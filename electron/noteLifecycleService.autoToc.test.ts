@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { DatabaseService } from './databaseService'
+import { isAutoAssignedId } from '../src/shared/assignedIds'
 import { NoteLifecycleService } from './noteLifecycleService'
 import { parseInternalNoteLink } from '../src/shared/internalNoteLinks'
 
@@ -102,10 +103,12 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
 
     const { created, chapters } = await lifecycle.regenerateAutoTocChapter(parent.id)
 
-    // Nothing got auto-assigned -- not the parent's assignedId, not the
-    // chapter's chapterId. That's the whole point: an id only ever exists
-    // because the user explicitly set one, and the TOC never needs one.
-    expect(db.getNoteRecord(parent.id)!.assignedId).toBeNull()
+    // The parent's id is still the PROVISIONAL one it was born with (every
+    // real note gets a NOTE-#n; see shared/assignedIds.ts) -- nothing here
+    // invented a user-chosen id -- and the chapter, which carries no tab
+    // identity, has no chapterId at all. That's the whole point: the TOC
+    // never needs either.
+    expect(isAutoAssignedId(db.getNoteRecord(parent.id)!.assignedId)).toBe(true)
     expect(chapters.find((c) => c.chapterNoteId === ch1.id)!.chapterId).toBeNull()
 
     expect(created.text).toBe([

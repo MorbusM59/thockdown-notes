@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { DragEvent, MouseEvent, WheelEvent as ReactWheelEvent } from 'react'
+import type { DragEvent, MouseEvent, ReactNode, WheelEvent as ReactWheelEvent } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import type { ChapterEntry } from '../shared/chapters'
 import { splitChapterFamily } from '../shared/chapters'
@@ -46,6 +46,17 @@ export interface ChapterBarProps {
   onDeleteChapterClick: (chapterNoteId: string) => void
   /** True while the parent note is timeless (SectionEditorArea.tsx's isViewingTimelessNote) -- every chapter pill is treated like an archived-merged ("ghost") pill (no drag, no rename, no archive/delete split), and the collapse/extract mini buttons are omitted entirely, since none of that is possible while the whole family is frozen (databaseService.ts's assertNotTimeless). */
   isLocked?: boolean
+  /** True while this bar is showing the note's METADATA layer (tags + note id) instead of its CONTENT layer (chapters) -- see `tagBar`. */
+  isTagBarMode: boolean
+  toggleTagBarMode: () => void
+  /**
+   * The tag bar, injected rather than built here: tags are a note-level
+   * property and belong on this bar (the chapter bar's dual -- metadata beside
+   * content structure), but the tag machinery is a large prop bundle owned by
+   * useSectionTabs. Passing the rendered element keeps that coupling out of
+   * this component entirely.
+   */
+  tagBar: ReactNode
 }
 
 /**
@@ -157,6 +168,9 @@ export function ChapterBar({
   onArchiveChapterClick,
   onDeleteChapterClick,
   isLocked = false,
+  isTagBarMode,
+  toggleTagBarMode,
+  tagBar,
 }: ChapterBarProps) {
   const parentNote = notes.find((note) => note.id === parentNoteId)
   const isParentActive = activeNoteId === parentNoteId
@@ -223,6 +237,25 @@ export function ChapterBar({
 
   return (
     <div className="chapter-bar-row">
+      {/* A note's two layers meet on this bar: its metadata (tags, note id)
+          and its content structure (chapters). The toggle is the only thing
+          that survives the swap, so it reads as the label for whichever layer
+          is showing -- the same "leading button names the bar" convention the
+          tab bar and the chapter strip already use. Tags live HERE, not on the
+          tab bar, because a tag is strictly per note: it has no meaning at the
+          level of a collection of notes. */}
+      <button
+        type="button"
+        className={`btn-icon chapter-auto-button${isTagBarMode ? ' is-active' : ''}`}
+        data-tooltip={isTagBarMode ? 'Show chapters' : 'Show tags'}
+        aria-label={isTagBarMode ? 'Show chapters' : 'Show tags'}
+        aria-pressed={isTagBarMode}
+        onClick={toggleTagBarMode}
+      >
+        <span className="fa-solid fa-tags" aria-hidden="true" />
+      </button>
+
+      {isTagBarMode ? tagBar : (<>
       {autoOpenItemsChapter ? (() => {
         const isActive = autoOpenItemsChapter.chapterNoteId === activeNoteId
         const note = notes.find((entry) => entry.id === autoOpenItemsChapter.chapterNoteId)
@@ -390,6 +423,7 @@ export function ChapterBar({
           <span className="fa-solid fa-scissors" aria-hidden="true" />
         </button>
       ) : null}
+      </>)}
     </div>
   )
 }

@@ -349,7 +349,7 @@ function sanitizeTypingSoundSet(input: unknown): (typeof VALID_TYPING_SOUND_SETS
   return (VALID_TYPING_SOUND_SETS as readonly unknown[]).includes(input) ? input as (typeof VALID_TYPING_SOUND_SETS)[number] : undefined;
 }
 
-function sanitizeTabBarMode(input: unknown): 'tags' | 'tabs' | undefined {
+function sanitizeChapterBarMode(input: unknown): 'tags' | 'tabs' | undefined {
   return input === 'tags' || input === 'tabs' ? input : undefined;
 }
 
@@ -507,7 +507,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     sidebarViewState: sanitizeSidebarViewState(input?.sidebarViewState),
     debuggingEnabled: Boolean(input?.debuggingEnabled),
     spellCheckEnabled: Boolean(input?.spellCheckEnabled ?? false),
-    tabBarMode: sanitizeTabBarMode(input?.tabBarMode),
+    chapterBarMode: sanitizeChapterBarMode(input?.chapterBarMode),
     isSidebarVisible: typeof input?.isSidebarVisible === 'boolean' ? input.isSidebarVisible : true,
     // Was missing entirely until this line -- sanitizeMenu (routed through
     // by both loadAppState and saveAppState) silently dropped this field on

@@ -1,7 +1,6 @@
 import type { CSSProperties, MouseEvent, RefObject } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import { isArchivedNote, isDeletedNote } from '../shared/noteLifecycle'
-import { normalizeTagName, isProtectedTagName } from '../shared/tags'
 import { resolveIdentityLabel } from '../shared/tabLabels'
 import { InlinePillOrInput } from '../shared/InlinePillOrInput'
 import { TEMP_TAB_PIN_HOLD_MS, type UseSectionTabsResult } from './useSectionTabs'
@@ -101,39 +100,6 @@ export function SectionTabBar({
   onSectionPickerClearClick,
 }: SectionTabBarProps) {
   const {
-    tagInputRef,
-    tagInputValue,
-    setTagInputValue,
-    orderedActiveTags,
-    suggestedTags,
-    deletePrimedTagName,
-    renamingTagName,
-    tagRenameDraft,
-    setTagRenameDraft,
-    commitTagRename,
-    cancelTagRename,
-    isTagMutationPending,
-    activeNoteIsExternal,
-    activeNoteIsTimeless,
-    handleTagInputKeyDown,
-    handleAddSuggestedTag,
-    handleTagChipClick,
-    handleTagChipMouseLeave,
-    handleTagDragStart,
-    handleTagDragEnd,
-    handleTagDrop,
-    handleTagContainerDragOver,
-    handleTagContainerDrop,
-    handleTagContextMenu,
-    isSuggestedTagsExpanded,
-    toggleSuggestedTagsExpanded,
-    suggestedTagsScrollerRef,
-    suggestedTagsCanScrollLeft,
-    suggestedTagsCanScrollRight,
-    updateSuggestedTagsScrollEdges,
-    handleSuggestedTagsWheel,
-    tabBarMode,
-    toggleTabBarMode,
     pinnedTabs,
     unpinPrimedTabNoteId,
     tempTabNoteId,
@@ -191,18 +157,7 @@ export function SectionTabBar({
         </button>
       )}
 
-      <button
-        type="button"
-        className={`btn-icon tagbar-toggle${tabBarMode === 'tags' ? ' is-active' : ''}`}
-        data-tooltip={tabBarMode === 'tags' ? 'Show tabs' : 'Show tags'}
-        aria-label={tabBarMode === 'tags' ? 'Show tabs' : 'Show tags'}
-        onClick={toggleTabBarMode}
-      >
-        <span className="fa-solid fa-tags" aria-hidden="true" />
-      </button>
-
-      {tabBarMode === 'tabs' ? (
-        <div className="section-identity-tab-shell">
+      <div className="section-identity-tab-shell">
           {isEditingSectionName ? (
             <input
               className="tag-pill section-identity-input"
@@ -239,11 +194,9 @@ export function SectionTabBar({
               <span className="tag-pill-label">{sectionName ?? '···'}</span>
             </button>
           )}
-        </div>
-      ) : null}
+      </div>
 
-      {tabBarMode === 'tabs' ? (
-        <div className="tab-mode-shell tabs-mode" role="group" aria-label="Note tabs">
+      <div className="tab-mode-shell tabs-mode" role="group" aria-label="Note tabs">
           <div className={`tabbar-tabs-scroll-shell${tabsCanScrollLeft ? ' fade-left' : ''}${tabsCanScrollRight ? ' fade-right' : ''}`}>
             <div
               className="tabbar-tabs-display"
@@ -391,131 +344,6 @@ export function SectionTabBar({
           </div>
         </div>
       ) : (
-      <div className="tab-mode-shell" role="group" aria-label="Tag manager">
-        {isSuggestedTagsExpanded ? (
-          <div
-            className={`tabbar-tabs-scroll-shell${suggestedTagsCanScrollLeft ? ' fade-left' : ''}${suggestedTagsCanScrollRight ? ' fade-right' : ''}`}
-            onContextMenu={(event) => {
-              event.preventDefault()
-              toggleSuggestedTagsExpanded()
-            }}
-          >
-            <div
-              className="tabbar-suggested-tags-expanded"
-              aria-live="polite"
-              ref={suggestedTagsScrollerRef}
-              onScroll={updateSuggestedTagsScrollEdges}
-              onWheel={handleSuggestedTagsWheel}
-            >
-              {suggestedTags.length === 0 ? (
-                <span className="tabbar-tag-hint">Suggested tags appear here.</span>
-              ) : (
-                suggestedTags.map((tagName) => (
-                  <div
-                    key={tagName}
-                    className="tag-pill suggested"
-                    onClick={() => handleAddSuggestedTag(tagName)}
-                    data-tooltip={`Add ${tagName}`}
-                    aria-disabled={!activeNoteId || isTagMutationPending || activeNoteIsExternal || activeNoteIsTimeless}
-                  >
-                    {tagName}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        ) : (
-          <>
-            <div
-              className="tabbar-tag-input"
-              onContextMenu={(event) => {
-                event.preventDefault()
-                toggleSuggestedTagsExpanded()
-              }}
-              data-tooltip="Right-click to show suggested tags"
-            >
-              <input
-                ref={tagInputRef}
-                className="tabbar-tag-input-field"
-                type="text"
-                value={tagInputValue}
-                placeholder={!activeNoteId ? '...' : '···'}
-                onChange={(event) => setTagInputValue(event.target.value)}
-                onKeyDown={handleTagInputKeyDown}
-                disabled={!persistenceReady || !activeNoteId || isTagMutationPending || activeNoteIsExternal || activeNoteIsTimeless}
-                aria-label="Tag input"
-              />
-            </div>
-            <div
-              className="tabbar-tags-display"
-              aria-live="polite"
-              onDragOver={handleTagContainerDragOver}
-              onDrop={handleTagContainerDrop}
-            >
-              {!activeNoteId ? (
-                <span className="tabbar-tag-hint"></span>
-              ) : orderedActiveTags.length === 0 ? (
-                <span className="tabbar-tag-hint"></span>
-              ) : (
-                orderedActiveTags.map((tagName, index) => {
-                  const normalized = normalizeTagName(tagName)
-                  const isProtected = isProtectedTagName(tagName)
-
-                  return (
-                    <InlinePillOrInput
-                      key={tagName}
-                      isEditing={renamingTagName === tagName}
-                      value={tagRenameDraft}
-                      onChange={setTagRenameDraft}
-                      onCommit={commitTagRename}
-                      onCancel={cancelTagRename}
-                      className="tag-pill is-active tag-rename-input"
-                      ariaLabel={`Rename tag ${tagName}`}
-                    >
-                      <div
-                        className={`tag-pill is-active${deletePrimedTagName === tagName ? ' primed' : ''}${isProtected ? ` protected ${normalized}` : ''}`}
-                        draggable={!isProtected}
-                        onDragStart={(event) => handleTagDragStart(event, index)}
-                        onDragEnd={handleTagDragEnd}
-                        onDragOver={(event) => {
-                          event.preventDefault()
-                          event.stopPropagation()
-                          event.dataTransfer.dropEffect = 'move'
-                        }}
-                        onDrop={(event) => handleTagDrop(event, index)}
-                        onClick={() => handleTagChipClick(tagName)}
-                        onContextMenu={(event) => handleTagContextMenu(event, tagName)}
-                        onMouseLeave={() => handleTagChipMouseLeave(tagName)}
-                        data-tooltip={deletePrimedTagName === tagName ? 'Click again to delete or move cursor away to cancel' : 'Click to arm deletion, right-click to rename'}
-                      >
-                        <span className="tag-pill-label">{tagName}</span>
-                      </div>
-                    </InlinePillOrInput>
-                  )
-                })
-              )}
-            </div>
-            <div className="tabbar-suggested-tags" aria-hidden={suggestedTags.length === 0}>
-              {suggestedTags.map((tagName) => (
-                <div
-                  key={tagName}
-                  className="tag-pill suggested"
-                  onClick={() => handleAddSuggestedTag(tagName)}
-                  data-tooltip={`Add ${tagName}`}
-                  aria-disabled={!activeNoteId || isTagMutationPending || activeNoteIsExternal || activeNoteIsTimeless}
-                >
-                  {tagName}
-                </div>
-              ))}
-              {suggestedTags.length === 0 ? (
-                <span className="tabbar-tag-hint">Suggested tags appear here.</span>
-              ) : null}
-            </div>
-          </>
-        )}
-      </div>
-      )}
-
       {/* Edit/render toggle -- a per-slot control, so it lives here at the
           slot's own edge rather than in the chapter bar (which speaks for one
           note's internals). Active means edit mode, so a note that can't leave

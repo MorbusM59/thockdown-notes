@@ -131,6 +131,10 @@ export interface SectionEditorAreaProps {
    */
   isViewingAutoTocChapter: boolean
   isViewingAutoOpenItemsChapter: boolean
+  /** Chapter bar's metadata/content swap -- see ChapterBar's own props. */
+  isTagBarMode: boolean
+  toggleTagBarMode: () => void
+  tagBar: ReactNode
 }
 
 /**
@@ -233,6 +237,9 @@ export function SectionEditorArea({
   onToggleTimeless,
   isViewingAutoTocChapter,
   isViewingAutoOpenItemsChapter,
+  isTagBarMode,
+  toggleTagBarMode,
+  tagBar,
 }: SectionEditorAreaProps) {
   const setStageEl = useCallback((el: HTMLDivElement | null) => {
     (editorStageRef as MutableRefObject<HTMLDivElement | null>).current = el
@@ -469,6 +476,9 @@ export function SectionEditorArea({
             onChapterPillContextMenu={onChapterPillContextMenu}
             onArchiveChapterClick={onArchiveChapterClick}
             onDeleteChapterClick={onDeleteChapterClick}
+            isTagBarMode={isTagBarMode}
+            toggleTagBarMode={toggleTagBarMode}
+            tagBar={tagBar}
           />
         ) : null}
       </div>

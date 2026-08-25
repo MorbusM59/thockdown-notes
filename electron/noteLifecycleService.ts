@@ -320,7 +320,7 @@ export class NoteLifecycleService {
   // ToC yet (self-healing the moment it gains a real chapter, via that same
   // backfill effect) is a far smaller problem than a failed ToC write
   // taking the whole note-creation call down with it.
-  async createNote(input?: CreateNoteInput, options?: { skipAutoToc?: boolean }): Promise<NoteDocument> {
+  async createNote(input?: CreateNoteInput, options?: { skipAutoToc?: boolean; skipProvisionalId?: boolean }): Promise<NoteDocument> {
     const id = buildNoteId(new Date());
     const text = normalizeText(input?.initialText ?? '');
     const title = input?.title ? input.title.trim() || titleFromText(text) : titleFromText(text);
@@ -370,6 +370,14 @@ export class NoteLifecycleService {
         await this.databaseService.addTagToNote(id, tag, 0);
       }
     }
+    // Every note starts with a provisional id (NOTE-#n). It is written to the
+    // same column a user-chosen id uses -- the difference lives in the value's
+    // shape, not in a second field (shared/assignedIds.ts explains why).
+    // Chapters are notes underneath but carry no tab identity of their own,
+    // so they must not consume NOTE-#n numbers -- only real notes get one.
+    if (!options?.skipProvisionalId) {
+      this.databaseService.assignProvisionalNoteId(id);
+    }
     if (!options?.skipAutoToc) {
       await this.createAutoTocChapter(id).catch((error) => {
         console.error(`Failed to create auto-TOC chapter for new note ${id}`, error);
@@ -412,7 +420,7 @@ export class NoteLifecycleService {
   // are otherwise full, independent notes (own tags, own file, own
   // snapshots); chapterOnly only controls menu-view visibility.
   async createChapterNote(parentNoteId: string): Promise<NoteDocument> {
-    const created = await this.createNote({ initialText: '## ' }, { skipAutoToc: true });
+    const created = await this.createNote({ initialText: '## ' }, { skipAutoToc: true, skipProvisionalId: true });
     this.databaseService.setNoteChapterOnly(created.id, true);
     await this.linkChapterOrCleanUp(parentNoteId, created.id, () => this.databaseService.addChapter(parentNoteId, created.id));
     return this.loadNote({ id: created.id });
@@ -436,7 +444,7 @@ export class NoteLifecycleService {
     // skipAutoToc: true -- without it, every new note's own birth would
     // recursively try to give its own auto-TOC chapter a TOC of its own,
     // forever.
-    const created = await this.createNote({}, { skipAutoToc: true });
+    const created = await this.createNote({}, { skipAutoToc: true, skipProvisionalId: true });
     this.databaseService.setNoteChapterOnly(created.id, true);
     this.databaseService.setNoteAutoToc(created.id, true);
     await this.linkChapterOrCleanUp(parentNoteId, created.id, () => {
@@ -678,7 +686,7 @@ export class NoteLifecycleService {
     }
 
     if (!openItemsChapterNoteId) {
-      const created = await this.createNote({}, { skipAutoToc: true });
+      const created = await this.createNote({}, { skipAutoToc: true, skipProvisionalId: true });
       this.databaseService.setNoteChapterOnly(created.id, true);
       this.databaseService.setNoteAutoOpenItems(created.id, true);
       await this.linkChapterOrCleanUp(parentNoteId, created.id, () => {

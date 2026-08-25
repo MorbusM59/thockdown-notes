@@ -3,7 +3,7 @@ import { existsSync, promises as fs } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { sanitizeDocumentText, truncateTitle } from '../src/shared/textSanitization';
-import { deriveDefaultAssignedIdBase, normalizeAssignedIdInput } from '../src/shared/assignedIds';
+import { buildNextAutoAssignedId, deriveDefaultAssignedIdBase, normalizeAssignedIdInput } from '../src/shared/assignedIds';
 import { ensureHelpNote } from './help/helpNote';
 import { shouldVacuumForBloat } from './databaseSanitationPolicy';
 import type { TextureCacheHit, TextureCachePurgeRequest, TextureCacheRequest } from '../src/shared/textures';
@@ -1358,6 +1358,20 @@ export class DatabaseService {
    * Always overwrites any existing value. Returns the final, collision-
    * resolved ID that was actually stored.
    */
+  /**
+   * Gives a note the lowest free provisional id (`NOTE-#n`, see
+   * shared/assignedIds.ts). Every note gets one at creation so the tab bar and
+   * tag bar always have something concrete to show, and so "has the user
+   * committed to an id?" stays a question about the id's SHAPE rather than
+   * about its presence -- no separate flag to keep in sync.
+   */
+  assignProvisionalNoteId(noteId: string): string {
+    const db = this.requireDb();
+    const provisional = buildNextAutoAssignedId(this.listUsedAssignedIds(noteId));
+    db.prepare('UPDATE notes SET assignedId = ? WHERE id = ?').run(provisional, noteId);
+    return provisional;
+  }
+
   setNoteAssignedId(noteId: string, requestedRaw: string): string {
     this.assertNotTimeless(noteId);
     const db = this.requireDb();

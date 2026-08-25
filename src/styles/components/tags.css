@@ -269,7 +269,8 @@
   margin-right: var(--spacing-regular);
 }
 
-.tag-pill.section-identity-tab {
+.tag-pill.section-identity-tab,
+.tag-pill.note-identity-tab {
   position:  relative;
   min-width: 120px;
   max-width: 120px;
@@ -291,7 +292,8 @@
   max-height: var(--ui-pill-bar-size);
 }
 
-.tag-pill.section-identity-tab .tag-pill-label {
+.tag-pill.section-identity-tab .tag-pill-label,
+.tag-pill.note-identity-tab .tag-pill-label {
   overflow: visible;
   letter-spacing: -0.02em;
 }
@@ -658,4 +660,43 @@
 .tag-pill.chapter-pill-mini-delete {
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
+}
+
+/* The tag input's own icon label -- see TagBar.tsx. Visible only while the
+   field is empty and unfocused, so it reads as the bar's label (the same
+   "leading element names the bar" convention the create buttons use) and
+   never competes with what is being typed. Driven by an explicit class plus
+   :focus-within rather than :placeholder-shown, which does not match an empty
+   placeholder attribute. */
+.tabbar-tag-input-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.6;
+  font-size: calc(var(--btn-icon-size) - 5px);
+  color: var(--color-text-80);
+}
+
+.tabbar-tag-input:focus-within .tabbar-tag-input-icon,
+.tabbar-tag-input-icon.is-hidden {
+  opacity: 0;
+}
+
+/* The chapter bar spaces its children with its own row `gap`, unlike the tab
+   bar where this shell's margin is the only separator. Without this the two
+   stack and the note-id pill sits noticeably further from its bar than the
+   section-identity pill does from the bar above. */
+.chapter-bar-row > .section-identity-tab-shell {
+  margin-right: 0;
+}
+
+/* A provisional (generator-assigned) note id -- see isAutoAssignedId. Faded
+   and italic so it reads as "not yet chosen" rather than as a real name, which
+   is the whole nudge toward committing to one before the note grows chapters. */
+.tag-pill.note-identity-tab.is-auto-assigned .tag-pill-label {
+  font-style: italic;
+  opacity: 0.55;
 }

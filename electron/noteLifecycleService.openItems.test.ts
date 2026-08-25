@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { DatabaseService } from './databaseService'
+import { isAutoAssignedId } from '../src/shared/assignedIds'
 import { NoteLifecycleService } from './noteLifecycleService'
 
 describe('NoteLifecycleService auto-Open-Items chapter', () => {
@@ -70,7 +71,8 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
 
     await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One\n\n- [ ] world-building task' })
 
-    expect(db.getNoteRecord(parent.id)!.assignedId).toBeNull()
+    // Provisional id only (NOTE-#n) -- never a user-chosen one; linking works regardless.
+    expect(isAutoAssignedId(db.getNoteRecord(parent.id)!.assignedId)).toBe(true)
     expect(db.listChaptersForNote(parent.id).find((c) => c.chapterNoteId === ch1.id)!.chapterId).toBeNull()
 
     const openItemsId = db.getAutoOpenItemsChapterNoteId(parent.id)!

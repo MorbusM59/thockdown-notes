@@ -39,7 +39,7 @@ export interface UseSectionTabsOptions {
   /** Patches a note's assignedId in the shared notes list after a `$id` assignment or a lazily-generated default. */
   updateNoteAssignedId: (noteId: string, assignedId: string) => void
   /** Applied once (e.g. after the persisted app-state round-trip resolves); null/omitted leaves the default 'tags' mode. */
-  initialTabBarMode?: 'tags' | 'tabs' | null
+  initialChapterBarMode?: 'tags' | 'tabs' | null
 }
 
 export interface UseSectionTabsResult {
@@ -78,10 +78,10 @@ export interface UseSectionTabsResult {
   handleSuggestedTagsWheel: (event: ReactWheelEvent<HTMLDivElement>) => void
 
   // ── Tab bar ──
-  tabBarMode: 'tags' | 'tabs'
-  toggleTabBarMode: () => void
+  chapterBarMode: 'tags' | 'tabs'
+  toggleChapterBarMode: () => void
   /** Imperative escape hatch for callers outside this section (App.tsx, post-swap) to force a specific bar mode -- e.g. so a section swapped in from a tab-bar-mode picker doesn't revert to its own fresh default of 'tags'. */
-  setTabBarMode: Dispatch<SetStateAction<'tags' | 'tabs'>>
+  setChapterBarMode: Dispatch<SetStateAction<'tags' | 'tabs'>>
   pinnedTabs: NoteTabEntry[]
   unpinPrimedTabNoteId: string | null
   activeNoteIsPinned: boolean
@@ -100,6 +100,8 @@ export interface UseSectionTabsResult {
   tabsCanScrollRight: boolean
   handleAddCurrentNoteToTabs: () => Promise<void>
   handleTabContextMenu: (event: MouseEvent<HTMLDivElement>) => void
+  /** Arms the in-place assigned-id edit for a note -- the tab pills' quick-right-click gesture, reused by the tag bar's note-id pill. */
+  startEditingTabId: (noteId: string) => void
   handleTabMouseLeave: (noteId: string) => void
   handleTabClick: (noteId: string) => void
   handleTabMouseDown: (event: MouseEvent<HTMLDivElement>, noteId: string) => void
@@ -145,7 +147,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     noteTransitionLockRef,
     scheduleFocusEditorInEditMode,
     updateNoteAssignedId,
-    initialTabBarMode,
+    initialChapterBarMode,
   } = options
 
   // ── Tag bar state ──────────────────────────────────────────────────────
@@ -451,14 +453,14 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
 
   // ── Tab bar state ──────────────────────────────────────────────────────
 
-  const [tabBarMode, setTabBarMode] = useState<'tags' | 'tabs'>('tabs')
+  const [chapterBarMode, setChapterBarMode] = useState<'tags' | 'tabs'>('tabs')
 
   useEffect(() => {
-    if (initialTabBarMode) setTabBarMode(initialTabBarMode)
+    if (initialChapterBarMode) setChapterBarMode(initialChapterBarMode)
     // Deliberately only reacting to the restored value arriving, not every
     // render -- this is a one-time hand-off from persisted app state, not a
     // controlled prop.
-  }, [initialTabBarMode])
+  }, [initialChapterBarMode])
 
   const [pinnedTabs, setPinnedTabs] = useState<NoteTabEntry[]>([])
   const [unpinPrimedTabNoteId, setUnpinPrimedTabNoteId] = useState<string | null>(null)
@@ -510,8 +512,8 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     }
   }, [persistenceReady, notes, tabIdentityNoteId, clearActiveNote])
 
-  const toggleTabBarMode = useCallback(() => {
-    setTabBarMode((previous) => (previous === 'tags' ? 'tabs' : 'tags'))
+  const toggleChapterBarMode = useCallback(() => {
+    setChapterBarMode((previous) => (previous === 'tags' ? 'tabs' : 'tags'))
     setUnpinPrimedTabNoteId(null)
   }, [])
 
@@ -531,7 +533,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
   // transient chrome for the note currently showing, not a sticky preference.
   useEffect(() => {
     setIsSuggestedTagsExpanded(false)
-  }, [tabBarMode, activeNoteId])
+  }, [chapterBarMode, activeNoteId])
 
   const suggestedTagsScrollerRef = useRef<HTMLDivElement | null>(null)
   const [suggestedTagsCanScrollLeft, setSuggestedTagsCanScrollLeft] = useState(false)
@@ -821,13 +823,13 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
 
   useEffect(() => {
     updateTabsScrollEdges()
-  }, [pinnedTabs, tempTabNoteId, tabBarMode, updateTabsScrollEdges])
+  }, [pinnedTabs, tempTabNoteId, chapterBarMode, updateTabsScrollEdges])
 
   useEffect(() => {
-    if (tabBarMode !== 'tabs') return
+    if (chapterBarMode !== 'tabs') return
     window.addEventListener('resize', updateTabsScrollEdges)
     return () => window.removeEventListener('resize', updateTabsScrollEdges)
-  }, [tabBarMode, updateTabsScrollEdges])
+  }, [chapterBarMode, updateTabsScrollEdges])
 
   // Vertical wheel input scrolls the bar horizontally, regardless of
   // browser/OS default wheel-axis behavior.
@@ -953,15 +955,16 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     updateSuggestedTagsScrollEdges,
     handleSuggestedTagsWheel,
 
-    tabBarMode,
-    toggleTabBarMode,
-    setTabBarMode,
+    chapterBarMode,
+    toggleChapterBarMode,
+    setChapterBarMode,
     pinnedTabs,
     unpinPrimedTabNoteId,
     activeNoteIsPinned,
     tempTabNoteId,
     pinArmingTabNoteId,
     editingTabNoteId,
+    startEditingTabId,
     tabIdDraft,
     setTabIdDraft,
     commitTabIdEdit,

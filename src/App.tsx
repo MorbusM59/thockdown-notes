@@ -1789,7 +1789,7 @@ function App() {
   // Mirrors useDocumentFind's isDocumentFindCaseSensitive so
   // buildMenuStateSnapshot (defined earlier than the hook call can be) can
   // read the latest value without a definition-order cycle -- same pattern
-  // as tabBarModeRef.
+  // as chapterBarModeRef.
   const documentFindCaseSensitiveRef = useRef(false)
   const [restoredDocumentFindCaseSensitive, setRestoredDocumentFindCaseSensitive] = useState<boolean | null>(null)
   const [isExportingPdf, setIsExportingPdf] = useState(false)
@@ -2080,7 +2080,7 @@ function App() {
   // after it mounts -- used so a section swapped in via the tab-bar-mode
   // picker doesn't revert to its own fresh default of 'tags'. Drained by
   // the effect below once each named section has registered.
-  const pendingTabBarModeBySectionIdRef = useRef<Map<string, 'tags' | 'tabs'>>(new Map())
+  const pendingChapterBarModeBySectionIdRef = useRef<Map<string, 'tags' | 'tabs'>>(new Map())
   // Which section last received a caret placement, click, or keystroke.
   // Interactions that target "the current note" without a section of their
   // own -- Find & Replace today, drag-a-note-onto-a-section later -- read
@@ -2340,10 +2340,10 @@ function App() {
   type ConsoleMethodName = 'log' | 'info' | 'warn' | 'error' | 'debug'
   const appStateSaveTimerRef = useRef<number | null>(null)
   const noteTransitionLockRef = useRef(false)
-  // Mirrors useSectionTabs' tabBarMode so buildMenuStateSnapshot (defined
+  // Mirrors useSectionTabs' chapterBarMode so buildMenuStateSnapshot (defined
   // earlier than the hook call, since it depends on things the hook itself
   // depends on) can read the latest value without a definition-order cycle.
-  const tabBarModeRef = useRef<'tags' | 'tabs'>('tabs')
+  const chapterBarModeRef = useRef<'tags' | 'tabs'>('tabs')
   const [restoredTabBarMode, setRestoredTabBarMode] = useState<'tags' | 'tabs' | null>(null)
 
   const originalConsoleMethodsRef = useRef<Partial<Record<ConsoleMethodName, (...args: unknown[]) => void>>>({})
@@ -3938,7 +3938,7 @@ function App() {
       },
       debuggingEnabled,
       spellCheckEnabled,
-      tabBarMode: tabBarModeRef.current,
+      chapterBarMode: chapterBarModeRef.current,
       isSidebarVisible: overrides?.isSidebarVisible ?? isSidebarVisible,
       isDoubleSizeMode: overrides?.isDoubleSizeMode ?? isDoubleSizeMode,
       reviewGutterVisibleBySection: overrides?.reviewGutterVisibleBySection ?? reviewGutterVisibleBySection,
@@ -5728,7 +5728,7 @@ ${markdownHtml}
             setTextureMaterials(cloneTextureMaterials(appState.menu.textureMaterials ?? DEFAULT_TEXTURE_MATERIALS))
             setDebuggingEnabled(appState.menu.debuggingEnabled ?? false)
             setSpellCheckEnabled(appState.menu.spellCheckEnabled ?? false)
-            setRestoredTabBarMode(appState.menu.tabBarMode ?? 'tabs')
+            setRestoredTabBarMode(appState.menu.chapterBarMode ?? 'tabs')
 
             // Restore persisted sidebar visibility
             setIsSidebarVisible(appState.menu.isSidebarVisible ?? true)
@@ -5900,15 +5900,15 @@ ${markdownHtml}
     }
   }, [editorSections])
 
-  // Same drain pattern as above, for pendingTabBarModeBySectionIdRef.
+  // Same drain pattern as above, for pendingChapterBarModeBySectionIdRef.
   useEffect(() => {
     for (const entry of editorSections) {
-      const pendingMode = pendingTabBarModeBySectionIdRef.current.get(entry.id)
+      const pendingMode = pendingChapterBarModeBySectionIdRef.current.get(entry.id)
       if (!pendingMode) continue
       const handle = getActiveSectionHandle(sectionRegistryRef, entry.id)
       if (!handle) continue
-      pendingTabBarModeBySectionIdRef.current.delete(entry.id)
-      handle.setTabBarMode(pendingMode)
+      pendingChapterBarModeBySectionIdRef.current.delete(entry.id)
+      handle.setChapterBarMode(pendingMode)
     }
   }, [editorSections])
 
@@ -6363,8 +6363,8 @@ ${markdownHtml}
       exchangeReviewGutterVisibility(outgoingSectionId, incomingSectionId)
       // Both panes were already showing their tab bars; keep them that way
       // rather than letting either remount back to 'tags'.
-      pendingTabBarModeBySectionIdRef.current.set(incomingSectionId, 'tabs')
-      pendingTabBarModeBySectionIdRef.current.set(outgoingSectionId, 'tabs')
+      pendingChapterBarModeBySectionIdRef.current.set(incomingSectionId, 'tabs')
+      pendingChapterBarModeBySectionIdRef.current.set(outgoingSectionId, 'tabs')
 
       applyResolvedSections(exchanged)
       syncFixedWidthsFromEntries(exchanged)
@@ -6405,7 +6405,7 @@ ${markdownHtml}
     // Swapping is only reachable via the tab-bar-mode section picker, so the
     // incoming section should keep showing the tab bar too, rather than its
     // own fresh EditorSection instance defaulting back to 'tags'.
-    pendingTabBarModeBySectionIdRef.current.set(incomingSectionId, 'tabs')
+    pendingChapterBarModeBySectionIdRef.current.set(incomingSectionId, 'tabs')
     applyResolvedSections(updated)
     // Sections just changed slots, so re-key the pins off what the store
     // reports rather than leaving them on the sections that moved away.
@@ -6465,7 +6465,7 @@ ${markdownHtml}
     // backfilled section should keep showing the tab bar too, rather than
     // its own fresh EditorSection instance defaulting back to 'tags'.
     if (created) {
-      pendingTabBarModeBySectionIdRef.current.set(created.id, 'tabs')
+      pendingChapterBarModeBySectionIdRef.current.set(created.id, 'tabs')
     }
 
     applyResolvedSections(updated)
@@ -9152,7 +9152,7 @@ ${markdownHtml}
                   recordLastAnchor={recordLastAnchor}
                   getLinkTargetPrefill={getLinkTargetPrefill}
                   restoredTabBarMode={restoredTabBarMode}
-                  tabBarModeRef={tabBarModeRef}
+                  chapterBarModeRef={chapterBarModeRef}
                   sidebarMode={sidebarMode}
                   restoredDocumentFindCaseSensitive={restoredDocumentFindCaseSensitive}
                   documentFindCaseSensitiveRef={documentFindCaseSensitiveRef}

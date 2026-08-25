@@ -11,7 +11,9 @@ import { buildEditRestoreSnapshotFromUiState } from '../editor/EditRestoreMath'
 import type { EditorRuntimeMetrics } from '../editor/EditorTypography'
 import type { UseSectionTabsResult } from '../tabBar/useSectionTabs'
 import type { NoteTabEntry } from '../shared/tabs'
+import { isAutoAssignedId } from '../shared/assignedIds'
 import { SectionTabBar } from '../tabBar/SectionTabBar'
+import { TagBar } from '../tabBar/TagBar'
 import { SectionEditorArea, type SectionEditorAreaProps } from './SectionEditorArea'
 import { useDisplayedNoteRenderMode } from './useDisplayedNoteRenderMode'
 import { useActiveNoteId } from './useActiveNoteId'
@@ -66,7 +68,8 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   | 'onCollapseChapterIntoPrevious' | 'onExtractSelectionToChapter' | 'isViewingAutoTocChapter' | 'isViewingAutoOpenItemsChapter'
   | 'isViewingTimelessNote' | 'onToggleTimeless' | 'isForcedPreviewNote' | 'onToggleRenderViewMode'
   | 'splitArmedChapter' | 'onChapterPillMouseDown' | 'onChapterPillMouseUp' | 'onChapterPillMouseLeave' | 'onChapterPillContextMenu'
-  | 'onArchiveChapterClick' | 'onDeleteChapterClick'> {
+  | 'onArchiveChapterClick' | 'onDeleteChapterClick'
+  | 'isTagBarMode' | 'toggleTagBarMode' | 'tagBar'> {
   sectionId: string
   markSectionActive: (sectionId: string) => void
   isSidebarVisible: boolean
@@ -102,7 +105,7 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   /** Builds the `$<noteid>§<chapterid>#<anchorid>` link target to prefill "Insert Link" with, from whatever `recordLastAnchor` last recorded (each part "" if nothing's been recorded yet this session). */
   getLinkTargetPrefill: () => string
   restoredTabBarMode: 'tags' | 'tabs' | null
-  tabBarModeRef: MutableRefObject<'tags' | 'tabs'>
+  chapterBarModeRef: MutableRefObject<'tags' | 'tabs'>
 
   sidebarMode: 'date' | 'category' | 'archive' | 'trash' | 'find' | 'options'
 
@@ -178,7 +181,7 @@ export function EditorSection({
   recordLastAnchor,
   getLinkTargetPrefill,
   restoredTabBarMode,
-  tabBarModeRef,
+  chapterBarModeRef,
   sidebarMode,
   restoredDocumentFindCaseSensitive,
   documentFindCaseSensitiveRef,
@@ -874,15 +877,16 @@ export function EditorSection({
     suggestedTagsCanScrollRight,
     updateSuggestedTagsScrollEdges,
     handleSuggestedTagsWheel,
-    tabBarMode,
-    toggleTabBarMode,
-    setTabBarMode,
+    chapterBarMode,
+    toggleChapterBarMode,
+    setChapterBarMode,
     pinnedTabs,
     unpinPrimedTabNoteId,
     activeNoteIsPinned,
     tempTabNoteId,
     pinArmingTabNoteId,
     editingTabNoteId,
+    startEditingTabId,
     tabIdDraft,
     setTabIdDraft,
     commitTabIdEdit,
@@ -924,7 +928,7 @@ export function EditorSection({
     noteTransitionLockRef,
     scheduleFocusEditorInEditMode,
     updateNoteAssignedId,
-    initialTabBarMode: restoredTabBarMode,
+    initialChapterBarMode: restoredTabBarMode,
   })
 
   // The tab bar's own "+" pill (SectionTabBar.tsx): creates a brand-new note
@@ -1033,8 +1037,8 @@ export function EditorSection({
   }, [activeNoteSummary, menuIdentityNoteSummary, chapters, activeNoteId, recordLastAnchor])
 
   useEffect(() => {
-    tabBarModeRef.current = tabBarMode
-  }, [tabBarMode, tabBarModeRef])
+    chapterBarModeRef.current = chapterBarMode
+  }, [chapterBarMode, chapterBarModeRef])
 
   // The tag bar is transient chrome, not a sticky preference -- but it must
   // survive clicks that pick a different note to tag (sidebar, a *different*
@@ -1043,17 +1047,38 @@ export function EditorSection({
   // editor's own text -- i.e. actually going back to writing -- should drop
   // it back to the tab bar.
   useEffect(() => {
-    if (tabBarMode !== 'tags') return
+    if (chapterBarMode !== 'tags') return
     const handleWindowMouseDown = (event: globalThis.MouseEvent) => {
       const target = event.target
       if (!(target instanceof Node)) return
       if (target instanceof HTMLElement && target.closest('.editor-stage')) {
-        setTabBarMode('tabs')
+        setChapterBarMode('tabs')
       }
     }
     window.addEventListener('mousedown', handleWindowMouseDown)
     return () => window.removeEventListener('mousedown', handleWindowMouseDown)
-  }, [tabBarMode, setTabBarMode])
+  }, [chapterBarMode, setChapterBarMode])
+
+  /**
+   * A note whose id is still provisional (generator-assigned, see
+   * isAutoAssignedId) opens on its metadata layer rather than its chapters.
+   *
+   * This is the whole enforcement of "commit to an id before the note grows
+   * structure", and it is deliberately a nudge rather than a gate: the bar is
+   * one click from the chapters, nothing is blocked, and the moment the user
+   * gives the note an id of their own it stops happening. Keyed on the note's
+   * identity, not on the id value, so committing an id does NOT immediately
+   * flip the bar out from under the user mid-edit.
+   */
+  const provisionalNudgedNoteIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!menuIdentityNoteId) return
+    if (provisionalNudgedNoteIdRef.current === menuIdentityNoteId) return
+    provisionalNudgedNoteIdRef.current = menuIdentityNoteId
+    const note = notesRef.current.find((entry) => entry.id === menuIdentityNoteId)
+    if (!isAutoAssignedId(note?.assignedId)) return
+    setChapterBarMode('tags')
+  }, [menuIdentityNoteId, notesRef, setChapterBarMode])
 
   const {
     primedNoteActionById,
@@ -1476,15 +1501,16 @@ export function EditorSection({
     suggestedTagsCanScrollRight,
     updateSuggestedTagsScrollEdges,
     handleSuggestedTagsWheel,
-    tabBarMode,
-    toggleTabBarMode,
-    setTabBarMode,
+    chapterBarMode,
+    toggleChapterBarMode,
+    setChapterBarMode,
     pinnedTabs,
     unpinPrimedTabNoteId,
     activeNoteIsPinned,
     tempTabNoteId,
     pinArmingTabNoteId,
     editingTabNoteId,
+    startEditingTabId,
     tabIdDraft,
     setTabIdDraft,
     commitTabIdEdit,
@@ -1741,18 +1767,9 @@ export function EditorSection({
     onClearSection()
   }, [closeSectionPicker, onClearSection])
 
-  return (
-    <div
-      className={`editor-section-column${sectionId === activeSectionId ? ' is-active' : ''}`}
-      data-section-id={sectionId}
-      onDropCapture={handleSectionDropCapture}
-      onFocusCapture={() => markSectionActive(sectionId)}
-      onMouseDownCapture={() => markSectionActive(sectionId)}
-      onKeyDownCapture={() => markSectionActive(sectionId)}
-    >
-      <SectionTabBar
-        tabbarGridRef={tabbarGridRef}
-        tabs={{
+  // One bundle, two consumers: the tab bar and the tag bar (which now lives
+  // on the chapter bar -- see ChapterBar's `tagBar` prop).
+  const sectionTabsBundle: UseSectionTabsResult = {
           tagInputRef,
           tagInputValue,
           setTagInputValue,
@@ -1784,15 +1801,16 @@ export function EditorSection({
           suggestedTagsCanScrollRight,
           updateSuggestedTagsScrollEdges,
           handleSuggestedTagsWheel,
-          tabBarMode,
-          toggleTabBarMode,
-          setTabBarMode,
+          chapterBarMode,
+          toggleChapterBarMode,
+          setChapterBarMode,
           pinnedTabs,
           unpinPrimedTabNoteId,
           activeNoteIsPinned,
           tempTabNoteId,
           pinArmingTabNoteId,
           editingTabNoteId,
+    startEditingTabId,
           tabIdDraft,
           setTabIdDraft,
           commitTabIdEdit,
@@ -1820,7 +1838,20 @@ export function EditorSection({
           unpinNoteTab,
           pinNoteAsRightmostTab,
           applyTabsUpdate,
-        }}
+  }
+
+  return (
+    <div
+      className={`editor-section-column${sectionId === activeSectionId ? ' is-active' : ''}`}
+      data-section-id={sectionId}
+      onDropCapture={handleSectionDropCapture}
+      onFocusCapture={() => markSectionActive(sectionId)}
+      onMouseDownCapture={() => markSectionActive(sectionId)}
+      onKeyDownCapture={() => markSectionActive(sectionId)}
+    >
+      <SectionTabBar
+        tabbarGridRef={tabbarGridRef}
+        tabs={sectionTabsBundle}
         isSidebarVisible={isSidebarVisible}
         toggleSidebarVisible={toggleSidebarVisible}
         persistenceReady={persistenceReady}
@@ -1898,6 +1929,17 @@ export function EditorSection({
         onToggleReviewFlags={onToggleReviewFlags}
         isViewingAutoTocChapter={isViewingAutoTocChapter}
         isViewingAutoOpenItemsChapter={isViewingAutoOpenItemsChapter}
+        isTagBarMode={chapterBarMode === 'tags'}
+        toggleTagBarMode={toggleChapterBarMode}
+        tagBar={(
+          <TagBar
+            tabs={sectionTabsBundle}
+            persistenceReady={persistenceReady}
+            activeNoteId={activeNoteId}
+            identityNoteId={menuIdentityNoteId}
+            notes={notes}
+          />
+        )}
         isViewingTimelessNote={isViewingTimelessNote}
         onToggleTimeless={onToggleTimeless}
         spellCheckRenderEnabled={spellCheckRenderEnabled}

@@ -13,7 +13,7 @@ export interface UsePreviewedSnapshotResult {
  * section, and that manual Time Machine browsing (clicking the timeline,
  * the present-state circle, hold-to-branch) also drives directly. Not
  * referenced by buildMenuStateSnapshot, so this doesn't need the
- * ref-mirror pattern used for tabBarMode / isDocumentFindCaseSensitive.
+ * ref-mirror pattern used for chapterBarMode / isDocumentFindCaseSensitive.
  */
 export function usePreviewedSnapshot(sectionId: string): UsePreviewedSnapshotResult {
   void sectionId

@@ -42,7 +42,7 @@ import { normalizeChapterHeadings } from '../shared/markdownHeadings'
 import { resolveIdentityLabel } from '../shared/tabLabels'
 import { computeHeadingAnchors, formatHeadingAnchorFragment, formatOutlineEntryLine, formatOutlineRootTitleLine, parseMarkdownHeading, stripMarkdownInlineFormatting } from '../shared/tableOfContentsText'
 import { formatInternalNoteLink } from '../shared/internalNoteLinks'
-import { deriveDefaultAssignedIdBase, normalizeAssignedIdInput } from '../shared/assignedIds'
+import { buildNextAutoAssignedId, deriveDefaultAssignedIdBase, normalizeAssignedIdInput } from '../shared/assignedIds'
 import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, findOpenItemSourceAtLine, parseOpenItemsGroups, toggleChecklistItemByText } from '../shared/openItemsText'
 
 const MOCK_STORAGE_KEY = 'thockdown-notes:browser-mock:v1'
@@ -470,6 +470,9 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
           chapterId: null,
           detachedChapterParentId: null,
         })
+        // Mirrors noteLifecycleService.ts's createNote: a genuine standalone
+        // note is born with a provisional NOTE-#n id (shared/assignedIds.ts).
+        created.assignedId = buildNextAutoAssignedId(store.notes.map((note) => note.assignedId))
         store.notes.push(created)
         // Mirrors noteLifecycleService.ts's createNote: every genuine new
         // standalone note gets its own auto-TOC chapter from birth. No
