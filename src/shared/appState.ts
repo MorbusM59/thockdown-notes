@@ -17,6 +17,17 @@ export interface PersistedSidebarViewState {
   collapsedSecondary?: string[];
 }
 
+export interface PersistedGuideView {
+  sectionId: string;
+  previousNoteId: string | null;
+}
+
+export interface PersistedUndockedNote {
+  noteId: string;
+  sectionId: string;
+  previousNoteId: string | null;
+}
+
 export interface PersistedMenuState {
   sidebarMode: SidebarMode;
   selectedMonths: number[];
@@ -168,6 +179,10 @@ export interface PersistedMenuState {
   chapterBarMode?: 'tags' | 'tabs';
   /** Whether the sidebar is visible (not part of layout widths). */
   isSidebarVisible?: boolean;
+  /** The active User Guide overlay, keyed to the section that is showing it. */
+  guideView?: PersistedGuideView | null;
+  /** The active undocked note overlay, keyed to the section that is showing it. */
+  undockedNote?: PersistedUndockedNote | null;
   /** Whether "double size" mode (2x page zoom + doubled window minimum) is on. See App.tsx's isDoubleSizeMode. */
   isDoubleSizeMode?: boolean;
   /**

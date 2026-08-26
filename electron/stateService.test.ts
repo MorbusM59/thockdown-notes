@@ -89,6 +89,26 @@ describe('StateService app-state field round-trip', () => {
     expect(loaded.menu?.reviewFlagsVisibleBySection).toEqual({ sectionA: false })
   })
 
+  it('persists the guide overlay and undocked note overlay across a save -> fresh-instance load', async () => {
+    const writer = new StateService(dataRoot)
+    await writer.saveAppState({
+      selectedNoteId: null,
+      menu: {
+        sidebarMode: 'date',
+        selectedMonths: [],
+        selectedYears: [],
+        searchQuery: '',
+        guideView: { sectionId: 'section-1', previousNoteId: 'note-2' },
+        undockedNote: { noteId: 'note-3', sectionId: 'section-1', previousNoteId: 'note-2' },
+      },
+    })
+
+    const reader = new StateService(dataRoot)
+    const loaded = await reader.loadAppState()
+    expect(loaded.menu?.guideView).toEqual({ sectionId: 'section-1', previousNoteId: 'note-2' })
+    expect(loaded.menu?.undockedNote).toEqual({ noteId: 'note-3', sectionId: 'section-1', previousNoteId: 'note-2' })
+  })
+
   it('persists the unified global spellcheck toggle across a save -> fresh-instance load', async () => {
     const writer = new StateService(dataRoot)
     await writer.saveAppState({

@@ -2068,6 +2068,14 @@ function App() {
   const [editorSections, setEditorSections] = useState<EditorSectionEntry[]>(() => [
     { id: DEFAULT_EDITOR_SECTION_ID, name: null, position: 0, widthFraction: null, fixedWidthPx: null, lastActiveNoteId: null, noteSlotInitialized: false },
   ])
+  /** Which slot is currently showing the User Guide and what it was showing before. */
+  const [guideView, setGuideView] = useState<{ sectionId: string; previousNoteId: string | null } | null>(null)
+  /** The note currently shown as an undocked overlay in a section slot. */
+  const [undockedNote, setUndockedNote] = useState<{
+    noteId: string
+    sectionId: string
+    previousNoteId: string | null
+  } | null>(null)
   // Which note each section should activate once it first mounts and
   // registers -- populated by bootstrap, drained by the effect below as
   // each section's registry entry appears. Not app state: this is one-shot
@@ -3833,6 +3841,8 @@ function App() {
     sidebarMode?: SidebarMode
     sidebarViewStateByMode?: SidebarViewStateByMode
     isSidebarVisible?: boolean
+    guideView?: { sectionId: string; previousNoteId: string | null } | null
+    undockedNote?: { noteId: string; sectionId: string; previousNoteId: string | null } | null
     isDoubleSizeMode?: boolean
     reviewGutterVisibleBySection?: Record<string, boolean>
     reviewFlagsVisibleBySection?: Record<string, boolean>
@@ -3940,6 +3950,8 @@ function App() {
       spellCheckEnabled,
       chapterBarMode: chapterBarModeRef.current,
       isSidebarVisible: overrides?.isSidebarVisible ?? isSidebarVisible,
+      guideView: overrides?.guideView ?? guideView,
+      undockedNote: overrides?.undockedNote ?? undockedNote,
       isDoubleSizeMode: overrides?.isDoubleSizeMode ?? isDoubleSizeMode,
       reviewGutterVisibleBySection: overrides?.reviewGutterVisibleBySection ?? reviewGutterVisibleBySection,
       reviewFlagsVisibleBySection: overrides?.reviewFlagsVisibleBySection ?? reviewFlagsVisibleBySection,
@@ -4017,6 +4029,8 @@ function App() {
     viewSpacing,
     viewLetterSpacingEm,
     viewStyle,
+    guideView,
+    undockedNote,
   ])
 
   /**
@@ -5155,24 +5169,11 @@ ${markdownHtml}
   // sidebar click uses, not a dedicated overlay component. No dedicated
   // close action any more either -- leaving it works exactly like leaving
   // any other note (pick another one from the sidebar, switch tabs, ...).
-  /**
-   * Which slot is currently showing the User Guide, and what that slot was
-   * showing before.
-   *
-   * The guide opens as an UNDOCKED note (docs/user-workflow-design.md): it
-   * belongs to no collection, is never pinned, and leaves the slot's own
-   * collection untouched underneath, so closing it is a restore rather than a
-   * reload. Only one is ever open -- opening it somewhere else closes the
-   * first, since two copies of a read-only manual help nobody.
-   *
-   * Transient, never persisted: after a restart the guide is simply not open.
-   */
-  const [guideView, setGuideView] = useState<{ sectionId: string; previousNoteId: string | null } | null>(null)
-
   const closeGuideView = useCallback(async () => {
     const pending = guideView
     if (!pending) return
     setGuideView(null)
+    persistMenuStateNow({ guideView: null, undockedNote })
     const handle = sectionRegistryRef.current.get(pending.sectionId)
     if (!handle) return
     // A slot that was EMPTY before must go back to empty, not keep the guide
@@ -5191,9 +5192,11 @@ ${markdownHtml}
     const targetSectionId = activeSectionId
     if (!targetSectionId) return
     const previousNoteId = getActiveSection()?.activeNoteId ?? null
-    setGuideView({ sectionId: targetSectionId, previousNoteId })
+    const nextGuideView = { sectionId: targetSectionId, previousNoteId }
+    setGuideView(nextGuideView)
+    persistMenuStateNow({ guideView: nextGuideView, undockedNote: null })
     await selectNote(HELP_GUIDE_ROOT_ID, { forceReload: true })
-  }, [activeSectionId, getActiveSection, selectNote])
+  }, [activeSectionId, getActiveSection, persistMenuStateNow, selectNote, undockedNote])
 
   /**
    * The window control is a TOGGLE, and a toggle that is lit always goes out
@@ -5295,27 +5298,6 @@ ${markdownHtml}
   updateActiveNoteTitlePreviewRef.current = updateActiveNoteTitlePreview
 
   /**
-   * The note created "undocked" -- from the shortcut or the quick-actions
-   * menu rather than a section's own create pill -- plus the slot it opened
-   * in and what that slot was showing before.
-   *
-   * Two kinds of new note (docs/user-workflow-design.md): one where the user
-   * has already decided where it belongs, and one where they were interrupted
-   * and have no attention to spare for that question. This is the second, and
-   * the whole point is that it asks for NOTHING. It is not a pending decision
-   * the UI chases; it is permission to defer one, possibly forever.
-   *
-   * Transient by design -- never persisted. After a restart an uncommitted
-   * note is simply an unpinned note, which is exactly what it is.
-   */
-  const [undockedNote, setUndockedNote] = useState<{
-    noteId: string
-    sectionId: string
-    /** What the slot was showing before, so "set aside" can put it back. */
-    previousNoteId: string | null
-  } | null>(null)
-
-  /**
    * "Set aside": stop showing the undocked note and bring the slot's own
    * section straight back. Cheap because the section never left -- undocked is
    * presentation only, so this is clearing a marker, not reloading anything.
@@ -5330,6 +5312,7 @@ ${markdownHtml}
     const pending = undockedNote
     if (!pending) return
     setUndockedNote(null)
+    persistMenuStateNow({ guideView, undockedNote: null })
 
     const handle = sectionRegistryRef.current.get(pending.sectionId)
     // Discard only when the note is genuinely still the untouched template,
@@ -5386,8 +5369,9 @@ ${markdownHtml}
     })
     await window.thockdownSections?.setActiveNote(candidateSectionId, pending.noteId).catch(() => undefined)
     setUndockedNote(null)
+    persistMenuStateNow({ guideView, undockedNote: null })
     await handleSwapSectionRef.current?.(pending.sectionId, candidateSectionId)
-  }, [undockedNote])
+  }, [guideView, persistMenuStateNow, undockedNote])
 
   const createNote = useCallback(async (initialText = NEW_NOTE_TEMPLATE) => {
     if (!window.thockdownNotes) return
@@ -5415,7 +5399,9 @@ ${markdownHtml}
       // Born undocked: this path never pins, so the note is genuinely absent
       // from every section's tab list rather than hidden from one.
       if (activeSectionId) {
-        setUndockedNote({ noteId: created.id, sectionId: activeSectionId, previousNoteId })
+        const nextUndockedNote = { noteId: created.id, sectionId: activeSectionId, previousNoteId }
+        setUndockedNote(nextUndockedNote)
+        persistMenuStateNow({ guideView, undockedNote: nextUndockedNote })
       }
       setSidebarMode('date')
     } catch (error) {
@@ -5423,7 +5409,7 @@ ${markdownHtml}
     } finally {
       noteTransitionLockRef.current = false
     }
-  }, [activeSectionId, getActiveSection, persistenceReady, refreshNotes])
+  }, [activeSectionId, getActiveSection, guideView, persistenceReady, persistMenuStateNow, refreshNotes])
 
   const createNoteFromClipboardTitle = useCallback(async () => {
     let title = FALLBACK_NEW_NOTE_TITLE
@@ -5720,6 +5706,9 @@ ${markdownHtml}
           const appState = window.thockdownState ? await window.thockdownState.loadAppState() : { selectedNoteId: null }
           if (disposed) return
 
+          let restoredGuideView: { sectionId: string; previousNoteId: string | null } | null = null
+          let restoredUndockedNote: { noteId: string; sectionId: string; previousNoteId: string | null } | null = null
+
           if (appState.menu) {
             const loadedSidebarViewState: SidebarViewStateByMode = {
               date: sanitizeSidebarViewState(appState.menu.sidebarViewState?.date),
@@ -5729,6 +5718,10 @@ ${markdownHtml}
               find: sanitizeSidebarViewState(appState.menu.sidebarViewState?.find),
               options: sanitizeSidebarViewState(appState.menu.sidebarViewState?.options),
             }
+            restoredGuideView = appState.menu.guideView ?? null
+            restoredUndockedNote = appState.menu.undockedNote ?? null
+            setGuideView(restoredGuideView)
+            setUndockedNote(restoredUndockedNote)
 
             setSidebarViewStateByMode(loadedSidebarViewState)
             setSidebarMode(appState.menu.sidebarMode)
@@ -5989,9 +5982,12 @@ ${markdownHtml}
             initialNoteIdBySectionIdRef.current.set(entry.id, fallbackNoteId)
           })
           setEditorSections(resolvedSections)
-          setActiveSectionId((previous) => (
-            resolvedSections.some((entry) => entry.id === previous) ? previous : resolvedSections[0].id
-          ))
+          setActiveSectionId((previous) => {
+            const preferredSectionId = restoredGuideView?.sectionId ?? restoredUndockedNote?.sectionId ?? previous
+            return resolvedSections.some((entry) => entry.id === preferredSectionId)
+              ? preferredSectionId
+              : (resolvedSections.some((entry) => entry.id === previous) ? previous : resolvedSections[0].id)
+          })
 
           // Restore the fixed/flexible pin state persisted for the placed
           // sections. Marking hydration complete (even when nothing is
@@ -6068,6 +6064,30 @@ ${markdownHtml}
       void handle.activateNote(pendingNoteId)
     }
   }, [editorSections])
+
+  useEffect(() => {
+    if (!persistenceReady) return
+
+    const pendingGuideView = guideView
+    if (pendingGuideView) {
+      const handle = getActiveSectionHandle(sectionRegistryRef, pendingGuideView.sectionId)
+      if (!handle) return
+      markSectionActive(pendingGuideView.sectionId)
+      if (handle.activeNoteId !== HELP_GUIDE_ROOT_ID) {
+        void handle.activateNote(HELP_GUIDE_ROOT_ID)
+      }
+      return
+    }
+
+    const pendingUndockedNote = undockedNote
+    if (!pendingUndockedNote) return
+    const handle = getActiveSectionHandle(sectionRegistryRef, pendingUndockedNote.sectionId)
+    if (!handle) return
+    markSectionActive(pendingUndockedNote.sectionId)
+    if (handle.activeNoteId !== pendingUndockedNote.noteId) {
+      void handle.activateNote(pendingUndockedNote.noteId)
+    }
+  }, [editorSections, guideView, markSectionActive, persistenceReady, undockedNote])
 
   // Same drain pattern as above, for pendingChapterBarModeBySectionIdRef.
   useEffect(() => {
@@ -9325,8 +9345,14 @@ ${markdownHtml}
                   undockedNoteId={undockedNote?.sectionId === entry.id ? undockedNote.noteId : null}
                   isShowingGuideSlot={guideView?.sectionId === entry.id}
                   onCloseGuideView={() => void closeGuideView()}
-                  onGuideNoLongerShown={() => setGuideView(null)}
-                  onDockUndockedNote={() => setUndockedNote(null)}
+                  onGuideNoLongerShown={() => {
+                    setGuideView(null)
+                    persistMenuStateNow({ guideView: null, undockedNote })
+                  }}
+                  onDockUndockedNote={() => {
+                    setUndockedNote(null)
+                    persistMenuStateNow({ guideView, undockedNote: null })
+                  }}
                   onDockUndockedNoteIntoSection={(candidateId) => void handleDockUndockedNoteIntoSection(candidateId)}
                   onSetAsideUndockedNote={() => void handleSetAsideUndockedNote()}
                   registerSectionHandle={registerSectionHandle}

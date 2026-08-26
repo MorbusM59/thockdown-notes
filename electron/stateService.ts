@@ -368,6 +368,28 @@ function sanitizeReviewGutterVisibleBySection(input: unknown): Record<string, bo
   return result;
 }
 
+function sanitizeGuideView(input: unknown): PersistedMenuState['guideView'] {
+  if (!input || typeof input !== 'object') return undefined;
+  const candidate = input as Partial<{ sectionId: unknown; previousNoteId: unknown }>;
+  if (typeof candidate.sectionId !== 'string' || candidate.sectionId.length === 0) return undefined;
+  return {
+    sectionId: candidate.sectionId,
+    previousNoteId: typeof candidate.previousNoteId === 'string' ? candidate.previousNoteId : null,
+  };
+}
+
+function sanitizeUndockedNote(input: unknown): PersistedMenuState['undockedNote'] {
+  if (!input || typeof input !== 'object') return undefined;
+  const candidate = input as Partial<{ noteId: unknown; sectionId: unknown; previousNoteId: unknown }>;
+  if (typeof candidate.noteId !== 'string' || candidate.noteId.length === 0) return undefined;
+  if (typeof candidate.sectionId !== 'string' || candidate.sectionId.length === 0) return undefined;
+  return {
+    noteId: candidate.noteId,
+    sectionId: candidate.sectionId,
+    previousNoteId: typeof candidate.previousNoteId === 'string' ? candidate.previousNoteId : null,
+  };
+}
+
 function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): PersistedMenuState {
   const selectedMonths = Array.isArray(input?.selectedMonths)
     ? input.selectedMonths.filter((value): value is number => Number.isInteger(value) && value >= 1 && value <= 12)
@@ -509,6 +531,8 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     spellCheckEnabled: Boolean(input?.spellCheckEnabled ?? false),
     chapterBarMode: sanitizeChapterBarMode(input?.chapterBarMode),
     isSidebarVisible: typeof input?.isSidebarVisible === 'boolean' ? input.isSidebarVisible : true,
+    guideView: sanitizeGuideView(input?.guideView),
+    undockedNote: sanitizeUndockedNote(input?.undockedNote),
     // Was missing entirely until this line -- sanitizeMenu (routed through
     // by both loadAppState and saveAppState) silently dropped this field on
     // every real read/write, so it could never actually round-trip no
