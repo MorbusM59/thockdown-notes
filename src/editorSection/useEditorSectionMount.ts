@@ -1951,10 +1951,15 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
 
     if (!sectionRequiresScrollUpdateRef.current) {
       // Fast path: both panes are already in sync, so this is a pure CSS
-      // visibility toggle. Do not run any restore/scroll code.
+      // visibility toggle. Do not run any restore/scroll code, but still
+      // reassert the live edit caret focus: the pane is visible again and a
+      // hidden editor with no focus means typing lands nowhere, exactly the
+      // complaint here.
       debugLogScrollSync(`render->edit fast path skipped (flag false): note=${activeNoteId}`)
       previousActiveNoteIdForEditRestoreRef.current = activeNoteId
       editRestoreCompletedForNoteIdRef.current.add(editRestoreKey)
+      setIsCaretSuspended(false)
+      scheduleFocusEditorInEditMode({ restoreSelection: true })
       return
     }
 
@@ -1968,14 +1973,14 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     if (cachedSnapshot && cachedSnapshot.noteId === activeNoteId) {
       pendingEditRestoreSnapshotRef.current = null
       editRestoreCompletedForNoteIdRef.current.add(editRestoreKey)
-applyEditRestoreSnapshot(cachedSnapshot, { restoreFullSelection: true, focusAfterApply: true, onComplete: () => setIsCaretSuspended(false) })
+      applyEditRestoreSnapshot(cachedSnapshot, { restoreFullSelection: true, focusAfterApply: true, onComplete: () => setIsCaretSuspended(false) })
       return
     }
 
     const memorySnapshot = editModeSnapshotByNoteIdRef.current.get(activeNoteId)
     if (memorySnapshot) {
       editRestoreCompletedForNoteIdRef.current.add(editRestoreKey)
-applyEditRestoreSnapshot(memorySnapshot, { restoreFullSelection: true, focusAfterApply: true, onComplete: () => setIsCaretSuspended(false) })
+      applyEditRestoreSnapshot(memorySnapshot, { restoreFullSelection: true, focusAfterApply: true, onComplete: () => setIsCaretSuspended(false) })
       return
     }
 
@@ -1996,7 +2001,7 @@ applyEditRestoreSnapshot(memorySnapshot, { restoreFullSelection: true, focusAfte
         updateEditModeSnapshotCache(fallbackSnapshot)
         editRestoreCompletedForNoteIdRef.current.add(editRestoreKey)
 
-applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusAfterApply: true, onComplete: () => setIsCaretSuspended(false) })
+        applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusAfterApply: true, onComplete: () => setIsCaretSuspended(false) })
       } catch (error) {
         console.warn('Failed to restore edit mode state from persisted UI data', error)
       }
@@ -2048,6 +2053,13 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         setActiveNoteText(normalizeInternalText(latestEditorTextRef.current || activeNoteText))
       }
       setIsPreviewMode((previous) => !previous)
+      if (!enteringPreview) {
+        // Fast-path toggles are just a visibility flip: the edit pane is
+        // already in the correct place, so reassert focus here rather than
+        // relying on the slow restore path that never runs in this branch.
+        setIsCaretSuspended(false)
+        scheduleFocusEditorInEditMode({ restoreSelection: true })
+      }
       return
     }
 
