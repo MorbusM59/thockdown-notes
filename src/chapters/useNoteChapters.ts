@@ -171,15 +171,24 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
 
   const [chapters, setChapters] = useState<ChapterEntry[]>([])
   const [draggedChapterIndex, setDraggedChapterIndex] = useState<number | null>(null)
+  // Which note id `chapters` actually reflects -- distinct from `chapters`
+  // itself becoming non-stale-looking after a re-render, since a bare state
+  // update can't tell the auto-TOC effect below apart from "still holding the
+  // PREVIOUS note's list while this one's own fetch is in flight." Read only
+  // by that effect's guard clause; see its own comment for the race this closes.
+  const [chaptersLoadedForNoteId, setChaptersLoadedForNoteId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!persistenceReady || !window.thockdownChapters || !menuIdentityNoteId) {
       setChapters([])
+      setChaptersLoadedForNoteId(null)
       return
     }
     let cancelled = false
     void window.thockdownChapters.listChapters(menuIdentityNoteId).then((entries) => {
-      if (!cancelled) setChapters(entries)
+      if (cancelled) return
+      setChapters(entries)
+      setChaptersLoadedForNoteId(menuIdentityNoteId)
     })
     return () => {
       cancelled = true
@@ -325,6 +334,20 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
   useEffect(() => {
     if (!persistenceReady || !window.thockdownChapters || !window.thockdownNotes || !menuIdentityNoteId) return
 
+    // `chapters` (and so autoTocChapterNoteId/autoOpenItemsChapterNoteId) can
+    // still be holding the PREVIOUS menuIdentityNoteId's own list for one or
+    // more renders after switching notes -- the fetch effect above sets both
+    // together, but only once its async listChapters call actually resolves.
+    // Deciding "no auto-TOC chapter exists yet" from that stale list was firing
+    // a real createAutoTocChapter call for a note that already had one (every
+    // note does, by default) the moment it was switched to right after a note
+    // whose own list hadn't loaded yet -- confirmed live switching into the
+    // Help Guide, whose parent already has its auto-TOC chapter seeded at
+    // startup. Waiting for `chapters` to actually belong to this note closes
+    // that race at the source instead of only tolerating it via the `.catch`
+    // below.
+    if (chaptersLoadedForNoteId !== menuIdentityNoteId) return
+
     if (autoTocChapterNoteId === null) {
       if (pendingAutoTocCreateForNoteIdRef.current === menuIdentityNoteId) return
       pendingAutoTocCreateForNoteIdRef.current = menuIdentityNoteId
@@ -393,7 +416,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
         cancelled = true
       }
     }
-  }, [reorderableChapterCount, autoTocChapterNoteId, autoOpenItemsChapterNoteId, menuIdentityNoteId, persistenceReady, activeNoteId, activateNote, refreshNotes, onNotePermanentlyDeleted])
+  }, [reorderableChapterCount, autoTocChapterNoteId, autoOpenItemsChapterNoteId, menuIdentityNoteId, chaptersLoadedForNoteId, persistenceReady, activeNoteId, activateNote, refreshNotes, onNotePermanentlyDeleted])
 
   const handleCreateChapter = useCallback(async () => {
     if (!window.thockdownChapters || !window.thockdownNotes || !menuIdentityNoteId) return
