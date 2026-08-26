@@ -462,6 +462,10 @@ function registerIpcHandlers() {
 
   ipcMain.handle(APP_STATE_CHANNELS.loadAppState, async () => stateService!.loadAppState());
   ipcMain.handle(APP_STATE_CHANNELS.saveAppState, async (_event, payload) => stateService!.saveAppState(payload));
+  ipcMain.handle(APP_STATE_CHANNELS.clearAppState, async () => {
+    databaseService?.resetToFactoryDefaults();
+    await stateService!.clearAppState();
+  });
   ipcMain.handle(APP_STATE_CHANNELS.loadWindowState, async () => stateService!.loadWindowState());
   ipcMain.handle(APP_STATE_CHANNELS.saveWindowState, async (_event, payload) => stateService!.saveWindowState(payload));
 

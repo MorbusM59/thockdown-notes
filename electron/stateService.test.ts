@@ -126,4 +126,31 @@ describe('StateService app-state field round-trip', () => {
     const loaded = await reader.loadAppState()
     expect(loaded.menu?.spellCheckEnabled).toBe(true)
   })
+
+  it('clearAppState resets persisted app state back to the default baseline', async () => {
+    const writer = new StateService(dataRoot)
+    await writer.saveAppState({
+      selectedNoteId: 'note-123',
+      menu: {
+        sidebarMode: 'find',
+        selectedMonths: [3],
+        selectedYears: [2024],
+        searchQuery: 'stale query',
+        guideView: { sectionId: 'section-1', previousNoteId: 'note-2' },
+        undockedNote: { noteId: 'note-3', sectionId: 'section-1', previousNoteId: 'note-2' },
+        debuggingEnabled: true,
+      },
+    })
+
+    await writer.clearAppState()
+
+    const reader = new StateService(dataRoot)
+    const loaded = await reader.loadAppState()
+    expect(loaded.selectedNoteId).toBeNull()
+    expect(loaded.menu?.sidebarMode).toBe('date')
+    expect(loaded.menu?.searchQuery).toBe('')
+    expect(loaded.menu?.guideView).toBeUndefined()
+    expect(loaded.menu?.undockedNote).toBeUndefined()
+    expect(loaded.menu?.debuggingEnabled).toBe(false)
+  })
 })

@@ -777,6 +777,12 @@ function buildStateBridge(storeRef: { current: BrowserMockStore }): AppStateApi 
       })
     },
 
+    async clearAppState(): Promise<void> {
+      mutate((store) => {
+        store.appState = clone(DEFAULT_APP_STATE)
+      })
+    },
+
     async loadWindowState(): Promise<WindowState> {
       return clone(storeRef.current.windowState)
     },

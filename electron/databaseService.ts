@@ -123,8 +123,8 @@ const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
     gridOutline: '#00000022',
     grid: '#f9f6f3',
     gutterBackground: 'rgba(196, 187, 182, 0.49)',
-    reviewLine: 'rgba(255, 221, 105, 0.35)',
-    warningLine: 'rgba(199, 60, 0, 0.35)',
+    reviewLine: 'rgba(255, 230, 0, 0.6)',
+    warningLine: 'rgba(255, 50, 0, 0.2)',
     lineNumber: 'rgba(0, 0, 0, 0.6)',
     base: '#f9f6f4',
     inputFields: '#ffffff',
@@ -1777,6 +1777,39 @@ export class DatabaseService {
     return this.listEditorSections();
   }
 
+  /**
+   * Resets the user-visible session state back to a fresh-install baseline:
+   * the default editor section is preserved, every other open section and its
+   * tabs are discarded, the default custom UI loadout is reactivated for both
+   * modes, and any previous pending scratch edits are cleared back to their
+   * factory default state. This is the database-backed counterpart to
+   * StateService.clearAppState(), which resets the app-state JSON file.
+   */
+  resetToFactoryDefaults(): void {
+    const db = this.requireDb();
+    const tx = db.transaction(() => {
+      db.prepare('DELETE FROM note_tabs').run();
+      db.prepare('DELETE FROM editor_slots').run();
+      db.prepare('DELETE FROM editor_sections WHERE id != ?').run(DEFAULT_EDITOR_SECTION_ID);
+      db.prepare(`
+        UPDATE editor_sections
+        SET name = NULL,
+            position = 0,
+            widthFraction = NULL,
+            fixedWidthPx = NULL,
+            lastActiveNoteId = NULL,
+            noteSlotInitialized = 0
+        WHERE id = ?
+      `).run(DEFAULT_EDITOR_SECTION_ID);
+      db.prepare('INSERT OR REPLACE INTO editor_slots (position, widthFraction, fixedWidthPx) VALUES (?, ?, ?)')
+        .run(0, null, null);
+    });
+    tx();
+
+    this.resetCustomUiLoadout('light');
+    this.resetCustomUiLoadout('dark');
+  }
+
   // ── Tab bar (pinned quick-access notes, scoped per section) ─────────────
 
   /**
@@ -3402,10 +3435,21 @@ export class DatabaseService {
     const sign = modeSign(normalizedMode);
     const defaultCustomId = LOADOUT_DEFAULT_CUSTOM_ID_ABS * sign;
     const timestamp = Date.now();
+    const defaultPayload = normalizedMode === 'dark' ? DEFAULT_CUSTOM_DARK : DEFAULT_CUSTOM_LIGHT;
+    const normalized = normalizeUiLayoutLoadout(defaultPayload) ?? DEFAULT_UI_LAYOUT_LOADOUT;
+    const signature = stableStringify(normalized);
+    const payloadJson = JSON.stringify(normalized);
 
     const tx = db.transaction(() => {
       db.prepare(`UPDATE ui_loadout_entries SET isActive = 0 WHERE id * ? > 0`).run(sign);
-      db.prepare(`UPDATE ui_loadout_entries SET isActive = 1, updatedAt = ? WHERE id = ?`).run(timestamp, defaultCustomId);
+      db.prepare(`
+        UPDATE ui_loadout_entries
+        SET isActive = 1,
+            signature = ?,
+            payloadJson = ?,
+            updatedAt = ?
+        WHERE id = ?
+      `).run(signature, payloadJson, timestamp, defaultCustomId);
       this.writeLoadoutMeta(`lastCustomId:${normalizedMode}`, defaultCustomId);
     });
 

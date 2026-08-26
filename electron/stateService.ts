@@ -605,6 +605,17 @@ export class StateService {
     await fs.writeFile(this.appStatePath, JSON.stringify(payload, null, 2), 'utf8');
   }
 
+  async clearAppState(): Promise<void> {
+    await this.ensureDataRoot();
+    const payload: AppState = {
+      selectedNoteId: null,
+      viewport: undefined,
+      menu: sanitizeMenu(DEFAULT_APP_STATE.menu),
+    };
+    this.cachedAppState = payload;
+    await fs.writeFile(this.appStatePath, JSON.stringify(payload, null, 2), 'utf8');
+  }
+
   // Called synchronously from the main process on app close, to guarantee
   // the last-known state is written even if the renderer's async IPC call
   // didn't complete before the window was destroyed.

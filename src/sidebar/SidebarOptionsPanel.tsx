@@ -361,6 +361,7 @@ export interface SidebarOptionsPanelProps {
   hasUnsavedUiLoadoutChanges: boolean
   saveCustomLoadout: () => Promise<void>
   resetCustomLoadout: () => Promise<void>
+  resetCustomLayoutPrimed: boolean
 
   primedColorSource: ColorArmSource
   setPrimedColorSource: (source: ColorArmSource) => void
@@ -509,6 +510,8 @@ export interface SidebarOptionsPanelProps {
 
   debuggingEnabled: boolean
   setDebuggingEnabled: (value: boolean) => void
+  clearAppState: () => void
+  clearAppStatePrimed: boolean
   debugNoteIdRef: MutableRefObject<string | null>
   queueAppStateSave: (selectedNoteId: string | null) => void
   activeNoteId: string | null
@@ -609,6 +612,7 @@ export function SidebarOptionsPanel({
   hasUnsavedUiLoadoutChanges,
   saveCustomLoadout,
   resetCustomLoadout,
+  resetCustomLayoutPrimed,
   primedColorSource,
   setPrimedColorSource,
   highlightColors,
@@ -747,6 +751,8 @@ export function SidebarOptionsPanel({
   importLayoutsTdl,
   debuggingEnabled,
   setDebuggingEnabled,
+  clearAppState,
+  clearAppStatePrimed,
   debugNoteIdRef,
   queueAppStateSave,
   activeNoteId,
@@ -1171,9 +1177,9 @@ export function SidebarOptionsPanel({
           </button>
           <button
             type="button"
-            className="btn-icon options-color-swatch options-loadout-btn"
-            data-tooltip="Reset custom layout to defaults"
-            aria-label="Reset custom layout to defaults"
+            className={`btn-icon options-color-swatch options-loadout-btn${resetCustomLayoutPrimed ? ' primed' : ''}`}
+            data-tooltip={resetCustomLayoutPrimed ? 'Click again to reset custom layout to defaults' : 'Reset custom layout to defaults'}
+            aria-label={resetCustomLayoutPrimed ? 'Confirm reset custom layout to defaults' : 'Reset custom layout to defaults'}
             onClick={() => void resetCustomLoadout()}
             onContextMenu={(event) => event.preventDefault()}
           >
@@ -2797,6 +2803,15 @@ export function SidebarOptionsPanel({
             aria-label="Open DevTools (detached window)"
           >
             <span className="fa-solid fa-code" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className={`btn-icon options-color-swatch options-loadout-btn${clearAppStatePrimed ? ' primed' : ''}`}
+            onClick={clearAppState}
+            data-tooltip={clearAppStatePrimed ? 'Click again to clear persisted app state and reload' : 'Clear persisted app state and reload'}
+            aria-label={clearAppStatePrimed ? 'Confirm clearing persisted app state and reload' : 'Clear persisted app state and reload'}
+          >
+            <span className="fa-solid fa-trash" aria-hidden="true" />
           </button>
         </div>
       </AccordionSection>

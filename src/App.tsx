@@ -15,6 +15,7 @@ import {
   typingSoundManager,
 } from './sound/TypingSoundManager'
 import type { PersistedMenuState, PersistedSidebarViewState, PersistedViewportState } from './shared/appState'
+import { DEFAULT_CUSTOM_DARK, DEFAULT_CUSTOM_LIGHT } from './shared/presets'
 import {
   DEFAULT_GLAZE_SETTINGS,
   GLAZE_GLOOM_OPACITY_MAX,
@@ -245,8 +246,8 @@ const DEFAULT_HIGHLIGHT_COLORS: HighlightColors = {
   gridOutline: '#00000022',
   grid: '#f9f6f3',
   gutterBackground: 'rgba(196, 187, 182, 0.49)',
-  reviewLine: 'rgba(255, 221, 105, 0.35)',
-  warningLine: 'rgba(199, 60, 0, 0.35)',
+  reviewLine: 'rgba(255, 230, 0, 0.6)',
+  warningLine: 'rgba(255, 50, 0, 0.2)',
   lineNumber: 'rgba(0, 0, 0, 0.6)',
   base: '#f9f6f4',
   inputFields: '#ffffff',
@@ -3109,7 +3110,19 @@ function App() {
     }
   }, [uiMode])
 
+  const [resetCustomLayoutPrimed, setResetCustomLayoutPrimed] = useState(false)
+
+  useEffect(() => {
+    setResetCustomLayoutPrimed(false)
+  }, [uiMode])
+
   const resetCustomLoadout = useCallback(async () => {
+    if (!resetCustomLayoutPrimed) {
+      setResetCustomLayoutPrimed(true)
+      return
+    }
+
+    setResetCustomLayoutPrimed(false)
     if (!window.thockdownLoadouts) return
     try {
       const result = await window.thockdownLoadouts.resetCustom(uiMode)
@@ -3121,7 +3134,7 @@ function App() {
     } catch (error) {
       console.error('Failed to reset custom UI loadout', error)
     }
-  }, [uiMode, applyEntryToLiveState])
+  }, [resetCustomLayoutPrimed, uiMode, applyEntryToLiveState])
 
   const [primedCustomLayoutId, setPrimedCustomLayoutId] = useState<number | null>(null)
   const customLoadoutRightClickHoldTimerRef = useRef<number | null>(null)
@@ -4979,6 +4992,34 @@ function App() {
       originalConsoleMethodsRef.current = {}
     }
   }, [debuggingEnabled, writeDebugEntry])
+
+  const [clearAppStatePrimed, setClearAppStatePrimed] = useState(false)
+
+  const clearPersistedAppState = useCallback(async () => {
+    if (!clearAppStatePrimed) {
+      setClearAppStatePrimed(true)
+      return
+    }
+
+    setClearAppStatePrimed(false)
+
+    setDebuggingEnabled(false)
+    debugNoteIdRef.current = null
+
+    const defaultLoadout = uiMode === 'dark' ? DEFAULT_CUSTOM_DARK : DEFAULT_CUSTOM_LIGHT
+    applyUiLayoutLoadout(defaultLoadout)
+
+    if (!window.thockdownState) return
+    await window.thockdownState.clearAppState()
+    const refreshedMenuState = buildMenuStateSnapshot()
+    persistedMenuStateRef.current = refreshedMenuState
+    await window.thockdownState.saveAppState({
+      selectedNoteId: null,
+      viewport: undefined,
+      menu: refreshedMenuState,
+    })
+    window.location.reload()
+  }, [applyUiLayoutLoadout, buildMenuStateSnapshot, clearAppStatePrimed, uiMode])
 
   const queueAppStateSave = useCallback((selectedNoteId: string | null) => {
     if (!window.thockdownState) return
@@ -8812,6 +8853,7 @@ ${markdownHtml}
                         hasUnsavedUiLoadoutChanges={hasUnsavedUiLoadoutChanges}
                         saveCustomLoadout={saveCustomLoadout}
                         resetCustomLoadout={resetCustomLoadout}
+                        resetCustomLayoutPrimed={resetCustomLayoutPrimed}
                         primedColorSource={primedColorSource}
                         setPrimedColorSource={setPrimedColorSource}
                         highlightColors={highlightColors}
@@ -8950,6 +8992,8 @@ ${markdownHtml}
                         importLayoutsTdl={importLayoutsTdl}
                         debuggingEnabled={debuggingEnabled}
                         setDebuggingEnabled={setDebuggingEnabled}
+                        clearAppState={clearPersistedAppState}
+                        clearAppStatePrimed={clearAppStatePrimed}
                         debugNoteIdRef={debugNoteIdRef}
                         queueAppStateSave={queueAppStateSave}
                         activeNoteId={activeSection?.activeNoteId ?? null}

@@ -91,6 +91,7 @@ contextBridge.exposeInMainWorld('thockdownNotes', noteLifecycleApi)
 const appStateApi: AppStateApi = {
   loadAppState: () => ipcRenderer.invoke(APP_STATE_CHANNELS.loadAppState),
   saveAppState: (state) => ipcRenderer.invoke(APP_STATE_CHANNELS.saveAppState, state),
+  clearAppState: () => ipcRenderer.invoke(APP_STATE_CHANNELS.clearAppState),
   loadWindowState: () => ipcRenderer.invoke(APP_STATE_CHANNELS.loadWindowState),
   saveWindowState: (state) => ipcRenderer.invoke(APP_STATE_CHANNELS.saveWindowState, state),
 }

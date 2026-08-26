@@ -4,6 +4,7 @@ import type { GlazeSettings } from './glaze';
 export const APP_STATE_CHANNELS = {
   loadAppState: 'state:app:load',
   saveAppState: 'state:app:save',
+  clearAppState: 'state:app:clear',
   loadWindowState: 'state:window:load',
   saveWindowState: 'state:window:save',
 } as const;
@@ -242,6 +243,7 @@ export interface WindowState {
 export interface AppStateApi {
   loadAppState(): Promise<AppState>;
   saveAppState(state: AppState): Promise<void>;
+  clearAppState(): Promise<void>;
   loadWindowState(): Promise<WindowState>;
   saveWindowState(state: WindowState): Promise<void>;
 }
