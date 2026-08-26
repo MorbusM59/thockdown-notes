@@ -320,12 +320,16 @@
   background:    transparent;
   overflow:      hidden;
   transition: box-shadow 350ms ease-out;
-  transition: ease-in margin 100ms;
 }
 
+/* The chapter bar exists exactly when a note is loaded, so this margin only
+   ever changes across the empty <-> note boundary. Animating it made the
+   incoming state (empty, or a freshly opened note) paint one frame wearing
+   the outgoing state's geometry and then resize into place; both directions
+   should simply appear settled on their first frame, so the margin change is
+   deliberately instant -- no transition here or on the base rule. */
 .editor-shell.chapter-panel-is-open{
   margin: 0 0 calc(var(--bottom-utility-bar-height) + var(--chapter-panel-clearance-estimate)) var(--spacing-large);
-  transition: ease-in margin 150ms;
 }
 
 .editor-shell::after {
