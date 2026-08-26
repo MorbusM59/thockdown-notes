@@ -167,7 +167,8 @@
 }
 
 /* 11b. Markdown typography */
-.markdown-preview > div > div:first-child > h1 {
+.markdown-preview > div > div:first-child > h1, 
+.markdown-preview > div > div:first-child > h2 {
   margin-top: 0;
 }
 
