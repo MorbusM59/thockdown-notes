@@ -2258,7 +2258,6 @@ function App() {
     // throw a TDZ ReferenceError the moment this dependency array is
     // evaluated during render -- referencing them inside the callback
     // *body* is fine (see the identical note on toggleSidebarVisible above).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const [renderScrollDynamic, setRenderScrollDynamic] = useState(() => getRenderScrollDynamic())
@@ -5209,7 +5208,7 @@ ${markdownHtml}
       return
     }
     await openGuideViewHere()
-  }, [guideView, closeGuideView])
+  }, [guideView, closeGuideView, openGuideViewHere])
 
   /**
    * The quick-actions menu is an OPEN, not a toggle: it says "User Guide", and
@@ -5220,7 +5219,7 @@ ${markdownHtml}
     if (guideView?.sectionId === activeSectionId) return
     if (guideView) await closeGuideView()
     await openGuideViewHere()
-  }, [guideView, activeSectionId, closeGuideView])
+  }, [guideView, activeSectionId, closeGuideView, openGuideViewHere])
 
   const isAllowedNonEditorFocusTarget = useCallback((target: EventTarget | null): boolean => {
     if (!(target instanceof HTMLElement)) return false

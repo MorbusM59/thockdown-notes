@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { DragEvent } from 'react'
+import type { Dispatch, DragEvent, SetStateAction } from 'react'
 import type { ChapterEntry } from '../shared/chapters'
 import { splitChapterFamily } from '../shared/chapters'
 import { isArchivedNote, type NoteSummary } from '../shared/noteLifecycle'
@@ -8,6 +8,27 @@ import { collapseSurgerySite, trimBlankLines } from './chapterExtraction'
 import { useInlinePillEdit } from '../shared/useInlinePillEdit'
 
 const EMPTY_STRING_SET: ReadonlySet<string> = new Set()
+
+export interface CreateChapterModeTransitionOptions {
+  isPreviewMode: boolean
+  isForcedPreviewNote: boolean
+  setIsPreviewMode: Dispatch<SetStateAction<boolean>>
+  toggleRenderViewMode: () => void
+}
+
+export function applyCreateChapterModeTransition({
+  isPreviewMode,
+  isForcedPreviewNote,
+  setIsPreviewMode,
+  toggleRenderViewMode,
+}: CreateChapterModeTransitionOptions): void {
+  if (!isPreviewMode) return
+  if (isForcedPreviewNote) {
+    setIsPreviewMode(false)
+    return
+  }
+  toggleRenderViewMode()
+}
 
 export interface UseNoteChaptersOptions {
   /** The note identity the chapter bar shows chapters *of* -- the chapter-aware "menu identity" (see EditorSection.tsx's `menuIdentityNoteId`), never a chapter's own id (chapters can't have chapters in this UI). */
@@ -22,6 +43,10 @@ export interface UseNoteChaptersOptions {
   refreshNotes: (preferredId?: string | null) => Promise<string | null>
   /** Whatever's actually loaded in the editor right now (parent or a chapter) -- see EditorSection.tsx's own `currentEditorText` doc comment for why this, not `activeNoteText`, is the canonical live read. */
   currentEditorText: string
+  isPreviewMode: boolean
+  isForcedPreviewNote: boolean
+  setIsPreviewMode: Dispatch<SetStateAction<boolean>>
+  toggleRenderViewMode: () => void
   editorSelection: EditorSelectionState
   /** Mutates the currently-displayed note's live text (and optionally its selection) -- see useEditorSectionMount.ts's own doc comment; used here to cut a selection out of whatever's currently open. */
   applyProgrammaticEditorText: (nextText: string, selectionStart?: number, selectionEnd?: number) => void
@@ -163,6 +188,10 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     activateNote,
     refreshNotes,
     currentEditorText,
+    isPreviewMode,
+    isForcedPreviewNote,
+    setIsPreviewMode,
+    toggleRenderViewMode,
     editorSelection,
     applyProgrammaticEditorText,
     flushPendingSaveNow,
@@ -420,13 +449,27 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
 
   const handleCreateChapter = useCallback(async () => {
     if (!window.thockdownChapters || !window.thockdownNotes || !menuIdentityNoteId) return
+    applyCreateChapterModeTransition({
+      isPreviewMode,
+      isForcedPreviewNote,
+      setIsPreviewMode,
+      toggleRenderViewMode,
+    })
     const { chapters: updatedChapters, created } = await window.thockdownChapters.createChapter(menuIdentityNoteId)
     const initialText = '## '
     await window.thockdownNotes.saveNote({ id: created.id, text: initialText })
     setChapters(updatedChapters)
     await refreshNotes(created.id)
     await activateNote(created.id, initialText.length)
-  }, [menuIdentityNoteId, refreshNotes, activateNote])
+  }, [
+    isPreviewMode,
+    isForcedPreviewNote,
+    menuIdentityNoteId,
+    refreshNotes,
+    activateNote,
+    setIsPreviewMode,
+    toggleRenderViewMode,
+  ])
 
   const handleChapterClick = useCallback((chapterNoteId: string) => {
     if (chapterNoteId === activeNoteId) return
@@ -436,6 +479,12 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
   const handleCloneNoteAsChapter = useCallback(async (sourceNoteId: string, insertBeforeChapterNoteId?: string) => {
     if (!window.thockdownChapters || !menuIdentityNoteId) return
     if (sourceNoteId === menuIdentityNoteId) return
+    applyCreateChapterModeTransition({
+      isPreviewMode,
+      isForcedPreviewNote,
+      setIsPreviewMode,
+      toggleRenderViewMode,
+    })
     const { chapters: createdChapters, created } = await window.thockdownChapters.cloneNoteAsChapter(menuIdentityNoteId, sourceNoteId)
 
     // cloneNoteAsChapter always appends the new chapter last -- move it in
@@ -457,7 +506,15 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
 
     await refreshNotes(created.id)
     await activateNote(created.id)
-  }, [menuIdentityNoteId, refreshNotes, activateNote])
+  }, [
+    isPreviewMode,
+    isForcedPreviewNote,
+    menuIdentityNoteId,
+    refreshNotes,
+    activateNote,
+    setIsPreviewMode,
+    toggleRenderViewMode,
+  ])
 
   const handleExtractSelectionToChapter = useCallback(async () => {
     if (!window.thockdownChapters || !window.thockdownNotes || !menuIdentityNoteId) return
@@ -492,6 +549,12 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     applyProgrammaticEditorText(remainingText, seamPos, seamPos)
     await flushPendingSaveNow()
 
+    applyCreateChapterModeTransition({
+      isPreviewMode,
+      isForcedPreviewNote,
+      setIsPreviewMode,
+      toggleRenderViewMode,
+    })
     const { chapters: createdChapters, created } = await window.thockdownChapters.createChapter(menuIdentityNoteId)
     const initialText = extractedText ? `## \n\n${extractedText}` : '## '
     await window.thockdownNotes.saveNote({ id: created.id, text: initialText })
@@ -512,7 +575,22 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     await refreshNotes(created.id)
     // Caret at the end of the pasted text -- "waiting for input behind" it.
     await activateNote(created.id, extractedText.length)
-  }, [menuIdentityNoteId, activeNoteId, autoTocChapterNoteId, autoOpenItemsChapterNoteId, editorSelection, currentEditorText, applyProgrammaticEditorText, flushPendingSaveNow, refreshNotes, activateNote])
+  }, [
+    isPreviewMode,
+    isForcedPreviewNote,
+    menuIdentityNoteId,
+    activeNoteId,
+    autoTocChapterNoteId,
+    autoOpenItemsChapterNoteId,
+    editorSelection,
+    currentEditorText,
+    applyProgrammaticEditorText,
+    flushPendingSaveNow,
+    refreshNotes,
+    activateNote,
+    setIsPreviewMode,
+    toggleRenderViewMode,
+  ])
 
   const handleCollapseChapterIntoPrevious = useCallback(async () => {
     if (!window.thockdownChapters || !window.thockdownNotes || !menuIdentityNoteId) return
@@ -650,6 +728,12 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
         applyProgrammaticEditorText(keptText, seamPos, seamPos)
         await flushPendingSaveNow()
 
+        applyCreateChapterModeTransition({
+          isPreviewMode,
+          isForcedPreviewNote,
+          setIsPreviewMode,
+          toggleRenderViewMode,
+        })
         const { created } = await window.thockdownChapters.createChapter(menuIdentityNoteId)
         const initialText = cutText ? `## \n\n${cutText}` : '## '
         await window.thockdownNotes.saveNote({ id: created.id, text: initialText })
@@ -724,7 +808,24 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
 
     setChapters(updatedChapters)
     await refreshNotes()
-  }, [menuIdentityNoteId, activeNoteId, autoTocChapterNoteId, autoOpenItemsChapterNoteId, reorderableChapters, currentEditorText, editorSelection, applyProgrammaticEditorText, flushPendingSaveNow, refreshNotes, activateNote, onNotePermanentlyDeleted])
+}, [
+      isPreviewMode,
+      isForcedPreviewNote,
+      menuIdentityNoteId,
+      activeNoteId,
+      autoTocChapterNoteId,
+      autoOpenItemsChapterNoteId,
+      reorderableChapters,
+      currentEditorText,
+      editorSelection,
+      applyProgrammaticEditorText,
+      flushPendingSaveNow,
+      refreshNotes,
+      activateNote,
+      setIsPreviewMode,
+      toggleRenderViewMode,
+      onNotePermanentlyDeleted,
+    ])
 
   // Chapter-pill drag-to-reorder only accepts drops onto actual chapter pills.
   // Any other drag target (the parent tab, the bar background, or any
