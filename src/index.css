@@ -12,7 +12,16 @@
   color-scheme: light;
   background-color: #f9f6f3;
 
-  font-synthesis: none;
+  /* Every bundled family in ./fonts ships upright-only (no italic .woff2),
+     so any italic text -- markdown emphasis, the italic UI labels in
+     tags.css -- renders slanted only if the browser is allowed to synthesize
+     an oblique. `none` here suppressed that app-wide and left those upright;
+     `style` turns synthetic italics back on for every font and every surface.
+     Weight synthesis stays off by default (faked bold is far uglier than a
+     skewed upright), so this is deliberately `style`, not `style weight` --
+     individual display faces opt into weight synthesis themselves in
+     markdown.css. */
+  font-synthesis: style;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
