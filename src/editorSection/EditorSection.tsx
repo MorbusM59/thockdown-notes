@@ -1626,6 +1626,7 @@ export function EditorSection({
     setIsPreviewMode,
     isForcedPreviewNote,
     activateNote,
+    clearActiveNote,
     activeDecorationFormats,
     activeHeadingLevel,
     isChecklistActive,

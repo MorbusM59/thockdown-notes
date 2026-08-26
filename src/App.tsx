@@ -5174,33 +5174,53 @@ ${markdownHtml}
     const pending = guideView
     if (!pending) return
     setGuideView(null)
-    if (!pending.previousNoteId) return
     const handle = sectionRegistryRef.current.get(pending.sectionId)
-    await handle?.activateNote(pending.previousNoteId).catch(() => undefined)
-  }, [guideView])
-
-  /**
-   * One rule covers both ways in and both expectations of them: asking for the
-   * guide where it already is closes it (so the window-control button is a
-   * toggle), and asking for it anywhere else MOVES it there (so opening it
-   * from another slot's quick-actions menu never leaves a second copy behind).
-   */
-  const handleHelpModeOpen = useCallback(async () => {
-    const targetSectionId = activeSectionId
-    if (!targetSectionId) return
-
-    if (guideView?.sectionId === targetSectionId) {
-      await closeGuideView()
+    if (!handle) return
+    // A slot that was EMPTY before must go back to empty, not keep the guide
+    // as a leftover temporary tab. Returning early here (there being no note
+    // to restore) left the guide loaded while the toggle said closed -- which
+    // then let the next press open a second copy in another slot.
+    if (pending.previousNoteId) {
+      await handle.activateNote(pending.previousNoteId).catch(() => undefined)
       return
     }
+    await handle.clearActiveNote().catch(() => undefined)
+  }, [guideView])
 
-    // Open somewhere else: put that slot back before borrowing this one.
-    if (guideView) await closeGuideView()
-
+  /** Loads the guide into whichever slot is active, remembering what that slot was showing. */
+  const openGuideViewHere = useCallback(async () => {
+    const targetSectionId = activeSectionId
+    if (!targetSectionId) return
     const previousNoteId = getActiveSection()?.activeNoteId ?? null
     setGuideView({ sectionId: targetSectionId, previousNoteId })
     await selectNote(HELP_GUIDE_ROOT_ID, { forceReload: true })
-  }, [guideView, closeGuideView, activeSectionId, getActiveSection, selectNote])
+  }, [activeSectionId, getActiveSection, selectNote])
+
+  /**
+   * The window control is a TOGGLE, and a toggle that is lit always goes out
+   * when pressed -- wherever the guide happens to be open. Making it depend on
+   * which slot is focused (closing here, moving it there) would mean the same
+   * button did two different things depending on state the user isn't looking
+   * at, which is not what a toggle promises.
+   */
+  const handleHelpGuideToggle = useCallback(async () => {
+    if (guideView) {
+      await closeGuideView()
+      return
+    }
+    await openGuideViewHere()
+  }, [guideView, closeGuideView])
+
+  /**
+   * The quick-actions menu is an OPEN, not a toggle: it says "User Guide", and
+   * it is invoked from inside a particular slot. So it brings the guide HERE,
+   * closing it wherever it was -- there is only ever one.
+   */
+  const handleHelpModeOpen = useCallback(async () => {
+    if (guideView?.sectionId === activeSectionId) return
+    if (guideView) await closeGuideView()
+    await openGuideViewHere()
+  }, [guideView, activeSectionId, closeGuideView])
 
   const isAllowedNonEditorFocusTarget = useCallback((target: EventTarget | null): boolean => {
     if (!(target instanceof HTMLElement)) return false
@@ -9181,8 +9201,10 @@ ${markdownHtml}
                   </button>
                 </div>
                 <div className="window-maximize-split" role="group" aria-label="User guide and maximize controls">
-                  {/* Top slot: the User Guide, the same handleHelpModeOpen the
-                      escape-hold panel's own User Guide cell calls. Took over the
+                  {/* Top slot: the User Guide TOGGLE. Deliberately not the
+                      escape-hold panel's own User Guide cell, which opens the
+                      guide into the slot it was invoked from -- a lit toggle
+                      must always go out when pressed, wherever the guide is. Took over the
                       slot double size vacated when it moved to the display-modes
                       split button; maximize/restore moved down to the bottom arm. */}
                   <button
@@ -9191,7 +9213,7 @@ ${markdownHtml}
                     data-tooltip={guideView ? 'Close the User Guide' : 'User Guide'}
                     aria-label={guideView ? 'Close the User Guide' : 'Open the User Guide'}
                     aria-pressed={guideView !== null}
-                    onClick={() => void handleHelpModeOpen()}
+                    onClick={() => void handleHelpGuideToggle()}
                   >
                     <span className="fa-solid fa-graduation-cap" aria-hidden="true" />
                   </button>

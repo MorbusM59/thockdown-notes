@@ -63,6 +63,8 @@ export interface SectionHandle extends
   setActiveNoteId: Dispatch<SetStateAction<string | null>>
   /** Switches which note this section shows -- the section's own, not a shared/parameterized one (see the handover doc's design decision). */
   activateNote: (noteId: string, overrideCursorPos?: number) => Promise<void>
+  /** Unloads whatever this section is showing, returning it to its empty state. Already published by EditorSection; declared here so callers outside it (closing the User Guide in a slot that was empty) can reach it. */
+  clearActiveNote: () => Promise<void>
 }
 
 export type SectionRegistry = MutableRefObject<Map<string, SectionHandle>>
