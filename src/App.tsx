@@ -15,7 +15,7 @@ import {
   typingSoundManager,
 } from './sound/TypingSoundManager'
 import type { PersistedMenuState, PersistedSidebarViewState, PersistedViewportState } from './shared/appState'
-import { DEFAULT_CUSTOM_DARK, DEFAULT_CUSTOM_LIGHT } from './shared/presets'
+import { DARK_FACTORY_PRESETS, LIGHT_FACTORY_PRESETS } from './shared/presets'
 import {
   DEFAULT_GLAZE_SETTINGS,
   GLAZE_GLOOM_OPACITY_MAX,
@@ -5006,11 +5006,9 @@ function App() {
     setDebuggingEnabled(false)
     debugNoteIdRef.current = null
 
-    const defaultLoadout = uiMode === 'dark' ? DEFAULT_CUSTOM_DARK : DEFAULT_CUSTOM_LIGHT
-    applyUiLayoutLoadout(defaultLoadout)
-
     if (!window.thockdownState) return
     await window.thockdownState.clearAppState()
+    applyUiLayoutLoadout(uiMode === 'dark' ? DARK_FACTORY_PRESETS[0] : LIGHT_FACTORY_PRESETS[0])
     const refreshedMenuState = buildMenuStateSnapshot()
     persistedMenuStateRef.current = refreshedMenuState
     await window.thockdownState.saveAppState({

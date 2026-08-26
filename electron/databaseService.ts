@@ -1806,8 +1806,23 @@ export class DatabaseService {
     });
     tx();
 
-    this.resetCustomUiLoadout('light');
-    this.resetCustomUiLoadout('dark');
+    const timestamp = Date.now();
+    const activateFactoryPreset = (mode: UiLoadoutMode, preset: UiLayoutLoadout, id: number): void => {
+      const normalized = normalizeUiLayoutLoadout(preset) ?? DEFAULT_UI_LAYOUT_LOADOUT;
+      const signature = stableStringify(normalized);
+      const payloadJson = JSON.stringify(normalized);
+      const sign = modeSign(mode);
+      db.prepare(`UPDATE ui_loadout_entries SET isActive = 0 WHERE id * ? > 0`).run(sign);
+      db.prepare(`
+        UPDATE ui_loadout_entries
+        SET isActive = 1, signature = ?, payloadJson = ?, updatedAt = ?
+        WHERE id = ?
+      `).run(signature, payloadJson, timestamp, id);
+      this.writeLoadoutMeta(`lastCustomId:${mode}`, LOADOUT_DEFAULT_CUSTOM_ID_ABS * sign);
+    };
+
+    activateFactoryPreset('light', LIGHT_FACTORY_PRESETS[0], 1);
+    activateFactoryPreset('dark', DARK_FACTORY_PRESETS[0], -1);
   }
 
   // ── Tab bar (pinned quick-access notes, scoped per section) ─────────────

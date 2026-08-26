@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { DatabaseService } from './databaseService'
 import { DEFAULT_EDITOR_SECTION_ID } from '../src/shared/sections'
-import { DEFAULT_CUSTOM_LIGHT } from '../src/shared/presets'
+import { DEFAULT_CUSTOM_LIGHT, DARK_FACTORY_PRESETS, LIGHT_FACTORY_PRESETS } from '../src/shared/presets'
 
 /**
  * Slot geometry (docs/user-workflow-design.md §1.4): a slot is the
@@ -153,7 +153,7 @@ describe('DatabaseService editor slots', () => {
     }
   })
 
-  it('factory reset clears extra sections and reactivates the default loadout', () => {
+  it('factory reset clears extra sections and restores the first factory presets', () => {
     db.createEditorSection('extra')
     db.updatePendingUiLoadout('light', {
       ...db.listUiLoadouts().entries.find((entry) => entry.id === 6)!.payload,
@@ -168,9 +168,12 @@ describe('DatabaseService editor slots', () => {
     expect(sections[0]).toMatchObject({ id: DEFAULT_EDITOR_SECTION_ID, name: null, position: 0 })
 
     const loadouts = db.listUiLoadouts()
-    expect(loadouts.entries.find((entry) => entry.id === 6)?.isActive).toBe(true)
+    expect(loadouts.entries.find((entry) => entry.id === 1)?.isActive).toBe(true)
+    expect(loadouts.entries.find((entry) => entry.id === 1)?.payload).toEqual(LIGHT_FACTORY_PRESETS[0])
+    expect(loadouts.entries.find((entry) => entry.id === 6)?.isActive).toBe(false)
     expect(loadouts.entries.find((entry) => entry.id === 7)?.isActive).toBe(false)
-    expect(loadouts.entries.find((entry) => entry.id === -6)?.isActive).toBe(true)
+    expect(loadouts.entries.find((entry) => entry.id === -1)?.isActive).toBe(true)
+    expect(loadouts.entries.find((entry) => entry.id === -1)?.payload).toEqual(DARK_FACTORY_PRESETS[0])
   })
 
   it('reset custom layout repopulates the complete default-custom payload from code defaults', () => {
