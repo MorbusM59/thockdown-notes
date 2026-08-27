@@ -989,6 +989,8 @@ export function usePreviewMarkdownRendering({
   const spacerRef = useRef<HTMLDivElement | null>(null)
   const [spacerReady, setSpacerReady] = useState(false)
   const prewarmHostRef = useRef<HTMLDivElement | null>(null)
+  const prewarmProbeRef = useRef<HTMLDivElement | null>(null)
+  const [probeReady, setProbeReady] = useState(false)
   const [prewarmBatch, setPrewarmBatch] = useState<readonly number[]>([])
   const prewarmedRef = useRef<Set<number>>(new Set())
   const prewarmBatchSizeRef = useRef(PREVIEW_PREWARM_INITIAL_BATCH)
@@ -1078,38 +1080,55 @@ export function usePreviewMarkdownRendering({
     queueNextPrewarmBatch()
   }, [prewarmBatch, virtualizer, queueNextPrewarmBatch])
 
-  // Start over whenever the measurements could no longer be true: a different
-  // note (new block list) or a different content width (every wrapped block
-  // re-wraps). Width is watched rather than assumed because the sidebar, the
-  // split-view divider and the window itself all change it without any of
-  // this hook's inputs changing.
+  const restartPrewarm = useCallback(() => {
+    prewarmedRef.current = new Set()
+    prewarmDoneRef.current = false
+    prewarmBatchSizeRef.current = PREVIEW_PREWARM_INITIAL_BATCH
+    setPrewarmBatch([])
+    queueNextPrewarmBatch()
+  }, [queueNextPrewarmBatch])
+
+  // Start over whenever the cached heights could no longer be true.
+  //
+  // A new note (a new block list) is the obvious trigger. The subtle one is
+  // TYPOGRAPHY: preview font size, line height, letter spacing and edge padding
+  // all arrive as inline styles on the scroller, set by SectionEditorArea from
+  // the reader's own view settings. None of them changes this hook's inputs,
+  // and none of them changes the scroller's clientWidth either -- padding lives
+  // *inside* clientWidth -- so an earlier version of this effect that watched
+  // the scroller's width missed every one of them. Measured cost of that miss:
+  // after a font-size change, jumping to the bottom of the scrollbar landed
+  // 2,590px short; after a line-height change, 2,014px. Confidently wrong,
+  // which is worse than the flat estimate this feature replaced.
+  //
+  // Rather than enumerate the settings -- a list that would silently rot the
+  // first time a new one is added -- this watches a PROBE: a hidden element
+  // inside the spacer holding fixed text, inheriting exactly what the real
+  // blocks inherit. Anything that would re-wrap or re-space a block changes the
+  // probe's own box, and a ResizeObserver on it restarts the sweep. That also
+  // catches changes driven from an ancestor (double-size mode, a root font
+  // scale) which no observer on the scroller's own attributes would see.
   useEffect(() => {
-    const scroller = previewScrollRef.current
-    if (!scroller) return undefined
+    restartPrewarm()
+  }, [previewBlocks, restartPrewarm])
 
-    const restart = () => {
-      prewarmedRef.current = new Set()
-      prewarmDoneRef.current = false
-      prewarmBatchSizeRef.current = PREVIEW_PREWARM_INITIAL_BATCH
-      setPrewarmBatch([])
-      queueNextPrewarmBatch()
-    }
+  useEffect(() => {
+    const probe = prewarmProbeRef.current
+    if (!probe) return undefined
 
-    restart()
-
-    let lastWidth = scroller.clientWidth
+    let last = `${probe.offsetWidth}x${probe.offsetHeight}`
     const observer = new ResizeObserver(() => {
-      if (scroller.clientWidth === lastWidth) return
-      lastWidth = scroller.clientWidth
-      restart()
+      const next = `${probe.offsetWidth}x${probe.offsetHeight}`
+      if (next === last) return
+      last = next
+      restartPrewarm()
     })
-    observer.observe(scroller)
+    observer.observe(probe)
 
-    return () => {
-      observer.disconnect()
-      cancelPrewarmSchedule()
-    }
-  }, [previewBlocks, previewScrollRef, queueNextPrewarmBatch, cancelPrewarmSchedule])
+    return () => observer.disconnect()
+  }, [probeReady, restartPrewarm])
+
+  useEffect(() => cancelPrewarmSchedule, [cancelPrewarmSchedule])
 
   const virtualItems = virtualizer.getVirtualItems()
 
@@ -1160,13 +1179,29 @@ export function usePreviewMarkdownRendering({
   // Cost: a batch lands every few milliseconds, and rendering it inside the
   // memo would re-render every visible block along with it.
   const prewarmHostElement = useMemo(() => {
-    if (!spacerReady || !spacerRef.current || prewarmBatch.length === 0) return null
+    if (!spacerReady || !spacerRef.current) return null
     return createPortal(
       <div
         ref={prewarmHostRef}
         aria-hidden="true"
         style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: 0, visibility: 'hidden', pointerEvents: 'none', zIndex: -1 }}
       >
+        {/* The typography probe -- always mounted, never measured into the
+            cache. Its only job is to change size when anything that would
+            re-wrap a real block changes, so the ResizeObserver above can
+            invalidate the sweep. The text is deliberately long enough to wrap
+            at any sane width: that makes letter-spacing and content-width
+            changes move its HEIGHT, not just its width, so a single observer
+            catches every case. Never shorten it to a single line. */}
+        <div
+          ref={(node) => { prewarmProbeRef.current = node; if (node) setProbeReady(true) }}
+          data-prewarm-probe=""
+          style={{ position: 'absolute', top: 0, left: 0, width: '100%' }}
+        >
+          The quick brown fox jumps over the lazy dog, and keeps on jumping for
+          long enough that this sentence has to wrap onto a second line at any
+          reasonable width, which is the entire point of it being this long.
+        </div>
         {prewarmBatch.map((index) => {
           const block = previewBlocks[index]
           if (!block) return null

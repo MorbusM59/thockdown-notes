@@ -1699,9 +1699,34 @@ that would make an implementation look finished and ship a regression:
    `:first-child` rule the host can't match by position, so it is mirrored by
    class (`.preview-prewarm-first-block`) in markdown.css. The two must stay in step.
 
+**Invalidation was initially wrong, and the first fix's own test hid it.** The
+sweep restarted on a new block list or a change in the scroller's `clientWidth`.
+Neither fires for preview font size, line height, letter spacing or edge
+padding: those arrive as inline styles on the scroller that this hook never
+sees, and padding lives *inside* `clientWidth`, so even that doesn't move.
+Measured staleness after each change, as jump-to-bottom error: **font size
+2,590px, line height 2,014px, edge padding 396px**. Confidently wrong, which is
+worse than the flat estimate the feature replaced.
+
+Worth recording *how* this nearly slipped through: a first probe compared the
+total size after a font change against the total after a full walk, and both
+read 52,728px — an apparent 0% error. That comparison was measuring the wrong
+thing. The honest test is whether jumping to the bottom of the scrollbar lands
+at the end, and it did not.
+
+The fix does not enumerate the settings — that list would rot the first time a
+new one is added. It watches a **probe**: a hidden element inside the spacer
+holding fixed, deliberately wrapping text, inheriting exactly what the real
+blocks inherit. Anything that would re-wrap or re-space a block changes the
+probe's own box, and a ResizeObserver on it restarts the sweep. It also catches
+ancestor-driven changes (double-size mode, a root font scale) that no observer
+on the scroller's own attributes would see. All four cases now land 0px from the
+end.
+
 **Guarding it.** `scripts/perf/verifyPreviewPrewarmSafety.mjs` asserts the host
 never becomes visible, never extends the scrollable area, leaves no DOM behind,
-and doesn't break the render↔edit round trip.
+doesn't break the render↔edit round trip, and re-measures the document after
+each of the four typography changes above.
 
 **A note on that round trip:** the first toggle out of an arbitrary mid-block
 scroll position legitimately moves ~1,400–1,500px, because restore is

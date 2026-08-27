@@ -107,6 +107,34 @@ async function main() {
     check('a settled position survives render -> edit -> render', settledTrip.drift < 50,
       `drifted ${settledTrip.drift}px (${settledTrip.before} -> ${settledTrip.after})`)
 
+    // --- typography changes must invalidate the cache ---
+    // Preview font size, line height, letter spacing and edge padding arrive as
+    // inline styles on the scroller. None of them changes the block list, and
+    // none changes clientWidth (padding is inside clientWidth), so an
+    // invalidation keyed on either misses all of them -- measured, before the
+    // probe existed, at 2,590px / 2,014px / 396px of jump-to-bottom error.
+    // These assert the property the reader actually feels.
+    const sizingCases = [
+      ['font size', "s.style.fontSize = '24px'"],
+      ['line height', "s.style.lineHeight = '2.2'"],
+      ['letter spacing', "s.style.letterSpacing = '0.18em'"],
+      ['edge padding', "s.style.setProperty('--preview-edge-padding', '60px')"],
+    ]
+    for (const [label, mutation] of sizingCases) {
+      await page.evaluate(`(() => { const s = document.querySelector('.markdown-preview'); ${mutation}; })()`)
+      // Long enough for the probe's ResizeObserver to fire and the sweep to
+      // re-run; the sweep itself settles in ~1.3s on this document.
+      await page.waitForTimeout(4000)
+      const missed = await page.evaluate(async () => {
+        const scroller = document.querySelector('.markdown-preview')
+        scroller.style.scrollBehavior = 'auto'
+        scroller.scrollTop = scroller.scrollHeight
+        await new Promise((r) => setTimeout(r, 1500))
+        return Math.round(scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop)
+      })
+      check(`a ${label} change re-measures the document`, Math.abs(missed) < 60, `jump-to-bottom missed the end by ${missed}px`)
+    }
+
     check('no page errors', errors.length === 0, errors.slice(0, 2).join(' | '))
   } finally {
     await browser.close()
