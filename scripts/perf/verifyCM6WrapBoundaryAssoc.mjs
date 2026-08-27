@@ -88,7 +88,9 @@ async function main() {
     async function caretY() {
       return page.evaluate(() => {
         const caret = document.querySelector('.thockdown-block-caret')
-        const m = caret && caret.style.transform.match(/translate3d\(([\d.]+)px,\s*([\d.]+)px/)
+        // translate(), not translate3d() -- the caret is deliberately
+        // kept off the compositor (see .thockdown-block-caret in index.css).
+        const m = caret && caret.style.transform.match(/translate\(([\d.]+)px,\s*([\d.]+)px/)
         return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : null
       })
     }

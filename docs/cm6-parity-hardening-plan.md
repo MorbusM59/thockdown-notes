@@ -46,7 +46,61 @@ do once Phase 1/2 have stopped changing the code out from under it.
    `docs/document-scale-performance-philosophy.md`'s existing contract; this doc only adds the
    "assumption-hunting" framing, it doesn't replace that doc's solution hierarchy.
 
-## Latest Session Update (transition orchestration hardening)
+## Latest Session Update (block caret compositing — black edit pane at small border radii)
+
+**Symptom (user-reported, reproduced on their GPU, not on this machine):** in edit mode, with
+`--border-radius-regular` set to 1px, the whole active edit pane renders solid black. The user
+had already localized it: it only happens while `.edit-container`'s top/bottom edge-fade mask is
+applied, and the black element is the caret's layer.
+
+**Root cause (evidence, not theory).** `.thockdown-block-caret` was composited three times over:
+`will-change: transform`, a `translate3d()`, and a compositor-driven `opacity` blink animation.
+The block caret deliberately paints *underneath* the text (`zIndex: 5` against
+`.cm6-editor-root`'s `10`, so a translucent caret colour never dims the glyph it sits on), so
+everything painted after it — grid overlays, editor text, gutters — overlaps a composited caret
+and gets promoted with it, squashed into a single anonymous editor-sized `Overlap` layer. That
+layer lives inside `.edit-container`'s mask and `.editor-stage`'s rounded clip; that combination
+is what goes black on real GPU compositing. It is the same compositor edge case already
+documented in `editor.css` on `.editor-empty-state` / `.editor-escape-hold-backdrop` ("corrupt
+that backdrop's blur snapshot into solid black at specific radius values"), where the remedy was
+pinning a stable layer — which does not apply here, because the squashing layer only exists at
+all while the caret is composited.
+
+Measured with CDP `LayerTree` against the running app (`dev:browser` driven by real Chromium via
+Playwright, not the Claude Code browser pane):
+
+- caret as shipped → `10x25 [Trivial3DTransform,ActiveOpacityAnimation,WillChangeTransform]`
+  **plus** `971x655 [Overlap]` (the editor-sized squashing layer) inside the mask;
+- caret raised above the text (z-index ≥ 10) → `[Overlap]` gone, but the caret then paints over
+  the glyph, which is exactly what the z-order exists to prevent;
+- caret fully de-promoted → both layers gone, nothing else changes.
+
+**Fix** (three parts, all load-bearing together — any one of them alone re-promotes the caret):
+
+- `index.css`: the blink animates `background-color` via
+  `color-mix(in srgb, var(--color-caret) N%, transparent)` instead of `opacity`. Mixing toward
+  `transparent` scales *only* alpha, so for a flat-coloured box it is pixel-identical to the old
+  `opacity: N%` keyframes (verified by an A/B pixel compare); same rhythm, same numbers.
+- `CM6Editor.tsx`: caret transform is `translate()`, not `translate3d()`.
+- `CM6Editor.tsx`: no `will-change: transform` on the caret element.
+- `scripts/perf/verifyCM6WrapBoundaryAssoc.mjs` parses `translate(` now, not `translate3d(`.
+
+**Trade accepted:** the blink repaints on the main thread instead of the compositor — a ~10x25
+invalidation per frame while the editor is focused. The low-power path
+(`.thockdown-reduced-caret-animation`, which stops the animation outright) therefore matters
+slightly more than it did. If caret-blink repaint ever shows up in a profile, the next move is
+not to re-promote the caret but to make the blink cheaper (fewer keyframe steps, or stepped
+rather than continuous).
+
+**Verification:** live-browser (real Chromium) layer-tree A/B before and after, visual A/B of
+the caret over a glyph and across lines, `tsc` clean, `eslint` clean on the changed file,
+`npm test` clean (52 files, 583 tests). Not verified on a real GPU/Electron build — this
+container composites in software and never reproduced the black itself; the fix is grounded in
+the layer-tree evidence above, so confirm on the user's machine at radius 1px.
+
+---
+
+## Previous Session Update (transition orchestration hardening)
 
 - Added a dedicated deterministic transition state machine at
   `src/editor/ScrollTransitionController.ts` and integrated it into

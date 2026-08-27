@@ -456,14 +456,42 @@ body {
   caret-color: transparent; /* Hide the native OS caret */
 }
 
-/* Custom retro block caret overlay (drawn by CM6Editor.tsx, not the browser's native caret) */
+/* Custom retro block caret overlay (drawn by CM6Editor.tsx, not the browser's
+   native caret).
+
+   The blink animates background-color rather than opacity, and CM6Editor.tsx
+   deliberately gives this element a 2D `translate()` and NO `will-change`.
+   All three go together, and all three are load-bearing: any one of them on
+   its own promotes this ~10x25 div onto its own compositor layer. Because the
+   caret paints UNDERNEATH the text (z-index 5 against .cm6-editor-root's 10,
+   so a translucent caret colour never dims the glyph it sits on), everything
+   painted after it -- the grid overlays, the editor text, the gutters --
+   overlaps a composited caret and gets promoted too, squashed into one
+   anonymous editor-sized "Overlap" layer. That layer sits inside
+   .edit-container's edge-fade mask and .editor-stage's rounded clip, and on
+   real GPU compositing the combination renders it SOLID BLACK at some
+   --border-radius-regular values (reported live at 1px; the whole edit pane
+   goes black, and it goes away if the fade mask is removed). It's the same
+   compositor edge case already documented on .editor-empty-state and
+   .editor-escape-hold-backdrop in editor.css -- there the remedy was pinning
+   a stable layer, which doesn't apply here: this squashing layer exists ONLY
+   while the caret is composited, so the fix is to keep the caret off the
+   compositor entirely. Verified via CDP LayerTree against the running app:
+   composited caret => an editor-sized [Overlap] layer inside the mask;
+   de-promoted caret => that layer is gone (and raising the caret above the
+   text also removes it, but that's the one thing the z-order can't do).
+
+   Cost of the trade: the blink now repaints on the main thread instead of the
+   compositor -- a ~10x25 invalidation per frame while the editor is focused,
+   which is why the low-power path below (which stops the animation outright)
+   matters slightly more than it used to. */
 .thockdown-block-caret {
   background-color: var(--color-caret);
   animation: thockdown-blink 1.2s infinite cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Low-power toggle: the blink animation keeps the compositor busy
-   indefinitely while idle, not just while typing. */
+/* Low-power toggle: the blink otherwise repaints the caret indefinitely while
+   idle, not just while typing. */
 .thockdown-reduced-caret-animation .thockdown-block-caret {
   animation: none;
   opacity: 0.8;
@@ -476,13 +504,17 @@ body {
   background-color: var(--color-selection);
 }
 
+/* Restore the beloved ff-caret-heartbeat rhythm! Same numbers the opacity
+   keyframes used, expressed as the caret colour's own alpha instead:
+   color-mix(... N%, transparent) scales alpha by exactly N%, which for a
+   flat-coloured box is pixel-identical to opacity: N%. See
+   .thockdown-block-caret above for why this can't animate opacity. */
 @keyframes thockdown-blink {
-  /* Restore the beloved ff-caret-heartbeat rhythm! */
-  0%       { opacity: 0.6; }
-  10%  { opacity: 0.1; }
-  65%  { opacity: 0.9; }
-  85%  { opacity: 0.3; }
-  100%     { opacity: 0.6; }
+  0%       { background-color: color-mix(in srgb, var(--color-caret) 60%, transparent); }
+  10%  { background-color: color-mix(in srgb, var(--color-caret) 10%, transparent); }
+  65%  { background-color: color-mix(in srgb, var(--color-caret) 90%, transparent); }
+  85%  { background-color: color-mix(in srgb, var(--color-caret) 30%, transparent); }
+  100%     { background-color: color-mix(in srgb, var(--color-caret) 60%, transparent); }
 }
 
 /* Editor Text Styles -- shared by CM6Editor.tsx's contentDOM, which carries this same class */

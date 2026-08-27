@@ -1556,7 +1556,11 @@ export function CM6Editor({
     const caretHeightPx = Math.max(1, lineHeightPxNow - CARET_INSET_PX);
 
     setCaretStyle({
-      transform: `translate3d(${scrollerLeftInLayer + absoluteLeft + CARET_INSET_PX}px, ${scrollerTopInLayer + topInViewport + CARET_INSET_PX}px, 0)`,
+      // translate(), not translate3d(): a 3D transform is a compositing
+      // trigger on its own, and this element must stay OFF the compositor --
+      // see .thockdown-block-caret's own comment in index.css for the black
+      // edit pane that a composited caret produces under the edge-fade mask.
+      transform: `translate(${scrollerLeftInLayer + absoluteLeft + CARET_INSET_PX}px, ${scrollerTopInLayer + topInViewport + CARET_INSET_PX}px)`,
       width: caretWidthPx,
       height: caretHeightPx,
     });
@@ -4709,7 +4713,12 @@ export function CM6Editor({
             zIndex: 5,
             top: 0,
             left: 0,
-            willChange: 'transform',
+            // No will-change: transform here, deliberately -- it promotes the
+            // caret onto its own compositor layer, which is what drags the
+            // whole editor into an anonymous squashed overlap layer that
+            // renders black under the edge-fade mask at some border radii.
+            // Same reason the transform above is 2D and the blink animates
+            // background-color; see index.css's .thockdown-block-caret.
             ...caretStyle,
           }}
         />
