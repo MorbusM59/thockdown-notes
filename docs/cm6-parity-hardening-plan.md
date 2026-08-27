@@ -46,6 +46,80 @@ do once Phase 1/2 have stopped changing the code out from under it.
    `docs/document-scale-performance-philosophy.md`'s existing contract; this doc only adds the
    "assumption-hunting" framing, it doesn't replace that doc's solution hierarchy.
 
+## PARKED: editor renders black at small border radii (unresolved)
+
+**Status: open, waiting on one measurement only the user can take.** Everything
+below the next paragraph is context; the action item is the bisection run.
+
+### What we know
+
+With `--border-radius-regular` at 1px, the whole active edit pane renders solid
+black on a real Electron build. It needs `.edit-container`'s top/bottom
+edge-fade mask to be applied -- removing the mask clears it. It does NOT need
+the block caret: the caret is now fully de-promoted (no `will-change`, 2D
+transform, colour-driven blink) and the black persists, in reduced-animation
+mode too. So the caret work below fixed a real compositing problem, but **not
+this one**; the "caret layer" attribution in that section was wrong as a root
+cause and should not be trusted as a starting point.
+
+### What is ruled out
+
+- The block caret, in every configuration (composited or not, animating or not).
+- Anything about the blink keyframes -- the black predates and outlives them.
+- Every non-GPU explanation reachable from here: `dev:browser` under real
+  Playwright Chromium, standalone CSS probes, and SwiftShader-forced GPU
+  compositing all render it correctly at every radius.
+
+### Leading hypothesis
+
+The remaining permanently-composited layer inside the masked subtree is **CM6's
+own scroller** (`Viewport, OverflowScrolling`, editor-sized, measured via CDP
+LayerTree). It sits inside `.edit-container`'s mask AND under `.editor-stage`'s
+rounded clip (`border-radius` + `overflow: hidden`) -- the same three-way
+combination as before, minus the caret. That fits every fact: editor-sized,
+present regardless of the caret, needs the fade, needs a non-zero radius. It is
+also the same compositor edge case already documented on `.editor-empty-state`
+and `.editor-escape-hold-backdrop` in editor.css ("corrupt ... into solid black
+at specific radius values").
+
+### Next step (do this first)
+
+Run `scripts/debug/caretBlackPaneBisect.js` in the app's own DevTools (Options >
+Debugging > `</>`); it toggles one candidate at a time. All 16 cases are
+verified to apply cleanly and leave the editor usable.
+
+- `t(1)` / `t(2)` / `t(3)` confirm the fade + rounded-clip pairing.
+- `t(4)`-`t(6)`, `t(8)`, `t(14)`, `t(15)` are candidate **fixes** that keep both
+  the fade and the radius. If one clears it, that is the shipping change --
+  ship it with a comment tying it back to this section.
+- `t(7)` tests the scroller hypothesis directly.
+- The rest narrow which layer paints black.
+
+If NOTHING in the list clears it, the compositing family is exhausted and the
+fallback below becomes the evidence-based call rather than a retreat.
+
+### Agreed fallback if the bisection comes up empty
+
+Drop the edge fade entirely and instead **stop rendering text in partially
+visible rows** at the top/bottom of the editor. This arguably fits the
+box-grid philosophy better than a fade does. It is NOT a small change: the fade
+currently masks the boundary between whole rows and the cage's scroll position,
+so hiding cut-off rows means the row count and the scroll quantization have to
+agree exactly -- that touches the settle/anchor machinery this repo has been
+bitten by before (see `docs/large-document-performance-handover.md`). Plan it
+as its own piece of work, not as a patch.
+
+### Standing lesson
+
+The app ships on Electron 30 = **Chromium 124**; these sessions measure with
+Chromium ~140. That gap has now produced two separate defects invisible to
+every local instrument (this one, and the `color-mix()` non-interpolation
+below). Treat any CSS feature newer than ~2021, and anything touching
+compositing, as unverifiable from here -- design so the user can bisect it in
+their own build rather than shipping a guess.
+
+---
+
 ## Latest Session Update (block caret compositing — black edit pane at small border radii)
 
 **Symptom (user-reported, reproduced on their GPU, not on this machine):** in edit mode, with

@@ -3,6 +3,7 @@
 - [x] Align edit and render viewport (scroll-sync rewrite: single persisted `anchorBlockIndex` per note/snapshot, mode-agnostic restore, see `docs/editor-contract.md`)
 - [x] Add render-mode in-note search
 - [x] Sort date menu by edited
+- [ ] **PARKED, next action known:** the editor renders solid black at a 1px border radius, whenever the edge-fade mask is applied. Not the caret (ruled out). Only reproduces on a real Electron/Chromium 124 build. Next step is one bisection run in the app's own DevTools -- see the "PARKED: editor renders black at small border radii" section of `docs/cm6-parity-hardening-plan.md` and `scripts/debug/caretBlackPaneBisect.js`.
 - [ ] Refine editor input focus behavior
 - [ ] `resolveIdentityLabel`'s derived-snippet fallback is now unreachable in practice: every note and every chapter carries an id (assigned at birth, and backfilled at startup by `sanitizeDatabase` for anything older). It is kept as a defensive floor rather than deleted -- the branch costs nothing, and removing it means changing a shared signature plus the tests that document it. Delete only if something else forces a change there.
 - [ ] `DatabaseService.sanitizeDatabase()` (startup notes_fts dedupe + conditional VACUUM, see `docs/large-document-performance-handover.md`'s newest session) has only been manually verified once against one real database — watch for its `[db] startup sanitation` log across a few real launches before considering it fully trusted.
