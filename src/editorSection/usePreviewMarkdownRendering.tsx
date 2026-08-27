@@ -3,7 +3,8 @@
    component memoized for the preview pane's per-block rendering (see its
    own comment below); it isn't part of this module's public API, so
    there's nothing here for Fast Refresh to preserve identity of. */
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { MutableRefObject, ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useVirtualizer, type VirtualizerOptions } from '@tanstack/react-virtual'
@@ -28,6 +29,12 @@ import type { ParsedInternalNoteLink } from '../shared/internalNoteLinks'
 import { splitMarkdownIntoPreviewBlocksIncremental, type PreviewBlockSplitCache } from '../editor/PreviewBlockSplit'
 import { resolvePreviewBlockIndexForSourceLine } from '../editor/PreviewBlockIndex'
 import { isNonQuantizedSmoothScrollActive, scrollToNonQuantizedSmooth } from '../editor/NonQuantizedSmoothScroll'
+import {
+  PREVIEW_PREWARM_INITIAL_BATCH,
+  PREVIEW_PREWARM_SLICE_BUDGET_MS,
+  planNextPrewarmBatch,
+  resolveNextPrewarmBatchSize,
+} from './previewMeasurementPrewarm'
 
 // Initial guess only -- corrected as soon as each block actually mounts and
 // reports its real height (react-virtual's estimate-then-correct model, via
@@ -973,6 +980,137 @@ export function usePreviewMarkdownRendering({
     [documentFindDirective.findText, isDocumentFindCaseSensitive],
   )
 
+  // ---------------------------------------------------------------------
+  // Background measurement prewarm -- see previewMeasurementPrewarm.ts for
+  // why this exists and what makes it fragile. In short: without it every
+  // unvisited block is a flat 56px guess, so the scrollbar is wrong by ~71%
+  // of the document height on a large note and churns as real heights land.
+  // ---------------------------------------------------------------------
+  const spacerRef = useRef<HTMLDivElement | null>(null)
+  const [spacerReady, setSpacerReady] = useState(false)
+  const prewarmHostRef = useRef<HTMLDivElement | null>(null)
+  const [prewarmBatch, setPrewarmBatch] = useState<readonly number[]>([])
+  const prewarmedRef = useRef<Set<number>>(new Set())
+  const prewarmBatchSizeRef = useRef(PREVIEW_PREWARM_INITIAL_BATCH)
+  const prewarmStartedAtRef = useRef(0)
+  const prewarmScheduleRef = useRef<number | null>(null)
+  const prewarmDoneRef = useRef(false)
+
+  const cancelPrewarmSchedule = useCallback(() => {
+    if (prewarmScheduleRef.current === null) return
+    const cancel = window.cancelIdleCallback ?? window.clearTimeout
+    cancel(prewarmScheduleRef.current)
+    prewarmScheduleRef.current = null
+  }, [])
+
+  // requestIdleCallback is the right primitive here -- the whole point is to
+  // use time the main thread isn't using. It is NOT universally available
+  // (Safari shipped it only recently), so fall back to a timeout; the slice
+  // budget below bounds the damage either way.
+  const schedulePrewarmSlice = useCallback((run: () => void) => {
+    cancelPrewarmSchedule()
+    if (typeof window.requestIdleCallback === 'function') {
+      prewarmScheduleRef.current = window.requestIdleCallback(() => { run() }, { timeout: 500 })
+      return
+    }
+    prewarmScheduleRef.current = window.setTimeout(run, 16)
+  }, [cancelPrewarmSchedule])
+
+  const queueNextPrewarmBatch = useCallback(() => {
+    schedulePrewarmSlice(() => {
+      const blockCount = previewBlocksRef.current.length
+      if (blockCount === 0 || prewarmDoneRef.current) return
+
+      // Never compete with an interaction. A scroll in flight is exactly when
+      // an extra layout pass would be felt, and it is also when react-virtual
+      // is already measuring for real -- so yield and come back.
+      const scroller = previewScrollRef.current
+      if (scroller && isNonQuantizedSmoothScrollActive(scroller)) {
+        queueNextPrewarmBatch()
+        return
+      }
+
+      const cursorIndex = virtualizer.getVirtualItems().at(-1)?.index ?? 0
+      const next = planNextPrewarmBatch({
+        blockCount,
+        isMeasured: (index) => prewarmedRef.current.has(index),
+        cursorIndex,
+        batchSize: prewarmBatchSizeRef.current,
+      })
+
+      if (next.length === 0) {
+        prewarmDoneRef.current = true
+        setPrewarmBatch([])
+        return
+      }
+
+      prewarmStartedAtRef.current = performance.now()
+      setPrewarmBatch(next)
+    })
+  }, [schedulePrewarmSlice, virtualizer, previewBlocksRef, previewScrollRef])
+
+  // Measure whatever the host just rendered and hand the real heights to the
+  // virtualizer. useLayoutEffect so this reads geometry in the same frame the
+  // batch was committed, before the browser paints -- the host is hidden, so
+  // there is nothing to see, but measuring after a paint would let an
+  // interleaved style change land between render and read.
+  useLayoutEffect(() => {
+    if (prewarmBatch.length === 0) return
+    const host = prewarmHostRef.current
+    if (!host) return
+
+    for (const index of prewarmBatch) {
+      const el = host.querySelector<HTMLElement>(`[data-prewarm-index="${index}"]`)
+      if (!el) continue
+      const height = el.getBoundingClientRect().height
+      prewarmedRef.current.add(index)
+      // A zero height is a block that rendered to nothing measurable; record
+      // it as done anyway so the sweep terminates, but leave the virtualizer
+      // on its own estimate rather than asserting a wrong 0.
+      if (height > 0) virtualizer.resizeItem(index, height)
+    }
+
+    prewarmBatchSizeRef.current = resolveNextPrewarmBatchSize(
+      prewarmBatch.length,
+      performance.now() - prewarmStartedAtRef.current,
+      PREVIEW_PREWARM_SLICE_BUDGET_MS,
+    )
+    queueNextPrewarmBatch()
+  }, [prewarmBatch, virtualizer, queueNextPrewarmBatch])
+
+  // Start over whenever the measurements could no longer be true: a different
+  // note (new block list) or a different content width (every wrapped block
+  // re-wraps). Width is watched rather than assumed because the sidebar, the
+  // split-view divider and the window itself all change it without any of
+  // this hook's inputs changing.
+  useEffect(() => {
+    const scroller = previewScrollRef.current
+    if (!scroller) return undefined
+
+    const restart = () => {
+      prewarmedRef.current = new Set()
+      prewarmDoneRef.current = false
+      prewarmBatchSizeRef.current = PREVIEW_PREWARM_INITIAL_BATCH
+      setPrewarmBatch([])
+      queueNextPrewarmBatch()
+    }
+
+    restart()
+
+    let lastWidth = scroller.clientWidth
+    const observer = new ResizeObserver(() => {
+      if (scroller.clientWidth === lastWidth) return
+      lastWidth = scroller.clientWidth
+      restart()
+    })
+    observer.observe(scroller)
+
+    return () => {
+      observer.disconnect()
+      cancelPrewarmSchedule()
+    }
+  }, [previewBlocks, previewScrollRef, queueNextPrewarmBatch, cancelPrewarmSchedule])
+
   const virtualItems = virtualizer.getVirtualItems()
 
   // Memoized so per-frame App re-renders (scroll thumb state, etc.) don't
@@ -983,7 +1121,10 @@ export function usePreviewMarkdownRendering({
   // just scoped to the *visible* subset now, which is all this loop ever
   // builds regardless.
   const previewMarkdownElement = useMemo(() => (
-    <div style={{ position: 'relative', width: '100%', height: virtualizer.getTotalSize() }}>
+    <div
+      ref={(node) => { spacerRef.current = node; if (node) setSpacerReady(true) }}
+      style={{ position: 'relative', width: '100%', height: virtualizer.getTotalSize() }}
+    >
       {virtualItems.map((virtualItem) => {
         const block = previewBlocks[virtualItem.index]
         if (!block) return null
@@ -1012,6 +1153,47 @@ export function usePreviewMarkdownRendering({
     </div>
   ), [virtualizer, virtualItems, previewBlocks, previewSearchHighlightPlugin, previewMarkdownComponents])
 
+  // Portalled into the spacer rather than rendered inside the memo above, for
+  // two independent reasons. Correctness: the spacer is the in-flow box the
+  // real blocks are positioned against, and measuring anywhere else resolves
+  // width:100% against a box 36px wider (see previewMeasurementPrewarm.ts).
+  // Cost: a batch lands every few milliseconds, and rendering it inside the
+  // memo would re-render every visible block along with it.
+  const prewarmHostElement = useMemo(() => {
+    if (!spacerReady || !spacerRef.current || prewarmBatch.length === 0) return null
+    return createPortal(
+      <div
+        ref={prewarmHostRef}
+        aria-hidden="true"
+        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: 0, visibility: 'hidden', pointerEvents: 'none', zIndex: -1 }}
+      >
+        {prewarmBatch.map((index) => {
+          const block = previewBlocks[index]
+          if (!block) return null
+          return (
+            <div
+              key={index}
+              data-prewarm-index={index}
+              // Absolutely positioned exactly like a real block wrapper.
+              // Normal flow would let adjacent blocks collapse margins with
+              // each other, which the real list never does.
+              className={index === 0 ? 'preview-prewarm-first-block' : undefined}
+              style={{ position: 'absolute', top: 0, left: 0, width: '100%' }}
+            >
+              <PreviewMarkdownBlock
+                text={block.text}
+                lineOffset={block.startLine}
+                searchHighlightPlugin={previewSearchHighlightPlugin}
+                components={previewMarkdownComponents}
+              />
+            </div>
+          )
+        })}
+      </div>,
+      spacerRef.current,
+    )
+  }, [spacerReady, prewarmBatch, previewBlocks, previewSearchHighlightPlugin, previewMarkdownComponents])
+
   // Deliberately dependency-free: this must fire after EVERY commit of this
   // hook's output, not only when some tracked value changed -- react-virtual
   // corrects block offsets through its own state updates, and those commits
@@ -1022,5 +1204,12 @@ export function usePreviewMarkdownRendering({
     onPreviewCommitted?.()
   })
 
-  return { previewMarkdownElement }
+  return {
+    previewMarkdownElement: (
+      <>
+        {previewMarkdownElement}
+        {prewarmHostElement}
+      </>
+    ),
+  }
 }

@@ -172,6 +172,17 @@
   margin-top: 0;
 }
 
+/* The background measurement prewarm renders block 0 outside the spacer's
+   real child order, so the position-dependent rule above can't match it --
+   and a block measured with a leading margin the real one doesn't have is a
+   wrong height handed to the virtualizer, which is worse than no prewarm at
+   all. Mirrors the rule above by class instead of by position; the two must
+   stay in step. See previewMeasurementPrewarm.ts. */
+.preview-prewarm-first-block > h1,
+.preview-prewarm-first-block > h2 {
+  margin-top: 0;
+}
+
 .markdown-preview h1,
 .markdown-preview h2,
 .markdown-preview h3,

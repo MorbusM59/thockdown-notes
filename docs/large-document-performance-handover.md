@@ -1653,6 +1653,72 @@ CM6/Chromium native overhead, not further attributable without new tooling" is u
 the honest answer for whatever's left. The `sanitizeDatabase()` real-world observation window noted
 directly above is the one open item this round actually added.
 
+## This round: the preview scrollbar is now accurate before the reader scrolls — background measurement prewarm
+
+**The defect.** The preview virtualizes blocks with a flat 56px estimate
+(`PREVIEW_BLOCK_ESTIMATED_HEIGHT_PX`), so any block not yet scrolled past is a
+guess. Measured on a 300k-character note (`scripts/perf/measurePreviewMeasurementCache.mjs`):
+cold total size **14,216px against a true 49,439px — 71% short**. Consequences the
+user reported and this reproduces: jumping to the bottom of the scrollbar lands
+**3,715px short of the end**, and a long scroll churns — total size changed **37
+times over 60 viewport hops, biggest single jump 1,091px**.
+
+**The fix.** A background sweep measures every block into the virtualizer's own
+cache (`virtualizer.resizeItem`) shortly after the note opens, in idle-time
+slices with an 8ms budget and an adaptive batch size. Scheduling logic is
+isolated and unit-tested in `src/editorSection/previewMeasurementPrewarm.ts`;
+the DOM half lives in `usePreviewMarkdownRendering.tsx`.
+
+| | before | after |
+|---|---|---|
+| cold total size vs. true | 71% short | **0–0.1% off** |
+| jump-to-bottom miss | 3,715px | **0px** |
+| biggest size jump while scrolling | 1,091px | **12px** |
+| settle time, 300k chars (~250 blocks) | — | **1.25s** |
+| settle time, 1.2M chars (~1,000 blocks) | — | **5.3s** |
+| median frame during the sweep | — | **16.7ms (untouched 60fps)** |
+| frames over 50ms, 1.2M chars | — | **2** (worst 60.7ms) |
+
+**Fidelity is the whole game, and two traps were found by measurement.** A
+prewarmed height that is *wrong* is worse than no prewarm: the virtualizer holds
+a confident wrong number until the block really mounts, then corrects — the same
+flicker, moved. Both traps under-measure silently, and both are the sort of thing
+that would make an implementation look finished and ship a regression:
+
+1. **Containing block.** The measurement host must live inside the virtualizer's
+   *spacer*, not the scroller. The scroller is `position: relative`, so an
+   absolutely positioned host attached there resolves `width: 100%` against its
+   **padding** box — 36px wider than the real blocks (2 × `--preview-edge-padding`).
+   Every block that wraps then measures short; only tall, wrap-heavy blocks
+   reveal it (a 1,160px blockquote measured 1,119px).
+2. **Margin collapse.** Each measured block must keep the real wrapper's absolute
+   positioning. Stacked in normal flow, adjacent blocks collapse margins with
+   each other, which the real (absolutely positioned) list never does — measured
+   at −12 to −18px per block.
+   A third, smaller one: block 0's leading `h1`/`h2` gets `margin-top: 0` from a
+   `:first-child` rule the host can't match by position, so it is mirrored by
+   class (`.preview-prewarm-first-block`) in markdown.css. The two must stay in step.
+
+**Guarding it.** `scripts/perf/verifyPreviewPrewarmSafety.mjs` asserts the host
+never becomes visible, never extends the scrollable area, leaves no DOM behind,
+and doesn't break the render↔edit round trip.
+
+**A note on that round trip:** the first toggle out of an arbitrary mid-block
+scroll position legitimately moves ~1,400–1,500px, because restore is
+block-quantized by design (persisted `anchorBlockIndex` plus a fixed one-line
+offset). A/B'd against unmodified code — 1,494px baseline vs 1,411px with the
+prewarm — so it is pre-existing, not a regression. The check therefore asserts
+that a *settled* position stays put (0px), which is the property that matters.
+
+**Also found (pre-existing, not fixed):** `scripts/perf/verifyScrollSync.mjs` and
+`perfHarness.mjs`'s `seedLargeNoteAndReload` both wait for the edit-mode
+contenteditable to become *visible*, but a restored note comes back in render
+view, where the edit pane is legitimately hidden — so both time out on
+unmodified code. Confirmed by A/B. Filed in `TODO.md`.
+
+**Verification:** `npx tsc --noEmit`, `eslint`, `npm test` (619/619), plus the two
+live-browser scripts above at 300k and 1.2M characters.
+
 ## This round: first edit→preview toggle latency on large notes — fixed via background preview-block prewarm
 
 The first switch from edit to preview on a large note used to pay for a full `splitMarkdownIntoPreviewBlocks` remark parse inside `usePreviewMarkdownRendering`, because the incremental block cache started empty whenever that hook first rendered. Now `useEditorSectionMount` builds that cache in the background while the user remains in edit mode, then passes the same `previewBlockSplitCacheRef` into `usePreviewMarkdownRendering` so the first toggle warm-starts the incremental parser instead of parsing the whole document on demand.
