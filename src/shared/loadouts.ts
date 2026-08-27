@@ -112,6 +112,7 @@ export type UiLayoutLoadout = {
   caretOutlineWidthPx: number;
   caretOutlineColor: string;
   caretHaloSpreadPx: number;
+  caretHaloBlurPx: number;
   caretHaloColor: string;
   caretAnimationPreset: CaretAnimationPresetKey;
   caretAnimationDurationMs: number;

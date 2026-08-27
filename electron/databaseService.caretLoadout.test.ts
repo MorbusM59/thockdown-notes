@@ -34,6 +34,7 @@ describe('DatabaseService caret loadout fields', () => {
     caretOutlineWidthPx: 4,
     caretOutlineColor: 'rgba(12, 34, 56, 0.78)',
     caretHaloSpreadPx: 17,
+    caretHaloBlurPx: 11,
     caretHaloColor: 'rgba(210, 120, 30, 0.4)',
     caretAnimationPreset: 'bounce',
     caretAnimationDurationMs: 2600,
@@ -81,6 +82,7 @@ describe('DatabaseService caret loadout fields', () => {
       caretSizeDeviationPx: 99,
       caretOutlineWidthPx: -12,
       caretHaloSpreadPx: 5000,
+      caretHaloBlurPx: -4,
       caretAnimationDurationMs: 1,
       caretFrameDurationMs: 100000,
       // A value that is not a known preset key must not reach the stylesheet
@@ -93,6 +95,7 @@ describe('DatabaseService caret loadout fields', () => {
     expect(stored.caretSizeDeviationPx).toBe(5)
     expect(stored.caretOutlineWidthPx).toBe(0)
     expect(stored.caretHaloSpreadPx).toBe(20)
+    expect(stored.caretHaloBlurPx).toBe(0)
     expect(stored.caretAnimationDurationMs).toBe(100)
     expect(stored.caretFrameDurationMs).toBe(500)
     expect(stored.caretAnimationPreset).toBe(DEFAULT_CARET_SETTINGS.animationPreset)

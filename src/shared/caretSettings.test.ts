@@ -23,6 +23,7 @@ const baseOptions: CaretBlinkKeyframeOptions = {
   outlineColor: 'rgba(10, 20, 30, 0.8)',
   haloColor: 'rgba(200, 100, 50, 0.5)',
   haloSpreadPx: 6,
+  haloBlurPx: 0,
 }
 
 const build = (overrides: Partial<CaretBlinkKeyframeOptions> = {}) =>
@@ -83,7 +84,7 @@ describe('buildCaretBlinkKeyframesCss', () => {
     // The 65% apex scales every surface's own alpha by 0.9.
     expect(css).toContain('background-color: rgba(0, 0, 0, 0.27)')
     expect(css).toContain('outline-color: rgba(10, 20, 30, 0.72)')
-    expect(css).toContain('box-shadow: 0 0 0 6px rgba(200, 100, 50, 0.45)')
+    expect(css).toContain('box-shadow: 0 0 0px 6px rgba(200, 100, 50, 0.45)')
   })
 
   it('leaves the animation unquantized at frame durations shorter than a display frame', () => {
@@ -163,6 +164,14 @@ describe('buildCaretBlinkKeyframesCss', () => {
     // stale value read back from a loadout written by a future version.
     const css = build({ presetKey: 'nope' })
     expect(percentsOf(css)).toEqual([0, 10, 65, 85, 100])
+  })
+
+  it('carries blur and spread independently into the halo shadow', () => {
+    // Blur without spread is a legitimate look (it feathers the caret's own
+    // edge outward), so neither value may be folded into the other.
+    expect(build({ haloBlurPx: 4 })).toContain('box-shadow: 0 0 4px 6px rgba(200, 100, 50,')
+    expect(build({ haloSpreadPx: 0, haloBlurPx: 9 })).toContain('box-shadow: 0 0 9px 0px rgba(200, 100, 50,')
+    expect(build({ haloBlurPx: -3 })).toContain('box-shadow: 0 0 0px 6px rgba(200, 100, 50,')
   })
 
   it('falls back to a visible colour when one cannot be parsed', () => {

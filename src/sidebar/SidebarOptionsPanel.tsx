@@ -31,6 +31,10 @@ import {
   CARET_HALO_SPREAD_MAX_PX,
   CARET_HALO_SPREAD_STEP_PX,
   CARET_HALO_SPREAD_DEFAULT_PX,
+  CARET_HALO_BLUR_MIN_PX,
+  CARET_HALO_BLUR_MAX_PX,
+  CARET_HALO_BLUR_STEP_PX,
+  CARET_HALO_BLUR_DEFAULT_PX,
   CARET_ANIMATION_DURATION_MIN_MS,
   CARET_ANIMATION_DURATION_MAX_MS,
   CARET_ANIMATION_DURATION_STEP_MS,
@@ -599,6 +603,8 @@ export interface SidebarOptionsPanelProps {
   caretOutlineColor: string
   caretHaloSpreadPx: number
   setCaretHaloSpreadPx: (value: number) => void
+  caretHaloBlurPx: number
+  setCaretHaloBlurPx: (value: number) => void
   caretHaloColor: string
   caretAnimationPreset: CaretAnimationPresetKey
   setCaretAnimationPreset: (value: CaretAnimationPresetKey) => void
@@ -863,6 +869,8 @@ export function SidebarOptionsPanel({
   caretOutlineColor,
   caretHaloSpreadPx,
   setCaretHaloSpreadPx,
+  caretHaloBlurPx,
+  setCaretHaloBlurPx,
   caretHaloColor,
   caretAnimationPreset,
   setCaretAnimationPreset,
@@ -2579,6 +2587,19 @@ export function SidebarOptionsPanel({
               ariaLabel="Caret halo spread in pixels -- 0 disables the halo"
               defaultValue={CARET_HALO_SPREAD_DEFAULT_PX}
               onCommit={(value) => setCaretHaloSpreadPx(clamp(Math.round(value), CARET_HALO_SPREAD_MIN_PX, CARET_HALO_SPREAD_MAX_PX))}
+            />
+          </div>
+          <div className="options-glaze-cell options-glaze-cell-span-3">
+            <CompactScrollbarSlider
+              id="caret-halo-blur"
+              min={CARET_HALO_BLUR_MIN_PX}
+              max={CARET_HALO_BLUR_MAX_PX}
+              step={CARET_HALO_BLUR_STEP_PX}
+              value={caretHaloBlurPx}
+              trackLabel="blur"
+              ariaLabel="Caret halo blur in pixels -- 0 keeps the halo's edge hard"
+              defaultValue={CARET_HALO_BLUR_DEFAULT_PX}
+              onCommit={(value) => setCaretHaloBlurPx(clamp(Math.round(value), CARET_HALO_BLUR_MIN_PX, CARET_HALO_BLUR_MAX_PX))}
             />
           </div>
 

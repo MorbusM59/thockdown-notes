@@ -58,6 +58,7 @@ import {
   CARET_SIZE_DEVIATION_MIN_PX, CARET_SIZE_DEVIATION_MAX_PX,
   CARET_OUTLINE_WIDTH_MIN_PX, CARET_OUTLINE_WIDTH_MAX_PX,
   CARET_HALO_SPREAD_MIN_PX, CARET_HALO_SPREAD_MAX_PX,
+  CARET_HALO_BLUR_MIN_PX, CARET_HALO_BLUR_MAX_PX,
   CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS,
   CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS,
 } from '../src/shared/caretSettings';
@@ -175,6 +176,7 @@ const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
   caretOutlineWidthPx: DEFAULT_CARET_SETTINGS.outlineWidthPx,
   caretOutlineColor: DEFAULT_CARET_SETTINGS.outlineColor,
   caretHaloSpreadPx: DEFAULT_CARET_SETTINGS.haloSpreadPx,
+  caretHaloBlurPx: DEFAULT_CARET_SETTINGS.haloBlurPx,
   caretHaloColor: DEFAULT_CARET_SETTINGS.haloColor,
   caretAnimationPreset: DEFAULT_CARET_SETTINGS.animationPreset,
   caretAnimationDurationMs: DEFAULT_CARET_SETTINGS.animationDurationMs,
@@ -593,6 +595,7 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
     caretOutlineWidthPx: clampInteger(source.caretOutlineWidthPx, CARET_OUTLINE_WIDTH_MIN_PX, CARET_OUTLINE_WIDTH_MAX_PX, DEFAULT_UI_LAYOUT_LOADOUT.caretOutlineWidthPx),
     caretOutlineColor: sanitizeString(source.caretOutlineColor, DEFAULT_UI_LAYOUT_LOADOUT.caretOutlineColor),
     caretHaloSpreadPx: clampInteger(source.caretHaloSpreadPx, CARET_HALO_SPREAD_MIN_PX, CARET_HALO_SPREAD_MAX_PX, DEFAULT_UI_LAYOUT_LOADOUT.caretHaloSpreadPx),
+    caretHaloBlurPx: clampInteger(source.caretHaloBlurPx, CARET_HALO_BLUR_MIN_PX, CARET_HALO_BLUR_MAX_PX, DEFAULT_UI_LAYOUT_LOADOUT.caretHaloBlurPx),
     caretHaloColor: sanitizeString(source.caretHaloColor, DEFAULT_UI_LAYOUT_LOADOUT.caretHaloColor),
     // A free-form string here would reach the stylesheet as an animation name;
     // only the known preset keys are accepted, anything else falls back.
@@ -625,7 +628,7 @@ const TDL_SCALAR_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
   'cursorClickRamp', 'cursorClickSkew', 'cursorClickSpeedX', 'cursorClickMaxSpeed',
   'cursorClickMinHoldMs', 'cursorClickBalance',
   'caretSizeDeviationPx', 'caretOutlineWidthPx', 'caretOutlineColor',
-  'caretHaloSpreadPx', 'caretHaloColor',
+  'caretHaloSpreadPx', 'caretHaloBlurPx', 'caretHaloColor',
   'caretAnimationPreset', 'caretAnimationDurationMs', 'caretFrameDurationMs',
 ];
 

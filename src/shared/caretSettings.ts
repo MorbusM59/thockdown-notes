@@ -30,8 +30,10 @@ export interface CaretSettings {
   sizeDeviationPx: number
   /** Outline drawn around the caret rectangle. 0 = no outline. */
   outlineWidthPx: number
-  /** Halo: a box-shadow with no x/y offset and no blur -- pure spread. 0 = no halo. */
+  /** Halo: a box-shadow with no x/y offset. How far it reaches past the caret. */
   haloSpreadPx: number
+  /** Softness of that halo's edge. 0 = a hard ring, the original look. */
+  haloBlurPx: number
   outlineColor: string
   haloColor: string
   animationPreset: CaretAnimationPresetKey
@@ -62,6 +64,14 @@ export const CARET_HALO_SPREAD_MAX_PX = 20
 export const CARET_HALO_SPREAD_STEP_PX = 1
 export const CARET_HALO_SPREAD_DEFAULT_PX = 0
 
+// Blur is independent of spread: a halo can be soft without reaching further
+// (blur alone feathers the caret's own edge outward), or reach without
+// softening (the hard ring the halo shipped as).
+export const CARET_HALO_BLUR_MIN_PX = 0
+export const CARET_HALO_BLUR_MAX_PX = 20
+export const CARET_HALO_BLUR_STEP_PX = 1
+export const CARET_HALO_BLUR_DEFAULT_PX = 0
+
 export const CARET_ANIMATION_DURATION_MIN_MS = 100
 export const CARET_ANIMATION_DURATION_MAX_MS = 5000
 export const CARET_ANIMATION_DURATION_STEP_MS = 100
@@ -84,6 +94,7 @@ export const DEFAULT_CARET_SETTINGS: CaretSettings = {
   sizeDeviationPx: CARET_SIZE_DEVIATION_DEFAULT_PX,
   outlineWidthPx: CARET_OUTLINE_WIDTH_DEFAULT_PX,
   haloSpreadPx: CARET_HALO_SPREAD_DEFAULT_PX,
+  haloBlurPx: CARET_HALO_BLUR_DEFAULT_PX,
   outlineColor: DEFAULT_CARET_OUTLINE_COLOR,
   haloColor: DEFAULT_CARET_HALO_COLOR,
   animationPreset: 'heartbeat',
@@ -272,6 +283,7 @@ export interface CaretBlinkKeyframeOptions {
   outlineColor: string
   haloColor: string
   haloSpreadPx: number
+  haloBlurPx: number
 }
 
 /** Trims trailing zeroes so the generated CSS stays readable when inspected. */
@@ -392,6 +404,7 @@ export function buildCaretBlinkKeyframesCss(options: CaretBlinkKeyframeOptions):
     outlineColor,
     haloColor,
     haloSpreadPx,
+    haloBlurPx,
   } = options
 
   const preset = CARET_ANIMATION_PRESETS[presetKey] ?? CARET_ANIMATION_PRESETS.heartbeat
@@ -399,12 +412,13 @@ export function buildCaretBlinkKeyframesCss(options: CaretBlinkKeyframeOptions):
   const outline = parseColorOrFallback(outlineColor, DEFAULT_CARET_OUTLINE_COLOR)
   const halo = parseColorOrFallback(haloColor, DEFAULT_CARET_HALO_COLOR)
   const spread = formatNumber(Math.max(0, haloSpreadPx))
+  const blur = formatNumber(Math.max(0, haloBlurPx))
 
   const blocks = resolveEmittedStops(preset, animationDurationMs, frameDurationMs).map((stop) => {
     const declarations = [
       `background-color: ${scaledRgba(fill, stop.alpha)};`,
       `outline-color: ${scaledRgba(outline, stop.alpha)};`,
-      `box-shadow: 0 0 0 ${spread}px ${scaledRgba(halo, stop.alpha)};`,
+      `box-shadow: 0 0 ${blur}px ${spread}px ${scaledRgba(halo, stop.alpha)};`,
     ]
     return `  ${formatNumber(stop.atPercent, 4)}% { ${declarations.join(' ')} }`
   })

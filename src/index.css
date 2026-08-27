@@ -490,12 +490,13 @@ body {
   /* Outline and halo are Options > Caret settings (App.tsx emits these vars).
      Both are zero by default, so a caret nobody has configured is exactly the
      plain rectangle it always was. The halo is a box-shadow with no offset and
-     no blur -- pure spread, a hard ring, which is what reads correctly against
-     the box grid. Neither property is a compositing trigger, unlike the
-     opacity animation they replaced. */
+     independently adjustable blur and spread: at blur 0 it is a hard ring
+     against the box grid, and winding blur up feathers it into a glow without
+     changing how far it reaches. Neither property is a compositing trigger,
+     unlike the opacity animation they replaced. */
   outline: var(--caret-outline-width, 0px) solid var(--caret-outline-color, transparent);
   outline-offset: 0;
-  box-shadow: 0 0 0 var(--caret-halo-spread, 0px) var(--caret-halo-color, transparent);
+  box-shadow: 0 0 var(--caret-halo-blur, 0px) var(--caret-halo-spread, 0px) var(--caret-halo-color, transparent);
   animation: thockdown-blink var(--caret-animation-duration, 1200ms) infinite cubic-bezier(0.4, 0, 0.2, 1);
 }
 

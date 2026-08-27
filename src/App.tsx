@@ -96,6 +96,7 @@ import {
   CARET_SIZE_DEVIATION_MIN_PX, CARET_SIZE_DEVIATION_MAX_PX,
   CARET_OUTLINE_WIDTH_MIN_PX, CARET_OUTLINE_WIDTH_MAX_PX,
   CARET_HALO_SPREAD_MIN_PX, CARET_HALO_SPREAD_MAX_PX,
+  CARET_HALO_BLUR_MIN_PX, CARET_HALO_BLUR_MAX_PX,
   CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS,
   CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS,
   type CaretAnimationPresetKey,
@@ -999,6 +1000,7 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     caretOutlineWidthPx: clamp(Math.round(toFiniteNumber(source.caretOutlineWidthPx, DEFAULT_CARET_SETTINGS.outlineWidthPx)), CARET_OUTLINE_WIDTH_MIN_PX, CARET_OUTLINE_WIDTH_MAX_PX),
     caretOutlineColor: typeof source.caretOutlineColor === 'string' ? source.caretOutlineColor : DEFAULT_CARET_SETTINGS.outlineColor,
     caretHaloSpreadPx: clamp(Math.round(toFiniteNumber(source.caretHaloSpreadPx, DEFAULT_CARET_SETTINGS.haloSpreadPx)), CARET_HALO_SPREAD_MIN_PX, CARET_HALO_SPREAD_MAX_PX),
+    caretHaloBlurPx: clamp(Math.round(toFiniteNumber(source.caretHaloBlurPx, DEFAULT_CARET_SETTINGS.haloBlurPx)), CARET_HALO_BLUR_MIN_PX, CARET_HALO_BLUR_MAX_PX),
     caretHaloColor: typeof source.caretHaloColor === 'string' ? source.caretHaloColor : DEFAULT_CARET_SETTINGS.haloColor,
     caretAnimationPreset: isCaretAnimationPresetKey(source.caretAnimationPreset) ? source.caretAnimationPreset : DEFAULT_CARET_SETTINGS.animationPreset,
     caretAnimationDurationMs: clamp(Math.round(toFiniteNumber(source.caretAnimationDurationMs, DEFAULT_CARET_SETTINGS.animationDurationMs)), CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS),
@@ -1848,6 +1850,7 @@ function App() {
   const [caretOutlineWidthPx, setCaretOutlineWidthPx] = useState(DEFAULT_CARET_SETTINGS.outlineWidthPx)
   const [caretOutlineColor, setCaretOutlineColor] = useState(DEFAULT_CARET_SETTINGS.outlineColor)
   const [caretHaloSpreadPx, setCaretHaloSpreadPx] = useState(DEFAULT_CARET_SETTINGS.haloSpreadPx)
+  const [caretHaloBlurPx, setCaretHaloBlurPx] = useState(DEFAULT_CARET_SETTINGS.haloBlurPx)
   const [caretHaloColor, setCaretHaloColor] = useState(DEFAULT_CARET_SETTINGS.haloColor)
   const [caretAnimationPreset, setCaretAnimationPreset] = useState<CaretAnimationPresetKey>(DEFAULT_CARET_SETTINGS.animationPreset)
   const [caretAnimationDurationMs, setCaretAnimationDurationMs] = useState(DEFAULT_CARET_SETTINGS.animationDurationMs)
@@ -2849,6 +2852,7 @@ function App() {
       caretOutlineWidthPx,
       caretOutlineColor,
       caretHaloSpreadPx,
+      caretHaloBlurPx,
       caretHaloColor,
       caretAnimationPreset,
       caretAnimationDurationMs,
@@ -2907,6 +2911,7 @@ function App() {
     caretOutlineWidthPx,
     caretOutlineColor,
     caretHaloSpreadPx,
+    caretHaloBlurPx,
     caretHaloColor,
     caretAnimationPreset,
     caretAnimationDurationMs,
@@ -3086,6 +3091,10 @@ function App() {
     setCaretHaloSpreadPx(clamp(
       Math.round(loadout.caretHaloSpreadPx ?? DEFAULT_CARET_SETTINGS.haloSpreadPx),
       CARET_HALO_SPREAD_MIN_PX, CARET_HALO_SPREAD_MAX_PX,
+    ))
+    setCaretHaloBlurPx(clamp(
+      Math.round(loadout.caretHaloBlurPx ?? DEFAULT_CARET_SETTINGS.haloBlurPx),
+      CARET_HALO_BLUR_MIN_PX, CARET_HALO_BLUR_MAX_PX,
     ))
     setCaretHaloColor(loadout.caretHaloColor ?? DEFAULT_CARET_SETTINGS.haloColor)
     setCaretAnimationPreset(
@@ -4732,6 +4741,7 @@ function App() {
       '--caret-outline-width': `${caretOutlineWidthPx}px`,
       '--caret-outline-color': caretOutlineColor,
       '--caret-halo-spread': `${caretHaloSpreadPx}px`,
+      '--caret-halo-blur': `${caretHaloBlurPx}px`,
       '--caret-halo-color': caretHaloColor,
       '--caret-animation-duration': `${caretAnimationDurationMs}ms`,
       '--color-selection': activeSectionSnapshot?.isPreviewMode ? highlightColors.selectionRender : highlightColors.selectionEdit,
@@ -4788,6 +4798,7 @@ function App() {
     caretOutlineWidthPx,
     caretOutlineColor,
     caretHaloSpreadPx,
+    caretHaloBlurPx,
     caretHaloColor,
     caretAnimationDurationMs,
     activeSectionSnapshot?.isPreviewMode,
@@ -4922,6 +4933,7 @@ function App() {
       outlineColor: caretOutlineColor,
       haloColor: caretHaloColor,
       haloSpreadPx: caretHaloSpreadPx,
+      haloBlurPx: caretHaloBlurPx,
     }),
     [
       caretAnimationPreset,
@@ -4931,6 +4943,7 @@ function App() {
       caretOutlineColor,
       caretHaloColor,
       caretHaloSpreadPx,
+      caretHaloBlurPx,
     ],
   )
 
@@ -9293,6 +9306,8 @@ ${markdownHtml}
                         caretOutlineColor={caretOutlineColor}
                         caretHaloSpreadPx={caretHaloSpreadPx}
                         setCaretHaloSpreadPx={setCaretHaloSpreadPx}
+                        caretHaloBlurPx={caretHaloBlurPx}
+                        setCaretHaloBlurPx={setCaretHaloBlurPx}
                         caretHaloColor={caretHaloColor}
                         caretAnimationPreset={caretAnimationPreset}
                         setCaretAnimationPreset={setCaretAnimationPreset}

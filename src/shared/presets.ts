@@ -161,6 +161,7 @@ export const NEUTRAL_BASE: UiLayoutLoadout = {
   caretOutlineWidthPx: DEFAULT_CARET_SETTINGS.outlineWidthPx,
   caretOutlineColor: DEFAULT_CARET_SETTINGS.outlineColor,
   caretHaloSpreadPx: DEFAULT_CARET_SETTINGS.haloSpreadPx,
+  caretHaloBlurPx: DEFAULT_CARET_SETTINGS.haloBlurPx,
   caretHaloColor: DEFAULT_CARET_SETTINGS.haloColor,
   caretAnimationPreset: DEFAULT_CARET_SETTINGS.animationPreset,
   caretAnimationDurationMs: DEFAULT_CARET_SETTINGS.animationDurationMs,
