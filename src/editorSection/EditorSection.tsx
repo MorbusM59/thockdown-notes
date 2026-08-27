@@ -58,7 +58,7 @@ type ViewStyleKey =
 export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   'sectionId' | 'isSectionActive' | 'activeNoteId' | 'isPreviewMode' | 'previewedSnapshotId' | 'bindings' | 'adapterRef' | 'sectionContainerRef'
   | 'editorDisplayText' | 'activeNoteHasDebugTag' | 'isPreviewingSnapshot' | 'isCaretSuspended' | 'previewTextureRef'
-  | 'previewScrollRef' | 'handlePreviewScroll' | 'blockPreviewEditMutation' | 'previewMarkdownElement'
+  | 'previewScrollRef' | 'handlePreviewScroll' | 'blockPreviewEditMutation' | 'previewMarkdownElement' | 'previewDiscovery'
   | 'previewScrollbarTrackRef' | 'handlePreviewTrackMouseDown' | 'handlePreviewTrackContextMenu' | 'previewScrollbarThumbRef' | 'isDraggingPreviewScrollThumb'
   | 'isPreviewScrollThumbActive' | 'handlePreviewThumbMouseDown' | 'activeNoteDocumentStats' | 'noteSnapshots'
   | 'handleNavigateSnapshot' | 'handleBranchOpened' | 'handleBranchError' | 'timelineCurveConstant' | 'setTimelineCurveConstant'
@@ -1385,7 +1385,7 @@ export function EditorSection({
     editorSectionMountRest.previewSettleGateRef.current?.notifyCommit()
   }, [editorSectionMountRest.previewSettleGateRef])
 
-  const { previewMarkdownElement } = usePreviewMarkdownRendering({
+  const { previewMarkdownElement, previewDiscovery } = usePreviewMarkdownRendering({
     notes,
     activeNoteId,
     activeNoteText,
@@ -2059,6 +2059,7 @@ export function EditorSection({
         viewSpacing={viewSpacing}
         viewLetterSpacingEm={viewLetterSpacingEm}
         highlightSearchColor={highlightSearchColor}
+        previewDiscovery={previewDiscovery}
         caretSizeDeviationPx={caretSizeDeviationPx}
         showLineNumbers={showLineNumbers}
         showReviewFlags={showReviewFlags}

@@ -38,6 +38,15 @@
 /** How long one measurement slice may occupy the main thread. */
 export const PREVIEW_PREWARM_SLICE_BUDGET_MS = 8
 
+/**
+ * How long the preview's geometry must hold still before a survey restarts.
+ *
+ * A window or split-view drag resizes the pane on every frame; restarting per
+ * frame means the survey never finishes while the drag is in progress, on
+ * exactly the hardware where it is already slowest.
+ */
+export const PREVIEW_PREWARM_RESIZE_SETTLE_MS = 300
+
 /** Where the adaptive batch size starts, and the range it may move in. */
 export const PREVIEW_PREWARM_MIN_BATCH = 1
 export const PREVIEW_PREWARM_MAX_BATCH = 24

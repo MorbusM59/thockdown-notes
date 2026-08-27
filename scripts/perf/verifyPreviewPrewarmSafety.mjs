@@ -31,6 +31,7 @@ async function main() {
   const server = await startDevServer(PORT)
   const browser = await chromium.launch({ executablePath: EXECUTABLE_PATH })
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
+  const cdp = await page.context().newCDPSession(page)
   const errors = []
   page.on('pageerror', (err) => errors.push(String(err).slice(0, 200)))
   page.on('console', (msg) => { if (msg.type() === 'error') errors.push(msg.text().slice(0, 200)) })
@@ -134,6 +135,48 @@ async function main() {
       })
       check(`a ${label} change re-measures the document`, Math.abs(missed) < 60, `jump-to-bottom missed the end by ${missed}px`)
     }
+
+    // --- the survey must be invisible on slow hardware ---
+    // This is why the survey buffers and commits once. Measured at 6x CPU
+    // throttle, parked mid-document with no input, when it applied each height
+    // as it was measured: 115 total-size changes (the thumb crawling) and 96
+    // scrollTop compensations totalling 25,280px (the text vibrating), over
+    // twelve seconds. With the survey disabled entirely the same window shows
+    // 1 change and 0 moves, so that churn was entirely self-inflicted -- and
+    // invisible on fast hardware, where the whole survey is over in ~1.3s.
+    await page.reload()
+    await page.waitForSelector('.markdown-preview', { timeout: 90000 })
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 6 })
+    const quiet = await page.evaluate(async () => {
+      const scroller = document.querySelector('.markdown-preview')
+      const spacer = scroller.querySelector(':scope > div[style*="height"]')
+      const size = () => Math.round(parseFloat(spacer.style.height) || 0)
+      scroller.style.scrollBehavior = 'auto'
+      scroller.scrollTop = 12000
+      await new Promise((r) => setTimeout(r, 500))
+
+      // Track a block the reader is looking at: what must not move is the
+      // content on screen, not scrollTop, which legitimately shifts when the
+      // survey commits (the coordinate system changes; the view does not).
+      const anchor = [...scroller.querySelectorAll('[data-index]')][2]
+      const anchorIndex = anchor?.dataset.index
+      const firstTop = anchor ? Math.round(anchor.getBoundingClientRect().top) : 0
+
+      let sizeChanges = 0
+      let worstDrift = 0
+      let lastSize = size()
+      const startedAt = performance.now()
+      while (performance.now() - startedAt < 10000) {
+        await new Promise((r) => requestAnimationFrame(r))
+        if (size() !== lastSize) { sizeChanges += 1; lastSize = size() }
+        const el = scroller.querySelector(`[data-index="${anchorIndex}"]`)
+        if (el) worstDrift = Math.max(worstDrift, Math.abs(Math.round(el.getBoundingClientRect().top) - firstTop))
+      }
+      return { sizeChanges, worstDrift }
+    })
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 })
+    check('the survey does not move the reader\'s content on slow hardware', quiet.worstDrift === 0, `content drifted ${quiet.worstDrift}px`)
+    check('the survey does not churn the scrollbar while it runs', quiet.sizeChanges <= 4, `total size changed ${quiet.sizeChanges}x`)
 
     check('no page errors', errors.length === 0, errors.slice(0, 2).join(' | '))
   } finally {

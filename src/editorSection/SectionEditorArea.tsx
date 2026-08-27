@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import type { PreviewDiscoveryState } from './usePreviewMarkdownRendering'
 import type { CSSProperties, DragEvent, MouseEvent, MutableRefObject, ReactNode, RefObject } from 'react'
 import { CM6Editor } from '../components/CM6Editor'
 import { SnapshotTimelineSlider } from '../editor/SnapshotTimelineSlider'
@@ -114,6 +115,8 @@ export interface SectionEditorAreaProps {
    * on the current line-number state; onToggleReviewFlags (right click)
    * flips the flag column alone.
    */
+  /** Progress of the preview's background block survey, so the timeline slot can explain the wait. */
+  previewDiscovery: PreviewDiscoveryState
   /** Options > Caret "size" slider -- see CM6Editor's updateCaret for how it reshapes the caret box. */
   caretSizeDeviationPx: number
   showLineNumbers: boolean
@@ -232,6 +235,7 @@ export function SectionEditorArea({
   onChapterPillContextMenu,
   onArchiveChapterClick,
   onDeleteChapterClick,
+  previewDiscovery,
   caretSizeDeviationPx,
   showLineNumbers,
   showReviewFlags,
@@ -547,7 +551,32 @@ export function SectionEditorArea({
           )}
         </div>
         <div className="timeline-panel">
-        {activeNoteId && !isViewingAutoTocChapter && !isViewingAutoOpenItemsChapter && !isViewingTimelessNote ? (
+        {/* While the preview is surveying a large document, the timeline slot
+            becomes a progress bar for that survey. The scrollbar deliberately
+            sits on its initial estimate until the survey commits (see
+            previewMeasurementPrewarm.ts), so without this the reader is left
+            with a scrollbar that is quietly wrong and no explanation -- on
+            slower hardware for ten seconds or more. Borrowing this slot rather
+            than adding a new one keeps it where the eye already goes for
+            "state of this document", and it costs nothing: a document still
+            being surveyed is one nobody is navigating the history of yet.
+            Only shown in render view, where the survey is what the reader is
+            actually waiting on; in edit mode it runs silently. */}
+        {isPreviewMode && previewDiscovery.isSurveying && previewDiscovery.total > 0 ? (
+          <div
+            className="utility-setting-scrollbar-shell snapshot-timeline-shell preview-discovery-shell"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={previewDiscovery.percent}
+            aria-label={`Measuring document: ${previewDiscovery.measured} of ${previewDiscovery.total} blocks`}
+            data-live-tooltip={`Measuring this document so the scrollbar is accurate — ${previewDiscovery.percent}%`}
+          >
+            <div className="utility-setting-scrollbar-rail snapshot-timeline-rail preview-discovery-rail">
+              <div className="preview-discovery-fill" style={{ width: `${previewDiscovery.percent}%` }} />
+            </div>
+          </div>
+        ) : activeNoteId && !isViewingAutoTocChapter && !isViewingAutoOpenItemsChapter && !isViewingTimelessNote ? (
           <SnapshotTimelineSlider
             sourceNoteId={activeNoteId}
             placements={noteSnapshots.placements}

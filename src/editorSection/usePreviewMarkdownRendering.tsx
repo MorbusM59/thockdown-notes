@@ -31,6 +31,7 @@ import { resolvePreviewBlockIndexForSourceLine } from '../editor/PreviewBlockInd
 import { isNonQuantizedSmoothScrollActive, scrollToNonQuantizedSmooth } from '../editor/NonQuantizedSmoothScroll'
 import {
   PREVIEW_PREWARM_INITIAL_BATCH,
+  PREVIEW_PREWARM_RESIZE_SETTLE_MS,
   PREVIEW_PREWARM_SLICE_BUDGET_MS,
   planNextPrewarmBatch,
   resolveNextPrewarmBatchSize,
@@ -46,6 +47,15 @@ const PREVIEW_BLOCK_ESTIMATED_HEIGHT_PX = 56
 // A modest buffer of blocks mounted above/below the visible window so
 // scrolling doesn't visibly pop content in at the viewport edge.
 const PREVIEW_BLOCK_OVERSCAN = 6
+
+/** Progress of the background block survey -- see previewMeasurementPrewarm.ts. */
+export interface PreviewDiscoveryState {
+  isSurveying: boolean
+  /** 0-100, whole numbers. */
+  percent: number
+  measured: number
+  total: number
+}
 
 interface OpenItemsToggleStore {
   isChecked: (sourceLine: number) => boolean
@@ -189,6 +199,7 @@ export interface UsePreviewMarkdownRenderingOptions {
 
 export interface UsePreviewMarkdownRenderingResult {
   previewMarkdownElement: ReactNode
+  previewDiscovery: PreviewDiscoveryState
 }
 
 interface PreviewMarkdownBlockProps {
@@ -993,10 +1004,24 @@ export function usePreviewMarkdownRendering({
   const [probeReady, setProbeReady] = useState(false)
   const [prewarmBatch, setPrewarmBatch] = useState<readonly number[]>([])
   const prewarmedRef = useRef<Set<number>>(new Set())
+  const prewarmBufferRef = useRef<Map<number, number>>(new Map())
   const prewarmBatchSizeRef = useRef(PREVIEW_PREWARM_INITIAL_BATCH)
   const prewarmStartedAtRef = useRef(0)
   const prewarmScheduleRef = useRef<number | null>(null)
   const prewarmDoneRef = useRef(false)
+  // Reported out so the UI can be honest about the wait -- see the discovery
+  // bar in SectionEditorArea. Updated only when the whole integer percent
+  // moves, so a thousand-block survey costs at most a hundred re-renders of
+  // the section rather than one per batch.
+  const [previewDiscovery, setPreviewDiscovery] = useState<PreviewDiscoveryState>({ isSurveying: false, percent: 0, measured: 0, total: 0 })
+  const discoveryPercentRef = useRef(-1)
+
+  const reportDiscovery = useCallback((measured: number, total: number, isSurveying: boolean) => {
+    const percent = total > 0 ? Math.min(100, Math.floor((measured / total) * 100)) : 0
+    if (isSurveying && percent === discoveryPercentRef.current) return
+    discoveryPercentRef.current = isSurveying ? percent : -1
+    setPreviewDiscovery({ isSurveying, percent, measured, total })
+  }, [])
 
   const cancelPrewarmSchedule = useCallback(() => {
     if (prewarmScheduleRef.current === null) return
@@ -1017,6 +1042,29 @@ export function usePreviewMarkdownRendering({
     }
     prewarmScheduleRef.current = window.setTimeout(run, 16)
   }, [cancelPrewarmSchedule])
+
+  /**
+   * Hands every buffered height to the virtualizer at once, when the survey is
+   * complete.
+   *
+   * One commit, not a stream of them: this is the difference between a
+   * scrollbar that crawls for the whole survey and one that sits still and
+   * then corrects once. react-virtual compensates scrollTop per item for
+   * anything above the fold, so the reader's content stays where it is -- what
+   * moves is the thumb, once, which is honest and is what the discovery
+   * progress bar has been explaining while this ran.
+   */
+  const commitPrewarmedSizes = useCallback(() => {
+    const buffered = prewarmBufferRef.current
+    if (buffered.size === 0) return
+    prewarmBufferRef.current = new Map()
+
+    // Ascending, so react-virtual's own above-the-fold compensation sees each
+    // item in document order rather than jumping around the offset map.
+    for (const index of [...buffered.keys()].sort((a, b) => a - b)) {
+      virtualizer.resizeItem(index, buffered.get(index)!)
+    }
+  }, [virtualizer])
 
   const queueNextPrewarmBatch = useCallback(() => {
     schedulePrewarmSlice(() => {
@@ -1043,13 +1091,15 @@ export function usePreviewMarkdownRendering({
       if (next.length === 0) {
         prewarmDoneRef.current = true
         setPrewarmBatch([])
+        commitPrewarmedSizes()
+        reportDiscovery(blockCount, blockCount, false)
         return
       }
 
       prewarmStartedAtRef.current = performance.now()
       setPrewarmBatch(next)
     })
-  }, [schedulePrewarmSlice, virtualizer, previewBlocksRef, previewScrollRef])
+  }, [schedulePrewarmSlice, virtualizer, previewBlocksRef, previewScrollRef, commitPrewarmedSizes, reportDiscovery])
 
   // Measure whatever the host just rendered and hand the real heights to the
   // virtualizer. useLayoutEffect so this reads geometry in the same frame the
@@ -1066,11 +1116,20 @@ export function usePreviewMarkdownRendering({
       if (!el) continue
       const height = el.getBoundingClientRect().height
       prewarmedRef.current.add(index)
-      // A zero height is a block that rendered to nothing measurable; record
-      // it as done anyway so the sweep terminates, but leave the virtualizer
-      // on its own estimate rather than asserting a wrong 0.
-      if (height > 0) virtualizer.resizeItem(index, height)
+      // BUFFERED, not applied. Handing each height to the virtualizer as it is
+      // measured is what made this feature miserable on slow hardware: every
+      // resizeItem changes the total size (the thumb crawls) and, for any block
+      // above the fold, compensates scrollTop (the text vibrates). Measured at
+      // 6x CPU throttle, parked mid-document with no input: 115 size changes
+      // and 96 scrollTop moves totalling 25,280px of drag over 12 seconds,
+      // against 1 change and 0 moves with the sweep disabled entirely. On a
+      // fast machine the same churn is over in ~1.3s and reads as a settle,
+      // which is exactly why it survived review here. See the single commit in
+      // commitPrewarmedSizes below.
+      if (height > 0) prewarmBufferRef.current.set(index, height)
     }
+
+    reportDiscovery(prewarmedRef.current.size, previewBlocksRef.current.length, true)
 
     prewarmBatchSizeRef.current = resolveNextPrewarmBatchSize(
       prewarmBatch.length,
@@ -1078,15 +1137,18 @@ export function usePreviewMarkdownRendering({
       PREVIEW_PREWARM_SLICE_BUDGET_MS,
     )
     queueNextPrewarmBatch()
-  }, [prewarmBatch, virtualizer, queueNextPrewarmBatch])
+  }, [prewarmBatch, virtualizer, queueNextPrewarmBatch, reportDiscovery, previewBlocksRef])
 
   const restartPrewarm = useCallback(() => {
     prewarmedRef.current = new Set()
+    prewarmBufferRef.current = new Map()
     prewarmDoneRef.current = false
     prewarmBatchSizeRef.current = PREVIEW_PREWARM_INITIAL_BATCH
     setPrewarmBatch([])
+    discoveryPercentRef.current = -1
+    reportDiscovery(0, previewBlocksRef.current.length, true)
     queueNextPrewarmBatch()
-  }, [queueNextPrewarmBatch])
+  }, [queueNextPrewarmBatch, reportDiscovery, previewBlocksRef])
 
   // Start over whenever the cached heights could no longer be true.
   //
@@ -1117,15 +1179,29 @@ export function usePreviewMarkdownRendering({
     if (!probe) return undefined
 
     let last = `${probe.offsetWidth}x${probe.offsetHeight}`
+    let settleTimer: number | null = null
+
     const observer = new ResizeObserver(() => {
       const next = `${probe.offsetWidth}x${probe.offsetHeight}`
       if (next === last) return
       last = next
-      restartPrewarm()
+      // Debounced, because a window or split-view drag fires this on every
+      // frame of the drag. Restarting per frame means a survey that never
+      // finishes while the reader is still dragging, on exactly the hardware
+      // where it is already slowest. Wait for the geometry to hold still, then
+      // survey once against the size it actually settled on.
+      if (settleTimer !== null) window.clearTimeout(settleTimer)
+      settleTimer = window.setTimeout(() => {
+        settleTimer = null
+        restartPrewarm()
+      }, PREVIEW_PREWARM_RESIZE_SETTLE_MS)
     })
     observer.observe(probe)
 
-    return () => observer.disconnect()
+    return () => {
+      observer.disconnect()
+      if (settleTimer !== null) window.clearTimeout(settleTimer)
+    }
   }, [probeReady, restartPrewarm])
 
   useEffect(() => cancelPrewarmSchedule, [cancelPrewarmSchedule])
@@ -1246,5 +1322,6 @@ export function usePreviewMarkdownRendering({
         {prewarmHostElement}
       </>
     ),
+    previewDiscovery,
   }
 }

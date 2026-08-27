@@ -92,15 +92,19 @@ async function main() {
       }
       requestAnimationFrame(tick)
 
+      // Completion is "the sweep stopped rendering batches", NOT "the total
+      // size stopped changing". The survey buffers its measurements and commits
+      // them in one go at the end precisely so the total size does NOT move
+      // while it runs, so watching the size for stability reports success
+      // immediately and measures a document that has not been surveyed yet.
       const startedAt = performance.now()
-      let size = readSize()
-      let stableSince = performance.now()
-      while (performance.now() - startedAt < 20000) {
+      let idleSince = performance.now()
+      while (performance.now() - startedAt < 30000) {
         await new Promise((r) => setTimeout(r, 50))
-        const next = readSize()
-        if (next !== size) { size = next; stableSince = performance.now() }
-        else if (performance.now() - stableSince > 600) break
+        if (document.querySelector('[data-prewarm-index]')) idleSince = performance.now()
+        else if (performance.now() - idleSince > 700 && readSize() > 0) break
       }
+      const stableSince = idleSince
       running = false
 
       const sorted = [...frames].sort((a, b) => a - b)

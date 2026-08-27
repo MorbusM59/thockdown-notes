@@ -721,3 +721,34 @@
 /* Preview mode edge fades: see .render-container's mask-image in
    markdown.css for the true-alpha replacement of this old color-matched
    overlay. */
+
+/* Discovery progress -- the timeline slot on loan while the preview surveys a
+   large document (see SectionEditorArea's comment where this renders, and
+   previewMeasurementPrewarm.ts for what is being surveyed). Deliberately
+   quiet: this is an explanation, not an alarm, and it sits in a slot the
+   reader's eye already treats as ambient status. */
+/* The snapshot rail this slot normally holds is a 2px hairline that exists to
+   thread markers onto, and a fill drawn on it is invisible -- measured as a
+   white 2px line on a white 2px line. The discovery bar gets its own track:
+   same slot, same width, but tall enough and dark enough to read as progress. */
+.preview-discovery-rail {
+  position: relative;
+  overflow: hidden;
+  height: 4px;
+  border-radius: var(--border-radius-small);
+  background: var(--canonical-scroll-track-bg);
+  box-shadow: var(--box-shadow-inverted-light);
+}
+
+.preview-discovery-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: var(--border-radius-small);
+  background: var(--canonical-handle-border);
+  /* Eased rather than instant because progress arrives in uneven batches --
+     an adaptive batch size means the jumps are not the same width, and
+     smoothing them keeps this reading as a fill rather than a stutter. */
+  transition: width 220ms ease-out;
+}

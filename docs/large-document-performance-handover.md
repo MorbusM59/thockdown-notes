@@ -1653,6 +1653,69 @@ CM6/Chromium native overhead, not further attributable without new tooling" is u
 the honest answer for whatever's left. The `sanitizeDatabase()` real-world observation window noted
 directly above is the one open item this round actually added.
 
+## This round: the survey no longer churns while it runs, and says so
+
+**Reported from an older Linux laptop**, and reproduced exactly here with CDP
+CPU throttling (`Emulation.setCPUThrottlingRate`, rate 6) — which is the tool to
+reach for whenever a report is hardware-shaped: the scroll thumb creeping for a
+prolonged time while a large document is explored, restarting whenever the
+editor's dimensions change, and the text "vibrating".
+
+**All three were self-inflicted by the survey shipped in the round below.**
+Measured at 6x throttle, parked mid-document with no user input at all:
+
+| | with the survey | survey disabled |
+|---|---|---|
+| total-size changes in 12s | **115** (biggest 1,125px) | 1 (13px) |
+| scrollTop compensations | **96, totalling 25,280px** | 0 |
+
+Every `resizeItem` changes the total size (the thumb moves) and, for a block
+above the fold, compensates scrollTop (the content shifts). On fast hardware the
+whole survey is over in ~1.3s so it reads as a brief settle; at 6x it is twelve
+seconds of visible dragging. **This is the second time in this effort that a
+change looked finished because the machine measuring it was too fast** — see the
+Chromium 124 note in `docs/cm6-parity-hardening-plan.md`. Throttle before
+believing a perf feature is invisible.
+
+**The fix, per the user's own instinct:** the survey now *buffers* every height
+and hands them to the virtualizer in **one commit** when it completes, so the
+scrollbar sits on its initial estimate for the duration rather than crawling
+toward the truth. Measured after: 3 size changes and 1 scrollTop move for the
+whole survey, and — the number that matters — **0px of on-screen content drift
+across 288 sampled frames**. The single scrollTop move is a coordinate-system
+shift, not a visible jump: react-virtual's per-item compensation is exact.
+
+Two supporting changes:
+
+- **Restarts are debounced** (`PREVIEW_PREWARM_RESIZE_SETTLE_MS`, 300ms). A
+  window or split-view drag fires the invalidation probe every frame, so an
+  undebounced restart meant a survey that never finished while the reader was
+  still dragging — on exactly the hardware where it is slowest.
+- **The timeline slot becomes a progress bar while a document is in discovery**
+  (`.preview-discovery-*`, render view only; in edit mode the survey runs
+  silently). Borrowing that slot rather than adding one keeps the status where
+  the eye already goes, and costs nothing: a document still being surveyed is
+  not one whose history anyone is navigating yet. Progress updates only when the
+  whole integer percent moves, so a 1,000-block survey costs at most 100
+  re-renders rather than one per batch.
+
+A note on the bar's styling, since it looked done and was not: drawn on the
+snapshot rail it was invisible — that rail is a 2px hairline built to thread
+markers onto, so the fill measured as a white 2px line on a white 2px line. It
+has its own 4px track now.
+
+**The instrument needed fixing too.** `measurePreviewMeasurementCache.mjs`
+detected completion by watching for the total size to stop changing — exactly
+the churn this round removed — so it reported "settled" instantly and then
+measured an unsurveyed document (71% error, 29,646px jump-to-bottom miss). It
+now waits for the sweep to stop rendering batches instead. Worth remembering:
+**an instrument calibrated against a symptom breaks when you fix the symptom.**
+
+**Verification:** `tsc`, `eslint`, `npm test` (619/619), both live scripts, and
+two new permanent assertions in `verifyPreviewPrewarmSafety.mjs` that run under
+6x CPU throttle — content drift 0px, total-size changes 2. Accuracy from the
+round below is unchanged: −0.1% cold, 0px jump-to-bottom, biggest jump 1px.
+
 ## This round: the preview scrollbar is now accurate before the reader scrolls — background measurement prewarm
 
 **The defect.** The preview virtualizes blocks with a flat 56px estimate
