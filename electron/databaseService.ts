@@ -61,6 +61,7 @@ import {
   CARET_HALO_BLUR_MIN_PX, CARET_HALO_BLUR_MAX_PX,
   CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS,
   CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS,
+  CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT,
 } from '../src/shared/caretSettings';
 import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureMaterialSettings, type TextureMaterialsBySurface } from '../src/textures/types';
 import type { MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../src/shared/audioPlayer';
@@ -181,6 +182,7 @@ const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
   caretAnimationPreset: DEFAULT_CARET_SETTINGS.animationPreset,
   caretAnimationDurationMs: DEFAULT_CARET_SETTINGS.animationDurationMs,
   caretFrameDurationMs: DEFAULT_CARET_SETTINGS.frameDurationMs,
+  caretEffectStrengthPercent: DEFAULT_CARET_SETTINGS.effectStrengthPercent,
 };
 
 type SqliteDatabase = import('better-sqlite3').Database;
@@ -604,6 +606,7 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
       : DEFAULT_UI_LAYOUT_LOADOUT.caretAnimationPreset,
     caretAnimationDurationMs: clampInteger(source.caretAnimationDurationMs, CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS, DEFAULT_UI_LAYOUT_LOADOUT.caretAnimationDurationMs),
     caretFrameDurationMs: clampInteger(source.caretFrameDurationMs, CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS, DEFAULT_UI_LAYOUT_LOADOUT.caretFrameDurationMs),
+    caretEffectStrengthPercent: clampInteger(source.caretEffectStrengthPercent, CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT, DEFAULT_UI_LAYOUT_LOADOUT.caretEffectStrengthPercent),
   };
 }
 
@@ -630,6 +633,7 @@ const TDL_SCALAR_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
   'caretSizeDeviationPx', 'caretOutlineWidthPx', 'caretOutlineColor',
   'caretHaloSpreadPx', 'caretHaloBlurPx', 'caretHaloColor',
   'caretAnimationPreset', 'caretAnimationDurationMs', 'caretFrameDurationMs',
+  'caretEffectStrengthPercent',
 ];
 
 // Keys whose values are nested objects; they're emitted as inline JSON when

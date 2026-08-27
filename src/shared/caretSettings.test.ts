@@ -9,6 +9,7 @@ import {
   CARET_FRAME_DURATION_MAX_MS,
   CARET_FRAME_DURATION_SMOOTH_MAX_MS,
   CARET_MAX_BAKED_STEPS,
+  CARET_EFFECT_STRENGTH_DEFAULT_PERCENT,
   buildCaretBlinkKeyframesCss,
   isCaretAnimationPresetKey,
   resolveCaretSegmentStepCount,
@@ -24,6 +25,7 @@ const baseOptions: CaretBlinkKeyframeOptions = {
   haloColor: 'rgba(200, 100, 50, 0.5)',
   haloSpreadPx: 6,
   haloBlurPx: 0,
+  effectStrengthPercent: CARET_EFFECT_STRENGTH_DEFAULT_PERCENT,
 }
 
 const build = (overrides: Partial<CaretBlinkKeyframeOptions> = {}) =>
@@ -172,6 +174,38 @@ describe('buildCaretBlinkKeyframesCss', () => {
     expect(build({ haloBlurPx: 4 })).toContain('box-shadow: 0 0 4px 6px rgba(200, 100, 50,')
     expect(build({ haloSpreadPx: 0, haloBlurPx: 9 })).toContain('box-shadow: 0 0 9px 0px rgba(200, 100, 50,')
     expect(build({ haloBlurPx: -3 })).toContain('box-shadow: 0 0 0px 6px rgba(200, 100, 50,')
+  })
+
+  it('blends the shape toward a static caret as effect strength drops', () => {
+    // The fill is rgba(0, 0, 0, 0.3), so a multiplier of 1 -- a static caret at
+    // its own colour -- is alpha 0.3. Full strength keeps the heartbeat's own
+    // multipliers; zero collapses every stop onto that static value.
+    expect(fillAlphasOf(build())).toEqual([0.18, 0.03, 0.27, 0.09, 0.18])
+    expect(fillAlphasOf(build({ effectStrengthPercent: 0 }))).toEqual([0.3, 0.3, 0.3, 0.3, 0.3])
+    // Halfway is a straight linear blend of the two: 0.6 -> 0.8, 0.1 -> 0.55,
+    // 0.9 -> 0.95, 0.3 -> 0.65, each times the colour's own 0.3.
+    expect(fillAlphasOf(build({ effectStrengthPercent: 50 }))).toEqual([0.24, 0.165, 0.285, 0.195, 0.24])
+  })
+
+  it('blends every surface by the same amount', () => {
+    const css = build({ presetKey: 'bigBeat', effectStrengthPercent: 0 })
+    // Each surface lands on its own colour's own alpha, untouched.
+    expect(css).toContain('background-color: rgba(0, 0, 0, 0.3)')
+    expect(css).toContain('outline-color: rgba(10, 20, 30, 0.8)')
+    expect(css).toContain('box-shadow: 0 0 0px 6px rgba(200, 100, 50, 0.5)')
+  })
+
+  it('leaves a zero-strength blink with nothing to repaint', () => {
+    // Every stop identical means the computed style never changes, so the
+    // animation costs no invalidation even though it is still running.
+    const stops = stopsOf(build({ presetKey: 'bounce', effectStrengthPercent: 0, frameDurationMs: 100 }))
+    const declarations = stops.map((line) => line.slice(line.indexOf('{')))
+    expect(new Set(declarations).size).toBe(1)
+  })
+
+  it('clamps effect strength rather than inverting or overshooting the blend', () => {
+    expect(fillAlphasOf(build({ effectStrengthPercent: -50 }))).toEqual([0.3, 0.3, 0.3, 0.3, 0.3])
+    expect(fillAlphasOf(build({ effectStrengthPercent: 400 }))).toEqual([0.18, 0.03, 0.27, 0.09, 0.18])
   })
 
   it('falls back to a visible colour when one cannot be parsed', () => {

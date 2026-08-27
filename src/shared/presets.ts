@@ -166,6 +166,7 @@ export const NEUTRAL_BASE: UiLayoutLoadout = {
   caretAnimationPreset: DEFAULT_CARET_SETTINGS.animationPreset,
   caretAnimationDurationMs: DEFAULT_CARET_SETTINGS.animationDurationMs,
   caretFrameDurationMs: DEFAULT_CARET_SETTINGS.frameDurationMs,
+  caretEffectStrengthPercent: DEFAULT_CARET_SETTINGS.effectStrengthPercent,
 };
 
 export const DEFAULT_CUSTOM_LIGHT: UiLayoutLoadout = {

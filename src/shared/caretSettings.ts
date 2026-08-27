@@ -45,6 +45,13 @@ export interface CaretSettings {
    * frame is not a step anyone can see) -- see buildCaretBlinkKeyframesCss.
    */
   frameDurationMs: number
+  /**
+   * How much of the chosen shape actually reaches the caret, as a percentage.
+   * 100 is the shape at full strength; 0 is a static caret sitting at its own
+   * colours. In between is a straight linear blend of the two -- see
+   * resolveEffectiveAlpha.
+   */
+  effectStrengthPercent: number
 }
 
 // Deliberately symmetric around 0 so the slider's centre detent is the
@@ -85,6 +92,14 @@ export const CARET_FRAME_DURATION_STEP_MS = 5
 // buildCaretBlinkKeyframesCss.
 export const CARET_FRAME_DURATION_DEFAULT_MS = CARET_FRAME_DURATION_MIN_MS
 
+// A shape at 0% strength is a static caret, so this is the one caret setting
+// whose default has to be its maximum: anything less would quietly damp the
+// heartbeat everyone already has.
+export const CARET_EFFECT_STRENGTH_MIN_PERCENT = 0
+export const CARET_EFFECT_STRENGTH_MAX_PERCENT = 100
+export const CARET_EFFECT_STRENGTH_STEP_PERCENT = 1
+export const CARET_EFFECT_STRENGTH_DEFAULT_PERCENT = 100
+
 /** Last-resort fill colour if `highlightColors.caret` cannot be parsed. */
 export const DEFAULT_CARET_FILL_COLOR = 'rgba(0, 0, 0, 0.3)'
 export const DEFAULT_CARET_OUTLINE_COLOR = 'rgba(0, 0, 0, 0.45)'
@@ -100,6 +115,7 @@ export const DEFAULT_CARET_SETTINGS: CaretSettings = {
   animationPreset: 'heartbeat',
   animationDurationMs: CARET_ANIMATION_DURATION_DEFAULT_MS,
   frameDurationMs: CARET_FRAME_DURATION_DEFAULT_MS,
+  effectStrengthPercent: CARET_EFFECT_STRENGTH_DEFAULT_PERCENT,
 }
 
 // ---------------------------------------------------------------------------
@@ -284,6 +300,7 @@ export interface CaretBlinkKeyframeOptions {
   haloColor: string
   haloSpreadPx: number
   haloBlurPx: number
+  effectStrengthPercent: number
 }
 
 /** Trims trailing zeroes so the generated CSS stays readable when inspected. */
@@ -307,6 +324,23 @@ function formatNumber(value: number, decimals = 3): string {
 function scaledRgba(color: RgbaColor, alphaScale: number): string {
   const alpha = clampAlphaChannel(color.a * Math.max(0, Math.min(1, alphaScale)))
   return `rgba(${clampColorChannel(color.r)}, ${clampColorChannel(color.g)}, ${clampColorChannel(color.b)}, ${formatNumber(alpha, 4)})`
+}
+
+/**
+ * Blends a stop's alpha multiplier toward 1 -- a caret sitting at its own
+ * colours, i.e. no effect at all -- by the effect-strength slider.
+ *
+ * Applied here, at emit time, rather than to the preset's stops up front. The
+ * blend is linear and so is the step interpolation in resolveEmittedStops, so
+ * `blend(lerp(a, b))` and `lerp(blend(a), blend(b))` are the same number;
+ * doing it last keeps the quantization maths reading in the preset's own
+ * units. At 0% every stop collapses to the same value, which means the
+ * computed style never changes and the animation stops costing a repaint --
+ * a static caret in the way that matters, not just the way it looks.
+ */
+function resolveEffectiveAlpha(stopAlpha: number, effectStrengthPercent: number): number {
+  const strength = Math.max(0, Math.min(1, effectStrengthPercent / 100))
+  return 1 + ((stopAlpha - 1) * strength)
 }
 
 function parseColorOrFallback(color: string, fallback: string): RgbaColor {
@@ -405,6 +439,7 @@ export function buildCaretBlinkKeyframesCss(options: CaretBlinkKeyframeOptions):
     haloColor,
     haloSpreadPx,
     haloBlurPx,
+    effectStrengthPercent,
   } = options
 
   const preset = CARET_ANIMATION_PRESETS[presetKey] ?? CARET_ANIMATION_PRESETS.heartbeat
@@ -415,10 +450,13 @@ export function buildCaretBlinkKeyframesCss(options: CaretBlinkKeyframeOptions):
   const blur = formatNumber(Math.max(0, haloBlurPx))
 
   const blocks = resolveEmittedStops(preset, animationDurationMs, frameDurationMs).map((stop) => {
+    // One alpha drives all three surfaces, so the caret dims and brightens as
+    // one object rather than a ring around a blinking centre.
+    const alpha = resolveEffectiveAlpha(stop.alpha, effectStrengthPercent)
     const declarations = [
-      `background-color: ${scaledRgba(fill, stop.alpha)};`,
-      `outline-color: ${scaledRgba(outline, stop.alpha)};`,
-      `box-shadow: 0 0 ${blur}px ${spread}px ${scaledRgba(halo, stop.alpha)};`,
+      `background-color: ${scaledRgba(fill, alpha)};`,
+      `outline-color: ${scaledRgba(outline, alpha)};`,
+      `box-shadow: 0 0 ${blur}px ${spread}px ${scaledRgba(halo, alpha)};`,
     ]
     return `  ${formatNumber(stop.atPercent, 4)}% { ${declarations.join(' ')} }`
   })

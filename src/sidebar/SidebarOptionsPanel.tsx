@@ -43,6 +43,10 @@ import {
   CARET_FRAME_DURATION_MAX_MS,
   CARET_FRAME_DURATION_STEP_MS,
   CARET_FRAME_DURATION_DEFAULT_MS,
+  CARET_EFFECT_STRENGTH_MIN_PERCENT,
+  CARET_EFFECT_STRENGTH_MAX_PERCENT,
+  CARET_EFFECT_STRENGTH_STEP_PERCENT,
+  CARET_EFFECT_STRENGTH_DEFAULT_PERCENT,
   CARET_ANIMATION_PRESETS,
   CARET_ANIMATION_PRESET_KEYS,
   type CaretAnimationPresetKey,
@@ -612,6 +616,8 @@ export interface SidebarOptionsPanelProps {
   setCaretAnimationDurationMs: (value: number) => void
   caretFrameDurationMs: number
   setCaretFrameDurationMs: (value: number) => void
+  caretEffectStrengthPercent: number
+  setCaretEffectStrengthPercent: (value: number) => void
   caretColorHsva: HsvaColor
   caretHsvaDisplayColors: { hColor: string; sColor: string; vColor: string; aGhostColor: string }
   caretHsvaDragState: HsvaDragState | null
@@ -878,6 +884,8 @@ export function SidebarOptionsPanel({
   setCaretAnimationDurationMs,
   caretFrameDurationMs,
   setCaretFrameDurationMs,
+  caretEffectStrengthPercent,
+  setCaretEffectStrengthPercent,
   caretColorHsva,
   caretHsvaDisplayColors,
   caretHsvaDragState,
@@ -2621,7 +2629,7 @@ export function SidebarOptionsPanel({
             ))}
           </div>
 
-          <div className="options-glaze-cell options-glaze-cell-span-3">
+          <div className="options-glaze-cell options-glaze-cell-span-2">
             <CompactScrollbarSlider
               id="caret-animation-duration"
               min={CARET_ANIMATION_DURATION_MIN_MS}
@@ -2634,7 +2642,7 @@ export function SidebarOptionsPanel({
               onCommit={(value) => setCaretAnimationDurationMs(clamp(Math.round(value), CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS))}
             />
           </div>
-          <div className="options-glaze-cell options-glaze-cell-span-3">
+          <div className="options-glaze-cell options-glaze-cell-span-2">
             <CompactScrollbarSlider
               id="caret-frame-duration"
               min={CARET_FRAME_DURATION_MIN_MS}
@@ -2645,6 +2653,19 @@ export function SidebarOptionsPanel({
               ariaLabel="How long the caret holds each animation frame in milliseconds -- the lowest setting leaves the blink smooth"
               defaultValue={CARET_FRAME_DURATION_DEFAULT_MS}
               onCommit={(value) => setCaretFrameDurationMs(clamp(Math.round(value), CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS))}
+            />
+          </div>
+          <div className="options-glaze-cell options-glaze-cell-span-2">
+            <CompactScrollbarSlider
+              id="caret-effect-strength"
+              min={CARET_EFFECT_STRENGTH_MIN_PERCENT}
+              max={CARET_EFFECT_STRENGTH_MAX_PERCENT}
+              step={CARET_EFFECT_STRENGTH_STEP_PERCENT}
+              value={caretEffectStrengthPercent}
+              trackLabel="effect"
+              ariaLabel="Caret effect strength as a percentage -- 100 is the blink at full strength, 0 is a static caret"
+              defaultValue={CARET_EFFECT_STRENGTH_DEFAULT_PERCENT}
+              onCommit={(value) => setCaretEffectStrengthPercent(clamp(Math.round(value), CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT))}
             />
           </div>
         </div>

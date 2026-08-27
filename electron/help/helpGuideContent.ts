@@ -784,6 +784,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - Six blink shapes to pick from: the classic heartbeat, its big beat on its own, a plain fade in/out peaking halfway through, the same fade peaking early (15%) or late (85%), and a bouncing-ball rhythm that drops in ever-smaller hops before starting over. The fill, outline and halo all fade together, so the caret always reads as one object.
 - **Cycle** (100–5000ms) is how long one full blink takes.
 - **Frame** (5–500ms) is how long the caret holds each step of the blink. At its lowest the blink is smooth; wind it up and the caret animates in visible chunks, like a machine that only redraws itself so often. Steps never cross a shape's own turning points — a step longer than the stretch it lands in just holds that whole stretch, and one that would split a stretch unevenly is spread evenly across it instead.
+- **Effect** (0–100%) is how much of the chosen shape actually reaches the caret. At 100 you get the blink at full strength; at 0 the caret is simply static, sitting at whatever colors you gave it; in between is a straight blend of the two, so you can keep a rhythm you like and just take the edge off it.
 - All of these are saved per layout, same as the rest of your theming. To stop the blink entirely, use **Reduce caret animation** in [Performance]($#performance).
 
 ### [Keystroke Sounds](#keystroke-sounds)

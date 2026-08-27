@@ -117,6 +117,7 @@ export type UiLayoutLoadout = {
   caretAnimationPreset: CaretAnimationPresetKey;
   caretAnimationDurationMs: number;
   caretFrameDurationMs: number;
+  caretEffectStrengthPercent: number;
 };
 
 // ---------------------------------------------------------------------------

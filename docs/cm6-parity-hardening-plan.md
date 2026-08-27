@@ -161,6 +161,17 @@ imperceptible anyway. `caretSettings.test.ts` asserts no `color-mix`/`var(` ever
 appears in the output, and that the baked easing matches the `cubic-bezier` in
 index.css so the two paths cannot drift.
 
+**Later additions.** A halo *blur* slider (independent of spread -- blur alone
+feathers the caret's own edge without reaching further), and an *effect
+strength* percentage sharing the cycle/frame row. Strength blends each stop's
+alpha multiplier linearly toward 1 (a static caret at its own colours):
+`1 + (stopAlpha - 1) * strength`. Applied at emit time rather than to the
+preset's stops, which is exact rather than convenient -- the blend and the step
+interpolation are both linear in alpha, so `blend(lerp(a, b))` equals
+`lerp(blend(a), blend(b))`. At 0% every stop collapses to the same value, so
+the computed style stops changing and the running animation costs no repaint at
+all; that is the cheapest static caret available without special-casing.
+
 Verification: live-browser through the real UI (sliders driven by keyboard,
 preset buttons clicked, values read back off the DOM), CDP LayerTree re-checked
 with outline and halo on to confirm neither re-promotes the caret, visual A/B at

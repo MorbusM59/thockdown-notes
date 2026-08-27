@@ -99,6 +99,7 @@ import {
   CARET_HALO_BLUR_MIN_PX, CARET_HALO_BLUR_MAX_PX,
   CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS,
   CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS,
+  CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT,
   type CaretAnimationPresetKey,
 } from './shared/caretSettings'
 import {
@@ -1005,6 +1006,7 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     caretAnimationPreset: isCaretAnimationPresetKey(source.caretAnimationPreset) ? source.caretAnimationPreset : DEFAULT_CARET_SETTINGS.animationPreset,
     caretAnimationDurationMs: clamp(Math.round(toFiniteNumber(source.caretAnimationDurationMs, DEFAULT_CARET_SETTINGS.animationDurationMs)), CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS),
     caretFrameDurationMs: clamp(Math.round(toFiniteNumber(source.caretFrameDurationMs, DEFAULT_CARET_SETTINGS.frameDurationMs)), CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS),
+    caretEffectStrengthPercent: clamp(Math.round(toFiniteNumber(source.caretEffectStrengthPercent, DEFAULT_CARET_SETTINGS.effectStrengthPercent)), CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT),
   }
 }
 
@@ -1855,6 +1857,7 @@ function App() {
   const [caretAnimationPreset, setCaretAnimationPreset] = useState<CaretAnimationPresetKey>(DEFAULT_CARET_SETTINGS.animationPreset)
   const [caretAnimationDurationMs, setCaretAnimationDurationMs] = useState(DEFAULT_CARET_SETTINGS.animationDurationMs)
   const [caretFrameDurationMs, setCaretFrameDurationMs] = useState(DEFAULT_CARET_SETTINGS.frameDurationMs)
+  const [caretEffectStrengthPercent, setCaretEffectStrengthPercent] = useState(DEFAULT_CARET_SETTINGS.effectStrengthPercent)
   // Staged HSVA for the Caret section's own H/S/V/A drag controls -- a closed
   // loop over that section's two targets (outline, halo), exactly like
   // cursorColorHsva is for the Mouse section's four. See that state's comment.
@@ -2857,6 +2860,7 @@ function App() {
       caretAnimationPreset,
       caretAnimationDurationMs,
       caretFrameDurationMs,
+      caretEffectStrengthPercent,
     }
   }, [
     borderRadiusRegularPx,
@@ -2916,6 +2920,7 @@ function App() {
     caretAnimationPreset,
     caretAnimationDurationMs,
     caretFrameDurationMs,
+    caretEffectStrengthPercent,
   ])
 
   const applyUiLayoutLoadout = useCallback((loadoutInput: unknown) => {
@@ -3109,6 +3114,10 @@ function App() {
     setCaretFrameDurationMs(clamp(
       Math.round(loadout.caretFrameDurationMs ?? DEFAULT_CARET_SETTINGS.frameDurationMs),
       CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS,
+    ))
+    setCaretEffectStrengthPercent(clamp(
+      Math.round(loadout.caretEffectStrengthPercent ?? DEFAULT_CARET_SETTINGS.effectStrengthPercent),
+      CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT,
     ))
   }, [applyDarkModePreset])
 
@@ -4934,6 +4943,7 @@ function App() {
       haloColor: caretHaloColor,
       haloSpreadPx: caretHaloSpreadPx,
       haloBlurPx: caretHaloBlurPx,
+      effectStrengthPercent: caretEffectStrengthPercent,
     }),
     [
       caretAnimationPreset,
@@ -4944,6 +4954,7 @@ function App() {
       caretHaloColor,
       caretHaloSpreadPx,
       caretHaloBlurPx,
+      caretEffectStrengthPercent,
     ],
   )
 
@@ -9315,6 +9326,8 @@ ${markdownHtml}
                         setCaretAnimationDurationMs={setCaretAnimationDurationMs}
                         caretFrameDurationMs={caretFrameDurationMs}
                         setCaretFrameDurationMs={setCaretFrameDurationMs}
+                        caretEffectStrengthPercent={caretEffectStrengthPercent}
+                        setCaretEffectStrengthPercent={setCaretEffectStrengthPercent}
                         caretColorHsva={caretColorHsva}
                         caretHsvaDisplayColors={caretHsvaDisplayColors}
                         caretHsvaDragState={caretHsvaDragState}
