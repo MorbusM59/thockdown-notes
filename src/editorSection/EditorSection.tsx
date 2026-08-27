@@ -223,6 +223,7 @@ export function EditorSection({
   spellCheckEditEnabled,
   spellCheckRenderEnabled,
   highlightSearchColor,
+  caretSizeDeviationPx,
   showLineNumbers,
   showReviewFlags,
   onToggleReviewGutter,
@@ -2058,6 +2059,7 @@ export function EditorSection({
         viewSpacing={viewSpacing}
         viewLetterSpacingEm={viewLetterSpacingEm}
         highlightSearchColor={highlightSearchColor}
+        caretSizeDeviationPx={caretSizeDeviationPx}
         showLineNumbers={showLineNumbers}
         showReviewFlags={showReviewFlags}
         onToggleReviewGutter={onToggleReviewGutter}

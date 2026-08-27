@@ -487,7 +487,16 @@ body {
    matters slightly more than it used to. */
 .thockdown-block-caret {
   background-color: var(--color-caret);
-  animation: thockdown-blink 1.2s infinite cubic-bezier(0.4, 0, 0.2, 1);
+  /* Outline and halo are Options > Caret settings (App.tsx emits these vars).
+     Both are zero by default, so a caret nobody has configured is exactly the
+     plain rectangle it always was. The halo is a box-shadow with no offset and
+     no blur -- pure spread, a hard ring, which is what reads correctly against
+     the box grid. Neither property is a compositing trigger, unlike the
+     opacity animation they replaced. */
+  outline: var(--caret-outline-width, 0px) solid var(--caret-outline-color, transparent);
+  outline-offset: 0;
+  box-shadow: 0 0 0 var(--caret-halo-spread, 0px) var(--caret-halo-color, transparent);
+  animation: thockdown-blink var(--caret-animation-duration, 1200ms) infinite cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Low-power toggle: the blink otherwise repaints the caret indefinitely while
@@ -504,18 +513,12 @@ body {
   background-color: var(--color-selection);
 }
 
-/* Restore the beloved ff-caret-heartbeat rhythm! Same numbers the opacity
-   keyframes used, expressed as the caret colour's own alpha instead:
-   color-mix(... N%, transparent) scales alpha by exactly N%, which for a
-   flat-coloured box is pixel-identical to opacity: N%. See
-   .thockdown-block-caret above for why this can't animate opacity. */
-@keyframes thockdown-blink {
-  0%       { background-color: color-mix(in srgb, var(--color-caret) 60%, transparent); }
-  10%  { background-color: color-mix(in srgb, var(--color-caret) 10%, transparent); }
-  65%  { background-color: color-mix(in srgb, var(--color-caret) 90%, transparent); }
-  85%  { background-color: color-mix(in srgb, var(--color-caret) 30%, transparent); }
-  100%     { background-color: color-mix(in srgb, var(--color-caret) 60%, transparent); }
-}
+/* `@keyframes thockdown-blink` is NOT defined here. It is generated at runtime
+   from the Options > Caret settings and mounted by App.tsx -- see
+   buildCaretBlinkKeyframesCss in shared/caretSettings.ts, which also explains
+   why the blink drives colours rather than opacity. Defining a static fallback
+   here would silently shadow (or be shadowed by) that one depending on
+   stylesheet order, so there is deliberately exactly one definition. */
 
 /* Editor Text Styles -- shared by CM6Editor.tsx's contentDOM, which carries this same class */
 .editor-text {

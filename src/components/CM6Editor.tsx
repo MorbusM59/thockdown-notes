@@ -241,6 +241,13 @@ export interface CM6EditorProps {
   // both this and hasViewportLines (below).
   fontReady?: boolean;
   caretSuspended?: boolean;
+  /**
+   * Options > Caret "size" slider: a per-side deviation in px from the
+   * caret's default box. 0 is the historical geometry -- filling a grid cell's
+   * content without covering the grid line around it. Negative values leave a
+   * gap to those lines, positive ones spill past them. See updateCaret.
+   */
+  caretSizeDeviationPx?: number;
   // Per-editor-slot toggles (owned by app state, not this component -- see
   // useReviewGutterVisibility.ts) for the two gutter columns, independently
   // switchable (left click on the toggle button flips both together, right
@@ -723,6 +730,7 @@ export function CM6Editor({
   spellCheckEnabled = false,
   fontReady = true,
   caretSuspended = false,
+  caretSizeDeviationPx = 0,
   showLineNumbers = false,
   showReviewFlags = false,
 }: CM6EditorProps) {
@@ -805,6 +813,12 @@ export function CM6Editor({
   // observers (debug hook, tests) actually can assert on.
   const wrapBoundaryAssocFixDispatchCountRef = useRef(0);
   const lineHeightPxRef = useRef(lineHeightPx);
+  const caretSizeDeviationRef = useRef(caretSizeDeviationPx);
+  // Indirection through a ref, not a direct dependency: scheduleCaretUpdate is
+  // declared far below the effect that needs it, and depending on it directly
+  // would be a temporal-dead-zone error at module evaluation -- the same trap
+  // App.tsx's persistMenuStateNowRef documents.
+  const scheduleCaretUpdateRef = useRef<(() => void) | null>(null);
   const cellWidthPxRef = useRef(cellWidthPx);
   // Mirrors showReviewFlags for the resize-observer callback below, which
   // needs the CURRENT value inside a mount-once closure -- same pattern as
@@ -1112,6 +1126,14 @@ export function CM6Editor({
     lineHeightPxRef.current = lineHeightPx;
     cellWidthPxRef.current = cellWidthPx;
   }, [lineHeightPx, cellWidthPx]);
+
+  // updateCaret reads this through a ref (it is a zero-dep callback), so the
+  // slider needs an explicit re-run to take effect -- without this the new
+  // size would only appear on the caret's next move.
+  useEffect(() => {
+    caretSizeDeviationRef.current = caretSizeDeviationPx;
+    scheduleCaretUpdateRef.current?.();
+  }, [caretSizeDeviationPx]);
 
   useEffect(() => {
     showReviewFlagsRef.current = showReviewFlags;
@@ -1552,15 +1574,22 @@ export function CM6Editor({
     let absoluteLeft = caretRect.left - scrollerRect.left;
     absoluteLeft = quantizeToPhase(absoluteLeft, runtimeCellWidthPx, Math.round(runtimeCellWidthPx / 2));
 
-    const caretWidthPx = Math.max(1, runtimeCellWidthPx - CARET_INSET_PX);
-    const caretHeightPx = Math.max(1, lineHeightPxNow - CARET_INSET_PX);
+    // Options > Caret "size": a per-side deviation from the default box. The
+    // default (0) starts one pixel in from the cell's leading grid line and
+    // runs to the next one, i.e. it covers the cell's content without covering
+    // the lines themselves; growing/shrinking by `d` on every side therefore
+    // means moving the origin by -d and changing each extent by 2d.
+    const caretSizeDeviation = caretSizeDeviationRef.current;
+    const caretOriginInsetPx = CARET_INSET_PX - caretSizeDeviation;
+    const caretWidthPx = Math.max(1, runtimeCellWidthPx - CARET_INSET_PX + (caretSizeDeviation * 2));
+    const caretHeightPx = Math.max(1, lineHeightPxNow - CARET_INSET_PX + (caretSizeDeviation * 2));
 
     setCaretStyle({
       // translate(), not translate3d(): a 3D transform is a compositing
       // trigger on its own, and this element must stay OFF the compositor --
       // see .thockdown-block-caret's own comment in index.css for the black
       // edit pane that a composited caret produces under the edge-fade mask.
-      transform: `translate(${scrollerLeftInLayer + absoluteLeft + CARET_INSET_PX}px, ${scrollerTopInLayer + topInViewport + CARET_INSET_PX}px)`,
+      transform: `translate(${scrollerLeftInLayer + absoluteLeft + caretOriginInsetPx}px, ${scrollerTopInLayer + topInViewport + caretOriginInsetPx}px)`,
       width: caretWidthPx,
       height: caretHeightPx,
     });
@@ -1575,6 +1604,11 @@ export function CM6Editor({
       updateCaret();
     });
   }, [updateCaret]);
+
+  useEffect(() => {
+    scheduleCaretUpdateRef.current = scheduleCaretUpdate;
+    return () => { scheduleCaretUpdateRef.current = null; };
+  }, [scheduleCaretUpdate]);
 
   const scheduleCaretUpdateAfterResize = useCallback(() => {
     invalidateCaretRectCache();
@@ -4710,7 +4744,13 @@ export function CM6Editor({
           style={{
             position: 'absolute',
             pointerEvents: 'none',
-            zIndex: 5,
+            // Above the grid overlays (6, 7) and below the text (10): the grid
+            // is scenery the caret should sit on top of, but the glyph the
+            // caret is on has to stay readable through it, so the caret can
+            // never paint over the text. Everything the caret's outline and
+            // halo can reach is scenery too, which is why they can be as big
+            // as they are without swallowing content.
+            zIndex: 8,
             top: 0,
             left: 0,
             // No will-change: transform here, deliberately -- it promotes the

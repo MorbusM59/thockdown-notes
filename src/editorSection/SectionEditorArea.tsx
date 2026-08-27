@@ -114,6 +114,8 @@ export interface SectionEditorAreaProps {
    * on the current line-number state; onToggleReviewFlags (right click)
    * flips the flag column alone.
    */
+  /** Options > Caret "size" slider -- see CM6Editor's updateCaret for how it reshapes the caret box. */
+  caretSizeDeviationPx: number
   showLineNumbers: boolean
   showReviewFlags: boolean
   onToggleReviewGutter: () => void
@@ -230,6 +232,7 @@ export function SectionEditorArea({
   onChapterPillContextMenu,
   onArchiveChapterClick,
   onDeleteChapterClick,
+  caretSizeDeviationPx,
   showLineNumbers,
   showReviewFlags,
   onToggleReviewGutter,
@@ -350,6 +353,7 @@ export function SectionEditorArea({
                   spellCheckEnabled={editorSpellCheckEnabled}
                   fontReady={editorFontLoadVersion > 0}
                   caretSuspended={isCaretSuspended}
+                  caretSizeDeviationPx={caretSizeDeviationPx}
                   showLineNumbers={showLineNumbers}
                   showReviewFlags={showReviewFlags}
                 />

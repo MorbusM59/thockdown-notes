@@ -768,6 +768,23 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - Sliders: number of circling dots, orbit radius, spin speed (-4Hz to 4Hz, negative reverses direction, 0 freezes it), trail fade duration (how long a trail particle takes to decay after the head passes it — e.g. 1000ms at 1Hz spin sweeps exactly one full revolution), trail thickness (0–12px, 0 hides it), dot size (0–12px, 0 hides it), center dot size (0–12px, 0 hides it), halo radius (0 hides it, capped at the same max as orbit radius), fall-off (0–100 — how far out the halo's glow stays near-opaque before fading to nothing at its edge; low values fade fast near the center, high values stay bright almost all the way to the rim), and a pulse effect that breathes the orbit's radius outward — magnitude 0 keeps it locked at its base size, magnitude 1 breathes up to 200% of it — at a given speed. The halo is rendered centered behind the center dot. Colors and these sliders are saved per layout, same as the rest of your theming.
 - Click response: left-click tightens the orbit (smaller radius, faster spin) and right-click widens it (larger radius, slower spin), up to 200% and down to 50% of your base radius/spin. Every click is handled the same way regardless of how long you hold it — a plain click is too fast to tell "tap" from "hold" apart — it rises to full strength, stays there while held, then eases back down to baseline on release instead of snapping. Six more sliders tune the feel, using the same bell-curve model as Animations' ramp/shape/speed/max-speed: click ramp (linear → bouncy), click shape (apex bias), click speed (how long the rise/fall takes -- weighted so the high-speed end of the slider gives much finer control than the low-speed end), click max speed (how strong the effect gets), min impact (floors how long a click is treated as held internally, 0–200ms, so even a quick real click still registers instead of flickering), and click balance (center = radius and spin both affected equally; left = radius only; right = spin only).
 
+### [Caret](#caret)
+
+> **Where?**
+> Settings panel → Caret.
+
+*Shape, glow and blink rhythm for the block caret in the editor. Its fill color lives with the rest of your theming in [Colors and Textures]($#colors-and-textures); everything else about it is here.*
+
+- The caret sits above the box grid and below your text, so the grid never draws lines across it and the caret never hides the character it's on — however big you make it, whatever color you give it.
+- Top row: an outline color swatch and a halo color swatch. The 4 buttons beside them (H, S, V, A) stage a color by dragging up/down or scrolling on each — left-click a swatch to paint it onto that part of the caret; hold right-click on a swatch to load its current color back into H/S/V/A. Same widget as [Mouse Options]($#mouse-options), independent of it.
+- **Size** (-5 to +5) grows or shrinks the caret on every side. 0 is the default: it fills a grid box's interior without covering the lines around it. -1 leaves a one-pixel gap to those lines; positive values spill past them into the neighbouring boxes.
+- **Outline** (0–5px) draws a border around the caret rectangle, in the outline color. 0 hides it.
+- **Halo** (0–20px) spreads a hard-edged glow outward from the caret, in the halo color. 0 hides it. It's square, not soft — it reads as part of the grid rather than a blur over it.
+- Six blink shapes to pick from: the classic heartbeat, its big beat on its own, a plain fade in/out peaking halfway through, the same fade peaking early (15%) or late (85%), and a bouncing-ball rhythm that drops in ever-smaller hops before starting over. The fill, outline and halo all fade together, so the caret always reads as one object.
+- **Cycle** (100–5000ms) is how long one full blink takes.
+- **Frame** (5–500ms) is how long the caret holds each step of the blink. At its lowest the blink is smooth; wind it up and the caret animates in visible chunks, like a machine that only redraws itself so often. Steps never cross a shape's own turning points — a step longer than the stretch it lands in just holds that whole stretch, and one that would split a stretch unevenly is spread evenly across it instead.
+- All of these are saved per layout, same as the rest of your theming. To stop the blink entirely, use **Reduce caret animation** in [Performance]($#performance).
+
 ### [Keystroke Sounds](#keystroke-sounds)
 
 > **Where?**

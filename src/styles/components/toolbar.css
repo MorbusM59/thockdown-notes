@@ -701,6 +701,29 @@
   gap: var(--color-grid-gap);
 }
 
+/* Caret section (Options > Caret). Same 6-column swatch grid the glaze/mouse
+   sections use, so the colour swatches and H/S/V/A controls line up with
+   theirs; rows are auto-sized because this section has no centre block. */
+.options-caret-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(6, var(--color-grid-cell));
+  grid-auto-rows: auto;
+  gap: var(--color-grid-gap);
+}
+
+/* The six animation-shape buttons -- one full row of the grid above, split
+   evenly so each button keeps the same footprint as a colour swatch. */
+.options-caret-preset-row {
+  grid-column: span 6;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--color-grid-gap);
+}
+
+.options-caret-preset-btn {
+  width: 100%;
+}
+
 .options-mouse-center-grid {
   align-content:center;
   display: grid;

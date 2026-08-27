@@ -19,6 +19,31 @@ import {
   BOX_SHADOW_ALPHA_PERCENT_DEFAULT,
 } from '../shared/uiBounds'
 import {
+  CARET_SIZE_DEVIATION_MIN_PX,
+  CARET_SIZE_DEVIATION_MAX_PX,
+  CARET_SIZE_DEVIATION_STEP_PX,
+  CARET_SIZE_DEVIATION_DEFAULT_PX,
+  CARET_OUTLINE_WIDTH_MIN_PX,
+  CARET_OUTLINE_WIDTH_MAX_PX,
+  CARET_OUTLINE_WIDTH_STEP_PX,
+  CARET_OUTLINE_WIDTH_DEFAULT_PX,
+  CARET_HALO_SPREAD_MIN_PX,
+  CARET_HALO_SPREAD_MAX_PX,
+  CARET_HALO_SPREAD_STEP_PX,
+  CARET_HALO_SPREAD_DEFAULT_PX,
+  CARET_ANIMATION_DURATION_MIN_MS,
+  CARET_ANIMATION_DURATION_MAX_MS,
+  CARET_ANIMATION_DURATION_STEP_MS,
+  CARET_ANIMATION_DURATION_DEFAULT_MS,
+  CARET_FRAME_DURATION_MIN_MS,
+  CARET_FRAME_DURATION_MAX_MS,
+  CARET_FRAME_DURATION_STEP_MS,
+  CARET_FRAME_DURATION_DEFAULT_MS,
+  CARET_ANIMATION_PRESETS,
+  CARET_ANIMATION_PRESET_KEYS,
+  type CaretAnimationPresetKey,
+} from '../shared/caretSettings'
+import {
   TEXTURE_GRANULARITY_MIN,
   TEXTURE_GRANULARITY_MAX,
   TEXTURE_VSTEPS_MIN,
@@ -160,6 +185,7 @@ type EditorTextColorTargetKey = 'editorEditText' | 'editorRenderText'
 type HsvaControlKey = 'h' | 's' | 'v' | 'a'
 type TextureControlKey = 'granularity' | 'smoothness'
 type CursorColorTargetKey = 'dot' | 'center' | 'trail' | 'halo'
+type CaretColorTargetKey = 'outline' | 'halo'
 
 type HsvaDragState = {
   control: HsvaControlKey
@@ -566,6 +592,30 @@ export interface SidebarOptionsPanelProps {
   applyCursorColorToTarget: (target: CursorColorTargetKey) => void
   startCursorColorCopyHold: (target: CursorColorTargetKey, event: MouseEvent<HTMLButtonElement>) => void
   clearCursorColorArmTimer: () => void
+  caretSizeDeviationPx: number
+  setCaretSizeDeviationPx: (value: number) => void
+  caretOutlineWidthPx: number
+  setCaretOutlineWidthPx: (value: number) => void
+  caretOutlineColor: string
+  caretHaloSpreadPx: number
+  setCaretHaloSpreadPx: (value: number) => void
+  caretHaloColor: string
+  caretAnimationPreset: CaretAnimationPresetKey
+  setCaretAnimationPreset: (value: CaretAnimationPresetKey) => void
+  caretAnimationDurationMs: number
+  setCaretAnimationDurationMs: (value: number) => void
+  caretFrameDurationMs: number
+  setCaretFrameDurationMs: (value: number) => void
+  caretColorHsva: HsvaColor
+  caretHsvaDisplayColors: { hColor: string; sColor: string; vColor: string; aGhostColor: string }
+  caretHsvaDragState: HsvaDragState | null
+  startCaretHsvaDrag: (control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => void
+  handleCaretHsvaDragMove: (control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => void
+  stopCaretHsvaDrag: (control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => void
+  wheelAdjustCaretHsvaControl: (control: HsvaControlKey, event: React.WheelEvent<HTMLButtonElement>) => void
+  applyCaretColorToTarget: (target: CaretColorTargetKey) => void
+  startCaretColorCopyHold: (target: CaretColorTargetKey, event: MouseEvent<HTMLButtonElement>) => void
+  clearCaretColorArmTimer: () => void
 }
 
 /**
@@ -806,6 +856,30 @@ export function SidebarOptionsPanel({
   applyCursorColorToTarget,
   startCursorColorCopyHold,
   clearCursorColorArmTimer,
+  caretSizeDeviationPx,
+  setCaretSizeDeviationPx,
+  caretOutlineWidthPx,
+  setCaretOutlineWidthPx,
+  caretOutlineColor,
+  caretHaloSpreadPx,
+  setCaretHaloSpreadPx,
+  caretHaloColor,
+  caretAnimationPreset,
+  setCaretAnimationPreset,
+  caretAnimationDurationMs,
+  setCaretAnimationDurationMs,
+  caretFrameDurationMs,
+  setCaretFrameDurationMs,
+  caretColorHsva,
+  caretHsvaDisplayColors,
+  caretHsvaDragState,
+  startCaretHsvaDrag,
+  handleCaretHsvaDragMove,
+  stopCaretHsvaDrag,
+  wheelAdjustCaretHsvaControl,
+  applyCaretColorToTarget,
+  startCaretColorCopyHold,
+  clearCaretColorArmTimer,
 }: SidebarOptionsPanelProps) {
     const topRowHighlightKeys: HighlightColorKey[] = ['base', 'inputFields', 'appButtons']
     const middleRowHighlightKeys: HighlightColorKey[] = [
@@ -2377,6 +2451,179 @@ export function SidebarOptionsPanel({
               ariaLabel="Click response balance between radius and spin -- left affects radius only, right affects spin only, center affects both"
               defaultValue={CURSOR_CLICK_BALANCE_DEFAULT}
               onCommit={(value) => setCustomCursorClickBalance(clamp(value, CURSOR_CLICK_BALANCE_MIN, CURSOR_CLICK_BALANCE_MAX))}
+            />
+          </div>
+        </div>
+      </AccordionSection>
+
+      <AccordionSection
+        className="sidebar-options-section-caret"
+        ariaLabel="Caret"
+        heading="Caret"
+        iconClass="fa-rectangle-list"
+        iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout."
+      >
+        <div className="options-caret-settings-grid" role="group" aria-label="Caret appearance controls">
+          {/* Row 1: the two colour targets this section owns. The caret's FILL
+              colour is not here on purpose -- it is highlightColors.caret,
+              edited in Colors & Textures with every other highlight colour;
+              duplicating it here would be a second control for one value. */}
+          <button
+            type="button"
+            className="btn-icon options-color-swatch"
+            style={{ background: caretOutlineColor }}
+            data-tooltip="Caret outline color -- click to apply, hold right-click to copy"
+            onClick={() => applyCaretColorToTarget('outline')}
+            onMouseDown={(event) => startCaretColorCopyHold('outline', event)}
+            onMouseUp={(event) => { if (event.button !== 2) return; clearCaretColorArmTimer() }}
+            onMouseLeave={clearCaretColorArmTimer}
+            onContextMenu={(event) => { event.preventDefault(); clearCaretColorArmTimer() }}
+          ><span className="options-color-swatch-glyph fa-regular fa-square" aria-hidden="true" /></button>
+          <button
+            type="button"
+            className="btn-icon options-color-swatch"
+            style={{ background: caretHaloColor }}
+            data-tooltip="Caret halo color -- click to apply, hold right-click to copy"
+            onClick={() => applyCaretColorToTarget('halo')}
+            onMouseDown={(event) => startCaretColorCopyHold('halo', event)}
+            onMouseUp={(event) => { if (event.button !== 2) return; clearCaretColorArmTimer() }}
+            onMouseLeave={clearCaretColorArmTimer}
+            onContextMenu={(event) => { event.preventDefault(); clearCaretColorArmTimer() }}
+          ><span className="options-color-swatch-glyph fa-solid fa-square" aria-hidden="true" /></button>
+
+          {/* The staged H/S/V/A the two swatches above apply -- same closed-loop
+              widget as the Mouse Options section's, scoped to this section. */}
+          <button
+            type="button"
+            className={`btn-icon options-color-swatch options-hsva-control${caretHsvaDragState?.control === 'h' ? ' is-dragging' : ''}`}
+            style={{ background: caretHsvaDisplayColors.hColor }}
+            data-live-tooltip={`Hue: ${Math.round(caretColorHsva.h)}`}
+            onPointerDown={(event) => startCaretHsvaDrag('h', event)}
+            onPointerMove={(event) => handleCaretHsvaDragMove('h', event)}
+            onPointerUp={(event) => stopCaretHsvaDrag('h', event)}
+            onPointerCancel={(event) => stopCaretHsvaDrag('h', event)}
+            onLostPointerCapture={(event) => stopCaretHsvaDrag('h', event)}
+            onWheel={(event) => wheelAdjustCaretHsvaControl('h', event)}
+          ><span className="options-hsva-glyph fa-solid fa-rainbow" aria-hidden="true" /></button>
+          <button
+            type="button"
+            className={`btn-icon options-color-swatch options-hsva-control${caretHsvaDragState?.control === 's' ? ' is-dragging' : ''}`}
+            style={{ background: caretHsvaDisplayColors.sColor }}
+            data-live-tooltip={`Saturation: ${Math.round(caretColorHsva.s * 255)}`}
+            onPointerDown={(event) => startCaretHsvaDrag('s', event)}
+            onPointerMove={(event) => handleCaretHsvaDragMove('s', event)}
+            onPointerUp={(event) => stopCaretHsvaDrag('s', event)}
+            onPointerCancel={(event) => stopCaretHsvaDrag('s', event)}
+            onLostPointerCapture={(event) => stopCaretHsvaDrag('s', event)}
+            onWheel={(event) => wheelAdjustCaretHsvaControl('s', event)}
+          ><span className="options-hsva-glyph fa-solid fa-droplet" aria-hidden="true" /></button>
+          <button
+            type="button"
+            className={`btn-icon options-color-swatch options-hsva-control${caretHsvaDragState?.control === 'v' ? ' is-dragging' : ''}`}
+            style={{ background: caretHsvaDisplayColors.vColor }}
+            data-live-tooltip={`Value: ${Math.round(caretColorHsva.v * 255)}`}
+            onPointerDown={(event) => startCaretHsvaDrag('v', event)}
+            onPointerMove={(event) => handleCaretHsvaDragMove('v', event)}
+            onPointerUp={(event) => stopCaretHsvaDrag('v', event)}
+            onPointerCancel={(event) => stopCaretHsvaDrag('v', event)}
+            onLostPointerCapture={(event) => stopCaretHsvaDrag('v', event)}
+            onWheel={(event) => wheelAdjustCaretHsvaControl('v', event)}
+          ><span className="options-hsva-glyph fa-solid fa-circle-half-stroke" aria-hidden="true" /></button>
+          <button
+            type="button"
+            className={`btn-icon options-color-swatch options-hsva-control options-hsva-alpha${caretHsvaDragState?.control === 'a' ? ' is-dragging' : ''}`}
+            style={{ background: 'var(--color-background-light)', color: caretHsvaDisplayColors.aGhostColor }}
+            data-live-tooltip={`Alpha: ${Math.round(caretColorHsva.a * 255)}`}
+            onPointerDown={(event) => startCaretHsvaDrag('a', event)}
+            onPointerMove={(event) => handleCaretHsvaDragMove('a', event)}
+            onPointerUp={(event) => stopCaretHsvaDrag('a', event)}
+            onPointerCancel={(event) => stopCaretHsvaDrag('a', event)}
+            onLostPointerCapture={(event) => stopCaretHsvaDrag('a', event)}
+            onWheel={(event) => wheelAdjustCaretHsvaControl('a', event)}
+          ><span className="options-hsva-glyph fa-solid fa-eye" aria-hidden="true" /></button>
+
+          <div className="options-glaze-cell options-glaze-cell-span-3">
+            <CompactScrollbarSlider
+              id="caret-size-deviation"
+              min={CARET_SIZE_DEVIATION_MIN_PX}
+              max={CARET_SIZE_DEVIATION_MAX_PX}
+              step={CARET_SIZE_DEVIATION_STEP_PX}
+              value={caretSizeDeviationPx}
+              trackLabel="size"
+              ariaLabel="Caret size deviation in pixels -- 0 fills the grid cell, negative leaves a gap to the grid lines, positive spills past them"
+              defaultValue={CARET_SIZE_DEVIATION_DEFAULT_PX}
+              onCommit={(value) => setCaretSizeDeviationPx(clamp(Math.round(value), CARET_SIZE_DEVIATION_MIN_PX, CARET_SIZE_DEVIATION_MAX_PX))}
+            />
+          </div>
+          <div className="options-glaze-cell options-glaze-cell-span-3">
+            <CompactScrollbarSlider
+              id="caret-outline-width"
+              min={CARET_OUTLINE_WIDTH_MIN_PX}
+              max={CARET_OUTLINE_WIDTH_MAX_PX}
+              step={CARET_OUTLINE_WIDTH_STEP_PX}
+              value={caretOutlineWidthPx}
+              trackLabel="outline"
+              ariaLabel="Caret outline width in pixels -- 0 disables the outline"
+              defaultValue={CARET_OUTLINE_WIDTH_DEFAULT_PX}
+              onCommit={(value) => setCaretOutlineWidthPx(clamp(Math.round(value), CARET_OUTLINE_WIDTH_MIN_PX, CARET_OUTLINE_WIDTH_MAX_PX))}
+            />
+          </div>
+          <div className="options-glaze-cell options-glaze-cell-span-3">
+            <CompactScrollbarSlider
+              id="caret-halo-spread"
+              min={CARET_HALO_SPREAD_MIN_PX}
+              max={CARET_HALO_SPREAD_MAX_PX}
+              step={CARET_HALO_SPREAD_STEP_PX}
+              value={caretHaloSpreadPx}
+              trackLabel="halo"
+              ariaLabel="Caret halo spread in pixels -- 0 disables the halo"
+              defaultValue={CARET_HALO_SPREAD_DEFAULT_PX}
+              onCommit={(value) => setCaretHaloSpreadPx(clamp(Math.round(value), CARET_HALO_SPREAD_MIN_PX, CARET_HALO_SPREAD_MAX_PX))}
+            />
+          </div>
+
+          {/* Animation shape. One button per curve, same visual language as the
+              custom-layout slots -- the selected one carries .is-active. */}
+          <div className="options-caret-preset-row" role="group" aria-label="Caret blink animation">
+            {CARET_ANIMATION_PRESET_KEYS.map((presetKey) => (
+              <button
+                key={presetKey}
+                type="button"
+                className={`btn-icon options-color-swatch options-caret-preset-btn${caretAnimationPreset === presetKey ? ' is-active' : ''}`}
+                data-tooltip={CARET_ANIMATION_PRESETS[presetKey].label}
+                aria-label={CARET_ANIMATION_PRESETS[presetKey].label}
+                aria-pressed={caretAnimationPreset === presetKey}
+                onClick={() => setCaretAnimationPreset(presetKey)}
+              >
+                <span className={`fa-solid ${CARET_ANIMATION_PRESETS[presetKey].iconClass}`} aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+
+          <div className="options-glaze-cell options-glaze-cell-span-3">
+            <CompactScrollbarSlider
+              id="caret-animation-duration"
+              min={CARET_ANIMATION_DURATION_MIN_MS}
+              max={CARET_ANIMATION_DURATION_MAX_MS}
+              step={CARET_ANIMATION_DURATION_STEP_MS}
+              value={caretAnimationDurationMs}
+              trackLabel="cycle"
+              ariaLabel="Length of one full caret blink cycle in milliseconds"
+              defaultValue={CARET_ANIMATION_DURATION_DEFAULT_MS}
+              onCommit={(value) => setCaretAnimationDurationMs(clamp(Math.round(value), CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS))}
+            />
+          </div>
+          <div className="options-glaze-cell options-glaze-cell-span-3">
+            <CompactScrollbarSlider
+              id="caret-frame-duration"
+              min={CARET_FRAME_DURATION_MIN_MS}
+              max={CARET_FRAME_DURATION_MAX_MS}
+              step={CARET_FRAME_DURATION_STEP_MS}
+              value={caretFrameDurationMs}
+              trackLabel="frame"
+              ariaLabel="How long the caret holds each animation frame in milliseconds -- the lowest setting leaves the blink smooth"
+              defaultValue={CARET_FRAME_DURATION_DEFAULT_MS}
+              onCommit={(value) => setCaretFrameDurationMs(clamp(Math.round(value), CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS))}
             />
           </div>
         </div>

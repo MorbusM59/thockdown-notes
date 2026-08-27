@@ -90,6 +90,17 @@ import {
   CURSOR_CLICK_BALANCE_MAX,
 } from './shared/cursorSettings'
 import {
+  DEFAULT_CARET_SETTINGS,
+  buildCaretBlinkKeyframesCss,
+  isCaretAnimationPresetKey,
+  CARET_SIZE_DEVIATION_MIN_PX, CARET_SIZE_DEVIATION_MAX_PX,
+  CARET_OUTLINE_WIDTH_MIN_PX, CARET_OUTLINE_WIDTH_MAX_PX,
+  CARET_HALO_SPREAD_MIN_PX, CARET_HALO_SPREAD_MAX_PX,
+  CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS,
+  CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS,
+  type CaretAnimationPresetKey,
+} from './shared/caretSettings'
+import {
   BORDER_RADIUS_REGULAR_MIN_PX,
   BORDER_RADIUS_REGULAR_MAX_PX,
   SPACING_REGULAR_MIN_PX,
@@ -293,6 +304,7 @@ type EditorTextColorTargetKey = 'editorEditText' | 'editorRenderText'
 
 type HsvaControlKey = 'h' | 's' | 'v' | 'a'
 type CursorColorTargetKey = 'dot' | 'center' | 'trail' | 'halo'
+type CaretColorTargetKey = 'outline' | 'halo'
 const GLAZE_RADIAL_CORNERS = ['top left', 'top right', 'bottom right', 'bottom left'] as const
 
 // Fallbacks for chrome reading through the section registry before any
@@ -983,6 +995,14 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     cursorClickMaxSpeed: roundForSignature(clamp(toFiniteNumber(source.cursorClickMaxSpeed, DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMaxSpeed), CURSOR_CLICK_MAX_SPEED_MIN, CURSOR_CLICK_MAX_SPEED_MAX)),
     cursorClickMinHoldMs: roundForSignature(clamp(toFiniteNumber(source.cursorClickMinHoldMs, DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMinHoldMs), CURSOR_CLICK_MIN_HOLD_MIN_MS, CURSOR_CLICK_MIN_HOLD_MAX_MS)),
     cursorClickBalance: roundForSignature(clamp(toFiniteNumber(source.cursorClickBalance, DEFAULT_CUSTOM_CURSOR_SETTINGS.clickBalance), CURSOR_CLICK_BALANCE_MIN, CURSOR_CLICK_BALANCE_MAX)),
+    caretSizeDeviationPx: clamp(Math.round(toFiniteNumber(source.caretSizeDeviationPx, DEFAULT_CARET_SETTINGS.sizeDeviationPx)), CARET_SIZE_DEVIATION_MIN_PX, CARET_SIZE_DEVIATION_MAX_PX),
+    caretOutlineWidthPx: clamp(Math.round(toFiniteNumber(source.caretOutlineWidthPx, DEFAULT_CARET_SETTINGS.outlineWidthPx)), CARET_OUTLINE_WIDTH_MIN_PX, CARET_OUTLINE_WIDTH_MAX_PX),
+    caretOutlineColor: typeof source.caretOutlineColor === 'string' ? source.caretOutlineColor : DEFAULT_CARET_SETTINGS.outlineColor,
+    caretHaloSpreadPx: clamp(Math.round(toFiniteNumber(source.caretHaloSpreadPx, DEFAULT_CARET_SETTINGS.haloSpreadPx)), CARET_HALO_SPREAD_MIN_PX, CARET_HALO_SPREAD_MAX_PX),
+    caretHaloColor: typeof source.caretHaloColor === 'string' ? source.caretHaloColor : DEFAULT_CARET_SETTINGS.haloColor,
+    caretAnimationPreset: isCaretAnimationPresetKey(source.caretAnimationPreset) ? source.caretAnimationPreset : DEFAULT_CARET_SETTINGS.animationPreset,
+    caretAnimationDurationMs: clamp(Math.round(toFiniteNumber(source.caretAnimationDurationMs, DEFAULT_CARET_SETTINGS.animationDurationMs)), CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS),
+    caretFrameDurationMs: clamp(Math.round(toFiniteNumber(source.caretFrameDurationMs, DEFAULT_CARET_SETTINGS.frameDurationMs)), CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS),
   }
 }
 
@@ -1821,6 +1841,26 @@ function App() {
   const [customCursorClickMaxSpeed, setCustomCursorClickMaxSpeed] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMaxSpeed)
   const [customCursorClickMinHoldMs, setCustomCursorClickMinHoldMs] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMinHoldMs)
   const [customCursorClickBalance, setCustomCursorClickBalance] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.clickBalance)
+  // Block caret appearance (Options > Caret). Layout-scoped, like the cursor
+  // settings above -- the caret's fill colour is highlightColors.caret, which
+  // already lives in the same loadout payload.
+  const [caretSizeDeviationPx, setCaretSizeDeviationPx] = useState(DEFAULT_CARET_SETTINGS.sizeDeviationPx)
+  const [caretOutlineWidthPx, setCaretOutlineWidthPx] = useState(DEFAULT_CARET_SETTINGS.outlineWidthPx)
+  const [caretOutlineColor, setCaretOutlineColor] = useState(DEFAULT_CARET_SETTINGS.outlineColor)
+  const [caretHaloSpreadPx, setCaretHaloSpreadPx] = useState(DEFAULT_CARET_SETTINGS.haloSpreadPx)
+  const [caretHaloColor, setCaretHaloColor] = useState(DEFAULT_CARET_SETTINGS.haloColor)
+  const [caretAnimationPreset, setCaretAnimationPreset] = useState<CaretAnimationPresetKey>(DEFAULT_CARET_SETTINGS.animationPreset)
+  const [caretAnimationDurationMs, setCaretAnimationDurationMs] = useState(DEFAULT_CARET_SETTINGS.animationDurationMs)
+  const [caretFrameDurationMs, setCaretFrameDurationMs] = useState(DEFAULT_CARET_SETTINGS.frameDurationMs)
+  // Staged HSVA for the Caret section's own H/S/V/A drag controls -- a closed
+  // loop over that section's two targets (outline, halo), exactly like
+  // cursorColorHsva is for the Mouse section's four. See that state's comment.
+  const [caretColorHsva, setCaretColorHsva] = useState<HsvaColor>(() => {
+    const seed = parseCssColorToRgba(DEFAULT_CARET_SETTINGS.outlineColor) ?? { r: 120, g: 115, b: 112, a: 1 }
+    return rgbaToHsva(seed)
+  })
+  const [caretHsvaDragState, setCaretHsvaDragState] = useState<HsvaDragState | null>(null)
+  const caretColorArmTimerRef = useRef<number | null>(null)
   // Local "staged" HSVA color for the Mouse options row-1 H/S/V/A drag
   // controls -- deliberately not tied to the app-wide activeColorHsva/
   // primedColorSource rig (that system arms a swatch anywhere in the app;
@@ -2576,6 +2616,14 @@ function App() {
     return { hColor, sColor, vColor, aGhostColor }
   }, [cursorColorHsva])
 
+  const caretHsvaDisplayColors = useMemo(() => {
+    const hColor = rgbaToCssColor(hsvaToRgba({ h: caretColorHsva.h, s: 1, v: 1, a: 1 }))
+    const sColor = rgbaToCssColor(hsvaToRgba({ h: caretColorHsva.h, s: caretColorHsva.s, v: 1, a: 1 }))
+    const vColor = rgbaToCssColor(hsvaToRgba({ h: caretColorHsva.h, s: 0, v: caretColorHsva.v, a: 1 }))
+    const aGhostColor = rgbaToCssColor(hsvaToRgba({ h: caretColorHsva.h, s: 0, v: 0, a: caretColorHsva.a }))
+    return { hColor, sColor, vColor, aGhostColor }
+  }, [caretColorHsva])
+
   const customCursorSettings: CustomCursorSettings = useMemo(() => ({
     enabled: customCursorEnabled,
     dotColor: customCursorDotColor,
@@ -2797,6 +2845,14 @@ function App() {
       cursorClickMaxSpeed: customCursorClickMaxSpeed,
       cursorClickMinHoldMs: customCursorClickMinHoldMs,
       cursorClickBalance: customCursorClickBalance,
+      caretSizeDeviationPx,
+      caretOutlineWidthPx,
+      caretOutlineColor,
+      caretHaloSpreadPx,
+      caretHaloColor,
+      caretAnimationPreset,
+      caretAnimationDurationMs,
+      caretFrameDurationMs,
     }
   }, [
     borderRadiusRegularPx,
@@ -2847,6 +2903,14 @@ function App() {
     customCursorClickMaxSpeed,
     customCursorClickMinHoldMs,
     customCursorClickBalance,
+    caretSizeDeviationPx,
+    caretOutlineWidthPx,
+    caretOutlineColor,
+    caretHaloSpreadPx,
+    caretHaloColor,
+    caretAnimationPreset,
+    caretAnimationDurationMs,
+    caretFrameDurationMs,
   ])
 
   const applyUiLayoutLoadout = useCallback((loadoutInput: unknown) => {
@@ -3009,6 +3073,33 @@ function App() {
     setCustomCursorClickBalance(clamp(
       loadout.cursorClickBalance ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.clickBalance,
       CURSOR_CLICK_BALANCE_MIN, CURSOR_CLICK_BALANCE_MAX,
+    ))
+    setCaretSizeDeviationPx(clamp(
+      Math.round(loadout.caretSizeDeviationPx ?? DEFAULT_CARET_SETTINGS.sizeDeviationPx),
+      CARET_SIZE_DEVIATION_MIN_PX, CARET_SIZE_DEVIATION_MAX_PX,
+    ))
+    setCaretOutlineWidthPx(clamp(
+      Math.round(loadout.caretOutlineWidthPx ?? DEFAULT_CARET_SETTINGS.outlineWidthPx),
+      CARET_OUTLINE_WIDTH_MIN_PX, CARET_OUTLINE_WIDTH_MAX_PX,
+    ))
+    setCaretOutlineColor(loadout.caretOutlineColor ?? DEFAULT_CARET_SETTINGS.outlineColor)
+    setCaretHaloSpreadPx(clamp(
+      Math.round(loadout.caretHaloSpreadPx ?? DEFAULT_CARET_SETTINGS.haloSpreadPx),
+      CARET_HALO_SPREAD_MIN_PX, CARET_HALO_SPREAD_MAX_PX,
+    ))
+    setCaretHaloColor(loadout.caretHaloColor ?? DEFAULT_CARET_SETTINGS.haloColor)
+    setCaretAnimationPreset(
+      isCaretAnimationPresetKey(loadout.caretAnimationPreset)
+        ? loadout.caretAnimationPreset
+        : DEFAULT_CARET_SETTINGS.animationPreset,
+    )
+    setCaretAnimationDurationMs(clamp(
+      Math.round(loadout.caretAnimationDurationMs ?? DEFAULT_CARET_SETTINGS.animationDurationMs),
+      CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS,
+    ))
+    setCaretFrameDurationMs(clamp(
+      Math.round(loadout.caretFrameDurationMs ?? DEFAULT_CARET_SETTINGS.frameDurationMs),
+      CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS,
     ))
   }, [applyDarkModePreset])
 
@@ -3592,6 +3683,113 @@ function App() {
 
     setCursorHsvaDragState(null)
   }, [cursorHsvaDragState])
+
+  // Caret color widget (Options > Caret): the same closed-loop pattern as the
+  // mouse-cursor one directly above -- left-click a target swatch to apply the
+  // staged H/S/V/A to it, hold right-click on one to copy its color back into
+  // the staged H/S/V/A. Kept separate from the cursor's staging so tuning a
+  // caret color can't disturb a cursor color mid-edit, and vice versa.
+  const clearCaretColorArmTimer = useCallback(() => {
+    if (caretColorArmTimerRef.current === null) return
+    window.clearTimeout(caretColorArmTimerRef.current)
+    caretColorArmTimerRef.current = null
+  }, [])
+
+  const applyCaretColorToTarget = useCallback((target: CaretColorTargetKey) => {
+    const css = rgbaToCssColor(hsvaToRgba(caretColorHsva))
+    if (target === 'outline') setCaretOutlineColor(css)
+    else setCaretHaloColor(css)
+  }, [caretColorHsva])
+
+  const copyCaretTargetColorToHsva = useCallback((target: CaretColorTargetKey) => {
+    const css = target === 'outline' ? caretOutlineColor : caretHaloColor
+    const rgba = parseCssColorToRgba(css)
+    if (!rgba) return
+    setCaretColorHsva(rgbaToHsva(rgba))
+  }, [caretOutlineColor, caretHaloColor])
+
+  const startCaretColorCopyHold = useCallback((target: CaretColorTargetKey, event: MouseEvent<HTMLButtonElement>) => {
+    if (event.button !== 2) return
+    event.preventDefault()
+    event.stopPropagation()
+    clearCaretColorArmTimer()
+
+    caretColorArmTimerRef.current = window.setTimeout(() => {
+      copyCaretTargetColorToHsva(target)
+      caretColorArmTimerRef.current = null
+    }, COLOR_BUTTON_ARM_HOLD_MS)
+  }, [clearCaretColorArmTimer, copyCaretTargetColorToHsva])
+
+  const updateCaretHsvaControlValue = useCallback((control: HsvaControlKey, rawValue: number) => {
+    setCaretColorHsva((previous) => {
+      if (control === 'h') {
+        const nextHue = Math.max(0, Math.min(360, rawValue))
+        return { ...previous, h: nextHue }
+      }
+
+      const normalized = Math.max(0, Math.min(1, rawValue / 255))
+      return { ...previous, [control]: normalized }
+    })
+  }, [])
+
+  const wheelAdjustCaretHsvaControl = useCallback((control: HsvaControlKey, event: React.WheelEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+
+    const stepDirection = getWheelStepDirection(event)
+    if (stepDirection === 0) return
+
+    const baseValue = control === 'h'
+      ? caretColorHsva.h
+      : caretColorHsva[control] * 255
+
+    updateCaretHsvaControlValue(control, baseValue + stepDirection)
+  }, [caretColorHsva, getWheelStepDirection, updateCaretHsvaControlValue])
+
+  const startCaretHsvaDrag = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return
+
+    event.preventDefault()
+
+    const baseValue = control === 'h'
+      ? caretColorHsva.h
+      : caretColorHsva[control] * 255
+
+    event.currentTarget.setPointerCapture(event.pointerId)
+
+    setCaretHsvaDragState({
+      control,
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      baseValue,
+    })
+
+    updateCaretHsvaControlValue(control, baseValue)
+  }, [caretColorHsva, updateCaretHsvaControlValue])
+
+  const handleCaretHsvaDragMove = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
+    const currentDrag = caretHsvaDragState
+    if (!currentDrag) return
+    if (currentDrag.control !== control) return
+    if (currentDrag.pointerId !== event.pointerId) return
+
+    event.preventDefault()
+    const delta = currentDrag.startY - event.clientY
+    updateCaretHsvaControlValue(control, currentDrag.baseValue + delta)
+  }, [caretHsvaDragState, updateCaretHsvaControlValue])
+
+  const stopCaretHsvaDrag = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
+    const currentDrag = caretHsvaDragState
+    if (!currentDrag) return
+    if (currentDrag.control !== control) return
+    if (currentDrag.pointerId !== event.pointerId) return
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+
+    setCaretHsvaDragState(null)
+  }, [caretHsvaDragState])
 
   const getTextureControlBounds = useCallback((control: TextureControlKey) => {
     if (control === 'granularity') {
@@ -4528,6 +4726,14 @@ function App() {
       '--color-line-number': lineNumberOpaqueCss,
       '--line-number-opacity': String(lineNumberRgba.a),
       '--color-caret': highlightColors.caret,
+      // Caret outline/halo geometry + colours (Options > Caret). The blink
+      // keyframes read these same vars so fill, outline and halo fade as one
+      // -- see buildCaretBlinkKeyframesCss.
+      '--caret-outline-width': `${caretOutlineWidthPx}px`,
+      '--caret-outline-color': caretOutlineColor,
+      '--caret-halo-spread': `${caretHaloSpreadPx}px`,
+      '--caret-halo-color': caretHaloColor,
+      '--caret-animation-duration': `${caretAnimationDurationMs}ms`,
       '--color-selection': activeSectionSnapshot?.isPreviewMode ? highlightColors.selectionRender : highlightColors.selectionEdit,
       '--color-input-backdrop': highlightColors.inputFields,
       '--canonical-scroll-track-bg': highlightColors.inputFields,
@@ -4579,6 +4785,11 @@ function App() {
     editorRenderTextTextureCss,
     editorRenderTextureTintCss,
     highlightColors,
+    caretOutlineWidthPx,
+    caretOutlineColor,
+    caretHaloSpreadPx,
+    caretHaloColor,
+    caretAnimationDurationMs,
     activeSectionSnapshot?.isPreviewMode,
     editorEditTextColorCss,
     editorRenderTextColorCss,
@@ -4693,6 +4904,16 @@ function App() {
     if (reduceVisualEffects) return 'none'
     return buildSheenGlazeLayer(glazeSettings, filterInvert > 0.5)
   }, [glazeSettings, filterInvert, reduceVisualEffects])
+
+  // The caret's blink keyframes are generated rather than shipped statically:
+  // every part of the rule (stop positions, per-segment step counts, how many
+  // stops there even are) depends on the Options > Caret settings. There is
+  // deliberately no `@keyframes thockdown-blink` in index.css to shadow or be
+  // shadowed by -- this is the only definition.
+  const caretBlinkKeyframesCss = useMemo(
+    () => buildCaretBlinkKeyframesCss(caretAnimationPreset, caretAnimationDurationMs, caretFrameDurationMs),
+    [caretAnimationPreset, caretAnimationDurationMs, caretFrameDurationMs],
+  )
 
   const appRootStyle = useMemo(() => {
     const borderRadiusRegularPxCss = `${borderRadiusRegularPx}px`
@@ -8529,6 +8750,7 @@ ${markdownHtml}
           </button>
         </div>
       ) : null}
+      <style>{caretBlinkKeyframesCss}</style>
       <div className="app-saturate-wrapper" style={{ ...appOuterStyle, position: 'fixed', inset: 0 }}>
         <div className={`glaze-overlay-stack${glazeSettings.radialAboveLinear ? ' radial-above-linear' : ''}`} aria-hidden="true">
           {/* mix-blend-mode forces the browser to blend against every repaint
@@ -9045,6 +9267,30 @@ ${markdownHtml}
                         applyCursorColorToTarget={applyCursorColorToTarget}
                         startCursorColorCopyHold={startCursorColorCopyHold}
                         clearCursorColorArmTimer={clearCursorColorArmTimer}
+                        caretSizeDeviationPx={caretSizeDeviationPx}
+                        setCaretSizeDeviationPx={setCaretSizeDeviationPx}
+                        caretOutlineWidthPx={caretOutlineWidthPx}
+                        setCaretOutlineWidthPx={setCaretOutlineWidthPx}
+                        caretOutlineColor={caretOutlineColor}
+                        caretHaloSpreadPx={caretHaloSpreadPx}
+                        setCaretHaloSpreadPx={setCaretHaloSpreadPx}
+                        caretHaloColor={caretHaloColor}
+                        caretAnimationPreset={caretAnimationPreset}
+                        setCaretAnimationPreset={setCaretAnimationPreset}
+                        caretAnimationDurationMs={caretAnimationDurationMs}
+                        setCaretAnimationDurationMs={setCaretAnimationDurationMs}
+                        caretFrameDurationMs={caretFrameDurationMs}
+                        setCaretFrameDurationMs={setCaretFrameDurationMs}
+                        caretColorHsva={caretColorHsva}
+                        caretHsvaDisplayColors={caretHsvaDisplayColors}
+                        caretHsvaDragState={caretHsvaDragState}
+                        startCaretHsvaDrag={startCaretHsvaDrag}
+                        handleCaretHsvaDragMove={handleCaretHsvaDragMove}
+                        stopCaretHsvaDrag={stopCaretHsvaDrag}
+                        wheelAdjustCaretHsvaControl={wheelAdjustCaretHsvaControl}
+                        applyCaretColorToTarget={applyCaretColorToTarget}
+                        startCaretColorCopyHold={startCaretColorCopyHold}
+                        clearCaretColorArmTimer={clearCaretColorArmTimer}
                       />
                     ) : (
                       <div
@@ -9445,6 +9691,7 @@ ${markdownHtml}
                   borderRadiusRegularPx={borderRadiusRegularPx}
                   spacingRegularPx={spacingRegularPx}
                   reduceVisualEffects={reduceVisualEffects}
+                  caretSizeDeviationPx={caretSizeDeviationPx}
                   showLineNumbers={reviewGutterVisibleBySection[entry.id] ?? false}
                   showReviewFlags={reviewFlagsVisibleBySection[entry.id] ?? false}
                   onToggleReviewGutter={() => handleToggleReviewGutter(entry.id)}

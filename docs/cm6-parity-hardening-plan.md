@@ -98,6 +98,43 @@ the caret over a glyph and across lines, `tsc` clean, `eslint` clean on the chan
 container composites in software and never reproduced the black itself; the fix is grounded in
 the layer-tree evidence above, so confirm on the user's machine at radius 1px.
 
+### Follow-on: the caret became configurable (Options > Caret)
+
+Same session, after the fix above landed: the caret's look is now a settings
+section of its own, sitting under Mouse Options and built on the same widgets.
+
+- **New z-order.** The caret moved from `zIndex: 5` to `8` -- above the grid
+  overlays (6, 7), still below the text (10). Requested so a large caret,
+  outline or halo covers the grid rather than being crossed by it, while the
+  glyph the caret sits on stays readable through it. This is only safe because
+  the caret is no longer composited: a composited caret at any z below the text
+  reproduces the editor-sized `[Overlap]` layer (measured at z=5, 8 and 9 --
+  only z >= 10 avoided it, and z >= 10 is exactly what the design forbids).
+  **If anything ever re-promotes the caret, the black pane comes back.** The
+  three things that would are named in `.thockdown-block-caret`'s comment.
+- **New module** `src/shared/caretSettings.ts`: bounds/defaults (mirroring
+  `cursorSettings.ts`), the six blink shapes, and `buildCaretBlinkKeyframesCss`,
+  which generates `@keyframes thockdown-blink` at runtime. index.css no longer
+  defines that rule at all -- App.tsx mounts the generated one, so there is
+  exactly one definition and no stylesheet-order coin flip.
+- **Frame quantization** is per-segment `steps(n, jump-end)`, `n =
+  ceil(segmentMs / frameMs)`, with `n = 1` when a frame outlasts its segment.
+  At the minimum frame duration no timing function is emitted at all, so the
+  animation-level easing survives and the default blink is unchanged; above it,
+  segments interpolate linearly (a keyframe's own timing function replaces the
+  animation-level one -- that is CSS, not a choice).
+- **Persistence** rides `UiLayoutLoadout` (layout-scoped, next to
+  `highlightColors.caret`). `normalizeUiLoadout`'s completeness is compiler-
+  enforced, but `TDL_SCALAR_KEYS` in `databaseService.ts` is hand-maintained and
+  drops fields silently -- `electron/databaseService.caretLoadout.test.ts`
+  guards it (and was A/B-checked: removing one key fails that test).
+
+Verification: live-browser through the real UI (sliders driven by keyboard,
+preset buttons clicked, values read back off the DOM), CDP LayerTree re-checked
+with outline and halo on to confirm neither re-promotes the caret, visual A/B at
+3x showing the glyph still on top and the grid underneath, `tsc`/`eslint` clean,
+`npm test` clean (54 files, 599 tests).
+
 ---
 
 ## Previous Session Update (transition orchestration hardening)

@@ -1,5 +1,6 @@
 import type { TextureMaterialsBySurface } from '../textures/types';
 import type { GlazeSettings } from './glaze';
+import type { CaretAnimationPresetKey } from './caretSettings';
 
 export const LOADOUT_CHANNELS = {
   list: 'loadout:list',
@@ -103,6 +104,18 @@ export type UiLayoutLoadout = {
   cursorClickMaxSpeed: number;
   cursorClickMinHoldMs: number;
   cursorClickBalance: number;
+  // Block caret appearance (Options > Caret). Sits here rather than in
+  // PersistedMenuState because the caret's fill colour already lives in this
+  // payload as highlightColors.caret -- splitting the caret's look across two
+  // persistence homes would let a layout switch change half of it.
+  caretSizeDeviationPx: number;
+  caretOutlineWidthPx: number;
+  caretOutlineColor: string;
+  caretHaloSpreadPx: number;
+  caretHaloColor: string;
+  caretAnimationPreset: CaretAnimationPresetKey;
+  caretAnimationDurationMs: number;
+  caretFrameDurationMs: number;
 };
 
 // ---------------------------------------------------------------------------

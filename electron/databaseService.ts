@@ -52,6 +52,15 @@ import {
   CURSOR_CLICK_MIN_HOLD_MIN_MS, CURSOR_CLICK_MIN_HOLD_MAX_MS,
   CURSOR_CLICK_BALANCE_MIN, CURSOR_CLICK_BALANCE_MAX,
 } from '../src/shared/cursorSettings';
+import {
+  DEFAULT_CARET_SETTINGS,
+  isCaretAnimationPresetKey,
+  CARET_SIZE_DEVIATION_MIN_PX, CARET_SIZE_DEVIATION_MAX_PX,
+  CARET_OUTLINE_WIDTH_MIN_PX, CARET_OUTLINE_WIDTH_MAX_PX,
+  CARET_HALO_SPREAD_MIN_PX, CARET_HALO_SPREAD_MAX_PX,
+  CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS,
+  CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS,
+} from '../src/shared/caretSettings';
 import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureMaterialSettings, type TextureMaterialsBySurface } from '../src/textures/types';
 import type { MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../src/shared/audioPlayer';
 import type { ReviewFlagEntry, ReviewFlagWrite, ReviewFlagRemap } from '../src/shared/reviewFlags';
@@ -162,6 +171,14 @@ const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
   cursorClickMaxSpeed: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMaxSpeed,
   cursorClickMinHoldMs: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMinHoldMs,
   cursorClickBalance: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickBalance,
+  caretSizeDeviationPx: DEFAULT_CARET_SETTINGS.sizeDeviationPx,
+  caretOutlineWidthPx: DEFAULT_CARET_SETTINGS.outlineWidthPx,
+  caretOutlineColor: DEFAULT_CARET_SETTINGS.outlineColor,
+  caretHaloSpreadPx: DEFAULT_CARET_SETTINGS.haloSpreadPx,
+  caretHaloColor: DEFAULT_CARET_SETTINGS.haloColor,
+  caretAnimationPreset: DEFAULT_CARET_SETTINGS.animationPreset,
+  caretAnimationDurationMs: DEFAULT_CARET_SETTINGS.animationDurationMs,
+  caretFrameDurationMs: DEFAULT_CARET_SETTINGS.frameDurationMs,
 };
 
 type SqliteDatabase = import('better-sqlite3').Database;
@@ -572,6 +589,18 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
     cursorClickMaxSpeed: clampNumber(source.cursorClickMaxSpeed, CURSOR_CLICK_MAX_SPEED_MIN, CURSOR_CLICK_MAX_SPEED_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorClickMaxSpeed),
     cursorClickMinHoldMs: clampNumber(source.cursorClickMinHoldMs, CURSOR_CLICK_MIN_HOLD_MIN_MS, CURSOR_CLICK_MIN_HOLD_MAX_MS, DEFAULT_UI_LAYOUT_LOADOUT.cursorClickMinHoldMs),
     cursorClickBalance: clampNumber(source.cursorClickBalance, CURSOR_CLICK_BALANCE_MIN, CURSOR_CLICK_BALANCE_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorClickBalance),
+    caretSizeDeviationPx: clampInteger(source.caretSizeDeviationPx, CARET_SIZE_DEVIATION_MIN_PX, CARET_SIZE_DEVIATION_MAX_PX, DEFAULT_UI_LAYOUT_LOADOUT.caretSizeDeviationPx),
+    caretOutlineWidthPx: clampInteger(source.caretOutlineWidthPx, CARET_OUTLINE_WIDTH_MIN_PX, CARET_OUTLINE_WIDTH_MAX_PX, DEFAULT_UI_LAYOUT_LOADOUT.caretOutlineWidthPx),
+    caretOutlineColor: sanitizeString(source.caretOutlineColor, DEFAULT_UI_LAYOUT_LOADOUT.caretOutlineColor),
+    caretHaloSpreadPx: clampInteger(source.caretHaloSpreadPx, CARET_HALO_SPREAD_MIN_PX, CARET_HALO_SPREAD_MAX_PX, DEFAULT_UI_LAYOUT_LOADOUT.caretHaloSpreadPx),
+    caretHaloColor: sanitizeString(source.caretHaloColor, DEFAULT_UI_LAYOUT_LOADOUT.caretHaloColor),
+    // A free-form string here would reach the stylesheet as an animation name;
+    // only the known preset keys are accepted, anything else falls back.
+    caretAnimationPreset: isCaretAnimationPresetKey(source.caretAnimationPreset)
+      ? source.caretAnimationPreset
+      : DEFAULT_UI_LAYOUT_LOADOUT.caretAnimationPreset,
+    caretAnimationDurationMs: clampInteger(source.caretAnimationDurationMs, CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS, DEFAULT_UI_LAYOUT_LOADOUT.caretAnimationDurationMs),
+    caretFrameDurationMs: clampInteger(source.caretFrameDurationMs, CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS, DEFAULT_UI_LAYOUT_LOADOUT.caretFrameDurationMs),
   };
 }
 
@@ -595,6 +624,9 @@ const TDL_SCALAR_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
   'cursorPulseMagnitude', 'cursorPulseHz',
   'cursorClickRamp', 'cursorClickSkew', 'cursorClickSpeedX', 'cursorClickMaxSpeed',
   'cursorClickMinHoldMs', 'cursorClickBalance',
+  'caretSizeDeviationPx', 'caretOutlineWidthPx', 'caretOutlineColor',
+  'caretHaloSpreadPx', 'caretHaloColor',
+  'caretAnimationPreset', 'caretAnimationDurationMs', 'caretFrameDurationMs',
 ];
 
 // Keys whose values are nested objects; they're emitted as inline JSON when

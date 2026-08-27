@@ -12,6 +12,7 @@
 import { DEFAULT_TEXTURE_MATERIALS, type TextureMaterialSettings, type TextureColorHsva } from '../textures/types';
 import { DEFAULT_GLAZE_SETTINGS } from './glaze';
 import { DEFAULT_CUSTOM_CURSOR_SETTINGS } from './cursorSettings';
+import { DEFAULT_CARET_SETTINGS } from './caretSettings';
 import type { UiLayoutLoadout } from './loadouts';
 
 type PartialTextureMaterialSettings = Omit<Partial<TextureMaterialSettings>, 'color'> & {
@@ -156,6 +157,14 @@ export const NEUTRAL_BASE: UiLayoutLoadout = {
   cursorClickMaxSpeed: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMaxSpeed,
   cursorClickMinHoldMs: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMinHoldMs,
   cursorClickBalance: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickBalance,
+  caretSizeDeviationPx: DEFAULT_CARET_SETTINGS.sizeDeviationPx,
+  caretOutlineWidthPx: DEFAULT_CARET_SETTINGS.outlineWidthPx,
+  caretOutlineColor: DEFAULT_CARET_SETTINGS.outlineColor,
+  caretHaloSpreadPx: DEFAULT_CARET_SETTINGS.haloSpreadPx,
+  caretHaloColor: DEFAULT_CARET_SETTINGS.haloColor,
+  caretAnimationPreset: DEFAULT_CARET_SETTINGS.animationPreset,
+  caretAnimationDurationMs: DEFAULT_CARET_SETTINGS.animationDurationMs,
+  caretFrameDurationMs: DEFAULT_CARET_SETTINGS.frameDurationMs,
 };
 
 export const DEFAULT_CUSTOM_LIGHT: UiLayoutLoadout = {
