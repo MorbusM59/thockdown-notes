@@ -129,6 +129,38 @@ section of its own, sitting under Mouse Options and built on the same widgets.
   drops fields silently -- `electron/databaseService.caretLoadout.test.ts`
   guards it (and was A/B-checked: removing one key fails that test).
 
+**Follow-up defect (found by the user on a real build, fixed same session).** The
+blink animated *discretely* in the shipped app -- four hard brightness flips
+instead of the heartbeat ramp, with the frame slider apparently inert because
+there was nothing to step through. Cause: the keyframes carried
+`color-mix(in srgb, var(--x) N%, transparent)` values, and **`color-mix()`/
+`var()` inside an animated property are not interpolable in Chromium 124
+(Electron 30)**. Chromium ~140 interpolates them fine, which is why every
+instrument here (`dev:browser` under Playwright, a standalone CSS probe)
+showed correct stepping and nothing caught it -- a reminder that this app ships
+on an engine two years older than the one these sessions measure with. When a
+CSS feature is newer than ~2021, assume the shipped Electron may differ.
+
+The fix removes both exotic dependencies from the animation:
+
+- colours are resolved in App.tsx and baked into the rule as concrete `rgba()`
+  (`buildCaretBlinkKeyframesCss` now takes the three colours and the halo
+  spread as inputs; the `--caret-*` vars remain, but only for the static base
+  rule the reduced-animation path uses);
+- stepping is baked as explicit hold-stop pairs instead of a per-keyframe
+  `steps()` timing function -- which also means each step now samples the REAL
+  eased curve, where `steps()` could only ever quantize a linear ramp (a
+  keyframe's own timing function replaces the animation-level easing).
+
+Consequences to keep in mind: the emitted rule is now colour-dependent, so it
+regenerates when the caret/outline/halo colour or halo spread changes, not just
+on animation settings; frame durations at or below one display frame
+(`CARET_FRAME_DURATION_SMOOTH_MAX_MS`) deliberately skip quantization; and
+`CARET_MAX_BAKED_STEPS` bounds the rule's size where steps would be
+imperceptible anyway. `caretSettings.test.ts` asserts no `color-mix`/`var(` ever
+appears in the output, and that the baked easing matches the `cubic-bezier` in
+index.css so the two paths cannot drift.
+
 Verification: live-browser through the real UI (sliders driven by keyboard,
 preset buttons clicked, values read back off the DOM), CDP LayerTree re-checked
 with outline and halo on to confirm neither re-promotes the caret, visual A/B at

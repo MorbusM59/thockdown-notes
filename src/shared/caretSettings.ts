@@ -10,6 +10,8 @@
 // PersistedMenuState -- switching layouts switches the caret's whole look with
 // everything else it belongs to.
 
+import { clampAlphaChannel, clampColorChannel, parseCssColorToRgba, type RgbaColor } from './colorMath'
+
 export type CaretAnimationPresetKey =
   | 'heartbeat'
   | 'bigBeat'
@@ -73,6 +75,8 @@ export const CARET_FRAME_DURATION_STEP_MS = 5
 // buildCaretBlinkKeyframesCss.
 export const CARET_FRAME_DURATION_DEFAULT_MS = CARET_FRAME_DURATION_MIN_MS
 
+/** Last-resort fill colour if `highlightColors.caret` cannot be parsed. */
+export const DEFAULT_CARET_FILL_COLOR = 'rgba(0, 0, 0, 0.3)'
 export const DEFAULT_CARET_OUTLINE_COLOR = 'rgba(0, 0, 0, 0.45)'
 export const DEFAULT_CARET_HALO_COLOR = 'rgba(0, 0, 0, 0.18)'
 
@@ -206,65 +210,203 @@ export function resolveCaretSegmentStepCount(segmentMs: number, frameDurationMs:
   return Math.max(1, Math.ceil(segmentMs / frameDurationMs))
 }
 
+
+// ---------------------------------------------------------------------------
+// Keyframe generation
+// ---------------------------------------------------------------------------
+
+/**
+ * A frame duration at or below this is treated as "don't quantize at all": a
+ * step shorter than one display frame is not a step anyone can see, so the
+ * blink is left continuous and the animation-level easing does the work. It
+ * also bounds how many keyframe stops the baked path below can emit.
+ */
+export const CARET_FRAME_DURATION_SMOOTH_MAX_MS = 15
+
+/**
+ * Ceiling on baked steps per cycle. Only bites where each step would already
+ * be shorter than a display frame (240 steps across the longest 5000ms cycle
+ * is ~21ms each), so it costs nothing visible and keeps the generated rule
+ * from growing without bound.
+ */
+export const CARET_MAX_BAKED_STEPS = 240
+
+/**
+ * The easing the caret's `animation` shorthand carries in index.css. Mirrored
+ * here because the baked path samples this curve itself rather than leaving it
+ * to the browser -- caretSettings.test.ts asserts the two never drift apart.
+ */
+export const CARET_BLINK_EASING_CONTROL_POINTS = [0.4, 0, 0.2, 1] as const
+
+/** Solves a CSS cubic-bezier timing function for its output at progress `x`. */
+function evaluateCubicBezier(x1: number, y1: number, x2: number, y2: number, x: number): number {
+  if (x <= 0) return 0
+  if (x >= 1) return 1
+
+  const axis = (t: number, a: number, b: number): number => {
+    const inverse = 1 - t
+    return (3 * inverse * inverse * t * a) + (3 * inverse * t * t * b) + (t * t * t)
+  }
+
+  // Bisection rather than Newton-Raphson: this runs a few hundred times per
+  // rebuild at most, and bisection cannot diverge on the flat-derivative
+  // stretches these curves have at their ends.
+  let low = 0
+  let high = 1
+  let mid = x
+  for (let iteration = 0; iteration < 32; iteration += 1) {
+    mid = (low + high) / 2
+    if (axis(mid, x1, x2) < x) low = mid
+    else high = mid
+  }
+
+  return axis(mid, y1, y2)
+}
+
+export interface CaretBlinkKeyframeOptions {
+  presetKey: CaretAnimationPresetKey
+  animationDurationMs: number
+  frameDurationMs: number
+  /** The caret's fill colour -- `highlightColors.caret`, not a caret setting. */
+  caretColor: string
+  outlineColor: string
+  haloColor: string
+  haloSpreadPx: number
+}
+
 /** Trims trailing zeroes so the generated CSS stays readable when inspected. */
-function formatNumber(value: number): string {
-  return String(Math.round(value * 1000) / 1000)
+function formatNumber(value: number, decimals = 3): string {
+  const factor = 10 ** decimals
+  return String(Math.round(value * factor) / factor)
 }
 
 /**
- * Scales a colour's own alpha by `alpha` without needing to know anything
- * about the colour. Mixing toward `transparent` in sRGB scales alpha only, so
- * for a flat-coloured box this is pixel-identical to `opacity: <alpha>` -- and
- * unlike opacity it does NOT put the caret on the compositor, which is the
- * whole point (see `.thockdown-block-caret` in index.css).
+ * Emits a concrete `rgba()` with the colour's own alpha scaled by `alphaScale`.
+ *
+ * Concrete, and resolved here rather than left to the stylesheet, because
+ * `color-mix()` and `var()` inside an animated property are NOT interpolable
+ * in every engine that runs this app: Chromium 124 (Electron 30) animates such
+ * keyframes DISCRETELY, flipping between stop values instead of ramping
+ * between them, which silently reduced the whole blink to four hard steps and
+ * made the frame setting invisible. Newer Chromium interpolates them fine,
+ * which is exactly why it survived review. Plain rgba() interpolates
+ * everywhere -- do not reintroduce color-mix() or var() into these stops.
  */
-function scaleAlpha(colorVar: string, alpha: number): string {
-  const percent = Math.max(0, Math.min(1, alpha)) * 100
-  return `color-mix(in srgb, var(${colorVar}) ${formatNumber(percent)}%, transparent)`
+function scaledRgba(color: RgbaColor, alphaScale: number): string {
+  const alpha = clampAlphaChannel(color.a * Math.max(0, Math.min(1, alphaScale)))
+  return `rgba(${clampColorChannel(color.r)}, ${clampColorChannel(color.g)}, ${clampColorChannel(color.b)}, ${formatNumber(alpha, 4)})`
+}
+
+function parseColorOrFallback(color: string, fallback: string): RgbaColor {
+  return parseCssColorToRgba(color)
+    ?? parseCssColorToRgba(fallback)
+    ?? { r: 0, g: 0, b: 0, a: 1 }
+}
+
+/**
+ * Expands a preset's stops into the stops actually emitted, quantizing each
+ * segment into equal steps when the frame duration calls for it.
+ *
+ * Stepping is baked into explicit stops -- a stop at the step's start and
+ * another a hair before the next one, both carrying the step's value -- rather
+ * than expressed as a per-keyframe `steps()` timing function. Two reasons, one
+ * defensive and one substantive: it removes the last piece of exotic CSS from
+ * a path that already broke once on an older engine, and it lets each step
+ * sample the REAL eased curve. A `steps()` timing function replaces the
+ * animation-level easing for its segment, so the browser-side version could
+ * only ever quantize a linear ramp; this quantizes the actual heartbeat.
+ */
+function resolveEmittedStops(
+  preset: CaretAnimationPreset,
+  animationDurationMs: number,
+  frameDurationMs: number,
+): CaretAnimationStop[] {
+  const stops = preset.stops
+  if (frameDurationMs <= CARET_FRAME_DURATION_SMOOTH_MAX_MS) return [...stops]
+
+  const [x1, y1, x2, y2] = CARET_BLINK_EASING_CONTROL_POINTS
+  const segmentMsAt = (index: number) =>
+    ((stops[index + 1].atPercent - stops[index].atPercent) / 100) * animationDurationMs
+
+  const countStepsAt = (frameMs: number) => {
+    let total = 0
+    for (let index = 0; index < stops.length - 1; index += 1) {
+      total += resolveCaretSegmentStepCount(segmentMsAt(index), frameMs)
+    }
+    return total
+  }
+
+  // Size the whole cycle first, so the cap scales every segment together
+  // instead of truncating whichever ones happen to come last. Each segment
+  // rounds its own step count up, so one division can still land over the cap;
+  // stretch and re-measure until it genuinely fits (converges in a pass or
+  // two -- the loop bound is only there so this can never spin).
+  let effectiveFrameMs = frameDurationMs
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const totalSteps = countStepsAt(effectiveFrameMs)
+    if (totalSteps <= CARET_MAX_BAKED_STEPS) break
+    effectiveFrameMs *= totalSteps / CARET_MAX_BAKED_STEPS
+  }
+
+  const emitted: CaretAnimationStop[] = []
+  for (let index = 0; index < stops.length - 1; index += 1) {
+    const from = stops[index]
+    const to = stops[index + 1]
+    const stepCount = resolveCaretSegmentStepCount(segmentMsAt(index), effectiveFrameMs)
+    const stepPercent = (to.atPercent - from.atPercent) / stepCount
+    // Small enough to read as an instant jump at any cycle length, and always
+    // a small fraction of the step it closes.
+    const holdEpsilon = Math.min(0.01, stepPercent / 8)
+
+    for (let step = 0; step < stepCount; step += 1) {
+      const eased = evaluateCubicBezier(x1, y1, x2, y2, step / stepCount)
+      const alpha = from.alpha + ((to.alpha - from.alpha) * eased)
+      const startPercent = from.atPercent + (step * stepPercent)
+      emitted.push({ atPercent: startPercent, alpha })
+      emitted.push({ atPercent: startPercent + stepPercent - holdEpsilon, alpha })
+    }
+  }
+
+  emitted.push({ ...stops[stops.length - 1] })
+  return emitted
 }
 
 /**
  * Builds the `@keyframes thockdown-blink` rule for the current caret settings.
  * Generated at runtime rather than shipped statically because every part of it
- * -- the stop positions, the per-segment step counts, the number of stops --
- * depends on user settings.
+ * -- the stop positions, the step counts, the resolved colours -- depends on
+ * user settings.
  *
  * All three animatable caret surfaces (fill, outline, halo) are faded together
  * from the same alpha so the caret reads as one object rather than a solid
- * ring around a blinking centre.
- *
- * Stepping is expressed as a per-keyframe `animation-timing-function:
- * steps(n, jump-end)`, which also means a segment interpolates LINEARLY once
- * stepped (a keyframe's own timing function replaces the animation-level one).
- * At the minimum frame duration no timing function is emitted at all, so the
- * animation-level easing survives and the default blink is exactly what it has
- * always been -- a step shorter than one display frame is not a step anyone
- * could see, so there is nothing to gain by quantizing there.
+ * ring around a blinking centre. None of them animates `opacity`, which would
+ * put the caret on the compositor -- see `.thockdown-block-caret` in index.css
+ * for the black edit pane that causes.
  */
-export function buildCaretBlinkKeyframesCss(
-  presetKey: CaretAnimationPresetKey,
-  animationDurationMs: number,
-  frameDurationMs: number,
-): string {
+export function buildCaretBlinkKeyframesCss(options: CaretBlinkKeyframeOptions): string {
+  const {
+    presetKey,
+    animationDurationMs,
+    frameDurationMs,
+    caretColor,
+    outlineColor,
+    haloColor,
+    haloSpreadPx,
+  } = options
+
   const preset = CARET_ANIMATION_PRESETS[presetKey] ?? CARET_ANIMATION_PRESETS.heartbeat
-  const stops = preset.stops
-  const shouldQuantize = frameDurationMs > CARET_FRAME_DURATION_MIN_MS
+  const fill = parseColorOrFallback(caretColor, DEFAULT_CARET_FILL_COLOR)
+  const outline = parseColorOrFallback(outlineColor, DEFAULT_CARET_OUTLINE_COLOR)
+  const halo = parseColorOrFallback(haloColor, DEFAULT_CARET_HALO_COLOR)
+  const spread = formatNumber(Math.max(0, haloSpreadPx))
 
-  const blocks = stops.map((stop, index) => {
+  const blocks = resolveEmittedStops(preset, animationDurationMs, frameDurationMs).map((stop) => {
     const declarations = [
-      `background-color: ${scaleAlpha('--color-caret', stop.alpha)};`,
-      `outline-color: ${scaleAlpha('--caret-outline-color', stop.alpha)};`,
-      `box-shadow: 0 0 0 var(--caret-halo-spread) ${scaleAlpha('--caret-halo-color', stop.alpha)};`,
+      `background-color: ${scaledRgba(fill, stop.alpha)};`,
+      `outline-color: ${scaledRgba(outline, stop.alpha)};`,
+      `box-shadow: 0 0 0 ${spread}px ${scaledRgba(halo, stop.alpha)};`,
     ]
-
-    const nextStop = stops[index + 1]
-    if (shouldQuantize && nextStop) {
-      const segmentMs = ((nextStop.atPercent - stop.atPercent) / 100) * animationDurationMs
-      const stepCount = resolveCaretSegmentStepCount(segmentMs, frameDurationMs)
-      declarations.push(`animation-timing-function: steps(${stepCount}, jump-end);`)
-    }
-
-    return `  ${formatNumber(stop.atPercent)}% { ${declarations.join(' ')} }`
+    return `  ${formatNumber(stop.atPercent, 4)}% { ${declarations.join(' ')} }`
   })
 
   return `@keyframes thockdown-blink {\n${blocks.join('\n')}\n}\n`

@@ -4911,8 +4911,27 @@ function App() {
   // deliberately no `@keyframes thockdown-blink` in index.css to shadow or be
   // shadowed by -- this is the only definition.
   const caretBlinkKeyframesCss = useMemo(
-    () => buildCaretBlinkKeyframesCss(caretAnimationPreset, caretAnimationDurationMs, caretFrameDurationMs),
-    [caretAnimationPreset, caretAnimationDurationMs, caretFrameDurationMs],
+    () => buildCaretBlinkKeyframesCss({
+      presetKey: caretAnimationPreset,
+      animationDurationMs: caretAnimationDurationMs,
+      frameDurationMs: caretFrameDurationMs,
+      // Resolved here and baked into the rule as concrete rgba() rather than
+      // referenced as var()/color-mix(): those are not interpolable in every
+      // engine this ships on -- see scaledRgba's comment in caretSettings.ts.
+      caretColor: highlightColors.caret,
+      outlineColor: caretOutlineColor,
+      haloColor: caretHaloColor,
+      haloSpreadPx: caretHaloSpreadPx,
+    }),
+    [
+      caretAnimationPreset,
+      caretAnimationDurationMs,
+      caretFrameDurationMs,
+      highlightColors.caret,
+      caretOutlineColor,
+      caretHaloColor,
+      caretHaloSpreadPx,
+    ],
   )
 
   const appRootStyle = useMemo(() => {
