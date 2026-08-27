@@ -467,19 +467,25 @@ body {
    so a translucent caret colour never dims the glyph it sits on), everything
    painted after it -- the grid overlays, the editor text, the gutters --
    overlaps a composited caret and gets promoted too, squashed into one
-   anonymous editor-sized "Overlap" layer. That layer sits inside
-   .edit-container's edge-fade mask and .editor-stage's rounded clip, and on
-   real GPU compositing the combination renders it SOLID BLACK at some
-   --border-radius-regular values (reported live at 1px; the whole edit pane
-   goes black, and it goes away if the fade mask is removed). It's the same
-   compositor edge case already documented on .editor-empty-state and
-   .editor-escape-hold-backdrop in editor.css -- there the remedy was pinning
-   a stable layer, which doesn't apply here: this squashing layer exists ONLY
-   while the caret is composited, so the fix is to keep the caret off the
-   compositor entirely. Verified via CDP LayerTree against the running app:
-   composited caret => an editor-sized [Overlap] layer inside the mask;
-   de-promoted caret => that layer is gone (and raising the caret above the
-   text also removes it, but that's the one thing the z-order can't do).
+   anonymous editor-sized "Overlap" layer, which sits inside
+   .edit-container's edge-fade mask and .editor-stage's rounded clip. Verified
+   via CDP LayerTree against the running app: composited caret => an
+   editor-sized [Overlap] layer inside the mask; de-promoted caret => that
+   layer is gone (and raising the caret above the text also removes it, but
+   that's the one thing the z-order can't do).
+
+   HISTORICAL NOTE ON WHY THIS WAS DONE: this de-promotion was originally
+   shipped as the fix for the edit pane rendering SOLID BLACK at small
+   --border-radius-regular values, on the assumption that the squashing layer
+   above was the thing going black. It was not -- the black survived full
+   de-promotion, and a later live bisection in the user's own build reproduced
+   it with the block caret hidden outright. The real trigger was the mask +
+   rounded-clip combination around Chromium's own focus-only native caret
+   layer, fixed by pinning a stable layer on .edit-container (see its comment
+   in styles/components/markdown.css). Keeping the caret off the compositor is
+   still the right default -- one fewer squashed editor-sized layer, and the
+   colour-driven blink is what the Options > Caret keyframes are built on --
+   but do not read it as load-bearing for the black-pane bug.
 
    Cost of the trade: the blink now repaints on the main thread instead of the
    compositor -- a ~10x25 invalidation per frame while the editor is focused,

@@ -131,6 +131,39 @@
   mask-size:     100% 100%;
   --edit-edge-fade-size: 3px;
   color: var(--color-editor-edit-text);
+  /* Pins this masked subtree to its own stable compositing layer. Without it
+     the whole edit pane renders SOLID BLACK on a real GPU at small
+     `--border-radius-regular` values (reported live at 1px, Electron 30 =
+     Chromium 124; not reproducible under Chromium ~140, so it can only be
+     bisected in the user's own build).
+
+     What the live bisection established (18 cases, run in the app's DevTools):
+     the black needs all three of
+
+       * a mask on THIS element -- removing it clears the black, and replacing
+         the gradient with a *solid* mask keeps it, so it is the mask itself,
+         not the fade;
+       * the rounded clip on `.editor-stage` (`border-radius` + `overflow:
+         hidden`) -- zeroing the radius or the overflow clears it, and swapping
+         the mask for an equivalent `clip-path` clears it too;
+       * editor FOCUS -- clicking into the console (i.e. blurring the
+         contenteditable) clears it instantly. The layer that only exists while
+         focused is Chromium's own native text-caret layer, visible as a
+         `1x18 [Caret]` entry in a CDP LayerTree dump.
+
+     So the corrupting layer is created and torn down as focus moves, and the
+     mask's render surface is rebuilt around it. Forcing a stable layer here
+     means that rebuild never happens. It is the same remedy already documented
+     on `.editor-empty-state` and `.editor-escape-hold-backdrop` in editor.css.
+     `contain: paint` and `transform: translateZ(0)` here, and `will-change:
+     transform` on `.editor-stage`, also cleared it and are equivalent
+     fallbacks if this one ever has to go. `will-change: transform` on
+     `.cm-scroller` made it strictly WORSE (black even unfocused) -- do not.
+
+     Note the custom block caret is NOT involved: hiding it entirely does not
+     clear the black. See src/index.css's `.thockdown-block-caret` comment, and
+     docs/cm6-parity-hardening-plan.md. */
+  will-change: transform;
 }
 
 .markdown-preview > *:not(.markdown-preview-texture),

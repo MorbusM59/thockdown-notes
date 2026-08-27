@@ -46,68 +46,68 @@ do once Phase 1/2 have stopped changing the code out from under it.
    `docs/document-scale-performance-philosophy.md`'s existing contract; this doc only adds the
    "assumption-hunting" framing, it doesn't replace that doc's solution hierarchy.
 
-## PARKED: editor renders black at small border radii (unresolved)
+## RESOLVED: editor rendered black at small border radii
 
-**Status: open, waiting on one measurement only the user can take.** Everything
-below the next paragraph is context; the action item is the bisection run.
+**Status: fixed.** `.edit-container` now carries `will-change: transform` (see
+its comment in `src/styles/components/markdown.css`, which is the durable
+record -- this section is the story of how it was found).
 
-### What we know
+### The symptom
 
-With `--border-radius-regular` at 1px, the whole active edit pane renders solid
-black on a real Electron build. It needs `.edit-container`'s top/bottom
-edge-fade mask to be applied -- removing the mask clears it. It does NOT need
-the block caret: the caret is now fully de-promoted (no `will-change`, 2D
-transform, colour-driven blink) and the black persists, in reduced-animation
-mode too. So the caret work below fixed a real compositing problem, but **not
-this one**; the "caret layer" attribution in that section was wrong as a root
-cause and should not be trusted as a starting point.
+With `--border-radius-regular` at 1px, the whole active edit pane rendered
+solid black on a real Electron build. Never reproducible here: `dev:browser`
+under real Playwright Chromium, standalone CSS probes, and SwiftShader-forced
+GPU compositing all rendered it correctly at every radius. It was found only by
+handing the user a bisection script to run in their own build.
 
-### What is ruled out
+### The three conditions (live bisection, 18 cases)
 
-- The block caret, in every configuration (composited or not, animating or not).
-- Anything about the blink keyframes -- the black predates and outlives them.
-- Every non-GPU explanation reachable from here: `dev:browser` under real
-  Playwright Chromium, standalone CSS probes, and SwiftShader-forced GPU
-  compositing all render it correctly at every radius.
+1. **A mask on `.edit-container`.** Removing the mask cleared it; replacing the
+   gradient with a *solid* mask did not -- so the mask itself, not the fade.
+   Swapping the mask for an equivalent `clip-path: inset()` also cleared it.
+2. **The rounded clip on `.editor-stage`** (`border-radius` + `overflow:
+   hidden`). Zeroing either cleared it.
+3. **Editor focus.** Decisive, and new: clicking into the DevTools console --
+   i.e. blurring the contenteditable -- cleared the black instantly. The layer
+   that exists only while focused is Chromium's own native text-caret layer,
+   which had been sitting in the CDP LayerTree dumps all along as `1x18
+   [Caret]`.
 
-### Leading hypothesis
+So the mask's render surface was being rebuilt around a layer that appears and
+disappears with focus, and that rebuild is what corrupted. Pinning a stable
+layer on the masked element stops the rebuild.
 
-The remaining permanently-composited layer inside the masked subtree is **CM6's
-own scroller** (`Viewport, OverflowScrolling`, editor-sized, measured via CDP
-LayerTree). It sits inside `.edit-container`'s mask AND under `.editor-stage`'s
-rounded clip (`border-radius` + `overflow: hidden`) -- the same three-way
-combination as before, minus the caret. That fits every fact: editor-sized,
-present regardless of the caret, needs the fade, needs a non-zero radius. It is
-also the same compositor edge case already documented on `.editor-empty-state`
-and `.editor-escape-hold-backdrop` in editor.css ("corrupt ... into solid black
-at specific radius values").
+### What was ruled out, and what that cost
 
-### Next step (do this first)
+The custom block caret, in every configuration -- composited or not, animating
+or not, and finally hidden outright, which still did not clear the black. The
+earlier session (below) attributed the bug to the block caret's squashing layer
+and shipped a full de-promotion as "the fix". That de-promotion is worth
+keeping on its own merits, but it was **not** the fix, and its confident
+root-cause write-up cost this bug a second session. The user's original report
+said "the element that turns black is the caret layer"; that was accepted as
+given rather than as the first thing to test.
 
-Run `scripts/debug/caretBlackPaneBisect.js` in the app's own DevTools (Options >
-Debugging > `</>`); it toggles one candidate at a time. All 16 cases are
-verified to apply cleanly and leave the editor usable.
+### Cases that also cleared it (equivalent fallbacks)
 
-- `t(1)` / `t(2)` / `t(3)` confirm the fade + rounded-clip pairing.
-- `t(4)`-`t(6)`, `t(8)`, `t(14)`, `t(15)` are candidate **fixes** that keep both
-  the fade and the radius. If one clears it, that is the shipping change --
-  ship it with a comment tying it back to this section.
-- `t(7)` tests the scroller hypothesis directly.
-- The rest narrow which layer paints black.
+`contain: paint` or `transform: translateZ(0)` on `.edit-container`;
+`will-change: transform` on `.editor-stage`. `will-change: transform` on
+`.cm-scroller` made it strictly worse -- black even when unfocused. All of
+this is recorded in the CSS comment so a future reader has the alternatives
+without re-running anything. The bisection script itself
+(`scripts/debug/caretBlackPaneBisect.js`) has been deleted per this repo's
+docs-hygiene rule; it is in history at `99139a5` if the bug ever returns.
 
-If NOTHING in the list clears it, the compositing family is exhausted and the
-fallback below becomes the evidence-based call rather than a retreat.
+### The fallback that is no longer needed
 
-### Agreed fallback if the bisection comes up empty
-
-Drop the edge fade entirely and instead **stop rendering text in partially
-visible rows** at the top/bottom of the editor. This arguably fits the
-box-grid philosophy better than a fade does. It is NOT a small change: the fade
-currently masks the boundary between whole rows and the cage's scroll position,
-so hiding cut-off rows means the row count and the scroll quantization have to
-agree exactly -- that touches the settle/anchor machinery this repo has been
-bitten by before (see `docs/large-document-performance-handover.md`). Plan it
-as its own piece of work, not as a patch.
+If the bisection had come up empty, the agreed plan was to drop the edge fade
+and instead stop rendering text in partially visible rows at the top/bottom of
+the editor. That is now unnecessary, but the idea stands on its own as a
+possible future design choice -- it arguably fits the box-grid philosophy
+better than a fade does. It is not a small change: the fade currently masks the
+boundary between whole rows and the cage's scroll position, so hiding cut-off
+rows means the row count and the scroll quantization have to agree exactly.
+Plan it as its own piece of work if it is ever wanted for its own sake.
 
 ### Standing lesson
 
@@ -139,6 +139,14 @@ documented in `editor.css` on `.editor-empty-state` / `.editor-escape-hold-backd
 that backdrop's blur snapshot into solid black at specific radius values"), where the remedy was
 pinning a stable layer — which does not apply here, because the squashing layer only exists at
 all while the caret is composited.
+
+> **Correction (later session).** The paragraph above is wrong about the black pane, and was
+> wrong when written: the black survived full de-promotion and survived hiding the caret
+> outright. The real trigger was the mask + rounded-clip combination around Chromium's
+> focus-only *native* caret layer, and the remedy was exactly the "pinning a stable layer" this
+> paragraph rules out — see the RESOLVED section above. Everything else in this section (the
+> layer-tree measurements, the de-promotion itself, the trade it accepts) still holds; only the
+> causal claim about the black pane does not.
 
 Measured with CDP `LayerTree` against the running app (`dev:browser` driven by real Chromium via
 Playwright, not the Claude Code browser pane):
