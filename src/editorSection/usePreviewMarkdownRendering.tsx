@@ -30,6 +30,7 @@ import { splitMarkdownIntoPreviewBlocksIncremental, type PreviewBlockSplitCache 
 import { resolvePreviewBlockIndexForSourceLine } from '../editor/PreviewBlockIndex'
 import { isNonQuantizedSmoothScrollActive, scrollToNonQuantizedSmooth } from '../editor/NonQuantizedSmoothScroll'
 import {
+  PREVIEW_PREWARM_GEOMETRY_CACHE_SIZE,
   PREVIEW_PREWARM_INITIAL_BATCH,
   PREVIEW_PREWARM_RESIZE_SETTLE_MS,
   PREVIEW_PREWARM_SCROLL_QUIET_MS,
@@ -1012,6 +1013,12 @@ export function usePreviewMarkdownRendering({
   const prewarmDoneRef = useRef(false)
   const lastPreviewScrollAtRef = useRef(0)
   const prewarmBatchRef = useRef<readonly number[]>([])
+  // Completed surveys, keyed by the geometry they were taken at. Returning to
+  // a geometry already surveyed -- toggling the sidebar back, undoing a font
+  // size, dragging a split divider back -- then costs nothing at all instead
+  // of a whole re-survey. Cleared whenever the block list changes, since the
+  // heights are only valid for the text they were measured from.
+  const surveyByGeometryRef = useRef<Map<string, Map<number, number>>>(new Map())
   // Reported out so the UI can be honest about the wait -- see the discovery
   // bar in SectionEditorArea. Updated only when the whole integer percent
   // moves, so a thousand-block survey costs at most a hundred re-renders of
@@ -1046,6 +1053,51 @@ export function usePreviewMarkdownRendering({
     prewarmScheduleRef.current = window.setTimeout(run, 16)
   }, [cancelPrewarmSchedule])
 
+  const readGeometrySignature = useCallback(() => {
+    const probe = prewarmProbeRef.current
+    return probe ? `${probe.offsetWidth}x${probe.offsetHeight}` : ''
+  }, [])
+
+  /**
+   * Applies a previously completed survey for this exact geometry, if there is
+   * one. Returns whether it did.
+   *
+   * There is no way to *derive* the new heights from the old ones: width, font
+   * size, letter spacing and padding all change where text WRAPS, so a block's
+   * line count changes, and a stored height carries no record of its line
+   * count. Only a pure line-height change would be a linear transform, and
+   * only if the fixed (margin/padding) part had been stored separately. What
+   * can be done is remember: geometries repeat far more often than they are
+   * novel.
+   */
+  const applyCachedSurvey = useCallback((signature: string) => {
+    const cached = signature ? surveyByGeometryRef.current.get(signature) : undefined
+    if (!cached || cached.size === 0) return false
+
+    // Refresh its recency -- this Map is in insertion order, which is what the
+    // eviction below relies on.
+    surveyByGeometryRef.current.delete(signature)
+    surveyByGeometryRef.current.set(signature, cached)
+
+    for (const index of [...cached.keys()].sort((a, b) => a - b)) {
+      virtualizer.resizeItem(index, cached.get(index)!)
+      prewarmedRef.current.add(index)
+    }
+    return true
+  }, [virtualizer])
+
+  const rememberCompletedSurvey = useCallback((signature: string, sizes: Map<number, number>) => {
+    if (!signature || sizes.size === 0) return
+    const store = surveyByGeometryRef.current
+    store.delete(signature)
+    store.set(signature, sizes)
+    while (store.size > PREVIEW_PREWARM_GEOMETRY_CACHE_SIZE) {
+      const oldest = store.keys().next().value
+      if (oldest === undefined) break
+      store.delete(oldest)
+    }
+  }, [])
+
   /**
    * Hands every buffered height to the virtualizer at once, when the survey is
    * complete.
@@ -1061,13 +1113,17 @@ export function usePreviewMarkdownRendering({
     const buffered = prewarmBufferRef.current
     if (buffered.size === 0) return
     prewarmBufferRef.current = new Map()
+    // Only a COMPLETED survey is worth remembering; a partial one (geometry
+    // changed mid-sweep) would be a cache entry that silently under-describes
+    // the document.
+    rememberCompletedSurvey(readGeometrySignature(), new Map(buffered))
 
     // Ascending, so react-virtual's own above-the-fold compensation sees each
     // item in document order rather than jumping around the offset map.
     for (const index of [...buffered.keys()].sort((a, b) => a - b)) {
       virtualizer.resizeItem(index, buffered.get(index)!)
     }
-  }, [virtualizer])
+  }, [virtualizer, rememberCompletedSurvey, readGeometrySignature])
 
   const queueNextPrewarmBatch = useCallback(() => {
     schedulePrewarmSlice(() => {
@@ -1167,9 +1223,19 @@ export function usePreviewMarkdownRendering({
     prewarmBatchRef.current = []
     setPrewarmBatch([])
     discoveryPercentRef.current = -1
-    reportDiscovery(0, previewBlocksRef.current.length, true)
+
+    // An exact hit means there is nothing to survey: apply it and stop, with
+    // no discovery bar and no wait.
+    const blockCount = previewBlocksRef.current.length
+    if (applyCachedSurvey(readGeometrySignature())) {
+      prewarmDoneRef.current = true
+      reportDiscovery(blockCount, blockCount, false)
+      return
+    }
+
+    reportDiscovery(0, blockCount, true)
     queueNextPrewarmBatch()
-  }, [queueNextPrewarmBatch, reportDiscovery, previewBlocksRef])
+  }, [queueNextPrewarmBatch, reportDiscovery, previewBlocksRef, applyCachedSurvey, readGeometrySignature])
 
   // Start over whenever the cached heights could no longer be true.
   //
@@ -1192,6 +1258,9 @@ export function usePreviewMarkdownRendering({
   // catches changes driven from an ancestor (double-size mode, a root font
   // scale) which no observer on the scroller's own attributes would see.
   useEffect(() => {
+    // The text changed, so every remembered survey describes a document that no
+    // longer exists.
+    surveyByGeometryRef.current = new Map()
     restartPrewarm()
   }, [previewBlocks, restartPrewarm])
 

@@ -178,6 +178,72 @@ async function main() {
     check('the survey does not move the reader\'s content on slow hardware', quiet.worstDrift === 0, `content drifted ${quiet.worstDrift}px`)
     check('the survey does not churn the scrollbar while it runs', quiet.sizeChanges <= 4, `total size changed ${quiet.sizeChanges}x`)
 
+    // --- a geometry already surveyed must not be surveyed again ---
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 })
+    await page.reload()
+    // 'attached', not 'visible': the earlier round-trip checks left this
+    // section in edit mode, and a note restored in edit mode has a preview
+    // pane that is mounted but legitimately hidden.
+    await page.waitForSelector('.markdown-preview', { state: 'attached', timeout: 90000 })
+    await page.waitForTimeout(500)
+    if (!(await page.evaluate(() => !!document.querySelector('.editor-stage.is-preview-mode')))) {
+      await page.keyboard.press('Escape')
+      await page.waitForTimeout(1200)
+    }
+    const waitForSurveyEnd = async () => {
+      // Debounced 300ms after the geometry settles, so give the restart a
+      // chance to begin before concluding it never did.
+      await page.waitForTimeout(1400)
+      for (let i = 0; i < 400; i++) {
+        if (!(await page.evaluate(() => !!document.querySelector('.preview-discovery-shell')))) return
+        await page.waitForTimeout(100)
+      }
+    }
+    const totalSize = () => page.evaluate(() => Math.round(parseFloat(document.querySelector('.markdown-preview > div[style*="height"]').style.height) || 0))
+    const sawBarWhile = async (act) => {
+      let saw = false
+      const poll = setInterval(async () => {
+        try { if (await page.evaluate(() => !!document.querySelector('.preview-discovery-shell'))) saw = true } catch { /* page busy */ }
+      }, 60)
+      await act()
+      clearInterval(poll)
+      return saw
+    }
+
+    await waitForSurveyEnd()
+    const atWide = await totalSize()
+    await page.setViewportSize({ width: 1100, height: 900 })
+    await waitForSurveyEnd()
+    const atNarrow = await totalSize()
+    check('a new geometry produces a different measured height', atNarrow !== atWide, `${atWide}px -> ${atNarrow}px`)
+
+    const barOnReturn = await sawBarWhile(async () => {
+      await page.setViewportSize({ width: 1280, height: 900 })
+      await page.waitForTimeout(1600)
+    })
+    const backAtWide = await totalSize()
+    // Not exact equality: the handful of blocks mounted while the pane was at
+    // the other width get re-measured for real on the way back, and those land
+    // sub-pixel differently -- measured at 2px across a 49,504px document,
+    // 0.004%. A genuine cache miss is not a near miss; it would show the OTHER
+    // geometry's height, ~11,000px out on this document.
+    check('returning to a surveyed geometry re-uses it', Math.abs(backAtWide - atWide) < 100, `${backAtWide}px vs ${atWide}px`)
+    check('returning to a surveyed geometry does not re-survey', !barOnReturn)
+
+    // --- but an edit must throw those remembered surveys away ---
+    // The heights are only valid for the text they were measured from; serving
+    // them after an edit would be the "confidently wrong" failure this whole
+    // feature has to avoid.
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(1200)
+    await page.click('.editor-text')
+    await page.keyboard.type('\n\n## An inserted heading\n\nAnd a fresh paragraph of text that did not exist when the survey ran.\n')
+    await page.waitForTimeout(1200)
+    await page.keyboard.press('Escape')
+    await waitForSurveyEnd()
+    const afterEdit = await totalSize()
+    check('an edit invalidates the remembered surveys', afterEdit !== backAtWide, `${backAtWide}px -> ${afterEdit}px`)
+
     check('no page errors', errors.length === 0, errors.slice(0, 2).join(' | '))
   } finally {
     await browser.close()

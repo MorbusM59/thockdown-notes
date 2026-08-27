@@ -1653,6 +1653,62 @@ CM6/Chromium native overhead, not further attributable without new tooling" is u
 the honest answer for whatever's left. The `sanitizeDatabase()` real-world observation window noted
 directly above is the one open item this round actually added.
 
+## This round: can a survey be re-cast into a new geometry rather than re-run?
+
+Asked directly. **Not derived — but often remembered.**
+
+**Why deriving does not work.** Width, font size, letter spacing and edge
+padding all change *where text wraps*, so a block's line count changes, and a
+stored height carries no record of its line count. Only a pure line-height
+change would be a linear transform, and only if the fixed (margin/padding) part
+had been stored separately from the line-driven part. The aggregate numbers show
+how far off a naive scale would be: 1280px -> 1100px (width x0.859) moved the
+true total 49,753 -> 61,210px, a x1.230 change against a naive inverse-width
+x1.164; font-size 16 -> 24px (x1.5) moved it x2.535 against a naive x2.25. Both
+~5-11% out in aggregate, and far worse per block, since a heading that never
+wrapped does not change at all while a long paragraph changes a lot.
+
+**Why "from scratch" was already cheaper than it sounds.** A restart only
+resets the survey's own bookkeeping; it never touches the virtualizer. The
+previously committed heights stay live, so the scrollbar holds the *previous
+geometry's* numbers rather than collapsing to the flat estimate — measured at
+16.7% wrong after a modest resize and 48.3% after a large font change, against
+71% for a cold document.
+
+**What was added: remember, don't derive.** Completed surveys are now kept keyed
+by the geometry they were taken at (`PREVIEW_PREWARM_GEOMETRY_CACHE_SIZE`, 4,
+LRU). Geometries repeat far more often than they are novel — a sidebar toggled
+off and back, a font size tried and undone, a split divider dragged and
+returned. Measured at 6x CPU throttle:
+
+| step | discovery bar | total |
+|---|---|---|
+| initial survey @1280 | shown, 10.5s | 49,753px |
+| resize to 1100 (new geometry) | shown, 7.5s | 61,215px |
+| **back to 1280 (already surveyed)** | **none** | 49,753px |
+| **back to 1100 (already surveyed)** | **none** | 61,215px |
+
+Only *completed* surveys are stored — a partial one (geometry changed mid-sweep)
+would be a cache entry that silently under-describes the document. And any edit
+clears the whole store, since the heights are only valid for the text they were
+measured from; serving them afterwards would be exactly the "confidently wrong"
+failure this feature exists to avoid. Both are asserted in
+`verifyPreviewPrewarmSafety.mjs`.
+
+One note on that assertion: returning to a surveyed geometry matches to within
+**2px across a 49,504px document** (0.004%), not exactly — the handful of blocks
+mounted while the pane was at the other width get re-measured for real on the
+way back and land sub-pixel differently. The check uses a 100px tolerance,
+because a genuine cache miss is not a near miss: it would show the other
+geometry's height, ~11,000px out.
+
+**Still open, if it ever matters:** a *sampled* re-cast — measure ~10% of blocks
+after a geometry change, take the ratio, and apply it to the rest as a
+provisional commit before the full survey finishes. That would cut the "wrong by
+17-48% while re-surveying" window at the cost of a second thumb movement. Not
+built, since the geometry cache covers the repeating case and the stale heights
+cover the novel one tolerably.
+
 ## This round: what happens if the reader scrolls while the survey runs
 
 Asked directly, and worth measuring rather than reasoning about. Answer, at 6x

@@ -58,6 +58,17 @@ export const PREVIEW_PREWARM_RESIZE_SETTLE_MS = 300
  */
 export const PREVIEW_PREWARM_SCROLL_QUIET_MS = 180
 
+/**
+ * How many completed surveys to keep, keyed by the geometry each was taken at.
+ *
+ * Geometries repeat: a sidebar toggled off and back on, a font size tried and
+ * undone, a split divider dragged and returned. Each of those is an exact hit,
+ * so the re-survey costs nothing. Small on purpose -- the entries are cheap
+ * (one number per block) but they are only worth keeping while the reader is
+ * plausibly still moving between the same few layouts.
+ */
+export const PREVIEW_PREWARM_GEOMETRY_CACHE_SIZE = 4
+
 /** Where the adaptive batch size starts, and the range it may move in. */
 export const PREVIEW_PREWARM_MIN_BATCH = 1
 export const PREVIEW_PREWARM_MAX_BATCH = 24
