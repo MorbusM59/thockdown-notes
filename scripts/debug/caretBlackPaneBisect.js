@@ -13,10 +13,16 @@
  *   3. Reproduce the black pane (border radius 1px, edit mode).
  *   4. Call t(1), t(2), ... and note which number clears it. t(0) restores.
  *
- * Cases 1-3 confirm which pairing causes it. Cases 4-8 are candidate FIXES
- * that keep both the edge fade and the rounded corners -- if one of those
- * clears it, that is the shipping change. The rest narrow down which layer is
+ * Cases 1-3 confirm which pairing causes it. Cases 4-8 (and 14-15) are
+ * candidate FIXES that keep both the edge fade and the rounded corners -- if
+ * one of those clears it, that is the shipping change. Cases 16-17 narrow what
+ * about the mask matters: whether any mask triggers it or only the gradient,
+ * and whether a plain clip is clean. The rest narrow down which layer is
  * actually painting black.
+ *
+ * NOTE: the block caret (case 13) is already RULED OUT -- it is fully
+ * de-promoted now and the black persists regardless. It is kept only so a run
+ * can confirm that independently.
  */
 (() => {
   const CASES = [
@@ -36,6 +42,14 @@
     ['block caret hidden', '.thockdown-block-caret{display:none!important}'],
     ['stage isolation:isolate', '.editor-stage{isolation:isolate}'],
     ['stage own layer (will-change)', '.editor-stage{will-change:transform}'],
+    // Splits "any mask does it" from "the GRADIENT does it" -- a solid mask is
+    // still a mask (same render surface, same compositing path) but has no
+    // gradient to rasterize. Different answers point at different fixes.
+    ['fade mask replaced with a SOLID mask', '.edit-container{-webkit-mask-image:linear-gradient(#000,#000)!important;mask-image:linear-gradient(#000,#000)!important}'],
+    // A hard cut in place of the fade: same clipping effect, no mask at all.
+    // If this is clean, the fade can be kept as a shape and only its softness
+    // is at issue.
+    ['fade replaced with clip-path (no mask)', '.edit-container{-webkit-mask-image:none!important;mask-image:none!important;clip-path:inset(3px 0)}'],
   ];
   let el = document.getElementById('__tdbisect');
   if (!el) { el = document.createElement('style'); el.id = '__tdbisect'; document.head.appendChild(el); }
