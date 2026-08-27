@@ -1653,6 +1653,44 @@ CM6/Chromium native overhead, not further attributable without new tooling" is u
 the honest answer for whatever's left. The `sanitizeDatabase()` real-world observation window noted
 directly above is the one open item this round actually added.
 
+## This round: what happens if the reader scrolls while the survey runs
+
+Asked directly, and worth measuring rather than reasoning about. Answer, at 6x
+CPU throttle on a 600k-character document, scrolling continuously:
+
+| | median frame | p95 | prewarm DOM present |
+|---|---|---|---|
+| scrolling **during** the survey, before this round | 29.9ms | 119ms | — |
+| scrolling **during** the survey, after this round | **23.0ms** | 109ms | 13 of 273 frames |
+| scrolling **after** the survey completed (control) | 23.3ms | 111ms | 0 |
+
+Scrolling during the survey now costs the same as scrolling after it. Two fixes
+got there, and the second was only found because the first appeared to work:
+
+1. **Yield while the reader scrolls.** `requestIdleCallback`'s `timeout` means a
+   batch runs whether the thread is idle or not, so the survey worked straight
+   through scrolls. A passive scroll listener plus a quiet window
+   (`PREVIEW_PREWARM_SCROLL_QUIET_MS`, 180ms) defers new batches.
+2. **Yielding has to mean unmounting.** That alone moved median frame time only
+   29.9 -> 26.0ms, because declining to *start* a batch leaves the previous
+   batch's blocks mounted -- real rendered markdown, still costing layout on
+   every frame. Instrumented: the host was present on **253 of 253 frames** of a
+   continuous scroll. The pause paused nothing the reader could feel. Clearing
+   `prewarmBatch` when yielding is what closed the gap.
+
+**What is still visible during discovery, by design:** the scrollbar is
+knowingly wrong. Scrolling to what looks like the end lands short, and more
+document appears. That is the deliberate trade for a thumb that does not crawl,
+and it is what the discovery progress bar exists to explain. The survey also
+takes longer while the reader is actively scrolling, since it is yielding --
+correct priority, and the bar shows it.
+
+**What is not visible:** the reader's content never moves (0px drift, parked or
+scrolling -- the 120px "jump" an early probe reported appeared in the control
+arm too, so it was the probe's own artifact), and the survey follows the reader
+rather than ignoring them: `cursorIndex` is re-read from the live viewport on
+every batch, so blocks near where they are get measured first.
+
 ## This round: the survey no longer churns while it runs, and says so
 
 **Reported from an older Linux laptop**, and reproduced exactly here with CDP

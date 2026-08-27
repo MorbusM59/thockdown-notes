@@ -47,6 +47,17 @@ export const PREVIEW_PREWARM_SLICE_BUDGET_MS = 8
  */
 export const PREVIEW_PREWARM_RESIZE_SETTLE_MS = 300
 
+/**
+ * How long after the reader's last scroll the survey stays out of the way.
+ *
+ * The survey has no deadline; the reader does. Measured at 6x CPU throttle
+ * while scrolling a large document, a survey that kept working through the
+ * scroll cost ~36% median frame time (29.9ms against 22.1ms once it had
+ * finished). Yielding while the reader is moving costs the survey a few
+ * seconds it does not care about.
+ */
+export const PREVIEW_PREWARM_SCROLL_QUIET_MS = 180
+
 /** Where the adaptive batch size starts, and the range it may move in. */
 export const PREVIEW_PREWARM_MIN_BATCH = 1
 export const PREVIEW_PREWARM_MAX_BATCH = 24

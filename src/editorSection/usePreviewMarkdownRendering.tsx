@@ -32,6 +32,7 @@ import { isNonQuantizedSmoothScrollActive, scrollToNonQuantizedSmooth } from '..
 import {
   PREVIEW_PREWARM_INITIAL_BATCH,
   PREVIEW_PREWARM_RESIZE_SETTLE_MS,
+  PREVIEW_PREWARM_SCROLL_QUIET_MS,
   PREVIEW_PREWARM_SLICE_BUDGET_MS,
   planNextPrewarmBatch,
   resolveNextPrewarmBatchSize,
@@ -1009,6 +1010,8 @@ export function usePreviewMarkdownRendering({
   const prewarmStartedAtRef = useRef(0)
   const prewarmScheduleRef = useRef<number | null>(null)
   const prewarmDoneRef = useRef(false)
+  const lastPreviewScrollAtRef = useRef(0)
+  const prewarmBatchRef = useRef<readonly number[]>([])
   // Reported out so the UI can be honest about the wait -- see the discovery
   // bar in SectionEditorArea. Updated only when the whole integer percent
   // moves, so a thousand-block survey costs at most a hundred re-renders of
@@ -1071,11 +1074,26 @@ export function usePreviewMarkdownRendering({
       const blockCount = previewBlocksRef.current.length
       if (blockCount === 0 || prewarmDoneRef.current) return
 
-      // Never compete with an interaction. A scroll in flight is exactly when
-      // an extra layout pass would be felt, and it is also when react-virtual
-      // is already measuring for real -- so yield and come back.
+      // Never compete with the reader. Two separate cases, both measured:
+      // an animated scroll in flight (the app's own travel), and the reader
+      // simply scrolling by hand -- requestIdleCallback's timeout means a
+      // batch runs eventually whether the thread is idle or not, so without
+      // this the survey works straight through a scroll. At 6x CPU throttle
+      // that cost ~36% median frame time while reading. The survey has no
+      // deadline; the reader does.
       const scroller = previewScrollRef.current
-      if (scroller && isNonQuantizedSmoothScrollActive(scroller)) {
+      const scrolledRecently = performance.now() - lastPreviewScrollAtRef.current < PREVIEW_PREWARM_SCROLL_QUIET_MS
+      if (scrolledRecently || (scroller && isNonQuantizedSmoothScrollActive(scroller))) {
+        // Yielding means unmounting, not just declining to start a new batch.
+        // The previous batch's blocks are real rendered markdown; left in the
+        // DOM they keep costing layout on every frame of the reader's scroll.
+        // Measured: without this the host was present on 253 of 253 frames
+        // during a continuous scroll, i.e. the "pause" paused nothing the
+        // reader could feel.
+        if (prewarmBatchRef.current.length > 0) {
+          prewarmBatchRef.current = []
+          setPrewarmBatch([])
+        }
         queueNextPrewarmBatch()
         return
       }
@@ -1090,6 +1108,7 @@ export function usePreviewMarkdownRendering({
 
       if (next.length === 0) {
         prewarmDoneRef.current = true
+        prewarmBatchRef.current = []
         setPrewarmBatch([])
         commitPrewarmedSizes()
         reportDiscovery(blockCount, blockCount, false)
@@ -1097,6 +1116,7 @@ export function usePreviewMarkdownRendering({
       }
 
       prewarmStartedAtRef.current = performance.now()
+      prewarmBatchRef.current = next
       setPrewarmBatch(next)
     })
   }, [schedulePrewarmSlice, virtualizer, previewBlocksRef, previewScrollRef, commitPrewarmedSizes, reportDiscovery])
@@ -1144,6 +1164,7 @@ export function usePreviewMarkdownRendering({
     prewarmBufferRef.current = new Map()
     prewarmDoneRef.current = false
     prewarmBatchSizeRef.current = PREVIEW_PREWARM_INITIAL_BATCH
+    prewarmBatchRef.current = []
     setPrewarmBatch([])
     discoveryPercentRef.current = -1
     reportDiscovery(0, previewBlocksRef.current.length, true)
@@ -1203,6 +1224,14 @@ export function usePreviewMarkdownRendering({
       if (settleTimer !== null) window.clearTimeout(settleTimer)
     }
   }, [probeReady, restartPrewarm])
+
+  useEffect(() => {
+    const scroller = previewScrollRef.current
+    if (!scroller) return undefined
+    const onScroll = () => { lastPreviewScrollAtRef.current = performance.now() }
+    scroller.addEventListener('scroll', onScroll, { passive: true })
+    return () => scroller.removeEventListener('scroll', onScroll)
+  }, [previewScrollRef, spacerReady])
 
   useEffect(() => cancelPrewarmSchedule, [cancelPrewarmSchedule])
 
