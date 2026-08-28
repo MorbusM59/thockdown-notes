@@ -345,6 +345,7 @@ export function SectionEditorArea({
                   bindings={bindings}
                   adapterRef={adapterRef}
                   isSectionActive={isSectionActive}
+                  isEditPaneVisible={!isPreviewMode}
                   noteId={activeNoteId}
                   initialText={editorDisplayText}
                   scrollbarHost={scrollbarHostEl}

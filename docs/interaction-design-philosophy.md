@@ -28,6 +28,24 @@ The goal is deterministic behavior with one source of truth per interaction phas
 - Caret visibility and viewport movement must not compete across multiple independent handlers.
 - Each interaction has one active owner for state transitions.
 
+### 3b. View-scrolling keys belong to the visible pane, not to whatever has focus
+- `PageUp`/`PageDown` move the *view the reader is looking at*. Focus is where
+  their next character would go, which is a different question: having just
+  clicked a toolbar button does not mean the reader stopped reading. Routing
+  these keys by focus alone leaves them swallowed by a button that has no use
+  for them -- measured live: one click on any toolbar icon and PageDown did
+  nothing at all until the reader clicked back into the text.
+- So each pane listens at the window, and three conditions decide the single
+  owner: the section is the active one (otherwise both panes of a split view
+  answer the same keypress), the pane is the one on screen (the edit pane stays
+  mounted while hidden, and would otherwise scroll invisibly in render view),
+  and nothing with a real claim already took the key.
+- "A real claim" means either a caret that can page through text
+  (`contentEditable`, `textarea`) or a control that deliberately binds the key
+  and calls `preventDefault` -- the Options sliders nudge by ten steps. Both
+  panes use the identical predicate so they cannot drift apart; a focused
+  button or search field is not a claim.
+
 ### 4. No hidden second chance paths
 - Fallbacks may exist, but they must not duplicate primary behavior in another phase.
 - A release-phase fallback that can re-run a press-phase action is prohibited.

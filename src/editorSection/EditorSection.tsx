@@ -1429,6 +1429,7 @@ export function EditorSection({
     isPreviewMode,
     isPreviewScrollInteractionBlocked: editorSectionMountRest.isPreviewScrollInteractionBlocked,
     previewScrollRef,
+    isSectionActive: sectionId === activeSectionId,
     previewDocumentPositionRef,
     activeNoteId,
     currentEditorText,

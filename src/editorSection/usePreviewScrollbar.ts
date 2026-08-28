@@ -43,6 +43,14 @@ export interface UsePreviewScrollbarOptions {
   isPreviewScrollInteractionBlocked?: () => boolean
   previewScrollRef: MutableRefObject<HTMLDivElement | null>
   /**
+   * Whether this section is the one the reader is working in.
+   *
+   * The page-key listener below is on the window, so in split view every
+   * preview pane would otherwise answer the same keypress and both would page
+   * at once. Only the active section's does.
+   */
+  isSectionActive?: boolean
+  /**
    * The preview's position in character space, published by
    * usePreviewMarkdownRendering. When present the thumb's POSITION is driven
    * from it rather than from pixels -- see previewCharPosition.ts. Optional,
@@ -69,6 +77,7 @@ export function usePreviewScrollbar({
   isPreviewMode,
   isPreviewScrollInteractionBlocked,
   previewScrollRef,
+  isSectionActive = true,
   previewDocumentPositionRef,
   activeNoteId,
   currentEditorText,
@@ -675,16 +684,25 @@ export function usePreviewScrollbar({
       return
     }
 
-    const isEditableTarget = (target: EventTarget | null): boolean => {
+    /**
+     * Whether something else on the page has a real claim on a page key.
+     *
+     * Deliberately narrower than "is this an editable element": a focused
+     * button or search field has no use for PageDown, and swallowing it there
+     * is exactly the defect this pane's own keys were reported for. Anything
+     * that genuinely binds these (the Options sliders nudge by ten steps)
+     * calls preventDefault, which is checked separately. Kept identical to
+     * CM6Editor's own rule so the two panes cannot drift apart.
+     */
+    const targetOwnsPageKeys = (target: EventTarget | null): boolean => {
       if (!(target instanceof HTMLElement)) return false
-      if (target.isContentEditable) return true
-      const tagName = target.tagName
-      return tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT'
+      return target.isContentEditable || target.tagName === 'TEXTAREA'
     }
 
     const onWindowKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.defaultPrevented) return
-      if (isEditableTarget(event.target)) return
+      if (!isSectionActive) return
+      if (targetOwnsPageKeys(event.target)) return
       if (event.key !== 'PageDown' && event.key !== 'PageUp') return
 
       if (shouldBlockPreviewInteraction()) {
@@ -774,6 +792,7 @@ export function usePreviewScrollbar({
   }, [
     clearPreviewContinuousHandoff,
     isPreviewMode,
+    isSectionActive,
     shouldBlockPreviewInteraction,
     startPreviewReleaseRampDown,
     startPreviewContinuousScroll,

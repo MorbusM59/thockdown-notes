@@ -226,6 +226,18 @@ export interface CM6EditorProps {
   // jump arrow has to activate the section and wait for that to land
   // before it's safe to jump).
   isSectionActive?: boolean;
+  /**
+   * Whether the edit pane is the one on screen.
+   *
+   * The edit pane stays mounted in render view (hidden, so its scroll position
+   * and virtualized state survive the toggle), which means "this editor
+   * exists" is not the same question as "the reader is looking at it". Only
+   * the window-level page-key listener needs to know, and it needs to badly:
+   * without this it answered PageDown in render view and scrolled the hidden
+   * editor, while the preview -- which then saw the key already handled --
+   * stayed put.
+   */
+  isEditPaneVisible?: boolean;
   noteId?: string | null;
   initialText?: string;
   scrollbarHost?: HTMLElement | null;
@@ -719,6 +731,7 @@ export function CM6Editor({
   bindings,
   adapterRef,
   isSectionActive = true,
+  isEditPaneVisible = true,
   noteId,
   initialText = '',
   scrollbarHost = null,
@@ -2021,6 +2034,10 @@ export function CM6Editor({
   // fine too, but the ref makes the "read at call time, not at render time"
   // intent explicit and matches every other latest-value ref in this file.
   const isSectionActiveRef = useRef(isSectionActive);
+  const isEditPaneVisibleRef = useRef(isEditPaneVisible);
+  useEffect(() => {
+    isEditPaneVisibleRef.current = isEditPaneVisible;
+  }, [isEditPaneVisible]);
   useEffect(() => {
     isSectionActiveRef.current = isSectionActive;
   }, [isSectionActive]);
@@ -2275,6 +2292,68 @@ export function CM6Editor({
       }
 
       pageContinuousRafId = requestAnimationFrame((ts) => runPageContinuousScroll(scroller, ts));
+    };
+
+    /**
+     * One page-scroll step, or the start of a held continuous one.
+     *
+     * Split out of the keymap entry because a CodeMirror keymap only ever
+     * sees keys typed INTO the editor. The reader with the caret in this
+     * editor but focus parked on a toolbar button -- having just clicked one
+     * -- is still, to them, "in the editor", and PageDown then did nothing at
+     * all (measured: scrollTop unchanged, the key swallowed by the button).
+     * The window listener further down routes those here.
+     */
+    const runPageKey = (key: 'PageUp' | 'PageDown', repeat: boolean): void => {
+      if (isEditScrollInteractionBlocked()) {
+        pageKeysHeld.delete(key);
+        clearPageContinuousHandoff();
+        stopPageContinuousScroll();
+        return;
+      }
+      const direction: -1 | 1 = key === 'PageDown' ? 1 : -1;
+      const scroller = view.scrollDOM;
+      pageKeysHeld.add(key);
+
+      if (repeat) {
+        if (pageContinuousHandoffTimeoutId === null) {
+          startPageContinuousScroll(scroller, direction);
+        }
+        return;
+      }
+
+      clearPageContinuousHandoff();
+      stopPageContinuousScroll();
+
+      const lineHeightPxNow = lineHeightPxRef.current;
+      const visibleRows = computeVisibleMiddleRows(scroller.clientHeight, topBoundaryPxRef.current, bottomBoundaryPxRef.current, lineHeightPxNow);
+      const delta = direction * visibleRows * lineHeightPxNow;
+
+      const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      const currentAligned = Math.round(scroller.scrollTop / lineHeightPxNow) * lineHeightPxNow;
+      const target = Math.max(0, Math.min(maxScrollTop, currentAligned + delta));
+      const quantizedTarget = Math.round(target / lineHeightPxNow) * lineHeightPxNow;
+
+      scrollToQuantizedSmooth(scroller, quantizedTarget, { lineHeightPx: lineHeightPxNow });
+
+      const targetContinuousSpeedPxPerSec = Math.max(
+        1,
+        resolveApexSpeedPxPerSecFromCurrentParams(quantizedTarget - currentAligned)
+          * EDITOR_PAGE_CONTINUOUS_SCROLL_APEX_MULTIPLIER,
+      );
+      const crossingTimeSec = resolveRampCrossingTimeSecFromCurrentParams(
+        quantizedTarget - currentAligned,
+        targetContinuousSpeedPxPerSec,
+      );
+
+      if (crossingTimeSec !== null) {
+        const delayMs = Math.max(0, Math.round(crossingTimeSec * 1000));
+        pageContinuousHandoffTimeoutId = window.setTimeout(() => {
+          pageContinuousHandoffTimeoutId = null;
+          if (!pageKeysHeld.has(key)) return;
+          startPageContinuousScroll(scroller, direction);
+        }, delayMs);
+      }
     };
 
     const startPageContinuousScroll = (scroller: HTMLElement, direction: -1 | 1) => {
@@ -2732,63 +2811,15 @@ export function CM6Editor({
           }
 
           if (event.key === 'PageUp' || event.key === 'PageDown') {
-            // Ported from CagedScrollPlugin.tsx's own PageUp/PageDown
-            // handling -- claimed here (Prec.highest, same as Tab/Enter
-            // above) rather than left to @codemirror/commands' defaultKeymap,
-            // which binds these to its own cursorPageUp/cursorPageDown
-            // (cursor movement, not the app's own quantized page-scroll feel).
+            // Claimed here (Prec.highest, same as Tab/Enter above) rather
+            // than left to @codemirror/commands' defaultKeymap, which binds
+            // these to its own cursorPageUp/cursorPageDown (cursor movement,
+            // not the app's own quantized page-scroll feel). The work itself
+            // lives in runPageKey so the window-level listener below can do
+            // the same thing when the editor does not have focus.
             pendingCageIntent = false;
             event.preventDefault();
-            if (isEditScrollInteractionBlocked()) {
-              pageKeysHeld.delete(event.key);
-              clearPageContinuousHandoff();
-              stopPageContinuousScroll();
-              return true;
-            }
-            const direction: -1 | 1 = event.key === 'PageDown' ? 1 : -1;
-            const scroller = view.scrollDOM;
-            pageKeysHeld.add(event.key);
-
-            if (event.repeat) {
-              if (pageContinuousHandoffTimeoutId === null) {
-                startPageContinuousScroll(scroller, direction);
-              }
-              return true;
-            }
-
-            clearPageContinuousHandoff();
-            stopPageContinuousScroll();
-
-            const lineHeightPxNow = lineHeightPxRef.current;
-            const visibleRows = computeVisibleMiddleRows(scroller.clientHeight, topBoundaryPxRef.current, bottomBoundaryPxRef.current, lineHeightPxNow);
-            const delta = direction * visibleRows * lineHeightPxNow;
-
-            const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-            const currentAligned = Math.round(scroller.scrollTop / lineHeightPxNow) * lineHeightPxNow;
-            const target = Math.max(0, Math.min(maxScrollTop, currentAligned + delta));
-            const quantizedTarget = Math.round(target / lineHeightPxNow) * lineHeightPxNow;
-
-            scrollToQuantizedSmooth(scroller, quantizedTarget, { lineHeightPx: lineHeightPxNow });
-
-            const targetContinuousSpeedPxPerSec = Math.max(
-              1,
-              resolveApexSpeedPxPerSecFromCurrentParams(quantizedTarget - currentAligned)
-                * EDITOR_PAGE_CONTINUOUS_SCROLL_APEX_MULTIPLIER,
-            );
-            const crossingTimeSec = resolveRampCrossingTimeSecFromCurrentParams(
-              quantizedTarget - currentAligned,
-              targetContinuousSpeedPxPerSec,
-            );
-
-            if (crossingTimeSec !== null) {
-              const delayMs = Math.max(0, Math.round(crossingTimeSec * 1000));
-              const key = event.key;
-              pageContinuousHandoffTimeoutId = window.setTimeout(() => {
-                pageContinuousHandoffTimeoutId = null;
-                if (!pageKeysHeld.has(key)) return;
-                startPageContinuousScroll(scroller, direction);
-              }, delayMs);
-            }
+            runPageKey(event.key, event.repeat);
             return true;
           }
 
@@ -3448,7 +3479,42 @@ export function CM6Editor({
         }
       }
     };
-    view.scrollDOM.addEventListener('keyup', handlePageKeyUp, { capture: true });
+
+    /**
+     * Whether something else on the page has a real claim on a page key.
+     *
+     * Anything that deliberately handles them calls preventDefault (the
+     * Options sliders bind them to a ten-step nudge), and that is checked
+     * separately -- this covers the places where paging means moving a caret
+     * through text rather than moving a view.
+     */
+    const targetOwnsPageKeys = (target: EventTarget | null): boolean => {
+      if (!(target instanceof HTMLElement)) return false;
+      // A contentEditable is either this editor -- whose keymap has already
+      // handled the key -- or another one, which is not ours to page.
+      return target.isContentEditable || target.tagName === 'TEXTAREA';
+    };
+
+    // Page keys belong to the active editor even when focus is sitting on a
+    // button, a search field or nothing at all. Without this the key reached
+    // the focused element, which ignored it, and the document did not move:
+    // clicking any toolbar button was enough to break PageDown entirely until
+    // the reader clicked back into the text.
+    const handlePageKeyDownAnywhere = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      if (event.key !== 'PageUp' && event.key !== 'PageDown') return;
+      if (!isSectionActiveRef.current) return;
+      if (!isEditPaneVisibleRef.current) return;
+      if (targetOwnsPageKeys(event.target)) return;
+      event.preventDefault();
+      runPageKey(event.key, event.repeat);
+    };
+
+    window.addEventListener('keydown', handlePageKeyDownAnywhere);
+    // On the window rather than the scroller for the same reason: the keyup
+    // that ends a held page-scroll has to arrive wherever the keydown came
+    // from, or the release ramp never starts and the scroll runs on.
+    window.addEventListener('keyup', handlePageKeyUp);
 
     // Drag-selection scroll quantization -- ported verbatim from
     // CagedScrollPlugin.tsx's own handlePointerDown/handleMouseDown/
@@ -3674,7 +3740,8 @@ export function CM6Editor({
       document.removeEventListener('selectionchange', scheduleSelectionHighlightUpdate);
       view.scrollDOM.removeEventListener('scroll', handleScroll);
       view.scrollDOM.removeEventListener('wheel', handleWheel);
-      view.scrollDOM.removeEventListener('keyup', handlePageKeyUp, true);
+      window.removeEventListener('keydown', handlePageKeyDownAnywhere);
+      window.removeEventListener('keyup', handlePageKeyUp);
       document.removeEventListener('pointerdown', handlePointerDown, true);
       document.removeEventListener('mousedown', handleMouseDown, true);
       view.scrollDOM.removeEventListener('scroll', handleSelectionDragScrollQuantization);
