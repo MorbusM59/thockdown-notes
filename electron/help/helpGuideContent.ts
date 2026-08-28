@@ -164,6 +164,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - Left-click anywhere on the track to jump directly to that position.
 - Right-click above or below the thumb to page up/down once, the same as pressing \`Page Up\`/\`Page Down\`. Right-clicking on the thumb itself does nothing.
 - Hold the right click down to keep paging continuously, just like holding \`Page Up\`/\`Page Down\` on the keyboard. It stops when you release the button, or as soon as the thumb reaches your cursor.
+- In render view the thumb marks your position in the *text* rather than in the rendered page, so it means the same thing whatever your view settings are: changing the font size or the pane width can re-flow every line without the thumb moving, and dragging it to the bottom of the track lands at the end of the note whether or not you've read your way down there before. On a very large note you may briefly see the slider beneath the editor fill up like a scrollbar handle instead of showing the [Time Machine Timeline]($HELP§TIME-MACHINE#time-machine-timeline) — that's the note being sized up in the background, and it goes away on its own.
 
 ### [Word and Character Count](#word-and-character-count)
 

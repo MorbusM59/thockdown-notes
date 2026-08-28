@@ -49,6 +49,24 @@ import {
   resolvePreviewBlockShape,
 } from './previewHeightModel'
 import type { PreviewHeightModel, PreviewHeightSample } from './previewHeightModel'
+import {
+  buildBlockCharOffsets,
+  resolvePreviewCharScrollOffset,
+  resolvePreviewCharViewport,
+} from './previewCharPosition'
+import type { PreviewCharViewport } from './previewCharPosition'
+
+/**
+ * The preview's position in character space, published for the scrollbar.
+ *
+ * Deliberately three small functions rather than a value: the scrollbar reads
+ * this on every scroll event, and anything that had to be recomputed into
+ * React state per frame would re-render the section instead.
+ */
+export interface PreviewDocumentPositionApi {
+  readViewport: () => PreviewCharViewport | null
+  scrollToChar: (charOffset: number) => void
+}
 
 // Initial guess only -- corrected as soon as each block actually mounts and
 // reports its real height (react-virtual's estimate-then-correct model, via
@@ -56,6 +74,9 @@ import type { PreviewHeightModel, PreviewHeightSample } from './previewHeightMod
 // needs to be in the right order of magnitude so the first layout pass
 // isn't wildly wrong before real measurements start arriving.
 const PREVIEW_BLOCK_ESTIMATED_HEIGHT_PX = 56
+
+/** How long discovery must run before its progress bar is worth showing. */
+const PREVIEW_DISCOVERY_BAR_DELAY_MS = 600
 
 /**
  * Whether to log the background survey's own throughput.
@@ -191,6 +212,13 @@ export interface UsePreviewMarkdownRenderingOptions {
    */
   previewScrollToSourceLineRef: MutableRefObject<PreviewScrollToSourceLineFn | null>
   /**
+   * Filled in by this hook with the preview's position in CHARACTER space, for
+   * the custom scrollbar to drive its thumb from -- see previewCharPosition.ts
+   * for why the thumb is not a pixel quantity. Optional: without it the
+   * scrollbar falls back to the pixel mapping it always used.
+   */
+  previewDocumentPositionRef?: MutableRefObject<PreviewDocumentPositionApi | null>
+  /**
    * Optional warm-start cache from useEditorSectionMount's background parse.
    * When present and text matches, the preview pane skips its own expensive
    * first full remark parse and reuses the already-computed blocks + ranges.
@@ -300,6 +328,7 @@ export function usePreviewMarkdownRendering({
   isDocumentFindCaseSensitive,
   renderedDisplayText,
   previewScrollToSourceLineRef,
+  previewDocumentPositionRef,
   previewBlockSplitCacheRef,
   isViewingAutoOpenItemsChapter,
   isActiveNoteEditable,
@@ -1086,12 +1115,24 @@ export function usePreviewMarkdownRendering({
   // the section rather than one per batch.
   const [previewDiscovery, setPreviewDiscovery] = useState<PreviewDiscoveryState>({ isSurveying: false, percent: 0, measured: 0, total: 0 })
   const discoveryPercentRef = useRef(-1)
+  const discoveryStartedAtRef = useRef(0)
 
   const reportDiscovery = useCallback((measured: number, total: number, isSurveying: boolean) => {
     const percent = total > 0 ? Math.min(100, Math.floor((measured / total) * 100)) : 0
-    if (isSurveying && percent === discoveryPercentRef.current) return
-    discoveryPercentRef.current = isSurveying ? percent : -1
-    setPreviewDiscovery({ isSurveying, percent, measured, total })
+    if (!isSurveying) discoveryStartedAtRef.current = 0
+    else if (discoveryStartedAtRef.current === 0) discoveryStartedAtRef.current = performance.now()
+
+    // Held back for a moment before it appears at all. Fitting a height model
+    // takes ~0.3s on this hardware, and a progress bar that shows up and
+    // vanishes inside a third of a second reads as a glitch, not as an
+    // explanation. It stays for the case it was built for: a document the
+    // model could not be fitted to, being measured block by block, where the
+    // wait is real and worth explaining.
+    const visible = isSurveying
+      && performance.now() - discoveryStartedAtRef.current >= PREVIEW_DISCOVERY_BAR_DELAY_MS
+    if (visible && percent === discoveryPercentRef.current) return
+    discoveryPercentRef.current = visible ? percent : -1
+    setPreviewDiscovery({ isSurveying: visible, percent, measured, total })
   }, [])
 
   const cancelPrewarmSchedule = useCallback(() => {
@@ -1199,6 +1240,58 @@ export function usePreviewMarkdownRendering({
       virtualizer.scrollToIndex(anchorIndex, { align: 'start' })
     }
   }, [virtualizer, previewBlocksRef, previewScrollRef])
+
+  // ---------------------------------------------------------------------
+  // Position in character space -- see previewCharPosition.ts.
+  // ---------------------------------------------------------------------
+  const blockCharOffsetsRef = useRef<Float64Array | null>(null)
+  useLayoutEffect(() => {
+    blockCharOffsetsRef.current = buildBlockCharOffsets(previewBlocks)
+  }, [previewBlocks])
+
+  /**
+   * The virtualizer's current block geometry.
+   *
+   * `getMeasurements()` is private; `measurementsCache` is the public array it
+   * writes its result into, and it is current as of the last time the memo
+   * chain ran. `getVirtualItems()` is what runs that chain (it is memoized, so
+   * calling it here is a cache read on all but the first call after an
+   * invalidation), which is why it is called first and its result discarded.
+   */
+  const readBlockMeasurements = useCallback(() => {
+    virtualizer.getVirtualItems()
+    return virtualizer.measurementsCache
+  }, [virtualizer])
+
+  const readCharViewport = useCallback((): PreviewCharViewport | null => {
+    const scroller = previewScrollRef.current
+    if (!scroller) return null
+    return resolvePreviewCharViewport({
+      offsets: blockCharOffsetsRef.current,
+      measurements: readBlockMeasurements(),
+      scrollTop: scroller.scrollTop,
+      clientHeight: scroller.clientHeight,
+    })
+  }, [readBlockMeasurements, previewScrollRef])
+
+  const scrollToChar = useCallback((charOffset: number) => {
+    const offset = resolvePreviewCharScrollOffset({
+      offsets: blockCharOffsetsRef.current,
+      measurements: readBlockMeasurements(),
+      charOffset,
+    })
+    if (offset === null) return
+    // Through the virtualizer rather than straight onto scrollTop, so this
+    // goes via the same scrollToFn every other programmatic scroll in this
+    // hook uses (instant snap, native smooth-scroll suppressed).
+    virtualizer.scrollToOffset(offset)
+  }, [virtualizer, readBlockMeasurements])
+
+  useLayoutEffect(() => {
+    if (!previewDocumentPositionRef) return undefined
+    previewDocumentPositionRef.current = { readViewport: readCharViewport, scrollToChar }
+    return () => { previewDocumentPositionRef.current = null }
+  }, [previewDocumentPositionRef, readCharViewport, scrollToChar])
 
   /**
    * Hands every buffered height to the virtualizer at once, when the survey is
@@ -1324,6 +1417,15 @@ export function usePreviewMarkdownRendering({
       })
     }
 
+    // Applied either way. Even a model that fails the trust check below is
+    // fitted from a hundred real blocks of THIS document, so its predictions
+    // beat a flat 56px guess in every case that has been constructed for it --
+    // for a document of images the fit degenerates to "the average sampled
+    // image", which is exactly the right thing to guess. What the trust check
+    // decides is not whether to use the model, but whether the model is good
+    // enough to stop there.
+    if (model) applyHeightModel(model)
+
     if (trusted) {
       const signature = readGeometrySignature()
       if (signature) {
@@ -1336,7 +1438,6 @@ export function usePreviewMarkdownRendering({
           store.delete(oldest)
         }
       }
-      applyHeightModel(model)
       surveyModeRef.current = 'idle'
       prewarmDoneRef.current = true
       prewarmBufferRef.current = new Map()
@@ -1344,7 +1445,9 @@ export function usePreviewMarkdownRendering({
       return
     }
 
-    // The mould does not fit this document. Measure it.
+    // The mould does not fit this document well enough to be the last word.
+    // Measure it -- in the background, with the model's predictions holding
+    // the scrollbar in the meantime rather than a flat guess.
     surveyModeRef.current = 'measuring'
     reportDiscovery(prewarmedRef.current.size, blockCount, true)
     queueNextPrewarmBatch()

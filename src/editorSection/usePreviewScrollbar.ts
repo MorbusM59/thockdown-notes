@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MouseEvent, MutableRefObject } from 'react'
+import type { PreviewDocumentPositionApi } from './usePreviewMarkdownRendering'
 import {
   buildReleaseRampDownPlanFromCurrentParams,
   cancelNonQuantizedSmoothScroll,
@@ -40,6 +41,14 @@ export interface UsePreviewScrollbarOptions {
   isPreviewMode: boolean
   isPreviewScrollInteractionBlocked?: () => boolean
   previewScrollRef: MutableRefObject<HTMLDivElement | null>
+  /**
+   * The preview's position in character space, published by
+   * usePreviewMarkdownRendering. When present the thumb's POSITION is driven
+   * from it rather than from pixels -- see previewCharPosition.ts. Optional,
+   * and null until the preview has blocks, so every path here still has to
+   * work on the pixel mapping alone.
+   */
+  previewDocumentPositionRef?: MutableRefObject<PreviewDocumentPositionApi | null>
   activeNoteId: string | null
   currentEditorText: string
   viewStyle: ViewStyleKey
@@ -59,6 +68,7 @@ export function usePreviewScrollbar({
   isPreviewMode,
   isPreviewScrollInteractionBlocked,
   previewScrollRef,
+  previewDocumentPositionRef,
   activeNoteId,
   currentEditorText,
   viewStyle,
@@ -148,12 +158,28 @@ export function usePreviewScrollbar({
 
     const maxScrollTop = contentHeight - viewportHeight
     const maxThumbTop = Math.max(0, usableTrackHeight - nextThumbHeight)
-    const scrollRatio = maxScrollTop > 0 ? scroller.scrollTop / maxScrollTop : 0
+
+    // POSITION comes from character space when the preview can supply it: it
+    // is exact by construction and, more to the point, it does not move when
+    // the layout does. A pixel ratio has the thumb creep while block heights
+    // are still being discovered and jump when the reader changes font size,
+    // neither of which is a thing the reader did.
+    //
+    // SIZE stays a pixel ratio deliberately. "How much of the document is on
+    // screen" in characters swings with the content -- a screen of dense prose
+    // against a screen holding one big code block -- so a character-sized
+    // thumb visibly grows and shrinks as you scroll through a mixed document.
+    // Position is the half that has to be exact; size only has to be steady.
+    const charViewport = previewDocumentPositionRef?.current?.readViewport() ?? null
+    const charSpan = charViewport ? charViewport.totalChars - charViewport.visibleChars : 0
+    const scrollRatio = charViewport && charSpan > 0
+      ? clamp(charViewport.startChar / charSpan, 0, 1)
+      : (maxScrollTop > 0 ? scroller.scrollTop / maxScrollTop : 0)
     const nextThumbTop = SCROLL_TRACK_EDGE_GAP_PX + Math.round(maxThumbTop * scrollRatio)
 
     applyPreviewThumbDom(nextThumbTop, nextThumbHeight)
     setIsPreviewScrollThumbActive(true)
-  }, [applyPreviewThumbDom, isDraggingPreviewScrollThumb, isPreviewMode, previewScrollRef])
+  }, [applyPreviewThumbDom, isDraggingPreviewScrollThumb, isPreviewMode, previewScrollRef, previewDocumentPositionRef])
 
   const previewScrollFromThumbTop = useCallback((thumbTopPx: number) => {
     const scroller = previewScrollRef.current
@@ -167,10 +193,22 @@ export function usePreviewScrollbar({
     const maxThumbTop = SCROLL_TRACK_EDGE_GAP_PX + maxThumbTravel
     const clampedTop = Math.max(minThumbTop, Math.min(thumbTopPx, maxThumbTop))
     applyPreviewThumbDom(clampedTop, previewScrollThumbHeightRef.current)
-    const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
     const ratio = maxThumbTravel > 0 ? (clampedTop - SCROLL_TRACK_EDGE_GAP_PX) / maxThumbTravel : 0
+
+    // The exact inverse of the reading above, and it has to stay that way:
+    // reading position in one space and writing it in another would drop the
+    // thumb somewhere other than where it was released.
+    const position = previewDocumentPositionRef?.current
+    const charViewport = position?.readViewport() ?? null
+    if (position && charViewport) {
+      const charSpan = Math.max(0, charViewport.totalChars - charViewport.visibleChars)
+      position.scrollToChar(ratio * charSpan)
+      return
+    }
+
+    const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
     scroller.scrollTop = ratio * maxScrollTop
-  }, [applyPreviewThumbDom, previewScrollRef])
+  }, [applyPreviewThumbDom, previewScrollRef, previewDocumentPositionRef])
 
   useEffect(() => {
     if (!isPreviewMode) return

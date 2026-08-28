@@ -572,8 +572,10 @@ export function SectionEditorArea({
             aria-label={`Measuring document: ${previewDiscovery.measured} of ${previewDiscovery.total} blocks`}
             data-live-tooltip={`Measuring this document so the scrollbar is accurate — ${previewDiscovery.percent}%`}
           >
-            <div className="utility-setting-scrollbar-rail snapshot-timeline-rail preview-discovery-rail">
-              <div className="preview-discovery-fill" style={{ width: `${previewDiscovery.percent}%` }} />
+            <div className="utility-setting-scrollbar-rail snapshot-timeline-rail">
+              <div className="preview-discovery-handle-track">
+                <div className="preview-discovery-handle" style={{ width: `${previewDiscovery.percent}%` }} />
+              </div>
             </div>
           </div>
         ) : activeNoteId && !isViewingAutoTocChapter && !isViewingAutoOpenItemsChapter && !isViewingTimelessNote ? (

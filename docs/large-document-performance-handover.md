@@ -1653,6 +1653,64 @@ CM6/Chromium native overhead, not further attributable without new tooling" is u
 the honest answer for whatever's left. The `sanitizeDatabase()` real-world observation window noted
 directly above is the one open item this round actually added.
 
+## This round: the scrollbar thumb is a position in the TEXT, not in the pixels
+
+Second half of the Kindle idea, on top of the height model below. The model
+made the pixel substrate honest to ~0.4%; this makes the thumb exact by
+construction, and immune to layout entirely.
+
+**What it is** (`src/editorSection/previewCharPosition.ts`): the block list,
+prefix-summed into character offsets, plus the two conversions the scrollbar
+needs — pixel position → character position and back — each interpolating
+*inside* the block it lands in, using that block's own on-screen geometry.
+Interpolation is not optional: block-granular position would freeze the thumb
+while the reader scrolls through one tall block and then snap it.
+
+**Position from characters, size from pixels.** Position is the half that has
+to be exact, and in character space it does not move when the layout moves — no
+creep while heights are discovered, no jump when the font changes. Size stayed
+a pixel ratio on purpose: "how much of the document is on screen" measured in
+characters swings wildly between a screen of dense prose and a screen holding
+one big code block, so a character-sized thumb visibly grows and shrinks as you
+scroll. Position must be exact; size only has to be steady.
+
+**The wiring.** `usePreviewMarkdownRendering` owns the block list and the
+virtualizer, `usePreviewScrollbar` owns the thumb, and they are separate hooks
+in `EditorSection`. The bridge is a ref holding two functions
+(`PreviewDocumentPositionApi`) rather than a value — the scrollbar reads it on
+every scroll event, and anything routed through React state would re-render the
+section per frame. Both sides still work when it is null (no blocks yet, edit
+mode), falling back to the pixel mapping.
+
+Note `virtualizer.getMeasurements()` is private in the published types;
+`measurementsCache` is the public array it writes into, and calling
+`getVirtualItems()` first (memoized) is what guarantees it is current.
+
+**Verified** (`scripts/perf/verifyPreviewCharScrollbar.mjs`, real thumb drags
+via mouse events, 400k-char document of 1,331 varied blocks):
+
+| property | result |
+|---|---|
+| inverse (drop the thumb at r, read it back) | worst error **0.001** |
+| thumb drift while parked and untouched | **0px over 2s** |
+| drag to 1.0 | lands on block 1,323 of 1,330 mounted — the final screen |
+| monotonic across 0 / .25 / .5 / .75 / 1 | yes |
+
+**Also this round:** the fitted model is now applied even when it fails its own
+trust check. It is fitted from a hundred real blocks of *this* document, so its
+predictions beat a flat 56px guess in every case constructed for it (for a
+document of images the fit degenerates to "the average sampled image", which is
+the right thing to guess). The trust check no longer decides whether to use the
+model, only whether it is good enough to stop there — a failing one still holds
+the scrollbar steady while the fallback survey refines it in the background.
+
+**And:** the discovery progress bar is now the snapshot timeline's own rail
+carrying a horizontal scroll HANDLE that grows from nothing to the full track
+(`.preview-discovery-handle`), rather than a bar in its own smaller track. It
+is also held back for 600ms before appearing at all: fitting a model takes
+~0.3s, and a progress bar that appears and vanishes inside a third of a second
+reads as a glitch rather than an explanation.
+
 ## This round: the document is no longer measured at all — heights are modelled from the source
 
 **The problem the survey never solved.** The background survey (below) made the

@@ -731,24 +731,31 @@
    thread markers onto, and a fill drawn on it is invisible -- measured as a
    white 2px line on a white 2px line. The discovery bar gets its own track:
    same slot, same width, but tall enough and dark enough to read as progress. */
-.preview-discovery-rail {
-  position: relative;
-  overflow: hidden;
-  height: 4px;
-  border-radius: var(--border-radius-small);
-  background: var(--canonical-scroll-track-bg);
-  box-shadow: var(--box-shadow-inverted-light);
+/* The discovery bar IS the snapshot timeline's rail -- same track, same
+   height, same border, same slot -- carrying a horizontal scrollbar handle
+   that grows from nothing to the full track. Nothing here restyles the rail:
+   the only new geometry is the handle, and it is the app's own scroll thumb
+   (compare `.thockdown-scroll-thumb` in index.css) turned on its side, so a
+   document being surveyed reads as a scrollbar filling up rather than as a
+   progress widget borrowed from somewhere else. */
+.preview-discovery-handle-track {
+  position: absolute;
+  inset:    var(--canonical-scroll-handle-gap);
 }
 
-.preview-discovery-fill {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
+.preview-discovery-handle {
+  position:      absolute;
+  top:           0;
+  bottom:        0;
+  left:          0;
+  min-width:     2px;
+  border:        1px solid var(--canonical-handle-border);
   border-radius: var(--border-radius-small);
-  background: var(--canonical-handle-border);
+  background:    var(--canonical-handle-bg);
+  box-shadow:    var(--box-shadow-regular-light);
   /* Eased rather than instant because progress arrives in uneven batches --
      an adaptive batch size means the jumps are not the same width, and
-     smoothing them keeps this reading as a fill rather than a stutter. */
-  transition: width 220ms ease-out;
+     smoothing them keeps this reading as a handle growing rather than a
+     stutter. */
+  transition:    width 220ms ease-out;
 }

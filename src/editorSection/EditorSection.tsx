@@ -31,6 +31,7 @@ import { useNoteProtectionActions } from './useNoteProtectionActions'
 import { useNoteSnapshotTimeline } from './useNoteSnapshotTimeline'
 import { useDocumentFind } from '../find/useDocumentFind'
 import { usePreviewMarkdownRendering } from './usePreviewMarkdownRendering'
+import type { PreviewDocumentPositionApi } from './usePreviewMarkdownRendering'
 import { usePreviewScrollbar } from './usePreviewScrollbar'
 import { useDocumentFindNavigation } from './useDocumentFindNavigation'
 import { useMarkdownFormattingToolbar } from './useMarkdownFormattingToolbar'
@@ -1385,6 +1386,12 @@ export function EditorSection({
     editorSectionMountRest.previewSettleGateRef.current?.notifyCommit()
   }, [editorSectionMountRest.previewSettleGateRef])
 
+  // Published by usePreviewMarkdownRendering (which owns the block list and
+  // the virtualizer) and consumed by usePreviewScrollbar (which owns the
+  // thumb): the preview's position in character space. See
+  // previewCharPosition.ts for why the thumb is not a pixel quantity.
+  const previewDocumentPositionRef = useRef<PreviewDocumentPositionApi | null>(null)
+
   const { previewMarkdownElement, previewDiscovery } = usePreviewMarkdownRendering({
     notes,
     activeNoteId,
@@ -1398,6 +1405,7 @@ export function EditorSection({
     isDocumentFindCaseSensitive: effectiveCaseSensitive,
     renderedDisplayText,
     previewScrollToSourceLineRef: editorSectionMountRest.previewScrollToSourceLineRef,
+    previewDocumentPositionRef,
     previewBlockSplitCacheRef,
     isViewingAutoOpenItemsChapter,
     isActiveNoteEditable,
@@ -1421,6 +1429,7 @@ export function EditorSection({
     isPreviewMode,
     isPreviewScrollInteractionBlocked: editorSectionMountRest.isPreviewScrollInteractionBlocked,
     previewScrollRef,
+    previewDocumentPositionRef,
     activeNoteId,
     currentEditorText,
     viewStyle,
