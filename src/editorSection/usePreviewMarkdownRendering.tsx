@@ -35,6 +35,7 @@ import {
   PREVIEW_PREWARM_RESIZE_SETTLE_MS,
   PREVIEW_PREWARM_SCROLL_QUIET_MS,
   PREVIEW_PREWARM_SLICE_BUDGET_MS,
+  PREVIEW_PREWARM_IDLE_TIMEOUT_MS,
   planNextPrewarmBatch,
   resolveNextPrewarmBatchSize,
 } from './previewMeasurementPrewarm'
@@ -45,6 +46,30 @@ import {
 // needs to be in the right order of magnitude so the first layout pass
 // isn't wildly wrong before real measurements start arriving.
 const PREVIEW_BLOCK_ESTIMATED_HEIGHT_PX = 56
+
+/**
+ * Whether to log the background survey's own throughput.
+ *
+ * Turn on with `localStorage['thockdown:debug-preview-survey'] = '1'` and
+ * reload. This exists because a slow survey has three completely different
+ * causes that look identical from outside -- expensive blocks (big `slice` at
+ * a small `batch`), a main thread that never goes idle (big `wait`), and
+ * competition with the reader (a high `yields`) -- and only one of them is
+ * fixable by tuning. Read live, one line a second, from the machine actually
+ * being slow; it is the difference between a diagnosis and a guess.
+ */
+let previewSurveyDebugFlag: boolean | null = null
+function isPreviewSurveyDebugOn(): boolean {
+  if (previewSurveyDebugFlag === null) {
+    try {
+      previewSurveyDebugFlag = typeof window !== 'undefined'
+        && window.localStorage.getItem('thockdown:debug-preview-survey') === '1'
+    } catch {
+      previewSurveyDebugFlag = false
+    }
+  }
+  return previewSurveyDebugFlag
+}
 
 // A modest buffer of blocks mounted above/below the visible window so
 // scrolling doesn't visibly pop content in at the viewport edge.
@@ -1013,6 +1038,8 @@ export function usePreviewMarkdownRendering({
   const prewarmDoneRef = useRef(false)
   const lastPreviewScrollAtRef = useRef(0)
   const prewarmBatchRef = useRef<readonly number[]>([])
+  const prewarmWaitMsRef = useRef(0)
+  const surveyStatsRef = useRef({ windowStartedAt: 0, blocks: 0, slices: 0, sliceMs: 0, maxSliceMs: 0, waitMs: 0, maxWaitMs: 0, yields: 0 })
   // Completed surveys, keyed by the geometry they were taken at. Returning to
   // a geometry already surveyed -- toggling the sidebar back, undoing a font
   // size, dragging a split divider back -- then costs nothing at all instead
@@ -1046,11 +1073,16 @@ export function usePreviewMarkdownRendering({
   // budget below bounds the damage either way.
   const schedulePrewarmSlice = useCallback((run: () => void) => {
     cancelPrewarmSchedule()
+    const scheduledAt = performance.now()
+    const start = () => {
+      prewarmWaitMsRef.current = performance.now() - scheduledAt
+      run()
+    }
     if (typeof window.requestIdleCallback === 'function') {
-      prewarmScheduleRef.current = window.requestIdleCallback(() => { run() }, { timeout: 500 })
+      prewarmScheduleRef.current = window.requestIdleCallback(start, { timeout: PREVIEW_PREWARM_IDLE_TIMEOUT_MS })
       return
     }
-    prewarmScheduleRef.current = window.setTimeout(run, 16)
+    prewarmScheduleRef.current = window.setTimeout(start, 16)
   }, [cancelPrewarmSchedule])
 
   const readGeometrySignature = useCallback(() => {
@@ -1150,6 +1182,7 @@ export function usePreviewMarkdownRendering({
           prewarmBatchRef.current = []
           setPrewarmBatch([])
         }
+        surveyStatsRef.current.yields += 1
         queueNextPrewarmBatch()
         return
       }
@@ -1207,9 +1240,40 @@ export function usePreviewMarkdownRendering({
 
     reportDiscovery(prewarmedRef.current.size, previewBlocksRef.current.length, true)
 
+    const sliceMs = performance.now() - prewarmStartedAtRef.current
+    if (isPreviewSurveyDebugOn()) {
+      const stats = surveyStatsRef.current
+      if (stats.windowStartedAt === 0) stats.windowStartedAt = performance.now()
+      stats.blocks += prewarmBatch.length
+      stats.slices += 1
+      stats.sliceMs += sliceMs
+      stats.maxSliceMs = Math.max(stats.maxSliceMs, sliceMs)
+      stats.waitMs += prewarmWaitMsRef.current
+      stats.maxWaitMs = Math.max(stats.maxWaitMs, prewarmWaitMsRef.current)
+      const windowMs = performance.now() - stats.windowStartedAt
+      if (windowMs >= 1000) {
+        const round = (value: number) => Math.round(value * 10) / 10
+        console.log('[preview-survey]', {
+          measured: prewarmedRef.current.size,
+          total: previewBlocksRef.current.length,
+          blocksPerSecond: Math.round((stats.blocks / windowMs) * 1000),
+          batch: Math.round(stats.blocks / stats.slices),
+          sliceMs: round(stats.sliceMs / stats.slices),
+          worstSliceMs: round(stats.maxSliceMs),
+          // How long a scheduled slice waited to run. Large here means the
+          // main thread never went idle, not that measuring is slow.
+          waitMs: round(stats.waitMs / stats.slices),
+          worstWaitMs: round(stats.maxWaitMs),
+          // Slices skipped because the reader was scrolling.
+          yields: stats.yields,
+        })
+        surveyStatsRef.current = { windowStartedAt: performance.now(), blocks: 0, slices: 0, sliceMs: 0, maxSliceMs: 0, waitMs: 0, maxWaitMs: 0, yields: 0 }
+      }
+    }
+
     prewarmBatchSizeRef.current = resolveNextPrewarmBatchSize(
       prewarmBatch.length,
-      performance.now() - prewarmStartedAtRef.current,
+      sliceMs,
       PREVIEW_PREWARM_SLICE_BUDGET_MS,
     )
     queueNextPrewarmBatch()

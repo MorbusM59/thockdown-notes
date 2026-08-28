@@ -35,8 +35,31 @@
 //      Stacked in normal flow they collapse margins with each other, which the
 //      real (absolutely positioned) blocks never do.
 
-/** How long one measurement slice may occupy the main thread. */
-export const PREVIEW_PREWARM_SLICE_BUDGET_MS = 8
+/**
+ * How long one measurement slice may occupy the main thread.
+ *
+ * This is a THROUGHPUT budget, not a jank budget, and it has to be read
+ * against the fixed cost of a slice. A slice costs `fixed + n * perBlock`,
+ * where `fixed` -- a React commit plus a forced layout of the whole preview --
+ * measured ~10ms and does not shrink with the batch. So a budget BELOW that
+ * fixed cost is unsatisfiable at any batch size, and the adaptive sizer below
+ * pins itself to its floor trying: at the original 8ms it settled on 2 blocks
+ * a slice on a large-block document, which is 111 blocks/sec no matter how
+ * cheap the blocks are. On a 1.5M-character document of ordinary short
+ * paragraphs (18,108 blocks) that is a survey that takes minutes -- reported
+ * live as "1% every other second", which is not a survey at all.
+ *
+ * Measured on that document (real Chromium via the harness):
+ *
+ *   budget  batch  blocks/sec  full survey
+ *      8ms     14         825       21.5s
+ *     32ms     77       1,973        8.7s
+ *
+ * Above ~32ms the curve flattens -- once `fixed` is amortized, throughput
+ * approaches 1/perBlock and a bigger budget just buys longer slices for the
+ * same rate -- so this is the knee, not a ceiling worth raising.
+ */
+export const PREVIEW_PREWARM_SLICE_BUDGET_MS = 32
 
 /**
  * How long the preview's geometry must hold still before a survey restarts.
@@ -69,9 +92,30 @@ export const PREVIEW_PREWARM_SCROLL_QUIET_MS = 180
  */
 export const PREVIEW_PREWARM_GEOMETRY_CACHE_SIZE = 4
 
-/** Where the adaptive batch size starts, and the range it may move in. */
+/**
+ * How long a scheduled slice may be starved before it runs anyway.
+ *
+ * `requestIdleCallback`'s own timeout. The default this code shipped with was
+ * 500ms, which on a main thread that never goes idle caps the survey at two
+ * slices a second regardless of the batch size -- a failure mode that is
+ * invisible on an idle machine and dominant on a busy one. 60ms keeps the
+ * "use time nobody else needs" behaviour on an idle thread (where the callback
+ * fires in the first idle period, long before this) while bounding the busy
+ * case to ~16 slices a second instead of 2.
+ */
+export const PREVIEW_PREWARM_IDLE_TIMEOUT_MS = 60
+
+/**
+ * Where the adaptive batch size starts, and the range it may move in.
+ *
+ * The maximum is high because it is not a policy, it is a safety rail: the
+ * budget above is what actually bounds a slice, and the batch size that fills
+ * it is a property of the document (a page of one-line paragraphs measures
+ * hundreds of blocks in the time a page of long blockquotes measures ten). A
+ * cap of 24 was quietly the real limit on cheap documents.
+ */
 export const PREVIEW_PREWARM_MIN_BATCH = 1
-export const PREVIEW_PREWARM_MAX_BATCH = 24
+export const PREVIEW_PREWARM_MAX_BATCH = 512
 export const PREVIEW_PREWARM_INITIAL_BATCH = 6
 
 /**
