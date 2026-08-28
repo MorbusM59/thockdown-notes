@@ -1653,6 +1653,71 @@ CM6/Chromium native overhead, not further attributable without new tooling" is u
 the honest answer for whatever's left. The `sanitizeDatabase()` real-world observation window noted
 directly above is the one open item this round actually added.
 
+## This round: scrollbar gesture, and max speed's second job
+
+Three things the user asked for, one of which explains a number from the round
+below.
+
+**The 18-second travel was a wrong default, not a design.**
+`DEFAULT_RENDER_SCROLL_MAX_SPEED_PX_PER_SEC` was 6000 while the Options
+slider's own default is 80,000 -- so every fallback path (a fresh install, a
+state file written before the setting existed, a non-finite value handed to the
+setter) silently ran at a tenth of the intended speed. That is exactly the
+"reverts to the wrong default in some cases" the user reported, and it is why a
+100,000px journey measured 18.2s: 100,000/6,000. The constant is now 80,000 and
+the slider reads its default from it rather than repeating the literal, so the
+two cannot drift apart again. Same journey now: **1.27s**.
+
+**Max speed also caps duration.** The slider now has a dual meaning: the
+longest any scroll may take is `SCROLL_DURATION_CAP_PX / maxSpeed` seconds --
+the time to cover 200,000px at the chosen speed -- so 2s at the slider maximum
+and 2.5s at the default. A journey that cannot fit under both limits keeps the
+duration ceiling and exceeds the velocity cap, deliberately: the velocity cap
+shapes ordinary travel, the ceiling bounds the extraordinary kind.
+
+Implemented as a uniform time compression of the plan
+(`compressScrollPlanToDuration`), not a clip: every time field scaled by the
+same factor, the plateau speed scaled inversely. `sampleScrollPlan` divides an
+elapsed time by a plan time in each of its three branches, so scaling both
+leaves the sampled position at the same *fraction* of the journey exactly
+unchanged -- easing, plateau and endpoints all survive. There is a test that
+samples both plans at twenty matched fractions and asserts they agree.
+
+It lives in `buildScrollPlanFromCurrentParams`, NOT in `buildScrollPlan`:
+the latter has two other callers (`escapeHoldRotationCurve` with a maxSpeed in
+*slots* per second, and `AccordionSection` with its own constants), and a rule
+expressed in pixels would be nonsense for both.
+
+**Click travels, hold snaps** (`scrollTrackHold.ts`, shared by both
+scrollbars). A left click on the track travels there; holding the button for
+250ms snaps instead. The snap fires on its own timer *while the button is still
+down*, which is what makes the gesture discoverable -- you hold, it jumps, and
+you have learned it without being told. The release listener lives on the
+window (a hold that wanders off the track is still a hold) and cleans itself up
+on every exit path including unmount and window blur, which otherwise leaves a
+gesture armed that fires a snap nobody asked for.
+
+Verified live in both panes: render view, short click at 30% travels (2.35s
+including settle detection) and a hold at 60% is already there 418ms in, before
+release; edit view, same, quantized to the row grid via a now-exported
+`quantizeScrollTopToRow` so the snap lands on exactly the grid the animation
+would have.
+
+**Two observations worth recording, neither acted on:**
+
+- The scroll curve has no ease-in left on long journeys. Measured at
+  80,000px/s: 2,000px is a pure bell, 20,000px ramps for 0.15s, 100,000px for
+  0.05s, and by 350,000px the ramp has vanished entirely -- the bell's natural
+  peak speed grows with distance while `t` does not, so the ramp-up fraction
+  goes to zero. Pre-existing, not introduced by the duration ceiling, but it
+  means a very long scroll starts and stops abruptly at speed.
+- The EDIT pane's scrollbar still resolves against pixels, and CM6's own height
+  estimates move as content is measured: clicking at 50% and holding at 50%
+  landed 20% apart in one live run, because the estimate changed between them.
+  The render pane's character mapping is the fix for that class of bug; whether
+  it is worth porting to an editor whose lines are near-uniform is an open
+  question.
+
 ## This round: a travel animation has to keep re-aiming, because its target moves
 
 Asked what happens if the reader opens a large note and immediately clicks the

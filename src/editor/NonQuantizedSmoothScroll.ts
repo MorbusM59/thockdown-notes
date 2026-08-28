@@ -25,6 +25,7 @@ export {
   deriveRenderScrollDynamicFromResponsiveness,
   deriveRenderScrollResponsivenessFromDynamic,
   RENDER_SCROLL_SKEW_MAX,
+  SCROLL_DURATION_CAP_PX,
   RENDER_SCROLL_SKEW_MIN,
   resolveApexSpeedPxPerSecFromCurrentParams,
   getRenderScrollDynamic,

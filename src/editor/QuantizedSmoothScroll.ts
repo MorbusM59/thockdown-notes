@@ -30,7 +30,15 @@ const activeAnimations = new WeakMap<HTMLElement, AnimationState>();
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
-const quantizeToRow = (valuePx: number, lineHeightPx: number) =>
+/**
+ * Snaps a scroll position onto the row grid.
+ *
+ * Exported because an instant scroll (the scrollbar's hold-to-snap gesture)
+ * has to land on exactly the same grid this module's animations do -- a snap
+ * that stopped half a row off would be visibly different from the travel it
+ * replaces.
+ */
+export const quantizeScrollTopToRow = (valuePx: number, lineHeightPx: number) =>
   Math.round(valuePx / lineHeightPx) * lineHeightPx;
 
 const cancelExistingAnimation = (scroller: HTMLElement): void => {
@@ -54,8 +62,8 @@ export function scrollToQuantizedSmooth(
   if (!Number.isFinite(lineHeightPx) || lineHeightPx <= 0) return;
 
   const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-  const quantizedStartPx = clamp(quantizeToRow(scroller.scrollTop, lineHeightPx), 0, maxScrollTopPx);
-  const quantizedTargetPx = clamp(quantizeToRow(targetScrollTopPx, lineHeightPx), 0, maxScrollTopPx);
+  const quantizedStartPx = clamp(quantizeScrollTopToRow(scroller.scrollTop, lineHeightPx), 0, maxScrollTopPx);
+  const quantizedTargetPx = clamp(quantizeScrollTopToRow(targetScrollTopPx, lineHeightPx), 0, maxScrollTopPx);
 
   const existing = activeAnimations.get(scroller);
   // Same destination already animating: keep current motion to avoid restart jitter.
@@ -109,7 +117,7 @@ export function scrollToQuantizedSmooth(
 
     const displacement = sampleScrollPlan(plan, elapsedMs / 1000);
     const quantizedFramePx = clamp(
-      quantizeToRow(quantizedStartPx + displacement, lineHeightPx),
+      quantizeScrollTopToRow(quantizedStartPx + displacement, lineHeightPx),
       0,
       maxScrollTopPx,
     );

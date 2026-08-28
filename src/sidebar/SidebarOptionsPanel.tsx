@@ -93,7 +93,7 @@ import {
   roundUiFontScale,
   type UiFontKey,
 } from '../shared/UiTypography'
-import { RENDER_SCROLL_SKEW_MIN, RENDER_SCROLL_SKEW_MAX } from '../editor/NonQuantizedSmoothScroll'
+import { DEFAULT_RENDER_SCROLL_MAX_SPEED_PX_PER_SEC, RENDER_SCROLL_SKEW_MIN, RENDER_SCROLL_SKEW_MAX } from '../editor/NonQuantizedSmoothScroll'
 import {
   CURSOR_DOT_COUNT_MIN,
   CURSOR_DOT_COUNT_MAX,
@@ -2942,7 +2942,7 @@ export function SidebarOptionsPanel({
             value={renderScrollMaxSpeedPxPerSec}
             trackLabel="max speed"
             ariaLabel="Maximum scroll speed in pixels per second"
-            defaultValue={80000}
+            defaultValue={DEFAULT_RENDER_SCROLL_MAX_SPEED_PX_PER_SEC}
             onCommit={(value) => setRenderScrollMaxSpeedPxPerSec(clamp(value, 1000, 100000))}
           />
         </div>

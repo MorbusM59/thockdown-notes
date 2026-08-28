@@ -161,7 +161,8 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 *Left-click jumps straight to a spot; right-click pages up or down, one screen at a time.*
 
-- Left-click anywhere on the track to jump directly to that position.
+- Left-click anywhere on the track to travel to that position — a smooth ride, so you keep your bearings and see what you're passing.
+- **Hold** the left button on the track instead, for about a quarter of a second, and it snaps there instantly rather than travelling. The jump happens while the button is still down, so the gesture shows you what it does the first time you try it. Use it when you already know where you're going and the journey is just in the way.
 - Right-click above or below the thumb to page up/down once, the same as pressing \`Page Up\`/\`Page Down\`. Right-clicking on the thumb itself does nothing.
 - Hold the right click down to keep paging continuously, just like holding \`Page Up\`/\`Page Down\` on the keyboard. It stops when you release the button, or as soon as the thumb reaches your cursor.
 - In render view the thumb marks your position in the *text* rather than in the rendered page, so it means the same thing whatever your view settings are: changing the font size or the pane width can re-flow every line without the thumb moving, and dragging it to the bottom of the track lands at the end of the note whether or not you've read your way down there before. On a very large note you may briefly see the slider beneath the editor fill up like a scrollbar handle instead of showing the [Time Machine Timeline]($HELP§TIME-MACHINE#time-machine-timeline) — that's the note being sized up in the background, and it goes away on its own.
@@ -756,6 +757,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 *Tunes the custom easing curve used for preview-mode scroll animations.*
 
 - Controls for ramp, speed, maximum speed, and overall curve shape. Response is auto-derived from ramp.
+- **Maximum speed** does two jobs at once. It caps how fast a scroll animation travels, and it also caps how *long* one may take: the longest any scroll can run is the time it would take to cover 200,000 pixels at the speed you've set — 2 seconds at the top of the slider, 2.5 at the default. Wind the speed up and long journeys get shorter as well as quicker; wind it down and a trip across a very large note becomes a proper voyage. A journey that can't fit under both limits keeps the time one and exceeds the speed one, so you're never left waiting.
 - These settings aren't part of a layout — they stay as you left them across layout switches and app restarts, the same way the custom cursor toggle does.
 
 ### [Mouse Options](#mouse-options)

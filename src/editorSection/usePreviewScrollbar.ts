@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MouseEvent, MutableRefObject } from 'react'
 import type { PreviewDocumentPositionApi } from './usePreviewMarkdownRendering'
+import { beginScrollTrackHold } from '../editor/scrollTrackHold'
 import {
   buildReleaseRampDownPlanFromCurrentParams,
   cancelNonQuantizedSmoothScroll,
@@ -96,6 +97,7 @@ export function usePreviewScrollbar({
     cursorYPx: number
     rafId: number | null
   } | null>(null)
+  const trackHoldCancelRef = useRef<(() => void) | null>(null)
   const [isPreviewScrollThumbActive, setIsPreviewScrollThumbActive] = useState(false)
   const [isDraggingPreviewScrollThumb, setIsDraggingPreviewScrollThumb] = useState(false)
 
@@ -424,17 +426,44 @@ export function usePreviewScrollbar({
     // content density the two landed in different places, and on one still
     // being sized up they landed VERY differently (measured: a click at 30%
     // on a just-opened note went to 13% of the text).
-    const position = previewDocumentPositionRef?.current
-    const charViewport = position?.readViewport() ?? null
-    if (position && charViewport) {
-      const charSpan = Math.max(0, charViewport.totalChars - charViewport.visibleChars)
-      position.smoothScrollToChar(ratio * charSpan)
-      return
+    const goTo = (instant: boolean) => {
+      const element = previewScrollRef.current
+      if (!element) return
+      const position = previewDocumentPositionRef?.current
+      const charViewport = position?.readViewport() ?? null
+      if (position && charViewport) {
+        const charSpan = Math.max(0, charViewport.totalChars - charViewport.visibleChars)
+        const charTarget = ratio * charSpan
+        if (instant) position.scrollToChar(charTarget)
+        else position.smoothScrollToChar(charTarget)
+        return
+      }
+
+      const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight)
+      const targetScrollTop = ratio * maxScrollTop
+      if (instant) {
+        cancelNonQuantizedSmoothScroll(element)
+        const previousBehavior = element.style.scrollBehavior
+        element.style.scrollBehavior = 'auto'
+        element.scrollTop = targetScrollTop
+        element.style.scrollBehavior = previousBehavior
+        return
+      }
+      scrollToNonQuantizedSmooth(element, targetScrollTop)
     }
 
-    const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
-    scrollToNonQuantizedSmooth(scroller, ratio * maxScrollTop)
+    // Click travels, hold snaps -- see scrollTrackHold.ts. Resolved on a timer
+    // while the button is still down, so the gesture teaches itself.
+    trackHoldCancelRef.current?.()
+    trackHoldCancelRef.current = beginScrollTrackHold({
+      onSnap: () => { trackHoldCancelRef.current = null; goTo(true) },
+      onTravel: () => { trackHoldCancelRef.current = null; goTo(false) },
+    })
   }, [previewScrollRef, shouldBlockPreviewInteraction, handlePreviewTrackRightMouseDown, previewDocumentPositionRef])
+
+  // A gesture in flight when this unmounts would otherwise fire its snap into
+  // a torn-down pane.
+  useEffect(() => () => { trackHoldCancelRef.current?.() }, [])
 
   const handlePreviewThumbMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
     if (shouldBlockPreviewInteraction()) return

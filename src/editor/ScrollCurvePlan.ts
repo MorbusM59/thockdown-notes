@@ -21,7 +21,37 @@
 export const DEFAULT_RENDER_SCROLL_DYNAMIC = 1.5;
 export const DEFAULT_RENDER_SCROLL_RESPONSIVENESS = 0.6;
 export const DEFAULT_RENDER_SCROLL_TOTAL_TIME_SEC = 0.4;
-export const DEFAULT_RENDER_SCROLL_MAX_SPEED_PX_PER_SEC = 6000;
+/**
+ * Default peak scroll velocity.
+ *
+ * This is the value the Options slider offers as its own default, and it has
+ * to be the same number here: this constant is what every fallback path lands
+ * on -- a fresh install, a state file written before the setting existed, a
+ * non-finite value handed to the setter -- and while it was 6000 those paths
+ * silently gave a tenth of the intended speed. Symptom: a scrollbar-click
+ * journey of 100,000px took 18 seconds instead of under two.
+ */
+export const DEFAULT_RENDER_SCROLL_MAX_SPEED_PX_PER_SEC = 80000;
+
+/**
+ * The dual meaning of "max speed": it also caps how long a scroll may take.
+ *
+ * A pure velocity cap says nothing about the worst case, and the worst case is
+ * what the reader actually feels -- on a large document the end of the
+ * scrollbar is far enough away that even a fast cap leaves a journey measured
+ * in seconds. So the same slider sets a duration ceiling of
+ * `SCROLL_DURATION_CAP_PX / maxSpeed` seconds: the time it would take to
+ * travel 200,000px AT the chosen speed. Winding the speed up therefore
+ * shortens the longest possible scroll as well as quickening the ordinary one
+ * -- 2 seconds at the slider's maximum of 100,000px/s, 2.5s at the default
+ * 80,000.
+ *
+ * A journey longer than the ceiling is time-compressed rather than clipped:
+ * the same curve, played faster, so it still eases in and out. That does mean
+ * such a scroll exceeds the nominal max speed -- deliberately. The velocity
+ * cap shapes ordinary travel; this bounds the extraordinary kind.
+ */
+export const SCROLL_DURATION_CAP_PX = 200000;
 export const DEFAULT_RENDER_SCROLL_SKEW = 0.5;
 export const RENDER_SCROLL_SKEW_MIN = 0.1;
 export const RENDER_SCROLL_SKEW_MAX = 0.9;
@@ -238,6 +268,31 @@ export const buildScrollPlan = (
 };
 
 // Returns signed displacement (px) from the scroll start, given elapsed seconds.
+/**
+ * Plays the same plan faster, so it finishes within `capSec`.
+ *
+ * A uniform scaling of every time in the plan, which sampleScrollPlan below
+ * reads back exactly: each of its three branches divides an elapsed time by a
+ * plan time, so scaling both leaves the sampled position identical -- the
+ * curve's shape, its easing, and its endpoints all survive. Only the plateau
+ * speed has to move the other way, since it covers the same distance in less
+ * time. Anything here that changes must be checked against that sampler.
+ */
+export const compressScrollPlanToDuration = (plan: ScrollPlan, capSec: number): ScrollPlan => {
+  if (!Number.isFinite(capSec) || capSec <= 0) return plan;
+  if (plan.totalDurationSec <= capSec) return plan;
+
+  const scale = capSec / plan.totalDurationSec;
+  return {
+    ...plan,
+    tSec: plan.tSec * scale,
+    totalDurationSec: capSec,
+    rampUpEndSec: plan.rampUpEndSec * scale,
+    plateauEndSec: plan.plateauEndSec * scale,
+    plateauSpeedPxPerSec: plan.plateauSpeedPxPerSec / scale,
+  };
+};
+
 export const sampleScrollPlan = (plan: ScrollPlan, elapsedSec: number): number => {
   if (elapsedSec <= 0) return 0;
   if (elapsedSec >= plan.totalDurationSec) return plan.signedDistance;
@@ -331,7 +386,8 @@ export const buildScrollPlanFromCurrentParams = (signedDistance: number): Scroll
     Math.min(RENDER_SCROLL_SKEW_MAX, renderScrollSkew),
   );
   const curve = buildCurvePlan(a, b, tSec, skew);
-  return buildScrollPlan(curve, tSec, signedDistance, maxSpeedPxPerSec);
+  const plan = buildScrollPlan(curve, tSec, signedDistance, maxSpeedPxPerSec);
+  return compressScrollPlanToDuration(plan, SCROLL_DURATION_CAP_PX / maxSpeedPxPerSec);
 };
 
 // Returns elapsed seconds from animation start to the first point where the

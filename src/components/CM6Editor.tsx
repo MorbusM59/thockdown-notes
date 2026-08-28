@@ -16,7 +16,8 @@ import {
   resolveRampCrossingTimeSecFromCurrentParams,
   sampleReleaseRampDownPlan,
 } from '../editor/NonQuantizedSmoothScroll';
-import { cancelQuantizedSmoothScroll, scrollToQuantizedSmooth } from '../editor/QuantizedSmoothScroll';
+import { cancelQuantizedSmoothScroll, quantizeScrollTopToRow, scrollToQuantizedSmooth } from '../editor/QuantizedSmoothScroll';
+import { beginScrollTrackHold } from '../editor/scrollTrackHold';
 import { resolveCagedScrollTarget } from '../editor/CageMath';
 import { sanitizeDocumentText, sanitizeDocumentTextExtended } from '../shared/textSanitization';
 import { resolveScopeRange, isSameRange, type SelectionScope } from '../editor/ContractBridgeRangeUtils';
@@ -944,6 +945,11 @@ export function CM6Editor({
   // same portal target Editor.tsx's own scrollbar rail uses, so switching
   // between the Lexical and CM6 paths doesn't require a different slot.
   const scrollbarTrackRef = useRef<HTMLDivElement | null>(null);
+  // A click-or-hold gesture in flight on the scrollbar track (scrollTrackHold.ts).
+  const trackHoldCancelRef = useRef<(() => void) | null>(null);
+  // One in flight when this unmounts would otherwise fire its snap into a
+  // torn-down editor.
+  useEffect(() => () => { trackHoldCancelRef.current?.(); }, []);
   const [scrollThumbTopPx, setScrollThumbTopPx] = useState(0);
   const [scrollThumbHeightPx, setScrollThumbHeightPx] = useState(0);
   const [isScrollThumbActive, setIsScrollThumbActive] = useState(false);
@@ -4081,9 +4087,31 @@ export function CM6Editor({
     const ratio = maxThumbTravel > 0 ? (clampedTop - SCROLL_TRACK_EDGE_GAP_PX) / maxThumbTravel : 0;
     const targetScrollTop = ratio * maxScrollTop;
 
-    scrollToQuantizedSmooth(view.scrollDOM, targetScrollTop, {
-      lineHeightPx: lineHeightPxRef.current,
-      onStep: syncCustomScrollbar,
+    // Click travels, hold snaps -- see scrollTrackHold.ts. The same gesture as
+    // the render view's scrollbar, quantized to the row grid here as every
+    // other scroll in this editor is.
+    const goTo = (instant: boolean) => {
+      const scrollDOM = viewRef.current?.scrollDOM;
+      if (!scrollDOM) return;
+      if (instant) {
+        cancelQuantizedSmoothScroll(scrollDOM);
+        const previousBehavior = scrollDOM.style.scrollBehavior;
+        scrollDOM.style.scrollBehavior = 'auto';
+        scrollDOM.scrollTop = quantizeScrollTopToRow(targetScrollTop, lineHeightPxRef.current);
+        scrollDOM.style.scrollBehavior = previousBehavior;
+        syncCustomScrollbar();
+        return;
+      }
+      scrollToQuantizedSmooth(scrollDOM, targetScrollTop, {
+        lineHeightPx: lineHeightPxRef.current,
+        onStep: syncCustomScrollbar,
+      });
+    };
+
+    trackHoldCancelRef.current?.();
+    trackHoldCancelRef.current = beginScrollTrackHold({
+      onSnap: () => { trackHoldCancelRef.current = null; goTo(true); },
+      onTravel: () => { trackHoldCancelRef.current = null; goTo(false); },
     });
   };
 
