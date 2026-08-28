@@ -685,18 +685,23 @@ export function usePreviewScrollbar({
     }
 
     /**
-     * Whether something else on the page has a real claim on a page key.
+     * Whether something else has a real claim on a page key.
      *
      * Deliberately narrower than "is this an editable element": a focused
      * button or search field has no use for PageDown, and swallowing it there
-     * is exactly the defect this pane's own keys were reported for. Anything
-     * that genuinely binds these (the Options sliders nudge by ten steps)
-     * calls preventDefault, which is checked separately. Kept identical to
-     * CM6Editor's own rule so the two panes cannot drift apart.
+     * is exactly the defect this pane's keys were reported for. It is also
+     * SLOT-AWARE -- the claim only counts for a caret inside this pane (this
+     * preview is itself contentEditable while render-view spell check is on),
+     * because a caret in another section's editor does not speak for the
+     * section the reader is in. Controls that genuinely bind these keys (the
+     * Options sliders nudge by ten steps) call preventDefault, checked
+     * separately. Kept identical to CM6Editor's rule so the panes cannot
+     * drift apart.
      */
     const targetOwnsPageKeys = (target: EventTarget | null): boolean => {
       if (!(target instanceof HTMLElement)) return false
-      return target.isContentEditable || target.tagName === 'TEXTAREA'
+      if (target.tagName === 'TEXTAREA') return true
+      return target.isContentEditable && (previewScrollRef.current?.contains(target) ?? false)
     }
 
     const onWindowKeyDown = (event: globalThis.KeyboardEvent) => {

@@ -3481,18 +3481,24 @@ export function CM6Editor({
     };
 
     /**
-     * Whether something else on the page has a real claim on a page key.
+     * Whether something else has a real claim on a page key.
      *
-     * Anything that deliberately handles them calls preventDefault (the
-     * Options sliders bind them to a ten-step nudge), and that is checked
-     * separately -- this covers the places where paging means moving a caret
-     * through text rather than moving a view.
+     * Slot-aware on purpose. "Is the target a contentEditable" is the wrong
+     * question the moment a second section exists: a caret parked in ANOTHER
+     * section's editor would make this one stand down, so the pane the reader
+     * is actually in refuses the key on behalf of a pane they are not looking
+     * at. The claim only counts if the caret is in THIS editor -- where the
+     * keymap above has already handled the key.
+     *
+     * A textarea anywhere still counts: paging there moves a caret through
+     * text, which is what the key means in that context. Controls that
+     * deliberately bind these keys (the Options sliders nudge by ten steps)
+     * call preventDefault, which is checked separately.
      */
     const targetOwnsPageKeys = (target: EventTarget | null): boolean => {
       if (!(target instanceof HTMLElement)) return false;
-      // A contentEditable is either this editor -- whose keymap has already
-      // handled the key -- or another one, which is not ours to page.
-      return target.isContentEditable || target.tagName === 'TEXTAREA';
+      if (target.tagName === 'TEXTAREA') return true;
+      return target.isContentEditable && view.contentDOM.contains(target);
     };
 
     // Page keys belong to the active editor even when focus is sitting on a
