@@ -87,14 +87,6 @@ const PREVIEW_BLOCK_ESTIMATED_HEIGHT_PX = 56
 const PREVIEW_DISCOVERY_BAR_DELAY_MS = 600
 
 /**
- * How far a travel animation's pixel target must move before it is re-aimed.
- *
- * Below this it is measurement noise, and re-planning on it would restart the
- * easing curve every frame -- an animation that never gets anywhere.
- */
-const PREVIEW_CHAR_TRAVEL_REAIM_PX = 24
-
-/**
  * Whether to log the background survey's own throughput.
  *
  * Turn on with `localStorage['thockdown:debug-preview-survey'] = '1'` and
@@ -653,10 +645,23 @@ export function usePreviewMarkdownRendering({
 
     if (behavior === 'smooth') {
       // This app's own curve-based motion (see NonQuantizedSmoothScroll.ts),
-      // not native smooth-scroll -- it supports being re-invoked mid-flight
-      // (replans smoothly from wherever the animation currently is), which
-      // is exactly what's needed as react-virtual corrects the destination
-      // once the target block's real height is measured.
+      // not native smooth-scroll.
+      //
+      // CAUTION: re-invoking this mid-flight is NOT free and NOT smooth. It
+      // cancels the running animation and builds a fresh bell curve from the
+      // current position, and a bell starts at zero velocity -- so a re-invoke
+      // brings the scroll to a standstill and re-accelerates. It preserves
+      // position, not velocity. (An earlier comment here claimed it "replans
+      // smoothly from wherever the animation currently is"; that half-truth
+      // cost this file a re-aiming loop that fired every frame.)
+      //
+      // react-virtual does re-invoke it while correcting a destination whose
+      // target block has just been measured. That is tolerated because it is
+      // rare and self-limiting -- a correction or two on arrival -- not
+      // because it is smooth. If a caller needs to change a destination
+      // mid-flight and keep the derivatives continuous, the tool for that is
+      // buildContinuationPlan in ScrollCurvePlan.ts, which picks up from the
+      // current velocity; this function is not it.
       scrollToNonQuantizedSmooth(scroller, target)
       return
     }
@@ -682,8 +687,15 @@ export function usePreviewMarkdownRendering({
     // restart effect below re-fits.
     estimateSize: (index) => {
       const predicted = predictedHeightsRef.current
-      const value = predicted && index < predicted.length ? predicted[index] : 0
-      return value > 0 ? value : PREVIEW_BLOCK_ESTIMATED_HEIGHT_PX
+      const fitted = predicted && index < predicted.length ? predicted[index] : 0
+      if (fitted > 0) return fitted
+      // Before the model is fitted, lines x line height -- known as soon as
+      // the text and typography are, and short only by the block margins it
+      // does not model. The flat guess below is the last resort, for the one
+      // commit before the probe has been read.
+      const byLines = lineHeightEstimatesRef.current
+      const estimated = byLines && index < byLines.length ? byLines[index] : 0
+      return estimated > 0 ? estimated : PREVIEW_BLOCK_ESTIMATED_HEIGHT_PX
     },
     overscan: PREVIEW_BLOCK_OVERSCAN,
     scrollToFn,
@@ -1262,12 +1274,33 @@ export function usePreviewMarkdownRendering({
   // Position in character space -- see previewCharPosition.ts.
   // ---------------------------------------------------------------------
   const blockCharOffsetsRef = useRef<Float64Array | null>(null)
-  const charTravelRafRef = useRef<number | null>(null)
   const lineMetricsCacheRef = useRef<{
     blocks: readonly { text: string }[]
     charsPerLine: number
     documentLines: number
   } | null>(null)
+  /**
+   * Per-block heights derived from line counts alone -- no fitting, no
+   * measuring, available the moment the text and the typography are known.
+   *
+   * This is what `estimateSize` uses before the fitted model lands.
+   *
+   * MEASURED, and not as designed. The intent was to replace a flat 56px guess
+   * that ran ~36% SHORT of the truth; this runs ~28% LONG (449,186px against a
+   * true 349,851px on a 1.2M-character note), so an immediate scrollbar click
+   * lands 7.8% of the document away instead of 10.4%. Same order of error,
+   * opposite sign. It is kept for one reason only: the error is a roughly
+   * constant SCALE factor rather than an arbitrary one, because this at least
+   * varies with the content, where 56px-per-block does not. A scale error is
+   * one constant away from being right; a constant is not.
+   *
+   * The 28% is not mysterious, it is the two things this deliberately does not
+   * model: per-block margins, and a characters-per-line derived from the probe
+   * that evidently under-reads the real wrap width. Both are exactly what the
+   * fitted model learns 0.3s later. If this window ever matters more than it
+   * does today, that is where to look -- not at more line arithmetic.
+   */
+  const lineHeightEstimatesRef = useRef<Float64Array | null>(null)
   useLayoutEffect(() => {
     blockCharOffsetsRef.current = buildBlockCharOffsets(previewBlocks)
   }, [previewBlocks])
@@ -1365,47 +1398,59 @@ export function usePreviewMarkdownRendering({
       return { documentLines: cached.documentLines, lineHeightPx }
     }
 
+    // One pass, two consumers: the document's length in lines (the thumb) and
+    // each block's height in pixels (the virtualizer's estimates). Splitting
+    // these into two passes would mean scanning the document twice for the
+    // same information.
+    const perBlock = new Float64Array(blocks.length)
     let documentLines = 0
-    for (const block of blocks) documentLines += countWrappedLines(block.text, charsPerLine)
+    for (let index = 0; index < blocks.length; index += 1) {
+      const lines = countWrappedLines(blocks[index].text, charsPerLine)
+      perBlock[index] = lines * lineHeightPx
+      documentLines += lines
+    }
     documentLines = Math.max(1, documentLines)
     lineMetricsCacheRef.current = { blocks, charsPerLine, documentLines }
+    lineHeightEstimatesRef.current = perBlock
     return { documentLines, lineHeightPx }
   }, [previewBlocksRef])
 
+  /**
+   * Travels to a character position. Plans once; never re-aims.
+   *
+   * The curve this rides on is a physics model whose whole value is continuous
+   * derivatives -- no jump in position, velocity or acceleration. Re-targeting
+   * it mid-flight does NOT preserve that: `scrollToNonQuantizedSmooth` cancels
+   * the running animation and builds a fresh bell curve from the current
+   * position, and a bell starts at zero velocity. So every re-aim drops the
+   * scroll to a standstill and re-accelerates.
+   *
+   * An earlier version of this function re-aimed every frame the target moved
+   * more than 24px, to chase a destination whose pixel address kept changing
+   * while the height model settled. It was defending against a real error --
+   * the flat 56px estimate put a click at 30% nearer 13% -- but it paid for it
+   * with the one property the animation exists to have, and it fired
+   * repeatedly per travel. The estimate is now within a fraction of a percent
+   * within a third of a second, so the error it defended against is gone and
+   * the cure is worse than the disease.
+   *
+   * The rule this leaves: a travel is planned once, against the geometry as it
+   * stands, and plays to completion untouched. If the document's pixel
+   * geometry shifts underneath it, we land slightly off -- nobody knows where
+   * 60% of a document "should" have been, and everybody feels a velocity jump.
+   * The only thing allowed to interrupt a travel is the reader.
+   */
   const smoothScrollToChar = useCallback((charOffset: number) => {
     const scroller = previewScrollRef.current
     if (!scroller) return
-    const resolve = () => resolvePreviewCharScrollOffset({
+    const offset = resolvePreviewCharScrollOffset({
       offsets: blockCharOffsetsRef.current,
       measurements: readBlockMeasurements(),
       charOffset,
     })
-
-    const first = resolve()
-    if (first === null) return
-    scrollToNonQuantizedSmooth(scroller, first)
-
-    if (charTravelRafRef.current !== null) cancelAnimationFrame(charTravelRafRef.current)
-    let aimedAt = first
-    const reaim = () => {
-      charTravelRafRef.current = null
-      const element = previewScrollRef.current
-      // The animation ending -- including because the reader took over -- ends
-      // this loop with it. Nothing here ever starts a scroll of its own.
-      if (!element || !isNonQuantizedSmoothScrollActive(element)) return
-      const next = resolve()
-      if (next !== null && Math.abs(next - aimedAt) > PREVIEW_CHAR_TRAVEL_REAIM_PX) {
-        aimedAt = next
-        scrollToNonQuantizedSmooth(element, next)
-      }
-      charTravelRafRef.current = requestAnimationFrame(reaim)
-    }
-    charTravelRafRef.current = requestAnimationFrame(reaim)
+    if (offset === null) return
+    scrollToNonQuantizedSmooth(scroller, offset)
   }, [previewScrollRef, readBlockMeasurements])
-
-  useEffect(() => () => {
-    if (charTravelRafRef.current !== null) cancelAnimationFrame(charTravelRafRef.current)
-  }, [])
 
   useLayoutEffect(() => {
     if (!previewDocumentPositionRef) return undefined
@@ -1703,6 +1748,10 @@ export function usePreviewMarkdownRendering({
     const blocks = previewBlocksRef.current
     const blockCount = blocks.length
     const signature = readGeometrySignature()
+    // Fills lineHeightEstimatesRef, so the virtualizer has a sane per-block
+    // height from the first commit rather than a flat guess. Same scan the
+    // thumb's own sizing needs, so it costs nothing extra.
+    readLineMetrics()
 
     // A geometry this document has already been fitted at -- the sidebar
     // toggled back, a font size tried and undone, a split divider dragged and
@@ -1747,7 +1796,7 @@ export function usePreviewMarkdownRendering({
     surveyModeRef.current = 'calibrating'
     reportDiscovery(0, targets.length, true)
     queueNextPrewarmBatch()
-  }, [queueNextPrewarmBatch, reportDiscovery, previewBlocksRef, applyCachedSurvey, readGeometrySignature, applyHeightModel, virtualizer])
+  }, [queueNextPrewarmBatch, reportDiscovery, previewBlocksRef, applyCachedSurvey, readGeometrySignature, applyHeightModel, readLineMetrics, virtualizer])
 
   // Start over whenever the cached heights could no longer be true.
   //
