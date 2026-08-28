@@ -1653,6 +1653,81 @@ CM6/Chromium native overhead, not further attributable without new tooling" is u
 the honest answer for whatever's left. The `sanitizeDatabase()` real-world observation window noted
 directly above is the one open item this round actually added.
 
+## This round: the document is no longer measured at all — heights are modelled from the source
+
+**The problem the survey never solved.** The background survey (below) made the
+scrollbar honest by rendering and measuring every block. On the user's own
+1.5M-character note that meant ~18,000 markdown renders, reported live as "1%
+of progress every other second" — minutes of a scrollbar that is quietly
+wrong, and the survey's own cost is what made the text vibrate on slower
+hardware. Two rounds of tuning (the batch-sizer fix, one commit before this)
+took the same document from 21.5s to 8.7s in this container. Better is not
+fixed: the approach's floor is "render the whole document once", and that floor
+is seconds at best.
+
+**The idea, from the user: how does a Kindle do this?** It doesn't. Its
+progress unit is the *location* — a fixed slice of the source file, assigned at
+import — so a font change repaginates the current screen and nothing else. Its
+page numbers, where it shows them, are looked up from a map generated
+server-side, never computed on the device. The insight is that the progress
+metric was never a pixel quantity.
+
+**What shipped** (`src/editorSection/previewHeightModel.ts`): heights stay
+pixels, so the thumb stays visually proportional, but they are *derived from
+the source text* by a model fitted from a ~160-block sample:
+
+- blocks are bucketed by SHAPE (heading/list/quote/code/table/media/rule/
+  paragraph) off the first line's sigil — a string test, not a parse;
+- per shape, `height ≈ intercept + perLine × predictedLines`, where
+  `predictedLines` sums `ceil(visibleChars / charsPerLine)` over the block's
+  own source lines (per line, so a five-item list is five lines, not one);
+- the two linear parameters are solved by least squares; `charsPerLine` is the
+  only thing searched, over a 1-D grid. No font metrics are involved anywhere —
+  fitting sidesteps line-box rounding, margin collapsing and wrap points, all
+  of which would silently bias the whole document if got wrong.
+
+**The sample budget is spent by share of the document**, not evenly. An even
+split left the dominant shape with a dozen samples to fit a slope that then
+multiplies ten thousand blocks; the sampling error showed up as a **2.6% bias**
+on the document total. Proportional allocation, same number of renders: **0.4%**.
+
+**It refuses to be confidently wrong.** The fit reports a per-block median
+error and, more importantly, the signed bias of its SUM (`biasPct`) — the
+number the scrollbar actually cares about, since wrap-point noise is unbiased
+and cancels across thousands of blocks while a systematic offset does not. If
+the bias exceeds 4% or the median block error 30% (`isPreviewHeightModel-
+Trustworthy`), the model is discarded and the document is measured block by
+block exactly as before. A document of images fails this on purpose: its
+heights are not a function of its text.
+
+**Measured** (`scripts/perf/measurePreviewHeightModel.mjs`, real Chromium,
+1.5M chars of varied prose = 18k blocks, against ground truth from walking
+every viewport):
+
+| | flat estimate + survey | fitted model |
+|---|---|---|
+| scrollbar settled after | 21.5s (minutes on the reporter's desktop) | **0.3s** |
+| settled total vs truth | −71% | **0.0%** (225px of 473,228) |
+| jump-to-bottom miss | ~3,700px | **0px** |
+| worst size jump while reading | 1,091px | 53px |
+
+**What this makes cheap.** A geometry change (font size, line height, letter
+spacing, pane width) re-casts the whole document by arithmetic over the block
+list — microseconds — instead of re-surveying it. Fitted models are cached by
+geometry signature, so returning to a geometry costs nothing at all. This is
+the "cast the discovery into a new mould" question from the round below,
+answered properly: the mould is the model, and it is parameterised by one
+measurement of the current typography.
+
+**Still open (next round):** driving the thumb by *character offset* rather
+than pixel offset, Kindle-style. The model gets the substrate honest — native
+wheel/fling scrolling and `scrollToIndex` both run on pixel offsets and need
+it — but the thumb itself needs no heights at all: position is
+`charOffset(topBlock) / totalChars`, size is `visibleChars / totalChars`. That
+would take the residual to zero by construction, make the thumb immune to
+typography entirely, and let the slow fallback survey be retired, since
+navigation would no longer depend on heights being known.
+
 ## This round: can a survey be re-cast into a new geometry rather than re-run?
 
 Asked directly. **Not derived — but often remembered.**

@@ -39,6 +39,16 @@ import {
   planNextPrewarmBatch,
   resolveNextPrewarmBatchSize,
 } from './previewMeasurementPrewarm'
+import {
+  PREVIEW_CALIBRATION_MAX_SAMPLES,
+  PREVIEW_CALIBRATION_SAMPLES_PER_SHAPE,
+  fitPreviewHeightModel,
+  isPreviewHeightModelTrustworthy,
+  planPreviewHeightSample,
+  predictPreviewBlockHeight,
+  resolvePreviewBlockShape,
+} from './previewHeightModel'
+import type { PreviewHeightModel, PreviewHeightSample } from './previewHeightModel'
 
 // Initial guess only -- corrected as soon as each block actually mounts and
 // reports its real height (react-virtual's estimate-then-correct model, via
@@ -620,7 +630,16 @@ export function usePreviewMarkdownRendering({
   const virtualizer = useVirtualizer({
     count: previewBlocks.length,
     getScrollElement: () => previewScrollRef.current,
-    estimateSize: () => PREVIEW_BLOCK_ESTIMATED_HEIGHT_PX,
+    // The model's prediction for this block when there is one, and the flat
+    // guess only until the first fit lands (or for a document the model was
+    // not trusted on). Bounds-checked because the block list can change under
+    // a model fitted from the previous one, for the one commit before the
+    // restart effect below re-fits.
+    estimateSize: (index) => {
+      const predicted = predictedHeightsRef.current
+      const value = predicted && index < predicted.length ? predicted[index] : 0
+      return value > 0 ? value : PREVIEW_BLOCK_ESTIMATED_HEIGHT_PX
+    },
     overscan: PREVIEW_BLOCK_OVERSCAN,
     scrollToFn,
   })
@@ -1039,6 +1058,21 @@ export function usePreviewMarkdownRendering({
   const lastPreviewScrollAtRef = useRef(0)
   const prewarmBatchRef = useRef<readonly number[]>([])
   const prewarmWaitMsRef = useRef(0)
+  // The fitted height model and the heights it predicts for every block --
+  // see previewHeightModel.ts. `predictedHeights` is materialised as an array
+  // rather than computed on demand because react-virtual asks `estimateSize`
+  // for every unmeasured block on every measurements recompute (that is, on
+  // every block that mounts), so it has to be an O(1) lookup, not a parse.
+  const heightModelRef = useRef<PreviewHeightModel | null>(null)
+  const predictedHeightsRef = useRef<Float64Array | null>(null)
+  const modelByGeometryRef = useRef<Map<string, PreviewHeightModel>>(new Map())
+  // Discovery now has two modes: fit a model from a ~100-block sample
+  // ('calibrating'), or, if that model cannot be trusted, fall back to
+  // measuring the whole document ('measuring') exactly as this used to.
+  const surveyModeRef = useRef<'idle' | 'calibrating' | 'measuring'>('idle')
+  const calibrationQueueRef = useRef<number[]>([])
+  const calibrationSamplesRef = useRef<PreviewHeightSample[]>([])
+  const calibrationTotalRef = useRef(0)
   const surveyStatsRef = useRef({ windowStartedAt: 0, blocks: 0, slices: 0, sliceMs: 0, maxSliceMs: 0, waitMs: 0, maxWaitMs: 0, yields: 0 })
   // Completed surveys, keyed by the geometry they were taken at. Returning to
   // a geometry already surveyed -- toggling the sidebar back, undoing a font
@@ -1131,6 +1165,42 @@ export function usePreviewMarkdownRendering({
   }, [])
 
   /**
+   * Casts a fitted model over the whole document.
+   *
+   * This is the cheap half of the whole feature: predicting 18,000 heights is
+   * arithmetic over the block list, single-digit milliseconds, against the
+   * tens of seconds the same document costs to measure block by block. The
+   * virtualizer has to be told to re-derive its offsets afterwards --
+   * `estimateSize` is not one of its memo keys, so nothing recomputes on its
+   * own -- and `measure()` is what does that.
+   *
+   * `measure()` also drops the real heights of whatever is currently mounted.
+   * That is correct: the model lands either on a freshly opened document
+   * (where there are a handful, immediately re-measured on the next commit) or
+   * right after a typography change (where they describe the old typography
+   * and are wrong). What it must not do is move the reader, so the block at
+   * the top of the viewport is re-anchored after the offsets change.
+   */
+  const applyHeightModel = useCallback((model: PreviewHeightModel) => {
+    const blocks = previewBlocksRef.current
+    const predicted = new Float64Array(blocks.length)
+    for (let index = 0; index < blocks.length; index += 1) {
+      predicted[index] = predictPreviewBlockHeight(model, blocks[index].text)
+    }
+    heightModelRef.current = model
+    predictedHeightsRef.current = predicted
+
+    const scroller = previewScrollRef.current
+    const anchorIndex = scroller && scroller.scrollTop > 0
+      ? virtualizer.getVirtualItems()[0]?.index ?? null
+      : null
+    virtualizer.measure()
+    if (anchorIndex !== null && anchorIndex > 0) {
+      virtualizer.scrollToIndex(anchorIndex, { align: 'start' })
+    }
+  }, [virtualizer, previewBlocksRef, previewScrollRef])
+
+  /**
    * Hands every buffered height to the virtualizer at once, when the survey is
    * complete.
    *
@@ -1179,11 +1249,29 @@ export function usePreviewMarkdownRendering({
         // during a continuous scroll, i.e. the "pause" paused nothing the
         // reader could feel.
         if (prewarmBatchRef.current.length > 0) {
+          // A calibration batch that is unmounted before it was measured has
+          // to go back in the queue -- silently dropping it would shrink the
+          // sample the model is fitted from every time the reader scrolls.
+          if (surveyModeRef.current === 'calibrating') {
+            calibrationQueueRef.current = [...prewarmBatchRef.current, ...calibrationQueueRef.current]
+          }
           prewarmBatchRef.current = []
           setPrewarmBatch([])
         }
         surveyStatsRef.current.yields += 1
         queueNextPrewarmBatch()
+        return
+      }
+
+      if (surveyModeRef.current === 'calibrating') {
+        const queue = calibrationQueueRef.current
+        const take = Math.max(1, Math.min(prewarmBatchSizeRef.current, queue.length))
+        const batch = queue.slice(0, take)
+        calibrationQueueRef.current = queue.slice(take)
+        if (batch.length === 0) return
+        prewarmStartedAtRef.current = performance.now()
+        prewarmBatchRef.current = batch
+        setPrewarmBatch(batch)
         return
       }
 
@@ -1210,6 +1298,58 @@ export function usePreviewMarkdownRendering({
     })
   }, [schedulePrewarmSlice, virtualizer, previewBlocksRef, previewScrollRef, commitPrewarmedSizes, reportDiscovery])
 
+  /**
+   * Fits the model from the calibration sample and decides whether to use it.
+   *
+   * The decision is the honest part of this feature. A document whose heights
+   * really are a function of its text gets a model and an accurate scrollbar
+   * within a second of opening; one whose heights are not -- images, embeds,
+   * anything sized from outside the markdown -- gets measured block by block
+   * exactly as it used to be. What it must never do is hold a confident wrong
+   * number, which is worse than the flat estimate this replaced: that one at
+   * least corrected itself as the reader scrolled.
+   */
+  const finishCalibration = useCallback(() => {
+    const blockCount = previewBlocksRef.current.length
+    const model = fitPreviewHeightModel(calibrationSamplesRef.current)
+    const trusted = isPreviewHeightModelTrustworthy(model)
+
+    if (isPreviewSurveyDebugOn()) {
+      console.log('[preview-survey] model', {
+        samples: model?.sampleCount ?? 0,
+        blocks: blockCount,
+        medianErrorPct: model ? Math.round(model.medianErrorPct * 10) / 10 : null,
+        biasPct: model ? Math.round(model.biasPct * 10) / 10 : null,
+        trusted,
+      })
+    }
+
+    if (trusted) {
+      const signature = readGeometrySignature()
+      if (signature) {
+        const store = modelByGeometryRef.current
+        store.delete(signature)
+        store.set(signature, model)
+        while (store.size > PREVIEW_PREWARM_GEOMETRY_CACHE_SIZE) {
+          const oldest = store.keys().next().value
+          if (oldest === undefined) break
+          store.delete(oldest)
+        }
+      }
+      applyHeightModel(model)
+      surveyModeRef.current = 'idle'
+      prewarmDoneRef.current = true
+      prewarmBufferRef.current = new Map()
+      reportDiscovery(blockCount, blockCount, false)
+      return
+    }
+
+    // The mould does not fit this document. Measure it.
+    surveyModeRef.current = 'measuring'
+    reportDiscovery(prewarmedRef.current.size, blockCount, true)
+    queueNextPrewarmBatch()
+  }, [previewBlocksRef, readGeometrySignature, applyHeightModel, reportDiscovery, queueNextPrewarmBatch])
+
   // Measure whatever the host just rendered and hand the real heights to the
   // virtualizer. useLayoutEffect so this reads geometry in the same frame the
   // batch was committed, before the browser paints -- the host is hidden, so
@@ -1220,11 +1360,16 @@ export function usePreviewMarkdownRendering({
     const host = prewarmHostRef.current
     if (!host) return
 
+    const isCalibrating = surveyModeRef.current === 'calibrating'
     for (const index of prewarmBatch) {
       const el = host.querySelector<HTMLElement>(`[data-prewarm-index="${index}"]`)
       if (!el) continue
       const height = el.getBoundingClientRect().height
       prewarmedRef.current.add(index)
+      if (isCalibrating && height > 0) {
+        const block = previewBlocksRef.current[index]
+        if (block) calibrationSamplesRef.current.push({ text: block.text, heightPx: height })
+      }
       // BUFFERED, not applied. Handing each height to the virtualizer as it is
       // measured is what made this feature miserable on slow hardware: every
       // resizeItem changes the total size (the thumb crawls) and, for any block
@@ -1238,7 +1383,15 @@ export function usePreviewMarkdownRendering({
       if (height > 0) prewarmBufferRef.current.set(index, height)
     }
 
-    reportDiscovery(prewarmedRef.current.size, previewBlocksRef.current.length, true)
+    // While calibrating, progress is measured against the SAMPLE, not the
+    // document: a hundred blocks is the whole job, and reporting it as a
+    // fraction of eighteen thousand would show a bar that never leaves zero
+    // before vanishing.
+    reportDiscovery(
+      isCalibrating ? calibrationSamplesRef.current.length : prewarmedRef.current.size,
+      isCalibrating ? calibrationTotalRef.current : previewBlocksRef.current.length,
+      true,
+    )
 
     const sliceMs = performance.now() - prewarmStartedAtRef.current
     if (isPreviewSurveyDebugOn()) {
@@ -1276,8 +1429,13 @@ export function usePreviewMarkdownRendering({
       sliceMs,
       PREVIEW_PREWARM_SLICE_BUDGET_MS,
     )
+
+    if (isCalibrating && calibrationQueueRef.current.length === 0) {
+      finishCalibration()
+      return
+    }
     queueNextPrewarmBatch()
-  }, [prewarmBatch, virtualizer, queueNextPrewarmBatch, reportDiscovery, previewBlocksRef])
+  }, [prewarmBatch, virtualizer, queueNextPrewarmBatch, finishCalibration, reportDiscovery, previewBlocksRef])
 
   const restartPrewarm = useCallback(() => {
     prewarmedRef.current = new Set()
@@ -1287,19 +1445,60 @@ export function usePreviewMarkdownRendering({
     prewarmBatchRef.current = []
     setPrewarmBatch([])
     discoveryPercentRef.current = -1
+    calibrationQueueRef.current = []
+    calibrationSamplesRef.current = []
+    calibrationTotalRef.current = 0
+    surveyModeRef.current = 'idle'
+    heightModelRef.current = null
 
-    // An exact hit means there is nothing to survey: apply it and stop, with
-    // no discovery bar and no wait.
-    const blockCount = previewBlocksRef.current.length
-    if (applyCachedSurvey(readGeometrySignature())) {
+    const blocks = previewBlocksRef.current
+    const blockCount = blocks.length
+    const signature = readGeometrySignature()
+
+    // A geometry this document has already been fitted at -- the sidebar
+    // toggled back, a font size tried and undone, a split divider dragged and
+    // returned. Re-casting a known model is arithmetic; nothing is measured
+    // and no discovery bar appears at all.
+    const cachedModel = signature ? modelByGeometryRef.current.get(signature) : undefined
+    if (cachedModel) {
+      modelByGeometryRef.current.delete(signature)
+      modelByGeometryRef.current.set(signature, cachedModel)
+      applyHeightModel(cachedModel)
       prewarmDoneRef.current = true
       reportDiscovery(blockCount, blockCount, false)
       return
     }
 
-    reportDiscovery(0, blockCount, true)
+    // Same, for a document that was measured the slow way (the model was not
+    // trusted for it) and has been back to this geometry before.
+    if (predictedHeightsRef.current) {
+      predictedHeightsRef.current = null
+      virtualizer.measure()
+    }
+    if (applyCachedSurvey(signature)) {
+      prewarmDoneRef.current = true
+      reportDiscovery(blockCount, blockCount, false)
+      return
+    }
+
+    if (blockCount === 0) {
+      prewarmDoneRef.current = true
+      reportDiscovery(0, 0, false)
+      return
+    }
+
+    const targets = planPreviewHeightSample({
+      blockCount,
+      shapeAt: (index) => resolvePreviewBlockShape(blocks[index]?.text ?? ''),
+      perShape: PREVIEW_CALIBRATION_SAMPLES_PER_SHAPE,
+      maxTotal: PREVIEW_CALIBRATION_MAX_SAMPLES,
+    })
+    calibrationQueueRef.current = targets
+    calibrationTotalRef.current = targets.length
+    surveyModeRef.current = 'calibrating'
+    reportDiscovery(0, targets.length, true)
     queueNextPrewarmBatch()
-  }, [queueNextPrewarmBatch, reportDiscovery, previewBlocksRef, applyCachedSurvey, readGeometrySignature])
+  }, [queueNextPrewarmBatch, reportDiscovery, previewBlocksRef, applyCachedSurvey, readGeometrySignature, applyHeightModel, virtualizer])
 
   // Start over whenever the cached heights could no longer be true.
   //
@@ -1322,9 +1521,10 @@ export function usePreviewMarkdownRendering({
   // catches changes driven from an ancestor (double-size mode, a root font
   // scale) which no observer on the scroller's own attributes would see.
   useEffect(() => {
-    // The text changed, so every remembered survey describes a document that no
-    // longer exists.
+    // The text changed, so every remembered survey -- and every fitted model --
+    // describes a document that no longer exists.
     surveyByGeometryRef.current = new Map()
+    modelByGeometryRef.current = new Map()
     restartPrewarm()
   }, [previewBlocks, restartPrewarm])
 
