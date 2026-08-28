@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MouseEvent, MutableRefObject } from 'react'
 import type { PreviewDocumentPositionApi } from './usePreviewMarkdownRendering'
 import { beginScrollTrackHold } from '../editor/scrollTrackHold'
+import { resolveThumbLineRatio } from '../editor/scrollThumbMetrics'
 import {
   buildReleaseRampDownPlanFromCurrentParams,
   cancelNonQuantizedSmoothScroll,
@@ -161,7 +162,18 @@ export function usePreviewScrollbar({
       return
     }
 
-    const visibleRatio = viewportHeight / contentHeight
+    // Thumb SIZE is a question about the text -- how much of the document one
+    // screen holds -- and is answered in lines, once, from the source. It is
+    // deliberately not `viewportHeight / contentHeight`: that asks about the
+    // layout, which is not known until it has been measured, which is what
+    // made the thumb resize once shortly after every note load as a better
+    // estimate replaced the first one. See editor/scrollThumbMetrics.ts.
+    const lineMetrics = previewDocumentPositionRef?.current?.readLineMetrics() ?? null
+    const visibleRatio = (lineMetrics && resolveThumbLineRatio({
+      viewportHeightPx: viewportHeight,
+      lineHeightPx: lineMetrics.lineHeightPx,
+      documentLines: lineMetrics.documentLines,
+    })) ?? (viewportHeight / contentHeight)
     const nextThumbHeight = Math.max(
       SCROLL_TRACK_MIN_THUMB_HEIGHT_PX,
       Math.min(usableTrackHeight, Math.round(usableTrackHeight * visibleRatio)),

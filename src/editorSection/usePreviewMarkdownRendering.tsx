@@ -49,6 +49,7 @@ import {
   resolvePreviewBlockShape,
 } from './previewHeightModel'
 import type { PreviewHeightModel, PreviewHeightSample } from './previewHeightModel'
+import { countWrappedLines } from '../editor/scrollThumbMetrics'
 import {
   buildBlockCharOffsets,
   resolvePreviewCharScrollOffset,
@@ -67,6 +68,12 @@ export interface PreviewDocumentPositionApi {
   readViewport: () => PreviewCharViewport | null
   scrollToChar: (charOffset: number) => void
   smoothScrollToChar: (charOffset: number) => void
+  /**
+   * The document's length in rendered lines, and how tall one is -- everything
+   * the scrollbar needs to size its thumb without consulting the layout. See
+   * editor/scrollThumbMetrics.ts.
+   */
+  readLineMetrics: () => { documentLines: number; lineHeightPx: number } | null
 }
 
 // Initial guess only -- corrected as soon as each block actually mounts and
@@ -1256,6 +1263,11 @@ export function usePreviewMarkdownRendering({
   // ---------------------------------------------------------------------
   const blockCharOffsetsRef = useRef<Float64Array | null>(null)
   const charTravelRafRef = useRef<number | null>(null)
+  const lineMetricsCacheRef = useRef<{
+    blocks: readonly { text: string }[]
+    charsPerLine: number
+    documentLines: number
+  } | null>(null)
   useLayoutEffect(() => {
     blockCharOffsetsRef.current = buildBlockCharOffsets(previewBlocks)
   }, [previewBlocks])
@@ -1319,6 +1331,47 @@ export function usePreviewMarkdownRendering({
    * moves. The threshold keeps a few pixels of measurement noise from
    * re-planning (and so restarting the easing) on every frame.
    */
+  /**
+   * How long this document is, in lines, and how tall a line is.
+   *
+   * Both come off the typography probe that already lives in the measurement
+   * host: its text is fixed and known, so the number of lines it wraps onto
+   * gives characters-per-line directly, and its computed style gives the line
+   * height. No layout of the document itself is consulted, which is the whole
+   * point -- the thumb must not resize because the app finished measuring
+   * something.
+   *
+   * Counted over the BLOCKS rather than the raw source, so the blank lines
+   * that separate blocks (and render as nothing) are not counted as lines.
+   * Cached against the block list's own identity, which changes only when the
+   * text does.
+   */
+  const readLineMetrics = useCallback(() => {
+    const probe = prewarmProbeRef.current
+    if (!probe) return null
+
+    const style = window.getComputedStyle(probe)
+    const lineHeightPx = parseFloat(style.lineHeight) || (parseFloat(style.fontSize) * 1.5)
+    if (!(lineHeightPx > 0)) return null
+
+    const probeText = (probe.textContent ?? '').replace(/\s+/g, ' ').trim()
+    const probeLines = Math.max(1, Math.round(probe.offsetHeight / lineHeightPx))
+    const charsPerLine = probeText.length > 0 ? Math.max(1, probeText.length / probeLines) : 0
+    if (!(charsPerLine > 0)) return null
+
+    const blocks = previewBlocksRef.current
+    const cached = lineMetricsCacheRef.current
+    if (cached && cached.blocks === blocks && cached.charsPerLine === charsPerLine) {
+      return { documentLines: cached.documentLines, lineHeightPx }
+    }
+
+    let documentLines = 0
+    for (const block of blocks) documentLines += countWrappedLines(block.text, charsPerLine)
+    documentLines = Math.max(1, documentLines)
+    lineMetricsCacheRef.current = { blocks, charsPerLine, documentLines }
+    return { documentLines, lineHeightPx }
+  }, [previewBlocksRef])
+
   const smoothScrollToChar = useCallback((charOffset: number) => {
     const scroller = previewScrollRef.current
     if (!scroller) return
@@ -1356,9 +1409,9 @@ export function usePreviewMarkdownRendering({
 
   useLayoutEffect(() => {
     if (!previewDocumentPositionRef) return undefined
-    previewDocumentPositionRef.current = { readViewport: readCharViewport, scrollToChar, smoothScrollToChar }
+    previewDocumentPositionRef.current = { readViewport: readCharViewport, scrollToChar, smoothScrollToChar, readLineMetrics }
     return () => { previewDocumentPositionRef.current = null }
-  }, [previewDocumentPositionRef, readCharViewport, scrollToChar, smoothScrollToChar])
+  }, [previewDocumentPositionRef, readCharViewport, scrollToChar, smoothScrollToChar, readLineMetrics])
 
   /**
    * Hands every buffered height to the virtualizer at once, when the survey is

@@ -18,6 +18,7 @@ import {
 } from '../editor/NonQuantizedSmoothScroll';
 import { cancelQuantizedSmoothScroll, quantizeScrollTopToRow, scrollToQuantizedSmooth } from '../editor/QuantizedSmoothScroll';
 import { beginScrollTrackHold } from '../editor/scrollTrackHold';
+import { countWrappedLines, resolveThumbLineRatio } from '../editor/scrollThumbMetrics';
 import { resolveCagedScrollTarget } from '../editor/CageMath';
 import { sanitizeDocumentText, sanitizeDocumentTextExtended } from '../shared/textSanitization';
 import { resolveScopeRange, isSameRange, type SelectionScope } from '../editor/ContractBridgeRangeUtils';
@@ -1012,6 +1013,49 @@ export function CM6Editor({
     return scrollTransitionControllerRef.current.shouldBlockUserInput(extraBlocked);
   }, []);
 
+  /**
+   * The document's length in rendered lines, cached.
+   *
+   * Recomputed when the note changes, when the cage's geometry changes, or
+   * when the document's length has moved enough to matter -- never on a
+   * keystroke. Typing shifts a 22,000-line count by one; recomputing for that
+   * would cost a full scan per character on exactly the path this project
+   * measures input lag on, to move the thumb by less than a pixel. A paste
+   * large enough to matter crosses the threshold and gets a fresh count.
+   */
+  const documentLineCacheRef = useRef<{
+    noteId: string | null
+    charsPerLine: number
+    docLength: number
+    documentLines: number
+  } | null>(null);
+
+  const readDocumentLines = useCallback((): { documentLines: number; lineHeightPx: number } | null => {
+    const view = viewRef.current;
+    const lineHeightPx = lineHeightPxRef.current;
+    if (!view || !(lineHeightPx > 0)) return null;
+
+    // The editor is a monospace cage, so this is exact rather than estimated:
+    // every glyph is one cell wide.
+    const cellWidthPx = cellWidthPxRef.current;
+    const contentWidthPx = view.contentDOM.clientWidth;
+    if (!(cellWidthPx > 0) || !(contentWidthPx > 0)) return null;
+    const charsPerLine = Math.max(1, Math.floor(contentWidthPx / cellWidthPx));
+
+    const currentNoteId = noteIdRef.current;
+    const docLength = view.state.doc.length;
+    const cached = documentLineCacheRef.current;
+    const drift = cached ? Math.abs(docLength - cached.docLength) : Number.POSITIVE_INFINITY;
+    const driftBudget = cached ? Math.max(2000, cached.docLength * 0.02) : 0;
+    if (cached && cached.noteId === currentNoteId && cached.charsPerLine === charsPerLine && drift <= driftBudget) {
+      return { documentLines: cached.documentLines, lineHeightPx };
+    }
+
+    const documentLines = countWrappedLines(view.state.doc.toString(), charsPerLine);
+    documentLineCacheRef.current = { noteId: currentNoteId, charsPerLine, docLength, documentLines };
+    return { documentLines, lineHeightPx };
+  }, []);
+
   const readScrollbarGeometry = useCallback((): ScrollbarGeometry | null => {
     const scroller = viewRef.current?.scrollDOM;
     const track = scrollbarTrackRef.current;
@@ -1047,7 +1091,16 @@ export function CM6Editor({
       };
     }
 
-    const visibleRatio = viewportHeight / contentHeight;
+    // Thumb SIZE in lines, from the text -- see editor/scrollThumbMetrics.ts
+    // and the twin of this line in usePreviewScrollbar. The pixel ratio is
+    // kept only as the answer of last resort, before the editor has enough
+    // geometry to say anything.
+    const lineMetrics = readDocumentLines();
+    const visibleRatio = (lineMetrics && resolveThumbLineRatio({
+      viewportHeightPx: viewportHeight,
+      lineHeightPx: lineMetrics.lineHeightPx,
+      documentLines: lineMetrics.documentLines,
+    })) ?? (viewportHeight / contentHeight);
     const thumbHeightPx = Math.max(
       SCROLL_TRACK_MIN_THUMB_HEIGHT_PX,
       Math.min(usableTrackHeight, Math.round(usableTrackHeight * visibleRatio)),
@@ -1063,7 +1116,7 @@ export function CM6Editor({
       maxThumbTravelPx,
       maxScrollTopPx,
     };
-  }, []);
+  }, [readDocumentLines]);
 
   const syncCustomScrollbar = useCallback((options?: { force?: boolean }) => {
     if (isDraggingScrollThumbRef.current && !options?.force) {

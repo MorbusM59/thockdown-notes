@@ -46,6 +46,23 @@ The goal is deterministic behavior with one source of truth per interaction phas
   panes use the identical predicate so they cannot drift apart; a focused
   button or search field is not a claim.
 
+### 3c. The scrollbar describes the text, not the layout
+- Thumb POSITION is a character offset into the source; thumb SIZE is
+  `viewport lines / document lines`, counted once from the source. Neither
+  reads `scrollHeight`.
+- The reason is not accuracy, it is stability. A pixel ratio is a question
+  about layout, and layout is not known until it has been measured, so the
+  thumb moved every time the app learned something -- once per note load, and
+  again whenever a better height estimate arrived. A scrollbar that twitches
+  when the app's knowledge improves is reporting on the wrong thing.
+- Ballpark is the standard, not exactness: measured within 2-9% of the pixel
+  ratio on ordinary notes, and knowingly worse on image-heavy ones. A thumb
+  that is consistently a little wrong beats one that is briefly right and then
+  moves.
+- Recompute on CHANGE (the text, the typography, the pane geometry), never on
+  measurement. If a recomputation would be triggered by the app finishing some
+  work rather than by the reader doing something, it is the wrong trigger.
+
 ### 4. No hidden second chance paths
 - Fallbacks may exist, but they must not duplicate primary behavior in another phase.
 - A release-phase fallback that can re-run a press-phase action is prohibited.

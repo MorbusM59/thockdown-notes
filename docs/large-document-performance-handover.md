@@ -1653,6 +1653,79 @@ CM6/Chromium native overhead, not further attributable without new tooling" is u
 the honest answer for whatever's left. The `sanitizeDatabase()` real-world observation window noted
 directly above is the one open item this round actually added.
 
+## This round: the thumb is sized in lines, once, and then left alone
+
+The reported symptom: the scrollbar's thumb resizes once shortly after every
+note load, including switching between notes already seen. The cause was not a
+bug -- it was the design. Thumb size was `viewportHeight / scrollHeight`, and
+`scrollHeight` changes exactly once per load, when the fitted height model
+replaces the flat first estimate (measured earlier: 223,159px -> 349,261px).
+Nothing about the reader's situation changed at that moment; only the app's
+knowledge did.
+
+**The decision** (the user's framing, and the right one): stop trying to make
+an increasingly clever system agree with an ever-growing set of edge cases.
+Pick one heuristic that a single pass can answer in a millisecond, and stick
+with it. The thumb does not have to match the true ratio of document lines to
+displayed lines -- it has to be in a reasonable ballpark and then hold still.
+
+**The heuristic**: `viewport lines / document lines`, where document lines is a
+single linear scan of the source counting WRAPPED lines
+(`editor/scrollThumbMetrics.ts`).
+
+Why lines, established by measurement before choosing:
+
+- Not characters: a 5,000-line file of short lines -- a list, dialogue, code, a
+  TOC -- has few characters and many screens, and character-counting calls it
+  short.
+- Not source lines: measured on ordinary prose, 7,353 source lines render as
+  22,367 wrapped ones, so the thumb would be three times too big and the error
+  would swing with the author's hard-wrapping.
+- The scan is affordable outright, so there is no sampling to get wrong:
+  **0.26ms at 200k characters, 0.75ms at 1.5M, 0.97ms at 5M.**
+- An O(1) approximation (`max(sourceLines, chars / charsPerLine)`) was
+  measured against the true count first and rejected: exact on uniform shapes
+  but **-21% to -23%** on anything mixed, always under-counting, so the thumb
+  reads too big on exactly the documents people write.
+
+**Characters-per-line** comes from one number per pane, read once. The editor
+is a monospace cage, so it is exact: `contentWidth / cellWidthPx`. The preview
+takes it off the typography probe that already exists for invalidation -- its
+text is fixed and known, so the lines it wraps onto give the number directly.
+
+**Recomputation is by change, never by measurement.** The preview caches
+against the block list's own identity (which changes only when the text does).
+The editor caches against note id, characters-per-line, and a document-length
+drift budget of `max(2000 chars, 2%)` -- so typing never triggers a rescan
+(shifting a 22,000-line count by one is not worth a full scan on the path this
+project measures input lag on), while a paste large enough to matter does.
+
+**Measured after** (real Chromium, three document shapes, watched for 2.5s
+after load):
+
+| | thumb changes after load | vs the pixel ratio |
+|---|---|---|
+| prose x25 | **0** | -7% |
+| prose x60 | **0** | -9% |
+| list x120 (short lines) | **0** | +2% |
+
+The consistent small negative on prose is paragraph margins: pixel height that
+is not a line. Constant, and invisible.
+
+**What this buys beyond the symptom.** The thumb no longer reads `scrollHeight`
+at all, so it cannot creep while blocks are measured, cannot jump when the
+height model lands, and has nothing to settle. Position was already exact by
+character; with size now stable by construction, the whole scrollbar is a pure
+function of the text, and pixels matter only for actually moving the scroller.
+The height model stays, but only for the substrate that native wheel scrolling
+and scrollToIndex run on -- it is no longer load-bearing for anything the
+reader looks at.
+
+**Accepted cost, stated so it is not a surprise later:** a note dominated by
+images, or by code blocks set in another size, gets a thumb that is off --
+perhaps by a third. It will be off consistently and silently, which is the
+property that matters.
+
 ## This round: scrollbar gesture, and max speed's second job
 
 Three things the user asked for, one of which explains a number from the round
@@ -1822,6 +1895,13 @@ a pixel ratio on purpose: "how much of the document is on screen" measured in
 characters swings wildly between a screen of dense prose and a screen holding
 one big code block, so a character-sized thumb visibly grows and shrinks as you
 scroll. Position must be exact; size only has to be steady.
+
+> **Superseded (later round).** Size is no longer a pixel ratio either — see
+> "the thumb is sized in lines" below. The reasoning above was right that
+> characters are the wrong unit for size and wrong that pixels were therefore
+> the answer: a pixel ratio is a question about layout, so it moved once per
+> note load as a better height estimate arrived. Lines are the unit that is
+> both stable and meaningful.
 
 **The wiring.** `usePreviewMarkdownRendering` owns the block list and the
 virtualizer, `usePreviewScrollbar` owns the thumb, and they are separate hooks
