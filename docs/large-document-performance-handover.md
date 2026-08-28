@@ -1653,6 +1653,56 @@ CM6/Chromium native overhead, not further attributable without new tooling" is u
 the honest answer for whatever's left. The `sanitizeDatabase()` real-world observation window noted
 directly above is the one open item this round actually added.
 
+## This round: a travel animation has to keep re-aiming, because its target moves
+
+Asked what happens if the reader opens a large note and immediately clicks the
+scrollbar track at 30%. Checking rather than reasoning turned up two defects,
+one of them shipped in the round below.
+
+**The track click was still pixel math.** Only the thumb DRAG had been routed
+through character space; `handlePreviewTrackMouseDown` still computed
+`ratio x maxScrollTop`. So the two gestures that mean the same thing to the
+reader -- drag the thumb to 30%, click the track at 30% -- resolved against
+different spaces, and disagreed by more the less uniform the document's content
+density was. Both now go through the same mapping.
+
+**A pixel target fixed at click time is a promise the app cannot keep.** Click
+at 30% inside the calibration window and the target is 30% of the flat 56px
+guess. Measured on a 1.2M-character note (3,972 blocks): the estimate at click
+time was 223,159px against a true 349,261px, and the travel animation for a
+jump that size runs **18 seconds** on this hardware -- long enough that the
+model lands, blocks are measured, and the total size moves repeatedly while it
+is in flight, each change redefining what the fixed target meant. The click
+landed around 13% of the document instead of 30%.
+
+The fix holds the destination in character space -- which does not move -- and
+re-projects it into pixels every frame (`smoothScrollToChar`).
+`scrollToNonQuantizedSmooth` re-plans smoothly from wherever the animation
+currently is and no-ops on an unchanged target, so this costs nothing until the
+geometry actually moves; a 24px threshold keeps measurement noise from
+restarting the easing every frame.
+
+**And calibration must not yield to the app's own animation.** The survey
+yields to `isNonQuantizedSmoothScrollActive` -- correct when the reader is
+scrolling, backwards while calibrating, because the animation's destination is
+a character position and until the model lands the pixel it maps to is a guess.
+The animation was, in effect, waiting on a survey that was waiting on the
+animation. While calibrating, only the READER's own scrolling now causes a
+yield. (A travel animation fires scroll events of its own, so the
+"scrolled recently" timestamp had to learn to ignore them too.)
+
+After all three, the same early click at 30% lands on block 1,159 of 3,972 --
+the same block the fully settled click lands on, and within 1% of the character
+target, that last 1% being the thumb-centring convention (clicking at 30% of
+the track centres the thumb there, which is travel-ratio 29.2%, not 30%).
+
+**Open question for the next session:** that travel animation takes 18s for
+100,000px. It is the app's own distance-based curve
+(`buildScrollPlanFromCurrentParams`), not anything this work introduced, but
+the user guide describes a track click as jumping "directly to that position",
+which 18 seconds is not. Worth asking whether a track click should travel or
+snap.
+
 ## This round: what CPU throttling found that a fast machine hid
 
 Both of these were invisible at full speed and obvious at 6x

@@ -66,6 +66,7 @@ import type { PreviewCharViewport } from './previewCharPosition'
 export interface PreviewDocumentPositionApi {
   readViewport: () => PreviewCharViewport | null
   scrollToChar: (charOffset: number) => void
+  smoothScrollToChar: (charOffset: number) => void
 }
 
 // Initial guess only -- corrected as soon as each block actually mounts and
@@ -77,6 +78,14 @@ const PREVIEW_BLOCK_ESTIMATED_HEIGHT_PX = 56
 
 /** How long discovery must run before its progress bar is worth showing. */
 const PREVIEW_DISCOVERY_BAR_DELAY_MS = 600
+
+/**
+ * How far a travel animation's pixel target must move before it is re-aimed.
+ *
+ * Below this it is measurement noise, and re-planning on it would restart the
+ * easing curve every frame -- an animation that never gets anywhere.
+ */
+const PREVIEW_CHAR_TRAVEL_REAIM_PX = 24
 
 /**
  * Whether to log the background survey's own throughput.
@@ -1246,6 +1255,7 @@ export function usePreviewMarkdownRendering({
   // Position in character space -- see previewCharPosition.ts.
   // ---------------------------------------------------------------------
   const blockCharOffsetsRef = useRef<Float64Array | null>(null)
+  const charTravelRafRef = useRef<number | null>(null)
   useLayoutEffect(() => {
     blockCharOffsetsRef.current = buildBlockCharOffsets(previewBlocks)
   }, [previewBlocks])
@@ -1288,11 +1298,67 @@ export function usePreviewMarkdownRendering({
     virtualizer.scrollToOffset(offset)
   }, [virtualizer, readBlockMeasurements])
 
+  /**
+   * Travels to a character position, re-aiming as the document's geometry
+   * changes underneath the animation.
+   *
+   * A pixel target fixed at click time is a promise the app cannot keep. Click
+   * the track at 30% the moment a large note opens and that target is 30% of
+   * whatever the heights are currently believed to be -- before the model
+   * lands, a flat 56px a block, which on a real document is ~70% short.
+   * Measured: the same click landed 13% into the document instead of 30%, and
+   * the travel animation is long enough (18s for 100,000px on this hardware)
+   * that the model lands, blocks are measured, and the total size moves
+   * repeatedly WHILE it is in flight -- each change quietly redefining what
+   * the fixed pixel target meant.
+   *
+   * So the target is held in character space, which does not move, and
+   * re-projected into pixels every frame. `scrollToNonQuantizedSmooth`
+   * re-plans smoothly from wherever the animation currently is, and no-ops on
+   * an unchanged target, so this costs nothing until the geometry actually
+   * moves. The threshold keeps a few pixels of measurement noise from
+   * re-planning (and so restarting the easing) on every frame.
+   */
+  const smoothScrollToChar = useCallback((charOffset: number) => {
+    const scroller = previewScrollRef.current
+    if (!scroller) return
+    const resolve = () => resolvePreviewCharScrollOffset({
+      offsets: blockCharOffsetsRef.current,
+      measurements: readBlockMeasurements(),
+      charOffset,
+    })
+
+    const first = resolve()
+    if (first === null) return
+    scrollToNonQuantizedSmooth(scroller, first)
+
+    if (charTravelRafRef.current !== null) cancelAnimationFrame(charTravelRafRef.current)
+    let aimedAt = first
+    const reaim = () => {
+      charTravelRafRef.current = null
+      const element = previewScrollRef.current
+      // The animation ending -- including because the reader took over -- ends
+      // this loop with it. Nothing here ever starts a scroll of its own.
+      if (!element || !isNonQuantizedSmoothScrollActive(element)) return
+      const next = resolve()
+      if (next !== null && Math.abs(next - aimedAt) > PREVIEW_CHAR_TRAVEL_REAIM_PX) {
+        aimedAt = next
+        scrollToNonQuantizedSmooth(element, next)
+      }
+      charTravelRafRef.current = requestAnimationFrame(reaim)
+    }
+    charTravelRafRef.current = requestAnimationFrame(reaim)
+  }, [previewScrollRef, readBlockMeasurements])
+
+  useEffect(() => () => {
+    if (charTravelRafRef.current !== null) cancelAnimationFrame(charTravelRafRef.current)
+  }, [])
+
   useLayoutEffect(() => {
     if (!previewDocumentPositionRef) return undefined
-    previewDocumentPositionRef.current = { readViewport: readCharViewport, scrollToChar }
+    previewDocumentPositionRef.current = { readViewport: readCharViewport, scrollToChar, smoothScrollToChar }
     return () => { previewDocumentPositionRef.current = null }
-  }, [previewDocumentPositionRef, readCharViewport, scrollToChar])
+  }, [previewDocumentPositionRef, readCharViewport, scrollToChar, smoothScrollToChar])
 
   /**
    * Hands every buffered height to the virtualizer at once, when the survey is
@@ -1334,8 +1400,21 @@ export function usePreviewMarkdownRendering({
       // that cost ~36% median frame time while reading. The survey has no
       // deadline; the reader does.
       const scroller = previewScrollRef.current
-      const scrolledRecently = performance.now() - lastPreviewScrollAtRef.current < PREVIEW_PREWARM_SCROLL_QUIET_MS
-      if (scrolledRecently || (scroller && isNonQuantizedSmoothScrollActive(scroller))) {
+      const travelling = scroller !== null && isNonQuantizedSmoothScrollActive(scroller)
+      // A travel animation fires scroll events of its own, so "the reader
+      // scrolled recently" only means anything while nothing is travelling.
+      const readerScrolling = !travelling
+        && performance.now() - lastPreviewScrollAtRef.current < PREVIEW_PREWARM_SCROLL_QUIET_MS
+      // While CALIBRATING, a travel animation is waiting on us rather than
+      // competing with us: its destination is a character position, and until
+      // the model lands the pixel that maps to is a flat-estimate guess.
+      // Yielding to it keeps the journey pointed at the wrong place for its
+      // whole duration -- measured at 18s on a large note. The reader's own
+      // scrolling still wins, in both modes.
+      const shouldYieldToScrolling = surveyModeRef.current === 'calibrating'
+        ? readerScrolling
+        : (readerScrolling || travelling)
+      if (shouldYieldToScrolling) {
         // Yielding means unmounting, not just declining to start a new batch.
         // The previous batch's blocks are real rendered markdown; left in the
         // DOM they keep costing layout on every frame of the reader's scroll.

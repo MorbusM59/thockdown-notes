@@ -415,12 +415,26 @@ export function usePreviewScrollbar({
     const minThumbTop = SCROLL_TRACK_EDGE_GAP_PX
     const maxThumbTop = SCROLL_TRACK_EDGE_GAP_PX + maxThumbTravel
     const clampedTop = Math.max(minThumbTop, Math.min(targetThumbTop, maxThumbTop))
-    const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
     const ratio = maxThumbTravel > 0 ? (clampedTop - SCROLL_TRACK_EDGE_GAP_PX) / maxThumbTravel : 0
-    const targetScrollTop = ratio * maxScrollTop
 
-    scrollToNonQuantizedSmooth(scroller, targetScrollTop)
-  }, [previewScrollRef, shouldBlockPreviewInteraction, handlePreviewTrackRightMouseDown])
+    // Same character mapping as the thumb drag. Clicking the track at 30% and
+    // dragging the thumb to 30% have to mean the same thing -- they are the
+    // same gesture to the reader -- and until this was routed here they did
+    // not: the click resolved against pixels, so on a document with uneven
+    // content density the two landed in different places, and on one still
+    // being sized up they landed VERY differently (measured: a click at 30%
+    // on a just-opened note went to 13% of the text).
+    const position = previewDocumentPositionRef?.current
+    const charViewport = position?.readViewport() ?? null
+    if (position && charViewport) {
+      const charSpan = Math.max(0, charViewport.totalChars - charViewport.visibleChars)
+      position.smoothScrollToChar(ratio * charSpan)
+      return
+    }
+
+    const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+    scrollToNonQuantizedSmooth(scroller, ratio * maxScrollTop)
+  }, [previewScrollRef, shouldBlockPreviewInteraction, handlePreviewTrackRightMouseDown, previewDocumentPositionRef])
 
   const handlePreviewThumbMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
     if (shouldBlockPreviewInteraction()) return
