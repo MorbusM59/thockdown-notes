@@ -1087,6 +1087,7 @@ export function usePreviewMarkdownRendering({
   const lastPreviewScrollAtRef = useRef(0)
   const prewarmBatchRef = useRef<readonly number[]>([])
   const prewarmWaitMsRef = useRef(0)
+  const minSliceMsRef = useRef(Number.POSITIVE_INFINITY)
   // The fitted height model and the heights it predicts for every block --
   // see previewHeightModel.ts. `predictedHeights` is materialised as an array
   // rather than computed on demand because react-virtual asks `estimateSize`
@@ -1404,6 +1405,13 @@ export function usePreviewMarkdownRendering({
    */
   const finishCalibration = useCallback(() => {
     const blockCount = previewBlocksRef.current.length
+    // Unmount the last calibration batch. Without this the measurement host
+    // keeps ~90 fully rendered markdown blocks in the DOM for the rest of the
+    // session, costing layout on every frame the reader scrolls -- the exact
+    // cost the scroll-yield path exists to avoid. Found by instrumenting:
+    // `[data-prewarm-index]` was still in the document minutes later.
+    prewarmBatchRef.current = []
+    setPrewarmBatch([])
     const model = fitPreviewHeightModel(calibrationSamplesRef.current)
     const trusted = isPreviewHeightModelTrustworthy(model)
 
@@ -1527,10 +1535,15 @@ export function usePreviewMarkdownRendering({
       }
     }
 
+    // The cheapest slice seen so far is mostly fixed cost (a React commit plus
+    // a forced layout of the whole preview), which is what the sizer needs in
+    // order to know how much of its budget is actually available for blocks.
+    minSliceMsRef.current = Math.min(minSliceMsRef.current, sliceMs)
     prewarmBatchSizeRef.current = resolveNextPrewarmBatchSize(
       prewarmBatch.length,
       sliceMs,
       PREVIEW_PREWARM_SLICE_BUDGET_MS,
+      minSliceMsRef.current,
     )
 
     if (isCalibrating && calibrationQueueRef.current.length === 0) {
@@ -1545,6 +1558,7 @@ export function usePreviewMarkdownRendering({
     prewarmBufferRef.current = new Map()
     prewarmDoneRef.current = false
     prewarmBatchSizeRef.current = PREVIEW_PREWARM_INITIAL_BATCH
+    minSliceMsRef.current = Number.POSITIVE_INFINITY
     prewarmBatchRef.current = []
     setPrewarmBatch([])
     discoveryPercentRef.current = -1

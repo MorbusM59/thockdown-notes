@@ -93,6 +93,20 @@ export const PREVIEW_PREWARM_SCROLL_QUIET_MS = 180
 export const PREVIEW_PREWARM_GEOMETRY_CACHE_SIZE = 4
 
 /**
+ * How far the slice budget may stretch to amortize a fixed cost it cannot
+ * avoid, and the hard ceiling on a slice however slow the machine is.
+ *
+ * A slice cannot cost less than one React commit plus one forced layout. When
+ * that alone is bigger than the budget, holding the budget means spending
+ * every slice on overhead -- so the budget stretches to a multiple of it. The
+ * ceiling is what stops that reasoning from running away on genuinely slow
+ * hardware: 120ms is a long time to hold the main thread, and it is spent only
+ * while calibrating, a handful of slices in total.
+ */
+export const PREVIEW_PREWARM_FIXED_COST_HEADROOM = 2.5
+export const PREVIEW_PREWARM_MAX_SLICE_MS = 120
+
+/**
  * How long a scheduled slice may be starved before it runs anyway.
  *
  * `requestIdleCallback`'s own timeout. The default this code shipped with was
@@ -168,6 +182,7 @@ export function resolveNextPrewarmBatchSize(
   previousBatchSize: number,
   previousDurationMs: number,
   budgetMs: number = PREVIEW_PREWARM_SLICE_BUDGET_MS,
+  fixedCostMs = 0,
 ): number {
   if (previousBatchSize <= 0) return PREVIEW_PREWARM_INITIAL_BATCH
   // A slice that measured nothing measurable (0ms) tells us nothing about
@@ -176,8 +191,20 @@ export function resolveNextPrewarmBatchSize(
     return Math.min(PREVIEW_PREWARM_MAX_BATCH, previousBatchSize * 2)
   }
 
-  const perBlockMs = previousDurationMs / previousBatchSize
-  const target = Math.floor(budgetMs / perBlockMs)
+  // Split the observed slice into the part that does not shrink with the batch
+  // and the part that does. Without this the budget is spent on overhead: at
+  // 6x CPU throttle a slice's fixed cost alone exceeded the whole budget, the
+  // sizer pinned itself to the floor exactly as it did before this budget was
+  // raised, and calibrating 160 blocks took 11.9s instead of ~1s. The budget
+  // stretches to cover a fixed cost it cannot avoid, so that slow hardware
+  // gets FEWER, bigger slices rather than a floor's worth of tiny ones.
+  const fixed = Math.max(0, Math.min(fixedCostMs, previousDurationMs))
+  const effectiveBudget = Math.min(
+    PREVIEW_PREWARM_MAX_SLICE_MS,
+    Math.max(budgetMs, fixed * PREVIEW_PREWARM_FIXED_COST_HEADROOM),
+  )
+  const perBlockMs = Math.max(0.001, (previousDurationMs - fixed) / previousBatchSize)
+  const target = Math.floor((effectiveBudget - fixed) / perBlockMs)
   // Never move by more than 2x in one step: a single anomalous slice (a GC
   // pause landing inside it) shouldn't collapse the batch size to 1 and leave
   // the sweep crawling for the rest of the document.

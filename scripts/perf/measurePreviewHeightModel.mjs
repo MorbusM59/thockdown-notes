@@ -24,6 +24,9 @@ const EXECUTABLE_PATH = process.env.PLAYWRIGHT_CHROMIUM_PATH || undefined
 const arg = (name, fallback) => Number((process.argv.find((a) => a.startsWith(`--${name}=`)) ?? `--${name}=${fallback}`).split('=')[1])
 const chars = arg('chars', 1500000)
 const shape = (process.argv.find((a) => a.startsWith('--shape=')) ?? '--shape=dense').split('=')[1]
+// Slow hardware is where this feature is judged: the reporter's own machine
+// took minutes where this container took seconds. 1 = no throttling.
+const throttle = arg('throttle', 1)
 
 /**
  * Blank-line-separated blocks of VARYING length -- the shape real prose has.
@@ -73,6 +76,12 @@ async function main() {
   try {
     await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'load' })
     await page.waitForTimeout(2000)
+
+    const cdp = await page.context().newCDPSession(page)
+    if (throttle > 1) {
+      await cdp.send('Emulation.setCPUThrottlingRate', { rate: throttle })
+      console.log(`CPU throttled ${throttle}x`)
+    }
 
     const text = shape === 'dense' ? generateDenseDocument(chars) : generateSyntheticDocument(chars)
     console.log(`document: ${text.length} chars, shape=${shape}`)
@@ -168,6 +177,44 @@ async function main() {
     console.log(`  settled estimate error:    ${errorPct}%`)
     console.log(`  jump-to-bottom missed by:  ${jump.missPx}px`)
     console.log(`  churn while walking:       ${truth.totalSizeChanges} size changes, biggest ${truth.biggestJumpPx}px`)
+
+    // --- Typography change: everything re-wraps, so every height changes ---
+    // The model has to be re-fitted; the point is that re-fitting is a
+    // hundred-odd renders and not another full survey.
+    const refit = await page.evaluate(async () => {
+      const scroller = document.querySelector('.markdown-preview')
+      scroller.scrollTop = 0
+      await new Promise((r) => setTimeout(r, 400))
+      const style = document.createElement('style')
+      style.textContent = '.markdown-preview { font-size: 21px !important; line-height: 1.9 !important; }'
+      document.head.appendChild(style)
+
+      const startedAt = performance.now()
+      const spacer = scroller.querySelector(':scope > div[style*="height"]')
+      const before = Math.round(parseFloat(spacer.style.height) || 0)
+      // Settled = the size stopped moving AND nothing is being measured.
+      let last = before
+      let stableSince = performance.now()
+      while (performance.now() - startedAt < 120000) {
+        await new Promise((r) => setTimeout(r, 100))
+        const size = Math.round(parseFloat(spacer.style.height) || 0)
+        const busy = !!document.querySelector('[data-prewarm-index]')
+        if (size !== last || busy) { last = size; stableSince = performance.now() }
+        else if (performance.now() - stableSince > 800) break
+      }
+      const settledMs = Math.round(stableSince - startedAt)
+
+      scroller.style.scrollBehavior = 'auto'
+      scroller.scrollTop = scroller.scrollHeight
+      await new Promise((r) => setTimeout(r, 1500))
+      const missPx = Math.round(scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop)
+      return { settledMs, beforePx: before, afterPx: last, missPx }
+    })
+    console.log('')
+    console.log(`  after a font/line-height change:`)
+    console.log(`    re-settled after:        ${(refit.settledMs / 1000).toFixed(1)}s`)
+    console.log(`    total size:              ${refit.beforePx}px -> ${refit.afterPx}px`)
+    console.log(`    jump-to-bottom missed by: ${refit.missPx}px`)
   } finally {
     await browser.close()
     await server.stop()

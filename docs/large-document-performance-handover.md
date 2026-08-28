@@ -1653,6 +1653,40 @@ CM6/Chromium native overhead, not further attributable without new tooling" is u
 the honest answer for whatever's left. The `sanitizeDatabase()` real-world observation window noted
 directly above is the one open item this round actually added.
 
+## This round: what CPU throttling found that a fast machine hid
+
+Both of these were invisible at full speed and obvious at 6x
+(`measurePreviewHeightModel.mjs --throttle=6`). Worth repeating for anything
+in this area: the reporter's hardware is several times slower than this
+container, and "it settles instantly here" is not evidence.
+
+**1. The measurement host was never unmounted when calibration finished.**
+`finishCalibration` applied the model and returned without clearing
+`prewarmBatch`, so the last ~90 fully rendered markdown blocks stayed in the
+DOM for the rest of the session -- costing layout on every frame the reader
+scrolls, which is exactly the cost the scroll-yield path exists to avoid. It
+also made anything watching `[data-prewarm-index]` (two of the perf scripts)
+believe a survey was still running forever. Found by instrumenting the live
+page rather than reasoning about the code.
+
+**2. The batch sizer collapsed to its floor again on slow hardware** -- the
+same defect the budget raise fixed, re-appearing for the same reason one level
+down. A slice cannot cost less than one React commit plus one forced layout,
+and at 6x throttle that fixed cost alone exceeded the whole 32ms budget, so
+every slice was spent on overhead: 160 calibration blocks took **11.9s**. The
+sizer now takes the fixed cost as an input (the hook feeds it the cheapest
+slice seen so far) and stretches the budget to a multiple of it, capped at
+120ms per slice. Slow hardware gets fewer, bigger slices instead of a floor's
+worth of tiny ones.
+
+At 6x CPU throttle, 400k chars / ~4,000 blocks:
+
+| | before these two | after |
+|---|---|---|
+| scrollbar settled | 11.9s | **4.1s** |
+| re-settled after a font change | never (host never unmounted) | **2.8s** |
+| settled estimate error | 0.4% | 0.4% |
+
 ## This round: the scrollbar thumb is a position in the TEXT, not in the pixels
 
 Second half of the Kindle idea, on top of the height model below. The model
