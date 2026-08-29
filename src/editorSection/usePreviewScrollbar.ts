@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MouseEvent, MutableRefObject } from 'react'
 import type { PreviewDocumentPositionApi } from './usePreviewMarkdownRendering'
 import { beginScrollTrackHold } from '../editor/scrollTrackHold'
+import { registerScrollBridge } from '../editor/scrollBridge'
+import { measureAverageCharWidthPx } from '../editor/scrollBridgeTexture'
 import {
   buildReleaseRampDownPlanFromCurrentParams,
   cancelNonQuantizedSmoothScroll,
@@ -58,12 +60,44 @@ export interface UsePreviewScrollbarOptions {
    * work on the pixel mapping alone.
    */
   previewDocumentPositionRef?: MutableRefObject<PreviewDocumentPositionApi | null>
+  /**
+   * The pane box the long-journey bridge draws into (editor/scrollBridge.ts).
+   *
+   * Deliberately the render CONTAINER rather than the scroller: a curtain
+   * inside the scroller would scroll with the content and add its own height
+   * to the scrollable area, which for a bridge this tall would be a good deal
+   * worse than merely wrong.
+   */
+  previewBridgeHostRef?: MutableRefObject<HTMLDivElement | null>
   activeNoteId: string | null
   currentEditorText: string
   viewStyle: ViewStyleKey
   viewFontSize: number
   viewSpacing: number
   viewLetterSpacingEm: number
+}
+
+/**
+ * The colour the bridge should paint itself, walking up until it finds one.
+ *
+ * The pane the text sits in is usually transparent, with whatever is behind it
+ * providing the colour -- so reading the scroller's own background gives
+ * `rgba(0, 0, 0, 0)`, and a curtain painted with that is not a curtain at all.
+ * The document ends up showing through the spoof text: two texts interleaved,
+ * both legible, which is worse than either the cut or the bridge alone.
+ */
+function resolveOpaqueBackgroundColor(from: HTMLElement): string {
+  let node: HTMLElement | null = from
+  while (node) {
+    const color = window.getComputedStyle(node).backgroundColor
+    // Anything but fully transparent will do: a translucent layer over an
+    // opaque one below it is exactly what the real text is sitting on too.
+    if (color && color !== 'transparent' && !/rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*0\s*\)/.test(color)) {
+      return color
+    }
+    node = node.parentElement
+  }
+  return '#ffffff'
 }
 
 /**
@@ -79,6 +113,7 @@ export function usePreviewScrollbar({
   previewScrollRef,
   isSectionActive = true,
   previewDocumentPositionRef,
+  previewBridgeHostRef,
   activeNoteId,
   currentEditorText,
   viewStyle,
@@ -215,6 +250,66 @@ export function usePreviewScrollbar({
     if (!isPreviewMode) return
     syncPreviewCustomScrollbar()
   }, [isPreviewMode, syncPreviewCustomScrollbar, activeNoteId, currentEditorText, viewStyle, viewFontSize, viewSpacing, viewLetterSpacingEm])
+
+  /**
+   * Offers this pane a curtain for long journeys (editor/scrollBridge.ts).
+   *
+   * Registered rather than passed: the engine that needs it is
+   * scrollToNonQuantizedSmooth, and it is reached from half a dozen places
+   * that have no business knowing whether the pane they are scrolling can
+   * cover a cut. A pane that registers nothing simply never has its journeys
+   * bridged, which is the correct behaviour for one that cannot draw.
+   *
+   * `readStyle` is read fresh at the start of every journey, so a change of
+   * font, size, spacing or theme needs no invalidation of its own.
+   */
+  const currentEditorTextRef = useRef(currentEditorText)
+  useEffect(() => { currentEditorTextRef.current = currentEditorText }, [currentEditorText])
+
+  useEffect(() => {
+    const scroller = previewScrollRef.current
+    const host = previewBridgeHostRef?.current
+    if (!scroller || !host) return undefined
+
+    return registerScrollBridge(scroller, {
+      host,
+      readStyle: () => {
+        // Measured from a rendered paragraph, not from the scroller. The
+        // scroller carries the reader's font-size setting, but the markdown
+        // styles size actual body text off it -- measured at 16px/25.6px on
+        // the scroller against 12.8px/20.48px on a real paragraph, which drew
+        // a bridge a quarter too big and immediately obvious against the
+        // document either side of it.
+        const paragraph = scroller.querySelector('p')
+        const style = window.getComputedStyle(paragraph ?? scroller)
+        const scrollerStyle = window.getComputedStyle(scroller)
+        const fontPx = parseFloat(style.fontSize)
+        const lineHeightPx = parseFloat(style.lineHeight)
+        if (!(fontPx > 0) || !(lineHeightPx > 0)) return null
+
+        // Padding stays the scroller's: it is what insets the text from the
+        // pane's edge, and a paragraph has none of its own.
+        const paddingLeftPx = parseFloat(scrollerStyle.paddingLeft) || 0
+        const paddingRightPx = parseFloat(scrollerStyle.paddingRight) || 0
+        const averageCharWidthPx = measureAverageCharWidthPx(fontPx, style.fontFamily)
+        if (!averageCharWidthPx) return null
+
+        const usableWidthPx = Math.max(1, scroller.clientWidth - paddingLeftPx - paddingRightPx)
+        return {
+          alphabet: 'declaration' as const,
+          text: currentEditorTextRef.current,
+          charsPerLine: Math.max(1, Math.round(usableWidthPx / averageCharWidthPx)),
+          lineHeightPx,
+          fontPx,
+          fontFamily: style.fontFamily,
+          color: style.color,
+          backgroundColor: resolveOpaqueBackgroundColor(scroller),
+          paddingLeftPx,
+          paddingRightPx,
+        }
+      },
+    })
+  }, [previewScrollRef, previewBridgeHostRef, activeNoteId])
 
   useEffect(() => {
     if (!isPreviewMode) return

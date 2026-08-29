@@ -709,3 +709,30 @@ body {
   padding: 0;
   min-height: var(--editor-line-height);
 }
+
+/* ── The long-journey bridge (editor/scrollBridge.ts) ──────────────────────
+   A band of spoof text that sweeps through the pane while the scroller does
+   its jump underneath.
+
+   Clipped by a viewport-sized host, so a bridge eighteen thousand pixels long
+   costs the same as a short one. Moved by the band's own top offset rather
+   than by a transform: a transform promotes it onto its own compositing
+   layer, and a composited layer under the edge-fade mask is what rendered the
+   edit pane black at some border radii, twice -- see .thockdown-block-caret's
+   own note on the same trap. */
+.scroll-bridge {
+  position:       absolute;
+  inset:          0;
+  overflow:       hidden;
+  pointer-events: none;
+  /* Above the text and its overlays. While this is up there is deliberately
+     nothing else to look at. */
+  z-index:        20;
+}
+
+.scroll-bridge-band {
+  position:          absolute;
+  left:              0;
+  right:             0;
+  background-repeat: repeat-y;
+}

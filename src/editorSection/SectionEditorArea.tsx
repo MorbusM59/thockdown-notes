@@ -52,6 +52,8 @@ export interface SectionEditorAreaProps {
   reduceVisualEffects: boolean
   spellCheckEditEnabled: boolean
   previewTextureRef: RefObject<HTMLDivElement>
+  /** Where the long-journey bridge draws -- see editor/scrollBridge.ts. */
+  previewBridgeHostRef: RefObject<HTMLDivElement>
   previewScrollRef: RefObject<HTMLDivElement>
   handlePreviewScroll: () => void
   viewStyle: string
@@ -183,6 +185,7 @@ export function SectionEditorArea({
   reduceVisualEffects,
   spellCheckEditEnabled,
   previewTextureRef,
+  previewBridgeHostRef,
   previewScrollRef,
   handlePreviewScroll,
   viewStyle,
@@ -364,7 +367,7 @@ export function SectionEditorArea({
                 />
               ) : null}
             </div>
-            <div className={`render-container${isPreviewMode ? '' : ' is-pane-hidden'}`} aria-hidden={!isPreviewMode}>
+            <div ref={previewBridgeHostRef} className={`render-container${isPreviewMode ? '' : ' is-pane-hidden'}`} aria-hidden={!isPreviewMode}>
               <div ref={previewTextureRef} className="markdown-preview-texture" />
               <div
                 ref={previewScrollRef}

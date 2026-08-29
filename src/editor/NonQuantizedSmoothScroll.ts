@@ -11,8 +11,23 @@
 
 import {
   buildScrollPlanFromCurrentParams,
+  sampleCurveRampPlan,
   sampleScrollPlan,
 } from './ScrollCurvePlan';
+import { planScrollJourney } from './scrollJourney';
+import { resolveScrollBridge } from './scrollBridge';
+
+/**
+ * Whether the reader has asked for less movement.
+ *
+ * Answered per call rather than cached: it is an OS-level setting that can be
+ * changed while the app is open, and a reader who turns it on mid-session
+ * means it from that moment, not from the next launch.
+ */
+function prefersReducedMotion(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
 
 export {
   buildReleaseRampDownPlanFromCurrentParams,
@@ -50,6 +65,14 @@ interface AnimationState {
   rafId: number;
   targetScrollTopPx: number;
   previousScrollBehavior: string;
+  /**
+   * Torn down whether the animation finishes or is interrupted.
+   *
+   * A bridged journey puts a curtain in the DOM for the length of the cut, and
+   * the reader is allowed to interrupt a journey at any moment -- so the only
+   * safe place for that teardown is here, where every exit path already meets.
+   */
+  onCancel?: () => void;
 }
 
 const activeAnimations = new WeakMap<HTMLElement, AnimationState>();
@@ -60,6 +83,7 @@ const cancelExistingAnimation = (scroller: HTMLElement): void => {
   const current = activeAnimations.get(scroller);
   if (!current) return;
   cancelAnimationFrame(current.rafId);
+  current.onCancel?.();
   scroller.style.scrollBehavior = current.previousScrollBehavior;
   activeAnimations.delete(scroller);
 };
@@ -108,11 +132,106 @@ export function scrollToNonQuantizedSmooth(
   }
 
   const signedDistance = targetPx - startPx;
-  const plan = buildScrollPlanFromCurrentParams(signedDistance);
-  const totalDurationMs = plan.totalDurationSec * 1000;
+
+  if (prefersReducedMotion()) {
+    scroller.scrollTop = targetPx;
+    options?.onStep?.();
+    return;
+  }
 
   const previousScrollBehavior = scroller.style.scrollBehavior;
   scroller.style.scrollBehavior = 'auto';
+
+  const finish = () => {
+    scroller.scrollTop = clamp(targetPx, 0, maxScrollTopPx);
+    options?.onStep?.();
+    scroller.style.scrollBehavior = previousScrollBehavior;
+    activeAnimations.delete(scroller);
+  };
+
+  const step = (nextPx: number) => {
+    const clamped = clamp(nextPx, 0, maxScrollTopPx);
+    if (scroller.scrollTop !== clamped) {
+      scroller.scrollTop = clamped;
+      options?.onStep?.();
+    }
+  };
+
+  let onCancel: (() => void) | undefined;
+  const keepAnimating = (frame: FrameRequestCallback) => {
+    activeAnimations.set(scroller, {
+      rafId: requestAnimationFrame(frame),
+      targetScrollTopPx: targetPx,
+      previousScrollBehavior,
+      onCancel,
+    });
+  };
+
+  // A journey long enough to have a middle worth cutting, on a pane that can
+  // cover the cut. Everything else falls through to the plain point-to-point
+  // curve below.
+  const journey = planScrollJourney(signedDistance);
+  const bridge = journey?.kind === 'bridged' ? resolveScrollBridge(scroller) : null;
+  const direction: -1 | 1 = signedDistance >= 0 ? 1 : -1;
+  const sweepPx = journey?.kind === 'bridged' && bridge
+    ? bridge.begin(Math.abs(journey.bridgeDistancePx), direction)
+    : null;
+
+  if (journey?.kind === 'bridged' && bridge && sweepPx !== null) {
+    // The curtain may sweep further than the plan asked -- it has to be at
+    // least a few viewports to cover anything -- so the bridge's own duration
+    // comes from what it actually does, not from what it was asked for.
+    const bridgeSec = sweepPx / journey.peakSpeedPxPerSec;
+    const rampUpSec = journey.rampUp.durationSec;
+    const bridgeEndSec = rampUpSec + bridgeSec;
+    const totalSec = bridgeEndSec + journey.rampDown.durationSec;
+
+    const afterRampUpPx = startPx + journey.rampUp.signedDistancePx;
+    const beforeRampDownPx = targetPx - journey.rampDown.signedDistancePx;
+    let jumped = false;
+    let startTimeMs: number | null = null;
+    onCancel = () => bridge.end();
+
+    const animateJourney = (nowMs: number): void => {
+      if (startTimeMs === null) startTimeMs = nowMs;
+      const elapsedSec = (nowMs - startTimeMs) / 1000;
+
+      if (elapsedSec >= totalSec) {
+        bridge.end();
+        finish();
+        return;
+      }
+
+      if (elapsedSec < rampUpSec) {
+        step(startPx + sampleCurveRampPlan(journey.rampUp, elapsedSec));
+      } else if (elapsedSec < bridgeEndSec) {
+        const travelled = (elapsedSec - rampUpSec) * journey.peakSpeedPxPerSec;
+        bridge.advance(travelled);
+        // Before the cut the pane is only partly covered, so the real content
+        // has to keep moving at the same speed the curtain is -- a frozen
+        // strip beside a moving one is more obviously wrong than the cut this
+        // is hiding. After the cut the same rule runs backwards from the far
+        // end, so the ramp-down starts from exactly where it expects to.
+        if (!jumped && bridge.isCovering(travelled)) jumped = true;
+        step(jumped
+          ? beforeRampDownPx - (direction * (sweepPx - travelled))
+          : afterRampUpPx + (direction * travelled));
+      } else {
+        bridge.advance(sweepPx);
+        step(beforeRampDownPx + sampleCurveRampPlan(journey.rampDown, elapsedSec - bridgeEndSec));
+      }
+
+      keepAnimating(animateJourney);
+    };
+
+    keepAnimating(animateJourney);
+    return;
+  }
+
+  bridge?.end();
+
+  const plan = buildScrollPlanFromCurrentParams(signedDistance);
+  const totalDurationMs = plan.totalDurationSec * 1000;
 
   let startTimeMs: number | null = null;
 
@@ -124,33 +243,13 @@ export function scrollToNonQuantizedSmooth(
     const elapsedMs = nowMs - startTimeMs;
 
     if (elapsedMs >= totalDurationMs) {
-      scroller.scrollTop = clamp(targetPx, 0, maxScrollTopPx);
-      options?.onStep?.();
-      scroller.style.scrollBehavior = previousScrollBehavior;
-      activeAnimations.delete(scroller);
+      finish();
       return;
     }
 
-    const displacement = sampleScrollPlan(plan, elapsedMs / 1000);
-    const nextPx = clamp(startPx + displacement, 0, maxScrollTopPx);
-
-    if (scroller.scrollTop !== nextPx) {
-      scroller.scrollTop = nextPx;
-      options?.onStep?.();
-    }
-
-    const nextRafId = requestAnimationFrame(animateFrame);
-    activeAnimations.set(scroller, {
-      rafId: nextRafId,
-      targetScrollTopPx: targetPx,
-      previousScrollBehavior,
-    });
+    step(startPx + sampleScrollPlan(plan, elapsedMs / 1000));
+    keepAnimating(animateFrame);
   };
 
-  const rafId = requestAnimationFrame(animateFrame);
-  activeAnimations.set(scroller, {
-    rafId,
-    targetScrollTopPx: targetPx,
-    previousScrollBehavior,
-  });
+  keepAnimating(animateFrame);
 }

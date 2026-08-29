@@ -58,7 +58,7 @@ type ViewStyleKey =
   | 'bubblerone'
 export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   'sectionId' | 'isSectionActive' | 'activeNoteId' | 'isPreviewMode' | 'previewedSnapshotId' | 'bindings' | 'adapterRef' | 'sectionContainerRef'
-  | 'editorDisplayText' | 'activeNoteHasDebugTag' | 'isPreviewingSnapshot' | 'isCaretSuspended' | 'previewTextureRef'
+  | 'editorDisplayText' | 'activeNoteHasDebugTag' | 'isPreviewingSnapshot' | 'isCaretSuspended' | 'previewTextureRef' | 'previewBridgeHostRef'
   | 'previewScrollRef' | 'handlePreviewScroll' | 'blockPreviewEditMutation' | 'previewMarkdownElement' | 'previewDiscovery'
   | 'previewScrollbarTrackRef' | 'handlePreviewTrackMouseDown' | 'handlePreviewTrackContextMenu' | 'previewScrollbarThumbRef' | 'isDraggingPreviewScrollThumb'
   | 'isPreviewScrollThumbActive' | 'handlePreviewThumbMouseDown' | 'activeNoteDocumentStats' | 'noteSnapshots'
@@ -1391,6 +1391,9 @@ export function EditorSection({
   // thumb): the preview's position in character space. See
   // previewCharPosition.ts for why the thumb is not a pixel quantity.
   const previewDocumentPositionRef = useRef<PreviewDocumentPositionApi | null>(null)
+  // The non-scrolling pane box the long-journey bridge draws into --
+  // see usePreviewScrollbar's own note on why it is not the scroller.
+  const previewBridgeHostRef = useRef<HTMLDivElement | null>(null)
 
   const { previewMarkdownElement, previewDiscovery } = usePreviewMarkdownRendering({
     notes,
@@ -1431,6 +1434,7 @@ export function EditorSection({
     previewScrollRef,
     isSectionActive: sectionId === activeSectionId,
     previewDocumentPositionRef,
+    previewBridgeHostRef,
     activeNoteId,
     currentEditorText,
     viewStyle,
@@ -2062,6 +2066,7 @@ export function EditorSection({
         reduceVisualEffects={reduceVisualEffects}
         spellCheckEditEnabled={spellCheckEditEnabled}
         previewTextureRef={previewTextureRef}
+        previewBridgeHostRef={previewBridgeHostRef}
         previewScrollRef={previewScrollRef}
         handlePreviewScroll={handlePreviewScroll}
         viewStyle={viewStyle}
