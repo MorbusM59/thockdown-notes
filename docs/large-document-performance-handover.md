@@ -2318,3 +2318,76 @@ Root causes in `src/editorSection/useEditorSectionMount.ts`:
   - Added `[scroll-sync]` diagnostic logs around the toggle showing the raw source line, containing block index, chosen anchor index, and anchor start line.
 
 **Verification:** `npx tsc`, `npm run lint`, `npm test` (277/277). Live verification needed: open a multi-block note, enable `localStorage['thockdown:debug-input-lag']='1'`, scroll in each mode, toggle, and confirm the logs show `containingIndex === anchorIndex` and that the top block in render matches the top block in edit.
+
+## This round: a long journey is cut, not endured — the scroll bridge
+
+The standing rule now lives in `docs/interaction-design-philosophy.md` §3d and
+§3e; this is the implementation note for the next person in the code.
+
+**The shape.** A journey longer than roughly a ramp-up plus a ramp-down (about
+11,400px at the default 80,000px/s) no longer plays its whole distance. It ramps
+up on the real document, a curtain of spoof text sweeps in at the journey's own
+speed, the jump happens ONLY while the pane is fully covered, and the ramp-down
+lands on the target as the curtain sweeps out. Total: about half a second
+whether the distance is twelve thousand pixels or twelve hundred thousand. This
+is what let the duration ceiling go (see that section above).
+
+**The modules.**
+- `src/editor/scrollJourney.ts` — plans it. Returns `direct` or `bridged` plus
+  the two ramps and the bridge distance. No DOM.
+- `src/editor/scrollBridge.ts` — the curtain itself. `registerScrollBridge`
+  once per pane; `begin` / `advance` / `isCovering` / `end` per journey.
+- `src/editor/scrollBridgeTexture.ts` — the tile, drawn to a canvas and cached
+  per host plus typography key.
+- `src/editor/scrollThumbRubberBand.ts` — the thumb's two edges.
+- Both engines (`NonQuantizedSmoothScroll`, `QuantizedSmoothScroll`) run the
+  identical three-phase branch and return the journey's timing, so whatever
+  drives the scrollbar can move in step with it.
+
+**Three things that are load-bearing and non-obvious.**
+
+1. *The band paints no background.* It is transparent glyphs, and the real text
+   is clipped away underneath it with `clip-path: inset(...)`. Reconstructing
+   the pane's background was tried and cannot be made to work — the backdrop is
+   a gradient and a tint on ancestors rather than a flat colour anywhere, so
+   reading a background-color up the tree just returns white and the bridge
+   showed visibly different paper for its duration. Nothing is reproduced, so
+   nothing can fail to match.
+
+2. *It moves by `top`, never by `transform`.* A transform promotes a
+   compositing layer, and this repository has two commits fixing a BLACK EDIT
+   PANE caused by a composited layer under the edge-fade mask.
+
+3. *In edit view everything is on the row grid — including the curtain itself.*
+   Three separate fixes were needed and each looked complete on its own. The
+   glyphs had to be drawn on the cell grid (canvas `letterSpacing` set to the
+   cell's remaining gap plus a half-gap shift, mirroring `.editor-text`'s CSS).
+   The baseline had to be the real half-leading, not `0.75 * lineHeight` — 18px
+   rather than 19.5 on a 26px row. And the BAND had to snap to the document's
+   rows rather than sliding continuously underneath correctly-drawn glyphs.
+   That last one has a trap: the row phase must be read from the first LINE
+   BOX, not from `.cm-content`'s own rect. The half-cell edge-breathing-room
+   shift is folded into that element's padding-top (see CM6Editor's header
+   note), so its border box sits exactly half a row above the lattice, and
+   reading it put the whole curtain half a line high.
+
+**What proves it.** `scripts/perf/verifyScrollBridge.mjs` runs one suite
+against both panes — no argument for both, or `preview` / `edit` for one. It
+samples every frame and asserts the cut lands inside the covered window, the
+clip is applied wherever the band overlaps and released at the end, the thumb
+stretches and eases correctly, and — edit view only — that every frame sits on
+the row grid and the curtain's phase is single-valued and equal to the
+document's. That last check replaced one comparing the curtain against
+`scrollTop % lineHeight`, which is zero by construction and so agreed happily
+with a curtain half a row out. If a check here ever needs relaxing, relax it to
+what must actually be true rather than to what currently passes: the thumb's
+resting-height assertion had to become "not left stretched" because the edit
+thumb is sized in wrapped lines and CodeMirror's count of those firms up as the
+document is measured.
+
+**Open, not blocking.** At the default 80,000px/s both seams cross the pane in
+under a frame, so the sweep only reads as a sweep at lower speeds — the spoof
+text is legible only to a reader who has wound the scroll speed down, which is
+the audience it is meant for. The `clip-path` on `.cm-scroller` is worth an
+occasional eye given hazard 2 above, though a plain inset is not itself a
+promotion trigger.
