@@ -1888,6 +1888,11 @@ export function usePreviewMarkdownRendering({
             key={virtualItem.key}
             ref={virtualizer.measureElement}
             data-index={virtualItem.index}
+            // Marks block 0 as the document's first block for the leading
+            // margin reset in markdown.css. By class rather than by DOM
+            // position: virtualization means the spacer's first child is
+            // whichever block is mounted right now, not block 0.
+            className={virtualItem.index === 0 ? 'preview-first-block' : undefined}
             style={{
               position: 'absolute',
               top: 0,

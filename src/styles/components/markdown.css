@@ -200,22 +200,6 @@
 }
 
 /* 11b. Markdown typography */
-.markdown-preview > div > div:first-child > h1, 
-.markdown-preview > div > div:first-child > h2 {
-  margin-top: 0;
-}
-
-/* The background measurement prewarm renders block 0 outside the spacer's
-   real child order, so the position-dependent rule above can't match it --
-   and a block measured with a leading margin the real one doesn't have is a
-   wrong height handed to the virtualizer, which is worse than no prewarm at
-   all. Mirrors the rule above by class instead of by position; the two must
-   stay in step. See previewMeasurementPrewarm.ts. */
-.preview-prewarm-first-block > h1,
-.preview-prewarm-first-block > h2 {
-  margin-top: 0;
-}
-
 .markdown-preview h1,
 .markdown-preview h2,
 .markdown-preview h3,
@@ -226,6 +210,33 @@
   line-height: 1.2;
   color:       inherit;
   text-shadow: var(--text-shadow-emboss-heading-glow);
+}
+
+/* The document's own first block opens flush with the top of the page -- a
+   note should never start with a gap above its own title.
+
+   Both selectors are CLASSES, deliberately, and both live in one rule.
+
+   By class, not by position: the preview is virtualized, so the spacer's
+   first DOM child is whichever block happens to be mounted right now, not
+   block 0. A `:first-child` rule here silently un-margins some heading in
+   the middle of the document as soon as the reader scrolls to it -- and
+   re-margins it when they scroll back, changing that block's height under
+   the virtualizer.
+
+   In one rule, not two: the background measurement prewarm renders block 0
+   into its own hidden host (previewMeasurementPrewarm.ts), so it needs the
+   same margin reset by its own class. When these were two separate rules
+   the prewarm's copy sat BEFORE `.markdown-preview h1`'s own margin at
+   equal specificity, so it lost the tie and block 0 was measured 0.5em
+   taller than it renders -- a gap under the title that no amount of
+   re-measuring could remove, because the measurement itself was wrong.
+   Whatever weight this rule carries, it now carries for both. */
+.markdown-preview .preview-first-block > h1,
+.markdown-preview .preview-first-block > h2,
+.markdown-preview .preview-prewarm-first-block > h1,
+.markdown-preview .preview-prewarm-first-block > h2 {
+  margin-top: 0;
 }
 
 .markdown-preview h1 { font-size: 1.9em; }
