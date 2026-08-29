@@ -20,6 +20,7 @@ import { cancelQuantizedSmoothScroll, quantizeScrollTopToRow, scrollToQuantizedS
 import { beginScrollTrackHold } from '../editor/scrollTrackHold';
 import { countWrappedLines, resolveThumbLineRatio } from '../editor/scrollThumbMetrics';
 import { resolveCagedScrollTarget } from '../editor/CageMath';
+import { attachRowGridGuard, resolveRowGridCorrection, resolveRowGridDirection, type RowGridGuard } from '../editor/rowGridGuard';
 import { sanitizeDocumentText, sanitizeDocumentTextExtended } from '../shared/textSanitization';
 import { resolveScopeRange, isSameRange, type SelectionScope } from '../editor/ContractBridgeRangeUtils';
 import { computeMinimalTextReplacement } from '../editor/MinimalTextDiff';
@@ -495,9 +496,6 @@ function computeVisibleMiddleRows(
   return Math.max(1, Math.floor(middleHeightPx / lineHeightPx));
 }
 
-/** Ported verbatim from CagedScrollPlugin.tsx. */
-const isAlignedToRowGrid = (valuePx: number, lineHeightPx: number) => Math.abs(valuePx % lineHeightPx) < 0.01;
-
 // Rounds `value` to the nearest multiple of `unit`, offset by `phase` --
 // i.e. the nearest value congruent to `phase` (mod unit), not to 0. Needed
 // wherever this file snaps a real, measured DOM position (caret/selection
@@ -537,25 +535,6 @@ const computeReviewGutterRightPx = (measuredWidthPx: number, cellWidthPx: number
   const remainderPx = (((measuredWidthPx - halfCellWidthPxNow) % cellWidthPx) + cellWidthPx) % cellWidthPx;
   return cellWidthPx + remainderPx;
 };
-
-/** Ported verbatim from CagedScrollPlugin.tsx's own resolveDirectionalQuantizedScrollTop. */
-function resolveDirectionalQuantizedScrollTop(
-  currentScrollTopPx: number,
-  previousScrollTopPx: number,
-  maxScrollTopPx: number,
-  lineHeightPx: number,
-): number {
-  const delta = currentScrollTopPx - previousScrollTopPx;
-  if (Math.abs(delta) < 0.01) {
-    return Math.max(0, Math.min(maxScrollTopPx, Math.round(currentScrollTopPx / lineHeightPx) * lineHeightPx));
-  }
-
-  if (delta > 0) {
-    return Math.max(0, Math.min(maxScrollTopPx, Math.ceil(currentScrollTopPx / lineHeightPx) * lineHeightPx));
-  }
-
-  return Math.max(0, Math.min(maxScrollTopPx, Math.floor(currentScrollTopPx / lineHeightPx) * lineHeightPx));
-}
 
 /** Ported verbatim from Editor.tsx. */
 const quantizeTopEdge = (valuePx: number, lineHeightPx: number) => Math.max(0, Math.round(valuePx / lineHeightPx) * lineHeightPx);
@@ -827,6 +806,12 @@ export function CM6Editor({
   // reliably observe, so this counter exists as the one thing outside
   // observers (debug hook, tests) actually can assert on.
   const wrapBoundaryAssocFixDispatchCountRef = useRef(0);
+  // Same reasoning as the counter above: a row-grid correction puts the
+  // scroll position where it should already have been, so it leaves no trace
+  // in the geometry an outside observer could assert on. The count is the
+  // only honest signal -- and an unbounded climb during ordinary typing is
+  // how a fight with CM6's own scroll-into-view would announce itself.
+  const rowGridGuardRef = useRef<RowGridGuard | null>(null);
   const lineHeightPxRef = useRef(lineHeightPx);
   const caretSizeDeviationRef = useRef(caretSizeDeviationPx);
   // Indirection through a ref, not a direct dependency: scheduleCaretUpdate is
@@ -3433,6 +3418,7 @@ export function CM6Editor({
           // the dispatch counter is the reliable signal.
           selectionAssoc: view.state.selection.main.assoc,
           wrapBoundaryAssocFixDispatchCount: wrapBoundaryAssocFixDispatchCountRef.current,
+          rowGridCorrectionCount: rowGridGuardRef.current?.correctionCount() ?? 0,
         };
       };
     }
@@ -3604,29 +3590,30 @@ export function CM6Editor({
     const handlePointerUp = () => endPointerDragSelection();
     const handlePointerCancel = () => endPointerDragSelection();
 
+    /**
+     * Whether the reader is extending a text selection by dragging right now.
+     *
+     * The precondition for the directional correction below, and -- because it
+     * is the same question -- the condition the general row-grid guard stands
+     * down on. A bare "is the primary button down" is NOT that question: a
+     * scrollbar thumb drag also holds the button down, and suspending the
+     * guard for it left the thumb drag with no corrector at all (measured: 6px
+     * off the grid, and left there).
+     */
+    const isDragSelectingText = (): boolean => {
+      if (!isPrimaryPointerDown) return false;
+      const domSelection = window.getSelection();
+      if (!domSelection || domSelection.rangeCount === 0 || domSelection.isCollapsed) return false;
+      const range = domSelection.getRangeAt(0);
+      const root = view.contentDOM;
+      return root.contains(range.startContainer) && root.contains(range.endContainer);
+    };
+
     const handleSelectionDragScrollQuantization = () => {
       const scroller = view.scrollDOM;
       const observedScrollTopPx = scroller.scrollTop;
 
-      if (isApplyingDragQuantizedCorrection) {
-        lastDragScrollTopPx = observedScrollTopPx;
-        return;
-      }
-
-      if (!isPrimaryPointerDown) {
-        lastDragScrollTopPx = observedScrollTopPx;
-        return;
-      }
-
-      const root = view.contentDOM;
-      const domSelection = window.getSelection();
-      if (!domSelection || domSelection.rangeCount === 0 || domSelection.isCollapsed) {
-        lastDragScrollTopPx = observedScrollTopPx;
-        return;
-      }
-
-      const range = domSelection.getRangeAt(0);
-      if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) {
+      if (isApplyingDragQuantizedCorrection || !isDragSelectingText()) {
         lastDragScrollTopPx = observedScrollTopPx;
         return;
       }
@@ -3640,21 +3627,18 @@ export function CM6Editor({
         if (!isPrimaryPointerDown) return;
 
         const currentScrollTopPx = scroller.scrollTop;
-        const lineHeightPxNow = lineHeightPxRef.current;
-        if (isAlignedToRowGrid(currentScrollTopPx, lineHeightPxNow)) {
-          lastDragScrollTopPx = currentScrollTopPx;
-          return;
-        }
+        // Same rule the general guard runs (editor/rowGridGuard.ts), asked
+        // for directionally: this one is correcting a position the reader's
+        // own drag is driving, and rounding to the nearest row would pull
+        // back against it half the time.
+        const quantizedTargetPx = resolveRowGridCorrection({
+          scrollTopPx: currentScrollTopPx,
+          lineHeightPx: lineHeightPxRef.current,
+          maxScrollTopPx: Math.max(0, scroller.scrollHeight - scroller.clientHeight),
+          direction: resolveRowGridDirection(currentScrollTopPx - lastDragScrollTopPx),
+        });
 
-        const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-        const quantizedTargetPx = resolveDirectionalQuantizedScrollTop(
-          currentScrollTopPx,
-          lastDragScrollTopPx,
-          maxScrollTopPx,
-          lineHeightPxNow,
-        );
-
-        if (Math.abs(quantizedTargetPx - currentScrollTopPx) < 0.01) {
+        if (quantizedTargetPx === null) {
           lastDragScrollTopPx = currentScrollTopPx;
           return;
         }
@@ -3665,6 +3649,24 @@ export function CM6Editor({
         lastDragScrollTopPx = quantizedTargetPx;
       });
     };
+
+    // The general row-grid guard (editor/rowGridGuard.ts). Everything this
+    // file writes to scrollTop is already quantized; this is the net for the
+    // writes it does NOT make -- chiefly CM6 shifting scrollTop by an
+    // arbitrary amount as its own height estimates firm up, which measured
+    // 12px off the grid across a run of arrow keys and 6px off at rest after
+    // a thumb drag (see that module's comment and
+    // scripts/perf/verifyEditRowGrid.mjs).
+    //
+    // It stands down only while a text drag-selection is in flight, because
+    // the correction just above owns the position then and corrects it
+    // directionally; two correctors with different rules on one scroller
+    // would trade writes every frame of a drag.
+    const rowGridGuard = attachRowGridGuard(view.scrollDOM, {
+      getLineHeightPx: () => lineHeightPxRef.current,
+      isSuspended: isDragSelectingText,
+    });
+    rowGridGuardRef.current = rowGridGuard;
 
     document.addEventListener('pointerdown', handlePointerDown, { capture: true, passive: true });
     document.addEventListener('mousedown', handleMouseDown, { capture: true, passive: true });
@@ -3818,6 +3820,8 @@ export function CM6Editor({
       document.removeEventListener('focusin', handleFocusChange, true);
       document.removeEventListener('focusout', handleFocusChange, true);
       document.removeEventListener('selectionchange', handleDomSelectionChange);
+      rowGridGuard.dispose();
+      rowGridGuardRef.current = null;
       view.scrollDOM.removeEventListener('scroll', handleScroll);
       view.scrollDOM.removeEventListener('wheel', handleWheel);
       window.removeEventListener('keydown', handlePageKeyDownAnywhere);
