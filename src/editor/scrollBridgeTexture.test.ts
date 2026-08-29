@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   BRIDGE_DECLARATION_TEXT,
   buildBridgeLineText,
+  resolveBridgeBaselineOffsetPx,
   sampleDocumentLineRhythm,
 } from './scrollBridgeTexture'
 
@@ -95,5 +96,27 @@ describe('buildBridgeLineText', () => {
   it('draws nothing for a gap', () => {
     expect(buildBridgeLineText(0, { at: 0 })).toBe('')
     expect(buildBridgeLineText(-5, { at: 0 })).toBe('')
+  })
+})
+
+describe('resolveBridgeBaselineOffsetPx', () => {
+  it('puts the baseline where the editor actually puts its own', () => {
+    // Measured against the running editor: line height 26, font 16, ascent 14,
+    // descent 4. A Range around the document's own first characters puts its
+    // baseline 18px into the row, and this has to agree exactly -- a page of
+    // spoof a pixel and a half low reads as text off the grid, because it is.
+    expect(resolveBridgeBaselineOffsetPx({ lineHeightPx: 26, ascentPx: 14, descentPx: 4 })).toBe(18)
+  })
+
+  it('splits the leftover space evenly, which is what makes it agree', () => {
+    // The same rule CSS uses for inline text in a line box, rather than a
+    // fitted constant: half the leftover above, half below.
+    expect(resolveBridgeBaselineOffsetPx({ lineHeightPx: 40, ascentPx: 10, descentPx: 10 })).toBe(20)
+    expect(resolveBridgeBaselineOffsetPx({ lineHeightPx: 20, ascentPx: 10, descentPx: 10 })).toBe(10)
+  })
+
+  it('falls back rather than drawing nothing when the font will not say', () => {
+    expect(resolveBridgeBaselineOffsetPx({ lineHeightPx: 26 })).toBe(19.5)
+    expect(resolveBridgeBaselineOffsetPx({ lineHeightPx: 26, ascentPx: 0, descentPx: 0 })).toBe(19.5)
   })
 })

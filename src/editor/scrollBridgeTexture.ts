@@ -135,6 +135,35 @@ export function measureAverageCharWidthPx(fontPx: number, fontFamily: string): n
  */
 export const BRIDGE_TILE_LINES = 97
 
+/**
+ * Where a line's baseline sits inside its row box.
+ *
+ * The same arithmetic CSS uses to place inline text in a line box: the space
+ * left over after the font's own ascent and descent is split evenly above and
+ * below -- the half-leading -- and the baseline sits an ascent below that.
+ *
+ * Worth being exact about rather than approximating, which is what shipped
+ * first: `0.75 * lineHeight` put the bridge's baseline at 19.5px on a 26px row
+ * where the document's own text sits at 18, and a page of text a pixel and a
+ * half low reads as text that is not on the grid, because it is not. Measured
+ * against the real editor: line height 26, font 16, ascent 14, descent 4 --
+ * this returns 18, and a Range around the document's own first characters
+ * puts its baseline at 18.
+ *
+ * Falls back to the old approximation only where the font metrics are missing,
+ * since a bridge slightly off is better than no bridge.
+ */
+export function resolveBridgeBaselineOffsetPx(options: {
+  lineHeightPx: number
+  ascentPx?: number
+  descentPx?: number
+}): number {
+  const { lineHeightPx, ascentPx, descentPx } = options
+  if (!(ascentPx! > 0) || !(descentPx! >= 0)) return lineHeightPx * 0.75
+  const halfLeadingPx = (lineHeightPx - (ascentPx! + descentPx!)) / 2
+  return halfLeadingPx + ascentPx!
+}
+
 export interface BridgeTextureRequest {
   /** The document's own rhythm, from sampleDocumentLineRhythm. */
   rhythm: BridgeLine[]
@@ -255,15 +284,21 @@ export function drawBridgeTile(request: BridgeTextureRequest): { dataUri: string
   const maxCells = Math.max(0, Math.floor(usableWidthPx / advancePx))
   const wordCursor = { at: 0 }
 
+  // Where in the row the baseline goes. Read from the font that is about to
+  // draw, so it follows a typography change without anything else being told.
+  const metrics = context.measureText('Hxg')
+  const baselineOffsetPx = resolveBridgeBaselineOffsetPx({
+    lineHeightPx,
+    ascentPx: metrics.fontBoundingBoxAscent,
+    descentPx: metrics.fontBoundingBoxDescent,
+  })
+
   for (let line = 0; line < BRIDGE_TILE_LINES; line += 1) {
     const { fill } = rhythm[line % rhythm.length]
     if (!(fill > 0)) continue
     const text = buildBridgeLineText(Math.min(maxCells, maxCells * fill), wordCursor)
     if (text.length === 0) continue
-    // Baseline sits where a real line's does: the font's own descent below the
-    // line box's bottom is what keeps the bridge's rows on the same rhythm as
-    // the document's.
-    const baselineY = (line * lineHeightPx) + (lineHeightPx * 0.75)
+    const baselineY = (line * lineHeightPx) + baselineOffsetPx
     if (onGrid && !supportsLetterSpacing) {
       // Older canvas implementations have no letter-spacing, and a maxWidth
       // squeeze would be worse than the problem -- so place each glyph on its
