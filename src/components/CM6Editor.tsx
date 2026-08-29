@@ -3707,7 +3707,28 @@ export function CM6Editor({
     // the way it does for editable content -- listen directly so the
     // highlight still tracks a drag-selection there, matching
     // BlockSelectionPlugin.tsx's own reasoning.
-    document.addEventListener('selectionchange', scheduleSelectionHighlightUpdate);
+    //
+    // The CARET needs this same listener, for a reason the highlight's own
+    // rationale does not cover: the block caret is drawn from the geometry of
+    // the browser's DOM selection, and CM6 writes that selection into the DOM
+    // itself, in its measure phase, WITHOUT a state update. So after a
+    // programmatic document swap -- opening a note, and most visibly creating
+    // a chapter, which lands the caret at the end of a freshly written
+    // heading -- the sequence is: state selection set (updateListener fires,
+    // caret measured), then CM6 moves the DOM selection out of the container
+    // and into the line (no update, no focus event, nothing scheduled). The
+    // caret was therefore measured against a container-level selection whose
+    // collapsed rect sits at the right-hand edge of the content box, and
+    // nothing ever asked it again -- so it stayed there, tens of columns away
+    // from the text, until the first keystroke moved it. Found live by
+    // logging the DOM selection's own focusNode across the switch: DIV
+    // (.cm-scroller's content child) at the moment the caret was measured,
+    // #text inside .cm-line 20ms later.
+    const handleDomSelectionChange = () => {
+      scheduleCaretUpdate();
+      scheduleSelectionHighlightUpdate();
+    };
+    document.addEventListener('selectionchange', handleDomSelectionChange);
 
     // Covers layout shifts that don't fire a window resize event (sidebar
     // toggle, split-view pane resize, font-size change). Also keeps
@@ -3796,7 +3817,7 @@ export function CM6Editor({
       resizeObserver.disconnect();
       document.removeEventListener('focusin', handleFocusChange, true);
       document.removeEventListener('focusout', handleFocusChange, true);
-      document.removeEventListener('selectionchange', scheduleSelectionHighlightUpdate);
+      document.removeEventListener('selectionchange', handleDomSelectionChange);
       view.scrollDOM.removeEventListener('scroll', handleScroll);
       view.scrollDOM.removeEventListener('wheel', handleWheel);
       window.removeEventListener('keydown', handlePageKeyDownAnywhere);
