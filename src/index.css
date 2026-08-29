@@ -730,9 +730,19 @@ body {
   z-index:        20;
 }
 
+/* Carries the flat editor background, set from the pane's own resolved colour.
+   Its two children are the pane's other two layers, in the pane's own order --
+   the tinted mask texture (which reuses .markdown-preview-texture outright, so
+   it cannot drift from the real one) and then the spoof text over it. */
 .scroll-bridge-band {
+  position: absolute;
+  left:     0;
+  right:    0;
+}
+
+.scroll-bridge-band-text {
   position:          absolute;
-  left:              0;
-  right:             0;
+  inset:             0;
+  z-index:           2;
   background-repeat: repeat-y;
 }

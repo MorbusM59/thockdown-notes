@@ -41,7 +41,13 @@ export interface ScrollBridgeStyle {
   fontPx: number
   fontFamily: string
   color: string
-  /** Opaque: see BridgeTextureRequest.backgroundColor. */
+  /**
+   * The flat editor background the pane's own layers are built on.
+   *
+   * Applied to the band rather than painted into the glyph tile: the tile is
+   * only the text, so the band can stack the same background, texture and text
+   * the pane does.
+   */
   backgroundColor: string
   paddingLeftPx: number
   paddingRightPx: number
@@ -148,7 +154,6 @@ export function resolveScrollBridge(scroller: HTMLElement): ScrollBridge | null 
           fontPx: style.fontPx,
           fontFamily: style.fontFamily,
           color: style.color,
-          backgroundColor: style.backgroundColor,
           paddingLeftPx: style.paddingLeftPx,
           paddingRightPx: style.paddingRightPx,
           devicePixelRatio: typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1,
@@ -170,8 +175,27 @@ export function resolveScrollBridge(scroller: HTMLElement): ScrollBridge | null 
       band = document.createElement('div')
       band.className = 'scroll-bridge-band'
       band.style.height = `${bandHeightPx}px`
-      band.style.backgroundImage = `url(${tile.dataUri})`
-      band.style.backgroundSize = `100% ${tile.heightPx}px`
+
+      // The pane's own three layers, in the pane's own order: the flat editor
+      // background, the tinted mask texture over it, then the text. Painting
+      // a single flat colour instead -- which is what this did first -- shows
+      // a visibly different background for the length of the bridge, because
+      // the texture tint is missing from it.
+      //
+      // The texture layer reuses the REAL texture element's class rather than
+      // restating its declarations, so the tint, mask image, tile size and
+      // repeat can never drift from the ones the document is sitting on. Its
+      // mask is anchored to the band, so the grain travels with the spoof
+      // text the same way the document's travels with the document.
+      band.style.backgroundColor = style.backgroundColor
+      const texture = document.createElement('div')
+      texture.className = 'markdown-preview-texture'
+      const glyphs = document.createElement('div')
+      glyphs.className = 'scroll-bridge-band-text'
+      glyphs.style.backgroundImage = `url(${tile.dataUri})`
+      glyphs.style.backgroundSize = `100% ${tile.heightPx}px`
+      band.appendChild(texture)
+      band.appendChild(glyphs)
       root.appendChild(band)
       host.appendChild(root)
 

@@ -159,15 +159,6 @@ export interface BridgeTextureRequest {
   fontPx: number
   fontFamily: string
   color: string
-  /**
-   * What the text sits on.
-   *
-   * The tile has to be OPAQUE. A transparent one lets the real document show
-   * through the spoof, which reads as a double exposure rather than as a
-   * curtain -- the two texts interleaved, both legible, which is worse than
-   * either the cut or the bridge on its own. Found by looking at it.
-   */
-  backgroundColor: string
   /** Left inset, matching the document's own text origin. */
   paddingLeftPx: number
   /** Right inset, so lines end where the document's do. */
@@ -218,7 +209,7 @@ export function buildBridgeLineText(
 export function drawBridgeTile(request: BridgeTextureRequest): { dataUri: string; heightPx: number } | null {
   const {
     alphabet, rhythm, widthPx, lineHeightPx, fontPx, fontFamily, color,
-    backgroundColor, paddingLeftPx, paddingRightPx, devicePixelRatio, seed,
+    paddingLeftPx, paddingRightPx, devicePixelRatio, seed,
   } = request
   if (typeof document === 'undefined') return null
   if (!(widthPx > 0) || !(lineHeightPx > 0) || rhythm.length === 0) return null
@@ -232,8 +223,9 @@ export function drawBridgeTile(request: BridgeTextureRequest): { dataUri: string
   if (!context) return null
 
   context.scale(scale, scale)
-  context.fillStyle = backgroundColor
-  context.fillRect(0, 0, widthPx, heightPx)
+  // Glyphs on transparency. What they sit on is the curtain's business, and
+  // it paints the pane's own layers rather than a flat stand-in for them --
+  // see scrollBridge.ts.
   context.font = `${fontPx}px ${fontFamily}`
   context.fillStyle = color
   context.textBaseline = 'alphabetic'
