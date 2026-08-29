@@ -17,6 +17,15 @@
   initial-value: 0px;
 }
 
+/* Registered so it computes to a real length rather than to the unsubstituted
+   token stream `calc(4px * 2)` -- updateSuggestedTagFit reads this back with
+   getComputedStyle and needs a number it can parse. */
+@property --suggested-tag-gutter {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
 /* Geometry (display/flex-direction/align-items/gap/padding/flex/width/
    height/min-width) lives in pillbars.css, combined with
    .chapter-tab-mode-shell -- this rule only owns the well's look. */
@@ -63,40 +72,81 @@
   letter-spacing: 0.1em;
 }
 
+/* Sole child of a .tabbar-tabs-scroll-shell, exactly like the tab and chapter
+   bars' own strips: the shell owns the flex sizing and the fade mask, this
+   owns the scrolling. Overflowing tags scroll rather than being clipped away
+   with no way to reach them. */
 .tabbar-tags-display {
-  overflow:    hidden;
+  width:       100%;
+  overflow-x:  auto;
+  overflow-y:  hidden;
+  scrollbar-width: none;      /* Firefox */
+  -ms-overflow-style: none;   /* legacy Edge */
 }
 
-/* Flex items default to min-width: auto, which floors their shrink at their
- * content's natural width -- that's what let this overflow past the tab bar
- * even with overflow: hidden set. flex-shrink alone isn't enough; min-width
- * has to be zeroed out too before the browser will actually shrink the box
- * (and let overflow: hidden clip the tag pills that no longer fit). */
-.tabbar-tags-display {
-  flex:      1 1 auto;
-  min-width: 0;
+.tabbar-tags-display::-webkit-scrollbar {
+  display: none;               /* Chromium / Electron */
 }
 
+/* The suggested-tags row is a passenger in this well, not a co-owner of it:
+   it takes only the space the note's own tags don't want. flex-grow: 0 keeps
+   it at its content width when there's room to spare (the tag strip absorbs
+   the slack, so these still sit against the right edge), and the enormous
+   shrink factor means the flex algorithm spends essentially all of any
+   shortfall here first -- collapsing this row to nothing, min-width: 0 and
+   the shrinkable ::before spacer included -- before it takes a single pixel
+   from the tags the note actually has. Reserving space here unconditionally
+   is what used to cut the real tags off. */
 .tabbar-suggested-tags {
-  flex-wrap: wrap;
-  flex-direction: row;
-  justify-content: flex-end;
+  /* nowrap, not wrap: a wrapping row grows the well's height as soon as more
+     suggestions exist than fit on one line. The old `container-type: size`
+     used to hide that by containing the height too, but that same containment
+     is what forced the flex-grow sizing this row no longer wants. One line
+     leaves the bar exactly one pill tall, whatever it holds.
+
+     row-reverse packs the pills against the bar's right edge while leaving
+     them in useSectionTabs' own most-used-first order in the DOM: the pill
+     pushed out of the row is therefore always the weakest suggestion, and the
+     strongest is the last one standing. (updateSuggestedTagFit then hides
+     whatever has fallen out, so a suggestion is only ever shown as a whole
+     pill -- there is no fade here, because nothing is ever half-shown.) */
+  flex-wrap: nowrap;
+  flex-direction: row-reverse;
+  justify-content: flex-start;
   padding: 0;
-  padding-left: 30px;
-  flex:        1 1 auto;
+  /* The clearance a suggestion must have from the note's own tags before it
+     is allowed to show at all -- read back by updateSuggestedTagFit in
+     useSectionTabs.ts, so this is the single place to tune it. It buys the
+     resize correction a margin to be late in: a suggestion dropped when it
+     comes within this of the real tags never gets close enough to look like
+     it collided with them. */
+  --suggested-tag-gutter: var(--spacing-large);
+  flex:        0 99999 auto;
   min-width:   0;
   overflow:    hidden;
   font-style: italic;
   opacity: 75%;
-  container-name: suggestedTags;
-  container-type: size;
 }
 
-@container suggestedTags (width < 30px) {
-  .tabbar-suggested-tags .tag-pill.suggested {
-    display: none;
-    padding-left: 0px;
-  }
+/* The gap between the note's tags and the suggestions, as a flex item rather
+   than padding: padding has no shrink factor, so as padding it was a 30px
+   floor this row could never collapse below. ::after, not ::before, because
+   row-reverse puts the last item at the left -- which is the side the gap
+   belongs on.
+   30px is the roomy-case preference and gives way under pressure; the
+   min-width is the floor it gives way to, the same clearance the fit test
+   enforces on the pills themselves. */
+.tabbar-suggested-tags::after {
+  content: '';
+  flex: 0 1 30px;
+  min-width: var(--suggested-tag-gutter);
+}
+
+/* Pushed past the row's left edge by a bar too narrow to hold it. Hidden
+   rather than removed so its width stays measurable and stable -- see
+   updateSuggestedTagFit in useSectionTabs.ts. */
+.tabbar-suggested-tags .tag-pill.suggested.is-out-of-bounds {
+  visibility: hidden;
 }
 
 /* Suggested tags, expanded to occupy the whole tag bar (identity tab click
@@ -137,7 +187,21 @@
   font-size:        calc(11px * var(--ui-font-scale));
   color:            var(--color-text-80);
   user-select:      none;
-  transition:       all 0.2s;
+  /* Cosmetic properties only, never geometry. This was `all 0.2s`, and `all`
+     also caught every pill's own SIZE AND POSITION: a pill that appeared on a
+     bar, or that moved because a neighbour did, animated into place over
+     200ms instead of being drawn where it belongs from the first frame.
+     Reported twice -- first as the create-pill growing in from a smaller
+     size (patched then with a narrower transition on .create-pill alone),
+     then as the suggested-tag row filling in cut off and flickering its
+     overhanging pills away a frame later. The second report is why the fix
+     moved here, to the shared rule: the measurement that decides which
+     suggestions fit (updateSuggestedTagFit) reads geometry at commit time,
+     so an animating pill hands it positions that are still 200ms out of
+     date, and it marks the wrong set until the animation settles.
+     The pill/input swap variants below re-declare `all` for their own height
+     transition, which is a deliberate one. */
+  transition:       background-color 0.2s, border-color 0.2s, color 0.2s, opacity 0.2s;
   white-space:      nowrap;
   overflow:         hidden;
 }
@@ -198,6 +262,10 @@
    padding + the 1px border on each side) only actually takes effect once
    it can't lose that specificity tie. */
 .tag-pill.tag-rename-input {
+  /* Deliberate: this input swaps in where a pill was, and wants its height
+     transition. Re-declared because base .tag-pill no longer transitions
+     geometry -- see the comment there. */
+  transition: all 0.2s;
   height: calc(1em * var(--ui-pill-line-height) + 2 * var(--spacing-regular) + 2px);
   field-sizing: content;
   text-align: center;
@@ -314,6 +382,8 @@
    only an explicit height (not min-height) actually overrides it. */
 .tag-pill.section-identity-input,
 .tag-pill.note-identity-input {
+  /* Deliberate geometry transition -- see .tag-pill.tag-rename-input. */
+  transition: all 0.2s;
   min-width: 120px;
   max-width: 120px;
   height: var(--ui-pill-bar-size);
@@ -456,19 +526,6 @@
   opacity: 0.5;
 }
 
-/* Narrows .tag-pill's own `transition: all 0.2s` down to just the two
-   cosmetic transitions this pill actually wants (hover background, the
-   aria-disabled opacity fade above). User-reported: "all" was also catching
-   this pill's own size whenever it (re)appears on a bar, growing in from a
-   smaller size instead of showing at its real one from the first frame --
-   not reproduced directly here, but there's no legitimate reason for a
-   static icon-only pill's geometry to ever animate, unlike e.g. the
-   rename-input pill swap, which still wants `all` for its own height
-   transition -- so excluding it is correct regardless of the exact trigger. */
-.create-pill {
-  transition: background-color 0.2s, opacity 0.2s;
-}
-
 /* Archived/trashed note whose tab is still pinned — dimmed, purely informational. */
 .note-tab-pill.ghost,
 .note-tab-pill.ghost.is-active {
@@ -545,6 +602,8 @@
    verified live, this now lines up with the display div's own rendered
    height to sub-pixel rounding. */
 .tag-pill.note-tab-id-input {
+  /* Deliberate geometry transition -- see .tag-pill.tag-rename-input. */
+  transition: all 0.2s;
   height: calc(1em * var(--ui-pill-line-height) + 2 * var(--spacing-regular) + 2px);
   field-sizing: content;
   text-align: center;

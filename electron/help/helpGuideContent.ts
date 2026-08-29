@@ -264,6 +264,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - Click a tag once to arm it for deletion (it highlights); click it again to delete, or move the pointer away to cancel.
 - Right-click a tag to rename it in place — the pill itself becomes an editable field, renaming the tag everywhere it's used (not just on this note). Enter or clicking away commits, Escape cancels. Protected tags can't be renamed this way.
 - Drag a tag left or right to reorder it relative to the others.
+- Too many tags to fit scrolls horizontally, fading at whichever edge has more off-screen, same as the tab and chapter bars.
 
 ### [Suggested Tags](#suggested-tags)
 
@@ -274,6 +275,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 - Click a suggested tag to add it instantly to the current note.
 - Tags already on the note, and protected tags, are excluded from suggestions.
+- Suggestions only ever use space the note's own tags don't need: as the tag list grows, the least-used suggestions drop off one at a time — always whole, never half a pill — and once the note's own tags no longer all fit, no suggestion is shown at all.
 - Right-click the tag input field to expand the suggested list to fill the whole bar; right-click again (anywhere in the expanded view) to collapse it back.
 
 ### [Protected Tags](#protected-tags)

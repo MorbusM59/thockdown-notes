@@ -60,8 +60,14 @@ export function TagBar({ tabs, persistenceReady, activeNoteId, identityNoteId, n
     handleTagContainerDragOver,
     handleTagContainerDrop,
     handleTagContextMenu,
+    activeTagsScrollerRef,
+    activeTagsCanScrollLeft,
+    activeTagsCanScrollRight,
+    updateActiveTagsScrollEdges,
+    handleActiveTagsWheel,
     isSuggestedTagsExpanded,
     toggleSuggestedTagsExpanded,
+    suggestedTagsRowRef,
     suggestedTagsScrollerRef,
     suggestedTagsCanScrollLeft,
     suggestedTagsCanScrollRight,
@@ -238,56 +244,64 @@ export function TagBar({ tabs, persistenceReady, activeNoteId, identityNoteId, n
                 aria-label="Tag input"
               />
             </div>
-            <div
-              className="tabbar-tags-display"
-              aria-live="polite"
-              onDragOver={handleTagContainerDragOver}
-              onDrop={handleTagContainerDrop}
-            >
-              {!activeNoteId ? (
-                <span className="tabbar-tag-hint"></span>
-              ) : orderedActiveTags.length === 0 ? (
-                <span className="tabbar-tag-hint"></span>
-              ) : (
-                orderedActiveTags.map((tagName, index) => {
-                  const normalized = normalizeTagName(tagName)
-                  const isProtected = isProtectedTagName(tagName)
+            {/* Same fade-masked horizontal scroller the tab and chapter bars
+                use for their own pill strips: tags past the right edge stay
+                reachable by wheel rather than being silently clipped. */}
+            <div className={`tabbar-tabs-scroll-shell${activeTagsCanScrollLeft ? ' fade-left' : ''}${activeTagsCanScrollRight ? ' fade-right' : ''}`}>
+              <div
+                className="tabbar-tags-display"
+                aria-live="polite"
+                ref={activeTagsScrollerRef}
+                onScroll={updateActiveTagsScrollEdges}
+                onWheel={handleActiveTagsWheel}
+                onDragOver={handleTagContainerDragOver}
+                onDrop={handleTagContainerDrop}
+              >
+                {!activeNoteId ? (
+                  <span className="tabbar-tag-hint"></span>
+                ) : orderedActiveTags.length === 0 ? (
+                  <span className="tabbar-tag-hint"></span>
+                ) : (
+                  orderedActiveTags.map((tagName, index) => {
+                    const normalized = normalizeTagName(tagName)
+                    const isProtected = isProtectedTagName(tagName)
 
-                  return (
-                    <InlinePillOrInput
-                      key={tagName}
-                      isEditing={renamingTagName === tagName}
-                      value={tagRenameDraft}
-                      onChange={setTagRenameDraft}
-                      onCommit={commitTagRename}
-                      onCancel={cancelTagRename}
-                      className="tag-pill is-active tag-rename-input"
-                      ariaLabel={`Rename tag ${tagName}`}
-                    >
-                      <div
-                        className={`tag-pill is-active${deletePrimedTagName === tagName ? ' primed' : ''}${isProtected ? ` protected ${normalized}` : ''}`}
-                        draggable={!isProtected}
-                        onDragStart={(event) => handleTagDragStart(event, index)}
-                        onDragEnd={handleTagDragEnd}
-                        onDragOver={(event) => {
-                          event.preventDefault()
-                          event.stopPropagation()
-                          event.dataTransfer.dropEffect = 'move'
-                        }}
-                        onDrop={(event) => handleTagDrop(event, index)}
-                        onClick={() => handleTagChipClick(tagName)}
-                        onContextMenu={(event) => handleTagContextMenu(event, tagName)}
-                        onMouseLeave={() => handleTagChipMouseLeave(tagName)}
-                        data-tooltip={deletePrimedTagName === tagName ? 'Click again to delete or move cursor away to cancel' : 'Click to arm deletion, right-click to rename'}
+                    return (
+                      <InlinePillOrInput
+                        key={tagName}
+                        isEditing={renamingTagName === tagName}
+                        value={tagRenameDraft}
+                        onChange={setTagRenameDraft}
+                        onCommit={commitTagRename}
+                        onCancel={cancelTagRename}
+                        className="tag-pill is-active tag-rename-input"
+                        ariaLabel={`Rename tag ${tagName}`}
                       >
-                        <span className="tag-pill-label">{tagName}</span>
-                      </div>
-                    </InlinePillOrInput>
-                  )
-                })
-              )}
+                        <div
+                          className={`tag-pill is-active${deletePrimedTagName === tagName ? ' primed' : ''}${isProtected ? ` protected ${normalized}` : ''}`}
+                          draggable={!isProtected}
+                          onDragStart={(event) => handleTagDragStart(event, index)}
+                          onDragEnd={handleTagDragEnd}
+                          onDragOver={(event) => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            event.dataTransfer.dropEffect = 'move'
+                          }}
+                          onDrop={(event) => handleTagDrop(event, index)}
+                          onClick={() => handleTagChipClick(tagName)}
+                          onContextMenu={(event) => handleTagContextMenu(event, tagName)}
+                          onMouseLeave={() => handleTagChipMouseLeave(tagName)}
+                          data-tooltip={deletePrimedTagName === tagName ? 'Click again to delete or move cursor away to cancel' : 'Click to arm deletion, right-click to rename'}
+                        >
+                          <span className="tag-pill-label">{tagName}</span>
+                        </div>
+                      </InlinePillOrInput>
+                    )
+                  })
+                )}
+              </div>
             </div>
-            <div className="tabbar-suggested-tags" aria-hidden={suggestedTags.length === 0}>
+            <div className="tabbar-suggested-tags" ref={suggestedTagsRowRef} aria-hidden={suggestedTags.length === 0}>
               {suggestedTags.map((tagName) => (
                 <div
                   key={tagName}

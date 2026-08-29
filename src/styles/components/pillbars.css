@@ -66,11 +66,9 @@
   height: auto;
 }
 
-/* Pill display row -- the flex row the pills actually sit in. Width is
-   deliberately NOT unified here: .tabbar-tags-display shares its well with
-   a sibling (the tag input field) and needs flex: 1 1 auto to divide space
-   with it, while the others are sole children of their scroll-shell and use
-   width: 100% -- that's a real structural difference, not drift. */
+/* Pill display row -- the flex row the pills actually sit in. All four are
+   now the sole child of a scroll shell and take width: 100% from their own
+   rules; the shell is what participates in the well's flex layout. */
 .tabbar-tabs-display,
 .tabbar-tags-display,
 .tabbar-suggested-tags-expanded,
@@ -83,9 +81,9 @@
 }
 
 /* .tabbar-suggested-tags (the compact, non-expanded suggested-tags row next
-   to .tabbar-tags-display) wraps to multiple lines instead of scrolling, so
-   flex-wrap stays its own in tags.css -- everything else about its pill row
-   is still shared. */
+   to .tabbar-tags-display) clips its overflow under a mask instead of
+   scrolling it, so flex-wrap and the mask stay its own in tags.css --
+   everything else about its pill row is still shared. */
 .tabbar-suggested-tags {
   display: flex;
   align-items: center;

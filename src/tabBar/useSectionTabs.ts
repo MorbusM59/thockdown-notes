@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Dispatch, DragEvent, KeyboardEvent, MouseEvent, MutableRefObject, RefObject, SetStateAction, WheelEvent as ReactWheelEvent } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import type { NoteTabEntry } from '../shared/tabs'
@@ -69,10 +69,20 @@ export interface UseSectionTabsResult {
   handleTagContainerDragOver: (event: DragEvent<HTMLDivElement>) => void
   handleTagContainerDrop: (event: DragEvent<HTMLDivElement>) => void
   handleTagContextMenu: (event: MouseEvent<HTMLDivElement>, tagName: string) => void
+  /** Callback ref -- attach with `ref={...}`; see useObservedBoxRef for why this is not an object ref. */
+  activeTagsScrollerRef: (element: HTMLDivElement | null) => void
+  activeTagsCanScrollLeft: boolean
+  activeTagsCanScrollRight: boolean
+  updateActiveTagsScrollEdges: () => void
+  handleActiveTagsWheel: (event: ReactWheelEvent<HTMLDivElement>) => void
   /** Whether the suggested-tags row is occupying the whole tag bar (hiding the tag input and currently-assigned tags) -- toggled by clicking the identity tab while it's showing the assigned id. */
   isSuggestedTagsExpanded: boolean
   toggleSuggestedTagsExpanded: () => void
-  suggestedTagsScrollerRef: RefObject<HTMLDivElement>
+  /** The compact (non-expanded) suggested-tags row, measured so a suggestion the bar can't finish is dropped rather than sliced. */
+  /** Callback ref -- attach with `ref={...}`; see useObservedBoxRef for why this is not an object ref. */
+  suggestedTagsRowRef: (element: HTMLDivElement | null) => void
+  /** Callback ref -- attach with `ref={...}`; see useObservedBoxRef for why this is not an object ref. */
+  suggestedTagsScrollerRef: (element: HTMLDivElement | null) => void
   suggestedTagsCanScrollLeft: boolean
   suggestedTagsCanScrollRight: boolean
   updateSuggestedTagsScrollEdges: () => void
@@ -96,7 +106,8 @@ export interface UseSectionTabsResult {
   cancelTabIdEdit: () => void
   /** Which tab pill (if any) is mid held-right-click, arming for unpin -- distinct from unpinPrimedTabNoteId, which is the post-arm "click again to confirm" state. */
   unpinArmingTabNoteId: string | null
-  tabsScrollerRef: RefObject<HTMLDivElement>
+  /** Callback ref -- attach with `ref={...}`; see useObservedBoxRef for why this is not an object ref. */
+  tabsScrollerRef: (element: HTMLDivElement | null) => void
   tabsCanScrollLeft: boolean
   tabsCanScrollRight: boolean
   handleAddCurrentNoteToTabs: () => Promise<void>
@@ -133,6 +144,61 @@ export interface UseSectionTabsResult {
  * beyond calling the `activateNote` it's given -- that's still owned by the
  * broader note-lifecycle machinery, injected in.
  */
+/**
+ * Attaches a ResizeObserver to whatever element the returned callback ref is
+ * placed on, mirroring that element into `elementRef` so measurement code can
+ * still reach it.
+ *
+ * Two things here are load-bearing, both learned by getting them wrong:
+ *
+ * The observer, rather than a `window.addEventListener('resize', ...)`, which
+ * is what every call site below used to have. A window listener notices only
+ * one of the many things that resize these bars -- not the sidebar opening, a
+ * section splitting, a typography slider, or a sibling flex item growing and
+ * taking width away -- and even for a real window resize it fires against the
+ * layout as it stood BEFORE React's response to it has landed, so the
+ * measurement is a frame stale: the first frame shows the pre-resize answer
+ * and only corrects on the NEXT resize event. ResizeObserver is delivered
+ * after layout and before paint, so no frame is ever painted wrong.
+ *
+ * The CALLBACK ref, rather than reading `elementRef.current` inside the
+ * effect. An effect with a stable dependency list runs exactly once, after
+ * the first commit -- and every element observed here mounts later than that
+ * (the editor stage starts empty, and the tag bar only exists in tag mode).
+ * Reading the ref there found null, returned early, and silently observed
+ * nothing at all, forever: an observer that looks entirely correct in the
+ * source and never fires once. That is exactly how a sliced suggestion pill
+ * survived the first attempt at this fix, and the reason the regression check
+ * (scripts/perf/verifyTagBarSuggestionFit.mjs) squeezes the bar from outside
+ * React instead of trusting the code to be right. A callback ref fires on
+ * mount and unmount, so the effect re-runs with the real element.
+ *
+ * Every caller's `onResize` must be layout-neutral (toggling `visibility`, or
+ * setting React state that doesn't resize the observed box) -- one that
+ * resized its own element would loop.
+ */
+function useObservedBoxRef<T extends HTMLElement>(
+  elementRef: MutableRefObject<T | null>,
+  onResize: () => void,
+  enabled = true,
+) {
+  const [element, setElement] = useState<T | null>(null)
+
+  const attach = useCallback((node: T | null) => {
+    elementRef.current = node
+    setElement(node)
+  }, [elementRef])
+
+  useEffect(() => {
+    if (!enabled || !element || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => onResize())
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [element, onResize, enabled])
+
+  return attach
+}
+
 export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsResult {
   const {
     sectionId,
@@ -539,12 +605,84 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     setIsSuggestedTagsExpanded(false)
   }, [chapterBarMode, activeNoteId])
 
-  const suggestedTagsScrollerRef = useRef<HTMLDivElement | null>(null)
+  // The note's own assigned tags scroll horizontally under the same fade mask
+  // as the tab and chapter bars' pill strips -- a note with more tags than the
+  // bar is wide stays fully reachable instead of having its overflow clipped
+  // away with no way to see it.
+  const activeTagsScrollerElementRef = useRef<HTMLDivElement | null>(null)
+  const [activeTagsCanScrollLeft, setActiveTagsCanScrollLeft] = useState(false)
+  const [activeTagsCanScrollRight, setActiveTagsCanScrollRight] = useState(false)
+
+  const updateActiveTagsScrollEdges = useCallback(() => {
+    const el = activeTagsScrollerElementRef.current
+    if (!el) return
+    setActiveTagsCanScrollLeft(el.scrollLeft > 1)
+    setActiveTagsCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 1)
+  }, [])
+
+  useEffect(() => {
+    // suggestedTags is a dependency even though it renders elsewhere: the
+    // suggested row shares the well and gives its width up to this row as it
+    // collapses, so the tag strip's own overflow changes when it changes.
+    updateActiveTagsScrollEdges()
+  }, [orderedActiveTags, suggestedTags, isSuggestedTagsExpanded, updateActiveTagsScrollEdges])
+
+  const activeTagsScrollerRef = useObservedBoxRef(activeTagsScrollerElementRef, updateActiveTagsScrollEdges, !isSuggestedTagsExpanded)
+
+  const handleActiveTagsWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
+    if (event.deltaY === 0) return
+    event.preventDefault()
+    event.currentTarget.scrollLeft += event.deltaY
+  }, [])
+
+  // A suggestion is shown whole or not at all. The row is laid out row-reverse
+  // (see tags.css), so it packs against the bar's right edge and anything that
+  // doesn't fit falls off the LEFT -- which means the pills that go first are
+  // the least-used ones, and the strongest suggestion is the last to survive.
+  // This marks the ones that have fallen out of the row's box; `visibility`,
+  // not `display`, so hiding a pill can't change the very widths this just
+  // measured and set up an oscillation across a resize.
+  //
+  // It also delivers the harder half of the rule for free: when the note's own
+  // tags overflow, the flex shrink in tags.css has already collapsed this row
+  // to zero width, so every pill is out of bounds and no suggestion shows at
+  // all -- the note's own tags never share the bar with a suggestion they
+  // don't have room for.
+  const suggestedTagsRowElementRef = useRef<HTMLDivElement | null>(null)
+
+  const updateSuggestedTagFit = useCallback(() => {
+    const row = suggestedTagsRowElementRef.current
+    if (!row) return
+    // A suggestion has to clear the note's own tags by --suggested-tag-gutter
+    // (tags.css), not merely avoid overlapping them. Two reasons: it reads as
+    // a deliberate gap between "yours" and "suggested" rather than as two
+    // groups that happen not to touch, and it gives the resize correction a
+    // margin to be late in -- the observer lands after layout but the window
+    // geometry it is reacting to can still be settling, and without the
+    // clearance that shows up as a suggestion briefly kissing the real tags
+    // before healing.
+    const rowBox = row.getBoundingClientRect()
+    const gutter = Number.parseFloat(getComputedStyle(row).getPropertyValue('--suggested-tag-gutter'))
+    // Half a pixel of slack on top: a pill flush with the limit lands on a
+    // fractional boundary often enough that an exact compare flickers it.
+    const limit = rowBox.left + (Number.isFinite(gutter) ? gutter : 0) - 0.5
+    for (const pill of row.querySelectorAll<HTMLElement>('.tag-pill.suggested')) {
+      pill.classList.toggle('is-out-of-bounds', pill.getBoundingClientRect().left < limit)
+    }
+  }, [])
+
+  useLayoutEffect(() => {
+    updateSuggestedTagFit()
+  }, [suggestedTags, orderedActiveTags, isSuggestedTagsExpanded, updateSuggestedTagFit])
+
+  const suggestedTagsRowRef = useObservedBoxRef(suggestedTagsRowElementRef, updateSuggestedTagFit, !isSuggestedTagsExpanded)
+
+  const suggestedTagsScrollerElementRef = useRef<HTMLDivElement | null>(null)
   const [suggestedTagsCanScrollLeft, setSuggestedTagsCanScrollLeft] = useState(false)
   const [suggestedTagsCanScrollRight, setSuggestedTagsCanScrollRight] = useState(false)
 
   const updateSuggestedTagsScrollEdges = useCallback(() => {
-    const el = suggestedTagsScrollerRef.current
+    const el = suggestedTagsScrollerElementRef.current
     if (!el) return
     setSuggestedTagsCanScrollLeft(el.scrollLeft > 1)
     setSuggestedTagsCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 1)
@@ -554,11 +692,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     updateSuggestedTagsScrollEdges()
   }, [suggestedTags, isSuggestedTagsExpanded, updateSuggestedTagsScrollEdges])
 
-  useEffect(() => {
-    if (!isSuggestedTagsExpanded) return
-    window.addEventListener('resize', updateSuggestedTagsScrollEdges)
-    return () => window.removeEventListener('resize', updateSuggestedTagsScrollEdges)
-  }, [isSuggestedTagsExpanded, updateSuggestedTagsScrollEdges])
+  const suggestedTagsScrollerRef = useObservedBoxRef(suggestedTagsScrollerElementRef, updateSuggestedTagsScrollEdges, isSuggestedTagsExpanded)
 
   const handleSuggestedTagsWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
     if (event.deltaY === 0) return
@@ -817,12 +951,12 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
 
   // ── Tab bar horizontal scrolling (fixed-width tabs, wheel-scroll, edge fades) ──
 
-  const tabsScrollerRef = useRef<HTMLDivElement | null>(null)
+  const tabsScrollerElementRef = useRef<HTMLDivElement | null>(null)
   const [tabsCanScrollLeft, setTabsCanScrollLeft] = useState(false)
   const [tabsCanScrollRight, setTabsCanScrollRight] = useState(false)
 
   const updateTabsScrollEdges = useCallback(() => {
-    const el = tabsScrollerRef.current
+    const el = tabsScrollerElementRef.current
     if (!el) return
     setTabsCanScrollLeft(el.scrollLeft > 1)
     setTabsCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 1)
@@ -832,11 +966,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     updateTabsScrollEdges()
   }, [pinnedTabs, tempTabNoteId, chapterBarMode, updateTabsScrollEdges])
 
-  useEffect(() => {
-    if (chapterBarMode !== 'tabs') return
-    window.addEventListener('resize', updateTabsScrollEdges)
-    return () => window.removeEventListener('resize', updateTabsScrollEdges)
-  }, [chapterBarMode, updateTabsScrollEdges])
+  const tabsScrollerRef = useObservedBoxRef(tabsScrollerElementRef, updateTabsScrollEdges, chapterBarMode === 'tabs')
 
   // Vertical wheel input scrolls the bar horizontally, regardless of
   // browser/OS default wheel-axis behavior.
@@ -956,6 +1086,12 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     handleTagContextMenu,
     isSuggestedTagsExpanded,
     toggleSuggestedTagsExpanded,
+    activeTagsScrollerRef,
+    activeTagsCanScrollLeft,
+    activeTagsCanScrollRight,
+    updateActiveTagsScrollEdges,
+    handleActiveTagsWheel,
+    suggestedTagsRowRef,
     suggestedTagsScrollerRef,
     suggestedTagsCanScrollLeft,
     suggestedTagsCanScrollRight,
