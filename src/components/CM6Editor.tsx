@@ -3780,6 +3780,21 @@ export function CM6Editor({
             paddingLeftPx,
             paddingRightPx,
             cellWidthPx: cellWidthPxNow,
+            // Where this document's rows actually sit inside the layer. Read
+            // now rather than assumed to be zero: a journey always starts from
+            // a row-quantized scrollTop, so this is the phase the text will
+            // hold for the whole journey, and it is what the curtain has to
+            // land on to sit on the same rows the reader is looking at.
+            rowGrid: {
+              heightPx: lineHeightPxNow,
+              phasePx: (() => {
+                const hostEl = layerRef.current;
+                if (!hostEl) return 0;
+                const offsetPx = view.contentDOM.getBoundingClientRect().top
+                  - hostEl.getBoundingClientRect().top;
+                return ((offsetPx % lineHeightPxNow) + lineHeightPxNow) % lineHeightPxNow;
+              })(),
+            },
           };
         },
       })

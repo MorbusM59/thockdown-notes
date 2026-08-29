@@ -69,8 +69,10 @@ const WATCH = (pane, ms) => `(async () => {
     const band = document.querySelector('.scroll-bridge-band')
     let covering = false
     let overlapping = false
+    let bandTop = null
     if (band) {
       const top = parseFloat(band.style.top)
+      bandTop = top
       const height = parseFloat(band.style.height)
       covering = top <= 0 && (top + height) >= host.clientHeight
       // Distinct from covering: during the ramp-up the band exists but is
@@ -80,6 +82,7 @@ const WATCH = (pane, ms) => `(async () => {
     frames.push({
       scrollTop: scroller.scrollTop,
       hasBand: !!band,
+      bandTop,
       covering,
       overlapping,
       bandBackground: band ? getComputedStyle(band).backgroundColor : null,
@@ -183,6 +186,20 @@ async function runPane(page, pane) {
     check('every frame of the journey lands on the row grid', offGrid.length === 0,
       `${offGrid.length} of ${frames.length} off grid (line height ${lineHeightPx}px, worst ${
         offGrid.length ? Math.max(...offGrid).toFixed(2) : 0}px)`)
+
+    // The curtain has its own position, and drawing its glyphs on a grid does
+    // nothing if the band they are painted on slides continuously underneath
+    // them. Before this was fixed the document's phase was 0 on all 34 frames
+    // while the curtain's ran through 1, 5, 7, 9, 15, 19, 21, 23 and 25 -- so
+    // the spoof matched the real rows only on the frames where it happened to.
+    const textPhase = frames
+      .map((frame) => ((frame.scrollTop % lineHeightPx) + lineHeightPx) % lineHeightPx)
+    const bandPhases = [...new Set(frames
+      .filter((frame) => frame.bandTop !== null)
+      .map((frame) => Math.round((((frame.bandTop % lineHeightPx) + lineHeightPx) % lineHeightPx) * 100) / 100))]
+    check('the curtain itself sits on the same rows the document does',
+      bandPhases.length === 1 && Math.abs(bandPhases[0] - textPhase[0]) < 0.5,
+      `curtain phases seen: ${bandPhases.join(', ')} (document sits at ${textPhase[0]})`)
   }
 
   // -- the bridge borrows the pane's background rather than painting one --

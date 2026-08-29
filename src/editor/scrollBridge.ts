@@ -40,6 +40,20 @@ export interface ScrollBridgeStyle {
   paddingRightPx: number
   /** Set only by a pane with a character-cell grid -- see the texture module. */
   cellWidthPx?: number
+  /**
+   * The row grid the curtain must land on, where the pane has one.
+   *
+   * Edit view only, and not the same thing as drawing the tile on a grid --
+   * that got the glyphs right within the band while the band itself slid
+   * continuously underneath them, so the spoof sat at a different sub-row
+   * offset every frame and matched the real rows only by luck. Measured
+   * across a journey: the document's own phase was 0 on all 34 frames, the
+   * curtain's ran through 1, 5, 7, 9, 15, 19, 21, 23, 25.
+   *
+   * `phasePx` is where the document's rows actually sit within the host, so
+   * the curtain snaps to the reader's grid rather than to a grid of its own.
+   */
+  rowGrid?: { heightPx: number; phasePx: number }
 }
 
 export interface ScrollBridgeSurface {
@@ -124,6 +138,30 @@ export function resolveScrollBridge(scroller: HTMLElement): ScrollBridge | null 
   let viewportHeightPx = 0
   let sweepDistancePx = 0
   let direction: -1 | 1 = 1
+  let rowGrid: { heightPx: number; phasePx: number } | null = null
+
+  /**
+   * Where the band may actually sit.
+   *
+   * On a row grid the curtain moves the way the text under it does -- a row at
+   * a time, on the reader's own rows. Off one it moves continuously, as that
+   * pane's text does.
+   *
+   * `round` is what a sweep wants: the nearest row to where the motion says it
+   * should be. The parked start needs `out` instead -- the row on the far side
+   * of where it was asked to sit, so a band waiting out the ramp-up cannot
+   * round a pixel INTO the pane and show a hairline of spoof over real text
+   * with no clip yet applied to hide it.
+   */
+  const placeBandTopPx = (topPx: number, mode: 'round' | 'out' = 'round'): number => {
+    if (!rowGrid) return topPx
+    const { heightPx, phasePx } = rowGrid
+    const rows = (topPx - phasePx) / heightPx
+    const snappedRows = mode === 'round'
+      ? Math.round(rows)
+      : (direction > 0 ? Math.ceil(rows) : Math.floor(rows))
+    return phasePx + (snappedRows * heightPx)
+  }
 
   const teardown = () => {
     root?.remove()
@@ -168,6 +206,7 @@ export function resolveScrollBridge(scroller: HTMLElement): ScrollBridge | null 
         tiles.set(host, tile)
       }
 
+      rowGrid = style.rowGrid && style.rowGrid.heightPx > 0 ? style.rowGrid : null
       direction = nextDirection
       sweepDistancePx = Math.max(requestedDistancePx, viewportHeightPx * MINIMUM_SWEEP_VIEWPORTS)
       bandHeightPx = sweepDistancePx - viewportHeightPx
@@ -192,7 +231,7 @@ export function resolveScrollBridge(scroller: HTMLElement): ScrollBridge | null 
 
       // Place it before the first frame, so it never paints at a default
       // position first.
-      const startTop = direction > 0 ? viewportHeightPx : -bandHeightPx
+      const startTop = placeBandTopPx(direction > 0 ? viewportHeightPx : -bandHeightPx, 'out')
       band.style.top = `${startTop}px`
       return sweepDistancePx
     },
@@ -202,9 +241,9 @@ export function resolveScrollBridge(scroller: HTMLElement): ScrollBridge | null 
       const travelled = Math.max(0, Math.min(sweepDistancePx, travelledPx))
       // Downward journeys move content up the screen, so the band comes up
       // from below; upward journeys are the mirror.
-      const topPx = direction > 0
+      const topPx = placeBandTopPx(direction > 0
         ? viewportHeightPx - travelled
-        : -bandHeightPx + travelled
+        : -bandHeightPx + travelled)
       band.style.top = `${topPx}px`
 
       // Hide the real text exactly where the band is. The band always covers a
