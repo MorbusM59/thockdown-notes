@@ -14,7 +14,7 @@ import {
   sampleCurveRampPlan,
   sampleScrollPlan,
 } from './ScrollCurvePlan';
-import { planScrollJourney } from './scrollJourney';
+import { planScrollJourney, type ScrollJourneyTiming } from './scrollJourney';
 import { resolveScrollBridge } from './scrollBridge';
 
 /**
@@ -109,18 +109,25 @@ export function isNonQuantizedSmoothScrollActive(scroller: HTMLElement): boolean
   return activeAnimations.has(scroller);
 }
 
+/**
+ * Travels to `targetScrollTopPx`.
+ *
+ * Returns the journey's shape when it was bridged, so a caller that has to
+ * move in step with it can -- and null when it was an ordinary curve, an
+ * instant landing, or a no-op.
+ */
 export function scrollToNonQuantizedSmooth(
   scroller: HTMLElement,
   targetScrollTopPx: number,
   options?: NonQuantizedSmoothScrollOptions,
-): void {
+): ScrollJourneyTiming | null {
   const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
   const startPx = clamp(scroller.scrollTop, 0, maxScrollTopPx);
   const targetPx = clamp(targetScrollTopPx, 0, maxScrollTopPx);
 
   const existing = activeAnimations.get(scroller);
   if (existing && Math.abs(existing.targetScrollTopPx - targetPx) < 0.01) {
-    return;
+    return null;
   }
 
   cancelExistingAnimation(scroller);
@@ -128,7 +135,7 @@ export function scrollToNonQuantizedSmooth(
   if (Math.abs(targetPx - startPx) < 0.5) {
     scroller.scrollTop = targetPx;
     options?.onStep?.();
-    return;
+    return null;
   }
 
   const signedDistance = targetPx - startPx;
@@ -136,7 +143,7 @@ export function scrollToNonQuantizedSmooth(
   if (prefersReducedMotion()) {
     scroller.scrollTop = targetPx;
     options?.onStep?.();
-    return;
+    return null;
   }
 
   const previousScrollBehavior = scroller.style.scrollBehavior;
@@ -225,7 +232,11 @@ export function scrollToNonQuantizedSmooth(
     };
 
     keepAnimating(animateJourney);
-    return;
+    return {
+      rampUp: journey.rampUp,
+      rampDown: journey.rampDown,
+      bridgeDurationSec: bridgeSec,
+    };
   }
 
   bridge?.end();
@@ -252,4 +263,5 @@ export function scrollToNonQuantizedSmooth(
   };
 
   keepAnimating(animateFrame);
+  return null;
 }

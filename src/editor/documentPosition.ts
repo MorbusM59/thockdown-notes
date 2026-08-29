@@ -64,9 +64,17 @@ export interface DocumentPosition {
   readThumbRatio: () => number | null
   /** Put the viewport at this ratio now, with no animation. */
   jumpToRatio: (ratio: number) => void
-  /** Travel to this ratio. */
-  travelToRatio: (ratio: number) => void
+  /**
+   * Travel to this ratio.
+   *
+   * Reports the journey's shape when it was long enough to be bridged, so the
+   * scrollbar can move its thumb in step with it, and null when it was an
+   * ordinary curve with nothing to keep step with.
+   */
+  travelToRatio: (ratio: number) => ScrollJourneyTiming | null
 }
+
+import type { ScrollJourneyTiming } from './scrollJourney'
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value))
 

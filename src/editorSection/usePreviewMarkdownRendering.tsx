@@ -1605,14 +1605,14 @@ export function usePreviewMarkdownRendering({
    */
   const smoothScrollToChar = useCallback((charOffset: number) => {
     const scroller = previewScrollRef.current
-    if (!scroller) return
+    if (!scroller) return null
     const offset = resolvePreviewCharScrollOffset({
       offsets: blockCharOffsetsRef.current,
       measurements: readBlockMeasurements(),
       charOffset,
     })
-    if (offset === null) return
-    scrollToNonQuantizedSmooth(scroller, offset)
+    if (offset === null) return null
+    return scrollToNonQuantizedSmooth(scroller, offset)
   }, [previewScrollRef, readBlockMeasurements])
 
   /**
@@ -1697,14 +1697,13 @@ export function usePreviewMarkdownRendering({
 
       travelToRatio: (ratio) => {
         const scroller = previewScrollRef.current
-        if (!scroller) return
+        if (!scroller) return null
         if (isContinuous()) {
           const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
-          scrollToNonQuantizedSmooth(scroller, ratio * maxScrollTopPx)
-          return
+          return scrollToNonQuantizedSmooth(scroller, ratio * maxScrollTopPx)
         }
         const charTarget = resolveChunkedTarget(ratio)
-        if (charTarget !== null) smoothScrollToChar(charTarget)
+        return charTarget !== null ? smoothScrollToChar(charTarget) : null
       },
     }
   }, [

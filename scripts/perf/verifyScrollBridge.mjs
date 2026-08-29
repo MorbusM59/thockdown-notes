@@ -28,6 +28,7 @@ const check = (label, ok, detail = '') => {
 const WATCH = (ms) => `(async () => {
   const scroller = document.querySelector('.markdown-preview')
   const host = document.querySelector('.render-container')
+  const thumb = document.querySelector('.thockdown-scroll-thumb')
   const frames = []
   const t0 = performance.now()
   while (performance.now() - t0 < ${ms}) {
@@ -39,7 +40,13 @@ const WATCH = (ms) => `(async () => {
       const height = parseFloat(band.style.height)
       covering = top <= 0 && (top + height) >= host.clientHeight
     }
-    frames.push({ scrollTop: scroller.scrollTop, hasBand: !!band, covering })
+    frames.push({
+      scrollTop: scroller.scrollTop,
+      hasBand: !!band,
+      covering,
+      thumbTop: Math.round(parseFloat(thumb.style.top) || 0),
+      thumbHeight: Math.round(parseFloat(thumb.style.height) || 0),
+    })
   }
   return frames
 })()`
@@ -127,6 +134,41 @@ async function main() {
 
     check('no curtain is left behind', await page.evaluate(() => document.querySelectorAll('.scroll-bridge').length) === 0)
 
+    // ── the thumb stretches rather than slides ────────────────────────────
+    //
+    // The document's middle is being cut out, so a thumb that slid smoothly
+    // would be describing a journey that did not happen. It stretches instead:
+    // the leading edge runs the span, both edges hold while the bridge covers
+    // the cut, then the trailing edge catches up.
+    const heights = frames.map((frame) => frame.thumbHeight)
+    const restingHeight = heights[0]
+    const peakHeight = Math.max(...heights)
+    check('the thumb stretches across the journey', peakHeight > restingHeight * 3,
+      `${restingHeight}px at rest, ${peakHeight}px stretched`)
+    check('the thumb returns to its resting height', heights[heights.length - 1] === restingHeight,
+      `ended at ${heights[heights.length - 1]}px`)
+
+    const peakAt = heights.indexOf(peakHeight)
+    const held = frames.filter((frame, i) =>
+      i > 0 && frame.thumbHeight === peakHeight && frames[i - 1].thumbHeight === peakHeight).length
+    check('the thumb holds still, stretched, while the bridge covers the cut', held >= 1,
+      `${held} frames at full stretch`)
+
+    // The subtle half of the design: each edge follows the POSITION curve of
+    // its own ramp, so the leading edge eases IN (covering more ground in the
+    // second half of its run than the first) and the trailing edge eases OUT.
+    const growth = heights.slice(0, peakAt + 1)
+    const midGrowth = growth[Math.floor(growth.length / 2)]
+    check('the leading edge eases in',
+      (peakHeight - midGrowth) > (midGrowth - restingHeight),
+      `first half ${midGrowth - restingHeight}px, second half ${peakHeight - midGrowth}px`)
+
+    const contraction = heights.slice(peakAt).filter((h, i, all) => i === 0 || h !== all[i - 1])
+    const midContraction = contraction[Math.floor(contraction.length / 2)]
+    check('the trailing edge eases out',
+      (peakHeight - midContraction) > (midContraction - restingHeight),
+      `first half ${peakHeight - midContraction}px, second half ${midContraction - restingHeight}px`)
+
     // ── a short journey needs no curtain ──────────────────────────────────
     //
     // scroll-behavior on the preview is `smooth`, so a bare scrollTop write
@@ -147,6 +189,10 @@ async function main() {
     check('a short journey does not raise one',
       shortFrames.every((frame) => !frame.hasBand),
       `${shortFrames.filter((f) => f.hasBand).length} frames had a curtain`)
+    const shortHeights = shortFrames.map((frame) => frame.thumbHeight)
+    check('a short journey does not stretch the thumb either',
+      Math.max(...shortHeights) - Math.min(...shortHeights) <= 2,
+      `thumb varied by ${Math.max(...shortHeights) - Math.min(...shortHeights)}px`)
 
     // ── an interrupted journey must not leave its curtain up ──────────────
     await goToTop(page)

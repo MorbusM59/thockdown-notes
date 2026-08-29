@@ -531,6 +531,23 @@ const buildCurveRampPlan = (
   };
 };
 
+/**
+ * How far through its own travel a half is, 0..1, at `elapsedSec` into it.
+ *
+ * The half's POSITION curve, normalized -- not its velocity. That distinction
+ * is the whole of it for anything that has to move over a different distance
+ * than the scroll does in the same time. The scrollbar thumb is the case in
+ * point: a ramp-up carries the document 5,684px of a 400,000px journey, while
+ * the thumb's leading edge crosses the entire track in exactly that window.
+ * Reusing the ramp's own distance would barely move it; reusing the ramp's
+ * SHAPE moves it the whole way, with the same easing the document has.
+ */
+export const sampleCurveRampProgress = (plan: CurveRampPlan, elapsedSec: number): number => {
+  if (!(Math.abs(plan.signedDistancePx) > 0)) return elapsedSec <= 0 ? 0 : 1;
+  const progress = sampleCurveRampPlan(plan, elapsedSec) / plan.signedDistancePx;
+  return Math.max(0, Math.min(1, progress));
+};
+
 /** Signed displacement from the start of the half, at `elapsedSec` into it. */
 export const sampleCurveRampPlan = (plan: CurveRampPlan, elapsedSec: number): number => {
   if (elapsedSec <= 0) return 0;

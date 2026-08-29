@@ -86,6 +86,21 @@ export interface BridgedJourney {
 
 export type ScrollJourney = DirectJourney | BridgedJourney;
 
+/**
+ * What a bridged journey actually did, handed back to whoever asked for it.
+ *
+ * The bridge's duration is the engine's to report rather than the planner's:
+ * a curtain has to sweep at least a few viewports to cover anything, so what
+ * it really takes is only known once a pane has been asked. Anything wanting
+ * to move in step with the journey -- the scrollbar thumb -- needs the number
+ * that happened, not the one that was planned.
+ */
+export interface ScrollJourneyTiming {
+  rampUp: CurveRampPlan;
+  rampDown: CurveRampPlan;
+  bridgeDurationSec: number;
+}
+
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
 /**

@@ -3,11 +3,15 @@ import type { MouseEvent, MutableRefObject } from 'react'
 import type { PreviewDocumentPositionApi } from './usePreviewMarkdownRendering'
 import { beginScrollTrackHold } from '../editor/scrollTrackHold'
 import { registerScrollBridge } from '../editor/scrollBridge'
+import { resolveThumbRubberBand } from '../editor/scrollThumbRubberBand'
+import { sampleCurveRampProgress } from '../editor/ScrollCurvePlan'
+import type { ScrollJourneyTiming } from '../editor/scrollJourney'
 import { measureAverageCharWidthPx } from '../editor/scrollBridgeTexture'
 import {
   buildReleaseRampDownPlanFromCurrentParams,
   cancelNonQuantizedSmoothScroll,
   CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER,
+  isNonQuantizedSmoothScrollActive,
   resolveApexSpeedPxPerSecFromCurrentParams,
   sampleReleaseRampDownPlan,
   resolveRampCrossingTimeSecFromCurrentParams,
@@ -142,6 +146,7 @@ export function usePreviewScrollbar({
     rafId: number | null
   } | null>(null)
   const trackHoldCancelRef = useRef<(() => void) | null>(null)
+  const rubberBandRafRef = useRef<number | null>(null)
   const [isPreviewScrollThumbActive, setIsPreviewScrollThumbActive] = useState(false)
   const [isDraggingPreviewScrollThumb, setIsDraggingPreviewScrollThumb] = useState(false)
 
@@ -160,7 +165,11 @@ export function usePreviewScrollbar({
   }, [])
 
   const syncPreviewCustomScrollbar = useCallback((options?: { force?: boolean }) => {
-    if (isDraggingPreviewScrollThumb && !options?.force) {
+    // The rubber band owns the thumb for the length of a bridged journey, the
+    // same way a drag does. Both would otherwise be overwritten every frame by
+    // a sync reading the real scroll position -- which during a bridge is
+    // mid-cut and says nothing anybody wants drawn.
+    if ((isDraggingPreviewScrollThumb || rubberBandRafRef.current !== null) && !options?.force) {
       return
     }
 
@@ -217,6 +226,82 @@ export function usePreviewScrollbar({
     applyPreviewThumbDom(nextThumbTop, nextThumbHeight)
     setIsPreviewScrollThumbActive(true)
   }, [applyPreviewThumbDom, isDraggingPreviewScrollThumb, isPreviewMode, previewScrollRef, previewDocumentPositionRef])
+
+  /**
+   * The thumb during a bridged journey: it stretches rather than slides.
+   *
+   * The edge in the direction of travel runs the whole span while the other
+   * stays put, both hold still while the bridge covers the cut, and then the
+   * trailing edge catches up. The document is not sliding either -- its middle
+   * is being cut out -- so a thumb that slid smoothly would be describing a
+   * journey that did not happen. Stretching says the true thing: for a moment
+   * the reader is spread across all of it.
+   *
+   * Each edge follows the POSITION curve of its own ramp, normalized and
+   * applied to the full span. The ramps' own pixel distances are no use here:
+   * a ramp-up carries the document a few thousand pixels of a journey that may
+   * be a million, while the thumb's leading edge crosses the entire track in
+   * that same window. What carries over is the shape.
+   */
+  const stopThumbRubberBand = useCallback(() => {
+    if (rubberBandRafRef.current === null) return
+    cancelAnimationFrame(rubberBandRafRef.current)
+    rubberBandRafRef.current = null
+  }, [])
+
+  const startThumbRubberBand = useCallback((
+    timing: ScrollJourneyTiming,
+    startTopPx: number,
+    targetTopPx: number,
+  ) => {
+    stopThumbRubberBand()
+    const thumbHeightPx = previewScrollThumbHeightRef.current
+    const rampUpSec = timing.rampUp.durationSec
+    const bridgeEndSec = rampUpSec + timing.bridgeDurationSec
+    const totalSec = bridgeEndSec + timing.rampDown.durationSec
+    let startedAtMs: number | null = null
+
+    const frame = (nowMs: number) => {
+      if (startedAtMs === null) startedAtMs = nowMs
+      const elapsedSec = (nowMs - startedAtMs) / 1000
+
+      // The reader is allowed to interrupt a journey with a wheel, a drag, a
+      // page key or another click, and every one of those cancels the scroll
+      // rather than telling the scrollbar anything. Asking the engine whether
+      // its journey is still running covers all of them at once -- without it
+      // the band would go on stretching toward a target nobody is travelling
+      // to any more, for the rest of its half second.
+      const scrollerNow = previewScrollRef.current
+      if (elapsedSec >= totalSec || !scrollerNow || !isNonQuantizedSmoothScrollActive(scrollerNow)) {
+        rubberBandRafRef.current = null
+        // Hand the thumb back to the ordinary sync, which now reads a settled
+        // scroll position -- wherever the journey actually ended up.
+        syncPreviewCustomScrollbar({ force: true })
+        return
+      }
+
+      const leadProgress = elapsedSec < rampUpSec
+        ? sampleCurveRampProgress(timing.rampUp, elapsedSec)
+        : 1
+      const trailProgress = elapsedSec <= bridgeEndSec
+        ? 0
+        : sampleCurveRampProgress(timing.rampDown, elapsedSec - bridgeEndSec)
+
+      const { topPx, heightPx } = resolveThumbRubberBand({
+        startTopPx,
+        targetTopPx,
+        thumbHeightPx,
+        leadProgress,
+        trailProgress,
+      })
+      applyPreviewThumbDom(topPx, heightPx)
+      rubberBandRafRef.current = requestAnimationFrame(frame)
+    }
+
+    rubberBandRafRef.current = requestAnimationFrame(frame)
+  }, [applyPreviewThumbDom, stopThumbRubberBand, syncPreviewCustomScrollbar, previewScrollRef])
+
+  useEffect(() => stopThumbRubberBand, [stopThumbRubberBand])
 
   const previewScrollFromThumbTop = useCallback((thumbTopPx: number) => {
     const scroller = previewScrollRef.current
@@ -526,8 +611,13 @@ export function usePreviewScrollbar({
       if (!element) return
       const position = previewDocumentPositionRef?.current
       if (position) {
-        if (instant) position.jumpToRatio(ratio)
-        else position.travelToRatio(ratio)
+        if (instant) {
+          position.jumpToRatio(ratio)
+          return
+        }
+        const startThumbTopPx = previewScrollThumbTopRef.current
+        const timing = position.travelToRatio(ratio)
+        if (timing) startThumbRubberBand(timing, startThumbTopPx, clampedTop)
         return
       }
 
@@ -551,7 +641,7 @@ export function usePreviewScrollbar({
       onSnap: () => { trackHoldCancelRef.current = null; goTo(true) },
       onTravel: () => { trackHoldCancelRef.current = null; goTo(false) },
     })
-  }, [previewScrollRef, shouldBlockPreviewInteraction, handlePreviewTrackRightMouseDown, previewDocumentPositionRef])
+  }, [previewScrollRef, shouldBlockPreviewInteraction, handlePreviewTrackRightMouseDown, previewDocumentPositionRef, startThumbRubberBand])
 
   // A gesture in flight when this unmounts would otherwise fire its snap into
   // a torn-down pane.
