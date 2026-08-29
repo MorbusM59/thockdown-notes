@@ -41,14 +41,6 @@ export interface ScrollBridgeStyle {
   fontPx: number
   fontFamily: string
   color: string
-  /**
-   * The flat editor background the pane's own layers are built on.
-   *
-   * Applied to the band rather than painted into the glyph tile: the tile is
-   * only the text, so the band can stack the same background, texture and text
-   * the pane does.
-   */
-  backgroundColor: string
   paddingLeftPx: number
   paddingRightPx: number
 }
@@ -62,6 +54,19 @@ export interface ScrollBridgeSurface {
    * catastrophic rather than merely wrong.
    */
   host: HTMLElement
+  /**
+   * The layer holding the real text, which is clipped away wherever the band
+   * covers it.
+   *
+   * This is how the bridge gets the pane's background exactly right: it does
+   * not paint one. Reconstructing it was tried and is not reliably possible --
+   * the backdrop is a gradient and a tint on ancestors rather than a flat
+   * colour anywhere, so reading a background-color up the tree returns white
+   * and the bridge showed a visibly different paper for its duration. Clipping
+   * the text instead leaves the real background and the real texture showing
+   * through, and nothing has to be reproduced to match.
+   */
+  textLayer: HTMLElement
   /** Read fresh each journey, so typography changes need no invalidation. */
   readStyle: () => ScrollBridgeStyle | null
 }
@@ -127,6 +132,8 @@ export function resolveScrollBridge(scroller: HTMLElement): ScrollBridge | null 
     root?.remove()
     root = null
     band = null
+    // Whatever happened, the reader gets their whole document back.
+    surface.textLayer.style.clipPath = ''
   }
 
   return {
@@ -141,7 +148,7 @@ export function resolveScrollBridge(scroller: HTMLElement): ScrollBridge | null 
 
       const key = [
         style.alphabet, widthPx, style.lineHeightPx, style.fontPx, style.fontFamily,
-        style.color, style.backgroundColor, style.paddingLeftPx, style.paddingRightPx, style.charsPerLine,
+        style.color, style.paddingLeftPx, style.paddingRightPx, style.charsPerLine,
         style.text.length,
       ].join('|')
       let tile = tiles.get(host)
@@ -176,26 +183,13 @@ export function resolveScrollBridge(scroller: HTMLElement): ScrollBridge | null 
       band.className = 'scroll-bridge-band'
       band.style.height = `${bandHeightPx}px`
 
-      // The pane's own three layers, in the pane's own order: the flat editor
-      // background, the tinted mask texture over it, then the text. Painting
-      // a single flat colour instead -- which is what this did first -- shows
-      // a visibly different background for the length of the bridge, because
-      // the texture tint is missing from it.
-      //
-      // The texture layer reuses the REAL texture element's class rather than
-      // restating its declarations, so the tint, mask image, tile size and
-      // repeat can never drift from the ones the document is sitting on. Its
-      // mask is anchored to the band, so the grain travels with the spoof
-      // text the same way the document's travels with the document.
-      band.style.backgroundColor = style.backgroundColor
-      const texture = document.createElement('div')
-      texture.className = 'markdown-preview-texture'
-      const glyphs = document.createElement('div')
-      glyphs.className = 'scroll-bridge-band-text'
-      glyphs.style.backgroundImage = `url(${tile.dataUri})`
-      glyphs.style.backgroundSize = `100% ${tile.heightPx}px`
-      band.appendChild(texture)
-      band.appendChild(glyphs)
+      // Glyphs on transparency, and nothing else. The band paints no
+      // background of its own -- the real one, texture and all, shows straight
+      // through it, because the real TEXT is clipped away wherever the band
+      // is (see advance below). That is the only way to be certain the paper
+      // matches: nothing is reproduced, so nothing can fail to match.
+      band.style.backgroundImage = `url(${tile.dataUri})`
+      band.style.backgroundSize = `100% ${tile.heightPx}px`
       root.appendChild(band)
       host.appendChild(root)
 
@@ -211,10 +205,21 @@ export function resolveScrollBridge(scroller: HTMLElement): ScrollBridge | null 
       const travelled = Math.max(0, Math.min(sweepDistancePx, travelledPx))
       // Downward journeys move content up the screen, so the band comes up
       // from below; upward journeys are the mirror.
-      const top = direction > 0
+      const topPx = direction > 0
         ? viewportHeightPx - travelled
         : -bandHeightPx + travelled
-      band.style.top = `${top}px`
+      band.style.top = `${topPx}px`
+
+      // Hide the real text exactly where the band is. The band always covers a
+      // strip running to one edge of the pane -- it enters from one side and
+      // leaves by the other -- so what remains visible is always a single
+      // rectangle, and an inset clip can say it. Written from the band's own
+      // edges rather than per direction, so a journey up the document and one
+      // down it are the same arithmetic.
+      const bottomPx = topPx + bandHeightPx
+      surface.textLayer.style.clipPath = topPx > 0
+        ? `inset(0px 0px ${Math.max(0, viewportHeightPx - topPx)}px 0px)`
+        : `inset(${Math.max(0, bottomPx)}px 0px 0px 0px)`
     },
 
     isCovering: (travelledPx) => (

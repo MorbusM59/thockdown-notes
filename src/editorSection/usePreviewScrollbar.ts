@@ -81,28 +81,6 @@ export interface UsePreviewScrollbarOptions {
   viewLetterSpacingEm: number
 }
 
-/**
- * The colour the bridge should paint itself, walking up until it finds one.
- *
- * The pane the text sits in is usually transparent, with whatever is behind it
- * providing the colour -- so reading the scroller's own background gives
- * `rgba(0, 0, 0, 0)`, and a curtain painted with that is not a curtain at all.
- * The document ends up showing through the spoof text: two texts interleaved,
- * both legible, which is worse than either the cut or the bridge alone.
- */
-function resolveOpaqueBackgroundColor(from: HTMLElement): string {
-  let node: HTMLElement | null = from
-  while (node) {
-    const color = window.getComputedStyle(node).backgroundColor
-    // Anything but fully transparent will do: a translucent layer over an
-    // opaque one below it is exactly what the real text is sitting on too.
-    if (color && color !== 'transparent' && !/rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*0\s*\)/.test(color)) {
-      return color
-    }
-    node = node.parentElement
-  }
-  return '#ffffff'
-}
 
 /**
  * Custom preview scrollbar (direct-DOM thumb sync + drag), PageUp/PageDown
@@ -358,6 +336,10 @@ export function usePreviewScrollbar({
 
     return registerScrollBridge(scroller, {
       host,
+      // The scroller is what holds the text, so it is what gets clipped away
+      // under the band. The texture behind it and the background behind that
+      // are left alone, which is the whole point.
+      textLayer: scroller,
       readStyle: () => {
         // Measured from a rendered paragraph, not from the scroller. The
         // scroller carries the reader's font-size setting, but the markdown
@@ -388,7 +370,6 @@ export function usePreviewScrollbar({
           fontPx,
           fontFamily: style.fontFamily,
           color: style.color,
-          backgroundColor: resolveOpaqueBackgroundColor(scroller),
           paddingLeftPx,
           paddingRightPx,
         }

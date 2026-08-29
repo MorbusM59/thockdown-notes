@@ -35,15 +35,22 @@ const WATCH = (ms) => `(async () => {
     await new Promise((r) => requestAnimationFrame(r))
     const band = document.querySelector('.scroll-bridge-band')
     let covering = false
+    let overlapping = false
     if (band) {
       const top = parseFloat(band.style.top)
       const height = parseFloat(band.style.height)
       covering = top <= 0 && (top + height) >= host.clientHeight
+      // Distinct from covering: during the ramp-up the band exists but is
+      // parked just outside the pane, hiding nothing and needing no clip.
+      overlapping = top < host.clientHeight && (top + height) > 0
     }
     frames.push({
       scrollTop: scroller.scrollTop,
       hasBand: !!band,
       covering,
+      overlapping,
+      bandBackground: band ? getComputedStyle(band).backgroundColor : null,
+      textClip: scroller.style.clipPath || '',
       thumbTop: Math.round(parseFloat(thumb.style.top) || 0),
       thumbHeight: Math.round(parseFloat(thumb.style.height) || 0),
     })
@@ -133,6 +140,30 @@ async function main() {
       `landed at ${Math.round((settled / geometry.maxScrollTop) * 100)}% of the document`)
 
     check('no curtain is left behind', await page.evaluate(() => document.querySelectorAll('.scroll-bridge').length) === 0)
+
+    // ── the bridge borrows the pane's background rather than painting one ──
+    //
+    // It paints NO background, and hides the real text underneath itself
+    // instead. That is the only way to be certain the paper matches: nothing
+    // is reproduced, so nothing can fail to match. Reconstructing it was tried
+    // and showed a visibly different paper in the real app -- the backdrop is
+    // a gradient and a tint on ancestors rather than a flat colour anywhere,
+    // so reading a background-color up the tree just returns white.
+    const bridgeFrames = frames.filter((frame) => frame.hasBand)
+    const backgrounds = [...new Set(bridgeFrames.map((frame) => frame.bandBackground))]
+    check('the bridge paints no background of its own',
+      backgrounds.every((color) => color === 'rgba(0, 0, 0, 0)' || color === 'transparent'),
+      backgrounds.join(', '))
+    // Only where the band actually overlaps the pane. During the ramp-up it
+    // exists but sits just outside, hiding nothing and needing no clip.
+    const overlapFrames = frames.filter((frame) => frame.overlapping)
+    const unclipped = overlapFrames.filter((frame) => frame.textClip === '').length
+    check('the real text is clipped away wherever the bridge covers it',
+      overlapFrames.length > 0 && unclipped === 0,
+      `${unclipped} of ${overlapFrames.length} overlapping frames left the text unclipped`)
+    check('the clip is released when the journey ends',
+      frames[frames.length - 1].textClip === '',
+      `ended as ${frames[frames.length - 1].textClip || '(none)'}`)
 
     // ── the thumb stretches rather than slides ────────────────────────────
     //

@@ -730,19 +730,15 @@ body {
   z-index:        20;
 }
 
-/* Carries the flat editor background, set from the pane's own resolved colour.
-   Its two children are the pane's other two layers, in the pane's own order --
-   the tinted mask texture (which reuses .markdown-preview-texture outright, so
-   it cannot drift from the real one) and then the spoof text over it. */
+/* Spoof glyphs on transparency, and nothing else. The band paints no
+   background of its own: the pane's real one, texture and all, shows straight
+   through it, because the real TEXT is clipped away wherever the band is.
+   Reconstructing the background was tried and cannot be made reliable -- the
+   backdrop is a gradient and a tint on ancestors rather than a flat colour
+   anywhere, so the bridge showed visibly different paper for its duration. */
 .scroll-bridge-band {
-  position: absolute;
-  left:     0;
-  right:    0;
-}
-
-.scroll-bridge-band-text {
   position:          absolute;
-  inset:             0;
-  z-index:           2;
+  left:              0;
+  right:             0;
   background-repeat: repeat-y;
 }
