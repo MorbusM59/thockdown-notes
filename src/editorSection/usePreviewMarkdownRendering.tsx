@@ -1195,6 +1195,28 @@ export function usePreviewMarkdownRendering({
   }, [])
 
   /**
+   * Re-measures every block currently mounted in the spacer, straight from
+   * the DOM.
+   *
+   * The virtualizer measures a block when it mounts and whenever its own
+   * ResizeObserver fires. Neither happens to a block that is already mounted
+   * and has not changed size -- so after anything that DISCARDS measurements
+   * (`virtualizer.measure()`, which has no "keep what was measured" mode),
+   * every block on screen is left on an estimate until the reader scrolls it
+   * out of view and back. On a document opened at the top that is the first
+   * screenful, permanently, which is exactly where a wrong height is most
+   * visible. Handing each mounted node back to `measureElement` costs one
+   * layout read per visible block and restores the truth immediately.
+   */
+  const remeasureMountedBlocks = useCallback(() => {
+    const spacer = spacerRef.current
+    if (!spacer) return
+    spacer.querySelectorAll<HTMLDivElement>(':scope > [data-index]').forEach((node) => {
+      virtualizer.measureElement(node)
+    })
+  }, [virtualizer])
+
+  /**
    * Applies a previously completed survey for this exact geometry, if there is
    * one. Returns whether it did.
    *
@@ -1244,14 +1266,29 @@ export function usePreviewMarkdownRendering({
    * `estimateSize` is not one of its memo keys, so nothing recomputes on its
    * own -- and `measure()` is what does that.
    *
-   * `measure()` also drops the real heights of whatever is currently mounted.
-   * That is correct: the model lands either on a freshly opened document
-   * (where there are a handful, immediately re-measured on the next commit) or
-   * right after a typography change (where they describe the old typography
-   * and are wrong). What it must not do is move the reader, so the block at
-   * the top of the viewport is re-anchored after the offsets change.
+   * `measure()` also drops every real height the virtualizer had -- there is
+   * no API for "re-derive the estimates but keep what was measured" -- so
+   * anything actually known has to be handed back afterwards, in two passes:
+   *
+   *  - `measured`: the calibration sample's own heights. These are ~100 real
+   *    renders of THIS document at THIS geometry, which is strictly better
+   *    information than the model fitted from them. Block 0 is always in the
+   *    sample and is the one block whose prediction is reliably wrong (it
+   *    carries a leading-margin reset no other block has), so this is also
+   *    what keeps the top of the document from overlapping the line below it.
+   *  - the mounted blocks: whatever is on screen gets re-measured from the
+   *    DOM. An earlier version of this comment claimed those were
+   *    "immediately re-measured on the next commit"; they are not.
+   *    react-virtual measures on mount and on ResizeObserver, and a block
+   *    whose size has not changed fires neither -- so a block that was
+   *    mounted when the model landed kept the model's guess for as long as it
+   *    stayed mounted. That is what put the title 20px into the first
+   *    paragraph, and a 60px gap above every group in the Open Items chapter.
+   *
+   * What none of it must do is move the reader, so the block at the top of
+   * the viewport is re-anchored last, after every offset has settled.
    */
-  const applyHeightModel = useCallback((model: PreviewHeightModel) => {
+  const applyHeightModel = useCallback((model: PreviewHeightModel, measured?: ReadonlyMap<number, number>) => {
     const blocks = previewBlocksRef.current
     const predicted = new Float64Array(blocks.length)
     for (let index = 0; index < blocks.length; index += 1) {
@@ -1265,10 +1302,35 @@ export function usePreviewMarkdownRendering({
       ? virtualizer.getVirtualItems()[0]?.index ?? null
       : null
     virtualizer.measure()
+
+    if (measured && measured.size > 0) {
+      // Force the estimate-derived measurements to materialize before handing
+      // real heights back. `measure()` only clears the size cache and bumps a
+      // version; the measurements array it invalidated is still the OLD one
+      // until something reads it. `resizeItem` compares against that array and
+      // returns early when the delta is zero -- so re-applying a height that
+      // happens to equal the stale entry pins nothing, and the block silently
+      // falls back to its estimate on the next recompute. That is not a corner
+      // case: it is every block whose height did not change, and it is exactly
+      // what left the Open Items chapter's zero-height marker blocks holding a
+      // ~50px estimate after being measured at 0.
+      //
+      // Through getVirtualItems rather than getMeasurements, which react-virtual
+      // keeps private; reading the items recomputes the measurements the same way.
+      virtualizer.getVirtualItems()
+      // Ascending, so react-virtual's own above-the-fold scroll compensation
+      // sees each item in document order -- same reason commitPrewarmedSizes
+      // sorts.
+      for (const index of [...measured.keys()].sort((a, b) => a - b)) {
+        virtualizer.resizeItem(index, measured.get(index)!)
+      }
+    }
+    remeasureMountedBlocks()
+
     if (anchorIndex !== null && anchorIndex > 0) {
       virtualizer.scrollToIndex(anchorIndex, { align: 'start' })
     }
-  }, [virtualizer, previewBlocksRef, previewScrollRef])
+  }, [virtualizer, previewBlocksRef, previewScrollRef, remeasureMountedBlocks])
 
   // ---------------------------------------------------------------------
   // Position in character space -- see previewCharPosition.ts.
@@ -1609,7 +1671,10 @@ export function usePreviewMarkdownRendering({
     // image", which is exactly the right thing to guess. What the trust check
     // decides is not whether to use the model, but whether the model is good
     // enough to stop there.
-    if (model) applyHeightModel(model)
+    // With the sample's own measured heights, not the model's guesses for
+    // them: every one of these is a real render of this document at this
+    // geometry, and for small documents the "sample" is the whole thing.
+    if (model) applyHeightModel(model, prewarmBufferRef.current)
 
     if (trusted) {
       const signature = readGeometrySignature()
@@ -1668,7 +1733,14 @@ export function usePreviewMarkdownRendering({
       // fast machine the same churn is over in ~1.3s and reads as a settle,
       // which is exactly why it survived review here. See the single commit in
       // commitPrewarmedSizes below.
-      if (height > 0) prewarmBufferRef.current.set(index, height)
+      // Zero included, deliberately. A block that renders to nothing at all
+      // -- the Open Items chapter's own `[open-items-group:...]` marker lines
+      // are rendered as null (PreviewMarkdown.tsx) -- really is 0px tall, and
+      // skipping it left the height model's guess (~60px) standing as a
+      // phantom gap above every group in that chapter. The measurement is
+      // taken from a real rendered block in a `visibility: hidden` host, so a
+      // zero here means "renders nothing", never "not laid out yet".
+      prewarmBufferRef.current.set(index, height)
     }
 
     // While calibrating, progress is measured against the SAMPLE, not the
