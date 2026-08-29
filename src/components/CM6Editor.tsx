@@ -3785,12 +3785,22 @@ export function CM6Editor({
             // a row-quantized scrollTop, so this is the phase the text will
             // hold for the whole journey, and it is what the curtain has to
             // land on to sit on the same rows the reader is looking at.
+            //
+            // From the first LINE BOX, not from contentDOM's own rect. The
+            // half-cell edge-breathing-room shift is folded into this
+            // element's padding-top (see this file's header note, and the
+            // grid overlay's matching backgroundPosition shift), so its
+            // border box sits half a row above the row lattice. Reading the
+            // border box put the curtain exactly half a line high -- which is
+            // what it looked like.
             rowGrid: {
               heightPx: lineHeightPxNow,
               phasePx: (() => {
                 const hostEl = layerRef.current;
                 if (!hostEl) return 0;
+                const contentPaddingTopPx = parseFloat(contentStyle.paddingTop) || 0;
                 const offsetPx = view.contentDOM.getBoundingClientRect().top
+                  + contentPaddingTopPx
                   - hostEl.getBoundingClientRect().top;
                 return ((offsetPx % lineHeightPxNow) + lineHeightPxNow) % lineHeightPxNow;
               })(),

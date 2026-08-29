@@ -87,6 +87,11 @@ const WATCH = (pane, ms) => `(async () => {
       overlapping,
       bandBackground: band ? getComputedStyle(band).backgroundColor : null,
       textClip: scroller.style.clipPath || '',
+      lineBoxTop: (() => {
+        const line = document.querySelector('.cm-line')
+        if (!line || !hostAnchor) return null
+        return line.getBoundingClientRect().top - host.getBoundingClientRect().top
+      })(),
       thumbTop: Math.round(parseFloat(thumb.style.top) || 0),
       thumbHeight: Math.round(parseFloat(thumb.style.height) || 0),
     })
@@ -192,14 +197,21 @@ async function runPane(page, pane) {
     // them. Before this was fixed the document's phase was 0 on all 34 frames
     // while the curtain's ran through 1, 5, 7, 9, 15, 19, 21, 23 and 25 -- so
     // the spoof matched the real rows only on the frames where it happened to.
-    const textPhase = frames
-      .map((frame) => ((frame.scrollTop % lineHeightPx) + lineHeightPx) % lineHeightPx)
+    const phaseOf = (px) => Math.round(((((px % lineHeightPx) + lineHeightPx) % lineHeightPx)) * 100) / 100
+    // Against the real LINE BOX, not against scrollTop -- scrollTop's phase is
+    // always zero by construction, so comparing to it proves nothing. The
+    // editor folds a half-cell shift into the content's padding, and reading
+    // the wrong box put the curtain exactly half a row high.
+    const rowPhases = [...new Set(frames
+      .filter((frame) => frame.lineBoxTop !== null)
+      .map((frame) => phaseOf(frame.lineBoxTop)))]
     const bandPhases = [...new Set(frames
       .filter((frame) => frame.bandTop !== null)
-      .map((frame) => Math.round((((frame.bandTop % lineHeightPx) + lineHeightPx) % lineHeightPx) * 100) / 100))]
+      .map((frame) => phaseOf(frame.bandTop)))]
     check('the curtain itself sits on the same rows the document does',
-      bandPhases.length === 1 && Math.abs(bandPhases[0] - textPhase[0]) < 0.5,
-      `curtain phases seen: ${bandPhases.join(', ')} (document sits at ${textPhase[0]})`)
+      bandPhases.length === 1 && rowPhases.length === 1
+        && Math.abs(bandPhases[0] - rowPhases[0]) < 0.5,
+      `curtain at ${bandPhases.join('/')}, document rows at ${rowPhases.join('/')}`)
   }
 
   // -- the bridge borrows the pane's background rather than painting one --
