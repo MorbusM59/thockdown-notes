@@ -38,6 +38,8 @@ export interface ScrollBridgeStyle {
   color: string
   paddingLeftPx: number
   paddingRightPx: number
+  /** Set only by a pane with a character-cell grid -- see the texture module. */
+  cellWidthPx?: number
 }
 
 export interface ScrollBridgeSurface {
@@ -144,6 +146,7 @@ export function resolveScrollBridge(scroller: HTMLElement): ScrollBridge | null 
       const key = [
         widthPx, style.lineHeightPx, style.fontPx, style.fontFamily,
         style.color, style.paddingLeftPx, style.paddingRightPx, style.charsPerLine,
+        style.cellWidthPx,
         style.text.length,
       ].join('|')
       let tile = tiles.get(host)
@@ -157,6 +160,7 @@ export function resolveScrollBridge(scroller: HTMLElement): ScrollBridge | null 
           color: style.color,
           paddingLeftPx: style.paddingLeftPx,
           paddingRightPx: style.paddingRightPx,
+          cellWidthPx: style.cellWidthPx,
           devicePixelRatio: typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1,
         })
         if (!drawn) return null

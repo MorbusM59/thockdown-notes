@@ -3779,6 +3779,7 @@ export function CM6Editor({
             color: contentStyle.color,
             paddingLeftPx,
             paddingRightPx,
+            cellWidthPx: cellWidthPxNow,
           };
         },
       })

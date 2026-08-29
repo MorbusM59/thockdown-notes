@@ -148,26 +148,50 @@ export interface BridgeTextureRequest {
   /** Right inset, so lines end where the document's do. */
   paddingRightPx: number
   devicePixelRatio: number
+  /**
+   * The width of one character cell, where the pane has a cell grid.
+   *
+   * Edit view only. There the pane is a grid of cells and the real text is
+   * padded out to fill them exactly (`.editor-text`'s letter-spacing plus a
+   * half-gap shift, see index.css); a bridge drawn on the font's own advance
+   * instead sits visibly off that grid, which is what shipped first and what
+   * this exists to stop. Omitted for the render view, which is proportional
+   * and has no grid to hold.
+   */
+  cellWidthPx?: number
 }
 
-/** The text one line of the bridge is filled with. */
+/**
+ * The text one line of the bridge is filled with, at most `maxChars` long.
+ *
+ * At most, not about: a line that ran past the right margin would either be
+ * squeezed by the canvas or spill out of the pane, and on a character grid
+ * either one is immediately visible. Whole words only, so it wraps where a
+ * real line does; a single word longer than the line is the one case that has
+ * to overflow, and it is cut rather than allowed to.
+ */
 export function buildBridgeLineText(
-  approximateChars: number,
+  maxChars: number,
   wordCursor: { at: number },
 ): string {
-  const chars = Math.max(0, Math.round(approximateChars))
-  if (chars === 0) return ''
+  const limit = Math.max(0, Math.round(maxChars))
+  if (limit === 0) return ''
 
   // Words are taken in order and cycled, so the Declaration reads as itself
   // rather than as a bag of its words for anyone who slows down enough to look.
   const words = BRIDGE_DECLARATION_TEXT.split(' ')
   let out = ''
-  while (out.length < chars) {
+  for (;;) {
     const word = words[wordCursor.at % words.length]
+    const next = out.length === 0 ? word : `${out} ${word}`
+    if (next.length > limit) {
+      // The cursor does not advance past a word that did not fit -- the next
+      // line starts with it, which is what wrapping means.
+      return out.length === 0 ? word.slice(0, limit) : out
+    }
+    out = next
     wordCursor.at += 1
-    out = out.length === 0 ? word : `${out} ${word}`
   }
-  return out
 }
 
 /**
@@ -184,7 +208,7 @@ export function buildBridgeLineText(
 export function drawBridgeTile(request: BridgeTextureRequest): { dataUri: string; heightPx: number } | null {
   const {
     rhythm, widthPx, lineHeightPx, fontPx, fontFamily, color,
-    paddingLeftPx, paddingRightPx, devicePixelRatio,
+    paddingLeftPx, paddingRightPx, devicePixelRatio, cellWidthPx,
   } = request
   if (typeof document === 'undefined') return null
   if (!(widthPx > 0) || !(lineHeightPx > 0) || rhythm.length === 0) return null
@@ -206,19 +230,52 @@ export function drawBridgeTile(request: BridgeTextureRequest): { dataUri: string
   context.textBaseline = 'alphabetic'
 
   const usableWidthPx = Math.max(1, widthPx - paddingLeftPx - paddingRightPx)
+  // Measured before any letter-spacing is applied, so this is the font's own
+  // advance -- the same quantity index.css calls --editor-glyph-width.
   const glyphWidthPx = Math.max(1, context.measureText('0').width)
+
+  // On a cell grid, the bridge is laid out exactly as `.editor-text` is: each
+  // glyph padded out to the cell width, and the whole line shifted half the
+  // remaining gap so the glyphs sit centred in their cells rather than hard
+  // against the left of them. Canvas letter-spacing follows the CSS property
+  // it is named after, so the two agree by construction. Everything below
+  // falls back to the font's own advance when there is no grid.
+  const onGrid = typeof cellWidthPx === 'number' && cellWidthPx > 0
+  const advancePx = onGrid ? (cellWidthPx as number) : glyphWidthPx
+  const gapPx = onGrid ? (cellWidthPx as number) - glyphWidthPx : 0
+  // Typed by hand: canvas letterSpacing is newer than the DOM lib this project
+  // builds against, and `in` narrowing on a type that never declares it takes
+  // the context to `never` for the rest of the function.
+  const spacer = context as CanvasRenderingContext2D & { letterSpacing?: string }
+  const supportsLetterSpacing = spacer.letterSpacing !== undefined
+  if (onGrid && supportsLetterSpacing) spacer.letterSpacing = `${gapPx}px`
+  const originXPx = paddingLeftPx + (onGrid ? gapPx / 2 : 0)
+
+  // A whole number of cells, so no line can end mid-cell or past the margin.
+  const maxCells = Math.max(0, Math.floor(usableWidthPx / advancePx))
   const wordCursor = { at: 0 }
 
   for (let line = 0; line < BRIDGE_TILE_LINES; line += 1) {
     const { fill } = rhythm[line % rhythm.length]
     if (!(fill > 0)) continue
-    const text = buildBridgeLineText((usableWidthPx * fill) / glyphWidthPx, wordCursor)
+    const text = buildBridgeLineText(Math.min(maxCells, maxCells * fill), wordCursor)
     if (text.length === 0) continue
     // Baseline sits where a real line's does: the font's own descent below the
     // line box's bottom is what keeps the bridge's rows on the same rhythm as
     // the document's.
     const baselineY = (line * lineHeightPx) + (lineHeightPx * 0.75)
-    context.fillText(text, paddingLeftPx, baselineY, usableWidthPx)
+    if (onGrid && !supportsLetterSpacing) {
+      // Older canvas implementations have no letter-spacing, and a maxWidth
+      // squeeze would be worse than the problem -- so place each glyph on its
+      // own cell. Costs one call per character, once per cached tile.
+      for (let i = 0; i < text.length; i += 1) {
+        context.fillText(text[i], originXPx + (i * advancePx), baselineY)
+      }
+      continue
+    }
+    // No maxWidth: on a grid it would condense the line off its cells, and off
+    // one the text is already built to fit.
+    context.fillText(text, originXPx, baselineY)
   }
 
   return { dataUri: canvas.toDataURL('image/png'), heightPx }

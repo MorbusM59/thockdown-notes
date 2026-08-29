@@ -55,7 +55,26 @@ describe('buildBridgeLineText', () => {
 
   it('cycles rather than running out', () => {
     const text = buildBridgeLineText(4000, { at: 0 })
-    expect(text.length).toBeGreaterThanOrEqual(4000)
+    expect(text.length).toBeGreaterThan(3960)
+  })
+
+  it('never runs past the width it was given', () => {
+    // On a character grid an overrun is not a rounding error, it is a line
+    // sticking out past the margin -- which is what the first edit-view
+    // bridge did.
+    const cursor = { at: 0 }
+    for (let i = 0; i < 40; i += 1) {
+      expect(buildBridgeLineText(37, cursor).length).toBeLessThanOrEqual(37)
+    }
+  })
+
+  it('leaves a word that did not fit for the next line', () => {
+    const cursor = { at: 0 }
+    const first = buildBridgeLineText(12, cursor)
+    const second = buildBridgeLineText(60, cursor)
+    // Whatever fell off the end of the first line opens the second, exactly as
+    // wrapping means -- rather than being dropped.
+    expect(`${first} ${second}`.startsWith(BRIDGE_DECLARATION_TEXT.slice(0, 40))).toBe(true)
   })
 
   it('carries the whole Declaration, not one article of it', () => {
