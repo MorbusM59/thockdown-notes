@@ -55,10 +55,17 @@ export async function startDevServer(port) {
   // executable search path the same way `npm` is on POSIX); `shell: true`
   // resolves that the same way a real shell invocation would, and cleanup
   // uses `taskkill /T` (kills the whole process tree) instead of a signal.
+  //
+  // `shell` is not optional on Windows, it is the only thing that works:
+  // since the CVE-2024-27980 fix, Node refuses to spawn a `.cmd` at all
+  // without one and throws EINVAL from spawn() itself. This comment used to
+  // describe a `shell: true` the options object did not actually carry, which
+  // meant every script in this directory died on its first line on Windows.
   const proc = spawn(isWindows ? 'npm.cmd' : 'npm', ['run', 'dev:browser', '--', '--port', String(port), '--strictPort'], {
     cwd: REPO_ROOT,
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: !isWindows,
+    shell: isWindows,
   })
 
   let output = ''
