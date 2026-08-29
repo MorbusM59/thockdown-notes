@@ -1,20 +1,11 @@
 import { chromium } from 'playwright'
-import { ensureEditMode } from './perfHarness.mjs'
+import { ensureEditMode, startDevServer, waitForAppReady } from './perfHarness.mjs'
 
-async function waitForDatabaseReady(page, timeoutMs = 20000) {
-  const deadline = Date.now() + timeoutMs
-  let lastError
-  while (Date.now() < deadline) {
-    try {
-      await page.evaluate(() => window.thockdownNotes.listNotes())
-      return
-    } catch (err) {
-      lastError = err
-      await new Promise((resolve) => setTimeout(resolve, 200))
-    }
-  }
-  throw new Error(`App never ready: ${lastError}`)
-}
+// Its own server, on its own port, like every other script here. This one
+// alone expected a dev server to be running already at a hardcoded 5174,
+// which meant it failed with a connection refused rather than telling anyone
+// what it wanted.
+const PORT = 5214
 
 async function getScrollPositions(page) {
   return page.evaluate(() => ({
@@ -25,6 +16,7 @@ async function getScrollPositions(page) {
 }
 
 async function main() {
+  const server = await startDevServer(PORT)
   const browser = await chromium.launch()
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } })
 
@@ -35,12 +27,12 @@ async function main() {
   })
 
   try {
-    await page.goto('http://localhost:5174/')
+    await page.goto(`http://localhost:${PORT}/`)
     await page.evaluate(() => {
       window.localStorage.setItem('thockdown:debug-input-lag', '1')
     })
     await page.reload()
-    await waitForDatabaseReady(page)
+    await waitForAppReady(page)
 
     // Create a tall note with many blocks.
     const lines = []
@@ -107,6 +99,7 @@ async function main() {
     console.log('noteId:', noteId)
   } finally {
     await browser.close()
+    server.stop()
   }
 }
 
