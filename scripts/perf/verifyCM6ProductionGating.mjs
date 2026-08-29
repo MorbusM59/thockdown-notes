@@ -15,7 +15,7 @@
 import { chromium } from 'playwright'
 import { existsSync, readdirSync } from 'node:fs'
 import path from 'node:path'
-import { startDevServer } from './perfHarness.mjs'
+import { startDevServer, waitForAppReady, ensureEditMode } from './perfHarness.mjs'
 
 function resolveChromiumExecutablePath() {
   const browsersRoot = process.env.PLAYWRIGHT_BROWSERS_PATH
@@ -60,16 +60,33 @@ async function main() {
     // Deliberately NOT setting the localStorage opt-in flag -- the whole
     // point of this check is that CM6 is now the default with no flag set.
     await page.goto(`http://localhost:${port}/`)
-    await page.waitForSelector('.editor-text[contenteditable="true"]', { timeout: 30000 })
+    await waitForAppReady(page)
     await page.waitForTimeout(400)
 
     assertTrue(await page.evaluate(() => !!document.querySelector('.cm6-editor-root')), 'CM6 mounted by default with no localStorage override set')
+
+    // "First mount" has to mean the first mount of a note that can HAVE a
+    // caret. A genuinely first launch seeds a welcome note with an
+    // auto-Table-of-Contents chapter and opens on that chapter, which is
+    // read-only and forced into render view -- so the grid renders, the root
+    // is visible, and there is correctly no caret at all. Asserting one there
+    // tests the welcome content, not the gating this script is about. Seed a
+    // note, make it active, and reload: still a fresh page load with no
+    // interaction of any kind, which is the property that matters.
+    await page.evaluate(async () => {
+      const note = await window.thockdownNotes.createNote({ initialText: 'First note content' })
+      await window.thockdownSections.setActiveNote('default', note.id)
+    })
+    await page.reload()
+    await ensureEditMode(page)
+    await page.waitForTimeout(400)
 
     const initial = await gridAndCaretVisible(page)
     console.log('  initial:', JSON.stringify(initial))
     assertTrue(initial.rootVisible, 'editor root visible on first mount')
     assertTrue(initial.gridPresent, 'grid lines rendered on first mount (hasViewportLines/fontReady gating did not get stuck)')
     assertTrue(initial.caretPresent, 'caret rendered on first mount')
+
 
     // Create a second note via the mock IPC bridge (content only -- the
     // bridge doesn't push a live update into the running app, see
@@ -83,7 +100,7 @@ async function main() {
       return note.id
     })
     await page.reload()
-    await page.waitForSelector('.editor-text[contenteditable="true"]', { timeout: 30000 })
+    await ensureEditMode(page)
     await page.waitForTimeout(400)
     await page.click(`.note-list-item[data-note-id="${secondNoteId}"]`)
     await page.waitForTimeout(600)

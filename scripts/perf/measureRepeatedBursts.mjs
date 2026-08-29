@@ -22,6 +22,7 @@ import {
   placeCaretAt,
   measureKeystrokeBurstMs,
   summarizeMs,
+  ensureEditMode,
 } from './perfHarness.mjs'
 
 const pkg = JSON.parse(await (await import('node:fs/promises')).readFile(path.join(REPO_ROOT, 'package.json'), 'utf8'))
@@ -76,7 +77,7 @@ async function seedLargeNoteAndReload(page, text) {
     await window.thockdownSections.setActiveNote('default', note.id)
   }, text)
   await page.reload()
-  await page.waitForSelector('.editor-text[contenteditable="true"]', { timeout: 30000 })
+  await ensureEditMode(page)
   await page.waitForTimeout(500)
 }
 

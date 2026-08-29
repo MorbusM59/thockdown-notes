@@ -19,7 +19,7 @@
 import { chromium } from 'playwright'
 import { existsSync, readdirSync } from 'node:fs'
 import path from 'node:path'
-import { startDevServer } from './perfHarness.mjs'
+import { startDevServer, waitForAppReady, ensureEditMode } from './perfHarness.mjs'
 
 function resolveChromiumExecutablePath() {
   const browsersRoot = process.env.PLAYWRIGHT_BROWSERS_PATH
@@ -49,7 +49,7 @@ async function main() {
     page.on('pageerror', (err) => { consoleErrors.push(String(err)) })
 
     await page.goto(`http://localhost:${port}/`)
-    await page.waitForSelector('.editor-text[contenteditable="true"]', { timeout: 30000 })
+    await waitForAppReady(page)
     await page.waitForTimeout(300)
 
     // Parent note with two real headings, then one real chapter with its
@@ -70,7 +70,7 @@ async function main() {
     // on its own -- reload (same as a fresh app launch reading persisted
     // active-note state) so the UI actually switches to the chapter.
     await page.reload()
-    await page.waitForSelector('.editor-text[contenteditable="true"]', { timeout: 30000 })
+    await ensureEditMode(page)
     await page.waitForTimeout(400)
 
     const editorText = async () => page.locator('.editor-text[contenteditable="true"]').innerText()
@@ -115,7 +115,7 @@ async function main() {
     // proves persistence if the edit was actually written first.
     await page.waitForTimeout(1200)
     await page.reload()
-    await page.waitForSelector('.editor-text[contenteditable="true"]', { timeout: 30000 })
+    await ensureEditMode(page)
     await page.waitForTimeout(600)
     text = await editorText()
     assertTrue(text.includes('### Table of Contents'), 'TOC block survives reload/reopen, still level 3')
@@ -132,7 +132,7 @@ async function main() {
       await window.thockdownSections.setActiveNote('default', note.id)
     })
     await page.reload()
-    await page.waitForSelector('.editor-text[contenteditable="true"]', { timeout: 30000 })
+    await ensureEditMode(page)
     await page.waitForTimeout(400)
     assertTrue((await editorText()).includes('Plain Note'), 'plain note is active and loaded in the editor')
     await tocButton.click()

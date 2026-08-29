@@ -24,7 +24,7 @@
 import { chromium } from 'playwright'
 import { existsSync, readdirSync } from 'node:fs'
 import path from 'node:path'
-import { startDevServer } from './perfHarness.mjs'
+import { startDevServer, waitForAppReady, ensureEditMode } from './perfHarness.mjs'
 
 function resolveChromiumExecutablePath() {
   const browsersRoot = process.env.PLAYWRIGHT_BROWSERS_PATH
@@ -42,7 +42,7 @@ function assertTrue(cond, msg) {
 
 async function seedAndOpen(page, port, { gutterOn } = {}) {
   await page.goto(`http://localhost:${port}/`)
-  await page.waitForSelector('.editor-text[contenteditable="true"]', { timeout: 30000 })
+  await waitForAppReady(page)
   await page.waitForTimeout(300)
   const longLine = Array.from({ length: 20 }, (_, i) => `word${i}`).join(' ')
   const text = Array.from({ length: 20 }, () => longLine).join('\n')
@@ -51,7 +51,7 @@ async function seedAndOpen(page, port, { gutterOn } = {}) {
     await window.thockdownSections.setActiveNote('default', note.id)
   }, text)
   await page.reload()
-  await page.waitForSelector('.editor-text[contenteditable="true"]', { timeout: 30000 })
+  await ensureEditMode(page)
   await page.waitForTimeout(300)
   if (gutterOn) {
     await page.click('[aria-label*="Toggle line numbers"]')

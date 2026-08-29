@@ -22,7 +22,7 @@
 import { chromium } from 'playwright'
 import { existsSync, readdirSync } from 'node:fs'
 import path from 'node:path'
-import { startDevServer } from './perfHarness.mjs'
+import { startDevServer, waitForAppReady, ensureEditMode } from './perfHarness.mjs'
 
 function resolveChromiumExecutablePath() {
   const browsersRoot = process.env.PLAYWRIGHT_BROWSERS_PATH
@@ -52,7 +52,7 @@ async function main() {
     page.on('pageerror', (err) => { consoleErrors.push(String(err)) })
 
     await page.goto(`http://localhost:${port}/`)
-    await page.waitForSelector('.editor-text[contenteditable="true"]', { timeout: 30000 })
+    await waitForAppReady(page)
     await page.waitForTimeout(300)
 
     // Create a note and make it the active note via persisted app state
@@ -64,7 +64,7 @@ async function main() {
       await window.thockdownSections.setActiveNote('default', note.id)
     })
     await page.reload()
-    await page.waitForSelector('.editor-text[contenteditable="true"]', { timeout: 30000 })
+    await ensureEditMode(page)
 
     // Give the restore path (RAF-scheduled per applyEditRestoreSnapshot) a
     // moment to run -- deliberately no click anywhere in this test.

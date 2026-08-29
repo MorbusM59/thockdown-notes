@@ -1,4 +1,5 @@
 import { chromium } from 'playwright'
+import { ensureEditMode } from './perfHarness.mjs'
 
 async function waitForDatabaseReady(page, timeoutMs = 20000) {
   const deadline = Date.now() + timeoutMs
@@ -59,7 +60,7 @@ async function main() {
     }, initialText)
 
     await page.reload()
-    await page.waitForSelector('.editor-text[contenteditable="true"]', { timeout: 30000 })
+    await ensureEditMode(page)
     await page.waitForTimeout(2000)
 
     // Focus the editor and scroll it down with the mouse wheel.

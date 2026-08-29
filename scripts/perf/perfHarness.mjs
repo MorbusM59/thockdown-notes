@@ -127,13 +127,79 @@ export function generateSyntheticDocument(targetChars) {
   return lines.join('\n')
 }
 
+export const EDITABLE_SELECTOR = '.editor-text[contenteditable="true"]'
+export const PREVIEW_SELECTOR = '.markdown-preview'
+
+// 90s, not 30s: this environment's dev-server/mount latency has been
+// observed to vary widely session-to-session (and even run-to-run within a
+// session) for large synthetic notes -- a single directly-timed baseline
+// mount took 18.6s on one run and CI-like conditions elsewhere in this
+// project's own investigation history have taken longer still. 30s
+// intermittently timed out on completely unmodified code.
+const MOUNT_TIMEOUT_MS = 90000
+
+/**
+ * Resolves once the app itself is up: the mock IPC bridges are installed and
+ * a section has mounted.
+ *
+ * This -- NOT the editable -- is what "the app has booted" means, and every
+ * script in this directory that waited for the editable instead was quietly
+ * broken by a product change it has nothing to do with. A first launch seeds
+ * a welcome note WITH an auto-Table-of-Contents chapter, lands on that
+ * chapter, and an auto chapter is read-only and forced into render view --
+ * so `[contenteditable="true"]` never appears at all, and the wait runs to
+ * its timeout. (Intermittently, at that: the auto-TOC chapter is created
+ * asynchronously, so whether the editable was ever briefly present came down
+ * to a race, which is why these scripts failed erratically rather than
+ * consistently.) A script that wants a writable editor should say so, with
+ * ensureEditMode below, after it has seeded a note of its own.
+ */
+export async function waitForAppReady(page, timeoutMs = MOUNT_TIMEOUT_MS) {
+  await page.waitForFunction(
+    () => !!(window.thockdownNotes && window.thockdownSections),
+    null,
+    { timeout: timeoutMs },
+  )
+  await page.waitForSelector('.editor-shell', { timeout: timeoutMs })
+}
+
+/**
+ * Resolves once a WRITABLE editor is actually on screen, toggling out of
+ * render view if that is where the note opened.
+ *
+ * The two panes are dual-mounted and hidden with `visibility` (markdown.css's
+ * `.is-pane-hidden`), so "attached" and "visible" are genuinely different
+ * questions here and only the second one means the editor is being shown.
+ * Escape is the app's own mode toggle.
+ */
+export async function ensureEditMode(page, timeoutMs = MOUNT_TIMEOUT_MS) {
+  await page.waitForSelector(EDITABLE_SELECTOR, { state: 'attached', timeout: timeoutMs })
+  const editable = page.locator(EDITABLE_SELECTOR).first()
+  if (!(await editable.isVisible())) {
+    await page.keyboard.press('Escape')
+    await editable.waitFor({ state: 'visible', timeout: 30000 })
+  }
+  return editable
+}
+
+/** The mirror of ensureEditMode, for scripts that want the render view. */
+export async function ensurePreviewMode(page, timeoutMs = MOUNT_TIMEOUT_MS) {
+  await page.waitForSelector(PREVIEW_SELECTOR, { state: 'attached', timeout: timeoutMs })
+  const preview = page.locator(PREVIEW_SELECTOR).first()
+  if (!(await preview.isVisible())) {
+    await page.keyboard.press('Escape')
+    await preview.waitFor({ state: 'visible', timeout: 30000 })
+  }
+  return preview
+}
+
 /**
  * Seeds a note with `text` via the dev-mode mock IPC bridge
  * (src/dev/installBrowserMockBridges.ts), activates it in the default
  * editor section, then reloads -- the bridge only updates persisted
  * section state, it does not push a live update into the already-running
  * React app (confirmed in the handover doc). Resolves once the editor's
- * real contenteditable has mounted post-reload.
+ * real contenteditable is mounted and shown post-reload.
  */
 export async function seedLargeNoteAndReload(page, text) {
   await page.evaluate(async (initialText) => {
@@ -141,19 +207,11 @@ export async function seedLargeNoteAndReload(page, text) {
     await window.thockdownSections.setActiveNote('default', note.id)
   }, text)
   await page.reload()
-  // 90s, not 30s: this environment's dev-server/mount latency has been
-  // observed to vary widely session-to-session (and even run-to-run within
-  // a session) for large synthetic notes -- a single directly-timed
-  // baseline mount took 18.6s on one run and CI-like conditions elsewhere
-  // in this project's own investigation history have taken longer still.
-  // 30s intermittently timed out on completely unmodified code.
-  await page.waitForSelector('.editor-text[contenteditable="true"]', { timeout: 90000 })
+  await ensureEditMode(page)
   // Let the initial mount/hydration settle (virtualizer measurement passes,
   // fixed-focus viewport boundary calculation) before any measurement starts.
   await page.waitForTimeout(500)
 }
-
-const EDITABLE_SELECTOR = '.editor-text[contenteditable="true"]'
 // The edit-mode scroller and the read-only preview scroller both carry
 // .thockdown-custom-scrollbar under the Lexical editor (Editor.tsx); CM6
 // (CM6Editor.tsx, the production editor as of 0.5.4) uses CodeMirror's own

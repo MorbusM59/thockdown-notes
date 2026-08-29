@@ -10,12 +10,10 @@
 //
 //   node scripts/perf/verifyCM6RightClickSelectionScope.mjs
 import { chromium } from 'playwright';
-import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { existsSync, readdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { startDevServer, waitForAppReady, ensureEditMode } from './perfHarness.mjs';
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const PORT = 5183;
 
 function resolveChromiumExecutablePath() {
@@ -27,18 +25,6 @@ function resolveChromiumExecutablePath() {
   return existsSync(candidate) ? candidate : undefined;
 }
 
-async function waitForServer(url, timeoutMs) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(url);
-      if (res.ok || res.status < 500) return;
-    } catch { /* keep polling */ }
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-  throw new Error(`Dev server at ${url} did not become ready in ${timeoutMs}ms`);
-}
-
 function assertEqual(actual, expected, label) {
   if (actual !== expected) {
     throw new Error(`FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
@@ -46,12 +32,10 @@ function assertEqual(actual, expected, label) {
   console.log(`  ok  ${label}: ${JSON.stringify(actual)}`);
 }
 
-const proc = spawn('npm', ['run', 'dev:browser', '--', '--port', String(PORT), '--strictPort'], {
-  cwd: REPO_ROOT, stdio: 'ignore', detached: true,
-});
+let server;
 
 async function main() {
-  await waitForServer(`http://localhost:${PORT}/`, 30000);
+  server = await startDevServer(PORT);
 
   const browser = await chromium.launch({ headless: true, executablePath: resolveChromiumExecutablePath() });
   const page = await browser.newPage();
@@ -60,7 +44,7 @@ async function main() {
   page.on('pageerror', (err) => consoleErrors.push(String(err)));
 
   await page.goto(`http://localhost:${PORT}/`);
-  await page.waitForSelector('.editor-text[contenteditable="true"]', { timeout: 15000 });
+  await waitForAppReady(page);
 
   const text = 'The quick brown fox jumps. Over the lazy dog! Here is another sentence.\nSecond line of the paragraph continues here.\n\nA second paragraph block starts here with more words to select.';
   await page.evaluate(async (initialText) => {
@@ -68,7 +52,7 @@ async function main() {
     await window.thockdownSections.setActiveNote('default', note.id);
   }, text);
   await page.reload();
-  await page.waitForSelector('.editor-text[contenteditable="true"]', { timeout: 15000 });
+  await ensureEditMode(page);
   await page.waitForTimeout(500);
 
   const wordLocator = page.locator('.cm-line', { hasText: 'brown fox' }).first();
@@ -141,11 +125,11 @@ async function main() {
 
 main()
   .then(() => {
-    try { process.kill(-proc.pid, 'SIGTERM'); } catch { proc.kill('SIGTERM'); }
+    server?.stop();
     process.exit(0);
   })
   .catch((err) => {
     console.error(err);
-    try { process.kill(-proc.pid, 'SIGTERM'); } catch { proc.kill('SIGTERM'); }
+    server?.stop();
     process.exit(1);
   });

@@ -11,12 +11,10 @@
 //
 //   node scripts/perf/verifyCM6CaretSurvivesTagMutation.mjs
 import { chromium } from 'playwright';
-import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { existsSync, readdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { startDevServer, waitForAppReady, ensureEditMode } from './perfHarness.mjs';
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const PORT = 5191;
 
 function resolveChromiumExecutablePath() {
@@ -28,16 +26,20 @@ function resolveChromiumExecutablePath() {
   return existsSync(candidate) ? candidate : undefined;
 }
 
-async function waitForServer(url, timeoutMs) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(url);
-      if (res.ok || res.status < 500) return;
-    } catch { /* keep polling */ }
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-  throw new Error(`Dev server at ${url} did not become ready in ${timeoutMs}ms`);
+/**
+ * Puts the tab bar into tag-manager mode, whichever mode it happens to start
+ * in. Asked as a question about what is on screen rather than as a blind
+ * click: the bar's default mode has flipped at least once, and a script that
+ * assumes it starts in chapter mode toggles tags OFF and then waits forever
+ * for the input it just closed. The toggle is addressed by its user-visible
+ * label because the `.tagbar-toggle` class this used to click is now dead CSS
+ * matching nothing at all -- a selector that rots silently.
+ */
+async function ensureTagBarMode(page) {
+  const input = page.locator('.tabbar-tag-input-field');
+  if (await input.isVisible().catch(() => false)) return;
+  await page.click('[aria-label="Show tags"]');
+  await input.waitFor({ state: 'visible', timeout: 5000 });
 }
 
 function assertTrue(cond, label) {
@@ -45,12 +47,10 @@ function assertTrue(cond, label) {
   console.log(`  ok  ${label}`);
 }
 
-const proc = spawn('npm', ['run', 'dev:browser', '--', '--port', String(PORT), '--strictPort'], {
-  cwd: REPO_ROOT, stdio: 'ignore', detached: true,
-});
+let server;
 
 async function main() {
-  await waitForServer(`http://localhost:${PORT}/`, 30000);
+  server = await startDevServer(PORT);
 
   const browser = await chromium.launch({ headless: true, executablePath: resolveChromiumExecutablePath() });
   const page = await browser.newPage();
@@ -59,14 +59,14 @@ async function main() {
   page.on('pageerror', (err) => consoleErrors.push(String(err)));
 
   await page.goto(`http://localhost:${PORT}/`);
-  await page.waitForSelector('.editor-text[contenteditable="true"]', { timeout: 15000 });
+  await waitForAppReady(page);
 
   await page.evaluate(async () => {
     const note = await window.thockdownNotes.createNote({ initialText: 'Tag mutation caret check' });
     await window.thockdownSections.setActiveNote('default', note.id);
   });
   await page.reload();
-  await page.waitForSelector('.editor-text[contenteditable="true"]', { timeout: 15000 });
+  await ensureEditMode(page);
   await page.waitForTimeout(400);
 
   const line = page.locator('.cm-line').first();
@@ -74,12 +74,11 @@ async function main() {
   await page.waitForTimeout(200);
   assertTrue(await page.locator('.thockdown-block-caret').count() > 0, 'caret visible before any tag mutation');
 
-  // Switch the tab bar into tag-manager mode, same as a user clicking the
-  // tag icon, then type a new tag and press Enter -- the real UI path
-  // handleTagInputEnter -> runActiveNoteTagMutation -> activateNote(sameId)
-  // goes through, same one a suggested-tag-pill click or chip removal uses.
-  await page.click('.tagbar-toggle');
-  await page.waitForSelector('.tabbar-tag-input-field', { timeout: 5000 });
+  // Tag-manager mode, then type a new tag and press Enter -- the real UI
+  // path handleTagInputEnter -> runActiveNoteTagMutation ->
+  // activateNote(sameId) goes through, same one a suggested-tag-pill click or
+  // chip removal uses.
+  await ensureTagBarMode(page);
   await page.fill('.tabbar-tag-input-field', 'demo-tag');
   await page.press('.tabbar-tag-input-field', 'Enter');
   await page.waitForTimeout(500);
@@ -92,11 +91,11 @@ async function main() {
   // runActiveNoteTagMutation -> activateNote(sameId) path. Clicking into
   // the editor above dropped the tab bar back out of tag-manager mode
   // (click-outside-closes-tag-bar), so re-enter it first.
-  await page.click('.tagbar-toggle');
-  await page.waitForSelector('.tag-pill.active', { timeout: 5000 });
-  await page.locator('.tag-pill.active', { hasText: 'demo-tag' }).click();
+  await ensureTagBarMode(page);
+  await page.waitForSelector('.tag-pill.is-active', { timeout: 5000 });
+  await page.locator('.tag-pill.is-active', { hasText: 'demo-tag' }).click();
   await page.waitForTimeout(150);
-  await page.locator('.tag-pill.active', { hasText: 'demo-tag' }).click();
+  await page.locator('.tag-pill.is-active', { hasText: 'demo-tag' }).click();
   await page.waitForTimeout(500);
 
   await page.click('.cm-line >> nth=0', { position: { x: 5, y: 5 } });
@@ -107,12 +106,12 @@ async function main() {
 
   console.log('\n[verify] ALL CHECKS PASSED');
   await browser.close();
-  process.kill(-proc.pid);
+  server?.stop();
   process.exit(0);
 }
 
 main().catch((err) => {
   console.error(err);
-  try { process.kill(-proc.pid); } catch { /* already gone */ }
+  server?.stop();
   process.exit(1);
 });

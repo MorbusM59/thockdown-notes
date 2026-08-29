@@ -30,6 +30,7 @@ import {
   startCdpJsProfile,
   withCdpCategoryTrace,
   startHeapSamplingProfile,
+  ensureEditMode,
 } from './perfHarness.mjs'
 
 function parseArgs(argv) {
@@ -85,7 +86,7 @@ async function seedLargeNoteAndReload(page, text) {
     await window.thockdownSections.setActiveNote('default', note.id)
   }, text)
   await page.reload()
-  await page.waitForSelector('.editor-text[contenteditable="true"]', { timeout: 30000 })
+  await ensureEditMode(page)
   await page.waitForTimeout(500)
 }
 

@@ -13,12 +13,10 @@
 //
 //   node scripts/perf/verifyCM6CursorPersistenceCheckpoints.mjs
 import { chromium } from 'playwright';
-import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { existsSync, readdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { startDevServer, waitForAppReady, ensureEditMode } from './perfHarness.mjs';
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const PORT = 5189;
 
 function resolveChromiumExecutablePath() {
@@ -30,18 +28,6 @@ function resolveChromiumExecutablePath() {
   return existsSync(candidate) ? candidate : undefined;
 }
 
-async function waitForServer(url, timeoutMs) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(url);
-      if (res.ok || res.status < 500) return;
-    } catch { /* keep polling */ }
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-  throw new Error(`Dev server at ${url} did not become ready in ${timeoutMs}ms`);
-}
-
 function assertEqual(actual, expected, label) {
   if (actual !== expected) {
     throw new Error(`FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
@@ -49,12 +35,10 @@ function assertEqual(actual, expected, label) {
   console.log(`  ok  ${label}: ${JSON.stringify(actual)}`);
 }
 
-const proc = spawn('npm', ['run', 'dev:browser', '--', '--port', String(PORT), '--strictPort'], {
-  cwd: REPO_ROOT, stdio: 'ignore', detached: true,
-});
+let server;
 
 async function main() {
-  await waitForServer(`http://localhost:${PORT}/`, 30000);
+  server = await startDevServer(PORT);
 
   const browser = await chromium.launch({ headless: true, executablePath: resolveChromiumExecutablePath() });
   const page = await browser.newPage();
@@ -63,7 +47,7 @@ async function main() {
   page.on('pageerror', (err) => consoleErrors.push(String(err)));
 
   await page.goto(`http://localhost:${PORT}/`);
-  await page.waitForSelector('.editor-text[contenteditable="true"]', { timeout: 15000 });
+  await waitForAppReady(page);
 
   // --- Check 1: typing alone piggybacks cursorPos onto the debounced save,
   // with no explicit saveNoteUiState call in between. ---
@@ -73,7 +57,7 @@ async function main() {
     return note.id;
   });
   await page.reload();
-  await page.waitForSelector('.editor-text[contenteditable="true"]', { timeout: 15000 });
+  await ensureEditMode(page);
   await page.waitForTimeout(400);
 
   const line = page.locator('.cm-line').first();
@@ -103,7 +87,7 @@ async function main() {
     return { noteId2: note.id, sectionId2: created.id };
   });
   await page.reload();
-  await page.waitForSelector('.editor-text[contenteditable="true"]', { timeout: 15000 });
+  await ensureEditMode(page);
   await page.waitForTimeout(400);
 
   const slots = page.locator('.editor-section-slot');
@@ -139,11 +123,11 @@ async function main() {
 
 main()
   .then(() => {
-    process.kill(-proc.pid);
+    server?.stop();
     process.exit(0);
   })
   .catch((err) => {
     console.error(err);
-    process.kill(-proc.pid);
+    server?.stop();
     process.exit(1);
   });
