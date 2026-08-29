@@ -117,9 +117,24 @@ Not enforced by the script, because judgment can't be:
 
 ## History
 
-- **v0.5.8** — first release under this protocol. It also fixed the reason no
-  earlier release ever carried a macOS build: `build-mac.yml` never requested
-  `contents: write`, so the job's token was read-only by repo default and the
-  upload failed with `Resource not accessible by integration` *after* a
-  successful build. v0.5.7's DMG was built and thrown away; so, silently, were
-  the ones before it.
+- **v0.5.8** — first release under this protocol, and the first with a macOS
+  build attached. Three separate faults had to be cleared to get one DMG onto a
+  release page, all of which failed *after* a successful build:
+  - `build-mac.yml` never requested `contents: write`, so the job's token was
+    read-only by repo default and the upload failed with `Resource not
+    accessible by integration`. This is why no release before v0.5.8 had a DMG:
+    v0.5.7's was built and thrown away, and so, silently, were the ones before.
+  - electron-builder saw a tag in the CI environment, decided by itself that
+    artifacts "will be published", and aborted demanding `GH_TOKEN` — with the
+    DMG already on disk. Fixed with `--publish never`: uploading is the
+    workflow's job, not the builder's.
+  - The checksum step matched nothing, because GitHub rewrites spaces in asset
+    filenames to dots and the local map was keyed on the on-disk name. It
+    degraded to warnings rather than failing, which is its own small lesson —
+    a verification step that can't match should be loud.
+
+  The `workflow_dispatch` `tag` input dates from the same session: a tag freezes
+  its own workflow file, so a pipeline fixed *after* tagging can never re-run
+  against its tag. Dispatching from `main` with `tag=vX.Y.Z` runs the current
+  workflow against the tagged source, which is what makes a broken release
+  recoverable without moving or burning a tag.

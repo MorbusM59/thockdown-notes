@@ -325,22 +325,55 @@ phase('macOS build (GitHub Actions)')
 if (DRY_RUN) {
   info(dim('[dry-run] would wait for the build-mac workflow'))
 } else {
-  const runs = ghQuiet('run', 'list', '--workflow', 'build-mac.yml', '--branch', tag,
-    '--limit', '1', '--json', 'databaseId,status,conclusion,url')
-  const parsed = runs.status === 0 && runs.stdout ? JSON.parse(runs.stdout) : []
-  if (!parsed.length) {
-    warn('no build-mac run found for this tag yet')
-    warn('re-run this script once it appears, or dispatch the workflow manually')
+  // Does the release already carry a DMG?  If a previous attempt got that far,
+  // there is nothing to wait for.
+  const existingAssets = ghQuiet('release', 'view', tag, '--json', 'assets')
+  const hasDmg = existingAssets.status === 0 && existingAssets.stdout
+    ? JSON.parse(existingAssets.stdout).assets.some((a) => a.name.endsWith('.dmg'))
+    : false
+
+  const listRuns = () => {
+    const res = ghQuiet('run', 'list', '--workflow', 'build-mac.yml', '--limit', '15',
+      '--json', 'databaseId,status,conclusion,url,headBranch,displayTitle,createdAt')
+    return res.status === 0 && res.stdout ? JSON.parse(res.stdout) : []
+  }
+  // A tag push names the run's headBranch after the tag; a dispatch carries the
+  // tag in its display title instead.
+  const runsForTag = () => listRuns().filter((r) => r.headBranch === tag || (r.displayTitle ?? '').includes(tag))
+
+  let macRun = runsForTag()[0]
+
+  if (hasDmg && (!macRun || macRun.status === 'completed')) {
+    ok('the release already carries a DMG')
   } else {
-    const [macRun] = parsed
-    info(macRun.url)
-    if (macRun.status !== 'completed') {
-      info('waiting for it to finish (usually 3-4 minutes)...')
-      run('gh', ['run', 'watch', String(macRun.databaseId), '--exit-status'], { allowFail: true })
+    if (!macRun || macRun.conclusion === 'failure' || macRun.conclusion === 'cancelled') {
+      // Dispatch from main so the *current* workflow file runs -- a tag's own
+      // copy is frozen, so a pipeline fixed after tagging can never re-run
+      // itself.  The `tag` input still points the build at the tagged source.
+      info(macRun ? 'the previous run failed -- dispatching a fresh one' : 'no run found for this tag -- dispatching one')
+      mutate('dispatch the build-mac workflow', () =>
+        run('gh', ['workflow', 'run', 'build-mac.yml', '--ref', 'main', '-f', `tag=${tag}`]))
+      const startedAt = Date.now()
+      const previousId = macRun?.databaseId
+      while (Date.now() - startedAt < 60_000) {
+        const candidate = runsForTag()[0]
+        if (candidate && candidate.databaseId !== previousId) { macRun = candidate; break }
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 3000)
+      }
     }
-    const after = JSON.parse(gh('run', 'view', String(macRun.databaseId), '--json', 'conclusion'))
-    if (after.conclusion === 'success') ok('macOS DMG built and attached')
-    else warn(`macOS build concluded "${after.conclusion}" -- the release will ship without a DMG`)
+
+    if (!macRun) {
+      warn('the workflow was dispatched but no run appeared -- re-run this script shortly')
+    } else {
+      info(macRun.url)
+      if (macRun.status !== 'completed') {
+        info('waiting for it to finish (usually 3-4 minutes)...')
+        run('gh', ['run', 'watch', String(macRun.databaseId), '--exit-status'], { allowFail: true })
+      }
+      const after = JSON.parse(gh('run', 'view', String(macRun.databaseId), '--json', 'conclusion'))
+      if (after.conclusion === 'success') ok('macOS DMG built and attached')
+      else warn(`macOS build concluded "${after.conclusion}" -- the release will ship without a DMG`)
+    }
   }
 }
 
@@ -360,7 +393,13 @@ if (DRY_RUN) {
   // -- which this machine never had -- the mac runner's own .sha256 sidecar
   // plays the role of the local hash, so it is checked the same way without
   // pulling 200+ MB back down.
-  const localHashes = new Map(windowsArtifacts.map((f) => [path.basename(f), sha256(f)]))
+  // GitHub rewrites spaces in an uploaded asset's filename to dots, so
+  // "Thockdown Notes-...exe" comes back as "Thockdown.Notes-...exe".  Key both
+  // sides on the same normalized name, or nothing ever matches and the whole
+  // verification degrades into a row of "no local hash" notes -- which is
+  // exactly how it shipped the first time.
+  const assetKey = (name) => name.replace(/\s+/g, '.')
+  const localHashes = new Map(windowsArtifacts.map((f) => [assetKey(path.basename(f)), sha256(f)]))
 
   const verifyDir = path.join(outDir, 'verify')
   fs.rmSync(verifyDir, { recursive: true, force: true })
@@ -368,7 +407,7 @@ if (DRY_RUN) {
   if (sidecar.status === 0 && fs.existsSync(verifyDir)) {
     for (const f of fs.readdirSync(verifyDir)) {
       const [hash, name] = fs.readFileSync(path.join(verifyDir, f), 'utf8').trim().split(/\s+/)
-      if (hash && name) localHashes.set(name, hash.toLowerCase())
+      if (hash && name) localHashes.set(assetKey(name), hash.toLowerCase())
     }
   } else {
     warn('no DMG checksum sidecar on the release -- the DMG could not be verified')
@@ -380,7 +419,7 @@ if (DRY_RUN) {
   for (const asset of assets) {
     if (asset.name.endsWith('.sha256') || asset.name === 'SHA256SUMS.txt') continue
     const remote = (asset.digest ?? '').replace(/^sha256:/, '').toLowerCase()
-    const local = localHashes.get(asset.name)
+    const local = localHashes.get(assetKey(asset.name))
     if (!remote) {
       warn(`${asset.name}: GitHub reported no digest`)
       continue
