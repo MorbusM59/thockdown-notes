@@ -15,7 +15,7 @@
 // Usage: node scripts/perf/verifyPreviewCharScrollbar.mjs [--chars=400000]
 
 import { chromium } from 'playwright'
-import { startDevServer } from './perfHarness.mjs'
+import { startDevServer, ensurePreviewMode } from './perfHarness.mjs'
 
 const PORT = 5207
 const EXECUTABLE_PATH = process.env.PLAYWRIGHT_CHROMIUM_PATH || undefined
@@ -87,12 +87,13 @@ async function main() {
       await window.thockdownSections.setActiveNote('default', note.id)
     }, text)
     await page.reload()
-    await page.waitForSelector('.markdown-preview', { timeout: 120000 })
+    // Waiting for the preview to be VISIBLE is not the same as waiting for it
+    // to exist, and the note does not always open in render view -- this used
+    // to run its own toggle, but only after a visibility wait that could never
+    // resolve when the toggle was the thing needed. ensurePreviewMode asks
+    // both questions in the right order.
+    await ensurePreviewMode(page, 120000)
     await page.waitForTimeout(500)
-    if (!(await page.evaluate(() => !!document.querySelector('.editor-stage.is-preview-mode')))) {
-      await page.keyboard.press('Escape')
-      await page.waitForTimeout(1500)
-    }
     await page.waitForTimeout(1500)
 
     // --- 3. STILLNESS: parked, untouched, for two seconds -----------------

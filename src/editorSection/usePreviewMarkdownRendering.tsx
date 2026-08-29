@@ -87,8 +87,27 @@ export type PreviewDocumentPositionApi = DocumentPosition
 // isn't wildly wrong before real measurements start arriving.
 const PREVIEW_BLOCK_ESTIMATED_HEIGHT_PX = 56
 
-/** How long discovery must run before its progress bar is worth showing. */
-const PREVIEW_DISCOVERY_BAR_DELAY_MS = 600
+/**
+ * How long discovery must run before its progress bar is worth showing.
+ *
+ * Raised from 600ms once the sweep got shorter. The bar's own rule is that a
+ * progress indicator which appears and vanishes inside a third of a second
+ * reads as a glitch rather than an explanation -- and with the end-to-end
+ * survey gone, 600ms put it exactly there. Measured from page load, watching
+ * for the element itself:
+ *
+ *                          fast machine      6x CPU throttle
+ *   48k chars, 667 blocks   276ms  (flash)   2.8s
+ *   400k chars, 768 blocks  305ms  (flash)   2.2s
+ *
+ * At this delay neither of those appears on a fast machine at all, and both
+ * still appear for over two seconds on a slow one -- which is the only case
+ * the bar was ever for.
+ */
+const PREVIEW_DISCOVERY_BAR_DELAY_MS = 1200
+
+/** Once the bar is up, the shortest time it may stay up. See reportDiscovery. */
+const PREVIEW_DISCOVERY_BAR_MIN_VISIBLE_MS = 500
 
 /**
  * Whether to log the background survey's own throughput.
@@ -1160,23 +1179,55 @@ export function usePreviewMarkdownRendering({
   const [previewDiscovery, setPreviewDiscovery] = useState<PreviewDiscoveryState>({ isSurveying: false, percent: 0, measured: 0, total: 0 })
   const discoveryPercentRef = useRef(-1)
   const discoveryStartedAtRef = useRef(0)
+  const discoveryShownAtRef = useRef(0)
+  const discoveryHideTimerRef = useRef<number | null>(null)
 
   const reportDiscovery = useCallback((measured: number, total: number, isSurveying: boolean) => {
     const percent = total > 0 ? Math.min(100, Math.floor((measured / total) * 100)) : 0
     if (!isSurveying) discoveryStartedAtRef.current = 0
     else if (discoveryStartedAtRef.current === 0) discoveryStartedAtRef.current = performance.now()
 
-    // Held back for a moment before it appears at all. Fitting a height model
-    // takes ~0.3s on this hardware, and a progress bar that shows up and
-    // vanishes inside a third of a second reads as a glitch, not as an
-    // explanation. It stays for the case it was built for: a document the
-    // model could not be fitted to, being measured block by block, where the
-    // wait is real and worth explaining.
-    const visible = isSurveying
-      && performance.now() - discoveryStartedAtRef.current >= PREVIEW_DISCOVERY_BAR_DELAY_MS
-    if (visible && percent === discoveryPercentRef.current) return
-    discoveryPercentRef.current = visible ? percent : -1
-    setPreviewDiscovery({ isSurveying: visible, percent, measured, total })
+    // Held back for a moment before it appears at all, so a sweep that is over
+    // quickly is never explained to anybody.
+    //
+    // The delay alone cannot be the whole answer, though, and tuning it harder
+    // will not make it one. Whatever the threshold, there is always some
+    // machine on which the sweep finishes just after it -- and on that machine
+    // the bar appears and vanishes, which is precisely the glitch the delay
+    // exists to prevent. Measured here at 1200ms: a fast machine showed the
+    // chunked sweep's bar for 131ms.
+    //
+    // So once it has appeared it stays for a minimum, at 100%. Holding a
+    // finished bar for a fraction of a second reads as completion; blinking
+    // reads as a fault.
+    const now = performance.now()
+    const wantsVisible = isSurveying
+      && now - discoveryStartedAtRef.current >= PREVIEW_DISCOVERY_BAR_DELAY_MS
+
+    if (wantsVisible && discoveryShownAtRef.current === 0) discoveryShownAtRef.current = now
+
+    const heldForMs = discoveryShownAtRef.current > 0 ? now - discoveryShownAtRef.current : 0
+    const owesTimeMs = discoveryShownAtRef.current > 0
+      ? PREVIEW_DISCOVERY_BAR_MIN_VISIBLE_MS - heldForMs
+      : 0
+
+    if (!wantsVisible && owesTimeMs > 0) {
+      if (discoveryHideTimerRef.current === null) {
+        discoveryHideTimerRef.current = window.setTimeout(() => {
+          discoveryHideTimerRef.current = null
+          discoveryShownAtRef.current = 0
+          discoveryPercentRef.current = -1
+          setPreviewDiscovery({ isSurveying: false, percent: 100, measured: total, total })
+        }, owesTimeMs)
+      }
+      setPreviewDiscovery({ isSurveying: true, percent: 100, measured: total, total })
+      return
+    }
+
+    if (!wantsVisible) discoveryShownAtRef.current = 0
+    if (wantsVisible && percent === discoveryPercentRef.current) return
+    discoveryPercentRef.current = wantsVisible ? percent : -1
+    setPreviewDiscovery({ isSurveying: wantsVisible, percent, measured, total })
   }, [])
 
   const cancelPrewarmSchedule = useCallback(() => {
@@ -1312,10 +1363,31 @@ export function usePreviewMarkdownRendering({
     heightModelRef.current = model
     predictedHeightsRef.current = predicted
 
+    // Where the reader actually is: a block, and how far into it.
+    //
+    // NOT `getVirtualItems()[0]`, which is the first block RENDERED. The
+    // overscan puts that PREVIEW_BLOCK_OVERSCAN blocks above the fold, so
+    // re-anchoring it with `align: 'start'` pulled the viewport up by six
+    // blocks every single time the model landed. Measured at 6x CPU throttle
+    // on a 300k-character note, as one step at the moment of the cast: total
+    // size 90,357px -> 49,463px, scrollTop 10,635 -> 7,766, and the block the
+    // reader was looking at moved 1,548px up the screen.
+    //
+    // The fraction matters as much as the block. Landing on the block's start
+    // would still jump by up to a block's height, and blocks here run to
+    // several hundred pixels.
     const scroller = previewScrollRef.current
-    const anchorIndex = scroller && scroller.scrollTop > 0
-      ? virtualizer.getVirtualItems()[0]?.index ?? null
-      : null
+    let anchor: { index: number; fraction: number } | null = null
+    if (scroller && scroller.scrollTop > 0) {
+      const items = virtualizer.getVirtualItems()
+      const atFold = items.find((item) => item.end > scroller.scrollTop) ?? items[0]
+      if (atFold && atFold.size > 0) {
+        anchor = {
+          index: atFold.index,
+          fraction: Math.min(1, Math.max(0, (scroller.scrollTop - atFold.start) / atFold.size)),
+        }
+      }
+    }
     virtualizer.measure()
 
     if (measured && measured.size > 0) {
@@ -1342,8 +1414,14 @@ export function usePreviewMarkdownRendering({
     }
     remeasureMountedBlocks()
 
-    if (anchorIndex !== null && anchorIndex > 0) {
-      virtualizer.scrollToIndex(anchorIndex, { align: 'start' })
+    // Last, and against freshly recomputed measurements: everything above has
+    // been moving the very offsets this has to land on.
+    if (anchor) {
+      virtualizer.getVirtualItems()
+      const measurement = virtualizer.measurementsCache[anchor.index]
+      if (measurement?.index === anchor.index) {
+        virtualizer.scrollToOffset(measurement.start + (measurement.size * anchor.fraction))
+      }
     }
   }, [virtualizer, previewBlocksRef, previewScrollRef, remeasureMountedBlocks])
 
@@ -1362,20 +1440,28 @@ export function usePreviewMarkdownRendering({
    *
    * This is what `estimateSize` uses before the fitted model lands.
    *
-   * MEASURED, and not as designed. The intent was to replace a flat 56px guess
-   * that ran ~36% SHORT of the truth; this runs ~28% LONG (449,186px against a
-   * true 349,851px on a 1.2M-character note), so an immediate scrollbar click
-   * lands 7.8% of the document away instead of 10.4%. Same order of error,
-   * opposite sign. It is kept for one reason only: the error is a roughly
-   * constant SCALE factor rather than an arbitrary one, because this at least
-   * varies with the content, where 56px-per-block does not. A scale error is
-   * one constant away from being right; a constant is not.
+   * MEASURED, and much worse than it once looked. This was recorded as
+   * running "~28% LONG", and described as a roughly constant SCALE factor --
+   * wrong in a predictable direction, one constant away from being right,
+   * which was the stated reason for keeping it. Re-measured across four
+   * documents against the settled truth:
    *
-   * The 28% is not mysterious, it is the two things this deliberately does not
-   * model: per-block margins, and a characters-per-line derived from the probe
-   * that evidently under-reads the real wrap width. Both are exactly what the
-   * fitted model learns 0.3s later. If this window ever matters more than it
-   * does today, that is where to look -- not at more line arithmetic.
+   *   48k chars, 667 small blocks    +29%
+   *   45k chars, 150 normal blocks   -35%
+   *   400k chars, 768 blocks         +94%
+   *   1.5M chars                    +102%
+   *
+   * Wrong in both directions, by a factor that swings with the shape of the
+   * document. There is no constant to divide out. What it is good for is
+   * exactly what a first commit needs and no more: a per-block number that at
+   * least varies with the content, so the virtualizer has somewhere to put
+   * blocks before anything has been measured.
+   *
+   * The error is the two things this deliberately does not model: per-block
+   * margins, and a characters-per-line derived from the probe that under-reads
+   * the real wrap width. Both are what the sweep learns within the second.
+   * This is why the sweep is not optional on either path -- see the
+   * measurement in that commit for the full comparison.
    */
   const lineHeightEstimatesRef = useRef<Float64Array | null>(null)
   useLayoutEffect(() => {
@@ -1949,8 +2035,10 @@ export function usePreviewMarkdownRendering({
       return
     }
 
-    // Same, for a document that was measured the slow way (the model was not
-    // trusted for it) and has been back to this geometry before.
+    // Same, for a small document that was measured outright and has been back
+    // to this geometry before. Only the continuous path ever fills this cache
+    // -- a chunked document is never measured end to end, so there is no
+    // survey of one to remember.
     if (predictedHeightsRef.current) {
       predictedHeightsRef.current = null
       virtualizer.measure()
@@ -2056,6 +2144,10 @@ export function usePreviewMarkdownRendering({
   }, [previewScrollRef, spacerReady])
 
   useEffect(() => cancelPrewarmSchedule, [cancelPrewarmSchedule])
+
+  useEffect(() => () => {
+    if (discoveryHideTimerRef.current !== null) window.clearTimeout(discoveryHideTimerRef.current)
+  }, [])
 
   const virtualItems = virtualizer.getVirtualItems()
 

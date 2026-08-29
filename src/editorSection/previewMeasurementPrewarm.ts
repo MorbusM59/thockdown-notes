@@ -1,23 +1,29 @@
 // Scheduling logic for the preview pane's background measurement prewarm.
 //
 // WHY THIS EXISTS
-// The preview virtualizes blocks with a flat 56px size estimate
-// (PREVIEW_BLOCK_ESTIMATED_HEIGHT_PX). Every block the reader has not scrolled
-// past keeps that estimate, which measures badly on a real document: on a
-// 300k-character note the cold total size is 14,216px against a true 49,439px
-// -- 71% short. Two visible consequences:
+// The virtualizer positions blocks at a running sum of their heights, so it
+// needs a height for every block including the ones nobody has scrolled to.
+// Until something is measured that height is arithmetic over the source
+// (lines x line height), and arithmetic is not close. Measured against the
+// settled truth on four documents:
 //
-//   * dragging or clicking to the bottom of the scrollbar lands ~3,700px short
-//     of the end, unless the document has already been scrolled through;
-//   * a long scroll churns -- the total size changed 37 times across 60
-//     viewport hops, the biggest single jump 1,091px, each one a visible
-//     stutter of the scroll thumb.
+//   48k chars, 667 small blocks    +29%
+//   45k chars, 150 normal blocks   -35%
+//   400k chars, 768 blocks         +94%
+//   1.5M chars                    +102%
 //
-// The fix is to measure every block up front, in the background, and hand the
-// real heights to the virtualizer before the reader ever gets there. This
-// module owns only the *scheduling*: which blocks to measure next and how many
-// to take in one slice. The measuring itself lives in
-// usePreviewMarkdownRendering.tsx, which has the DOM.
+// Wrong in both directions, by a factor that swings with the shape of the
+// document -- so there is no constant to correct it by, and something has to
+// go and look. That is what the sweep is, and why it is not optional on
+// either path: a small document has every block measured, a large one has a
+// sample measured and a model fitted from it (previewHeightModel.ts), and
+// with neither the substrate the reader scrolls through is up to twice as
+// tall as the document really is.
+//
+// This module owns only the PACING -- how many blocks to take in one slice,
+// and how long to wait between them. Which blocks to take is the caller's
+// decision now (it follows from the document's size), and the measuring
+// itself lives in usePreviewMarkdownRendering.tsx, which has the DOM.
 //
 // FIDELITY IS THE WHOLE GAME
 // A prewarmed height that is wrong is worse than no prewarm at all: the
@@ -131,43 +137,6 @@ export const PREVIEW_PREWARM_IDLE_TIMEOUT_MS = 60
 export const PREVIEW_PREWARM_MIN_BATCH = 1
 export const PREVIEW_PREWARM_MAX_BATCH = 512
 export const PREVIEW_PREWARM_INITIAL_BATCH = 6
-
-/**
- * Picks the next run of unmeasured block indices.
- *
- * Order matters, and it is not "0 upward". The virtualizer compensates
- * scrollTop whenever a block ABOVE the fold changes size -- correct behaviour
- * (it keeps the content under the reader still), but it means measuring
- * upward from the top while the reader sits mid-document moves the scroll
- * thumb under their hand. So: sweep from the reader's position to the end
- * first, where corrections are invisible, and only then come back for what is
- * above them. On a freshly opened note -- the case this feature is really for
- * -- the reader is at the top, so the entire sweep is below the fold and
- * nothing shifts at all.
- */
-export function planNextPrewarmBatch(options: {
-  blockCount: number
-  /** Whether this index already has a real (non-estimated) height. */
-  isMeasured: (index: number) => boolean
-  /** Roughly where the reader is; the downward sweep starts here. */
-  cursorIndex: number
-  batchSize: number
-}): number[] {
-  const { blockCount, isMeasured, cursorIndex, batchSize } = options
-  if (blockCount <= 0 || batchSize <= 0) return []
-
-  const start = Math.max(0, Math.min(cursorIndex, blockCount - 1))
-  const picked: number[] = []
-
-  for (let index = start; index < blockCount && picked.length < batchSize; index += 1) {
-    if (!isMeasured(index)) picked.push(index)
-  }
-  for (let index = 0; index < start && picked.length < batchSize; index += 1) {
-    if (!isMeasured(index)) picked.push(index)
-  }
-
-  return picked
-}
 
 /**
  * Grows or shrinks the next batch so a slice lands near the time budget.
