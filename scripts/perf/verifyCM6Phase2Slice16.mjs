@@ -10,7 +10,7 @@
 import { chromium } from 'playwright'
 import { existsSync, readdirSync } from 'node:fs'
 import path from 'node:path'
-import { startDevServer, generateSyntheticDocument } from './perfHarness.mjs'
+import { startDevServer, generateSyntheticDocument, waitForAppReady, ensureEditMode } from './perfHarness.mjs'
 
 function resolveChromiumExecutablePath() {
   const browsersRoot = process.env.PLAYWRIGHT_BROWSERS_PATH
@@ -60,7 +60,7 @@ async function main() {
     page.on('pageerror', (err) => consoleErrors.push(String(err)))
     await page.addInitScript(() => window.localStorage.setItem('thockdown:cm6-editor-spike', '1'))
     await page.goto(`http://localhost:${PORT}/`)
-    await page.waitForSelector('.cm6-editor-root .cm-content', { timeout: 15000 })
+    await waitForAppReady(page)
 
     const longText = generateSyntheticDocument(20_000)
     await page.evaluate(async (text) => {
@@ -68,7 +68,7 @@ async function main() {
       await window.thockdownSections.setActiveNote('default', note.id)
     }, longText)
     await page.reload()
-    await page.waitForSelector('.cm6-editor-root .cm-content', { timeout: 15000 })
+    await ensureEditMode(page)
     await page.waitForTimeout(400)
 
     // --- Native caret must be hidden -- this app draws its own block caret ---

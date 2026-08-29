@@ -6,7 +6,7 @@
 import { chromium } from 'playwright'
 import { existsSync, readdirSync } from 'node:fs'
 import path from 'node:path'
-import { startDevServer } from './perfHarness.mjs'
+import { startDevServer, waitForAppReady, ensureEditMode } from './perfHarness.mjs'
 
 function resolveChromiumExecutablePath() {
   const browsersRoot = process.env.PLAYWRIGHT_BROWSERS_PATH
@@ -60,7 +60,21 @@ async function main() {
     page.on('pageerror', (err) => consoleErrors.push(String(err)))
     await page.addInitScript(() => window.localStorage.setItem('thockdown:cm6-editor-spike', '1'))
     await page.goto(`http://localhost:${PORT}/`)
-    await page.waitForSelector('.cm6-editor-root .cm-content', { timeout: 15000 })
+    await waitForAppReady(page)
+
+    // Seed a note of this script's own and open it, rather than typing into
+    // whatever a first launch happens to show. That used to be an ordinary
+    // editable note; it is now the welcome note's auto-Table-of-Contents
+    // chapter, which is read-only and forced into render view -- so there was
+    // no visible editor to click and this ran to its timeout. What is being
+    // tested here has nothing to do with the welcome content either way.
+    await page.evaluate(async () => {
+      const note = await window.thockdownNotes.createNote({ initialText: 'seed line one' })
+      await window.thockdownSections.setActiveNote('default', note.id)
+    })
+    await page.reload()
+    await ensureEditMode(page)
+    await page.waitForTimeout(300)
 
     const cmContent = page.locator('.cm6-editor-root .cm-content')
     await cmContent.click()
