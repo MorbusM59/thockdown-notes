@@ -462,13 +462,35 @@ export interface ReleaseRampDownPlan {
   tailDurationSec: number;
 }
 
-// Build a post-apex-only decay plan that starts at the bell apex and follows
-// the natural bell tail down to zero velocity.
-export const buildReleaseRampDownPlanFromCurrentParams = (
+/**
+ * One half of the bell, played at a known peak speed.
+ *
+ * The two halves are the same construction read in opposite directions: the
+ * leading half takes the motion from rest up to `peakSpeedPxPerSec`, the
+ * trailing half brings it back down. Both are anchored at the apex, where the
+ * speed is known, which is what lets either be played without knowing how far
+ * the motion will ultimately travel -- and that is exactly the situation a
+ * journey with a cut in the middle is in.
+ */
+export interface CurveRampPlan {
+  cdf: Float64Array;
+  tSec: number;
+  /** Where in the curve this half begins, 0..1. */
+  fromX: number;
+  /** The CDF at `fromX`, subtracted out so the half starts from zero. */
+  fromProgress: number;
+  durationSec: number;
+  signedDistanceForFullCurve: number;
+  /** What this half alone covers. */
+  signedDistancePx: number;
+}
+
+const buildCurveRampPlan = (
+  half: 'up' | 'down',
   direction: -1 | 1,
-  initialSpeedPxPerSec: number,
-): ReleaseRampDownPlan | null => {
-  const speed = Math.max(0, initialSpeedPxPerSec);
+  peakSpeedPxPerSec: number,
+): CurveRampPlan | null => {
+  const speed = Math.max(0, peakSpeedPxPerSec);
   if (speed <= 0) return null;
 
   const a = Math.max(0.0001, renderScrollDynamic);
@@ -482,20 +504,65 @@ export const buildReleaseRampDownPlanFromCurrentParams = (
   const curve = buildCurvePlan(a, b, tSec, skew);
   const apexX = skew;
   const apexProgress = sampleCdf(curve.cdf, apexX);
-  const tailDurationSec = Math.max(0, (1 - apexX) * tSec);
-  if (tailDurationSec <= 0.0001) return null;
 
+  const fromX = half === 'down' ? apexX : 0;
+  const toX = half === 'down' ? 1 : apexX;
+  const durationSec = Math.max(0, (toX - fromX) * tSec);
+  if (durationSec <= 0.0001) return null;
+
+  // The apex slope is what converts "this many pixels a second at the top of
+  // the curve" into the distance the whole curve would cover -- the one place
+  // a known speed touches a shape that is otherwise only a proportion.
   const slopeIndex = Math.max(0, Math.min(curve.slopes.length - 1, Math.floor(apexX * curve.slopes.length)));
   const slopeAtApex = Math.max(0.0001, curve.slopes[slopeIndex]);
   const signedDistanceForFullCurve = direction * ((speed * tSec) / slopeAtApex);
 
+  const fromProgress = half === 'down' ? apexProgress : 0;
+  const toProgress = half === 'down' ? 1 : apexProgress;
+
   return {
     cdf: curve.cdf,
     tSec,
-    apexX,
-    apexProgress,
+    fromX,
+    fromProgress,
+    durationSec,
     signedDistanceForFullCurve,
-    tailDurationSec,
+    signedDistancePx: signedDistanceForFullCurve * (toProgress - fromProgress),
+  };
+};
+
+/** Signed displacement from the start of the half, at `elapsedSec` into it. */
+export const sampleCurveRampPlan = (plan: CurveRampPlan, elapsedSec: number): number => {
+  if (elapsedSec <= 0) return 0;
+  if (elapsedSec >= plan.durationSec) return plan.signedDistancePx;
+  const xNorm = plan.fromX + (elapsedSec / plan.tSec);
+  return plan.signedDistanceForFullCurve * (sampleCdf(plan.cdf, xNorm) - plan.fromProgress);
+};
+
+/** The leading half: rest up to `peakSpeedPxPerSec`. */
+export const buildScrollRampUpPlanFromCurrentParams = (
+  direction: -1 | 1,
+  peakSpeedPxPerSec: number,
+): CurveRampPlan | null => buildCurveRampPlan('up', direction, peakSpeedPxPerSec);
+
+// Build a post-apex-only decay plan that starts at the bell apex and follows
+// the natural bell tail down to zero velocity. Expressed through the shared
+// half-curve builder above; the field names here are the ones its two callers
+// (the page-key release ramps in CM6Editor and usePreviewScrollbar) already
+// read, so they are kept rather than renamed.
+export const buildReleaseRampDownPlanFromCurrentParams = (
+  direction: -1 | 1,
+  initialSpeedPxPerSec: number,
+): ReleaseRampDownPlan | null => {
+  const ramp = buildCurveRampPlan('down', direction, initialSpeedPxPerSec);
+  if (!ramp) return null;
+  return {
+    cdf: ramp.cdf,
+    tSec: ramp.tSec,
+    apexX: ramp.fromX,
+    apexProgress: ramp.fromProgress,
+    signedDistanceForFullCurve: ramp.signedDistanceForFullCurve,
+    tailDurationSec: ramp.durationSec,
   };
 };
 
