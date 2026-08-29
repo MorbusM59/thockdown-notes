@@ -2,12 +2,11 @@
 // from its SOURCE TEXT, without rendering it.
 //
 // WHY THIS EXISTS
-// The preview's scrollbar is a pixel quantity -- react-virtual's offsets are a
-// running sum of block heights -- so "where does the end of the document sit"
-// used to require measuring every block. On a 1.5M-character note that is
-// 18,000 markdown renders, and the background survey that did it took tens of
-// seconds (minutes, on the machine that reported it). The reader spends that
-// whole time with a scrollbar that is quietly wrong.
+// react-virtual positions blocks at a running sum of their heights, so it
+// needs a height for every block including the thousands nobody has looked at
+// yet. Measuring them is 18,000 markdown renders on a 1.5M-character note, and
+// the background survey that did it took tens of seconds -- minutes, on the
+// machine that reported it.
 //
 // An e-reader does not do this. A Kindle's progress is a *location* -- a fixed
 // slice of the source file, assigned at import -- so changing the font
@@ -28,9 +27,19 @@
 // block type this app can render, and being wrong about any of them silently
 // biases the whole document. Fitting sidesteps all of it: measure a sample,
 // solve for the two numbers that describe each block SHAPE, and let the
-// residual tell you how much to trust the result (see fitPreviewHeightModel's
-// `medianErrorPct`, which the caller uses to decide whether to fall back to
-// measuring everything).
+// residual say how good the answer is (`medianErrorPct`, `biasPct` -- reported
+// for a human reading the survey debug log, not acted on).
+//
+// WHAT THIS IS AND IS NOT RESPONSIBLE FOR, NOW
+// Only chunked documents use this at all, and only as a SCROLL SUBSTRATE: a
+// plausible, monotone pixel space for the native scroller to move through.
+// It used to have to hold the scrollbar as well, which is a far more
+// demanding job -- a systematic bias put the end of the document in the wrong
+// place -- and there was a trust check here that sent a badly-fitting
+// document off to be surveyed block by block when it failed. The scrollbar is
+// a character quantity now (editor/documentPosition.ts), so nothing depends
+// on this being accurate, the check is gone, and there is no survey to fall
+// back to.
 
 /** Block shapes that render differently enough to need their own parameters. */
 export type PreviewBlockShape =
@@ -69,12 +78,13 @@ export interface PreviewHeightModel {
   /**
    * Signed error of the model's SUM over the samples, as a percent.
    *
-   * This is the number the scrollbar actually cares about. Per-block error is
-   * mostly the word wrap falling a line either side of where arithmetic says,
-   * which is unbiased and cancels across thousands of blocks; a systematic
-   * bias does not cancel, and is what would put the end of the document in the
-   * wrong place. A model can be honestly useful with a 20% median block error
-   * and a 1% bias, and useless the other way around.
+   * Diagnostic only. Per-block error is mostly the word wrap falling a line
+   * either side of where arithmetic says, which is unbiased and cancels
+   * across thousands of blocks; a systematic bias does not cancel. That
+   * distinction mattered a great deal when the scrollbar was driven from
+   * these heights, and matters to nothing now -- it stays because it is the
+   * one number that tells a human reading the debug log whether a fit is
+   * sane, and it costs one pass over a sample already in hand.
    */
   biasPct: number
   sampleCount: number
@@ -106,20 +116,6 @@ const CHARS_PER_LINE_CANDIDATES: number[] = (() => {
  */
 export const PREVIEW_CALIBRATION_SAMPLES_PER_SHAPE = 6
 export const PREVIEW_CALIBRATION_MAX_SAMPLES = 160
-
-/**
- * When to trust a fitted model instead of measuring the document the slow way.
- *
- * Both bars matter, and they say different things. The bias bar is tight
- * because a systematic offset is exactly the defect this feature exists to
- * remove -- a 6% bias on a 50,000px document puts the end of it 3,000px from
- * where the scrollbar says. The per-block bar is loose because wrap-point
- * noise is unbiased and cancels: a 25% median error on 56px blocks is ±14px
- * per block, random sign, which over 18,000 blocks is a rounding error in the
- * total.
- */
-export const PREVIEW_MODEL_MAX_BIAS_PCT = 4
-export const PREVIEW_MODEL_MAX_MEDIAN_ERROR_PCT = 30
 
 /** Below this many samples a shape cannot be fitted and borrows the fallback. */
 const MIN_SAMPLES_PER_SHAPE = 4
@@ -380,21 +376,4 @@ export function planPreviewHeightSample(options: {
     thinned.push(ordered[Math.round((i * (ordered.length - 1)) / (maxTotal - 1))])
   }
   return [...new Set(thinned)]
-}
-
-/**
- * Whether a fitted model is good enough to hand to the scrollbar.
- *
- * A document whose heights genuinely are not a function of its source text --
- * one full of images, embeds, or anything sized from outside the markdown --
- * fails this, and the caller measures it block by block instead. Being wrong
- * confidently is worse than being slow: a bad model would hold a precise,
- * incorrect scrollbar forever, where the flat estimate it replaced at least
- * corrected itself as the reader scrolled.
- */
-export function isPreviewHeightModelTrustworthy(model: PreviewHeightModel | null): model is PreviewHeightModel {
-  if (!model) return false
-  if (model.sampleCount < MIN_SAMPLES_PER_SHAPE) return false
-  return Math.abs(model.biasPct) <= PREVIEW_MODEL_MAX_BIAS_PCT
-    && model.medianErrorPct <= PREVIEW_MODEL_MAX_MEDIAN_ERROR_PCT
 }

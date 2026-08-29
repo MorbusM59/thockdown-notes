@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MouseEvent, MutableRefObject } from 'react'
 import type { PreviewDocumentPositionApi } from './usePreviewMarkdownRendering'
 import { beginScrollTrackHold } from '../editor/scrollTrackHold'
-import { resolveThumbLineRatio } from '../editor/scrollThumbMetrics'
 import {
   buildReleaseRampDownPlanFromCurrentParams,
   cancelNonQuantizedSmoothScroll,
@@ -162,18 +161,12 @@ export function usePreviewScrollbar({
       return
     }
 
-    // Thumb SIZE is a question about the text -- how much of the document one
-    // screen holds -- and is answered in lines, once, from the source. It is
-    // deliberately not `viewportHeight / contentHeight`: that asks about the
-    // layout, which is not known until it has been measured, which is what
-    // made the thumb resize once shortly after every note load as a better
-    // estimate replaced the first one. See editor/scrollThumbMetrics.ts.
-    const lineMetrics = previewDocumentPositionRef?.current?.readLineMetrics() ?? null
-    const visibleRatio = (lineMetrics && resolveThumbLineRatio({
-      viewportHeightPx: viewportHeight,
-      lineHeightPx: lineMetrics.lineHeightPx,
-      documentLines: lineMetrics.documentLines,
-    })) ?? (viewportHeight / contentHeight)
+    // Both numbers come from the document itself (editor/documentPosition.ts),
+    // which answers in ratios and does not say whether this document is being
+    // measured or modelled underneath. The pixel fallbacks below are for the
+    // one frame before it can answer at all -- not a second opinion.
+    const position = previewDocumentPositionRef?.current ?? null
+    const visibleRatio = position?.readThumbRatio() ?? (viewportHeight / contentHeight)
     const nextThumbHeight = Math.max(
       SCROLL_TRACK_MIN_THUMB_HEIGHT_PX,
       Math.min(usableTrackHeight, Math.round(usableTrackHeight * visibleRatio)),
@@ -182,22 +175,8 @@ export function usePreviewScrollbar({
     const maxScrollTop = contentHeight - viewportHeight
     const maxThumbTop = Math.max(0, usableTrackHeight - nextThumbHeight)
 
-    // POSITION comes from character space when the preview can supply it: it
-    // is exact by construction and, more to the point, it does not move when
-    // the layout does. A pixel ratio has the thumb creep while block heights
-    // are still being discovered and jump when the reader changes font size,
-    // neither of which is a thing the reader did.
-    //
-    // SIZE stays a pixel ratio deliberately. "How much of the document is on
-    // screen" in characters swings with the content -- a screen of dense prose
-    // against a screen holding one big code block -- so a character-sized
-    // thumb visibly grows and shrinks as you scroll through a mixed document.
-    // Position is the half that has to be exact; size only has to be steady.
-    const charViewport = previewDocumentPositionRef?.current?.readViewport() ?? null
-    const charSpan = charViewport ? charViewport.totalChars - charViewport.visibleChars : 0
-    const scrollRatio = charViewport && charSpan > 0
-      ? clamp(charViewport.startChar / charSpan, 0, 1)
-      : (maxScrollTop > 0 ? scroller.scrollTop / maxScrollTop : 0)
+    const scrollRatio = position?.readScrollRatio()
+      ?? (maxScrollTop > 0 ? clamp(scroller.scrollTop / maxScrollTop, 0, 1) : 0)
     const nextThumbTop = SCROLL_TRACK_EDGE_GAP_PX + Math.round(maxThumbTop * scrollRatio)
 
     applyPreviewThumbDom(nextThumbTop, nextThumbHeight)
@@ -220,12 +199,11 @@ export function usePreviewScrollbar({
 
     // The exact inverse of the reading above, and it has to stay that way:
     // reading position in one space and writing it in another would drop the
-    // thumb somewhere other than where it was released.
+    // thumb somewhere other than where it was released. Routing both through
+    // the same object is what guarantees it.
     const position = previewDocumentPositionRef?.current
-    const charViewport = position?.readViewport() ?? null
-    if (position && charViewport) {
-      const charSpan = Math.max(0, charViewport.totalChars - charViewport.visibleChars)
-      position.scrollToChar(ratio * charSpan)
+    if (position) {
+      position.jumpToRatio(ratio)
       return
     }
 
@@ -440,23 +418,21 @@ export function usePreviewScrollbar({
     const clampedTop = Math.max(minThumbTop, Math.min(targetThumbTop, maxThumbTop))
     const ratio = maxThumbTravel > 0 ? (clampedTop - SCROLL_TRACK_EDGE_GAP_PX) / maxThumbTravel : 0
 
-    // Same character mapping as the thumb drag. Clicking the track at 30% and
+    // Exactly the mapping the thumb drag uses. Clicking the track at 30% and
     // dragging the thumb to 30% have to mean the same thing -- they are the
-    // same gesture to the reader -- and until this was routed here they did
-    // not: the click resolved against pixels, so on a document with uneven
-    // content density the two landed in different places, and on one still
-    // being sized up they landed VERY differently (measured: a click at 30%
-    // on a just-opened note went to 13% of the text).
+    // same gesture to the reader -- and until both were routed through the
+    // same object they did not: the click resolved against pixels, so on a
+    // document with uneven content density the two landed in different
+    // places, and on one still being sized up they landed VERY differently
+    // (measured: a click at 30% on a just-opened note went to 13% of the
+    // text).
     const goTo = (instant: boolean) => {
       const element = previewScrollRef.current
       if (!element) return
       const position = previewDocumentPositionRef?.current
-      const charViewport = position?.readViewport() ?? null
-      if (position && charViewport) {
-        const charSpan = Math.max(0, charViewport.totalChars - charViewport.visibleChars)
-        const charTarget = ratio * charSpan
-        if (instant) position.scrollToChar(charTarget)
-        else position.smoothScrollToChar(charTarget)
+      if (position) {
+        if (instant) position.jumpToRatio(ratio)
+        else position.travelToRatio(ratio)
         return
       }
 

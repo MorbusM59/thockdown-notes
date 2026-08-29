@@ -30,26 +30,31 @@ import { splitMarkdownIntoPreviewBlocksIncremental, type PreviewBlockSplitCache 
 import { resolvePreviewBlockIndexForSourceLine } from '../editor/PreviewBlockIndex'
 import { isNonQuantizedSmoothScrollActive, scrollToNonQuantizedSmooth } from '../editor/NonQuantizedSmoothScroll'
 import {
+  isContinuousDocument,
+  resolveChunkedCharTarget,
+  resolveChunkedScrollRatio,
+  resolveContinuousRatios,
+  type DocumentPosition,
+} from '../editor/documentPosition'
+import {
   PREVIEW_PREWARM_GEOMETRY_CACHE_SIZE,
   PREVIEW_PREWARM_INITIAL_BATCH,
   PREVIEW_PREWARM_RESIZE_SETTLE_MS,
   PREVIEW_PREWARM_SCROLL_QUIET_MS,
   PREVIEW_PREWARM_SLICE_BUDGET_MS,
   PREVIEW_PREWARM_IDLE_TIMEOUT_MS,
-  planNextPrewarmBatch,
   resolveNextPrewarmBatchSize,
 } from './previewMeasurementPrewarm'
 import {
   PREVIEW_CALIBRATION_MAX_SAMPLES,
   PREVIEW_CALIBRATION_SAMPLES_PER_SHAPE,
   fitPreviewHeightModel,
-  isPreviewHeightModelTrustworthy,
   planPreviewHeightSample,
   predictPreviewBlockHeight,
   resolvePreviewBlockShape,
 } from './previewHeightModel'
 import type { PreviewHeightModel, PreviewHeightSample } from './previewHeightModel'
-import { countWrappedLines } from '../editor/scrollThumbMetrics'
+import { countWrappedLines, resolveThumbLineRatio } from '../editor/scrollThumbMetrics'
 import {
   buildBlockCharOffsets,
   resolvePreviewCharScrollOffset,
@@ -64,17 +69,16 @@ import type { PreviewCharViewport } from './previewCharPosition'
  * this on every scroll event, and anything that had to be recomputed into
  * React state per frame would re-render the section instead.
  */
-export interface PreviewDocumentPositionApi {
-  readViewport: () => PreviewCharViewport | null
-  scrollToChar: (charOffset: number) => void
-  smoothScrollToChar: (charOffset: number) => void
-  /**
-   * The document's length in rendered lines, and how tall one is -- everything
-   * the scrollbar needs to size its thumb without consulting the layout. See
-   * editor/scrollThumbMetrics.ts.
-   */
-  readLineMetrics: () => { documentLines: number; lineHeightPx: number } | null
-}
+/**
+ * What the preview hands the scrollbar.
+ *
+ * Deliberately nothing but `DocumentPosition` -- four methods, all in ratios.
+ * The scrollbar is not told whether this document is being measured or
+ * modelled, because a caller that could ask would eventually branch on the
+ * answer, and then there would be two scrollbars again. See
+ * editor/documentPosition.ts.
+ */
+export type PreviewDocumentPositionApi = DocumentPosition
 
 // Initial guess only -- corrected as soon as each block actually mounts and
 // reports its real height (react-virtual's estimate-then-correct model, via
@@ -633,6 +637,17 @@ export function usePreviewMarkdownRendering({
     previewBlocksRef.current = previewBlocks
   }, [previewBlocks])
 
+  // The document's own length, which is what decides whether it is measured
+  // or modelled (editor/documentPosition.ts). Through a ref because the
+  // position API reads it from inside stable callbacks, and because the
+  // decision has to be the CURRENT one every time it is asked -- latching it
+  // would leave a document that grew past the threshold still described the
+  // old way.
+  const previewBlockTextLengthRef = useRef(renderedDisplayText.length)
+  useEffect(() => {
+    previewBlockTextLengthRef.current = renderedDisplayText.length
+  }, [renderedDisplayText])
+
   // react-virtual's own scroll-correction loop (`reconcileScroll`)
   // re-invokes this whenever a target block's real, measured height
   // replaces its initial estimate mid-scroll -- both branches below must
@@ -1127,7 +1142,7 @@ export function usePreviewMarkdownRendering({
   // Discovery now has two modes: fit a model from a ~100-block sample
   // ('calibrating'), or, if that model cannot be trusted, fall back to
   // measuring the whole document ('measuring') exactly as this used to.
-  const surveyModeRef = useRef<'idle' | 'calibrating' | 'measuring'>('idle')
+  const surveyModeRef = useRef<'idle' | 'calibrating'>('idle')
   const calibrationQueueRef = useRef<number[]>([])
   const calibrationSamplesRef = useRef<PreviewHeightSample[]>([])
   const calibrationTotalRef = useRef(0)
@@ -1514,11 +1529,113 @@ export function usePreviewMarkdownRendering({
     scrollToNonQuantizedSmooth(scroller, offset)
   }, [previewScrollRef, readBlockMeasurements])
 
+  /**
+   * The two answers to "where are we", behind one interface.
+   *
+   * Which one this document gets is decided by its length alone, and the
+   * scrollbar never learns which it got -- see editor/documentPosition.ts for
+   * why the boundary is drawn there and why everything crossing it is a ratio.
+   *
+   * The decision is re-read on every call rather than latched, so a document
+   * that grows past the threshold is described the new way from then on. That
+   * can only happen at a note switch or on the way back from edit mode --
+   * nobody types into the render view -- so there is no risk of the semantics
+   * flickering under a reader's hand.
+   */
+  const documentPosition = useMemo<DocumentPosition>(() => {
+    const isContinuous = () => isContinuousDocument(previewBlockTextLengthRef.current)
+
+    const readContinuousRatios = () => {
+      const scroller = previewScrollRef.current
+      if (!scroller) return null
+      return resolveContinuousRatios({
+        scrollTopPx: scroller.scrollTop,
+        clientHeightPx: scroller.clientHeight,
+        scrollHeightPx: scroller.scrollHeight,
+      })
+    }
+
+    // The chunked thumb's size is a question about the TEXT -- how much of the
+    // document one screen holds -- answered in lines, once, from the source.
+    // Deliberately not the pixel ratio: that asks about the layout, which is
+    // not known until it is measured, which is what made the thumb resize once
+    // shortly after every note load as a better estimate replaced the first.
+    const readChunkedThumbRatio = () => {
+      const scroller = previewScrollRef.current
+      const metrics = readLineMetrics()
+      if (!scroller || !metrics) return null
+      return resolveThumbLineRatio({
+        viewportHeightPx: scroller.clientHeight,
+        lineHeightPx: metrics.lineHeightPx,
+        documentLines: metrics.documentLines,
+      })
+    }
+
+    const readThumbRatio = () => (
+      isContinuous() ? readContinuousRatios()?.thumbRatio ?? null : readChunkedThumbRatio()
+    )
+
+    const resolveChunkedTarget = (ratio: number) => {
+      const viewport = readCharViewport()
+      const thumbRatio = readChunkedThumbRatio()
+      if (!viewport || thumbRatio === null) return null
+      return resolveChunkedCharTarget({ ratio, totalChars: viewport.totalChars, thumbRatio })
+    }
+
+    return {
+      readScrollRatio: () => {
+        if (isContinuous()) return readContinuousRatios()?.scrollRatio ?? null
+        const viewport = readCharViewport()
+        const thumbRatio = readChunkedThumbRatio()
+        if (!viewport || thumbRatio === null) return null
+        return resolveChunkedScrollRatio({
+          startChar: viewport.startChar,
+          totalChars: viewport.totalChars,
+          thumbRatio,
+        })
+      },
+
+      readThumbRatio,
+
+      jumpToRatio: (ratio) => {
+        const scroller = previewScrollRef.current
+        if (!scroller) return
+        if (isContinuous()) {
+          const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+          virtualizer.scrollToOffset(ratio * maxScrollTopPx)
+          return
+        }
+        const charTarget = resolveChunkedTarget(ratio)
+        if (charTarget !== null) scrollToChar(charTarget)
+      },
+
+      travelToRatio: (ratio) => {
+        const scroller = previewScrollRef.current
+        if (!scroller) return
+        if (isContinuous()) {
+          const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+          scrollToNonQuantizedSmooth(scroller, ratio * maxScrollTopPx)
+          return
+        }
+        const charTarget = resolveChunkedTarget(ratio)
+        if (charTarget !== null) smoothScrollToChar(charTarget)
+      },
+    }
+  }, [
+    previewScrollRef,
+    readCharViewport,
+    readLineMetrics,
+    scrollToChar,
+    smoothScrollToChar,
+    virtualizer,
+    previewBlockTextLengthRef,
+  ])
+
   useLayoutEffect(() => {
     if (!previewDocumentPositionRef) return undefined
-    previewDocumentPositionRef.current = { readViewport: readCharViewport, scrollToChar, smoothScrollToChar, readLineMetrics }
+    previewDocumentPositionRef.current = documentPosition
     return () => { previewDocumentPositionRef.current = null }
-  }, [previewDocumentPositionRef, readCharViewport, scrollToChar, smoothScrollToChar, readLineMetrics])
+  }, [previewDocumentPositionRef, documentPosition])
 
   /**
    * Hands every buffered height to the virtualizer at once, when the survey is
@@ -1565,15 +1682,13 @@ export function usePreviewMarkdownRendering({
       // scrolled recently" only means anything while nothing is travelling.
       const readerScrolling = !travelling
         && performance.now() - lastPreviewScrollAtRef.current < PREVIEW_PREWARM_SCROLL_QUIET_MS
-      // While CALIBRATING, a travel animation is waiting on us rather than
-      // competing with us: its destination is a character position, and until
-      // the model lands the pixel that maps to is a flat-estimate guess.
-      // Yielding to it keeps the journey pointed at the wrong place for its
-      // whole duration -- measured at 18s on a large note. The reader's own
-      // scrolling still wins, in both modes.
-      const shouldYieldToScrolling = surveyModeRef.current === 'calibrating'
-        ? readerScrolling
-        : (readerScrolling || travelling)
+      // A travel animation is waiting on the sweep rather than competing with
+      // it: its destination is a character position, and until the heights
+      // land the pixel that maps to is a flat-estimate guess. Yielding to it
+      // would keep the journey pointed at the wrong place for its whole
+      // duration -- measured at 18s on a large note. The reader's own
+      // scrolling still wins.
+      const shouldYieldToScrolling = readerScrolling
       if (shouldYieldToScrolling) {
         // Yielding means unmounting, not just declining to start a new batch.
         // The previous batch's blocks are real rendered markdown; left in the
@@ -1582,12 +1697,11 @@ export function usePreviewMarkdownRendering({
         // during a continuous scroll, i.e. the "pause" paused nothing the
         // reader could feel.
         if (prewarmBatchRef.current.length > 0) {
-          // A calibration batch that is unmounted before it was measured has
-          // to go back in the queue -- silently dropping it would shrink the
-          // sample the model is fitted from every time the reader scrolls.
-          if (surveyModeRef.current === 'calibrating') {
-            calibrationQueueRef.current = [...prewarmBatchRef.current, ...calibrationQueueRef.current]
-          }
+          // A batch unmounted before it was measured goes back in the queue --
+          // silently dropping it would shrink the sample the model is fitted
+          // from, or leave a small document with blocks nobody measured, every
+          // time the reader scrolls.
+          calibrationQueueRef.current = [...prewarmBatchRef.current, ...calibrationQueueRef.current]
           prewarmBatchRef.current = []
           setPrewarmBatch([])
         }
@@ -1596,40 +1710,22 @@ export function usePreviewMarkdownRendering({
         return
       }
 
-      if (surveyModeRef.current === 'calibrating') {
-        const queue = calibrationQueueRef.current
-        const take = Math.max(1, Math.min(prewarmBatchSizeRef.current, queue.length))
-        const batch = queue.slice(0, take)
-        calibrationQueueRef.current = queue.slice(take)
-        if (batch.length === 0) return
-        prewarmStartedAtRef.current = performance.now()
-        prewarmBatchRef.current = batch
-        setPrewarmBatch(batch)
-        return
-      }
-
-      const cursorIndex = virtualizer.getVirtualItems().at(-1)?.index ?? 0
-      const next = planNextPrewarmBatch({
-        blockCount,
-        isMeasured: (index) => prewarmedRef.current.has(index),
-        cursorIndex,
-        batchSize: prewarmBatchSizeRef.current,
-      })
-
-      if (next.length === 0) {
-        prewarmDoneRef.current = true
-        prewarmBatchRef.current = []
-        setPrewarmBatch([])
-        commitPrewarmedSizes()
-        reportDiscovery(blockCount, blockCount, false)
-        return
-      }
-
+      // One mode left: measure the planned targets and stop. The document is
+      // either small enough to have every block on that list, or large enough
+      // that a fitted model is the last word on it -- there is no third case
+      // where an untrusted model sends the whole document to be surveyed
+      // block by block, so there is no rolling "what have we not measured
+      // yet" scan any more either.
+      const queue = calibrationQueueRef.current
+      const take = Math.max(1, Math.min(prewarmBatchSizeRef.current, queue.length))
+      const batch = queue.slice(0, take)
+      calibrationQueueRef.current = queue.slice(take)
+      if (batch.length === 0) return
       prewarmStartedAtRef.current = performance.now()
-      prewarmBatchRef.current = next
-      setPrewarmBatch(next)
+      prewarmBatchRef.current = batch
+      setPrewarmBatch(batch)
     })
-  }, [schedulePrewarmSlice, virtualizer, previewBlocksRef, previewScrollRef, commitPrewarmedSizes, reportDiscovery])
+  }, [schedulePrewarmSlice, previewBlocksRef, previewScrollRef])
 
   /**
    * Fits the model from the calibration sample and decides whether to use it.
@@ -1651,8 +1747,23 @@ export function usePreviewMarkdownRendering({
     // `[data-prewarm-index]` was still in the document minutes later.
     prewarmBatchRef.current = []
     setPrewarmBatch([])
+
+    // A small document was measured outright, so there is nothing to model:
+    // hand the real heights over and stop. This is the branch that makes
+    // `scrollHeight` a true total rather than a running sum of estimates,
+    // which is the whole premise the continuous strategy rests on.
+    if (isContinuousDocument(previewBlockTextLengthRef.current)) {
+      commitPrewarmedSizes()
+      surveyModeRef.current = 'idle'
+      prewarmDoneRef.current = true
+      reportDiscovery(blockCount, blockCount, false)
+      if (isPreviewSurveyDebugOn()) {
+        console.log('[preview-survey] measured outright', { blocks: blockCount })
+      }
+      return
+    }
+
     const model = fitPreviewHeightModel(calibrationSamplesRef.current)
-    const trusted = isPreviewHeightModelTrustworthy(model)
 
     if (isPreviewSurveyDebugOn()) {
       console.log('[preview-survey] model', {
@@ -1660,48 +1771,41 @@ export function usePreviewMarkdownRendering({
         blocks: blockCount,
         medianErrorPct: model ? Math.round(model.medianErrorPct * 10) / 10 : null,
         biasPct: model ? Math.round(model.biasPct * 10) / 10 : null,
-        trusted,
       })
     }
 
-    // Applied either way. Even a model that fails the trust check below is
-    // fitted from a hundred real blocks of THIS document, so its predictions
-    // beat a flat 56px guess in every case that has been constructed for it --
-    // for a document of images the fit degenerates to "the average sampled
-    // image", which is exactly the right thing to guess. What the trust check
-    // decides is not whether to use the model, but whether the model is good
-    // enough to stop there.
-    // With the sample's own measured heights, not the model's guesses for
-    // them: every one of these is a real render of this document at this
-    // geometry, and for small documents the "sample" is the whole thing.
+    // Cast unconditionally, with the sample's own measured heights rather
+    // than the model's guesses for them: every one of those is a real render
+    // of this document at this geometry.
+    //
+    // There is no trust check any more, and no survey to fall back to. The
+    // model used to have to be good enough to hold the SCROLLBAR, which is a
+    // demanding job -- a systematic bias put the end of the document in the
+    // wrong place -- and when it was not, the document was measured end to
+    // end instead. The scrollbar is a character quantity now
+    // (editor/documentPosition.ts), so all the model still has to do is give
+    // the native scroller a plausible, monotone substrate to scroll through.
+    // A fit that would have failed the old bar does that perfectly well, and
+    // measuring eighteen thousand blocks to improve it buys nothing anyone
+    // can see.
     if (model) applyHeightModel(model, prewarmBufferRef.current)
 
-    if (trusted) {
-      const signature = readGeometrySignature()
-      if (signature) {
-        const store = modelByGeometryRef.current
-        store.delete(signature)
-        store.set(signature, model)
-        while (store.size > PREVIEW_PREWARM_GEOMETRY_CACHE_SIZE) {
-          const oldest = store.keys().next().value
-          if (oldest === undefined) break
-          store.delete(oldest)
-        }
+    const signature = readGeometrySignature()
+    if (model && signature) {
+      const store = modelByGeometryRef.current
+      store.delete(signature)
+      store.set(signature, model)
+      while (store.size > PREVIEW_PREWARM_GEOMETRY_CACHE_SIZE) {
+        const oldest = store.keys().next().value
+        if (oldest === undefined) break
+        store.delete(oldest)
       }
-      surveyModeRef.current = 'idle'
-      prewarmDoneRef.current = true
-      prewarmBufferRef.current = new Map()
-      reportDiscovery(blockCount, blockCount, false)
-      return
     }
-
-    // The mould does not fit this document well enough to be the last word.
-    // Measure it -- in the background, with the model's predictions holding
-    // the scrollbar in the meantime rather than a flat guess.
-    surveyModeRef.current = 'measuring'
-    reportDiscovery(prewarmedRef.current.size, blockCount, true)
-    queueNextPrewarmBatch()
-  }, [previewBlocksRef, readGeometrySignature, applyHeightModel, reportDiscovery, queueNextPrewarmBatch])
+    surveyModeRef.current = 'idle'
+    prewarmDoneRef.current = true
+    prewarmBufferRef.current = new Map()
+    reportDiscovery(blockCount, blockCount, false)
+  }, [previewBlocksRef, readGeometrySignature, applyHeightModel, reportDiscovery, commitPrewarmedSizes, previewBlockTextLengthRef])
 
   // Measure whatever the host just rendered and hand the real heights to the
   // virtualizer. useLayoutEffect so this reads geometry in the same frame the
@@ -1713,13 +1817,18 @@ export function usePreviewMarkdownRendering({
     const host = prewarmHostRef.current
     if (!host) return
 
-    const isCalibrating = surveyModeRef.current === 'calibrating'
     for (const index of prewarmBatch) {
       const el = host.querySelector<HTMLElement>(`[data-prewarm-index="${index}"]`)
       if (!el) continue
-      const height = el.getBoundingClientRect().height
+      // Rounded, because react-virtual rounds: its own measureElement takes
+      // Math.round of the border box, so a block measured here at 68.78 and
+      // later re-measured on mount at 69 shifts everything below it by the
+      // difference. Individually invisible; across a document it is the total
+      // size drifting while the reader scrolls toward it, which is precisely
+      // what a measured document is supposed to be free of.
+      const height = Math.round(el.getBoundingClientRect().height)
       prewarmedRef.current.add(index)
-      if (isCalibrating && height > 0) {
+      if (height > 0) {
         const block = previewBlocksRef.current[index]
         if (block) calibrationSamplesRef.current.push({ text: block.text, heightPx: height })
       }
@@ -1743,15 +1852,16 @@ export function usePreviewMarkdownRendering({
       prewarmBufferRef.current.set(index, height)
     }
 
-    // While calibrating, progress is measured against the SAMPLE, not the
-    // document: a hundred blocks is the whole job, and reporting it as a
+    // Progress is against the PLANNED TARGETS, not the document. On a large
+    // note that list is a hundred blocks and the whole job; reporting it as a
     // fraction of eighteen thousand would show a bar that never leaves zero
-    // before vanishing.
-    reportDiscovery(
-      isCalibrating ? calibrationSamplesRef.current.length : prewarmedRef.current.size,
-      isCalibrating ? calibrationTotalRef.current : previewBlocksRef.current.length,
-      true,
-    )
+    // before vanishing. On a small one the two are the same list anyway.
+    //
+    // Counted by what was measured rather than by what was sampled: a block
+    // that renders to nothing is measured but contributes no sample, so
+    // counting samples would stall the bar short of the end on any document
+    // that has one.
+    reportDiscovery(prewarmedRef.current.size, calibrationTotalRef.current, true)
 
     const sliceMs = performance.now() - prewarmStartedAtRef.current
     if (isPreviewSurveyDebugOn()) {
@@ -1795,7 +1905,7 @@ export function usePreviewMarkdownRendering({
       minSliceMsRef.current,
     )
 
-    if (isCalibrating && calibrationQueueRef.current.length === 0) {
+    if (calibrationQueueRef.current.length === 0) {
       finishCalibration()
       return
     }
@@ -1857,12 +1967,21 @@ export function usePreviewMarkdownRendering({
       return
     }
 
-    const targets = planPreviewHeightSample({
-      blockCount,
-      shapeAt: (index) => resolvePreviewBlockShape(blocks[index]?.text ?? ''),
-      perShape: PREVIEW_CALIBRATION_SAMPLES_PER_SHAPE,
-      maxTotal: PREVIEW_CALIBRATION_MAX_SAMPLES,
-    })
+    // Below the threshold the document is small enough to measure outright,
+    // and measuring it is the whole point: it is what makes `scrollHeight` a
+    // real total rather than a running sum of estimates, which is what lets
+    // the scrollbar use the plain pixel identity and be exact
+    // (editor/documentPosition.ts). Every index, explicitly, rather than
+    // asking the sampler for "all of them" and trusting its proportional
+    // share-out to round in our favour.
+    const targets = isContinuousDocument(previewBlockTextLengthRef.current)
+      ? Array.from({ length: blockCount }, (_, index) => index)
+      : planPreviewHeightSample({
+        blockCount,
+        shapeAt: (index) => resolvePreviewBlockShape(blocks[index]?.text ?? ''),
+        perShape: PREVIEW_CALIBRATION_SAMPLES_PER_SHAPE,
+        maxTotal: PREVIEW_CALIBRATION_MAX_SAMPLES,
+      })
     calibrationQueueRef.current = targets
     calibrationTotalRef.current = targets.length
     surveyModeRef.current = 'calibrating'

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   fitPreviewHeightModel,
-  isPreviewHeightModelTrustworthy,
   planPreviewHeightSample,
   predictPreviewBlockHeight,
   predictPreviewBlockLines,
@@ -168,33 +167,6 @@ describe('planPreviewHeightSample', () => {
   it('handles a document smaller than the sample budget', () => {
     expect(planPreviewHeightSample({ blockCount: 3, shapeAt, perShape: 10, maxTotal: 40 })).toEqual([0, 1, 2])
     expect(planPreviewHeightSample({ blockCount: 0, shapeAt, perShape: 10, maxTotal: 40 })).toEqual([])
-  })
-})
-
-describe('isPreviewHeightModelTrustworthy', () => {
-  const model = (over: Partial<ReturnType<typeof baseModel>>) => ({ ...baseModel(), ...over })
-  function baseModel() {
-    return {
-      shapes: {},
-      fallback: { interceptPx: 16, perLinePx: 24, charsPerLine: 72, sampleCount: 40 },
-      medianErrorPct: 5,
-      biasPct: 1,
-      sampleCount: 40,
-    }
-  }
-
-  it('accepts a model that is unbiased, even with noisy individual blocks', () => {
-    expect(isPreviewHeightModelTrustworthy(model({ medianErrorPct: 22, biasPct: 1.5 }))).toBe(true)
-  })
-
-  it('rejects a systematic bias, which is the defect this exists to remove', () => {
-    expect(isPreviewHeightModelTrustworthy(model({ medianErrorPct: 3, biasPct: 9 }))).toBe(false)
-    expect(isPreviewHeightModelTrustworthy(model({ medianErrorPct: 3, biasPct: -9 }))).toBe(false)
-  })
-
-  it('rejects a model fitted from almost nothing, and no model at all', () => {
-    expect(isPreviewHeightModelTrustworthy(model({ sampleCount: 2 }))).toBe(false)
-    expect(isPreviewHeightModelTrustworthy(null)).toBe(false)
   })
 })
 

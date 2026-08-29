@@ -136,6 +136,21 @@ async function main() {
       check(`a ${label} change re-measures the document`, Math.abs(missed) < 60, `jump-to-bottom missed the end by ${missed}px`)
     }
 
+    // Put the typography back. These mutations are cumulative and were never
+    // undone, so every check after this point used to run against a document
+    // set in 24px on 2.2 line-height with 0.18em of letter spacing and 60px of
+    // padding -- which made the totals they report describe a document nobody
+    // was asking about. Harmless while those checks only compared a number
+    // against itself; actively misleading to read.
+    await page.evaluate(() => {
+      const s = document.querySelector('.markdown-preview')
+      s.style.fontSize = ''
+      s.style.lineHeight = ''
+      s.style.letterSpacing = ''
+      s.style.removeProperty('--preview-edge-padding')
+    })
+    await page.waitForTimeout(4000)
+
     // --- the survey must be invisible on slow hardware ---
     // This is why the survey buffers and commits once. Measured at 6x CPU
     // throttle, parked mid-document with no input, when it applied each height
