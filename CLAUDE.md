@@ -5,6 +5,9 @@ This project's documentation is kept deliberately small. These are the load-bear
 ## Git workflow
 Non-local (remote/cloud) sessions: once a change is committed and pushed to its working branch, merge it straight into `main` yourself (a fast-forward, when the branch is a clean descendant of `main`) rather than opening a pull request and waiting on review. Push `main` directly. Skip this and fall back to a normal branch+PR (or ask first) when the merge isn't a clean fast-forward, or when the user asks for a PR instead. Local sessions are unaffected — this default is for non-local sessions only.
 
+## Releases
+One command: `npm run release` (patch bump), or `-- minor` / `-- major` / `-- 0.7.2`. It gates on a clean, in-sync `main` and a passing test suite, pauses for you to write the release notes, tags and pushes, builds Windows locally, waits for the macOS DMG on GitHub Actions, then uploads and checksum-verifies every asset before leaving it staged as a prerelease. Re-running the same command resumes an interrupted release rather than starting over. See [docs/release-protocol.md](docs/release-protocol.md) — read that before touching `scripts/release.mjs` or `.github/workflows/build-mac.yml`.
+
 ## Read first
 - [docs/guiding-vision.md](docs/guiding-vision.md) — the product's spiritual guideline: why this app exists and who it's for. Written for the AI agent, not for end users; let it inform judgment calls, don't surface it to users.
 

@@ -35,3 +35,6 @@ data-backups/
 
 # TypeScript incremental build cache (composite: true in tsconfig.node.json)
 *.tsbuildinfo
+
+# Release-note drafts are a staging buffer; the GitHub release body is the record.
+release-notes/

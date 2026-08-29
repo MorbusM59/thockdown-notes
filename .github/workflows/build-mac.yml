@@ -1,10 +1,23 @@
 name: Build macOS DMG
 
+# Half of the release protocol. The other half runs on the maintainer's Windows
+# machine (`npm run release`, scripts/release.mjs) -- see docs/release-protocol.md.
+#
+# This job's only job: build the macOS DMG that a Windows machine physically
+# cannot build, and attach it to the release for the pushed tag.
+
 on:
   workflow_dispatch:
   push:
     tags:
       - "v*"
+
+# Without this the job's GITHUB_TOKEN is read-only (the repo default), and the
+# upload fails with "Resource not accessible by integration" *after* a
+# successful 3-minute build. That is exactly what happened on v0.5.7, and it is
+# why no release before v0.5.8 ever carried a macOS build.
+permissions:
+  contents: write
 
 jobs:
   build-mac:
@@ -13,6 +26,9 @@ jobs:
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
+        with:
+          # Full history so release-note tooling and `git describe` work here.
+          fetch-depth: 0
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -24,52 +40,54 @@ jobs:
         id: version
         run: echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
 
-      - name: Set up Node modules
+      - name: Install dependencies
         run: npm ci
 
       - name: Run tests
         run: npm test
 
-      - name: Build app
-        run: npm run build
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Rename DMG with version tag
-        if: startsWith(github.ref, 'refs/tags/v')
+      # Only the mac target. `npm run build` also runs the Windows portable
+      # config, which on a mac runner just produces a second, redundant DMG and
+      # makes the artifact glob ambiguous.
+      - name: Build macOS DMG
         run: |
-          TAG="${{ github.ref_name }}"
-          SRC=$(find release -name "*.dmg" | head -n 1)
-          DEST="$(dirname "$SRC")/Thockdown-Notes-mac-${TAG}.dmg"
-          mv "$SRC" "$DEST"
+          npx tsc
+          npx vite build
+          npx electron-builder --mac dmg
 
-      - name: Upload DMG
+      - name: Checksum the DMG
+        id: dmg
+        run: |
+          DMG=$(find release -maxdepth 3 -name "*.dmg" | head -n 1)
+          if [ -z "$DMG" ]; then echo "No DMG produced"; exit 1; fi
+          HASH=$(shasum -a 256 "$DMG" | awk '{print $1}')
+          printf '%s  %s\n' "$HASH" "$(basename "$DMG")" > "$DMG.sha256"
+          echo "path=$DMG" >> "$GITHUB_OUTPUT"
+          cat "$DMG.sha256"
+
+      # Uploaded unconditionally, so even a failed publish leaves a downloadable
+      # build rather than three minutes of nothing.
+      - name: Upload DMG as a workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: Thockdown-Notes-mac-${{ steps.version.outputs.version }}-dmg
-          path: release/**/**/*.dmg
+          path: |
+            release/**/*.dmg
+            release/**/*.dmg.sha256
 
-      - name: Generate release notes
+      # The release is normally created first by `npm run release` on the
+      # maintainer's machine, with hand-written notes. Creating it here is the
+      # fallback for a bare `git push --tags` or a manual dispatch.
+      - name: Attach DMG to the release
         if: startsWith(github.ref, 'refs/tags/v')
-        id: release_notes
-        run: |
-          TAG="${{ github.ref_name }}"
-          PREV_TAG=$(git tag --sort=-version:refname | grep -E '^v' | sed -n '2p')
-          if [ -n "$PREV_TAG" ]; then
-            NOTES=$(git log "${PREV_TAG}..${TAG}" --pretty=format:"- %s" --no-merges)
-          else
-            NOTES=$(git log "${TAG}" --pretty=format:"- %s" --no-merges)
-          fi
-          printf 'notes<<EOF\n%s\nEOF\n' "$NOTES" >> "$GITHUB_OUTPUT"
-
-      - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: Thockdown Notes ${{ github.ref_name }}
-          body: "${{ steps.release_notes.outputs.notes }}"
-          files: release/**/**/*.dmg
-          fail_on_unmatched_files: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          DMG: ${{ steps.dmg.outputs.path }}
+        run: |
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            echo "No release for $TAG yet -- creating one."
+            gh release create "$TAG" --prerelease --title "$TAG" \
+              --notes "Automated build for $TAG."
+          fi
+          gh release upload "$TAG" "$DMG" "$DMG.sha256" --clobber
