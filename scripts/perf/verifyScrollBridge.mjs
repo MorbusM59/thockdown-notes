@@ -7,27 +7,60 @@
 // viewport is covered -- so this samples every frame and checks exactly that,
 // rather than checking that a curtain appeared at some point and hoping.
 //
+// Both panes get the same suite, because both run the same design from the
+// same modules: the render view (NonQuantizedSmoothScroll) and the edit view
+// (QuantizedSmoothScroll, which additionally may never leave the row grid --
+// checked here for every frame of a journey, curtain included).
+//
 // Usage: node scripts/perf/verifyScrollBridge.mjs
+//        node scripts/perf/verifyScrollBridge.mjs edit
 
 import { chromium } from 'playwright'
-import { startDevServer, waitForAppReady, ensurePreviewMode, generateSyntheticDocument } from './perfHarness.mjs'
+import {
+  startDevServer, waitForAppReady, ensureEditMode, ensurePreviewMode, generateSyntheticDocument,
+} from './perfHarness.mjs'
 
 const PORT = 5213
 const EXECUTABLE_PATH = process.env.PLAYWRIGHT_CHROMIUM_PATH || undefined
 
 const failures = []
+let paneLabel = ''
 const check = (label, ok, detail = '') => {
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? ` -- ${detail}` : ''}`)
-  if (!ok) failures.push(label)
+  const full = `${paneLabel}: ${label}`
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${full}${detail ? ` -- ${detail}` : ''}`)
+  if (!ok) failures.push(full)
+}
+
+const PANES = {
+  preview: {
+    label: 'render view',
+    scroller: '.markdown-preview',
+    host: '.render-container',
+    // The render view's blocks are of every height; there is no grid to hold.
+    rowGrid: false,
+    enter: ensurePreviewMode,
+  },
+  edit: {
+    label: 'edit view',
+    scroller: '.cm-scroller',
+    // The non-scrolling frame the caret is positioned against, which is also
+    // the bridge's host -- it has no class of its own, so it is reached
+    // through the one child that does.
+    host: '.cm6-editor-root',
+    hostIsParent: true,
+    rowGrid: true,
+    enter: ensureEditMode,
+  },
 }
 
 /**
  * Records, every frame for `ms`, where the scroller is and whether the curtain
  * is covering the pane.
  */
-const WATCH = (ms) => `(async () => {
-  const scroller = document.querySelector('.markdown-preview')
-  const host = document.querySelector('.render-container')
+const WATCH = (pane, ms) => `(async () => {
+  const scroller = document.querySelector(${JSON.stringify(pane.scroller)})
+  const hostAnchor = document.querySelector(${JSON.stringify(pane.host)})
+  const host = ${pane.hostIsParent ? 'hostAnchor.parentElement' : 'hostAnchor'}
   const thumb = document.querySelector('.thockdown-scroll-thumb')
   const frames = []
   const t0 = performance.now()
@@ -58,26 +91,26 @@ const WATCH = (ms) => `(async () => {
   return frames
 })()`
 
-async function seed(page, text) {
+async function seed(page, pane, text) {
   await page.evaluate(async (initialText) => {
     const note = await window.thockdownNotes.createNote({ initialText })
     await window.thockdownSections.setActiveNote('default', note.id)
   }, text)
   await page.reload()
-  await ensurePreviewMode(page)
+  await pane.enter(page)
   await page.waitForTimeout(6000)
 }
 
 /** Back to the top, without the pane animating its way there. */
-async function goToTop(page) {
-  await page.evaluate(async () => {
-    const scroller = document.querySelector('.markdown-preview')
+async function goToTop(page, pane) {
+  await page.evaluate(async (selector) => {
+    const scroller = document.querySelector(selector)
     const previous = scroller.style.scrollBehavior
     scroller.style.scrollBehavior = 'auto'
     scroller.scrollTop = 0
     await new Promise((r) => setTimeout(r, 400))
     scroller.style.scrollBehavior = previous
-  })
+  }, pane.scroller)
   await page.waitForTimeout(500)
 }
 
@@ -98,7 +131,184 @@ function biggestJump(frames) {
   return worst
 }
 
+async function runPane(page, pane) {
+  paneLabel = pane.label
+  await seed(page, pane, generateSyntheticDocument(400000))
+
+  // -- a long journey ---------------------------------------------------
+  const watching = page.evaluate(WATCH(pane, 2500))
+  await page.waitForTimeout(60)
+  await clickTrackAt(page, 0.85)
+  const frames = await watching
+
+  const bridged = frames.filter((frame) => frame.hasBand).length
+  check('a long journey raises a curtain', bridged > 0, `${bridged} of ${frames.length} frames`)
+
+  const covered = frames.filter((frame) => frame.covering).length
+  check('the curtain fully covers the pane for part of the journey', covered > 0,
+    `${covered} frames fully covered`)
+
+  // The whole point. The cut is a single enormous move, and it must land
+  // inside the covered window -- otherwise the reader watched it happen.
+  const jump = biggestJump(frames)
+  check('the cut happens only while the pane is covered', jump.covering,
+    `biggest single-frame move was ${Math.round(jump.deltaPx)}px`)
+
+  const settled = frames[frames.length - 1].scrollTop
+  const geometry = await page.evaluate((selector) => {
+    const scroller = document.querySelector(selector)
+    return { maxScrollTop: scroller.scrollHeight - scroller.clientHeight }
+  }, pane.scroller)
+  check('the journey ends somewhere near the bottom, where it was aimed',
+    settled > geometry.maxScrollTop * 0.5,
+    `landed at ${Math.round((settled / geometry.maxScrollTop) * 100)}% of the document`)
+
+  check('no curtain is left behind',
+    await page.evaluate(() => document.querySelectorAll('.scroll-bridge').length) === 0)
+
+  // -- the row grid survives the journey --------------------------------
+  //
+  // Edit view only, and the one invariant a bridge could plausibly break: a
+  // journey writes scrollTop from three separate places (ramp up, sweep, ramp
+  // down), and text sitting half a row off its box would be visible the
+  // instant the curtain lifted.
+  if (pane.rowGrid) {
+    const lineHeightPx = await page.evaluate(() => {
+      const content = document.querySelector('.cm-content')
+      return parseFloat(getComputedStyle(content).lineHeight)
+    })
+    const offGrid = frames
+      .map((frame) => Math.abs(frame.scrollTop - (Math.round(frame.scrollTop / lineHeightPx) * lineHeightPx)))
+      .filter((offsetPx) => offsetPx > 0.5)
+    check('every frame of the journey lands on the row grid', offGrid.length === 0,
+      `${offGrid.length} of ${frames.length} off grid (line height ${lineHeightPx}px, worst ${
+        offGrid.length ? Math.max(...offGrid).toFixed(2) : 0}px)`)
+  }
+
+  // -- the bridge borrows the pane's background rather than painting one --
+  //
+  // It paints NO background, and hides the real text underneath itself
+  // instead. That is the only way to be certain the paper matches: nothing
+  // is reproduced, so nothing can fail to match. Reconstructing it was tried
+  // and showed a visibly different paper in the real app -- the backdrop is
+  // a gradient and a tint on ancestors rather than a flat colour anywhere,
+  // so reading a background-color up the tree just returns white.
+  const bridgeFrames = frames.filter((frame) => frame.hasBand)
+  const backgrounds = [...new Set(bridgeFrames.map((frame) => frame.bandBackground))]
+  check('the bridge paints no background of its own',
+    backgrounds.every((color) => color === 'rgba(0, 0, 0, 0)' || color === 'transparent'),
+    backgrounds.join(', '))
+  // Only where the band actually overlaps the pane. During the ramp-up it
+  // exists but sits just outside, hiding nothing and needing no clip.
+  const overlapFrames = frames.filter((frame) => frame.overlapping)
+  const unclipped = overlapFrames.filter((frame) => frame.textClip === '').length
+  check('the real text is clipped away wherever the bridge covers it',
+    overlapFrames.length > 0 && unclipped === 0,
+    `${unclipped} of ${overlapFrames.length} overlapping frames left the text unclipped`)
+  check('the clip is released when the journey ends',
+    frames[frames.length - 1].textClip === '',
+    `ended as ${frames[frames.length - 1].textClip || '(none)'}`)
+
+  // -- the thumb stretches rather than slides ----------------------------
+  //
+  // The document's middle is being cut out, so a thumb that slid smoothly
+  // would be describing a journey that did not happen. It stretches instead:
+  // the leading edge runs the span, both edges hold while the bridge covers
+  // the cut, then the trailing edge catches up.
+  const heights = frames.map((frame) => frame.thumbHeight)
+  const restingHeight = heights[0]
+  const peakHeight = Math.max(...heights)
+  check('the thumb stretches across the journey', peakHeight > restingHeight * 3,
+    `${restingHeight}px at rest, ${peakHeight}px stretched`)
+  // Not exact equality, and deliberately so in the edit view: the thumb is
+  // sized in wrapped lines, and CM6's count of those is an estimate that firms
+  // up as more of the document is measured. A journey across 400,000
+  // characters measures a great deal of it, so the resting height legitimately
+  // moves by a few pixels (28px -> 32px, measured). What must not happen is
+  // the thumb being left stretched.
+  const endHeight = heights[heights.length - 1]
+  check('the thumb returns to a resting height rather than staying stretched',
+    endHeight <= Math.max(restingHeight * 1.5, restingHeight + 8),
+    `${restingHeight}px before, ${peakHeight}px stretched, ${endHeight}px after`)
+
+  const peakAt = heights.indexOf(peakHeight)
+  const held = frames.filter((frame, i) =>
+    i > 0 && frame.thumbHeight === peakHeight && frames[i - 1].thumbHeight === peakHeight).length
+  check('the thumb holds still, stretched, while the bridge covers the cut', held >= 1,
+    `${held} frames at full stretch`)
+
+  // The subtle half of the design: each edge follows the POSITION curve of
+  // its own ramp, so the leading edge eases IN (covering more ground in the
+  // second half of its run than the first) and the trailing edge eases OUT.
+  const growth = heights.slice(0, peakAt + 1)
+  const midGrowth = growth[Math.floor(growth.length / 2)]
+  check('the leading edge eases in',
+    (peakHeight - midGrowth) > (midGrowth - restingHeight),
+    `first half ${midGrowth - restingHeight}px, second half ${peakHeight - midGrowth}px`)
+
+  const contraction = heights.slice(peakAt).filter((h, i, all) => i === 0 || h !== all[i - 1])
+  const midContraction = contraction[Math.floor(contraction.length / 2)]
+  check('the trailing edge eases out',
+    (peakHeight - midContraction) > (midContraction - restingHeight),
+    `first half ${peakHeight - midContraction}px, second half ${midContraction - restingHeight}px`)
+
+  // -- a short journey needs no curtain ----------------------------------
+  //
+  // scroll-behavior on the preview is smooth, so a bare scrollTop write
+  // animates -- it has to be forced to auto or the next click sets off
+  // from somewhere other than where this asked for, which is exactly how
+  // this check first "failed".
+  await goToTop(page, pane)
+  const shortWatch = page.evaluate(WATCH(pane, 1500))
+  await page.waitForTimeout(60)
+  const box = await page.locator('.thockdown-scroll-track').boundingBox()
+  await page.mouse.click(box.x + box.width / 2, box.y + (box.height * 0.05), { delay: 0 })
+  const shortFrames = await shortWatch
+  const shortDistance = Math.abs(shortFrames[shortFrames.length - 1].scrollTop - shortFrames[0].scrollTop)
+  // Asserted rather than assumed: a "short" journey that turned out to be
+  // long would otherwise pass this by being bridged for a good reason.
+  check('the short-journey case really is short', shortDistance < 11000,
+    `travelled ${Math.round(shortDistance)}px`)
+  check('a short journey does not raise one',
+    shortFrames.every((frame) => !frame.hasBand),
+    `${shortFrames.filter((f) => f.hasBand).length} frames had a curtain`)
+  const shortHeights = shortFrames.map((frame) => frame.thumbHeight)
+  check('a short journey does not stretch the thumb either',
+    Math.max(...shortHeights) - Math.min(...shortHeights) <= 2,
+    `thumb varied by ${Math.max(...shortHeights) - Math.min(...shortHeights)}px`)
+
+  // -- an interrupted journey must not leave its curtain up --------------
+  await goToTop(page, pane)
+  await clickTrackAt(page, 0.9)
+  await page.waitForTimeout(120)
+  await page.evaluate((selector) => {
+    // Whatever the reader does next cancels the journey; a wheel is the
+    // most ordinary version of it.
+    document.querySelector(selector).dispatchEvent(
+      new WheelEvent('wheel', { deltaY: 200, bubbles: true, cancelable: true }),
+    )
+  }, pane.scroller)
+  await page.mouse.click(box.x + box.width / 2, box.y + 24, { delay: 0 })
+  await page.waitForTimeout(2500)
+  check('an interrupted journey takes its curtain with it',
+    await page.evaluate(() => document.querySelectorAll('.scroll-bridge').length) === 0)
+  check('an interrupted journey lets the thumb go too',
+    await page.evaluate(() => {
+      const thumb = document.querySelector('.thockdown-scroll-thumb')
+      const track = document.querySelector('.thockdown-scroll-track')
+      return parseFloat(thumb.style.height) < track.clientHeight * 0.9
+    }),
+    'thumb left stretched across the track')
+}
+
 async function main() {
+  const requested = process.argv[2]
+  const panes = requested ? [PANES[requested]] : [PANES.preview, PANES.edit]
+  if (panes.some((pane) => !pane)) {
+    console.error(`unknown pane "${requested}" -- expected preview or edit`)
+    process.exit(1)
+  }
+
   const server = await startDevServer(PORT)
   const browser = await chromium.launch({ executablePath: EXECUTABLE_PATH })
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
@@ -109,138 +319,10 @@ async function main() {
   try {
     await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'load' })
     await waitForAppReady(page)
-    await seed(page, generateSyntheticDocument(400000))
-
-    // ── a long journey ────────────────────────────────────────────────────
-    const watching = page.evaluate(WATCH(2500))
-    await page.waitForTimeout(60)
-    await clickTrackAt(page, 0.85)
-    const frames = await watching
-
-    const bridged = frames.filter((frame) => frame.hasBand).length
-    check('a long journey raises a curtain', bridged > 0, `${bridged} of ${frames.length} frames`)
-
-    const covered = frames.filter((frame) => frame.covering).length
-    check('the curtain fully covers the pane for part of the journey', covered > 0,
-      `${covered} frames fully covered`)
-
-    // The whole point. The cut is a single enormous move, and it must land
-    // inside the covered window -- otherwise the reader watched it happen.
-    const jump = biggestJump(frames)
-    check('the cut happens only while the pane is covered', jump.covering,
-      `biggest single-frame move was ${Math.round(jump.deltaPx)}px`)
-
-    const settled = frames[frames.length - 1].scrollTop
-    const geometry = await page.evaluate(() => {
-      const scroller = document.querySelector('.markdown-preview')
-      return { maxScrollTop: scroller.scrollHeight - scroller.clientHeight }
-    })
-    check('the journey ends somewhere near the bottom, where it was aimed',
-      settled > geometry.maxScrollTop * 0.5,
-      `landed at ${Math.round((settled / geometry.maxScrollTop) * 100)}% of the document`)
-
-    check('no curtain is left behind', await page.evaluate(() => document.querySelectorAll('.scroll-bridge').length) === 0)
-
-    // ── the bridge borrows the pane's background rather than painting one ──
-    //
-    // It paints NO background, and hides the real text underneath itself
-    // instead. That is the only way to be certain the paper matches: nothing
-    // is reproduced, so nothing can fail to match. Reconstructing it was tried
-    // and showed a visibly different paper in the real app -- the backdrop is
-    // a gradient and a tint on ancestors rather than a flat colour anywhere,
-    // so reading a background-color up the tree just returns white.
-    const bridgeFrames = frames.filter((frame) => frame.hasBand)
-    const backgrounds = [...new Set(bridgeFrames.map((frame) => frame.bandBackground))]
-    check('the bridge paints no background of its own',
-      backgrounds.every((color) => color === 'rgba(0, 0, 0, 0)' || color === 'transparent'),
-      backgrounds.join(', '))
-    // Only where the band actually overlaps the pane. During the ramp-up it
-    // exists but sits just outside, hiding nothing and needing no clip.
-    const overlapFrames = frames.filter((frame) => frame.overlapping)
-    const unclipped = overlapFrames.filter((frame) => frame.textClip === '').length
-    check('the real text is clipped away wherever the bridge covers it',
-      overlapFrames.length > 0 && unclipped === 0,
-      `${unclipped} of ${overlapFrames.length} overlapping frames left the text unclipped`)
-    check('the clip is released when the journey ends',
-      frames[frames.length - 1].textClip === '',
-      `ended as ${frames[frames.length - 1].textClip || '(none)'}`)
-
-    // ── the thumb stretches rather than slides ────────────────────────────
-    //
-    // The document's middle is being cut out, so a thumb that slid smoothly
-    // would be describing a journey that did not happen. It stretches instead:
-    // the leading edge runs the span, both edges hold while the bridge covers
-    // the cut, then the trailing edge catches up.
-    const heights = frames.map((frame) => frame.thumbHeight)
-    const restingHeight = heights[0]
-    const peakHeight = Math.max(...heights)
-    check('the thumb stretches across the journey', peakHeight > restingHeight * 3,
-      `${restingHeight}px at rest, ${peakHeight}px stretched`)
-    check('the thumb returns to its resting height', heights[heights.length - 1] === restingHeight,
-      `ended at ${heights[heights.length - 1]}px`)
-
-    const peakAt = heights.indexOf(peakHeight)
-    const held = frames.filter((frame, i) =>
-      i > 0 && frame.thumbHeight === peakHeight && frames[i - 1].thumbHeight === peakHeight).length
-    check('the thumb holds still, stretched, while the bridge covers the cut', held >= 1,
-      `${held} frames at full stretch`)
-
-    // The subtle half of the design: each edge follows the POSITION curve of
-    // its own ramp, so the leading edge eases IN (covering more ground in the
-    // second half of its run than the first) and the trailing edge eases OUT.
-    const growth = heights.slice(0, peakAt + 1)
-    const midGrowth = growth[Math.floor(growth.length / 2)]
-    check('the leading edge eases in',
-      (peakHeight - midGrowth) > (midGrowth - restingHeight),
-      `first half ${midGrowth - restingHeight}px, second half ${peakHeight - midGrowth}px`)
-
-    const contraction = heights.slice(peakAt).filter((h, i, all) => i === 0 || h !== all[i - 1])
-    const midContraction = contraction[Math.floor(contraction.length / 2)]
-    check('the trailing edge eases out',
-      (peakHeight - midContraction) > (midContraction - restingHeight),
-      `first half ${peakHeight - midContraction}px, second half ${midContraction - restingHeight}px`)
-
-    // ── a short journey needs no curtain ──────────────────────────────────
-    //
-    // scroll-behavior on the preview is `smooth`, so a bare scrollTop write
-    // animates -- it has to be forced to `auto` or the next click sets off
-    // from somewhere other than where this asked for, which is exactly how
-    // this check first "failed".
-    await goToTop(page)
-    const shortWatch = page.evaluate(WATCH(1500))
-    await page.waitForTimeout(60)
-    const box = await page.locator('.thockdown-scroll-track').boundingBox()
-    await page.mouse.click(box.x + box.width / 2, box.y + (box.height * 0.05), { delay: 0 })
-    const shortFrames = await shortWatch
-    const shortDistance = Math.abs(shortFrames[shortFrames.length - 1].scrollTop - shortFrames[0].scrollTop)
-    // Asserted rather than assumed: a "short" journey that turned out to be
-    // long would otherwise pass this by being bridged for a good reason.
-    check('the short-journey case really is short', shortDistance < 11000,
-      `travelled ${Math.round(shortDistance)}px`)
-    check('a short journey does not raise one',
-      shortFrames.every((frame) => !frame.hasBand),
-      `${shortFrames.filter((f) => f.hasBand).length} frames had a curtain`)
-    const shortHeights = shortFrames.map((frame) => frame.thumbHeight)
-    check('a short journey does not stretch the thumb either',
-      Math.max(...shortHeights) - Math.min(...shortHeights) <= 2,
-      `thumb varied by ${Math.max(...shortHeights) - Math.min(...shortHeights)}px`)
-
-    // ── an interrupted journey must not leave its curtain up ──────────────
-    await goToTop(page)
-    await clickTrackAt(page, 0.9)
-    await page.waitForTimeout(120)
-    await page.evaluate(() => {
-      // Whatever the reader does next cancels the journey; a wheel is the
-      // most ordinary version of it.
-      document.querySelector('.markdown-preview').dispatchEvent(
-        new WheelEvent('wheel', { deltaY: 200, bubbles: true, cancelable: true }),
-      )
-    })
-    await page.mouse.click(box.x + box.width / 2, box.y + 24, { delay: 0 })
-    await page.waitForTimeout(2500)
-    check('an interrupted journey takes its curtain with it',
-      await page.evaluate(() => document.querySelectorAll('.scroll-bridge').length) === 0)
-
+    for (const pane of panes) {
+      await runPane(page, pane)
+    }
+    paneLabel = 'both'
     check('no page errors', errors.length === 0, errors.slice(0, 2).join(' | '))
   } finally {
     await browser.close()

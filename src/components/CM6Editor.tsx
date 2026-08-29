@@ -16,11 +16,15 @@ import {
   resolveRampCrossingTimeSecFromCurrentParams,
   sampleReleaseRampDownPlan,
 } from '../editor/NonQuantizedSmoothScroll';
-import { cancelQuantizedSmoothScroll, quantizeScrollTopToRow, scrollToQuantizedSmooth } from '../editor/QuantizedSmoothScroll';
+import { cancelQuantizedSmoothScroll, isQuantizedSmoothScrollActive, quantizeScrollTopToRow, scrollToQuantizedSmooth } from '../editor/QuantizedSmoothScroll';
 import { beginScrollTrackHold } from '../editor/scrollTrackHold';
 import { countWrappedLines, resolveThumbLineRatio } from '../editor/scrollThumbMetrics';
 import { resolveCagedScrollTarget } from '../editor/CageMath';
 import { attachRowGridGuard, resolveRowGridCorrection, resolveRowGridDirection, type RowGridGuard } from '../editor/rowGridGuard';
+import { registerScrollBridge } from '../editor/scrollBridge';
+import { resolveThumbRubberBand } from '../editor/scrollThumbRubberBand';
+import { sampleCurveRampProgress } from '../editor/ScrollCurvePlan';
+import type { ScrollJourneyTiming } from '../editor/scrollJourney';
 import { sanitizeDocumentText, sanitizeDocumentTextExtended } from '../shared/textSanitization';
 import { resolveScopeRange, isSameRange, type SelectionScope } from '../editor/ContractBridgeRangeUtils';
 import { computeMinimalTextReplacement } from '../editor/MinimalTextDiff';
@@ -951,6 +955,18 @@ export function CM6Editor({
   useEffect(() => () => { trackHoldCancelRef.current?.(); }, []);
   const [scrollThumbTopPx, setScrollThumbTopPx] = useState(0);
   const [scrollThumbHeightPx, setScrollThumbHeightPx] = useState(0);
+  // Mirrors of the two above, plus the element itself.
+  //
+  // The rubber band writes the thumb's DOM directly for the length of a
+  // journey rather than going through state: that is sixty updates in half a
+  // second, and this component is large enough that re-rendering it that often
+  // would cost frames precisely when the animation is running. The preview's
+  // scrollbar avoids state for the same reason. State stays the source of
+  // truth everywhere else, and the band hands back to it on landing.
+  const scrollThumbElRef = useRef<HTMLDivElement | null>(null);
+  const scrollThumbTopPxRef = useRef(0);
+  const scrollThumbHeightPxRef = useRef(0);
+  const thumbRubberBandRafRef = useRef<number | null>(null);
   const [isScrollThumbActive, setIsScrollThumbActive] = useState(false);
   const [isDraggingScrollThumb, setIsDraggingScrollThumb] = useState(false);
   // Read inside syncCustomScrollbar instead of closing over the state
@@ -1104,7 +1120,10 @@ export function CM6Editor({
   }, [readDocumentLines]);
 
   const syncCustomScrollbar = useCallback((options?: { force?: boolean }) => {
-    if (isDraggingScrollThumbRef.current && !options?.force) {
+    // A drag and a bridged journey both own the thumb outright while they run;
+    // a sync reading the real scroll position mid-cut says nothing anybody
+    // wants drawn.
+    if ((isDraggingScrollThumbRef.current || thumbRubberBandRafRef.current !== null) && !options?.force) {
       return;
     }
 
@@ -1153,6 +1172,78 @@ export function CM6Editor({
     return () => controller.setOnSettled(null);
   }, []);
 
+  /**
+   * The thumb during a bridged journey: it stretches rather than slides.
+   *
+   * Identical in shape to the render view's (usePreviewScrollbar), and for the
+   * same reason -- the document's middle is being cut out, so a thumb that
+   * slid smoothly would describe a journey that did not happen. The leading
+   * edge runs the span, both edges hold while the bridge covers the cut, then
+   * the trailing edge catches up. Each edge follows the POSITION curve of its
+   * own ramp, normalized onto the full span; the ramps' own pixel distances
+   * are no use, since the thumb crosses the whole track in the window the
+   * document crosses a few thousand pixels.
+   */
+  const stopThumbRubberBand = useCallback(() => {
+    if (thumbRubberBandRafRef.current === null) return;
+    cancelAnimationFrame(thumbRubberBandRafRef.current);
+    thumbRubberBandRafRef.current = null;
+  }, []);
+
+  const startThumbRubberBand = useCallback((
+    timing: ScrollJourneyTiming,
+    startTopPx: number,
+    targetTopPx: number,
+  ) => {
+    stopThumbRubberBand();
+    const thumbHeightPx = scrollThumbHeightPxRef.current;
+    const rampUpSec = timing.rampUp.durationSec;
+    const bridgeEndSec = rampUpSec + timing.bridgeDurationSec;
+    const totalSec = bridgeEndSec + timing.rampDown.durationSec;
+    let startedAtMs: number | null = null;
+
+    const frame = (nowMs: number) => {
+      if (startedAtMs === null) startedAtMs = nowMs;
+      const elapsedSec = (nowMs - startedAtMs) / 1000;
+      const scroller = viewRef.current?.scrollDOM;
+
+      // The reader may interrupt a journey with a wheel, a key or another
+      // click, and all of those cancel the scroll without telling the
+      // scrollbar. Asking the engine whether its journey is still running
+      // covers every one of them at once.
+      if (elapsedSec >= totalSec || !scroller || !isQuantizedSmoothScrollActive(scroller)) {
+        thumbRubberBandRafRef.current = null;
+        syncCustomScrollbar({ force: true });
+        return;
+      }
+
+      const leadProgress = elapsedSec < rampUpSec
+        ? sampleCurveRampProgress(timing.rampUp, elapsedSec)
+        : 1;
+      const trailProgress = elapsedSec <= bridgeEndSec
+        ? 0
+        : sampleCurveRampProgress(timing.rampDown, elapsedSec - bridgeEndSec);
+
+      const { topPx, heightPx } = resolveThumbRubberBand({
+        startTopPx,
+        targetTopPx,
+        thumbHeightPx,
+        leadProgress,
+        trailProgress,
+      });
+      const thumb = scrollThumbElRef.current;
+      if (thumb) {
+        thumb.style.top = `${topPx}px`;
+        thumb.style.height = `${Math.max(0, heightPx)}px`;
+      }
+      thumbRubberBandRafRef.current = requestAnimationFrame(frame);
+    };
+
+    thumbRubberBandRafRef.current = requestAnimationFrame(frame);
+  }, [stopThumbRubberBand, syncCustomScrollbar]);
+
+  useEffect(() => stopThumbRubberBand, [stopThumbRubberBand]);
+
   const scrollFromThumbTop = useCallback((thumbTopPx: number) => {
     const scroller = viewRef.current?.scrollDOM;
     const geometry = readScrollbarGeometry();
@@ -1178,6 +1269,11 @@ export function CM6Editor({
   useEffect(() => {
     isDraggingScrollThumbRef.current = isDraggingScrollThumb;
   }, [isDraggingScrollThumb]);
+
+  useEffect(() => {
+    scrollThumbTopPxRef.current = scrollThumbTopPx;
+    scrollThumbHeightPxRef.current = scrollThumbHeightPx;
+  }, [scrollThumbTopPx, scrollThumbHeightPx]);
 
   useEffect(() => {
     lineHeightPxRef.current = lineHeightPx;
@@ -3650,6 +3746,48 @@ export function CM6Editor({
       });
     };
 
+    // The long-journey bridge for this pane (editor/scrollBridge.ts). The
+    // render view gets the Declaration; the editor gets ones and zeroes, which
+    // suit a monospace grid exactly -- every glyph is one cell wide, so the
+    // spoof lands on the same character grid the real text does.
+    //
+    // The host is layerRef, the non-scrolling frame the caret is already
+    // positioned against: viewport-sized, overflow-hidden, and outside the
+    // scroller, which is what a curtain this tall needs. The text layer to
+    // clip is the scroller itself -- the bridge paints no background of its
+    // own, so the pane's real one shows through.
+    const detachScrollBridge = layerRef.current
+      ? registerScrollBridge(view.scrollDOM, {
+        host: layerRef.current,
+        textLayer: view.scrollDOM,
+        readStyle: () => {
+          const contentStyle = window.getComputedStyle(view.contentDOM);
+          const fontPx = parseFloat(contentStyle.fontSize);
+          const lineHeightPxNow = lineHeightPxRef.current;
+          if (!(fontPx > 0) || !(lineHeightPxNow > 0)) return null;
+
+          const paddingLeftPx = parseFloat(contentStyle.paddingLeft) || 0;
+          const paddingRightPx = parseFloat(contentStyle.paddingRight) || 0;
+          // Exact here, unlike the proportional case: the editor lays every
+          // glyph out on a cell of known width, so this is a count rather than
+          // an estimate.
+          const cellWidthPxNow = Math.max(1, cellWidthPxRef.current);
+          const usableWidthPx = Math.max(1, view.scrollDOM.clientWidth - paddingLeftPx - paddingRightPx);
+          return {
+            alphabet: 'binary' as const,
+            text: view.state.doc.toString(),
+            charsPerLine: Math.max(1, Math.floor(usableWidthPx / cellWidthPxNow)),
+            lineHeightPx: lineHeightPxNow,
+            fontPx,
+            fontFamily: contentStyle.fontFamily,
+            color: contentStyle.color,
+            paddingLeftPx,
+            paddingRightPx,
+          };
+        },
+      })
+      : null;
+
     // The general row-grid guard (editor/rowGridGuard.ts). Everything this
     // file writes to scrollTop is already quantized; this is the net for the
     // writes it does NOT make -- chiefly CM6 shifting scrollTop by an
@@ -3822,6 +3960,7 @@ export function CM6Editor({
       document.removeEventListener('selectionchange', handleDomSelectionChange);
       rowGridGuard.dispose();
       rowGridGuardRef.current = null;
+      detachScrollBridge?.();
       view.scrollDOM.removeEventListener('scroll', handleScroll);
       view.scrollDOM.removeEventListener('wheel', handleWheel);
       window.removeEventListener('keydown', handlePageKeyDownAnywhere);
@@ -4253,10 +4392,12 @@ export function CM6Editor({
         syncCustomScrollbar();
         return;
       }
-      scrollToQuantizedSmooth(scrollDOM, targetScrollTop, {
+      const startThumbTopPx = scrollThumbTopPxRef.current;
+      const timing = scrollToQuantizedSmooth(scrollDOM, targetScrollTop, {
         lineHeightPx: lineHeightPxRef.current,
         onStep: syncCustomScrollbar,
       });
+      if (timing) startThumbRubberBand(timing, startThumbTopPx, clampedTop);
     };
 
     trackHoldCancelRef.current?.();
@@ -4280,10 +4421,18 @@ export function CM6Editor({
     if (scroller) {
       cancelQuantizedSmoothScroll(scroller);
     }
+    // Grabbing the thumb mid-journey: the rubber band has to let go here and
+    // now, and the drag has to start from where the thumb actually IS. State
+    // still holds the pre-journey position -- the band writes the DOM
+    // directly -- and it will not catch up until after this handler returns.
+    stopThumbRubberBand();
+    const liveThumbTopPx = scrollThumbElRef.current
+      ? parseFloat(scrollThumbElRef.current.style.top)
+      : NaN;
     setIsDraggingScrollThumb(true);
     scrollThumbDragOriginRef.current = {
       pointerY: event.clientY,
-      thumbTopPx: scrollThumbTopPx,
+      thumbTopPx: Number.isFinite(liveThumbTopPx) ? liveThumbTopPx : scrollThumbTopPx,
     };
   };
 
@@ -4564,6 +4713,7 @@ export function CM6Editor({
         onContextMenu={handleTrackContextMenu}
       >
         <div
+          ref={scrollThumbElRef}
           className={`thockdown-scroll-thumb${isDraggingScrollThumb ? ' is-dragging' : ''}${isScrollThumbActive ? '' : ' is-inactive'}`}
           style={{
             top: `${scrollThumbTopPx}px`,

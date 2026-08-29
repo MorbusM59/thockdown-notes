@@ -47,21 +47,63 @@ The goal is deterministic behavior with one source of truth per interaction phas
   button or search field is not a claim.
 
 ### 3c. The scrollbar describes the text, not the layout
-- Thumb POSITION is a character offset into the source; thumb SIZE is
-  `viewport lines / document lines`, counted once from the source. Neither
-  reads `scrollHeight`.
-- The reason is not accuracy, it is stability. A pixel ratio is a question
-  about layout, and layout is not known until it has been measured, so the
-  thumb moved every time the app learned something -- once per note load, and
-  again whenever a better height estimate arrived. A scrollbar that twitches
-  when the app's knowledge improves is reporting on the wrong thing.
-- Ballpark is the standard, not exactness: measured within 2-9% of the pixel
-  ratio on ordinary notes, and knowingly worse on image-heavy ones. A thumb
-  that is consistently a little wrong beats one that is briefly right and then
-  moves.
+- A scrollbar asks one question of the document -- "where am I, as a fraction?"
+  -- and gets it two different ways depending on size
+  (`src/editor/documentPosition.ts`). The scrollbar itself only ever deals in
+  ratios and knows nothing about which answer it got.
+- **Under 50,000 characters**: ordinary pixel scrolling. The whole document is
+  rendered, its height is genuinely known, and pretending otherwise would be
+  ceremony.
+- **Over 50,000 characters**: the document is chunked, so its pixel height is
+  not known -- and no attempt is made to learn it. Thumb POSITION is a
+  character offset into the source; thumb SIZE is `viewport lines / document
+  lines`, counted once from the source. Neither reads `scrollHeight`.
+- The reason for the second is not accuracy, it is stability. A pixel ratio is
+  a question about layout, and layout is not known until it has been measured,
+  so the thumb moved every time the app learned something -- once per note
+  load, and again whenever a better height estimate arrived. A scrollbar that
+  twitches when the app's knowledge improves is reporting on the wrong thing.
+- Ballpark is the standard there, not exactness: measured within 2-9% of the
+  pixel ratio on ordinary notes, and knowingly worse on image-heavy ones. A
+  thumb that is consistently a little wrong beats one that is briefly right and
+  then moves.
 - Recompute on CHANGE (the text, the typography, the pane geometry), never on
   measurement. If a recomputation would be triggered by the app finishing some
   work rather than by the reader doing something, it is the wrong trigger.
+
+### 3d. In edit view, text is never between rows
+- The edit pane is a grid of character cells. Text sits on row boundaries
+  before, during and after every interaction -- a wheel, a held PageDown, a
+  thumb drag, a resize, a mid-flight animation frame. There is no moment,
+  however brief, at which a line is allowed to sit half a row off its box.
+- This is a hard guard, not a convention: every engine that writes `scrollTop`
+  quantizes on the way out, and `src/editor/rowGridGuard.ts` is the net beneath
+  them for the writes the app does not make (chiefly CodeMirror adjusting
+  `scrollTop` as its own height estimates firm up). Two correctors never run on
+  one scroller at once; the guard stands down while a drag-selection owns the
+  position.
+- The rule is edit view only. The render view lays out blocks of every height
+  and has no grid to hold.
+
+### 3e. A long journey is cut, not endured
+- Travel time is a property of the interaction, not of the distance. A
+  scrollbar click across a very large document takes about the same half second
+  as one across a small one, because the journey's middle is removed rather
+  than played (`src/editor/scrollJourney.ts`, `src/editor/scrollBridge.ts`).
+- It is a cut, not a teleport, and the difference is the whole design: the
+  motion ramps up on the real document, a curtain of spoof text sweeps in at
+  the journey's own speed, the jump happens only while the pane is fully
+  covered, and the ramp-down lands on the target as the curtain sweeps out. The
+  reader sees text leave, text pass, and text arrive.
+- Speed is always measured in real viewport pixels, never in characters. A
+  character-space ratio may say WHERE to go; how fast it feels getting there is
+  a question about the screen.
+- The scrollbar tells the same story rather than a smoother one. Its thumb
+  stretches across the span, holds while the cut happens, and gathers itself at
+  the far end -- a thumb that slid evenly would be describing a journey that
+  did not take place.
+- Nothing here reaches the scroll-sync between the two panes, which keeps its
+  own approach.
 
 ### 4. No hidden second chance paths
 - Fallbacks may exist, but they must not duplicate primary behavior in another phase.
