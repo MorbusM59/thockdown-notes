@@ -5488,7 +5488,14 @@ ${markdownHtml}
       return
     }
     await handle.clearActiveNote().catch(() => undefined)
-  }, [guideView])
+    // undockedNote is READ above and passed through as an override, and
+    // persistMenuStateNow closes over buildMenuStateSnapshot, which reads it
+    // too. A closure that only refreshed when guideView changed would write
+    // back whatever undockedNote was when the guide opened -- silently
+    // reverting a note undocked since, on the next restart. Both are declared
+    // above this point, so they can be depended on directly (see
+    // persistMenuStateNowRef for the case where they cannot).
+  }, [guideView, persistMenuStateNow, undockedNote])
 
   /** Loads the guide into whichever slot is active, remembering what that slot was showing. */
   const openGuideViewHere = useCallback(async () => {
@@ -5499,7 +5506,9 @@ ${markdownHtml}
     setGuideView(nextGuideView)
     persistMenuStateNow({ guideView: nextGuideView, undockedNote: null })
     await selectNote(HELP_GUIDE_ROOT_ID, { forceReload: true })
-  }, [activeSectionId, getActiveSection, persistMenuStateNow, selectNote, undockedNote])
+    // No undockedNote here on purpose: opening the guide clears it, so the
+    // override is the literal null and the value is never read.
+  }, [activeSectionId, getActiveSection, persistMenuStateNow, selectNote])
 
   /**
    * The window control is a TOGGLE, and a toggle that is lit always goes out
@@ -5644,7 +5653,10 @@ ${markdownHtml}
       })
       await refreshNotes()
     }
-  }, [undockedNote, refreshNotes])
+    // guideView and persistMenuStateNow for the same reason closeGuideView
+    // needs undockedNote: this reads the other half of the pair and passes it
+    // through, so a stale closure writes back a stale guide position.
+  }, [undockedNote, refreshNotes, guideView, persistMenuStateNow])
 
   /**
    * handleSwapSection is declared much further down this file, so depending on
