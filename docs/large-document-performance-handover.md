@@ -1741,25 +1741,25 @@ setter) silently ran at a tenth of the intended speed. That is exactly the
 the slider reads its default from it rather than repeating the literal, so the
 two cannot drift apart again. Same journey now: **1.27s**.
 
-**Max speed also caps duration.** The slider now has a dual meaning: the
-longest any scroll may take is `SCROLL_DURATION_CAP_PX / maxSpeed` seconds --
-the time to cover 200,000px at the chosen speed -- so 2s at the slider maximum
-and 2.5s at the default. A journey that cannot fit under both limits keeps the
-duration ceiling and exceeds the velocity cap, deliberately: the velocity cap
-shapes ordinary travel, the ceiling bounds the extraordinary kind.
+**Max speed also capped duration -- and no longer does.** The slider briefly
+had a dual meaning: the longest any scroll could take was `200,000px / maxSpeed`
+seconds, with a longer journey uniformly time-compressed (the same curve played
+faster) rather than clipped. A journey that could not fit under both limits
+kept the ceiling and exceeded the velocity cap, deliberately.
 
-Implemented as a uniform time compression of the plan
-(`compressScrollPlanToDuration`), not a clip: every time field scaled by the
-same factor, the plateau speed scaled inversely. `sampleScrollPlan` divides an
-elapsed time by a plan time in each of its three branches, so scaling both
-leaves the sampled position at the same *fraction* of the journey exactly
-unchanged -- easing, plateau and endpoints all survive. There is a test that
-samples both plans at twenty matched fractions and asserts they agree.
+That was a compromise forced by the worst case, and the bridge removed the
+worst case. A long journey no longer plays its whole distance: it ramps up,
+cuts its middle out under a curtain, and ramps down onto the target, in about
+half a second whether the distance is twelve thousand pixels or twelve hundred
+thousand (`src/editor/scrollJourney.ts`). With nothing left to bound, both
+`SCROLL_DURATION_CAP_PX` and `compressScrollPlanToDuration` are gone and the
+slider means the one thing its name says.
 
-It lives in `buildScrollPlanFromCurrentParams`, NOT in `buildScrollPlan`:
-the latter has two other callers (`escapeHoldRotationCurve` with a maxSpeed in
-*slots* per second, and `AccordionSection` with its own constants), and a rule
-expressed in pixels would be nonsense for both.
+One consequence worth knowing: `buildScrollPlanFromCurrentParams` will now
+happily return a fifty-second plan for a five-million-pixel distance, and a
+test asserts exactly that. Any caller reaching it with a distance like that has
+a bug -- both engines route a journey that long through the bridge, and jump
+outright if the pane cannot raise one.
 
 **Click travels, hold snaps** (`scrollTrackHold.ts`, shared by both
 scrollbars). A left click on the track travels there; holding the button for

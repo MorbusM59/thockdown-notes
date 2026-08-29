@@ -40,7 +40,6 @@ export {
   deriveRenderScrollDynamicFromResponsiveness,
   deriveRenderScrollResponsivenessFromDynamic,
   RENDER_SCROLL_SKEW_MAX,
-  SCROLL_DURATION_CAP_PX,
   RENDER_SCROLL_SKEW_MIN,
   resolveApexSpeedPxPerSecFromCurrentParams,
   getRenderScrollDynamic,
@@ -240,6 +239,15 @@ export function scrollToNonQuantizedSmooth(
   }
 
   bridge?.end();
+
+  // Planned as bridged, but this pane cannot raise a curtain. No curve is
+  // right here: with the duration ceiling gone, playing the whole distance out
+  // would be a scroll measured in seconds, and seconds of unreadable blur.
+  // Arriving is the honest answer.
+  if (journey?.kind === 'bridged') {
+    finish();
+    return null;
+  }
 
   const plan = buildScrollPlanFromCurrentParams(signedDistance);
   const totalDurationMs = plan.totalDurationSec * 1000;
