@@ -26,14 +26,9 @@
 // its full height, so a bridge that is eighteen thousand pixels long costs the
 // same as one that is two thousand.
 
-import {
-  drawBridgeTile,
-  sampleDocumentLineRhythm,
-  type ScrollBridgeAlphabet,
-} from './scrollBridgeTexture'
+import { drawBridgeTile, sampleDocumentLineRhythm } from './scrollBridgeTexture'
 
 export interface ScrollBridgeStyle {
-  alphabet: ScrollBridgeAlphabet
   /** The document's own text, for its line rhythm. */
   text: string
   charsPerLine: number
@@ -147,14 +142,13 @@ export function resolveScrollBridge(scroller: HTMLElement): ScrollBridge | null 
       if (!style) return null
 
       const key = [
-        style.alphabet, widthPx, style.lineHeightPx, style.fontPx, style.fontFamily,
+        widthPx, style.lineHeightPx, style.fontPx, style.fontFamily,
         style.color, style.paddingLeftPx, style.paddingRightPx, style.charsPerLine,
         style.text.length,
       ].join('|')
       let tile = tiles.get(host)
       if (!tile || tile.key !== key) {
         const drawn = drawBridgeTile({
-          alphabet: style.alphabet,
           rhythm: sampleDocumentLineRhythm({ text: style.text, charsPerLine: style.charsPerLine }),
           widthPx,
           lineHeightPx: style.lineHeightPx,
@@ -164,7 +158,6 @@ export function resolveScrollBridge(scroller: HTMLElement): ScrollBridge | null 
           paddingLeftPx: style.paddingLeftPx,
           paddingRightPx: style.paddingRightPx,
           devicePixelRatio: typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1,
-          seed: style.text.length || 1,
         })
         if (!drawn) return null
         tile = { key, dataUri: drawn.dataUri, heightPx: drawn.heightPx }

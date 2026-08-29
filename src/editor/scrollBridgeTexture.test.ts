@@ -5,8 +5,6 @@ import {
   sampleDocumentLineRhythm,
 } from './scrollBridgeTexture'
 
-const random = () => 0.25
-
 describe('sampleDocumentLineRhythm', () => {
   it('keeps blank lines as gaps, because the gaps are part of the texture', () => {
     const rhythm = sampleDocumentLineRhythm({ text: 'abcde\n\nabcde', charsPerLine: 10 })
@@ -46,23 +44,17 @@ describe('sampleDocumentLineRhythm', () => {
 })
 
 describe('buildBridgeLineText', () => {
-  it('fills a binary line with ones and zeroes only', () => {
-    const text = buildBridgeLineText('binary', 20, random, { at: 0 })
-    expect(text).toHaveLength(20)
-    expect(text).toMatch(/^[01]+$/)
-  })
-
   it('reads the Declaration in order rather than shuffling its words', () => {
     const cursor = { at: 0 }
-    const first = buildBridgeLineText('declaration', 30, random, cursor)
+    const first = buildBridgeLineText(30, cursor)
     expect(BRIDGE_DECLARATION_TEXT.startsWith(first.slice(0, 20))).toBe(true)
     // The cursor carries on, so the next line continues the sentence.
-    const second = buildBridgeLineText('declaration', 30, random, cursor)
+    const second = buildBridgeLineText(30, cursor)
     expect(second).not.toBe(first)
   })
 
   it('cycles rather than running out', () => {
-    const text = buildBridgeLineText('declaration', 4000, random, { at: 0 })
+    const text = buildBridgeLineText(4000, { at: 0 })
     expect(text.length).toBeGreaterThanOrEqual(4000)
   })
 
@@ -82,7 +74,7 @@ describe('buildBridgeLineText', () => {
   })
 
   it('draws nothing for a gap', () => {
-    expect(buildBridgeLineText('binary', 0, random, { at: 0 })).toBe('')
-    expect(buildBridgeLineText('declaration', -5, random, { at: 0 })).toBe('')
+    expect(buildBridgeLineText(0, { at: 0 })).toBe('')
+    expect(buildBridgeLineText(-5, { at: 0 })).toBe('')
   })
 })

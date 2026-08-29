@@ -3746,10 +3746,7 @@ export function CM6Editor({
       });
     };
 
-    // The long-journey bridge for this pane (editor/scrollBridge.ts). The
-    // render view gets the Declaration; the editor gets ones and zeroes, which
-    // suit a monospace grid exactly -- every glyph is one cell wide, so the
-    // spoof lands on the same character grid the real text does.
+    // The long-journey bridge for this pane (editor/scrollBridge.ts).
     //
     // The host is layerRef, the non-scrolling frame the caret is already
     // positioned against: viewport-sized, overflow-hidden, and outside the
@@ -3774,7 +3771,6 @@ export function CM6Editor({
           const cellWidthPxNow = Math.max(1, cellWidthPxRef.current);
           const usableWidthPx = Math.max(1, view.scrollDOM.clientWidth - paddingLeftPx - paddingRightPx);
           return {
-            alphabet: 'binary' as const,
             text: view.state.doc.toString(),
             charsPerLine: Math.max(1, Math.floor(usableWidthPx / cellWidthPxNow)),
             lineHeightPx: lineHeightPxNow,

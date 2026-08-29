@@ -363,7 +363,6 @@ export function usePreviewScrollbar({
 
         const usableWidthPx = Math.max(1, scroller.clientWidth - paddingLeftPx - paddingRightPx)
         return {
-          alphabet: 'declaration' as const,
           text: currentEditorTextRef.current,
           charsPerLine: Math.max(1, Math.round(usableWidthPx / averageCharWidthPx)),
           lineHeightPx,

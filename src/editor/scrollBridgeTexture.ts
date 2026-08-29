@@ -17,12 +17,14 @@
 // twice the ink of real prose, which is the brightness jump it exists to
 // prevent, just moved.
 //
-// The glyphs themselves are free, and are an easter egg. Edit mode gets ones
-// and zeroes, which suit a monospace grid exactly: every glyph is one cell
-// wide, so the bridge lands on the same character grid the text does. Render
-// view gets the Universal Declaration of Human Rights, which suits a
-// proportional face and is, on the whole, a nicer thing to be carrying
-// through a document than lorem ipsum.
+// The glyphs themselves are free, and are an easter egg: both panes carry the
+// Universal Declaration of Human Rights, which is on the whole a nicer thing
+// to be moving through a document than lorem ipsum.
+//
+// Edit mode briefly had ones and zeroes instead, on the reasoning that they
+// suit a monospace grid exactly -- every glyph one cell wide. They do, and it
+// looked like a screensaver. The Declaration sits on that grid perfectly well,
+// and being the same in both panes is worth more than the neatness was.
 //
 // At the default speed a frame advances more than a viewport, so none of this
 // is readable in flight. It becomes legible only for a reader who has turned
@@ -53,26 +55,9 @@ export const BRIDGE_DECLARATION_TEXT = declarationMarkdown
   .replace(/\s+/g, ' ')
   .trim()
 
-export type ScrollBridgeAlphabet = 'binary' | 'declaration'
-
 export interface BridgeLine {
   /** Fraction of the available width this line fills, 0..1. Zero is a gap. */
   fill: number
-}
-
-/**
- * A deterministic pseudo-random source.
- *
- * Deterministic so a given document and geometry always produce the same
- * bridge -- a texture that reshuffled itself between journeys would be one
- * more thing moving on screen for no reason the reader can see.
- */
-function makeRandom(seed: number): () => number {
-  let state = (seed | 0) || 1
-  return () => {
-    state = (state * 1664525 + 1013904223) | 0
-    return ((state >>> 8) & 0xffffff) / 0xffffff
-  }
 }
 
 /**
@@ -151,7 +136,6 @@ export function measureAverageCharWidthPx(fontPx: number, fontFamily: string): n
 export const BRIDGE_TILE_LINES = 97
 
 export interface BridgeTextureRequest {
-  alphabet: ScrollBridgeAlphabet
   /** The document's own rhythm, from sampleDocumentLineRhythm. */
   rhythm: BridgeLine[]
   widthPx: number
@@ -164,24 +148,15 @@ export interface BridgeTextureRequest {
   /** Right inset, so lines end where the document's do. */
   paddingRightPx: number
   devicePixelRatio: number
-  seed: number
 }
 
-/** The text a line of the bridge is filled with, for the given alphabet. */
+/** The text one line of the bridge is filled with. */
 export function buildBridgeLineText(
-  alphabet: ScrollBridgeAlphabet,
   approximateChars: number,
-  random: () => number,
   wordCursor: { at: number },
 ): string {
   const chars = Math.max(0, Math.round(approximateChars))
   if (chars === 0) return ''
-
-  if (alphabet === 'binary') {
-    let out = ''
-    for (let i = 0; i < chars; i += 1) out += random() < 0.5 ? '0' : '1'
-    return out
-  }
 
   // Words are taken in order and cycled, so the Declaration reads as itself
   // rather than as a bag of its words for anyone who slows down enough to look.
@@ -208,8 +183,8 @@ export function buildBridgeLineText(
  */
 export function drawBridgeTile(request: BridgeTextureRequest): { dataUri: string; heightPx: number } | null {
   const {
-    alphabet, rhythm, widthPx, lineHeightPx, fontPx, fontFamily, color,
-    paddingLeftPx, paddingRightPx, devicePixelRatio, seed,
+    rhythm, widthPx, lineHeightPx, fontPx, fontFamily, color,
+    paddingLeftPx, paddingRightPx, devicePixelRatio,
   } = request
   if (typeof document === 'undefined') return null
   if (!(widthPx > 0) || !(lineHeightPx > 0) || rhythm.length === 0) return null
@@ -232,13 +207,12 @@ export function drawBridgeTile(request: BridgeTextureRequest): { dataUri: string
 
   const usableWidthPx = Math.max(1, widthPx - paddingLeftPx - paddingRightPx)
   const glyphWidthPx = Math.max(1, context.measureText('0').width)
-  const random = makeRandom(seed)
   const wordCursor = { at: 0 }
 
   for (let line = 0; line < BRIDGE_TILE_LINES; line += 1) {
     const { fill } = rhythm[line % rhythm.length]
     if (!(fill > 0)) continue
-    const text = buildBridgeLineText(alphabet, (usableWidthPx * fill) / glyphWidthPx, random, wordCursor)
+    const text = buildBridgeLineText((usableWidthPx * fill) / glyphWidthPx, wordCursor)
     if (text.length === 0) continue
     // Baseline sits where a real line's does: the font's own descent below the
     // line box's bottom is what keeps the bridge's rows on the same rhythm as
