@@ -9,6 +9,7 @@
 //   --dry-run     print every step, change nothing, push nothing
 //   --skip-tests  skip the local `npm test` gate (CI still runs it)
 //   --yes         don't pause for the release-notes edit
+//   --force-new   bump even when the current version's release is unfinished
 //
 // The script is resumable: every phase checks whether its work already exists
 // before doing it, so re-running after a failure picks up where it stopped
@@ -154,7 +155,35 @@ function nextVersion(current, bump) {
   return die(`unrecognized version argument "${bump}"`, 'Use patch, minor, major, or an exact x.y.z.')
 }
 
-const version = nextVersion(currentVersion, bumpArg)
+// The deliverable set for a finished release.  Used to tell "unfinished" from
+// "done", which is the whole basis of resuming.
+function releaseIsComplete(t) {
+  const res = ghQuiet('release', 'view', t, '--json', 'assets')
+  if (res.status !== 0 || !res.stdout) return false
+  const names = JSON.parse(res.stdout).assets.map((a) => a.name)
+  return names.some((n) => n.endsWith('.dmg'))
+    && names.some((n) => n.endsWith('.exe'))
+    && names.includes('SHA256SUMS.txt')
+}
+
+// A run that got as far as step 5 has already written its version into
+// package.json.  Bumping off that would cut a *second* release rather than
+// finish the first -- which is precisely how v0.5.8 stalled without its DMG
+// and a re-run silently produced v0.5.9.  So: if the current version is
+// tagged and its release is incomplete, resume it.
+const currentTag = `v${currentVersion}`
+const currentIsTagged = gitQuiet('rev-parse', '-q', '--verify', `refs/tags/${currentTag}`).status === 0
+const versionGivenExplicitly = /^\d+\.\d+\.\d+$/.test(bumpArg)
+
+let version
+if (!versionGivenExplicitly && !flag('--force-new') && currentIsTagged && !releaseIsComplete(currentTag)) {
+  version = currentVersion
+  warn(`${currentTag} is tagged but its release is unfinished -- resuming it rather than bumping`)
+  warn('pass --force-new to cut a new version anyway')
+} else {
+  version = nextVersion(currentVersion, bumpArg)
+}
+
 const tag = `v${version}`
 const tagExists = gitQuiet('rev-parse', '-q', '--verify', `refs/tags/${tag}`).status === 0
 
@@ -406,8 +435,12 @@ if (DRY_RUN) {
   const sidecar = ghQuiet('release', 'download', tag, '--pattern', '*.dmg.sha256', '--dir', verifyDir)
   if (sidecar.status === 0 && fs.existsSync(verifyDir)) {
     for (const f of fs.readdirSync(verifyDir)) {
-      const [hash, name] = fs.readFileSync(path.join(verifyDir, f), 'utf8').trim().split(/\s+/)
-      if (hash && name) localHashes.set(assetKey(name), hash.toLowerCase())
+      // "<hash>  <filename>", and the filename contains spaces ("Thockdown
+      // Notes-Mac-..."), so split on the *first* run of whitespace only.
+      const line = fs.readFileSync(path.join(verifyDir, f), 'utf8').trim()
+      const parsed = /^(\S+)\s+(.+)$/.exec(line)
+      if (parsed) localHashes.set(assetKey(parsed[2]), parsed[1].toLowerCase())
+      else warn(`could not parse checksum sidecar ${f}`)
     }
   } else {
     warn('no DMG checksum sidecar on the release -- the DMG could not be verified')

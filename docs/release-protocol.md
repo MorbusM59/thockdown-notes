@@ -94,11 +94,18 @@ rest of the protocol is unaffected.
 ## Resuming
 
 Releases fail partway: the network drops, a mac runner dies, a build breaks.
-Every phase checks whether its work already exists before doing it, so the fix
-is always the same: **run the same command again.** An existing tag isn't
-re-tagged, an existing release isn't re-created (its notes are refreshed from
-the file), an existing build isn't rebuilt, and uploads clobber rather than
-duplicate. Nothing needs to be undone first.
+The fix is always the same: **run the same command again.** An existing tag
+isn't re-tagged, an existing release isn't re-created (its notes are refreshed
+from the file), an existing build isn't rebuilt, uploads clobber rather than
+duplicate, and a missing or failed mac build is re-dispatched. Nothing needs to
+be undone first.
+
+The subtle part is *which version* a re-run means. By the time anything can
+fail, the new version is already written into `package.json` — so a plain bump
+would step over the unfinished release and cut a second one. Instead, if the
+current version is tagged and its release is missing any of its three
+deliverables (a `.dmg`, an `.exe`, and `SHA256SUMS.txt`), the script says so and
+resumes that version. `--force-new` bumps anyway.
 
 To redo the notes for a release that already exists, edit
 `release-notes/vX.Y.Z.md` and re-run — step 6 pushes the file's contents back up.
@@ -132,6 +139,16 @@ Not enforced by the script, because judgment can't be:
     filenames to dots and the local map was keyed on the on-disk name. It
     degraded to warnings rather than failing, which is its own small lesson —
     a verification step that can't match should be loud.
+
+  Two more, found by cutting the release itself:
+  - A re-run after the stalled build bumped *past* the unfinished version
+    instead of resuming it, cutting a v0.5.9 alongside the v0.5.8 it was
+    supposed to finish. v0.5.8 was deleted as a false start; the resume rule
+    above is the fix.
+  - The DMG checksum sidecar is `<hash>  Thockdown Notes-Mac-….dmg` — and the
+    filename has a space in it. Splitting on all whitespace truncated the name
+    to "Thockdown", so the DMG silently went unverified. Split on the first run
+    of whitespace only.
 
   The `workflow_dispatch` `tag` input dates from the same session: a tag freezes
   its own workflow file, so a pipeline fixed *after* tagging can never re-run
