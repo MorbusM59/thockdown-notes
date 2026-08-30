@@ -785,6 +785,12 @@ export function CM6Editor({
   // can pull {analyticalTop, scrollTop, ...} after each keystroke without
   // any console-log-ordering ambiguity. Remove once that investigation
   // closes.
+  // Read LIVE, not latched at mount, so the trace can be switched on in a
+  // console session without reloading -- reloading a huge note to turn a log
+  // on is a real cost when the defect takes a hundred keypresses to reach.
+  const cageTraceOn = () => (
+    typeof window !== 'undefined' && window.localStorage.getItem('thockdown:debug-cage-state') === '1'
+  );
   const debugCageStateEnabled = useRef(
     typeof window !== 'undefined' && window.localStorage.getItem('thockdown:debug-cage-state') === '1',
   ).current;
@@ -2690,7 +2696,7 @@ export function CM6Editor({
 
       requestAnimationFrame(() => {
         if (reconcileGeneration !== myGeneration) return;
-        if (debugCageStateEnabled && Math.abs(scroller.scrollTop - scrollTopAfterWrite) > 0.01) {
+        if (cageTraceOn() && Math.abs(scroller.scrollTop - scrollTopAfterWrite) > 0.01) {
           console.log(
             `[cage]    settled: CM6 moved it again by ${Math.round(scroller.scrollTop - scrollTopAfterWrite)}px`
             + ` (${((scroller.scrollTop - scrollTopAfterWrite) / lineHeightPxNow).toFixed(2)} rows) -- re-deriving`,
