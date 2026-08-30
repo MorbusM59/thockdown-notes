@@ -2589,6 +2589,12 @@ export function CM6Editor({
     // fresh reconcileCagedScroll call) already happened before the check
     // fires.
     let reconcileGeneration = 0;
+    // What this reconcile last left behind, so the next one can report how far
+    // CM6 moved the scroller on its own in between -- which is its
+    // compensation for a height-map revision, the number this investigation
+    // is actually about. Only read for the debug trace.
+    let lastCageWrite: { scrollTopPx: number; scrollHeightPx: number } | null = null;
+    let cagePressIndex = 0;
 
     const reconcileCagedScroll = (view: EditorView) => {
       reconcileGeneration += 1;
@@ -2608,6 +2614,10 @@ export function CM6Editor({
         scroller.scrollTop,
       );
 
+      const rowPhaseOffsetPxNow = Math.round(lineHeightPxNow / 2);
+      const scrollTopBefore = scroller.scrollTop;
+      const scrollHeightBefore = scroller.scrollHeight;
+
       const { targetScrollTopPx } = resolveCagedScrollTarget({
         caretTopInScrollPx: caretTopInScroll,
         scrollerScrollTopPx: scroller.scrollTop,
@@ -2616,7 +2626,7 @@ export function CM6Editor({
         topBoundaryPx: topBoundaryPxRef.current,
         bottomBoundaryPx: bottomBoundaryPxRef.current,
         lineHeightPx: lineHeightPxNow,
-        rowPhaseOffsetPx: Math.round(lineHeightPxNow / 2),
+        rowPhaseOffsetPx: rowPhaseOffsetPxNow,
       });
 
       // INSTANT, not animated. This is quantized movement of one row in
@@ -2646,8 +2656,46 @@ export function CM6Editor({
       }
 
       const scrollTopAfterWrite = scroller.scrollTop;
+
+      // The trace. Everything needed to tell a legitimate revision
+      // compensation apart from a skip, in one line per keypress:
+      //   caretBefore   where the caret sat in the viewport before this ran
+      //                 (a real row is at topBoundary + half a row -- the
+      //                 infinity-grid phase -- so half-row values are correct)
+      //   cm6Offer      how far CM6 moved the scroller since our last write,
+      //                 i.e. what it decided the revision cost
+      //   heightDelta   how much the document's total height changed with it
+      //   target/wrote  what this reconcile asked for and what it left
+      //   rows          net rows the TEXT moved, which is the invariant: one
+      //                 keypress must be 0 or 1, never more
+      if (debugCageStateEnabled) {
+        const cm6OfferPx = lastCageWrite ? Math.round(scrollTopBefore - lastCageWrite.scrollTopPx) : null;
+        const heightDeltaPx = lastCageWrite ? Math.round(scrollHeightBefore - lastCageWrite.scrollHeightPx) : null;
+        const netTextRows = ((scrollTopAfterWrite - scrollTopBefore) + (cm6OfferPx ?? 0)) / lineHeightPxNow;
+        cagePressIndex += 1;
+        console.log(
+          `[cage] #${cagePressIndex}`
+          + ` caretBefore=${Math.round(caretTopInScroll - scrollTopBefore)}px`
+          + ` (row ${((caretTopInScroll - scrollTopBefore - topBoundaryPxRef.current - rowPhaseOffsetPxNow) / lineHeightPxNow).toFixed(2)})`
+          + ` scrollTopBefore=${Math.round(scrollTopBefore)}`
+          + ` cm6Offer=${cm6OfferPx === null ? 'n/a' : `${cm6OfferPx}px/${(cm6OfferPx / lineHeightPxNow).toFixed(2)}r`}`
+          + ` heightDelta=${heightDeltaPx === null ? 'n/a' : `${heightDeltaPx}px`}`
+          + ` target=${Math.round(targetScrollTopPx)}`
+          + ` wrote=${Math.round(scrollTopAfterWrite)}`
+          + ` netTextRows=${netTextRows.toFixed(2)}`
+          + ` lineHeight=${lineHeightPxNow} topBoundary=${topBoundaryPxRef.current} phase=${rowPhaseOffsetPxNow}`,
+        );
+      }
+      lastCageWrite = { scrollTopPx: scrollTopAfterWrite, scrollHeightPx: scroller.scrollHeight };
+
       requestAnimationFrame(() => {
         if (reconcileGeneration !== myGeneration) return;
+        if (debugCageStateEnabled && Math.abs(scroller.scrollTop - scrollTopAfterWrite) > 0.01) {
+          console.log(
+            `[cage]    settled: CM6 moved it again by ${Math.round(scroller.scrollTop - scrollTopAfterWrite)}px`
+            + ` (${((scroller.scrollTop - scrollTopAfterWrite) / lineHeightPxNow).toFixed(2)} rows) -- re-deriving`,
+          );
+        }
         // CM6 moved it after we did -- it has learned real heights for text
         // that was only estimated and shifted the scroller to keep its anchor
         // still. That shift is an arbitrary sub-row amount, because positions
