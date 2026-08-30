@@ -55,6 +55,29 @@ export const ZERO_PERSISTED_VIEWPORT: PersistedViewportState = { topBoundaryLine
  */
 export const RESTORE_OFFSET_LINES = 1
 
+/**
+ * The two halves of that reference point, as functions.
+ *
+ * Sharing the constant was supposed to keep reading and landing in step. It
+ * did not, because each call site still wrote its own arithmetic around it,
+ * and the sign is the whole content of that arithmetic: reading ADDS the
+ * offset, landing SUBTRACTS it, because landing is the read solved for the
+ * scroll position. Four sites wrote it; three added it in both directions,
+ * and a note switch walked the viewport down a row each time -- most visibly
+ * on a wrapped paragraph, where it settled on the paragraph's second visual
+ * row and looked like nothing at all.
+ *
+ * So the arithmetic lives here once and nobody writes the sign by hand again.
+ * `read(land(x)) === x` is asserted in this module's tests.
+ */
+export function readSourceAnchorLine(scrollTopLines: number, topBoundaryLines: number): number {
+  return Math.max(0, Math.round(scrollTopLines) + Math.round(topBoundaryLines) + RESTORE_OFFSET_LINES)
+}
+
+export function landScrollTopLines(anchorLine: number, topBoundaryLines: number): number {
+  return Math.max(0, Math.round(anchorLine) - Math.round(topBoundaryLines) - RESTORE_OFFSET_LINES)
+}
+
 export function resolveSourceAnchorFromEditState(params: {
   text: string
   lineHeightPx: number
@@ -89,7 +112,7 @@ export function resolveSourceAnchorFromEditState(params: {
   }
 
   const anchorLine = viewport
-    ? Math.max(0, Math.round(viewport.scrollTopLines) + Math.round(viewport.topBoundaryLines) + RESTORE_OFFSET_LINES)
+    ? readSourceAnchorLine(viewport.scrollTopLines, viewport.topBoundaryLines)
     :
     (telemetry ? Math.max(0, Math.floor(telemetry.scrollTopPx / safeLineHeight)) : 0)
   const clampedLine = Math.min(Math.max(0, anchorLine), Math.max(0, lines.length - 1))
@@ -234,7 +257,7 @@ export function buildEditRestoreSnapshotFromUiState(params: {
   // constant was shared, but one of the two sites kept the wrong sign.
   const storedScrollTopLines =
     anchorLine !== null
-      ? Math.max(0, anchorLine - fallbackTopBoundaryLines - RESTORE_OFFSET_LINES)
+      ? landScrollTopLines(anchorLine, fallbackTopBoundaryLines)
       : Math.max(0, Math.round(fallbackViewport?.scrollTopLines ?? 0))
 
   const collapsedSelection: EditorSelectionState = {

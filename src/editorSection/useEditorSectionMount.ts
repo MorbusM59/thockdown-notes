@@ -21,6 +21,8 @@ import {
   buildEditRestoreSnapshotFromUiState,
   findPreviewSourceAnchorElement,
   RESTORE_OFFSET_LINES,
+  readSourceAnchorLine,
+  landScrollTopLines,
   ZERO_EDITOR_SELECTION,
   ZERO_PERSISTED_VIEWPORT,
 } from '../editor/EditRestoreMath'
@@ -690,7 +692,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     const cachedSnapshot = activeNoteId ? editModeSnapshotByNoteIdRef.current.get(activeNoteId) : null
     if (!cachedSnapshot) return null
     // Same reference line the adapter-backed path above reads at.
-    return Math.max(0, cachedSnapshot.viewport.scrollTopLines + cachedSnapshot.viewport.topBoundaryLines + RESTORE_OFFSET_LINES)
+    return readSourceAnchorLine(cachedSnapshot.viewport.scrollTopLines, cachedSnapshot.viewport.topBoundaryLines)
   }, [activeNoteId, isPreviewMode, readCurrentEditUiPayload, resolvePreviewSourceAnchorFromContainer])
 
   const captureCurrentAnchorBlockIndex = useCallback((): number | null => {
@@ -1109,7 +1111,19 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       if (lineTopPx === null) return null
 
       const topBoundaryPx = Math.max(0, Math.round(viewport.topBoundaryLines * lineHeightPx))
-      return Math.max(0, Math.round((lineTopPx - topBoundaryPx) / lineHeightPx) + RESTORE_OFFSET_LINES)
+      // MINUS, for the same reason as EditRestoreMath's landing formula: this
+      // solves "put sourceAnchorLine RESTORE_OFFSET_LINES below the top of the
+      // content area" for the scroll position, and solving moves the offset to
+      // the other side.
+      //
+      // This is the copy that actually runs, since it is the wrapping-aware
+      // one -- and wrapping is what made the wrong sign unmistakable. On a
+      // note whose one paragraph wraps across four rows, a switch away and
+      // back landed on the paragraph's SECOND visual row and stayed there: not
+      // a block boundary, not anywhere meaningful, just one row past where the
+      // read had said. Reading is exact here (the adapter answers with the
+      // line's real pixel top), so every row of drift came from this line.
+      return landScrollTopLines(Math.round(lineTopPx / lineHeightPx), Math.round(topBoundaryPx / lineHeightPx))
     }
 
     const applyCorrectedViewport = (
@@ -2151,8 +2165,9 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
           // Rough placement (naive line count -- see EditRestoreSnapshot's
           // own doc comment); applyEditRestoreSnapshot corrects this to an
           // analytically exact value via sourceAnchorLine below, one frame
-          // later, once the adapter is confirmed mounted.
-          scrollTopLines: Math.max(0, sourceAnchorLine - topBoundaryLines + RESTORE_OFFSET_LINES),
+          // later, once the adapter is confirmed mounted. MINUS the offset --
+          // this is a landing, and landings subtract what reads add.
+          scrollTopLines: landScrollTopLines(sourceAnchorLine, topBoundaryLines),
         },
         sourceAnchorLine,
       }
@@ -2800,7 +2815,8 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
           viewport: {
             topBoundaryLines,
             bottomBoundaryLines: fallbackViewport?.bottomBoundaryLines ?? 0,
-            scrollTopLines: Math.max(0, sourceLine - topBoundaryLines + RESTORE_OFFSET_LINES),
+            // A landing: subtract, as above.
+            scrollTopLines: landScrollTopLines(sourceLine, topBoundaryLines),
           },
           sourceAnchorLine: sourceLine,
         }, { restoreFullSelection: false, focusAfterApply: false })

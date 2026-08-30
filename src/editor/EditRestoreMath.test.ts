@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildEditRestoreSnapshotFromUiState, RESTORE_OFFSET_LINES } from './EditRestoreMath'
+import { buildEditRestoreSnapshotFromUiState, landScrollTopLines, readSourceAnchorLine, RESTORE_OFFSET_LINES } from './EditRestoreMath'
 import { splitMarkdownIntoPreviewBlocks } from './PreviewBlockSplit'
 
 const text = [
@@ -95,9 +95,10 @@ describe('reading a position and landing on it are inverses', () => {
     overrideSourceAnchorLine: anchorLine,
   }).viewport.scrollTopLines
 
-  // The read, as resolveSourceAnchorFromEditState performs it.
+  // The real read, not a restatement of it -- these are the functions the
+  // app calls, so a sign that drifts in either one fails here.
   const read = (scrollTopLines: number, topBoundaryLines = 0) =>
-    scrollTopLines + topBoundaryLines + RESTORE_OFFSET_LINES
+    readSourceAnchorLine(scrollTopLines, topBoundaryLines)
 
   it('leaves a document resting at the very top exactly where it is', () => {
     expect(land(read(0))).toBe(0)
@@ -121,5 +122,30 @@ describe('reading a position and landing on it are inverses', () => {
     for (const topBoundaryLines of [0, 1, 4]) {
       expect(land(read(7, topBoundaryLines), topBoundaryLines)).toBe(7)
     }
+  })
+})
+
+describe('the read/land pair itself', () => {
+  // Asserted on the shared helpers directly, because these are what every
+  // call site now uses -- the four hand-written copies of this arithmetic
+  // are what let one of them keep the wrong sign.
+  it('is the identity in both directions', () => {
+    for (const topBoundaryLines of [0, 1, 3]) {
+      for (const scrollTopLines of [0, 1, 2, 9, 250]) {
+        expect(landScrollTopLines(readSourceAnchorLine(scrollTopLines, topBoundaryLines), topBoundaryLines))
+          .toBe(scrollTopLines)
+      }
+    }
+  })
+
+  it('reads one line further down than it lands, and never the reverse', () => {
+    // The direction of the offset, stated once. Landing puts the anchor line
+    // RESTORE_OFFSET_LINES below the top; reading asks what is at that spot.
+    expect(readSourceAnchorLine(0, 0)).toBe(RESTORE_OFFSET_LINES)
+    expect(landScrollTopLines(RESTORE_OFFSET_LINES, 0)).toBe(0)
+  })
+
+  it('clamps at the top of the document rather than going negative', () => {
+    expect(landScrollTopLines(0, 0)).toBe(0)
   })
 })
