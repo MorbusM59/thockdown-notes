@@ -80,6 +80,47 @@ async function runCase(page, { chars, mode, label }) {
     `${second.scrollTop} of ${second.maxScrollTop}, short by ${second.shortByPx}px`)
 }
 
+/**
+ * The exact boundary of the mapping: 0%-100% runs from the centre of the thumb
+ * at rest to the centre of the thumb at the end of its travel, so a click one
+ * half-thumb up from the bottom of the track is the FIRST position that means
+ * "the end". Everything below it is inside the bottom offset and means the
+ * same thing. This is where the miss was still visible after the end of the
+ * track itself had been fixed -- measured at 99.7% of the document, one row
+ * short, because the height was still settling when the correction landed.
+ */
+async function runBoundaryCase(page, { chars, mode, label }) {
+  const selector = mode === 'edit' ? '.cm-scroller' : '.markdown-preview'
+  await page.evaluate(async (initialText) => {
+    const note = await window.thockdownNotes.createNote({ initialText })
+    await window.thockdownSections.setActiveNote('default', note.id)
+  }, generateSyntheticDocument(chars))
+  await page.reload()
+  await (mode === 'edit' ? ensureEditMode(page) : ensurePreviewMode(page))
+  await page.waitForTimeout(250)
+
+  const box = await page.locator('.thockdown-scroll-track').boundingBox()
+  const halfThumbPx = await page.evaluate(() => (
+    (parseFloat(document.querySelector('.thockdown-scroll-thumb').style.height) || 0) / 2
+  ))
+
+  // A HOLD, which snaps. Deliberately, and this is the part that makes the
+  // check discriminating: a travelling click takes long enough that the
+  // document's height has usually stopped moving by the time it lands, so it
+  // passes with or without the correction. A snap arrives immediately, while
+  // the height is still settling, which is the condition the miss needs.
+  // Verified: without the correction this reads 99.7% of the document.
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height - halfThumbPx)
+  await page.mouse.down()
+  await page.waitForTimeout(380)
+  await page.mouse.up()
+  await page.waitForTimeout(1200)
+  const landed = await readEnd(page, selector)
+  check(`${label}: a first snap at the thumb-centre-at-end boundary reaches the end`,
+    Math.abs(landed.shortByPx) <= TOLERANCE_PX,
+    `${landed.scrollTop} of ${landed.maxScrollTop}, short by ${landed.shortByPx}px`)
+}
+
 async function main() {
   const server = await startDevServer(PORT)
   const browser = await chromium.launch({
@@ -96,6 +137,8 @@ async function main() {
     await runCase(page, { chars: 400000, mode: 'edit', label: 'edit view, 400k' })
     await runCase(page, { chars: 1500000, mode: 'edit', label: 'edit view, 1.5M' })
     await runCase(page, { chars: 1500000, mode: 'preview', label: 'render view, 1.5M' })
+    await runBoundaryCase(page, { chars: 45000, mode: 'edit', label: 'edit view, 45k' })
+    await runBoundaryCase(page, { chars: 45000, mode: 'preview', label: 'render view, 45k' })
     check('no page errors', errors.length === 0, errors.slice(0, 2).join(' | '))
   } finally {
     await browser.close()

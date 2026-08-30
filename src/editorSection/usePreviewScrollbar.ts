@@ -621,23 +621,42 @@ export function usePreviewScrollbar({
     // been measured -- so once the journey is over and the geometry has
     // stopped moving, finish the trip.
     const aimedAtEnd = ratio >= 0.999
+    // Held for a short window rather than applied once. The document's height
+    // does not stop moving the instant the journey does -- measured in the
+    // edit view, it was still shrinking several frames later (15340 -> 15132)
+    // -- so a single correction lands on a number that is about to change
+    // again. This keeps the end pinned for as long as the end keeps moving.
     const landOnDocumentEnd = () => {
-      const element = previewScrollRef.current
-      if (!element) return
-      const settledAt = element.scrollTop
-      requestAnimationFrame(() => {
+      let framesLeft = 40
+      let expectedTopPx: number | null = null
+      const step = () => {
         const el = previewScrollRef.current
-        // Anything that moved the scroller since is the reader, who outranks
-        // this correction.
-        if (!el || Math.abs(el.scrollTop - settledAt) > 1) return
+        if (!el || framesLeft-- <= 0) return
         const maxScrollTopPx = Math.max(0, el.scrollHeight - el.clientHeight)
-        if (el.scrollTop >= maxScrollTopPx - 0.5) return
-        const previousBehavior = el.style.scrollBehavior
-        el.style.scrollBehavior = 'auto'
-        el.scrollTop = maxScrollTopPx
-        el.style.scrollBehavior = previousBehavior
-        syncPreviewCustomScrollbar({ force: true })
-      })
+
+        // "Did the reader take over?" is a question about who MOVED the
+        // scroller, not about how far from the end it is. Distance was the
+        // first rule tried and it was exactly backwards: a journey that landed
+        // at 19% of the document -- the very failure this exists to correct --
+        // looks far from the end, so the correction stood down precisely when
+        // it was needed. Compare against what we last left instead. The
+        // scroller also clamps scrollTop down by itself when content shrinks,
+        // so sitting exactly at the maximum is never read as input.
+        if (expectedTopPx !== null
+          && Math.abs(el.scrollTop - expectedTopPx) > 2
+          && el.scrollTop !== maxScrollTopPx) return
+
+        if (el.scrollTop < maxScrollTopPx - 0.5) {
+          const previousBehavior = el.style.scrollBehavior
+          el.style.scrollBehavior = 'auto'
+          el.scrollTop = maxScrollTopPx
+          el.style.scrollBehavior = previousBehavior
+          syncPreviewCustomScrollbar({ force: true })
+        }
+        expectedTopPx = el.scrollTop
+        requestAnimationFrame(step)
+      }
+      requestAnimationFrame(step)
     }
     const landOnDocumentEndAfterJourney = () => {
       const waitForArrival = () => {

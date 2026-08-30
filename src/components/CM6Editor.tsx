@@ -4459,23 +4459,33 @@ export function CM6Editor({
     // in flight; this is the same promise kept the cheap way, by finishing the
     // last few pixels once the height has stopped moving.
     const aimedAtEnd = ratio >= 0.999;
+    // Held for a short window rather than applied once: CM6 keeps revising its
+    // height for several frames after the journey ends (measured shrinking
+    // 15340 -> 15132), so one correction lands on a number about to change.
     const landOnDocumentEnd = () => {
-      const scrollDOM = viewRef.current?.scrollDOM;
-      if (!scrollDOM) return;
-      const settledAt = scrollDOM.scrollTop;
-      requestAnimationFrame(() => {
+      let framesLeft = 40;
+      let expectedTopPx: number | null = null;
+      const step = () => {
         const el = viewRef.current?.scrollDOM;
-        // Anything that moved the scroller since the journey ended is the
-        // reader, and the reader outranks this correction.
-        if (!el || Math.abs(el.scrollTop - settledAt) > 1) return;
+        if (!el || framesLeft-- <= 0) return;
         const maxScrollTopPx = Math.max(0, el.scrollHeight - el.clientHeight);
-        if (el.scrollTop >= maxScrollTopPx - 0.5) return;
-        const previousBehavior = el.style.scrollBehavior;
-        el.style.scrollBehavior = 'auto';
-        el.scrollTop = maxScrollTopPx;
-        el.style.scrollBehavior = previousBehavior;
-        syncCustomScrollbarRef.current?.({ force: true });
-      });
+        // Who MOVED it, not how far from the end it is -- see the twin of this
+        // in usePreviewScrollbar for why distance was the wrong question.
+        if (expectedTopPx !== null
+          && Math.abs(el.scrollTop - expectedTopPx) > 2
+          && el.scrollTop !== maxScrollTopPx) return;
+
+        if (el.scrollTop < maxScrollTopPx - 0.5) {
+          const previousBehavior = el.style.scrollBehavior;
+          el.style.scrollBehavior = 'auto';
+          el.scrollTop = maxScrollTopPx;
+          el.style.scrollBehavior = previousBehavior;
+          syncCustomScrollbarRef.current?.({ force: true });
+        }
+        expectedTopPx = el.scrollTop;
+        requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
     };
 
     // See the twin of this in usePreviewScrollbar: a second click cannot
