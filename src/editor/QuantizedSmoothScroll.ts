@@ -27,7 +27,37 @@ function prefersReducedMotion(): boolean {
 interface QuantizedSmoothScrollOptions {
   lineHeightPx: number;
   onStep?: () => void;
+  /**
+   * Re-reads the destination in pixels, once, from underneath the curtain.
+   *
+   * A jump across a large document is aimed with CM6's ESTIMATED line heights,
+   * and arriving is what makes CM6 measure them for real. Measuring the lines
+   * ABOVE the destination moves the destination, so the pixel the jump aimed
+   * at is not where the text is by the time it gets there.
+   *
+   * Measured on a 1.1M-character note: a hit aimed at 416,676 was reached
+   * exactly -- residual zero -- and the same hit was by then at 399,334. The
+   * landing was never inaccurate; the address was stale. A second click, from
+   * a document whose heights were now real, went straight to it.
+   *
+   * So while the pane is fully covered this engine parks on the target, which
+   * is what makes CM6 measure the destination, and then asks here for the
+   * address those measurements give. Answer from the DOCUMENT POSITION, never
+   * from a remembered pixel -- the position is the thing that did not move.
+   *
+   * The ramp-down keeps its exact shape and duration; only its origin and
+   * destination shift, together, and both while there is nothing to see.
+   */
+  resolveTargetUnderBridge?: () => number | null;
 }
+
+/**
+ * Frames the parked pane is held for before the destination is re-read.
+ *
+ * CM6 revises its height map over several frames after a scroll, not on the
+ * one that provoked it. Two is what fits inside the shortest curtain there is.
+ */
+const BRIDGE_MEASURE_FRAMES = 2;
 
 interface AnimationState {
   rafId: number;
@@ -84,7 +114,12 @@ export function scrollToQuantizedSmooth(
   const { lineHeightPx, onStep } = options;
   if (!Number.isFinite(lineHeightPx) || lineHeightPx <= 0) return null;
 
-  const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+  // Refreshed once if the journey re-reads its destination under the curtain:
+  // measuring the destination is exactly what changes how tall CM6 believes the
+  // document is, and every write after that would otherwise be clamped against
+  // a range that no longer exists. Not re-read per frame -- `scrollHeight`
+  // forces layout, and this is the scroll path.
+  let maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
   const quantizedStartPx = clamp(quantizeScrollTopToRow(scroller.scrollTop, lineHeightPx), 0, maxScrollTopPx);
   const quantizedTargetPx = clamp(quantizeScrollTopToRow(targetScrollTopPx, lineHeightPx), 0, maxScrollTopPx);
 
@@ -135,8 +170,12 @@ export function scrollToQuantizedSmooth(
     }
   };
 
+  // Where the journey is actually going. Fixed for everything except a bridged
+  // journey that re-reads its destination under the curtain.
+  let landingPx = quantizedTargetPx;
+
   const finish = () => {
-    step(quantizedTargetPx);
+    step(landingPx);
     scroller.style.scrollBehavior = previousScrollBehavior;
     activeAnimations.delete(scroller);
   };
@@ -145,7 +184,7 @@ export function scrollToQuantizedSmooth(
   const keepAnimating = (frame: FrameRequestCallback) => {
     activeAnimations.set(scroller, {
       rafId: requestAnimationFrame(frame),
-      targetScrollTopPx: quantizedTargetPx,
+      targetScrollTopPx: landingPx,
       previousScrollBehavior,
       onCancel,
     });
@@ -168,14 +207,30 @@ export function scrollToQuantizedSmooth(
     const totalSec = bridgeEndSec + journey.rampDown.durationSec;
 
     const afterRampUpPx = quantizedStartPx + journey.rampUp.signedDistancePx;
-    const beforeRampDownPx = quantizedTargetPx - journey.rampDown.signedDistancePx;
+    let beforeRampDownPx = landingPx - journey.rampDown.signedDistancePx;
     let jumped = false;
     let journeyStartMs: number | null = null;
     onCancel = () => bridge.end();
 
+    // The re-read under the curtain -- park, wait for the measurement, take the
+    // answer, resume. Once per journey, and only inside the fully covered
+    // stretch, which ends at `sweep - viewport` because the band is a viewport
+    // shorter than its own sweep. It refuses to start unless the whole park
+    // fits in what remains: a correction that ran out of cover half way would
+    // put the snap back on screen, which is what the curtain exists to prevent.
+    const coveredEndPx = sweepPx - scroller.clientHeight;
+    let parkFramesLeft = -1;
+    let parkedAnswerPx: number | null = null;
+    let lastFrameMs: number | null = null;
+    let retargetSettled = options.resolveTargetUnderBridge === undefined;
+
     const animateJourney = (nowMs: number): void => {
       if (journeyStartMs === null) journeyStartMs = nowMs;
       const elapsedSec = (nowMs - journeyStartMs) / 1000;
+      // Captured BEFORE the overwrite -- the park below needs the interval
+      // since the previous frame, not zero.
+      const previousFrameMs = lastFrameMs;
+      lastFrameMs = nowMs;
 
       if (elapsedSec >= totalSec) {
         bridge.end();
@@ -189,6 +244,53 @@ export function scrollToQuantizedSmooth(
         const travelled = (elapsedSec - rampUpSec) * journey.peakSpeedPxPerSec;
         bridge.advance(travelled);
         if (!jumped && bridge.isCovering(travelled)) jumped = true;
+
+        if (jumped && !retargetSettled) {
+          // How much cover is left, in REAL frames. Deriving this from an
+          // assumed 60fps was wrong on the machine it was written for: a
+          // journey measured live burned 2 frames of budget per frame and
+          // abandoned a park it had already started. The frame the engine
+          // actually got is the only honest unit.
+          const frameMs = previousFrameMs === null ? 16.7 : Math.max(1, nowMs - previousFrameMs);
+          const pxPerFrame = Math.max(1, journey.peakSpeedPxPerSec * (frameMs / 1000));
+          const coveredFramesLeft = Math.max(0, coveredEndPx - travelled) / pxPerFrame;
+          const coverEnding = !bridge.isCovering(travelled) || coveredFramesLeft < 1;
+
+          if (parkFramesLeft < 0) {
+            if (coverEnding) {
+              retargetSettled = true;
+            } else {
+              // Park ON the destination. Nothing short of standing there makes
+              // CM6 measure it, and measuring it is the entire point.
+              parkFramesLeft = BRIDGE_MEASURE_FRAMES;
+              step(landingPx);
+              keepAnimating(animateJourney);
+              return;
+            }
+          } else {
+            // Once parked, the answer is taken every frame and the best one
+            // kept. A park that gave up because it ran out of cover threw away
+            // a measurement it had already paid for and landed stale -- an
+            // early answer beats no answer, and the whole reason to be here is
+            // that the pre-journey address is known to be wrong.
+            const answer = options.resolveTargetUnderBridge?.() ?? null;
+            if (answer !== null && Number.isFinite(answer)) parkedAnswerPx = answer;
+            parkFramesLeft -= 1;
+
+            if (parkFramesLeft > 0 && !coverEnding) {
+              keepAnimating(animateJourney);
+              return;
+            }
+
+            if (parkedAnswerPx !== null) {
+              maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+              landingPx = clamp(quantizeScrollTopToRow(parkedAnswerPx, lineHeightPx), 0, maxScrollTopPx);
+              beforeRampDownPx = landingPx - journey.rampDown.signedDistancePx;
+            }
+            retargetSettled = true;
+          }
+        }
+
         step(jumped
           ? beforeRampDownPx - (direction * (sweepPx - travelled))
           : afterRampUpPx + (direction * travelled));

@@ -177,8 +177,20 @@ export function useDocumentFindNavigation({
    * through a stretch with no hits in it re-renders nothing at all.
    */
   useEffect(() => {
-    const scroller = previewScrollRef.current
-    if (!isPreviewMode || !scroller || documentFindHits.length === 0) {
+    if (documentFindHits.length === 0) {
+      setVisibleDocumentFindHitRange(null)
+      return undefined
+    }
+
+    // Both views answer the same question, in the same units, through their
+    // own machinery: the rendered pane off its block measurements, the editor
+    // off CM6's height map. Which one is asked is the only difference here.
+    const scroller = isPreviewMode ? previewScrollRef.current : null
+    const readRange = isPreviewMode
+      ? () => previewDocumentPositionRef.current?.readVisibleSourceLineRange() ?? null
+      : () => adapterRef.current?.readVisibleSourceLineRange() ?? null
+
+    if (isPreviewMode && !scroller) {
       setVisibleDocumentFindHitRange(null)
       return undefined
     }
@@ -191,7 +203,7 @@ export function useDocumentFindNavigation({
 
     const recompute = () => {
       frameId = null
-      const lines = previewDocumentPositionRef.current?.readVisibleSourceLineRange() ?? null
+      const lines = readRange()
       if (lines === null && attemptsLeft > 0) {
         attemptsLeft -= 1
         frameId = requestAnimationFrame(recompute)
@@ -219,14 +231,40 @@ export function useDocumentFindNavigation({
     }
 
     schedule()
-    scroller.addEventListener('scroll', schedule, { passive: true })
+
+    let unsubscribe: (() => void) | null = null
+    let attachFrameId: number | null = null
+    if (scroller) {
+      scroller.addEventListener('scroll', schedule, { passive: true })
+      unsubscribe = () => scroller.removeEventListener('scroll', schedule)
+    } else {
+      // The adapter can be a frame or two behind this effect on a note or
+      // section switch, and an attach that quietly failed would leave the
+      // cards frozen on whatever was visible when find opened.
+      let attachAttemptsLeft = 30
+      const attach = () => {
+        attachFrameId = null
+        unsubscribe = adapterRef.current?.subscribeToViewportChange(schedule) ?? null
+        if (unsubscribe) {
+          schedule()
+          return
+        }
+        if (attachAttemptsLeft > 0) {
+          attachAttemptsLeft -= 1
+          attachFrameId = requestAnimationFrame(attach)
+        }
+      }
+      attach()
+    }
+
     return () => {
-      scroller.removeEventListener('scroll', schedule)
+      unsubscribe?.()
+      if (attachFrameId !== null) cancelAnimationFrame(attachFrameId)
       if (frameId !== null) cancelAnimationFrame(frameId)
     }
     // documentFindHits is a dependency because a new hit list re-indexes
     // everything; currentEditorText reaches this through hitSourceLines.
-  }, [isPreviewMode, documentFindHits, lowerBound, previewScrollRef, previewDocumentPositionRef])
+  }, [isPreviewMode, documentFindHits, lowerBound, previewScrollRef, previewDocumentPositionRef, adapterRef])
 
   /**
    * The match this card refers to, set in small caps where it stands.
@@ -480,6 +518,21 @@ export function useDocumentFindNavigation({
     const adapter = adapterRef.current
     if (!adapter) return
 
+    // The same rule the rendered pane follows: a hit the reader can already
+    // see is not a journey. Selecting it is what says "this one" in the edit
+    // view -- the selection is the mark here -- so the page has no reason to
+    // move underneath the words they are reading.
+    //
+    // Asked of the editor's own visible range rather than of the card's
+    // highlight, for the reason the preview's does: the highlight is one frame
+    // behind the scroll, and a click must not do one thing while the card says
+    // another.
+    const visibleLines = adapter.readVisibleSourceLineRange()
+    const hitLine = resolveSourceLineForOffset(normalizeInternalText(currentEditorText), hit.index)
+    const isVisible = visibleLines !== null
+      && hitLine >= visibleLines.fromLine
+      && hitLine <= visibleLines.toLine
+
     adapter.applySnapshot({
       selection: {
         anchor: hit.index,
@@ -488,9 +541,9 @@ export function useDocumentFindNavigation({
         end: hit.index + hit.matchLength,
         isCollapsed: false,
       },
-      selectionScrollBehavior: 'center-caged',
+      selectionScrollBehavior: isVisible ? 'preserve-scroll' : 'center-caged',
     })
-  }, [isPreviewMode, jumpToPreviewDocumentFindHit, adapterRef, markPreviewHitInPlace])
+  }, [isPreviewMode, jumpToPreviewDocumentFindHit, adapterRef, markPreviewHitInPlace, currentEditorText])
 
   const replaceDocumentFindHit = useCallback((hit: DocumentFindHit) => {
     const sourceText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)

@@ -2916,3 +2916,48 @@ its behalf.
 `correctWrappingOnceReady` bailing on a null, and `settleCorrectionLoop`'s three unlogged exits plus
 its unlogged exhaustion, were each capable of producing this exact symptom and none of them said so.
 A correction that can decline to run should be able to say why under the existing debug flag.
+
+## This session: a search-hit jump landed perfectly on the wrong pixel
+
+**The symptom**: clicking a find result in the edit view took two clicks to reach the hit, sometimes
+three. Reported for months as "the jump is inaccurate".
+
+**What the trace showed** (a temporary `thockdown:debug-find-jump` flag, now removed): the jump was
+never inaccurate. On a 1.1M-character note it aimed at 416,676 and landed on 416,676 -- residual
+zero, twice in a row. The *hit* was at 399,334 by the time it arrived. The address had gone stale
+mid-flight.
+
+**The cause**: the target is derived from CM6's height map, which estimates every line it has not
+rendered. Travelling to the target is precisely what makes CM6 measure those lines, and measuring
+anything **above** the selection moves the selection. Net document height changed by only ~2k px
+across the journey while the cumulative correction above the hit was 17,342 px -- the exact distance
+the target moved. A second click, aimed at a document whose heights were now real, went straight
+there.
+
+**The fix**: the curtain already exists for the middle of a long journey, and nothing is visible
+while it is down. `scrollToQuantizedSmooth` now takes `resolveTargetUnderBridge`, parks the scroller
+on the destination while fully covered (which is what makes CM6 measure it), re-reads the target from
+the *document position*, and recomputes `beforeRampDownPx` from the corrected value. The ramp-down
+keeps its exact shape and duration; only its endpoints move, and both while the pane is covered.
+`resolveSelectionJumpTargetPx` was split out of the reconcile precisely so it can be asked twice.
+
+**Three things this got wrong first, all worth remembering**:
+
+- *The confirmation compared against the pre-journey target.* Meaningless in both directions: when
+  the engine corrected under the curtain, a perfect landing read as off by the correction and re-ran
+  needlessly; when it did not, a stale landing read as residual zero and no retry fired. Both were
+  measured in one trace, in consecutive jumps. It now resolves the target fresh after arrival.
+- *A park that ran out of cover abandoned the measurement it had already paid for.* Once parked, take
+  the answer every frame and keep the best one; commit whatever you have when cover ends. An early
+  answer beats no answer.
+- *Remaining cover was budgeted at an assumed 60fps.* The real journey burned two frames of budget
+  per frame and bailed out of a park it had already started. Frame counts must come from the frame
+  the engine actually got, not from a constant.
+
+**Generalize this**: when a scroll lands on the wrong content, ask whether the position was wrong or
+whether the *address* was, before touching the landing logic. They need opposite fixes, and a residual
+of zero cannot tell them apart.
+
+**Also**: the render view has the same class of problem and does **not** need this. It holds targets
+in character space (`previewCharPosition.ts`), so its address survives the measurement that
+invalidates every pixel. That is what that design buys.

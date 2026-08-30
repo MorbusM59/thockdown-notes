@@ -172,6 +172,26 @@ export interface EditorAdapter {
   // wrapped row's bounds" depends on line-wrapping layout only the editor
   // can reason about. Returns null when the adapter can't currently answer.
   resolveCaretHorizontalWrapRatio(): number | null;
+  // The span of 0-indexed source lines currently on screen, or null when the
+  // adapter can't answer yet. Block-granular by nature: a wrapped logical line
+  // whose first row is above the fold still counts as visible, because the
+  // editor's own height map answers in logical lines.
+  //
+  // An adapter primitive for the same reason the pair above are: only the
+  // editor knows how its lines map onto heights. The render view answers the
+  // same question through DocumentPosition.readVisibleSourceLineRange, and the
+  // two are deliberately the same shape so a caller can ask either one.
+  readVisibleSourceLineRange(): { fromLine: number; toLine: number } | null;
+  // Calls `listener` whenever the visible range may have moved -- today, on
+  // every scroll. Returns its own unsubscribe.
+  //
+  // Separate from the `onViewportChange` binding rather than folded into it:
+  // bindings are a single object owned by one consumer (the section mount),
+  // and this is a signal several unrelated features want at once. A listener
+  // set is the honest shape for that; routing a second consumer through the
+  // one binding would make the mount hook responsible for fanning out events
+  // it has no interest in.
+  subscribeToViewportChange(listener: () => void): () => void;
 }
 
 export interface EditorBindings {

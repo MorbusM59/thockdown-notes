@@ -747,7 +747,7 @@ export function CM6Editor({
   // applySnapshot, which needs to center a newly-applied selection (search
   // hits, go-to-start/end) in the viewport -- see its use in applySnapshot's
   // `snapshot.selection` handling.
-  const reconcileSelectionJumpScrollRef = useRef<((view: EditorView, instant?: boolean, align?: 'center' | 'top') => void) | null>(null);
+  const reconcileSelectionJumpScrollRef = useRef<((view: EditorView, instant?: boolean, align?: 'center' | 'top', passesLeft?: number) => void) | null>(null);
   // Read by the Ctrl+ArrowUp/Down keymap handler below (registered once at
   // view-construction time), same "stable ref to a closure that's recreated
   // every render" pattern as bindingsRef -- see navigateToFlaggedLine's own
@@ -983,6 +983,17 @@ export function CM6Editor({
   const scrollThumbTopPxRef = useRef(0);
   const scrollThumbHeightPxRef = useRef(0);
   const thumbRubberBandRafRef = useRef<number | null>(null);
+  /** Fanned out by the scroller's own scroll handler -- see the adapter's subscribeToViewportChange. */
+  const viewportListenersRef = useRef(new Set<() => void>());
+  // Reached through refs, not closed over, by the selection-jump reconcile:
+  // it lives inside the mount-once effect, whose closure is captured exactly
+  // once, so a direct reference would pin the first render's callbacks
+  // forever. Same pattern as syncCustomScrollbarRef right below them.
+  const readScrollbarGeometryRef = useRef<(() => ScrollbarGeometry | null) | null>(null);
+  const startThumbRubberBandRef = useRef<
+    ((timing: ScrollJourneyTiming, startTopPx: number, targetTopPx: number) => void) | null
+  >(null);
+  const stopThumbRubberBandRef = useRef<(() => void) | null>(null);
   const thumbHeightCommitRef = useRef(createCommittedThumbHeight());
   // Where a track click aimed the thumb, held until the reader scrolls
   // somewhere else.
@@ -1260,6 +1271,10 @@ export function CM6Editor({
   }, [syncCustomScrollbar]);
 
   useEffect(() => {
+    readScrollbarGeometryRef.current = readScrollbarGeometry;
+  }, [readScrollbarGeometry]);
+
+  useEffect(() => {
     const controller = scrollTransitionControllerRef.current;
     controller.setOnSettled(() => {
       syncCustomScrollbarRef.current?.({ force: true });
@@ -1336,6 +1351,11 @@ export function CM6Editor({
 
     thumbRubberBandRafRef.current = requestAnimationFrame(frame);
   }, [stopThumbRubberBand, syncCustomScrollbar]);
+
+  useEffect(() => {
+    startThumbRubberBandRef.current = startThumbRubberBand;
+    stopThumbRubberBandRef.current = stopThumbRubberBand;
+  }, [startThumbRubberBand, stopThumbRubberBand]);
 
   useEffect(() => stopThumbRubberBand, [stopThumbRubberBand]);
 
@@ -2940,9 +2960,21 @@ export function CM6Editor({
      * caged area ('top'), one line below the boundary. 'top' is for jumps whose
      * target is a heading -- see EditorSelectionScrollBehavior.
      */
-    const reconcileSelectionJumpScroll = (view: EditorView, instant = false, align: 'center' | 'top' = 'center') => {
-      selectionJumpReconcileGeneration += 1;
-      const myGeneration = selectionJumpReconcileGeneration;
+    /**
+     * Where the pane has to sit for the current selection to be caged.
+     *
+     * Split out from the reconcile below so it can be asked TWICE for one
+     * journey: once to aim, and once more from underneath the curtain, after
+     * arriving has made CM6 measure the lines it had only estimated.
+     *
+     * Measured live: aiming at a hit half a document away produced a target of
+     * 416,676, the journey landed on 416,676 exactly -- and the same hit was
+     * then at 399,334. The pixel was reached perfectly and had moved 17,342px
+     * while we travelled to it, because measuring the lines ABOVE the
+     * selection moves the selection. Every part of this has to be recomputed
+     * for that second answer, which is why it is a function and not a value.
+     */
+    const resolveSelectionJumpTargetPx = (view: EditorView, align: 'center' | 'top'): number | null => {
       const scroller = view.scrollDOM;
       const lineHeightPxNow = lineHeightPxRef.current;
       const scrollerRect = scroller.getBoundingClientRect();
@@ -2982,7 +3014,7 @@ export function CM6Editor({
         selectionHeightPx = Math.max(lineHeightPxNow, selectionRect.bottom - selectionRect.top);
       } else {
         const block = resolveSelectionBlockInScroll(view);
-        if (!block) return;
+        if (!block) return null;
         selectionTopInScroll = block.topInScroll;
         selectionHeightPx = Math.max(lineHeightPxNow, block.heightPx);
       }
@@ -3001,6 +3033,23 @@ export function CM6Editor({
         Math.min(maxScrollTopPx, Math.round(rawTargetScrollTopPx / lineHeightPxNow) * lineHeightPxNow),
       );
 
+      return targetScrollTopPx;
+    };
+
+    /**
+     * Places the selection in the caged middle ('center') or at the top of the
+     * caged area ('top'), one line below the boundary. 'top' is for jumps whose
+     * target is a heading -- see EditorSelectionScrollBehavior.
+     */
+    const reconcileSelectionJumpScroll = (view: EditorView, instant = false, align: 'center' | 'top' = 'center', passesLeft = 2) => {
+      selectionJumpReconcileGeneration += 1;
+      const myGeneration = selectionJumpReconcileGeneration;
+      const scroller = view.scrollDOM;
+      const lineHeightPxNow = lineHeightPxRef.current;
+
+      const targetScrollTopPx = resolveSelectionJumpTargetPx(view, align);
+      if (targetScrollTopPx === null) return;
+
       if (Math.abs(targetScrollTopPx - scroller.scrollTop) > 0.01) {
         if (instant) {
           // Land with no animation -- and cancel any in-flight one first: a
@@ -3008,22 +3057,82 @@ export function CM6Editor({
           // target on every frame, so a write landing mid-flight is erased on
           // the next one.
           cancelQuantizedSmoothScroll(scroller);
+          stopThumbRubberBandRef.current?.();
           const previousScrollBehavior = scroller.style.scrollBehavior;
           scroller.style.scrollBehavior = 'auto';
           scroller.scrollTop = targetScrollTopPx;
           scroller.style.scrollBehavior = previousScrollBehavior;
+          syncCustomScrollbarRef.current?.({ force: true });
         } else {
-          scrollToQuantizedSmooth(scroller, targetScrollTopPx, { lineHeightPx: lineHeightPxNow });
+          // The thumb travels with it. A jump to a search hit or a review flag
+          // crosses the same distance a click on the scrollbar track does, and
+          // it used to cross it without the scrollbar being told anything at
+          // all: the thumb followed raw scroll events, including the bridge's
+          // teleport across the cut, which is the one moment the reader must
+          // not be shown a literal reading of scrollTop. Same journey, same
+          // stretched thumb, same landing.
+          const startThumbTopPx = scrollThumbTopPxRef.current;
+          const geometry = readScrollbarGeometryRef.current?.() ?? null;
+          const timing = scrollToQuantizedSmooth(scroller, targetScrollTopPx, {
+            lineHeightPx: lineHeightPxNow,
+            // Asked again from under the curtain, once the destination has
+            // really been measured -- see the option's own note, and
+            // resolveSelectionJumpTargetPx for the measurement that made this
+            // necessary.
+            resolveTargetUnderBridge: () => resolveSelectionJumpTargetPx(view, align),
+          });
+          if (timing && geometry) {
+            const ratio = geometry.maxScrollTopPx > 0 ? targetScrollTopPx / geometry.maxScrollTopPx : 0;
+            const targetThumbTopPx = SCROLL_TRACK_EDGE_GAP_PX
+              + Math.round(geometry.maxThumbTravelPx * Math.max(0, Math.min(1, ratio)));
+            // The landing is where this journey was aimed, not what the height
+            // estimate says once it arrives -- see thumbLandingPinRef.
+            thumbLandingPinRef.current = { scrollTopPx: targetScrollTopPx, thumbTopPx: targetThumbTopPx };
+            startThumbRubberBandRef.current?.(timing, startThumbTopPx, targetThumbTopPx);
+          }
         }
       }
 
-      const scrollTopAfterWrite = scroller.scrollTop;
-      requestAnimationFrame(() => {
+      // Confirm the landing against a FRESHLY RESOLVED target, once the
+      // journey is over.
+      //
+      // Comparing against the target captured before the journey is what this
+      // used to do, and it is meaningless twice over. The engine may have
+      // corrected the destination under the curtain, so a landing that is
+      // perfect reads as off by the correction; and when the correction did
+      // not happen, a landing that is genuinely stale reads as residual zero
+      // and no retry fires. Both were measured live in the same trace -- one
+      // jump re-ran for a correction that had already been applied, and the
+      // next stopped 260px short reporting a residual of nothing.
+      //
+      // Asking where the selection is NOW is the only question worth asking:
+      // if the pane is where it should be, there is nothing to do, whatever
+      // anyone believed on the way here.
+      //
+      // It waits for the journey to end rather than checking during it. An
+      // earlier version compared against the position one frame after the
+      // write and re-ran whenever it had moved -- which during an animation is
+      // every frame, so a jump re-planned itself the whole way down. It
+      // survived only because the engine no-ops on an unchanged target.
+      //
+      // Bounded, because a correction needing more than a couple of passes is
+      // not converging.
+      let attemptsLeft = passesLeft;
+      const confirmLanding = () => {
         if (selectionJumpReconcileGeneration !== myGeneration) return;
-        if (Math.abs(scroller.scrollTop - scrollTopAfterWrite) > 0.01) {
-          reconcileSelectionJumpScroll(view, instant, align);
+        if (isQuantizedSmoothScrollActive(scroller)) {
+          requestAnimationFrame(confirmLanding);
+          return;
         }
-      });
+        const landedTargetPx = resolveSelectionJumpTargetPx(view, align);
+        if (landedTargetPx !== null
+          && attemptsLeft > 0
+          && Math.abs(scroller.scrollTop - landedTargetPx) > 0.01) {
+          attemptsLeft -= 1;
+          reconcileSelectionJumpScroll(view, instant, align, attemptsLeft);
+        }
+      };
+      requestAnimationFrame(confirmLanding);
     };
     reconcileSelectionJumpScrollRef.current = reconcileSelectionJumpScroll;
 
@@ -3847,6 +3956,7 @@ export function CM6Editor({
       scheduleCaretUpdate();
       scheduleSelectionHighlightUpdate();
       syncCustomScrollbar();
+      viewportListenersRef.current.forEach((listener) => listener());
     };
     view.scrollDOM.addEventListener('scroll', handleScroll, { passive: true });
 
@@ -5048,6 +5158,29 @@ export function CM6Editor({
         const columnFromLineStart = head - line.from;
         const columnWithinRow = columnFromLineStart % columnsPerRow;
         return Math.max(0, Math.min(1, columnWithinRow / columnsPerRow));
+      },
+      readVisibleSourceLineRange() {
+        const view = viewRef.current;
+        if (!view) return null;
+        const scroller = view.scrollDOM;
+        // Off CM6's own height map, not off the rendered rows: the map answers
+        // for lines that have never been rendered, which is the whole point at
+        // this document scale. Same primitive updateLineLayout's edge-line
+        // resolution uses, minus its DOM measurement and its setState.
+        const lineAtHeight = (heightPx: number) => {
+          const clamped = Math.max(0, Math.min(view.contentHeight, heightPx));
+          return view.state.doc.lineAt(view.lineBlockAtHeight(clamped).from).number - 1;
+        };
+        return {
+          fromLine: lineAtHeight(scroller.scrollTop),
+          toLine: lineAtHeight(scroller.scrollTop + scroller.clientHeight),
+        };
+      },
+      subscribeToViewportChange(listener: () => void) {
+        viewportListenersRef.current.add(listener);
+        return () => {
+          viewportListenersRef.current.delete(listener);
+        };
       },
     };
 
