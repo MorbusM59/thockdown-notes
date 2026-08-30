@@ -984,6 +984,29 @@ export function CM6Editor({
   const scrollThumbHeightPxRef = useRef(0);
   const thumbRubberBandRafRef = useRef<number | null>(null);
   const thumbHeightCommitRef = useRef(createCommittedThumbHeight());
+  // Where a track click aimed the thumb, held until the reader scrolls
+  // somewhere else.
+  //
+  // The thumb's POSITION is `scrollTop / (scrollHeight - clientHeight)`, and
+  // in this editor that denominator is not a constant: CM6 estimates the
+  // height of every line it has not measured yet and revises the estimate as
+  // the reader arrives. A journey down the document is exactly the event that
+  // makes it revise -- it lands on lines nobody had measured -- so the number
+  // the click divided by is not the number the landing divides by, and the
+  // thumb is drawn one last time a pixel or two off the destination it had
+  // already reached. Upward it does not happen (those lines are measured
+  // already) and in the render view it does not happen (real DOM heights
+  // throughout), which is precisely where the defect was reported. Row
+  // quantization adds its own half-row of the same error.
+  //
+  // So the arrival is remembered rather than recomputed: the pair is the
+  // scroll position the journey was aimed at and the thumb top the reader
+  // clicked, and while the scroller is standing on that position the thumb is
+  // drawn where it was sent. Any other scroll position and the pin does not
+  // match, so the ordinary ratio takes over again -- the same reasoning as
+  // thumbHeightCommitRef, which refuses to let the thumb's SIZE report on the
+  // app's changing knowledge of the document instead of on the reader.
+  const thumbLandingPinRef = useRef<{ scrollTopPx: number; thumbTopPx: number } | null>(null);
   const [isScrollThumbActive, setIsScrollThumbActive] = useState(false);
   const [isDraggingScrollThumb, setIsDraggingScrollThumb] = useState(false);
   // Read inside syncCustomScrollbar instead of closing over the state
@@ -1198,7 +1221,18 @@ export function CM6Editor({
     }
 
     const scrollRatio = geometry.maxScrollTopPx > 0 ? scroller.scrollTop / geometry.maxScrollTopPx : 0;
-    const nextThumbTop = SCROLL_TRACK_EDGE_GAP_PX + Math.round(geometry.maxThumbTravelPx * scrollRatio);
+    const derivedThumbTop = SCROLL_TRACK_EDGE_GAP_PX + Math.round(geometry.maxThumbTravelPx * scrollRatio);
+
+    // Standing where a click sent it: draw it there. See thumbLandingPinRef.
+    const pin = thumbLandingPinRef.current;
+    const isPinned = pin !== null && Math.abs(scroller.scrollTop - pin.scrollTopPx) < 0.5;
+    if (pin !== null && !isPinned) thumbLandingPinRef.current = null;
+    const nextThumbTop = isPinned
+      ? Math.max(
+        SCROLL_TRACK_EDGE_GAP_PX,
+        Math.min(pin.thumbTopPx, SCROLL_TRACK_EDGE_GAP_PX + geometry.maxThumbTravelPx),
+      )
+      : derivedThumbTop;
 
     setScrollThumbHeightPx(geometry.thumbHeightPx);
     setScrollThumbTopPx(nextThumbTop);
@@ -4673,6 +4707,13 @@ export function CM6Editor({
     // in flight; this is the same promise kept the cheap way, by finishing the
     // last few pixels once the height has stopped moving.
     const aimedAtEnd = ratio >= 0.999;
+    // The one scroll position at which the thumb belongs exactly where it was
+    // clicked, computed the same way the engine computes it -- see
+    // thumbLandingPinRef.
+    const landingScrollTopPx = Math.max(0, Math.min(
+      maxScrollTop,
+      quantizeScrollTopToRow(targetScrollTop, lineHeightPxRef.current),
+    ));
     // Held for a short window rather than applied once: CM6 keeps revising its
     // height for several frames after the journey ends (measured shrinking
     // 15340 -> 15132), so one correction lands on a number about to change.
@@ -4714,6 +4755,7 @@ export function CM6Editor({
     const goTo = (instant: boolean) => {
       const scrollDOM = viewRef.current?.scrollDOM;
       if (!scrollDOM) return;
+      thumbLandingPinRef.current = { scrollTopPx: landingScrollTopPx, thumbTopPx: clampedTop };
       if (instant) {
         cancelQuantizedSmoothScroll(scrollDOM);
         // The band has to let go here, or it goes on stretching toward a
