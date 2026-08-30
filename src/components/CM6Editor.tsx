@@ -2622,8 +2622,21 @@ export function CM6Editor({
      * correction able to put the reader back on it.
      */
     let lastPinnedEdge: 'top' | 'bottom' | null = null;
+    /**
+     * How many times the current keypress has already re-derived.
+     *
+     * The follow-up below re-enters this function, which schedules another
+     * follow-up, so a drift that cannot be fully corrected would re-derive on
+     * every frame for as long as the note stayed open. A fresh keypress
+     * resets this; a handful of corrections is plenty for a revision to
+     * settle, and stopping is better than spinning.
+     */
+    let repinDepth = 0;
+    const MAX_REPIN_DEPTH = 4;
 
     const reconcileCagedScroll = (view: EditorView, repinEdge?: 'top' | 'bottom') => {
+      // A fresh keypress resets the budget; a re-derive spends one.
+      repinDepth = repinEdge ? repinDepth + 1 : 0;
       reconcileGeneration += 1;
       const myGeneration = reconcileGeneration;
       const scroller = view.scrollDOM;
@@ -2744,27 +2757,58 @@ export function CM6Editor({
 
       requestAnimationFrame(() => {
         if (reconcileGeneration !== myGeneration) return;
-        if (cageTraceOn() && Math.abs(scroller.scrollTop - scrollTopAfterWrite) > 0.01) {
+
+        // WATCH THE CARET, NOT JUST THE SCROLL POSITION.
+        //
+        // Only reacting to scrollTop moving was too narrow, and the reporter's
+        // trace showed why: a press that visibly put the caret two rows down
+        // the pane produced no entry here at all. A height-map revision that
+        // changes heights BETWEEN the top of the viewport and the caret moves
+        // where the caret sits on screen while leaving scrollTop exactly where
+        // we left it -- nothing to notice, so nothing was noticed, and the
+        // reader was left looking at a caret that had walked off its edge.
+        //
+        // The caret's distance from the edge it was resting against is the
+        // thing the reader actually sees, so that is what is checked.
+        const scrollMovedPx = scroller.scrollTop - scrollTopAfterWrite;
+        let caretDriftPx = 0;
+        if (lastPinnedEdge) {
+          const settledSelection = window.getSelection();
+          const settledRect = settledSelection && settledSelection.rangeCount > 0
+            ? readSelectionRect(settledSelection, lineHeightPxNow, view.contentDOM)
+            : null;
+          if (settledRect) {
+            const settledCaretTopInViewportPx = settledRect.top - scroller.getBoundingClientRect().top;
+            const restingTopInViewportPx = lastPinnedEdge === 'top'
+              ? topBoundaryPxRef.current + rowPhaseOffsetPxNow
+              : Math.max(
+                topBoundaryPxRef.current,
+                scroller.clientHeight - bottomBoundaryPxRef.current - lineHeightPxNow,
+              );
+            caretDriftPx = settledCaretTopInViewportPx - restingTopInViewportPx;
+          }
+        }
+
+        const caretDrifted = Math.abs(caretDriftPx) > lineHeightPxNow / 2;
+        const scrollMoved = Math.abs(scrollMovedPx) > 0.01;
+        if (!scrollMoved && !caretDrifted) return;
+        if (repinDepth >= MAX_REPIN_DEPTH) {
+          if (cageTraceOn()) {
+            console.log(`[cage]    gave up re-deriving after ${MAX_REPIN_DEPTH} attempts -- caret still ${Math.round(caretDriftPx)}px off the ${lastPinnedEdge ?? 'unpinned'} edge`);
+          }
+          return;
+        }
+
+        if (cageTraceOn()) {
           console.log(
-            `[cage]    settled: CM6 moved it again by ${Math.round(scroller.scrollTop - scrollTopAfterWrite)}px`
-            + ` (${((scroller.scrollTop - scrollTopAfterWrite) / lineHeightPxNow).toFixed(2)} rows) -- re-deriving`,
+            `[cage]    settled: scroll moved ${Math.round(scrollMovedPx)}px`
+            + ` (${(scrollMovedPx / lineHeightPxNow).toFixed(2)}r),`
+            + ` caret drifted ${Math.round(caretDriftPx)}px`
+            + ` (${(caretDriftPx / lineHeightPxNow).toFixed(2)}r) off the ${lastPinnedEdge ?? 'unpinned'} edge`
+            + ` -- re-deriving${lastPinnedEdge ? ` and re-pinning ${lastPinnedEdge}` : ''}`,
           );
         }
-        // CM6 moved it after we did -- it has learned real heights for text
-        // that was only estimated and shifted the scroller to keep its anchor
-        // still. That shift is an arbitrary sub-row amount, because positions
-        // inside an unmeasured gap are interpolated by CHARACTER count and
-        // come out fractional, while every real line height is an exact
-        // multiple of the row. Re-deriving from the settled caret puts the
-        // reader back on a whole row, so a keypress moves the text by exactly
-        // one row or none, whatever the revision cost.
-        if (Math.abs(scroller.scrollTop - scrollTopAfterWrite) > 0.01) {
-          // CM6 moved it after we did, which means it compensated for a
-          // height-map revision. Hand the edge the reader was resting against
-          // back to the re-derive, so it restores that rather than accepting
-          // wherever the compensation happened to leave the caret.
-          reconcileCagedScroll(view, lastPinnedEdge ?? undefined);
-        }
+        reconcileCagedScroll(view, lastPinnedEdge ?? undefined);
       });
     };
 
