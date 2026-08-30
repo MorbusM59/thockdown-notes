@@ -30,6 +30,12 @@ One command: `npm run release` (patch bump), or `-- minor` / `-- major` / `-- 0.
 
   If you're adding a new instant menu-state toggle or a new persisted field, both halves are required, not optional groundwork to skip.
 
+## Diagnostic traces (opt-in, cost nothing when off)
+Three `localStorage` flags turn on traces built for defects that only reproduce in a real session. Each attaches nothing when unset; set the flag, reproduce, read, unset.
+- `thockdown:debug-cage-state` — one line per keypress from the edit view's caret-cage reconcile: where the caret sat, what CM6 moved on its own (its height-map revision compensation), the height change, the target, what was written, and scroll/height/text rows separately. **Text movement is scroll movement minus height change** — reading the scroll number alone will mislead you, and did for most of a session. Also buffered on `window.__cageTrace` (last 400), because a console filter or another flag's flood will otherwise hide the one line you need: `copy(window.__cageTrace.join('\n'))`.
+- `thockdown:debug-focus` (`src/dev/focusDiagnostics.ts`) — every mousedown in the capture phase with `defaultPrevented`, what holds focus one frame and one tick later, and every focusin/focusout naming both parties and their section column.
+- `thockdown:debug-input-lag` — the pre-existing keystroke/scroll-sync trace. Loud; turn it OFF before reading either of the others.
+
 ## Verification rigor: match the size of the change
 Two tiers, chosen by judgment, not by rote:
 - **Substantial/structural work** (new features, architecture or contract changes, cross-cutting refactors, anything touching editor/scroll/performance-critical code): gold standard. Live-browser Playwright verification (not just code reading), the full existing regression-script suite, `npm test`, `tsc`/`lint`, and an A/B check (e.g. `git stash`) proving a fix's own test actually fails without it. Update the relevant living doc/JSDoc history.

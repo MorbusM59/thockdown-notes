@@ -86,6 +86,37 @@ The goal is deterministic behavior with one source of truth per interaction phas
   correctly stable, it never has, so the animation's last frame stays on screen
   for good.
 
+### 3e2. A keypress moves the text by whole rows, and never by a revision's cost
+- **The invariant.** One arrow press moves the TEXT by exactly zero rows or
+  exactly one row, decided only by whether the caret has reached the cage's
+  edge -- never by anything about measurement. It is an invariant about where
+  CHARACTERS sit, not about `scrollTop`: when a height-map revision changes the
+  height of content above the viewport, holding the text still *requires*
+  `scrollTop` to change, by exactly the revision's cost.
+- Therefore `scrollTop` is the wrong thing to measure, and measuring it is how
+  this hid for so long. A press reporting a scroll delta of -208px may have
+  moved the reader one row while absorbing a -182px revision, which is right,
+  or eight rows, which is not. Only text movement -- scroll delta minus height
+  change -- answers the question, and the trace reports both halves for that
+  reason.
+- **A revision above the viewport is the only thing that displaces a reader.**
+  Heights learned *below* the viewport do not move what is above them, so
+  downward travel is correct by construction and must be left alone. Correcting
+  it anyway broke it outright: the bottom resting position is screen-anchored
+  (pane height minus two insets) rather than a row, so a real row can never
+  land on it, the caret sits permanently short, and a correction firing on that
+  residual fights every keypress. The correction is top-edge only.
+- **CM6's anchor is not the reader's caret.** Its compensation holds *its own*
+  anchor still, which can carry the caret clean across the viewport -- measured,
+  a 442px revision moved it from the top edge to the bottom. So a check that
+  asks only "is the caret inside the cage" is satisfied by a caret that has been
+  thrown the width of the pane. Remember which edge the reader was travelling
+  along and restore that; and let only a real keypress set it, since a
+  correction that redefines the edge oscillates forever.
+- A "no edge" answer is an answer. A caret comfortably inside the cage is not a
+  missing reading, and treating it as one leaves the last edge standing, so
+  every later press in any direction drags the caret back to it.
+
 ### 3f. A journey in flight is not interruptible, except to end it
 - While a scroll is travelling, an ordinary click on the track is ignored. A
   second journey would inherit the stretched thumb as its own base size and
