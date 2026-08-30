@@ -2689,7 +2689,16 @@ export function CM6Editor({
         );
         targetScrollTopPx = caretTopInScroll - lastRowTopOffsetPx;
       }
-      if (pinnedEdge) lastPinnedEdge = pinnedEdge;
+      // Only a real keypress may change which edge the reader is travelling
+      // along. A correction must never redefine it, and letting it do so was
+      // catastrophic: a revision worth 130,754px left the caret at row 13.19,
+      // below the cage's bottom, so the natural computation for that run
+      // answered "bottom" -- and recording it meant every following correction
+      // pinned the caret to the BOTTOM edge, on a reader who was travelling
+      // up. It then oscillated, a row at a time, forever: each held keypress
+      // reset the re-derive budget and fed the next cycle. The caret sat at
+      // row 12.19 and would not come back.
+      if (pinnedEdge && !repinEdge) lastPinnedEdge = pinnedEdge;
 
       // INSTANT, not animated. This is quantized movement of one row in
       // response to one keypress; there is nothing to animate, and animating
@@ -2733,7 +2742,14 @@ export function CM6Editor({
       if (cageTraceOn()) {
         const cm6OfferPx = lastCageWrite ? Math.round(scrollTopBefore - lastCageWrite.scrollTopPx) : null;
         const heightDeltaPx = lastCageWrite ? Math.round(scrollHeightBefore - lastCageWrite.scrollHeightPx) : null;
-        const netTextRows = ((scrollTopAfterWrite - scrollTopBefore) + (cm6OfferPx ?? 0)) / lineHeightPxNow;
+        // Scroll movement is NOT text movement. When a revision adds height
+        // ABOVE the caret and we scroll down by the same amount to keep the
+        // caret on its edge, the text stays visually put -- so the honest
+        // reading subtracts the height change from the scroll change. Both are
+        // reported, since only their difference is what the reader sees.
+        const scrollRows = ((scrollTopAfterWrite - scrollTopBefore) + (cm6OfferPx ?? 0)) / lineHeightPxNow;
+        const heightRows = (heightDeltaPx ?? 0) / lineHeightPxNow;
+        const textRows = scrollRows - heightRows;
         cagePressIndex += 1;
         const line = `[cage] #${cagePressIndex}`
           + ` caretBefore=${Math.round(caretTopInScroll - scrollTopBefore)}px`
@@ -2743,7 +2759,7 @@ export function CM6Editor({
           + ` heightDelta=${heightDeltaPx === null ? 'n/a' : `${heightDeltaPx}px`}`
           + ` target=${Math.round(targetScrollTopPx)}`
           + ` wrote=${Math.round(scrollTopAfterWrite)}`
-          + ` netTextRows=${netTextRows.toFixed(2)}`
+          + ` scrollRows=${scrollRows.toFixed(2)} heightRows=${heightRows.toFixed(2)} textRows=${textRows.toFixed(2)}`
           + ` lineHeight=${lineHeightPxNow} topBoundary=${topBoundaryPxRef.current} phase=${rowPhaseOffsetPxNow}`;
         // Buffered as well as logged. The console is a hostile place to read a
         // trace from -- a stray filter, a "hide messages from this file", or
