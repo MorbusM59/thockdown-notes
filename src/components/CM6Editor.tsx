@@ -2619,13 +2619,43 @@ export function CM6Editor({
         rowPhaseOffsetPx: Math.round(lineHeightPxNow / 2),
       });
 
+      // INSTANT, not animated. This is quantized movement of one row in
+      // response to one keypress; there is nothing to animate, and animating
+      // it made the invariant unverifiable and the follow-up check useless.
+      //
+      // The old smooth write also fed itself: `scrollTopAfterWrite` was read
+      // immediately after starting an animation, so it captured the value
+      // BEFORE the animation moved anything, the frame check below always saw
+      // a difference, and the reconcile re-ran and re-planned the scroll
+      // against its own in-flight motion. With an instant write that value is
+      // final, so the check below now means the one thing worth reacting to:
+      // something ELSE moved the scroller -- which is CM6 compensating for a
+      // height-map revision (see EditorView's scrollAnchorPos/scrollAnchorHeight
+      // loop), the case this whole reconcile exists to land correctly.
       if (Math.abs(targetScrollTopPx - scroller.scrollTop) > 0.01) {
-        scrollToQuantizedSmooth(scroller, targetScrollTopPx, { lineHeightPx: lineHeightPxNow });
+        cancelQuantizedSmoothScroll(scroller);
+        const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+        const nextScrollTopPx = Math.max(0, Math.min(
+          quantizeScrollTopToRow(targetScrollTopPx, lineHeightPxNow),
+          maxScrollTopPx,
+        ));
+        const previousScrollBehavior = scroller.style.scrollBehavior;
+        scroller.style.scrollBehavior = 'auto';
+        scroller.scrollTop = nextScrollTopPx;
+        scroller.style.scrollBehavior = previousScrollBehavior;
       }
 
       const scrollTopAfterWrite = scroller.scrollTop;
       requestAnimationFrame(() => {
         if (reconcileGeneration !== myGeneration) return;
+        // CM6 moved it after we did -- it has learned real heights for text
+        // that was only estimated and shifted the scroller to keep its anchor
+        // still. That shift is an arbitrary sub-row amount, because positions
+        // inside an unmeasured gap are interpolated by CHARACTER count and
+        // come out fractional, while every real line height is an exact
+        // multiple of the row. Re-deriving from the settled caret puts the
+        // reader back on a whole row, so a keypress moves the text by exactly
+        // one row or none, whatever the revision cost.
         if (Math.abs(scroller.scrollTop - scrollTopAfterWrite) > 0.01) {
           reconcileCagedScroll(view);
         }
