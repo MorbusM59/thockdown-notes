@@ -4448,6 +4448,36 @@ export function CM6Editor({
     // Click travels, hold snaps -- see scrollTrackHold.ts. The same gesture as
     // the render view's scrollbar, quantized to the row grid here as every
     // other scroll in this editor is.
+    // The end of the track means the end of the DOCUMENT, and that is a fact
+    // about the text rather than about the layout. This target is a fraction
+    // of `scrollHeight`, which in this editor is an estimate CM6 revises as it
+    // measures real lines -- so the pixel the click aimed at stops being the
+    // end while the journey is still travelling to it. Measured on 1.5M
+    // characters: the first click landed 26px short, and scrollHeight itself
+    // moved by 26px between that click and a later one. The render view does
+    // not have this problem because it aims at a character offset and re-aims
+    // in flight; this is the same promise kept the cheap way, by finishing the
+    // last few pixels once the height has stopped moving.
+    const aimedAtEnd = ratio >= 0.999;
+    const landOnDocumentEnd = () => {
+      const scrollDOM = viewRef.current?.scrollDOM;
+      if (!scrollDOM) return;
+      const settledAt = scrollDOM.scrollTop;
+      requestAnimationFrame(() => {
+        const el = viewRef.current?.scrollDOM;
+        // Anything that moved the scroller since the journey ended is the
+        // reader, and the reader outranks this correction.
+        if (!el || Math.abs(el.scrollTop - settledAt) > 1) return;
+        const maxScrollTopPx = Math.max(0, el.scrollHeight - el.clientHeight);
+        if (el.scrollTop >= maxScrollTopPx - 0.5) return;
+        const previousBehavior = el.style.scrollBehavior;
+        el.style.scrollBehavior = 'auto';
+        el.scrollTop = maxScrollTopPx;
+        el.style.scrollBehavior = previousBehavior;
+        syncCustomScrollbarRef.current?.({ force: true });
+      });
+    };
+
     // See the twin of this in usePreviewScrollbar: a second click cannot
     // become a second journey while the thumb is stretched across the first,
     // or the new one takes that stretched span for its base size and grows
@@ -4471,6 +4501,7 @@ export function CM6Editor({
         scrollDOM.scrollTop = quantizeScrollTopToRow(targetScrollTop, lineHeightPxRef.current);
         scrollDOM.style.scrollBehavior = previousBehavior;
         syncCustomScrollbar({ force: true });
+        if (aimedAtEnd) landOnDocumentEnd();
         return;
       }
       const startThumbTopPx = scrollThumbTopPxRef.current;
@@ -4479,6 +4510,18 @@ export function CM6Editor({
         onStep: syncCustomScrollbar,
       });
       if (timing) startThumbRubberBand(timing, startThumbTopPx, clampedTop);
+      if (aimedAtEnd) {
+        const waitForArrival = () => {
+          const el = viewRef.current?.scrollDOM;
+          if (!el) return;
+          if (isQuantizedSmoothScrollActive(el)) {
+            requestAnimationFrame(waitForArrival);
+            return;
+          }
+          landOnDocumentEnd();
+        };
+        requestAnimationFrame(waitForArrival);
+      }
     };
 
     trackHoldCancelRef.current?.();

@@ -610,6 +610,48 @@ export function usePreviewScrollbar({
     // places, and on one still being sized up they landed VERY differently
     // (measured: a click at 30% on a just-opened note went to 13% of the
     // text).
+    // The end of the track means the end of the DOCUMENT. Everything between
+    // this click and the pixel it lands on -- the char target, the block
+    // offsets it is resolved against -- is derived from heights that are still
+    // estimates on a document nobody has read yet, and the error is not small:
+    // measured on 1.5M characters, the first click at the bottom of the track
+    // landed at 19% of the document instead of the end, intermittently (4px
+    // short on one run, 197,900px short on the next). The reader asked for the
+    // end, and the end is a fact about the text, not about how much of it has
+    // been measured -- so once the journey is over and the geometry has
+    // stopped moving, finish the trip.
+    const aimedAtEnd = ratio >= 0.999
+    const landOnDocumentEnd = () => {
+      const element = previewScrollRef.current
+      if (!element) return
+      const settledAt = element.scrollTop
+      requestAnimationFrame(() => {
+        const el = previewScrollRef.current
+        // Anything that moved the scroller since is the reader, who outranks
+        // this correction.
+        if (!el || Math.abs(el.scrollTop - settledAt) > 1) return
+        const maxScrollTopPx = Math.max(0, el.scrollHeight - el.clientHeight)
+        if (el.scrollTop >= maxScrollTopPx - 0.5) return
+        const previousBehavior = el.style.scrollBehavior
+        el.style.scrollBehavior = 'auto'
+        el.scrollTop = maxScrollTopPx
+        el.style.scrollBehavior = previousBehavior
+        syncPreviewCustomScrollbar({ force: true })
+      })
+    }
+    const landOnDocumentEndAfterJourney = () => {
+      const waitForArrival = () => {
+        const el = previewScrollRef.current
+        if (!el) return
+        if (isNonQuantizedSmoothScrollActive(el)) {
+          requestAnimationFrame(waitForArrival)
+          return
+        }
+        landOnDocumentEnd()
+      }
+      requestAnimationFrame(waitForArrival)
+    }
+
     // A journey already in flight. A second click cannot become a second
     // journey: the thumb is stretched across the first one, so the new one
     // would take that stretched span for its own base size and set off from
@@ -633,11 +675,13 @@ export function usePreviewScrollbar({
           stopThumbRubberBand()
           position.jumpToRatio(ratio)
           syncPreviewCustomScrollbar({ force: true })
+          if (aimedAtEnd) landOnDocumentEnd()
           return
         }
         const startThumbTopPx = previewScrollThumbTopRef.current
         const timing = position.travelToRatio(ratio)
         if (timing) startThumbRubberBand(timing, startThumbTopPx, clampedTop)
+        if (aimedAtEnd) landOnDocumentEndAfterJourney()
         return
       }
 
