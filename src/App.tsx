@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown'
 import { SidebarOptionsPanel } from './sidebar/SidebarOptionsPanel'
 import { AudioControls } from './components/AudioControls'
 import MouseCursorOverlay from './components/MouseCursorOverlay'
+import { installFocusDiagnostics } from './dev/focusDiagnostics'
 import { TooltipLayer } from './components/TooltipLayer'
 import { useWindowDragRegion } from './window/useWindowDragRegion'
 import './App.css'
@@ -1792,6 +1793,10 @@ async function hashNormalizedText(text: string): Promise<string> {
 
 function App() {
   useWindowDragRegion()
+
+  // Off unless localStorage['thockdown:debug-focus'] === '1'; attaches nothing
+  // otherwise. See src/dev/focusDiagnostics.ts for what it traces and why.
+  useEffect(() => { installFocusDiagnostics() }, [])
 
   const appShellRef = useRef<HTMLDivElement | null>(null)
   const windowControlsGridRef = useRef<HTMLElement | null>(null)
