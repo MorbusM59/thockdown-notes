@@ -791,6 +791,15 @@ export function CM6Editor({
   const cageTraceOn = () => (
     typeof window !== 'undefined' && window.localStorage.getItem('thockdown:debug-cage-state') === '1'
   );
+
+  /** Keeps the last 400 trace lines on `window.__cageTrace`, so they can be copied out in one go rather than scraped off the console. */
+  const appendCageTrace = (line: string) => {
+    if (typeof window === 'undefined') return;
+    const host = window as unknown as { __cageTrace?: string[] };
+    if (!host.__cageTrace) host.__cageTrace = [];
+    host.__cageTrace.push(line);
+    if (host.__cageTrace.length > 400) host.__cageTrace.splice(0, host.__cageTrace.length - 400);
+  };
   const debugCageStateEnabled = useRef(
     typeof window !== 'undefined' && window.localStorage.getItem('thockdown:debug-cage-state') === '1',
   ).current;
@@ -2674,13 +2683,12 @@ export function CM6Editor({
       //   target/wrote  what this reconcile asked for and what it left
       //   rows          net rows the TEXT moved, which is the invariant: one
       //                 keypress must be 0 or 1, never more
-      if (debugCageStateEnabled) {
+      if (cageTraceOn()) {
         const cm6OfferPx = lastCageWrite ? Math.round(scrollTopBefore - lastCageWrite.scrollTopPx) : null;
         const heightDeltaPx = lastCageWrite ? Math.round(scrollHeightBefore - lastCageWrite.scrollHeightPx) : null;
         const netTextRows = ((scrollTopAfterWrite - scrollTopBefore) + (cm6OfferPx ?? 0)) / lineHeightPxNow;
         cagePressIndex += 1;
-        console.log(
-          `[cage] #${cagePressIndex}`
+        const line = `[cage] #${cagePressIndex}`
           + ` caretBefore=${Math.round(caretTopInScroll - scrollTopBefore)}px`
           + ` (row ${((caretTopInScroll - scrollTopBefore - topBoundaryPxRef.current - rowPhaseOffsetPxNow) / lineHeightPxNow).toFixed(2)})`
           + ` scrollTopBefore=${Math.round(scrollTopBefore)}`
@@ -2689,8 +2697,14 @@ export function CM6Editor({
           + ` target=${Math.round(targetScrollTopPx)}`
           + ` wrote=${Math.round(scrollTopAfterWrite)}`
           + ` netTextRows=${netTextRows.toFixed(2)}`
-          + ` lineHeight=${lineHeightPxNow} topBoundary=${topBoundaryPxRef.current} phase=${rowPhaseOffsetPxNow}`,
-        );
+          + ` lineHeight=${lineHeightPxNow} topBoundary=${topBoundaryPxRef.current} phase=${rowPhaseOffsetPxNow}`;
+        // Buffered as well as logged. The console is a hostile place to read a
+        // trace from -- a stray filter, a "hide messages from this file", or
+        // another flag's flood, and the line you needed is the one that is not
+        // there. window.__cageTrace always has the last 400, whatever the
+        // console is doing:  copy(window.__cageTrace.join('\n'))
+        appendCageTrace(line);
+        console.log(line);
       }
       lastCageWrite = { scrollTopPx: scrollTopAfterWrite, scrollHeightPx: scroller.scrollHeight };
 
