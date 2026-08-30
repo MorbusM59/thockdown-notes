@@ -474,6 +474,49 @@ export function EditorSection({
     previewBlocksCacheRef,
   })
 
+  /**
+   * A section that has just become active must end up with a usable caret.
+   *
+   * KNOWN TO BE A GUARD, NOT A CURE. The reported defect is that a first
+   * click into a non-active section marks it active while
+   * `document.activeElement` stays on `<body>` -- no caret, and arrow keys
+   * nudge the pane instead of navigating, until a second click. Measured by
+   * the reporter; see TODO.md for what has been ruled out (DOM replacement,
+   * generic first-click behaviour, a race against the neighbouring render
+   * pane's scroll animation, and the runtime itself). The trigger is some
+   * accumulated session state -- it stopped reproducing after an app
+   * restart -- and has not been found, so this does not claim to fix it.
+   *
+   * What it does claim: activation and focus should not be able to disagree
+   * in the first place. `markSectionActive` only sets `activeSectionId`;
+   * nothing anywhere put focus in the newly active section, so ANY path that
+   * activates without focusing leaves the editor looking ready and not being
+   * ready. Closing that gap is right on its own terms.
+   *
+   * Deliberately narrow, so it cannot start stealing focus:
+   *  - only on the transition into active, never on later renders;
+   *  - only in edit mode, with a note open;
+   *  - and only when focus is not already inside this section. Clicking this
+   *    section's own chrome (a tab rename field, the chapter bar) focuses
+   *    something inside it, and that must keep working -- which is exactly
+   *    what the containment check preserves.
+   */
+  const wasSectionActiveRef = useRef(false)
+  useEffect(() => {
+    const isActive = sectionId === activeSectionId
+    const wasActive = wasSectionActiveRef.current
+    wasSectionActiveRef.current = isActive
+    if (!isActive || wasActive) return
+    if (isPreviewMode || !activeNoteId) return
+
+    const container = sectionContainerRef.current
+    if (!container) return
+    const focused = document.activeElement
+    if (focused && focused !== document.body && container.contains(focused)) return
+
+    scheduleFocusEditorInEditMode({ restoreSelection: true })
+  }, [sectionId, activeSectionId, isPreviewMode, activeNoteId, scheduleFocusEditorInEditMode, sectionContainerRef])
+
   const getActiveNoteLiveText = useCallback(() => (
     latestEditorTextRef.current || activeNoteText
   ), [activeNoteText, latestEditorTextRef])
