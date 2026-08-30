@@ -57,6 +57,7 @@ import type { PreviewHeightModel, PreviewHeightSample } from './previewHeightMod
 import { countWrappedLines, resolveThumbLineRatio } from '../editor/scrollThumbMetrics'
 import {
   buildBlockCharOffsets,
+  findBlockAtPixel,
   resolvePreviewCharScrollOffset,
   resolvePreviewCharViewport,
 } from './previewCharPosition'
@@ -1703,6 +1704,122 @@ export function usePreviewMarkdownRendering({
       isContinuous() ? readContinuousRatios()?.thumbRatio ?? null : readChunkedThumbRatio()
     )
 
+    /**
+     * A source line's position in the block/character space everything else
+     * here speaks, interpolated through the block that owns it.
+     *
+     * Block granularity alone is not enough: a hit two thirds of the way down
+     * a long paragraph would be aimed at that paragraph's first line, and on
+     * a tall block that is most of a screen out. The fraction is taken in
+     * lines rather than characters because a source line is what the caller
+     * has and what the block records.
+     */
+    const charForSourceLine = (sourceLine: number): number | null => {
+      const blocks = previewBlocksRef.current
+      const offsets = blockCharOffsetsRef.current
+      if (!offsets || offsets.length < 2 || blocks.length === 0) return null
+
+      const index = resolvePreviewBlockIndexForSourceLine(blocks, sourceLine)
+      if (index < 0 || index + 1 >= offsets.length) return null
+
+      const block = blocks[index]
+      const blockChars = offsets[index + 1] - offsets[index]
+      const blockLines = block.text.split('\n').length
+      const linesIn = Math.max(0, sourceLine - block.startLine)
+      const fraction = blockLines > 0 ? Math.min(1, linesIn / blockLines) : 0
+      return offsets[index] + (blockChars * fraction)
+    }
+
+    const ratioForSourceLine = (sourceLine: number, leadViewportFraction = 0): number | null => {
+      const scroller = previewScrollRef.current
+      const charOffset = charForSourceLine(sourceLine)
+      if (!scroller || charOffset === null) return null
+
+      // The same preparation scrollPreviewToSourceLine documents at length,
+      // and for the same reason: every offset read below is only as good as
+      // the estimate tier in force when it is read, and entering render view
+      // is exactly the moment the good tiers are empty. Populate them, make
+      // the virtualizer ask again, and refuse to answer on a guess -- callers
+      // retry, and one frame later the answer is real.
+      if (!readLineMetricsRef.current?.()) return null
+      virtualizer.measure()
+
+      // Both strategies back the target off by the same fraction of a screen,
+      // each in its own units -- the whole point of doing it here rather than
+      // correcting the pixels afterwards is that the arrival is already right
+      // and there is nothing left to nudge.
+      if (isContinuous()) {
+        const offset = resolvePreviewCharScrollOffset({
+          offsets: blockCharOffsetsRef.current,
+          measurements: readBlockMeasurements(),
+          charOffset,
+        })
+        if (offset === null) return null
+        const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+        if (!(maxScrollTopPx > 0)) return 0
+        const lead = scroller.clientHeight * leadViewportFraction
+        return Math.min(1, Math.max(0, (offset - lead) / maxScrollTopPx))
+      }
+
+      const viewport = readCharViewport()
+      const thumbRatio = readChunkedThumbRatio()
+      if (!viewport || thumbRatio === null) return null
+      return resolveChunkedScrollRatio({
+        startChar: Math.max(0, charOffset - (viewport.visibleChars * leadViewportFraction)),
+        totalChars: viewport.totalChars,
+        thumbRatio,
+      })
+    }
+
+    const readVisibleSourceLineRange = (): { fromLine: number; toLine: number } | null => {
+      const scroller = previewScrollRef.current
+      const blocks = previewBlocksRef.current
+      if (!scroller || blocks.length === 0) return null
+
+      const measurements = readBlockMeasurements()
+      if (measurements.length === 0) return null
+
+      const clampIndex = (index: number) => Math.min(blocks.length - 1, Math.max(0, index))
+      const firstIndex = clampIndex(findBlockAtPixel(measurements, scroller.scrollTop))
+      const lastIndex = clampIndex(findBlockAtPixel(measurements, scroller.scrollTop + scroller.clientHeight))
+
+      const lastBlock = blocks[lastIndex]
+      const lastBlockLines = lastBlock.text.split('\n').length
+      return {
+        fromLine: blocks[firstIndex].startLine,
+        toLine: lastBlock.startLine + Math.max(0, lastBlockLines - 1),
+      }
+    }
+
+    const ratioForScrollOffsetPx = (offsetPx: number): number | null => {
+      const scroller = previewScrollRef.current
+      if (!scroller) return null
+
+      if (isContinuous()) {
+        const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+        if (!(maxScrollTopPx > 0)) return 0
+        return Math.min(1, Math.max(0, offsetPx / maxScrollTopPx))
+      }
+
+      // Through resolvePreviewCharViewport rather than a conversion of its
+      // own: it is the same pixel-to-character mapping the live reading uses,
+      // so this stays the inverse of resolveChunkedTarget by construction
+      // instead of by two functions agreeing to stay in step.
+      const at = resolvePreviewCharViewport({
+        offsets: blockCharOffsetsRef.current,
+        measurements: readBlockMeasurements(),
+        scrollTop: offsetPx,
+        clientHeight: scroller.clientHeight,
+      })
+      const thumbRatio = readChunkedThumbRatio()
+      if (!at || thumbRatio === null) return null
+      return resolveChunkedScrollRatio({
+        startChar: at.startChar,
+        totalChars: at.totalChars,
+        thumbRatio,
+      })
+    }
+
     const resolveChunkedTarget = (ratio: number) => {
       const viewport = readCharViewport()
       const thumbRatio = readChunkedThumbRatio()
@@ -1724,6 +1841,12 @@ export function usePreviewMarkdownRendering({
       },
 
       readThumbRatio,
+
+      ratioForSourceLine,
+
+      readVisibleSourceLineRange,
+
+      ratioForScrollOffsetPx,
 
       // Chunked ratios are line-based and final from the first answer.
       // Continuous ones are read off a scrollHeight that is only true once
@@ -1755,12 +1878,14 @@ export function usePreviewMarkdownRendering({
     }
   }, [
     previewScrollRef,
+    readBlockMeasurements,
     readCharViewport,
     readLineMetrics,
     scrollToChar,
     smoothScrollToChar,
     virtualizer,
     previewBlockTextLengthRef,
+    previewBlocksRef,
   ])
 
   useLayoutEffect(() => {

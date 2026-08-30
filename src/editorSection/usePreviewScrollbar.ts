@@ -305,6 +305,62 @@ export function usePreviewScrollbar({
 
   useEffect(() => stopThumbRubberBand, [stopThumbRubberBand])
 
+  /**
+   * The thumb top a ratio corresponds to. The one conversion the track click
+   * and a travel started from elsewhere have to agree on, or the band sets off
+   * for a destination the sync does not put it at.
+   */
+  const resolveThumbTopForRatio = useCallback((ratio: number): number => {
+    const track = previewScrollbarTrackRef.current
+    const trackHeight = track?.clientHeight ?? 0
+    const usableTrackHeight = Math.max(0, trackHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2))
+    const maxThumbTop = Math.max(0, usableTrackHeight - previewScrollThumbHeightRef.current)
+    return SCROLL_TRACK_EDGE_GAP_PX + Math.round(maxThumbTop * clamp(ratio, 0, 1))
+  }, [])
+
+  /**
+   * Travel to a ratio exactly as a click on the track would.
+   *
+   * Published so that everything with a reason to move the pane a long way --
+   * a search hit, an anchor -- gets the journey the scrollbar already has:
+   * the bridge over the cut, the thumb stretched across it, the landing. The
+   * alternative each such caller kept reinventing was a scroll of its own
+   * followed by a correction, and a correction is exactly what the reader sees
+   * as the pane arriving twice.
+   *
+   * A journey already in flight is ENDED first rather than refused. The track
+   * click refuses a second click for a real reason -- the thumb is stretched
+   * across the first journey, and a second would take that stretched span for
+   * its own base size -- but a reader clicking a second search hit is asking
+   * for that hit, not repeating themselves, and dropping the click would be
+   * the worse answer. Cancelling the scroll, releasing the band and forcing
+   * the sync puts the thumb back at its committed size on the position it has
+   * actually reached, which is the honest base for the next journey.
+   */
+  const travelPreviewToRatio = useCallback((ratio: number): boolean => {
+    const scroller = previewScrollRef.current
+    const position = previewDocumentPositionRef?.current
+    if (!scroller || !position) return false
+
+    if (rubberBandRafRef.current !== null || isNonQuantizedSmoothScrollActive(scroller)) {
+      cancelNonQuantizedSmoothScroll(scroller)
+      stopThumbRubberBand()
+      syncPreviewCustomScrollbar({ force: true })
+    }
+
+    const startThumbTopPx = previewScrollThumbTopRef.current
+    const timing = position.travelToRatio(ratio)
+    if (timing) startThumbRubberBand(timing, startThumbTopPx, resolveThumbTopForRatio(ratio))
+    return true
+  }, [
+    previewScrollRef,
+    previewDocumentPositionRef,
+    resolveThumbTopForRatio,
+    startThumbRubberBand,
+    stopThumbRubberBand,
+    syncPreviewCustomScrollbar,
+  ])
+
   const previewScrollFromThumbTop = useCallback((thumbTopPx: number) => {
     const scroller = previewScrollRef.current
     const track = previewScrollbarTrackRef.current
@@ -1095,5 +1151,6 @@ export function usePreviewScrollbar({
     handlePreviewThumbMouseDown,
     handlePreviewScroll,
     blockPreviewEditMutation,
+    travelPreviewToRatio,
   }
 }

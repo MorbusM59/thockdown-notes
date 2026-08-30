@@ -77,6 +77,50 @@ export interface DocumentPosition {
    * source text, which no amount of measuring will revise.
    */
   isThumbRatioSettled: () => boolean
+  /**
+   * Where a line of the SOURCE text sits, as a ratio.
+   *
+   * The one place a caller is allowed to name a location rather than a
+   * fraction, because some callers genuinely have one: a search hit, an
+   * anchor, a restored reading position. It answers in the same currency
+   * everything else here does, so `travelToRatio`/`jumpToRatio` take the
+   * answer unchanged and the caller still never learns whether this document
+   * is measured or modelled underneath.
+   *
+   * `leadViewportFraction` is how much of a screen to leave ABOVE the line on
+   * arrival -- 0 puts it flush against the top edge, which is technically
+   * correct and horrible to read. Expressed as a fraction of the viewport
+   * rather than in pixels so it means the same thing on both strategies.
+   *
+   * Null when the document cannot place the line yet, which is "not yet"
+   * rather than "the top" -- a caller handed 0 would travel confidently to
+   * the wrong end.
+   */
+  ratioForSourceLine: (sourceLine: number, leadViewportFraction?: number) => number | null
+  /**
+   * The span of SOURCE lines the reader can currently see, inclusive.
+   *
+   * The reading twin of `ratioForSourceLine`, and the same exception applies:
+   * it answers in locations because the question is about locations, and both
+   * strategies answer it the same way -- from the blocks the viewport covers.
+   * Block-granular by nature, so a block straddling the viewport edge counts
+   * as visible in full; nothing that depends on this needs finer than that.
+   *
+   * Null while the pane cannot say -- no blocks, or nothing measured yet.
+   */
+  readVisibleSourceLineRange: () => { fromLine: number; toLine: number } | null
+  /**
+   * The ratio that lands the viewport on an exact pixel offset in the pane.
+   *
+   * For the caller that has already measured where it wants to be -- a match
+   * whose element is on screen, so its position is known rather than
+   * modelled. Going back out through a ratio rather than writing `scrollTop`
+   * is what keeps such a caller on the same journey as everything else, and
+   * the conversion is the exact inverse of the one `travelToRatio` runs, so
+   * the pixel asked for is the pixel arrived at -- with nothing left over to
+   * correct afterwards.
+   */
+  ratioForScrollOffsetPx: (offsetPx: number) => number | null
   /** Put the viewport at this ratio now, with no animation. */
   jumpToRatio: (ratio: number) => void
   /**

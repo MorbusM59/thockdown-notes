@@ -398,26 +398,38 @@
 }
 
 .notes-list.date-view  { overflow-y: hidden; }
-.notes-list.tree-view  { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-.notes-list.find-view  { flex: 1 1 auto; min-height: 0; overflow-y: auto; gap: var(--spacing-regular); }
+.notes-list.tree-view,
+.notes-list.find-view  { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 
 .find-hit-item {
   width: 100%;
   display: block;
-  padding: var(--spacing-large);
+  padding: var(--spacing-regular) var(--spacing-large);
+  border: 1px solid var(--color-border-light-70);
+  background: var(--bg-menu-card);
+  box-shadow: var(--box-shadow-regular);
   border-radius: var(--border-radius-regular);
-  border: 1px solid #d2cec9;
-  background: #ffffff9e;
-  color: var(--color-text-base);
   text-align: left;
-  font-size: calc(11px * var(--ui-font-scale));
-  line-height: 1.45;
+  font-size: calc(12px * var(--ui-font-scale));
+  line-height: 1.2;
+  font-style: italic;
+  font-weight: 100;
 }
-.find-hit-item:hover {
-  background: #fffc;
+/* A hit the reader can already see in the pane. Marked on the card rather
+   than only in the text so the list reads as a map of the document: these
+   few are where you are, the rest are elsewhere. Deliberately a quiet
+   border/background shift and not the accent colour -- being on screen is a
+   fact about position, not a selection the reader made. */
+.find-hit-item.is-in-view {
+  filter: var(--filter-highlight);
+}
+.find-hit-item:hover,
+.find-hit-item.active {
+  border: 1px solid var(--color-border-light-90);
+  background: var(--bg-menu-card-active);
 }
 .find-hit-item:focus-visible {
-  outline: 1px solid #8d7a68;
+  outline: 1px solid var(--color-border-dark-90);
   outline-offset: 1px;
 }
 .find-hit-snippet {

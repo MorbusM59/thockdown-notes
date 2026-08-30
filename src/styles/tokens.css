@@ -129,6 +129,8 @@
   /* Filters */
   --filter-primed-delete:  invert(1) sepia() contrast(0.5) brightness(2);
   --filter-primed-archive: sepia() grayscale();
+  --filter-highlight:  grayscale() sepia() invert(1) contrast(0.6) brightness(2);
+  --filter-search-hit:  grayscale() ;
 
   /* ---------------------------------------------------------------------------
      1b. Shadow System

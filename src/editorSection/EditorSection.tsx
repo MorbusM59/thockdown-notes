@@ -1477,6 +1477,7 @@ export function EditorSection({
     handlePreviewThumbMouseDown,
     handlePreviewScroll,
     blockPreviewEditMutation,
+    travelPreviewToRatio,
   } = usePreviewScrollbar({
     isPreviewMode,
     isPreviewScrollInteractionBlocked: editorSectionMountRest.isPreviewScrollInteractionBlocked,
@@ -1493,12 +1494,15 @@ export function EditorSection({
   })
 
   const {
+    visibleDocumentFindHitRange,
     handleJumpToDocumentFindHit,
     replaceDocumentFindHit,
     replaceAllDocumentFindHits,
   } = useDocumentFindNavigation({
     previewScrollRef,
     previewScrollToSourceLineRef: editorSectionMountRest.previewScrollToSourceLineRef,
+    previewDocumentPositionRef,
+    travelPreviewToRatio,
     documentFindDirective,
     documentFindHits,
     effectiveCaseSensitive,
@@ -1752,6 +1756,7 @@ export function EditorSection({
     preserveCase,
     documentFindDirective,
     documentFindHits,
+    visibleDocumentFindHitRange,
     handleJumpToDocumentFindHit,
     replaceDocumentFindHit,
     replaceAllDocumentFindHits,

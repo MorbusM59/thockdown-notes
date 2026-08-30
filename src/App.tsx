@@ -9065,17 +9065,28 @@ ${markdownHtml}
                         className="notes-list find-view thockdown-custom-scrollbar"
                         ref={setSidebarTreeScrollerEl}
                       >
-                        {(activeSection?.documentFindHits ?? []).map((hit, index) => (
+                        {(activeSection?.documentFindHits ?? []).map((hit, index) => {
+                          // Hits are in document order and the viewport is one
+                          // stretch of it, so "on screen" is a range rather
+                          // than a per-card lookup -- see
+                          // visibleDocumentFindHitRange.
+                          const visibleRange = activeSection?.visibleDocumentFindHitRange ?? null
+                          const isInView = visibleRange !== null
+                            && index >= visibleRange.from
+                            && index < visibleRange.to
+                          return (
                           <button
                             key={hit.id}
                             type="button"
-                            className="find-hit-item"
+                            className={`find-hit-item${isInView ? ' is-in-view' : ''}`}
                             onClick={() => getActiveSection()?.handleJumpToDocumentFindHit(hit)}
                             onContextMenu={(event) => {
                               event.preventDefault()
                               getActiveSection()?.replaceDocumentFindHit(hit)
                             }}
-                            data-tooltip={`Jump to occurrence ${index + 1}`}
+                            data-tooltip={isInView
+                              ? `Mark occurrence ${index + 1}, already on screen`
+                              : `Jump to occurrence ${index + 1}`}
                           >
                             <span className="find-hit-snippet">
                               {hit.hasSnippetPrefixEllipsis ? '... ' : ''}
@@ -9085,7 +9096,8 @@ ${markdownHtml}
                               {hit.hasSnippetSuffixEllipsis ? ' ...' : ''}
                             </span>
                           </button>
-                        ))}
+                          )
+                        })}
                         {(activeSection?.documentFindHits.length ?? 0) === 0 ? (
                           <div className="notes-empty-state">
                             {(activeSection?.documentFindQuery ?? '').trim()
