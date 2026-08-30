@@ -2574,39 +2574,87 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         }
       }
 
-      let attemptsLeft = 10
+      /**
+       * Scroll, look, RE-AIM -- on frames, not on commits.
+       *
+       * The scroll above resolves the target block's offset against heights
+       * that are still estimates for every block nobody has looked at, so on
+       * a large document it can stop enormously short: measured entering
+       * render view on a 200k-character note, aimed at source line 429 and
+       * landed on line 75. The block's element is then not mounted, because
+       * in a virtualized preview a block only mounts where the scroll
+       * actually reached -- so looking for it again cannot help, and looking
+       * is all this used to do.
+       *
+       * It also used to look on COMMIT notifications, which is the part that
+       * made it hopeless rather than merely insufficient: commits come from
+       * the preview re-rendering, and a preview that has settled in the wrong
+       * place has stopped re-rendering. The retry ran once or twice and then
+       * waited forever for a signal that was never coming again. (Re-aiming
+       * on that same commit signal was tried first and changed nothing, for
+       * exactly this reason.)
+       *
+       * Frames always come. Each re-aim is also a better-informed question
+       * than the last, because the blocks the previous attempt DID reach have
+       * been measured since, so the estimate of everything before the target
+       * improves and the aim crawls toward it. The loop ends the moment the
+       * target mounts -- which is the only outcome that proves the scroll
+       * arrived -- or when it runs out of frames, and it is bounded so a
+       * target that can never resolve cannot spin forever.
+       */
+      const MAX_SETTLE_FRAMES = 90
+      let framesLeft = MAX_SETTLE_FRAMES
+      let rafId: number | null = null
       let unsubscribeFromCommits: (() => void) | null = null
+
+      const stopWatching = () => {
+        unsubscribeFromCommits?.()
+        unsubscribeFromCommits = null
+        if (rafId !== null) {
+          cancelAnimationFrame(rafId)
+          rafId = null
+        }
+      }
 
       const attemptFindAndScroll = () => {
         if (cancelled || !container) {
-          unsubscribeFromCommits?.()
-          unsubscribeFromCommits = null
+          stopWatching()
           finishRestore()
           return
         }
 
         const target = findPreviewSourceAnchorElement(container, clampedSourceLine)
-        if (!target) {
-          if (attemptsLeft <= 0) {
-            unsubscribeFromCommits?.()
-            unsubscribeFromCommits = null
-            finishRestore()
-          }
-          attemptsLeft -= 1
+        if (target) {
+          stopWatching()
+          target.scrollIntoView({ block: 'start', inline: 'nearest' })
+          finishRestore()
           return
         }
 
-        unsubscribeFromCommits?.()
-        unsubscribeFromCommits = null
-        target.scrollIntoView({ block: 'start', inline: 'nearest' })
-        finishRestore()
+        if (framesLeft <= 0) {
+          debugLogScrollSync(`preview anchor never mounted: line=${clampedSourceLine} after ${MAX_SETTLE_FRAMES} frames`)
+          stopWatching()
+          finishRestore()
+          return
+        }
+        framesLeft -= 1
+
+        previewScrollToSourceLineRef.current?.(clampedSourceLine, { align: 'start' })
+        rafId = requestAnimationFrame(attemptFindAndScroll)
       }
 
-      unsubscribeFromCommits = previewSettleGateRef.current?.subscribeToCommit(attemptFindAndScroll) ?? null
-      registerRestoreCleanup(() => {
-        unsubscribeFromCommits?.()
-        unsubscribeFromCommits = null
-      })
+      // Commits are kept as a second signal -- when one does land it is the
+      // most likely frame for the target to have appeared -- but the frame
+      // loop is what guarantees the retry happens at all.
+      unsubscribeFromCommits = previewSettleGateRef.current?.subscribeToCommit(() => {
+        if (cancelled) return
+        const target = findPreviewSourceAnchorElement(container, clampedSourceLine)
+        if (!target) return
+        stopWatching()
+        target.scrollIntoView({ block: 'start', inline: 'nearest' })
+        finishRestore()
+      }) ?? null
+      registerRestoreCleanup(stopWatching)
       attemptFindAndScroll()
     }
 

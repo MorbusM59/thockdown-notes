@@ -735,9 +735,44 @@ export function usePreviewMarkdownRendering({
     scrollToFn,
   })
 
+  // readLineMetrics is defined further down (it depends on refs declared
+  // between here and there), so it is reached through a ref rather than
+  // moved -- a direct reference is a temporal dead zone error.
+  const readLineMetricsRef = useRef<(() => { documentLines: number; lineHeightPx: number } | null) | null>(null)
+
   const scrollPreviewToSourceLine = useCallback<PreviewScrollToSourceLineFn>((sourceLine, opts) => {
     const index = resolvePreviewBlockIndexForSourceLine(previewBlocksRef.current, sourceLine)
     if (index < 0) return false
+
+    // Ask for the line estimates BEFORE asking for an offset.
+    //
+    // `estimateSize` has three tiers -- the fitted model, lines x line
+    // height, and a flat per-block guess as a last resort -- and the offset
+    // this scroll lands on is only as good as the tier in force when it is
+    // computed. Toggling INTO render view is precisely the moment the top two
+    // are empty: the probe those estimates are measured from has only just
+    // mounted. So the flat guess answered, and it is not close. Measured
+    // entering render view on a 200k-character note, aimed at block 47:
+    // 47 blocks x 56px flat = 2632px, and the pane duly landed at 2607px --
+    // 8% of a document the reader was 45% through. Every symptom of the
+    // mode-toggle round trip followed from that one number.
+    //
+    // readLineMetrics populates the per-block estimates as a side effect and
+    // costs one pass over blocks it has already cached, so this is cheap. If
+    // the probe is not measurable yet it answers null, and refusing to scroll
+    // on a guess is the point: callers retry, and one frame later the answer
+    // is real.
+    if (!readLineMetricsRef.current?.()) return false
+
+    // Populating the estimates is not enough on its own: react-virtual has
+    // already cached the measurements it computed from whatever `estimateSize`
+    // said at the time, and improving what that function returns does not
+    // invalidate that cache. `measure()` is what makes it ask again. Without
+    // it the offset below is still the flat guess's answer, however good the
+    // estimates have since become -- which is why populating them alone
+    // changed nothing at all.
+    virtualizer.measure()
+
     virtualizer.scrollToIndex(index, { align: opts?.align ?? 'start', behavior: opts?.behavior })
     return true
   }, [virtualizer])
@@ -1577,6 +1612,13 @@ export function usePreviewMarkdownRendering({
     lineHeightEstimatesRef.current = perBlock
     return { documentLines, lineHeightPx }
   }, [previewBlocksRef])
+
+  // Published for scrollPreviewToSourceLine, which needs the per-block line
+  // estimates populated before it asks the virtualizer for an offset and is
+  // declared above this.
+  useLayoutEffect(() => {
+    readLineMetricsRef.current = readLineMetrics
+  }, [readLineMetrics])
 
   /**
    * Travels to a character position. Plans once; never re-aims.
