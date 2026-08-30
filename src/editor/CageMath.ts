@@ -29,6 +29,19 @@ interface ResolveCagedScrollTargetInput {
 
 interface ResolveCagedScrollTargetResult {
   targetScrollTopPx: number;
+  /**
+   * Which edge of the cage this call pinned the caret to, or null when the
+   * caret was already inside and only the scroll position was tidied.
+   *
+   * The caller needs this because a height-map revision can move the caret
+   * from one edge to the other WITHOUT taking it out of the cage -- measured
+   * live: a revision worth 442px moved the caret from row -0.81, just above
+   * the top edge, to row 13.19, at the bottom -- and a check that only asks
+   * "is the caret inside the cage" is satisfied by that and leaves it there.
+   * Remembering the edge is what lets the correction put the reader back
+   * where they were rather than wherever the revision dropped them.
+   */
+  pinnedEdge: 'top' | 'bottom' | null;
 }
 
 export function resolveCagedScrollTarget(
@@ -73,6 +86,7 @@ export function resolveCagedScrollTarget(
   const cageLastRowTopInScrollPx = scrollerScrollTopPx + lastRowTopOffsetPx;
 
   let targetScrollTopPx = scrollerScrollTopPx;
+  let pinnedEdge: 'top' | 'bottom' | null = null;
 
   if (quantizedRowTopPx < cageTopInScrollPx) {
     // Place caret exactly on the first row of the middle section -- at its
@@ -83,6 +97,7 @@ export function resolveCagedScrollTarget(
     // one, and quantizedRowTopPx - rowPhaseOffsetPx is one by construction),
     // so no further rounding needed here.
     targetScrollTopPx = quantizedRowTopPx - topBoundaryPx - rowPhaseOffsetPx;
+    pinnedEdge = 'top';
   } else if (quantizedRowTopPx > cageLastRowTopInScrollPx) {
     // Place caret exactly on the last row of the middle section. No
     // rowPhaseOffsetPx term here: lastRowTopOffsetPx is a screen-anchored
@@ -102,6 +117,7 @@ export function resolveCagedScrollTarget(
     // at most a few px of extra clearance above the boundary; rounding
     // down risked cutting off real text.
     targetScrollTopPx = Math.ceil((quantizedRowTopPx - lastRowTopOffsetPx) / lineHeightPx) * lineHeightPx;
+    pinnedEdge = 'bottom';
   } else {
     targetScrollTopPx = Math.round(targetScrollTopPx / lineHeightPx) * lineHeightPx;
   }
@@ -110,5 +126,6 @@ export function resolveCagedScrollTarget(
 
   return {
     targetScrollTopPx,
+    pinnedEdge,
   };
 }

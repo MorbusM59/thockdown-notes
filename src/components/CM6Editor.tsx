@@ -2610,8 +2610,20 @@ export function CM6Editor({
     // is actually about. Only read for the debug trace.
     let lastCageWrite: { scrollTopPx: number; scrollHeightPx: number } | null = null;
     let cagePressIndex = 0;
+    /**
+     * Which cage edge the caret was last resting against.
+     *
+     * The reader travelling with an arrow key is pinned to one edge, and a
+     * height-map revision can move the caret clean across the viewport
+     * without taking it out of the cage -- measured: a 442px revision put the
+     * caret at row 13.19 having left it at row -0.81, and the reconcile,
+     * which only asks whether the caret is inside, accepted that and left it
+     * at the bottom of the editor. Remembering the edge is what makes the
+     * correction able to put the reader back on it.
+     */
+    let lastPinnedEdge: 'top' | 'bottom' | null = null;
 
-    const reconcileCagedScroll = (view: EditorView) => {
+    const reconcileCagedScroll = (view: EditorView, repinEdge?: 'top' | 'bottom') => {
       reconcileGeneration += 1;
       const myGeneration = reconcileGeneration;
       const scroller = view.scrollDOM;
@@ -2633,7 +2645,7 @@ export function CM6Editor({
       const scrollTopBefore = scroller.scrollTop;
       const scrollHeightBefore = scroller.scrollHeight;
 
-      const { targetScrollTopPx } = resolveCagedScrollTarget({
+      const { targetScrollTopPx: naturalTargetPx, pinnedEdge } = resolveCagedScrollTarget({
         caretTopInScrollPx: caretTopInScroll,
         scrollerScrollTopPx: scroller.scrollTop,
         scrollerClientHeightPx: scroller.clientHeight,
@@ -2643,6 +2655,28 @@ export function CM6Editor({
         lineHeightPx: lineHeightPxNow,
         rowPhaseOffsetPx: rowPhaseOffsetPxNow,
       });
+
+      // Re-pin, when this run is cleaning up after a height-map revision.
+      //
+      // `naturalTargetPx` answers "is the caret inside the cage", and after a
+      // revision the answer is yes even when the caret has been thrown from
+      // the edge the reader was travelling along to the opposite one. Yes is
+      // the wrong answer to give them: they were reading at the top of the
+      // pane and the text is now five rows past where it should be with the
+      // caret at the bottom. So when the caller says this is a revision
+      // cleanup and names the edge the caret was resting against, put it back
+      // on that edge instead of accepting wherever it landed.
+      let targetScrollTopPx = naturalTargetPx;
+      if (repinEdge === 'top') {
+        targetScrollTopPx = caretTopInScroll - topBoundaryPxRef.current - rowPhaseOffsetPxNow;
+      } else if (repinEdge === 'bottom') {
+        const lastRowTopOffsetPx = Math.max(
+          topBoundaryPxRef.current,
+          scroller.clientHeight - bottomBoundaryPxRef.current - lineHeightPxNow,
+        );
+        targetScrollTopPx = caretTopInScroll - lastRowTopOffsetPx;
+      }
+      if (pinnedEdge) lastPinnedEdge = pinnedEdge;
 
       // INSTANT, not animated. This is quantized movement of one row in
       // response to one keypress; there is nothing to animate, and animating
@@ -2725,7 +2759,11 @@ export function CM6Editor({
         // reader back on a whole row, so a keypress moves the text by exactly
         // one row or none, whatever the revision cost.
         if (Math.abs(scroller.scrollTop - scrollTopAfterWrite) > 0.01) {
-          reconcileCagedScroll(view);
+          // CM6 moved it after we did, which means it compensated for a
+          // height-map revision. Hand the edge the reader was resting against
+          // back to the re-derive, so it restores that rather than accepting
+          // wherever the compensation happened to leave the caret.
+          reconcileCagedScroll(view, lastPinnedEdge ?? undefined);
         }
       });
     };
