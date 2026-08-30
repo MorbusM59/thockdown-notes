@@ -219,9 +219,22 @@ export function buildEditRestoreSnapshotFromUiState(params: {
   const anchorLine = hasOverrideAnchorLine
     ? Math.max(0, Math.round(overrideSourceAnchorLine as number))
     : resolveEditSourceAnchorLineFromUiState(text, uiState, previewBlocks)
+  // MINUS the offset, because this is the inverse of the read above.
+  //
+  // Reading asks which line sits RESTORE_OFFSET_LINES below the top of the
+  // content area: anchorLine = scrollTopLines + topBoundaryLines + offset.
+  // Landing has to solve that same equation for scrollTopLines, and solving
+  // it moves the offset to the other side. This added it instead, so every
+  // round trip through a note switch walked the viewport down by two lines,
+  // quantized by the anchor's block: a document resting at the very top came
+  // back one line down (0 - 0 + 1), then again, and then stopped once the
+  // walk stayed inside one block -- which is why it settled on a heading and
+  // looked deliberate. RESTORE_OFFSET_LINES' own doc comment describes this
+  // exact failure as the thing the shared constant was meant to end; the
+  // constant was shared, but one of the two sites kept the wrong sign.
   const storedScrollTopLines =
     anchorLine !== null
-      ? Math.max(0, anchorLine - fallbackTopBoundaryLines + RESTORE_OFFSET_LINES)
+      ? Math.max(0, anchorLine - fallbackTopBoundaryLines - RESTORE_OFFSET_LINES)
       : Math.max(0, Math.round(fallbackViewport?.scrollTopLines ?? 0))
 
   const collapsedSelection: EditorSelectionState = {

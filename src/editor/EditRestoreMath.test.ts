@@ -45,7 +45,13 @@ describe('buildEditRestoreSnapshotFromUiState — overrideSourceAnchorLine', () 
     })
     // The note lands on the linked-to heading, not on where it was last read.
     expect(snapshot.sourceAnchorLine).toBe(2)
-    expect(snapshot.viewport.scrollTopLines).toBe(2 + RESTORE_OFFSET_LINES)
+    // MINUS the offset. Landing solves the reading equation
+    // (anchor = scrollTop + topBoundary + offset) for scrollTop, so the offset
+    // changes sides. This asserted the plus, which put the heading a full two
+    // lines ABOVE the top of the viewport -- scrolled past rather than opened
+    // at -- and, on the ordinary restore path, walked a note's position down
+    // by two lines on every switch away and back.
+    expect(snapshot.viewport.scrollTopLines).toBe(2 - RESTORE_OFFSET_LINES)
     expect(snapshot.collapsedSelection.start).toBe(text.indexOf('## First section'))
   })
 
@@ -71,5 +77,49 @@ describe('buildEditRestoreSnapshotFromUiState — overrideSourceAnchorLine', () 
       overrideSourceAnchorLine: Number.NaN,
     })
     expect(snapshot.sourceAnchorLine).toBe(storedAnchorLine)
+  })
+})
+
+describe('reading a position and landing on it are inverses', () => {
+  // The property the whole shared-offset design rests on, asserted directly
+  // rather than left to the two call sites to keep in step. They did not: the
+  // landing formula added RESTORE_OFFSET_LINES where solving for scrollTop
+  // subtracts it, so switching away from a note and back walked its viewport
+  // down two lines at a time -- visibly, from the very top of a document,
+  // settling on a heading once the walk stayed inside one block.
+  const land = (anchorLine: number, topBoundaryLines = 0) => buildEditRestoreSnapshotFromUiState({
+    noteId: 'n1',
+    text,
+    uiState: { cursorPos: 0 },
+    fallbackViewport: { topBoundaryLines, bottomBoundaryLines: 0, scrollTopLines: 0 },
+    overrideSourceAnchorLine: anchorLine,
+  }).viewport.scrollTopLines
+
+  // The read, as resolveSourceAnchorFromEditState performs it.
+  const read = (scrollTopLines: number, topBoundaryLines = 0) =>
+    scrollTopLines + topBoundaryLines + RESTORE_OFFSET_LINES
+
+  it('leaves a document resting at the very top exactly where it is', () => {
+    expect(land(read(0))).toBe(0)
+  })
+
+  it('leaves a document resting mid-text exactly where it is', () => {
+    for (const scrollTopLines of [1, 2, 5, 40, 500]) {
+      expect(land(read(scrollTopLines))).toBe(scrollTopLines)
+    }
+  })
+
+  it('does not walk over repeated round trips', () => {
+    let scrollTopLines = 0
+    for (let trip = 0; trip < 10; trip += 1) {
+      scrollTopLines = land(read(scrollTopLines))
+    }
+    expect(scrollTopLines).toBe(0)
+  })
+
+  it('holds with a reserved top boundary too', () => {
+    for (const topBoundaryLines of [0, 1, 4]) {
+      expect(land(read(7, topBoundaryLines), topBoundaryLines)).toBe(7)
+    }
   })
 })
