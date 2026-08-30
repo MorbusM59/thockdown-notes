@@ -82,3 +82,79 @@ export function resolveThumbLineRatio(options: {
   const viewportLines = viewportHeightPx / lineHeightPx
   return Math.min(1, Math.max(MIN_RATIO, viewportLines / documentLines))
 }
+
+/**
+ * A thumb height that is decided once and then held.
+ *
+ * The rule at the top of this file says the size is computed once and then
+ * left alone, but a call site that recomputes it on every sync does not honor
+ * that on its own: it re-derives the same answer from whatever the layout
+ * happens to say this frame, and any drift in that reading becomes a thumb
+ * that resizes while the reader watches. The visible symptom was the end of a
+ * long journey -- the leading edge lands, then the trailing edge settles a few
+ * pixels further on, because the size that arrived was not quite the size that
+ * set out.
+ *
+ * So the height is committed against a SIGNATURE of the things that may
+ * legitimately change it: the document, the viewport, and the type geometry.
+ * While the signature holds, the committed height is returned unchanged -- no
+ * matter where the reader is, what the scroller currently reports its height
+ * to be, or how much of the document has been measured since. When the
+ * signature changes, the height is resolved once more and held again.
+ *
+ * Position is deliberately not part of this. Where the thumb SITS must stay
+ * live and truthful; only how BIG it is is frozen.
+ */
+export interface CommittedThumbHeight {
+  resolve(options: {
+    /** Everything that may legitimately change the size, joined into one key. */
+    signature: string
+    /** The authoritative ratio, or null when the document cannot answer yet. */
+    ratio: number | null
+    /** Used only while `ratio` is null and nothing is committed. Never committed. */
+    provisionalRatio: number
+    usableTrackHeightPx: number
+    minThumbHeightPx: number
+  }): number
+  /** Drop the commitment, so the next resolve decides afresh. */
+  invalidate(): void
+}
+
+export function createCommittedThumbHeight(): CommittedThumbHeight {
+  let committedSignature: string | null = null
+  let committedHeightPx: number | null = null
+
+  const toHeightPx = (ratio: number, usableTrackHeightPx: number, minThumbHeightPx: number) => Math.max(
+    minThumbHeightPx,
+    Math.min(usableTrackHeightPx, Math.round(usableTrackHeightPx * ratio)),
+  )
+
+  return {
+    resolve({ signature, ratio, provisionalRatio, usableTrackHeightPx, minThumbHeightPx }) {
+      // A commitment describes one document at one geometry. Once either
+      // changes it is not a stale answer to this question, it is an answer to
+      // a different one, and holding it would pin the new document's thumb to
+      // the old document's size for as long as measuring takes.
+      if (committedSignature !== signature) {
+        committedSignature = null
+        committedHeightPx = null
+      }
+
+      if (committedHeightPx !== null) return committedHeightPx
+
+      // "Not yet" is not an answer. Draw the provisional ratio so the frame
+      // is not empty -- and never commit to it, or a document entitled to an
+      // exact scrollbar keeps whatever estimate was current when it first
+      // managed to say anything at all.
+      if (ratio === null) return toHeightPx(provisionalRatio, usableTrackHeightPx, minThumbHeightPx)
+
+      committedHeightPx = toHeightPx(ratio, usableTrackHeightPx, minThumbHeightPx)
+      committedSignature = signature
+      return committedHeightPx
+    },
+    invalidate() {
+      committedSignature = null
+      committedHeightPx = null
+    },
+  }
+}

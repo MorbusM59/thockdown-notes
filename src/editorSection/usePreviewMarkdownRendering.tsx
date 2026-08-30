@@ -1683,6 +1683,11 @@ export function usePreviewMarkdownRendering({
 
       readThumbRatio,
 
+      // Chunked ratios are line-based and final from the first answer.
+      // Continuous ones are read off a scrollHeight that is only true once
+      // the prewarm has measured every block and committed the real heights.
+      isThumbRatioSettled: () => (isContinuous() ? prewarmDoneRef.current : true),
+
       jumpToRatio: (ratio) => {
         const scroller = previewScrollRef.current
         if (!scroller) return

@@ -249,15 +249,19 @@ async function runPane(page, pane) {
   const peakHeight = Math.max(...heights)
   check('the thumb stretches across the journey', peakHeight > restingHeight * 3,
     `${restingHeight}px at rest, ${peakHeight}px stretched`)
-  // Not exact equality, and deliberately so in the edit view: the thumb is
-  // sized in wrapped lines, and CM6's count of those is an estimate that firms
-  // up as more of the document is measured. A journey across 400,000
-  // characters measures a great deal of it, so the resting height legitimately
-  // moves by a few pixels (28px -> 32px, measured). What must not happen is
-  // the thumb being left stretched.
+  // Exact equality, deliberately. This used to allow a few pixels of slack on
+  // the reasoning that CM6's wrapped-line count firms up as more of the
+  // document is measured (28px -> 32px, measured). Two things were wrong with
+  // that. The size is not allowed to depend on how much of the document has
+  // been looked at -- it is committed against the document and the type
+  // geometry and held (src/editor/scrollThumbMetrics.ts). And the drift was
+  // not the line count at all: the rubber band writes the thumb's style
+  // directly, so its last frame stayed on screen whenever the ordinary sync's
+  // React state came back unchanged and skipped its re-render. The slack in
+  // this check is what let that sit here unnoticed.
   const endHeight = heights[heights.length - 1]
-  check('the thumb returns to a resting height rather than staying stretched',
-    endHeight <= Math.max(restingHeight * 1.5, restingHeight + 8),
+  check('the thumb returns to exactly its resting height, not merely near it',
+    endHeight === restingHeight,
     `${restingHeight}px before, ${peakHeight}px stretched, ${endHeight}px after`)
 
   const peakAt = heights.indexOf(peakHeight)
@@ -328,6 +332,45 @@ async function runPane(page, pane) {
       return parseFloat(thumb.style.height) < track.clientHeight * 0.9
     }),
     'thumb left stretched across the track')
+
+  // -- snapping out of a journey ----------------------------------------
+  //
+  // A held click snaps to the target, and it is the ONLY input honored while
+  // a journey is in flight -- an ordinary click is ignored, because a second
+  // journey would take the stretched thumb for its own base size and set off
+  // from that, which is how a thumb ends up longer than its own rail.
+  // Snapping has to end the journey outright and hand the thumb back at its
+  // resting size, which it did not: it left the band running, so the thumb
+  // stayed extended and kept stretching toward a target nobody was going to.
+  await goToTop(page, pane)
+  const restingBeforeSnap = await page.evaluate(() => Math.round(
+    parseFloat(document.querySelector('.thockdown-scroll-thumb').style.height) || 0))
+  await clickTrackAt(page, 0.9)
+  await page.waitForTimeout(140)
+  // Held, not clicked -- scrollTrackHold resolves a hold to a snap.
+  await page.mouse.move(box.x + box.width / 2, box.y + (box.height * 0.35))
+  await page.mouse.down()
+  await page.waitForTimeout(400)
+  await page.mouse.up()
+  await page.waitForTimeout(2500)
+
+  const afterSnap = await page.evaluate(() => {
+    const thumb = document.querySelector('.thockdown-scroll-thumb')
+    const track = document.querySelector('.thockdown-scroll-track')
+    return {
+      heightPx: Math.round(parseFloat(thumb.style.height) || 0),
+      topPx: Math.round(parseFloat(thumb.style.top) || 0),
+      trackHeightPx: track.clientHeight,
+      bands: document.querySelectorAll('.scroll-bridge').length,
+    }
+  })
+  check('a snap out of a journey puts the thumb back at its resting size',
+    afterSnap.heightPx === restingBeforeSnap,
+    `${restingBeforeSnap}px before, ${afterSnap.heightPx}px after`)
+  check('a snap out of a journey leaves the thumb inside its rail',
+    afterSnap.topPx + afterSnap.heightPx <= afterSnap.trackHeightPx,
+    `thumb ends at ${afterSnap.topPx + afterSnap.heightPx}px of a ${afterSnap.trackHeightPx}px track`)
+  check('a snap out of a journey takes the curtain with it', afterSnap.bands === 0)
 }
 
 async function main() {

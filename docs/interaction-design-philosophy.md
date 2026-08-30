@@ -70,6 +70,33 @@ The goal is deterministic behavior with one source of truth per interaction phas
 - Recompute on CHANGE (the text, the typography, the pane geometry), never on
   measurement. If a recomputation would be triggered by the app finishing some
   work rather than by the reader doing something, it is the wrong trigger.
+- That rule is now enforced rather than merely intended: the size is COMMITTED
+  against a signature of exactly those inputs and held until one of them moves
+  (`createCommittedThumbHeight`, `src/editor/scrollThumbMetrics.ts`). Deriving
+  the right answer on every sync is not the same thing as holding it -- any
+  wobble in the reading became a thumb that resized under the reader, most
+  visibly at the end of a long journey.
+- A provisional answer is never committed. "Not yet" is not an answer, and a
+  document entitled to an exact scrollbar must not be pinned to whatever
+  estimate happened to be current the first time it could say anything
+  (`isThumbRatioSettled`, `src/editor/documentPosition.ts`).
+- Where a thumb is written directly to the DOM for an animation, handing it
+  back has to write the DOM directly too. A restore that only sets React state
+  is silently conditional on that state having changed -- and once the size is
+  correctly stable, it never has, so the animation's last frame stays on screen
+  for good.
+
+### 3f. A journey in flight is not interruptible, except to end it
+- While a scroll is travelling, an ordinary click on the track is ignored. A
+  second journey would inherit the stretched thumb as its own base size and
+  set off from that, which is how a thumb ends up longer than its own rail.
+- The one input honored mid-flight is the HOLD, which snaps. That is coherent
+  because a snap ends the journey outright rather than trying to travel
+  alongside it -- and it is the gesture a reader reaches for precisely when
+  they have decided the journey is in the way.
+- Ending a journey early, by any route, must return the thumb to its resting
+  size. A cancelled animation that leaves its own geometry behind is worse
+  than one that never ran.
 
 ### 3d. In edit view, text is never between rows
 - The edit pane is a grid of character cells. Text sits on row boundaries

@@ -4,6 +4,7 @@ import type { PreviewDocumentPositionApi } from './usePreviewMarkdownRendering'
 import { beginScrollTrackHold } from '../editor/scrollTrackHold'
 import { registerScrollBridge } from '../editor/scrollBridge'
 import { resolveThumbRubberBand } from '../editor/scrollThumbRubberBand'
+import { createCommittedThumbHeight } from '../editor/scrollThumbMetrics'
 import { sampleCurveRampProgress } from '../editor/ScrollCurvePlan'
 import type { ScrollJourneyTiming } from '../editor/scrollJourney'
 import { measureAverageCharWidthPx } from '../editor/scrollBridgeTexture'
@@ -110,6 +111,7 @@ export function usePreviewScrollbar({
   const previewScrollbarThumbRef = useRef<HTMLDivElement | null>(null)
   const previewScrollThumbTopRef = useRef(0)
   const previewScrollThumbHeightRef = useRef(0)
+  const thumbHeightCommitRef = useRef(createCommittedThumbHeight())
   const previewContinuousScrollDirectionRef = useRef<-1 | 0 | 1>(0)
   const previewContinuousScrollRafRef = useRef<number | null>(null)
   const previewContinuousScrollLastTsRef = useRef<number | null>(null)
@@ -188,11 +190,33 @@ export function usePreviewScrollbar({
     // measured or modelled underneath. The pixel fallbacks below are for the
     // one frame before it can answer at all -- not a second opinion.
     const position = previewDocumentPositionRef?.current ?? null
-    const visibleRatio = position?.readThumbRatio() ?? (viewportHeight / contentHeight)
-    const nextThumbHeight = Math.max(
-      SCROLL_TRACK_MIN_THUMB_HEIGHT_PX,
-      Math.min(usableTrackHeight, Math.round(usableTrackHeight * visibleRatio)),
-    )
+
+    // SIZE is committed and held; POSITION stays live. See
+    // editor/scrollThumbMetrics.ts. The signature is every input that may
+    // honestly change the size -- the document, the viewport, the track, and
+    // the type geometry -- and deliberately not scrollHeight, which moves as
+    // blocks are measured, nor the scroll position, which is none of the
+    // size's business.
+    const nextThumbHeight = thumbHeightCommitRef.current.resolve({
+      signature: [
+        activeNoteId ?? '',
+        currentEditorTextRef.current.length,
+        viewportHeight,
+        usableTrackHeight,
+        viewStyle,
+        viewFontSize,
+        viewSpacing,
+        viewLetterSpacingEm,
+      ].join('|'),
+      // Only a settled answer is committed to. Until the document's heights
+      // are real, the live pixel ratio is drawn but never frozen -- otherwise
+      // a small document, which is entitled to an exact scrollbar, keeps
+      // whatever estimate happened to be current on its first answer.
+      ratio: position?.isThumbRatioSettled() ? position.readThumbRatio() : null,
+      provisionalRatio: viewportHeight / contentHeight,
+      usableTrackHeightPx: usableTrackHeight,
+      minThumbHeightPx: SCROLL_TRACK_MIN_THUMB_HEIGHT_PX,
+    })
 
     const maxScrollTop = contentHeight - viewportHeight
     const maxThumbTop = Math.max(0, usableTrackHeight - nextThumbHeight)
@@ -203,7 +227,7 @@ export function usePreviewScrollbar({
 
     applyPreviewThumbDom(nextThumbTop, nextThumbHeight)
     setIsPreviewScrollThumbActive(true)
-  }, [applyPreviewThumbDom, isDraggingPreviewScrollThumb, isPreviewMode, previewScrollRef, previewDocumentPositionRef])
+  }, [applyPreviewThumbDom, isDraggingPreviewScrollThumb, isPreviewMode, previewScrollRef, previewDocumentPositionRef, activeNoteId, viewStyle, viewFontSize, viewSpacing, viewLetterSpacingEm])
 
   /**
    * The thumb during a bridged journey: it stretches rather than slides.
@@ -586,13 +610,29 @@ export function usePreviewScrollbar({
     // places, and on one still being sized up they landed VERY differently
     // (measured: a click at 30% on a just-opened note went to 13% of the
     // text).
+    // A journey already in flight. A second click cannot become a second
+    // journey: the thumb is stretched across the first one, so the new one
+    // would take that stretched span for its own base size and set off from
+    // it -- which is how a thumb ends up longer than its rail. Only the snap
+    // is honored mid-flight, because a snap ends the journey outright rather
+    // than trying to travel alongside it.
+    const scrollerNow = previewScrollRef.current
+    const journeyInFlight = rubberBandRafRef.current !== null
+      || (!!scrollerNow && isNonQuantizedSmoothScrollActive(scrollerNow))
+
     const goTo = (instant: boolean) => {
       const element = previewScrollRef.current
       if (!element) return
       const position = previewDocumentPositionRef?.current
       if (position) {
         if (instant) {
+          // Land, and hand the thumb back at its committed size. Without
+          // stopping the band first it goes on stretching toward a target
+          // nobody is travelling to.
+          cancelNonQuantizedSmoothScroll(element)
+          stopThumbRubberBand()
           position.jumpToRatio(ratio)
+          syncPreviewCustomScrollbar({ force: true })
           return
         }
         const startThumbTopPx = previewScrollThumbTopRef.current
@@ -619,9 +659,13 @@ export function usePreviewScrollbar({
     trackHoldCancelRef.current?.()
     trackHoldCancelRef.current = beginScrollTrackHold({
       onSnap: () => { trackHoldCancelRef.current = null; goTo(true) },
-      onTravel: () => { trackHoldCancelRef.current = null; goTo(false) },
+      onTravel: () => {
+        trackHoldCancelRef.current = null
+        if (journeyInFlight) return
+        goTo(false)
+      },
     })
-  }, [previewScrollRef, shouldBlockPreviewInteraction, handlePreviewTrackRightMouseDown, previewDocumentPositionRef, startThumbRubberBand])
+  }, [previewScrollRef, shouldBlockPreviewInteraction, handlePreviewTrackRightMouseDown, previewDocumentPositionRef, startThumbRubberBand, stopThumbRubberBand, syncPreviewCustomScrollbar])
 
   // A gesture in flight when this unmounts would otherwise fire its snap into
   // a torn-down pane.

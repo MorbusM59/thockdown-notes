@@ -23,6 +23,7 @@ import { resolveCagedScrollTarget } from '../editor/CageMath';
 import { attachRowGridGuard, resolveRowGridCorrection, resolveRowGridDirection, type RowGridGuard } from '../editor/rowGridGuard';
 import { registerScrollBridge } from '../editor/scrollBridge';
 import { resolveThumbRubberBand } from '../editor/scrollThumbRubberBand';
+import { createCommittedThumbHeight } from '../editor/scrollThumbMetrics';
 import { sampleCurveRampProgress } from '../editor/ScrollCurvePlan';
 import type { ScrollJourneyTiming } from '../editor/scrollJourney';
 import { sanitizeDocumentText, sanitizeDocumentTextExtended } from '../shared/textSanitization';
@@ -967,6 +968,7 @@ export function CM6Editor({
   const scrollThumbTopPxRef = useRef(0);
   const scrollThumbHeightPxRef = useRef(0);
   const thumbRubberBandRafRef = useRef<number | null>(null);
+  const thumbHeightCommitRef = useRef(createCommittedThumbHeight());
   const [isScrollThumbActive, setIsScrollThumbActive] = useState(false);
   const [isDraggingScrollThumb, setIsDraggingScrollThumb] = useState(false);
   // Read inside syncCustomScrollbar instead of closing over the state
@@ -1097,15 +1099,43 @@ export function CM6Editor({
     // kept only as the answer of last resort, before the editor has enough
     // geometry to say anything.
     const lineMetrics = readDocumentLines();
-    const visibleRatio = (lineMetrics && resolveThumbLineRatio({
-      viewportHeightPx: viewportHeight,
-      lineHeightPx: lineMetrics.lineHeightPx,
-      documentLines: lineMetrics.documentLines,
-    })) ?? (viewportHeight / contentHeight);
-    const thumbHeightPx = Math.max(
-      SCROLL_TRACK_MIN_THUMB_HEIGHT_PX,
-      Math.min(usableTrackHeight, Math.round(usableTrackHeight * visibleRatio)),
-    );
+    const ratio = lineMetrics
+      ? resolveThumbLineRatio({
+        viewportHeightPx: viewportHeight,
+        lineHeightPx: lineMetrics.lineHeightPx,
+        documentLines: lineMetrics.documentLines,
+      })
+      : null;
+
+    // Decided once and held -- see editor/scrollThumbMetrics.ts, and the twin
+    // of this in usePreviewScrollbar. The signature holds every input allowed
+    // to change the size; scrollHeight is not one of them, because CM6 refines
+    // it as it measures more of the document, and a thumb that follows that is
+    // reporting on the app's knowledge rather than on the reader's position.
+    const thumbHeightPx = thumbHeightCommitRef.current.resolve({
+      // Every input here is one the reader can actually change: the document,
+      // the type geometry, the pane, the track. Deliberately NOT the width of
+      // contentDOM, which `readDocumentLines` measures and which grows with
+      // the widest line currently rendered -- that makes charsPerLine, and so
+      // the ratio, a function of where the reader is standing, which is the
+      // whole thing this is here to stop. The pane's own width is the honest
+      // reading of "how wide is a line", and it moves only on a real resize.
+      // Document length is bucketed to match readDocumentLines' own drift
+      // budget, so ordinary typing does not re-resolve anything.
+      signature: [
+        noteIdRef.current ?? '',
+        Math.round((viewRef.current?.state.doc.length ?? 0) / 2000),
+        viewportHeight,
+        usableTrackHeight,
+        scroller.clientWidth,
+        lineMetrics?.lineHeightPx ?? 0,
+        cellWidthPxRef.current,
+      ].join('|'),
+      ratio,
+      provisionalRatio: viewportHeight / contentHeight,
+      usableTrackHeightPx: usableTrackHeight,
+      minThumbHeightPx: SCROLL_TRACK_MIN_THUMB_HEIGHT_PX,
+    });
     const maxThumbTravelPx = Math.max(0, usableTrackHeight - thumbHeightPx);
 
     return {
@@ -1158,6 +1188,22 @@ export function CM6Editor({
     setScrollThumbHeightPx(geometry.thumbHeightPx);
     setScrollThumbTopPx(nextThumbTop);
     setIsScrollThumbActive(true);
+
+    // The rubber band writes this element's style DIRECTLY, so React's style
+    // prop is not necessarily what is on screen. Setting state is therefore
+    // not enough to take the thumb back from it: if the values come back
+    // unchanged React skips the re-render, nothing rewrites the style, and
+    // the band's last frame stays on the thumb permanently. Measured after a
+    // journey: 29.8935px on a thumb whose real height is 28px, and it never
+    // recovered. This used to hide behind a thumb height that drifted on
+    // every sync -- the state always differed, so React always re-rendered.
+    // Now that the height is committed and stable, the handoff has to be
+    // explicit.
+    const thumbEl = scrollThumbElRef.current;
+    if (thumbEl) {
+      thumbEl.style.top = `${nextThumbTop}px`;
+      thumbEl.style.height = `${Math.max(0, geometry.thumbHeightPx)}px`;
+    }
   }, [isEditScrollInteractionBlocked, readScrollbarGeometry]);
 
   useEffect(() => {
@@ -4402,16 +4448,29 @@ export function CM6Editor({
     // Click travels, hold snaps -- see scrollTrackHold.ts. The same gesture as
     // the render view's scrollbar, quantized to the row grid here as every
     // other scroll in this editor is.
+    // See the twin of this in usePreviewScrollbar: a second click cannot
+    // become a second journey while the thumb is stretched across the first,
+    // or the new one takes that stretched span for its base size and grows
+    // out of its rail. Only the snap is honored mid-flight -- it ends the
+    // journey rather than travelling alongside it.
+    const scrollerNow = viewRef.current?.scrollDOM;
+    const journeyInFlight = thumbRubberBandRafRef.current !== null
+      || (!!scrollerNow && isQuantizedSmoothScrollActive(scrollerNow));
+
     const goTo = (instant: boolean) => {
       const scrollDOM = viewRef.current?.scrollDOM;
       if (!scrollDOM) return;
       if (instant) {
         cancelQuantizedSmoothScroll(scrollDOM);
+        // The band has to let go here, or it goes on stretching toward a
+        // target nobody is travelling to -- and the forced sync below is what
+        // puts the thumb back at its committed size on arrival.
+        stopThumbRubberBand();
         const previousBehavior = scrollDOM.style.scrollBehavior;
         scrollDOM.style.scrollBehavior = 'auto';
         scrollDOM.scrollTop = quantizeScrollTopToRow(targetScrollTop, lineHeightPxRef.current);
         scrollDOM.style.scrollBehavior = previousBehavior;
-        syncCustomScrollbar();
+        syncCustomScrollbar({ force: true });
         return;
       }
       const startThumbTopPx = scrollThumbTopPxRef.current;
@@ -4425,7 +4484,11 @@ export function CM6Editor({
     trackHoldCancelRef.current?.();
     trackHoldCancelRef.current = beginScrollTrackHold({
       onSnap: () => { trackHoldCancelRef.current = null; goTo(true); },
-      onTravel: () => { trackHoldCancelRef.current = null; goTo(false); },
+      onTravel: () => {
+        trackHoldCancelRef.current = null;
+        if (journeyInFlight) return;
+        goTo(false);
+      },
     });
   };
 
