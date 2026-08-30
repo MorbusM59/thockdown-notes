@@ -79,10 +79,20 @@ export function resolveCagedScrollTarget(
     // natural resting position (topBoundaryPx + rowPhaseOffsetPx below the
     // viewport top), not flush against topBoundaryPx, so this matches
     // where the row already sits by construction rather than fighting it.
-    // Always an exact multiple of lineHeightPx already (topBoundaryPx is
-    // one, and quantizedRowTopPx - rowPhaseOffsetPx is one by construction),
-    // so no further rounding needed here.
-    targetScrollTopPx = quantizedRowTopPx - topBoundaryPx - rowPhaseOffsetPx;
+    //
+    // From the caret's MEASURED position, not from its rounded one. The
+    // rounded value is right for deciding whether the caret has left the
+    // cage -- that is a comparison, and a hair of baseline jitter should not
+    // change the answer -- but wrong for computing where to land, because
+    // rounding introduces an error the reader then sees. Where the caret
+    // actually is minus where it should sit is the whole calculation, and it
+    // needs no quantization to come out on a row: if the caret is on a real
+    // row and the target is a real row, their difference is a whole number
+    // of rows already. Quantizing it can only move the answer AWAY from that,
+    // by up to half a row per press, in whichever direction the rounding
+    // happens to favour -- and a bias that favours one direction accumulates
+    // into the multi-row skips reported here.
+    targetScrollTopPx = caretTopInScrollPx - topBoundaryPx - rowPhaseOffsetPx;
   } else if (quantizedRowTopPx > cageLastRowTopInScrollPx) {
     // Place caret exactly on the last row of the middle section. No
     // rowPhaseOffsetPx term here: lastRowTopOffsetPx is a screen-anchored
