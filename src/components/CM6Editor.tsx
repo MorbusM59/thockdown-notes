@@ -2634,7 +2634,7 @@ export function CM6Editor({
     let repinDepth = 0;
     const MAX_REPIN_DEPTH = 4;
 
-    const reconcileCagedScroll = (view: EditorView, repinEdge?: 'top' | 'bottom') => {
+    const reconcileCagedScroll = (view: EditorView, repinEdge?: 'top') => {
       // A fresh keypress resets the budget; a re-derive spends one.
       repinDepth = repinEdge ? repinDepth + 1 : 0;
       reconcileGeneration += 1;
@@ -2682,13 +2682,10 @@ export function CM6Editor({
       let targetScrollTopPx = naturalTargetPx;
       if (repinEdge === 'top') {
         targetScrollTopPx = caretTopInScroll - topBoundaryPxRef.current - rowPhaseOffsetPxNow;
-      } else if (repinEdge === 'bottom') {
-        const lastRowTopOffsetPx = Math.max(
-          topBoundaryPxRef.current,
-          scroller.clientHeight - bottomBoundaryPxRef.current - lineHeightPxNow,
-        );
-        targetScrollTopPx = caretTopInScroll - lastRowTopOffsetPx;
       }
+      // No bottom-edge branch, deliberately: `repinEdge` is only ever 'top'.
+      // See the follow-up below for why -- downward travel cannot be displaced
+      // by a revision, so there is nothing there to correct.
       // Only a real keypress may change which edge the reader is travelling
       // along. A correction must never redefine it, and letting it do so was
       // catastrophic: a revision worth 130,754px left the caret at row 13.19,
@@ -2793,26 +2790,40 @@ export function CM6Editor({
         //
         // The caret's distance from the edge it was resting against is the
         // thing the reader actually sees, so that is what is checked.
+        //
+        // TOP EDGE ONLY, and that is not a shortcut. The displacement this
+        // corrects comes from a revision changing heights ABOVE the viewport,
+        // which can only push the reader around while they are travelling UP.
+        // Revisions below the viewport do not move what is above them, so
+        // downward travel is correct by construction and has nothing to fix.
+        // Watching the bottom edge anyway bought nothing and cost plenty: the
+        // bottom resting position is screen-anchored rather than a row (an
+        // arbitrary pane height minus two insets), so a real row can never
+        // land on it, the caret always sat a permanent 15px short, and the
+        // correction fired on that residual every frame and fought the
+        // keypress -- travelling down simply stopped working at the bottom of
+        // the pane. Not correcting a process that was already right is the
+        // fix; a threshold that tolerated the residual was only a patch on
+        // code that should not have been running.
         const scrollMovedPx = scroller.scrollTop - scrollTopAfterWrite;
         let caretDriftPx = 0;
-        if (lastPinnedEdge) {
+        if (lastPinnedEdge === 'top') {
           const settledSelection = window.getSelection();
           const settledRect = settledSelection && settledSelection.rangeCount > 0
             ? readSelectionRect(settledSelection, lineHeightPxNow, view.contentDOM)
             : null;
           if (settledRect) {
             const settledCaretTopInViewportPx = settledRect.top - scroller.getBoundingClientRect().top;
-            const restingTopInViewportPx = lastPinnedEdge === 'top'
-              ? topBoundaryPxRef.current + rowPhaseOffsetPxNow
-              : Math.max(
-                topBoundaryPxRef.current,
-                scroller.clientHeight - bottomBoundaryPxRef.current - lineHeightPxNow,
-              );
+            const restingTopInViewportPx = topBoundaryPxRef.current + rowPhaseOffsetPxNow;
             caretDriftPx = settledCaretTopInViewportPx - restingTopInViewportPx;
           }
         }
 
-        const caretDrifted = Math.abs(caretDriftPx) > lineHeightPxNow / 2;
+        // A full row. The top resting position IS a real row position, so a
+        // correctly-placed caret sits within a caret inset of it -- anything
+        // under a row is that inset, and the displacement this catches is
+        // three to thirteen rows.
+        const caretDrifted = Math.abs(caretDriftPx) >= lineHeightPxNow;
         const scrollMoved = Math.abs(scrollMovedPx) > 0.01;
         if (!scrollMoved && !caretDrifted) return;
         if (repinDepth >= MAX_REPIN_DEPTH) {
@@ -2831,7 +2842,7 @@ export function CM6Editor({
             + ` -- re-deriving${lastPinnedEdge ? ` and re-pinning ${lastPinnedEdge}` : ''}`,
           );
         }
-        reconcileCagedScroll(view, lastPinnedEdge ?? undefined);
+        reconcileCagedScroll(view, lastPinnedEdge === 'top' ? 'top' : undefined);
       });
     };
 

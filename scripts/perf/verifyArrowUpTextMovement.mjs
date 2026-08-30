@@ -196,6 +196,25 @@ const main = async () => {
       + ` -> ${rowAfterDown === null ? '?' : rowAfterDown.toFixed(2)}`
       + `  ${stayedPut ? 'OK' : 'FAIL: dragged toward an edge it was not on'}`)
     if (!stayedPut) process.exitCode = 1
+    // Travelling DOWN past the bottom edge. Once the caret reaches that edge
+    // the text must advance one row per press, and it did not: the bottom
+    // resting position is screen-anchored rather than a row, so the caret
+    // always sits a fraction short of it, and a correction that fired on that
+    // fraction fought every keypress. scrollTop must climb, not oscillate.
+    const scrollTopNow = () => page.evaluate(() => Math.round(document.querySelector('.cm-scroller').scrollTop))
+    for (let i = 0; i < 25; i += 1) { await page.keyboard.press('ArrowDown'); await page.waitForTimeout(settleMs) }
+    const downSamples = []
+    for (let i = 0; i < 12; i += 1) {
+      await page.keyboard.press('ArrowDown')
+      await page.waitForTimeout(settleMs)
+      downSamples.push(await scrollTopNow())
+    }
+    const downDeltas = downSamples.slice(1).map((v, i) => v - downSamples[i])
+    const wentBackwards = downDeltas.filter((d) => d < 0).length
+    const advanced = downSamples[downSamples.length - 1] - downSamples[0]
+    console.log(`ArrowDown at the bottom edge: advanced ${advanced}px over 11 presses,`
+      + ` ${wentBackwards} backwards steps  ${wentBackwards === 0 && advanced > 0 ? 'OK' : 'FAIL: oscillating instead of travelling'}`)
+    if (wentBackwards > 0 || advanced <= 0) process.exitCode = 1
     console.log(`line height ${lineHeightPx}px, ${presses} presses, ${settleMs}ms settle, ${measured} comparable`)
     console.log(`TEXT MOVED MORE THAN ONE ROW ON ${violations.length} PRESSES`)
     for (const v of violations.slice(0, 12)) {
