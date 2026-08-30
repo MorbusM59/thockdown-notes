@@ -2698,7 +2698,14 @@ export function CM6Editor({
       // up. It then oscillated, a row at a time, forever: each held keypress
       // reset the re-derive budget and fed the next cycle. The caret sat at
       // row 12.19 and would not come back.
-      if (pinnedEdge && !repinEdge) lastPinnedEdge = pinnedEdge;
+      // ...and a keypress that pins to NO edge must clear it. `null` here is
+      // an answer -- "the caret is inside the cage, nothing to pin it to" --
+      // not an absence of one, and treating it as an absence left the last
+      // edge standing forever: one upward journey pinned 'top', and from then
+      // on every arrow press in any direction, from anywhere in the pane,
+      // measured its drift against the top edge and dragged the caret back
+      // there. Assigning unconditionally is the whole fix.
+      if (!repinEdge) lastPinnedEdge = pinnedEdge;
 
       // INSTANT, not animated. This is quantized movement of one row in
       // response to one keypress; there is nothing to animate, and animating

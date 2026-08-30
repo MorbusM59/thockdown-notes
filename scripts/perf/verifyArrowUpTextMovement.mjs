@@ -169,6 +169,33 @@ const main = async () => {
       before = after
     }
 
+    // A press must not drag the caret to an edge it was not resting on.
+    // The cage remembers which edge the reader is travelling along so it can
+    // restore it after a height-map revision; remembering it too eagerly made
+    // EVERY arrow press in any direction haul the caret back to the top line.
+    const caretRowInCage = () => page.evaluate(() => {
+      const scroller = document.querySelector('.cm-scroller')
+      const caret = document.querySelector('.thockdown-block-caret, .block-caret')
+      if (!scroller || !caret) return null
+      const lh = parseFloat(getComputedStyle(document.querySelector('.cm-line')).lineHeight) || 26
+      return (caret.getBoundingClientRect().top - scroller.getBoundingClientRect().top) / lh
+    })
+
+    const midPoint = await page.evaluate(() => {
+      const el = document.querySelector('.cm-scroller')
+      const r = el.getBoundingClientRect()
+      return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height * 0.5) }
+    })
+    await page.mouse.click(midPoint.x, midPoint.y, { delay: 80 })
+    await page.waitForTimeout(700)
+    const rowAfterClick = await caretRowInCage()
+    for (let i = 0; i < 4; i += 1) { await page.keyboard.press('ArrowDown'); await page.waitForTimeout(settleMs) }
+    const rowAfterDown = await caretRowInCage()
+    const stayedPut = rowAfterClick !== null && rowAfterDown !== null && rowAfterDown > rowAfterClick - 1
+    console.log(`ArrowDown from mid-pane: caret row ${rowAfterClick === null ? '?' : rowAfterClick.toFixed(2)}`
+      + ` -> ${rowAfterDown === null ? '?' : rowAfterDown.toFixed(2)}`
+      + `  ${stayedPut ? 'OK' : 'FAIL: dragged toward an edge it was not on'}`)
+    if (!stayedPut) process.exitCode = 1
     console.log(`line height ${lineHeightPx}px, ${presses} presses, ${settleMs}ms settle, ${measured} comparable`)
     console.log(`TEXT MOVED MORE THAN ONE ROW ON ${violations.length} PRESSES`)
     for (const v of violations.slice(0, 12)) {
