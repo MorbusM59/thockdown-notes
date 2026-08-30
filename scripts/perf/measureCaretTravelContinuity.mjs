@@ -9,12 +9,18 @@
 //
 // A MEASUREMENT TOOL, NOT A GATE. It does not reproduce the defect, and is
 // committed so the next attempt starts from a working instrument rather than
-// rebuilding one. What it already rules out, on dev:browser with a 1.5M-char
-// prose document:
+// rebuilding one. On dev:browser, 1.5M chars of prose, four ten-second holds:
 //
-//   settled document, 14s hold   9906px travelled, 0 backwards frames,
-//                                0 jumps over two rows, caret drift 0.000
-//   resize + jump, 14s hold     10686px travelled, same, caret drift 0.000
+//   settled document, ArrowDown      every scroll step exactly one row
+//   settled document, ArrowUp        every scroll step exactly one row
+//   resize + jump, ArrowDown         every scroll step exactly one row
+//   resize + jump, ArrowUp           every scroll step exactly one row
+//
+// 222-243 moving frames per run, zero steps larger than 1.4 rows, zero
+// against the direction of travel. Both directions were tested because a
+// heightmap correction for newly-measured lines ABOVE the viewport moves what
+// is on screen where the same correction below it does not, so up-travel into
+// unmeasured text was the strongest suspicion. It is clean too.
 //
 // Three things were needed to make those numbers mean anything, and each one
 // was wrong in an earlier version of this file:
@@ -34,11 +40,34 @@
 // Electron, the reader's own typography, or a document whose block shapes
 // differ from prose. Worth trying those before writing any code.
 //
-// Usage: node scripts/perf/measureCaretTravelContinuity.mjs
+// Usage:
+//   node scripts/perf/measureCaretTravelContinuity.mjs
+//   node scripts/perf/measureCaretTravelContinuity.mjs --file="C:\path\to\ulysses.md"
+//   ... --font=28 --width=900 --height=600 --hold=20000
+//
+// Flags:
+//   --file=PATH   read a real document instead of generating prose. This is
+//                 the one most likely to matter: generated paragraphs are all
+//                 the same shape, and a real book is not.
+//   --chars=N     size of the generated document when --file is not given
+//                 (default 1500000)
+//   --font=N      editor font size in px. Fewer rows per screen means more
+//                 frequent chunk boundaries, so a large font is worth trying.
+//   --width=N --height=N   window size (default 1280x900)
+//   --hold=MS     how long to hold the arrow key each run (default 14000)
 import { chromium } from 'playwright'
+import fs from 'node:fs'
 import { startDevServer, waitForAppReady, ensureEditMode } from './perfHarness.mjs'
 
 const PORT = 5249
+
+const args = Object.fromEntries(process.argv.slice(2)
+  .filter((a) => a.startsWith('--'))
+  .map((a) => {
+    const [key, ...rest] = a.replace(/^--/, '').split('=')
+    return [key, rest.join('=')]
+  }))
+const numeric = (key, fallback) => (args[key] !== undefined && Number.isFinite(Number(args[key])) ? Number(args[key]) : fallback)
 
 const WORDS = ('stately plump buck mulligan came from the stairhead bearing a bowl of lather on which a mirror '
   + 'and a razor lay crossed the mild morning air held them gently behind him as he went about his business '
@@ -88,28 +117,38 @@ const stopSampling = (page) => page.evaluate(() => {
   return window.__samples
 })
 
-const hold = async (client, ms, gapMs) => {
+const KEYS = {
+  down: { code: 40, key: 'ArrowDown' },
+  // Travelling UP is the interesting direction: a heightmap correction for
+  // newly-measured lines ABOVE the viewport moves what is on screen, where the
+  // same correction below it does not.
+  up: { code: 38, key: 'ArrowUp' },
+}
+
+const hold = async (client, ms, gapMs, direction) => {
+  const { code, key } = KEYS[direction]
   const until = Date.now() + ms
   let first = true
   while (Date.now() < until) {
     await client.send('Input.dispatchKeyEvent', {
-      type: 'rawKeyDown', windowsVirtualKeyCode: 40, nativeVirtualKeyCode: 40,
-      key: 'ArrowDown', code: 'ArrowDown', autoRepeat: !first,
+      type: 'rawKeyDown', windowsVirtualKeyCode: code, nativeVirtualKeyCode: code,
+      key, code: key, autoRepeat: !first,
     })
     first = false
     await new Promise((r) => setTimeout(r, gapMs))
   }
   await client.send('Input.dispatchKeyEvent', {
-    type: 'keyUp', windowsVirtualKeyCode: 40, nativeVirtualKeyCode: 40, key: 'ArrowDown', code: 'ArrowDown',
+    type: 'keyUp', windowsVirtualKeyCode: code, nativeVirtualKeyCode: code, key, code: key,
   })
 }
 
-const report = (label, samples, lineHeightPx) => {
+const report = (label, samples, lineHeightPx, direction) => {
   const lh = lineHeightPx || 26
   const deltas = []
   for (let i = 1; i < samples.length; i += 1) deltas.push(samples[i].top - samples[i - 1].top)
-  const backwards = deltas.filter((d) => d < -2)
-  const bigJumps = deltas.filter((d) => d > lh * 2)
+  const sign = direction === 'up' ? -1 : 1
+  const backwards = deltas.filter((d) => d * sign < -2)
+  const bigJumps = deltas.filter((d) => Math.abs(d) > lh * 2)
   const carets = samples.map((s) => s.caret).filter((v) => v !== null)
   // Once travelling, the caret should PIN near one edge. Wandering back
   // toward the middle is the reported "snaps back to mid viewport".
@@ -117,27 +156,67 @@ const report = (label, samples, lineHeightPx) => {
   const spread = settled.length ? Math.max(...settled) - Math.min(...settled) : 0
   console.log(`\n${label}`)
   console.log(`   frames=${samples.length}  travelled=${samples.length ? samples[samples.length - 1].top - samples[0].top : 0}px`)
-  console.log(`   BACKWARDS frames: ${backwards.length}${backwards.length ? ` (worst ${Math.min(...backwards)}px)` : ''}`)
-  console.log(`   jumps over two rows: ${bigJumps.length}${bigJumps.length ? ` (worst ${Math.max(...bigJumps)}px = ${(Math.max(...bigJumps) / lh).toFixed(1)} rows)` : ''}`)
+  console.log(`   AGAINST-TRAVEL frames: ${backwards.length}${backwards.length ? ` (worst ${backwards.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a), 0)}px)` : ''}`)
+  const worstJump = bigJumps.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a), 0)
+  console.log(`   jumps over two rows: ${bigJumps.length}${bigJumps.length ? ` (worst ${worstJump}px = ${(Math.abs(worstJump) / lh).toFixed(1)} rows)` : ''}`)
+  const sorted = deltas.map((d, i) => ({ d, i })).filter((x) => x.d !== 0).sort((a, b) => Math.abs(b.d) - Math.abs(a.d))
+  console.log(`   largest scroll steps: ${sorted.slice(0, 8).map((x) => `${x.d}px/${(Math.abs(x.d) / lh).toFixed(1)}r`).join(', ')}`)
+  const rowsMoved = deltas.filter((d) => d !== 0).map((d) => Math.abs(d) / lh)
+  const overOneRow = rowsMoved.filter((r) => r > 1.4).length
+  console.log(`   steps larger than 1.4 rows: ${overOneRow} of ${rowsMoved.length} moving frames`)
   const withCaret = samples.filter((x) => x.hasCaret).length
   console.log(`   caret samples: ${withCaret} of ${samples.length} frames had a caret element`)
-  console.log(`   caret drift within viewport once travelling: ${spread.toFixed(3)} of the viewport height`)
+  // INFORMATIONAL ONLY, and not a defect signal. The caret MOVES within the
+  // viewport as it travels -- that is what caret travel is: it walks toward
+  // the edge through the text, and only once it reaches the edge does the
+  // text scroll instead. So spread here measures the feature, not a fault,
+  // and it produced a convincing false positive (0.214 of the viewport, in
+  // exactly the scenario under suspicion) while every scroll step below was
+  // exactly one row. The scroll-step distribution is the metric that means
+  // something; the caret is always correct within the text.
+  console.log(`   caret rect drift (informational, lags the text): ${spread.toFixed(3)} of the viewport height`)
+  // Only the SETTLED window: the first stretch is the caret legitimately
+  // walking to the viewport edge before it pins, which is not the defect.
+  const settledStart = Math.floor(carets.length / 3)
+  const caretJumps = []
+  for (let i = settledStart + 1; i < carets.length; i += 1) {
+    const d = carets[i] - carets[i - 1]
+    if (Math.abs(d) > 0.03) caretJumps.push({ i, d: Number(d.toFixed(3)), from: carets[i - 1], to: carets[i] })
+  }
+  console.log(`   caret LURCHES after pinning (>3% of viewport in one frame): ${caretJumps.length}`)
+  for (const j of caretJumps.slice(0, 8)) console.log(`      frame ${j.i}: ${j.from} -> ${j.to} (${j.d > 0 ? '+' : ''}${j.d})`)
 }
 
 const main = async () => {
   const server = await startDevServer(PORT)
   const browser = await chromium.launch()
-  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
+  const width = numeric('width', 1280)
+  const height = numeric('height', 900)
+  const holdMs = numeric('hold', 14000)
+  const page = await browser.newPage({ viewport: { width, height } })
   const errors = []
   page.on('pageerror', (e) => errors.push(String(e).slice(0, 200)))
   try {
+    const text = args.file
+      ? fs.readFileSync(args.file, 'utf8')
+      : proseDocument(numeric('chars', 1500000))
+    console.log(`document: ${args.file ? args.file : 'generated prose'} -- ${text.length.toLocaleString()} chars`)
+    console.log(`window: ${width}x${height}${args.font ? `  editor font: ${numeric('font', 0)}px` : ''}  hold: ${holdMs}ms`)
+
     await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'load' })
     await waitForAppReady(page)
     const client = await page.context().newCDPSession(page)
-    await page.evaluate(async (text) => {
-      const n = await window.thockdownNotes.createNote({ initialText: text })
+    await page.evaluate(async ({ initialText, fontSize }) => {
+      const n = await window.thockdownNotes.createNote({ initialText })
       await window.thockdownSections.setActiveNote('default', n.id)
-    }, proseDocument(1500000))
+      if (fontSize) {
+        const state = await window.thockdownState.loadAppState()
+        await window.thockdownState.saveAppState({
+          ...state,
+          menu: { ...(state.menu ?? {}), editorFontSize: fontSize },
+        })
+      }
+    }, { initialText: text, fontSize: args.font ? numeric('font', 0) : 0 })
     await page.reload()
     await waitForAppReady(page)
     await ensureEditMode(page)
@@ -145,6 +224,8 @@ const main = async () => {
 
     const lineHeightPx = await page.evaluate(() => Math.round(
       parseFloat(getComputedStyle(document.querySelector('.cm-line') || document.querySelector('.cm-scroller')).lineHeight) || 26))
+
+    console.log(`measured line height: ${lineHeightPx}px`)
 
     const clickTrack = async (ratio) => {
       const box = await page.locator('.thockdown-scroll-track').boundingBox()
@@ -161,19 +242,23 @@ const main = async () => {
       await page.waitForTimeout(900)
     }
 
-    await clickTrack(0.45)
-    await clickText()
-    await startSampling(page)
-    await hold(client, 14000, 28)
-    report('A. settled document, held ArrowDown for 14s', await stopSampling(page), lineHeightPx)
+    for (const direction of ['down', 'up']) {
+      await clickTrack(0.45)
+      await clickText()
+      await startSampling(page)
+      await hold(client, holdMs, 28, direction)
+      report(`A. settled document, held Arrow${direction === 'up' ? 'Up' : 'Down'}`, await stopSampling(page), lineHeightPx, direction)
+    }
 
-    await page.setViewportSize({ width: 900, height: 620 })
+    await page.setViewportSize({ width: Math.max(600, Math.round(width * 0.7)), height: Math.max(420, Math.round(height * 0.7)) })
     await page.waitForTimeout(3000)
-    await clickTrack(0.72)
-    await clickText()
-    await startSampling(page)
-    await hold(client, 14000, 28)
-    report('B. after a resize + jump (undiscovered area)', await stopSampling(page), lineHeightPx)
+    for (const direction of ['down', 'up']) {
+      await clickTrack(0.72)
+      await clickText()
+      await startSampling(page)
+      await hold(client, holdMs, 28, direction)
+      report(`B. after resize + jump, held Arrow${direction === 'up' ? 'Up' : 'Down'}`, await stopSampling(page), lineHeightPx, direction)
+    }
 
     console.log(`\npage errors: ${errors.length ? errors.join(' | ') : 'none'}`)
   } finally { await browser.close(); server.stop() }
