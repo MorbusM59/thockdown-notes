@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { DatabaseService } from '../databaseService'
 import { NoteLifecycleService } from '../noteLifecycleService'
+import { HELP_GUIDE_NOTE_IDS } from '../../src/shared/helpGuide'
+import { ensureHelpNote } from './helpNote'
 import { ensureHelpGuide } from './helpGuideNote'
 import { HELP_GUIDE_ROOT_ID, HELP_GUIDE_CHAPTERS } from './helpGuideContent'
 
@@ -22,6 +24,26 @@ describe('ensureHelpGuide', () => {
   afterEach(() => {
     db.close()
     rmSync(dataRoot, { recursive: true, force: true })
+  })
+
+  it('creates the welcome note when only the built-in User Guide family is present', async () => {
+    // Fresh DBs already get the welcome note seeded during initialization, so
+    // remove that seeded row and then simulate the real startup state: guide
+    // family present, no real user note yet.
+    const raw = (db as any).requireDb() as { prepare: (sql: string) => { run: (...args: unknown[]) => unknown } }
+    raw.prepare('DELETE FROM notes WHERE id = ?').run('26-07-04_00-00_WELCOME00')
+    raw.prepare('DELETE FROM notes_fts WHERE noteId = ?').run('26-07-04_00-00_WELCOME00')
+
+    await ensureHelpGuide(db, lifecycle)
+
+    const guideOnlyNotes = db.listNoteRecords().filter((note) => !HELP_GUIDE_NOTE_IDS.has(note.id))
+    expect(guideOnlyNotes).toHaveLength(0)
+
+    await ensureHelpNote(db)
+
+    const realNotes = db.listNoteRecords().filter((note) => !HELP_GUIDE_NOTE_IDS.has(note.id))
+    expect(realNotes).toHaveLength(1)
+    expect(realNotes[0]?.title).toBe('Welcome to Thockdown Notes')
   })
 
   it('leaves the whole guide family timeless after seeding, with every real chapter linked', async () => {

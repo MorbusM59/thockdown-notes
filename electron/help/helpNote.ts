@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { HELP_GUIDE_NOTE_IDS } from '../../src/shared/helpGuide';
 import { sanitizeDocumentText } from '../../src/shared/textSanitization';
 import type { DatabaseService } from '../databaseService';
 import { HELP_NOTE_CONTENT } from './helpNoteContent';
@@ -17,13 +18,14 @@ const HELP_NOTE_FILE_NAME = `${HELP_NOTE_ID}.md`;
  * @param db The database service instance
  */
 export async function ensureHelpNote(db: DatabaseService): Promise<void> {
-  // Get all notes from the database
   const notes = db.listNoteRecords();
-  console.log(`[ensureHelpNote] Database contains ${notes.length} notes`);
+  const realNotes = notes.filter((note) => !HELP_GUIDE_NOTE_IDS.has(note.id));
+  console.log(`[ensureHelpNote] Database contains ${realNotes.length} real user notes (excluding built-in guide family)`);
 
-  // Only create help note if database is truly empty
-  if (notes.length > 0) {
-    console.log(`[ensureHelpNote] Database not empty, skipping help note creation`);
+  // Only create the welcome note if the database has no real user notes
+  // beyond the app-owned User Guide family.
+  if (realNotes.length > 0) {
+    console.log(`[ensureHelpNote] Real user notes already present, skipping welcome note creation`);
     return;
   }
 
