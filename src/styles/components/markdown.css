@@ -63,7 +63,12 @@
   text-shadow:
     0 -1px 0px var(--text-shadow-emboss-render-secondary),
     0 1px 0px var(--text-shadow-emboss-render-main);
-  font-synthesis: style;
+  /* The render view deliberately allows font synthesis for both slant and
+     weight so every preview style can render bold text even when its bundled
+     face only ships a normal weight. The rest of the app stays on the more
+     conservative `style` default in src/index.css so UI chrome keeps its
+     cleaner upright appearance. */
+  font-synthesis: style weight;
   position:       relative;
   z-index:        2;
   /* Render mode is a read-only view -- no text-edit caret (even though the
@@ -431,7 +436,12 @@
 .markdown-preview.style-calibrilight {
   font-family:         'Carlito', 'Calibri Light', 'Segoe UI', sans-serif;
   --preview-code-font: 'Share Tech Mono', 'Red Hat Mono', 'Syne Mono', 'Menlo', 'Monaco', monospace;
-  font-weight:         300;
+  /* Carlito is the one preview family still overriding the synthetic-weight
+     default with a lighter explicit weight. That blocks the browser's
+     synthetic-bold path, so keep the preview at the normal weight and allow
+     bold generation to happen via `font-synthesis: style weight` instead. */
+  font-weight:         400;
+  font-synthesis:      style weight;
 }
 
 .markdown-preview.style-opensans {
