@@ -917,7 +917,7 @@ export function SidebarOptionsPanel({
         <button
           key={key}
           type="button"
-          className={`btn-icon options-color-swatch${key === 'textBase' ? ' text-ui-icon' : ''}${key === 'lineNumber' ? ' text-icon' : ''}`}
+          className={`btn-icon options-color-swatch${isSearchHighlightControl ? ' search-highlight-color-button' : ''}${key === 'textBase' ? ' text-ui-icon' : ''}${key === 'lineNumber' ? ' text-icon' : ''}`}
           onClick={() => {
             if (primedColorSource.kind === 'active-color') {
               applyActiveColorToElement(resolvedKey)

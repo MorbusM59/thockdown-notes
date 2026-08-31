@@ -327,6 +327,10 @@
   justify-content: flex-end;
 }
 
+.search-highlight-color-button {
+  filter: var(--filter-search-hit);
+}
+
 /* Notes list & view modes */
 .notes-list {
   flex:           1 1 auto;

@@ -178,8 +178,9 @@
   color:            inherit;
   border-radius:    var(--border-radius-regular);
   filter: var(--filter-search-hit);
-  outline: 1px solid var(--color-border-light-90);
+  outline: 1px solid var(--color-border-dark-40);
   padding:          var(--spacing-regular);
+  box-shadow: none;
 }
 
 /* The one match a reader picked off a search card while it was already on
@@ -190,7 +191,8 @@
    it survives being read, which a flash does not. */
 .markdown-preview .search-hit.search-hit-picked {
   filter: var(--filter-search-hit);
-  outline: 2px solid var(--color-border-light-90);
+  outline: 1px solid var(--color-border-light-90);
+  box-shadow: var(--box-shadow-inverted-filtered);
 }
 
 /* Anchor definitions ([Anchor Text](#anchor-id)) render as plain,
