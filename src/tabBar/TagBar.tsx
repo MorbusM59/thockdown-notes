@@ -201,7 +201,7 @@ export function TagBar({ tabs, persistenceReady, activeNoteId, identityNoteId, n
               onWheel={handleSuggestedTagsWheel}
             >
               {suggestedTags.length === 0 ? (
-                <span className="tabbar-tag-hint">Suggested tags appear here.</span>
+                <span className="tabbar-tag-hint">Previously used tags appear here.</span>
               ) : (
                 suggestedTags.map((tagName) => (
                   <div
@@ -313,9 +313,6 @@ export function TagBar({ tabs, persistenceReady, activeNoteId, identityNoteId, n
                   {tagName}
                 </div>
               ))}
-              {suggestedTags.length === 0 ? (
-                <span className="tabbar-tag-hint">Suggested tags appear here.</span>
-              ) : null}
             </div>
           </>
         )}
