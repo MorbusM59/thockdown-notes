@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { DatabaseService } from './databaseService'
-import { NEUTRAL_BASE } from '../src/shared/presets'
+import { DatabaseService, normalizeUiLayoutLoadout } from './databaseService'
+import { LIGHT_FACTORY_PRESETS, NEUTRAL_BASE } from '../src/shared/presets'
 import { DEFAULT_CARET_SETTINGS } from '../src/shared/caretSettings'
 import type { UiLayoutLoadout } from '../src/shared/loadouts'
 
@@ -102,6 +102,16 @@ describe('DatabaseService caret loadout fields', () => {
     expect(stored.caretFrameDurationMs).toBe(500)
     expect(stored.caretEffectStrengthPercent).toBe(0)
     expect(stored.caretAnimationPreset).toBe(DEFAULT_CARET_SETTINGS.animationPreset)
+  })
+
+  it('normalizes new floating-point cursor and caret settings before signing a preset', () => {
+    const preset = LIGHT_FACTORY_PRESETS[2]
+    const normalized = normalizeUiLayoutLoadout(preset)
+    expect(normalized).not.toBeNull()
+    expect(normalized!.cursorSpinHz).toBe(0.2)
+    expect(normalized!.cursorPulseMagnitude).toBe(Number(normalized!.cursorPulseMagnitude.toFixed(4)))
+    expect(normalized!.cursorClickRamp).toBe(Number(normalized!.cursorClickRamp.toFixed(4)))
+    expect(normalized!.cursorClickBalance).toBe(Number(normalized!.cursorClickBalance.toFixed(4)))
   })
 
   it('carries every caret field through a .tdl export/import cycle', async () => {

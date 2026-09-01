@@ -491,7 +491,7 @@ function normalizeTextureMaterials(input: unknown): TextureMaterialsBySurface {
   return next;
 }
 
-function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
+export function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
   if (!input || typeof input !== 'object') {
     return null;
   }
@@ -577,7 +577,7 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
     cursorTrailColor: sanitizeString(source.cursorTrailColor, DEFAULT_UI_LAYOUT_LOADOUT.cursorTrailColor),
     cursorDotCount: clampInteger(source.cursorDotCount, CURSOR_DOT_COUNT_MIN, CURSOR_DOT_COUNT_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorDotCount),
     cursorRadiusPx: clampNumber(source.cursorRadiusPx, CURSOR_RADIUS_MIN_PX, CURSOR_RADIUS_MAX_PX, DEFAULT_UI_LAYOUT_LOADOUT.cursorRadiusPx),
-    cursorSpinHz: clampNumber(source.cursorSpinHz, CURSOR_SPIN_HZ_MIN, CURSOR_SPIN_HZ_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorSpinHz),
+    cursorSpinHz: roundForSignature(clampNumber(source.cursorSpinHz, CURSOR_SPIN_HZ_MIN, CURSOR_SPIN_HZ_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorSpinHz)),
     cursorTrailThicknessPx: clampNumber(source.cursorTrailThicknessPx, CURSOR_TRAIL_THICKNESS_MIN_PX, CURSOR_TRAIL_THICKNESS_MAX_PX, DEFAULT_UI_LAYOUT_LOADOUT.cursorTrailThicknessPx),
     cursorTrailFadeMs: clampNumber(source.cursorTrailFadeMs, CURSOR_TRAIL_FADE_MIN_MS, CURSOR_TRAIL_FADE_MAX_MS, DEFAULT_UI_LAYOUT_LOADOUT.cursorTrailFadeMs),
     cursorDotSizePx: clampNumber(source.cursorDotSizePx, CURSOR_DOT_SIZE_MIN_PX, CURSOR_DOT_SIZE_MAX_PX, DEFAULT_UI_LAYOUT_LOADOUT.cursorDotSizePx),
@@ -585,14 +585,14 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
     cursorHaloColor: sanitizeString(source.cursorHaloColor, DEFAULT_UI_LAYOUT_LOADOUT.cursorHaloColor),
     cursorHaloRadiusPx: clampNumber(source.cursorHaloRadiusPx, CURSOR_HALO_RADIUS_MIN_PX, CURSOR_HALO_RADIUS_MAX_PX, DEFAULT_UI_LAYOUT_LOADOUT.cursorHaloRadiusPx),
     cursorHaloFalloff: clampNumber(source.cursorHaloFalloff, CURSOR_HALO_FALLOFF_MIN, CURSOR_HALO_FALLOFF_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorHaloFalloff),
-    cursorPulseMagnitude: clampNumber(source.cursorPulseMagnitude, CURSOR_PULSE_MAGNITUDE_MIN, CURSOR_PULSE_MAGNITUDE_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorPulseMagnitude),
-    cursorPulseHz: clampNumber(source.cursorPulseHz, CURSOR_PULSE_HZ_MIN, CURSOR_PULSE_HZ_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorPulseHz),
-    cursorClickRamp: clampNumber(source.cursorClickRamp, CURSOR_CLICK_RAMP_MIN, CURSOR_CLICK_RAMP_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorClickRamp),
-    cursorClickSkew: clampNumber(source.cursorClickSkew, CURSOR_CLICK_SKEW_MIN, CURSOR_CLICK_SKEW_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorClickSkew),
-    cursorClickSpeedX: clampNumber(source.cursorClickSpeedX, CURSOR_CLICK_SPEED_X_MIN, CURSOR_CLICK_SPEED_X_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorClickSpeedX),
-    cursorClickMaxSpeed: clampNumber(source.cursorClickMaxSpeed, CURSOR_CLICK_MAX_SPEED_MIN, CURSOR_CLICK_MAX_SPEED_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorClickMaxSpeed),
-    cursorClickMinHoldMs: clampNumber(source.cursorClickMinHoldMs, CURSOR_CLICK_MIN_HOLD_MIN_MS, CURSOR_CLICK_MIN_HOLD_MAX_MS, DEFAULT_UI_LAYOUT_LOADOUT.cursorClickMinHoldMs),
-    cursorClickBalance: clampNumber(source.cursorClickBalance, CURSOR_CLICK_BALANCE_MIN, CURSOR_CLICK_BALANCE_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorClickBalance),
+    cursorPulseMagnitude: roundForSignature(clampNumber(source.cursorPulseMagnitude, CURSOR_PULSE_MAGNITUDE_MIN, CURSOR_PULSE_MAGNITUDE_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorPulseMagnitude)),
+    cursorPulseHz: roundForSignature(clampNumber(source.cursorPulseHz, CURSOR_PULSE_HZ_MIN, CURSOR_PULSE_HZ_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorPulseHz)),
+    cursorClickRamp: roundForSignature(clampNumber(source.cursorClickRamp, CURSOR_CLICK_RAMP_MIN, CURSOR_CLICK_RAMP_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorClickRamp)),
+    cursorClickSkew: roundForSignature(clampNumber(source.cursorClickSkew, CURSOR_CLICK_SKEW_MIN, CURSOR_CLICK_SKEW_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorClickSkew)),
+    cursorClickSpeedX: roundForSignature(clampNumber(source.cursorClickSpeedX, CURSOR_CLICK_SPEED_X_MIN, CURSOR_CLICK_SPEED_X_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorClickSpeedX)),
+    cursorClickMaxSpeed: roundForSignature(clampNumber(source.cursorClickMaxSpeed, CURSOR_CLICK_MAX_SPEED_MIN, CURSOR_CLICK_MAX_SPEED_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorClickMaxSpeed)),
+    cursorClickMinHoldMs: roundForSignature(clampNumber(source.cursorClickMinHoldMs, CURSOR_CLICK_MIN_HOLD_MIN_MS, CURSOR_CLICK_MIN_HOLD_MAX_MS, DEFAULT_UI_LAYOUT_LOADOUT.cursorClickMinHoldMs)),
+    cursorClickBalance: roundForSignature(clampNumber(source.cursorClickBalance, CURSOR_CLICK_BALANCE_MIN, CURSOR_CLICK_BALANCE_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorClickBalance)),
     caretSizeDeviationPx: clampInteger(source.caretSizeDeviationPx, CARET_SIZE_DEVIATION_MIN_PX, CARET_SIZE_DEVIATION_MAX_PX, DEFAULT_UI_LAYOUT_LOADOUT.caretSizeDeviationPx),
     caretOutlineWidthPx: clampInteger(source.caretOutlineWidthPx, CARET_OUTLINE_WIDTH_MIN_PX, CARET_OUTLINE_WIDTH_MAX_PX, DEFAULT_UI_LAYOUT_LOADOUT.caretOutlineWidthPx),
     caretOutlineColor: sanitizeString(source.caretOutlineColor, DEFAULT_UI_LAYOUT_LOADOUT.caretOutlineColor),

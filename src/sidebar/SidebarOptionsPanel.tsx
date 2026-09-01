@@ -311,7 +311,7 @@ const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
 const LIGHT_PRESET_ICONS: string[] = [
   'fa-solid fa-sun',
   'fa-solid fa-mound',
-  'fa-solid fa-leaf',
+  'fa-solid fa-cloud',
   'fa-regular fa-file',
   'fa-solid fa-ring',
 ]
@@ -328,7 +328,7 @@ const DARK_PRESET_ICONS: string[] = [
 const LIGHT_PRESET_THEMES: string[] = [
   'Light (Default)',
   'Sand',
-  'Forest',
+  'Sky',
   'Paper',
   'Gold',
 ]
