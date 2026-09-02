@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildPreviewVisibleTextProjection, mapVisibleOffsetToSourceOffset } from './PreviewVisibleText'
 import { buildDocumentFindHits, buildPreviewVisibleDocumentFindHits } from './FindReplaceEngine'
+import { createPreviewSearchHighlightRehypePlugin } from './PreviewMarkdown'
 
 describe('buildPreviewVisibleTextProjection', () => {
   it('drops a link target while keeping its label', () => {
@@ -41,6 +42,18 @@ describe('buildPreviewVisibleTextProjection', () => {
     const source = 'Look: ![alt](https://example.com/anchor.png)\n'
     const { visibleText } = buildPreviewVisibleTextProjection(source)
     expect(visibleText).not.toContain('anchor')
+  })
+})
+
+describe('createPreviewSearchHighlightRehypePlugin', () => {
+  it('caps expensive DOM splitting when a single text node has too many matches', () => {
+    const text = 'a'.repeat(300)
+    const tree = { type: 'root', children: [{ type: 'text', value: text }] }
+
+    createPreviewSearchHighlightRehypePlugin('a', false)()(tree as any)
+
+    expect(tree.children).toHaveLength(1)
+    expect(tree.children[0]).toEqual({ type: 'text', value: text })
   })
 })
 

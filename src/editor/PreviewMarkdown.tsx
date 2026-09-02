@@ -471,6 +471,8 @@ export function createPreviewMarkdownComponents(
   } as const
 }
 
+const MAX_SEARCH_HIGHLIGHT_MATCHES_PER_TEXT_NODE = 32
+
 export function createPreviewSearchHighlightRehypePlugin(needle: string, isCaseSensitive: boolean) {
   const normalizedNeedle = isCaseSensitive ? needle : needle.toLocaleLowerCase()
   if (!normalizedNeedle) {
@@ -495,10 +497,25 @@ export function createPreviewSearchHighlightRehypePlugin(needle: string, isCaseS
           const haystack = isCaseSensitive ? textValue : textValue.toLocaleLowerCase()
           const needleLength = normalizedNeedle.length
 
+          // A single short query can match a large section of text dozens or
+          // hundreds of times. Replacing every match with inline span nodes is
+          // fundamentally just styling, not geometry, and it causes the preview
+          // tree to balloon without giving any meaningful UX benefit. Once a
+          // node gets dense enough to require a large amount of extra markup,
+          // leave it untouched and let the search-hit list remain the source of
+          // truth for the actual match navigation. This is a deliberate
+          // fail-safe: the preview still highlights normal cases, but the render
+          // path no longer churns layout on pathological repeated words.
           let cursor = 0
           const replacements: RehypeAstNode[] = []
           let matchIndex = haystack.indexOf(normalizedNeedle, cursor)
+          let matchCount = 0
+
           while (matchIndex >= 0) {
+            if (matchCount >= MAX_SEARCH_HIGHLIGHT_MATCHES_PER_TEXT_NODE) {
+              return
+            }
+
             if (matchIndex > cursor) {
               replacements.push({ type: 'text', value: textValue.slice(cursor, matchIndex) })
             }
@@ -510,6 +527,7 @@ export function createPreviewSearchHighlightRehypePlugin(needle: string, isCaseS
             })
             cursor = matchIndex + needleLength
             matchIndex = haystack.indexOf(normalizedNeedle, cursor)
+            matchCount += 1
           }
 
           if (replacements.length > 0) {
