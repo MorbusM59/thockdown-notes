@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { buildPreviewVisibleTextProjection, mapVisibleOffsetToSourceOffset } from './PreviewVisibleText'
 import { buildDocumentFindHits, buildPreviewVisibleDocumentFindHits } from './FindReplaceEngine'
 import { createPreviewSearchHighlightRehypePlugin } from './PreviewMarkdown'
+import { invalidatePreviewVirtualizerMeasurementsAfterIndex } from '../editorSection/usePreviewMarkdownRendering'
 
 describe('buildPreviewVisibleTextProjection', () => {
   it('drops a link target while keeping its label', () => {
@@ -54,6 +55,21 @@ describe('createPreviewSearchHighlightRehypePlugin', () => {
 
     expect(tree.children).toHaveLength(1)
     expect(tree.children[0]).toEqual({ type: 'text', value: text })
+  })
+})
+
+describe('invalidatePreviewVirtualizerMeasurementsAfterIndex', () => {
+  it('keeps earlier blocks measured while invalidating only the tail', () => {
+    const virtualizer = {
+      itemSizeCache: new Map<number, number>([[0, 10], [1, 20], [2, 30], [3, 40]]),
+      laneAssignments: new Map<number, number>([[0, 0], [1, 1], [2, 0], [3, 1]]),
+      measurementsCache: [{ index: 0 }, { index: 1 }, { index: 2 }, { index: 3 }],
+    } as any
+
+    invalidatePreviewVirtualizerMeasurementsAfterIndex(virtualizer, 2)
+
+    expect([...virtualizer.itemSizeCache.keys()]).toEqual([0, 1])
+    expect([...virtualizer.laneAssignments.keys()]).toEqual([0, 1])
   })
 })
 

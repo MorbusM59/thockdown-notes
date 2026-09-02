@@ -306,6 +306,47 @@ interface PreviewMarkdownBlockProps {
   components: ReturnType<typeof createPreviewMarkdownComponents>
 }
 
+export function invalidatePreviewVirtualizerMeasurementsAfterIndex(
+  virtualizer: {
+    itemSizeCache?: Map<number | string, number>
+    laneAssignments?: Map<number, number>
+    measurementsCache?: Array<{ index?: number } | undefined>
+    pendingMin?: number | null
+  } | null | undefined,
+  index: number,
+): void {
+  if (!virtualizer || !Number.isFinite(index) || index < 0) return
+
+  const itemSizeCache = virtualizer.itemSizeCache
+  if (itemSizeCache instanceof Map) {
+    for (const key of Array.from(itemSizeCache.keys())) {
+      if (typeof key === 'number' && key >= index) {
+        itemSizeCache.delete(key)
+      }
+    }
+  }
+
+  const laneAssignments = virtualizer.laneAssignments
+  if (laneAssignments instanceof Map) {
+    for (const laneIndex of Array.from(laneAssignments.keys())) {
+      if (laneIndex >= index) laneAssignments.delete(laneIndex)
+    }
+  }
+
+  if (Array.isArray(virtualizer.measurementsCache)) {
+    for (let i = index; i < virtualizer.measurementsCache.length; i += 1) {
+      if (virtualizer.measurementsCache[i]?.index !== undefined) {
+        virtualizer.measurementsCache[i] = undefined
+      }
+    }
+  }
+
+  const pendingMin = (virtualizer as { pendingMin?: number | null }).pendingMin
+  if (pendingMin === null || pendingMin === undefined || pendingMin > index) {
+    ;(virtualizer as { pendingMin: number }).pendingMin = index
+  }
+}
+
 // Memoized on (text, lineOffset, searchHighlightPlugin, components) -- all
 // either primitives or stable-until-actually-different references -- so a
 // block whose own source text and position are unchanged skips
@@ -2268,13 +2309,48 @@ export function usePreviewMarkdownRendering({
   // probe's own box, and a ResizeObserver on it restarts the sweep. That also
   // catches changes driven from an ancestor (double-size mode, a root font
   // scale) which no observer on the scroller's own attributes would see.
+  const previousRenderedDisplayTextRef = useRef<string | null>(null)
+  const previousPreviewNoteIdRef = useRef<string | null>(null)
   useEffect(() => {
-    // The text changed, so every remembered survey -- and every fitted model --
-    // describes a document that no longer exists.
+    const previousText = previousRenderedDisplayTextRef.current
+    const previousNoteId = previousPreviewNoteIdRef.current
+    previousRenderedDisplayTextRef.current = renderedDisplayText
+    previousPreviewNoteIdRef.current = activeNoteId
+
+    if (previousText === null || previousText === renderedDisplayText) return
+
+    // A local edit leaves the earlier geometry intact. Only the blocks that
+    // follow the first changed line need to be re-estimated, and the reader's
+    // current scroll target is already known to stay in view for the replace
+    // case this path exists for. Clearing the whole survey here would force a
+    // full-document remeasure on a change that only altered the tail.
+    if (previousNoteId === activeNoteId) {
+      const previousLines = previousText.split('\n')
+      const nextLines = renderedDisplayText.split('\n')
+      const maxCommon = Math.min(previousLines.length, nextLines.length)
+      let prefixLines = 0
+      while (prefixLines < maxCommon && previousLines[prefixLines] === nextLines[prefixLines]) {
+        prefixLines += 1
+      }
+
+      const startLine = prefixLines
+      const firstChangedBlockIndex = resolvePreviewBlockIndexForSourceLine(previewBlocksRef.current, startLine)
+      if (firstChangedBlockIndex >= 0) {
+        surveyByGeometryRef.current = new Map()
+        modelByGeometryRef.current = new Map()
+        heightModelRef.current = null
+        predictedHeightsRef.current = null
+        invalidatePreviewVirtualizerMeasurementsAfterIndex(virtualizer, firstChangedBlockIndex)
+        return
+      }
+    }
+
+    // For a note switch or a broader structural edit, the old survey no longer
+    // applies and the prewarm has to start over on the new document.
     surveyByGeometryRef.current = new Map()
     modelByGeometryRef.current = new Map()
     restartPrewarm()
-  }, [previewBlocks, restartPrewarm])
+  }, [activeNoteId, renderedDisplayText, previewBlocks, restartPrewarm, virtualizer])
 
   useEffect(() => {
     const probe = prewarmProbeRef.current
