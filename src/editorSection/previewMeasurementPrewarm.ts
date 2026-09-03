@@ -183,3 +183,20 @@ export function resolveNextPrewarmBatchSize(
   )
   return Math.max(PREVIEW_PREWARM_MIN_BATCH, Math.min(PREVIEW_PREWARM_MAX_BATCH, bounded))
 }
+
+/**
+ * Opt-out kill switch for the whole background survey.
+ *
+ * Set `thockdown:disable-preview-prewarm` in localStorage (any value) and
+ * reload: no block is measured, no height model is fitted, no discovery bar
+ * appears, and the virtualizer runs on the lines x line-height estimate alone.
+ * It exists so the survey's worth can be felt rather than argued about --
+ * remove it, and this comment, once that question is settled.
+ */
+export const isPreviewPrewarmDisabled = (): boolean => {
+  try {
+    return window.localStorage.getItem('thockdown:disable-preview-prewarm') !== null
+  } catch {
+    return false
+  }
+}

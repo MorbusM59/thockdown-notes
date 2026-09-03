@@ -44,6 +44,7 @@ import {
   PREVIEW_PREWARM_SLICE_BUDGET_MS,
   PREVIEW_PREWARM_IDLE_TIMEOUT_MS,
   resolveNextPrewarmBatchSize,
+  isPreviewPrewarmDisabled,
 } from './previewMeasurementPrewarm'
 import {
   PREVIEW_CALIBRATION_MAX_SAMPLES,
@@ -2232,6 +2233,16 @@ export function usePreviewMarkdownRendering({
     // height from the first commit rather than a flat guess. Same scan the
     // thumb's own sizing needs, so it costs nothing extra.
     readLineMetrics()
+
+    // Kill switch (see previewMeasurementPrewarm.ts): stop here and let the
+    // line-count estimate stand. Nothing downstream runs, because everything
+    // downstream is reached from queueNextPrewarmBatch below.
+    if (isPreviewPrewarmDisabled()) {
+      predictedHeightsRef.current = null
+      prewarmDoneRef.current = true
+      reportDiscovery(blockCount, blockCount, false)
+      return
+    }
 
     // A geometry this document has already been fitted at -- the sidebar
     // toggled back, a font size tried and undone, a split divider dragged and
