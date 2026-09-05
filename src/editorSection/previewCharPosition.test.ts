@@ -5,6 +5,7 @@ import {
   findBlockAtPixel,
   resolvePreviewCharScrollOffset,
   resolvePreviewCharViewport,
+  resolveLastScreenChars,
 } from './previewCharPosition'
 import type { PreviewBlockMeasurement } from './previewCharPosition'
 
@@ -137,5 +138,65 @@ describe('resolvePreviewCharScrollOffset', () => {
   it('says nothing when it has nothing to work from', () => {
     expect(resolvePreviewCharScrollOffset({ offsets: null, measurements, charOffset: 5 })).toBeNull()
     expect(resolvePreviewCharScrollOffset({ offsets, measurements: [], charOffset: 5 })).toBeNull()
+  })
+})
+
+describe('resolveLastScreenChars', () => {
+  // Ten blocks of 100 characters each, 50px tall.
+  const blockCount = 10
+  const offsets = new Float64Array(blockCount + 1)
+  for (let i = 0; i <= blockCount; i += 1) offsets[i] = i * 100
+  const measurements = Array.from({ length: blockCount }, (_, index) => ({
+    index, start: index * 50, size: 50,
+  }))
+
+  it('measures back from the document bottom by one screen', () => {
+    // The document is 500px tall. A 100px screen starts at 400px, which is the
+    // top of the last two blocks: 200 characters.
+    expect(resolveLastScreenChars({ offsets, measurements, blockCount, clientHeightPx: 100 })).toBe(200)
+  })
+
+  it('interpolates through a block that straddles the top edge', () => {
+    // A 120px screen starts at 380px, which is 60% of the way into the block
+    // spanning 350..400. That block contributes 40 of its 100 characters, plus
+    // the 200 in the two whole blocks below it.
+    expect(resolveLastScreenChars({ offsets, measurements, blockCount, clientHeightPx: 120 })).toBeCloseTo(240, 10)
+  })
+
+  it('survives a document that is a single enormous block', () => {
+    // Markdown parses a list whose items are separated by blank lines as ONE
+    // node, so a whole document can be a single block taller than any screen.
+    // Counting that block in full would report the entire document as its own
+    // last screen, collapse the scrollbar's span to zero, and pin the thumb at
+    // the top of the track forever. Measured live before this was interpolated.
+    const oneBlockOffsets = new Float64Array([0, 400_000])
+    const oneBlockMeasurement = [{ index: 0, start: 0, size: 1_000_000 }]
+    const lastScreen = resolveLastScreenChars({
+      offsets: oneBlockOffsets,
+      measurements: oneBlockMeasurement,
+      blockCount: 1,
+      clientHeightPx: 655,
+    })!
+    expect(lastScreen).toBeGreaterThan(0)
+    expect(lastScreen).toBeLessThan(400_000)
+    expect(lastScreen).toBeCloseTo(400_000 * (655 / 1_000_000), 6)
+  })
+
+  it('is the whole document when one screen holds it', () => {
+    expect(resolveLastScreenChars({ offsets, measurements, blockCount, clientHeightPx: 5000 })).toBe(1000)
+  })
+
+  it('refuses to answer from measurements that do not reach the last block', () => {
+    // The windowed pane's usual state: measurements describe the middle of the
+    // document, which says nothing about how its end is laid out.
+    expect(resolveLastScreenChars({
+      offsets, measurements: measurements.slice(0, 5), blockCount, clientHeightPx: 120,
+    })).toBeNull()
+  })
+
+  it('says nothing rather than zero when it has not been given enough', () => {
+    expect(resolveLastScreenChars({ offsets: null, measurements, blockCount, clientHeightPx: 120 })).toBeNull()
+    expect(resolveLastScreenChars({ offsets, measurements: [], blockCount, clientHeightPx: 120 })).toBeNull()
+    expect(resolveLastScreenChars({ offsets, measurements, blockCount, clientHeightPx: 0 })).toBeNull()
   })
 })

@@ -2391,3 +2391,420 @@ text is legible only to a reader who has wound the scroll speed down, which is
 the audience it is meant for. The `clip-path` on `.cm-scroller` is worth an
 occasional eye given hazard 2 above, though a plain inset is not itself a
 promotion trigger.
+
+## This round: the windowed preview — built, verified, flag-gated, awaiting a human verdict
+
+**The question that started it.** "I've never actually seen the preloading
+system in action. Is it still warranted?" Answering it properly meant asking
+what the background survey is *for*, and the answer is narrower than the
+machinery around it: the survey exists to make the virtualizer's whole-document
+spacer height convincing. Nothing else needs it. The scrollbar was moved off
+pixels entirely in an earlier round (`previewCharPosition.ts`), so position,
+thumb size and every ratio are already answered from characters and lines, and
+would not notice if the survey vanished.
+
+**What actually needs a document height, and it is not the reader.** Two things,
+both consequences of using a native scroller as the transport rather than
+properties of the document: (1) runway for native scrolling — the scroller can
+only scroll to `scrollHeight - clientHeight`; (2) turning a destination into a
+`scrollTop`, because that is the only handle a native scroller offers. Both need
+a bounded runway, not a total. That is the whole design.
+
+### The measurements that sized it
+
+`scripts/perf/measurePreviewScrollRunway.mjs` (Playwright, real Chromium, CDP
+CPU throttling; prewarm off by default via `thockdown:disable-preview-prewarm`).
+
+| Run | fps | Drain | Refill (med / p95) | Runway |
+|---|---|---|---|---|
+| 1x, 500k | 60.0 | 6,220 px/s = 9.5 screenfuls/s | 49 / 50 ms | 0.48 screenfuls |
+| 6x, 500k | 10.4 | 4,585 px/s = 7.0 screenfuls/s | 214 / 251 ms | 1.76 screenfuls |
+| 6x, 1.5M | 10.8 | 4,290 px/s = 6.6 screenfuls/s | 206 / 234 ms | 1.53 screenfuls |
+| 6x, 500k, prewarm on | 14.4 | 5,839 px/s = 8.9 screenfuls/s | 133 / 157 ms | 1.40 screenfuls |
+
+Three things fell out, and the third was not expected:
+
+1. **Refill cost does not scale with the document** — 206ms on 1.5M characters
+   against 214ms on 500k, 28 blocks a screenful in both. A screenful is a
+   screenful. This is the claim the whole design rests on.
+2. **Held page keys are nowhere near the danger zone.** The continuous handoff
+   runs at ~6,200px/s (1.5x the apex of a one-page journey), not the 80,000px/s
+   peak — that is a *bridged* journey's speed, and nothing renders at it, which
+   is why the bridge exists.
+3. **The survey was earning its keep, for a reason nobody had written down.**
+   With prewarm on, the same document mounts *faster*: refill 133ms vs 214ms,
+   14.4fps vs 10.4fps. The spacer is 163,307px with the model against 276,545px
+   without — the estimates run ~69% long, so the first mount pass underfills the
+   viewport and react-virtual has to go round again. Do not delete the survey
+   without the windowing replacement in place; they are a package.
+
+**A number stated earlier in this effort was wrong and is corrected here:** a
+runway buys *latency* tolerance, not throughput. At 6x the rates are demand ~109
+blocks/s against supply ~131 blocks/s — a ~20% margin, not the "70% headroom"
+first claimed, which had compared a runway depth against a mount cost as though
+they were the same kind of quantity.
+
+### What was built
+
+Flag: `localStorage['thockdown:preview-window']`, then reload. The virtualized
+path, the survey and the height model are all still there and untouched; the
+flag chooses which one the render view uses, so the two can be felt against each
+other on the same note without a rebuild.
+
+- `src/editorSection/previewWindow.ts` — pure window planning: how deep the
+  runway is, when to grow, when to trim, and the hysteresis between the two.
+  16 unit tests.
+- `src/editorSection/usePreviewWindow.tsx` — the DOM half: renders the window in
+  **ordinary flow** (each block in a `display: flow-root` wrapper, which is what
+  reproduces the absolutely-positioned path's margin behaviour exactly),
+  measures it, moves it, and answers position in character space.
+- Redirection in `usePreviewMarkdownRendering.tsx` is deliberately just four
+  primitives — measurements, char viewport, `scrollToChar`, `smoothScrollToChar`.
+  Everything else (every ratio, the thumb, source-line mapping) runs unchanged,
+  because it was already expressed in character space. That is the payoff from
+  the earlier `previewCharPosition.ts` round.
+- `NonQuantizedSmoothScroll.ts` gained two options: `journeyDistancePx` (plan the
+  curve's shape from a distance that is not in this scroller's space) and
+  `onBridgeCut` (relocate the destination at the moment the curtain covers the
+  pane). The window re-anchors there — precisely the substitution the bridge
+  already existed to hide.
+- `DocumentPosition` gained two optional questions: `isAtDocumentEdge` and
+  `readContinuousScrollOffsetPx`. Both absent on the virtualized path, where
+  their answers are trivially yes and `scrollTop`.
+
+### Three bugs found by measurement, each worth remembering
+
+1. **Adjustments must be serialized against commits.** `adjust` runs per scroll
+   event, faster than React commits. A second pass computed before the first
+   landed read the old measurements while `rangeRef` already held the new range,
+   so its anchor was captured against geometry that no longer applied. Live at
+   6x: the front edge moved 32 blocks while the compensation was computed for 6,
+   the reader was thrown 2,655px instead of 1,376px, and the window oscillated
+   (start index 55 -> 87 -> 54 -> 93 -> 46 on consecutive frames) for the rest of
+   the scroll. Fixed with `pendingCommitRef`.
+2. **The compensation must be absolute, not incremental.** `scrollTop += delta`
+   is correct exactly once, and it was applied twice — the browser's own clamp
+   on a shrinking scroller and this correction are two writes to the same number.
+   Restating the anchor's position outright (`scrollTop = newStart +
+   (oldScrollTop - oldStart)`) is idempotent. Fixing this alone took a 4-second
+   held PageDown from 324 blocks travelled to 538.
+3. **The window's end is not the document's end.** The continuous-scroll loop
+   stopped permanently the first time it ran out of runway, stranding the reader
+   mid-document with the key still held. `isAtDocumentEdge` is what tells the two
+   apart, and the release ramp needed the same treatment. This was named in the
+   audit as the load-bearing site and then not wired on the first pass — which is
+   how it was found.
+
+### Verification
+
+`scripts/perf/verifyPreviewWindow.mjs` opens the same document on both paths in
+one browser and checks, in order: block gaps and heights match the virtualized
+path (the `flow-root` claim); the spacer stays bounded; a held PageDown carries
+the reader forward with **zero** reversals; the spacer is still bounded after a
+far scrollbar-track click; and that click travels clear past the previous window.
+All pass at 1x and 6x, on 500k and 1.5M characters. `npm test` 765/765.
+
+Spacer height, same viewport: **2,652px windowed on both a 500k and a 1.5M
+document**, against 175,767px and 525,538px virtualized.
+
+### What is deliberately not done
+
+- **Nothing is deleted yet.** The survey, the height model, the geometry caches
+  and the discovery progress bar are all still live on the virtualized path. They
+  come out only once the windowed path has been lived with.
+- **A stall is a stall.** When the runway cannot be refilled in time the scroll
+  pauses until content arrives, by explicit decision — no spoofed-scroll
+  fallback. Whether one is needed is a question for manual testing.
+- **`previewSettleGate`'s signature** (`scrollTop|scrollHeight|sizerHeight`) has
+  not been re-examined for a pane whose geometry legitimately changes on every
+  shift. It gates the pane's visibility during a restore, so if the windowed
+  preview is ever seen staying hidden after a note switch, look here first.
+- The continuous path (documents under 50k characters) is untouched and keeps its
+  measured whole-document scroller.
+
+### A framing this doc used to carry, retired
+
+The section above at "the preview scrollbar is now accurate before the reader
+scrolls" named the survey's purpose in terms that were true when it was written
+and are not true now. The character-space scrollbar landed afterwards
+(`previewCharPosition.ts`, `documentPosition.ts`), and it took the thumb off
+pixels entirely: on a chunked document the thumb's SIZE comes from lines of
+source text via the typography probe, and its POSITION comes from the block at
+the fold — which is on screen, so it is measured, not modelled.
+`isThumbRatioSettled` answers `true` throughout on that path precisely because
+nothing about it is waiting for the survey.
+
+So "the survey buys scrollbar accuracy" should not be said again about a chunked
+note. What the survey buys there is:
+
+- **Landing accuracy for an unmounted destination.** A scrollbar drag or a search
+  hit resolves through `resolvePreviewCharScrollOffset`, which needs a
+  `measurement.start` for a block nobody has looked at. That is a landing, not a
+  thumb.
+- **Mount efficiency**, the finding from the windowing round: a spacer ~69% too
+  tall makes the first mount pass underfill the viewport, so react-virtual goes
+  round again.
+
+Only the continuous path (under 50k characters) reads its thumb off a pixel
+height, and that is the one case where the older wording still holds.
+
+The user-facing tooltip on the discovery bar carried the same stale claim and now
+reads "Measuring this document so jumps land where you aim".
+
+### Follow-up in the same round: the chunked virtualizer is gone, and the flags with it
+
+The section above describes the windowed preview living behind
+`thockdown:preview-window` alongside the chunked virtualizer. It does not any
+more. There are now exactly two strategies, chosen by the document's length and
+nothing else — the same boundary `editor/documentPosition.ts` already drew:
+
+- **under `CONTINUOUS_DOCUMENT_MAX_CHARS` (50,000)** — continuous. Every block
+  is measured by the survey, `scrollHeight` becomes a true total, and the
+  scrollbar uses the plain pixel identity. Unchanged.
+- **at or over it** — windowed. No survey, no model, no whole-document height.
+
+Deleted outright: `previewHeightModel.ts` and its test (379 lines + 18 tests),
+`scripts/perf/measurePreviewHeightModel.mjs`, `applyHeightModel`,
+`remeasureMountedBlocks`, `predictedHeightsRef`, `heightModelRef`,
+`modelByGeometryRef`, `calibrationSamplesRef`, the fitted-model geometry cache,
+the sampled-target planning in `restartPrewarm`, the model tier of
+`estimateSize`, and both localStorage switches
+(`thockdown:preview-window`, `thockdown:disable-preview-prewarm`) — each of
+which existed to answer a question that is now answered.
+
+`usePreviewMarkdownRendering.tsx` went from 2,533 lines to 2,436 while gaining
+the whole windowed path, so the net removal is larger than it looks.
+
+The discovery progress bar survives, and its tooltip goes back to saying "so
+the scrollbar is accurate" — which is now true again for the only case that can
+raise it. A continuous document is the only kind surveyed, and it is exactly
+the kind whose thumb is read off `scrollHeight`.
+
+**The verification had to change with it.** The old geometry check compared the
+windowed path against the chunked virtualizer; with that gone there is no
+second path on the same document to compare with. It now asserts the invariant
+directly, which is stronger: every wrapper must CONTAIN its own block's margins
+(worst 0.01px off), and consecutive wrappers must be CONTIGUOUS (worst gap 0px).
+Together those are what "the flow layout reproduces the absolutely positioned
+one" actually meant.
+
+### A pre-existing defect this surfaced, in the CONTINUOUS path — not fixed
+
+While building the geometry check, the continuous path was measured for the
+first time in a while and it is laying blocks out on ESTIMATES, not on the
+heights the survey measured. On a 20,000-character document of one-line
+paragraphs, six seconds after opening:
+
+```
+transforms: translateY(0px), translateY(25.6px), translateY(102.4px), translateY(179.2px)
+wrapper heights: 29.75, 43.19, 43.19, 43.19
+```
+
+The blocks are 43.19px tall and are being placed 76.8px apart — 25.6 and 76.8
+being exactly 1x and 3x the line height, i.e. `lineHeightEstimatesRef`'s
+`countWrappedLines` answer. A one-line paragraph is being treated as three
+lines, so every gap between paragraphs is ~33.6px wider than it should be.
+
+**It reproduces at HEAD** (checked by stashing this round's work and running the
+same probe), so it is not something the windowing work introduced. The likely
+mechanism, and the reason it was invisible until now: the prewarm host
+under-reads the wrap width, so both the line estimate and the host's own
+measurement come out too tall, and `commitPrewarmedSizes` writes those over the
+correct heights react-virtual measured on mount. The chunked path used to hide
+this because `applyHeightModel` called `remeasureMountedBlocks()` afterwards,
+restoring the truth for everything on screen — which is exactly what that
+function's doc comment said it was for. With the chunked path gone, nothing
+calls it, and the continuous path never did.
+
+Not fixed here because it is a different defect from the one this round was
+about, and fixing it properly means looking at why the measurement host reads a
+narrower width than the real blocks rather than papering over it with another
+remeasure pass.
+
+### The continuous-path spacing defect, diagnosed and fixed
+
+The section above reported it and left it. It is fixed, and the cause was not
+what that section guessed (it blamed the measurement host's width; the host is
+exactly the right width -- 935px, identical to a real block).
+
+**What was actually happening.** The survey works. On a 20,000-character
+document it measured all 166 blocks and committed them correctly, confirmed by
+instrumenting the commit: `[0->30, 1->43, 2->43, 3->43]`. One frame later
+`scrollPreviewToSourceLine` called `virtualizer.measure()` and destroyed every
+one of them.
+
+`measure()` clears react-virtual's SIZE cache -- the measured heights -- not
+just the estimate-derived measurements the caller wanted refreshed. The
+restore path retries across animation frames, so it reliably landed *after* the
+survey finished. The pane then fell back to `estimateSize`, which returned
+`countWrappedLines` line estimates: 76.8px for a one-line paragraph whose true
+height is 43px. Every paragraph gap in the document was ~33.6px too wide, on
+every note under 50,000 characters, permanently.
+
+**Why nobody saw it while the chunked path existed.** A chunked document's
+heights came from `estimateSize` (the fitted model), and `measure()` does not
+touch `estimateSize`. Only the continuous path had anything to lose. Deleting
+the chunked path did not cause this -- it removed the cover it was hiding
+behind.
+
+**The fix** is a guard on both `measure()` call sites
+(`scrollPreviewToSourceLine` and `ratioForSourceLine`): re-asking for estimates
+is an improvement while the survey is still running and pure loss once it has
+finished, so it now runs only when `!prewarmDoneRef.current`. `measured beats
+estimated, always` is the rule; there is nothing for a re-ask to improve after
+the survey lands.
+
+**Guarded by** `scripts/perf/verifyPreviewBlockSpacing.mjs`, which asserts the
+invariant the bug broke: consecutive blocks must be placed exactly their own
+measured height apart. A/B against the fix -- worst drift 33.61px without it,
+0.25px with it.
+
+### Still open: the line estimate itself is wrong twice over
+
+Not fixed, because it is a different defect and no longer affects layout (the
+estimate is now only the first-frame stopgap it was meant to be). It DOES still
+size the scrollbar thumb, on both paths, via `readLineMetrics`'s
+`documentLines`:
+
+1. **Blank separator lines are counted as rendered lines.** `readLineMetrics`'s
+   own comment claims they are not -- "Counted over the BLOCKS rather than the
+   raw source, so the blank lines that separate blocks (and render as nothing)
+   are not counted" -- but `PreviewBlockSplit` absorbs the blank line between
+   two blocks into the *start* of the following block's text, so it is inside
+   the text `countWrappedLines` is given, and its `length === 0 ? 1` branch
+   counts it as a rendered line.
+2. **`charsPerLine` is an average, not a capacity.** It is derived as
+   `probeTextLength / probeLines` -- 205 characters over 2 lines = 102.5. The
+   real capacity at that width is at least 127 (a 127-character paragraph
+   renders on one line, measured). With a 2-line probe the error can approach
+   2x, always in the direction of over-counting lines.
+
+Together they made a one-line paragraph estimate as three (1 blank + 2 wrap),
+which is exactly the 76.8px seen above. For the thumb the consequence is
+`documentLines` roughly 3x the truth, so the thumb is far shorter than it
+should be. Fixing (2) properly means measuring average character advance from a
+`white-space: pre` ruler and dividing the column width by it, rather than
+inferring capacity from where a short probe happened to wrap.
+
+### The chunked thumb is sized in characters, not lines
+
+Position was already character-based; size was not. It is now, and the two speak
+one unit.
+
+**Size.** `resolveViewportCharCapacity` (`editor/documentPosition.ts`) reads the
+viewport as a character grid -- `floor(contentWidth / charWidth) x floor(height /
+lineHeight)` -- and halves it: `VIEWPORT_GRID_FILL_FACTOR`, because no real
+document fills its grid (lines end early, paragraphs break, spaces are cells
+too). `resolveChunkedThumbRatio` is then that capacity over the document's
+character count, and the caller turns it into pixels against the track.
+
+`charWidth` comes from a **character ruler**: a fixed string in the measurement
+host with `white-space: pre`, whose width over its length is the average
+character advance at this font, size and letter spacing. One measurement, no
+inference. That is the honest version of the quantity `readLineMetrics` was
+guessing at -- its probe reports where a particular sentence happened to break,
+which gave 102.5 characters a line against a real capacity of at least 127.
+
+Everything in that chain is geometry, so **the same document at the same
+settings gets the same thumb every time it is opened**, regardless of where the
+reader is standing. A briefly-shipped intermediate version sized the thumb from
+the mounted window's measured character density; it was replaced before it left
+this session, because density is a property of the text on screen and the thumb
+must not depend on that.
+
+**Position.** `resolveChunkedScrollRatio` is `startChar / (totalChars -
+lastScreenChars)`. The span a reader moves through is not the document: the
+furthest anyone can go is the START of its last screen. Divide by that and the
+reading is exactly 0 with nothing behind them and exactly 1 with the last screen
+in view, with an inverse that is exact rather than approximate -- a drag lands
+where it was dropped with nothing left to settle.
+
+Two earlier versions approximated the same quantity instead: one subtracted a
+fraction of the track from the span, one blended two readings that each fell
+short at one end. Both left the thumb a few pixels off the bottom at the end of
+a document. Measuring the tail removes the need for either, and it is the same
+number in both directions -- the single source of truth the two paths share.
+
+`resolveLastScreenChars` (`previewCharPosition.ts`) is that measurement, and both
+strategies feed it:
+
+- **Windowed**, from a TAIL PROBE (`usePreviewWindow.tsx`): a hidden, zero-height
+  render of the document's final blocks, doubling from 8 until they cover a
+  viewport, measured once per document and geometry and then unmounted. Bounded
+  and small -- it measures the end of the document, not all of it, and its answer
+  is used as an exact offset rather than as an estimate of anything.
+- **Continuous**, straight from the virtualizer's measurements, which already
+  cover every block.
+
+Until whichever applies has answered, the grid capacity stands in; the correction
+when the real number lands is far below a pixel.
+
+**It must interpolate, and that is not a detail.** Taking the last screen as
+"whole blocks until they cover a viewport" fails on a document that is a SINGLE
+block -- markdown parses a list whose items are separated by blank lines as one
+node, so a 400,000-character list is one block a million pixels tall. Counting
+that block in full reported the whole document as its own last screen, collapsed
+the span to zero, and pinned the thumb at the top of the track for the entire
+document. Found live, by a test document that happened to be a loose list, which
+is why `verifyPreviewCharThumb.mjs` keeps one.
+
+**The extreme is answered directly.** `resolveChunkedCharTarget` returns
+`totalChars` for a ratio of 1 rather than routing it through the span. The
+measurement carries a small error -- converting the screen's top edge into a
+character assumes characters are spread evenly down the block it lands in, and a
+paragraph's last line is short -- and it showed up as a drag to the very bottom
+landing **18px above the true end**. Harmless mid-track, wrong at the one place
+the reader's intent is not in doubt. With that special case the same drag now
+lands **0px** from the end.
+
+**Measured, both ends.** The thumb sits 4px from the track's top at the start of
+the document and 4px from its bottom at the end, on a 688px track, with the
+viewport 0px from the document's last pixel. Symmetric, and that 4px is the
+track's own `--canonical-scroll-handle-gap`.
+
+**Minimum height.** The thumb's floor is its own **width**, so at its smallest it
+is a square -- read from the element (`offsetWidth`) rather than from the old
+hardcoded 28px, because the width follows `--canonical-scroll-thickness` and the
+handle gap, both of which move with the reader's spacing settings. Measured: 6px
+tall by 6px wide at the default.
+
+For almost any chunked document the thumb renders at that minimum, because a
+note over 50,000 characters is tens to hundreds of screens long and the honest
+ratio is a fraction of a pixel. The size of a chunked thumb is a handle; its
+POSITION is the readout.
+
+`resolveThumbLineRatio` stays and is still correct for the EDIT view, where lines
+are what the reader navigates.
+
+**Guarded by** `scripts/perf/verifyPreviewCharThumb.mjs`: that two documents of
+the same character count but very different shape (long prose against short list
+items) get the same thumb, that it bottoms out square, that it holds its size
+while the reader scrolls, and that it advances. It also prints the end-of-track
+shortfall above rather than asserting a value, since that number is a design
+consequence to keep an eye on, not a threshold.
+
+### Follow-on cleanup: work the ruler made redundant
+
+Three things were still wired up after the thumb moved off `readLineMetrics`,
+all of them scans a windowed pane paid for and never read:
+
+- `restartPrewarm` called `readLineMetrics()` BEFORE its windowed bail, so every
+  note switch ran a full-document `countWrappedLines` pass to fill
+  `lineHeightEstimatesRef` -- which feeds `estimateSize`, which belongs to the
+  virtualizer, which a windowed pane does not use. Moved below the bail.
+- `ratioForSourceLine` gated on the same call, so aiming at a search hit ran that
+  pass too. Now continuous-only; a windowed pane resolves the line through its
+  own measured blocks.
+- `documentLines` was computed and returned by `readLineMetrics` for nobody --
+  its last reader was `resolveThumbLineRatio`, which the preview stopped using
+  when the thumb moved to the character grid. Removed, along with its cache
+  field.
+
+**And one real gap, found by re-reading a comment that had gone false.**
+`lastScreenChars` is a count of characters in one SCREEN, so it is only true for
+the geometry it was measured at -- but the tail probe only restarted on a new
+document. A font-size or pane-width change left the scrollbar's span describing
+the old geometry until the note was reopened. It now also restarts when the
+character ruler's own box changes, which is the precise signal: the ruler moves
+when the font, its size, its letter spacing or the pane's width do, and -- unlike
+the window's container, whose height changes on every shift -- not otherwise.

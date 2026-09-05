@@ -14,11 +14,15 @@
 //
 // Wrong in both directions, by a factor that swings with the shape of the
 // document -- so there is no constant to correct it by, and something has to
-// go and look. That is what the sweep is, and why it is not optional on
-// either path: a small document has every block measured, a large one has a
-// sample measured and a model fitted from it (previewHeightModel.ts), and
-// with neither the substrate the reader scrolls through is up to twice as
-// tall as the document really is.
+// go and look. That is what the sweep is.
+//
+// It now runs on CONTINUOUS documents only -- under
+// CONTINUOUS_DOCUMENT_MAX_CHARS, where every block is measured and
+// `scrollHeight` becomes a true total. A chunked document has no
+// whole-document height to be wrong about: it is windowed
+// (editorSection/previewWindow.ts), its scroller holds only the mounted run,
+// and every height in it is one the browser produced. The sampled-and-fitted
+// height model that used to serve that case is gone with it.
 //
 // This module owns only the PACING -- how many blocks to take in one slice,
 // and how long to wait between them. Which blocks to take is the caller's
@@ -184,19 +188,3 @@ export function resolveNextPrewarmBatchSize(
   return Math.max(PREVIEW_PREWARM_MIN_BATCH, Math.min(PREVIEW_PREWARM_MAX_BATCH, bounded))
 }
 
-/**
- * Opt-out kill switch for the whole background survey.
- *
- * Set `thockdown:disable-preview-prewarm` in localStorage (any value) and
- * reload: no block is measured, no height model is fitted, no discovery bar
- * appears, and the virtualizer runs on the lines x line-height estimate alone.
- * It exists so the survey's worth can be felt rather than argued about --
- * remove it, and this comment, once that question is settled.
- */
-export const isPreviewPrewarmDisabled = (): boolean => {
-  try {
-    return window.localStorage.getItem('thockdown:disable-preview-prewarm') !== null
-  } catch {
-    return false
-  }
-}

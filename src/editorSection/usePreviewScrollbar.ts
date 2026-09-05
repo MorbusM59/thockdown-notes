@@ -164,7 +164,11 @@ export function usePreviewScrollbar({
     if (!scroller) return
 
     if (previewTextureRef.current) {
-      syncTextureToScroll(scroller.scrollTop, previewTextureRef.current)
+      // Not scrollTop: on a windowed pane that number jumps every time the
+      // window's front edge moves, and the texture would slip against the
+      // text it is meant to be printed on.
+      const continuousOffsetPx = previewDocumentPositionRef?.current?.readContinuousScrollOffsetPx?.()
+      syncTextureToScroll(continuousOffsetPx ?? scroller.scrollTop, previewTextureRef.current)
     }
 
     if (!track) return
@@ -215,7 +219,12 @@ export function usePreviewScrollbar({
       ratio: position?.isThumbRatioSettled() ? position.readThumbRatio() : null,
       provisionalRatio: viewportHeight / contentHeight,
       usableTrackHeightPx: usableTrackHeight,
-      minThumbHeightPx: SCROLL_TRACK_MIN_THUMB_HEIGHT_PX,
+      // The thumb's floor is its own WIDTH, so the smallest it can be is a
+      // square. Read from the element rather than from a constant: the width
+      // follows --canonical-scroll-thickness and the handle gap, both of which
+      // move with the reader's own spacing settings, and a hardcoded 28px
+      // would stop being square the moment either changed.
+      minThumbHeightPx: previewScrollbarThumbRef.current?.offsetWidth || SCROLL_TRACK_MIN_THUMB_HEIGHT_PX,
     })
 
     const maxScrollTop = contentHeight - viewportHeight
@@ -468,7 +477,7 @@ export function usePreviewScrollbar({
 
     scroller.addEventListener('scroll', onScroll, { passive: true })
     return () => scroller.removeEventListener('scroll', onScroll)
-  }, [isPreviewMode, syncPreviewCustomScrollbar, previewScrollRef])
+  }, [isPreviewMode, syncPreviewCustomScrollbar, previewScrollRef, previewDocumentPositionRef])
 
   useEffect(() => {
     if (!isPreviewMode) return
@@ -511,7 +520,7 @@ export function usePreviewScrollbar({
         previewScrollbarRafRef.current = null
       }
     }
-  }, [isPreviewMode, syncPreviewCustomScrollbar, previewScrollRef])
+  }, [isPreviewMode, syncPreviewCustomScrollbar, previewScrollRef, previewDocumentPositionRef])
 
   useEffect(() => {
     if (!isDraggingPreviewScrollThumb) return
@@ -703,10 +712,22 @@ export function usePreviewScrollbar({
           && el.scrollTop !== maxScrollTopPx) return
 
         if (el.scrollTop < maxScrollTopPx - 0.5) {
-          const previousBehavior = el.style.scrollBehavior
-          el.style.scrollBehavior = 'auto'
-          el.scrollTop = maxScrollTopPx
-          el.style.scrollBehavior = previousBehavior
+          const position = previewDocumentPositionRef?.current
+          // On a windowed pane `maxScrollTopPx` is the end of the MOUNTED
+          // RUN, so writing it would park the reader at the edge of a window
+          // somewhere in the middle of the note and call it the end. Ask the
+          // document for its own end instead. (This whole correction exists to
+          // undo a landing spoiled by estimated heights -- on a pane with no
+          // estimates it is mostly redundant, but a ratio of 1 is still the
+          // right way to say "the end" there.)
+          if (position?.isAtDocumentEdge) {
+            position.jumpToRatio(1)
+          } else {
+            const previousBehavior = el.style.scrollBehavior
+            el.style.scrollBehavior = 'auto'
+            el.scrollTop = maxScrollTopPx
+            el.style.scrollBehavior = previousBehavior
+          }
           syncPreviewCustomScrollbar({ force: true })
         }
         expectedTopPx = el.scrollTop
@@ -869,8 +890,16 @@ export function usePreviewScrollbar({
         syncPreviewCustomScrollbar()
       }
 
-      const hitBoundary = (direction < 0 && nextScrollTop <= 0.01)
+      // Running out of scroller is not the same as running out of document.
+      // A windowed preview (editorSection/previewWindow.ts) reaches the end of
+      // its mounted content many times on the way through a large note -- each
+      // one a runway being consumed, with more arriving a frame later. Stopping
+      // there would strand the reader mid-document with a key still held.
+      const atScrollerEnd = (direction < 0 && nextScrollTop <= 0.01)
         || (direction > 0 && nextScrollTop >= maxScrollTop - 0.01)
+      const position = previewDocumentPositionRef?.current
+      const hitBoundary = atScrollerEnd
+        && (position?.isAtDocumentEdge?.(direction) ?? true)
       if (hitBoundary) {
         previewContinuousScrollDirectionRef.current = 0
         previewContinuousScrollRafRef.current = null
@@ -880,7 +909,7 @@ export function usePreviewScrollbar({
     }
 
     previewContinuousScrollRafRef.current = requestAnimationFrame(runPreviewContinuousScroll)
-  }, [isPreviewMode, syncPreviewCustomScrollbar, previewScrollRef])
+  }, [isPreviewMode, syncPreviewCustomScrollbar, previewScrollRef, previewDocumentPositionRef])
 
   const startPreviewReleaseRampDown = useCallback((direction: -1 | 1) => {
     if (!isPreviewMode) {
@@ -945,7 +974,12 @@ export function usePreviewScrollbar({
         syncPreviewCustomScrollbar()
       }
 
-      const hitBoundary = nextScrollTop <= 0.01 || nextScrollTop >= maxScrollTop - 0.01
+      // Same distinction as the continuous loop above: the release ramp must
+      // coast to a stop, not be cut short by a runway edge.
+      const rampDirection: -1 | 1 = displacement >= 0 ? 1 : -1
+      const atScrollerEnd = nextScrollTop <= 0.01 || nextScrollTop >= maxScrollTop - 0.01
+      const hitBoundary = atScrollerEnd
+        && (previewDocumentPositionRef?.current?.isAtDocumentEdge?.(rampDirection) ?? true)
       if (elapsedSec >= rampDownPlan.tailDurationSec || hitBoundary) {
         previewReleaseRampDownRafRef.current = null
         if (previewContinuousPreviousScrollBehaviorRef.current !== null) {
@@ -959,7 +993,7 @@ export function usePreviewScrollbar({
     }
 
     previewReleaseRampDownRafRef.current = requestAnimationFrame(animateRampDown)
-  }, [isPreviewMode, stopPreviewContinuousScroll, syncPreviewCustomScrollbar, previewScrollRef])
+  }, [isPreviewMode, stopPreviewContinuousScroll, syncPreviewCustomScrollbar, previewScrollRef, previewDocumentPositionRef])
 
   const startPreviewContinuousScroll = useCallback((direction: -1 | 1) => {
     if (!isPreviewMode) return

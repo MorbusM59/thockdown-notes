@@ -565,7 +565,16 @@ export function SectionEditorArea({
             "state of this document", and it costs nothing: a document still
             being surveyed is one nobody is navigating the history of yet.
             Only shown in render view, where the survey is what the reader is
-            actually waiting on; in edit mode it runs silently. */}
+            actually waiting on; in edit mode it runs silently.
+
+            The tooltip means what it says, and only because of what this bar
+            can still appear for. A CONTINUOUS document (under
+            CONTINUOUS_DOCUMENT_MAX_CHARS) is the only kind that is surveyed at
+            all now, and it is exactly the kind whose thumb is read off
+            `scrollHeight` -- so measuring it really is what makes the scrollbar
+            accurate. A chunked document is windowed, never surveyed, and never
+            raises this bar, so the claim cannot be made about a document it is
+            false for. */}
         {isPreviewMode && previewDiscovery.isSurveying && previewDiscovery.total > 0 ? (
           <div
             className="utility-setting-scrollbar-shell snapshot-timeline-shell preview-discovery-shell"

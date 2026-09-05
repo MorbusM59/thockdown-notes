@@ -395,10 +395,19 @@ export function useDocumentFindNavigation({
     }
 
     const scrollToFallback = () => {
+      // The hit's position is a CHARACTER ratio. Multiplying it by a pixel
+      // height was always an approximation; on a windowed pane that height is
+      // the mounted run, so it would aim inside whatever happens to be
+      // mounted rather than at the hit. The document can place a ratio itself.
+      const position = previewDocumentPositionRef?.current
+      const ratio = clamp(hit.index / Math.max(1, sourceText.length), 0, 1)
+      if (position?.isAtDocumentEdge) {
+        position.travelToRatio(ratio)
+        syncPreviewCustomScrollbar()
+        return
+      }
       const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
-      const target = maxScrollTop <= 0
-        ? 0
-        : clamp(hit.index / Math.max(1, sourceText.length), 0, 1) * maxScrollTop
+      const target = maxScrollTop <= 0 ? 0 : ratio * maxScrollTop
       scrollToNonQuantizedSmooth(scroller, target, {
         onStep: () => syncPreviewCustomScrollbar(),
       })

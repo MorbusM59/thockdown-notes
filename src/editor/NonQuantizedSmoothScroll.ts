@@ -58,6 +58,29 @@ export {
 
 interface NonQuantizedSmoothScrollOptions {
   onStep?: () => void;
+  /**
+   * The distance to plan the journey's SHAPE from, when the real one is not a
+   * pixel distance in this scroller.
+   *
+   * The windowed preview (editorSection/previewWindow.ts) mounts only a few
+   * screenfuls at a time, so a destination twenty thousand blocks away is
+   * simply not in its scroll space -- `targetScrollTopPx` can only be the far
+   * edge of the current window. Left to itself this would read that as a short
+   * hop and play an uninterrupted curve, when what the reader asked for was a
+   * journey across the document. This says how far they actually asked to go.
+   * It chooses the curve and the bridge; it never places anything.
+   */
+  journeyDistancePx?: number;
+  /**
+   * Called once, at the moment the curtain fully covers the pane.
+   *
+   * For a caller whose destination does not exist in the scroller's current
+   * space and has to put it there -- the windowed preview re-anchors its
+   * window here, which is precisely the substitution the bridge exists to
+   * hide. Returns the scroll position the journey should now be landing on,
+   * or null to keep the original target.
+   */
+  onBridgeCut?: () => number | null;
 }
 
 interface AnimationState {
@@ -120,9 +143,12 @@ export function scrollToNonQuantizedSmooth(
   targetScrollTopPx: number,
   options?: NonQuantizedSmoothScrollOptions,
 ): ScrollJourneyTiming | null {
-  const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+  // Mutable, because a bridged journey on a windowed pane relocates its own
+  // destination at the cut: the scroll space it lands in is not the one it set
+  // off from. Everything below reads these rather than capturing them.
+  let maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
   const startPx = clamp(scroller.scrollTop, 0, maxScrollTopPx);
-  const targetPx = clamp(targetScrollTopPx, 0, maxScrollTopPx);
+  let targetPx = clamp(targetScrollTopPx, 0, maxScrollTopPx);
 
   const existing = activeAnimations.get(scroller);
   if (existing && Math.abs(existing.targetScrollTopPx - targetPx) < 0.01) {
@@ -131,13 +157,15 @@ export function scrollToNonQuantizedSmooth(
 
   cancelExistingAnimation(scroller);
 
-  if (Math.abs(targetPx - startPx) < 0.5) {
+  // How far the reader asked to go, which on a windowed pane is not how far
+  // this scroller can carry them -- see `journeyDistancePx`.
+  const signedDistance = options?.journeyDistancePx ?? (targetPx - startPx);
+
+  if (Math.abs(signedDistance) < 0.5) {
     scroller.scrollTop = targetPx;
     options?.onStep?.();
     return null;
   }
-
-  const signedDistance = targetPx - startPx;
 
   if (prefersReducedMotion()) {
     scroller.scrollTop = targetPx;
@@ -193,7 +221,7 @@ export function scrollToNonQuantizedSmooth(
     const totalSec = bridgeEndSec + journey.rampDown.durationSec;
 
     const afterRampUpPx = startPx + journey.rampUp.signedDistancePx;
-    const beforeRampDownPx = targetPx - journey.rampDown.signedDistancePx;
+    let beforeRampDownPx = targetPx - journey.rampDown.signedDistancePx;
     let jumped = false;
     let startTimeMs: number | null = null;
     onCancel = () => bridge.end();
@@ -218,7 +246,19 @@ export function scrollToNonQuantizedSmooth(
         // strip beside a moving one is more obviously wrong than the cut this
         // is hiding. After the cut the same rule runs backwards from the far
         // end, so the ramp-down starts from exactly where it expects to.
-        if (!jumped && bridge.isCovering(travelled)) jumped = true;
+        if (!jumped && bridge.isCovering(travelled)) {
+          jumped = true;
+          // The pane is fully covered: the one moment a caller may put its
+          // destination somewhere else entirely. Re-read the geometry
+          // afterwards -- a windowed pane's scroll space is a different size
+          // now, and every clamp below depends on it.
+          const relocated = options?.onBridgeCut?.();
+          if (relocated !== null && relocated !== undefined) {
+            maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+            targetPx = clamp(relocated, 0, maxScrollTopPx);
+            beforeRampDownPx = targetPx - journey.rampDown.signedDistancePx;
+          }
+        }
         step(jumped
           ? beforeRampDownPx - (direction * (sweepPx - travelled))
           : afterRampUpPx + (direction * travelled));

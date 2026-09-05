@@ -45,6 +45,7 @@
  */
 export const CONTINUOUS_DOCUMENT_MAX_CHARS = 50000
 
+
 /** Whether a document of this length gets the exact treatment. */
 export function isContinuousDocument(charCount: number): boolean {
   return charCount < CONTINUOUS_DOCUMENT_MAX_CHARS
@@ -121,6 +122,24 @@ export interface DocumentPosition {
    * correct afterwards.
    */
   ratioForScrollOffsetPx: (offsetPx: number) => number | null
+  /**
+   * Whether the pane's scroll end in `direction` is the DOCUMENT's end.
+   *
+   * Optional, and absent means yes: a pane whose scroller holds the whole
+   * document has no other kind of end. A WINDOWED pane does -- it runs out of
+   * mounted content many times on the way through a large note -- and a
+   * continuous scroll that reads that as arrival stops the reader in the
+   * middle of the document and will not restart.
+   */
+  isAtDocumentEdge?: (direction: -1 | 1) => boolean
+  /**
+   * A scroll offset that counts continuously through the document.
+   *
+   * Optional, and absent means `scrollTop` already is one. Anything visually
+   * glued to the content -- the pane's paper texture -- has to follow this
+   * instead on a pane whose scrollTop is only local to a window.
+   */
+  readContinuousScrollOffsetPx?: () => number
   /** Put the viewport at this ratio now, with no animation. */
   jumpToRatio: (ratio: number) => void
   /**
@@ -165,33 +184,85 @@ export function resolveContinuousRatios(options: {
 }
 
 /**
+ * How much of the grid a screenful of prose actually fills.
+ *
+ * A viewport is `columns x rows` character cells, and no real document fills
+ * them: lines end early, paragraphs break, spaces are cells too. A half is the
+ * standing assumption, and it is deliberately a FIXED number rather than a
+ * measurement -- the thumb has to be the same size for the same document every
+ * time it is opened, and anything derived from the text currently on screen
+ * makes it depend on where the reader happens to be standing.
+ */
+export const VIEWPORT_GRID_FILL_FACTOR = 0.5
+
+/**
+ * How many characters one screen holds, from the viewport's character grid.
+ *
+ * `columns x rows / 2`. Both terms are geometry -- the column width comes from
+ * a measured character advance, the row height from the line height -- so this
+ * is a property of the pane and the typography, not of the text in it.
+ *
+ * Null when it has not been given enough to answer; a caller with no capacity
+ * yet should keep whatever it last drew rather than draw a wrong one.
+ */
+export function resolveViewportCharCapacity(options: {
+  contentWidthPx: number
+  viewportHeightPx: number
+  charWidthPx: number
+  lineHeightPx: number
+}): number | null {
+  const { contentWidthPx, viewportHeightPx, charWidthPx, lineHeightPx } = options
+  if (!(contentWidthPx > 0) || !(viewportHeightPx > 0)) return null
+  if (!(charWidthPx > 0) || !(lineHeightPx > 0)) return null
+  const columns = Math.floor(contentWidthPx / charWidthPx)
+  const rows = Math.floor(viewportHeightPx / lineHeightPx)
+  if (columns <= 0 || rows <= 0) return null
+  return columns * rows * VIEWPORT_GRID_FILL_FACTOR
+}
+
+/**
+ * How much of a chunked document one screen holds, as a fraction of it.
+ *
+ * The thumb's size, before the caller applies its own pixel minimum. On a large
+ * document this is a very small number and the minimum takes over -- which is
+ * correct, and is why the minimum exists.
+ */
+export function resolveChunkedThumbRatio(options: {
+  charsPerScreen: number
+  totalChars: number
+}): number | null {
+  const { charsPerScreen, totalChars } = options
+  if (!(charsPerScreen > 0) || !(totalChars > 0)) return null
+  return Math.min(1, charsPerScreen / totalChars)
+}
+
+/**
  * How far through a chunked document the viewport sits.
  *
- * `thumbRatio` is not decoration here, it is what makes the mapping reach its
- * own end. The span a scroll position moves through is the document minus the
- * screenful that is always visible, and expressing that screenful as
- * `totalChars * thumbRatio` -- rather than measuring the characters actually
- * on screen -- buys two things:
+ * The first character on screen, over the span a reader can actually move
+ * through. That span is not the document: the furthest anyone can go is the
+ * START of the last screenful, so it is `totalChars - lastScreenChars`
+ * (previewCharPosition.ts's resolveLastScreenChars measures that tail).
  *
- *  - the thumb lands flush against the bottom of the track exactly when the
- *    document does, because the same ratio sizes the thumb and shortens the
- *    span. Sizing with one number and positioning with another leaves the
- *    thumb short of the end, or past it;
- *  - the mapping is a function of position alone. A live count of visible
- *    characters makes the denominator move with local text density, so the
- *    same position reports differently depending on what happens to be on
- *    screen -- and the thumb can then drift BACKWARDS while the reader
- *    scrolls forwards.
+ * Which makes this exact at both ends -- 0 with nothing behind the reader, 1
+ * with the last screen in view -- and its inverse below exact too, so a drag
+ * lands where it was dropped with nothing left to settle afterwards. Two
+ * earlier versions of this function approximated the same quantity instead,
+ * one by subtracting a fraction of the track from the span and one by blending
+ * two readings that each fell short at one end; both left the thumb a few
+ * pixels off the bottom of its track at the end of a document. Measuring the
+ * tail costs one pass over a handful of blocks and removes the need for either.
  */
 export function resolveChunkedScrollRatio(options: {
   startChar: number
   totalChars: number
-  thumbRatio: number
+  lastScreenChars: number
 }): number | null {
-  const { startChar, totalChars, thumbRatio } = options
+  const { startChar, totalChars, lastScreenChars } = options
   if (!(totalChars > 0)) return null
-
-  const spanChars = totalChars * (1 - clamp01(thumbRatio))
+  const spanChars = totalChars - Math.max(0, Math.min(totalChars, lastScreenChars))
+  // One screen holds the whole document: there is nowhere to scroll, and the
+  // reader is at both ends of it at once. Zero is the honest reading.
   if (!(spanChars > 0)) return 0
   return clamp01(startChar / spanChars)
 }
@@ -199,16 +270,30 @@ export function resolveChunkedScrollRatio(options: {
 /**
  * The character offset that puts the viewport at `ratio`.
  *
- * The exact inverse of the reading above, and it has to stay that way: a drag
- * that reads position one way and writes it another drops the thumb somewhere
- * other than where the reader released it.
+ * The exact inverse of the reading above -- a drag that reads position one way
+ * and writes it another drops the thumb somewhere other than where the reader
+ * released it. Ratio 1 lands on the start of the last screenful, which is the
+ * furthest a reader can be, never a character past the document's end.
  */
 export function resolveChunkedCharTarget(options: {
   ratio: number
   totalChars: number
-  thumbRatio: number
+  lastScreenChars: number
 }): number {
-  const { ratio, totalChars, thumbRatio } = options
+  const { ratio, totalChars, lastScreenChars } = options
   if (!(totalChars > 0)) return 0
-  return clamp01(ratio) * totalChars * (1 - clamp01(thumbRatio))
+  // "Take me to the end" means the end.
+  //
+  // Everywhere else this divides by the span, which is the document minus a
+  // MEASURED last screen -- and that measurement carries a small error, because
+  // converting the screen's top edge into a character assumes characters are
+  // spread evenly down the block it lands in, and a paragraph's last line is
+  // short. Measured: dragging to the very bottom landed 18px above the true end
+  // of a 400,000-character document, about two thirds of a line. Harmless in
+  // the middle of the track, wrong at the one place the reader's intent is not
+  // in doubt, so the extreme is answered directly rather than through the
+  // measurement. The scroller clamps the overshoot itself.
+  if (clamp01(ratio) >= 1) return totalChars
+  const spanChars = totalChars - Math.max(0, Math.min(totalChars, lastScreenChars))
+  return clamp01(ratio) * Math.max(0, spanChars)
 }

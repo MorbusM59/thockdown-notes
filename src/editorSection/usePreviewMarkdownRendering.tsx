@@ -33,6 +33,8 @@ import {
   isContinuousDocument,
   resolveChunkedCharTarget,
   resolveChunkedScrollRatio,
+  resolveChunkedThumbRatio,
+  resolveViewportCharCapacity,
   resolveContinuousRatios,
   type DocumentPosition,
 } from '../editor/documentPosition'
@@ -44,21 +46,13 @@ import {
   PREVIEW_PREWARM_SLICE_BUDGET_MS,
   PREVIEW_PREWARM_IDLE_TIMEOUT_MS,
   resolveNextPrewarmBatchSize,
-  isPreviewPrewarmDisabled,
 } from './previewMeasurementPrewarm'
-import {
-  PREVIEW_CALIBRATION_MAX_SAMPLES,
-  PREVIEW_CALIBRATION_SAMPLES_PER_SHAPE,
-  fitPreviewHeightModel,
-  planPreviewHeightSample,
-  predictPreviewBlockHeight,
-  resolvePreviewBlockShape,
-} from './previewHeightModel'
-import type { PreviewHeightModel, PreviewHeightSample } from './previewHeightModel'
-import { countWrappedLines, resolveThumbLineRatio } from '../editor/scrollThumbMetrics'
+import { usePreviewWindow, type PreviewWindowApi } from './usePreviewWindow'
+import { countWrappedLines } from '../editor/scrollThumbMetrics'
 import {
   buildBlockCharOffsets,
   findBlockAtPixel,
+  resolveLastScreenChars,
   resolvePreviewCharScrollOffset,
   resolvePreviewCharViewport,
 } from './previewCharPosition'
@@ -134,6 +128,16 @@ function isPreviewSurveyDebugOn(): boolean {
   }
   return previewSurveyDebugFlag
 }
+
+/**
+ * What the character ruler measures.
+ *
+ * Ordinary prose rather than a repeated glyph: the quantity wanted is the
+ * average advance of a character in this document's alphabet, and 'M' repeated
+ * would answer a question nobody asked. Long enough that one glyph's rounding
+ * cannot move the average.
+ */
+const PREVIEW_CHAR_RULER_TEXT = 'the quick brown fox jumps over the lazy dog and then keeps going for a while longer so that one glyph cannot move the average'
 
 // A modest buffer of blocks mounted above/below the visible window so
 // scrolling doesn't visibly pop content in at the viewport edge.
@@ -757,19 +761,14 @@ export function usePreviewMarkdownRendering({
   const virtualizer = useVirtualizer({
     count: previewBlocks.length,
     getScrollElement: () => previewScrollRef.current,
-    // The model's prediction for this block when there is one, and the flat
-    // guess only until the first fit lands (or for a document the model was
-    // not trusted on). Bounds-checked because the block list can change under
-    // a model fitted from the previous one, for the one commit before the
-    // restart effect below re-fits.
+    // Only ever asked about a CONTINUOUS document: a chunked one is windowed
+    // (editorSection/previewWindow.ts) and never reaches this virtualizer at
+    // all. So this covers the moment between the first commit and the survey
+    // measuring each block for real -- lines x line height, known as soon as
+    // the text and typography are, and short only by the block margins it does
+    // not model. The flat guess below is the last resort, for the one commit
+    // before the probe has been read.
     estimateSize: (index) => {
-      const predicted = predictedHeightsRef.current
-      const fitted = predicted && index < predicted.length ? predicted[index] : 0
-      if (fitted > 0) return fitted
-      // Before the model is fitted, lines x line height -- known as soon as
-      // the text and typography are, and short only by the block margins it
-      // does not model. The flat guess below is the last resort, for the one
-      // commit before the probe has been read.
       const byLines = lineHeightEstimatesRef.current
       const estimated = byLines && index < byLines.length ? byLines[index] : 0
       return estimated > 0 ? estimated : PREVIEW_BLOCK_ESTIMATED_HEIGHT_PX
@@ -781,11 +780,30 @@ export function usePreviewMarkdownRendering({
   // readLineMetrics is defined further down (it depends on refs declared
   // between here and there), so it is reached through a ref rather than
   // moved -- a direct reference is a temporal dead zone error.
-  const readLineMetricsRef = useRef<(() => { documentLines: number; lineHeightPx: number } | null) | null>(null)
+  const readLineMetricsRef = useRef<(() => { lineHeightPx: number } | null) | null>(null)
+
+  // The windowed preview is created further down (it needs refs declared
+  // between here and there), so callers up here reach it through a ref -- the
+  // same reason readLineMetricsRef exists, and the same temporal dead zone
+  // that forbids a direct reference. Null on a continuous document.
+  const previewWindowApiRef = useRef<PreviewWindowApi | null>(null)
 
   const scrollPreviewToSourceLine = useCallback<PreviewScrollToSourceLineFn>((sourceLine, opts) => {
     const index = resolvePreviewBlockIndexForSourceLine(previewBlocksRef.current, sourceLine)
     if (index < 0) return false
+
+    // Windowed: there is no document-wide pixel space to scroll into, so the
+    // block is mounted and landed on directly. No estimates to populate, no
+    // measurement cache to invalidate, and no retry -- the answer is exact on
+    // the first attempt, which is what the whole rest of this function is
+    // trying and failing to be.
+    const windowApi = previewWindowApiRef.current
+    if (windowApi) {
+      const offsets = blockCharOffsetsRef.current
+      if (!offsets || index + 1 >= offsets.length) return false
+      windowApi.scrollToChar(offsets[index])
+      return true
+    }
 
     // Ask for the line estimates BEFORE asking for an offset.
     //
@@ -810,14 +828,34 @@ export function usePreviewMarkdownRendering({
     // Populating the estimates is not enough on its own: react-virtual has
     // already cached the measurements it computed from whatever `estimateSize`
     // said at the time, and improving what that function returns does not
-    // invalidate that cache. `measure()` is what makes it ask again. Without
-    // it the offset below is still the flat guess's answer, however good the
-    // estimates have since become -- which is why populating them alone
-    // changed nothing at all.
-    virtualizer.measure()
+    // invalidate that cache. `measure()` is what makes it ask again.
+    //
+    // ONLY WHILE THE SURVEY IS STILL RUNNING, though, and this guard is the
+    // whole fix for a defect that had been live on every note under 50,000
+    // characters. `measure()` clears the SIZE cache -- every height the survey
+    // measured for real, not just the estimate-derived entries this wanted to
+    // refresh. The restore path retries across frames, so it reliably landed
+    // AFTER the survey finished: 166 blocks measured and committed correctly
+    // ([0->30, 1->43, 2->43, 3->43]), then wiped one frame later, leaving the
+    // pane on `countWrappedLines` estimates for the rest of the session. Those
+    // placed one-line paragraphs 76.8px apart against a true 43px, so every
+    // gap in the document was ~33.6px too wide.
+    //
+    // It hid behind the chunked path for as long as that existed: a chunked
+    // document's heights came from `estimateSize` (the fitted model), which
+    // `measure()` does not touch, so only the continuous path ever lost
+    // anything -- and the continuous path is the common case.
+    //
+    // Once the survey is done there is nothing left for a re-ask to improve:
+    // measured beats estimated, always.
+    if (!prewarmDoneRef.current) virtualizer.measure()
 
     virtualizer.scrollToIndex(index, { align: opts?.align ?? 'start', behavior: opts?.behavior })
     return true
+  // blockCharOffsetsRef is declared further down the file, so naming it here
+  // is a temporal dead zone error even though it is a stable ref the body may
+  // freely read at call time.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [virtualizer])
 
   // See UsePreviewMarkdownRenderingOptions.previewScrollToSourceLineRef --
@@ -1208,14 +1246,20 @@ export function usePreviewMarkdownRendering({
 
   // ---------------------------------------------------------------------
   // Background measurement prewarm -- see previewMeasurementPrewarm.ts for
-  // why this exists and what makes it fragile. In short: without it every
-  // unvisited block is a flat 56px guess, so the scrollbar is wrong by ~71%
-  // of the document height on a large note and churns as real heights land.
+  // why this exists and what makes it fragile.
+  //
+  // CONTINUOUS DOCUMENTS ONLY. Under CONTINUOUS_DOCUMENT_MAX_CHARS every block
+  // is measured outright, which is what turns `scrollHeight` into a true total
+  // and lets the scrollbar use the plain pixel identity (editor/
+  // documentPosition.ts). Over that threshold the document is windowed
+  // (previewWindow.ts): its scroller holds only the mounted run, so there is no
+  // whole-document height for a survey to be right about and none runs.
   // ---------------------------------------------------------------------
   const spacerRef = useRef<HTMLDivElement | null>(null)
   const [spacerReady, setSpacerReady] = useState(false)
   const prewarmHostRef = useRef<HTMLDivElement | null>(null)
   const prewarmProbeRef = useRef<HTMLDivElement | null>(null)
+  const charRulerRef = useRef<HTMLDivElement | null>(null)
   const [probeReady, setProbeReady] = useState(false)
   const [prewarmBatch, setPrewarmBatch] = useState<readonly number[]>([])
   const prewarmedRef = useRef<Set<number>>(new Set())
@@ -1228,20 +1272,11 @@ export function usePreviewMarkdownRendering({
   const prewarmBatchRef = useRef<readonly number[]>([])
   const prewarmWaitMsRef = useRef(0)
   const minSliceMsRef = useRef(Number.POSITIVE_INFINITY)
-  // The fitted height model and the heights it predicts for every block --
-  // see previewHeightModel.ts. `predictedHeights` is materialised as an array
-  // rather than computed on demand because react-virtual asks `estimateSize`
-  // for every unmeasured block on every measurements recompute (that is, on
-  // every block that mounts), so it has to be an O(1) lookup, not a parse.
-  const heightModelRef = useRef<PreviewHeightModel | null>(null)
-  const predictedHeightsRef = useRef<Float64Array | null>(null)
-  const modelByGeometryRef = useRef<Map<string, PreviewHeightModel>>(new Map())
-  // Discovery now has two modes: fit a model from a ~100-block sample
-  // ('calibrating'), or, if that model cannot be trusted, fall back to
-  // measuring the whole document ('measuring') exactly as this used to.
+  // One mode. A continuous document is measured outright; a chunked one is
+  // windowed and never surveyed at all, so there is nothing left to fit or to
+  // fall back to.
   const surveyModeRef = useRef<'idle' | 'calibrating'>('idle')
   const calibrationQueueRef = useRef<number[]>([])
-  const calibrationSamplesRef = useRef<PreviewHeightSample[]>([])
   const calibrationTotalRef = useRef(0)
   const surveyStatsRef = useRef({ windowStartedAt: 0, blocks: 0, slices: 0, sliceMs: 0, maxSliceMs: 0, waitMs: 0, maxWaitMs: 0, yields: 0 })
   // Completed surveys, keyed by the geometry they were taken at. Returning to
@@ -1339,28 +1374,6 @@ export function usePreviewMarkdownRendering({
   }, [])
 
   /**
-   * Re-measures every block currently mounted in the spacer, straight from
-   * the DOM.
-   *
-   * The virtualizer measures a block when it mounts and whenever its own
-   * ResizeObserver fires. Neither happens to a block that is already mounted
-   * and has not changed size -- so after anything that DISCARDS measurements
-   * (`virtualizer.measure()`, which has no "keep what was measured" mode),
-   * every block on screen is left on an estimate until the reader scrolls it
-   * out of view and back. On a document opened at the top that is the first
-   * screenful, permanently, which is exactly where a wrong height is most
-   * visible. Handing each mounted node back to `measureElement` costs one
-   * layout read per visible block and restores the truth immediately.
-   */
-  const remeasureMountedBlocks = useCallback(() => {
-    const spacer = spacerRef.current
-    if (!spacer) return
-    spacer.querySelectorAll<HTMLDivElement>(':scope > [data-index]').forEach((node) => {
-      virtualizer.measureElement(node)
-    })
-  }, [virtualizer])
-
-  /**
    * Applies a previously completed survey for this exact geometry, if there is
    * one. Returns whether it did.
    *
@@ -1400,109 +1413,6 @@ export function usePreviewMarkdownRendering({
     }
   }, [])
 
-  /**
-   * Casts a fitted model over the whole document.
-   *
-   * This is the cheap half of the whole feature: predicting 18,000 heights is
-   * arithmetic over the block list, single-digit milliseconds, against the
-   * tens of seconds the same document costs to measure block by block. The
-   * virtualizer has to be told to re-derive its offsets afterwards --
-   * `estimateSize` is not one of its memo keys, so nothing recomputes on its
-   * own -- and `measure()` is what does that.
-   *
-   * `measure()` also drops every real height the virtualizer had -- there is
-   * no API for "re-derive the estimates but keep what was measured" -- so
-   * anything actually known has to be handed back afterwards, in two passes:
-   *
-   *  - `measured`: the calibration sample's own heights. These are ~100 real
-   *    renders of THIS document at THIS geometry, which is strictly better
-   *    information than the model fitted from them. Block 0 is always in the
-   *    sample and is the one block whose prediction is reliably wrong (it
-   *    carries a leading-margin reset no other block has), so this is also
-   *    what keeps the top of the document from overlapping the line below it.
-   *  - the mounted blocks: whatever is on screen gets re-measured from the
-   *    DOM. An earlier version of this comment claimed those were
-   *    "immediately re-measured on the next commit"; they are not.
-   *    react-virtual measures on mount and on ResizeObserver, and a block
-   *    whose size has not changed fires neither -- so a block that was
-   *    mounted when the model landed kept the model's guess for as long as it
-   *    stayed mounted. That is what put the title 20px into the first
-   *    paragraph, and a 60px gap above every group in the Open Items chapter.
-   *
-   * What none of it must do is move the reader, so the block at the top of
-   * the viewport is re-anchored last, after every offset has settled.
-   */
-  const applyHeightModel = useCallback((model: PreviewHeightModel, measured?: ReadonlyMap<number, number>) => {
-    const blocks = previewBlocksRef.current
-    const predicted = new Float64Array(blocks.length)
-    for (let index = 0; index < blocks.length; index += 1) {
-      predicted[index] = predictPreviewBlockHeight(model, blocks[index].text)
-    }
-    heightModelRef.current = model
-    predictedHeightsRef.current = predicted
-
-    // Where the reader actually is: a block, and how far into it.
-    //
-    // NOT `getVirtualItems()[0]`, which is the first block RENDERED. The
-    // overscan puts that PREVIEW_BLOCK_OVERSCAN blocks above the fold, so
-    // re-anchoring it with `align: 'start'` pulled the viewport up by six
-    // blocks every single time the model landed. Measured at 6x CPU throttle
-    // on a 300k-character note, as one step at the moment of the cast: total
-    // size 90,357px -> 49,463px, scrollTop 10,635 -> 7,766, and the block the
-    // reader was looking at moved 1,548px up the screen.
-    //
-    // The fraction matters as much as the block. Landing on the block's start
-    // would still jump by up to a block's height, and blocks here run to
-    // several hundred pixels.
-    const scroller = previewScrollRef.current
-    let anchor: { index: number; fraction: number } | null = null
-    if (scroller && scroller.scrollTop > 0) {
-      const items = virtualizer.getVirtualItems()
-      const atFold = items.find((item) => item.end > scroller.scrollTop) ?? items[0]
-      if (atFold && atFold.size > 0) {
-        anchor = {
-          index: atFold.index,
-          fraction: Math.min(1, Math.max(0, (scroller.scrollTop - atFold.start) / atFold.size)),
-        }
-      }
-    }
-    virtualizer.measure()
-
-    if (measured && measured.size > 0) {
-      // Force the estimate-derived measurements to materialize before handing
-      // real heights back. `measure()` only clears the size cache and bumps a
-      // version; the measurements array it invalidated is still the OLD one
-      // until something reads it. `resizeItem` compares against that array and
-      // returns early when the delta is zero -- so re-applying a height that
-      // happens to equal the stale entry pins nothing, and the block silently
-      // falls back to its estimate on the next recompute. That is not a corner
-      // case: it is every block whose height did not change, and it is exactly
-      // what left the Open Items chapter's zero-height marker blocks holding a
-      // ~50px estimate after being measured at 0.
-      //
-      // Through getVirtualItems rather than getMeasurements, which react-virtual
-      // keeps private; reading the items recomputes the measurements the same way.
-      virtualizer.getVirtualItems()
-      // Ascending, so react-virtual's own above-the-fold scroll compensation
-      // sees each item in document order -- same reason commitPrewarmedSizes
-      // sorts.
-      for (const index of [...measured.keys()].sort((a, b) => a - b)) {
-        virtualizer.resizeItem(index, measured.get(index)!)
-      }
-    }
-    remeasureMountedBlocks()
-
-    // Last, and against freshly recomputed measurements: everything above has
-    // been moving the very offsets this has to land on.
-    if (anchor) {
-      virtualizer.getVirtualItems()
-      const measurement = virtualizer.measurementsCache[anchor.index]
-      if (measurement?.index === anchor.index) {
-        virtualizer.scrollToOffset(measurement.start + (measurement.size * anchor.fraction))
-      }
-    }
-  }, [virtualizer, previewBlocksRef, previewScrollRef, remeasureMountedBlocks])
-
   // ---------------------------------------------------------------------
   // Position in character space -- see previewCharPosition.ts.
   // ---------------------------------------------------------------------
@@ -1510,7 +1420,6 @@ export function usePreviewMarkdownRendering({
   const lineMetricsCacheRef = useRef<{
     blocks: readonly { text: string }[]
     charsPerLine: number
-    documentLines: number
   } | null>(null)
   /**
    * Per-block heights derived from line counts alone -- no fitting, no
@@ -1546,6 +1455,92 @@ export function usePreviewMarkdownRendering({
     blockCharOffsetsRef.current = buildBlockCharOffsets(previewBlocks)
   }, [previewBlocks])
 
+  // Which of the two strategies this document gets, decided by its length and
+  // nothing else -- the same boundary editor/documentPosition.ts draws, and the
+  // same one the scrollbar's own two answers are chosen by. Under it the
+  // document is measured outright and scrolled as one piece; over it the pane
+  // holds a moving window and never has a whole-document height at all. No
+  // switch, no flag: a chunked document is always windowed.
+  const isWindowed = !isContinuousDocument(renderedDisplayText.length)
+
+  const renderPreviewBlock = useCallback((block: { text: string; startLine: number }, index: number) => (
+    <PreviewMarkdownBlock
+      key={index}
+      text={block.text}
+      lineOffset={block.startLine}
+      searchHighlightPlugin={previewSearchHighlightPlugin}
+      components={previewMarkdownComponents}
+    />
+  ), [previewSearchHighlightPlugin, previewMarkdownComponents])
+
+  // The typography host, for the windowed path.
+  //
+  // It carries two things, and only the second is still needed here. The PROBE
+  // -- the wrapping sentence -- belongs to readLineMetrics, which a windowed
+  // pane no longer calls at all; it is kept because the same element is what
+  // the virtualized path measures, and one definition is better than two that
+  // can drift. The RULER is the live one: `readViewportCharCapacity` divides
+  // the pane's width by its measured character advance to size the thumb, and
+  // usePreviewWindow watches its box as the signal that the geometry behind
+  // `lastScreenChars` has moved.
+  const typographyProbeElement = useMemo(() => (
+    <div
+      aria-hidden="true"
+      style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: 0, visibility: 'hidden', pointerEvents: 'none', zIndex: -1 }}
+    >
+      {/* Deliberately long enough to wrap at any sane width -- see the copy of
+          this probe on the virtualized path for why it must never be shortened
+          to a single line. */}
+      <div
+        ref={(node) => { prewarmProbeRef.current = node; if (node) setProbeReady(true) }}
+        data-prewarm-probe=""
+        style={{ position: 'absolute', top: 0, left: 0, width: '100%' }}
+      >
+        The quick brown fox jumps over the lazy dog, and keeps on jumping for
+        long enough that this sentence has to wrap onto a second line at any
+        reasonable width, which is the entire point of it being this long.
+      </div>
+      {/* The character ruler.
+          A fixed string that is not allowed to wrap, so its width divided by
+          its length is the average advance of a character at this font, size
+          and letter spacing -- MEASURED, in one read, with no inference.
+          The probe above cannot answer this: it reports where a particular
+          sentence happened to break, which gives an average of 102.5
+          characters a line against a real capacity of at least 127, and always
+          in the direction of over-counting lines. */}
+      <div
+        ref={charRulerRef}
+        data-preview-char-ruler=""
+        style={{ position: 'absolute', top: 0, left: 0, whiteSpace: 'pre', display: 'inline-block', width: 'max-content' }}
+      >
+        {PREVIEW_CHAR_RULER_TEXT}
+      </div>
+    </div>
+  ), [])
+
+  /**
+   * The windowed preview -- see previewWindow.ts and usePreviewWindow.tsx.
+   *
+   * Called unconditionally and inert on a continuous document, so the two
+   * strategies never become a conditional hook. When it is live, the four
+   * primitives below (measurements, char viewport, and the two scroll-to-
+   * character calls) are redirected to it and EVERYTHING ELSE -- every ratio,
+   * the thumb, the source-line mapping -- runs unchanged, because all of that
+   * was already expressed in character space.
+   */
+  const previewWindow = usePreviewWindow({
+    enabled: isWindowed,
+    previewScrollRef,
+    previewBlocks,
+    blockCharOffsetsRef,
+    renderBlock: renderPreviewBlock,
+    overlay: isWindowed ? typographyProbeElement : null,
+    geometryProbeRef: charRulerRef,
+    renderedDisplayText,
+    activeNoteId,
+  })
+  previewWindowApiRef.current = isWindowed ? previewWindow.api : null
+
   /**
    * The virtualizer's current block geometry.
    *
@@ -1556,11 +1551,13 @@ export function usePreviewMarkdownRendering({
    * invalidation), which is why it is called first and its result discarded.
    */
   const readBlockMeasurements = useCallback(() => {
+    if (isWindowed) return previewWindow.api.readMeasurements()
     virtualizer.getVirtualItems()
     return virtualizer.measurementsCache
-  }, [virtualizer])
+  }, [virtualizer, isWindowed, previewWindow.api])
 
   const readCharViewport = useCallback((): PreviewCharViewport | null => {
+    if (isWindowed) return previewWindow.api.readCharViewport()
     const scroller = previewScrollRef.current
     if (!scroller) return null
     return resolvePreviewCharViewport({
@@ -1569,9 +1566,10 @@ export function usePreviewMarkdownRendering({
       scrollTop: scroller.scrollTop,
       clientHeight: scroller.clientHeight,
     })
-  }, [readBlockMeasurements, previewScrollRef])
+  }, [readBlockMeasurements, previewScrollRef, isWindowed, previewWindow.api])
 
   const scrollToChar = useCallback((charOffset: number) => {
+    if (isWindowed) { previewWindow.api.scrollToChar(charOffset); return }
     const offset = resolvePreviewCharScrollOffset({
       offsets: blockCharOffsetsRef.current,
       measurements: readBlockMeasurements(),
@@ -1582,7 +1580,7 @@ export function usePreviewMarkdownRendering({
     // goes via the same scrollToFn every other programmatic scroll in this
     // hook uses (instant snap, native smooth-scroll suppressed).
     virtualizer.scrollToOffset(offset)
-  }, [virtualizer, readBlockMeasurements])
+  }, [virtualizer, readBlockMeasurements, isWindowed, previewWindow.api])
 
   /**
    * Travels to a character position, re-aiming as the document's geometry
@@ -1636,7 +1634,7 @@ export function usePreviewMarkdownRendering({
     const blocks = previewBlocksRef.current
     const cached = lineMetricsCacheRef.current
     if (cached && cached.blocks === blocks && cached.charsPerLine === charsPerLine) {
-      return { documentLines: cached.documentLines, lineHeightPx }
+      return { lineHeightPx }
     }
 
     // One pass, two consumers: the document's length in lines (the thumb) and
@@ -1644,16 +1642,12 @@ export function usePreviewMarkdownRendering({
     // these into two passes would mean scanning the document twice for the
     // same information.
     const perBlock = new Float64Array(blocks.length)
-    let documentLines = 0
     for (let index = 0; index < blocks.length; index += 1) {
-      const lines = countWrappedLines(blocks[index].text, charsPerLine)
-      perBlock[index] = lines * lineHeightPx
-      documentLines += lines
+      perBlock[index] = countWrappedLines(blocks[index].text, charsPerLine) * lineHeightPx
     }
-    documentLines = Math.max(1, documentLines)
-    lineMetricsCacheRef.current = { blocks, charsPerLine, documentLines }
+    lineMetricsCacheRef.current = { blocks, charsPerLine }
     lineHeightEstimatesRef.current = perBlock
-    return { documentLines, lineHeightPx }
+    return { lineHeightPx }
   }, [previewBlocksRef])
 
   // Published for scrollPreviewToSourceLine, which needs the per-block line
@@ -1691,6 +1685,31 @@ export function usePreviewMarkdownRendering({
   const smoothScrollToChar = useCallback((charOffset: number) => {
     const scroller = previewScrollRef.current
     if (!scroller) return null
+    if (isWindowed) {
+      // A destination inside the window is an ordinary curve over measured
+      // pixels. One outside it has no pixel in this scroller at all, so the
+      // journey is planned from the CHARACTER distance and the window is
+      // re-anchored at the cut, under the curtain -- see the onBridgeCut
+      // option in NonQuantizedSmoothScroll.ts.
+      const mounted = previewWindow.api.resolveCharOffsetPx(charOffset)
+      if (mounted !== null) return scrollToNonQuantizedSmooth(scroller, mounted)
+
+      const viewport = previewWindow.api.readCharViewport()
+      const startChar = viewport?.startChar ?? 0
+      const visibleChars = Math.max(1, viewport?.visibleChars ?? 1)
+      // Characters converted to pixels ONLY to choose the journey's shape and
+      // its duration -- never to place anything. The exchange rate is the
+      // reader's own screenful, which is the one it is safe to be wrong about:
+      // the ramps are relative distances and the landing comes from the cut.
+      const plannedDistancePx = ((charOffset - startChar) / visibleChars) * scroller.clientHeight
+      return scrollToNonQuantizedSmooth(scroller, scroller.scrollTop + plannedDistancePx, {
+        journeyDistancePx: plannedDistancePx,
+        onBridgeCut: () => {
+          previewWindow.api.scrollToChar(charOffset)
+          return previewScrollRef.current?.scrollTop ?? null
+        },
+      })
+    }
     const offset = resolvePreviewCharScrollOffset({
       offsets: blockCharOffsetsRef.current,
       measurements: readBlockMeasurements(),
@@ -1698,7 +1717,7 @@ export function usePreviewMarkdownRendering({
     })
     if (offset === null) return null
     return scrollToNonQuantizedSmooth(scroller, offset)
-  }, [previewScrollRef, readBlockMeasurements])
+  }, [previewScrollRef, readBlockMeasurements, isWindowed, previewWindow.api])
 
   /**
    * The two answers to "where are we", behind one interface.
@@ -1726,20 +1745,78 @@ export function usePreviewMarkdownRendering({
       })
     }
 
-    // The chunked thumb's size is a question about the TEXT -- how much of the
-    // document one screen holds -- answered in lines, once, from the source.
-    // Deliberately not the pixel ratio: that asks about the layout, which is
-    // not known until it is measured, which is what made the thumb resize once
-    // shortly after every note load as a better estimate replaced the first.
-    const readChunkedThumbRatio = () => {
+    /**
+     * How many characters this pane's viewport holds, from its character grid.
+     *
+     * Columns x rows / 2 -- see resolveViewportCharCapacity. Every term is
+     * geometry: the column width from the ruler's measured character advance,
+     * the row height from the line height, the content width from the pane.
+     * None of it depends on the text currently on screen, so the same document
+     * at the same settings gets the same thumb every time it is opened.
+     */
+    const readViewportCharCapacity = () => {
       const scroller = previewScrollRef.current
-      const metrics = readLineMetrics()
-      if (!scroller || !metrics) return null
-      return resolveThumbLineRatio({
+      const ruler = charRulerRef.current
+      if (!scroller || !ruler) return null
+      const rulerWidthPx = ruler.getBoundingClientRect().width
+      if (!(rulerWidthPx > 0)) return null
+      const style = window.getComputedStyle(ruler)
+      const lineHeightPx = parseFloat(style.lineHeight) || (parseFloat(style.fontSize) * 1.5)
+      return resolveViewportCharCapacity({
+        // clientWidth excludes the scrollbar but INCLUDES the pane's padding,
+        // which no text is set in -- the ruler sits inside the same content
+        // box the blocks do, so its own width is the column width.
+        contentWidthPx: ruler.parentElement?.getBoundingClientRect().width ?? scroller.clientWidth,
         viewportHeightPx: scroller.clientHeight,
-        lineHeightPx: metrics.lineHeightPx,
-        documentLines: metrics.documentLines,
+        charWidthPx: rulerWidthPx / PREVIEW_CHAR_RULER_TEXT.length,
+        lineHeightPx,
       })
+    }
+
+    /**
+     * How many characters the document's last screenful holds.
+     *
+     * The single number the scrollbar's span is built from, and the same
+     * quantity however the pane is rendering:
+     *
+     *  - WINDOWED, from the tail probe (usePreviewWindow.tsx) -- a hidden,
+     *    bounded render of the document's final blocks, measured once per
+     *    document and geometry.
+     *  - CONTINUOUS, straight from the virtualizer's measurements, which
+     *    already cover every block including the last ones.
+     *
+     * Null until whichever of those can answer does. The caller stands in the
+     * grid capacity for the frame or two that takes, which is close enough that
+     * the correction is invisible and honest enough that it is never mistaken
+     * for the measurement.
+     */
+    const readLastScreenChars = () => {
+      const scroller = previewScrollRef.current
+      if (!scroller) return null
+      const measured = isWindowed
+        ? previewWindowApiRef.current?.readLastScreenChars() ?? null
+        : resolveLastScreenChars({
+          offsets: blockCharOffsetsRef.current,
+          measurements: readBlockMeasurements(),
+          blockCount: previewBlocksRef.current.length,
+          clientHeightPx: scroller.clientHeight,
+        })
+      return measured ?? readViewportCharCapacity()
+    }
+
+    // The chunked thumb's size is a question about the TEXT -- how much of the
+    // document one screen holds -- answered in CHARACTERS.
+    //
+    // Information is characters, not lines: two screenfuls with the same line
+    // count can hold very different amounts of document, and the thumb's whole
+    // job is to say how much is left to read. Characters are also what the
+    // thumb's POSITION is measured in, so size and position speak one unit.
+    const readChunkedThumbRatio = () => {
+      const charsPerScreen = readViewportCharCapacity()
+      const offsets = blockCharOffsetsRef.current
+      const totalChars = offsets && offsets.length > 1 ? offsets[offsets.length - 1] : 0
+      if (charsPerScreen === null) return null
+      return resolveChunkedThumbRatio({ charsPerScreen, totalChars })
     }
 
     const readThumbRatio = () => (
@@ -1783,8 +1860,17 @@ export function usePreviewMarkdownRendering({
       // is exactly the moment the good tiers are empty. Populate them, make
       // the virtualizer ask again, and refuse to answer on a guess -- callers
       // retry, and one frame later the answer is real.
-      if (!readLineMetricsRef.current?.()) return null
-      virtualizer.measure()
+      // Continuous only. The estimates this populates are what the virtualizer
+      // reads, and a windowed pane resolves the line through its own measured
+      // blocks instead -- so on that path this was a full-document scan whose
+      // result was discarded, run every time a search hit was aimed at.
+      if (!isWindowed) {
+        if (!readLineMetricsRef.current?.()) return null
+        // Same guard, same reason as scrollPreviewToSourceLine's: re-asking for
+        // estimates is an improvement before the survey lands and pure loss
+        // after it.
+        if (!prewarmDoneRef.current) virtualizer.measure()
+      }
 
       // Both strategies back the target off by the same fraction of a screen,
       // each in its own units -- the whole point of doing it here rather than
@@ -1804,12 +1890,13 @@ export function usePreviewMarkdownRendering({
       }
 
       const viewport = readCharViewport()
-      const thumbRatio = readChunkedThumbRatio()
-      if (!viewport || thumbRatio === null) return null
+      if (!viewport) return null
+      const lastScreenChars = readLastScreenChars()
+      if (lastScreenChars === null) return null
       return resolveChunkedScrollRatio({
         startChar: Math.max(0, charOffset - (viewport.visibleChars * leadViewportFraction)),
         totalChars: viewport.totalChars,
-        thumbRatio,
+        lastScreenChars,
       })
     }
 
@@ -1853,32 +1940,32 @@ export function usePreviewMarkdownRendering({
         scrollTop: offsetPx,
         clientHeight: scroller.clientHeight,
       })
-      const thumbRatio = readChunkedThumbRatio()
-      if (!at || thumbRatio === null) return null
+      const lastScreenChars = readLastScreenChars()
+      if (!at || lastScreenChars === null) return null
       return resolveChunkedScrollRatio({
         startChar: at.startChar,
         totalChars: at.totalChars,
-        thumbRatio,
+        lastScreenChars,
       })
     }
 
     const resolveChunkedTarget = (ratio: number) => {
       const viewport = readCharViewport()
-      const thumbRatio = readChunkedThumbRatio()
-      if (!viewport || thumbRatio === null) return null
-      return resolveChunkedCharTarget({ ratio, totalChars: viewport.totalChars, thumbRatio })
+      const lastScreenChars = readLastScreenChars()
+      if (!viewport || lastScreenChars === null) return null
+      return resolveChunkedCharTarget({ ratio, totalChars: viewport.totalChars, lastScreenChars })
     }
 
     return {
       readScrollRatio: () => {
         if (isContinuous()) return readContinuousRatios()?.scrollRatio ?? null
         const viewport = readCharViewport()
-        const thumbRatio = readChunkedThumbRatio()
-        if (!viewport || thumbRatio === null) return null
+        const lastScreenChars = readLastScreenChars()
+        if (!viewport || lastScreenChars === null) return null
         return resolveChunkedScrollRatio({
           startChar: viewport.startChar,
           totalChars: viewport.totalChars,
-          thumbRatio,
+          lastScreenChars,
         })
       },
 
@@ -1894,6 +1981,12 @@ export function usePreviewMarkdownRendering({
       // Continuous ones are read off a scrollHeight that is only true once
       // the prewarm has measured every block and committed the real heights.
       isThumbRatioSettled: () => (isContinuous() ? prewarmDoneRef.current : true),
+
+      // Only a windowed pane has an end that is not the document's, and only a
+      // windowed pane's scrollTop stops counting at a window boundary.
+      isAtDocumentEdge: isWindowed ? previewWindowApiRef.current?.isAtDocumentEdge : undefined,
+
+      readContinuousScrollOffsetPx: isWindowed ? previewWindowApiRef.current?.readContinuousScrollOffsetPx : undefined,
 
       jumpToRatio: (ratio) => {
         const scroller = previewScrollRef.current
@@ -1922,12 +2015,12 @@ export function usePreviewMarkdownRendering({
     previewScrollRef,
     readBlockMeasurements,
     readCharViewport,
-    readLineMetrics,
     scrollToChar,
     smoothScrollToChar,
     virtualizer,
     previewBlockTextLengthRef,
     previewBlocksRef,
+    isWindowed,
   ])
 
   useLayoutEffect(() => {
@@ -1955,6 +2048,17 @@ export function usePreviewMarkdownRendering({
     // changed mid-sweep) would be a cache entry that silently under-describes
     // the document.
     rememberCompletedSurvey(readGeometrySignature(), new Map(buffered))
+
+    // Materialize the measurements before handing heights back. `resizeItem`
+    // reads react-virtual's measurements array to find the entry it is
+    // replacing and returns early when there is none, and that array is only
+    // rebuilt when something reads it. Cheap (it is memoized, so this is a
+    // cache read on all but the first call after an invalidation) and it
+    // removes a way for a whole survey to land on nothing.
+    //
+    // Through getVirtualItems rather than getMeasurements, which react-virtual
+    // keeps private; reading the items recomputes the measurements the same way.
+    virtualizer.getVirtualItems()
 
     // Ascending, so react-virtual's own above-the-fold compensation sees each
     // item in document order rather than jumping around the offset map.
@@ -2047,64 +2151,21 @@ export function usePreviewMarkdownRendering({
     prewarmBatchRef.current = []
     setPrewarmBatch([])
 
-    // A small document was measured outright, so there is nothing to model:
-    // hand the real heights over and stop. This is the branch that makes
+    // One case left. Only a CONTINUOUS document is ever surveyed now -- a
+    // chunked one is windowed and has no whole-document height to be right
+    // about -- so every target on the list was measured for real and there is
+    // nothing to model. Handing the real heights over is what makes
     // `scrollHeight` a true total rather than a running sum of estimates,
     // which is the whole premise the continuous strategy rests on.
-    if (isContinuousDocument(previewBlockTextLengthRef.current)) {
-      commitPrewarmedSizes()
-      surveyModeRef.current = 'idle'
-      prewarmDoneRef.current = true
-      reportDiscovery(blockCount, blockCount, false)
-      if (isPreviewSurveyDebugOn()) {
-        console.log('[preview-survey] measured outright', { blocks: blockCount })
-      }
-      return
-    }
-
-    const model = fitPreviewHeightModel(calibrationSamplesRef.current)
-
-    if (isPreviewSurveyDebugOn()) {
-      console.log('[preview-survey] model', {
-        samples: model?.sampleCount ?? 0,
-        blocks: blockCount,
-        medianErrorPct: model ? Math.round(model.medianErrorPct * 10) / 10 : null,
-        biasPct: model ? Math.round(model.biasPct * 10) / 10 : null,
-      })
-    }
-
-    // Cast unconditionally, with the sample's own measured heights rather
-    // than the model's guesses for them: every one of those is a real render
-    // of this document at this geometry.
-    //
-    // There is no trust check any more, and no survey to fall back to. The
-    // model used to have to be good enough to hold the SCROLLBAR, which is a
-    // demanding job -- a systematic bias put the end of the document in the
-    // wrong place -- and when it was not, the document was measured end to
-    // end instead. The scrollbar is a character quantity now
-    // (editor/documentPosition.ts), so all the model still has to do is give
-    // the native scroller a plausible, monotone substrate to scroll through.
-    // A fit that would have failed the old bar does that perfectly well, and
-    // measuring eighteen thousand blocks to improve it buys nothing anyone
-    // can see.
-    if (model) applyHeightModel(model, prewarmBufferRef.current)
-
-    const signature = readGeometrySignature()
-    if (model && signature) {
-      const store = modelByGeometryRef.current
-      store.delete(signature)
-      store.set(signature, model)
-      while (store.size > PREVIEW_PREWARM_GEOMETRY_CACHE_SIZE) {
-        const oldest = store.keys().next().value
-        if (oldest === undefined) break
-        store.delete(oldest)
-      }
-    }
+    commitPrewarmedSizes()
     surveyModeRef.current = 'idle'
     prewarmDoneRef.current = true
     prewarmBufferRef.current = new Map()
     reportDiscovery(blockCount, blockCount, false)
-  }, [previewBlocksRef, readGeometrySignature, applyHeightModel, reportDiscovery, commitPrewarmedSizes, previewBlockTextLengthRef])
+    if (isPreviewSurveyDebugOn()) {
+      console.log('[preview-survey] measured outright', { blocks: blockCount })
+    }
+  }, [previewBlocksRef, reportDiscovery, commitPrewarmedSizes])
 
   // Measure whatever the host just rendered and hand the real heights to the
   // virtualizer. useLayoutEffect so this reads geometry in the same frame the
@@ -2127,10 +2188,6 @@ export function usePreviewMarkdownRendering({
       // what a measured document is supposed to be free of.
       const height = Math.round(el.getBoundingClientRect().height)
       prewarmedRef.current.add(index)
-      if (height > 0) {
-        const block = previewBlocksRef.current[index]
-        if (block) calibrationSamplesRef.current.push({ text: block.text, heightPx: height })
-      }
       // BUFFERED, not applied. Handing each height to the virtualizer as it is
       // measured is what made this feature miserable on slow hardware: every
       // resizeItem changes the total size (the thumb crawls) and, for any block
@@ -2221,51 +2278,36 @@ export function usePreviewMarkdownRendering({
     setPrewarmBatch([])
     discoveryPercentRef.current = -1
     calibrationQueueRef.current = []
-    calibrationSamplesRef.current = []
     calibrationTotalRef.current = 0
     surveyModeRef.current = 'idle'
-    heightModelRef.current = null
 
     const blocks = previewBlocksRef.current
     const blockCount = blocks.length
     const signature = readGeometrySignature()
+    // A chunked document is windowed (editorSection/previewWindow.ts): it has
+    // no whole-document height, so there is nothing here to survey. Everything
+    // downstream is reached from queueNextPrewarmBatch below, so stopping here
+    // stops all of it.
+    //
+    // Before the line estimates, deliberately. Those exist for `estimateSize`,
+    // which belongs to the virtualizer -- and a windowed pane does not use the
+    // virtualizer at all. Computing them here meant a full-document pass over
+    // every block on every note switch, on precisely the documents where that
+    // pass is most expensive, for a number nothing on this path would read.
+    if (isWindowed) {
+      prewarmDoneRef.current = true
+      reportDiscovery(blockCount, blockCount, false)
+      return
+    }
+
     // Fills lineHeightEstimatesRef, so the virtualizer has a sane per-block
-    // height from the first commit rather than a flat guess. Same scan the
-    // thumb's own sizing needs, so it costs nothing extra.
+    // height from the first commit rather than a flat guess.
     readLineMetrics()
-
-    // Kill switch (see previewMeasurementPrewarm.ts): stop here and let the
-    // line-count estimate stand. Nothing downstream runs, because everything
-    // downstream is reached from queueNextPrewarmBatch below.
-    if (isPreviewPrewarmDisabled()) {
-      predictedHeightsRef.current = null
-      prewarmDoneRef.current = true
-      reportDiscovery(blockCount, blockCount, false)
-      return
-    }
-
-    // A geometry this document has already been fitted at -- the sidebar
-    // toggled back, a font size tried and undone, a split divider dragged and
-    // returned. Re-casting a known model is arithmetic; nothing is measured
-    // and no discovery bar appears at all.
-    const cachedModel = signature ? modelByGeometryRef.current.get(signature) : undefined
-    if (cachedModel) {
-      modelByGeometryRef.current.delete(signature)
-      modelByGeometryRef.current.set(signature, cachedModel)
-      applyHeightModel(cachedModel)
-      prewarmDoneRef.current = true
-      reportDiscovery(blockCount, blockCount, false)
-      return
-    }
 
     // Same, for a small document that was measured outright and has been back
     // to this geometry before. Only the continuous path ever fills this cache
     // -- a chunked document is never measured end to end, so there is no
     // survey of one to remember.
-    if (predictedHeightsRef.current) {
-      predictedHeightsRef.current = null
-      virtualizer.measure()
-    }
     if (applyCachedSurvey(signature)) {
       prewarmDoneRef.current = true
       reportDiscovery(blockCount, blockCount, false)
@@ -2285,20 +2327,13 @@ export function usePreviewMarkdownRendering({
     // (editor/documentPosition.ts). Every index, explicitly, rather than
     // asking the sampler for "all of them" and trusting its proportional
     // share-out to round in our favour.
-    const targets = isContinuousDocument(previewBlockTextLengthRef.current)
-      ? Array.from({ length: blockCount }, (_, index) => index)
-      : planPreviewHeightSample({
-        blockCount,
-        shapeAt: (index) => resolvePreviewBlockShape(blocks[index]?.text ?? ''),
-        perShape: PREVIEW_CALIBRATION_SAMPLES_PER_SHAPE,
-        maxTotal: PREVIEW_CALIBRATION_MAX_SAMPLES,
-      })
+    const targets = Array.from({ length: blockCount }, (_, index) => index)
     calibrationQueueRef.current = targets
     calibrationTotalRef.current = targets.length
     surveyModeRef.current = 'calibrating'
     reportDiscovery(0, targets.length, true)
     queueNextPrewarmBatch()
-  }, [queueNextPrewarmBatch, reportDiscovery, previewBlocksRef, applyCachedSurvey, readGeometrySignature, applyHeightModel, readLineMetrics, virtualizer])
+  }, [queueNextPrewarmBatch, reportDiscovery, previewBlocksRef, applyCachedSurvey, readGeometrySignature, readLineMetrics, isWindowed])
 
   // Start over whenever the cached heights could no longer be true.
   //
@@ -2348,9 +2383,6 @@ export function usePreviewMarkdownRendering({
       const firstChangedBlockIndex = resolvePreviewBlockIndexForSourceLine(previewBlocksRef.current, startLine)
       if (firstChangedBlockIndex >= 0) {
         surveyByGeometryRef.current = new Map()
-        modelByGeometryRef.current = new Map()
-        heightModelRef.current = null
-        predictedHeightsRef.current = null
         invalidatePreviewVirtualizerMeasurementsAfterIndex(virtualizer, firstChangedBlockIndex)
         return
       }
@@ -2359,7 +2391,6 @@ export function usePreviewMarkdownRendering({
     // For a note switch or a broader structural edit, the old survey no longer
     // applies and the prewarm has to start over on the new document.
     surveyByGeometryRef.current = new Map()
-    modelByGeometryRef.current = new Map()
     restartPrewarm()
   }, [activeNoteId, renderedDisplayText, previewBlocks, restartPrewarm, virtualizer])
 
@@ -2522,7 +2553,9 @@ export function usePreviewMarkdownRendering({
   })
 
   return {
-    previewMarkdownElement: (
+    // The windowed path renders its own content and has no survey, so it needs
+    // neither the virtualizer's spacer nor the prewarm's measurement host.
+    previewMarkdownElement: isWindowed ? previewWindow.element : (
       <>
         {previewMarkdownElement}
         {prewarmHostElement}

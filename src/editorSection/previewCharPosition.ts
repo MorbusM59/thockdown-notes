@@ -14,10 +14,14 @@
 // depends on layout, so nothing about it changes when the layout does.
 //
 // This module is that: the block list, prefix-summed into character offsets,
-// with the two conversions the scrollbar needs. `previewHeightModel.ts` keeps
-// the pixel substrate honest (native wheel scrolling and scrollToIndex both
-// run on pixels); this keeps the THUMB honest, which is a stronger guarantee
-// -- it is exact by construction, not accurate to within a fitted percent.
+// with the two conversions the scrollbar needs. This keeps the THUMB honest:
+// exact by construction rather than accurate to within a fitted percent.
+//
+// The pixel substrate it interpolates through is now honest too, and for a
+// better reason than it once was. A chunked document is windowed
+// (previewWindow.ts), so every measurement this module is handed describes a
+// block that is actually mounted -- there is no modelled height left anywhere
+// for it to interpolate against.
 //
 // INTERPOLATION IS NOT OPTIONAL
 // Block-granular position alone would freeze the thumb while the reader
@@ -167,4 +171,61 @@ export function resolvePreviewCharScrollOffset(options: {
     ? Math.min(1, Math.max(0, (charOffset - offsets[blockIndex]) / blockChars))
     : 0
   return measurement.start + (measurement.size * fraction)
+}
+
+/**
+ * How many characters the document's LAST screenful holds.
+ *
+ * The one number that makes the scrollbar exact at both ends. A reader's
+ * furthest position is not the end of the document, it is the START of its last
+ * screen -- so the span a scroll position moves through is
+ * `totalChars - lastScreenChars`, and dividing by that gives a reading of
+ * exactly 1 when the reader has arrived and exactly 0 when they have not left.
+ * Every earlier attempt at this approximated the same quantity: a fraction of
+ * the track subtracted from the span, or a midpoint blend between two readings
+ * that each fell short at one end. This measures it instead.
+ *
+ * INTERPOLATED, not counted in blocks. Taking the last screen as "whole blocks
+ * until they cover a viewport" is wrong in a way that has teeth: a document can
+ * be a SINGLE top-level block -- markdown parses a list whose items are
+ * separated by blank lines as one node, so a 400,000-character list is one
+ * block a million pixels tall -- and counting that block in full reports the
+ * whole document as its own last screen. The span then collapses to zero and
+ * the thumb is pinned at the top of its track for the entire document. Found
+ * exactly that way, by a test document that happened to be a loose list.
+ *
+ * So this asks where the screen's top edge falls in PIXELS and converts that
+ * one position into characters, through the same in-block interpolation every
+ * other reading here uses.
+ *
+ * Returns null when the measurements do not reach the document's last block,
+ * which is the honest answer rather than a guess drawn from the wrong end of
+ * the document. The caller stands in something approximate until they do.
+ */
+export function resolveLastScreenChars(options: {
+  offsets: Float64Array | null
+  measurements: readonly PreviewBlockMeasurement[]
+  blockCount: number
+  clientHeightPx: number
+}): number | null {
+  const { offsets, measurements, blockCount, clientHeightPx } = options
+  if (!offsets || offsets.length < 2 || blockCount <= 0) return null
+  if (measurements.length === 0 || !(clientHeightPx > 0)) return null
+
+  const last = measurements[measurements.length - 1]
+  if (last.index !== blockCount - 1) return null
+
+  const totalChars = offsets[blockCount]
+  const documentBottomPx = last.start + last.size
+  const lastScreenTopPx = documentBottomPx - clientHeightPx
+
+  // The measured tail is itself shorter than a screen. If it starts at the
+  // document's first block then one screen holds the whole document; if it
+  // does not, the measurements simply do not reach far enough back to say.
+  if (lastScreenTopPx <= measurements[0].start) {
+    return measurements[0].index === 0 ? totalChars : null
+  }
+
+  const startChar = pixelToChar(offsets, measurements, lastScreenTopPx)
+  return Math.max(0, Math.min(totalChars, totalChars - startChar))
 }
