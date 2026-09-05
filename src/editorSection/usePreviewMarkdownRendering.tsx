@@ -1704,10 +1704,11 @@ export function usePreviewMarkdownRendering({
       const plannedDistancePx = ((charOffset - startChar) / visibleChars) * scroller.clientHeight
       return scrollToNonQuantizedSmooth(scroller, scroller.scrollTop + plannedDistancePx, {
         journeyDistancePx: plannedDistancePx,
-        onBridgeCut: () => {
-          previewWindow.api.scrollToChar(charOffset)
-          return previewScrollRef.current?.scrollTop ?? null
-        },
+        // Land AND settle the window before reporting a pixel back. The
+        // ramp-down aims at whatever this returns and then plays for a couple
+        // of hundred milliseconds, so it has to be a number that will still
+        // mean the same thing when the animation arrives -- see landOnChar.
+        onBridgeCut: () => previewWindow.api.landOnChar(charOffset),
       })
     }
     const offset = resolvePreviewCharScrollOffset({

@@ -2808,3 +2808,109 @@ the old geometry until the note was reopened. It now also restarts when the
 character ruler's own box changes, which is the precise signal: the ruler moves
 when the font, its size, its letter spacing or the pane's width do, and -- unlike
 the window's container, whose height changes on every shift -- not otherwise.
+
+### A bridged jump landed short, every time, and needed repeat clicks
+
+Reported from real use on a large note: the scrollbar "readjusts after landing"
+and "only travels to the top with repeated clicks -- the first few settle too
+far down". Reproduced in `scripts/perf/verifyPreviewTrackLanding.mjs`, which
+clicks the track and records where the reader ended up, immediately and again
+700ms later. It was two faults stacked.
+
+**One: the cut read a scroll position that had not been written yet.** The
+bridged journey's `onBridgeCut` called `scrollToChar` and immediately read
+`scrollTop` back to aim its ramp-down. Mounting a window is a React state
+update, though, and the scroll it implies is applied a commit later in a layout
+effect -- so the cut read the PRE-jump position and aimed the ramp-down back at
+it, while the animation's own per-frame writes discarded whatever the window
+eventually did. The trace is unambiguous: the window moved from blocks
+1669..1794 to 347..489 while `scrollTop` sat unchanged at 1982. Each click got
+closer, which is exactly the "repeated clicks" symptom. Fixed by committing a
+reader-moving re-anchor with `flushSync`: four clicks became one.
+
+**Two: the window kept moving after the landing.** A window mounted around a
+target sits with it a third of the way in, so its backward runway is short and
+the very next adjustment pass grows it and compensates `scrollTop` to hold the
+reader still. That compensation is right, and invisible -- unless an animation
+is already aiming at the pre-compensation pixel, in which case it overwrites the
+compensation every frame. A click that should have arrived at block 34 arrived
+at block 16, one screenful short, repeatably. `landOnChar` fixes it by running
+the adjustment to a standstill before reporting a pixel back, which is free at
+that moment: the pane is covered by the curtain.
+
+After both: one click lands on block 34 and stays there, three more clicks do
+not move it, and a click at the very top of the track reaches block 0.
+
+**A note on the test that found it.** Its first version failed a landing that
+was correct -- it asserted that a click 2% down the track should reach the
+document's start, when 2% of the track means 2% of the DOCUMENT. The extreme is
+now asked separately, as its own click at the very top.
+
+### Third fault in the same journey: the window adjusted underneath the ramp-down
+
+Reported after the first two were fixed: the thumb's band "hits a target too far,
+then snaps back to the min size". The band was innocent -- it stretches to the
+thumb top the CLICK asked for, which is correct. What was wrong is that the
+reader did not end up there, so the sync placed the thumb somewhere else the
+moment the band finished, and the difference read as a snap.
+
+Traced with the numbers rather than guessed. A click at 75% of the track:
+
+    [target] ratio=0.7567 char=301375
+    [cut]    char=301375 landed=2002.4     <- the landing itself was exact
+    [plan]   char=0 startChar=231146       <- but the NEXT journey saw 231,146
+
+The ramp-down keeps writing `scrollTop` for a couple of hundred milliseconds
+after the cut. Those writes fire scroll events; the window adjusts and
+compensates `scrollTop` to hold the reader still; the animation overwrites the
+compensation on its next frame. Neither is wrong on its own and together they
+walked the reader a sixth of the document backwards -- from character 301,375 to
+231,146.
+
+**Fix.** `adjust()` defers entirely while a travel animation owns the scroller
+(`isNonQuantizedSmoothScrollActive`), re-queueing itself for the frame after it
+ends. Deferring costs nothing: a journey is a few hundred milliseconds inside a
+runway measured in screenfuls. The cut's own settle is exempt, since it runs
+during the animation on purpose.
+
+After it, the same click reports `startChar=301374` against a requested 301,375,
+and the thumb rests at 514px against the 512px the click asked for.
+
+**The general shape of all three.** Every one was the same collision: an
+animation that recomputes `scrollTop` from a plan it made earlier, against a
+window that corrects `scrollTop` to keep the reader still. Anything that writes
+that number has to know which of the two owns it at that moment. `verifyPreviewTrackLanding.mjs`
+now guards the whole set -- the landing, the repeat, the extreme, and that the
+band ends where the thumb rests.
+
+### A reported jitter that would not reproduce, and the instrument left behind
+
+Reported: on a large note the text settles into two states about a line apart
+and flips between them -- not pixel vibration, a genuine bistable oscillation.
+That signature means two mechanisms each undoing the other's correction, which
+is the same family as the three journey faults above.
+
+`scripts/perf/verifyPreviewRestStability.mjs` parks the reader at several
+depths and samples every frame for two seconds with no input at all, keyed on
+where the TEXT is rather than on `scrollTop` -- which is window-local and
+legitimately jumps when the window shifts, so it cannot tell a real wobble from
+a bookkeeping one. A pane at rest must produce exactly one distinct state.
+
+It does, across every trigger tried: after a track click at 25/50/75%, after
+wheel-down, after wheel-up, and on a deliberately HETEROGENEOUS document --
+headings, tall code fences, lists, one-word paragraphs. That last one was built
+on purpose, because the window sizes its growth and trim steps by dividing a
+pixel shortfall by the MEAN height of the mounted blocks: exact on uniform
+prose, badly wrong on a real note, and therefore the most plausible source of an
+overshooting step that alternates. It did not reproduce either.
+
+So the trigger is still unknown, and per this repo's own rule the next move is
+the state difference from the person who can see it, not more theory. Left
+behind for that: `thockdown:debug-preview-window`, a buffered trace of every
+window movement, carry and landing, with `scrollTop` before and after on each
+line. An oscillation should be legible in it directly -- two `move` lines
+alternating, or a `carry` that lands somewhere the next `adjust` immediately
+undoes.
+
+The check is worth keeping either way: "the text holds still when nobody is
+touching it" is easy to break and easy to miss.

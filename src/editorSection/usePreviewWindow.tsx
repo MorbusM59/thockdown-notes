@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import type { MutableRefObject, ReactNode } from 'react'
 import type { PreviewMarkdownBlock as PreviewBlock } from '../editor/PreviewBlockSplit'
+import { isNonQuantizedSmoothScrollActive } from '../editor/NonQuantizedSmoothScroll'
 import {
   findBlockAtChar,
   findBlockAtPixel,
@@ -44,6 +46,41 @@ import {
  * letting the browser do the positioning.
  */
 
+/**
+ * Opt-in trace of every window movement -- see CLAUDE.md's diagnostic traces.
+ *
+ * `localStorage['thockdown:debug-preview-window'] = '1'`, reload, reproduce,
+ * then `copy(window.__previewWindowTrace.join('\n'))`. Attaches nothing when
+ * unset.
+ *
+ * Buffered as well as logged, because the interesting defects here are the ones
+ * that repeat: a two-state oscillation is invisible in a console that is
+ * scrolling past, and obvious in forty lines side by side. Every line carries
+ * the scrollTop BEFORE and AFTER, because a movement of the window and a
+ * movement of the reader are different events that look identical from outside.
+ */
+let previewWindowDebugFlag: boolean | null = null
+function isPreviewWindowDebugOn(): boolean {
+  if (previewWindowDebugFlag === null) {
+    try {
+      previewWindowDebugFlag = typeof window !== 'undefined'
+        && window.localStorage.getItem('thockdown:debug-preview-window') === '1'
+    } catch {
+      previewWindowDebugFlag = false
+    }
+  }
+  return previewWindowDebugFlag
+}
+
+function tracePreviewWindow(line: string): void {
+  if (!isPreviewWindowDebugOn()) return
+  const w = window as unknown as { __previewWindowTrace?: string[] }
+  if (!w.__previewWindowTrace) w.__previewWindowTrace = []
+  w.__previewWindowTrace.push(line)
+  if (w.__previewWindowTrace.length > 400) w.__previewWindowTrace.shift()
+  console.log('[preview-window] ' + line)
+}
+
 /** How the reader's position is carried across a window change. */
 interface PreviewWindowAnchor {
   blockIndex: number
@@ -79,6 +116,27 @@ export interface PreviewWindowApi {
   readMeasurements: () => readonly PreviewBlockMeasurement[]
   /** Puts `charOffset` at the top of the viewport, re-anchoring if it has to. */
   scrollToChar: (charOffset: number) => void
+  /**
+   * The same, then settles the window, and reports where the reader ended up.
+   *
+   * For a caller that has to AIM at the result -- the bridged journey's
+   * ramp-down, which plays out over the next couple of hundred milliseconds and
+   * needs a pixel that will still mean the same thing when it gets there.
+   *
+   * Landing alone is not enough for that. A window mounted around a target sits
+   * with the target a third of the way in, so its backward runway is short, and
+   * the very next adjustment pass grows it and compensates `scrollTop` to keep
+   * the reader still. That compensation is correct and invisible normally --
+   * but an animation already aiming at the pre-compensation pixel will overwrite
+   * it every frame and land the reader wherever the old number pointed.
+   * Measured: a track click that should have arrived at block 34 arrived at
+   * block 16, one screenful short, every single time.
+   *
+   * So this runs the adjustment to a standstill first. It is a synchronous
+   * commit or three, at the one moment they cost nothing: the pane is covered
+   * by the curtain.
+   */
+  landOnChar: (charOffset: number) => number | null
   /**
    * The window-local pixel offset for `charOffset`, or null when that
    * character is not mounted. For a caller that needs a pixel it can animate
@@ -216,6 +274,8 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
    * consecutive frames while the reader bounced with it.
    */
   const pendingCommitRef = useRef(false)
+  /** True only inside settleWindow, where commits must be synchronous. */
+  const settlingRef = useRef(false)
   /** See readContinuousScrollOffsetPx. */
   const originPxRef = useRef(0)
   const scheduledAdjustRef = useRef<number | null>(null)
@@ -296,7 +356,7 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
    * laid them out -- but before it paints, which is what makes the correction
    * invisible rather than a jump.
    */
-  const moveWindow = useCallback((next: PreviewWindowRange) => {
+  const moveWindow = useCallback((next: PreviewWindowRange, options?: { synchronous?: boolean }) => {
     if (pendingCommitRef.current) return
     const current = rangeRef.current
     if (next.startIndex === current.startIndex && next.endIndex === current.endIndex) return
@@ -306,12 +366,41 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
     if (next.startIndex !== current.startIndex && pendingScrollRef.current === null) {
       pendingAnchorRef.current = readAnchor()
     }
+    tracePreviewWindow(`move    ${current.startIndex}..${current.endIndex} -> ${next.startIndex}..${next.endIndex}`
+      + ` top=${Math.round(previewScrollRef.current?.scrollTop ?? -1)}`
+      + `${next.startIndex !== current.startIndex ? ' FRONT' : ''}${options?.synchronous ? ' sync' : ''}`)
     pendingCommitRef.current = true
     rangeRef.current = next
+    if (options?.synchronous) {
+      flushSync(() => setRange(next))
+      return
+    }
     setRange(next)
-  }, [readAnchor])
+  }, [readAnchor, previewScrollRef])
 
-  // Re-anchoring: mount a window around a block the reader is not near.
+  /**
+   * Re-anchoring: mount a window around a block the reader is not near.
+   *
+   * SYNCHRONOUS when it moves the reader, and that is the whole difference
+   * between this landing where it was asked to and landing somewhere near it.
+   * Mounting a window is a React state update, and the scroll that follows it
+   * can only be applied once the new blocks have been committed and measured --
+   * a layout effect, one commit later. A caller that asks to be put at a
+   * character and then reads back where it ended up gets the OLD position.
+   *
+   * That caller exists: the bridged journey's cut (NonQuantizedSmoothScroll's
+   * onBridgeCut) re-anchors under the curtain and needs the new scroll offset
+   * immediately, to aim its ramp-down. Measured before this flush, on a
+   * 400,000-character note: a click near the top of the track moved the window
+   * from blocks 1669..1794 to 347..489 while scrollTop sat unchanged at 1982,
+   * so the reader arrived 45 blocks into the new window instead of at the
+   * character they asked for -- and it took four clicks to walk to the top of
+   * the document one journey at a time.
+   *
+   * `flushSync` is safe here because every caller is an event handler or an
+   * animation frame, never a render. It is also the cheapest possible moment
+   * for a synchronous commit: the pane is covered by the curtain.
+   */
   const anchorWindowOn = useCallback((blockIndex: number, fraction: number, moveReader: boolean) => {
     const blockCount = previewBlocksRef.current.length
     if (blockCount === 0) return
@@ -329,6 +418,10 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
     }
     pendingCommitRef.current = true
     rangeRef.current = next
+    if (moveReader) {
+      flushSync(() => setRange(next))
+      return
+    }
     setRange(next)
   // applyPendingScroll is declared below and reached through the ref pattern
   // this file uses for the same reason the rest of the codebase does: a direct
@@ -344,6 +437,8 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
     if (!measurement) return
     pendingScrollRef.current = null
     const target = measurement.start + (measurement.size * pending.fraction)
+    tracePreviewWindow(`land    block=${pending.blockIndex} frac=${pending.fraction.toFixed(3)}`
+      + ` top=${Math.round(scroller.scrollTop)} -> ${Math.round(target)}`)
     // A landing is a deliberate move to somewhere else in the document, so the
     // texture is entitled to jump with it -- what it must not do is drift on
     // an ordinary shift. Re-basing here keeps the offset finite over a long
@@ -399,6 +494,8 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
     // where it had been. Restating the anchor's position outright cannot do
     // that: run it twice and the second run is a no-op.
     const target = measurement.start + (anchor.scrollTopPx - anchor.startPx)
+    tracePreviewWindow(`carry   block=${anchor.blockIndex} was=${Math.round(anchor.startPx)}@${Math.round(anchor.scrollTopPx)}`
+      + ` now=${Math.round(measurement.start)} top=${Math.round(scroller.scrollTop)} -> ${Math.round(target)}`)
     if (Math.abs(scroller.scrollTop - target) < 0.5) return
     // Whatever this correction takes out of scrollTop, the continuous offset
     // puts back -- the reader did not move, the window did.
@@ -493,6 +590,27 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
     if (!enabled) return
     const scroller = previewScrollRef.current
     if (!scroller) return
+
+    // Never move the window while a travel animation owns the scroller.
+    //
+    // Such an animation recomputes `scrollTop` from its own plan on every
+    // frame, so any correction made underneath it is overwritten before it can
+    // be seen -- including the front-edge compensation that keeps the reader
+    // still when the window grows. The two together do not merely cancel out,
+    // they leave the reader somewhere neither intended: measured on a track
+    // click aimed at character 301,375, the landing was exact and then the
+    // ramp-down's own scroll writes let the window adjust and be stomped
+    // repeatedly, ending at character 231,146 -- a sixth of the document short.
+    //
+    // Deferring costs nothing. A journey is a few hundred milliseconds inside a
+    // runway measured in screenfuls, and the pass is re-queued for the frame
+    // after it ends. The one caller that must not be deferred is the cut's own
+    // settle, which runs DURING the animation on purpose and is exempt.
+    if (!settlingRef.current && isNonQuantizedSmoothScrollActive(scroller)) {
+      scheduleAdjustRef.current?.()
+      return
+    }
+    tracePreviewWindow(`adjust  top=${Math.round(scroller.scrollTop)} h=${Math.round(contentHeightRef.current)} win=${rangeRef.current.startIndex}..${rangeRef.current.endIndex} avg=${Math.round(averageBlockHeightRef.current)}`)
     const blockCount = previewBlocksRef.current.length
     const next = resolvePreviewWindowAdjustment(rangeRef.current, blockCount, {
       scrollTopPx: scroller.scrollTop,
@@ -500,11 +618,15 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
       contentHeightPx: contentHeightRef.current,
       averageBlockHeightPx: averageBlockHeightRef.current,
     })
-    if (next) moveWindow(next)
+    if (next) moveWindow(next, { synchronous: settlingRef.current })
   }, [enabled, previewScrollRef, moveWindow])
 
   const adjustRef = useRef(adjust)
   adjustRef.current = adjust
+  // adjust() needs to re-queue itself while a journey owns the scroller, and
+  // scheduleAdjust is declared below it -- a direct reference is a temporal
+  // dead zone error, the same reason readLineMetricsRef exists next door.
+  const scheduleAdjustRef = useRef<(() => void) | null>(null)
 
   /** At most one queued pass, on the next frame. */
   const scheduleAdjust = useCallback(() => {
@@ -514,6 +636,7 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
       adjustRef.current()
     })
   }, [])
+  scheduleAdjustRef.current = scheduleAdjust
 
   useEffect(() => () => {
     if (scheduledAdjustRef.current !== null) window.cancelAnimationFrame(scheduledAdjustRef.current)
@@ -615,15 +738,52 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
     anchorWindowOn(target.blockIndex, target.fraction, true)
   }, [resolveCharTarget, resolveCharOffsetPx, previewScrollRef, adjust, anchorWindowOn])
 
+  /**
+   * Runs adjustment passes until the window stops changing.
+   *
+   * Bounded: each pass either grows or trims by a step, and the thresholds have
+   * hysteresis, so a handful converges. The cap is there because a loop that
+   * cannot converge must not become an infinite one -- if it is ever hit, the
+   * window is merely not yet at its full runway, which the next scroll event
+   * fixes.
+   */
+  const settleWindow = useCallback(() => {
+    settlingRef.current = true
+    try {
+      settleWindowPasses()
+    } finally {
+      settlingRef.current = false
+    }
+  }, [])
+
+  const settleWindowPasses = () => {
+    for (let pass = 0; pass < 4; pass += 1) {
+      const before = rangeRef.current
+      adjustRef.current()
+      const after = rangeRef.current
+      if (after.startIndex === before.startIndex && after.endIndex === before.endIndex) return
+    }
+  }
+
+  const landOnChar = useCallback((charOffset: number): number | null => {
+    scrollToChar(charOffset)
+    settleWindow()
+    // Re-read the target's own offset rather than trusting the scrollTop the
+    // landing wrote: the settle passes above may have compensated it, which is
+    // exactly the movement this exists to get ahead of.
+    return resolveCharOffsetPx(charOffset) ?? previewScrollRef.current?.scrollTop ?? null
+  }, [scrollToChar, settleWindow, resolveCharOffsetPx, previewScrollRef])
+
   const api = useMemo<PreviewWindowApi>(() => ({
     readCharViewport,
     readMeasurements,
     scrollToChar,
+    landOnChar,
     resolveCharOffsetPx,
     readLastScreenChars,
     readContinuousScrollOffsetPx,
     isAtDocumentEdge,
-  }), [readCharViewport, readMeasurements, scrollToChar, resolveCharOffsetPx, readLastScreenChars, readContinuousScrollOffsetPx, isAtDocumentEdge])
+  }), [readCharViewport, readMeasurements, scrollToChar, landOnChar, resolveCharOffsetPx, readLastScreenChars, readContinuousScrollOffsetPx, isAtDocumentEdge])
 
   const element = useMemo(() => {
     if (!enabled) return null
