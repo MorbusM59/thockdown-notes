@@ -76,6 +76,25 @@
   cursor: default;
 }
 
+/* A mode's identity pill, in the note-id position on the chapter bar. The
+   note's own pill (tags.css's .note-identity-tab) supplies every dimension --
+   including the fixed 120px that keeps the narration beside it from shifting
+   as the text changes -- so this adds only what a pill nobody presses needs:
+   the text centred and clipped rather than allowed to burst the fixed box. */
+.tag-pill.note-identity-tab.escape-menu-identity-tab {
+  display:       flex;
+  align-items:   center;
+  overflow:      hidden;
+}
+
+.tag-pill.note-identity-tab.escape-menu-identity-tab .tag-pill-label {
+  overflow:      hidden;
+  text-overflow: ellipsis;
+  white-space:   nowrap;
+  width:         100%;
+  text-align:    center;
+}
+
 /* The mode's narration pill. It sits in the chapter bar's own well, scroll
    shell and display row (EscapeMenuStatus.tsx), so all of its geometry is
    already the chapter bar's -- this sets only what is different about the
@@ -223,11 +242,14 @@
 
 /* A position a mode has RESERVED: the button's exact shape and style (hence
    `.ui-btn` on it -- see the note on .escape-menu-chrome-pill), with
-   `fa-ban` inside it. The app-wide convention for "spoken for, not working
+   `fa-ban` inside it. Keyed off `.btn-icon` alone rather than off one
+   button class: the two bars size their buttons differently and BOTH have a
+   reserved position, so the convention has to be the button's, not the
+   stats row's. The app-wide convention for "spoken for, not working
    yet" -- an empty frame reads as a rendering fault and a plausible icon
    reads as a broken control. Inert, and dimmed so it does not compete with
    the controls that do work. See escapeMenuContract.ts. */
-.btn-icon.chapter-toggle-button.is-reserved {
+.btn-icon.is-reserved {
   display:         inline-flex;
   align-items:     center;
   justify-content: center;
@@ -266,25 +288,6 @@
 .timeline-panel {
   flex:      1 1 auto;
   min-width: 0;
-}
-
-/* A mode's identity box, in the note-id position at the head of the stats
-   row. Fixed width and clipped, the same rule (and the same 120px) the
-   note's own id pill follows one row up -- and for a reason that turned up
-   independently here: this text changes on every step of a run, and a box
-   that hugged it would shove the whole strip sideways each time. The full
-   text is in its tooltip. */
-.wordcount-panel.escape-menu-identity-panel {
-  width:         120px;
-  min-width:     120px;
-  max-width:     120px;
-  padding:       0 var(--spacing-regular);
-  overflow:      hidden;
-  text-overflow: ellipsis;
-  /* The tooltip is the whole point of clipping this; a panel that cannot be
-     hovered cannot show one, and .wordcount-panel turns pointer events off
-     for the plain word count that has nothing to say. */
-  pointer-events: auto;
 }
 
 /* A mode's two currency meters, in the word-count position on each side of
@@ -961,10 +964,25 @@
   align-items:    flex-end;
 }
 
-/* INSIDE the track, at its foot. The bar starts ABOVE it with
-   --spacing-regular between the two, so the icon is never covered and reads
-   as the thing being measured rather than as part of the measurement. */
-.escape-menu-chrome-gauge-icon {
+/* What sits at the foot of a track, under the bar: the gauge's icon, and --
+   where the gauge has one -- a tally under that. Named once so the icon's
+   own offset and the bar's floor are both derived from it and cannot drift
+   apart by a pixel. */
+.escape-menu-chrome-gauge {
+  --gauge-icon-size:  calc(var(--canonical-scroll-thickness) - 6px);
+  --gauge-count-size: calc(var(--canonical-scroll-thickness) - 8px);
+  --gauge-count-room: 0px;
+}
+
+.escape-menu-chrome-gauge:has(.escape-menu-chrome-gauge-count) {
+  --gauge-count-room: calc(var(--gauge-count-size) + var(--canonical-scroll-handle-gap));
+}
+
+/* The tally, at the very foot: how many of this gauge's own points the run
+   has spent. Dimmer than the icon -- the icon names the gauge, the number is
+   a footnote to it, and at this size two equally weighted glyphs stacked
+   read as one smudge. */
+.escape-menu-chrome-gauge-count {
   position:        absolute;
   left:            0;
   right:           0;
@@ -972,7 +990,27 @@
   display:         flex;
   align-items:     center;
   justify-content: center;
-  font-size:       calc(var(--canonical-scroll-thickness) - 6px);
+  font-size:       var(--gauge-count-size);
+  line-height:     1;
+  font-variant-numeric: tabular-nums;
+  color:           var(--color-text-60);
+  pointer-events:  none;
+  z-index:         1;
+}
+
+/* INSIDE the track, at its foot -- above the tally when there is one. The bar
+   starts ABOVE the whole foot with --spacing-regular between them, so neither
+   is ever covered and both read as what is being measured rather than as part
+   of the measurement. */
+.escape-menu-chrome-gauge-icon {
+  position:        absolute;
+  left:            0;
+  right:           0;
+  bottom:          calc(var(--canonical-scroll-handle-gap) + var(--gauge-count-room));
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  font-size:       var(--gauge-icon-size);
   line-height:     1;
   color:           var(--canonical-handle-border);
   pointer-events:  none;
@@ -993,7 +1031,8 @@
 .escape-menu-chrome-gauge {
   --gauge-floor: calc(
     var(--canonical-scroll-handle-gap)
-    + (var(--canonical-scroll-thickness) - 6px)
+    + var(--gauge-count-room)
+    + var(--gauge-icon-size)
     + var(--spacing-regular)
   );
 }

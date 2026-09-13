@@ -27,7 +27,7 @@ import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from './co
 import { emptySave, type GameSave } from './model/gameState'
 import { createSeed } from './core/rng'
 import { ROOT_STAGE_ID, STAGES } from './stages'
-import { chromeAction, chromeGauges, chromeIdentity, chromeMeters, chromeStrip, chromeToggle, statusReadouts } from './chrome'
+import { chromeAction, chromeBarToggle, chromeGauges, chromeIdentity, chromeMeters, chromeStrip, chromeToggle, statusReadouts } from './chrome'
 
 const CATALOG = buildCatalog(THOCKQUEST)
 
@@ -139,6 +139,7 @@ export function useAdventureEscapeMenu(options: AdventureEscapeMenuOptions): Esc
         // The stage names itself; the identity line does not keep a table
         // of names that could fall out of step with the registry.
         identity: chromeIdentity(save, STAGES.get(screen.stageId)?.title ?? ''),
+        barToggle: chromeBarToggle(),
         meters: chromeMeters(save),
         strip: chromeStrip(save, CATALOG),
         gauges: chromeGauges(save),

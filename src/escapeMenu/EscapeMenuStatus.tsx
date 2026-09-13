@@ -63,44 +63,50 @@ export function EscapeMenuReadouts({ status }: { status: EscapeMenuModeChrome })
 }
 
 /**
- * Narration, on the CHAPTER BAR, which is otherwise empty while a mode owns
- * the slot (there is no note, so there are no chapters and no tags).
+ * THE WHOLE CHAPTER-BAR ROW while a mode owns the slot, on the tag bar's own
+ * anatomy: the layer toggle, the id pill saying which one this is, then the
+ * strip. Every element is the real bar's -- the same well, fade-masked scroll
+ * shell, display row and pill a note's tags and chapters use, sharing
+ * shared/usePillStripScroll.ts -- so a headline longer than the bar scrolls
+ * under the same fades instead of overrunning it, and the bar sits at exactly
+ * the height it does for a note (the pills are what set it; narration
+ * rendered as prose made this bar shorter and the editor moved when a mode
+ * took the slot).
  *
- * It is the chapter bar's own strip, element for element: the well, the
- * fade-masked scroll shell, the display row and the pill. That is not a
- * resemblance -- it is the same chain, with the same shared scrolling
- * (shared/usePillStripScroll.ts), so a headline longer than the bar scrolls
- * under the same fades a note's chapters do instead of overrunning the bar
- * or being clipped at its edge. The pills also set the bar's height, which
- * is why narration is a pill and not prose: rendered as text this bar came
- * out shorter than the same bar showing a note, and the editor moved when a
- * mode took the slot.
- *
- * `is-inert` is the one difference: a chapter pill is something you press,
- * and every gesture a mode has is in the ring. Same box, no affordance.
+ * `is-inert` is the one difference on the narration pill: a chapter pill is
+ * something you press, and every gesture a mode has is in the ring.
  */
-export function EscapeMenuNarration({ status }: { status: EscapeMenuModeChrome }) {
-  // Called before the early return: the strip is one pill today and a list
+export function EscapeMenuChromeBarRow({ status }: { status: EscapeMenuModeChrome }) {
+  // Called before any early return: the strip is one pill today and a list
   // tomorrow, and a hook that only runs on some renders is not a hook.
   const strip = usePillStripScroll(status.headline)
-  if (!status.headline) return null
   return (
     <div className="chapter-bar-row">
-      <div className="chapter-tab-mode-shell">
-        <div className={`chapter-bar-scroll-shell${strip.fadeClassName}`}>
-          <div
-            className="chapter-bar-display"
-            role="status"
-            aria-live="polite"
-            aria-label={`${status.title} narration`}
-            ref={strip.ref}
-            onScroll={strip.onScroll}
-            onWheel={strip.onWheel}
-          >
-            <span className="tag-pill escape-menu-narration is-inert">{status.headline}</span>
+      {status.barToggle ? <EscapeMenuChromeButton control={status.barToggle} shape="chapter-auto-button" /> : null}
+      {status.identity ? (
+        <div className="section-identity-tab-shell">
+          <span className="tag-pill note-identity-tab is-inert escape-menu-identity-tab" data-tooltip={status.identity}>
+            <span className="tag-pill-label">{status.identity}</span>
+          </span>
+        </div>
+      ) : null}
+      {status.headline ? (
+        <div className="chapter-tab-mode-shell">
+          <div className={`chapter-bar-scroll-shell${strip.fadeClassName}`}>
+            <div
+              className="chapter-bar-display"
+              role="status"
+              aria-live="polite"
+              aria-label={`${status.title} narration`}
+              ref={strip.ref}
+              onScroll={strip.onScroll}
+              onWheel={strip.onWheel}
+            >
+              <span className="tag-pill escape-menu-narration is-inert">{status.headline}</span>
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
     </div>
   )
 }
@@ -121,10 +127,20 @@ export function EscapeMenuNarration({ status }: { status: EscapeMenuModeChrome }
  */
 export const RESERVED_POSITION_ICON = 'fa-solid fa-ban'
 
-export function EscapeMenuChromeButton({ control }: { control: EscapeMenuChromeToggle }) {
+/**
+ * `shape` is the HOST's class for a button in that position, not a choice a
+ * mode makes: the two bars size their buttons differently (the chapter bar's
+ * track the pill height, the stats row's the scrollbar's thickness), and a
+ * reserved position has to be exactly the button it is holding open or it
+ * does not hold the geometry it exists to hold.
+ */
+export function EscapeMenuChromeButton({ control, shape = 'chapter-toggle-button' }: {
+  control: EscapeMenuChromeToggle
+  shape?: 'chapter-toggle-button' | 'chapter-auto-button'
+}) {
   if (!control.onActivate) {
     return (
-      <span className="ui-btn btn-icon chapter-toggle-button is-reserved" aria-hidden="true" data-tooltip={control.label}>
+      <span className={`ui-btn btn-icon ${shape} is-reserved`} aria-hidden="true" data-tooltip={control.label}>
         <span className={RESERVED_POSITION_ICON} aria-hidden="true" />
       </span>
     )
@@ -132,7 +148,7 @@ export function EscapeMenuChromeButton({ control }: { control: EscapeMenuChromeT
   return (
     <button
       type="button"
-      className={`chapter-toggle-button btn-icon${control.isActive ? ' is-active' : ''}`}
+      className={`${shape} btn-icon${control.isActive ? ' is-active' : ''}`}
       aria-label={control.label}
       aria-pressed={control.isActive}
       data-tooltip={control.label}
@@ -233,11 +249,6 @@ export function EscapeMenuChromeStatsRow({ status }: { status: EscapeMenuModeChr
       <div className="chapter-toggle-panel">
         {status.toggle ? <EscapeMenuChromeButton control={status.toggle} /> : null}
       </div>
-      {status.identity ? (
-        <div className="wordcount-panel escape-menu-identity-panel" data-tooltip={status.identity}>
-          <span>{status.identity}</span>
-        </div>
-      ) : null}
       {status.meters?.leading ? <EscapeMenuChromeMeterBox meter={status.meters.leading} side="leading" /> : null}
       <div className="timeline-panel">
         <EscapeMenuChromeStrip status={status} />
@@ -285,7 +296,13 @@ export function EscapeMenuChromeGauges({ status }: { status: EscapeMenuModeChrom
             // indeterminate instead of as "none of it".
             aria-valuenow={filled === null ? undefined : Math.round(filled * 100)}
           >
-            <div className="thockdown-scroll-track escape-menu-chrome-gauge-track">
+            <div
+              className="thockdown-scroll-track escape-menu-chrome-gauge-track"
+              // The bar's floor is raised by whatever sits under it. Declared
+              // here rather than as a second class, so the count's presence
+              // and the floor it creates cannot disagree.
+              data-has-count={gauge.count === undefined ? undefined : 'true'}
+            >
               {filled === null ? null : (
                 <div
                   className="thockdown-scroll-thumb escape-menu-chrome-gauge-fill"
@@ -306,6 +323,16 @@ export function EscapeMenuChromeGauges({ status }: { status: EscapeMenuModeChrom
               <span className="escape-menu-chrome-gauge-icon" aria-hidden="true">
                 <span className={gauge.icon} aria-hidden="true" />
               </span>
+              {/* Under the icon, at the very foot: what has been SPENT of
+                  what this gauge measures, where the bar above is progress
+                  toward the next one. Clamped to two digits -- this column is
+                  a scrollbar's width, and the true figure is in the tooltip
+                  the whole gauge already carries. */}
+              {gauge.count === undefined ? null : (
+                <span className="escape-menu-chrome-gauge-count" aria-hidden="true">
+                  {Math.min(99, Math.max(0, Math.floor(gauge.count)))}
+                </span>
+              )}
             </div>
           </div>
         )

@@ -17,7 +17,7 @@ import type { ChapterPillSplitArm } from '../chapters/useChapterPillActions'
 import { EscapeHoldPanel, type ExportScope } from './EscapeHoldPanel'
 import { splitChapterFamily } from '../shared/chapters'
 import type { EscapeMenuContribution } from '../escapeMenu/escapeMenuContract'
-import { EscapeMenuChromeGauges, EscapeMenuChromeStatsRow, EscapeMenuNarration } from '../escapeMenu/EscapeMenuStatus'
+import { EscapeMenuChromeBarRow, EscapeMenuChromeGauges, EscapeMenuChromeStatsRow } from '../escapeMenu/EscapeMenuStatus'
 
 export interface SectionEditorAreaProps {
   sectionId: string
@@ -510,7 +510,7 @@ export function SectionEditorArea({
       </aside>
       <div className={`chapter-panel${isChapterPanelOpen ? ' is-open' : ''}`} aria-hidden={!isChapterPanelOpen}>
         {modeStatus ? (
-          <EscapeMenuNarration status={modeStatus} />
+          <EscapeMenuChromeBarRow status={modeStatus} />
         ) : activeNoteId && menuIdentityNoteId ? (
           <ChapterBar
             parentNoteId={menuIdentityNoteId}

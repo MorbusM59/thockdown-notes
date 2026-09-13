@@ -27,7 +27,7 @@
 
 import type { EscapeMenuChromeGauge, EscapeMenuChromePill, EscapeMenuModeChrome, EscapeMenuReadout } from '../escapeMenu/escapeMenuContract'
 import { totalArmor } from './model/armor'
-import { moteBalance, statPointProgress, statPointSpan } from './model/motes'
+import { famePointsSpent, moteBalance, statPointProgress, statPointSpan, statPointsSpent } from './model/motes'
 import { activeGame, heldModifiers, holdingCounts, profileOf, type GameSave } from './model/gameState'
 import { describeModifier, type Modifier } from './model/modifiers'
 import { STAT_ICONS, STAT_KEYS, STAT_LABELS } from './model/stats'
@@ -92,7 +92,6 @@ export function statusReadouts(save: GameSave, catalog: ReadonlyMap<string, Modi
       value: String(profile.stats[key]),
     })),
     ...(game.statPoints > 0 ? [{ key: 'points', icon: READOUT_ICONS.points, label: 'Stat points to spend', value: String(game.statPoints) }] : []),
-    { key: 'fame', icon: READOUT_ICONS.fame, label: 'Fame', value: String(game.fame) },
   ]
 }
 
@@ -209,8 +208,13 @@ function reservedPosition(label: string) {
   return { label, isActive: false }
 }
 
-/** The slot's toggle position. Held, unused. */
+/** The slot's toggle position, on the timeline row. Held, unused. */
 export function chromeToggle() {
+  return reservedPosition('Reserved')
+}
+
+/** The chapter bar's leading toggle position. Held, unused. */
+export function chromeBarToggle() {
   return reservedPosition('Reserved')
 }
 
@@ -224,6 +228,11 @@ export function chromeAction() {
 
 /**
  * The rail's gauges, top to bottom: FAME, then the next stat point.
+ *
+ * Each carries, under its icon, the number of that gauge's own points this
+ * run has SPENT -- the bar is progress toward the next one, the tally is what
+ * the previous ones bought. Fame's is always zero and honestly so: nothing
+ * can spend a fame point yet (model/motes.ts's famePointsSpent).
  *
  * Fame is the run's score and the top half of the rail, because it is what
  * the whole run is for; the stat-point bar below it is the shorter, faster
@@ -249,9 +258,11 @@ export function chromeGauges(save: GameSave): EscapeMenuChromeGauge[] {
     {
       key: 'fame',
       icon: 'fa-solid fa-crown',
+      count: famePointsSpent(),
       label: 'Fame',
       detail: [
         `${game.fame} fame`,
+        `${famePointsSpent()} fame points spent`,
         'The curve that scales this bar is not written yet',
       ],
     },
@@ -259,10 +270,12 @@ export function chromeGauges(save: GameSave): EscapeMenuChromeGauge[] {
       key: 'statPoint',
       icon: 'fa-solid fa-star',
       ratio: statPointProgress(game.experienceEarned, game.experienceToNextStatPoint, game.statPointsAcquired),
+      count: statPointsSpent(game.statPointsAcquired),
       label: 'Next stat point',
       detail: [
         `${into} of ${span} motes earned toward it`,
         `${game.experienceEarned} earned in total, next point at ${game.experienceToNextStatPoint}`,
+        `${statPointsSpent(game.statPointsAcquired)} stat points spent`,
       ],
     },
   ]

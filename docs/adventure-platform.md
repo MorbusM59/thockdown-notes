@@ -26,11 +26,11 @@ channels:
 | --- | --- |
 | the ring | one question's choices, as icon + short label — ALL of them the stage's own |
 | the tab bar | health, armor and the six stats, each an ICON and its value (the name in the tooltip) — or, while a choice is focused, that choice's own effects |
-| the chapter bar | narration: what just happened, and the frame for what is being asked |
-| the identity box | `IV [Combat] 3 | 4` — level in roman numerals, the stage, how far through it. In the note-id position, fixed width, clipped: it changes every step, and a box that hugged it would shove the strip sideways each time |
+| the chapter bar | its leading toggle, the identity pill, then narration: what just happened, and the frame for what is being asked |
+| the identity pill | `IV [Combat] 3 | 4` — level in roman numerals, the stage, how far through it. In the note-id position on the chapter bar, fixed width, clipped: it changes every step, and a pill that hugged it would shove the narration sideways each time |
 | the strip | what the run is carrying: items out from the left, traits in from the right |
 | the two meters | the currencies, flanking the strip: gold leading, motes trailing, each with an icon on its outward side. They are next to what they BUY — a balance on the tab bar and the things it bought a whole editor away were two halves of one thought in two places |
-| the rail | one gauge per subdivision, each an icon at the foot and a bar rising above it |
+| the rail | one gauge per subdivision, each an icon at the foot with a two-digit tally under it — how many of that gauge's own points the run has SPENT — and a bar rising above both |
 | the toggle, the action | two buttons the game may claim; **empty** until it does |
 
 The chapter bar carries narration and nothing else. It led with a second
@@ -41,13 +41,23 @@ therefore not shown anywhere right now** — the counter has the level, and
 where you are has no surface. Worth a decision when region actually means
 something mechanically; not worth reinstating a pill for.
 
-The stats row below the editor is laid out on the TAG BAR's anatomy, one
-position at a time: the leading toggle, then the id box saying which one this
-is, then the strip, with the row's remaining boxes flanking it and the
-manual-save position closing it. The mode lays that row out itself rather
-than filling in the editor's — the rule that a mode owning a slot owns its
-chrome was previously spelled once per position, which is how the row's
-SHAPE stayed the editor's while only its contents changed.
+Both rows below the editor are laid out on the TAG BAR's anatomy, one
+position at a time. The chapter bar takes its head from it exactly: the
+layer toggle, the id pill saying which one this is, then the strip. The
+stats row below repeats the shape at its own scale — the leading toggle,
+the strip, the two currency meters flanking it, the manual-save position
+closing it. The mode lays both rows out itself rather than filling in the
+editor's — the rule that a mode owning a slot owns its chrome was previously
+spelled once per position, which is how a row's SHAPE stayed the editor's
+while only its contents changed.
+
+**Fame's tally is always zero, and honestly so.** Fame points are meant to be
+attained and spent the way stat points are, and neither half is written:
+there is no fame-point field on the record, no curve turning fame into
+points, and nothing to spend one on. `model/motes.ts`'s `famePointsSpent`
+answers it in one place so the day the concept lands the chrome already reads
+it — deliberately a function and not a stored field, because storage with no
+writer is a rule half-decided.
 
 Both bars are the real ones, element for element — the same well, scroll
 shell, display row and pill a note's tabs and chapters use, sharing

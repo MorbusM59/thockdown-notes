@@ -36,17 +36,17 @@ export const STAT_LABELS: Readonly<Record<StatKey, string>> = {
  * The tab bar's icon per stat, per the design document's status line.
  *
  * Charisma is the one that is not the design document's own choice: it asks
- * for `fa-lips`, which is Font Awesome PRO. `fa-face-kiss` is the closest
- * lips-forward glyph in the free set actually shipped here
- * (@fortawesome/fontawesome-free) -- `fa-masks-theater` is the closer match
- * in MEANING if the literal lips were not the point.
+ * for `fa-lips`, which is Font Awesome PRO and so does not exist in the free
+ * set shipped here (@fortawesome/fontawesome-free). `fa-masks-theater` was
+ * chosen over the nearest lips-forward free glyph (`fa-face-kiss`) because
+ * it matches what charisma DOES rather than what the original icon depicts.
  */
 export const STAT_ICONS: Readonly<Record<StatKey, string>> = {
   might: 'fa-solid fa-hand-fist',
-  agility: 'fa-solid fa-wind',
+  agility: 'fa-solid fa-feather-pointed',
   perception: 'fa-solid fa-eye',
   intellect: 'fa-solid fa-brain',
-  charisma: 'fa-solid fa-face-kiss',
+  charisma: 'fa-solid fa-masks-theater',
   luck: 'fa-solid fa-clover',
 }
 

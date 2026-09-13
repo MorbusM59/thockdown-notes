@@ -116,6 +116,17 @@ export interface EscapeMenuChromeGauge {
    * claim and, where the rule is undecided, a false one.
    */
   ratio?: number
+  /**
+   * A short number under the icon, inside the track -- what the gauge's own
+   * quantity has bought so far, where the bar above it is progress toward the
+   * next one. Two digits: it is a tally in a column as wide as a scrollbar,
+   * not a readout. The host clamps what it draws and leaves the true figure
+   * to the tooltip.
+   *
+   * Omitted draws no number and the bar's floor drops accordingly, so a gauge
+   * that counts nothing does not reserve a strip for it.
+   */
+  count?: number
   label: string
   detail?: string[]
 }
@@ -199,17 +210,24 @@ export interface EscapeMenuModeChrome {
    */
   toggle?: EscapeMenuChromeToggle
   /**
-   * WHICH one, and where in it -- shown in the note-id position at the head
-   * of the stats row, the box a note uses to say `$SOMETHING`. The mode
-   * formats it; the host only places it.
+   * WHICH one, and where in it -- shown in the note-id position on the
+   * CHAPTER BAR, the pill a note uses to say `$SOMETHING` while that bar is
+   * in tag mode. The mode formats it; the host only places it.
    *
-   * A FIXED width that clips, exactly as the note's own id box is, and for
+   * A FIXED width that clips, exactly as the note's own id pill is, and for
    * the same reason turned up a second time: this text changes on every step
-   * (`I [Welcome]` to `IV [Character Creation]`), and a box that hugs it
-   * would shove the whole strip sideways each time. The full text is in its
-   * tooltip.
+   * (`I [Welcome]` to `IV [Character Creation]`), and a pill that hugs it
+   * would shove the narration beside it sideways each time. The full text is
+   * in its tooltip.
    */
   identity?: string
+  /**
+   * The button at the head of the CHAPTER BAR, where a note's
+   * tags/chapters toggle sits. Omitted leaves it EMPTY, for the same reason
+   * `toggle` does -- that button switches between a note's two layers, and a
+   * mode has neither.
+   */
+  barToggle?: EscapeMenuChromeToggle
   /**
    * The two boxes flanking the strip, in the positions a note's word count
    * occupies. What a mode SPENDS goes here, beside what it has spent it on:

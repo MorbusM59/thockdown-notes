@@ -41,6 +41,38 @@ export function statPointSpan(pointsAcquired: number): number {
   return points === 0 ? FIRST_STAT_POINT_THRESHOLD : STAT_POINT_STEP * points
 }
 
+/**
+ * How many stat points this run has SPENT -- allocated into a stat, never to
+ * come back. `statPointsAcquired` is that count under an older name: it is
+ * incremented by `allocateStatPoint`, which is the spend, not the earn.
+ *
+ * Named here rather than read off the field at the call site, because the
+ * field's name says the opposite of what it counts and a reader of the
+ * chrome should not have to know that.
+ */
+export function statPointsSpent(statPointsAcquired: number): number {
+  return Math.max(0, Math.floor(statPointsAcquired))
+}
+
+/**
+ * How many FAME points this run has spent.
+ *
+ * Always zero, and honestly so: fame points can be attained and spent by
+ * design (the same shape as stat points), and NEITHER half is written --
+ * there is no fame-point field on the record, no curve that turns fame into
+ * points, and nothing to spend one on. See the open questions in
+ * docs/adventure-platform.md.
+ *
+ * A function rather than a literal at the display, so the day the concept
+ * lands there is one place that answers this and the chrome already reads
+ * it. Deliberately NOT a stored field: storage with no writer is a rule
+ * half-decided, and this is a count that is genuinely zero rather than
+ * unknown.
+ */
+export function famePointsSpent(): number {
+  return 0
+}
+
 /** Motes in hand, for buying traits. Nothing about stat points enters this. */
 export function moteBalance(experienceEarned: number, experienceSpentOnTraits: number): number {
   return Math.max(0, experienceEarned - experienceSpentOnTraits)
