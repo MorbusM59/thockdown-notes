@@ -13,6 +13,8 @@
     "preview": "vite preview",
     "pretest": "node scripts/killStrayElectronDev.mjs && npm rebuild better-sqlite3",
     "test": "vitest run",
+    "adventure:sim": "vite-node scripts/adventure/simulate.ts --",
+    "adventure:play": "xvfb-run -a node scripts/adventure/playthrough.mjs",
     "perf:input-lag": "node scripts/perf/measureInputLag.mjs",
     "perf:input-lag:electron": "xvfb-run -a node scripts/perf/measureInputLagElectron.mjs",
     "perf:input-lag:electron:packaged": "xvfb-run -a node scripts/perf/measureInputLagElectronPackaged.mjs",

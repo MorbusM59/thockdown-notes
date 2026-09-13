@@ -8,6 +8,7 @@ import { LEVEL_ENCOUNTER_COUNT } from '../model/encounterOffers'
 import { resolveProfile } from '../model/modifiers'
 import { lootStage } from './loot'
 import { encounterSelectStage } from './encounterSelect'
+import { sanitizeGameSave } from '../save'
 
 const DEPS: DirectorDeps = {
   stages: STAGES,
@@ -180,5 +181,66 @@ describe('the level counts to ten', () => {
     // ...and three ways to look for one everywhere else.
     const open = encounterSelectStage.enter({ encounterIndex: 4 }, context, 5)
     expect(encounterSelectStage.present(open.state, context).choices).toHaveLength(3)
+  })
+})
+
+describe('game settings', () => {
+  /** Walks to the settings screen from the entry screen. */
+  function openSettings(save: GameSave) {
+    return choose(save, 'welcome:settings', DEPS, NOW).save
+  }
+
+  it('offers every preset, and says which one is current', () => {
+    const save = openSettings(enterEntryScreen(emptySave(4242), DEPS, NOW))
+    const screen = currentScreen(save, DEPS)
+    expect(screen?.stageId).toBe('settings')
+    const labels = screen?.choices.map((choice) => choice.label) ?? []
+    expect(labels).toEqual(['Easy', 'Medium (current)', 'Hard', 'Extreme', 'Back'])
+    // Each preset says what it does, in the two numbers it IS.
+    expect(screen?.choices[0].detail?.lines).toEqual([
+      'Monster hit points and damage at 50%',
+      '+1% compounding each level',
+    ])
+  })
+
+  it('comes back to the entry screen it was opened from, run and all', () => {
+    // PUSH, not replace: the welcome frame knows whether it is sitting on a
+    // suspended run, and could not work that out again.
+    const playing = choose(enterEntryScreen(emptySave(4242), DEPS, NOW), 'welcome:start', DEPS, NOW).save
+    const reopened = enterEntryScreen(playing, DEPS, NOW)
+    const back = choose(openSettings(reopened), 'settings:back', DEPS, NOW).save
+    expect(back.director.stack).toEqual(reopened.director.stack)
+    expect(currentScreen(back, DEPS)?.choices.map((choice) => choice.id)).toContain('welcome:continue')
+  })
+
+  it('applies a preset to the NEXT run and never to the one in progress', () => {
+    // A preset changed mid-run would rewrite what every fight already fought
+    // was worth.
+    const started = choose(enterEntryScreen(emptySave(4242), DEPS, NOW), 'welcome:start', DEPS, NOW).save
+    expect(activeGame(started)?.difficulty).toBe('medium')
+
+    const reopened = enterEntryScreen(started, DEPS, NOW)
+    const chosen = choose(openSettings(reopened), 'difficulty:extreme', DEPS, NOW).save
+    expect(chosen.settings.difficulty).toBe('extreme')
+    expect(chosen.games.find((game) => game.id === chosen.activeGameId)?.difficulty).toBe('medium')
+
+    const next = choose(enterEntryScreen(chosen, DEPS, NOW), 'welcome:start', DEPS, NOW).save
+    expect(activeGame(next)?.difficulty).toBe('extreme')
+  })
+
+  it('survives the sanitizer, which is the half that has shipped broken before', () => {
+    const chosen = choose(
+      openSettings(enterEntryScreen(emptySave(4242), DEPS, NOW)),
+      'difficulty:easy',
+      DEPS,
+      NOW,
+    ).save
+    const readBack = sanitizeGameSave(JSON.parse(JSON.stringify(chosen)))
+    expect(readBack?.settings.difficulty).toBe('easy')
+    // And a save written before presets existed reads at the default rather
+    // than being discarded.
+    const older = JSON.parse(JSON.stringify(chosen)) as Record<string, unknown>
+    delete older.settings
+    expect(sanitizeGameSave(older)?.settings.difficulty).toBe('medium')
   })
 })

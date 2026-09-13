@@ -10,6 +10,7 @@
 // stays a tree.
 
 export const WELCOME_STAGE_ID = 'welcome'
+export const SETTINGS_STAGE_ID = 'settings'
 export const CHARACTER_CREATION_STAGE_ID = 'characterCreation'
 export const REGION_SELECT_STAGE_ID = 'regionSelect'
 export const ENCOUNTER_SELECT_STAGE_ID = 'encounterSelect'

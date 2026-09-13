@@ -47,6 +47,9 @@ export function monsterFor(offer: EncounterOffer, context: StageContext): Monste
     classBaseStats: monsterBaseStats(offer, context),
     type: offer.type,
     level: context.game.level,
+    // The RUN's preset, fixed when it started -- not the settings, which are
+    // what the next run will be played under (model/gameState.ts).
+    difficulty: context.game.difficulty,
     against: context.profile.stats,
   })
 }

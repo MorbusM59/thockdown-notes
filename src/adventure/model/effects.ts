@@ -11,6 +11,7 @@
 // something it cannot say. An effect that exists because it might be useful
 // one day is an effect nobody can delete later.
 
+import type { Difficulty } from './difficulty'
 import type { StatKey } from './stats'
 import type { ModifierKind } from './modifiers'
 import type { JsonObject } from '../core/json'
@@ -22,6 +23,12 @@ export type Effect =
    * pure function of its inputs to stay replayable -- never sees one.
    */
   | { kind: 'startGame' }
+  /**
+   * The difficulty the NEXT run is played at. Not the current one: a preset
+   * changed mid-run would rewrite what every fight already fought was worth
+   * (model/gameState.ts).
+   */
+  | { kind: 'setDifficulty'; difficulty: Difficulty }
   /** Makes an existing slot active -- "continue previous adventure". */
   | { kind: 'openGame'; gameId: string }
   /** Leaves the current slot without ending the game. Back to the welcome screen. */

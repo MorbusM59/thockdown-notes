@@ -77,3 +77,43 @@ export function clampChance(value: number): number {
 export function resolveChance(chance: StatChance, own: StatBlock, opponent?: StatBlock | null): number {
   return clampChance(rawChance(chance, own, opponent))
 }
+
+/**
+ * What a modifier does to a chance, on top of whatever the stats made it.
+ *
+ * A SCALE and a DELTA rather than either alone, because the two items that
+ * want this want different things: a whetstone that sharpens what you already
+ * do is a scale, and a lucky coin that adds five points of crit is a delta.
+ * Applied in that order and then clamped, exactly once, wherever the chance
+ * is used -- which is the whole reason this is a value carried alongside the
+ * profile rather than a number folded into it: a chance is CONTESTED at the
+ * moment it is rolled, so it cannot be finished in advance.
+ *
+ * The identity is `{ scale: 1, delta: 0 }`, so an actor with no modifiers
+ * takes exactly the path an actor with them does.
+ */
+export interface ChanceAdjustment {
+  scale: number
+  delta: number
+}
+
+export const NO_CHANCE_ADJUSTMENT: ChanceAdjustment = { scale: 1, delta: 0 }
+
+/**
+ * A declared chance, resolved and then adjusted -- the ONE way a chance is
+ * arrived at anywhere in the game.
+ *
+ * Both the tab bar's figure and the roll in a fight come through here; they
+ * differ only in whether an opponent is passed. When they did not, an item
+ * saying "+10% crit" moved the number on the bar and nothing in the fight,
+ * because combat resolved chances from the stat block alone and never saw the
+ * modifier at all.
+ */
+export function resolveChanceWith(
+  chance: StatChance,
+  own: StatBlock,
+  opponent: StatBlock | null | undefined,
+  adjustment: ChanceAdjustment = NO_CHANCE_ADJUSTMENT,
+): number {
+  return clampChance(rawChance(chance, own, opponent) * adjustment.scale + adjustment.delta)
+}

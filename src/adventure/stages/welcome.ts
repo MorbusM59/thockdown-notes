@@ -18,7 +18,7 @@
 
 import type { StageModule } from '../core/stage'
 import { resumableGame } from '../model/gameState'
-import { WELCOME_STAGE_ID } from './ids'
+import { SETTINGS_STAGE_ID, WELCOME_STAGE_ID } from './ids'
 
 
 const CHOICE = {
@@ -98,12 +98,9 @@ export const welcomeStage: StageModule = {
     }
 
     if (choiceId === CHOICE.settings) {
-      return {
-        kind: 'stay',
-        state,
-        narration: 'Difficulty and presets are not specified yet. What would you like to do?',
-        rng,
-      }
+      // PUSH: this frame knows whether it is sitting on a suspended run, and
+      // that is not something it could work out again after a replace.
+      return { kind: 'push', stageId: SETTINGS_STAGE_ID, rng }
     }
 
     if (choiceId === CHOICE.leave) return { kind: 'leave', rng }

@@ -12,7 +12,8 @@
 // uses, and it exists because this file is read before anything can be
 // rendered to complain with.
 
-import { SAVE_VERSION, type DirectorState, type GameRecord, type GameSave, type StageFrame } from './model/gameState'
+import { DEFAULT_SETTINGS, SAVE_VERSION, type DirectorState, type GameRecord, type GameSave, type StageFrame } from './model/gameState'
+import { DEFAULT_DIFFICULTY, isDifficulty } from './model/difficulty'
 import { STAT_KEYS, type StatBlock } from './model/stats'
 import { FIRST_MILESTONE_THRESHOLD } from './model/milestones'
 import type { JsonObject } from './core/json'
@@ -99,6 +100,9 @@ function sanitizeGame(value: unknown): GameRecord | null {
       ? { endedReason: value.endedReason }
       : {}),
     level: wholeAtLeast(value.level, 1),
+    // A run saved before presets existed is played out at the default rather
+    // than discarded -- the same widening the narration list took.
+    difficulty: isDifficulty(value.difficulty) ? value.difficulty : DEFAULT_DIFFICULTY,
     regionId: typeof value.regionId === 'string' ? value.regionId : null,
     baseStats: sanitizeStats(value.baseStats),
     statPoints: wholeAtLeast(value.statPoints, 0),
@@ -127,6 +131,7 @@ export function sanitizeGameSave(input: unknown): GameSave | null {
   const games = Array.isArray(input.games) ? input.games.flatMap((game) => sanitizeGame(game) ?? []) : []
   const ids = new Set(games.map((game) => game.id))
   const profile = isRecord(input.profile) ? input.profile : {}
+  const settings = isRecord(input.settings) ? input.settings : {}
 
   const holdings = (Array.isArray(input.holdings) ? input.holdings : []).flatMap((row) => {
     if (!isRecord(row)) return []
@@ -160,6 +165,7 @@ export function sanitizeGameSave(input: unknown): GameSave | null {
       gamesEnded: wholeAtLeast(profile.gamesEnded, 0),
       bestFame: wholeAtLeast(profile.bestFame, 0),
     },
+    settings: isDifficulty(settings.difficulty) ? { difficulty: settings.difficulty } : DEFAULT_SETTINGS,
     games,
     holdings,
     outcomes,

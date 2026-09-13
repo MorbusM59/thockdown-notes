@@ -13,7 +13,7 @@
 import { nextSample, type RngState } from '../core/rng'
 import type { JsonObject } from '../core/json'
 import type { StageContext, StageModule } from '../core/stage'
-import { describeModifier, type Modifier } from '../model/modifiers'
+import { describeModifier, isOfferable, type Modifier } from '../model/modifiers'
 import { holdingCounts } from '../model/gameState'
 import { STAT_KEYS, STAT_LABELS } from '../model/stats'
 import { CHARACTER_CREATION_STAGE_ID, REGION_SELECT_STAGE_ID } from './ids'
@@ -26,8 +26,11 @@ function stepOf(value: unknown): Step {
 }
 
 function offerPool(step: Step, context: StageContext): readonly Modifier[] {
-  if (step === 'trait') return context.content.traits
-  if (step === 'item') return context.content.items
+  // Only what DOES something: the pool carries the design's unspecified names
+  // too, and an opening choice between two of those is a choice between two
+  // nothings. See `isOfferable`.
+  if (step === 'trait') return context.content.traits.filter(isOfferable)
+  if (step === 'item') return context.content.items.filter(isOfferable)
   return []
 }
 

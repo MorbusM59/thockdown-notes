@@ -113,7 +113,15 @@ function armNextAction(
   if (!derived) return { actor: null, dodgeOffered: false, rng }
   const picked = rollActor(round, monster, derived, rng)
   if (picked.actor !== 'monster') return { actor: picked.actor, dodgeOffered: false, rng: picked.rng }
-  const dodge = rollDodgeOffered(context.profile?.stats ?? monster.stats, monster.stats, picked.rng)
+  // The player's own dodge, with their own adjustment: an item that says
+  // "+10% dodge" has to move the roll that decides whether Dodge is on the
+  // table, or it moves nothing at all (model/chance.ts).
+  const dodge = rollDodgeOffered(
+    context.profile?.stats ?? monster.stats,
+    monster.stats,
+    picked.rng,
+    context.profile?.chances.dodgeChance,
+  )
   return { actor: 'monster', dodgeOffered: dodge.offered, rng: dodge.rng }
 }
 
@@ -351,6 +359,7 @@ export const combatStage: StageModule = {
         monster,
         playerStats: context.profile.stats,
         playerDerived: context.profile.derived,
+        playerChances: context.profile.chances,
         rng,
       })
       // Nothing on the PLAYER changes when they attack, so no record change.

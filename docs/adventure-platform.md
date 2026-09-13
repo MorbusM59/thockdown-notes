@@ -297,21 +297,33 @@ an item carried over counts as a fresh acquisition.
 
 Built and exercised end to end: the director, the stack, the effect
 vocabulary, the save and its sanitizer, stats, modifiers, armor, checks,
-determinism, the mote model, the chrome contract, and the stages for welcome,
-character creation, region select and the encounter hub. The two acquired-\* interludes are GONE — what you
-carry belongs on the chrome, always visible, not behind a permanent cell.
+determinism, the mote model, the chrome contract, the difficulty presets and
+the settings screen, and the whole encounter chain — welcome, character
+creation, region select, the hub, the hunt, the round engine with its four
+defences, and the loot that pays for it. The two acquired-\* interludes are
+GONE — what you carry belongs on the chrome, always visible, not behind a
+permanent cell.
 
-**Not built, on purpose**: hunting, exploring, chance encounters, combat and
-loot. Their rules are still being written — the action economy, what the
-damage multiplier multiplies, what a region's pools contain — and the
+**Not built, on purpose**: exploring, special encounters, charisma actions,
+special attacks and spells. Their rules are still being written, and the
 platform routes them to a stage that says so *in the game* rather than
 stubbing them with plausible behaviour. That is how the previous draft
 acquired numbers nobody chose and then defended them.
 
-Content is perhaps a third written. Every placeholder is labelled: an entry
-that exists by name but whose effect is undecided carries a `tag` effect
-saying exactly that, so it shows up in the tab bar as unspecified rather than
-as a number somebody would have to guess was real. **Do not fill these in.**
+**Not built, and MISSING rather than deferred**: anything that spends what a
+run earns. Gold, motes and stat points all accumulate, the effects to spend
+them all exist (`spendGold`, `spendExperience`, `allocateStatPoint`), and no
+stage offers any of it — so a character's only growth is the items a fight
+happens to drop. Together with the absence of any rest, that is what question
+55 below measures.
+
+Content is perhaps half written. Every placeholder is labelled: an entry that
+exists by name but whose effect is undecided carries a `tag` effect saying
+exactly that, and is kept OUT of every offer pool (`isOfferable`) rather than
+served as a choice that does nothing. **Do not fill these in.** The ten items
+and ten traits that ARE specified were written here rather than in the design
+document — see question 66.
+
 
 ## Open questions
 
@@ -534,9 +546,25 @@ special attacks; and the charisma failure chance as a type base plus
     multiplier it means the difficulty preset — easy, normal, hard, insane.
     One of them needs a different word before either is built on.
 
-40. **Nothing chooses a difficulty.** The multiplier depends on a preset that
-    is not stored, not presented, and has no default written down beyond
-    "normal" appearing first in the list. (Was question 17.)
+40. ~~**Nothing chooses a difficulty.**~~ **ANSWERED and BUILT.** Four
+    presets, each TWO numbers rather than one — a base on a monster's hit
+    points and damage, and a growth the level exponentiates on top
+    (`model/difficulty.ts`):
+
+    | Preset | Monster hit points & damage | Per level |
+    | --- | --- | --- |
+    | Easy | 50% | ×1.01 |
+    | Medium | 80% | ×1.02 |
+    | Hard | 100% | ×1.05 |
+    | Extreme | 120% | ×1.1 |
+
+    A single growth factor could only reach the late game; the base is what
+    moves the FIRST fight, which is where a run is actually lost. The choice
+    is made on a settings screen pushed from the entry screen
+    (`stages/settings.ts`), stored on the SAVE, and copied onto a run when it
+    starts — a preset changed mid-run would rewrite what every fight already
+    fought was worth. Medium is the default, and `hard` is the old
+    single-curve behaviour exactly.
 
 41. **How many monsters is a Group?** Type Group is `−1` to base stats and
     "multiple monsters"; the count is not given. It also decides whether the
@@ -580,18 +608,44 @@ exchange, the round's exits and what each one pays.
 `encounterSelect → hunt → combat → loot → encounterSelect(+1)`, with the boss
 placed at 5, 9 and 10 and the level advancing after ten.
 
-55. **THE FIRST FIGHT IS UNWINNABLE at current tuning**, which the walk test
-    found rather than a reading did. A level-1 warrior has 80 hit points, two
-    actions a round and does 8 a blow at a 50% chance to hit; a Large Boar has
-    84 hit points, three actions and does 8 (17 on a crit). The player needs
-    about twenty landed blows and survives about ten. Nothing is wrong with
-    the rules as specified — this is the tuning pass, and it wants
-    playthroughs rather than an argument.
+55. **A RUN IS A MONOTONIC DECLINE, and no preset fixes that.** Measured over
+    300 runs per preset (`npm run adventure:sim`, policy `careful`, which
+    dodges when it can and runs below a quarter health):
 
-56. **A monster's action count comes straight off Agility, uncapped.** A
-    three-action monster against a two-action player means the player answers
-    more often than they act, which is the action economy working; it is also
-    the single biggest lever on difficulty and nothing bounds it.
+    | Preset | died | encounters won (p10/med/p90) | damage per fight |
+    | --- | --- | --- | --- |
+    | Easy | 98% | 1 / 3 / 6 | 12.7 |
+    | Medium | 100% | 0 / 1 / 2 | 22.8 |
+    | Hard | 100% | 0 / 0 / 1 | 30.3 |
+    | Extreme | 100% | 0 / 0 / 1 | 35.5 |
+
+    The arithmetic behind it is the level's own shape: **ten encounters, no
+    rest, eighty hit points**. That budget allows a fight to cost about EIGHT
+    hit points, and on Medium one costs twenty-three. Nothing about the round
+    engine is wrong — a first fight is close to even (the player needs about
+    twelve rounds to kill, and dies in about fifteen) — the run simply never
+    gets anything back, so it is the second and third fights that kill.
+
+    Three levers, and choosing between them is a design decision, not a tuning
+    one, so none of them has been taken:
+    - **Recovery.** Only items and traits heal today
+      (`recoverAfterEncounter`), and a character carrying two of them is at
+      break-even. A systemic rest — at a level boundary, or a fraction after
+      each encounter — would make fights expensive AND survivable, which
+      cheaper fights would not.
+    - **Acquisition.** A run starts with one item and one trait and dies
+      before it can collect more. Pinning four defensive pieces from the start
+      takes Easy to a median of NINE encounters won and 27% of runs past level
+      one — the content already reaches "monster territory"; a character
+      cannot live long enough to hold it.
+    - **Cost.** Cheaper encounters, which is the lever that costs the fights
+      their tension.
+
+56. **A monster's action count comes straight off Agility, uncapped**, and the
+    measurements above put a number on it: a three-action monster against a
+    two-action player is where most of the damage per fight comes from. It is
+    the action economy working, and it is also the single biggest lever on
+    difficulty with nothing bounding it.
 
 57. ~~**Nothing WIRES the old questions yet**~~ — **SUPERSEDED and BUILT**
     (was 52, and duplicated it). The chain runs: hunt, combat, loot, and a
@@ -636,3 +690,47 @@ placed at 5, 9 and 10 and the level advancing after ten.
     Defend. `DEFENCES` happens to be in that order and `defencesOffered`
     preserves it — `stages/combatLog.test.ts` asserts it, because nothing
     about a reordering would otherwise look like a change in behaviour.
+
+64. **TWO HARNESSES, and neither can answer the other's question.**
+    `npm run adventure:sim` (`scripts/adventure/simulate.ts`) plays thousands
+    of runs through the pure model in a second and answers everything
+    statistical; `--rank` PINS each item and trait in turn and prints what
+    each is worth, which is how a modifier that reaches the tab bar and not
+    the fight shows itself as a row that does not move. `npm run
+    adventure:play` (`scripts/adventure/playthrough.mjs`) plays a run in the
+    REAL Electron app and reports what the chrome shows, which is the only way
+    to see an empty box where a Pro icon was named. A browser in the loop
+    cannot answer a balance question at a few hundred milliseconds per choice,
+    and the model cannot see the screen.
+
+    Note the native-module trap between them: `better-sqlite3` must be built
+    for ELECTRON to run the playthrough (`npx electron-rebuild -f -w
+    better-sqlite3`) and for NODE to run vitest (`npm rebuild better-sqlite3`,
+    which `npm run pretest` does). Getting it wrong does not say so: Electron
+    never opens a window, and vitest segfaults.
+
+65. **A modifier's effect has to REACH the thing it names**, and three classes
+    of it did not (`model/modifierReach.test.ts` now holds each one):
+    - A CHANCE could not be finished inside the profile, because it is
+      contested at the moment it is rolled — so combat resolved chances from
+      the stat block and never saw a modifier at all. Adjustments (a scale and
+      a delta) are now carried on the profile and applied by one function,
+      `resolveChanceWith`, which both the tab bar's figure and the fight's
+      roll go through.
+    - A rise in MAXIMUM hit points was permitted rather than granted, so "+25
+      hit points" changed nothing until the next heal — of which there are
+      almost none. Hit points now follow their ceiling in both directions,
+      once, around every effect (`followMaxHitPoints`).
+    - An UNSPECIFIED placeholder was offered as an ordinary choice; character
+      creation served up "Bronze Talisman or Nail Clipper", neither of which
+      did anything. Offerability is now derived from whether an entry has any
+      effect at all (`isOfferable`) rather than declared per entry, and the
+      placeholders stay in content under the design's own names.
+
+66. **Ten items and ten traits are written and are NOT from the design
+    document.** They are the one invented part of `content/thockquest.ts`, and
+    they aim at a spread rather than a ladder: flat, scaling, conditional,
+    recovering, and two that cost something (an Iron Buckler that trades dodge
+    for armor, a Cracked Hourglass that trades fifteen hit points for an
+    action). Their numbers are a first pass; `--rank` is how to see what each
+    is currently worth. The design's own unspecified names are untouched.

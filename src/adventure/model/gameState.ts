@@ -31,6 +31,7 @@ import type { Effect } from './effects'
 import { FIRST_MILESTONE_THRESHOLD, takeMilestone } from './milestones'
 import type { JsonObject } from '../core/json'
 import { createSeed, type RngState } from '../core/rng'
+import { DEFAULT_DIFFICULTY, type Difficulty } from './difficulty'
 
 /**
  * Bumped when the SHAPE below changes incompatibly, which DISCARDS the save
@@ -102,6 +103,13 @@ export interface GameRecord {
   endedReason?: 'defeat' | 'retired'
   /** 1-based. */
   level: number
+  /**
+   * FIXED when the run starts, from the settings as they stood then. A
+   * preset changed mid-run would rewrite what every fight already fought was
+   * worth, so the settings hold the choice for the NEXT run and the record
+   * holds the one this run is being played under.
+   */
+  difficulty: Difficulty
   regionId: string | null
   baseStats: StatBlock
   /** Points earned and not yet spent on a stat. */
@@ -156,9 +164,20 @@ export interface OutcomeRow {
   payload: JsonObject
 }
 
+/**
+ * What the player has chosen for the game itself, rather than for any one
+ * run. Persisted across runs, and copied onto a run when it starts.
+ */
+export interface GameSettings {
+  difficulty: Difficulty
+}
+
+export const DEFAULT_SETTINGS: GameSettings = { difficulty: DEFAULT_DIFFICULTY }
+
 export interface GameSave {
   version: number
   profile: Profile
+  settings: GameSettings
   games: GameRecord[]
   holdings: HoldingRow[]
   outcomes: OutcomeRow[]
@@ -170,6 +189,7 @@ export function emptySave(rng: RngState): GameSave {
   return {
     version: SAVE_VERSION,
     profile: EMPTY_PROFILE,
+    settings: DEFAULT_SETTINGS,
     games: [],
     holdings: [],
     outcomes: [],
@@ -213,14 +233,18 @@ export function holdingCounts(held: readonly Modifier[]): HoldingCounts {
 /** The player as every formula sees them. */
 export function profileOf(save: GameSave, game: GameRecord, catalog: ReadonlyMap<string, Modifier>): EffectiveProfile {
   const held = heldModifiers(save, game.id, catalog)
-  return resolveProfile(game.baseStats, held, holdingCounts(held))
+  // The record's own hit points ride along, so a conditional effect ("harder
+  // to kill with their back to the wall") is already in every number every
+  // caller reads. The record is written after each blow, so this is current
+  // inside a fight as well as outside one.
+  return resolveProfile(game.baseStats, held, holdingCounts(held), { hitPoints: game.hitPoints })
 }
 
 function nextSeq(rows: readonly { gameId: string; seq: number }[], gameId: string): number {
   return rows.reduce((highest, row) => (row.gameId === gameId ? Math.max(highest, row.seq) : highest), 0) + 1
 }
 
-function createGame(id: string, seed: RngState, nowMs: number): GameRecord {
+function createGame(id: string, seed: RngState, nowMs: number, difficulty: Difficulty): GameRecord {
   const baseStats = createStatBlock(0)
   return {
     id,
@@ -229,6 +253,7 @@ function createGame(id: string, seed: RngState, nowMs: number): GameRecord {
     updatedAtMs: nowMs,
     status: 'active',
     level: 1,
+    difficulty,
     regionId: null,
     baseStats,
     statPoints: 0,
@@ -279,7 +304,7 @@ export function applyEffect(
     for (let suffix = 2; save.games.some((existing) => existing.id === id); suffix += 1) {
       id = `game-${nowMs.toString(36)}-${seed.toString(36)}-${suffix}`
     }
-    const game = createGame(id, seed, nowMs)
+    const game = createGame(id, seed, nowMs, save.settings.difficulty)
     return {
       ...save,
       games: [...save.games, game],
@@ -287,6 +312,12 @@ export function applyEffect(
       director: { ...save.director, rng: seed },
       profile: { ...save.profile, gamesStarted: save.profile.gamesStarted + 1 },
     }
+  }
+
+  if (effect.kind === 'setDifficulty') {
+    // Settings, not the record: applies to runs that have not begun. A run in
+    // progress keeps the preset it was started under.
+    return { ...save, settings: { ...save.settings, difficulty: effect.difficulty } }
   }
 
   if (effect.kind === 'openGame') {
@@ -428,13 +459,52 @@ export function applyEffect(
   }
 }
 
+/**
+ * HIT POINTS FOLLOW THEIR CEILING, in both directions, after every single
+ * effect.
+ *
+ * A rise is GRANTED: a point of Might, or a charm worth +25 hit points, makes
+ * a character tougher rather than newly wounded -- without this, "+25 hit
+ * points" was a number on the tab bar that changed nothing until the next
+ * heal, which is exactly the class of effect that shows and does not work. A
+ * fall is CLAMPED, for the same reason from the other end: dropping the item
+ * that granted the ceiling cannot leave a character standing above their own
+ * maximum.
+ *
+ * Applied here, once, around every effect, rather than in the two or three
+ * branches that happen to change a maximum today -- a rule stated once has to
+ * hold everywhere it applies, and the next effect that moves the ceiling will
+ * not know to ask.
+ */
+function followMaxHitPoints(before: GameSave, after: GameSave, catalog: ReadonlyMap<string, Modifier>): GameSave {
+  const previous = activeGame(before)
+  const current = activeGame(after)
+  if (!current) return after
+  // A run that has only just started has no hit points to follow: character
+  // creation fills them at the end, on purpose (see that stage).
+  if (!previous || previous.id !== current.id) return after
+
+  const wasMax = profileOf(before, previous, catalog).derived.maxHitPoints
+  const nowMax = profileOf(after, current, catalog).derived.maxHitPoints
+  const gained = Math.max(0, nowMax - wasMax)
+  const hitPoints = Math.max(0, Math.min(nowMax, current.hitPoints + gained))
+  if (hitPoints === current.hitPoints) return after
+  return {
+    ...after,
+    games: after.games.map((game) => (game.id === current.id ? { ...game, hitPoints } : game)),
+  }
+}
+
 export function applyEffects(
   save: GameSave,
   effects: readonly Effect[],
   catalog: ReadonlyMap<string, Modifier>,
   nowMs: number,
 ): GameSave {
-  const next = effects.reduce((current, effect) => applyEffect(current, effect, catalog, nowMs), save)
+  const next = effects.reduce(
+    (current, effect) => followMaxHitPoints(current, applyEffect(current, effect, catalog, nowMs), catalog),
+    save,
+  )
   if (!next.activeGameId) return next
   return {
     ...next,

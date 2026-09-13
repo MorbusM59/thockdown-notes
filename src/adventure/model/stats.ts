@@ -139,7 +139,23 @@ const COUNT_KEYS: ReadonlySet<DerivedKey> = new Set<DerivedKey>([
   'offerChoices',
 ])
 
-const CHANCE_KEYS: ReadonlySet<DerivedKey> = new Set<DerivedKey>(['dodgeChance', 'hitChance', 'critChance'])
+/**
+ * The derived values that are PROBABILITIES, and therefore the ones a
+ * modifier cannot simply add to: they are contested at the moment they are
+ * rolled (model/chance.ts), so a modifier's effect on them is carried as an
+ * adjustment and applied there. Named as a type rather than only as a set,
+ * because that adjustment record has one field per member and must not be
+ * able to fall out of step with this list.
+ */
+export type ChanceKey = 'dodgeChance' | 'hitChance' | 'critChance'
+
+export const CHANCE_DERIVED_KEYS: readonly ChanceKey[] = ['dodgeChance', 'hitChance', 'critChance']
+
+export function isChanceKey(key: DerivedKey): key is ChanceKey {
+  return (CHANCE_DERIVED_KEYS as readonly DerivedKey[]).includes(key)
+}
+
+const CHANCE_KEYS: ReadonlySet<DerivedKey> = new Set<DerivedKey>(CHANCE_DERIVED_KEYS)
 
 /**
  * Everything a stat block implies -- optionally AGAINST somebody.
@@ -158,6 +174,13 @@ const CHANCE_KEYS: ReadonlySet<DerivedKey> = new Set<DerivedKey>(['dodgeChance',
 export const DODGE_CHANCE: StatChance = { base: 0.5, perPoint: 0.05, stat: 'agility' }
 export const HIT_CHANCE: StatChance = { base: 0.5, perPoint: 0.05, stat: 'perception' }
 export const CRIT_CHANCE: StatChance = { base: 0.2, perPoint: 0.1, stat: 'luck' }
+
+/** The declaration behind each one, so a caller can resolve it for itself. */
+export const CHANCE_SPECS: Readonly<Record<ChanceKey, StatChance>> = {
+  dodgeChance: DODGE_CHANCE,
+  hitChance: HIT_CHANCE,
+  critChance: CRIT_CHANCE,
+}
 
 export function deriveStats(effective: StatBlock, opponent?: StatBlock | null): DerivedStats {
   return normalizeDerived({

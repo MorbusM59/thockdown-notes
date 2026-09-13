@@ -95,8 +95,12 @@ describe('the power multiplier', () => {
     })
     const first = at(1)
     const twentieth = at(20)
-    expect(twentieth.maxHitPoints).toBeGreaterThan(first.maxHitPoints * 2)
-    expect(twentieth.damage).toBeGreaterThan(first.damage * 2)
+    // Grown by exactly the curve, rather than by "more than double" -- that
+    // was a fact about one growth factor, and it broke the day the presets
+    // gained a second number.
+    const ratio = powerMultiplier(20) / powerMultiplier(1)
+    expect(twentieth.maxHitPoints).toBeGreaterThan(first.maxHitPoints)
+    expect(twentieth.damage / first.damage).toBeCloseTo(ratio, 10)
     for (const key of ['dodgeChance', 'hitChance', 'critChance', 'actionsPerRound'] as const) {
       expect(twentieth.derived[key]).toBe(first.derived[key])
     }
@@ -104,8 +108,11 @@ describe('the power multiplier', () => {
 
   it('is one factor per level, for every difficulty', () => {
     for (const difficulty of DIFFICULTIES) {
-      const one = powerMultiplier(1, difficulty)
-      expect(powerMultiplier(3, difficulty)).toBeCloseTo(one ** 3, 10)
+      const base = powerMultiplier(0, difficulty)
+      const step = powerMultiplier(1, difficulty) / base
+      // Compounds on the BASE rather than on itself: three levels is the
+      // base times three growth steps, not the level-one power cubed.
+      expect(powerMultiplier(3, difficulty)).toBeCloseTo(base * step ** 3, 10)
     }
   })
 })
