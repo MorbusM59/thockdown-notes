@@ -14,6 +14,8 @@
 //
 // Nothing here is random, stateful, or aware of rounds, enemies or menus.
 
+import { resolveChance, type StatChance } from './chance'
+
 export const STAT_KEYS = ['might', 'agility', 'perception', 'intellect', 'charisma', 'luck'] as const
 
 export type StatKey = (typeof STAT_KEYS)[number]
@@ -22,49 +24,6 @@ export type StatBlock = Readonly<Record<StatKey, number>>
 
 /** What a game's own progression can reach. Items and traits add on top. */
 export const BASE_STAT_CAP = 6
-
-/**
- * Every stat is CONTESTED against one other, and this is the pairing.
- *
- * A check is never against a fixed number: the delta between my stat and my
- * opponent's counter is added to my side of it, so a Dodge at Agility 3
- * against Agility 5 is `50% + 5% x (3 - 5)` = 40%. The pairing is symmetric
- * where the two are the same stat and reciprocal where they are not, which
- * is what makes "countered by" a relation rather than a table of special
- * cases: Perception is answered by Luck and Luck by Perception, Charisma by
- * Intellect and Intellect by Charisma.
- *
- * Might answers Might. Nothing in the derived values below uses it -- the
- * damage multiplier is a coefficient rather than a check, so it is not
- * contested -- but special attacks and later content are Might-versus-Might,
- * which is why the entry is here rather than absent.
- */
-export const COUNTER_STATS: Readonly<Record<StatKey, StatKey>> = {
-  might: 'might',
-  agility: 'agility',
-  perception: 'luck',
-  intellect: 'charisma',
-  charisma: 'intellect',
-  luck: 'perception',
-}
-
-/**
- * What goes into a contested formula in place of a bare stat: my value minus
- * my opponent's counter.
- *
- * With NO opponent it reads my own stat as the opposition, for a delta of
- * exactly zero. That is what keeps this ONE function rather than two: a
- * formula that does not care about an opponent simply never calls this, and
- * one that does gets a well-defined answer whether or not there is somebody
- * on the other side. Note what it means, though: an uncontested `dodgeChance`
- * is the flat 50% base, NOT `50% + 5% x Agility` -- the design plan's stat
- * table is the contested formula against an opponent of zero, and out of
- * combat there is no opponent at all rather than an empty one.
- */
-export function contestedStat(stat: StatKey, own: StatBlock, opponent?: StatBlock | null): number {
-  const opposing = opponent ? opponent[COUNTER_STATS[stat]] : own[stat]
-  return own[stat] - opposing
-}
 
 export const STAT_LABELS: Readonly<Record<StatKey, string>> = {
   might: 'Might',
@@ -191,20 +150,25 @@ const CHANCE_KEYS: ReadonlySet<DerivedKey> = new Set<DerivedKey>(['dodgeChance',
  * effects pending, not stats without a purpose -- see the open questions in
  * docs/adventure-platform.md.
  */
+/**
+ * The three chances a stat block implies, DECLARED rather than written out --
+ * see model/chance.ts. Everything else below is a property of the actor alone
+ * and takes no opponent at all.
+ */
+export const DODGE_CHANCE: StatChance = { base: 0.5, perPoint: 0.05, stat: 'agility' }
+export const HIT_CHANCE: StatChance = { base: 0.5, perPoint: 0.05, stat: 'perception' }
+export const CRIT_CHANCE: StatChance = { base: 0.2, perPoint: 0.1, stat: 'luck' }
+
 export function deriveStats(effective: StatBlock, opponent?: StatBlock | null): DerivedStats {
-  // The three CHANCES are contested; everything else is a property of this
-  // actor alone and ignores the opponent entirely. One function either way --
-  // see contestedStat for why this is not two.
-  const contested = (stat: StatKey) => contestedStat(stat, effective, opponent)
   return normalizeDerived({
     maxHitPoints: MAX_HIT_POINTS(effective),
     damageMultiplier: 0.5 + 0.15 * effective.might,
-    dodgeChance: 0.5 + 0.05 * contested('agility'),
+    dodgeChance: resolveChance(DODGE_CHANCE, effective, opponent),
     actionsPerRound: 2 + effective.agility / 2,
     encounterChoices: 2 + effective.perception / 2,
-    hitChance: 0.5 + 0.05 * contested('perception'),
+    hitChance: resolveChance(HIT_CHANCE, effective, opponent),
     offerChoices: 2 + effective.luck / 2,
-    critChance: 0.2 + 0.1 * contested('luck'),
+    critChance: resolveChance(CRIT_CHANCE, effective, opponent),
   })
 }
 

@@ -540,17 +540,16 @@ special attacks; and the charisma failure chance as a type base plus
 45. **Fame, experience and gold rates.** What a regular monster, a mini boss
     and a boss are each worth. (Was question 7, still the last economic gap.)
 
-46. **Does the type shift floor at zero?** Group is `−1` on every base stat,
-    and a class base of 0 in a stat therefore becomes −1. Nothing says it
-    should not: a −1 reads as "worse than nobody" and behaves sanely
-    everywhere (fewer hit points, a worse contested delta, chances clamped at
-    the ends). It is built unfloored, which is the literal reading, and it is
-    one line if the answer is otherwise.
+41, 43, 46 and 47 are **answered and BUILT or recorded** — a group is one
+hydra with a shared pool (`model/monsters.ts`); a monster dodges if it can
+and defends otherwise, and never elects to flee; the type shift does not
+floor at zero; and the highest usable charisma tier is the character's
+Charisma, now stated in the plan rather than inferred.
 
-47. **"The highest tier a character can use is their Charisma" is an
-    INFERENCE**, not something stated. It is forced arithmetically — a full
-    100% added after one use happens only where `Tier = Charisma` — and the
-    plan gives no other unlock rule for charisma actions, where it does give
-    one for spells (`Max spells per tier = Intellect − Tier`). Worth
-    confirming before the tier list is built, because it also decides whether
-    Charisma 0 has Plead.
+48. **What a group's head count is, per encounter.** The hydra rule is built
+    and the number it takes is content nobody has written — no encounter
+    supplies one, so every group is currently a group of one.
+
+49. **What a successful Flee yields**, on either side. The encounter ends;
+    whether it pays loot or fame, and whether the level's encounter count
+    still advances, is unstated. (Was part of 44.)

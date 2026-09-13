@@ -303,6 +303,33 @@ Offered to the player when a monster acts.
 `fromItems` which decays as it absorbs and `natural` from traits which decay
 cannot touch. It applies on **Defend** and nowhere else.
 
+### A group is one hydra
+
+A group is fought as a SINGLE monster with a shared pool: hit points and
+actions are one member's times the head count, and one blow is still one
+member's blow — a group hits more often, not harder.
+
+The pool divides into as many equal bands as there are members. Each band the
+cumulative damage crosses costs the group **one member's worth of actions**,
+taken off whatever is currently left and floored at zero. That is
+deliberately biased toward the player: the member that just fell is assumed
+to be the one who would have acted LAST, so killing it takes actions the
+group still had rather than actions it had already spent.
+
+The head count is content, per encounter, not a rule.
+
+### What a monster does when attacked
+
+Dodge if the contested check offers it, otherwise defend. The ordering is
+total, so there is no judgement in it.
+
+**A monster never decides to flee.** Fleeing is a state the player puts it
+in — a successful Terrify, or a talk event that checks Charisma — and if it
+is available the monster takes it. A monster that could run on its own would
+make Terrify meaningless, since it would already be doing the thing Terrify
+is for. The chance on those is `50% + 5%` per point of the contested stat,
+like everything else, until it is tuned.
+
 ### A level's layout
 
 Ten encounters. Encounters 5 and 9 are mini bosses; encounter 10 is the boss.
@@ -332,17 +359,19 @@ and traits.
 *(Later, and not built: mobs drawing traits from a random table every five
 levels or so, as an additional challenge.)*
 
-### One derive function, opponent optional
+### One derive function, opponent optional — and one chance resolver
 
 `deriveStats(own, opponent?)`. The formulas that do not involve an opponent
-ignore the argument; the contested ones read the opponent's counter stat, and
-with no opponent read the actor's own value of that same stat — a delta of
-exactly zero. There is no second function and no split return type.
+ignore the argument; the contested ones subtract the opponent's counter. An
+ABSENT opponent contributes **zero**, so the contested formula and the stat
+table above are the same formula: `50% + 5% × (Agility − 0)` is
+`50% + 5% × Agility`. There is no second function and no split return type.
 
-The consequence, worth stating because the plan's stat table reads otherwise:
-an UNCONTESTED `dodgeChance` is the flat 50%, not `50% + 5% × Agility`. The
-table's formulas are the contested ones against an opponent of zero, and out
-of combat there is no opponent at all rather than an empty one.
+Every chance in the game has that one shape — a base, a step per point, and
+the stat it reads — so an action **declares** those two numbers
+(`StatChance`) and hands them to one resolver rather than writing the contest
+out again. Dodge is `50% + 5%` on Agility, a crit `20% + 10%` on Luck, a
+pursuit `50% + 5%` on Agility, a fear attempt `50% + 5%` on Charisma.
 
 **Might's counter is not used by the damage multiplier**, which is a
 coefficient rather than a check. Might-versus-Might belongs to special
@@ -365,9 +394,12 @@ plus `Tier × uses this combat / Charisma`.
 
 So a tier 0 action never becomes likelier to fail; at Charisma 6 a tier 2
 ability adds 33% after its first use and 67% after its second; and an action
-of the **highest tier a character can use** adds a full 100% after one use —
-which fixes the highest usable tier at the character's Charisma, since that
-is the only value at which `Tier × 1 / Charisma` is 1.
+of the **highest tier a character can use** adds a full 100% after one use.
+
+**The highest charisma-action tier a character can use IS their Charisma.**
+That is the unlock rule — the plan gives one for spells and none for charisma
+actions — and it is also the only value at which `Tier × 1 / Charisma` comes
+to 1, which is what makes the sentence above true.
 
 The divisor is the player's OWN Charisma, uncontested. The monster's
 resistance is the type base — contesting the divisor as well would divide by

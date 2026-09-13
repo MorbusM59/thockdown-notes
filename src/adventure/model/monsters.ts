@@ -49,9 +49,28 @@ export const MONSTER_TYPE_CHARISMA_RESISTANCE: Readonly<Record<MonsterType, numb
   boss: 0.8,
 }
 
+/**
+ * A GROUP is fought as ONE monster with a shared pool -- "a hydra fight".
+ *
+ * Its hit points and its actions are a single member's times the head count.
+ * The pool is then divided into that many equal bands, and each band the
+ * cumulative damage crosses costs the group ONE MEMBER'S WORTH OF ACTIONS,
+ * taken off whatever is currently left and floored at zero.
+ *
+ * That last part is deliberately biased toward the player: the member that
+ * just died is assumed to have been the one who would have acted LAST, so
+ * killing it takes actions the group still had rather than actions it had
+ * already spent. The alternative -- charging the loss against actions
+ * already used -- would make killing a member during a round do nothing at
+ * all until the next one.
+ *
+ * The head count itself is CONTENT, per encounter, not a rule.
+ */
 export interface Monster {
   classId: string
   type: MonsterType
+  /** Members fought as one. 1 for everything that is not a group. */
+  count: number
   /** Class base plus the type's flat shift. Uncapped -- see the module comment. */
   stats: StatBlock
   /**
@@ -63,6 +82,36 @@ export interface Monster {
   maxHitPoints: number
   /** Base damage times the scaled multiplier -- what one landed blow is worth. */
   damage: number
+  /** The whole group's opening action pool: one member's, times the count. */
+  maxActions: number
+}
+
+/**
+ * How many members' worth of actions a group has lost, given the damage it
+ * has taken. Each 1/count band of the pool crossed is one member.
+ *
+ * Uses the total pool and the count rather than a stored band width, so it
+ * cannot disagree with `maxHitPoints`; and it is a pure function of damage
+ * taken, so it needs nothing remembered between blows.
+ */
+export function membersDown(monster: Monster, damageTaken: number): number {
+  if (monster.count <= 1) return damageTaken >= monster.maxHitPoints ? 1 : 0
+  const band = monster.maxHitPoints / monster.count
+  return Math.min(monster.count, Math.floor(Math.max(0, damageTaken) / band))
+}
+
+/**
+ * The actions a group still has: its pool, less one member's worth for every
+ * band of damage it has crossed, floored at zero.
+ *
+ * `actionsSpent` is what has already been used this round. Both subtractions
+ * apply -- the group loses actions to the clock and to its casualties, and a
+ * member dying does not refund what the group already did.
+ */
+export function actionsRemaining(monster: Monster, damageTaken: number, actionsSpent: number): number {
+  const perMember = monster.maxActions / monster.count
+  const lost = membersDown(monster, damageTaken) * perMember
+  return Math.max(0, Math.floor(monster.maxActions - lost - Math.max(0, actionsSpent)))
 }
 
 /** Both sides multiply this by their damage multiplier. One parameter, expected to be tuned. */
@@ -80,6 +129,8 @@ export function buildMonster(options: {
   difficulty?: Difficulty
   /** The player, so the contested chances resolve. */
   against: StatBlock
+  /** Members in a group. Content's to choose; anything but a group is one. */
+  count?: number
 }): Monster {
   const shift = MONSTER_TYPE_STAT_SHIFT[options.type]
   const stats = addStats(options.classBaseStats, {
@@ -92,14 +143,39 @@ export function buildMonster(options: {
   })
   const derived = deriveStats(stats, options.against)
   const power = powerMultiplier(options.level, options.difficulty)
+  const count = options.type === 'group' ? Math.max(1, Math.floor(options.count ?? 1)) : 1
   return {
     classId: options.classId,
     type: options.type,
+    count,
     stats,
     derived,
     // Whole hit points: a monster with 63.4 of them is a rounding artefact
     // on screen, and the floor is the same rule every other count follows.
-    maxHitPoints: Math.floor(derived.maxHitPoints * power),
+    maxHitPoints: Math.floor(derived.maxHitPoints * power) * count,
+    // Per member. A group of four does not hit four times harder for one
+    // blow -- it hits four times as OFTEN, which is what the action pool is.
     damage: damageFrom(derived.damageMultiplier) * power,
+    maxActions: derived.actionsPerRound * count,
   }
+}
+
+/**
+ * What a monster does when the player attacks it -- the hidden mirror of the
+ * player's own defensive choice.
+ *
+ * Dodge if it is offered, otherwise defend. There is no judgement in it and
+ * none is wanted: dodge takes no damage at all and defend takes some, so the
+ * ordering is total.
+ *
+ * FLEE is deliberately absent. It is not something a monster weighs; it is a
+ * state the player PUTS it in -- by a successful Terrify, or out of a talk
+ * event that checks Charisma. A monster that could decide to run on its own
+ * would make Terrify meaningless, since it would already be doing the thing
+ * Terrify is for.
+ */
+export type MonsterDefence = 'dodge' | 'defend'
+
+export function monsterDefence(dodgeAvailable: boolean): MonsterDefence {
+  return dodgeAvailable ? 'dodge' : 'defend'
 }
