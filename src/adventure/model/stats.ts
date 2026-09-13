@@ -23,6 +23,49 @@ export type StatBlock = Readonly<Record<StatKey, number>>
 /** What a game's own progression can reach. Items and traits add on top. */
 export const BASE_STAT_CAP = 6
 
+/**
+ * Every stat is CONTESTED against one other, and this is the pairing.
+ *
+ * A check is never against a fixed number: the delta between my stat and my
+ * opponent's counter is added to my side of it, so a Dodge at Agility 3
+ * against Agility 5 is `50% + 5% x (3 - 5)` = 40%. The pairing is symmetric
+ * where the two are the same stat and reciprocal where they are not, which
+ * is what makes "countered by" a relation rather than a table of special
+ * cases: Perception is answered by Luck and Luck by Perception, Charisma by
+ * Intellect and Intellect by Charisma.
+ *
+ * Might answers Might. Nothing in the derived values below uses it -- the
+ * damage multiplier is a coefficient rather than a check, so it is not
+ * contested -- but special attacks and later content are Might-versus-Might,
+ * which is why the entry is here rather than absent.
+ */
+export const COUNTER_STATS: Readonly<Record<StatKey, StatKey>> = {
+  might: 'might',
+  agility: 'agility',
+  perception: 'luck',
+  intellect: 'charisma',
+  charisma: 'intellect',
+  luck: 'perception',
+}
+
+/**
+ * What goes into a contested formula in place of a bare stat: my value minus
+ * my opponent's counter.
+ *
+ * With NO opponent it reads my own stat as the opposition, for a delta of
+ * exactly zero. That is what keeps this ONE function rather than two: a
+ * formula that does not care about an opponent simply never calls this, and
+ * one that does gets a well-defined answer whether or not there is somebody
+ * on the other side. Note what it means, though: an uncontested `dodgeChance`
+ * is the flat 50% base, NOT `50% + 5% x Agility` -- the design plan's stat
+ * table is the contested formula against an opponent of zero, and out of
+ * combat there is no opponent at all rather than an empty one.
+ */
+export function contestedStat(stat: StatKey, own: StatBlock, opponent?: StatBlock | null): number {
+  const opposing = opponent ? opponent[COUNTER_STATS[stat]] : own[stat]
+  return own[stat] - opposing
+}
+
 export const STAT_LABELS: Readonly<Record<StatKey, string>> = {
   might: 'Might',
   agility: 'Agility',
@@ -140,22 +183,28 @@ const COUNT_KEYS: ReadonlySet<DerivedKey> = new Set<DerivedKey>([
 const CHANCE_KEYS: ReadonlySet<DerivedKey> = new Set<DerivedKey>(['dodgeChance', 'hitChance', 'critChance'])
 
 /**
+ * Everything a stat block implies -- optionally AGAINST somebody.
+ *
  * Intellect and Charisma carry no numeric derivation yet: the design
  * document gives them UNLOCKS (spells, charisma actions) rather than
  * curves, and neither list is written. They are declared stats with real
  * effects pending, not stats without a purpose -- see the open questions in
  * docs/adventure-platform.md.
  */
-export function deriveStats(effective: StatBlock): DerivedStats {
+export function deriveStats(effective: StatBlock, opponent?: StatBlock | null): DerivedStats {
+  // The three CHANCES are contested; everything else is a property of this
+  // actor alone and ignores the opponent entirely. One function either way --
+  // see contestedStat for why this is not two.
+  const contested = (stat: StatKey) => contestedStat(stat, effective, opponent)
   return normalizeDerived({
     maxHitPoints: MAX_HIT_POINTS(effective),
     damageMultiplier: 0.5 + 0.15 * effective.might,
-    dodgeChance: 0.5 + 0.05 * effective.agility,
+    dodgeChance: 0.5 + 0.05 * contested('agility'),
     actionsPerRound: 2 + effective.agility / 2,
     encounterChoices: 2 + effective.perception / 2,
-    hitChance: 0.5 + 0.05 * effective.perception,
+    hitChance: 0.5 + 0.05 * contested('perception'),
     offerChoices: 2 + effective.luck / 2,
-    critChance: 0.2 + 0.1 * effective.luck,
+    critChance: 0.2 + 0.1 * contested('luck'),
   })
 }
 

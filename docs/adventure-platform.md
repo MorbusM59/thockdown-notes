@@ -495,35 +495,13 @@ Defend and nowhere else.
 
 ## Still open, and each one blocks something
 
-29. **Charisma's failure formula still cannot be right.** The contested-stat
-    rule changes which Charisma value goes in; it does not touch the defect.
-    `Tier × uses this combat / Charisma` is ZERO on the first use of any
-    tier, so a first Command (tier 6) never fails at any Charisma. Contesting
-    it makes the second half worse rather than better: the divisor becomes
-    `charisma − enemy intellect`, which is zero or negative whenever the
-    monster is the smarter one.
-
-35. **The power multiplier cannot apply to the CHANCE-shaped derived stats.**
-    `factor^level` on a magnitude (hit points, damage) is exactly right. On
-    `dodgeChance`, `hitChance` or `critChance` it saturates: at normal 1.05,
-    a monster's 50% dodge is 81% by level 10 and pinned at 100% by level 15,
-    so monsters stop being hittable rather than getting stronger. Which
-    derived values the multiplier touches has to be named. The likely answer
-    is magnitudes only — hit points, damage, and perhaps the action count.
-
-36. **Contested stats change the SHAPE of a derived stat.** `deriveStats`
-    maps one stat block to one `DerivedStats`, and every consumer assumes
-    that. Under the counter rule a chance is a function of TWO blocks and
-    cannot be resolved until an opponent is known, so `DerivedStats` splits
-    in two: values that stand alone (hit points, encounter choices, offer
-    choices, action count) and CONTESTED chances resolved at the moment of a
-    check. This is the structural change the round loop would otherwise be
-    built on top of, so it comes first.
-
-37. **Is the damage multiplier contested?** Might is countered by Might, but
-    the multiplier is not a check — it is a coefficient. If it is contested,
-    Might-vs-Might matters twice; if it is not, Might's counter never comes
-    up in combat at all.
+29, 35, 36 and 37 are **answered and BUILT** — see the design plan, and
+`model/stats.ts`, `model/difficulty.ts`, `model/monsters.ts`:
+the counter table and one opponent-optional `deriveStats`; the power
+multiplier on hit points and damage only; the damage multiplier left
+uncontested because it is a coefficient, with Might-versus-Might reserved for
+special attacks; and the charisma failure chance as a type base plus
+`Tier × uses / Charisma` over an uncontested Charisma.
 
 38. **`level` or `level − 1` in `factor^level`.** At level 1 the multiplier is
     already 1.05 rather than 1. The old plan had the same ambiguity and it
@@ -561,3 +539,18 @@ Defend and nowhere else.
 
 45. **Fame, experience and gold rates.** What a regular monster, a mini boss
     and a boss are each worth. (Was question 7, still the last economic gap.)
+
+46. **Does the type shift floor at zero?** Group is `−1` on every base stat,
+    and a class base of 0 in a stat therefore becomes −1. Nothing says it
+    should not: a −1 reads as "worse than nobody" and behaves sanely
+    everywhere (fewer hit points, a worse contested delta, chances clamped at
+    the ends). It is built unfloored, which is the literal reading, and it is
+    one line if the answer is otherwise.
+
+47. **"The highest tier a character can use is their Charisma" is an
+    INFERENCE**, not something stated. It is forced arithmetically — a full
+    100% added after one use happens only where `Tier = Charisma` — and the
+    plan gives no other unlock rule for charisma actions, where it does give
+    one for spells (`Max spells per tier = Intellect − Tier`). Worth
+    confirming before the tier list is built, because it also decides whether
+    Charisma 0 has Plead.

@@ -317,3 +317,59 @@ opening choice. Go Exploring's destinations are areas within a level.
 
 Down, wherever a rule produces a fraction — including a special attack's
 `stat / unlock level` uses.
+
+### What the power multiplier touches
+
+Hit points and damage, and nothing else. Not the chances — `factor^level` on
+a 0..1 chance saturates rather than scales, and a monster pinned at 100%
+dodge has stopped getting stronger and started being unhittable. Not the
+action count either, for now: an extra action is a whole extra decision in
+the round, a bigger step than a curve should take on its own.
+
+It applies to MONSTERS only. The player's growth is stat points plus items
+and traits.
+
+*(Later, and not built: mobs drawing traits from a random table every five
+levels or so, as an additional challenge.)*
+
+### One derive function, opponent optional
+
+`deriveStats(own, opponent?)`. The formulas that do not involve an opponent
+ignore the argument; the contested ones read the opponent's counter stat, and
+with no opponent read the actor's own value of that same stat — a delta of
+exactly zero. There is no second function and no split return type.
+
+The consequence, worth stating because the plan's stat table reads otherwise:
+an UNCONTESTED `dodgeChance` is the flat 50%, not `50% + 5% × Agility`. The
+table's formulas are the contested ones against an opponent of zero, and out
+of combat there is no opponent at all rather than an empty one.
+
+**Might's counter is not used by the damage multiplier**, which is a
+coefficient rather than a check. Might-versus-Might belongs to special
+attacks and to content still to come.
+
+### Charisma actions: the chance to fail
+
+A base chance from the monster's TYPE, plus a term for the tier and how hard
+it has been leaned on:
+
+| type | base chance to fail |
+| --- | --- |
+| Group | 0% |
+| Regular | 20% |
+| Elite | 40% |
+| Mini boss | 60% |
+| Boss | 80% |
+
+plus `Tier × uses this combat / Charisma`.
+
+So a tier 0 action never becomes likelier to fail; at Charisma 6 a tier 2
+ability adds 33% after its first use and 67% after its second; and an action
+of the **highest tier a character can use** adds a full 100% after one use —
+which fixes the highest usable tier at the character's Charisma, since that
+is the only value at which `Tier × 1 / Charisma` is 1.
+
+The divisor is the player's OWN Charisma, uncontested. The monster's
+resistance is the type base — contesting the divisor as well would divide by
+`Charisma − Intellect`, which is zero or negative whenever the monster is the
+smarter one. A group never resists: crowd control works on crowds.
