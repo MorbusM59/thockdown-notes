@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TextureCacheRequest } from '../shared/textures';
 import type { TextureMaterialSettings, TextureSurfaceKey, TextureWorkerRequest, TextureWorkerResponse } from './types';
 import { clampMaterialSettings } from './generateTexture';
+import { beginBackgroundWork } from '../shared/backgroundWork';
 
 export const TEXTURE_ALGORITHM_VERSION = 2;
 export const TEXTURE_REPEAT_TILE_SIZE = 512;
@@ -113,6 +114,13 @@ export function useTextureSurface(params: {
 
         const worker = new Worker(new URL('./textureWorker.ts', import.meta.url), { type: 'module' });
         workerRef.current = worker;
+        // Announced to the reader through the one register of work in flight
+        // (shared/backgroundWork.ts), which is what turns the sidebar's
+        // cogwheel. Ended in `finally` rather than after the await, because
+        // this path has three exits -- resolved, rejected into the catch, and
+        // cancelled -- and a register that leaks an entry leaves the wheel
+        // turning forever.
+        const work = beginBackgroundWork('texture');
         const workerRequest: TextureWorkerRequest = {
           width,
           height,
@@ -121,11 +129,16 @@ export function useTextureSurface(params: {
           vSteps: materialVSteps,
         };
 
-        const response = await new Promise<TextureWorkerResponse>((resolve, reject) => {
-          worker.onmessage = (event: MessageEvent<TextureWorkerResponse>) => resolve(event.data);
-          worker.onerror = (error) => reject(error);
-          worker.postMessage(workerRequest);
-        });
+        let response: TextureWorkerResponse;
+        try {
+          response = await new Promise<TextureWorkerResponse>((resolve, reject) => {
+            worker.onmessage = (event: MessageEvent<TextureWorkerResponse>) => resolve(event.data);
+            worker.onerror = (error) => reject(error);
+            worker.postMessage(workerRequest);
+          });
+        } finally {
+          work.done();
+        }
         worker.terminate();
         workerRef.current = null;
 

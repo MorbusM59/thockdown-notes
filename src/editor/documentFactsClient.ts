@@ -34,6 +34,7 @@ import type {
 } from './documentFactsMessages'
 import { buildPreviewVisibleDocumentFindHits, type DocumentFindHit } from './FindReplaceEngine'
 import type { PersistedPreviewBlockCache } from '../shared/noteLifecycle'
+import { beginBackgroundWork, type BackgroundWorkHandle } from '../shared/backgroundWork'
 
 type PartialListener = (cache: PreviewBlockSplitCache) => void
 
@@ -49,6 +50,15 @@ type Pending = {
    * them asked first must not decide that for the other.
    */
   listeners: Set<PartialListener>
+  /**
+   * Registered here rather than by the callers, so a future reason to ask the
+   * worker for a block map is announced to the reader without its author
+   * knowing the indicator exists -- the same argument that puts the hold
+   * thresholds inside `armHold`.
+   */
+  work: BackgroundWorkHandle
+  /** Total lines, for turning accumulated ranges into a real fraction. */
+  totalLines: number
 }
 
 /**
@@ -57,7 +67,7 @@ type Pending = {
  * is shared by text between callers, a find is one question with one answer
  * and is superseded by the next question rather than joined.
  */
-type PendingFind = { resolve: (hits: DocumentFindHit[]) => void }
+type PendingFind = { resolve: (hits: DocumentFindHit[]) => void; work: BackgroundWorkHandle }
 
 let worker: Worker | null | undefined
 let nextRequestId = 1
@@ -81,6 +91,7 @@ function ensureWorker(): Worker | null {
         const waiting = pendingFinds.get(id)
         if (!waiting) return
         pendingFinds.delete(id)
+        waiting.work.done()
         waiting.resolve(hits)
         return
       }
@@ -88,6 +99,14 @@ function ensureWorker(): Worker | null {
       const request = pending.get(id)
       if (!request) return
       if (ranges.length > 0) request.ranges.push(...ranges)
+      // The split is the one piece of background work that genuinely knows
+      // how far along it is: instalments arrive in document order, so the
+      // last range's end line against the document's total is a real
+      // fraction rather than an animation pretending to be one.
+      const reached = request.ranges.length > 0
+        ? request.ranges[request.ranges.length - 1].rangeEndLine1
+        : 0
+      request.work.report(request.totalLines > 0 ? reached / request.totalLines : null)
       const cache = restorePreviewBlockSplitCacheFromRanges(request.text, request.ranges)
       if (!done) {
         for (const listener of request.listeners) listener(cache)
@@ -96,6 +115,7 @@ function ensureWorker(): Worker | null {
       pending.delete(id)
       pendingByText.delete(request.text)
       inFlightByText.delete(request.text)
+      request.work.done()
       request.resolve(cache)
     }
     created.onerror = () => {
@@ -103,12 +123,16 @@ function ensureWorker(): Worker | null {
       // not going to be better on the next note, and every request from here
       // takes the main-thread path rather than hanging on a dead port.
       for (const [, request] of pending) {
+        request.work.done()
         request.resolve(splitMarkdownIntoPreviewBlocksIncremental(request.text, null))
       }
       pending.clear()
       pendingByText.clear()
       inFlightByText.clear()
-      for (const [, waiting] of pendingFinds) waiting.resolve([])
+      for (const [, waiting] of pendingFinds) {
+        waiting.work.done()
+        waiting.resolve([])
+      }
       pendingFinds.clear()
       worker = null
     }
@@ -151,6 +175,8 @@ export function requestFullBlockSplit(
     text,
     ranges: [],
     listeners: onPartial ? new Set([onPartial]) : new Set(),
+    work: beginBackgroundWork('document-split'),
+    totalLines: text.length === 0 ? 0 : text.split('\n').length,
   }
   const answer = new Promise<PreviewBlockSplitCache>((resolve) => {
     entry.resolve = resolve
@@ -190,7 +216,7 @@ export function requestPreviewFindHits(
   const id = nextRequestId
   nextRequestId += 1
   return new Promise<DocumentFindHit[]>((resolve) => {
-    pendingFinds.set(id, { resolve })
+    pendingFinds.set(id, { resolve, work: beginBackgroundWork('document-find') })
     const request: DocumentFactsRequest = { kind: 'find', id, text, query, caseSensitive }
     active.postMessage(request)
   })

@@ -245,6 +245,7 @@ import {
 import { TEXTURE_ALGORITHM_VERSION, TEXTURE_REPEAT_TILE_SIZE, useTextureSurface } from './textures/useTextureSurface'
 import { armHold, HOLD_CONFIRM_MS } from './shared/holdTiming'
 import { noteRightPressAction } from './editorSection/useNoteProtectionActions'
+import { WorkIndicatorGlyph } from './components/WorkIndicatorGlyph'
 
 const NEW_NOTE_TEMPLATE = '# '
 const FALLBACK_NEW_NOTE_TITLE = 'Untitled'
@@ -9696,7 +9697,13 @@ ${markdownHtml}
                           /assets/buttons/*.png mask asset (see sidebar.css) --
                           it was already styled for an inline glyph instead
                           (color, not background-color), matching this. */}
-                      {mode === 'options' ? <span className="view-toggle-options-glyph fa-solid fa-gear" aria-hidden="true" /> : null}
+                      {mode === 'options' ? (
+                        <WorkIndicatorGlyph
+                          speedX={customCursorClickSpeedX}
+                          ramp={customCursorClickRamp}
+                          skew={customCursorClickSkew}
+                        />
+                      ) : null}
                       <span className="sr-only-mode-label">{label}</span>
                     </button>
                   )
