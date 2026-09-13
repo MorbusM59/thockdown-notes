@@ -121,14 +121,23 @@ describe('monster types', () => {
     }
   })
 
-  it('orders the ladder so a boss is the strongest and a group the weakest', () => {
+  it('orders the ladder by a MEMBER\'s strength, which is not the pool', () => {
+    // A group of three pools more hit points than one regular monster, so the
+    // ladder cannot be read off `maxHitPoints` -- that is the whole point of
+    // a group. What the ladder orders is how strong each member is.
     const base = block({ might: 2, agility: 1 })
-    const hp = (type: (typeof MONSTER_TYPES)[number]) =>
-      buildMonster({ classId: 'fighter', classBaseStats: base, type, level: 1, against: base }).maxHitPoints
-    expect(hp('group')).toBeLessThan(hp('regular'))
-    expect(hp('regular')).toBeLessThan(hp('elite'))
-    expect(hp('elite')).toBeLessThan(hp('miniBoss'))
-    expect(hp('miniBoss')).toBeLessThan(hp('boss'))
+    const perMember = (type: (typeof MONSTER_TYPES)[number]) => {
+      const monster = buildMonster({ classId: 'fighter', classBaseStats: base, type, level: 1, against: base })
+      return monster.maxHitPoints / monster.count
+    }
+    expect(perMember('group')).toBeLessThan(perMember('regular'))
+    expect(perMember('regular')).toBeLessThan(perMember('elite'))
+    expect(perMember('elite')).toBeLessThan(perMember('miniBoss'))
+    expect(perMember('miniBoss')).toBeLessThan(perMember('boss'))
+    // ...and the pool really does go the other way for a default group.
+    const group = buildMonster({ classId: 'fighter', classBaseStats: base, type: 'group', level: 1, against: base })
+    const regular = buildMonster({ classId: 'fighter', classBaseStats: base, type: 'regular', level: 1, against: base })
+    expect(group.maxHitPoints).toBeGreaterThan(regular.maxHitPoints)
   })
 
   it('multiplies one universal base damage, both sides', () => {

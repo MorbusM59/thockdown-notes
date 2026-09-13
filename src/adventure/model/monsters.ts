@@ -17,6 +17,9 @@
 import { powerMultiplier, type Difficulty } from './difficulty'
 import { addStats, deriveStats, type DerivedStats, type StatBlock } from './stats'
 
+/** Members in a group whose encounter does not name a count. */
+export const DEFAULT_GROUP_SIZE = 3
+
 export const MONSTER_TYPES = ['group', 'regular', 'elite', 'miniBoss', 'boss'] as const
 
 export type MonsterType = (typeof MONSTER_TYPES)[number]
@@ -64,7 +67,8 @@ export const MONSTER_TYPE_CHARISMA_RESISTANCE: Readonly<Record<MonsterType, numb
  * already used -- would make killing a member during a round do nothing at
  * all until the next one.
  *
- * The head count itself is CONTENT, per encounter, not a rule.
+ * The head count is CONTENT, per encounter. `DEFAULT_GROUP_SIZE` is what an
+ * encounter that does not say gets.
  */
 export interface Monster {
   classId: string
@@ -143,7 +147,7 @@ export function buildMonster(options: {
   })
   const derived = deriveStats(stats, options.against)
   const power = powerMultiplier(options.level, options.difficulty)
-  const count = options.type === 'group' ? Math.max(1, Math.floor(options.count ?? 1)) : 1
+  const count = options.type === 'group' ? Math.max(1, Math.floor(options.count ?? DEFAULT_GROUP_SIZE)) : 1
   return {
     classId: options.classId,
     type: options.type,

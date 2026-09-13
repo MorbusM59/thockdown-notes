@@ -546,10 +546,16 @@ and defends otherwise, and never elects to flee; the type shift does not
 floor at zero; and the highest usable charisma tier is the character's
 Charisma, now stated in the plan rather than inferred.
 
-48. **What a group's head count is, per encounter.** The hydra rule is built
-    and the number it takes is content nobody has written — no encounter
-    supplies one, so every group is currently a group of one.
+48 and 49 are **answered and BUILT** — a group defaults to three members,
+and the payout table is in the design plan. The ROUND ENGINE is built with
+them (`model/combat.ts`): the turn-order roll, the four defences, the
+exchange, the round's exits and what each one pays.
 
-49. **What a successful Flee yields**, on either side. The encounter ends;
-    whether it pays loot or fame, and whether the level's encounter count
-    still advances, is unstated. (Was part of 44.)
+50. **What a combat encounter is worth**, in gold and experience, per monster
+    type. The payout SHAPE is settled and the engine takes the number as an
+    input; nothing supplies one. (This is question 45 narrowed to the part
+    that now blocks a playable fight.)
+
+51. **Nothing constructs an encounter yet.** The engine takes a `Monster` and
+    a player; no stage builds one, picks a class, or knows a level's ten
+    encounters. That is the next thing to build and it needs 50.

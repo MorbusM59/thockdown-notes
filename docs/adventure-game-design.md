@@ -316,7 +316,8 @@ deliberately biased toward the player: the member that just fell is assumed
 to be the one who would have acted LAST, so killing it takes actions the
 group still had rather than actions it had already spent.
 
-The head count is content, per encounter, not a rule.
+The head count is content, per encounter; an encounter that does not name one
+gets **three**.
 
 ### What a monster does when attacked
 
@@ -329,6 +330,24 @@ is available the monster takes it. A monster that could run on its own would
 make Terrify meaningless, since it would already be doing the thing Terrify
 is for. The chance on those is `50% + 5%` per point of the contested stat,
 like everything else, until it is tuned.
+
+### What an encounter pays
+
+The amounts are content and mostly unwritten. The shape is not:
+
+| how it ended | gold | experience | loot menu | spends an encounter |
+| --- | --- | --- | --- | --- |
+| monsters defeated | 1 | the encounter's | yes | yes |
+| the MONSTER fled | 1 | the encounter's, in full | no | yes |
+| the PLAYER fled | — | — | no | **yes** |
+| the player was defeated | — | — | no | — |
+
+A monster that ran still pays: you beat it, you just did not get to search
+it. One gold is not a special case for that — the loot menu's gold branch is
+one piece too, so a flight pays exactly that branch with no choice offered.
+
+The player's own flight pays nothing and **still spends one of the level's
+ten**, which is what makes running a decision rather than a free reroll.
 
 ### A level's layout
 
