@@ -3,6 +3,7 @@ import {
   buildBlockCharOffsets,
   findBlockAtChar,
   findBlockAtPixel,
+  resolveVisibleBlockIndexRange,
   resolvePreviewCharScrollOffset,
   resolvePreviewCharViewport,
   resolveLastScreenChars,
@@ -198,5 +199,52 @@ describe('resolveLastScreenChars', () => {
     expect(resolveLastScreenChars({ offsets: null, measurements, blockCount, clientHeightPx: 120 })).toBeNull()
     expect(resolveLastScreenChars({ offsets, measurements: [], blockCount, clientHeightPx: 120 })).toBeNull()
     expect(resolveLastScreenChars({ offsets, measurements, blockCount, clientHeightPx: 0 })).toBeNull()
+  })
+})
+
+describe('resolveVisibleBlockIndexRange', () => {
+  /**
+   * The distinction this function exists for: a measurement's POSITION in the
+   * array is not its block's index in the document, and the two panes differ
+   * on whether that matters. Every case here is stated in both shapes,
+   * because a fix that only holds for the continuous pane is the bug.
+   */
+  const measurementsFrom = (firstIndex: number, count: number, height = 100) =>
+    Array.from({ length: count }, (_, offset) => ({
+      index: firstIndex + offset,
+      start: offset * height,
+      size: height,
+    }))
+
+  it('answers with document indices for a continuous pane, where they equal positions', () => {
+    const measurements = measurementsFrom(0, 20)
+    expect(resolveVisibleBlockIndexRange(measurements, 0, 250)).toEqual({ firstIndex: 0, lastIndex: 2 })
+    expect(resolveVisibleBlockIndexRange(measurements, 500, 250)).toEqual({ firstIndex: 5, lastIndex: 7 })
+  })
+
+  it('answers with document indices for a WINDOWED pane, where they do not', () => {
+    // The same geometry, mounted as blocks 136..155 rather than 0..19 -- the
+    // window this was actually diagnosed on.
+    const measurements = measurementsFrom(136, 20)
+    expect(resolveVisibleBlockIndexRange(measurements, 0, 250)).toEqual({ firstIndex: 136, lastIndex: 138 })
+    expect(resolveVisibleBlockIndexRange(measurements, 500, 250)).toEqual({ firstIndex: 141, lastIndex: 143 })
+  })
+
+  it('is not the array position, which is what the defect returned', () => {
+    const measurements = measurementsFrom(136, 20)
+    const answer = resolveVisibleBlockIndexRange(measurements, 500, 250)
+    // The old code returned 5..7 here: correct as positions, ~136 blocks
+    // above where the reader actually was.
+    expect(answer?.firstIndex).not.toBe(5)
+    expect(answer?.firstIndex).toBe(141)
+  })
+
+  it('has nothing to say about an unmeasured pane', () => {
+    expect(resolveVisibleBlockIndexRange([], 0, 250)).toBeNull()
+  })
+
+  it('clamps to the mounted run rather than running off its end', () => {
+    const measurements = measurementsFrom(136, 20)
+    expect(resolveVisibleBlockIndexRange(measurements, 99_999, 250)).toEqual({ firstIndex: 155, lastIndex: 155 })
   })
 })

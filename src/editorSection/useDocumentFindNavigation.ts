@@ -186,9 +186,13 @@ export function useDocumentFindNavigation({
    * through a stretch with no hits in it re-renders nothing at all.
    */
   useEffect(() => {
-    traceFindMarking(() => `effect run: hits=${documentFindHits.length} isPreviewMode=${isPreviewMode} previewBlockCount=${previewBlockCount}`)
+    const situation = () => `hits=${documentFindHits.length} preview=${isPreviewMode} blocks=${previewBlockCount}`
     if (documentFindHits.length === 0) {
-      traceFindMarking(() => 'declined: no hits')
+      // ONE line per effect run, not one per decision. Two lines per run made
+      // the idle case alternate between two texts, which no consecutive-repeat
+      // collapse can fold -- and 1000 runs a second then read as 2000
+      // unrelated events rather than one condition.
+      traceFindMarking(() => `effect: ${situation()} -> declined, nothing to mark`)
       setVisibleDocumentFindHitRange(null)
       return undefined
     }
@@ -202,10 +206,12 @@ export function useDocumentFindNavigation({
       : () => adapterRef.current?.readVisibleSourceLineRange() ?? null
 
     if (isPreviewMode && !scroller) {
-      traceFindMarking(() => 'declined: preview mode with no scroller element')
+      traceFindMarking(() => `effect: ${situation()} -> declined, preview pane has no scroller element yet`)
       setVisibleDocumentFindHitRange(null)
       return undefined
     }
+
+    traceFindMarking(() => `effect: ${situation()} -> watching`)
 
     let frameId: number | null = null
 

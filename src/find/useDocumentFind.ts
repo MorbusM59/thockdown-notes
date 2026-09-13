@@ -7,6 +7,17 @@ import {
 } from '../editor/FindReplaceEngine'
 import { requestPreviewFindHits } from '../editor/documentFactsClient'
 
+/**
+ * The one empty hit list, shared.
+ *
+ * A fresh `[]` per render is a different array every render, and this value
+ * is a dependency of an effect and of a `useMemo` that walks the document to
+ * find each hit's line. Returning a literal made both re-run on EVERY render
+ * of the section -- caught by the find-marking trace emitting about a
+ * thousand lines a second on an idle app, with no query typed.
+ */
+const NO_HITS: DocumentFindHit[] = []
+
 export interface UseDocumentFindOptions {
   /**
    * Which section this instance belongs to. Not read internally yet -- there's
@@ -176,7 +187,7 @@ export function useDocumentFind(options: UseDocumentFindOptions): UseDocumentFin
   } | null>(null)
 
   const editModeHits = useMemo<DocumentFindHit[]>(() => {
-    if (isPreviewMode) return []
+    if (isPreviewMode) return NO_HITS
     return buildDocumentFindHits(sourceText, documentFindDirective.findText, effectiveCaseSensitive)
   }, [sourceText, documentFindDirective.findText, effectiveCaseSensitive, isPreviewMode])
 
@@ -212,7 +223,7 @@ export function useDocumentFind(options: UseDocumentFindOptions): UseDocumentFin
     ? editModeHits
     : previewAnswerIsCurrent
       ? previewAnswer.hits
-      : []
+      : NO_HITS
 
   return {
     documentFindQuery,

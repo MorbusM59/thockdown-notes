@@ -95,6 +95,51 @@ export function findBlockAtPixel(measurements: readonly PreviewBlockMeasurement[
   return low
 }
 
+/**
+ * The first and last DOCUMENT block indices visible in a scroller.
+ *
+ * ## Position is not index
+ *
+ * `findBlockAtPixel` answers with a POSITION in `measurements`. The two panes
+ * disagree about what that means, and that disagreement is the whole reason
+ * this function exists rather than being three lines at the call site:
+ *
+ *   - the CONTINUOUS pane mounts every block, so position === index, and code
+ *     that conflates them is correct by accident.
+ *   - the WINDOWED pane mounts a moving run, so position is short by the
+ *     window's first block. Every index derived from it addresses the wrong
+ *     block, by an amount that is zero until the reader scrolls past the
+ *     first window and grows from there.
+ *
+ * That is not hypothetical. The find-hit "on screen" marking read a position
+ * as an index for as long as the windowed pane has existed: with the window
+ * at the top of the document the marking was right, and from the reader's
+ * first real scroll onwards it reported lines ~275 above where they actually
+ * were, so no hit in view was ever in range. Diagnosed only when a trace put
+ * the pane's own `win 136..196` next to the marking's `lines=55..70` on
+ * adjacent lines.
+ *
+ * `measurement.index` is the translation, and it is the same one `pixelToChar`
+ * below already performs. Naming it once is what stops the next caller
+ * getting it wrong in the same way.
+ */
+export function resolveVisibleBlockIndexRange(
+  measurements: readonly PreviewBlockMeasurement[],
+  scrollTop: number,
+  clientHeight: number,
+): { firstIndex: number; lastIndex: number } | null {
+  if (measurements.length === 0) return null
+
+  const firstPosition = findBlockAtPixel(measurements, scrollTop)
+  const lastPosition = findBlockAtPixel(measurements, scrollTop + clientHeight)
+  if (firstPosition < 0 || lastPosition < 0) return null
+
+  return {
+    firstIndex: measurements[firstPosition].index,
+    lastIndex: measurements[lastPosition].index,
+  }
+}
+
 /** Where a pixel position falls in character space, interpolated in-block. */
 function pixelToChar(
   offsets: Float64Array,

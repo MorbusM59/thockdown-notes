@@ -42,7 +42,7 @@ import { noteFrameCostScroll } from './previewFrameCostTrace'
 import { usePreviewWindow, type PreviewWindowApi } from './usePreviewWindow'
 import {
   buildBlockCharOffsets,
-  findBlockAtPixel,
+  resolveVisibleBlockIndexRange,
   resolveLastScreenChars,
   resolvePreviewCharScrollOffset,
   resolvePreviewCharViewport,
@@ -1781,12 +1781,17 @@ export function usePreviewMarkdownRendering({
       const blocks = previewBlocksRef.current
       if (!scroller || blocks.length === 0) return null
 
-      const measurements = readBlockMeasurements()
-      if (measurements.length === 0) return null
+      // Through resolveVisibleBlockIndexRange, which translates a measurement
+      // POSITION into a document block INDEX. This used to call
+      // findBlockAtPixel and use its answer directly, which is the same
+      // number only while the pane mounts every block -- see that function's
+      // own note on what the windowed pane made of it.
+      const visible = resolveVisibleBlockIndexRange(readBlockMeasurements(), scroller.scrollTop, scroller.clientHeight)
+      if (!visible) return null
 
       const clampIndex = (index: number) => Math.min(blocks.length - 1, Math.max(0, index))
-      const firstIndex = clampIndex(findBlockAtPixel(measurements, scroller.scrollTop))
-      const lastIndex = clampIndex(findBlockAtPixel(measurements, scroller.scrollTop + scroller.clientHeight))
+      const firstIndex = clampIndex(visible.firstIndex)
+      const lastIndex = clampIndex(visible.lastIndex)
 
       const lastBlock = blocks[lastIndex]
       const lastBlockLines = lastBlock.text.split('\n').length
