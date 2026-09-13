@@ -245,6 +245,16 @@
   font-size: 10px; /* icon glyph, fixed box -- see --ui-font-scale's scope note in tokens.css */
 }
 
+/* A position a mode has RESERVED: it holds the geometry and does nothing.
+   Deliberately not a disabled button -- no icon, no press, no pointer -- so
+   it reads as an empty frame rather than as a control that stopped working.
+   See escapeMenuContract.ts's EscapeMenuChromeToggle. */
+.btn-icon.chapter-toggle-button.is-reserved {
+  cursor:         default;
+  pointer-events: none;
+  opacity:        0.45;
+}
+
 .btn-icon.chapter-toggle-button.is-active {
   background-color: var(--color-gutter-bg);
   box-shadow: inset 0 0 0 1px var(--color-grid-outline);
@@ -887,9 +897,17 @@
   flex-direction: row-reverse;
 }
 
+/* The line-number toggle's own box. These sit in the timeline's lane, which
+   mirrors the scrollbar and has no room for a tag pill's height -- so they
+   borrow the button geometry rather than introduce a second one, and the lane
+   keeps the height every margin around it was set against. Informational, so
+   no press look and no pointer. */
 .escape-menu-chrome-pill {
-  flex: 0 0 auto;
-  cursor: default;
+  flex:    0 0 auto;
+  cursor:  default;
+  display: inline-flex;
+  align-items:     center;
+  justify-content: center;
 }
 
 /* The rail, divided one track per gauge, top to bottom. Equal shares: a
@@ -913,24 +931,26 @@
   align-items:    flex-end;
 }
 
-/* The icon sits at the FOOT of the track and the fill rises from
-   --spacing-regular above it, so the icon reads as the thing being measured
-   and the bar as how far along it is. The icon is outside the track rather
-   than inside its bottom, so a full gauge never covers it. */
+/* INSIDE the track, at its foot, with the fill passing behind it. The icon is
+   what the track is for, so it stays legible at every value rather than the
+   track owing it a reserved strip below that it only needs when full. */
 .escape-menu-chrome-gauge-icon {
-  flex:          0 0 auto;
-  width:         var(--canonical-scroll-thickness);
-  margin-top:    var(--spacing-regular);
-  font-size:     calc(var(--canonical-scroll-thickness) - 2px);
+  position:      absolute;
+  left:          0;
+  right:         0;
+  bottom:        var(--canonical-scroll-handle-gap);
+  font-size:     calc(var(--canonical-scroll-thickness) - 4px);
   line-height:   1;
   text-align:    center;
   color:         var(--canonical-handle-border);
   pointer-events: none;
+  z-index:       1;
 }
 
 .escape-menu-chrome-gauge-track {
-  flex:      1 1 auto;
+  flex:       1 1 auto;
   min-height: 0;
+  position:   relative;
 }
 
 /* Bottom-anchored, so it grows upward. Height is the ratio; everything else

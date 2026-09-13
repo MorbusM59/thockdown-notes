@@ -4,11 +4,17 @@
 //
 // A mode owning a slot owns all six of that slot's chrome surfaces (see
 // escapeMenuContract.ts's EscapeMenuModeChrome). This file fills four of them
-// -- the readouts, the subject line, the counter and the strip. The toggle is
-// deliberately EMPTY: nothing in the game has claimed that button yet, and
-// leaving the editor's line-number/freeze toggle showing underneath would be
-// reporting on a document this slot is not displaying. The gauge is filled
-// once the mote model lands.
+// -- the readouts, the subject line, the counter and the strip -- and
+// RESERVES the other two.
+//
+// Reserved, not omitted. Nothing in the game has claimed the toggle or the
+// snapshot button yet, and leaving the editor's own showing underneath would
+// report on a document this slot is not displaying -- but dropping them
+// closes the gap they hold and shifts the panels beside them, which is how
+// the word-count panel acquired a leading space it never had. The manual-save
+// position matters most: it is the corner the scrollbar and the timeline both
+// extend from, so an empty one throws the whole column's balance. See
+// escapeMenuContract.ts's EscapeMenuChromeToggle.
 //
 // The design's status line is `health | six stats | gold, experience,
 // points, fame`, with armor beside health. Two things it also asks for are
@@ -153,14 +159,45 @@ export function chromeStrip(save: GameSave, catalog: ReadonlyMap<string, Modifie
 }
 
 /**
- * The rail's gauges. One today: how close the next stat point is.
+ * A position the game holds without using yet.
  *
- * It reads the run's TOTAL experience against the moving threshold, so it
- * does not move when motes are spent on a trait -- which is the whole of the
- * mote design and the thing a single running balance could not express.
+ * Both of the chrome's buttons are like this today, and both for the same
+ * reason: the game has not claimed them, and the editor's own must not show
+ * through. Reserving keeps the composition -- see this file's header.
+ */
+function reservedPosition(label: string) {
+  return { label, isActive: false }
+}
+
+/** The slot's toggle position. Held, unused. */
+export function chromeToggle() {
+  return reservedPosition('Reserved')
+}
+
+/**
+ * The manual-save position. Held, unused, and the most important of the two
+ * to hold: it is the corner the scrollbar and the timeline both extend from.
+ */
+export function chromeAction() {
+  return reservedPosition('Reserved')
+}
+
+/**
+ * The rail's gauges, top to bottom: FAME, then the next stat point.
  *
- * A list because the rail is subdivided: the second gauge is a layout
- * question, and the layout answers it already (escapeMenuContract.ts).
+ * Fame is the run's score and the top half of the rail, because it is what
+ * the whole run is for; the stat-point bar below it is the shorter, faster
+ * cycle underneath. Fame carries NO RATIO: the score is real and named, and
+ * the curve that scales it is explicitly unwritten (open question 12 in
+ * docs/adventure-platform.md). An empty track says "this is here and has
+ * nothing to report"; a zeroed one would claim the answer is none, and a
+ * fabricated one would make an undecided rule look settled. The number itself
+ * is on the tab bar, where it is true without a curve.
+ *
+ * The stat-point gauge reads the run's TOTAL experience against the moving
+ * threshold, so it does not move when motes are spent on a trait -- which is
+ * the whole of the mote design and the thing a single running balance could
+ * not express.
  */
 export function chromeGauges(save: GameSave): EscapeMenuChromeGauge[] {
   const game = activeGame(save)
@@ -170,8 +207,17 @@ export function chromeGauges(save: GameSave): EscapeMenuChromeGauge[] {
   const into = Math.max(0, game.experienceEarned - (game.experienceToNextStatPoint - span))
   return [
     {
+      key: 'fame',
+      icon: 'fa-solid fa-crown',
+      label: 'Fame',
+      detail: [
+        `${game.fame} fame`,
+        'The curve that scales this bar is not written yet',
+      ],
+    },
+    {
       key: 'statPoint',
-      icon: 'fa-solid fa-arrow-up-right-dots',
+      icon: 'fa-solid fa-star',
       ratio: statPointProgress(game.experienceEarned, game.experienceToNextStatPoint, game.statPointsAcquired),
       label: 'Next stat point',
       detail: [

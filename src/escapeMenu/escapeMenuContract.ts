@@ -70,24 +70,48 @@ export interface EscapeMenuChromePill {
   detail?: string[]
 }
 
-/** One subdivision of the chrome's rail: an icon, and a bar rising above it. */
+/** One subdivision of the chrome's rail: a track, with its icon at the foot. */
 export interface EscapeMenuChromeGauge {
   key: string
   /** A Font Awesome class string, drawn at the foot of the track. */
   icon: string
-  /** How full, 0..1. Clamped by the host; a value outside it is a caller bug, not a layout one. */
-  ratio: number
+  /**
+   * How full, 0..1. Clamped by the host; a value outside it is a caller bug,
+   * not a layout one.
+   *
+   * OMITTED means the track exists and its fill is not yet knowable -- the
+   * quantity is real and named, the curve that scales it is not written. An
+   * empty track says "this is here and has nothing to report"; a zeroed one
+   * would say "this is here and the answer is none", which is a different
+   * claim and, where the rule is undecided, a false one.
+   */
+  ratio?: number
   label: string
   detail?: string[]
 }
 
-/** The button the chrome's toggle slot shows while a mode owns it. */
+/**
+ * The button the chrome's toggle slot shows while a mode owns it -- or a
+ * RESERVED position, when `onActivate` is absent.
+ *
+ * Reserved is a third state, distinct from both "a button" and "omitted", and
+ * it exists because omitting a control changes the LAYOUT: the positions
+ * around the editor are a composition, and dropping one closes the gap it
+ * held, moving everything beside it. The word-count panel gained a space it
+ * never had the first time a mode left the toggle out. A mode that intends to
+ * claim a position later says so by reserving it, and the geometry stays put.
+ *
+ * A reserved position is inert, not disabled-looking: it draws no icon and
+ * takes no press, because a control that looks pressable and does nothing is
+ * worse than an empty frame.
+ */
 export interface EscapeMenuChromeToggle {
-  /** A Font Awesome class string. */
-  icon: string
+  /** A Font Awesome class string. Omitted on a reserved position. */
+  icon?: string
   label: string
   isActive: boolean
-  onActivate: () => void
+  /** Omitted RESERVES the position: it holds its space and does nothing. */
+  onActivate?: () => void
 }
 
 /**

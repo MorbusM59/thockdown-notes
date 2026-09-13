@@ -17,7 +17,7 @@ import type { ChapterPillSplitArm } from '../chapters/useChapterPillActions'
 import { EscapeHoldPanel, type ExportScope } from './EscapeHoldPanel'
 import { splitChapterFamily } from '../shared/chapters'
 import type { EscapeMenuContribution } from '../escapeMenu/escapeMenuContract'
-import { EscapeMenuChromeGauges, EscapeMenuChromeStrip, EscapeMenuNarration } from '../escapeMenu/EscapeMenuStatus'
+import { EscapeMenuChromeButton, EscapeMenuChromeGauges, EscapeMenuChromeStrip, EscapeMenuNarration } from '../escapeMenu/EscapeMenuStatus'
 
 export interface SectionEditorAreaProps {
   sectionId: string
@@ -541,16 +541,7 @@ export function SectionEditorArea({
               See escapeMenuContract.ts's EscapeMenuModeChrome. */}
           {modeStatus ? (
             modeStatus.toggle ? (
-              <button
-                type="button"
-                className={`chapter-toggle-button btn-icon${modeStatus.toggle.isActive ? ' is-active' : ''}`}
-                aria-label={modeStatus.toggle.label}
-                aria-pressed={modeStatus.toggle.isActive}
-                data-tooltip={modeStatus.toggle.label}
-                onClick={modeStatus.toggle.onActivate}
-              >
-                <span className={modeStatus.toggle.icon} aria-hidden="true" />
-              </button>
+              <EscapeMenuChromeButton control={modeStatus.toggle} />
             ) : null
           ) : (
           <>
@@ -640,16 +631,7 @@ export function SectionEditorArea({
               displaying -- the same rule as the toggle and the counter. */}
           {modeStatus ? (
             modeStatus.action ? (
-              <button
-                type="button"
-                className={`chapter-toggle-button btn-icon${modeStatus.action.isActive ? ' is-active' : ''}`}
-                aria-label={modeStatus.action.label}
-                aria-pressed={modeStatus.action.isActive}
-                data-tooltip={modeStatus.action.label}
-                onClick={modeStatus.action.onActivate}
-              >
-                <span className={modeStatus.action.icon} aria-hidden="true" />
-              </button>
+              <EscapeMenuChromeButton control={modeStatus.action} />
             ) : null
           ) : (
           <PresentStateCircle

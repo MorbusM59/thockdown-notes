@@ -27,7 +27,7 @@ import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from './co
 import { emptySave, type GameSave } from './model/gameState'
 import { createSeed } from './core/rng'
 import { ROOT_STAGE_ID, STAGES } from './stages'
-import { chromeCounter, chromeGauges, chromeStrip, statusReadouts, statusSubject } from './chrome'
+import { chromeAction, chromeCounter, chromeGauges, chromeStrip, chromeToggle, statusReadouts, statusSubject } from './chrome'
 
 const CATALOG = buildCatalog(THOCKQUEST)
 
@@ -147,9 +147,11 @@ export function useAdventureEscapeMenu(options: AdventureEscapeMenuOptions): Esc
         counter: chromeCounter(save, STAGES.get(screen.stageId)?.title ?? ''),
         strip: chromeStrip(save, CATALOG),
         gauges: chromeGauges(save),
-        // No `toggle` and no `action` yet -- an omitted surface goes BLANK
-        // rather than falling back to the editor's, which is the point of
-        // the rule. See chrome.ts.
+        // RESERVED, not omitted. The game has claimed neither button, and
+        // the editor's own must not show through -- but an omitted position
+        // closes the gap it holds and moves its neighbours. See chrome.ts.
+        toggle: chromeToggle(),
+        action: chromeAction(),
       },
     }
   }, [isAdventureViewActive, save, handleChoice, onLeave])

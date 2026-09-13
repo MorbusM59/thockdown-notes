@@ -1,4 +1,5 @@
-import type { EscapeMenuChromePill, EscapeMenuModeChrome } from './escapeMenuContract'
+import type { EscapeMenuChromePill,
+  EscapeMenuChromeToggle, EscapeMenuModeChrome } from './escapeMenuContract'
 
 /**
  * A mode's two output channels, and WHICH BAR each one lands on.
@@ -83,6 +84,41 @@ export function EscapeMenuNarration({ status }: { status: EscapeMenuModeChrome }
  * declaration the resolver applies (model/modifiers.ts), so it is prose of
  * unpredictable length and would burst the strip.
  */
+/**
+ * One of the chrome's two button positions -- the slot's toggle, or the
+ * action beside the counter.
+ *
+ * A control with no `onActivate` is RESERVED, and renders as an inert frame
+ * of exactly the button's size rather than as a disabled button: it draws no
+ * icon and takes no press. Both halves matter. Omitting the position instead
+ * would close the gap it holds and shift the panels beside it -- which is how
+ * the word-count panel acquired a space it never had -- and a control that
+ * looks pressable and does nothing is worse than an empty frame.
+ */
+export function EscapeMenuChromeButton({ control }: { control: EscapeMenuChromeToggle }) {
+  if (!control.onActivate) {
+    return (
+      <span
+        className="btn-icon chapter-toggle-button is-reserved"
+        aria-hidden="true"
+        data-tooltip={control.label}
+      />
+    )
+  }
+  return (
+    <button
+      type="button"
+      className={`chapter-toggle-button btn-icon${control.isActive ? ' is-active' : ''}`}
+      aria-label={control.label}
+      aria-pressed={control.isActive}
+      data-tooltip={control.label}
+      onClick={control.onActivate}
+    >
+      {control.icon ? <span className={control.icon} aria-hidden="true" /> : null}
+    </button>
+  )
+}
+
 export function EscapeMenuChromeStrip({ status }: { status: EscapeMenuModeChrome }) {
   const strip = status.strip
   if (!strip || (strip.leading.length === 0 && strip.trailing.length === 0)) return null
@@ -90,11 +126,17 @@ export function EscapeMenuChromeStrip({ status }: { status: EscapeMenuModeChrome
   const group = (pills: EscapeMenuChromePill[], className: string) => (
     <div className={className}>
       {pills.map((pill) => (
+        // The line-number toggle's own box, not a tag pill: these sit in the
+        // timeline's lane, which is a mirror of the scrollbar and has no room
+        // for a pill's height. Reusing the button geometry keeps the lane at
+        // the height every margin around it was set against, and keeps one
+        // visual language in the chrome instead of two.
         <span
           key={pill.key}
-          className="tag-pill escape-menu-chrome-pill"
+          className="btn-icon chapter-toggle-button escape-menu-chrome-pill"
           data-tooltip={tooltipOf(pill.label, pill.detail)}
           aria-label={pill.label}
+          role="listitem"
         >
           <span className={pill.icon} aria-hidden="true" />
         </span>
@@ -113,11 +155,17 @@ export function EscapeMenuChromeStrip({ status }: { status: EscapeMenuModeChrome
 /**
  * The scrollbar rail, divided one track per gauge.
  *
- * Each track carries its icon at the FOOT and fills upward from just above
- * it, so the icon reads as the thing being measured and the bar as how far
- * along it is. Styled as a scroll thumb rather than as a progress bar of its
- * own: it is standing in the scrollbar's place, and a second visual language
- * in that column would read as a second control.
+ * Each track carries its icon at the foot INSIDE it, and fills upward from
+ * the bottom, so the icon reads as the thing being measured and the bar as
+ * how far along it is. The fill passes behind the icon rather than stopping
+ * short of it: the icon is what the track is for, so it stays legible at
+ * every value instead of the track owing it a reserved strip it only needs
+ * when full. Styled as a scroll thumb rather than as a progress bar of its
+ * own -- it is standing in the scrollbar's place, and a second visual
+ * language in that column would read as a second control.
+ *
+ * A gauge with NO ratio draws its track and its icon and no fill: the
+ * quantity is named and its curve is not written yet. See the contract.
  */
 export function EscapeMenuChromeGauges({ status }: { status: EscapeMenuModeChrome }) {
   const gauges = status.gauges
@@ -125,7 +173,7 @@ export function EscapeMenuChromeGauges({ status }: { status: EscapeMenuModeChrom
   return (
     <div className="escape-menu-chrome-gauges">
       {gauges.map((gauge) => {
-        const filled = Math.max(0, Math.min(1, gauge.ratio))
+        const filled = gauge.ratio === undefined ? null : Math.max(0, Math.min(1, gauge.ratio))
         return (
           <div
             key={gauge.key}
@@ -135,15 +183,19 @@ export function EscapeMenuChromeGauges({ status }: { status: EscapeMenuModeChrom
             aria-label={gauge.label}
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-valuenow={Math.round(filled * 100)}
+            // Absent rather than zero, so assistive tech reads it as
+            // indeterminate instead of as "none of it".
+            aria-valuenow={filled === null ? undefined : Math.round(filled * 100)}
           >
             <div className="thockdown-scroll-track escape-menu-chrome-gauge-track">
-              <div
-                className="thockdown-scroll-thumb escape-menu-chrome-gauge-fill"
-                style={{ height: `${filled * 100}%` }}
-              />
+              {filled === null ? null : (
+                <div
+                  className="thockdown-scroll-thumb escape-menu-chrome-gauge-fill"
+                  style={{ height: `${filled * 100}%` }}
+                />
+              )}
+              <span className={`escape-menu-chrome-gauge-icon ${gauge.icon}`} aria-hidden="true" />
             </div>
-            <span className={`escape-menu-chrome-gauge-icon ${gauge.icon}`} aria-hidden="true" />
           </div>
         )
       })}
