@@ -291,9 +291,26 @@ These block a playable game and want answers rather than guesses.
    effects pending.
 7. **Enemy scaling, fame, experience and gold rates, and the action economy.**
    All unwritten.
-8. **Ring capacity.** Nine stage choices plus the three the director always
-   adds is the working cap (`core/screen.ts`). Not yet checked against the
-   rendered dial at twelve cells.
+8. **Ring capacity — ANSWERED, and the cap is wrong.** The ring holds TEN
+   cells, not twelve. Cells sit at equal ANGULAR intervals on a rounded
+   square, so their spacing varies around the perimeter and the tightest pair
+   decides legibility; both shape inputs are reader-facing sliders, so the
+   cap has to hold across their whole range and not just at the defaults.
+
+   | cells | tightest gap, defaults | tightest gap, worst settings |
+   | --- | --- | --- |
+   | 10 | 52.0px | 44.5px |
+   | 12 | 46.2px | **37.3px** |
+
+   Against a 44px button. At maximum rounding the rounded square degenerates
+   to a circle of radius 72px, and twelve 44px buttons need radius 84 to sit
+   apart on one — a physical shortfall, not a tuning one, since the panel and
+   button sizes are static CSS tokens.
+
+   `escapeHoldRingCapacity.test.ts` computes this from the real layout
+   function. **The decision is which way to close the gap** — ten choices, or
+   smaller cells, or a larger panel — and the third test in that file is what
+   fails the day someone assumes it was settled.
 9. **Regions** currently carry a name and nothing else: which encounters and
     monsters each brings into scope is unspecified.
 10. **A second game slot.** The save is shaped for it (`games` is a list,

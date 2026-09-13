@@ -56,7 +56,12 @@ export interface Screen {
  * the same twelve, spent entirely on the question being asked instead of
  * three cells' worth of standing furniture.
  *
- * PROVISIONAL: chosen from the design conversation and not yet checked
- * against the rendered dial at twelve cells.
+ * PROVISIONAL, and now known to be TOO HIGH: the ring holds ten cells, not
+ * twelve. Twelve sit 37.3px apart at their tightest, against a 44px button,
+ * once the reader's rounding and spacing sliders are at maximum -- see
+ * `escapeHoldRingCapacity.test.ts`, which computes it from the real layout,
+ * and open question 8 in docs/adventure-platform.md. Which way to close the
+ * gap is a design decision and has not been taken, so this number is left
+ * standing rather than quietly reduced.
  */
 export const MAX_STAGE_CHOICES = 12
