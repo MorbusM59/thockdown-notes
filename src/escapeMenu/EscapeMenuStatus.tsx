@@ -1,5 +1,5 @@
 import { usePillStripScroll } from '../shared/usePillStripScroll'
-import type { EscapeMenuChromePill,
+import type { EscapeMenuChromeMeter, EscapeMenuChromePill,
   EscapeMenuChromeToggle, EscapeMenuModeChrome } from './escapeMenuContract'
 
 /**
@@ -154,7 +154,7 @@ export function EscapeMenuChromeButton({ control }: { control: EscapeMenuChromeT
  * declaration the resolver applies (model/modifiers.ts), so it is prose of
  * unpredictable length and would burst the strip.
  */
-export function EscapeMenuChromeStrip({ status }: { status: EscapeMenuModeChrome }) {
+function EscapeMenuChromeStrip({ status }: { status: EscapeMenuModeChrome }) {
   const strip = status.strip
   if (!strip || (strip.leading.length === 0 && strip.trailing.length === 0)) return null
 
@@ -184,6 +184,69 @@ export function EscapeMenuChromeStrip({ status }: { status: EscapeMenuModeChrome
       {group(strip.leading, 'escape-menu-chrome-strip-group is-leading')}
       {group(strip.trailing, 'escape-menu-chrome-strip-group is-trailing')}
     </div>
+  )
+}
+
+/**
+ * One meter: a bare icon label and the row's small bordered box, in that
+ * order at the head of the row and reversed at its foot, so both icons face
+ * outward and the two values sit nearest the strip they pay for.
+ *
+ * The label is the strip pill's own box with no glyph of its own to press --
+ * the row already has exactly one vocabulary for "a small square carrying an
+ * icon", and a second would read as a control of a different kind.
+ */
+function EscapeMenuChromeMeterBox({ meter, side }: { meter: EscapeMenuChromeMeter; side: 'leading' | 'trailing' }) {
+  const tooltip = tooltipOf(meter.label, [meter.value])
+  const icon = (
+    <span
+      className="ui-btn btn-icon chapter-toggle-button escape-menu-chrome-pill escape-menu-meter-icon"
+      data-tooltip={tooltip}
+      aria-hidden="true"
+    >
+      <span className={meter.icon} aria-hidden="true" />
+    </span>
+  )
+  const value = (
+    <div className="wordcount-panel escape-menu-meter-value" data-tooltip={tooltip} aria-label={`${meter.label}: ${meter.value}`}>
+      <span>{meter.value}</span>
+    </div>
+  )
+  return side === 'leading' ? <>{icon}{value}</> : <>{value}{icon}</>
+}
+
+/**
+ * THE WHOLE STATS ROW while a mode owns the slot -- every position on it,
+ * laid out by the mode's own record rather than poured into the editor's.
+ *
+ * The order mirrors the tag bar one row up, which is where a reader has
+ * already learned to look for each kind of thing: the leading toggle, then
+ * the id box saying which one this is, then the strip, with the row's
+ * remaining boxes flanking it and the manual-save position closing it. The
+ * toggle and the action are RESERVED rather than omitted -- see
+ * EscapeMenuChromeButton, and the note in escapeMenuContract.ts about what
+ * dropping a position does to the composition.
+ */
+export function EscapeMenuChromeStatsRow({ status }: { status: EscapeMenuModeChrome }) {
+  return (
+    <>
+      <div className="chapter-toggle-panel">
+        {status.toggle ? <EscapeMenuChromeButton control={status.toggle} /> : null}
+      </div>
+      {status.identity ? (
+        <div className="wordcount-panel escape-menu-identity-panel" data-tooltip={status.identity}>
+          <span>{status.identity}</span>
+        </div>
+      ) : null}
+      {status.meters?.leading ? <EscapeMenuChromeMeterBox meter={status.meters.leading} side="leading" /> : null}
+      <div className="timeline-panel">
+        <EscapeMenuChromeStrip status={status} />
+      </div>
+      {status.meters?.trailing ? <EscapeMenuChromeMeterBox meter={status.meters.trailing} side="trailing" /> : null}
+      <div className="manual-snapshot-panel">
+        {status.action ? <EscapeMenuChromeButton control={status.action} /> : null}
+      </div>
+    </>
   )
 }
 

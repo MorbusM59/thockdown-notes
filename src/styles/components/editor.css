@@ -268,6 +268,48 @@
   min-width: 0;
 }
 
+/* A mode's identity box, in the note-id position at the head of the stats
+   row. Fixed width and clipped, the same rule (and the same 120px) the
+   note's own id pill follows one row up -- and for a reason that turned up
+   independently here: this text changes on every step of a run, and a box
+   that hugged it would shove the whole strip sideways each time. The full
+   text is in its tooltip. */
+.wordcount-panel.escape-menu-identity-panel {
+  width:         120px;
+  min-width:     120px;
+  max-width:     120px;
+  padding:       0 var(--spacing-regular);
+  overflow:      hidden;
+  text-overflow: ellipsis;
+  /* The tooltip is the whole point of clipping this; a panel that cannot be
+     hovered cannot show one, and .wordcount-panel turns pointer events off
+     for the plain word count that has nothing to say. */
+  pointer-events: auto;
+}
+
+/* A mode's two currency meters, in the word-count position on each side of
+   the strip. The value box is the row's own; only the pairing is new -- the
+   icon label and its value sit tight against each other so the two read as
+   one thing, while the row's ordinary gap separates them from the strip. */
+.escape-menu-meter-icon,
+.escape-menu-meter-value {
+  flex: 0 0 auto;
+}
+
+.escape-menu-meter-icon + .escape-menu-meter-value,
+.escape-menu-meter-value + .escape-menu-meter-icon {
+  margin-left: calc(var(--spacing-small) - var(--spacing-regular));
+}
+
+/* The meter's value is a number that changes as it is spent, so it reads
+   first -- the same weight the readouts' own values carry on the tab bar. */
+.escape-menu-meter-value {
+  min-width:      calc(22px * var(--ui-font-scale));
+  pointer-events: auto;
+  font-weight:    600;
+  color:          var(--color-text-100);
+}
+
 /* Snapshot timeline slider */
 .snapshot-timeline-shell {
   display: block;

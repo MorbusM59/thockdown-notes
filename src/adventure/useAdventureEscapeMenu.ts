@@ -27,7 +27,7 @@ import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from './co
 import { emptySave, type GameSave } from './model/gameState'
 import { createSeed } from './core/rng'
 import { ROOT_STAGE_ID, STAGES } from './stages'
-import { chromeAction, chromeCounter, chromeGauges, chromeStrip, chromeToggle, statusReadouts } from './chrome'
+import { chromeAction, chromeGauges, chromeIdentity, chromeMeters, chromeStrip, chromeToggle, statusReadouts } from './chrome'
 
 const CATALOG = buildCatalog(THOCKQUEST)
 
@@ -136,9 +136,10 @@ export function useAdventureEscapeMenu(options: AdventureEscapeMenuOptions): Esc
         title: 'Adventure',
         headline: screen.narration,
         readouts: statusReadouts(save, CATALOG),
-        // The stage names itself; the counter does not keep a table of
-        // names that could fall out of step with the registry.
-        counter: chromeCounter(save, STAGES.get(screen.stageId)?.title ?? ''),
+        // The stage names itself; the identity line does not keep a table
+        // of names that could fall out of step with the registry.
+        identity: chromeIdentity(save, STAGES.get(screen.stageId)?.title ?? ''),
+        meters: chromeMeters(save),
         strip: chromeStrip(save, CATALOG),
         gauges: chromeGauges(save),
         // RESERVED, not omitted. The game has claimed neither button, and

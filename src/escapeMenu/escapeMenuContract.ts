@@ -81,6 +81,25 @@ export interface EscapeMenuChromePill {
   detail?: string[]
 }
 
+/**
+ * One of the stats row's small bordered boxes: a quantity the mode is
+ * accumulating, named by an icon rather than a word.
+ *
+ * The icon's SIDE is not a field. There are two of these and they sit at
+ * opposite ends of the strip, so each one's icon goes on its outward side --
+ * a property of where the box is, which the host already knows, rather than
+ * one more thing for a mode to get backwards.
+ */
+export interface EscapeMenuChromeMeter {
+  key: string
+  /** A Font Awesome class string, drawn beside the value as a bare label. */
+  icon: string
+  /** Read out for assistive tech, and the tooltip. */
+  label: string
+  /** Already formatted. */
+  value: string
+}
+
 /** One subdivision of the chrome's rail: a track, with its icon at the foot. */
 export interface EscapeMenuChromeGauge {
   key: string
@@ -180,10 +199,28 @@ export interface EscapeMenuModeChrome {
    */
   toggle?: EscapeMenuChromeToggle
   /**
-   * One short line where the word and character count would be. The mode
+   * WHICH one, and where in it -- shown in the note-id position at the head
+   * of the stats row, the box a note uses to say `$SOMETHING`. The mode
    * formats it; the host only places it.
+   *
+   * A FIXED width that clips, exactly as the note's own id box is, and for
+   * the same reason turned up a second time: this text changes on every step
+   * (`I [Welcome]` to `IV [Character Creation]`), and a box that hugs it
+   * would shove the whole strip sideways each time. The full text is in its
+   * tooltip.
    */
-  counter?: string
+  identity?: string
+  /**
+   * The two boxes flanking the strip, in the positions a note's word count
+   * occupies. What a mode SPENDS goes here, beside what it has spent it on:
+   * the strip between them is what the run is carrying, and a currency read
+   * from the tab bar a whole editor away from the things it buys was two
+   * halves of one thought in two places.
+   */
+  meters?: {
+    leading?: EscapeMenuChromeMeter
+    trailing?: EscapeMenuChromeMeter
+  }
   /**
    * Two groups of pills across the timeline's width -- `leading` from the
    * left, `trailing` from the right. What a mode is accumulating belongs

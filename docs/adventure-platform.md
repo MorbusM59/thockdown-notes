@@ -25,10 +25,11 @@ channels:
 | Channel | Carries |
 | --- | --- |
 | the ring | one question's choices, as icon + short label — ALL of them the stage's own |
-| the tab bar | the stats readout, each an ICON and its value (the name in the tooltip) — or, while a choice is focused, that choice's own effects |
+| the tab bar | health, armor and the six stats, each an ICON and its value (the name in the tooltip) — or, while a choice is focused, that choice's own effects |
 | the chapter bar | narration: what just happened, and the frame for what is being asked |
-| the counter | `IV [Combat] 3 | 4` — level in roman numerals, the stage, how far through it |
+| the identity box | `IV [Combat] 3 | 4` — level in roman numerals, the stage, how far through it. In the note-id position, fixed width, clipped: it changes every step, and a box that hugged it would shove the strip sideways each time |
 | the strip | what the run is carrying: items out from the left, traits in from the right |
+| the two meters | the currencies, flanking the strip: gold leading, motes trailing, each with an icon on its outward side. They are next to what they BUY — a balance on the tab bar and the things it bought a whole editor away were two halves of one thought in two places |
 | the rail | one gauge per subdivision, each an icon at the foot and a bar rising above it |
 | the toggle, the action | two buttons the game may claim; **empty** until it does |
 
@@ -39,6 +40,14 @@ and the counter already says how far into it you are. **The REGION's name is
 therefore not shown anywhere right now** — the counter has the level, and
 where you are has no surface. Worth a decision when region actually means
 something mechanically; not worth reinstating a pill for.
+
+The stats row below the editor is laid out on the TAG BAR's anatomy, one
+position at a time: the leading toggle, then the id box saying which one this
+is, then the strip, with the row's remaining boxes flanking it and the
+manual-save position closing it. The mode lays that row out itself rather
+than filling in the editor's — the rule that a mode owning a slot owns its
+chrome was previously spelled once per position, which is how the row's
+SHAPE stayed the editor's while only its contents changed.
 
 Both bars are the real ones, element for element — the same well, scroll
 shell, display row and pill a note's tabs and chapters use, sharing

@@ -17,7 +17,7 @@ import type { ChapterPillSplitArm } from '../chapters/useChapterPillActions'
 import { EscapeHoldPanel, type ExportScope } from './EscapeHoldPanel'
 import { splitChapterFamily } from '../shared/chapters'
 import type { EscapeMenuContribution } from '../escapeMenu/escapeMenuContract'
-import { EscapeMenuChromeButton, EscapeMenuChromeGauges, EscapeMenuChromeStrip, EscapeMenuNarration } from '../escapeMenu/EscapeMenuStatus'
+import { EscapeMenuChromeGauges, EscapeMenuChromeStatsRow, EscapeMenuNarration } from '../escapeMenu/EscapeMenuStatus'
 
 export interface SectionEditorAreaProps {
   sectionId: string
@@ -546,19 +546,18 @@ export function SectionEditorArea({
         ) : null}
       </div>
       <div className="editor-document-stats" aria-live="polite">
+        {/* The branch is at the ROW, not at each position in it. A mode owning
+            a slot owns this whole row -- the rule was already true and was
+            spelled four times, once per panel, which is how the row's SHAPE
+            ended up being the editor's with a mode's contents poured into it.
+            The mode's row has boxes the editor's does not (an identity, two
+            meters flanking the strip), so it lays itself out.
+            See escapeMenuContract.ts's EscapeMenuModeChrome. */}
+        {modeStatus ? (
+          <EscapeMenuChromeStatsRow status={modeStatus} />
+        ) : (
+        <>
         <div className="chapter-toggle-panel">
-          {/* A mode owning the slot owns this position too, and an omitted
-              toggle leaves it EMPTY rather than falling back to the editor's
-              own -- the line-number and freeze buttons report on a document
-              this slot is not showing, and leaving state from underneath on
-              screen is exactly what "the game drives the chrome" rules out.
-              See escapeMenuContract.ts's EscapeMenuModeChrome. */}
-          {modeStatus ? (
-            modeStatus.toggle ? (
-              <EscapeMenuChromeButton control={modeStatus.toggle} />
-            ) : null
-          ) : (
-          <>
           {/*
             Mode-aware: in edit mode this is the line-numbers/review-flags
             toggle (unchanged). In preview mode -- where line numbers have
@@ -606,20 +605,14 @@ export function SectionEditorArea({
               <span className="fa-solid fa-hashtag" aria-hidden="true" />
             </button>
           )}
-          </>
-          )}
         </div>
         <div className="wordcount-panel" aria-live="polite">
-          {modeStatus ? (
-            modeStatus.counter ? <span>{modeStatus.counter}</span> : null
-          ) : activeNoteId ? (
+          {activeNoteId ? (
             <span><b>{activeNoteDocumentStats.wordCount.toLocaleString()}</b> ({activeNoteDocumentStats.characterCount.toLocaleString()})</span>
           ) : null}
         </div>
         <div className="timeline-panel">
-        {modeStatus ? (
-          <EscapeMenuChromeStrip status={modeStatus} />
-        ) : activeNoteId && !isViewingAutoTocChapter && !isViewingAutoOpenItemsChapter && !isViewingTimelessNote ? (
+        {activeNoteId && !isViewingAutoTocChapter && !isViewingAutoOpenItemsChapter && !isViewingTimelessNote ? (
           <SnapshotTimelineSlider
             sourceNoteId={activeNoteId}
             placements={noteSnapshots.placements}
@@ -640,14 +633,6 @@ export function SectionEditorArea({
         )}
         </div>
         <div className="manual-snapshot-panel">
-          {/* A mode owns this position too. Omitted leaves it empty rather
-              than showing a snapshot control for a document this slot is not
-              displaying -- the same rule as the toggle and the counter. */}
-          {modeStatus ? (
-            modeStatus.action ? (
-              <EscapeMenuChromeButton control={modeStatus.action} />
-            ) : null
-          ) : (
           <PresentStateCircle
             hasPendingManualChanges={activeNoteId && !isViewingTimelessNote ? ((isViewingAutoTocChapter || isViewingAutoOpenItemsChapter) ? true : noteSnapshots.hasPendingManualChanges) : false}
             onCreateManualSnapshot={() => { void handleCreateManualSnapshot() }}
@@ -663,8 +648,9 @@ export function SectionEditorArea({
                   : undefined
             }
           />
-          )}
         </div>
+        </>
+        )}
       </div>
     </div>
   )

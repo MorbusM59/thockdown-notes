@@ -4,8 +4,8 @@
 //
 // A mode owning a slot owns all six of that slot's chrome surfaces (see
 // escapeMenuContract.ts's EscapeMenuModeChrome). This file fills four of them
-// -- the readouts, the narration line, the counter and the strip -- and
-// RESERVES the other two.
+// -- the readouts, the narration line, the identity box with its two meters,
+// and the strip -- and RESERVES the other two.
 //
 // Reserved, not omitted. Nothing in the game has claimed the toggle or the
 // snapshot button yet, and leaving the editor's own showing underneath would
@@ -45,11 +45,26 @@ import { STAT_ICONS, STAT_KEYS, STAT_LABELS } from './model/stats'
 const READOUT_ICONS = {
   hp: 'fa-solid fa-heart',
   armor: 'fa-solid fa-shield-halved',
-  gold: 'fa-solid fa-coins',
-  motes: 'fa-solid fa-gem',
   points: 'fa-solid fa-star',
   fame: 'fa-solid fa-crown',
   games: 'fa-solid fa-dice-d20',
+} as const
+
+/**
+ * The two currencies, on the STATS ROW rather than up with the stats.
+ *
+ * They buy what the strip between them holds -- gold buys items, motes buy
+ * traits -- so they belong beside it: a balance read on the tab bar and the
+ * things it was spent on read a whole editor away were two halves of one
+ * thought in two places. Gold leads (items read out from the left), motes
+ * trail (traits read in from the right), each mirroring its own half.
+ *
+ * The book, not a second gem: this is what motes are SPENT ON, and the icon
+ * beside a balance names what the balance is for.
+ */
+const METER_ICONS = {
+  gold: 'fa-solid fa-coins',
+  motes: 'fa-solid fa-book',
 } as const
 
 export function statusReadouts(save: GameSave, catalog: ReadonlyMap<string, Modifier>): EscapeMenuReadout[] {
@@ -76,11 +91,6 @@ export function statusReadouts(save: GameSave, catalog: ReadonlyMap<string, Modi
       label: STAT_LABELS[key],
       value: String(profile.stats[key]),
     })),
-    { key: 'gold', icon: READOUT_ICONS.gold, label: 'Gold', value: String(game.goldUnits) },
-    // The BALANCE, not the total earned: this readout is what the player can
-    // spend. How close the next stat point is is the rail's job, and reads
-    // the total instead -- see model/motes.ts for why those are two numbers.
-    { key: 'xp', icon: READOUT_ICONS.motes, label: 'Motes to spend', value: String(moteBalance(game.experienceEarned, game.experienceSpentOnTraits)) },
     ...(game.statPoints > 0 ? [{ key: 'points', icon: READOUT_ICONS.points, label: 'Stat points to spend', value: String(game.statPoints) }] : []),
     { key: 'fame', icon: READOUT_ICONS.fame, label: 'Fame', value: String(game.fame) },
   ]
@@ -111,18 +121,48 @@ export function romanNumeral(value: number): string {
 }
 
 /**
- * The one line where a note's word count would be: `IV [Combat] 3 | 4` --
- * level, the stage you are in, and how far through it you are.
+ * The one line in the note-id position: `IV [Combat] 3 | 4` -- level, the
+ * stage you are in, and how far through it you are. It answers the same
+ * question a note's `$id` box does, which is why it sits there: WHICH one is
+ * this, at a glance, in a box that does not move as the answer changes.
  *
  * The progress pair is ABSENT rather than zeroed until there is something
  * that counts rounds and actions: combat is deliberately unbuilt (see
  * docs/adventure-platform.md), and `3 | 4` with nothing behind it would read
  * as a working feature reporting zero.
  */
-export function chromeCounter(save: GameSave, stageTitle: string): string {
+export function chromeIdentity(save: GameSave, stageTitle: string): string {
   const game = activeGame(save)
   const level = game ? `${romanNumeral(game.level)} ` : ''
   return `${level}[${stageTitle}]`
+}
+
+/**
+ * The two currencies, flanking the strip. See METER_ICONS for why they are
+ * here rather than on the tab bar with the stats.
+ *
+ * Both are BALANCES -- what is left to spend -- not totals earned. Motes have
+ * two numbers and this is deliberately the smaller one: how close the next
+ * stat point is reads the TOTAL instead, and that is the rail's job (see
+ * model/motes.ts for why one running balance could not express both).
+ */
+export function chromeMeters(save: GameSave): EscapeMenuModeChrome['meters'] {
+  const game = activeGame(save)
+  if (!game) return undefined
+  return {
+    leading: {
+      key: 'gold',
+      icon: METER_ICONS.gold,
+      label: 'Gold to spend',
+      value: String(game.goldUnits),
+    },
+    trailing: {
+      key: 'motes',
+      icon: METER_ICONS.motes,
+      label: 'Motes to spend',
+      value: String(moteBalance(game.experienceEarned, game.experienceSpentOnTraits)),
+    },
+  }
 }
 
 function pillsOf(held: readonly Modifier[], kind: Modifier['kind'], counts: ReturnType<typeof holdingCounts>): EscapeMenuChromePill[] {
