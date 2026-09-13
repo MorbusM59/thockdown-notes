@@ -462,70 +462,102 @@ The third was real, and is answered:
     which the counts reset. Monsters scale per LEVEL. The deleted plan's
     `10 · factor^round` said round and meant level.
 
-## Building the action economy: what is specified, and what is missing
+## Building the action economy
 
-The round's STRUCTURE is fully specified and can be built without inventing
-anything. Its NUMBERS mostly cannot. The split matters, because the buildable
-half is a pure engine and the missing half is all content:
+Most of what was missing is now specified — monster stats by class and type,
+the power multiplier, base damage, the defensive choices, the level layout,
+contested stats, rounding, the names. **All of it is written down in
+[adventure-game-design.md](adventure-game-design.md)**, in the deviations
+section, because rules belong there and only what is OPEN belongs here.
 
-**Specified, buildable today**
-- Actions reset to maximum at the start of each round.
-- Whose action it is: `player_actions / (player_actions + monster_actions)`,
-  rolled per action; if it is not the player's, it is a monster's. The chosen
-  side's remaining count drops by one.
-- The round ends when every action has been spent → back to the round-start
-  tactical menu.
-- Combat ends when the player is defeated (→ game over) or every monster is
-  (→ the loot menu).
-- A player action offers offensive choices; a monster action offers the
-  player's reactive ones. Every action in the round is one ring choice.
-- The player's action count is `2 + Agility/2`, already derived.
+Questions 22-28 and 30-34 are answered by that section. Numbers are kept
+rather than reused, since the project cites them:
 
-**Missing, and each blocks a specific part of it**
-22. **A monster's action count.** It is the denominator of the turn-order
-    roll, so the loop cannot run without it. The plan says a monster's CLASS
-    determines "health and damage modifiers, special actions, number of
-    actions and loot" and gives no numbers for any of them, nor a base for
-    the modifiers to modify.
-23. **Monster health and damage, and how they scale per level.** The plan
-    says monsters grow stronger each level and does not say by how much. (The
-    deleted plan had `10 · factor^level` with per-difficulty factors, but
-    difficulty presets are not in the current plan at all.)
-24. **Player base damage.** The multiplier is specified; what it multiplies
-    is not.
-25. **Which defensive choices appear, and how often.** "The likelihood of a
-    choice appearing is calculated based on the stats" — which stats, and by
-    what function. Only Dodge exists as a named choice.
-26. **What the bonus on a defensive stat check is.** "On a choice, depending
-    on a stat check, a bonus may become available" names neither.
-27. **How long an effect lasts.** Effects carry over into the next round;
-    Stomp stuns for `-1 monster action`, Taunt lasts "the rest of the round",
-    Suggest forces "the next action". There is no duration model to hold any
-    of them.
-28. **Encounters per level**, which the plan calls "a predetermined number".
+22-24 monster actions / health / damage — **answered**.
+25 which defensive choices appear — **answered** (dodge, defend, flee, take
+the hit; dodge gated on the contested Agility check).
+26 the bonus on a defensive stat check — **answered by 25, in effect**: the
+plan's "on a choice, depending on a stat check, a bonus may become available"
+is the dodge rule. Nothing else is pending under it.
+27 effect duration — **answered**: there is no duration model. "The rest of
+the round" means until every action point is spent, and Stomp simply reduces
+the current monster action pool.
+28 encounters per level — **answered**: ten, with mini bosses at 5 and 9 and
+the boss at 10.
+30 `stat / unlock level` rounding — **answered**: down, everywhere.
+31 naming — **answered**: Special Encounter, Charisma Actions, Region.
+32 where a level ends — **answered**: at the boss, encounter 10.
+33 the narration format — **accepted**, to be adopted.
+34 armor — **accepted** as a real extension, and now placed: it applies on
+Defend and nowhere else.
 
-**Contradictions inside the plan itself**
-29. **Charisma's failure formula cannot be right as written.**
+29 is NOT answered — see below.
+
+## Still open, and each one blocks something
+
+29. **Charisma's failure formula still cannot be right.** The contested-stat
+    rule changes which Charisma value goes in; it does not touch the defect.
     `Tier × uses this combat / Charisma` is ZERO on the first use of any
-    tier, so a Charisma 1 character's first Command (tier 6) never fails; it
-    is unbounded above 1; and it divides by zero at Charisma 0.
-30. **Special-attack uses `stat / unlock level` is not a whole number.**
-    Might 5 with Haymaker (unlock 2) is 2.5 uses. No rounding rule.
-31. **Naming.** The gameplay loop calls the third encounter kind a "Special
-    encounter"; the Encounters section calls it a "Chance Encounter". The
-    Charisma Actions section labels its own list a "Spell-List". Separately,
-    the code calls the level's opening choice a REGION (caves, foothills,
-    island), the plan calls Go Exploring's destinations AREAS (swamp, forest,
-    plains, mountains), and a Road was named in conversation. Three words,
-    and at least two distinct concepts.
-32. **Where a level ends.** The plan says a level ends in a BOSS with
-    minibosses on the way; it was described in conversation as ending at the
-    mini boss.
+    tier, so a first Command (tier 6) never fails at any Charisma. Contesting
+    it makes the second half worse rather than better: the divisor becomes
+    `charisma − enemy intellect`, which is zero or negative whenever the
+    monster is the smarter one.
 
-**Specified in the plan and absent from the code, unrelated to combat**
-33. **The narration format.** `**[action taken]:** *Description*`, with any
-    numbers bold-italic. Narration currently renders as plain text.
-34. **Armor is in the code and in NO version of the plan.** Two pools, decay
-    on absorb, a luck-based survival chance. It reaches the tab bar and has
-    a tuning constant marked provisional. Either it predates the plan or it
-    came from a conversation, but nothing written says what it is for.
+35. **The power multiplier cannot apply to the CHANCE-shaped derived stats.**
+    `factor^level` on a magnitude (hit points, damage) is exactly right. On
+    `dodgeChance`, `hitChance` or `critChance` it saturates: at normal 1.05,
+    a monster's 50% dodge is 81% by level 10 and pinned at 100% by level 15,
+    so monsters stop being hittable rather than getting stronger. Which
+    derived values the multiplier touches has to be named. The likely answer
+    is magnitudes only — hit points, damage, and perhaps the action count.
+
+36. **Contested stats change the SHAPE of a derived stat.** `deriveStats`
+    maps one stat block to one `DerivedStats`, and every consumer assumes
+    that. Under the counter rule a chance is a function of TWO blocks and
+    cannot be resolved until an opponent is known, so `DerivedStats` splits
+    in two: values that stand alone (hit points, encounter choices, offer
+    choices, action count) and CONTESTED chances resolved at the moment of a
+    check. This is the structural change the round loop would otherwise be
+    built on top of, so it comes first.
+
+37. **Is the damage multiplier contested?** Might is countered by Might, but
+    the multiplier is not a check — it is a coefficient. If it is contested,
+    Might-vs-Might matters twice; if it is not, Might's counter never comes
+    up in combat at all.
+
+38. **`level` or `level − 1` in `factor^level`.** At level 1 the multiplier is
+    already 1.05 rather than 1. The old plan had the same ambiguity and it
+    compounds: at insane 1.2 over ten levels the difference is a factor of
+    1.2.
+
+39. **"Difficulty Rating" now means two things.** In the plan it is the number
+    added to a D6 in a stat check (`model/checks.ts`). In the power
+    multiplier it means the difficulty preset — easy, normal, hard, insane.
+    One of them needs a different word before either is built on.
+
+40. **Nothing chooses a difficulty.** The multiplier depends on a preset that
+    is not stored, not presented, and has no default written down beyond
+    "normal" appearing first in the list. (Was question 17.)
+
+41. **How many monsters is a Group?** Type Group is `−1` to base stats and
+    "multiple monsters"; the count is not given. It also decides whether the
+    turn-order denominator sums several monsters' action pools, which the
+    formula implies but has never been stated for more than one.
+
+42. **Which classes can a monster be?** The plan lists Fighter, Mage and
+    Thief. The player origins are Warrior, Thief, Mage and Bard, and their
+    bases are what monsters borrow — so Bard's is either a fourth monster
+    class or unused. A charisma-shaped monster is not idle: Talk is one of
+    the plan's own monster actions.
+
+43. **What is "the best outcome" for a defending enemy?** Dodge always beats
+    the rest when it is offered, and Defend beats Take the hit — but whether
+    an enemy ever chooses Flee, and on what condition, is an AI policy the
+    phrase does not settle. Enemies that never flee make Terrify meaningless.
+
+44. **What a successful Flee yields.** The encounter ends; whether it pays
+    loot, fame or nothing is unstated, as is whether the level's encounter
+    count still advances.
+
+45. **Fame, experience and gold rates.** What a regular monster, a mini boss
+    and a boss are each worth. (Was question 7, still the last economic gap.)

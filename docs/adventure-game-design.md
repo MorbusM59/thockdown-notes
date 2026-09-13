@@ -216,3 +216,104 @@ text is left as authored; this is what has moved.
   differently, so never their sum.
 - **Gold and motes left the tab bar** for the stats row below the editor,
   beside the item and trait pills they buy.
+
+### Monsters
+
+- A monster has **base stats**, from its CLASS, on the same scale the player's
+  origins use. The player origins' bases stand in for now.
+- Its **type** shifts every base stat by a flat amount, and type is orthogonal
+  to class — a mini boss or a boss is a random class carrying that type:
+
+  | type | base stats |
+  | --- | --- |
+  | Group | −1 |
+  | Regular | 0 |
+  | Elite | +1 |
+  | Mini boss | +2 |
+  | Boss | +3 |
+
+- Derived stats come off those base stats the way the player's do, and are
+  then scaled by a **power multiplier of `factor^level`** — easy 1.02, normal
+  1.05, hard 1.1, insane 1.2.
+- The player's edge is meant to come from ITEMS AND TRAITS and from
+  leveraging them well, not from out-statting a monster.
+
+### Damage
+
+- The damage multiplier applies to a **universal base damage of 10**, both
+  sides. One parameter, expected to be tuned.
+
+### Contested stats
+
+Every stat check is made RELATIVE to the opposing stat, not against a fixed
+number. Each stat has a counter:
+
+| stat | countered by |
+| --- | --- |
+| Might | Might |
+| Agility | Agility |
+| Perception | Luck |
+| Luck | Perception |
+| Charisma | Intellect |
+| Intellect | Charisma |
+
+The **delta** (mine − theirs) is added to my side of the check. A player with
+Agility 3 dodging a monster with Agility 5 has `50% + 5%×(3−5)` = 40%.
+
+### A combat round
+
+- Every party has a number of actions; at the start of a round they are all
+  restored to maximum.
+- Whose action it is: `player_actions / (player_actions + monster_actions)`,
+  rolled per action. If it is not the player's, it is a monster's. The chosen
+  side's remaining count drops by one.
+- **Every action in the round is one ring choice for the player**, whichever
+  side owns it: on the player's action the ring offers offensive choices, on
+  a monster's it offers the player's reactive ones.
+- The round ends when every action has been spent → the round-start tactical
+  menu. Combat ends when the player is defeated (→ game over) or every
+  monster is (→ loot).
+- "For the rest of the round" means until every action point has been spent.
+  Stomp reduces the CURRENT monster action pool by 1 — there is no duration
+  model behind it.
+
+### Offensive actions
+
+Attack only, for now.
+
+Every player attack draws a **hidden defensive choice from the enemy**, from
+the same set the player picks from. The enemy takes the best outcome.
+
+### Defensive choices
+
+Offered to the player when a monster acts.
+
+- **Dodge** — appears only if the contested Agility check passes, so it is
+  offered with probability `50% + 5%×(agility delta)`. Taken, the attack does
+  not land.
+- **Defend** — always offered. Damage is reduced by armor, and the armor
+  decay check applies. The attack may still miss.
+- **Flee** — no armor reduction, and the attack may still miss. Ends the
+  encounter unless the enemy passes a contested Agility check to pursue,
+  `50% + 5%×(agility delta)`.
+- **Take the hit** — the enemy's chance to miss drops to zero. Damage lands
+  in full, with no armor check.
+
+**Armor** (an extension to the plan, not in its body) lives here: two pools,
+`fromItems` which decays as it absorbs and `natural` from traits which decay
+cannot touch. It applies on **Defend** and nowhere else.
+
+### A level's layout
+
+Ten encounters. Encounters 5 and 9 are mini bosses; encounter 10 is the boss.
+The rest are regular — Go Hunting, Go Exploring or a Special Encounter.
+
+### Names
+
+"Special Encounter", "Charisma Actions", and **Region** for the level's
+opening choice. Go Exploring's destinations are areas within a level.
+
+### Rounding
+
+Down, wherever a rule produces a fraction — including a special attack's
+`stat / unlock level` uses.
