@@ -1,0 +1,129 @@
+// What you found, and then what you learned.
+//
+// One screen per loot the escalating check bought (`model/rewards.ts`), each
+// a choice between a piece of gold and an item. The MOTES are not part of
+// that choice and are not shown alongside it: they land once, on the way
+// back to encounter selection, so the sequence reads as two things rather
+// than one crowded one.
+//
+// A monster that RAN pays the gold branch with no choice offered -- it was
+// beaten, it just was not searched.
+
+import { nextSample } from '../core/rng'
+import type { JsonObject } from '../core/json'
+import type { StageContext, StageModule } from '../core/stage'
+import type { Effect } from '../model/effects'
+import { describeModifier } from '../model/modifiers'
+import { holdingCounts } from '../model/gameState'
+import { GOLD_PER_LOOT_SCREEN } from '../model/rewards'
+import { encounterIndexOf } from './levelProgress'
+import { ENCOUNTER_SELECT_STAGE_ID, LOOT_STAGE_ID } from './ids'
+
+
+const GOLD_CHOICE = 'loot:gold'
+
+function rollItemOffers(context: StageContext, rng: number) {
+  const pool = context.content.items
+  if (pool.length === 0) return { offerIds: [] as string[], rng }
+  const sample = nextSample(rng, pool, context.profile?.derived.offerChoices ?? 2)
+  return { offerIds: sample.value.map((item) => item.id), rng: sample.rng }
+}
+
+function readNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.floor(value) : fallback
+}
+
+export const lootStage: StageModule = {
+  id: LOOT_STAGE_ID,
+  title: 'Spoils',
+
+  enter: (input, context, rng) => {
+    const offersLoot = input.offersLoot !== false
+    const rolled = offersLoot ? rollItemOffers(context, rng) : { offerIds: [] as string[], rng }
+    return {
+      state: {
+        encounterIndex: encounterIndexOf(input.encounterIndex),
+        screensLeft: Math.max(1, readNumber(input.screensLeft, 1)),
+        motes: Math.max(0, readNumber(input.motes, 1)),
+        offersLoot,
+        offerIds: rolled.offerIds,
+      } satisfies JsonObject,
+      narration: offersLoot ? 'You go through what is left behind.' : 'It is gone, and it left little.',
+      rng: rolled.rng,
+    }
+  },
+
+  present: (state, context) => {
+    const counts = holdingCounts(context.held)
+    const offerIds = Array.isArray(state.offerIds) ? state.offerIds : []
+    const screensLeft = readNumber(state.screensLeft, 1)
+    return {
+      screenKey: `loot:${screensLeft}`,
+      choices: [
+        {
+          id: GOLD_CHOICE,
+          label: `${GOLD_PER_LOOT_SCREEN} gold`,
+          icon: 'fa-solid fa-coins',
+        },
+        ...offerIds.flatMap((id) => {
+          const item = typeof id === 'string' ? context.catalog.get(id) : undefined
+          if (!item) return []
+          return [{
+            id: `loot:item:${item.id}`,
+            label: item.name,
+            icon: item.icon,
+            detail: { title: item.name, lines: describeModifier(item, counts) },
+          }]
+        }),
+      ],
+    }
+  },
+
+  resolve: (state, choiceId, context, rng) => {
+    const screensLeft = readNumber(state.screensLeft, 1)
+    const encounterIndex = encounterIndexOf(state.encounterIndex)
+    const motes = Math.max(0, readNumber(state.motes, 1))
+
+    const taken: Effect[] = []
+    let label = ''
+    if (choiceId === GOLD_CHOICE) {
+      taken.push({ kind: 'grantGold', units: GOLD_PER_LOOT_SCREEN })
+      label = `${GOLD_PER_LOOT_SCREEN} gold`
+    } else if (choiceId.startsWith('loot:item:')) {
+      const item = context.catalog.get(choiceId.replace('loot:item:', ''))
+      if (!item) return { kind: 'stay', state, rng }
+      taken.push({ kind: 'acquireModifier', modifierKind: 'item', modifierId: item.id })
+      label = item.name
+    } else {
+      return { kind: 'stay', state, rng }
+    }
+
+    if (screensLeft > 1) {
+      const rolled = state.offersLoot !== false ? rollItemOffers(context, rng) : { offerIds: [] as string[], rng }
+      return {
+        kind: 'stay',
+        state: { ...state, screensLeft: screensLeft - 1, offerIds: rolled.offerIds },
+        // The pick is applied HERE, not held until the last screen. Holding
+        // them would lose every intermediate one, and would also mean the
+        // next screen's item offers rolled against a Luck the player had
+        // already earned but not yet been given.
+        effects: taken,
+        narration: `**${label}:** *And there is more.*`,
+        rng: rolled.rng,
+      }
+    }
+
+    // Every screen has been through: the motes land now, together, on the way
+    // out. See the module comment for why they are not on the loot screens.
+    return {
+      kind: 'replace',
+      stageId: ENCOUNTER_SELECT_STAGE_ID,
+      input: { encounterIndex: encounterIndex + 1 },
+      effects: [...taken, { kind: 'grantExperience', units: motes }],
+      narration: `**${label}:** *You are **${motes}** mote${motes === 1 ? '' : 's'} the wiser.*`,
+      rng,
+    }
+  },
+}
+
+export { LOOT_STAGE_ID }

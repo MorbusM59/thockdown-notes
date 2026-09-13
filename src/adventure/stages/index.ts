@@ -9,6 +9,9 @@ import { welcomeStage, WELCOME_STAGE_ID } from './welcome'
 import { characterCreationStage } from './characterCreation'
 import { regionSelectStage } from './regionSelect'
 import { encounterSelectStage } from './encounterSelect'
+import { huntStage } from './hunt'
+import { combatStage } from './combat'
+import { lootStage } from './loot'
 import { underConstructionStage } from './underConstruction'
 
 export const STAGES = registerStages([
@@ -16,6 +19,9 @@ export const STAGES = registerStages([
   characterCreationStage,
   regionSelectStage,
   encounterSelectStage,
+  huntStage,
+  combatStage,
+  lootStage,
   underConstructionStage,
 ])
 

@@ -6,8 +6,8 @@
 // state of it, and visible as such rather than dressed up.
 
 import type { StageModule } from '../core/stage'
+import { REGION_SELECT_STAGE_ID } from './ids'
 
-export const REGION_SELECT_STAGE_ID = 'regionSelect'
 
 export const regionSelectStage: StageModule = {
   id: REGION_SELECT_STAGE_ID,
@@ -42,3 +42,5 @@ export const regionSelectStage: StageModule = {
     }
   },
 }
+
+export { REGION_SELECT_STAGE_ID }

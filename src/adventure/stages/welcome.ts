@@ -18,8 +18,8 @@
 
 import type { StageModule } from '../core/stage'
 import { resumableGame } from '../model/gameState'
+import { WELCOME_STAGE_ID } from './ids'
 
-export const WELCOME_STAGE_ID = 'welcome'
 
 const CHOICE = {
   start: 'welcome:start',
@@ -111,3 +111,5 @@ export const welcomeStage: StageModule = {
     return { kind: 'stay', state, rng }
   },
 }
+
+export { WELCOME_STAGE_ID }

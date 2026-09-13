@@ -33,6 +33,9 @@ export const MONSTER_CLASS_IDS: readonly MonsterClassId[] = ['warrior', 'thief',
 
 export interface MonsterClass {
   id: MonsterClassId
+  /** What it is called when the ring has to name it. */
+  name: string
+  icon: string
   statDeltas: Partial<Record<StatKey, number>>
 }
 

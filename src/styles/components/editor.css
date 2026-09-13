@@ -102,6 +102,19 @@
    filling the bar; a pill in a scroller must NOT truncate, because the
    scroll is what reaches the rest of it. `nowrap` stays: the bar is one
    line high and a second would push the editor down. */
+.escape-menu-narration-text {
+  white-space: pre-wrap;
+}
+
+.escape-menu-narration-strong {
+  font-weight: 600;
+  color: var(--color-text-100);
+}
+
+.escape-menu-narration-em {
+  font-style: italic;
+}
+
 .escape-menu-narration {
   white-space: nowrap;
   font-size: calc(12px * var(--ui-font-scale));

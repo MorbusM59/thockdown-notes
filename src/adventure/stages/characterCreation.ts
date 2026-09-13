@@ -16,8 +16,8 @@ import type { StageContext, StageModule } from '../core/stage'
 import { describeModifier, type Modifier } from '../model/modifiers'
 import { holdingCounts } from '../model/gameState'
 import { STAT_KEYS, STAT_LABELS } from '../model/stats'
+import { CHARACTER_CREATION_STAGE_ID, REGION_SELECT_STAGE_ID } from './ids'
 
-export const CHARACTER_CREATION_STAGE_ID = 'characterCreation'
 
 type Step = 'origin' | 'trait' | 'item'
 
@@ -141,9 +141,21 @@ export const characterCreationStage: StageModule = {
 
     return {
       kind: 'replace',
-      stageId: 'regionSelect',
-      effects: [acquire],
+      stageId: REGION_SELECT_STAGE_ID,
+      effects: [
+        acquire,
+        // A run SETS OUT WHOLE. The record's hit points are derived once, at
+        // creation, from a stat block that is still all zeroes -- so the
+        // fifty they start at is the floor of `50 + 15 x Might` with no Might
+        // yet, and every point of it the origin and the opening item grant
+        // raises the MAXIMUM without raising the current. A warrior walked
+        // into their first fight at 50 of 80 until this. Clamped to the max
+        // on apply, so the number here only has to be large.
+        { kind: 'adjustHitPoints', amount: Number.MAX_SAFE_INTEGER },
+      ],
       rng,
     }
   },
 }
+
+export { CHARACTER_CREATION_STAGE_ID }

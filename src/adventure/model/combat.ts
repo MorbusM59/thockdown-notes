@@ -159,7 +159,12 @@ export function resolveExchange(input: ExchangeInput): { blow: Blow; armor: Armo
 
   const critRoll = nextChance(rng, resolveChance(CRIT_CHANCE, input.attackerStats, input.defenderStats))
   rng = critRoll.rng
-  const raw = input.attackerDamage * (critRoll.value ? 2 : 1)
+  // WHOLE, once, here. The power multiplier makes a monster's damage
+  // fractional (8.4 at level one, 16.8 on a crit), and leaving it that way
+  // meant the record lost 16.8 hit points while the narration said 17. Hit
+  // points are a count; rounding at the blow is the only place the two can
+  // be made to agree.
+  const raw = Math.round(input.attackerDamage * (critRoll.value ? 2 : 1))
 
   // Armor is Defend's alone. Flee and Take the hit both say so explicitly,
   // and Dodge never reaches here. The pool comes back UNTOUCHED rather than

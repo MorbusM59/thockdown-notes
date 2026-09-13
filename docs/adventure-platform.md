@@ -555,11 +555,41 @@ exchange, the round's exits and what each one pays.
 (`model/rewards.ts`), the species table (`content/`) and the offer generator
 (`model/encounterOffers.ts`). See the design plan.
 
-52. **Nothing WIRES any of this yet.** There is a round engine, a monster
+52 is **BUILT**: the encounter chain runs end to end —
+`encounterSelect → hunt → combat → loot → encounterSelect(+1)`, with the boss
+placed at 5, 9 and 10 and the level advancing after ten.
+
+55. **THE FIRST FIGHT IS UNWINNABLE at current tuning**, which the walk test
+    found rather than a reading did. A level-1 warrior has 80 hit points, two
+    actions a round and does 8 a blow at a 50% chance to hit; a Large Boar has
+    84 hit points, three actions and does 8 (17 on a crit). The player needs
+    about twenty landed blows and survives about ten. Nothing is wrong with
+    the rules as specified — this is the tuning pass, and it wants
+    playthroughs rather than an argument.
+
+56. **A monster's action count comes straight off Agility, uncapped.** A
+    three-action monster against a two-action player means the player answers
+    more often than they act, which is the action economy working; it is also
+    the single biggest lever on difficulty and nothing bounds it.
+
+57. **Nothing WIRES the old questions yet** (was 52). There is a round engine, a monster
     builder, a reward model and an offer generator, and no stage that puts a
     player in front of them: no combat stage, no loot stage, no level that
     counts to ten. That is the next build, and it needs nothing new decided.
 
-53. **Species modifiers are not capped.** A Beast at −3 Intellect on a group's
+58. **Species modifiers are not capped.** A Beast at −3 Intellect on a group's
     −1 is −4 before class. Nothing says a monster's stats have a floor (see
     46) and nothing yet says they have a ceiling either.
+
+59. **`fa-swords` shipped as an empty box** before a test caught it — it is
+    Font Awesome PRO, like `fa-lips` before it. A Pro icon does not fail
+    loudly; it renders as a blank square that reads as a rendering fault.
+    `content/icons.contract.test.ts` now parses both the content and the
+    STAGE SOURCES (where the broken one was written inline) against the free
+    set that actually ships. Nothing is open here — it is recorded because it
+    is the second time.
+
+60. **Narration spans had to become ONE flex item.** `.tag-pill` is
+    `inline-flex`, so a span per formatted run made every run a flex ITEM,
+    and a flex item whose entire content is a space collapses to nothing —
+    which ate the gap between the bold action and the italic outcome.

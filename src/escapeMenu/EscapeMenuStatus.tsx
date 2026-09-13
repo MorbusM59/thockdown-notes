@@ -1,4 +1,5 @@
 import { usePillStripScroll } from '../shared/usePillStripScroll'
+import { parseNarration } from './narrationMarkup'
 import type { EscapeMenuCellDetail, EscapeMenuChromeMeter, EscapeMenuChromePill,
   EscapeMenuChromeToggle, EscapeMenuModeChrome } from './escapeMenuContract'
 
@@ -109,7 +110,28 @@ export function EscapeMenuChromeBarRow({ status, detail }: {
               onScroll={strip.onScroll}
               onWheel={strip.onWheel}
             >
-              <span className="tag-pill escape-menu-narration is-inert">{status.headline}</span>
+              {/* The action bold, the outcome italic, any figure both --
+                  see narrationMarkup.ts. Three marks, not Markdown: this is
+                  a pill on a one-line bar. */}
+              <span className="tag-pill escape-menu-narration is-inert">
+                {/* ONE flex item, not one per span. `.tag-pill` is
+                    inline-flex, so a span per run makes every run a flex
+                    ITEM -- and a flex item whose whole content is a space
+                    collapses to nothing, which ate the gap between the bold
+                    action and the italic outcome. Inside a single inline
+                    child they are ordinary inline runs and the spaces
+                    between them are text. */}
+                <span className="escape-menu-narration-text">
+                  {parseNarration(status.headline).map((span, index) => (
+                    <span
+                      key={`${index}:${span.text}`}
+                      className={`${span.bold ? 'escape-menu-narration-strong' : ''}${span.italic ? ' escape-menu-narration-em' : ''}`.trim() || undefined}
+                    >
+                      {span.text}
+                    </span>
+                  ))}
+                </span>
+              </span>
               {/* What the cell the ring is sitting on would do. DASHED,
                   because it is the one thing on this bar that has not
                   happened: everything else here is the state of the run, and

@@ -262,7 +262,18 @@ export function applyEffect(
     // stop being a pure function of its inputs, and the game would stop
     // being replayable. See core/rng.ts.
     const seed = createSeed(nowMs)
-    const game = createGame(`game-${nowMs.toString(36)}-${seed.toString(36)}`, seed, nowMs)
+    // The id is built from the CLOCK, so two games started in the same
+    // millisecond were handed the same one -- the save then held two rows
+    // with one id and `activeGame` returned the older, dead one, which is a
+    // run that begins at zero hit points and ends on its first blow. Rare by
+    // hand and instant in a test that passes a fixed clock. Disambiguated
+    // against what the save already holds rather than made likelier to be
+    // unique.
+    let id = `game-${nowMs.toString(36)}-${seed.toString(36)}`
+    for (let suffix = 2; save.games.some((existing) => existing.id === id); suffix += 1) {
+      id = `game-${nowMs.toString(36)}-${seed.toString(36)}-${suffix}`
+    }
+    const game = createGame(id, seed, nowMs)
     return {
       ...save,
       games: [...save.games, game],

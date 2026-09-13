@@ -102,9 +102,9 @@ const ITEMS: readonly Modifier[] = [
  * scale in the game rather than two that have to be kept comparable.
  */
 const MONSTER_CLASSES: readonly MonsterClass[] = [
-  { id: 'warrior', statDeltas: { might: 2, agility: 1 } },
-  { id: 'thief', statDeltas: { agility: 2, luck: 1 } },
-  { id: 'mage', statDeltas: { intellect: 2, perception: 1 } },
+  { id: 'warrior', name: 'Warrior', icon: 'fa-solid fa-hand-fist', statDeltas: { might: 2, agility: 1 } },
+  { id: 'thief', name: 'Thief', icon: 'fa-solid fa-mask', statDeltas: { agility: 2, luck: 1 } },
+  { id: 'mage', name: 'Mage', icon: 'fa-solid fa-wand-sparkles', statDeltas: { intellect: 2, perception: 1 } },
 ]
 
 /**

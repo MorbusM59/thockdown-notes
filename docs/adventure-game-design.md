@@ -409,6 +409,21 @@ name and the class together.
 | Orc | Pack of Orcs *(warrior)* | Orc *(any)* | Orc Brute *(warrior)* | Orc Squad Leader *(mage)* | Orc Demon *(warrior)* |
 | Beast | Pack of Wolves *(thief)* / Pack of Boars *(warrior)* | Large Wolf *(thief)* / Large Boar *(warrior)* | Dire Wolf *(warrior)* / Enraged Boar *(warrior)* | Dire Bear *(warrior)* / Shadow Stag *(mage)* | Hulking Grizzly *(warrior)* |
 
+### How narration is written
+
+`**[what you did]:** *what happened*`, with any number in the description
+**bold and italic** — which is `**8**` INSIDE the italic run, nesting, rather
+than a mark of its own. Two marks, and deliberately not Markdown: this text
+sits in a pill on a bar one line high, so a heading or a list would have
+nowhere to be. An unmatched mark stays a literal asterisk.
+
+### A run sets out whole
+
+A new game's hit points are derived before any stat exists, so they start at
+the floor of `50 + 15 × Might` with no Might. Character creation then raises
+the maximum without raising the current, which put a warrior into their first
+fight at 50 of 80. Creation now ends by restoring hit points to full.
+
 ### Names
 
 "Special Encounter", "Charisma Actions", and **Region** for the level's
