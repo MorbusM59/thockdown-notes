@@ -56,11 +56,28 @@ export interface StageContext {
   held: readonly Modifier[]
 }
 
+/**
+ * What a stage says the bar should show, NEWEST FIRST.
+ *
+ * A bare string is one entry and the ordinary case. A LIST is a stage that
+ * accumulates -- a combat round shows every action in it, newest at the head
+ * -- and it hands back the WHOLE list every time rather than an instruction
+ * to append.
+ *
+ * That is deliberate and it is what keeps the director free of narration
+ * policy: appending would make the director own a log, and owning a log means
+ * owning the question of when it is cleared, which is a rule about rounds
+ * that only the fight knows. A stage that accumulates keeps its own entries in
+ * its own state, where they are already persisted with everything else it
+ * remembers, and cuts them back when its own rules say the sequence is over.
+ */
+export type Narration = string | readonly string[]
+
 /** What a stage hands back when it is entered. */
 export interface StageEntry {
   state: JsonObject
-  /** What just happened, in words. Shown above the first screen this stage presents. */
-  narration?: string
+  /** What just happened. Shown on the chapter bar above the first screen this stage presents. */
+  narration?: Narration
   effects?: readonly Effect[]
   rng: RngState
 }
@@ -68,17 +85,17 @@ export interface StageEntry {
 /** What a stage hands back when it has resolved a choice. */
 export type Transition =
   /** Stay in this stage with new state -- the next screen is this stage's too. */
-  | { kind: 'stay'; state: JsonObject; narration?: string; effects?: readonly Effect[]; rng: RngState }
+  | { kind: 'stay'; state: JsonObject; narration?: Narration; effects?: readonly Effect[]; rng: RngState }
   /** Put another stage on top of this one. This stage's state is kept, untouched, underneath. */
-  | { kind: 'push'; stageId: string; input?: JsonObject; narration?: string; effects?: readonly Effect[]; rng: RngState }
+  | { kind: 'push'; stageId: string; input?: JsonObject; narration?: Narration; effects?: readonly Effect[]; rng: RngState }
   /** Finish, and give the screen back to whatever was underneath. */
-  | { kind: 'pop'; narration?: string; effects?: readonly Effect[]; rng: RngState }
+  | { kind: 'pop'; narration?: Narration; effects?: readonly Effect[]; rng: RngState }
   /** Finish, and hand off to another stage at the same depth. */
   | {
       kind: 'replace'
       stageId: string
       input?: JsonObject
-      narration?: string
+      narration?: Narration
       effects?: readonly Effect[]
       rng: RngState
     }
@@ -92,7 +109,7 @@ export type Transition =
       kind: 'reset'
       stageId: string
       input?: JsonObject
-      narration?: string
+      narration?: Narration
       effects?: readonly Effect[]
       rng: RngState
     }

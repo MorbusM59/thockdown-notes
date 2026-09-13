@@ -9,7 +9,7 @@
 // assembles, not as anything a screen knows about.
 //
 // Where each part lands is fixed (see the design document):
-//   - `narration` -> the chapter bar, below the editor.
+//   - `narration` -> the chapter bar, below the editor, newest entry first.
 //   - the stats readout -> the tab bar, above it.
 //   - a choice's label -> the ring's centre, while that choice is focused.
 //   - a choice's `detail` -> the tab bar, replacing the stats readout while
@@ -42,8 +42,16 @@ export interface Screen {
   stageId: string
   /** Changes when this is a new question, so the ring resets its dial. */
   screenKey: string
-  /** The result of the last choice, and the frame for this one. */
-  narration: string
+  /**
+   * What the bar is showing, NEWEST FIRST -- one pill per entry.
+   *
+   * Usually one: the result of the last choice and the frame for this one.
+   * A stage with a sequence to show (a combat round, action by action) hands
+   * back the whole of it, and the entries older than the newest are the ones
+   * that scroll rightward under the bar's fade. See core/stage.ts on why the
+   * accumulation is the STAGE's and not the director's.
+   */
+  narration: readonly string[]
   choices: Choice[]
 }
 

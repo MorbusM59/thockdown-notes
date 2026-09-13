@@ -115,6 +115,15 @@
   font-style: italic;
 }
 
+/* An icon standing in for a word (narrationMarkup.ts). In a combat pill it
+   IS the sentence -- who, what, how much, to whom -- so it takes the strong
+   colour the bold run does rather than reading as an ornament beside the
+   text, and no size of its own: at the pill's own size it sits on the same
+   baseline as the figures next to it. */
+.escape-menu-narration-icon {
+  color: var(--color-text-100);
+}
+
 .escape-menu-narration {
   white-space: nowrap;
   font-size: calc(12px * var(--ui-font-scale));

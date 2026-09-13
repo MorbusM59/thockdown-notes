@@ -6,6 +6,13 @@
 // choice the player makes, their own offensively and the monster's
 // reactively, so the stage must come to rest between each of them.
 //
+// THE ROUND'S LOG IS THIS STAGE'S OWN. Every action prepends a pill to it
+// (combatLog.ts) and the next round opens by cutting it back to a single
+// status pill, so the bar carries exactly one round of history, newest at the
+// head. It lives in stage state rather than in the director because WHEN a
+// log is spent is a rule about rounds, and the director holds no rules --
+// see core/stage.ts on why narration is handed back whole instead of appended.
+//
 // TWO THINGS ARE ROLLED AND STORED, never rolled while presenting: whose
 // action it is, and whether Dodge is on the table. `present` gets no random
 // state (see core/stage.ts), and a choice that appeared because a roll had
@@ -17,32 +24,44 @@ import type { StageModule, Transition } from '../core/stage'
 import type { RngState } from '../core/rng'
 import type { StageContext } from '../core/stage'
 import type { Effect } from '../model/effects'
-import { NO_ARMOR, totalArmor } from '../model/armor'
+import { NO_ARMOR } from '../model/armor'
 import {
   beginRound, combatStatus, DEFENCES, defencesOffered, resolveMonsterAttack,
   resolvePlayerAttack, rollActor, rollDodgeOffered, type Defence, type RoundState,
 } from '../model/combat'
 import { rewardFor } from '../model/rewards'
+import { monsterAttackPill, playerAttackPill, statusPill } from './combatLog'
 import type { Monster } from '../model/monsters'
 import { encounterIndexOf } from './levelProgress'
 import { monsterFor, offerFromJson, offerToJson } from './encounter'
 import { COMBAT_STAGE_ID, ENCOUNTER_SELECT_STAGE_ID, LOOT_STAGE_ID, WELCOME_STAGE_ID } from './ids'
 
 
+/**
+ * The four answers, with the SAME glyphs the round's pills use for them: the
+ * cell you pressed and the pill it produced are the one vocabulary, so a
+ * reader learns each mark once. `fa-wind` on Dodge is the clearest case -- it
+ * is "nothing arrives", both as the thing you chose and as the thing that
+ * happened.
+ */
 const DEFENCE_LABELS: Readonly<Record<Defence, { label: string; icon: string }>> = {
-  dodge: { label: 'Dodge', icon: 'fa-solid fa-person-running' },
-  defend: { label: 'Defend', icon: 'fa-solid fa-shield-halved' },
-  flee: { label: 'Flee', icon: 'fa-solid fa-person-walking-arrow-right' },
-  takeTheHit: { label: 'Take the hit', icon: 'fa-solid fa-hand-fist' },
+  dodge: { label: 'Dodge', icon: 'fa-solid fa-wind' },
+  defend: { label: 'Defend', icon: 'fa-solid fa-shield' },
+  flee: { label: 'Flee', icon: 'fa-solid fa-person-running' },
+  takeTheHit: { label: 'Take the hit', icon: 'fa-solid fa-user' },
 }
+
+const ATTACK_ICON = 'fa-solid fa-burst'
 
 interface CombatState extends JsonObject {
   encounterIndex: number
   offer: JsonObject
   round: JsonObject
-  /** Null between rounds, when the tactical menu is up instead. */
+  /** Whose action this is. Null only where there is no profile to roll one for. */
   actor: 'player' | 'monster' | null
   dodgeOffered: boolean
+  /** This round's pills, newest first. Cut back to the status pill each round. */
+  log: string[]
 }
 
 function roundToJson(round: RoundState): JsonObject {
@@ -79,6 +98,7 @@ function readState(state: JsonObject): CombatState {
     round: (typeof state.round === 'object' && state.round !== null && !Array.isArray(state.round) ? state.round : {}) as JsonObject,
     actor: state.actor === 'player' || state.actor === 'monster' ? state.actor : null,
     dodgeOffered: state.dodgeOffered === true,
+    log: Array.isArray(state.log) ? state.log.filter((entry): entry is string => typeof entry === 'string') : [],
   }
 }
 
@@ -126,18 +146,20 @@ function afterAction(
   round: RoundState,
   monster: Monster,
   context: StageContext,
-  narration: string,
+  /** What just happened, as one pill. It goes to the HEAD of the round's log. */
+  entry: string,
   effects: readonly Effect[],
   rng: RngState,
 ): Transition {
   const derived = context.profile?.derived
   const status = derived ? combatStatus(round, monster, derived) : 'roundOver'
+  const log = [entry, ...state.log]
 
   if (status === 'playerDefeated') {
     return {
       kind: 'reset',
       stageId: WELCOME_STAGE_ID,
-      narration: `${narration} You do not get up.`,
+      narration: log,
       effects: [...effects, { kind: 'endGame', reason: 'defeat' }],
       rng,
     }
@@ -150,7 +172,7 @@ function afterAction(
       kind: 'replace',
       stageId: ENCOUNTER_SELECT_STAGE_ID,
       input: { encounterIndex: state.encounterIndex + 1 },
-      narration: `${narration} You do not look back.`,
+      narration: log,
       effects,
       rng,
     }
@@ -172,39 +194,68 @@ function afterAction(
         // no choice at all (see the design plan's payout table).
         offersLoot: status === 'monstersDefeated',
       },
-      narration,
+      narration: log,
       effects,
       rng: reward.rng,
     }
   }
 
-  if (status === 'roundOver') {
-    return {
-      kind: 'stay',
-      state: { ...state, round: roundToJson(round), actor: null, dodgeOffered: false },
-      narration: `${narration} You both draw breath.`,
-      effects,
-      rng,
-    }
-  }
+  // THE ROUND TURNS OVER WITHOUT ASKING. There was a screen here -- one cell,
+  // "Begin combat" -- and it asked nothing: the round's actions are restored
+  // whatever the player answers, so the only thing it could report was that
+  // time had passed, which the status pill now says without spending a press.
+  if (status === 'roundOver') return openRound(state, beginRound(round), monster, context, effects, rng)
 
   const next = armNextAction(round, monster, context, rng)
   return {
     kind: 'stay',
-    state: { ...state, round: roundToJson(round), actor: next.actor, dodgeOffered: next.dodgeOffered },
-    narration,
+    state: { ...state, round: roundToJson(round), actor: next.actor, dodgeOffered: next.dodgeOffered, log },
     effects,
+    narration: log,
     rng: next.rng,
   }
 }
 
-function blowNarration(subject: string, blow: { hit: boolean; crit: boolean; dodged: boolean; damage: number }): string {
-  if (blow.dodged) return `${subject} nothing but air.`
-  if (!blow.hit) return `${subject} wide.`
-  const amount = Math.max(0, Math.round(blow.damage))
-  return blow.crit
-    ? `${subject} clean through for **${amount}**.`
-    : `${subject} home for **${amount}**.`
+/**
+ * A ROUND OPENS: the log is cut back to the status pill and the first action
+ * is armed.
+ *
+ * The one place a round's history is discarded, and the one place the status
+ * pill is written -- entering the fight and turning a round over are the same
+ * event as far as the reader is concerned, so they are the same code.
+ */
+function openRound(
+  state: CombatState,
+  round: RoundState,
+  monster: Monster,
+  context: StageContext,
+  effects: readonly Effect[],
+  rng: RngState,
+): Transition {
+  const opened = beginningOf(state, round, monster, context, rng)
+  return { kind: 'stay', state: opened.state, narration: opened.state.log, effects, rng: opened.rng }
+}
+
+/** The state a round starts in: fresh log, first action armed. Shared by `enter` and `openRound`. */
+function beginningOf(
+  state: CombatState,
+  round: RoundState,
+  monster: Monster,
+  context: StageContext,
+  rng: RngState,
+): { state: CombatState; rng: RngState } {
+  const derived = context.profile?.derived
+  const next = armNextAction(round, monster, context, rng)
+  return {
+    state: {
+      ...state,
+      round: roundToJson(round),
+      actor: next.actor,
+      dodgeOffered: next.dodgeOffered,
+      log: derived ? [statusPill(round, monster, derived)] : [],
+    },
+    rng: next.rng,
+  }
 }
 
 export const combatStage: StageModule = {
@@ -222,21 +273,26 @@ export const combatStage: StageModule = {
       monsterFleeing: false,
       playerFled: false,
     })
-    return {
-      state: {
-        encounterIndex,
-        offer: offer ? offerToJson(offer) : {},
-        round: roundToJson(round),
-        // The tactical menu opens the fight: actions are set to maximum when
-        // it is answered, not before.
-        actor: null,
-        dodgeOffered: false,
-      } satisfies CombatState,
-      narration: monster
-        ? `**${offer?.name}.** *It has seen you. ${monster.maxHitPoints} hit points, ${Math.round(monster.damage)} a blow.*`
-        : 'Something is here, and the game cannot say what.',
-      rng,
+    const base: CombatState = {
+      encounterIndex,
+      offer: offer ? offerToJson(offer) : {},
+      round: roundToJson(round),
+      actor: null,
+      dodgeOffered: false,
+      log: [],
     }
+    if (!monster) {
+      return { state: base, narration: 'Something is here, and the game cannot say what.', rng }
+    }
+
+    // The first round opens exactly as every later one does, with the enemy's
+    // NAME behind the status pill -- the one thing in the fight that is worth
+    // words, and the only entry that is not a pill of glyphs. It is dropped
+    // with the rest of the round's log when the second round opens, by which
+    // point the reader knows what they are fighting.
+    const opened = beginningOf(base, round, monster, context, rng)
+    const log = [...opened.state.log, `**${offer?.name}.** *It has seen you.*`]
+    return { state: { ...opened.state, log }, narration: log, rng: opened.rng }
   },
 
   present: (raw, context) => {
@@ -245,38 +301,27 @@ export const combatStage: StageModule = {
     const monster = offer ? monsterFor(offer, context) : null
     const round = roundFromJson(state.round)
 
-    if (!monster) {
+    // No monster, or nobody to roll an action for: the fight cannot proceed
+    // and says so with the one cell that gets the player out of it.
+    if (!monster || state.actor === null) {
       return { screenKey: 'combat:void', choices: [{ id: 'combat:flee', label: 'Withdraw', icon: 'fa-solid fa-rotate-left' }] }
-    }
-
-    if (state.actor === null) {
-      return {
-        screenKey: `combat:tactical:${round.monsterDamageTaken}`,
-        choices: [{
-          id: 'combat:begin',
-          label: 'Begin combat',
-          icon: 'fa-solid fa-khanda',
-          detail: {
-            title: offer?.name ?? 'The enemy',
-            lines: [
-              `${Math.max(0, monster.maxHitPoints - round.monsterDamageTaken)} hit points left`,
-              `${monster.maxActions} action${monster.maxActions === 1 ? '' : 's'} a round`,
-              `You: ${round.playerHitPoints} hit points, ${totalArmor(round.playerArmor)} armor`,
-            ],
-          },
-        }],
-      }
     }
 
     if (state.actor === 'player') {
       return {
         screenKey: `combat:mine:${round.playerActionsSpent}:${round.monsterActionsSpent}`,
-        choices: [{ id: 'combat:attack', label: 'Attack', icon: 'fa-solid fa-hand-fist' }],
+        choices: [{ id: 'combat:attack', label: 'Attack', icon: ATTACK_ICON }],
       }
     }
 
     return {
       screenKey: `combat:theirs:${round.playerActionsSpent}:${round.monsterActionsSpent}`,
+      // ORDER IS THE DEFAULT. The ring opens on its first cell, so the answer
+      // that usually makes sense has to BE first -- Dodge, which costs
+      // nothing and takes nothing, then Defend, then the two that give
+      // something up. `DEFENCES` is already in that order and
+      // `defencesOffered` preserves it; the test says so, because a
+      // reordering there would silently change what a fast player presses.
       choices: defencesOffered(state.dodgeOffered).map((defence) => ({
         id: `defence:${defence}`,
         label: DEFENCE_LABELS[defence].label,
@@ -300,17 +345,6 @@ export const combatStage: StageModule = {
       }
     }
 
-    if (choiceId === 'combat:begin') {
-      const fresh = beginRound(round)
-      const next = armNextAction(fresh, monster, context, rng)
-      return {
-        kind: 'stay',
-        state: { ...state, round: roundToJson(fresh), actor: next.actor, dodgeOffered: next.dodgeOffered },
-        narration: '**Begin combat:** *Blades up.*',
-        rng: next.rng,
-      }
-    }
-
     if (choiceId === 'combat:attack' && context.profile) {
       const attack = resolvePlayerAttack({
         state: round,
@@ -319,9 +353,8 @@ export const combatStage: StageModule = {
         playerDerived: context.profile.derived,
         rng,
       })
-      const narration = `**Attack:** *${blowNarration('Your blow lands', attack.blow)}*`
       // Nothing on the PLAYER changes when they attack, so no record change.
-      return afterAction(state, attack.state, monster, context, narration, [], attack.rng)
+      return afterAction(state, attack.state, monster, context, playerAttackPill(monster, attack.blow), [], attack.rng)
     }
 
     const defence = DEFENCES.find((candidate) => `defence:${candidate}` === choiceId)
@@ -334,11 +367,8 @@ export const combatStage: StageModule = {
         defence,
         rng,
       })
-      const label = DEFENCE_LABELS[defence].label
-      const narration = answer.escaped
-        ? `**${label}:** *You break away and it does not follow.*`
-        : `**${label}:** *${blowNarration(`${offer?.name ?? 'It'} strikes`, answer.blow ?? { hit: false, crit: false, dodged: true, damage: 0 })}*`
-      return afterAction(state, answer.state, monster, context, narration, recordChanges(round, answer.state), answer.rng)
+      const entry = monsterAttackPill(monster, defence, answer.blow, answer.escaped)
+      return afterAction(state, answer.state, monster, context, entry, recordChanges(round, answer.state), answer.rng)
     }
 
     return { kind: 'stay', state: raw, rng }

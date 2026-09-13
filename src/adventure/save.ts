@@ -62,11 +62,22 @@ function sanitizeFrames(value: unknown): StageFrame[] {
   })
 }
 
+function sanitizeNarration(value: unknown): string[] {
+  if (typeof value === 'string') return value.length > 0 ? [value] : []
+  if (!Array.isArray(value)) return []
+  return value.filter((entry): entry is string => typeof entry === 'string')
+}
+
 function sanitizeDirector(value: unknown): DirectorState {
   const source = isRecord(value) ? value : {}
   return {
     stack: sanitizeFrames(source.stack),
-    narration: typeof source.narration === 'string' ? source.narration : '',
+    // Was ONE string before narration became a list, and a save written by
+    // that version is read rather than discarded: a line is a list of one,
+    // which is exactly what it meant. Nothing else about the shape moved, so
+    // this costs a widening here instead of a version bump that would throw
+    // away somebody's run.
+    narration: sanitizeNarration(source.narration),
     rng: toRngState(finite(source.rng, 1)),
   }
 }

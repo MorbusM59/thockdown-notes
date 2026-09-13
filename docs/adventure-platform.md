@@ -26,12 +26,33 @@ channels:
 | --- | --- |
 | the ring | one question's choices, as icon + short label — ALL of them the stage's own |
 | the tab bar | health, armor and the six stats, each an ICON and its value (the name in the tooltip) — or, while a choice is focused, that choice's own effects |
-| the chapter bar | its leading toggle, the identity pill, then narration: what just happened, and the frame for what is being asked — followed, while the dial sits on a choice that has one, by that choice's effects in a DASHED pill |
+| the chapter bar | its leading toggle, the identity pill, then narration: a LIST of pills, NEWEST FIRST — what just happened, and the frame for what is being asked — followed, while the dial sits on a choice that has one, by that choice's effects in a DASHED pill |
 | the identity pill | `IV [Combat] 3 | 4` — level in roman numerals, the stage, how far through it. In the note-id position on the chapter bar, fixed width, clipped: it changes every step, and a pill that hugged it would shove the narration sideways each time |
 | the strip | what the run is carrying: items out from the left, traits in from the right |
 | the two meters | the currencies, flanking the strip: gold leading, motes trailing, each with an icon on its outward side. They are next to what they BUY — a balance on the tab bar and the things it bought a whole editor away were two halves of one thought in two places |
 | the rail | one gauge per subdivision, each an icon at the foot with a two-digit tally under it — how many of that gauge's own points the run has SPENT — and a bar rising above both |
 | the toggle, the action | two buttons the game may claim; **empty** until it does |
+
+**Narration is a list, and the list is the STAGE's.** One entry is the
+ordinary case and reads as the single line it used to be. A stage with a
+sequence to show — a combat round, action by action — hands back the whole
+list every time, newest at the head, and the older entries scroll rightward
+under the bar's own fade. There is deliberately no "append": appending would
+make the director own a log, and owning a log means owning the question of
+when it is CLEARED, which is a rule about rounds that only the fight knows.
+The director stores what it was handed and nothing else; a stage that
+accumulates keeps its entries in its own state, where they are persisted with
+everything else it remembers, so leaving mid-round and coming back finds the
+round's story where the round itself is.
+
+An entry's markup is small and is not Markdown (`escapeMenu/narrationMarkup.ts`):
+bold for the action, italic for the outcome, both for a figure, and
+`[fa-solid fa-burst|hit]` where one glyph says what a sentence would. **A
+glyph carries its own word** — the parser will not open an icon without the
+pipe — because a table here mapping icons to nouns is the same
+hand-maintained drift the icon contract test exists to remove. An empty word
+(`[fa-solid fa-left-long|]`) is a DECISION that the glyph adds nothing to
+say, not an omission.
 
 The chapter bar carries narration and nothing else. It led with a second
 pill naming the run (`Thockquest — Level IV, A remote island`) and that pill
@@ -572,10 +593,9 @@ placed at 5, 9 and 10 and the level advancing after ten.
     more often than they act, which is the action economy working; it is also
     the single biggest lever on difficulty and nothing bounds it.
 
-57. **Nothing WIRES the old questions yet** (was 52). There is a round engine, a monster
-    builder, a reward model and an offer generator, and no stage that puts a
-    player in front of them: no combat stage, no loot stage, no level that
-    counts to ten. That is the next build, and it needs nothing new decided.
+57. ~~**Nothing WIRES the old questions yet**~~ — **SUPERSEDED and BUILT**
+    (was 52, and duplicated it). The chain runs: hunt, combat, loot, and a
+    level that counts to ten.
 
 58. **Species modifiers are not capped.** A Beast at −3 Intellect on a group's
     −1 is −4 before class. Nothing says a monster's stats have a floor (see
@@ -593,3 +613,26 @@ placed at 5, 9 and 10 and the level advancing after ten.
     `inline-flex`, so a span per formatted run made every run a flex ITEM,
     and a flex item whose entire content is a space collapses to nothing —
     which ate the gap between the bold action and the italic outcome.
+
+61. **A round SAYS itself in glyphs, and only for as long as it lasts.**
+    Every action prepends one pill — `[who] [what] [how much] [to whom]`
+    (`stages/combatLog.ts`) — and the next round opens by cutting the strip
+    back to a single status pill: actions and hit points for both sides,
+    mirrored around the clash arrows. So the bar holds exactly the round being
+    fought, newest first, and never a history no bar could carry. The damage
+    figure appears ONLY on a hit: the difference between something and nothing
+    should be whether there is a number, not what the number is. The choice
+    cells use the same glyphs their outcomes do, so each mark is learned once.
+
+62. **"Begin combat" is gone.** It was a one-cell screen at the head of every
+    round that could not be answered any other way, so it asked nothing — the
+    round's actions are restored whichever way it is pressed. The only thing
+    it reported was that time had passed, which the status pill now says
+    without spending a press. A round turns over on its own.
+
+63. **The ring's default is the ORDER**, which is easy to change by accident.
+    The dial resets to its first cell on every step, so the first choice a
+    stage lists is the one a fast player presses: Dodge, then Attack, then
+    Defend. `DEFENCES` happens to be in that order and `defencesOffered`
+    preserves it — `stages/combatLog.test.ts` asserts it, because nothing
+    about a reordering would otherwise look like a change in behaviour.

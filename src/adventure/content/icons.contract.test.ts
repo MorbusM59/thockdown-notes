@@ -58,7 +58,12 @@ describe('every icon the adventure names', () => {
     const missing: string[] = []
     for (const file of readdirSync(dir).filter((name) => name.endsWith('.ts') && !name.includes('.test.'))) {
       const source = readFileSync(path.join(dir, file), 'utf8')
-      for (const match of source.matchAll(/'fa-(?:solid|regular|brands) (fa-[a-z0-9-]+)'/g)) {
+      // Unquoted on purpose: an icon also appears inside a narration token
+      // (`[fa-solid fa-burst|hit]`, see escapeMenu/narrationMarkup.ts), which
+      // is built in a template literal and would slip past a pattern that
+      // insisted on its own quotes. A false positive here would be a comment
+      // naming a real free icon, which costs nothing.
+      for (const match of source.matchAll(/fa-(?:solid|regular|brands) (fa-[a-z0-9-]+)/g)) {
         const name = match[1].slice('fa-'.length)
         if (!existsSync(path.join(SOLID, `${name}.svg`))) missing.push(`${file}: ${match[0]}`)
       }

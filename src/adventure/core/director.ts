@@ -31,7 +31,7 @@ import type { Content } from '../content'
 import type { JsonObject } from './json'
 import type { RngState } from './rng'
 import type { Screen } from './screen'
-import type { StageContext, StageModule, StageRegistry, Transition } from './stage'
+import type { Narration, StageContext, StageModule, StageRegistry, Transition } from './stage'
 
 export interface DirectorDeps {
   stages: StageRegistry
@@ -52,6 +52,27 @@ export function buildContext(save: GameSave, deps: DirectorDeps): StageContext {
     profile: game ? profileOf(save, game, deps.catalog) : null,
     held,
   }
+}
+
+/**
+ * A stage's narration as the director stores it: newest first, always a list.
+ *
+ * The one narration rule the director holds, and it is a shape rule rather
+ * than a policy one -- see core/stage.ts for why appending is deliberately
+ * not on offer.
+ *
+ * Hands back the PREVIOUS array when the entries are the same, because
+ * `withDirector` decides "did anything change" by identity: a stage that
+ * narrates the same line twice (every stage that declines a choice does)
+ * would otherwise hand back a fresh array every time and make the save look
+ * changed, which persists a byte-identical save to disk. Comparing content
+ * here rather than teaching `withDirector` about this one field keeps that
+ * function's rule general.
+ */
+function narrationLog(narration: Narration, previous: string[]): string[] {
+  const next = typeof narration === 'string' ? [narration] : [...narration]
+  const same = next.length === previous.length && next.every((entry, index) => entry === previous[index])
+  return same ? previous : next
 }
 
 function stageOf(deps: DirectorDeps, stageId: string): StageModule | null {
@@ -124,7 +145,7 @@ function enterStage(
   return withDirector(committed.save, {
     stack,
     rng: entry.rng,
-    narration: entry.narration ?? committed.save.director.narration,
+    narration: entry.narration === undefined ? committed.save.director.narration : narrationLog(entry.narration, committed.save.director.narration),
   })
 }
 
@@ -215,7 +236,7 @@ function applyTransition(
   const narrated = withDirector(committed.save, {
     rng: transition.rng,
     narration: 'narration' in transition && transition.narration !== undefined
-      ? transition.narration
+      ? narrationLog(transition.narration, committed.save.director.narration)
       : committed.save.director.narration,
   })
 

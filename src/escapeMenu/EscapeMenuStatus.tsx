@@ -1,5 +1,5 @@
 import { usePillStripScroll } from '../shared/usePillStripScroll'
-import { parseNarration } from './narrationMarkup'
+import { narrationText, parseNarration } from './narrationMarkup'
 import type { EscapeMenuCellDetail, EscapeMenuChromeMeter, EscapeMenuChromePill,
   EscapeMenuChromeToggle, EscapeMenuModeChrome } from './escapeMenuContract'
 
@@ -64,18 +64,53 @@ export function EscapeMenuReadouts({ status }: { status: EscapeMenuModeChrome })
 }
 
 /**
+ * ONE narration entry: the pill, with the line's markup rendered inside it.
+ *
+ * `is-inert` is the one difference from a chapter pill: a chapter pill is
+ * something you press, and every gesture a mode has is in the ring.
+ */
+function EscapeMenuNarrationPill({ entry }: { entry: string }) {
+  const spans = parseNarration(entry)
+  return (
+    // The words, on the pill itself: the spans below are glyphs and figures,
+    // and a pill reading "8" to a screen reader is a pill saying nothing.
+    <span className="tag-pill escape-menu-narration is-inert" aria-label={narrationText(spans)}>
+      {/* ONE flex item, not one per span. `.tag-pill` is inline-flex, so a
+          span per run makes every run a flex ITEM -- and a flex item whose
+          whole content is a space collapses to nothing, which ate the gap
+          between the bold action and the italic outcome. Inside a single
+          inline child they are ordinary inline runs and the spaces between
+          them are text. */}
+      <span className="escape-menu-narration-text" aria-hidden="true">
+        {spans.map((span, index) => (span.kind === 'icon' ? (
+          <span key={`${index}:${span.icon}`} className={`${span.icon} escape-menu-narration-icon`} aria-hidden="true" />
+        ) : (
+          <span
+            key={`${index}:${span.text}`}
+            className={`${span.bold ? 'escape-menu-narration-strong' : ''}${span.italic ? ' escape-menu-narration-em' : ''}`.trim() || undefined}
+          >
+            {span.text}
+          </span>
+        )))}
+      </span>
+    </span>
+  )
+}
+
+/**
  * THE WHOLE CHAPTER-BAR ROW while a mode owns the slot, on the tag bar's own
  * anatomy: the layer toggle, the id pill saying which one this is, then the
  * strip. Every element is the real bar's -- the same well, fade-masked scroll
  * shell, display row and pill a note's tags and chapters use, sharing
- * shared/usePillStripScroll.ts -- so a headline longer than the bar scrolls
+ * shared/usePillStripScroll.ts -- so a strip longer than the bar scrolls
  * under the same fades instead of overrunning it, and the bar sits at exactly
  * the height it does for a note (the pills are what set it; narration
  * rendered as prose made this bar shorter and the editor moved when a mode
  * took the slot).
  *
- * `is-inert` is the one difference on the narration pill: a chapter pill is
- * something you press, and every gesture a mode has is in the ring.
+ * NEWEST FIRST, which is DOM order and therefore also reading order: a new
+ * entry appears at the head and pushes the round's older ones rightward,
+ * where they stay legible until the mode says they are spent.
  */
 export function EscapeMenuChromeBarRow({ status, detail }: {
   status: EscapeMenuModeChrome
@@ -84,10 +119,11 @@ export function EscapeMenuChromeBarRow({ status, detail }: {
 }) {
   const detailLines = detail?.lines.filter((line) => line.trim().length > 0) ?? []
   // Called before any early return, and keyed on what the strip CONTAINS:
-  // the detail pill appears and disappears as the dial turns, which changes
-  // the strip's width without changing the row's box, so the observer alone
-  // would never re-measure the fades.
-  const strip = usePillStripScroll(`${status.headline}\u0000${detail?.title ?? ''}\u0000${detailLines.join('|')}`)
+  // the detail pill appears and disappears as the dial turns, and entries
+  // accumulate within a round, either of which changes the strip's width
+  // without changing the row's box -- so the observer alone would never
+  // re-measure the fades.
+  const strip = usePillStripScroll(`${status.narration.join('\u0001')}\u0000${detail?.title ?? ''}\u0000${detailLines.join('|')}`)
   return (
     <div className="chapter-bar-row">
       {status.barToggle ? <EscapeMenuChromeButton control={status.barToggle} shape="chapter-auto-button" /> : null}
@@ -98,7 +134,7 @@ export function EscapeMenuChromeBarRow({ status, detail }: {
           </span>
         </div>
       ) : null}
-      {status.headline ? (
+      {status.narration.length > 0 ? (
         <div className="chapter-tab-mode-shell">
           <div className={`chapter-bar-scroll-shell${strip.fadeClassName}`}>
             <div
@@ -110,28 +146,9 @@ export function EscapeMenuChromeBarRow({ status, detail }: {
               onScroll={strip.onScroll}
               onWheel={strip.onWheel}
             >
-              {/* The action bold, the outcome italic, any figure both --
-                  see narrationMarkup.ts. Three marks, not Markdown: this is
-                  a pill on a one-line bar. */}
-              <span className="tag-pill escape-menu-narration is-inert">
-                {/* ONE flex item, not one per span. `.tag-pill` is
-                    inline-flex, so a span per run makes every run a flex
-                    ITEM -- and a flex item whose whole content is a space
-                    collapses to nothing, which ate the gap between the bold
-                    action and the italic outcome. Inside a single inline
-                    child they are ordinary inline runs and the spaces
-                    between them are text. */}
-                <span className="escape-menu-narration-text">
-                  {parseNarration(status.headline).map((span, index) => (
-                    <span
-                      key={`${index}:${span.text}`}
-                      className={`${span.bold ? 'escape-menu-narration-strong' : ''}${span.italic ? ' escape-menu-narration-em' : ''}`.trim() || undefined}
-                    >
-                      {span.text}
-                    </span>
-                  ))}
-                </span>
-              </span>
+              {status.narration.map((entry, index) => (
+                <EscapeMenuNarrationPill key={`${index}:${entry}`} entry={entry} />
+              ))}
               {/* What the cell the ring is sitting on would do. DASHED,
                   because it is the one thing on this bar that has not
                   happened: everything else here is the state of the run, and

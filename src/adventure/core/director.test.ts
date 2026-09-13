@@ -18,6 +18,11 @@ function start(seed = 4242): GameSave {
   return enterEntryScreen(emptySave(seed), DEPS, NOW)
 }
 
+/** The bar's whole strip as one string -- newest entry first, as it reads. */
+function narrationOf(save: GameSave): string {
+  return screenOf(save).narration.join(' ')
+}
+
 function screenOf(save: GameSave) {
   const screen = currentScreen(save, DEPS)
   if (!screen) throw new Error('no screen')
@@ -198,20 +203,20 @@ describe('the promises the platform is built on', () => {
 describe('a game, played', () => {
   it('runs from the welcome screen to an encounter, carrying what was chosen', () => {
     let save = start(2024)
-    expect(screenOf(save).narration).toContain('What would you like to do?')
+    expect(narrationOf(save)).toContain('What would you like to do?')
 
     save = choose(save, 'welcome:start', DEPS, NOW).save
-    expect(screenOf(save).narration).toContain('What are you?')
+    expect(narrationOf(save)).toContain('What are you?')
     expect(save.activeGameId).not.toBeNull()
 
     save = choose(save, 'origin:warrior', DEPS, NOW).save
     const game = save.games.find((candidate) => candidate.id === save.activeGameId)
     expect(game?.baseStats.might).toBe(2)
     expect(game?.baseStats.agility).toBe(1)
-    expect(screenOf(save).narration).toContain('What are you known for?')
+    expect(narrationOf(save)).toContain('What are you known for?')
 
     save = choose(save, firstStageChoiceId(save), DEPS, NOW).save
-    expect(screenOf(save).narration).toContain('never leave home without')
+    expect(narrationOf(save)).toContain('never leave home without')
 
     save = choose(save, firstStageChoiceId(save), DEPS, NOW).save
     expect(screenOf(save).stageId).toBe('regionSelect')

@@ -139,7 +139,7 @@ export function useAdventureEscapeMenu(options: AdventureEscapeMenuOptions): Esc
         // of thing the slot is holding (its neighbour in that role is "User
         // Guide"), and it clips at 120px.
         title: 'Adventure',
-        headline: screen.narration,
+        narration: screen.narration,
         readouts: statusReadouts(save, CATALOG),
         // The stage names itself; the identity line does not keep a table
         // of names that could fall out of step with the registry.
