@@ -354,8 +354,16 @@ These block a playable game and want answers rather than guesses.
 6. **Intellect and Charisma** have unlocks (spells, charisma actions) rather
    than curves, and neither list is written. They are declared stats with real
    effects pending.
-7. **Enemy scaling, fame, experience and gold rates, and the action economy.**
-   All unwritten.
+7. **Fame, experience and gold rates.** What a minion, a miniboss and a boss
+   are each worth. Unwritten.
+
+   *(Enemy scaling and the action economy were listed here as unwritten and
+   are NOT: both are specified in [adventure-game-design.md](adventure-game-design.md),
+   which was deleted in the platform rebuild and has been restored. Scaling
+   is `10 · factor^round` with the factor set once per run by the difficulty
+   preset — easy 1.01, medium 1.02, hard 1.05, insane 1.1. The action economy
+   is the round's four phases and its step layout. Neither is BUILT; both are
+   decided.)*
 8. **Ring capacity — ANSWERED, and the cap is wrong.** The ring holds TEN
    cells, not twelve. Cells sit at equal ANGULAR intervals on a rounded
    square, so their spacing varies around the perimeter and the tightest pair
@@ -412,3 +420,45 @@ These block a playable game and want answers rather than guesses.
     EARNING half of both ladders is also unwired — nothing emits
     `grantStatPoints` or `grantFamePoints` when a threshold is crossed,
     because that belongs to the level flow that is not built.
+
+Recovered from [adventure-game-design.md](adventure-game-design.md) when it
+was restored — these existed only in that file and were lost while it was
+deleted:
+
+13. **Starting stats.** A new run starts at 0 in everything, which makes hit
+    chance 50% and hit points 50. Intended, or does a run start with points
+    to spend?
+14. **The round exponent.** Is `n` in `10 · x^n` the round number (1-based,
+    as the deleted implementation had it) or rounds completed? At medium the
+    difference is 2%; at insane it is 10%.
+15. **Enemy accuracy.** The player has a hit chance; enemies land unless
+    dodged. Should enemies miss on their own account too?
+16. **Defeat.** Does a run end at zero hit points, or does the round end and
+    the run continue?
+17. **Difficulty choice.** Presented at run start, in the ring, as the first
+    thing a new run asks? Nothing presents it, and no preset is stored.
+18. **Gear and trait content.** The catalog type is ready
+    (`model/modifiers.ts`) and Thockquest carries a handful of examples;
+    a real pool does not exist.
+
+And three the RESTORATION itself turned up — places where the code and the
+design contract disagree, rather than places the contract is silent:
+
+19. **"Round" and "level" are the same thing under two names.** The contract
+    says round; the record says `level` and the effect says `advanceLevel`,
+    and the scaling exponent the contract calls `round` is that number. One
+    word has to win before the round structure is built on top of it.
+20. **`actionsPerRound` is not in the contract.** `model/stats.ts` derives
+    `2 + Agility/2` actions per round, and the chrome counter reserves
+    `3 | 4` for "the round and the actions left". The contract has no
+    per-combat action budget at all — its combat is decided immediately, and
+    its Agility gives dodge and hit chance. Either the derived value is an
+    invention to delete, or the contract is behind.
+21. **The stat table disagrees on two rows.** The contract: Agility → dodge
+    *and* hit chance; Perception → choices per step. The code: Agility →
+    dodge and actionsPerRound; Perception → encounter choices *and* hit
+    chance. The contract also lists FIVE stats (Luck, Might, Perception,
+    Charm, Agility) where the code has six, with Intellect added and Charm
+    renamed Charisma. Since the round's phases are specified in terms of
+    `2 + Luck/2` and `2 + Perception/2`, this has to be settled before the
+    action economy can be built on those numbers.
