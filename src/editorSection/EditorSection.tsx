@@ -93,9 +93,9 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
    *
    * `arrival` is non-null ONLY on the render where this slot's note actually
    * changed, and carries what that change displaced. App needs it to record
-   * a RETURN for an overlay it did not open itself -- a `$HELP` link
-   * activates a guide note by the ordinary note route, and only this slot
-   * ever knew what was here first.
+   * a RETURN for an overlay it did not open itself -- a restored session or
+   * one of the guide's own cross-references activates a guide note by the
+   * ordinary note route, and only this slot ever knew what was here first.
    *
    * It is a transition rather than a standing value on purpose. A snapshot
    * cannot tell "the guide just arrived" from "the guide is on its way out",

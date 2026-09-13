@@ -2362,8 +2362,8 @@ function App() {
     // clear as a switch would close the ring on the way in.
     if (arrival?.arrivedNoteId) setIsEscapeHoldPanelOpen(false)
 
-    // A guide that ARRIVED without us opening it -- a `$HELP` link, a link
-    // from another note -- still owes the slot its note back. It is already
+    // A guide that ARRIVED without us opening it -- a restored session, one
+    // of its own cross-references -- still owes the slot its note back. It is already
     // displayed correctly, because the guide is derived rather than declared
     // (shared/slotOverlay.ts); what it lacks is the return, and this is the
     // one moment anything knows what it displaced.
@@ -5841,11 +5841,10 @@ ${markdownHtml}
     // first -- confirmed live: on a genuinely fresh install (no persisted
     // preferredId yet), it otherwise wins this fallback and opens as a
     // normal, editable note, defeating the whole "only reachable via the
-    // help button or a $HELP link" design. listNotes() doesn't filter this
-    // family out itself (unlike the sidebar's own dateEligibleNotes etc.,
-    // in App.tsx) since $HELP cross-link resolution elsewhere needs it
-    // present in the full notes array -- only this fallback selection
-    // needs it excluded.
+    // help button" design. listNotes() doesn't filter this family out itself
+    // (unlike the sidebar's own dateEligibleNotes etc., in App.tsx) since the
+    // guide's own cross-link resolution needs it present in the full notes
+    // array -- only this fallback selection needs it excluded.
     const selectable = listed.filter((note) => !HELP_GUIDE_NOTE_IDS.has(note.id))
     return selectable[0]?.id ?? null
   }, [])
@@ -8080,9 +8079,9 @@ ${markdownHtml}
     // filters individually -- unlike a chapterOnly note, this family should
     // never resurface under any circumstance (not even an active search or
     // Trash's own blanket chapter inclusion), since it's only ever reachable
-    // through the dedicated help button or a `$HELP` link. It still stays in
-    // the raw `notes`/`notesRef` array those links resolve against -- only
-    // filtered out of the menu-facing lists here.
+    // through the dedicated help button. It still stays in the raw
+    // `notes`/`notesRef` array the guide's own cross-links resolve against --
+    // only filtered out of the menu-facing lists here.
     return sortedNotes
       .filter((note) => !HELP_GUIDE_NOTE_IDS.has(note.id))
       .filter((note) => matchesNoteSearchQuery(

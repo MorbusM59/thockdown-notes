@@ -4,8 +4,8 @@ import { createHash } from 'node:crypto';
 import { sanitizeDocumentText } from '../../src/shared/textSanitization';
 import type { DatabaseService } from '../databaseService';
 import type { NoteLifecycleService } from '../noteLifecycleService';
+import { isAutoAssignedId } from '../../src/shared/assignedIds';
 import {
-  HELP_GUIDE_ASSIGNED_ID,
   HELP_GUIDE_ROOT_ID,
   HELP_GUIDE_AUTO_TOC_ID,
   HELP_GUIDE_INTRO_CONTENT,
@@ -61,7 +61,7 @@ function deriveTitle(text: string): string {
 
 /**
  * Seeds (and re-seeds, whenever the content actually changed) the built-in
- * User Guide: a protected parent note (assigned id `$HELP`) plus one real
+ * User Guide: a protected parent note (no user-facing id -- see below) plus one real
  * chapter per topic, plus an auto-generated Table of Contents chapter for
  * navigation between them. Content itself lives in helpGuideContent.ts --
  * this module only wires it into the database.
@@ -121,7 +121,16 @@ export async function ensureHelpGuide(db: DatabaseService, noteLifecycle: NoteLi
     createdAtMs: now,
     updatedAtMs: now,
   });
-  db.setNoteAssignedId(HELP_GUIDE_ROOT_ID, HELP_GUIDE_ASSIGNED_ID);
+  // The guide has no user-facing id, deliberately: an id is what makes a note
+  // addressable by name from anyone else's prose, and the guide is reached
+  // through its window control and nothing else (see the header comment in
+  // helpGuideContent.ts). It shipped as `$HELP` for a long time, so this
+  // actively hands that id back rather than merely stopping to set it --
+  // otherwise an existing install would keep advertising a route that
+  // `$`-link resolution no longer honours. Guarded on the id's SHAPE, not on
+  // the literal it used to be, so a reseed does not renumber it every launch.
+  const rootAssignedId = db.getNoteRecord(HELP_GUIDE_ROOT_ID)?.assignedId;
+  if (!isAutoAssignedId(rootAssignedId)) db.setNoteAssignedId(HELP_GUIDE_ROOT_ID, '');
 
   const existingChapterNoteIds = new Set(db.listChaptersForNote(HELP_GUIDE_ROOT_ID).map((chapter) => chapter.chapterNoteId));
 

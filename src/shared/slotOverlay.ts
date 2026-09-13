@@ -18,7 +18,8 @@
 // facts legitimately disagreed for a window on every single open, and every
 // defect in this area lived in that window:
 //
-//   - A `$HELP` link activated the guide note without setting any record,
+//   - A link into the guide from an ordinary note (the `$HELP` id, since
+//     retired) activated a guide note without setting any record,
 //     so the guide appeared as an ORDINARY note: dark toggle, its own temp
 //     tab, and clicking that tab called revealNoteInMenu, which cleared the
 //     reader's month/year filters to "reveal" a note that is filtered out of
@@ -33,8 +34,9 @@
 //
 //   - The GUIDE is not recorded at all for display purposes. Showing the
 //     guide IS having one of its notes active. Every route in -- the window
-//     control, a `$HELP` link, a restored session, a link from another note
-//     -- therefore reads as the guide with no code of its own, and the
+//     control, a restored session, a chapter pill, one of the guide's own
+//     cross-references -- therefore reads as the guide with no code of its
+//     own, and the
 //     orphan class above is not merely fixed but unrepresentable.
 //   - The ADVENTURE and an UNDOCKED note are the two occupants that nothing
 //     on screen can identify (one is an empty slot, the other an ordinary

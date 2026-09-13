@@ -23,6 +23,7 @@ import {
 import { resolveMarkdownChecklistLineToggleTransform } from '../editor/ChecklistCaretClickTogglePolicy'
 import { normalizeInternalText } from '../editor/TextPolicy'
 import { findHeadingAnchorLine, parseHeadingAnchorFragment } from '../shared/tableOfContentsText'
+import { HELP_GUIDE_NOTE_IDS } from '../shared/helpGuide'
 import type { ParsedInternalNoteLink } from '../shared/internalNoteLinks'
 import { splitPreviewBlocksWithoutFullParse, type PreviewBlockSplitCache } from '../editor/PreviewBlockSplit'
 import { requestFullBlockSplit } from '../editor/documentFactsClient'
@@ -1170,7 +1171,17 @@ export function usePreviewMarkdownRendering({
       // id's first character, so the raw text after it has to be resolved back
       // to the stored form before lookup (shared/assignedIds.ts).
       const normalizedTarget = normalizeInternalIdForLookup(resolveLinkedNoteId(target.noteIdRaw))
-      contextNote = notesRef.current.find((note) => note.assignedId && normalizeInternalIdForLookup(note.assignedId) === normalizedTarget)
+      // The User Guide family is excluded here for the same reason it is
+      // excluded from every sidebar list: it is not a note the user reaches by
+      // naming it. The window control is the only route in, and a second one
+      // is what made "one guide across all slots" something to defend rather
+      // than something that holds. Its own chapters address each other by
+      // internal id instead (navigateToInternalNoteLink below).
+      contextNote = notesRef.current.find((note) => (
+        note.assignedId
+        && !HELP_GUIDE_NOTE_IDS.has(note.id)
+        && normalizeInternalIdForLookup(note.assignedId) === normalizedTarget
+      ))
       if (!contextNote) return
     } else if (activeNoteId) {
       const activeNote = notesRef.current.find((note) => note.id === activeNoteId)
@@ -1221,25 +1232,32 @@ export function usePreviewMarkdownRendering({
     anchorTarget.scrollTo(sourceLine, false)
   }, [activeNoteId, activateAndScroll, resolveAnchorTarget, latestEditorTextRef])
 
-  // Resolves and follows an `@noteId[#fragment]` internal-only link -- the
-  // auto-generated TOC/Open Items chapters' own addressing scheme
-  // (internalNoteLinks.ts), entirely separate from navigateToInternalPreviewLink
-  // above: the target note is identified directly by its own real,
-  // permanent id, no assignedId/chapterId lookup involved at all, so it
-  // never fails just because the user hasn't assigned one. A fragment, if
-  // present, is always a heading-derived anchor -- this scheme has no
-  // manual-anchor equivalent, since a manual anchor is something a user
-  // types, and nothing produced here is ever user-typed.
+  // Resolves and follows an `@noteId[#fragment]` app-authored link -- the
+  // addressing scheme of content this app writes rather than the user
+  // (internalNoteLinks.ts): the auto-generated TOC/Open Items chapters, and
+  // the shipped User Guide's own cross-references. Entirely separate from
+  // navigateToInternalPreviewLink above: the target note is identified
+  // directly by its own real, permanent id, no assignedId/chapterId lookup
+  // involved at all, so it never fails just because the user hasn't assigned
+  // one -- which is exactly why the guide can drop its own `$HELP` id and
+  // still navigate itself (see electron/help/helpGuideContent.ts).
+  //
+  // A fragment goes through the SAME resolveAnchorTarget the `$` scheme uses,
+  // rather than a second, narrower copy of anchor resolution. It used to
+  // accept only a heading-derived `heading:` fragment, on the reasoning that
+  // a manual `[Anchor Text](#id)` anchor is something a user types and
+  // nothing generated is user-typed. The guide's prose is hand-authored and
+  // uses manual anchors, so that reasoning no longer holds -- and the
+  // prefix already distinguishes the two cases, so one resolver covers both.
   const navigateToInternalNoteLink = useCallback((target: ParsedInternalNoteLink) => {
     const targetContentText = notesRef.current.find((note) => note.id === target.noteId)?.contentText ?? ''
     if (target.fragment === null) {
       activateAndScroll(target.noteId, targetContentText, null)
       return
     }
-    const headingSlug = parseHeadingAnchorFragment(target.fragment)
-    if (headingSlug === null || findHeadingAnchorLine(targetContentText, headingSlug) === null) return
+    if (resolveAnchorTarget(target.fragment).resolveLine(targetContentText) === null) return
     activateAndScroll(target.noteId, targetContentText, target.fragment)
-  }, [activateAndScroll])
+  }, [activateAndScroll, resolveAnchorTarget])
 
   // navigateToInternalPreviewLink itself still isn't fully keystroke-stable
   // -- it depends (transitively, via `activateNote`) on other callbacks

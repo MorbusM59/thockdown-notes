@@ -13,8 +13,9 @@ const GUIDE_CHAPTER = HELP_GUIDE_CHAPTER_IDS[0].noteId
 describe('occupancyOf', () => {
   it('reads the guide from the note itself, with no record involved', () => {
     // The whole point: every route into the guide -- the window control, a
-    // $HELP link, a restored session, a link from another note -- lands
-    // here identically, because there is nothing else to get right.
+    // restored session, a chapter pill, one of the guide's own
+    // cross-references -- lands here identically, because there is nothing
+    // else to get right.
     expect(occupancyOf('left', HELP_GUIDE_ROOT_ID, null).kind).toBe('guide')
     expect(occupancyOf('left', GUIDE_CHAPTER, null).kind).toBe('guide')
   })

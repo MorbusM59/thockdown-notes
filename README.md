@@ -4,7 +4,7 @@ Desktop notes app built with Electron, React, and CodeMirror 6.
 
 Current version: **0.5.7**
 
-Full usage documentation is built into the app itself — open the in-app Help note ($HELP). This file intentionally does not duplicate it.
+Full usage documentation is built into the app itself — open the in-app User Guide (the book button in the window controls). This file intentionally does not duplicate it.
 
 ## Install
 

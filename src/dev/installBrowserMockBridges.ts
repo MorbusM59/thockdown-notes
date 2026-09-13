@@ -43,7 +43,6 @@ import { resolveIdentityLabel } from '../shared/tabLabels'
 import { computeHeadingAnchors, formatHeadingAnchorFragment, formatOutlineEntryLine, formatOutlineRootTitleLine, parseMarkdownHeading, stripMarkdownInlineFormatting } from '../shared/tableOfContentsText'
 import { formatInternalNoteLink } from '../shared/internalNoteLinks'
 import {
-  HELP_GUIDE_ASSIGNED_ID,
   HELP_GUIDE_CHAPTER_IDS,
   HELP_GUIDE_ROOT_ID,
 } from '../shared/helpGuide'
@@ -232,8 +231,8 @@ function stableStringify(value: unknown): string {
  *
  * The real guide is seeded by the main process (electron/help/helpGuideNote.ts)
  * and so has never existed in browser mode -- which meant every guide
- * behaviour (the window control's toggle, the tab bar's guide chrome, a
- * `$HELP` link, the slot-overlay derivation in shared/slotOverlay.ts) could
+ * behaviour (the window control's toggle, the tab bar's guide chrome, the
+ * slot-overlay derivation in shared/slotOverlay.ts) could
  * only ever be reasoned about here, never run. This is deliberately the
  * SHAPE and not the content: the same fixed ids, sealed and timeless, one
  * chapter rather than seventeen, and placeholder prose. Anything that reads
@@ -262,7 +261,8 @@ function seedHelpGuideNotes(): NoteDocument[] {
     chapterId: null,
     detachedChapterParentId: null,
   })
-  root.assignedId = HELP_GUIDE_ASSIGNED_ID
+  // No assigned id, matching the real seed: the guide is not addressable by
+  // name -- see electron/help/helpGuideNote.ts.
 
   const first = normalizeDocument({
     id: chapter.noteId,

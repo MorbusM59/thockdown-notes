@@ -373,9 +373,10 @@ export function createPreviewMarkdownComponents(
     a: ({ children, href }: { children?: ReactNode; href?: string }) => {
       const normalizedHref = typeof href === 'string' ? href : undefined
 
-      // `@noteId[#fragment]` -- the internal-only auto-TOC/Open-Items
-      // addressing scheme (internalNoteLinks.ts), entirely separate from
-      // the `$NOTE-ID§CHAPTER-ID` scheme below: never user-typed, never
+      // `@noteId[#fragment]` -- the app-authored addressing scheme
+      // (internalNoteLinks.ts), used by the auto-TOC/Open-Items chapters and
+      // by the shipped User Guide's own cross-references. Entirely separate
+      // from the `$NOTE-ID§CHAPTER-ID` scheme below: never user-typed, never
       // gated on an assigned id. Checked first since its `@` sigil can
       // never collide with either of the user-facing forms.
       const internalNoteTarget = normalizedHref ? parseInternalNoteLink(normalizedHref) : null

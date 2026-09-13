@@ -11,19 +11,26 @@
 // themselves so the renderer (src/) can filter on them without pulling in
 // ~800 lines of guide text it never needs to load eagerly.
 
-export const HELP_GUIDE_ASSIGNED_ID = 'HELP'
-
 export const HELP_GUIDE_ROOT_ID = '26-07-04_00-00_HELPGUIDE'
 export const HELP_GUIDE_AUTO_TOC_ID = '26-07-04_00-00_HELPCTOC1'
 
 export interface HelpGuideChapterId {
   /** Fixed internal note id. */
   noteId: string
-  /** The user-facing `§CHAPTER-ID` short id used by this guide's own internal cross-links. */
+  /**
+   * The guide's own stable name for this chapter. It is what its prose
+   * addresses a cross-reference to (see helpGuideContent.ts's `guideLink`),
+   * and it is stored as the chapter's `§CHAPTER-ID` so the chapter bar reads
+   * as something deliberate rather than `§7`.
+   *
+   * It is NOT a route in. The guide family is unaddressable by `$`-link (see
+   * HELP_GUIDE_NOTE_IDS) -- a chapter id is only reachable through its
+   * parent's assigned id, and the guide's parent has no user-facing one.
+   */
   chapterId: string
 }
 
-export const HELP_GUIDE_CHAPTER_IDS: HelpGuideChapterId[] = [
+export const HELP_GUIDE_CHAPTER_IDS = [
   { noteId: '26-07-04_00-00_HELPCH001', chapterId: 'NOTES-EDITING' },
   { noteId: '26-07-04_00-00_HELPCH002', chapterId: 'INTERNAL-LINKING' },
   { noteId: '26-07-04_00-00_HELPCH003', chapterId: 'TAGS' },
@@ -41,9 +48,36 @@ export const HELP_GUIDE_CHAPTER_IDS: HelpGuideChapterId[] = [
   { noteId: '26-07-04_00-00_HELPCH015', chapterId: 'APPEARANCE-SETTINGS' },
   { noteId: '26-07-04_00-00_HELPCH016', chapterId: 'MUSIC-PLAYER' },
   { noteId: '26-07-04_00-00_HELPCH017', chapterId: 'DATA-STORAGE' },
-]
+] as const satisfies readonly HelpGuideChapterId[]
 
-/** Every note id in the guide's family -- the parent, the auto-TOC chapter, and every real chapter. Used to exclude the whole family from every sidebar list (Date/Category/Archive/Trash/Find) in one place. */
+/**
+ * The set of chapter names the guide's own prose may address, as a type.
+ *
+ * Derived from the table above rather than written out, so a cross-reference
+ * to a chapter that does not exist is a COMPILE error rather than a link that
+ * silently does nothing when a reader clicks it. That is not hypothetical: a
+ * `$HELP§SETTINGS#mouse-options` link shipped in the guide for as long as the
+ * chapter it meant was called `APPEARANCE-SETTINGS`, and nothing noticed.
+ */
+export type HelpGuideChapterKey = (typeof HELP_GUIDE_CHAPTER_IDS)[number]['chapterId']
+
+/** The fixed note id of one guide chapter, addressed by its own stable name. */
+export function helpGuideChapterNoteId(chapterId: HelpGuideChapterKey): string {
+  const entry = HELP_GUIDE_CHAPTER_IDS.find((candidate) => candidate.chapterId === chapterId)
+  // Unreachable while HelpGuideChapterKey is derived from this same table --
+  // the throw is here so a future hand-written key cannot degrade to a link
+  // that points nowhere.
+  if (!entry) throw new Error(`Unknown User Guide chapter: ${chapterId}`)
+  return entry.noteId
+}
+
+/**
+ * Every note id in the guide's family -- the parent, the auto-TOC chapter, and
+ * every real chapter. Used to exclude the whole family from every sidebar list
+ * (Date/Category/Archive/Trash/Find) in one place -- AND from `$`-link
+ * resolution, which is the same rule: the guide is not a note the user can
+ * reach by naming it. The only route in is the User Guide window control.
+ */
 export const HELP_GUIDE_NOTE_IDS: ReadonlySet<string> = new Set([
   HELP_GUIDE_ROOT_ID,
   HELP_GUIDE_AUTO_TOC_ID,
