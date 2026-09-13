@@ -49,6 +49,10 @@ const WHOLE_DOCUMENT_PARSE_EXPORTS: Record<string, string[]> = {
   './PreviewVisibleText': [
     'buildPreviewVisibleTextProjection',
     'getPreviewVisibleTextProjection',
+    // Not the accumulator trio (createPreviewVisibleTextAccumulator,
+    // appendProjectionNodes, finishPreviewVisibleTextProjection): those parse
+    // nothing, they walk nodes somebody else parsed. Nor
+    // projectionNeedsWholeDocumentParse, which is a line scan.
   ],
   './FindReplaceEngine': [
     // Not the edit-mode sibling `buildDocumentFindHits`, which is an indexOf

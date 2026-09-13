@@ -1,4 +1,11 @@
 import { describe, it, expect } from 'vitest'
+import { splitPreviewBlockRangesProgressively } from './PreviewBlockSplit'
+import {
+  appendProjectionNodes,
+  createPreviewVisibleTextAccumulator,
+  finishPreviewVisibleTextProjection,
+  projectionNeedsWholeDocumentParse,
+} from './PreviewVisibleText'
 import { buildPreviewVisibleTextProjection, mapVisibleOffsetToSourceOffset } from './PreviewVisibleText'
 import { buildDocumentFindHits, buildPreviewVisibleDocumentFindHits } from './FindReplaceEngine'
 import { createPreviewSearchHighlightRehypePlugin, type RehypeAstNode } from './PreviewMarkdown'
@@ -104,5 +111,98 @@ describe('buildPreviewVisibleDocumentFindHits', () => {
 
   it('returns nothing for an empty query without parsing the document', () => {
     expect(buildPreviewVisibleDocumentFindHits('# anything', '   ', false)).toEqual([])
+  })
+})
+
+describe('a projection assembled from the block split\'s own windows', () => {
+  /**
+   * The whole point of deriving the projection from the split's pass is that
+   * it produces the SAME projection. A window boundary that dropped a block
+   * separator, or shifted a source offset by the wrong amount, would give
+   * find hits that land on the wrong text -- silently, since nothing else
+   * reads these coordinates.
+   *
+   * Driven at tiny chunk sizes so even small corpora cross many boundaries,
+   * exactly as the range-tiling test does.
+   */
+  function expectChunkedMatchesWhole(markdown: string, label: string) {
+    // The one documented exception. A document with reference definitions is
+    // NOT assembled from windows -- the worker parses it whole -- so the
+    // property to hold here is that the detector says so, not that the
+    // chunked assembly happens to agree (it does not, and cannot).
+    if (projectionNeedsWholeDocumentParse(markdown)) {
+      throw new Error(`${label}: use expectNeedsWholeDocumentParse for a document with definitions`)
+    }
+    const whole = buildPreviewVisibleTextProjection(markdown)
+    for (const firstChunkLines of [1, 3, 7, 64]) {
+      const accumulator = createPreviewVisibleTextAccumulator()
+      for (const chunk of splitPreviewBlockRangesProgressively(markdown, firstChunkLines)) {
+        appendProjectionNodes(accumulator, chunk.nodes, chunk.sourceOffset)
+      }
+      const chunked = finishPreviewVisibleTextProjection(accumulator)
+      expect(chunked.visibleText, `${label} text @ ${firstChunkLines}`).toBe(whole.visibleText)
+      expect(chunked.segments, `${label} segments @ ${firstChunkLines}`).toEqual(whole.segments)
+    }
+  }
+
+  it('matches on ordinary prose and headings', () => {
+    expectChunkedMatchesWhole('', 'empty')
+    expectChunkedMatchesWhole('just one paragraph', 'single block')
+    expectChunkedMatchesWhole('# Title\n\nBody text.\n\n## Next\n\nMore body.\n\n', 'headings')
+  })
+
+  it('matches where the source offsets are what a shift could get wrong', () => {
+    // Every block after the first has a non-zero document offset, and the
+    // later ones are large -- an off-by-one shift shows as a diff here rather
+    // than as a hit landing one character out in the real app.
+    let markdown = ''
+    for (let i = 0; i < 30; i += 1) markdown += `## Heading ${i}\n\nParagraph ${i} with several words in it.\n\n`
+    expectChunkedMatchesWhole(markdown, 'many offset blocks')
+  })
+
+  it('matches across the constructs that make chunk boundaries hard', () => {
+    const body = Array.from({ length: 40 }, (_, i) => `line ${i} inside`).join('\n')
+    expectChunkedMatchesWhole(`Intro.\n\n\`\`\`js\n${body}\n\`\`\`\n\nAfter.\n`, 'long fence')
+    expectChunkedMatchesWhole(`Intro.\n\n\`\`\`js\n${body}\n`, 'unclosed fence')
+    expectChunkedMatchesWhole('A paragraph\n===\n\nAnother\n---\n\nEnd.\n', 'setext')
+    expectChunkedMatchesWhole('> quoted\n> continued\nlazy tail\n\nOut.\n', 'lazy blockquote')
+    expectChunkedMatchesWhole('- a\n- b\n\nText **bold** and `code` and [link](#x).\n\n', 'inline runs')
+    // Definitions are the exception, asserted as such below.
+  })
+
+  it('refuses to assemble a document whose references resolve document-wide', () => {
+    // `[ref]` is the word "ref" when the definition exists and the literal
+    // text "[ref]" when it does not, so a window parsed before reaching the
+    // definition projects text the reader never sees. Caught by this suite,
+    // not by reasoning: the projection was believed to have no document-wide
+    // dependency at all.
+    const withDefinition = 'See [ref] and [^fn].\n\nBody.\n\n[ref]: https://example.com\n\n[^fn]: A note.\n'
+    expect(projectionNeedsWholeDocumentParse(withDefinition)).toBe(true)
+    expect(buildPreviewVisibleTextProjection(withDefinition).visibleText).toContain('See ref and')
+
+    expect(projectionNeedsWholeDocumentParse('Plain text with [an inline link](#x).\n')).toBe(false)
+    expect(projectionNeedsWholeDocumentParse('# Heading\n\nBody.\n')).toBe(false)
+    // Conservative on purpose: a definition-shaped line inside a fence is not
+    // a definition, and costing a whole parse for it is the safe direction.
+    expect(projectionNeedsWholeDocumentParse('```\n[ref]: not really\n```\n')).toBe(true)
+  })
+
+  it('matches on a randomized mixed corpus', () => {
+    let seed = 20260913
+    const rng = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff }
+    const out: string[] = []
+    for (let i = 0; i < 60; i += 1) {
+      const roll = rng()
+      if (roll < 0.3) out.push(`Paragraph ${i} with filler words.`)
+      else if (roll < 0.45) out.push(`## Heading ${i}`)
+      else if (roll < 0.6) out.push('- item a\n- item b')
+      else if (roll < 0.72) out.push(`\`\`\`js\nconst x = ${i}\n\`\`\``)
+      else if (roll < 0.8) out.push(`> quoted ${i}\n> more`)
+      else if (roll < 0.88) out.push(`Setext ${i}\n===`)
+      // No reference definitions in this corpus: they are the documented
+      // exception and have their own case.
+      else out.push(`| a | b |\n| - | - |\n| ${i} | ${i + 1} |`)
+    }
+    expectChunkedMatchesWhole(`${out.join('\n\n')}\n`, 'mixed corpus')
   })
 })

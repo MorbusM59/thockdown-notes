@@ -478,7 +478,7 @@ describe('splitPreviewBlockRangesProgressively', () => {
   // dozens of boundaries, which the production 256-line chunk never would.
   function expectProgressiveMatchesFullParse(text: string, label: string) {
     for (const firstChunkLines of [1, 3, 7, 64]) {
-      const ranges = [...splitPreviewBlockRangesProgressively(text, firstChunkLines)].flat()
+      const ranges = [...splitPreviewBlockRangesProgressively(text, firstChunkLines)].flatMap((chunk) => chunk.ranges)
       const groundTruth = splitMarkdownIntoPreviewBlocksIncremental(text, null)
       expect(ranges, `${label} @ firstChunkLines=${firstChunkLines}`).toEqual(groundTruth.ranges)
       expect(

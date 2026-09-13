@@ -4193,3 +4193,62 @@ against hand-written expectations.
 `countWrappedLines` was on the suspect list at 23ms and was **left alone**:
 that number came from the browser mock, it appears in no packaged profile,
 its own pass is allocation-free, and its one `toString()` is cached per note.
+
+## One parse, two facts — the projection now rides the split's pass
+
+Closing the item the previous round's measurement chose. On a 2MB note:
+
+| | before | after |
+| --- | --- | --- |
+| block split | 17,281ms | — |
+| visible-text projection | 30,563ms | — |
+| both | **47,844ms** | **16,262ms** |
+
+The projection is now free. Nominally it is the ~1.2s of walking the parse
+already produced; in the run above the shared pass came out 1.0s *faster*
+than the split alone, which is run-to-run variance on a 16s job — the honest
+statement is that its cost is below what this instrument can resolve. Output
+is identical, asserted in the same run.
+
+**It also moves WHEN the work happens, which matters more to a reader than
+how much of it there is.** The projection used to be built lazily on the
+first find, so opening a large note and pressing Ctrl+F meant waiting through
+a 30-second parse. It is now finished as the note opens, because the split
+runs then anyway, and the first find is a string scan.
+
+### The one document-wide dependency, which a test found and reasoning missed
+
+`splitPreviewBlockRangesProgressively` now yields the parsed nodes and the
+window's source offset alongside its ranges, and the worker walks them into a
+projection accumulator. That the pieces concatenate to the same projection was
+argued from "the projection has no document-wide dependency, unlike the block
+split's definition propagation". That argument was wrong:
+
+```
+whole-document:  "See ref and ."
+window by window: "See [ref] and [^fn]."
+```
+
+`[ref]` renders as the word *ref* when a `[ref]: url` definition exists
+anywhere in the document, and as literal `[ref]` when it does not. A window
+parsed before reaching the definition therefore projects text the reader never
+sees — silently, since nothing else reads these coordinates. Same for `[^fn]`.
+
+So `projectionNeedsWholeDocumentParse` decides, by a line scan, before the
+loop runs. It is deliberately conservative: it matches a definition-shaped
+line inside a code fence too, where remark would not. A false positive costs
+one note a whole-document parse; a false negative silently corrupts find. Not
+comparable, so the cheap side is the wrong side to be clever on.
+
+The tests hold the chunked assembly to an EXACT match against a whole-document
+parse — text and segments, at chunk sizes 1, 3, 7 and 64 — and assert the
+detector separately for the exception. Only the segment offsets make this
+worth doing at that granularity: an off-by-one shift is invisible until a hit
+lands one character out in the real app.
+
+`MdastAstNode` is now declared once (`mdastShape.ts`). Two structurally
+different mirrors of it existed, one carrying `position.start.line` and the
+other `position.start.offset`; making the nodes cross between modules turned
+that into a type error, which was the shapes pointing out that they were the
+same shape.
+

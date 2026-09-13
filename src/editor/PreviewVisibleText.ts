@@ -1,16 +1,9 @@
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkGfm from 'remark-gfm'
+import type { MdastAstNode } from './mdastShape'
 
-// Loose structural shape for mdast nodes -- mirrors PreviewBlockSplit.ts's
-// own MdastAstNode rather than pulling in full mdast types, since this only
-// ever reads `type`/`value`/`position`/`children`.
-interface MdastAstNode {
-  type: string
-  value?: string
-  position?: { start?: { offset?: number }; end?: { offset?: number } }
-  children?: MdastAstNode[]
-}
+
 
 // Same parse-only pipeline (and same remark-gfm config) PreviewBlockSplit.ts
 // uses, so what this considers "visible" is derived from exactly the tree the
@@ -76,39 +69,59 @@ export interface PreviewVisibleTextProjection {
  * ordinal, which is what the preview jump used to resolve a card to a
  * position, so clicking a card landed on the wrong occurrence.
  */
-export function buildPreviewVisibleTextProjection(markdown: string): PreviewVisibleTextProjection {
-  const root = visibleTextProcessor.parse(markdown) as MdastAstNode
+/**
+ * A projection under construction.
+ *
+ * Separate from the finished projection because the document can be handed
+ * over in PIECES -- the block split already parses it a window at a time, and
+ * the same pass can produce this (see appendProjectionNodes). The three
+ * fields are exactly what an append needs to know about everything that came
+ * before it, which is why chunking works at all: how long the visible text is
+ * so far, whether it already ends in a newline, and where to put the pieces.
+ */
+export interface PreviewVisibleTextAccumulator {
+  parts: string[]
+  visibleLength: number
+  endsWithNewline: boolean
+  segments: PreviewVisibleTextSegment[]
+}
 
-  /**
-   * The projection is assembled in PIECES and joined once, and the two facts
-   * the assembly needs about what came before -- how long it is, and whether
-   * it already ends in a newline -- are tracked alongside rather than asked
-   * of the string.
-   *
-   * It used to be one `visibleText` built with `+=`, with
-   * `visibleText.endsWith('\n')` consulted once per block. V8 keeps a chain
-   * of `+=` as a rope and does not flatten it until something needs the
-   * characters in order -- and `endsWith` is exactly that. So every block
-   * boundary flattened a string that grew to 1.8MB, ~58,000 times: quadratic,
-   * and measured at 142 SECONDS on a 2MB note against ~16s for the block
-   * split's parse of the same document. The parse was never the expensive
-   * part; the bookkeeping around it was.
-   */
-  const parts: string[] = []
-  let visibleLength = 0
-  let endsWithNewline = false
-  const segments: PreviewVisibleTextSegment[] = []
+export function createPreviewVisibleTextAccumulator(): PreviewVisibleTextAccumulator {
+  return { parts: [], visibleLength: 0, endsWithNewline: false, segments: [] }
+}
 
+/**
+ * Walks `nodes` into `accumulator`, shifting every source offset by
+ * `sourceOffset`.
+ *
+ * `sourceOffset` is what makes a windowed parse usable: a window parsed on its
+ * own reports offsets relative to its own text, and the document's offset of
+ * the window's first character converts them. It is 0 for a whole-document
+ * parse, which is why the two paths are the same code rather than two
+ * implementations that have to agree.
+ *
+ * The projection has no document-wide dependency of its own -- unlike the
+ * block split, which appends every link/footnote definition to every block --
+ * so nodes can be appended in document order and the result is the same as a
+ * single pass. `PreviewVisibleText.test.ts` holds that to an exact match
+ * against a whole-document parse at several chunk sizes rather than taking
+ * this paragraph's word for it.
+ */
+export function appendProjectionNodes(
+  accumulator: PreviewVisibleTextAccumulator,
+  nodes: readonly MdastAstNode[],
+  sourceOffset = 0,
+): void {
   const append = (value: string) => {
     if (value.length === 0) return
-    parts.push(value)
-    visibleLength += value.length
-    endsWithNewline = value.charCodeAt(value.length - 1) === 10
+    accumulator.parts.push(value)
+    accumulator.visibleLength += value.length
+    accumulator.endsWithNewline = value.charCodeAt(value.length - 1) === 10
   }
 
   const appendBlockSeparator = () => {
-    if (visibleLength === 0) return
-    if (endsWithNewline) return
+    if (accumulator.visibleLength === 0) return
+    if (accumulator.endsWithNewline) return
     append('\n')
   }
 
@@ -123,11 +136,11 @@ export function buildPreviewVisibleTextProjection(markdown: string): PreviewVisi
       const sourceStart = node.position?.start?.offset
       const sourceEnd = node.position?.end?.offset
       if (typeof sourceStart === 'number' && node.value.length > 0) {
-        segments.push({
-          visibleStart: visibleLength,
-          visibleEnd: visibleLength + node.value.length,
-          sourceStart,
-          sourceEnd: typeof sourceEnd === 'number' ? sourceEnd : sourceStart + node.value.length,
+        accumulator.segments.push({
+          visibleStart: accumulator.visibleLength,
+          visibleEnd: accumulator.visibleLength + node.value.length,
+          sourceStart: sourceStart + sourceOffset,
+          sourceEnd: (typeof sourceEnd === 'number' ? sourceEnd : sourceStart + node.value.length) + sourceOffset,
         })
         append(node.value)
       }
@@ -138,7 +151,7 @@ export function buildPreviewVisibleTextProjection(markdown: string): PreviewVisi
     // A hard line break renders as <br>, so it separates words the same way
     // a block boundary does -- without being one.
     if (node.type === 'break') {
-      if (!endsWithNewline) append('\n')
+      if (!accumulator.endsWithNewline) append('\n')
       return
     }
 
@@ -147,9 +160,67 @@ export function buildPreviewVisibleTextProjection(markdown: string): PreviewVisi
     if (isBlock) appendBlockSeparator()
   }
 
-  root.children?.forEach(walk)
+  nodes.forEach(walk)
+}
 
-  return { visibleText: parts.join(''), segments }
+/**
+ * The finished projection.
+ *
+ * The pieces are joined exactly once, here. They used to be concatenated with
+ * `+=` while `endsWith('\n')` was consulted per block -- V8 keeps a `+=`
+ * chain as a rope and flattens it whenever something needs the characters in
+ * order, so every block boundary flattened a string growing to 1.8MB, ~58,000
+ * times. Measured at 142 SECONDS on a 2MB note against ~16s for the block
+ * split's parse of the same document. The parse was never the expensive part.
+ */
+export function finishPreviewVisibleTextProjection(
+  accumulator: PreviewVisibleTextAccumulator,
+): PreviewVisibleTextProjection {
+  return { visibleText: accumulator.parts.join(''), segments: accumulator.segments }
+}
+
+/**
+ * Whether this document has to be parsed WHOLE for its projection to be right.
+ *
+ * The projection can otherwise be assembled from the block split's own
+ * windows, which is free -- the parse is already happening. There is exactly
+ * one thing that breaks that, and it is not obvious enough to have been
+ * reasoned out in advance; a test found it:
+ *
+ *   `[ref]` renders as the word "ref" if a `[ref]: url` definition exists
+ *   ANYWHERE in the document, and as the literal text "[ref]" if it does
+ *   not. A window parsed before it reaches the definition therefore projects
+ *   different visible text than the whole document does -- so find would
+ *   search "[ref]" where the reader sees "ref". Same for `[^fn]` footnotes.
+ *
+ * The test is deliberately CONSERVATIVE: it matches anything shaped like a
+ * definition, including one inside a code fence, where remark would not treat
+ * it as one. A false positive costs a whole-document parse for that note; a
+ * false negative would silently project text the reader cannot see. Those are
+ * not comparable, so the cheap side is the wrong side to be clever on.
+ */
+const REFERENCE_DEFINITION_LINE = /^ {0,3}\[[^\]]*\]:/
+
+export function projectionNeedsWholeDocumentParse(markdown: string): boolean {
+  let lineStart = 0
+  while (lineStart <= markdown.length) {
+    let lineEnd = markdown.indexOf('\n', lineStart)
+    if (lineEnd === -1) lineEnd = markdown.length
+    // Only the first few characters can carry the shape, so this never slices
+    // a long line out to test it.
+    if (REFERENCE_DEFINITION_LINE.test(markdown.slice(lineStart, Math.min(lineEnd, lineStart + 256)))) {
+      return true
+    }
+    lineStart = lineEnd + 1
+  }
+  return false
+}
+
+export function buildPreviewVisibleTextProjection(markdown: string): PreviewVisibleTextProjection {
+  const root = visibleTextProcessor.parse(markdown) as MdastAstNode
+  const accumulator = createPreviewVisibleTextAccumulator()
+  appendProjectionNodes(accumulator, root.children ?? [])
+  return finishPreviewVisibleTextProjection(accumulator)
 }
 
 /**
@@ -244,4 +315,25 @@ export function mapVisibleRangeToSourceRange(
   if (visibleEnd <= visibleStart) return { start, end: start }
   const lastCharacterStart = mapVisibleOffsetToSourceOffset(projection, visibleEnd - 1)
   return { start, end: Math.max(start, lastCharacterStart + 1) }
+}
+
+/**
+ * Records a projection built elsewhere against its text.
+ *
+ * The block split parses every note as it opens, and the same pass now
+ * produces this projection (documentFacts.worker.ts). Handing it here means
+ * the reader's first find is a string scan over something already built,
+ * rather than a 30-second parse they wait through -- and the memo stops being
+ * a cache whose size matters and becomes a by-product of opening the note.
+ */
+export function rememberPreviewVisibleTextProjection(
+  markdown: string,
+  projection: PreviewVisibleTextProjection,
+): void {
+  projectionMemo.delete(markdown)
+  projectionMemo.set(markdown, projection)
+  if (projectionMemo.size > PROJECTION_MEMO_SIZE) {
+    const oldest = projectionMemo.keys().next()
+    if (!oldest.done) projectionMemo.delete(oldest.value)
+  }
 }
