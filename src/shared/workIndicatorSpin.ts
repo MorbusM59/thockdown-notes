@@ -1,19 +1,19 @@
 // A cogwheel that turns while the app is working, and stops on a tooth.
 //
-// The wheel's artwork is invariant under a 45° rotation, so 45° is the
+// The wheel's artwork is invariant under a 60° rotation, so 60° is the
 // smallest movement that leaves it looking like itself. That is what makes
 // this readable as a MECHANISM rather than as a spinner: it never rests
-// mid-tooth, because every phase it can be in is exactly 45°.
+// mid-tooth, because every phase it can be in is exactly one step.
 //
-//   ATTACK    45°, accelerating from rest to full speed
-//   SUSTAIN   45° at full speed, repeated for as long as work continues
-//   RELEASE   45°, decelerating back to rest
+//   ATTACK    60°, accelerating from rest to full speed
+//   SUSTAIN   60° at full speed, repeated for as long as work continues
+//   RELEASE   60°, decelerating back to rest
 //
 // The decision to keep going is taken at the END of each increment, never
 // mid-turn, which is what removes the need for any rule about where a
 // wind-down is allowed to start: every boundary is a tooth by construction.
 //
-// A single very short task therefore still turns the wheel 90° -- attack then
+// A single very short task therefore still turns the wheel 120° -- attack then
 // release -- so a worker that finishes in 40ms reads as one deliberate click
 // of a mechanism instead of a flicker. There is deliberately no "don't show
 // work shorter than X" threshold: the minimum turn IS that mechanism, and it
@@ -22,12 +22,12 @@
 // ## Durations are solved from the angle, never assumed
 //
 // The attack and release use the app's own animation curves, shaped by the
-// reader's ramp/shape/speed settings -- so they must cover exactly 45°
+// reader's ramp/shape/speed settings -- so they must cover exactly one step
 // whatever those settings are. The two curves do not have the same area under
 // them, so giving them a shared duration would give them different angles and
 // the wheel would drift off its teeth. Instead each duration is derived: the
 // curve's normalized area is measured, and the duration that makes it
-// integrate to 45° is the one used. The settings then change how the turn
+// integrate to one step is the one used. The settings then change how the turn
 // FEELS and never where it stops.
 
 import {
@@ -36,14 +36,30 @@ import {
   sampleCursorHoldReleaseLevel,
 } from '../editor/CursorClickCurve'
 
-/** The wheel's own symmetry, and therefore the size of every phase. */
-export const WORK_INDICATOR_STEP_DEG = 45
+/**
+ * The icon's own rotational symmetry, and therefore the size of every phase.
+ *
+ * MEASURED, not assumed. This was 45 on the reasoning that a cog has eight
+ * teeth; Font Awesome's gear has SIX. Stepping 45° on a six-tooth gear leaves
+ * it a third of a tooth out at every rest, so no two rests look alike -- which
+ * is not read as an error but as a WOBBLE, and was reported as one. The
+ * suspicion at the time was an off-centre glyph; the origin turned out to be
+ * exactly right (ink centre = box centre, 50%/50%) and the tooth count wrong.
+ *
+ *   45° -> 30.6% of inked pixels differ    60° -> 0.6% (antialiasing)
+ *   90° -> 44.8%                          120° -> 0.9%
+ *
+ * `node scripts/measureIconSymmetry.mjs` produces those numbers. Run it before
+ * changing the indicator's icon: this constant is a fact about the artwork,
+ * and the artwork is the one thing here nobody can check by reading.
+ */
+export const WORK_INDICATOR_STEP_DEG = 60
 
 /** Resolution of the travel tables. Plenty for a monotonic ramp, and cheap. */
 const CURVE_SAMPLES = 256
 
 /**
- * How much of a phase's 45° has been travelled by each point in its duration
+ * How much of a phase's step has been travelled by each point in its duration
  * -- a normalized cumulative integral of the velocity curve, from 0 to
  * exactly 1.
  *
@@ -113,18 +129,18 @@ export interface WorkIndicatorTiming {
  */
 export function resolveWorkIndicatorTiming(speedX: number, ramp: number, skew: number): WorkIndicatorTiming {
   // The attack's own duration comes from the speed slider; its SPEED is then
-  // whatever makes it cover 45° in that time.
+  // whatever makes it cover a step in that time.
   const attackSec = Math.max(0.05, resolveCursorClickDurationSec(speedX))
   const attackCurve = (progress: number) => sampleCursorHoldLevel(progress * attackSec, ramp, skew, attackSec)
   const maxSpeedDegPerSec = WORK_INDICATOR_STEP_DEG / (attackSec * meanHeightOf(attackCurve))
 
-  // At full speed, a sustain increment is simply how long 45° takes.
+  // At full speed, a sustain increment is simply how long a step takes.
   const sustainSec = WORK_INDICATOR_STEP_DEG / maxSpeedDegPerSec
 
   // The release decays on its own curve, so its duration is solved
-  // independently to cover the same 45°. Probed at the attack's duration
+  // independently to cover the same step. Probed at the attack's duration
   // purely to measure the curve's SHAPE; the duration that comes out is what
-  // makes it travel 45°.
+  // makes it travel one step.
   const releaseProbeSec = attackSec
   const releaseCurve = (progress: number) => sampleCursorHoldReleaseLevel(1, progress * releaseProbeSec, ramp, skew, releaseProbeSec)
   const releaseSec = WORK_INDICATOR_STEP_DEG / (maxSpeedDegPerSec * meanHeightOf(releaseCurve))
@@ -143,7 +159,7 @@ export type WorkIndicatorPhase = 'idle' | 'attack' | 'sustain' | 'release'
 
 export interface WorkIndicatorState {
   phase: WorkIndicatorPhase
-  /** Degrees turned within the current phase, in [0, 45]. */
+  /** Degrees turned within the current phase, in [0, WORK_INDICATOR_STEP_DEG]. */
   phaseDeg: number
   /** Total degrees turned since the wheel last rested. Only ever read modulo 360. */
   angleDeg: number
@@ -157,7 +173,7 @@ export const WORK_INDICATOR_AT_REST: WorkIndicatorState = {
   elapsedSec: 0,
 }
 
-/** Where within its own 45° a phase has got to, as a fraction. */
+/** Where within its own step a phase has got to, as a fraction. */
 function phaseProgress(state: WorkIndicatorState, timing: WorkIndicatorTiming): number {
   if (state.phase === 'attack') return Math.min(1, state.elapsedSec / timing.attackSec)
   if (state.phase === 'release') return Math.min(1, state.elapsedSec / timing.releaseSec)
@@ -168,7 +184,7 @@ function phaseProgress(state: WorkIndicatorState, timing: WorkIndicatorTiming): 
  * Advances the wheel by one frame.
  *
  * Pure, and the reason it is pure is that the interesting property -- that
- * the wheel only ever comes to rest on a multiple of 45° -- is then something
+ * the wheel only ever comes to rest on a whole number of steps -- is then something
  * a test can assert over thousands of random frame timings and work patterns,
  * rather than something anyone has to watch for.
  *
@@ -235,7 +251,7 @@ export function advanceWorkIndicator(
     : next
 }
 
-/** The fraction of this phase's 45° travelled by `progress` of its duration. */
+/** The fraction of this phase's step travelled by `progress` of its duration. */
 function travelFraction(
   phase: WorkIndicatorPhase,
   progress: number,

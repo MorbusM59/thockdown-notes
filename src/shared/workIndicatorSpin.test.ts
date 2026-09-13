@@ -7,9 +7,11 @@ import {
 } from './workIndicatorSpin'
 
 /**
- * The wheel's artwork repeats every 45°, so "at rest" and "at rest, one tooth
- * on" are the same picture -- and resting anywhere else is the difference
- * between a mechanism and a stalled spinner. Everything here is that one
+ * The wheel's artwork repeats every WORK_INDICATOR_STEP_DEG, so "at rest" and
+ * "at rest, one tooth on" are the same picture -- and resting anywhere else is
+ * the difference between a mechanism and a stalled spinner. Everything here is
+ * written against the constant rather than a literal, which is why correcting
+ * it from 45° to the gear's real 60° needed no change to a single assertion. Everything here is that one
  * property, asserted across the settings range rather than at one comfortable
  * set of values, because the durations are DERIVED from those settings and a
  * derivation is exactly the thing that can be right for the values its author
@@ -55,7 +57,7 @@ function runToRest(
 describe('the work indicator comes to rest on a tooth', () => {
   it.each(SETTINGS)('after a very short piece of work (%o)', (settings) => {
     // One frame of work: still a full attack and a full release, because a
-    // phase runs to completion. 90 degrees, the documented minimum.
+    // phase runs to completion -- two steps, the documented minimum.
     const { state, started } = runToRest(settings, (elapsed) => elapsed < 0.001)
     expect(started).toBe(true)
     expect(state.phase).toBe('idle')
