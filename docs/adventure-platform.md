@@ -302,8 +302,14 @@ These block a playable game and want answers rather than guesses.
    Needs an additive field on the shared contract. (A modifier's live effects
    ARE now readable — as the tooltip on its strip pill — so this is about the
    focused CHOICE, not about holdings any more.)
-2. **Readouts have no icons.** The design's status line is written in icons;
-   the contract's readout is a short label and a value.
+2. **Readouts have no icons — ANSWERED.** `EscapeMenuReadout.icon` is
+   required, and the tab bar draws an icon and a value with the name in the
+   tooltip. The six stats use `STAT_ICONS`; charisma is `fa-masks-theater`
+   and agility `fa-feather-pointed` (the design's `fa-lips` is Font Awesome
+   PRO and does not exist in the free set shipped here). Fame and stat points
+   take the crown and the star from the rail's own gauges, so one quantity
+   never wears two glyphs on one chrome. Gold and motes left the bar entirely
+   for the stats row, beside the strip they buy.
 3. **Motes — BUILT** (`model/motes.ts`). One earning stream, two stored facts:
    `experienceEarned` (monotonic) and `experienceSpentOnTraits`. The spendable
    balance is `earned − spentOnTraits` and has nothing to do with stats. Stat
