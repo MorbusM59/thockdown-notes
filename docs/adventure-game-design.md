@@ -1,150 +1,218 @@
-# The adventure game — design contract
+<!--
+  THE GAME'S RULES. The source of truth for what Thockquest IS; its sibling
+  docs/adventure-platform.md is the source of truth for how the platform
+  underneath is BUILT. They do not overlap.
 
-> **RESTORED.** This document was deleted by `5523f8f` ("Rebuild the
-> adventure as a platform"), which treated it as a point-in-time record. It
-> is not one: it is the source of truth for the game's RULES, and deleting it
-> took six open questions out of the project's memory with it. It is back,
-> with its specification text intact and only its MODULE PATHS corrected —
-> every `rules/*` path in the original predates the rebuild.
->
-> **Read this with [adventure-platform.md](adventure-platform.md).** They are
-> not rivals and they do not overlap: this document says what the game's
-> rules ARE, that one says how the platform underneath is BUILT. Where a rule
-> here is not implemented, this document still stands and the code is what is
-> behind.
->
-> **Open questions live in ONE place** — adventure-platform.md's numbered
-> list, which is what the project refers to by number. The list at the foot
-> of this document has been folded into it; see the note there.
+  The body below is the design plan as authored, unedited. An OLDER version
+  of it once lived here, was deleted by 5523f8f as if it were a point-in-time
+  record, and was briefly restored before this one replaced it -- that older
+  text described five stats and a different stat table, and reading it as
+  current produced two "the code contradicts the design" findings that were
+  nothing of the kind. If a rule here and the code disagree, check which
+  version you are holding before believing either.
 
-The game reached by right-clicking the User Guide window control. This
-document is the source of truth for its RULES; `src/escapeMenu/escapeMenuContract.ts`
-is the source of truth for how it reaches the screen. Read both before
-changing either.
+  Where CONVERSATION has since moved a rule on, it is recorded under
+  "Deviations settled since" at the foot -- never by editing the plan's own
+  prose, so the two can always be told apart.
 
-The rules live in `src/adventure/model/` (pure rules) and `src/adventure/core/` (the director) as pure functions over
-serializable state — no React, no clock, no `Math.random` (the run carries
-its own seed). That is not fastidiousness: a run is saved after every single
-player action and must be replayable from its seed plus its inputs, or a
-defect in it cannot be reported, only described.
+  Open questions live in ONE place: adventure-platform.md's numbered list.
+-->
 
-## The shape of a run
+# Thockquest Design Plan
 
-A **run** is a sequence of **rounds**. Each round is a fixed sequence of
-**steps** ending in a boss, with minibosses on the way (`model/` — NOT BUILT;
-`STANDARD_ROUND_LAYOUT` is the specification's own example, and the only
-layout today). A round runs through four phases, which are explicit states
-because the ring can only ask one question at a time (`core/director.ts` + `stages/`):
+## Introduction
 
-```
-outfitting ──► step ──► … ──► roundEnd ──► outfitting ──► …
-                 │                  │
-                 └──────► over ◄────┘
-```
+Thockquest is a minigame integrated into the editor that is based around the game's revolving escape menu.
 
-- **outfitting** — spend the round's experience and gold. One unit of
-  experience buys one trait, one unit of gold buys one piece of gear, each
-  chosen from `2 + Luck/2` offers. Offers are rolled *when each selection
-  becomes current*, so a Luck bonus from the item just taken widens the next
-  offer. Units are consumed as the queue is built, so a run saved midway
-  through cannot spend them twice.
-- **step** — the player picks from `2 + Perception/2` options. What those
-  options *are* is content (see "The seam" below).
-- **roundEnd** — keep **one** piece of gear and **one** trait. Everything
-  else is discarded, *including whatever was kept last round*
-  (`model/` — NOT BUILT; `releaseModifier` is the effect it will use). The carry-over is never a growing pile; it is
-  exactly two things, chosen fresh from everything currently held.
-- **over** — defeat (hit points reached zero) or retirement. Fame is the score.
+## Integration
 
-## The stats
+Thockquest lives entirely within the "Escape Menu" and can be toggled in the active slot by right clicking the user guide button.
 
-Five, declared in `model/stats.ts` and read by every formula through a
-`StatBlock` — a sixth stat is an entry in `STAT_KEYS` plus a formula, not a
-migration.
+The game is entirely based on presenting the user with choices selected via the Escape Menu. Selecting a choice does not close the menu as in regular interaction. Only the escape button does.
 
-Base stats are capped at **6**; gear is what takes you past it. That is why
-effective stats are computed in one documented order (`model/modifiers.ts`):
+The game's narration is displayed in the chapter bar. After each selection, a brief description explains the outcome in the chapter bar. In the format **[action taken]:** *Description*. The action take is printed in bold, the outcome in italic. Any numbers in the description are shown bold and italic.
 
-```
-clamp(base, 0..6) → + gear/trait stat deltas → derive → × derived scales
-                  → + derived deltas → normalize (counts whole, chances 0..1)
-```
+The players stats are shown in the tab bar above the editor in the following format:
+[fa-heart][health] | [fa-hand-fist][Might] [fa-wind][Agility] [fa-eye][Perception] [fa-brain][Intellect] [fa-lips][Charisma] [fa-clover][Luck] | [fa-coins][Gold] [fa-book][motes of experience] [fa-up-long][motes till next stat point] [fa-star][acquired stat points] [fa-trophy][fame]
 
-| Stat | Effects |
-| --- | --- |
-| Luck | offers per selection `2 + Luck/2`; crit chance `20% + 10%·Luck` |
-| Might | hit points `50 + 15·Might`†; damage multiplier `50% + 15%·Might` |
-| Perception | choices per step `2 + Perception/2` |
-| Charm | spell casts per round `2 + Charm` |
-| Agility | dodge chance `50% + 5%·Agility`; hit chance `50% + 5%·Agility` |
+## Gameplay Loop
 
-† The specification writes this one as `50 + 15·Resilience`, and there is no
-Resilience in its list of stats. Implemented against Might, the stat it is
-listed under. See the open questions.
+The game takes place in levels. Each level has a predetermined number of encounters, ends in a boss encounter and has a number of mini boss encounters on the way there. The regular encounters are started when the user selects "Go hunting", "Go exploring" or "Special encounter".
 
-**Stat checks** (`model/checks.ts`): roll a D6, add the encounter's
-Difficulty Rating, and the check passes if the stat **matches or exceeds**
-that total. The die is the opposition, not the player's contribution — the
-inverse of the more common tabletop convention, and worth stating because
-the two read identically in prose. A rating at or above the die's maximum
-cannot be passed at all. The scene layer resolves its `check` outcomes
-through this same function, so the game has exactly one check rule.
+The game tracks stats. These are base stats that carry over from level to level. The user can select a stat point for every n motes of experience they collect where n = 10 + 5*[total acquired stat points]. Items can be acquired at the beginning of levels, as loot after combat and in other events. It can can grant major boosts and lead to a more dramatic change in stats as the user progressed through one level. The user can pick one piece of gear to keep at the end of each level (not cumulative). The user can also acquire traits while adventuring. At the end of each level, they can choose one trait to keep (not cumulative).
 
-## Economy
+Throughout the game the user collects motes of experience, pieces of gold and fame, the latter being the score the user tries to beat on a run. Fame is gained through each defeated mini boss and boss. Motes of experience and pieces of gold are awared as quantized units and determine how you start the next level. At the beginning of each level, the player can exchange motes of experience for traits and pieces of gold for items. These are selected from a random offering in the circle menu. The amount of selections offered depends on user stats. Items and traits are only in effect for one level, except for the permanently selected ones.
 
-- **Fame** — the score. Awarded by minibosses and bosses. Only goes up.
-- **Experience** and **gold** — quantized units, spent one-for-one on the
-  selections at the start of the next round.
-- **Stat points** — roughly one per round, granted by the layout's `boon`
-  step rather than by the round ending, so a round left early never quietly
-  pays out.
+## Stats
 
-## Enemies and combat
+All stats are capped at 6 before item gains. Stat checks are rolled against a Difficulty Rating (DR) +  D6. If the user's stat matches or exceeds the rolled number, the check is passed. Apart from checks, the stats also have these added effects:
 
-An enemy archetype is a *shape*, not a statline (`model/` — NOT BUILT): a band
-of percentages applied to the round's base value, so "a brute is 140–180%
-health" holds at round 1 and round 40. The base is
-`10 · factor^round`, with the factor set once per run by the difficulty
-preset — easy 1.01, medium 1.02, hard 1.05, insane 1.1 (`model/` — NOT BUILT).
+- Might
+   - Hit Points: 50 + 15*Resilience
+   - Damage Multiplier: 50% + 15%*Might
+- Agility
+   - Chance to dodge: 50% + 5%*Agility
+   - Number of actions = 2 + Agility/2
+- Perception
+   - Number of encounter choices each step = 2 + Perception/2
+   - Chance to hit: 50% + 5%*Perception
+- Intellect
+   - Unlocks spells (see combat)
+- Charisma
+   - Unlocks charisma based actions (see combat)
+- Luck
+   - Number of selection choices for items and traits = 2 + Luck/2
+   - Chance for double damage (crit): 20% + 10%*Luck
 
-Combat is *decided immediately* (`model/` — NOT BUILT): the player commits, and
-is told how it went. That is a statement about the interface, not the maths
-— the exchange still runs blow by blow (hit → crit → enemy answers unless
-dodged), because that is what makes a stat point feel like anything, and
-because the event log it returns is what an encounter's prose will be
-written from.
+## Encounters
 
-## The seam
+### Go Hunting
+Selection of Monsters
+- Classes (determines health and damage modifiers, special actions, number of actions and loot)
+   - Fighter
+   - Mage
+   - Thief
+- Types
+   - Normal
+   - Elite (increased percentage modifier to health, damage, actions and loot)
+   - Group (reduced percentage modifier to health, damage, actions and loot, but multiple monsters)
+- Races (additional modifiers and special actions)
+   - ...
 
-`core/director.ts` + `stages/` deliberately does **not** decide what an encounter is. A
-step's content — the choices, their prose, whether one starts a fight or a
-skill check — is supplied from outside and comes back as a single
-`StepOutcome` (fame, units, damage, gear, traits, stat points, whether to
-advance). That is the only way anything outside the rules changes a run.
+### Go Exploring
+Selection of Areas (each have unique encounters to be determined)
+- Swamp
+- Forest
+- Plains
+- Mountains
 
-Two content layers exist, and they are not rivals:
+### Chance Encounter
+Selection of Encounters (to be determined)
+- Trader
+- Distress
+- Bard
+- Pet
 
-- the **run framework** (`rules/`) decides *which* encounter you face and
-  what it pays out;
-- the **scene layer** (`content/`) is one way an individual
-  encounter's choices can be authored — a small branching graph with
-  requirements, effects, weighted chance and stat checks. `The Long Margin`
-  is currently wired up as the whole game; it will become one encounter's
-  worth of authoring once the run framework is playable.
+## Combat
 
-## Open questions
+### Combat Encounter Structure
+- Combat round start menu with tactical choices
+   - Only one choice as a placeholder: Begin combat
+   - After a choice has been taken, all actions are set to their maximum (see combat rounds) and combat starts.
+- Combat round starts
+   - Player and monster take actions, affecting their health and potentially loot outcomes
+   - Effects carry over into the next round if there is one
+- Combat round ends when
+   - player has been defeated,
+      - Result: Game Over Menu
+   - all monsters have been defeated
+      - Result: Loot Menu
+   - all actions have been used
+      - Result: Combat round start menu
+- Loot Menu with selections
+   - Gold (1 piece) + Mote(s) of experience (# depend on encounter)
+   - Item (choices depend on luck) + Mote of experience(s) (# depend on encounter)
 
-Folded into [adventure-platform.md](adventure-platform.md)'s numbered list,
-which is the one the project cites by number. Six of them existed ONLY here
-and were lost while this file was deleted: starting stats, the round
-exponent, enemy accuracy, what defeat does, whether difficulty is chosen at
-run start, and the absence of gear/trait content. They are questions 13-18
-there now.
+### Combat rounds
+   - every monster and player each have a number of actions
+      - Chance for player to take an action = player_actions / (player_actions + monster actions)
+      - If the player doesn't take an action, the monster does
+      - after taking an action, the number of available actions drops by one
+   - Monster actions
+      - Attack
+         - On each attack the monster makes, the player has a selection of defensive choices
+         - The likelihood of a choice appearing is calculated based on the stats
+         - Multiple choices can be available (only dodge at the moment, but more are to be added)
+         - On a choice, depending on a stat check, a bonus may become available.
+         - Even if there is only one choice available, the player selects it because the selction also serves as a feedback for the player
+      - Special Attack
+         - same as attack
+      - Flee
+         - choice of pursuit based on agility
+      - Talk
+         - choice of negotiation actions based on charisma
+   - Player actions
+      - Attack
+      - Special Attack
+      - Charisma Actions
+      - Spells
 
-Two of this document's own questions have since been answered:
+### Special Attacks
+- Trait unlocked
+- Item unlocked
+- Stat unlocked (# of uses per combat = stat/unlock level)
+   - Might
+      - 2: Haymaker (+100% damage -20% chance to hit)
+      - 3: Stomp (AE damage for 50% and stun: -1 monster action)
+      - 5: Second Wind (return player health to full)
+   - Perception
+      - 2: [to be determined]
+      - 3: [to be determined]
+      - 5: [to be determined]
+   - Agility
+      - 2: [to be determined]
+      - 3: [to be determined]
+      - 5: [to be determined]
+   - Luck
+      - 2: [to be determined]
+      - 3: [to be determined]
+      - 5: [to be determined]
 
-- **Resilience** is a leftover, not a sixth stat. Physical attack and
-  physical defence are one stat, Might — which is why the hit-point formula
-  was written under Might while naming Resilience.
-- **Fame** is the stat-point ladder fed by gold, on identical numbers
+### Charisma Actions
+- Unlocked  based on Charisma (Chance to fail = Tier * [number of uses this combat] / Charisma)
+- Spell-List
+   - Tier 0 
+      - Plead (all enemies lose 1 action)
+   - Tier 1
+      - Suggest (forces a single enemy's next action to be "talk")
+   - Tier 2
+      - Taunt (forces enemy to attack only for the rest of the round)
+   - Tier 3
+      - Confuse (the enemy's next attack will target itself or a friend)
+   - Tier 4
+      - Terrify (forces enemies to flee, with reduced loot options)
+   - Tier 5
+      - Overwhelm (forces enemies to surrender, leaving full loot)
+   - Tier 6
+      - Command (a single enemy joins your ranks and fights for you until it dies)
+
+### Spells
+- Learned at the beginning of a level based on Intellect
+   - Total spell picks = 2*Intellect
+   - Max spells per tier = Intellect - Tier
+- Spell-List
+   - [to be determined]
+
+---
+
+## Deviations settled since (not part of the plan above)
+
+Decisions taken in conversation after this plan was written. The plan's own
+text is left as authored; this is what has moved.
+
+- **Resilience** in the hit-point formula is a leftover. Physical attack and
+  physical defence are one stat — Might — which is why the formula is written
+  under Might while naming Resilience. There is no seventh stat.
+- **Stat points and fame points are spendable at any time**, not only at a
+  level's end.
+- **Fame is the stat-point ladder fed by gold**, on identical numbers:
+  `10 + 5 × points spent`, so 10, 15, 25, 40, 60, 85 … Gold earned drives
+  fame points exactly as experience earned drives stat points
   (`model/milestones.ts`).
+- **Monsters grow stronger per LEVEL, not per combat round.**
+- **A combat round** is one unit of combat: from all parties holding all
+  their actions to all parties having spent them, after which the counts
+  reset. It is what makes Agility's action count mean anything.
+- **Every action in a round is a ring choice**, whichever side owns it. On a
+  player action the ring offers offensive choices (attack, special attack,
+  charisma actions, spells); on a monster action it offers the player's
+  reactive ones (dodge, flee, defend). The total choices a player makes in a
+  round is therefore the combined action count of every party in it.
+- **Icons.** `fa-lips` (charisma) is Font Awesome Pro and does not exist in
+  the free set shipped here — `fa-masks-theater` is used instead. Agility is
+  `fa-feather-pointed` rather than `fa-wind`.
+- **The tab bar carries armor** (`fa-shield-halved`), which the plan's status
+  line does not mention, as `items(natural)` — two pools that behave
+  differently, so never their sum.
+- **Gold and motes left the tab bar** for the stats row below the editor,
+  beside the item and trait pills they buy.

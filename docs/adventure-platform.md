@@ -441,24 +441,91 @@ deleted:
     (`model/modifiers.ts`) and Thockquest carries a handful of examples;
     a real pool does not exist.
 
-And three the RESTORATION itself turned up — places where the code and the
-design contract disagree, rather than places the contract is silent:
+The RESTORATION also turned up three apparent code-versus-contract
+disagreements. **Two of them were not real** and are recorded here so nobody
+finds them again: the restored file was an OLDER version of the design plan,
+describing five stats and a different stat table. Against the CURRENT plan
+(`adventure-game-design.md`) the code's stat table matches row for row —
+Agility gives dodge and the action count, Perception gives encounter choices
+and hit chance, Intellect and Charisma carry unlocks rather than curves — and
+so does the check rule. The lesson is the one rule 9 already states: a stale
+description is believed, and a stale description that has been *restored*
+looks authoritative.
 
-19. **"Round" and "level" are the same thing under two names.** The contract
-    says round; the record says `level` and the effect says `advanceLevel`,
-    and the scaling exponent the contract calls `round` is that number. One
-    word has to win before the round structure is built on top of it.
-20. **`actionsPerRound` is not in the contract.** `model/stats.ts` derives
-    `2 + Agility/2` actions per round, and the chrome counter reserves
-    `3 | 4` for "the round and the actions left". The contract has no
-    per-combat action budget at all — its combat is decided immediately, and
-    its Agility gives dodge and hit chance. Either the derived value is an
-    invention to delete, or the contract is behind.
-21. **The stat table disagrees on two rows.** The contract: Agility → dodge
-    *and* hit chance; Perception → choices per step. The code: Agility →
-    dodge and actionsPerRound; Perception → encounter choices *and* hit
-    chance. The contract also lists FIVE stats (Luck, Might, Perception,
-    Charm, Agility) where the code has six, with Intellect added and Charm
-    renamed Charisma. Since the round's phases are specified in terms of
-    `2 + Luck/2` and `2 + Perception/2`, this has to be settled before the
-    action economy can be built on those numbers.
+The third was real, and is answered:
+
+19. **"Round" and "level" — ANSWERED, they are different things.** A LEVEL is
+    one iteration of the whole cycle after character creation: from choosing
+    where to go, through a predetermined number of encounters and minibosses,
+    to the level's final boss. A ROUND is one unit of COMBAT — from every
+    party holding all its actions to every party having spent them, after
+    which the counts reset. Monsters scale per LEVEL. The deleted plan's
+    `10 · factor^round` said round and meant level.
+
+## Building the action economy: what is specified, and what is missing
+
+The round's STRUCTURE is fully specified and can be built without inventing
+anything. Its NUMBERS mostly cannot. The split matters, because the buildable
+half is a pure engine and the missing half is all content:
+
+**Specified, buildable today**
+- Actions reset to maximum at the start of each round.
+- Whose action it is: `player_actions / (player_actions + monster_actions)`,
+  rolled per action; if it is not the player's, it is a monster's. The chosen
+  side's remaining count drops by one.
+- The round ends when every action has been spent → back to the round-start
+  tactical menu.
+- Combat ends when the player is defeated (→ game over) or every monster is
+  (→ the loot menu).
+- A player action offers offensive choices; a monster action offers the
+  player's reactive ones. Every action in the round is one ring choice.
+- The player's action count is `2 + Agility/2`, already derived.
+
+**Missing, and each blocks a specific part of it**
+22. **A monster's action count.** It is the denominator of the turn-order
+    roll, so the loop cannot run without it. The plan says a monster's CLASS
+    determines "health and damage modifiers, special actions, number of
+    actions and loot" and gives no numbers for any of them, nor a base for
+    the modifiers to modify.
+23. **Monster health and damage, and how they scale per level.** The plan
+    says monsters grow stronger each level and does not say by how much. (The
+    deleted plan had `10 · factor^level` with per-difficulty factors, but
+    difficulty presets are not in the current plan at all.)
+24. **Player base damage.** The multiplier is specified; what it multiplies
+    is not.
+25. **Which defensive choices appear, and how often.** "The likelihood of a
+    choice appearing is calculated based on the stats" — which stats, and by
+    what function. Only Dodge exists as a named choice.
+26. **What the bonus on a defensive stat check is.** "On a choice, depending
+    on a stat check, a bonus may become available" names neither.
+27. **How long an effect lasts.** Effects carry over into the next round;
+    Stomp stuns for `-1 monster action`, Taunt lasts "the rest of the round",
+    Suggest forces "the next action". There is no duration model to hold any
+    of them.
+28. **Encounters per level**, which the plan calls "a predetermined number".
+
+**Contradictions inside the plan itself**
+29. **Charisma's failure formula cannot be right as written.**
+    `Tier × uses this combat / Charisma` is ZERO on the first use of any
+    tier, so a Charisma 1 character's first Command (tier 6) never fails; it
+    is unbounded above 1; and it divides by zero at Charisma 0.
+30. **Special-attack uses `stat / unlock level` is not a whole number.**
+    Might 5 with Haymaker (unlock 2) is 2.5 uses. No rounding rule.
+31. **Naming.** The gameplay loop calls the third encounter kind a "Special
+    encounter"; the Encounters section calls it a "Chance Encounter". The
+    Charisma Actions section labels its own list a "Spell-List". Separately,
+    the code calls the level's opening choice a REGION (caves, foothills,
+    island), the plan calls Go Exploring's destinations AREAS (swamp, forest,
+    plains, mountains), and a Road was named in conversation. Three words,
+    and at least two distinct concepts.
+32. **Where a level ends.** The plan says a level ends in a BOSS with
+    minibosses on the way; it was described in conversation as ending at the
+    mini boss.
+
+**Specified in the plan and absent from the code, unrelated to combat**
+33. **The narration format.** `**[action taken]:** *Description*`, with any
+    numbers bold-italic. Narration currently renders as plain text.
+34. **Armor is in the code and in NO version of the plan.** Two pools, decay
+    on absorb, a luck-based survival chance. It reaches the tab bar and has
+    a tuning constant marked provisional. Either it predates the plan or it
+    came from a conversation, but nothing written says what it is for.
