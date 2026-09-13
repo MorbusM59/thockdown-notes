@@ -217,14 +217,25 @@ export interface EscapeMenuMode {
   /** Everything that does not belong in the ring -- see above. */
   status?: EscapeMenuModeChrome
   /**
-   * A MODE AND ITS RING ARE ONE UNIT, and this is one half of saying so.
+   * A MODE AND ITS RING ARE ONE UNIT, IN ITS OWN SLOT, and this is one half
+   * of saying so.
    *
-   * The other half is not a field at all: while a mode owns a slot, the ring
-   * is UP by derivation (App.tsx's `isEscapeRingUp`), not because whoever
-   * opened it also remembered to raise it. That direction matters on
-   * restore, where a persisted overlay comes back and a transient "the
-   * reader raised it" flag does not -- an overlay that could exist without
-   * its ring is half a mode, occupying a slot with nothing in it.
+   * The other half is not a field at all: while a mode owns a slot, that
+   * SLOT draws the ring by derivation (SectionEditorArea's
+   * `isEscapeHoldActive`), not because whoever opened it also remembered to
+   * raise it. That direction matters on restore, where a persisted overlay
+   * comes back and a transient "the reader raised it" flag does not -- an
+   * overlay that could exist without its ring is half a mode, occupying a
+   * slot with nothing in it.
+   *
+   * "IN ITS OWN SLOT" is the correction a second slot forced, and it is the
+   * distinction to hold on to: a mode does NOT compete for the one ring the
+   * window has. The quick-actions ring is a transient menu over whatever the
+   * reader is looking at, so it follows focus; a mode is a slot's persistent
+   * interface that merely borrows the same chrome, so it does not. Treating
+   * them as the same thing meant opening a second slot took the game's own
+   * interface away from it -- the game still there, still occupying its
+   * slot, with no menu -- and made Escape in an unrelated note dismiss it.
    *
    * What it means for this mode when the RING GOES DOWN -- Escape, or a cell
    * that does not keep the menu open.

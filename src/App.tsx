@@ -2218,7 +2218,12 @@ function App() {
     // Without this, lowering the adventure's ring left its slot occupied,
     // empty and its toggle lit -- a view with no way back into it. See
     // EscapeMenuMode.onDismiss.
-    escapeMenuModeRef.current?.onDismiss?.()
+    //
+    // ONLY when the ring being lowered is that mode's OWN. A mode lives in
+    // one slot and does not compete for the window's single ring, so Escape
+    // in a note beside it is not a dismissal of it -- and treating it as one
+    // ended a game the reader was not even looking at.
+    if (isModeOwningActiveSlotRef.current) escapeMenuModeRef.current?.onDismiss?.()
   }, [clearEscapeHoldTimer])
   // "Double size" mode: 2x page zoom paired with a doubled window minimum --
   // see the window-control:double-size-mode handler in electron/main.ts.
@@ -4373,6 +4378,13 @@ function App() {
    * would silently pin this to a first-render closure if it tried.
    */
   const escapeMenuModeRef = useRef<{ onDismiss?: () => void } | null>(null)
+  /**
+   * Whether that mode owns the slot the reader is actually in -- same
+   * ref-proxy technique and the same TDZ reason as `escapeMenuModeRef`
+   * above, since `handleEscapeHoldPanelClose` is declared far earlier than
+   * the section state it has to consult.
+   */
+  const isModeOwningActiveSlotRef = useRef(false)
 
   const queueAppStateSaveStable = useCallback((selectedNoteId: string | null) => queueAppStateSaveRef.current(selectedNoteId), [])
   const updateActiveNoteTitlePreviewStable = useCallback((nextText: string) => updateActiveNoteTitlePreviewRef.current(nextText), [])
@@ -6077,26 +6089,44 @@ ${markdownHtml}
   escapeMenuModeRef.current = escapeMenuContribution.activeMode
 
   /**
-   * WHETHER THE RING IS UP -- the one answer, which everything asks.
+   * WHETHER A RING IS UP IN THE SLOT THE READER IS IN.
+   *
+   * Every consumer of this is about the reader's current keyboard and focus
+   * context -- does Escape belong to a ring, should a click refocus an
+   * editor -- so the question is about the ACTIVE slot and not about the
+   * window.
    *
    * `isEscapeHoldPanelOpen` alone means "the reader raised it", and that is
    * not the whole story: a mode owning a slot IS an open ring
    * (escapeMenuContract.ts), because the ring is that mode's entire
-   * interface rather than a menu over something else. So a mode implies the
-   * ring, and the two are one unit.
+   * interface rather than a menu over something else.
    *
-   * Reloading with the adventure up is what exposed the gap: the overlay is
+   * Reloading with the adventure up is what exposed that: the overlay is
    * persisted and came back, the raised flag is transient session state and
    * did not, so the slot returned occupied with nothing in it -- half a
-   * mode. Deriving it here rather than re-raising the flag on restore is the
+   * mode. Deriving it rather than re-raising the flag on restore is the
    * difference between the state being unrepresentable and it merely being
    * fixed on one path.
+   *
+   * BUT A MODE COUNTS ONLY IN ITS OWN SLOT. A mode is not a menu competing
+   * for the one ring the window has; it is a slot's persistent interface
+   * that happens to be drawn as one. Counting it here whatever slot it sat
+   * in made a second slot's Escape belong to a game the reader was not
+   * looking at -- and, worse, the ring itself followed focus out of the
+   * game's slot and left it with no interface at all. Visibility is per
+   * slot now (SectionEditorArea's isEscapeHoldActive); this is the active
+   * slot's answer alone.
    *
    * This cannot deadlock against the converse rule (lowering the ring runs
    * the mode's onDismiss, which ends the mode): closing removes the mode in
    * the same action, and the mode's absence is what lets the ring stay down.
    */
-  const isEscapeRingUp = isEscapeHoldPanelOpen || escapeMenuContribution.activeMode !== null
+  const isModeOwningActiveSlot = escapeMenuContribution.activeMode !== null
+    && adventureSectionId !== null
+    && adventureSectionId === activeSectionId
+  const isEscapeRingUp = isEscapeHoldPanelOpen || isModeOwningActiveSlot
+  // Plain assignment every render, for the same reason as the mode ref's.
+  isModeOwningActiveSlotRef.current = isModeOwningActiveSlot
 
   /**
    * The window control is a TOGGLE, and a toggle that is lit always goes out

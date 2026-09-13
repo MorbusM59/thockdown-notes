@@ -283,7 +283,21 @@ export function SectionEditorArea({
   // accounts for a mode owning a slot (App.tsx's isEscapeRingUp); deriving
   // that a second time here would give this component a private opinion
   // about whether the ring is up, which is how Escape stopped closing it.
-  const isEscapeHoldActive = isEscapeHoldPanelOpen && isSectionActive
+  /**
+   * Whether THIS slot draws the ring.
+   *
+   * Two different things can put one here, and only one of them follows
+   * focus. The quick-actions ring is a transient menu the reader raised over
+   * whatever they are looking at, so it belongs to the active slot. A MODE
+   * is not that: it is this slot's persistent interface, which happens to be
+   * drawn as a ring because it borrows the escape menu's chrome. It does not
+   * compete for the window's single ring and does not move when focus does.
+   *
+   * ANDing both against `isSectionActive` is what made opening a second slot
+   * take the game's own interface away from it -- the game was still there,
+   * still occupying its slot, with no menu.
+   */
+  const isEscapeHoldActive = Boolean(escapeMenu?.activeMode) || (isEscapeHoldPanelOpen && isSectionActive)
   const isEmptyStateVisible = !activeNoteId || isEscapeHoldActive
 
   // The reroll easter egg is disabled while the quick-actions panel is up --
