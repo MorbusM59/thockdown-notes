@@ -756,10 +756,30 @@ export function usePreviewMarkdownRendering({
   // scrollToAnchorInPreview's deps), so they must read the *latest* blocks
   // through a ref rather than closing over a value from whenever they were
   // created.
+  /**
+   * Written DURING RENDER, not in an effect, and that is load-bearing.
+   *
+   * `useEditorSectionMount` is called BEFORE this hook (EditorSection.tsx
+   * line ~492 against ~1575), and its scroll restore is a layout effect.
+   * React runs every layout effect before any passive one, and layout effects
+   * in declaration order -- so on the commit where preview mode turns on, the
+   * restore reads this mirror while it still holds the PREVIOUS render's
+   * blocks, whichever kind of effect updated it.
+   *
+   * That was a real defect and an ugly one: open a note in edit mode, jump to
+   * a find hit, toggle to render -- and the pane stayed at the top. The
+   * restore asked for line 10766, got -1 back because the mirror was still
+   * empty, reported `landed=false`, and had already marked itself complete,
+   * so nothing ever retried. It looked like the split not being ready and was
+   * not: it happened long after the worker had finished, which is what ruled
+   * that out.
+   *
+   * A ref that mirrors a rendered value has no reason to lag the render it
+   * mirrors. Assigning here makes it current for every effect in the commit,
+   * regardless of which hook declared them or in what order.
+   */
   const previewBlocksRef = useRef(previewBlocks)
-  useEffect(() => {
-    previewBlocksRef.current = previewBlocks
-  }, [previewBlocks])
+  previewBlocksRef.current = previewBlocks
 
   // react-virtual's own scroll-correction loop (`reconcileScroll`)
   // re-invokes this whenever a target block's real, measured height
@@ -1305,10 +1325,21 @@ export function usePreviewMarkdownRendering({
   // ---------------------------------------------------------------------
   // Position in character space -- see previewCharPosition.ts.
   // ---------------------------------------------------------------------
+  /**
+   * The same hazard as `previewBlocksRef` above, and the same fix: the
+   * WINDOWED landing reads these offsets, so a stale mirror here fails a
+   * restore exactly as an empty block list does.
+   *
+   * Guarded on the blocks' identity rather than recomputed every render --
+   * `buildBlockCharOffsets` walks every block, and a render is not a reason
+   * to redo that.
+   */
   const blockCharOffsetsRef = useRef<Float64Array | null>(null)
-  useLayoutEffect(() => {
+  const blockCharOffsetsSourceRef = useRef<typeof previewBlocks | null>(null)
+  if (blockCharOffsetsSourceRef.current !== previewBlocks) {
+    blockCharOffsetsSourceRef.current = previewBlocks
     blockCharOffsetsRef.current = buildBlockCharOffsets(previewBlocks)
-  }, [previewBlocks])
+  }
 
   // Which of the two strategies this document gets, decided by its length and
   // nothing else -- the same boundary editor/documentPosition.ts draws, and the
