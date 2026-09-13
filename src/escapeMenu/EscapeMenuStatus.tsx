@@ -116,7 +116,7 @@ export const RESERVED_POSITION_ICON = 'fa-solid fa-ban'
 export function EscapeMenuChromeButton({ control }: { control: EscapeMenuChromeToggle }) {
   if (!control.onActivate) {
     return (
-      <span className="btn-icon chapter-toggle-button is-reserved" aria-hidden="true" data-tooltip={control.label}>
+      <span className="ui-btn btn-icon chapter-toggle-button is-reserved" aria-hidden="true" data-tooltip={control.label}>
         <span className={RESERVED_POSITION_ICON} aria-hidden="true" />
       </span>
     )
@@ -149,7 +149,7 @@ export function EscapeMenuChromeStrip({ status }: { status: EscapeMenuModeChrome
         // visual language in the chrome instead of two.
         <span
           key={pill.key}
-          className="btn-icon chapter-toggle-button escape-menu-chrome-pill"
+          className="ui-btn btn-icon chapter-toggle-button escape-menu-chrome-pill"
           data-tooltip={tooltipOf(pill.label, pill.detail)}
           aria-label={pill.label}
           role="listitem"
@@ -214,7 +214,16 @@ export function EscapeMenuChromeGauges({ status }: { status: EscapeMenuModeChrom
                   style={{ ['--gauge-ratio' as string]: filled }}
                 />
               )}
-              <span className={`escape-menu-chrome-gauge-icon ${gauge.icon}`} aria-hidden="true" />
+              {/* The FA class carries its own WIDTH (1.25em). On a
+                  positioned element that width beats `right: 0` and `left`
+                  beats `right`, so the icon pinned to the track's left edge
+                  instead of centring -- `text-align` then centred it inside
+                  its own 1.25em box, which was the wrong box. The positioned
+                  element and the glyph are separate now: this one owns the
+                  placement, the inner one owns nothing but the glyph. */}
+              <span className="escape-menu-chrome-gauge-icon" aria-hidden="true">
+                <span className={gauge.icon} aria-hidden="true" />
+              </span>
             </div>
           </div>
         )
