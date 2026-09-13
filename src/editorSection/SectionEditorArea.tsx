@@ -298,6 +298,19 @@ export function SectionEditorArea({
    * still occupying its slot, with no menu.
    */
   const isEscapeHoldActive = Boolean(escapeMenu?.activeMode) || (isEscapeHoldPanelOpen && isSectionActive)
+
+  // Which cell the ring is sitting on, so the chapter bar can show what that
+  // cell would DO. Held here because this is the one component that renders
+  // both the ring and that bar; the panel resolves it and nothing else in the
+  // app needs it, so there is no store and no context.
+  //
+  // It costs nothing while the ring is an ordinary quick-actions menu: those
+  // cells carry no detail, so the resolved value is null on every step and
+  // React bails out of the re-render. It only ever moves under a MODE -- and
+  // a mode has emptied this slot's editor, so what re-renders is a blank one.
+  const [activeRingCellId, setActiveRingCellId] = useState<string | null>(null)
+  const activeRingCellDetail = escapeMenu?.activeMode?.cells
+    .find((cell) => cell.id === activeRingCellId)?.detail ?? null
   const isEmptyStateVisible = !activeNoteId || isEscapeHoldActive
 
   // The reroll easter egg is disabled while the quick-actions panel is up --
@@ -468,6 +481,7 @@ export function SectionEditorArea({
                 onExportPdf={onEscapeHoldExportPdf}
                 onExportMd={onEscapeHoldExportMd}
                 onOpenHelp={onEscapeHoldOpenHelp}
+                onActiveCellChange={setActiveRingCellId}
                 escapeMenu={escapeMenu}
                 onClose={onEscapeHoldPanelClose}
               />
@@ -510,7 +524,7 @@ export function SectionEditorArea({
       </aside>
       <div className={`chapter-panel${isChapterPanelOpen ? ' is-open' : ''}`} aria-hidden={!isChapterPanelOpen}>
         {modeStatus ? (
-          <EscapeMenuChromeBarRow status={modeStatus} />
+          <EscapeMenuChromeBarRow status={modeStatus} detail={activeRingCellDetail} />
         ) : activeNoteId && menuIdentityNoteId ? (
           <ChapterBar
             parentNoteId={menuIdentityNoteId}

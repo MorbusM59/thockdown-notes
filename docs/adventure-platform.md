@@ -26,7 +26,7 @@ channels:
 | --- | --- |
 | the ring | one question's choices, as icon + short label — ALL of them the stage's own |
 | the tab bar | health, armor and the six stats, each an ICON and its value (the name in the tooltip) — or, while a choice is focused, that choice's own effects |
-| the chapter bar | its leading toggle, the identity pill, then narration: what just happened, and the frame for what is being asked |
+| the chapter bar | its leading toggle, the identity pill, then narration: what just happened, and the frame for what is being asked — followed, while the dial sits on a choice that has one, by that choice's effects in a DASHED pill |
 | the identity pill | `IV [Combat] 3 | 4` — level in roman numerals, the stage, how far through it. In the note-id position on the chapter bar, fixed width, clipped: it changes every step, and a pill that hugged it would shove the narration sideways each time |
 | the strip | what the run is carrying: items out from the left, traits in from the right |
 | the two meters | the currencies, flanking the strip: gold leading, motes trailing, each with an icon on its outward side. They are next to what they BUY — a balance on the tab bar and the things it bought a whole editor away were two halves of one thought in two places |
@@ -296,12 +296,36 @@ as a number somebody would have to guess was real. **Do not fill these in.**
 
 These block a playable game and want answers rather than guesses.
 
-1. **The tab bar is not focus-sensitive yet.** A choice's `detail` is computed
-   and carried on every `Choice`, but the escape-menu contract has no way to
-   show it: `EscapeMenuModeChrome` is static for as long as a mode is up.
-   Needs an additive field on the shared contract. (A modifier's live effects
-   ARE now readable — as the tooltip on its strip pill — so this is about the
-   focused CHOICE, not about holdings any more.)
+1. **The focused choice's effects — ANSWERED, on the chapter bar rather than
+   the tab bar.** A choice's `detail` reaches the screen as a DASHED pill
+   following the narration: dashed because it is the only thing on that bar
+   that has not happened yet, and it goes away the moment the dial moves on.
+
+   The design document said this should REPLACE the stats readout while a
+   choice is focused. That was written when the ring was a menu you raise and
+   lower; it is permanently up during play now, and the dial always has a
+   focused cell, so replacing would have meant the stats line was never
+   visible. The stats stay above, where "how am I doing" lives, and the
+   preview sits beside the narration, where "what is being asked" does.
+
+   Four parts, three of which already existed:
+   - the DATA belongs to the cell (`EscapeMenuCell.detail`), authored where
+     the choice is authored;
+   - the WHEN belongs to the ring — `EscapeHoldPanel`'s one `hovered ??
+     focused` resolution, which already drove the centre label, now also
+     reports the cell id. **One resolution, two surfaces**: computing it twice
+     is how the centre label and the pill would come to name different cells,
+     the same argument that put the hover answer in `refreshHoverFromPointer`
+     rather than in CSS. An ID, not the cell, so a mode rebuilding its cells
+     every render cannot push a new object into host state and loop;
+   - the WHERE belongs to the host (`SectionEditorArea` renders both the ring
+     and that bar, so there is no store and no context);
+   - the MODE stays static. It never learns which cell is focused, so it
+     cannot start narrating through the dial.
+
+   `detail.title` is deliberately not drawn: it is always the cell's own
+   label, which the ring's centre is showing at that exact moment. It carries
+   the tooltip and the accessible name instead.
 2. **Readouts have no icons — ANSWERED.** `EscapeMenuReadout.icon` is
    required, and the tab bar draws an icon and a value with the name in the
    tooltip. The six stats use `STAT_ICONS`; charisma is `fa-masks-theater`

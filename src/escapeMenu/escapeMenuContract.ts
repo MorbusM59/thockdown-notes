@@ -27,6 +27,26 @@
 // panel's own, which is what keeps a mode from having to reimplement the
 // dial to be usable.
 
+/**
+ * What one cell would DO, shown while that cell is the one you are about to
+ * activate.
+ *
+ * Prose, not a readout: these lines are computed live against the state the
+ * player is actually in (an item's "+10% damage" is rendered as "+10% damage
+ * (3 held)"), so they are of unpredictable length and cannot be an icon and a
+ * value.
+ *
+ * The `title` is deliberately NOT drawn. It is always the cell's own label,
+ * which the ring's centre is already showing at the moment this appears --
+ * printing it twice, an inch apart, is noise. It stays here because assistive
+ * tech and the tooltip need the lines attributed to something.
+ */
+export interface EscapeMenuCellDetail {
+  title: string
+  /** One line per effect. Already rendered into words, already accurate. */
+  lines: string[]
+}
+
 export interface EscapeMenuCell {
   /**
    * Stable across renders for as long as this cell means the same thing.
@@ -47,6 +67,17 @@ export interface EscapeMenuCell {
    * leaves this false so that quitting closes the ring in one press.
    */
   keepsMenuOpen?: boolean
+  /**
+   * What this cell would do, for the chapter bar to show while this is the
+   * cell in the selection spot. Optional: an ordinary quick action does what
+   * its own label says and has nothing to add.
+   *
+   * It belongs to the CELL rather than to the mode's `status` because it is a
+   * fact about this option, authored where the option is. The mode's chrome
+   * stays static -- it never learns which cell is focused, so a mode cannot
+   * start narrating through the dial (see EscapeMenuModeChrome).
+   */
+  detail?: EscapeMenuCellDetail
   onSelect: () => void | Promise<void>
 }
 

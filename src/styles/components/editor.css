@@ -108,6 +108,34 @@
   color: var(--color-text-80);
 }
 
+/* What the cell the ring is sitting on would do, following the narration.
+   DASHED: it is the only thing on this bar that has not happened. Everything
+   else here is the state of the run; this is a preview of an option still
+   being weighed, and it goes away the moment the dial moves on. The border
+   carries that on its own -- a dashed pill among solid ones needs no second
+   marking, and it is the same box otherwise, so the bar's height cannot
+   change as it appears and disappears. */
+.escape-menu-choice-detail {
+  border-style: dashed;
+  white-space:  nowrap;
+  gap:          var(--spacing-small);
+  font-size:    calc(12px * var(--ui-font-scale));
+  color:        var(--color-text-80);
+}
+
+.escape-menu-choice-detail-line {
+  display:     inline-flex;
+  align-items: center;
+  gap:         var(--spacing-small);
+}
+
+/* Between effects, not around them: the dot separates two lines and must not
+   appear before the first or after the last, so it is drawn by each line
+   after the first rather than by the gap. */
+.escape-menu-choice-detail-sep {
+  color: var(--color-text-50);
+}
+
 /* State, in the tab bar's strip. The pills are the chapter bar's, unchanged;
    only the row around them is new, because here it shares the strip's own
    scroll shell rather than sitting in a well of its own. */

@@ -113,6 +113,11 @@ export function useAdventureEscapeMenu(options: AdventureEscapeMenuOptions): Esc
       id: choice.id,
       label: choice.label,
       icon: choice.icon,
+      // The stage already computed this, against the state the player is
+      // actually in (model/modifiers.ts renders "+10% damage" as "+10% damage
+      // (3 held)"). It used to be dropped here for want of anywhere to put
+      // it -- see EscapeMenuCellDetail.
+      detail: choice.detail,
       // Every cell keeps the menu up: the ring IS the game, and a choice
       // that closed it would end the session rather than advance it. The
       // one exception is leaving, which the director reports as a host

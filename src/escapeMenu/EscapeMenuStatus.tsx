@@ -1,5 +1,5 @@
 import { usePillStripScroll } from '../shared/usePillStripScroll'
-import type { EscapeMenuChromeMeter, EscapeMenuChromePill,
+import type { EscapeMenuCellDetail, EscapeMenuChromeMeter, EscapeMenuChromePill,
   EscapeMenuChromeToggle, EscapeMenuModeChrome } from './escapeMenuContract'
 
 /**
@@ -76,10 +76,17 @@ export function EscapeMenuReadouts({ status }: { status: EscapeMenuModeChrome })
  * `is-inert` is the one difference on the narration pill: a chapter pill is
  * something you press, and every gesture a mode has is in the ring.
  */
-export function EscapeMenuChromeBarRow({ status }: { status: EscapeMenuModeChrome }) {
-  // Called before any early return: the strip is one pill today and a list
-  // tomorrow, and a hook that only runs on some renders is not a hook.
-  const strip = usePillStripScroll(status.headline)
+export function EscapeMenuChromeBarRow({ status, detail }: {
+  status: EscapeMenuModeChrome
+  /** What the cell the ring is sitting on would do -- see the detail pill below. */
+  detail?: EscapeMenuCellDetail | null
+}) {
+  const detailLines = detail?.lines.filter((line) => line.trim().length > 0) ?? []
+  // Called before any early return, and keyed on what the strip CONTAINS:
+  // the detail pill appears and disappears as the dial turns, which changes
+  // the strip's width without changing the row's box, so the observer alone
+  // would never re-measure the fades.
+  const strip = usePillStripScroll(`${status.headline}\u0000${detail?.title ?? ''}\u0000${detailLines.join('|')}`)
   return (
     <div className="chapter-bar-row">
       {status.barToggle ? <EscapeMenuChromeButton control={status.barToggle} shape="chapter-auto-button" /> : null}
@@ -103,6 +110,31 @@ export function EscapeMenuChromeBarRow({ status }: { status: EscapeMenuModeChrom
               onWheel={strip.onWheel}
             >
               <span className="tag-pill escape-menu-narration is-inert">{status.headline}</span>
+              {/* What the cell the ring is sitting on would do. DASHED,
+                  because it is the one thing on this bar that has not
+                  happened: everything else here is the state of the run, and
+                  this is a preview of an option still being weighed. The
+                  border is the whole signal, so it needs no other marking.
+
+                  The lines only. `detail.title` is always the cell's own
+                  label, which the ring's centre is showing at this exact
+                  moment -- see EscapeMenuCellDetail. It rides the tooltip and
+                  the accessible name instead, where the lines still need
+                  attributing to something. */}
+              {detailLines.length > 0 ? (
+                <span
+                  className="tag-pill escape-menu-choice-detail is-inert"
+                  data-tooltip={tooltipOf(detail?.title ?? '', detailLines)}
+                  aria-label={`${detail?.title ?? ''}: ${detailLines.join(', ')}`}
+                >
+                  {detailLines.map((line, index) => (
+                    <span key={line} className="escape-menu-choice-detail-line">
+                      {index > 0 ? <span className="escape-menu-choice-detail-sep" aria-hidden="true">·</span> : null}
+                      {line}
+                    </span>
+                  ))}
+                </span>
+              ) : null}
             </div>
           </div>
         </div>

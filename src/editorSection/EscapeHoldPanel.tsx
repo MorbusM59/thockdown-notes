@@ -68,6 +68,14 @@ export interface EscapeHoldPanelProps {
   onExportPdf: (scope: ExportScope) => void | Promise<void>
   onExportMd: (scope: ExportScope) => void | Promise<void>
   onOpenHelp: () => void | Promise<void>
+  /**
+   * Reports which cell is currently in the selection spot -- hovered if the
+   * pointer is over one, focused otherwise, which is exactly what the ring's
+   * centre label names. Null while the ring is down. The host uses it to show
+   * that cell's `detail` (escapeMenuContract.ts); the panel itself has no
+   * opinion about where that goes.
+   */
+  onActiveCellChange?: (cellId: string | null) => void
   onClose: () => void
   /**
    * Cells contributed by a feature that lives inside this ring rather than
@@ -284,6 +292,7 @@ export function EscapeHoldPanel({
   onExportPdf,
   onExportMd,
   onOpenHelp,
+  onActiveCellChange,
   onClose,
   escapeMenu,
 }: EscapeHoldPanelProps) {
@@ -942,7 +951,20 @@ export function EscapeHoldPanel({
   // end of `cells` for a stale render in the same tick a shrink hasn't been
   // clamped yet (the clamp effect above runs after render, not during it),
   // so this reads defensively rather than asserting the index is valid.
-  const displayedLabel = (hoveredIndex !== null ? cells[hoveredIndex] : cells[focusedIndex])?.label ?? ''
+  const activeCell = hoveredIndex !== null ? cells[hoveredIndex] : cells[focusedIndex]
+  const displayedLabel = activeCell?.label ?? ''
+
+  // ONE resolution, two surfaces. The centre label and the chapter bar's
+  // detail pill are both "the cell you are about to activate", and computing
+  // that twice is how they would come to name different cells -- the same
+  // argument that put the hover answer in refreshHoverFromPointer rather than
+  // in CSS. Reported as an ID, not the cell: a string settles by value, so a
+  // mode rebuilding its cells every render (they all do) cannot push a new
+  // object into the host's state and start a loop.
+  const reportedCellId = isOpen ? activeCell?.id ?? null : null
+  useEffect(() => {
+    onActiveCellChange?.(reportedCellId)
+  }, [onActiveCellChange, reportedCellId])
 
   return (
     <div
