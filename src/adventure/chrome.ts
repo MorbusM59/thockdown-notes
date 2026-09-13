@@ -26,7 +26,6 @@
 // rule would make the rule look decided.
 
 import type { EscapeMenuChromeGauge, EscapeMenuChromePill, EscapeMenuModeChrome, EscapeMenuReadout } from '../escapeMenu/escapeMenuContract'
-import { totalArmor } from './model/armor'
 import { famePointsSpent, moteBalance, statPointProgress, statPointSpan, statPointsSpent } from './model/motes'
 import { activeGame, heldModifiers, holdingCounts, profileOf, type GameSave } from './model/gameState'
 import { describeModifier, type Modifier } from './model/modifiers'
@@ -77,11 +76,27 @@ export function statusReadouts(save: GameSave, catalog: ReadonlyMap<string, Modi
   }
 
   const profile = profileOf(save, game, catalog)
-  const armor = totalArmor(game.armor)
 
   return [
     { key: 'hp', icon: READOUT_ICONS.hp, label: 'Hit points', value: `${game.hitPoints}/${profile.derived.maxHitPoints}` },
-    ...(armor > 0 ? [{ key: 'armor', icon: READOUT_ICONS.armor, label: 'Armor', value: String(armor) }] : []),
+    {
+      key: 'armor',
+      icon: READOUT_ICONS.armor,
+      // BOTH POOLS, never their sum. Armor is two numbers that behave
+      // differently -- item armor is spent as it absorbs, natural armor
+      // cannot be worn away (model/armor.ts) -- so a player reading `11`
+      // cannot tell what a fight is about to cost them. The parenthesis is
+      // the part that survives it.
+      //
+      // Shown at zero rather than hidden, unlike its own first version:
+      // armor is a standing property of the character the way hit points
+      // are, and a readout that appears only once it is non-zero teaches
+      // that armor is a thing that happens to you rather than a thing you
+      // have. The row is a status line, not a list of what is currently
+      // interesting.
+      label: 'Armor (natural)',
+      value: `${Math.max(0, game.armor.fromItems)}(${Math.max(0, game.armor.natural)})`,
+    },
     // Effective stats, not base: what a check actually rolls against is
     // what the player needs to see. The base cap is a rule about
     // progression, not about what is true of them right now.
