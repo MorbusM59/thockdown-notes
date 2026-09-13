@@ -105,7 +105,6 @@ function sanitizeGame(value: unknown): GameRecord | null {
     difficulty: isDifficulty(value.difficulty) ? value.difficulty : DEFAULT_DIFFICULTY,
     regionId: typeof value.regionId === 'string' ? value.regionId : null,
     baseStats: sanitizeStats(value.baseStats),
-    statPoints: wholeAtLeast(value.statPoints, 0),
     statPointsSpent: wholeAtLeast(value.statPointsSpent, 0),
     experienceEarned: wholeAtLeast(value.experienceEarned, 0),
     experienceSpentOnTraits: wholeAtLeast(value.experienceSpentOnTraits, 0),

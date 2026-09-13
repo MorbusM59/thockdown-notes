@@ -83,3 +83,31 @@ export function takeMilestone(threshold: number, pointsSpent: number): { thresho
   const spent = Math.max(0, Math.floor(pointsSpent)) + 1
   return { threshold: threshold + MILESTONE_STEP * spent, pointsSpent: spent }
 }
+
+/**
+ * How many points are waiting to be taken RIGHT NOW -- which is not always
+ * one, because the threshold advances on the spend: a run that earns fifty
+ * without spending anything has crossed several of the ladder's steps at
+ * once, and taking one only reveals the next.
+ *
+ * DERIVED rather than stored, and that is the whole point of it. There was a
+ * `statPoints` counter on the record, incremented by an effect nothing ever
+ * emitted, and `allocateStatPoint` refused to do anything while it was zero
+ * -- so a stat point could be earned and never spent, by construction. Two
+ * representations of "a point is waiting" is one too many, and the ladder is
+ * the one the documentation describes.
+ */
+export function milestonesAvailable(earned: number, threshold: number, pointsSpent: number): number {
+  let available = 0
+  let next = threshold
+  let spent = pointsSpent
+  // Bounded by the ladder itself: each step is at least MILESTONE_STEP wider
+  // than the last, so this cannot run away even on an absurd total.
+  while (canTakeMilestone(earned, next) && available < 1000) {
+    const taken = takeMilestone(next, spent)
+    next = taken.threshold
+    spent = taken.pointsSpent
+    available += 1
+  }
+  return available
+}

@@ -35,8 +35,6 @@ export type Effect =
   | { kind: 'closeGame' }
   /** Character creation and stat points. Clamped to the base cap on apply. */
   | { kind: 'adjustBaseStat'; stat: StatKey; amount: number }
-  /** Unspent stat points. */
-  | { kind: 'grantStatPoints'; amount: number }
   /** Takes a modifier into the game: holdings, and any on-acquire effect it carries. */
   | { kind: 'acquireModifier'; modifierKind: ModifierKind; modifierId: string }
   /** Drops one, by id. Used by end-of-level keep-one-of-each. */
@@ -54,10 +52,13 @@ export type Effect =
    */
   | { kind: 'spendExperience'; units: number }
   /**
-   * Putting a held stat point into a stat. Consumes one point and pushes the
-   * next threshold away; the STAT it goes into is `adjustBaseStat`, emitted
-   * alongside, because which stat is the game's business and the threshold
-   * is the platform's.
+   * Putting an EARNED stat point into a stat. Pushes the next threshold away;
+   * the STAT it goes into is `adjustBaseStat`, emitted alongside, because
+   * which stat is the game's business and the threshold is the platform's.
+   *
+   * Whether a point is available is DERIVED from the ladder
+   * (`model/milestones.ts`) rather than stored, so there is nothing to grant
+   * and no counter that can disagree with the earnings that produced it.
    */
   | { kind: 'allocateStatPoint' }
   | { kind: 'grantGold'; units: number }

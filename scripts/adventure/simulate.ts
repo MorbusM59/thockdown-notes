@@ -83,6 +83,9 @@ const firstReal = (screen: Screen): string =>
 const careful: Policy = ({ screen, health, prefer }) => {
   const wanted = preferred(screen, prefer)
   if (wanted) return wanted
+  // A point in hand is worth nothing, and the hub offers it on every screen.
+  const spend = pick(screen, 'encounter:spendStatPoint')
+  if (spend) return spend
   if (health !== null && health < 0.25) {
     const flee = pick(screen, 'defence:flee')
     if (flee) return flee

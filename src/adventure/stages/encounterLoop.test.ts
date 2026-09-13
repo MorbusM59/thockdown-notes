@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { buildCatalog, THOCKQUEST } from '../content'
 import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from '../core/director'
-import { activeGame, emptySave, type GameSave } from '../model/gameState'
+import { activeGame, applyEffects, emptySave, type GameSave } from '../model/gameState'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
 import { LEVEL_ENCOUNTER_COUNT } from '../model/encounterOffers'
 import { resolveProfile } from '../model/modifiers'
@@ -242,5 +242,74 @@ describe('game settings', () => {
     const older = JSON.parse(JSON.stringify(chosen)) as Record<string, unknown>
     delete older.settings
     expect(sanitizeGameSave(older)?.settings.difficulty).toBe('medium')
+  })
+})
+
+describe('spending a stat point', () => {
+  /** A run standing at the hub with `motes` earned, however it got there. */
+  function atHubWith(motes: number): GameSave {
+    let save = choose(enterEntryScreen(emptySave(4242), DEPS, NOW), 'welcome:start', DEPS, NOW).save
+    save = choose(save, 'origin:warrior', DEPS, NOW).save
+    for (let step = 0; step < 3; step += 1) {
+      const screen = currentScreen(save, DEPS)
+      if (!screen) throw new Error('no screen')
+      save = choose(save, screen.choices[0].id, DEPS, NOW).save
+    }
+    if (currentScreen(save, DEPS)?.stageId !== 'encounterSelect') throw new Error('not at the hub')
+    return motes > 0 ? applyEffects(save, [{ kind: 'grantExperience', units: motes }], DEPS.catalog, NOW) : save
+  }
+
+  const cellIds = (save: GameSave) => currentScreen(save, DEPS)?.choices.map((choice) => choice.id) ?? []
+
+  it('is offered exactly when the ladder has a point waiting', () => {
+    // Nine motes is not ten. The threshold is the whole rule, and it is
+    // derived from what was earned rather than from a counter -- which is
+    // what the counter it replaced could never be, since nothing filled it.
+    expect(cellIds(atHubWith(9))).not.toContain('encounter:spendStatPoint')
+    expect(cellIds(atHubWith(10))).toContain('encounter:spendStatPoint')
+  })
+
+  it('raises the stat, moves the threshold, and takes its own cell away', () => {
+    const ready = atHubWith(10)
+    const before = activeGame(ready)
+    const spending = choose(ready, 'encounter:spendStatPoint', DEPS, NOW).save
+    expect(currentScreen(spending, DEPS)?.stageId).toBe('statPoint')
+
+    const spent = choose(spending, 'statPoint:might', DEPS, NOW).save
+    const after = activeGame(spent)
+    expect(after?.baseStats.might).toBe((before?.baseStats.might ?? 0) + 1)
+    expect(after?.statPointsSpent).toBe((before?.statPointsSpent ?? 0) + 1)
+    // 10 -> 15: the next point is five further off for each one spent.
+    expect(after?.experienceToNextStatPoint).toBe(15)
+    expect(cellIds(spent)).not.toContain('encounter:spendStatPoint')
+  })
+
+  it('grants the hit points the point is worth, rather than only the room for them', () => {
+    const ready = atHubWith(10)
+    const before = activeGame(ready)?.hitPoints ?? 0
+    const spent = choose(choose(ready, 'encounter:spendStatPoint', DEPS, NOW).save, 'statPoint:might', DEPS, NOW).save
+    expect(activeGame(spent)?.hitPoints).toBe(before + 15)
+  })
+
+  it('comes back to the SAME encounter, not a freshly rolled one', () => {
+    // A `replace` would re-enter the hub and draw different monsters, which
+    // would make spending a point a way to reroll the encounter.
+    const ready = atHubWith(10)
+    const before = ready.director.stack[ready.director.stack.length - 1]
+    const spent = choose(choose(ready, 'encounter:spendStatPoint', DEPS, NOW).save, 'statPoint:might', DEPS, NOW).save
+    const after = spent.director.stack[spent.director.stack.length - 1]
+    expect(after.stageId).toBe('encounterSelect')
+    expect(after.state).toEqual(before.state)
+  })
+
+  it('says what the point would do, computed rather than written down', () => {
+    const spending = choose(atHubWith(10), 'encounter:spendStatPoint', DEPS, NOW).save
+    const choices = currentScreen(spending, DEPS)?.choices ?? []
+    const might = choices.find((choice) => choice.id === 'statPoint:might')
+    expect(might?.detail?.lines).toContain('15 hit points')
+    // A stat whose uses are unwritten says so, rather than showing an empty
+    // pill that reads as a rendering fault.
+    const intellect = choices.find((choice) => choice.id === 'statPoint:intellect')
+    expect(intellect?.detail?.lines).toContain('Its uses are not written yet')
   })
 })

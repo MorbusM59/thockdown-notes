@@ -11,6 +11,7 @@ import { characterCreationStage } from './characterCreation'
 import { regionSelectStage } from './regionSelect'
 import { encounterSelectStage } from './encounterSelect'
 import { huntStage } from './hunt'
+import { statPointStage } from './statPoints'
 import { combatStage } from './combat'
 import { lootStage } from './loot'
 import { underConstructionStage } from './underConstruction'
@@ -22,6 +23,7 @@ export const STAGES = registerStages([
   regionSelectStage,
   encounterSelectStage,
   huntStage,
+  statPointStage,
   combatStage,
   lootStage,
   underConstructionStage,

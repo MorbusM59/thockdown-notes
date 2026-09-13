@@ -310,12 +310,17 @@ platform routes them to a stage that says so *in the game* rather than
 stubbing them with plausible behaviour. That is how the previous draft
 acquired numbers nobody chose and then defended them.
 
-**Not built, and MISSING rather than deferred**: anything that spends what a
-run earns. Gold, motes and stat points all accumulate, the effects to spend
-them all exist (`spendGold`, `spendExperience`, `allocateStatPoint`), and no
-stage offers any of it — so a character's only growth is the items a fight
-happens to drop. Together with the absence of any rest, that is what question
-55 below measures.
+**Not built, and MISSING rather than deferred**: the level-start EXCHANGE —
+motes for traits, gold for items, from a random offering whose width is a
+stat. The design specifies it; what it does not specify is a PRICE, so it
+cannot be built without inventing one. Until it exists, gold and motes
+accumulate with nothing to buy, and a character's only growth besides stat
+points is the items a fight happens to drop.
+
+Stat points ARE spendable now, at the hub, whenever the ladder has one waiting
+(`stages/statPoints.ts`) — "spendable at any time" is the design's own wording.
+Fame points are not: what a fame point buys is unwritten, and the effect that
+would spend one only moves the ladder.
 
 Content is perhaps half written. Every placeholder is labelled: an entry that
 exists by name but whose effect is undecided carries a `tag` effect saying
@@ -634,7 +639,9 @@ placed at 5, 9 and 10 and the level advancing after ten.
       each encounter — would make fights expensive AND survivable, which
       cheaper fights would not.
     - **Acquisition.** A run starts with one item and one trait and dies
-      before it can collect more. Pinning four defensive pieces from the start
+      before it can collect more. The economy is calibrated for a run that
+      survives and nothing does: the first stat point costs ten motes, and a
+      Medium run earns **1.3** before it dies. Pinning four defensive pieces from the start
       takes Easy to a median of NINE encounters won and 27% of runs past level
       one — the content already reaches "monster territory"; a character
       cannot live long enough to hold it.

@@ -29,6 +29,7 @@ import { resolveProfile, type EffectiveProfile, type HoldingCounts, type Modifie
 import { clampBaseStats, createStatBlock, deriveStats, type StatBlock } from './stats'
 import type { Effect } from './effects'
 import { FIRST_MILESTONE_THRESHOLD, takeMilestone } from './milestones'
+import { canAllocateStatPoint } from './motes'
 import type { JsonObject } from '../core/json'
 import { createSeed, type RngState } from '../core/rng'
 import { DEFAULT_DIFFICULTY, type Difficulty } from './difficulty'
@@ -113,7 +114,6 @@ export interface GameRecord {
   regionId: string | null
   baseStats: StatBlock
   /** Points earned and not yet spent on a stat. */
-  statPoints: number
   /** Points ever spent on a stat -- what pushes the next threshold away. */
   statPointsSpent: number
   /**
@@ -256,7 +256,6 @@ function createGame(id: string, seed: RngState, nowMs: number, difficulty: Diffi
     difficulty,
     regionId: null,
     baseStats,
-    statPoints: 0,
     statPointsSpent: 0,
     experienceEarned: 0,
     experienceSpentOnTraits: 0,
@@ -341,9 +340,6 @@ export function applyEffect(
         baseStats: clampBaseStats({ ...game.baseStats, [effect.stat]: game.baseStats[effect.stat] + effect.amount }),
       })
 
-    case 'grantStatPoints':
-      return replace({ statPoints: Math.max(0, game.statPoints + effect.amount) })
-
     case 'acquireModifier': {
       const withHolding: GameSave = {
         ...save,
@@ -389,10 +385,12 @@ export function applyEffect(
       })
 
     case 'allocateStatPoint': {
-      if (game.statPoints <= 0) return save
+      // Gated on the LADDER, which is the only representation of "a point is
+      // waiting" there is now. It used to be gated on a stored counter that
+      // nothing incremented, so this effect could never do anything at all.
+      if (!canAllocateStatPoint(game.experienceEarned, game.experienceToNextStatPoint)) return save
       const taken = takeMilestone(game.experienceToNextStatPoint, game.statPointsSpent)
       return replace({
-        statPoints: game.statPoints - 1,
         statPointsSpent: taken.pointsSpent,
         experienceToNextStatPoint: taken.threshold,
       })

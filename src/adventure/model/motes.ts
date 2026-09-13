@@ -22,11 +22,20 @@
 // once in model/milestones.ts and this module is only the experience half of
 // it.
 
-import { milestoneProgress, milestoneSpan, milestoneStanding, takeMilestone, canTakeMilestone } from './milestones'
+import { milestoneProgress, milestoneSpan, milestoneStanding, milestonesAvailable, takeMilestone, canTakeMilestone } from './milestones'
 
 /** Motes in hand, for buying traits. Nothing about stat points enters this. */
 export function moteBalance(experienceEarned: number, experienceSpentOnTraits: number): number {
   return Math.max(0, experienceEarned - experienceSpentOnTraits)
+}
+
+/** How many stat points are waiting to be spent. Derived; nothing stores it. */
+export function statPointsAvailable(
+  experienceEarned: number,
+  experienceToNextStatPoint: number,
+  statPointsSpent: number,
+): number {
+  return milestonesAvailable(experienceEarned, experienceToNextStatPoint, statPointsSpent)
 }
 
 /** Whether the run has earned enough total experience to take another point. */

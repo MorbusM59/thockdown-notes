@@ -26,7 +26,7 @@
 // rule would make the rule look decided.
 
 import type { EscapeMenuChromeGauge, EscapeMenuChromePill, EscapeMenuModeChrome, EscapeMenuReadout } from '../escapeMenu/escapeMenuContract'
-import { moteBalance, statPointProgress, statPointStanding } from './model/motes'
+import { moteBalance, statPointProgress, statPointsAvailable, statPointStanding } from './model/motes'
 import { famePointProgress, famePointStanding, goldBalance } from './model/gold'
 import { activeGame, heldModifiers, holdingCounts, profileOf, type GameSave } from './model/gameState'
 import { describeModifier, type Modifier } from './model/modifiers'
@@ -77,6 +77,7 @@ export function statusReadouts(save: GameSave, catalog: ReadonlyMap<string, Modi
   }
 
   const profile = profileOf(save, game, catalog)
+  const waiting = statPointsAvailable(game.experienceEarned, game.experienceToNextStatPoint, game.statPointsSpent)
 
   return [
     { key: 'hp', icon: READOUT_ICONS.hp, label: 'Hit points', value: `${game.hitPoints}/${profile.derived.maxHitPoints}` },
@@ -107,7 +108,12 @@ export function statusReadouts(save: GameSave, catalog: ReadonlyMap<string, Modi
       label: STAT_LABELS[key],
       value: String(profile.stats[key]),
     })),
-    ...(game.statPoints > 0 ? [{ key: 'points', icon: READOUT_ICONS.points, label: 'Stat points to spend', value: String(game.statPoints) }] : []),
+    // Only when there is one waiting, and DERIVED from the ladder rather
+    // than read off a counter -- the counter it used to read was never
+    // incremented by anything, so this readout could not appear.
+    ...(waiting > 0
+      ? [{ key: 'points', icon: READOUT_ICONS.points, label: 'Stat points to spend', value: String(waiting) }]
+      : []),
   ]
 }
 
@@ -288,7 +294,7 @@ export function chromeGauges(save: GameSave): EscapeMenuChromeGauge[] {
       detail: [
         `${stat.into} of ${stat.span} motes earned toward it`,
         `${game.experienceEarned} earned in total, next point at ${game.experienceToNextStatPoint}`,
-        `${game.statPoints} in hand, ${game.statPointsSpent} spent`,
+        `${statPointsAvailable(game.experienceEarned, game.experienceToNextStatPoint, game.statPointsSpent)} waiting, ${game.statPointsSpent} spent`,
       ],
     },
   ]
