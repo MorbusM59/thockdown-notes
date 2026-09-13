@@ -29,6 +29,19 @@ export interface UseDocumentFindOptions {
    */
   sectionId: string
   /**
+   * Whether the reader is actually looking at find results.
+   *
+   * Find does NO work when this is false -- not the worker search, not the
+   * edit-mode scan. A query left in the box used to keep searching every note
+   * the reader opened, in every sidebar view, forever; the only way to stop
+   * it was to empty the box by hand.
+   *
+   * The last answer is deliberately KEPT rather than cleared, so reopening
+   * find on the same note with the same query is instant instead of a fresh
+   * parse. Being on ice is not the same as being forgotten.
+   */
+  isFindActive: boolean
+  /**
    * The text to search -- deliberately just a string, not "the active
    * note" or "the active editor". The caller decides which section's live
    * text this is; today there's only one, but this is the seam a future
@@ -89,7 +102,7 @@ export interface UseDocumentFindResult {
  * `documentFindDirective` back out to drive them.
  */
 export function useDocumentFind(options: UseDocumentFindOptions): UseDocumentFindResult {
-  const { sectionId, sourceText, initialCaseSensitive, isPreviewMode } = options
+  const { sectionId, sourceText, initialCaseSensitive, isPreviewMode, isFindActive } = options
   void sectionId
 
   const [documentFindQuery, setDocumentFindQuery] = useState('')
@@ -187,12 +200,15 @@ export function useDocumentFind(options: UseDocumentFindOptions): UseDocumentFin
   } | null>(null)
 
   const editModeHits = useMemo<DocumentFindHit[]>(() => {
-    if (isPreviewMode) return NO_HITS
+    if (!isFindActive || isPreviewMode) return NO_HITS
+    // Cheap per call, but it is a whole-document scan and it re-runs on every
+    // keystroke -- there is no reason to pay it for a panel nobody is looking
+    // at either.
     return buildDocumentFindHits(sourceText, documentFindDirective.findText, effectiveCaseSensitive)
-  }, [sourceText, documentFindDirective.findText, effectiveCaseSensitive, isPreviewMode])
+  }, [isFindActive, sourceText, documentFindDirective.findText, effectiveCaseSensitive, isPreviewMode])
 
   useEffect(() => {
-    if (!isPreviewMode || !documentFindDirective.findText) return
+    if (!isFindActive || !isPreviewMode || !documentFindDirective.findText) return
     let cancelled = false
     void requestPreviewFindHits(sourceText, documentFindDirective.findText, effectiveCaseSensitive)
       .then((hits: DocumentFindHit[]) => {
@@ -208,22 +224,28 @@ export function useDocumentFind(options: UseDocumentFindOptions): UseDocumentFin
     // showing it would make the list flicker backwards through superseded
     // queries on a slow note.
     return () => { cancelled = true }
-  }, [sourceText, documentFindDirective.findText, effectiveCaseSensitive, isPreviewMode])
+  }, [isFindActive, sourceText, documentFindDirective.findText, effectiveCaseSensitive, isPreviewMode])
 
   const previewAnswerIsCurrent = previewAnswer !== null
     && previewAnswer.text === sourceText
     && previewAnswer.query === documentFindDirective.findText
     && previewAnswer.caseSensitive === effectiveCaseSensitive
 
-  const isSearchingPreview = isPreviewMode
+  // Not searching while on ice, however stale the last answer is: saying
+  // "Searching this note..." about a search that is not running would be the
+  // same lie the flag version told for one frame, just held indefinitely.
+  const isSearchingPreview = isFindActive
+    && isPreviewMode
     && documentFindDirective.findText !== ''
     && !previewAnswerIsCurrent
 
-  const documentFindHits = !isPreviewMode
-    ? editModeHits
-    : previewAnswerIsCurrent
-      ? previewAnswer.hits
-      : NO_HITS
+  const documentFindHits = !isFindActive
+    ? NO_HITS
+    : !isPreviewMode
+      ? editModeHits
+      : previewAnswerIsCurrent
+        ? previewAnswer.hits
+        : NO_HITS
 
   return {
     documentFindQuery,

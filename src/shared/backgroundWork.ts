@@ -73,6 +73,28 @@ export interface BackgroundWorkHandle {
 interface Entry {
   kind: BackgroundWorkKind
   progress: number | null
+  startedAtMs: number
+}
+
+/**
+ * What is turning the cogwheel, when the answer is not obvious.
+ *
+ * `localStorage['thockdown:debug-background-work'] = '1'`, read live. The
+ * indicator deliberately says only THAT the app is working, which is right
+ * for a reader and useless the moment someone asks WHICH work -- and that
+ * question came up the day the wheel shipped, with three plausible answers
+ * and no way to tell them apart from outside.
+ *
+ * Each line carries the kind, how long it took, and what is left in flight.
+ */
+function traceBackgroundWork(line: string): void {
+  if (typeof window === 'undefined') return
+  try {
+    if (window.localStorage.getItem('thockdown:debug-background-work') !== '1') return
+  } catch {
+    return
+  }
+  console.log(`[background-work] ${line}`)
 }
 
 let nextId = 1
@@ -99,7 +121,9 @@ function publish(): void {
 export function beginBackgroundWork(kind: BackgroundWorkKind): BackgroundWorkHandle {
   const id = nextId
   nextId += 1
-  entries.set(id, { kind, progress: null })
+  const startedAtMs = Date.now()
+  entries.set(id, { kind, progress: null, startedAtMs })
+  traceBackgroundWork(`begin ${kind} (pending=${entries.size})`)
   publish()
 
   let settled = false
@@ -113,7 +137,11 @@ export function beginBackgroundWork(kind: BackgroundWorkKind): BackgroundWorkHan
     done: () => {
       if (settled) return
       settled = true
+      const entry = entries.get(id)
       entries.delete(id)
+      traceBackgroundWork(
+        `end   ${kind} after ${entry ? Date.now() - entry.startedAtMs : 0}ms (pending=${entries.size})`,
+      )
       publish()
     },
   }

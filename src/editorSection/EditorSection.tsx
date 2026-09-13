@@ -1520,6 +1520,21 @@ export function EditorSection({
     return () => window.clearTimeout(timeoutId)
   }, [activeNoteId, currentEditorText, editorSelection.end, editorSelection.isCollapsed, editorSelection.start])
 
+  /**
+   * Whether find is actually being looked at.
+   *
+   * The same condition decided whether search HIGHLIGHTS were drawn, while
+   * the search itself ran regardless -- so a query left in the box kept
+   * working forever: every note switch, in any sidebar view, re-ran a
+   * whole-document find against the newly opened note. Visibly, once the
+   * cogwheel existed to report it. The only way to stop it was to clear the
+   * box by hand, which is not a thing a reader should have to know.
+   *
+   * A search nobody is looking at is not a search. One predicate now decides
+   * both, because they were never two questions.
+   */
+  const isFindActive = isSidebarVisible && sidebarMode === 'find'
+
   const {
     documentFindQuery,
     setDocumentFindQuery,
@@ -1536,6 +1551,7 @@ export function EditorSection({
     isDocumentFindSearching,
   } = useDocumentFind({
     sectionId,
+    isFindActive,
     sourceText: currentEditorText,
     initialCaseSensitive: restoredDocumentFindCaseSensitive,
     isPreviewMode,
@@ -1583,7 +1599,7 @@ export function EditorSection({
     adapterRef,
     documentFindDirective,
     isDocumentFindCaseSensitive: effectiveCaseSensitive,
-    isSearchHighlightActive: isSidebarVisible && sidebarMode === 'find',
+    isSearchHighlightActive: isFindActive,
     renderedDisplayText,
     previewScrollToSourceLineRef: editorSectionMountRest.previewScrollToSourceLineRef,
     previewDocumentPositionRef,
