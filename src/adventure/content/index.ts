@@ -19,6 +19,46 @@
 import type { Modifier } from '../model/modifiers'
 import type { StatKey } from '../model/stats'
 
+/**
+ * A monster's CLASS -- what it fights like. The same three the player's own
+ * origins are built from, on the same stat scale.
+ *
+ * Bard is deliberately absent: the design's monster classes are the fighting
+ * three. A charisma-shaped monster would be interesting (Talk is one of the
+ * plan's own monster actions) and is not written.
+ */
+export type MonsterClassId = 'warrior' | 'thief' | 'mage'
+
+export const MONSTER_CLASS_IDS: readonly MonsterClassId[] = ['warrior', 'thief', 'mage']
+
+export interface MonsterClass {
+  id: MonsterClassId
+  statDeltas: Partial<Record<StatKey, number>>
+}
+
+/**
+ * One shape a species takes at one type -- its NAME at that rank, and which
+ * classes it may be.
+ *
+ * A type can have more than one form: a Beast group is a pack of wolves or a
+ * pack of boars, and which it is decides both the name and the class. That
+ * is why this is a list per type rather than a name and a class list.
+ */
+export interface MonsterForm {
+  name: string
+  /** Empty means any class. */
+  classes: readonly MonsterClassId[]
+}
+
+/** WHAT a monster is: its stat modifiers, and what it is called at each rank. */
+export interface Species {
+  id: string
+  name: string
+  statDeltas: Partial<Record<StatKey, number>>
+  /** One or more forms per type. Every type must have at least one. */
+  forms: Readonly<Record<'group' | 'regular' | 'elite' | 'miniBoss' | 'boss', readonly MonsterForm[]>>
+}
+
 /** What you were, before any of this. Chosen once, at the start of a game. */
 export interface Origin {
   id: string
@@ -46,6 +86,8 @@ export interface Content {
   items: readonly Modifier[]
   traits: readonly Modifier[]
   regions: readonly Region[]
+  monsterClasses: readonly MonsterClass[]
+  species: readonly Species[]
 }
 
 export function buildCatalog(content: Content): ReadonlyMap<string, Modifier> {
@@ -70,6 +112,18 @@ export function validateContent(content: Content): string[] {
 
   for (const origin of content.origins) check(origin.id, `origin "${origin.name}"`)
   for (const region of content.regions) check(region.id, `region "${region.name}"`)
+  for (const species of content.species) {
+    check(species.id, `species "${species.name}"`)
+    // Every rank needs at least one form, or the offer generator has nothing
+    // to name a monster of that type and would silently skip the species.
+    for (const [type, forms] of Object.entries(species.forms)) {
+      if (forms.length === 0) problems.push(`species "${species.id}" has no ${type} form`)
+      for (const form of forms) {
+        const unknown = form.classes.filter((id) => !content.monsterClasses.some((cls) => cls.id === id))
+        for (const id of unknown) problems.push(`species "${species.id}" form "${form.name}" allows unknown class "${id}"`)
+      }
+    }
+  }
   for (const item of content.items) {
     check(item.id, `item "${item.name}"`)
     if (item.kind !== 'item') problems.push(`item "${item.id}" is declared as a ${item.kind}`)
@@ -81,6 +135,8 @@ export function validateContent(content: Content): string[] {
 
   if (content.origins.length === 0) problems.push('no origins: character creation would have nothing to offer')
   if (content.regions.length === 0) problems.push('no regions: a level would have nowhere to happen')
+  if (content.species.length === 0) problems.push('no species: an encounter would have nothing to be')
+  if (content.monsterClasses.length === 0) problems.push('no monster classes: a monster would have no stats')
 
   return problems
 }

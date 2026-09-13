@@ -551,11 +551,19 @@ and the payout table is in the design plan. The ROUND ENGINE is built with
 them (`model/combat.ts`): the turn-order roll, the four defences, the
 exchange, the round's exits and what each one pays.
 
-50. **What a combat encounter is worth**, in gold and experience, per monster
-    type. The payout SHAPE is settled and the engine takes the number as an
-    input; nothing supplies one. (This is question 45 narrowed to the part
-    that now blocks a playable fight.)
+50 and 51 are **answered and BUILT** — the escalating loot/mote check
+(`model/rewards.ts`), the species table (`content/`) and the offer generator
+(`model/encounterOffers.ts`). See the design plan.
 
-51. **Nothing constructs an encounter yet.** The engine takes a `Monster` and
-    a player; no stage builds one, picks a class, or knows a level's ten
-    encounters. That is the next thing to build and it needs 50.
+52. **"Band of Goblin" is spelled as authored** and reads as a missing plural
+    beside "Pack of Orcs" and "Pack of Wolves". It is a name a player sees, so
+    it is not mine to correct silently.
+
+53. **Nothing WIRES any of this yet.** There is a round engine, a monster
+    builder, a reward model and an offer generator, and no stage that puts a
+    player in front of them: no combat stage, no loot stage, no level that
+    counts to ten. That is the next build, and it needs nothing new decided.
+
+54. **Species modifiers are not capped.** A Beast at −3 Intellect on a group's
+    −1 is −4 before class. Nothing says a monster's stats have a floor (see
+    46) and nothing yet says they have a ceiling either.

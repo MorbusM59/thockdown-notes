@@ -12,7 +12,7 @@
 // with plausible values -- filling in blanks that were left open on purpose
 // is how the last draft of this game went wrong.
 
-import type { Content, Origin, Region } from './index'
+import type { Content, MonsterClass, MonsterClassId, Origin, Region, Species } from './index'
 import type { Modifier } from '../model/modifiers'
 
 /** The effect of something that has a name and nothing else yet. */
@@ -96,9 +96,88 @@ const ITEMS: readonly Modifier[] = [
   },
 ]
 
+/**
+ * The three monster classes, on the player origins' own stat scale -- the
+ * design's "similar to the player classes", taken literally so there is one
+ * scale in the game rather than two that have to be kept comparable.
+ */
+const MONSTER_CLASSES: readonly MonsterClass[] = [
+  { id: 'warrior', statDeltas: { might: 2, agility: 1 } },
+  { id: 'thief', statDeltas: { agility: 2, luck: 1 } },
+  { id: 'mage', statDeltas: { intellect: 2, perception: 1 } },
+]
+
+/**
+ * WHAT you fight, and what it is called at each rank.
+ *
+ * A species carries stat modifiers of its own and a name per type, plus which
+ * classes it may take at that type -- a Goblin Chieftain is always a warrior,
+ * a Goblin Lord always a mage, and a plain Goblin can be anything.
+ *
+ * A type may have SEVERAL forms. Beasts are the reason: a beast group is a
+ * pack of wolves or a pack of boars, and the choice decides the name and the
+ * class together.
+ *
+ * `classes: []` means any class.
+ */
+const ANY: readonly MonsterClassId[] = []
+
+const SPECIES: readonly Species[] = [
+  {
+    id: 'goblin',
+    name: 'Goblin',
+    statDeltas: { luck: 2, might: -1, charisma: -2, agility: 1 },
+    forms: {
+      group: [{ name: 'Band of Goblin', classes: ['thief'] }],
+      regular: [{ name: 'Goblin', classes: ANY }],
+      elite: [{ name: 'Goblin Veteran', classes: ANY }],
+      miniBoss: [{ name: 'Goblin Chieftain', classes: ['warrior'] }],
+      boss: [{ name: 'Goblin Lord', classes: ['mage'] }],
+    },
+  },
+  {
+    id: 'orc',
+    name: 'Orc',
+    statDeltas: { might: 2, intellect: -1, charisma: -2, perception: 1 },
+    forms: {
+      group: [{ name: 'Pack of Orcs', classes: ['warrior'] }],
+      regular: [{ name: 'Orc', classes: ANY }],
+      elite: [{ name: 'Orc Brute', classes: ['warrior'] }],
+      miniBoss: [{ name: 'Orc Squad Leader', classes: ['mage'] }],
+      boss: [{ name: 'Orc Demon', classes: ['warrior'] }],
+    },
+  },
+  {
+    id: 'beast',
+    name: 'Beast',
+    statDeltas: { perception: 2, intellect: -3, agility: 1 },
+    forms: {
+      group: [
+        { name: 'Pack of Wolves', classes: ['thief'] },
+        { name: 'Pack of Boars', classes: ['warrior'] },
+      ],
+      regular: [
+        { name: 'Large Wolf', classes: ['thief'] },
+        { name: 'Large Boar', classes: ['warrior'] },
+      ],
+      elite: [
+        { name: 'Dire Wolf', classes: ['warrior'] },
+        { name: 'Enraged Boar', classes: ['warrior'] },
+      ],
+      miniBoss: [
+        { name: 'Dire Bear', classes: ['warrior'] },
+        { name: 'Shadow Stag', classes: ['mage'] },
+      ],
+      boss: [{ name: 'Hulking Grizzly', classes: ['warrior'] }],
+    },
+  },
+]
+
 export const THOCKQUEST: Content = {
   origins: ORIGINS,
   items: ITEMS,
   traits: TRAITS,
   regions: REGIONS,
+  monsterClasses: MONSTER_CLASSES,
+  species: SPECIES,
 }

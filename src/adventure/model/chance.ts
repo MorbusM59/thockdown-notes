@@ -56,8 +56,24 @@ export interface StatChance {
   stat: StatKey
 }
 
+/**
+ * A declared chance BEFORE clamping.
+ *
+ * Kept apart from `resolveChance` because some rules subtract from a chance
+ * that is already over 1 and the order matters: a boss's loot check starts at
+ * 200% and loses 50 points per repeat, so it is certain three times over.
+ * Clamping first would make it 100% and then 50%, turning three guaranteed
+ * loot screens into one and a coin flip.
+ */
+export function rawChance(chance: StatChance, own: StatBlock, opponent?: StatBlock | null): number {
+  return chance.base + chance.perPoint * contestedStat(chance.stat, own, opponent)
+}
+
+export function clampChance(value: number): number {
+  return Math.max(0, Math.min(1, value))
+}
+
 /** A declared chance, resolved against an actor and optionally an opponent. Always inside 0..1. */
 export function resolveChance(chance: StatChance, own: StatBlock, opponent?: StatBlock | null): number {
-  const value = chance.base + chance.perPoint * contestedStat(chance.stat, own, opponent)
-  return Math.max(0, Math.min(1, value))
+  return clampChance(rawChance(chance, own, opponent))
 }

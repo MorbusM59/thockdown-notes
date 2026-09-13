@@ -331,9 +331,32 @@ make Terrify meaningless, since it would already be doing the thing Terrify
 is for. The chance on those is `50% + 5%` per point of the contested stat,
 like everything else, until it is tuned.
 
-### What an encounter pays
+### What a won encounter pays
 
-The amounts are content and mostly unwritten. The shape is not:
+A LOOT SCREEN offers a choice between **one piece of gold** and **an item**
+(with as many items to pick from as Luck allows, `2 + Luck/2`).
+
+How many loot screens there are is one escalating check, run after the fight:
+a base of **50% + 5% per point of Luck**, and every repeat is **fifty points
+worse** than the one before, until one fails. The monster's TYPE raises the
+starting chance, past certainty on purpose. At Luck 0 the run of chances is:
+
+| type | chances, in order | screens guaranteed |
+| --- | --- | --- |
+| group, regular | 50% | 1 |
+| elite | 100%, 50% | 2 |
+| mini boss | 150%, 100%, 50% | 3 |
+| boss | 200%, 150%, 100%, 50% | 4 |
+
+MOTES OF EXPERIENCE work the identical way, one procedure with one number
+changed: one mote is automatic, and the extras are the same escalating check
+against **Intellect** instead of Luck, with the same type bonus. They are
+awarded **after every loot screen has been through**, as the player returns
+to encounter selection — what you found, then what you learned.
+
+### What an encounter pays, by how it ended
+
+The amounts above are the win. The shape of the rest:
 
 | how it ended | gold | experience | loot menu | spends an encounter |
 | --- | --- | --- | --- | --- |
@@ -349,10 +372,43 @@ one piece too, so a flight pays exactly that branch with no choice offered.
 The player's own flight pays nothing and **still spends one of the level's
 ten**, which is what makes running a decision rather than a free reroll.
 
-### A level's layout
+### A level's layout, and what it offers
 
 Ten encounters. Encounters 5 and 9 are mini bosses; encounter 10 is the boss.
-The rest are regular — Go Hunting, Go Exploring or a Special Encounter.
+At those three there is **no choice** — the encounter is the encounter. The
+rest are chosen from `2 + Perception/2` offers.
+
+The **first** offer is always a random species at REGULAR rank, so no reading
+of the dice opens a level with a choice between three packs. Every further
+offer is drawn at random from the three offerable ranks — group, regular,
+elite — and must be a combination not already on the list. Mini boss and boss
+are placed, never rolled.
+
+Uniqueness is by the WHOLE identity: species, form, class and rank. The rule
+was first written as "class/type combinations", before species existed; a
+Goblin thief and an Orc thief are visibly different encounters and thinning
+the list by collapsing them would buy nothing the player could see.
+
+### Species
+
+A monster is a SPECIES, a CLASS and a TYPE. The class supplies base stats (the
+three fighting classes, on the player origins' own scale — warrior, thief,
+mage); the species adds its own modifiers and decides what the thing is
+CALLED at each rank, and which classes it may be there. A rank may have
+several forms — a beast group is wolves or boars, and which it is settles the
+name and the class together.
+
+| species | modifiers |
+| --- | --- |
+| Goblin | +2 Luck, −1 Might, −2 Charisma, +1 Agility |
+| Orc | +2 Might, −1 Intellect, −2 Charisma, +1 Perception |
+| Beast | +2 Perception, −3 Intellect, +1 Agility |
+
+| | group | regular | elite | mini boss | boss |
+| --- | --- | --- | --- | --- | --- |
+| Goblin | Band of Goblin *(thief)* | Goblin *(any)* | Goblin Veteran *(any)* | Goblin Chieftain *(warrior)* | Goblin Lord *(mage)* |
+| Orc | Pack of Orcs *(warrior)* | Orc *(any)* | Orc Brute *(warrior)* | Orc Squad Leader *(mage)* | Orc Demon *(warrior)* |
+| Beast | Pack of Wolves *(thief)* / Pack of Boars *(warrior)* | Large Wolf *(thief)* / Large Boar *(warrior)* | Dire Wolf *(warrior)* / Enraged Boar *(warrior)* | Dire Bear *(warrior)* / Shadow Stag *(mage)* | Hulking Grizzly *(warrior)* |
 
 ### Names
 
