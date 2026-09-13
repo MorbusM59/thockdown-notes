@@ -117,11 +117,10 @@ export const DERIVED_LABELS: Readonly<Record<DerivedKey, string>> = {
 }
 
 /**
- * OPEN QUESTION, recorded rather than quietly decided. The design document
- * writes hit points as `50 + 15 * Resilience`, and Resilience is not one of
- * the six stats it lists -- but the formula is written under Might. Read
- * against Might here. If Resilience is meant to be a seventh stat, it is
- * one entry in STAT_KEYS and one word in this function.
+ * SETTLED: Resilience was a leftover, and there is no seventh stat. Physical
+ * attack and physical defence are ONE stat -- Might -- which is why the
+ * design document's own hit-point formula was written under Might while
+ * naming Resilience. Read against Might, deliberately, not by inference.
  */
 const MAX_HIT_POINTS = (stats: StatBlock) => 50 + 15 * stats.might
 

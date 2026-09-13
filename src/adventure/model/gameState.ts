@@ -28,7 +28,7 @@ import { armorFromHoldings, applyAcquisition, NO_ARMOR, type Armor } from './arm
 import { resolveProfile, type EffectiveProfile, type HoldingCounts, type Modifier, type ModifierKind } from './modifiers'
 import { clampBaseStats, createStatBlock, deriveStats, type StatBlock } from './stats'
 import type { Effect } from './effects'
-import { allocateStatPoint, FIRST_STAT_POINT_THRESHOLD } from './motes'
+import { FIRST_MILESTONE_THRESHOLD, takeMilestone } from './milestones'
 import type { JsonObject } from '../core/json'
 import { createSeed, type RngState } from '../core/rng'
 
@@ -41,8 +41,17 @@ import { createSeed, type RngState } from '../core/rng'
  * balance, and there is no honest way to read a total out of it -- whatever
  * was spent is simply gone from the number. Guessing would put a run at the
  * wrong distance from its next stat point with nothing to say so.
+ *
+ * 3: gold split the same way (`goldEarned` / `goldSpentOnItems`) now that it
+ * drives a ladder of its own, and fame became that ladder's points
+ * (`famePoints` / `famePointsSpent` / `goldToNextFamePoint`) rather than a
+ * bare score. `statPointsAcquired` was renamed `statPointsSpent`, which is
+ * what it always counted -- it is incremented by the allocation, not by the
+ * attainment, and the old name had already cost one wrapper function written
+ * purely to hide it. A v2 save's `goldUnits` is a balance with the same
+ * unrecoverable total as v1's motes.
  */
-export const SAVE_VERSION = 2
+export const SAVE_VERSION = 3
 
 /** One frame of the director's stack: which stage, and its own private state. */
 export interface StageFrame {
@@ -92,7 +101,7 @@ export interface GameRecord {
   /** Points earned and not yet spent on a stat. */
   statPoints: number
   /** Points ever spent on a stat -- what pushes the next threshold away. */
-  statPointsAcquired: number
+  statPointsSpent: number
   /**
    * Every mote this run has ever earned. MONOTONIC: spending never reduces
    * it, because it is the milestone track as well as the source of the
@@ -103,8 +112,24 @@ export interface GameRecord {
   experienceSpentOnTraits: number
   /** What `experienceEarned` must reach for the next stat point. Starts at 10. */
   experienceToNextStatPoint: number
-  goldUnits: number
-  fame: number
+  /**
+   * Every gold piece this run has ever earned. MONOTONIC, for the same
+   * reason `experienceEarned` is: it is the fame ladder's position as well
+   * as the source of the currency. See model/gold.ts.
+   */
+  goldEarned: number
+  /** Of those, how many have gone on items. The balance is the difference. */
+  goldSpentOnItems: number
+  /** What `goldEarned` must reach for the next fame point. Starts at 10. */
+  goldToNextFamePoint: number
+  /**
+   * Fame points earned and not yet spent. This is the run's SCORE: fame is
+   * the ladder gold feeds, on the same numbers stat points sit on, so a
+   * fame point is a milestone reached rather than a running total of gold.
+   */
+  famePoints: number
+  /** Points ever spent -- what pushes the next fame threshold away. */
+  famePointsSpent: number
   hitPoints: number
   armor: Armor
 }
@@ -201,12 +226,15 @@ function createGame(id: string, seed: RngState, nowMs: number): GameRecord {
     regionId: null,
     baseStats,
     statPoints: 0,
-    statPointsAcquired: 0,
+    statPointsSpent: 0,
     experienceEarned: 0,
     experienceSpentOnTraits: 0,
-    experienceToNextStatPoint: FIRST_STAT_POINT_THRESHOLD,
-    goldUnits: 0,
-    fame: 0,
+    experienceToNextStatPoint: FIRST_MILESTONE_THRESHOLD,
+    goldEarned: 0,
+    goldSpentOnItems: 0,
+    goldToNextFamePoint: FIRST_MILESTONE_THRESHOLD,
+    famePoints: 0,
+    famePointsSpent: 0,
     hitPoints: deriveStats(clampBaseStats(baseStats)).maxHitPoints,
     armor: NO_ARMOR,
   }
@@ -314,15 +342,37 @@ export function applyEffect(
 
     case 'allocateStatPoint': {
       if (game.statPoints <= 0) return save
-      const next = allocateStatPoint(game.experienceToNextStatPoint, game.statPointsAcquired)
-      return replace({ statPoints: game.statPoints - 1, ...next })
+      const taken = takeMilestone(game.experienceToNextStatPoint, game.statPointsSpent)
+      return replace({
+        statPoints: game.statPoints - 1,
+        statPointsSpent: taken.pointsSpent,
+        experienceToNextStatPoint: taken.threshold,
+      })
     }
 
     case 'grantGold':
-      return replace({ goldUnits: Math.max(0, game.goldUnits + effect.units) })
+      // Earning only ever adds, exactly as with experience: the total is the
+      // fame ladder's position. Spending is `spendGold`.
+      return replace({ goldEarned: Math.max(0, game.goldEarned + effect.units) })
 
-    case 'grantFame':
-      return replace({ fame: Math.max(0, game.fame + effect.amount) })
+    case 'spendGold':
+      return replace({ goldSpentOnItems: Math.max(0, game.goldSpentOnItems + effect.units) })
+
+    case 'grantFamePoints':
+      return replace({ famePoints: Math.max(0, game.famePoints + effect.amount) })
+
+    case 'allocateFamePoint': {
+      // The mirror of allocateStatPoint, on the same ladder. What a fame
+      // point BUYS is not written yet -- this only moves the ladder, which
+      // is the half that is settled.
+      if (game.famePoints <= 0) return save
+      const taken = takeMilestone(game.goldToNextFamePoint, game.famePointsSpent)
+      return replace({
+        famePoints: game.famePoints - 1,
+        famePointsSpent: taken.pointsSpent,
+        goldToNextFamePoint: taken.threshold,
+      })
+    }
 
     case 'setRegion':
       return replace({ regionId: effect.regionId })
@@ -343,7 +393,9 @@ export function applyEffect(
         profile: {
           ...ended.profile,
           gamesEnded: ended.profile.gamesEnded + 1,
-          bestFame: Math.max(ended.profile.bestFame, game.fame),
+          // Everything the run ever ATTAINED, not what is left in hand: a
+          // player who spent their fame points did not score less for it.
+          bestFame: Math.max(ended.profile.bestFame, game.famePoints + game.famePointsSpent),
         },
       }
     }

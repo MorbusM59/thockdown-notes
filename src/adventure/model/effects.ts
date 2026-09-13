@@ -54,8 +54,10 @@ export type Effect =
    */
   | { kind: 'allocateStatPoint' }
   | { kind: 'grantGold'; units: number }
+  | { kind: 'spendGold'; units: number }
   /** The score. Only ever goes up. */
-  | { kind: 'grantFame'; amount: number }
+  | { kind: 'grantFamePoints'; amount: number }
+  | { kind: 'allocateFamePoint' }
   /** Which region this level is being played in, and therefore which pools are in scope. */
   | { kind: 'setRegion'; regionId: string }
   | { kind: 'advanceLevel' }

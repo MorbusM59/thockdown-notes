@@ -26,7 +26,8 @@
 // rule would make the rule look decided.
 
 import type { EscapeMenuChromeGauge, EscapeMenuChromePill, EscapeMenuModeChrome, EscapeMenuReadout } from '../escapeMenu/escapeMenuContract'
-import { famePointsSpent, moteBalance, statPointProgress, statPointSpan, statPointsSpent } from './model/motes'
+import { moteBalance, statPointProgress, statPointStanding } from './model/motes'
+import { famePointProgress, famePointStanding, goldBalance } from './model/gold'
 import { activeGame, heldModifiers, holdingCounts, profileOf, type GameSave } from './model/gameState'
 import { describeModifier, type Modifier } from './model/modifiers'
 import { STAT_ICONS, STAT_KEYS, STAT_LABELS } from './model/stats'
@@ -168,7 +169,7 @@ export function chromeMeters(save: GameSave): EscapeMenuModeChrome['meters'] {
       key: 'gold',
       icon: METER_ICONS.gold,
       label: 'Gold to spend',
-      value: String(game.goldUnits),
+      value: String(goldBalance(game.goldEarned, game.goldSpentOnItems)),
     },
     trailing: {
       key: 'motes',
@@ -246,51 +247,48 @@ export function chromeAction() {
  *
  * Each carries, under its icon, the number of that gauge's own points this
  * run has SPENT -- the bar is progress toward the next one, the tally is what
- * the previous ones bought. Fame's is always zero and honestly so: nothing
- * can spend a fame point yet (model/motes.ts's famePointsSpent).
+ * the previous ones bought.
  *
- * Fame is the run's score and the top half of the rail, because it is what
- * the whole run is for; the stat-point bar below it is the shorter, faster
- * cycle underneath. Fame carries NO RATIO: the score is real and named, and
- * the curve that scales it is explicitly unwritten (open question 12 in
- * docs/adventure-platform.md). An empty track says "this is here and has
- * nothing to report"; a zeroed one would claim the answer is none, and a
- * fabricated one would make an undecided rule look settled. The number itself
- * is on the tab bar, where it is true without a curve.
+ * THE TWO ARE THE SAME LADDER (model/milestones.ts), which is why they sit
+ * one above the other: fame is what gold earns and stat points are what
+ * experience earns, on identical numbers. Fame is on top because it is what
+ * the whole run is for; the stat-point cycle below it is the one that grows
+ * the character that earns the gold.
  *
- * The stat-point gauge reads the run's TOTAL experience against the moving
- * threshold, so it does not move when motes are spent on a trait -- which is
- * the whole of the mote design and the thing a single running balance could
- * not express.
+ * Both read their stream's TOTAL against the moving threshold, so neither
+ * moves when the currency is spent -- gold on an item, motes on a trait.
+ * That is the whole of the two-fields-not-one design and the thing a single
+ * running balance could not express.
  */
 export function chromeGauges(save: GameSave): EscapeMenuChromeGauge[] {
   const game = activeGame(save)
   if (!game) return []
 
-  const span = statPointSpan(game.statPointsAcquired)
-  const into = Math.max(0, game.experienceEarned - (game.experienceToNextStatPoint - span))
+  const fame = famePointStanding(game.goldEarned, game.goldToNextFamePoint, game.famePointsSpent)
+  const stat = statPointStanding(game.experienceEarned, game.experienceToNextStatPoint, game.statPointsSpent)
   return [
     {
       key: 'fame',
       icon: 'fa-solid fa-crown',
-      count: famePointsSpent(),
-      label: 'Fame',
+      ratio: famePointProgress(game.goldEarned, game.goldToNextFamePoint, game.famePointsSpent),
+      count: game.famePointsSpent,
+      label: 'Next fame point',
       detail: [
-        `${game.fame} fame`,
-        `${famePointsSpent()} fame points spent`,
-        'The curve that scales this bar is not written yet',
+        `${fame.into} of ${fame.span} gold earned toward it`,
+        `${game.goldEarned} earned in total, next point at ${game.goldToNextFamePoint}`,
+        `${game.famePoints} in hand, ${game.famePointsSpent} spent`,
       ],
     },
     {
       key: 'statPoint',
       icon: 'fa-solid fa-star',
-      ratio: statPointProgress(game.experienceEarned, game.experienceToNextStatPoint, game.statPointsAcquired),
-      count: statPointsSpent(game.statPointsAcquired),
+      ratio: statPointProgress(game.experienceEarned, game.experienceToNextStatPoint, game.statPointsSpent),
+      count: game.statPointsSpent,
       label: 'Next stat point',
       detail: [
-        `${into} of ${span} motes earned toward it`,
+        `${stat.into} of ${stat.span} motes earned toward it`,
         `${game.experienceEarned} earned in total, next point at ${game.experienceToNextStatPoint}`,
-        `${statPointsSpent(game.statPointsAcquired)} stat points spent`,
+        `${game.statPoints} in hand, ${game.statPointsSpent} spent`,
       ],
     },
   ]

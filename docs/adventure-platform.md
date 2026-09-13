@@ -338,14 +338,17 @@ These block a playable game and want answers rather than guesses.
    `experienceEarned` (monotonic) and `experienceSpentOnTraits`. The spendable
    balance is `earned − spentOnTraits` and has nothing to do with stats. Stat
    points read `earned` alone: available when `earned ≥ experienceToNextStatPoint`,
-   which starts at 10 and grows by `5 × pointsAcquired` on each allocation
+   which starts at 10 and grows by `5 × pointsSpent` on each allocation
    (10, 15, 25, 40, 60, 85 …). The gauge shows
-   `(earned − (next − 5 × pointsAcquired)) / (5 × pointsAcquired)` — with the
+   `(earned − (next − 5 × pointsSpent)) / (5 × pointsSpent)` — with the
    first span read as 10 rather than `5 × 0`, or it divides by zero before the
-   first point.
-4. **Resilience.** The design writes hit points as `50 + 15 × Resilience`, and
-   Resilience is not one of the six stats — but the formula is written under
-   Might, and is read against Might here. Seventh stat, or a slip?
+   first point. The ladder itself moved to `model/milestones.ts` once fame
+   turned out to be the same one (question 12).
+4. **Resilience — ANSWERED: a leftover.** Physical attack and physical
+   defence are ONE stat, Might, which is why the design document's own
+   hit-point formula was written under Might while naming Resilience. There
+   is no seventh stat. `50 + 15 × Might` now reads that way deliberately
+   rather than by inference.
 5. **Player base damage.** The damage *multiplier* is specified; what it
    multiplies is not.
 6. **Intellect and Charisma** have unlocks (spells, charisma actions) rather
@@ -383,7 +386,29 @@ These block a playable game and want answers rather than guesses.
     would have nowhere to keep its own.
 11. **Armor decay's curve.** "A chance based on luck" is specified; the curve
     is not. `ARMOR_DECAY_TUNING` is a labelled placeholder, not a tuned value.
-12. **Fame — shaped, not numbered.** Fame is the score, driven by TOTAL GOLD
-    accumulated, and getting progressively harder as it rises: the run's
-    tension is meant to be between growing the character with stat points and
-    converting power into gold, and gold into score. The curve is not written.
+12. **Fame — ANSWERED: it is the stat-point ladder, fed by gold.** The curve
+    is identical, so it is written once (`model/milestones.ts`) and both
+    currencies are instances of it:
+
+    | stream | currency spent on | milestone | ladder |
+    | --- | --- | --- | --- |
+    | `experienceEarned` | traits (`experienceSpentOnTraits`) | stat points | 10, 15, 25, 40, 60, 85 … |
+    | `goldEarned` | items (`goldSpentOnItems`) | **fame points** | the same |
+
+    Fame is therefore the milestone, not a running total: `famePoints` in
+    hand, `famePointsSpent` behind you, and the run's score is the two added
+    together (which is what `bestFame` records — spending your fame points
+    must not cost you the score). Gold gained the same two-fields-not-one
+    split motes have, for the identical reason: buying an item must not push
+    the next fame point away.
+
+    The threshold advances on the SPEND, not the attainment — hoard a point
+    and the next is no closer. That was already the stat-point rule; naming
+    it once made it a rule rather than a coincidence.
+
+    **Still unwritten, and deliberately so:** what a fame point BUYS, and the
+    rates at which gold and experience are earned in the first place (open
+    question 7). `allocateFamePoint` moves the ladder and nothing else. The
+    EARNING half of both ladders is also unwired — nothing emits
+    `grantStatPoints` or `grantFamePoints` when a threshold is crossed,
+    because that belongs to the level flow that is not built.

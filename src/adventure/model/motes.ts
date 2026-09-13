@@ -16,62 +16,13 @@
 // push the next stat point away, and not subtracting it would make the
 // currency infinite.
 //
-// The threshold sequence is 10, 15, 25, 40, 60, 85 ... -- each step 5 more
-// than the last. It is stored rather than recomputed, because the update is
-// the rule ("take a point, the next one costs 5 x points more") and a closed
-// form would be a second statement of it to keep in step.
+// The ladder itself -- the 10, 15, 25, 40 ... sequence and everything that
+// reads it -- is NOT here. Gold does exactly this too, one point at a time,
+// on the same numbers (fame points, model/gold.ts), so the ladder is written
+// once in model/milestones.ts and this module is only the experience half of
+// it.
 
-/** What the first stat point costs, before any have been taken. */
-export const FIRST_STAT_POINT_THRESHOLD = 10
-
-/** How much further away each stat point pushes the next, per point held. */
-export const STAT_POINT_STEP = 5
-
-/**
- * The experience between the PREVIOUS stat point and the next one -- the
- * span the progress bar measures across.
- *
- * The general term is `STAT_POINT_STEP * pointsAcquired`, which is zero
- * before the first point is taken and would divide by it. The first span is
- * the first threshold itself: nought to ten. Handled here, once, so no
- * caller has to know the sequence starts differently.
- */
-export function statPointSpan(pointsAcquired: number): number {
-  const points = Math.max(0, Math.floor(pointsAcquired))
-  return points === 0 ? FIRST_STAT_POINT_THRESHOLD : STAT_POINT_STEP * points
-}
-
-/**
- * How many stat points this run has SPENT -- allocated into a stat, never to
- * come back. `statPointsAcquired` is that count under an older name: it is
- * incremented by `allocateStatPoint`, which is the spend, not the earn.
- *
- * Named here rather than read off the field at the call site, because the
- * field's name says the opposite of what it counts and a reader of the
- * chrome should not have to know that.
- */
-export function statPointsSpent(statPointsAcquired: number): number {
-  return Math.max(0, Math.floor(statPointsAcquired))
-}
-
-/**
- * How many FAME points this run has spent.
- *
- * Always zero, and honestly so: fame points can be attained and spent by
- * design (the same shape as stat points), and NEITHER half is written --
- * there is no fame-point field on the record, no curve that turns fame into
- * points, and nothing to spend one on. See the open questions in
- * docs/adventure-platform.md.
- *
- * A function rather than a literal at the display, so the day the concept
- * lands there is one place that answers this and the chrome already reads
- * it. Deliberately NOT a stored field: storage with no writer is a rule
- * half-decided, and this is a count that is genuinely zero rather than
- * unknown.
- */
-export function famePointsSpent(): number {
-  return 0
-}
+import { milestoneProgress, milestoneSpan, milestoneStanding, takeMilestone, canTakeMilestone } from './milestones'
 
 /** Motes in hand, for buying traits. Nothing about stat points enters this. */
 export function moteBalance(experienceEarned: number, experienceSpentOnTraits: number): number {
@@ -80,37 +31,40 @@ export function moteBalance(experienceEarned: number, experienceSpentOnTraits: n
 
 /** Whether the run has earned enough total experience to take another point. */
 export function canAllocateStatPoint(experienceEarned: number, experienceToNextStatPoint: number): boolean {
-  return experienceEarned >= experienceToNextStatPoint
+  return canTakeMilestone(experienceEarned, experienceToNextStatPoint)
 }
 
-/**
- * How far past the previous stat point this run is, as a fraction of the
- * span to the next. 0..1, and 1 means a point is waiting to be taken.
- */
+/** How far past the previous stat point this run is, 0..1. */
 export function statPointProgress(
   experienceEarned: number,
   experienceToNextStatPoint: number,
-  pointsAcquired: number,
+  statPointsSpent: number,
 ): number {
-  const span = statPointSpan(pointsAcquired)
-  if (span <= 0) return 0
-  const previousThreshold = experienceToNextStatPoint - span
-  return Math.max(0, Math.min(1, (experienceEarned - previousThreshold) / span))
+  return milestoneProgress(experienceEarned, experienceToNextStatPoint, statPointsSpent)
+}
+
+/** The current span and how much of it is earned, for the gauge's tooltip. */
+export function statPointStanding(
+  experienceEarned: number,
+  experienceToNextStatPoint: number,
+  statPointsSpent: number,
+) {
+  return milestoneStanding(experienceEarned, experienceToNextStatPoint, statPointsSpent)
+}
+
+/** The span to the next stat point, for callers that only need its width. */
+export function statPointSpan(statPointsSpent: number): number {
+  return milestoneSpan(statPointsSpent)
 }
 
 /**
- * Taking a stat point: one more acquired, and the next one pushed further
- * away by the NEW count. The order matters -- the step uses the count after
- * the increment, which is what makes the spans 10, 5, 10, 15, 20 ... rather
- * than 10, 0, 5, 10.
+ * Spending a stat point on a stat: one more spent, and the next one pushed
+ * further away. See takeMilestone for why the order matters.
  */
 export function allocateStatPoint(
   experienceToNextStatPoint: number,
-  pointsAcquired: number,
-): { experienceToNextStatPoint: number; statPointsAcquired: number } {
-  const acquired = Math.max(0, Math.floor(pointsAcquired)) + 1
-  return {
-    experienceToNextStatPoint: experienceToNextStatPoint + STAT_POINT_STEP * acquired,
-    statPointsAcquired: acquired,
-  }
+  statPointsSpent: number,
+): { experienceToNextStatPoint: number; statPointsSpent: number } {
+  const taken = takeMilestone(experienceToNextStatPoint, statPointsSpent)
+  return { experienceToNextStatPoint: taken.threshold, statPointsSpent: taken.pointsSpent }
 }

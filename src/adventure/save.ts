@@ -14,7 +14,7 @@
 
 import { SAVE_VERSION, type DirectorState, type GameRecord, type GameSave, type StageFrame } from './model/gameState'
 import { STAT_KEYS, type StatBlock } from './model/stats'
-import { FIRST_STAT_POINT_THRESHOLD } from './model/motes'
+import { FIRST_MILESTONE_THRESHOLD } from './model/milestones'
 import type { JsonObject } from './core/json'
 import type { ModifierKind } from './model/modifiers'
 import { toRngState } from './core/rng'
@@ -91,14 +91,19 @@ function sanitizeGame(value: unknown): GameRecord | null {
     regionId: typeof value.regionId === 'string' ? value.regionId : null,
     baseStats: sanitizeStats(value.baseStats),
     statPoints: wholeAtLeast(value.statPoints, 0),
-    statPointsAcquired: wholeAtLeast(value.statPointsAcquired, 0),
+    statPointsSpent: wholeAtLeast(value.statPointsSpent, 0),
     experienceEarned: wholeAtLeast(value.experienceEarned, 0),
     experienceSpentOnTraits: wholeAtLeast(value.experienceSpentOnTraits, 0),
     // Floored at the FIRST threshold rather than at 0: a zero here would
     // mean every stat point is already earned, forever.
-    experienceToNextStatPoint: wholeAtLeast(value.experienceToNextStatPoint, FIRST_STAT_POINT_THRESHOLD),
-    goldUnits: wholeAtLeast(value.goldUnits, 0),
-    fame: wholeAtLeast(value.fame, 0),
+    experienceToNextStatPoint: wholeAtLeast(value.experienceToNextStatPoint, FIRST_MILESTONE_THRESHOLD),
+    goldEarned: wholeAtLeast(value.goldEarned, 0),
+    goldSpentOnItems: wholeAtLeast(value.goldSpentOnItems, 0),
+    // Floored at the FIRST threshold for the same reason the experience one
+    // is: a zero here would mean every fame point is already earned, forever.
+    goldToNextFamePoint: wholeAtLeast(value.goldToNextFamePoint, FIRST_MILESTONE_THRESHOLD),
+    famePoints: wholeAtLeast(value.famePoints, 0),
+    famePointsSpent: wholeAtLeast(value.famePointsSpent, 0),
     hitPoints: wholeAtLeast(value.hitPoints, 0),
     armor: { fromItems: wholeAtLeast(armor.fromItems, 0), natural: wholeAtLeast(armor.natural, 0) },
   }
