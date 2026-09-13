@@ -4,7 +4,7 @@
 //
 // A mode owning a slot owns all six of that slot's chrome surfaces (see
 // escapeMenuContract.ts's EscapeMenuModeChrome). This file fills four of them
-// -- the readouts, the subject line, the counter and the strip -- and
+// -- the readouts, the narration line, the counter and the strip -- and
 // RESERVES the other two.
 //
 // Reserved, not omitted. Nothing in the game has claimed the toggle or the
@@ -17,40 +17,47 @@
 // escapeMenuContract.ts's EscapeMenuChromeToggle.
 //
 // The design's status line is `health | six stats | gold, experience,
-// points, fame`, with armor beside health. Two things it also asks for are
-// NOT here, each for a reason worth stating rather than silently dropping:
-//
-//   - ICONS per readout. The escape-menu contract's readout is a short
-//     label and a value; giving it an icon is a change to a shared seam
-//     (src/escapeMenu/escapeMenuContract.ts) that other features would see,
-//     so it is a deliberate edit rather than a side effect of this work.
-//   - MOTES UNTIL THE NEXT STAT POINT. The threshold is specified
-//     (10 + 5 * points acquired), but whether spending experience on traits
-//     also consumes progress toward it is not. Showing a number computed
-//     from an unresolved rule would make the rule look decided.
+// points, fame`, with armor beside health -- each named by an ICON and its
+// value, the words living in the tooltip. One thing it also asks for is NOT
+// here, for a reason worth stating rather than silently dropping: MOTES
+// UNTIL THE NEXT STAT POINT. The threshold is specified (10 + 5 * points
+// acquired), but whether spending experience on traits also consumes
+// progress toward it is not. Showing a number computed from an unresolved
+// rule would make the rule look decided.
 
 import type { EscapeMenuChromeGauge, EscapeMenuChromePill, EscapeMenuModeChrome, EscapeMenuReadout } from '../escapeMenu/escapeMenuContract'
 import { totalArmor } from './model/armor'
 import { moteBalance, statPointProgress, statPointSpan } from './model/motes'
 import { activeGame, heldModifiers, holdingCounts, profileOf, type GameSave } from './model/gameState'
 import { describeModifier, type Modifier } from './model/modifiers'
-import { STAT_KEYS, STAT_LABELS } from './model/stats'
+import { STAT_ICONS, STAT_KEYS, STAT_LABELS } from './model/stats'
 
-const SHORT: Readonly<Record<string, string>> = {
-  might: 'MGT',
-  agility: 'AGI',
-  perception: 'PER',
-  intellect: 'INT',
-  charisma: 'CHA',
-  luck: 'LCK',
-}
+/**
+ * The icon per non-stat readout. The six stats bring their own
+ * (model/stats.ts's STAT_ICONS, from the same design document's status line);
+ * these are the quantities on either side of them.
+ *
+ * Two of them are FIXED BY THE RAIL rather than chosen here: fame is the
+ * crown and a stat point is the star on the gauges below (chromeGauges), and
+ * the same quantity carrying two different glyphs in two places on the same
+ * chrome would read as two different quantities.
+ */
+const READOUT_ICONS = {
+  hp: 'fa-solid fa-heart',
+  armor: 'fa-solid fa-shield-halved',
+  gold: 'fa-solid fa-coins',
+  motes: 'fa-solid fa-gem',
+  points: 'fa-solid fa-star',
+  fame: 'fa-solid fa-crown',
+  games: 'fa-solid fa-dice-d20',
+} as const
 
 export function statusReadouts(save: GameSave, catalog: ReadonlyMap<string, Modifier>): EscapeMenuReadout[] {
   const game = activeGame(save)
   if (!game) {
     return [
-      { key: 'games', label: 'Games', value: String(save.profile.gamesStarted) },
-      { key: 'best', label: 'Best fame', value: String(save.profile.bestFame) },
+      { key: 'games', icon: READOUT_ICONS.games, label: 'Games started', value: String(save.profile.gamesStarted) },
+      { key: 'best', icon: READOUT_ICONS.fame, label: 'Best fame', value: String(save.profile.bestFame) },
     ]
   }
 
@@ -58,32 +65,25 @@ export function statusReadouts(save: GameSave, catalog: ReadonlyMap<string, Modi
   const armor = totalArmor(game.armor)
 
   return [
-    { key: 'hp', label: 'HP', value: `${game.hitPoints}/${profile.derived.maxHitPoints}` },
-    ...(armor > 0 ? [{ key: 'armor', label: 'ARM', value: String(armor) }] : []),
+    { key: 'hp', icon: READOUT_ICONS.hp, label: 'Hit points', value: `${game.hitPoints}/${profile.derived.maxHitPoints}` },
+    ...(armor > 0 ? [{ key: 'armor', icon: READOUT_ICONS.armor, label: 'Armor', value: String(armor) }] : []),
     // Effective stats, not base: what a check actually rolls against is
     // what the player needs to see. The base cap is a rule about
     // progression, not about what is true of them right now.
     ...STAT_KEYS.map((key) => ({
       key,
-      label: SHORT[key] ?? STAT_LABELS[key],
+      icon: STAT_ICONS[key],
+      label: STAT_LABELS[key],
       value: String(profile.stats[key]),
     })),
-    { key: 'gold', label: 'Gold', value: String(game.goldUnits) },
+    { key: 'gold', icon: READOUT_ICONS.gold, label: 'Gold', value: String(game.goldUnits) },
     // The BALANCE, not the total earned: this readout is what the player can
     // spend. How close the next stat point is is the rail's job, and reads
     // the total instead -- see model/motes.ts for why those are two numbers.
-    { key: 'xp', label: 'Motes', value: String(moteBalance(game.experienceEarned, game.experienceSpentOnTraits)) },
-    ...(game.statPoints > 0 ? [{ key: 'points', label: 'Points', value: String(game.statPoints) }] : []),
-    { key: 'fame', label: 'Fame', value: String(game.fame) },
+    { key: 'xp', icon: READOUT_ICONS.motes, label: 'Motes to spend', value: String(moteBalance(game.experienceEarned, game.experienceSpentOnTraits)) },
+    ...(game.statPoints > 0 ? [{ key: 'points', icon: READOUT_ICONS.points, label: 'Stat points to spend', value: String(game.statPoints) }] : []),
+    { key: 'fame', icon: READOUT_ICONS.fame, label: 'Fame', value: String(game.fame) },
   ]
-}
-
-/** The one line that says where you are. Level and region, once a game is running. */
-export function statusSubject(save: GameSave, regionNameOf: (regionId: string) => string | null): string {
-  const game = activeGame(save)
-  if (!game) return 'Thockquest'
-  const region = game.regionId ? regionNameOf(game.regionId) : null
-  return region ? `Thockquest — Level ${game.level}, ${region}` : `Thockquest — Level ${game.level}`
 }
 
 const ROMAN: readonly (readonly [number, string])[] = [

@@ -70,43 +70,23 @@
   border-radius:  var(--border-radius-regular);
 }
 
-/* A mode's readouts (EscapeMenuStatusBar.tsx), in the well the chapter
-   strip would occupy. The well itself, the row around it and the pills
-   inside it are the chapter bar's own elements, so geometry needs nothing
-   here; this only sets the two things that are actually different -- the
-   pills sit at their natural width instead of filling the strip, and each
-   one is a label and a value rather than a single name. */
-.escape-menu-narration-shell {
-  gap: var(--spacing-regular);
-  padding: var(--spacing-small) var(--spacing-regular);
-}
-
-/* The mode's narration: prose, not a pill. A pill would read as something to
-   press, and every gesture a mode has is in the ring. Takes the rest of the
-   bar and truncates rather than wrapping -- this strip is one line high, and
-   a second line would push the editor. */
 /* Same box as a chapter pill, none of its affordance -- see the note in
    EscapeMenuStatus.tsx. */
 .tag-pill.is-inert {
   cursor: default;
 }
 
+/* The mode's narration pill. It sits in the chapter bar's own well, scroll
+   shell and display row (EscapeMenuStatus.tsx), so all of its geometry is
+   already the chapter bar's -- this sets only what is different about the
+   text in it. It had `overflow: hidden` and an ellipsis when it was prose
+   filling the bar; a pill in a scroller must NOT truncate, because the
+   scroll is what reaches the rest of it. `nowrap` stays: the bar is one
+   line high and a second would push the editor down. */
 .escape-menu-narration {
-  align-self: center;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
   font-size: calc(12px * var(--ui-font-scale));
   color: var(--color-text-80);
-}
-
-/* Separated from the subject in EMs, not in --spacing-*: the shell's gap is
-   the bar's pill gap (2px at default spacing), which is right between pills
-   that carry their own padding and far too tight between two bare runs of
-   text. This is typographic space, so it scales with the type. */
-.escape-menu-status-subject + .escape-menu-narration {
-  margin-left: 0.75em;
 }
 
 /* State, in the tab bar's strip. The pills are the chapter bar's, unchanged;
@@ -119,18 +99,6 @@
   min-width: 0;
 }
 
-/* The mode's own name, leading the bar. Not a pill: it names the strip
-   rather than being one more thing on it -- the same relationship the
-   chapter bar's leading toggle has to the pills beside it. */
-.escape-menu-status-subject {
-  align-self: center;
-  padding-left: var(--spacing-small);
-  font-size: calc(11px * var(--ui-font-scale));
-  color: var(--color-text-50);
-  font-style: italic;
-  white-space: nowrap;
-}
-
 .escape-menu-readout {
   gap: var(--spacing-small);
   padding: 0 var(--spacing-regular);
@@ -138,7 +106,9 @@
 }
 
 /* The number is the part that changes, so it is the part that reads first;
-   the label beside it stays at the bar's ordinary weight. */
+   the icon beside it stays at the bar's ordinary weight. (It was a written
+   label before -- see EscapeMenuStatus.tsx for why a status line of
+   abbreviations became a status line of glyphs.) */
 .escape-menu-readout-value {
   font-weight: 600;
   color: var(--color-text-100);

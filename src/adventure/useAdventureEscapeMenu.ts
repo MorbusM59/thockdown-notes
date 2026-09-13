@@ -27,7 +27,7 @@ import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from './co
 import { emptySave, type GameSave } from './model/gameState'
 import { createSeed } from './core/rng'
 import { ROOT_STAGE_ID, STAGES } from './stages'
-import { chromeAction, chromeCounter, chromeGauges, chromeStrip, chromeToggle, statusReadouts, statusSubject } from './chrome'
+import { chromeAction, chromeCounter, chromeGauges, chromeStrip, chromeToggle, statusReadouts } from './chrome'
 
 const CATALOG = buildCatalog(THOCKQUEST)
 
@@ -36,10 +36,6 @@ const DEPS: DirectorDeps = {
   content: THOCKQUEST,
   catalog: CATALOG,
   rootStageId: ROOT_STAGE_ID,
-}
-
-function regionNameOf(regionId: string): string | null {
-  return THOCKQUEST.regions.find((region) => region.id === regionId)?.name ?? null
 }
 
 export interface AdventureEscapeMenuOptions {
@@ -136,10 +132,8 @@ export function useAdventureEscapeMenu(options: AdventureEscapeMenuOptions): Esc
       status: {
         // "Adventure" rather than the game's name: this pill says what KIND
         // of thing the slot is holding (its neighbour in that role is "User
-        // Guide"), and it clips at 120px. The game names itself below,
-        // where there is room.
+        // Guide"), and it clips at 120px.
         title: 'Adventure',
-        subject: statusSubject(save, regionNameOf),
         headline: screen.narration,
         readouts: statusReadouts(save, CATALOG),
         // The stage names itself; the counter does not keep a table of

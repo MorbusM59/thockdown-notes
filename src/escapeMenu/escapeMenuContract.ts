@@ -53,7 +53,18 @@ export interface EscapeMenuCell {
 export interface EscapeMenuReadout {
   /** Stable identity for React keys. */
   key: string
-  /** Short name, e.g. a stat's abbreviation. */
+  /**
+   * A Font Awesome class string. REQUIRED, not optional: a strip where some
+   * readouts are named by a glyph and others by a word is two strips, and the
+   * words are what crowd the bar -- eight abbreviations read as a code the
+   * player has to learn, where eight icons read as a status line at a glance.
+   */
+  icon: string
+  /**
+   * What the readout IS, in words -- read out for assistive tech and shown as
+   * the tooltip. Not drawn on the pill: the icon says which quantity this is
+   * and the value says how much, and a bar has room for exactly that.
+   */
   label: string
   /** Its current value, already formatted. */
   value: string
@@ -147,15 +158,15 @@ export interface EscapeMenuModeChrome {
    * The one line that says what just happened and what is being asked --
    * shown on the CHAPTER BAR below the editor, where a reader already looks
    * for "what is going on with this". Prose, not a label.
+   *
+   * It goes into that bar's own scrolling, fade-masked pill strip, exactly
+   * as a note's chapters do (shared/usePillStripScroll.ts), so a long line
+   * is scrolled to rather than clipped and nothing overruns the bar. There
+   * was a second pill ahead of it naming the mode's instance; it is gone,
+   * because the tab bar's identity pill already says which mode this is and
+   * the counter already says where in it you are.
    */
   headline: string
-  /**
-   * WHICH one, when the mode has instances worth naming: a story's title, a
-   * document's name. Shown as the leading label of the status bar below,
-   * where there is room for it. Omit when the mode is a single thing and
-   * `title` has already said everything.
-   */
-  subject?: string
   /**
    * Running state, as pills on the TAB BAR above the editor -- where a
    * reader already looks for "what am I holding". Keep it to a handful.

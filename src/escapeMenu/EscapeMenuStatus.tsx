@@ -1,3 +1,4 @@
+import { usePillStripScroll } from '../shared/usePillStripScroll'
 import type { EscapeMenuChromePill,
   EscapeMenuChromeToggle, EscapeMenuModeChrome } from './escapeMenuContract'
 
@@ -28,7 +29,15 @@ function tooltipOf(label: string, detail?: string[]): string {
   return detail && detail.length > 0 ? [label, ...detail].join('\n') : label
 }
 
-/** State, on the TAB BAR, in the strip a note's tabs would occupy. */
+/**
+ * State, on the TAB BAR, in the strip a note's tabs would occupy.
+ *
+ * Each readout is an ICON and a number. The words were on the pills first
+ * (`HP 60/95  MGT 3  AGI 2 ...`) and a full status line of them filled the
+ * bar with abbreviations -- a code to learn rather than a line to read, and
+ * one that pushed the last readouts out of the strip. The name lives in the
+ * tooltip, where it costs nothing and is unabbreviated.
+ */
 export function EscapeMenuReadouts({ status }: { status: EscapeMenuModeChrome }) {
   if (status.readouts.length === 0) return null
   return (
@@ -39,8 +48,13 @@ export function EscapeMenuReadouts({ status }: { status: EscapeMenuModeChrome })
       aria-label={`${status.title} state`}
     >
       {status.readouts.map((readout) => (
-        <div key={readout.key} className="tag-pill escape-menu-readout">
-          <span className="tag-pill-label">{readout.label}</span>
+        <div
+          key={readout.key}
+          className="tag-pill escape-menu-readout"
+          data-tooltip={tooltipOf(readout.label, [readout.value])}
+          aria-label={`${readout.label}: ${readout.value}`}
+        >
+          <span className={readout.icon} aria-hidden="true" />
           <span className="escape-menu-readout-value">{readout.value}</span>
         </div>
       ))}
@@ -52,51 +66,45 @@ export function EscapeMenuReadouts({ status }: { status: EscapeMenuModeChrome })
  * Narration, on the CHAPTER BAR, which is otherwise empty while a mode owns
  * the slot (there is no note, so there are no chapters and no tags).
  *
- * `subject` leads it -- which instance of the mode this is -- and the
- * headline follows, as a sentence rather than a pill: it is prose, and
- * putting prose in a pill would make it look like something to press.
+ * It is the chapter bar's own strip, element for element: the well, the
+ * fade-masked scroll shell, the display row and the pill. That is not a
+ * resemblance -- it is the same chain, with the same shared scrolling
+ * (shared/usePillStripScroll.ts), so a headline longer than the bar scrolls
+ * under the same fades a note's chapters do instead of overrunning the bar
+ * or being clipped at its edge. The pills also set the bar's height, which
+ * is why narration is a pill and not prose: rendered as text this bar came
+ * out shorter than the same bar showing a note, and the editor moved when a
+ * mode took the slot.
+ *
+ * `is-inert` is the one difference: a chapter pill is something you press,
+ * and every gesture a mode has is in the ring. Same box, no affordance.
  */
 export function EscapeMenuNarration({ status }: { status: EscapeMenuModeChrome }) {
-  if (!status.headline && !status.subject) return null
+  // Called before the early return: the strip is one pill today and a list
+  // tomorrow, and a hook that only runs on some renders is not a hook.
+  const strip = usePillStripScroll(status.headline)
+  if (!status.headline) return null
   return (
     <div className="chapter-bar-row">
-      <div
-        className="chapter-tab-mode-shell escape-menu-narration-shell"
-        role="status"
-        aria-live="polite"
-        aria-label={`${status.title} narration`}
-      >
-        {/* PILLS, not bare text. The chapter bar's height comes from the
-            pills in it, so narration rendered as prose made this bar shorter
-            than the same bar showing a note -- the editor moved when a mode
-            took the slot. Borrowing the pill box makes the two heights equal
-            by construction rather than by a matched padding somebody has to
-            keep matched.
-
-            They carry `is-inert`: a chapter pill is something you press, and
-            every gesture a mode has is in the ring. Same box, no affordance. */}
-        {status.subject ? (
-          <span className="tag-pill escape-menu-status-subject is-inert">{status.subject}</span>
-        ) : null}
-        {status.headline ? (
-          <span className="tag-pill escape-menu-narration is-inert">{status.headline}</span>
-        ) : null}
+      <div className="chapter-tab-mode-shell">
+        <div className={`chapter-bar-scroll-shell${strip.fadeClassName}`}>
+          <div
+            className="chapter-bar-display"
+            role="status"
+            aria-live="polite"
+            aria-label={`${status.title} narration`}
+            ref={strip.ref}
+            onScroll={strip.onScroll}
+            onWheel={strip.onWheel}
+          >
+            <span className="tag-pill escape-menu-narration is-inert">{status.headline}</span>
+          </div>
+        </div>
       </div>
     </div>
   )
 }
 
-/**
- * The pills a mode is accumulating, across the width the snapshot timeline
- * occupies for a note. Two groups reading inward from each end, because the
- * two things a run accumulates are different in kind and a single run of
- * pills would make them look like one list.
- *
- * The detail lives in the TOOLTIP rather than on the pill. A pill is an icon
- * and a name; what an item actually does is computed live from the same
- * declaration the resolver applies (model/modifiers.ts), so it is prose of
- * unpredictable length and would burst the strip.
- */
 /**
  * One of the chrome's two button positions -- the slot's toggle, or the
  * action beside the counter.
@@ -135,6 +143,17 @@ export function EscapeMenuChromeButton({ control }: { control: EscapeMenuChromeT
   )
 }
 
+/**
+ * The pills a mode is accumulating, across the width the snapshot timeline
+ * occupies for a note. Two groups reading inward from each end, because the
+ * two things a run accumulates are different in kind and a single run of
+ * pills would make them look like one list.
+ *
+ * The detail lives in the TOOLTIP rather than on the pill. A pill is an icon
+ * and a name; what an item actually does is computed live from the same
+ * declaration the resolver applies (model/modifiers.ts), so it is prose of
+ * unpredictable length and would burst the strip.
+ */
 export function EscapeMenuChromeStrip({ status }: { status: EscapeMenuModeChrome }) {
   const strip = status.strip
   if (!strip || (strip.leading.length === 0 && strip.trailing.length === 0)) return null

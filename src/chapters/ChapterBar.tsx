@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { DragEvent, MouseEvent, ReactNode, WheelEvent as ReactWheelEvent } from 'react'
+import { useMemo } from 'react'
+import type { DragEvent, MouseEvent, ReactNode } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import type { ChapterEntry } from '../shared/chapters'
 import { splitChapterFamily } from '../shared/chapters'
 import { resolveIdentityLabel } from '../shared/tabLabels'
 import { InlinePillOrInput } from '../shared/InlinePillOrInput'
 import type { ChapterPillSplitArm } from './useChapterPillActions'
+import { usePillStripScroll } from '../shared/usePillStripScroll'
 
 export interface ChapterBarProps {
   parentNoteId: string
@@ -209,31 +210,11 @@ export function ChapterBar({
     })
   }, [reorderableChapters, archivedMergedChapterIds])
 
-  const scrollerRef = useRef<HTMLDivElement | null>(null)
-  const [canScrollLeft, setCanScrollLeft] = useState(false)
-  const [canScrollRight, setCanScrollRight] = useState(false)
-
-  const updateScrollEdges = useCallback(() => {
-    const el = scrollerRef.current
-    if (!el) return
-    setCanScrollLeft(el.scrollLeft > 1)
-    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 1)
-  }, [])
-
-  useEffect(() => {
-    updateScrollEdges()
-  }, [chapters.length, updateScrollEdges])
-
-  useEffect(() => {
-    window.addEventListener('resize', updateScrollEdges)
-    return () => window.removeEventListener('resize', updateScrollEdges)
-  }, [updateScrollEdges])
-
-  const handleWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
-    if (event.deltaY === 0) return
-    event.preventDefault()
-    event.currentTarget.scrollLeft += event.deltaY
-  }, [])
+  // Was a hand-rolled copy of this, watching `window.resize` rather than the
+  // strip's own box -- so the fades went stale when the bar changed width
+  // without the window doing so (a slot opening beside it, the sidebar
+  // collapsing). The shared hook observes the element.
+  const strip = usePillStripScroll(chapters.length)
 
   return (
     <div className="chapter-bar-row">
@@ -298,14 +279,14 @@ export function ChapterBar({
       })() : null}
 
       <div className="chapter-tab-mode-shell">
-        <div className={`chapter-bar-scroll-shell${canScrollLeft ? ' fade-left' : ''}${canScrollRight ? ' fade-right' : ''}`}>
+        <div className={`chapter-bar-scroll-shell${strip.fadeClassName}`}>
           <div
             className="chapter-bar-display"
             aria-label="Note chapters"
             role="group"
-            ref={scrollerRef}
-            onScroll={updateScrollEdges}
-            onWheel={handleWheel}
+            ref={strip.ref}
+            onScroll={strip.onScroll}
+            onWheel={strip.onWheel}
           >
             {/* Leading, not trailing -- it mirrors the tab bar's own "new note"
                 pill, which sits at the head of the tab strip. Sitting first

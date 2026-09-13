@@ -25,12 +25,25 @@ channels:
 | Channel | Carries |
 | --- | --- |
 | the ring | one question's choices, as icon + short label — ALL of them the stage's own |
-| the tab bar | the stats readout — or, while a choice is focused, that choice's own effects |
+| the tab bar | the stats readout, each an ICON and its value (the name in the tooltip) — or, while a choice is focused, that choice's own effects |
 | the chapter bar | narration: what just happened, and the frame for what is being asked |
 | the counter | `IV [Combat] 3 | 4` — level in roman numerals, the stage, how far through it |
 | the strip | what the run is carrying: items out from the left, traits in from the right |
 | the rail | one gauge per subdivision, each an icon at the foot and a bar rising above it |
 | the toggle, the action | two buttons the game may claim; **empty** until it does |
+
+The chapter bar carries narration and nothing else. It led with a second
+pill naming the run (`Thockquest — Level IV, A remote island`) and that pill
+is gone: the tab bar's identity pill already says which mode holds the slot
+and the counter already says how far into it you are. **The REGION's name is
+therefore not shown anywhere right now** — the counter has the level, and
+where you are has no surface. Worth a decision when region actually means
+something mechanically; not worth reinstating a pill for.
+
+Both bars are the real ones, element for element — the same well, scroll
+shell, display row and pill a note's tabs and chapters use, sharing
+`shared/usePillStripScroll.ts`, so a strip wider than its bar scrolls under
+the same fades instead of overrunning it.
 
 Those last four are the chrome AROUND the editor, and one rule covers all of
 them: **a mode owning a slot owns that slot's chrome.** The editor underneath
