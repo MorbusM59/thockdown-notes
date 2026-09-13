@@ -11,6 +11,7 @@ import {
 } from '../editor/FindReplaceEngine'
 import { isNonQuantizedSmoothScrollActive, scrollToNonQuantizedSmooth } from '../editor/NonQuantizedSmoothScroll'
 import { resolvePreviewHitRange, resolveSourceLineForOffset } from './PreviewFindHitLocator'
+import { traceFindMarking } from './findMarkingTrace'
 import type { PreviewDocumentPositionApi, PreviewScrollToSourceLineFn } from './usePreviewMarkdownRendering'
 
 /**
@@ -185,7 +186,9 @@ export function useDocumentFindNavigation({
    * through a stretch with no hits in it re-renders nothing at all.
    */
   useEffect(() => {
+    traceFindMarking(() => `effect run: hits=${documentFindHits.length} isPreviewMode=${isPreviewMode} previewBlockCount=${previewBlockCount}`)
     if (documentFindHits.length === 0) {
+      traceFindMarking(() => 'declined: no hits')
       setVisibleDocumentFindHitRange(null)
       return undefined
     }
@@ -199,6 +202,7 @@ export function useDocumentFindNavigation({
       : () => adapterRef.current?.readVisibleSourceLineRange() ?? null
 
     if (isPreviewMode && !scroller) {
+      traceFindMarking(() => 'declined: preview mode with no scroller element')
       setVisibleDocumentFindHitRange(null)
       return undefined
     }
@@ -233,6 +237,15 @@ export function useDocumentFindNavigation({
           const to = lowerBound(lines.toLine + 1)
           return to > from ? { from, to } : null
         })()
+      traceFindMarking(() => {
+        const span = lines === null
+          ? 'lines=NULL (the pane could not answer)'
+          : `lines=${lines.fromLine}..${lines.toLine}`
+        const first = documentFindHits.length > 0 ? hitSourceLines[0] : -1
+        const last = documentFindHits.length > 0 ? hitSourceLines[documentFindHits.length - 1] : -1
+        return `recompute: ${span} range=${next ? `${next.from}..${next.to}` : 'NULL'}`
+          + ` hitLines=${first}..${last} hits=${documentFindHits.length}`
+      })
 
       setVisibleDocumentFindHitRange((current) => {
         if (current === null && next === null) return current
@@ -282,7 +295,7 @@ export function useDocumentFindNavigation({
     // everything; currentEditorText reaches this through hitSourceLines;
     // previewBlockCount because it is what makes the pane answerable at all
     // (see recompute).
-  }, [isPreviewMode, documentFindHits, previewBlockCount, lowerBound, previewScrollRef, previewDocumentPositionRef, adapterRef])
+  }, [isPreviewMode, documentFindHits, previewBlockCount, lowerBound, hitSourceLines, previewScrollRef, previewDocumentPositionRef, adapterRef])
 
   /**
    * The match this card refers to, set in small caps where it stands.
