@@ -66,8 +66,21 @@ export function EscapeMenuNarration({ status }: { status: EscapeMenuModeChrome }
         aria-live="polite"
         aria-label={`${status.title} narration`}
       >
-        {status.subject ? <span className="escape-menu-status-subject">{status.subject}</span> : null}
-        {status.headline ? <span className="escape-menu-narration">{status.headline}</span> : null}
+        {/* PILLS, not bare text. The chapter bar's height comes from the
+            pills in it, so narration rendered as prose made this bar shorter
+            than the same bar showing a note -- the editor moved when a mode
+            took the slot. Borrowing the pill box makes the two heights equal
+            by construction rather than by a matched padding somebody has to
+            keep matched.
+
+            They carry `is-inert`: a chapter pill is something you press, and
+            every gesture a mode has is in the ring. Same box, no affordance. */}
+        {status.subject ? (
+          <span className="tag-pill escape-menu-status-subject is-inert">{status.subject}</span>
+        ) : null}
+        {status.headline ? (
+          <span className="tag-pill escape-menu-narration is-inert">{status.headline}</span>
+        ) : null}
       </div>
     </div>
   )
@@ -88,21 +101,24 @@ export function EscapeMenuNarration({ status }: { status: EscapeMenuModeChrome }
  * One of the chrome's two button positions -- the slot's toggle, or the
  * action beside the counter.
  *
- * A control with no `onActivate` is RESERVED, and renders as an inert frame
- * of exactly the button's size rather than as a disabled button: it draws no
- * icon and takes no press. Both halves matter. Omitting the position instead
- * would close the gap it holds and shift the panels beside it -- which is how
- * the word-count panel acquired a space it never had -- and a control that
- * looks pressable and does nothing is worse than an empty frame.
+ * A control with no `onActivate` is RESERVED: the button's exact shape and
+ * style, carrying `fa-ban`. That icon is the app-wide convention for "this
+ * position is spoken for and does not work yet" -- an empty frame reads as a
+ * rendering fault, and a plausible icon reads as a control that is broken.
+ * `fa-ban` reads as neither.
+ *
+ * Omitting the position instead would close the gap it holds and shift the
+ * panels beside it, which is how the word-count panel acquired a leading
+ * space it never had.
  */
+export const RESERVED_POSITION_ICON = 'fa-solid fa-ban'
+
 export function EscapeMenuChromeButton({ control }: { control: EscapeMenuChromeToggle }) {
   if (!control.onActivate) {
     return (
-      <span
-        className="btn-icon chapter-toggle-button is-reserved"
-        aria-hidden="true"
-        data-tooltip={control.label}
-      />
+      <span className="btn-icon chapter-toggle-button is-reserved" aria-hidden="true" data-tooltip={control.label}>
+        <span className={RESERVED_POSITION_ICON} aria-hidden="true" />
+      </span>
     )
   }
   return (
@@ -191,7 +207,11 @@ export function EscapeMenuChromeGauges({ status }: { status: EscapeMenuModeChrom
               {filled === null ? null : (
                 <div
                   className="thockdown-scroll-thumb escape-menu-chrome-gauge-fill"
-                  style={{ height: `${filled * 100}%` }}
+                  // The RATIO, not a height: the bar's floor sits above the
+                  // icon, so how tall it should be is a fraction of what is
+                  // left over -- an arithmetic the stylesheet owns, because
+                  // it owns the icon's size and the gap.
+                  style={{ ['--gauge-ratio' as string]: filled }}
                 />
               )}
               <span className={`escape-menu-chrome-gauge-icon ${gauge.icon}`} aria-hidden="true" />

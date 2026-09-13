@@ -85,6 +85,12 @@
    press, and every gesture a mode has is in the ring. Takes the rest of the
    bar and truncates rather than wrapping -- this strip is one line high, and
    a second line would push the editor. */
+/* Same box as a chapter pill, none of its affordance -- see the note in
+   EscapeMenuStatus.tsx. */
+.tag-pill.is-inert {
+  cursor: default;
+}
+
 .escape-menu-narration {
   align-self: center;
   min-width: 0;
@@ -245,14 +251,18 @@
   font-size: 10px; /* icon glyph, fixed box -- see --ui-font-scale's scope note in tokens.css */
 }
 
-/* A position a mode has RESERVED: it holds the geometry and does nothing.
-   Deliberately not a disabled button -- no icon, no press, no pointer -- so
-   it reads as an empty frame rather than as a control that stopped working.
-   See escapeMenuContract.ts's EscapeMenuChromeToggle. */
+/* A position a mode has RESERVED: the button's exact shape and style, with
+   `fa-ban` inside it. The app-wide convention for "spoken for, not working
+   yet" -- an empty frame reads as a rendering fault and a plausible icon
+   reads as a broken control. Inert, and dimmed so it does not compete with
+   the controls that do work. See escapeMenuContract.ts. */
 .btn-icon.chapter-toggle-button.is-reserved {
-  cursor:         default;
-  pointer-events: none;
-  opacity:        0.45;
+  display:         inline-flex;
+  align-items:     center;
+  justify-content: center;
+  cursor:          default;
+  pointer-events:  none;
+  opacity:         0.45;
 }
 
 .btn-icon.chapter-toggle-button.is-active {
@@ -931,15 +941,15 @@
   align-items:    flex-end;
 }
 
-/* INSIDE the track, at its foot, with the fill passing behind it. The icon is
-   what the track is for, so it stays legible at every value rather than the
-   track owing it a reserved strip below that it only needs when full. */
+/* INSIDE the track, at its foot. The bar starts ABOVE it with
+   --spacing-regular between the two, so the icon is never covered and reads
+   as the thing being measured rather than as part of the measurement. */
 .escape-menu-chrome-gauge-icon {
   position:      absolute;
   left:          0;
   right:         0;
   bottom:        var(--canonical-scroll-handle-gap);
-  font-size:     calc(var(--canonical-scroll-thickness) - 4px);
+  font-size:     calc(var(--canonical-scroll-thickness) - 6px);
   line-height:   1;
   text-align:    center;
   color:         var(--canonical-handle-border);
@@ -953,9 +963,21 @@
   position:   relative;
 }
 
-/* Bottom-anchored, so it grows upward. Height is the ratio; everything else
-   is the ordinary thumb, including its inset inside the track's border. */
+/* Bottom-anchored, so it grows upward -- but from ABOVE the icon, not from
+   the track's floor: the icon's own box plus --spacing-regular. Its height is
+   therefore a fraction of what REMAINS above that floor, not of the track, or
+   a full bar would overrun the top by exactly the floor. Everything else is
+   the ordinary thumb. */
+.escape-menu-chrome-gauge {
+  --gauge-floor: calc(
+    var(--canonical-scroll-handle-gap)
+    + (var(--canonical-scroll-thickness) - 6px)
+    + var(--spacing-regular)
+  );
+}
+
 .escape-menu-chrome-gauge-fill {
-  bottom: calc(var(--canonical-scroll-handle-gap) - 2px);
+  bottom: var(--gauge-floor);
+  height: calc((100% - var(--gauge-floor)) * var(--gauge-ratio, 0));
   cursor: default;
 }
