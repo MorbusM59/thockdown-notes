@@ -384,10 +384,9 @@ offer is drawn at random from the three offerable ranks — group, regular,
 elite — and must be a combination not already on the list. Mini boss and boss
 are placed, never rolled.
 
-Uniqueness is by the WHOLE identity: species, form, class and rank. The rule
-was first written as "class/type combinations", before species existed; a
-Goblin thief and an Orc thief are visibly different encounters and thinning
-the list by collapsing them would buy nothing the player could see.
+Uniqueness is by **class and rank**, and deliberately not by species as well.
+The rule is there to make the list varied, and three regular warriors from
+three species is the same fight three times wearing different names.
 
 ### Species
 
@@ -406,7 +405,7 @@ name and the class together.
 
 | | group | regular | elite | mini boss | boss |
 | --- | --- | --- | --- | --- | --- |
-| Goblin | Band of Goblin *(thief)* | Goblin *(any)* | Goblin Veteran *(any)* | Goblin Chieftain *(warrior)* | Goblin Lord *(mage)* |
+| Goblin | Band of Goblins *(thief)* | Goblin *(any)* | Goblin Veteran *(any)* | Goblin Chieftain *(warrior)* | Goblin Lord *(mage)* |
 | Orc | Pack of Orcs *(warrior)* | Orc *(any)* | Orc Brute *(warrior)* | Orc Squad Leader *(mage)* | Orc Demon *(warrior)* |
 | Beast | Pack of Wolves *(thief)* / Pack of Boars *(warrior)* | Large Wolf *(thief)* / Large Boar *(warrior)* | Dire Wolf *(warrior)* / Enraged Boar *(warrior)* | Dire Bear *(warrior)* / Shadow Stag *(mage)* | Hulking Grizzly *(warrior)* |
 

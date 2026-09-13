@@ -128,7 +128,7 @@ const SPECIES: readonly Species[] = [
     name: 'Goblin',
     statDeltas: { luck: 2, might: -1, charisma: -2, agility: 1 },
     forms: {
-      group: [{ name: 'Band of Goblin', classes: ['thief'] }],
+      group: [{ name: 'Band of Goblins', classes: ['thief'] }],
       regular: [{ name: 'Goblin', classes: ANY }],
       elite: [{ name: 'Goblin Veteran', classes: ANY }],
       miniBoss: [{ name: 'Goblin Chieftain', classes: ['warrior'] }],

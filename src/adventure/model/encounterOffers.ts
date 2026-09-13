@@ -9,11 +9,11 @@
 // no reading of the dice can open with three packs. Every further choice is
 // drawn at random and must be a combination not already on the list.
 //
-// UNIQUENESS is by the whole identity -- species, form, class and type -- and
-// not by class and type alone as the rule was first written, because species
-// came later. A Goblin thief and an Orc thief are visibly different
-// encounters, and collapsing them would thin the list for no reason the
-// player could see.
+// UNIQUENESS is by CLASS AND TYPE, and deliberately not by the species too.
+// The rule exists to make a list VARIED, and three regular warriors from
+// three different species is not a varied list -- it is the same fight three
+// times wearing different names. Widening the key to include the species
+// would let exactly that through.
 
 import { nextInt, nextPick, type RngState } from '../core/rng'
 import type { MonsterClassId, MonsterForm, Species } from '../content'
@@ -42,8 +42,9 @@ export function fixedTypeAt(encounter: number): MonsterType | null {
   return MINI_BOSS_ENCOUNTERS.includes(encounter) ? 'miniBoss' : null
 }
 
+/** What may appear only once in a list: how it FIGHTS, not what it is called. */
 function identityOf(offer: EncounterOffer): string {
-  return `${offer.speciesId}:${offer.name}:${offer.classId}:${offer.type}`
+  return `${offer.classId}:${offer.type}`
 }
 
 function classesFor(form: MonsterForm, allClasses: readonly MonsterClassId[]): readonly MonsterClassId[] {

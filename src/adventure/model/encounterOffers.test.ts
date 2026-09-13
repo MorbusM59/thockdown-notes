@@ -42,10 +42,13 @@ describe('what an ordinary encounter offers', () => {
     }
   })
 
-  it('never repeats an identity within one list', () => {
+  it('never repeats a class-and-rank, whatever species wears it', () => {
+    // The rule is about a VARIED list. Three regular warriors from three
+    // species is the same fight three times in different names, so the
+    // species deliberately does not widen the key.
     for (let seed = 1; seed <= 120; seed += 1) {
       const offers = offersAt(3, 5, seed)
-      const identities = offers.map((offer) => `${offer.speciesId}:${offer.name}:${offer.classId}:${offer.type}`)
+      const identities = offers.map((offer) => `${offer.classId}:${offer.type}`)
       expect(new Set(identities).size).toBe(identities.length)
     }
   })
@@ -81,15 +84,25 @@ describe('what an ordinary encounter offers', () => {
     }
   })
 
-  it('returns a SHORTER list rather than looping when content runs out', () => {
-    // One species, one form, one class: exactly one distinguishable regular
-    // and one group and one elite. Asking for twenty cannot be honoured, and
-    // the answer is what exists -- not an endless search for a fourth.
-    const one = THOCKQUEST.species.filter((species) => species.id === 'orc')
+  it('returns a SHORTER list rather than looping when the combinations run out', () => {
+    // Asking for twenty cannot be honoured: there are only so many
+    // class-and-rank pairs the content can actually field. The bound is
+    // COMPUTED from the content rather than written down, so adding a species
+    // moves it without touching this test.
+    const reachable = new Set<string>()
+    for (const species of THOCKQUEST.species) {
+      for (const type of OFFERABLE_TYPES) {
+        for (const form of species.forms[type as 'group' | 'regular' | 'elite']) {
+          const classes = form.classes.length > 0 ? form.classes : MONSTER_CLASS_IDS
+          for (const classId of classes) reachable.add(`${classId}:${type}`)
+        }
+      }
+    }
     const offers = buildEncounterOffers({
-      encounter: 2, choiceCount: 20, species: one, classes: ['warrior'], rng: 7,
+      encounter: 2, choiceCount: 20, species: THOCKQUEST.species, classes: MONSTER_CLASS_IDS, rng: 7,
     }).offers
     expect(offers.length).toBeGreaterThan(0)
+    expect(offers.length).toBeLessThanOrEqual(reachable.size)
     expect(offers.length).toBeLessThan(20)
   })
 })

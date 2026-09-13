@@ -555,15 +555,11 @@ exchange, the round's exits and what each one pays.
 (`model/rewards.ts`), the species table (`content/`) and the offer generator
 (`model/encounterOffers.ts`). See the design plan.
 
-52. **"Band of Goblin" is spelled as authored** and reads as a missing plural
-    beside "Pack of Orcs" and "Pack of Wolves". It is a name a player sees, so
-    it is not mine to correct silently.
-
-53. **Nothing WIRES any of this yet.** There is a round engine, a monster
+52. **Nothing WIRES any of this yet.** There is a round engine, a monster
     builder, a reward model and an offer generator, and no stage that puts a
     player in front of them: no combat stage, no loot stage, no level that
     counts to ten. That is the next build, and it needs nothing new decided.
 
-54. **Species modifiers are not capped.** A Beast at −3 Intellect on a group's
+53. **Species modifiers are not capped.** A Beast at −3 Intellect on a group's
     −1 is −4 before class. Nothing says a monster's stats have a floor (see
     46) and nothing yet says they have a ceiling either.
