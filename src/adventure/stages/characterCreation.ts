@@ -26,12 +26,13 @@ function stepOf(value: unknown): Step {
 }
 
 function offerPool(step: Step, context: StageContext): readonly Modifier[] {
-  // Only what DOES something: the pool carries the design's unspecified names
-  // too, and an opening choice between two of those is a choice between two
-  // nothings. See `isOfferable`.
-  if (step === 'trait') return context.content.traits.filter(isOfferable)
-  if (step === 'item') return context.content.items.filter(isOfferable)
-  return []
+  // Only what DOES something, and only what is not already held: the pool
+  // carries the design's unspecified names too (an opening choice between two
+  // of those is a choice between two nothings -- see `isOfferable`), and a
+  // second copy of something is not a second thing (model/gameState.ts's
+  // `acquireModifier`).
+  const pool = step === 'trait' ? context.content.traits : step === 'item' ? context.content.items : []
+  return pool.filter((modifier) => isOfferable(modifier) && !context.held.some((row) => row.id === modifier.id))
 }
 
 function rollOffers(step: Step, context: StageContext, rng: RngState): { offerIds: string[]; rng: RngState } {

@@ -24,7 +24,11 @@ import { ENCOUNTER_SELECT_STAGE_ID, LOOT_STAGE_ID } from './ids'
 const GOLD_CHOICE = 'loot:gold'
 
 function rollItemOffers(context: StageContext, rng: number) {
-  const pool = context.content.items.filter(isOfferable)
+  // Not what is already held: a duplicate is not a second item, it is the
+  // same one applying twice (model/gameState.ts's `acquireModifier`), and
+  // offering it would be offering nothing.
+  const pool = context.content.items
+    .filter((item) => isOfferable(item) && !context.held.some((row) => row.id === item.id))
   if (pool.length === 0) return { offerIds: [] as string[], rng }
   const sample = nextSample(rng, pool, context.profile?.derived.offerChoices ?? 2)
   return { offerIds: sample.value.map((item) => item.id), rng: sample.rng }

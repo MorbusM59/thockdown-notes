@@ -117,16 +117,20 @@ export interface GameRecord {
    */
   successAdjust: number
   /**
-   * What the player has MARKED to carry into the next level -- one item and
-   * one trait, everything else given up when the level ends.
+   * What the player has MARKED to carry into the next level, in the order
+   * they marked it. Everything else is given up when the level ends.
    *
-   * A modifier ID rather than a holding: two copies of one item are the same
-   * thing, so the mark names WHAT is kept and the level's end keeps one of
-   * them. Null means nothing is marked, and the default applies -- see
-   * `keptModifierId`.
+   * A LIST rather than one id, because how many survive is a number the rules
+   * own (`keepAllowance`) rather than an assumption: it is one of each today
+   * and a fame unlock is expected to raise it. Marks beyond the allowance
+   * cannot accumulate -- see `withKeepMark`.
+   *
+   * Modifier IDS, which name a holding exactly: duplicates cannot exist
+   * (`acquireModifier`). Fewer marks than the allowance is the ordinary case
+   * and not an empty state -- see `keptModifierIds`.
    */
-  keepItemId: string | null
-  keepTraitId: string | null
+  keepItemIds: string[]
+  keepTraitIds: string[]
   regionId: string | null
   baseStats: StatBlock
   /** Points ever spent on a stat -- what pushes the next threshold away. */
@@ -279,21 +283,51 @@ export function heldModifiers(save: GameSave, gameId: string, catalog: ReadonlyM
 }
 
 /**
- * WHAT SURVIVES THE LEVEL, for one kind: the marked modifier if it is still
- * held, and otherwise the one acquired LAST.
+ * HOW MANY of each kind survive a level. One, today.
  *
- * The default is not a fallback for an error case -- it is the rule for a
- * player who never touched the marks, and it is the newest thing they found
- * because that is the one they have had least use out of. Which means the
- * strip can always light exactly one pill per kind and have it be true:
- * there is no "nothing is selected" state to draw.
+ * A function of the RUN rather than a constant at the one call site, because
+ * the design expects a fame unlock to raise it -- and because "one" appearing
+ * inline in the level's end is exactly the kind of assumption that has to be
+ * found again later in three places. Nothing raises it yet; what a fame point
+ * buys is unwritten (docs/adventure-platform.md), and this is the seam it
+ * will be bought with rather than a guess at the price.
  */
-export function keptModifierId(save: GameSave, game: GameRecord, kind: ModifierKind): string | null {
+export const BASE_KEEP_ALLOWANCE = 1
+
+export function keepAllowance(_game: GameRecord, _kind: ModifierKind): number {
+  return BASE_KEEP_ALLOWANCE
+}
+
+function markedIds(game: GameRecord, kind: ModifierKind): string[] {
+  return kind === 'item' ? game.keepItemIds : game.keepTraitIds
+}
+
+/**
+ * WHAT SURVIVES THE LEVEL, for one kind: the marks that are still held, in
+ * the order they were made, topped up with the most recently acquired until
+ * the allowance is full.
+ *
+ * The top-up is not a fallback for an error case -- it is the rule for a
+ * player who marked nothing, or marked fewer than they are allowed, and it
+ * takes the newest finds because those are the ones they have had least use
+ * out of. Which means the strip can always light exactly
+ * `min(allowance, held)` pills per kind and have every one of them be true:
+ * there is no "nothing selected" state to draw.
+ */
+export function keptModifierIds(save: GameSave, game: GameRecord, kind: ModifierKind): string[] {
   const rows = holdingsOf(save, game.id).filter((row) => row.kind === kind)
-  if (rows.length === 0) return null
-  const marked = kind === 'item' ? game.keepItemId : game.keepTraitId
-  if (marked !== null && rows.some((row) => row.modifierId === marked)) return marked
-  return rows.reduce((latest, row) => (row.seq > latest.seq ? row : latest), rows[0]).modifierId
+  const allowance = Math.max(0, Math.floor(keepAllowance(game, kind)))
+  const held = new Set(rows.map((row) => row.modifierId))
+
+  const kept = markedIds(game, kind).filter((id) => held.has(id)).slice(0, allowance)
+  if (kept.length >= allowance) return kept
+
+  const newestFirst = [...rows].sort((left, right) => right.seq - left.seq)
+  for (const row of newestFirst) {
+    if (kept.length >= allowance) break
+    if (!kept.includes(row.modifierId)) kept.push(row.modifierId)
+  }
+  return kept
 }
 
 /**
@@ -302,15 +336,22 @@ export function keptModifierId(save: GameSave, game: GameRecord, kind: ModifierK
  * stage, so this is not in the effect vocabulary -- which is what a STAGE may
  * ask the world to change (model/effects.ts).
  *
- * Passing the id that is already marked CLEARS it, which is what makes the
- * pills toggles; the keeper then falls back to the default above.
+ * Pressing a marked one CLEARS it, which is what makes the pills toggles.
+ * Pressing an unmarked one when the allowance is already full drops the
+ * OLDEST mark to make room, which is what makes an allowance of one behave as
+ * a single choice that moves, and any larger allowance behave as a set the
+ * player can keep rearranging without first having to empty it.
  */
 export function withKeepMark(save: GameSave, kind: ModifierKind, modifierId: string): GameSave {
   const game = activeGame(save)
   if (!game) return save
-  const field = kind === 'item' ? 'keepItemId' : 'keepTraitId'
-  const next = game[field] === modifierId ? null : modifierId
-  if (next === game[field]) return save
+  const field = kind === 'item' ? 'keepItemIds' : 'keepTraitIds'
+  const current = markedIds(game, kind)
+
+  const next = current.includes(modifierId)
+    ? current.filter((id) => id !== modifierId)
+    : [...current, modifierId].slice(-Math.max(1, Math.floor(keepAllowance(game, kind))))
+
   return {
     ...save,
     games: save.games.map((candidate) => (candidate.id === game.id ? { ...candidate, [field]: next } : candidate)),
@@ -349,8 +390,8 @@ function createGame(id: string, seed: RngState, nowMs: number, settings: GameSet
     level: 1,
     difficulty: settings.difficulty,
     successAdjust: settings.successAdjust,
-    keepItemId: null,
-    keepTraitId: null,
+    keepItemIds: [],
+    keepTraitIds: [],
     regionId: null,
     baseStats,
     statPointsSpent: 0,
@@ -438,6 +479,16 @@ export function applyEffect(
       })
 
     case 'acquireModifier': {
+      // ONE OF EACH THING, EVER. Two copies of an item are not two items --
+      // every effect it carries is declarative and would simply apply twice,
+      // so a duplicate is a silent doubling rather than a second object. The
+      // pools that OFFER things already exclude what is held; this is the
+      // same rule at the place it is actually applied, because an offer
+      // filter is a rule stated at one caller and this is its sibling.
+      const alreadyHeld = holdingsOf(save, gameId)
+        .some((row) => row.kind === effect.modifierKind && row.modifierId === effect.modifierId)
+      if (alreadyHeld) return save
+
       const withHolding: GameSave = {
         ...save,
         holdings: [
@@ -522,8 +573,8 @@ export function applyEffect(
 
     case 'advanceLevel': {
       // A level is its own journey: the player rests up between them, gives
-      // up everything they are carrying but ONE item and ONE trait, and sets
-      // out again. Three things happen here and their ORDER is the rule (see
+      // up everything they are carrying but what they marked to keep (one of
+      // each kind today -- `keepAllowance`), and sets out again. Three things happen here and their ORDER is the rule (see
       // docs/adventure-game-design.md):
       //
       //   1. RESTORE hit points, against the maximum as it stands WITH
@@ -543,24 +594,12 @@ export function applyEffect(
         holdingCounts(heldBefore),
       ).derived.maxHitPoints
 
-      const keepItem = keptModifierId(save, game, 'item')
-      const keepTrait = keptModifierId(save, game, 'trait')
-      // ONE ROW per kept id, not every row carrying it: keeping "an item"
-      // means one of them, and two copies of one item are the same thing.
-      const keptSeqs = new Set(
-        (['item', 'trait'] as const).flatMap((kind) => {
-          const wanted = kind === 'item' ? keepItem : keepTrait
-          if (wanted === null) return []
-          const rows = holdingsOf(save, gameId).filter((row) => row.kind === kind && row.modifierId === wanted)
-          const newest = rows.reduce<HoldingRow | null>(
-            (latest, row) => (latest === null || row.seq > latest.seq ? row : latest),
-            null,
-          )
-          return newest ? [newest.seq] : []
-        }),
-      )
+      // Everything that survives, both kinds, as the holdings that carry
+      // those ids. Duplicates cannot exist (`acquireModifier`), so an id
+      // names one row and there is nothing to choose between.
+      const kept = new Set((['item', 'trait'] as const).flatMap((kind) => keptModifierIds(save, game, kind)))
 
-      const holdings = save.holdings.filter((row) => row.gameId !== gameId || keptSeqs.has(row.seq))
+      const holdings = save.holdings.filter((row) => row.gameId !== gameId || kept.has(row.modifierId))
       const survived = heldModifiers({ ...save, holdings }, gameId, catalog)
 
       return {
@@ -577,8 +616,8 @@ export function applyEffect(
               armor: armorFromHoldings(survived),
               // The marks are spent. A new level's default is its own newest
               // find, not a decision taken a level ago.
-              keepItemId: null,
-              keepTraitId: null,
+              keepItemIds: [],
+              keepTraitIds: [],
             }
           : candidate)),
       }

@@ -28,6 +28,17 @@ function finite(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback
 }
 
+/**
+ * A list of modifier ids. Anything else is empty, which is the value that
+ * changes nothing: with no marks the level's end keeps the newest finds
+ * (model/gameState.ts's `keptModifierIds`), so a mark lost on the way in
+ * costs a default rather than a decision.
+ */
+function modifierIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0)
+}
+
 /** A 0..1 knob. Anything else is 0, which is the value that changes nothing. */
 function fraction(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0
@@ -109,8 +120,8 @@ function sanitizeGame(value: unknown): GameRecord | null {
     // than discarded -- the same widening the narration list took.
     difficulty: isDifficulty(value.difficulty) ? value.difficulty : DEFAULT_DIFFICULTY,
     successAdjust: fraction(value.successAdjust),
-    keepItemId: typeof value.keepItemId === 'string' ? value.keepItemId : null,
-    keepTraitId: typeof value.keepTraitId === 'string' ? value.keepTraitId : null,
+    keepItemIds: modifierIds(value.keepItemIds),
+    keepTraitIds: modifierIds(value.keepTraitIds),
     regionId: typeof value.regionId === 'string' ? value.regionId : null,
     baseStats: sanitizeStats(value.baseStats),
     statPointsSpent: wholeAtLeast(value.statPointsSpent, 0),

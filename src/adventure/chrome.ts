@@ -28,7 +28,7 @@
 import type { EscapeMenuChromeGauge, EscapeMenuChromePill, EscapeMenuModeChrome, EscapeMenuReadout } from '../escapeMenu/escapeMenuContract'
 import { moteBalance, statPointProgress, statPointsAvailable, statPointStanding } from './model/motes'
 import { famePointProgress, famePointStanding, goldBalance } from './model/gold'
-import { activeGame, heldModifiers, holdingCounts, keptModifierId, profileOf, type GameSave } from './model/gameState'
+import { activeGame, heldModifiers, holdingCounts, keptModifierIds, profileOf, type GameSave } from './model/gameState'
 import { describeModifier, type Modifier, type ModifierKind } from './model/modifiers'
 import { STAT_ICONS, STAT_KEYS, STAT_LABELS } from './model/stats'
 
@@ -190,16 +190,16 @@ function pillsOf(
   held: readonly Modifier[],
   kind: Modifier['kind'],
   counts: ReturnType<typeof holdingCounts>,
-  kept: string | null,
+  kept: readonly string[],
   onKeep: ((kind: ModifierKind, modifierId: string) => void) | undefined,
 ): EscapeMenuChromePill[] {
   return held
     .filter((modifier) => modifier.kind === kind)
-    // Acquisition order, and duplicates kept: two of the same item are two
-    // things the run is carrying, and collapsing them would hide that from
-    // the one surface that shows what you have.
-    .map((modifier, index) => ({
-      key: `${modifier.id}:${index}`,
+    // Acquisition order. One pill per thing held, which is also one per thing
+    // there IS: a run cannot hold two of anything (model/gameState.ts's
+    // `acquireModifier`), so the id is the key.
+    .map((modifier) => ({
+      key: modifier.id,
       icon: modifier.icon,
       label: modifier.name,
       detail: [
@@ -208,11 +208,11 @@ function pillsOf(
         // discovered at the end of the level. Exactly one per kind is lit at
         // all times (`keptModifierId` defaults to the newest find), so this
         // line is on exactly one pill per kind too.
-        modifier.id === kept
+        kept.includes(modifier.id)
           ? 'Kept when this level ends'
           : 'Press to keep this one when the level ends',
       ],
-      isActive: modifier.id === kept,
+      isActive: kept.includes(modifier.id),
       onActivate: onKeep ? () => onKeep(kind, modifier.id) : undefined,
     }))
 }
@@ -235,8 +235,8 @@ export function chromeStrip(
   const held = heldModifiers(save, game.id, catalog)
   const counts = holdingCounts(held)
   return {
-    leading: pillsOf(held, 'item', counts, keptModifierId(save, game, 'item'), onKeep),
-    trailing: pillsOf(held, 'trait', counts, keptModifierId(save, game, 'trait'), onKeep),
+    leading: pillsOf(held, 'item', counts, keptModifierIds(save, game, 'item'), onKeep),
+    trailing: pillsOf(held, 'trait', counts, keptModifierIds(save, game, 'trait'), onKeep),
   }
 }
 

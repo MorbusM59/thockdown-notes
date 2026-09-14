@@ -217,15 +217,25 @@ text is left as authored; this is what has moved.
   player toward landing blows AND toward dodging, which is exactly the pair of
   outcomes that feel like agency. Applied at the roll, never folded into what
   a character is worth; fixed on a run when the run starts.
-- **ONE ITEM AND ONE TRAIT SURVIVE A LEVEL, and the player marks which.** The
-  strip's pills are toggles — one active per kind — and pressing one marks it
-  to keep. Nothing else carries over. **If nothing is marked, the LAST
-  acquired of that kind is kept**, which is not a fallback for an error case:
-  it is the rule for a player who never touched the marks, and it is the
-  newest find because that is the one they have had least use out of. Exactly
-  one pill per kind is therefore lit at all times, and it always says the
-  truth about what will survive. The marks are spent when the level ends, so
-  the next level's default is its own newest find.
+- **A RUN HOLDS ONE OF EACH THING, EVER.** Duplicates do not exist: every
+  effect a modifier carries is declarative, so a second copy is not a second
+  object, it is the same one applying twice. Nothing offers what is already
+  held, and acquiring it again does nothing.
+- **WHAT SURVIVES A LEVEL is marked on the strip**, whose pills are toggles.
+  The number that survives is an ALLOWANCE — one item and one trait today,
+  and a fame unlock is expected to raise it, which is why it is a rule the
+  code asks for rather than a "one" written into the level's end. Pressing a
+  marked pill clears it; pressing an unmarked one when the allowance is full
+  drops the oldest mark to make room, so at an allowance of one a press moves
+  the choice, and at any larger one a set can be rearranged without emptying
+  it first.
+
+  **Fewer marks than the allowance is the ordinary case, not an empty state**:
+  the rest is filled with the most recently acquired, because those are the
+  ones the player has had least use out of. So exactly `min(allowance, held)`
+  pills are lit per kind at all times and every one of them is true. The marks
+  are spent when the level ends, so the next level's default is its own newest
+  finds.
 - **Hit points are the BUDGET FOR ONE LEVEL.** They wear down encounter by
   encounter with nothing to restore them, and they are reset when the level
   ends — each level is its own journey (which is why a new region is chosen

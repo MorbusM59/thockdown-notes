@@ -11,7 +11,10 @@ import { describe, expect, it } from 'vitest'
 
 import { buildCatalog, THOCKQUEST } from '../content'
 import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from '../core/director'
-import { activeGame, applyEffects, emptySave, heldModifiers, withKeepMark, type GameSave } from '../model/gameState'
+import {
+  activeGame, applyEffects, BASE_KEEP_ALLOWANCE, emptySave, heldModifiers, keepAllowance,
+  keptModifierIds, withKeepMark, type GameSave,
+} from '../model/gameState'
 import { isOfferable, resolveProfile, UNSPECIFIED_TAG, type Modifier } from './modifiers'
 import { resolveExchange, rollDodgeOffered } from './combat'
 import { resolveChanceWith } from './chance'
@@ -370,9 +373,9 @@ describe('what survives a level', () => {
     const firstItem = save.holdings.find((row) => row.kind === 'item')
     if (!firstItem) throw new Error('nothing held')
     const marked = withKeepMark(save, 'item', firstItem.modifierId)
-    expect(activeGame(marked)?.keepItemId).toBe(firstItem.modifierId)
+    expect(activeGame(marked)?.keepItemIds).toEqual([firstItem.modifierId])
     const cleared = withKeepMark(marked, 'item', firstItem.modifierId)
-    expect(activeGame(cleared)?.keepItemId).toBeNull()
+    expect(activeGame(cleared)?.keepItemIds).toEqual([])
     expect(heldIds(applyEffects(cleared, [{ kind: 'advanceLevel' }], DEPS.catalog, NOW))).toContain('whetstone')
   })
 
@@ -397,6 +400,106 @@ describe('what survives a level', () => {
     const firstItem = save.holdings.find((row) => row.kind === 'item')
     if (!firstItem) throw new Error('nothing held')
     const onward = applyEffects(withKeepMark(save, 'item', firstItem.modifierId), [{ kind: 'advanceLevel' }], DEPS.catalog, NOW)
-    expect(activeGame(onward)?.keepItemId).toBeNull()
+    expect(activeGame(onward)?.keepItemIds).toEqual([])
+  })
+})
+
+describe('one of each thing, ever', () => {
+  function started(): GameSave {
+    const save = enterEntryScreen(emptySave(4242), DEPS, NOW)
+    let playing = choose(save, 'welcome:start', DEPS, NOW).save
+    playing = choose(playing, 'origin:warrior', DEPS, NOW).save
+    for (let step = 0; step < 2; step += 1) {
+      const screen = currentScreen(playing, DEPS)
+      if (!screen) throw new Error('no screen')
+      playing = choose(playing, screen.choices[0].id, DEPS, NOW).save
+    }
+    return playing
+  }
+
+  it('declines a second copy, wherever it is asked for', () => {
+    // Two copies of an item are not two items: every effect it carries is
+    // declarative and would simply apply twice. The guard is at the
+    // ACQUISITION, not only in the pools that offer -- an offer filter is a
+    // rule stated at one caller, and this is its sibling.
+    const once = applyEffects(started(), [
+      { kind: 'acquireModifier', modifierKind: 'item', modifierId: 'whetstone' },
+    ], DEPS.catalog, NOW)
+    const twice = applyEffects(once, [
+      { kind: 'acquireModifier', modifierKind: 'item', modifierId: 'whetstone' },
+    ], DEPS.catalog, NOW)
+    expect(twice.holdings.filter((row) => row.modifierId === 'whetstone')).toHaveLength(1)
+    expect(twice.holdings).toEqual(once.holdings)
+  })
+
+  it('never OFFERS what is already held, so the choice is never a non-choice', () => {
+    let save = started()
+    for (let step = 0; step < 60; step += 1) {
+      const screen = currentScreen(save, DEPS)
+      if (!screen) break
+      const held = new Set(save.holdings.map((row) => row.modifierId))
+      for (const choice of screen.choices) {
+        for (const id of held) expect(choice.id.endsWith(`:${id}`)).toBe(false)
+      }
+      save = choose(save, screen.choices[0].id, DEPS, NOW).save
+    }
+  })
+})
+
+describe('how many survive', () => {
+  function carryingThree(): GameSave {
+    const save = enterEntryScreen(emptySave(99), DEPS, NOW)
+    let playing = choose(save, 'welcome:start', DEPS, NOW).save
+    playing = choose(playing, 'origin:warrior', DEPS, NOW).save
+    for (let step = 0; step < 2; step += 1) {
+      const screen = currentScreen(playing, DEPS)
+      if (!screen) throw new Error('no screen')
+      playing = choose(playing, screen.choices[0].id, DEPS, NOW).save
+    }
+    return applyEffects(playing, [
+      { kind: 'acquireModifier', modifierKind: 'item', modifierId: 'whetstone' },
+      { kind: 'acquireModifier', modifierKind: 'item', modifierId: 'iron-buckler' },
+    ], DEPS.catalog, NOW)
+  }
+
+  it('lights exactly the allowance, marked first and newest after', () => {
+    const save = carryingThree()
+    const game = activeGame(save)
+    if (!game) throw new Error('no game')
+    expect(keepAllowance(game, 'item')).toBe(BASE_KEEP_ALLOWANCE)
+    // Nothing marked: the newest find.
+    expect(keptModifierIds(save, game, 'item')).toEqual(['iron-buckler'])
+
+    const marked = withKeepMark(save, 'item', 'whetstone')
+    const markedGame = activeGame(marked)
+    if (!markedGame) throw new Error('no game')
+    expect(keptModifierIds(marked, markedGame, 'item')).toEqual(['whetstone'])
+  })
+
+  it('drops the OLDEST mark when the allowance is full, rather than refusing', () => {
+    // With an allowance of one this is what makes a press move the choice
+    // instead of doing nothing; with a larger one it is what lets a set be
+    // rearranged without emptying it first.
+    let save = withKeepMark(carryingThree(), 'item', 'whetstone')
+    save = withKeepMark(save, 'item', 'iron-buckler')
+    expect(activeGame(save)?.keepItemIds).toEqual(['iron-buckler'])
+  })
+
+  it('keeps as many as the allowance says, not as many as it was written for', () => {
+    // The property the number is a function for: raise it (a fame unlock is
+    // expected to) and the level's end keeps more, with no other change.
+    const save = carryingThree()
+    const game = activeGame(save)
+    if (!game) throw new Error('no game')
+    const held = save.holdings.filter((row) => row.kind === 'item').length
+    expect(held).toBeGreaterThanOrEqual(2)
+    expect(keptModifierIds(save, game, 'item')).toHaveLength(Math.min(keepAllowance(game, 'item'), held))
+  })
+
+  it('ignores a mark for something no longer held', () => {
+    const save = withKeepMark(carryingThree(), 'item', 'a-thing-that-was-never-held')
+    const game = activeGame(save)
+    if (!game) throw new Error('no game')
+    expect(keptModifierIds(save, game, 'item')).toEqual(['iron-buckler'])
   })
 })

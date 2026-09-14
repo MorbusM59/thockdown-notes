@@ -310,10 +310,11 @@ platform routes them to a stage that says so *in the game* rather than
 stubbing them with plausible behaviour. That is how the previous draft
 acquired numbers nobody chose and then defended them.
 
-**Now built**: the level's end. One item and one trait survive it, marked by
-pressing their pills on the strip (exactly one lit per kind; unmarked keeps
-the newest find), and everything else is given up — in the order the rules
-require: restore hit points against the maximum as it stands with everything
+**Now built**: the level's end. What survives is an ALLOWANCE per kind
+(`keepAllowance`, one today, raised by a fame unlock when there is one),
+marked by pressing pills on the strip — marks first, topped up with the
+newest finds, so exactly `min(allowance, held)` are lit and each is true —
+and everything else is given up, in the order the rules require: restore hit points against the maximum as it stands with everything
 held, THEN release, and let `followMaxHitPoints` bring the pool down to the
 new maximum, so a run always sets out full.
 
@@ -825,3 +826,16 @@ placed at 5, 9 and 10 and the level advancing after ten.
     and a real `<button>` where it can be pressed — a span that listens for
     clicks is a button a keyboard cannot reach — and the cursor follows the
     element rather than the class, so nothing inert promises a press.
+
+    The ring stays LEAN on purpose, and that is the author's own reason for
+    bending their rule: it is an input device, and every selection forced
+    through it loads it with things that could be settled with less effort
+    elsewhere. The test is not "is this a choice" — it is whether the choice
+    is a STEP in the game.
+
+69. **Duplicates cannot exist.** Every effect a modifier carries is
+    declarative, so a second copy is not a second object -- it is the same one
+    applying twice, silently. The offer pools exclude what is held AND
+    `acquireModifier` declines it, because an offer filter is a rule stated at
+    one caller and the other pools are its siblings. It is also what lets a
+    keep mark be a plain modifier id: an id names exactly one holding.
