@@ -17,7 +17,9 @@ import type { Effect } from '../model/effects'
 import { describeModifier, isOfferable } from '../model/modifiers'
 import { holdingCounts } from '../model/gameState'
 import { GOLD_PER_LOOT_SCREEN } from '../model/rewards'
-import { dropChoices, dropEffects, dropNarration, handsAreFull, readPendingId } from './carry'
+import {
+  DROP_CANCEL, dropCancelledNarration, dropChoices, dropEffects, dropNarration, handsAreFull, readPendingId,
+} from './carry'
 import { encounterIndexOf } from './levelProgress'
 import { ENCOUNTER_SELECT_STAGE_ID, LOOT_STAGE_ID } from './ids'
 
@@ -46,6 +48,12 @@ export const lootStage: StageModule = {
   enter: (input, context, rng) => {
     const offersLoot = input.offersLoot !== false
     const rolled = offersLoot ? rollItemOffers(context, rng) : { offerIds: [] as string[], rng }
+    const opening = offersLoot ? 'You go through what is left behind.' : 'It is gone, and it left little.'
+    // THE KILL, BEHIND THE OPENING LINE. The round's log is spent when the
+    // fight ends, and the one thing worth carrying over is how the thing
+    // died -- so it arrives as this screen's older entry, in the same
+    // four-part shape every combat pill has (stages/combatLog.ts).
+    const kill = typeof input.killPill === 'string' ? input.killPill : null
     return {
       state: {
         encounterIndex: encounterIndexOf(input.encounterIndex),
@@ -54,7 +62,7 @@ export const lootStage: StageModule = {
         offersLoot,
         offerIds: rolled.offerIds,
       } satisfies JsonObject,
-      narration: offersLoot ? 'You go through what is left behind.' : 'It is gone, and it left little.',
+      narration: kill ? [opening, kill] : opening,
       rng: rolled.rng,
     }
   },
@@ -96,6 +104,17 @@ export const lootStage: StageModule = {
     const encounterIndex = encounterIndexOf(state.encounterIndex)
     const motes = Math.max(0, readNumber(state.motes, 1))
     const pending = readPendingId(state)
+
+    // Waving the question away costs nothing and gives the loot screen back
+    // -- the pick was never applied (stages/carry.ts).
+    if (pending && choiceId === DROP_CANCEL) {
+      return {
+        kind: 'stay',
+        state: { ...state, pendingId: null },
+        narration: dropCancelledNarration(context.catalog.get(pending)?.name ?? 'It'),
+        rng,
+      }
+    }
 
     const taken: Effect[] = []
     let label = ''

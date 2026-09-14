@@ -29,7 +29,9 @@ import { goldBalance } from '../model/gold'
 import { moteBalance } from '../model/motes'
 import { describeModifier, type ModifierKind } from '../model/modifiers'
 import { holdingCounts } from '../model/gameState'
-import { dropChoices, dropEffects, dropNarration, handsAreFull, readPendingId } from './carry'
+import {
+  DROP_CANCEL, dropCancelledNarration, dropChoices, dropEffects, dropNarration, handsAreFull, readPendingId,
+} from './carry'
 import { MARKET_STAGE_ID } from './ids'
 
 
@@ -148,6 +150,16 @@ export const marketStage: StageModule = {
     const pending = readPendingId(state)
 
     if (pending) {
+      // Free, because nothing was taken: the purchase waits on this screen
+      // rather than having been made before it (see stages/carry.ts).
+      if (choiceId === DROP_CANCEL) {
+        return {
+          kind: 'stay',
+          state: { ...state, pendingId: null },
+          narration: dropCancelledNarration(context.catalog.get(pending)?.name ?? 'It'),
+          rng,
+        }
+      }
       const effects = dropEffects(kind, choiceId, pending)
       if (!effects) return { kind: 'stay', state, rng }
       const modifier = context.catalog.get(pending)

@@ -30,7 +30,7 @@ import {
   resolvePlayerAttack, rollActor, rollDodgeOffered, type Defence, type RoundState,
 } from '../model/combat'
 import { rewardFor } from '../model/rewards'
-import { monsterAttackPill, playerAttackPill, statusPill } from './combatLog'
+import { killPill, monsterAttackPill, playerAttackPill, statusPill } from './combatLog'
 import type { Monster } from '../model/monsters'
 import { encounterIndexOf } from './levelProgress'
 import { monsterFor, offerFromJson, offerToJson } from './encounter'
@@ -160,6 +160,8 @@ function afterAction(
   entry: string,
   effects: readonly Effect[],
   rng: RngState,
+  /** What this action took off the monster, for the kill pill if it was the last. */
+  struck = 0,
 ): Transition {
   const derived = context.profile?.derived
   const status = derived ? combatStatus(round, monster, derived) : 'roundOver'
@@ -203,6 +205,9 @@ function afterAction(
         // A monster that ran is beaten but not searched: the gold branch and
         // no choice at all (see the design plan's payout table).
         offersLoot: status === 'monstersDefeated',
+        // The last blow, carried across the boundary that spends the round's
+        // log -- the spoils screen shows it behind its own line.
+        killPill: status === 'monstersDefeated' ? killPill(monster, struck) : null,
       },
       narration: log,
       effects,
@@ -366,7 +371,16 @@ export const combatStage: StageModule = {
         rng,
       })
       // Nothing on the PLAYER changes when they attack, so no record change.
-      return afterAction(state, attack.state, monster, context, playerAttackPill(monster, attack.blow), [], attack.rng)
+      return afterAction(
+        state,
+        attack.state,
+        monster,
+        context,
+        playerAttackPill(monster, attack.blow),
+        [],
+        attack.rng,
+        attack.blow.hit ? attack.blow.damage : 0,
+      )
     }
 
     const defence = DEFENCES.find((candidate) => `defence:${candidate}` === choiceId)

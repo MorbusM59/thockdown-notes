@@ -868,3 +868,25 @@ placed at 5, 9 and 10 and the level advancing after ten.
     price, and the outpost's door with them — verified live: nineteen gold
     bought one cape, and the nine left took every buy cell off the screen and
     the trader's door off the outpost.
+
+72. **A CELL NAMES THE ACT, not the thing** -- "Drop Whetstone", "Lose
+    Patient Hunter" -- because the ring's centre shows that label and nothing
+    else while the dial sits on it. A list of the things you are carrying, on
+    a screen that follows a purchase, reads as a second offer; the verb is the
+    only thing saying which way round the question is. An item is DROPPED and
+    a trait is LOST: you put one down, the other leaves you.
+
+    The same screen offers a way BACK, and that it can is a property of the
+    flow rather than a kindness: the offer is held as `pendingId` and nothing
+    is paid or taken until the question is answered, so cancelling returns
+    exactly the state that was there before. This screen shipped without one,
+    on the reasoning that the choice had already been made -- which was wrong
+    about its own design, and is the kind of claim a comment can carry for a
+    long time unchallenged.
+
+73. **THE KILL IS THE LAST LINE OF THE FIGHT, and it is shown on the SPOILS
+    screen** -- `[you] [cross] [damage] [it]`, in the same four-part shape
+    every other combat pill has, behind that screen's own opening line. The
+    round's log is spent at the boundary (see 61), so the one thing worth
+    carrying across it travels as the loot stage's input rather than as
+    narration the next stage would overwrite.

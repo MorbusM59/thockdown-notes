@@ -6,6 +6,7 @@ import { activeGame, applyEffects, BASE_CARRY_LIMIT, emptySave, type GameSave } 
 import { goldBalance } from '../model/gold'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
 import { MARKET_OFFER_COUNT, MARKET_PRICE } from './market'
+import { DROP_CANCEL } from './carry'
 
 const DEPS: DirectorDeps = {
   stages: STAGES,
@@ -140,11 +141,33 @@ describe('hands full', () => {
 
     const asking = choose(save, buying, DEPS, NOW).save
     expect(screenOf(asking).narration.join(' ')).toMatch(/hands are full/i)
+    // One cell per thing held, each NAMING THE ACT rather than the thing,
+    // plus a way back out.
     expect(ids(asking).every((id) => id.startsWith('drop:'))).toBe(true)
-    expect(ids(asking)).toHaveLength(BASE_CARRY_LIMIT)
+    expect(ids(asking)).toHaveLength(BASE_CARRY_LIMIT + 1)
+    expect(ids(asking)).toContain(DROP_CANCEL)
+    for (const choice of screenOf(asking).choices) {
+      if (choice.id === DROP_CANCEL) continue
+      expect(choice.label.startsWith('Drop ')).toBe(true)
+    }
     // Nothing paid and nothing taken until the question is answered.
     expect(activeGame(asking)?.goldSpentOnItems).toBe(0)
     expect(asking.holdings.filter((row) => row.kind === 'item')).toHaveLength(BASE_CARRY_LIMIT)
+  })
+
+  it('lets the question be waved away, with nothing given up and nothing paid', () => {
+    // Free by construction rather than by refunding: the purchase waits on
+    // the drop screen instead of having been made before it.
+    const save = atTheLimit()
+    const buying = ids(save).find((id) => id.startsWith('buy:'))
+    if (!buying) throw new Error('nothing on offer')
+    const before = save.holdings.map((row) => row.modifierId)
+
+    const back = choose(choose(save, buying, DEPS, NOW).save, DROP_CANCEL, DEPS, NOW).save
+    expect(back.holdings.map((row) => row.modifierId)).toEqual(before)
+    expect(activeGame(back)?.goldSpentOnItems).toBe(0)
+    // And the table is exactly as it was, offer included.
+    expect(ids(back)).toEqual(ids(save))
   })
 
   it('swaps one for the other and charges once, staying at the limit', () => {
@@ -154,7 +177,7 @@ describe('hands full', () => {
     const incoming = buying.slice('buy:'.length)
 
     const asking = choose(save, buying, DEPS, NOW).save
-    const dropping = ids(asking)[0]
+    const dropping = ids(asking).find((id) => id !== DROP_CANCEL) ?? ''
     const dropped = dropping.slice('drop:'.length)
     const done = choose(asking, dropping, DEPS, NOW).save
 

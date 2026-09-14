@@ -30,6 +30,9 @@ import { holdingCounts } from '../model/gameState'
 /** The cell id a drop choice carries, so a stage can recognise one. */
 export const DROP_PREFIX = 'drop:'
 
+/** Changing your mind. Costs nothing, because nothing has been taken yet. */
+export const DROP_CANCEL = 'drop:cancel'
+
 export function readPendingId(state: { pendingId?: unknown }): string | null {
   return typeof state.pendingId === 'string' && state.pendingId.length > 0 ? state.pendingId : null
 }
@@ -42,32 +45,53 @@ export function handsAreFull(context: StageContext, kind: ModifierKind): boolean
 }
 
 /**
- * The screen: one cell per thing held of that kind, and nothing else. There
- * is deliberately no way back -- the choice was made on the previous screen
- * and this is the other half of it, so a cancel here would leave the offer
- * taken and nothing given up.
+ * The screen: one cell per thing held of that kind, and a way back.
+ *
+ * The cell NAMES THE ACT, not the thing -- "Drop Whetstone", "Lose Patient
+ * Hunter" -- because the ring's centre shows that label and nothing else
+ * while the dial sits on it (escapeMenuContract.ts). A list of the things you
+ * are carrying, on a screen that follows a purchase, reads as a second offer;
+ * the verb is the only thing that says which way round this question is. An
+ * item is DROPPED, a trait is LOST: you put one down and the other leaves you.
+ *
+ * CANCELLING IS FREE, and that is a property of the flow rather than a
+ * kindness: the offer is not applied until this screen is answered (the
+ * acquiring stage holds it as `pendingId` and spends nothing), so backing out
+ * returns exactly the state that was there before. The first version of this
+ * screen had no way back, on the reasoning that the choice was already made
+ * -- which was wrong about its own design.
  */
 export function dropChoices(context: StageContext, kind: ModifierKind, incomingId: string): Choice[] {
   const counts = holdingCounts(context.held)
   const incoming = context.catalog.get(incomingId)
-  return context.held
-    .filter((modifier) => modifier.kind === kind)
-    .map((modifier) => ({
-      id: `${DROP_PREFIX}${modifier.id}`,
-      label: modifier.name,
-      icon: modifier.icon,
-      detail: {
-        title: `Give up ${modifier.name}`,
-        lines: [
-          ...describeModifier(modifier, counts),
-          ...(incoming ? [`Makes room for ${incoming.name}`] : []),
-        ],
-      },
-    }))
+  const verb = kind === 'item' ? 'Drop' : 'Lose'
+  return [
+    ...context.held
+      .filter((modifier) => modifier.kind === kind)
+      .map((modifier) => ({
+        id: `${DROP_PREFIX}${modifier.id}`,
+        label: `${verb} ${modifier.name}`,
+        icon: modifier.icon,
+        detail: {
+          title: `${verb} ${modifier.name}`,
+          lines: [
+            ...describeModifier(modifier, counts),
+            ...(incoming ? [`Makes room for ${incoming.name}`] : []),
+          ],
+        },
+      })),
+    {
+      id: DROP_CANCEL,
+      label: incoming ? `Leave ${incoming.name}` : 'Leave it',
+      icon: 'fa-solid fa-rotate-left',
+      detail: { title: 'Change your mind', lines: ['Nothing given up, nothing taken'] },
+    },
+  ]
 }
 
 /** What a drop choice is worth: the one given up, then the one taken. */
 export function dropEffects(kind: ModifierKind, choiceId: string, incomingId: string): Effect[] | null {
+  if (choiceId === DROP_CANCEL) return null
   if (!choiceId.startsWith(DROP_PREFIX)) return null
   const droppedId = choiceId.slice(DROP_PREFIX.length)
   return [
@@ -84,4 +108,9 @@ export function dropEffects(kind: ModifierKind, choiceId: string, incomingId: st
 export function dropNarration(kind: ModifierKind, incomingName: string): string {
   const noun = kind === 'item' ? 'carry' : 'hold'
   return `**${incomingName}.** *Your hands are full. What do you ${noun} no longer?*`
+}
+
+/** What the bar says when the question is waved away. */
+export function dropCancelledNarration(incomingName: string): string {
+  return `**${incomingName}.** *You leave it where it is.*`
 }

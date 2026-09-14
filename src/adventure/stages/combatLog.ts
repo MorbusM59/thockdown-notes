@@ -39,6 +39,8 @@ const LANDED = 'fa-solid fa-burst'
 const NOTHING = 'fa-solid fa-wind'
 const DEFENDED = 'fa-solid fa-shield'
 const FLED = 'fa-solid fa-person-running'
+/** The blow that ended it. Not a hit -- hits have their own glyph. */
+const KILLED = 'fa-solid fa-cross'
 const ACTIONS = 'fa-solid fa-bolt'
 const HEALTH = 'fa-solid fa-heart'
 const TOWARD = 'fa-solid fa-right-long'
@@ -114,6 +116,20 @@ export function monsterAttackPill(monster: Monster, defence: Defence, blow: Blow
   const action = playerActionIcon(defence, blow, escaped)
   const damage = blow?.hit === true ? blow.damage : null
   return pill(monsterIcon(monster), 'it', action, damage, PLAYER, 'you')
+}
+
+/**
+ * THE BLOW THAT ENDED IT, in the same four-part shape every other pill uses
+ * -- who, what, how much, to whom -- so the kill reads as the last line of
+ * the fight rather than as an announcement in a different voice.
+ *
+ * It is shown on the SPOILS screen, behind that screen's own line, because
+ * that is where the reader is by the time the fight is over: the round's log
+ * is spent at the boundary, and the one thing worth carrying across it is how
+ * the thing died.
+ */
+export function killPill(monster: Monster, damage: number): string {
+  return pill(PLAYER, 'you', { icon: KILLED, word: 'killed' }, damage, monsterIcon(monster), 'it')
 }
 
 /**

@@ -7,7 +7,8 @@ import { ROOT_STAGE_ID, STAGES } from '../stages'
 import { narrationText, parseNarration } from '../../escapeMenu/narrationMarkup'
 import { buildMonster } from '../model/monsters'
 import { addStats, createStatBlock } from '../model/stats'
-import { monsterAttackPill, playerAttackPill, statusPill } from './combatLog'
+import { killPill, monsterAttackPill, playerAttackPill, statusPill } from './combatLog'
+import { lootStage } from './loot'
 import { beginRound } from '../model/combat'
 
 const DEPS: DirectorDeps = {
@@ -194,5 +195,45 @@ describe('what the ring opens on', () => {
       save = step(save)
     }
     expect(sawAttack && sawDefence).toBe(true)
+  })
+})
+
+describe('the blow that ended it', () => {
+  it('reads in the same four parts every other pill does', () => {
+    const pill = killPill(monsterOf('regular'), 12)
+    expect(glyphs(pill)).toEqual(['fa-solid fa-user-shield', 'fa-solid fa-cross', 'fa-solid fa-skull'])
+    expect(figures(pill)).toEqual(['12'])
+    expect(narrationText(parseNarration(pill))).toBe('you killed 12 it')
+  })
+
+  it('names a boss as a boss, like every other pill', () => {
+    expect(glyphs(killPill(monsterOf('boss'), 9))[2]).toBe('fa-solid fa-dragon')
+  })
+
+  it('lands on the SPOILS screen, behind its own line', () => {
+    // The round's log is spent at the boundary; the one thing worth carrying
+    // across it is how the thing died, and it belongs behind the screen the
+    // reader is now looking at rather than in front of it.
+    const context = {
+      save: emptySave(1), game: null, content: THOCKQUEST, catalog: DEPS.catalog, profile: null, held: [],
+    }
+    const entered = lootStage.enter(
+      { encounterIndex: 2, screensLeft: 1, motes: 1, offersLoot: true, killPill: '[fa-solid fa-user-shield|you] x' },
+      context,
+      7,
+    )
+    expect(entered.narration).toEqual(['You go through what is left behind.', '[fa-solid fa-user-shield|you] x'])
+  })
+
+  it('is absent when nothing was killed', () => {
+    const context = {
+      save: emptySave(1), game: null, content: THOCKQUEST, catalog: DEPS.catalog, profile: null, held: [],
+    }
+    const fled = lootStage.enter(
+      { encounterIndex: 2, screensLeft: 1, motes: 1, offersLoot: false, killPill: null },
+      context,
+      7,
+    )
+    expect(fled.narration).toBe('It is gone, and it left little.')
   })
 })
