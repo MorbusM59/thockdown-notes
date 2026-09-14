@@ -9,6 +9,8 @@ import { welcomeStage, WELCOME_STAGE_ID } from './welcome'
 import { settingsStage } from './settings'
 import { characterCreationStage } from './characterCreation'
 import { regionSelectStage } from './regionSelect'
+import { outpostStage } from './outpost'
+import { marketStage } from './market'
 import { encounterSelectStage } from './encounterSelect'
 import { huntStage } from './hunt'
 import { statPointStage } from './statPoints'
@@ -21,6 +23,8 @@ export const STAGES = registerStages([
   settingsStage,
   characterCreationStage,
   regionSelectStage,
+  outpostStage,
+  marketStage,
   encounterSelectStage,
   huntStage,
   statPointStage,

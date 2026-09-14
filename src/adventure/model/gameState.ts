@@ -298,6 +298,31 @@ export function keepAllowance(_game: GameRecord, _kind: ModifierKind): number {
   return BASE_KEEP_ALLOWANCE
 }
 
+/**
+ * HOW MANY of each kind a run may carry at once. Three, today.
+ *
+ * A function of the run for the same reason the keep allowance is: a fame
+ * unlock is expected to raise it, and the seam belongs where the rule is
+ * rather than where a number happened to be typed. The two are separate
+ * quantities and always were -- what you can carry through a level and what
+ * survives the end of one answer different questions -- so neither is derived
+ * from the other.
+ *
+ * At the limit, taking something new means giving something up: that is a
+ * CHOICE rather than a refusal, and it is made in the ring, because it is a
+ * step in the game (stages/carry.ts).
+ */
+export const BASE_CARRY_LIMIT = 3
+
+export function carryLimit(_game: GameRecord, _kind: ModifierKind): number {
+  return BASE_CARRY_LIMIT
+}
+
+/** What the run is carrying of one kind, as holdings rather than as resolved modifiers. */
+export function holdingsOfKind(save: GameSave, gameId: string, kind: ModifierKind): HoldingRow[] {
+  return holdingsOf(save, gameId).filter((row) => row.kind === kind)
+}
+
 function markedIds(game: GameRecord, kind: ModifierKind): string[] {
   return kind === 'item' ? game.keepItemIds : game.keepTraitIds
 }

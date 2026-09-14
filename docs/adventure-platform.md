@@ -318,17 +318,16 @@ and everything else is given up, in the order the rules require: restore hit poi
 held, THEN release, and let `followMaxHitPoints` bring the pool down to the
 new maximum, so a run always sets out full.
 
-**Not built, and MISSING rather than deferred**: the level-start EXCHANGE —
-motes for traits, gold for items, from a random offering whose width is a
-stat. The design specifies it; what it does not specify is a PRICE, so it
-cannot be built without inventing one. Until it exists, gold and motes
-accumulate with nothing to buy, and a character's only growth besides stat
-points is the items a fight happens to drop.
+**Now built**: the level-start EXCHANGE, as an OUTPOST between the road and
+the level (`stages/outpost.ts`, `stages/market.ts`) — the trader sells items
+for gold, the Oracle sells traits for motes, six on the table and ten apiece,
+and the outpost only stands there at all while one of the purses can pay. The
+price was the piece the design did not specify and now does.
 
-Stat points ARE spendable now, at the hub, whenever the ladder has one waiting
+Stat points are spendable at the hub whenever the ladder has one waiting
 (`stages/statPoints.ts`) — "spendable at any time" is the design's own wording.
-Fame points are not: what a fame point buys is unwritten, and the effect that
-would spend one only moves the ladder.
+Fame points are the one currency with nothing to buy: what a fame point buys
+is unwritten, and the effect that would spend one only moves the ladder.
 
 Content is perhaps half written. Every placeholder is labelled: an entry that
 exists by name but whose effect is undecided carries a `tag` effect saying
@@ -839,3 +838,33 @@ placed at 5, 9 and 10 and the level advancing after ten.
     `acquireModifier` declines it, because an offer filter is a rule stated at
     one caller and the other pools are its siblings. It is also what lets a
     keep mark be a plain modifier id: an id names exactly one holding.
+
+70. **A PUSHED STAGE CANNOT CHANGE ITS PARENT'S STATE**, and two features ran
+    into it from opposite sides. `push` carries no `state` (core/stage.ts), so
+    a stage that hands over cannot first record that it did.
+
+    - **"What do you give up?"** cannot be a pushed stage: the parent would
+      not have recorded that the offer was taken, so popping back would land
+      on the same screen with the same offer still on it. It is a SHARED STEP
+      instead (`stages/carry.ts`) — the acquiring stage keeps a `pendingId` in
+      its own state and the module supplies the screen and the effects, so the
+      flow stays where the flow's state already lives, and three acquiring
+      stages cannot disagree about what happens when the hands are full.
+    - **The market's six** cannot be the market's, for the mirror reason: a
+      market that rolled its own table would roll a fresh one every time it
+      was re-entered, which is a free reroll for the price of two presses. The
+      OUTPOST rolls the stock and pushes it in, and a bought thing leaves the
+      table by being HELD rather than by being struck off it — the same filter
+      every pool uses. The parent's frame is untouched underneath, which is
+      what makes leaving and returning show the same table.
+
+    Read together: a `push` is right when the parent has nothing to record,
+    and the thing to reach for otherwise is one stage's own state plus a
+    shared helper — not a second frame that cannot talk back.
+
+71. **"You cannot afford this" is an ABSENCE, never a refusal.** Choices are
+    pre-resolved (core/stage.ts), so a cell in the ring is a thing that WILL
+    happen. The trader's offers vanish the moment the purse drops below the
+    price, and the outpost's door with them — verified live: nineteen gold
+    bought one cape, and the nine left took every buy cell off the screen and
+    the trader's door off the outpost.

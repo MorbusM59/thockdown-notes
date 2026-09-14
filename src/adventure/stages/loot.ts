@@ -17,6 +17,7 @@ import type { Effect } from '../model/effects'
 import { describeModifier, isOfferable } from '../model/modifiers'
 import { holdingCounts } from '../model/gameState'
 import { GOLD_PER_LOOT_SCREEN } from '../model/rewards'
+import { dropChoices, dropEffects, dropNarration, handsAreFull, readPendingId } from './carry'
 import { encounterIndexOf } from './levelProgress'
 import { ENCOUNTER_SELECT_STAGE_ID, LOOT_STAGE_ID } from './ids'
 
@@ -62,6 +63,12 @@ export const lootStage: StageModule = {
     const counts = holdingCounts(context.held)
     const offerIds = Array.isArray(state.offerIds) ? state.offerIds : []
     const screensLeft = readNumber(state.screensLeft, 1)
+    // Hands full: the other half of the pick, on the same terms everywhere
+    // something is acquired (stages/carry.ts).
+    const pending = readPendingId(state)
+    if (pending) {
+      return { screenKey: `loot:drop:${pending}`, choices: dropChoices(context, 'item', pending) }
+    }
     return {
       screenKey: `loot:${screensLeft}`,
       choices: [
@@ -88,15 +95,31 @@ export const lootStage: StageModule = {
     const screensLeft = readNumber(state.screensLeft, 1)
     const encounterIndex = encounterIndexOf(state.encounterIndex)
     const motes = Math.max(0, readNumber(state.motes, 1))
+    const pending = readPendingId(state)
 
     const taken: Effect[] = []
     let label = ''
-    if (choiceId === GOLD_CHOICE) {
+    if (pending) {
+      const swapped = dropEffects('item', choiceId, pending)
+      if (!swapped) return { kind: 'stay', state, rng }
+      taken.push(...swapped)
+      label = context.catalog.get(pending)?.name ?? 'It'
+    } else if (choiceId === GOLD_CHOICE) {
       taken.push({ kind: 'grantGold', units: GOLD_PER_LOOT_SCREEN })
       label = `${GOLD_PER_LOOT_SCREEN} gold`
     } else if (choiceId.startsWith('loot:item:')) {
       const item = context.catalog.get(choiceId.replace('loot:item:', ''))
       if (!item) return { kind: 'stay', state, rng }
+      // Ask what to give up FIRST: the pick is not applied until the question
+      // is answered, so a screen cannot be spent on a choice that stalls.
+      if (handsAreFull(context, 'item')) {
+        return {
+          kind: 'stay',
+          state: { ...state, pendingId: item.id },
+          narration: dropNarration('item', item.name),
+          rng,
+        }
+      }
       taken.push({ kind: 'acquireModifier', modifierKind: 'item', modifierId: item.id })
       label = item.name
     } else {
@@ -107,7 +130,7 @@ export const lootStage: StageModule = {
       const rolled = state.offersLoot !== false ? rollItemOffers(context, rng) : { offerIds: [] as string[], rng }
       return {
         kind: 'stay',
-        state: { ...state, screensLeft: screensLeft - 1, offerIds: rolled.offerIds },
+        state: { ...state, screensLeft: screensLeft - 1, offerIds: rolled.offerIds, pendingId: null },
         // The pick is applied HERE, not held until the last screen. Holding
         // them would lose every intermediate one, and would also mean the
         // next screen's item offers rolled against a Luck the player had

@@ -6,7 +6,8 @@
 // state of it, and visible as such rather than dressed up.
 
 import type { StageModule } from '../core/stage'
-import { REGION_SELECT_STAGE_ID } from './ids'
+import { MARKET_PRICE, purse } from './market'
+import { ENCOUNTER_SELECT_STAGE_ID, OUTPOST_STAGE_ID, REGION_SELECT_STAGE_ID } from './ids'
 
 
 export const regionSelectStage: StageModule = {
@@ -30,14 +31,18 @@ export const regionSelectStage: StageModule = {
   resolve: (state, choiceId, context, rng) => {
     const region = context.content.regions.find((candidate) => `region:${candidate.id}` === choiceId)
     if (!region) return { kind: 'stay', state, rng }
+    // Through the OUTPOST when there is something to spend there, and
+    // straight on when there is not: an outpost you can only walk through is
+    // a screen that asks nothing (stages/outpost.ts).
+    const canTrade = purse(context, 'item') >= MARKET_PRICE || purse(context, 'trait') >= MARKET_PRICE
     return {
       kind: 'replace',
-      stageId: 'encounterSelect',
+      stageId: canTrade ? OUTPOST_STAGE_ID : ENCOUNTER_SELECT_STAGE_ID,
       effects: [
         { kind: 'setRegion', regionId: region.id },
         { kind: 'recordOutcome', outcome: 'region-entered', payload: { regionId: region.id } },
       ],
-      narration: 'You take a moment to consider your options.',
+      ...(canTrade ? {} : { narration: 'You take a moment to consider your options.' }),
       rng,
     }
   },

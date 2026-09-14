@@ -217,6 +217,21 @@ text is left as authored; this is what has moved.
   player toward landing blows AND toward dodging, which is exactly the pair of
   outcomes that feel like agency. Applied at the roll, never folded into what
   a character is worth; fixed on a run when the run starts.
+- **A RUN CARRIES THREE OF EACH KIND**, and a fame unlock may later raise it.
+  At the limit, taking something new is not refused — it is a CHOICE about
+  what to give up, asked in the ring, and nothing is paid or taken until it is
+  answered. That holds at every acquisition: loot, the trader, the Oracle.
+- **THE OUTPOST stands between the road and the level**, and only while there
+  is something to spend: ten of either currency. Three doors — the trader
+  (items, for gold), the Oracle (traits, for motes), and *move to camp*, which
+  gets on with the level. Each shop lays out **six**, each costs **ten**, and
+  the player buys until the purse cannot pay. A door that cannot be paid for,
+  or whose table is bare, is not offered at all.
+
+  The stock is the OUTPOST's, rolled once per visit: leaving one door and
+  opening the other — or the same one again — finds the table it left, less
+  what was bought. Since the road comes before any earnings on level one, the
+  outpost is first seen at the start of level two.
 - **A RUN HOLDS ONE OF EACH THING, EVER.** Duplicates do not exist: every
   effect a modifier carries is declarative, so a second copy is not a second
   object, it is the same one applying twice. Nothing offers what is already
