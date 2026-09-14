@@ -1127,28 +1127,20 @@ button.escape-menu-chrome-pill {
    it dirties is its own. */
 @keyframes escape-menu-chrome-gauge-strain {
   0% {
-    height: calc(var(--gauge-travel) - var(--spacing-large));
-    animation-timing-function: ease-out;
+    height: calc(var(--gauge-travel) - var(--spacing-regular));
+    animation-timing-function: ease-in;
   }
-  42% {
+  35% {
     height: var(--gauge-travel);
-    animation-timing-function: ease-in;
-  }
-  62% {
-    height: calc(var(--gauge-travel) - var(--spacing-large));
     animation-timing-function: ease-out;
   }
-  74% {
-    height: calc(var(--gauge-travel) - (var(--spacing-large) * 0.45));
-    animation-timing-function: ease-in;
-  }
-  86%, 100% {
-    height: calc(var(--gauge-travel) - var(--spacing-large));
+ 100% {
+    height: calc(var(--gauge-travel) - var(--spacing-regular));
   }
 }
 
 .escape-menu-chrome-gauge-fill[data-full='true'] {
-  animation: escape-menu-chrome-gauge-strain 2.2s infinite;
+  animation: escape-menu-chrome-gauge-strain 0.8s infinite;
 }
 
 /* A loop nobody asked for is exactly what this setting is about. The bar
