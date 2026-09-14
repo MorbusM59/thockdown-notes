@@ -63,11 +63,17 @@ export type Effect =
   | { kind: 'allocateStatPoint' }
   | { kind: 'grantGold'; units: number }
   | { kind: 'spendGold'; units: number }
-  /** The score. Only ever goes up. */
-  | { kind: 'grantFamePoints'; amount: number }
+  /**
+   * Spending a fame point. Like `allocateStatPoint`, whether one is available
+   * is DERIVED from the ladder (`model/gold.ts`) rather than stored -- there
+   * is no grant to go with it, and no counter that can disagree with the
+   * gold that produced it.
+   */
   | { kind: 'allocateFamePoint' }
   /** Which region this level is being played in, and therefore which pools are in scope. */
   | { kind: 'setRegion'; regionId: string }
+  /** One of the level's ten encounters spent. See stages/levelProgress.ts. */
+  | { kind: 'advanceEncounter' }
   | { kind: 'advanceLevel' }
   /** Ends the game. `defeat` when hit points ran out, `retired` at the player's word. */
   | { kind: 'endGame'; reason: 'defeat' | 'retired' }

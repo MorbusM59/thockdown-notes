@@ -9,7 +9,7 @@ import type { StageModule } from '../core/stage'
 import { MONSTER_CLASS_IDS } from '../content'
 import { buildEncounterOffers } from '../model/encounterOffers'
 import { iconFor, monsterFor, offerFromJson, offerToJson } from './encounter'
-import { encounterIndexOf } from './levelProgress'
+import { currentEncounter } from './levelProgress'
 import { COMBAT_STAGE_ID, HUNT_STAGE_ID } from './ids'
 
 
@@ -17,8 +17,8 @@ export const huntStage: StageModule = {
   id: HUNT_STAGE_ID,
   title: 'The Hunt',
 
-  enter: (input, context, rng) => {
-    const encounter = encounterIndexOf(input.encounterIndex)
+  enter: (_input, context, rng) => {
+    const encounter = currentEncounter(context.game)
     const rolled = buildEncounterOffers({
       encounter,
       choiceCount: context.profile?.derived.encounterChoices ?? 2,
@@ -27,7 +27,7 @@ export const huntStage: StageModule = {
       rng,
     })
     return {
-      state: { encounterIndex: encounter, offers: rolled.offers.map(offerToJson) } satisfies JsonObject,
+      state: { offers: rolled.offers.map(offerToJson) } satisfies JsonObject,
       narration: 'You cast about for tracks. Something is out there.',
       rng: rolled.rng,
     }
@@ -36,7 +36,7 @@ export const huntStage: StageModule = {
   present: (state, context) => {
     const offers = Array.isArray(state.offers) ? state.offers : []
     return {
-      screenKey: `hunt:${String(state.encounterIndex ?? 1)}`,
+      screenKey: `hunt:${currentEncounter(context.game)}`,
       choices: offers.flatMap((raw, index) => {
         const offer = offerFromJson(raw)
         if (!offer) return []
@@ -68,7 +68,7 @@ export const huntStage: StageModule = {
     return {
       kind: 'replace',
       stageId: COMBAT_STAGE_ID,
-      input: { encounterIndex: encounterIndexOf(state.encounterIndex), offer: offerToJson(offer) },
+      input: { offer: offerToJson(offer) },
       rng,
     }
   },

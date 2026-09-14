@@ -12,7 +12,6 @@
 
 import type { StageModule } from '../core/stage'
 import { ENCOUNTER_SELECT_STAGE_ID, UNDER_CONSTRUCTION_STAGE_ID } from './ids'
-import { encounterIndexOf } from './levelProgress'
 
 
 export const underConstructionStage: StageModule = {
@@ -22,10 +21,10 @@ export const underConstructionStage: StageModule = {
   enter: (input, _context, rng) => {
     const what = typeof input.what === 'string' ? input.what : 'That'
     return {
-      // The encounter index rides through. Looking at a wall does not spend
-      // one of the level's ten, so it has to come back unchanged -- and
-      // returning without it would silently restart the level's count.
-      state: { what, encounterIndex: encounterIndexOf(input.encounterIndex) },
+      // Nothing to carry: looking at a wall does not spend one of the level's
+      // ten, and the count is not this stage's to pass along any more -- it
+      // sits on the record and only an `advanceEncounter` moves it.
+      state: { what },
       narration: `${what} is not built yet — its rules are still being written.`,
       rng,
     }
@@ -36,10 +35,9 @@ export const underConstructionStage: StageModule = {
     choices: [{ id: 'underConstruction:back', label: 'Turn back', icon: 'fa-solid fa-rotate-left' }],
   }),
 
-  resolve: (state, _choiceId, _context, rng) => ({
+  resolve: (_state, _choiceId, _context, rng) => ({
     kind: 'replace',
     stageId: ENCOUNTER_SELECT_STAGE_ID,
-    input: { encounterIndex: encounterIndexOf(state.encounterIndex) },
     narration: 'You take a moment to consider your options.',
     rng,
   }),

@@ -193,6 +193,33 @@ export function enterEntryScreen(save: GameSave, deps: DirectorDeps, nowMs: numb
 }
 
 /**
+ * Opens an INTERLUDE on top of whatever is on screen: a stage reached from
+ * the chrome rather than from the ring.
+ *
+ * The chrome's rail reports two standing quantities of the run, and pressing
+ * one goes to where that quantity is spent (escapeMenuContract.ts's
+ * `EscapeMenuChromeGauge`). That is a way IN, not a decision -- the decision
+ * is still taken in the ring, on the screen this puts there -- but the
+ * director is the only thing that writes, so it has to come through here
+ * rather than through a stage that does not know it is being asked.
+ *
+ * PUSHED, never replaced, for the reason the stat-point screen already gives:
+ * what is underneath keeps its rolled encounter or its half-fought round, and
+ * the interlude pops back onto it untouched.
+ *
+ * ALREADY ON TOP is a no-op, which is what makes the same press twice
+ * harmless -- and, because `withDirector` compares by identity, hands back
+ * the same save so nothing is persisted for it.
+ *
+ * An EVENT, like `enterEntryScreen`, and named so for the same reason: it is
+ * called from a press, never re-checked as a condition.
+ */
+export function enterInterlude(save: GameSave, stageId: string, deps: DirectorDeps, nowMs: number): GameSave {
+  if (topFrame(save)?.stageId === stageId) return save
+  return enterStage(save, stageId, {}, save.director.stack.length, deps, nowMs)
+}
+
+/**
  * What to show right now. Pure: no rolls, no writes, no effects. Safe to
  * call on every render, which is exactly why it has to be.
  */

@@ -1,26 +1,43 @@
 // Spending a stat point: the one place a character grows by decision rather
 // than by what a fight happened to drop.
 //
-// SPENDABLE AT ANY TIME is the design's own wording, and "any time" here means
-// between encounters -- the hub offers it whenever the ladder has a point
-// waiting. Not on every screen: the director contributes no cells to anything
-// (core/director.ts), and a cell standing in the middle of a fight would be a
-// decision taken while a monster waits.
+// SPENDABLE AT ANY TIME is the design's own wording, and it is now literally
+// true: the way in is the rail's STAR GAUGE, pressed, on whatever screen the
+// player is looking at (see escapeMenuContract.ts's `EscapeMenuChromeGauge`).
+// It used to be a cell on the hub, which could only ever mean "spendable when
+// the level lets you" -- and putting that cell on every screen instead was
+// never on offer, because a cell standing in the middle of a fight is a
+// decision taken while a monster waits. The gauge is not a cell: it is the
+// place the quantity is already reported, and pressing it goes to where that
+// quantity is spent. The decision itself is still taken in the ring.
 //
-// PUSHED, so the hub underneath keeps the encounter it had already rolled: a
-// replace would re-enter it and draw a different set of monsters, which would
-// turn "spend a point" into "reroll the encounter" for anyone who noticed.
+// PUSHED, so whatever is underneath is untouched and comes back exactly as it
+// was: the hub keeps the encounter it had already rolled (a replace would
+// re-enter it and draw a different set of monsters, turning "spend a point"
+// into "reroll the encounter"), and a fight keeps its round mid-swing.
 //
-// It offers one cell per stat and nothing else. There is no confirmation and
-// no going back, which is deliberate: the ring's centre names the cell you are
-// about to activate and its detail says what the point would do, so the
-// decision is made before the press rather than after it.
+// THE GATE IS HERE, not in whoever offers the way in, and that is the whole
+// difference reachability made. `allocateStatPoint` declines when the ladder
+// has nothing waiting, but `adjustBaseStat` -- emitted beside it, because
+// which stat is the game's business and the ladder is the platform's -- does
+// not, so a screen that offered its stat cells with no point waiting would
+// hand out the stat for free. The stats are offered only when there is a
+// point to spend; otherwise the screen says so and the only cell is the way
+// back out.
+//
+// There is no confirmation: the ring's centre names the cell you are about to
+// activate and its detail says what the point would do, so the decision is
+// made before the press rather than after it. There IS a way back, which
+// there was not when the only route in was choosing to spend -- arriving by
+// pressing a gauge has to be undoable by not choosing anything.
 
 import type { StageModule } from '../core/stage'
 import { statPointsAvailable } from '../model/motes'
 import { deriveStats, STAT_ICONS, STAT_KEYS, STAT_LABELS, type StatKey } from '../model/stats'
 import { addStats } from '../model/stats'
 import { STAT_POINT_STAGE_ID } from './ids'
+
+const BACK_CHOICE = 'statPoint:back'
 
 
 /**
@@ -66,7 +83,9 @@ export const statPointStage: StageModule = {
       : 0
     return {
       state: {},
-      narration: `**${waiting}** stat point${waiting === 1 ? '' : 's'} to spend. *What has all this taught you?*`,
+      narration: waiting > 0
+        ? `**${waiting}** stat point${waiting === 1 ? '' : 's'} to spend. *What has all this taught you?*`
+        : 'No stat points yet. *Motes earn them; the next one is further off each time.*',
       rng,
     }
   },
@@ -75,22 +94,36 @@ export const statPointStage: StageModule = {
     // BASE stats, not effective: a point goes into what the character IS, and
     // showing the item-inflated figure would promise a different number than
     // the one that changes.
-    const stats = context.game?.baseStats
-    if (!stats) return { screenKey: 'statPoint:none', choices: [] }
+    const game = context.game
+    const stats = game?.baseStats
+    const back = {
+      id: BACK_CHOICE,
+      label: 'Turn back',
+      icon: 'fa-solid fa-rotate-left',
+      detail: { title: 'Turn back', lines: ['Nothing is spent'] },
+    }
+    const waiting = game
+      ? statPointsAvailable(game.experienceEarned, game.experienceToNextStatPoint, game.statPointsSpent)
+      : 0
+    if (!stats || waiting <= 0) return { screenKey: 'statPoint:none', choices: [back] }
     return {
-      screenKey: `statPoint:${context.game?.statPointsSpent ?? 0}`,
-      choices: STAT_KEYS.map((stat) => ({
-        id: `statPoint:${stat}`,
-        label: STAT_LABELS[stat],
-        icon: STAT_ICONS[stat],
-        detail: { title: STAT_LABELS[stat], lines: differenceFrom(stat, stats) },
-      })),
+      screenKey: `statPoint:${game?.statPointsSpent ?? 0}`,
+      choices: [
+        ...STAT_KEYS.map((stat) => ({
+          id: `statPoint:${stat}`,
+          label: STAT_LABELS[stat],
+          icon: STAT_ICONS[stat],
+          detail: { title: STAT_LABELS[stat], lines: differenceFrom(stat, stats) },
+        })),
+        back,
+      ],
     }
   },
 
   resolve: (_state, choiceId, _context, rng) => {
     const stat = STAT_KEYS.find((candidate) => `statPoint:${candidate}` === choiceId)
     if (!stat) return { kind: 'pop', rng }
+
     return {
       kind: 'pop',
       // TWO effects, and the split is the platform's rule showing through:

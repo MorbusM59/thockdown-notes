@@ -20,7 +20,6 @@ import { GOLD_PER_LOOT_SCREEN } from '../model/rewards'
 import {
   DROP_CANCEL, dropCancelledNarration, dropChoices, dropEffects, dropNarration, handsAreFull, readPendingId,
 } from './carry'
-import { encounterIndexOf } from './levelProgress'
 import { ENCOUNTER_SELECT_STAGE_ID, LOOT_STAGE_ID } from './ids'
 
 
@@ -56,7 +55,6 @@ export const lootStage: StageModule = {
     const kill = typeof input.killPill === 'string' ? input.killPill : null
     return {
       state: {
-        encounterIndex: encounterIndexOf(input.encounterIndex),
         screensLeft: Math.max(1, readNumber(input.screensLeft, 1)),
         motes: Math.max(0, readNumber(input.motes, 1)),
         offersLoot,
@@ -101,7 +99,6 @@ export const lootStage: StageModule = {
 
   resolve: (state, choiceId, context, rng) => {
     const screensLeft = readNumber(state.screensLeft, 1)
-    const encounterIndex = encounterIndexOf(state.encounterIndex)
     const motes = Math.max(0, readNumber(state.motes, 1))
     const pending = readPendingId(state)
 
@@ -165,8 +162,11 @@ export const lootStage: StageModule = {
     return {
       kind: 'replace',
       stageId: ENCOUNTER_SELECT_STAGE_ID,
-      input: { encounterIndex: encounterIndex + 1 },
-      effects: [...taken, { kind: 'grantExperience', units: motes }],
+      // THE ENCOUNTER IS SPENT HERE, on the way out of the spoils rather than
+      // on the way into the next fight: everything about this one is behind
+      // the player now, so the count they are shown is the one they are
+      // preparing for (stages/levelProgress.ts).
+      effects: [...taken, { kind: 'grantExperience', units: motes }, { kind: 'advanceEncounter' }],
       narration: `**${label}:** *You are **${motes}** mote${motes === 1 ? '' : 's'} the wiser.*`,
       rng,
     }

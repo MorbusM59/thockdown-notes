@@ -1100,6 +1100,55 @@ button.escape-menu-chrome-pill {
   --gauge-travel: calc(100% - var(--gauge-floor) - var(--canonical-scroll-track-edge-gap));
 }
 
+/* A PRESSABLE GAUGE IS A REAL BUTTON, so it arrives carrying base.css's
+   button look -- border, background, hover fill, the pressed inset -- on an
+   element that is a 16px column of track. All of it is taken back off here:
+   what the reader presses is the gauge they were already looking at, and a
+   second frame around it would read as a control sitting on top of one.
+
+   The press is answered by the parts that mean something instead: the icon at
+   the foot names what the gauge is, so it is what brightens under the pointer
+   and what deepens while held. `cursor: pointer` is on the button alone, so
+   nothing inert promises a press -- the same rule the strip's pills keep. */
+button.escape-menu-chrome-gauge {
+  border:     0;
+  background: none;
+  box-shadow: none;
+  padding:    0;
+  font:       inherit;
+  color:      inherit;
+  cursor:     pointer;
+}
+
+button.escape-menu-chrome-gauge:hover {
+  background: none;
+}
+
+button.escape-menu-chrome-gauge:hover .escape-menu-chrome-gauge-icon,
+button.escape-menu-chrome-gauge:hover .escape-menu-chrome-gauge-count {
+  color: var(--color-text);
+}
+
+/* `[data-pressed]`, never `:active`: Chromium sets `:active` on a mousedown of
+   any button and clears it only on the primary release, which leaves a control
+   looking held after a right press. See shared/pressTracking.ts -- and note
+   that the marker only reaches elements a `[data-pressed]` rule could match,
+   read out of these stylesheets at runtime, so this rule is what makes the
+   gauge markable in the first place. */
+button.escape-menu-chrome-gauge[data-pressed] {
+  background: none;
+}
+
+button.escape-menu-chrome-gauge[data-pressed] .escape-menu-chrome-gauge-icon,
+button.escape-menu-chrome-gauge[data-pressed] .escape-menu-chrome-gauge-count {
+  color: var(--color-text);
+}
+
+button.escape-menu-chrome-gauge[data-pressed] .escape-menu-chrome-gauge-fill {
+  border-color: var(--btn-border-active);
+  box-shadow:   var(--box-shadow-inverted-harsh-active);
+}
+
 .escape-menu-chrome-gauge-fill {
   bottom: var(--gauge-floor);
   height: calc(var(--gauge-travel) * var(--gauge-ratio, 0));
@@ -1112,14 +1161,12 @@ button.escape-menu-chrome-pill {
    "nothing to do". It reads as one bar rather than as a second kind of
    indicator: the same handle, in the same track, moving.
 
-   The curve is the whole illusion, and it is gravity's rather than a
-   designer's: a thrown thing DECELERATES into its apex and ACCELERATES away
-   from it, so the rise is ease-out and the fall is ease-in -- the ceiling is
-   the apex here, which is why the slow part is the contact. A timing function
-   named in a keyframe governs the segment that STARTS there, so each leg
-   carries its own. The second, smaller contact is what makes it a bounce
-   rather than a pulse, and the pause at the end is what keeps a loop from
-   reading as a machine.
+   The curve is the whole illusion. A timing function named in a keyframe
+   governs the segment that STARTS there, so each leg carries its own: the
+   rise accelerates into the ceiling and the fall eases out of it, which reads
+   as the bar throwing itself at the top rather than resting against it.
+   Tuned by feel, which is the only instrument for this -- the numbers here
+   are a reading of how it looks, not a derivation.
 
    Height rather than transform: the bar is planted on its floor and grows,
    and translating it would lift the whole column off the icon it stands on.

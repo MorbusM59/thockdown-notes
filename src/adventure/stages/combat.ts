@@ -32,7 +32,6 @@ import {
 import { rewardFor } from '../model/rewards'
 import { killPill, monsterAttackPill, playerAttackPill, statusPill } from './combatLog'
 import type { Monster } from '../model/monsters'
-import { encounterIndexOf } from './levelProgress'
 import { monsterFor, offerFromJson, offerToJson } from './encounter'
 import { COMBAT_STAGE_ID, ENCOUNTER_SELECT_STAGE_ID, LOOT_STAGE_ID, WELCOME_STAGE_ID } from './ids'
 
@@ -54,7 +53,6 @@ const DEFENCE_LABELS: Readonly<Record<Defence, { label: string; icon: string }>>
 const ATTACK_ICON = 'fa-solid fa-burst'
 
 interface CombatState extends JsonObject {
-  encounterIndex: number
   offer: JsonObject
   round: JsonObject
   /** Whose action this is. Null only where there is no profile to roll one for. */
@@ -93,7 +91,6 @@ function roundFromJson(value: JsonObject['']): RoundState {
 
 function readState(state: JsonObject): CombatState {
   return {
-    encounterIndex: encounterIndexOf(state.encounterIndex),
     offer: (typeof state.offer === 'object' && state.offer !== null && !Array.isArray(state.offer) ? state.offer : {}) as JsonObject,
     round: (typeof state.round === 'object' && state.round !== null && !Array.isArray(state.round) ? state.round : {}) as JsonObject,
     actor: state.actor === 'player' || state.actor === 'monster' ? state.actor : null,
@@ -183,9 +180,8 @@ function afterAction(
     return {
       kind: 'replace',
       stageId: ENCOUNTER_SELECT_STAGE_ID,
-      input: { encounterIndex: state.encounterIndex + 1 },
       narration: log,
-      effects,
+      effects: [...effects, { kind: 'advanceEncounter' }],
       rng,
     }
   }
@@ -199,7 +195,6 @@ function afterAction(
       kind: 'replace',
       stageId: LOOT_STAGE_ID,
       input: {
-        encounterIndex: state.encounterIndex,
         screensLeft: reward.reward.lootScreens,
         motes: reward.reward.motes,
         // A monster that ran is beaten but not searched: the gold branch and
@@ -278,7 +273,6 @@ export const combatStage: StageModule = {
   title: 'Combat',
 
   enter: (input, context, rng) => {
-    const encounterIndex = encounterIndexOf(input.encounterIndex)
     const offer = offerFromJson(input.offer)
     const monster = offer ? monsterFor(offer, context) : null
     const round = beginRound({
@@ -289,7 +283,6 @@ export const combatStage: StageModule = {
       playerFled: false,
     })
     const base: CombatState = {
-      encounterIndex,
       offer: offer ? offerToJson(offer) : {},
       round: roundToJson(round),
       actor: null,
@@ -355,7 +348,7 @@ export const combatStage: StageModule = {
       return {
         kind: 'replace',
         stageId: ENCOUNTER_SELECT_STAGE_ID,
-        input: { encounterIndex: state.encounterIndex + 1 },
+        effects: [{ kind: 'advanceEncounter' }],
         rng,
       }
     }

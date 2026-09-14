@@ -116,6 +116,11 @@ function sanitizeGame(value: unknown): GameRecord | null {
       ? { endedReason: value.endedReason }
       : {}),
     level: wholeAtLeast(value.level, 1),
+    // A save written before the counter moved onto the record has none, and
+    // starts the level over at its first encounter -- the same widening the
+    // narration list and the difficulty preset took, for the same reason: a
+    // field nobody could have written is not grounds for throwing a run away.
+    encounterIndex: wholeAtLeast(value.encounterIndex, 1),
     // A run saved before presets existed is played out at the default rather
     // than discarded -- the same widening the narration list took.
     difficulty: isDifficulty(value.difficulty) ? value.difficulty : DEFAULT_DIFFICULTY,
@@ -135,7 +140,6 @@ function sanitizeGame(value: unknown): GameRecord | null {
     // Floored at the FIRST threshold for the same reason the experience one
     // is: a zero here would mean every fame point is already earned, forever.
     goldToNextFamePoint: wholeAtLeast(value.goldToNextFamePoint, FIRST_MILESTONE_THRESHOLD),
-    famePoints: wholeAtLeast(value.famePoints, 0),
     famePointsSpent: wholeAtLeast(value.famePointsSpent, 0),
     hitPoints: wholeAtLeast(value.hitPoints, 0),
     armor: { fromItems: wholeAtLeast(armor.fromItems, 0), natural: wholeAtLeast(armor.natural, 0) },

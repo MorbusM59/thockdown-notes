@@ -23,11 +23,12 @@ import {
   type EscapeMenuMode,
 } from '../escapeMenu/escapeMenuContract'
 import { buildCatalog, THOCKQUEST } from './content'
-import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from './core/director'
+import { choose, currentScreen, enterEntryScreen, enterInterlude, type DirectorDeps } from './core/director'
 import { emptySave, withKeepMark, type GameSave } from './model/gameState'
 import type { ModifierKind } from './model/modifiers'
 import { createSeed } from './core/rng'
 import { ROOT_STAGE_ID, STAGES } from './stages'
+import { FAME_STAGE_ID, STAT_POINT_STAGE_ID } from './stages/ids'
 import { chromeAction, chromeBarToggle, chromeGauges, chromeIdentity, chromeMeters, chromeStrip, chromeToggle, statusReadouts } from './chrome'
 
 const CATALOG = buildCatalog(THOCKQUEST)
@@ -120,6 +121,30 @@ export function useAdventureEscapeMenu(options: AdventureEscapeMenuOptions): Esc
     [save, onCommitSave],
   )
 
+  /**
+   * Pressing one of the rail's two gauges: open the screen where that gauge's
+   * points are spent, on top of whatever is on screen.
+   *
+   * A host action rather than a stage choice, like `handleKeep` beside it --
+   * but for a different reason, and the difference is the whole of why the
+   * contract admits it (escapeMenuContract.ts's `EscapeMenuChromeGaugeAction`).
+   * A keep mark changes nothing about the game's sequence; this does put a
+   * screen up. What keeps it out of the ring is that it is not a decision: it
+   * is a way IN to where the decision is taken, from the place the quantity
+   * is already reported.
+   *
+   * Which stage each gauge opens is decided HERE rather than in chrome.ts,
+   * which assembles numbers and has no business naming stages.
+   */
+  const handleGaugeOpen = useCallback(
+    (gauge: 'fame' | 'statPoint') => {
+      if (!save) return
+      const next = enterInterlude(save, gauge === 'fame' ? FAME_STAGE_ID : STAT_POINT_STAGE_ID, DEPS, Date.now())
+      if (next !== save) onCommitSave(next)
+    },
+    [save, onCommitSave],
+  )
+
   const activeMode = useMemo<EscapeMenuMode | null>(() => {
     if (!isAdventureViewActive || !save) return null
     const screen = currentScreen(save, DEPS)
@@ -163,7 +188,7 @@ export function useAdventureEscapeMenu(options: AdventureEscapeMenuOptions): Esc
         barToggle: chromeBarToggle(),
         meters: chromeMeters(save),
         strip: chromeStrip(save, CATALOG, handleKeep),
-        gauges: chromeGauges(save),
+        gauges: chromeGauges(save, handleGaugeOpen),
         // RESERVED, not omitted. The game has claimed neither button, and
         // the editor's own must not show through -- but an omitted position
         // closes the gap it holds and moves its neighbours. See chrome.ts.
@@ -171,7 +196,7 @@ export function useAdventureEscapeMenu(options: AdventureEscapeMenuOptions): Esc
         action: chromeAction(),
       },
     }
-  }, [isAdventureViewActive, save, handleChoice, handleKeep, onLeave])
+  }, [isAdventureViewActive, save, handleChoice, handleKeep, handleGaugeOpen, onLeave])
 
   return useMemo<EscapeMenuContribution>(
     () => (activeMode ? { entryCells: [], activeMode } : EMPTY_ESCAPE_MENU_CONTRIBUTION),

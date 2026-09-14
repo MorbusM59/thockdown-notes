@@ -154,6 +154,32 @@ export interface EscapeMenuChromeMeter {
   value: string
 }
 
+/**
+ * What pressing a gauge does, where pressing one does anything.
+ *
+ * THE SECOND PLACE A MODE IS TOUCHED OUTSIDE THE RING, and it is admitted on
+ * a narrower argument than the strip pill's. A pill is pressed because
+ * marking a held thing to keep is a property of the thing carried rather than
+ * a step in the game. A gauge press IS a step -- it puts a screen up -- so
+ * the line it keeps is a different one: a gauge names a standing quantity of
+ * the run, and pressing it goes to WHERE THAT QUANTITY IS SPENT. It is a way
+ * in, not a decision; the decision is taken in the ring, on the screen it
+ * opens. A gauge that did anything else -- spent the point itself, toggled a
+ * rule -- would be a mode narrating through its instruments, which is the
+ * thing the two-bars rule above exists to prevent.
+ *
+ * It carries its own LABEL because the gauge's is a noun and a button needs a
+ * verb: "Next stat point" is what the bar measures, "Spend a stat point" is
+ * what the press does, and a button whose accessible name is the former tells
+ * a screen reader nothing about what it is for. One field with both halves
+ * rather than two optional ones, so a label without a handler -- or a handler
+ * with no name -- cannot be written.
+ */
+export interface EscapeMenuChromeGaugeAction {
+  label: string
+  onActivate: () => void
+}
+
 /** One subdivision of the chrome's rail: a track, with its icon at the foot. */
 export interface EscapeMenuChromeGauge {
   key: string
@@ -172,17 +198,23 @@ export interface EscapeMenuChromeGauge {
    * A FULL bar stops where a real scrollbar thumb stops -- the same gap to the
    * track's top edge -- so the two readings in the same rail are measured
    * against one geometry rather than each being flush against a different
-   * thing. It then rests one `--spacing-large` short of that and strains
-   * against the edge on a loop, because a bar that has nothing left to fill
-   * otherwise reads as a bar that stopped reporting.
+   * thing. It then rests just short of that and strains against the edge on
+   * a loop, because a bar that has nothing left to fill otherwise reads as a
+   * bar that stopped reporting.
    */
   ratio?: number
   /**
    * A short number under the icon, inside the track -- what the gauge's own
-   * quantity has bought so far, where the bar above it is progress toward the
-   * next one. Two digits: it is a tally in a column as wide as a scrollbar,
-   * not a readout. The host clamps what it draws and leaves the true figure
-   * to the tooltip.
+   * quantity has WAITING TO BE SPENT, where the bar above it is progress
+   * toward the next one. Two digits: it is a tally in a column as wide as a
+   * scrollbar, not a readout. The host clamps what it draws and leaves the
+   * true figure to the tooltip.
+   *
+   * What is in hand rather than what has been spent, which is what it showed
+   * first. Both are true things to say and only one of them is ever acted on:
+   * a number that goes up when you spend it is a record of the past sitting
+   * where the reader looks for what to do next, and it shared that column
+   * with a bar that fills toward exactly that.
    *
    * Omitted draws no number and the bar's floor drops accordingly, so a gauge
    * that counts nothing does not reserve a strip for it.
@@ -190,6 +222,18 @@ export interface EscapeMenuChromeGauge {
   count?: number
   label: string
   detail?: string[]
+  /**
+   * What pressing this gauge opens, if anything. A gauge WITHOUT one is a
+   * readout and is not a button, for the reason the strip's pills give: a
+   * span that listens for clicks is a control keyboards and screen readers
+   * cannot reach.
+   *
+   * Independent of `ratio`. A gauge leads where its quantity is spent whether
+   * or not there is any of it waiting -- a bar that only became pressable at
+   * full would make the way in appear and vanish, and a player cannot learn a
+   * control they cannot find when they go looking for it.
+   */
+  action?: EscapeMenuChromeGaugeAction
 }
 
 /**

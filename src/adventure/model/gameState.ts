@@ -30,6 +30,7 @@ import { clampBaseStats, createStatBlock, deriveStats, type StatBlock } from './
 import type { Effect } from './effects'
 import { FIRST_MILESTONE_THRESHOLD, takeMilestone } from './milestones'
 import { canAllocateStatPoint } from './motes'
+import { canAllocateFamePoint, fameReached } from './gold'
 import type { JsonObject } from '../core/json'
 import { createSeed, type RngState } from '../core/rng'
 import { DEFAULT_DIFFICULTY, type Difficulty } from './difficulty'
@@ -105,6 +106,22 @@ export interface GameRecord {
   /** 1-based. */
   level: number
   /**
+   * WHICH of the level's ten encounters the run is on, 1-based, and it counts
+   * PAST the last one -- eleven means the level is done (stages/levelProgress.ts).
+   *
+   * On the record rather than threaded through the encounter chain as stage
+   * input, which is where it lived first. Input threading was answering a
+   * real constraint (a stage cannot update its own state while pushing a
+   * child, and every stage in the chain replaces the last at the same depth,
+   * so there is no parent frame to hold it) -- but the counter is a property
+   * of the RUN, not of any one screen, and the moment something outside the
+   * stack had to read it (the chrome's identity line, which says `V-3`) a
+   * threaded value could not answer. Two copies of it -- one on the record
+   * for display, one in the chain for sequencing -- is the drift this
+   * codebase is made of, so there is one, and it is here.
+   */
+  encounterIndex: number
+  /**
    * FIXED when the run starts, from the settings as they stood then. A
    * preset changed mid-run would rewrite what every fight already fought was
    * worth, so the settings hold the choice for the NEXT run and the record
@@ -156,12 +173,14 @@ export interface GameRecord {
   /** What `goldEarned` must reach for the next fame point. Starts at 10. */
   goldToNextFamePoint: number
   /**
-   * Fame points earned and not yet spent. This is the run's SCORE: fame is
-   * the ladder gold feeds, on the same numbers stat points sit on, so a
-   * fame point is a milestone reached rather than a running total of gold.
+   * Points ever spent -- what pushes the next fame threshold away.
+   *
+   * There is no companion "points in hand" field, and there was: a
+   * `famePoints` counter that `grantFamePoints` incremented and nothing ever
+   * emitted, which `allocateFamePoint` then gated on. What is WAITING is
+   * derived from the ladder (model/gold.ts's `famePointsAvailable`), exactly
+   * as it is for stat points.
    */
-  famePoints: number
-  /** Points ever spent -- what pushes the next fame threshold away. */
   famePointsSpent: number
   hitPoints: number
   armor: Armor
@@ -413,6 +432,7 @@ function createGame(id: string, seed: RngState, nowMs: number, settings: GameSet
     updatedAtMs: nowMs,
     status: 'active',
     level: 1,
+    encounterIndex: 1,
     difficulty: settings.difficulty,
     successAdjust: settings.successAdjust,
     keepItemIds: [],
@@ -426,7 +446,6 @@ function createGame(id: string, seed: RngState, nowMs: number, settings: GameSet
     goldEarned: 0,
     goldSpentOnItems: 0,
     goldToNextFamePoint: FIRST_MILESTONE_THRESHOLD,
-    famePoints: 0,
     famePointsSpent: 0,
     hitPoints: deriveStats(clampBaseStats(baseStats)).maxHitPoints,
     armor: NO_ARMOR,
@@ -577,17 +596,14 @@ export function applyEffect(
     case 'spendGold':
       return replace({ goldSpentOnItems: Math.max(0, game.goldSpentOnItems + effect.units) })
 
-    case 'grantFamePoints':
-      return replace({ famePoints: Math.max(0, game.famePoints + effect.amount) })
-
     case 'allocateFamePoint': {
-      // The mirror of allocateStatPoint, on the same ladder. What a fame
-      // point BUYS is not written yet -- this only moves the ladder, which
-      // is the half that is settled.
-      if (game.famePoints <= 0) return save
+      // The mirror of allocateStatPoint, on the same ladder, and gated the
+      // same way: on the LADDER, which is the only representation of "a point
+      // is waiting" there is. What a fame point BUYS is not written yet --
+      // this only moves the ladder, which is the half that is settled.
+      if (!canAllocateFamePoint(game.goldEarned, game.goldToNextFamePoint)) return save
       const taken = takeMilestone(game.goldToNextFamePoint, game.famePointsSpent)
       return replace({
-        famePoints: game.famePoints - 1,
         famePointsSpent: taken.pointsSpent,
         goldToNextFamePoint: taken.threshold,
       })
@@ -595,6 +611,13 @@ export function applyEffect(
 
     case 'setRegion':
       return replace({ regionId: effect.regionId })
+
+    case 'advanceEncounter':
+      // One step along the level's ten, emitted by whatever stage SPENT the
+      // encounter -- which is the loot screen on the way out, and combat
+      // itself when the player ran. It counts past ten on purpose: eleven is
+      // how the hub knows the level is over (stages/levelProgress.ts).
+      return replace({ encounterIndex: game.encounterIndex + 1 })
 
     case 'advanceLevel': {
       // A level is its own journey: the player rests up between them, gives
@@ -634,6 +657,9 @@ export function applyEffect(
           ? {
               ...candidate,
               level: candidate.level + 1,
+              // A new journey starts at its first encounter. The counter is
+              // per level, not per run.
+              encounterIndex: 1,
               hitPoints: restored,
               // Rebuilt from what SURVIVED -- an item carried over counts as
               // a fresh acquisition, which is the rule that makes carrying an
@@ -657,7 +683,10 @@ export function applyEffect(
           gamesEnded: ended.profile.gamesEnded + 1,
           // Everything the run ever ATTAINED, not what is left in hand: a
           // player who spent their fame points did not score less for it.
-          bestFame: Math.max(ended.profile.bestFame, game.famePoints + game.famePointsSpent),
+          bestFame: Math.max(
+            ended.profile.bestFame,
+            fameReached(game.goldEarned, game.goldToNextFamePoint, game.famePointsSpent),
+          ),
         },
       }
     }

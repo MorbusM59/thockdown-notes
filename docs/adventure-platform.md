@@ -27,7 +27,7 @@ channels:
 | the ring | one question's choices, as icon + short label — ALL of them the stage's own |
 | the tab bar | health, armor and the six stats, each an ICON and its value (the name in the tooltip) — or, while a choice is focused, that choice's own effects |
 | the chapter bar | its leading toggle, the identity pill, then narration: a LIST of pills, NEWEST FIRST — what just happened, and the frame for what is being asked — followed, while the dial sits on a choice that has one, by that choice's effects in a DASHED pill |
-| the identity pill | `IV [Combat] 3 | 4` — level in roman numerals, the stage, how far through it. In the note-id position on the chapter bar, fixed width, clipped: it changes every step, and a pill that hugged it would shove the narration sideways each time |
+| the identity pill | `V-3 [Combat]` — level in roman numerals, encounter in arabic, then the stage. In the note-id position on the chapter bar, fixed width, clipped: it changes every step, and a pill that hugged it would shove the narration sideways each time |
 | the strip | what the run is carrying: items out from the left, traits in from the right |
 | the two meters | the currencies, flanking the strip: gold leading, motes trailing, each with an icon on its outward side. They are next to what they BUY — a balance on the tab bar and the things it bought a whole editor away were two halves of one thought in two places |
 | the rail | one gauge per subdivision, each an icon at the foot with a two-digit tally under it — how many of that gauge's own points the run has SPENT — and a bar rising above both |
@@ -72,13 +72,11 @@ editor's — the rule that a mode owning a slot owns its chrome was previously
 spelled once per position, which is how a row's SHAPE stayed the editor's
 while only its contents changed.
 
-**Fame's tally is always zero, and honestly so.** Fame points are meant to be
-attained and spent the way stat points are, and neither half is written:
-there is no fame-point field on the record, no curve turning fame into
-points, and nothing to spend one on. `model/motes.ts`'s `famePointsSpent`
-answers it in one place so the day the concept lands the chrome already reads
-it — deliberately a function and not a stored field, because storage with no
-writer is a rule half-decided.
+**Fame's tally is always zero, and honestly so.** *(Superseded — fame points
+are now attained off the same ladder stat points climb, derived rather than
+stored, and the crown gauge reports how many are waiting. The half that is
+still unwritten is what a point BUYS: the Renown screen says so rather than
+offering an invented unlock. See entry 75.)*
 
 Both bars are the real ones, element for element — the same well, scroll
 shell, display row and pill a note's tabs and chapters use, sharing
@@ -324,10 +322,13 @@ for gold, the Oracle sells traits for motes, six on the table and ten apiece,
 and the outpost only stands there at all while one of the purses can pay. The
 price was the piece the design did not specify and now does.
 
-Stat points are spendable at the hub whenever the ladder has one waiting
-(`stages/statPoints.ts`) — "spendable at any time" is the design's own wording.
-Fame points are the one currency with nothing to buy: what a fame point buys
-is unwritten, and the effect that would spend one only moves the ladder.
+Stat points are spendable from the rail's STAR GAUGE, on any screen — which is
+what "spendable at any time", the design's own wording, actually asks for (see
+entry 75). Fame points are attained off the same ladder and are the one
+currency with nothing to buy: what a fame point buys is unwritten, and the
+effect that would spend one only moves the ladder. The crown gauge opens a
+Renown screen that reports the standing and says so, rather than offering an
+unlock nobody chose.
 
 Content is perhaps half written. Every placeholder is labelled: an entry that
 exists by name but whose effect is undecided carries a `tag` effect saying
@@ -448,10 +449,11 @@ These block a playable game and want answers rather than guesses.
     | `experienceEarned` | traits (`experienceSpentOnTraits`) | stat points | 10, 15, 25, 40, 60, 85 … |
     | `goldEarned` | items (`goldSpentOnItems`) | **fame points** | the same |
 
-    Fame is therefore the milestone, not a running total: `famePoints` in
-    hand, `famePointsSpent` behind you, and the run's score is the two added
-    together (which is what `bestFame` records — spending your fame points
-    must not cost you the score). Gold gained the same two-fields-not-one
+    Fame is therefore the milestone, not a running total: what is WAITING is
+    derived from the ladder (`famePointsAvailable`), `famePointsSpent` is
+    behind you, and the run's score is the two added together — which is what
+    `fameReached` computes and `bestFame` records, because spending your fame
+    points must not cost you the score. Gold gained the same two-fields-not-one
     split motes have, for the identical reason: buying an item must not push
     the next fame point away.
 
@@ -890,3 +892,73 @@ placed at 5, 9 and 10 and the level advancing after ten.
     round's log is spent at the boundary (see 61), so the one thing worth
     carrying across it travels as the loot stage's input rather than as
     narration the next stage would overwrite.
+
+74. **WHERE IN THE LEVEL YOU ARE IS A FACT ABOUT THE RUN, not about the
+    stack.** The encounter counter was threaded from stage to stage as input,
+    for two real reasons -- a stage cannot update its own state while pushing
+    a child (see 70), and every stage in the encounter chain replaces the
+    last at the same depth, so there is no parent frame to hold it. Both are
+    facts about the STACK. The moment something OUTSIDE the stack had to read
+    the number -- the identity pill, which now says `V-3` -- a threaded value
+    could not answer, and the choice was between a second copy on the record
+    for display or moving the one copy there. Two numbers that must agree and
+    are not derived from each other is what this codebase is made of, so it
+    moved: `GameRecord.encounterIndex`, advanced by an `advanceEncounter`
+    effect emitted by whatever stage SPENT the encounter.
+
+    It got smaller in the move. Four stages stopped carrying a number they
+    only passed along, `underConstruction` stopped having to explain why it
+    hands its input back unchanged (it emits no effect, so nothing advances),
+    and the fled-encounter rule -- running still spends one -- became one
+    effect on the flee path rather than a `+1` written at two call sites.
+
+    The count advances on the way OUT of the spoils screen, not on the way
+    into the next fight, and that is a display decision as much as a
+    sequencing one: everything about the encounter just fought is behind the
+    player, so the number they read is the one they are PREPARING for. It
+    runs to eleven, which is how the hub knows the level is over; the chrome
+    clamps to ten, because `V-11` in a level of ten reads as a bug.
+
+75. **A GAUGE IS PRESSED TO REACH WHERE ITS POINTS ARE SPENT**, and that is
+    the second place a mode is touched outside the ring (see 68). The
+    argument is narrower than the pill's and worth keeping straight. A pill
+    is pressed because marking a held thing is not a step in the game. A
+    gauge press IS a step -- it puts a screen up. What keeps it honest is
+    that it is not a DECISION: a gauge names a standing quantity, and
+    pressing it goes to where that quantity is spent. The decision is still
+    taken in the ring, on the screen the press opens.
+
+    This is what finally made "spendable at any time" true rather than
+    aspirational. The stat point was a cell on the hub, which could only mean
+    "spendable when the level lets you"; putting that cell on every screen
+    was never on offer, because a cell standing in a fight is a decision
+    taken while a monster waits. The gauge is on every screen already,
+    because it is chrome. The hub got a twelfth of its dial back.
+
+    **Reachability moved the gate.** `allocateStatPoint` declines when the
+    ladder has nothing waiting, but `adjustBaseStat` -- emitted beside it,
+    because which stat is the game's business and the ladder is the
+    platform's -- does not. A screen that offered its stat cells with nothing
+    waiting would have handed out the stat for free, every press. The gate is
+    now in the stage, where it belongs: with nothing waiting the only cell is
+    the way back. A way back is itself new, and necessary -- arriving by
+    pressing a gauge has to be undoable by choosing nothing.
+
+    Both gauges lead somewhere whether or not anything is waiting. A control
+    that appears only when it is useful is one the player cannot go looking
+    for, and both screens are worth reading empty.
+
+    The crown's screen is `Renown`, and it invents nothing: what a fame point
+    buys is still an open question below, so the screen reports the standing
+    and offers the way out. It exists as a stage rather than a tooltip
+    because that is where the unlocks land the day they are decided -- and
+    because a gauge that opened nothing would be a control that does nothing.
+
+76. **A TALLY UNDER A BAR SAYS WHAT IS WAITING, not what is behind you.**
+    Both rail gauges carried the count SPENT, which is a true number nobody
+    acts on -- and it sat directly under a bar filling toward exactly the
+    thing the reader wanted to know about. Spending a point made the number
+    go UP. It is now what is in hand, on both gauges, derived from the ladder
+    like everything else about them. The stat-point readout on the tab bar
+    went with it: the same number in two places on one chrome is two
+    quantities to a reader.

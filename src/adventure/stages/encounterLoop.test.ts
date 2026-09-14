@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { buildCatalog, THOCKQUEST } from '../content'
-import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from '../core/director'
+import { choose, currentScreen, enterEntryScreen, enterInterlude, type DirectorDeps } from '../core/director'
 import { activeGame, applyEffects, emptySave, type GameSave } from '../model/gameState'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
 import { LEVEL_ENCOUNTER_COUNT } from '../model/encounterOffers'
@@ -10,6 +10,7 @@ import { lootStage } from './loot'
 import { encounterSelectStage } from './encounterSelect'
 import { sanitizeGameSave } from '../save'
 import { withSuccessAdjust } from '../model/gameState'
+import { famePointsAvailable } from '../model/gold'
 
 const DEPS: DirectorDeps = {
   stages: STAGES,
@@ -110,7 +111,7 @@ describe('the loot stage', () => {
       held: [],
     }
     const entered = lootStage.enter(
-      { encounterIndex: 3, screensLeft: screens, motes, offersLoot: true },
+      { screensLeft: screens, motes, offersLoot: true },
       context,
       seed,
     )
@@ -139,24 +140,39 @@ describe('the loot stage', () => {
     expect(last.kind).toBe('replace')
     if (last.kind !== 'replace') throw new Error('unreachable')
     expect(last.stageId).toBe('encounterSelect')
-    expect(last.input?.encounterIndex).toBe(4)
     expect(last.effects).toContainEqual({ kind: 'grantExperience', units: 4 })
+    // The encounter is spent HERE, by an effect on the record, rather than by
+    // handing the next stage a bigger number -- which is what lets the chrome
+    // read the count without rummaging in the stack.
+    expect(last.effects).toContainEqual({ kind: 'advanceEncounter' })
   })
 })
 
 describe('the level counts to ten', () => {
-  it('offers the way on only once every encounter is spent', () => {
+  /**
+   * A context standing at the given encounter -- which is now a fact about
+   * the RECORD rather than something handed to the stage, so the only honest
+   * way to set it up is to advance the record to it.
+   */
+  function atEncounter(encounter: number) {
     const save = enterEntryScreen(emptySave(4242), DEPS, NOW)
-    const started = choose(save, 'welcome:start', DEPS, NOW).save
-    const context = {
-      save: started, game: activeGame(started), content: THOCKQUEST, catalog: DEPS.catalog,
-      profile: activeGame(started)
-        ? resolveProfile(activeGame(started)!.baseStats, [], { items: 0, traits: 0 })
-        : null,
+    let started = choose(save, 'welcome:start', DEPS, NOW).save
+    for (let step = 1; step < encounter; step += 1) {
+      started = applyEffects(started, [{ kind: 'advanceEncounter' }], DEPS.catalog, NOW)
+    }
+    const game = activeGame(started)
+    expect(game?.encounterIndex).toBe(encounter)
+    return {
+      save: started, game, content: THOCKQUEST, catalog: DEPS.catalog,
+      profile: game ? resolveProfile(game.baseStats, [], { items: 0, traits: 0 }) : null,
       held: [],
     }
+  }
+
+  it('offers the way on only once every encounter is spent', () => {
     for (let encounter = 1; encounter <= LEVEL_ENCOUNTER_COUNT + 1; encounter += 1) {
-      const entered = encounterSelectStage.enter({ encounterIndex: encounter }, context, 5)
+      const context = atEncounter(encounter)
+      const entered = encounterSelectStage.enter({}, context, 5)
       const shown = encounterSelectStage.present(entered.state, context)
       const isLast = encounter > LEVEL_ENCOUNTER_COUNT
       expect(shown.choices.some((choice) => choice.id === 'level:advance')).toBe(isLast)
@@ -164,24 +180,25 @@ describe('the level counts to ten', () => {
   })
 
   it('presents one forced encounter at five, nine and ten', () => {
-    const save = enterEntryScreen(emptySave(4242), DEPS, NOW)
-    const started = choose(save, 'welcome:start', DEPS, NOW).save
-    const context = {
-      save: started, game: activeGame(started), content: THOCKQUEST, catalog: DEPS.catalog,
-      profile: activeGame(started)
-        ? resolveProfile(activeGame(started)!.baseStats, [], { items: 0, traits: 0 })
-        : null,
-      held: [],
-    }
     for (const encounter of [5, 9, 10]) {
-      const entered = encounterSelectStage.enter({ encounterIndex: encounter }, context, 5)
+      const context = atEncounter(encounter)
+      const entered = encounterSelectStage.enter({}, context, 5)
       const shown = encounterSelectStage.present(entered.state, context)
       expect(shown.choices).toHaveLength(1)
       expect(shown.choices[0].id).toBe('encounter:fixed')
     }
     // ...and three ways to look for one everywhere else.
-    const open = encounterSelectStage.enter({ encounterIndex: 4 }, context, 5)
-    expect(encounterSelectStage.present(open.state, context).choices).toHaveLength(3)
+    const open = atEncounter(4)
+    const entered = encounterSelectStage.enter({}, open, 5)
+    expect(encounterSelectStage.present(entered.state, open).choices).toHaveLength(3)
+  })
+
+  it('starts each level over at its first encounter', () => {
+    // The count is per level, not per run: a new journey begins at one.
+    const context = atEncounter(LEVEL_ENCOUNTER_COUNT + 1)
+    const advanced = applyEffects(context.save, [{ kind: 'advanceLevel' }], DEPS.catalog, NOW)
+    expect(activeGame(advanced)?.level).toBe(2)
+    expect(activeGame(advanced)?.encounterIndex).toBe(1)
   })
 })
 
@@ -260,35 +277,49 @@ describe('spending a stat point', () => {
     return motes > 0 ? applyEffects(save, [{ kind: 'grantExperience', units: motes }], DEPS.catalog, NOW) : save
   }
 
+  /** The way in the rail's star gauge takes: an interlude, from wherever you are. */
+  const open = (save: GameSave) => enterInterlude(save, 'statPoint', DEPS, NOW)
   const cellIds = (save: GameSave) => currentScreen(save, DEPS)?.choices.map((choice) => choice.id) ?? []
 
-  it('is offered exactly when the ladder has a point waiting', () => {
-    // Nine motes is not ten. The threshold is the whole rule, and it is
-    // derived from what was earned rather than from a counter -- which is
-    // what the counter it replaced could never be, since nothing filled it.
-    expect(cellIds(atHubWith(9))).not.toContain('encounter:spendStatPoint')
-    expect(cellIds(atHubWith(10))).toContain('encounter:spendStatPoint')
+  it('is not a cell on the hub any more, on any screen of it', () => {
+    // The rail's gauge is the way in now, so the dial gets that twelfth back.
+    expect(cellIds(atHubWith(10))).not.toContain('encounter:spendStatPoint')
+    expect(cellIds(atHubWith(0))).not.toContain('encounter:spendStatPoint')
   })
 
-  it('raises the stat, moves the threshold, and takes its own cell away', () => {
-    const ready = atHubWith(10)
-    const before = activeGame(ready)
-    const spending = choose(ready, 'encounter:spendStatPoint', DEPS, NOW).save
-    expect(currentScreen(spending, DEPS)?.stageId).toBe('statPoint')
+  it('offers nothing to spend when the ladder has nothing waiting', () => {
+    // THE GATE IS IN THE STAGE, and it has to be: the screen is reachable at
+    // any moment now, and `adjustBaseStat` is not gated the way
+    // `allocateStatPoint` is -- so a stat cell offered with no point waiting
+    // would hand out the stat for free, every time it was pressed.
+    const empty = open(atHubWith(9))
+    expect(currentScreen(empty, DEPS)?.stageId).toBe('statPoint')
+    expect(cellIds(empty)).toEqual(['statPoint:back'])
 
-    const spent = choose(spending, 'statPoint:might', DEPS, NOW).save
+    const before = activeGame(empty)?.baseStats.might ?? 0
+    // And the id cannot be forced in from outside either: the director only
+    // answers what the screen offered.
+    const forced = choose(empty, 'statPoint:might', DEPS, NOW).save
+    expect(activeGame(forced)?.baseStats.might).toBe(before)
+  })
+
+  it('raises the stat and moves the threshold', () => {
+    const ready = open(atHubWith(10))
+    expect(currentScreen(ready, DEPS)?.stageId).toBe('statPoint')
+    const before = activeGame(ready)
+
+    const spent = choose(ready, 'statPoint:might', DEPS, NOW).save
     const after = activeGame(spent)
     expect(after?.baseStats.might).toBe((before?.baseStats.might ?? 0) + 1)
     expect(after?.statPointsSpent).toBe((before?.statPointsSpent ?? 0) + 1)
     // 10 -> 15: the next point is five further off for each one spent.
     expect(after?.experienceToNextStatPoint).toBe(15)
-    expect(cellIds(spent)).not.toContain('encounter:spendStatPoint')
   })
 
   it('grants the hit points the point is worth, rather than only the room for them', () => {
-    const ready = atHubWith(10)
+    const ready = open(atHubWith(10))
     const before = activeGame(ready)?.hitPoints ?? 0
-    const spent = choose(choose(ready, 'encounter:spendStatPoint', DEPS, NOW).save, 'statPoint:might', DEPS, NOW).save
+    const spent = choose(ready, 'statPoint:might', DEPS, NOW).save
     expect(activeGame(spent)?.hitPoints).toBe(before + 15)
   })
 
@@ -297,21 +328,102 @@ describe('spending a stat point', () => {
     // would make spending a point a way to reroll the encounter.
     const ready = atHubWith(10)
     const before = ready.director.stack[ready.director.stack.length - 1]
-    const spent = choose(choose(ready, 'encounter:spendStatPoint', DEPS, NOW).save, 'statPoint:might', DEPS, NOW).save
+    const spent = choose(open(ready), 'statPoint:might', DEPS, NOW).save
     const after = spent.director.stack[spent.director.stack.length - 1]
     expect(after.stageId).toBe('encounterSelect')
     expect(after.state).toEqual(before.state)
   })
 
+  it('gives the screen underneath back untouched when nothing is chosen', () => {
+    // Arriving by pressing a gauge has to be undoable by choosing nothing --
+    // which it was not when the only way in was choosing to spend.
+    const ready = atHubWith(10)
+    const back = choose(open(ready), 'statPoint:back', DEPS, NOW).save
+    expect(back.director.stack).toEqual(ready.director.stack)
+    expect(activeGame(back)?.statPointsSpent).toBe(activeGame(ready)?.statPointsSpent)
+  })
+
+  it('is reachable mid-fight, and hands the round back exactly as it was', () => {
+    // "Spendable at any time" is the design's wording, and the gauge is on
+    // every screen -- so the interlude has to survive a stage with a fight in
+    // its state.
+    let save = enterEntryScreen(emptySave(4242), DEPS, NOW)
+    for (let step = 0; step < 200 && currentScreen(save, DEPS)?.stageId !== 'combat'; step += 1) {
+      const screen = currentScreen(save, DEPS)
+      const choice = screen?.choices.find((candidate) => !candidate.id.endsWith(':leave'))
+      if (!choice) break
+      save = choose(save, choice.id, DEPS, NOW).save
+    }
+    expect(currentScreen(save, DEPS)?.stageId).toBe('combat')
+    const fight = save.director.stack[save.director.stack.length - 1]
+
+    const looked = open(save)
+    expect(currentScreen(looked, DEPS)?.stageId).toBe('statPoint')
+    const back = choose(looked, 'statPoint:back', DEPS, NOW).save
+    expect(back.director.stack[back.director.stack.length - 1]).toEqual(fight)
+  })
+
+  it('is a no-op when it is already on top, so the same press twice costs nothing', () => {
+    const once = open(atHubWith(10))
+    expect(open(once)).toBe(once)
+  })
+
   it('says what the point would do, computed rather than written down', () => {
-    const spending = choose(atHubWith(10), 'encounter:spendStatPoint', DEPS, NOW).save
-    const choices = currentScreen(spending, DEPS)?.choices ?? []
+    const choices = currentScreen(open(atHubWith(10)), DEPS)?.choices ?? []
     const might = choices.find((choice) => choice.id === 'statPoint:might')
     expect(might?.detail?.lines).toContain('15 hit points')
     // A stat whose uses are unwritten says so, rather than showing an empty
     // pill that reads as a rendering fault.
     const intellect = choices.find((choice) => choice.id === 'statPoint:intellect')
     expect(intellect?.detail?.lines).toContain('Its uses are not written yet')
+  })
+})
+
+describe('renown', () => {
+  /** A run standing at the hub with `gold` earned. */
+  function withGold(gold: number): GameSave {
+    const started = choose(enterEntryScreen(emptySave(4242), DEPS, NOW), 'welcome:start', DEPS, NOW).save
+    return gold > 0 ? applyEffects(started, [{ kind: 'grantGold', units: gold }], DEPS.catalog, NOW) : started
+  }
+
+  it('hands out fame points from the ladder, which it could not do at all before', () => {
+    // There WAS a `famePoints` counter, incremented by an effect nothing ever
+    // emitted, which `allocateFamePoint` then refused to act without -- so a
+    // fame point could be earned and never taken, by construction. Exactly
+    // the defect model/milestones.ts describes for stat points, in the
+    // sibling that was not fixed with it.
+    const rich = withGold(10)
+    const game = activeGame(rich)!
+    expect(famePointsAvailable(game.goldEarned, game.goldToNextFamePoint, game.famePointsSpent)).toBe(1)
+
+    const taken = applyEffects(rich, [{ kind: 'allocateFamePoint' }], DEPS.catalog, NOW)
+    expect(activeGame(taken)?.famePointsSpent).toBe(1)
+    // 10 -> 15, the same ladder the stat points climb.
+    expect(activeGame(taken)?.goldToNextFamePoint).toBe(15)
+  })
+
+  it('declines when the gold is not there, rather than going into debt', () => {
+    const poor = withGold(9)
+    const asked = applyEffects(poor, [{ kind: 'allocateFamePoint' }], DEPS.catalog, NOW)
+    expect(activeGame(asked)?.famePointsSpent).toBe(0)
+    expect(activeGame(asked)?.goldToNextFamePoint).toBe(activeGame(poor)?.goldToNextFamePoint)
+  })
+
+  it('does not lose the run its score for spending gold on things', () => {
+    // The ladder reads what was EARNED, so buying an item must not push the
+    // next fame point away. This is the whole two-fields-not-one design.
+    const rich = withGold(10)
+    const spent = applyEffects(rich, [{ kind: 'spendGold', units: 10 }], DEPS.catalog, NOW)
+    const game = activeGame(spent)!
+    expect(famePointsAvailable(game.goldEarned, game.goldToNextFamePoint, game.famePointsSpent)).toBe(1)
+  })
+
+  it('opens a screen that reports the standing and invents no unlock for it', () => {
+    // What a fame point BUYS is an open question the platform doc says not to
+    // fill in, so the screen says so rather than offering something plausible.
+    const screen = currentScreen(enterInterlude(withGold(10), 'fame', DEPS, NOW), DEPS)
+    expect(screen?.stageId).toBe('fame')
+    expect(screen?.choices.map((choice) => choice.id)).toEqual(['fame:back'])
   })
 })
 

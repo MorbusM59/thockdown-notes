@@ -367,6 +367,12 @@ export function EscapeMenuChromeStatsRow({ status }: { status: EscapeMenuModeChr
  *
  * A gauge with NO ratio draws its track and its icon and no fill: the
  * quantity is named and its curve is not written yet. See the contract.
+ *
+ * A gauge WITH an action is a real `<button>` and one without is a `<div>`,
+ * the same rule the strip's pills follow. The `progressbar` role moves down
+ * onto the TRACK when that happens rather than sitting on the button: a
+ * button that is also a progressbar is neither to assistive tech, and the
+ * track is the thing that is actually a bar.
  */
 export function EscapeMenuChromeGauges({ status }: { status: EscapeMenuModeChrome }) {
   const gauges = status.gauges
@@ -375,25 +381,21 @@ export function EscapeMenuChromeGauges({ status }: { status: EscapeMenuModeChrom
     <div className="escape-menu-chrome-gauges">
       {gauges.map((gauge) => {
         const filled = gauge.ratio === undefined ? null : Math.max(0, Math.min(1, gauge.ratio))
-        return (
-          <div
-            key={gauge.key}
-            className="escape-menu-chrome-gauge"
-            data-tooltip={tooltipOf(gauge.label, gauge.detail)}
-            role="progressbar"
-            aria-label={gauge.label}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            // Absent rather than zero, so assistive tech reads it as
-            // indeterminate instead of as "none of it".
-            aria-valuenow={filled === null ? undefined : Math.round(filled * 100)}
-          >
+        const action = gauge.action
+        const bar = (
             <div
               className="thockdown-scroll-track escape-menu-chrome-gauge-track"
               // The bar's floor is raised by whatever sits under it. Declared
               // here rather than as a second class, so the count's presence
               // and the floor it creates cannot disagree.
               data-has-count={gauge.count === undefined ? undefined : 'true'}
+              role="progressbar"
+              aria-label={gauge.label}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              // Absent rather than zero, so assistive tech reads it as
+              // indeterminate instead of as "none of it".
+              aria-valuenow={filled === null ? undefined : Math.round(filled * 100)}
             >
               {filled === null ? null : (
                 <div
@@ -433,7 +435,32 @@ export function EscapeMenuChromeGauges({ status }: { status: EscapeMenuModeChrom
                 </span>
               )}
             </div>
-          </div>
+        )
+        const tooltip = tooltipOf(action ? action.label : gauge.label, gauge.detail)
+        if (!action) {
+          return (
+            <div key={gauge.key} className="escape-menu-chrome-gauge" data-tooltip={tooltip}>
+              {bar}
+            </div>
+          )
+        }
+        return (
+          <button
+            key={gauge.key}
+            type="button"
+            className="escape-menu-chrome-gauge"
+            data-tooltip={tooltip}
+            // The VERB, not the noun the bar measures: this is what the press
+            // does. See EscapeMenuChromeGaugeAction.
+            aria-label={action.label}
+            // Nothing is behind these but an empty editor, and a right press
+            // here does nothing -- declared rather than left undecided, per
+            // shared/pressTracking.ts.
+            data-secondary-press="none"
+            onClick={action.onActivate}
+          >
+            {bar}
+          </button>
         )
       })}
     </div>

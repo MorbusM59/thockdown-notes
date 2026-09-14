@@ -14,6 +14,7 @@ import { marketStage } from './market'
 import { encounterSelectStage } from './encounterSelect'
 import { huntStage } from './hunt'
 import { statPointStage } from './statPoints'
+import { fameStage } from './fame'
 import { combatStage } from './combat'
 import { lootStage } from './loot'
 import { underConstructionStage } from './underConstruction'
@@ -28,6 +29,7 @@ export const STAGES = registerStages([
   encounterSelectStage,
   huntStage,
   statPointStage,
+  fameStage,
   combatStage,
   lootStage,
   underConstructionStage,

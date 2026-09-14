@@ -30,12 +30,14 @@
 // that finds stalls.
 
 import { buildCatalog, THOCKQUEST } from '../../src/adventure/content'
-import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from '../../src/adventure/core/director'
+import { choose, currentScreen, enterEntryScreen, enterInterlude, type DirectorDeps } from '../../src/adventure/core/director'
 import type { Screen } from '../../src/adventure/core/screen'
 import { activeGame, applyEffects, emptySave, type GameSave } from '../../src/adventure/model/gameState'
 import { isOfferable, type Modifier } from '../../src/adventure/model/modifiers'
 import { DIFFICULTIES, DIFFICULTY_LABELS, type Difficulty } from '../../src/adventure/model/difficulty'
 import { ROOT_STAGE_ID, STAGES } from '../../src/adventure/stages'
+import { STAT_POINT_STAGE_ID } from '../../src/adventure/stages/ids'
+import { statPointsAvailable } from '../../src/adventure/model/motes'
 
 const DEPS: DirectorDeps = {
   stages: STAGES,
@@ -87,9 +89,6 @@ const firstReal = (screen: Screen): string =>
 const careful: Policy = ({ screen, health, prefer }) => {
   const wanted = preferred(screen, prefer)
   if (wanted) return wanted
-  // A point in hand is worth nothing, and the hub offers it on every screen.
-  const spend = pick(screen, 'encounter:spendStatPoint')
-  if (spend) return spend
   if (health !== null && health < 0.25) {
     const flee = pick(screen, 'defence:flee')
     if (flee) return flee
@@ -176,6 +175,18 @@ function playOne(
         break
       }
       if (game.level > levelCap) break
+    }
+
+    // A POINT IN HAND IS WORTH NOTHING, so the simulated player spends one
+    // the moment it lands -- taking the same route a real one does, which is
+    // pressing the rail's star gauge rather than a cell on the hub (the cell
+    // is gone; see docs/adventure-platform.md, entry 75). Done HERE rather
+    // than in a policy because it is not a choice between screens: it is the
+    // chrome being pressed, which no policy can express.
+    if (game && screen.stageId !== 'statPoint'
+      && statPointsAvailable(game.experienceEarned, game.experienceToNextStatPoint, game.statPointsSpent) > 0) {
+      save = enterInterlude(save, STAT_POINT_STAGE_ID, DEPS, NOW)
+      continue
     }
 
     if (screen.stageId === 'combat' && lastStage !== 'combat') result.fights += 1

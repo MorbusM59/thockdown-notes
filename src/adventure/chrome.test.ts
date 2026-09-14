@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { applyEffect, emptySave, type GameSave } from './model/gameState'
-import { chromeGauges, chromeMeters, statusReadouts } from './chrome'
+import { chromeGauges, chromeIdentity, chromeMeters, statusReadouts } from './chrome'
 import type { Modifier } from './model/modifiers'
 import { createSeed } from './core/rng'
 
@@ -71,5 +71,85 @@ describe('the rail gauges', () => {
       expect(gauge.ratio).toBe(0)
       expect(gauge.count).toBe(0)
     }
+  })
+
+  it('tallies what is WAITING to be spent, not what has been', () => {
+    // The tally sits under a bar that fills toward the next point, and what
+    // the reader wants from that column is whether there is anything to do.
+    // Spending used to make the number go UP.
+    const running = runningGame({ fromItems: 0, natural: 0 })
+    const earned = applyEffect(running, { kind: 'grantExperience', units: 10 }, NO_CATALOG, 1)
+    const statOf = (save: GameSave) => chromeGauges(save).find((gauge) => gauge.key === 'statPoint')
+    expect(statOf(earned)?.count).toBe(1)
+
+    const spent = applyEffect(earned, { kind: 'allocateStatPoint' }, NO_CATALOG, 1)
+    expect(statOf(spent)?.count).toBe(0)
+
+    // Fame is the same ladder and reads the same way, which it could not do
+    // at all while "points in hand" was a counter nothing incremented.
+    const famous = applyEffect(running, { kind: 'grantGold', units: 10 }, NO_CATALOG, 1)
+    expect(chromeGauges(famous).find((gauge) => gauge.key === 'fame')?.count).toBe(1)
+  })
+
+  it('carries a way in whether or not anything is waiting', () => {
+    // A control that appears only when it is useful is one the player cannot
+    // go looking for, and both screens are worth reading empty.
+    const opened: string[] = []
+    const gauges = chromeGauges(runningGame({ fromItems: 0, natural: 0 }), (key) => opened.push(key))
+    for (const gauge of gauges) {
+      expect(gauge.ratio).toBe(0)
+      gauge.action?.onActivate()
+    }
+    expect(opened).toEqual(['fame', 'statPoint'])
+    // The VERB, not the noun the bar measures: it is what a button is named.
+    expect(gauges.map((gauge) => gauge.action?.label)).toEqual(['Open your renown', 'Spend a stat point'])
+  })
+
+  it('is a readout, not a button, when nobody is listening', () => {
+    for (const gauge of chromeGauges(runningGame({ fromItems: 0, natural: 0 }))) {
+      expect(gauge.action).toBeUndefined()
+    }
+  })
+})
+
+/**
+ * The identity box answers "which one is this" -- and for a run that is two
+ * numbers, not one: a level is ten encounters and neither half locates you
+ * without the other.
+ */
+describe('the identity line', () => {
+  it('reads level-encounter, roman then arabic', () => {
+    expect(chromeIdentity(runningGame({ fromItems: 0, natural: 0 }), 'Wilds')).toBe('I-1 [Wilds]')
+  })
+
+  it('moves to the encounter being PREPARED for, the moment the last is behind', () => {
+    const running = runningGame({ fromItems: 0, natural: 0 })
+    const next = applyEffect(running, { kind: 'advanceEncounter' }, NO_CATALOG, 1)
+    expect(chromeIdentity(next, 'Wilds')).toBe('I-2 [Wilds]')
+  })
+
+  it('never shows the eleventh, which is a sequencing fact rather than a place', () => {
+    let save = runningGame({ fromItems: 0, natural: 0 })
+    for (let step = 0; step < 10; step += 1) {
+      save = applyEffect(save, { kind: 'advanceEncounter' }, NO_CATALOG, 1)
+    }
+    expect(chromeIdentity(save, 'Wilds')).toBe('I-10 [Wilds]')
+  })
+
+  it('says nothing about where when there is no run', () => {
+    expect(chromeIdentity(emptySave(createSeed(1)), 'Thockquest')).toBe('[Thockquest]')
+  })
+})
+
+/**
+ * A stat point waiting is reported by the rail's star gauge, under the bar
+ * that fills toward the next one. It used to ALSO be a readout on the tab
+ * bar, which is the same number in two places on one chrome.
+ */
+describe('the readouts', () => {
+  it('does not repeat the star gauge on the tab bar', () => {
+    const earned = applyEffect(runningGame({ fromItems: 0, natural: 0 }), { kind: 'grantExperience', units: 10 }, NO_CATALOG, 1)
+    expect(chromeGauges(earned).find((gauge) => gauge.key === 'statPoint')?.count).toBe(1)
+    expect(readoutFor(earned, 'points')).toBeUndefined()
   })
 })

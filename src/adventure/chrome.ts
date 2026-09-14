@@ -27,7 +27,8 @@
 
 import type { EscapeMenuChromeGauge, EscapeMenuChromePill, EscapeMenuModeChrome, EscapeMenuReadout } from '../escapeMenu/escapeMenuContract'
 import { moteBalance, statPointProgress, statPointsAvailable, statPointStanding } from './model/motes'
-import { famePointProgress, famePointStanding, goldBalance } from './model/gold'
+import { famePointProgress, famePointsAvailable, famePointStanding, goldBalance } from './model/gold'
+import { displayEncounter } from './stages/levelProgress'
 import { activeGame, heldModifiers, holdingCounts, keptModifierIds, profileOf, type GameSave } from './model/gameState'
 import { describeModifier, type Modifier, type ModifierKind } from './model/modifiers'
 import { STAT_ICONS, STAT_KEYS, STAT_LABELS } from './model/stats'
@@ -37,15 +38,20 @@ import { STAT_ICONS, STAT_KEYS, STAT_LABELS } from './model/stats'
  * (model/stats.ts's STAT_ICONS, from the same design document's status line);
  * these are the quantities on either side of them.
  *
- * Two of them are FIXED BY THE RAIL rather than chosen here: fame is the
- * crown and a stat point is the star on the gauges below (chromeGauges), and
- * the same quantity carrying two different glyphs in two places on the same
- * chrome would read as two different quantities.
+ * One is FIXED BY THE RAIL rather than chosen here: fame is the crown on the
+ * gauge below (chromeGauges), and the same quantity carrying two different
+ * glyphs in two places on the same chrome would read as two different
+ * quantities. It appears here only where there is no run at all, as the
+ * profile's best.
+ *
+ * A stat point waiting used to have a readout too, in the star. It does not
+ * now: the rail's own star gauge says how many are waiting, under the bar
+ * that fills toward the next -- and the same number in two places on one
+ * chrome is the thing the paragraph above is about.
  */
 const READOUT_ICONS = {
   hp: 'fa-solid fa-heart',
   armor: 'fa-solid fa-shield-halved',
-  points: 'fa-solid fa-star',
   fame: 'fa-solid fa-crown',
   games: 'fa-solid fa-dice-d20',
 } as const
@@ -77,7 +83,6 @@ export function statusReadouts(save: GameSave, catalog: ReadonlyMap<string, Modi
   }
 
   const profile = profileOf(save, game, catalog)
-  const waiting = statPointsAvailable(game.experienceEarned, game.experienceToNextStatPoint, game.statPointsSpent)
 
   return [
     { key: 'hp', icon: READOUT_ICONS.hp, label: 'Hit points', value: `${game.hitPoints}/${profile.derived.maxHitPoints}` },
@@ -108,12 +113,6 @@ export function statusReadouts(save: GameSave, catalog: ReadonlyMap<string, Modi
       label: STAT_LABELS[key],
       value: String(profile.stats[key]),
     })),
-    // Only when there is one waiting, and DERIVED from the ladder rather
-    // than read off a counter -- the counter it used to read was never
-    // incremented by anything, so this readout could not appear.
-    ...(waiting > 0
-      ? [{ key: 'points', icon: READOUT_ICONS.points, label: 'Stat points to spend', value: String(waiting) }]
-      : []),
   ]
 }
 
@@ -142,20 +141,25 @@ export function romanNumeral(value: number): string {
 }
 
 /**
- * The one line in the note-id position: `IV [Combat] 3 | 4` -- level, the
- * stage you are in, and how far through it you are. It answers the same
- * question a note's `$id` box does, which is why it sits there: WHICH one is
- * this, at a glance, in a box that does not move as the answer changes.
+ * The one line in the note-id position: `V-3 [Combat]` -- where in the run
+ * you are, and what you are looking at. It answers the same question a
+ * note's `$id` box does, which is why it sits there: WHICH one is this, at a
+ * glance, in a box that does not move as the answer changes.
  *
- * The progress pair is ABSENT rather than zeroed until there is something
- * that counts rounds and actions: combat is deliberately unbuilt (see
- * docs/adventure-platform.md), and `3 | 4` with nothing behind it would read
- * as a working feature reporting zero.
+ * LEVEL-ENCOUNTER, on one hyphen, because they are one position: a level is
+ * ten encounters and neither half locates you without the other. The level
+ * stays roman and the encounter is arabic, which is what keeps a two-part
+ * address from reading as a range -- and the roman half is a heading for the
+ * run rather than a quantity, exactly as `romanNumeral` says.
+ *
+ * The encounter is the one the player is ON, which after a spoils screen is
+ * the one they are preparing for rather than the one they just finished:
+ * everything about that fight is behind them (stages/levelProgress.ts).
  */
 export function chromeIdentity(save: GameSave, stageTitle: string): string {
   const game = activeGame(save)
-  const level = game ? `${romanNumeral(game.level)} ` : ''
-  return `${level}[${stageTitle}]`
+  const where = game ? `${romanNumeral(game.level)}-${displayEncounter(game)} ` : ''
+  return `${where}[${stageTitle}]`
 }
 
 /**
@@ -272,51 +276,70 @@ export function chromeAction() {
 /**
  * The rail's gauges, top to bottom: FAME, then the next stat point.
  *
- * Each carries, under its icon, the number of that gauge's own points this
- * run has SPENT -- the bar is progress toward the next one, the tally is what
- * the previous ones bought.
+ * Each carries, under its icon, how many of that gauge's own points are
+ * WAITING TO BE SPENT -- the bar is progress toward the next one, the tally
+ * is what is already in hand. It was the count SPENT first, which is a true
+ * number nobody acts on: what the reader wants from that column is whether
+ * there is anything to do, and the bar directly above it is filling toward
+ * exactly that. Both are derived from the ladder rather than stored, so
+ * neither can disagree with the earnings behind it (model/milestones.ts).
  *
- * THE TWO ARE THE SAME LADDER (model/milestones.ts), which is why they sit
- * one above the other: fame is what gold earns and stat points are what
- * experience earns, on identical numbers. Fame is on top because it is what
- * the whole run is for; the stat-point cycle below it is the one that grows
- * the character that earns the gold.
+ * THE TWO ARE THE SAME LADDER, which is why they sit one above the other:
+ * fame is what gold earns and stat points are what experience earns, on
+ * identical numbers. Fame is on top because it is what the whole run is for;
+ * the stat-point cycle below it is the one that grows the character that
+ * earns the gold.
  *
  * Both read their stream's TOTAL against the moving threshold, so neither
  * moves when the currency is spent -- gold on an item, motes on a trait.
  * That is the whole of the two-fields-not-one design and the thing a single
  * running balance could not express.
+ *
+ * EACH ONE IS PRESSED to reach where its points are spent, and that is why
+ * `onOpen` is passed in rather than the two screens being named here: this
+ * file assembles numbers, and which stage a press opens is the hook's
+ * business (see useAdventureEscapeMenu). A gauge leads there whether or not
+ * anything is waiting -- a way in that appears only when it is useful is one
+ * the player cannot go looking for, and both screens are worth reading
+ * empty.
  */
-export function chromeGauges(save: GameSave): EscapeMenuChromeGauge[] {
+export function chromeGauges(
+  save: GameSave,
+  onOpen?: (gauge: 'fame' | 'statPoint') => void,
+): EscapeMenuChromeGauge[] {
   const game = activeGame(save)
   if (!game) return []
 
   const fame = famePointStanding(game.goldEarned, game.goldToNextFamePoint, game.famePointsSpent)
+  const fameWaiting = famePointsAvailable(game.goldEarned, game.goldToNextFamePoint, game.famePointsSpent)
   const stat = statPointStanding(game.experienceEarned, game.experienceToNextStatPoint, game.statPointsSpent)
+  const statWaiting = statPointsAvailable(game.experienceEarned, game.experienceToNextStatPoint, game.statPointsSpent)
   return [
     {
       key: 'fame',
       icon: 'fa-solid fa-crown',
       ratio: famePointProgress(game.goldEarned, game.goldToNextFamePoint, game.famePointsSpent),
-      count: game.famePointsSpent,
+      count: fameWaiting,
       label: 'Next fame point',
       detail: [
         `${fame.into} of ${fame.span} gold earned toward it`,
         `${game.goldEarned} earned in total, next point at ${game.goldToNextFamePoint}`,
-        `${game.famePoints} in hand, ${game.famePointsSpent} spent`,
+        `${fameWaiting} in hand, ${game.famePointsSpent} spent`,
       ],
+      ...(onOpen ? { action: { label: 'Open your renown', onActivate: () => onOpen('fame') } } : {}),
     },
     {
       key: 'statPoint',
       icon: 'fa-solid fa-star',
       ratio: statPointProgress(game.experienceEarned, game.experienceToNextStatPoint, game.statPointsSpent),
-      count: game.statPointsSpent,
+      count: statWaiting,
       label: 'Next stat point',
       detail: [
         `${stat.into} of ${stat.span} motes earned toward it`,
         `${game.experienceEarned} earned in total, next point at ${game.experienceToNextStatPoint}`,
-        `${statPointsAvailable(game.experienceEarned, game.experienceToNextStatPoint, game.statPointsSpent)} waiting, ${game.statPointsSpent} spent`,
+        `${statWaiting} waiting, ${game.statPointsSpent} spent`,
       ],
+      ...(onOpen ? { action: { label: 'Spend a stat point', onActivate: () => onOpen('statPoint') } } : {}),
     },
   ]
 }
