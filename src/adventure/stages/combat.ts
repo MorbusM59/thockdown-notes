@@ -116,12 +116,14 @@ function armNextAction(
   // The player's own dodge, with their own adjustment: an item that says
   // "+10% dodge" has to move the roll that decides whether Dodge is on the
   // table, or it moves nothing at all (model/chance.ts).
-  const dodge = rollDodgeOffered(
-    context.profile?.stats ?? monster.stats,
-    monster.stats,
-    picked.rng,
-    context.profile?.chances.dodgeChance,
-  )
+  const dodge = rollDodgeOffered({
+    defenderStats: context.profile?.stats ?? monster.stats,
+    attackerStats: monster.stats,
+    adjustment: context.profile?.chances.dodgeChance,
+    defender: 'player',
+    successAdjust: context.game?.successAdjust,
+    rng: picked.rng,
+  })
   return { actor: 'monster', dodgeOffered: dodge.offered, rng: dodge.rng }
 }
 
@@ -360,6 +362,7 @@ export const combatStage: StageModule = {
         playerStats: context.profile.stats,
         playerDerived: context.profile.derived,
         playerChances: context.profile.chances,
+        successAdjust: context.game?.successAdjust,
         rng,
       })
       // Nothing on the PLAYER changes when they attack, so no record change.
@@ -374,6 +377,7 @@ export const combatStage: StageModule = {
         playerStats: context.profile.stats,
         armorDecayFloor: context.profile.armorDecayFloor,
         defence,
+        successAdjust: context.game?.successAdjust,
         rng,
       })
       const entry = monsterAttackPill(monster, defence, answer.blow, answer.escaped)

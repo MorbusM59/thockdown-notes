@@ -5,7 +5,7 @@ import {
   monsterDefence, MONSTER_TYPES, MONSTER_TYPE_STAT_SHIFT,
 } from './monsters'
 import { DIFFICULTIES, powerMultiplier } from './difficulty'
-import { COUNTER_STATS, contestedStat, resolveChance } from './chance'
+import { COUNTER_STATS, contestedStat, pressThumb, resolveChance } from './chance'
 import { createStatBlock, deriveStats, DODGE_CHANCE, STAT_KEYS } from './stats'
 
 const block = (over: Partial<Record<string, number>> = {}) => ({ ...createStatBlock(0), ...over }) as ReturnType<typeof createStatBlock>
@@ -210,5 +210,61 @@ describe('what a monster does when attacked', () => {
   it('dodges when it can and defends when it cannot', () => {
     expect(monsterDefence(true)).toBe('dodge')
     expect(monsterDefence(false)).toBe('defend')
+  })
+})
+
+describe('the thumb on the scale', () => {
+  it('does nothing at all at zero, for either side', () => {
+    for (const chance of [0, 0.2, 0.5, 0.8, 1]) {
+      expect(pressThumb(chance, 'player', 0)).toBe(chance)
+      expect(pressThumb(chance, 'monster', 0)).toBe(chance)
+    }
+  })
+
+  it('halves a PLAYER failure and a MONSTER success at fifty percent', () => {
+    // The specified example: 80% to succeed is 20% to fail, halved to 10%.
+    expect(pressThumb(0.8, 'player', 0.5)).toBeCloseTo(0.9, 10)
+    expect(pressThumb(0.6, 'monster', 0.5)).toBeCloseTo(0.3, 10)
+  })
+
+  it('is total at one: the player cannot fail and the monster cannot succeed', () => {
+    for (const chance of [0, 0.35, 0.99]) {
+      expect(pressThumb(chance, 'player', 1)).toBe(1)
+      expect(pressThumb(chance, 'monster', 1)).toBe(0)
+    }
+  })
+
+  it('never leaves 0..1, and never needs a clamp to stay there', () => {
+    // The property that makes this shape the right one: it scales a
+    // probability rather than adding to it, so no setting can overshoot and
+    // no clamp is hiding an error.
+    for (let thumb = 0; thumb <= 1.0001; thumb += 0.05) {
+      for (let chance = 0; chance <= 1.0001; chance += 0.05) {
+        for (const side of ['player', 'monster'] as const) {
+          const pressed = pressThumb(Math.min(1, chance), side, Math.min(1, thumb))
+          expect(pressed).toBeGreaterThanOrEqual(0)
+          expect(pressed).toBeLessThanOrEqual(1)
+        }
+      }
+    }
+  })
+
+  it('moves each side in one direction only, however hard it presses', () => {
+    for (let thumb = 0; thumb <= 1.0001; thumb += 0.1) {
+      expect(pressThumb(0.4, 'player', Math.min(1, thumb))).toBeGreaterThanOrEqual(0.4)
+      expect(pressThumb(0.4, 'monster', Math.min(1, thumb))).toBeLessThanOrEqual(0.4)
+    }
+  })
+
+  it('leaves the stats doing all the work: two characters keep their order', () => {
+    // The whole reason for this shape rather than a flat bonus. A point of
+    // Agility is worth what it was worth; the thumb cannot reorder two
+    // characters, only move them both.
+    const slow = resolveChance(DODGE_CHANCE, block({ agility: 1 }), block({ agility: 2 }))
+    const quick = resolveChance(DODGE_CHANCE, block({ agility: 4 }), block({ agility: 2 }))
+    expect(quick).toBeGreaterThan(slow)
+    for (const thumb of [0.2, 0.5, 0.9]) {
+      expect(pressThumb(quick, 'player', thumb)).toBeGreaterThan(pressThumb(slow, 'player', thumb))
+    }
   })
 })

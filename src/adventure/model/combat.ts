@@ -17,7 +17,7 @@
 
 import { absorb, NO_ARMOR, type Armor } from './armor'
 import { nextChance, type RngState } from '../core/rng'
-import { NO_CHANCE_ADJUSTMENT, resolveChanceWith, type ChanceAdjustment } from './chance'
+import { NO_CHANCE_ADJUSTMENT, resolveChanceWith, type ChanceAdjustment, type ChanceSide } from './chance'
 import { actionsRemaining, damageFrom, monsterDefence, type Monster } from './monsters'
 import { CRIT_CHANCE, DODGE_CHANCE, HIT_CHANCE, type DerivedStats, type StatBlock } from './stats'
 
@@ -131,6 +131,10 @@ interface ExchangeInput {
    * `rollDodgeOffered`, which takes its own.
    */
   attackerChances?: Readonly<Record<'hitChance' | 'critChance', ChanceAdjustment>>
+  /** Whose blow this is. Both rolls below are the attacker's, so one answer covers them. */
+  attacker: ChanceSide
+  /** The run's thumb on the scale (model/chance.ts). 0 leaves every roll exactly as the stats made it. */
+  successAdjust?: number
   /** Dodge negates entirely; Take the hit makes the attack land by definition. */
   defence: Defence | 'none'
   dodgeOffered: boolean
@@ -155,9 +159,11 @@ export function resolveExchange(input: ExchangeInput): { blow: Blow; armor: Armo
   let rng = input.rng
   let landed = true
   if (input.defence !== 'takeTheHit') {
-    const roll = nextChance(rng, resolveChanceWith(
-      HIT_CHANCE, input.attackerStats, input.defenderStats, input.attackerChances?.hitChance,
-    ))
+    const roll = nextChance(rng, resolveChanceWith(HIT_CHANCE, input.attackerStats, input.defenderStats, {
+      adjustment: input.attackerChances?.hitChance,
+      side: input.attacker,
+      successAdjust: input.successAdjust,
+    }))
     landed = roll.value
     rng = roll.rng
   }
@@ -165,9 +171,11 @@ export function resolveExchange(input: ExchangeInput): { blow: Blow; armor: Armo
     return { blow: { hit: false, crit: false, dodged: false, damage: 0, armorDecayed: false }, armor, rng }
   }
 
-  const critRoll = nextChance(rng, resolveChanceWith(
-    CRIT_CHANCE, input.attackerStats, input.defenderStats, input.attackerChances?.critChance,
-  ))
+  const critRoll = nextChance(rng, resolveChanceWith(CRIT_CHANCE, input.attackerStats, input.defenderStats, {
+    adjustment: input.attackerChances?.critChance,
+    side: input.attacker,
+    successAdjust: input.successAdjust,
+  }))
   rng = critRoll.rng
   // WHOLE, once, here. The power multiplier makes a monster's damage
   // fractional (8.4 at level one, 16.8 on a crit), and leaving it that way
@@ -192,14 +200,21 @@ export function resolveExchange(input: ExchangeInput): { blow: Blow; armor: Armo
 }
 
 /** Whether Dodge is on the table at all this time, which is what its chance buys. */
-export function rollDodgeOffered(
-  defenderStats: StatBlock,
-  attackerStats: StatBlock,
-  rng: RngState,
+export function rollDodgeOffered(options: {
+  defenderStats: StatBlock
+  attackerStats: StatBlock
   /** The DEFENDER's own adjustment -- this is their chance, not the attacker's. */
-  adjustment: ChanceAdjustment = NO_CHANCE_ADJUSTMENT,
-): { offered: boolean; rng: RngState } {
-  const draw = nextChance(rng, resolveChanceWith(DODGE_CHANCE, defenderStats, attackerStats, adjustment))
+  adjustment?: ChanceAdjustment
+  /** Who is dodging. A monster's dodge is a monster SUCCESS and is weighted as one. */
+  defender: ChanceSide
+  successAdjust?: number
+  rng: RngState
+}): { offered: boolean; rng: RngState } {
+  const draw = nextChance(options.rng, resolveChanceWith(DODGE_CHANCE, options.defenderStats, options.attackerStats, {
+    adjustment: options.adjustment ?? NO_CHANCE_ADJUSTMENT,
+    side: options.defender,
+    successAdjust: options.successAdjust,
+  }))
   return { offered: draw.value, rng: draw.rng }
 }
 
@@ -220,9 +235,17 @@ export function resolvePlayerAttack(options: {
   playerDerived: DerivedStats
   /** The player's own accuracy and crit adjustments. Monsters carry none. */
   playerChances?: Readonly<Record<'hitChance' | 'critChance', ChanceAdjustment>>
+  successAdjust?: number
   rng: RngState
 }): { state: RoundState; blow: Blow; rng: RngState } {
-  const offered = rollDodgeOffered(options.monster.stats, options.playerStats, options.rng)
+  // The MONSTER's dodge, which the thumb presses down rather than up.
+  const offered = rollDodgeOffered({
+    defenderStats: options.monster.stats,
+    attackerStats: options.playerStats,
+    defender: 'monster',
+    successAdjust: options.successAdjust,
+    rng: options.rng,
+  })
   const exchange = resolveExchange({
     attackerStats: options.playerStats,
     attackerDamage: damageFrom(options.playerDerived.damageMultiplier),
@@ -231,6 +254,8 @@ export function resolvePlayerAttack(options: {
     armor: NO_ARMOR,
     armorDecayFloor: 0,
     attackerChances: options.playerChances,
+    attacker: 'player',
+    successAdjust: options.successAdjust,
     defence: monsterDefence(offered.offered),
     dodgeOffered: offered.offered,
     rng: offered.rng,
@@ -260,15 +285,21 @@ export function resolveMonsterAttack(options: {
   playerStats: StatBlock
   armorDecayFloor: number
   defence: Defence
+  successAdjust?: number
   rng: RngState
 }): { state: RoundState; blow: Blow | null; escaped: boolean; rng: RngState } {
   const spent = { ...options.state, monsterActionsSpent: options.state.monsterActionsSpent + 1 }
 
   let rng = options.rng
   if (options.defence === 'flee') {
-    // The MONSTER's roll, so no player adjustment applies to it: an item that
-    // sharpens your own dodge does not make the thing chasing you slower.
-    const pursuit = nextChance(rng, resolveChanceWith(DODGE_CHANCE, options.monster.stats, options.playerStats))
+    // The MONSTER's roll, so no player adjustment applies to it -- an item
+    // that sharpens your own dodge does not make the thing chasing you
+    // slower -- and the thumb presses it DOWN, since catching you is a
+    // monster success.
+    const pursuit = nextChance(rng, resolveChanceWith(DODGE_CHANCE, options.monster.stats, options.playerStats, {
+      side: 'monster',
+      successAdjust: options.successAdjust,
+    }))
     rng = pursuit.rng
     if (!pursuit.value) {
       return { state: { ...spent, playerFled: true }, blow: null, escaped: true, rng }
@@ -281,6 +312,8 @@ export function resolveMonsterAttack(options: {
     defenderStats: options.playerStats,
     armor: options.state.playerArmor,
     armorDecayFloor: options.armorDecayFloor,
+    attacker: 'monster',
+    successAdjust: options.successAdjust,
     defence: options.defence,
     dodgeOffered: options.defence === 'dodge',
     rng,

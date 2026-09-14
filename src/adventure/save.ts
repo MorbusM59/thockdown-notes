@@ -28,6 +28,11 @@ function finite(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback
 }
 
+/** A 0..1 knob. Anything else is 0, which is the value that changes nothing. */
+function fraction(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0
+}
+
 function wholeAtLeast(value: unknown, minimum: number): number {
   return Math.max(minimum, Math.floor(finite(value, minimum)))
 }
@@ -103,6 +108,7 @@ function sanitizeGame(value: unknown): GameRecord | null {
     // A run saved before presets existed is played out at the default rather
     // than discarded -- the same widening the narration list took.
     difficulty: isDifficulty(value.difficulty) ? value.difficulty : DEFAULT_DIFFICULTY,
+    successAdjust: fraction(value.successAdjust),
     regionId: typeof value.regionId === 'string' ? value.regionId : null,
     baseStats: sanitizeStats(value.baseStats),
     statPointsSpent: wholeAtLeast(value.statPointsSpent, 0),
@@ -164,7 +170,10 @@ export function sanitizeGameSave(input: unknown): GameSave | null {
       gamesEnded: wholeAtLeast(profile.gamesEnded, 0),
       bestFame: wholeAtLeast(profile.bestFame, 0),
     },
-    settings: isDifficulty(settings.difficulty) ? { difficulty: settings.difficulty } : DEFAULT_SETTINGS,
+    settings: {
+      difficulty: isDifficulty(settings.difficulty) ? settings.difficulty : DEFAULT_SETTINGS.difficulty,
+      successAdjust: fraction(settings.successAdjust),
+    },
     games,
     holdings,
     outcomes,

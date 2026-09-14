@@ -12,12 +12,16 @@
 //
 //   npx vite-node scripts/adventure/simulate.ts -- --runs=400 --difficulty=all
 //   npx vite-node scripts/adventure/simulate.ts -- --rank --difficulty=medium
+//   npx vite-node scripts/adventure/simulate.ts -- --sweep-adjust
 //
 // Flags: --runs, --difficulty (a preset, or `all`), --seed, --policy
 //        (`careful` | `reckless` | `first`), --levels (stop after N),
-//        --prefer=id,id (take these offers when they appear), --rank (one
-//        pass per item and trait, each preferred in turn, to see what each is
-//        actually worth), --json.
+//        --prefer=id,id (take these offers when they appear), --pin=id,id
+//        (hand them over outright), --rank (one pass per item and trait, each
+//        pinned in turn, to see what each is actually worth),
+//        --success-adjust=0.3 (the thumb on the scale -- see
+//        model/chance.ts), --sweep-adjust[=0,0.1,0.2] (one pass per thumb
+//        setting), --json.
 //
 // A run is autoplayed by a POLICY -- a small, stated way of choosing -- and
 // the numbers mean nothing without knowing which one produced them, so every
@@ -134,8 +138,9 @@ function playOne(
   levelCap: number,
   prefer: readonly string[] = [],
   pin: readonly Modifier[] = [],
+  successAdjust = 0,
 ): RunResult {
-  let save: GameSave = { ...emptySave(seed), settings: { difficulty } }
+  let save: GameSave = { ...emptySave(seed), settings: { difficulty, successAdjust } }
   save = enterEntryScreen(save, DEPS, NOW)
 
   const result: RunResult = {
@@ -229,6 +234,7 @@ function parseArgs(argv: string[]) {
   const args = {
     runs: 200, difficulty: 'all', seed: 1, policy: 'careful' as PolicyName,
     levels: 3, json: false, prefer: [] as string[], pin: [] as string[], rank: false,
+    successAdjust: 0, sweepAdjust: null as number[] | null,
   }
   for (const raw of argv) {
     const [key, value] = raw.replace(/^--/, '').split('=')
@@ -241,6 +247,10 @@ function parseArgs(argv: string[]) {
     else if (key === 'rank') args.rank = true
     else if (key === 'prefer') args.prefer = (value ?? '').split(',').filter(Boolean)
     else if (key === 'pin') args.pin = (value ?? '').split(',').filter(Boolean)
+    else if (key === 'success-adjust') args.successAdjust = Number(value)
+    else if (key === 'sweep-adjust') {
+      args.sweepAdjust = value ? value.split(',').map(Number) : [0, 0.1, 0.2, 0.3, 0.4, 0.5]
+    }
   }
   return args
 }
@@ -253,10 +263,15 @@ const presets = args.difficulty === 'all'
   : [args.difficulty as Difficulty].filter((value) => (DIFFICULTIES as readonly string[]).includes(value))
 if (presets.length === 0) throw new Error(`unknown difficulty "${args.difficulty}"`)
 
-function sweep(difficulty: Difficulty, prefer: readonly string[], pin: readonly Modifier[] = []) {
+function sweep(
+  difficulty: Difficulty,
+  prefer: readonly string[],
+  pin: readonly Modifier[] = [],
+  successAdjust = args.successAdjust,
+) {
   const runs: RunResult[] = []
   for (let index = 0; index < args.runs; index += 1) {
-    runs.push(playOne(args.seed + index * 7919, difficulty, policy, args.levels, prefer, pin))
+    runs.push(playOne(args.seed + index * 7919, difficulty, policy, args.levels, prefer, pin, successAdjust))
   }
   return summarize(runs)
 }
@@ -295,6 +310,35 @@ const pinned = args.pin.map((id) => {
   if (!modifier) throw new Error(`no item or trait with id "${id}"`)
   return modifier
 })
+
+/**
+ * THE THUMB, one column per setting: what the same runs look like as a
+ * player's failures and a monster's successes are scaled away.
+ *
+ * The point of the sweep rather than a single number is that the interesting
+ * quantity is the SHAPE of the curve -- where survival stops being flat at
+ * zero, and where the fights stop being fights. Reading one setting at a time
+ * makes the first of those look like the answer.
+ */
+if (args.sweepAdjust) {
+  const thumbs = args.sweepAdjust
+  console.log(`\n${args.runs} runs per cell, policy "${args.policy}", stopping after level ${args.levels}\n`)
+  console.log('preset     thumb   died   encounters won (p10/med/p90)   rounds/fight  damage/fight  level')
+  for (const difficulty of presets) {
+    for (const thumb of thumbs) {
+      const row = sweep(difficulty, args.prefer, pinned, thumb)
+      console.log(
+        `${DIFFICULTY_LABELS[difficulty].padEnd(9)} ${`${Math.round(thumb * 100)}%`.padStart(5)}`
+        + `${`${(row.deathRate * 100).toFixed(0)}%`.padStart(7)}   `
+        + `${String(row.encountersWon.p10).padStart(3)} /${String(row.encountersWon.median).padStart(4)} /${String(row.encountersWon.p90).padStart(4)}`
+        + `${row.roundsPerFight.toFixed(1).padStart(18)}${row.damagePerFight.toFixed(1).padStart(14)}`
+        + `${row.levelReached.toFixed(1).padStart(7)}`,
+      )
+    }
+    console.log('')
+  }
+  process.exit(0)
+}
 
 const report: Record<string, ReturnType<typeof summarize>> = {}
 for (const difficulty of presets) {

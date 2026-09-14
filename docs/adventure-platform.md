@@ -631,20 +631,28 @@ placed at 5, 9 and 10 and the level advancing after ten.
     twelve rounds to kill, and dies in about fifteen) — the run simply never
     gets anything back, so it is the second and third fights that kill.
 
-    Three levers, and choosing between them is a design decision, not a tuning
-    one, so none of them has been taken:
-    - **Recovery.** Only items and traits heal today
-      (`recoverAfterEncounter`), and a character carrying two of them is at
-      break-even. A systemic rest — at a level boundary, or a fraction after
-      each encounter — would make fights expensive AND survivable, which
-      cheaper fights would not.
+    Of the three levers, **recovery has been tried and pulled**. Two pieces of
+    content healed for one evening; with them, "how long can a run last" had a
+    content answer rather than a design one, and the intended shape — hit
+    points as a resource a run SPENDS, filled once when the character sets out
+    — was no longer being tested. The effect kind is gone from the vocabulary
+    rather than merely unused, so nothing can add healing back by accident.
+    (One door is still open and it is worth knowing about: a rise in MAXIMUM
+    hit points is granted, not merely permitted, so Iron Constitution's +25
+    and Pack Instinct's +8% per trait are each a real infusion at the moment
+    they are taken. That is deliberate — the alternative is an effect that
+    does nothing until a heal that no longer exists — but it is the one way
+    hit points come back.)
+
+    What is being tuned instead is **the thumb** (see below) against the
+    remaining two levers:
     - **Acquisition.** A run starts with one item and one trait and dies
       before it can collect more. The economy is calibrated for a run that
       survives and nothing does: the first stat point costs ten motes, and a
-      Medium run earns **1.3** before it dies. Pinning four defensive pieces from the start
-      takes Easy to a median of NINE encounters won and 27% of runs past level
-      one — the content already reaches "monster territory"; a character
-      cannot live long enough to hold it.
+      Medium run earns **1.3** before it dies. Pinning four defensive pieces
+      from the start takes Easy to a median of NINE encounters won — the
+      content already reaches "monster territory"; a character cannot live
+      long enough to hold it.
     - **Cost.** Cheaper encounters, which is the lever that costs the fights
       their tension.
 
@@ -741,3 +749,44 @@ placed at 5, 9 and 10 and the level advancing after ten.
     for armor, a Cracked Hourglass that trades fifteen hit points for an
     action). Their numbers are a first pass; `--rank` is how to see what each
     is currently worth. The design's own unspecified names are untouched.
+
+67. **THE THUMB ON THE SCALE** (`successAdjust`, `model/chance.ts`'s
+    `pressThumb`). One number from 0 to 1 that scales a **player's chance to
+    FAIL** and a **monster's chance to SUCCEED**:
+
+        player:  1 − (1 − p) × (1 − t)     a 20% failure at t=0.5 becomes 10%
+        monster: p × (1 − t)               a 60% hit     at t=0.5 becomes 30%
+
+    The shape is the point. Both sides keep reading the same stat table, the
+    same contest and the same formulas, so a point of Agility is worth what it
+    was worth and two characters cannot change places — the thumb moves them
+    both. It cannot overshoot either, since it scales a probability rather
+    than adding to one, so no clamp is hiding a mistake; and it has least
+    absolute effect where it should, on a roll that was already nearly
+    certain.
+
+    Applied at the ROLL and nowhere else: a character's own numbers are what
+    the character is worth, and the thumb belongs to the run's tuning. That is
+    enforced by construction rather than remembered — `resolveChanceWith`
+    presses it only when it is told which SIDE is rolling, and the profile
+    passes no side at all. It is fixed on the run when the run starts, exactly
+    as the preset is, and no screen sets it: it is a tuning knob, and the
+    harness is what turns it (`--success-adjust`, `--sweep-adjust`).
+
+    Measured, 200 runs per cell, stopping after level 3:
+
+    | preset | thumb 0% | 20% | 30% | 40% | 50% |
+    | --- | --- | --- | --- | --- | --- |
+    | Easy | 99% died, med 2 | 54%, 13 | 17%, 27 | 1%, 30 | 0%, 30 |
+    | Medium | 100%, 1 | 94%, 3 | 76%, 5 | 33%, 20 | 8%, 29 |
+    | Hard | 100%, 0 | 100%, 2 | 96%, 4 | 74%, 6 | 29%, 21 |
+    | Extreme | 100%, 0 | 100%, 1 | 100%, 1 | 92%, 4 | 69%, 8 |
+
+    Two things to read off it. The transition is SHARP — on Medium the death
+    rate falls from 94% to 8% across twenty points of thumb — because the
+    fight is close to even to begin with and the thumb compounds over every
+    roll of a run. And the two dials compose: roughly ten points of thumb is
+    worth one difficulty step, so they are not two names for the same
+    quantity. A level is ten encounters, so a median of 10-20 is a run that
+    finishes a level or two, which is currently around **Medium at 40%** or
+    **Hard at 50%**.

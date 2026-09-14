@@ -97,13 +97,16 @@ const TRAITS: readonly Modifier[] = [
     effects: [{ kind: 'derivedScaleWhileHurt', derived: 'actionsPerRound', factor: 1.5, belowFraction: 0.5 }],
   },
   {
-    id: 'field-medic',
+    id: 'patient-hunter',
     kind: 'trait',
-    name: 'Field Medic',
-    icon: 'fa-solid fa-kit-medical',
-    // A FRACTION, so it keeps pace with a character who has been stacking hit
-    // points -- the flat kit in the item list deliberately does not.
-    effects: [{ kind: 'recoverAfterEncounter', fraction: 0.15 }],
+    name: 'Patient Hunter',
+    icon: 'fa-solid fa-crosshairs',
+    // The third of the three "back to the wall" traits, and each is on a
+    // different axis: Cornered Animal hits harder, Battle Trance acts more
+    // often, and this one stops missing. With no healing in the game, a
+    // character at low hit points is where every run ends up, so what happens
+    // there is worth three answers rather than one.
+    effects: [{ kind: 'derivedScaleWhileHurt', derived: 'hitChance', factor: 1.3, belowFraction: 0.5 }],
   },
   {
     id: 'duelists-read',
@@ -220,13 +223,17 @@ const ITEMS: readonly Modifier[] = [
     ],
   },
   {
-    id: 'field-surgeons-kit',
+    id: 'duelists-cape',
     kind: 'item',
-    name: "Field Surgeon's Kit",
-    icon: 'fa-solid fa-briefcase-medical',
-    // FLAT, where the trait that does this is a fraction: early on it is
-    // worth more than Field Medic and by the tenth level it is worth less.
-    effects: [{ kind: 'recoverAfterEncounter', amount: 10 }],
+    name: "Duelist's Cape",
+    icon: 'fa-solid fa-user-ninja',
+    // The mirror of the buckler: that one buys armor with dodge, this one
+    // buys dodge with damage. Two ways to pay for not being hit, which is the
+    // only economy there is once hit points stop coming back.
+    effects: [
+      { kind: 'derivedDelta', derived: 'dodgeChance', amount: 0.1 },
+      { kind: 'derivedScale', derived: 'damageMultiplier', factor: 0.9 },
+    ],
   },
   {
     id: 'featherweight-boots',

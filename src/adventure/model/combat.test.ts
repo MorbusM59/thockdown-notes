@@ -114,7 +114,7 @@ describe('one exchange', () => {
 
   it('dodging negates the blow without rolling anything', () => {
     const result = resolveExchange({
-      attackerStats: attacker, attackerDamage: 10, defenderStats: defender,
+      attacker: 'player', attackerStats: attacker, attackerDamage: 10, defenderStats: defender,
       armor: NO_ARMOR, armorDecayFloor: 0, defence: 'dodge', dodgeOffered: true, rng: 7,
     })
     expect(result.blow).toMatchObject({ dodged: true, hit: false, damage: 0 })
@@ -128,7 +128,7 @@ describe('one exchange', () => {
     const hopeless = block({ perception: -20 })
     for (let seed = 1; seed <= 40; seed += 1) {
       const result = resolveExchange({
-        attackerStats: hopeless, attackerDamage: 10, defenderStats: defender,
+        attacker: 'player', attackerStats: hopeless, attackerDamage: 10, defenderStats: defender,
         armor: NO_ARMOR, armorDecayFloor: 0, defence: 'takeTheHit', dodgeOffered: false, rng: seed,
       })
       expect(result.blow.hit).toBe(true)
@@ -138,7 +138,7 @@ describe('one exchange', () => {
   it('puts armor between the blow and its target on Defend, and only there', () => {
     const armor = { fromItems: 4, natural: 2 }
     const shared = {
-      attackerStats: attacker, attackerDamage: 10, defenderStats: defender,
+      attacker: 'player' as const, attackerStats: attacker, attackerDamage: 10, defenderStats: defender,
       armorDecayFloor: 0, dodgeOffered: false, rng: 3,
     }
     const defended = resolveExchange({ ...shared, armor, defence: 'defend' })

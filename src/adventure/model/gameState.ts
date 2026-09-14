@@ -111,6 +111,11 @@ export interface GameRecord {
    * holds the one this run is being played under.
    */
   difficulty: Difficulty
+  /**
+   * The thumb on the scale, 0..1, fixed when the run starts for the same
+   * reason the preset is. See model/chance.ts's `pressThumb`.
+   */
+  successAdjust: number
   regionId: string | null
   baseStats: StatBlock
   /** Points earned and not yet spent on a stat. */
@@ -170,9 +175,20 @@ export interface OutcomeRow {
  */
 export interface GameSettings {
   difficulty: Difficulty
+  /**
+   * A TUNING parameter rather than a player-facing one: it scales a player's
+   * chance to FAIL and a monster's chance to SUCCEED (model/chance.ts's
+   * `pressThumb`), which puts a thumb on the scale while leaving both sides
+   * reading the same stat table. 0 changes nothing.
+   *
+   * Nothing in the game sets it -- there is no screen for it, on purpose.
+   * The simulation harness does (`npm run adventure:sim -- --success-adjust`),
+   * which is what it is for while the shape of a run is still being found.
+   */
+  successAdjust: number
 }
 
-export const DEFAULT_SETTINGS: GameSettings = { difficulty: DEFAULT_DIFFICULTY }
+export const DEFAULT_SETTINGS: GameSettings = { difficulty: DEFAULT_DIFFICULTY, successAdjust: 0 }
 
 export interface GameSave {
   version: number
@@ -244,7 +260,7 @@ function nextSeq(rows: readonly { gameId: string; seq: number }[], gameId: strin
   return rows.reduce((highest, row) => (row.gameId === gameId ? Math.max(highest, row.seq) : highest), 0) + 1
 }
 
-function createGame(id: string, seed: RngState, nowMs: number, difficulty: Difficulty): GameRecord {
+function createGame(id: string, seed: RngState, nowMs: number, settings: GameSettings): GameRecord {
   const baseStats = createStatBlock(0)
   return {
     id,
@@ -253,7 +269,8 @@ function createGame(id: string, seed: RngState, nowMs: number, difficulty: Diffi
     updatedAtMs: nowMs,
     status: 'active',
     level: 1,
-    difficulty,
+    difficulty: settings.difficulty,
+    successAdjust: settings.successAdjust,
     regionId: null,
     baseStats,
     statPointsSpent: 0,
@@ -303,7 +320,7 @@ export function applyEffect(
     for (let suffix = 2; save.games.some((existing) => existing.id === id); suffix += 1) {
       id = `game-${nowMs.toString(36)}-${seed.toString(36)}-${suffix}`
     }
-    const game = createGame(id, seed, nowMs, save.settings.difficulty)
+    const game = createGame(id, seed, nowMs, save.settings)
     return {
       ...save,
       games: [...save.games, game],

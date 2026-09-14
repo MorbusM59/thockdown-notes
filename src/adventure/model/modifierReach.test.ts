@@ -14,6 +14,9 @@ import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from '../c
 import { activeGame, applyEffects, emptySave, type GameSave } from '../model/gameState'
 import { isOfferable, resolveProfile, UNSPECIFIED_TAG, type Modifier } from './modifiers'
 import { resolveExchange, rollDodgeOffered } from './combat'
+import { resolveChanceWith } from './chance'
+import { buildMonster } from './monsters'
+import { HIT_CHANCE } from './stats'
 import { NO_ARMOR } from './armor'
 import { addStats, createStatBlock } from './stats'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
@@ -56,6 +59,7 @@ describe('a chance a modifier changes', () => {
 
     const crits = (chances: typeof plain.chances) => frequency((rng) => {
       const result = resolveExchange({
+        attacker: 'player',
         attackerStats: BASE,
         attackerDamage: 10,
         defenderStats: createStatBlock(0),
@@ -77,7 +81,9 @@ describe('a chance a modifier changes', () => {
     const booted = resolveProfile(BASE, [boots], noHoldings)
     const offered = (adjustment: typeof plain.chances.dodgeChance) =>
       frequency((rng) => {
-        const drawn = rollDodgeOffered(BASE, createStatBlock(0), rng, adjustment)
+        const drawn = rollDodgeOffered({
+          defenderStats: BASE, attackerStats: createStatBlock(0), adjustment, defender: 'player', rng,
+        })
         return { value: drawn.offered, rng: drawn.rng }
       })
     expect(offered(booted.chances.dodgeChance) - offered(plain.chances.dodgeChance)).toBeGreaterThan(0.15)
@@ -90,6 +96,7 @@ describe('a chance a modifier changes', () => {
     const profile = resolveProfile(BASE, [chalk], noHoldings)
     const landed = frequency((rng) => {
       const result = resolveExchange({
+        attacker: 'player',
         attackerStats: BASE,
         attackerDamage: 10,
         defenderStats: createStatBlock(0),
@@ -103,6 +110,99 @@ describe('a chance a modifier changes', () => {
       return { value: result.blow.hit, rng: result.rng }
     })
     expect(landed).toBeCloseTo(profile.derived.hitChance, 1)
+  })
+})
+
+describe('the thumb on the scale', () => {
+  const monster = () => buildMonster({
+    classId: 'warrior',
+    classBaseStats: addStats(createStatBlock(0), { might: 2, agility: 1 }),
+    type: 'regular',
+    level: 1,
+    against: BASE,
+  })
+
+  /** A whole fight's worth of exchanges, both sides, at one thumb setting. */
+  function trade(successAdjust: number) {
+    const foe = monster()
+    const profile = resolveProfile(BASE, [], noHoldings)
+    let rng = 999
+    let landed = 0
+    let suffered = 0
+    for (let index = 0; index < 2000; index += 1) {
+      const mine = resolveExchange({
+        attacker: 'player',
+        attackerStats: BASE,
+        attackerDamage: 10,
+        defenderStats: foe.stats,
+        armor: NO_ARMOR,
+        armorDecayFloor: 0,
+        attackerChances: profile.chances,
+        successAdjust,
+        defence: 'defend',
+        dodgeOffered: false,
+        rng,
+      })
+      rng = mine.rng
+      if (mine.blow.hit) landed += 1
+      const theirs = resolveExchange({
+        attacker: 'monster',
+        attackerStats: foe.stats,
+        attackerDamage: 10,
+        defenderStats: BASE,
+        armor: NO_ARMOR,
+        armorDecayFloor: 0,
+        successAdjust,
+        defence: 'defend',
+        dodgeOffered: false,
+        rng,
+      })
+      rng = theirs.rng
+      if (theirs.blow.hit) suffered += 1
+    }
+    return { landed: landed / 2000, suffered: suffered / 2000 }
+  }
+
+  it('reaches the fight in both directions at once', () => {
+    const even = trade(0)
+    const weighted = trade(0.5)
+    expect(weighted.landed).toBeGreaterThan(even.landed + 0.15)
+    expect(weighted.suffered).toBeLessThan(even.suffered - 0.15)
+  })
+
+  it('is total at one, which is what makes it a scale rather than a bonus', () => {
+    const decided = trade(1)
+    expect(decided.landed).toBe(1)
+    expect(decided.suffered).toBe(0)
+  })
+
+  it('reaches whether DODGE is offered, on the right side each time', () => {
+    const foe = monster()
+    const offered = (defender: 'player' | 'monster', successAdjust: number) => frequency((rng) => {
+      const drawn = rollDodgeOffered({
+        defenderStats: defender === 'player' ? BASE : foe.stats,
+        attackerStats: defender === 'player' ? foe.stats : BASE,
+        defender,
+        successAdjust,
+        rng,
+      })
+      return { value: drawn.offered, rng: drawn.rng }
+    })
+    // The player's own dodge is a player success, so the thumb raises it; the
+    // monster's is a monster success, so the same setting lowers it.
+    expect(offered('player', 0.5)).toBeGreaterThan(offered('player', 0) + 0.1)
+    expect(offered('monster', 0.5)).toBeLessThan(offered('monster', 0) - 0.1)
+  })
+
+  it('does NOT touch what the character is worth', () => {
+    // The thumb belongs to the run's tuning, not to the character, so nothing
+    // on the tab bar and nothing a stat point promises moves with it. A
+    // profile takes no thumb at all, which is how that is enforced.
+    const profile = resolveProfile(BASE, [], noHoldings)
+    expect(profile.derived.hitChance).toBeCloseTo(
+      resolveChanceWith(HIT_CHANCE, BASE, null, {}),
+      10,
+    )
   })
 })
 

@@ -313,3 +313,39 @@ describe('spending a stat point', () => {
     expect(intellect?.detail?.lines).toContain('Its uses are not written yet')
   })
 })
+
+describe('the thumb the run is played under', () => {
+  it('is fixed at the start, like the preset, and clamped on the way in', () => {
+    const tuned: GameSave = { ...emptySave(4242), settings: { difficulty: 'hard', successAdjust: 0.35 } }
+    const started = choose(enterEntryScreen(tuned, DEPS, NOW), 'welcome:start', DEPS, NOW).save
+    expect(activeGame(started)?.successAdjust).toBe(0.35)
+
+    const readBack = sanitizeGameSave(JSON.parse(JSON.stringify(started)))
+    expect(readBack?.settings.successAdjust).toBe(0.35)
+    expect(readBack?.games[0].successAdjust).toBe(0.35)
+
+    // Nonsense from disk is 0 -- the value that changes nothing -- rather
+    // than a run silently played at some other tuning.
+    const nonsense = JSON.parse(JSON.stringify(started)) as { settings: Record<string, unknown> }
+    nonsense.settings.successAdjust = 'plenty'
+    expect(sanitizeGameSave(nonsense)?.settings.successAdjust).toBe(0)
+  })
+
+  it('changes how a fight goes, and nothing else about the run', () => {
+    // Same seed, same choices, one dial: the run under the thumb has to be a
+    // DIFFERENT run, or the parameter is not reaching the rolls.
+    const play = (successAdjust: number) => {
+      let save: GameSave = { ...emptySave(31337), settings: { difficulty: 'medium', successAdjust } }
+      save = enterEntryScreen(save, DEPS, NOW)
+      for (let step = 0; step < 60; step += 1) {
+        const screen = currentScreen(save, DEPS)
+        if (!screen) break
+        const choice = screen.choices.find((candidate) => !candidate.id.endsWith(':leave'))
+        if (!choice) break
+        save = choose(save, choice.id, DEPS, NOW).save
+      }
+      return activeGame(save)
+    }
+    expect(play(0.5)?.hitPoints).toBeGreaterThan(play(0)?.hitPoints ?? 0)
+  })
+})

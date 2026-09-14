@@ -18,6 +18,14 @@
 // vocabulary cannot express -- that one carries a written description,
 // because nothing else can describe it.
 //
+// THERE IS NO HEALING, and that is a decision rather than an omission. Hit
+// points are a resource a run SPENDS: they are filled once, when the
+// character sets out, and every fight after that is paid for out of what is
+// left. A `recoverAfterEncounter` effect existed here for one evening and was
+// pulled -- with it, the question "how long can this run last" had a content
+// answer instead of a design one. The vocabulary cannot express healing now,
+// so nothing can add it back by accident; it takes a decision.
+//
 // THE ORDER, which is the actual rule "capped at 6 before item gains":
 //   1. base stats, clamped to 0..6        <- a game's own progression
 //   2. + every statDelta                  <- uncapped; this is the point
@@ -78,17 +86,6 @@ export type ModifierEffect =
    * consumer, which is this codebase's characteristic failure.
    */
   | { kind: 'derivedScaleWhileHurt'; derived: DerivedKey; factor: number; belowFraction: number }
-  /**
-   * Hit points returned after every encounter that pays out. The one
-   * recovery in the game, and it is CONTENT rather than a systemic rule: a
-   * run heals because the player chose something that heals it, and a run
-   * that chose otherwise does not. See the loot stage, which is the single
-   * place this is applied.
-   *
-   * `fraction` is of maximum hit points; `amount` is flat. Both may be
-   * present, and they add.
-   */
-  | { kind: 'recoverAfterEncounter'; amount?: number; fraction?: number }
   /**
    * Armor granted ONCE, when this modifier is acquired. Not a passive
    * bonus: armor is spent as it absorbs, and carrying an item into the next
@@ -163,8 +160,6 @@ export interface EffectiveProfile {
    * at the moment it is rolled -- see model/chance.ts.
    */
   chances: Readonly<Record<ChanceKey, ChanceAdjustment>>
-  /** Hit points returned after each paying encounter, already totalled. */
-  recoveryPerEncounter: number
   /** Named hooks currently held, for effects the numbers cannot express. */
   tags: readonly string[]
 }
@@ -216,7 +211,6 @@ export function resolveProfile(
 
   let naturalArmor = 0
   let armorDecayFloor = 0
-  let recoveryPerEncounter = 0
   const tags: string[] = []
   const chances: Record<ChanceKey, ChanceAdjustment> = {
     dodgeChance: { ...NO_CHANCE_ADJUSTMENT },
@@ -246,16 +240,17 @@ export function resolveProfile(
         else derived[effect.derived] += effect.amount
       } else if (effect.kind === 'naturalArmor') naturalArmor += effect.amount
       else if (effect.kind === 'armorDecayFloor') armorDecayFloor = Math.max(armorDecayFloor, effect.floor)
-      else if (effect.kind === 'recoverAfterEncounter') {
-        recoveryPerEncounter += (effect.amount ?? 0) + (effect.fraction ?? 0) * derived.maxHitPoints
-      } else if (effect.kind === 'tag') tags.push(effect.tag)
+      else if (effect.kind === 'tag') tags.push(effect.tag)
     }
   }
 
   // The UNCONTESTED figure, adjusted -- what the tab bar shows and what a
   // fight starts from before it subtracts the opponent.
   for (const key of CHANCE_DERIVED_KEYS) {
-    derived[key] = resolveChanceWith(CHANCE_SPECS[key], stats, null, chances[key])
+    // NO SIDE, deliberately: this is what the CHARACTER is worth, and the
+    // run's thumb is a property of the run's tuning rather than of them.
+    // See `pressThumb`.
+    derived[key] = resolveChanceWith(CHANCE_SPECS[key], stats, null, { adjustment: chances[key] })
   }
 
   return {
@@ -264,7 +259,6 @@ export function resolveProfile(
     naturalArmor,
     armorDecayFloor,
     chances,
-    recoveryPerEncounter: Math.max(0, Math.round(recoveryPerEncounter)),
     tags,
   }
 }
@@ -305,13 +299,6 @@ export function describeEffect(effect: ModifierEffect, holdings: HoldingCounts):
     }
     case 'derivedScaleWhileHurt':
       return `${signedPercent(effect.factor - 1)} ${DERIVED_LABELS[effect.derived]} below ${Math.round(effect.belowFraction * 100)}% hit points`
-    case 'recoverAfterEncounter': {
-      const parts = [
-        ...(effect.amount ? [`${effect.amount}`] : []),
-        ...(effect.fraction ? [`${Math.round(effect.fraction * 100)}% of maximum`] : []),
-      ]
-      return `Recover ${parts.join(' + ')} hit points after each encounter`
-    }
     case 'armorOnAcquire':
       return `${signed(effect.amount)} Armor when acquired`
     case 'naturalArmor':

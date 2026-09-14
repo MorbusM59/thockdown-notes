@@ -100,20 +100,69 @@ export interface ChanceAdjustment {
 export const NO_CHANCE_ADJUSTMENT: ChanceAdjustment = { scale: 1, delta: 0 }
 
 /**
- * A declared chance, resolved and then adjusted -- the ONE way a chance is
- * arrived at anywhere in the game.
+ * WHOSE roll this is. The one thing a chance needs to know about the world
+ * outside the two stat blocks, and only because of the thumb below.
+ */
+export type ChanceSide = 'player' | 'monster'
+
+/**
+ * THE THUMB ON THE SCALE: one number, from 0 to 1, that scales a player's
+ * chance to FAIL and a monster's chance to SUCCEED.
+ *
+ *   player:  1 - (1 - p) x (1 - t)      a 20% failure at t=0.5 becomes 10%
+ *   monster: p x (1 - t)                a 60% hit    at t=0.5 becomes 30%
+ *
+ * At 0 it does nothing at all and every chance is exactly what the stats
+ * made it. At 1 the player cannot fail and the monster cannot succeed.
+ *
+ * WHY THIS SHAPE rather than a flat bonus: both sides keep reading the same
+ * stat table, the same contest and the same formulas, so a point of Agility
+ * is worth what it was worth and nothing about the design has to be restated
+ * at a second difficulty. It also cannot overshoot -- neither expression can
+ * leave 0..1 for a chance already inside it -- so no clamp is hiding a
+ * mistake, and it has diminishing absolute effect exactly where it should:
+ * on a roll that was already nearly certain, there is little failure left to
+ * halve.
+ *
+ * It is applied at the ROLL and nowhere else. A character's own numbers --
+ * what the tab bar shows, what a stat point promises -- are what the
+ * character is worth, and the thumb is a property of the run's tuning rather
+ * than of them. See `resolveChanceWith`.
+ */
+export function pressThumb(chance: number, side: ChanceSide, successAdjust: number): number {
+  const thumb = Math.max(0, Math.min(1, successAdjust))
+  if (thumb === 0) return chance
+  return side === 'player' ? 1 - (1 - chance) * (1 - thumb) : chance * (1 - thumb)
+}
+
+/** Everything about a roll that is not the two stat blocks. */
+export interface ChanceContext {
+  /** What the roller's items and traits do to this chance. */
+  adjustment?: ChanceAdjustment
+  /** Whose roll it is. Required for the thumb to mean anything. */
+  side?: ChanceSide
+  /** The run's thumb, 0..1. See `pressThumb`. */
+  successAdjust?: number
+}
+
+/**
+ * A declared chance, resolved, adjusted by what the roller carries, and then
+ * weighted by the run's thumb -- the ONE way a chance is arrived at anywhere
+ * in the game.
  *
  * Both the tab bar's figure and the roll in a fight come through here; they
- * differ only in whether an opponent is passed. When they did not, an item
- * saying "+10% crit" moved the number on the bar and nothing in the fight,
- * because combat resolved chances from the stat block alone and never saw the
- * modifier at all.
+ * differ in whether an opponent is passed and whether a side is. When they
+ * did not share this function at all, an item saying "+10% crit" moved the
+ * number on the bar and nothing in the fight, because combat resolved chances
+ * from the stat block alone and never saw the modifier.
  */
 export function resolveChanceWith(
   chance: StatChance,
   own: StatBlock,
   opponent: StatBlock | null | undefined,
-  adjustment: ChanceAdjustment = NO_CHANCE_ADJUSTMENT,
+  context: ChanceContext = {},
 ): number {
-  return clampChance(rawChance(chance, own, opponent) * adjustment.scale + adjustment.delta)
+  const adjustment = context.adjustment ?? NO_CHANCE_ADJUSTMENT
+  const adjusted = clampChance(rawChance(chance, own, opponent) * adjustment.scale + adjustment.delta)
+  return context.side === undefined ? adjusted : pressThumb(adjusted, context.side, context.successAdjust ?? 0)
 }

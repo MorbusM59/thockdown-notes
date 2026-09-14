@@ -8,13 +8,7 @@
 //
 // A monster that RAN pays the gold branch with no choice offered -- it was
 // beaten, it just was not searched.
-//
-// This is also the ONE place hit points come back, and only for a character
-// carrying something that returns them (`recoverAfterEncounter`). There is no
-// systemic rest: a run that took nothing healing keeps every wound it has,
-// which is what makes those items a real choice rather than a rounding error.
-// Paid on the way OUT, once, however many loot screens the check bought --
-// per encounter, not per screen.
+
 
 import { nextSample } from '../core/rng'
 import type { JsonObject } from '../core/json'
@@ -34,19 +28,6 @@ function rollItemOffers(context: StageContext, rng: number) {
   if (pool.length === 0) return { offerIds: [] as string[], rng }
   const sample = nextSample(rng, pool, context.profile?.derived.offerChoices ?? 2)
   return { offerIds: sample.value.map((item) => item.id), rng: sample.rng }
-}
-
-/**
- * What the character's holdings return after this encounter, as an effect or
- * nothing at all.
- *
- * Read from the profile the stage was given, which is the one resolved before
- * this choice was applied: an item picked up on the final loot screen pays
- * from the NEXT encounter, not retroactively from the one it was found in.
- */
-function recovery(context: StageContext): Effect[] {
-  const amount = context.profile?.recoveryPerEncounter ?? 0
-  return amount > 0 ? [{ kind: 'adjustHitPoints', amount }] : []
 }
 
 function readNumber(value: unknown, fallback: number): number {
@@ -139,15 +120,7 @@ export const lootStage: StageModule = {
       kind: 'replace',
       stageId: ENCOUNTER_SELECT_STAGE_ID,
       input: { encounterIndex: encounterIndex + 1 },
-      effects: [
-        ...taken,
-        { kind: 'grantExperience', units: motes },
-        // AFTER the pick, so an item taken on this very screen is already
-        // being carried when its own recovery is counted. It reads from the
-        // profile as it stood on entry, so the ordering is one call site's
-        // business rather than a rule the reader has to infer -- see below.
-        ...recovery(context),
-      ],
+      effects: [...taken, { kind: 'grantExperience', units: motes }],
       narration: `**${label}:** *You are **${motes}** mote${motes === 1 ? '' : 's'} the wiser.*`,
       rng,
     }
