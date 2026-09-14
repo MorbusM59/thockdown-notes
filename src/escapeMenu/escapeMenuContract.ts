@@ -110,6 +110,29 @@ export interface EscapeMenuChromePill {
   label: string
   /** The rest of the tooltip, one line each. */
   detail?: string[]
+  /**
+   * Lit, as one of a set where exactly one is. The host draws the state; what
+   * it MEANS is the mode's business.
+   */
+  isActive?: boolean
+  /**
+   * What pressing it does, if anything. A pill without this is a readout, as
+   * every pill was until the first one needed to be pressed.
+   *
+   * THE ONE PLACE A MODE IS TOUCHED OUTSIDE THE RING, and the line is worth
+   * stating because the rule it bends is real: every GESTURE a mode has
+   * belongs in the ring, because a gesture is a step in the game and the ring
+   * is where the game is played. This is not a step. The strip is what the
+   * run is CARRYING, and marking one of those to keep is a property of the
+   * thing carried -- it can be set at any time, changed freely, and costs
+   * nothing until the level ends. Putting it in the ring would make a
+   * standing preference into a screen, and one that could only be answered at
+   * the moment it is spent.
+   *
+   * It stays out of the two BARS, which remain untouchable: those carry state
+   * and narration, and there is nothing on them that is a thing you have.
+   */
+  onActivate?: () => void
 }
 
 /**

@@ -28,8 +28,8 @@
 import type { EscapeMenuChromeGauge, EscapeMenuChromePill, EscapeMenuModeChrome, EscapeMenuReadout } from '../escapeMenu/escapeMenuContract'
 import { moteBalance, statPointProgress, statPointsAvailable, statPointStanding } from './model/motes'
 import { famePointProgress, famePointStanding, goldBalance } from './model/gold'
-import { activeGame, heldModifiers, holdingCounts, profileOf, type GameSave } from './model/gameState'
-import { describeModifier, type Modifier } from './model/modifiers'
+import { activeGame, heldModifiers, holdingCounts, keptModifierId, profileOf, type GameSave } from './model/gameState'
+import { describeModifier, type Modifier, type ModifierKind } from './model/modifiers'
 import { STAT_ICONS, STAT_KEYS, STAT_LABELS } from './model/stats'
 
 /**
@@ -186,7 +186,13 @@ export function chromeMeters(save: GameSave): EscapeMenuModeChrome['meters'] {
   }
 }
 
-function pillsOf(held: readonly Modifier[], kind: Modifier['kind'], counts: ReturnType<typeof holdingCounts>): EscapeMenuChromePill[] {
+function pillsOf(
+  held: readonly Modifier[],
+  kind: Modifier['kind'],
+  counts: ReturnType<typeof holdingCounts>,
+  kept: string | null,
+  onKeep: ((kind: ModifierKind, modifierId: string) => void) | undefined,
+): EscapeMenuChromePill[] {
   return held
     .filter((modifier) => modifier.kind === kind)
     // Acquisition order, and duplicates kept: two of the same item are two
@@ -196,7 +202,18 @@ function pillsOf(held: readonly Modifier[], kind: Modifier['kind'], counts: Retu
       key: `${modifier.id}:${index}`,
       icon: modifier.icon,
       label: modifier.name,
-      detail: describeModifier(modifier, counts),
+      detail: [
+        ...describeModifier(modifier, counts),
+        // What the lit one MEANS, said on the pill rather than left to be
+        // discovered at the end of the level. Exactly one per kind is lit at
+        // all times (`keptModifierId` defaults to the newest find), so this
+        // line is on exactly one pill per kind too.
+        modifier.id === kept
+          ? 'Kept when this level ends'
+          : 'Press to keep this one when the level ends',
+      ],
+      isActive: modifier.id === kept,
+      onActivate: onKeep ? () => onKeep(kind, modifier.id) : undefined,
     }))
 }
 
@@ -208,14 +225,18 @@ function pillsOf(held: readonly Modifier[], kind: Modifier['kind'], counts: Retu
  * behind them. It costs nothing per screen and is always true, where those
  * cost three of twelve cells everywhere to be true on demand.
  */
-export function chromeStrip(save: GameSave, catalog: ReadonlyMap<string, Modifier>): EscapeMenuModeChrome['strip'] {
+export function chromeStrip(
+  save: GameSave,
+  catalog: ReadonlyMap<string, Modifier>,
+  onKeep?: (kind: ModifierKind, modifierId: string) => void,
+): EscapeMenuModeChrome['strip'] {
   const game = activeGame(save)
   if (!game) return undefined
   const held = heldModifiers(save, game.id, catalog)
   const counts = holdingCounts(held)
   return {
-    leading: pillsOf(held, 'item', counts),
-    trailing: pillsOf(held, 'trait', counts),
+    leading: pillsOf(held, 'item', counts, keptModifierId(save, game, 'item'), onKeep),
+    trailing: pillsOf(held, 'trait', counts, keptModifierId(save, game, 'trait'), onKeep),
   }
 }
 

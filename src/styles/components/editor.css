@@ -976,8 +976,11 @@
 /* The line-number toggle's own box. These sit in the timeline's lane, which
    mirrors the scrollbar and has no room for a tag pill's height -- so they
    borrow the button geometry rather than introduce a second one, and the lane
-   keeps the height every margin around it was set against. Informational, so
-   no press look and no pointer.
+   keeps the height every margin around it was set against. A SPAN where the
+   pill is a readout and a real BUTTON where it can be pressed (the keep mark
+   -- see escapeMenuContract.ts's `onActivate`), which is why the cursor is
+   set per element below rather than once here: a pointer on something inert
+   promises a press that does nothing.
 
    They carry `.ui-btn` because the button LOOK -- border, background, radius
    -- comes from the `button, .ui-btn` element selector in base.css, not from
@@ -991,6 +994,10 @@
   display: inline-flex;
   align-items:     center;
   justify-content: center;
+}
+
+button.escape-menu-chrome-pill {
+  cursor: pointer;
 }
 
 /* The rail, divided one track per gauge, top to bottom. Equal shares: a

@@ -247,22 +247,43 @@ function EscapeMenuChromeStrip({ status }: { status: EscapeMenuModeChrome }) {
 
   const group = (pills: EscapeMenuChromePill[], className: string) => (
     <div className={className}>
-      {pills.map((pill) => (
+      {pills.map((pill) => {
         // The line-number toggle's own box, not a tag pill: these sit in the
         // timeline's lane, which is a mirror of the scrollbar and has no room
         // for a pill's height. Reusing the button geometry keeps the lane at
         // the height every margin around it was set against, and keeps one
         // visual language in the chrome instead of two.
-        <span
-          key={pill.key}
-          className="ui-btn btn-icon chapter-toggle-button escape-menu-chrome-pill"
-          data-tooltip={tooltipOf(pill.label, pill.detail)}
-          aria-label={pill.label}
-          role="listitem"
-        >
-          <span className={pill.icon} aria-hidden="true" />
-        </span>
-      ))}
+        const boxClassName = `ui-btn btn-icon chapter-toggle-button escape-menu-chrome-pill${pill.isActive ? ' is-active' : ''}`
+        const tooltip = tooltipOf(pill.label, pill.detail)
+        // A real BUTTON only where there is something to press. A span that
+        // listens for clicks is a button that keyboards and screen readers
+        // cannot reach, and most pills here genuinely are readouts.
+        if (!pill.onActivate) {
+          return (
+            <span key={pill.key} className={boxClassName} data-tooltip={tooltip} aria-label={pill.label} role="listitem">
+              <span className={pill.icon} aria-hidden="true" />
+            </span>
+          )
+        }
+        return (
+          <button
+            key={pill.key}
+            type="button"
+            className={boxClassName}
+            data-tooltip={tooltip}
+            aria-label={pill.label}
+            aria-pressed={pill.isActive === true}
+            role="listitem"
+            // Nothing is behind these but an empty editor, and a right press
+            // here does nothing -- declared rather than left undecided, per
+            // shared/pressTracking.ts.
+            data-secondary-press="none"
+            onClick={pill.onActivate}
+          >
+            <span className={pill.icon} aria-hidden="true" />
+          </button>
+        )
+      })}
     </div>
   )
 

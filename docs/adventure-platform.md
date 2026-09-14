@@ -310,6 +310,13 @@ platform routes them to a stage that says so *in the game* rather than
 stubbing them with plausible behaviour. That is how the previous draft
 acquired numbers nobody chose and then defended them.
 
+**Now built**: the level's end. One item and one trait survive it, marked by
+pressing their pills on the strip (exactly one lit per kind; unmarked keeps
+the newest find), and everything else is given up — in the order the rules
+require: restore hit points against the maximum as it stands with everything
+held, THEN release, and let `followMaxHitPoints` bring the pool down to the
+new maximum, so a run always sets out full.
+
 **Not built, and MISSING rather than deferred**: the level-start EXCHANGE —
 motes for traits, gold for items, from a random offering whose width is a
 stat. The design specifies it; what it does not specify is a PRICE, so it
@@ -803,3 +810,18 @@ placed at 5, 9 and 10 and the level advancing after ten.
     quantity. A level is ten encounters, so a median of 10-20 is a run that
     finishes a level or two, which is currently around **Medium at 40%** or
     **Hard at 50%**.
+
+68. **A PILL CAN BE PRESSED, and that is the one place a mode is touched
+    outside the ring.** The rule it bends — every gesture a mode has belongs
+    in the ring — is real, and it holds for gestures: a gesture is a step in
+    the game, and the ring is where the game is played. Marking an item to
+    keep is not a step. The strip is what the run is CARRYING, the mark is a
+    property of the thing carried, and it can be set at any time, changed
+    freely, and costs nothing until the level ends. In the ring it would have
+    become a screen, answerable only at the moment it is spent.
+
+    The two BARS stay untouchable: they carry state and narration, and nothing
+    on them is a thing you have. A pill is a `<span>` where it is a readout
+    and a real `<button>` where it can be pressed — a span that listens for
+    clicks is a button a keyboard cannot reach — and the cursor follows the
+    element rather than the class, so nothing inert promises a press.

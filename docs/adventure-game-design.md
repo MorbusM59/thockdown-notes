@@ -217,6 +217,15 @@ text is left as authored; this is what has moved.
   player toward landing blows AND toward dodging, which is exactly the pair of
   outcomes that feel like agency. Applied at the roll, never folded into what
   a character is worth; fixed on a run when the run starts.
+- **ONE ITEM AND ONE TRAIT SURVIVE A LEVEL, and the player marks which.** The
+  strip's pills are toggles — one active per kind — and pressing one marks it
+  to keep. Nothing else carries over. **If nothing is marked, the LAST
+  acquired of that kind is kept**, which is not a fallback for an error case:
+  it is the rule for a player who never touched the marks, and it is the
+  newest find because that is the one they have had least use out of. Exactly
+  one pill per kind is therefore lit at all times, and it always says the
+  truth about what will survive. The marks are spent when the level ends, so
+  the next level's default is its own newest find.
 - **Hit points are the BUDGET FOR ONE LEVEL.** They wear down encounter by
   encounter with nothing to restore them, and they are reset when the level
   ends — each level is its own journey (which is why a new region is chosen

@@ -109,6 +109,8 @@ function sanitizeGame(value: unknown): GameRecord | null {
     // than discarded -- the same widening the narration list took.
     difficulty: isDifficulty(value.difficulty) ? value.difficulty : DEFAULT_DIFFICULTY,
     successAdjust: fraction(value.successAdjust),
+    keepItemId: typeof value.keepItemId === 'string' ? value.keepItemId : null,
+    keepTraitId: typeof value.keepTraitId === 'string' ? value.keepTraitId : null,
     regionId: typeof value.regionId === 'string' ? value.regionId : null,
     baseStats: sanitizeStats(value.baseStats),
     statPointsSpent: wholeAtLeast(value.statPointsSpent, 0),

@@ -116,9 +116,19 @@ export interface GameRecord {
    * reason the preset is. See model/chance.ts's `pressThumb`.
    */
   successAdjust: number
+  /**
+   * What the player has MARKED to carry into the next level -- one item and
+   * one trait, everything else given up when the level ends.
+   *
+   * A modifier ID rather than a holding: two copies of one item are the same
+   * thing, so the mark names WHAT is kept and the level's end keeps one of
+   * them. Null means nothing is marked, and the default applies -- see
+   * `keptModifierId`.
+   */
+  keepItemId: string | null
+  keepTraitId: string | null
   regionId: string | null
   baseStats: StatBlock
-  /** Points earned and not yet spent on a stat. */
   /** Points ever spent on a stat -- what pushes the next threshold away. */
   statPointsSpent: number
   /**
@@ -268,6 +278,45 @@ export function heldModifiers(save: GameSave, gameId: string, catalog: ReadonlyM
   })
 }
 
+/**
+ * WHAT SURVIVES THE LEVEL, for one kind: the marked modifier if it is still
+ * held, and otherwise the one acquired LAST.
+ *
+ * The default is not a fallback for an error case -- it is the rule for a
+ * player who never touched the marks, and it is the newest thing they found
+ * because that is the one they have had least use out of. Which means the
+ * strip can always light exactly one pill per kind and have it be true:
+ * there is no "nothing is selected" state to draw.
+ */
+export function keptModifierId(save: GameSave, game: GameRecord, kind: ModifierKind): string | null {
+  const rows = holdingsOf(save, game.id).filter((row) => row.kind === kind)
+  if (rows.length === 0) return null
+  const marked = kind === 'item' ? game.keepItemId : game.keepTraitId
+  if (marked !== null && rows.some((row) => row.modifierId === marked)) return marked
+  return rows.reduce((latest, row) => (row.seq > latest.seq ? row : latest), rows[0]).modifierId
+}
+
+/**
+ * Marks (or unmarks) what to keep. A HOST action, like `withSuccessAdjust`:
+ * the strip's pills are pressed by the player directly rather than through a
+ * stage, so this is not in the effect vocabulary -- which is what a STAGE may
+ * ask the world to change (model/effects.ts).
+ *
+ * Passing the id that is already marked CLEARS it, which is what makes the
+ * pills toggles; the keeper then falls back to the default above.
+ */
+export function withKeepMark(save: GameSave, kind: ModifierKind, modifierId: string): GameSave {
+  const game = activeGame(save)
+  if (!game) return save
+  const field = kind === 'item' ? 'keepItemId' : 'keepTraitId'
+  const next = game[field] === modifierId ? null : modifierId
+  if (next === game[field]) return save
+  return {
+    ...save,
+    games: save.games.map((candidate) => (candidate.id === game.id ? { ...candidate, [field]: next } : candidate)),
+  }
+}
+
 export function holdingCounts(held: readonly Modifier[]): HoldingCounts {
   return {
     items: held.filter((modifier) => modifier.kind === 'item').length,
@@ -300,6 +349,8 @@ function createGame(id: string, seed: RngState, nowMs: number, settings: GameSet
     level: 1,
     difficulty: settings.difficulty,
     successAdjust: settings.successAdjust,
+    keepItemId: null,
+    keepTraitId: null,
     regionId: null,
     baseStats,
     statPointsSpent: 0,
@@ -470,12 +521,67 @@ export function applyEffect(
       return replace({ regionId: effect.regionId })
 
     case 'advanceLevel': {
-      // A new level restores hit points and REBUILDS armor from what is
-      // held -- an item carried over counts as a fresh acquisition, which
-      // is the rule that makes carrying an armour item a real choice.
-      const held = heldModifiers(save, gameId, catalog)
-      const max = resolveProfile(game.baseStats, held, holdingCounts(held)).derived.maxHitPoints
-      return replace({ level: game.level + 1, hitPoints: max, armor: armorFromHoldings(held) })
+      // A level is its own journey: the player rests up between them, gives
+      // up everything they are carrying but ONE item and ONE trait, and sets
+      // out again. Three things happen here and their ORDER is the rule (see
+      // docs/adventure-game-design.md):
+      //
+      //   1. RESTORE hit points, against the maximum as it stands WITH
+      //      everything still held.
+      //   2. RELEASE what is not kept, which lowers that maximum.
+      //   3. Let the ceiling rule bring the pool down to it
+      //      (`followMaxHitPoints`, around every effect).
+      //
+      // Restoring first is what keeps the fall landing on a FULL pool rather
+      // than driving a depleted one somewhere it should never go. The clamp
+      // makes the result the same either way today -- the order is what makes
+      // it stay that way when something subtracts a delta instead.
+      const heldBefore = heldModifiers(save, gameId, catalog)
+      const restored = resolveProfile(
+        game.baseStats,
+        heldBefore,
+        holdingCounts(heldBefore),
+      ).derived.maxHitPoints
+
+      const keepItem = keptModifierId(save, game, 'item')
+      const keepTrait = keptModifierId(save, game, 'trait')
+      // ONE ROW per kept id, not every row carrying it: keeping "an item"
+      // means one of them, and two copies of one item are the same thing.
+      const keptSeqs = new Set(
+        (['item', 'trait'] as const).flatMap((kind) => {
+          const wanted = kind === 'item' ? keepItem : keepTrait
+          if (wanted === null) return []
+          const rows = holdingsOf(save, gameId).filter((row) => row.kind === kind && row.modifierId === wanted)
+          const newest = rows.reduce<HoldingRow | null>(
+            (latest, row) => (latest === null || row.seq > latest.seq ? row : latest),
+            null,
+          )
+          return newest ? [newest.seq] : []
+        }),
+      )
+
+      const holdings = save.holdings.filter((row) => row.gameId !== gameId || keptSeqs.has(row.seq))
+      const survived = heldModifiers({ ...save, holdings }, gameId, catalog)
+
+      return {
+        ...save,
+        holdings,
+        games: save.games.map((candidate) => (candidate.id === gameId
+          ? {
+              ...candidate,
+              level: candidate.level + 1,
+              hitPoints: restored,
+              // Rebuilt from what SURVIVED -- an item carried over counts as
+              // a fresh acquisition, which is the rule that makes carrying an
+              // armour item a real choice.
+              armor: armorFromHoldings(survived),
+              // The marks are spent. A new level's default is its own newest
+              // find, not a decision taken a level ago.
+              keepItemId: null,
+              keepTraitId: null,
+            }
+          : candidate)),
+      }
     }
 
     case 'endGame': {

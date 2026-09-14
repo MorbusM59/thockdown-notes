@@ -24,7 +24,8 @@ import {
 } from '../escapeMenu/escapeMenuContract'
 import { buildCatalog, THOCKQUEST } from './content'
 import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from './core/director'
-import { emptySave, type GameSave } from './model/gameState'
+import { emptySave, withKeepMark, type GameSave } from './model/gameState'
+import type { ModifierKind } from './model/modifiers'
 import { createSeed } from './core/rng'
 import { ROOT_STAGE_ID, STAGES } from './stages'
 import { chromeAction, chromeBarToggle, chromeGauges, chromeIdentity, chromeMeters, chromeStrip, chromeToggle, statusReadouts } from './chrome'
@@ -104,6 +105,21 @@ export function useAdventureEscapeMenu(options: AdventureEscapeMenuOptions): Esc
     [save, onCommitSave, onLeave],
   )
 
+  /**
+   * Marking what to carry into the next level. A host action rather than a
+   * stage choice -- the strip's pills are pressed directly, and nothing about
+   * the game's sequence changes when one is (see escapeMenuContract.ts's
+   * `onActivate`).
+   */
+  const handleKeep = useCallback(
+    (kind: ModifierKind, modifierId: string) => {
+      if (!save) return
+      const next = withKeepMark(save, kind, modifierId)
+      if (next !== save) onCommitSave(next)
+    },
+    [save, onCommitSave],
+  )
+
   const activeMode = useMemo<EscapeMenuMode | null>(() => {
     if (!isAdventureViewActive || !save) return null
     const screen = currentScreen(save, DEPS)
@@ -146,7 +162,7 @@ export function useAdventureEscapeMenu(options: AdventureEscapeMenuOptions): Esc
         identity: chromeIdentity(save, STAGES.get(screen.stageId)?.title ?? ''),
         barToggle: chromeBarToggle(),
         meters: chromeMeters(save),
-        strip: chromeStrip(save, CATALOG),
+        strip: chromeStrip(save, CATALOG, handleKeep),
         gauges: chromeGauges(save),
         // RESERVED, not omitted. The game has claimed neither button, and
         // the editor's own must not show through -- but an omitted position
@@ -155,7 +171,7 @@ export function useAdventureEscapeMenu(options: AdventureEscapeMenuOptions): Esc
         action: chromeAction(),
       },
     }
-  }, [isAdventureViewActive, save, handleChoice, onLeave])
+  }, [isAdventureViewActive, save, handleChoice, handleKeep, onLeave])
 
   return useMemo<EscapeMenuContribution>(
     () => (activeMode ? { entryCells: [], activeMode } : EMPTY_ESCAPE_MENU_CONTRIBUTION),

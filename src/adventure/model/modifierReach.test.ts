@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest'
 
 import { buildCatalog, THOCKQUEST } from '../content'
 import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from '../core/director'
-import { activeGame, applyEffects, emptySave, type GameSave } from '../model/gameState'
+import { activeGame, applyEffects, emptySave, heldModifiers, withKeepMark, type GameSave } from '../model/gameState'
 import { isOfferable, resolveProfile, UNSPECIFIED_TAG, type Modifier } from './modifiers'
 import { resolveExchange, rollDodgeOffered } from './combat'
 import { resolveChanceWith } from './chance'
@@ -321,5 +321,82 @@ describe('the level boundary', () => {
     const after = activeGame(onward)
     expect(after?.level).toBe((before?.level ?? 1) + 1)
     expect(after?.hitPoints).toBe(50 + 15 * (after?.baseStats.might ?? 0))
+  })
+})
+
+describe('what survives a level', () => {
+  /** A run holding two items and two traits, in acquisition order. */
+  function carrying(): GameSave {
+    const save = enterEntryScreen(emptySave(4242), DEPS, NOW)
+    let playing = choose(save, 'welcome:start', DEPS, NOW).save
+    playing = choose(playing, 'origin:warrior', DEPS, NOW).save
+    for (let step = 0; step < 2; step += 1) {
+      const screen = currentScreen(playing, DEPS)
+      if (!screen) throw new Error('no screen')
+      playing = choose(playing, screen.choices[0].id, DEPS, NOW).save
+    }
+    return applyEffects(playing, [
+      { kind: 'acquireModifier', modifierKind: 'item', modifierId: 'whetstone' },
+      { kind: 'acquireModifier', modifierKind: 'trait', modifierId: 'second-skin' },
+    ], DEPS.catalog, NOW)
+  }
+
+  const heldIds = (save: GameSave) => save.holdings.map((row) => row.modifierId)
+
+  it('keeps the LAST acquired of each kind when nothing is marked', () => {
+    // Not a fallback for an error case: it is the rule for a player who never
+    // touched the marks, and it is the newest find because that is the one
+    // they have had least use out of.
+    const save = carrying()
+    expect(heldIds(save)).toHaveLength(4)
+    const onward = applyEffects(save, [{ kind: 'advanceLevel' }], DEPS.catalog, NOW)
+    expect(heldIds(onward).sort()).toEqual(['second-skin', 'whetstone'])
+  })
+
+  it('keeps what was MARKED instead, one of each kind', () => {
+    const save = carrying()
+    const firstItem = save.holdings.find((row) => row.kind === 'item')
+    const firstTrait = save.holdings.find((row) => row.kind === 'trait')
+    if (!firstItem || !firstTrait) throw new Error('nothing held')
+
+    let marked = withKeepMark(save, 'item', firstItem.modifierId)
+    marked = withKeepMark(marked, 'trait', firstTrait.modifierId)
+    const onward = applyEffects(marked, [{ kind: 'advanceLevel' }], DEPS.catalog, NOW)
+    expect(heldIds(onward).sort()).toEqual([firstTrait.modifierId, firstItem.modifierId].sort())
+  })
+
+  it('is a TOGGLE: pressing the marked one again gives the default back', () => {
+    const save = carrying()
+    const firstItem = save.holdings.find((row) => row.kind === 'item')
+    if (!firstItem) throw new Error('nothing held')
+    const marked = withKeepMark(save, 'item', firstItem.modifierId)
+    expect(activeGame(marked)?.keepItemId).toBe(firstItem.modifierId)
+    const cleared = withKeepMark(marked, 'item', firstItem.modifierId)
+    expect(activeGame(cleared)?.keepItemId).toBeNull()
+    expect(heldIds(applyEffects(cleared, [{ kind: 'advanceLevel' }], DEPS.catalog, NOW))).toContain('whetstone')
+  })
+
+  it('sets out FULL, at the maximum the survivors allow', () => {
+    // The order is the rule: restore against the maximum as it stands with
+    // everything held, THEN release, and let the ceiling rule bring the pool
+    // down to the new maximum. A run must never start a level part-empty.
+    const save = applyEffects(carrying(), [{ kind: 'adjustHitPoints', amount: -40 }], DEPS.catalog, NOW)
+    const onward = applyEffects(save, [{ kind: 'advanceLevel' }], DEPS.catalog, NOW)
+    const game = activeGame(onward)
+    if (!game) throw new Error('no game')
+    const max = resolveProfile(
+      game.baseStats,
+      heldModifiers(onward, game.id, DEPS.catalog),
+      { items: 1, traits: 1 },
+    ).derived.maxHitPoints
+    expect(game.hitPoints).toBe(max)
+  })
+
+  it('spends the marks, so the next level decides for itself', () => {
+    const save = carrying()
+    const firstItem = save.holdings.find((row) => row.kind === 'item')
+    if (!firstItem) throw new Error('nothing held')
+    const onward = applyEffects(withKeepMark(save, 'item', firstItem.modifierId), [{ kind: 'advanceLevel' }], DEPS.catalog, NOW)
+    expect(activeGame(onward)?.keepItemId).toBeNull()
   })
 })
