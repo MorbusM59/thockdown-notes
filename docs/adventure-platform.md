@@ -624,9 +624,11 @@ placed at 5, 9 and 10 and the level advancing after ten.
     | Hard | 100% | 0 / 0 / 1 | 30.3 |
     | Extreme | 100% | 0 / 0 / 1 | 35.5 |
 
-    The arithmetic behind it is the level's own shape: **ten encounters, no
-    rest, eighty hit points**. That budget allows a fight to cost about EIGHT
-    hit points, and on Medium one costs twenty-three. Nothing about the round
+    The arithmetic behind it is the level's own shape: **ten encounters and
+    eighty hit points, with the rest only at the level's END** (a level is its
+    own journey; `advanceLevel` refills). That budget allows a fight to cost
+    about EIGHT hit points, and on Medium one costs twenty-three — so no run
+    reaches the rest that would have refilled it. Nothing about the round
     engine is wrong — a first fight is close to even (the player needs about
     twelve rounds to kill, and dies in about fifteen) — the run simply never
     gets anything back, so it is the second and third fights that kill.
@@ -640,12 +642,14 @@ placed at 5, 9 and 10 and the level advancing after ten.
     punishing new damage sources TOGETHER, as one layer balanced against
     itself. The effect kind is gone from the vocabulary rather than merely
     unused, so that layer arrives as a decision rather than by accident.
-    (One door is still open and it is worth knowing about: a rise in MAXIMUM
-    hit points is granted, not merely permitted, so Iron Constitution's +25
-    and Pack Instinct's +8% per trait are each a real infusion at the moment
-    they are taken. That is deliberate — the alternative is an effect that
-    does nothing until a heal that no longer exists — but it is the one way
-    hit points come back.)
+    (A rise in MAXIMUM hit points is granted rather than merely permitted, and
+    that is NOT healing under the rule as its author states it: current and
+    maximum move together, so nothing lost is restored and the equation stays
+    readable — raising the maximum alone would be *taking damage* equal to the
+    delta. The falling direction is the same rule, and it has one planned
+    moment: giving up items and traits at a level's end, where hit points must
+    be RESTORED FIRST and the modifiers removed after, so the fall lands on a
+    full pool. See the design doc.)
 
     What is being tuned instead is **the thumb** (see below) against the
     remaining two levers:
@@ -772,9 +776,15 @@ placed at 5, 9 and 10 and the level advancing after ten.
     the character is worth, and the thumb belongs to the run's tuning. That is
     enforced by construction rather than remembered — `resolveChanceWith`
     presses it only when it is told which SIDE is rolling, and the profile
-    passes no side at all. It is fixed on the run when the run starts, exactly
-    as the preset is, and no screen sets it: it is a tuning knob, and the
-    harness is what turns it (`--success-adjust`, `--sweep-adjust`).
+    passes no side at all. It is copied onto a run when the run starts,
+    exactly as the preset is — but UNLIKE the preset it is also turned live:
+    the options panel's Debugging section carries a slider that writes the
+    setting AND the run in progress (`withSuccessAdjust`), because the whole
+    use of a tuning instrument is to move it and feel the difference in the
+    fight on screen. A preset is frozen mid-run to protect what fights already
+    fought were worth, which is a promise to a player; an instrument makes no
+    such promise. The harness turns the same knob headlessly
+    (`--success-adjust`, `--sweep-adjust`).
 
     Measured, 200 runs per cell, stopping after level 3:
 

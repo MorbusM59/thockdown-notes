@@ -887,6 +887,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 - **Debug logging** routes the app's debug log into a dedicated note tagged \`debug\` — see [Protected Tags](${guideLink('TAGS', 'protected-tags')}).
 - A button opens a detached DevTools window.
+- **The thumb** is a tuning slider for the adventure: it scales away the player's chance to *fail* and a monster's chance to *succeed*, so both sides go on using the same stats while the fight tilts your way. Unlike the adventure's own difficulty setting, this one applies **immediately**, to the run already in progress — it is here to be moved while you watch what it does.
 `,
   `## Music Player
 

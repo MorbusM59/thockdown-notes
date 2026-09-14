@@ -217,14 +217,41 @@ text is left as authored; this is what has moved.
   player toward landing blows AND toward dodging, which is exactly the pair of
   outcomes that feel like agency. Applied at the roll, never folded into what
   a character is worth; fixed on a run when the run starts.
+- **Hit points are the BUDGET FOR ONE LEVEL.** They wear down encounter by
+  encounter with nothing to restore them, and they are reset when the level
+  ends — each level is its own journey (which is why a new region is chosen
+  for each), and the player rests up between them. Already built: `advanceLevel`
+  refills to maximum, in the same place armor is rebuilt from what is held.
 - **Healing is DEFERRED, not ruled out.** Recovery makes the balance hard to
   read: every question about how long a run should last gets two answers at
   once, and the ones that matter now are about damage, actions and armor.
   So the order is — get the balance right with no healing at all, then
   introduce healing and equally punishing new damage sources TOGETHER, as one
-  layer balanced against itself. Nothing in the effect vocabulary can heal
-  today, deliberately, so that layer arrives as a decision rather than by
-  accident.
+  layer balanced against itself. In total that layer should barely move the
+  baseline: a tightly managed system that balances to zero, whose point is to
+  make the player find a way to absorb swings without going into overdraft.
+  Nothing in the effect vocabulary can heal today, deliberately, so that layer
+  arrives as a decision rather than by accident.
+- **CHANGING MAXIMUM HIT POINTS IS NOT HEALING, as long as current moves with
+  it.** Raising the maximum and the current together restores nothing that was
+  lost and leaves the equation readable. The two directions are one rule:
+
+  - Raising the maximum WITHOUT raising the current would be *taking damage*
+    equal to the delta, so the grant is not optional.
+  - Lowering the maximum lowers the current with it.
+
+  Built as `followMaxHitPoints`, applied around every effect rather than in
+  the branches that happen to change a maximum today.
+
+  The falling case is only PLANNED for one moment — the end of a level, where
+  items and traits are given up. **Restore the player's hit points first, then
+  remove them**, so the fall lands on a full pool rather than driving a
+  depleted one negative and tripping something that reads a hit-point total as
+  a death.
+- **Temporary hit-point changes, if they ever arrive, get their own ruleset** —
+  likely leaving the player at 1 rather than killing them. Nothing about them
+  is decided; they are named here so the rule above is not later assumed to
+  cover them.
 - **Monsters grow stronger per LEVEL, not per combat round.**
 - **A combat round** is one unit of combat: from all parties holding all
   their actions to all parties having spent them, after which the counts

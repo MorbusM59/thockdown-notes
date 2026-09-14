@@ -573,6 +573,14 @@ export interface SidebarOptionsPanelProps {
   exportLayoutsTdl: () => Promise<void>
   importLayoutsTdl: () => Promise<void>
 
+  /**
+   * The adventure's tuning thumb, 0..1 (src/adventure/model/chance.ts). It
+   * sits in Debugging rather than anywhere near the game because it is an
+   * instrument rather than a difficulty: the game's own difficulty presets
+   * are chosen inside it, on its settings screen.
+   */
+  adventureSuccessAdjust: number
+  setAdventureSuccessAdjust: (value: number) => void
   debuggingEnabled: boolean
   setDebuggingEnabled: (value: boolean) => void
   clearAppState: () => void
@@ -849,6 +857,8 @@ export function SidebarOptionsPanel({
   openNotesFolder,
   exportLayoutsTdl,
   importLayoutsTdl,
+  adventureSuccessAdjust,
+  setAdventureSuccessAdjust,
   debuggingEnabled,
   setDebuggingEnabled,
   clearAppState,
@@ -3268,6 +3278,29 @@ export function SidebarOptionsPanel({
           >
             <span className="fa-solid fa-trash" aria-hidden="true" />
           </button>
+        </div>
+        {/* The adventure's thumb on the scale: it scales the player's chance
+            to FAIL and a monster's chance to SUCCEED, so both sides keep
+            reading the same stat table while the fight tilts. Live -- it
+            reaches the run in progress, which is the whole point of tuning by
+            feel -- and stored on the adventure's own save, so it survives a
+            restart and the next run starts under it too. */}
+        <div className="typography-sliders">
+          <div className="typography-slider">
+            <CompactScrollbarSlider
+              id="adventure-success-adjust"
+              min={0}
+              max={1}
+              step={0.05}
+              value={adventureSuccessAdjust}
+              trackLabel="thumb"
+              tooltipLabel="adventure: the thumb on the scale"
+              ariaLabel="Adventure success adjustment"
+              defaultValue={0}
+              formatValue={(value) => `${Math.round(value * 100)}%`}
+              onCommit={setAdventureSuccessAdjust}
+            />
+          </div>
         </div>
       </AccordionSection>
       </AccordionGroup>

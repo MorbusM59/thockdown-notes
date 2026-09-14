@@ -214,6 +214,35 @@ export function emptySave(rng: RngState): GameSave {
   }
 }
 
+/**
+ * Sets the tuning thumb (model/chance.ts) on the settings AND on the run in
+ * progress, and it is the one thing in the game that deliberately reaches
+ * into a run that has already started.
+ *
+ * The difficulty preset is frozen at a run's start because changing it would
+ * rewrite what every fight already fought was worth -- a promise to a PLAYER.
+ * The thumb is an instrument: the whole use of a debugging slider is to move
+ * it and feel the difference in the fight that is on screen, and one that
+ * only took effect on the next run would be answering a question nobody
+ * asked. The two behave differently on purpose.
+ *
+ * Not an `Effect`, and that is not an oversight: the effect vocabulary is
+ * what a STAGE may ask the world to change (model/effects.ts), and this is
+ * the host's own control rather than anything the game offers.
+ */
+export function withSuccessAdjust(save: GameSave, successAdjust: number): GameSave {
+  // Rounded as well as clamped: a slider stepping by 0.05 arrives carrying
+  // 0.6000000000000001, and that is what would be stored, read back and
+  // eventually shown to somebody as a percentage.
+  const thumb = Math.round(Math.max(0, Math.min(1, successAdjust)) * 100) / 100
+  if (thumb === save.settings.successAdjust && activeGame(save)?.successAdjust === thumb) return save
+  return {
+    ...save,
+    settings: { ...save.settings, successAdjust: thumb },
+    games: save.games.map((game) => (game.id === save.activeGameId ? { ...game, successAdjust: thumb } : game)),
+  }
+}
+
 export function activeGame(save: GameSave): GameRecord | null {
   return save.games.find((game) => game.id === save.activeGameId) ?? null
 }
@@ -478,13 +507,19 @@ export function applyEffect(
  * HIT POINTS FOLLOW THEIR CEILING, in both directions, after every single
  * effect.
  *
- * A rise is GRANTED: a point of Might, or a charm worth +25 hit points, makes
- * a character tougher rather than newly wounded -- without this, "+25 hit
- * points" was a number on the tab bar that changed nothing until the next
- * heal, which is exactly the class of effect that shows and does not work. A
- * fall is CLAMPED, for the same reason from the other end: dropping the item
- * that granted the ceiling cannot leave a character standing above their own
- * maximum.
+ * This is NOT healing, and the rule says why (docs/adventure-game-design.md):
+ * current and maximum move TOGETHER, so nothing that was lost is restored and
+ * the equation stays readable. Raising the maximum on its own would be
+ * *taking damage* equal to the delta -- which is the real reason the grant is
+ * not optional, over and above "+25 hit points" otherwise being a number on
+ * the tab bar that changed nothing.
+ *
+ * A fall is the same rule from the other end: dropping the item that granted
+ * the ceiling cannot leave a character standing above their own maximum. Its
+ * one planned moment is the end of a level, where items and traits are given
+ * up -- and there the ORDER matters: restore hit points first, then remove
+ * them, so the fall lands on a full pool rather than driving a depleted one
+ * to nothing.
  *
  * Applied here, once, around every effect, rather than in the two or three
  * branches that happen to change a maximum today -- a rule stated once has to

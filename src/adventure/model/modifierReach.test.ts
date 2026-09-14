@@ -294,3 +294,32 @@ describe('what is offered', () => {
     }
   })
 })
+
+describe('the level boundary', () => {
+  function startedRun(): GameSave {
+    const save = enterEntryScreen(emptySave(4242), DEPS, NOW)
+    let playing = choose(save, 'welcome:start', DEPS, NOW).save
+    playing = choose(playing, 'origin:warrior', DEPS, NOW).save
+    for (let step = 0; step < 2; step += 1) {
+      const screen = currentScreen(playing, DEPS)
+      if (!screen) throw new Error('no screen')
+      playing = choose(playing, screen.choices[0].id, DEPS, NOW).save
+    }
+    return playing
+  }
+
+  it('RESETS the hit-point budget, because a level is its own journey', () => {
+    // Hit points are the budget for ONE level: they wear down encounter by
+    // encounter with nothing to restore them, and the rest between levels is
+    // what refills them. Not healing -- a level boundary, in the same place
+    // armor is rebuilt.
+    const wounded = applyEffects(startedRun(), [{ kind: 'adjustHitPoints', amount: -40 }], DEPS.catalog, NOW)
+    const before = activeGame(wounded)
+    expect(before?.hitPoints).toBeLessThan(50 + 15 * (before?.baseStats.might ?? 0))
+
+    const onward = applyEffects(wounded, [{ kind: 'advanceLevel' }], DEPS.catalog, NOW)
+    const after = activeGame(onward)
+    expect(after?.level).toBe((before?.level ?? 1) + 1)
+    expect(after?.hitPoints).toBe(50 + 15 * (after?.baseStats.might ?? 0))
+  })
+})

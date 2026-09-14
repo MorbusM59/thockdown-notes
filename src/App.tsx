@@ -179,7 +179,8 @@ import { deriveNoteTitleFromText } from './shared/noteTitle'
 import { isNoteSearchQueryActive, matchesNoteSearchQuery } from './shared/noteSearch'
 import { useAdventureEscapeMenu } from './adventure/useAdventureEscapeMenu'
 import { sanitizeGameSave } from './adventure/save'
-import type { GameSave } from './adventure/model/gameState'
+import { emptySave, withSuccessAdjust, type GameSave } from './adventure/model/gameState'
+import { createSeed } from './adventure/core/rng'
 import { ESCAPE_HOLD_MS } from './shared/escapeHold'
 import {
   planOverlayClose,
@@ -6010,6 +6011,25 @@ ${markdownHtml}
   }, [persistMenuStateNow])
 
   /**
+   * The adventure's tuning thumb, from the options panel's Debugging section
+   * (model/chance.ts). Written straight onto the save -- which is where every
+   * other thing about a run lives -- rather than into a second home on the
+   * persisted menu; the adventure save already routes through both halves of
+   * the persistence contract, so this needs neither a new field nor a new
+   * line in `sanitizeMenu`.
+   *
+   * A save is CREATED if there is none, by exactly the call the game itself
+   * makes when it first opens: a knob that silently did nothing until someone
+   * had played once would be a knob nobody could trust.
+   */
+  const adventureSuccessAdjust = adventureSave?.settings.successAdjust ?? 0
+
+  const setAdventureSuccessAdjust = useCallback((value: number) => {
+    const base = adventureSave ?? emptySave(createSeed(Date.now()))
+    commitAdventureSave(withSuccessAdjust(base, value))
+  }, [adventureSave, commitAdventureSave])
+
+  /**
    * Gives the active slot over to the adventure and EMPTIES it -- the game
    * plays over a blank editor, not on top of somebody's note. Mirrors
    * openGuideViewHere in every respect except the last step.
@@ -10051,6 +10071,8 @@ ${markdownHtml}
                         openNotesFolder={openNotesFolder}
                         exportLayoutsTdl={exportLayoutsTdl}
                         importLayoutsTdl={importLayoutsTdl}
+                        adventureSuccessAdjust={adventureSuccessAdjust}
+                        setAdventureSuccessAdjust={setAdventureSuccessAdjust}
                         debuggingEnabled={debuggingEnabled}
                         setDebuggingEnabled={setDebuggingEnabled}
                         clearAppState={clearPersistedAppState}

@@ -9,6 +9,7 @@ import { resolveProfile } from '../model/modifiers'
 import { lootStage } from './loot'
 import { encounterSelectStage } from './encounterSelect'
 import { sanitizeGameSave } from '../save'
+import { withSuccessAdjust } from '../model/gameState'
 
 const DEPS: DirectorDeps = {
   stages: STAGES,
@@ -329,6 +330,23 @@ describe('the thumb the run is played under', () => {
     const nonsense = JSON.parse(JSON.stringify(started)) as { settings: Record<string, unknown> }
     nonsense.settings.successAdjust = 'plenty'
     expect(sanitizeGameSave(nonsense)?.settings.successAdjust).toBe(0)
+  })
+
+  it('is moved LIVE by the debugging slider, unlike the preset', () => {
+    // The one thing that deliberately reaches into a run already under way.
+    // A difficulty preset is frozen at the start because changing it would
+    // rewrite what every fight already fought was worth; the thumb is an
+    // instrument, and one that only took effect next run would be answering
+    // a question nobody asked.
+    const started = choose(enterEntryScreen(emptySave(4242), DEPS, NOW), 'welcome:start', DEPS, NOW).save
+    const turned = withSuccessAdjust(started, 0.4)
+    expect(turned.settings.successAdjust).toBe(0.4)
+    expect(activeGame(turned)?.successAdjust).toBe(0.4)
+
+    // Clamped, and identical in identity when nothing moves -- the host
+    // persists on every change, so a no-op must not look like one.
+    expect(withSuccessAdjust(turned, 5).settings.successAdjust).toBe(1)
+    expect(withSuccessAdjust(turned, 0.4)).toBe(turned)
   })
 
   it('changes how a fight goes, and nothing else about the run', () => {
