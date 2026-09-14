@@ -45,6 +45,7 @@ const ACTIONS = 'fa-solid fa-bolt'
 const HEALTH = 'fa-solid fa-heart'
 const TOWARD = 'fa-solid fa-right-long'
 const BACK = 'fa-solid fa-left-long'
+const VERSUS = 'fa-solid fa-explosion'
 
 /** One glyph, and the word it stands in for. See escapeMenu/narrationMarkup.ts. */
 function icon(classes: string, word: string): string {
@@ -149,7 +150,7 @@ export function statusPill(round: RoundState, monster: Monster, playerDerived: D
     icon(PLAYER, 'you'),
     figure(round.playerHitPoints),
     icon(HEALTH, 'hit points'),
-    `${icon(TOWARD, 'versus')}${icon(BACK, '')}`,
+    icon(VERSUS, 'versus'),
     icon(HEALTH, 'hit points'),
     figure(monsterHealth),
     icon(monsterIcon(monster), 'it'),
