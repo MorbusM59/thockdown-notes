@@ -18,13 +18,17 @@
 // vocabulary cannot express -- that one carries a written description,
 // because nothing else can describe it.
 //
-// THERE IS NO HEALING, and that is a decision rather than an omission. Hit
-// points are a resource a run SPENDS: they are filled once, when the
+// THERE IS NO HEALING, and it is DEFERRED rather than ruled out. Recovery
+// makes the balance unreadable: with it, every question about how long a run
+// should last has two answers at once, and the ones being settled now are
+// about damage, actions and armor. So hit points are filled once, when the
 // character sets out, and every fight after that is paid for out of what is
-// left. A `recoverAfterEncounter` effect existed here for one evening and was
-// pulled -- with it, the question "how long can this run last" had a content
-// answer instead of a design one. The vocabulary cannot express healing now,
-// so nothing can add it back by accident; it takes a decision.
+// left -- until healing returns TOGETHER with equally punishing new damage
+// sources, as one layer balanced against itself (docs/adventure-game-design.md).
+//
+// A `recoverAfterEncounter` effect existed here for one evening. It is gone
+// from the vocabulary rather than merely unused, so that layer arrives as a
+// decision rather than by accident.
 //
 // THE ORDER, which is the actual rule "capped at 6 before item gains":
 //   1. base stats, clamped to 0..6        <- a game's own progression

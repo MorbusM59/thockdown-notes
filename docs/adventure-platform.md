@@ -631,12 +631,15 @@ placed at 5, 9 and 10 and the level advancing after ten.
     twelve rounds to kill, and dies in about fifteen) — the run simply never
     gets anything back, so it is the second and third fights that kill.
 
-    Of the three levers, **recovery has been tried and pulled**. Two pieces of
-    content healed for one evening; with them, "how long can a run last" had a
-    content answer rather than a design one, and the intended shape — hit
-    points as a resource a run SPENDS, filled once when the character sets out
-    — was no longer being tested. The effect kind is gone from the vocabulary
-    rather than merely unused, so nothing can add healing back by accident.
+    Of the three levers, **recovery is DEFERRED rather than rejected**, and
+    the reason is legibility rather than shape (the design doc's own wording,
+    which is where that decision lives): with healing in, every question about
+    how long a run should last has two answers at once, and the ones that
+    matter now are about damage, actions and armor. The order is — get the
+    balance right with no healing at all, then introduce healing and equally
+    punishing new damage sources TOGETHER, as one layer balanced against
+    itself. The effect kind is gone from the vocabulary rather than merely
+    unused, so that layer arrives as a decision rather than by accident.
     (One door is still open and it is worth knowing about: a rise in MAXIMUM
     hit points is granted, not merely permitted, so Iron Constitution's +25
     and Pack Instinct's +8% per trait are each a real infusion at the moment

@@ -199,6 +199,32 @@ text is left as authored; this is what has moved.
   `10 + 5 × points spent`, so 10, 15, 25, 40, 60, 85 … Gold earned drives
   fame points exactly as experience earned drives stat points
   (`model/milestones.ts`).
+- **A miss is the least fun thing in the game, and a dodge is one of the most.**
+  Both are "nothing happened", and they are not the same event to a player: a
+  miss is the game refusing an action they took, and a dodge is an action of
+  their own working. Equal hit and dodge chances therefore do not read as
+  balanced, they read as flat. This is the reason the knob below is shaped the
+  way it is rather than as a damage or hit-point dial.
+- **THE THUMB ON THE SCALE** (`successAdjust`, 0…1) scales a player's chance
+  to FAIL and a monster's chance to SUCCEED:
+
+      player:  1 − (1 − p) × (1 − t)
+      monster: p × (1 − t)
+
+  Both sides keep reading the same stat table, the same contested formulas and
+  the same rules, so a point of Agility is worth what it was worth and two
+  characters cannot change places — the thumb moves them both. It pushes the
+  player toward landing blows AND toward dodging, which is exactly the pair of
+  outcomes that feel like agency. Applied at the roll, never folded into what
+  a character is worth; fixed on a run when the run starts.
+- **Healing is DEFERRED, not ruled out.** Recovery makes the balance hard to
+  read: every question about how long a run should last gets two answers at
+  once, and the ones that matter now are about damage, actions and armor.
+  So the order is — get the balance right with no healing at all, then
+  introduce healing and equally punishing new damage sources TOGETHER, as one
+  layer balanced against itself. Nothing in the effect vocabulary can heal
+  today, deliberately, so that layer arrives as a decision rather than by
+  accident.
 - **Monsters grow stronger per LEVEL, not per combat round.**
 - **A combat round** is one unit of combat: from all parties holding all
   their actions to all parties having spent them, after which the counts
