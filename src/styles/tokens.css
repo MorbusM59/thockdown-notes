@@ -492,6 +492,15 @@
 
   --canonical-scroll-thickness:       16px;
   --canonical-scroll-handle-gap:      4px;
+  /* How far a thumb stops short of each END of its track -- the gap at the
+     top and the bottom, where the handle gap above is the one at the sides.
+     The custom scrollbar widget has the same number as
+     `SCROLL_TRACK_EDGE_GAP_PX` (editorSection/usePreviewScrollbar.ts,
+     components/CM6Editor.tsx), which computes thumb positions in JS and
+     cannot read this. Anything drawn in the track by CSS ALONE -- the
+     adventure's rail gauges -- reads it from here, so the two kinds of
+     handle stop at the same line. See docs/pending-review-and-removal.md. */
+  --canonical-scroll-track-edge-gap:  3px;
   --canonical-scroll-handle-thickness: calc(
     var(--canonical-scroll-thickness) - (var(--canonical-scroll-handle-gap) * 2)
   );

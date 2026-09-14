@@ -544,3 +544,31 @@ go.
 **Noticed.** Making the split asynchronous, where the seeded initial value
 turned out to be why a freshly-mounted section splits its first note even in
 edit mode.
+
+### The scrollbar's track-edge gap is written down twice
+
+**What.** `SCROLL_TRACK_EDGE_GAP_PX = 3` in `usePreviewScrollbar.ts` (also read
+by `CM6Editor.tsx`) and `--canonical-scroll-track-edge-gap: 3px` in
+`tokens.css` are the same measurement, kept in agreement by hand. The token was
+added so the escape-menu chrome's gauges could stop a full bar exactly where a
+real thumb stops; the constant exists because the thumb's position is computed
+in JS, which cannot read a token.
+
+**Why it is suspect.** This is the drift shape the codebase already knows: a
+rule stated once has to hold everywhere it applies, and two numbers that must
+match but are not derived from each other will eventually not match. The
+failure is silent and cosmetic-looking — a gauge a few pixels off a thumb reads
+as sloppiness rather than as a bug — which is exactly the kind nobody chases.
+
+**What would have to be true to remove it.** That one side can be derived from
+the other at run time: either the scrollbar reads the computed token
+(`getComputedStyle(el).getPropertyValue('--canonical-scroll-track-edge-gap')`)
+once per layout pass rather than holding a literal, or the token is written
+onto the root from the JS constant at startup. The first is preferable — the
+stylesheet stays the single place a designer changes it — but it needs a check
+that the read is not on a hot layout path, and that a missing or malformed
+token has a defined answer rather than a NaN that silently pins every thumb to
+the top.
+
+**Noticed.** Making the chrome's gauges observe the same top gap a thumb keeps,
+where the token had to be invented to say in CSS what JS already knew.

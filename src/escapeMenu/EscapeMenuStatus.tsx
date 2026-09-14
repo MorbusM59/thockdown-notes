@@ -398,6 +398,13 @@ export function EscapeMenuChromeGauges({ status }: { status: EscapeMenuModeChrom
               {filled === null ? null : (
                 <div
                   className="thockdown-scroll-thumb escape-menu-chrome-gauge-fill"
+                  // FULL is marked rather than inferred: CSS cannot compare a
+                  // custom property against 1, and the strain animation needs
+                  // to know. An attribute rather than a class for the reason
+                  // shared/pressTracking.ts gives -- React rewrites className
+                  // on re-render, and this element is re-rendered on every
+                  // choice the player makes.
+                  data-full={filled >= 1 ? 'true' : undefined}
                   // The RATIO, not a height: the bar's floor sits above the
                   // icon, so how tall it should be is a fraction of what is
                   // left over -- an arithmetic the stylesheet owns, because

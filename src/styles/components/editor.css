@@ -1083,8 +1083,13 @@ button.escape-menu-chrome-pill {
 /* Bottom-anchored, so it grows upward -- but from ABOVE the icon, not from
    the track's floor: the icon's own box plus --spacing-regular. Its height is
    therefore a fraction of what REMAINS above that floor, not of the track, or
-   a full bar would overrun the top by exactly the floor. Everything else is
-   the ordinary thumb. */
+   a full bar would overrun the top by exactly the floor.
+
+   It stops short of the CEILING by the same distance a real thumb does
+   (--canonical-scroll-track-edge-gap), which it did not: a full gauge ran
+   flush into the track's top border while every other handle in the app
+   keeps three pixels off each end. Travel is what is left between the two,
+   and everything else is the ordinary thumb. */
 .escape-menu-chrome-gauge {
   --gauge-floor: calc(
     var(--canonical-scroll-handle-gap)
@@ -1092,10 +1097,65 @@ button.escape-menu-chrome-pill {
     + var(--gauge-icon-size)
     + var(--spacing-regular)
   );
+  --gauge-travel: calc(100% - var(--gauge-floor) - var(--canonical-scroll-track-edge-gap));
 }
 
 .escape-menu-chrome-gauge-fill {
   bottom: var(--gauge-floor);
-  height: calc((100% - var(--gauge-floor)) * var(--gauge-ratio, 0));
+  height: calc(var(--gauge-travel) * var(--gauge-ratio, 0));
   cursor: default;
+}
+
+/* A FULL BAR STRAINS AGAINST THE CEILING. It rests a --spacing-large short of
+   the top and jumps up to touch it, because a gauge that has filled is a
+   thing waiting to be spent and stillness is how everything else here says
+   "nothing to do". It reads as one bar rather than as a second kind of
+   indicator: the same handle, in the same track, moving.
+
+   The curve is the whole illusion, and it is gravity's rather than a
+   designer's: a thrown thing DECELERATES into its apex and ACCELERATES away
+   from it, so the rise is ease-out and the fall is ease-in -- the ceiling is
+   the apex here, which is why the slow part is the contact. A timing function
+   named in a keyframe governs the segment that STARTS there, so each leg
+   carries its own. The second, smaller contact is what makes it a bounce
+   rather than a pulse, and the pause at the end is what keeps a loop from
+   reading as a machine.
+
+   Height rather than transform: the bar is planted on its floor and grows,
+   and translating it would lift the whole column off the icon it stands on.
+   It is one absolutely-positioned element in a 16px-wide track, so the layout
+   it dirties is its own. */
+@keyframes escape-menu-chrome-gauge-strain {
+  0% {
+    height: calc(var(--gauge-travel) - var(--spacing-large));
+    animation-timing-function: ease-out;
+  }
+  42% {
+    height: var(--gauge-travel);
+    animation-timing-function: ease-in;
+  }
+  62% {
+    height: calc(var(--gauge-travel) - var(--spacing-large));
+    animation-timing-function: ease-out;
+  }
+  74% {
+    height: calc(var(--gauge-travel) - (var(--spacing-large) * 0.45));
+    animation-timing-function: ease-in;
+  }
+  86%, 100% {
+    height: calc(var(--gauge-travel) - var(--spacing-large));
+  }
+}
+
+.escape-menu-chrome-gauge-fill[data-full='true'] {
+  animation: escape-menu-chrome-gauge-strain 2.2s infinite;
+}
+
+/* A loop nobody asked for is exactly what this setting is about. The bar
+   stays FULL rather than resting low -- the reduced state is the thing it is
+   reporting, not the thing it does about it. */
+@media (prefers-reduced-motion: reduce) {
+  .escape-menu-chrome-gauge-fill[data-full='true'] {
+    animation: none;
+  }
 }

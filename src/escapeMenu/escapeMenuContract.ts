@@ -168,6 +168,13 @@ export interface EscapeMenuChromeGauge {
    * empty track says "this is here and has nothing to report"; a zeroed one
    * would say "this is here and the answer is none", which is a different
    * claim and, where the rule is undecided, a false one.
+   *
+   * A FULL bar stops where a real scrollbar thumb stops -- the same gap to the
+   * track's top edge -- so the two readings in the same rail are measured
+   * against one geometry rather than each being flush against a different
+   * thing. It then rests one `--spacing-large` short of that and strains
+   * against the edge on a loop, because a bar that has nothing left to fill
+   * otherwise reads as a bar that stopped reporting.
    */
   ratio?: number
   /**
