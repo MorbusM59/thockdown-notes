@@ -467,6 +467,7 @@ export function SectionEditorArea({
             >
               <EscapeHoldPanel
                 isOpen={isEscapeHoldActive}
+                isSectionActive={isSectionActive}
                 activeNoteId={activeNoteId}
                 isActiveNoteTimeless={isViewingTimelessNote}
                 hasChapters={splitChapterFamily(chapters, notes).realChapters.length > 0}

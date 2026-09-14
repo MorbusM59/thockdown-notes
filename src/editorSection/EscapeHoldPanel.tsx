@@ -50,6 +50,24 @@ export interface EscapeHoldPanelProps {
    * to true instead of off mount. */
   isOpen: boolean
   activeNoteId: string | null
+  /**
+   * Whether the slot this ring is drawn in is the ACTIVE one.
+   *
+   * Not the same question as `isOpen`, and that is the whole reason it
+   * exists. For the quick-actions ring the two agree by construction --
+   * `isEscapeHoldActive` ANDs the global flag with this one. For a MODE they
+   * do not: a mode's ring is its slot's persistent interface and stays drawn
+   * while the reader works in another slot (SectionEditorArea), so `isOpen`
+   * never flips when they come back to it, and the focus grab below -- which
+   * had only ever needed to fire on that flip -- never ran.
+   *
+   * The invariant it restores: THE ACTIVE SLOT HOLDS THE KEYBOARD. Clicking a
+   * slot that shows no editor used to activate it and move focus nowhere, so
+   * focus stayed in the other slot's editor and its first keystroke marked
+   * that slot active again (EditorSection's `onKeyDownCapture`). The section
+   * with nothing focusable is exactly the one with a ring.
+   */
+  isSectionActive: boolean
   /** True while the active note (or its whole chapter family) is timeless -- disables New Chapter, since a frozen family can't gain a new chapter (databaseService.ts's assertNotTimeless). Export/New Note are unaffected -- they're not mutations of the frozen note itself. */
   isActiveNoteTimeless: boolean
   /** True when the open note's family has at least one real (not auto-generated) chapter -- the only case in which Export All covers more than Export does, so it is the only case in which it is offered. */
@@ -278,6 +296,7 @@ interface PanelCell {
  */
 export function EscapeHoldPanel({
   isOpen,
+  isSectionActive,
   activeNoteId,
   isActiveNoteTimeless,
   hasChapters,
@@ -744,6 +763,11 @@ export function EscapeHoldPanel({
   // this the last write, so it wins instead.
   useEffect(() => {
     if (!isOpen) return
+    // A ring in an INACTIVE slot never takes the keyboard: a mode's ring
+    // stays drawn there, and grabbing focus would pull the reader out of the
+    // slot they are actually working in. The converse is the point of the
+    // dependency -- becoming active IS when this ring should take it.
+    if (!isSectionActive) return
     const timeoutId = window.setTimeout(() => {
       buttonRefs.current[focusedIndex]?.focus()
     }, FOCUS_GRAB_DELAY_MS)
@@ -754,7 +778,7 @@ export function EscapeHoldPanel({
     // every button was just unmounted and replaced, taking DOM focus with
     // it to <body>. Without re-running here, handleRingBlur would see focus
     // outside every ring and close the panel on the player's first choice.
-  }, [isOpen, focusedIndex, ringResetKey])
+  }, [isOpen, isSectionActive, focusedIndex, ringResetKey])
 
   const directionFromKey = (event: KeyboardEvent<HTMLDivElement>): 1 | -1 | null => {
     if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') return -1
