@@ -5,9 +5,9 @@ import {
   playerActionsLeft, resolveExchange, resolveMonsterAttack, resolvePlayerAttack, rollActor,
   type RoundState,
 } from './combat'
-import { buildMonster, DEFAULT_GROUP_SIZE, type Monster } from './monsters'
+import { buildMonster, DEFAULT_GROUP_SIZE, MONSTER_TYPE_ARMOR, MONSTER_TYPES, type Monster, type MonsterType } from './monsters'
 import { createStatBlock, deriveStats, type StatBlock } from './stats'
-import { NO_ARMOR } from './armor'
+import { NO_ARMOR, totalArmor } from './armor'
 
 const block = (over: Partial<StatBlock> = {}): StatBlock => ({ ...createStatBlock(0), ...over })
 
@@ -236,5 +236,70 @@ describe('an attack spends exactly one action', () => {
     })
     expect(theirs.state.monsterActionsSpent).toBe(1)
     expect(theirs.state.playerActionsSpent).toBe(0)
+  })
+})
+
+/**
+ * A monster's plate is the PLAYER'S armor mechanism pointed the other way --
+ * the same `absorb`, the same natural pool, the same "only when defending"
+ * rule. Nothing about a fight learned a second kind of armor, and these
+ * assert that rather than assert the numbers in the table.
+ */
+describe('monster armor', () => {
+  const monsterOf = (type: MonsterType): Monster => buildMonster({
+    classId: 'fighter',
+    classBaseStats: block({ might: 2, agility: 1 }),
+    type,
+    level: 1,
+    against: PLAYER,
+  })
+  const armoured = (natural: number): Monster => ({ ...monsterOf('regular'), armor: { fromItems: 0, natural } })
+
+  /** An attack the monster cannot dodge, so the exchange reaches armor. */
+  function strike(monster: Monster, seed: number) {
+    return resolvePlayerAttack({
+      state: freshRound(),
+      monster,
+      playerStats: PLAYER,
+      playerDerived: PLAYER_DERIVED,
+      // Certain to hit, never a crit: the blow's size is then the armor's
+      // doing alone.
+      successAdjust: 1,
+      rng: seed,
+    })
+  }
+
+  it('takes its points off a blow it defends against', () => {
+    // Same seed, same blow, one difference. Some seeds let the monster dodge
+    // outright, which is a different branch -- take the ones that landed.
+    for (let seed = 1; seed <= 40; seed += 1) {
+      const bare = strike(armoured(0), seed)
+      const plated = strike(armoured(4), seed)
+      if (!bare.blow.hit || bare.blow.dodged) continue
+      if (bare.blow.damage <= 0) continue
+      expect(plated.blow.damage).toBeLessThan(bare.blow.damage)
+      expect(bare.blow.damage - plated.blow.damage).toBeLessThanOrEqual(4)
+      return
+    }
+    throw new Error('no seed produced a landed blow')
+  })
+
+  it('never wears away, however many blows it takes', () => {
+    // It lives in the NATURAL pool, which `absorb` is not allowed to touch --
+    // so there is nothing for a fight to carry between actions, which is why
+    // the round state stores no monster armor at all.
+    const monster = armoured(3)
+    for (let seed = 1; seed <= 25; seed += 1) {
+      expect(strike(monster, seed)).toBeDefined()
+      expect(monster.armor).toEqual({ fromItems: 0, natural: 3 })
+    }
+  })
+
+  it('is given by RANK rather than by species, and a group has none', () => {
+    expect(MONSTER_TYPE_ARMOR.group).toBe(0)
+    expect(MONSTER_TYPE_ARMOR.boss).toBeGreaterThan(MONSTER_TYPE_ARMOR.regular)
+    for (const type of MONSTER_TYPES) {
+      expect(totalArmor(monsterOf(type).armor)).toBe(MONSTER_TYPE_ARMOR[type])
+    }
   })
 })

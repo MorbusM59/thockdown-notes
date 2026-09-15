@@ -8,7 +8,7 @@ import type { JsonObject } from '../core/json'
 import type { StageModule } from '../core/stage'
 import { MONSTER_CLASS_IDS } from '../content'
 import { buildEncounterOffers } from '../model/encounterOffers'
-import { iconFor, monsterFor, offerFromJson, offerToJson } from './encounter'
+import { iconFor, monsterDetailLines, monsterFor, offerFromJson, offerToJson } from './encounter'
 import { currentEncounter } from './levelProgress'
 import { COMBAT_STAGE_ID, HUNT_STAGE_ID } from './ids'
 
@@ -48,11 +48,7 @@ export const huntStage: StageModule = {
           detail: monster
             ? {
                 title: offer.name,
-                lines: [
-                  `${monster.maxHitPoints} hit points`,
-                  `${monster.maxActions} action${monster.maxActions === 1 ? '' : 's'} a round`,
-                  `${Math.round(monster.damage)} damage a blow`,
-                ],
+                lines: monsterDetailLines(monster),
               }
             : undefined,
         }]

@@ -15,7 +15,7 @@
 // Nothing in here decides what an encounter PAYS. That is content, and the
 // rates are unwritten (open question 45).
 
-import { absorb, NO_ARMOR, type Armor } from './armor'
+import { absorb, type Armor } from './armor'
 import { nextChance, type RngState } from '../core/rng'
 import { NO_CHANCE_ADJUSTMENT, resolveChanceWith, type ChanceAdjustment, type ChanceSide } from './chance'
 import { actionsRemaining, damageFrom, monsterDefence, type Monster } from './monsters'
@@ -250,8 +250,11 @@ export function resolvePlayerAttack(options: {
     attackerStats: options.playerStats,
     attackerDamage: damageFrom(options.playerDerived.damageMultiplier),
     defenderStats: options.monster.stats,
-    // Monsters carry no items or traits, so nothing gives them armor yet.
-    armor: NO_ARMOR,
+    // The monster's own plate, in the natural pool -- so `absorb` reduces the
+    // blow and has nothing it is allowed to wear away (model/armor.ts). There
+    // is therefore no armor to carry back out of the exchange, which is why
+    // nothing here stores one.
+    armor: options.monster.armor,
     armorDecayFloor: 0,
     attackerChances: options.playerChances,
     attacker: 'player',

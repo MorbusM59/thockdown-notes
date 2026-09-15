@@ -14,6 +14,7 @@
 // about a player's own progression -- what they can reach before gear -- and
 // a boss at +3 on a class base of 2 is meant to be past it.
 
+import { NO_ARMOR, type Armor } from './armor'
 import { powerMultiplier, type Difficulty } from './difficulty'
 import { addStats, deriveStats, type DerivedStats, type StatBlock } from './stats'
 
@@ -53,6 +54,36 @@ export const MONSTER_TYPE_CHARISMA_RESISTANCE: Readonly<Record<MonsterType, numb
 }
 
 /**
+ * What a monster of this type is armoured with, in points.
+ *
+ * ARMOR WORKS EXACTLY AS THE PLAYER'S DOES -- `model/armor.ts`, the same
+ * `absorb`, the same flat reduction, the same consulted-only-when-defending
+ * rule -- and it is carried in the NATURAL pool, which is the half decay
+ * cannot touch. That is not a special case for monsters: natural armor is
+ * what an actor has by being what it is, and a monster's plate is exactly
+ * that. Nothing about a fight had to learn a second kind of armor.
+ *
+ * The numbers are a FIRST PASS and are meant to be tuned -- run
+ * `npm run adventure:sim` and look at what changes. What is not arbitrary is
+ * the shape: it is a per-type table, like `MONSTER_TYPE_STAT_SHIFT` beside
+ * it, so armour is a property of the RANK a creature arrives at rather than
+ * of its species. A group is the deliberate zero -- more bodies, not better
+ * ones.
+ *
+ * It is NOT scaled by the power multiplier. Hit points and damage are, so a
+ * flat plate matters less as a level climbs, which is the right direction:
+ * armour should be the early fight's problem and the late fight's footnote,
+ * and magic is the answer to it at every level (model/spells.ts).
+ */
+export const MONSTER_TYPE_ARMOR: Readonly<Record<MonsterType, number>> = {
+  group: 0,
+  regular: 0,
+  elite: 1,
+  miniBoss: 2,
+  boss: 3,
+}
+
+/**
  * A GROUP is fought as ONE monster with a shared pool -- "a hydra fight".
  *
  * Its hit points and its actions are a single member's times the head count.
@@ -88,6 +119,11 @@ export interface Monster {
   damage: number
   /** The whole group's opening action pool: one member's, times the count. */
   maxActions: number
+  /**
+   * Flat reduction on a blow it DEFENDS against, in the natural pool so it
+   * never wears away. See MONSTER_TYPE_ARMOR.
+   */
+  armor: Armor
 }
 
 /**
@@ -161,6 +197,11 @@ export function buildMonster(options: {
     // blow -- it hits four times as OFTEN, which is what the action pool is.
     damage: damageFrom(derived.damageMultiplier) * power,
     maxActions: derived.actionsPerRound * count,
+    // Per MEMBER, not per group: a group of four does not stack four plates
+    // on one body. It is zero for groups today either way.
+    armor: MONSTER_TYPE_ARMOR[options.type] > 0
+      ? { ...NO_ARMOR, natural: MONSTER_TYPE_ARMOR[options.type] }
+      : NO_ARMOR,
   }
 }
 

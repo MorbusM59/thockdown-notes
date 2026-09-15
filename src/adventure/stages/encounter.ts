@@ -11,6 +11,7 @@ import type { JsonObject } from '../core/json'
 import type { MonsterClassId } from '../content'
 import type { StageContext } from '../core/stage'
 import type { EncounterOffer } from '../model/encounterOffers'
+import { totalArmor } from '../model/armor'
 import { buildMonster, MONSTER_TYPES, type Monster, type MonsterType } from '../model/monsters'
 import { addStats, createStatBlock, type StatBlock } from '../model/stats'
 
@@ -57,4 +58,26 @@ export function monsterFor(offer: EncounterOffer, context: StageContext): Monste
 export function iconFor(offer: EncounterOffer, context: StageContext): string {
   return context.content.monsterClasses.find((candidate) => candidate.id === offer.classId)?.icon
     ?? 'fa-solid fa-paw'
+}
+
+/**
+ * WHAT A MONSTER IS, in the lines an offer's detail pill shows -- written
+ * once because the hub and the hunt both show it, and a creature that read
+ * differently depending on which screen offered it would be two creatures.
+ *
+ * Armour is the one CONDITIONAL line, and deliberately unlike the player's
+ * own armour readout (which is shown at zero, because a status line that
+ * appears only when interesting teaches that armour is something that
+ * happens to you). This is not a status line: it is a description of one
+ * creature, and "0 armour" on every goblin is a line that says nothing on
+ * nine offers in ten.
+ */
+export function monsterDetailLines(monster: Monster): string[] {
+  const armor = totalArmor(monster.armor)
+  return [
+    `${monster.maxHitPoints} hit points`,
+    `${monster.maxActions} action${monster.maxActions === 1 ? '' : 's'} a round`,
+    `${Math.round(monster.damage)} damage a blow`,
+    ...(armor > 0 ? [`${armor} armour, and magic goes through it`] : []),
+  ]
 }
