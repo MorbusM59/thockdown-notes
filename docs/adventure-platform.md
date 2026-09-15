@@ -397,9 +397,21 @@ These block a playable game and want answers rather than guesses.
    rather than by inference.
 5. **Player base damage.** The damage *multiplier* is specified; what it
    multiplies is not.
-6. **Intellect and Charisma** have unlocks (spells, charisma actions) rather
-   than curves, and neither list is written. They are declared stats with real
-   effects pending.
+6. **Intellect and Charisma — ANSWERED, and built** (`model/spells.ts`,
+   `model/charm.ts`). Both are unlocks rather than curves, as the plan says,
+   and what settled their shape was not a list but the PACE constraint: the
+   default mode is attack, charm plays itself, and magic arrives as cells
+   already sorted so the first one is the right one. See the design
+   document's foot for the tables and entry 77 below for the machinery. The
+   plan's own spell rule -- learned at a level's start, `2 x Intellect` picks
+   -- is superseded by a per-round roll and is marked as such there.
+
+   What is STILL open under this heading is the plan's **charisma actions**,
+   the tier-and-usage table with `MONSTER_TYPE_CHARISMA_RESISTANCE` behind it.
+   The three charm effects that exist are automatic and answer a different
+   question ("what is true of this round"); a charisma ACTION is a cell the
+   player presses, and whether the pace constraint leaves room for one at all
+   is the author's call, not the code's.
 7. **Fame, experience and gold rates.** What a minion, a miniboss and a boss
    are each worth. Unwritten.
 
@@ -962,3 +974,67 @@ placed at 5, 9 and 10 and the level advancing after ten.
     like everything else about them. The stat-point readout on the tab bar
     went with it: the same number in two places on one chrome is two
     quantities to a reader.
+
+77. **THE PACE CONSTRAINT IS THE DESIGN, and Charisma and Intellect are what
+    it produced.** The author's own statement of it is at the foot of the
+    design document and is worth reading before touching anything in a fight:
+    a run is a dozen levels of ten fights of twenty actions, so a choice that
+    costs ten seconds of thought is a choice that cannot exist. Everything
+    below is that one sentence, applied.
+
+    **Charisma never asks.** Three effects, rolled when the round opens,
+    firing on the monster's own actions -- and the interception is rolled when
+    the action is ARMED rather than when a defence is answered, because a
+    charm rolled at answer-time would cost a press to learn that nothing
+    happened. That is the whole of why it is free, and it is testable as a
+    property: a talkative character is asked to defend fewer times over the
+    same fights than a silent one.
+
+    **Intellect deals a hand.** Availability collapses to ONE number per round
+    (`spellReach`), because reaching a level brings every lower one with it --
+    a set could express a hand the rule says cannot be dealt. Rolled once a
+    round rather than once an action, for the same reason the charms are: the
+    ring opens on its first cell, that cell is what a fast player presses, and
+    a hand that changed under them mid-round would make it a moving target.
+
+    **The order IS the recommendation.** Strongest spell first, then Attack,
+    then Prepare. A player who presses the first cell every time is playing
+    well, which is what a fight this long requires. It is also why an action
+    with nothing to do is ABSENT rather than offered and wasted -- a lasting
+    spell already in effect, a Prepare already banked -- on the same argument
+    "you cannot afford this" follows (entry 71): a first cell that is
+    sometimes a mistake is a fight the player has to read.
+
+    **Prepare is the exception that proves it**: one decision, one
+    consequence, and the one place the whole stat block is spent at once. The
+    two stats that were worth nothing in a fight -- Charisma and Intellect --
+    are the two that turn it into an event.
+
+78. **A FIGHT NOW STEPS FORWARD ON ITS OWN, and the stage is a loop.** Until
+    charms existed, every action either asked something or ended something, so
+    `afterAction` could resolve one action and return. A charmed action does
+    neither: it happens, it is worth a pill, and the fight is in exactly the
+    position it was. `stepFight` advances through the end of a round, a new
+    round opening, and any number of actions taken away from the monster,
+    until it reaches a question or an ending. Recursing instead would have
+    made "how many things can happen between two presses" a property of the
+    call stack.
+
+    Two consequences worth knowing. **The end of a round is an EVENT**: the
+    lingering spells pay out there and either can finish the fight, so they
+    land before the fight is asked where it stands. And their pills are
+    CARRIED into the next round's log rather than left in the one being
+    discarded, which is the only way the reader sees them at all.
+
+    **A fight can now be over before it begins** -- a Doom on the opening
+    action. `enter` cannot hand back a transition (entering a stage is not
+    answering one), so the fight comes to rest on a finished state and one
+    cell pays it out, with its words read from the status: "Withdraw" over a
+    corpse is the one thing that screen must not say.
+
+79. **EVERY NARRATION PILL CARRIES ITS OWN TOOLTIP**, which is the same text
+    as its accessible name. The vocabulary already requires an icon to carry
+    the word it stands for (`narrationMarkup.ts`), so this costs nothing to
+    keep in step and is what makes a bar of glyphs readable at all. It is also
+    the only place a pill that stands for SEVERAL things can say which: the
+    charm pill is one mask and a count, and its tooltip is the list.

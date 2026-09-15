@@ -581,3 +581,107 @@ The divisor is the player's OWN Charisma, uncontested. The monster's
 resistance is the type base — contesting the divisor as well would divide by
 `Charisma − Intellect`, which is zero or negative whenever the monster is the
 smarter one. A group never resists: crowd control works on crowds.
+
+### The pace constraint, and what Charisma and Intellect became under it
+
+The plan above gives Intellect "unlocks spells" and Charisma a list of
+actions, and leaves both as lists to be written. What settled them was not a
+list but a CONSTRAINT on the whole fight, stated by the author:
+
+> We have to keep the game simple and fluid, like an auto battler where you
+> make meaningful choices with stats, traits and items, then mostly see how
+> successful your choices play out in a run. The game has countless
+> consecutive rounds. This can only stay fun by keeping a high pace. We can't
+> expect the player to spend 10 seconds on making a choice between dealing 2
+> or 5 damage to a monster when it takes 20 attacks to bring down a monster,
+> there are 10 monsters to a level and double digits of level to make it
+> through.
+
+Everything below follows from it. **The default mode for a player is attack.**
+Charm-based abilities happen on their own, every round, with nothing to
+choose; magical attacks arrive by chance and appear as cells already sorted so
+that the first one is the right one.
+
+**The ring, on the player's action**, in this order: the available magical
+attacks from highest spell level to lowest, then Attack, then Prepare.
+
+#### Prepare
+
+An action that executes no attack and increases the power of the next one.
+That attack gains, per point:
+
+| stat | what a point buys the prepared attack |
+| --- | --- |
+| Might | +10% damage |
+| Luck | +10% crit chance |
+| Perception | +10% hit chance |
+| Charisma | 10% chance to lower the monster's action points to zero |
+| Agility | 10% chance to execute twice |
+
+…and it also executes the highest level magical attack available to the
+player, on top of its regular attack.
+
+#### Charm effects (Charisma)
+
+Take effect at the beginning of a round of combat and last until the end of it
+(all actions spent). Several may be in effect at once. Each has a chance of
+`(Charisma − effect level) / 12` to come up.
+
+| level | effect |
+| --- | --- |
+| 0 | each time the monster attacks, a charm check (base 0%, scale 10%) makes it not take an action instead |
+| 2 | the same check makes it attack itself instead, and always hit |
+| 4 | the same check makes it die instead |
+
+When one or more are active for a round, a single pill `[fa-masks-theater #]`
+says so, `#` being how many; hovering it lists them from strongest to weakest.
+When one fires, the action icon is replaced by the mask: followed by the
+player icon for the first, by the damage number and the monster icon for the
+second, and by the killed icon for the third.
+
+#### Magical attacks (Intellect)
+
+**SUPERSEDES the plan's own spell rule above** (learned at the beginning of a
+level, `2 × Intellect` total picks, `Intellect − Tier` per tier). Each
+magical attack has a chance of `(Intellect − level) / 12` to become
+available, and when one of a given level becomes available, all lower levels
+become available with it.
+
+Magical attacks are **not mitigated by armour** — which certain monster types
+have, working exactly as the player's does — and **cannot be dodged or miss**.
+
+| level | spell | effect |
+| --- | --- | --- |
+| 0 | Singe | enhances a regular attack to count as a magical attack |
+| 1 | Plague | the monster loses 20% of its current health at the end of every round |
+| 2 | Ignite | the monster takes 10% of a regular attack in damage after every action it takes (stacking) |
+| 3 | Lightning Bolt | a magical attack; then a Luck check with base chance 50% to repeat, until the check fails for the first time |
+| 4 | Lightning Storm | the monster takes regular magical damage (as Singe) at the end of every round |
+| 5 | Meteor Strike | the monster takes double regular damage and loses all action points for this round |
+
+#### What the code decided, where the spec did not say
+
+Recorded here rather than left to be inferred from the implementation, and
+each is the author's to overrule:
+
+- **Both rolls happen when the round opens**, once. The spec times the charm
+  effects that way and is silent on the spells; rolling a spell's reach per
+  ACTION would make the ring's first cell a moving target, and the first cell
+  is what a fast player presses.
+- **Availability is uncontested; the charm check is contested.** What a
+  monster's wits are worth is settled by the check that fires, so contesting
+  the "is it up" roll as well would charge the player for its Intellect twice.
+- **A lasting spell already in effect is not offered again** (Plague, the
+  Storm), nor is Prepare once banked. A first cell that is sometimes a mistake
+  is a fight the player has to read.
+- **A preparation is a flag, not a count**, and is spent by an Attack only —
+  a spell cast while prepared leaves it banked. Its rider fires once however
+  many times the attack swung.
+- **The bolt's chain is bounded** at ten strikes. Its repeat chance is
+  contested Luck on a base of a half and reaches certainty, which would not
+  terminate. A terminator, not a rule.
+- **Ignite's and the lasting spells' clocks are different**: Ignite answers
+  the monster's actions, Plague and the Storm answer the round.
+- **Monster armour is a per-TYPE table** (0/0/1/2/3 by group/regular/elite/
+  mini boss/boss), carried in the natural pool so it never decays, and not
+  scaled by the power multiplier. A first pass, meant to be tuned.
