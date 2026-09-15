@@ -43,8 +43,7 @@ const FLED = 'fa-solid fa-person-running'
 const KILLED = 'fa-solid fa-cross'
 const ACTIONS = 'fa-solid fa-bolt'
 const HEALTH = 'fa-solid fa-heart'
-const TOWARD = 'fa-solid fa-right-long'
-const BACK = 'fa-solid fa-left-long'
+/** The clash the round's two sides are mirrored around. */
 const VERSUS = 'fa-solid fa-explosion'
 
 /** One glyph, and the word it stands in for. See escapeMenu/narrationMarkup.ts. */

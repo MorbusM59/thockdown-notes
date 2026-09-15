@@ -96,15 +96,15 @@ describe('a combat pill', () => {
     const pill = statusPill(round, monster, { ...monster.derived, actionsPerRound: 2 })
     expect(glyphs(pill)).toEqual([
       'fa-solid fa-bolt', 'fa-solid fa-user-shield', 'fa-solid fa-heart',
-      'fa-solid fa-right-long', 'fa-solid fa-left-long',
+      'fa-solid fa-explosion',
       'fa-solid fa-heart', 'fa-solid fa-skull', 'fa-solid fa-bolt',
     ])
     expect(figures(pill)).toEqual(['2', '80', String(monster.maxHitPoints), String(monster.maxActions)])
   })
 })
 
-/** The status pill is the only entry carrying the clash arrows. */
-const isRoundHead = (entry: string) => entry.includes('fa-right-long')
+/** The status pill is the only entry carrying the clash glyph. */
+const isRoundHead = (entry: string) => entry.includes('fa-explosion')
 
 function intoCombat(seed: number): GameSave {
   let save = enterEntryScreen(emptySave(seed), DEPS, NOW)
