@@ -30,6 +30,7 @@ import { monsterActionsLeft, playerActionsLeft } from '../model/combat'
 import type { Monster } from '../model/monsters'
 import type { Spell } from '../model/spells'
 import { CHARM_ICON, type CharmEffect } from '../model/charm'
+import { PREPARE_ICON } from '../model/prepare'
 import type { DerivedStats } from '../model/stats'
 
 const PLAYER = 'fa-solid fa-user-shield'
@@ -210,4 +211,24 @@ export function charmPill(effect: CharmEffect, monster: Monster, damage: number)
     case 'died':
       return pill(it, 'it', mask, null, KILLED, 'died')
   }
+}
+
+/**
+ * TAKING AIM: the one action that does nothing now, said in the same shape as
+ * everything that does.
+ */
+export function preparePill(monster: Monster): string {
+  return pill(PLAYER, 'you', { icon: PREPARE_ICON, word: 'take aim at' }, null, monsterIcon(monster), 'it')
+}
+
+/**
+ * ITS ROUND, TAKEN AWAY -- by a Meteor or by a prepared blow that staggered
+ * it. ONE glyph for both, because they are one thing happening: an effect the
+ * reader cannot see is an effect that is not there, and two marks for it
+ * would be two things to learn.
+ */
+export const STUN_ICON = 'fa-solid fa-ban'
+
+export function stunPill(monster: Monster): string {
+  return pill(PLAYER, 'you', { icon: STUN_ICON, word: 'ended the round of' }, null, monsterIcon(monster), 'it')
 }

@@ -31,12 +31,15 @@ import {
   UNTOUCHED_FIGHT, type Defence, type RoundState,
 } from '../model/combat'
 import {
-  castSpell, endOfRoundTicks, igniteTick, rollSpellReach, SPELLS, spellsOffered, type Spell,
+  castSpell, endOfRoundTicks, igniteTick, rollSpellReach, SPELLS, spellsOffered, strongestOffered,
+  type Spell,
 } from '../model/spells'
 import { charmsOf, interceptMonsterAction, rollCharms } from '../model/charm'
 import { rewardFor } from '../model/rewards'
+import { PREPARE_ICON, prepareLines, resolvePreparedAttack } from '../model/prepare'
 import {
-  charmPill, charmStatusPill, killPill, monsterAttackPill, playerAttackPill, spellPill, statusPill,
+  charmPill, charmStatusPill, killPill, monsterAttackPill, playerAttackPill, preparePill, spellPill,
+  statusPill, stunPill,
 } from './combatLog'
 import type { Monster } from '../model/monsters'
 import { monsterFor, offerFromJson, offerToJson } from './encounter'
@@ -58,6 +61,8 @@ const DEFENCE_LABELS: Readonly<Record<Defence, { label: string; icon: string }>>
 }
 
 const ATTACK_ICON = 'fa-solid fa-burst'
+
+const PREPARE_CHOICE = 'combat:prepare'
 
 /** One id shape for every spell cell, so `present` and `resolve` cannot disagree. */
 function spellChoiceId(spell: Spell): string {
@@ -490,10 +495,16 @@ export const combatStage: StageModule = {
       // with this many actions in it. See model/spells.ts on why a spell
       // already in effect is absent rather than offered and wasted.
       const spells = spellsOffered(round.spellReach, round)
+      const stats = context.profile?.stats
+      const aimed = round.prepared && stats
+        ? { title: 'Attack', lines: prepareLines(stats, strongestOffered(round.spellReach, round)) }
+        : undefined
       return {
         // The offered set is part of the question, so it is part of the key:
-        // the dial has to treat a round that dealt Meteor as a new screen.
-        screenKey: `combat:mine:${round.playerActionsSpent}:${round.monsterActionsSpent}:${spells.map((spell) => spell.id).join(',')}`,
+        // the dial has to treat a round that dealt Meteor as a new screen --
+        // and an attack that is loaded as a different question from one that
+        // is not.
+        screenKey: `combat:mine:${round.playerActionsSpent}:${round.monsterActionsSpent}:${spells.map((spell) => spell.id).join(',')}:${round.prepared ? 'aimed' : 'loose'}`,
         choices: [
           ...spells.map((spell) => ({
             id: spellChoiceId(spell),
@@ -501,7 +512,22 @@ export const combatStage: StageModule = {
             icon: spell.icon,
             detail: { title: spell.name, lines: [...spell.lines] },
           })),
-          { id: 'combat:attack', label: 'Attack', icon: ATTACK_ICON },
+          // LOADED says so on the cell, because the ring's detail is the only
+          // place it can: a banked preparation is worth nothing the player
+          // cannot see, and its own cell has gone away to make room for this.
+          { id: 'combat:attack', label: round.prepared ? 'Attack, aimed' : 'Attack', icon: ATTACK_ICON, detail: aimed },
+          // LAST, and absent once it is banked. A second Prepare would do
+          // nothing -- it is a flag, not a count -- and an action with
+          // nothing to do does not appear (model/spells.ts makes the same
+          // argument for a spell already in effect).
+          ...(round.prepared || !stats
+            ? []
+            : [{
+                id: PREPARE_CHOICE,
+                label: 'Prepare',
+                icon: PREPARE_ICON,
+                detail: { title: 'Prepare', lines: prepareLines(stats, strongestOffered(round.spellReach, round)) },
+              }]),
         ],
       }
     }
@@ -541,6 +567,50 @@ export const combatStage: StageModule = {
         effects: [{ kind: 'advanceEncounter' }],
         rng,
       }
+    }
+
+    if (monster && choiceId === PREPARE_CHOICE && context.profile) {
+      // The action is spent here and nothing else happens -- which is the
+      // whole of what Prepare is.
+      return stepFight({
+        state,
+        round: { ...round, prepared: true, playerActionsSpent: round.playerActionsSpent + 1 },
+        monster,
+        context,
+        entries: [preparePill(monster)],
+        effects: [],
+        rng,
+      })
+    }
+
+    if (choiceId === 'combat:attack' && round.prepared && context.profile) {
+      const aimed = resolvePreparedAttack({
+        state: round,
+        monster,
+        playerStats: context.profile.stats,
+        playerDerived: context.profile.derived,
+        playerChances: context.profile.chances,
+        successAdjust: context.game?.successAdjust,
+        rng,
+      })
+      const dealt = [...aimed.blows, ...(aimed.rider?.blows ?? [])]
+        .reduce((sum, blow) => sum + blow.damage, 0)
+      return stepFight({
+        state,
+        round: aimed.state,
+        monster,
+        context,
+        // NEWEST FIRST, and in the order they happened: the swings, then the
+        // stagger, then the spell that rode along.
+        entries: [
+          ...(aimed.rider ? [spellPill(aimed.rider.spell, monster, aimed.rider.blows.reduce((sum, blow) => sum + blow.damage, 0))] : []),
+          ...(aimed.stunned ? [stunPill(monster)] : []),
+          ...aimed.blows.map((blow) => playerAttackPill(monster, blow)).reverse(),
+        ],
+        effects: [],
+        rng: aimed.rng,
+        struck: dealt,
+      })
     }
 
     if (choiceId === 'combat:attack' && context.profile) {
@@ -587,7 +657,10 @@ export const combatStage: StageModule = {
         // ONE PILL however many times a bolt leapt: the reader wants what the
         // cast was worth, and four pills of the same glyph would bury the
         // round's other news under one action's bookkeeping.
-        entries: [spellPill(spell, monster, cast.blows.length > 0 ? dealt : null)],
+        entries: [
+          ...(cast.stunned ? [stunPill(monster)] : []),
+          spellPill(spell, monster, cast.blows.length > 0 ? dealt : null),
+        ],
         effects: [],
         rng: cast.rng,
         struck: dealt,

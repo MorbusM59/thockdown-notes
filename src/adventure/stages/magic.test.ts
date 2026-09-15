@@ -58,9 +58,9 @@ const glyphs = (entry: string) => parseNarration(entry)
   .map((span) => span.icon)
 
 describe('magic, as the ring offers it', () => {
-  it('puts the strongest spell first and the plain attack last', () => {
+  it('puts the strongest spell first, then the attack, then Prepare', () => {
     const ids = cellIds(inAFightWithMagic(4242))
-    expect(ids[ids.length - 1]).toBe('combat:attack')
+    expect(ids.slice(-2)).toEqual(['combat:attack', 'combat:prepare'])
     const spells = ids.filter((id) => id.startsWith('spell:'))
     expect(spells.length).toBeGreaterThan(0)
     // Descending by level, which is the order SPELLS is written in.
@@ -72,7 +72,7 @@ describe('magic, as the ring offers it', () => {
     // Intellect 0 is (0 - 0) / 12 -- no spell ever comes within reach, so the
     // fight is exactly the fight it was before any of this existed.
     const ids = cellIds(inAFightWithMagic(4242, 0))
-    expect(ids).toEqual(['combat:attack'])
+    expect(ids).toEqual(['combat:attack', 'combat:prepare'])
   })
 
   it('casts, and says so on the bar in the same shape every other action uses', () => {

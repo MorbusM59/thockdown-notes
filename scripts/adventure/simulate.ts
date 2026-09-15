@@ -50,7 +50,7 @@ const NOW = 1_700_000_000_000
 /** A run that has not died or reached the level cap by here is not going to. */
 const MAX_CHOICES = 20_000
 
-type PolicyName = 'careful' | 'reckless' | 'first'
+type PolicyName = 'careful' | 'patient' | 'reckless' | 'first'
 
 interface Situation {
   screen: Screen
@@ -103,13 +103,29 @@ const careful: Policy = ({ screen, health, prefer }) => {
   return pick(screen, 'defence:dodge', 'defence:defend', 'combat:attack') ?? firstReal(screen)
 }
 
+/**
+ * Always takes aim first: Prepare whenever it is on offer, then swing.
+ *
+ * Here to MEASURE Prepare, which `careful` never touches -- it presses the
+ * leading offensive cell, and Prepare is deliberately the last one. The two
+ * policies together answer the question the action exists to raise: is a
+ * round spent aiming worth more than a round spent swinging?
+ */
+const patient: Policy = (input) => {
+  const prepare = pick(input.screen, 'combat:prepare')
+  if (prepare) return prepare
+  return careful(input)
+}
+
 /** Never gives ground: no dodging, no fleeing, and takes every hit. */
 const reckless: Policy = ({ screen, prefer }) =>
   pick(screen, 'combat:attack', 'defence:takeTheHit', 'defence:defend')
   ?? preferred(screen, prefer)
   ?? firstReal(screen)
 
-const POLICIES: Readonly<Record<PolicyName, Policy>> = { careful, reckless, first: ({ screen }) => firstReal(screen) }
+const POLICIES: Readonly<Record<PolicyName, Policy>> = {
+  careful, patient, reckless, first: ({ screen }) => firstReal(screen),
+}
 
 interface RunResult {
   died: boolean

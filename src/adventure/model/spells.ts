@@ -229,6 +229,8 @@ export interface CastResult {
   state: RoundState
   /** Every blow this cast landed, in order. Empty for a spell that only sets a condition. */
   blows: Blow[]
+  /** Whether this took the monster's remaining actions away. Meteor's, and worth its own pill. */
+  stunned: boolean
   rng: RngState
 }
 
@@ -268,19 +270,20 @@ export function castSpell(input: CastInput): CastResult {
 
   switch (input.spell.id) {
     case 'plague':
-      return { state: { ...spent, plagued: true }, blows: [], rng: input.rng }
+      return { state: { ...spent, plagued: true }, blows: [], stunned: false, rng: input.rng }
 
     case 'lightningStorm':
-      return { state: { ...spent, storming: true }, blows: [], rng: input.rng }
+      return { state: { ...spent, storming: true }, blows: [], stunned: false, rng: input.rng }
 
     case 'ignite':
-      return { state: { ...spent, igniteStacks: spent.igniteStacks + 1 }, blows: [], rng: input.rng }
+      return { state: { ...spent, igniteStacks: spent.igniteStacks + 1 }, blows: [], stunned: false, rng: input.rng }
 
     case 'singe': {
       const struck = magicStrike(input, base, input.rng)
       return {
         state: { ...spent, monsterDamageTaken: spent.monsterDamageTaken + struck.blow.damage },
         blows: [struck.blow],
+        stunned: false,
         rng: struck.rng,
       }
     }
@@ -297,6 +300,7 @@ export function castSpell(input: CastInput): CastResult {
           monsterActionsSpent: spent.monsterActionsSpent + monsterActionsLeft(spent, input.monster),
         },
         blows: [struck.blow],
+        stunned: true,
         rng: struck.rng,
       }
     }
@@ -319,7 +323,7 @@ export function castSpell(input: CastInput): CastResult {
         rng = again.rng
         if (!again.value) break
       }
-      return { state, blows, rng }
+      return { state, blows, stunned: false, rng }
     }
   }
 }
