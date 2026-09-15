@@ -16,6 +16,8 @@
 // rates are unwritten (open question 45).
 
 import { absorb, type Armor } from './armor'
+import type { JsonObject, JsonValue } from '../core/json'
+import { NO_SPELLS } from './spellReach'
 import { nextChance, type RngState } from '../core/rng'
 import { NO_CHANCE_ADJUSTMENT, resolveChanceWith, type ChanceAdjustment, type ChanceSide } from './chance'
 import { actionsRemaining, damageFrom, monsterDefence, type Monster } from './monsters'
@@ -45,11 +47,104 @@ export interface RoundState {
   monsterFleeing: boolean
   /** Set when the player got away. The encounter is over and pays nothing. */
   playerFled: boolean
+
+  // --- What this ROUND happens to be ------------------------------------
+  // Rolled once when the round opens and true until it closes. They are on
+  // the round rather than beside it because that is exactly their lifetime,
+  // and because a fight resolved a step at a time has nowhere else to put a
+  // fact that outlives a step.
+
+  /**
+   * The highest spell level in reach this round; -1 for none. ONE NUMBER,
+   * because reaching a level brings every lower one with it (model/spells.ts).
+   */
+  spellReach: number
+  /** The charm effects that came up this round, strongest first (model/charm.ts). */
+  charms: number[]
+
+  // --- What the fight has had done to it --------------------------------
+  // These OUTLIVE the round: a plague does not lift because a clock ticked.
+  // `beginRound` carries them for exactly that reason.
+
+  /** Plague is on it: a fifth of what it has left, at the end of every round. */
+  plagued: boolean
+  /** A Lightning Storm is overhead: a bolt at the end of every round. */
+  storming: boolean
+  /** How many times Ignite has been laid on. It burns per stack, per monster action. */
+  igniteStacks: number
+  /**
+   * A Prepare is banked, and the next ATTACK spends it. Not a count: the
+   * spec gives one preparation one attack, and two banked preparations would
+   * be a resource to hoard, which is the opposite of the fight's whole shape.
+   */
+  prepared: boolean
+}
+
+/**
+ * A round, as JSON and back -- next to the type, because a serializer is a
+ * property of what it serializes and not of whoever happens to store it.
+ *
+ * Out is STRUCTURAL (a `RoundState` is already JSON-shaped, nested armor
+ * included) so a new field cannot be forgotten on the way out. In is
+ * hand-written, because reading has to survive a save that predates the
+ * field -- and `roundJson.test.ts` round-trips a fully-populated round so
+ * that a field missing HERE fails rather than silently reading as zero.
+ */
+export function roundToJson(round: RoundState): JsonObject {
+  return { ...round, playerArmor: { ...round.playerArmor }, charms: [...round.charms] }
+}
+
+export function roundFromJson(value: JsonValue | undefined): RoundState {
+  const row = (typeof value === 'object' && value !== null && !Array.isArray(value) ? value : {}) as Record<string, unknown>
+  const num = (key: string, fallback = 0) => (typeof row[key] === 'number' && Number.isFinite(row[key]) ? (row[key] as number) : fallback)
+  const armor = (typeof row.playerArmor === 'object' && row.playerArmor !== null && !Array.isArray(row.playerArmor)
+    ? row.playerArmor
+    : {}) as Record<string, unknown>
+  const armorPool = (key: string) => (typeof armor[key] === 'number' && Number.isFinite(armor[key]) ? (armor[key] as number) : 0)
+  return {
+    playerActionsSpent: num('playerActionsSpent'),
+    monsterActionsSpent: num('monsterActionsSpent'),
+    playerHitPoints: num('playerHitPoints'),
+    playerArmor: { fromItems: armorPool('fromItems'), natural: armorPool('natural') },
+    monsterDamageTaken: num('monsterDamageTaken'),
+    monsterFleeing: row.monsterFleeing === true,
+    playerFled: row.playerFled === true,
+    // NO_SPELLS, not zero: zero is "Singe is in reach", which is a hand the
+    // player was never dealt.
+    spellReach: num('spellReach', NO_SPELLS),
+    charms: Array.isArray(row.charms)
+      ? row.charms.filter((entry): entry is number => typeof entry === 'number')
+      : [],
+    plagued: row.plagued === true,
+    storming: row.storming === true,
+    igniteStacks: Math.max(0, num('igniteStacks')),
+    prepared: row.prepared === true,
+  }
+}
+
+/**
+ * A FIGHT NOTHING HAS HAPPENED IN YET: no spell in reach, no charm up, no
+ * condition laid on, nothing banked.
+ *
+ * Written once so a fight's opening conditions are one thing rather than six
+ * repeated at every place a fight begins -- and so adding a seventh is a line
+ * here and a compiler error at any caller that builds a round some other way.
+ */
+export const UNTOUCHED_FIGHT = {
+  spellReach: NO_SPELLS,
+  charms: [] as number[],
+  plagued: false,
+  storming: false,
+  igniteStacks: 0,
+  prepared: false,
 }
 
 export function beginRound(previous: Omit<RoundState, 'playerActionsSpent' | 'monsterActionsSpent'>): RoundState {
-  // The ONLY thing a new round resets. Hit points, damage dealt and armor all
-  // carry: a round is a clock, not a checkpoint.
+  // The ONLY thing a new round resets. Hit points, damage dealt, armor, the
+  // lingering spells and a banked Prepare all carry: a round is a clock, not
+  // a checkpoint. What a round GRANTS -- its spell reach and its charms -- is
+  // rolled by the caller and handed in here, because rolling is not this
+  // function's business and it takes no rng.
   return { ...previous, playerActionsSpent: 0, monsterActionsSpent: 0 }
 }
 
@@ -135,8 +230,12 @@ interface ExchangeInput {
   attacker: ChanceSide
   /** The run's thumb on the scale (model/chance.ts). 0 leaves every roll exactly as the stats made it. */
   successAdjust?: number
-  /** Dodge negates entirely; Take the hit makes the attack land by definition. */
-  defence: Defence | 'none'
+  /**
+   * Dodge negates entirely; Take the hit makes the attack land by definition;
+   * MAGIC is neither a choice nor a defence but the absence of one -- it
+   * cannot be missed with and armour does not see it (model/spells.ts).
+   */
+  defence: Defence | 'none' | 'magic'
   dodgeOffered: boolean
   rng: RngState
 }
@@ -158,7 +257,10 @@ export function resolveExchange(input: ExchangeInput): { blow: Blow; armor: Armo
 
   let rng = input.rng
   let landed = true
-  if (input.defence !== 'takeTheHit') {
+  // Magic joins Take the hit here: both mean the blow arrives, so there is
+  // nothing to roll. The dodge branch above is never reached for magic --
+  // the caster does not offer the dodge in the first place.
+  if (input.defence !== 'takeTheHit' && input.defence !== 'magic') {
     const roll = nextChance(rng, resolveChanceWith(HIT_CHANCE, input.attackerStats, input.defenderStats, {
       adjustment: input.attackerChances?.hitChance,
       side: input.attacker,
@@ -184,9 +286,11 @@ export function resolveExchange(input: ExchangeInput): { blow: Blow; armor: Armo
   // be made to agree.
   const raw = Math.round(input.attackerDamage * (critRoll.value ? 2 : 1))
 
-  // Armor is Defend's alone. Flee and Take the hit both say so explicitly,
-  // and Dodge never reaches here. The pool comes back UNTOUCHED rather than
-  // emptied -- it is still on the defender, it simply did not help.
+  // Armor is Defend's alone. Flee, Take the hit and magic all say so
+  // explicitly, and Dodge never reaches here. The pool comes back UNTOUCHED
+  // rather than emptied -- it is still on the defender, it simply did not
+  // help. For magic that is the rule rather than a consequence: a plated
+  // monster is the problem Intellect answers.
   if (input.defence !== 'defend') {
     return { blow: { hit: true, crit: critRoll.value, dodged: false, damage: raw, armorDecayed: false }, armor, rng }
   }

@@ -28,6 +28,7 @@
 import type { Blow, Defence, RoundState } from '../model/combat'
 import { monsterActionsLeft, playerActionsLeft } from '../model/combat'
 import type { Monster } from '../model/monsters'
+import type { Spell } from '../model/spells'
 import type { DerivedStats } from '../model/stats'
 
 const PLAYER = 'fa-solid fa-user-shield'
@@ -156,4 +157,18 @@ export function statusPill(round: RoundState, monster: Monster, playerDerived: D
     figure(monsterActionsLeft(round, monster)),
     icon(ACTIONS, 'actions'),
   ].join(' ')
+}
+
+/**
+ * A SPELL, in the same four-part shape every other pill has -- who, what, how
+ * much, to whom -- with the spell's own glyph in the action slot.
+ *
+ * ONE function for a cast and for a tick, because they are the same sentence:
+ * the player is the source either way, and a Plague biting at the end of a
+ * round is no less the player's doing for having been set up three rounds
+ * ago. A spell that only laid a condition on passes `null` and shows no
+ * number, exactly as a missed attack does.
+ */
+export function spellPill(spell: Spell, monster: Monster, damage: number | null): string {
+  return pill(PLAYER, 'you', { icon: spell.icon, word: spell.name }, damage, monsterIcon(monster), 'it')
 }

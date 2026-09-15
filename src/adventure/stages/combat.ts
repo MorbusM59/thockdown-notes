@@ -27,10 +27,14 @@ import type { Effect } from '../model/effects'
 import { NO_ARMOR } from '../model/armor'
 import {
   beginRound, combatStatus, DEFENCES, defencesOffered, resolveMonsterAttack,
-  resolvePlayerAttack, rollActor, rollDodgeOffered, type Defence, type RoundState,
+  resolvePlayerAttack, rollActor, rollDodgeOffered, roundFromJson, roundToJson,
+  UNTOUCHED_FIGHT, type Defence, type RoundState,
 } from '../model/combat'
+import {
+  castSpell, endOfRoundTicks, igniteTick, rollSpellReach, SPELLS, spellsOffered, type Spell,
+} from '../model/spells'
 import { rewardFor } from '../model/rewards'
-import { killPill, monsterAttackPill, playerAttackPill, statusPill } from './combatLog'
+import { killPill, monsterAttackPill, playerAttackPill, spellPill, statusPill } from './combatLog'
 import type { Monster } from '../model/monsters'
 import { monsterFor, offerFromJson, offerToJson } from './encounter'
 import { COMBAT_STAGE_ID, ENCOUNTER_SELECT_STAGE_ID, LOOT_STAGE_ID, WELCOME_STAGE_ID } from './ids'
@@ -52,6 +56,11 @@ const DEFENCE_LABELS: Readonly<Record<Defence, { label: string; icon: string }>>
 
 const ATTACK_ICON = 'fa-solid fa-burst'
 
+/** One id shape for every spell cell, so `present` and `resolve` cannot disagree. */
+function spellChoiceId(spell: Spell): string {
+  return `spell:${spell.id}`
+}
+
 interface CombatState extends JsonObject {
   offer: JsonObject
   round: JsonObject
@@ -60,33 +69,6 @@ interface CombatState extends JsonObject {
   dodgeOffered: boolean
   /** This round's pills, newest first. Cut back to the status pill each round. */
   log: string[]
-}
-
-function roundToJson(round: RoundState): JsonObject {
-  return {
-    playerActionsSpent: round.playerActionsSpent,
-    monsterActionsSpent: round.monsterActionsSpent,
-    playerHitPoints: round.playerHitPoints,
-    playerArmorFromItems: round.playerArmor.fromItems,
-    playerArmorNatural: round.playerArmor.natural,
-    monsterDamageTaken: round.monsterDamageTaken,
-    monsterFleeing: round.monsterFleeing,
-    playerFled: round.playerFled,
-  }
-}
-
-function roundFromJson(value: JsonObject['']): RoundState {
-  const row = (typeof value === 'object' && value !== null && !Array.isArray(value) ? value : {}) as Record<string, unknown>
-  const num = (key: string) => (typeof row[key] === 'number' ? (row[key] as number) : 0)
-  return {
-    playerActionsSpent: num('playerActionsSpent'),
-    monsterActionsSpent: num('monsterActionsSpent'),
-    playerHitPoints: num('playerHitPoints'),
-    playerArmor: { fromItems: num('playerArmorFromItems'), natural: num('playerArmorNatural') },
-    monsterDamageTaken: num('monsterDamageTaken'),
-    monsterFleeing: row.monsterFleeing === true,
-    playerFled: row.playerFled === true,
-  }
 }
 
 function readState(state: JsonObject): CombatState {
@@ -148,28 +130,65 @@ function recordChanges(before: RoundState, after: RoundState): Effect[] {
 }
 
 /** Where the fight goes once an action has landed. */
-function afterAction(
-  state: CombatState,
-  round: RoundState,
-  monster: Monster,
-  context: StageContext,
-  /** What just happened, as one pill. It goes to the HEAD of the round's log. */
-  entry: string,
-  effects: readonly Effect[],
-  rng: RngState,
+function afterAction(options: {
+  state: CombatState
+  round: RoundState
+  monster: Monster
+  context: StageContext
+  /**
+   * What just happened, NEWEST FIRST, because one action can be several
+   * things to say: a monster's blow and the fire it walked into, a bolt and
+   * the four times it leapt. They go to the head of the round's log in this
+   * order.
+   */
+  entries: readonly string[]
+  effects: readonly Effect[]
+  rng: RngState
   /** What this action took off the monster, for the kill pill if it was the last. */
-  struck = 0,
-): Transition {
+  struck?: number
+}): Transition {
+  const { state, monster, context } = options
+  let round = options.round
+  let rng = options.rng
+  let struck = options.struck ?? 0
   const derived = context.profile?.derived
-  const status = derived ? combatStatus(round, monster, derived) : 'roundOver'
-  const log = [entry, ...state.log]
+  let log = [...options.entries, ...state.log]
+  let status = derived ? combatStatus(round, monster, derived) : 'roundOver'
+
+  // THE END OF A ROUND IS AN EVENT, not merely a boundary: the lingering
+  // spells pay out here, and either of them can finish the fight. So they are
+  // applied BEFORE the fight is asked where it stands again -- a monster that
+  // burned to death between rounds is dead, not the opening of another round.
+  //
+  // Their pills are carried INTO the next round's log rather than left in the
+  // one being discarded (see `openRound`), which is also how the reader sees
+  // them at all.
+  let carried: string[] = []
+  if (status === 'roundOver' && derived && context.profile) {
+    const ticked = endOfRoundTicks({
+      state: round,
+      monster,
+      playerStats: context.profile.stats,
+      playerDerived: derived,
+      playerChances: context.profile.chances,
+      successAdjust: context.game?.successAdjust,
+      rng,
+    })
+    round = ticked.state
+    rng = ticked.rng
+    // Newest first, so the last thing that happened reads first.
+    carried = ticked.ticks.map((tick) => spellPill(tick.spell, monster, tick.damage)).reverse()
+    log = [...carried, ...log]
+    if (ticked.ticks.length > 0) struck = ticked.ticks[ticked.ticks.length - 1].damage
+    status = combatStatus(round, monster, derived)
+  }
 
   if (status === 'playerDefeated') {
     return {
       kind: 'reset',
       stageId: WELCOME_STAGE_ID,
       narration: log,
-      effects: [...effects, { kind: 'endGame', reason: 'defeat' }],
+      effects: [...options.effects, { kind: 'endGame', reason: 'defeat' }],
       rng,
     }
   }
@@ -181,7 +200,7 @@ function afterAction(
       kind: 'replace',
       stageId: ENCOUNTER_SELECT_STAGE_ID,
       narration: log,
-      effects: [...effects, { kind: 'advanceEncounter' }],
+      effects: [...options.effects, { kind: 'advanceEncounter' }],
       rng,
     }
   }
@@ -205,7 +224,7 @@ function afterAction(
         killPill: status === 'monstersDefeated' ? killPill(monster, struck) : null,
       },
       narration: log,
-      effects,
+      effects: options.effects,
       rng: reward.rng,
     }
   }
@@ -214,13 +233,15 @@ function afterAction(
   // "Begin combat" -- and it asked nothing: the round's actions are restored
   // whatever the player answers, so the only thing it could report was that
   // time had passed, which the status pill now says without spending a press.
-  if (status === 'roundOver') return openRound(state, beginRound(round), monster, context, effects, rng)
+  if (status === 'roundOver') {
+    return openRound(state, beginRound(round), monster, context, options.effects, rng, carried)
+  }
 
   const next = armNextAction(round, monster, context, rng)
   return {
     kind: 'stay',
     state: { ...state, round: roundToJson(round), actor: next.actor, dodgeOffered: next.dodgeOffered, log },
-    effects,
+    effects: options.effects,
     narration: log,
     rng: next.rng,
   }
@@ -241,28 +262,45 @@ function openRound(
   context: StageContext,
   effects: readonly Effect[],
   rng: RngState,
+  /** Pills from the moment the last round CLOSED, kept behind the new status pill. */
+  carried: readonly string[] = [],
 ): Transition {
-  const opened = beginningOf(state, round, monster, context, rng)
+  const opened = beginningOf(state, round, monster, context, rng, carried)
   return { kind: 'stay', state: opened.state, narration: opened.state.log, effects, rng: opened.rng }
 }
 
-/** The state a round starts in: fresh log, first action armed. Shared by `enter` and `openRound`. */
+/**
+ * The state a round starts in: what this round HAPPENS TO BE is rolled, the
+ * log is cut back to the status pill, and the first action is armed. Shared
+ * by `enter` and `openRound`, because entering a fight and turning a round
+ * over are the same event.
+ *
+ * THE ROUND'S HAND IS DEALT HERE and nowhere else -- which spells are in
+ * reach (model/spells.ts) and which charms came up (model/charm.ts). Once a
+ * round, because the ring's first cell is what a fast player presses and a
+ * hand that changed under them mid-round would make that cell a moving
+ * target. It is also the only moment a roll of this kind can happen at all:
+ * `present` is handed no rng, deliberately (core/stage.ts).
+ */
 function beginningOf(
   state: CombatState,
   round: RoundState,
   monster: Monster,
   context: StageContext,
   rng: RngState,
+  carried: readonly string[] = [],
 ): { state: CombatState; rng: RngState } {
   const derived = context.profile?.derived
-  const next = armNextAction(round, monster, context, rng)
+  const dealt = rollSpellReach(context.profile?.stats.intellect ?? 0, rng)
+  const opened: RoundState = { ...round, spellReach: dealt.reach }
+  const next = armNextAction(opened, monster, context, dealt.rng)
   return {
     state: {
       ...state,
-      round: roundToJson(round),
+      round: roundToJson(opened),
       actor: next.actor,
       dodgeOffered: next.dodgeOffered,
-      log: derived ? [statusPill(round, monster, derived)] : [],
+      log: derived ? [statusPill(opened, monster, derived), ...carried] : [...carried],
     },
     rng: next.rng,
   }
@@ -276,6 +314,7 @@ export const combatStage: StageModule = {
     const offer = offerFromJson(input.offer)
     const monster = offer ? monsterFor(offer, context) : null
     const round = beginRound({
+    ...UNTOUCHED_FIGHT,
       playerHitPoints: context.game?.hitPoints ?? 0,
       playerArmor: context.game?.armor ?? NO_ARMOR,
       monsterDamageTaken: 0,
@@ -316,9 +355,25 @@ export const combatStage: StageModule = {
     }
 
     if (state.actor === 'player') {
+      // STRONGEST FIRST, then the plain attack. The ring opens on its first
+      // cell, so the order IS the recommendation -- and a player who presses
+      // it every time is playing well, which is the whole point of a fight
+      // with this many actions in it. See model/spells.ts on why a spell
+      // already in effect is absent rather than offered and wasted.
+      const spells = spellsOffered(round.spellReach, round)
       return {
-        screenKey: `combat:mine:${round.playerActionsSpent}:${round.monsterActionsSpent}`,
-        choices: [{ id: 'combat:attack', label: 'Attack', icon: ATTACK_ICON }],
+        // The offered set is part of the question, so it is part of the key:
+        // the dial has to treat a round that dealt Meteor as a new screen.
+        screenKey: `combat:mine:${round.playerActionsSpent}:${round.monsterActionsSpent}:${spells.map((spell) => spell.id).join(',')}`,
+        choices: [
+          ...spells.map((spell) => ({
+            id: spellChoiceId(spell),
+            label: spell.name,
+            icon: spell.icon,
+            detail: { title: spell.name, lines: [...spell.lines] },
+          })),
+          { id: 'combat:attack', label: 'Attack', icon: ATTACK_ICON },
+        ],
       }
     }
 
@@ -364,16 +419,44 @@ export const combatStage: StageModule = {
         rng,
       })
       // Nothing on the PLAYER changes when they attack, so no record change.
-      return afterAction(
+      return afterAction({
         state,
-        attack.state,
+        round: attack.state,
         monster,
         context,
-        playerAttackPill(monster, attack.blow),
-        [],
-        attack.rng,
-        attack.blow.hit ? attack.blow.damage : 0,
-      )
+        entries: [playerAttackPill(monster, attack.blow)],
+        effects: [],
+        rng: attack.rng,
+        struck: attack.blow.hit ? attack.blow.damage : 0,
+      })
+    }
+
+    const spell = SPELLS.find((candidate) => spellChoiceId(candidate) === choiceId)
+    if (spell && context.profile) {
+      const cast = castSpell({
+        spell,
+        state: round,
+        monster,
+        playerStats: context.profile.stats,
+        playerDerived: context.profile.derived,
+        playerChances: context.profile.chances,
+        successAdjust: context.game?.successAdjust,
+        rng,
+      })
+      const dealt = cast.blows.reduce((sum, blow) => sum + blow.damage, 0)
+      return afterAction({
+        state,
+        round: cast.state,
+        monster,
+        context,
+        // ONE PILL however many times a bolt leapt: the reader wants what the
+        // cast was worth, and four pills of the same glyph would bury the
+        // round's other news under one action's bookkeeping.
+        entries: [spellPill(spell, monster, cast.blows.length > 0 ? dealt : null)],
+        effects: [],
+        rng: cast.rng,
+        struck: dealt,
+      })
     }
 
     const defence = DEFENCES.find((candidate) => `defence:${candidate}` === choiceId)
@@ -387,8 +470,27 @@ export const combatStage: StageModule = {
         successAdjust: context.game?.successAdjust,
         rng,
       })
-      const entry = monsterAttackPill(monster, defence, answer.blow, answer.escaped)
-      return afterAction(state, answer.state, monster, context, entry, recordChanges(round, answer.state), answer.rng)
+      // THE FIRE BITES AFTER IT MOVES, once per stack. It answers the
+      // monster's clock rather than the round's, which is what makes Ignite
+      // worth more against something fast and worth nothing against
+      // something a Meteor has just stunned (model/spells.ts).
+      const burned = context.profile
+        ? igniteTick(answer.state, context.profile.derived)
+        : { state: answer.state, tick: null }
+      const entries = [
+        ...(burned.tick ? [spellPill(burned.tick.spell, monster, burned.tick.damage)] : []),
+        monsterAttackPill(monster, defence, answer.blow, answer.escaped),
+      ]
+      return afterAction({
+        state,
+        round: burned.state,
+        monster,
+        context,
+        entries,
+        effects: recordChanges(round, answer.state),
+        rng: answer.rng,
+        struck: burned.tick?.damage ?? 0,
+      })
     }
 
     return { kind: 'stay', state: raw, rng }

@@ -89,6 +89,13 @@ const firstReal = (screen: Screen): string =>
 const careful: Policy = ({ screen, health, prefer }) => {
   const wanted = preferred(screen, prefer)
   if (wanted) return wanted
+  // THE FIRST CELL IS THE RECOMMENDATION. On the player's action the ring is
+  // sorted strongest-spell-first and then Attack (stages/combat.ts), so a
+  // simulated player who takes the leading offensive cell is playing the way
+  // the ring is built to be played -- and is the only way the magic Intellect
+  // buys reaches these numbers at all.
+  const offensive = screen.choices.find((choice) => choice.id.startsWith('spell:'))
+  if (offensive) return offensive.id
   if (health !== null && health < 0.25) {
     const flee = pick(screen, 'defence:flee')
     if (flee) return flee

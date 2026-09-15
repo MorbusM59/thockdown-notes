@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  beginRound, combatStatus, defencesOffered, monsterActionsLeft, payoutFor,
+  beginRound, combatStatus, defencesOffered, monsterActionsLeft, payoutFor, UNTOUCHED_FIGHT,
   playerActionsLeft, resolveExchange, resolveMonsterAttack, resolvePlayerAttack, rollActor,
   type RoundState,
 } from './combat'
@@ -27,6 +27,7 @@ function monster(over: { type?: 'regular' | 'group'; count?: number } = {}): Mon
 
 function freshRound(over: Partial<RoundState> = {}): RoundState {
   return beginRound({
+    ...UNTOUCHED_FIGHT,
     playerHitPoints: 80,
     playerArmor: NO_ARMOR,
     monsterDamageTaken: 0,

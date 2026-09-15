@@ -9,7 +9,7 @@ import { buildMonster } from '../model/monsters'
 import { addStats, createStatBlock } from '../model/stats'
 import { killPill, monsterAttackPill, playerAttackPill, statusPill } from './combatLog'
 import { lootStage } from './loot'
-import { beginRound } from '../model/combat'
+import { beginRound, UNTOUCHED_FIGHT } from '../model/combat'
 
 const DEPS: DirectorDeps = {
   stages: STAGES,
@@ -87,6 +87,7 @@ describe('a combat pill', () => {
   it('opens a round mirrored around the clash, each side outward from it', () => {
     const monster = monsterOf('regular')
     const round = beginRound({
+    ...UNTOUCHED_FIGHT,
       playerHitPoints: 80,
       playerArmor: { fromItems: 0, natural: 0 },
       monsterDamageTaken: 0,
