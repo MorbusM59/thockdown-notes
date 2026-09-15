@@ -27,20 +27,27 @@ const NOW = 1_700_000_000_000
  */
 function inAFightWithMagic(seed: number, intellect = 12): GameSave {
   let save = enterEntryScreen(emptySave(seed), DEPS, NOW)
-  for (let step = 0; step < 200; step += 1) {
+  for (let step = 0; step < 300; step += 1) {
     const screen = currentScreen(save, DEPS)
     if (!screen) throw new Error('no screen')
-    if (screen.stageId === 'combat') return save
+    // Stop on the PLAYER's own action, not merely inside a fight: whose
+    // action opens a round is a roll, so "in combat" lands on a defence
+    // screen about half the time and the ring there is answering, not
+    // attacking.
+    if (screen.stageId === 'combat' && screen.choices.some((choice) => choice.id === 'combat:attack')) return save
     const choice = screen.choices.find((candidate) => !candidate.id.endsWith(':leave'))
     if (!choice) throw new Error('nothing to press')
-    save = choose(save, choice.id, DEPS, NOW).save
+    // On a defence screen, the answer that changes least: Defend costs
+    // nothing but the monster's action.
+    const answer = screen.choices.find((candidate) => candidate.id === 'defence:defend') ?? choice
+    save = choose(save, answer.id, DEPS, NOW).save
     // Raised the moment there is a character to raise, so the fight's very
     // first round is already dealt from the full table.
     if (activeGame(save) && (activeGame(save)?.baseStats.intellect ?? 0) < intellect) {
       save = applyEffects(save, [{ kind: 'adjustBaseStat', stat: 'intellect', amount: intellect }], DEPS.catalog, NOW)
     }
   }
-  throw new Error('never reached a fight')
+  throw new Error('never reached the player\'s own action')
 }
 
 const cellIds = (save: GameSave) => currentScreen(save, DEPS)?.choices.map((choice) => choice.id) ?? []
@@ -103,23 +110,30 @@ describe('magic, as the ring offers it', () => {
   })
 
   it('carries a lingering spell across the round boundary that spends the log', () => {
-    // A Plague or a Storm pays out when the round CLOSES, and the log is cut
-    // when the next one opens -- so the tick's pill has to be carried into
-    // the new round or the reader never sees it happen.
-    let save = inAFightWithMagic(31337, 30)
+    // A Plague pays out when the round CLOSES, and the log is cut when the
+    // next one opens -- so the tick's pill has to be carried into the new
+    // round or the reader never sees it happen.
+    let save = inAFightWithMagic(31337, 20)
+    const plague = cellIds(save).find((id) => id === 'spell:plague')
+    expect(plague).toBeDefined()
+    save = choose(save, plague!, DEPS, NOW).save
+
     let sawTick = false
     for (let action = 0; action < 80 && !sawTick; action += 1) {
       const screen = currentScreen(save, DEPS)
       if (!screen || screen.stageId !== 'combat') break
-      save = choose(save, screen.choices[0].id, DEPS, NOW).save
+      // Never cast again -- the plain attack, so the only thing that can put
+      // a Plague glyph on the bar is the tick itself.
+      const plain = screen.choices.find((choice) => !choice.id.startsWith('spell:')) ?? screen.choices[0]
+      save = choose(save, plain.id, DEPS, NOW).save
       const after = currentScreen(save, DEPS)
       if (!after || after.stageId !== 'combat') break
       // A freshly opened round: the status pill at the head. Anything behind
-      // it is a tick carried over from the round that just closed.
+      // it is carried over from the round that just closed.
       const opened = after.narration.length > 1 && after.narration[0].includes('fa-explosion')
-      if (opened && after.narration.slice(1).some((entry) => glyphs(entry).some(
-        (glyph) => glyph === 'fa-solid fa-disease' || glyph === 'fa-solid fa-cloud-bolt',
-      ))) sawTick = true
+      if (opened && after.narration.slice(1).some(
+        (entry) => glyphs(entry).includes('fa-solid fa-disease'),
+      )) sawTick = true
     }
     expect(sawTick).toBe(true)
   })

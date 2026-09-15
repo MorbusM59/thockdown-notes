@@ -33,8 +33,11 @@ import {
 import {
   castSpell, endOfRoundTicks, igniteTick, rollSpellReach, SPELLS, spellsOffered, type Spell,
 } from '../model/spells'
+import { charmsOf, interceptMonsterAction, rollCharms } from '../model/charm'
 import { rewardFor } from '../model/rewards'
-import { killPill, monsterAttackPill, playerAttackPill, spellPill, statusPill } from './combatLog'
+import {
+  charmPill, charmStatusPill, killPill, monsterAttackPill, playerAttackPill, spellPill, statusPill,
+} from './combatLog'
 import type { Monster } from '../model/monsters'
 import { monsterFor, offerFromJson, offerToJson } from './encounter'
 import { COMBAT_STAGE_ID, ENCOUNTER_SELECT_STAGE_ID, LOOT_STAGE_ID, WELCOME_STAGE_ID } from './ids'
@@ -81,29 +84,65 @@ function readState(state: JsonObject): CombatState {
   }
 }
 
-/** Rolls whose action is next, and Dodge's availability when it turns out to be the monster's. */
+/**
+ * What happened when the next action was armed: either there is a question to
+ * ask, or a charm already answered it.
+ */
+type Armed =
+  | { kind: 'armed'; actor: 'player' | 'monster' | null; dodgeOffered: boolean; rng: RngState }
+  /** A charm fired: the action is SPENT, the round moved, and nobody was asked. */
+  | { kind: 'charmed'; round: RoundState; entry: string; damage: number; rng: RngState }
+
+/**
+ * Rolls whose action is next, Dodge's availability when it turns out to be
+ * the monster's -- and, before either, whether a charm takes that action away
+ * from it (model/charm.ts).
+ *
+ * THE CHARM IS ROLLED HERE rather than when a defence is answered, and that
+ * is the whole reason this function can come back having already advanced the
+ * fight. Asking the player to pick a defence and then telling them the blow
+ * never came costs a press to learn that nothing happened.
+ */
 function armNextAction(
   round: RoundState,
   monster: Monster,
   context: StageContext,
   rng: RngState,
-): { actor: 'player' | 'monster' | null; dodgeOffered: boolean; rng: RngState } {
+): Armed {
   const derived = context.profile?.derived
-  if (!derived) return { actor: null, dodgeOffered: false, rng }
+  if (!derived) return { kind: 'armed', actor: null, dodgeOffered: false, rng }
   const picked = rollActor(round, monster, derived, rng)
-  if (picked.actor !== 'monster') return { actor: picked.actor, dodgeOffered: false, rng: picked.rng }
-  // The player's own dodge, with their own adjustment: an item that says
-  // "+10% dodge" has to move the roll that decides whether Dodge is on the
-  // table, or it moves nothing at all (model/chance.ts).
-  const dodge = rollDodgeOffered({
-    defenderStats: context.profile?.stats ?? monster.stats,
-    attackerStats: monster.stats,
-    adjustment: context.profile?.chances.dodgeChance,
-    defender: 'player',
-    successAdjust: context.game?.successAdjust,
-    rng: picked.rng,
-  })
-  return { actor: 'monster', dodgeOffered: dodge.offered, rng: dodge.rng }
+  if (picked.actor !== 'monster') {
+    return { kind: 'armed', actor: picked.actor, dodgeOffered: false, rng: picked.rng }
+  }
+
+  if (context.profile) {
+    const charmed = interceptMonsterAction({
+      state: round,
+      monster,
+      playerStats: context.profile.stats,
+      successAdjust: context.game?.successAdjust,
+      rng: picked.rng,
+    })
+    if (charmed.interception) {
+      const { effect, damage, state } = charmed.interception
+      return { kind: 'charmed', round: state, entry: charmPill(effect, monster, damage), damage, rng: charmed.rng }
+    }
+    // The player's own dodge, with their own adjustment: an item that says
+    // "+10% dodge" has to move the roll that decides whether Dodge is on the
+    // table, or it moves nothing at all (model/chance.ts).
+    const dodge = rollDodgeOffered({
+      defenderStats: context.profile.stats,
+      attackerStats: monster.stats,
+      adjustment: context.profile.chances.dodgeChance,
+      defender: 'player',
+      successAdjust: context.game?.successAdjust,
+      rng: charmed.rng,
+    })
+    return { kind: 'armed', actor: 'monster', dodgeOffered: dodge.offered, rng: dodge.rng }
+  }
+
+  return { kind: 'armed', actor: 'monster', dodgeOffered: false, rng: picked.rng }
 }
 
 /**
@@ -129,8 +168,75 @@ function recordChanges(before: RoundState, after: RoundState): Effect[] {
   return effects
 }
 
-/** Where the fight goes once an action has landed. */
-function afterAction(options: {
+/**
+ * HOW MANY TIMES THE FIGHT MAY STEP FORWARD WITHOUT ASKING ANYTHING.
+ *
+ * A terminator, not a rule, in the same spirit as the bolt's strike cap. Every
+ * pass of the loop below either ends the fight, spends one of the monster's
+ * actions to a charm, or opens a round -- the first two are bounded by the
+ * pools, and opening a round is bounded only while the player has actions to
+ * be asked about. A character whose `actionsPerRound` some modifier drove to
+ * zero has none, and would open rounds forever. Reaching the bound lands on
+ * the same "this fight cannot proceed" screen an absent monster does, which
+ * is the honest thing for it to be.
+ */
+const MAX_AUTOMATIC_STEPS = 64
+
+/**
+ * A ROUND OPENS: its hand is dealt, and the log is cut back to what is true
+ * of the new round.
+ *
+ * THE HAND IS DEALT HERE and nowhere else -- which spells are in reach
+ * (model/spells.ts) and which charms came up (model/charm.ts). Once a round,
+ * because the ring opens on its first cell, that cell is what a fast player
+ * presses, and a hand that changed under them mid-round would make it a
+ * moving target. It is also the only moment a roll of this kind can happen at
+ * all: `present` is handed no rng, deliberately (core/stage.ts).
+ *
+ * The log becomes the status pill, then the charm pill if the round is under
+ * anything, then whatever the last round's closing carried over. Newest
+ * first: what is true of this round leads, and what happened at the end of
+ * the last one reads behind it.
+ */
+function openedRound(
+  previous: RoundState,
+  monster: Monster,
+  context: StageContext,
+  rng: RngState,
+  carried: readonly string[] = [],
+): { round: RoundState; log: string[]; rng: RngState } {
+  const spells = rollSpellReach(context.profile?.stats.intellect ?? 0, rng)
+  const charmed = rollCharms(context.profile?.stats.charisma ?? 0, spells.rng)
+  const round = beginRound({ ...previous, spellReach: spells.reach, charms: charmed.charms })
+  const derived = context.profile?.derived
+  const effects = charmsOf(round)
+  return {
+    round,
+    log: [
+      ...(derived ? [statusPill(round, monster, derived)] : []),
+      ...(effects.length > 0 ? [charmStatusPill(effects)] : []),
+      ...carried,
+    ],
+    rng: charmed.rng,
+  }
+}
+
+/**
+ * THE FIGHT, STEPPED FORWARD UNTIL SOMETHING HAS TO BE ANSWERED.
+ *
+ * The stage's whole job in one function: take the round as it now stands and
+ * advance it -- through the end of a round, through a new round opening,
+ * through any number of actions a charm takes away from the monster -- until
+ * it reaches a question for the ring, or an ending.
+ *
+ * It is a LOOP and it did not used to be, because until charms existed every
+ * action either asked something or ended something. A charmed action does
+ * neither: it happens, it is worth a pill, and the fight is in exactly the
+ * same position afterwards as a fight that has to keep going. Handling that
+ * by recursing through `afterAction` would have made "how many things can
+ * happen between two presses" a property of the call stack.
+ */
+function stepFight(options: {
   state: CombatState
   round: RoundState
   monster: Monster
@@ -138,8 +244,7 @@ function afterAction(options: {
   /**
    * What just happened, NEWEST FIRST, because one action can be several
    * things to say: a monster's blow and the fire it walked into, a bolt and
-   * the four times it leapt. They go to the head of the round's log in this
-   * order.
+   * the four times it leapt. They go to the head of the round's log.
    */
   entries: readonly string[]
   effects: readonly Effect[]
@@ -148,163 +253,154 @@ function afterAction(options: {
   struck?: number
 }): Transition {
   const { state, monster, context } = options
+  const derived = context.profile?.derived
   let round = options.round
   let rng = options.rng
   let struck = options.struck ?? 0
-  const derived = context.profile?.derived
   let log = [...options.entries, ...state.log]
-  let status = derived ? combatStatus(round, monster, derived) : 'roundOver'
-
-  // THE END OF A ROUND IS AN EVENT, not merely a boundary: the lingering
-  // spells pay out here, and either of them can finish the fight. So they are
-  // applied BEFORE the fight is asked where it stands again -- a monster that
-  // burned to death between rounds is dead, not the opening of another round.
-  //
-  // Their pills are carried INTO the next round's log rather than left in the
-  // one being discarded (see `openRound`), which is also how the reader sees
-  // them at all.
+  /** Pills from the moment a round CLOSED, kept behind the next status pill. */
   let carried: string[] = []
-  if (status === 'roundOver' && derived && context.profile) {
-    const ticked = endOfRoundTicks({
-      state: round,
-      monster,
-      playerStats: context.profile.stats,
-      playerDerived: derived,
-      playerChances: context.profile.chances,
-      successAdjust: context.game?.successAdjust,
-      rng,
-    })
-    round = ticked.state
-    rng = ticked.rng
-    // Newest first, so the last thing that happened reads first.
-    carried = ticked.ticks.map((tick) => spellPill(tick.spell, monster, tick.damage)).reverse()
-    log = [...carried, ...log]
-    if (ticked.ticks.length > 0) struck = ticked.ticks[ticked.ticks.length - 1].damage
-    status = combatStatus(round, monster, derived)
-  }
 
-  if (status === 'playerDefeated') {
-    return {
-      kind: 'reset',
-      stageId: WELCOME_STAGE_ID,
-      narration: log,
-      effects: [...options.effects, { kind: 'endGame', reason: 'defeat' }],
-      rng,
-    }
-  }
-
-  if (status === 'playerFled') {
-    // Pays nothing and still spends the encounter -- running is a decision,
-    // not a free reroll.
-    return {
-      kind: 'replace',
-      stageId: ENCOUNTER_SELECT_STAGE_ID,
-      narration: log,
-      effects: [...options.effects, { kind: 'advanceEncounter' }],
-      rng,
-    }
-  }
-
-  if (status === 'monstersDefeated' || status === 'monsterFled') {
-    const stats = context.profile?.stats
-    const reward = stats
-      ? rewardFor(stats, monster.type, rng)
-      : { reward: { lootScreens: 1, motes: 1 }, rng }
-    return {
-      kind: 'replace',
-      stageId: LOOT_STAGE_ID,
-      input: {
-        screensLeft: reward.reward.lootScreens,
-        motes: reward.reward.motes,
-        // A monster that ran is beaten but not searched: the gold branch and
-        // no choice at all (see the design plan's payout table).
-        offersLoot: status === 'monstersDefeated',
-        // The last blow, carried across the boundary that spends the round's
-        // log -- the spoils screen shows it behind its own line.
-        killPill: status === 'monstersDefeated' ? killPill(monster, struck) : null,
-      },
-      narration: log,
-      effects: options.effects,
-      rng: reward.rng,
-    }
-  }
-
-  // THE ROUND TURNS OVER WITHOUT ASKING. There was a screen here -- one cell,
-  // "Begin combat" -- and it asked nothing: the round's actions are restored
-  // whatever the player answers, so the only thing it could report was that
-  // time had passed, which the status pill now says without spending a press.
-  if (status === 'roundOver') {
-    return openRound(state, beginRound(round), monster, context, options.effects, rng, carried)
-  }
-
-  const next = armNextAction(round, monster, context, rng)
-  return {
+  const resting = (actor: 'player' | 'monster' | null, dodgeOffered: boolean, next: RngState): Transition => ({
     kind: 'stay',
-    state: { ...state, round: roundToJson(round), actor: next.actor, dodgeOffered: next.dodgeOffered, log },
+    state: { ...state, round: roundToJson(round), actor, dodgeOffered, log },
     effects: options.effects,
     narration: log,
-    rng: next.rng,
+    rng: next,
+  })
+
+  for (let step = 0; step < MAX_AUTOMATIC_STEPS; step += 1) {
+    const status = derived ? combatStatus(round, monster, derived) : 'roundOver'
+
+    if (status === 'playerDefeated') {
+      return {
+        kind: 'reset',
+        stageId: WELCOME_STAGE_ID,
+        narration: log,
+        effects: [...options.effects, { kind: 'endGame', reason: 'defeat' }],
+        rng,
+      }
+    }
+
+    if (status === 'playerFled') {
+      // Pays nothing and still spends the encounter -- running is a decision,
+      // not a free reroll.
+      return {
+        kind: 'replace',
+        stageId: ENCOUNTER_SELECT_STAGE_ID,
+        narration: log,
+        effects: [...options.effects, { kind: 'advanceEncounter' }],
+        rng,
+      }
+    }
+
+    if (status === 'monstersDefeated' || status === 'monsterFled') {
+      const stats = context.profile?.stats
+      const reward = stats
+        ? rewardFor(stats, monster.type, rng)
+        : { reward: { lootScreens: 1, motes: 1 }, rng }
+      return {
+        kind: 'replace',
+        stageId: LOOT_STAGE_ID,
+        input: {
+          screensLeft: reward.reward.lootScreens,
+          motes: reward.reward.motes,
+          // A monster that ran is beaten but not searched: the gold branch and
+          // no choice at all (see the design plan's payout table).
+          offersLoot: status === 'monstersDefeated',
+          // The last blow, carried across the boundary that spends the round's
+          // log -- the spoils screen shows it behind its own line.
+          killPill: status === 'monstersDefeated' ? killPill(monster, struck) : null,
+        },
+        narration: log,
+        effects: options.effects,
+        rng: reward.rng,
+      }
+    }
+
+    if (status === 'roundOver') {
+      // THE END OF A ROUND IS AN EVENT, not merely a boundary: the lingering
+      // spells pay out here (model/spells.ts) and either of them can finish
+      // the fight -- so they land before anything asks where the fight stands
+      // again, and the loop's next pass is what asks. A monster that burned
+      // to death between rounds is dead, not the opening of another round.
+      if (derived && context.profile) {
+        const ticked = endOfRoundTicks({
+          state: round,
+          monster,
+          playerStats: context.profile.stats,
+          playerDerived: derived,
+          playerChances: context.profile.chances,
+          successAdjust: context.game?.successAdjust,
+          rng,
+        })
+        rng = ticked.rng
+        if (ticked.ticks.length > 0) {
+          round = ticked.state
+          // Newest first, so the last thing that happened reads first. They
+          // are CARRIED into the next round's log rather than left in the one
+          // about to be discarded, which is the only way the reader sees them.
+          const pills = ticked.ticks.map((tick) => spellPill(tick.spell, monster, tick.damage)).reverse()
+          carried = [...pills, ...carried]
+          log = [...pills, ...log]
+          struck = ticked.ticks[ticked.ticks.length - 1].damage
+          continue
+        }
+      }
+
+      // THE ROUND TURNS OVER WITHOUT ASKING. There was a screen here -- one
+      // cell, "Begin combat" -- and it asked nothing: the round's actions are
+      // restored whatever the player answers, so the only thing it could
+      // report was that time had passed, which the status pill now says
+      // without spending a press.
+      const opened = openedRound(round, monster, context, rng, carried)
+      round = opened.round
+      log = opened.log
+      rng = opened.rng
+      carried = []
+      continue
+    }
+
+    const armed = armNextAction(round, monster, context, rng)
+    rng = armed.rng
+    if (armed.kind === 'armed') return resting(armed.actor, armed.dodgeOffered, rng)
+
+    // A charm took the action away from it. Nothing was asked and nothing
+    // ended; the fight simply moved, so the loop goes round again.
+    round = armed.round
+    log = [armed.entry, ...log]
+    struck = armed.damage
   }
+
+  // The bound above, reached. The one screen that gets the player out.
+  return resting(null, false, rng)
 }
 
 /**
- * A ROUND OPENS: the log is cut back to the status pill and the first action
- * is armed.
- *
- * The one place a round's history is discarded, and the one place the status
- * pill is written -- entering the fight and turning a round over are the same
- * event as far as the reader is concerned, so they are the same code.
+ * The round a transition is carrying, where it has one. A `stay` stores it;
+ * everything else already spent it, and the round we opened with is the
+ * closest true thing left to store.
  */
-function openRound(
-  state: CombatState,
-  round: RoundState,
-  monster: Monster,
-  context: StageContext,
-  effects: readonly Effect[],
-  rng: RngState,
-  /** Pills from the moment the last round CLOSED, kept behind the new status pill. */
-  carried: readonly string[] = [],
-): Transition {
-  const opened = beginningOf(state, round, monster, context, rng, carried)
-  return { kind: 'stay', state: opened.state, narration: opened.state.log, effects, rng: opened.rng }
+function steppedRound(transition: Transition, fallback: RoundState): RoundState {
+  return transition.kind === 'stay' ? roundFromJson((transition.state as CombatState).round) : fallback
 }
 
 /**
- * The state a round starts in: what this round HAPPENS TO BE is rolled, the
- * log is cut back to the status pill, and the first action is armed. Shared
- * by `enter` and `openRound`, because entering a fight and turning a round
- * over are the same event.
+ * THE FIGHT IS OVER AND THE STAGE IS STILL HERE -- reachable only through
+ * `enter`, which cannot hand back a transition (see there).
  *
- * THE ROUND'S HAND IS DEALT HERE and nowhere else -- which spells are in
- * reach (model/spells.ts) and which charms came up (model/charm.ts). Once a
- * round, because the ring's first cell is what a fast player presses and a
- * hand that changed under them mid-round would make that cell a moving
- * target. It is also the only moment a roll of this kind can happen at all:
- * `present` is handed no rng, deliberately (core/stage.ts).
+ * One cell, which steps the fight and lets it go where it was already going.
+ * Its WORDS are read from the status rather than fixed, because "Withdraw"
+ * over a corpse is the one thing this screen must not say.
  */
-function beginningOf(
-  state: CombatState,
-  round: RoundState,
-  monster: Monster,
-  context: StageContext,
-  rng: RngState,
-  carried: readonly string[] = [],
-): { state: CombatState; rng: RngState } {
-  const derived = context.profile?.derived
-  const dealt = rollSpellReach(context.profile?.stats.intellect ?? 0, rng)
-  const opened: RoundState = { ...round, spellReach: dealt.reach }
-  const next = armNextAction(opened, monster, context, dealt.rng)
-  return {
-    state: {
-      ...state,
-      round: roundToJson(opened),
-      actor: next.actor,
-      dodgeOffered: next.dodgeOffered,
-      log: derived ? [statusPill(opened, monster, derived), ...carried] : [...carried],
-    },
-    rng: next.rng,
-  }
+const SETTLED_CELL: Readonly<Record<string, { label: string; icon: string }>> = {
+  monstersDefeated: { label: 'Look it over', icon: 'fa-solid fa-magnifying-glass' },
+  monsterFled: { label: 'Let it go', icon: 'fa-solid fa-person-running' },
+  playerDefeated: { label: 'Darkness', icon: 'fa-solid fa-skull' },
+  playerFled: { label: 'Keep running', icon: 'fa-solid fa-person-running' },
 }
+
+const SETTLE_CHOICE = 'combat:settle'
 
 export const combatStage: StageModule = {
   id: COMBAT_STAGE_ID,
@@ -337,9 +433,33 @@ export const combatStage: StageModule = {
     // words, and the only entry that is not a pill of glyphs. It is dropped
     // with the rest of the round's log when the second round opens, by which
     // point the reader knows what they are fighting.
-    const opened = beginningOf(base, round, monster, context, rng)
-    const log = [...opened.state.log, `**${offer?.name}.** *It has seen you.*`]
-    return { state: { ...opened.state, log }, narration: log, rng: opened.rng }
+    const opened = openedRound(round, monster, context, rng, [`**${offer?.name}.** *It has seen you.*`])
+    // Stepped, not merely armed: a charm can take the very first action of
+    // the fight, and something has to resolve it.
+    const stepped = stepFight({
+      state: { ...base, log: opened.log },
+      round: opened.round,
+      monster,
+      context,
+      entries: [],
+      effects: [],
+      rng: opened.rng,
+    })
+    if (stepped.kind !== 'stay') {
+      // A FIGHT THAT WAS OVER BEFORE IT BEGAN. A Doom on the opening action is
+      // the one way there is, and `enter` cannot hand back a transition -- the
+      // platform's own shape, since entering a stage is not answering one. So
+      // the round is stored where it stopped and the fight comes to rest on a
+      // finished state, which `present` and `resolve` both know how to read
+      // (see `SETTLED_CELL`). Nothing is lost: the monster is dead on the
+      // round's terms and the very next press pays out for it.
+      return {
+        state: { ...base, round: roundToJson(steppedRound(stepped, opened.round)), log: opened.log },
+        narration: opened.log,
+        rng: opened.rng,
+      }
+    }
+    return { state: stepped.state as CombatState, narration: stepped.narration ?? opened.log, rng: stepped.rng }
   },
 
   present: (raw, context) => {
@@ -350,7 +470,16 @@ export const combatStage: StageModule = {
 
     // No monster, or nobody to roll an action for: the fight cannot proceed
     // and says so with the one cell that gets the player out of it.
-    if (!monster || state.actor === null) {
+    if (!monster) {
+      return { screenKey: 'combat:void', choices: [{ id: 'combat:flee', label: 'Withdraw', icon: 'fa-solid fa-rotate-left' }] }
+    }
+
+    const settled = context.profile ? SETTLED_CELL[combatStatus(round, monster, context.profile.derived)] : undefined
+    if (settled) {
+      return { screenKey: 'combat:settled', choices: [{ id: SETTLE_CHOICE, label: settled.label, icon: settled.icon }] }
+    }
+
+    if (state.actor === null) {
       return { screenKey: 'combat:void', choices: [{ id: 'combat:flee', label: 'Withdraw', icon: 'fa-solid fa-rotate-left' }] }
     }
 
@@ -399,6 +528,12 @@ export const combatStage: StageModule = {
     const monster = offer ? monsterFor(offer, context) : null
     const round = roundFromJson(state.round)
 
+    if (monster && choiceId === SETTLE_CHOICE) {
+      // Nothing new happened; the fight is simply asked again where it stands,
+      // and the loop takes it where it was already going.
+      return stepFight({ state, round, monster, context, entries: [], effects: [], rng })
+    }
+
     if (!monster || choiceId === 'combat:flee') {
       return {
         kind: 'replace',
@@ -419,7 +554,7 @@ export const combatStage: StageModule = {
         rng,
       })
       // Nothing on the PLAYER changes when they attack, so no record change.
-      return afterAction({
+      return stepFight({
         state,
         round: attack.state,
         monster,
@@ -444,7 +579,7 @@ export const combatStage: StageModule = {
         rng,
       })
       const dealt = cast.blows.reduce((sum, blow) => sum + blow.damage, 0)
-      return afterAction({
+      return stepFight({
         state,
         round: cast.state,
         monster,
@@ -481,7 +616,7 @@ export const combatStage: StageModule = {
         ...(burned.tick ? [spellPill(burned.tick.spell, monster, burned.tick.damage)] : []),
         monsterAttackPill(monster, defence, answer.blow, answer.escaped),
       ]
-      return afterAction({
+      return stepFight({
         state,
         round: burned.state,
         monster,

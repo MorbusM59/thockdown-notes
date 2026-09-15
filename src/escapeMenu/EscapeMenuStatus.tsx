@@ -74,7 +74,18 @@ function EscapeMenuNarrationPill({ entry }: { entry: string }) {
   return (
     // The words, on the pill itself: the spans below are glyphs and figures,
     // and a pill reading "8" to a screen reader is a pill saying nothing.
-    <span className="tag-pill escape-menu-narration is-inert" aria-label={narrationText(spans)}>
+    //
+    // The SAME words are the tooltip, which is the whole of what makes a bar
+    // of glyphs readable at all: every icon in the vocabulary already carries
+    // the word it stands for (narrationMarkup.ts), so hovering a pill spells
+    // it out with nothing to keep in step. It is also the only place a pill
+    // that stands for several things -- the charm pill, which is one glyph
+    // and a count -- can say which ones.
+    <span
+      className="tag-pill escape-menu-narration is-inert"
+      aria-label={narrationText(spans)}
+      data-tooltip={narrationText(spans)}
+    >
       {/* ONE flex item, not one per span. `.tag-pill` is inline-flex, so a
           span per run makes every run a flex ITEM -- and a flex item whose
           whole content is a space collapses to nothing, which ate the gap

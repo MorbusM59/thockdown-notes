@@ -29,6 +29,7 @@ import type { Blow, Defence, RoundState } from '../model/combat'
 import { monsterActionsLeft, playerActionsLeft } from '../model/combat'
 import type { Monster } from '../model/monsters'
 import type { Spell } from '../model/spells'
+import { CHARM_ICON, type CharmEffect } from '../model/charm'
 import type { DerivedStats } from '../model/stats'
 
 const PLAYER = 'fa-solid fa-user-shield'
@@ -171,4 +172,42 @@ export function statusPill(round: RoundState, monster: Monster, playerDerived: D
  */
 export function spellPill(spell: Spell, monster: Monster, damage: number | null): string {
   return pill(PLAYER, 'you', { icon: spell.icon, word: spell.name }, damage, monsterIcon(monster), 'it')
+}
+
+/**
+ * WHAT THE ROUND IS UNDER: one pill for however many charm effects came up,
+ * with the count beside the mask.
+ *
+ * One pill rather than one each, because they are not three things that
+ * happened -- they are one thing that is true of this round, and a bar that
+ * spent three of its pills saying so would have no room left for the fight.
+ * The NAMES ride on the glyph's own word, strongest first, which is what the
+ * pill's tooltip reads out (escapeMenu/narrationMarkup.ts: an icon carries
+ * its own word, and that word is the only place a glyph can say what it
+ * means).
+ */
+export function charmStatusPill(effects: readonly CharmEffect[]): string {
+  return `${icon(CHARM_ICON, effects.map((effect) => effect.name).join(', '))} ${figure(effects.length)}`
+}
+
+/**
+ * A CHARM FIRING, in the four-part shape, with the mask where the action
+ * glyph goes -- because that is exactly what happened: the monster's action
+ * was the thing that went wrong for it.
+ *
+ * The three read differently in the last two slots, and each says what it is:
+ * a lost action arrives at the player with nothing in hand, a confusion
+ * carries a number back to the monster itself, and a doom ends at the cross.
+ */
+export function charmPill(effect: CharmEffect, monster: Monster, damage: number): string {
+  const mask = { icon: CHARM_ICON, word: effect.name }
+  const it = monsterIcon(monster)
+  switch (effect.outcome) {
+    case 'lostAction':
+      return pill(it, 'it', mask, null, PLAYER, 'you')
+    case 'turnedOnItself':
+      return pill(it, 'it', mask, damage, it, 'itself')
+    case 'died':
+      return pill(it, 'it', mask, null, KILLED, 'died')
+  }
 }
