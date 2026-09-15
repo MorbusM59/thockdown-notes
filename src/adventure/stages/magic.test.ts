@@ -138,3 +138,40 @@ describe('magic, as the ring offers it', () => {
     expect(sawTick).toBe(true)
   })
 })
+
+describe('the fire answers the monster, not the round', () => {
+  /**
+   * "After every action it takes" is ONE rule, and it was written at one of
+   * its two call sites: the blow the monster swung burned, and the action a
+   * charm took away from it did not. A stack that only bites when the monster
+   * gets to use its action is a different spell against a talkative
+   * character.
+   */
+  it('burns for an action a charm took away, exactly as for one it swung', () => {
+    let save = inAFightWithMagic(4242, 20)
+    // Both stats up: the charm has to be able to fire, and Ignite has to be
+    // in reach to be laid on in the first place.
+    save = applyEffects(save, [{ kind: 'adjustBaseStat', stat: 'charisma', amount: 6 }], DEPS.catalog, NOW)
+
+    const ignite = cellIds(save).find((id) => id === 'spell:ignite')
+    expect(ignite).toBeDefined()
+    save = choose(save, ignite!, DEPS, NOW).save
+
+    let burnedAfterCharm = false
+    for (let action = 0; action < 120 && !burnedAfterCharm; action += 1) {
+      const screen = currentScreen(save, DEPS)
+      if (!screen || screen.stageId !== 'combat') break
+      const plain = screen.choices.find((choice) => !choice.id.startsWith('spell:')) ?? screen.choices[0]
+      save = choose(save, plain.id, DEPS, NOW).save
+      const after = currentScreen(save, DEPS)
+      if (!after) break
+      // The fire's pill sits directly on top of the charm's, because the
+      // charm spent the action and the fire answered it.
+      const head = after.narration[0] ?? ''
+      const behind = after.narration[1] ?? ''
+      if (glyphs(head).includes('fa-solid fa-fire-flame-curved')
+        && glyphs(behind).includes('fa-solid fa-masks-theater')) burnedAfterCharm = true
+    }
+    expect(burnedAfterCharm).toBe(true)
+  })
+})

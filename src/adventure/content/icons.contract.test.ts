@@ -26,6 +26,17 @@ function nameOf(iconClass: string): string | null {
   return match ? match[1] : null
 }
 
+/** Every non-test source under a directory, however deep. */
+function sourcesUnder(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name)
+    if (entry.isDirectory()) return sourcesUnder(full)
+    if (!entry.name.endsWith('.ts') && !entry.name.endsWith('.tsx')) return []
+    if (entry.name.includes('.test.')) return []
+    return [full]
+  })
+}
+
 function collectIcons(): { icon: string; where: string }[] {
   const found: { icon: string; where: string }[] = []
   for (const cls of THOCKQUEST.monsterClasses) found.push({ icon: cls.icon, where: `class ${cls.id}` })
@@ -48,16 +59,21 @@ describe('every icon the adventure names', () => {
     expect(missing).toEqual([])
   })
 
-  it('covers the icons the STAGES name inline, which is where the broken one was', () => {
+  it('covers every icon the MODULE names inline, wherever in it they live', () => {
     // Stages write their icons into `present` rather than into content, so a
     // scan of content alone would have missed `fa-swords` -- the one that
     // actually shipped as an empty box. The sources are parsed for the same
     // reason pressTracking.contract.test.ts parses JSX: a hand-kept list of
     // where icons live is the drift hazard the check exists to remove.
-    const dir = path.join(process.cwd(), 'src/adventure/stages')
+    //
+    // It scanned `stages/` ALONE at first, which was a list of where icons
+    // live wearing a different hat -- and it went stale the moment the spell
+    // table and the charm effects put six new glyphs in `model/`. The whole
+    // module is walked now, so a glyph named in a file nobody thought of is
+    // still checked.
     const missing: string[] = []
-    for (const file of readdirSync(dir).filter((name) => name.endsWith('.ts') && !name.includes('.test.'))) {
-      const source = readFileSync(path.join(dir, file), 'utf8')
+    for (const file of sourcesUnder(path.join(process.cwd(), 'src/adventure'))) {
+      const source = readFileSync(file, 'utf8')
       // Unquoted on purpose: an icon also appears inside a narration token
       // (`[fa-solid fa-burst|hit]`, see escapeMenu/narrationMarkup.ts), which
       // is built in a template literal and would slip past a pattern that
@@ -65,7 +81,7 @@ describe('every icon the adventure names', () => {
       // naming a real free icon, which costs nothing.
       for (const match of source.matchAll(/fa-(?:solid|regular|brands) (fa-[a-z0-9-]+)/g)) {
         const name = match[1].slice('fa-'.length)
-        if (!existsSync(path.join(SOLID, `${name}.svg`))) missing.push(`${file}: ${match[0]}`)
+        if (!existsSync(path.join(SOLID, `${name}.svg`))) missing.push(`${path.relative(process.cwd(), file)}: ${match[0]}`)
       }
     }
     expect(missing).toEqual([])

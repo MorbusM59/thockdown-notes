@@ -256,6 +256,11 @@ function stepFight(options: {
   rng: RngState
   /** What this action took off the monster, for the kill pill if it was the last. */
   struck?: number
+  /**
+   * Whether the action that got us here was the MONSTER's. Ignite answers the
+   * monster's clock, and this is what tells the one place that applies it.
+   */
+  monsterActed?: boolean
 }): Transition {
   const { state, monster, context } = options
   const derived = context.profile?.derived
@@ -263,6 +268,30 @@ function stepFight(options: {
   let rng = options.rng
   let struck = options.struck ?? 0
   let log = [...options.entries, ...state.log]
+
+  /**
+   * THE FIRE BITES AFTER THE MONSTER MOVES, once per stack, and this is the
+   * ONE place that says so -- for the blow it swung and for the action a
+   * charm took away from it alike. It was applied where a defence was
+   * resolved at first, which was the same rule at one of its two call sites:
+   * a charmed action is an action the monster took, and a stack that only
+   * burned for the ones it got to use would be a different spell against a
+   * talkative character.
+   *
+   * It answers the MONSTER's clock rather than the round's, which is what
+   * makes Ignite worth more against something fast and worth nothing at all
+   * against something a Meteor has just stunned (model/spells.ts).
+   */
+  const burn = () => {
+    if (!derived) return
+    const burned = igniteTick(round, derived)
+    if (!burned.tick) return
+    round = burned.state
+    log = [spellPill(burned.tick.spell, monster, burned.tick.damage), ...log]
+    struck = burned.tick.damage
+  }
+
+  if (options.monsterActed) burn()
   /** Pills from the moment a round CLOSED, kept behind the next status pill. */
   let carried: string[] = []
 
@@ -371,10 +400,12 @@ function stepFight(options: {
     if (armed.kind === 'armed') return resting(armed.actor, armed.dodgeOffered, rng)
 
     // A charm took the action away from it. Nothing was asked and nothing
-    // ended; the fight simply moved, so the loop goes round again.
+    // ended; the fight simply moved, so the loop goes round again -- and the
+    // action it lost is still an action it took, so the fire bites for it.
     round = armed.round
     log = [armed.entry, ...log]
     struck = armed.damage
+    burn()
   }
 
   // The bound above, reached. The one screen that gets the player out.
@@ -678,26 +709,17 @@ export const combatStage: StageModule = {
         successAdjust: context.game?.successAdjust,
         rng,
       })
-      // THE FIRE BITES AFTER IT MOVES, once per stack. It answers the
-      // monster's clock rather than the round's, which is what makes Ignite
-      // worth more against something fast and worth nothing against
-      // something a Meteor has just stunned (model/spells.ts).
-      const burned = context.profile
-        ? igniteTick(answer.state, context.profile.derived)
-        : { state: answer.state, tick: null }
-      const entries = [
-        ...(burned.tick ? [spellPill(burned.tick.spell, monster, burned.tick.damage)] : []),
-        monsterAttackPill(monster, defence, answer.blow, answer.escaped),
-      ]
       return stepFight({
         state,
-        round: burned.state,
+        round: answer.state,
         monster,
         context,
-        entries,
+        entries: [monsterAttackPill(monster, defence, answer.blow, answer.escaped)],
         effects: recordChanges(round, answer.state),
         rng: answer.rng,
-        struck: burned.tick?.damage ?? 0,
+        // The fire bites after it moves, and `stepFight` is the one place
+        // that knows -- see `burn` there.
+        monsterActed: true,
       })
     }
 
