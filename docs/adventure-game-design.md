@@ -664,10 +664,11 @@ have, working exactly as the player's does — and **cannot be dodged or miss**.
 Recorded here rather than left to be inferred from the implementation, and
 each is the author's to overrule:
 
-- **Both rolls happen when the round opens**, once. The spec times the charm
-  effects that way and is silent on the spells; rolling a spell's reach per
-  ACTION would make the ring's first cell a moving target, and the first cell
-  is what a fast player presses.
+- **The charms are rolled when the round opens; the spell hand is rolled per
+  ACTION.** The spec times the charms that way and was silent on the spells.
+  They were given the same timing at first, and the author corrected it: a
+  round that reached Meteor reached it for every action in that round, and a
+  Meteor streak is not what the chance is meant to buy.
 - **Availability is uncontested; the charm check is contested.** What a
   monster's wits are worth is settled by the check that fires, so contesting
   the "is it up" roll as well would charge the player for its Intellect twice.

@@ -8,10 +8,15 @@
 // meaning none. That is why nothing stores a set: a set could express
 // "Meteor but not Singe", which the rule says cannot happen.
 //
-// ONCE A ROUND, at the same moment the charm effects are rolled
-// (model/charm.ts) and for the same reason: a hand that changed under the
-// player mid-round would make the ring's first cell a moving target, and the
-// ring's first cell is what a fast player presses. A round is the hand.
+// ONCE PER ACTION, every time the player is about to act. It was once a
+// ROUND at first, alongside the charms (model/charm.ts), on the argument that
+// the ring's first cell should not move under a fast player -- and that was
+// the wrong trade: a round that reached Meteor reached it for EVERY action in
+// that round, and a Meteor streak is not what a one-in-twelve chance is meant
+// to buy. `(intellect - level) / 12` reads as the chance of an ACTION having
+// it, which is what it now is. The charms stay per round, because being under
+// one is a property of the round rather than of an action -- it is what the
+// pill says and what "lasts until the end of the round" means.
 //
 // MAGIC CANNOT MISS, CANNOT BE DODGED, AND IGNORES ARMOUR. All three fall
 // out of one line -- the strike is resolved with `defence: 'magic'`

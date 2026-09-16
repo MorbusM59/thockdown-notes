@@ -114,7 +114,16 @@ describe('magic, as the ring offers it', () => {
     // next one opens -- so the tick's pill has to be carried into the new
     // round or the reader never sees it happen.
     let save = inAFightWithMagic(31337, 20)
-    const plague = cellIds(save).find((id) => id === 'spell:plague')
+    // The hand is dealt per ACTION now, so Plague is not necessarily in the
+    // first one. Take the plain attack until it is.
+    let plague: string | undefined
+    for (let action = 0; action < 40; action += 1) {
+      plague = cellIds(save).find((id) => id === 'spell:plague')
+      if (plague) break
+      const screen = currentScreen(save, DEPS)
+      if (!screen || screen.stageId !== 'combat') break
+      save = choose(save, screen.choices.find((choice) => !choice.id.startsWith('spell:'))!.id, DEPS, NOW).save
+    }
     expect(plague).toBeDefined()
     save = choose(save, plague!, DEPS, NOW).save
 
@@ -173,5 +182,42 @@ describe('the fire answers the monster, not the round', () => {
         && glyphs(behind).includes('fa-solid fa-masks-theater')) burnedAfterCharm = true
     }
     expect(burnedAfterCharm).toBe(true)
+  })
+})
+
+describe('the hand is dealt per action', () => {
+  /**
+   * PER ACTION, not per round -- which was the first version, on the argument
+   * that the ring's first cell should not move under a fast player. That was
+   * the wrong trade: a round that reached Meteor reached it for every action
+   * in the round, and a Meteor STREAK is not what one chance in twelve buys.
+   */
+  it('does not hand the same top spell to every action of a round', () => {
+    // The property: across the actions of one fight, the offered set changes.
+    // Per-round dealing would hold it fixed for every action between two
+    // status pills.
+    const hands = new Set<string>()
+    let save = inAFightWithMagic(4242, 20)
+    for (let action = 0; action < 60; action += 1) {
+      const screen = currentScreen(save, DEPS)
+      if (!screen || screen.stageId !== 'combat') break
+      const spells = screen.choices.filter((choice) => choice.id.startsWith('spell:'))
+      if (spells.length > 0) hands.add(spells.map((choice) => choice.id).join(','))
+      // Never cast: casting can remove a cell on its own, which would make
+      // the set change for a reason that is not the deal.
+      save = choose(save, screen.choices.find((choice) => !choice.id.startsWith('spell:'))!.id, DEPS, NOW).save
+    }
+    expect(hands.size).toBeGreaterThan(1)
+  })
+
+  it('offers nothing while the question belongs to the monster, so the field never claims a hand nobody was dealt', () => {
+    let save = inAFightWithMagic(4242, 20)
+    for (let action = 0; action < 60; action += 1) {
+      const screen = currentScreen(save, DEPS)
+      if (!screen || screen.stageId !== 'combat') break
+      const defending = screen.choices.some((choice) => choice.id.startsWith('defence:'))
+      if (defending) expect(screen.choices.some((choice) => choice.id.startsWith('spell:'))).toBe(false)
+      save = choose(save, screen.choices[0].id, DEPS, NOW).save
+    }
   })
 })

@@ -25,6 +25,7 @@ import type { RngState } from '../core/rng'
 import type { StageContext } from '../core/stage'
 import type { Effect } from '../model/effects'
 import { NO_ARMOR } from '../model/armor'
+import { NO_SPELLS } from '../model/spellReach'
 import {
   beginRound, combatStatus, DEFENCES, defencesOffered, resolveMonsterAttack,
   resolvePlayerAttack, rollActor, rollDodgeOffered, roundFromJson, roundToJson,
@@ -94,7 +95,19 @@ function readState(state: JsonObject): CombatState {
  * ask, or a charm already answered it.
  */
 type Armed =
-  | { kind: 'armed'; actor: 'player' | 'monster' | null; dodgeOffered: boolean; rng: RngState }
+  | {
+      kind: 'armed'
+      actor: 'player' | 'monster' | null
+      dodgeOffered: boolean
+      /**
+       * The round with this action's own hand in it. `spellReach` is a fact
+       * about the ACTION about to be taken, not about the round -- it is
+       * NO_SPELLS whenever the question is not the player's, so the field can
+       * never claim a hand nobody was dealt.
+       */
+      round?: RoundState
+      rng: RngState
+    }
   /** A charm fired: the action is SPENT, the round moved, and nobody was asked. */
   | { kind: 'charmed'; round: RoundState; entry: string; damage: number; rng: RngState }
 
@@ -118,7 +131,21 @@ function armNextAction(
   if (!derived) return { kind: 'armed', actor: null, dodgeOffered: false, rng }
   const picked = rollActor(round, monster, derived, rng)
   if (picked.actor !== 'monster') {
-    return { kind: 'armed', actor: picked.actor, dodgeOffered: false, rng: picked.rng }
+    // THE HAND IS DEALT PER ACTION. It was dealt per ROUND at first, on the
+    // argument that the ring's first cell should not move under a fast
+    // player -- which turned out to be the wrong trade: a round that reached
+    // Meteor reached it for every action in that round, and a Meteor STREAK
+    // is not what a one-in-twelve chance is meant to buy. Rolled here, the
+    // table is re-asked every time the player is about to act, which is what
+    // `(intellect - level) / 12` reads as a chance OF.
+    const dealt = rollSpellReach(context.profile?.stats.intellect ?? 0, picked.rng)
+    return {
+      kind: 'armed',
+      actor: picked.actor,
+      dodgeOffered: false,
+      round: { ...round, spellReach: picked.actor === 'player' ? dealt.reach : NO_SPELLS },
+      rng: picked.actor === 'player' ? dealt.rng : picked.rng,
+    }
   }
 
   if (context.profile) {
@@ -191,12 +218,14 @@ const MAX_AUTOMATIC_STEPS = 64
  * A ROUND OPENS: its hand is dealt, and the log is cut back to what is true
  * of the new round.
  *
- * THE HAND IS DEALT HERE and nowhere else -- which spells are in reach
- * (model/spells.ts) and which charms came up (model/charm.ts). Once a round,
- * because the ring opens on its first cell, that cell is what a fast player
- * presses, and a hand that changed under them mid-round would make it a
- * moving target. It is also the only moment a roll of this kind can happen at
- * all: `present` is handed no rng, deliberately (core/stage.ts).
+ * THE ROUND'S CHARMS ARE ROLLED HERE (model/charm.ts), because being under a
+ * charm is a property of the ROUND -- it is what the pill says, and it is
+ * what "lasts until the end of the round" means. The SPELL hand is not: it is
+ * dealt per action, in `armNextAction`, so that reaching Meteor once is not
+ * reaching it for every action of that round.
+ *
+ * Either way this is the only kind of moment such a roll can happen at all:
+ * `present` is handed no rng, deliberately (core/stage.ts).
  *
  * The log becomes the status pill, then the charm pill if the round is under
  * anything, then whatever the last round's closing carried over. Newest
@@ -210,9 +239,8 @@ function openedRound(
   rng: RngState,
   carried: readonly string[] = [],
 ): { round: RoundState; log: string[]; rng: RngState } {
-  const spells = rollSpellReach(context.profile?.stats.intellect ?? 0, rng)
-  const charmed = rollCharms(context.profile?.stats.charisma ?? 0, spells.rng)
-  const round = beginRound({ ...previous, spellReach: spells.reach, charms: charmed.charms })
+  const charmed = rollCharms(context.profile?.stats.charisma ?? 0, rng)
+  const round = beginRound({ ...previous, spellReach: NO_SPELLS, charms: charmed.charms })
   const derived = context.profile?.derived
   const effects = charmsOf(round)
   return {
@@ -397,7 +425,10 @@ function stepFight(options: {
 
     const armed = armNextAction(round, monster, context, rng)
     rng = armed.rng
-    if (armed.kind === 'armed') return resting(armed.actor, armed.dodgeOffered, rng)
+    if (armed.kind === 'armed') {
+      if (armed.round) round = armed.round
+      return resting(armed.actor, armed.dodgeOffered, rng)
+    }
 
     // A charm took the action away from it. Nothing was asked and nothing
     // ended; the fight simply moved, so the loop goes round again -- and the

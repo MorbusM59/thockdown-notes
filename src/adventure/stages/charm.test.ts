@@ -54,15 +54,25 @@ describe('charm, as the bar tells it', () => {
     // are one thing that is true of this round -- and a bar that spent three
     // pills saying so would have no room left for the fight.
     //
-    // Base stats are capped at six, so this is the most a character can be
-    // and two of the three is a good round for it.
-    const screen = currentScreen(inAFight(4242, 6), DEPS)!
-    const charmPills = screen.narration.filter(isCharmStatus)
-    expect(charmPills).toHaveLength(1)
-    // The names ride on the glyph's own word, STRONGEST FIRST, which is what
-    // the pill's tooltip reads out -- and the count beside it is how many.
-    expect(words(charmPills[0])[0]).toBe('Confusion, Distraction')
-    expect(charmPills[0]).toContain('**2**')
+    // Which effects came up is a roll, so the assertion is the SHAPE rather
+    // than a particular hand: one pill, whatever it holds, with the names
+    // strongest first and a count that agrees with them.
+    const order = ['Doom', 'Confusion', 'Distraction']
+    let sawSeveral = false
+    for (const seed of [4242, 31337, 7, 99, 1234, 555]) {
+      const screen = currentScreen(inAFight(seed, 6), DEPS)!
+      const charmPills = screen.narration.filter(isCharmStatus)
+      if (charmPills.length === 0) continue
+      expect(charmPills).toHaveLength(1)
+      // The names ride on the glyph's own word, STRONGEST FIRST, which is
+      // what the pill's tooltip reads out -- and the count beside it is how
+      // many.
+      const named = words(charmPills[0])[0].split(', ')
+      expect(named).toEqual(order.filter((name) => named.includes(name)))
+      expect(charmPills[0]).toContain(`**${named.length}**`)
+      if (named.length > 1) sawSeveral = true
+    }
+    expect(sawSeveral).toBe(true)
   })
 
   it('says nothing at all for a character with no tongue for it', () => {
@@ -93,14 +103,17 @@ describe('charm, as the bar tells it', () => {
   })
 
   it('shows a charm that fired in the four-part shape, with the mask where the action goes', () => {
-    let save = inAFight(4242, 6)
     let fired: string | null = null
-    for (let action = 0; action < 60 && !fired; action += 1) {
-      const screen = currentScreen(save, DEPS)
-      if (!screen || screen.stageId !== 'combat') break
-      save = choose(save, screen.choices[0].id, DEPS, NOW).save
-      const after = currentScreen(save, DEPS)
-      fired = after?.narration.find((entry) => glyphs(entry).includes(CHARM_ICON) && !isCharmStatus(entry)) ?? null
+    for (const seed of [4242, 31337, 7, 99, 1234]) {
+      let save = inAFight(seed, 6)
+      for (let action = 0; action < 60 && !fired; action += 1) {
+        const screen = currentScreen(save, DEPS)
+        if (!screen || screen.stageId !== 'combat') break
+        save = choose(save, screen.choices[0].id, DEPS, NOW).save
+        const after = currentScreen(save, DEPS)
+        fired = after?.narration.find((entry) => glyphs(entry).includes(CHARM_ICON) && !isCharmStatus(entry)) ?? null
+      }
+      if (fired) break
     }
     expect(fired).not.toBeNull()
     // The MONSTER leads -- its own action was the thing that went wrong for

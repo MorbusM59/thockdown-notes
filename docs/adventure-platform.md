@@ -990,12 +990,16 @@ placed at 5, 9 and 10 and the level advancing after ten.
     property: a talkative character is asked to defend fewer times over the
     same fights than a silent one.
 
-    **Intellect deals a hand.** Availability collapses to ONE number per round
+    **Intellect deals a hand.** Availability collapses to ONE number
     (`spellReach`), because reaching a level brings every lower one with it --
-    a set could express a hand the rule says cannot be dealt. Rolled once a
-    round rather than once an action, for the same reason the charms are: the
-    ring opens on its first cell, that cell is what a fast player presses, and
-    a hand that changed under them mid-round would make it a moving target.
+    a set could express a hand the rule says cannot be dealt. Rolled once per
+    ACTION, every time the player is about to act. It was once a round at
+    first, alongside the charms, on the argument that the ring's first cell
+    should not move under a fast player; that was the wrong trade, because a
+    round that reached Meteor reached it for every action in the round and a
+    Meteor STREAK is not what one chance in twelve buys. The charms stay per
+    round: being under one is a property of the ROUND -- it is what the pill
+    says, and what "lasts until the end of the round" means.
 
     **The order IS the recommendation.** Strongest spell first, then Attack,
     then Prepare. A player who presses the first cell every time is playing
