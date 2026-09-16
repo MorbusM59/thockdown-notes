@@ -221,3 +221,28 @@ describe('the hand is dealt per action', () => {
     }
   })
 })
+
+describe('a hand belongs to the action it was dealt for', () => {
+  /**
+   * `spellReach` says what is in reach for the action ABOUT to be taken. On a
+   * monster's action nothing is, and the field must say so rather than keep
+   * the player's last hand -- it was left standing at first, which made the
+   * round claim a hand nobody had been dealt.
+   */
+  it('reads as nothing while the monster is the one acting', () => {
+    let save = inAFightWithMagic(4242, 20)
+    let checked = 0
+    for (let action = 0; action < 60; action += 1) {
+      const screen = currentScreen(save, DEPS)
+      if (!screen || screen.stageId !== 'combat') break
+      const frame = save.director.stack[save.director.stack.length - 1].state as Record<string, unknown>
+      const round = frame.round as Record<string, unknown>
+      if (screen.choices.some((choice) => choice.id.startsWith('defence:'))) {
+        expect(round.spellReach).toBe(-1)
+        checked += 1
+      }
+      save = choose(save, screen.choices[0].id, DEPS, NOW).save
+    }
+    expect(checked).toBeGreaterThan(0)
+  })
+})

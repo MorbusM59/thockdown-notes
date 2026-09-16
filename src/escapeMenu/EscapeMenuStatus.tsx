@@ -1,5 +1,5 @@
 import { usePillStripScroll } from '../shared/usePillStripScroll'
-import { narrationText, parseNarration } from './narrationMarkup'
+import { narrationText, parseNarration, splitNarration } from './narrationMarkup'
 import type { EscapeMenuCellDetail, EscapeMenuChromeMeter, EscapeMenuChromePill,
   EscapeMenuChromeToggle, EscapeMenuModeChrome } from './escapeMenuContract'
 
@@ -70,7 +70,11 @@ export function EscapeMenuReadouts({ status }: { status: EscapeMenuModeChrome })
  * something you press, and every gesture a mode has is in the ring.
  */
 function EscapeMenuNarrationPill({ entry }: { entry: string }) {
-  const spans = parseNarration(entry)
+  // The pill shows the LINE; anything behind it is the arithmetic, and lands
+  // in the tooltip under the words (narrationMarkup.ts's `splitNarration`).
+  const { line, detail } = splitNarration(entry)
+  const spans = parseNarration(line)
+  const words = narrationText(spans)
   return (
     // The words, on the pill itself: the spans below are glyphs and figures,
     // and a pill reading "8" to a screen reader is a pill saying nothing.
@@ -83,8 +87,8 @@ function EscapeMenuNarrationPill({ entry }: { entry: string }) {
     // and a count -- can say which ones.
     <span
       className="tag-pill escape-menu-narration is-inert"
-      aria-label={narrationText(spans)}
-      data-tooltip={narrationText(spans)}
+      aria-label={words}
+      data-tooltip={[words, ...detail].join('\n')}
     >
       {/* ONE flex item, not one per span. `.tag-pill` is inline-flex, so a
           span per run makes every run a flex ITEM -- and a flex item whose

@@ -1044,9 +1044,28 @@ placed at 5, 9 and 10 and the level advancing after ten.
     cell pays it out, with its words read from the status: "Withdraw" over a
     corpse is the one thing that screen must not say.
 
-79. **EVERY NARRATION PILL CARRIES ITS OWN TOOLTIP**, which is the same text
-    as its accessible name. The vocabulary already requires an icon to carry
-    the word it stands for (`narrationMarkup.ts`), so this costs nothing to
-    keep in step and is what makes a bar of glyphs readable at all. It is also
-    the only place a pill that stands for SEVERAL things can say which: the
-    charm pill is one mask and a count, and its tooltip is the list.
+79. **EVERY NARRATION PILL CARRIES ITS OWN TOOLTIP**, which is its words and
+    then ITS ARITHMETIC. The vocabulary already requires an icon to carry the
+    word it stands for (`narrationMarkup.ts`), so the words cost nothing to
+    keep in step; the working is what the fight actually did.
+
+    An entry is a string and stays one: everything after the first newline is
+    DETAIL (`splitNarration`), one line per fact. Narration is a `string[]`
+    through the director, the save and the sanitizer, and a shape change there
+    would ripple through all three to carry something only the renderer reads.
+    A pill with nothing to explain is exactly the string it always was.
+
+    **The numbers are the ones the fight USED, never recomputed.** A roll is a
+    VALUE (`core/rng.ts`'s `Roll` -- `nextChance` is it with the working
+    thrown away, defined in terms of it so the two cannot disagree about what
+    "passed" means), carried out on `Blow.math` and on every model that rolls
+    anything. A tooltip that derives its own answer from the stats is a
+    tooltip that can disagree with the blow it is explaining, which is the one
+    thing it must not do.
+
+    One shape, everywhere: a roll reads `rolled|needed` as whole percentages
+    -- "42|65" is "rolled 42, needed under 65" -- and a sum is written out
+    with its terms (`Damage: 8 = 4 x 2 crit`). Where the pill's glyph is
+    ambiguous the tooltip says so in words: a dodge and a miss wear the same
+    mark, because both are "nothing arrived", so a dodged blow says it was
+    dodged rather than leaving the absent hit roll to imply it.

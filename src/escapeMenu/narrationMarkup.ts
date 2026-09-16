@@ -117,3 +117,27 @@ export function narrationText(spans: readonly NarrationSpan[]): string {
     .replace(/\s+/g, ' ')
     .trim()
 }
+
+/**
+ * AN ENTRY'S TWO HALVES: the pill's own line, and the arithmetic behind it.
+ *
+ * Everything after the first newline is DETAIL -- what the pill's tooltip
+ * says under the words, one line per fact. It rides inside the same string
+ * rather than in a richer type on purpose: narration is a `string[]` all the
+ * way down, through the director, the save and the sanitizer, and a shape
+ * change there would ripple through every one of them to carry something only
+ * the renderer reads.
+ *
+ * A pill with nothing to explain is exactly the string it always was, so
+ * every existing entry keeps working without saying so.
+ */
+export function splitNarration(entry: string): { line: string; detail: string[] } {
+  const [line, ...rest] = entry.split('\n')
+  return { line, detail: rest.filter((row) => row.trim().length > 0) }
+}
+
+/** The inverse: a line and its working, as one entry. */
+export function withDetail(line: string, detail: readonly string[]): string {
+  const rows = detail.filter((row) => row.trim().length > 0)
+  return rows.length > 0 ? [line, ...rows].join('\n') : line
+}

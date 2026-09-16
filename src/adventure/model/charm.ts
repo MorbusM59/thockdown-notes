@@ -26,7 +26,7 @@
 // action is not a thing that can happen: the monster only has the one action
 // to lose.
 
-import { nextChance, type RngState } from '../core/rng'
+import { nextChance, nextRoll, type RngState, type Roll } from '../core/rng'
 import { resolveChanceWith, type StatChance } from './chance'
 import type { StatBlock } from './stats'
 import { REACH_DIVISOR } from './spells'
@@ -106,6 +106,11 @@ export function charmAt(level: number): CharmEffect | null {
   return CHARM_EFFECTS.find((effect) => effect.level === level) ?? null
 }
 
+/** What a charm check comes to against this monster -- what the pill's tooltip quotes. */
+export function charmCheckChance(playerStats: StatBlock, monster: Monster, successAdjust?: number): number {
+  return resolveChanceWith(CHARM_CHECK, playerStats, monster.stats, { side: 'player', successAdjust })
+}
+
 /** The effects a round is under, strongest first, as the things rather than the numbers. */
 export function charmsOf(state: RoundState): CharmEffect[] {
   return state.charms
@@ -118,6 +123,8 @@ export interface CharmInterception {
   effect: CharmEffect
   /** What it cost the monster, where that is a number. Zero for a lost action. */
   damage: number
+  /** The check that fired it, for the pill's tooltip. */
+  roll: Roll
   state: RoundState
 }
 
@@ -142,19 +149,20 @@ export function interceptMonsterAction(options: {
 }): { interception: CharmInterception | null; rng: RngState } {
   let rng = options.rng
   for (const effect of charmsOf(options.state)) {
-    const draw = nextChance(rng, resolveChanceWith(CHARM_CHECK, options.playerStats, options.monster.stats, {
+    const draw = nextRoll(rng, resolveChanceWith(CHARM_CHECK, options.playerStats, options.monster.stats, {
       side: 'player',
       successAdjust: options.successAdjust,
     }))
     rng = draw.rng
-    if (!draw.value) continue
+    if (!draw.value.passed) continue
+    const roll = draw.value
 
     // The action is gone either way -- that is what every one of these does
     // first, and the difference is only what it costs the monster on top.
     const spent = { ...options.state, monsterActionsSpent: options.state.monsterActionsSpent + 1 }
 
     if (effect.outcome === 'lostAction') {
-      return { interception: { effect, damage: 0, state: spent }, rng }
+      return { interception: { effect, damage: 0, roll, state: spent }, rng }
     }
 
     if (effect.outcome === 'turnedOnItself') {
@@ -163,7 +171,12 @@ export function interceptMonsterAction(options: {
       // only one of it here.
       const damage = Math.round(options.monster.damage)
       return {
-        interception: { effect, damage, state: { ...spent, monsterDamageTaken: spent.monsterDamageTaken + damage } },
+        interception: {
+          effect,
+          damage,
+          roll,
+          state: { ...spent, monsterDamageTaken: spent.monsterDamageTaken + damage },
+        },
         rng,
       }
     }
@@ -172,7 +185,12 @@ export function interceptMonsterAction(options: {
     // also the figure the spoils screen's kill line reads.
     const left = Math.max(0, options.monster.maxHitPoints - spent.monsterDamageTaken)
     return {
-      interception: { effect, damage: left, state: { ...spent, monsterDamageTaken: spent.monsterDamageTaken + left } },
+      interception: {
+        effect,
+        damage: left,
+        roll,
+        state: { ...spent, monsterDamageTaken: spent.monsterDamageTaken + left },
+      },
       rng,
     }
   }

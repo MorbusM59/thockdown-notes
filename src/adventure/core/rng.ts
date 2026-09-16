@@ -54,10 +54,36 @@ export function nextInt(rng: RngState, min: number, max: number): Draw<number> {
   return { value: Math.floor(min) + Math.floor(draw.value * (span + 1)), rng: draw.rng }
 }
 
+/**
+ * ONE CHANCE, ROLLED, with its working shown: what came up, what it had to
+ * come in under, and whether it did.
+ *
+ * The game tells the player what happened in glyphs, and every pill's tooltip
+ * documents the arithmetic behind it -- which is only possible if a roll is a
+ * VALUE rather than a boolean somebody threw the number away to make. This is
+ * that value; `nextChance` is it with the working discarded, defined in terms
+ * of it so the two cannot come to disagree about what "passed" means.
+ *
+ * Both numbers are 0..1. Read as "rolled 42, needed under 65".
+ */
+export interface Roll {
+  rolled: number
+  needed: number
+  passed: boolean
+}
+
+export function nextRoll(rng: RngState, probability: number): Draw<Roll> {
+  const draw = nextFloat(rng)
+  return {
+    value: { rolled: draw.value, needed: probability, passed: draw.value < probability },
+    rng: draw.rng,
+  }
+}
+
 /** True with the given probability. Out-of-range probabilities are honest: 0 never, 1 always. */
 export function nextChance(rng: RngState, probability: number): Draw<boolean> {
-  const draw = nextFloat(rng)
-  return { value: draw.value < probability, rng: draw.rng }
+  const draw = nextRoll(rng, probability)
+  return { value: draw.value.passed, rng: draw.rng }
 }
 
 /** One element, uniformly. Null for an empty pool rather than undefined behaviour. */

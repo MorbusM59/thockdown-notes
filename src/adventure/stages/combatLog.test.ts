@@ -4,7 +4,7 @@ import { buildCatalog, THOCKQUEST } from '../content'
 import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from '../core/director'
 import { emptySave, type GameSave } from '../model/gameState'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
-import { narrationText, parseNarration } from '../../escapeMenu/narrationMarkup'
+import { narrationText, parseNarration, splitNarration } from '../../escapeMenu/narrationMarkup'
 import { buildMonster } from '../model/monsters'
 import { addStats, createStatBlock } from '../model/stats'
 import { killPill, monsterAttackPill, playerAttackPill, statusPill } from './combatLog'
@@ -20,8 +20,16 @@ const DEPS: DirectorDeps = {
 
 const NOW = 1_700_000_000_000
 
-const HIT = { hit: true, crit: false, dodged: false, damage: 8, armorDecayed: false }
-const MISS = { hit: false, crit: false, dodged: false, damage: 0, armorDecayed: false }
+const ROLL = (rolled: number, needed: number) => ({ rolled, needed, passed: rolled < needed })
+
+const HIT = {
+  hit: true, crit: false, dodged: false, damage: 8, armorDecayed: false,
+  math: { dodge: null, hit: ROLL(0.4, 0.6), crit: ROLL(0.9, 0.3), base: 8, critMultiplier: 1, absorbed: 0 },
+}
+const MISS = {
+  hit: false, crit: false, dodged: false, damage: 0, armorDecayed: false,
+  math: { dodge: null, hit: ROLL(0.8, 0.6), crit: null, base: 8, critMultiplier: 1, absorbed: 0 },
+}
 
 const WARRIOR = addStats(createStatBlock(0), { might: 2, agility: 1 })
 
@@ -35,14 +43,21 @@ function monsterOf(type: 'regular' | 'boss') {
   })
 }
 
+/**
+ * The pill's own LINE, without the arithmetic behind it. An entry carries
+ * both (escapeMenu/narrationMarkup.ts), and only the line is the grammar
+ * these tests are about.
+ */
+const lineOf = (entry: string) => splitNarration(entry).line
+
 /** The glyphs in an entry, in order -- which is the pill's whole grammar. */
 function glyphs(entry: string): string[] {
-  return parseNarration(entry).flatMap((span) => (span.kind === 'icon' ? [span.icon] : []))
+  return parseNarration(lineOf(entry)).flatMap((span) => (span.kind === 'icon' ? [span.icon] : []))
 }
 
 /** The figures in an entry. Empty where the pill carries no number at all. */
 function figures(entry: string): string[] {
-  return parseNarration(entry).flatMap((span) => (span.kind === 'text' && /\d/.test(span.text) ? [span.text] : []))
+  return parseNarration(lineOf(entry)).flatMap((span) => (span.kind === 'text' && /\d/.test(span.text) ? [span.text] : []))
 }
 
 describe('a combat pill', () => {
@@ -50,7 +65,7 @@ describe('a combat pill', () => {
     const pill = playerAttackPill(monsterOf('regular'), HIT)
     expect(glyphs(pill)).toEqual(['fa-solid fa-user-shield', 'fa-solid fa-burst', 'fa-solid fa-skull'])
     expect(figures(pill)).toEqual(['8'])
-    expect(narrationText(parseNarration(pill))).toBe('you hit 8 it')
+    expect(narrationText(parseNarration(lineOf(pill)))).toBe('you hit 8 it')
   })
 
   it('carries NO number on a miss, so nothing reads as a quantity', () => {
@@ -62,15 +77,15 @@ describe('a combat pill', () => {
   it('turns the arrow round when the monster is the one swinging', () => {
     const pill = monsterAttackPill(monsterOf('regular'), 'defend', HIT, false)
     expect(glyphs(pill)).toEqual(['fa-solid fa-skull', 'fa-solid fa-shield', 'fa-solid fa-user-shield'])
-    expect(narrationText(parseNarration(pill))).toBe('it got through 8 you')
+    expect(narrationText(parseNarration(lineOf(pill)))).toBe('it got through 8 you')
   })
 
   it('reads from whoever is SWINGING -- a blow that beat a block is not a block', () => {
     // "it blocked 8 you" said the opposite of what happened: the player
     // blocked, the monster got through it.
-    expect(narrationText(parseNarration(monsterAttackPill(monsterOf('regular'), 'dodge', { ...MISS, dodged: true }, false))))
+    expect(narrationText(parseNarration(lineOf(monsterAttackPill(monsterOf('regular'), 'dodge', { ...MISS, dodged: true }, false)))))
       .toBe('it was dodged by you')
-    expect(narrationText(parseNarration(monsterAttackPill(monsterOf('regular'), 'flee', null, true))))
+    expect(narrationText(parseNarration(lineOf(monsterAttackPill(monsterOf('regular'), 'flee', null, true)))))
       .toBe('it lost you')
   })
 
@@ -210,7 +225,7 @@ describe('the blow that ended it', () => {
     const pill = killPill(monsterOf('regular'), 12)
     expect(glyphs(pill)).toEqual(['fa-solid fa-user-shield', 'fa-solid fa-cross', 'fa-solid fa-skull'])
     expect(figures(pill)).toEqual(['12'])
-    expect(narrationText(parseNarration(pill))).toBe('you killed 12 it')
+    expect(narrationText(parseNarration(lineOf(pill)))).toBe('you killed 12 it')
   })
 
   it('names a boss as a boss, like every other pill', () => {

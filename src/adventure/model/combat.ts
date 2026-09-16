@@ -18,7 +18,7 @@
 import { absorb, type Armor } from './armor'
 import type { JsonObject, JsonValue } from '../core/json'
 import { NO_SPELLS } from './spellReach'
-import { nextChance, type RngState } from '../core/rng'
+import { nextChance, nextRoll, type RngState, type Roll } from '../core/rng'
 import { NO_CHANCE_ADJUSTMENT, resolveChanceWith, type ChanceAdjustment, type ChanceSide } from './chance'
 import { actionsRemaining, damageFrom, monsterDefence, type Monster } from './monsters'
 import { CRIT_CHANCE, DODGE_CHANCE, HIT_CHANCE, type DerivedStats, type StatBlock } from './stats'
@@ -209,6 +209,33 @@ export function rollActor(
   return { actor: draw.value ? 'player' : 'monster', rng: draw.rng }
 }
 
+/**
+ * THE WORKING BEHIND A BLOW, so the pill that reports it can document its own
+ * arithmetic (escapeMenu/narrationMarkup.ts on an entry's two halves).
+ *
+ * Every field is what the roll or the sum ACTUALLY was, not a restatement --
+ * a tooltip computed from the stats a second time is a tooltip that can
+ * disagree with the fight, which is the one thing it must not do. Absent
+ * where nothing was rolled: magic takes no hit roll, Take the hit takes no
+ * hit roll, a blow that missed takes no crit roll.
+ */
+export interface BlowMath {
+  /** The defender's chance not to be there at all, where the attacker rolled it. */
+  dodge: Roll | null
+  hit: Roll | null
+  crit: Roll | null
+  /** What one blow of this attacker's is worth, before the crit and before armour. */
+  base: number
+  /** 1, or 2 on a crit. */
+  critMultiplier: number
+  /** What armour stopped, where it was consulted. */
+  absorbed: number
+}
+
+export const NO_BLOW_MATH: BlowMath = {
+  dodge: null, hit: null, crit: null, base: 0, critMultiplier: 1, absorbed: 0,
+}
+
 /** One blow's worth of what happened, for the narration to read from. */
 export interface Blow {
   hit: boolean
@@ -218,6 +245,7 @@ export interface Blow {
   damage: number
   /** Whether this blow cost the defender a point of item armor. */
   armorDecayed: boolean
+  math: BlowMath
 }
 
 interface ExchangeInput {
@@ -250,6 +278,8 @@ interface ExchangeInput {
    */
   defence: Defence | 'none' | 'magic'
   dodgeOffered: boolean
+  /** The defender's dodge offer, where the caller rolled one, for the working. */
+  dodgeRoll?: Roll | null
   rng: RngState
 }
 
@@ -264,8 +294,16 @@ interface ExchangeInput {
  */
 export function resolveExchange(input: ExchangeInput): { blow: Blow; armor: Armor; rng: RngState } {
   const armor = input.armor
+  // What the attacker's own side of this already rolled, where the caller
+  // took it before getting here (the defender's dodge offer).
+  const math: BlowMath = { ...NO_BLOW_MATH, dodge: input.dodgeRoll ?? null, base: input.attackerDamage }
+
   if (input.defence === 'dodge') {
-    return { blow: { hit: false, crit: false, dodged: true, damage: 0, armorDecayed: false }, armor, rng: input.rng }
+    return {
+      blow: { hit: false, crit: false, dodged: true, damage: 0, armorDecayed: false, math },
+      armor,
+      rng: input.rng,
+    }
   }
 
   let rng = input.rng
@@ -274,30 +312,37 @@ export function resolveExchange(input: ExchangeInput): { blow: Blow; armor: Armo
   // nothing to roll. The dodge branch above is never reached for magic --
   // the caster does not offer the dodge in the first place.
   if (input.defence !== 'takeTheHit' && input.defence !== 'magic') {
-    const roll = nextChance(rng, resolveChanceWith(HIT_CHANCE, input.attackerStats, input.defenderStats, {
+    const roll = nextRoll(rng, resolveChanceWith(HIT_CHANCE, input.attackerStats, input.defenderStats, {
       adjustment: input.attackerChances?.hitChance,
       side: input.attacker,
       successAdjust: input.successAdjust,
     }))
-    landed = roll.value
+    math.hit = roll.value
+    landed = roll.value.passed
     rng = roll.rng
   }
   if (!landed) {
-    return { blow: { hit: false, crit: false, dodged: false, damage: 0, armorDecayed: false }, armor, rng }
+    return {
+      blow: { hit: false, crit: false, dodged: false, damage: 0, armorDecayed: false, math },
+      armor,
+      rng,
+    }
   }
 
-  const critRoll = nextChance(rng, resolveChanceWith(CRIT_CHANCE, input.attackerStats, input.defenderStats, {
+  const critRoll = nextRoll(rng, resolveChanceWith(CRIT_CHANCE, input.attackerStats, input.defenderStats, {
     adjustment: input.attackerChances?.critChance,
     side: input.attacker,
     successAdjust: input.successAdjust,
   }))
   rng = critRoll.rng
+  math.crit = critRoll.value
+  math.critMultiplier = critRoll.value.passed ? 2 : 1
   // WHOLE, once, here. The power multiplier makes a monster's damage
   // fractional (8.4 at level one, 16.8 on a crit), and leaving it that way
   // meant the record lost 16.8 hit points while the narration said 17. Hit
   // points are a count; rounding at the blow is the only place the two can
   // be made to agree.
-  const raw = Math.round(input.attackerDamage * (critRoll.value ? 2 : 1))
+  const raw = Math.round(input.attackerDamage * math.critMultiplier)
 
   // Armor is Defend's alone. Flee, Take the hit and magic all say so
   // explicitly, and Dodge never reaches here. The pool comes back UNTOUCHED
@@ -305,12 +350,23 @@ export function resolveExchange(input: ExchangeInput): { blow: Blow; armor: Armo
   // help. For magic that is the rule rather than a consequence: a plated
   // monster is the problem Intellect answers.
   if (input.defence !== 'defend') {
-    return { blow: { hit: true, crit: critRoll.value, dodged: false, damage: raw, armorDecayed: false }, armor, rng }
+    return {
+      blow: { hit: true, crit: critRoll.value.passed, dodged: false, damage: raw, armorDecayed: false, math },
+      armor,
+      rng,
+    }
   }
 
   const absorbed = absorb(armor, raw, input.defenderStats.luck, input.armorDecayFloor, rng)
   return {
-    blow: { hit: true, crit: critRoll.value, dodged: false, damage: absorbed.damage, armorDecayed: absorbed.decayed },
+    blow: {
+      hit: true,
+      crit: critRoll.value.passed,
+      dodged: false,
+      damage: absorbed.damage,
+      armorDecayed: absorbed.decayed,
+      math: { ...math, absorbed: absorbed.absorbed },
+    },
     armor: absorbed.armor,
     rng: absorbed.rng,
   }
@@ -326,13 +382,13 @@ export function rollDodgeOffered(options: {
   defender: ChanceSide
   successAdjust?: number
   rng: RngState
-}): { offered: boolean; rng: RngState } {
-  const draw = nextChance(options.rng, resolveChanceWith(DODGE_CHANCE, options.defenderStats, options.attackerStats, {
+}): { offered: boolean; roll: Roll; rng: RngState } {
+  const draw = nextRoll(options.rng, resolveChanceWith(DODGE_CHANCE, options.defenderStats, options.attackerStats, {
     adjustment: options.adjustment ?? NO_CHANCE_ADJUSTMENT,
     side: options.defender,
     successAdjust: options.successAdjust,
   }))
-  return { offered: draw.value, rng: draw.rng }
+  return { offered: draw.value.passed, roll: draw.value, rng: draw.rng }
 }
 
 /** What the player may pick, this time. Dodge is the only one that has to be earned. */
@@ -378,6 +434,7 @@ export function resolvePlayerAttack(options: {
     successAdjust: options.successAdjust,
     defence: monsterDefence(offered.offered),
     dodgeOffered: offered.offered,
+    dodgeRoll: offered.roll,
     rng: offered.rng,
   })
   return {
@@ -405,24 +462,33 @@ export function resolveMonsterAttack(options: {
   playerStats: StatBlock
   armorDecayFloor: number
   defence: Defence
+  /**
+   * The roll that PUT Dodge on the table, taken when the action was armed
+   * rather than here. Carried through so the blow can explain itself: picking
+   * Dodge cannot fail, because Dodge being there IS the success, and the
+   * number behind that is the only one a dodged blow has to show.
+   */
+  dodgeRoll?: Roll | null
   successAdjust?: number
   rng: RngState
-}): { state: RoundState; blow: Blow | null; escaped: boolean; rng: RngState } {
+}): { state: RoundState; blow: Blow | null; escaped: boolean; pursuit: Roll | null; rng: RngState } {
   const spent = { ...options.state, monsterActionsSpent: options.state.monsterActionsSpent + 1 }
 
   let rng = options.rng
+  let pursuit: Roll | null = null
   if (options.defence === 'flee') {
     // The MONSTER's roll, so no player adjustment applies to it -- an item
     // that sharpens your own dodge does not make the thing chasing you
     // slower -- and the thumb presses it DOWN, since catching you is a
     // monster success.
-    const pursuit = nextChance(rng, resolveChanceWith(DODGE_CHANCE, options.monster.stats, options.playerStats, {
+    const chase = nextRoll(rng, resolveChanceWith(DODGE_CHANCE, options.monster.stats, options.playerStats, {
       side: 'monster',
       successAdjust: options.successAdjust,
     }))
-    rng = pursuit.rng
-    if (!pursuit.value) {
-      return { state: { ...spent, playerFled: true }, blow: null, escaped: true, rng }
+    rng = chase.rng
+    pursuit = chase.value
+    if (!chase.value.passed) {
+      return { state: { ...spent, playerFled: true }, blow: null, escaped: true, pursuit, rng }
     }
   }
 
@@ -436,6 +502,7 @@ export function resolveMonsterAttack(options: {
     successAdjust: options.successAdjust,
     defence: options.defence,
     dodgeOffered: options.defence === 'dodge',
+    dodgeRoll: options.dodgeRoll,
     rng,
   })
 
@@ -447,6 +514,7 @@ export function resolveMonsterAttack(options: {
     },
     blow: exchange.blow,
     escaped: false,
+    pursuit,
     rng: exchange.rng,
   }
 }

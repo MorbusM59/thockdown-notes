@@ -687,3 +687,25 @@ each is the author's to overrule:
 - **Monster armour is a per-TYPE table** (0/0/1/2/3 by group/regular/elite/
   mini boss/boss), carried in the natural pool so it never decays, and not
   scaled by the power multiplier. A first pass, meant to be tuned.
+
+#### Every pill documents its own arithmetic
+
+A later addition by the author, and it applies to the whole bar rather than
+to the charm pill it started with:
+
+> Let's actually have tooltip info for every pill that documents the math
+> briefly. Example: `Hit: [rolled]|[needed] Crit: [rolled]|[needed] Damage:
+> [total] = [rolled]([min]-[max]) x [crit multiplier]` … in that spirit for
+> all pills adapted accordingly for misses, dodges etc.
+
+Adapted where the formulas differ from the example, which they do in one
+place worth naming: **a blow's damage has no range**. It is
+`BASE_DAMAGE x damageMultiplier`, a single number, so the tooltip writes
+`Damage: 8 = 4 x 2 crit` rather than inventing a `(min-max)` that does not
+exist. Showing a range the game does not roll would be a documented formula
+that is not the game's.
+
+The shape, everywhere: a roll is `rolled|needed` in whole percentages, and a
+sum is written with its terms. Where a glyph is ambiguous the tooltip says so
+in words — a dodge and a miss share a mark, so a dodged blow says it was
+dodged.

@@ -27,7 +27,7 @@
 //
 // The CRIT roll stays. A spell is an attack, and Luck is what a crit reads.
 
-import { nextChance, type RngState } from '../core/rng'
+import { nextChance, nextRoll, type RngState, type Roll } from '../core/rng'
 import { CRIT_CHANCE, type DerivedStats, type StatBlock } from './stats'
 import { resolveChanceWith, type ChanceAdjustment } from './chance'
 import { damageFrom, type Monster } from './monsters'
@@ -224,7 +224,18 @@ export interface CastResult {
   blows: Blow[]
   /** Whether this took the monster's remaining actions away. Meteor's, and worth its own pill. */
   stunned: boolean
+  /**
+   * The spell's own working, for the pill's tooltip -- what it laid on, or
+   * how a bolt's chain went. The BLOWS explain themselves (`Blow.math`); this
+   * is only what the spell did that a blow cannot say.
+   */
+  detail: string[]
   rng: RngState
+}
+
+/** A roll as a tooltip reads it: what came up against what it needed. */
+function rollLine(label: string, roll: Roll): string {
+  return `${label}: ${Math.round(roll.rolled * 100)}|${Math.round(roll.needed * 100)}`
 }
 
 /** One magical blow: no hit roll, no dodge, no armour, crit as usual. */
@@ -263,13 +274,31 @@ export function castSpell(input: CastInput): CastResult {
 
   switch (input.spell.id) {
     case 'plague':
-      return { state: { ...spent, plagued: spent.plagued + 1 }, blows: [], stunned: false, rng: input.rng }
+      return {
+        state: { ...spent, plagued: spent.plagued + 1 },
+        blows: [],
+        stunned: false,
+        detail: [`${spent.plagued + 1} stack(s): ${Math.round(PLAGUE_SHARE * 100 * (spent.plagued + 1))}% of what it has left, each round`],
+        rng: input.rng,
+      }
 
     case 'lightningStorm':
-      return { state: { ...spent, storming: spent.storming + 1 }, blows: [], stunned: false, rng: input.rng }
+      return {
+        state: { ...spent, storming: spent.storming + 1 },
+        blows: [],
+        stunned: false,
+        detail: [`${spent.storming + 1} stack(s): ${Math.round(magicalDamage(input.playerDerived))} damage each round, before crit`],
+        rng: input.rng,
+      }
 
     case 'ignite':
-      return { state: { ...spent, igniteStacks: spent.igniteStacks + 1 }, blows: [], stunned: false, rng: input.rng }
+      return {
+        state: { ...spent, igniteStacks: spent.igniteStacks + 1 },
+        blows: [],
+        stunned: false,
+        detail: [`${spent.igniteStacks + 1} stack(s): ${Math.round(magicalDamage(input.playerDerived) * IGNITE_SHARE * (spent.igniteStacks + 1))} damage per action it takes`],
+        rng: input.rng,
+      }
 
     case 'singe': {
       const struck = magicStrike(input, base, input.rng)
@@ -277,6 +306,7 @@ export function castSpell(input: CastInput): CastResult {
         state: { ...spent, monsterDamageTaken: spent.monsterDamageTaken + struck.blow.damage },
         blows: [struck.blow],
         stunned: false,
+        detail: [],
         rng: struck.rng,
       }
     }
@@ -294,12 +324,14 @@ export function castSpell(input: CastInput): CastResult {
         },
         blows: [struck.blow],
         stunned: true,
+        detail: [`Double damage: ${Math.round(base)} for one of this character's attacks`],
         rng: struck.rng,
       }
     }
 
     case 'lightningBolt': {
       const blows: Blow[] = []
+      const leaps: string[] = []
       let state = spent
       let rng = input.rng
       for (let strike = 0; strike < LIGHTNING_MAX_STRIKES; strike += 1) {
@@ -307,16 +339,23 @@ export function castSpell(input: CastInput): CastResult {
         blows.push(struck.blow)
         state = { ...state, monsterDamageTaken: state.monsterDamageTaken + struck.blow.damage }
         rng = struck.rng
-        const again = nextChance(rng, resolveChanceWith(
+        const again = nextRoll(rng, resolveChanceWith(
           LIGHTNING_REPEAT_CHANCE,
           input.playerStats,
           input.monster.stats,
           { side: 'player', successAdjust: input.successAdjust },
         ))
         rng = again.rng
-        if (!again.value) break
+        leaps.push(rollLine('Leap', again.value))
+        if (!again.value.passed) break
       }
-      return { state, blows, stunned: false, rng }
+      return {
+        state,
+        blows,
+        stunned: false,
+        detail: [`${blows.length} strike(s)`, ...leaps],
+        rng,
+      }
     }
   }
 }
@@ -325,6 +364,8 @@ export function castSpell(input: CastInput): CastResult {
 export interface SpellTick {
   spell: Spell
   damage: number
+  /** The arithmetic behind that number, for the pill's tooltip. */
+  detail: string[]
 }
 
 /**
@@ -339,11 +380,16 @@ export interface SpellTick {
 export function igniteTick(state: RoundState, playerDerived: DerivedStats): { state: RoundState; tick: SpellTick | null } {
   if (state.igniteStacks <= 0) return { state, tick: null }
   const spell = SPELLS.find((candidate) => candidate.id === 'ignite')!
-  const damage = Math.round(magicalDamage(playerDerived) * IGNITE_SHARE * state.igniteStacks)
+  const per = magicalDamage(playerDerived) * IGNITE_SHARE
+  const damage = Math.round(per * state.igniteStacks)
   if (damage <= 0) return { state, tick: null }
   return {
     state: { ...state, monsterDamageTaken: state.monsterDamageTaken + damage },
-    tick: { spell, damage },
+    tick: {
+      spell,
+      damage,
+      detail: [`Damage: ${damage} = ${Math.round(magicalDamage(playerDerived))} x ${Math.round(IGNITE_SHARE * 100)}% x ${state.igniteStacks} stack(s)`],
+    },
   }
 }
 
@@ -380,12 +426,16 @@ export function endOfRoundTicks(options: {
     const damage = Math.round(left * PLAGUE_SHARE * state.plagued)
     if (damage > 0) {
       state = { ...state, monsterDamageTaken: state.monsterDamageTaken + damage }
-      ticks.push({ spell: spellAt(1)!, damage })
+      ticks.push({
+        spell: spellAt(1)!,
+        damage,
+        detail: [`Damage: ${damage} = ${left} left x ${Math.round(PLAGUE_SHARE * 100)}% x ${state.plagued} stack(s)`],
+      })
     }
   }
 
   if (state.storming > 0) {
-    const crit = nextChance(rng, resolveChanceWith(CRIT_CHANCE, options.playerStats, options.monster.stats, {
+    const crit = nextRoll(rng, resolveChanceWith(CRIT_CHANCE, options.playerStats, options.monster.stats, {
       adjustment: options.playerChances?.critChance,
       side: 'player',
       successAdjust: options.successAdjust,
@@ -393,10 +443,18 @@ export function endOfRoundTicks(options: {
     rng = crit.rng
     // PER STACK, on ONE crit roll: two storms are two bolts out of the same
     // sky, not two independently lucky ones.
-    const damage = Math.round(magicalDamage(options.playerDerived) * (crit.value ? 2 : 1) * state.storming)
+    const multiplier = crit.value.passed ? 2 : 1
+    const damage = Math.round(magicalDamage(options.playerDerived) * multiplier * state.storming)
     if (damage > 0) {
       state = { ...state, monsterDamageTaken: state.monsterDamageTaken + damage }
-      ticks.push({ spell: spellAt(4)!, damage })
+      ticks.push({
+        spell: spellAt(4)!,
+        damage,
+        detail: [
+          rollLine('Crit', crit.value),
+          `Damage: ${damage} = ${Math.round(magicalDamage(options.playerDerived))} x ${multiplier} x ${state.storming} stack(s)`,
+        ],
+      })
     }
   }
 

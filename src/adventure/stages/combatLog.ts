@@ -25,9 +25,11 @@
 // icon renders as an empty box rather than failing, and two have shipped that
 // way already.
 
-import type { Blow, Defence, RoundState } from '../model/combat'
+import type { Blow, BlowMath, Defence, RoundState } from '../model/combat'
 import { monsterActionsLeft, playerActionsLeft } from '../model/combat'
 import type { Monster } from '../model/monsters'
+import type { Roll } from '../core/rng'
+import { withDetail } from '../../escapeMenu/narrationMarkup'
 import type { Spell } from '../model/spells'
 import { CHARM_ICON, type CharmEffect } from '../model/charm'
 import { PREPARE_ICON } from '../model/prepare'
@@ -96,18 +98,86 @@ function playerActionIcon(action: 'attack' | Defence, blow: Blow | null, escaped
   }
 }
 
+/**
+ * THE WORKING, as a tooltip reads it.
+ *
+ * Every pill documents the arithmetic behind itself, and the shape is one
+ * shape: a roll is `rolled|needed` as whole percentages -- "42|65" is "rolled
+ * 42, needed under 65" -- and a sum is written out with its terms. The
+ * numbers are the ones the fight ACTUALLY used (`Blow.math`), never recomputed
+ * from the stats here: a tooltip that derives its own answer is a tooltip
+ * that can disagree with the blow it is explaining, which is the one thing it
+ * must not do.
+ */
+function rollLine(label: string, roll: Roll | null): string | null {
+  return roll === null ? null : `${label}: ${Math.round(roll.rolled * 100)}|${Math.round(roll.needed * 100)}`
+}
+
+/** Every roll a blow took, on one line, in the order they were taken. */
+function rollsOf(math: BlowMath): string | null {
+  const rolls = [
+    rollLine('Dodge', math.dodge),
+    rollLine('Hit', math.hit),
+    rollLine('Crit', math.crit),
+  ].filter((row): row is string => row !== null)
+  return rolls.length > 0 ? rolls.join('  ') : null
+}
+
+/** What the damage came to, and out of what. */
+function damageOf(blow: Blow): string | null {
+  if (!blow.hit) return null
+  const base = Math.round(blow.math.base)
+  const struck = Math.round(base * blow.math.critMultiplier)
+  const terms = [`${base}`]
+  if (blow.math.critMultiplier !== 1) terms.push(`x ${blow.math.critMultiplier} crit`)
+  if (blow.math.absorbed > 0) terms.push(`- ${Math.round(blow.math.absorbed)} armour`)
+  return terms.length === 1 && struck === blow.damage
+    ? `Damage: ${blow.damage}`
+    : `Damage: ${blow.damage} = ${terms.join(' ')}`
+}
+
+/**
+ * A blow's whole working: what was rolled, and what it came to.
+ *
+ * A DODGED blow's only number is the roll that put Dodge on the table, taken
+ * when the action was armed -- picking Dodge cannot fail, because Dodge being
+ * there IS the success, so there is nothing else to show and the pill would
+ * otherwise have nothing to say for itself.
+ */
+export function blowDetail(blow: Blow | null): string[] {
+  if (!blow) return []
+  return [
+    rollsOf(blow.math),
+    // A DODGE AND A MISS WEAR THE SAME GLYPH -- both are "nothing arrived",
+    // which is the right thing for the pill to say and the wrong thing for
+    // the tooltip to leave at that. The rolls alone distinguish them (a
+    // dodged blow never took a hit roll), but only for a reader who already
+    // knows that, so it is said in words.
+    blow.dodged ? 'Dodged, so nothing was rolled to hit' : null,
+    damageOf(blow),
+  ].filter((row): row is string => row !== null)
+}
+
 /** The one shape, assembled once so nothing can quietly build a different one. */
-function pill(attacker: string, attackerWord: string, action: { icon: string; word: string }, damage: number | null, defender: string, defenderWord: string): string {
+function pill(
+  attacker: string,
+  attackerWord: string,
+  action: { icon: string; word: string },
+  damage: number | null,
+  defender: string,
+  defenderWord: string,
+  detail: readonly string[] = [],
+): string {
   const parts = [icon(attacker, attackerWord), icon(action.icon, action.word)]
   if (damage !== null) parts.push(figure(damage))
   parts.push(icon(defender, defenderWord))
-  return parts.join(' ')
+  return withDetail(parts.join(' '), detail)
 }
 
 /** The player swings. Attacker is the player, defender is whatever is in front of them. */
 export function playerAttackPill(monster: Monster, blow: Blow): string {
   const action = playerActionIcon('attack', blow, false)
-  return pill(PLAYER, 'you', action, blow.hit ? blow.damage : null, monsterIcon(monster), 'it')
+  return pill(PLAYER, 'you', action, blow.hit ? blow.damage : null, monsterIcon(monster), 'it', blowDetail(blow))
 }
 
 /**
@@ -115,10 +185,20 @@ export function playerAttackPill(monster: Monster, blow: Blow): string {
  * the arrow of the pill is who the damage flowed to -- while the middle glyph
  * is still the player's own choice.
  */
-export function monsterAttackPill(monster: Monster, defence: Defence, blow: Blow | null, escaped: boolean): string {
+export function monsterAttackPill(
+  monster: Monster,
+  defence: Defence,
+  blow: Blow | null,
+  escaped: boolean,
+  /** The monster's roll to chase a fleeing player, where one was taken. */
+  pursuit: Roll | null = null,
+): string {
   const action = playerActionIcon(defence, blow, escaped)
   const damage = blow?.hit === true ? blow.damage : null
-  return pill(monsterIcon(monster), 'it', action, damage, PLAYER, 'you')
+  return pill(monsterIcon(monster), 'it', action, damage, PLAYER, 'you', [
+    ...(rollLine('Pursuit', pursuit) ? [rollLine('Pursuit', pursuit)!] : []),
+    ...blowDetail(blow),
+  ])
 }
 
 /**
@@ -132,7 +212,9 @@ export function monsterAttackPill(monster: Monster, defence: Defence, blow: Blow
  * the thing died.
  */
 export function killPill(monster: Monster, damage: number): string {
-  return pill(PLAYER, 'you', { icon: KILLED, word: 'killed' }, damage, monsterIcon(monster), 'it')
+  return pill(PLAYER, 'you', { icon: KILLED, word: 'killed' }, damage, monsterIcon(monster), 'it', [
+    `The blow that finished it: ${damage}`,
+  ])
 }
 
 /**
@@ -171,8 +253,16 @@ export function statusPill(round: RoundState, monster: Monster, playerDerived: D
  * ago. A spell that only laid a condition on passes `null` and shows no
  * number, exactly as a missed attack does.
  */
-export function spellPill(spell: Spell, monster: Monster, damage: number | null): string {
-  return pill(PLAYER, 'you', { icon: spell.icon, word: spell.name }, damage, monsterIcon(monster), 'it')
+export function spellPill(
+  spell: Spell,
+  monster: Monster,
+  damage: number | null,
+  detail: readonly string[] = [],
+): string {
+  return pill(PLAYER, 'you', { icon: spell.icon, word: spell.name }, damage, monsterIcon(monster), 'it', [
+    ...spell.lines,
+    ...detail,
+  ])
 }
 
 /**
@@ -187,8 +277,14 @@ export function spellPill(spell: Spell, monster: Monster, damage: number | null)
  * its own word, and that word is the only place a glyph can say what it
  * means).
  */
-export function charmStatusPill(effects: readonly CharmEffect[]): string {
-  return `${icon(CHARM_ICON, effects.map((effect) => effect.name).join(', '))} ${figure(effects.length)}`
+export function charmStatusPill(effects: readonly CharmEffect[], checkChance: number): string {
+  return withDetail(
+    `${icon(CHARM_ICON, effects.map((effect) => effect.name).join(', '))} ${figure(effects.length)}`,
+    [
+      `Each of its actions: ${Math.round(checkChance * 100)}% to be taken`,
+      ...effects.map((effect) => `${effect.name} - ${effect.line}`),
+    ],
+  )
 }
 
 /**
@@ -200,16 +296,17 @@ export function charmStatusPill(effects: readonly CharmEffect[]): string {
  * a lost action arrives at the player with nothing in hand, a confusion
  * carries a number back to the monster itself, and a doom ends at the cross.
  */
-export function charmPill(effect: CharmEffect, monster: Monster, damage: number): string {
+export function charmPill(effect: CharmEffect, monster: Monster, damage: number, roll: Roll): string {
   const mask = { icon: CHARM_ICON, word: effect.name }
   const it = monsterIcon(monster)
+  const detail = [rollLine('Charm', roll)!, effect.line]
   switch (effect.outcome) {
     case 'lostAction':
-      return pill(it, 'it', mask, null, PLAYER, 'you')
+      return pill(it, 'it', mask, null, PLAYER, 'you', detail)
     case 'turnedOnItself':
-      return pill(it, 'it', mask, damage, it, 'itself')
+      return pill(it, 'it', mask, damage, it, 'itself', [...detail, `Damage: ${damage}, its own blow, and it cannot miss itself`])
     case 'died':
-      return pill(it, 'it', mask, null, KILLED, 'died')
+      return pill(it, 'it', mask, null, KILLED, 'died', [...detail, `It had ${damage} left`])
   }
 }
 
@@ -217,8 +314,8 @@ export function charmPill(effect: CharmEffect, monster: Monster, damage: number)
  * TAKING AIM: the one action that does nothing now, said in the same shape as
  * everything that does.
  */
-export function preparePill(monster: Monster): string {
-  return pill(PLAYER, 'you', { icon: PREPARE_ICON, word: 'take aim at' }, null, monsterIcon(monster), 'it')
+export function preparePill(monster: Monster, detail: readonly string[] = []): string {
+  return pill(PLAYER, 'you', { icon: PREPARE_ICON, word: 'take aim at' }, null, monsterIcon(monster), 'it', detail)
 }
 
 /**
@@ -230,5 +327,7 @@ export function preparePill(monster: Monster): string {
 export const STUN_ICON = 'fa-solid fa-ban'
 
 export function stunPill(monster: Monster): string {
-  return pill(PLAYER, 'you', { icon: STUN_ICON, word: 'ended the round of' }, null, monsterIcon(monster), 'it')
+  return pill(PLAYER, 'you', { icon: STUN_ICON, word: 'ended the round of' }, null, monsterIcon(monster), 'it', [
+    'Every action it had left is spent',
+  ])
 }

@@ -21,7 +21,7 @@
 
 import type { JsonObject } from '../core/json'
 import type { StageModule, Transition } from '../core/stage'
-import type { RngState } from '../core/rng'
+import type { RngState, Roll } from '../core/rng'
 import type { StageContext } from '../core/stage'
 import type { Effect } from '../model/effects'
 import { NO_ARMOR } from '../model/armor'
@@ -35,12 +35,12 @@ import {
   castSpell, endOfRoundTicks, igniteTick, rollSpellReach, SPELLS, spellsOffered, strongestOffered,
   type Spell,
 } from '../model/spells'
-import { charmsOf, interceptMonsterAction, rollCharms } from '../model/charm'
+import { charmCheckChance, charmsOf, interceptMonsterAction, rollCharms } from '../model/charm'
 import { rewardFor } from '../model/rewards'
 import { PREPARE_ICON, prepareLines, resolvePreparedAttack } from '../model/prepare'
 import {
-  charmPill, charmStatusPill, killPill, monsterAttackPill, playerAttackPill, preparePill, spellPill,
-  statusPill, stunPill,
+  blowDetail, charmPill, charmStatusPill, killPill, monsterAttackPill, playerAttackPill, preparePill,
+  spellPill, statusPill, stunPill,
 } from './combatLog'
 import type { Monster } from '../model/monsters'
 import { monsterFor, offerFromJson, offerToJson } from './encounter'
@@ -65,6 +65,14 @@ const ATTACK_ICON = 'fa-solid fa-burst'
 
 const PREPARE_CHOICE = 'combat:prepare'
 
+/** A stored dodge roll, back as itself. Written by `resting`, read here. */
+function readRoll(value: JsonObject | null): Roll | null {
+  if (!value) return null
+  const { rolled, needed, passed } = value as Record<string, unknown>
+  if (typeof rolled !== 'number' || typeof needed !== 'number') return null
+  return { rolled, needed, passed: passed === true }
+}
+
 /** One id shape for every spell cell, so `present` and `resolve` cannot disagree. */
 function spellChoiceId(spell: Spell): string {
   return `spell:${spell.id}`
@@ -76,6 +84,8 @@ interface CombatState extends JsonObject {
   /** Whose action this is. Null only where there is no profile to roll one for. */
   actor: 'player' | 'monster' | null
   dodgeOffered: boolean
+  /** The roll that put Dodge on the table, so a dodged blow can show its working. */
+  dodgeRoll: JsonObject | null
   /** This round's pills, newest first. Cut back to the status pill each round. */
   log: string[]
 }
@@ -86,6 +96,9 @@ function readState(state: JsonObject): CombatState {
     round: (typeof state.round === 'object' && state.round !== null && !Array.isArray(state.round) ? state.round : {}) as JsonObject,
     actor: state.actor === 'player' || state.actor === 'monster' ? state.actor : null,
     dodgeOffered: state.dodgeOffered === true,
+    dodgeRoll: (typeof state.dodgeRoll === 'object' && state.dodgeRoll !== null && !Array.isArray(state.dodgeRoll)
+      ? state.dodgeRoll
+      : null) as JsonObject | null,
     log: Array.isArray(state.log) ? state.log.filter((entry): entry is string => typeof entry === 'string') : [],
   }
 }
@@ -99,6 +112,7 @@ type Armed =
       kind: 'armed'
       actor: 'player' | 'monster' | null
       dodgeOffered: boolean
+      dodgeRoll?: Roll | null
       /**
        * The round with this action's own hand in it. `spellReach` is a fact
        * about the ACTION about to be taken, not about the round -- it is
@@ -157,8 +171,14 @@ function armNextAction(
       rng: picked.rng,
     })
     if (charmed.interception) {
-      const { effect, damage, state } = charmed.interception
-      return { kind: 'charmed', round: state, entry: charmPill(effect, monster, damage), damage, rng: charmed.rng }
+      const { effect, damage, roll, state } = charmed.interception
+      return {
+        kind: 'charmed',
+        round: state,
+        entry: charmPill(effect, monster, damage, roll),
+        damage,
+        rng: charmed.rng,
+      }
     }
     // The player's own dodge, with their own adjustment: an item that says
     // "+10% dodge" has to move the roll that decides whether Dodge is on the
@@ -171,10 +191,26 @@ function armNextAction(
       successAdjust: context.game?.successAdjust,
       rng: charmed.rng,
     })
-    return { kind: 'armed', actor: 'monster', dodgeOffered: dodge.offered, rng: dodge.rng }
+    return {
+      kind: 'armed',
+      actor: 'monster',
+      dodgeOffered: dodge.offered,
+      // The roll that PUT Dodge on the table travels with the action, because
+      // it is the only number a dodged blow has to show for itself: picking
+      // Dodge cannot fail, so nothing is rolled when the player answers.
+      dodgeRoll: dodge.roll,
+      round: { ...round, spellReach: NO_SPELLS },
+      rng: dodge.rng,
+    }
   }
 
-  return { kind: 'armed', actor: 'monster', dodgeOffered: false, rng: picked.rng }
+  return {
+    kind: 'armed',
+    actor: 'monster',
+    dodgeOffered: false,
+    round: { ...round, spellReach: NO_SPELLS },
+    rng: picked.rng,
+  }
 }
 
 /**
@@ -243,11 +279,14 @@ function openedRound(
   const round = beginRound({ ...previous, spellReach: NO_SPELLS, charms: charmed.charms })
   const derived = context.profile?.derived
   const effects = charmsOf(round)
+  const checkChance = context.profile
+    ? charmCheckChance(context.profile.stats, monster, context.game?.successAdjust)
+    : 0
   return {
     round,
     log: [
       ...(derived ? [statusPill(round, monster, derived)] : []),
-      ...(effects.length > 0 ? [charmStatusPill(effects)] : []),
+      ...(effects.length > 0 ? [charmStatusPill(effects, checkChance)] : []),
       ...carried,
     ],
     rng: charmed.rng,
@@ -315,7 +354,7 @@ function stepFight(options: {
     const burned = igniteTick(round, derived)
     if (!burned.tick) return
     round = burned.state
-    log = [spellPill(burned.tick.spell, monster, burned.tick.damage), ...log]
+    log = [spellPill(burned.tick.spell, monster, burned.tick.damage, burned.tick.detail), ...log]
     struck = burned.tick.damage
   }
 
@@ -323,9 +362,21 @@ function stepFight(options: {
   /** Pills from the moment a round CLOSED, kept behind the next status pill. */
   let carried: string[] = []
 
-  const resting = (actor: 'player' | 'monster' | null, dodgeOffered: boolean, next: RngState): Transition => ({
+  const resting = (
+    actor: 'player' | 'monster' | null,
+    dodgeOffered: boolean,
+    next: RngState,
+    dodgeRoll: Roll | null = null,
+  ): Transition => ({
     kind: 'stay',
-    state: { ...state, round: roundToJson(round), actor, dodgeOffered, log },
+    state: {
+      ...state,
+      round: roundToJson(round),
+      actor,
+      dodgeOffered,
+      dodgeRoll: dodgeRoll ? { ...dodgeRoll } : null,
+      log,
+    },
     effects: options.effects,
     narration: log,
     rng: next,
@@ -402,7 +453,9 @@ function stepFight(options: {
           // Newest first, so the last thing that happened reads first. They
           // are CARRIED into the next round's log rather than left in the one
           // about to be discarded, which is the only way the reader sees them.
-          const pills = ticked.ticks.map((tick) => spellPill(tick.spell, monster, tick.damage)).reverse()
+          const pills = ticked.ticks
+            .map((tick) => spellPill(tick.spell, monster, tick.damage, tick.detail))
+            .reverse()
           carried = [...pills, ...carried]
           log = [...pills, ...log]
           struck = ticked.ticks[ticked.ticks.length - 1].damage
@@ -427,7 +480,7 @@ function stepFight(options: {
     rng = armed.rng
     if (armed.kind === 'armed') {
       if (armed.round) round = armed.round
-      return resting(armed.actor, armed.dodgeOffered, rng)
+      return resting(armed.actor, armed.dodgeOffered, rng, armed.dodgeRoll ?? null)
     }
 
     // A charm took the action away from it. Nothing was asked and nothing
@@ -489,6 +542,7 @@ export const combatStage: StageModule = {
       round: roundToJson(round),
       actor: null,
       dodgeOffered: false,
+      dodgeRoll: null,
       log: [],
     }
     if (!monster) {
@@ -646,7 +700,9 @@ export const combatStage: StageModule = {
         round: { ...round, prepared: round.prepared + 1, playerActionsSpent: round.playerActionsSpent + 1 },
         monster,
         context,
-        entries: [preparePill(monster)],
+        entries: [preparePill(monster, context.profile
+          ? prepareLines(context.profile.stats, strongestOffered(round.spellReach), round.prepared + 1)
+          : [])],
         effects: [],
         rng,
       })
@@ -672,7 +728,14 @@ export const combatStage: StageModule = {
         // NEWEST FIRST, and in the order they happened: the swings, then the
         // stagger, then the spell that rode along.
         entries: [
-          ...(aimed.rider ? [spellPill(aimed.rider.spell, monster, aimed.rider.blows.reduce((sum, blow) => sum + blow.damage, 0))] : []),
+          ...(aimed.rider
+            ? [spellPill(
+                aimed.rider.spell,
+                monster,
+                aimed.rider.blows.reduce((sum, blow) => sum + blow.damage, 0),
+                aimed.rider.blows.flatMap((blow) => blowDetail(blow)),
+              )]
+            : []),
           ...(aimed.stunned ? [stunPill(monster)] : []),
           ...aimed.blows.map((blow) => playerAttackPill(monster, blow)).reverse(),
         ],
@@ -728,7 +791,15 @@ export const combatStage: StageModule = {
         // round's other news under one action's bookkeeping.
         entries: [
           ...(cast.stunned ? [stunPill(monster)] : []),
-          spellPill(spell, monster, cast.blows.length > 0 ? dealt : null),
+          spellPill(
+            spell,
+            monster,
+            cast.blows.length > 0 ? dealt : null,
+            // The spell's own working, then each blow's. A cast that only
+            // laid a condition on has no blow to explain and says what the
+            // condition now comes to instead.
+            [...cast.detail, ...cast.blows.flatMap((blow) => blowDetail(blow))],
+          ),
         ],
         effects: [],
         rng: cast.rng,
@@ -744,6 +815,7 @@ export const combatStage: StageModule = {
         playerStats: context.profile.stats,
         armorDecayFloor: context.profile.armorDecayFloor,
         defence,
+        dodgeRoll: readRoll(state.dodgeRoll),
         successAdjust: context.game?.successAdjust,
         rng,
       })
@@ -752,7 +824,7 @@ export const combatStage: StageModule = {
         round: answer.state,
         monster,
         context,
-        entries: [monsterAttackPill(monster, defence, answer.blow, answer.escaped)],
+        entries: [monsterAttackPill(monster, defence, answer.blow, answer.escaped, answer.pursuit)],
         effects: recordChanges(round, answer.state),
         rng: answer.rng,
         // The fire bites after it moves, and `stepFight` is the one place
