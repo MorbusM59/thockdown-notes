@@ -123,15 +123,32 @@ function rollsOf(math: BlowMath): string | null {
   return rolls.length > 0 ? rolls.join('  ') : null
 }
 
-/** What the damage came to, and out of what. */
+/**
+ * What the damage came to, and out of what: the roll, the band it came from,
+ * how many draws bought it, then the crit and the armour.
+ *
+ * `Damage: 13 = 8 (4-8, best of 3) x 2 crit - 3 armour` -- which is the shape
+ * the spec asked for, with the band in DAMAGE rather than in shares, because
+ * that is the unit the rest of the line is in. A band with no width (a
+ * character whose Perception has reached the pivot, model/damageRoll.ts) is
+ * left out rather than written as `8-8`: there was nothing to draw.
+ */
 function damageOf(blow: Blow): string | null {
   if (!blow.hit) return null
-  const base = Math.round(blow.math.base)
-  const struck = Math.round(base * blow.math.critMultiplier)
-  const terms = [`${base}`]
-  if (blow.math.critMultiplier !== 1) terms.push(`x ${blow.math.critMultiplier} crit`)
-  if (blow.math.absorbed > 0) terms.push(`- ${Math.round(blow.math.absorbed)} armour`)
-  return terms.length === 1 && struck === blow.damage
+  const math = blow.math
+  const low = Math.round(math.low)
+  const high = Math.round(math.high)
+  const rolled = Math.round(math.rolled)
+  const banded = low !== high
+  const band = banded ? ` (${low}-${high}, best of ${math.rolls})` : ''
+  const terms = [`${rolled}${band}`]
+  if (math.critMultiplier !== 1) terms.push(`x ${math.critMultiplier} crit`)
+  if (math.absorbed > 0) terms.push(`- ${Math.round(math.absorbed)} armour`)
+  // The short form only where there is genuinely nothing to show: no band to
+  // have been drawn from, no crit, no armour. Testing the TERMS rather than
+  // the band threw away the band it had just written, which is how a live
+  // run came back reading "Damage: 6" for a blow drawn from five to eight.
+  return !banded && terms.length === 1 && rolled === blow.damage
     ? `Damage: ${blow.damage}`
     : `Damage: ${blow.damage} = ${terms.join(' ')}`
 }

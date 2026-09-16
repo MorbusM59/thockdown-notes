@@ -698,14 +698,53 @@ to the charm pill it started with:
 > [total] = [rolled]([min]-[max]) x [crit multiplier]` … in that spirit for
 > all pills adapted accordingly for misses, dodges etc.
 
-Adapted where the formulas differ from the example, which they do in one
-place worth naming: **a blow's damage has no range**. It is
-`BASE_DAMAGE x damageMultiplier`, a single number, so the tooltip writes
-`Damage: 8 = 4 x 2 crit` rather than inventing a `(min-max)` that does not
-exist. Showing a range the game does not roll would be a documented formula
-that is not the game's.
+*(The example named a `(min-max)` a blow's damage did not then have. It does
+now — see the next section, which the author added for exactly that reason —
+so the line reads `Damage: 11 = 5 (4-7, best of 2) x 2 crit`, with the band
+in DAMAGE rather than in shares because that is the unit the rest of the line
+is in.)*
 
 The shape, everywhere: a roll is `rolled|needed` in whole percentages, and a
 sum is written with its terms. Where a glyph is ambiguous the tooltip says so
 in words — a dodge and a miss share a mark, so a dodged blow says it was
 dodged.
+
+#### Damage is a range, and two stats read it
+
+> Let's add damage ranges. From 100% - spread to 100%.
+> `spread = base_spread * (6 - perception) / 6`
+>
+> That means spread can become negative which reverses left and right
+> boundaries of the interval. The user gets one extra roll for damage per
+> point of luck. The best of these rolls is picked.
+
+A blow's nominal damage is its CEILING, not its value. **Perception** closes
+the band — at the base stat cap of 6 the spread is zero and a character does
+full damage every time, and past the cap the spread goes negative and the band
+runs from 100% UP, so gear that carries Perception past what a run can reach
+stops buying consistency and starts buying damage. **Luck** buys draws rather
+than a bonus: one extra per point, best taken, so it can stop a blow landing
+at the floor but can never push it past the ceiling.
+
+**What the code decided:**
+
+- `base_spread` is **0.5**, which the spec did not give. Named
+  (`BASE_DAMAGE_SPREAD`) and tunable; at Perception 0 a blow lands anywhere
+  from half its nominal to all of it.
+- The pivot is **6**, the base stat cap, which is what makes "a maxed run
+  does full damage" the reward rather than a coincidence.
+- **It reads the ATTACKER's stats, whoever that is** — a lucky monster rolls
+  its damage as many times as a lucky player. The spec said "the user",
+  which may have meant the player narrowly; applying it to the attacker is
+  the reading that keeps the invariant every other chance in this game holds
+  to (both sides read one stat table, which is the whole reason the thumb is
+  shaped the way it is). **This is the one thing here to overrule if it was
+  meant the other way.**
+- **A band with no width is not drawn from at all**, rather than drawn from
+  and always yielding the same answer: a wasted draw moves the seeded rng
+  stream, so every later roll in the run would shift for nothing.
+- It applies to **attacks**, which includes every magical strike and the
+  Lightning Storm's bolt ("regular magical damage, the same as Singe"). It
+  does NOT apply to Plague (a share of what the monster has left) or Ignite
+  (a share of a nominal): those are drips, not blows being swung, and a band
+  on a number that is already one or two hit points is noise.

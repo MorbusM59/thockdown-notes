@@ -152,7 +152,11 @@ describe('the table, spell by spell', () => {
     for (let seed = 1; seed <= 20; seed += 1) {
       const singed = cast('singe', freshRound(), monster, seed)
       const struck = cast('meteor', freshRound(), monster, seed)
-      expect(struck.blows[0].damage).toBe(singed.blows[0].damage * 2)
+      // Twice as hard is a claim about what the blow is WORTH, not about what
+      // it rolled -- damage is drawn from a band now (model/damageRoll.ts),
+      // and two draws from two bands are not each other's double.
+      expect(struck.blows[0].math.base).toBe(singed.blows[0].math.base * 2)
+      expect(struck.blows[0].math.high).toBe(singed.blows[0].math.high * 2)
       // Every action it had, spent -- so `monsterActionsLeft` reads zero and
       // nothing else in the fight had to learn what a stun is.
       expect(struck.state.monsterActionsSpent).toBe(monster.maxActions)

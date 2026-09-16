@@ -16,7 +16,7 @@ const DEPS: DirectorDeps = {
 const NOW = 1_700_000_000_000
 
 /** A run in a fight, with whatever stats are needed to reach the thing under test. */
-function inAFight(seed: number, stats: Partial<Record<'intellect' | 'charisma', number>> = {}): GameSave {
+function inAFight(seed: number, stats: Partial<Record<'intellect' | 'charisma' | 'perception', number>> = {}): GameSave {
   let save = enterEntryScreen(emptySave(seed), DEPS, NOW)
   for (let step = 0; step < 300; step += 1) {
     const screen = currentScreen(save, DEPS)
@@ -142,5 +142,50 @@ describe('what a pill says when you hover it', () => {
       }
     }
     expect(checked).toBeGreaterThan(20)
+  })
+})
+
+describe('the damage line shows the band it was drawn from', () => {
+  /**
+   * `Damage: 13 = 8 (5-8, best of 3) x 2 crit` -- the shape the spec asked
+   * for. The band is in DAMAGE rather than in shares, because that is the
+   * unit the rest of the line is in.
+   */
+  it('writes the roll, its band and the draws that bought it', () => {
+    let save = inAFight(4242)
+    for (let action = 0; action < 60; action += 1) {
+      const screen = currentScreen(save, DEPS)
+      if (!screen || screen.stageId !== 'combat') break
+      save = choose(save, screen.choices[0].id, DEPS, NOW).save
+      const damage = headDetail(save).find((row) => row.startsWith('Damage:'))
+      if (!damage || !damage.includes('=')) continue
+      expect(damage).toMatch(/^Damage: \d+ = \d+ \(\d+-\d+, best of \d+\)/)
+      return
+    }
+    throw new Error('no blow landed with a band to show')
+  })
+
+  it('says only the number where there was no band to draw from', () => {
+    // A character whose Perception has reached the pivot rolls nothing --
+    // and `8-8, best of 1` would be arithmetic theatre for a fixed value.
+    for (const seed of [4242, 31337, 7, 99, 1234]) {
+      let save = inAFight(seed, { perception: 6 })
+      for (let action = 0; action < 60; action += 1) {
+        const screen = currentScreen(save, DEPS)
+        if (!screen || screen.stageId !== 'combat') break
+        const attack = screen.choices.find((choice) => choice.id === 'combat:attack')
+        save = choose(save, (attack ?? screen.choices[0]).id, DEPS, NOW).save
+        const head = currentScreen(save, DEPS)?.narration[0] ?? ''
+        // The PLAYER's own blow: the monster has its own Perception and its
+        // own band, so only a pill the player is the subject of says anything
+        // about theirs.
+        if (!head.startsWith('[fa-solid fa-user-shield')) continue
+        const damage = detailOf(head).find((row) => row.startsWith('Damage:'))
+        if (!damage) continue
+        expect(damage).not.toContain('best of')
+        return
+      }
+    }
+    throw new Error('no blow of the player’s landed')
   })
 })

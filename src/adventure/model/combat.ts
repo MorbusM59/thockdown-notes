@@ -16,6 +16,7 @@
 // rates are unwritten (open question 45).
 
 import { absorb, type Armor } from './armor'
+import { rollAttackDamage } from './damageRoll'
 import type { JsonObject, JsonValue } from '../core/json'
 import { NO_SPELLS } from './spellReach'
 import { nextChance, nextRoll, type RngState, type Roll } from '../core/rng'
@@ -224,8 +225,15 @@ export interface BlowMath {
   dodge: Roll | null
   hit: Roll | null
   crit: Roll | null
-  /** What one blow of this attacker's is worth, before the crit and before armour. */
+  /** What one blow of this attacker's is worth at its CEILING -- the nominal. */
   base: number
+  /** What the damage roll came to, before the crit and before armour. */
+  rolled: number
+  /** The band it was drawn from, low first (model/damageRoll.ts). */
+  low: number
+  high: number
+  /** Draws taken: one, plus one per point of the attacker's Luck. */
+  rolls: number
   /** 1, or 2 on a crit. */
   critMultiplier: number
   /** What armour stopped, where it was consulted. */
@@ -233,7 +241,8 @@ export interface BlowMath {
 }
 
 export const NO_BLOW_MATH: BlowMath = {
-  dodge: null, hit: null, crit: null, base: 0, critMultiplier: 1, absorbed: 0,
+  dodge: null, hit: null, crit: null, base: 0, rolled: 0, low: 0, high: 0, rolls: 1,
+  critMultiplier: 1, absorbed: 0,
 }
 
 /** One blow's worth of what happened, for the narration to read from. */
@@ -337,12 +346,28 @@ export function resolveExchange(input: ExchangeInput): { blow: Blow; armor: Armo
   rng = critRoll.rng
   math.crit = critRoll.value
   math.critMultiplier = critRoll.value.passed ? 2 : 1
+
+  // HOW MUCH OF THE NOMINAL ACTUALLY ARRIVES, drawn from the attacker's own
+  // Perception band, best of their Luck's worth of draws (model/damageRoll.ts).
+  // Rolled after the crit rather than before it only because there is no
+  // point rolling damage for a blow that did not land.
+  const drawn = rollAttackDamage({
+    nominal: input.attackerDamage,
+    attackerStats: input.attackerStats,
+    rng,
+  })
+  rng = drawn.rng
+  math.rolled = drawn.damage
+  math.low = drawn.low
+  math.high = drawn.high
+  math.rolls = drawn.rolls
+
   // WHOLE, once, here. The power multiplier makes a monster's damage
   // fractional (8.4 at level one, 16.8 on a crit), and leaving it that way
   // meant the record lost 16.8 hit points while the narration said 17. Hit
   // points are a count; rounding at the blow is the only place the two can
   // be made to agree.
-  const raw = Math.round(input.attackerDamage * math.critMultiplier)
+  const raw = Math.round(drawn.damage * math.critMultiplier)
 
   // Armor is Defend's alone. Flee, Take the hit and magic all say so
   // explicitly, and Dodge never reaches here. The pool comes back UNTOUCHED

@@ -304,3 +304,60 @@ describe('monster armor', () => {
     }
   })
 })
+
+/**
+ * A blow's damage is DRAWN, not fixed (model/damageRoll.ts). These are the
+ * two ends of that reaching the fight: the same blow varies, and the working
+ * it hands back is the one it actually used.
+ */
+describe('a blow rolls its damage', () => {
+  function swing(stats: StatBlock, seed: number) {
+    return resolvePlayerAttack({
+      state: freshRound(),
+      monster: monster(),
+      playerStats: stats,
+      playerDerived: deriveStats(stats),
+      // Certain to land, so every difference below is the damage roll's.
+      successAdjust: 1,
+      rng: seed,
+    })
+  }
+
+  it('varies across seeds for a character with a band to draw from', () => {
+    const loose = block({ might: 2, perception: 0 })
+    const seen = new Set<number>()
+    for (let seed = 1; seed <= 60; seed += 1) {
+      const blow = swing(loose, seed).blow
+      // The ROLL, not the damage: a crit doubles what was rolled and would
+      // make this pass on variance the band had nothing to do with.
+      if (blow.hit) seen.add(Math.round(blow.math.rolled * 100))
+    }
+    expect(seen.size).toBeGreaterThan(1)
+  })
+
+  it('stops varying once Perception closes the band', () => {
+    const sharp = block({ might: 2, perception: 6 })
+    const seen = new Set<number>()
+    for (let seed = 1; seed <= 60; seed += 1) {
+      const blow = swing(sharp, seed).blow
+      if (blow.hit) seen.add(Math.round(blow.math.rolled * 100))
+    }
+    expect(seen.size).toBe(1)
+  })
+
+  it('reports the band and the draws it actually took', () => {
+    const stats = block({ might: 2, perception: 1, luck: 3 })
+    for (let seed = 1; seed <= 40; seed += 1) {
+      const blow = swing(stats, seed).blow
+      if (!blow.hit) continue
+      expect(blow.math.rolls).toBe(4)
+      expect(blow.math.low).toBeLessThan(blow.math.high)
+      expect(blow.math.rolled).toBeGreaterThanOrEqual(blow.math.low - 1e-9)
+      expect(blow.math.rolled).toBeLessThanOrEqual(blow.math.high + 1e-9)
+      // The nominal is the band's ceiling, which is what "nominal" means.
+      expect(blow.math.high).toBeCloseTo(blow.math.base, 10)
+      return
+    }
+    throw new Error('no blow landed')
+  })
+})

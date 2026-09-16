@@ -31,6 +31,7 @@ import { nextChance, nextRoll, type RngState, type Roll } from '../core/rng'
 import { CRIT_CHANCE, type DerivedStats, type StatBlock } from './stats'
 import { resolveChanceWith, type ChanceAdjustment } from './chance'
 import { damageFrom, type Monster } from './monsters'
+import { rollAttackDamage, type DamageRoll } from './damageRoll'
 import { monsterActionsLeft, resolveExchange, type Blow, type RoundState } from './combat'
 import { NO_SPELLS } from './spellReach'
 
@@ -236,6 +237,21 @@ export interface CastResult {
 /** A roll as a tooltip reads it: what came up against what it needed. */
 function rollLine(label: string, roll: Roll): string {
   return `${label}: ${Math.round(roll.rolled * 100)}|${Math.round(roll.needed * 100)}`
+}
+
+/**
+ * A rolled damage, written out with its terms -- the same shape a blow's own
+ * line uses (stages/combatLog.ts), because a bolt out of the sky and a bolt
+ * out of a cast are the same arithmetic and should read as it.
+ */
+function damageLine(total: number, drawn: DamageRoll, multiplier: number, stacks: number): string {
+  const band = Math.round(drawn.low) === Math.round(drawn.high)
+    ? ''
+    : ` (${Math.round(drawn.low)}-${Math.round(drawn.high)}, best of ${drawn.rolls})`
+  const terms = [`${Math.round(drawn.damage)}${band}`]
+  if (multiplier !== 1) terms.push(`x ${multiplier} crit`)
+  if (stacks !== 1) terms.push(`x ${stacks} stack(s)`)
+  return `Damage: ${total} = ${terms.join(' ')}`
 }
 
 /** One magical blow: no hit roll, no dodge, no armour, crit as usual. */
@@ -444,7 +460,19 @@ export function endOfRoundTicks(options: {
     // PER STACK, on ONE crit roll: two storms are two bolts out of the same
     // sky, not two independently lucky ones.
     const multiplier = crit.value.passed ? 2 : 1
-    const damage = Math.round(magicalDamage(options.playerDerived) * multiplier * state.storming)
+    // "REGULAR MAGICAL DAMAGE, THE SAME AS SINGE" is the spec's wording, and
+    // Singe is an attack -- so the bolt is drawn from the same Perception
+    // band, best of the same Luck's worth of draws (model/damageRoll.ts). The
+    // other two lingering spells are NOT attacks being swung: Plague is a
+    // share of what the monster has left and Ignite a share of a nominal, and
+    // a drip that is already one or two hit points does not want a band.
+    const drawn = rollAttackDamage({
+      nominal: magicalDamage(options.playerDerived),
+      attackerStats: options.playerStats,
+      rng,
+    })
+    rng = drawn.rng
+    const damage = Math.round(drawn.damage * multiplier * state.storming)
     if (damage > 0) {
       state = { ...state, monsterDamageTaken: state.monsterDamageTaken + damage }
       ticks.push({
@@ -452,7 +480,7 @@ export function endOfRoundTicks(options: {
         damage,
         detail: [
           rollLine('Crit', crit.value),
-          `Damage: ${damage} = ${Math.round(magicalDamage(options.playerDerived))} x ${multiplier} x ${state.storming} stack(s)`,
+          damageLine(damage, drawn, multiplier, state.storming),
         ],
       })
     }

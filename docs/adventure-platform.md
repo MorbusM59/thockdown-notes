@@ -1069,3 +1069,35 @@ placed at 5, 9 and 10 and the level advancing after ten.
     ambiguous the tooltip says so in words: a dodge and a miss wear the same
     mark, because both are "nothing arrived", so a dodged blow says it was
     dodged rather than leaving the absent hit roll to imply it.
+
+80. **DAMAGE IS DRAWN, NOT FIXED** (`model/damageRoll.ts`). A blow's nominal
+    is its ceiling; what arrives is drawn from a band below it whose width is
+    `BASE_DAMAGE_SPREAD x (6 - perception) / 6`, best of `1 + luck` draws.
+
+    Three things about it are worth knowing before touching a fight.
+
+    **The band comes back LOW FIRST, always.** The spread goes negative past
+    the base stat cap -- deliberately, so gear that carries Perception past
+    what a run can reach buys damage instead of consistency -- and `1 -
+    spread` is then above 1. Ordering it inside `damageBand` rather than at
+    each caller is the whole reason that function exists: a caller that
+    assumed `1 - spread` was the floor would sample the band backwards.
+
+    **A band of no width is not drawn from.** Drawing anyway would spend the
+    rng stream on an answer that cannot vary, and in a seeded game every roll
+    after it shifts. So a character at the pivot takes ZERO draws, not one.
+
+    **It reads the attacker's stats**, whoever the attacker is, which is the
+    same invariant the thumb exists to protect. See the design document's
+    foot for why, and for the one reading of the spec that would change it.
+
+    It applies to attacks -- everything through `resolveExchange`, plus the
+    Storm's bolt, which the spec defines as Singe's damage. Plague and Ignite
+    are shares rather than blows and stay fixed.
+
+    One defect it produced, caught live rather than by a test: the damage
+    tooltip built its terms and then threw them away, because the short-form
+    check tested `terms.length === 1` -- true whenever there was no crit and
+    no armour -- instead of testing whether there had been a band. It read
+    "Damage: 6" for a blow drawn from four to seven. The check is on the BAND
+    now, which is what it was ever about.

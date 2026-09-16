@@ -24,11 +24,17 @@ const ROLL = (rolled: number, needed: number) => ({ rolled, needed, passed: roll
 
 const HIT = {
   hit: true, crit: false, dodged: false, damage: 8, armorDecayed: false,
-  math: { dodge: null, hit: ROLL(0.4, 0.6), crit: ROLL(0.9, 0.3), base: 8, critMultiplier: 1, absorbed: 0 },
+  math: {
+    dodge: null, hit: ROLL(0.4, 0.6), crit: ROLL(0.9, 0.3),
+    base: 8, rolled: 8, low: 4, high: 8, rolls: 2, critMultiplier: 1, absorbed: 0,
+  },
 }
 const MISS = {
   hit: false, crit: false, dodged: false, damage: 0, armorDecayed: false,
-  math: { dodge: null, hit: ROLL(0.8, 0.6), crit: null, base: 8, critMultiplier: 1, absorbed: 0 },
+  math: {
+    dodge: null, hit: ROLL(0.8, 0.6), crit: null,
+    base: 8, rolled: 0, low: 4, high: 8, rolls: 2, critMultiplier: 1, absorbed: 0,
+  },
 }
 
 const WARRIOR = addStats(createStatBlock(0), { might: 2, agility: 1 })
