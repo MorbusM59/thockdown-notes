@@ -672,12 +672,13 @@ each is the author's to overrule:
 - **Availability is uncontested; the charm check is contested.** What a
   monster's wits are worth is settled by the check that fires, so contesting
   the "is it up" roll as well would charge the player for its Intellect twice.
-- **A lasting spell already in effect is not offered again** (Plague, the
-  Storm), nor is Prepare once banked. A first cell that is sometimes a mistake
-  is a fight the player has to read.
-- **A preparation is a flag, not a count**, and is spent by an Attack only —
-  a spell cast while prepared leaves it banked. Its rider fires once however
-  many times the attack swung.
+- **ACTIVE EFFECTS STACK** (the author's, settling it): a second Plague takes
+  twice the share, a second Storm throws twice the bolt, a second Prepare
+  doubles every term. Nothing is withheld for already being in effect. A
+  preparation is spent by an Attack only — a spell cast while prepared leaves
+  it banked — and an attack spends every one of them at once. Its rider fires
+  once per PREPARATION and does not multiply with the swings: the swings are
+  one action's worth of blows, the preparations are what was paid for them.
 - **The bolt's chain is bounded** at ten strikes. Its repeat chance is
   contested Luck on a base of a half and reaches certainty, which would not
   terminate. A terminator, not a rule.

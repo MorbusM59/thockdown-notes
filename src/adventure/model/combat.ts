@@ -66,18 +66,23 @@ export interface RoundState {
   // These OUTLIVE the round: a plague does not lift because a clock ticked.
   // `beginRound` carries them for exactly that reason.
 
-  /** Plague is on it: a fifth of what it has left, at the end of every round. */
-  plagued: boolean
-  /** A Lightning Storm is overhead: a bolt at the end of every round. */
-  storming: boolean
-  /** How many times Ignite has been laid on. It burns per stack, per monster action. */
+  // ALL FOUR ARE COUNTS, and that is the rule: an active effect STACKS. A
+  // second Plague takes twice the share, a second Storm throws twice the
+  // bolt, a second Ignite burns twice as hot, and a second Prepare doubles
+  // what the next attack gains. Three of them were flags first, on the
+  // reading that a condition is either on or off -- which made a second cast
+  // a wasted action and so made those spells something the ring had to
+  // withhold. Counting instead removes the special case rather than managing
+  // it.
+
+  /** Stacks of Plague: a fifth of what it has left EACH, at the end of every round. */
+  plagued: number
+  /** Storms overhead: a bolt EACH, at the end of every round. */
+  storming: number
+  /** Stacks of Ignite. It burns per stack, per monster action. */
   igniteStacks: number
-  /**
-   * A Prepare is banked, and the next ATTACK spends it. Not a count: the
-   * spec gives one preparation one attack, and two banked preparations would
-   * be a resource to hoard, which is the opposite of the fight's whole shape.
-   */
-  prepared: boolean
+  /** Preparations banked. The next ATTACK spends them all, at once. */
+  prepared: number
 }
 
 /**
@@ -92,6 +97,12 @@ export interface RoundState {
  */
 export function roundToJson(round: RoundState): JsonObject {
   return { ...round, playerArmor: { ...round.playerArmor }, charms: [...round.charms] }
+}
+
+/** A stack count as written, tolerating the BOOLEAN these three used to be. */
+function stacksOf(value: unknown): number {
+  if (value === true) return 1
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0
 }
 
 export function roundFromJson(value: JsonValue | undefined): RoundState {
@@ -115,10 +126,12 @@ export function roundFromJson(value: JsonValue | undefined): RoundState {
     charms: Array.isArray(row.charms)
       ? row.charms.filter((entry): entry is number => typeof entry === 'number')
       : [],
-    plagued: row.plagued === true,
-    storming: row.storming === true,
-    igniteStacks: Math.max(0, num('igniteStacks')),
-    prepared: row.prepared === true,
+    // A save that predates the counts wrote booleans here; `true` is one
+    // stack, which is exactly what it meant.
+    plagued: stacksOf(row.plagued),
+    storming: stacksOf(row.storming),
+    igniteStacks: stacksOf(row.igniteStacks),
+    prepared: stacksOf(row.prepared),
   }
 }
 
@@ -133,10 +146,10 @@ export function roundFromJson(value: JsonValue | undefined): RoundState {
 export const UNTOUCHED_FIGHT = {
   spellReach: NO_SPELLS,
   charms: [] as number[],
-  plagued: false,
-  storming: false,
+  plagued: 0,
+  storming: 0,
   igniteStacks: 0,
-  prepared: false,
+  prepared: 0,
 }
 
 export function beginRound(previous: Omit<RoundState, 'playerActionsSpent' | 'monsterActionsSpent'>): RoundState {

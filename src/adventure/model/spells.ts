@@ -39,25 +39,22 @@ export const SPELL_IDS = ['singe', 'plague', 'ignite', 'lightningBolt', 'lightni
 export type SpellId = (typeof SPELL_IDS)[number]
 
 /**
- * HOW A SPELL LANDS, which is the only thing about it the fight branches on.
+ * EVERY LASTING SPELL STACKS, so there is no longer a `kind` to branch on.
  *
- *  - `strike`  happens now and is over: damage, and possibly something else
- *              to the round.
- *  - `lasting` sets a condition that pays out at the END of every round from
- *              here on. Casting it again would do nothing, so it is not
- *              offered again -- see `spellsOffered`.
- *  - `stacking` is the same except that a second cast is worth a second
- *              helping, so it stays on the ring.
+ * There was one -- `strike` / `lasting` / `stacking` -- because a second
+ * Plague did nothing and was therefore kept off the ring, while a second
+ * Ignite was worth a second helping. The author settled it the other way:
+ * active effects stack, all of them. A second Plague takes twice the share, a
+ * second Storm throws twice the bolt, and nothing is ever withheld for having
+ * been cast already. `castSpell` switches on the spell's ID, which is the
+ * only thing it ever really needed.
  */
-export type SpellKind = 'strike' | 'lasting' | 'stacking'
-
 export interface Spell {
   id: SpellId
   /** Its place in the table, and the number its availability is rolled against. */
   level: number
   name: string
   icon: string
-  kind: SpellKind
   /** What it does, in the words the ring's detail pill shows. */
   lines: readonly string[]
 }
@@ -78,7 +75,6 @@ export const SPELLS: readonly Spell[] = [
     level: 0,
     name: 'Singe',
     icon: 'fa-solid fa-fire-flame-simple',
-    kind: 'strike',
     lines: ['An attack that cannot miss', 'Straight through armour'],
   },
   {
@@ -86,8 +82,7 @@ export const SPELLS: readonly Spell[] = [
     level: 1,
     name: 'Plague',
     icon: 'fa-solid fa-disease',
-    kind: 'lasting',
-    lines: ['A fifth of what it has left, at the end of every round', 'Once is enough'],
+    lines: ['A fifth of what it has left, at the end of every round', 'Cast again and it takes twice as much'],
   },
   {
     id: 'ignite',
@@ -96,15 +91,13 @@ export const SPELLS: readonly Spell[] = [
     // spell at a glance: the curved flame is the one that keeps burning.
     icon: 'fa-solid fa-fire-flame-curved',
     name: 'Ignite',
-    kind: 'stacking',
-    lines: ['It burns for every action it takes', 'Cast again and it burns worse'],
+    lines: ['It burns for every action it takes', 'Cast again and it burns twice as hot'],
   },
   {
     id: 'lightningBolt',
     level: 3,
     name: 'Lightning Bolt',
     icon: 'fa-solid fa-bolt-lightning',
-    kind: 'strike',
     lines: ['An attack that cannot miss', 'And leaps again on a Luck check, until it does not'],
   },
   {
@@ -112,15 +105,13 @@ export const SPELLS: readonly Spell[] = [
     level: 4,
     name: 'Lightning Storm',
     icon: 'fa-solid fa-cloud-bolt',
-    kind: 'lasting',
-    lines: ['A bolt at the end of every round', 'Once is enough'],
+    lines: ['A bolt at the end of every round', 'Cast again and it throws twice as many'],
   },
   {
     id: 'meteor',
     level: 5,
     name: 'Meteor Strike',
     icon: 'fa-solid fa-meteor',
-    kind: 'strike',
     lines: ['Double damage, through armour', 'And it acts no more this round'],
   },
 ]
@@ -168,29 +159,26 @@ export function rollSpellReach(intellect: number, rng: RngState): { reach: numbe
 }
 
 /**
- * What the ring offers this round, STRONGEST FIRST -- which is what makes
- * pressing the first cell the right play without the player reading anything.
+ * What the ring offers for this action, STRONGEST FIRST -- which is what
+ * makes pressing the first cell the right play without the player reading
+ * anything.
  *
- * A `lasting` spell already in effect is ABSENT rather than offered and
- * wasted. That is the same rule "you cannot afford this" follows: an action
- * with nothing to do does not appear, because the alternative is a first cell
- * that is sometimes a mistake -- and a first cell that is sometimes a mistake
- * is a fight the player has to read.
+ * Everything in reach is offered, including a lasting spell already in
+ * effect: they STACK, so a second cast is never a wasted one. An earlier
+ * version withheld those, on the argument that a first cell which is
+ * sometimes a mistake is a fight the player has to read -- true, and no
+ * longer load-bearing here, because there is no longer a wasted cast to
+ * protect them from.
  */
-export function spellsOffered(reach: number, state: RoundState): Spell[] {
+export function spellsOffered(reach: number, _state?: RoundState): Spell[] {
   return SPELLS
     .filter((spell) => spell.level <= reach)
-    .filter((spell) => {
-      if (spell.id === 'plague') return !state.plagued
-      if (spell.id === 'lightningStorm') return !state.storming
-      return true
-    })
     .sort((left, right) => right.level - left.level)
 }
 
 /** The strongest thing in reach, which is what a prepared attack fires alongside itself. */
-export function strongestOffered(reach: number, state: RoundState): Spell | null {
-  return spellsOffered(reach, state)[0] ?? null
+export function strongestOffered(reach: number): Spell | null {
+  return spellsOffered(reach)[0] ?? null
 }
 
 /** What a spell's damage is measured in: one ordinary attack of this character's. */
@@ -275,10 +263,10 @@ export function castSpell(input: CastInput): CastResult {
 
   switch (input.spell.id) {
     case 'plague':
-      return { state: { ...spent, plagued: true }, blows: [], stunned: false, rng: input.rng }
+      return { state: { ...spent, plagued: spent.plagued + 1 }, blows: [], stunned: false, rng: input.rng }
 
     case 'lightningStorm':
-      return { state: { ...spent, storming: true }, blows: [], stunned: false, rng: input.rng }
+      return { state: { ...spent, storming: spent.storming + 1 }, blows: [], stunned: false, rng: input.rng }
 
     case 'ignite':
       return { state: { ...spent, igniteStacks: spent.igniteStacks + 1 }, blows: [], stunned: false, rng: input.rng }
@@ -362,7 +350,7 @@ export function igniteTick(state: RoundState, playerDerived: DerivedStats): { st
 /** What one stack of Ignite is worth, as a share of one ordinary attack. */
 export const IGNITE_SHARE = 0.1
 
-/** What Plague takes off, as a share of what the monster has LEFT. */
+/** What ONE stack of Plague takes off, as a share of what the monster has LEFT. */
 export const PLAGUE_SHARE = 0.2
 
 /**
@@ -386,23 +374,26 @@ export function endOfRoundTicks(options: {
   let rng = options.rng
   const ticks: SpellTick[] = []
 
-  if (state.plagued) {
+  if (state.plagued > 0) {
     const left = Math.max(0, options.monster.maxHitPoints - state.monsterDamageTaken)
-    const damage = Math.round(left * PLAGUE_SHARE)
+    // PER STACK: a second Plague takes twice the share of what is left.
+    const damage = Math.round(left * PLAGUE_SHARE * state.plagued)
     if (damage > 0) {
       state = { ...state, monsterDamageTaken: state.monsterDamageTaken + damage }
       ticks.push({ spell: spellAt(1)!, damage })
     }
   }
 
-  if (state.storming) {
+  if (state.storming > 0) {
     const crit = nextChance(rng, resolveChanceWith(CRIT_CHANCE, options.playerStats, options.monster.stats, {
       adjustment: options.playerChances?.critChance,
       side: 'player',
       successAdjust: options.successAdjust,
     }))
     rng = crit.rng
-    const damage = Math.round(magicalDamage(options.playerDerived) * (crit.value ? 2 : 1))
+    // PER STACK, on ONE crit roll: two storms are two bolts out of the same
+    // sky, not two independently lucky ones.
+    const damage = Math.round(magicalDamage(options.playerDerived) * (crit.value ? 2 : 1) * state.storming)
     if (damage > 0) {
       state = { ...state, monsterDamageTaken: state.monsterDamageTaken + damage }
       ticks.push({ spell: spellAt(4)!, damage })

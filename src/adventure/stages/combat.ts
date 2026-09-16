@@ -558,15 +558,16 @@ export const combatStage: StageModule = {
       // already in effect is absent rather than offered and wasted.
       const spells = spellsOffered(round.spellReach, round)
       const stats = context.profile?.stats
-      const aimed = round.prepared && stats
-        ? { title: 'Attack', lines: prepareLines(stats, strongestOffered(round.spellReach, round)) }
+      const rider = strongestOffered(round.spellReach)
+      const aimed = round.prepared > 0 && stats
+        ? { title: 'Attack', lines: prepareLines(stats, rider, round.prepared) }
         : undefined
       return {
         // The offered set is part of the question, so it is part of the key:
         // the dial has to treat a round that dealt Meteor as a new screen --
         // and an attack that is loaded as a different question from one that
         // is not.
-        screenKey: `combat:mine:${round.playerActionsSpent}:${round.monsterActionsSpent}:${spells.map((spell) => spell.id).join(',')}:${round.prepared ? 'aimed' : 'loose'}`,
+        screenKey: `combat:mine:${round.playerActionsSpent}:${round.monsterActionsSpent}:${spells.map((spell) => spell.id).join(',')}:aimed${round.prepared}`,
         choices: [
           ...spells.map((spell) => ({
             id: spellChoiceId(spell),
@@ -574,22 +575,28 @@ export const combatStage: StageModule = {
             icon: spell.icon,
             detail: { title: spell.name, lines: [...spell.lines] },
           })),
-          // LOADED says so on the cell, because the ring's detail is the only
-          // place it can: a banked preparation is worth nothing the player
-          // cannot see, and its own cell has gone away to make room for this.
-          { id: 'combat:attack', label: round.prepared ? 'Attack, aimed' : 'Attack', icon: ATTACK_ICON, detail: aimed },
-          // LAST, and absent once it is banked. A second Prepare would do
-          // nothing -- it is a flag, not a count -- and an action with
-          // nothing to do does not appear (model/spells.ts makes the same
-          // argument for a spell already in effect).
-          ...(round.prepared || !stats
-            ? []
-            : [{
+          // LOADED says so on the cell, and says HOW loaded: a banked
+          // preparation is worth nothing the player cannot see, and with them
+          // stacking the count is the whole of what pressing this is worth.
+          {
+            id: 'combat:attack',
+            label: round.prepared > 1
+              ? `Attack, aimed ×${round.prepared}`
+              : (round.prepared === 1 ? 'Attack, aimed' : 'Attack'),
+            icon: ATTACK_ICON,
+            detail: aimed,
+          },
+          // LAST, and always there: preparations stack, so a second one is
+          // never a wasted action. Its detail promises what the NEXT one
+          // would make the attack worth, not what one of them is.
+          ...(stats
+            ? [{
                 id: PREPARE_CHOICE,
                 label: 'Prepare',
                 icon: PREPARE_ICON,
-                detail: { title: 'Prepare', lines: prepareLines(stats, strongestOffered(round.spellReach, round)) },
-              }]),
+                detail: { title: 'Prepare', lines: prepareLines(stats, rider, round.prepared + 1) },
+              }]
+            : []),
         ],
       }
     }
@@ -636,7 +643,7 @@ export const combatStage: StageModule = {
       // whole of what Prepare is.
       return stepFight({
         state,
-        round: { ...round, prepared: true, playerActionsSpent: round.playerActionsSpent + 1 },
+        round: { ...round, prepared: round.prepared + 1, playerActionsSpent: round.playerActionsSpent + 1 },
         monster,
         context,
         entries: [preparePill(monster)],
@@ -645,7 +652,7 @@ export const combatStage: StageModule = {
       })
     }
 
-    if (choiceId === 'combat:attack' && round.prepared && context.profile) {
+    if (choiceId === 'combat:attack' && round.prepared > 0 && context.profile) {
       const aimed = resolvePreparedAttack({
         state: round,
         monster,

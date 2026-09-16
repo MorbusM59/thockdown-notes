@@ -33,7 +33,7 @@ function roundOf(over: Partial<RoundState> = {}): RoundState {
 
 function aim(stats: StatBlock, rng: number, over: Partial<RoundState> = {}) {
   return resolvePreparedAttack({
-    state: roundOf({ prepared: true, ...over }),
+    state: roundOf({ prepared: 1, ...over }),
     monster: monsterOf(),
     playerStats: stats,
     playerDerived: deriveStats(stats),
@@ -47,10 +47,27 @@ function aim(stats: StatBlock, rng: number, over: Partial<RoundState> = {}) {
  * has something to spend an action on.
  */
 describe('a prepared attack', () => {
-  it('spends the preparation, whatever else happens', () => {
+  it('spends every banked preparation, whatever else happens', () => {
     for (let seed = 1; seed <= 40; seed += 1) {
-      expect(aim(block({ might: 2, agility: 2 }), seed).state.prepared).toBe(false)
+      expect(aim(block({ might: 2, agility: 2 }), seed).state.prepared).toBe(0)
+      expect(aim(block({ might: 2, agility: 2 }), seed, { prepared: 3 }).state.prepared).toBe(0)
     }
+  })
+
+  it('doubles every term for a second preparation', () => {
+    // "Double prepare doubles the stats" -- every one of them, including the
+    // rider, which comes down once per preparation.
+    const stats = block({ might: 4, agility: 5, charisma: 5, perception: 4, intellect: 6 })
+    const once = aim(stats, 9, { spellReach: 0 })
+    const twice = aim(stats, 9, { spellReach: 0, prepared: 2 })
+    // Agility 5 is a coin-flip once and a certainty twice; Charisma likewise.
+    expect(twice.blows.length).toBe(2)
+    expect(twice.stunned).toBe(true)
+    // The rider fires once per preparation.
+    expect(once.rider?.blows).toHaveLength(1)
+    expect(twice.rider?.blows).toHaveLength(2)
+    // ...and still costs exactly the one action the attack itself is.
+    expect(twice.state.playerActionsSpent).toBe(1)
   })
 
   it('costs exactly one action, however many times it swung', () => {

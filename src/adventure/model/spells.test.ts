@@ -78,31 +78,28 @@ describe('what a round reaches', () => {
 
   it('brings every lower spell with it', () => {
     for (const spell of SPELLS) {
-      const offered = spellsOffered(spell.level, freshRound())
+      const offered = spellsOffered(spell.level)
       expect(offered).toHaveLength(spell.level + 1)
       // STRONGEST FIRST: the ring opens on its first cell, so the order is
       // the recommendation.
       expect(offered.map((candidate) => candidate.level)).toEqual(
         [...Array(spell.level + 1).keys()].reverse(),
       )
-      expect(strongestOffered(spell.level, freshRound())?.level).toBe(spell.level)
+      expect(strongestOffered(spell.level)?.level).toBe(spell.level)
     }
-    expect(spellsOffered(NO_SPELLS, freshRound())).toEqual([])
+    expect(spellsOffered(NO_SPELLS)).toEqual([])
   })
 
-  it('stops offering a lasting spell that is already lasting', () => {
-    // Casting it again would do nothing, and a first cell that is sometimes a
-    // mistake is a fight the player has to read.
-    const all = spellsOffered(5, freshRound()).map((spell) => spell.id)
-    expect(all).toContain('plague')
-    expect(all).toContain('lightningStorm')
-
-    const inEffect = spellsOffered(5, freshRound({ plagued: true, storming: true })).map((spell) => spell.id)
-    expect(inEffect).not.toContain('plague')
-    expect(inEffect).not.toContain('lightningStorm')
-    // Ignite STACKS, so a second helping is worth something and it stays.
-    expect(inEffect).toContain('ignite')
-    expect(spellsOffered(5, freshRound({ igniteStacks: 3 })).map((spell) => spell.id)).toContain('ignite')
+  it('keeps offering a lasting spell that is already lasting, because they stack', () => {
+    // An earlier version withheld those, on the argument that a first cell
+    // which is sometimes a mistake is a fight the player has to read. It is
+    // not load-bearing here any more: a second cast is never a wasted one.
+    const all = spellsOffered(5).map((spell) => spell.id)
+    const inEffect = spellsOffered(5, freshRound({ plagued: 2, storming: 1, igniteStacks: 3 }))
+      .map((spell) => spell.id)
+    expect(inEffect).toEqual(all)
+    expect(inEffect).toContain('plague')
+    expect(inEffect).toContain('lightningStorm')
   })
 })
 
@@ -185,7 +182,7 @@ describe('the table, spell by spell', () => {
   it('Plague takes a share of what is LEFT, so it fades and cannot finish a fight', () => {
     const monster = monsterOf()
     let state = cast('plague', freshRound(), monster, 5).state
-    expect(state.plagued).toBe(true)
+    expect(state.plagued).toBe(1)
 
     const bites: number[] = []
     for (let round = 0; round < 6; round += 1) {
@@ -200,10 +197,33 @@ describe('the table, spell by spell', () => {
     expect(state.monsterDamageTaken).toBeLessThan(monster.maxHitPoints)
   })
 
+  it('takes twice the share for a second Plague, which is what stacking means', () => {
+    const monster = monsterOf()
+    const once = cast('plague', freshRound(), monster, 5).state
+    const twice = cast('plague', once, monster, 5).state
+    expect(twice.plagued).toBe(2)
+    const bite = (state: RoundState) => endOfRoundTicks({
+      state, monster, playerStats: PLAYER, playerDerived: DERIVED, rng: 9,
+    }).ticks[0].damage
+    expect(bite(twice)).toBe(bite(once) * 2)
+  })
+
+  it('throws a second bolt for a second Storm, out of the same crit roll', () => {
+    // Two storms are two bolts out of one sky, not two independently lucky
+    // ones -- so the doubling is exact rather than a second gamble.
+    const monster = monsterOf()
+    const once = cast('lightningStorm', freshRound(), monster, 5).state
+    const twice = cast('lightningStorm', once, monster, 5).state
+    const bolt = (state: RoundState) => endOfRoundTicks({
+      state, monster, playerStats: PLAYER, playerDerived: DERIVED, rng: 9,
+    }).ticks[0].damage
+    expect(bolt(twice)).toBe(bolt(once) * 2)
+  })
+
   it('a Storm is flat, and therefore is the one that can finish it', () => {
     const monster = monsterOf()
     let state = cast('lightningStorm', freshRound(), monster, 5).state
-    expect(state.storming).toBe(true)
+    expect(state.storming).toBe(1)
     for (let round = 0; round < 40 && state.monsterDamageTaken < monster.maxHitPoints; round += 1) {
       state = endOfRoundTicks({ state, monster, playerStats: PLAYER, playerDerived: DERIVED, rng: 9 + round }).state
     }
@@ -255,10 +275,10 @@ describe('a round survives the disk', () => {
       playerFled: true,
       spellReach: 4,
       charms: [4, 2, 0],
-      plagued: true,
-      storming: true,
+      plagued: 2,
+      storming: 3,
       igniteStacks: 3,
-      prepared: true,
+      prepared: 1,
     }
     expect(roundFromJson(JSON.parse(JSON.stringify(roundToJson(round))))).toEqual(round)
   })

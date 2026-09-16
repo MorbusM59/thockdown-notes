@@ -27,9 +27,15 @@
 //
 // SPENT BY AN ATTACK AND NOTHING ELSE. A spell cast while prepared leaves the
 // preparation banked -- "the next attack" is the spec's wording and a spell
-// is its own thing, with its own rider waiting. And it is a FLAG, not a
-// count: two banked preparations would be a resource to hoard, which is the
-// opposite of a fight with no time to think in.
+// is its own thing, with its own rider waiting.
+//
+// PREPARATIONS STACK, and the attack spends them ALL at once: two of them
+// double every term above, guarantee the second swing at six Agility instead
+// of risking it, and bring the rider down twice. It was a flag first, on the
+// reading that a hoardable bonus is the opposite of a fight with no time to
+// think in -- but the actions are the cost, and two actions spent aiming is
+// a real bet rather than a hoard. The rider scales with the rest because
+// halving one of six terms is the special case, not the rule.
 
 import { nextChance, type RngState } from '../core/rng'
 import type { ChanceAdjustment } from './chance'
@@ -44,13 +50,24 @@ export const PREPARE_PER_POINT = 0.1
 
 export const PREPARE_ICON = 'fa-solid fa-crosshairs'
 
-/** What a prepared attack would do, in the words the ring's detail pill shows. */
-export function prepareLines(stats: StatBlock, rider: Spell | null): string[] {
-  const percent = (points: number) => Math.round(points * PREPARE_PER_POINT * 100)
+/**
+ * What a prepared attack would do, in the words the ring's detail pill shows.
+ *
+ * `banked` is how many preparations are already in hand, so the cell can
+ * promise what pressing it is actually worth rather than what one of them is.
+ * Zero is the Prepare cell itself: what you would have after taking it.
+ */
+export function prepareLines(stats: StatBlock, rider: Spell | null, banked = 1): string[] {
+  const stacks = Math.max(1, banked)
+  const percent = (points: number) => Math.round(Math.min(1, points * PREPARE_PER_POINT * stacks) * 100)
+  const riderLine = rider
+    ? `${rider.name} rides along with it${stacks > 1 ? `, ${stacks} times` : ''}`
+    : 'No spell in reach to ride along'
   return [
-    `+${percent(stats.might)}% damage, +${percent(stats.perception)}% to land, +${percent(stats.luck)}% to crit`,
+    `+${Math.round(stats.might * PREPARE_PER_POINT * stacks * 100)}% damage, `
+      + `+${percent(stats.perception)}% to land, +${percent(stats.luck)}% to crit`,
     `${percent(stats.agility)}% to strike twice, ${percent(stats.charisma)}% to end its round`,
-    rider ? `${rider.name} rides along with it` : 'No spell in reach to ride along',
+    riderLine,
   ]
 }
 
@@ -89,17 +106,20 @@ export interface PreparedAttack {
  */
 export function resolvePreparedAttack(input: PreparedInput): PreparedAttack {
   const stats = input.playerStats
+  // EVERY TERM SCALES WITH THE COUNT. One preparation is the unit; two is
+  // twice of each, which is what "double prepare doubles the stats" means.
+  const stacks = Math.max(1, input.state.prepared)
   const bump = (adjustment: ChanceAdjustment | undefined, points: number): ChanceAdjustment => ({
     scale: adjustment?.scale ?? 1,
     // A DELTA, not a scale: the spec says "+10% hit chance per point", which
     // is points added to the chance, and it composes with whatever an item
     // already did to the same roll (model/chance.ts).
-    delta: (adjustment?.delta ?? 0) + points * PREPARE_PER_POINT,
+    delta: (adjustment?.delta ?? 0) + points * PREPARE_PER_POINT * stacks,
   })
 
   const sharpened: DerivedStats = {
     ...input.playerDerived,
-    damageMultiplier: input.playerDerived.damageMultiplier * (1 + stats.might * PREPARE_PER_POINT),
+    damageMultiplier: input.playerDerived.damageMultiplier * (1 + stats.might * PREPARE_PER_POINT * stacks),
   }
   const chances = {
     hitChance: bump(input.playerChances?.hitChance, stats.perception),
@@ -108,11 +128,11 @@ export function resolvePreparedAttack(input: PreparedInput): PreparedAttack {
 
   // TWICE is decided before either swing, so the two are one decision rather
   // than a second roll the first swing's outcome could colour.
-  const twice = nextChance(input.rng, Math.min(1, stats.agility * PREPARE_PER_POINT))
+  const twice = nextChance(input.rng, Math.min(1, stats.agility * PREPARE_PER_POINT * stacks))
   let rng = twice.rng
-  // The preparation is spent HERE, whatever else follows -- there is no path
-  // out of this function that leaves it banked.
-  let state: RoundState = { ...input.state, prepared: false }
+  // ALL of them are spent HERE, whatever else follows -- there is no path out
+  // of this function that leaves any banked.
+  let state: RoundState = { ...input.state, prepared: 0 }
   const blows: Blow[] = []
 
   for (let swing = 0; swing < (twice.value ? 2 : 1); swing += 1) {
@@ -136,30 +156,38 @@ export function resolvePreparedAttack(input: PreparedInput): PreparedAttack {
     rng = struck.rng
   }
 
-  const stun = nextChance(rng, Math.min(1, stats.charisma * PREPARE_PER_POINT))
+  const stun = nextChance(rng, Math.min(1, stats.charisma * PREPARE_PER_POINT * stacks))
   rng = stun.rng
   if (stun.value) {
     state = { ...state, monsterActionsSpent: state.monsterActionsSpent + monsterActionsLeft(state, input.monster) }
   }
 
-  const spell = strongestOffered(state.spellReach, state)
+  const spell = strongestOffered(state.spellReach)
   let rider: PreparedAttack['rider'] = null
   if (spell) {
-    const cast = castSpell({
-      spell,
-      state,
-      monster: input.monster,
-      playerStats: stats,
-      playerDerived: sharpened,
-      playerChances: chances,
-      successAdjust: input.successAdjust,
-      rng,
-      // It rides on the attack's action. Nothing extra is spent.
-      spendsAction: false,
-    })
-    state = cast.state
-    rng = cast.rng
-    rider = { spell, blows: cast.blows }
+    const riderBlows: Blow[] = []
+    // ONCE PER PREPARATION, like everything else here. However many times the
+    // attack SWUNG is a different question and does not multiply it: the
+    // swings are one action's worth of blows, the preparations are what was
+    // paid for them.
+    for (let cast = 0; cast < stacks; cast += 1) {
+      const fired = castSpell({
+        spell,
+        state,
+        monster: input.monster,
+        playerStats: stats,
+        playerDerived: sharpened,
+        playerChances: chances,
+        successAdjust: input.successAdjust,
+        rng,
+        // It rides on the attack's action. Nothing extra is spent.
+        spendsAction: false,
+      })
+      state = fired.state
+      rng = fired.rng
+      riderBlows.push(...fired.blows)
+    }
+    rider = { spell, blows: riderBlows }
   }
 
   return { state, blows, stunned: stun.value, rider, rng }

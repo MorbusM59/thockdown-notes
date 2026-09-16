@@ -1003,11 +1003,19 @@ placed at 5, 9 and 10 and the level advancing after ten.
 
     **The order IS the recommendation.** Strongest spell first, then Attack,
     then Prepare. A player who presses the first cell every time is playing
-    well, which is what a fight this long requires. It is also why an action
-    with nothing to do is ABSENT rather than offered and wasted -- a lasting
-    spell already in effect, a Prepare already banked -- on the same argument
-    "you cannot afford this" follows (entry 71): a first cell that is
-    sometimes a mistake is a fight the player has to read.
+    well, which is what a fight this long requires.
+
+    **EVERY ACTIVE EFFECT STACKS.** A second Plague takes twice the share, a
+    second Storm throws twice the bolt, a second Ignite burns twice as hot,
+    and a second Prepare doubles every term of the next attack -- rider
+    included, which comes down once per preparation. Three of them were flags
+    first, on the reading that a condition is either on or off; that made a
+    second cast a wasted action, which in turn made those cells something the
+    ring had to WITHHOLD (on entry 71's argument, that a first cell which is
+    sometimes a mistake is a fight the player has to read). Counting removes
+    the special case rather than managing it: nothing is ever withheld for
+    having been cast already, and `SpellKind` -- which existed only to tell
+    the two apart -- is gone.
 
     **Prepare is the exception that proves it**: one decision, one
     consequence, and the one place the whole stat block is spent at once. The
