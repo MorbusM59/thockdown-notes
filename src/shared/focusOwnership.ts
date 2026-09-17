@@ -62,3 +62,21 @@ export function mayTakeFocusOnPress(target: Element | null | undefined): boolean
   if (!target) return false
   return isTextEntryElement(target) || Boolean(target.closest(NATIVE_PRESS_SELECTOR))
 }
+
+/**
+ * The surfaces that own the Tab key where they are.
+ *
+ * A text field steps to its sibling or leaves itself; an editor indents; the
+ * ring turns its dial. Everywhere else Tab has nothing to walk to, and the
+ * app's last-resort handler returns the keyboard to the active slot instead.
+ *
+ * Asked of whoever HOLDS the keyboard rather than of whatever the press
+ * landed on -- they are the same element for a key press, and saying holder
+ * is saying which question this is.
+ */
+const TAB_OWNING_SURFACE_SELECTOR = '.editor-escape-hold-ring'
+
+export function ownsTabKey(holder: Element | null | undefined): boolean {
+  if (!holder) return false
+  return isTextEntryElement(holder) || Boolean(holder.closest(TAB_OWNING_SURFACE_SELECTOR))
+}

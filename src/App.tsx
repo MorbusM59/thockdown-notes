@@ -6,7 +6,8 @@ import ReactMarkdown from 'react-markdown'
 import { SidebarOptionsPanel } from './sidebar/SidebarOptionsPanel'
 import { AudioControls } from './components/AudioControls'
 import { isPlaylistSlot } from './shared/audioPlayer'
-import { isTextEntryElement, mayTakeFocusOnPress } from './shared/focusOwnership'
+import { isTextEntryElement, mayTakeFocusOnPress, ownsTabKey } from './shared/focusOwnership'
+import { focusEscapeHoldRing } from './editorSection/escapeHoldRingFocus'
 import {
   BTN_SQUARE_LARGE_SIZE_PX,
   computeWindowControlsCollapsedWidthPx,
@@ -9062,12 +9063,29 @@ ${markdownHtml}
       const isGlazeRadialSeedField = target === glazeRadialSeedInputRef.current
       const isEditorControlField = isSearchField || isReplaceField || isTagField || isPageJumpField || isTextureSeedField || isGlazeLinearSeedField || isGlazeRadialSeedField
 
-      // In find-and-replace mode, an un-shifted Tab in the find field should
-      // move focus to the sibling replace field rather than jump to the
-      // editor -- only the last field in the pair still does that.
-      const shouldPassThroughToReplaceField = isReplaceMode && isSearchField && event.key === 'Tab' && !event.shiftKey
+      // THE FIND/REPLACE PAIR IS THE ONE PLACE TAB STEPS SIDEWAYS, and it
+      // now does so by NAME rather than by riding the browser's tab order.
+      // It rode it before -- declining to handle the press and letting the
+      // native order happen to land on the next field -- which worked only
+      // while those two inputs stayed adjacent in the DOM, and stopped being
+      // expressible at all once Tab had an owner of last resort (see the
+      // effect above; an unclaimed Tab is now returned to the editor).
+      // Shift+Tab steps back, which the native order gave for free and which
+      // therefore has to be said out loud too.
+      const tabStep = event.key === 'Tab' && isReplaceMode
+        ? (isSearchField && !event.shiftKey ? documentReplaceInputRef.current
+          : isReplaceField && event.shiftKey ? sidebarSearchInputRef.current
+          : null)
+        : null
+      if (tabStep) {
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        tabStep.focus()
+        tabStep.select()
+        return
+      }
 
-      if (isEditorControlField && ['Escape', 'Enter', 'Tab'].includes(event.key) && !shouldPassThroughToReplaceField) {
+      if (isEditorControlField && ['Escape', 'Enter', 'Tab'].includes(event.key)) {
         event.preventDefault()
         event.stopImmediatePropagation()
         if (event.key === 'Escape') escapeConsumedByFieldRef.current = true
@@ -9404,6 +9422,85 @@ ${markdownHtml}
     showSidebarInMode,
     toggleSidebarVisible,
   ])
+
+  /**
+   * WHERE THE KEYBOARD GOES BACK TO: the ACTIVE SLOT's surface, which is the
+   * ring when a mode owns that slot and the editor otherwise.
+   *
+   * One function because three callers need the same answer -- an unowned
+   * Tab, a press that found the keyboard elsewhere, and (once it exists) any
+   * reconciliation of focus that landed nowhere -- and three opinions about
+   * "the active surface" is three surfaces.
+   *
+   * The slot is found in the DOM by its own `data-section-id`, the same way
+   * the press handler above resolves the section it was clicked in. That is a
+   * query at a rare gesture rather than another ref threaded through four
+   * components, and it reads the screen rather than a mirror of it.
+   */
+  const returnKeyboardToActiveSurface = useCallback(() => {
+    const slot = document.querySelector<HTMLElement>(`[data-section-id="${CSS.escape(activeSectionId)}"]`)
+    if (isEscapeRingUp) {
+      focusEscapeHoldRing(slot)
+      return
+    }
+    getActiveSection()?.scheduleFocusEditorInEditMode()
+  }, [activeSectionId, getActiveSection, isEscapeRingUp])
+
+  /**
+   * TAB HAS ONE OWNER OF LAST RESORT.
+   *
+   * Tab is not a way to walk the app. There is no designed order for it to
+   * walk -- the controls are laid out for the eye, not in a sequence -- so
+   * the browser's own order was a tour of the chrome in DOM order, which is
+   * exactly as arbitrary as it sounds and took the keyboard off whatever was
+   * being written.
+   *
+   * Tab belongs to whatever SURFACE holds the keyboard, and the surfaces that
+   * own it already claim it where they are:
+   *
+   *   - an editor in edit mode indents (CM6Editor's keymap);
+   *   - the ring turns its dial one step, because a notch, an arrow and a Tab
+   *     are one motion to it (escapeMenuContract.ts);
+   *   - a text field leaves itself -- the find field steps to replace and
+   *     back, and every other field commits or cancels and hands the editor
+   *     back (the editor-control-field block above, useSectionTabs' tag
+   *     input, the seed editors).
+   *
+   * Everywhere else there is nothing to walk to, so Tab returns the keyboard
+   * to the active slot's surface and nothing else happens.
+   *
+   * IT ASKS WHO HOLDS THE KEYBOARD, not whether somebody else has already
+   * claimed the press. Reading `event.defaultPrevented` from a bubble
+   * listener is the obvious way to write "last resort" and it is wrong here,
+   * because it makes correctness depend on LISTENER REGISTRATION ORDER: the
+   * app's main keydown effect lists `isReplaceMode` among its dependencies,
+   * so opening find-and-replace tore that listener down and re-added it --
+   * after this one -- and from that moment this handler ran FIRST, prevented
+   * the default, and the real owner bailed out on the `defaultPrevented`
+   * check at its own top. Found live, as Tab in the find field jumping to
+   * the editor instead of stepping to the replace field. An effect's
+   * dependencies are nobody's idea of a priority list, and any rule resting
+   * on them is one dependency away from silently inverting.
+   *
+   * The holder is a question with a stable answer, asked through the same
+   * `focusOwnership.ts` predicate the press rule uses, so a surface cannot
+   * be in one of the two answers and not the other.
+   *
+   * NOT BUILT, and deliberately named rather than silently missing: walking
+   * a list of search hits with Tab. Nothing in the app is a hit card with a
+   * tab stop today, so there is no list to walk; when there is, it claims Tab
+   * where it lives like every other surface here, and this stays untouched.
+   */
+  useEffect(() => {
+    const onTab = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Tab') return
+      if (ownsTabKey(document.activeElement)) return
+      event.preventDefault()
+      returnKeyboardToActiveSurface()
+    }
+    window.addEventListener('keydown', onTab, true)
+    return () => window.removeEventListener('keydown', onTab, true)
+  }, [returnKeyboardToActiveSurface])
 
   /**
    * A PRESS DOES NOT MOVE THE KEYBOARD.
