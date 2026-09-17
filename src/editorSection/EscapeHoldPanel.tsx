@@ -18,6 +18,7 @@ import {
   hoverStepVoice, panForRingX, planScreenBurst,
 } from '../escapeMenu/menuSounds'
 import { useNonPassiveWheel } from '../shared/useNonPassiveWheel'
+import { focusEscapeHoldRing } from './escapeHoldRingFocus'
 import type { EscapeHoldRingParams } from './escapeHoldRingLayout'
 import type { EscapeMenuContribution } from '../escapeMenu/escapeMenuContract'
 
@@ -1052,7 +1053,7 @@ export function EscapeHoldPanel({
       if (!isOpenRef.current) return
       const active = document.activeElement
       if (active !== null && active !== document.body) return
-      ringRef.current?.querySelector<HTMLButtonElement>('button[tabindex="0"]')?.focus()
+      focusEscapeHoldRing(ringRef.current)
     }, 0)
   }
 

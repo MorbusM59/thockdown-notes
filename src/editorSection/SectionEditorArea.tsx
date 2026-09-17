@@ -15,6 +15,7 @@ import { ChapterBar } from '../chapters/ChapterBar'
 import { isSealedNoteId } from '../shared/helpGuide'
 import type { ChapterPillSplitArm } from '../chapters/useChapterPillActions'
 import { EscapeHoldPanel, type ExportScope } from './EscapeHoldPanel'
+import { focusEscapeHoldRing } from './escapeHoldRingFocus'
 import { splitChapterFamily } from '../shared/chapters'
 import type { EscapeMenuContribution } from '../escapeMenu/escapeMenuContract'
 import { EscapeMenuChromeBarRow, EscapeMenuChromeGauges, EscapeMenuChromeStatsRow } from '../escapeMenu/EscapeMenuStatus'
@@ -383,12 +384,25 @@ export function SectionEditorArea({
               <div
                 className="editor-escape-hold-backdrop"
                 aria-hidden="true"
-                // Swallows the focus a mousedown would otherwise move to
-                // <body>. The backdrop is inert -- it has nothing to focus
-                // -- so a click on it must leave focus exactly where it was,
-                // in the ring. Without this, clicking the dimmed area killed
-                // the ring's keyboard navigation with no way to get it back.
-                onMouseDown={(event) => event.preventDefault()}
+                // A CLICK HERE BELONGS TO THE RING, so it hands the ring
+                // the keyboard -- it does not merely decline to take it away.
+                //
+                // Declining was the whole of this, and it only worked from a
+                // state you were already in: preventDefault stops the
+                // mousedown moving focus to <body>, which is right when focus
+                // is in the ring, and does nothing at all when the reader has
+                // been in the sidebar since. Then the dimmed area was the one
+                // surface with no way back -- the ring's own recovery
+                // (handleRingFocusOut) only fires for focus that landed on
+                // <body>, and App.tsx's click-to-refocus stands down entirely
+                // while a ring is up, both correctly. Nobody owned it.
+                //
+                // preventDefault stays, and for the same reason as before: it
+                // is what stops the browser clearing focus after this runs.
+                onMouseDown={(event) => {
+                  event.preventDefault()
+                  focusEscapeHoldRing(sectionContainerRef.current)
+                }}
               />
             ) : null}
             <div className={`edit-container${isPreviewMode ? ' is-pane-hidden' : ''}`}>
