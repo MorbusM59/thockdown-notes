@@ -745,61 +745,54 @@
    (EscapeHoldPanel.tsx's arrivedCount), so each cell appears in sync with its
    own sound.
 
-   IN PLACE. A cell arrives exactly where it was always going to be -- the
-   ring's geometry is not part of this, and nothing travels. What it does is
-   pop: a brief overshoot in SIZE and nothing else.
+   THE RING IS NOT STAGED, ONLY WHAT IT SAYS. Every chip is drawn at once, so
+   the shape of the screen -- how many choices there are and where they sit --
+   is readable from the first frame, and nothing about the geometry, the focus
+   target or what can be hovered depends on how far the deal has got. What
+   arrives per note is the ICON: it fades up and grows from half size into
+   place, on `ease-in`, over `--cell-arrival` (EscapeHoldPanel's arrivalMs,
+   half a page-up scroll), which is also exactly how long that cell's note is
+   held back -- so the sound lands as the icon finishes rather than as it sets
+   off.
 
-   `visibility` rather than `opacity` or `display` for the waiting state:
-   hidden has to mean un-hoverable and un-hit-testable too (the ring re-asks
-   the DOM what is under the pointer, and a cell nobody can see must not be
-   the answer), while the node itself stays laid out and keeps its ref -- the
-   ring's geometry, its focus target and its React keys are the same objects
-   before and after arriving. */
-.editor-stage .editor-escape-hold-panel-btn.is-unarrived {
-  visibility: hidden;
+   ON THE ICON, NOT ON THE BUTTON, and that is a correction: an element's
+   `scale` is applied BEFORE its own `transform` (the individual transform
+   properties compose as translate, rotate, scale, then `transform`), so
+   scaling a button whose `transform` IS its ring placement scales that
+   placement's translation too -- the cell slid along its own radius, pivoting
+   about the ring's centre instead of its own. Putting it on the icon inside
+   removes the interaction rather than working around it: two properties on
+   two elements, the placement still the rotation loop's alone, and the icon's
+   box centred in the cell, so its centre is what it scales about and what
+   stays still. */
+.editor-stage .editor-escape-hold-panel-btn.is-unarrived
+  > .editor-escape-hold-panel-btn-icon {
+  opacity: 0;
 }
 
-/* THE POP IS ON THE ICON, NOT ON THE BUTTON, and that is a correction: an
-   element's `scale` is applied BEFORE its own `transform` (the individual
-   transform properties compose as translate, rotate, scale, then
-   `transform`), so scaling a button whose `transform` IS its ring placement
-   scales that placement's translation too -- the cell slid along its own
-   radius, pivoting about the ring's centre instead of its own. Putting the
-   animation on the icon inside removes the interaction rather than working
-   around it: two properties on two elements, the placement still the
-   rotation loop's alone, and the icon's own box centred in the cell, so its
-   centre is exactly what it scales about and exactly what stays still.
-
-   NINETY TO A HUNDRED AND FIVE AND BACK: a rise into the overshoot and a
-   settle out of it, equal halves, `--cell-pop-half` each (EscapeHoldPanel's
-   CELL_POP_HALF_MS, which is also how long the cell's note is held back so
-   it lands on the apex rather than on the start). Rise and fall being equal
-   is what makes the 50% keyframe the apex; the durations are not two
-   numbers that can drift. */
-@keyframes escape-hold-cell-pop {
-  0% {
-    scale: 0.9;
-    animation-timing-function: ease-in;
+@keyframes escape-hold-cell-arrive {
+  from {
+    opacity: 0;
+    scale: 0.5;
   }
-  50% {
-    scale: 1.05;
-    animation-timing-function: ease-out;
-  }
-  100% {
+  to {
+    opacity: 1;
     scale: 1;
   }
 }
 
 .editor-stage .editor-escape-hold-panel-btn:not(.is-unarrived):not(.is-simple-rotation)
   > .editor-escape-hold-panel-btn-icon {
-  animation: escape-hold-cell-pop calc(var(--cell-pop-half, 50ms) * 2) both;
+  animation: escape-hold-cell-arrive var(--cell-arrival, 100ms) ease-in both;
 }
 
 /* The two ways a reader says they do not want this. `.is-simple-rotation` is
    the app's own reduced-visual-effects setting (it is already what turns the
    curve-driven rotation into a plain CSS step) and is excluded in the rule
-   above rather than here, because with that setting the cells all arrive at
-   once and would otherwise pop in unison. */
+   above rather than here, because with that setting every cell arrives at
+   once and they would otherwise grow in unison. Either way the icon's own
+   resting state is fully opaque and unscaled, so switching the animation off
+   leaves the ring correct rather than blank. */
 @media (prefers-reduced-motion: reduce) {
   .editor-stage .editor-escape-hold-panel-btn > .editor-escape-hold-panel-btn-icon {
     animation: none;

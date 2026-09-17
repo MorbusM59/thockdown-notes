@@ -5,6 +5,7 @@ import {
   burstGapMs,
   burstNoteVoice,
   cellActivationVoice,
+  cellArrivalMs,
   dialStepVoice,
   hoverStepVoice,
   panForRingX,
@@ -151,6 +152,31 @@ describe('how far apart the notes fall', () => {
   it('reaches the plan, so the notes are actually spaced by it', () => {
     const notes = planScreenBurst(3, 10, 20, alwaysFirst)
     expect(notes.map((note) => note.delayMs)).toEqual([0, 20, 40])
+  })
+})
+
+describe('how long a cell takes to arrive', () => {
+  it('is half a page-up scroll, so it is the reader\'s own number', () => {
+    expect(cellArrivalMs(1)).toBeCloseTo(500, 10)
+    expect(cellArrivalMs(0.24)).toBeCloseTo(120, 10)
+  })
+
+  it('falls back on a duration it cannot halve', () => {
+    // Zero would be an icon that never animates and a note with no offset;
+    // the same fallback the gap takes, because at that point neither has a
+    // duration to divide.
+    expect(cellArrivalMs(0)).toBe(BURST_GAP_MS)
+    expect(cellArrivalMs(Number.NaN)).toBe(BURST_GAP_MS)
+    expect(cellArrivalMs(-1)).toBe(BURST_GAP_MS)
+  })
+
+  it('offsets every note equally, so the deal is not bunched or slowed', () => {
+    // The offset moves each note onto its OWN cell's landing: the notes stay
+    // exactly one gap apart, and the burst still ends one arrival after the
+    // last cell set off.
+    const arrival = cellArrivalMs(0.2)
+    const landings = planScreenBurst(3, 10, 20, alwaysFirst).map((note) => note.delayMs + arrival)
+    expect(landings).toEqual([arrival, arrival + 20, arrival + 40])
   })
 })
 

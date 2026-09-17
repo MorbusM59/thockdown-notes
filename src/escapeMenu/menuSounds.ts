@@ -112,6 +112,24 @@ export function burstGapMs(choiceCount: number, totalTimeSec: number): number {
 }
 
 /**
+ * HOW LONG A CELL TAKES TO ARRIVE -- half a page-up scroll -- and therefore
+ * HOW LONG ITS NOTE IS HELD BACK. One function because those are one
+ * quantity: the cell fades and grows into place over this, and its note
+ * lands on the moment it gets there rather than on the moment it sets off.
+ * Two numbers here would be a sound that drifts off the thing it announces.
+ *
+ * Read by the panel for both -- the animation's duration goes to the CSS as
+ * a custom property, the same value offsets the note's timer -- so the
+ * reader's Scrolling Behavior sliders set the feel of this the way they set
+ * the dial's rotation. A nonsense `t` falls back to the same default the
+ * gap does, since at that point neither has a duration to divide.
+ */
+export function cellArrivalMs(totalTimeSec: number): number {
+  if (!Number.isFinite(totalTimeSec) || totalTimeSec <= 0) return BURST_GAP_MS
+  return (totalTimeSec * 1000) / 2
+}
+
+/**
  * WHERE A CELL IS, as the sound manager's pan takes it (-1 leftmost, 1
  * rightmost).
  *
