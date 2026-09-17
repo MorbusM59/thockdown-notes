@@ -24,8 +24,9 @@
 // stack into its row, and nothing here forecloses it -- but the field for
 // it is not written until something uses it.
 
-import { armorFromHoldings, applyAcquisition, NO_ARMOR, type Armor } from './armor'
+import { pieceOf, refillArmor, repairAfterFight, type Armor, type ArmorPiece } from './armor'
 import { resolveProfile, type EffectiveProfile, type HoldingCounts, type Modifier, type ModifierKind } from './modifiers'
+import { catalogFor, type Content } from '../content'
 import { clampBaseStats, createStatBlock, deriveStats, type StatBlock } from './stats'
 import type { Effect } from './effects'
 import { FIRST_MILESTONE_THRESHOLD, takeMilestone } from './milestones'
@@ -183,7 +184,6 @@ export interface GameRecord {
    */
   famePointsSpent: number
   hitPoints: number
-  armor: Armor
 }
 
 export interface HoldingRow {
@@ -192,6 +192,21 @@ export interface HoldingRow {
   modifierId: string
   /** Order of acquisition, so "keep one" can show them as they were found. */
   seq: number
+  /**
+   * ARMOR POINTS LEFT ON THIS ITEM, where it carries an armor slot.
+   *
+   * On the HOLDING rather than on the game record, which is the whole of the
+   * rule "armor is tracked by the item, not the player": dropping the item
+   * deletes the row, and its armor is gone with nothing to correct. A pool on
+   * the record would have had to guess how much of itself went with a dropped
+   * shield, and would have had no *each* for "restore each item to the
+   * condition its owner can maintain" to act on.
+   *
+   * Absent means FULL. A row written before this field existed, and a row
+   * written the moment something is acquired, both mean the same thing -- so
+   * the widening and the default are one value rather than two.
+   */
+  armorPoints?: number
 }
 
 export interface OutcomeRow {
@@ -299,6 +314,51 @@ export function heldModifiers(save: GameSave, gameId: string, catalog: ReadonlyM
     const modifier = catalog.get(row.modifierId)
     return modifier ? [modifier] : []
   })
+}
+
+/**
+ * THE RUN'S ARMOR, assembled: one piece per held item that carries an armor
+ * slot, plus every non-decaying point the run's traits and items grant.
+ *
+ * DERIVED, never stored whole. A piece's maximum and its decay floor are
+ * properties of the item as this run rolled it (model/itemSlots.ts), so the
+ * only thing worth persisting is how many points are left -- and that lives on
+ * the holding. `natural` is derived outright: nothing spends it, so a stored
+ * copy could only ever disagree with the traits that granted it.
+ */
+export function armorOf(save: GameSave, game: GameRecord, catalog: ReadonlyMap<string, Modifier>): Armor {
+  const pieces: ArmorPiece[] = []
+  for (const row of holdingsOf(save, game.id)) {
+    const modifier = catalog.get(row.modifierId)
+    if (!modifier || modifier.kind !== 'item') continue
+    const piece = pieceOf(modifier, row.armorPoints)
+    if (piece) pieces.push(piece)
+  }
+  const held = heldModifiers(save, game.id, catalog)
+  return { natural: resolveProfile(game.baseStats, held, holdingCounts(held)).naturalArmor, pieces }
+}
+
+/** The armor a run's holdings imply, taken from the save's own content. */
+export function armorIn(save: GameSave, game: GameRecord, content: Content): Armor {
+  return armorOf(save, game, catalogFor(content, game.seed))
+}
+
+/**
+ * Writes a set of armor pieces back onto the holdings they belong to. The one
+ * way points are persisted -- the fight mirrors its working copy back through
+ * `setArmor`, and the between-fight rules below go through the same door.
+ */
+function writeArmor(save: GameSave, gameId: string, armor: Armor): GameSave {
+  const byItem = new Map(armor.pieces.map((piece) => [piece.itemId, Math.max(0, Math.floor(piece.points))]))
+  if (byItem.size === 0) return save
+  return {
+    ...save,
+    holdings: save.holdings.map((row) => {
+      if (row.gameId !== gameId || row.kind !== 'item') return row
+      const points = byItem.get(row.modifierId)
+      return points === undefined || points === row.armorPoints ? row : { ...row, armorPoints: points }
+    }),
+  }
 }
 
 /**
@@ -410,8 +470,8 @@ export function holdingCounts(held: readonly Modifier[]): HoldingCounts {
 }
 
 /** The player as every formula sees them. */
-export function profileOf(save: GameSave, game: GameRecord, catalog: ReadonlyMap<string, Modifier>): EffectiveProfile {
-  const held = heldModifiers(save, game.id, catalog)
+export function profileOf(save: GameSave, game: GameRecord, content: Content): EffectiveProfile {
+  const held = heldModifiers(save, game.id, catalogFor(content, game.seed))
   // The record's own hit points ride along, so a conditional effect ("harder
   // to kill with their back to the wall") is already in every number every
   // caller reads. The record is written after each blow, so this is current
@@ -448,7 +508,6 @@ function createGame(id: string, seed: RngState, nowMs: number, settings: GameSet
     goldToNextFamePoint: FIRST_MILESTONE_THRESHOLD,
     famePointsSpent: 0,
     hitPoints: deriveStats(clampBaseStats(baseStats)).maxHitPoints,
-    armor: NO_ARMOR,
   }
 }
 
@@ -465,7 +524,7 @@ function createGame(id: string, seed: RngState, nowMs: number, settings: GameSet
 export function applyEffect(
   save: GameSave,
   effect: Effect,
-  catalog: ReadonlyMap<string, Modifier>,
+  content: Content,
   nowMs: number,
 ): GameSave {
   if (effect.kind === 'startGame') {
@@ -510,6 +569,10 @@ export function applyEffect(
   const game = activeGame(save)
   if (!game) return save
   const gameId = game.id
+  // The run's own catalog: items are rolled from the run's seed, so "what is a
+  // Spyglass" is a different answer per run and there is nothing to thread in
+  // from outside (content/index.ts's `catalogFor`, which memoizes).
+  const catalog = catalogFor(content, game.seed)
 
   const replace = (next: Partial<GameRecord>): GameSave => ({
     ...save,
@@ -533,20 +596,17 @@ export function applyEffect(
         .some((row) => row.kind === effect.modifierKind && row.modifierId === effect.modifierId)
       if (alreadyHeld) return save
 
-      const withHolding: GameSave = {
+      // ARMOR NEEDS NO SPECIAL CASE HERE any more, and that is the point of
+      // putting it on the item: a new holding carries no `armorPoints`, which
+      // means FULL (`armorOf`), so a fresh acquisition arrives whole without
+      // an on-acquire event to fire exactly once and without a pool on the
+      // record to add to.
+      return {
         ...save,
         holdings: [
           ...save.holdings,
           { gameId, kind: effect.modifierKind, modifierId: effect.modifierId, seq: nextSeq(save.holdings, gameId) },
         ],
-      }
-      const modifier = catalog.get(effect.modifierId)
-      if (!modifier) return withHolding
-      // On-acquire effects fire HERE and exactly once. See armor.ts.
-      const armor = applyAcquisition(game.armor, modifier)
-      return {
-        ...withHolding,
-        games: withHolding.games.map((candidate) => (candidate.id === gameId ? { ...candidate, armor } : candidate)),
       }
     }
 
@@ -559,12 +619,14 @@ export function applyEffect(
       }
 
     case 'adjustHitPoints': {
-      const max = profileOf(save, game, catalog).derived.maxHitPoints
+      const max = profileOf(save, game, content).derived.maxHitPoints
       return replace({ hitPoints: Math.max(0, Math.min(max, game.hitPoints + effect.amount)) })
     }
 
     case 'setArmor':
-      return replace({ armor: { fromItems: effect.fromItems, natural: effect.natural } })
+      // Points only. A piece's maximum and floor are what the item IS, so the
+      // fight has nothing to say about them and cannot write them wrong.
+      return writeArmor(save, gameId, { natural: 0, pieces: effect.pieces.map((piece) => ({ ...piece, max: piece.points, floor: 0 })) })
 
     case 'grantExperience':
       // Earning only ever adds. Spending is `spendExperience`, and it is a
@@ -612,12 +674,26 @@ export function applyEffect(
     case 'setRegion':
       return replace({ regionId: effect.regionId })
 
-    case 'advanceEncounter':
+    case 'advanceEncounter': {
       // One step along the level's ten, emitted by whatever stage SPENT the
       // encounter -- which is the loot screen on the way out, and combat
       // itself when the player ran. It counts past ten on purpose: eleven is
       // how the hub knows the level is over (stages/levelProgress.ts).
-      return replace({ encounterIndex: game.encounterIndex + 1 })
+      //
+      // AND THE KIT IS SEEN TO, here rather than in an effect of its own --
+      // "after the fight" is exactly the moment this effect names, and every
+      // stage that ends an encounter already emits it. A `repairArmor` effect
+      // beside it would be a second statement of the same moment, and the
+      // stage that forgot to emit it would be the one nobody noticed.
+      const profile = profileOf(save, game, content)
+      const repaired = repairAfterFight(
+        armorOf(save, game, catalog),
+        profile.stats.might,
+        profile.stats.intellect,
+        profile.armorRepair,
+      )
+      return writeArmor(replace({ encounterIndex: game.encounterIndex + 1 }), gameId, repaired)
+    }
 
     case 'advanceLevel': {
       // A level is its own journey: the player rests up between them, gives
@@ -648,12 +724,19 @@ export function applyEffect(
       const kept = new Set((['item', 'trait'] as const).flatMap((kind) => keptModifierIds(save, game, kind)))
 
       const holdings = save.holdings.filter((row) => row.gameId !== gameId || kept.has(row.modifierId))
-      const survived = heldModifiers({ ...save, holdings }, gameId, catalog)
+
+      // WHOLE AGAIN. A level is a journey with a rest at either end, so what
+      // survives it is repaired outright -- which is also what makes carrying
+      // a battered shield over a real choice rather than a formality.
+      const refilled = writeArmor(
+        { ...save, holdings },
+        gameId,
+        refillArmor(armorOf({ ...save, holdings }, game, catalog)),
+      )
 
       return {
-        ...save,
-        holdings,
-        games: save.games.map((candidate) => (candidate.id === gameId
+        ...refilled,
+        games: refilled.games.map((candidate) => (candidate.id === gameId
           ? {
               ...candidate,
               level: candidate.level + 1,
@@ -661,10 +744,6 @@ export function applyEffect(
               // per level, not per run.
               encounterIndex: 1,
               hitPoints: restored,
-              // Rebuilt from what SURVIVED -- an item carried over counts as
-              // a fresh acquisition, which is the rule that makes carrying an
-              // armour item a real choice.
-              armor: armorFromHoldings(survived),
               // The marks are spent. A new level's default is its own newest
               // find, not a decision taken a level ago.
               keepItemIds: [],
@@ -725,7 +804,7 @@ export function applyEffect(
  * hold everywhere it applies, and the next effect that moves the ceiling will
  * not know to ask.
  */
-function followMaxHitPoints(before: GameSave, after: GameSave, catalog: ReadonlyMap<string, Modifier>): GameSave {
+function followMaxHitPoints(before: GameSave, after: GameSave, content: Content): GameSave {
   const previous = activeGame(before)
   const current = activeGame(after)
   if (!current) return after
@@ -733,8 +812,8 @@ function followMaxHitPoints(before: GameSave, after: GameSave, catalog: Readonly
   // creation fills them at the end, on purpose (see that stage).
   if (!previous || previous.id !== current.id) return after
 
-  const wasMax = profileOf(before, previous, catalog).derived.maxHitPoints
-  const nowMax = profileOf(after, current, catalog).derived.maxHitPoints
+  const wasMax = profileOf(before, previous, content).derived.maxHitPoints
+  const nowMax = profileOf(after, current, content).derived.maxHitPoints
   const gained = Math.max(0, nowMax - wasMax)
   const hitPoints = Math.max(0, Math.min(nowMax, current.hitPoints + gained))
   if (hitPoints === current.hitPoints) return after
@@ -747,11 +826,11 @@ function followMaxHitPoints(before: GameSave, after: GameSave, catalog: Readonly
 export function applyEffects(
   save: GameSave,
   effects: readonly Effect[],
-  catalog: ReadonlyMap<string, Modifier>,
+  content: Content,
   nowMs: number,
 ): GameSave {
   const next = effects.reduce(
-    (current, effect) => followMaxHitPoints(current, applyEffect(current, effect, catalog, nowMs), catalog),
+    (current, effect) => followMaxHitPoints(current, applyEffect(current, effect, content, nowMs), content),
     save,
   )
   if (!next.activeGameId) return next

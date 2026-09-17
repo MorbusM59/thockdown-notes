@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildCatalog, THOCKQUEST } from '../content'
+import { THOCKQUEST } from '../content'
 import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from '../core/director'
 import { activeGame, applyEffects, emptySave, type GameSave } from '../model/gameState'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
@@ -10,7 +10,6 @@ import { SPELLS } from '../model/spells'
 const DEPS: DirectorDeps = {
   stages: STAGES,
   content: THOCKQUEST,
-  catalog: buildCatalog(THOCKQUEST),
   rootStageId: ROOT_STAGE_ID,
 }
 
@@ -44,7 +43,7 @@ function inAFightWithMagic(seed: number, intellect = 12): GameSave {
     // Raised the moment there is a character to raise, so the fight's very
     // first round is already dealt from the full table.
     if (activeGame(save) && (activeGame(save)?.baseStats.intellect ?? 0) < intellect) {
-      save = applyEffects(save, [{ kind: 'adjustBaseStat', stat: 'intellect', amount: intellect }], DEPS.catalog, NOW)
+      save = applyEffects(save, [{ kind: 'adjustBaseStat', stat: 'intellect', amount: intellect }], DEPS.content, NOW)
     }
   }
   throw new Error('never reached the player\'s own action')
@@ -160,7 +159,7 @@ describe('the fire answers the monster, not the round', () => {
     let save = inAFightWithMagic(4242, 20)
     // Both stats up: the charm has to be able to fire, and Ignite has to be
     // in reach to be laid on in the first place.
-    save = applyEffects(save, [{ kind: 'adjustBaseStat', stat: 'charisma', amount: 6 }], DEPS.catalog, NOW)
+    save = applyEffects(save, [{ kind: 'adjustBaseStat', stat: 'charisma', amount: 6 }], DEPS.content, NOW)
 
     const ignite = cellIds(save).find((id) => id === 'spell:ignite')
     expect(ignite).toBeDefined()

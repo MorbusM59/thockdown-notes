@@ -27,7 +27,7 @@ import { ENCOUNTER_SELECT_STAGE_ID, MARKET_STAGE_ID, OUTPOST_STAGE_ID } from './
 
 /** What a face could possibly sell: specified, and not already held. */
 function poolFor(context: StageContext, kind: ModifierKind): readonly Modifier[] {
-  const pool = kind === 'item' ? context.content.items : context.content.traits
+  const pool = kind === 'item' ? context.items : context.content.traits
   return pool.filter((modifier) => isOfferable(modifier) && !context.held.some((row) => row.id === modifier.id))
 }
 

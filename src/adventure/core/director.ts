@@ -24,8 +24,9 @@
 // by handing off. Everything the director knows is in this file, and it is
 // all about sequencing.
 
-import { applyEffects, activeGame, heldModifiers, profileOf, type GameSave, type StageFrame } from '../model/gameState'
-import type { Modifier } from '../model/modifiers'
+import { applyEffects, activeGame, armorOf, heldModifiers, profileOf, type GameSave, type StageFrame } from '../model/gameState'
+import { NO_ARMOR } from '../model/armor'
+import { catalogFor, rolledItems } from '../content'
 import type { Effect } from '../model/effects'
 import type { Content } from '../content'
 import type { JsonObject } from './json'
@@ -36,20 +37,31 @@ import type { Narration, StageContext, StageModule, StageRegistry, Transition } 
 export interface DirectorDeps {
   stages: StageRegistry
   content: Content
-  catalog: ReadonlyMap<string, Modifier>
   /** Where an empty stack starts, and what opening the view puts on top. */
   rootStageId: string
 }
 
+/**
+ * THE CATALOG IS A FUNCTION OF THE RUN, not a dependency handed in.
+ *
+ * Items are rolled from the run's own seed (content/index.ts's `catalogFor`),
+ * so a catalog built once at start-up would describe whichever game happened
+ * to be open then -- and would go on describing it after the player started
+ * another. Resolving it from the save at every context build is both correct
+ * by construction and free: `catalogFor` memoizes per seed.
+ */
 export function buildContext(save: GameSave, deps: DirectorDeps): StageContext {
   const game = activeGame(save)
-  const held = game ? heldModifiers(save, game.id, deps.catalog) : []
+  const catalog = catalogFor(deps.content, game?.seed ?? 0)
+  const held = game ? heldModifiers(save, game.id, catalog) : []
   return {
     save,
     game,
     content: deps.content,
-    catalog: deps.catalog,
-    profile: game ? profileOf(save, game, deps.catalog) : null,
+    catalog,
+    items: rolledItems(deps.content, game?.seed ?? 0),
+    profile: game ? profileOf(save, game, deps.content) : null,
+    armor: game ? armorOf(save, game, catalog) : NO_ARMOR,
     held,
   }
 }
@@ -95,7 +107,7 @@ function commit(
   deps: DirectorDeps,
   nowMs: number,
 ): Applied {
-  const next = effects && effects.length > 0 ? applyEffects(save, effects, deps.catalog, nowMs) : save
+  const next = effects && effects.length > 0 ? applyEffects(save, effects, deps.content, nowMs) : save
   return { save: next, rng }
 }
 

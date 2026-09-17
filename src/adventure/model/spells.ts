@@ -261,7 +261,6 @@ function magicStrike(input: CastInput, damage: number, rng: RngState): { blow: B
     attackerDamage: damage,
     defenderStats: input.monster.stats,
     armor: input.monster.armor,
-    armorDecayFloor: 0,
     attackerChances: input.playerChances,
     attacker: 'player',
     successAdjust: input.successAdjust,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildCatalog, THOCKQUEST } from '../content'
+import { THOCKQUEST } from '../content'
 import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from '../core/director'
 import { activeGame, applyEffects, BASE_CARRY_LIMIT, emptySave, type GameSave } from '../model/gameState'
 import { goldBalance } from '../model/gold'
@@ -11,7 +11,6 @@ import { DROP_CANCEL } from './carry'
 const DEPS: DirectorDeps = {
   stages: STAGES,
   content: THOCKQUEST,
-  catalog: buildCatalog(THOCKQUEST),
   rootStageId: ROOT_STAGE_ID,
 }
 const NOW = 1_700_000_000_000
@@ -35,7 +34,7 @@ function onTheRoad(seed = 4242): GameSave {
 const withPurse = (save: GameSave, gold: number, motes: number) => applyEffects(save, [
   ...(gold > 0 ? [{ kind: 'grantGold' as const, units: gold }] : []),
   ...(motes > 0 ? [{ kind: 'grantExperience' as const, units: motes }] : []),
-], DEPS.catalog, NOW)
+], DEPS.content, NOW)
 
 const takeRoad = (save: GameSave) => choose(save, screenOf(save).choices[0].id, DEPS, NOW).save
 
@@ -121,13 +120,15 @@ describe('hands full', () => {
   function atTheLimit(): GameSave {
     const road = onTheRoad(31337)
     const held = new Set(road.holdings.filter((row) => row.kind === 'item').map((row) => row.modifierId))
+    // Every template rolls into something, so the only filter left is what is
+    // already carried (model/itemSlots.ts).
     const fillers = THOCKQUEST.items
-      .filter((item) => !held.has(item.id) && item.effects.some((effect) => effect.kind !== 'tag'))
+      .filter((item) => !held.has(item.id))
       .slice(0, BASE_CARRY_LIMIT - held.size)
     const filled = applyEffects(
       withPurse(road, MARKET_PRICE * 2, 0),
       fillers.map((item) => ({ kind: 'acquireModifier' as const, modifierKind: 'item' as const, modifierId: item.id })),
-      DEPS.catalog,
+      DEPS.content,
       NOW,
     )
     return choose(takeRoad(filled), 'outpost:trader', DEPS, NOW).save

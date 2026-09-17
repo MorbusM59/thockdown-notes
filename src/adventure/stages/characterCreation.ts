@@ -31,7 +31,7 @@ function offerPool(step: Step, context: StageContext): readonly Modifier[] {
   // of those is a choice between two nothings -- see `isOfferable`), and a
   // second copy of something is not a second thing (model/gameState.ts's
   // `acquireModifier`).
-  const pool = step === 'trait' ? context.content.traits : step === 'item' ? context.content.items : []
+  const pool = step === 'trait' ? context.content.traits : step === 'item' ? context.items : []
   return pool.filter((modifier) => isOfferable(modifier) && !context.held.some((row) => row.id === modifier.id))
 }
 

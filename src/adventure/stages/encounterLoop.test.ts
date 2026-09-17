@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildCatalog, THOCKQUEST } from '../content'
+import { NO_ARMOR } from '../model/armor'
+
+import { catalogFor, rolledItems, THOCKQUEST } from '../content'
 import { choose, currentScreen, enterEntryScreen, enterInterlude, type DirectorDeps } from '../core/director'
 import { activeGame, applyEffects, emptySave, type GameSave } from '../model/gameState'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
@@ -15,10 +17,11 @@ import { famePointsAvailable } from '../model/gold'
 const DEPS: DirectorDeps = {
   stages: STAGES,
   content: THOCKQUEST,
-  catalog: buildCatalog(THOCKQUEST),
   rootStageId: ROOT_STAGE_ID,
 }
 
+const CATALOG = catalogFor(THOCKQUEST, 0)
+const ITEMS = rolledItems(THOCKQUEST, 0)
 const NOW = 1_700_000_000_000
 
 /**
@@ -104,7 +107,9 @@ describe('the loot stage', () => {
       save: started,
       game: activeGame(started),
       content: THOCKQUEST,
-      catalog: DEPS.catalog,
+      catalog: CATALOG,
+      items: ITEMS,
+      armor: NO_ARMOR,
       profile: activeGame(started)
         ? resolveProfile(activeGame(started)!.baseStats, [], { items: 0, traits: 0 })
         : null,
@@ -158,12 +163,14 @@ describe('the level counts to ten', () => {
     const save = enterEntryScreen(emptySave(4242), DEPS, NOW)
     let started = choose(save, 'welcome:start', DEPS, NOW).save
     for (let step = 1; step < encounter; step += 1) {
-      started = applyEffects(started, [{ kind: 'advanceEncounter' }], DEPS.catalog, NOW)
+      started = applyEffects(started, [{ kind: 'advanceEncounter' }], DEPS.content, NOW)
     }
     const game = activeGame(started)
     expect(game?.encounterIndex).toBe(encounter)
     return {
-      save: started, game, content: THOCKQUEST, catalog: DEPS.catalog,
+      save: started, game, content: THOCKQUEST, catalog: CATALOG,
+      items: ITEMS,
+      armor: NO_ARMOR,
       profile: game ? resolveProfile(game.baseStats, [], { items: 0, traits: 0 }) : null,
       held: [],
     }
@@ -196,7 +203,7 @@ describe('the level counts to ten', () => {
   it('starts each level over at its first encounter', () => {
     // The count is per level, not per run: a new journey begins at one.
     const context = atEncounter(LEVEL_ENCOUNTER_COUNT + 1)
-    const advanced = applyEffects(context.save, [{ kind: 'advanceLevel' }], DEPS.catalog, NOW)
+    const advanced = applyEffects(context.save, [{ kind: 'advanceLevel' }], DEPS.content, NOW)
     expect(activeGame(advanced)?.level).toBe(2)
     expect(activeGame(advanced)?.encounterIndex).toBe(1)
   })
@@ -274,7 +281,7 @@ describe('spending a stat point', () => {
       save = choose(save, screen.choices[0].id, DEPS, NOW).save
     }
     if (currentScreen(save, DEPS)?.stageId !== 'encounterSelect') throw new Error('not at the hub')
-    return motes > 0 ? applyEffects(save, [{ kind: 'grantExperience', units: motes }], DEPS.catalog, NOW) : save
+    return motes > 0 ? applyEffects(save, [{ kind: 'grantExperience', units: motes }], DEPS.content, NOW) : save
   }
 
   /** The way in the rail's star gauge takes: an interlude, from wherever you are. */
@@ -383,7 +390,7 @@ describe('renown', () => {
   /** A run standing at the hub with `gold` earned. */
   function withGold(gold: number): GameSave {
     const started = choose(enterEntryScreen(emptySave(4242), DEPS, NOW), 'welcome:start', DEPS, NOW).save
-    return gold > 0 ? applyEffects(started, [{ kind: 'grantGold', units: gold }], DEPS.catalog, NOW) : started
+    return gold > 0 ? applyEffects(started, [{ kind: 'grantGold', units: gold }], DEPS.content, NOW) : started
   }
 
   it('hands out fame points from the ladder, which it could not do at all before', () => {
@@ -396,7 +403,7 @@ describe('renown', () => {
     const game = activeGame(rich)!
     expect(famePointsAvailable(game.goldEarned, game.goldToNextFamePoint, game.famePointsSpent)).toBe(1)
 
-    const taken = applyEffects(rich, [{ kind: 'allocateFamePoint' }], DEPS.catalog, NOW)
+    const taken = applyEffects(rich, [{ kind: 'allocateFamePoint' }], DEPS.content, NOW)
     expect(activeGame(taken)?.famePointsSpent).toBe(1)
     // 10 -> 15, the same ladder the stat points climb.
     expect(activeGame(taken)?.goldToNextFamePoint).toBe(15)
@@ -404,7 +411,7 @@ describe('renown', () => {
 
   it('declines when the gold is not there, rather than going into debt', () => {
     const poor = withGold(9)
-    const asked = applyEffects(poor, [{ kind: 'allocateFamePoint' }], DEPS.catalog, NOW)
+    const asked = applyEffects(poor, [{ kind: 'allocateFamePoint' }], DEPS.content, NOW)
     expect(activeGame(asked)?.famePointsSpent).toBe(0)
     expect(activeGame(asked)?.goldToNextFamePoint).toBe(activeGame(poor)?.goldToNextFamePoint)
   })
@@ -413,7 +420,7 @@ describe('renown', () => {
     // The ladder reads what was EARNED, so buying an item must not push the
     // next fame point away. This is the whole two-fields-not-one design.
     const rich = withGold(10)
-    const spent = applyEffects(rich, [{ kind: 'spendGold', units: 10 }], DEPS.catalog, NOW)
+    const spent = applyEffects(rich, [{ kind: 'spendGold', units: 10 }], DEPS.content, NOW)
     const game = activeGame(spent)!
     expect(famePointsAvailable(game.goldEarned, game.goldToNextFamePoint, game.famePointsSpent)).toBe(1)
   })

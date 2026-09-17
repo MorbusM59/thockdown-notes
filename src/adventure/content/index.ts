@@ -17,6 +17,8 @@
 // chose. See docs/adventure-platform.md.
 
 import type { Modifier } from '../model/modifiers'
+import { rollItem, validateItemTemplate, type ItemTemplate } from '../model/itemSlots'
+import type { RngState } from '../core/rng'
 import type { StatKey } from '../model/stats'
 
 /**
@@ -86,15 +88,60 @@ export interface Region {
 
 export interface Content {
   origins: readonly Origin[]
-  items: readonly Modifier[]
+  /**
+   * What an item COULD be. Rolled into actual items once per run, from the
+   * run's own seed -- see `catalogFor` and model/itemSlots.ts. Templates
+   * rather than modifiers because the numbers are not content's to decide.
+   */
+  items: readonly ItemTemplate[]
   traits: readonly Modifier[]
   regions: readonly Region[]
   monsterClasses: readonly MonsterClass[]
   species: readonly Species[]
 }
 
-export function buildCatalog(content: Content): ReadonlyMap<string, Modifier> {
-  return new Map([...content.items, ...content.traits].map((modifier) => [modifier.id, modifier]))
+/**
+ * THE RUN'S CATALOG: every trait as written, and every item as this run rolled
+ * it.
+ *
+ * Keyed by the run's seed and MEMOIZED, because it is asked for constantly --
+ * every profile resolution, every screen, every effect applied -- and rolling
+ * thirty templates each time would be thirty hashes and a hundred draws per
+ * keypress. The cache is per `Content` object (a WeakMap, so a test's own
+ * content is collected with it) and per seed, and it is safe to be a cache at
+ * all precisely because the roll is a pure function of those two things: a
+ * miss and a hit cannot disagree.
+ *
+ * Seed 0 is the no-run case -- the welcome screen resolves a catalog before
+ * any game exists, so that "what is a Whetstone" has an answer even with
+ * nothing to answer it for.
+ */
+const CATALOG_CACHE = new WeakMap<Content, Map<RngState, ReadonlyMap<string, Modifier>>>()
+
+export function catalogFor(content: Content, runSeed: RngState): ReadonlyMap<string, Modifier> {
+  let bySeed = CATALOG_CACHE.get(content)
+  if (!bySeed) {
+    bySeed = new Map()
+    CATALOG_CACHE.set(content, bySeed)
+  }
+  const cached = bySeed.get(runSeed)
+  if (cached) return cached
+
+  const built: ReadonlyMap<string, Modifier> = new Map([
+    ...content.items.map((template) => [template.id, rollItem(template, runSeed)] as const),
+    ...content.traits.map((trait) => [trait.id, trait] as const),
+  ])
+  bySeed.set(runSeed, built)
+  return built
+}
+
+/** Every item this run has, rolled. The ordered half of `catalogFor`. */
+export function rolledItems(content: Content, runSeed: RngState): Modifier[] {
+  const catalog = catalogFor(content, runSeed)
+  return content.items.flatMap((template) => {
+    const item = catalog.get(template.id)
+    return item ? [item] : []
+  })
 }
 
 /**
@@ -127,9 +174,9 @@ export function validateContent(content: Content): string[] {
       }
     }
   }
-  for (const item of content.items) {
-    check(item.id, `item "${item.name}"`)
-    if (item.kind !== 'item') problems.push(`item "${item.id}" is declared as a ${item.kind}`)
+  for (const template of content.items) {
+    check(template.id, `item "${template.name}"`)
+    problems.push(...validateItemTemplate(template))
   }
   for (const trait of content.traits) {
     check(trait.id, `trait "${trait.name}"`)

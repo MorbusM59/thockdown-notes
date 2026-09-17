@@ -9,11 +9,11 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { buildCatalog, THOCKQUEST } from '../content'
+import { catalogFor, THOCKQUEST } from '../content'
 import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from '../core/director'
 import {
   activeGame, applyEffects, BASE_KEEP_ALLOWANCE, emptySave, heldModifiers, keepAllowance,
-  keptModifierIds, withKeepMark, type GameSave,
+  keptModifierIds, profileOf, withKeepMark, type GameSave,
 } from '../model/gameState'
 import { isOfferable, resolveProfile, UNSPECIFIED_TAG, type Modifier } from './modifiers'
 import { resolveExchange, rollDodgeOffered } from './combat'
@@ -27,7 +27,6 @@ import { ROOT_STAGE_ID, STAGES } from '../stages'
 const DEPS: DirectorDeps = {
   stages: STAGES,
   content: THOCKQUEST,
-  catalog: buildCatalog(THOCKQUEST),
   rootStageId: ROOT_STAGE_ID,
 }
 const NOW = 1_700_000_000_000
@@ -36,6 +35,13 @@ const BASE = addStats(createStatBlock(0), { might: 2, agility: 1 })
 
 function modifier(id: string, effects: Modifier['effects']): Modifier {
   return { id, kind: 'item', name: id, icon: '', effects }
+}
+
+/** The maximum a save's active run currently has, read rather than written down. */
+function maxOf(save: GameSave): number {
+  const game = activeGame(save)
+  if (!game) throw new Error('no game')
+  return profileOf(save, game, THOCKQUEST).derived.maxHitPoints
 }
 
 /** How often a chance actually fires, over enough rolls to tell 20% from 30%. */
@@ -55,10 +61,14 @@ describe('a chance a modifier changes', () => {
     // The bone: chances are contested at the moment they are rolled, so they
     // cannot be finished inside the profile -- combat took them from the stat
     // block and a "+30% crit" charm was decoration.
-    const charm = modifier('charm', [{ kind: 'derivedDelta', derived: 'critChance', amount: 0.3 }])
+    const charm = modifier('charm', [{ kind: 'derivedPercent', derived: 'critChance', percent: 0.5 }])
     const plain = resolveProfile(BASE, [], noHoldings)
     const charmed = resolveProfile(BASE, [charm], noHoldings)
-    expect(charmed.derived.critChance - plain.derived.critChance).toBeCloseTo(0.3, 10)
+    // HALF THE ORDINARY HITS become crits: 20% base, so 20% + 80% x 50% = 60%.
+    // A percentage of a probability is a percentage of the remainder
+    // (model/chance.ts) -- adding fifty POINTS would have been 70%, and three
+    // such items would have been a certainty.
+    expect(charmed.derived.critChance).toBeCloseTo(0.6, 10)
 
     const crits = (chances: typeof plain.chances) => frequency((rng) => {
       const result = resolveExchange({
@@ -67,7 +77,6 @@ describe('a chance a modifier changes', () => {
         attackerDamage: 10,
         defenderStats: createStatBlock(0),
         armor: NO_ARMOR,
-        armorDecayFloor: 0,
         attackerChances: chances,
         defence: 'takeTheHit',
         dodgeOffered: false,
@@ -75,11 +84,11 @@ describe('a chance a modifier changes', () => {
       })
       return { value: result.blow.crit, rng: result.rng }
     })
-    expect(crits(charmed.chances) - crits(plain.chances)).toBeGreaterThan(0.2)
+    expect(crits(charmed.chances) - crits(plain.chances)).toBeGreaterThan(0.3)
   })
 
   it('reaches the dodge roll too, which is a different call entirely', () => {
-    const boots = modifier('boots', [{ kind: 'derivedDelta', derived: 'dodgeChance', amount: 0.25 }])
+    const boots = modifier('boots', [{ kind: 'derivedPercent', derived: 'dodgeChance', percent: 0.5 }])
     const plain = resolveProfile(BASE, [], noHoldings)
     const booted = resolveProfile(BASE, [boots], noHoldings)
     const offered = (adjustment: typeof plain.chances.dodgeChance) =>
@@ -95,7 +104,7 @@ describe('a chance a modifier changes', () => {
   it('is the SAME arithmetic on the bar and in the fight', () => {
     // Uncontested, the roll and the readout have to agree exactly, or one of
     // the two is lying to the player about what they just chose.
-    const chalk = modifier('chalk', [{ kind: 'derivedScale', derived: 'hitChance', factor: 1.2 }])
+    const chalk = modifier('chalk', [{ kind: 'derivedPercent', derived: 'hitChance', percent: 0.2 }])
     const profile = resolveProfile(BASE, [chalk], noHoldings)
     const landed = frequency((rng) => {
       const result = resolveExchange({
@@ -104,7 +113,6 @@ describe('a chance a modifier changes', () => {
         attackerDamage: 10,
         defenderStats: createStatBlock(0),
         armor: NO_ARMOR,
-        armorDecayFloor: 0,
         attackerChances: profile.chances,
         defence: 'defend',
         dodgeOffered: false,
@@ -139,7 +147,6 @@ describe('the thumb on the scale', () => {
         attackerDamage: 10,
         defenderStats: foe.stats,
         armor: NO_ARMOR,
-        armorDecayFloor: 0,
         attackerChances: profile.chances,
         successAdjust,
         defence: 'defend',
@@ -154,7 +161,6 @@ describe('the thumb on the scale', () => {
         attackerDamage: 10,
         defenderStats: BASE,
         armor: NO_ARMOR,
-        armorDecayFloor: 0,
         successAdjust,
         defence: 'defend',
         dodgeOffered: false,
@@ -212,7 +218,7 @@ describe('the thumb on the scale', () => {
 describe('a conditional effect', () => {
   it('fires only while the character is actually hurt', () => {
     const cornered = modifier('cornered', [
-      { kind: 'derivedScaleWhileHurt', derived: 'damageMultiplier', factor: 2, belowFraction: 0.5 },
+      { kind: 'derivedPercentWhileHurt', derived: 'damageMultiplier', percent: 1, belowFraction: 0.5 },
     ])
     const whole = resolveProfile(BASE, [cornered], noHoldings, { hitPoints: 80 })
     const bleeding = resolveProfile(BASE, [cornered], noHoldings, { hitPoints: 10 })
@@ -243,42 +249,48 @@ describe('hit points following their ceiling', () => {
     const save = started()
     const before = activeGame(save)
     if (!before) throw new Error('no game')
-    const wounded = applyEffects(save, [{ kind: 'adjustHitPoints', amount: -30 }], DEPS.catalog, NOW)
+    const wounded = applyEffects(save, [{ kind: 'adjustHitPoints', amount: -30 }], DEPS.content, NOW)
     const hurt = activeGame(wounded)?.hitPoints ?? 0
 
     const tougher = applyEffects(
       wounded,
       [{ kind: 'acquireModifier', modifierKind: 'trait', modifierId: 'iron-constitution' }],
-      DEPS.catalog,
+      DEPS.content,
       NOW,
     )
-    // Iron Constitution is +25 maximum, and the character is 25 hit points
-    // sturdier for it -- not 25 hit points further from full.
-    expect(activeGame(tougher)?.hitPoints).toBe(hurt + 25)
+    // Iron Constitution is a PERCENTAGE of the maximum now, so the expected
+    // rise is read from the profile rather than written down -- the property
+    // under test is that the character is exactly that much sturdier, not
+    // that much further from full.
+    const gained = maxOf(tougher) - maxOf(wounded)
+    expect(gained).toBeGreaterThan(0)
+    expect(activeGame(tougher)?.hitPoints).toBe(hurt + gained)
   })
 
   it('CLAMPS when the ceiling falls, so nobody stands above their own maximum', () => {
     const save = applyEffects(
       started(),
       [{ kind: 'acquireModifier', modifierKind: 'trait', modifierId: 'iron-constitution' }],
-      DEPS.catalog,
+      DEPS.content,
       NOW,
     )
     const raised = activeGame(save)?.hitPoints ?? 0
     const dropped = applyEffects(
       save,
       [{ kind: 'releaseModifier', modifierKind: 'trait', modifierId: 'iron-constitution' }],
-      DEPS.catalog,
+      DEPS.content,
       NOW,
     )
-    expect(activeGame(dropped)?.hitPoints).toBe(raised - 25)
+    expect(activeGame(dropped)?.hitPoints).toBe(raised - (maxOf(save) - maxOf(dropped)))
   })
 })
 
 describe('what is offered', () => {
   it('never offers something whose effect has not been decided', () => {
-    const unspecified = THOCKQUEST.items
-      .concat(THOCKQUEST.traits)
+    // TRAITS ONLY. An item cannot be unspecified any more: it is rolled from a
+    // template and a template always rolls into something
+    // (model/itemSlots.ts), so the state stopped existing on that half.
+    const unspecified = THOCKQUEST.traits
       .filter((entry) => entry.effects.every((effect) => effect.kind === 'tag' && effect.tag === UNSPECIFIED_TAG))
     // The placeholders are still IN content -- they are the design's own
     // names, not ours to delete -- and out of every pool that offers.
@@ -316,14 +328,17 @@ describe('the level boundary', () => {
     // encounter with nothing to restore them, and the rest between levels is
     // what refills them. Not healing -- a level boundary, in the same place
     // armor is rebuilt.
-    const wounded = applyEffects(startedRun(), [{ kind: 'adjustHitPoints', amount: -40 }], DEPS.catalog, NOW)
+    const wounded = applyEffects(startedRun(), [{ kind: 'adjustHitPoints', amount: -40 }], DEPS.content, NOW)
     const before = activeGame(wounded)
-    expect(before?.hitPoints).toBeLessThan(50 + 15 * (before?.baseStats.might ?? 0))
+    // Against the maximum as the run actually stands, not against the bare
+    // stat formula: what creation handed out can carry a percentage of the
+    // pool with it now, so `50 + 15 x Might` is no longer the ceiling.
+    expect(before?.hitPoints).toBeLessThan(maxOf(wounded))
 
-    const onward = applyEffects(wounded, [{ kind: 'advanceLevel' }], DEPS.catalog, NOW)
+    const onward = applyEffects(wounded, [{ kind: 'advanceLevel' }], DEPS.content, NOW)
     const after = activeGame(onward)
     expect(after?.level).toBe((before?.level ?? 1) + 1)
-    expect(after?.hitPoints).toBe(50 + 15 * (after?.baseStats.might ?? 0))
+    expect(after?.hitPoints).toBe(maxOf(onward))
   })
 })
 
@@ -341,7 +356,7 @@ describe('what survives a level', () => {
     return applyEffects(playing, [
       { kind: 'acquireModifier', modifierKind: 'item', modifierId: 'whetstone' },
       { kind: 'acquireModifier', modifierKind: 'trait', modifierId: 'second-skin' },
-    ], DEPS.catalog, NOW)
+    ], DEPS.content, NOW)
   }
 
   const heldIds = (save: GameSave) => save.holdings.map((row) => row.modifierId)
@@ -352,7 +367,7 @@ describe('what survives a level', () => {
     // they have had least use out of.
     const save = carrying()
     expect(heldIds(save)).toHaveLength(4)
-    const onward = applyEffects(save, [{ kind: 'advanceLevel' }], DEPS.catalog, NOW)
+    const onward = applyEffects(save, [{ kind: 'advanceLevel' }], DEPS.content, NOW)
     expect(heldIds(onward).sort()).toEqual(['second-skin', 'whetstone'])
   })
 
@@ -364,7 +379,7 @@ describe('what survives a level', () => {
 
     let marked = withKeepMark(save, 'item', firstItem.modifierId)
     marked = withKeepMark(marked, 'trait', firstTrait.modifierId)
-    const onward = applyEffects(marked, [{ kind: 'advanceLevel' }], DEPS.catalog, NOW)
+    const onward = applyEffects(marked, [{ kind: 'advanceLevel' }], DEPS.content, NOW)
     expect(heldIds(onward).sort()).toEqual([firstTrait.modifierId, firstItem.modifierId].sort())
   })
 
@@ -376,20 +391,20 @@ describe('what survives a level', () => {
     expect(activeGame(marked)?.keepItemIds).toEqual([firstItem.modifierId])
     const cleared = withKeepMark(marked, 'item', firstItem.modifierId)
     expect(activeGame(cleared)?.keepItemIds).toEqual([])
-    expect(heldIds(applyEffects(cleared, [{ kind: 'advanceLevel' }], DEPS.catalog, NOW))).toContain('whetstone')
+    expect(heldIds(applyEffects(cleared, [{ kind: 'advanceLevel' }], DEPS.content, NOW))).toContain('whetstone')
   })
 
   it('sets out FULL, at the maximum the survivors allow', () => {
     // The order is the rule: restore against the maximum as it stands with
     // everything held, THEN release, and let the ceiling rule bring the pool
     // down to the new maximum. A run must never start a level part-empty.
-    const save = applyEffects(carrying(), [{ kind: 'adjustHitPoints', amount: -40 }], DEPS.catalog, NOW)
-    const onward = applyEffects(save, [{ kind: 'advanceLevel' }], DEPS.catalog, NOW)
+    const save = applyEffects(carrying(), [{ kind: 'adjustHitPoints', amount: -40 }], DEPS.content, NOW)
+    const onward = applyEffects(save, [{ kind: 'advanceLevel' }], DEPS.content, NOW)
     const game = activeGame(onward)
     if (!game) throw new Error('no game')
     const max = resolveProfile(
       game.baseStats,
-      heldModifiers(onward, game.id, DEPS.catalog),
+      heldModifiers(onward, game.id, catalogFor(THOCKQUEST, game.seed)),
       { items: 1, traits: 1 },
     ).derived.maxHitPoints
     expect(game.hitPoints).toBe(max)
@@ -399,7 +414,7 @@ describe('what survives a level', () => {
     const save = carrying()
     const firstItem = save.holdings.find((row) => row.kind === 'item')
     if (!firstItem) throw new Error('nothing held')
-    const onward = applyEffects(withKeepMark(save, 'item', firstItem.modifierId), [{ kind: 'advanceLevel' }], DEPS.catalog, NOW)
+    const onward = applyEffects(withKeepMark(save, 'item', firstItem.modifierId), [{ kind: 'advanceLevel' }], DEPS.content, NOW)
     expect(activeGame(onward)?.keepItemIds).toEqual([])
   })
 })
@@ -424,10 +439,10 @@ describe('one of each thing, ever', () => {
     // rule stated at one caller, and this is its sibling.
     const once = applyEffects(started(), [
       { kind: 'acquireModifier', modifierKind: 'item', modifierId: 'whetstone' },
-    ], DEPS.catalog, NOW)
+    ], DEPS.content, NOW)
     const twice = applyEffects(once, [
       { kind: 'acquireModifier', modifierKind: 'item', modifierId: 'whetstone' },
-    ], DEPS.catalog, NOW)
+    ], DEPS.content, NOW)
     expect(twice.holdings.filter((row) => row.modifierId === 'whetstone')).toHaveLength(1)
     expect(twice.holdings).toEqual(once.holdings)
   })
@@ -459,7 +474,7 @@ describe('how many survive', () => {
     return applyEffects(playing, [
       { kind: 'acquireModifier', modifierKind: 'item', modifierId: 'whetstone' },
       { kind: 'acquireModifier', modifierKind: 'item', modifierId: 'iron-buckler' },
-    ], DEPS.catalog, NOW)
+    ], DEPS.content, NOW)
   }
 
   it('lights exactly the allowance, marked first and newest after', () => {

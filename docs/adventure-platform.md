@@ -255,8 +255,26 @@ carry you past it, which is why effective stats resolve in one documented
 order (`model/modifiers.ts`):
 
 ```
-clamp(base, 0..6) → + stat deltas → derive → × scales → + deltas → normalize
+clamp(base, 0..6) → + stat deltas → derive → × (1 + Σ percentages) → normalize
 ```
+
+**Everything is a percentage, and stat points are the one exception.** A flat
+"+25 hit points" is a third of a starting character and a rounding error on a
+late one, so it had to be re-tuned every time a curve moved; a percentage is
+worth the same share wherever it lands. Stat points stay flat because a stat
+point is the unit the whole table is written in. The two kinds of percentage
+are *not* the same arithmetic, and this is the one thing about the vocabulary
+worth memorising:
+
+- a **quantity** (hit points, damage, actions) takes percentages **additively**:
+  +20% and +30% is +50%.
+- a **chance** takes a percentage of what is **left**: +20% accuracy removes a
+  fifth of the *misses*, and a second +10% removes a tenth of what still
+  misses. A penalty is the mirror, on the successes. It cannot overshoot, it is
+  the same shape as the run's own thumb (`pressThumb`), and adding percentage
+  points to probabilities is how a game ends up with a guaranteed critical hit.
+  Carried as `ChanceAdjustment`'s two keep factors, because a chance is
+  contested when it is rolled and cannot be finished in advance.
 
 **Stat checks**: roll a D6, add the Difficulty Rating, pass if the stat
 matches or exceeds the total. The die is the *opposition*, not the player's
@@ -272,9 +290,44 @@ the same declaration the resolver applies. One vocabulary produces both the
 maths and the words. `tag` is the escape hatch for effects the vocabulary
 cannot express; that one carries written prose, because nothing else can.
 
+**A trait is written; an item is rolled.** Traits are authored one by one in
+content. Items are authored as **templates** (`model/itemSlots.ts`) that say
+what an item is *about* — which stats it would plausibly sharpen, which odds
+or quantities it would plausibly move, which of the richer effects suit it,
+and whether it is armour — and the run rolls which of those it actually is.
+Thirty templates is thirty items in one run and a different thirty in the
+next, with no hand-tuned number anywhere in the item list.
+
+The roll is **once per run, per template**, off `game.seed` mixed with the
+template's id (`core/rng.ts`'s `seedFrom`). Per *offer* would mean the
+Spyglass in the market and the Spyglass in the chest were different objects
+with one name, that a screen re-entered showed different numbers, and that
+every unacquired offer had to be persisted. Per run means a Spyglass is simply
+what a Spyglass is in this world: the save goes on referring to items by id,
+and the keep marks, the carry limit, the "already held" filters and the market
+table all keep working untouched. A **per-template stream** rather than one
+sequence walked in content order, so adding a thirty-first item does not
+silently re-roll the other thirty for every save in existence.
+
+The slots: **armor** (present only where the fiction carries it, always filled
+when it is, taken first), up to **two stat slots** (1–3 points each, never the
+same stat twice), one **derived slot** (10–50% in tens), and one **verbose
+slot** — a conditional on how the fight is going, on where in the round the
+action falls, or on what else is carried. Two or three are filled, armor
+counting as one. Every verbose effect has to **reach the fight**; that is the
+standing bar for admitting one, and `adventure:sim --rank` is how it is
+checked.
+
 Effects come in two kinds, and the distinction is load-bearing: **passive**
-(re-applied whenever the profile resolves) and **on-acquire** (fired once,
-changes state). Armor is the reason.
+(re-applied whenever the profile resolves) and **conditional** (fired only in
+a matching `Situation` — below a fraction of hit points, or on the round's
+first or last action). Conditionals are resolved in `resolveProfile` and
+nowhere else, so there is one place a condition can be got wrong rather than
+one per consumer. The round-position one needs a profile resolved *for one
+action*, which only the fight knows: `stages/combat.ts`'s `actingProfile`
+builds it, and `model/combat.ts`'s `roundActionPosition` reads the **round**
+rather than one side's pool — read per side, an opener on Dodge (which only
+ever fires on a monster's action) would be permanently switched off.
 
 **Motes are a currency and a milestone at once**, and the two never interact:
 the balance (`earned − spentOnTraits`) buys traits, while stat points read
@@ -285,11 +338,31 @@ express that — subtracting a purchase from it would silently defer the next
 stat point — which is why two numbers are stored and neither is derived from
 the other.
 
-**Armor is not a stat.** Every other stat is static for a level; armor is
-*spent*. Two pools — `fromItems`, which decay can touch, and `natural` from
-traits, which it cannot — because one number could not express a trait that
-grants armor decay cannot reach. It is rebuilt at the start of each level, so
-an item carried over counts as a fresh acquisition.
+**Armor is not a stat, and it belongs to the ITEM.** Every other stat is
+static for a level; armor is *spent*. It is a pool **per item** carrying an
+armor slot — its own points, its own maximum, its own decay floor — plus one
+`natural` pool for everything decay cannot touch. Points live on the **holding
+row** (`HoldingRow.armorPoints`, absent meaning full); the maximum and the
+floor are properties of the item as this run rolled it and are never stored.
+That is the whole of "drop the item and its armor goes with it": the row is
+deleted and there is nothing to correct. A single `fromItems` pool was the
+first version and could not say *which* item wore down, so a drop had to guess
+how much of the pool went with it, and "restore each item to what its owner
+maintains" had no *each* to act on.
+
+Three moments, three different rules:
+
+1. **An absorb** reduces the blow, and one piece may lose a point — the
+   **fullest** piece still above its own floor, so a kit wears evenly rather
+   than letting one big shield rot beside a pristine bracer.
+2. **After a fight**, every piece is brought **up to** `(Might + Intellect) / 20`
+   of its own maximum, plus whatever repairs the run carries. It is a ceiling,
+   not a top-up: a piece already above the line keeps what it has, so the kit
+   *settles onto* the condition its owner can maintain over a level. Applied at
+   `advanceEncounter`, which is exactly the moment "after the fight" names and
+   is already emitted by every stage that ends one — a `repairArmor` effect
+   beside it would be a second statement of the same moment.
+3. **A new level** makes every surviving piece whole again.
 
 ## What is built, and what is not
 
@@ -1101,3 +1174,57 @@ placed at 5, 9 and 10 and the level advancing after ten.
     no armour -- instead of testing whether there had been a band. It read
     "Damage: 6" for a blow drawn from four to seven. The check is on the BAND
     now, which is what it was ever about.
+
+81. **AN ITEM IS ROLLED FROM A TEMPLATE, once per run** (`model/itemSlots.ts`,
+    `content/index.ts`'s `catalogFor`). The reasoning is in **The model**
+    above; what belongs here is what it cost and what it settled.
+
+    **The catalog stopped being a constant.** It was built once at import time
+    in three places (the hook, the director's deps, the simulation harness),
+    which would have described whichever game happened to be open first and
+    gone on describing it forever. It is now a function of `game.seed`,
+    memoized per seed, and `DirectorDeps` no longer carries one at all —
+    `buildContext` resolves it, `applyEffect` resolves it, and neither can be
+    handed the wrong one. `game.seed` existed already and was read by nothing:
+    the field for this was sitting there.
+
+    **`--rank` now measures a template**, averaged over the rolls each run made
+    of it, which is a strictly better question than the one it answered about a
+    hand-tuned item. Its pins are `{kind, id}` references rather than
+    `Modifier`s, because outside one run there is no such object as "the
+    Spyglass".
+
+    **Measured, on Easy, 30 runs per row:** baseline 8.27 encounters won,
+    every item between 8.67 and 26.23, every trait between 7.80 and 15.57.
+    That gap is the finding: **the traits are now the weak half**, and
+    revisiting their power against the rolled items is the next session's work.
+    The run as a whole got easier in the right direction — on the same seeds
+    and policy, Easy went from a 100% death rate and a median of 2 encounters
+    won to 80% and a median of 4.
+
+    **Two placeholders were filled, and they were the author's to fill.** The
+    Bronze Talisman and the Nail Clipper carried `unspecified` tags. What an
+    item does is no longer a number anybody chooses, so "unspecified" stopped
+    being a state an item could be in; `isOfferable` now guards traits alone,
+    and three of those are still in that state and still not ours.
+
+82. **ARMOR MOVED ONTO THE ITEM**, and the reasoning is in **The model**. What
+    is worth recording is the shape of the change: `Armor` became
+    `{ natural, pieces }`, `setArmor` became points per item, `GameRecord.armor`
+    was **deleted** rather than left unused, and the round's working copy
+    serializes its pieces. A save written before the move carries a
+    `fromItems` number and no pieces; there is no honest way to say which item
+    those points were on, so the natural pool is read and the wear is lost —
+    the generous direction, and the only one available.
+
+    `armorDecayFloor` is now a property of the piece rather than a
+    profile-wide maximum, which is what per-item pools made possible: the
+    jerkin wears down to two and stops, and the bracer beside it does not
+    inherit that.
+
+83. **PREPARE WAS THE LAST THING WORKING IN A SECOND CURRENCY.** Its
+    "+10% hit chance per point" added points to the chance while every other
+    boost took a share of the remainder, so a prepared attack at Perception 6
+    beside two accuracy items was a certainty. It is a keep factor now, like
+    everything else. This is rule 4 of the doctrine in its usual shape: the
+    rule was right at one caller and not at its sibling.

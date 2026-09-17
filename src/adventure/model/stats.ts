@@ -151,6 +151,25 @@ export type ChanceKey = 'dodgeChance' | 'hitChance' | 'critChance'
 
 export const CHANCE_DERIVED_KEYS: readonly ChanceKey[] = ['dodgeChance', 'hitChance', 'critChance']
 
+/**
+ * WHAT A PERCENTAGE OF A CHANCE IS A PERCENTAGE OF, in words.
+ *
+ * A boost to a chance takes a share of the FAILURES away and a penalty takes a
+ * share of the successes (model/chance.ts) -- so "+20% Accuracy" is a fifth of
+ * your misses, and "-20% Accuracy" is a fifth of your hits. Those are
+ * different quantities, and a description that said only "+20% Accuracy" would
+ * be read as twenty points by everybody.
+ *
+ * Kept HERE, beside the chances themselves, rather than in the describer: it
+ * is a property of what the chance IS, and the next chance added to the game
+ * will not compile without one.
+ */
+export const CHANCE_COMPLEMENTS: Readonly<Record<ChanceKey, { success: string; failure: string }>> = {
+  dodgeChance: { success: 'your dodges', failure: 'the blows that land' },
+  hitChance: { success: 'your hits', failure: 'your misses' },
+  critChance: { success: 'your crits', failure: 'your ordinary hits' },
+}
+
 export function isChanceKey(key: DerivedKey): key is ChanceKey {
   return (CHANCE_DERIVED_KEYS as readonly DerivedKey[]).includes(key)
 }

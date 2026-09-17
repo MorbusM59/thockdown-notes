@@ -24,13 +24,15 @@ import type { StageModule, Transition } from '../core/stage'
 import type { RngState, Roll } from '../core/rng'
 import type { StageContext } from '../core/stage'
 import type { Effect } from '../model/effects'
-import { NO_ARMOR } from '../model/armor'
+
 import { NO_SPELLS } from '../model/spellReach'
 import {
   beginRound, combatStatus, DEFENCES, defencesOffered, resolveMonsterAttack,
-  resolvePlayerAttack, rollActor, rollDodgeOffered, roundFromJson, roundToJson,
+  resolvePlayerAttack, rollActor, rollDodgeOffered, roundActionPosition, roundFromJson, roundToJson,
   UNTOUCHED_FIGHT, type Defence, type RoundState,
 } from '../model/combat'
+import { resolveProfile, type EffectiveProfile } from '../model/modifiers'
+import { holdingCounts } from '../model/gameState'
 import {
   castSpell, endOfRoundTicks, igniteTick, rollSpellReach, SPELLS, spellsOffered, strongestOffered,
   type Spell,
@@ -181,12 +183,18 @@ function armNextAction(
       }
     }
     // The player's own dodge, with their own adjustment: an item that says
-    // "+10% dodge" has to move the roll that decides whether Dodge is on the
+    // "+20% dodge" has to move the roll that decides whether Dodge is on the
     // table, or it moves nothing at all (model/chance.ts).
+    //
+    // Resolved FOR THIS ACTION (`actingProfile`), because the action about to
+    // be armed is a monster's and an item that promises something on the
+    // round's first or last action can only reach a defence here -- the
+    // defence itself rolls nothing.
+    const defending = actingProfile(context, round, monster) ?? context.profile
     const dodge = rollDodgeOffered({
-      defenderStats: context.profile.stats,
+      defenderStats: defending.stats,
       attackerStats: monster.stats,
-      adjustment: context.profile.chances.dodgeChance,
+      adjustment: defending.chances.dodgeChance,
       defender: 'player',
       successAdjust: context.game?.successAdjust,
       rng: charmed.rng,
@@ -227,13 +235,47 @@ function recordChanges(before: RoundState, after: RoundState): Effect[] {
   const effects: Effect[] = []
   const damage = before.playerHitPoints - after.playerHitPoints
   if (damage !== 0) effects.push({ kind: 'adjustHitPoints', amount: -damage })
-  if (
-    after.playerArmor.fromItems !== before.playerArmor.fromItems
-    || after.playerArmor.natural !== before.playerArmor.natural
-  ) {
-    effects.push({ kind: 'setArmor', fromItems: after.playerArmor.fromItems, natural: after.playerArmor.natural })
-  }
+  // PER PIECE, and only the ones that moved: armor belongs to the item now
+  // (model/armor.ts), so the fight mirrors back points rather than a pool. The
+  // natural pool is not here at all -- nothing can wear it, so there is
+  // nothing about it for a fight to report.
+  const wasPoints = new Map(before.playerArmor.pieces.map((piece) => [piece.itemId, piece.points]))
+  const worn = after.playerArmor.pieces
+    .filter((piece) => wasPoints.get(piece.itemId) !== piece.points)
+    .map((piece) => ({ itemId: piece.itemId, points: piece.points }))
+  if (worn.length > 0) effects.push({ kind: 'setArmor', pieces: worn })
   return effects
+}
+
+/**
+ * THE PLAYER AS THEY ARE FOR *THIS ACTION*, which is not always the same thing
+ * as the player.
+ *
+ * `context.profile` is resolved once per director tick, in the situation the
+ * run is in -- hit points and nothing else. An item that promises something on
+ * the round's FIRST or LAST action (model/modifiers.ts's
+ * `derivedPercentOnAction`) needs the profile resolved in a situation that
+ * knows which action is about to be taken, and only the fight knows that.
+ *
+ * Resolved HERE and handed to the exchange, rather than the exchange being
+ * taught about rounds: the conditional mechanism is `resolveProfile`'s, exactly
+ * as the below-hit-points one is, so there is one place where a condition can
+ * be got wrong instead of two.
+ *
+ * The action COUNT it reads is the plain profile's, deliberately: an effect
+ * that adds actions on the last action of a round would otherwise be deciding
+ * when the last action is.
+ */
+function actingProfile(context: StageContext, round: RoundState, monster: Monster): EffectiveProfile | null {
+  const base = context.profile
+  const game = context.game
+  if (!base || !game) return base
+  const actionPosition = roundActionPosition(round, base.derived, monster)
+  if (!actionPosition.first && !actionPosition.last) return base
+  return resolveProfile(game.baseStats, context.held, holdingCounts(context.held), {
+    hitPoints: game.hitPoints,
+    actionPosition,
+  })
 }
 
 /**
@@ -532,7 +574,7 @@ export const combatStage: StageModule = {
     const round = beginRound({
     ...UNTOUCHED_FIGHT,
       playerHitPoints: context.game?.hitPoints ?? 0,
-      playerArmor: context.game?.armor ?? NO_ARMOR,
+      playerArmor: context.armor,
       monsterDamageTaken: 0,
       monsterFleeing: false,
       playerFled: false,
@@ -708,13 +750,15 @@ export const combatStage: StageModule = {
       })
     }
 
-    if (choiceId === 'combat:attack' && round.prepared > 0 && context.profile) {
+    const acting = monster ? actingProfile(context, round, monster) : context.profile
+
+    if (choiceId === 'combat:attack' && round.prepared > 0 && acting) {
       const aimed = resolvePreparedAttack({
         state: round,
         monster,
-        playerStats: context.profile.stats,
-        playerDerived: context.profile.derived,
-        playerChances: context.profile.chances,
+        playerStats: acting.stats,
+        playerDerived: acting.derived,
+        playerChances: acting.chances,
         successAdjust: context.game?.successAdjust,
         rng,
       })
@@ -745,13 +789,13 @@ export const combatStage: StageModule = {
       })
     }
 
-    if (choiceId === 'combat:attack' && context.profile) {
+    if (choiceId === 'combat:attack' && acting) {
       const attack = resolvePlayerAttack({
         state: round,
         monster,
-        playerStats: context.profile.stats,
-        playerDerived: context.profile.derived,
-        playerChances: context.profile.chances,
+        playerStats: acting.stats,
+        playerDerived: acting.derived,
+        playerChances: acting.chances,
         successAdjust: context.game?.successAdjust,
         rng,
       })
@@ -769,14 +813,14 @@ export const combatStage: StageModule = {
     }
 
     const spell = SPELLS.find((candidate) => spellChoiceId(candidate) === choiceId)
-    if (spell && context.profile) {
+    if (spell && acting) {
       const cast = castSpell({
         spell,
         state: round,
         monster,
-        playerStats: context.profile.stats,
-        playerDerived: context.profile.derived,
-        playerChances: context.profile.chances,
+        playerStats: acting.stats,
+        playerDerived: acting.derived,
+        playerChances: acting.chances,
         successAdjust: context.game?.successAdjust,
         rng,
       })
@@ -813,7 +857,6 @@ export const combatStage: StageModule = {
         state: round,
         monster,
         playerStats: context.profile.stats,
-        armorDecayFloor: context.profile.armorDecayFloor,
         defence,
         dodgeRoll: readRoll(state.dodgeRoll),
         successAdjust: context.game?.successAdjust,

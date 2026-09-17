@@ -29,11 +29,11 @@
 // is the walk the tests use, kept because it is the worst case and the one
 // that finds stalls.
 
-import { buildCatalog, THOCKQUEST } from '../../src/adventure/content'
+import { THOCKQUEST } from '../../src/adventure/content'
 import { choose, currentScreen, enterEntryScreen, enterInterlude, type DirectorDeps } from '../../src/adventure/core/director'
 import type { Screen } from '../../src/adventure/core/screen'
 import { activeGame, applyEffects, emptySave, type GameSave } from '../../src/adventure/model/gameState'
-import { isOfferable, type Modifier } from '../../src/adventure/model/modifiers'
+import { isOfferable, type ModifierKind } from '../../src/adventure/model/modifiers'
 import { DIFFICULTIES, DIFFICULTY_LABELS, type Difficulty } from '../../src/adventure/model/difficulty'
 import { ROOT_STAGE_ID, STAGES } from '../../src/adventure/stages'
 import { STAT_POINT_STAGE_ID } from '../../src/adventure/stages/ids'
@@ -42,8 +42,23 @@ import { statPointsAvailable } from '../../src/adventure/model/motes'
 const DEPS: DirectorDeps = {
   stages: STAGES,
   content: THOCKQUEST,
-  catalog: buildCatalog(THOCKQUEST),
   rootStageId: ROOT_STAGE_ID,
+}
+
+/**
+ * WHAT THIS HARNESS PINS: a name and an id, never a resolved modifier.
+ *
+ * Items are rolled per run now (model/itemSlots.ts), so there is no such
+ * object as "the Spyglass" outside of one run -- a pin holding a `Modifier`
+ * would be holding whatever some other run's seed made. Pinning by id means a
+ * ranking row measures what a Spyglass is worth ON AVERAGE ACROSS RUNS, which
+ * is the question worth asking about a rolled item and a strictly better
+ * question than the one this used to answer about a hand-tuned one.
+ */
+interface PinRef {
+  kind: ModifierKind
+  id: string
+  name: string
 }
 
 const NOW = 1_700_000_000_000
@@ -159,7 +174,7 @@ function playOne(
   policy: Policy,
   levelCap: number,
   prefer: readonly string[] = [],
-  pin: readonly Modifier[] = [],
+  pin: readonly PinRef[] = [],
   successAdjust = 0,
 ): RunResult {
   let save: GameSave = { ...emptySave(seed), settings: { difficulty, successAdjust } }
@@ -181,8 +196,8 @@ function playOne(
     if (pin.length > 0 && game && !pinned) {
       save = applyEffects(
         save,
-        pin.map((modifier) => ({ kind: 'acquireModifier' as const, modifierKind: modifier.kind, modifierId: modifier.id })),
-        DEPS.catalog,
+        pin.map((ref) => ({ kind: 'acquireModifier' as const, modifierKind: ref.kind, modifierId: ref.id })),
+        DEPS.content,
         NOW,
       )
       game = activeGame(save)
@@ -300,7 +315,7 @@ if (presets.length === 0) throw new Error(`unknown difficulty "${args.difficulty
 function sweep(
   difficulty: Difficulty,
   prefer: readonly string[],
-  pin: readonly Modifier[] = [],
+  pin: readonly PinRef[] = [],
   successAdjust = args.successAdjust,
 ) {
   const runs: RunResult[] = []
@@ -311,6 +326,16 @@ function sweep(
 }
 
 /**
+ * EVERYTHING THAT CAN BE PINNED, as references. Every item template can be --
+ * a template always rolls into something (model/itemSlots.ts) -- and a trait
+ * only if somebody has decided what it does.
+ */
+const CATALOGUE: readonly PinRef[] = [
+  ...THOCKQUEST.items.map((template) => ({ kind: 'item' as const, id: template.id, name: template.name })),
+  ...THOCKQUEST.traits.filter(isOfferable).map((trait) => ({ kind: 'trait' as const, id: trait.id, name: trait.name })),
+]
+
+/**
  * WHAT EACH PIECE OF CONTENT IS WORTH, measured rather than argued: the same
  * runs, once per modifier, with that modifier taken whenever it is offered.
  *
@@ -319,30 +344,34 @@ function sweep(
  * at all -- the second is the failure this found, when every chance-shaped
  * item measured as exactly nothing because combat resolved chances from the
  * stat block and never saw a modifier.
+ *
+ * An ITEM's row is now an average over the rolls its template made in each
+ * run, so a flat row means the template as a whole never arrives -- which is
+ * exactly the check a verbose slot needs, and the reason a verbose effect that
+ * cannot reach the fight is not allowed into the vocabulary at all.
  */
 if (args.rank) {
-  const pool = [...THOCKQUEST.items, ...THOCKQUEST.traits].filter(isOfferable)
+  const pool = CATALOGUE
   const difficulty = (presets[0] ?? 'medium') as Difficulty
   const base = sweep(difficulty, [])
   console.log(`\n${args.runs} runs each, ${DIFFICULTY_LABELS[difficulty]}, policy "${args.policy}", preferring one thing at a time\n`)
   console.log('modifier                       encounters won (mean)   died   damage/fight')
-  const rows = pool.map((modifier) => ({ modifier, row: sweep(difficulty, [], [modifier]) }))
+  const rows = pool.map((ref) => ({ ref, row: sweep(difficulty, [], [ref]) }))
   rows.sort((left, right) => right.row.encountersWon.mean - left.row.encountersWon.mean)
   const line = (name: string, row: ReturnType<typeof summarize>) => console.log(
     `${name.padEnd(30)} ${row.encountersWon.mean.toFixed(2).padStart(8)}`
     + `${`${(row.deathRate * 100).toFixed(0)}%`.padStart(14)}${row.damagePerFight.toFixed(1).padStart(15)}`,
   )
   line('(nothing pinned)', base)
-  for (const { modifier, row } of rows) line(`${modifier.name} [${modifier.kind}]`, row)
+  for (const { ref, row } of rows) line(`${ref.name} [${ref.kind}]`, row)
   console.log('')
   process.exit(0)
 }
 
-const catalogue = [...THOCKQUEST.items, ...THOCKQUEST.traits]
 const pinned = args.pin.map((id) => {
-  const modifier = catalogue.find((candidate) => candidate.id === id)
-  if (!modifier) throw new Error(`no item or trait with id "${id}"`)
-  return modifier
+  const ref = CATALOGUE.find((candidate) => candidate.id === id)
+  if (!ref) throw new Error(`no item or trait with id "${id}"`)
+  return ref
 })
 
 /**

@@ -15,13 +15,14 @@
 // Nothing in here decides what an encounter PAYS. That is content, and the
 // rates are unwritten (open question 45).
 
-import { absorb, type Armor } from './armor'
+import { absorb, type Armor, type ArmorPiece } from './armor'
 import { rollAttackDamage } from './damageRoll'
 import type { JsonObject, JsonValue } from '../core/json'
 import { NO_SPELLS } from './spellReach'
 import { nextChance, nextRoll, type RngState, type Roll } from '../core/rng'
 import { NO_CHANCE_ADJUSTMENT, resolveChanceWith, type ChanceAdjustment, type ChanceSide } from './chance'
 import { actionsRemaining, damageFrom, monsterDefence, type Monster } from './monsters'
+import type { ActionPosition } from './modifiers'
 import { CRIT_CHANCE, DODGE_CHANCE, HIT_CHANCE, type DerivedStats, type StatBlock } from './stats'
 
 /** What the player may answer a monster's attack with. All four are always offered except Dodge. */
@@ -97,7 +98,29 @@ export interface RoundState {
  * that a field missing HERE fails rather than silently reading as zero.
  */
 export function roundToJson(round: RoundState): JsonObject {
-  return { ...round, playerArmor: { ...round.playerArmor }, charms: [...round.charms] }
+  return {
+    ...round,
+    playerArmor: {
+      natural: round.playerArmor.natural,
+      pieces: round.playerArmor.pieces.map((piece) => ({ ...piece })),
+    },
+    charms: [...round.charms],
+  }
+}
+
+/** One armor piece as it was written. A row that cannot be read is dropped. */
+function pieceFromJson(value: unknown): ArmorPiece | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const row = value as Record<string, unknown>
+  if (typeof row.itemId !== 'string' || row.itemId.length === 0) return null
+  const num = (key: string) => (typeof row[key] === 'number' && Number.isFinite(row[key]) ? (row[key] as number) : 0)
+  const max = Math.max(0, Math.floor(num('max')))
+  return {
+    itemId: row.itemId,
+    max,
+    points: Math.max(0, Math.min(max, Math.floor(num('points')))),
+    floor: Math.max(0, Math.min(max, Math.floor(num('floor')))),
+  }
 }
 
 /** A stack count as written, tolerating the BOOLEAN these three used to be. */
@@ -109,15 +132,23 @@ function stacksOf(value: unknown): number {
 export function roundFromJson(value: JsonValue | undefined): RoundState {
   const row = (typeof value === 'object' && value !== null && !Array.isArray(value) ? value : {}) as Record<string, unknown>
   const num = (key: string, fallback = 0) => (typeof row[key] === 'number' && Number.isFinite(row[key]) ? (row[key] as number) : fallback)
-  const armor = (typeof row.playerArmor === 'object' && row.playerArmor !== null && !Array.isArray(row.playerArmor)
+  const armorRow = (typeof row.playerArmor === 'object' && row.playerArmor !== null && !Array.isArray(row.playerArmor)
     ? row.playerArmor
     : {}) as Record<string, unknown>
-  const armorPool = (key: string) => (typeof armor[key] === 'number' && Number.isFinite(armor[key]) ? (armor[key] as number) : 0)
+  // A save written before armor was per-item has a `fromItems` number and no
+  // pieces. There is no honest way to say which item those points were on, so
+  // the natural pool is read and the rest is rebuilt from the holdings when
+  // the round next writes -- a fight resumed across that boundary loses the
+  // wear, which is the generous direction and the only one available.
+  const armor: Armor = {
+    natural: typeof armorRow.natural === 'number' && Number.isFinite(armorRow.natural) ? armorRow.natural : 0,
+    pieces: Array.isArray(armorRow.pieces) ? armorRow.pieces.flatMap((entry) => pieceFromJson(entry) ?? []) : [],
+  }
   return {
     playerActionsSpent: num('playerActionsSpent'),
     monsterActionsSpent: num('monsterActionsSpent'),
     playerHitPoints: num('playerHitPoints'),
-    playerArmor: { fromItems: armorPool('fromItems'), natural: armorPool('natural') },
+    playerArmor: armor,
     monsterDamageTaken: num('monsterDamageTaken'),
     monsterFleeing: row.monsterFleeing === true,
     playerFled: row.playerFled === true,
@@ -168,6 +199,30 @@ export function playerActionsLeft(state: RoundState, playerDerived: DerivedStats
 
 export function monsterActionsLeft(state: RoundState, monster: Monster): number {
   return actionsRemaining(monster, state.monsterDamageTaken, state.monsterActionsSpent)
+}
+
+/**
+ * WHETHER THE ACTION ABOUT TO BE RESOLVED IS THE ROUND'S FIRST OR ITS LAST,
+ * whoever is taking it (model/modifiers.ts's `ActionPosition`).
+ *
+ * Over the ROUND rather than over one side's pool, deliberately: "the first
+ * action each round" is the first thing that happens in the round, and reading
+ * it per side would leave an opener on Dodge -- which only ever fires on a
+ * MONSTER's action -- permanently switched off.
+ *
+ * The last one is "nothing else is left afterwards", counting both pools, so a
+ * round where the monster is out of actions and the player has one left is on
+ * its last. A round of a single action is both, which is why this returns two
+ * flags rather than a position.
+ */
+export function roundActionPosition(
+  state: RoundState,
+  playerDerived: DerivedStats,
+  monster: Monster,
+): ActionPosition {
+  const spent = state.playerActionsSpent + state.monsterActionsSpent
+  const left = playerActionsLeft(state, playerDerived) + monsterActionsLeft(state, monster)
+  return { first: spent === 0, last: left <= 1 }
 }
 
 export type CombatStatus = 'playerDefeated' | 'monstersDefeated' | 'monsterFled' | 'playerFled' | 'roundOver' | 'acting'
@@ -269,7 +324,6 @@ interface ExchangeInput {
    * pool and the caller stored it.
    */
   armor: Armor
-  armorDecayFloor: number
   /**
    * What the ATTACKER's modifiers do to their own accuracy and crit. The
    * defender's dodge is not here: dodge is settled before the exchange, by
@@ -382,7 +436,7 @@ export function resolveExchange(input: ExchangeInput): { blow: Blow; armor: Armo
     }
   }
 
-  const absorbed = absorb(armor, raw, input.defenderStats.luck, input.armorDecayFloor, rng)
+  const absorbed = absorb(armor, raw, input.defenderStats.luck, rng)
   return {
     blow: {
       hit: true,
@@ -453,7 +507,6 @@ export function resolvePlayerAttack(options: {
     // is therefore no armor to carry back out of the exchange, which is why
     // nothing here stores one.
     armor: options.monster.armor,
-    armorDecayFloor: 0,
     attackerChances: options.playerChances,
     attacker: 'player',
     successAdjust: options.successAdjust,
@@ -485,7 +538,6 @@ export function resolveMonsterAttack(options: {
   state: RoundState
   monster: Monster
   playerStats: StatBlock
-  armorDecayFloor: number
   defence: Defence
   /**
    * The roll that PUT Dodge on the table, taken when the action was armed
@@ -522,7 +574,6 @@ export function resolveMonsterAttack(options: {
     attackerDamage: options.monster.damage,
     defenderStats: options.playerStats,
     armor: options.state.playerArmor,
-    armorDecayFloor: options.armorDecayFloor,
     attacker: 'monster',
     successAdjust: options.successAdjust,
     defence: options.defence,

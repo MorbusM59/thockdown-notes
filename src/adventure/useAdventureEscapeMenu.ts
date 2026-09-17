@@ -22,22 +22,31 @@ import {
   type EscapeMenuContribution,
   type EscapeMenuMode,
 } from '../escapeMenu/escapeMenuContract'
-import { buildCatalog, THOCKQUEST } from './content'
+import { catalogFor, THOCKQUEST } from './content'
 import { choose, currentScreen, enterEntryScreen, enterInterlude, type DirectorDeps } from './core/director'
 import { emptySave, withKeepMark, type GameSave } from './model/gameState'
-import type { ModifierKind } from './model/modifiers'
+import type { Modifier, ModifierKind } from './model/modifiers'
 import { createSeed } from './core/rng'
 import { ROOT_STAGE_ID, STAGES } from './stages'
 import { FAME_STAGE_ID, STAT_POINT_STAGE_ID } from './stages/ids'
 import { chromeAction, chromeBarToggle, chromeGauges, chromeIdentity, chromeMeters, chromeStrip, chromeToggle, statusReadouts } from './chrome'
 
-const CATALOG = buildCatalog(THOCKQUEST)
-
 const DEPS: DirectorDeps = {
   stages: STAGES,
   content: THOCKQUEST,
-  catalog: CATALOG,
   rootStageId: ROOT_STAGE_ID,
+}
+
+/**
+ * The catalog of the run currently open. NOT a module constant, which is what
+ * it was: items are rolled from the run's own seed (content/index.ts's
+ * `catalogFor`), so one built at import time would describe whichever game
+ * happened to be open first and go on describing it forever. `catalogFor`
+ * memoizes per seed, so asking every render costs a map lookup.
+ */
+function catalogOf(save: GameSave): ReadonlyMap<string, Modifier> {
+  const game = save.games.find((candidate) => candidate.id === save.activeGameId)
+  return catalogFor(THOCKQUEST, game?.seed ?? 0)
 }
 
 export interface AdventureEscapeMenuOptions {
@@ -176,18 +185,21 @@ export function useAdventureEscapeMenu(options: AdventureEscapeMenuOptions): Esc
       // a view the player can see the effects of but not reach.
       onDismiss: onLeave,
       status: {
-        // "Adventure" rather than the game's name: this pill says what KIND
-        // of thing the slot is holding (its neighbour in that role is "User
-        // Guide"), and it clips at 120px.
-        title: 'Adventure',
+        // THE GAME'S NAME, capital Q. This pill says what the slot is
+        // holding, and its neighbour in that role is "User Guide" -- a proper
+        // name there too, rather than a category. "Adventure" was the kind of
+        // thing rather than the thing, which is only the right answer while
+        // there is more than one game to be playing. It clips at 120px;
+        // "ThockQuest" is ten characters.
+        title: 'ThockQuest',
         narration: screen.narration,
-        readouts: statusReadouts(save, CATALOG),
+        readouts: statusReadouts(save, THOCKQUEST),
         // The stage names itself; the identity line does not keep a table
         // of names that could fall out of step with the registry.
         identity: chromeIdentity(save, STAGES.get(screen.stageId)?.title ?? ''),
         barToggle: chromeBarToggle(),
         meters: chromeMeters(save),
-        strip: chromeStrip(save, CATALOG, handleKeep),
+        strip: chromeStrip(save, catalogOf(save), handleKeep),
         gauges: chromeGauges(save, handleGaugeOpen),
         // RESERVED, not omitted. The game has claimed neither button, and
         // the editor's own must not show through -- but an omitted position

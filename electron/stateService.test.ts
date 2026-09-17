@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { StateService } from './stateService'
 import { UI_FONT_SCALE_MAX, UI_FONT_SCALE_MIN } from '../src/shared/UiTypography'
-import { buildCatalog, THOCKQUEST } from '../src/adventure/content'
+import { THOCKQUEST } from '../src/adventure/content'
 import { choose, enterEntryScreen, type DirectorDeps } from '../src/adventure/core/director'
 import { emptySave } from '../src/adventure/model/gameState'
 import { ROOT_STAGE_ID, STAGES } from '../src/adventure/stages'
@@ -272,7 +272,6 @@ describe('StateService app-state field round-trip', () => {
     const deps: DirectorDeps = {
       stages: STAGES,
       content: THOCKQUEST,
-      catalog: buildCatalog(THOCKQUEST),
       rootStageId: ROOT_STAGE_ID,
     }
     const nowMs = 1_700_000_000_000

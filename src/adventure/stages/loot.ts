@@ -29,7 +29,7 @@ function rollItemOffers(context: StageContext, rng: number) {
   // Not what is already held: a duplicate is not a second item, it is the
   // same one applying twice (model/gameState.ts's `acquireModifier`), and
   // offering it would be offering nothing.
-  const pool = context.content.items
+  const pool = context.items
     .filter((item) => isOfferable(item) && !context.held.some((row) => row.id === item.id))
   if (pool.length === 0) return { offerIds: [] as string[], rng }
   const sample = nextSample(rng, pool, context.profile?.derived.offerChoices ?? 2)

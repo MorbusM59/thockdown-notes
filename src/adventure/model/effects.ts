@@ -41,8 +41,15 @@ export type Effect =
   | { kind: 'releaseModifier'; modifierKind: ModifierKind; modifierId: string }
   /** Negative for damage taken, positive for healing. Clamped to 0..max on apply. */
   | { kind: 'adjustHitPoints'; amount: number }
-  /** Armor after an absorb, written whole because the absorb computed both pools. */
-  | { kind: 'setArmor'; fromItems: number; natural: number }
+  /**
+   * Armor after an absorb, per ITEM -- the fight's working copy mirrored back
+   * onto the holdings that own the points (model/armor.ts).
+   *
+   * Points only. A piece's maximum and its decay floor are properties of the
+   * item as this run rolled it, so there is nothing about them for a fight to
+   * write, and no way for a fight to write them wrong.
+   */
+  | { kind: 'setArmor'; pieces: readonly { itemId: string; points: number }[] }
   /** Quantized: one unit buys one selection at the start of a level. */
   | { kind: 'grantExperience'; units: number }
   /**

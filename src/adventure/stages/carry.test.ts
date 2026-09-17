@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildCatalog, THOCKQUEST } from '../content'
+import { catalogFor, rolledItems, THOCKQUEST } from '../content'
 import { emptySave } from '../model/gameState'
+import { NO_ARMOR } from '../model/armor'
 import { resolveProfile } from '../model/modifiers'
 import { createStatBlock } from '../model/stats'
 import type { StageContext } from '../core/stage'
 import { DROP_CANCEL, dropChoices, dropEffects } from './carry'
 
-const CATALOG = buildCatalog(THOCKQUEST)
+const CATALOG = catalogFor(THOCKQUEST, 0)
 
 function contextHolding(ids: readonly string[]): StageContext {
   const held = ids.flatMap((id) => {
@@ -19,6 +20,8 @@ function contextHolding(ids: readonly string[]): StageContext {
     game: null,
     content: THOCKQUEST,
     catalog: CATALOG,
+    items: rolledItems(THOCKQUEST, 0),
+    armor: NO_ARMOR,
     profile: resolveProfile(createStatBlock(0), held, { items: 0, traits: 0 }),
     held,
   }

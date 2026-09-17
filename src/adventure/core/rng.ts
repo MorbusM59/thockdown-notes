@@ -127,3 +127,26 @@ export function nextWeighted<T>(rng: RngState, pool: readonly T[], weightOf: (it
   }
   return { value: candidates[candidates.length - 1], rng: draw.rng }
 }
+
+/**
+ * A STABLE SIDE STREAM off one seed, named rather than counted.
+ *
+ * The run's item catalog is rolled once from `game.seed` (content/index.ts),
+ * and every template has to roll the same thing no matter how many templates
+ * exist or what order they are in. Drawing them from one sequence would make
+ * adding a thirty-first item silently reshuffle the other thirty for every
+ * save in existence -- a content edit rewriting somebody's run.
+ *
+ * So each template draws from its OWN stream, seeded by the run's seed mixed
+ * with the template's id. FNV-1a over the key, folded into the base with the
+ * same golden-ratio constant `createSeed` uses, then run through one round of
+ * the generator so that two near-identical keys ("boots" and "boot") do not
+ * start out near each other.
+ */
+export function seedFrom(base: RngState, key: string): RngState {
+  let hash = 0x811c9dc5
+  for (let index = 0; index < key.length; index += 1) {
+    hash = Math.imul(hash ^ key.charCodeAt(index), 0x01000193) >>> 0
+  }
+  return nextFloat(toRngState((base ^ hash ^ 0x9e3779b9) >>> 0)).rng
+}

@@ -25,7 +25,7 @@ function monsterOf(type: MonsterType = 'regular', armor = 0): Monster {
     level: 1,
     against: PLAYER,
   })
-  return { ...built, armor: { fromItems: 0, natural: armor } }
+  return { ...built, armor: { natural: armor, pieces: [] } }
 }
 
 function freshRound(over: Partial<RoundState> = {}): RoundState {
@@ -273,7 +273,7 @@ describe('a round survives the disk', () => {
       playerActionsSpent: 2,
       monsterActionsSpent: 3,
       playerHitPoints: 41,
-      playerArmor: { fromItems: 2, natural: 5 },
+      playerArmor: { natural: 5, pieces: [{ itemId: 'plate', points: 2, max: 2, floor: 0 }] },
       monsterDamageTaken: 17,
       monsterFleeing: true,
       playerFled: true,

@@ -36,6 +36,7 @@ import type { JsonObject } from './json'
 import type { RngState } from './rng'
 import type { Effect } from '../model/effects'
 import type { EffectiveProfile, Modifier } from '../model/modifiers'
+import type { Armor } from '../model/armor'
 import type { GameRecord, GameSave } from '../model/gameState'
 import type { Content } from '../content'
 import type { Choice } from './screen'
@@ -50,8 +51,22 @@ export interface StageContext {
   game: GameRecord | null
   content: Content
   catalog: ReadonlyMap<string, Modifier>
+  /**
+   * THE RUN'S ITEMS, rolled -- content's templates as this run made them, in
+   * content's own order (model/itemSlots.ts). Beside `catalog` because a stage
+   * offering items needs the POOL and not only a lookup, and rolling it per
+   * stage would have every stage remember to pass the run's seed.
+   */
+  items: readonly Modifier[]
   /** Resolved stats, or null when there is no game to resolve them for. */
   profile: EffectiveProfile | null
+  /**
+   * THE RUN'S ARMOR, assembled from the items that carry it plus every
+   * non-decaying point (model/armor.ts). Beside the profile rather than on it:
+   * a profile is what a character is WORTH and is recomputed from nothing,
+   * while armor is a quantity currently SPENT DOWN and lives on the holdings.
+   */
+  armor: Armor
   /** Everything the active game holds, in acquisition order. */
   held: readonly Modifier[]
 }

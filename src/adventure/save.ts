@@ -103,7 +103,6 @@ function sanitizeGame(value: unknown): GameRecord | null {
   if (!isRecord(value)) return null
   if (typeof value.id !== 'string' || value.id.length === 0) return null
   const status = value.status === 'over' ? 'over' : 'active'
-  const armor = isRecord(value.armor) ? value.armor : {}
   const createdAtMs = finite(value.createdAtMs, 0)
 
   return {
@@ -142,7 +141,6 @@ function sanitizeGame(value: unknown): GameRecord | null {
     goldToNextFamePoint: wholeAtLeast(value.goldToNextFamePoint, FIRST_MILESTONE_THRESHOLD),
     famePointsSpent: wholeAtLeast(value.famePointsSpent, 0),
     hitPoints: wholeAtLeast(value.hitPoints, 0),
-    armor: { fromItems: wholeAtLeast(armor.fromItems, 0), natural: wholeAtLeast(armor.natural, 0) },
   }
 }
 
@@ -161,7 +159,20 @@ export function sanitizeGameSave(input: unknown): GameSave | null {
     if (typeof row.modifierId !== 'string' || row.modifierId.length === 0) return []
     if (row.kind !== 'item' && row.kind !== 'trait') return []
     const kind: ModifierKind = row.kind
-    return [{ gameId: row.gameId, kind, modifierId: row.modifierId, seq: wholeAtLeast(row.seq, 0) }]
+    // ARMOR POINTS are absent for a trait, for an item with no armor slot,
+    // and for a row written before armor moved onto the item -- and absent
+    // means FULL (model/gameState.ts's `armorOf`). A negative or fractional
+    // number is not a save to throw away, it is a number to floor.
+    const armorPoints = typeof row.armorPoints === 'number' && Number.isFinite(row.armorPoints)
+      ? Math.max(0, Math.floor(row.armorPoints))
+      : undefined
+    return [{
+      gameId: row.gameId,
+      kind,
+      modifierId: row.modifierId,
+      seq: wholeAtLeast(row.seq, 0),
+      ...(armorPoints === undefined ? {} : { armorPoints }),
+    }]
   })
 
   const outcomes = (Array.isArray(input.outcomes) ? input.outcomes : []).flatMap((row) => {

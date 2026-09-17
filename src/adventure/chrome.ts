@@ -29,7 +29,9 @@ import type { EscapeMenuChromeGauge, EscapeMenuChromePill, EscapeMenuModeChrome,
 import { moteBalance, statPointProgress, statPointsAvailable, statPointStanding } from './model/motes'
 import { famePointProgress, famePointsAvailable, famePointStanding, goldBalance } from './model/gold'
 import { displayEncounter } from './stages/levelProgress'
-import { activeGame, heldModifiers, holdingCounts, keptModifierIds, profileOf, type GameSave } from './model/gameState'
+import { activeGame, armorIn, heldModifiers, holdingCounts, keptModifierIds, profileOf, type GameSave } from './model/gameState'
+import { itemArmor } from './model/armor'
+import type { Content } from './content'
 import { describeModifier, type Modifier, type ModifierKind } from './model/modifiers'
 import { STAT_ICONS, STAT_KEYS, STAT_LABELS } from './model/stats'
 
@@ -73,7 +75,7 @@ const METER_ICONS = {
   motes: 'fa-solid fa-book',
 } as const
 
-export function statusReadouts(save: GameSave, catalog: ReadonlyMap<string, Modifier>): EscapeMenuReadout[] {
+export function statusReadouts(save: GameSave, content: Content): EscapeMenuReadout[] {
   const game = activeGame(save)
   if (!game) {
     return [
@@ -82,7 +84,8 @@ export function statusReadouts(save: GameSave, catalog: ReadonlyMap<string, Modi
     ]
   }
 
-  const profile = profileOf(save, game, catalog)
+  const profile = profileOf(save, game, content)
+  const armor = armorIn(save, game, content)
 
   return [
     { key: 'hp', icon: READOUT_ICONS.hp, label: 'Hit points', value: `${game.hitPoints}/${profile.derived.maxHitPoints}` },
@@ -90,10 +93,15 @@ export function statusReadouts(save: GameSave, catalog: ReadonlyMap<string, Modi
       key: 'armor',
       icon: READOUT_ICONS.armor,
       // BOTH POOLS, never their sum. Armor is two numbers that behave
-      // differently -- item armor is spent as it absorbs, natural armor
-      // cannot be worn away (model/armor.ts) -- so a player reading `11`
-      // cannot tell what a fight is about to cost them. The parenthesis is
-      // the part that survives it.
+      // differently -- item armor is spent as it absorbs and is now spent
+      // PER ITEM, natural armor cannot be worn away (model/armor.ts) -- so a
+      // player reading `11` cannot tell what a fight is about to cost them.
+      // The parenthesis is the part that survives it.
+      //
+      // The items' pools are summed into one figure rather than listed: which
+      // piece is wearing is the strip's business (each item's own pill), and a
+      // status line that grew a number per carried item would be four
+      // quantities where the reader wanted one.
       //
       // Shown at zero rather than hidden, unlike its own first version:
       // armor is a standing property of the character the way hit points
@@ -102,7 +110,7 @@ export function statusReadouts(save: GameSave, catalog: ReadonlyMap<string, Modi
       // have. The row is a status line, not a list of what is currently
       // interesting.
       label: 'Armor (natural)',
-      value: `${Math.max(0, game.armor.fromItems)}(${Math.max(0, game.armor.natural)})`,
+      value: `${itemArmor(armor)}(${Math.max(0, armor.natural)})`,
     },
     // Effective stats, not base: what a check actually rolls against is
     // what the player needs to see. The base cap is a rule about

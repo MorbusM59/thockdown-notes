@@ -1,19 +1,41 @@
 import { describe, expect, it } from 'vitest'
 
-import { applyEffect, emptySave, type GameSave } from './model/gameState'
+import { applyEffect, applyEffects, emptySave, type GameSave } from './model/gameState'
 import { chromeGauges, chromeIdentity, chromeMeters, statusReadouts } from './chrome'
-import type { Modifier } from './model/modifiers'
+import { THOCKQUEST, type Content } from './content'
 import { createSeed } from './core/rng'
 
-const NO_CATALOG: ReadonlyMap<string, Modifier> = new Map()
-
-function runningGame(armor: { fromItems: number; natural: number }): GameSave {
-  const started = applyEffect(emptySave(createSeed(1)), { kind: 'startGame' }, NO_CATALOG, 1)
-  return applyEffect(started, { kind: 'setArmor', ...armor }, NO_CATALOG, 1)
+/**
+ * Armor cannot be fabricated any more, and that is the point of the change it
+ * tests: it belongs to the items carrying it (model/armor.ts), so the only way
+ * to have nine points of it is to be carrying something worth nine. The pieces
+ * roll their armor slot unconditionally, so a template with a range of one
+ * value is a known quantity in every run (model/itemSlots.ts).
+ */
+function contentWith(itemArmor: number, naturalArmor: number): Content {
+  return {
+    ...THOCKQUEST,
+    items: itemArmor > 0
+      ? [{ id: 'test-plate', name: 'Test Plate', icon: 'fa-solid fa-shield', stats: [], derived: [], verbose: [], armor: [itemArmor, itemArmor] }]
+      : [],
+    traits: naturalArmor > 0
+      ? [{ id: 'test-hide', kind: 'trait', name: 'Test Hide', icon: 'fa-solid fa-shield', effects: [{ kind: 'naturalArmor', amount: naturalArmor }] }]
+      : [],
+  }
 }
 
-function readoutFor(save: GameSave, key: string) {
-  return statusReadouts(save, NO_CATALOG).find((readout) => readout.key === key)
+const PLAIN = contentWith(0, 0)
+
+function runningGame(content: Content = PLAIN): GameSave {
+  const started = applyEffect(emptySave(createSeed(1)), { kind: 'startGame' }, content, 1)
+  return applyEffects(started, [
+    ...(content.items.length > 0 ? [{ kind: 'acquireModifier' as const, modifierKind: 'item' as const, modifierId: content.items[0].id }] : []),
+    ...(content.traits.length > 0 ? [{ kind: 'acquireModifier' as const, modifierKind: 'trait' as const, modifierId: content.traits[0].id }] : []),
+  ], content, 1)
+}
+
+function readoutFor(save: GameSave, key: string, content: Content = PLAIN) {
+  return statusReadouts(save, content).find((readout) => readout.key === key)
 }
 
 /**
@@ -24,19 +46,22 @@ function readoutFor(save: GameSave, key: string) {
  */
 describe('the armor readout', () => {
   it('shows the item pool with the natural pool in parentheses, never the total', () => {
-    expect(readoutFor(runningGame({ fromItems: 9, natural: 2 }), 'armor')?.value).toBe('9(2)')
+    const content = contentWith(9, 2)
+    expect(readoutFor(runningGame(content), 'armor', content)?.value).toBe('9(2)')
   })
 
   it('is present at zero rather than appearing only once armor exists', () => {
     // It was conditional on a non-zero total once. A readout that appears
     // only when interesting teaches that armor is something that happens to
     // you rather than something you have -- and the row is a status line.
-    expect(readoutFor(runningGame({ fromItems: 0, natural: 0 }), 'armor')?.value).toBe('0(0)')
+    expect(readoutFor(runningGame(), 'armor')?.value).toBe('0(0)')
   })
 
   it('keeps the two pools apart when only one of them is filled', () => {
-    expect(readoutFor(runningGame({ fromItems: 0, natural: 3 }), 'armor')?.value).toBe('0(3)')
-    expect(readoutFor(runningGame({ fromItems: 4, natural: 0 }), 'armor')?.value).toBe('4(0)')
+    const natural = contentWith(0, 3)
+    const items = contentWith(4, 0)
+    expect(readoutFor(runningGame(natural), 'armor', natural)?.value).toBe('0(3)')
+    expect(readoutFor(runningGame(items), 'armor', items)?.value).toBe('4(0)')
   })
 })
 
@@ -50,8 +75,8 @@ describe('the armor readout', () => {
  */
 describe('the rail gauges', () => {
   it('measures fame against gold EARNED, untouched by what was spent', () => {
-    const earned = applyEffect(runningGame({ fromItems: 0, natural: 0 }), { kind: 'grantGold', units: 5 }, NO_CATALOG, 1)
-    const spent = applyEffect(earned, { kind: 'spendGold', units: 5 }, NO_CATALOG, 1)
+    const earned = applyEffect(runningGame(), { kind: 'grantGold', units: 5 }, PLAIN, 1)
+    const spent = applyEffect(earned, { kind: 'spendGold', units: 5 }, PLAIN, 1)
     const fameOf = (save: GameSave) => chromeGauges(save).find((gauge) => gauge.key === 'fame')
     // Half way to the first fame point, and buying something with the gold
     // does not undo that -- the whole reason gold is two stored numbers.
@@ -65,7 +90,7 @@ describe('the rail gauges', () => {
   })
 
   it('gives both gauges a real ratio and a real tally', () => {
-    const gauges = chromeGauges(runningGame({ fromItems: 0, natural: 0 }))
+    const gauges = chromeGauges(runningGame())
     expect(gauges.map((gauge) => gauge.key)).toEqual(['fame', 'statPoint'])
     for (const gauge of gauges) {
       expect(gauge.ratio).toBe(0)
@@ -77,17 +102,17 @@ describe('the rail gauges', () => {
     // The tally sits under a bar that fills toward the next point, and what
     // the reader wants from that column is whether there is anything to do.
     // Spending used to make the number go UP.
-    const running = runningGame({ fromItems: 0, natural: 0 })
-    const earned = applyEffect(running, { kind: 'grantExperience', units: 10 }, NO_CATALOG, 1)
+    const running = runningGame()
+    const earned = applyEffect(running, { kind: 'grantExperience', units: 10 }, PLAIN, 1)
     const statOf = (save: GameSave) => chromeGauges(save).find((gauge) => gauge.key === 'statPoint')
     expect(statOf(earned)?.count).toBe(1)
 
-    const spent = applyEffect(earned, { kind: 'allocateStatPoint' }, NO_CATALOG, 1)
+    const spent = applyEffect(earned, { kind: 'allocateStatPoint' }, PLAIN, 1)
     expect(statOf(spent)?.count).toBe(0)
 
     // Fame is the same ladder and reads the same way, which it could not do
     // at all while "points in hand" was a counter nothing incremented.
-    const famous = applyEffect(running, { kind: 'grantGold', units: 10 }, NO_CATALOG, 1)
+    const famous = applyEffect(running, { kind: 'grantGold', units: 10 }, PLAIN, 1)
     expect(chromeGauges(famous).find((gauge) => gauge.key === 'fame')?.count).toBe(1)
   })
 
@@ -95,7 +120,7 @@ describe('the rail gauges', () => {
     // A control that appears only when it is useful is one the player cannot
     // go looking for, and both screens are worth reading empty.
     const opened: string[] = []
-    const gauges = chromeGauges(runningGame({ fromItems: 0, natural: 0 }), (key) => opened.push(key))
+    const gauges = chromeGauges(runningGame(), (key) => opened.push(key))
     for (const gauge of gauges) {
       expect(gauge.ratio).toBe(0)
       gauge.action?.onActivate()
@@ -106,7 +131,7 @@ describe('the rail gauges', () => {
   })
 
   it('is a readout, not a button, when nobody is listening', () => {
-    for (const gauge of chromeGauges(runningGame({ fromItems: 0, natural: 0 }))) {
+    for (const gauge of chromeGauges(runningGame())) {
       expect(gauge.action).toBeUndefined()
     }
   })
@@ -119,25 +144,25 @@ describe('the rail gauges', () => {
  */
 describe('the identity line', () => {
   it('reads level-encounter, roman then arabic', () => {
-    expect(chromeIdentity(runningGame({ fromItems: 0, natural: 0 }), 'Wilds')).toBe('I-1 [Wilds]')
+    expect(chromeIdentity(runningGame(), 'Wilds')).toBe('I-1 [Wilds]')
   })
 
   it('moves to the encounter being PREPARED for, the moment the last is behind', () => {
-    const running = runningGame({ fromItems: 0, natural: 0 })
-    const next = applyEffect(running, { kind: 'advanceEncounter' }, NO_CATALOG, 1)
+    const running = runningGame()
+    const next = applyEffect(running, { kind: 'advanceEncounter' }, PLAIN, 1)
     expect(chromeIdentity(next, 'Wilds')).toBe('I-2 [Wilds]')
   })
 
   it('never shows the eleventh, which is a sequencing fact rather than a place', () => {
-    let save = runningGame({ fromItems: 0, natural: 0 })
+    let save = runningGame()
     for (let step = 0; step < 10; step += 1) {
-      save = applyEffect(save, { kind: 'advanceEncounter' }, NO_CATALOG, 1)
+      save = applyEffect(save, { kind: 'advanceEncounter' }, PLAIN, 1)
     }
     expect(chromeIdentity(save, 'Wilds')).toBe('I-10 [Wilds]')
   })
 
   it('says nothing about where when there is no run', () => {
-    expect(chromeIdentity(emptySave(createSeed(1)), 'Thockquest')).toBe('[Thockquest]')
+    expect(chromeIdentity(emptySave(createSeed(1)), 'ThockQuest')).toBe('[ThockQuest]')
   })
 })
 
@@ -148,7 +173,7 @@ describe('the identity line', () => {
  */
 describe('the readouts', () => {
   it('does not repeat the star gauge on the tab bar', () => {
-    const earned = applyEffect(runningGame({ fromItems: 0, natural: 0 }), { kind: 'grantExperience', units: 10 }, NO_CATALOG, 1)
+    const earned = applyEffect(runningGame(), { kind: 'grantExperience', units: 10 }, PLAIN, 1)
     expect(chromeGauges(earned).find((gauge) => gauge.key === 'statPoint')?.count).toBe(1)
     expect(readoutFor(earned, 'points')).toBeUndefined()
   })

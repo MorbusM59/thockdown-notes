@@ -81,23 +81,42 @@ export function resolveChance(chance: StatChance, own: StatBlock, opponent?: Sta
 /**
  * What a modifier does to a chance, on top of whatever the stats made it.
  *
- * A SCALE and a DELTA rather than either alone, because the two items that
- * want this want different things: a whetstone that sharpens what you already
- * do is a scale, and a lucky coin that adds five points of crit is a delta.
- * Applied in that order and then clamped, exactly once, wherever the chance
- * is used -- which is the whole reason this is a value carried alongside the
- * profile rather than a number folded into it: a chance is CONTESTED at the
- * moment it is rolled, so it cannot be finished in advance.
+ * TWO KEEP FACTORS, not a scale and an offset, and the difference is the whole
+ * rule: **a percentage of a probability is a percentage of what is LEFT.** A
+ * +20% boost to a 60% chance to hit does not make it 72% and does not make it
+ * 80% -- it takes a fifth of the MISSES away, leaving 68%. A second +10% takes
+ * a tenth of what is still missing, leaving 71.2%. That is the same arithmetic
+ * `pressThumb` does below, arrived at from the other end: the thumb is the
+ * run's tuning expressed as a chance boost, and an item's boost is the same
+ * shape so that neither can overshoot 0..1 and neither needs a clamp hiding a
+ * mistake.
  *
- * The identity is `{ scale: 1, delta: 0 }`, so an actor with no modifiers
- * takes exactly the path an actor with them does.
+ *   failureKeep -- the share of FAILURES a boost leaves standing, multiplied
+ *                  together across every boost held. `1` is no boost at all.
+ *   successKeep -- the mirror, for a PENALTY: the share of successes it
+ *                  leaves standing. A buckler that costs 10% of your dodges
+ *                  takes a tenth of the dodges, not ten points off the chance.
+ *
+ * Both are multiplicative on their own half, so holding two of anything is the
+ * same arithmetic as holding one twice and the order they are collected in
+ * cannot matter. Applied wherever the chance is used, exactly once -- which is
+ * the whole reason this is a value carried alongside the profile rather than a
+ * number folded into it: a chance is CONTESTED at the moment it is rolled, so
+ * it cannot be finished in advance.
+ *
+ * A SCALE AND A DELTA came before this, and they were replaced rather than
+ * added to. They could express "+5 points of crit", which reads fine on a
+ * single item and is unbounded the moment two of them are held: three lucky
+ * coins and a crit is certain. Every chance effect in the game is now a
+ * percentage of the remainder, which is the same rule at every site
+ * (model/modifiers.ts).
  */
 export interface ChanceAdjustment {
-  scale: number
-  delta: number
+  failureKeep: number
+  successKeep: number
 }
 
-export const NO_CHANCE_ADJUSTMENT: ChanceAdjustment = { scale: 1, delta: 0 }
+export const NO_CHANCE_ADJUSTMENT: ChanceAdjustment = { failureKeep: 1, successKeep: 1 }
 
 /**
  * WHOSE roll this is. The one thing a chance needs to know about the world
@@ -163,6 +182,10 @@ export function resolveChanceWith(
   context: ChanceContext = {},
 ): number {
   const adjustment = context.adjustment ?? NO_CHANCE_ADJUSTMENT
-  const adjusted = clampChance(rawChance(chance, own, opponent) * adjustment.scale + adjustment.delta)
+  const stated = clampChance(rawChance(chance, own, opponent))
+  // Gains first, then penalties. Each acts on its own half of the remainder,
+  // so neither can leave 0..1 and the result needs no second clamp.
+  const gained = 1 - (1 - stated) * Math.max(0, adjustment.failureKeep)
+  const adjusted = clampChance(gained * Math.max(0, adjustment.successKeep))
   return context.side === undefined ? adjusted : pressThumb(adjusted, context.side, context.successAdjust ?? 0)
 }

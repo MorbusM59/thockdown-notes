@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { absorb, applyAcquisition, armorFromHoldings, NO_ARMOR, totalArmor } from './armor'
+import { absorb, itemArmor, maintainedFraction, pieceOf, refillArmor, repairAfterFight, totalArmor, type Armor } from './armor'
 import { describeEffect, resolveProfile, type Modifier } from './modifiers'
 import { createStatBlock } from './stats'
 import { resolveCheck, tierForMargin } from './checks'
@@ -27,7 +27,7 @@ describe('stat resolution', () => {
       kind: 'trait',
       name: 'Avid Collector',
       icon: '',
-      effects: [{ kind: 'derivedScalePerHolding', derived: 'damageMultiplier', factorPer: 0.1, holding: 'item' }],
+      effects: [{ kind: 'derivedPercentPerHolding', derived: 'damageMultiplier', percentPer: 0.1, holding: 'item' }],
     }
     const base = createStatBlock(0)
     const none = resolveProfile(base, [collector], { items: 0, traits: 1 }).derived.damageMultiplier
@@ -37,7 +37,7 @@ describe('stat resolution', () => {
 
   it('describes an effect with the number it currently has, not the one it was written with', () => {
     const line = describeEffect(
-      { kind: 'derivedScalePerHolding', derived: 'damageMultiplier', factorPer: 0.1, holding: 'item' },
+      { kind: 'derivedPercentPerHolding', derived: 'damageMultiplier', percentPer: 0.1, holding: 'item' },
       { items: 3, traits: 0 },
     )
     // The tab bar shows this string. If it said only "+10% per item" the
@@ -53,8 +53,8 @@ describe('stat resolution', () => {
       name: 'Absurd',
       icon: '',
       effects: [
-        { kind: 'derivedDelta', derived: 'critChance', amount: 5 },
-        { kind: 'derivedDelta', derived: 'encounterChoices', amount: 0.5 },
+        { kind: 'derivedPercent', derived: 'critChance', percent: 5 },
+        { kind: 'derivedPercent', derived: 'encounterChoices', percent: 0.25 },
       ],
     }
     const derived = resolveProfile(createStatBlock(1), [absurd], noHoldings).derived
@@ -69,7 +69,14 @@ describe('armor', () => {
     kind: 'item',
     name: 'Plate',
     icon: '',
-    effects: [{ kind: 'armorOnAcquire', amount: 3 }],
+    effects: [{ kind: 'armorSlot', amount: 8 }],
+  }
+  const tempered: Modifier = {
+    id: 'tempered',
+    kind: 'item',
+    name: 'Tempered Plate',
+    icon: '',
+    effects: [{ kind: 'armorSlot', amount: 4 }, { kind: 'armorDecayFloor', floor: 2 }],
   }
   const hide: Modifier = {
     id: 'hide',
@@ -79,49 +86,104 @@ describe('armor', () => {
     effects: [{ kind: 'naturalArmor', amount: 2 }],
   }
 
-  it('grants armor once per acquisition rather than as a standing bonus', () => {
-    const once = applyAcquisition(NO_ARMOR, plate)
-    expect(once.fromItems).toBe(3)
-    // Carrying the same item into the next level counts as a fresh
-    // acquisition, which is a REBUILD, not a second grant on top.
-    expect(armorFromHoldings([plate, hide])).toEqual({ fromItems: 3, natural: 2 })
+  const armorOf = (pieces: readonly Modifier[], natural = 0): Armor => ({
+    natural,
+    pieces: pieces.flatMap((modifier) => pieceOf(modifier) ?? []),
   })
 
-  it('reduces damage by the whole shield, both pools together', () => {
-    const result = absorb({ fromItems: 3, natural: 2 }, 8, 0, 0, 1)
-    expect(result.absorbed).toBe(5)
-    expect(result.damage).toBe(3)
+  /**
+   * A piece arrives FULL and its maximum is a property of the item, never of
+   * the save -- which is what makes "drop it and its armor goes with it" true
+   * with nothing to correct.
+   */
+  it('gives an item its own pool, full, read from what the item is', () => {
+    expect(pieceOf(plate)).toEqual({ itemId: 'plate', points: 8, max: 8, floor: 0 })
+    expect(pieceOf(hide)).toBeNull()
+  })
+
+  it('reduces damage by the whole shield, every pool together', () => {
+    const result = absorb(armorOf([tempered], 2), 8, 0, 1)
+    expect(result.absorbed).toBe(6)
+    expect(result.damage).toBe(2)
   })
 
   it('never decays when it did not actually stop anything', () => {
     // Luck 0 makes survival unlikely, so a decay here would be a real one.
-    const untested = absorb({ fromItems: 3, natural: 0 }, 0, 0, 0, 11)
+    const untested = absorb(armorOf([plate]), 0, 0, 11)
     expect(untested.decayed).toBe(false)
-    expect(untested.armor.fromItems).toBe(3)
+    expect(itemArmor(untested.armor)).toBe(8)
   })
 
-  it('wears down only the pool that items granted, never natural armor', () => {
-    let armor = { fromItems: 3, natural: 2 }
+  it('wears down only what items granted, never natural armor', () => {
+    let armor = armorOf([plate], 2)
     let rng = 5
     for (let index = 0; index < 200; index += 1) {
-      const result = absorb(armor, 4, 0, 0, rng)
+      const result = absorb(armor, 4, 0, rng)
       armor = result.armor
       rng = result.rng
     }
-    expect(armor.fromItems).toBe(0)
+    expect(itemArmor(armor)).toBe(0)
     expect(armor.natural).toBe(2)
     expect(totalArmor(armor)).toBe(2)
   })
 
-  it('stops decaying at the floor a trait sets', () => {
-    let armor = { fromItems: 4, natural: 0 }
+  it('stops decaying at the floor the item itself carries', () => {
+    let armor = armorOf([tempered])
     let rng = 5
     for (let index = 0; index < 200; index += 1) {
-      const result = absorb(armor, 4, 0, 2, rng)
+      const result = absorb(armor, 4, 0, rng)
       armor = result.armor
       rng = result.rng
     }
-    expect(armor.fromItems).toBe(2)
+    expect(armor.pieces[0].points).toBe(2)
+  })
+
+  /**
+   * WEAR IS SPREAD, not concentrated: the fullest eligible piece takes the
+   * point. Concentrating it would let a big shield rot to nothing beside a
+   * pristine bracer, which would make repair -- a share of each piece's own
+   * maximum -- mean something different for every kit.
+   */
+  it('wears the fullest piece, so a kit wears evenly', () => {
+    const small: Modifier = { id: 'small', kind: 'item', name: 'Small', icon: '', effects: [{ kind: 'armorSlot', amount: 2 }] }
+    let armor = armorOf([plate, small])
+    let rng = 5
+    for (let index = 0; index < 40; index += 1) {
+      const result = absorb(armor, 4, 0, rng)
+      armor = result.armor
+      rng = result.rng
+    }
+    const points = new Map(armor.pieces.map((piece) => [piece.itemId, piece.points]))
+    // The eight-point piece has to come down to the two-point one before that
+    // one is touched at all.
+    expect(points.get('plate')).toBeLessThanOrEqual(2)
+    expect(points.get('small')! - points.get('plate')!).toBeLessThanOrEqual(1)
+  })
+
+  /**
+   * THE REPAIR IS A CEILING, NOT A TOP-UP. `(Might + Intellect) / 20` of each
+   * piece's maximum is the condition the character can maintain: below it, a
+   * fight's wear is undone; above it, nothing happens at all.
+   */
+  it('brings each piece up to what its owner can maintain, and no further', () => {
+    expect(maintainedFraction(2, 2)).toBeCloseTo(0.2)
+    const worn: Armor = { natural: 0, pieces: [{ itemId: 'plate', points: 0, max: 10, floor: 0 }] }
+    expect(repairAfterFight(worn, 2, 2).pieces[0].points).toBe(2)
+
+    const healthy: Armor = { natural: 0, pieces: [{ itemId: 'plate', points: 9, max: 10, floor: 0 }] }
+    expect(repairAfterFight(healthy, 2, 2).pieces[0].points).toBe(9)
+  })
+
+  it('adds what the kit repairs on top of the maintained line, capped at whole', () => {
+    const worn: Armor = { natural: 0, pieces: [{ itemId: 'plate', points: 0, max: 10, floor: 0 }] }
+    expect(repairAfterFight(worn, 2, 2, 3).pieces[0].points).toBe(5)
+    const nearly: Armor = { natural: 0, pieces: [{ itemId: 'plate', points: 9, max: 10, floor: 0 }] }
+    expect(repairAfterFight(nearly, 2, 2, 3).pieces[0].points).toBe(10)
+  })
+
+  it('makes everything whole again at a new level', () => {
+    const worn: Armor = { natural: 0, pieces: [{ itemId: 'plate', points: 1, max: 10, floor: 0 }] }
+    expect(refillArmor(worn).pieces[0].points).toBe(10)
   })
 })
 

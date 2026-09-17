@@ -7,7 +7,7 @@ import {
 } from './combat'
 import { buildMonster, DEFAULT_GROUP_SIZE, MONSTER_TYPE_ARMOR, MONSTER_TYPES, type Monster, type MonsterType } from './monsters'
 import { createStatBlock, deriveStats, type StatBlock } from './stats'
-import { NO_ARMOR, totalArmor } from './armor'
+import { NO_ARMOR, totalArmor, type Armor } from './armor'
 
 const block = (over: Partial<StatBlock> = {}): StatBlock => ({ ...createStatBlock(0), ...over })
 
@@ -116,7 +116,7 @@ describe('one exchange', () => {
   it('dodging negates the blow without rolling anything', () => {
     const result = resolveExchange({
       attacker: 'player', attackerStats: attacker, attackerDamage: 10, defenderStats: defender,
-      armor: NO_ARMOR, armorDecayFloor: 0, defence: 'dodge', dodgeOffered: true, rng: 7,
+      armor: NO_ARMOR, defence: 'dodge', dodgeOffered: true, rng: 7,
     })
     expect(result.blow).toMatchObject({ dodged: true, hit: false, damage: 0 })
     // The attack does not land at all -- it is not merely likelier to miss --
@@ -130,17 +130,16 @@ describe('one exchange', () => {
     for (let seed = 1; seed <= 40; seed += 1) {
       const result = resolveExchange({
         attacker: 'player', attackerStats: hopeless, attackerDamage: 10, defenderStats: defender,
-        armor: NO_ARMOR, armorDecayFloor: 0, defence: 'takeTheHit', dodgeOffered: false, rng: seed,
+        armor: NO_ARMOR, defence: 'takeTheHit', dodgeOffered: false, rng: seed,
       })
       expect(result.blow.hit).toBe(true)
     }
   })
 
   it('puts armor between the blow and its target on Defend, and only there', () => {
-    const armor = { fromItems: 4, natural: 2 }
+    const armor: Armor = { natural: 2, pieces: [{ itemId: 'plate', points: 4, max: 4, floor: 0 }] }
     const shared = {
-      attacker: 'player' as const, attackerStats: attacker, attackerDamage: 10, defenderStats: defender,
-      armorDecayFloor: 0, dodgeOffered: false, rng: 3,
+      attacker: 'player' as const, attackerStats: attacker, attackerDamage: 10, defenderStats: defender, dodgeOffered: false, rng: 3,
     }
     const defended = resolveExchange({ ...shared, armor, defence: 'defend' })
     const bare = resolveExchange({ ...shared, armor, defence: 'takeTheHit' })
@@ -168,7 +167,7 @@ describe('fleeing', () => {
       classId: 'fighter', classBaseStats: block({ agility: -40 }), type: 'regular', level: 1, against: PLAYER,
     })
     const result = resolveMonsterAttack({
-      state: freshRound(), monster: slow, playerStats: PLAYER, armorDecayFloor: 0, defence: 'flee', rng: 5,
+      state: freshRound(), monster: slow, playerStats: PLAYER, defence: 'flee', rng: 5,
     })
     expect(result.escaped).toBe(true)
     expect(result.state.playerFled).toBe(true)
@@ -180,12 +179,12 @@ describe('fleeing', () => {
       classId: 'fighter', classBaseStats: block({ agility: 40, perception: 40 }), type: 'regular', level: 1, against: PLAYER,
     })
     const result = resolveMonsterAttack({
-      state: freshRound({ playerArmor: { fromItems: 6, natural: 0 } }),
-      monster: fast, playerStats: PLAYER, armorDecayFloor: 0, defence: 'flee', rng: 5,
+      state: freshRound({ playerArmor: { natural: 0, pieces: [{ itemId: 'plate', points: 6, max: 6, floor: 0 }] } }),
+      monster: fast, playerStats: PLAYER, defence: 'flee', rng: 5,
     })
     expect(result.escaped).toBe(false)
     // No armor between them and the blow -- the cost of having tried.
-    expect(result.state.playerArmor).toEqual({ fromItems: 6, natural: 0 })
+    expect(result.state.playerArmor).toEqual({ natural: 0, pieces: [{ itemId: 'plate', points: 6, max: 6, floor: 0 }] })
     expect(result.blow?.hit).toBe(true)
   })
 })
@@ -233,7 +232,7 @@ describe('an attack spends exactly one action', () => {
     expect(mine.state.playerActionsSpent).toBe(1)
     expect(mine.state.monsterActionsSpent).toBe(0)
     const theirs = resolveMonsterAttack({
-      state: freshRound(), monster: foe, playerStats: PLAYER, armorDecayFloor: 0, defence: 'defend', rng: 11,
+      state: freshRound(), monster: foe, playerStats: PLAYER, defence: 'defend', rng: 11,
     })
     expect(theirs.state.monsterActionsSpent).toBe(1)
     expect(theirs.state.playerActionsSpent).toBe(0)
@@ -254,7 +253,7 @@ describe('monster armor', () => {
     level: 1,
     against: PLAYER,
   })
-  const armoured = (natural: number): Monster => ({ ...monsterOf('regular'), armor: { fromItems: 0, natural } })
+  const armoured = (natural: number): Monster => ({ ...monsterOf('regular'), armor: { natural, pieces: [] } })
 
   /** An attack the monster cannot dodge, so the exchange reaches armor. */
   function strike(monster: Monster, seed: number) {
@@ -292,7 +291,7 @@ describe('monster armor', () => {
     const monster = armoured(3)
     for (let seed = 1; seed <= 25; seed += 1) {
       expect(strike(monster, seed)).toBeDefined()
-      expect(monster.armor).toEqual({ fromItems: 0, natural: 3 })
+      expect(monster.armor).toEqual({ natural: 3, pieces: [] })
     }
   })
 

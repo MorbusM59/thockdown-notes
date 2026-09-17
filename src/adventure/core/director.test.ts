@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildCatalog, THOCKQUEST, validateContent } from '../content'
+import { THOCKQUEST, validateContent } from '../content'
 import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from './director'
 import { emptySave, type GameSave } from '../model/gameState'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
@@ -8,7 +8,6 @@ import { MAX_STAGE_CHOICES } from './screen'
 const DEPS: DirectorDeps = {
   stages: STAGES,
   content: THOCKQUEST,
-  catalog: buildCatalog(THOCKQUEST),
   rootStageId: ROOT_STAGE_ID,
 }
 

@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildCatalog, THOCKQUEST } from '../content'
+import { THOCKQUEST } from '../content'
 import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from '../core/director'
-import { activeGame, applyEffects, emptySave, type GameSave } from '../model/gameState'
+import { activeGame, applyEffects, emptySave, profileOf, type GameSave } from '../model/gameState'
+import { SPREAD_PIVOT } from '../model/damageRoll'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
 import { splitNarration } from '../../escapeMenu/narrationMarkup'
 
 const DEPS: DirectorDeps = {
   stages: STAGES,
   content: THOCKQUEST,
-  catalog: buildCatalog(THOCKQUEST),
   rootStageId: ROOT_STAGE_ID,
 }
 
@@ -29,7 +29,7 @@ function inAFight(seed: number, stats: Partial<Record<'intellect' | 'charisma' |
     if (!game) continue
     for (const [stat, amount] of Object.entries(stats)) {
       if (game.baseStats[stat as 'intellect'] < amount) {
-        save = applyEffects(save, [{ kind: 'adjustBaseStat', stat: stat as 'intellect', amount }], DEPS.catalog, NOW)
+        save = applyEffects(save, [{ kind: 'adjustBaseStat', stat: stat as 'intellect', amount }], DEPS.content, NOW)
       }
     }
   }
@@ -37,6 +37,22 @@ function inAFight(seed: number, stats: Partial<Record<'intellect' | 'charisma' |
 }
 
 const detailOf = (entry: string) => splitNarration(entry).detail
+
+/**
+ * The same run, with EFFECTIVE Perception sitting exactly on the damage
+ * band's pivot -- null where what the run is already carrying has taken it
+ * past, which is a run this particular question cannot be asked of.
+ */
+function atPivot(save: GameSave): GameSave | null {
+  const game = activeGame(save)
+  if (!game) return null
+  const fromGear = profileOf(save, game, DEPS.content).stats.perception - game.baseStats.perception
+  const target = SPREAD_PIVOT - fromGear
+  if (target < 0) return null
+  return applyEffects(save, [
+    { kind: 'adjustBaseStat', stat: 'perception', amount: target - game.baseStats.perception },
+  ], DEPS.content, NOW)
+}
 const headDetail = (save: GameSave) => detailOf(currentScreen(save, DEPS)!.narration[0])
 
 /** A roll, as every tooltip in the game writes one. */
@@ -168,8 +184,17 @@ describe('the damage line shows the band it was drawn from', () => {
   it('says only the number where there was no band to draw from', () => {
     // A character whose Perception has reached the pivot rolls nothing --
     // and `8-8, best of 1` would be arithmetic theatre for a fixed value.
+    //
+    // EFFECTIVE Perception, set after the fight is reached rather than before
+    // it: items are rolled per run now and can carry stat points of their own
+    // (model/itemSlots.ts), so a base of six is no longer a total of six --
+    // and PAST the pivot the band reopens on purpose (model/damageRoll.ts),
+    // which made this read as a regression when it was the rule working.
     for (const seed of [4242, 31337, 7, 99, 1234]) {
-      let save = inAFight(seed, { perception: 6 })
+      let save = inAFight(seed)
+      const pinned = atPivot(save)
+      if (!pinned) continue
+      save = pinned
       for (let action = 0; action < 60; action += 1) {
         const screen = currentScreen(save, DEPS)
         if (!screen || screen.stageId !== 'combat') break

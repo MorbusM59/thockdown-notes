@@ -109,12 +109,15 @@ export function resolvePreparedAttack(input: PreparedInput): PreparedAttack {
   // EVERY TERM SCALES WITH THE COUNT. One preparation is the unit; two is
   // twice of each, which is what "double prepare doubles the stats" means.
   const stacks = Math.max(1, input.state.prepared)
+  // A SHARE OF THE REMAINDER, exactly as an item's boost is: "+10% hit chance
+  // per point" takes a tenth of the MISSES per point, and composes with
+  // whatever an item already did to the same roll by multiplying into the same
+  // factor (model/chance.ts). It was points ADDED to the chance first, which
+  // made a prepared attack at Perception 6 plus two chalk items a certainty --
+  // and made Prepare the only thing in the game working in a second currency.
   const bump = (adjustment: ChanceAdjustment | undefined, points: number): ChanceAdjustment => ({
-    scale: adjustment?.scale ?? 1,
-    // A DELTA, not a scale: the spec says "+10% hit chance per point", which
-    // is points added to the chance, and it composes with whatever an item
-    // already did to the same roll (model/chance.ts).
-    delta: (adjustment?.delta ?? 0) + points * PREPARE_PER_POINT * stacks,
+    failureKeep: (adjustment?.failureKeep ?? 1) * Math.max(0, 1 - points * PREPARE_PER_POINT * stacks),
+    successKeep: adjustment?.successKeep ?? 1,
   })
 
   const sharpened: DerivedStats = {

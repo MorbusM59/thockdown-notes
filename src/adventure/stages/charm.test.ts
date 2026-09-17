@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildCatalog, THOCKQUEST } from '../content'
+import { THOCKQUEST } from '../content'
 import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from '../core/director'
 import { activeGame, applyEffects, emptySave, type GameSave } from '../model/gameState'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
@@ -10,7 +10,6 @@ import { CHARM_ICON } from '../model/charm'
 const DEPS: DirectorDeps = {
   stages: STAGES,
   content: THOCKQUEST,
-  catalog: buildCatalog(THOCKQUEST),
   rootStageId: ROOT_STAGE_ID,
 }
 
@@ -35,7 +34,7 @@ function inAFight(seed: number, charisma: number): GameSave {
     if (!choice) throw new Error('nothing to press')
     save = choose(save, choice.id, DEPS, NOW).save
     if (activeGame(save) && (activeGame(save)?.baseStats.charisma ?? 0) < charisma) {
-      save = applyEffects(save, [{ kind: 'adjustBaseStat', stat: 'charisma', amount: charisma }], DEPS.catalog, NOW)
+      save = applyEffects(save, [{ kind: 'adjustBaseStat', stat: 'charisma', amount: charisma }], DEPS.content, NOW)
     }
   }
   throw new Error('never reached a fight')

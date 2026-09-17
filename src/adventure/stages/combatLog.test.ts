@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildCatalog, THOCKQUEST } from '../content'
+import { NO_ARMOR } from '../model/armor'
+
+import { catalogFor, rolledItems, THOCKQUEST } from '../content'
 import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from '../core/director'
 import { emptySave, type GameSave } from '../model/gameState'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
@@ -14,10 +16,11 @@ import { beginRound, UNTOUCHED_FIGHT } from '../model/combat'
 const DEPS: DirectorDeps = {
   stages: STAGES,
   content: THOCKQUEST,
-  catalog: buildCatalog(THOCKQUEST),
   rootStageId: ROOT_STAGE_ID,
 }
 
+const CATALOG = catalogFor(THOCKQUEST, 0)
+const ITEMS = rolledItems(THOCKQUEST, 0)
 const NOW = 1_700_000_000_000
 
 const ROLL = (rolled: number, needed: number) => ({ rolled, needed, passed: rolled < needed })
@@ -110,7 +113,7 @@ describe('a combat pill', () => {
     const round = beginRound({
     ...UNTOUCHED_FIGHT,
       playerHitPoints: 80,
-      playerArmor: { fromItems: 0, natural: 0 },
+      playerArmor: NO_ARMOR,
       monsterDamageTaken: 0,
       monsterFleeing: false,
       playerFled: false,
@@ -243,7 +246,9 @@ describe('the blow that ended it', () => {
     // across it is how the thing died, and it belongs behind the screen the
     // reader is now looking at rather than in front of it.
     const context = {
-      save: emptySave(1), game: null, content: THOCKQUEST, catalog: DEPS.catalog, profile: null, held: [],
+      save: emptySave(1), game: null, content: THOCKQUEST, catalog: CATALOG,
+      items: ITEMS,
+      armor: NO_ARMOR, profile: null, held: [],
     }
     const entered = lootStage.enter(
       { encounterIndex: 2, screensLeft: 1, motes: 1, offersLoot: true, killPill: '[fa-solid fa-user-shield|you] x' },
@@ -255,7 +260,9 @@ describe('the blow that ended it', () => {
 
   it('is absent when nothing was killed', () => {
     const context = {
-      save: emptySave(1), game: null, content: THOCKQUEST, catalog: DEPS.catalog, profile: null, held: [],
+      save: emptySave(1), game: null, content: THOCKQUEST, catalog: CATALOG,
+      items: ITEMS,
+      armor: NO_ARMOR, profile: null, held: [],
     }
     const fled = lootStage.enter(
       { encounterIndex: 2, screensLeft: 1, motes: 1, offersLoot: false, killPill: null },
