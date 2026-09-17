@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  BURST_GAP_MS,
   burstGapMs,
   burstNoteVoice,
   cellActivationVoice,
@@ -64,10 +63,15 @@ describe('taking a choice', () => {
  * one note per choice, and no note sounding like a repeat of another.
  */
 describe('announcing a new screen', () => {
-  it('plays one note per choice, fifty milliseconds apart', () => {
-    const notes = planScreenBurst(4, 10, BURST_GAP_MS, alwaysFirst)
+  // A stand-in gap: these are about the PLAN (one note per choice, no
+  // repeats), not about how far apart the notes fall, which has its own
+  // block below.
+  const A_GAP = 50
+
+  it('plays one note per choice, evenly spaced', () => {
+    const notes = planScreenBurst(4, 10, A_GAP, alwaysFirst)
     expect(notes).toHaveLength(4)
-    expect(notes.map((note) => note.delayMs)).toEqual([0, BURST_GAP_MS, BURST_GAP_MS * 2, BURST_GAP_MS * 3])
+    expect(notes.map((note) => note.delayMs)).toEqual([0, A_GAP, A_GAP * 2, A_GAP * 3])
   })
 
   it('never repeats a sample inside one burst', () => {
@@ -76,13 +80,13 @@ describe('announcing a new screen', () => {
     // against BOTH extremes of the pick function, so this asserts the
     // draw-without-replacement and not one lucky shuffle.
     for (const pick of [alwaysFirst, alwaysLast]) {
-      const notes = planScreenBurst(10, 10, BURST_GAP_MS, pick)
+      const notes = planScreenBurst(10, 10, A_GAP, pick)
       expect(new Set(notes.map((note) => note.assetIndex)).size).toBe(10)
     }
   })
 
   it('refills the pool rather than running out, when a screen has more choices than there are samples', () => {
-    const notes = planScreenBurst(13, 10, BURST_GAP_MS, alwaysFirst)
+    const notes = planScreenBurst(13, 10, A_GAP, alwaysFirst)
     expect(notes).toHaveLength(13)
     // Every index is a real one -- the failure this guards is an undefined
     // assetIndex reaching the sound manager, which plays silence.
@@ -96,8 +100,8 @@ describe('announcing a new screen', () => {
   })
 
   it('is silent for a screen with nothing on it', () => {
-    expect(planScreenBurst(0, 10, BURST_GAP_MS, alwaysFirst)).toEqual([])
-    expect(planScreenBurst(3, 0, BURST_GAP_MS, alwaysFirst)).toEqual([])
+    expect(planScreenBurst(0, 10, A_GAP, alwaysFirst)).toEqual([])
+    expect(planScreenBurst(3, 0, A_GAP, alwaysFirst)).toEqual([])
   })
 
   /**
@@ -123,30 +127,40 @@ describe('announcing a new screen', () => {
  * announcing itself for longer than the app's own measure allows.
  */
 describe('how far apart the notes fall', () => {
-  it('is fifty milliseconds when the scroll duration leaves room for it', () => {
-    // Four notes need three gaps; at 1s of scroll there is room for 50ms each.
-    expect(burstGapMs(4, 1)).toBe(BURST_GAP_MS)
+  it('is a quarter of the scroll duration while there is room for it', () => {
+    // Four notes need three gaps, which fits inside one t at t/4 each.
+    expect(burstGapMs(4, 1)).toBeCloseTo(250, 10)
+    expect(burstGapMs(2, 1)).toBeCloseTo(250, 10)
   })
 
-  it('squeezes the whole burst into the scroll duration when fifty would overrun', () => {
-    // Five notes, four gaps, 100ms of scroll -> 25ms each, and the last note
-    // lands at exactly t rather than four times beyond it.
-    expect(burstGapMs(5, 0.1)).toBeCloseTo(25, 10)
-    expect(burstGapMs(5, 0.1) * 4).toBeCloseTo(100, 10)
+  it('meets its own cap at exactly five choices', () => {
+    // Four gaps of t/4 IS one t, so the cap and the squeeze are the same
+    // number there -- which is what makes the cap readable as "at most four
+    // gaps' worth" rather than as a second, unrelated rule.
+    expect(burstGapMs(5, 1)).toBeCloseTo(250, 10)
+    expect(burstGapMs(5, 1) * 4).toBeCloseTo(1000, 10)
+  })
+
+  it('squeezes the whole burst into one scroll past that', () => {
+    // Nine notes, eight gaps: t/4 would run to twice t, so the burst
+    // compresses and the last note still lands at exactly t.
+    expect(burstGapMs(9, 1)).toBeCloseTo(125, 10)
+    expect(burstGapMs(9, 1) * 8).toBeCloseTo(1000, 10)
   })
 
   it('never divides by a gap that does not exist', () => {
-    // One choice has no gap to divide, and dividing by n-1 would be infinite.
-    expect(burstGapMs(1, 0.001)).toBe(BURST_GAP_MS)
-    expect(burstGapMs(0, 0.001)).toBe(BURST_GAP_MS)
+    // One choice has no gap to divide, and dividing by n-1 would be
+    // infinite; it takes the cap, unused.
+    expect(burstGapMs(1, 1)).toBeCloseTo(250, 10)
+    expect(burstGapMs(0, 1)).toBeCloseTo(250, 10)
   })
 
-  it('falls back rather than collapsing the burst into one sound', () => {
-    // A zero or nonsense duration would otherwise space every note at 0ms,
-    // which is n sounds at once -- exactly not a count.
-    expect(burstGapMs(4, 0)).toBe(BURST_GAP_MS)
-    expect(burstGapMs(4, Number.NaN)).toBe(BURST_GAP_MS)
-    expect(burstGapMs(4, -1)).toBe(BURST_GAP_MS)
+  it('collapses with everything else at a scroll duration of zero', () => {
+    // Not a fallback: a reader who has turned smooth motion off has turned
+    // the deal off too, and the arrival below agrees. A floor here would be
+    // this one function keeping a pace the rest of the app has abandoned.
+    expect(burstGapMs(4, 0)).toBe(0)
+    expect(cellArrivalMs(0)).toBe(0)
   })
 
   it('reaches the plan, so the notes are actually spaced by it', () => {
@@ -161,15 +175,6 @@ describe('how long a cell takes to arrive', () => {
     expect(cellArrivalMs(0.24)).toBeCloseTo(120, 10)
   })
 
-  it('falls back on a duration it cannot halve', () => {
-    // Zero would be an icon that never animates and a note with no offset;
-    // the same fallback the gap takes, because at that point neither has a
-    // duration to divide.
-    expect(cellArrivalMs(0)).toBe(BURST_GAP_MS)
-    expect(cellArrivalMs(Number.NaN)).toBe(BURST_GAP_MS)
-    expect(cellArrivalMs(-1)).toBe(BURST_GAP_MS)
-  })
-
   it('offsets every note equally, so the deal is not bunched or slowed', () => {
     // The offset moves each note onto its OWN cell's landing: the notes stay
     // exactly one gap apart, and the burst still ends one arrival after the
@@ -182,7 +187,7 @@ describe('how long a cell takes to arrive', () => {
 
 describe('where each note comes from', () => {
   it('names the cell it belongs to, so the sound and the pop-in are one event', () => {
-    expect(planScreenBurst(3, 10, BURST_GAP_MS, alwaysFirst).map((note) => note.slot)).toEqual([0, 1, 2])
+    expect(planScreenBurst(3, 10, 50, alwaysFirst).map((note) => note.slot)).toEqual([0, 1, 2])
   })
 
   it('pans a cell by its share of the ring, and centres what has no width to sit in', () => {

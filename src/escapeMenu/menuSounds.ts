@@ -84,31 +84,37 @@ export interface BurstNote {
   slot: number
 }
 
-/** The gap between the burst's notes, when nothing shortens it. */
-export const BURST_GAP_MS = 50
-
 /**
- * HOW FAR APART THE NOTES FALL: fifty milliseconds, unless that would make
- * the burst outlast a page-up scroll, in which case the whole burst is
- * squeezed into that time instead.
+ * HOW FAR APART THE NOTES FALL, and it is the reader's own number all the
+ * way down: a quarter of a page-up smooth scroll (`t`, ScrollCurvePlan's
+ * `getRenderScrollTotalTimeSec` -- the same live value the ring's rotation
+ * curve already borrows rather than inventing a dial-specific one), unless
+ * there are more choices than that leaves room for, in which case the whole
+ * burst is squeezed into one `t` instead.
  *
- * `t` is the user's own smooth-scroll duration (ScrollCurvePlan's
- * `getRenderScrollTotalTimeSec`) -- the same live value the ring's rotation
- * curve already borrows rather than inventing a dial-specific one
- * (escapeHoldRotationCurve.ts). It is the app's standing answer to "how long
- * may a thing take to arrive", so a screen that announces itself for longer
- * than a page takes to turn is announcing itself for too long by the app's
- * own measure.
+ * There is NO constant here any more, which is the point. A fixed cap in
+ * milliseconds was a second opinion about how long a thing may take to
+ * arrive, sitting beside the app's standing one; a screen that announces
+ * itself for longer than a page takes to turn is announcing itself for too
+ * long by the app's own measure, and how much of that page it may spend is
+ * the same kind of decision.
  *
- * `n - 1` gaps join `n` notes, so the last note lands at exactly `t`. A
- * single-choice screen has no gap to divide and takes the default; so does a
- * `t` of zero or nonsense, because a burst with no spacing at all is one
- * sound rather than a count.
+ * `n - 1` gaps join `n` notes, so the last note lands at exactly `t`. The
+ * two terms therefore MEET at five choices -- four gaps of `t/4` is one `t`
+ * -- so the cap is simply "at most four gaps' worth", and past five the
+ * burst starts compressing. A single-choice screen has no gap to divide and
+ * takes the cap unused.
+ *
+ * `t` is finite and at least zero by construction (`setRenderScrollTotalTimeSec`
+ * is its only writer and clamps), so there is nothing to guard. At exactly
+ * zero the reader has asked for no smooth motion anywhere, and this
+ * collapses with everything else: no stagger, no growth, the screen simply
+ * there. That is one rule rather than a floor hiding in this one function.
  */
 export function burstGapMs(choiceCount: number, totalTimeSec: number): number {
-  if (choiceCount <= 1) return BURST_GAP_MS
-  if (!Number.isFinite(totalTimeSec) || totalTimeSec <= 0) return BURST_GAP_MS
-  return Math.min(BURST_GAP_MS, (totalTimeSec * 1000) / (choiceCount - 1))
+  const totalMs = totalTimeSec * 1000
+  if (choiceCount <= 1) return totalMs / 4
+  return Math.min(totalMs / 4, totalMs / (choiceCount - 1))
 }
 
 /**
@@ -121,11 +127,11 @@ export function burstGapMs(choiceCount: number, totalTimeSec: number): number {
  * Read by the panel for both -- the animation's duration goes to the CSS as
  * a custom property, the same value offsets the note's timer -- so the
  * reader's Scrolling Behavior sliders set the feel of this the way they set
- * the dial's rotation. A nonsense `t` falls back to the same default the
- * gap does, since at that point neither has a duration to divide.
+ * the dial's rotation -- and at a scroll duration of zero it is zero, with
+ * the gap above, because a reader who has turned smooth motion off has
+ * turned this off too.
  */
 export function cellArrivalMs(totalTimeSec: number): number {
-  if (!Number.isFinite(totalTimeSec) || totalTimeSec <= 0) return BURST_GAP_MS
   return (totalTimeSec * 1000) / 2
 }
 
@@ -172,7 +178,7 @@ export function panForRingX(x: number, ringHalfWidthPx: number): number {
 export function planScreenBurst(
   choiceCount: number,
   assetCount: number,
-  gapMs: number = BURST_GAP_MS,
+  gapMs: number,
   pick: (upperExclusive: number) => number = (upper) => Math.floor(Math.random() * upper),
 ): BurstNote[] {
   const notes: BurstNote[] = []

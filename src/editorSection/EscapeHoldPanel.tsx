@@ -996,11 +996,26 @@ export function EscapeHoldPanel({
    * ArrowRight do, through the same rotateOneStep, so the motion cannot
    * drift apart from the keyboard's.
    *
-   * What counts as a notch is not decided here: `resolveWheelEventUnits`
-   * already answers that for the whole app (editor/wheelNotch.ts), learning
-   * the device's real notch size instead of assuming one, and returning 0
-   * for a trackpad's sub-notch stream. A second answer to that question
-   * here is how the two panes drifted apart last time.
+   * WHETHER this event is a notch is not decided here:
+   * `resolveWheelEventUnits` already answers that for the whole app
+   * (editor/wheelNotch.ts), learning the device's real notch size instead of
+   * assuming one, and returning 0 for a trackpad's sub-notch stream. A
+   * second answer to that question here is how the two panes drifted apart
+   * last time.
+   *
+   * HOW MUCH it is worth, though, is NOT that function's answer to give
+   * here, and taking it was a bug the reader saw as the dial jumping two
+   * choices. That count is built for a SCROLLER, where the reader's total
+   * travel has to be conserved: pixel mode keeps the remainder of a notch
+   * that did not divide evenly, so a device sending 120 against a learned
+   * unit of 100 banks 20 a notch and pays out DOUBLE on every fifth one,
+   * and line/page mode hands back the count the device declares (three
+   * lines a notch is three). Both are right for rows of text. Neither is
+   * right for a dial, where a notch is one decision and there is no travel
+   * to conserve -- a menu that occasionally skips the choice you were aiming
+   * at is the whole of what conserving it buys. So the magnitude is
+   * discarded and only the DIRECTION is taken: one notch, one step, which
+   * is also what the ring's contract says a notch means.
    *
    * Attached to the RING, never to the backdrop: the backdrop is inert, and
    * a wheel over it belongs to whatever is behind it. Non-passive, because
@@ -1012,15 +1027,7 @@ export function EscapeHoldPanel({
     const units = resolveWheelEventUnits(event, wheelNotchStateRef.current, performance.now())
     if (units === 0) return
     event.preventDefault()
-
-    const count = cellsRef.current.length
-    if (count === 0) return
-    // A flick, or a page-mode device, can be worth more than a lap. Capping
-    // at one keeps the dial's own catch-up logic in its designed range
-    // rather than asking it to splice a multi-lap curve.
-    const steps = Math.min(Math.abs(units), count)
-    const direction = units < 0 ? -1 : 1
-    for (let step = 0; step < steps; step += 1) rotateOneStepRef.current(direction)
+    rotateOneStepRef.current(units < 0 ? -1 : 1)
   }, [])
   useNonPassiveWheel(ringRef, handleRingWheel)
 
