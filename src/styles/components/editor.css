@@ -741,6 +741,65 @@
   letter-spacing: -0.1em;
 }
 
+/* A NEW SCREEN IS DEALT OUT, one cell per note of its arrival burst
+   (EscapeHoldPanel.tsx's arrivedCount), so each cell appears in sync with its
+   own sound.
+
+   IN PLACE. A cell arrives exactly where it was always going to be -- the
+   ring's geometry is not part of this, and nothing travels. What it does is
+   pop: a brief overshoot in SIZE and nothing else.
+
+   `visibility` rather than `opacity` or `display` for the waiting state:
+   hidden has to mean un-hoverable and un-hit-testable too (the ring re-asks
+   the DOM what is under the pointer, and a cell nobody can see must not be
+   the answer), while the node itself stays laid out and keeps its ref -- the
+   ring's geometry, its focus target and its React keys are the same objects
+   before and after arriving. */
+.editor-stage .editor-escape-hold-panel-btn.is-unarrived {
+  visibility: hidden;
+}
+
+/* THE POP IS ON `scale`, NOT ON `transform`, and that is the whole reason it
+   can exist at all: each button's `transform` is its ring placement, written
+   imperatively every frame by the rotation loop (see the note on the base
+   rule below). An animation sharing that property would be overwritten mid-
+   flight by the rAF writes, or would fight them. `scale` is an independent
+   property that composes with `transform` without either touching the other,
+   so a cell can pop while the ring is turning underneath it.
+
+   Overshoot and settle, not a fade-up: the cell is arriving, and a thing that
+   arrives has some weight to it. Small on purpose -- eight per cent -- since
+   this fires once per cell on every screen, and the count is what the reader
+   is meant to be reading. */
+@keyframes escape-hold-cell-pop {
+  0% {
+    scale: 0.72;
+    animation-timing-function: ease-out;
+  }
+  60% {
+    scale: 1.08;
+    animation-timing-function: ease-in-out;
+  }
+  100% {
+    scale: 1;
+  }
+}
+
+.editor-stage .editor-escape-hold-panel-btn:not(.is-unarrived):not(.is-simple-rotation) {
+  animation: escape-hold-cell-pop 180ms both;
+}
+
+/* The two ways a reader says they do not want this. `.is-simple-rotation` is
+   the app's own reduced-visual-effects setting (it is already what turns the
+   curve-driven rotation into a plain CSS step) and is excluded in the rule
+   above rather than here, because with that setting the cells all arrive at
+   once and would otherwise pop in unison. */
+@media (prefers-reduced-motion: reduce) {
+  .editor-stage .editor-escape-hold-panel-btn:not(.is-unarrived) {
+    animation: none;
+  }
+}
+
 .editor-stage .editor-escape-hold-panel-btn {
   position:        absolute;
   top:             50%;

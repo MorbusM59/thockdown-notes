@@ -9,12 +9,13 @@ import {
   sampleScrollPlan,
 } from '../editor/ScrollCurvePlan'
 import { buildEscapeHoldRotationPlan, pixelsPerSlotAt } from './escapeHoldRotationCurve'
-import { computeEscapeHoldPointAtSlot } from './escapeHoldRingLayout'
+import { computeEscapeHoldPointAtSlot, escapeHoldRingHalfExtentPx } from './escapeHoldRingLayout'
 import { createWheelNotchState, resolveWheelEventUnits } from '../editor/wheelNotch'
 import { typingSoundManager } from '../sound/TypingSoundManager'
 import { TYPING_SOUND_SAMPLES_PER_SET } from '../sound/typingSounds'
 import {
-  burstNoteVoice, cellActivationVoice, dialStepVoice, hoverStepVoice, planScreenBurst,
+  burstGapMs, burstNoteVoice, cellActivationVoice, dialStepVoice, hoverStepVoice,
+  panForRingX, planScreenBurst,
 } from '../escapeMenu/menuSounds'
 import { useNonPassiveWheel } from '../shared/useNonPassiveWheel'
 import type { EscapeHoldRingParams } from './escapeHoldRingLayout'
@@ -399,9 +400,35 @@ export function EscapeHoldPanel({
   cellsRef.current = cells
 
   /**
-   * A NEW SCREEN, ANNOUNCED: one ordinary key sound per choice on it, all
-   * different, fifty milliseconds apart -- so the player hears how many
-   * options arrived before the dial has finished drawing them.
+   * HOW MANY CELLS HAVE ARRIVED. The screen is dealt out rather than drawn
+   * at once: each cell pops in on its own note of the burst below, so the
+   * sound and the thing appearing are ONE event.
+   *
+   * A count rather than a set, because the cells arrive in ring order and
+   * never out of it -- a set would be able to represent "the third arrived
+   * but not the second", which is not a state this can be in.
+   */
+  const [arrivedCount, setArrivedCount] = useState(0)
+
+  /**
+   * A NEW SCREEN, ANNOUNCED AND DEALT OUT: one ordinary key sound per choice,
+   * all different, each landing as its own cell pops into place -- so the
+   * player hears how many options arrived while watching them arrive.
+   *
+   * THE SPACING IS THE USER'S OWN. Fifty milliseconds by default, but never
+   * so many that the burst outlasts a page-up scroll: `burstGapMs` divides
+   * the scroll duration across the gaps when that is shorter. The value is
+   * the live one the Scrolling Behavior sliders set
+   * (`getRenderScrollTotalTimeSec`), which the ring's rotation curve already
+   * borrows rather than inventing a dial-specific twin
+   * (escapeHoldRotationCurve.ts) -- it is this app's standing answer to how
+   * long a thing may take to arrive, and a menu is a thing arriving.
+   *
+   * EACH NOTE IS PANNED WHERE ITS CELL IS, through the ring's own geometry
+   * function -- so the screen is dealt out across the stereo field in the
+   * shape the ring actually has. It is supplied as mode-B pan and weighed by
+   * the spatial slider the reader already set; nothing here re-decides how
+   * much of it to apply.
    *
    * Keyed on `ringResetKey`, which already means exactly "the ring now shows
    * a different set of things" and is already what the reset and focus
@@ -409,23 +436,49 @@ export function EscapeHoldPanel({
    * burst would come to fire on a step the dial did not reset for.
    *
    * CANCELLED ON THE WAY OUT, and that is not housekeeping: a player pressing
-   * through screens faster than `choices x 50ms` would otherwise have two
-   * bursts playing over each other, which is the one thing that makes the
-   * count unreadable -- the whole point of the sound.
+   * through screens faster than the burst would otherwise have two of them
+   * playing over each other, which is the one thing that makes the count
+   * unreadable -- the whole point of the sound.
    */
   useEffect(() => {
-    if (!isOpen) return undefined
-    const notes = planScreenBurst(cellsRef.current.length, TYPING_SOUND_SAMPLES_PER_SET)
-    const timers = notes.map((note) => window.setTimeout(
-      () => { void typingSoundManager.playRandomClick(burstNoteVoice(note)) },
-      note.delayMs,
-    ))
+    if (!isOpen) {
+      setArrivedCount(0)
+      return undefined
+    }
+    const count = cellsRef.current.length
+    // The cheap-visuals path gets the sounds and none of the staging: a
+    // pop-in is a visual effect, and this flag is what the reader sets to
+    // not have those.
+    //
+    // Otherwise the FIRST cell is already here, synchronously, and the rest
+    // are dealt. Not cosmetic: the panel grabs focus onto the top cell as the
+    // ring opens, a `visibility: hidden` element cannot take focus, and a ring
+    // that fails to get it closes itself on the resulting blur. Starting at
+    // one means the cell focus lands on is never the hidden kind -- by
+    // construction, rather than by the 0ms timer happening to win the race.
+    setArrivedCount(reduceVisualEffects ? count : Math.min(1, count))
+
+    const notes = planScreenBurst(
+      count,
+      TYPING_SOUND_SAMPLES_PER_SET,
+      burstGapMs(count, getRenderScrollTotalTimeSec()),
+    )
+    const timers = notes.map((note) => window.setTimeout(() => {
+      // The cell's real on-screen point, from the same function that places
+      // the button -- the ring is a rounded square, so an angle recomputed
+      // here would pan a sound somewhere its cell is not.
+      const point = computeEscapeHoldPointAtSlot(note.slot, count, ringGeometryParamsRef.current)
+      void typingSoundManager.playRandomClick(
+        burstNoteVoice(note, panForRingX(point.x, escapeHoldRingHalfExtentPx(ringGeometryParamsRef.current))),
+      )
+      setArrivedCount((current) => Math.max(current, note.slot + 1))
+    }, note.delayMs))
     return () => { for (const timer of timers) window.clearTimeout(timer) }
     // cellsRef rather than `cells`: the burst is about the screen ARRIVING,
     // so it must not re-fire when a cell's label or availability changes
     // underneath a screen that is already up.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ringResetKey, isOpen])
+  }, [ringResetKey, isOpen, reduceVisualEffects])
   // The ring element itself, for the native wheel listener below, and a
   // mirror of `isOpen` the two imperative handlers can read.
   const ringRef = useRef<HTMLDivElement | null>(null)
@@ -1024,6 +1077,19 @@ export function EscapeHoldPanel({
   // end of `cells` for a stale render in the same tick a shrink hasn't been
   // clamped yet (the clamp effect above runs after render, not during it),
   // so this reads defensively rather than asserting the index is valid.
+  /**
+   * Whether the cell at this array index has popped in yet. The burst deals
+   * cells out by SLOT (distance from the ring's top), and `topIndex` is what
+   * turns one into the other -- so a screen that arrives already rotated
+   * still fills from its own top outwards.
+   */
+  const slotArrived = (index: number) => {
+    const count = cells.length
+    if (count === 0) return true
+    const slot = ((index - topIndex) % count + count) % count
+    return slot < arrivedCount
+  }
+
   const activeCell = hoveredIndex !== null ? cells[hoveredIndex] : cells[focusedIndex]
   const displayedLabel = activeCell?.label ?? ''
 
@@ -1070,7 +1136,14 @@ export function EscapeHoldPanel({
             type="button"
             key={cell.id}
             ref={(el) => { buttonRefs.current[index] = el }}
-            className={`editor-escape-hold-panel-btn${reduceVisualEffects ? ' is-simple-rotation' : ''}${index === hoveredIndex ? ' is-hovered' : ''}`}
+            // NOT YET ARRIVED: the screen is dealt out one cell per note of
+            // the burst (see arrivedCount). Hidden rather than unmounted, so
+            // the ring's geometry, its refs and its focus target are the same
+            // objects throughout -- a cell that mounted late would be a new
+            // DOM node, which is exactly what the `key`-stability rule above
+            // exists to avoid. `visibility` rather than opacity so a cell
+            // that has not arrived cannot be hovered or hit-tested either.
+            className={`editor-escape-hold-panel-btn${reduceVisualEffects ? ' is-simple-rotation' : ''}${index === hoveredIndex ? ' is-hovered' : ''}${slotArrived(index) ? '' : ' is-unarrived'}`}
             style={{
               transform: `translate(-50%, -50%) translate(${point.x}px, ${point.y}px)`,
               '--rotation-duration': `${SIMPLE_ROTATION_TRANSITION_MS}ms`,

@@ -140,11 +140,26 @@ export interface EscapeHoldRingParams {
  */
 export function computeEscapeHoldPointAtSlot(slot: number, count: number, params: EscapeHoldRingParams): RingPoint {
   const cornerRadius = params.borderRadiusRegularPx * 6
-  const spacingLarge = params.spacingRegularPx * 2
-  const inset = spacingLarge + BUTTON_SIZE_PX / 2
-  const halfSize = PANEL_SIZE_PX / 2 - inset
   const theta = -Math.PI / 2 + (slot / count) * 2 * Math.PI
-  return rayToRoundedSquareBoundary(theta, halfSize, cornerRadius)
+  return rayToRoundedSquareBoundary(theta, escapeHoldRingHalfExtentPx(params), cornerRadius)
+}
+
+/**
+ * HOW FAR THE RING REACHES from its centre, which is the same `halfSize` the
+ * points above are cast against -- so anything that needs to know where a
+ * cell sits as a FRACTION of the ring's width (the screen-arrival burst pans
+ * each note by its own cell's position) divides by the extent the points
+ * actually span, rather than by a panel size that includes the inset the
+ * points are pulled in by.
+ *
+ * Extracted from the point computation rather than written beside it: two
+ * expressions for the ring's size is the pair that goes out of step the next
+ * time the inset changes, and this one is read by a module that has no other
+ * reason to know about `PANEL_SIZE_PX` at all.
+ */
+export function escapeHoldRingHalfExtentPx(params: EscapeHoldRingParams): number {
+  const inset = params.spacingRegularPx * 2 + BUTTON_SIZE_PX / 2
+  return PANEL_SIZE_PX / 2 - inset
 }
 
 /** The escape-hold panel's own ring, at its actual on-screen dimensions. */

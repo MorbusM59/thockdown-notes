@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest'
 
 import {
   BURST_GAP_MS,
+  burstGapMs,
   burstNoteVoice,
   cellActivationVoice,
   dialStepVoice,
   hoverStepVoice,
+  panForRingX,
   planScreenBurst,
 } from './menuSounds'
 import {
@@ -62,7 +64,7 @@ describe('taking a choice', () => {
  */
 describe('announcing a new screen', () => {
   it('plays one note per choice, fifty milliseconds apart', () => {
-    const notes = planScreenBurst(4, 10, alwaysFirst)
+    const notes = planScreenBurst(4, 10, BURST_GAP_MS, alwaysFirst)
     expect(notes).toHaveLength(4)
     expect(notes.map((note) => note.delayMs)).toEqual([0, BURST_GAP_MS, BURST_GAP_MS * 2, BURST_GAP_MS * 3])
   })
@@ -73,13 +75,13 @@ describe('announcing a new screen', () => {
     // against BOTH extremes of the pick function, so this asserts the
     // draw-without-replacement and not one lucky shuffle.
     for (const pick of [alwaysFirst, alwaysLast]) {
-      const notes = planScreenBurst(10, 10, pick)
+      const notes = planScreenBurst(10, 10, BURST_GAP_MS, pick)
       expect(new Set(notes.map((note) => note.assetIndex)).size).toBe(10)
     }
   })
 
   it('refills the pool rather than running out, when a screen has more choices than there are samples', () => {
-    const notes = planScreenBurst(13, 10, alwaysFirst)
+    const notes = planScreenBurst(13, 10, BURST_GAP_MS, alwaysFirst)
     expect(notes).toHaveLength(13)
     // Every index is a real one -- the failure this guards is an undefined
     // assetIndex reaching the sound manager, which plays silence.
@@ -93,8 +95,8 @@ describe('announcing a new screen', () => {
   })
 
   it('is silent for a screen with nothing on it', () => {
-    expect(planScreenBurst(0, 10, alwaysFirst)).toEqual([])
-    expect(planScreenBurst(3, 0, alwaysFirst)).toEqual([])
+    expect(planScreenBurst(0, 10, BURST_GAP_MS, alwaysFirst)).toEqual([])
+    expect(planScreenBurst(3, 0, BURST_GAP_MS, alwaysFirst)).toEqual([])
   })
 
   /**
@@ -105,8 +107,73 @@ describe('announcing a new screen', () => {
    * whatever key shares the id.
    */
   it('names a sample without claiming to be a key', () => {
-    const voice = burstNoteVoice({ assetIndex: 3, delayMs: 0 })
+    const voice = burstNoteVoice({ assetIndex: 3, delayMs: 0, slot: 0 })
     expect(voice.assetIndex).toBe(3)
     expect(voice.keyId).toBeUndefined()
+  })
+})
+
+
+/**
+ * THE BURST MAY NEVER OUTLAST A PAGE TURN. `t` is the reader's own
+ * smooth-scroll duration -- the app's standing answer to how long a thing may
+ * take to arrive, and the same live value the ring's rotation curve already
+ * borrows -- so a screen that announced itself for longer than that would be
+ * announcing itself for longer than the app's own measure allows.
+ */
+describe('how far apart the notes fall', () => {
+  it('is fifty milliseconds when the scroll duration leaves room for it', () => {
+    // Four notes need three gaps; at 1s of scroll there is room for 50ms each.
+    expect(burstGapMs(4, 1)).toBe(BURST_GAP_MS)
+  })
+
+  it('squeezes the whole burst into the scroll duration when fifty would overrun', () => {
+    // Five notes, four gaps, 100ms of scroll -> 25ms each, and the last note
+    // lands at exactly t rather than four times beyond it.
+    expect(burstGapMs(5, 0.1)).toBeCloseTo(25, 10)
+    expect(burstGapMs(5, 0.1) * 4).toBeCloseTo(100, 10)
+  })
+
+  it('never divides by a gap that does not exist', () => {
+    // One choice has no gap to divide, and dividing by n-1 would be infinite.
+    expect(burstGapMs(1, 0.001)).toBe(BURST_GAP_MS)
+    expect(burstGapMs(0, 0.001)).toBe(BURST_GAP_MS)
+  })
+
+  it('falls back rather than collapsing the burst into one sound', () => {
+    // A zero or nonsense duration would otherwise space every note at 0ms,
+    // which is n sounds at once -- exactly not a count.
+    expect(burstGapMs(4, 0)).toBe(BURST_GAP_MS)
+    expect(burstGapMs(4, Number.NaN)).toBe(BURST_GAP_MS)
+    expect(burstGapMs(4, -1)).toBe(BURST_GAP_MS)
+  })
+
+  it('reaches the plan, so the notes are actually spaced by it', () => {
+    const notes = planScreenBurst(3, 10, 20, alwaysFirst)
+    expect(notes.map((note) => note.delayMs)).toEqual([0, 20, 40])
+  })
+})
+
+describe('where each note comes from', () => {
+  it('names the cell it belongs to, so the sound and the pop-in are one event', () => {
+    expect(planScreenBurst(3, 10, BURST_GAP_MS, alwaysFirst).map((note) => note.slot)).toEqual([0, 1, 2])
+  })
+
+  it('pans a cell by its share of the ring, and centres what has no width to sit in', () => {
+    expect(panForRingX(0, 60)).toBe(0)
+    expect(panForRingX(60, 60)).toBe(1)
+    expect(panForRingX(-60, 60)).toBe(-1)
+    expect(panForRingX(30, 60)).toBeCloseTo(0.5, 10)
+    // A point beyond the extent is still a legal pan, not a louder one.
+    expect(panForRingX(9999, 60)).toBe(1)
+    expect(panForRingX(10, 0)).toBe(0)
+  })
+
+  it('carries the pan only when there is one, so a caller that has none is unchanged', () => {
+    // The manager reads `pan` only when the spatial slider is dialled towards
+    // mode B; passing undefined has to stay distinguishable from passing 0,
+    // which is a real position (dead centre).
+    expect(burstNoteVoice({ assetIndex: 1, delayMs: 0, slot: 0 })).toEqual({ assetIndex: 1 })
+    expect(burstNoteVoice({ assetIndex: 1, delayMs: 0, slot: 0 }, 0)).toEqual({ assetIndex: 1, pan: 0 })
   })
 })

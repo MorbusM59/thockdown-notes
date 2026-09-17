@@ -69,16 +69,67 @@ export function hoverStepVoice(fromIndex: number, toIndex: number, count: number
   return dialStepVoice(forward * 2 <= count ? 1 : -1)
 }
 
-/** One sample of the screen-arrival burst: which sample, and how far in. */
+/** One sample of the screen-arrival burst: which sample, when, and where. */
 export interface BurstNote {
   /** Index into the active sound set's samples. */
   assetIndex: number
   /** Offset from the start of the burst. */
   delayMs: number
+  /**
+   * Which cell this note belongs to, counted from the ring's top. The cell
+   * POPS IN on this note, so the sound and the thing appearing are one
+   * event rather than two that happen to be scheduled alike -- and it is
+   * what the note is panned by.
+   */
+  slot: number
 }
 
-/** The gap between the burst's notes. */
+/** The gap between the burst's notes, when nothing shortens it. */
 export const BURST_GAP_MS = 50
+
+/**
+ * HOW FAR APART THE NOTES FALL: fifty milliseconds, unless that would make
+ * the burst outlast a page-up scroll, in which case the whole burst is
+ * squeezed into that time instead.
+ *
+ * `t` is the user's own smooth-scroll duration (ScrollCurvePlan's
+ * `getRenderScrollTotalTimeSec`) -- the same live value the ring's rotation
+ * curve already borrows rather than inventing a dial-specific one
+ * (escapeHoldRotationCurve.ts). It is the app's standing answer to "how long
+ * may a thing take to arrive", so a screen that announces itself for longer
+ * than a page takes to turn is announcing itself for too long by the app's
+ * own measure.
+ *
+ * `n - 1` gaps join `n` notes, so the last note lands at exactly `t`. A
+ * single-choice screen has no gap to divide and takes the default; so does a
+ * `t` of zero or nonsense, because a burst with no spacing at all is one
+ * sound rather than a count.
+ */
+export function burstGapMs(choiceCount: number, totalTimeSec: number): number {
+  if (choiceCount <= 1) return BURST_GAP_MS
+  if (!Number.isFinite(totalTimeSec) || totalTimeSec <= 0) return BURST_GAP_MS
+  return Math.min(BURST_GAP_MS, (totalTimeSec * 1000) / (choiceCount - 1))
+}
+
+/**
+ * WHERE A CELL IS, as the sound manager's pan takes it (-1 leftmost, 1
+ * rightmost).
+ *
+ * Fed from the ring's OWN geometry (`computeEscapeHoldPointAtSlot`, the same
+ * function that positions the button) rather than from an angle recomputed
+ * here: the ring is a rounded square, not a circle, so its cells are not
+ * evenly spread across the width and a second opinion about where a cell is
+ * would pan the sound somewhere the cell is not.
+ *
+ * This is mode-B pan -- the caller-supplied position the spatial slider
+ * already knows how to weigh (TypingSoundPlayOptions.pan). Passing it is the
+ * whole of "obey the slider": at neutral the manager ignores it, dialled
+ * towards B it applies it, and none of that is re-decided here.
+ */
+export function panForRingX(x: number, ringHalfWidthPx: number): number {
+  if (!(ringHalfWidthPx > 0)) return 0
+  return Math.max(-1, Math.min(1, x / ringHalfWidthPx))
+}
 
 /**
  * A NEW SCREEN, ANNOUNCED: one ordinary key sound per choice on it, all
@@ -103,6 +154,7 @@ export const BURST_GAP_MS = 50
 export function planScreenBurst(
   choiceCount: number,
   assetCount: number,
+  gapMs: number = BURST_GAP_MS,
   pick: (upperExclusive: number) => number = (upper) => Math.floor(Math.random() * upper),
 ): BurstNote[] {
   const notes: BurstNote[] = []
@@ -112,7 +164,7 @@ export function planScreenBurst(
   for (let index = 0; index < choiceCount; index += 1) {
     if (pool.length === 0) pool = Array.from({ length: assetCount }, (_, at) => at)
     const taken = pool.splice(Math.min(pick(pool.length), pool.length - 1), 1)[0]
-    notes.push({ assetIndex: taken, delayMs: index * BURST_GAP_MS })
+    notes.push({ assetIndex: taken, delayMs: index * gapMs, slot: index })
   }
   return notes
 }
@@ -128,6 +180,6 @@ export function planScreenBurst(
  * handed, randomises the rest exactly as it does for an unfamiliar key, and
  * writes nothing to the history.
  */
-export function burstNoteVoice(note: BurstNote): TypingSoundPlayOptions {
-  return { assetIndex: note.assetIndex }
+export function burstNoteVoice(note: BurstNote, pan?: number): TypingSoundPlayOptions {
+  return pan === undefined ? { assetIndex: note.assetIndex } : { assetIndex: note.assetIndex, pan }
 }
