@@ -10,6 +10,7 @@ import {
   clampContinuousDocumentThreshold,
 } from '../editor/documentPosition'
 import { type RgbaColor, type HsvaColor, rgbaToCssColor, hsvaToRgba } from '../shared/colorMath'
+import { isTextEntryElement } from '../shared/focusOwnership'
 import type { HighlightColorKey, HighlightColors } from '../shared/highlightColors'
 import {
   BORDER_RADIUS_REGULAR_MIN_PX,
@@ -471,7 +472,6 @@ export interface SidebarOptionsPanelProps {
   cancelTextureSeedEdit: () => void
   randomizeTextureSeed: () => void
   startTextureSeedEdit: () => void
-  isAllowedNonEditorFocusTarget: (target: EventTarget | null) => boolean
   textureControlDragState: TextureControlDragState | null
   startTextureControlDrag: (control: TextureControlKey, event: PointerEvent<HTMLButtonElement>) => void
   handleTextureControlDragMove: (control: TextureControlKey, event: PointerEvent<HTMLButtonElement>) => void
@@ -762,7 +762,6 @@ export function SidebarOptionsPanel({
   cancelTextureSeedEdit,
   randomizeTextureSeed,
   startTextureSeedEdit,
-  isAllowedNonEditorFocusTarget,
   textureControlDragState,
   startTextureControlDrag,
   handleTextureControlDragMove,
@@ -1597,7 +1596,7 @@ export function SidebarOptionsPanel({
                       }}
                       onBlur={() => {
                         window.setTimeout(() => {
-                          if (!isAllowedNonEditorFocusTarget(document.activeElement)) {
+                          if (!isTextEntryElement(document.activeElement)) {
                             scheduleFocusEditorInEditMode()
                           }
                         }, 0)
@@ -1825,7 +1824,7 @@ export function SidebarOptionsPanel({
                     onBlur={() => {
                       commitGlazeLinearSeedEdit()
                       window.setTimeout(() => {
-                        if (!isAllowedNonEditorFocusTarget(document.activeElement)) {
+                        if (!isTextEntryElement(document.activeElement)) {
                           scheduleFocusEditorInEditMode()
                         }
                       }, 0)
@@ -1902,7 +1901,7 @@ export function SidebarOptionsPanel({
                     onBlur={() => {
                       commitGlazeRadialSeedEdit()
                       window.setTimeout(() => {
-                        if (!isAllowedNonEditorFocusTarget(document.activeElement)) {
+                        if (!isTextEntryElement(document.activeElement)) {
                           scheduleFocusEditorInEditMode()
                         }
                       }, 0)

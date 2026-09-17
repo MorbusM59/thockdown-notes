@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown'
 import { SidebarOptionsPanel } from './sidebar/SidebarOptionsPanel'
 import { AudioControls } from './components/AudioControls'
 import { isPlaylistSlot } from './shared/audioPlayer'
+import { isTextEntryElement, mayTakeFocusOnPress } from './shared/focusOwnership'
 import {
   BTN_SQUARE_LARGE_SIZE_PX,
   computeWindowControlsCollapsedWidthPx,
@@ -6199,43 +6200,6 @@ ${markdownHtml}
     await openGuideViewHere()
   }, [guideSectionId, activeSectionId, openGuideViewHere])
 
-  const isAllowedNonEditorFocusTarget = useCallback((target: EventTarget | null): boolean => {
-    if (!(target instanceof HTMLElement)) return false
-
-    if (target instanceof HTMLSelectElement) {
-      return true
-    }
-
-    if (
-      target === sidebarSearchInputRef.current ||
-      target === documentReplaceInputRef.current ||
-      target === getActiveSection()?.tagInputRef.current ||
-      target === pageJumpInputRef.current ||
-      target === textureSeedInputRef.current ||
-      target === glazeLinearSeedInputRef.current ||
-      target === glazeRadialSeedInputRef.current
-    ) {
-      return true
-    }
-
-    if (target.closest('.sidebar-pagination')) {
-      return true
-    }
-
-    if (target.closest('.options-seed-editor')) {
-      return true
-    }
-
-    if (target.closest('.tag-pill, .tabbar-tags-display, .tabbar-suggested-tags, .tab-mode-shell')) {
-      return true
-    }
-
-    if (target.closest('[draggable="true"]')) {
-      return true
-    }
-
-    return false
-  }, [getActiveSection])
 
   const updateActiveNoteTitlePreview = useCallback((nextText: string) => {
     const activeNoteId = getActiveSection()?.activeNoteId
@@ -9441,25 +9405,35 @@ ${markdownHtml}
     toggleSidebarVisible,
   ])
 
+  /**
+   * A PRESS DOES NOT MOVE THE KEYBOARD.
+   *
+   * One window-level listener, because "a button should not take focus" is a
+   * fact about this app rather than about any particular button -- 125 of
+   * them and counting, none of which wants the keyboard. `focusOwnership.ts`
+   * names the three kinds that genuinely need the browser's own press
+   * behaviour (typing, selecting, dragging) and nothing else gets it.
+   *
+   * It REPLACES an allowlist of elements permitted to hold focus -- seven
+   * named refs and five CSS selectors -- which had to be joined by hand by
+   * every new field and had already fallen behind. Asking what an element IS
+   * cannot go stale the way a register of instances does.
+   *
+   * The restore below is what is LEFT of that handler, and it is deliberately
+   * narrow now. It used to run on every qualifying press, because the press
+   * had already stolen the keyboard and something had to fetch it back; with
+   * the steal gone there is nothing to fetch, and firing anyway would yank
+   * the caret into the editor every time the reader touched a tag pill. It
+   * runs only when the keyboard is genuinely somewhere else: on a control in
+   * another slot, or nowhere at all.
+   */
   useEffect(() => {
     const onMouseDownCapture = (event: globalThis.MouseEvent) => {
       const target = event.target
       if (!(target instanceof HTMLElement)) return
+      if (mayTakeFocusOnPress(target)) return
 
-      if (target.closest('.editor-stage .editor-text[contenteditable="true"]')) {
-        return
-      }
-
-      // Read-only editor text (debug-tagged notes, snapshot previews) is
-      // never focused into edit mode, but clicks inside it should still be
-      // allowed to start a native text selection so users can select/copy.
-      if (target.closest('.editor-stage .editor-text[contenteditable="false"]')) {
-        return
-      }
-
-      if (isAllowedNonEditorFocusTarget(target)) {
-        return
-      }
+      event.preventDefault()
 
       // Resolve which section to refocus from the click's own DOM position
       // (via .editor-section-column's data-section-id), NOT from
@@ -9483,23 +9457,28 @@ ${markdownHtml}
         ? sectionRegistryRef.current.get(targetSectionId)
         : getActiveSection()
 
+      // Already where it belongs: in a field the reader is typing into, or
+      // inside the very section this press landed in. Pressing a control
+      // there has not moved it, so there is nothing to put back -- and doing
+      // it anyway is a caret jump the reader did not ask for.
+      const holder = document.activeElement
+      if (isTextEntryElement(holder)) return
+      if (holder instanceof HTMLElement && sectionEl?.contains(holder)) return
+
       if (targetSection?.isPreviewMode || !targetSection?.activeNoteId) return
 
-      // Not when the quick-actions panel is open: same reasoning as the
-      // Alt+Arrow section-switch handler above -- the panel moves itself
-      // into whichever section a click just activated and refocuses its
-      // own top cell (EscapeHoldPanel.tsx), and this scheduled call would
-      // otherwise steal focus back into that section's editor out from
-      // under it a moment later, leaving the ring up but unfocused.
+      // Not when a ring is up: the ring is that slot's keyboard surface, not
+      // the editor underneath it, and its own backdrop already hands the
+      // keyboard back (escapeHoldRingFocus.ts). Restoring an editor here
+      // would take it straight off the ring again.
       if (isEscapeRingUp) return
 
-      event.preventDefault()
       targetSection.scheduleFocusEditorInEditMode()
     }
 
     window.addEventListener('mousedown', onMouseDownCapture, true)
     return () => window.removeEventListener('mousedown', onMouseDownCapture, true)
-  }, [getActiveSection, isAllowedNonEditorFocusTarget, isEscapeRingUp])
+  }, [getActiveSection, isEscapeRingUp])
 
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -9636,7 +9615,7 @@ ${markdownHtml}
                       onChange={(event) => getActiveSection()?.setDocumentFindQuery(event.target.value)}
                       onBlur={() => {
                         window.setTimeout(() => {
-                          if (!isAllowedNonEditorFocusTarget(document.activeElement)) {
+                          if (!isTextEntryElement(document.activeElement)) {
                             getActiveSection()?.scheduleFocusEditorInEditMode()
                           }
                         }, 0)
@@ -9663,7 +9642,7 @@ ${markdownHtml}
                   }}
                   onBlur={() => {
                     window.setTimeout(() => {
-                      if (!isAllowedNonEditorFocusTarget(document.activeElement)) {
+                      if (!isTextEntryElement(document.activeElement)) {
                         getActiveSection()?.scheduleFocusEditorInEditMode()
                       }
                     }, 0)
@@ -9684,7 +9663,7 @@ ${markdownHtml}
                       onChange={(event) => getActiveSection()?.setDocumentReplaceQuery(event.target.value)}
                       onBlur={() => {
                         window.setTimeout(() => {
-                          if (!isAllowedNonEditorFocusTarget(document.activeElement)) {
+                          if (!isTextEntryElement(document.activeElement)) {
                             getActiveSection()?.scheduleFocusEditorInEditMode()
                           }
                         }, 0)
@@ -9982,7 +9961,6 @@ ${markdownHtml}
                         cancelTextureSeedEdit={cancelTextureSeedEdit}
                         randomizeTextureSeed={randomizeTextureSeed}
                         startTextureSeedEdit={startTextureSeedEdit}
-                        isAllowedNonEditorFocusTarget={isAllowedNonEditorFocusTarget}
                         textureControlDragState={textureControlDragState}
                         startTextureControlDrag={startTextureControlDrag}
                         handleTextureControlDragMove={handleTextureControlDragMove}
@@ -10261,7 +10239,7 @@ ${markdownHtml}
                         }}
                         onBlur={() => {
                           window.setTimeout(() => {
-                            if (!isAllowedNonEditorFocusTarget(document.activeElement)) {
+                            if (!isTextEntryElement(document.activeElement)) {
                               getActiveSection()?.scheduleFocusEditorInEditMode()
                             }
                           }, 0)
