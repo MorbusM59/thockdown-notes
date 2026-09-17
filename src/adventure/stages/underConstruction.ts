@@ -32,7 +32,7 @@ export const underConstructionStage: StageModule = {
 
   present: (state) => ({
     screenKey: typeof state.what === 'string' ? state.what : 'unknown',
-    choices: [{ id: 'underConstruction:back', label: 'Turn back', icon: 'fa-solid fa-rotate-left' }],
+    choices: [{ id: 'underConstruction:back', label: 'Turn back', icon: 'fa-solid fa-rotate-left', isBack: true }],
   }),
 
   resolve: (_state, _choiceId, _context, rng) => ({

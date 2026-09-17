@@ -1,4 +1,6 @@
 import { usePillStripScroll } from '../shared/usePillStripScroll'
+import { typingSoundManager } from '../sound/TypingSoundManager'
+import { TAB_KEY_VOICE } from '../sound/keyVoices'
 import { narrationText, parseNarration, splitNarration } from './narrationMarkup'
 import type { EscapeMenuCellDetail, EscapeMenuChromeMeter, EscapeMenuChromePill,
   EscapeMenuChromeToggle, EscapeMenuModeChrome } from './escapeMenuContract'
@@ -472,7 +474,24 @@ export function EscapeMenuChromeGauges({ status }: { status: EscapeMenuModeChrom
             // here does nothing -- declared rather than left undecided, per
             // shared/pressTracking.ts.
             data-secondary-press="none"
-            onClick={action.onActivate}
+            onClick={() => {
+              // TAB: a screen brought up from OUTSIDE the ring.
+              //
+              // The one place in this feature where the sound says HOW
+              // something happened rather than what. Every other menu sound
+              // is a key the reader effectively pressed on the dial; this
+              // one is a screen arriving because they pressed something on
+              // the chrome instead, and Tab is the key that means "somewhere
+              // else now has the keyboard".
+              //
+              // Played HERE rather than announced by the stage that opens:
+              // the gauge press is what knows this arrival came from outside,
+              // and a mode would otherwise have to carry a flag saying how
+              // its own screen was reached -- a fact about the gesture stored
+              // on the destination.
+              void typingSoundManager.playRandomClick(TAB_KEY_VOICE)
+              action.onActivate()
+            }}
           >
             {bar}
           </button>

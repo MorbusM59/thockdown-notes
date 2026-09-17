@@ -136,7 +136,7 @@ export const marketStage: StageModule = {
               }]
             })
           : []),
-        { id: 'market:leave', label: 'Take your leave', icon: 'fa-solid fa-rotate-left' },
+        { id: 'market:leave', label: 'Take your leave', icon: 'fa-solid fa-rotate-left', isBack: true },
       ],
     }
   },

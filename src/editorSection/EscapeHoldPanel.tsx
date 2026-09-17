@@ -11,6 +11,11 @@ import {
 import { buildEscapeHoldRotationPlan, pixelsPerSlotAt } from './escapeHoldRotationCurve'
 import { computeEscapeHoldPointAtSlot } from './escapeHoldRingLayout'
 import { createWheelNotchState, resolveWheelEventUnits } from '../editor/wheelNotch'
+import { typingSoundManager } from '../sound/TypingSoundManager'
+import { TYPING_SOUND_SAMPLES_PER_SET } from '../sound/typingSounds'
+import {
+  burstNoteVoice, cellActivationVoice, dialStepVoice, hoverStepVoice, planScreenBurst,
+} from '../escapeMenu/menuSounds'
 import { useNonPassiveWheel } from '../shared/useNonPassiveWheel'
 import type { EscapeHoldRingParams } from './escapeHoldRingLayout'
 import type { EscapeMenuContribution } from '../escapeMenu/escapeMenuContract'
@@ -113,6 +118,8 @@ interface PanelCell {
   icon: string
   /** When set, activating this cell leaves the menu up -- see EscapeMenuCell.keepsMenuOpen. */
   keepsMenuOpen?: boolean
+  /** When set, this cell is a way BACK and sounds like one -- see EscapeMenuCell.isBack. */
+  isBack?: boolean
   onSelect: () => void | Promise<void>
 }
 
@@ -329,6 +336,7 @@ export function EscapeHoldPanel({
   // would end the mode on its first choice.
   const ringResetKey = `${isOpen ? 'open' : 'closed'}:${activeMode?.id ?? ''}:${activeMode?.stepKey ?? ''}`
 
+
   const cells = useMemo<PanelCell[]>(() => {
     // A mode owns the whole ring while it is up -- see the escapeMenu prop.
     // Returning early rather than merging is what lets a mode be written
@@ -389,6 +397,35 @@ export function EscapeHoldPanel({
   // Found from the positions, which moved for exactly one of three cells --
   // a whole-ring geometry error would have moved all of them.
   cellsRef.current = cells
+
+  /**
+   * A NEW SCREEN, ANNOUNCED: one ordinary key sound per choice on it, all
+   * different, fifty milliseconds apart -- so the player hears how many
+   * options arrived before the dial has finished drawing them.
+   *
+   * Keyed on `ringResetKey`, which already means exactly "the ring now shows
+   * a different set of things" and is already what the reset and focus
+   * effects run on. Deriving a second notion of "a new screen" is how the
+   * burst would come to fire on a step the dial did not reset for.
+   *
+   * CANCELLED ON THE WAY OUT, and that is not housekeeping: a player pressing
+   * through screens faster than `choices x 50ms` would otherwise have two
+   * bursts playing over each other, which is the one thing that makes the
+   * count unreadable -- the whole point of the sound.
+   */
+  useEffect(() => {
+    if (!isOpen) return undefined
+    const notes = planScreenBurst(cellsRef.current.length, TYPING_SOUND_SAMPLES_PER_SET)
+    const timers = notes.map((note) => window.setTimeout(
+      () => { void typingSoundManager.playRandomClick(burstNoteVoice(note)) },
+      note.delayMs,
+    ))
+    return () => { for (const timer of timers) window.clearTimeout(timer) }
+    // cellsRef rather than `cells`: the burst is about the screen ARRIVING,
+    // so it must not re-fire when a cell's label or availability changes
+    // underneath a screen that is already up.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ringResetKey, isOpen])
   // The ring element itself, for the native wheel listener below, and a
   // mirror of `isOpen` the two imperative handlers can read.
   const ringRef = useRef<HTMLDivElement | null>(null)
@@ -812,6 +849,13 @@ export function EscapeHoldPanel({
    * second, subtly different rotation path.
    */
   const rotateOneStep = (direction: 1 | -1) => {
+    // THE DIAL'S OWN SOUND, here rather than at the three inputs that reach
+    // this function, for exactly the reason the function exists: an arrow,
+    // a Tab and a wheel notch are one motion, and giving them separate
+    // sounds is the first thing that would let them drift apart
+    // (escapeMenu/menuSounds.ts). Above the reduceVisualEffects branch, so
+    // the cheap rotation path is not also the silent one.
+    void typingSoundManager.playRandomClick(dialStepVoice(direction))
     if (reduceVisualEffects) {
       stepSimple(direction)
       return
@@ -965,6 +1009,11 @@ export function EscapeHoldPanel({
   // that is the whole difference between running an action and playing
   // something in the menu.
   const runCell = (cell: PanelCell) => {
+    // Enter, or a backspace where the cell says it is a way back. The cell
+    // SAYS so (EscapeMenuCell.isBack) -- every way back in the adventure
+    // happens to share one icon, and so does combat's "Withdraw", which is
+    // a decision the fight is for rather than a way out of a screen.
+    void typingSoundManager.playRandomClick(cellActivationVoice(cell.isBack))
     void cell.onSelect()
     if (!cell.keepsMenuOpen) onClose()
   }
@@ -1029,7 +1078,25 @@ export function EscapeHoldPanel({
             tabIndex={index === focusedIndex ? 0 : -1}
             aria-label={cell.label}
             onClick={() => runCell(cell)}
-            onMouseEnter={() => setHoveredIndex(index)}
+            onMouseEnter={() => {
+              // THE POINTER moving onto a cell, which is the reader choosing
+              // with the mouse what the arrow keys choose with the dial --
+              // so it gets the dial's sound, in the direction the dial would
+              // have had to turn.
+              //
+              // Safe against double-sounding a rotation: the browser does not
+              // re-evaluate hover when the RING moves under a stationary
+              // pointer -- that gap is the entire reason
+              // refreshHoverFromPointer exists -- so this fires for pointer
+              // movement and nothing else.
+              setHoveredIndex((current) => {
+                if (current === index) return current
+                void typingSoundManager.playRandomClick(
+                  hoverStepVoice(current ?? focusedIndex, index, cellsRef.current.length),
+                )
+                return index
+              })
+            }}
             onMouseLeave={() => setHoveredIndex((current) => (current === index ? null : current))}
           >
             <span className={cell.icon} aria-hidden="true" />

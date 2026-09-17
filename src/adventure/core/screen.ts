@@ -36,6 +36,18 @@ export interface Choice {
   /** A Font Awesome class string, e.g. `fa-solid fa-fire`. */
   icon: string
   detail?: ChoiceDetail
+  /**
+   * Whether this choice is a WAY BACK out of the screen it is on, rather
+   * than a step through the game. The ring sounds it as a backspace instead
+   * of an Enter (escapeMenu/menuSounds.ts).
+   *
+   * DECLARED by the stage, and the icon is exactly why it cannot be
+   * inferred: every way back in this game happens to carry
+   * `fa-solid fa-rotate-left`, and so does combat's "Withdraw" -- which is
+   * fleeing a fight, an action with consequences and one of the decisions
+   * the fight is FOR. A rule read off the glyph would call that a way back.
+   */
+  isBack?: boolean
 }
 
 export interface Screen {

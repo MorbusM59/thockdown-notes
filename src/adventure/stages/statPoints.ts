@@ -100,6 +100,7 @@ export const statPointStage: StageModule = {
       id: BACK_CHOICE,
       label: 'Turn back',
       icon: 'fa-solid fa-rotate-left',
+      isBack: true,
       detail: { title: 'Turn back', lines: ['Nothing is spent'] },
     }
     const waiting = game

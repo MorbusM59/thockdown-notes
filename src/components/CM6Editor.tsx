@@ -6,6 +6,7 @@ import { EditorView, Decoration, ViewPlugin, keymap, type DecorationSet } from '
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { buildTokenPresentation } from '../editor/MarkdownLineClassification';
 import { suppressNextPlainTypingSoundOnce, typingSoundManager } from '../sound/TypingSoundManager';
+import { ARROW_KEY_VOICES, SHIFT_TAB_KEY_VOICE, TAB_KEY_VOICE } from '../sound/keyVoices';
 import { readSelectionRect, type SelectionRect } from '../editor/CaretRect';
 import { readSelectionLineRects } from '../editor/SelectionRects';
 import { createWheelNotchState, resolveWheelEventUnits } from '../editor/wheelNotch';
@@ -3512,22 +3513,13 @@ export function CM6Editor({
             // the tab transform, because the dedicated tab burst is already
             // the intended sound for this keystroke.
             suppressNextPlainTypingSoundOnce();
-            const tabKeyId = event.shiftKey ? 'key:Shift:Tab' : 'key:Tab';
-            if (event.shiftKey) {
-              void typingSoundManager.playRandomClick({
-                keyId: tabKeyId,
-                reverse: true,
-                gain: 0.7,
-                echo: { count: 2, delayMs: 80, decay: 0.4 },
-                detune: 600,
-              });
-            } else {
-              void typingSoundManager.playRandomClick({
-                keyId: tabKeyId,
-                gain: 0.7,
-                echo: { count: 2, delayMs: 80, decay: 0.4 },
-              });
-            }
+            // The voice is NAMED, not spelled out here -- the escape-hold
+            // ring plays the same one for a menu arriving from outside, and
+            // two copies of these numbers is one of them getting tuned
+            // (src/sound/keyVoices.ts).
+            void typingSoundManager.playRandomClick(
+              event.shiftKey ? SHIFT_TAB_KEY_VOICE : TAB_KEY_VOICE,
+            );
 
             // previousTextRef.current is guaranteed to already equal a fresh
             // view.state.doc.toString() here: this is a pre-commit handler
@@ -3635,7 +3627,13 @@ export function CM6Editor({
             case 'ArrowRight':
             case 'ArrowUp':
             case 'ArrowDown':
-              void typingSoundManager.playRandomClick({ keyId, detune: 1200, gain: 0.3 });
+              // The TUNING is named (src/sound/keyVoices.ts) so the ring's
+              // dial, which is also moved by arrows, sounds like this one
+              // rather than like a second opinion about it. The keyId stays
+              // the locally computed one, which carries the modifiers:
+              // shift+arrow is a selection rather than a move and has always
+              // had its own sample pinned to `key:Shift:ArrowUp`.
+              void typingSoundManager.playRandomClick({ ...ARROW_KEY_VOICES[event.key], keyId });
               break;
             case 'z':
               if (event.ctrlKey || event.metaKey) {

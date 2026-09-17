@@ -59,6 +59,7 @@ export const fameStage: StageModule = {
         id: BACK_CHOICE,
         label: 'Turn back',
         icon: 'fa-solid fa-rotate-left',
+        isBack: true,
         detail: { title: 'Renown', lines },
       }],
     }

@@ -84,6 +84,7 @@ export function dropChoices(context: StageContext, kind: ModifierKind, incomingI
       id: DROP_CANCEL,
       label: incoming ? `Leave ${incoming.name}` : 'Leave it',
       icon: 'fa-solid fa-rotate-left',
+      isBack: true,
       detail: { title: 'Change your mind', lines: ['Nothing given up, nothing taken'] },
     },
   ]

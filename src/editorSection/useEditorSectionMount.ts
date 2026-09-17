@@ -49,6 +49,7 @@ import {
   suppressNextPlainTypingSoundOnce,
   typingSoundManager,
 } from '../sound/TypingSoundManager'
+import { ENTER_KEY_VOICE } from '../sound/keyVoices'
 import { ScrollTransitionController } from '../editor/ScrollTransitionController'
 import type { PreviewScrollToSourceLineFn } from './usePreviewMarkdownRendering'
 import { createPreviewSettleGate, type PreviewSettleGate } from './previewSettleGate'
@@ -1785,7 +1786,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       }
       if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
       suppressNextPlainTypingSoundOnce()
-      void typingSoundManager.playRandomClick({ detune: -500 })
+      void typingSoundManager.playRandomClick(ENTER_KEY_VOICE)
       // The section's shared inline-state cache turns Enter's fenced-code
       // check from a scan of everything before the caret into a scan of the
       // caret's own line. Verified against the text inside applyMarkdownEnter,

@@ -78,6 +78,19 @@ export interface EscapeMenuCell {
    * start narrating through the dial (see EscapeMenuModeChrome).
    */
   detail?: EscapeMenuCellDetail
+  /**
+   * Whether this cell is a WAY BACK -- "Take your leave", "Leave it",
+   * "Change your mind" -- rather than a step forward. The ring plays a
+   * backspace where it would otherwise play an Enter (escapeMenu/menuSounds.ts).
+   *
+   * DECLARED, never inferred. The alternative is a table of ids or icons
+   * that mean back, which is the same hand-maintained-allowlist drift
+   * `sanitizeMenu` is a standing complaint about: it goes stale the first
+   * time content names a way out something new, and it goes stale SILENTLY
+   * -- the cell just starts sounding like a commit. Authored where the cell
+   * is authored, like `detail` and for the same reason.
+   */
+  isBack?: boolean
   onSelect: () => void | Promise<void>
 }
 

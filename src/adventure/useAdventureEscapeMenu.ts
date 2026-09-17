@@ -168,6 +168,10 @@ export function useAdventureEscapeMenu(options: AdventureEscapeMenuOptions): Esc
       // (3 held)"). It used to be dropped here for want of anywhere to put
       // it -- see EscapeMenuCellDetail.
       detail: choice.detail,
+      // A way back sounds like a backspace rather than an Enter. Carried
+      // through from the stage that authored the choice -- the ring never
+      // guesses which cells mean back (escapeMenu/menuSounds.ts).
+      isBack: choice.isBack,
       // Every cell keeps the menu up: the ring IS the game, and a choice
       // that closed it would end the session rather than advance it. The
       // one exception is leaving, which the director reports as a host

@@ -57,7 +57,7 @@ export const settingsStage: StageModule = {
           icon: PRESET_ICONS[difficulty],
           detail: { title: DIFFICULTY_LABELS[difficulty], lines: describeDifficulty(difficulty) },
         })),
-        { id: 'settings:back', label: 'Back', icon: 'fa-solid fa-rotate-left' },
+        { id: 'settings:back', label: 'Back', icon: 'fa-solid fa-rotate-left', isBack: true },
       ],
     }
   },

@@ -55,3 +55,16 @@ export const TYPING_SOUND_ASSETS: Record<TypingSoundSetId, readonly string[]> = 
 
 export const BASS_TYPING_SOUND_ASSET = new URL('../assets/sounds/bass.wav', import.meta.url).href
 export const TREBLE_TYPING_SOUND_ASSET = new URL('../assets/sounds/treble.wav', import.meta.url).href
+
+/**
+ * How many samples a set has, taken from the data rather than typed as a
+ * number, so a set that grows or shrinks moves this with it.
+ *
+ * The MINIMUM across the sets, because callers that want "N different
+ * samples" (escapeMenu/menuSounds.ts's screen-arrival burst) plan the draw
+ * before knowing which set is active, and planning against the largest set
+ * would ask a smaller one for an index it does not have.
+ */
+export const TYPING_SOUND_SAMPLES_PER_SET = Math.min(
+  ...TYPING_SOUND_SET_IDS.map((id) => TYPING_SOUND_ASSETS[id].length),
+)
