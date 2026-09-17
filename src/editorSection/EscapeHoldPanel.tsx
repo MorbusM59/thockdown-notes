@@ -18,7 +18,6 @@ import {
   hoverStepVoice, panForRingX, planScreenBurst,
 } from '../escapeMenu/menuSounds'
 import { useNonPassiveWheel } from '../shared/useNonPassiveWheel'
-import { focusEscapeHoldRing } from './escapeHoldRingFocus'
 import type { EscapeHoldRingParams } from './escapeHoldRingLayout'
 import type { EscapeMenuContribution } from '../escapeMenu/escapeMenuContract'
 
@@ -281,10 +280,12 @@ interface PanelCell {
  * mode is up would put the same rule in two places and let them disagree,
  * so there is one rule for every consumer.
  *
- * Losing focus does not close it -- but it does not strand it either: focus
- * that lands on <body> (a click on something inert) is taken back, while
- * focus a reader gave to a real control is left alone. See
- * handleRingFocusOut.
+ * Losing focus does not close it -- and it is not this component's job to
+ * get it back. It had its own recovery for focus that landed on <body>, and
+ * that was a private copy of an app-wide rule: focus never rests somewhere
+ * that cannot hold it, and it returns to the ACTIVE SLOT's surface, which is
+ * this ring when a mode owns the slot. App.tsx's reconciler owns it for
+ * everybody (src/shared/focusOwnership.ts).
  *
  * Two earlier designs closed on blur and both were racy in the same way:
  * native focus-shift on mousedown fires inside the very dispatch that also
@@ -1032,31 +1033,6 @@ export function EscapeHoldPanel({
   }, [])
   useNonPassiveWheel(ringRef, handleRingWheel)
 
-  /**
-   * Focus that went NOWHERE comes back.
-   *
-   * The ring no longer closes when it loses focus (see the component doc
-   * comment), which left a real hole: clicking any inert part of the app
-   * moved focus to <body>, and from there the arrow keys did nothing, no
-   * cell read as selected, and there was no gesture that could get it back
-   * -- the only way out was to close the game and reopen it.
-   *
-   * The condition is deliberately narrow. <body> is not a destination
-   * anybody chose, so taking focus back from it steals nothing; a click on
-   * a real control (the sidebar, a toolbar button, a text field) lands on
-   * that control and is left alone, because the reader meant it. Switching
-   * sections is the same case: focus lands in the other section's ring, so
-   * this declines.
-   */
-  const handleRingFocusOut = () => {
-    window.setTimeout(() => {
-      if (!isOpenRef.current) return
-      const active = document.activeElement
-      if (active !== null && active !== document.body) return
-      focusEscapeHoldRing(ringRef.current)
-    }, 0)
-  }
-
   const handleRingKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     // Alt+ArrowLeft/Right is the app's global "switch active section"
     // shortcut (App.tsx) -- must pass through untouched, not get hijacked
@@ -1143,7 +1119,6 @@ export function EscapeHoldPanel({
       role="toolbar"
       aria-label="Quick note actions"
       onKeyDown={handleRingKeyDown}
-      onBlur={handleRingFocusOut}
     >
       {/* Centered label of whichever cell is focused, or hovered while the
           mouse is over one -- see displayedLabel above. Sized/shaped in

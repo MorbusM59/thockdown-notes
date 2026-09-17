@@ -64,19 +64,31 @@ export function mayTakeFocusOnPress(target: Element | null | undefined): boolean
 }
 
 /**
- * The surfaces that own the Tab key where they are.
+ * MAY THIS ELEMENT HOLD THE KEYBOARD?
  *
- * A text field steps to its sibling or leaves itself; an editor indents; the
- * ring turns its dial. Everywhere else Tab has nothing to walk to, and the
- * app's last-resort handler returns the keyboard to the active slot instead.
+ * Two kinds, and the second is a DECLARATION the markup already makes:
  *
- * Asked of whoever HOLDS the keyboard rather than of whatever the press
- * landed on -- they are the same element for a key press, and saying holder
- * is saying which question this is.
+ *   A TEXT-ENTRY SURFACE, as above -- including the editor, which is a
+ *   contenteditable.
+ *
+ *   ANYTHING CARRYING AN EXPLICIT `tabindex`. A control that is meant to be
+ *   driven from the keyboard says so by carrying one: the ring's cells, the
+ *   snapshot timeline, the compact scrollbar, the render pane. Native
+ *   focusability is NOT that declaration -- a `<button>` is focusable because
+ *   the browser makes every button focusable, which is a fact about HTML and
+ *   not a decision anybody here took. That is the whole distinction: the
+ *   things that should hold the keyboard already say so, in the one place
+ *   that cannot be forgotten, because without the attribute they would not be
+ *   reachable from the keyboard at all.
+ *
+ * ONE PREDICATE, TWO QUESTIONS. Who may hold the keyboard and who owns the
+ * Tab key are the same set, deliberately: a surface holding the keyboard owns
+ * the keys pressed into it, Tab included, and anything else is holding it by
+ * accident -- which is the case the reconciler exists to end. Two predicates
+ * would let a surface be in one answer and not the other, which is precisely
+ * how Tab came to walk a tour of the chrome in the first place.
  */
-const TAB_OWNING_SURFACE_SELECTOR = '.editor-escape-hold-ring'
-
-export function ownsTabKey(holder: Element | null | undefined): boolean {
+export function mayHoldKeyboard(holder: Element | null | undefined): boolean {
   if (!holder) return false
-  return isTextEntryElement(holder) || Boolean(holder.closest(TAB_OWNING_SURFACE_SELECTOR))
+  return isTextEntryElement(holder) || Boolean(holder.closest('[tabindex]'))
 }

@@ -6,7 +6,7 @@ import ReactMarkdown from 'react-markdown'
 import { SidebarOptionsPanel } from './sidebar/SidebarOptionsPanel'
 import { AudioControls } from './components/AudioControls'
 import { isPlaylistSlot } from './shared/audioPlayer'
-import { isTextEntryElement, mayTakeFocusOnPress, ownsTabKey } from './shared/focusOwnership'
+import { isTextEntryElement, mayTakeFocusOnPress, mayHoldKeyboard } from './shared/focusOwnership'
 import { focusEscapeHoldRing } from './editorSection/escapeHoldRingFocus'
 import {
   BTN_SQUARE_LARGE_SIZE_PX,
@@ -9483,8 +9483,8 @@ ${markdownHtml}
    * on them is one dependency away from silently inverting.
    *
    * The holder is a question with a stable answer, asked through the same
-   * `focusOwnership.ts` predicate the press rule uses, so a surface cannot
-   * be in one of the two answers and not the other.
+   * `focusOwnership.ts` predicate the reconciler below uses, so a surface
+   * cannot be in one of the two answers and not the other.
    *
    * NOT BUILT, and deliberately named rather than silently missing: walking
    * a list of search hits with Tab. Nothing in the app is a hit card with a
@@ -9494,12 +9494,59 @@ ${markdownHtml}
   useEffect(() => {
     const onTab = (event: globalThis.KeyboardEvent) => {
       if (event.key !== 'Tab') return
-      if (ownsTabKey(document.activeElement)) return
+      if (mayHoldKeyboard(document.activeElement)) return
       event.preventDefault()
       returnKeyboardToActiveSurface()
     }
     window.addEventListener('keydown', onTab, true)
     return () => window.removeEventListener('keydown', onTab, true)
+  }, [returnKeyboardToActiveSurface])
+
+  /**
+   * FOCUS NEVER RESTS SOMEWHERE THAT CANNOT HOLD IT.
+   *
+   * The two rules above stop the keyboard being TAKEN -- by a press, by a
+   * Tab. This is the one that puts it back when it lands somewhere anyway,
+   * and there are plenty of ways: a control focused programmatically, a node
+   * unmounting under the keyboard and dropping it on `<body>`, anything the
+   * browser does that nobody here wrote. Without it the two rules above are
+   * a fence with no gate, and the symptom is the one the ring already had
+   * privately -- arrow keys doing nothing, no cell lit, and no gesture that
+   * gets it back.
+   *
+   * It is a DERIVATION, not a set of corrections: it does not know why focus
+   * moved, only whether where it landed may hold it (`mayHoldKeyboard`, the
+   * same predicate the Tab rule asks). So a new way to lose the keyboard is
+   * covered without its author knowing this exists -- the same argument that
+   * puts the hold thresholds inside `armHold` and the work register at the
+   * transports.
+   *
+   * This REPLACES the ring's own copy, which recovered focus that landed on
+   * `<body>` and only that: a private rule, in one component, for a case that
+   * is not the ring's alone.
+   *
+   * No loop is expressible: what it focuses is an editor or a ring cell, both
+   * of which may hold the keyboard, so the `focusin` it causes returns
+   * immediately. When there is nothing to focus (no note, a slot in preview)
+   * `scheduleFocusEditorInEditMode` declines and the keyboard simply stays
+   * put -- one round, not a retry.
+   */
+  useEffect(() => {
+    const reconcile = () => {
+      const holder = document.activeElement
+      if (holder && holder !== document.body && mayHoldKeyboard(holder)) return
+      returnKeyboardToActiveSurface()
+    }
+    // focusout fires BEFORE the new holder has focus, so its answer is read
+    // a tick later -- otherwise every ordinary move between two legitimate
+    // surfaces would read as focus having gone nowhere.
+    const onFocusOut = () => { window.setTimeout(reconcile, 0) }
+    window.addEventListener('focusin', reconcile)
+    window.addEventListener('focusout', onFocusOut)
+    return () => {
+      window.removeEventListener('focusin', reconcile)
+      window.removeEventListener('focusout', onFocusOut)
+    }
   }, [returnKeyboardToActiveSurface])
 
   /**
