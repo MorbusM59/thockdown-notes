@@ -52,12 +52,18 @@ export interface StageContext {
   content: Content
   catalog: ReadonlyMap<string, Modifier>
   /**
-   * THE RUN'S ITEMS, rolled -- content's templates as this run made them, in
-   * content's own order (model/itemSlots.ts). Beside `catalog` because a stage
-   * offering items needs the POOL and not only a lookup, and rolling it per
-   * stage would have every stage remember to pass the run's seed.
+   * THE RUN'S TWO POOLS, rolled -- content's templates as this run made them,
+   * in content's own order (model/modifierSlots.ts). Beside `catalog` because
+   * a stage offering something needs the POOL and not only a lookup, and
+   * rolling one per stage would have every stage remember to pass the run's
+   * seed.
+   *
+   * Two fields rather than one list a stage filters: gold buys from one and
+   * experience from the other, and every screen that offers already knows
+   * which of the two it is.
    */
   items: readonly Modifier[]
+  traits: readonly Modifier[]
   /** Resolved stats, or null when there is no game to resolve them for. */
   profile: EffectiveProfile | null
   /**

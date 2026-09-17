@@ -2,29 +2,35 @@ import { describe, expect, it } from 'vitest'
 
 import { applyEffect, applyEffects, emptySave, type GameSave } from './model/gameState'
 import { chromeGauges, chromeIdentity, chromeMeters, statusReadouts } from './chrome'
-import { THOCKQUEST, type Content } from './content'
+import { catalogFor, THOCKQUEST, type Content } from './content'
 import { createSeed } from './core/rng'
 
 /**
  * Armor cannot be fabricated any more, and that is the point of the change it
- * tests: it belongs to the items carrying it (model/armor.ts), so the only way
- * to have nine points of it is to be carrying something worth nine. The pieces
- * roll their armor slot unconditionally, so a template with a range of one
- * value is a known quantity in every run (model/itemSlots.ts).
+ * tests: it belongs to the modifiers carrying it (model/armor.ts), so the only
+ * way to have any is to be carrying something that has some. An armour
+ * template always fills its armor slot, so what it is worth is fixed for a
+ * given run seed and read back from the catalog rather than written down here
+ * (model/modifierSlots.ts).
  */
-function contentWith(itemArmor: number, naturalArmor: number): Content {
+const PLATE = {
+  id: 'test-plate', kind: 'item' as const, name: 'Test Plate', icon: 'fa-solid fa-shield',
+  stats: [], derived: [], verbose: [], armor: true,
+}
+const HIDE = {
+  id: 'test-hide', kind: 'trait' as const, name: 'Test Hide', icon: 'fa-solid fa-shield',
+  derived: [], verbose: [], armor: true,
+}
+
+function contentWith(withArmor: boolean, withHide: boolean): Content {
   return {
     ...THOCKQUEST,
-    items: itemArmor > 0
-      ? [{ id: 'test-plate', name: 'Test Plate', icon: 'fa-solid fa-shield', stats: [], derived: [], verbose: [], armor: [itemArmor, itemArmor] }]
-      : [],
-    traits: naturalArmor > 0
-      ? [{ id: 'test-hide', kind: 'trait', name: 'Test Hide', icon: 'fa-solid fa-shield', effects: [{ kind: 'naturalArmor', amount: naturalArmor }] }]
-      : [],
+    items: withArmor ? [PLATE] : [],
+    traits: withHide ? [HIDE] : [],
   }
 }
 
-const PLAIN = contentWith(0, 0)
+const PLAIN = contentWith(false, false)
 
 function runningGame(content: Content = PLAIN): GameSave {
   const started = applyEffect(emptySave(createSeed(1)), { kind: 'startGame' }, content, 1)
@@ -32,6 +38,15 @@ function runningGame(content: Content = PLAIN): GameSave {
     ...(content.items.length > 0 ? [{ kind: 'acquireModifier' as const, modifierKind: 'item' as const, modifierId: content.items[0].id }] : []),
     ...(content.traits.length > 0 ? [{ kind: 'acquireModifier' as const, modifierKind: 'trait' as const, modifierId: content.traits[0].id }] : []),
   ], content, 1)
+}
+
+/** What this run's armour templates actually rolled, by pool. */
+function armorOfRun(content: Content) {
+  const catalog = catalogFor(content, createSeed(1))
+  const sum = (kind: 'armorSlot' | 'naturalArmor') => [...catalog.values()]
+    .flatMap((modifier) => modifier.effects)
+    .reduce((total, effect) => (effect.kind === kind ? total + effect.amount : total), 0)
+  return { item: sum('armorSlot'), natural: sum('naturalArmor') }
 }
 
 function readoutFor(save: GameSave, key: string, content: Content = PLAIN) {
@@ -46,8 +61,13 @@ function readoutFor(save: GameSave, key: string, content: Content = PLAIN) {
  */
 describe('the armor readout', () => {
   it('shows the item pool with the natural pool in parentheses, never the total', () => {
-    const content = contentWith(9, 2)
-    expect(readoutFor(runningGame(content), 'armor', content)?.value).toBe('9(2)')
+    // The two numbers are what the run rolled, read back rather than asserted:
+    // the property is that they are kept APART, not what they came to.
+    const content = contentWith(true, true)
+    const armor = armorOfRun(content)
+    expect(armor.item).toBeGreaterThan(0)
+    expect(armor.natural).toBeGreaterThan(0)
+    expect(readoutFor(runningGame(content), 'armor', content)?.value).toBe(`${armor.item}(${armor.natural})`)
   })
 
   it('is present at zero rather than appearing only once armor exists', () => {
@@ -58,10 +78,10 @@ describe('the armor readout', () => {
   })
 
   it('keeps the two pools apart when only one of them is filled', () => {
-    const natural = contentWith(0, 3)
-    const items = contentWith(4, 0)
-    expect(readoutFor(runningGame(natural), 'armor', natural)?.value).toBe('0(3)')
-    expect(readoutFor(runningGame(items), 'armor', items)?.value).toBe('4(0)')
+    const natural = contentWith(false, true)
+    const items = contentWith(true, false)
+    expect(readoutFor(runningGame(natural), 'armor', natural)?.value).toBe(`0(${armorOfRun(natural).natural})`)
+    expect(readoutFor(runningGame(items), 'armor', items)?.value).toBe(`${armorOfRun(items).item}(0)`)
   })
 })
 

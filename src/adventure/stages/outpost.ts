@@ -20,15 +20,15 @@
 import { nextSample } from '../core/rng'
 import type { JsonObject } from '../core/json'
 import type { StageContext, StageModule } from '../core/stage'
-import { isOfferable, type Modifier, type ModifierKind } from '../model/modifiers'
+import type { Modifier, ModifierKind } from '../model/modifiers'
 import { MARKET_OFFER_COUNT, MARKET_PRICE, purse, tableOf } from './market'
 import { ENCOUNTER_SELECT_STAGE_ID, MARKET_STAGE_ID, OUTPOST_STAGE_ID } from './ids'
 
 
-/** What a face could possibly sell: specified, and not already held. */
+/** What a face could possibly sell: whatever is not already held. */
 function poolFor(context: StageContext, kind: ModifierKind): readonly Modifier[] {
-  const pool = kind === 'item' ? context.items : context.content.traits
-  return pool.filter((modifier) => isOfferable(modifier) && !context.held.some((row) => row.id === modifier.id))
+  const pool = kind === 'item' ? context.items : context.traits
+  return pool.filter((modifier) => !context.held.some((row) => row.id === modifier.id))
 }
 
 function offersOf(state: JsonObject, key: 'itemOffers' | 'traitOffers'): string[] {

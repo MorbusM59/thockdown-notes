@@ -17,7 +17,7 @@
 // chose. See docs/adventure-platform.md.
 
 import type { Modifier } from '../model/modifiers'
-import { rollItem, validateItemTemplate, type ItemTemplate } from '../model/itemSlots'
+import { rollModifier, validateTemplate, type ModifierTemplate } from '../model/modifierSlots'
 import type { RngState } from '../core/rng'
 import type { StatKey } from '../model/stats'
 
@@ -89,12 +89,18 @@ export interface Region {
 export interface Content {
   origins: readonly Origin[]
   /**
-   * What an item COULD be. Rolled into actual items once per run, from the
-   * run's own seed -- see `catalogFor` and model/itemSlots.ts. Templates
-   * rather than modifiers because the numbers are not content's to decide.
+   * What an item and a trait COULD be. Rolled into actual modifiers once per
+   * run, from the run's own seed -- see `catalogFor` and
+   * model/modifierSlots.ts. Templates rather than modifiers because the
+   * numbers are not content's to decide.
+   *
+   * TWO LISTS rather than one with a filter, because they are two pools: gold
+   * buys from one and experience from the other, and every screen that offers
+   * knows which it is offering. Each entry still carries its own `kind`, so
+   * nothing downstream has to remember which list it came out of.
    */
-  items: readonly ItemTemplate[]
-  traits: readonly Modifier[]
+  items: readonly ModifierTemplate[]
+  traits: readonly ModifierTemplate[]
   regions: readonly Region[]
   monsterClasses: readonly MonsterClass[]
   species: readonly Species[]
@@ -127,20 +133,19 @@ export function catalogFor(content: Content, runSeed: RngState): ReadonlyMap<str
   const cached = bySeed.get(runSeed)
   if (cached) return cached
 
-  const built: ReadonlyMap<string, Modifier> = new Map([
-    ...content.items.map((template) => [template.id, rollItem(template, runSeed)] as const),
-    ...content.traits.map((trait) => [trait.id, trait] as const),
-  ])
+  const built: ReadonlyMap<string, Modifier> = new Map(
+    [...content.items, ...content.traits].map((template) => [template.id, rollModifier(template, runSeed)] as const),
+  )
   bySeed.set(runSeed, built)
   return built
 }
 
-/** Every item this run has, rolled. The ordered half of `catalogFor`. */
-export function rolledItems(content: Content, runSeed: RngState): Modifier[] {
+/** One pool this run, rolled, in content's own order. The ordered half of `catalogFor`. */
+export function rolledPool(content: Content, runSeed: RngState, kind: 'item' | 'trait'): Modifier[] {
   const catalog = catalogFor(content, runSeed)
-  return content.items.flatMap((template) => {
-    const item = catalog.get(template.id)
-    return item ? [item] : []
+  return (kind === 'item' ? content.items : content.traits).flatMap((template) => {
+    const rolled = catalog.get(template.id)
+    return rolled ? [rolled] : []
   })
 }
 
@@ -174,13 +179,19 @@ export function validateContent(content: Content): string[] {
       }
     }
   }
-  for (const template of content.items) {
-    check(template.id, `item "${template.name}"`)
-    problems.push(...validateItemTemplate(template))
+  for (const template of [...content.items, ...content.traits]) {
+    check(template.id, `${template.kind} "${template.name}"`)
+    problems.push(...validateTemplate(template))
   }
-  for (const trait of content.traits) {
-    check(trait.id, `trait "${trait.name}"`)
-    if (trait.kind !== 'trait') problems.push(`trait "${trait.id}" is declared as a ${trait.kind}`)
+  // WHICH LIST a template is in has to agree with what it says it is, because
+  // the pools are what a screen offers from and `kind` is what everything
+  // downstream reads. A trait in the item list would be bought with gold and
+  // resolved as a trait.
+  for (const template of content.items) {
+    if (template.kind !== 'item') problems.push(`"${template.id}" is in the item pool but declares itself a ${template.kind}`)
+  }
+  for (const template of content.traits) {
+    if (template.kind !== 'trait') problems.push(`"${template.id}" is in the trait pool but declares itself a ${template.kind}`)
   }
 
   if (content.origins.length === 0) problems.push('no origins: character creation would have nothing to offer')

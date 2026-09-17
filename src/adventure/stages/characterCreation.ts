@@ -13,7 +13,7 @@
 import { nextSample, type RngState } from '../core/rng'
 import type { JsonObject } from '../core/json'
 import type { StageContext, StageModule } from '../core/stage'
-import { describeModifier, isOfferable, type Modifier } from '../model/modifiers'
+import { describeModifier, type Modifier } from '../model/modifiers'
 import { holdingCounts } from '../model/gameState'
 import { STAT_KEYS, STAT_LABELS } from '../model/stats'
 import { CHARACTER_CREATION_STAGE_ID, REGION_SELECT_STAGE_ID } from './ids'
@@ -26,13 +26,12 @@ function stepOf(value: unknown): Step {
 }
 
 function offerPool(step: Step, context: StageContext): readonly Modifier[] {
-  // Only what DOES something, and only what is not already held: the pool
-  // carries the design's unspecified names too (an opening choice between two
-  // of those is a choice between two nothings -- see `isOfferable`), and a
-  // second copy of something is not a second thing (model/gameState.ts's
-  // `acquireModifier`).
-  const pool = step === 'trait' ? context.content.traits : step === 'item' ? context.items : []
-  return pool.filter((modifier) => isOfferable(modifier) && !context.held.some((row) => row.id === modifier.id))
+  // Only what is not already held: a second copy of something is not a second
+  // thing (model/gameState.ts's `acquireModifier`). There is no longer an
+  // "unspecified" half to filter out as well -- every template rolls into
+  // something (model/modifierSlots.ts).
+  const pool = step === 'trait' ? context.traits : step === 'item' ? context.items : []
+  return pool.filter((modifier) => !context.held.some((row) => row.id === modifier.id))
 }
 
 function rollOffers(step: Step, context: StageContext, rng: RngState): { offerIds: string[]; rng: RngState } {

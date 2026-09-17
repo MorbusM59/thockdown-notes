@@ -16,7 +16,8 @@ import { describe, expect, it } from 'vitest'
 import { buildContext, type DirectorDeps } from '../core/director'
 import { applyEffects, emptySave, type GameSave } from './gameState'
 import { beginRound, roundActionPosition, roundToJson, UNTOUCHED_FIGHT } from './combat'
-import { resolveProfile } from './modifiers'
+import { resolveProfile, type Modifier } from './modifiers'
+import type { StageContext } from '../core/stage'
 import { buildMonster } from './monsters'
 import { NO_ARMOR } from './armor'
 import { combatStage } from '../stages/combat'
@@ -29,14 +30,7 @@ import type { ModifierEffect } from './modifiers'
 const NOW = 1_700_000_000_000
 const OFFER = { speciesId: 'goblin', name: 'Goblin', classId: 'warrior', type: 'regular' }
 
-/** Content whose only trait is the one under test, so nothing else can move. */
-function contentWith(effects: readonly ModifierEffect[]): Content {
-  return {
-    ...THOCKQUEST,
-    items: [],
-    traits: [{ id: 'subject', kind: 'trait', name: 'Subject', icon: '', effects }],
-  }
-}
+const CONTENT: Content = { ...THOCKQUEST, items: [], traits: [] }
 
 function holding(content: Content): GameSave {
   const started = applyEffects(emptySave(4242), [{ kind: 'startGame' }], content, NOW)
@@ -47,8 +41,32 @@ function holding(content: Content): GameSave {
     { kind: 'adjustBaseStat', stat: 'might', amount: 6 },
     { kind: 'adjustBaseStat', stat: 'perception', amount: 6 },
     { kind: 'adjustBaseStat', stat: 'luck', amount: 6 },
-    { kind: 'acquireModifier', modifierKind: 'trait', modifierId: 'subject' },
   ], content, NOW)
+}
+
+/**
+ * The fight's context, holding ONE modifier written out rather than rolled.
+ *
+ * Everything in the game is rolled from a template now, and a template rolls a
+ * RANGE -- but a test about whether an effect reaches the fight needs one
+ * effect of one size, and needs the same size in each of the three runs it
+ * compares. So the modifier is written here and put straight into `held`,
+ * which is exactly the shape a rolled one arrives in (`buildContext` derives
+ * `held` from the catalog, and the catalog is a map of `Modifier`s whoever
+ * built it). Nothing about the seam under test knows the difference.
+ */
+function contextHolding(effects: readonly ModifierEffect[]): StageContext {
+  const deps: DirectorDeps = { stages: STAGES, content: CONTENT, rootStageId: ROOT_STAGE_ID }
+  const save = holding(CONTENT)
+  const base = buildContext(save, deps)
+  const game = base.game
+  if (!game) throw new Error('no game')
+  const held: Modifier[] = [{ id: 'subject', kind: 'trait', name: 'Subject', icon: '', effects }]
+  return {
+    ...base,
+    held,
+    profile: resolveProfile(game.baseStats, held, { items: 0, traits: 1 }, { hitPoints: game.hitPoints }),
+  }
 }
 
 /**
@@ -65,9 +83,7 @@ function holding(content: Content): GameSave {
  * (stages/combatLog.ts), so it is the honest place to read one.
  */
 function damageOfOneAttack(effects: readonly ModifierEffect[], playerActionsSpent: number): number {
-  const content = contentWith(effects)
-  const deps: DirectorDeps = { stages: STAGES, content, rootStageId: ROOT_STAGE_ID }
-  const context = buildContext(holding(content), deps)
+  const context = contextHolding(effects)
   const round = {
     ...beginRound({
       ...UNTOUCHED_FIGHT,

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { NO_ARMOR } from '../model/armor'
 
-import { catalogFor, rolledItems, THOCKQUEST } from '../content'
+import { catalogFor, rolledPool, THOCKQUEST } from '../content'
 import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from '../core/director'
 import { emptySave, type GameSave } from '../model/gameState'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
@@ -20,7 +20,8 @@ const DEPS: DirectorDeps = {
 }
 
 const CATALOG = catalogFor(THOCKQUEST, 0)
-const ITEMS = rolledItems(THOCKQUEST, 0)
+const ITEMS = rolledPool(THOCKQUEST, 0, 'item')
+const TRAITS = rolledPool(THOCKQUEST, 0, 'trait')
 const NOW = 1_700_000_000_000
 
 const ROLL = (rolled: number, needed: number) => ({ rolled, needed, passed: rolled < needed })
@@ -248,6 +249,7 @@ describe('the blow that ended it', () => {
     const context = {
       save: emptySave(1), game: null, content: THOCKQUEST, catalog: CATALOG,
       items: ITEMS,
+      traits: TRAITS,
       armor: NO_ARMOR, profile: null, held: [],
     }
     const entered = lootStage.enter(
@@ -262,6 +264,7 @@ describe('the blow that ended it', () => {
     const context = {
       save: emptySave(1), game: null, content: THOCKQUEST, catalog: CATALOG,
       items: ITEMS,
+      traits: TRAITS,
       armor: NO_ARMOR, profile: null, held: [],
     }
     const fled = lootStage.enter(

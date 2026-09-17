@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { NO_ARMOR } from '../model/armor'
 
-import { catalogFor, rolledItems, THOCKQUEST } from '../content'
+import { catalogFor, rolledPool, THOCKQUEST } from '../content'
 import { choose, currentScreen, enterEntryScreen, enterInterlude, type DirectorDeps } from '../core/director'
 import { activeGame, applyEffects, emptySave, type GameSave } from '../model/gameState'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
@@ -21,7 +21,8 @@ const DEPS: DirectorDeps = {
 }
 
 const CATALOG = catalogFor(THOCKQUEST, 0)
-const ITEMS = rolledItems(THOCKQUEST, 0)
+const ITEMS = rolledPool(THOCKQUEST, 0, 'item')
+const TRAITS = rolledPool(THOCKQUEST, 0, 'trait')
 const NOW = 1_700_000_000_000
 
 /**
@@ -109,6 +110,7 @@ describe('the loot stage', () => {
       content: THOCKQUEST,
       catalog: CATALOG,
       items: ITEMS,
+      traits: TRAITS,
       armor: NO_ARMOR,
       profile: activeGame(started)
         ? resolveProfile(activeGame(started)!.baseStats, [], { items: 0, traits: 0 })
@@ -170,6 +172,7 @@ describe('the level counts to ten', () => {
     return {
       save: started, game, content: THOCKQUEST, catalog: CATALOG,
       items: ITEMS,
+      traits: TRAITS,
       armor: NO_ARMOR,
       profile: game ? resolveProfile(game.baseStats, [], { items: 0, traits: 0 }) : null,
       held: [],
@@ -471,18 +474,25 @@ describe('the thumb the run is played under', () => {
   it('changes how a fight goes, and nothing else about the run', () => {
     // Same seed, same choices, one dial: the run under the thumb has to be a
     // DIFFERENT run, or the parameter is not reaching the rolls.
-    const play = (successAdjust: number) => {
-      let save: GameSave = { ...emptySave(31337), settings: { difficulty: 'medium', successAdjust } }
+    const play = (seed: number, successAdjust: number) => {
+      let save: GameSave = { ...emptySave(seed), settings: { difficulty: 'medium', successAdjust } }
       save = enterEntryScreen(save, DEPS, NOW)
-      for (let step = 0; step < 60; step += 1) {
+      for (let step = 0; step < 200; step += 1) {
         const screen = currentScreen(save, DEPS)
         if (!screen) break
         const choice = screen.choices.find((candidate) => !candidate.id.endsWith(':leave'))
         if (!choice) break
         save = choose(save, choice.id, DEPS, NOW).save
       }
-      return activeGame(save)
+      return activeGame(save)?.hitPoints ?? 0
     }
-    expect(play(0.5)?.hitPoints).toBeGreaterThan(play(0)?.hitPoints ?? 0)
+    // OVER SEVERAL SEEDS AND A WHOLE RUN of choices, because one seed cut at
+    // one arbitrary step is a coin toss dressed as an assertion: the thumb
+    // moves the DISTRIBUTION of a fight, and a single walk can land anywhere
+    // inside it. Three runs is enough for a parameter that is meant to make
+    // the player nearly unkillable at a half-turn.
+    const seeds = [31337, 4242, 7]
+    const total = (successAdjust: number) => seeds.reduce((sum, seed) => sum + play(seed, successAdjust), 0)
+    expect(total(0.5)).toBeGreaterThan(total(0))
   })
 })

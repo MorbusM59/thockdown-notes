@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { catalogFor, rolledItems, THOCKQUEST } from '../content'
+import { catalogFor, rolledPool, THOCKQUEST } from '../content'
 import { emptySave } from '../model/gameState'
 import { NO_ARMOR } from '../model/armor'
 import { resolveProfile } from '../model/modifiers'
@@ -20,7 +20,8 @@ function contextHolding(ids: readonly string[]): StageContext {
     game: null,
     content: THOCKQUEST,
     catalog: CATALOG,
-    items: rolledItems(THOCKQUEST, 0),
+    items: rolledPool(THOCKQUEST, 0, 'item'),
+    traits: rolledPool(THOCKQUEST, 0, 'trait'),
     armor: NO_ARMOR,
     profile: resolveProfile(createStatBlock(0), held, { items: 0, traits: 0 }),
     held,

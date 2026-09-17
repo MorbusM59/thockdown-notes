@@ -33,7 +33,7 @@ import { THOCKQUEST } from '../../src/adventure/content'
 import { choose, currentScreen, enterEntryScreen, enterInterlude, type DirectorDeps } from '../../src/adventure/core/director'
 import type { Screen } from '../../src/adventure/core/screen'
 import { activeGame, applyEffects, emptySave, type GameSave } from '../../src/adventure/model/gameState'
-import { isOfferable, type ModifierKind } from '../../src/adventure/model/modifiers'
+import type { ModifierKind } from '../../src/adventure/model/modifiers'
 import { DIFFICULTIES, DIFFICULTY_LABELS, type Difficulty } from '../../src/adventure/model/difficulty'
 import { ROOT_STAGE_ID, STAGES } from '../../src/adventure/stages'
 import { STAT_POINT_STAGE_ID } from '../../src/adventure/stages/ids'
@@ -48,7 +48,7 @@ const DEPS: DirectorDeps = {
 /**
  * WHAT THIS HARNESS PINS: a name and an id, never a resolved modifier.
  *
- * Items are rolled per run now (model/itemSlots.ts), so there is no such
+ * Everything is rolled per run now (model/modifierSlots.ts), so there is no such
  * object as "the Spyglass" outside of one run -- a pin holding a `Modifier`
  * would be holding whatever some other run's seed made. Pinning by id means a
  * ranking row measures what a Spyglass is worth ON AVERAGE ACROSS RUNS, which
@@ -326,14 +326,15 @@ function sweep(
 }
 
 /**
- * EVERYTHING THAT CAN BE PINNED, as references. Every item template can be --
- * a template always rolls into something (model/itemSlots.ts) -- and a trait
- * only if somebody has decided what it does.
+ * EVERYTHING THAT CAN BE PINNED, as references. All of it: every template
+ * rolls into something (model/modifierSlots.ts), so there is no longer a half
+ * of the content that does nothing and has to be filtered out of the ranking.
  */
-const CATALOGUE: readonly PinRef[] = [
-  ...THOCKQUEST.items.map((template) => ({ kind: 'item' as const, id: template.id, name: template.name })),
-  ...THOCKQUEST.traits.filter(isOfferable).map((trait) => ({ kind: 'trait' as const, id: trait.id, name: trait.name })),
-]
+const CATALOGUE: readonly PinRef[] = [...THOCKQUEST.items, ...THOCKQUEST.traits].map((template) => ({
+  kind: template.kind,
+  id: template.id,
+  name: template.name,
+}))
 
 /**
  * WHAT EACH PIECE OF CONTENT IS WORTH, measured rather than argued: the same

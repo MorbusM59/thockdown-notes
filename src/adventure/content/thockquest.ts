@@ -5,38 +5,30 @@
 // read it -- and it lives here, in content, so that a second game would be a
 // second file rather than a second engine.
 //
-// EVERY PLACEHOLDER IN THIS FILE IS LABELLED. An entry that exists by name
-// but whose effect has not been decided carries a `tag` effect saying exactly
-// that, so it shows up as unspecified rather than as a number somebody would
-// otherwise have to guess was real. Do not replace those with plausible
-// values -- filling in blanks that were left open on purpose is how the last
-// draft of this game went wrong. They are also not OFFERED (see
-// `isOfferable`): an unspecified entry stays in content under the design's
-// own name and out of the ring, where a choice between two of them was a
-// choice between two nothings. THREE TRAITS are in that state; no item is,
-// and cannot be -- see the item templates below.
+// NOTHING IN THIS FILE SAYS WHAT IT DOES, and that is the shape of it. Both
+// halves -- items and traits -- are TEMPLATES: a template names what a thing
+// is ABOUT, and the run rolls what it actually is
+// (model/modifierSlots.ts). Sixty templates is sixty things in one run and a
+// different sixty in the next, without sixty numbers to hand-tune.
 //
-// TRAITS ARE WRITTEN AND ITEMS ARE ROLLED, and the two halves of this file
-// read differently because of it. A trait names its own effect. An item names
-// only what it is ABOUT, and the run decides what it is (model/itemSlots.ts).
+// WHAT IS AUTHORED HERE IS THE THEME, and it is the only thing that has to be
+// right. A spyglass sharpens Perception and what Perception buys; it has no
+// opinion about Might. Get the lists wrong and the game produces a coherent
+// thing that means nothing -- which is a content mistake you can see by
+// reading, rather than a balance mistake you can only see by playing.
 //
-// The traits that are not placeholders were written here rather than in the
-// design document, and they are the one part of this file that is mine to
-// have invented. They aim at a spread rather than a ladder: a plain one, a
-// scaling one, three conditional ones on three different axes. Nothing in the
-// list is strictly better than anything else in it, which is the only balance
-// rule they were held to -- the numbers themselves are a first pass and expect
-// tuning. THEIR POWER HAS NOT BEEN REVISITED against the rolled items yet;
-// that is the next session's work (docs/adventure-platform.md).
+// THE PLACEHOLDER MECHANISM IS GONE, and it is worth saying why rather than
+// letting it vanish. Five entries used to exist by NAME and carry an
+// `unspecified` tag saying their effect had not been decided, so that a blank
+// left open on purpose read as a blank rather than as a number somebody
+// guessed; they were kept out of every pool that offers, because a choice
+// between two of them was a choice between two nothings. What a thing does is
+// no longer a number anybody chooses, so "unspecified" stopped being a state
+// one can be in -- the tag effect, `isOfferable` and the filters that read it
+// are all deleted rather than left standing over a case that cannot arise.
 
 import type { Content, MonsterClass, MonsterClassId, Origin, Region, Species } from './index'
-import type { ItemTemplate } from '../model/itemSlots'
-import type { Modifier } from '../model/modifiers'
-
-/** The effect of something that has a name and nothing else yet. */
-function unspecified(what: string): Modifier['effects'] {
-  return [{ kind: 'tag', tag: 'unspecified', description: `${what} — effect not yet specified` }]
-}
+import type { ModifierTemplate } from '../model/modifierSlots'
 
 /**
  * PLACEHOLDER STAT SPREADS. Only the Warrior's is specified (+2 Might, +1
@@ -63,28 +55,48 @@ const REGIONS: readonly Region[] = [
   { id: 'island', name: 'A remote island', icon: 'fa-solid fa-umbrella-beach' },
 ]
 
-const TRAITS: readonly Modifier[] = [
+/**
+ * THE TRAIT TEMPLATES. Thirty of them, and, exactly as with the items, not one
+ * of them says what it does.
+ *
+ * WHAT MAKES A TRAIT DIFFERENT FROM AN ITEM is two lines of the slot plan and
+ * nothing else (`model/modifierSlots.ts`'s `SLOT_PLAN`). An item is GEAR: it
+ * has two stat slots, because the base stat cap is the thing gear exists to
+ * carry a character past. A trait is something you ARE and cannot be picked
+ * up, so it has none, and spends those two slots on VERBOSE effects instead --
+ * which makes traits the odd and the particular half of the game, and items
+ * the half that moves the table.
+ *
+ * Its armor slot is NATURAL armor, flat and unwearable, at a third of what an
+ * item's decaying pool rolls. A point that survives a whole level is worth
+ * several that do not.
+ *
+ * THREE OF THESE WERE PLACEHOLDERS. Short Fuse, Disarming Smile and Sense of
+ * Style were named by the design document and carried an `unspecified` tag,
+ * on the rule that a blank left open on purpose is not ours to fill. They are
+ * filled now because the AUTHOR filled them -- what a trait is is no longer a
+ * number anybody has to choose -- and the tag mechanism is gone with them,
+ * because "unspecified" stopped being a state a modifier can be in.
+ */
+const TRAITS: readonly ModifierTemplate[] = [
   {
     id: 'avid-collector',
     kind: 'trait',
     name: 'Avid Collector',
     icon: 'fa-solid fa-box-archive',
-    // The one fully specified trait, and the reason modifier effects are
-    // declarative data: its number cannot be written down in advance.
-    effects: [{ kind: 'derivedPercentPerHolding', derived: 'damageMultiplier', percentPer: 0.1, holding: 'item' }],
+    // The trait the declarative vocabulary was built for: its number cannot be
+    // written down in advance, because it depends on what is being carried.
+    derived: ['damageMultiplier', 'maxHitPoints'],
+    verbose: ['collector', 'studied', 'desperate'],
   },
   {
     id: 'iron-constitution',
     kind: 'trait',
     name: 'Iron Constitution',
     icon: 'fa-solid fa-heart-pulse',
-    // Hit points, granted rather than merely permitted -- see
-    // `followMaxHitPoints`. A PERCENTAGE rather than the flat +25 it shipped
-    // as: a flat pool is a third of a starting warrior and a rounding error on
-    // a late one, so it had to be re-tuned every time the curve moved
-    // (model/modifiers.ts). The plainest thing in the list on purpose: not
-    // every choice should need thinking about.
-    effects: [{ kind: 'derivedPercent', derived: 'maxHitPoints', percent: 0.3 }],
+    derived: ['maxHitPoints', 'damageMultiplier'],
+    verbose: ['desperate', 'finisher'],
+    armor: true,
   },
   {
     id: 'cornered-animal',
@@ -92,34 +104,29 @@ const TRAITS: readonly Modifier[] = [
     name: 'Cornered Animal',
     icon: 'fa-solid fa-paw',
     // Worth nothing at all until a fight has gone badly, and then worth more
-    // than anything else on offer. The interesting property is that it
-    // rewards NOT running, which is the decision Flee is there to make hard.
-    effects: [{ kind: 'derivedPercentWhileHurt', derived: 'damageMultiplier', percent: 0.6, belowFraction: 1 / 3 }],
+    // than anything else on offer. The interesting property is that it rewards
+    // NOT running, which is the decision Flee is there to make hard.
+    derived: ['damageMultiplier', 'critChance'],
+    verbose: ['desperate', 'finisher'],
   },
   {
     id: 'battle-trance',
     kind: 'trait',
     name: 'Battle Trance',
     icon: 'fa-solid fa-fire-flame-curved',
-    // An extra ACTION when it matters, which is the largest single thing that
-    // can happen to a character: the round's turn order is a ratio of action
-    // pools, so this buys attacks and answers at once.
-    effects: [{ kind: 'derivedPercentWhileHurt', derived: 'actionsPerRound', percent: 0.5, belowFraction: 0.5 }],
+    // Actions are the largest single thing that can happen to a character: the
+    // round's turn order is a ratio of action pools, so they buy attacks and
+    // answers at once.
+    derived: ['actionsPerRound', 'damageMultiplier'],
+    verbose: ['desperate', 'opener'],
   },
   {
     id: 'patient-hunter',
     kind: 'trait',
     name: 'Patient Hunter',
     icon: 'fa-solid fa-crosshairs',
-    // The third of the three "back to the wall" traits, and each is on a
-    // different axis: Cornered Animal hits harder, Battle Trance acts more
-    // often, and this one stops missing. With no healing in the game, a
-    // character at low hit points is where every run ends up, so what happens
-    // there is worth three answers rather than one.
-    // A percentage of the MISSES, not of the chance -- which is what a
-    // percentage of a probability means everywhere in this game
-    // (model/chance.ts). Thirty percent of what still misses.
-    effects: [{ kind: 'derivedPercentWhileHurt', derived: 'hitChance', percent: 0.3, belowFraction: 0.5 }],
+    derived: ['hitChance', 'critChance'],
+    verbose: ['desperate', 'finisher'],
   },
   {
     id: 'duelists-read',
@@ -127,27 +134,24 @@ const TRAITS: readonly Modifier[] = [
     name: "Duelist's Read",
     // The dodge glyph, because that is what it buys -- see stages/combatLog.ts.
     icon: 'fa-solid fa-wind',
-    // A fifth of the blows that would land, rather than the flat ten points
-    // it shipped as: points added to a probability stack into certainty, and
-    // a share of the remainder cannot (model/chance.ts).
-    effects: [{ kind: 'derivedPercent', derived: 'dodgeChance', percent: 0.2 }],
+    derived: ['dodgeChance', 'hitChance'],
+    verbose: ['opener', 'finisher'],
   },
   {
     id: 'opportunist',
     kind: 'trait',
     name: 'Opportunist',
     icon: 'fa-solid fa-star',
-    effects: [{ kind: 'derivedPercent', derived: 'critChance', percent: 0.2 }],
+    derived: ['critChance', 'offerChoices'],
+    verbose: ['finisher', 'collector'],
   },
   {
     id: 'light-sleeper',
     kind: 'trait',
     name: 'Light Sleeper',
     icon: 'fa-solid fa-eye',
-    effects: [
-      { kind: 'statDelta', stat: 'perception', amount: 1 },
-      { kind: 'derivedPercent', derived: 'hitChance', percent: 0.1 },
-    ],
+    derived: ['hitChance', 'dodgeChance'],
+    verbose: ['opener', 'studied'],
   },
   {
     id: 'pack-instinct',
@@ -156,7 +160,8 @@ const TRAITS: readonly Modifier[] = [
     icon: 'fa-solid fa-users',
     // The mirror of Avid Collector, on the other axis: this one pays for
     // narrow specialisation in traits rather than for hoarding items.
-    effects: [{ kind: 'derivedPercentPerHolding', derived: 'maxHitPoints', percentPer: 0.08, holding: 'trait' }],
+    derived: ['maxHitPoints', 'damageMultiplier'],
+    verbose: ['studied', 'collector'],
   },
   {
     id: 'second-skin',
@@ -164,97 +169,241 @@ const TRAITS: readonly Modifier[] = [
     name: 'Second Skin',
     icon: 'fa-solid fa-fingerprint',
     // Armor that cannot decay, which is the only kind worth having over a
-    // whole level: everything in the item list wears through.
-    effects: [{ kind: 'naturalArmor', amount: 3 }],
+    // whole level: everything in the item list wears through. A trait's armor
+    // slot IS that -- which is why no trait names `ward` beside it.
+    derived: ['dodgeChance', 'maxHitPoints'],
+    verbose: ['desperate', 'opener'],
+    armor: true,
   },
-  { id: 'short-fuse', kind: 'trait', name: 'Short Fuse', icon: 'fa-solid fa-fire', effects: unspecified('Short Fuse') },
+  {
+    id: 'short-fuse',
+    kind: 'trait',
+    name: 'Short Fuse',
+    icon: 'fa-solid fa-fire',
+    derived: ['damageMultiplier', 'actionsPerRound'],
+    verbose: ['opener', 'desperate'],
+  },
   {
     id: 'disarming-smile',
     kind: 'trait',
     name: 'Disarming Smile',
     icon: 'fa-solid fa-face-smile',
-    effects: unspecified('Disarming Smile'),
+    derived: ['dodgeChance', 'offerChoices'],
+    verbose: ['opener', 'collector'],
   },
   {
     id: 'sense-of-style',
     kind: 'trait',
     name: 'Sense of Style',
     icon: 'fa-solid fa-hat-cowboy',
-    effects: unspecified('Sense of Style'),
+    derived: ['offerChoices', 'critChance'],
+    verbose: ['collector', 'studied'],
+  },
+  {
+    id: 'thick-skinned',
+    kind: 'trait',
+    name: 'Thick Skinned',
+    icon: 'fa-solid fa-shield-heart',
+    derived: ['maxHitPoints', 'damageMultiplier'],
+    verbose: ['repair', 'desperate'],
+    armor: true,
+  },
+  {
+    id: 'quick-study',
+    kind: 'trait',
+    name: 'Quick Study',
+    icon: 'fa-solid fa-brain',
+    derived: ['hitChance', 'encounterChoices'],
+    verbose: ['studied', 'opener'],
+  },
+  {
+    id: 'grudge-bearer',
+    kind: 'trait',
+    name: 'Grudge Bearer',
+    icon: 'fa-solid fa-hand-back-fist',
+    derived: ['damageMultiplier', 'hitChance'],
+    verbose: ['desperate', 'finisher'],
+  },
+  {
+    id: 'silver-tongue',
+    kind: 'trait',
+    name: 'Silver Tongue',
+    icon: 'fa-solid fa-comment-dots',
+    // The one that buys nothing in a fight at all: what it moves is what the
+    // world puts in front of you, which is the other half of a run.
+    derived: ['offerChoices', 'encounterChoices'],
+    verbose: ['collector', 'studied'],
+  },
+  {
+    id: 'cave-sense',
+    kind: 'trait',
+    name: 'Cave Sense',
+    icon: 'fa-solid fa-mountain-sun',
+    derived: ['encounterChoices', 'dodgeChance'],
+    verbose: ['studied', 'opener'],
+  },
+  {
+    id: 'steady-hands',
+    kind: 'trait',
+    name: 'Steady Hands',
+    icon: 'fa-solid fa-hand-sparkles',
+    derived: ['hitChance', 'critChance'],
+    verbose: ['opener', 'finisher'],
+  },
+  {
+    id: 'hoarder',
+    kind: 'trait',
+    name: 'Hoarder',
+    icon: 'fa-solid fa-sack-xmark',
+    derived: ['maxHitPoints', 'offerChoices'],
+    verbose: ['collector', 'repair'],
+  },
+  {
+    id: 'night-owl',
+    kind: 'trait',
+    name: 'Night Owl',
+    icon: 'fa-solid fa-moon',
+    derived: ['dodgeChance', 'critChance'],
+    verbose: ['opener', 'desperate'],
+  },
+  {
+    id: 'scar-tissue',
+    kind: 'trait',
+    name: 'Scar Tissue',
+    icon: 'fa-solid fa-bandage',
+    derived: ['maxHitPoints', 'dodgeChance'],
+    verbose: ['desperate', 'finisher'],
+    armor: true,
+  },
+  {
+    id: 'bloodhound',
+    kind: 'trait',
+    name: 'Bloodhound',
+    icon: 'fa-solid fa-dog',
+    derived: ['hitChance', 'encounterChoices'],
+    verbose: ['finisher', 'studied'],
+  },
+  {
+    id: 'stubborn-streak',
+    kind: 'trait',
+    name: 'Stubborn Streak',
+    icon: 'fa-solid fa-anchor',
+    derived: ['maxHitPoints', 'damageMultiplier'],
+    verbose: ['desperate', 'studied'],
+  },
+  {
+    id: 'feral-grace',
+    kind: 'trait',
+    name: 'Feral Grace',
+    icon: 'fa-solid fa-cat',
+    derived: ['dodgeChance', 'actionsPerRound'],
+    verbose: ['desperate', 'finisher'],
+  },
+  {
+    id: 'cold-blooded',
+    kind: 'trait',
+    name: 'Cold Blooded',
+    icon: 'fa-solid fa-snowflake',
+    derived: ['critChance', 'hitChance'],
+    verbose: ['finisher', 'opener'],
+  },
+  {
+    id: 'lucky-streak',
+    kind: 'trait',
+    name: 'Lucky Streak',
+    icon: 'fa-solid fa-dice-d20',
+    derived: ['critChance', 'offerChoices'],
+    verbose: ['collector', 'finisher'],
+  },
+  {
+    id: 'wary-traveller',
+    kind: 'trait',
+    name: 'Wary Traveller',
+    icon: 'fa-solid fa-person-walking',
+    derived: ['dodgeChance', 'encounterChoices'],
+    verbose: ['opener', 'studied'],
+  },
+  {
+    id: 'deep-breather',
+    kind: 'trait',
+    name: 'Deep Breather',
+    icon: 'fa-solid fa-lungs',
+    derived: ['maxHitPoints', 'actionsPerRound'],
+    verbose: ['desperate', 'repair'],
+  },
+  {
+    id: 'pit-fighter',
+    kind: 'trait',
+    name: 'Pit Fighter',
+    icon: 'fa-solid fa-khanda',
+    derived: ['damageMultiplier', 'dodgeChance'],
+    verbose: ['finisher', 'desperate'],
   },
 ]
 
 /**
- * THE ITEM TEMPLATES. Thirty of them, and not one of them says what it does.
+ * THE ITEM TEMPLATES. Thirty of them.
  *
- * A template says what an item is ABOUT -- which stats it would plausibly
- * sharpen, which odds or quantities it would plausibly move, which of the
- * richer effects suit it, and whether it is armour -- and the run rolls which
- * of those it actually is (model/itemSlots.ts). So this file no longer holds
- * a single tuned number for an item, which is the point: thirty hand-balanced
- * items is thirty things to re-tune every time a formula moves, and the
- * previous ten were already a "first pass expecting tuning" that nobody was
- * ever going to do thirty of.
+ * An ITEM IS GEAR, which is the whole of what makes this half different from
+ * the traits above: it has two STAT slots, because the base stat cap is the
+ * thing gear exists to carry a character past, and one verbose slot where a
+ * trait has two.
  *
- * WHAT IS AUTHORED HERE IS THE THEME, and it is the only thing that has to be
- * right. A spyglass sharpens Perception and what Perception buys; it has no
- * opinion about Might, so it cannot roll one. A warhorn is Charisma and Might
- * and the noise a round opens with. Get the lists wrong and the game produces
- * a coherent item that means nothing -- which is a content mistake you can see
- * by reading, rather than a balance mistake you can only see by playing.
+ * ARMOUR IS A PROPERTY OF THE FICTION, not a roll: eight of the thirty are
+ * armour, they always fill that slot, and it is taken first (see the module
+ * comment in model/modifierSlots.ts). The other twenty-two never have armor,
+ * however the dice fall, because a spyglass is not a shield. HOW MUCH is not
+ * written here -- one range per slot, declared beside every other slot's, so
+ * that a shield is not eight hand-tuned numbers waiting to go stale.
  *
- * ARMOUR IS A PROPERTY OF THE FICTION, not a roll: eight of the thirty carry
- * an armor range, they always fill that slot, and it is taken first (see the
- * module comment in model/itemSlots.ts). The other twenty-two never have
- * armor, however the dice fall, because a spyglass is not a shield.
- *
- * TWO OF THESE WERE PLACEHOLDERS. The Bronze Talisman and the Nail Clipper
- * were named by the design document and carried an `unspecified` tag, on the
- * rule that a blank left open on purpose is not ours to fill. They are filled
- * now because the AUTHOR filled them -- what an item is is no longer a number
- * somebody has to choose, so "unspecified" stopped being a state an item could
- * be in. The three unspecified TRAITS above are untouched.
+ * TWO OF THESE WERE PLACEHOLDERS -- the Bronze Talisman and the Nail Clipper.
+ * See this file's header for what happened to that mechanism.
  */
-const ITEMS: readonly ItemTemplate[] = [
+const ITEMS: readonly ModifierTemplate[] = [
   // --- Armour ---------------------------------------------------------------
   {
     id: 'boiled-leather-jerkin',
+    kind: 'item',
     name: 'Boiled Leather Jerkin',
     icon: 'fa-solid fa-shirt',
     stats: ['might', 'agility'],
     derived: ['maxHitPoints', 'dodgeChance'],
     verbose: ['tempered', 'repair', 'desperate'],
-    armor: [6, 10],
+    armor: true,
   },
   {
     id: 'iron-buckler',
+    kind: 'item',
     name: 'Iron Buckler',
     icon: 'fa-solid fa-shield-halved',
     stats: ['might'],
     derived: ['dodgeChance', 'damageMultiplier'],
     verbose: ['tempered', 'ward', 'finisher'],
-    armor: [5, 9],
+    armor: true,
   },
   {
     id: 'scaled-bracers',
+    kind: 'item',
     name: 'Scaled Bracers',
     icon: 'fa-solid fa-mitten',
     stats: ['agility', 'might'],
     derived: ['dodgeChance', 'damageMultiplier'],
     verbose: ['tempered', 'opener'],
-    armor: [4, 7],
+    armor: true,
   },
   {
     id: 'chain-coif',
+    kind: 'item',
     name: 'Chain Coif',
     icon: 'fa-solid fa-helmet-safety',
     stats: ['might', 'perception'],
     derived: ['maxHitPoints', 'hitChance'],
     verbose: ['tempered', 'ward'],
-    armor: [5, 8],
+    armor: true,
   },
   {
     id: 'oaken-shield',
+    kind: 'item',
     name: 'Oaken Shield',
     icon: 'fa-solid fa-shield',
     stats: ['might'],
@@ -262,19 +411,21 @@ const ITEMS: readonly ItemTemplate[] = [
     // The big slow one: most armor in the game, and the verbose options all
     // make it last longer rather than hit harder.
     verbose: ['tempered', 'repair', 'desperate'],
-    armor: [8, 13],
+    armor: true,
   },
   {
     id: 'plated-greaves',
+    kind: 'item',
     name: 'Plated Greaves',
     icon: 'fa-solid fa-socks',
     stats: ['might', 'agility'],
     derived: ['maxHitPoints', 'actionsPerRound'],
     verbose: ['tempered', 'ward'],
-    armor: [6, 10],
+    armor: true,
   },
   {
     id: 'tinkers-harness',
+    kind: 'item',
     name: "Tinker's Harness",
     icon: 'fa-solid fa-toolbox',
     // The one piece of armour Intellect wants: what it rolls is often the
@@ -282,21 +433,23 @@ const ITEMS: readonly ItemTemplate[] = [
     stats: ['intellect', 'might'],
     derived: ['maxHitPoints', 'damageMultiplier'],
     verbose: ['repair', 'tempered'],
-    armor: [4, 8],
+    armor: true,
   },
   {
     id: 'bonemail',
+    kind: 'item',
     name: 'Bonemail',
     icon: 'fa-solid fa-bone',
     stats: ['might', 'luck'],
     derived: ['maxHitPoints', 'critChance'],
     verbose: ['tempered', 'desperate'],
-    armor: [5, 9],
+    armor: true,
   },
 
   // --- Everything else ------------------------------------------------------
   {
     id: 'spyglass',
+    kind: 'item',
     name: 'Spyglass',
     icon: 'fa-solid fa-binoculars',
     stats: ['perception', 'luck'],
@@ -305,6 +458,7 @@ const ITEMS: readonly ItemTemplate[] = [
   },
   {
     id: 'whetstone',
+    kind: 'item',
     name: 'Whetstone',
     icon: 'fa-solid fa-hammer',
     stats: ['might'],
@@ -313,6 +467,7 @@ const ITEMS: readonly ItemTemplate[] = [
   },
   {
     id: 'cracked-hourglass',
+    kind: 'item',
     name: 'Cracked Hourglass',
     icon: 'fa-solid fa-hourglass-half',
     // Actions are the largest thing that can happen to a character -- the
@@ -324,6 +479,7 @@ const ITEMS: readonly ItemTemplate[] = [
   },
   {
     id: 'duelists-cape',
+    kind: 'item',
     name: "Duelist's Cape",
     icon: 'fa-solid fa-user-ninja',
     stats: ['agility', 'charisma'],
@@ -332,6 +488,7 @@ const ITEMS: readonly ItemTemplate[] = [
   },
   {
     id: 'featherweight-boots',
+    kind: 'item',
     name: 'Featherweight Boots',
     icon: 'fa-solid fa-shoe-prints',
     stats: ['agility'],
@@ -340,6 +497,7 @@ const ITEMS: readonly ItemTemplate[] = [
   },
   {
     id: 'lucky-copper-coin',
+    kind: 'item',
     name: 'Lucky Copper Coin',
     icon: 'fa-solid fa-clover',
     // Luck is the widest stat in the game -- crit, offers, armor's own
@@ -350,6 +508,7 @@ const ITEMS: readonly ItemTemplate[] = [
   },
   {
     id: 'duelists-chalk',
+    kind: 'item',
     name: "Duelist's Chalk",
     icon: 'fa-solid fa-crosshairs',
     stats: ['perception', 'agility'],
@@ -358,6 +517,7 @@ const ITEMS: readonly ItemTemplate[] = [
   },
   {
     id: 'thock-keycap',
+    kind: 'item',
     name: 'Thock Keycap',
     icon: 'fa-solid fa-keyboard',
     // It is a keycap. It is not from around here.
@@ -367,6 +527,7 @@ const ITEMS: readonly ItemTemplate[] = [
   },
   {
     id: 'bronze-talisman',
+    kind: 'item',
     name: 'Bronze Talisman',
     icon: 'fa-solid fa-circle-notch',
     stats: ['charisma', 'luck'],
@@ -375,6 +536,7 @@ const ITEMS: readonly ItemTemplate[] = [
   },
   {
     id: 'nail-clipper',
+    kind: 'item',
     name: 'Nail Clipper',
     icon: 'fa-solid fa-scissors',
     stats: ['agility', 'perception'],
@@ -383,6 +545,7 @@ const ITEMS: readonly ItemTemplate[] = [
   },
   {
     id: 'hunters-quiver',
+    kind: 'item',
     name: "Hunter's Quiver",
     icon: 'fa-solid fa-feather-pointed',
     stats: ['perception', 'might'],
@@ -391,6 +554,7 @@ const ITEMS: readonly ItemTemplate[] = [
   },
   {
     id: 'salted-rations',
+    kind: 'item',
     name: 'Salted Rations',
     icon: 'fa-solid fa-drumstick-bite',
     // The plainest thing in the list, on purpose: not every choice should
@@ -406,6 +570,7 @@ const ITEMS: readonly ItemTemplate[] = [
   },
   {
     id: 'ravens-feather',
+    kind: 'item',
     name: "Raven's Feather",
     icon: 'fa-solid fa-feather',
     stats: ['perception', 'charisma'],
@@ -414,6 +579,7 @@ const ITEMS: readonly ItemTemplate[] = [
   },
   {
     id: 'glass-phial',
+    kind: 'item',
     name: 'Glass Phial',
     icon: 'fa-solid fa-flask',
     stats: ['intellect', 'luck'],
@@ -422,6 +588,7 @@ const ITEMS: readonly ItemTemplate[] = [
   },
   {
     id: 'iron-knuckles',
+    kind: 'item',
     name: 'Iron Knuckles',
     icon: 'fa-solid fa-hand-fist',
     stats: ['might', 'agility'],
@@ -430,6 +597,7 @@ const ITEMS: readonly ItemTemplate[] = [
   },
   {
     id: 'gamblers-dice',
+    kind: 'item',
     name: "Gambler's Dice",
     icon: 'fa-solid fa-dice',
     stats: ['luck'],
@@ -438,6 +606,7 @@ const ITEMS: readonly ItemTemplate[] = [
   },
   {
     id: 'widows-locket',
+    kind: 'item',
     name: "Widow's Locket",
     icon: 'fa-solid fa-heart-crack',
     stats: ['charisma', 'luck'],
@@ -446,6 +615,7 @@ const ITEMS: readonly ItemTemplate[] = [
   },
   {
     id: 'cinder-flask',
+    kind: 'item',
     name: 'Cinder Flask',
     icon: 'fa-solid fa-fire',
     stats: ['intellect', 'might'],
@@ -454,6 +624,7 @@ const ITEMS: readonly ItemTemplate[] = [
   },
   {
     id: 'silk-wraps',
+    kind: 'item',
     name: 'Silk Wraps',
     icon: 'fa-solid fa-ribbon',
     stats: ['agility', 'charisma'],
@@ -462,6 +633,7 @@ const ITEMS: readonly ItemTemplate[] = [
   },
   {
     id: 'surveyors-rod',
+    kind: 'item',
     name: "Surveyor's Rod",
     icon: 'fa-solid fa-ruler-combined',
     stats: ['perception', 'intellect'],
@@ -470,6 +642,7 @@ const ITEMS: readonly ItemTemplate[] = [
   },
   {
     id: 'warhorn',
+    kind: 'item',
     name: 'Warhorn',
     icon: 'fa-solid fa-bullhorn',
     // Charisma and Might, and a noise a round opens with: the one template
@@ -480,6 +653,7 @@ const ITEMS: readonly ItemTemplate[] = [
   },
   {
     id: 'brass-compass',
+    kind: 'item',
     name: 'Brass Compass',
     icon: 'fa-solid fa-compass',
     stats: ['perception', 'intellect'],

@@ -290,13 +290,22 @@ the same declaration the resolver applies. One vocabulary produces both the
 maths and the words. `tag` is the escape hatch for effects the vocabulary
 cannot express; that one carries written prose, because nothing else can.
 
-**A trait is written; an item is rolled.** Traits are authored one by one in
-content. Items are authored as **templates** (`model/itemSlots.ts`) that say
-what an item is *about* — which stats it would plausibly sharpen, which odds
-or quantities it would plausibly move, which of the richer effects suit it,
-and whether it is armour — and the run rolls which of those it actually is.
-Thirty templates is thirty items in one run and a different thirty in the
-next, with no hand-tuned number anywhere in the item list.
+**Everything is rolled from a template.** Items and traits alike are authored
+as **templates** (`model/modifierSlots.ts`) that say what a thing is *about* —
+which stats it would plausibly sharpen, which odds or quantities it would
+plausibly move, which of the richer effects suit it, and whether it is armour
+— and the run rolls which of those it actually is. Sixty templates is sixty
+things in one run and a different sixty in the next, with no hand-tuned number
+anywhere in either list.
+
+**The two kinds differ in two lines of `SLOT_PLAN` and in nothing else.** An
+item is GEAR: it has two **stat** slots, because the base stat cap is the thing
+gear exists to carry a character past, and one verbose slot. A trait is
+something you ARE and cannot be picked up, so it has no stat slots at all and
+spends them on a second **verbose** one — which makes traits the odd and the
+particular half of the game and items the half that moves the table. That is
+written down once, as a declaration the roller reads, rather than as two
+rollers.
 
 The roll is **once per run, per template**, off `game.seed` mixed with the
 template's id (`core/rng.ts`'s `seedFrom`). Per *offer* would mean the
@@ -310,13 +319,36 @@ sequence walked in content order, so adding a thirty-first item does not
 silently re-roll the other thirty for every save in existence.
 
 The slots: **armor** (present only where the fiction carries it, always filled
-when it is, taken first), up to **two stat slots** (1–3 points each, never the
-same stat twice), one **derived slot** (10–50% in tens), and one **verbose
-slot** — a conditional on how the fight is going, on where in the round the
-action falls, or on what else is carried. Two or three are filled, armor
-counting as one. Every verbose effect has to **reach the fight**; that is the
-standing bar for admitting one, and `adventure:sim --rank` is how it is
+when it is, taken first), **stat** slots (1–3 points each, never the same stat
+twice), one **derived slot** (10–50% in tens), and **verbose** slots — a
+conditional on how the fight is going, on where in the round the action falls,
+or on what else is carried, never the same one twice. Two or three are filled,
+armor counting as one. Every verbose effect has to **reach the fight**; that is
+the standing bar for admitting one, and `adventure:sim --rank` is how it is
 checked.
+
+**One range per slot, not one per template.** Every slot's size is declared
+beside the others in `model/modifierSlots.ts` — 1–3 stat points, 10–50% in
+tens, **3–9 decaying armor on an item and 1–3 natural armor on a trait**, a
+third of it because a point that survives a whole level is worth several that
+do not. Armor was eight hand-written pairs in content for one release, which
+is eight numbers to re-tune every time the damage curve moves.
+
+What each kind's armor slot GRANTS follows from the kind and nothing else: an
+item gets a pool of its own that wears as it absorbs, a trait gets armor decay
+cannot touch. Which is why `tempered` (a floor under a decaying pool) and
+`ward` (a second grant of natural armor) are both **items only** — a trait has
+no pool to put a floor under, and its armor slot already *is* the ward.
+
+**There is no "unspecified" state any more, and the machinery is gone with
+it.** Five entries used to exist by NAME and carry a `tag` effect saying their
+effect had not been decided, kept out of every pool that offers so a choice
+between two of them could not happen. A template always rolls into something,
+so the state cannot arise — and `isOfferable`, `UNSPECIFIED_TAG`, the `tag`
+effect kind, `EffectiveProfile.tags` and `hasTag` are all deleted rather than
+left standing over a case that cannot occur. The `tag` escape hatch never had
+another user in its life; keeping it for the day something needs one is the
+thing `model/effects.ts` says about its own vocabulary.
 
 Effects come in two kinds, and the distinction is load-bearing: **passive**
 (re-applied whenever the profile resolves) and **conditional** (fired only in
@@ -1228,3 +1260,58 @@ placed at 5, 9 and 10 and the level advancing after ten.
     beside two accuracy items was a certainty. It is a keep factor now, like
     everything else. This is rule 4 of the doctrine in its usual shape: the
     rule was right at one caller and not at its sibling.
+
+84. **TRAITS ARE TEMPLATES TOO**, and the change was almost entirely
+    subtraction. The reasoning is in **The model** above; what belongs here is
+    what it settled and what it cost.
+
+    **Two lines of `SLOT_PLAN` are the whole difference between the kinds.**
+    Everything else that could have forked — the roller, the effect
+    vocabulary, the describer, the validator, the catalog, the reach rules for
+    conditional effects — is shared, which is what "a rule stated once must
+    hold everywhere" looks like when it is arranged in advance rather than
+    repaired afterwards. `rollItem` became `rollModifier`, `ItemTemplate`
+    became `ModifierTemplate`, `itemSlots.ts` became `modifierSlots.ts`.
+
+    **Three complaints the content validator now makes, each found by reading a
+    rolled catalog rather than by reasoning about one:**
+    - a **trait that declares stats** declares something it has no slot to
+      roll;
+    - a **template that cannot reach two slots** rolls something thinner than
+      the design says any modifier is. Naming FEWER options than its kind has
+      slots for is fine and often deliberate — a Whetstone is Might and
+      nothing else — so the check is on the capacity, not on each list's
+      length;
+    - a **trait naming `ward`** is naming its own armor slot twice, and a
+      trait that rolled both came out carrying two identical `naturalArmor`
+      effects. That one is the reason the armor slot's meaning is derived from
+      the kind rather than declared per template: once it is, "what does a
+      trait's armor slot grant" has exactly one answer and the duplicate is
+      visible.
+
+    **Measured (`--rank`, Easy, 30 runs per row).** Before traits were rolled,
+    items ran 8.67–26.23 encounters won against a baseline of 8.27 and traits
+    ran 7.80–15.57 — the gap this change was for. After: baseline 7.47, items
+    11.50–26.33 (median 16.9), traits 6.47–15.53 (median 11.1). The traits
+    moved up and the two halves still do not meet, which is defensible rather
+    than finished — gear is bought with gold and there is far more gold in a
+    run than there are motes, so an item SHOULD move the table further than a
+    trait. Whether that is the right ratio is a tuning question and not a
+    structural one.
+
+    **One row is below the baseline, and it is worth reading before fixing.**
+    Silver Tongue (6.47) buys `offerChoices` and `encounterChoices` and nothing
+    a fight reads, so preferring it costs a pick and returns nothing the
+    harness measures — the simulation's policies take the pinned thing whenever
+    it appears and then choose by their own rule, which is exactly the rule
+    more choices are supposed to improve. So the number is partly an artefact
+    of the instrument, and tuning the trait against it would be tuning against
+    the harness. Recorded rather than acted on.
+
+85. **THE ARMOR RANGES ARE THE SLOT'S, NOT THE TEMPLATE'S** — 3–9 decaying,
+    1–3 natural. Stated by the author, and worth recording because the first
+    version had it the other way round: eight item templates each carrying
+    their own `[min, max]`, which read as expressive (a big shield, a small
+    bracer) and was in fact eight hand-tuned numbers in a file whose whole
+    point is that it contains none. Every other slot declares one range for
+    the game; armor does now too.

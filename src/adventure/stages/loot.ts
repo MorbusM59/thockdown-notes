@@ -14,7 +14,7 @@ import { nextSample } from '../core/rng'
 import type { JsonObject } from '../core/json'
 import type { StageContext, StageModule } from '../core/stage'
 import type { Effect } from '../model/effects'
-import { describeModifier, isOfferable } from '../model/modifiers'
+import { describeModifier } from '../model/modifiers'
 import { holdingCounts } from '../model/gameState'
 import { GOLD_PER_LOOT_SCREEN } from '../model/rewards'
 import {
@@ -29,8 +29,7 @@ function rollItemOffers(context: StageContext, rng: number) {
   // Not what is already held: a duplicate is not a second item, it is the
   // same one applying twice (model/gameState.ts's `acquireModifier`), and
   // offering it would be offering nothing.
-  const pool = context.items
-    .filter((item) => isOfferable(item) && !context.held.some((row) => row.id === item.id))
+  const pool = context.items.filter((item) => !context.held.some((row) => row.id === item.id))
   if (pool.length === 0) return { offerIds: [] as string[], rng }
   const sample = nextSample(rng, pool, context.profile?.derived.offerChoices ?? 2)
   return { offerIds: sample.value.map((item) => item.id), rng: sample.rng }

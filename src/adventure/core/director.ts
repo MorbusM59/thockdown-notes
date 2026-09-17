@@ -26,7 +26,7 @@
 
 import { applyEffects, activeGame, armorOf, heldModifiers, profileOf, type GameSave, type StageFrame } from '../model/gameState'
 import { NO_ARMOR } from '../model/armor'
-import { catalogFor, rolledItems } from '../content'
+import { catalogFor, rolledPool } from '../content'
 import type { Effect } from '../model/effects'
 import type { Content } from '../content'
 import type { JsonObject } from './json'
@@ -59,7 +59,8 @@ export function buildContext(save: GameSave, deps: DirectorDeps): StageContext {
     game,
     content: deps.content,
     catalog,
-    items: rolledItems(deps.content, game?.seed ?? 0),
+    items: rolledPool(deps.content, game?.seed ?? 0, 'item'),
+    traits: rolledPool(deps.content, game?.seed ?? 0, 'trait'),
     profile: game ? profileOf(save, game, deps.content) : null,
     armor: game ? armorOf(save, game, catalog) : NO_ARMOR,
     held,

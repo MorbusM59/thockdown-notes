@@ -7,13 +7,14 @@
 // item and one trait at the end of a level" a filter rather than two
 // parallel systems.
 //
-// A TRAIT IS WRITTEN; AN ITEM IS ROLLED. Traits are authored one by one in
-// content. Items are authored as TEMPLATES (model/itemSlots.ts) that roll
-// their slots once per run from the run's own seed, so a Spyglass is a fixed
-// thing for the length of a run and a different thing in the next one. Both
-// arrive here as the same `Modifier`, because nothing below this line should
-// be able to tell which is which -- that is the whole point of rolling into
-// the existing shape rather than beside it.
+// BOTH ARE ROLLED FROM TEMPLATES (model/modifierSlots.ts), once per run from
+// the run's own seed, so a Spyglass is a fixed thing for the length of a run
+// and a different thing in the next one. They differ in WHICH SLOTS they have
+// and in nothing else: an item is gear, so it buys stat points and the base
+// stat cap is what gear exists to carry you past; a trait is something you
+// ARE, so it buys the odd and the particular -- two verbose slots instead of
+// two stat ones. Both arrive here as the same `Modifier`, because nothing
+// below this line should be able to tell which is which.
 //
 // EFFECTS ARE DATA, NOT CODE, and that is load-bearing rather than
 // fastidious. The tab bar shows a modifier's effect while its cell is in
@@ -21,10 +22,18 @@
 // +30% damage (3 items)" is true only if the number is computed from the
 // same declaration the resolver applies. A hand-written description string
 // goes stale the first time the effect depends on anything, and nothing
-// tells you it has. So one vocabulary produces both the maths and the
-// words, and `tag` is the deliberate escape hatch for the rare effect the
-// vocabulary cannot express -- that one carries a written description,
-// because nothing else can describe it.
+// tells you it has. So one vocabulary produces both the maths and the words,
+// and every effect in it is a shape the describer can put into English.
+//
+// A `tag` ESCAPE HATCH lived here -- a named hook with its own written prose,
+// for the effect the vocabulary could not express. Nothing ever used it except
+// the `unspecified` placeholder, and a placeholder is not a state a modifier
+// can be in any more: every one of them is rolled from a template
+// (model/modifierSlots.ts) and a template always rolls into something. It is
+// deleted rather than kept for the day something needs it, which is the same
+// rule model/effects.ts states about its own vocabulary -- an effect that
+// exists because it might be useful one day is an effect nobody can delete
+// later.
 //
 // EVERYTHING IS A PERCENTAGE, never a flat value, and that is a rule rather
 // than a style: a flat "+25 hit points" is a third of a starting character
@@ -179,8 +188,6 @@ export type ModifierEffect =
   | { kind: 'armorRepairAfterCombat'; amount: number }
   /** Armor that decay cannot touch. Added on top of every decaying pool. */
   | { kind: 'naturalArmor'; amount: number }
-  /** The escape hatch: a named hook a system looks for, with its own prose. */
-  | { kind: 'tag'; tag: string; description: string }
 
 export interface Modifier {
   id: string
@@ -188,40 +195,6 @@ export interface Modifier {
   name: string
   icon: string
   effects: readonly ModifierEffect[]
-}
-
-/**
- * The tag a piece of content carries when it exists by NAME and its effect
- * has not been decided. Named here rather than spelled in content, because
- * `isOfferable` below is the thing that reads it and a typo would silently
- * put an empty choice back in the ring.
- */
-export const UNSPECIFIED_TAG = 'unspecified'
-
-/**
- * Whether this is something to OFFER a player -- which is to say, whether it
- * does anything at all.
- *
- * The design names more traits than it has specified, and those stay in
- * content (they are the design's names, not ours to delete) carrying a tag
- * that says so. But an offer of two of them is a choice between two nothings,
- * which is exactly what character creation served up once the pool grew:
- * "Bronze Talisman or Nail Clipper", neither of which did anything.
- *
- * ITEMS cannot be unspecified any more -- every item is rolled from a template
- * and a template that rolled nothing would be a bug in the roller, not a
- * decision somebody deferred. This now guards traits alone, and that is worth
- * saying because the check still runs over both: it is cheaper to keep one
- * rule that holds for everything than to remember which half it applies to.
- *
- * DERIVED rather than declared per entry: an entry becomes offerable the
- * moment somebody gives it an effect, with no second list to remember. That
- * is the same argument that took the hand-kept `weight` field out of this
- * type -- it was read by nothing and claimed that 0 made an entry
- * unreachable, which was true of no code anywhere.
- */
-export function isOfferable(modifier: Modifier): boolean {
-  return modifier.effects.some((effect) => !(effect.kind === 'tag' && effect.tag === UNSPECIFIED_TAG))
 }
 
 export interface EffectiveProfile {
@@ -239,8 +212,6 @@ export interface EffectiveProfile {
    * at the moment it is rolled -- see model/chance.ts.
    */
   chances: Readonly<Record<ChanceKey, ChanceAdjustment>>
-  /** Named hooks currently held, for effects the numbers cannot express. */
-  tags: readonly string[]
 }
 
 /**
@@ -298,7 +269,6 @@ export function resolveProfile(
 
   let naturalArmor = 0
   let armorRepair = 0
-  const tags: string[] = []
   const chances: Record<ChanceKey, ChanceAdjustment> = {
     dodgeChance: { ...NO_CHANCE_ADJUSTMENT },
     hitChance: { ...NO_CHANCE_ADJUSTMENT },
@@ -344,9 +314,6 @@ export function resolveProfile(
         case 'armorRepairAfterCombat':
           armorRepair += effect.amount
           break
-        case 'tag':
-          tags.push(effect.tag)
-          break
         default:
           break
       }
@@ -375,12 +342,7 @@ export function resolveProfile(
     naturalArmor,
     armorRepair,
     chances,
-    tags,
   }
-}
-
-export function hasTag(profile: EffectiveProfile, tag: string): boolean {
-  return profile.tags.includes(tag)
 }
 
 function signed(amount: number): string {
@@ -444,8 +406,6 @@ export function describeEffect(effect: ModifierEffect, holdings: HoldingCounts):
       return `${signed(effect.amount)} Armor to every item after each fight`
     case 'naturalArmor':
       return `${signed(effect.amount)} Armor that cannot decay`
-    case 'tag':
-      return effect.description
   }
 }
 

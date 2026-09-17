@@ -15,7 +15,7 @@ import {
   activeGame, applyEffects, BASE_KEEP_ALLOWANCE, emptySave, heldModifiers, keepAllowance,
   keptModifierIds, profileOf, withKeepMark, type GameSave,
 } from '../model/gameState'
-import { isOfferable, resolveProfile, UNSPECIFIED_TAG, type Modifier } from './modifiers'
+import { resolveProfile, type Modifier } from './modifiers'
 import { resolveExchange, rollDodgeOffered } from './combat'
 import { resolveChanceWith } from './chance'
 import { buildMonster } from './monsters'
@@ -245,6 +245,26 @@ describe('hit points following their ceiling', () => {
     return playing
   }
 
+  /**
+   * A TRAIT THIS RUN ROLLED A HIT-POINT BONUS ONTO. Named by the roll rather
+   * than by the test: every modifier is a template now
+   * (model/modifierSlots.ts), so "Iron Constitution raises the maximum" is
+   * true of most runs and not of all of them, and a test that assumed it would
+   * fail on the seeds where it rolled its other line instead.
+   */
+  function sturdyTrait(save: GameSave): string {
+    const game = activeGame(save)
+    if (!game) throw new Error('no game')
+    const catalog = catalogFor(THOCKQUEST, game.seed)
+    const found = THOCKQUEST.traits
+      .map((template) => catalog.get(template.id))
+      .find((trait) => trait?.effects.some(
+        (effect) => effect.kind === 'derivedPercent' && effect.derived === 'maxHitPoints',
+      ))
+    if (!found) throw new Error('no trait in this run raises the maximum')
+    return found.id
+  }
+
   it('GRANTS what a rise in the maximum is worth, rather than merely permitting it', () => {
     const save = started()
     const before = activeGame(save)
@@ -254,7 +274,7 @@ describe('hit points following their ceiling', () => {
 
     const tougher = applyEffects(
       wounded,
-      [{ kind: 'acquireModifier', modifierKind: 'trait', modifierId: 'iron-constitution' }],
+      [{ kind: 'acquireModifier', modifierKind: 'trait', modifierId: sturdyTrait(wounded) }],
       DEPS.content,
       NOW,
     )
@@ -268,16 +288,18 @@ describe('hit points following their ceiling', () => {
   })
 
   it('CLAMPS when the ceiling falls, so nobody stands above their own maximum', () => {
+    const fresh = started()
+    const sturdy = sturdyTrait(fresh)
     const save = applyEffects(
-      started(),
-      [{ kind: 'acquireModifier', modifierKind: 'trait', modifierId: 'iron-constitution' }],
+      fresh,
+      [{ kind: 'acquireModifier', modifierKind: 'trait', modifierId: sturdy }],
       DEPS.content,
       NOW,
     )
     const raised = activeGame(save)?.hitPoints ?? 0
     const dropped = applyEffects(
       save,
-      [{ kind: 'releaseModifier', modifierKind: 'trait', modifierId: 'iron-constitution' }],
+      [{ kind: 'releaseModifier', modifierKind: 'trait', modifierId: sturdy }],
       DEPS.content,
       NOW,
     )
@@ -286,24 +308,30 @@ describe('hit points following their ceiling', () => {
 })
 
 describe('what is offered', () => {
-  it('never offers something whose effect has not been decided', () => {
-    // TRAITS ONLY. An item cannot be unspecified any more: it is rolled from a
-    // template and a template always rolls into something
-    // (model/itemSlots.ts), so the state stopped existing on that half.
-    const unspecified = THOCKQUEST.traits
-      .filter((entry) => entry.effects.every((effect) => effect.kind === 'tag' && effect.tag === UNSPECIFIED_TAG))
-    // The placeholders are still IN content -- they are the design's own
-    // names, not ours to delete -- and out of every pool that offers.
-    expect(unspecified.length).toBeGreaterThan(0)
-    for (const entry of unspecified) expect(isOfferable(entry)).toBe(false)
-
+  /**
+   * THE "UNSPECIFIED" STATE IS GONE, and the test that guarded it with it.
+   *
+   * Five entries used to exist by name and carry a tag saying their effect had
+   * not been decided, kept out of every pool that offers so that a choice
+   * between two of them could not happen. Every modifier is rolled from a
+   * template now (`model/modifierSlots.ts`) and a template always rolls into
+   * something, so the state cannot arise -- and a guard over a case that
+   * cannot arise is a guard nobody can ever delete.
+   *
+   * What is still worth asserting is the half of that rule which never
+   * depended on the tag: a cell in the ring is a thing that DOES something.
+   */
+  it('never offers a modifier with no effects at all', () => {
     let save = choose(enterEntryScreen(emptySave(7), DEPS, NOW), 'welcome:start', DEPS, NOW).save
     save = choose(save, 'origin:warrior', DEPS, NOW).save
     for (let step = 0; step < 40; step += 1) {
       const screen = currentScreen(save, DEPS)
       if (!screen) break
+      const game = activeGame(save)
+      const catalog = game ? catalogFor(THOCKQUEST, game.seed) : null
       for (const choice of screen.choices) {
-        for (const entry of unspecified) expect(choice.id.endsWith(`:${entry.id}`)).toBe(false)
+        const named = [...(catalog?.values() ?? [])].find((modifier) => choice.id.endsWith(`:${modifier.id}`))
+        if (named) expect(named.effects.length).toBeGreaterThan(0)
       }
       save = choose(save, screen.choices[0].id, DEPS, NOW).save
     }
