@@ -31,6 +31,20 @@ const FOCUS_GRAB_DELAY_MS = 0
 // instead of trying to feed it a "reduced" version of the same math.
 const SIMPLE_ROTATION_TRANSITION_MS = 200
 
+/**
+ * HALF OF A CELL'S POP -- the rise from 90% to 105%, which the fall from
+ * 105% back to 100% mirrors exactly. One number rather than two because the
+ * keyframes' apex sits at 50%: rise and fall being equal is what makes that
+ * percentage a fact rather than a coincidence, and the CSS reads this value
+ * (as `--cell-pop-half`) instead of restating it.
+ *
+ * It is also the SOUND'S OFFSET. A cell's note is meant to land on the pop's
+ * apex, not on its start -- the sound is the cell arriving, and the cell has
+ * not arrived until it is biggest. So the note fires one rise after the cell
+ * is revealed, which is what makes this one constant and not two.
+ */
+const CELL_POP_HALF_MS = 50
+
 // While a key is held, native OS auto-repeat keydowns are throttled to at
 // most one accepted every N ms -- see handleRingKeyDown. Decoupled from the
 // OS's own (usually much faster) repeat rate on purpose: an accepted repeat
@@ -402,7 +416,9 @@ export function EscapeHoldPanel({
   /**
    * HOW MANY CELLS HAVE ARRIVED. The screen is dealt out rather than drawn
    * at once: each cell pops in on its own note of the burst below, so the
-   * sound and the thing appearing are ONE event.
+   * sound and the thing appearing are ONE event -- the note timed onto the
+   * pop's apex rather than its start, since that is the moment the cell
+   * reads as having landed.
    *
    * A count rather than a set, because the cells arrive in ring order and
    * never out of it -- a set would be able to represent "the third arrived
@@ -463,16 +479,25 @@ export function EscapeHoldPanel({
       TYPING_SOUND_SAMPLES_PER_SET,
       burstGapMs(count, getRenderScrollTotalTimeSec()),
     )
-    const timers = notes.map((note) => window.setTimeout(() => {
-      // The cell's real on-screen point, from the same function that places
-      // the button -- the ring is a rounded square, so an angle recomputed
-      // here would pan a sound somewhere its cell is not.
-      const point = computeEscapeHoldPointAtSlot(note.slot, count, ringGeometryParamsRef.current)
-      void typingSoundManager.playRandomClick(
-        burstNoteVoice(note, panForRingX(point.x, escapeHoldRingHalfExtentPx(ringGeometryParamsRef.current))),
-      )
-      setArrivedCount((current) => Math.max(current, note.slot + 1))
-    }, note.delayMs))
+    // TWO MOMENTS PER NOTE, one rise apart: the cell is revealed (and starts
+    // its pop), and the sound lands on that pop's apex. Scheduled separately
+    // rather than by delaying the whole deal, so the cells still arrive on
+    // the gap the reader's own scroll duration set -- the offset moves the
+    // sound onto the peak, it does not slow the deal down.
+    const timers = notes.flatMap((note) => [
+      window.setTimeout(() => {
+        setArrivedCount((current) => Math.max(current, note.slot + 1))
+      }, note.delayMs),
+      window.setTimeout(() => {
+        // The cell's real on-screen point, from the same function that places
+        // the button -- the ring is a rounded square, so an angle recomputed
+        // here would pan a sound somewhere its cell is not.
+        const point = computeEscapeHoldPointAtSlot(note.slot, count, ringGeometryParamsRef.current)
+        void typingSoundManager.playRandomClick(
+          burstNoteVoice(note, panForRingX(point.x, escapeHoldRingHalfExtentPx(ringGeometryParamsRef.current))),
+        )
+      }, note.delayMs + CELL_POP_HALF_MS),
+    ])
     return () => { for (const timer of timers) window.clearTimeout(timer) }
     // cellsRef rather than `cells`: the burst is about the screen ARRIVING,
     // so it must not re-fire when a cell's label or availability changes
@@ -1147,6 +1172,7 @@ export function EscapeHoldPanel({
             style={{
               transform: `translate(-50%, -50%) translate(${point.x}px, ${point.y}px)`,
               '--rotation-duration': `${SIMPLE_ROTATION_TRANSITION_MS}ms`,
+              '--cell-pop-half': `${CELL_POP_HALF_MS}ms`,
             } as CSSProperties}
             tabIndex={index === focusedIndex ? 0 : -1}
             aria-label={cell.label}
@@ -1172,7 +1198,12 @@ export function EscapeHoldPanel({
             }}
             onMouseLeave={() => setHoveredIndex((current) => (current === index ? null : current))}
           >
-            <span className={cell.icon} aria-hidden="true" />
+            {/* THE POP LIVES HERE, not on the button: see the CSS. The
+                button's own transform is its ring placement, and scaling an
+                element scales the translation its `transform` applies --
+                so a pop on the button moved the cell along its own radius
+                instead of leaving it where it is. */}
+            <span className={`${cell.icon} editor-escape-hold-panel-btn-icon`} aria-hidden="true" />
           </button>
         )
       })}

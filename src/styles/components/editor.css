@@ -759,34 +759,40 @@
   visibility: hidden;
 }
 
-/* THE POP IS ON `scale`, NOT ON `transform`, and that is the whole reason it
-   can exist at all: each button's `transform` is its ring placement, written
-   imperatively every frame by the rotation loop (see the note on the base
-   rule below). An animation sharing that property would be overwritten mid-
-   flight by the rAF writes, or would fight them. `scale` is an independent
-   property that composes with `transform` without either touching the other,
-   so a cell can pop while the ring is turning underneath it.
+/* THE POP IS ON THE ICON, NOT ON THE BUTTON, and that is a correction: an
+   element's `scale` is applied BEFORE its own `transform` (the individual
+   transform properties compose as translate, rotate, scale, then
+   `transform`), so scaling a button whose `transform` IS its ring placement
+   scales that placement's translation too -- the cell slid along its own
+   radius, pivoting about the ring's centre instead of its own. Putting the
+   animation on the icon inside removes the interaction rather than working
+   around it: two properties on two elements, the placement still the
+   rotation loop's alone, and the icon's own box centred in the cell, so its
+   centre is exactly what it scales about and exactly what stays still.
 
-   Overshoot and settle, not a fade-up: the cell is arriving, and a thing that
-   arrives has some weight to it. Small on purpose -- eight per cent -- since
-   this fires once per cell on every screen, and the count is what the reader
-   is meant to be reading. */
+   NINETY TO A HUNDRED AND FIVE AND BACK: a rise into the overshoot and a
+   settle out of it, equal halves, `--cell-pop-half` each (EscapeHoldPanel's
+   CELL_POP_HALF_MS, which is also how long the cell's note is held back so
+   it lands on the apex rather than on the start). Rise and fall being equal
+   is what makes the 50% keyframe the apex; the durations are not two
+   numbers that can drift. */
 @keyframes escape-hold-cell-pop {
   0% {
-    scale: 0.72;
-    animation-timing-function: ease-out;
+    scale: 0.9;
+    animation-timing-function: ease-in;
   }
-  60% {
-    scale: 1.08;
-    animation-timing-function: ease-in-out;
+  50% {
+    scale: 1.05;
+    animation-timing-function: ease-out;
   }
   100% {
     scale: 1;
   }
 }
 
-.editor-stage .editor-escape-hold-panel-btn:not(.is-unarrived):not(.is-simple-rotation) {
-  animation: escape-hold-cell-pop 180ms both;
+.editor-stage .editor-escape-hold-panel-btn:not(.is-unarrived):not(.is-simple-rotation)
+  > .editor-escape-hold-panel-btn-icon {
+  animation: escape-hold-cell-pop calc(var(--cell-pop-half, 50ms) * 2) both;
 }
 
 /* The two ways a reader says they do not want this. `.is-simple-rotation` is
@@ -795,7 +801,7 @@
    above rather than here, because with that setting the cells all arrive at
    once and would otherwise pop in unison. */
 @media (prefers-reduced-motion: reduce) {
-  .editor-stage .editor-escape-hold-panel-btn:not(.is-unarrived) {
+  .editor-stage .editor-escape-hold-panel-btn > .editor-escape-hold-panel-btn-icon {
     animation: none;
   }
 }
