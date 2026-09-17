@@ -2,9 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { HELP_GUIDE_ROOT_ID, HELP_GUIDE_CHAPTER_IDS } from './helpGuide'
 import {
   isOverlayLive,
+  liveOccupancy,
   occupancyOf,
+  PLAIN_NOTE_OCCUPANCY,
   planOverlayClose,
   planOverlayOpen,
+  sectionShowingOverlay,
+  type SlotOccupancy,
   type SlotOverlay,
 } from './slotOverlay'
 
@@ -121,5 +125,53 @@ describe('planOverlayClose', () => {
 
   it('has nothing to restore when nothing was open', () => {
     expect(planOverlayClose(null)).toEqual({ overlay: null, restore: null })
+  })
+})
+
+/**
+ * A SLOT THAT IS NOT ON SCREEN REPORTS NOTHING.
+ *
+ * Occupancy is fed by each section from its own render, and unmounting is the
+ * one event a reporter is not around for -- so the raw map keeps entries for
+ * slots that have been closed. Believing one of those is how the window
+ * control ended up lit, with a flame, over a section that no longer existed:
+ * the toggle reads "is something showing the adventure", got a dead slot's id
+ * back, and every press from then on tried to CLOSE a view nothing could
+ * reach. The first press cleared the return record and found no slot to hand
+ * back to; every press after that had nothing left to close and did literally
+ * nothing. Lit for ever, dead for ever.
+ */
+describe('what the slots that exist are showing', () => {
+  const closedSlotStillClaimingTheAdventure: Record<string, SlotOccupancy> = {
+    left: PLAIN_NOTE_OCCUPANCY,
+    gone: { kind: 'adventure' },
+  }
+
+  it('drops a report from a slot that is no longer on screen', () => {
+    expect(liveOccupancy(['left'], closedSlotStillClaimingTheAdventure)).toEqual({ left: PLAIN_NOTE_OCCUPANCY })
+  })
+
+  it('never names a slot the reader cannot be sent to', () => {
+    // The whole defect in one assertion: scanning every entry answers "gone",
+    // and there is no such slot to close, focus, or draw a ring in.
+    expect(sectionShowingOverlay(['left'], closedSlotStillClaimingTheAdventure, 'adventure')).toBeNull()
+  })
+
+  it('names the slot while it is still there', () => {
+    expect(sectionShowingOverlay(['left', 'gone'], closedSlotStillClaimingTheAdventure, 'adventure')).toBe('gone')
+  })
+
+  it('answers in the slots own order, so two guides resolve to the leftmost', () => {
+    // Two slots can genuinely both show the guide (see `occupancyOf`). Which
+    // one is named has to be stable, and the reader's own left-to-right order
+    // is the only stable one -- object key order is insertion order, which is
+    // whichever section happened to mount first.
+    const both: Record<string, SlotOccupancy> = { right: { kind: 'guide' }, left: { kind: 'guide' } }
+    expect(sectionShowingOverlay(['left', 'right'], both, 'guide')).toBe('left')
+  })
+
+  it('is empty when nothing has reported yet', () => {
+    expect(liveOccupancy(['left'], {})).toEqual({})
+    expect(sectionShowingOverlay(['left'], {}, 'adventure')).toBeNull()
   })
 })

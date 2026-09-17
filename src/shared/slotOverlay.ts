@@ -110,6 +110,64 @@ export function occupancyOf(
   return PLAIN_NOTE_OCCUPANCY
 }
 
+/**
+ * WHAT THE SLOTS THAT EXIST ARE SHOWING -- the aggregate, filtered to the
+ * slots that are actually on screen.
+ *
+ * The occupancy map is fed by each section reporting from its own render, and
+ * a section that goes away cannot report that it has: unmounting is the one
+ * event a reporter is not around for. So the raw map accumulates entries for
+ * slots that have been closed, and every consumer that scans it -- "which slot
+ * is showing the adventure", "is this overlay still live" -- gets an answer
+ * naming a slot nobody can reach.
+ *
+ * That is not a cosmetic staleness. It is the SAME class of defect this module
+ * was written to make unreachable, arriving through the one door left open:
+ * the record was made harmless by never being believed on its own, and then
+ * the thing it is corroborated AGAINST grew a way to be stale itself. Closing
+ * the slot holding the adventure left the window control lit with a flame over
+ * a section that no longer existed, and pressing it could never put it out --
+ * the first press cleared the return record and found no slot to hand back to,
+ * and every press after that had a null record to close and did nothing at
+ * all. Lit for ever, dead for ever, with the game's ring routed to a slot that
+ * was not on screen.
+ *
+ * Filtered at the READ rather than pruned on unmount, deliberately, and this
+ * is the same argument the record itself is governed by: a prune is a
+ * correction, it has to be remembered at every site that closes or swaps a
+ * slot (there are four), and the fifth one written will forget. Deriving from
+ * the live list instead makes a dead slot's entry INERT by construction --
+ * exactly what a stale overlay record already is -- so there is no window in
+ * which the app can claim a slot the screen does not have.
+ */
+export function liveOccupancy(
+  liveSectionIds: readonly string[],
+  occupancyBySectionId: Readonly<Record<string, SlotOccupancy>>,
+): Record<string, SlotOccupancy> {
+  const live: Record<string, SlotOccupancy> = {}
+  for (const sectionId of liveSectionIds) {
+    const occupancy = occupancyBySectionId[sectionId]
+    if (occupancy) live[sectionId] = occupancy
+  }
+  return live
+}
+
+/**
+ * Which slot, if any, is showing a given kind right now. Scans the LIVE
+ * occupancy (above) in the slots' own order, so the answer is always a slot
+ * the reader can be sent to.
+ */
+export function sectionShowingOverlay(
+  liveSectionIds: readonly string[],
+  occupancyBySectionId: Readonly<Record<string, SlotOccupancy>>,
+  kind: SlotOverlayKind,
+): string | null {
+  for (const sectionId of liveSectionIds) {
+    if (occupancyBySectionId[sectionId]?.kind === kind) return sectionId
+  }
+  return null
+}
+
 /** Whether the record still describes something real. A stale record is inert, but worth tidying. */
 export function isOverlayLive(overlay: SlotOverlay | null, activeNoteIdOf: (sectionId: string) => string | null): boolean {
   if (!overlay) return false

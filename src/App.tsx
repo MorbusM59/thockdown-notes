@@ -183,8 +183,10 @@ import { emptySave, withSuccessAdjust, type GameSave } from './adventure/model/g
 import { createSeed } from './adventure/core/rng'
 import { ESCAPE_HOLD_MS } from './shared/escapeHold'
 import {
+  liveOccupancy,
   planOverlayClose,
   planOverlayOpen,
+  sectionShowingOverlay,
   type SlotOccupancy,
   type SlotOverlay,
   type SlotOverlayKind,
@@ -2315,7 +2317,7 @@ function App() {
    * this area: see src/shared/slotOverlay.ts, which owns the rule.
    *
    * READ IT FOR THE RETURN, NOT FOR WHAT IS ON SCREEN. What a slot is
-   * actually showing is `occupancyBySectionId` below, reported by the
+   * actually showing is `liveOccupancyBySectionId` below, reported by the
    * section that owns the slot. This record can be stale; it can never
    * therefore be wrong about the screen, because nothing asks it.
    */
@@ -2329,6 +2331,11 @@ function App() {
    * aggregates. Nothing here ever corrects a section, and no effect watches
    * a section in order to retract a flag -- the two that used to do exactly
    * that are gone with this map.
+   *
+   * REPORTS FROM SLOTS THAT NO LONGER EXIST STAY IN HERE, because unmounting
+   * is the one event a reporter cannot report. Nothing reads this raw: every
+   * consumer goes through `liveOccupancyBySectionId` below, which is why a
+   * closed slot's entry is inert rather than a claim about the screen.
    */
   const [occupancyBySectionId, setOccupancyBySectionId] = useState<Record<string, SlotOccupancy>>({})
 
@@ -2389,16 +2396,25 @@ function App() {
     })
   }, [])
 
-  /** Which slot, if any, is showing a given kind of overlay right now. */
-  const sectionShowingOverlay = useCallback((kind: SlotOverlayKind): string | null => {
-    for (const [sectionId, occupancy] of Object.entries(occupancyBySectionId)) {
-      if (occupancy.kind === kind) return sectionId
-    }
-    return null
-  }, [occupancyBySectionId])
+  /**
+   * What the slots THAT EXIST are showing. The only form of the aggregate
+   * anything is allowed to read -- see shared/slotOverlay.ts's `liveOccupancy`
+   * for what a report from a closed slot did to the window control before this
+   * existed.
+   */
+  const liveOccupancyBySectionId = useMemo(
+    () => liveOccupancy(editorSections.map((entry) => entry.id), occupancyBySectionId),
+    [editorSections, occupancyBySectionId],
+  )
 
-  const guideSectionId = sectionShowingOverlay('guide')
-  const adventureSectionId = sectionShowingOverlay('adventure')
+  const guideSectionId = useMemo(
+    () => sectionShowingOverlay(editorSections.map((entry) => entry.id), occupancyBySectionId, 'guide'),
+    [editorSections, occupancyBySectionId],
+  )
+  const adventureSectionId = useMemo(
+    () => sectionShowingOverlay(editorSections.map((entry) => entry.id), occupancyBySectionId, 'adventure'),
+    [editorSections, occupancyBySectionId],
+  )
   /**
    * The undocked note, when one is genuinely on screen. Read from the record
    * but only ever believed alongside the slot's own report -- the record on
@@ -5971,7 +5987,7 @@ ${markdownHtml}
     // note arriving lowers the ring, which can reach a mode's onDismiss a
     // beat after the slot stopped showing it. The invariant, applied: where
     // the record and the screen disagree, the screen wins.
-    const live = occupancyBySectionId[slotOverlay.sectionId]?.kind === slotOverlay.kind
+    const live = liveOccupancyBySectionId[slotOverlay.sectionId]?.kind === slotOverlay.kind
     setSlotOverlay(null)
     persistMenuStateNow({ slotOverlay: null })
     if (!live) return
@@ -5983,7 +5999,7 @@ ${markdownHtml}
       return
     }
     await handle.clearActiveNote().catch(() => undefined)
-  }, [occupancyBySectionId, persistMenuStateNow, slotOverlay])
+  }, [liveOccupancyBySectionId, persistMenuStateNow, slotOverlay])
 
   /**
    * The User Guide: an ordinary (timeless) note loaded through the exact
