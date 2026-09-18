@@ -5,6 +5,22 @@
 // encounter is the encounter. Everywhere else the player picks how to look
 // for one.
 //
+// THE OMEN STANDS BEFORE THE THREE, and it is a phase of THIS stage rather
+// than a stage of its own. That is not where it would naturally live, and the
+// reason is the funnel: five stages route into this one (the outpost, the
+// loot screen, a fight ending either way, the region select, the
+// under-construction wall), and "go to the omen first when the next encounter
+// is fixed" placed at each of them is five copies of one rule -- this
+// codebase's characteristic failure, and the next route in would not know to
+// ask. Placed here it is asked once, because every route in arrives here.
+//
+// A stage cannot redirect on entry (a transition comes from `resolve`), so
+// the omen being a separate stage would mean showing the boss screen first
+// and pushing the omen off it -- which is the wrong order, and the order is
+// the whole point: you are given something BEFORE you see what you are given
+// it for. The rules and the draw are `model/specialEvents.ts`; only the
+// screen is here.
+//
 // WHICH encounter is read off the record (see levelProgress.ts), not held
 // here and not threaded in: this stage is re-entered once per encounter and
 // has no way to count its own re-entries.
@@ -14,11 +30,19 @@ import type { StageModule } from '../core/stage'
 import { MONSTER_CLASS_IDS } from '../content'
 import { buildEncounterOffers, fixedTypeAt, LEVEL_ENCOUNTER_COUNT } from '../model/encounterOffers'
 import { iconFor, monsterDetailLines, monsterFor, offerFromJson, offerToJson } from './encounter'
+import {
+  DROP_CANCEL, dropCancelledNarration, dropChoices, dropEffects, dropNarration, handsAreFull, readPendingId,
+} from './carry'
+import { drawOmenTraits, omenHealAmount, omenPool, omenTraitCount } from '../model/specialEvents'
+import { describeModifier } from '../model/modifiers'
+import { holdingCounts } from '../model/gameState'
 import { currentEncounter, isLevelComplete } from './levelProgress'
 import { COMBAT_STAGE_ID, ENCOUNTER_SELECT_STAGE_ID, HUNT_STAGE_ID, REGION_SELECT_STAGE_ID } from './ids'
 
 
 const ADVANCE_CHOICE = 'level:advance'
+const OMEN_HEAL_CHOICE = 'omen:rest'
+const OMEN_TRAIT_PREFIX = 'omen:trait:'
 
 // SPENDING A STAT POINT IS NOT A CELL HERE any more, and the cell it replaced
 // was this stage's only reason to know about the ladder. A point waiting is
@@ -48,12 +72,28 @@ export const encounterSelectStage: StageModule = {
       rng,
     })
     const offer = drawn.offers[0]
+    // The omen is drawn NOW, with the boss, and shown first. Drawing it here
+    // rather than when it is presented is what lets both screens belong to
+    // one entry: the player answers the omen, the stage stays, and the boss
+    // it already drew is underneath -- no re-entry, no second draw, and the
+    // monster cannot change because you took a heal.
+    const region = context.content.regions.find((candidate) => candidate.id === context.game?.regionId)
+    const pool = omenPool(region, context.traits, context.held)
+    const omen = drawOmenTraits(
+      pool,
+      omenTraitCount(context.profile?.stats.intellect ?? 0),
+      drawn.rng,
+    )
     return {
-      state: { fixedOffer: offer ? offerToJson(offer) : null } satisfies JsonObject,
+      state: {
+        fixedOffer: offer ? offerToJson(offer) : null,
+        omenTraitIds: omen.traits.map((trait) => trait.id),
+        omenAnswered: false,
+      } satisfies JsonObject,
       narration: offer
-        ? `**${offer.name}.** *It has been waiting for you.*`
+        ? `**${offer.name} is ahead.** *The road gives you something first.*`
         : 'Something should be here, and the game cannot say what.',
-      rng: drawn.rng,
+      rng: omen.rng,
     }
   },
 
@@ -73,6 +113,45 @@ export const encounterSelectStage: StageModule = {
     }
 
     const fixed = offerFromJson(state.fixedOffer ?? undefined)
+
+    if (fixed && state.omenAnswered !== true) {
+      const pending = readPendingId(state)
+      if (pending) {
+        return {
+          screenKey: `omen:drop:${pending}`,
+          choices: dropChoices(context, 'trait', pending),
+        }
+      }
+      const heal = omenHealAmount(context.profile?.stats.might ?? 0)
+      const offered = (Array.isArray(state.omenTraitIds) ? state.omenTraitIds : [])
+        .flatMap((id) => {
+          const trait = typeof id === 'string' ? context.catalog.get(id) : undefined
+          return trait ? [trait] : []
+        })
+      return {
+        screenKey: `omen:${encounter}`,
+        choices: [
+          ...offered.map((trait) => ({
+            id: `${OMEN_TRAIT_PREFIX}${trait.id}`,
+            label: trait.name,
+            icon: trait.icon,
+            detail: { title: trait.name, lines: describeModifier(trait, holdingCounts(context.held)) },
+          })),
+          {
+            id: OMEN_HEAL_CHOICE,
+            label: 'Rest a while',
+            icon: 'fa-solid fa-campground',
+            detail: {
+              title: 'Rest a while',
+              // The number, not the formula: a player deciding between this
+              // and a trait needs to know what they are being handed.
+              lines: [`Recover ${heal} hit points`, 'Ten, and two for every point of Might'],
+            },
+          },
+        ],
+      }
+    }
+
     if (fixed) {
       const monster = monsterFor(fixed, context)
       return {
@@ -101,7 +180,68 @@ export const encounterSelectStage: StageModule = {
     }
   },
 
-  resolve: (state, choiceId, _context, rng) => {
+  resolve: (state, choiceId, context, rng) => {
+    // THE OMEN, answered. It resolves with `stay`, so the boss this stage
+    // already drew is still underneath and is what the next screen shows.
+    if (state.fixedOffer && state.omenAnswered !== true) {
+      const answered = { ...state, omenAnswered: true, omenTraitIds: [], pendingId: null }
+      const pending = readPendingId(state)
+
+      if (pending && choiceId === DROP_CANCEL) {
+        return {
+          kind: 'stay',
+          state: { ...state, pendingId: null },
+          narration: dropCancelledNarration(context.catalog.get(pending)?.name ?? 'It'),
+          rng,
+        }
+      }
+      if (pending) {
+        const swapped = dropEffects('trait', choiceId, pending)
+        if (!swapped) return { kind: 'stay', state, rng }
+        return {
+          kind: 'stay',
+          state: answered,
+          effects: swapped,
+          narration: `**${context.catalog.get(pending)?.name ?? 'It'}.** *Carried out of here.*`,
+          rng,
+        }
+      }
+
+      if (choiceId === OMEN_HEAL_CHOICE) {
+        const heal = omenHealAmount(context.profile?.stats.might ?? 0)
+        return {
+          kind: 'stay',
+          state: answered,
+          effects: [{ kind: 'adjustHitPoints', amount: heal }],
+          narration: `**You rest.** *${heal} hit points back, and then the road.*`,
+          rng,
+        }
+      }
+
+      if (choiceId.startsWith(OMEN_TRAIT_PREFIX)) {
+        const trait = context.catalog.get(choiceId.slice(OMEN_TRAIT_PREFIX.length))
+        if (!trait) return { kind: 'stay', state, rng }
+        // Ask what to give up FIRST, exactly as the loot screen does: the
+        // pick is not applied until the question is answered.
+        if (handsAreFull(context, 'trait')) {
+          return {
+            kind: 'stay',
+            state: { ...state, pendingId: trait.id },
+            narration: dropNarration('trait', trait.name),
+            rng,
+          }
+        }
+        return {
+          kind: 'stay',
+          state: answered,
+          effects: [{ kind: 'acquireModifier', modifierKind: 'trait', modifierId: trait.id }],
+          narration: `**${trait.name}.** *The place leaves its mark on you.*`,
+          rng,
+        }
+      }
+      return { kind: 'stay', state, rng }
+    }
+
     if (choiceId === ADVANCE_CHOICE) {
       return {
         kind: 'replace',

@@ -106,6 +106,26 @@ export interface Region {
   id: string
   name: string
   icon: string
+  /**
+   * THE TWO BORDERS this region lies between, named -- which is what a player
+   * reads when choosing where to go. Not decoration: the names ARE the two
+   * groups of five its traits come from, so reading them tells you what can
+   * be found here and, because a neighbour shares one of them, which way to
+   * travel for more of it.
+   */
+  borders: readonly string[]
+  /**
+   * WHICH TRAITS THIS PLACE BREEDS -- the ten a special event here may offer
+   * (stages/encounterSelect.ts's omen). Every trait belongs to two regions
+   * and every region holds ten, which is not a coincidence to be maintained
+   * by hand: the regions are a RING and the traits are authored on the
+   * borders between them, so a region is the two groups it lies between. See
+   * `content/thockquest.ts`.
+   *
+   * By ID, like everything else the save and the content share, so a trait
+   * renamed or dropped costs a name in a list rather than a broken region.
+   */
+  traits: readonly string[]
 }
 
 export interface Content {

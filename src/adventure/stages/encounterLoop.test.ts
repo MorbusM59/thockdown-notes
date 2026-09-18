@@ -13,6 +13,7 @@ import { encounterSelectStage } from './encounterSelect'
 import { sanitizeGameSave } from '../save'
 import { withSuccessAdjust } from '../model/gameState'
 import { famePointsAvailable } from '../model/gold'
+import { omenHealAmount } from '../model/specialEvents'
 
 const DEPS: DirectorDeps = {
   stages: STAGES,
@@ -189,11 +190,24 @@ describe('the level counts to ten', () => {
     }
   })
 
-  it('presents one forced encounter at five, nine and ten', () => {
+  it('stands an omen before the forced encounter at five, nine and ten', () => {
     for (const encounter of [5, 9, 10]) {
       const context = atEncounter(encounter)
       const entered = encounterSelectStage.enter({}, context, 5)
-      const shown = encounterSelectStage.present(entered.state, context)
+
+      // THE OMEN COMES FIRST, which is the order the whole thing is for: you
+      // are given something before you are shown what it is for. The rest is
+      // always on the table; the traits depend on the region, and this
+      // context has none, so here it is the rest alone.
+      const omen = encounterSelectStage.present(entered.state, context)
+      expect(omen.choices.map((choice) => choice.id)).toContain('omen:rest')
+      expect(omen.choices.map((choice) => choice.id)).not.toContain('encounter:fixed')
+
+      // Answering it STAYS in this stage, so the boss drawn on entry is the
+      // one presented next -- no re-entry and no second draw.
+      const answered = encounterSelectStage.resolve(entered.state, 'omen:rest', context, 5)
+      if (answered.kind !== 'stay') throw new Error('the omen should stay in the hub')
+      const shown = encounterSelectStage.present(answered.state, context)
       expect(shown.choices).toHaveLength(1)
       expect(shown.choices[0].id).toBe('encounter:fixed')
     }
@@ -201,6 +215,27 @@ describe('the level counts to ten', () => {
     const open = atEncounter(4)
     const entered = encounterSelectStage.enter({}, open, 5)
     expect(encounterSelectStage.present(entered.state, open).choices).toHaveLength(3)
+  })
+
+  it('pays the rest into a hurt character, and cannot overfill a healthy one', () => {
+    // The one thing the omen GIVES, seen arriving. It is also the first
+    // healing in the game -- deliberately a rest you give a trait up for at
+    // three fixed moments, not a recovery mechanic (docs/adventure-game-design.md).
+    const context = atEncounter(5)
+    const hurt = applyEffects(context.save, [{ kind: 'adjustHitPoints', amount: -30 }], DEPS.content, NOW)
+    const before = activeGame(hurt)!.hitPoints
+    const entered = encounterSelectStage.enter({}, { ...context, save: hurt }, 5)
+    const answered = encounterSelectStage.resolve(entered.state, 'omen:rest', { ...context, save: hurt }, 5)
+    if (answered.kind !== 'stay') throw new Error('the omen should stay in the hub')
+
+    const rested = applyEffects(hurt, answered.effects ?? [], DEPS.content, NOW)
+    const might = context.profile?.stats.might ?? 0
+    expect(activeGame(rested)!.hitPoints).toBe(before + omenHealAmount(might))
+
+    // And at full health it is clamped rather than banked -- which is what
+    // makes taking the trait the obvious call when nothing hurts.
+    const full = applyEffects(context.save, answered.effects ?? [], DEPS.content, NOW)
+    expect(activeGame(full)!.hitPoints).toBe(activeGame(context.save)!.hitPoints)
   })
 
   it('starts each level over at its first encounter', () => {

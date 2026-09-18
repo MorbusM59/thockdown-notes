@@ -1423,3 +1423,59 @@ placed at 5, 9 and 10 and the level advancing after ten.
     harder (Easy's death rate 87% → 94%). It reads `deriveStats` through the
     real profile now and the numbers came back. An instrument that restates a
     formula measures the copy.
+
+88. **REGIONS DECIDE WHAT CAN BE FOUND, AND THE OMEN IS WHERE THEY SAY SO.**
+    Regions recorded a choice and did nothing with it. They now own the trait
+    pool of the special event that stands before every mini boss and boss.
+
+    **THE HEXAGON.** Six regions, thirty traits, each trait in two regions,
+    ten per region: those four numbers are `30 x 2 = 60 = 6 x 10`, which is a
+    2-regular graph on six vertices, whose only connected form is a ring. So
+    the regions are laid in a ring and the traits are authored on the BORDERS
+    between them -- six groups of five -- and a region is the two groups it
+    lies between. Every constraint then falls out of the shape rather than
+    being maintained by hand: ten per region because a region has two
+    borders, two regions per trait because a border has two sides.
+    `regionTraits.contract.test.ts` holds the arithmetic anyway, because the
+    groups are hand-typed lists of ids and a typo that repeats one id and
+    drops another keeps every count intact while quietly putting one trait in
+    four regions.
+
+    The shape buys the design something a flat assignment would not:
+    NEIGHBOURS OVERLAP BY FIVE AND OPPOSITES BY NOTHING, so the world has a
+    grain and travel is a decision. Each border is NAMED, and a region's two
+    border names are its detail on the road screen -- ten trait names would
+    cost more reading than the pace constraint allows, and the names are the
+    honest short form because they are literally the groups.
+
+    **THE OMEN IS A PHASE OF THE HUB, not a stage**, and that is the funnel's
+    doing. Five stages route into `encounterSelect` (outpost, loot, combat
+    either way, region select, the under-construction wall), so "go to the
+    omen first when the next encounter is fixed" placed at each of them is
+    five copies of one rule and the next route in would not know to ask.
+    Placed in the hub it is asked once. A stage also cannot redirect on entry
+    -- a transition comes from `resolve` -- so the omen as its own stage would
+    mean showing the boss screen and pushing the omen off it, which is the
+    wrong order, and the order is the whole point: you are given something
+    before you are shown what it is for.
+
+    Both screens belong to ONE entry: the boss and the omen's traits are
+    drawn together in `enter`, and answering the omen is a `stay`. So the
+    monster cannot change because you took a heal, and there is no marker on
+    the record -- the stage's own state carries it, which is exactly what
+    stage state is for.
+
+    **THE RULES ARE THE MODEL'S** (`model/specialEvents.ts`): the rest is
+    `10 + 2 x Might` so it is worth most to the character built around
+    surviving; the traits are `2 + Intellect / 2`, which widens the choice
+    rather than improving it. Both floor at zero, because a Berserker starts
+    at -2 Intellect. Fewer traits than asked for is a real outcome, not a
+    failure: the rest is always on the table, so the screen is never empty.
+
+    Taking a trait with full hands goes through `stages/carry.ts` unchanged
+    -- the same drop question loot asks, in the same words.
+
+    **It moves the balance a long way**, as three free things a level should:
+    Easy's death rate fell 88% -> 66% and the median run reached level 2.2
+    rather than 1.6. That is the sim reporting the game, not itself, this
+    time.

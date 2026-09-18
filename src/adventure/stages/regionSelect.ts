@@ -1,9 +1,14 @@
 // Where this level happens.
 //
-// A region is meant to determine which encounters and which monsters are in
-// scope for the level. Those pools are not specified yet, so choosing one
-// currently records the choice and nothing more -- which is the honest
-// state of it, and visible as such rather than dressed up.
+// A region DECIDES WHAT CAN BE FOUND THERE: the traits its special events
+// offer, before every mini boss and boss (model/specialEvents.ts). The six
+// are a ring and their traits are authored on the borders between them, so
+// each region's two border names say what it breeds -- and a neighbour shares
+// one of those borders, which is why travelling one way rather than the other
+// is a decision a player can actually make.
+//
+// Which encounters and which MONSTERS a region brings into scope is still
+// unspecified, and this stage still does not pretend otherwise.
 
 import type { StageModule } from '../core/stage'
 import { MARKET_PRICE, purse } from './market'
@@ -25,6 +30,11 @@ export const regionSelectStage: StageModule = {
       id: `region:${region.id}`,
       label: region.name,
       icon: region.icon,
+      // WHAT IS FOUND HERE, in two words per border rather than ten trait
+      // names: the pace constraint says a choice cannot cost ten seconds of
+      // reading, and the border names are the honest short form -- they are
+      // literally the groups the traits come from.
+      detail: { title: region.name, lines: [...region.borders] },
     })),
   }),
 

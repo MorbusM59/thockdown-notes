@@ -105,11 +105,97 @@ const ORIGINS: readonly Origin[] = [
  * monsters each one brings into scope is NOT specified, so a region is
  * currently a place with a name.
  */
-const REGIONS: readonly Region[] = [
+/**
+ * THE SIX REGIONS, AND THE TRAITS THEY BREED, as a RING.
+ *
+ * The design asks for six regions, thirty traits, every trait belonging to
+ * two regions, and ten traits in every region. Those four numbers have
+ * exactly one clean shape: 30 x 2 = 60 = 6 x 10, which is a 2-regular graph
+ * on six vertices -- and the only connected one is a hexagon.
+ *
+ * So the regions are laid in a RING and the traits are authored on the
+ * BORDERS between them: six groups of five, each group belonging to the two
+ * regions it lies between. A region is then the two groups on its own two
+ * borders, which is ten, and every trait is in exactly two regions because a
+ * border has exactly two sides. None of that is counted by hand or asserted
+ * by hope -- it falls out of the shape, and `regionTraits.contract.test.ts`
+ * holds it to the arithmetic.
+ *
+ * It also buys the thing a flat assignment would not: NEIGHBOURS OVERLAP.
+ * Travel from the marsh to the wastes and half of what you can find comes
+ * with you, half is new. The world has a grain, and a player who notices it
+ * can steer toward a trait they want.
+ *
+ * Each border is a THEME both its sides can own -- stone and cold between
+ * the caves and the snowline, scavengers between the ruins and the fen -- so
+ * a trait reads as belonging to where it was found rather than as having
+ * been dealt there.
+ */
+const REGION_RING: readonly { id: string; name: string; icon: string }[] = [
   { id: 'caves', name: 'A sprawling cave system', icon: 'fa-solid fa-mountain-sun' },
   { id: 'foothills', name: 'The foothills of a snowy range', icon: 'fa-solid fa-snowflake' },
+  { id: 'ruins', name: 'A city gone to ruin', icon: 'fa-solid fa-archway' },
+  { id: 'fen', name: 'A fever-ridden fen', icon: 'fa-solid fa-frog' },
+  { id: 'wastes', name: 'The ember wastes', icon: 'fa-solid fa-volcano' },
   { id: 'island', name: 'A remote island', icon: 'fa-solid fa-umbrella-beach' },
 ]
+
+/**
+ * ONE GROUP PER BORDER, in the ring's own order: group `i` lies between
+ * region `i` and region `i + 1`, and the last closes the circle back to the
+ * first. Five traits each, thirty in all, none repeated.
+ */
+const BORDER_TRAITS: readonly { name: string; traits: readonly string[] }[] = [
+  {
+    // caves | foothills. What it takes to keep going where the ground is hard
+    // and the air is thin.
+    name: 'Stone and cold',
+    traits: ['iron-constitution', 'thick-skinned', 'deep-breather', 'cold-blooded', 'stubborn-streak'],
+  },
+  {
+    // foothills | ruins. The road between them is watchful work: sleeping
+    // light, reading ground, keeping your hands steady.
+    name: 'The long march',
+    traits: ['patient-hunter', 'wary-traveller', 'light-sleeper', 'quick-study', 'steady-hands'],
+  },
+  {
+    // ruins | fen. Two places people pick over, and the habits of everyone
+    // who lives off what is left.
+    name: 'Scavengers',
+    traits: ['avid-collector', 'hoarder', 'opportunist', 'grudge-bearer', 'scar-tissue'],
+  },
+  {
+    // fen | wastes. Where nothing is fair, what keeps you alive is the part
+    // of you that stops being careful.
+    name: 'Desperation',
+    traits: ['cornered-animal', 'battle-trance', 'short-fuse', 'pit-fighter', 'bloodhound'],
+  },
+  {
+    // wastes | island. The far edges of the map: chancers, castaways, and
+    // whatever you can talk your way out of.
+    name: 'Fortune',
+    traits: ['lucky-streak', 'disarming-smile', 'sense-of-style', 'silver-tongue', 'duelists-read'],
+  },
+  {
+    // island | caves. Smugglers' coves and sunless tunnels want the same
+    // things: senses that work without light, and instinct.
+    name: 'In the dark',
+    traits: ['cave-sense', 'night-owl', 'feral-grace', 'pack-instinct', 'second-skin'],
+  },
+]
+
+const REGIONS: readonly Region[] = REGION_RING.map((region, index) => {
+  // The two borders this region lies on: the one behind it and the one ahead.
+  // `+ length` before the modulo so the first region reaches round to the last
+  // border rather than to index -1.
+  const behind = BORDER_TRAITS[(index - 1 + BORDER_TRAITS.length) % BORDER_TRAITS.length]
+  const ahead = BORDER_TRAITS[index]
+  return {
+    ...region,
+    borders: [behind.name, ahead.name],
+    traits: [...behind.traits, ...ahead.traits],
+  }
+})
 
 /**
  * THE TRAIT TEMPLATES. Thirty of them, and, exactly as with the items, not one

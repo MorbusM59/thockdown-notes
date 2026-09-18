@@ -786,3 +786,35 @@ at the floor but can never push it past the ceiling.
   being armoured.
 
   Earned by **spending six points into Might in one run** — reaching 6/6.
+
+- **A SPECIAL EVENT STANDS BEFORE EVERY MINI BOSS AND BOSS** — three a level,
+  at the only three encounters a player cannot choose their way around. It
+  gives something for nothing, and asks which:
+
+  - **one rest**, always offered, worth `10 + 2 x Might`;
+  - **`2 + Intellect / 2` traits**, drawn from the region's own ten.
+
+  Intellect WIDENS the choice rather than improving it. Taking a trait with
+  full hands asks what to give up, exactly as loot does.
+
+  This is the first healing in the game, and it is not the healing layer the
+  plan defers: a rest you give a trait up for, at three fixed moments, rather
+  than recovery as a mechanic.
+- **THE SIX REGIONS ARE A RING, and the traits are authored on the borders
+  between them.** Thirty traits, each in two regions, ten per region is
+  `30 x 2 = 60 = 6 x 10` — a hexagon. Six groups of five sit on the six
+  borders; a region is the two groups it lies between.
+
+  | | border behind | border ahead |
+  |---|---|---|
+  | A sprawling cave system | In the dark | Stone and cold |
+  | The foothills of a snowy range | Stone and cold | The long march |
+  | A city gone to ruin | The long march | Scavengers |
+  | A fever-ridden fen | Scavengers | Desperation |
+  | The ember wastes | Desperation | Fortune |
+  | A remote island | Fortune | In the dark |
+
+  So **neighbours share five traits and opposite regions share none** — the
+  world has a grain, and a player who wants a particular trait can travel
+  along it. A region's two border names are what the choice shows, because
+  ten trait names is more than a choice may cost to read.
