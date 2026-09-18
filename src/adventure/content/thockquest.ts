@@ -31,18 +31,22 @@ import type { Content, MonsterClass, MonsterClassId, Origin, Region, Species } f
 import type { ModifierTemplate } from '../model/modifierSlots'
 
 /**
- * PLACEHOLDER STAT SPREADS for the four starting classes. Only the Warrior's
+ * PLACEHOLDER STAT SPREADS for the four starting origins. Only the Warrior's
  * is specified (+2 Might, +1 Agility). The other three are named in the
  * design document with no numbers at all; theirs are shaped to match the
  * Warrior's budget so that character creation is playable, and they are NOT
  * balanced, considered, or agreed. Replace them with real ones before any of
  * this is tuned.
  *
- * The BERSERKER is specified, and it is the first class that has to be
+ * The BERSERKER is specified, and it is the first origin that has to be
  * earned: reach Might 6 in a run and it is available at the start of every
- * run after (model/permanentUnlocks.ts). It is also the first class to carry
- * effects that are not stats -- which is what a class sharing the modifier
+ * run after (model/permanentUnlocks.ts). It is also the first origin to carry
+ * effects that are not stats -- which is what an origin sharing the modifier
  * vocabulary buys, rather than a second kind of declaration.
+ *
+ * ORIGIN, never "class": what the PLAYER is stays an origin, and `class` is
+ * spoken for by the MONSTER axis below (`MONSTER_CLASSES`), which is the
+ * design document's own word for what a monster fights like.
  */
 const ORIGINS: readonly Origin[] = [
   {

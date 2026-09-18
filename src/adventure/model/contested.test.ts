@@ -118,7 +118,7 @@ describe('the power multiplier', () => {
 })
 
 describe('monster types', () => {
-  it('shifts every base stat by the ladder, class untouched', () => {
+  it('shifts every base stat by the ladder, origin untouched', () => {
     const base = block({ might: 2, agility: 1 })
     for (const type of MONSTER_TYPES) {
       const monster = buildMonster({ classId: 'fighter', classBaseStats: base, type, level: 1, against: base })

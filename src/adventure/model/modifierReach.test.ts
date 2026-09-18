@@ -431,7 +431,7 @@ describe('what survives a level', () => {
     const game = activeGame(onward)
     if (!game) throw new Error('no game')
     // Through the RUN's resolver, not a hand-assembled one: a run's profile
-    // includes its class, and an expectation built without it is measuring a
+    // includes its origin, and an expectation built without it is measuring a
     // character nobody is playing.
     const max = resolveRunProfile(
       game,

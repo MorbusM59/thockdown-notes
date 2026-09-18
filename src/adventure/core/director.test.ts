@@ -210,7 +210,7 @@ describe('a game, played', () => {
 
     save = choose(save, 'origin:warrior', DEPS, NOW).save
     const game = save.games.find((candidate) => candidate.id === save.activeGameId)
-    // A CLASS IS NOT PROGRESSION. Its gifts used to be written into the base
+    // AN ORIGIN IS NOT PROGRESSION. Its gifts used to be written into the base
     // block, which quietly spent two of the player's own six Might points; it
     // is recorded instead and resolves with the modifiers, so the base block
     // is what the player spent and nothing else -- nothing, this early.

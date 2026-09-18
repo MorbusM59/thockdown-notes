@@ -90,7 +90,7 @@ export type Effect =
    */
   | { kind: 'buyFamePurchase'; purchase: string }
   /**
-   * Which CLASS this run is playing. Recorded rather than applied: a class
+   * Which ORIGIN this run is playing. Recorded rather than applied: an origin
    * resolves with the modifiers (model/gameState.ts's `originModifier`), so
    * the base stat block stays purely what the player spent and every run has
    * all six points in every stat to spend.

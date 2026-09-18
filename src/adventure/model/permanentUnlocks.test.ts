@@ -24,13 +24,13 @@ function spendMight(save: GameSave, points: number): GameSave {
   )
 }
 
-describe('a class stacks with what the player spends', () => {
-  it('leaves every one of the six points to spend, whatever the class gave', () => {
-    // THE PROPERTY, across every class rather than one: a class that wrote
+describe('an origin stacks with what the player spends', () => {
+  it('leaves every one of the six points to spend, whatever the origin gave', () => {
+    // THE PROPERTY, across every origin rather than one: an origin that wrote
     // into the base block spent the player's allowance for them, and the
-    // failure that invites is the one where it holds for the class somebody
+    // failure that invites is the one where it holds for the origin somebody
     // tested. A Warrior used to begin at Might 2 and could put only four more
-    // in; now every class begins at nothing spent.
+    // in; now every origin begins at nothing spent.
     for (const origin of THOCKQUEST.origins) {
       const save = runAs(origin.id)
       const game = activeGame(save)!
@@ -40,7 +40,7 @@ describe('a class stacks with what the player spends', () => {
     }
   })
 
-  it('reaches past the base cap, which is what gear does and what a class now is', () => {
+  it('reaches past the base cap, which is what gear does and what an origin now is', () => {
     // Six points of Might is the top of the player's own progression; the
     // Warrior's +2 lands on TOP of it, so the fight sees 8. Before, those two
     // were the same two points counted once.
@@ -66,7 +66,7 @@ describe('a class stacks with what the player spends', () => {
   })
 
   it('takes worn armour away from the Berserker and leaves natural armour alone', () => {
-    // The trade the class is FOR: no decaying pool from items, but a trait's
+    // The trade the origin is FOR: no decaying pool from items, but a trait's
     // natural armour still counts, so a Berserker can be tough without ever
     // being armoured.
     const plain = runAs('warrior')
@@ -115,7 +115,7 @@ describe('what a run leaves behind', () => {
     const reloaded = sanitizeGameSave(JSON.parse(JSON.stringify(earned)))!
     expect(reloaded.profile.unlocked).toEqual(['berserker'])
 
-    // A NEW run on that save is offered the class, which is the whole point.
+    // A NEW run on that save is offered the origin, which is the whole point.
     const next = choose(enterEntryScreen({ ...reloaded, activeGameId: null, director: { stack: [], narration: [], rng: 11 } }, DEPS, NOW), 'welcome:start', DEPS, NOW).save
     expect(currentScreen(next, DEPS)!.choices.map((choice) => choice.id)).toContain('origin:berserker')
   })

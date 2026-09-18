@@ -21,7 +21,7 @@ describe('what the omen is worth', () => {
     expect([0, 1, 2, 3, 4, 5, 6].map(omenTraitCount)).toEqual([2, 2, 3, 3, 4, 4, 5])
   })
 
-  it('never goes below the floor, whatever a class did to the stat', () => {
+  it('never goes below the floor, whatever an origin did to the stat', () => {
     // A Berserker carries -2 Intellect and can start below zero.
     expect(omenTraitCount(-2)).toBe(2)
     expect(omenHealAmount(-3)).toBe(10)

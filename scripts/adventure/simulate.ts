@@ -236,8 +236,8 @@ function playOne(
 
     // THE REAL CEILING, not a restatement of it. This read
     // `50 + 15 * baseStats.might` -- the hit-point formula, copied -- and the
-    // copy went wrong the moment classes stopped being written into the base
-    // block: the denominator lost the class's Might, health read too high,
+    // copy went wrong the moment origins stopped being written into the base
+    // block: the denominator lost the origin's Might, health read too high,
     // and the "careful" policy stopped being careful. The sim reported that
     // as the game getting harder. The formula has one home (`deriveStats`),
     // reached here the way every other caller reaches it.

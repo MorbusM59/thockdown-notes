@@ -65,7 +65,7 @@ export const characterCreationStage: StageModule = {
   present: (state, context) => {
     const step = stepOf(state.step)
     if (step === 'origin') {
-      // A class the player has not earned is not on the ring at all. The
+      // An origin the player has not earned is not on the ring at all. The
       // gate is HERE rather than in content, the same way every other
       // reachability gate in this game lives in the stage that offers the
       // choice: content says what a thing requires, the screen decides
@@ -82,7 +82,7 @@ export const characterCreationStage: StageModule = {
             detail: {
               title: origin.name,
               // Described from the EFFECTS, through the same describer an
-              // item's detail uses -- which is the whole point of a class
+              // item's detail uses -- which is the whole point of an origin
               // carrying effects rather than a stat map. A Berserker's
               // "+100% damage" and "worn armour counts for nothing" need no
               // code here at all.
@@ -124,7 +124,7 @@ export const characterCreationStage: StageModule = {
         kind: 'replace',
         stageId: CHARACTER_CREATION_STAGE_ID,
         input: { step: 'trait' },
-        // RECORDED, not written into the stats. The class resolves with the
+        // RECORDED, not written into the stats. The origin resolves with the
         // modifiers from here on, so the six points in every stat are the
         // player's own to spend whatever they picked.
         effects: [

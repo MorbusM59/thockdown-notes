@@ -40,7 +40,7 @@ export const PERMANENT_UNLOCKS: readonly PermanentUnlock[] = [
     id: 'berserker',
     name: 'Berserker',
     earnedFor: `${STAT_LABELS.might} ${BASE_STAT_CAP}/${BASE_STAT_CAP} in one run`,
-    // Base stats are what the player SPENT and nothing else now that classes
+    // Base stats are what the player SPENT and nothing else now that origins
     // resolve with the modifiers, so reaching the cap is six points put into
     // Might -- which is the condition as the author stated it, with no
     // arithmetic in between that could drift from it.

@@ -148,8 +148,8 @@ function sanitizeGame(value: unknown): GameRecord | null {
     // and the ceiling is clamped there too, so a list this build cannot
     // explain can neither crash it nor raise a rule past the design's top.
     famePurchases: modifierIds(value.famePurchases),
-    // Null for a run saved before classes moved out of the base block. Such a
-    // run keeps the stats its class was written into and simply has no class
+    // Null for a run saved before origins moved out of the base block. Such a
+    // run keeps the stats its origin was written into and simply has no origin
     // layer -- which is what it was played as, so it plays on unchanged rather
     // than being thrown away or silently re-gifted.
     originId: typeof value.originId === 'string' && value.originId.length > 0 ? value.originId : null,

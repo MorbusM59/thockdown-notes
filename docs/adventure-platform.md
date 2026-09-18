@@ -38,7 +38,7 @@ chosen. Everything below it is the machinery that carries this out.
 | **region** | one of six, chosen at each level's start; it decides which ten traits the omen may draw from. |
 | **modifier** | an item or a trait, rolled once per run from a template (`model/modifierSlots.ts`) and held by id. |
 | **catalog** | `catalogFor(content, seed)` — this run's rolled modifiers, a function of the seed, memoized. |
-| **profile** | `resolveRunProfile(...)` — what a character is worth right now: base stats, class, everything held. Recomputed, never stored. |
+| **profile** | `resolveRunProfile(...)` — what a character is worth right now: base stats, origin, everything held. Recomputed, never stored. |
 
 Two words that are NOT synonyms, having once been one: a **fame purchase**
 (`model/famePurchases.ts`) is bought with fame and dies with the run; a
@@ -1429,7 +1429,7 @@ placed at 5, 9 and 10 and the level advancing after ten.
     **FAME IS SPENT WITHIN A RUN**, which is a change of the author's: the
     original plan had it persist between runs. What persists instead will be
     a separate list of PERMANENT UNLOCKS, earned by what a run spent rather
-    than carried over as currency — available classes at the start, and
+    than carried over as currency — available origins at the start, and
     whatever else — and those are not written. Nothing here anticipates them
     beyond leaving the ceilings where a permanent unlock could later move
     them.
@@ -1472,16 +1472,16 @@ placed at 5, 9 and 10 and the level advancing after ten.
     usually several decisions, and being thrown back to the fight after each
     one would make the second cost a gauge press.
 
-87. **A CLASS IS A MODIFIER, AND UNLOCKS ARE DERIVED.** Two changes that
+87. **AN ORIGIN IS A MODIFIER, AND UNLOCKS ARE DERIVED.** Two changes that
     arrived together because the second needs the first.
 
-    **Classes stack.** An origin's gifts were applied at character creation as
+    **Origins stack.** An origin's gifts were applied at character creation as
     `adjustBaseStat`, which wrote them into the base block — and the base
     block is capped at six, so a Warrior's +2 Might was two of the player's
-    own six points, spent for them before they chose anything. A class is not
+    own six points, spent for them before they chose anything. An origin is not
     progression, it is what you ARE, so it now sits where gear sits: the run
     records `originId`, and `originModifier` hands the resolver a Modifier
-    built from the class's own `effects`. Every run has all six points in
+    built from the origin's own `effects`. Every run has all six points in
     every stat whatever it plays as, and a Warrior at the cap fights at 8.
 
     `Origin.statDeltas` became `Origin.effects`, in the MODIFIER vocabulary,
@@ -1492,10 +1492,10 @@ placed at 5, 9 and 10 and the level advancing after ten.
 
     **The profile has ONE resolver now** (`resolveRunProfile`). Four call
     sites spelled out the same triple — base stats, held modifiers, holding
-    counts — and a class resolving with the modifiers would have had to be
+    counts — and an origin resolving with the modifiers would have had to be
     remembered at every one. That is this codebase's characteristic failure
     written out in advance, so the triple is a function: there is no way to
-    resolve a run's profile without its class in it. `armorIn` collapsed into
+    resolve a run's profile without its origin in it. `armorIn` collapsed into
     `armorOf` in the same pass, being the same function with a different third
     argument once armour had to ask the profile whether worn gear counts.
 
@@ -1516,13 +1516,13 @@ placed at 5, 9 and 10 and the level advancing after ten.
     replaced, and the type cannot express one.
 
     The gate is in the STAGE, as every reachability gate here is: content says
-    what a class requires (`requiresUnlock`), character creation decides
-    whether to offer it. A class not yet earned is not on the ring at all.
+    what an origin requires (`requiresUnlock`), character creation decides
+    whether to offer it. An origin not yet earned is not on the ring at all.
 
     **The sim was lying, and that is worth recording.** Its "careful" policy
     judged health as `hitPoints / (50 + 15 * baseStats.might)` — the
-    hit-point formula, copied — so the moment classes left the base block the
-    denominator lost the class's Might, health read too high, the policy
+    hit-point formula, copied — so the moment origins left the base block the
+    denominator lost the origin's Might, health read too high, the policy
     stopped being careful, and the harness reported the GAME as having got
     harder (Easy's death rate 87% → 94%). It reads `deriveStats` through the
     real profile now and the numbers came back. An instrument that restates a

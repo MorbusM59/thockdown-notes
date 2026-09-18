@@ -208,10 +208,10 @@ export interface GameRecord {
    */
   famePurchases: readonly string[]
   /**
-   * WHICH CLASS this run is playing, by id. Its gifts are NOT written into
+   * WHICH ORIGIN this run is playing, by id. Its gifts are NOT written into
    * `baseStats`: they resolve with the modifiers, so the base block stays
    * purely what the player spent and every run gets all six points in every
-   * stat. Null for a run saved before classes moved out of the base block,
+   * stat. Null for a run saved before origins moved out of the base block,
    * and for one that has not chosen yet.
    */
   originId: string | null
@@ -368,7 +368,7 @@ export function armorOf(save: GameSave, game: GameRecord, content: Content): Arm
     if (piece) pieces.push(piece)
   }
   const held = heldModifiers(save, game.id, catalog)
-  // Through the run's own resolver, so a class that forbids worn armour
+  // Through the run's own resolver, so an origin that forbids worn armour
   // (`noDecayingArmor`) is read here rather than only where stats are.
   const profile = resolveRunProfile(game, content, held)
   return { natural: profile.naturalArmor, pieces: profile.noDecayingArmor ? [] : pieces }
@@ -503,7 +503,7 @@ export function holdingCounts(held: readonly Modifier[]): HoldingCounts {
 }
 
 /**
- * THE RUN'S CLASS AS A MODIFIER, because that is what a class is now: the
+ * THE RUN'S ORIGIN AS A MODIFIER, because that is what an origin is now: the
  * same effect vocabulary as an item, resolved in the same pass.
  *
  * Not a HELD modifier -- it occupies no carry slot, appears on no strip and
@@ -523,11 +523,11 @@ export function originModifier(game: GameRecord, content: Content): Modifier | n
  * resolved.
  *
  * Four call sites used to spell out the same triple -- base stats, held
- * modifiers, holding counts -- and a class that resolves with the modifiers
+ * modifiers, holding counts -- and an origin that resolves with the modifiers
  * would have had to be remembered at every one of them. That is this
  * codebase's characteristic failure written out in advance, so the triple is
  * a function instead: there is now no way to resolve a run's profile without
- * its class in it.
+ * its origin in it.
  */
 export function resolveRunProfile(
   game: GameRecord,
@@ -781,7 +781,7 @@ export function applyEffect(
     }
 
     case 'setOrigin':
-      // The class is RECORDED, not applied: its gifts resolve with the
+      // The origin is RECORDED, not applied: its gifts resolve with the
       // modifiers (`originModifier`), so the base block stays purely what the
       // player spent. Writing them into `baseStats` is what used to cost a
       // Warrior two of their own six Might points.

@@ -541,7 +541,7 @@ describe('the thumb the run is played under', () => {
     // arbitrary step is a coin toss dressed as an assertion: the thumb moves
     // the DISTRIBUTION of a fight, and a single walk can land anywhere inside
     // it. It said THREE was enough and three was not -- it passed on the runs
-    // those three seeds happened to produce, and flipped the day classes
+    // those three seeds happened to produce, and flipped the day origins
     // stopped eating the player's stat points and the walks changed. Measured
     // rather than tuned: at 3 seeds the totals cross, at 10 they separate, and
     // at 25 the thumb is worth about half as much again, which is the size of

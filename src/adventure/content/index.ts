@@ -64,14 +64,20 @@ export interface Species {
   forms: Readonly<Record<'group' | 'regular' | 'elite' | 'miniBoss' | 'boss', readonly MonsterForm[]>>
 }
 
-/** What you were, before any of this. Chosen once, at the start of a game. */
 /**
- * A CLASS, AND IT WORKS LIKE AN ITEM.
+ * WHAT YOU WERE, BEFORE ANY OF THIS -- chosen once, at the start of a game,
+ * AND IT WORKS LIKE AN ITEM.
+ *
+ * ORIGIN is the word for what the player is. It is never a "class": `class`
+ * names the MONSTER axis above (`MonsterClassId` -- what a monster fights
+ * like), which is the design document's own use of it, and one word for the
+ * two would put the player's identity and a monster's fighting style in the
+ * same noun.
  *
  * Its stat gifts used to be written into the run's BASE stats at character
  * creation, which quietly spent part of the player's own allowance: a Warrior
  * began at Might 2 and could therefore only ever spend four more points into
- * it before the base cap of six. A class is not progression, it is what you
+ * it before the base cap of six. An origin is not progression, it is what you
  * ARE, so it now sits in the same layer gear does and stacks on top -- which
  * means every run gets all six points in every stat, whatever it plays as.
  *
@@ -87,8 +93,8 @@ export interface Origin {
   icon: string
   effects: readonly ModifierEffect[]
   /**
-   * A class the player has to EARN. Absent means available from the start;
-   * an id means this class appears at character creation only once that
+   * An origin the player has to EARN. Absent means available from the start;
+   * an id means this origin appears at character creation only once that
    * permanent unlock has been won (model/permanentUnlocks.ts).
    */
   requiresUnlock?: string

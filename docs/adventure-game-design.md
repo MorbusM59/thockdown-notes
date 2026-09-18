@@ -522,6 +522,14 @@ its own before each of the three fixed encounters instead of being a way to
 go looking for one. The open-encounter screen now offers Go Hunting and Go
 Exploring and nothing else. "Charisma Actions" and **Region** stand.
 
+### What the PLAYER is, is an ORIGIN — "class" is the monster's
+
+The plan uses both words for the player ("Classes" in the loop, "the player
+origins" under monsters). Settled: **origin**, everywhere the player is
+meant. **Class** stays the MONSTER axis — warrior, thief, mage, what a
+monster fights like — which is the plan's own use of it under Encounters, and
+is otherwise held free.
+
 ### "Fame unlock" is called a fame PURCHASE in the code
 
 The plan's term is kept in this document, where it is the author's. The code
@@ -765,7 +773,7 @@ at the floor but can never push it past the ceiling.
 
 - **FAME AND STAT POINTS ARE BOTH SPENT WITHIN A RUN.** The plan above has
   fame persisting between runs; it does not. What persists instead is a
-  separate list of PERMANENT UNLOCKS — available classes at the start, and
+  separate list of PERMANENT UNLOCKS — available origins at the start, and
   whatever else — earned by meeting conditions on what a run SPENT of either
   currency rather than by carrying the currency forward. Those conditions and
   that list are not written yet.
@@ -784,16 +792,17 @@ at the floor but can never push it past the ceiling.
   of three and one. So Strong Back and Experienced can be bought three times
   each, and Large Coffers and Stubborn twice.
 
-- **A CLASS WORKS LIKE AN ITEM: it STACKS with what the player spends.** Its
-  gifts are no longer written into the run's base stats, where they quietly
-  spent part of the player's own allowance — a Warrior began at Might 2 and
-  could put only four more in. **Every run now has all six points in every
-  stat**, whatever it plays as, and the class adds on top of them. A Warrior
-  who spends all six into Might fights at 8.
+- **AN ORIGIN WORKS LIKE AN ITEM: it STACKS with what the player spends.**
+  Its gifts are no longer written into the run's base stats, where they
+  quietly spent part of the player's own allowance — a Warrior began at Might
+  2 and could put only four more in. **Every run now has all six points in
+  every stat**, whatever it plays as, and the origin adds on top of them. A
+  Warrior who spends all six into Might fights at 8.
 - **PERMANENT UNLOCKS are what crosses between runs**, earned by what a run
   REACHED rather than by carrying currency forward. The first:
 
-  **Berserker** — a class, available from the start of every run once earned.
+  **Berserker** — an origin, available from the start of every run once
+  earned.
   +4 Might, +2 Agility, −2 Intellect, +100% damage, and **no armour from
   worn gear**: items' decaying armour is worth nothing to them, while natural
   armour from traits still counts, so a Berserker can be tough without ever
