@@ -414,7 +414,7 @@ stubbing them with plausible behaviour. That is how the previous draft
 acquired numbers nobody chose and then defended them.
 
 **Now built**: the level's end. What survives is an ALLOWANCE per kind
-(`keepAllowance`, one today, raised by a fame unlock when there is one),
+(`keepAllowance`, one to start and raised by a fame unlock — entry 86),
 marked by pressing pills on the strip — marks first, topped up with the
 newest finds, so exactly `min(allowance, held)` are lit and each is true —
 and everything else is given up, in the order the rules require: restore hit points against the maximum as it stands with everything
@@ -429,11 +429,9 @@ price was the piece the design did not specify and now does.
 
 Stat points are spendable from the rail's STAR GAUGE, on any screen — which is
 what "spendable at any time", the design's own wording, actually asks for (see
-entry 75). Fame points are attained off the same ladder and are the one
-currency with nothing to buy: what a fame point buys is unwritten, and the
-effect that would spend one only moves the ladder. The crown gauge opens a
-Renown screen that reports the standing and says so, rather than offering an
-unlock nobody chose.
+entry 75). Fame points are attained off the same ladder and are spent from the
+CROWN GAUGE beside it, on the run's own shape: what it can carry and what
+survives a level (entry 86).
 
 Content is perhaps half written. Every placeholder is labelled: an entry that
 exists by name but whose effect is undecided carries a `tag` effect saying
@@ -578,9 +576,10 @@ These block a playable game and want answers rather than guesses.
     and the next is no closer. That was already the stat-point rule; naming
     it once made it a rule rather than a coincidence.
 
-    **Still unwritten, and deliberately so:** what a fame point BUYS, and the
-    rates at which gold and experience are earned in the first place (open
-    question 7). `allocateFamePoint` moves the ladder and nothing else. The
+    **What a fame point BUYS is now written** (`model/fameUnlocks.ts`, entry
+    86) and `allocateFamePoint` is no longer the only thing that spends one.
+    Still unwritten, and deliberately so: the rates at which gold and
+    experience are earned in the first place (open question 7). The
     EARNING half of both ladders is also unwired — nothing emits
     `grantStatPoints` or `grantFamePoints` when a threshold is crossed,
     because that belongs to the level flow that is not built.
@@ -1065,11 +1064,10 @@ placed at 5, 9 and 10 and the level advancing after ten.
     that appears only when it is useful is one the player cannot go looking
     for, and both screens are worth reading empty.
 
-    The crown's screen is `Renown`, and it invents nothing: what a fame point
-    buys is still an open question below, so the screen reports the standing
-    and offers the way out. It exists as a stage rather than a tooltip
-    because that is where the unlocks land the day they are decided -- and
-    because a gauge that opened nothing would be a control that does nothing.
+    The crown's screen is `Renown`. It was a placeholder that invented
+    nothing while what a fame point buys was still open; the unlocks landed
+    in exactly that stage the day they were decided (entry 86), which is what
+    it was held open for.
 
 76. **A TALLY UNDER A BAR SAYS WHAT IS WAITING, not what is behind you.**
     Both rail gauges carried the count SPENT, which is a true number nobody
@@ -1315,3 +1313,57 @@ placed at 5, 9 and 10 and the level advancing after ten.
     bracer) and was in fact eight hand-tuned numbers in a file whose whole
     point is that it contains none. Every other slot declares one range for
     the game; armor does now too.
+
+86. **WHAT A FAME POINT BUYS IS THE RUN'S SHAPE** (`model/fameUnlocks.ts`),
+    and the two rules it raises were written as seams long before there was
+    anything to put in them: `carryLimit` and `keepAllowance` have always
+    been functions of the RUN rather than constants at their call sites,
+    because the design said "a fame unlock is expected to raise it". The
+    unlocks went in without touching either call site, which is what a seam
+    is for.
+
+    **FAME IS SPENT WITHIN A RUN**, which is a change of the author's: the
+    original plan had it persist between runs. What persists instead will be
+    a separate list of PERMANENT UNLOCKS, earned by what a run spent rather
+    than carried over as currency — available classes at the start, and
+    whatever else — and those are not written. Nothing here anticipates them
+    beyond leaving the ceilings where a permanent unlock could later move
+    them.
+
+    **FOUR PURCHASES, TWO RULES, TWO KINDS** — a grid, so the table carries
+    `rule` and `kind` columns rather than four bespoke entries: Strong Back
+    (items carried, 1), Large Coffers (items kept, 2), Experienced (traits
+    carried, 1), Stubborn (traits kept, 2). Carrying more costs one and
+    keeping more costs two, because a carried modifier is lost at the level's
+    end and a kept one is the only thing that compounds across a run.
+
+    **THE CEILING IS ON THE RULE, NOT ON THE PURCHASE COUNT.** Six carried at
+    once and three surviving a level is where the design puts the top of a
+    run; expressed as "buy this three times" that ceiling would move silently
+    the day a base value changed. Stated as a total, the base and the ceiling
+    can each move without the other lying. It is clamped where the rule is
+    read as well as gated where the purchase is made, because the list is
+    PERSISTED: a save from another build must not be able to raise a rule
+    past the design's top.
+
+    **THE PURCHASE IS ONE EFFECT** (`buyFameUnlock`), price and grant
+    together, so paid-but-not-granted and granted-but-not-paid are both
+    inexpressible. The obvious alternative — the screen emitting
+    `allocateFamePoint` once per point of the price and then a grant — is two
+    facts a caller has to keep in step, and effects are applied against the
+    state the last one left, so a two-point purchase attempted with one point
+    waiting would take the point and hand the unlock over anyway.
+
+    **THE RUN RECORDS WHAT IT BOUGHT AS A LIST, repeats and all** — one entry
+    per purchase, the same rows-not-columns discipline `outcomes` uses: a
+    fifth unlock is a new id and touches no schema, and an id a build no
+    longer knows is ignored by the readers rather than crashing them.
+
+    The screen gates as the stat-point screen does — it offers only what can
+    be taken right now, so a cell on the ring is always live — and puts the
+    WHOLE ladder, prices and standings, on the way-back cell's detail,
+    because a player saving up needs to see what they are saving for. It
+    STAYS on the screen after a purchase rather than popping, unlike a stat
+    point: these come in fours at two prices, so several points in hand is
+    usually several decisions, and being thrown back to the fight after each
+    one would make the second cost a gauge press.

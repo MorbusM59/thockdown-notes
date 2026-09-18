@@ -748,3 +748,24 @@ at the floor but can never push it past the ceiling.
   does NOT apply to Plague (a share of what the monster has left) or Ignite
   (a share of a nominal): those are drips, not blows being swung, and a band
   on a number that is already one or two hit points is noise.
+
+- **FAME AND STAT POINTS ARE BOTH SPENT WITHIN A RUN.** The plan above has
+  fame persisting between runs; it does not. What persists instead is a
+  separate list of PERMANENT UNLOCKS — available classes at the start, and
+  whatever else — earned by meeting conditions on what a run SPENT of either
+  currency rather than by carrying the currency forward. Those conditions and
+  that list are not written yet.
+- **A FAME POINT BUYS THE RUN'S SHAPE**, on four purchases:
+
+  | | carried | kept between levels |
+  |---|---|---|
+  | items | **Strong Back**, 1 point | **Large Coffers**, 2 points |
+  | traits | **Experienced**, 1 point | **Stubborn**, 2 points |
+
+  Keeping costs twice what carrying costs, because a carried modifier is lost
+  at the level's end and a kept one is the only thing that compounds.
+
+  Each is repeatable, and the CAP IS A TOTAL rather than a number of
+  purchases: **six carried at once and three surviving a level**, from a base
+  of three and one. So Strong Back and Experienced can be bought three times
+  each, and Large Coffers and Stubborn twice.

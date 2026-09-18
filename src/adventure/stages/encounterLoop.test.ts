@@ -428,12 +428,25 @@ describe('renown', () => {
     expect(famePointsAvailable(game.goldEarned, game.goldToNextFamePoint, game.famePointsSpent)).toBe(1)
   })
 
-  it('opens a screen that reports the standing and invents no unlock for it', () => {
-    // What a fame point BUYS is an open question the platform doc says not to
-    // fill in, so the screen says so rather than offering something plausible.
-    const screen = currentScreen(enterInterlude(withGold(10), 'fame', DEPS, NOW), DEPS)
-    expect(screen?.stageId).toBe('fame')
-    expect(screen?.choices.map((choice) => choice.id)).toEqual(['fame:back'])
+  it('offers only what the run can actually take, and always the way back', () => {
+    // SUPERSEDES "invents no unlock for it": what a fame point buys is written
+    // now (model/fameUnlocks.ts). The rule that replaced it is that the gate
+    // lives in the stage, exactly as it does for stat points -- a cell on the
+    // ring can always be taken, so the two-point purchases are absent while
+    // only one point is in hand.
+    const oneReady = currentScreen(enterInterlude(withGold(10), 'fame', DEPS, NOW), DEPS)
+    expect(oneReady?.stageId).toBe('fame')
+    expect(oneReady?.choices.map((choice) => choice.id)).toEqual([
+      'fame:buy:strongBack',
+      'fame:buy:experienced',
+      'fame:back',
+    ])
+
+    // With nothing earned there is nothing to offer, and the screen is the
+    // way back alone -- the standing still readable on its detail.
+    const none = currentScreen(enterInterlude(withGold(0), 'fame', DEPS, NOW), DEPS)
+    expect(none?.choices.map((choice) => choice.id)).toEqual(['fame:back'])
+    expect(none?.choices[0].detail?.lines.some((line) => line.startsWith('Large Coffers'))).toBe(true)
   })
 })
 

@@ -140,6 +140,14 @@ function sanitizeGame(value: unknown): GameRecord | null {
     // is: a zero here would mean every fame point is already earned, forever.
     goldToNextFamePoint: wholeAtLeast(value.goldToNextFamePoint, FIRST_MILESTONE_THRESHOLD),
     famePointsSpent: wholeAtLeast(value.famePointsSpent, 0),
+    // REPEATS ARE MEANINGFUL here, unlike keepItemIds -- one entry per
+    // purchase is how the run counts what it bought -- so this keeps the list
+    // as written rather than de-duplicating it. Unknown ids are tolerated
+    // rather than dropped, the same way a dropped modifier id is: the readers
+    // (model/fameUnlocks.ts) match on the ids they know and ignore the rest,
+    // and the ceiling is clamped there too, so a list this build cannot
+    // explain can neither crash it nor raise a rule past the design's top.
+    fameUnlocks: modifierIds(value.fameUnlocks),
     hitPoints: wholeAtLeast(value.hitPoints, 0),
   }
 }

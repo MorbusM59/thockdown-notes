@@ -31,7 +31,8 @@ import { clampBaseStats, createStatBlock, deriveStats, type StatBlock } from './
 import type { Effect } from './effects'
 import { FIRST_MILESTONE_THRESHOLD, takeMilestone } from './milestones'
 import { canAllocateStatPoint } from './motes'
-import { canAllocateFamePoint, fameReached } from './gold'
+import { canAllocateFamePoint, famePointsAvailable, fameReached } from './gold'
+import { canBuyMore, fameUnlockById, fameUnlockBonus } from './fameUnlocks'
 import type { JsonObject } from '../core/json'
 import { createSeed, type RngState } from '../core/rng'
 import { DEFAULT_DIFFICULTY, type Difficulty } from './difficulty'
@@ -183,6 +184,15 @@ export interface GameRecord {
    * as it is for stat points.
    */
   famePointsSpent: number
+  /**
+   * WHAT THE RUN BOUGHT WITH ITS FAME, one entry per purchase (they repeat --
+   * see model/fameUnlocks.ts, where the ceiling is on the rule rather than on
+   * the count). A LIST of ids rather than counters per unlock, for the same
+   * reason `outcomes` is rows rather than columns: a new unlock is a new id
+   * and touches no schema, and an id this build no longer knows is ignored by
+   * the readers rather than crashing them.
+   */
+  fameUnlocks: readonly string[]
   hitPoints: number
 }
 
@@ -373,8 +383,8 @@ function writeArmor(save: GameSave, gameId: string, armor: Armor): GameSave {
  */
 export const BASE_KEEP_ALLOWANCE = 1
 
-export function keepAllowance(_game: GameRecord, _kind: ModifierKind): number {
-  return BASE_KEEP_ALLOWANCE
+export function keepAllowance(game: GameRecord, kind: ModifierKind): number {
+  return BASE_KEEP_ALLOWANCE + fameUnlockBonus(game.fameUnlocks, 'keep', kind, BASE_KEEP_ALLOWANCE)
 }
 
 /**
@@ -393,8 +403,8 @@ export function keepAllowance(_game: GameRecord, _kind: ModifierKind): number {
  */
 export const BASE_CARRY_LIMIT = 3
 
-export function carryLimit(_game: GameRecord, _kind: ModifierKind): number {
-  return BASE_CARRY_LIMIT
+export function carryLimit(game: GameRecord, kind: ModifierKind): number {
+  return BASE_CARRY_LIMIT + fameUnlockBonus(game.fameUnlocks, 'carry', kind, BASE_CARRY_LIMIT)
 }
 
 /** What the run is carrying of one kind, as holdings rather than as resolved modifiers. */
@@ -507,6 +517,7 @@ function createGame(id: string, seed: RngState, nowMs: number, settings: GameSet
     goldSpentOnItems: 0,
     goldToNextFamePoint: FIRST_MILESTONE_THRESHOLD,
     famePointsSpent: 0,
+    fameUnlocks: [],
     hitPoints: deriveStats(clampBaseStats(baseStats)).maxHitPoints,
   }
 }
@@ -668,6 +679,39 @@ export function applyEffect(
       return replace({
         famePointsSpent: taken.pointsSpent,
         goldToNextFamePoint: taken.threshold,
+      })
+    }
+
+    case 'buyFameUnlock': {
+      // ONE EFFECT, so paid-but-not-granted and granted-but-not-paid are both
+      // inexpressible. The obvious alternative -- the screen emitting
+      // `allocateFamePoint` once per point of the price, then a grant -- is
+      // two facts a caller has to keep in step, and a two-point unlock bought
+      // with one point waiting would take the point and hand over the unlock
+      // anyway, because each effect is applied against the state the last one
+      // left.
+      const unlock = fameUnlockById(effect.unlock)
+      if (!unlock) return save
+      const base = unlock.rule === 'carry' ? BASE_CARRY_LIMIT : BASE_KEEP_ALLOWANCE
+      if (!canBuyMore(game.fameUnlocks, unlock, base)) return save
+      if (famePointsAvailable(game.goldEarned, game.goldToNextFamePoint, game.famePointsSpent) < unlock.cost) {
+        return save
+      }
+      // The ladder charges per point and the threshold moves each time, which
+      // is what makes the SECOND point of a two-point unlock cost more gold to
+      // have earned than the first. Iterating the price is not a retry: the
+      // count is known before the loop starts.
+      let threshold = game.goldToNextFamePoint
+      let spent = game.famePointsSpent
+      for (let point = 0; point < unlock.cost; point += 1) {
+        const taken = takeMilestone(threshold, spent)
+        threshold = taken.threshold
+        spent = taken.pointsSpent
+      }
+      return replace({
+        famePointsSpent: spent,
+        goldToNextFamePoint: threshold,
+        fameUnlocks: [...game.fameUnlocks, unlock.id],
       })
     }
 
