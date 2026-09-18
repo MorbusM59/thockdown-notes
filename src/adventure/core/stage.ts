@@ -1,13 +1,47 @@
-// What a stage is, and the only things it is allowed to do.
+// WHAT A STAGE IS, stated precisely.
 //
-// A STAGE is a collection of pure functions that the director calls with
-// state and gets results from. It owns one part of the game -- the welcome
-// screen, character creation, a fight -- and it emits one or more SCREENS
-// before handing off. It does not touch the ring, does not persist
-// anything, does not know another stage exists, and never writes: it
-// returns EFFECTS describing what should change, and the director applies
-// them. That is what keeps a stage testable without a database and keeps
-// every write in one place.
+// A stage is a VALUE of the `StageModule` interface below: an id, a title,
+// and three functions. There is no class, no instance and no lifecycle --
+// the thirteen stages are module-level constants collected into one
+// `ReadonlyMap<string, StageModule>` keyed by id. "Entering combat" is
+// pushing the string "combat" onto an array and calling `combat.enter` once.
+//
+// The three functions partition the job:
+//
+//   enter(input, context, rng)            -> StageEntry
+//       Called ONCE, when a frame for this stage is created. May consume
+//       randomness. May return effects.
+//   present(state, context)               -> StagePresentation
+//       Called on EVERY render, arbitrarily often. Takes no rng and its
+//       result type has no effects field, so it can do neither.
+//   resolve(state, choiceId, context, rng) -> Transition
+//       Called once per choice taken. May consume randomness. May return
+//       effects. Says what happens to the stack.
+//
+// PURE, in the mathematical sense: the result is determined by the arguments
+// and evaluating it changes nothing. `present` is pure outright --
+// present(s, c) = present(s, c), which matters because React decides how
+// often it runs. `enter` and `resolve` are pure too despite rolling dice:
+// the generator is a number passed in as `rng` and its successor comes back
+// in the result (core/rng.ts), so randomness is threaded rather than
+// ambient, which is what makes a run replayable from its seed alone.
+//
+// NEVER WRITES means: no stage function has `GameSave` in its return type.
+// A stage that wants the save changed returns values of type `Effect` --
+// { kind: 'addGold', amount: 30 } and so on -- which are inert data. One
+// function turns them into a new save:
+//
+//   applyEffects(save, effects, content, nowMs) -> GameSave
+//
+// It is a fold: each effect is applied to the state the previous one left,
+// and it returns a new object rather than mutating. Its only callers are
+// `applyTransition` and `enterStage` in core/director.ts. So every rule
+// about when a change is legal lives in one place, and a stage is testable
+// by calling it with a literal state object and comparing the effect array
+// it hands back -- no database, no app.
+//
+// A stage also does not touch the ring, and does not know another stage
+// exists; it names a successor only by id, in a Transition.
 //
 // THREE RULES ARE ENFORCED BY THESE TYPES RATHER THAN BY DISCIPLINE:
 //

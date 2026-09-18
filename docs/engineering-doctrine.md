@@ -20,22 +20,36 @@ worst outcome available.
 
 ---
 
-## 1. Find the bone. Never splint the limb.
+## 1. Set the bone. Never splint the fracture.
 
-A symptom appears at the surface; the defect is almost always one or more
-layers below. Fixing where the symptom shows produces something that looks
-like a fix, passes the immediate test, and leaves the real fault in place with
-one more layer of compensation on top of it.
+**The intended meaning, restored.** A fracture that is splinted rather than set
+knits crooked: it holds for a while and will never carry load. The rule is
+about the FIRST INSTINCT when something is broken — look for the structurally
+correct arrangement, rather than for the layers and detours that would let the
+broken structure keep bearing weight. It is not a rule about locating a "core
+component". "The bone" drifted into meaning that, and the drift cost this rule
+most of its force: finding the important file is easy, and declining to prop up
+a structure you have just proved unsound is the hard part.
+
+Two things follow, and they are the same instinct applied at two moments.
+
+*Before fixing, ask where the fault IS, rather than where it SHOWS.* A symptom
+appears at the surface; the defect is almost always one or more layers below.
+Fixing where the symptom shows produces something that looks like a fix, passes
+the immediate test, and leaves the real fault in place with one more layer of
+compensation on top of it.
+
+*Having found it, repair the structure rather than brace it.* A guard, a
+clamp, a retry or a correction placed downstream of a fault is a splint. It is
+load-bearing for exactly as long as nobody adds the next caller.
 
 *Instance.* The render view restored one paragraph too high on every note
 switch. Three fixes were attempted in ascending layers — the anchor resolver's
 gap direction, then the restore's retry, then a discarded return value — each
-plausible, each wrong. The actual fault was that `usePreviewWindow` stated the
-rule *"a landing overrides a carry"* and applied it on only one of the two
-branches that land. Every earlier fix would have shipped, and none of them
-touched the bone.
-
-**Ask before fixing: is this where the fault IS, or where it SHOWS?**
+plausible, each a splint. The actual fault was that `usePreviewWindow` stated
+the rule *"a landing overrides a carry"* and applied it on only one of the two
+branches that land. Every earlier fix would have shipped, and none of them set
+anything straight.
 
 ## 2. When pieces will not fit, step up a level.
 
