@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { THOCKQUEST, validateContent } from '../content'
 import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from './director'
-import { emptySave, type GameSave } from '../model/gameState'
+import { emptySave, profileOf, type GameSave } from '../model/gameState'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
 import { MAX_STAGE_CHOICES } from './screen'
 
@@ -210,8 +210,16 @@ describe('a game, played', () => {
 
     save = choose(save, 'origin:warrior', DEPS, NOW).save
     const game = save.games.find((candidate) => candidate.id === save.activeGameId)
-    expect(game?.baseStats.might).toBe(2)
-    expect(game?.baseStats.agility).toBe(1)
+    // A CLASS IS NOT PROGRESSION. Its gifts used to be written into the base
+    // block, which quietly spent two of the player's own six Might points; it
+    // is recorded instead and resolves with the modifiers, so the base block
+    // is what the player spent and nothing else -- nothing, this early.
+    expect(game?.originId).toBe('warrior')
+    expect(game?.baseStats.might).toBe(0)
+    expect(game?.baseStats.agility).toBe(0)
+    // And it reaches the numbers anyway, through the layer gear resolves in.
+    expect(profileOf(save, game!, THOCKQUEST).stats.might).toBe(2)
+    expect(profileOf(save, game!, THOCKQUEST).stats.agility).toBe(1)
     expect(narrationOf(save)).toContain('What are you known for?')
 
     save = choose(save, firstStageChoiceId(save), DEPS, NOW).save

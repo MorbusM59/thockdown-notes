@@ -1367,3 +1367,59 @@ placed at 5, 9 and 10 and the level advancing after ten.
     point: these come in fours at two prices, so several points in hand is
     usually several decisions, and being thrown back to the fight after each
     one would make the second cost a gauge press.
+
+87. **A CLASS IS A MODIFIER, AND UNLOCKS ARE DERIVED.** Two changes that
+    arrived together because the second needs the first.
+
+    **Classes stack.** An origin's gifts were applied at character creation as
+    `adjustBaseStat`, which wrote them into the base block — and the base
+    block is capped at six, so a Warrior's +2 Might was two of the player's
+    own six points, spent for them before they chose anything. A class is not
+    progression, it is what you ARE, so it now sits where gear sits: the run
+    records `originId`, and `originModifier` hands the resolver a Modifier
+    built from the class's own `effects`. Every run has all six points in
+    every stat whatever it plays as, and a Warrior at the cap fights at 8.
+
+    `Origin.statDeltas` became `Origin.effects`, in the MODIFIER vocabulary,
+    which is what "like an item" means in code rather than by analogy: the
+    Berserker's +100% damage and its no-worn-armour rule need no new
+    declaration and no code at character creation — the same `describeModifier`
+    an item's detail uses writes its tooltip.
+
+    **The profile has ONE resolver now** (`resolveRunProfile`). Four call
+    sites spelled out the same triple — base stats, held modifiers, holding
+    counts — and a class resolving with the modifiers would have had to be
+    remembered at every one. That is this codebase's characteristic failure
+    written out in advance, so the triple is a function: there is no way to
+    resolve a run's profile without its class in it. `armorIn` collapsed into
+    `armorOf` in the same pass, being the same function with a different third
+    argument once armour had to ask the profile whether worn gear counts.
+
+    **`noDecayingArmor` is a CEILING, not a quantity**, which is why it is a
+    flag: "minus all of it" would depend on what happened to be worn and could
+    be out-added by a second piece. Natural armour is untouched by it, because
+    the rule is about worn gear rather than about being hard to hurt.
+
+    **Permanent unlocks are DERIVED after every effect**
+    (`model/permanentUnlocks.ts`), never granted: no effect hands one out and
+    no counter can disagree with the run that produced it — the argument the
+    milestone ladders already make. The set is the union of what the save had
+    with whatever the run now satisfies, so a new condition is covered without
+    its author knowing this exists, the set can only grow (an unlock cannot be
+    lost by a later effect making its condition false again), and there is no
+    site to forget. A condition reads the RUN, not the save: an unlock earned
+    across two runs would be a tally, which is the currency model this
+    replaced, and the type cannot express one.
+
+    The gate is in the STAGE, as every reachability gate here is: content says
+    what a class requires (`requiresUnlock`), character creation decides
+    whether to offer it. A class not yet earned is not on the ring at all.
+
+    **The sim was lying, and that is worth recording.** Its "careful" policy
+    judged health as `hitPoints / (50 + 15 * baseStats.might)` — the
+    hit-point formula, copied — so the moment classes left the base block the
+    denominator lost the class's Might, health read too high, the policy
+    stopped being careful, and the harness reported the GAME as having got
+    harder (Easy's death rate 87% → 94%). It reads `deriveStats` through the
+    real profile now and the numbers came back. An instrument that restates a
+    formula measures the copy.

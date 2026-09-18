@@ -188,6 +188,16 @@ export type ModifierEffect =
   | { kind: 'armorRepairAfterCombat'; amount: number }
   /** Armor that decay cannot touch. Added on top of every decaying pool. */
   | { kind: 'naturalArmor'; amount: number }
+  /**
+   * NO DECAYING ARMOR: the armour items carry is worth nothing to this
+   * character. Natural armour is untouched, so a trait's toughness still
+   * counts -- the rule is about worn gear, not about being hard to hurt.
+   *
+   * A CEILING rather than a quantity, which is why it is a flag and not a
+   * negative number: "minus all of it" would depend on what happened to be
+   * worn, and could be out-added by a second piece.
+   */
+  | { kind: 'noDecayingArmor' }
 
 export interface Modifier {
   id: string
@@ -202,6 +212,8 @@ export interface EffectiveProfile {
   stats: StatBlock
   /** Everything those stats imply, after modifiers have had their say. */
   derived: DerivedStats
+  /** Whether worn armour counts for anything (model/armor.ts reads it). */
+  noDecayingArmor: boolean
   /** Armor that decay cannot reduce. */
   naturalArmor: number
   /** Extra points returned to EVERY armor piece after each fight. */
@@ -269,6 +281,7 @@ export function resolveProfile(
 
   let naturalArmor = 0
   let armorRepair = 0
+  let noDecayingArmor = false
   const chances: Record<ChanceKey, ChanceAdjustment> = {
     dodgeChance: { ...NO_CHANCE_ADJUSTMENT },
     hitChance: { ...NO_CHANCE_ADJUSTMENT },
@@ -308,6 +321,10 @@ export function resolveProfile(
         case 'derivedPercentOnAction':
           if (actionPosition[effect.position]) bank(effect.derived, effect.percent)
           break
+        case 'noDecayingArmor':
+          noDecayingArmor = true
+          break
+
         case 'naturalArmor':
           naturalArmor += effect.amount
           break
@@ -339,6 +356,7 @@ export function resolveProfile(
   return {
     stats,
     derived: normalizeDerived(derived),
+    noDecayingArmor,
     naturalArmor,
     armorRepair,
     chances,
@@ -404,6 +422,8 @@ export function describeEffect(effect: ModifierEffect, holdings: HoldingCounts):
       return `Its armor never decays below ${effect.floor}`
     case 'armorRepairAfterCombat':
       return `${signed(effect.amount)} Armor to every item after each fight`
+    case 'noDecayingArmor':
+      return 'Worn armour counts for nothing'
     case 'naturalArmor':
       return `${signed(effect.amount)} Armor that cannot decay`
   }

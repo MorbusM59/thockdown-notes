@@ -769,3 +769,20 @@ at the floor but can never push it past the ceiling.
   purchases: **six carried at once and three surviving a level**, from a base
   of three and one. So Strong Back and Experienced can be bought three times
   each, and Large Coffers and Stubborn twice.
+
+- **A CLASS WORKS LIKE AN ITEM: it STACKS with what the player spends.** Its
+  gifts are no longer written into the run's base stats, where they quietly
+  spent part of the player's own allowance — a Warrior began at Might 2 and
+  could put only four more in. **Every run now has all six points in every
+  stat**, whatever it plays as, and the class adds on top of them. A Warrior
+  who spends all six into Might fights at 8.
+- **PERMANENT UNLOCKS are what crosses between runs**, earned by what a run
+  REACHED rather than by carrying currency forward. The first:
+
+  **Berserker** — a class, available from the start of every run once earned.
+  +4 Might, +2 Agility, −2 Intellect, +100% damage, and **no armour from
+  worn gear**: items' decaying armour is worth nothing to them, while natural
+  armour from traits still counts, so a Berserker can be tough without ever
+  being armoured.
+
+  Earned by **spending six points into Might in one run** — reaching 6/6.

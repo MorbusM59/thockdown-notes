@@ -10,7 +10,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { itemArmor, maintainedFraction, totalArmor } from './armor'
-import { activeGame, applyEffects, armorIn, emptySave, type GameSave } from './gameState'
+import { activeGame, applyEffects, armorOf as runArmor, emptySave, type GameSave } from './gameState'
 import { armorSlotOf } from './modifiers'
 import { catalogFor, THOCKQUEST, type Content } from '../content'
 import { createSeed } from '../core/rng'
@@ -52,7 +52,7 @@ function running(content: Content, effects: readonly Effect[] = []): GameSave {
 const armorOf = (save: GameSave, content: Content) => {
   const game = activeGame(save)
   if (!game) throw new Error('no game')
-  return armorIn(save, game, content)
+  return runArmor(save, game, content)
 }
 
 describe('an item that carries armor', () => {

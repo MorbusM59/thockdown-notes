@@ -62,7 +62,7 @@ export function buildContext(save: GameSave, deps: DirectorDeps): StageContext {
     items: rolledPool(deps.content, game?.seed ?? 0, 'item'),
     traits: rolledPool(deps.content, game?.seed ?? 0, 'trait'),
     profile: game ? profileOf(save, game, deps.content) : null,
-    armor: game ? armorOf(save, game, catalog) : NO_ARMOR,
+    armor: game ? armorOf(save, game, deps.content) : NO_ARMOR,
     held,
   }
 }

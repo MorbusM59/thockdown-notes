@@ -13,7 +13,7 @@ import { catalogFor, THOCKQUEST } from '../content'
 import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from '../core/director'
 import {
   activeGame, applyEffects, BASE_KEEP_ALLOWANCE, emptySave, heldModifiers, keepAllowance,
-  keptModifierIds, profileOf, withKeepMark, type GameSave,
+  keptModifierIds, profileOf, resolveRunProfile, withKeepMark, type GameSave,
 } from '../model/gameState'
 import { resolveProfile, type Modifier } from './modifiers'
 import { resolveExchange, rollDodgeOffered } from './combat'
@@ -430,10 +430,13 @@ describe('what survives a level', () => {
     const onward = applyEffects(save, [{ kind: 'advanceLevel' }], DEPS.content, NOW)
     const game = activeGame(onward)
     if (!game) throw new Error('no game')
-    const max = resolveProfile(
-      game.baseStats,
+    // Through the RUN's resolver, not a hand-assembled one: a run's profile
+    // includes its class, and an expectation built without it is measuring a
+    // character nobody is playing.
+    const max = resolveRunProfile(
+      game,
+      THOCKQUEST,
       heldModifiers(onward, game.id, catalogFor(THOCKQUEST, game.seed)),
-      { items: 1, traits: 1 },
     ).derived.maxHitPoints
     expect(game.hitPoints).toBe(max)
   })

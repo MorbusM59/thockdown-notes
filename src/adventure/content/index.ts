@@ -16,7 +16,7 @@
 // the tab bar, to the player, rather than as a plausible number nobody
 // chose. See docs/adventure-platform.md.
 
-import type { Modifier } from '../model/modifiers'
+import type { Modifier, ModifierEffect } from '../model/modifiers'
 import { rollModifier, validateTemplate, type ModifierTemplate } from '../model/modifierSlots'
 import type { RngState } from '../core/rng'
 import type { StatKey } from '../model/stats'
@@ -65,11 +65,33 @@ export interface Species {
 }
 
 /** What you were, before any of this. Chosen once, at the start of a game. */
+/**
+ * A CLASS, AND IT WORKS LIKE AN ITEM.
+ *
+ * Its stat gifts used to be written into the run's BASE stats at character
+ * creation, which quietly spent part of the player's own allowance: a Warrior
+ * began at Might 2 and could therefore only ever spend four more points into
+ * it before the base cap of six. A class is not progression, it is what you
+ * ARE, so it now sits in the same layer gear does and stacks on top -- which
+ * means every run gets all six points in every stat, whatever it plays as.
+ *
+ * `effects` rather than a stat map, in the modifier vocabulary
+ * (model/modifiers.ts), because "like an item" is the whole idea and two
+ * vocabularies for the same thing is how they come apart. It is what lets the
+ * Berserker carry `+100% damage` and `no decaying armor` without this type
+ * learning a word about either.
+ */
 export interface Origin {
   id: string
   name: string
   icon: string
-  statDeltas: Partial<Record<StatKey, number>>
+  effects: readonly ModifierEffect[]
+  /**
+   * A class the player has to EARN. Absent means available from the start;
+   * an id means this class appears at character creation only once that
+   * permanent unlock has been won (model/permanentUnlocks.ts).
+   */
+  requiresUnlock?: string
 }
 
 /**

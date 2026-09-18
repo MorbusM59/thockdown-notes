@@ -32,7 +32,7 @@
 import { THOCKQUEST } from '../../src/adventure/content'
 import { choose, currentScreen, enterEntryScreen, enterInterlude, type DirectorDeps } from '../../src/adventure/core/director'
 import type { Screen } from '../../src/adventure/core/screen'
-import { activeGame, applyEffects, emptySave, type GameSave } from '../../src/adventure/model/gameState'
+import { activeGame, applyEffects, emptySave, profileOf, type GameSave } from '../../src/adventure/model/gameState'
 import type { ModifierKind } from '../../src/adventure/model/modifiers'
 import { DIFFICULTIES, DIFFICULTY_LABELS, type Difficulty } from '../../src/adventure/model/difficulty'
 import { ROOT_STAGE_ID, STAGES } from '../../src/adventure/stages'
@@ -234,7 +234,16 @@ function playOne(
     lastNarration = screen.stageId === 'combat' ? screen.narration.length : 0
     lastStage = screen.stageId
 
-    const health = game ? Math.min(1, game.hitPoints / Math.max(1, 50 + 15 * game.baseStats.might)) : null
+    // THE REAL CEILING, not a restatement of it. This read
+    // `50 + 15 * baseStats.might` -- the hit-point formula, copied -- and the
+    // copy went wrong the moment classes stopped being written into the base
+    // block: the denominator lost the class's Might, health read too high,
+    // and the "careful" policy stopped being careful. The sim reported that
+    // as the game getting harder. The formula has one home (`deriveStats`),
+    // reached here the way every other caller reaches it.
+    const health = game
+      ? Math.min(1, game.hitPoints / Math.max(1, profileOf(save, game, DEPS.content).derived.maxHitPoints))
+      : null
     const choiceId = policy({ screen, save, health, prefer })
     const next = choose(save, choiceId, DEPS, NOW).save
     result.choices += 1

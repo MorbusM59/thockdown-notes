@@ -89,6 +89,13 @@ export type Effect =
    * when the run cannot afford it or the rule is already at its ceiling.
    */
   | { kind: 'buyFameUnlock'; unlock: string }
+  /**
+   * Which CLASS this run is playing. Recorded rather than applied: a class
+   * resolves with the modifiers (model/gameState.ts's `originModifier`), so
+   * the base stat block stays purely what the player spent and every run has
+   * all six points in every stat to spend.
+   */
+  | { kind: 'setOrigin'; originId: string }
   /** Which region this level is being played in, and therefore which pools are in scope. */
   | { kind: 'setRegion'; regionId: string }
   /** One of the level's ten encounters spent. See stages/levelProgress.ts. */

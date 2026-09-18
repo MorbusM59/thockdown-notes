@@ -499,12 +499,17 @@ describe('the thumb the run is played under', () => {
       }
       return activeGame(save)?.hitPoints ?? 0
     }
-    // OVER SEVERAL SEEDS AND A WHOLE RUN of choices, because one seed cut at
-    // one arbitrary step is a coin toss dressed as an assertion: the thumb
-    // moves the DISTRIBUTION of a fight, and a single walk can land anywhere
-    // inside it. Three runs is enough for a parameter that is meant to make
-    // the player nearly unkillable at a half-turn.
-    const seeds = [31337, 4242, 7]
+    // OVER MANY SEEDS AND A WHOLE RUN of choices, because one seed cut at one
+    // arbitrary step is a coin toss dressed as an assertion: the thumb moves
+    // the DISTRIBUTION of a fight, and a single walk can land anywhere inside
+    // it. It said THREE was enough and three was not -- it passed on the runs
+    // those three seeds happened to produce, and flipped the day classes
+    // stopped eating the player's stat points and the walks changed. Measured
+    // rather than tuned: at 3 seeds the totals cross, at 10 they separate, and
+    // at 25 the thumb is worth about half as much again, which is the size of
+    // effect it is meant to have. Seeds spread by a prime so the list is not
+    // three numbers somebody liked.
+    const seeds = Array.from({ length: 25 }, (_, index) => 1 + index * 7919)
     const total = (successAdjust: number) => seeds.reduce((sum, seed) => sum + play(seed, successAdjust), 0)
     expect(total(0.5)).toBeGreaterThan(total(0))
   })

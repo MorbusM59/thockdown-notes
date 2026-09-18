@@ -148,6 +148,11 @@ function sanitizeGame(value: unknown): GameRecord | null {
     // and the ceiling is clamped there too, so a list this build cannot
     // explain can neither crash it nor raise a rule past the design's top.
     fameUnlocks: modifierIds(value.fameUnlocks),
+    // Null for a run saved before classes moved out of the base block. Such a
+    // run keeps the stats its class was written into and simply has no class
+    // layer -- which is what it was played as, so it plays on unchanged rather
+    // than being thrown away or silently re-gifted.
+    originId: typeof value.originId === 'string' && value.originId.length > 0 ? value.originId : null,
     hitPoints: wholeAtLeast(value.hitPoints, 0),
   }
 }
@@ -205,6 +210,10 @@ export function sanitizeGameSave(input: unknown): GameSave | null {
       gamesStarted: wholeAtLeast(profile.gamesStarted, 0),
       gamesEnded: wholeAtLeast(profile.gamesEnded, 0),
       bestFame: wholeAtLeast(profile.bestFame, 0),
+      // The one thing that crosses between runs. De-duplicated, unlike the
+      // run's fame purchases: an unlock is held or it is not, and a repeat
+      // would be a second copy of a fact rather than a second purchase.
+      unlocked: [...new Set(modifierIds(profile.unlocked))],
     },
     settings: {
       difficulty: isDifficulty(settings.difficulty) ? settings.difficulty : DEFAULT_SETTINGS.difficulty,

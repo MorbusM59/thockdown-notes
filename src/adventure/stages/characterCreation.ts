@@ -15,7 +15,7 @@ import type { JsonObject } from '../core/json'
 import type { StageContext, StageModule } from '../core/stage'
 import { describeModifier, type Modifier } from '../model/modifiers'
 import { holdingCounts } from '../model/gameState'
-import { STAT_KEYS, STAT_LABELS } from '../model/stats'
+import { isUnlocked } from '../model/permanentUnlocks'
 import { CHARACTER_CREATION_STAGE_ID, REGION_SELECT_STAGE_ID } from './ids'
 
 
@@ -65,20 +65,33 @@ export const characterCreationStage: StageModule = {
   present: (state, context) => {
     const step = stepOf(state.step)
     if (step === 'origin') {
+      // A class the player has not earned is not on the ring at all. The
+      // gate is HERE rather than in content, the same way every other
+      // reachability gate in this game lives in the stage that offers the
+      // choice: content says what a thing requires, the screen decides
+      // whether to offer it.
+      const unlocked = context.save.profile.unlocked
       return {
-        screenKey: 'origin',
-        choices: context.content.origins.map((origin) => ({
-          id: `origin:${origin.id}`,
-          label: origin.name,
-          icon: origin.icon,
-          detail: {
-            title: origin.name,
-            lines: STAT_KEYS.flatMap((stat) => {
-              const amount = origin.statDeltas[stat]
-              return amount ? [`+${amount} ${STAT_LABELS[stat]}`] : []
-            }),
-          },
-        })),
+        screenKey: `origin:${unlocked.length}`,
+        choices: context.content.origins
+          .filter((origin) => isUnlocked(unlocked, origin.requiresUnlock))
+          .map((origin) => ({
+            id: `origin:${origin.id}`,
+            label: origin.name,
+            icon: origin.icon,
+            detail: {
+              title: origin.name,
+              // Described from the EFFECTS, through the same describer an
+              // item's detail uses -- which is the whole point of a class
+              // carrying effects rather than a stat map. A Berserker's
+              // "+100% damage" and "worn armour counts for nothing" need no
+              // code here at all.
+              lines: describeModifier(
+                { id: origin.id, kind: 'trait', name: origin.name, icon: origin.icon, effects: origin.effects },
+                holdingCounts(context.held),
+              ),
+            },
+          })),
       }
     }
 
@@ -111,11 +124,11 @@ export const characterCreationStage: StageModule = {
         kind: 'replace',
         stageId: CHARACTER_CREATION_STAGE_ID,
         input: { step: 'trait' },
+        // RECORDED, not written into the stats. The class resolves with the
+        // modifiers from here on, so the six points in every stat are the
+        // player's own to spend whatever they picked.
         effects: [
-          ...STAT_KEYS.flatMap((stat) => {
-            const amount = origin.statDeltas[stat]
-            return amount ? [{ kind: 'adjustBaseStat' as const, stat, amount }] : []
-          }),
+          { kind: 'setOrigin', originId: origin.id },
           { kind: 'recordOutcome', outcome: 'origin-chosen', payload: { originId: origin.id } },
         ],
         rng,

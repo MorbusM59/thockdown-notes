@@ -31,17 +31,73 @@ import type { Content, MonsterClass, MonsterClassId, Origin, Region, Species } f
 import type { ModifierTemplate } from '../model/modifierSlots'
 
 /**
- * PLACEHOLDER STAT SPREADS. Only the Warrior's is specified (+2 Might, +1
- * Agility). The other three are named in the design document with no
- * numbers at all; theirs are shaped to match the Warrior's budget so that
- * character creation is playable, and they are NOT balanced, considered, or
- * agreed. Replace them with real ones before any of this is tuned.
+ * PLACEHOLDER STAT SPREADS for the four starting classes. Only the Warrior's
+ * is specified (+2 Might, +1 Agility). The other three are named in the
+ * design document with no numbers at all; theirs are shaped to match the
+ * Warrior's budget so that character creation is playable, and they are NOT
+ * balanced, considered, or agreed. Replace them with real ones before any of
+ * this is tuned.
+ *
+ * The BERSERKER is specified, and it is the first class that has to be
+ * earned: reach Might 6 in a run and it is available at the start of every
+ * run after (model/permanentUnlocks.ts). It is also the first class to carry
+ * effects that are not stats -- which is what a class sharing the modifier
+ * vocabulary buys, rather than a second kind of declaration.
  */
 const ORIGINS: readonly Origin[] = [
-  { id: 'warrior', name: 'Warrior', icon: 'fa-solid fa-hand-fist', statDeltas: { might: 2, agility: 1 } },
-  { id: 'thief', name: 'Thief', icon: 'fa-solid fa-mask', statDeltas: { agility: 2, luck: 1 } },
-  { id: 'mage', name: 'Mage', icon: 'fa-solid fa-wand-sparkles', statDeltas: { intellect: 2, perception: 1 } },
-  { id: 'bard', name: 'Bard', icon: 'fa-solid fa-music', statDeltas: { charisma: 2, luck: 1 } },
+  {
+    id: 'warrior',
+    name: 'Warrior',
+    icon: 'fa-solid fa-hand-fist',
+    effects: [
+      { kind: 'statDelta', stat: 'might', amount: 2 },
+      { kind: 'statDelta', stat: 'agility', amount: 1 },
+    ],
+  },
+  {
+    id: 'thief',
+    name: 'Thief',
+    icon: 'fa-solid fa-mask',
+    effects: [
+      { kind: 'statDelta', stat: 'agility', amount: 2 },
+      { kind: 'statDelta', stat: 'luck', amount: 1 },
+    ],
+  },
+  {
+    id: 'mage',
+    name: 'Mage',
+    icon: 'fa-solid fa-wand-sparkles',
+    effects: [
+      { kind: 'statDelta', stat: 'intellect', amount: 2 },
+      { kind: 'statDelta', stat: 'perception', amount: 1 },
+    ],
+  },
+  {
+    id: 'bard',
+    name: 'Bard',
+    icon: 'fa-solid fa-music',
+    effects: [
+      { kind: 'statDelta', stat: 'charisma', amount: 2 },
+      { kind: 'statDelta', stat: 'luck', amount: 1 },
+    ],
+  },
+  {
+    id: 'berserker',
+    name: 'Berserker',
+    icon: 'fa-solid fa-khanda',
+    requiresUnlock: 'berserker',
+    effects: [
+      { kind: 'statDelta', stat: 'might', amount: 4 },
+      { kind: 'statDelta', stat: 'agility', amount: 2 },
+      { kind: 'statDelta', stat: 'intellect', amount: -2 },
+      // A FRACTION, like every other percentage in the vocabulary (the slot
+      // ranges are 0.1 to 0.5): 1 is +100%, which doubles the damage.
+      { kind: 'derivedPercent', derived: 'damageMultiplier', percent: 1 },
+      // Worn armour is worth nothing to them; a trait's natural armour still
+      // is, so a Berserker can be tough without ever being armoured.
+      { kind: 'noDecayingArmor' },
+    ],
+  },
 ]
 
 /**

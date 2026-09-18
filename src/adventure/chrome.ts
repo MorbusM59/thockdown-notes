@@ -29,7 +29,7 @@ import type { EscapeMenuChromeGauge, EscapeMenuChromePill, EscapeMenuModeChrome,
 import { moteBalance, statPointProgress, statPointsAvailable, statPointStanding } from './model/motes'
 import { famePointProgress, famePointsAvailable, famePointStanding, goldBalance } from './model/gold'
 import { displayEncounter } from './stages/levelProgress'
-import { activeGame, armorIn, heldModifiers, holdingCounts, keptModifierIds, profileOf, type GameSave } from './model/gameState'
+import { activeGame, armorOf, heldModifiers, holdingCounts, keptModifierIds, profileOf, type GameSave } from './model/gameState'
 import { itemArmor } from './model/armor'
 import type { Content } from './content'
 import { describeModifier, type Modifier, type ModifierKind } from './model/modifiers'
@@ -85,7 +85,7 @@ export function statusReadouts(save: GameSave, content: Content): EscapeMenuRead
   }
 
   const profile = profileOf(save, game, content)
-  const armor = armorIn(save, game, content)
+  const armor = armorOf(save, game, content)
 
   return [
     { key: 'hp', icon: READOUT_ICONS.hp, label: 'Hit points', value: `${game.hitPoints}/${profile.derived.maxHitPoints}` },

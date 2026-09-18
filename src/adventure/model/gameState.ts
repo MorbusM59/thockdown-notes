@@ -25,7 +25,7 @@
 // it is not written until something uses it.
 
 import { pieceOf, refillArmor, repairAfterFight, type Armor, type ArmorPiece } from './armor'
-import { resolveProfile, type EffectiveProfile, type HoldingCounts, type Modifier, type ModifierKind } from './modifiers'
+import { resolveProfile, type EffectiveProfile, type HoldingCounts, type Modifier, type ModifierKind, type Situation } from './modifiers'
 import { catalogFor, type Content } from '../content'
 import { clampBaseStats, createStatBlock, deriveStats, type StatBlock } from './stats'
 import type { Effect } from './effects'
@@ -33,6 +33,7 @@ import { FIRST_MILESTONE_THRESHOLD, takeMilestone } from './milestones'
 import { canAllocateStatPoint } from './motes'
 import { canAllocateFamePoint, famePointsAvailable, fameReached } from './gold'
 import { canBuyMore, fameUnlockById, fameUnlockBonus } from './fameUnlocks'
+import { withUnlocksEarnedBy } from './permanentUnlocks'
 import type { JsonObject } from '../core/json'
 import { createSeed, type RngState } from '../core/rng'
 import { DEFAULT_DIFFICULTY, type Difficulty } from './difficulty'
@@ -92,9 +93,15 @@ export interface Profile {
   gamesStarted: number
   gamesEnded: number
   bestFame: number
+  /**
+   * PERMANENT UNLOCKS, earned by what a run reached and kept for every run
+   * after (model/permanentUnlocks.ts). The one thing that crosses between
+   * runs: fame and stat points do not.
+   */
+  unlocked: readonly string[]
 }
 
-export const EMPTY_PROFILE: Profile = { gamesStarted: 0, gamesEnded: 0, bestFame: 0 }
+export const EMPTY_PROFILE: Profile = { gamesStarted: 0, gamesEnded: 0, bestFame: 0, unlocked: [] }
 
 /** One game slot. Multiple are possible by construction; only one is offered today. */
 export interface GameRecord {
@@ -193,6 +200,14 @@ export interface GameRecord {
    * the readers rather than crashing them.
    */
   fameUnlocks: readonly string[]
+  /**
+   * WHICH CLASS this run is playing, by id. Its gifts are NOT written into
+   * `baseStats`: they resolve with the modifiers, so the base block stays
+   * purely what the player spent and every run gets all six points in every
+   * stat. Null for a run saved before classes moved out of the base block,
+   * and for one that has not chosen yet.
+   */
+  originId: string | null
   hitPoints: number
 }
 
@@ -336,7 +351,8 @@ export function heldModifiers(save: GameSave, gameId: string, catalog: ReadonlyM
  * the holding. `natural` is derived outright: nothing spends it, so a stored
  * copy could only ever disagree with the traits that granted it.
  */
-export function armorOf(save: GameSave, game: GameRecord, catalog: ReadonlyMap<string, Modifier>): Armor {
+export function armorOf(save: GameSave, game: GameRecord, content: Content): Armor {
+  const catalog = catalogFor(content, game.seed)
   const pieces: ArmorPiece[] = []
   for (const row of holdingsOf(save, game.id)) {
     const modifier = catalog.get(row.modifierId)
@@ -345,13 +361,13 @@ export function armorOf(save: GameSave, game: GameRecord, catalog: ReadonlyMap<s
     if (piece) pieces.push(piece)
   }
   const held = heldModifiers(save, game.id, catalog)
-  return { natural: resolveProfile(game.baseStats, held, holdingCounts(held)).naturalArmor, pieces }
+  // Through the run's own resolver, so a class that forbids worn armour
+  // (`noDecayingArmor`) is read here rather than only where stats are.
+  const profile = resolveRunProfile(game, content, held)
+  return { natural: profile.naturalArmor, pieces: profile.noDecayingArmor ? [] : pieces }
 }
 
-/** The armor a run's holdings imply, taken from the save's own content. */
-export function armorIn(save: GameSave, game: GameRecord, content: Content): Armor {
-  return armorOf(save, game, catalogFor(content, game.seed))
-}
+
 
 /**
  * Writes a set of armor pieces back onto the holdings they belong to. The one
@@ -479,14 +495,55 @@ export function holdingCounts(held: readonly Modifier[]): HoldingCounts {
   }
 }
 
-/** The player as every formula sees them. */
+/**
+ * THE RUN'S CLASS AS A MODIFIER, because that is what a class is now: the
+ * same effect vocabulary as an item, resolved in the same pass.
+ *
+ * Not a HELD modifier -- it occupies no carry slot, appears on no strip and
+ * is counted in no holding total. It is prepended to the list the resolver
+ * reads and nothing else, which is why `holdingCounts` is still taken from
+ * what is actually held.
+ */
+export function originModifier(game: GameRecord, content: Content): Modifier | null {
+  if (!game.originId) return null
+  const origin = content.origins.find((candidate) => candidate.id === game.originId)
+  if (!origin) return null
+  return { id: `origin:${origin.id}`, kind: 'trait', name: origin.name, icon: origin.icon, effects: origin.effects }
+}
+
+/**
+ * THE PLAYER AS EVERY FORMULA SEES THEM, and the ONE place a run's profile is
+ * resolved.
+ *
+ * Four call sites used to spell out the same triple -- base stats, held
+ * modifiers, holding counts -- and a class that resolves with the modifiers
+ * would have had to be remembered at every one of them. That is this
+ * codebase's characteristic failure written out in advance, so the triple is
+ * a function instead: there is now no way to resolve a run's profile without
+ * its class in it.
+ */
+export function resolveRunProfile(
+  game: GameRecord,
+  content: Content,
+  held: readonly Modifier[],
+  situation?: Situation,
+): EffectiveProfile {
+  const origin = originModifier(game, content)
+  return resolveProfile(
+    game.baseStats,
+    origin ? [origin, ...held] : held,
+    holdingCounts(held),
+    situation,
+  )
+}
+
 export function profileOf(save: GameSave, game: GameRecord, content: Content): EffectiveProfile {
   const held = heldModifiers(save, game.id, catalogFor(content, game.seed))
   // The record's own hit points ride along, so a conditional effect ("harder
   // to kill with their back to the wall") is already in every number every
   // caller reads. The record is written after each blow, so this is current
   // inside a fight as well as outside one.
-  return resolveProfile(game.baseStats, held, holdingCounts(held), { hitPoints: game.hitPoints })
+  return resolveRunProfile(game, content, held, { hitPoints: game.hitPoints })
 }
 
 function nextSeq(rows: readonly { gameId: string; seq: number }[], gameId: string): number {
@@ -518,6 +575,7 @@ function createGame(id: string, seed: RngState, nowMs: number, settings: GameSet
     goldToNextFamePoint: FIRST_MILESTONE_THRESHOLD,
     famePointsSpent: 0,
     fameUnlocks: [],
+    originId: null,
     hitPoints: deriveStats(clampBaseStats(baseStats)).maxHitPoints,
   }
 }
@@ -715,6 +773,13 @@ export function applyEffect(
       })
     }
 
+    case 'setOrigin':
+      // The class is RECORDED, not applied: its gifts resolve with the
+      // modifiers (`originModifier`), so the base block stays purely what the
+      // player spent. Writing them into `baseStats` is what used to cost a
+      // Warrior two of their own six Might points.
+      return replace({ originId: effect.originId })
+
     case 'setRegion':
       return replace({ regionId: effect.regionId })
 
@@ -731,7 +796,7 @@ export function applyEffect(
       // stage that forgot to emit it would be the one nobody noticed.
       const profile = profileOf(save, game, content)
       const repaired = repairAfterFight(
-        armorOf(save, game, catalog),
+        armorOf(save, game, content),
         profile.stats.might,
         profile.stats.intellect,
         profile.armorRepair,
@@ -756,11 +821,7 @@ export function applyEffect(
       // makes the result the same either way today -- the order is what makes
       // it stay that way when something subtracts a delta instead.
       const heldBefore = heldModifiers(save, gameId, catalog)
-      const restored = resolveProfile(
-        game.baseStats,
-        heldBefore,
-        holdingCounts(heldBefore),
-      ).derived.maxHitPoints
+      const restored = resolveRunProfile(game, content, heldBefore).derived.maxHitPoints
 
       // Everything that survives, both kinds, as the holdings that carry
       // those ids. Duplicates cannot exist (`acquireModifier`), so an id
@@ -775,7 +836,7 @@ export function applyEffect(
       const refilled = writeArmor(
         { ...save, holdings },
         gameId,
-        refillArmor(armorOf({ ...save, holdings }, game, catalog)),
+        refillArmor(armorOf({ ...save, holdings }, game, content)),
       )
 
       return {
@@ -878,8 +939,17 @@ export function applyEffects(
     save,
   )
   if (!next.activeGameId) return next
-  return {
+  const stamped = {
     ...next,
     games: next.games.map((game) => (game.id === next.activeGameId ? { ...game, updatedAtMs: nowMs } : game)),
   }
+  // PERMANENT UNLOCKS ARE DERIVED, here, after every effect -- for the same
+  // reason `followMaxHitPoints` is applied here rather than in the branches
+  // that happen to move a ceiling today: the next effect that satisfies a
+  // condition will not know to ask. The set only grows, so this cannot
+  // retract one that a later effect made false again.
+  const unlocked = withUnlocksEarnedBy(stamped.profile.unlocked, activeGame(stamped))
+  return unlocked === stamped.profile.unlocked
+    ? stamped
+    : { ...stamped, profile: { ...stamped.profile, unlocked } }
 }
