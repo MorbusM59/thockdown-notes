@@ -144,10 +144,10 @@ function sanitizeGame(value: unknown): GameRecord | null {
     // purchase is how the run counts what it bought -- so this keeps the list
     // as written rather than de-duplicating it. Unknown ids are tolerated
     // rather than dropped, the same way a dropped modifier id is: the readers
-    // (model/fameUnlocks.ts) match on the ids they know and ignore the rest,
+    // (model/famePurchases.ts) match on the ids they know and ignore the rest,
     // and the ceiling is clamped there too, so a list this build cannot
     // explain can neither crash it nor raise a rule past the design's top.
-    fameUnlocks: modifierIds(value.fameUnlocks),
+    famePurchases: modifierIds(value.famePurchases),
     // Null for a run saved before classes moved out of the base block. Such a
     // run keeps the stats its class was written into and simply has no class
     // layer -- which is what it was played as, so it plays on unchanged rather

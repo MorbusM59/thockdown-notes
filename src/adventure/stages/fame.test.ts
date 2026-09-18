@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { THOCKQUEST } from '../content'
 import { choose, enterEntryScreen, type DirectorDeps } from '../core/director'
 import { activeGame, applyEffects, carryLimit, emptySave, keepAllowance, type GameSave } from '../model/gameState'
-import { FAME_UNLOCKS, FAME_UNLOCK_CEILING } from '../model/fameUnlocks'
+import { FAME_PURCHASES, FAME_PURCHASE_CEILING } from '../model/famePurchases'
 import { famePointsAvailable } from '../model/gold'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
 
@@ -16,8 +16,8 @@ function runWithGold(gold: number): GameSave {
   return gold > 0 ? applyEffects(started, [{ kind: 'grantGold', units: gold }], DEPS.content, NOW) : started
 }
 
-function buy(save: GameSave, unlock: string): GameSave {
-  return applyEffects(save, [{ kind: 'buyFameUnlock', unlock }], DEPS.content, NOW)
+function buy(save: GameSave, purchase: string): GameSave {
+  return applyEffects(save, [{ kind: 'buyFamePurchase', purchase }], DEPS.content, NOW)
 }
 
 function pointsIn(save: GameSave): number {
@@ -58,18 +58,18 @@ describe('what a fame point buys', () => {
   it('refuses a purchase the run cannot afford, whole', () => {
     // The half-apply this guards is the reason the purchase is ONE effect: a
     // price paid in separate allocations would take the one point that was
-    // there and hand over the unlock anyway.
+    // there and hand over the purchase anyway.
     const save = runWithGold(10)
     expect(pointsIn(save)).toBe(1)
 
     const after = activeGame(buy(save, 'largeCoffers'))!
     expect(after.famePointsSpent).toBe(0)
-    expect(after.fameUnlocks).toEqual([])
+    expect(after.famePurchases).toEqual([])
     expect(keepAllowance(after, 'item')).toBe(1)
   })
 
   it('climbs to the ceiling and stops there, however much fame is thrown at it', () => {
-    // The property, not one step of it: buying the same unlock far more times
+    // The property, not one step of it: buying the same purchase far more times
     // than the ceiling allows must leave the rule AT the ceiling and the
     // purchases it refused unpaid. A run with a fortune is the case where an
     // off-by-one in the cap becomes a run carrying twelve items.
@@ -77,32 +77,32 @@ describe('what a fame point buys', () => {
     for (let attempt = 0; attempt < 12; attempt += 1) save = buy(save, 'strongBack')
 
     const game = activeGame(save)!
-    expect(carryLimit(game, 'item')).toBe(FAME_UNLOCK_CEILING.carry)
-    expect(game.fameUnlocks.filter((id) => id === 'strongBack')).toHaveLength(
-      FAME_UNLOCK_CEILING.carry - 3,
+    expect(carryLimit(game, 'item')).toBe(FAME_PURCHASE_CEILING.carry)
+    expect(game.famePurchases.filter((id) => id === 'strongBack')).toHaveLength(
+      FAME_PURCHASE_CEILING.carry - 3,
     )
   })
 
-  it('reaches every ceiling from every unlock, and no further', () => {
+  it('reaches every ceiling from every purchase, and no further', () => {
     // Held against the whole table rather than one row: the grid is what
-    // makes a fifth unlock cheap to add, and a rule that only holds for the
+    // makes a fifth purchase cheap to add, and a rule that only holds for the
     // row somebody tested is this codebase's characteristic failure.
-    for (const unlock of FAME_UNLOCKS) {
+    for (const purchase of FAME_PURCHASES) {
       let save = runWithGold(1_000_000)
-      for (let attempt = 0; attempt < 10; attempt += 1) save = buy(save, unlock.id)
+      for (let attempt = 0; attempt < 10; attempt += 1) save = buy(save, purchase.id)
       const game = activeGame(save)!
-      const reached = unlock.rule === 'carry' ? carryLimit(game, unlock.kind) : keepAllowance(game, unlock.kind)
-      expect(reached).toBe(FAME_UNLOCK_CEILING[unlock.rule])
+      const reached = purchase.rule === 'carry' ? carryLimit(game, purchase.kind) : keepAllowance(game, purchase.kind)
+      expect(reached).toBe(FAME_PURCHASE_CEILING[purchase.rule])
     }
   })
 
-  it('ignores an unlock id this build does not know', () => {
-    // Saves outlive content. An id from a build that had a fifth unlock must
+  it('ignores an purchase id this build does not know', () => {
+    // Saves outlive content. An id from a build that had a fifth purchase must
     // cost nothing and change nothing rather than throw.
     const save = runWithGold(100)
     const after = activeGame(buy(save, 'sorcerousTote'))!
     expect(after.famePointsSpent).toBe(0)
-    expect(after.fameUnlocks).toEqual([])
+    expect(after.famePurchases).toEqual([])
   })
 
   it('survives the save, purchases and repeats intact', async () => {
@@ -112,7 +112,7 @@ describe('what a fame point buys', () => {
 
     const reloaded = sanitizeGameSave(JSON.parse(JSON.stringify(save)))!
     const game = activeGame(reloaded)!
-    expect(game.fameUnlocks).toEqual(['strongBack', 'strongBack'])
+    expect(game.famePurchases).toEqual(['strongBack', 'strongBack'])
     expect(carryLimit(game, 'item')).toBe(5)
   })
 })

@@ -1,7 +1,7 @@
 // WHAT SURVIVES A RUN.
 //
 // Fame and stat points are both spent WITHIN a run and buy nothing that
-// outlives it (model/fameUnlocks.ts). What crosses from one run to the next is
+// outlives it (model/famePurchases.ts). What crosses from one run to the next is
 // this: a set of permanent unlocks, earned by what a run REACHED rather than
 // carried over as currency. A player does not bank anything between runs; they
 // widen what a run can start as.

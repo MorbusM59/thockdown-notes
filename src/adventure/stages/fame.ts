@@ -13,9 +13,9 @@
 // written and this screen does not anticipate them.
 //
 // THE GATE IS HERE, the same way it is on the stat-point screen beside this
-// one: `buyFameUnlock` refuses what the run cannot afford or has already
+// one: `buyFamePurchase` refuses what the run cannot afford or has already
 // raised to its ceiling, and this screen declines to OFFER those, so a cell
-// that is on the ring can always be taken. The full ladder -- every unlock,
+// that is on the ring can always be taken. The full ladder -- every purchase,
 // its price, and how far this run has taken it -- is on the way-back cell's
 // detail, because a player saving up needs to see what they are saving for
 // even while none of it is affordable.
@@ -34,36 +34,36 @@ import {
 } from '../model/gameState'
 import {
   canBuyMore,
-  FAME_UNLOCKS,
-  FAME_UNLOCK_CEILING,
-  fameUnlockById,
-  type FameUnlock,
-} from '../model/fameUnlocks'
+  FAME_PURCHASES,
+  FAME_PURCHASE_CEILING,
+  famePurchaseById,
+  type FamePurchase,
+} from '../model/famePurchases'
 import { FAME_STAGE_ID } from './ids'
 
 const BACK_CHOICE = 'fame:back'
 const CHOICE_PREFIX = 'fame:buy:'
 
 /** The base a rule starts from, which is also what its ceiling is measured against. */
-function baseFor(unlock: FameUnlock): number {
-  return unlock.rule === 'carry' ? BASE_CARRY_LIMIT : BASE_KEEP_ALLOWANCE
+function baseFor(purchase: FamePurchase): number {
+  return purchase.rule === 'carry' ? BASE_CARRY_LIMIT : BASE_KEEP_ALLOWANCE
 }
 
-/** What this run currently has of the rule an unlock raises. */
-function standingFor(game: GameRecord, unlock: FameUnlock): number {
-  return unlock.rule === 'carry' ? carryLimit(game, unlock.kind) : keepAllowance(game, unlock.kind)
+/** What this run currently has of the rule a purchase raises. */
+function standingFor(game: GameRecord, purchase: FamePurchase): number {
+  return purchase.rule === 'carry' ? carryLimit(game, purchase.kind) : keepAllowance(game, purchase.kind)
 }
 
-/** The rule an unlock raises, named as the readout names it. */
-function ruleWords(unlock: FameUnlock): string {
-  const noun = unlock.kind === 'item' ? 'items' : 'traits'
-  return unlock.rule === 'carry' ? `${noun} carried` : `${noun} kept between levels`
+/** The rule a purchase raises, named as the readout names it. */
+function ruleWords(purchase: FamePurchase): string {
+  const noun = purchase.kind === 'item' ? 'items' : 'traits'
+  return purchase.rule === 'carry' ? `${noun} carried` : `${noun} kept between levels`
 }
 
 /** The same fact as prose, for the narration pill, where a readout's phrasing reads as broken English. */
-function gainWords(unlock: FameUnlock): string {
-  const noun = unlock.kind === 'item' ? 'item' : 'trait'
-  return unlock.rule === 'carry'
+function gainWords(purchase: FamePurchase): string {
+  const noun = purchase.kind === 'item' ? 'item' : 'trait'
+  return purchase.rule === 'carry'
     ? `One more ${noun} in your hands.`
     : `One more ${noun} survives the level.`
 }
@@ -73,26 +73,26 @@ function gainWords(unlock: FameUnlock): string {
  * number as it is and as it would be, read from the live rule rather than
  * restated, so it cannot disagree with what the purchase actually changes.
  */
-function purchaseLines(game: GameRecord, unlock: FameUnlock): string[] {
-  const now = standingFor(game, unlock)
+function purchaseLines(game: GameRecord, purchase: FamePurchase): string[] {
+  const now = standingFor(game, purchase)
   return [
-    `${ruleWords(unlock)} ${now} → ${now + 1}`,
-    `Costs ${unlock.cost} fame point${unlock.cost === 1 ? '' : 's'}`,
-    `Up to ${FAME_UNLOCK_CEILING[unlock.rule]}`,
+    `${ruleWords(purchase)} ${now} → ${now + 1}`,
+    `Costs ${purchase.cost} fame point${purchase.cost === 1 ? '' : 's'}`,
+    `Up to ${FAME_PURCHASE_CEILING[purchase.rule]}`,
   ]
 }
 
 /** The whole ladder, affordable or not -- what a player saving up is saving for. */
 function ladderLines(game: GameRecord, waiting: number): string[] {
-  return FAME_UNLOCKS.map((unlock) => {
-    const now = standingFor(game, unlock)
-    const atCeiling = !canBuyMore(game.fameUnlocks, unlock, baseFor(unlock))
+  return FAME_PURCHASES.map((purchase) => {
+    const now = standingFor(game, purchase)
+    const atCeiling = !canBuyMore(game.famePurchases, purchase, baseFor(purchase))
     const suffix = atCeiling
       ? 'at its limit'
-      : waiting >= unlock.cost
-        ? `${unlock.cost} to raise`
-        : `${unlock.cost} fame`
-    return `${unlock.name}: ${now} — ${suffix}`
+      : waiting >= purchase.cost
+        ? `${purchase.cost} to raise`
+        : `${purchase.cost} fame`
+    return `${purchase.name}: ${now} — ${suffix}`
   })
 }
 
@@ -134,20 +134,20 @@ export const fameStage: StageModule = {
     }
     if (!game) return { screenKey: 'fame:none', choices: [back] }
 
-    const affordable = FAME_UNLOCKS.filter((unlock) => (
-      unlock.cost <= waiting && canBuyMore(game.fameUnlocks, unlock, baseFor(unlock))
+    const affordable = FAME_PURCHASES.filter((purchase) => (
+      purchase.cost <= waiting && canBuyMore(game.famePurchases, purchase, baseFor(purchase))
     ))
     return {
       // Keyed on what the run has BOUGHT as well as what it has spent, so
       // taking a purchase deals a new screen rather than leaving the ring on
       // a cell that has just changed meaning.
-      screenKey: `fame:${game.famePointsSpent}:${game.fameUnlocks.length}`,
+      screenKey: `fame:${game.famePointsSpent}:${game.famePurchases.length}`,
       choices: [
-        ...affordable.map((unlock) => ({
-          id: `${CHOICE_PREFIX}${unlock.id}`,
-          label: unlock.name,
-          icon: unlock.icon,
-          detail: { title: unlock.name, lines: purchaseLines(game, unlock) },
+        ...affordable.map((purchase) => ({
+          id: `${CHOICE_PREFIX}${purchase.id}`,
+          label: purchase.name,
+          icon: purchase.icon,
+          detail: { title: purchase.name, lines: purchaseLines(game, purchase) },
         })),
         back,
       ],
@@ -156,8 +156,8 @@ export const fameStage: StageModule = {
 
   resolve: (state, choiceId, _context, rng) => {
     if (!choiceId.startsWith(CHOICE_PREFIX)) return { kind: 'pop', rng }
-    const unlock = fameUnlockById(choiceId.slice(CHOICE_PREFIX.length))
-    if (!unlock) return { kind: 'pop', rng }
+    const purchase = famePurchaseById(choiceId.slice(CHOICE_PREFIX.length))
+    if (!purchase) return { kind: 'pop', rng }
     return {
       // STAYS on the screen rather than popping, unlike a stat point: these
       // come in fours at two prices, so a player with several points in hand
@@ -166,10 +166,10 @@ export const fameStage: StageModule = {
       kind: 'stay',
       state,
       effects: [
-        { kind: 'buyFameUnlock', unlock: unlock.id },
-        { kind: 'recordOutcome', outcome: 'fame-unlock-bought', payload: { unlock: unlock.id } },
+        { kind: 'buyFamePurchase', purchase: purchase.id },
+        { kind: 'recordOutcome', outcome: 'fame-purchase-bought', payload: { purchase: purchase.id } },
       ],
-      narration: `**${unlock.name}.** *${gainWords(unlock)}*`,
+      narration: `**${purchase.name}.** *${gainWords(purchase)}*`,
       rng,
     }
   },

@@ -211,10 +211,13 @@ describe('the level counts to ten', () => {
       expect(shown.choices).toHaveLength(1)
       expect(shown.choices[0].id).toBe('encounter:fixed')
     }
-    // ...and three ways to look for one everywhere else.
+    // ...and two ways to look for one everywhere else. Two, not three:
+    // Special Encounter was removed rather than built, and the omen above is
+    // what took its place.
     const open = atEncounter(4)
     const entered = encounterSelectStage.enter({}, open, 5)
-    expect(encounterSelectStage.present(entered.state, open).choices).toHaveLength(3)
+    const ways = encounterSelectStage.present(entered.state, open).choices
+    expect(ways.map((choice) => choice.id)).toEqual(['encounter:hunt', 'encounter:explore'])
   })
 
   it('pays the rest into a hurt character, and cannot overfill a healthy one', () => {
@@ -465,7 +468,7 @@ describe('renown', () => {
 
   it('offers only what the run can actually take, and always the way back', () => {
     // SUPERSEDES "invents no unlock for it": what a fame point buys is written
-    // now (model/fameUnlocks.ts). The rule that replaced it is that the gate
+    // now (model/famePurchases.ts). The rule that replaced it is that the gate
     // lives in the stage, exactly as it does for stat points -- a cell on the
     // ring can always be taken, so the two-point purchases are absent while
     // only one point is in hand.

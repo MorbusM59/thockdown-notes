@@ -502,7 +502,6 @@ export function EscapeHoldPanel({
     // cellsRef rather than `cells`: the burst is about the screen ARRIVING,
     // so it must not re-fire when a cell's label or availability changes
     // underneath a screen that is already up.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ringResetKey, isOpen, reduceVisualEffects])
   // The ring element itself, for the native wheel listener below, and a
   // mirror of `isOpen` the two imperative handlers can read.

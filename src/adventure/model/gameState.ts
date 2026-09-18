@@ -32,7 +32,7 @@ import type { Effect } from './effects'
 import { FIRST_MILESTONE_THRESHOLD, takeMilestone } from './milestones'
 import { canAllocateStatPoint } from './motes'
 import { canAllocateFamePoint, famePointsAvailable, fameReached } from './gold'
-import { canBuyMore, fameUnlockById, fameUnlockBonus } from './fameUnlocks'
+import { canBuyMore, famePurchaseById, famePurchaseBonus } from './famePurchases'
 import { withUnlocksEarnedBy } from './permanentUnlocks'
 import type { JsonObject } from '../core/json'
 import { createSeed, type RngState } from '../core/rng'
@@ -56,8 +56,15 @@ import { DEFAULT_DIFFICULTY, type Difficulty } from './difficulty'
  * attainment, and the old name had already cost one wrapper function written
  * purely to hide it. A v2 save's `goldUnits` is a balance with the same
  * unrecoverable total as v1's motes.
+ *
+ * v4 renamed `fameUnlocks` to `famePurchases` (model/famePurchases.ts): the
+ * word "unlock" now means a permanent one and nothing else. The version is
+ * bumped rather than the old key tolerated, because a v3 save read under the
+ * new name would load with an EMPTY purchase list -- a run that bought Strong
+ * Back twice would carry on with the base limit and nothing would say so.
+ * Discarding the save states the loss; reading it silently mis-states the run.
  */
-export const SAVE_VERSION = 3
+export const SAVE_VERSION = 4
 
 /** One frame of the director's stack: which stage, and its own private state. */
 export interface StageFrame {
@@ -193,13 +200,13 @@ export interface GameRecord {
   famePointsSpent: number
   /**
    * WHAT THE RUN BOUGHT WITH ITS FAME, one entry per purchase (they repeat --
-   * see model/fameUnlocks.ts, where the ceiling is on the rule rather than on
+   * see model/famePurchases.ts, where the ceiling is on the rule rather than on
    * the count). A LIST of ids rather than counters per unlock, for the same
    * reason `outcomes` is rows rather than columns: a new unlock is a new id
    * and touches no schema, and an id this build no longer knows is ignored by
    * the readers rather than crashing them.
    */
-  fameUnlocks: readonly string[]
+  famePurchases: readonly string[]
   /**
    * WHICH CLASS this run is playing, by id. Its gifts are NOT written into
    * `baseStats`: they resolve with the modifiers, so the base block stays
@@ -400,7 +407,7 @@ function writeArmor(save: GameSave, gameId: string, armor: Armor): GameSave {
 export const BASE_KEEP_ALLOWANCE = 1
 
 export function keepAllowance(game: GameRecord, kind: ModifierKind): number {
-  return BASE_KEEP_ALLOWANCE + fameUnlockBonus(game.fameUnlocks, 'keep', kind, BASE_KEEP_ALLOWANCE)
+  return BASE_KEEP_ALLOWANCE + famePurchaseBonus(game.famePurchases, 'keep', kind, BASE_KEEP_ALLOWANCE)
 }
 
 /**
@@ -420,7 +427,7 @@ export function keepAllowance(game: GameRecord, kind: ModifierKind): number {
 export const BASE_CARRY_LIMIT = 3
 
 export function carryLimit(game: GameRecord, kind: ModifierKind): number {
-  return BASE_CARRY_LIMIT + fameUnlockBonus(game.fameUnlocks, 'carry', kind, BASE_CARRY_LIMIT)
+  return BASE_CARRY_LIMIT + famePurchaseBonus(game.famePurchases, 'carry', kind, BASE_CARRY_LIMIT)
 }
 
 /** What the run is carrying of one kind, as holdings rather than as resolved modifiers. */
@@ -574,7 +581,7 @@ function createGame(id: string, seed: RngState, nowMs: number, settings: GameSet
     goldSpentOnItems: 0,
     goldToNextFamePoint: FIRST_MILESTONE_THRESHOLD,
     famePointsSpent: 0,
-    fameUnlocks: [],
+    famePurchases: [],
     originId: null,
     hitPoints: deriveStats(clampBaseStats(baseStats)).maxHitPoints,
   }
@@ -740,7 +747,7 @@ export function applyEffect(
       })
     }
 
-    case 'buyFameUnlock': {
+    case 'buyFamePurchase': {
       // ONE EFFECT, so paid-but-not-granted and granted-but-not-paid are both
       // inexpressible. The obvious alternative -- the screen emitting
       // `allocateFamePoint` once per point of the price, then a grant -- is
@@ -748,11 +755,11 @@ export function applyEffect(
       // with one point waiting would take the point and hand over the unlock
       // anyway, because each effect is applied against the state the last one
       // left.
-      const unlock = fameUnlockById(effect.unlock)
-      if (!unlock) return save
-      const base = unlock.rule === 'carry' ? BASE_CARRY_LIMIT : BASE_KEEP_ALLOWANCE
-      if (!canBuyMore(game.fameUnlocks, unlock, base)) return save
-      if (famePointsAvailable(game.goldEarned, game.goldToNextFamePoint, game.famePointsSpent) < unlock.cost) {
+      const purchase = famePurchaseById(effect.purchase)
+      if (!purchase) return save
+      const base = purchase.rule === 'carry' ? BASE_CARRY_LIMIT : BASE_KEEP_ALLOWANCE
+      if (!canBuyMore(game.famePurchases, purchase, base)) return save
+      if (famePointsAvailable(game.goldEarned, game.goldToNextFamePoint, game.famePointsSpent) < purchase.cost) {
         return save
       }
       // The ladder charges per point and the threshold moves each time, which
@@ -761,7 +768,7 @@ export function applyEffect(
       // count is known before the loop starts.
       let threshold = game.goldToNextFamePoint
       let spent = game.famePointsSpent
-      for (let point = 0; point < unlock.cost; point += 1) {
+      for (let point = 0; point < purchase.cost; point += 1) {
         const taken = takeMilestone(threshold, spent)
         threshold = taken.threshold
         spent = taken.pointsSpent
@@ -769,7 +776,7 @@ export function applyEffect(
       return replace({
         famePointsSpent: spent,
         goldToNextFamePoint: threshold,
-        fameUnlocks: [...game.fameUnlocks, unlock.id],
+        famePurchases: [...game.famePurchases, purchase.id],
       })
     }
 

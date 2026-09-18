@@ -7,6 +7,14 @@
 // because "a fame unlock is expected to raise it". This is the thing that
 // raises them.
 //
+// THE WORD "UNLOCK" IS NOT USED HERE, and that is the point of the name. Two
+// different things were both called unlocks: these, which a run BUYS with
+// fame and which die with it, and the permanent unlocks
+// (model/permanentUnlocks.ts), which a run EARNS and which cross into the
+// next one. `game.famePurchases` and `profile.unlocked` are now unconfusable.
+// The design document still says "a fame unlock is expected to raise it" --
+// it means this, and the quotations below are left as its author wrote them.
+//
 // FAME IS SPENT WITHIN A RUN, like stat points, and buys nothing that outlives
 // it. That is a change from the original plan, where fame persisted between
 // runs; what persists instead is a separate list of permanent unlocks, earned
@@ -27,19 +35,19 @@
 
 import type { ModifierKind } from './modifiers'
 
-export type FameUnlockId = 'strongBack' | 'largeCoffers' | 'experienced' | 'stubborn'
+export type FamePurchaseId = 'strongBack' | 'largeCoffers' | 'experienced' | 'stubborn'
 
-/** Which of the two run-shape rules an unlock raises. */
-export type FameUnlockRule = 'carry' | 'keep'
+/** Which of the two run-shape rules a purchase raises. */
+export type FamePurchaseRule = 'carry' | 'keep'
 
-export interface FameUnlock {
-  id: FameUnlockId
+export interface FamePurchase {
+  id: FamePurchaseId
   /** What the player reads. */
   name: string
   icon: string
   /** Fame points, paid on the same ladder gold feeds (model/gold.ts). */
   cost: number
-  rule: FameUnlockRule
+  rule: FamePurchaseRule
   kind: ModifierKind
 }
 
@@ -48,15 +56,15 @@ export interface FameUnlock {
  * more: a carried modifier is lost at the level's end and a kept one is the
  * only thing that compounds across a run.
  */
-export const FAME_UNLOCKS: readonly FameUnlock[] = [
+export const FAME_PURCHASES: readonly FamePurchase[] = [
   { id: 'strongBack', name: 'Strong Back', icon: 'fa-solid fa-hand-back-fist', cost: 1, rule: 'carry', kind: 'item' },
   { id: 'largeCoffers', name: 'Large Coffers', icon: 'fa-solid fa-vault', cost: 2, rule: 'keep', kind: 'item' },
   { id: 'experienced', name: 'Experienced', icon: 'fa-solid fa-hat-wizard', cost: 1, rule: 'carry', kind: 'trait' },
   { id: 'stubborn', name: 'Stubborn', icon: 'fa-solid fa-anchor', cost: 2, rule: 'keep', kind: 'trait' },
 ]
 
-export function fameUnlockById(id: string): FameUnlock | undefined {
-  return FAME_UNLOCKS.find((unlock) => unlock.id === id)
+export function famePurchaseById(id: string): FamePurchase | undefined {
+  return FAME_PURCHASES.find((purchase) => purchase.id === id)
 }
 
 /**
@@ -64,13 +72,13 @@ export function fameUnlockById(id: string): FameUnlock | undefined {
  * purchases -- see the module comment. Six carried at once and three surviving
  * a level is where the design puts the top of a run.
  */
-export const FAME_UNLOCK_CEILING: Record<FameUnlockRule, number> = {
+export const FAME_PURCHASE_CEILING: Record<FamePurchaseRule, number> = {
   carry: 6,
   keep: 3,
 }
 
-/** How many times this run has bought a given unlock. */
-export function timesBought(held: readonly string[], id: FameUnlockId): number {
+/** How many times this run has bought a given purchase. */
+export function timesBought(held: readonly string[], id: FamePurchaseId): number {
   return held.reduce((count, entry) => (entry === id ? count + 1 : count), 0)
 }
 
@@ -83,19 +91,19 @@ export function timesBought(held: readonly string[], id: FameUnlockId): number {
  * run can go. The purchase screen asks the same ceiling before offering, so
  * this clamp is a floor under a rule rather than a correction to a bug.
  */
-export function fameUnlockBonus(
+export function famePurchaseBonus(
   held: readonly string[],
-  rule: FameUnlockRule,
+  rule: FamePurchaseRule,
   kind: ModifierKind,
   base: number,
 ): number {
-  const match = FAME_UNLOCKS.find((unlock) => unlock.rule === rule && unlock.kind === kind)
+  const match = FAME_PURCHASES.find((purchase) => purchase.rule === rule && purchase.kind === kind)
   if (!match) return 0
   const bought = timesBought(held, match.id)
-  return Math.max(0, Math.min(bought, FAME_UNLOCK_CEILING[rule] - base))
+  return Math.max(0, Math.min(bought, FAME_PURCHASE_CEILING[rule] - base))
 }
 
 /** Whether this run may still buy one -- the ceiling's own question, asked once. */
-export function canBuyMore(held: readonly string[], unlock: FameUnlock, base: number): boolean {
-  return base + timesBought(held, unlock.id) < FAME_UNLOCK_CEILING[unlock.rule]
+export function canBuyMore(held: readonly string[], purchase: FamePurchase, base: number): boolean {
+  return base + timesBought(held, purchase.id) < FAME_PURCHASE_CEILING[purchase.rule]
 }

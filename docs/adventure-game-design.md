@@ -516,6 +516,20 @@ fight at 50 of 80. Creation now ends by restoring hit points to full.
 "Special Encounter", "Charisma Actions", and **Region** for the level's
 opening choice. Go Exploring's destinations are areas within a level.
 
+**"Special Encounter" is superseded.** The hub cell of that name was removed
+rather than built: what it would have been became the omen, which arrives on
+its own before each of the three fixed encounters instead of being a way to
+go looking for one. The open-encounter screen now offers Go Hunting and Go
+Exploring and nothing else. "Charisma Actions" and **Region** stand.
+
+### "Fame unlock" is called a fame PURCHASE in the code
+
+The plan's term is kept in this document, where it is the author's. The code
+reserves "unlock" for the permanent unlocks a run EARNS and calls what fame
+BUYS a purchase, because the two were otherwise one word for two lists that
+outlive each other differently (`model/famePurchases.ts` against
+`model/permanentUnlocks.ts`).
+
 ### Rounding
 
 Down, wherever a rule produces a fraction — including a special attack's

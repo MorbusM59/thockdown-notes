@@ -15,6 +15,84 @@ wrong with the first attempt:
   is data. A second game would be a second content file, not a second
   engine.
 
+## The flow, and every term in it
+
+This section is the map: what the words mean, and how the next screen is
+chosen. Everything below it is the machinery that carries this out.
+
+### The vocabulary, defined
+
+| term | what it is, exactly |
+| --- | --- |
+| **run** (a *game*) | one `GameRecord` in `save.games`: a seed, base stats, gold, fame, region, level and encounter counters, and what it has bought. A run ends at death or at the last level. |
+| **level** | ten encounters. The fifth and ninth are mini bosses, the tenth is the boss. Counters live on the record; `stages/levelProgress.ts` reads them. |
+| **encounter** | one step of the ten. Advanced by an `advanceEncounter` effect, never by arriving anywhere. |
+| **stage** | a value of `StageModule` (`core/stage.ts`): an id, a title, and three functions — `enter`, `present`, `resolve`. Thirteen of them, in one `ReadonlyMap` (`stages/index.ts`). |
+| **frame** | `{ stageId, state }`, one element of `save.director.stack`. The stage is shared; the frame is this visit's own state, and it is `JsonObject` so it survives disk. |
+| **screen** | what `present(state, context)` returns: a list of choices and a `screenKey`. Derived on every render, never stored. |
+| **choice** | one ring cell: an id, a label, an icon, optionally a `detail`. Pre-resolved — a cell is offered because its roll already succeeded. |
+| **effect** | a value describing a change to the save (`model/effects.ts`). A stage returns them; only `applyEffects` performs them. |
+| **transition** | what `resolve` returns: `stay`, `push`, `pop`, `replace`, `reset` or `leave`. It is the only thing that changes the stack. |
+| **interlude** | a stage entered by `push` from the CHROME rather than from a ring cell — the two rail gauges. It `pop`s back to the frame underneath, untouched. |
+| **omen** | a phase of the hub, not a stage: the screen offering one rest or a handful of region traits, shown before each fixed encounter. |
+| **region** | one of six, chosen at each level's start; it decides which ten traits the omen may draw from. |
+| **modifier** | an item or a trait, rolled once per run from a template (`model/modifierSlots.ts`) and held by id. |
+| **catalog** | `catalogFor(content, seed)` — this run's rolled modifiers, a function of the seed, memoized. |
+| **profile** | `resolveRunProfile(...)` — what a character is worth right now: base stats, class, everything held. Recomputed, never stored. |
+
+Two words that are NOT synonyms, having once been one: a **fame purchase**
+(`model/famePurchases.ts`) is bought with fame and dies with the run; a
+**permanent unlock** (`model/permanentUnlocks.ts`) is earned by a run and
+crosses into the next.
+
+### How the next screen is chosen
+
+There is no flow chart anywhere in the code. The next screen is always the
+same derivation — the top frame of `save.director.stack`, asked to `present`
+itself — and the only thing that moves is the stack. So "the flow" is
+entirely the set of transitions the thirteen stages return.
+
+```
+  open the view ──► welcome ──┬─ continue ──► (pop back into the suspended frame)
+   (enterEntryScreen,         │                or replace ──► encounterSelect
+    pushed on top)            ├─ new game ──► RESET ──► characterCreation
+                              ├─ settings ──► PUSH ──► settings ──► pop
+                              └─ leave ────► the host reclaims the slot
+
+  characterCreation ──► regionSelect ──┬─ (can afford the market) ──► outpost ──► encounterSelect
+                                       └─ (cannot) ─────────────────► encounterSelect
+                                                   outpost ──► PUSH ──► market ──► pop
+
+  ┌───────────────── encounterSelect — the hub, re-entered once per encounter ─────────────────┐
+  │  encounter 5, 9, 10 :  the OMEN first (a `stay`), then the fixed monster — one cell        │
+  │  every other        :  Go Hunting  /  Go Exploring                                         │
+  │  level complete     :  advance ──► regionSelect (+ advanceLevel)                           │
+  └────────────────────────────────────────────────────────────────────────────────────────────┘
+        │ hunt              │ explore                │ fixed
+        ▼                   ▼                        ▼
+      hunt ──► combat    underConstruction ──► hub  combat
+                              (encounter NOT spent)
+
+  combat ──┬─ won or the monster fled ──► loot ──► hub  (+ grantExperience, advanceEncounter)
+           ├─ the player fled ──────────► hub        (+ advanceEncounter — running still costs it)
+           └─ defeated ─────────────────► RESET ──► welcome  (+ endGame)
+
+  from ANY screen, by pressing a rail gauge:  PUSH ──► statPoint | fame ──► pop back
+```
+
+Five different stages `replace` into the hub — the outpost, the loot screen,
+either end of a fight, the region select, and the under-construction wall —
+which is why the omen is a phase OF the hub rather than a stage before it: a
+rule placed at each of five routes in is five copies of one rule, and the
+sixth route would not know to ask. A stage also cannot redirect on `enter`
+(only `resolve` returns a transition), so an omen stage would have had to
+show the boss screen first and push itself on top of it.
+
+Two screens are reachable at every moment and belong to no point in the
+sequence: the stat-point screen and the fame screen. They are `push`ed by the
+chrome's rail gauges, so what is underneath — a rolled encounter, a
+half-fought round — is still there when they `pop`.
+
 ## The ring is an input device
 
 The escape-hold ring says how a choice is expressed — an icon and a few
@@ -116,13 +194,35 @@ belongs to.
                                      the save (model/gameState.ts)
 ```
 
-A **stage** is a collection of pure functions the director calls with state
-and gets results from. It owns one part of the game, emits one or more
-**screens**, and hands off. It does not touch the ring, does not persist
-anything, does not know another stage exists, and **never writes** — it
-returns *effects* describing what should change, and the director applies
-them. That is what keeps a stage testable without a database and keeps every
-write in one place.
+A **stage** is a value of the `StageModule` interface (`core/stage.ts`): an
+id, a title, and three functions. There is no class, no instance and no
+lifecycle — the thirteen stages are module-level constants in one map.
+
+| function | called | may roll | may return effects |
+| --- | --- | --- | --- |
+| `enter(input, context, rng)` | once, when a frame is created | yes | yes |
+| `present(state, context)` | on every render, arbitrarily often | no — takes no `rng` | no — the return type has no field for them |
+| `resolve(state, choiceId, context, rng)` | once per choice taken | yes | yes |
+
+**Pure** is meant in the mathematical sense: the result is determined by the
+arguments, and evaluating it changes nothing. `present` is pure outright,
+which matters because React decides how often it runs. `enter` and `resolve`
+are pure too despite rolling: the generator is a number passed in as `rng`
+and its successor comes back in the result (`core/rng.ts`), so randomness is
+threaded rather than ambient — which is what makes a run replayable from its
+seed alone.
+
+**Never writes** means: no stage function has `GameSave` in its return type.
+A stage that wants the save changed returns values of type `Effect`, which
+are inert data, and one function turns them into a new save —
+`applyEffects(save, effects, content, nowMs)`, a fold whose only callers are
+`applyTransition` and `enterStage` in `core/director.ts`. So every rule about
+when a change is legal lives in one place, and a stage is testable by calling
+it with a literal state object and comparing the effect array it hands back:
+no database, no app.
+
+A stage also does not touch the ring, and does not know another stage exists
+— it names a successor only by id, inside a transition.
 
 A **service** is a pure function a stage calls that never speaks to the
 player: a stat check (`model/checks.ts`), an armor absorb (`model/armor.ts`),
@@ -407,8 +507,9 @@ defences, and the loot that pays for it. The two acquired-\* interludes are
 GONE — what you carry belongs on the chrome, always visible, not behind a
 permanent cell.
 
-**Not built, on purpose**: exploring, special encounters, charisma actions,
-special attacks and spells. Their rules are still being written, and the
+**Not built, on purpose**: exploring, charisma actions, special attacks and
+spells. (Special encounters were on this list and are now REMOVED rather than
+pending — the omen took what they were for; see `stages/encounterSelect.ts`.) Their rules are still being written, and the
 platform routes them to a stage that says so *in the game* rather than
 stubbing them with plausible behaviour. That is how the previous draft
 acquired numbers nobody chose and then defended them.
@@ -649,6 +750,9 @@ the current monster action pool.
 the boss at 10.
 30 `stat / unlock level` rounding — **answered**: down, everywhere.
 31 naming — **answered**: Special Encounter, Charisma Actions, Region.
+   **Special Encounter is superseded**: the cell was removed rather than
+   built, and the omen (`model/specialEvents.ts`) is what stands in its
+   place. The other two names stand.
 32 where a level ends — **answered**: at the boss, encounter 10.
 33 the narration format — **accepted**, to be adopted.
 34 armor — **accepted** as a real extension, and now placed: it applies on

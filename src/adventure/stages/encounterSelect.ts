@@ -52,6 +52,13 @@ const OMEN_TRAIT_PREFIX = 'omen:trait:'
 // when the level lets you". It also gives the dial back a twelfth of itself
 // on every screen of the hub. See stages/statPoints.ts.
 
+// SPECIAL ENCOUNTER IS GONE, and it is not a placeholder waiting to come
+// back. It was a third cell here whose rules were never written, and what it
+// would have been is now the OMEN -- which arrives on its own at the three
+// fixed encounters rather than being one of the ways you go looking. A cell
+// that leads to a wall is a promise the game cannot keep; the two that remain
+// are the two ways an open encounter is actually found.
+
 export const encounterSelectStage: StageModule = {
   id: ENCOUNTER_SELECT_STAGE_ID,
   title: 'Wilds',
@@ -175,7 +182,6 @@ export const encounterSelectStage: StageModule = {
       choices: [
         { id: 'encounter:hunt', label: 'Go Hunting', icon: 'fa-solid fa-paw' },
         { id: 'encounter:explore', label: 'Go Exploring', icon: 'fa-solid fa-compass' },
-        { id: 'encounter:special', label: 'Special Encounter', icon: 'fa-solid fa-dice' },
       ],
     }
   },
@@ -266,7 +272,7 @@ export const encounterSelectStage: StageModule = {
       return { kind: 'replace', stageId: HUNT_STAGE_ID, rng }
     }
 
-    if (choiceId === 'encounter:explore' || choiceId === 'encounter:special') {
+    if (choiceId === 'encounter:explore') {
       // Still unbuilt, and the stage says so in the game rather than being
       // stubbed with something plausible. The encounter is NOT spent by
       // looking at a wall: nothing advances the count, so it comes back to
@@ -274,7 +280,7 @@ export const encounterSelectStage: StageModule = {
       return {
         kind: 'replace',
         stageId: 'underConstruction',
-        input: { what: choiceId === 'encounter:explore' ? 'Exploring' : 'The special encounter' },
+        input: { what: 'Exploring' },
         rng,
       }
     }

@@ -78,17 +78,17 @@ export type Effect =
    */
   | { kind: 'allocateFamePoint' }
   /**
-   * BUYING one of the run's fame unlocks (model/fameUnlocks.ts), price and
+   * BUYING one of the run's fame purchases (model/famePurchases.ts), price and
    * grant together.
    *
    * Atomic on purpose: the price is several points for some of them, and a
    * screen emitting `allocateFamePoint` once per point followed by a grant
    * would be able to half-apply -- each effect is applied against the state
    * the last one left, so a two-point purchase made with one point waiting
-   * would take the point and hand over the unlock anyway. Refused outright
+   * would take the point and hand over the purchase anyway. Refused outright
    * when the run cannot afford it or the rule is already at its ceiling.
    */
-  | { kind: 'buyFameUnlock'; unlock: string }
+  | { kind: 'buyFamePurchase'; purchase: string }
   /**
    * Which CLASS this run is playing. Recorded rather than applied: a class
    * resolves with the modifiers (model/gameState.ts's `originModifier`), so
