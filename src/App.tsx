@@ -9530,6 +9530,24 @@ ${markdownHtml}
    * immediately. When there is nothing to focus (no note, a slot in preview)
    * `scheduleFocusEditorInEditMode` declines and the keyboard simply stays
    * put -- one round, not a retry.
+   *
+   * IT ALSO RUNS WHEN THE SURFACE ITSELF COULD HAVE ARRIVED, not only on
+   * focus events, because AT BOOT THERE ARE NONE: nothing has the keyboard,
+   * nothing moves it, and a reconciler that only listens would wait forever
+   * for an event that is never coming. The effect's own inputs are the
+   * readiness question -- which slot is active, whether it is showing a ring,
+   * and whether that slot has a note to put a caret in -- so it re-asks
+   * exactly when the answer could have changed and at no other time. A poll
+   * would ask when nothing had.
+   *
+   * That is safe to call early only because the editor now WAITS rather than
+   * retries: a focus request that arrives before the editor is usable is
+   * parked and released by the editor's own ready signal
+   * (`useEditorSectionMount`'s `handleEditorSurfaceReady`, fired from the
+   * effect in CM6Editor that publishes the adapter). Before that, calling
+   * this at boot would have started an unbounded `requestAnimationFrame`
+   * retry -- which is how the same feature would have been built by reflex,
+   * and is the thing the doctrine's third rule is about.
    */
   useEffect(() => {
     const reconcile = () => {
@@ -9537,6 +9555,7 @@ ${markdownHtml}
       if (holder && holder !== document.body && mayHoldKeyboard(holder)) return
       returnKeyboardToActiveSurface()
     }
+    reconcile()
     // focusout fires BEFORE the new holder has focus, so its answer is read
     // a tick later -- otherwise every ordinary move between two legitimate
     // surfaces would read as focus having gone nowhere.
@@ -9547,7 +9566,7 @@ ${markdownHtml}
       window.removeEventListener('focusin', reconcile)
       window.removeEventListener('focusout', onFocusOut)
     }
-  }, [returnKeyboardToActiveSurface])
+  }, [returnKeyboardToActiveSurface, activeSection?.activeNoteId, activeSection?.isPreviewMode])
 
   /**
    * A PRESS DOES NOT MOVE THE KEYBOARD.

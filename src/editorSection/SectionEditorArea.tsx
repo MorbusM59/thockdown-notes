@@ -29,6 +29,8 @@ export interface SectionEditorAreaProps {
   previewedSnapshotId: number | null
   bindings: EditorBindings
   adapterRef: MutableRefObject<EditorAdapter | null>
+  /** Passed to the editor as `onSurfaceReady` -- see useEditorSectionMount's handleEditorSurfaceReady. */
+  onEditorSurfaceReady: () => void
   activeNoteId: string | null
   editorDisplayText: string
   scrollbarHostEl: HTMLDivElement | null
@@ -166,6 +168,7 @@ export function SectionEditorArea({
   previewedSnapshotId,
   bindings,
   adapterRef,
+  onEditorSurfaceReady,
   activeNoteId,
   editorDisplayText,
   scrollbarHostEl,
@@ -411,6 +414,7 @@ export function SectionEditorArea({
                 <CM6Editor
                   bindings={bindings}
                   adapterRef={adapterRef}
+                  onSurfaceReady={onEditorSurfaceReady}
                   isSectionActive={isSectionActive}
                   isEditPaneVisible={!isPreviewMode}
                   noteId={activeNoteId}

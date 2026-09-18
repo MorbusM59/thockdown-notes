@@ -247,6 +247,17 @@ import { resolveGlyphWidthPx } from '../editor/EditorTypography';
 export interface CM6EditorProps {
   bindings?: EditorBindings;
   adapterRef?: React.MutableRefObject<EditorAdapter | null>;
+  /**
+   * THE SURFACE IS USABLE -- fired from the same effect that publishes
+   * `adapterRef`, because the adapter existing and the editor root being in
+   * the DOM are the two halves of that and they become true together.
+   *
+   * It exists so that whoever wants the keyboard in this editor can WAIT for
+   * it instead of re-asking: useEditorSectionMount parks a focus request that
+   * arrives early and fires it from here. Travels beside `adapterRef` on
+   * purpose -- the ref and "the ref is worth reading" are one fact.
+   */
+  onSurfaceReady?: () => void;
   // Whether this editor's own split-view section is the currently active
   // one -- see navigateToFlaggedLine's own doc comment for why the
   // flag-jump controls need this (a click on a still-inactive section's
@@ -739,6 +750,7 @@ const lineTokenPlugin = ViewPlugin.fromClass(class {
 export function CM6Editor({
   bindings,
   adapterRef,
+  onSurfaceReady,
   isSectionActive = true,
   isEditPaneVisible = true,
   noteId,
@@ -5604,6 +5616,8 @@ export function CM6Editor({
       },
     };
 
+    onSurfaceReady?.();
+
     return () => {
       if (adapterRef.current) {
         adapterRef.current = null;
@@ -5616,6 +5630,7 @@ export function CM6Editor({
     // values after a boundary drag.
   }, [
     adapterRef,
+    onSurfaceReady,
     beginScrollTransition,
     extendScrollTransitionSettle,
     registerProgrammaticScrollEvent,

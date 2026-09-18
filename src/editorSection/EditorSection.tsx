@@ -61,6 +61,7 @@ type ViewStyleKey =
   | 'bubblerone'
 export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   'sectionId' | 'isSectionActive' | 'activeNoteId' | 'isPreviewMode' | 'previewedSnapshotId' | 'bindings' | 'adapterRef' | 'sectionContainerRef'
+  | 'onEditorSurfaceReady'
   | 'editorDisplayText' | 'activeNoteHasDebugTag' | 'isPreviewingSnapshot' | 'isCaretSuspended' | 'previewTextureRef' | 'previewBridgeHostRef'
   | 'previewScrollRef' | 'handlePreviewScroll' | 'blockPreviewEditMutation' | 'previewMarkdownElement'
   | 'previewScrollbarTrackRef' | 'handlePreviewTrackMouseDown' | 'handlePreviewTrackContextMenu' | 'previewScrollbarThumbRef' | 'isDraggingPreviewScrollThumb'
@@ -484,6 +485,7 @@ export function EditorSection({
     captureEditModeSnapshotFromEditor,
     captureCurrentAnchorBlockIndex,
     scheduleFocusEditorInEditMode,
+    handleEditorSurfaceReady,
     applyEditRestoreSnapshot,
     bindings,
     toggleRenderViewMode,
@@ -1782,6 +1784,9 @@ export function EditorSection({
     // Destructured out of editorSectionMountRest above (activateNote writes
     // it), so the spread no longer carries it -- put it back by hand.
     pendingRenderViewSourceAnchorRef,
+    // Same: destructured out above to hand to the editor as its ready
+    // signal, so the spread no longer carries it.
+    handleEditorSurfaceReady,
     queueSave,
     flushPendingSaveNow,
     cancelPendingSave,
@@ -2288,6 +2293,7 @@ export function EditorSection({
         previewedSnapshotId={previewedSnapshotId}
         bindings={bindings}
         adapterRef={adapterRef}
+        onEditorSurfaceReady={handleEditorSurfaceReady}
         activeNoteId={activeNoteId}
         editorDisplayText={editorDisplayText}
         scrollbarHostEl={scrollbarHostEl}

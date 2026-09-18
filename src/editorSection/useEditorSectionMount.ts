@@ -230,6 +230,8 @@ export interface UseEditorSectionMountResult {
   restoreEditorSelection: () => void
   focusEditorInEditMode: (options?: { restoreSelection?: boolean }) => void
   scheduleFocusEditorInEditMode: (options?: { restoreSelection?: boolean }) => void
+  /** Hand to the editor as `onSurfaceReady`: releases a focus request that arrived before the editor was usable. */
+  handleEditorSurfaceReady: () => void
   persistEditUiState: (noteId: string, options?: { immediate?: boolean }) => void
   /** Cancels a debounced persistEditUiState write without flushing it -- mirrors useNoteSaveQueue's cancelPendingSave, for unmount cleanup. */
   cancelPendingEditUiStatePersist: () => void
@@ -807,24 +809,57 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     editorRoot.focus({ preventScroll: true })
   }, [restoreEditorSelection, sectionContainerRef])
 
+  /**
+   * A FOCUS REQUEST THAT ARRIVED BEFORE THE SURFACE DID, kept until the
+   * surface says it is here.
+   *
+   * There is at most one: a second request supersedes the first, because
+   * they both mean "the keyboard belongs in this editor" and honouring the
+   * older one afterwards would be focusing twice for one intent.
+   */
+  const pendingEditorFocusRef = useRef<{ restoreSelection?: boolean } | null>(null)
+
+  /**
+   * THE EDITOR'S SURFACE HAS ARRIVED -- called by the editor itself, from the
+   * same effect that publishes its adapter (CM6Editor.tsx), which is the
+   * moment both halves of "usable" become true at once.
+   *
+   * This is the ready signal that replaced a RETRY. `scheduleFocusEditorInEditMode`
+   * used to re-ask on `requestAnimationFrame`, unboundedly, until the adapter
+   * and the editor root existed -- the doctrine's "never converge by retrying"
+   * in its purest form, and a loop that simply spins forever in the cases
+   * where the surface never appears at all. The information it was waiting for
+   * has an owner and a moment; now it waits for them.
+   */
+  const handleEditorSurfaceReady = useCallback(() => {
+    const pending = pendingEditorFocusRef.current
+    if (!pending) return
+    pendingEditorFocusRef.current = null
+    focusEditorInEditMode(pending)
+  }, [focusEditorInEditMode])
+
   const scheduleFocusEditorInEditMode = useCallback((options?: { restoreSelection?: boolean }) => {
-    const attemptFocus = () => {
-      if (isPreviewModeRef.current || !activeNoteIdRef.current) return
-
-      const adapter = adapterRef.current
-      const editorRoot = sectionContainerRef.current?.querySelector<HTMLElement>('.editor-text[contenteditable="true"]')
-      if (!adapter || !editorRoot) {
-        requestAnimationFrame(attemptFocus)
-        return
-      }
-
-      focusEditorInEditMode(options)
-    }
-
+    // Deferred by a tick and a frame, deliberately: when this is called from a
+    // real mouse click, the browser's own focus placement for that click runs
+    // AFTER all synchronous JS for the event, and a focus written before it
+    // loses. Being the last write is the whole point of the delay.
     window.setTimeout(() => {
-      requestAnimationFrame(attemptFocus)
+      requestAnimationFrame(() => {
+        if (isPreviewModeRef.current || !activeNoteIdRef.current) return
+
+        const adapter = adapterRef.current
+        const editorRoot = sectionContainerRef.current?.querySelector<HTMLElement>('.editor-text[contenteditable="true"]')
+        if (!adapter || !editorRoot) {
+          // Not yet: park the request rather than re-ask. handleEditorSurfaceReady
+          // above fires it the moment the editor publishes its adapter.
+          pendingEditorFocusRef.current = options ?? {}
+          return
+        }
+
+        focusEditorInEditMode(options)
+      })
     }, 0)
-  }, [focusEditorInEditMode, sectionContainerRef])
+  }, [adapterRef, focusEditorInEditMode, sectionContainerRef])
 
   const persistEditUiState = useCallback((noteId: string, options?: { immediate?: boolean }) => {
     const notesApi = window.thockdownNotes
@@ -3015,6 +3050,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     restoreEditorSelection,
     focusEditorInEditMode,
     scheduleFocusEditorInEditMode,
+    handleEditorSurfaceReady,
     persistEditUiState,
     cancelPendingEditUiStatePersist,
     persistActiveNoteEditModeStateNow,
