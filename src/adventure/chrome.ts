@@ -34,6 +34,8 @@ import { itemArmor } from './model/armor'
 import type { Content } from './content'
 import { buildWeightInitials } from './model/vectors'
 import { describeModifier, descriptionStyleOf, type DescriptionStyle, type Modifier, type ModifierKind } from './model/modifiers'
+import { describeMove } from './model/moves'
+import { speciesModifier } from './model/monsters'
 import { STAT_ICONS, STAT_KEYS, STAT_LABELS } from './model/stats'
 
 /**
@@ -143,7 +145,7 @@ export function statusReadouts(save: GameSave, content: Content): EscapeMenuRead
     // A vector the run has not answered is simply absent, because character
     // creation asks one screen at a time and a half-built character is a
     // real state rather than a broken one.
-    ...vectorNameplates(game, content),
+    ...vectorNameplates(game, content, descriptionStyleOf(save.settings)),
     // Effective stats, not base: what a check actually rolls against is
     // what the player needs to see. The base cap is a rule about
     // progression, not about what is true of them right now.
@@ -159,22 +161,50 @@ export function statusReadouts(save: GameSave, content: Content): EscapeMenuRead
 /**
  * The build, the species and the class, as icon-only pills.
  *
+ * A NAME IS NOT ALL THERE IS TO SAY, and for two of the three it was: the
+ * species and the class named themselves and stopped, so the one place in a
+ * run where a player can look up what they chose told them nothing they did
+ * not already know from having chosen it. Each carries what it DOES now --
+ * the species its effects, the class a line per move -- in the run's own
+ * description style, exactly as the item and trait pills do (`pillsOf`), so
+ * one setting governs every description the game writes.
+ *
  * The BUILD's tooltip carries its weights as repeated initials -- "Brutish
  * (MMMA)" -- because the weights are the whole of what a build is and there
- * is no other place in a run to read them. The other two are nouns and their
- * name is all there is to say.
+ * is no other place in a run to read them. It has no effects to list: a build
+ * is a ratio, and the initials ARE its description.
  *
  * Each vector's own icon, so the pill is recognisable as the thing that was
  * picked at creation rather than as a generic marker.
  */
-function vectorNameplates(game: GameRecord, content: Content): EscapeMenuReadout[] {
+function vectorNameplates(game: GameRecord, content: Content, describe: DescriptionStyle): EscapeMenuReadout[] {
   const build = content.builds.find((candidate) => candidate.id === game.buildId)
   const species = content.species.find((candidate) => candidate.id === game.speciesId)
   const combatClass = content.combatClasses.find((candidate) => candidate.id === game.classId)
   const plates: EscapeMenuReadout[] = []
   if (build) plates.push({ key: 'build', icon: build.icon, label: `${build.name} (${buildWeightInitials(build)})` })
-  if (species) plates.push({ key: 'species', icon: species.icon, label: species.name })
-  if (combatClass) plates.push({ key: 'class', icon: combatClass.icon, label: combatClass.name })
+  if (species) {
+    const asModifier = speciesModifier(species)
+    plates.push({
+      key: 'species',
+      icon: species.icon,
+      label: species.name,
+      detail: asModifier ? describeModifier(asModifier, describe) : [],
+    })
+  }
+  if (combatClass) {
+    plates.push({
+      key: 'class',
+      icon: combatClass.icon,
+      label: combatClass.name,
+      // ONE LINE PER MOVE, named, because a class IS its moves and a bare
+      // list of effects would not say which of them arrive together. The
+      // whole of each move rather than its first line only, which is what
+      // `monsterDetailLines` takes: that one is comparing two offers at a
+      // glance, and this one is the player looking their own class up.
+      detail: combatClass.moves.map((move) => `${move.name}: ${describeMove(move, describe).join(', ')}`),
+    })
+  }
   return plates
 }
 

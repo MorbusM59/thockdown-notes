@@ -3,7 +3,7 @@ import { typingSoundManager } from '../sound/TypingSoundManager'
 import { TAB_KEY_VOICE } from '../sound/keyVoices'
 import { narrationText, parseNarration, splitNarration } from './narrationMarkup'
 import type { EscapeMenuCellDetail, EscapeMenuChromeMeter, EscapeMenuChromePill,
-  EscapeMenuChromeToggle, EscapeMenuModeChrome } from './escapeMenuContract'
+  EscapeMenuChromeToggle, EscapeMenuModeChrome, EscapeMenuReadout } from './escapeMenuContract'
 
 /**
  * A mode's two output channels, and WHICH BAR each one lands on.
@@ -43,6 +43,11 @@ import type { EscapeMenuCellDetail, EscapeMenuChromeMeter, EscapeMenuChromePill,
  */
 const DETAIL_SEPARATOR = '  |  '
 
+/** Everything a readout has to say under its name: its figure, then its detail. */
+function readoutLines(readout: EscapeMenuReadout): string[] {
+  return [...(readout.value === undefined ? [] : [readout.value]), ...(readout.detail ?? [])]
+}
+
 function tooltipOf(label: string, detail?: string[]): string {
   return detail && detail.length > 0 ? [label, ...detail].join('\n') : label
 }
@@ -74,8 +79,13 @@ export function EscapeMenuReadouts({ status }: { status: EscapeMenuModeChrome })
         <div
           key={readout.key}
           className={`tag-pill escape-menu-readout${readout.value === undefined ? ' is-nameplate' : ''}`}
-          data-tooltip={readout.value === undefined ? readout.label : tooltipOf(readout.label, [readout.value])}
-          aria-label={readout.value === undefined ? readout.label : `${readout.label}: ${readout.value}`}
+          // A readout says at most three things and the value is simply the
+          // first of them, so both kinds compose one list rather than
+          // branching twice on whether there is a figure.
+          data-tooltip={tooltipOf(readout.label, readoutLines(readout))}
+          aria-label={readoutLines(readout).length > 0
+            ? `${readout.label}: ${readoutLines(readout).join(DETAIL_SEPARATOR)}`
+            : readout.label}
         >
           <span className={readout.icon} aria-hidden="true" />
           {readout.value === undefined ? null : <span className="escape-menu-readout-value">{readout.value}</span>}

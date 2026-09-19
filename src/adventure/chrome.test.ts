@@ -7,6 +7,9 @@ import { createSeed } from './core/rng'
 import { createdRun, withVectors } from './testing/run'
 import { BASE_PLAYER_TIER } from './model/vectors'
 import { STAT_KEYS } from './model/stats'
+import { describeModifier } from './model/modifiers'
+import { describeMove } from './model/moves'
+import { speciesModifier } from './model/monsters'
 
 /**
  * Armor cannot be fabricated any more, and that is the point of the change it
@@ -254,6 +257,37 @@ describe('who the player is, on the bar', () => {
     expect(plate('build')?.label).toMatch(/^Hulking \([MAPICL]+\)$/)
     expect(plate('species')?.label).toBe('Mertok')
     expect(plate('class')?.label).toBe('Duelist')
+  })
+
+  it('says what the species and the class DO, not only what they are called', () => {
+    // A square pill is a glyph and a tooltip, so the tooltip is the whole of
+    // what it can say -- and for these two it used to be one word the player
+    // already knew from having chosen it. The species carries its effects and
+    // the class a line per move, both in the run's own description style.
+    const readouts = readoutsOf(withVectors(createdRun({ seed: 77 }), CHOSEN))
+    const plate = (key: string) => readouts.find((readout) => readout.key === key)
+    const species = THOCKQUEST.species.find((candidate) => candidate.id === 'mertok')!
+    const duelist = THOCKQUEST.combatClasses.find((candidate) => candidate.id === 'duelist')!
+    expect(plate('species')?.detail).toEqual(
+      describeModifier(speciesModifier(species)!, 'verbose'),
+    )
+    expect(plate('class')?.detail).toHaveLength(duelist.moves.length)
+    for (const move of duelist.moves) {
+      expect(plate('class')?.detail).toContain(`${move.name}: ${describeMove(move, 'verbose').join(', ')}`)
+    }
+    // A BUILD IS A RATIO and has no effects to list: the initials in its
+    // label are its description, which is why it carries no detail.
+    expect(plate('build')?.detail ?? []).toEqual([])
+  })
+
+  it('follows the run\'s description style, like every other description', () => {
+    const run = withVectors(createdRun({ seed: 77 }), CHOSEN)
+    const concise = { ...run, settings: { ...run.settings, verboseDescriptions: false } }
+    const plateOf = (save: typeof run, key: string) =>
+      readoutsOf(save).find((readout) => readout.key === key)?.detail ?? []
+    expect(plateOf(concise, 'class').join()).not.toEqual(plateOf(run, 'class').join())
+    expect(plateOf(concise, 'class').join().length)
+      .toBeLessThan(plateOf(run, 'class').join().length)
   })
 
   it('leaves out a vector that has not been chosen, because creation asks one at a time', () => {

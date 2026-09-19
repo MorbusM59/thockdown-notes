@@ -111,6 +111,13 @@ export interface EscapeMenuReadout {
    */
   label: string
   /**
+   * What is true of the thing this readout names, a line each, under the
+   * label in the tooltip. For a NAMEPLATE this is the whole of what it can
+   * say -- a square pill has room for a glyph and nothing else, so a vector
+   * with no detail is a pill whose tooltip is one word.
+   */
+  detail?: string[]
+  /**
    * Its current value, already formatted -- or ABSENT, for a readout that
    * names something rather than measuring it.
    *
