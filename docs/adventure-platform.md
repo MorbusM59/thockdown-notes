@@ -852,6 +852,46 @@ Defend and nowhere else.
 
 ## Still open, and each one blocks something
 
+**NEW, and it blocks the four vectors being balanceable at all: DAMAGE READS
+ONLY MIGHT, so a build that does not weight Might cannot hurt anything.**
+
+`damageMultiplier = 0.5 + 0.15 × Might` is the design's own formula and is
+unchanged; what changed is that a build now decides how much Might a
+character has at all. Before, everyone shared a base and an origin nudged it;
+now a Fleeting or a Blessed character has a Might of ZERO and every other
+stat multiplies a blow worth five.
+
+Measured, `--rank-vectors`, 12 runs on Medium (noisy, but the ordering is not
+subtle):
+
+| build | encounters won | build | encounters won |
+| --- | --- | --- | --- |
+| Brooding (Int 2, Might 1) | 16.4 | Grim | 4.3 |
+| Erudite (Int) | 14.9 | Uncanny | 3.7 |
+| Shrewd (Int 2) | 11.6 | Blessed (Luck) | 2.5 |
+| Wiry | 9.8 | Hawk-Eyed (Perception) | 2.3 |
+| Hulking (Might) | 6.4 | Wayward (Luck 2) | 1.4 |
+
+Intellect wins because magic is a second damage source that does not read
+Might at all. Luck and Perception lose because both are MULTIPLIERS on a
+blow, so they multiply nothing. A live playthrough shows the same thing from
+the other end: a low-Might run spends **seventy presses** on one encounter,
+against the design's own pace constraint of twenty actions a fight.
+
+This is a RULES question and therefore the author's, not something to patch
+in the model. Three shapes it could take, none of them chosen:
+
+1. Every stat gets its own damage path, so Agility is many small blows, Luck
+   is rare big ones, Perception is reliability — mostly true already, except
+   that all three scale a number Might sets.
+2. The damage formula reads the whole block rather than one stat.
+3. Builds are required to weight Might, which is the answer that gives up
+   the vector.
+
+Until it is settled the ranking table is the instrument: a build's row is
+what that build is worth, and the spread above is what needs closing.
+
+
 29, 35, 36 and 37 are **answered and BUILT** — see the design plan, and
 `model/stats.ts`, `model/difficulty.ts`, `model/monsters.ts`:
 the counter table and one opponent-optional `deriveStats`; the power
