@@ -28,7 +28,9 @@
 import type { JsonObject } from '../core/json'
 import type { StageModule } from '../core/stage'
 import { monsterPools, buildEncounterOffers, fixedTypeAt, LEVEL_ENCOUNTER_COUNT } from '../model/encounterOffers'
-import { iconFor, monsterDetailLines, monsterFor, monsterName, offerFromJson, offerToJson } from './encounter'
+import {
+  iconFor, monsterCellLabel, monsterDetailLines, monsterFor, monsterName, offerFromJson, offerToJson,
+} from './encounter'
 import {
   DROP_CANCEL, dropCancelledNarration, dropChoices, dropEffects, dropNarration, handsAreFull, readPendingId,
 } from './carry'
@@ -162,11 +164,11 @@ export const encounterSelectStage: StageModule = {
         screenKey: `encounter:fixed:${encounter}`,
         choices: [{
           id: 'encounter:fixed',
-          label: monsterName(fixed, context.content),
+          label: monsterCellLabel(fixed, context.content, monster),
           icon: iconFor(fixed, context),
           detail: monster
             ? {
-                title: monsterName(fixed, context.content),
+                title: monsterCellLabel(fixed, context.content, monster),
                 lines: monsterDetailLines(monster, context.describe),
               }
             : undefined,
