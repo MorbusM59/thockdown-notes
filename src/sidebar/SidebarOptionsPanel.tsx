@@ -3356,19 +3356,22 @@ export function SidebarOptionsPanel({
               onCommit={(value) => setAdventureSettings({ progression: value })}
             />
           </div>
-          {/* LUCK: the thumb on the scale. It scales the player's chance to
-              FAIL and a monster's chance to SUCCEED, so both sides keep
-              reading the same stat table while the fight tilts. */}
+          {/* LUCKINESS: the thumb on the scale. It scales the player's chance
+              to FAIL and a monster's chance to SUCCEED, so both sides keep
+              reading the same stat table while the fight tilts.
+              NOT "luck": Luck is one of the six STATS (model/stats.ts), where
+              it buys extra damage draws. One word for two unrelated dials is
+              a collision a reader has no way to resolve. */}
           <div className="typography-slider">
             <CompactScrollbarSlider
-              id="adventure-luck"
+              id="adventure-luckiness"
               min={0}
               max={1}
               step={0.05}
               value={adventureSettings.successAdjust}
-              trackLabel="luck"
+              trackLabel="luckiness"
               tooltipLabel="adventure: the thumb on the scale"
-              ariaLabel="Adventure luck"
+              ariaLabel="Adventure luckiness"
               defaultValue={0}
               formatValue={(value) => `${Math.round(value * 100)}%`}
               onCommit={(value) => setAdventureSettings({ successAdjust: value })}

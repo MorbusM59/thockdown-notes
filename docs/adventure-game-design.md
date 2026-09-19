@@ -965,6 +965,10 @@ at the floor but can never push it past the ceiling.
   > the tooltip. Without guard: "True mode: Lock in Difficulty", with guard:
   > "True mode will wipe the current run!"
 
+  `Luck` was the name as authored; it is **Luckiness** on the slider, because
+  Luck is also one of the six stats and one word for two unrelated dials is a
+  collision a reader has no way to resolve.
+
   This REPLACES the four difficulty presets and the in-game settings screen
   that offered them. The level-zero multiplier a preset carried alongside its
   growth factor is gone: the thumb is the flat, immediate axis it existed to

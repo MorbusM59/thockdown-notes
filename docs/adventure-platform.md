@@ -1883,7 +1883,7 @@ placed at 5, 9 and 10 and the level advancing after ten.
     | Slider | Range | Default | What it is |
     | --- | --- | --- | --- |
     | Progression | 1.01 – 1.25, step 0.01 | 1.01 | the base of `power = progression ^ level`, on monster hit points and damage (`model/difficulty.ts`) |
-    | Luck | 0 – 1, step 0.05 | 0 | `successAdjust`, the thumb on the scale (`model/chance.ts`) |
+    | Luckiness | 0 – 1, step 0.05 | 0 | `successAdjust`, the thumb on the scale (`model/chance.ts`). **Named `Luckiness`, not `Luck`**: Luck is one of the six stats, where it buys damage draws, and one word for two unrelated dials is a collision a reader has no way to resolve. |
 
     **The preset's second number is gone and is not missed.** A preset was a
     (base, growth) PAIR, and the argument for the pair was that a growth
@@ -1896,7 +1896,7 @@ placed at 5, 9 and 10 and the level advancing after ten.
     level-zero multiplier is 1 and a monster at level zero is worth what its
     stats derive.
 
-    Measured, at progression 1.01, over the sim's careful policy: luck
+    Measured, at progression 1.01, over the sim's careful policy: luckiness
     0 / 0.2 / 0.4 / 0.6 gives deaths 92% / 57% / 12% / 0% and rounds per
     fight 4.0 → 1.7. The thumb turns out to be the pace lever too.
 
