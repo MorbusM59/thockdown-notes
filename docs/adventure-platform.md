@@ -589,8 +589,8 @@ Three moments, three different rules:
 
 Built and exercised end to end: the director, the stack, the effect
 vocabulary, the save and its sanitizer, stats, modifiers, armor, checks,
-determinism, the mote model, the chrome contract, the difficulty presets and
-the settings screen, **the four vectors** (build, tier, species, class, with
+determinism, the mote model, the chrome contract, the two tuning sliders and
+true mode (entry 90), **the four vectors** (build, tier, species, class, with
 class moves reaching the fight), and the whole encounter chain — welcome,
 character creation over five questions, region select, the hub, the hunt, the
 round engine with its four defences, and the loot that pays for it. The two acquired-\* interludes are
@@ -767,7 +767,7 @@ These block a playable game and want answers rather than guesses.
     and the next is no closer. That was already the stat-point rule; naming
     it once made it a rule rather than a coincidence.
 
-    **What a fame point BUYS is now written** (`model/fameUnlocks.ts`, entry
+    **What a fame point BUYS is now written** (`model/famePurchases.ts`, entry
     86) and `allocateFamePoint` is no longer the only thing that spends one.
     Still unwritten, and deliberately so: the rates at which gold and
     experience are earned in the first place (open question 7). The
@@ -789,8 +789,8 @@ deleted:
     dodged. Should enemies miss on their own account too?
 16. **Defeat.** Does a run end at zero hit points, or does the round end and
     the run continue?
-17. **Difficulty choice.** Presented at run start, in the ring, as the first
-    thing a new run asks? Nothing presents it, and no preset is stored.
+17. ~~**Difficulty choice.**~~ **ANSWERED — and not in the ring at all.**
+    Two sliders in the options panel's Adventure section, see entry 90.
 18. **Gear and trait content.** The catalog type is ready
     (`model/modifiers.ts`) and Thockquest carries a handful of examples;
     a real pool does not exist.
@@ -975,7 +975,10 @@ special attacks; and the charisma failure chance as a type base plus
     multiplier it means the difficulty preset — easy, normal, hard, insane.
     One of them needs a different word before either is built on.
 
-40. ~~**Nothing chooses a difficulty.**~~ **ANSWERED and BUILT.** Four
+40. ~~**Nothing chooses a difficulty.**~~ **ANSWERED, BUILT, and SUPERSEDED
+    by entry 90** — the four presets and the settings screen below no longer
+    exist; what stands is the pair of sliders. Kept because the ARGUMENT for
+    two numbers is what entry 90 answers with a second slider. Four
     presets, each TWO numbers rather than one — a base on a monster's hit
     points and damage, and a growth the level exponentiates on top
     (`model/difficulty.ts`):
@@ -1619,7 +1622,7 @@ placed at 5, 9 and 10 and the level advancing after ten.
     point is that it contains none. Every other slot declares one range for
     the game; armor does now too.
 
-86. **WHAT A FAME POINT BUYS IS THE RUN'S SHAPE** (`model/fameUnlocks.ts`),
+86. **WHAT A FAME POINT BUYS IS THE RUN'S SHAPE** (`model/famePurchases.ts`),
     and the two rules it raises were written as seams long before there was
     anything to put in them: `carryLimit` and `keepAllowance` have always
     been functions of the RUN rather than constants at their call sites,
@@ -1792,7 +1795,7 @@ placed at 5, 9 and 10 and the level advancing after ten.
     rather than 1.6. That is the sim reporting the game, not itself, this
     time.
 
-88. **THE FOUR VECTORS.** What a player or a monster IS is now exactly four
+89. **THE FOUR VECTORS.** What a player or a monster IS is now exactly four
     things, each with one name and one way to affect what it is. The full
     account is in **The four vectors** above; this entry records what was
     decided and what it replaced.
@@ -1869,3 +1872,97 @@ placed at 5, 9 and 10 and the level advancing after ten.
     first looked like (a pure Might build comes seventeenth of twenty-five).
     The stats that grant actions or bypass the fight beat the three that
     multiply one blow. **None of this is tuned.**
+
+90. **THE TWO NUMBERS ARE SLIDERS NOW, AND TRUE MODE SAYS WHETHER THEY COUNT.**
+    The four presets of entry 40 and the settings stage that offered them
+    (`stages/settings.ts`, `SETTINGS_STAGE_ID`, the `setDifficulty` effect)
+    are deleted. What replaces them is two sliders in the options panel's
+    Adventure section, which is where every other thing a reader tunes
+    already lives:
+
+    | Slider | Range | Default | What it is |
+    | --- | --- | --- | --- |
+    | Progression | 1.01 – 1.25, step 0.01 | 1.01 | the base of `power = progression ^ level`, on monster hit points and damage (`model/difficulty.ts`) |
+    | Luck | 0 – 1, step 0.05 | 0 | `successAdjust`, the thumb on the scale (`model/chance.ts`) |
+
+    **The preset's second number is gone and is not missed.** A preset was a
+    (base, growth) PAIR, and the argument for the pair was that a growth
+    factor alone can only move the late game — it does nothing about the
+    first fight, which is where a run is actually lost. That argument was
+    right, and the second slider is what answers it: the thumb is flat,
+    immediate and reaches the very first roll. One slider bends the curve,
+    the other lifts the whole line. A hidden third number doing half of each
+    would be exactly the overlap the vectors were separated to end, so the
+    level-zero multiplier is 1 and a monster at level zero is worth what its
+    stats derive.
+
+    Measured, at progression 1.01, over the sim's careful policy: luck
+    0 / 0.2 / 0.4 / 0.6 gives deaths 92% / 57% / 12% / 0% and rounds per
+    fight 4.0 → 1.7. The thumb turns out to be the pace lever too.
+
+    **TRUE MODE decides whether a slider is an override or a commitment**,
+    and it is one toggle under the two of them. Off (the default), the
+    sliders are read at the ROLL and apply to the run already in progress —
+    which is what makes them worth moving while a fight is on screen. On,
+    a run is played at what it was CREATED with. Both are one read-time
+    resolution, `runTuning` (`model/gameState.ts`), and never a write: the
+    record keeps what the run began with either way, which is what lets true
+    mode mean anything and what a future permanent unlock would read.
+
+    **Both numbers are mixed into the run's seed** (`seedFrom(createSeed(now),
+    "<progression>:<successAdjust>")`), so two runs begun at different
+    settings are different runs and not the same one played differently.
+    Two tests were recomputing `createSeed(1)` to predict a catalogue and had
+    to be pointed at `activeGame(save).seed` instead — the same defect class
+    as an instrument that restates a formula.
+
+    **Turning true mode ON wipes an active run past level one** (`withTrueMode`
+    clears the run, the holdings, the outcomes and the stack), because a run
+    cannot be half-locked. That is guarded by a press and HOLD at
+    `HOLD_COMMIT_MS`, the app's "I know this is not undoable" threshold, and
+    the tooltip says which of the two a press will be before it is made.
+    Turning it OFF costs nothing and is a plain click. `SAVE_VERSION` went to
+    6.
+
+91. **HOLDING SPACE PLAYS ON**, at a rate and to a boundary the reader sets
+    (`model/autoAdvance.ts`, two more sliders in the same section: **hold
+    space**, five evenly spaced scopes from `nothing` to the end of the
+    level, and **hold speed**, 50–1000ms in fifties, dead while the scope is
+    `nothing`).
+
+    **SPACE AND NOT ENTER** is the browser's doing: a native button fires its
+    click from Enter on every auto-repeat keydown, at whatever rate the OS
+    decides, and from Space only on RELEASE. Space is therefore the one key
+    whose press and release the panel can see the whole of, and taking it
+    over means `preventDefault` on the keydown — which is also what stops the
+    native click arriving on release and pressing one extra cell.
+
+    **THE RING KNOWS NOTHING ABOUT ROUNDS OR LEVELS.** A mode hands it an
+    `EscapeMenuAutoAdvance` — an interval and an opaque `boundaryKey` — and
+    the hold ends when the key it started with stops matching. `boundaryKeyFor`
+    is the whole of the rule: a combat-only scope returns null outside a
+    fight, which is what makes a round-scoped hold decline to start on a
+    hub screen. The round number is read out of the combat frame's own state,
+    never tracked beside it.
+
+    **THE RELEASE IS A WINDOW-LEVEL FACT**, and this was found live. The ring
+    re-deals its cells on every advance, so the focused cell unmounts and
+    focus churns through `<body>` before the panel takes it back. A `keyup`
+    bound to the ring can land somewhere else entirely, and the `blur` that
+    first stood in for that case fired on the ring's OWN re-deal — which
+    ended every hold after exactly one press (a level-scoped hold sat on one
+    action for twenty-four seconds). The keyup is watched on the window in
+    capture, together with the window losing focus, which is the one event
+    that means no keyup is ever coming. Focus moving inside the app is not an
+    end; the mode going away still is, in the effect that already owns that.
+    Verified after the fix: a level-scoped hold at 50ms plays encounters 1
+    through 10 and stops on the region choice at II-1.
+
+    **A GUARDED PRESS AND ITS CLICK ARE ONE DECISION.** Cancelling a
+    `pointerdown`'s default does NOT stop the click — Chromium suppresses the
+    compatibility mouse events and dispatches `click` from the activation
+    behaviour anyway. So the true-mode hold turned the mode on and the click
+    behind it turned it straight back off. Re-asking the state in the click
+    cannot fix that: the state is what the hold just changed, and React
+    dispatches the click against the new closure. The press tells the click
+    what kind of press it was, in a ref written on every `pointerdown`.

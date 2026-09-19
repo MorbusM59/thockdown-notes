@@ -935,3 +935,38 @@ at the floor but can never push it past the ceiling.
   world has a grain, and a player who wants a particular trait can travel
   along it. A region's two border names are what the choice shows, because
   ten trait names is more than a choice may cost to read.
+- **THE DIFFICULTY IS TWO SLIDERS, AND TRUE MODE SAYS WHETHER THEY COUNT.**
+  As authored:
+
+  > let's allow the player to hold down the space key to auto battle. We also
+  > need an options section for game settings in the side bar menu. This
+  > options section should contain a slider for the game difficulty settings
+  > and the thumb on the scale. Let's call these sliders progression and luck
+  > and set them both to default minimum. Progression sets the base of our
+  > exponential adjustment from 1.01 to 1.25 / Luck ranges from 0 to 1. Below
+  > these sliders, we have one more slider that determines what a space bar
+  > can auto advance. The following choices are equally spaced from min to max
+  > position. A choice to the right includes all choices to the left. -
+  > nothing / action until end of round / actions till end of combat /
+  > choices until the end of a stage / choices until the end of a level.
+  > Values are shown as tooltips as usual. Let's offer one more slider for
+  > auto choice speed that the user can adjust from 50ms to 1000ms in
+  > increments of 50ms. This slider is inactive when the slider above is set
+  > to nothing
+
+  > Let's have a toggle button below the sliders that toggles "true mode".
+  > Outside of true mode, both sliders take effect on the current run as an
+  > override. In true mode, both sliders set how a new run is created and
+  > remain constant throughout the run. In general, both settings should be
+  > baked into the seed of the run. Unlocks may depend on them later. We start
+  > in free mode by default. When we set to true mode and we have an ongoing
+  > adventure past level 1, let's guard the toggle behind a long hold of the
+  > left mouse click instead of instant clicking. Let's also reflect this in
+  > the tooltip. Without guard: "True mode: Lock in Difficulty", with guard:
+  > "True mode will wipe the current run!"
+
+  This REPLACES the four difficulty presets and the in-game settings screen
+  that offered them. The level-zero multiplier a preset carried alongside its
+  growth factor is gone: the thumb is the flat, immediate axis it existed to
+  provide. See entries 90 and 91 of [adventure-platform.md](adventure-platform.md)
+  for how it is built.
