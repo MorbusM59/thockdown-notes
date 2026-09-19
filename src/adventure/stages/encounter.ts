@@ -27,7 +27,7 @@ import type { EncounterOffer } from '../model/encounterOffers'
 import { totalArmor } from '../model/armor'
 import { describeMove } from '../model/moves'
 import type { DescriptionStyle } from '../model/modifiers'
-import { buildMonster, type Monster } from '../model/monsters'
+import { buildMonster, type Monster, type MonsterMoment } from '../model/monsters'
 import { runTuning } from '../model/gameState'
 import { MONSTER_TYPES, MONSTER_TYPE_WORD, monsterTier, type MonsterType } from '../model/vectors'
 
@@ -85,7 +85,17 @@ export function monsterName(offer: EncounterOffer, content: Content): string {
   return offer.count > 1 ? `${name} ×${offer.count}` : name
 }
 
-export function monsterFor(offer: EncounterOffer, context: StageContext): Monster | null {
+export function monsterFor(
+  offer: EncounterOffer,
+  context: StageContext,
+  /**
+   * The instant this monster is being asked about, where there is one. Absent
+   * on the offer screens and in the hunt: no fight has started, so every
+   * conditional effect is out of force -- the same answer the player's status
+   * bar gets, and the honest one for a creature nobody has swung at yet.
+   */
+  moment?: MonsterMoment,
+): Monster | null {
   if (!context.game || !context.profile) return null
   const { build, species, combatClass } = vectorsOf(offer, context.content)
   return buildMonster({
@@ -93,6 +103,7 @@ export function monsterFor(offer: EncounterOffer, context: StageContext): Monste
     species,
     combatClass,
     type: offer.type,
+    moment,
     tier: monsterTier(offer.type, context.game.level),
     level: context.game.level,
     // RESOLVED, not read off the record: in free mode the live slider

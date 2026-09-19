@@ -1093,10 +1093,12 @@ at the floor but can never push it past the ceiling.
   > allows them to get a smoother start into the game until they have a few
   > stat points under their belt.
 
-  The target band is built for the PLAYER only. A monster's conditional
-  effects — of any kind, including the self-health ones Ghoul and Lich already
-  carry — never reach it, because `buildMonster` resolves a monster once at
-  offer time with no situation at all. That is pre-existing and measured; see
-  `TODO.md`.
+  The target band works on BOTH sides. It was built for the player first, and
+  a monster's conditionals were reported as unreachable — that report was
+  right about the bug and **wrong about what it would cost**: a `Monster` is
+  not persisted at all, it is rebuilt from the encounter's offer on every
+  call, so it only ever needed to be told which moment it was being computed
+  for. Fixed in the same session; see entries 103 and 107 of
+  [adventure-platform.md](adventure-platform.md).
 
   Built as entries 102 to 106 of [adventure-platform.md](adventure-platform.md).

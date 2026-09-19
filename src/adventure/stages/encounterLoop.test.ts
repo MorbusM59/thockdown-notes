@@ -620,10 +620,8 @@ describe('the thumb the run is played under', () => {
     expect(withTuning(turned, { successAdjust: 0.4 })).toBe(turned)
   })
 
-  it('changes how a fight goes, and nothing else about the run', () => {
-    // Same seed, same choices, one dial: the run under the thumb has to be a
-    // DIFFERENT run, or the parameter is not reaching the rolls.
-    const play = (seed: number, successAdjust: number) => {
+  /** Plays a whole run at one thumb setting and reports the hit points left. */
+  const play = (seed: number, successAdjust: number) => {
       let save: GameSave = withTuning(emptySave(seed), { successAdjust })
       save = enterEntryScreen(save, DEPS, NOW)
       for (let step = 0; step < 200; step += 1) {
@@ -633,8 +631,13 @@ describe('the thumb the run is played under', () => {
         if (!choice) break
         save = choose(save, choice.id, DEPS, NOW).save
       }
-      return activeGame(save)?.hitPoints ?? 0
-    }
+    return activeGame(save)?.hitPoints ?? 0
+  }
+
+  it('changes how a fight goes, and nothing else about the run', () => {
+    // Same seed, same choices, one dial: the run under the thumb has to be a
+    // DIFFERENT run, or the parameter is not reaching the rolls.
+    //
     // OVER MANY SEEDS AND A WHOLE RUN of choices, because one seed cut at one
     // arbitrary step is a coin toss dressed as an assertion: the thumb moves
     // the DISTRIBUTION of a fight, and a single walk can land anywhere inside
@@ -647,6 +650,18 @@ describe('the thumb the run is played under', () => {
     // three numbers somebody liked.
     const seeds = Array.from({ length: 25 }, (_, index) => 1 + index * 7919)
     const total = (successAdjust: number) => seeds.reduce((sum, seed) => sum + play(seed, successAdjust), 0)
-    expect(total(0.5)).toBeGreaterThan(total(0))
+    // ABOVE THE GUARDIAN FLOOR, both of them. A walk stays on the first level,
+    // where the floor is `guardianLuckiness(1)` and supersedes anything under
+    // it -- so 0 and 0.5 are now the SAME fight, to the point, and the old
+    // pair compared a number against itself (935 against 935, found here).
+    // That is the floor working, not the thumb failing.
+    // The floor's own "supersedes the slider" property is NOT asserted at
+    // this level and must not be: `successAdjust` is mixed into the run's
+    // SEED, so two settings are two different runs whatever the rolls end up
+    // reading. It is held in `guardian.test.ts`, against `runTuning`, which
+    // is where the superseding actually happens.
+    const floor = guardianLuckiness(1)
+    expect(total(floor + 0.3)).toBeGreaterThan(total(floor))
   })
+
 })

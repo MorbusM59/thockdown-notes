@@ -180,6 +180,9 @@ export const SPECIES: readonly Species[] = [
       { kind: 'derivedPercentOnAction', derived: 'damageMultiplier', percent: 0.6, position: 'first' },
       { kind: 'derivedPercent', derived: 'dodgeChance', percent: 0.15 },
       { kind: 'derivedPercent', derived: 'maxHitPoints', percent: -0.15 },
+      // A pack finishes what it has brought down. Reads the PLAYER's health,
+      // which is what makes a wolf pack frightening rather than merely fast.
+      { kind: 'derivedPercentWhileHealth', derived: 'damageMultiplier', percent: 0.8, band: 'maimed', subject: 'target' },
     ],
   },
   {

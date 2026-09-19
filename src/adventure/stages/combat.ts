@@ -48,6 +48,8 @@ import {
 } from './combatLog'
 import type { Monster } from '../model/monsters'
 import { monsterFor, monsterName, offerFromJson, offerToJson } from './encounter'
+import type { MonsterMoment } from '../model/monsters'
+import type { ActionPosition } from '../model/modifiers'
 import { armMove, describeMove, moveById, type MoveSituation } from '../model/moves'
 import type { CombatClass } from '../model/vectors'
 import { COMBAT_STAGE_ID, ENCOUNTER_SELECT_STAGE_ID, LOOT_STAGE_ID, WELCOME_STAGE_ID } from './ids'
@@ -722,13 +724,42 @@ const SETTLED_CELL: Readonly<Record<string, { label: string; icon: string }>> = 
 
 const SETTLE_CHOICE = 'combat:settle'
 
+/**
+ * THE INSTANT THE MONSTER IS BEING ASKED ABOUT, from what the fight knows.
+ *
+ * One function rather than the same triple spelled out at each of the three
+ * places combat rebuilds its monster -- `enter`, `present` and `resolve` --
+ * because a moment assembled correctly at two of them and not the third is
+ * precisely the shape of defect rule 4 names.
+ *
+ * `playerHitPoints` is passed rather than read off the round: `enter` has not
+ * opened one yet, and the record's number is the right one there.
+ */
+function monsterMoment(
+  context: StageContext,
+  playerHitPoints: number,
+  monsterDamageTaken: number,
+  actionPosition?: ActionPosition,
+): MonsterMoment {
+  const playerMax = context.profile?.derived.maxHitPoints ?? 0
+  return {
+    damageTaken: monsterDamageTaken,
+    actionPosition,
+    opponentHealthFraction: playerMax > 0
+      ? Math.max(0, Math.min(playerMax, playerHitPoints)) / playerMax
+      : undefined,
+  }
+}
+
 export const combatStage: StageModule = {
   id: COMBAT_STAGE_ID,
   title: 'Combat',
 
   enter: (input, context, rng) => {
     const offer = offerFromJson(input.offer)
-    const monster = offer ? monsterFor(offer, context) : null
+    const monster = offer
+      ? monsterFor(offer, context, monsterMoment(context, context.game?.hitPoints ?? 0, 0))
+      : null
     const round = beginRound({
     ...UNTOUCHED_FIGHT,
       playerHitPoints: context.game?.hitPoints ?? 0,
@@ -788,8 +819,10 @@ export const combatStage: StageModule = {
   present: (raw, context) => {
     const state = readState(raw)
     const offer = offerFromJson(state.offer)
-    const monster = offer ? monsterFor(offer, context) : null
     const round = roundFromJson(state.round)
+    const monster = offer
+      ? monsterFor(offer, context, monsterMoment(context, round.playerHitPoints, round.monsterDamageTaken))
+      : null
 
     // No monster, or nobody to roll an action for: the fight cannot proceed
     // and says so with the one cell that gets the player out of it.
@@ -890,8 +923,10 @@ export const combatStage: StageModule = {
   resolve: (raw, choiceId, context, rng) => {
     const state = readState(raw)
     const offer = offerFromJson(state.offer)
-    const monster = offer ? monsterFor(offer, context) : null
     const round = roundFromJson(state.round)
+    const monster = offer
+      ? monsterFor(offer, context, monsterMoment(context, round.playerHitPoints, round.monsterDamageTaken))
+      : null
 
     if (monster && choiceId === SETTLE_CHOICE) {
       // Nothing new happened; the fight is simply asked again where it stands,

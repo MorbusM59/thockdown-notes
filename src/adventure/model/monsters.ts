@@ -19,7 +19,8 @@
 
 import { NO_ARMOR, type Armor } from './armor'
 import { powerMultiplier } from './difficulty'
-import { resolveProfile, type Modifier } from './modifiers'
+import { resolveProfile, type ActionPosition, type Modifier, type Situation } from './modifiers'
+
 import { buildModifier, type Build, type CombatClass, type MonsterType, type Species } from './vectors'
 import { resolveChanceWith, type ChanceAdjustment } from './chance'
 import { CHANCE_DERIVED_KEYS, CHANCE_SPECS, createStatBlock, type ChanceKey, type DerivedStats, type StatBlock } from './stats'
@@ -129,6 +130,45 @@ export function speciesModifier(species: Species | null): Modifier | null {
   return { id: `species:${species.id}`, kind: 'trait', name: species.name, icon: species.icon, effects: species.effects }
 }
 
+/**
+ * WHAT IS TRUE OF THE INSTANT a monster is being asked about.
+ *
+ * `Situation`'s own fields, except that the fight tracks a monster's wear as
+ * DAMAGE TAKEN rather than as hit points left -- the monster is the only one
+ * who knows its own maximum, and it does not exist until it is built.
+ */
+export interface MonsterMoment {
+  /** What this fight has already done to it. */
+  damageTaken?: number
+  /** Where in the round the action being resolved falls. */
+  actionPosition?: ActionPosition
+  /** How hurt the PLAYER is, 0..1, for a `subject: 'target'` effect to read. */
+  opponentHealthFraction?: number
+}
+
+/**
+ * The moment, as a `Situation` -- which means turning damage taken into hit
+ * points left, and that needs the maximum the STATS derive.
+ *
+ * TWO PASSES, and the first one is not waste: the fraction has to be measured
+ * against the maximum BEFORE any conditional has moved it, or an effect that
+ * raises hit points while maimed would lift the character out of the band
+ * that switched it on and oscillate. `resolveProfile` keeps exactly the same
+ * discipline for the player, for exactly the same reason -- this is that rule
+ * applied to the side that could not state it, because the caller has no
+ * maximum to divide by until the monster exists.
+ */
+function situationFor(moment: MonsterMoment | undefined, layers: readonly Modifier[]): Situation {
+  if (!moment) return {}
+  const base: Situation = {
+    actionPosition: moment.actionPosition,
+    opponentHealthFraction: moment.opponentHealthFraction,
+  }
+  if (moment.damageTaken === undefined) return base
+  const unconditioned = resolveProfile(createStatBlock(0), layers, { items: 0, traits: 0 })
+  return { ...base, hitPoints: unconditioned.derived.maxHitPoints - Math.max(0, moment.damageTaken) }
+}
+
 export function buildMonster(options: {
   build: Build | null
   species: Species | null
@@ -141,6 +181,24 @@ export function buildMonster(options: {
   /** The player, so the contested chances resolve. */
   against: StatBlock
   count?: number
+  /**
+   * WHICH MOMENT THIS MONSTER IS BEING ASKED ABOUT (model/modifiers.ts's
+   * `Situation`), plus the damage this fight has already done to it.
+   *
+   * A monster is not a stored thing: `monsterFor` rebuilds it from the
+   * encounter's offer on every call, so this is a VIEW of the creature at one
+   * instant rather than an update to a record. Absent -- on the offer screens
+   * and in the hunt, where there is no fight yet -- every conditional effect
+   * is simply out of force, exactly as it is for the player's status bar.
+   *
+   * It used to take no moment at all, which meant a species' conditional
+   * effects were resolved once against nothing and then thrown away: the
+   * Ghoul's "+80% Damage injured" and the Lich's "+100% Actions maimed" could
+   * never fire, and a `healthy` one would have fired always. Measured, not
+   * suspected -- a Ghoul with those effects and one without them came out
+   * with identical damage and hit points.
+   */
+  moment?: MonsterMoment
 }): Monster {
   // BOTH VECTORS AS MODIFIERS, resolved in the one pass: the build's tier
   // points (which must sit above the base-stat clamp -- see `buildModifier`)
@@ -148,7 +206,7 @@ export function buildMonster(options: {
   // everything it is arrives through this list.
   const layers = [buildModifier(options.build, options.tier), speciesModifier(options.species)]
     .filter((layer): layer is Modifier => layer !== null)
-  const profile = resolveProfile(createStatBlock(0), layers, { items: 0, traits: 0 })
+  const profile = resolveProfile(createStatBlock(0), layers, { items: 0, traits: 0 }, situationFor(options.moment, layers))
   // The three CONTESTED chances, resolved against the player with this
   // monster's own adjustments -- `resolveProfile` cannot do it, because a
   // chance is settled at the moment it is rolled and it has no opponent. A

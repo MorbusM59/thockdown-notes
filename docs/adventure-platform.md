@@ -2203,7 +2203,10 @@ placed at 5, 9 and 10 and the level advancing after ten.
      FIRST so it beats Backstab's roll) and the Templar's **Condemn** (vs
      healthy) — the mirror that makes a glass-cannon opener playable.
 
-103. **A MONSTER'S CONDITIONALS NEVER REACH IT**, pre-existing and now
+103. ~~**A MONSTER'S CONDITIONALS NEVER REACH IT.**~~ **FIXED in entry 107,
+     and the reason given here for not fixing it was WRONG** — see there. The
+     bug was real and the measurement stands; the diagnosis of what it would
+     cost did not. Pre-existing and
      MEASURED rather than suspected: `buildMonster` calls `resolveProfile`
      with no situation at all, so every `derivedPercentWhileHealth` and
      `derivedPercentOnAction` on a monster species resolves against the
@@ -2248,3 +2251,54 @@ placed at 5, 9 and 10 and the level advancing after ten.
      against the flex line is the derivation — no pixel value to drift when
      `--ui-font-scale` moves, and no second opinion about how tall a readout
      is. Live: 21px, the same as all nine neighbours.
+
+107. **A MONSTER IS A VIEW, NOT A RECORD — and entry 103's excuse was wrong.**
+
+     Entry 103 said fixing it meant a `Monster` would "have to stop being a
+     snapshot frozen at offer time", which "touches what the encounter
+     persists". **Neither half was true.** A `Monster` is not persisted at
+     all: `monsterFor` rebuilds it from the stored `EncounterOffer` — a
+     handful of ids — on every call, three times in `combat.ts` alone. It was
+     already recomputed per action. The only thing missing was that nobody
+     told it *which moment it was being computed for*.
+
+     The author put it better than either of my framings: a monster simply
+     *has* the "200% damage vs maimed" property, and it kicks in when an
+     attack is resolved rather than when the monster is created. Because the
+     monster object is ephemeral, "rebuild it with the situation" IS "the
+     conditional kicks in at resolution time" — the same statement.
+
+     The fault was rule 4, exactly: **a conditional resolves against the
+     moment** was stated for the player (`resolveRunProfile` takes a
+     `Situation`, so `actingProfile` passes the live one) and not for its
+     sibling (`buildMonster` had no such parameter, so it resolved against
+     `{}` and the conditionals collapsed into their no-information answer).
+     The fix is to give the monster the same door, not to build a second
+     mechanism.
+
+     `buildMonster` takes a `MonsterMoment`: the fight's damage taken, the
+     action position, and the player's health fraction. Absent on the offer
+     screens and in the hunt, where nothing has been swung at — the honest
+     answer, and the same one the player's bar gets.
+
+     **TWO PASSES inside `situationFor`, and the first is not waste**: the
+     fight tracks a monster's wear as DAMAGE TAKEN, and turning that into hit
+     points left needs the maximum the STATS derive — before any conditional
+     has moved it. Otherwise an effect that raises hit points while maimed
+     lifts the character out of the band that switched it on. `resolveProfile`
+     already keeps exactly that discipline for the player; this is the same
+     rule applied to the side that could not state it, because the caller has
+     no maximum to divide by until the monster exists.
+
+     **Measured, the same way the bug was.** A Ghoul at full health is
+     unchanged (damage 20.2, 2 actions); at 70% health — inside `injured` —
+     it is 36.4 damage and 3 actions, which is the +80% and +50% its species
+     has always claimed. With no moment at all it reads 20.2 again. The Wolf's
+     `vs maimed` effect, written for entry 102 and then removed rather than
+     shipped inert, is back: 20.2 against a whole player, 36.4 against a
+     maimed one. `monsterMoment.test.ts` holds the property in both
+     directions and A/B's clean — two of its five fail without the fix.
+
+     `combat.ts` assembles the moment once, in `monsterMoment`, rather than
+     spelling the triple out at each of its three rebuild sites: a moment
+     assembled correctly at two of three is the same defect one level down.
