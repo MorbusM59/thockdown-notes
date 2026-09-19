@@ -148,13 +148,21 @@ function sanitizeGame(value: unknown): GameRecord | null {
     // and the ceiling is clamped there too, so a list this build cannot
     // explain can neither crash it nor raise a rule past the design's top.
     famePurchases: modifierIds(value.famePurchases),
-    // Null for a run saved before origins moved out of the base block. Such a
-    // run keeps the stats its origin was written into and simply has no origin
-    // layer -- which is what it was played as, so it plays on unchanged rather
-    // than being thrown away or silently re-gifted.
-    originId: typeof value.originId === 'string' && value.originId.length > 0 ? value.originId : null,
+    // THE THREE CONTENT VECTORS, by id (model/vectors.ts). Null where the
+    // choice has not been made -- character creation asks for them one screen
+    // at a time, so a save taken between two of those screens is a real state
+    // and not a broken one. An id content no longer has reads as null at the
+    // point it is looked up, like every other id the save holds.
+    buildId: vectorId(value.buildId),
+    speciesId: vectorId(value.speciesId),
+    classId: vectorId(value.classId),
     hitPoints: wholeAtLeast(value.hitPoints, 0),
   }
+}
+
+/** One vector id, or null. Written once because three fields want exactly it. */
+function vectorId(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null
 }
 
 export function sanitizeGameSave(input: unknown): GameSave | null {

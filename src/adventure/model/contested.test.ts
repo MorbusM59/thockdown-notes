@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  actionsRemaining, BASE_DAMAGE, buildMonster, damageFrom, membersDown,
-  monsterDefence, MONSTER_TYPES, MONSTER_TYPE_STAT_SHIFT,
-} from './monsters'
+  actionsRemaining, BASE_DAMAGE, damageFrom, membersDown,
+  monsterDefence, MONSTER_TYPES, } from './monsters'
 import { DIFFICULTIES, powerMultiplier } from './difficulty'
 import { COUNTER_STATS, contestedStat, pressThumb, resolveChance } from './chance'
 import { createStatBlock, deriveStats, DODGE_CHANCE, STAT_KEYS } from './stats'
+import { testMonster } from '../testing/monster'
+import { monsterTier, statsFromTier, type Species } from './vectors'
+import { rollCount } from './encounterOffers'
+import { totalArmor } from './armor'
 
 const block = (over: Partial<Record<string, number>> = {}) => ({ ...createStatBlock(0), ...over }) as ReturnType<typeof createStatBlock>
 
@@ -90,8 +93,7 @@ describe('the power multiplier', () => {
     // than scales, and a monster pinned at 100% dodge by level 15 has
     // stopped being stronger and started being unhittable.
     const against = block({ agility: 2, perception: 2, luck: 2 })
-    const at = (level: number) => buildMonster({
-      classId: 'fighter', classBaseStats: block({ might: 2, agility: 1 }), type: 'regular', level, against,
+    const at = (level: number) => testMonster({ stats: block({ might: 2, agility: 1 }), type: 'regular', level, against,
     })
     const first = at(1)
     const twentieth = at(20)
@@ -117,34 +119,83 @@ describe('the power multiplier', () => {
   })
 })
 
-describe('monster types', () => {
-  it('shifts every base stat by the ladder, origin untouched', () => {
-    const base = block({ might: 2, agility: 1 })
+describe('monster ranks', () => {
+  it('orders the ranks by TIER, and adds one for every level past the first', () => {
+    // The rank ladder used to be a flat stat shift applied to a class's base
+    // block. It is a TIER now (model/vectors.ts) -- a budget the build's
+    // weights split -- so what a rank is worth is one number and the ordering
+    // is a property of that number rather than of six stats moving together.
+    for (let index = 1; index < MONSTER_TYPES.length; index += 1) {
+      expect(monsterTier(MONSTER_TYPES[index], 1)).toBeGreaterThan(monsterTier(MONSTER_TYPES[index - 1], 1))
+    }
+    // ONE per level, not five: the rank gap has to stay legible for the whole
+    // run, so a level-12 regular is still plainly weaker than a level-12
+    // elite. THE PROPERTY, across the whole ladder, rather than one reading.
     for (const type of MONSTER_TYPES) {
-      const monster = buildMonster({ classId: 'fighter', classBaseStats: base, type, level: 1, against: base })
-      for (const stat of STAT_KEYS) {
-        expect(monster.stats[stat]).toBe(base[stat] + MONSTER_TYPE_STAT_SHIFT[type])
+      for (let level = 1; level <= 12; level += 1) {
+        expect(monsterTier(type, level)).toBe(monsterTier(type, 1) + level - 1)
+      }
+      expect(monsterTier(type, 12)).toBeLessThan(monsterTier('boss', 1) + 12)
+    }
+  })
+
+  it('spends the whole tier and no more, whatever the build', () => {
+    // THE PROPERTY apportionment exists for: "five points distributed" has to
+    // hand out five. Per-share rounding leaks -- six equal weights at tier 5
+    // round to one each and pay out six -- which would make the flattest
+    // build quietly the strongest at every tier.
+    const shapes = [
+      { might: 2, agility: 1 },
+      { might: 1, agility: 1, perception: 1, intellect: 1, charisma: 1, luck: 1 },
+      { intellect: 5, luck: 1 },
+      { might: 4, perception: 1 },
+    ]
+    for (const weights of shapes) {
+      for (let tier = 0; tier <= 30; tier += 1) {
+        const stats = statsFromTier({ weights }, tier)
+        expect(STAT_KEYS.reduce((sum, key) => sum + stats[key], 0)).toBe(tier)
       }
     }
   })
 
-  it('orders the ladder by a MEMBER\'s strength, which is not the pool', () => {
-    // A group of three pools more hit points than one regular monster, so the
-    // ladder cannot be read off `maxHitPoints` -- that is the whole point of
-    // a group. What the ladder orders is how strong each member is.
+  it('reproduces the design\'s own worked example', () => {
+    // Tier 5 over 1 part Agility and 2 parts Might: 2 and 3.
+    const stats = statsFromTier({ weights: { agility: 1, might: 2 } }, 5)
+    expect(stats.agility).toBe(2)
+    expect(stats.might).toBe(3)
+  })
+
+  it('takes its armour from its SPECIES, not from its rank', () => {
+    // Armour used to be a per-rank table beside the stat shift. It is the
+    // species' now -- the vector whose whole job is what a creature is when
+    // it is not being a stat block -- so an elite goblin is no better
+    // armoured than an ordinary one, and any golem is.
     const base = block({ might: 2, agility: 1 })
-    const perMember = (type: (typeof MONSTER_TYPES)[number]) => {
-      const monster = buildMonster({ classId: 'fighter', classBaseStats: base, type, level: 1, against: base })
-      return monster.maxHitPoints / monster.count
+    const hide: Species = {
+      id: 'hide', name: 'Hide', icon: 'fa-solid fa-shield',
+      effects: [{ kind: 'naturalArmor', amount: 4 }],
     }
-    expect(perMember('group')).toBeLessThan(perMember('regular'))
-    expect(perMember('regular')).toBeLessThan(perMember('elite'))
-    expect(perMember('elite')).toBeLessThan(perMember('miniBoss'))
-    expect(perMember('miniBoss')).toBeLessThan(perMember('boss'))
-    // ...and the pool really does go the other way for a default group.
-    const group = buildMonster({ classId: 'fighter', classBaseStats: base, type: 'group', level: 1, against: base })
-    const regular = buildMonster({ classId: 'fighter', classBaseStats: base, type: 'regular', level: 1, against: base })
-    expect(group.maxHitPoints).toBeGreaterThan(regular.maxHitPoints)
+    for (const type of MONSTER_TYPES) {
+      expect(totalArmor(testMonster({ stats: base, type, level: 1, against: base }).armor)).toBe(0)
+      expect(totalArmor(testMonster({ stats: base, type, level: 1, against: base, species: hide }).armor)).toBe(4)
+    }
+  })
+
+  it('travels in numbers only at the ranks that are supposed to', () => {
+    // A runt always has a friend and usually two; an ordinary monster has one
+    // half the time; nothing elite or above travels at all. Asserted as a
+    // RANGE over many seeds rather than as one roll, because one roll of a
+    // coin says nothing about the coin.
+    const counts = (type: (typeof MONSTER_TYPES)[number]) => {
+      const seen = new Set<number>()
+      for (let seed = 1; seed <= 200; seed += 1) seen.add(rollCount(type, seed).count)
+      return seen
+    }
+    expect([...counts('runt')].sort()).toEqual([2, 3])
+    expect([...counts('regular')].sort()).toEqual([1, 2])
+    for (const type of ['elite', 'miniBoss', 'boss'] as const) {
+      expect([...counts(type)]).toEqual([1])
+    }
   })
 
   it('multiplies one universal base damage, both sides', () => {
@@ -157,7 +208,7 @@ describe('monster types', () => {
 describe('a group is one hydra', () => {
   const base = block({ might: 2, agility: 2 })
   const groupOf = (count: number) =>
-    buildMonster({ classId: 'fighter', classBaseStats: base, type: 'group', level: 1, against: base, count })
+    testMonster({ stats: base, type: 'runt', level: 1, against: base, count })
 
   it('pools hit points and actions across its members', () => {
     const one = groupOf(1)
@@ -198,10 +249,16 @@ describe('a group is one hydra', () => {
     expect(actionsRemaining(group, group.maxHitPoints * 5, 999)).toBe(0)
   })
 
-  it('is one member for every type that is not a group', () => {
-    for (const type of MONSTER_TYPES.filter((candidate) => candidate !== 'group')) {
-      const monster = buildMonster({ classId: 'fighter', classBaseStats: base, type, level: 1, against: base, count: 5 })
-      expect(monster.count).toBe(1)
+  it('takes the head count it is given, whatever the rank', () => {
+    // WHERE THE RULE LIVES MOVED, and this asserts the move rather than the
+    // old placement. `buildMonster` used to force a count of one for every
+    // rank but "group", which meant the rank rule was stated twice: once in
+    // the type table and once in the builder. It is `rollCount`'s alone now
+    // (asserted above), and the builder simply pools what it is handed --
+    // which is what lets an offer's stored count survive a reload without the
+    // builder second-guessing it.
+    for (const type of MONSTER_TYPES) {
+      expect(testMonster({ stats: base, type, level: 1, against: base, count: 5 }).count).toBe(5)
     }
   })
 })

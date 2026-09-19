@@ -8,9 +8,10 @@ import {
   NO_SPELLS, PLAGUE_SHARE, rollSpellReach, spellAt, spellChance, SPELLS, spellsOffered,
   strongestOffered,
 } from './spells'
-import { buildMonster, type Monster, type MonsterType } from './monsters'
+import { type Monster, type MonsterType } from './monsters'
 import { createStatBlock, deriveStats, type StatBlock } from './stats'
 import { NO_ARMOR } from './armor'
+import { testMonster } from '../testing/monster'
 
 const block = (over: Partial<StatBlock> = {}): StatBlock => ({ ...createStatBlock(0), ...over })
 
@@ -18,9 +19,7 @@ const PLAYER = block({ might: 2, agility: 2, perception: 2, intellect: 4, luck: 
 const DERIVED = deriveStats(PLAYER)
 
 function monsterOf(type: MonsterType = 'regular', armor = 0): Monster {
-  const built = buildMonster({
-    classId: 'fighter',
-    classBaseStats: block({ might: 2, agility: 1 }),
+  const built = testMonster({ stats: block({ might: 2, agility: 1 }),
     type,
     level: 1,
     against: PLAYER,
@@ -270,6 +269,7 @@ describe('the table, spell by spell', () => {
 describe('a round survives the disk', () => {
   it('round-trips every field it has', () => {
     const round: RoundState = {
+      roundNumber: 3,
       playerActionsSpent: 2,
       monsterActionsSpent: 3,
       playerHitPoints: 41,
@@ -291,6 +291,14 @@ describe('a round survives the disk', () => {
     const old = roundFromJson({ playerHitPoints: 30, monsterDamageTaken: 4 })
     // NO_SPELLS, not zero -- zero is "Singe is in reach", a hand nobody dealt.
     expect(old.spellReach).toBe(NO_SPELLS)
-    expect(old).toMatchObject({ ...UNTOUCHED_FIGHT, playerHitPoints: 30, monsterDamageTaken: 4 })
+    // ROUND ONE, not zero, and that is the one field whose unwritten reading
+    // is not `UNTOUCHED_FIGHT`'s. Zero is what an unopened fight holds, and
+    // `beginRound` turns it into one; a save being READ has already had its
+    // first round opened, so one is the only honest floor. It costs a resumed
+    // fight one extra opening move, which is the generous direction and the
+    // only one available -- the true number is not recoverable from anything
+    // else in the round.
+    expect(old.roundNumber).toBe(1)
+    expect(old).toMatchObject({ ...UNTOUCHED_FIGHT, roundNumber: 1, playerHitPoints: 30, monsterDamageTaken: 4 })
   })
 })

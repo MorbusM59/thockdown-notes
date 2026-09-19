@@ -1,17 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
-import { BOSS_ENCOUNTER, buildEncounterOffers, fixedTypeAt, MINI_BOSS_ENCOUNTERS, OFFERABLE_TYPES } from './encounterOffers'
-import { MONSTER_CLASS_IDS } from '../content'
+import {
+  BOSS_ENCOUNTER, buildEncounterOffers, fixedTypeAt, MINI_BOSS_ENCOUNTERS, monsterPools, OFFERABLE_TYPES, rollCount,
+} from './encounterOffers'
+import { MONSTER_BUDDY_CHANCES } from './vectors'
 import { THOCKQUEST } from '../content/thockquest'
 
+const POOLS = monsterPools(THOCKQUEST)
+
 const offersAt = (encounter: number, choiceCount: number, rng: number) =>
-  buildEncounterOffers({
-    encounter,
-    choiceCount,
-    species: THOCKQUEST.species,
-    classes: MONSTER_CLASS_IDS,
-    rng,
-  }).offers
+  buildEncounterOffers({ encounter, choiceCount, ...POOLS, rng }).offers
 
 describe('where the bosses are', () => {
   it('fixes the fifth, ninth and tenth and leaves the rest open', () => {
@@ -42,13 +40,16 @@ describe('what an ordinary encounter offers', () => {
     }
   })
 
-  it('never repeats a class-and-rank, whatever species wears it', () => {
-    // The rule is about a VARIED list. Three regular warriors from three
-    // species is the same fight three times in different names, so the
-    // species deliberately does not widen the key.
+  it('never repeats a species-class-and-rank, whatever build wears it', () => {
+    // The rule is about a VARIED list, and what varies is what the fight IS.
+    // The BUILD is deliberately out of the key: a Hulking Orc Bruiser beside
+    // a Wiry Orc Bruiser is the same fight with a different adjective. The
+    // species is deliberately IN it, which it was not while a species was
+    // only a name -- it carries the whole non-stat vector now, so a Golem and
+    // an Imp are not interchangeable.
     for (let seed = 1; seed <= 120; seed += 1) {
       const offers = offersAt(3, 5, seed)
-      const identities = offers.map((offer) => `${offer.classId}:${offer.type}`)
+      const identities = offers.map((offer) => `${offer.speciesId}:${offer.classId}:${offer.type}`)
       expect(new Set(identities).size).toBe(identities.length)
     }
   })
@@ -61,21 +62,58 @@ describe('what an ordinary encounter offers', () => {
     }
   })
 
-  it('respects each form\'s class restriction', () => {
-    const formsByName = new Map(
-      THOCKQUEST.species.flatMap((species) =>
-        Object.values(species.forms).flat().map((form) => [`${species.id}:${form.name}`, form] as const),
-      ),
-    )
+  it('never offers one of the PEOPLES as a monster', () => {
+    // The one asymmetry between the two sides of the game, and it lives in
+    // `monsterPools` rather than at the call sites -- so this is the test
+    // that would catch a third caller filtering for itself and getting it
+    // wrong.
+    const peoples = new Set(THOCKQUEST.species.filter((species) => species.playable).map((species) => species.id))
+    expect(peoples.size).toBeGreaterThan(0)
     for (let seed = 1; seed <= 200; seed += 1) {
       for (const encounter of [1, 3, 5, 10]) {
         for (const offer of offersAt(encounter, 5, seed)) {
-          const form = formsByName.get(`${offer.speciesId}:${offer.name}`)
-          expect(form).toBeDefined()
-          if (form && form.classes.length > 0) expect(form.classes).toContain(offer.classId)
+          expect(peoples.has(offer.speciesId)).toBe(false)
         }
       }
     }
+  })
+
+  it('names only vectors the content actually has', () => {
+    const builds = new Set(THOCKQUEST.builds.map((build) => build.id))
+    const species = new Set(THOCKQUEST.species.map((entry) => entry.id))
+    const classes = new Set(THOCKQUEST.combatClasses.map((entry) => entry.id))
+    for (let seed = 1; seed <= 200; seed += 1) {
+      for (const offer of offersAt(3, 5, seed)) {
+        expect(builds.has(offer.buildId)).toBe(true)
+        expect(species.has(offer.speciesId)).toBe(true)
+        expect(classes.has(offer.classId)).toBe(true)
+      }
+    }
+  })
+
+  it('gives every offer a head count its RANK allows', () => {
+    // The buddy rule is the rank's, and an offer carries the roll rather than
+    // re-rolling it wherever the monster is rebuilt -- which is what keeps a
+    // reloaded fight the same fight.
+    for (let seed = 1; seed <= 200; seed += 1) {
+      for (const encounter of [1, 3, 5, 10]) {
+        for (const offer of offersAt(encounter, 5, seed)) {
+          const most = 1 + MONSTER_BUDDY_CHANCES[offer.type].length
+          expect(offer.count).toBeGreaterThanOrEqual(1)
+          expect(offer.count).toBeLessThanOrEqual(most)
+        }
+      }
+    }
+  })
+
+  it('stops asking for friends at the first refusal', () => {
+    // A second buddy is a friend of the FIRST, so a creature that came alone
+    // cannot have a second companion. With a runt's chances (1, then a half)
+    // that means two or three and never anything else -- which is only true
+    // if the loop breaks rather than rolling every entry independently.
+    const seen = new Set<number>()
+    for (let seed = 1; seed <= 400; seed += 1) seen.add(rollCount('runt', seed).count)
+    expect([...seen].sort()).toEqual([2, 3])
   })
 
   it('gives as many as asked for while the content can tell them apart', () => {
@@ -85,24 +123,19 @@ describe('what an ordinary encounter offers', () => {
   })
 
   it('returns a SHORTER list rather than looping when the combinations run out', () => {
-    // Asking for twenty cannot be honoured: there are only so many
-    // class-and-rank pairs the content can actually field. The bound is
+    // Asking for more than exists cannot be honoured: there are only so many
+    // species-class-and-rank triples the content can field. The bound is
     // COMPUTED from the content rather than written down, so adding a species
-    // moves it without touching this test.
-    const reachable = new Set<string>()
-    for (const species of THOCKQUEST.species) {
-      for (const type of OFFERABLE_TYPES) {
-        for (const form of species.forms[type as 'group' | 'regular' | 'elite']) {
-          const classes = form.classes.length > 0 ? form.classes : MONSTER_CLASS_IDS
-          for (const classId of classes) reachable.add(`${classId}:${type}`)
-        }
-      }
-    }
-    const offers = buildEncounterOffers({
-      encounter: 2, choiceCount: 20, species: THOCKQUEST.species, classes: MONSTER_CLASS_IDS, rng: 7,
-    }).offers
+    // moves it without touching this test -- and the ask is computed from the
+    // bound for the same reason. (It used to be a flat twenty, which the four
+    // vectors made reachable: fourteen species by fourteen classes by three
+    // ranks is nearly six hundred distinguishable fights where the old
+    // class-and-rank key could tell apart nine.)
+    const reachable = POOLS.species.length * POOLS.classes.length * OFFERABLE_TYPES.length
+    const asked = reachable + 50
+    const offers = buildEncounterOffers({ encounter: 2, choiceCount: asked, ...POOLS, rng: 7 }).offers
     expect(offers.length).toBeGreaterThan(0)
-    expect(offers.length).toBeLessThanOrEqual(reachable.size)
-    expect(offers.length).toBeLessThan(20)
+    expect(offers.length).toBeLessThanOrEqual(reachable)
+    expect(offers.length).toBeLessThan(asked)
   })
 })

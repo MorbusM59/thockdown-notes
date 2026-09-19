@@ -6,9 +6,8 @@
 
 import type { JsonObject } from '../core/json'
 import type { StageModule } from '../core/stage'
-import { MONSTER_CLASS_IDS } from '../content'
-import { buildEncounterOffers } from '../model/encounterOffers'
-import { iconFor, monsterDetailLines, monsterFor, offerFromJson, offerToJson } from './encounter'
+import { monsterPools, buildEncounterOffers } from '../model/encounterOffers'
+import { iconFor, monsterDetailLines, monsterFor, monsterName, offerFromJson, offerToJson } from './encounter'
 import { currentEncounter } from './levelProgress'
 import { COMBAT_STAGE_ID, HUNT_STAGE_ID } from './ids'
 
@@ -22,8 +21,7 @@ export const huntStage: StageModule = {
     const rolled = buildEncounterOffers({
       encounter,
       choiceCount: context.profile?.derived.encounterChoices ?? 2,
-      species: context.content.species,
-      classes: MONSTER_CLASS_IDS,
+      ...monsterPools(context.content),
       rng,
     })
     return {
@@ -43,11 +41,11 @@ export const huntStage: StageModule = {
         const monster = monsterFor(offer, context)
         return [{
           id: `hunt:${index}`,
-          label: offer.name,
+          label: monsterName(offer, context.content),
           icon: iconFor(offer, context),
           detail: monster
             ? {
-                title: offer.name,
+                title: monsterName(offer, context.content),
                 lines: monsterDetailLines(monster),
               }
             : undefined,

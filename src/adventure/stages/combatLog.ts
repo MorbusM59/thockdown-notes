@@ -191,10 +191,29 @@ function pill(
   return withDetail(parts.join(' '), detail)
 }
 
-/** The player swings. Attacker is the player, defender is whatever is in front of them. */
-export function playerAttackPill(monster: Monster, blow: Blow): string {
+/**
+ * The player swings. Attacker is the player, defender is whatever is in front
+ * of them.
+ *
+ * A CLASS MOVE'S NAME goes on the DETAIL, not the glyph. The middle icon is
+ * the vocabulary the reader has already learned -- a hit, a crit, a miss --
+ * and a move that swapped it for a mark of its own would make every class a
+ * new alphabet. The name rides in the tooltip's first line, where "Haymaker"
+ * explains the number without competing with it.
+ */
+export function playerAttackPill(monster: Monster, blow: Blow, moveName?: string): string {
   const action = playerActionIcon('attack', blow, false)
-  return pill(PLAYER, 'you', action, blow.hit ? blow.damage : null, monsterIcon(monster), 'it', blowDetail(blow))
+  const detail = moveName ? [moveName, ...blowDetail(blow)] : blowDetail(blow)
+  return pill(PLAYER, 'you', action, blow.hit ? blow.damage : null, monsterIcon(monster), 'it', detail)
+}
+
+/**
+ * A DEFENSIVE MOVE STRUCK BACK. The arrow runs from the player, because the
+ * damage did -- it is the player's blow, taken as part of answering one.
+ */
+export function ripostePill(monster: Monster, blow: Blow, moveName: string): string {
+  const action = playerActionIcon('attack', blow, false)
+  return pill(PLAYER, 'you', action, blow.hit ? blow.damage : null, monsterIcon(monster), 'it', [moveName, ...blowDetail(blow)])
 }
 
 /**

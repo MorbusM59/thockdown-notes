@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import { THOCKQUEST } from '../content'
-import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from '../core/director'
-import { activeGame, applyEffects, BASE_CARRY_LIMIT, emptySave, type GameSave } from '../model/gameState'
+import { choose, currentScreen, type DirectorDeps } from '../core/director'
+import { activeGame, applyEffects, BASE_CARRY_LIMIT, type GameSave } from '../model/gameState'
 import { goldBalance } from '../model/gold'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
 import { MARKET_OFFER_COUNT, MARKET_PRICE } from './market'
 import { DROP_CANCEL } from './carry'
+import { createdRun } from '../testing/run'
 
 const DEPS: DirectorDeps = {
   stages: STAGES,
@@ -22,11 +23,9 @@ const screenOf = (save: GameSave) => {
 }
 const ids = (save: GameSave) => screenOf(save).choices.map((choice) => choice.id)
 
-/** A run standing on the road, having chosen an origin, a trait and an item. */
+/** A run standing on the road, having answered all five creation questions. */
 function onTheRoad(seed = 4242): GameSave {
-  let save = choose(enterEntryScreen(emptySave(seed), DEPS, NOW), 'welcome:start', DEPS, NOW).save
-  save = choose(save, 'origin:warrior', DEPS, NOW).save
-  for (let step = 0; step < 2; step += 1) save = choose(save, screenOf(save).choices[0].id, DEPS, NOW).save
+  const save = createdRun({ seed })
   if (screenOf(save).stageId !== 'regionSelect') throw new Error('not on the road')
   return save
 }

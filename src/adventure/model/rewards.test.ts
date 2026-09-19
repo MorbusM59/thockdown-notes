@@ -25,7 +25,7 @@ describe('the escalating reward check', () => {
     // lose fifty points per repeat, so:
     const stats = block()
     expect(guaranteedScreens('regular', stats)).toBe(1)
-    expect(guaranteedScreens('group', stats)).toBe(1)
+    expect(guaranteedScreens('runt', stats)).toBe(1)
     expect(guaranteedScreens('elite', stats)).toBe(2)
     expect(guaranteedScreens('miniBoss', stats)).toBe(3)
     expect(guaranteedScreens('boss', stats)).toBe(4)

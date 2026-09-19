@@ -27,9 +27,8 @@
 
 import type { JsonObject } from '../core/json'
 import type { StageModule } from '../core/stage'
-import { MONSTER_CLASS_IDS } from '../content'
-import { buildEncounterOffers, fixedTypeAt, LEVEL_ENCOUNTER_COUNT } from '../model/encounterOffers'
-import { iconFor, monsterDetailLines, monsterFor, offerFromJson, offerToJson } from './encounter'
+import { monsterPools, buildEncounterOffers, fixedTypeAt, LEVEL_ENCOUNTER_COUNT } from '../model/encounterOffers'
+import { iconFor, monsterDetailLines, monsterFor, monsterName, offerFromJson, offerToJson } from './encounter'
 import {
   DROP_CANCEL, dropCancelledNarration, dropChoices, dropEffects, dropNarration, handsAreFull, readPendingId,
 } from './carry'
@@ -74,8 +73,7 @@ export const encounterSelectStage: StageModule = {
     const drawn = buildEncounterOffers({
       encounter,
       choiceCount: 1,
-      species: context.content.species,
-      classes: MONSTER_CLASS_IDS,
+      ...monsterPools(context.content),
       rng,
     })
     const offer = drawn.offers[0]
@@ -98,7 +96,7 @@ export const encounterSelectStage: StageModule = {
         omenAnswered: false,
       } satisfies JsonObject,
       narration: offer
-        ? `**${offer.name} is ahead.** *The road gives you something first.*`
+        ? `**${monsterName(offer, context.content)} is ahead.** *The road gives you something first.*`
         : 'Something should be here, and the game cannot say what.',
       rng: omen.rng,
     }
@@ -165,11 +163,11 @@ export const encounterSelectStage: StageModule = {
         screenKey: `encounter:fixed:${encounter}`,
         choices: [{
           id: 'encounter:fixed',
-          label: fixed.name,
+          label: monsterName(fixed, context.content),
           icon: iconFor(fixed, context),
           detail: monster
             ? {
-                title: fixed.name,
+                title: monsterName(fixed, context.content),
                 lines: monsterDetailLines(monster),
               }
             : undefined,

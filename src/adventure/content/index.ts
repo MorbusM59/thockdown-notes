@@ -16,89 +16,24 @@
 // the tab bar, to the player, rather than as a plausible number nobody
 // chose. See docs/adventure-platform.md.
 
-import type { Modifier, ModifierEffect } from '../model/modifiers'
+import type { Modifier } from '../model/modifiers'
+import type { Build, CombatClass, Species } from '../model/vectors'
+import { STAT_KEYS } from '../model/stats'
 import { rollModifier, validateTemplate, type ModifierTemplate } from '../model/modifierSlots'
 import type { RngState } from '../core/rng'
-import type { StatKey } from '../model/stats'
+import { DEFENCES } from '../model/defences'
+
+/** The four a move may replace, beside `attack`. Read as strings by the validator. */
+const DEFENCE_IDS: readonly string[] = DEFENCES
 
 /**
- * A monster's CLASS -- what it fights like. The same three the player's own
- * origins are built from, on the same stat scale.
- *
- * Bard is deliberately absent: the design's monster classes are the fighting
- * three. A charisma-shaped monster would be interesting (Talk is one of the
- * plan's own monster actions) and is not written.
+ * THE FOUR VECTORS live in model/vectors.ts, and content declares lists of
+ * them. They are re-exported here so a caller that wants "the content types"
+ * gets all of them from one place, and so the old `MonsterClass`/`Origin`
+ * pair cannot be reached by accident: both are gone, their jobs split across
+ * `Build`, `Species` and `CombatClass`.
  */
-export type MonsterClassId = 'warrior' | 'thief' | 'mage'
-
-export const MONSTER_CLASS_IDS: readonly MonsterClassId[] = ['warrior', 'thief', 'mage']
-
-export interface MonsterClass {
-  id: MonsterClassId
-  /** What it is called when the ring has to name it. */
-  name: string
-  icon: string
-  statDeltas: Partial<Record<StatKey, number>>
-}
-
-/**
- * One shape a species takes at one type -- its NAME at that rank, and which
- * classes it may be.
- *
- * A type can have more than one form: a Beast group is a pack of wolves or a
- * pack of boars, and which it is decides both the name and the class. That
- * is why this is a list per type rather than a name and a class list.
- */
-export interface MonsterForm {
-  name: string
-  /** Empty means any class. */
-  classes: readonly MonsterClassId[]
-}
-
-/** WHAT a monster is: its stat modifiers, and what it is called at each rank. */
-export interface Species {
-  id: string
-  name: string
-  statDeltas: Partial<Record<StatKey, number>>
-  /** One or more forms per type. Every type must have at least one. */
-  forms: Readonly<Record<'group' | 'regular' | 'elite' | 'miniBoss' | 'boss', readonly MonsterForm[]>>
-}
-
-/**
- * WHAT YOU WERE, BEFORE ANY OF THIS -- chosen once, at the start of a game,
- * AND IT WORKS LIKE AN ITEM.
- *
- * ORIGIN is the word for what the player is. It is never a "class": `class`
- * names the MONSTER axis above (`MonsterClassId` -- what a monster fights
- * like), which is the design document's own use of it, and one word for the
- * two would put the player's identity and a monster's fighting style in the
- * same noun.
- *
- * Its stat gifts used to be written into the run's BASE stats at character
- * creation, which quietly spent part of the player's own allowance: a Warrior
- * began at Might 2 and could therefore only ever spend four more points into
- * it before the base cap of six. An origin is not progression, it is what you
- * ARE, so it now sits in the same layer gear does and stacks on top -- which
- * means every run gets all six points in every stat, whatever it plays as.
- *
- * `effects` rather than a stat map, in the modifier vocabulary
- * (model/modifiers.ts), because "like an item" is the whole idea and two
- * vocabularies for the same thing is how they come apart. It is what lets the
- * Berserker carry `+100% damage` and `no decaying armor` without this type
- * learning a word about either.
- */
-export interface Origin {
-  id: string
-  name: string
-  icon: string
-  effects: readonly ModifierEffect[]
-  /**
-   * An origin the player has to EARN. Absent means available from the start;
-   * an id means this origin appears at character creation only once that
-   * permanent unlock has been won (model/permanentUnlocks.ts).
-   */
-  requiresUnlock?: string
-}
+export type { Build, CombatClass, CombatMove, MonsterType, Species } from '../model/vectors'
 
 /**
  * Where a level is played. A region is meant to determine which encounters
@@ -135,7 +70,8 @@ export interface Region {
 }
 
 export interface Content {
-  origins: readonly Origin[]
+  /** VECTOR ONE. Shared: a monster and a player are shaped from the same list. */
+  builds: readonly Build[]
   /**
    * What an item and a trait COULD be. Rolled into actual modifiers once per
    * run, from the run's own seed -- see `catalogFor` and
@@ -150,8 +86,10 @@ export interface Content {
   items: readonly ModifierTemplate[]
   traits: readonly ModifierTemplate[]
   regions: readonly Region[]
-  monsterClasses: readonly MonsterClass[]
+  /** VECTOR THREE. `playable` splits the peoples from what you fight. */
   species: readonly Species[]
+  /** VECTOR FOUR. Shared, like builds -- an orc bruiser fights like a bruiser. */
+  combatClasses: readonly CombatClass[]
 }
 
 /**
@@ -213,20 +151,110 @@ export function validateContent(content: Content): string[] {
     seen.add(id)
   }
 
-  for (const origin of content.origins) check(origin.id, `origin "${origin.name}"`)
-  for (const region of content.regions) check(region.id, `region "${region.name}"`)
+  // --- THE FOUR VECTORS, and what each one is FORBIDDEN from doing -------
+  //
+  // This is the half of the vector rule that cannot be enforced by a type:
+  // `ModifierEffect` is one union, so nothing stops a species declaring a
+  // `statDelta` except this. Without it, the first interesting monster puts
+  // two Might on a species and within a release the vectors overlap again --
+  // which is exactly how the arrangement this replaced came apart.
+
+  for (const build of content.builds) {
+    check(build.id, `build "${build.name}"`)
+    const weights = STAT_KEYS.map((key) => build.weights[key] ?? 0)
+    if (weights.some((weight) => weight < 0)) {
+      problems.push(`build "${build.id}" has a negative weight: a weight is a share, and a negative share has no meaning`)
+    }
+    if (weights.every((weight) => weight <= 0)) {
+      problems.push(`build "${build.id}" has no positive weight: every tier would resolve to nothing`)
+    }
+  }
+
+  // Two builds with the same normalised ratio are one build with two names,
+  // and a player choosing between them is choosing nothing.
+  const shapes = new Map<string, string>()
+  for (const build of content.builds) {
+    const weights = STAT_KEYS.map((key) => build.weights[key] ?? 0)
+    const total = weights.reduce((sum, weight) => sum + weight, 0)
+    if (total <= 0) continue
+    const shape = weights.map((weight) => (weight / total).toFixed(4)).join(':')
+    const first = shapes.get(shape)
+    if (first) problems.push(`builds "${first}" and "${build.id}" are the same shape in different words`)
+    else shapes.set(shape, build.id)
+  }
+
   for (const species of content.species) {
     check(species.id, `species "${species.name}"`)
-    // Every rank needs at least one form, or the offer generator has nothing
-    // to name a monster of that type and would silently skip the species.
-    for (const [type, forms] of Object.entries(species.forms)) {
-      if (forms.length === 0) problems.push(`species "${species.id}" has no ${type} form`)
-      for (const form of forms) {
-        const unknown = form.classes.filter((id) => !content.monsterClasses.some((cls) => cls.id === id))
-        for (const id of unknown) problems.push(`species "${species.id}" form "${form.name}" allows unknown class "${id}"`)
+    if (species.effects.length === 0) {
+      problems.push(`species "${species.id}" does nothing: a species with no effects is a name`)
+    }
+    for (const effect of species.effects) {
+      if (effect.kind === 'statDelta') {
+        problems.push(`species "${species.id}" carries a statDelta: stats are the build's and the tier's (model/vectors.ts)`)
+      }
+      // An armour SLOT is a pool that decays and is repaired per item. A
+      // species is not carried and cannot be dropped, so its toughness is
+      // natural armour -- the half decay cannot touch.
+      if (effect.kind === 'armorSlot' || effect.kind === 'armorDecayFloor') {
+        problems.push(`species "${species.id}" carries ${effect.kind}: a species has no decaying pool, only natural armour`)
       }
     }
   }
+  if (!content.species.some((species) => species.playable)) {
+    problems.push('no playable species: character creation would have nothing to offer')
+  }
+  if (!content.species.some((species) => !species.playable)) {
+    problems.push('no monster species: an encounter would have nothing to be')
+  }
+
+  const moveIds = new Set<string>()
+  for (const combatClass of content.combatClasses) {
+    check(combatClass.id, `class "${combatClass.name}"`)
+    if (combatClass.moves.length === 0) {
+      problems.push(`class "${combatClass.id}" has no moves: a class that swaps nothing is a name`)
+    }
+    for (const move of combatClass.moves) {
+      if (moveIds.has(move.id)) problems.push(`duplicate move id "${move.id}" (class "${combatClass.id}")`)
+      moveIds.add(move.id)
+      if (move.when.kind === 'chance' && (move.when.chance <= 0 || move.when.chance > 1)) {
+        problems.push(`move "${move.id}" has a chance of ${move.when.chance}, which is not a chance`)
+      }
+      if ((move.strikes ?? 1) < 1) problems.push(`move "${move.id}" strikes fewer than once`)
+      if ((move.damageShare ?? 1) < 0) problems.push(`move "${move.id}" has negative damage`)
+      // A defence that replaces `dodge` only ever appears when dodge was
+      // offered, which is a roll -- so a class whose ONLY move is a dodge
+      // swap does nothing on most turns. That is allowed; what is not is a
+      // move that replaces a choice nobody has.
+      if (move.replaces !== 'attack' && !DEFENCE_IDS.includes(move.replaces)) {
+        problems.push(`move "${move.id}" replaces "${move.replaces}", which is not a choice anybody is offered`)
+      }
+    }
+  }
+
+  // A class's moves must not ALL be unconditional replacements of the same
+  // cell: the second would be unreachable, since the first declared wins.
+  for (const combatClass of content.combatClasses) {
+    const unconditional = new Set<string>()
+    for (const move of combatClass.moves) {
+      if (move.when.kind !== 'always') continue
+      if (unconditional.has(move.replaces)) {
+        problems.push(`class "${combatClass.id}" has two unconditional moves for "${move.replaces}"; the second can never fire`)
+      }
+      unconditional.add(move.replaces)
+    }
+    // Same defect one step subtler: an unconditional move declared ABOVE a
+    // conditional one for the same cell makes the conditional unreachable.
+    const seenAlways = new Set<string>()
+    for (const move of combatClass.moves) {
+      if (seenAlways.has(move.replaces)) {
+        problems.push(`class "${combatClass.id}" declares "${move.id}" below an unconditional move for the same choice; it can never fire`)
+      }
+      if (move.when.kind === 'always') seenAlways.add(move.replaces)
+    }
+  }
+
+  for (const region of content.regions) check(region.id, `region "${region.name}"`)
+
   for (const template of [...content.items, ...content.traits]) {
     check(template.id, `${template.kind} "${template.name}"`)
     problems.push(...validateTemplate(template))
@@ -242,10 +270,9 @@ export function validateContent(content: Content): string[] {
     if (template.kind !== 'trait') problems.push(`"${template.id}" is in the trait pool but declares itself a ${template.kind}`)
   }
 
-  if (content.origins.length === 0) problems.push('no origins: character creation would have nothing to offer')
+  if (content.builds.length === 0) problems.push('no builds: nothing would have a stat block')
   if (content.regions.length === 0) problems.push('no regions: a level would have nowhere to happen')
-  if (content.species.length === 0) problems.push('no species: an encounter would have nothing to be')
-  if (content.monsterClasses.length === 0) problems.push('no monster classes: a monster would have no stats')
+  if (content.combatClasses.length === 0) problems.push('no classes: nothing would have anything to do in a fight')
 
   return problems
 }

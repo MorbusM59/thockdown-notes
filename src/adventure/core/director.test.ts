@@ -4,6 +4,8 @@ import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from './di
 import { emptySave, profileOf, type GameSave } from '../model/gameState'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
 import { MAX_STAGE_CHOICES } from './screen'
+import { STAT_KEYS } from '../model/stats'
+import { BASE_PLAYER_TIER } from '../model/vectors'
 
 const DEPS: DirectorDeps = {
   stages: STAGES,
@@ -205,21 +207,31 @@ describe('a game, played', () => {
     expect(narrationOf(save)).toContain('What would you like to do?')
 
     save = choose(save, 'welcome:start', DEPS, NOW).save
-    expect(narrationOf(save)).toContain('What are you?')
+    expect(narrationOf(save)).toContain('What shape are you?')
     expect(save.activeGameId).not.toBeNull()
 
-    save = choose(save, 'origin:warrior', DEPS, NOW).save
-    const game = save.games.find((candidate) => candidate.id === save.activeGameId)
-    // AN ORIGIN IS NOT PROGRESSION. Its gifts used to be written into the base
-    // block, which quietly spent two of the player's own six Might points; it
-    // is recorded instead and resolves with the modifiers, so the base block
-    // is what the player spent and nothing else -- nothing, this early.
-    expect(game?.originId).toBe('warrior')
-    expect(game?.baseStats.might).toBe(0)
-    expect(game?.baseStats.agility).toBe(0)
-    // And it reaches the numbers anyway, through the layer gear resolves in.
-    expect(profileOf(save, game!, THOCKQUEST).stats.might).toBe(2)
-    expect(profileOf(save, game!, THOCKQUEST).stats.agility).toBe(1)
+    // THE THREE VECTOR SCREENS, in order: build, species, class.
+    save = choose(save, firstStageChoiceId(save), DEPS, NOW).save
+    const game = () => save.games.find((candidate) => candidate.id === save.activeGameId)
+    // A VECTOR IS NOT PROGRESSION. The build's points are not written into the
+    // base block -- which is capped at six and is what the player SPENT --
+    // they resolve as a modifier layer above it, so the base block is nothing
+    // this early and the run still has all six of its own points to spend.
+    expect(game()?.buildId).not.toBeNull()
+    expect(game()?.baseStats.might).toBe(0)
+    expect(game()?.baseStats.agility).toBe(0)
+    // And the tier reaches the numbers anyway, through the layer gear resolves
+    // in: five points, split by whatever build was dealt and taken.
+    const spread = profileOf(save, game()!, THOCKQUEST).stats
+    expect(STAT_KEYS.reduce((sum, key) => sum + spread[key], 0)).toBe(BASE_PLAYER_TIER)
+    expect(narrationOf(save)).toContain('And what are you?')
+
+    save = choose(save, firstStageChoiceId(save), DEPS, NOW).save
+    expect(game()?.speciesId).not.toBeNull()
+    expect(narrationOf(save)).toContain('when it comes to blows')
+
+    save = choose(save, firstStageChoiceId(save), DEPS, NOW).save
+    expect(game()?.classId).not.toBeNull()
     expect(narrationOf(save)).toContain('What are you known for?')
 
     save = choose(save, firstStageChoiceId(save), DEPS, NOW).save
@@ -235,12 +247,14 @@ describe('a game, played', () => {
     expect(save.games[0].regionId).not.toBeNull()
 
     // And the permanent record kept the decisions worth keeping, as rows.
-    expect(save.outcomes.map((row) => row.outcome)).toEqual(['origin-chosen', 'region-entered'])
+    expect(save.outcomes.map((row) => row.outcome)).toEqual([
+      'build-chosen', 'species-chosen', 'class-chosen', 'region-entered',
+    ])
   })
 
   it('shows a modifier with its live effects, which is what the tab bar reads', () => {
     let save = choose(start(2024), 'welcome:start', DEPS, NOW).save
-    save = choose(save, 'origin:warrior', DEPS, NOW).save
+    for (let step = 0; step < 3; step += 1) save = choose(save, firstStageChoiceId(save), DEPS, NOW).save
     const offer = screenOf(save).choices[0]
     expect(offer.detail?.title).toBeTruthy()
     expect(offer.detail?.lines.length).toBeGreaterThan(0)

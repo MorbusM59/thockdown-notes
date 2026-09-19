@@ -37,6 +37,8 @@ import { withUnlocksEarnedBy } from './permanentUnlocks'
 import type { JsonObject } from '../core/json'
 import { createSeed, type RngState } from '../core/rng'
 import { DEFAULT_DIFFICULTY, type Difficulty } from './difficulty'
+import { BASE_PLAYER_TIER, buildModifier, type CombatClass } from './vectors'
+import { speciesModifier } from './monsters'
 
 /**
  * Bumped when the SHAPE below changes incompatibly, which DISCARDS the save
@@ -63,8 +65,15 @@ import { DEFAULT_DIFFICULTY, type Difficulty } from './difficulty'
  * new name would load with an EMPTY purchase list -- a run that bought Strong
  * Back twice would carry on with the base limit and nothing would say so.
  * Discarding the save states the loss; reading it silently mis-states the run.
+ *
+ * v5 is THE FOUR VECTORS (model/vectors.ts). `originId` is gone, replaced by
+ * `buildId`/`speciesId`/`classId`, and a monster is no longer a class-and-type
+ * with stat deltas. A v4 run has an origin that no longer exists, a stat block
+ * the new arithmetic would not have produced, and a stack that may be parked
+ * mid-fight against a monster this build cannot rebuild. There is no honest
+ * reading of it.
  */
-export const SAVE_VERSION = 4
+export const SAVE_VERSION = 5
 
 /** One frame of the director's stack: which stage, and its own private state. */
 export interface StageFrame {
@@ -208,13 +217,23 @@ export interface GameRecord {
    */
   famePurchases: readonly string[]
   /**
-   * WHICH ORIGIN this run is playing, by id. Its gifts are NOT written into
-   * `baseStats`: they resolve with the modifiers, so the base block stays
-   * purely what the player spent and every run gets all six points in every
-   * stat. Null for a run saved before origins moved out of the base block,
-   * and for one that has not chosen yet.
+   * THE THREE CONTENT VECTORS this run is playing, by id -- the build, the
+   * species and the class (model/vectors.ts). The fourth, TIER, is not stored:
+   * it is derived from what fame has bought (`playerTierOf`), the same way
+   * every other rule of the run's shape is derived from `famePurchases`
+   * rather than kept as a second copy that can disagree.
+   *
+   * None of the three is written into `baseStats`. The build's points arrive
+   * as a modifier layer above the base-stat clamp and the species' effects
+   * arrive as another, so the base block stays purely what the player SPENT
+   * and every run gets all six points in every stat whatever it plays as.
+   *
+   * Null before the choice is made. A run cannot be in progress without all
+   * three, but character creation asks for them one screen at a time.
    */
-  originId: string | null
+  buildId: string | null
+  speciesId: string | null
+  classId: string | null
   hitPoints: number
 }
 
@@ -503,19 +522,41 @@ export function holdingCounts(held: readonly Modifier[]): HoldingCounts {
 }
 
 /**
- * THE RUN'S ORIGIN AS A MODIFIER, because that is what an origin is now: the
- * same effect vocabulary as an item, resolved in the same pass.
+ * WHAT THE RUN'S TIER IS: the base, plus what fame has bought.
  *
- * Not a HELD modifier -- it occupies no carry slot, appears on no strip and
- * is counted in no holding total. It is prepended to the list the resolver
- * reads and nothing else, which is why `holdingCounts` is still taken from
- * what is actually held.
+ * Derived from the purchase list rather than stored, which is the rule every
+ * other fame-bought quantity already follows (`carryLimit`, `keepAllowance`):
+ * a stored copy is a second answer that a save from another build can put out
+ * of step with the list it was supposed to summarise.
  */
-export function originModifier(game: GameRecord, content: Content): Modifier | null {
-  if (!game.originId) return null
-  const origin = content.origins.find((candidate) => candidate.id === game.originId)
-  if (!origin) return null
-  return { id: `origin:${origin.id}`, kind: 'trait', name: origin.name, icon: origin.icon, effects: origin.effects }
+export function playerTierOf(game: GameRecord): number {
+  return BASE_PLAYER_TIER + famePurchaseBonus(game.famePurchases, 'tier', null, BASE_PLAYER_TIER)
+}
+
+/**
+ * THE RUN'S TWO PROFILE VECTORS, AS MODIFIERS -- because that is what they
+ * are: the same effect vocabulary as an item, resolved in the same pass.
+ *
+ * Neither is a HELD modifier. They occupy no carry slot, appear on no strip
+ * and are counted in no holding total; they are prepended to the list the
+ * resolver reads and nothing else, which is why `holdingCounts` is still
+ * taken from what is actually held.
+ *
+ * The CLASS is deliberately absent. It contributes nothing to a profile --
+ * it swaps combat choices and touches no number a stat block implies -- and
+ * a class that leaked into the resolver would be a species with a different
+ * name (model/vectors.ts).
+ */
+export function runVectorModifiers(game: GameRecord, content: Content): Modifier[] {
+  const build = content.builds.find((candidate) => candidate.id === game.buildId) ?? null
+  const species = content.species.find((candidate) => candidate.id === game.speciesId) ?? null
+  return [buildModifier(build, playerTierOf(game)), speciesModifier(species)]
+    .filter((layer): layer is Modifier => layer !== null)
+}
+
+/** The run's class, or null. What combat asks for its moves. */
+export function runClass(game: GameRecord, content: Content): CombatClass | null {
+  return content.combatClasses.find((candidate) => candidate.id === game.classId) ?? null
 }
 
 /**
@@ -535,10 +576,9 @@ export function resolveRunProfile(
   held: readonly Modifier[],
   situation?: Situation,
 ): EffectiveProfile {
-  const origin = originModifier(game, content)
   return resolveProfile(
     game.baseStats,
-    origin ? [origin, ...held] : held,
+    [...runVectorModifiers(game, content), ...held],
     holdingCounts(held),
     situation,
   )
@@ -582,7 +622,9 @@ function createGame(id: string, seed: RngState, nowMs: number, settings: GameSet
     goldToNextFamePoint: FIRST_MILESTONE_THRESHOLD,
     famePointsSpent: 0,
     famePurchases: [],
-    originId: null,
+    buildId: null,
+    speciesId: null,
+    classId: null,
     hitPoints: deriveStats(clampBaseStats(baseStats)).maxHitPoints,
   }
 }
@@ -780,12 +822,19 @@ export function applyEffect(
       })
     }
 
-    case 'setOrigin':
-      // The origin is RECORDED, not applied: its gifts resolve with the
-      // modifiers (`originModifier`), so the base block stays purely what the
-      // player spent. Writing them into `baseStats` is what used to cost a
-      // Warrior two of their own six Might points.
-      return replace({ originId: effect.originId })
+    case 'setVector':
+      // RECORDED, not applied. The build's points and the species' effects
+      // resolve with the modifiers (`runVectorModifiers`), so the base block
+      // stays purely what the player spent -- writing them in is what used to
+      // cost a Warrior two of their own six Might points. ONE effect for the
+      // three, keyed by which vector it sets, because they are the same act
+      // three times and three near-identical effects is three places for the
+      // next vector to be forgotten.
+      return replace(
+        effect.vector === 'build' ? { buildId: effect.id }
+        : effect.vector === 'species' ? { speciesId: effect.id }
+        : { classId: effect.id },
+      )
 
     case 'setRegion':
       return replace({ regionId: effect.regionId })

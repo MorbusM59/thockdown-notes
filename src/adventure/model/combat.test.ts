@@ -5,19 +5,18 @@ import {
   playerActionsLeft, resolveExchange, resolveMonsterAttack, resolvePlayerAttack, rollActor,
   type RoundState,
 } from './combat'
-import { buildMonster, DEFAULT_GROUP_SIZE, MONSTER_TYPE_ARMOR, MONSTER_TYPES, type Monster, type MonsterType } from './monsters'
+import { MONSTER_TYPES, type Monster, type MonsterType } from './monsters'
 import { createStatBlock, deriveStats, type StatBlock } from './stats'
 import { NO_ARMOR, totalArmor, type Armor } from './armor'
+import { testMonster } from '../testing/monster'
 
 const block = (over: Partial<StatBlock> = {}): StatBlock => ({ ...createStatBlock(0), ...over })
 
 const PLAYER = block({ might: 2, agility: 2, perception: 2, luck: 1 })
 const PLAYER_DERIVED = deriveStats(PLAYER)
 
-function monster(over: { type?: 'regular' | 'group'; count?: number } = {}): Monster {
-  return buildMonster({
-    classId: 'fighter',
-    classBaseStats: block({ might: 2, agility: 1 }),
+function monster(over: { type?: 'regular' | 'runt'; count?: number } = {}): Monster {
+  return testMonster({ stats: block({ might: 2, agility: 1 }),
     type: over.type ?? 'regular',
     level: 1,
     against: PLAYER,
@@ -163,8 +162,7 @@ describe('the defences on offer', () => {
 describe('fleeing', () => {
   it('ends the encounter when the pursuit check fails', () => {
     // A monster that cannot pursue anything.
-    const slow = buildMonster({
-      classId: 'fighter', classBaseStats: block({ agility: -40 }), type: 'regular', level: 1, against: PLAYER,
+    const slow = testMonster({ stats: block({ agility: -40 }), type: 'regular', level: 1, against: PLAYER,
     })
     const result = resolveMonsterAttack({
       state: freshRound(), monster: slow, playerStats: PLAYER, defence: 'flee', rng: 5,
@@ -175,8 +173,7 @@ describe('fleeing', () => {
   })
 
   it('costs the attempt when the pursuit succeeds', () => {
-    const fast = buildMonster({
-      classId: 'fighter', classBaseStats: block({ agility: 40, perception: 40 }), type: 'regular', level: 1, against: PLAYER,
+    const fast = testMonster({ stats: block({ agility: 40, perception: 40 }), type: 'regular', level: 1, against: PLAYER,
     })
     const result = resolveMonsterAttack({
       state: freshRound({ playerArmor: { natural: 0, pieces: [{ itemId: 'plate', points: 6, max: 6, floor: 0 }] } }),
@@ -191,8 +188,11 @@ describe('fleeing', () => {
 
 describe('a group losing members mid-round', () => {
   it('takes actions off the pool as the damage crosses each band', () => {
-    const swarm = monster({ type: 'group' })
-    expect(swarm.count).toBe(DEFAULT_GROUP_SIZE)
+    // Three of them, said outright: the head count is rolled per offer now
+    // (model/vectors.ts's buddy chances) rather than read off a constant, so
+    // a test about what a pack DOES names its own pack size.
+    const swarm = monster({ type: 'runt', count: 3 })
+    expect(swarm.count).toBe(3)
     const whole = monsterActionsLeft(freshRound(), swarm)
     const oneDown = monsterActionsLeft(freshRound({ monsterDamageTaken: swarm.maxHitPoints / 3 }), swarm)
     expect(oneDown).toBeLessThan(whole)
@@ -246,9 +246,7 @@ describe('an attack spends exactly one action', () => {
  * assert that rather than assert the numbers in the table.
  */
 describe('monster armor', () => {
-  const monsterOf = (type: MonsterType): Monster => buildMonster({
-    classId: 'fighter',
-    classBaseStats: block({ might: 2, agility: 1 }),
+  const monsterOf = (type: MonsterType): Monster => testMonster({ stats: block({ might: 2, agility: 1 }),
     type,
     level: 1,
     against: PLAYER,
@@ -295,11 +293,15 @@ describe('monster armor', () => {
     }
   })
 
-  it('is given by RANK rather than by species, and a group has none', () => {
-    expect(MONSTER_TYPE_ARMOR.group).toBe(0)
-    expect(MONSTER_TYPE_ARMOR.boss).toBeGreaterThan(MONSTER_TYPE_ARMOR.regular)
+  it('is given by SPECIES rather than by rank, which is the other way round', () => {
+    // It WAS a per-rank table, and that was exactly the muddle the four
+    // vectors were separated to end: a rank is a TIER and nothing else, and
+    // what a creature is made of belongs to its species. So every rank is
+    // unarmoured on its own, and any rank is armoured when it is the kind of
+    // thing that has a hide -- which `contested.test.ts` asserts from the
+    // other side, with a species that has one.
     for (const type of MONSTER_TYPES) {
-      expect(totalArmor(monsterOf(type).armor)).toBe(MONSTER_TYPE_ARMOR[type])
+      expect(totalArmor(monsterOf(type).armor)).toBe(0)
     }
   })
 })

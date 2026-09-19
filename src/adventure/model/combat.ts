@@ -23,6 +23,8 @@ import { nextChance, nextRoll, type RngState, type Roll } from '../core/rng'
 import { NO_CHANCE_ADJUSTMENT, resolveChanceWith, type ChanceAdjustment, type ChanceSide } from './chance'
 import { actionsRemaining, damageFrom, monsterDefence, type Monster } from './monsters'
 import type { ActionPosition } from './modifiers'
+import { damageShareOf, strikesOf } from './moves'
+import type { CombatMove } from './vectors'
 import { CRIT_CHANCE, DODGE_CHANCE, HIT_CHANCE, type DerivedStats, type StatBlock } from './stats'
 
 /** What the player may answer a monster's attack with. All four are always offered except Dodge. */
@@ -39,6 +41,16 @@ export type Defence = (typeof DEFENCES)[number]
  * happened to deal the fatal blow.
  */
 export interface RoundState {
+  /**
+   * WHICH ROUND THIS IS, from 1. The one fact a class move's
+   * `firstActionOfEncounter` trigger needs that the round did not already
+   * have: "first of the fight" is round 1 with nothing spent, and without a
+   * round number there is no way to tell that from the first action of the
+   * fourth round. One counter rather than a second pair of per-fight action
+   * totals, because the pair would have to be kept in step with the per-round
+   * pair beside it and this cannot.
+   */
+  roundNumber: number
   playerActionsSpent: number
   monsterActionsSpent: number
   playerHitPoints: number
@@ -145,6 +157,11 @@ export function roundFromJson(value: JsonValue | undefined): RoundState {
     pieces: Array.isArray(armorRow.pieces) ? armorRow.pieces.flatMap((entry) => pieceFromJson(entry) ?? []) : [],
   }
   return {
+    // A save from before rounds were numbered reads as round 1, which makes a
+    // resumed fight offer one more opening move than it should. That is the
+    // generous direction and the only one available -- the number it should
+    // have is not recoverable from anything else in the round.
+    roundNumber: Math.max(1, num('roundNumber', 1)),
     playerActionsSpent: num('playerActionsSpent'),
     monsterActionsSpent: num('monsterActionsSpent'),
     playerHitPoints: num('playerHitPoints'),
@@ -176,6 +193,11 @@ export function roundFromJson(value: JsonValue | undefined): RoundState {
  * here and a compiler error at any caller that builds a round some other way.
  */
 export const UNTOUCHED_FIGHT = {
+  // ZERO, not one: every round including the first is opened by `beginRound`,
+  // which increments. A one here would have the opening round read as the
+  // second and quietly withhold every `firstActionOfEncounter` move in the
+  // game.
+  roundNumber: 0,
   spellReach: NO_SPELLS,
   charms: [] as number[],
   plagued: 0,
@@ -190,7 +212,7 @@ export function beginRound(previous: Omit<RoundState, 'playerActionsSpent' | 'mo
   // a checkpoint. What a round GRANTS -- its spell reach and its charms -- is
   // rolled by the caller and handed in here, because rolling is not this
   // function's business and it takes no rng.
-  return { ...previous, playerActionsSpent: 0, monsterActionsSpent: 0 }
+  return { ...previous, roundNumber: previous.roundNumber + 1, playerActionsSpent: 0, monsterActionsSpent: 0 }
 }
 
 export function playerActionsLeft(state: RoundState, playerDerived: DerivedStats): number {
@@ -340,6 +362,14 @@ interface ExchangeInput {
    * cannot be missed with and armour does not see it (model/spells.ts).
    */
   defence: Defence | 'none' | 'magic'
+  /**
+   * A CLASS MOVE's say on this one blow (model/vectors.ts, vector four).
+   * Damage scaling is applied by the CALLER, which strikes the right number
+   * of times; what arrives here is the part that belongs inside one exchange.
+   */
+  ignoreArmor?: boolean
+  /** Extra flat armour for this blow only, from a defensive move. Natural, so nothing decays it. */
+  guard?: number
   dodgeOffered: boolean
   /** The defender's dodge offer, where the caller rolled one, for the working. */
   dodgeRoll?: Roll | null
@@ -428,7 +458,10 @@ export function resolveExchange(input: ExchangeInput): { blow: Blow; armor: Armo
   // rather than emptied -- it is still on the defender, it simply did not
   // help. For magic that is the rule rather than a consequence: a plated
   // monster is the problem Intellect answers.
-  if (input.defence !== 'defend') {
+  // A move that IGNORES ARMOUR leaves here with the whole blow, by the same
+  // route magic does: the pool comes back untouched rather than emptied,
+  // because it is still on the defender and simply did not help.
+  if (input.defence !== 'defend' || input.ignoreArmor) {
     return {
       blow: { hit: true, crit: critRoll.value.passed, dodged: false, damage: raw, armorDecayed: false, math },
       armor,
@@ -436,7 +469,13 @@ export function resolveExchange(input: ExchangeInput): { blow: Blow; armor: Armo
     }
   }
 
-  const absorbed = absorb(armor, raw, input.defenderStats.luck, rng)
+  // A defensive move's GUARD is flat armour for this blow only. It goes in
+  // the natural pool -- the half decay cannot touch -- because it is not a
+  // thing the defender owns and wears down; it is what they did this turn.
+  const guarded = input.guard && input.guard > 0
+    ? { ...armor, natural: armor.natural + input.guard }
+    : armor
+  const absorbed = absorb(guarded, raw, input.defenderStats.luck, rng)
   return {
     blow: {
       hit: true,
@@ -446,7 +485,12 @@ export function resolveExchange(input: ExchangeInput): { blow: Blow; armor: Armo
       armorDecayed: absorbed.decayed,
       math: { ...math, absorbed: absorbed.absorbed },
     },
-    armor: absorbed.armor,
+    // The guard is TAKEN BACK OUT of what is stored. It was this turn's
+    // choice, not a pool the defender owns, and leaving it in would have a
+    // Sentinel's Bulwark quietly accumulate four permanent armour a round.
+    armor: input.guard && input.guard > 0
+      ? { ...absorbed.armor, natural: Math.max(0, absorbed.armor.natural - input.guard) }
+      : absorbed.armor,
     rng: absorbed.rng,
   }
 }
@@ -479,6 +523,14 @@ export function defencesOffered(dodgeOffered: boolean): Defence[] {
  * The player attacks. The enemy's defence is HIDDEN and automatic -- it takes
  * the best outcome, which is a total ordering rather than a judgement (see
  * `monsterDefence`).
+ *
+ * ONE ACTION, ONE OR MORE BLOWS. A class move may strike several times
+ * (model/vectors.ts), and each strike is a whole exchange of its own: its own
+ * dodge offer, its own hit roll, its own crit and its own damage draw. That
+ * is what makes a Juggler's two blows at 60% a different thing from one blow
+ * at 120% -- the same expected damage, spread over twice as many chances to
+ * miss and twice as many chances to crit. Collapsing them into one scaled
+ * blow would have made the class a rounding difference.
  */
 export function resolvePlayerAttack(options: {
   state: RoundState
@@ -488,42 +540,96 @@ export function resolvePlayerAttack(options: {
   /** The player's own accuracy and crit adjustments. Monsters carry none. */
   playerChances?: Readonly<Record<'hitChance' | 'critChance', ChanceAdjustment>>
   successAdjust?: number
+  /** The armed class move, or null for an ordinary attack. */
+  move?: CombatMove | null
   rng: RngState
-}): { state: RoundState; blow: Blow; rng: RngState } {
-  // The MONSTER's dodge, which the thumb presses down rather than up.
-  const offered = rollDodgeOffered({
-    defenderStats: options.monster.stats,
-    attackerStats: options.playerStats,
-    defender: 'monster',
-    successAdjust: options.successAdjust,
-    rng: options.rng,
-  })
-  const exchange = resolveExchange({
-    attackerStats: options.playerStats,
-    attackerDamage: damageFrom(options.playerDerived.damageMultiplier),
-    defenderStats: options.monster.stats,
-    // The monster's own plate, in the natural pool -- so `absorb` reduces the
-    // blow and has nothing it is allowed to wear away (model/armor.ts). There
-    // is therefore no armor to carry back out of the exchange, which is why
-    // nothing here stores one.
-    armor: options.monster.armor,
-    attackerChances: options.playerChances,
-    attacker: 'player',
-    successAdjust: options.successAdjust,
-    defence: monsterDefence(offered.offered),
-    dodgeOffered: offered.offered,
-    dodgeRoll: offered.roll,
-    rng: offered.rng,
-  })
+}): { state: RoundState; blow: Blow; blows: Blow[]; rng: RngState } {
+  const move = options.move ?? null
+  const chances = withMoveShares(options.playerChances, move)
+  const nominal = damageFrom(options.playerDerived.damageMultiplier) * damageShareOf(move)
+  let rng = options.rng
+  let taken = 0
+  const blows: Blow[] = []
+
+  for (let strike = 0; strike < strikesOf(move); strike += 1) {
+    // The MONSTER's dodge, which the thumb presses down rather than up. Rolled
+    // per strike: a second blow is a second chance to be somewhere else.
+    const offered = rollDodgeOffered({
+      defenderStats: options.monster.stats,
+      attackerStats: options.playerStats,
+      defender: 'monster',
+      successAdjust: options.successAdjust,
+      rng,
+    })
+    const exchange = resolveExchange({
+      attackerStats: options.playerStats,
+      attackerDamage: nominal,
+      defenderStats: options.monster.stats,
+      // The monster's own plate, in the natural pool -- so `absorb` reduces the
+      // blow and has nothing it is allowed to wear away (model/armor.ts). There
+      // is therefore no armor to carry back out of the exchange, which is why
+      // nothing here stores one.
+      armor: options.monster.armor,
+      attackerChances: chances,
+      attacker: 'player',
+      successAdjust: options.successAdjust,
+      defence: monsterDefence(offered.offered),
+      ignoreArmor: move?.ignoresArmor,
+      dodgeOffered: offered.offered,
+      dodgeRoll: offered.roll,
+      rng: offered.rng,
+    })
+    rng = exchange.rng
+    taken += exchange.blow.damage
+    blows.push(exchange.blow)
+  }
+
   return {
     state: {
       ...options.state,
       playerActionsSpent: options.state.playerActionsSpent + 1,
-      monsterDamageTaken: options.state.monsterDamageTaken + exchange.blow.damage,
+      // A STUN IS A SPENT ACTION on the other side's clock, which is the unit
+      // a round already counts in -- so nothing had to learn a new kind of
+      // state for it, and a stun cannot outlive the round it was landed in.
+      monsterActionsSpent: options.state.monsterActionsSpent + (move?.stealsActions ?? 0),
+      monsterDamageTaken: options.state.monsterDamageTaken + taken,
     },
-    blow: exchange.blow,
-    rng: exchange.rng,
+    // The FIRST blow, for callers that describe one. `blows` is the whole of
+    // what happened and is what the narration walks.
+    blow: blows[0],
+    blows,
+    rng,
   }
+}
+
+/**
+ * A move's accuracy and crit shares, folded into whatever the character's own
+ * modifiers already said.
+ *
+ * MULTIPLIED ON THE REMAINDER, not added: a chance adjustment is carried as
+ * "what share of the failures survives" (model/chance.ts), so two sources
+ * compose by multiplying those survivals. That is why a move can promise
+ * "half the misses gone" on top of an item that already removed a fifth and
+ * neither overshoots nor needs a clamp.
+ */
+function withMoveShares(
+  own: Readonly<Record<'hitChance' | 'critChance', ChanceAdjustment>> | undefined,
+  move: CombatMove | null,
+): Readonly<Record<'hitChance' | 'critChance', ChanceAdjustment>> | undefined {
+  if (!move || (!move.hitShare && !move.critShare)) return own
+  const base = own ?? { hitChance: NO_CHANCE_ADJUSTMENT, critChance: NO_CHANCE_ADJUSTMENT }
+  return {
+    hitChance: composeShare(base.hitChance, move.hitShare ?? 0),
+    critChance: composeShare(base.critChance, move.critShare ?? 0),
+  }
+}
+
+/** One share of the remainder, in the sign convention the adjustment uses. */
+function composeShare(adjustment: ChanceAdjustment, share: number): ChanceAdjustment {
+  if (share === 0) return adjustment
+  return share > 0
+    ? { ...adjustment, failureKeep: adjustment.failureKeep * (1 - Math.min(1, share)) }
+    : { ...adjustment, successKeep: adjustment.successKeep * (1 - Math.min(1, -share)) }
 }
 
 /**
@@ -547,8 +653,24 @@ export function resolveMonsterAttack(options: {
    */
   dodgeRoll?: Roll | null
   successAdjust?: number
+  /** The PLAYER's armed move for the defence they picked. Guards and ripostes. */
+  defenceMove?: CombatMove | null
+  /** The MONSTER's armed move for its own attack. Strikes, shares, armour. */
+  monsterMove?: CombatMove | null
+  /** The player's stats as their modifiers leave them, for a riposte's damage. */
+  playerDamage?: number
   rng: RngState
-}): { state: RoundState; blow: Blow | null; escaped: boolean; pursuit: Roll | null; rng: RngState } {
+}): {
+  state: RoundState
+  blow: Blow | null
+  /** Every blow the monster threw this action -- more than one where its class strikes twice. */
+  blows: Blow[]
+  /** What the player's defensive move struck back for, if it did. */
+  riposte: Blow | null
+  escaped: boolean
+  pursuit: Roll | null
+  rng: RngState
+} {
   const spent = { ...options.state, monsterActionsSpent: options.state.monsterActionsSpent + 1 }
 
   let rng = options.rng
@@ -565,33 +687,85 @@ export function resolveMonsterAttack(options: {
     rng = chase.rng
     pursuit = chase.value
     if (!chase.value.passed) {
-      return { state: { ...spent, playerFled: true }, blow: null, escaped: true, pursuit, rng }
+      return { state: { ...spent, playerFled: true }, blow: null, blows: [], riposte: null, escaped: true, pursuit, rng }
     }
   }
 
-  const exchange = resolveExchange({
-    attackerStats: options.monster.stats,
-    attackerDamage: options.monster.damage,
-    defenderStats: options.playerStats,
-    armor: options.state.playerArmor,
-    attacker: 'monster',
-    successAdjust: options.successAdjust,
-    defence: options.defence,
-    dodgeOffered: options.defence === 'dodge',
-    dodgeRoll: options.dodgeRoll,
-    rng,
-  })
+  const monsterMove = options.monsterMove ?? null
+  const defenceMove = options.defenceMove ?? null
+  const nominal = options.monster.damage * damageShareOf(monsterMove)
+  const monsterChances = withMoveShares(
+    { hitChance: options.monster.chances.hitChance, critChance: options.monster.chances.critChance },
+    monsterMove,
+  )
+
+  let armor = options.state.playerArmor
+  let hurt = 0
+  const blows: Blow[] = []
+  for (let strike = 0; strike < strikesOf(monsterMove); strike += 1) {
+    const exchange = resolveExchange({
+      attackerStats: options.monster.stats,
+      attackerDamage: nominal,
+      defenderStats: options.playerStats,
+      armor,
+      attackerChances: monsterChances,
+      attacker: 'monster',
+      successAdjust: options.successAdjust,
+      defence: options.defence,
+      ignoreArmor: monsterMove?.ignoresArmor,
+      // The player's own defensive move guards EVERY strike of the action it
+      // answered: it is the choice they made against this attack, not against
+      // one blow of it.
+      guard: defenceMove?.guard,
+      dodgeOffered: options.defence === 'dodge',
+      dodgeRoll: options.dodgeRoll,
+      rng,
+    })
+    rng = exchange.rng
+    armor = exchange.armor
+    hurt += exchange.blow.damage
+    blows.push(exchange.blow)
+  }
+
+  let state: RoundState = {
+    ...spent,
+    // A monster's stun costs the PLAYER actions, the mirror of the player's own.
+    playerActionsSpent: spent.playerActionsSpent + (monsterMove?.stealsActions ?? 0),
+    playerHitPoints: Math.max(0, spent.playerHitPoints - hurt),
+    playerArmor: armor,
+  }
+
+  // THE RIPOSTE IS PART OF THE DEFENCE, not a free action: it costs the
+  // player nothing because they already spent the choice, and it is resolved
+  // only if they are still standing. Striking back from the floor would make
+  // a Duelist's Riposte a way to win a fight you had already lost.
+  let riposte: Blow | null = null
+  if (defenceMove?.riposteShare && state.playerHitPoints > 0 && !state.playerFled) {
+    const back = resolveExchange({
+      attackerStats: options.playerStats,
+      attackerDamage: (options.playerDamage ?? 0) * defenceMove.riposteShare,
+      defenderStats: options.monster.stats,
+      armor: options.monster.armor,
+      attacker: 'player',
+      successAdjust: options.successAdjust,
+      // The monster is busy having attacked. A riposte is not answered.
+      defence: 'none',
+      dodgeOffered: false,
+      rng,
+    })
+    rng = back.rng
+    riposte = back.blow
+    state = { ...state, monsterDamageTaken: state.monsterDamageTaken + back.blow.damage }
+  }
 
   return {
-    state: {
-      ...spent,
-      playerHitPoints: Math.max(0, spent.playerHitPoints - exchange.blow.damage),
-      playerArmor: exchange.armor,
-    },
-    blow: exchange.blow,
+    state,
+    blow: blows[0] ?? null,
+    blows,
+    riposte,
     escaped: false,
     pursuit,
-    rng: exchange.rng,
+    rng,
   }
 }
 

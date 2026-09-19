@@ -6,6 +6,7 @@ import { activeGame, applyEffects, emptySave, profileOf, type GameSave } from '.
 import { SPREAD_PIVOT } from '../model/damageRoll'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
 import { splitNarration } from '../../escapeMenu/narrationMarkup'
+import { withVectors } from '../testing/run'
 
 const DEPS: DirectorDeps = {
   stages: STAGES,
@@ -15,7 +16,20 @@ const DEPS: DirectorDeps = {
 
 const NOW = 1_700_000_000_000
 
-/** A run in a fight, with whatever stats are needed to reach the thing under test. */
+/**
+ * A run in a fight, with whatever stats are needed to reach the thing under
+ * test.
+ *
+ * THE VECTORS ARE PINNED, and to the FLAT build specifically, which is load
+ * bearing for every test here. What these watch for are events that only
+ * happen inside a fight that lasts -- a charm firing, a damage band being
+ * drawn from, a round turning over -- and creation DEALS a build now, so an
+ * unpinned run is a coin toss between a character who ends a fight in two
+ * actions and one who cannot win it at all. Journeyman is the one shape that
+ * is neither: enough Might to kill a goblin eventually, enough Perception to
+ * land the blows that show their band, and enough of everything else to
+ * survive being hit back.
+ */
 function inAFight(seed: number, stats: Partial<Record<'intellect' | 'charisma' | 'perception', number>> = {}): GameSave {
   let save = enterEntryScreen(emptySave(seed), DEPS, NOW)
   for (let step = 0; step < 300; step += 1) {
@@ -27,6 +41,7 @@ function inAFight(seed: number, stats: Partial<Record<'intellect' | 'charisma' |
     save = choose(save, choice.id, DEPS, NOW).save
     const game = activeGame(save)
     if (!game) continue
+    save = withVectors(save, { build: 'journeyman', species: 'masurian', combatClass: 'sentinel' })
     for (const [stat, amount] of Object.entries(stats)) {
       if (game.baseStats[stat as 'intellect'] < amount) {
         save = applyEffects(save, [{ kind: 'adjustBaseStat', stat: stat as 'intellect', amount }], DEPS.content, NOW)

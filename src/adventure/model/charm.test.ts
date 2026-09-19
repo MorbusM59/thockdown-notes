@@ -4,18 +4,17 @@ import { beginRound, UNTOUCHED_FIGHT, type RoundState } from './combat'
 import {
   charmChance, CHARM_EFFECTS, charmsOf, interceptMonsterAction, rollCharms,
 } from './charm'
-import { buildMonster, type Monster } from './monsters'
+import { type Monster } from './monsters'
 import { createStatBlock, type StatBlock } from './stats'
 import { NO_ARMOR } from './armor'
+import { testMonster } from '../testing/monster'
 
 const block = (over: Partial<StatBlock> = {}): StatBlock => ({ ...createStatBlock(0), ...over })
 
 const PLAYER = block({ might: 2, agility: 2, charisma: 6 })
 
 function monsterOf(over: Partial<StatBlock> = {}): Monster {
-  return buildMonster({
-    classId: 'fighter',
-    classBaseStats: block({ might: 2, agility: 1, ...over }),
+  return testMonster({ stats: block({ might: 2, agility: 1, ...over }),
     type: 'regular',
     level: 1,
     against: PLAYER,

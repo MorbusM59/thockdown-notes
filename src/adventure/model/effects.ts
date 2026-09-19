@@ -90,12 +90,19 @@ export type Effect =
    */
   | { kind: 'buyFamePurchase'; purchase: string }
   /**
-   * Which ORIGIN this run is playing. Recorded rather than applied: an origin
-   * resolves with the modifiers (model/gameState.ts's `originModifier`), so
+   * ONE OF THE THREE CONTENT VECTORS this run is playing (model/vectors.ts):
+   * its build, its species or its class.
+   *
+   * Recorded rather than applied. The build's points and the species' effects
+   * resolve with the modifiers (model/gameState.ts's `runVectorModifiers`), so
    * the base stat block stays purely what the player spent and every run has
-   * all six points in every stat to spend.
+   * all six points in every stat to spend; the class touches no number at all.
+   *
+   * ONE effect with a `vector` field rather than three near-identical ones,
+   * because they are the same act three times -- and three effects would be
+   * three places to forget the fourth if a fifth vector is ever added.
    */
-  | { kind: 'setOrigin'; originId: string }
+  | { kind: 'setVector'; vector: 'build' | 'species' | 'class'; id: string }
   /** Which region this level is being played in, and therefore which pools are in scope. */
   | { kind: 'setRegion'; regionId: string }
   /** One of the level's ten encounters spent. See stages/levelProgress.ts. */

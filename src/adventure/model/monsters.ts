@@ -1,90 +1,33 @@
-// A monster's numbers, built the same way a player's are and then scaled.
+// A monster's numbers, built from THE SAME FOUR VECTORS a player is.
 //
 // The pipeline, in order, and the order is the whole of it:
 //
-//   class base stats -> + type shift -> derive (against the player)
-//                    -> x power multiplier, on health and damage only
+//   tier x build weights -> base stats
+//                        -> + species effects, through resolveProfile
+//                        -> derive (against the player)
+//                        -> x power multiplier, on health and damage only
 //
-// A monster is a CLASS (which supplies base stats, on the same scale the
-// player's origins use) and a TYPE (which shifts every one of those stats by
-// a flat amount). The two are orthogonal: a mini boss is a random class
-// carrying the mini-boss type, not a creature of its own.
+// There is no monster-only arithmetic left in it. The stat shift per rank,
+// the armour per rank and the stat deltas on classes and species are all
+// GONE: rank is a tier (model/vectors.ts), armour is something a species
+// has, and stats are the build's. A mini boss is not a creature of its own
+// -- it is the same four vectors with fifteen more points to spend.
 //
 // Base stats are NOT clamped to the player's cap of 6. That cap is a rule
-// about a player's own progression -- what they can reach before gear -- and
-// a boss at +3 on a class base of 2 is meant to be past it.
+// about what a player's own SPENDING can reach; a tier-20 boss is meant to
+// be past it, and so is a player who has bought their tier up.
 
 import { NO_ARMOR, type Armor } from './armor'
 import { powerMultiplier, type Difficulty } from './difficulty'
-import { addStats, deriveStats, type DerivedStats, type StatBlock } from './stats'
+import { resolveProfile, type Modifier } from './modifiers'
+import { buildModifier, type Build, type CombatClass, type MonsterType, type Species } from './vectors'
+import { resolveChanceWith, type ChanceAdjustment } from './chance'
+import { CHANCE_DERIVED_KEYS, CHANCE_SPECS, createStatBlock, type ChanceKey, type DerivedStats, type StatBlock } from './stats'
 
-/** Members in a group whose encounter does not name a count. */
-export const DEFAULT_GROUP_SIZE = 3
-
-export const MONSTER_TYPES = ['group', 'regular', 'elite', 'miniBoss', 'boss'] as const
-
-export type MonsterType = (typeof MONSTER_TYPES)[number]
-
-/** What the type adds to EVERY base stat. */
-export const MONSTER_TYPE_STAT_SHIFT: Readonly<Record<MonsterType, number>> = {
-  group: -1,
-  regular: 0,
-  elite: 1,
-  miniBoss: 2,
-  boss: 3,
-}
+export { MONSTER_TYPES, MONSTER_TYPE_CHARISMA_RESISTANCE, type MonsterType } from './vectors'
 
 /**
- * The base chance a charisma action fails against a monster of this type,
- * before the tier-and-usage term is added.
- *
- * This is where a monster's resistance to being talked at lives -- which is
- * why the tier term's divisor is the player's own Charisma and not a
- * contested one. Contesting it too would divide by `charisma - intellect`,
- * which is zero or negative whenever the monster is the smarter one.
- *
- * A GROUP never resists: crowd control works on crowds, by construction.
- */
-export const MONSTER_TYPE_CHARISMA_RESISTANCE: Readonly<Record<MonsterType, number>> = {
-  group: 0,
-  regular: 0.2,
-  elite: 0.4,
-  miniBoss: 0.6,
-  boss: 0.8,
-}
-
-/**
- * What a monster of this type is armoured with, in points.
- *
- * ARMOR WORKS EXACTLY AS THE PLAYER'S DOES -- `model/armor.ts`, the same
- * `absorb`, the same flat reduction, the same consulted-only-when-defending
- * rule -- and it is carried in the NATURAL pool, which is the half decay
- * cannot touch. That is not a special case for monsters: natural armor is
- * what an actor has by being what it is, and a monster's plate is exactly
- * that. Nothing about a fight had to learn a second kind of armor.
- *
- * The numbers are a FIRST PASS and are meant to be tuned -- run
- * `npm run adventure:sim` and look at what changes. What is not arbitrary is
- * the shape: it is a per-type table, like `MONSTER_TYPE_STAT_SHIFT` beside
- * it, so armour is a property of the RANK a creature arrives at rather than
- * of its species. A group is the deliberate zero -- more bodies, not better
- * ones.
- *
- * It is NOT scaled by the power multiplier. Hit points and damage are, so a
- * flat plate matters less as a level climbs, which is the right direction:
- * armour should be the early fight's problem and the late fight's footnote,
- * and magic is the answer to it at every level (model/spells.ts).
- */
-export const MONSTER_TYPE_ARMOR: Readonly<Record<MonsterType, number>> = {
-  group: 0,
-  regular: 0,
-  elite: 1,
-  miniBoss: 2,
-  boss: 3,
-}
-
-/**
- * A GROUP is fought as ONE monster with a shared pool -- "a hydra fight".
+ * A MONSTER IS FOUGHT AS ONE, however many bodies it has -- "a hydra fight".
  *
  * Its hit points and its actions are a single member's times the head count.
  * The pool is then divided into that many equal bands, and each band the
@@ -98,19 +41,26 @@ export const MONSTER_TYPE_ARMOR: Readonly<Record<MonsterType, number>> = {
  * already used -- would make killing a member during a round do nothing at
  * all until the next one.
  *
- * The head count is CONTENT, per encounter. `DEFAULT_GROUP_SIZE` is what an
- * encounter that does not say gets.
+ * The head count is ROLLED PER OFFER now, from the rank's own buddy chances
+ * (model/vectors.ts's `MONSTER_BUDDY_CHANCES`), rather than being a property
+ * of a "group" rank that no longer exists. A runt always has a friend; an
+ * ordinary monster has one half the time; nothing elite or above travels.
  */
 export interface Monster {
+  buildId: string
+  speciesId: string
   classId: string
   type: MonsterType
-  /** Members fought as one. 1 for everything that is not a group. */
+  /** What the four vectors add up to, before anything is derived. */
+  tier: number
+  /** Members fought as one. 1 for anything that came alone. */
   count: number
-  /** Class base plus the type's flat shift. Uncapped -- see the module comment. */
+  /** Tier split by the build's weights. Uncapped -- see the module comment. */
   stats: StatBlock
   /**
    * Derived AGAINST THE PLAYER, so the contested chances in here are this
    * monster's real ones in this fight and not a context-free approximation.
+   * The species' effects are already in it.
    */
   derived: DerivedStats
   /** Already scaled by the power multiplier. */
@@ -120,10 +70,14 @@ export interface Monster {
   /** The whole group's opening action pool: one member's, times the count. */
   maxActions: number
   /**
-   * Flat reduction on a blow it DEFENDS against, in the natural pool so it
-   * never wears away. See MONSTER_TYPE_ARMOR.
+   * Flat reduction on a blow it DEFENDS against. Natural, always: a species
+   * is not carried and cannot be dropped, so it has nothing that decays.
    */
   armor: Armor
+  /** Its class, carried whole, because the fight asks it for moves. */
+  combatClass: CombatClass | null
+  /** What its species does to each contested chance, for the roll to apply. */
+  chances: Readonly<Record<ChanceKey, ChanceAdjustment>>
 }
 
 /**
@@ -161,47 +115,86 @@ export function damageFrom(damageMultiplier: number): number {
   return BASE_DAMAGE * damageMultiplier
 }
 
+/**
+ * A SPECIES AS A MODIFIER, so it resolves in the pass every other effect
+ * resolves in.
+ *
+ * The same trick `buildModifier` plays for the player (model/gameState.ts):
+ * a species carries the modifier vocabulary, so wrapping it in a Modifier
+ * means `resolveProfile` applies it with no knowledge that species exist,
+ * and `describeModifier` writes its tooltip for free.
+ */
+export function speciesModifier(species: Species | null): Modifier | null {
+  if (!species) return null
+  return { id: `species:${species.id}`, kind: 'trait', name: species.name, icon: species.icon, effects: species.effects }
+}
+
 export function buildMonster(options: {
-  classId: string
-  classBaseStats: StatBlock
+  build: Build | null
+  species: Species | null
+  combatClass: CombatClass | null
   type: MonsterType
-  level: number
+  tier: number
   difficulty?: Difficulty
+  level: number
   /** The player, so the contested chances resolve. */
   against: StatBlock
-  /** Members in a group. Content's to choose; anything but a group is one. */
   count?: number
 }): Monster {
-  const shift = MONSTER_TYPE_STAT_SHIFT[options.type]
-  const stats = addStats(options.classBaseStats, {
-    might: shift,
-    agility: shift,
-    perception: shift,
-    intellect: shift,
-    charisma: shift,
-    luck: shift,
-  })
-  const derived = deriveStats(stats, options.against)
+  // BOTH VECTORS AS MODIFIERS, resolved in the one pass: the build's tier
+  // points (which must sit above the base-stat clamp -- see `buildModifier`)
+  // and the species' effects. A monster has no base stats of its own at all;
+  // everything it is arrives through this list.
+  const layers = [buildModifier(options.build, options.tier), speciesModifier(options.species)]
+    .filter((layer): layer is Modifier => layer !== null)
+  const profile = resolveProfile(createStatBlock(0), layers, { items: 0, traits: 0 })
+  // The three CONTESTED chances, resolved against the player with this
+  // monster's own adjustments -- `resolveProfile` cannot do it, because a
+  // chance is settled at the moment it is rolled and it has no opponent. A
+  // Spider's "+30% accuracy" reaches its attacks through `chances` below;
+  // this is what the DETAIL PILL reads. WITHOUT the run's thumb, deliberately
+  // -- `successAdjust` is applied at the roll and never folded into what a
+  // character is worth (model/chance.ts), so a difficulty setting must not
+  // show up in a creature's description.
+  const derived: DerivedStats = {
+    ...profile.derived,
+    ...Object.fromEntries(CHANCE_DERIVED_KEYS.map((key) => [
+      key,
+      resolveChanceWith(CHANCE_SPECS[key], profile.stats, options.against, {
+        adjustment: profile.chances[key],
+      }),
+    ])),
+  }
   const power = powerMultiplier(options.level, options.difficulty)
-  const count = options.type === 'group' ? Math.max(1, Math.floor(options.count ?? DEFAULT_GROUP_SIZE)) : 1
+  const count = Math.max(1, Math.floor(options.count ?? 1))
   return {
-    classId: options.classId,
+    buildId: options.build?.id ?? '',
+    speciesId: options.species?.id ?? '',
+    classId: options.combatClass?.id ?? '',
     type: options.type,
+    tier: Math.max(0, Math.floor(options.tier)),
     count,
-    stats,
+    stats: profile.stats,
+    // The PROFILE's derived values, not the bare ones: the species has had
+    // its say on hit points, actions, accuracy and crit, and taking
+    // `deriveStats` alone here would have silently dropped every one of them.
     derived,
     // Whole hit points: a monster with 63.4 of them is a rounding artefact
     // on screen, and the floor is the same rule every other count follows.
-    maxHitPoints: Math.floor(derived.maxHitPoints * power) * count,
-    // Per member. A group of four does not hit four times harder for one
+    maxHitPoints: Math.floor(profile.derived.maxHitPoints * power) * count,
+    // Per member. A pack of four does not hit four times harder for one
     // blow -- it hits four times as OFTEN, which is what the action pool is.
-    damage: damageFrom(derived.damageMultiplier) * power,
-    maxActions: derived.actionsPerRound * count,
-    // Per MEMBER, not per group: a group of four does not stack four plates
-    // on one body. It is zero for groups today either way.
-    armor: MONSTER_TYPE_ARMOR[options.type] > 0
-      ? { ...NO_ARMOR, natural: MONSTER_TYPE_ARMOR[options.type] }
-      : NO_ARMOR,
+    damage: damageFrom(profile.derived.damageMultiplier) * power,
+    maxActions: profile.derived.actionsPerRound * count,
+    // Per MEMBER, not per pack: four wolves do not stack four hides on one
+    // body.
+    armor: profile.naturalArmor > 0 ? { ...NO_ARMOR, natural: profile.naturalArmor } : NO_ARMOR,
+    combatClass: options.combatClass,
+    // CARRIED, not folded in: a chance is resolved against an opponent at the
+    // moment it is rolled (model/chance.ts), so the species' say on accuracy
+    // and crit has to travel to the roll rather than be averaged into a
+    // number here. Exactly what an EffectiveProfile does for the player.
+    chances: profile.chances,
   }
 }
 
@@ -211,7 +204,9 @@ export function buildMonster(options: {
  *
  * Dodge if it is offered, otherwise defend. There is no judgement in it and
  * none is wanted: dodge takes no damage at all and defend takes some, so the
- * ordering is total.
+ * ordering is total. A monster's CLASS may swap what defending means, which
+ * is the class vector doing its job and not a second decision -- the choice
+ * is still the same two.
  *
  * FLEE is deliberately absent. It is not something a monster weighs; it is a
  * state the player PUTS it in -- by a successful Terrify, or out of a talk

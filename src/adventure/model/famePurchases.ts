@@ -34,11 +34,12 @@
 // ceiling can each move without the other lying.
 
 import type { ModifierKind } from './modifiers'
+import { MAX_PLAYER_TIER, TIER_PER_FAME_POINT } from './vectors'
 
-export type FamePurchaseId = 'strongBack' | 'largeCoffers' | 'experienced' | 'stubborn'
+export type FamePurchaseId = 'strongBack' | 'largeCoffers' | 'experienced' | 'stubborn' | 'ascendant'
 
-/** Which of the two run-shape rules a purchase raises. */
-export type FamePurchaseRule = 'carry' | 'keep'
+/** Which of the run-shape rules a purchase raises. */
+export type FamePurchaseRule = 'carry' | 'keep' | 'tier'
 
 export interface FamePurchase {
   id: FamePurchaseId
@@ -48,7 +49,21 @@ export interface FamePurchase {
   /** Fame points, paid on the same ladder gold feeds (model/gold.ts). */
   cost: number
   rule: FamePurchaseRule
-  kind: ModifierKind
+  /**
+   * WHICH KIND the rule is about, or null where the rule has no kinds.
+   *
+   * Carrying and keeping are per kind -- you carry items and you carry traits,
+   * and they are two separate allowances. TIER is not: a run has one, and a
+   * nullable field says so better than a third `kind` value nothing else
+   * would ever match on.
+   */
+  kind: ModifierKind | null
+  /**
+   * What ONE purchase adds to the rule. One for a slot; five for tier,
+   * because a tier point is not a unit anybody spends singly -- the design
+   * puts a fame point at five tier and the ceiling at five points.
+   */
+  step: number
 }
 
 /**
@@ -57,10 +72,16 @@ export interface FamePurchase {
  * only thing that compounds across a run.
  */
 export const FAME_PURCHASES: readonly FamePurchase[] = [
-  { id: 'strongBack', name: 'Strong Back', icon: 'fa-solid fa-hand-back-fist', cost: 1, rule: 'carry', kind: 'item' },
-  { id: 'largeCoffers', name: 'Large Coffers', icon: 'fa-solid fa-vault', cost: 2, rule: 'keep', kind: 'item' },
-  { id: 'experienced', name: 'Experienced', icon: 'fa-solid fa-hat-wizard', cost: 1, rule: 'carry', kind: 'trait' },
-  { id: 'stubborn', name: 'Stubborn', icon: 'fa-solid fa-anchor', cost: 2, rule: 'keep', kind: 'trait' },
+  { id: 'strongBack', name: 'Strong Back', icon: 'fa-solid fa-hand-back-fist', cost: 1, rule: 'carry', kind: 'item', step: 1 },
+  { id: 'largeCoffers', name: 'Large Coffers', icon: 'fa-solid fa-vault', cost: 2, rule: 'keep', kind: 'item', step: 1 },
+  { id: 'experienced', name: 'Experienced', icon: 'fa-solid fa-hat-wizard', cost: 1, rule: 'carry', kind: 'trait', step: 1 },
+  { id: 'stubborn', name: 'Stubborn', icon: 'fa-solid fa-anchor', cost: 2, rule: 'keep', kind: 'trait', step: 1 },
+  // THE THIRD RULE, and the only one that buys what a character IS rather
+  // than what they may hold: five tier points, which the build's weights then
+  // split (model/vectors.ts). One point each and five of them, so a fully
+  // ascended run is a tier-30 character -- six times the stat budget it set
+  // out with, which is the whole of what makes a late run feel different.
+  { id: 'ascendant', name: 'Ascendant', icon: 'fa-solid fa-arrow-up-right-dots', cost: 1, rule: 'tier', kind: null, step: TIER_PER_FAME_POINT },
 ]
 
 export function famePurchaseById(id: string): FamePurchase | undefined {
@@ -75,6 +96,7 @@ export function famePurchaseById(id: string): FamePurchase | undefined {
 export const FAME_PURCHASE_CEILING: Record<FamePurchaseRule, number> = {
   carry: 6,
   keep: 3,
+  tier: MAX_PLAYER_TIER,
 }
 
 /** How many times this run has bought a given purchase. */
@@ -94,16 +116,16 @@ export function timesBought(held: readonly string[], id: FamePurchaseId): number
 export function famePurchaseBonus(
   held: readonly string[],
   rule: FamePurchaseRule,
-  kind: ModifierKind,
+  kind: ModifierKind | null,
   base: number,
 ): number {
   const match = FAME_PURCHASES.find((purchase) => purchase.rule === rule && purchase.kind === kind)
   if (!match) return 0
   const bought = timesBought(held, match.id)
-  return Math.max(0, Math.min(bought, FAME_PURCHASE_CEILING[rule] - base))
+  return Math.max(0, Math.min(bought * match.step, FAME_PURCHASE_CEILING[rule] - base))
 }
 
 /** Whether this run may still buy one -- the ceiling's own question, asked once. */
 export function canBuyMore(held: readonly string[], purchase: FamePurchase, base: number): boolean {
-  return base + timesBought(held, purchase.id) < FAME_PURCHASE_CEILING[purchase.rule]
+  return base + timesBought(held, purchase.id) * purchase.step < FAME_PURCHASE_CEILING[purchase.rule]
 }

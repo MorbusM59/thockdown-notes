@@ -27,114 +27,12 @@
 // one can be in -- the tag effect, `isOfferable` and the filters that read it
 // are all deleted rather than left standing over a case that cannot arise.
 
-import type { Content, MonsterClass, MonsterClassId, Origin, Region, Species } from './index'
+import type { Content, Region } from './index'
+import { BUILDS } from './builds'
+import { SPECIES } from './species'
+import { COMBAT_CLASSES } from './classes'
 import type { ModifierTemplate } from '../model/modifierSlots'
 
-/**
- * PLACEHOLDER STAT SPREADS for the four starting origins. Only the Warrior's
- * is specified (+2 Might, +1 Agility). The other three are named in the
- * design document with no numbers at all; theirs are shaped to match the
- * Warrior's budget so that character creation is playable, and they are NOT
- * balanced, considered, or agreed. Replace them with real ones before any of
- * this is tuned.
- *
- * The BERSERKER is specified, and it is the first origin that has to be
- * earned: reach Might 6 in a run and it is available at the start of every
- * run after (model/permanentUnlocks.ts). It is also the first origin to carry
- * effects that are not stats -- which is what an origin sharing the modifier
- * vocabulary buys, rather than a second kind of declaration.
- *
- * ORIGIN, never "class": what the PLAYER is stays an origin, and `class` is
- * spoken for by the MONSTER axis below (`MONSTER_CLASSES`), which is the
- * design document's own word for what a monster fights like.
- */
-const ORIGINS: readonly Origin[] = [
-  {
-    id: 'warrior',
-    name: 'Warrior',
-    icon: 'fa-solid fa-hand-fist',
-    effects: [
-      { kind: 'statDelta', stat: 'might', amount: 2 },
-      { kind: 'statDelta', stat: 'agility', amount: 1 },
-    ],
-  },
-  {
-    id: 'thief',
-    name: 'Thief',
-    icon: 'fa-solid fa-mask',
-    effects: [
-      { kind: 'statDelta', stat: 'agility', amount: 2 },
-      { kind: 'statDelta', stat: 'luck', amount: 1 },
-    ],
-  },
-  {
-    id: 'mage',
-    name: 'Mage',
-    icon: 'fa-solid fa-wand-sparkles',
-    effects: [
-      { kind: 'statDelta', stat: 'intellect', amount: 2 },
-      { kind: 'statDelta', stat: 'perception', amount: 1 },
-    ],
-  },
-  {
-    id: 'bard',
-    name: 'Bard',
-    icon: 'fa-solid fa-music',
-    effects: [
-      { kind: 'statDelta', stat: 'charisma', amount: 2 },
-      { kind: 'statDelta', stat: 'luck', amount: 1 },
-    ],
-  },
-  {
-    id: 'berserker',
-    name: 'Berserker',
-    icon: 'fa-solid fa-khanda',
-    requiresUnlock: 'berserker',
-    effects: [
-      { kind: 'statDelta', stat: 'might', amount: 4 },
-      { kind: 'statDelta', stat: 'agility', amount: 2 },
-      { kind: 'statDelta', stat: 'intellect', amount: -2 },
-      // A FRACTION, like every other percentage in the vocabulary (the slot
-      // ranges are 0.1 to 0.5): 1 is +100%, which doubles the damage.
-      { kind: 'derivedPercent', derived: 'damageMultiplier', percent: 1 },
-      // Worn armour is worth nothing to them; a trait's natural armour still
-      // is, so a Berserker can be tough without ever being armoured.
-      { kind: 'noDecayingArmor' },
-    ],
-  },
-]
-
-/**
- * Named in the design document's sample playthrough. Which encounters and
- * monsters each one brings into scope is NOT specified, so a region is
- * currently a place with a name.
- */
-/**
- * THE SIX REGIONS, AND THE TRAITS THEY BREED, as a RING.
- *
- * The design asks for six regions, thirty traits, every trait belonging to
- * two regions, and ten traits in every region. Those four numbers have
- * exactly one clean shape: 30 x 2 = 60 = 6 x 10, which is a 2-regular graph
- * on six vertices -- and the only connected one is a hexagon.
- *
- * So the regions are laid in a RING and the traits are authored on the
- * BORDERS between them: six groups of five, each group belonging to the two
- * regions it lies between. A region is then the two groups on its own two
- * borders, which is ten, and every trait is in exactly two regions because a
- * border has exactly two sides. None of that is counted by hand or asserted
- * by hope -- it falls out of the shape, and `regionTraits.contract.test.ts`
- * holds it to the arithmetic.
- *
- * It also buys the thing a flat assignment would not: NEIGHBOURS OVERLAP.
- * Travel from the marsh to the wastes and half of what you can find comes
- * with you, half is new. The world has a grain, and a player who notices it
- * can steer toward a trait they want.
- *
- * Each border is a THEME both its sides can own -- stone and cold between
- * the caves and the snowline, scavengers between the ruins and the fen -- so
- * a trait reads as belonging to where it was found rather than as having
- * been dealt there.
- */
 const REGION_RING: readonly { id: string; name: string; icon: string }[] = [
   { id: 'caves', name: 'A sprawling cave system', icon: 'fa-solid fa-mountain-sun' },
   { id: 'foothills', name: 'The foothills of a snowy range', icon: 'fa-solid fa-snowflake' },
@@ -808,88 +706,11 @@ const ITEMS: readonly ModifierTemplate[] = [
   },
 ]
 
-/**
- * The three monster classes, on the player origins' own stat scale -- the
- * design's "similar to the player classes", taken literally so there is one
- * scale in the game rather than two that have to be kept comparable.
- */
-const MONSTER_CLASSES: readonly MonsterClass[] = [
-  { id: 'warrior', name: 'Warrior', icon: 'fa-solid fa-hand-fist', statDeltas: { might: 2, agility: 1 } },
-  { id: 'thief', name: 'Thief', icon: 'fa-solid fa-mask', statDeltas: { agility: 2, luck: 1 } },
-  { id: 'mage', name: 'Mage', icon: 'fa-solid fa-wand-sparkles', statDeltas: { intellect: 2, perception: 1 } },
-]
-
-/**
- * WHAT you fight, and what it is called at each rank.
- *
- * A species carries stat modifiers of its own and a name per type, plus which
- * classes it may take at that type -- a Goblin Chieftain is always a warrior,
- * a Goblin Lord always a mage, and a plain Goblin can be anything.
- *
- * A type may have SEVERAL forms. Beasts are the reason: a beast group is a
- * pack of wolves or a pack of boars, and the choice decides the name and the
- * class together.
- *
- * `classes: []` means any class.
- */
-const ANY: readonly MonsterClassId[] = []
-
-const SPECIES: readonly Species[] = [
-  {
-    id: 'goblin',
-    name: 'Goblin',
-    statDeltas: { luck: 2, might: -1, charisma: -2, agility: 1 },
-    forms: {
-      group: [{ name: 'Band of Goblins', classes: ['thief'] }],
-      regular: [{ name: 'Goblin', classes: ANY }],
-      elite: [{ name: 'Goblin Veteran', classes: ANY }],
-      miniBoss: [{ name: 'Goblin Chieftain', classes: ['warrior'] }],
-      boss: [{ name: 'Goblin Lord', classes: ['mage'] }],
-    },
-  },
-  {
-    id: 'orc',
-    name: 'Orc',
-    statDeltas: { might: 2, intellect: -1, charisma: -2, perception: 1 },
-    forms: {
-      group: [{ name: 'Pack of Orcs', classes: ['warrior'] }],
-      regular: [{ name: 'Orc', classes: ANY }],
-      elite: [{ name: 'Orc Brute', classes: ['warrior'] }],
-      miniBoss: [{ name: 'Orc Squad Leader', classes: ['mage'] }],
-      boss: [{ name: 'Orc Demon', classes: ['warrior'] }],
-    },
-  },
-  {
-    id: 'beast',
-    name: 'Beast',
-    statDeltas: { perception: 2, intellect: -3, agility: 1 },
-    forms: {
-      group: [
-        { name: 'Pack of Wolves', classes: ['thief'] },
-        { name: 'Pack of Boars', classes: ['warrior'] },
-      ],
-      regular: [
-        { name: 'Large Wolf', classes: ['thief'] },
-        { name: 'Large Boar', classes: ['warrior'] },
-      ],
-      elite: [
-        { name: 'Dire Wolf', classes: ['warrior'] },
-        { name: 'Enraged Boar', classes: ['warrior'] },
-      ],
-      miniBoss: [
-        { name: 'Dire Bear', classes: ['warrior'] },
-        { name: 'Shadow Stag', classes: ['mage'] },
-      ],
-      boss: [{ name: 'Hulking Grizzly', classes: ['warrior'] }],
-    },
-  },
-]
-
 export const THOCKQUEST: Content = {
-  origins: ORIGINS,
+  builds: BUILDS,
   items: ITEMS,
   traits: TRAITS,
   regions: REGIONS,
-  monsterClasses: MONSTER_CLASSES,
   species: SPECIES,
+  combatClasses: COMBAT_CLASSES,
 }

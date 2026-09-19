@@ -6,6 +6,7 @@ import { activeGame, applyEffects, emptySave, type GameSave } from '../model/gam
 import { ROOT_STAGE_ID, STAGES } from '../stages'
 import { parseNarration } from '../../escapeMenu/narrationMarkup'
 import { SPELLS } from '../model/spells'
+import { withVectors } from '../testing/run'
 
 const DEPS: DirectorDeps = {
   stages: STAGES,
@@ -19,12 +20,22 @@ const NOW = 1_700_000_000_000
  * A run standing in a fight with a mind sharp enough that the table is
  * reliably in reach.
  *
- * Intellect is raised by EFFECT rather than by choosing the mage origin,
- * because the origin gives two points and the point of these is to see the
- * whole table: a hand that is empty nine rounds in ten is a slow way to
- * assert that spells are wired at all.
+ * Intellect is raised by EFFECT rather than by choosing a mind-shaped build,
+ * because a build gives a share of five points and the point of these is to
+ * see the whole table: a hand that is empty nine rounds in ten is a slow way
+ * to assert that spells are wired at all.
  */
-function inAFightWithMagic(seed: number, intellect = 12): GameSave {
+function inAFightWithMagic(
+  seed: number,
+  intellect = 12,
+  /**
+   * The build to pin. Defaults to the one that makes a fight SHORT (all five
+   * tier points in Might), which is what most of these want; a test that
+   * needs a long fight to observe something rare asks for one that cannot
+   * kill anything quickly.
+   */
+  build = 'hulking',
+): GameSave {
   let save = enterEntryScreen(emptySave(seed), DEPS, NOW)
   for (let step = 0; step < 300; step += 1) {
     const screen = currentScreen(save, DEPS)
@@ -40,6 +51,30 @@ function inAFightWithMagic(seed: number, intellect = 12): GameSave {
     // nothing but the monster's action.
     const answer = screen.choices.find((candidate) => candidate.id === 'defence:defend') ?? choice
     save = choose(save, answer.id, DEPS, NOW).save
+    // THE VECTORS ARE PINNED, not left to the deal. Creation hands out a
+    // tier of five split by whatever build was dealt, so a run that happened
+    // to be dealt Erudite has Intellect nobody asked for -- and this suite's
+    // whole premise is that Intellect is exactly what the test sets. Hulking
+    // weighs only Might and the Masurian touches no chance this reads, so
+    // what is left is the number below and nothing else.
+    const game = activeGame(save)
+    if (game) {
+      save = withVectors(save, { build, species: 'masurian', combatClass: 'sentinel' })
+      // AND WHAT WAS PICKED UP AT CREATION GOES TOO, when the test wants a
+      // character with no mind at all. Creation takes a trait and an item,
+      // and either may carry Intellect -- so "Intellect 0" is a claim about
+      // the EFFECTIVE stat and cannot be made by pinning the vectors alone.
+      if (intellect === 0) {
+        save = applyEffects(
+          save,
+          save.holdings
+            .filter((row) => row.gameId === game.id)
+            .map((row) => ({ kind: 'releaseModifier' as const, modifierKind: row.kind, modifierId: row.modifierId })),
+          DEPS.content,
+          NOW,
+        )
+      }
+    }
     // Raised the moment there is a character to raise, so the fight's very
     // first round is already dealt from the full table.
     if (activeGame(save) && (activeGame(save)?.baseStats.intellect ?? 0) < intellect) {
@@ -156,21 +191,30 @@ describe('the fire answers the monster, not the round', () => {
    * character.
    */
   it('burns for an action a charm took away, exactly as for one it swung', () => {
-    let save = inAFightWithMagic(4242, 20)
-    // Both stats up: the charm has to be able to fire, and Ignite has to be
-    // in reach to be laid on in the first place.
-    save = applyEffects(save, [{ kind: 'adjustBaseStat', stat: 'charisma', amount: 6 }], DEPS.content, NOW)
-
-    const ignite = cellIds(save).find((id) => id === 'spell:ignite')
-    expect(ignite).toBeDefined()
-    save = choose(save, ignite!, DEPS, NOW).save
-
+    // WATCHED ACROSS FIGHTS, not inside one, and that is a change forced by
+    // the vectors rather than a loosening. A runt is tier ZERO now -- the
+    // rank table says so -- which is a creature with nothing in any stat, and
+    // a mind sharp enough to have Ignite in reach kills one with the cast
+    // that lays it on. The coincidence being watched for (a charm taking an
+    // action, and the fire answering that action) therefore needs more fights
+    // than one to occur in, not more actions.
+    let save = inAFightWithMagic(4242, 20, 'resplendent')
     let burnedAfterCharm = false
-    for (let action = 0; action < 120 && !burnedAfterCharm; action += 1) {
+
+    for (let action = 0; action < 600 && !burnedAfterCharm; action += 1) {
       const screen = currentScreen(save, DEPS)
-      if (!screen || screen.stageId !== 'combat') break
+      if (!screen) break
+      // Charisma high enough that a charm is a real event, re-applied because
+      // a new run would start over. Intellect is already pinned by the walk.
+      save = applyEffects(save, [{ kind: 'adjustBaseStat', stat: 'charisma', amount: 6 }], DEPS.content, NOW)
+
+      // Ignite if it is on the table, otherwise whatever is not a spell: the
+      // stack has to be laid on before it can tick, and nothing else about
+      // the fight matters to this.
+      const ignite = screen.choices.find((choice) => choice.id === 'spell:ignite')
       const plain = screen.choices.find((choice) => !choice.id.startsWith('spell:')) ?? screen.choices[0]
-      save = choose(save, plain.id, DEPS, NOW).save
+      save = choose(save, (ignite ?? plain).id, DEPS, NOW).save
+
       const after = currentScreen(save, DEPS)
       if (!after) break
       // The fire's pill sits directly on top of the charm's, because the
@@ -182,6 +226,7 @@ describe('the fire answers the monster, not the round', () => {
     }
     expect(burnedAfterCharm).toBe(true)
   })
+
 })
 
 describe('the hand is dealt per action', () => {

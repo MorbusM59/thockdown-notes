@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { THOCKQUEST } from '../content'
 import { choose, enterEntryScreen, type DirectorDeps } from '../core/director'
-import { activeGame, applyEffects, carryLimit, emptySave, keepAllowance, type GameSave } from '../model/gameState'
+import { activeGame, applyEffects, carryLimit, emptySave, keepAllowance, playerTierOf, type GameSave } from '../model/gameState'
 import { FAME_PURCHASES, FAME_PURCHASE_CEILING } from '../model/famePurchases'
 import { famePointsAvailable } from '../model/gold'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
@@ -91,7 +91,14 @@ describe('what a fame point buys', () => {
       let save = runWithGold(1_000_000)
       for (let attempt = 0; attempt < 10; attempt += 1) save = buy(save, purchase.id)
       const game = activeGame(save)!
-      const reached = purchase.rule === 'carry' ? carryLimit(game, purchase.kind) : keepAllowance(game, purchase.kind)
+      // THE RULE'S OWN READING, whichever rule it is. Tier is the third and
+      // it has no kind -- a run has one stat budget, not one per kind -- so
+      // this is where a `kind` of null has to be answered rather than
+      // assumed. A `purchase.kind!` here would have read the tier row as an
+      // item row and quietly compared the carry limit against 30.
+      const reached = purchase.rule === 'tier' || purchase.kind === null
+        ? playerTierOf(game)
+        : purchase.rule === 'carry' ? carryLimit(game, purchase.kind) : keepAllowance(game, purchase.kind)
       expect(reached).toBe(FAME_PURCHASE_CEILING[purchase.rule])
     }
   })

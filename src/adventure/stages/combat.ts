@@ -27,25 +27,29 @@ import type { Effect } from '../model/effects'
 
 import { NO_SPELLS } from '../model/spellReach'
 import {
-  beginRound, combatStatus, DEFENCES, defencesOffered, resolveMonsterAttack,
+  beginRound, combatStatus, DEFENCES, defencesOffered, monsterActionsLeft, playerActionsLeft, resolveMonsterAttack,
   resolvePlayerAttack, rollActor, rollDodgeOffered, roundActionPosition, roundFromJson, roundToJson,
   UNTOUCHED_FIGHT, type Defence, type RoundState,
 } from '../model/combat'
-import { resolveProfile, type EffectiveProfile } from '../model/modifiers'
-import { holdingCounts } from '../model/gameState'
+import type { EffectiveProfile } from '../model/modifiers'
+import type { DerivedStats } from '../model/stats'
+import { resolveRunProfile, runClass } from '../model/gameState'
 import {
   castSpell, endOfRoundTicks, igniteTick, rollSpellReach, SPELLS, spellsOffered, strongestOffered,
   type Spell,
 } from '../model/spells'
 import { charmCheckChance, charmsOf, interceptMonsterAction, rollCharms } from '../model/charm'
 import { rewardFor } from '../model/rewards'
+import { damageFrom } from '../model/monsters'
 import { PREPARE_ICON, prepareLines, resolvePreparedAttack } from '../model/prepare'
 import {
   blowDetail, charmPill, charmStatusPill, killPill, monsterAttackPill, playerAttackPill, preparePill,
-  spellPill, statusPill, stunPill,
+  ripostePill, spellPill, statusPill, stunPill,
 } from './combatLog'
 import type { Monster } from '../model/monsters'
-import { monsterFor, offerFromJson, offerToJson } from './encounter'
+import { monsterFor, monsterName, offerFromJson, offerToJson } from './encounter'
+import { armMove, describeMove, moveById, type MoveSituation } from '../model/moves'
+import type { CombatClass } from '../model/vectors'
 import { COMBAT_STAGE_ID, ENCOUNTER_SELECT_STAGE_ID, LOOT_STAGE_ID, WELCOME_STAGE_ID } from './ids'
 
 
@@ -66,6 +70,20 @@ const DEFENCE_LABELS: Readonly<Record<Defence, { label: string; icon: string }>>
 const ATTACK_ICON = 'fa-solid fa-burst'
 
 const PREPARE_CHOICE = 'combat:prepare'
+
+/**
+ * What the attack cell says: the move's own name, and how loaded it is.
+ *
+ * LOADED says so on the cell, and says HOW loaded: a banked preparation is
+ * worth nothing the player cannot see, and with them stacking the count is
+ * the whole of what pressing this is worth. Written once because a class move
+ * renames the cell and the two facts have to compose -- "Haymaker, aimed x2"
+ * rather than either one of them winning.
+ */
+function attackLabel(name: string, prepared: number): string {
+  if (prepared > 1) return `${name}, aimed \u00d7${prepared}`
+  return prepared === 1 ? `${name}, aimed` : name
+}
 
 /** A stored dodge roll, back as itself. Written by `resting`, read here. */
 function readRoll(value: JsonObject | null): Roll | null {
@@ -88,6 +106,19 @@ interface CombatState extends JsonObject {
   dodgeOffered: boolean
   /** The roll that put Dodge on the table, so a dodged blow can show its working. */
   dodgeRoll: JsonObject | null
+  /**
+   * THE ARMED CLASS MOVES for the question now on screen (model/moves.ts).
+   *
+   * `playerMove` is what stands in for Attack on the player's own action;
+   * `defenceMoves` maps each defence the player may pick to the move that
+   * stands in for it. Both are rolled once, when the action is armed, and
+   * stored -- because `present` may not roll, and a move re-decided on every
+   * render would change while the player was reading it. The cell is named
+   * after the stored id and the resolve applies the stored id, so what the
+   * ring promised and what the blow did cannot disagree.
+   */
+  playerMove: string | null
+  defenceMoves: JsonObject
   /** This round's pills, newest first. Cut back to the status pill each round. */
   log: string[]
 }
@@ -101,6 +132,10 @@ function readState(state: JsonObject): CombatState {
     dodgeRoll: (typeof state.dodgeRoll === 'object' && state.dodgeRoll !== null && !Array.isArray(state.dodgeRoll)
       ? state.dodgeRoll
       : null) as JsonObject | null,
+    playerMove: typeof state.playerMove === 'string' ? state.playerMove : null,
+    defenceMoves: (typeof state.defenceMoves === 'object' && state.defenceMoves !== null && !Array.isArray(state.defenceMoves)
+      ? state.defenceMoves
+      : {}) as JsonObject,
     log: Array.isArray(state.log) ? state.log.filter((entry): entry is string => typeof entry === 'string') : [],
   }
 }
@@ -122,10 +157,45 @@ type Armed =
        * never claim a hand nobody was dealt.
        */
       round?: RoundState
+      /** The move standing in for Attack, where this action is the player's. */
+      playerMove?: string | null
+      /** The move standing in for each defence, where this action is the monster's. */
+      defenceMoves?: JsonObject
       rng: RngState
     }
   /** A charm fired: the action is SPENT, the round moved, and nobody was asked. */
   | { kind: 'charmed'; round: RoundState; entry: string; damage: number; rng: RngState }
+
+/**
+ * WHAT A CLASS MOVE'S TRIGGER READS, off the round and the profile.
+ *
+ * `actionsLeftThisRound` INCLUDES the action about to be taken, so 1 means
+ * this is the last one -- which is the reading `lastActionOfRound` wants and
+ * is the same convention `roundActionPosition` already uses for the items
+ * that promise something on a round's edges. Two different answers to "is
+ * this the last action" would be two rules.
+ */
+function moveSituationFor(
+  round: RoundState,
+  side: 'player' | 'monster',
+  derived: DerivedStats,
+  monster: Monster,
+): MoveSituation {
+  const spent = side === 'player' ? round.playerActionsSpent : round.monsterActionsSpent
+  const left = side === 'player'
+    ? playerActionsLeft(round, derived)
+    : monsterActionsLeft(round, monster)
+  const maxHitPoints = side === 'player' ? derived.maxHitPoints : monster.maxHitPoints
+  const current = side === 'player' ? round.playerHitPoints : maxHitPoints - round.monsterDamageTaken
+  return {
+    // The first action of the ENCOUNTER is the first action of its first
+    // round, which is the one thing the round number is here for.
+    actionsTakenThisEncounter: round.roundNumber <= 1 ? spent : spent + 1,
+    actionsSpentThisRound: spent,
+    actionsLeftThisRound: Math.max(1, left),
+    healthFraction: maxHitPoints > 0 ? Math.max(0, current) / maxHitPoints : 1,
+  }
+}
 
 /**
  * Rolls whose action is next, Dodge's availability when it turns out to be
@@ -137,6 +207,30 @@ type Armed =
  * fight. Asking the player to pick a defence and then telling them the blow
  * never came costs a press to learn that nothing happened.
  */
+/**
+ * The armed move for each defence on offer, as a plain id map.
+ *
+ * In `defencesOffered`'s own order so the rolls are taken in a fixed one --
+ * a map built by iterating an unordered set would make the seeded stream
+ * depend on iteration order, which is the kind of thing that is right on
+ * every machine until it is not.
+ */
+function armDefenceMoves(
+  combatClass: CombatClass | null,
+  dodgeOffered: boolean,
+  situation: MoveSituation,
+  rng: RngState,
+): { moves: JsonObject; rng: RngState } {
+  const moves: Record<string, string> = {}
+  let current = rng
+  for (const defence of defencesOffered(dodgeOffered)) {
+    const armed = armMove(combatClass, defence, situation, current)
+    current = armed.rng
+    if (armed.move) moves[defence] = armed.move.id
+  }
+  return { moves: moves as JsonObject, rng: current }
+}
+
 function armNextAction(
   round: RoundState,
   monster: Monster,
@@ -155,12 +249,26 @@ function armNextAction(
     // table is re-asked every time the player is about to act, which is what
     // `(intellect - level) / 12` reads as a chance OF.
     const dealt = rollSpellReach(context.profile?.stats.intellect ?? 0, picked.rng)
+    if (picked.actor !== 'player') {
+      return { kind: 'armed', actor: picked.actor, dodgeOffered: false, round: { ...round, spellReach: NO_SPELLS }, rng: picked.rng }
+    }
+    // THE PLAYER'S CLASS MOVE, armed with the hand. Rolled here and stored,
+    // for the same reason the hand is: a move that fires on a chance must be
+    // decided once, before the ring shows it, or the cell would change under
+    // the reader (model/moves.ts).
+    const armed = armMove(
+      context.game ? runClass(context.game, context.content) : null,
+      'attack',
+      moveSituationFor(round, 'player', derived, monster),
+      dealt.rng,
+    )
     return {
       kind: 'armed',
-      actor: picked.actor,
+      actor: 'player',
       dodgeOffered: false,
-      round: { ...round, spellReach: picked.actor === 'player' ? dealt.reach : NO_SPELLS },
-      rng: picked.actor === 'player' ? dealt.rng : picked.rng,
+      round: { ...round, spellReach: dealt.reach },
+      playerMove: armed.move?.id ?? null,
+      rng: armed.rng,
     }
   }
 
@@ -199,6 +307,16 @@ function armNextAction(
       successAdjust: context.game?.successAdjust,
       rng: charmed.rng,
     })
+    // ONE MOVE PER DEFENCE THE PLAYER MAY PICK, armed together. All four are
+    // asked rather than only the one they end up choosing, because the CELL
+    // has to say what it does before it is pressed -- a Duelist's Defend is
+    // "Riposte" on the ring, not a surprise after the fact.
+    const defences = armDefenceMoves(
+      context.game ? runClass(context.game, context.content) : null,
+      dodge.offered,
+      moveSituationFor(round, 'player', derived, monster),
+      dodge.rng,
+    )
     return {
       kind: 'armed',
       actor: 'monster',
@@ -208,7 +326,8 @@ function armNextAction(
       // Dodge cannot fail, so nothing is rolled when the player answers.
       dodgeRoll: dodge.roll,
       round: { ...round, spellReach: NO_SPELLS },
-      rng: dodge.rng,
+      defenceMoves: defences.moves,
+      rng: defences.rng,
     }
   }
 
@@ -265,6 +384,14 @@ function recordChanges(before: RoundState, after: RoundState): Effect[] {
  * The action COUNT it reads is the plain profile's, deliberately: an effect
  * that adds actions on the last action of a round would otherwise be deciding
  * when the last action is.
+ *
+ * THROUGH `resolveRunProfile`, which is the point of there being one resolver.
+ * This called `resolveProfile` directly with `game.baseStats` and the held
+ * modifiers, which is the same triple the resolver exists to stop anybody
+ * spelling out -- and it silently dropped the run's build and species, so a
+ * Davalian's "+75% damage on the first action of a round" was resolved by a
+ * profile that had never heard of Davalians. The one call site that most
+ * needed the vectors was the one that left them out.
  */
 function actingProfile(context: StageContext, round: RoundState, monster: Monster): EffectiveProfile | null {
   const base = context.profile
@@ -272,7 +399,7 @@ function actingProfile(context: StageContext, round: RoundState, monster: Monste
   if (!base || !game) return base
   const actionPosition = roundActionPosition(round, base.derived, monster)
   if (!actionPosition.first && !actionPosition.last) return base
-  return resolveProfile(game.baseStats, context.held, holdingCounts(context.held), {
+  return resolveRunProfile(game, context.content, context.held, {
     hitPoints: game.hitPoints,
     actionPosition,
   })
@@ -409,6 +536,15 @@ function stepFight(options: {
     dodgeOffered: boolean,
     next: RngState,
     dodgeRoll: Roll | null = null,
+    /**
+     * The moves armed WITH this action. Passed explicitly and defaulted to
+     * nothing rather than carried in the `...state` spread, because a stale
+     * one is worse than none: the spread would leave the last action's
+     * Haymaker armed on a screen that never rolled it, and the resolve would
+     * then apply a move the ring had already stopped showing.
+     */
+    playerMove: string | null = null,
+    defenceMoves: JsonObject = {},
   ): Transition => ({
     kind: 'stay',
     state: {
@@ -417,6 +553,8 @@ function stepFight(options: {
       actor,
       dodgeOffered,
       dodgeRoll: dodgeRoll ? { ...dodgeRoll } : null,
+      playerMove,
+      defenceMoves,
       log,
     },
     effects: options.effects,
@@ -522,7 +660,7 @@ function stepFight(options: {
     rng = armed.rng
     if (armed.kind === 'armed') {
       if (armed.round) round = armed.round
-      return resting(armed.actor, armed.dodgeOffered, rng, armed.dodgeRoll ?? null)
+      return resting(armed.actor, armed.dodgeOffered, rng, armed.dodgeRoll ?? null, armed.playerMove ?? null, armed.defenceMoves ?? {})
     }
 
     // A charm took the action away from it. Nothing was asked and nothing
@@ -585,6 +723,8 @@ export const combatStage: StageModule = {
       actor: null,
       dodgeOffered: false,
       dodgeRoll: null,
+      playerMove: null,
+      defenceMoves: {},
       log: [],
     }
     if (!monster) {
@@ -596,7 +736,7 @@ export const combatStage: StageModule = {
     // words, and the only entry that is not a pill of glyphs. It is dropped
     // with the rest of the round's log when the second round opens, by which
     // point the reader knows what they are fighting.
-    const opened = openedRound(round, monster, context, rng, [`**${offer?.name}.** *It has seen you.*`])
+    const opened = openedRound(round, monster, context, rng, [`**${offer ? monsterName(offer, context.content) : 'Something'}.** *It has seen you.*`])
     // Stepped, not merely armed: a charm can take the very first action of
     // the fight, and something has to resolve it.
     const stepped = stepFight({
@@ -655,15 +795,20 @@ export const combatStage: StageModule = {
       const spells = spellsOffered(round.spellReach, round)
       const stats = context.profile?.stats
       const rider = strongestOffered(round.spellReach)
+      // THE CLASS MOVE NAMES THE CELL. It was armed when the action came up
+      // and is read back here by id, so the ring shows the move that will
+      // actually be struck with rather than a generic Attack that turns into
+      // something else on press.
+      const move = moveById(context.game ? runClass(context.game, context.content) : null, state.playerMove)
       const aimed = round.prepared > 0 && stats
-        ? { title: 'Attack', lines: prepareLines(stats, rider, round.prepared) }
-        : undefined
+        ? { title: move?.name ?? 'Attack', lines: [...(move ? describeMove(move) : []), ...prepareLines(stats, rider, round.prepared)] }
+        : (move ? { title: move.name, lines: describeMove(move) } : undefined)
       return {
         // The offered set is part of the question, so it is part of the key:
         // the dial has to treat a round that dealt Meteor as a new screen --
         // and an attack that is loaded as a different question from one that
         // is not.
-        screenKey: `combat:mine:${round.playerActionsSpent}:${round.monsterActionsSpent}:${spells.map((spell) => spell.id).join(',')}:aimed${round.prepared}`,
+        screenKey: `combat:mine:${round.playerActionsSpent}:${round.monsterActionsSpent}:${spells.map((spell) => spell.id).join(',')}:aimed${round.prepared}:${state.playerMove ?? ''}`,
         choices: [
           ...spells.map((spell) => ({
             id: spellChoiceId(spell),
@@ -676,10 +821,8 @@ export const combatStage: StageModule = {
           // stacking the count is the whole of what pressing this is worth.
           {
             id: 'combat:attack',
-            label: round.prepared > 1
-              ? `Attack, aimed ×${round.prepared}`
-              : (round.prepared === 1 ? 'Attack, aimed' : 'Attack'),
-            icon: ATTACK_ICON,
+            label: attackLabel(move?.name ?? 'Attack', round.prepared),
+            icon: move?.icon ?? ATTACK_ICON,
             detail: aimed,
           },
           // LAST, and always there: preparations stack, so a second one is
@@ -705,11 +848,22 @@ export const combatStage: StageModule = {
       // something up. `DEFENCES` is already in that order and
       // `defencesOffered` preserves it; the test says so, because a
       // reordering there would silently change what a fast player presses.
-      choices: defencesOffered(state.dodgeOffered).map((defence) => ({
-        id: `defence:${defence}`,
-        label: DEFENCE_LABELS[defence].label,
-        icon: DEFENCE_LABELS[defence].icon,
-      })),
+      // A CLASS MOVE RENAMES THE CELL IT STANDS IN FOR, and keeps its
+      // position: the order is the default (Dodge first, then Defend, then
+      // the two that give something up), and a class that changed where its
+      // answer sat would cost a fast player the thing the ordering buys.
+      choices: defencesOffered(state.dodgeOffered).map((defence) => {
+        const move = moveById(
+          context.game ? runClass(context.game, context.content) : null,
+          typeof state.defenceMoves[defence] === 'string' ? (state.defenceMoves[defence] as string) : null,
+        )
+        return {
+          id: `defence:${defence}`,
+          label: move?.name ?? DEFENCE_LABELS[defence].label,
+          icon: move?.icon ?? DEFENCE_LABELS[defence].icon,
+          detail: move ? { title: move.name, lines: describeMove(move) } : undefined,
+        }
+      }),
     }
   },
 
@@ -790,6 +944,10 @@ export const combatStage: StageModule = {
     }
 
     if (choiceId === 'combat:attack' && acting) {
+      // THE MOVE THE CELL PROMISED, read back by the id armed with the
+      // action -- not re-armed here. Re-arming would roll a second time and
+      // could hand the player a different move from the one they pressed.
+      const move = moveById(context.game ? runClass(context.game, context.content) : null, state.playerMove)
       const attack = resolvePlayerAttack({
         state: round,
         monster,
@@ -797,18 +955,26 @@ export const combatStage: StageModule = {
         playerDerived: acting.derived,
         playerChances: acting.chances,
         successAdjust: context.game?.successAdjust,
+        move,
         rng,
       })
+      const dealt = attack.blows.reduce((sum, blow) => sum + blow.damage, 0)
       // Nothing on the PLAYER changes when they attack, so no record change.
       return stepFight({
         state,
         round: attack.state,
         monster,
         context,
-        entries: [playerAttackPill(monster, attack.blow)],
+        // ONE PILL PER BLOW, newest first -- a move that strikes three times
+        // is three things that happened, and a single pill summing them would
+        // hide which of them missed.
+        entries: [
+          ...(move?.stealsActions ? [stunPill(monster)] : []),
+          ...attack.blows.map((blow) => playerAttackPill(monster, blow, move?.name)).reverse(),
+        ],
         effects: [],
         rng: attack.rng,
-        struck: attack.blow.hit ? attack.blow.damage : 0,
+        struck: dealt,
       })
     }
 
@@ -852,7 +1018,24 @@ export const combatStage: StageModule = {
     }
 
     const defence = DEFENCES.find((candidate) => `defence:${candidate}` === choiceId)
-    if (defence && context.profile) {
+    if (defence && context.profile && acting) {
+      const playerClass = context.game ? runClass(context.game, context.content) : null
+      // The move the CELL promised, read back by the id armed with the action.
+      const defenceMove = moveById(
+        playerClass,
+        typeof state.defenceMoves[defence] === 'string' ? (state.defenceMoves[defence] as string) : null,
+      )
+      // THE MONSTER'S OWN MOVE is armed HERE rather than when the action was,
+      // and that is not an inconsistency: the player's move has to be armed
+      // early because a CELL names it, and the monster's names nothing. Its
+      // defence has always been hidden and rolled at the moment it swings
+      // (`monsterDefence`); its attack is the same rule.
+      const monsterArmed = armMove(
+        monster.combatClass,
+        'attack',
+        moveSituationFor(round, 'monster', acting.derived, monster),
+        rng,
+      )
       const answer = resolveMonsterAttack({
         state: round,
         monster,
@@ -860,16 +1043,29 @@ export const combatStage: StageModule = {
         defence,
         dodgeRoll: readRoll(state.dodgeRoll),
         successAdjust: context.game?.successAdjust,
-        rng,
+        defenceMove,
+        monsterMove: monsterArmed.move,
+        // What the player's own blow is worth, so a riposte is a share of a
+        // real one rather than of a number this file invented.
+        playerDamage: damageFrom(acting.derived.damageMultiplier),
+        rng: monsterArmed.rng,
       })
       return stepFight({
         state,
         round: answer.state,
         monster,
         context,
-        entries: [monsterAttackPill(monster, defence, answer.blow, answer.escaped, answer.pursuit)],
+        // NEWEST FIRST: the riposte answered the blow, so it goes above it.
+        entries: [
+          ...(answer.riposte && defenceMove ? [ripostePill(monster, answer.riposte, defenceMove.name)] : []),
+          ...(monsterArmed.move?.stealsActions ? [stunPill(monster)] : []),
+          ...(answer.blows.length > 0
+            ? answer.blows.map((blow) => monsterAttackPill(monster, defence, blow, answer.escaped, answer.pursuit)).reverse()
+            : [monsterAttackPill(monster, defence, answer.blow, answer.escaped, answer.pursuit)]),
+        ],
         effects: recordChanges(round, answer.state),
         rng: answer.rng,
+        struck: answer.riposte?.damage ?? 0,
         // The fire bites after it moves, and `stepFight` is the one place
         // that knows -- see `burn` there.
         monsterActed: true,

@@ -4,14 +4,15 @@ import { NO_ARMOR } from '../model/armor'
 
 import { catalogFor, rolledPool, THOCKQUEST } from '../content'
 import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from '../core/director'
-import { emptySave, type GameSave } from '../model/gameState'
+import { activeGame, emptySave, type GameSave } from '../model/gameState'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
 import { narrationText, parseNarration, splitNarration } from '../../escapeMenu/narrationMarkup'
-import { buildMonster } from '../model/monsters'
 import { addStats, createStatBlock } from '../model/stats'
 import { killPill, monsterAttackPill, playerAttackPill, statusPill } from './combatLog'
 import { lootStage } from './loot'
 import { beginRound, UNTOUCHED_FIGHT } from '../model/combat'
+import { testMonster } from '../testing/monster'
+import { withVectors } from '../testing/run'
 
 const DEPS: DirectorDeps = {
   stages: STAGES,
@@ -44,10 +45,7 @@ const MISS = {
 const WARRIOR = addStats(createStatBlock(0), { might: 2, agility: 1 })
 
 function monsterOf(type: 'regular' | 'boss') {
-  return buildMonster({
-    classId: 'warrior',
-    classBaseStats: WARRIOR,
-    type,
+  return testMonster({ stats: WARRIOR, type,
     level: 1,
     against: WARRIOR,
   })
@@ -132,6 +130,15 @@ describe('a combat pill', () => {
 /** The status pill is the only entry carrying the clash glyph. */
 const isRoundHead = (entry: string) => entry.includes('fa-explosion')
 
+/**
+ * Into a fight, with the run's vectors PINNED to the flat build.
+ *
+ * Creation deals a build now, and what a round looks like on the bar depends
+ * entirely on how long the round is: a Hulking character ends a fight before
+ * it turns over and a Resplendent one never lands a blow worth a pill.
+ * Journeyman is the shape that produces an ordinary round, which is what
+ * these are reading.
+ */
 function intoCombat(seed: number): GameSave {
   let save = enterEntryScreen(emptySave(seed), DEPS, NOW)
   for (let step = 0; step < 200; step += 1) {
@@ -141,6 +148,7 @@ function intoCombat(seed: number): GameSave {
     const choice = screen.choices.find((candidate) => !candidate.id.endsWith(':leave'))
     if (!choice) throw new Error('nothing to press')
     save = choose(save, choice.id, DEPS, NOW).save
+    if (activeGame(save)) save = withVectors(save, { build: 'journeyman', species: 'masurian', combatClass: 'sentinel' })
   }
   throw new Error('never reached a fight')
 }

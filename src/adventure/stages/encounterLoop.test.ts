@@ -6,6 +6,7 @@ import { catalogFor, rolledPool, THOCKQUEST } from '../content'
 import { choose, currentScreen, enterEntryScreen, enterInterlude, type DirectorDeps } from '../core/director'
 import { activeGame, applyEffects, emptySave, type GameSave } from '../model/gameState'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
+import { createdRun } from '../testing/run'
 import { LEVEL_ENCOUNTER_COUNT } from '../model/encounterOffers'
 import { resolveProfile } from '../model/modifiers'
 import { lootStage } from './loot'
@@ -314,13 +315,12 @@ describe('game settings', () => {
 describe('spending a stat point', () => {
   /** A run standing at the hub with `motes` earned, however it got there. */
   function atHubWith(motes: number): GameSave {
-    let save = choose(enterEntryScreen(emptySave(4242), DEPS, NOW), 'welcome:start', DEPS, NOW).save
-    save = choose(save, 'origin:warrior', DEPS, NOW).save
-    for (let step = 0; step < 3; step += 1) {
-      const screen = currentScreen(save, DEPS)
-      if (!screen) throw new Error('no screen')
-      save = choose(save, screen.choices[0].id, DEPS, NOW).save
-    }
+    // Creation, then the region: five vector-and-offer questions and the
+    // road (testing/run.ts walks the first five).
+    let save = createdRun({ seed: 4242 })
+    const road = currentScreen(save, DEPS)
+    if (!road) throw new Error('no screen')
+    save = choose(save, road.choices[0].id, DEPS, NOW).save
     if (currentScreen(save, DEPS)?.stageId !== 'encounterSelect') throw new Error('not at the hub')
     return motes > 0 ? applyEffects(save, [{ kind: 'grantExperience', units: motes }], DEPS.content, NOW) : save
   }
@@ -474,9 +474,13 @@ describe('renown', () => {
     // only one point is in hand.
     const oneReady = currentScreen(enterInterlude(withGold(10), 'fame', DEPS, NOW), DEPS)
     expect(oneReady?.stageId).toBe('fame')
+    // ASCENDANT is on this list and the two-point purchases are not: it costs
+    // one, and what it raises is the run's TIER -- the third rule the grid
+    // grew when the four vectors landed, and the first that is not per kind.
     expect(oneReady?.choices.map((choice) => choice.id)).toEqual([
       'fame:buy:strongBack',
       'fame:buy:experienced',
+      'fame:buy:ascendant',
       'fame:back',
     ])
 

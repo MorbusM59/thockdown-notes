@@ -30,8 +30,10 @@ import {
   BASE_KEEP_ALLOWANCE,
   carryLimit,
   keepAllowance,
+  playerTierOf,
   type GameRecord,
 } from '../model/gameState'
+import { BASE_PLAYER_TIER } from '../model/vectors'
 import {
   canBuyMore,
   FAME_PURCHASES,
@@ -46,22 +48,28 @@ const CHOICE_PREFIX = 'fame:buy:'
 
 /** The base a rule starts from, which is also what its ceiling is measured against. */
 function baseFor(purchase: FamePurchase): number {
+  if (purchase.rule === 'tier') return BASE_PLAYER_TIER
   return purchase.rule === 'carry' ? BASE_CARRY_LIMIT : BASE_KEEP_ALLOWANCE
 }
 
 /** What this run currently has of the rule a purchase raises. */
 function standingFor(game: GameRecord, purchase: FamePurchase): number {
+  if (purchase.rule === 'tier' || purchase.kind === null) return playerTierOf(game)
   return purchase.rule === 'carry' ? carryLimit(game, purchase.kind) : keepAllowance(game, purchase.kind)
 }
 
 /** The rule a purchase raises, named as the readout names it. */
 function ruleWords(purchase: FamePurchase): string {
+  if (purchase.rule === 'tier' || purchase.kind === null) return 'stat budget'
   const noun = purchase.kind === 'item' ? 'items' : 'traits'
   return purchase.rule === 'carry' ? `${noun} carried` : `${noun} kept between levels`
 }
 
 /** The same fact as prose, for the narration pill, where a readout's phrasing reads as broken English. */
 function gainWords(purchase: FamePurchase): string {
+  if (purchase.rule === 'tier' || purchase.kind === null) {
+    return `${purchase.step} more points, split the way you are built.`
+  }
   const noun = purchase.kind === 'item' ? 'item' : 'trait'
   return purchase.rule === 'carry'
     ? `One more ${noun} in your hands.`
@@ -76,7 +84,7 @@ function gainWords(purchase: FamePurchase): string {
 function purchaseLines(game: GameRecord, purchase: FamePurchase): string[] {
   const now = standingFor(game, purchase)
   return [
-    `${ruleWords(purchase)} ${now} → ${now + 1}`,
+    `${ruleWords(purchase)} ${now} → ${now + purchase.step}`,
     `Costs ${purchase.cost} fame point${purchase.cost === 1 ? '' : 's'}`,
     `Up to ${FAME_PURCHASE_CEILING[purchase.rule]}`,
   ]

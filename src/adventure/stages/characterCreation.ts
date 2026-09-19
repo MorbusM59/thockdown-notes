@@ -1,40 +1,110 @@
-// Character creation: what you are, what you are known for, and what you
-// would never leave home without.
+// Character creation: the three content vectors, and then the two things you
+// bring with you.
 //
-// Three questions, and the stage hands off TO ITSELF between them rather
-// than carrying a step counter through one long state. That is not a
-// stylistic choice: `enter` runs after the director has applied the
-// previous answer's effects, so the offers for the second question are
-// rolled against the stats the first one granted. Rolling them inside a
-// single `resolve` would use the profile as it was BEFORE the choice that
-// just changed it -- which is exactly the bug the design calls out when it
-// says a Luck bonus from the item just taken should widen the next offer.
+// FIVE QUESTIONS, in the order the four vectors read in a name:
+//
+//   1. build    -- what SHAPE you are          ("Dashing")
+//   2. species  -- what you ARE                ("Davalian")
+//   3. class    -- what you DO in a fight      ("Duelist")
+//   4. trait    -- what you are known for
+//   5. item     -- what you would never leave home without
+//
+// The fourth vector, TIER, is not asked: a run starts at five and fame buys
+// it upward inside the run (model/vectors.ts, model/famePurchases.ts). A
+// question whose only possible answer at this moment is "five" is not a
+// question.
+//
+// The stage hands off TO ITSELF between steps rather than carrying a counter
+// through one long state. That is not stylistic: `enter` runs after the
+// director has applied the previous answer's effects, so the offers for a
+// later question are rolled against the stats the earlier ones granted.
+// Rolling them inside a single `resolve` would use the profile as it was
+// BEFORE the choice that just changed it -- which is exactly the bug the
+// design calls out when it says a Luck bonus from the item just taken should
+// widen the next offer. With a build and a species now settled before the
+// trait screen, that is no longer a subtlety: the whole stat block arrives in
+// steps one and two, and step four's offer count is `2 + Luck/2` of it.
 
 import { nextSample, type RngState } from '../core/rng'
 import type { JsonObject } from '../core/json'
 import type { StageContext, StageModule } from '../core/stage'
 import { describeModifier, type Modifier } from '../model/modifiers'
-import { holdingCounts } from '../model/gameState'
+import { holdingCounts, playerTierOf } from '../model/gameState'
 import { isUnlocked } from '../model/permanentUnlocks'
+import { describeMove } from '../model/moves'
+import { describeBuild, statsFromTier } from '../model/vectors'
+import { STAT_LABELS, STAT_KEYS } from '../model/stats'
 import { CHARACTER_CREATION_STAGE_ID, REGION_SELECT_STAGE_ID } from './ids'
 
+/**
+ * HOW MANY OF EACH VECTOR THE RUN DEALS OUT.
+ *
+ * The content lists are deliberately longer than this -- two dozen builds, a
+ * dozen classes -- and the ring holds twelve cells in total
+ * (`MAX_STAGE_CHOICES`). So creation SAMPLES, exactly as the trait and item
+ * offers on the screens after it do, and exactly as the loot screen and the
+ * omen do: what you may be is dealt, and a run is partly the hand it was
+ * dealt. That is the game's standing idiom and the only one that lets the
+ * catalogue grow without the dial growing with it.
+ *
+ * SIX rather than the full twelve, because six is a choice a player can read
+ * in one pass and twelve is a list they scroll. Fixed rather than
+ * `2 + Luck/2`: at creation there is no Luck, and a rule that resolves to two
+ * on the one screen where it would apply is a rule pretending to be one.
+ */
+export const CREATION_OFFER_COUNT = 6
 
-type Step = 'origin' | 'trait' | 'item'
+const STEPS = ['build', 'species', 'class', 'trait', 'item'] as const
+
+type Step = (typeof STEPS)[number]
 
 function stepOf(value: unknown): Step {
-  return value === 'trait' || value === 'item' ? value : 'origin'
+  return STEPS.includes(value as Step) ? (value as Step) : 'build'
+}
+
+/** What follows what. The last vector screen hands off to the trait offer. */
+function nextStep(step: Step): Step | null {
+  const index = STEPS.indexOf(step)
+  return index >= 0 && index < STEPS.length - 1 ? STEPS[index + 1] : null
 }
 
 function offerPool(step: Step, context: StageContext): readonly Modifier[] {
   // Only what is not already held: a second copy of something is not a second
-  // thing (model/gameState.ts's `acquireModifier`). There is no longer an
-  // "unspecified" half to filter out as well -- every template rolls into
-  // something (model/modifierSlots.ts).
+  // thing (model/gameState.ts's `acquireModifier`).
   const pool = step === 'trait' ? context.traits : step === 'item' ? context.items : []
   return pool.filter((modifier) => !context.held.some((row) => row.id === modifier.id))
 }
 
+/**
+ * WHAT THIS RUN MAY BE, for one vector: a sample of the ones it is allowed.
+ *
+ * The unlock gate is applied BEFORE the sample, not after, so an earned
+ * option competes for a place on the ring like any other rather than
+ * displacing one -- and so a player who has earned nothing still sees six.
+ */
+function vectorPool(step: Step, context: StageContext): readonly { id: string; requiresUnlock?: string; playable?: boolean }[] {
+  const unlocked = context.save.profile.unlocked
+  const all = step === 'build' ? context.content.builds
+    : step === 'species' ? context.content.species
+    : step === 'class' ? context.content.combatClasses
+    : []
+  return all.filter((entry) => (
+    // A species must SAY it is playable; a build or a class is playable
+    // unless it says otherwise. Those defaults are the right way round: the
+    // peoples are a short named list, and the other two vectors are shared
+    // with monsters by default.
+    (step === 'species' ? entry.playable === true : entry.playable !== false)
+    && isUnlocked(unlocked, entry.requiresUnlock)
+  ))
+}
+
 function rollOffers(step: Step, context: StageContext, rng: RngState): { offerIds: string[]; rng: RngState } {
+  if (step === 'build' || step === 'species' || step === 'class') {
+    const pool = vectorPool(step, context)
+    if (pool.length === 0) return { offerIds: [], rng }
+    const sample = nextSample(rng, pool, CREATION_OFFER_COUNT)
+    return { offerIds: sample.value.map((entry) => entry.id), rng: sample.rng }
+  }
   const pool = offerPool(step, context)
   if (pool.length === 0) return { offerIds: [], rng }
   const count = context.profile?.derived.offerChoices ?? 2
@@ -42,10 +112,27 @@ function rollOffers(step: Step, context: StageContext, rng: RngState): { offerId
   return { offerIds: sample.value.map((modifier) => modifier.id), rng: sample.rng }
 }
 
+/** The ids this screen dealt, as written by `enter`. */
+function dealt(state: JsonObject): string[] {
+  return Array.isArray(state.offerIds) ? state.offerIds.filter((id): id is string => typeof id === 'string') : []
+}
+
 const NARRATION: Readonly<Record<Step, string>> = {
-  origin: 'What are you? A...',
+  build: 'What shape are you? Something...',
+  species: 'And what are you?',
+  class: 'What do you do when it comes to blows?',
   trait: 'What are you known for?',
   item: 'You would never leave home without...',
+}
+
+/**
+ * The run's tier, or the base one before a game exists. A build's detail
+ * shows what it is worth AT THIS TIER, not as a ratio: "2 parts Might" is
+ * the rule, "3 Might, 2 Agility" is the answer, and the answer is what a
+ * player is choosing between.
+ */
+function tierOf(context: StageContext): number {
+  return context.game ? playerTierOf(context.game) : 5
 }
 
 export const characterCreationStage: StageModule = {
@@ -64,43 +151,92 @@ export const characterCreationStage: StageModule = {
 
   present: (state, context) => {
     const step = stepOf(state.step)
-    if (step === 'origin') {
-      // An origin the player has not earned is not on the ring at all. The
-      // gate is HERE rather than in content, the same way every other
-      // reachability gate in this game lives in the stage that offers the
-      // choice: content says what a thing requires, the screen decides
-      // whether to offer it.
-      const unlocked = context.save.profile.unlocked
+    const unlocked = context.save.profile.unlocked
+    const tier = tierOf(context)
+
+    // A vector the player has not earned is not on the ring at all. The gate
+    // is HERE rather than in content, the same way every other reachability
+    // gate in this game lives in the stage that offers the choice: content
+    // says what a thing requires, the screen decides whether to offer it.
+    if (step === 'build') {
+      const offered = new Set(dealt(state))
       return {
-        screenKey: `origin:${unlocked.length}`,
-        choices: context.content.origins
-          .filter((origin) => isUnlocked(unlocked, origin.requiresUnlock))
-          .map((origin) => ({
-            id: `origin:${origin.id}`,
-            label: origin.name,
-            icon: origin.icon,
+        screenKey: `build:${unlocked.length}:${tier}`,
+        choices: context.content.builds
+          .filter((build) => offered.has(build.id))
+          .map((build) => {
+            const stats = statsFromTier(build, tier)
+            return {
+              id: `build:${build.id}`,
+              label: build.name,
+              icon: build.icon,
+              detail: {
+                title: build.name,
+                // WHAT IT COMES TO, then what the rule was. A player choosing
+                // a build is choosing a stat block, and the ratio is the
+                // reason rather than the answer -- so the numbers lead.
+                lines: [
+                  ...STAT_KEYS.filter((key) => stats[key] > 0).map((key) => `${STAT_LABELS[key]} ${stats[key]}`),
+                  `Tier ${tier}, split:`,
+                  ...describeBuild(build),
+                ],
+              },
+            }
+          }),
+      }
+    }
+
+    if (step === 'species') {
+      const counts = holdingCounts(context.held)
+      const offered = new Set(dealt(state))
+      return {
+        screenKey: `species:${unlocked.length}`,
+        choices: context.content.species
+          .filter((species) => offered.has(species.id))
+          .map((species) => ({
+            id: `species:${species.id}`,
+            label: species.name,
+            icon: species.icon,
             detail: {
-              title: origin.name,
-              // Described from the EFFECTS, through the same describer an
-              // item's detail uses -- which is the whole point of an origin
-              // carrying effects rather than a stat map. A Berserker's
-              // "+100% damage" and "worn armour counts for nothing" need no
-              // code here at all.
+              title: species.name,
+              // Through the same describer an item's detail uses, which is
+              // the whole point of a species carrying the modifier
+              // vocabulary: "+25% hit points" needs no code here at all.
               lines: describeModifier(
-                { id: origin.id, kind: 'trait', name: origin.name, icon: origin.icon, effects: origin.effects },
-                holdingCounts(context.held),
+                { id: species.id, kind: 'trait', name: species.name, icon: species.icon, effects: species.effects },
+                counts,
               ),
             },
           })),
       }
     }
 
-    const offerIds = Array.isArray(state.offerIds) ? state.offerIds : []
+    if (step === 'class') {
+      const offered = new Set(dealt(state))
+      return {
+        screenKey: `class:${unlocked.length}`,
+        choices: context.content.combatClasses
+          .filter((combatClass) => offered.has(combatClass.id))
+          .map((combatClass) => ({
+            id: `class:${combatClass.id}`,
+            label: combatClass.name,
+            icon: combatClass.icon,
+            detail: {
+              title: combatClass.name,
+              // Every move, named and spelled out. A class is the one vector
+              // whose worth cannot be read off a number, so the detail is the
+              // whole of what the player has to go on.
+              lines: combatClass.moves.flatMap((move) => [`${move.name}`, ...describeMove(move).map((line) => `  ${line}`)]),
+            },
+          })),
+      }
+    }
+
     const counts = holdingCounts(context.held)
     return {
       screenKey: step,
-      choices: offerIds.flatMap((id) => {
-        const modifier = typeof id === 'string' ? context.catalog.get(id) : undefined
+      choices: dealt(state).flatMap((id) => {
+        const modifier = context.catalog.get(id)
         if (!modifier) return []
         return [
           {
@@ -117,19 +253,26 @@ export const characterCreationStage: StageModule = {
   resolve: (state, choiceId, context, rng) => {
     const step = stepOf(state.step)
 
-    if (step === 'origin') {
-      const origin = context.content.origins.find((candidate) => `origin:${candidate.id}` === choiceId)
-      if (!origin) return { kind: 'stay', state, rng }
+    // THE THREE VECTOR STEPS ARE ONE BRANCH, not three. They differ in which
+    // list is searched and which word goes in the effect, and nothing else --
+    // written out three times, the fourth would be written out a fourth.
+    if (step === 'build' || step === 'species' || step === 'class') {
+      const pool: readonly { id: string }[] =
+        step === 'build' ? context.content.builds
+        : step === 'species' ? context.content.species
+        : context.content.combatClasses
+      const offered = new Set(dealt(state))
+      const chosen = pool.find((candidate) => `${step}:${candidate.id}` === choiceId && offered.has(candidate.id))
+      if (!chosen) return { kind: 'stay', state, rng }
+      const after = nextStep(step)
+      if (!after) return { kind: 'stay', state, rng }
       return {
         kind: 'replace',
         stageId: CHARACTER_CREATION_STAGE_ID,
-        input: { step: 'trait' },
-        // RECORDED, not written into the stats. The origin resolves with the
-        // modifiers from here on, so the six points in every stat are the
-        // player's own to spend whatever they picked.
+        input: { step: after },
         effects: [
-          { kind: 'setOrigin', originId: origin.id },
-          { kind: 'recordOutcome', outcome: 'origin-chosen', payload: { originId: origin.id } },
+          { kind: 'setVector', vector: step, id: chosen.id },
+          { kind: 'recordOutcome', outcome: `${step}-chosen`, payload: { id: chosen.id } },
         ],
         rng,
       }
@@ -163,10 +306,12 @@ export const characterCreationStage: StageModule = {
         // A run SETS OUT WHOLE. The record's hit points are derived once, at
         // creation, from a stat block that is still all zeroes -- so the
         // fifty they start at is the floor of `50 + 15 x Might` with no Might
-        // yet, and every point of it the origin and the opening item grant
-        // raises the MAXIMUM without raising the current. A warrior walked
-        // into their first fight at 50 of 80 until this. Clamped to the max
-        // on apply, so the number here only has to be large.
+        // yet, and every point of it the build, the species and the opening
+        // item grant raises the MAXIMUM without raising the current. A
+        // warrior walked into their first fight at 50 of 80 until this.
+        // Clamped to the max on apply, so the number here only has to be
+        // large. It matters MORE now than it did: a tier-5 build is a bigger
+        // opening stat block than an origin's two or three points ever was.
         { kind: 'adjustHitPoints', amount: Number.MAX_SAFE_INTEGER },
       ],
       rng,

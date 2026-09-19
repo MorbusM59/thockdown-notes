@@ -1,63 +1,112 @@
-// Reading an encounter offer out of stage state, and building the monster it
-// names.
+// Reading an encounter offer out of stage state, building the monster it
+// names, and naming it.
 //
-// A stage stores the OFFER -- four strings -- and never the monster. That is
-// the same discipline character creation follows with `offerIds`: state holds
-// what was chosen, and everything derivable is derived again from content.
-// `buildMonster` rolls nothing, so rebuilding it mid-fight cannot disagree
-// with the one the fight started against.
+// A stage stores the OFFER -- three ids, a rank and a head count -- and never
+// the monster. That is the same discipline character creation follows: state
+// holds what was chosen, and everything derivable is derived again from
+// content. `buildMonster` rolls nothing, so rebuilding it mid-fight cannot
+// disagree with the one the fight started against.
+//
+// THE NAME IS DERIVED TOO, and that is new. Names used to be authored per
+// species per rank ("Goblin Chieftain", "Pack of Orcs") and stored on the
+// offer, which meant a hand-written table that had to be kept in step with
+// what a creature actually was -- and a stored string that a content edit
+// could leave describing a different monster. A name is now READ OFF THE
+// FOUR VECTORS, in their own order: rank, build, species, class.
+//
+//     Champion Hulking Orc Bruiser
+//     Runt Sly Kobold Trickster x3
+//
+// which is exactly the sentence the vectors already are, and cannot go stale
+// because there is nothing to keep in step.
 
 import type { JsonObject } from '../core/json'
-import type { MonsterClassId } from '../content'
+import type { Content } from '../content'
 import type { StageContext } from '../core/stage'
 import type { EncounterOffer } from '../model/encounterOffers'
 import { totalArmor } from '../model/armor'
-import { buildMonster, MONSTER_TYPES, type Monster, type MonsterType } from '../model/monsters'
-import { addStats, createStatBlock, type StatBlock } from '../model/stats'
+import { describeMove } from '../model/moves'
+import { buildMonster, type Monster } from '../model/monsters'
+import { MONSTER_TYPES, MONSTER_TYPE_WORD, monsterTier, type MonsterType } from '../model/vectors'
 
 export function offerToJson(offer: EncounterOffer): JsonObject {
-  return { speciesId: offer.speciesId, name: offer.name, classId: offer.classId, type: offer.type }
+  return {
+    buildId: offer.buildId,
+    speciesId: offer.speciesId,
+    classId: offer.classId,
+    type: offer.type,
+    count: offer.count,
+  }
 }
 
 export function offerFromJson(value: JsonObject[''] | undefined): EncounterOffer | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
   const row = value as Record<string, unknown>
-  const { speciesId, name, classId, type } = row
-  if (typeof speciesId !== 'string' || typeof name !== 'string') return null
-  if (classId !== 'warrior' && classId !== 'thief' && classId !== 'mage') return null
+  const { buildId, speciesId, classId, type, count } = row
+  if (typeof buildId !== 'string' || typeof speciesId !== 'string' || typeof classId !== 'string') return null
   if (!MONSTER_TYPES.includes(type as MonsterType)) return null
-  return { speciesId, name, classId: classId as MonsterClassId, type: type as MonsterType }
+  return {
+    buildId,
+    speciesId,
+    classId,
+    type: type as MonsterType,
+    // A saved count that is missing or nonsense is ONE, not a crash and not a
+    // re-roll: a re-roll would make a reloaded fight a different fight.
+    count: typeof count === 'number' && Number.isFinite(count) ? Math.max(1, Math.floor(count)) : 1,
+  }
+}
+
+/** The three vectors an offer names, looked up. Any of them may be missing from content. */
+export function vectorsOf(offer: EncounterOffer, content: Content) {
+  return {
+    build: content.builds.find((candidate) => candidate.id === offer.buildId) ?? null,
+    species: content.species.find((candidate) => candidate.id === offer.speciesId) ?? null,
+    combatClass: content.combatClasses.find((candidate) => candidate.id === offer.classId) ?? null,
+  }
 }
 
 /**
- * The base stats a monster starts from: its CLASS's, plus its SPECIES'.
+ * WHAT IT IS CALLED: rank, build, species, class, and a count where there is
+ * more than one of them.
  *
- * Addition, so the order of the two does not matter -- and the type's own
- * shift is added by `buildMonster` on top, for the same reason.
+ * A missing vector is simply left out rather than replaced with a word, so a
+ * content edit that drops a species reads as a shorter name instead of as
+ * "Unknown". The rank word is empty for a regular, which is what makes an
+ * ordinary monster read as "Hulking Orc Bruiser" and not "Regular Hulking
+ * Orc Bruiser".
  */
-export function monsterBaseStats(offer: EncounterOffer, context: StageContext): StatBlock {
-  const cls = context.content.monsterClasses.find((candidate) => candidate.id === offer.classId)
-  const species = context.content.species.find((candidate) => candidate.id === offer.speciesId)
-  return addStats(addStats(createStatBlock(0), cls?.statDeltas ?? {}), species?.statDeltas ?? {})
+export function monsterName(offer: EncounterOffer, content: Content): string {
+  const { build, species, combatClass } = vectorsOf(offer, content)
+  const words = [MONSTER_TYPE_WORD[offer.type], build?.name, species?.name, combatClass?.name]
+    .filter((word): word is string => typeof word === 'string' && word.length > 0)
+  const name = words.join(' ')
+  return offer.count > 1 ? `${name} ×${offer.count}` : name
 }
 
 export function monsterFor(offer: EncounterOffer, context: StageContext): Monster | null {
   if (!context.game || !context.profile) return null
+  const { build, species, combatClass } = vectorsOf(offer, context.content)
   return buildMonster({
-    classId: offer.classId,
-    classBaseStats: monsterBaseStats(offer, context),
+    build,
+    species,
+    combatClass,
     type: offer.type,
+    tier: monsterTier(offer.type, context.game.level),
     level: context.game.level,
     // The RUN's preset, fixed when it started -- not the settings, which are
     // what the next run will be played under (model/gameState.ts).
     difficulty: context.game.difficulty,
     against: context.profile.stats,
+    count: offer.count,
   })
 }
 
+/**
+ * The SPECIES' icon, because the species is what the thing IS. The build is
+ * an adjective and the class is a job; neither is a picture of a creature.
+ */
 export function iconFor(offer: EncounterOffer, context: StageContext): string {
-  return context.content.monsterClasses.find((candidate) => candidate.id === offer.classId)?.icon
-    ?? 'fa-solid fa-paw'
+  return vectorsOf(offer, context.content).species?.icon ?? 'fa-solid fa-paw'
 }
 
 /**
@@ -65,19 +114,31 @@ export function iconFor(offer: EncounterOffer, context: StageContext): string {
  * once because the hub and the hunt both show it, and a creature that read
  * differently depending on which screen offered it would be two creatures.
  *
- * Armour is the one CONDITIONAL line, and deliberately unlike the player's
- * own armour readout (which is shown at zero, because a status line that
- * appears only when interesting teaches that armour is something that
- * happens to you). This is not a status line: it is a description of one
- * creature, and "0 armour" on every goblin is a line that says nothing on
- * nine offers in ten.
+ * The TIER leads, because it is the one number that says how much of a
+ * creature this is and it is the same number on every offer -- which is what
+ * makes two offers comparable at a glance in a way four derived quantities
+ * never were.
+ *
+ * Armour is CONDITIONAL, and deliberately unlike the player's own armour
+ * readout (which is shown at zero, because a status line that appears only
+ * when interesting teaches that armour is something that happens to you).
+ * This is not a status line: it is a description of one creature, and "0
+ * armour" on every goblin is a line that says nothing on nine offers in ten.
+ *
+ * The CLASS'S MOVES are last and are the reason a class is worth naming: a
+ * player who reads "Ambush: 250% of a blow, on the first action of a fight"
+ * knows what the first exchange is going to cost them, which is a decision
+ * they can act on rather than a surprise.
  */
-export function monsterDetailLines(monster: Monster): string[] {
+export function monsterDetailLines(monster: Monster, count = monster.count): string[] {
   const armor = totalArmor(monster.armor)
   return [
+    `Tier ${monster.tier}`,
+    ...(count > 1 ? [`${count} of them, fought as one`] : []),
     `${monster.maxHitPoints} hit points`,
     `${monster.maxActions} action${monster.maxActions === 1 ? '' : 's'} a round`,
     `${Math.round(monster.damage)} damage a blow`,
     ...(armor > 0 ? [`${armor} armour, and magic goes through it`] : []),
+    ...(monster.combatClass?.moves ?? []).flatMap((move) => [`${move.name}: ${describeMove(move)[0] ?? ''}`]),
   ]
 }

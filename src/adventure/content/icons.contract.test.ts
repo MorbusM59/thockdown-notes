@@ -39,8 +39,16 @@ function sourcesUnder(dir: string): string[] {
 
 function collectIcons(): { icon: string; where: string }[] {
   const found: { icon: string; where: string }[] = []
-  for (const cls of THOCKQUEST.monsterClasses) found.push({ icon: cls.icon, where: `class ${cls.id}` })
-  for (const origin of THOCKQUEST.origins) found.push({ icon: origin.icon, where: `origin ${origin.id}` })
+  // ALL FOUR VECTORS' worth, and every MOVE: a class's moves each name an
+  // icon of their own and they are what the ring actually shows in a fight,
+  // so a Pro-only glyph on a move would reach a player exactly as fast as one
+  // on the class itself.
+  for (const build of THOCKQUEST.builds) found.push({ icon: build.icon, where: `build ${build.id}` })
+  for (const species of THOCKQUEST.species) found.push({ icon: species.icon, where: `species ${species.id}` })
+  for (const cls of THOCKQUEST.combatClasses) {
+    found.push({ icon: cls.icon, where: `class ${cls.id}` })
+    for (const move of cls.moves) found.push({ icon: move.icon, where: `move ${move.id}` })
+  }
   for (const region of THOCKQUEST.regions) found.push({ icon: region.icon, where: `region ${region.id}` })
   for (const modifier of [...THOCKQUEST.items, ...THOCKQUEST.traits]) {
     found.push({ icon: modifier.icon, where: `modifier ${modifier.id}` })

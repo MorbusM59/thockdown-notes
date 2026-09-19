@@ -18,7 +18,6 @@ import { applyEffects, emptySave, type GameSave } from './gameState'
 import { beginRound, roundActionPosition, roundToJson, UNTOUCHED_FIGHT } from './combat'
 import { resolveProfile, type Modifier } from './modifiers'
 import type { StageContext } from '../core/stage'
-import { buildMonster } from './monsters'
 import { NO_ARMOR } from './armor'
 import { combatStage } from '../stages/combat'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
@@ -26,11 +25,21 @@ import { THOCKQUEST, type Content } from '../content'
 import { addStats, createStatBlock } from './stats'
 import type { JsonObject } from '../core/json'
 import type { ModifierEffect } from './modifiers'
+import { testMonster } from '../testing/monster'
 
 const NOW = 1_700_000_000_000
-const OFFER = { speciesId: 'goblin', name: 'Goblin', classId: 'warrior', type: 'regular' }
+// An offer in the four-vector shape: three ids, a rank and a head count. The
+// class is one with NO moves of its own, deliberately -- this test measures
+// whether a MODIFIER's conditional effect reaches the blow, and a class that
+// swapped the attack for something else would be measuring two things.
+const OFFER = { buildId: 'feral', speciesId: 'goblin', classId: 'plain', type: 'regular', count: 1 }
 
-const CONTENT: Content = { ...THOCKQUEST, items: [], traits: [] }
+const CONTENT: Content = {
+  ...THOCKQUEST,
+  items: [],
+  traits: [],
+  combatClasses: [{ id: 'plain', name: 'Plain', icon: 'fa-solid fa-circle', moves: [] }],
+}
 
 function holding(content: Content): GameSave {
   const started = applyEffects(emptySave(4242), [{ kind: 'startGame' }], content, NOW)
@@ -145,9 +154,7 @@ describe('an effect that fires on the round\'s first action', () => {
 })
 
 describe('where in the round an action falls', () => {
-  const monster = buildMonster({
-    classId: 'warrior',
-    classBaseStats: addStats(createStatBlock(0), { might: 2, agility: 1 }),
+  const monster = testMonster({ stats: addStats(createStatBlock(0), { might: 2, agility: 1 }),
     type: 'regular',
     level: 1,
     against: createStatBlock(0),

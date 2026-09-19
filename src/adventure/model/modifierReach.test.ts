@@ -18,11 +18,12 @@ import {
 import { resolveProfile, type Modifier } from './modifiers'
 import { resolveExchange, rollDodgeOffered } from './combat'
 import { resolveChanceWith } from './chance'
-import { buildMonster } from './monsters'
 import { HIT_CHANCE } from './stats'
 import { NO_ARMOR } from './armor'
 import { addStats, createStatBlock } from './stats'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
+import { testMonster } from '../testing/monster'
+import { createdRun } from '../testing/run'
 
 const DEPS: DirectorDeps = {
   stages: STAGES,
@@ -125,9 +126,7 @@ describe('a chance a modifier changes', () => {
 })
 
 describe('the thumb on the scale', () => {
-  const monster = () => buildMonster({
-    classId: 'warrior',
-    classBaseStats: addStats(createStatBlock(0), { might: 2, agility: 1 }),
+  const monster = () => testMonster({ stats: addStats(createStatBlock(0), { might: 2, agility: 1 }),
     type: 'regular',
     level: 1,
     against: BASE,
@@ -373,14 +372,7 @@ describe('the level boundary', () => {
 describe('what survives a level', () => {
   /** A run holding two items and two traits, in acquisition order. */
   function carrying(): GameSave {
-    const save = enterEntryScreen(emptySave(4242), DEPS, NOW)
-    let playing = choose(save, 'welcome:start', DEPS, NOW).save
-    playing = choose(playing, 'origin:warrior', DEPS, NOW).save
-    for (let step = 0; step < 2; step += 1) {
-      const screen = currentScreen(playing, DEPS)
-      if (!screen) throw new Error('no screen')
-      playing = choose(playing, screen.choices[0].id, DEPS, NOW).save
-    }
+    const playing = createdRun({ seed: 4242 })
     return applyEffects(playing, [
       { kind: 'acquireModifier', modifierKind: 'item', modifierId: 'whetstone' },
       { kind: 'acquireModifier', modifierKind: 'trait', modifierId: 'second-skin' },
@@ -494,14 +486,7 @@ describe('one of each thing, ever', () => {
 
 describe('how many survive', () => {
   function carryingThree(): GameSave {
-    const save = enterEntryScreen(emptySave(99), DEPS, NOW)
-    let playing = choose(save, 'welcome:start', DEPS, NOW).save
-    playing = choose(playing, 'origin:warrior', DEPS, NOW).save
-    for (let step = 0; step < 2; step += 1) {
-      const screen = currentScreen(playing, DEPS)
-      if (!screen) throw new Error('no screen')
-      playing = choose(playing, screen.choices[0].id, DEPS, NOW).save
-    }
+    const playing = createdRun({ seed: 99 })
     return applyEffects(playing, [
       { kind: 'acquireModifier', modifierKind: 'item', modifierId: 'whetstone' },
       { kind: 'acquireModifier', modifierKind: 'item', modifierId: 'iron-buckler' },

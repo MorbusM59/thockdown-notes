@@ -31,7 +31,7 @@ export const REWARD_REPEAT_PENALTY = 0.5
 
 /** Added to the starting chance by what was killed. */
 export const MONSTER_TYPE_REWARD_BONUS: Readonly<Record<MonsterType, number>> = {
-  group: 0,
+  runt: 0,
   regular: 0,
   elite: 0.5,
   miniBoss: 1,

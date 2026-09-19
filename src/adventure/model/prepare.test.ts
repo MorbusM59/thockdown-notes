@@ -2,17 +2,16 @@ import { describe, expect, it } from 'vitest'
 
 import { beginRound, monsterActionsLeft, UNTOUCHED_FIGHT, type RoundState } from './combat'
 import { PREPARE_PER_POINT, prepareLines, resolvePreparedAttack } from './prepare'
-import { buildMonster, type Monster } from './monsters'
+import { type Monster } from './monsters'
 import { createStatBlock, deriveStats, type StatBlock } from './stats'
 import { NO_ARMOR } from './armor'
 import { spellAt } from './spells'
+import { testMonster } from '../testing/monster'
 
 const block = (over: Partial<StatBlock> = {}): StatBlock => ({ ...createStatBlock(0), ...over })
 
 function monsterOf(): Monster {
-  return buildMonster({
-    classId: 'fighter',
-    classBaseStats: block({ might: 2, agility: 1 }),
+  return testMonster({ stats: block({ might: 2, agility: 1 }),
     type: 'regular',
     level: 1,
     against: block({ might: 2 }),
