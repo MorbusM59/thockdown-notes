@@ -82,7 +82,26 @@ export function monsterName(offer: EncounterOffer, content: Content): string {
   const words = [MONSTER_TYPE_WORD[offer.type], build?.name, species?.name, combatClass?.name]
     .filter((word): word is string => typeof word === 'string' && word.length > 0)
   const name = words.join(' ')
-  return offer.count > 1 ? `${name} ×${offer.count}` : name
+  return offer.count > 1 ? `${name} × ${offer.count}` : name
+}
+
+/**
+ * The same name with the tier in front of it: `[14] Grim Golem Berserker × 2`.
+ *
+ * A CELL LABEL, NOT THE NAME. What a player compares two offers by is how
+ * hard they are, and the tier is that number -- so it belongs where a choice
+ * is made and nowhere else. `monsterName` stays bare because its other use is
+ * PROSE ("Grim Golem is ahead"), where a bracketed figure is not a name.
+ * Where the monster could not be built there is no tier to state, so the
+ * label is simply the name, the same way its detail is simply absent.
+ */
+export function monsterCellLabel(
+  offer: EncounterOffer,
+  content: Content,
+  monster: Monster | null,
+): string {
+  const name = monsterName(offer, content)
+  return monster ? `[${monster.tier}] ${name}` : name
 }
 
 export function monsterFor(
