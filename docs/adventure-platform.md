@@ -1966,3 +1966,107 @@ placed at 5, 9 and 10 and the level advancing after ten.
     cannot fix that: the state is what the hold just changed, and React
     dispatches the click against the new closure. The press tells the click
     what kind of press it was, in a ref written on every `pointerdown`.
+
+92. **A DESCRIPTION EXPLAINS ITSELF ONLY WHEN ASKED** (`model/modifiers.ts`'s
+    `DescriptionStyle`). A fifth setting, `verboseDescriptions`, ON by
+    default: a player meeting "+20% Accuracy" for the first time cannot know
+    it is a share of the misses rather than twenty flat points, and that is
+    the difference between an item worth taking and an item worth taking
+    twice. Off once it has been read — it is then the same sentence at every
+    fight forever, and it is what stopped a narration line fitting a narrow
+    editor slot.
+
+    | verbose | concise |
+    | --- | --- |
+    | `+2 Armor that cannot decay` | `+2 Natural Armor` |
+    | `+2 Armor to every item after each fight` | `+2 Mending` |
+    | `5 Armor, worn down as it absorbs` | `5 Armor` |
+    | `-15% Dodge (of your dodges)` | `-15% Dodge` |
+    | `+40% Accuracy (of your misses) on your last action of a round` | `+40% Final Accuracy` |
+    | `+10% Damage per item (3 held: +30%)` | `+30% Damage` |
+    | a move's `flavour`, which is a sentence | dropped |
+
+    **THE STYLE IS ONE REQUIRED ARGUMENT, never a default.** A default means
+    a call site that forgot it silently stays verbose, and this is the rule
+    that has to hold at every describer or at none — rule 4, stated in a
+    type. The director resolves it ONCE onto `StageContext.describe`
+    (`descriptionStyleOf`), so no stage reads the setting and the seven call
+    sites cannot disagree; making the argument required is what found all
+    seven, since the compiler listed them.
+
+    **NO SAVE_VERSION BUMP, and that is a decision rather than an oversight**:
+    the sanitizer tests `verboseDescriptions !== false`, because absence has
+    a right answer (true) and `=== true` would read every save written before
+    this field as concise and flip a setting nobody touched. That is the
+    `isDoubleSizeMode` failure in the other direction.
+
+    **FLAVOUR IS NOT A DESCRIPTION** and is the one line the format rules
+    below do not govern: it is a sentence, capitalised, with a full stop, and
+    it says nothing about what a move does — which is exactly what concise
+    exists to be rid of, so it appears in verbose only.
+
+93. **HOW A DESCRIPTION IS WRITTEN IS A PROPERTY, NOT A HABIT**
+    (`model/descriptionFormat.contract.test.ts`). Four rules, checked against
+    every effect of every item, trait, species and build in the catalogue and
+    every move of every class, in BOTH styles, so a content author gets them
+    enforced without having read them:
+
+    1. Stat and derived-value names are capitalised (Agility, Damage, Armor,
+       Natural Armor, Hit points) — read from the label tables, so a renamed
+       stat cannot fall out of the allowed set.
+    2. Nothing else is capitalised at the front. A description is a phrase,
+       and a row of capitalised phrases reads as sentences that have all lost
+       their full stops.
+    3. No trailing period, for the same reason.
+    4. No `--`.
+
+    The sweep also asserts that concise is strictly SHORTER in total and
+    never longer, and that no player-facing description says "tier" at all.
+    A/B'd: restoring one old string produces six named complaints.
+
+94. **TIER AND BUILD ARE DIFFERENT KINDS OF FACT, and no longer share a pill.**
+    A BUILD is how a character grows — a set of proportions, fixed at
+    creation — and a TIER is how far they have come. They were one readout
+    ("Tier -- Hulking Mertok Duelist"), which made the tier read as a
+    property of the build.
+
+    The tier pill is a bare figure now, labelled with the noun alone because
+    the row composes `"<label>: <value>"` itself (a label carrying the figure
+    too read as "Tier: 5: 5" — caught live, not by a test). The three content
+    vectors get **NAMEPLATES**: a readout with NO VALUE, which
+    `EscapeMenuReadout.value` now expresses as optional, drawn square on its
+    icon alone with everything it has to say in the tooltip. That is what a
+    name IS on a row of quantities. The build's tooltip carries its weights
+    as REPEATED INITIALS — `Sly (AAP)` — which is the only place in a run
+    they can be read; it works because the six stats have six distinct
+    initials, and `vectors.test.ts` holds that, since a seventh starting with
+    an M would print two builds the same.
+
+    **Character creation shows a build's WEIGHTS and nothing else.** It
+    showed what a build came to at the CURRENT tier, which made the ratio
+    look like a consequence of the tier rather than the thing being chosen.
+    `tierOf` and the tier in that screen's `screenKey` are deleted with it —
+    the screen no longer varies with the tier, so the key must not claim to.
+
+95. **ONE SEPARATOR BETWEEN TWO DESCRIPTIONS**: `"  |  "`, from a single
+    constant used by the rendered row and by the accessible name alike
+    (`EscapeMenuStatus.tsx`'s `DETAIL_SEPARATOR`), where a centre dot and a
+    `", "` had been saying it differently. The spaces are IN the string
+    rather than in a margin, because the accessible name is plain text and
+    has no margins — a rule about what separates two descriptions has to hold
+    in both renderings or it is two rules. `white-space: pre` on the span is
+    what stops HTML collapsing them.
+
+96. **"--" IS GONE FROM EVERYTHING A READER SEES**, and
+    `shared/userFacingText.contract.test.ts` keeps it that way. It asks
+    whether a string is reader-facing from its POSITION — anything in
+    `src/adventure/`, anything in `electron/help/`, or a string landing in a
+    `data-tooltip`/`aria-label`/`title`/`placeholder` — rather than from a
+    list of files somebody has to keep joining, the same argument as
+    `focusOwnership.ts`'s predicate replacing its allowlist. Parsed with the
+    TypeScript compiler, because the distinction it rests on (a string
+    literal versus a comment containing the same characters) is the one a
+    regex cannot draw. **The source's comments keep `" -- "`**: the rule is
+    about the product. Markdown rules of three or more hyphens are exempt and
+    nothing else is. It found three tooltips a hand-written scan had missed
+    on its first run.

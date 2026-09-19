@@ -974,3 +974,53 @@ at the floor but can never push it past the ceiling.
   growth factor is gone: the thumb is the flat, immediate axis it existed to
   provide. See entries 90 and 91 of [adventure-platform.md](adventure-platform.md)
   for how it is built.
+- **VERBOSE AND CONCISE DESCRIPTIONS, AND THE FORMAT BOTH OBEY.** As
+  authored:
+
+  > let's add another toggle button to the game settings that toggles verbose
+  > stat descriptions. [...] Let's have a toggle for verbose tooltips that is
+  > on by default. if we have it off, tooltips must be extremely concise and
+  > only describe *what* changes but not explain anything beyond that.
+  >
+  > Specifically: Verbose > Concise
+  >
+  > * Armor that cannot decay. > Natural Armor
+  > * Armor to every item after each fight > Mending
+  > * Armor that decays > Armor
+  > * (of your dodges/etc.) > [removed]
+  > * +x% [stat] on your first/last action of a round > +x% Initial/Final [stat]
+  >
+  > Also, these formatting rules need to be obeyed for verbose and for
+  > concise stat descriptions:
+  >
+  > * all stats are capitalized (Agility Damage Armor Natural Armor)
+  > * no sentence initial capitalization beyond the rule above
+  > * no period after a description
+  > * "  |  " so a "double space vertical line double space" between two descriptions
+  > * tier for a player should not appear in any description anywhere but in
+  >   the stat bar, where you have it currently. It should always just read
+  >   "Tier: #" without the adjective or anything. The "build" is how you
+  >   develop genetically in a sense, the tier is how far you have advanced.
+  >   I'd like to keep these separate.
+  > * We should have another pill without a value, just a little square pill,
+  >   between the tier pill and the stat pills that bears the icon of the
+  >   chosen "build" and that shows its name and weights indicated by
+  >   repeated stat initial letters in the tooltip: Brutish (MMMA)
+  > * when choosing the "build" in "origins", let's only show the Stat
+  >   weights. Let's leave the actual stat points gained and tier out of it.
+  >   We select a blueprint for growth. So "Charisma x 3| Intellect x 1" is
+  >   all the information needed here.
+  >
+  > Finally, a global formatting rule: let's not use "--" anywhere. It's
+  > either a hyphen or a em dash depending on case. We should have a regex
+  > and replace all of "--" with em dashes. As for center dots, those need to
+  > be replaced with "|" consistently.
+
+  Two questions were put back and answered. The dash sweep is **user-facing
+  text only** — the source's comments keep `" -- "` as a house style, and the
+  rule is enforced on the product by a contract test. And the species and the
+  class, which lost their home when the tier pill was cut back, get
+  **nameplates of their own** beside the build's: they are the same kind of
+  thing as a build, not the same kind as a tier.
+
+  Built as entries 92 to 96 of [adventure-platform.md](adventure-platform.md).
