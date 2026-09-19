@@ -18,7 +18,7 @@
 //   * The noun is the MIDDLE word of a monster's name, so it has to read
 //     between an adjective and a class: "Dashing Orc Bruiser".
 //
-// PLAYABLE species are the six peoples; the rest are what you fight. That is
+// PLAYABLE species are the peoples; the rest are what you fight. That is
 // the only split, and it is a flag rather than two lists because a rule
 // about which pool a thing is drawn from belongs to the screen doing the
 // drawing, not to the thing.
@@ -26,7 +26,7 @@
 import type { Species } from '../model/vectors'
 
 export const SPECIES: readonly Species[] = [
-  // --- The peoples -------------------------------------------------------
+  // --- The peoples, which character creation deals six of ------------------
   {
     id: 'masurian',
     name: 'Masurian',
