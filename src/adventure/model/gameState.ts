@@ -29,7 +29,8 @@ import { resolveProfile, type EffectiveProfile, type HoldingCounts, type Modifie
 import { catalogFor, type Content } from '../content'
 import { clampBaseStats, createStatBlock, deriveStats, type StatBlock } from './stats'
 import type { Effect } from './effects'
-import { FIRST_MILESTONE_THRESHOLD, takeMilestone } from './milestones'
+import { FIRST_MILESTONE_THRESHOLD, milestonesAvailable, takeMilestone } from './milestones'
+import { guardianLuckiness } from './guardian'
 import { canAllocateStatPoint } from './motes'
 import { canAllocateFamePoint, famePointsAvailable, fameReached } from './gold'
 import { canBuyMore, famePurchaseById, famePurchaseBonus } from './famePurchases'
@@ -377,13 +378,19 @@ export function emptySave(rng: RngState): GameSave {
  * ask. Reading instead leaves the record honest and costs one function.
  */
 export function runTuning(
-  game: Pick<GameRecord, 'progression' | 'successAdjust'> | null,
+  game: Pick<GameRecord, 'progression' | 'successAdjust' | 'level'> | null,
   settings: GameSettings,
 ): { progression: number; successAdjust: number } {
-  if (!settings.trueMode || !game) {
-    return { progression: clampProgression(settings.progression), successAdjust: settings.successAdjust }
-  }
-  return { progression: clampProgression(game.progression), successAdjust: game.successAdjust }
+  const chosen = !settings.trueMode || !game
+    ? { progression: clampProgression(settings.progression), successAdjust: settings.successAdjust }
+    : { progression: clampProgression(game.progression), successAdjust: game.successAdjust }
+  // THE GUARDIAN ANGEL IS A FLOOR under both modes and under either answer
+  // above (model/guardian.ts). It is not a setting, so true mode does not
+  // freeze it and free mode does not override it; it is the game declining to
+  // be brutal on the first levels, and it lifts off by itself by the fourth.
+  // A reader who has turned their own Luckiness up past it never meets it.
+  if (!game) return chosen
+  return { ...chosen, successAdjust: Math.max(chosen.successAdjust, guardianLuckiness(game.level)) }
 }
 
 /** The same answer for whatever run is active, which is what every caller wants. */
@@ -633,7 +640,29 @@ export function holdingCounts(held: readonly Modifier[]): HoldingCounts {
  * of step with the list it was supposed to summarise.
  */
 export function playerTierOf(game: GameRecord): number {
-  return BASE_PLAYER_TIER + famePurchaseBonus(game.famePurchases, 'tier', null, BASE_PLAYER_TIER)
+  return BASE_PLAYER_TIER
+    + statPointsEarned(game)
+    + famePurchaseBonus(game.famePurchases, 'tier', null, BASE_PLAYER_TIER)
+}
+
+/**
+ * HOW MANY STAT POINTS THIS RUN HAS BEEN AWARDED, spent or not.
+ *
+ * Tier rises with this rather than with `statPointsSpent`, so an advancement
+ * is worth two points and neither depends on the other: the tier point is
+ * apportioned by the build the moment it is earned, and the stat point sits
+ * waiting until the player decides where to put it. Keying the tier off the
+ * SPEND would have made a player who is saving a point weaker than one who
+ * spent theirs badly, which is a choice nobody should be punished for making
+ * carefully.
+ *
+ * Both halves are derived (model/milestones.ts): what has been taken is on
+ * the record, and what is waiting is read off the ladder, because two
+ * representations of "a point is waiting" is one too many.
+ */
+export function statPointsEarned(game: GameRecord): number {
+  return game.statPointsSpent
+    + milestonesAvailable(game.experienceEarned, game.experienceToNextStatPoint, game.statPointsSpent)
 }
 
 /**

@@ -217,7 +217,7 @@ describe('the thumb on the scale', () => {
 describe('a conditional effect', () => {
   it('fires only inside its own health band', () => {
     const cornered = modifier('cornered', [
-      { kind: 'derivedPercentWhileHealth', derived: 'damageMultiplier', percent: 1, band: 'injured' },
+      { kind: 'derivedPercentWhileHealth', derived: 'damageMultiplier', percent: 1, band: 'injured', subject: 'self' },
     ])
     const at = (hitPoints: number) => resolveProfile(BASE, [cornered], noHoldings, { hitPoints })
     const ceiling = resolveProfile(BASE, [], noHoldings).derived.maxHitPoints
@@ -243,10 +243,10 @@ describe('a conditional effect', () => {
     // of the two and never in neither. Asserted over the range rather than
     // trusted, because the two are written separately.
     const hurt = modifier('hurt', [
-      { kind: 'derivedPercentWhileHealth', derived: 'damageMultiplier', percent: 1, band: 'injured' },
+      { kind: 'derivedPercentWhileHealth', derived: 'damageMultiplier', percent: 1, band: 'injured', subject: 'self' },
     ])
     const hale = modifier('hale', [
-      { kind: 'derivedPercentWhileHealth', derived: 'damageMultiplier', percent: 1, band: 'healthy' },
+      { kind: 'derivedPercentWhileHealth', derived: 'damageMultiplier', percent: 1, band: 'healthy', subject: 'self' },
     ])
     const ceiling = resolveProfile(BASE, [], noHoldings).derived.maxHitPoints
     const base = resolveProfile(BASE, [], noHoldings).derived.damageMultiplier

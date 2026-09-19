@@ -232,6 +232,7 @@ function rollVerbose(
           derived: key.value,
           percent: roundStep(size.value / 10, 0.1),
           band: which.value === 0 ? 'maimed' : 'injured',
+          subject: 'self',
         },
         rng: which.rng,
       }
@@ -249,6 +250,7 @@ function rollVerbose(
           derived: key.value,
           percent: roundStep(size.value / 10, 0.1),
           band: 'healthy',
+          subject: 'self',
         },
         rng: size.rng,
       }

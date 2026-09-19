@@ -45,6 +45,21 @@ export const COMBAT_CLASSES: readonly CombatClass[] = [
     icon: 'fa-solid fa-user-ninja',
     moves: [
       {
+        // FIRST DECLARED, so it takes the cell whenever it qualifies: an
+        // assassin presented with a dying target is not rolling for a
+        // backstab. Declaration order is the author's priority
+        // (model/moves.ts), and it is the only ordering that needs no second
+        // field to keep in step.
+        id: 'assassin:execute',
+        name: 'Execute',
+        icon: 'fa-solid fa-skull-crossbones',
+        replaces: 'attack',
+        when: { kind: 'targetHealth', band: 'maimed' },
+        damageShare: 3,
+        hitShare: 0.5,
+        flavour: 'The part that was always going to happen.',
+      },
+      {
         id: 'assassin:ambush',
         name: 'Ambush',
         icon: 'fa-solid fa-user-secret',
@@ -399,6 +414,20 @@ export const COMBAT_CLASSES: readonly CombatClass[] = [
     name: 'Templar',
     icon: 'fa-solid fa-place-of-worship',
     moves: [
+      {
+        // AGAINST A FOE STILL WHOLE, which is the mirror of the Assassin's
+        // finisher and the one shape `healthy` exists to make playable: a
+        // build that opens enormous and has to finish what it started.
+        id: 'templar:condemn',
+        name: 'Condemn',
+        icon: 'fa-solid fa-scale-balanced',
+        replaces: 'attack',
+        when: { kind: 'targetHealth', band: 'healthy' },
+        damageShare: 1.9,
+        critShare: 0.4,
+        ignoresArmor: true,
+        flavour: 'Judgement falls heaviest on the unbowed.',
+      },
       {
         id: 'templar:absolve',
         name: 'Absolve',

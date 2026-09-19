@@ -79,7 +79,7 @@
 //   5. normalize                          <- counts whole, chances 0..1
 
 import { NO_CHANCE_ADJUSTMENT, resolveChanceWith, type ChanceAdjustment } from './chance'
-import { HEALTH_BAND_BOUNDS, inHealthBand, type HealthBand } from './health'
+import { HEALTH_BAND_BOUNDS, bandWithArticle, inHealthBand, type HealthBand } from './health'
 import {
   addStats,
   clampBaseStats,
@@ -157,7 +157,20 @@ export type ModifierEffect =
    * at each place the value is used -- is the same rule written once per
    * consumer, which is this codebase's characteristic failure.
    */
-  | { kind: 'derivedPercentWhileHealth'; derived: DerivedKey; percent: number; band: HealthBand }
+  | {
+    kind: 'derivedPercentWhileHealth'
+    derived: DerivedKey
+    percent: number
+    band: HealthBand
+    /**
+     * WHOSE health decides it. `self` is the character carrying the effect;
+     * `target` is whoever they are about to hit, which only a blow knows --
+     * so a target-conditioned effect is simply not in force anywhere there is
+     * no opponent, exactly as a self-conditioned one is not in force with no
+     * hit points given. Same door, same absence, one rule.
+     */
+    subject: 'self' | 'target'
+  }
   /**
    * A derived value boosted only on the FIRST or the LAST action of a round.
    *
@@ -241,6 +254,17 @@ export interface Situation {
    * is worth must not quote them their opening-blow number.
    */
   actionPosition?: ActionPosition
+  /**
+   * How hurt the OPPONENT is, 0..1. Absent means there is nobody to hit, and
+   * every `subject: 'target'` effect is out of force -- which is the honest
+   * answer for the status bar, for character creation and for every offer
+   * screen, none of which have an opponent in hand.
+   *
+   * A FRACTION rather than hit points, unlike the self side: this character's
+   * maximum is derived right here from their own stats, and the opponent's is
+   * the opponent's business.
+   */
+  opponentHealthFraction?: number
 }
 
 /**
@@ -316,7 +340,13 @@ export function resolveProfile(
           bank(effect.derived, effect.percentPer * holdings[effect.holding === 'item' ? 'items' : 'traits'])
           break
         case 'derivedPercentWhileHealth':
-          if (inHealthBand(hurtFraction, effect.band)) bank(effect.derived, effect.percent)
+          {
+            // A target-conditioned effect with no opponent in the situation
+            // is out of force, the same way a self-conditioned one is with no
+            // hit points -- `undefined` is "not applicable", never "full".
+            const fraction = effect.subject === 'target' ? situation.opponentHealthFraction : hurtFraction
+            if (fraction !== undefined && inHealthBand(fraction, effect.band)) bank(effect.derived, effect.percent)
+          }
           break
         case 'derivedPercentOnAction':
           if (actionPosition[effect.position]) bank(effect.derived, effect.percent)
@@ -458,6 +488,14 @@ export function describeEffect(effect: ModifierEffect, style: DescriptionStyle):
       // The band's WORD is the concise form: it is a term the game uses
       // everywhere, so it needs no gloss once it has been met. Verbose says
       // where the line actually falls, which is the only place to find out.
+      if (effect.subject === 'target') {
+        // "vs maimed" -- the preposition is the whole difference, and it is
+        // the same word in both styles because there is no shorter way to say
+        // "theirs, not mine" and no reader who could guess it.
+        return concise
+          ? `${head} vs ${effect.band}`
+          : `${head} against ${bandWithArticle(effect.band)} foe (${HEALTH_BAND_BOUNDS[effect.band]})`
+      }
       return concise ? `${head} ${effect.band}` : `${head} while ${effect.band} (${HEALTH_BAND_BOUNDS[effect.band]})`
     }
     case 'derivedPercentOnAction': {

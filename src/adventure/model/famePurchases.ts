@@ -34,7 +34,7 @@
 // ceiling can each move without the other lying.
 
 import type { ModifierKind } from './modifiers'
-import { MAX_PLAYER_TIER, TIER_PER_FAME_POINT } from './vectors'
+import { MAX_FAME_TIER, TIER_PER_FAME_POINT } from './vectors'
 
 export type FamePurchaseId = 'strongBack' | 'largeCoffers' | 'experienced' | 'stubborn' | 'ascendant'
 
@@ -96,7 +96,7 @@ export function famePurchaseById(id: string): FamePurchase | undefined {
 export const FAME_PURCHASE_CEILING: Record<FamePurchaseRule, number> = {
   carry: 6,
   keep: 3,
-  tier: MAX_PLAYER_TIER,
+  tier: MAX_FAME_TIER,
 }
 
 /** How many times this run has bought a given purchase. */

@@ -187,6 +187,13 @@
 .escape-menu-readout.is-nameplate {
   gap: 0;
   padding: 0 var(--spacing-small);
+  /* AS TALL AS THE ROW, which its siblings define. A `.tag-pill` is sized by
+     its content, and this one's content is a single icon whose line box is
+     shorter than a figure's -- so it drew short beside the readouts it sits
+     among. `align-self: stretch` against the flex line is the DERIVATION: no
+     pixel value to drift when --ui-font-scale moves, and no second opinion
+     about how tall a readout is. */
+  align-self: stretch;
 }
 
 /* The number is the part that changes, so it is the part that reads first;

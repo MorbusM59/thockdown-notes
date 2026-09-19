@@ -63,3 +63,11 @@ export const HEALTH_BAND_BOUNDS: Readonly<Record<HealthBand, string>> = {
   injured: 'below two thirds of full Health',
   healthy: 'at two thirds of full Health or above',
 }
+
+/**
+ * "a maimed", "an injured", "a healthy" -- the article the band's own word
+ * takes, so a description does not have to know which of the three it has.
+ */
+export function bandWithArticle(band: HealthBand): string {
+  return `${/^[aeiou]/.test(band) ? 'an' : 'a'} ${band}`
+}

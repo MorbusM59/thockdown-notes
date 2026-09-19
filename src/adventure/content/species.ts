@@ -85,8 +85,8 @@ export const SPECIES: readonly Species[] = [
     effects: [
       // Cornered is where they want to be, and they never quite manage to be
       // safe -- the hit points are low so the condition actually fires.
-      { kind: 'derivedPercentWhileHealth', derived: 'damageMultiplier', percent: 1, band: 'maimed' },
-      { kind: 'derivedPercentWhileHealth', derived: 'critChance', percent: 0.3, band: 'maimed' },
+      { kind: 'derivedPercentWhileHealth', derived: 'damageMultiplier', percent: 1, band: 'maimed', subject: 'self' },
+      { kind: 'derivedPercentWhileHealth', derived: 'critChance', percent: 0.3, band: 'maimed', subject: 'self' },
       { kind: 'derivedPercent', derived: 'maxHitPoints', percent: -0.15 },
     ],
   },
@@ -115,6 +115,10 @@ export const SPECIES: readonly Species[] = [
       { kind: 'armorRepairAfterCombat', amount: 4 },
       { kind: 'naturalArmor', amount: 1 },
       { kind: 'derivedPercent', derived: 'critChance', percent: -0.2 },
+      // The first swing on something still whole is the one a smith knows how
+      // to place. Falls away as the fight wears on, which is the opposite
+      // curve to Korrun's and is why the two read as different peoples.
+      { kind: 'derivedPercentWhileHealth', derived: 'damageMultiplier', percent: 0.6, band: 'healthy', subject: 'target' },
     ],
   },
   {
@@ -140,6 +144,10 @@ export const SPECIES: readonly Species[] = [
       { kind: 'derivedPercent', derived: 'offerChoices', percent: 0.5 },
       { kind: 'derivedPercent', derived: 'hitChance', percent: 0.25 },
       { kind: 'derivedPercent', derived: 'maxHitPoints', percent: -0.2 },
+      // What they see first is an opening. Reads the TARGET, so it is worth
+      // nothing on a fresh monster and everything on one that has been worked
+      // down -- which is the shape that makes a fight worth finishing.
+      { kind: 'derivedPercentWhileHealth', derived: 'critChance', percent: 0.5, band: 'injured', subject: 'target' },
     ],
   },
 
@@ -283,8 +291,8 @@ export const SPECIES: readonly Species[] = [
     name: 'Ghoul',
     icon: 'fa-solid fa-skull-crossbones',
     effects: [
-      { kind: 'derivedPercentWhileHealth', derived: 'damageMultiplier', percent: 0.8, band: 'injured' },
-      { kind: 'derivedPercentWhileHealth', derived: 'actionsPerRound', percent: 0.5, band: 'injured' },
+      { kind: 'derivedPercentWhileHealth', derived: 'damageMultiplier', percent: 0.8, band: 'injured', subject: 'self' },
+      { kind: 'derivedPercentWhileHealth', derived: 'actionsPerRound', percent: 0.5, band: 'injured', subject: 'self' },
       { kind: 'derivedPercent', derived: 'maxHitPoints', percent: -0.2 },
     ],
   },
@@ -390,7 +398,7 @@ export const SPECIES: readonly Species[] = [
     icon: 'fa-solid fa-book-skull',
     effects: [
       { kind: 'derivedPercent', derived: 'damageMultiplier', percent: 0.6 },
-      { kind: 'derivedPercentWhileHealth', derived: 'actionsPerRound', percent: 1, band: 'maimed' },
+      { kind: 'derivedPercentWhileHealth', derived: 'actionsPerRound', percent: 1, band: 'maimed', subject: 'self' },
       { kind: 'derivedPercent', derived: 'dodgeChance', percent: -0.25 },
     ],
   },

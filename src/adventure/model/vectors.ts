@@ -201,15 +201,36 @@ export function monsterTier(type: MonsterType, level: number): number {
   return MONSTER_TYPE_TIER[type] + Math.max(0, Math.floor(level) - 1)
 }
 
-/** Where a run starts. Fame buys it upward -- see model/famePurchases.ts. */
-export const BASE_PLAYER_TIER = 5
+/**
+ * WHERE A RUN STARTS: nothing at all.
+ *
+ * A tier is how far a character has COME, so a character who has come nowhere
+ * has none, and every point of it is earned -- one per stat point the run has
+ * been AWARDED (`statPointsEarned`, whether or not it has been spent), plus
+ * whatever Ascendant buys.
+ *
+ * That makes an advancement worth TWO points rather than one: the tier point
+ * lands in the build's own proportions, and the stat point is the player's to
+ * place wherever they like. It also makes the first level materially weaker
+ * than it was, which is what `model/guardian.ts` exists to soften.
+ */
+export const BASE_PLAYER_TIER = 0
 
 /** What one fame point spent on tier is worth, and how many may be spent. */
 export const TIER_PER_FAME_POINT = 5
 export const MAX_TIER_PURCHASES = 5
 
 /** The top of the ladder: 5 + 5 x 5. Stated as a total, like every other ceiling. */
-export const MAX_PLAYER_TIER = BASE_PLAYER_TIER + TIER_PER_FAME_POINT * MAX_TIER_PURCHASES
+/**
+ * THE TOP OF WHAT FAME CAN BUY, which is no longer the top of a player.
+ *
+ * A run's tier is `BASE_PLAYER_TIER` + one per stat point EARNED + whatever
+ * Ascendant has bought, and only the last of those three has a ceiling: the
+ * first is zero and the second is what playing the run pays out. So this
+ * names the fame rule's own limit (`FAME_PURCHASE_CEILING.tier`) and nothing
+ * about how large a character may get.
+ */
+export const MAX_FAME_TIER = BASE_PLAYER_TIER + TIER_PER_FAME_POINT * MAX_TIER_PURCHASES
 
 /** What the RANK is called, where a name has to say it. Regular says nothing. */
 export const MONSTER_TYPE_WORD: Readonly<Record<MonsterType, string>> = {
@@ -310,6 +331,8 @@ export type MoveTrigger =
   | { kind: 'chance'; chance: number }
   /** Only with their back to the wall. */
   | { kind: 'health'; band: HealthBand }
+  /** On the state of whoever is being hit -- a finisher, or a bully. */
+  | { kind: 'targetHealth'; band: HealthBand }
 
 /**
  * ONE COMBAT CHOICE SWAPPED FOR ANOTHER -- the whole of what a class does.

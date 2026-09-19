@@ -185,16 +185,30 @@ function moveSituationFor(
   const left = side === 'player'
     ? playerActionsLeft(round, derived)
     : monsterActionsLeft(round, monster)
-  const maxHitPoints = side === 'player' ? derived.maxHitPoints : monster.maxHitPoints
-  const current = side === 'player' ? round.playerHitPoints : maxHitPoints - round.monsterDamageTaken
+  // BOTH SIDES, because a move may be about either: `health` reads the
+  // actor's and `targetHealth` reads whoever is across from them, and the
+  // fight is the only place both are in hand at once.
   return {
     // The first action of the ENCOUNTER is the first action of its first
     // round, which is the one thing the round number is here for.
     actionsTakenThisEncounter: round.roundNumber <= 1 ? spent : spent + 1,
     actionsSpentThisRound: spent,
     actionsLeftThisRound: Math.max(1, left),
-    healthFraction: maxHitPoints > 0 ? Math.max(0, current) / maxHitPoints : 1,
+    healthFraction: healthFractionOf(side, round, derived, monster),
+    opponentHealthFraction: healthFractionOf(side === 'player' ? 'monster' : 'player', round, derived, monster),
   }
+}
+
+/** One side's health as a fraction of its own maximum, 0..1. */
+export function healthFractionOf(
+  side: 'player' | 'monster',
+  round: RoundState,
+  derived: DerivedStats,
+  monster: Monster,
+): number {
+  const maxHitPoints = side === 'player' ? derived.maxHitPoints : monster.maxHitPoints
+  const current = side === 'player' ? round.playerHitPoints : maxHitPoints - round.monsterDamageTaken
+  return maxHitPoints > 0 ? Math.max(0, Math.min(maxHitPoints, current)) / maxHitPoints : 1
 }
 
 /**
@@ -397,11 +411,17 @@ function actingProfile(context: StageContext, round: RoundState, monster: Monste
   const base = context.profile
   const game = context.game
   if (!base || !game) return base
-  const actionPosition = roundActionPosition(round, base.derived, monster)
-  if (!actionPosition.first && !actionPosition.last) return base
+  // NO SHORTCUT any more. This used to hand back the unconditioned profile
+  // unless the action sat on a round's edge, which was true while the edge
+  // was the only thing the situation could decide. It now also carries who is
+  // being hit, and an early return on the edge alone would silently drop every
+  // `subject: 'target'` effect in the middle of a round -- the exact shape of
+  // defect rule 4 is about. Resolving is arithmetic over a handful of
+  // modifiers, and it happens once per action.
   return resolveRunProfile(game, context.content, context.held, {
     hitPoints: game.hitPoints,
-    actionPosition,
+    actionPosition: roundActionPosition(round, base.derived, monster),
+    opponentHealthFraction: healthFractionOf('monster', round, base.derived, monster),
   })
 }
 

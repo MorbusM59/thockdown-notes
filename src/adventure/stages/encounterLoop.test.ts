@@ -8,6 +8,7 @@ import {
   activeGame, applyEffects, emptySave, profileOf, runTuning, withTrueMode, withTuning, type GameSave,
 } from '../model/gameState'
 import { PROGRESSION_MAX, PROGRESSION_MIN } from '../model/difficulty'
+import { guardianLuckiness } from '../model/guardian'
 import { AUTO_ADVANCE_MIN_MS } from '../model/autoAdvance'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
 import { createdRun, GAME_EXIT_CHOICE } from '../testing/run'
@@ -292,7 +293,15 @@ describe('game settings', () => {
     expect(activeGame(started)?.progression).toBe(PROGRESSION_MIN)
 
     const moved = withTuning(started, { progression: 1.2, successAdjust: 0.4 })
-    expect(runTuning(activeGame(moved), moved.settings)).toEqual({ progression: 1.2, successAdjust: 0.4 })
+    // The PROGRESSION is the slider's. The thumb is not, on the first level:
+    // the guardian floor (model/guardian.ts) is higher than 0.4 there, and it
+    // supersedes the slider while it is. Asserted against the floor's own
+    // function rather than against 0.6, so tuning the two constants does not
+    // make this test lie.
+    expect(runTuning(activeGame(moved), moved.settings)).toEqual({
+      progression: 1.2,
+      successAdjust: guardianLuckiness(1),
+    })
     // THE RECORD IS UNTOUCHED, which is the part that used to be written over:
     // a run whose numbers are overwritten every time a slider moves cannot say
     // what it was set up as.
@@ -596,8 +605,14 @@ describe('the thumb the run is played under', () => {
     const started = choose(enterEntryScreen(emptySave(4242), DEPS, NOW), 'welcome:start', DEPS, NOW).save
     const turned = withTuning(started, { successAdjust: 0.4 })
     expect(turned.settings.successAdjust).toBe(0.4)
-    expect(runTuning(activeGame(turned), turned.settings).successAdjust).toBe(0.4)
     expect(activeGame(turned)?.successAdjust).toBe(0)
+    // On the FIRST level the guardian floor is higher than the slider, so it
+    // is what the fight reads (model/guardian.ts). Past the floor's last
+    // level the slider is the whole answer again, which is the half of this
+    // that the floor must not have broken.
+    const game = activeGame(turned)!
+    expect(runTuning(game, turned.settings).successAdjust).toBe(guardianLuckiness(1))
+    expect(runTuning({ ...game, level: 4 }, turned.settings).successAdjust).toBe(0.4)
 
     // Clamped, and identical in identity when nothing moves -- the host
     // persists on every change, so a no-op must not look like one.

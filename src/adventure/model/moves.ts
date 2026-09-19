@@ -24,7 +24,7 @@
 import { nextChance, type RngState } from '../core/rng'
 import type { CombatClass, CombatMove } from './vectors'
 import type { Defence } from './defences'
-import { HEALTH_BAND_BOUNDS, inHealthBand } from './health'
+import { HEALTH_BAND_BOUNDS, bandWithArticle, inHealthBand } from './health'
 import type { DescriptionStyle } from './modifiers'
 
 /** What the triggers read. Everything in it is a fact the fight already has. */
@@ -37,6 +37,8 @@ export interface MoveSituation {
   actionsLeftThisRound: number
   /** Current over maximum, 0..1. */
   healthFraction: number
+  /** The OTHER side's, 0..1. Absent where there is nobody across from you. */
+  opponentHealthFraction?: number
 }
 
 export const FRESH_SITUATION: MoveSituation = {
@@ -61,6 +63,8 @@ function conditionHolds(move: CombatMove, situation: MoveSituation): boolean {
     case 'firstActionOfRound': return situation.actionsSpentThisRound === 0
     case 'lastActionOfRound': return situation.actionsLeftThisRound <= 1
     case 'health': return inHealthBand(situation.healthFraction, move.when.band)
+    case 'targetHealth': return situation.opponentHealthFraction !== undefined
+      && inHealthBand(situation.opponentHealthFraction, move.when.band)
     case 'chance': return true
   }
 }
@@ -206,5 +210,8 @@ function whenWords(move: CombatMove, style: DescriptionStyle): string {
     case 'health': return concise
       ? move.when.band
       : `while ${move.when.band} (${HEALTH_BAND_BOUNDS[move.when.band]})`
+    case 'targetHealth': return concise
+      ? `vs ${move.when.band}`
+      : `against ${bandWithArticle(move.when.band)} foe (${HEALTH_BAND_BOUNDS[move.when.band]})`
   }
 }
