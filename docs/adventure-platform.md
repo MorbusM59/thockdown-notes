@@ -38,7 +38,12 @@ chosen. Everything below it is the machinery that carries this out.
 | **region** | one of six, chosen at each level's start; it decides which ten traits the omen may draw from. |
 | **modifier** | an item or a trait, rolled once per run from a template (`model/modifierSlots.ts`) and held by id. |
 | **catalog** | `catalogFor(content, seed)` — this run's rolled modifiers, a function of the seed, memoized. |
-| **profile** | `resolveRunProfile(...)` — what a character is worth right now: base stats, origin, everything held. Recomputed, never stored. |
+| **build** | VECTOR ONE: an adjective and a set of stat WEIGHTS (`model/vectors.ts`). Ratios, not points — one build reads the same at any tier. |
+| **tier** | VECTOR TWO: a number, the stat budget the weights split. A monster's is its rank's plus one per level; a player's starts at 5 and fame buys it to 30. |
+| **species** | VECTOR THREE: a noun, carrying non-stat modifier effects and nothing else. The peoples are the `playable` ones; the rest are what you fight. |
+| **class** | VECTOR FOUR: a noun, carrying MOVES that swap one combat choice for another. It touches no number a stat block implies. |
+| **move** | One swap: what replaces the attack or a defence, and when. Armed when the action comes up, so the cell can name it. |
+| **profile** | `resolveRunProfile(...)` — what a character is worth right now: base stats, build, species, everything held. Recomputed, never stored. |
 
 Two words that are NOT synonyms, having once been one: a **fame purchase**
 (`model/famePurchases.ts`) is bought with fame and dies with the run; a
@@ -347,10 +352,94 @@ which holds opaque stage state and is a blob wherever it lives.
 kind and touches no schema; a column per content addition would make content
 the opposite of additive.
 
+## The four vectors
+
+**A player and a monster are the same four things**, and each one affects
+what they are in exactly ONE way (`model/vectors.ts`):
+
+| vector | what it is | the ONE thing it does |
+| --- | --- | --- |
+| build | an adjective | weights over the six stats |
+| tier | a number | how many stat points those weights split |
+| species | a noun (what it is) | non-stat modifier effects |
+| class | a noun (what it does) | swaps a combat choice for another |
+
+So a monster reads off the four in order — *a Dashing Orc Bruiser at tier 12*
+— and so does a player. THE SAME FOUR on both sides, deliberately: a rule
+that applies to one and not the other is a rule written twice and got wrong
+once.
+
+**What this replaced, and why.** An origin carried stat gifts *and* damage
+percentages *and* an armour rule; a monster class carried stat deltas; a
+species carried stat deltas too; a rank carried a stat shift *plus* armour
+*plus* charisma resistance. Four names, three of them doing overlapping
+arithmetic, and no way to answer "where does this number come from" without
+reading all of them. `MONSTER_TYPE_STAT_SHIFT`, `MONSTER_TYPE_ARMOR`,
+`Origin`, `MonsterClass` and `Species.statDeltas` are all gone.
+
+**The tier is split by LARGEST REMAINDER**, not by rounding each share. The
+design says "5 points are distributed according to weights", and *distributed*
+is taken literally: the block sums to exactly the tier. It agrees with the
+design's own worked example (tier 5 over `agility 1, might 2` gives 2 and 3
+either way) and it does not leak — six equal weights at tier 5 round to one
+each and hand out SIX, which would make the flattest build quietly the
+strongest at every tier. `vectors.test.ts` asserts the sum, that a stat with
+no weight never gains one at any tier, and monotonicity (no seat moves
+backwards as the tier grows).
+
+**Both stat-bearing vectors arrive as MODIFIERS.** `resolveProfile` clamps
+base stats to six because base stats are what a run SPENT; tier is not
+spending, so `buildModifier` hands it in as `statDelta` effects above the
+clamp, exactly where gear lands. A tier-20 boss reaches Might 13 without the
+cap learning an exception. A species is wrapped the same way
+(`speciesModifier`), which is what lets it say "+100% damage" or "worn armour
+counts for nothing" with no code anywhere knowing species exist — and gets
+`describeModifier` to write its tooltip for free.
+
+**What each vector may NOT do is enforced**, in `validateContent`: a species
+carrying a `statDelta` fails (that is the build's), so does a build with no
+positive weight, two builds with the same normalised ratio, and a class whose
+move can never fire because an unconditional one for the same cell is
+declared above it. That last one caught a real bug on its first run. The
+rule cannot be enforced by a type — `ModifierEffect` is one union — so
+nothing else stops the first interesting monster putting two Might on a
+species and the vectors overlapping again within a release.
+
+**A class move REPLACES a cell and never adds one.** The pace constraint is
+the reason: a run is a dozen levels of ten encounters of twenty actions, so a
+class that put two more cells on every screen would cost more reading than
+the fight is worth. A move is ARMED when the action comes up and its id
+stored on the fight's state — `present` may not roll, and a move re-decided
+on every render would change while the player was reading it — so the ring
+shows "Haymaker" and pressing it strikes a Haymaker. A multi-strike move is
+a whole exchange per strike (its own dodge offer, hit roll, crit and damage
+draw), which is what makes a Juggler's two blows at 60% a different thing
+from one blow at 120% rather than a rounding difference.
+
+**Ranks are tiers and packs are rolled.** runt 0, regular 5, elite 10, mini
+boss 15, boss 20, plus one per level past the first — one and not five, so
+the rungs stay legible for a whole run. The "group" rank is gone: a runt
+always has a friend and usually two, an ordinary monster has one half the
+time, and anything elite or above travels alone
+(`MONSTER_BUDDY_CHANCES`). The count is rolled once, per offer, and stored on
+it, so a reloaded fight is the same fight.
+
+**A name is derived**, never stored: rank, build, species, class, and a count
+where there is more than one. There is no authored per-species-per-rank table
+to keep in step, and no stored string a content edit can leave describing a
+different creature.
+
+`npm run adventure:sim -- --rank-vectors` pins each build, species and class
+in turn and prints what each is actually worth. A row that does not move is a
+vector that never reaches the fight — which is what the table reported on its
+own first run, when the pin was landing before character creation had
+finished and was being overwritten by it.
+
 ## The model
 
 **Six stats**, declared in `model/stats.ts`: Might, Agility, Perception,
-Intellect, Charisma, Luck. Base stats cap at **6**; items and traits are what
+Intellect, Charisma, Luck. Base stats cap at **6** — that cap is about what a
+run's own SPENDING can reach; the build's tier, items and traits are what
 carry you past it, which is why effective stats resolve in one documented
 order (`model/modifiers.ts`):
 
@@ -501,9 +590,10 @@ Three moments, three different rules:
 Built and exercised end to end: the director, the stack, the effect
 vocabulary, the save and its sanitizer, stats, modifiers, armor, checks,
 determinism, the mote model, the chrome contract, the difficulty presets and
-the settings screen, and the whole encounter chain — welcome, character
-creation, region select, the hub, the hunt, the round engine with its four
-defences, and the loot that pays for it. The two acquired-\* interludes are
+the settings screen, **the four vectors** (build, tier, species, class, with
+class moves reaching the fight), and the whole encounter chain — welcome,
+character creation over five questions, region select, the hub, the hunt, the
+round engine with its four defences, and the loot that pays for it. The two acquired-\* interludes are
 GONE — what you carry belongs on the chrome, always visible, not behind a
 permanent cell.
 
@@ -823,20 +913,26 @@ special attacks; and the charisma failure chance as a type base plus
 45. **Fame, experience and gold rates.** What a regular monster, a mini boss
     and a boss are each worth. (Was question 7, still the last economic gap.)
 
-41, 43, 46 and 47 are **answered and BUILT or recorded** — a group is one
+41, 43, 46 and 47 are **answered and BUILT or recorded** — a pack is one
 hydra with a shared pool (`model/monsters.ts`); a monster dodges if it can
-and defends otherwise, and never elects to flee; the type shift does not
-floor at zero; and the highest usable charisma tier is the character's
-Charisma, now stated in the plan rather than inferred.
+and defends otherwise, and never elects to flee; and the highest usable
+charisma tier is the character's Charisma, now stated in the plan rather than
+inferred. (46 was about the TYPE SHIFT flooring at zero. **Superseded**:
+there is no type shift — a rank is a tier, and a tier of zero splits to a
+block of zeroes with nothing to floor.)
 
-48 and 49 are **answered and BUILT** — a group defaults to three members,
-and the payout table is in the design plan. The ROUND ENGINE is built with
+48 and 49 are **answered and BUILT** — the payout table is in the design
+plan. (48 was "how many in a group". **Superseded** by the buddy roll: a
+default group size no longer exists, because how many there are is drawn per
+offer from the rank's own chances.) The ROUND ENGINE is built with
 them (`model/combat.ts`): the turn-order roll, the four defences, the
 exchange, the round's exits and what each one pays.
 
 50 and 51 are **answered and BUILT** — the escalating loot/mote check
-(`model/rewards.ts`), the species table (`content/`) and the offer generator
-(`model/encounterOffers.ts`). See the design plan.
+(`model/rewards.ts`) and the offer generator (`model/encounterOffers.ts`).
+The "species table" they name is now the four vectors: an offer is a build, a
+species, a class, a rank and a head count, and what a creature is called is
+read off them rather than authored. See the design plan.
 
 52 is **BUILT**: the encounter chain runs end to end —
 `encounterSelect → hunt → combat → loot → encounterSelect(+1)`, with the boss
@@ -1475,6 +1571,13 @@ placed at 5, 9 and 10 and the level advancing after ten.
 87. **AN ORIGIN IS A MODIFIER, AND UNLOCKS ARE DERIVED.** Two changes that
     arrived together because the second needs the first.
 
+    **SUPERSEDED IN PART by entry 88 (the four vectors).** The origin is gone,
+    split into a build, a species and a class; what survives unchanged is the
+    ARGUMENT — that what a character IS arrives as a modifier layer above the
+    base-stat clamp rather than being written into the block a run spends —
+    and the permanent-unlock mechanism, which now gates a class. Read this for
+    the reasoning and entry 88 for what the code does.
+
     **Origins stack.** An origin's gifts were applied at character creation as
     `adjustBaseStat`, which wrote them into the base block — and the base
     block is capped at six, so a Warrior's +2 Might was two of the player's
@@ -1583,3 +1686,83 @@ placed at 5, 9 and 10 and the level advancing after ten.
     Easy's death rate fell 88% -> 66% and the median run reached level 2.2
     rather than 1.6. That is the sim reporting the game, not itself, this
     time.
+
+88. **THE FOUR VECTORS.** What a player or a monster IS is now exactly four
+    things, each with one name and one way to affect what it is. The full
+    account is in **The four vectors** above; this entry records what was
+    decided and what it replaced.
+
+    | vector | what it is | the ONE thing it does |
+    | --- | --- | --- |
+    | build | an adjective | weights over the six stats |
+    | tier | a number | how many stat points those weights split |
+    | species | a noun | non-stat modifier effects |
+    | class | a noun | swaps one combat choice for another |
+
+    **What was wrong before.** An origin carried stat gifts AND damage
+    percentages AND an armour rule (entry 87 is the story of getting it half
+    apart); a monster class carried stat deltas; a species carried stat
+    deltas too; a rank carried a stat shift plus armour plus charisma
+    resistance. Four names, three of them doing overlapping arithmetic. The
+    author's own summary: *"with the berserker, I muddled things"* -- the
+    Berserker was four vectors wearing one name, and is a CLASS now, because
+    what is distinctive about a berserker is how they fight.
+
+    **Largest-remainder apportionment**, not per-share rounding. "Five points
+    distributed" has to hand out five; per-share rounding leaks six for six
+    equal weights and would make the flattest build the strongest at every
+    tier. It agrees with the design's worked example either way, so this was
+    free.
+
+    **Weights are non-negative**, because a negative weight shrinks the
+    denominator and would make one stat's share depend on how bad you are at
+    a third. A stat a build does not want gets no weight.
+
+    **The vector rule is enforced, not remembered** (`validateContent`): a
+    species may not carry a `statDelta`, a build may carry nothing but
+    weights, a class may not touch the profile, no two builds may share a
+    normalised ratio, and a move declared below an unconditional one for the
+    same cell is an error. `ModifierEffect` is one union, so a type cannot do
+    this -- and without it the first interesting monster puts two Might on a
+    species and the vectors overlap again within a release. It found a real
+    bug on its first run (the Juggler's Cascade was unreachable).
+
+    **A move replaces a cell and never adds one**, is armed when the action
+    comes up and stored by id, and names the cell it stands in for. A
+    multi-strike move is a whole exchange per strike, which is what makes two
+    blows at 60% a different thing from one at 120%.
+
+    **Ranks became tiers and groups became a roll.**
+    `MONSTER_TYPE_STAT_SHIFT`, `MONSTER_TYPE_ARMOR` and the "group" rank are
+    deleted rather than left unused. Armour is the species'.
+
+    **Creation deals six of each vector.** The ring holds twelve cells and
+    the catalogue is two dozen builds; dealing is what every other offer in
+    this game already does, and it makes two runs differ before the first
+    fight.
+
+    **A real bug came out of the wiring**: `actingProfile` in
+    `stages/combat.ts` called `resolveProfile` directly with `game.baseStats`
+    and the held modifiers -- the exact triple `resolveRunProfile` exists to
+    stop anybody spelling out (entry 87) -- and so resolved a first-action
+    bonus against a character who had never heard of the run's build or
+    species. The one call site that most needed the vectors was the one that
+    left them out. That is the characteristic failure, found again, one
+    release after the resolver that was supposed to end it.
+
+    **`--rank-vectors`** pins each build, species and class in turn. On its
+    first run every row was identical, which is exactly the finding the table
+    exists to report -- here about itself: the pin was landing before
+    character creation had finished and the creation screens were overwriting
+    it. With the pin moved past creation, every row moves, which is the
+    statement that all three content vectors reach the fight.
+
+    **What it is worth, at 12 runs on Medium** (noisy, and recorded as a
+    starting point rather than as balance): builds spread from Brooding 16.4
+    encounters won to Wayward 1.4, with Intellect-weighted shapes clearly
+    ahead -- magic is strong and a build that reaches it is strong. Classes
+    spread from Duelist 13.5 to Reaver 3.6, with the guard-and-riposte
+    defensive classes ahead, which is at least partly the "careful" policy
+    defending constantly. Species are the flattest of the three. **None of
+    this is tuned**, and the spread is wider than it should be; it is written
+    down so the next session starts from a measurement rather than a hunch.

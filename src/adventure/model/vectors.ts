@@ -147,7 +147,7 @@ export function describeBuild(build: Build): string[] {
 
 // Imported lazily as a local map rather than from stats.ts's STAT_LABELS to
 // keep this module's import list to the three it genuinely needs. (It is the
-// same six words; `vectors.contract.test.ts` asserts they agree.)
+// same six words; `vectors.test.ts` asserts they agree.)
 const STAT_LABELS_LOCAL: Readonly<Record<StatKey, string>> = {
   might: 'Might',
   agility: 'Agility',

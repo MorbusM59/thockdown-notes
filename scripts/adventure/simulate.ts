@@ -17,7 +17,8 @@
 // Flags: --runs, --difficulty (a preset, or `all`), --seed, --policy
 //        (`careful` | `reckless` | `first`), --levels (stop after N),
 //        --prefer=id,id (take these offers when they appear), --pin=id,id
-//        (hand them over outright), --rank (one pass per item and trait, each
+//        (hand them over outright), --rank-vectors (one pass per build,
+//        species and class), --rank (one pass per item and trait, each
 //        pinned in turn, to see what each is actually worth),
 //        --success-adjust=0.3 (the thumb on the scale -- see
 //        model/chance.ts), --sweep-adjust[=0,0.1,0.2] (one pass per thumb
@@ -57,6 +58,24 @@ const DEPS: DirectorDeps = {
  */
 interface PinRef {
   kind: ModifierKind
+  id: string
+  name: string
+}
+
+/**
+ * A VECTOR TO PIN, for the vector ranking (`--rank-vectors`).
+ *
+ * The same question `--rank` asks of items and traits, asked of the three
+ * content vectors (model/vectors.ts): what is a Hulking build worth, what is
+ * a Golem worth, what is a Bruiser worth. It is a different measurement from
+ * the modifier one and not a widening of it -- a modifier is something a run
+ * MIGHT acquire, so its row is "what does taking this whenever offered do",
+ * while a vector is something the run IS from its first screen, so its row is
+ * "what is a run shaped like this worth". Pinning a vector into the modifier
+ * ranking would have silently mixed the two.
+ */
+interface VectorPin {
+  vector: 'build' | 'species' | 'class'
   id: string
   name: string
 }
@@ -176,6 +195,7 @@ function playOne(
   prefer: readonly string[] = [],
   pin: readonly PinRef[] = [],
   successAdjust = 0,
+  vectors: readonly VectorPin[] = [],
 ): RunResult {
   let save: GameSave = { ...emptySave(seed), settings: { difficulty, successAdjust } }
   save = enterEntryScreen(save, DEPS, NOW)
@@ -193,10 +213,26 @@ function playOne(
     const screen = currentScreen(save, DEPS)
     if (!screen) break
     let game = activeGame(save)
-    if (pin.length > 0 && game && !pinned) {
+    // AFTER CREATION HAS FINISHED, not at the first moment a game exists.
+    // The three vector screens WRITE the record, so a pin applied while they
+    // are still to come is overwritten by whatever the run then picks --
+    // which showed up as every row of the ranking being identical, the exact
+    // symptom this table exists to detect, on the table itself.
+    const creating = screen.stageId === 'characterCreation'
+    if ((pin.length > 0 || vectors.length > 0) && game && !pinned && !creating) {
       save = applyEffects(
         save,
-        pin.map((ref) => ({ kind: 'acquireModifier' as const, modifierKind: ref.kind, modifierId: ref.id })),
+        [
+          ...pin.map((ref) => ({ kind: 'acquireModifier' as const, modifierKind: ref.kind, modifierId: ref.id })),
+          // WRITTEN OVER WHAT THE DEAL CHOSE, at the same moment the modifier
+          // pin lands. Creation samples its vectors, so a run cannot be asked
+          // to pick a particular build -- it may simply not be on the ring.
+          // Setting the record is the only way to ask "what is THIS build
+          // worth" rather than "what is this build worth on the seeds that
+          // happened to offer it", which is a different and much less useful
+          // question.
+          ...vectors.map((ref) => ({ kind: 'setVector' as const, vector: ref.vector, id: ref.id })),
+        ],
         DEPS.content,
         NOW,
       )
@@ -291,7 +327,7 @@ function summarize(runs: RunResult[]) {
 function parseArgs(argv: string[]) {
   const args = {
     runs: 200, difficulty: 'all', seed: 1, policy: 'careful' as PolicyName,
-    levels: 3, json: false, prefer: [] as string[], pin: [] as string[], rank: false,
+    levels: 3, json: false, prefer: [] as string[], pin: [] as string[], rank: false, rankVectors: false,
     successAdjust: 0, sweepAdjust: null as number[] | null,
   }
   for (const raw of argv) {
@@ -303,6 +339,7 @@ function parseArgs(argv: string[]) {
     else if (key === 'levels') args.levels = Number(value)
     else if (key === 'json') args.json = true
     else if (key === 'rank') args.rank = true
+    else if (key === 'rank-vectors') args.rankVectors = true
     else if (key === 'prefer') args.prefer = (value ?? '').split(',').filter(Boolean)
     else if (key === 'pin') args.pin = (value ?? '').split(',').filter(Boolean)
     else if (key === 'success-adjust') args.successAdjust = Number(value)
@@ -326,10 +363,11 @@ function sweep(
   prefer: readonly string[],
   pin: readonly PinRef[] = [],
   successAdjust = args.successAdjust,
+  vectors: readonly VectorPin[] = [],
 ) {
   const runs: RunResult[] = []
   for (let index = 0; index < args.runs; index += 1) {
-    runs.push(playOne(args.seed + index * 7919, difficulty, policy, args.levels, prefer, pin, successAdjust))
+    runs.push(playOne(args.seed + index * 7919, difficulty, policy, args.levels, prefer, pin, successAdjust, vectors))
   }
   return summarize(runs)
 }
@@ -374,6 +412,52 @@ if (args.rank) {
   )
   line('(nothing pinned)', base)
   for (const { ref, row } of rows) line(`${ref.name} [${ref.kind}]`, row)
+  console.log('')
+  process.exit(0)
+}
+
+/**
+ * WHAT EACH VECTOR IS WORTH, the same measurement one level up.
+ *
+ * Three tables rather than one, because the three are not comparable: a build
+ * changes the SHAPE of a stat block, a species changes what is true of the
+ * character outside it, and a class changes which cell is on the ring. Sorted
+ * within each, so what is readable is the ordering inside a vector -- which
+ * is the only ordering that means anything.
+ *
+ * A ROW THAT DOES NOT MOVE is the finding this exists for, exactly as in the
+ * modifier ranking: a species whose row sits on the baseline is a species
+ * whose effects never reach the fight, and a class whose row sits on it is a
+ * class whose moves never fire.
+ */
+if (args.rankVectors) {
+  const difficulty = (presets[0] ?? 'medium') as Difficulty
+  const base = sweep(difficulty, [])
+  const groups: { title: string; pins: VectorPin[] }[] = [
+    { title: 'build', pins: THOCKQUEST.builds.map((build) => ({ vector: 'build', id: build.id, name: build.name })) },
+    {
+      title: 'species',
+      pins: THOCKQUEST.species.map((species) => ({
+        vector: 'species',
+        id: species.id,
+        name: `${species.name}${species.playable ? '' : ' (monster)'}`,
+      })),
+    },
+    { title: 'class', pins: THOCKQUEST.combatClasses.map((entry) => ({ vector: 'class', id: entry.id, name: entry.name })) },
+  ]
+  console.log(`\n${args.runs} runs each, ${DIFFICULTY_LABELS[difficulty]}, policy "${args.policy}", one vector pinned at a time\n`)
+  const line = (name: string, row: ReturnType<typeof summarize>) => console.log(
+    `${name.padEnd(30)} ${row.encountersWon.mean.toFixed(2).padStart(8)}`
+    + `${`${(row.deathRate * 100).toFixed(0)}%`.padStart(14)}${row.damagePerFight.toFixed(1).padStart(15)}`,
+  )
+  for (const group of groups) {
+    console.log(`${group.title.padEnd(30)} encounters won (mean)   died   damage/fight`)
+    const rows = group.pins.map((ref) => ({ ref, row: sweep(difficulty, [], [], args.successAdjust, [ref]) }))
+    rows.sort((left, right) => right.row.encountersWon.mean - left.row.encountersWon.mean)
+    for (const { ref, row } of rows) line(`  ${ref.name}`, row)
+    console.log('')
+  }
+  line('(nothing pinned)', base)
   console.log('')
   process.exit(0)
 }

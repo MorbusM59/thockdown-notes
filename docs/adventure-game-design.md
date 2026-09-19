@@ -516,11 +516,105 @@ fight at 50 of 80. Creation now ends by restoring hit points to full.
 "Special Encounter", "Charisma Actions", and **Region** for the level's
 opening choice. Go Exploring's destinations are areas within a level.
 
+**Superseded again in part by the four vectors above**, which replace the
+origin with a build, a species and a class.
+
 **"Special Encounter" is superseded.** The hub cell of that name was removed
 rather than built: what it would have been became the omen, which arrives on
 its own before each of the three fixed encounters instead of being a way to
 go looking for one. The open-encounter screen now offers Go Hunting and Go
 Exploring and nothing else. "Charisma Actions" and **Region** stand.
+
+### THE FOUR VECTORS (supersedes the origin/class/species arrangement above)
+
+Specified in conversation, and recorded here as authored. It replaces the
+naming decision below it, the monster's species-class-type make-up under
+**Encounters**, and the origin-as-a-modifier entry further down: what a
+player or a monster IS is now exactly four things, each with one name and one
+way to affect what it is.
+
+> What we want is clear distinct vectors that each of a name and a way to
+> affect what a player or a monster is.
+>
+> * the first vector: stat point weights
+>    * vector_id: build
+>    * examples: (adjectives): erudite, dashing, hulking, fleeting, volatile,
+>      blessed...
+>    * effects: agi 1 might 2; all values are added up to form the denominator
+>      of the fraction by which to multiply the tier (the stat budget)
+> * the second vector: scaling of these weights, the stat budget
+>    * vector_id: tier
+>    * examples: 1, 6, 12, 51
+>    * effects: 5 means that 5 points are distributed according to weights. so
+>      in the example above (1/3)*5 agi and (2/3)*5 might; regular rounding,
+>      so 2 agi and 3 might.
+>    * monsters have a starting tier:
+>       * runt: 0
+>       * normal: 5
+>       * elite: 10
+>       * mini boss: 15
+>       * boss: 20
+>    * monster tier is starting tier + 1 per level beyond the first
+>    * player tier starts at 5 and can be increased by 5 per fame point up to
+>      a max of 5 fame points spent
+> * the third vector: non stat modifier adjustment
+>    * vector_id: species
+>    * examples: goblin, spider, orc, wolf, bear, (fantasy races for the
+>      player, Masurian, Davalian, Mertok)
+>    * effects: +100% attack; decayed armor contribution 0%; natural armor:
+>      +2; triple damage done on first action each round
+> * the fourth vector: combat choice swaps both offensive and defensive
+>   choices
+>    * vector_id: class
+>    * examples: warlock, assassin, bruiser, juggler, bard, pryomancer
+>    * effects: swaps attack for ambush on the first attack in an encounter;
+>      swaps regular attack for a double attack for 60% damage each; has a 25%
+>      chance for replace regular attack with stunning blow...
+>
+> so a monster could be a [tier] dashing orc bruiser
+>
+> let's still have the option to group monsters together with the current
+> rules
+>
+> for now, let's give runts a 100% chance to have a buddy and a 50% chance to
+> have a second buddy
+> normal mobs just get a 50% chance to have a buddy
+
+**With the berserker, I muddled things** — the author's own words, and the
+reason the Berserker is no longer one pickable thing. Its stat gifts, its
++100% damage, its no-worn-armour rule and the way it fights were four vectors
+in one name. What is distinctive about a berserker is HOW THEY FIGHT, so it
+is a CLASS now, still earned by reaching Might 6/6 in a run.
+
+**What was decided while building it**, none of it specified above:
+
+- **The split is largest-remainder apportionment**, not per-share rounding.
+  It agrees with the worked example (tier 5 over `agi 1, might 2` gives 2 and
+  3 either way) and it makes the block sum to exactly the tier. Per-share
+  rounding leaks: six equal weights at tier 5 round to one each and hand out
+  six, which would make the flattest build quietly the strongest at every
+  tier.
+- **Weights are non-negative.** A negative weight shrinks the denominator, so
+  a second stat's share would depend on how bad you are at a third. A stat a
+  build does not want simply gets no weight.
+- **A name is read off the vectors**: rank, build, species, class, and a
+  count where there is more than one — "Champion Hulking Orc Bruiser",
+  "Runt Sly Kobold Trickster ×3". The hand-authored per-rank names are gone.
+- **The "group" rank is gone.** Travelling in numbers is the buddy roll, so
+  any rank could in principle have company and the ranks are purely the tier
+  ladder.
+- **Armour is the species'**, not the rank's. The per-rank armour table went
+  with the per-rank stat shift.
+- **A class move REPLACES a cell and never adds one**, and is armed when the
+  action comes up so the cell can name it. That is the pace constraint: a
+  fight is a dozen levels of ten encounters of twenty actions, so a class
+  that put two more cells on every screen would cost more reading than the
+  fight is worth.
+- **Character creation DEALS six of each vector.** The ring holds twelve
+  cells and the catalogue is two dozen builds and more; dealing is what every
+  other offer in the game already does.
+- **Tier is bought with the fame purchase "Ascendant"**, one point for five
+  tier, five purchases, so a fully ascended run is tier 30.
 
 ### What the PLAYER is, is an ORIGIN — "class" is the monster's
 
