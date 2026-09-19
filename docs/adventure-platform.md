@@ -2070,3 +2070,102 @@ placed at 5, 9 and 10 and the level advancing after ten.
     about the product. Markdown rules of three or more hyphens are exempt and
     nothing else is. It found three tooltips a hand-written scan had missed
     on its first run.
+
+97. **THE ARMOR FLOOR IS DELETED, as a stat and as a concept.** It overlapped
+    two things that already existed without being either: natural armor is a
+    point decay cannot touch, mending is points coming back, and a floor was
+    a third rule about the same pool that had to be held in the reader's head
+    alongside both. Gone: the `armorDecayFloor` effect kind, the `tempered`
+    verbose slot that rolled it, the eight templates that named it, two
+    validator rules, `armorSlotOf`'s second return field, `ArmorPiece.floor`,
+    the `armorAmount` parameter `rollVerbose` carried only for it, and the
+    one test that existed to assert it. Decay stops at zero, which is what a
+    pool with no floor already meant — the test above it already asserted
+    that an item pool wears to exactly zero while natural armor survives.
+
+98. **HOW HURT YOU ARE IS THREE NAMED BANDS** (`model/health.ts`), and the
+    boundaries are written in exactly one place:
+
+    | band | holds | 
+    | --- | --- |
+    | `maimed` | below a third |
+    | `injured` | below two thirds — **a maimed character is also injured** |
+    | `healthy` | two thirds and up |
+
+    What preceded it was four authored thresholds — `0.35` on one move, `0.4`
+    on a species, `0.5` and `0.6` elsewhere — which is four different ideas of
+    "hurt" in one game, none of them nameable on a pill and none comparable
+    to each other.
+
+    **NOT DISJOINT, and that is the author's own definition**: an effect that
+    rewards being hurt should get MORE true as things get worse, so a Frenzy
+    that stopped when you were nearly dead would quit at the only moment it
+    was for. `healthy` is therefore exactly the complement of `injured`, and
+    `modifierReach.test.ts` walks the whole hit-point range asserting a
+    fraction is in one or the other and never in neither — the two constants
+    are written separately and nothing else would keep them in step.
+
+    `healthy` is REACHABLE because a new `hale` slot rolls it, on eight
+    templates that are about staying whole (the armour pieces, and the traits
+    whose idea is composure rather than desperation). A condition nothing can
+    produce is a condition that does not exist.
+
+    **A TARGET'S health is NOT built** and is named rather than silently
+    missing. The author asked for `+100% Damage vs maimed`, and it cannot be
+    written where this lives: a conditional percentage is folded into
+    `resolveProfile`, which computes what a character is worth with no target
+    in hand — the bar, character creation and the offer screens all resolve a
+    profile with nobody to hit. A target band means moving that whole class of
+    effect out of the profile and applying it at the BLOW. That is a real
+    change to combat resolution and is not half-built here.
+
+99. **A PER-HOLDING EFFECT STATES ITS RULE, never its running total.** It read
+    `+15% Damage per item (2 held: +30%)`, and the parenthesis is wrong
+    exactly where these are read most: at character creation nothing is held,
+    so a real effect announced itself as `+0%` and looked like nothing at all.
+    What an offer IS cannot depend on what you happen to be carrying when you
+    look at it, and the carried count is on the bar anyway. That made
+    `holdings` dead in both describers, so it is gone from them and from the
+    seven call sites that were computing `holdingCounts` only in order to
+    describe.
+
+100. **CONCISE HAS A VOCABULARY FOR MOVES.** `describeMove` had the style
+     threaded through it and used it only to drop flavour; its other eleven
+     lines printed the same in both. Now:
+
+     | verbose | concise |
+     | --- | --- |
+     | `4 strikes, 45% Damage each` | `Split (4x45%)` |
+     | `50% of the hits turned critical` | `50% hit to crit` |
+     | `35% of the misses gone` | `35% miss to hit` |
+     | `strikes back for 50% of a blow` | `Vengeance (50%)` |
+     | `costs them 1 Action` | `Stun (1)` |
+     | `Armor does not see it` | `Magical` |
+     | `2 Armor, this blow only` | `2 Block` |
+     | `on the first action of a fight` | `on Engage` |
+     | `on the first/last action of a round` | `Initial` / `Final` |
+     | `every time` | nothing at all |
+
+     **`Split` and `on Engage` rather than `Flurry` and `Ambush`**, which the
+     author proposed and then changed: both are the names of real moves, and
+     a term that also names one specific move reads as a cross-reference to
+     it (`Ambush: 250% of a blow | Ambush`).
+
+     The two round positions take the SAME adjectives an item's conditional
+     percentage takes, because it is the same fact — reading it two ways
+     because it arrived from two functions is this codebase's characteristic
+     drift, stated as rule 4.
+
+     An unconditional trigger says NOTHING in concise: "every time" is the
+     absence of a condition, and printing it makes the reader check a line
+     that can never differ. All 42 moves still describe as at least one line,
+     which is checked rather than assumed.
+
+     The terms are exported as `MOVE_TERMS` (and `ROUND_POSITION_WORD`) and
+     `descriptionFormat.contract.test.ts` READS them, rather than keeping a
+     second list of which capitalised words are proper names — the contract
+     caught all five on its first run, which is what that list is for.
+
+101. **"Hit points" is "Health"** everywhere a player reads it: the derived
+     label, the tab bar's readout, a monster's detail. The field is still
+     `maxHitPoints`, which is what it IS in the formula.

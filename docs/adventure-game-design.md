@@ -1024,3 +1024,48 @@ at the floor but can never push it past the ceiling.
   thing as a build, not the same kind as a tier.
 
   Built as entries 92 to 96 of [adventure-platform.md](adventure-platform.md).
+- **THE HEALTH BANDS, THE ARMOR FLOOR, AND THE CONCISE MOVE VOCABULARY.** As
+  authored:
+
+  > * remove armor floor as a stat. it overlaps with both natural armor and
+  >   mending and convolutes the system unnecesssarily
+  > * let's have fixed intervals for health conditionals and name them
+  >    * < 1/3 health : maimed
+  >    * >= 1/3 but < 2/3 : injured
+  >    * >= 2/3 : healthy
+  > * concise: +100% Damage maimed
+  >    * +100% Damage vs maimed [when checking target's health]
+  > * when counting per trait or item: +10% Damage per trait
+  >    *  do NOT show current total, but per item/trait (this is live and
+  >       shows 0% in concise mode during character creation
+  > * let's go with "health" over "hit points"
+  > * 4 strikes, 45% Damage each > Flurry (4x45%)
+  > * 50% of hits turned critical > 50% hit to crit
+  > * strikes back for 50% of a blow > Vengeance (50%)
+  > * costs them 1 Action > Stun (1)
+  > * Armor does not see it > Magical [if this refers to damage not being
+  >   reduced by armor]
+  > * on the first action of a fight > Ambush
+  > * 2 Armor, this blow only > 2 Block
+
+  And, on the bands being disjoint or nested:
+
+  > Maimed only below 1/3 / Injured anywhere below 2/3 / Healthy at 2/3 and
+  > anywhere above 2/3. Healthy is definitely a condition that should be
+  > included, both checking vs player and vs monster. It can be a nice boost
+  > for certain builds to reward good defense or for glass cannon builds who
+  > try to snipe monsters with the first attack (once introduced).
+
+  So `injured` CONTAINS `maimed`, and `healthy` is exactly the complement of
+  `injured`. The move renames are **concise only** — verbose keeps the prose
+  that teaches a first-time reader what a move does. `Ambush` and `Flurry`
+  were withdrawn because both name real moves, and replaced by **"on Engage"**
+  and **"Split"** respectively.
+
+  **`vs maimed` — checking the TARGET's health — is NOT BUILT.** A
+  conditional percentage is folded into the profile, which is resolved with
+  no target in hand; a target band requires moving that class of effect out
+  of the profile and applying it at the blow. That is a change to combat
+  resolution and is left for its own pass rather than half-built here.
+
+  Built as entries 97 to 101 of [adventure-platform.md](adventure-platform.md).
