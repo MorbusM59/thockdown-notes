@@ -759,8 +759,8 @@
   height: calc(100% - 8px);
   width: calc(100% - 8px);
   font-size:      calc(12px * var(--ui-font-scale));
-  line-height: 0.8;
-  letter-spacing: -0.1em;
+  line-height: 1;
+  letter-spacing: -0.02em;
 }
 
 /* A NEW SCREEN IS DEALT OUT, one cell per note of its arrival burst
