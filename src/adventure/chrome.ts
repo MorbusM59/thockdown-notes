@@ -29,7 +29,7 @@ import type { EscapeMenuChromeGauge, EscapeMenuChromePill, EscapeMenuModeChrome,
 import { moteBalance, statPointProgress, statPointsAvailable, statPointStanding } from './model/motes'
 import { famePointProgress, famePointsAvailable, famePointStanding, goldBalance } from './model/gold'
 import { displayEncounter } from './stages/levelProgress'
-import { activeGame, armorOf, heldModifiers, holdingCounts, keptModifierIds, profileOf, type GameSave } from './model/gameState'
+import { activeGame, armorOf, heldModifiers, holdingCounts, keptModifierIds, playerTierOf, profileOf, type GameRecord, type GameSave } from './model/gameState'
 import { itemArmor } from './model/armor'
 import type { Content } from './content'
 import { describeModifier, type Modifier, type ModifierKind } from './model/modifiers'
@@ -56,6 +56,7 @@ const READOUT_ICONS = {
   armor: 'fa-solid fa-shield-halved',
   fame: 'fa-solid fa-crown',
   games: 'fa-solid fa-dice-d20',
+  tier: 'fa-solid fa-arrow-up-right-dots',
 } as const
 
 /**
@@ -112,6 +113,26 @@ export function statusReadouts(save: GameSave, content: Content): EscapeMenuRead
       label: 'Armor (natural)',
       value: `${itemArmor(armor)}(${Math.max(0, armor.natural)})`,
     },
+    // WHO YOU ARE, as one pill: the tier is the value and the three content
+    // vectors are its tooltip (model/vectors.ts).
+    //
+    // ONE readout rather than four, and the tier is the one that gets to be
+    // the number: a build, a species and a class are NAMES, and a name has
+    // no business in a column of quantities -- three word-pills among eight
+    // glyph-and-figure ones would read as a different bar. The tier is the
+    // single number that says how much character this is, it is the one
+    // thing fame changes about it (Ascendant), and before this there was no
+    // way at all to see either it or what you picked at creation.
+    //
+    // It sits directly above the six stats because that is what it IS: the
+    // budget they were apportioned from, so the pill and the row under it
+    // are one sentence.
+    {
+      key: 'tier',
+      icon: READOUT_ICONS.tier,
+      label: characterLabel(game, content),
+      value: String(playerTierOf(game)),
+    },
     // Effective stats, not base: what a check actually rolls against is
     // what the player needs to see. The base cap is a rule about
     // progression, not about what is true of them right now.
@@ -122,6 +143,22 @@ export function statusReadouts(save: GameSave, content: Content): EscapeMenuRead
       value: String(profile.stats[key]),
     })),
   ]
+}
+
+/**
+ * "Tier -- Hulking Mertok Duelist", or as much of it as the run has chosen.
+ *
+ * A vector the run has not answered yet is simply LEFT OUT rather than
+ * replaced with a word: character creation asks for the three one screen at a
+ * time, so a half-answered character is a real state and reads as a shorter
+ * sentence. The same rule the monster's name follows (stages/encounter.ts).
+ */
+function characterLabel(game: GameRecord, content: Content): string {
+  const build = content.builds.find((candidate) => candidate.id === game.buildId)
+  const species = content.species.find((candidate) => candidate.id === game.speciesId)
+  const combatClass = content.combatClasses.find((candidate) => candidate.id === game.classId)
+  const words = [build?.name, species?.name, combatClass?.name].filter((word): word is string => !!word)
+  return words.length > 0 ? `Tier -- ${words.join(' ')}` : 'Tier'
 }
 
 const ROMAN: readonly (readonly [number, string])[] = [

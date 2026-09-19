@@ -4,6 +4,9 @@ import { applyEffect, applyEffects, emptySave, type GameSave } from './model/gam
 import { chromeGauges, chromeIdentity, chromeMeters, statusReadouts } from './chrome'
 import { catalogFor, THOCKQUEST, type Content } from './content'
 import { createSeed } from './core/rng'
+import { createdRun, withVectors } from './testing/run'
+import { BASE_PLAYER_TIER } from './model/vectors'
+import { STAT_KEYS } from './model/stats'
 
 /**
  * Armor cannot be fabricated any more, and that is the point of the change it
@@ -196,5 +199,40 @@ describe('the readouts', () => {
     const earned = applyEffect(runningGame(), { kind: 'grantExperience', units: 10 }, PLAIN, 1)
     expect(chromeGauges(earned).find((gauge) => gauge.key === 'statPoint')?.count).toBe(1)
     expect(readoutFor(earned, 'points')).toBeUndefined()
+  })
+})
+
+describe('who the player is, on the bar', () => {
+  it('reads the tier as the value and the three vectors as its tooltip', () => {
+    // The gap this closes: a run picks a build, a species and a class at
+    // creation and then had no way to see any of them again -- nor its tier,
+    // which fame can buy up and nothing showed.
+    const save = withVectors(createdRun({ seed: 77 }), {
+      build: 'hulking',
+      species: 'mertok',
+      combatClass: 'duelist',
+    })
+    const tier = statusReadouts(save, THOCKQUEST).find((readout) => readout.key === 'tier')
+    expect(tier).toBeDefined()
+    expect(tier?.value).toBe(String(BASE_PLAYER_TIER))
+    expect(tier?.label).toBe('Tier -- Hulking Mertok Duelist')
+  })
+
+  it('names only what has been chosen, because creation asks one at a time', () => {
+    // A half-answered character is a real state, not a broken one, so a
+    // vector not yet picked is LEFT OUT rather than replaced with a word.
+    const save = withVectors(createdRun({ seed: 77 }), { build: 'hulking' })
+    const bare = { ...save, games: save.games.map((game) => ({ ...game, speciesId: null, classId: null })) }
+    const tier = statusReadouts(bare, THOCKQUEST).find((readout) => readout.key === 'tier')
+    expect(tier?.label).toBe('Tier -- Hulking')
+  })
+
+  it('sits directly above the stats it was apportioned into', () => {
+    // The pill and the row under it are one sentence: this budget produced
+    // these numbers. A reader who has to hunt for the tier cannot read it
+    // that way.
+    const keys = statusReadouts(createdRun({ seed: 77 }), THOCKQUEST).map((readout) => readout.key)
+    expect(keys.indexOf('tier')).toBe(keys.indexOf('might') - 1)
+    for (const stat of STAT_KEYS) expect(keys).toContain(stat)
   })
 })
