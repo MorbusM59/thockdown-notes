@@ -852,6 +852,46 @@ Defend and nowhere else.
 
 ## Still open, and each one blocks something
 
+**NEW, and measured against the commit before the vectors landed: FIGHTS GOT
+TWO TO EIGHT TIMES LONGER, and the obvious lever does not fix it.**
+
+Same sim, 200 runs, level cap 3, `7b170b8` (before) against the four vectors
+(after):
+
+| preset | died before → after | rounds per fight before → after |
+| --- | --- | --- |
+| Easy | 66% → **37%** | 4.0 → **33.4** |
+| Medium | 95% → **71%** | 4.1 → **8.8** |
+| Hard | 99% → 88% | 4.5 → 6.1 |
+| Extreme | 100% → 96% | 4.3 → 4.9 |
+
+The game got EASIER (a run gets five tier points at creation where an origin
+gave two or three, and fame buys twenty-five more) and the fights got LONGER
+with it — the old 4.0 rounds everywhere was not a short fight, it was a fast
+death. A live playthrough agrees: around a hundred presses for one encounter
+against the design's own pace constraint of **twenty actions a fight**.
+
+**`BASE_DAMAGE` is the parameter its own comment says is expected to be
+tuned, and it is not the lever.** Swept at 120 runs:
+
+| BASE_DAMAGE | Easy rounds/fight | Easy died |
+| --- | --- | --- |
+| 10 (shipped) | 29.4 | 40% |
+| 15 | 9.5 | 58% |
+| 20 | 10.9 | 68% |
+| 25 | 3.6 | 71% |
+| 30 | 1.6 | 74% |
+
+It shortens fights and costs almost twice the death rate doing it, because
+speeding both sides up favours whoever has FEWER hit points and that is the
+player: a character carries fifty to a hundred and thirty, while a monster
+carries its own pool **times its pack size**. Fight length and difficulty are
+not separable with one number while the two pools are that lopsided.
+
+So this is not one constant to turn. It is the same question as the one
+below, from the other end — what a stat is worth decides how much of a
+monster a tier buys — and it wants deciding before anything is tuned.
+
 **NEW, and it is what the four vectors made visible: THE SIX STATS ARE NOT
 WORTH THE SAME, and the gap is about seven to one.**
 
