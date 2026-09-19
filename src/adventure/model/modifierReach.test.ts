@@ -65,11 +65,12 @@ describe('a chance a modifier changes', () => {
     const charm = modifier('charm', [{ kind: 'derivedPercent', derived: 'critChance', percent: 0.5 }])
     const plain = resolveProfile(BASE, [], noHoldings)
     const charmed = resolveProfile(BASE, [charm], noHoldings)
-    // HALF THE ORDINARY HITS become crits: 20% base, so 20% + 80% x 50% = 60%.
-    // A percentage of a probability is a percentage of the remainder
-    // (model/chance.ts) -- adding fifty POINTS would have been 70%, and three
-    // such items would have been a certainty.
-    expect(charmed.derived.critChance).toBeCloseTo(0.6, 10)
+    // HALF THE ORDINARY HITS become crits: 25% at a Luck of nothing (the
+    // curve's -4 shift), so 25% + 75% x 50% = 62.5%. A percentage of a
+    // probability is a percentage of the remainder (model/chance.ts) --
+    // adding fifty POINTS would have been 75%, and three such items would
+    // have been a certainty.
+    expect(charmed.derived.critChance).toBeCloseTo(0.625, 10)
 
     const crits = (chances: typeof plain.chances) => frequency((rng) => {
       const result = resolveExchange({

@@ -2314,3 +2314,64 @@ placed at 5, 9 and 10 and the level advancing after ten.
      PRESENTATION ONLY — `armDefenceMoves` still rolls in `defencesOffered`'s
      order, because that order is what keeps the seeded stream fixed, and a
      sort that reached it would make the rolls depend on what was rolled.
+
+109. **EVERY STAT-DELTA CHANCE IS A HALVING CURVE, and an immunity is no
+     longer expressible.** `base + perPoint x delta` walked off both ends and
+     the clamp turned each end into an immunity: dodge was a flat 100% at ten
+     points of Agility, crit was CERTAIN at eight of Luck and exactly ZERO two
+     points down, and a charm check was strictly zero against any monster
+     whose Intellect matched the player's Charisma. None of those is a corner
+     — a mono-stat build at the base cap of six plus six of tier is at twelve
+     against another build's nothing, so deltas past ten are ordinary play.
+     The curve is
+
+         u = delta + deltaShift
+         u <= 0:  p = 0.5 x 2^(-deltaForce x |u|)
+         u >  0:  p = 1 - 0.5 x 2^(-deltaForce x u)
+
+     — one rule read from whichever side you are on: every `1/deltaForce`
+     points of delta halves whichever of the two is LEFT. **It is the same
+     arithmetic as `ChanceAdjustment`'s keep factors and as `pressThumb`**, so
+     the base curve stopped being the one place in the game that worked
+     differently from everything applied on top of it. Strictly inside 0..1 at
+     every finite delta and monotone in it, so nothing clamps it and no clamp
+     is hiding a mistake. **The thumb still reaches 1**, deliberately: a
+     Luckiness of 1 means the player cannot fail, which is what that slider is
+     for, and it is applied after this.
+     **`deltaForce` is a shared 0.25** — four points to halve — chosen over
+     the 0.5 first proposed because 0.5 made a two-point edge worth 75% and
+     tracked nothing like the old curve in the range real fights sit in.
+     **`deltaShift` moves the coin flip**: `p(-deltaShift) = 0.5` always. Four
+     of the five checks sit at zero and are even money between equals; **crit
+     is -4**, so a quarter at parity and even money only four points of Luck
+     up, which is what keeps a crit a rarity rather than a contest.
+     **THERE IS NO `base` FIELD** — a base and a shift are two ways to say one
+     thing — and the cost of that is real: a reader could once read
+     "50% + 5% a point" off the declaration and now cannot.
+     `statChance.contract.test.ts` is the answer, stating every declaration's
+     parity value and the whole table for the shared rate, so a tuning change
+     has to come and edit it.
+     **A REWARD CHECK IS NOT ONE OF THESE** and kept the straight line, under
+     its own `LinearChance` in `model/rewards.ts`: it is uncontested (the
+     fight is over) so there is no delta to answer, and `countRepeatedAwards`
+     needs a chance ABOVE ONE with the repeat penalty coming off before
+     anything clamps — a boss's 200% start is certain three times over, which
+     a bounded curve cannot express. One name for two curve shapes was the
+     thing to avoid.
+     **CHARM'S FLOOR MOVED TO THE ROLL THAT ALWAYS HELD IT.** "A charisma of
+     nothing is worth nothing" is `(0 - 0) / 12 = 0` in `rollCharms`, so no
+     effect is ever up and the check never runs; the straight line stated that
+     same floor a second time and paid for it with the Intellect immunity.
+     Its test moved from the second roll to the first, having been asserting a
+     state the game cannot reach.
+     **`LIGHTNING_MAX_STRIKES` stopped being load-bearing** and stays: the
+     chain now ends with probability one on its own, but "ends eventually" and
+     "ends" are not the same promise to make about a loop in a pure function.
+     **THE SIM COULD NOT MEASURE THIS**, and that is a finding about the
+     instrument rather than about the change: it reports 94-98% death at every
+     difficulty BEFORE the change as well as after, so the death rate is
+     saturated and discriminates nothing. Entry 89 records Easy at 66% after
+     the omen landed; something between then and now cost that and is worth
+     its own session. The one signal that did move is rounds per fight, down
+     roughly 10-15% (7.7 to 6.5 at x1.01): both sides land more often near
+     parity, so fights resolve faster at the same damage per fight.

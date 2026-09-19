@@ -1,12 +1,18 @@
 // How a stat becomes a probability, in one place.
 //
-// EVERY chance in this game has the same shape: a base, a per-point step, and
-// the stat it reads -- contested against that stat's counter. Dodge is
-// `50% + 5%` per point of Agility, a crit is `20% + 10%` per point of Luck, a
-// monster's pursuit of a fleeing player is `50% + 5%` per point of Agility
-// again. Writing each of those out by hand is three chances to get the
-// contest wrong and three places to fix when the rule changes, so an action
+// EVERY chance in this game has the same shape: a HALVING CURVE over the
+// contested stat delta. Writing each of them out by hand is a chance to get
+// the contest wrong and a place to fix when the rule changes, so an action
 // DECLARES its two numbers and hands them here instead.
+//
+// THE CURVE REPLACED A LINE, and the line is why. `base + perPoint x delta`
+// walks off both ends: dodge reached a flat 100% at ten points of Agility and
+// crit was CERTAIN at eight points of Luck, with the clamp turning both into
+// immunities rather than into steep odds. That is not an edge case here -- a
+// mono-stat build at the base cap of six plus six of tier is already at
+// twelve, against another build's zero, so deltas past ten are ordinary play
+// rather than a corner. The curve cannot reach either bound at any finite
+// delta, so an immunity is not expressible.
 //
 // CONTESTED means the opponent's counter stat is subtracted from mine before
 // the step is applied. The pairing is symmetric where a stat answers itself
@@ -14,12 +20,12 @@
 // relation rather than a table of special cases.
 //
 // An ABSENT opponent contributes ZERO, not the actor's own value. That is
-// what makes the design plan's stat table -- `50% + 5% x Agility` -- the same
-// formula as the contested one rather than a second rule: the table is the
-// contest against an opponent of nothing. Defaulting to the actor's own value
-// looks like it gives "a delta of zero" and does, but it also cancels the
-// stat term itself, so an uncontested dodge came out at a flat 50% however
-// nimble the character was.
+// what makes the stat table on a character sheet the same formula as the
+// contested one rather than a second rule: the table is the contest against
+// an opponent of nothing. Defaulting to the actor's own value looks like it
+// gives "a delta of zero" and does, but it also cancels the stat term itself,
+// so an uncontested dodge came out at a flat 50% however nimble the character
+// was.
 
 import type { StatBlock, StatKey } from './stats'
 
@@ -45,28 +51,60 @@ export function contestedStat(stat: StatKey, own: StatBlock, opponent?: StatBloc
 }
 
 /**
- * One chance, declared rather than written out: what it is at zero, what a
- * point of its stat is worth, and which stat that is.
+ * HOW FAST THE CURVE CLIMBS: at `deltaForce` 1, every point of delta halves
+ * the chance of failure -- 50%, 75%, 87.5%. The shared default is a quarter
+ * of that, so it takes FOUR points to halve, which keeps a one-point edge a
+ * nudge and still leaves room above the deltas real builds reach.
+ */
+export const DEFAULT_DELTA_FORCE = 0.25
+
+/**
+ * One chance, declared rather than written out: how steeply it answers the
+ * contested delta, where along that delta the coin flip sits, and which stat
+ * it reads.
+ *
+ * THERE IS NO `base` FIELD, and that is the one thing this declaration no
+ * longer says out loud. A chance at parity is `chanceAtDelta(chance, 0)` --
+ * derived from the shift rather than authored beside it, because a base and a
+ * shift are two ways to say the same thing and two ways to say one thing is
+ * one way to say two different ones. `statChance.contract.test.ts` states
+ * every declaration's parity value instead, so the number a designer actually
+ * cares about is checked rather than implied.
  */
 export interface StatChance {
-  /** At a contested stat of zero. */
-  base: number
-  /** Added per point of the contested stat. Negative is legal -- a penalty per point is still a curve. */
-  perPoint: number
+  /** How steeply the curve answers the delta. See `DEFAULT_DELTA_FORCE`. */
+  deltaForce: number
+  /**
+   * Where the coin flip sits: `p(-deltaShift) = 0.5`, always. Zero puts it at
+   * parity; crit's -4 says a character needs four points of Luck over their
+   * opponent just to crit half the time, which is what makes crit a rarity
+   * rather than a contest.
+   */
+  deltaShift: number
   stat: StatKey
 }
 
 /**
- * A declared chance BEFORE clamping.
+ * THE CURVE. A chance at a given contested delta, and the only shape a
+ * stat-delta check has.
  *
- * Kept apart from `resolveChance` because some rules subtract from a chance
- * that is already over 1 and the order matters: a boss's loot check starts at
- * 200% and loses 50 points per repeat, so it is certain three times over.
- * Clamping first would make it 100% and then 50%, turning three guaranteed
- * loot screens into one and a coin flip.
+ *   u <= 0:  p = 0.5 x 2^(-deltaForce x |u|)
+ *   u >  0:  p = 1 - 0.5 x 2^(-deltaForce x u)        where u = delta + deltaShift
+ *
+ * Read from whichever side you are on, that is one rule: EVERY
+ * `1 / deltaForce` points of delta halves whichever of the two is left. It is
+ * the same arithmetic as `ChanceAdjustment`'s keep factors and as
+ * `pressThumb` below -- a percentage of a probability is a percentage of what
+ * is LEFT -- so the base curve is no longer the one place in the game that
+ * works differently from everything applied on top of it.
+ *
+ * Strictly inside 0..1 at every finite delta, and monotone in it. Nothing
+ * clamps it, because there is nothing to clamp.
  */
-export function rawChance(chance: StatChance, own: StatBlock, opponent?: StatBlock | null): number {
-  return chance.base + chance.perPoint * contestedStat(chance.stat, own, opponent)
+export function chanceAtDelta(chance: StatChance, delta: number): number {
+  const shifted = delta + chance.deltaShift
+  const half = 0.5 * 2 ** (-chance.deltaForce * Math.abs(shifted))
+  return shifted <= 0 ? half : 1 - half
 }
 
 export function clampChance(value: number): number {
@@ -75,7 +113,7 @@ export function clampChance(value: number): number {
 
 /** A declared chance, resolved against an actor and optionally an opponent. Always inside 0..1. */
 export function resolveChance(chance: StatChance, own: StatBlock, opponent?: StatBlock | null): number {
-  return clampChance(rawChance(chance, own, opponent))
+  return chanceAtDelta(chance, contestedStat(chance.stat, own, opponent))
 }
 
 /**
@@ -182,7 +220,7 @@ export function resolveChanceWith(
   context: ChanceContext = {},
 ): number {
   const adjustment = context.adjustment ?? NO_CHANCE_ADJUSTMENT
-  const stated = clampChance(rawChance(chance, own, opponent))
+  const stated = resolveChance(chance, own, opponent)
   // Gains first, then penalties. Each acts on its own half of the remainder,
   // so neither can leave 0..1 and the result needs no second clamp.
   const gained = 1 - (1 - stated) * Math.max(0, adjustment.failureKeep)

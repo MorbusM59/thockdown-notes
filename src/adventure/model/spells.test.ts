@@ -163,14 +163,21 @@ describe('the table, spell by spell', () => {
   })
 
   it('a Bolt leaps at least once and never forever', () => {
-    // The repeat chance reaches certainty on a lucky enough character, so the
-    // chain is bounded -- a terminator, not a rule.
+    // THE BOUND HOLDS AND IS NO LONGER REACHED BY CERTAINTY. The repeat
+    // chance used to hit exactly 1 at ten points of Luck, so a lucky enough
+    // character chained the maximum every time and this asserted that. The
+    // curve cannot reach 1 at any delta (model/chance.ts), so the strongest
+    // thing true of a very lucky caster is that the chain is long and still
+    // bounded -- which is the terminator's whole job.
     const lucky = { ...PLAYER, luck: 12 }
-    const result = castSpell({
-      spell: spellAt(3)!, state: freshRound(), monster: monsterOf(),
-      playerStats: lucky, playerDerived: deriveStats(lucky), rng: 11,
-    })
-    expect(result.blows.length).toBe(LIGHTNING_MAX_STRIKES)
+    for (let seed = 1; seed <= 40; seed += 1) {
+      const result = castSpell({
+        spell: spellAt(3)!, state: freshRound(), monster: monsterOf(),
+        playerStats: lucky, playerDerived: deriveStats(lucky), rng: seed,
+      })
+      expect(result.blows.length).toBeGreaterThanOrEqual(1)
+      expect(result.blows.length).toBeLessThanOrEqual(LIGHTNING_MAX_STRIKES)
+    }
 
     let leapt = false
     for (let seed = 1; seed <= 60; seed += 1) {

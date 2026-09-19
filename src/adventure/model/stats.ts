@@ -14,7 +14,7 @@
 //
 // Nothing here is random, stateful, or aware of rounds, enemies or menus.
 
-import { resolveChance, type StatChance } from './chance'
+import { DEFAULT_DELTA_FORCE, resolveChance, type StatChance } from './chance'
 
 export const STAT_KEYS = ['might', 'agility', 'perception', 'intellect', 'charisma', 'luck'] as const
 
@@ -190,9 +190,19 @@ const CHANCE_KEYS: ReadonlySet<DerivedKey> = new Set<DerivedKey>(CHANCE_DERIVED_
  * see model/chance.ts. Everything else below is a property of the actor alone
  * and takes no opponent at all.
  */
-export const DODGE_CHANCE: StatChance = { base: 0.5, perPoint: 0.05, stat: 'agility' }
-export const HIT_CHANCE: StatChance = { base: 0.5, perPoint: 0.05, stat: 'perception' }
-export const CRIT_CHANCE: StatChance = { base: 0.2, perPoint: 0.1, stat: 'luck' }
+/** A coin flip at equal Agility. See `chanceAtDelta`. */
+export const DODGE_CHANCE: StatChance = { deltaForce: DEFAULT_DELTA_FORCE, deltaShift: 0, stat: 'agility' }
+
+/** A coin flip at equal Perception against Luck. */
+export const HIT_CHANCE: StatChance = { deltaForce: DEFAULT_DELTA_FORCE, deltaShift: 0, stat: 'perception' }
+
+/**
+ * A quarter at parity, and a coin flip only four points of Luck up on the
+ * opponent's Perception. The shift is what keeps a crit a rarity: with none
+ * of it, every chance in the game would be even money between equals, and a
+ * crit that is even money is not a crit.
+ */
+export const CRIT_CHANCE: StatChance = { deltaForce: DEFAULT_DELTA_FORCE, deltaShift: -4, stat: 'luck' }
 
 /** The declaration behind each one, so a caller can resolve it for itself. */
 export const CHANCE_SPECS: Readonly<Record<ChanceKey, StatChance>> = {

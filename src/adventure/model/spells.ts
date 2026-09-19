@@ -29,7 +29,7 @@
 
 import { nextChance, nextRoll, type RngState, type Roll } from '../core/rng'
 import { CRIT_CHANCE, type DerivedStats, type StatBlock } from './stats'
-import { resolveChanceWith, type ChanceAdjustment } from './chance'
+import { DEFAULT_DELTA_FORCE, resolveChanceWith, type ChanceAdjustment, type StatChance } from './chance'
 import { damageFrom, type Monster } from './monsters'
 import { rollAttackDamage, type DamageRoll } from './damageRoll'
 import { monsterActionsLeft, resolveExchange, type Blow, type RoundState } from './combat'
@@ -187,17 +187,22 @@ export function magicalDamage(playerDerived: DerivedStats): number {
   return damageFrom(playerDerived.damageMultiplier)
 }
 
-/** The bolt's chance to leap again. `base` is the spec's 50%; the step is Luck's own. */
-export const LIGHTNING_REPEAT_CHANCE = { base: 0.5, perPoint: 0.1, stat: 'luck' } as const
+/** The bolt's chance to leap again: the spec's 50% between equals, on contested Luck. */
+export const LIGHTNING_REPEAT_CHANCE: StatChance = {
+  deltaForce: DEFAULT_DELTA_FORCE, deltaShift: 0, stat: 'luck',
+}
 
 /**
  * How many times a bolt may leap in total.
  *
- * NOT a rule, a TERMINATOR. The repeat chance is contested Luck on a base of
- * a half and reaches certainty at ten points of it, at which the chain would
- * never end -- an unbounded loop in a pure function nothing can interrupt. It
- * is named rather than buried so the number is the author's to set, and it is
- * high enough that a bolt reaching it is already an extraordinary round.
+ * NOT a rule, a TERMINATOR. It was load-bearing while the repeat chance was a
+ * straight line, which reached CERTAINTY at ten points of Luck -- an
+ * unbounded loop in a pure function nothing can interrupt. The curve cannot
+ * reach one at any delta (model/chance.ts), so the chain now ends on its own
+ * with probability one; this stays because "ends eventually" and "ends" are
+ * not the same promise to make about a loop, and because the number is the
+ * author's to set. It is high enough that a bolt reaching it is already an
+ * extraordinary round.
  */
 export const LIGHTNING_MAX_STRIKES = 10
 

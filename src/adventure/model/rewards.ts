@@ -21,10 +21,10 @@
 // chance and not a clamped one: clamp first and a boss's 200% becomes 100%,
 // then 50%, and three certainties collapse into one and a coin flip.
 
-import { clampChance, rawChance, type StatChance } from './chance'
+import { clampChance } from './chance'
 import { nextChance, type RngState } from '../core/rng'
 import type { MonsterType } from './monsters'
-import type { StatBlock } from './stats'
+import type { StatBlock, StatKey } from './stats'
 
 /** Every repeat is this much less likely than the one before. */
 export const REWARD_REPEAT_PENALTY = 0.5
@@ -38,11 +38,30 @@ export const MONSTER_TYPE_REWARD_BONUS: Readonly<Record<MonsterType, number>> = 
   boss: 1.5,
 }
 
+/**
+ * A REWARD CHECK IS NOT A STAT-DELTA CHECK, and it kept the straight line the
+ * combat chances gave up (model/chance.ts).
+ *
+ * Two reasons, and either alone is enough. It is UNCONTESTED -- the fight is
+ * over, there is nobody to contest -- so there is no delta for a curve to
+ * answer. And the escalation above needs a chance ABOVE ONE and needs the
+ * repeat penalty to come off it before anything clamps, which a curve bounded
+ * inside 0..1 cannot express at all. Sharing one declaration type with the
+ * combat chances would have meant one name for two curve shapes.
+ */
+export interface LinearChance {
+  /** At a stat of zero. May exceed 1: see the run of chances above. */
+  base: number
+  /** Added per point of the stat. */
+  perPoint: number
+  stat: StatKey
+}
+
 /** An extra loot screen, checked against Luck. */
-export const EXTRA_LOOT_CHANCE: StatChance = { base: 0.5, perPoint: 0.05, stat: 'luck' }
+export const EXTRA_LOOT_CHANCE: LinearChance = { base: 0.5, perPoint: 0.05, stat: 'luck' }
 
 /** An extra mote of experience, checked against Intellect. */
-export const EXTRA_MOTE_CHANCE: StatChance = { base: 0.5, perPoint: 0.05, stat: 'intellect' }
+export const EXTRA_MOTE_CHANCE: LinearChance = { base: 0.5, perPoint: 0.05, stat: 'intellect' }
 
 /** A loot screen's gold branch. Always exactly one piece; an item is the alternative. */
 export const GOLD_PER_LOOT_SCREEN = 1
@@ -58,12 +77,12 @@ export const BASE_MOTES_PER_ENCOUNTER = 1
  * uncontested, which is what makes `50% + 5% x Luck` mean what it says.
  */
 export function countRepeatedAwards(
-  chance: StatChance,
+  chance: LinearChance,
   stats: StatBlock,
   typeBonus: number,
   rng: RngState,
 ): { count: number; rng: RngState } {
-  const start = rawChance(chance, stats) + typeBonus
+  const start = chance.base + chance.perPoint * stats[chance.stat] + typeBonus
   let count = 0
   let state = rng
   for (;;) {

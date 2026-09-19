@@ -1102,3 +1102,39 @@ at the floor but can never push it past the ceiling.
   [adventure-platform.md](adventure-platform.md).
 
   Built as entries 102 to 106 of [adventure-platform.md](adventure-platform.md).
+
+### The stat table's chances are a curve, not a line
+
+The plan's stat table gives each chance as `base + step x stat` — dodge at
+`50% + 5% x Agility`, crit at `20% + 10% x Luck`. The author replaced that
+shape, in conversation, with a halving curve:
+
+  > p(x) = 0.5 (1 - 0.5^(deltaForce*abs(x+deltaShift))) * sgn(x+deltaShift)) + 0.5
+  >
+  > where x = myStat − theirCounterStat and deltaForce is a value between 0
+  > and 1, default 0.5 that scales how much the stat delta affects the
+  > outcome. The idea is that at deltaForce 1, each point of difference halves
+  > the chance of failure. [...] This should be a fairly clean replacement that
+  > tones down pathological cases from hitting immunities.
+  >
+  > What we need for crit is a deltaShift in addition to deltaForce. [...] At a
+  > deltaShift of -2, default crit should sit at 25% with deltaForce 0.5.
+  >
+  > let's apply the curve with a straight (0.25, 0) deltaForce deltaShift for
+  > dodge, hit and charm. crit gets (0.25,-4)
+  >
+  > 0.25 is intentional. With builds and high tiers, we will hit major deltas,
+  > because one build has a stat at 0 and another at 10 or higher, 6 base stat
+  > 6 tier on a mono stat build is already 12.
+
+The settled values are therefore `deltaForce` 0.25 everywhere, with
+`deltaShift` 0 for dodge, accuracy, charm and the lightning repeat, and −4 for
+crit. The two loot/mote reward checks keep the plan's straight line: they are
+uncontested, and the boss's escalating check needs a chance above 100%.
+
+Charm's `base: 0` — "a charisma of nothing is worth nothing" — is unchanged as
+a RULE and moved to the roll that always enforced it, the availability check
+`(charisma − level) / 12`. The author's own reading settled it: *"a 0 charisma
+character never has any effect up. so that settles it for me."*
+
+Built as entry 109 of [adventure-platform.md](adventure-platform.md).

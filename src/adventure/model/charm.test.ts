@@ -75,9 +75,18 @@ describe('a charm firing', () => {
     rng,
   })
 
-  it('never fires for a character with nothing to say', () => {
+  it('never comes up at all for a character with nothing to say', () => {
+    // THE FLOOR IS THE FIRST ROLL, and it is the only place it is stated.
+    // A charm check is a contested chance like every other (model/chance.ts),
+    // so between a Charisma of nothing and an Intellect of nothing it is even
+    // money -- and that never matters, because `rollCharms` puts nothing on
+    // the table for it to fire. Asserting it at the SECOND roll, as this
+    // test used to, was asserting a state the game cannot reach: the old
+    // straight line happened to be zero there, which made a floor look like
+    // it lived in two places when the game only ever consulted one.
     for (let seed = 1; seed <= 200; seed += 1) {
-      expect(intercept([4, 2, 0], seed, block()).interception).toBeNull()
+      expect(rollCharms(0, seed).charms).toEqual([])
+      expect(rollCharms(-2, seed).charms).toEqual([])
     }
   })
 

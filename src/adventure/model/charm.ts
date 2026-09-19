@@ -16,10 +16,18 @@
 //      are worth is settled by the second roll, and contesting both would
 //      charge the player for its Intellect twice.
 //
-//   2. DOES IT FIRE? A charm check on every action the monster takes -- base
-//      zero, ten points per point of Charisma, CONTESTED against Intellect
-//      like every other chance in the game (model/chance.ts). Zero base is
-//      the spec's, and it is what keeps a charisma of nothing worth nothing.
+//   2. DOES IT FIRE? A charm check on every action the monster takes, on the
+//      same curve as every other chance in the game and CONTESTED against
+//      Intellect (model/chance.ts) -- so it is even money between a Charisma
+//      and an Intellect that match.
+//
+//      IT CARRIES NO FLOOR OF ITS OWN, and does not need one. The spec's
+//      "a charisma of nothing is worth nothing" is held by the FIRST roll,
+//      not this one: `(0 - 0) / 12` is zero, so a character with no Charisma
+//      never has an effect up and this check never runs. The straight line
+//      this replaced stated that floor a second time, in a second place, and
+//      paid for it by being strictly zero against any monster whose Intellect
+//      matched -- an immunity nothing announced.
 //
 // The effects are tried STRONGEST FIRST and the first success wins, which is
 // also the order the round's pill lists them in. Two of them firing on one
@@ -27,7 +35,7 @@
 // to lose.
 
 import { nextChance, nextRoll, type RngState, type Roll } from '../core/rng'
-import { resolveChanceWith, type StatChance } from './chance'
+import { DEFAULT_DELTA_FORCE, resolveChanceWith, type StatChance } from './chance'
 import type { StatBlock } from './stats'
 import { REACH_DIVISOR } from './spells'
 import type { Monster } from './monsters'
@@ -88,7 +96,7 @@ export function charmChance(charisma: number, level: number): number {
  * a point, contested against Intellect -- so a clever monster is a hard one
  * to talk at, which is the relation `COUNTER_STATS` already declares.
  */
-export const CHARM_CHECK: StatChance = { base: 0, perPoint: 0.1, stat: 'charisma' }
+export const CHARM_CHECK: StatChance = { deltaForce: DEFAULT_DELTA_FORCE, deltaShift: 0, stat: 'charisma' }
 
 /** Which effects are up this round, STRONGEST FIRST. */
 export function rollCharms(charisma: number, rng: RngState): { charms: number[]; rng: RngState } {

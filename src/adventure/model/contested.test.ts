@@ -4,7 +4,7 @@ import {
   actionsRemaining, BASE_DAMAGE, damageFrom, membersDown,
   monsterDefence, MONSTER_TYPES, } from './monsters'
 import { clampProgression, PROGRESSION_MAX, PROGRESSION_MIN, PROGRESSION_STEP, powerMultiplier } from './difficulty'
-import { COUNTER_STATS, contestedStat, pressThumb, resolveChance } from './chance'
+import { chanceAtDelta, COUNTER_STATS, contestedStat, pressThumb, resolveChance } from './chance'
 import { createStatBlock, deriveStats, DODGE_CHANCE, STAT_KEYS } from './stats'
 import { testMonster } from '../testing/monster'
 import { monsterTier, statsFromTier, type Species } from './vectors'
@@ -51,28 +51,34 @@ describe('contested stats', () => {
     }
   })
 
-  it('makes the plan\'s stat table the contest against nobody', () => {
+  it('makes the stat table the contest against nobody', () => {
+    // An ABSENT opponent contributes zero, which is what makes the table and
+    // the contest one formula rather than two.
     for (let agility = 0; agility <= 6; agility += 1) {
       const mine = block({ agility })
-      expect(deriveStats(mine).dodgeChance).toBeCloseTo(0.5 + 0.05 * agility, 10)
-      // ...and against an opponent of zero, which is the same thing.
-      expect(deriveStats(mine, block()).dodgeChance).toBeCloseTo(0.5 + 0.05 * agility, 10)
+      expect(deriveStats(mine).dodgeChance)
+        .toBeCloseTo(chanceAtDelta(DODGE_CHANCE, agility), 10)
+      expect(deriveStats(mine, block()).dodgeChance)
+        .toBeCloseTo(chanceAtDelta(DODGE_CHANCE, agility), 10)
     }
   })
 
   it('resolves a declared chance the same way the derived one does', () => {
-    // One resolver, so an action declaring `{base, perPoint, stat}` and the
-    // derived stat block cannot drift apart.
+    // One resolver, so an action declaring `{deltaForce, deltaShift, stat}`
+    // and the derived stat block cannot drift apart.
     const mine = block({ agility: 4 })
     const theirs = block({ agility: 1 })
     expect(resolveChance(DODGE_CHANCE, mine, theirs))
       .toBeCloseTo(deriveStats(mine, theirs).dodgeChance, 10)
   })
 
-  it('resolves the design plan\'s worked example', () => {
-    // Agility 3 against Agility 5 dodges at 50% + 5% x (3 - 5).
-    const dodge = deriveStats(block({ agility: 3 }), block({ agility: 5 })).dodgeChance
-    expect(dodge).toBeCloseTo(0.4, 10)
+  it('answers only the delta, wherever the two stats sit', () => {
+    // The curve reads the DIFFERENCE and nothing else, so 3-against-5 and
+    // 8-against-10 are the same fight. The design plan's own worked example
+    // (Agility 3 against Agility 5) is this row, at its new value.
+    const two = chanceAtDelta(DODGE_CHANCE, -2)
+    expect(deriveStats(block({ agility: 3 }), block({ agility: 5 })).dodgeChance).toBeCloseTo(two, 10)
+    expect(deriveStats(block({ agility: 8 }), block({ agility: 10 })).dodgeChance).toBeCloseTo(two, 10)
   })
 
   it('leaves the uncontested values alone whoever is on the other side', () => {
