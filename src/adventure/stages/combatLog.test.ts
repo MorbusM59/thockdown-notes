@@ -9,6 +9,8 @@ import { ROOT_STAGE_ID, STAGES } from '../stages'
 import { narrationText, parseNarration, splitNarration } from '../../escapeMenu/narrationMarkup'
 import { addStats, createStatBlock } from '../model/stats'
 import { killPill, monsterAttackPill, playerAttackPill, statusPill } from './combatLog'
+import { defencesOffered } from '../model/combat'
+import { defenceRank } from './combat'
 import { lootStage } from './loot'
 import { beginRound, UNTOUCHED_FIGHT } from '../model/combat'
 import { testMonster } from '../testing/monster'
@@ -281,5 +283,27 @@ describe('the blow that ended it', () => {
       7,
     )
     expect(fled.narration).toBe('It is gone, and it left little.')
+  })
+})
+
+describe('what the ring opens on when a blow is coming', () => {
+  it('puts the class move between Dodge and the plain answers', () => {
+    // The ring opens on its first cell, so the order IS the default a fast
+    // player presses through. A move is what the class was chosen for, so it
+    // outranks the generic Defend it stands in for.
+    const move = { id: 'someMove' }
+    const ranked = defencesOffered(true)
+      .map((defence) => ({ defence, move: defence === 'takeTheHit' ? move : null }))
+      .sort((left, right) => defenceRank(left.defence, left.move) - defenceRank(right.defence, right.move))
+      .map(({ defence }) => defence)
+    expect(ranked).toEqual(['dodge', 'takeTheHit', 'defend', 'flee'])
+  })
+
+  it('leaves the plain order alone when the class offers nothing', () => {
+    const ranked = defencesOffered(true)
+      .map((defence) => ({ defence, move: null }))
+      .sort((left, right) => defenceRank(left.defence, left.move) - defenceRank(right.defence, right.move))
+      .map(({ defence }) => defence)
+    expect(ranked).toEqual(['dodge', 'defend', 'flee', 'takeTheHit'])
   })
 })

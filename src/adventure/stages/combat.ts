@@ -69,6 +69,17 @@ const DEFENCE_LABELS: Readonly<Record<Defence, { label: string; icon: string }>>
   takeTheHit: { label: 'Take the hit', icon: 'fa-solid fa-user' },
 }
 
+/**
+ * Where a defence sits on the ring, given whether a class move stands in for
+ * it. Dodge first (it costs nothing and takes nothing), then the class's own
+ * answer, then the plain ones. Ties keep `DEFENCES`' order, because a sort
+ * is stable.
+ */
+export function defenceRank(defence: Defence, move: { id: string } | null): number {
+  if (defence === 'dodge') return 0
+  return move ? 1 : 2
+}
+
 const ATTACK_ICON = 'fa-solid fa-burst'
 
 const PREPARE_CHOICE = 'combat:prepare'
@@ -901,22 +912,28 @@ export const combatStage: StageModule = {
       // something up. `DEFENCES` is already in that order and
       // `defencesOffered` preserves it; the test says so, because a
       // reordering there would silently change what a fast player presses.
-      // A CLASS MOVE RENAMES THE CELL IT STANDS IN FOR, and keeps its
-      // position: the order is the default (Dodge first, then Defend, then
-      // the two that give something up), and a class that changed where its
-      // answer sat would cost a fast player the thing the ordering buys.
-      choices: defencesOffered(state.dodgeOffered).map((defence) => {
-        const move = moveById(
-          context.game ? runClass(context.game, context.content) : null,
-          typeof state.defenceMoves[defence] === 'string' ? (state.defenceMoves[defence] as string) : null,
-        )
-        return {
+      // A CLASS MOVE RENAMES THE CELL IT STANDS IN FOR AND OUTRANKS IT:
+      // Dodge, then whatever the class is offering, then the plain answers.
+      // A move is the thing the class was chosen FOR, so a fast player
+      // pressing through should get it rather than the generic Defend it
+      // replaced. Presentation only -- `armDefenceMoves` still rolls in
+      // `defencesOffered`'s order, because that order is what keeps the
+      // seeded stream fixed.
+      choices: defencesOffered(state.dodgeOffered)
+        .map((defence) => ({
+          defence,
+          move: moveById(
+            context.game ? runClass(context.game, context.content) : null,
+            typeof state.defenceMoves[defence] === 'string' ? (state.defenceMoves[defence] as string) : null,
+          ),
+        }))
+        .sort((left, right) => defenceRank(left.defence, left.move) - defenceRank(right.defence, right.move))
+        .map(({ defence, move }) => ({
           id: `defence:${defence}`,
           label: move?.name ?? DEFENCE_LABELS[defence].label,
           icon: move?.icon ?? DEFENCE_LABELS[defence].icon,
           detail: move ? { title: move.name, lines: describeMove(move, context.describe) } : undefined,
-        }
-      }),
+        })),
     }
   },
 

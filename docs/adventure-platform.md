@@ -2302,3 +2302,15 @@ placed at 5, 9 and 10 and the level advancing after ten.
      `combat.ts` assembles the moment once, in `monsterMoment`, rather than
      spelling the triple out at each of its three rebuild sites: a moment
      assembled correctly at two of three is the same defect one level down.
+
+108. **A CLASS MOVE OUTRANKS THE CELL IT STANDS IN FOR.** The ring opens on
+     its first cell, so the order of the defence screen IS the default a
+     player holding Space presses through. It was `DEFENCES`' order with a
+     move merely renaming whichever cell it replaced, which meant the plain
+     Defend beat the thing the class was chosen FOR whenever the move landed
+     on Flee or Take the hit. The rank is now Dodge, then any cell carrying
+     an armed move, then the plain answers (`stages/combat.ts`'s
+     `defenceRank`; ties keep `DEFENCES`' order, a sort being stable).
+     PRESENTATION ONLY — `armDefenceMoves` still rolls in `defencesOffered`'s
+     order, because that order is what keeps the seeded stream fixed, and a
+     sort that reached it would make the rolls depend on what was rolled.
