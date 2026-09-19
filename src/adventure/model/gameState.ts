@@ -35,8 +35,11 @@ import { canAllocateFamePoint, famePointsAvailable, fameReached } from './gold'
 import { canBuyMore, famePurchaseById, famePurchaseBonus } from './famePurchases'
 import { withUnlocksEarnedBy } from './permanentUnlocks'
 import type { JsonObject } from '../core/json'
-import { createSeed, type RngState } from '../core/rng'
-import { DEFAULT_DIFFICULTY, type Difficulty } from './difficulty'
+import { createSeed, seedFrom, type RngState } from '../core/rng'
+import { clampProgression, DEFAULT_PROGRESSION } from './difficulty'
+import {
+  clampAutoAdvanceMs, DEFAULT_AUTO_ADVANCE_MS, DEFAULT_AUTO_ADVANCE_SCOPE, type AutoAdvanceScope,
+} from './autoAdvance'
 import { BASE_PLAYER_TIER, buildModifier, type CombatClass } from './vectors'
 import { speciesModifier } from './monsters'
 
@@ -147,16 +150,20 @@ export interface GameRecord {
    */
   encounterIndex: number
   /**
-   * FIXED when the run starts, from the settings as they stood then. A
-   * preset changed mid-run would rewrite what every fight already fought was
-   * worth, so the settings hold the choice for the NEXT run and the record
-   * holds the one this run is being played under.
+   * WHAT THIS RUN WAS CREATED WITH -- the two tuning numbers as the settings
+   * stood at the moment it began, and never written again.
+   *
+   * They are also mixed into `seed`, so a run's content is a function of the
+   * tuning it was set up under: the same clock under a different progression
+   * is a different adventure, which is what "baked in" has to mean if a
+   * later unlock is ever to depend on how a run was played.
+   *
+   * WHICH OF THESE THE FIGHT ACTUALLY READS is `runTuning`'s answer and not
+   * this record's: in free mode the live sliders override them. They are
+   * what the run was SET UP as, not necessarily what it was played as, and
+   * that distinction is the whole of what true mode is for.
    */
-  difficulty: Difficulty
-  /**
-   * The thumb on the scale, 0..1, fixed when the run starts for the same
-   * reason the preset is. See model/chance.ts's `pressThumb`.
-   */
+  progression: number
   successAdjust: number
   /**
    * What the player has MARKED to carry into the next level, in the order
@@ -273,21 +280,49 @@ export interface OutcomeRow {
  * run. Persisted across runs, and copied onto a run when it starts.
  */
 export interface GameSettings {
-  difficulty: Difficulty
   /**
-   * A TUNING parameter rather than a player-facing one: it scales a player's
-   * chance to FAIL and a monster's chance to SUCCEED (model/chance.ts's
-   * `pressThumb`), which puts a thumb on the scale while leaving both sides
-   * reading the same stat table. 0 changes nothing.
+   * PROGRESSION: the base of the exponential a monster's power is raised by,
+   * 1.01 to 1.25 (model/difficulty.ts). The options panel's slider.
+   */
+  progression: number
+  /**
+   * LUCK, as the slider calls it: it scales a player's chance to FAIL and a
+   * monster's chance to SUCCEED (model/chance.ts's `pressThumb`), which puts
+   * a thumb on the scale while leaving both sides reading the same stat
+   * table. 0 changes nothing.
    *
-   * Nothing in the game sets it -- there is no screen for it, on purpose.
-   * The simulation harness does (`npm run adventure:sim -- --success-adjust`),
-   * which is what it is for while the shape of a run is still being found.
+   * Still `successAdjust` in the code, deliberately: that is what it DOES,
+   * and the game already has a stat called Luck. The slider's word is for the
+   * reader; a second identifier would be two names for one number.
    */
   successAdjust: number
+  /**
+   * TRUE MODE: whether the two sliders above SET UP a run or OVERRIDE one.
+   *
+   * Off (the default, and what a run is played under while it is being
+   * built): both sliders reach the run in progress immediately, so tuning by
+   * feel is a thing you do while watching a fight.
+   *
+   * On: the run keeps the numbers it was CREATED with and the sliders only
+   * decide what the next one starts under. That is the mode a result means
+   * something in -- and it is why turning it on discards a run that was
+   * played under overrides, which `runTuning` could not otherwise tell apart
+   * from an honest one.
+   */
+  trueMode: boolean
+  /** How far holding the space bar carries (model/autoAdvance.ts). */
+  autoAdvanceScope: AutoAdvanceScope
+  /** Milliseconds between auto-advanced presses, 50..1000. */
+  autoAdvanceMs: number
 }
 
-export const DEFAULT_SETTINGS: GameSettings = { difficulty: DEFAULT_DIFFICULTY, successAdjust: 0 }
+export const DEFAULT_SETTINGS: GameSettings = {
+  progression: DEFAULT_PROGRESSION,
+  successAdjust: 0,
+  trueMode: false,
+  autoAdvanceScope: DEFAULT_AUTO_ADVANCE_SCOPE,
+  autoAdvanceMs: DEFAULT_AUTO_ADVANCE_MS,
+}
 
 export interface GameSave {
   version: number
@@ -314,31 +349,88 @@ export function emptySave(rng: RngState): GameSave {
 }
 
 /**
- * Sets the tuning thumb (model/chance.ts) on the settings AND on the run in
- * progress, and it is the one thing in the game that deliberately reaches
- * into a run that has already started.
+ * THE TWO TUNING NUMBERS THE FIGHT ACTUALLY READS, resolved in one place.
  *
- * The difficulty preset is frozen at a run's start because changing it would
- * rewrite what every fight already fought was worth -- a promise to a PLAYER.
- * The thumb is an instrument: the whole use of a debugging slider is to move
- * it and feel the difference in the fight that is on screen, and one that
- * only took effect on the next run would be answering a question nobody
- * asked. The two behave differently on purpose.
+ * FREE MODE (the default): the live sliders, so moving one reaches the fight
+ * on screen. That is the whole use of tuning by feel, and a control that did
+ * nothing until the next run would be answering a question nobody asked.
+ *
+ * TRUE MODE: the run's own record, fixed when it was created. A result only
+ * means something if the curve it was got under did not move while it was
+ * being got.
+ *
+ * RESOLVED rather than WRITTEN, which is the part worth holding on to. The
+ * free-mode override used to be written into the record, and that destroyed
+ * the one thing the record is for: a run whose numbers are overwritten every
+ * time a slider moves cannot say what it was set up as, so nothing later can
+ * ask. Reading instead leaves the record honest and costs one function.
+ */
+export function runTuning(
+  game: Pick<GameRecord, 'progression' | 'successAdjust'> | null,
+  settings: GameSettings,
+): { progression: number; successAdjust: number } {
+  if (!settings.trueMode || !game) {
+    return { progression: clampProgression(settings.progression), successAdjust: settings.successAdjust }
+  }
+  return { progression: clampProgression(game.progression), successAdjust: game.successAdjust }
+}
+
+/** The same answer for whatever run is active, which is what every caller wants. */
+export function activeTuning(save: GameSave): { progression: number; successAdjust: number } {
+  return runTuning(activeGame(save), save.settings)
+}
+
+/**
+ * Moves a slider. SETTINGS ONLY -- the record is written once, at creation.
  *
  * Not an `Effect`, and that is not an oversight: the effect vocabulary is
- * what a STAGE may ask the world to change (model/effects.ts), and this is
- * the host's own control rather than anything the game offers.
+ * what a STAGE may ask the world to change (model/effects.ts), and these are
+ * the host's own controls rather than anything the game offers.
  */
-export function withSuccessAdjust(save: GameSave, successAdjust: number): GameSave {
+export function withTuning(save: GameSave, patch: Partial<GameSettings>): GameSave {
+  const next: GameSettings = { ...save.settings, ...patch }
   // Rounded as well as clamped: a slider stepping by 0.05 arrives carrying
   // 0.6000000000000001, and that is what would be stored, read back and
   // eventually shown to somebody as a percentage.
-  const thumb = Math.round(Math.max(0, Math.min(1, successAdjust)) * 100) / 100
-  if (thumb === save.settings.successAdjust && activeGame(save)?.successAdjust === thumb) return save
+  const settings: GameSettings = {
+    ...next,
+    progression: Math.round(clampProgression(next.progression) * 100) / 100,
+    successAdjust: Math.round(Math.max(0, Math.min(1, next.successAdjust)) * 100) / 100,
+    autoAdvanceMs: clampAutoAdvanceMs(next.autoAdvanceMs),
+  }
+  const unchanged = (Object.keys(settings) as (keyof GameSettings)[])
+    .every((key) => settings[key] === save.settings[key])
+  return unchanged ? save : { ...save, settings }
+}
+
+/**
+ * TURNING TRUE MODE ON DISCARDS THE RUN IN PROGRESS, and turning it off does
+ * not.
+ *
+ * A free-mode run was played under whatever the sliders happened to be at
+ * each moment, and its record holds only what it was SET UP with -- so there
+ * is no honest way to carry it into a mode whose entire claim is that the
+ * numbers did not move. Rather than let it become a true-mode run by
+ * assertion, it ends.
+ *
+ * Going the other way costs nothing: a true-mode run continuing under
+ * overrides is a run that stops counting, which is exactly what free mode
+ * says it is.
+ */
+export function withTrueMode(save: GameSave, trueMode: boolean): GameSave {
+  const settings = { ...save.settings, trueMode }
+  if (!trueMode || !save.activeGameId) return { ...save, settings }
   return {
     ...save,
-    settings: { ...save.settings, successAdjust: thumb },
-    games: save.games.map((game) => (game.id === save.activeGameId ? { ...game, successAdjust: thumb } : game)),
+    settings,
+    activeGameId: null,
+    games: save.games.filter((game) => game.id !== save.activeGameId),
+    holdings: save.holdings.filter((row) => row.gameId !== save.activeGameId),
+    outcomes: save.outcomes.filter((row) => row.gameId !== save.activeGameId),
+    // The stack goes with it: a frame parked mid-fight against a monster
+    // whose run no longer exists is the one state the director cannot
+    // present, and leaving it would show the game a screen with no game.
+    director: { ...save.director, stack: [], narration: [] },
   }
 }
 
@@ -607,7 +699,7 @@ function createGame(id: string, seed: RngState, nowMs: number, settings: GameSet
     status: 'active',
     level: 1,
     encounterIndex: 1,
-    difficulty: settings.difficulty,
+    progression: clampProgression(settings.progression),
     successAdjust: settings.successAdjust,
     keepItemIds: [],
     keepTraitIds: [],
@@ -650,7 +742,14 @@ export function applyEffect(
     // acting rather than a stage: a stage that could read a clock would
     // stop being a pure function of its inputs, and the game would stop
     // being replayable. See core/rng.ts.
-    const seed = createSeed(nowMs)
+    // ...AND THE TUNING IS BAKED INTO IT. A run's content is a function of
+    // what it was set up under, so the same clock at a different progression
+    // is a different adventure -- which is what makes "this run was won at
+    // 1.25" a thing a later unlock could be allowed to believe. Mixed rather
+    // than stored twice: the record keeps the numbers as numbers (they are
+    // read back and shown), and the seed keeps them as a fingerprint.
+    const tuning = `${clampProgression(save.settings.progression).toFixed(2)}:${save.settings.successAdjust.toFixed(2)}`
+    const seed = seedFrom(createSeed(nowMs), tuning)
     // The id is built from the CLOCK, so two games started in the same
     // millisecond were handed the same one -- the save then held two rows
     // with one id and `activeGame` returned the older, dead one, which is a
@@ -670,12 +769,6 @@ export function applyEffect(
       director: { ...save.director, rng: seed },
       profile: { ...save.profile, gamesStarted: save.profile.gamesStarted + 1 },
     }
-  }
-
-  if (effect.kind === 'setDifficulty') {
-    // Settings, not the record: applies to runs that have not begun. A run in
-    // progress keeps the preset it was started under.
-    return { ...save, settings: { ...save.settings, difficulty: effect.difficulty } }
   }
 
   if (effect.kind === 'openGame') {

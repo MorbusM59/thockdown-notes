@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { applyEffect, applyEffects, emptySave, type GameSave } from './model/gameState'
+import { activeGame, applyEffect, applyEffects, emptySave, type GameSave } from './model/gameState'
 import { chromeGauges, chromeIdentity, chromeMeters, statusReadouts } from './chrome'
 import { catalogFor, THOCKQUEST, type Content } from './content'
 import { createSeed } from './core/rng'
@@ -43,9 +43,18 @@ function runningGame(content: Content = PLAIN): GameSave {
   ], content, 1)
 }
 
-/** What this run's armour templates actually rolled, by pool. */
-function armorOfRun(content: Content) {
-  const catalog = catalogFor(content, createSeed(1))
+/**
+ * What this run's armour templates actually rolled, by pool.
+ *
+ * Off the RUN's seed rather than off the clock it was made from: the run's
+ * tuning is mixed into its seed now (model/gameState.ts), so recomputing
+ * `createSeed(1)` here rolled a different catalogue than the one the game is
+ * actually holding.
+ */
+function armorOfRun(save: GameSave, content: Content) {
+  const game = activeGame(save)
+  if (!game) throw new Error('no game')
+  const catalog = catalogFor(content, game.seed)
   const sum = (kind: 'armorSlot' | 'naturalArmor') => [...catalog.values()]
     .flatMap((modifier) => modifier.effects)
     .reduce((total, effect) => (effect.kind === kind ? total + effect.amount : total), 0)
@@ -67,10 +76,11 @@ describe('the armor readout', () => {
     // The two numbers are what the run rolled, read back rather than asserted:
     // the property is that they are kept APART, not what they came to.
     const content = contentWith(true, true)
-    const armor = armorOfRun(content)
+    const save = runningGame(content)
+    const armor = armorOfRun(save, content)
     expect(armor.item).toBeGreaterThan(0)
     expect(armor.natural).toBeGreaterThan(0)
-    expect(readoutFor(runningGame(content), 'armor', content)?.value).toBe(`${armor.item}(${armor.natural})`)
+    expect(readoutFor(save, 'armor', content)?.value).toBe(`${armor.item}(${armor.natural})`)
   })
 
   it('is present at zero rather than appearing only once armor exists', () => {
@@ -83,8 +93,10 @@ describe('the armor readout', () => {
   it('keeps the two pools apart when only one of them is filled', () => {
     const natural = contentWith(false, true)
     const items = contentWith(true, false)
-    expect(readoutFor(runningGame(natural), 'armor', natural)?.value).toBe(`0(${armorOfRun(natural).natural})`)
-    expect(readoutFor(runningGame(items), 'armor', items)?.value).toBe(`${armorOfRun(items).item}(0)`)
+    const naturalRun = runningGame(natural)
+    const itemsRun = runningGame(items)
+    expect(readoutFor(naturalRun, 'armor', natural)?.value).toBe(`0(${armorOfRun(naturalRun, natural).natural})`)
+    expect(readoutFor(itemsRun, 'armor', items)?.value).toBe(`${armorOfRun(itemsRun, items).item}(0)`)
   })
 })
 

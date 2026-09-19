@@ -389,6 +389,26 @@ export interface EscapeMenuModeChrome {
   gauges?: EscapeMenuChromeGauge[]
 }
 
+/**
+ * HOLDING A KEY TO PLAY ON, declared by the mode and run by the panel.
+ *
+ * The ring's business is a dial; rounds, fights, stages and levels are the
+ * game's. So the mode hands over an opaque `boundaryKey` that changes
+ * exactly when the reader's chosen stopping point has been crossed, and the
+ * panel's whole rule is *stop when the string I started with is not the
+ * string I see now*. A sixth kind of boundary is then a line in the game and
+ * no change at all here.
+ *
+ * Absent means holding the key does nothing, which is the default and what
+ * the reader gets until they ask for otherwise.
+ */
+export interface EscapeMenuAutoAdvance {
+  /** Milliseconds between presses. */
+  intervalMs: number
+  /** Changes when the chosen scope has been crossed. Opaque to the panel. */
+  boundaryKey: string
+}
+
 export interface EscapeMenuMode {
   /** Identifies the feature holding the ring; distinct modes never merge. */
   id: string
@@ -441,6 +461,11 @@ export interface EscapeMenuMode {
    * the host guessing.
    */
   onDismiss?: () => void
+  /**
+   * Whether holding the space bar plays on, and how far. See
+   * `EscapeMenuAutoAdvance`. Omitted while the reader has not asked for it.
+   */
+  autoAdvance?: EscapeMenuAutoAdvance
 }
 
 export interface EscapeMenuContribution {

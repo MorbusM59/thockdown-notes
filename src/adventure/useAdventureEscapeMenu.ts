@@ -24,7 +24,10 @@ import {
 } from '../escapeMenu/escapeMenuContract'
 import { catalogFor, THOCKQUEST } from './content'
 import { choose, currentScreen, enterEntryScreen, enterInterlude, type DirectorDeps } from './core/director'
-import { emptySave, withKeepMark, type GameSave } from './model/gameState'
+import { activeGame, emptySave, withKeepMark, type GameSave } from './model/gameState'
+import { boundaryKeyFor } from './model/autoAdvance'
+import { COMBAT_STAGE_ID } from './stages/ids'
+import { roundFromJson } from './model/combat'
 import type { Modifier, ModifierKind } from './model/modifiers'
 import { createSeed } from './core/rng'
 import { ROOT_STAGE_ID, STAGES } from './stages'
@@ -72,6 +75,22 @@ export interface AdventureEscapeMenuOptions {
    * screen, which is the whole promise the persisted stack exists to keep.
    */
   onLeave: () => void
+}
+
+/**
+ * WHICH ROUND THE FIGHT IS ON, or null when there is no fight.
+ *
+ * Read out of the combat frame's own state rather than tracked beside it:
+ * the round belongs to the fight, and a copy kept here would be a second
+ * answer that goes stale the moment a round turns over without this hook
+ * re-rendering. Null is the honest answer everywhere else and is what makes
+ * a combat-scoped hold decline to start outside one.
+ */
+function roundNumberOf(save: GameSave, stageId: string): number | null {
+  if (stageId !== COMBAT_STAGE_ID) return null
+  const frame = save.director.stack[save.director.stack.length - 1]
+  if (!frame || frame.stageId !== COMBAT_STAGE_ID) return null
+  return roundFromJson(frame.state.round as never).roundNumber
 }
 
 export function useAdventureEscapeMenu(options: AdventureEscapeMenuOptions): EscapeMenuContribution {
@@ -180,10 +199,32 @@ export function useAdventureEscapeMenu(options: AdventureEscapeMenuOptions): Esc
       onSelect: () => handleChoice(choice.id),
     }))
 
+    /**
+     * HOW FAR HOLDING SPACE CARRIES, as a key that changes when it should
+     * stop (model/autoAdvance.ts). Null where the reader asked for nothing,
+     * or where the scope is a combat one and this is not a fight.
+     *
+     * The ROUND NUMBER is read out of the combat stage's own frame rather
+     * than tracked here: it is the fight's state and the fight is the only
+     * thing that can say what round it is on.
+     */
+    const game = activeGame(save)
+    const boundaryKey = game
+      ? boundaryKeyFor(save.settings.autoAdvanceScope, {
+        stageId: screen.stageId,
+        level: game.level,
+        encounter: game.encounterIndex,
+        roundNumber: roundNumberOf(save, screen.stageId),
+      })
+      : null
+
     return {
       id: 'adventure',
       stepKey: screen.screenKey,
       cells,
+      ...(boundaryKey === null
+        ? {}
+        : { autoAdvance: { intervalMs: save.settings.autoAdvanceMs, boundaryKey } }),
       // The ring IS the game, so lowering it leaves the game. Anything else
       // leaves the slot occupied by an empty editor with the toggle lit --
       // a view the player can see the effects of but not reach.

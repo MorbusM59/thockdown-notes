@@ -18,7 +18,7 @@
 // be past it, and so is a player who has bought their tier up.
 
 import { NO_ARMOR, type Armor } from './armor'
-import { powerMultiplier, type Difficulty } from './difficulty'
+import { powerMultiplier } from './difficulty'
 import { resolveProfile, type Modifier } from './modifiers'
 import { buildModifier, type Build, type CombatClass, type MonsterType, type Species } from './vectors'
 import { resolveChanceWith, type ChanceAdjustment } from './chance'
@@ -135,7 +135,8 @@ export function buildMonster(options: {
   combatClass: CombatClass | null
   type: MonsterType
   tier: number
-  difficulty?: Difficulty
+  /** The run's curve (model/difficulty.ts), already resolved by `runTuning`. */
+  progression?: number
   level: number
   /** The player, so the contested chances resolve. */
   against: StatBlock
@@ -165,7 +166,7 @@ export function buildMonster(options: {
       }),
     ])),
   }
-  const power = powerMultiplier(options.level, options.difficulty)
+  const power = powerMultiplier(options.level, options.progression)
   const count = Math.max(1, Math.floor(options.count ?? 1))
   return {
     buildId: options.build?.id ?? '',

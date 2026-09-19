@@ -1,5 +1,6 @@
 import type { MouseEvent, MutableRefObject, PointerEvent } from 'react'
 import type * as React from 'react'
+import { useRef } from 'react'
 import { AccordionGroup, AccordionSection } from '../components/AccordionSection'
 import { CompactScrollbarSlider } from '../components/CompactScrollbarSlider'
 import {
@@ -200,6 +201,15 @@ import {
   WHEEL_STEP_ROWS_MIN,
   WHEEL_STEP_ROWS_STEP,
 } from '../editor/wheelStep'
+import type { GameSettings } from '../adventure/model/gameState'
+import {
+  DEFAULT_PROGRESSION, PROGRESSION_MAX, PROGRESSION_MIN, PROGRESSION_STEP,
+} from '../adventure/model/difficulty'
+import {
+  AUTO_ADVANCE_LABELS, AUTO_ADVANCE_MAX_MS, AUTO_ADVANCE_MIN_MS, AUTO_ADVANCE_SCOPES, AUTO_ADVANCE_STEP_MS,
+  DEFAULT_AUTO_ADVANCE_MS, DEFAULT_AUTO_ADVANCE_SCOPE, indexOfScope, scopeAtIndex,
+} from '../adventure/model/autoAdvance'
+import { armHold, HOLD_COMMIT_MS } from '../shared/holdTiming'
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
@@ -574,13 +584,21 @@ export interface SidebarOptionsPanelProps {
   importLayoutsTdl: () => Promise<void>
 
   /**
-   * The adventure's tuning thumb, 0..1 (src/adventure/model/chance.ts). It
-   * sits in Debugging rather than anywhere near the game because it is an
-   * instrument rather than a difficulty: the game's own difficulty presets
-   * are chosen inside it, on its settings screen.
+   * THE ADVENTURE'S OWN SETTINGS, all five, and its own section.
+   *
+   * The thumb used to sit alone in Debugging on the argument that it was an
+   * instrument rather than a difficulty -- true while the game's difficulty
+   * was four presets chosen on a screen inside it. It is a slider now, beside
+   * the thumb, because they are the two axes of one question: progression
+   * bends the curve and the thumb lifts the whole line. A control in
+   * Debugging and its pair in the game was the split that made neither
+   * legible.
    */
-  adventureSuccessAdjust: number
-  setAdventureSuccessAdjust: (value: number) => void
+  adventureSettings: GameSettings
+  setAdventureSettings: (patch: Partial<GameSettings>) => void
+  setAdventureTrueMode: (value: boolean) => void
+  /** Whether turning true mode on would cost a run -- past level one. */
+  adventureTrueModeWouldWipe: boolean
   debuggingEnabled: boolean
   setDebuggingEnabled: (value: boolean) => void
   clearAppState: () => void
@@ -856,8 +874,10 @@ export function SidebarOptionsPanel({
   openNotesFolder,
   exportLayoutsTdl,
   importLayoutsTdl,
-  adventureSuccessAdjust,
-  setAdventureSuccessAdjust,
+  adventureSettings,
+  setAdventureSettings,
+  setAdventureTrueMode,
+  adventureTrueModeWouldWipe,
   debuggingEnabled,
   setDebuggingEnabled,
   clearAppState,
@@ -954,6 +974,13 @@ export function SidebarOptionsPanel({
   startCaretColorCopyHold,
   clearCaretColorArmTimer,
 }: SidebarOptionsPanelProps) {
+    /**
+     * The true-mode hold's canceller, so a release or a pointer leaving the
+     * button aborts it. `armHold` pairs begin and end exactly once itself, so
+     * calling this twice is safe and the two handlers below do not have to
+     * agree about which of them got there first.
+     */
+    const trueModeHoldRef = useRef<(() => void) | null>(null)
     const topRowHighlightKeys: HighlightColorKey[] = ['base', 'inputFields', 'appButtons']
     const middleRowHighlightKeys: HighlightColorKey[] = [
       isPreviewMode ? 'textEmbossRender' : 'textEmbossEdit',
@@ -3278,28 +3305,143 @@ export function SidebarOptionsPanel({
             <span className="fa-solid fa-trash" aria-hidden="true" />
           </button>
         </div>
-        {/* The adventure's thumb on the scale: it scales the player's chance
-            to FAIL and a monster's chance to SUCCEED, so both sides keep
-            reading the same stat table while the fight tilts. Live -- it
-            reaches the run in progress, which is the whole point of tuning by
-            feel -- and stored on the adventure's own save, so it survives a
-            restart and the next run starts under it too. */}
+      </AccordionSection>
+      {/* THE ADVENTURE'S OWN SETTINGS. Two tuning sliders, then the two that
+          decide what holding the space bar does, then the toggle that says
+          whether the tuning is an override or a commitment. In that order
+          because it is the order they are read in: what kind of game, then
+          how you play it, then whether it counts. */}
+      <AccordionSection
+        className="sidebar-options-section-adventure"
+        ariaLabel="Adventure"
+        heading="Adventure"
+        iconClass="fa-dice-d20"
+        iconTooltip="ThockQuest, reached by right-clicking the User Guide window control."
+      >
         <div className="typography-sliders">
+          {/* PROGRESSION: the base of the exponential a monster's power is
+              raised by. The gentlest curve is the default and the leftmost
+              position, so the slider reads left-to-right as "harder". */}
           <div className="typography-slider">
             <CompactScrollbarSlider
-              id="adventure-success-adjust"
+              id="adventure-progression"
+              min={PROGRESSION_MIN}
+              max={PROGRESSION_MAX}
+              step={PROGRESSION_STEP}
+              value={adventureSettings.progression}
+              trackLabel="progression"
+              tooltipLabel="adventure: how fast monsters outgrow you"
+              ariaLabel="Adventure progression"
+              defaultValue={DEFAULT_PROGRESSION}
+              formatValue={(value) => `+${Math.round((value - 1) * 100)}% a level`}
+              onCommit={(value) => setAdventureSettings({ progression: value })}
+            />
+          </div>
+          {/* LUCK: the thumb on the scale. It scales the player's chance to
+              FAIL and a monster's chance to SUCCEED, so both sides keep
+              reading the same stat table while the fight tilts. */}
+          <div className="typography-slider">
+            <CompactScrollbarSlider
+              id="adventure-luck"
               min={0}
               max={1}
               step={0.05}
-              value={adventureSuccessAdjust}
-              trackLabel="thumb"
+              value={adventureSettings.successAdjust}
+              trackLabel="luck"
               tooltipLabel="adventure: the thumb on the scale"
-              ariaLabel="Adventure success adjustment"
+              ariaLabel="Adventure luck"
               defaultValue={0}
               formatValue={(value) => `${Math.round(value * 100)}%`}
-              onCommit={setAdventureSuccessAdjust}
+              onCommit={(value) => setAdventureSettings({ successAdjust: value })}
             />
           </div>
+          {/* HOW FAR HOLDING SPACE CARRIES. An INDEX rather than a value, so
+              the five choices are evenly spaced on the track the way the
+              design asks -- the labels are words and words have no scale. */}
+          <div className="typography-slider">
+            <CompactScrollbarSlider
+              id="adventure-auto-advance-scope"
+              min={0}
+              max={AUTO_ADVANCE_SCOPES.length - 1}
+              step={1}
+              value={indexOfScope(adventureSettings.autoAdvanceScope)}
+              trackLabel="hold space"
+              tooltipLabel="adventure: how far holding space carries"
+              ariaLabel="Adventure auto-advance scope"
+              defaultValue={indexOfScope(DEFAULT_AUTO_ADVANCE_SCOPE)}
+              formatValue={(value) => AUTO_ADVANCE_LABELS[scopeAtIndex(value)]}
+              onCommit={(value) => setAdventureSettings({ autoAdvanceScope: scopeAtIndex(value) })}
+            />
+          </div>
+          {/* HOW FAST it carries. Dead while the slider above says nothing,
+              because a rate for something that does not happen is a control
+              that cannot be wrong -- and one the reader would move looking
+              for an effect. */}
+          <div className="typography-slider">
+            <CompactScrollbarSlider
+              id="adventure-auto-advance-speed"
+              min={AUTO_ADVANCE_MIN_MS}
+              max={AUTO_ADVANCE_MAX_MS}
+              step={AUTO_ADVANCE_STEP_MS}
+              value={adventureSettings.autoAdvanceMs}
+              trackLabel="hold speed"
+              tooltipLabel="adventure: time between auto-advanced choices"
+              ariaLabel="Adventure auto-advance speed"
+              defaultValue={DEFAULT_AUTO_ADVANCE_MS}
+              disabled={adventureSettings.autoAdvanceScope === 'nothing'}
+              formatValue={(value) => `${value}ms`}
+              onCommit={(value) => setAdventureSettings({ autoAdvanceMs: value })}
+            />
+          </div>
+        </div>
+        {/* TRUE MODE. A CLICK while nothing is at stake and a HOLD once a run
+            has survived a level -- `HOLD_COMMIT_MS`, the threshold this app
+            reserves for "I know this is not undoable", which is exactly what
+            ending somebody's run is. The tooltip says which it is, because a
+            button that sometimes ignores a click and sometimes does not is a
+            button that reads as broken unless it says so first. */}
+        <div className="options-toggle-row">
+          <button
+            type="button"
+            className={`btn-icon options-color-swatch options-loadout-btn${adventureSettings.trueMode ? ' active' : ''}`}
+            onPointerDown={(event) => {
+              if (event.button !== 0) return
+              // Only turning it ON can cost anything, and only past level one.
+              if (adventureSettings.trueMode || !adventureTrueModeWouldWipe) return
+              event.preventDefault()
+              trueModeHoldRef.current = armHold(() => { setAdventureTrueMode(true) }, HOLD_COMMIT_MS)
+            }}
+            onPointerUp={() => {
+              if (trueModeHoldRef.current) {
+                trueModeHoldRef.current()
+                trueModeHoldRef.current = null
+              }
+            }}
+            onPointerLeave={() => {
+              if (trueModeHoldRef.current) {
+                trueModeHoldRef.current()
+                trueModeHoldRef.current = null
+              }
+            }}
+            onClick={() => {
+              // The guarded case never reaches here: its pointerdown cancels
+              // the default, so no click follows. This is the plain one.
+              if (!adventureSettings.trueMode && adventureTrueModeWouldWipe) return
+              setAdventureTrueMode(!adventureSettings.trueMode)
+            }}
+            data-secondary-press="none"
+            data-tooltip={
+              adventureSettings.trueMode
+                ? 'True mode: on. Runs keep the settings they began with'
+                : (adventureTrueModeWouldWipe
+                    ? 'True mode will wipe the current run!'
+                    : 'True mode: Lock in Difficulty')
+            }
+            aria-label="Adventure true mode"
+            aria-pressed={adventureSettings.trueMode}
+          >
+            <span className="fa-solid fa-lock" aria-hidden="true" />
+          </button>
         </div>
       </AccordionSection>
       </AccordionGroup>

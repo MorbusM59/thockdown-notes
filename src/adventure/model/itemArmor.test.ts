@@ -13,7 +13,6 @@ import { itemArmor, maintainedFraction, totalArmor } from './armor'
 import { activeGame, applyEffects, armorOf as runArmor, emptySave, type GameSave } from './gameState'
 import { armorSlotOf } from './modifiers'
 import { catalogFor, THOCKQUEST, type Content } from '../content'
-import { createSeed } from '../core/rng'
 import type { Effect } from './effects'
 
 const NOW = 1_700_000_000_000
@@ -37,8 +36,19 @@ function contentWithPlate(extra: Content['items'] = []): Content {
 }
 
 /** What an armour template rolled in the run these tests play. */
-function maxOf(content: Content, id = 'plate'): number {
-  const rolled = catalogFor(content, createSeed(NOW))
+/**
+ * THE RUN'S OWN SEED, read off the run rather than recomputed from the clock.
+ *
+ * It was `createSeed(NOW)` here, which was the same expression the record was
+ * built with -- until the run's tuning was mixed into its seed
+ * (model/gameState.ts), at which point this rolled a different catalogue and
+ * asserted one item's maximum against another's. An instrument that restates
+ * a formula measures the copy.
+ */
+function maxOf(save: GameSave, content: Content, id = 'plate'): number {
+  const game = activeGame(save)
+  if (!game) throw new Error('no game')
+  const rolled = catalogFor(content, game.seed)
   const slot = armorSlotOf(rolled.get(id) ?? { id, kind: 'item', name: '', icon: '', effects: [] })
   if (!slot) throw new Error(`${id} rolled no armor`)
   return slot.amount
@@ -59,7 +69,7 @@ describe('an item that carries armor', () => {
   it('arrives whole, with nothing written to the save to say so', () => {
     const content = contentWithPlate()
     const save = running(content, [{ kind: 'acquireModifier', modifierKind: 'item', modifierId: 'plate' }])
-    expect(itemArmor(armorOf(save, content))).toBe(maxOf(content))
+    expect(itemArmor(armorOf(save, content))).toBe(maxOf(save, content))
     // ABSENT MEANS FULL. A row written the moment something is acquired and a
     // row written before this field existed mean the same thing, so the
     // widening and the default are one value rather than two.
@@ -79,7 +89,7 @@ describe('an item that carries armor', () => {
     // points in a new shape -- which is true here by construction rather than
     // by a correction, because the row that held them is gone.
     const again = applyEffects(dropped, [{ kind: 'acquireModifier', modifierKind: 'item', modifierId: 'plate' }], content, NOW)
-    expect(itemArmor(armorOf(again, content))).toBe(maxOf(content))
+    expect(itemArmor(armorOf(again, content))).toBe(maxOf(save, content))
   })
 
   it('keeps its own pool when another armour item is carried beside it', () => {
@@ -94,7 +104,7 @@ describe('an item that carries armor', () => {
     const pieces = new Map(armorOf(save, content).pieces.map((piece) => [piece.itemId, piece.points]))
     expect(pieces.get('plate')).toBe(1)
     // Untouched, and NOT the same number as the plate's: two pieces, two pools.
-    expect(pieces.get('bracer')).toBe(maxOf(content, 'bracer'))
+    expect(pieces.get('bracer')).toBe(maxOf(save, content, 'bracer'))
   })
 })
 
@@ -108,13 +118,13 @@ describe('an item that carries armor', () => {
 describe('between fights', () => {
   it('brings each piece up to what Might and Intellect maintain, and no further', () => {
     const content = contentWithPlate()
-    const max = maxOf(content)
+    let save = running(content, [{ kind: 'acquireModifier', modifierKind: 'item', modifierId: 'plate' }])
+    const max = maxOf(save, content)
     // Six apiece is the base stat cap, so this is the most a character can
     // maintain: 60% of the piece, and the arithmetic below is legible at it.
     const maintained = Math.floor(max * maintainedFraction(6, 6))
     expect(maintained).toBeGreaterThan(0)
 
-    let save = running(content, [{ kind: 'acquireModifier', modifierKind: 'item', modifierId: 'plate' }])
     save = applyEffects(save, [
       { kind: 'adjustBaseStat', stat: 'might', amount: 6 },
       { kind: 'adjustBaseStat', stat: 'intellect', amount: 6 },
@@ -182,6 +192,6 @@ describe('a new level', () => {
     // It survived (nothing was marked, so the newest find is kept) and it is
     // full: a level is a journey with a rest at either end.
     expect(onward.holdings.map((row) => row.modifierId)).toEqual(['plate'])
-    expect(itemArmor(armorOf(onward, content))).toBe(maxOf(content))
+    expect(itemArmor(armorOf(onward, content))).toBe(maxOf(save, content))
   })
 })

@@ -10,11 +10,11 @@
 // model computed reaches the screen intact -- and neither can answer the
 // other's.
 //
-//   npx vite-node scripts/adventure/simulate.ts -- --runs=400 --difficulty=all
-//   npx vite-node scripts/adventure/simulate.ts -- --rank --difficulty=medium
+//   npx vite-node scripts/adventure/simulate.ts -- --runs=400 --progression=all
+//   npx vite-node scripts/adventure/simulate.ts -- --rank --progression=1.05
 //   npx vite-node scripts/adventure/simulate.ts -- --sweep-adjust
 //
-// Flags: --runs, --difficulty (a preset, or `all`), --seed, --policy
+// Flags: --runs, --progression (a number in 1.01..1.25, or `all`), --seed, --policy
 //        (`careful` | `reckless` | `first`), --levels (stop after N),
 //        --prefer=id,id (take these offers when they appear), --pin=id,id
 //        (hand them over outright), --rank-vectors (one pass per build,
@@ -35,7 +35,19 @@ import { choose, currentScreen, enterEntryScreen, enterInterlude, type DirectorD
 import type { Screen } from '../../src/adventure/core/screen'
 import { activeGame, applyEffects, emptySave, profileOf, type GameSave } from '../../src/adventure/model/gameState'
 import type { ModifierKind } from '../../src/adventure/model/modifiers'
-import { DIFFICULTIES, DIFFICULTY_LABELS, type Difficulty } from '../../src/adventure/model/difficulty'
+import { PROGRESSION_MAX, PROGRESSION_MIN, clampProgression } from '../../src/adventure/model/difficulty'
+
+/**
+ * THE HARNESS'S OWN SAMPLING of the progression range, not content's.
+ *
+ * Difficulty used to be four named presets and the report had a row per
+ * preset, which read well. It is a continuous slider now, so `--progression=all`
+ * samples the range at four points instead -- the two ends and two between --
+ * and the rows are labelled by the number, because the number is the thing.
+ */
+const PROGRESSION_SAMPLES: readonly number[] = [PROGRESSION_MIN, 1.05, 1.12, PROGRESSION_MAX]
+
+const progressionLabel = (value: number) => `x${value.toFixed(2)}`
 import { ROOT_STAGE_ID, STAGES } from '../../src/adventure/stages'
 import { STAT_POINT_STAGE_ID } from '../../src/adventure/stages/ids'
 import { statPointsAvailable } from '../../src/adventure/model/motes'
@@ -189,7 +201,7 @@ interface RunResult {
  */
 function playOne(
   seed: number,
-  difficulty: Difficulty,
+  progression: number,
   policy: Policy,
   levelCap: number,
   prefer: readonly string[] = [],
@@ -197,7 +209,7 @@ function playOne(
   successAdjust = 0,
   vectors: readonly VectorPin[] = [],
 ): RunResult {
-  let save: GameSave = { ...emptySave(seed), settings: { difficulty, successAdjust } }
+  let save: GameSave = { ...emptySave(seed), settings: { ...emptySave(seed).settings, progression, successAdjust } }
   save = enterEntryScreen(save, DEPS, NOW)
 
   const result: RunResult = {
@@ -326,14 +338,14 @@ function summarize(runs: RunResult[]) {
 
 function parseArgs(argv: string[]) {
   const args = {
-    runs: 200, difficulty: 'all', seed: 1, policy: 'careful' as PolicyName,
+    runs: 200, progression: 'all', seed: 1, policy: 'careful' as PolicyName,
     levels: 3, json: false, prefer: [] as string[], pin: [] as string[], rank: false, rankVectors: false,
     successAdjust: 0, sweepAdjust: null as number[] | null,
   }
   for (const raw of argv) {
     const [key, value] = raw.replace(/^--/, '').split('=')
     if (key === 'runs') args.runs = Number(value)
-    else if (key === 'difficulty') args.difficulty = value
+    else if (key === 'progression') args.progression = value
     else if (key === 'seed') args.seed = Number(value)
     else if (key === 'policy') args.policy = value as PolicyName
     else if (key === 'levels') args.levels = Number(value)
@@ -353,13 +365,15 @@ function parseArgs(argv: string[]) {
 const args = parseArgs(process.argv.slice(2))
 const policy = POLICIES[args.policy]
 if (!policy) throw new Error(`unknown policy "${args.policy}" -- one of ${Object.keys(POLICIES).join(', ')}`)
-const presets = args.difficulty === 'all'
-  ? DIFFICULTIES
-  : [args.difficulty as Difficulty].filter((value) => (DIFFICULTIES as readonly string[]).includes(value))
-if (presets.length === 0) throw new Error(`unknown difficulty "${args.difficulty}"`)
+const presets: readonly number[] = args.progression === 'all'
+  ? PROGRESSION_SAMPLES
+  : [Number(args.progression)].filter((value) => Number.isFinite(value) && value === clampProgression(value))
+if (presets.length === 0) {
+  throw new Error(`progression "${args.progression}" is not a number in ${PROGRESSION_MIN}..${PROGRESSION_MAX}, or "all"`)
+}
 
 function sweep(
-  difficulty: Difficulty,
+  progression: number,
   prefer: readonly string[],
   pin: readonly PinRef[] = [],
   successAdjust = args.successAdjust,
@@ -367,7 +381,7 @@ function sweep(
 ) {
   const runs: RunResult[] = []
   for (let index = 0; index < args.runs; index += 1) {
-    runs.push(playOne(args.seed + index * 7919, difficulty, policy, args.levels, prefer, pin, successAdjust, vectors))
+    runs.push(playOne(args.seed + index * 7919, progression, policy, args.levels, prefer, pin, successAdjust, vectors))
   }
   return summarize(runs)
 }
@@ -400,11 +414,11 @@ const CATALOGUE: readonly PinRef[] = [...THOCKQUEST.items, ...THOCKQUEST.traits]
  */
 if (args.rank) {
   const pool = CATALOGUE
-  const difficulty = (presets[0] ?? 'medium') as Difficulty
-  const base = sweep(difficulty, [])
-  console.log(`\n${args.runs} runs each, ${DIFFICULTY_LABELS[difficulty]}, policy "${args.policy}", preferring one thing at a time\n`)
+  const progression = presets[0] ?? PROGRESSION_MIN
+  const base = sweep(progression, [])
+  console.log(`\n${args.runs} runs each, progression ${progressionLabel(progression)}, policy "${args.policy}", preferring one thing at a time\n`)
   console.log('modifier                       encounters won (mean)   died   damage/fight')
-  const rows = pool.map((ref) => ({ ref, row: sweep(difficulty, [], [ref]) }))
+  const rows = pool.map((ref) => ({ ref, row: sweep(progression, [], [ref]) }))
   rows.sort((left, right) => right.row.encountersWon.mean - left.row.encountersWon.mean)
   const line = (name: string, row: ReturnType<typeof summarize>) => console.log(
     `${name.padEnd(30)} ${row.encountersWon.mean.toFixed(2).padStart(8)}`
@@ -431,8 +445,8 @@ if (args.rank) {
  * class whose moves never fire.
  */
 if (args.rankVectors) {
-  const difficulty = (presets[0] ?? 'medium') as Difficulty
-  const base = sweep(difficulty, [])
+  const progression = presets[0] ?? PROGRESSION_MIN
+  const base = sweep(progression, [])
   const groups: { title: string; pins: VectorPin[] }[] = [
     { title: 'build', pins: THOCKQUEST.builds.map((build) => ({ vector: 'build', id: build.id, name: build.name })) },
     {
@@ -445,14 +459,14 @@ if (args.rankVectors) {
     },
     { title: 'class', pins: THOCKQUEST.combatClasses.map((entry) => ({ vector: 'class', id: entry.id, name: entry.name })) },
   ]
-  console.log(`\n${args.runs} runs each, ${DIFFICULTY_LABELS[difficulty]}, policy "${args.policy}", one vector pinned at a time\n`)
+  console.log(`\n${args.runs} runs each, progression ${progressionLabel(progression)}, policy "${args.policy}", one vector pinned at a time\n`)
   const line = (name: string, row: ReturnType<typeof summarize>) => console.log(
     `${name.padEnd(30)} ${row.encountersWon.mean.toFixed(2).padStart(8)}`
     + `${`${(row.deathRate * 100).toFixed(0)}%`.padStart(14)}${row.damagePerFight.toFixed(1).padStart(15)}`,
   )
   for (const group of groups) {
     console.log(`${group.title.padEnd(30)} encounters won (mean)   died   damage/fight`)
-    const rows = group.pins.map((ref) => ({ ref, row: sweep(difficulty, [], [], args.successAdjust, [ref]) }))
+    const rows = group.pins.map((ref) => ({ ref, row: sweep(progression, [], [], args.successAdjust, [ref]) }))
     rows.sort((left, right) => right.row.encountersWon.mean - left.row.encountersWon.mean)
     for (const { ref, row } of rows) line(`  ${ref.name}`, row)
     console.log('')
@@ -480,12 +494,12 @@ const pinned = args.pin.map((id) => {
 if (args.sweepAdjust) {
   const thumbs = args.sweepAdjust
   console.log(`\n${args.runs} runs per cell, policy "${args.policy}", stopping after level ${args.levels}\n`)
-  console.log('preset     thumb   died   encounters won (p10/med/p90)   rounds/fight  damage/fight  level')
-  for (const difficulty of presets) {
+  console.log('progress.  luck    died   encounters won (p10/med/p90)   rounds/fight  damage/fight  level')
+  for (const progression of presets) {
     for (const thumb of thumbs) {
-      const row = sweep(difficulty, args.prefer, pinned, thumb)
+      const row = sweep(progression, args.prefer, pinned, thumb)
       console.log(
-        `${DIFFICULTY_LABELS[difficulty].padEnd(9)} ${`${Math.round(thumb * 100)}%`.padStart(5)}`
+        `${progressionLabel(progression).padEnd(9)} ${`${Math.round(thumb * 100)}%`.padStart(5)}`
         + `${`${(row.deathRate * 100).toFixed(0)}%`.padStart(7)}   `
         + `${String(row.encountersWon.p10).padStart(3)} /${String(row.encountersWon.median).padStart(4)} /${String(row.encountersWon.p90).padStart(4)}`
         + `${row.roundsPerFight.toFixed(1).padStart(18)}${row.damagePerFight.toFixed(1).padStart(14)}`
@@ -498,20 +512,20 @@ if (args.sweepAdjust) {
 }
 
 const report: Record<string, ReturnType<typeof summarize>> = {}
-for (const difficulty of presets) {
-  report[difficulty] = sweep(difficulty, args.prefer, pinned)
+for (const progression of presets) {
+  report[progressionLabel(progression)] = sweep(progression, args.prefer, pinned)
 }
 
 if (args.json) {
   console.log(JSON.stringify({ policy: args.policy, runs: args.runs, levels: args.levels, report }, null, 2))
 } else {
   const percent = (value: number) => `${(value * 100).toFixed(0)}%`
-  console.log(`\n${args.runs} runs per preset, policy "${args.policy}", stopping after level ${args.levels}\n`)
-  console.log('preset    died   encounters won (p10/med/p90)   rounds/fight  damage/fight  level  gold  motes')
-  for (const difficulty of presets) {
-    const row = report[difficulty]
+  console.log(`\n${args.runs} runs per progression, policy "${args.policy}", stopping after level ${args.levels}\n`)
+  console.log('progress. died   encounters won (p10/med/p90)   rounds/fight  damage/fight  level  gold  motes')
+  for (const progression of presets) {
+    const row = report[progressionLabel(progression)]
     console.log(
-      `${DIFFICULTY_LABELS[difficulty].padEnd(9)} ${percent(row.deathRate).padStart(4)}   `
+      `${progressionLabel(progression).padEnd(9)} ${percent(row.deathRate).padStart(4)}   `
       + `${String(row.encountersWon.p10).padStart(3)} /${String(row.encountersWon.median).padStart(4)} /${String(row.encountersWon.p90).padStart(4)}`
       + `${row.roundsPerFight.toFixed(1).padStart(18)}${row.damagePerFight.toFixed(1).padStart(14)}`
       + `${row.levelReached.toFixed(1).padStart(7)}${row.gold.toFixed(1).padStart(6)}${row.motes.toFixed(1).padStart(7)}`,

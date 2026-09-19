@@ -181,8 +181,9 @@ import { deriveNoteTitleFromText } from './shared/noteTitle'
 import { isNoteSearchQueryActive, matchesNoteSearchQuery } from './shared/noteSearch'
 import { useAdventureEscapeMenu } from './adventure/useAdventureEscapeMenu'
 import { sanitizeGameSave } from './adventure/save'
-import { emptySave, withSuccessAdjust, type GameSave } from './adventure/model/gameState'
+import { activeGame, emptySave, withTrueMode, withTuning, type GameSave } from './adventure/model/gameState'
 import { createSeed } from './adventure/core/rng'
+import { DEFAULT_SETTINGS } from './adventure/model/gameState'
 import { ESCAPE_HOLD_MS } from './shared/escapeHold'
 import {
   liveOccupancy,
@@ -6040,12 +6041,38 @@ ${markdownHtml}
    * makes when it first opens: a knob that silently did nothing until someone
    * had played once would be a knob nobody could trust.
    */
-  const adventureSuccessAdjust = adventureSave?.settings.successAdjust ?? 0
+  const adventureSettings = adventureSave?.settings ?? DEFAULT_SETTINGS
 
-  const setAdventureSuccessAdjust = useCallback((value: number) => {
+  /**
+   * ONE SETTER FOR FIVE SLIDERS, taking a patch.
+   *
+   * Five near-identical callbacks would be five places to forget the
+   * create-if-absent line below, and the sixth setting would make it six.
+   * `withTuning` clamps whatever arrives, so a caller cannot put an illegal
+   * number in by passing one.
+   */
+  const setAdventureSettings = useCallback((patch: Partial<GameSave['settings']>) => {
     const base = adventureSave ?? emptySave(createSeed(Date.now()))
-    commitAdventureSave(withSuccessAdjust(base, value))
+    commitAdventureSave(withTuning(base, patch))
   }, [adventureSave, commitAdventureSave])
+
+  /**
+   * TRUE MODE IS NOT A SLIDER and does not go through `withTuning`: turning
+   * it on ENDS the run in progress, which is a different kind of act from
+   * moving a number (model/gameState.ts's `withTrueMode`).
+   */
+  const setAdventureTrueMode = useCallback((value: boolean) => {
+    const base = adventureSave ?? emptySave(createSeed(Date.now()))
+    commitAdventureSave(withTrueMode(base, value))
+  }, [adventureSave, commitAdventureSave])
+
+  /**
+   * WHETHER TURNING TRUE MODE ON WOULD COST ANYTHING, which is what decides
+   * whether the toggle is a click or a hold. Past the first level is the
+   * line the design draws: a run that has survived a level is an investment,
+   * and one that has not is a few minutes.
+   */
+  const adventureTrueModeWouldWipe = (activeGame(adventureSave ?? emptySave(0))?.level ?? 0) > 1
 
   /**
    * Gives the active slot over to the adventure and EMPTIES it -- the game
@@ -10228,8 +10255,10 @@ ${markdownHtml}
                         openNotesFolder={openNotesFolder}
                         exportLayoutsTdl={exportLayoutsTdl}
                         importLayoutsTdl={importLayoutsTdl}
-                        adventureSuccessAdjust={adventureSuccessAdjust}
-                        setAdventureSuccessAdjust={setAdventureSuccessAdjust}
+                        adventureSettings={adventureSettings}
+                        setAdventureSettings={setAdventureSettings}
+                        setAdventureTrueMode={setAdventureTrueMode}
+                        adventureTrueModeWouldWipe={adventureTrueModeWouldWipe}
                         debuggingEnabled={debuggingEnabled}
                         setDebuggingEnabled={setDebuggingEnabled}
                         clearAppState={clearPersistedAppState}

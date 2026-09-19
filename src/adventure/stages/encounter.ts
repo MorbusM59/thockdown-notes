@@ -27,6 +27,7 @@ import type { EncounterOffer } from '../model/encounterOffers'
 import { totalArmor } from '../model/armor'
 import { describeMove } from '../model/moves'
 import { buildMonster, type Monster } from '../model/monsters'
+import { runTuning } from '../model/gameState'
 import { MONSTER_TYPES, MONSTER_TYPE_WORD, monsterTier, type MonsterType } from '../model/vectors'
 
 export function offerToJson(offer: EncounterOffer): JsonObject {
@@ -93,9 +94,10 @@ export function monsterFor(offer: EncounterOffer, context: StageContext): Monste
     type: offer.type,
     tier: monsterTier(offer.type, context.game.level),
     level: context.game.level,
-    // The RUN's preset, fixed when it started -- not the settings, which are
-    // what the next run will be played under (model/gameState.ts).
-    difficulty: context.game.difficulty,
+    // RESOLVED, not read off the record: in free mode the live slider
+    // overrides what the run was created with, and `runTuning` is the one
+    // place that knows which (model/gameState.ts).
+    progression: runTuning(context.game, context.save.settings).progression,
     against: context.profile.stats,
     count: offer.count,
   })

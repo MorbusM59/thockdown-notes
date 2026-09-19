@@ -1032,12 +1032,91 @@ export function EscapeHoldPanel({
   }, [])
   useNonPassiveWheel(ringRef, handleRingWheel)
 
+  /**
+   * HOLDING SPACE PLAYS ON, at the mode's own rate, until the mode's own
+   * boundary is crossed (escapeMenuContract.ts's `EscapeMenuAutoAdvance`).
+   *
+   * SPACE AND NOT ENTER, deliberately, and the difference is the browser's:
+   * a native button fires its click from Enter on every auto-repeat keydown
+   * and from Space only on RELEASE. So Enter is already a held-key repeat at
+   * whatever rate the OS decides -- nobody's choice -- while Space is the one
+   * key with a press and a release the panel can see the whole of. Taking it
+   * over means calling `preventDefault` on the keydown, which is also what
+   * stops the native click arriving on release and pressing a cell one extra
+   * time after the hold has stopped.
+   *
+   * THE FIRST PRESS IS THE READER'S, not the timer's: the cell fires
+   * immediately and the interval only governs what follows, so a tap of
+   * space still means exactly what it meant before this existed.
+   */
+  const autoAdvanceTimerRef = useRef<number | null>(null)
+  const autoAdvanceBoundaryRef = useRef<string | null>(null)
+
+  const stopAutoAdvance = useCallback(() => {
+    if (autoAdvanceTimerRef.current !== null) {
+      window.clearInterval(autoAdvanceTimerRef.current)
+      autoAdvanceTimerRef.current = null
+    }
+    autoAdvanceBoundaryRef.current = null
+  }, [])
+
+  // The boundary is watched from a ref the render loop keeps current, so the
+  // interval below reads the LIVE key rather than the one captured when the
+  // hold began -- which is the whole mechanism: a hold ends because the game
+  // moved past where the reader said to stop.
+  const autoAdvanceRef = useRef(activeMode?.autoAdvance ?? null)
+  autoAdvanceRef.current = activeMode?.autoAdvance ?? null
+  const runCellRef = useRef<(cell: PanelCell) => void>(() => {})
+  const activeCellRef = useRef<PanelCell | undefined>(undefined)
+
+  useEffect(() => {
+    const started = autoAdvanceBoundaryRef.current
+    if (started === null) return
+    if (autoAdvanceRef.current?.boundaryKey !== started) stopAutoAdvance()
+  })
+
+  // Lowering the ring, or losing the mode, ends any hold with it: a timer
+  // pressing cells on a ring nobody is looking at is the one outcome this
+  // must not have.
+  useEffect(() => {
+    if (!isOpen || !activeMode) stopAutoAdvance()
+  }, [isOpen, activeMode, stopAutoAdvance])
+  useEffect(() => stopAutoAdvance, [stopAutoAdvance])
+
   const handleRingKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     // Alt+ArrowLeft/Right is the app's global "switch active section"
     // shortcut (App.tsx) -- must pass through untouched, not get hijacked
     // as a rotation. Plain Ctrl/Cmd+Arrow are excluded too on the same
     // principle: this ring only owns unmodified arrow/Tab presses.
     if (event.altKey || event.ctrlKey || event.metaKey) return
+
+    if (event.key === ' ' || event.key === 'Spacebar') {
+      // Always ours while a ring is up: it must not scroll the page, and it
+      // must not reach the native button activation that would fire a second
+      // press on release.
+      event.preventDefault()
+      // The OS's own repeat is ignored outright -- the interval below is the
+      // rate, and it is the reader's own setting rather than a keyboard's.
+      if (event.repeat) return
+      const cell = activeCellRef.current
+      if (!cell) return
+      runCellRef.current(cell)
+      const auto = autoAdvanceRef.current
+      if (!auto) return
+      stopAutoAdvance()
+      autoAdvanceBoundaryRef.current = auto.boundaryKey
+      autoAdvanceTimerRef.current = window.setInterval(() => {
+        const live = autoAdvanceRef.current
+        const next = activeCellRef.current
+        if (!live || !next || live.boundaryKey !== autoAdvanceBoundaryRef.current) {
+          stopAutoAdvance()
+          return
+        }
+        runCellRef.current(next)
+      }, Math.max(1, auto.intervalMs))
+      return
+    }
+
     const direction = directionFromKey(event)
     if (direction === null) return
     event.preventDefault()
@@ -1097,6 +1176,12 @@ export function EscapeHoldPanel({
   }
 
   const activeCell = hoveredIndex !== null ? cells[hoveredIndex] : cells[focusedIndex]
+  // THE SAME CELL THE CENTRE LABEL NAMES, handed to the auto-advance timer
+  // through a ref so the interval presses whatever is on the dial NOW rather
+  // than whatever was there when the space bar went down. Two computations of
+  // "the cell you are about to activate" would be two cells.
+  activeCellRef.current = activeCell
+  runCellRef.current = runCell
   const displayedLabel = activeCell?.label ?? ''
 
   // ONE resolution, two surfaces. The centre label and the chapter bar's
@@ -1118,6 +1203,11 @@ export function EscapeHoldPanel({
       role="toolbar"
       aria-label="Quick note actions"
       onKeyDown={handleRingKeyDown}
+      // A hold ends when the key comes up, and when the ring stops holding
+      // the keyboard at all -- a `keyup` that lands somewhere else never
+      // arrives here, and a timer that outlived its key would keep pressing.
+      onKeyUp={(event) => { if (event.key === ' ' || event.key === 'Spacebar') stopAutoAdvance() }}
+      onBlur={stopAutoAdvance}
     >
       {/* Centered label of whichever cell is focused, or hovered while the
           mouse is over one -- see displayedLabel above. Sized/shaped in

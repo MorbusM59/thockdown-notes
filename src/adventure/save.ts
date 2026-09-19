@@ -12,8 +12,9 @@
 // uses, and it exists because this file is read before anything can be
 // rendered to complain with.
 
-import { DEFAULT_SETTINGS, SAVE_VERSION, type DirectorState, type GameRecord, type GameSave, type StageFrame } from './model/gameState'
-import { DEFAULT_DIFFICULTY, isDifficulty } from './model/difficulty'
+import { SAVE_VERSION, type DirectorState, type GameRecord, type GameSave, type StageFrame } from './model/gameState'
+import { clampProgression } from './model/difficulty'
+import { clampAutoAdvanceMs, AUTO_ADVANCE_SCOPES, DEFAULT_AUTO_ADVANCE_SCOPE, type AutoAdvanceScope } from './model/autoAdvance'
 import { STAT_KEYS, type StatBlock } from './model/stats'
 import { FIRST_MILESTONE_THRESHOLD } from './model/milestones'
 import type { JsonObject } from './core/json'
@@ -117,12 +118,14 @@ function sanitizeGame(value: unknown): GameRecord | null {
     level: wholeAtLeast(value.level, 1),
     // A save written before the counter moved onto the record has none, and
     // starts the level over at its first encounter -- the same widening the
-    // narration list and the difficulty preset took, for the same reason: a
+    // narration list and the tuning numbers took, for the same reason: a
     // field nobody could have written is not grounds for throwing a run away.
     encounterIndex: wholeAtLeast(value.encounterIndex, 1),
-    // A run saved before presets existed is played out at the default rather
-    // than discarded -- the same widening the narration list took.
-    difficulty: isDifficulty(value.difficulty) ? value.difficulty : DEFAULT_DIFFICULTY,
+    // WHAT THE RUN WAS CREATED WITH. Clamped rather than validated against a
+    // list, because it is a number on a range now rather than one of four
+    // names -- so a save from a build with a wider range reads as the nearest
+    // legal curve instead of being thrown away.
+    progression: clampProgression(value.progression),
     successAdjust: fraction(value.successAdjust),
     keepItemIds: modifierIds(value.keepItemIds),
     keepTraitIds: modifierIds(value.keepTraitIds),
@@ -158,6 +161,13 @@ function sanitizeGame(value: unknown): GameRecord | null {
     classId: vectorId(value.classId),
     hitPoints: wholeAtLeast(value.hitPoints, 0),
   }
+}
+
+/** A scope this build knows, or the default. Saves outlive content, and lists. */
+function scopeOf(value: unknown): AutoAdvanceScope {
+  return AUTO_ADVANCE_SCOPES.includes(value as AutoAdvanceScope)
+    ? (value as AutoAdvanceScope)
+    : DEFAULT_AUTO_ADVANCE_SCOPE
 }
 
 /** One vector id, or null. Written once because three fields want exactly it. */
@@ -224,8 +234,11 @@ export function sanitizeGameSave(input: unknown): GameSave | null {
       unlocked: [...new Set(modifierIds(profile.unlocked))],
     },
     settings: {
-      difficulty: isDifficulty(settings.difficulty) ? settings.difficulty : DEFAULT_SETTINGS.difficulty,
+      progression: clampProgression(settings.progression),
       successAdjust: fraction(settings.successAdjust),
+      trueMode: settings.trueMode === true,
+      autoAdvanceScope: scopeOf(settings.autoAdvanceScope),
+      autoAdvanceMs: clampAutoAdvanceMs(settings.autoAdvanceMs),
     },
     games,
     holdings,

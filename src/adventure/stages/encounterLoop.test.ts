@@ -4,7 +4,11 @@ import { NO_ARMOR } from '../model/armor'
 
 import { catalogFor, rolledPool, THOCKQUEST } from '../content'
 import { choose, currentScreen, enterEntryScreen, enterInterlude, type DirectorDeps } from '../core/director'
-import { activeGame, applyEffects, emptySave, profileOf, type GameSave } from '../model/gameState'
+import {
+  activeGame, applyEffects, emptySave, profileOf, runTuning, withTrueMode, withTuning, type GameSave,
+} from '../model/gameState'
+import { PROGRESSION_MAX, PROGRESSION_MIN } from '../model/difficulty'
+import { AUTO_ADVANCE_MIN_MS } from '../model/autoAdvance'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
 import { createdRun, GAME_EXIT_CHOICE } from '../testing/run'
 import { LEVEL_ENCOUNTER_COUNT } from '../model/encounterOffers'
@@ -12,7 +16,6 @@ import { resolveProfile } from '../model/modifiers'
 import { lootStage } from './loot'
 import { encounterSelectStage } from './encounterSelect'
 import { sanitizeGameSave } from '../save'
-import { withSuccessAdjust } from '../model/gameState'
 import { famePointsAvailable } from '../model/gold'
 import { omenHealAmount } from '../model/specialEvents'
 
@@ -252,63 +255,109 @@ describe('the level counts to ten', () => {
 })
 
 describe('game settings', () => {
-  /** Walks to the settings screen from the entry screen. */
-  function openSettings(save: GameSave) {
-    return choose(save, 'welcome:settings', DEPS, NOW).save
-  }
-
-  it('offers every preset, and says which one is current', () => {
-    const save = openSettings(enterEntryScreen(emptySave(4242), DEPS, NOW))
-    const screen = currentScreen(save, DEPS)
-    expect(screen?.stageId).toBe('settings')
-    const labels = screen?.choices.map((choice) => choice.label) ?? []
-    expect(labels).toEqual(['Easy', 'Medium (current)', 'Hard', 'Extreme', 'Back'])
-    // Each preset says what it does, in the two numbers it IS.
-    expect(screen?.choices[0].detail?.lines).toEqual([
-      'Monster hit points and damage at 50%',
-      '+1% compounding each level',
-    ])
+  /**
+   * THE SETTINGS SCREEN IS GONE, and the suite that covered it with it. It
+   * held one choice -- a difficulty preset out of four -- which is a slider
+   * in the options panel now (model/difficulty.ts), beside the thumb it
+   * belongs with. What replaced those tests is below: the run's own tuning,
+   * the free/true split that decides which numbers the fight reads, and the
+   * sanitizer, which is still the half that has shipped broken before.
+   */
+  it('offers no settings cell on the entry screen any more', () => {
+    const screen = currentScreen(enterEntryScreen(emptySave(4242), DEPS, NOW), DEPS)
+    expect(screen?.choices.map((choice) => choice.id)).not.toContain('welcome:settings')
+    expect(screen?.choices.map((choice) => choice.id)).toContain('welcome:start')
   })
 
-  it('comes back to the entry screen it was opened from, run and all', () => {
-    // PUSH, not replace: the welcome frame knows whether it is sitting on a
-    // suspended run, and could not work that out again.
-    const playing = choose(enterEntryScreen(emptySave(4242), DEPS, NOW), 'welcome:start', DEPS, NOW).save
-    const reopened = enterEntryScreen(playing, DEPS, NOW)
-    const back = choose(openSettings(reopened), 'settings:back', DEPS, NOW).save
-    expect(back.director.stack).toEqual(reopened.director.stack)
-    expect(currentScreen(back, DEPS)?.choices.map((choice) => choice.id)).toContain('welcome:continue')
+  it('bakes the tuning into the run, and into its seed', () => {
+    // A run's content is a function of what it was set up under, so the same
+    // clock at a different progression is a different adventure. That is what
+    // makes "this run was won at 1.25" something a later unlock could believe.
+    const gentle = emptySave(4242)
+    const steep = withTuning(emptySave(4242), { progression: PROGRESSION_MAX })
+    const one = choose(enterEntryScreen(gentle, DEPS, NOW), 'welcome:start', DEPS, NOW).save
+    const two = choose(enterEntryScreen(steep, DEPS, NOW), 'welcome:start', DEPS, NOW).save
+    expect(activeGame(one)?.progression).toBe(PROGRESSION_MIN)
+    expect(activeGame(two)?.progression).toBe(PROGRESSION_MAX)
+    expect(activeGame(one)?.seed).not.toBe(activeGame(two)?.seed)
   })
 
-  it('applies a preset to the NEXT run and never to the one in progress', () => {
-    // A preset changed mid-run would rewrite what every fight already fought
-    // was worth.
+  it('lets the sliders override a run in FREE mode, and not in true mode', () => {
+    // The whole of what the toggle is for, from both sides. Free mode reads
+    // the live sliders so tuning by feel reaches the fight on screen; true
+    // mode reads what the run was created with, so a result means something.
     const started = choose(enterEntryScreen(emptySave(4242), DEPS, NOW), 'welcome:start', DEPS, NOW).save
-    expect(activeGame(started)?.difficulty).toBe('medium')
+    expect(activeGame(started)?.progression).toBe(PROGRESSION_MIN)
 
-    const reopened = enterEntryScreen(started, DEPS, NOW)
-    const chosen = choose(openSettings(reopened), 'difficulty:extreme', DEPS, NOW).save
-    expect(chosen.settings.difficulty).toBe('extreme')
-    expect(chosen.games.find((game) => game.id === chosen.activeGameId)?.difficulty).toBe('medium')
+    const moved = withTuning(started, { progression: 1.2, successAdjust: 0.4 })
+    expect(runTuning(activeGame(moved), moved.settings)).toEqual({ progression: 1.2, successAdjust: 0.4 })
+    // THE RECORD IS UNTOUCHED, which is the part that used to be written over:
+    // a run whose numbers are overwritten every time a slider moves cannot say
+    // what it was set up as.
+    expect(activeGame(moved)?.progression).toBe(PROGRESSION_MIN)
 
-    const next = choose(enterEntryScreen(chosen, DEPS, NOW), 'welcome:start', DEPS, NOW).save
-    expect(activeGame(next)?.difficulty).toBe('extreme')
+    const strict = { ...moved, settings: { ...moved.settings, trueMode: true } }
+    expect(runTuning(activeGame(strict), strict.settings).progression).toBe(PROGRESSION_MIN)
+  })
+
+  it('ends the run when true mode is turned ON, and not when it is turned off', () => {
+    // A free-mode run was played under whatever the sliders happened to be,
+    // so there is no honest way to carry it into a mode whose entire claim is
+    // that the numbers did not move.
+    const started = choose(enterEntryScreen(emptySave(4242), DEPS, NOW), 'welcome:start', DEPS, NOW).save
+    expect(started.activeGameId).not.toBeNull()
+
+    const strict = withTrueMode(started, true)
+    expect(strict.settings.trueMode).toBe(true)
+    expect(strict.activeGameId).toBeNull()
+    expect(strict.games).toEqual([])
+    // The stack goes with it: a frame parked against a run that no longer
+    // exists is the one state the director cannot present.
+    expect(strict.director.stack).toEqual([])
+
+    const relaxed = withTrueMode(
+      choose(enterEntryScreen(strict, DEPS, NOW), 'welcome:start', DEPS, NOW).save,
+      false,
+    )
+    expect(relaxed.settings.trueMode).toBe(false)
+    expect(relaxed.activeGameId).not.toBeNull()
+  })
+
+  it('clamps whatever a slider hands it, rather than storing it', () => {
+    // A slider stepping by 0.05 arrives carrying 0.6000000000000001, and a
+    // caller can ask for anything at all.
+    const wild = withTuning(emptySave(1), { progression: 99, successAdjust: -5, autoAdvanceMs: 7 })
+    expect(wild.settings.progression).toBe(PROGRESSION_MAX)
+    expect(wild.settings.successAdjust).toBe(0)
+    expect(wild.settings.autoAdvanceMs).toBe(AUTO_ADVANCE_MIN_MS)
   })
 
   it('survives the sanitizer, which is the half that has shipped broken before', () => {
-    const chosen = choose(
-      openSettings(enterEntryScreen(emptySave(4242), DEPS, NOW)),
-      'difficulty:easy',
-      DEPS,
-      NOW,
-    ).save
-    const readBack = sanitizeGameSave(JSON.parse(JSON.stringify(chosen)))
-    expect(readBack?.settings.difficulty).toBe('easy')
-    // And a save written before presets existed reads at the default rather
-    // than being discarded.
+    const chosen = withTuning(emptySave(4242), {
+      progression: 1.2,
+      successAdjust: 0.35,
+      autoAdvanceScope: 'combat',
+      autoAdvanceMs: 150,
+    })
+    const readBack = sanitizeGameSave(JSON.parse(JSON.stringify({ ...chosen, settings: { ...chosen.settings, trueMode: true } })))
+    expect(readBack?.settings).toEqual({
+      progression: 1.2,
+      successAdjust: 0.35,
+      trueMode: true,
+      autoAdvanceScope: 'combat',
+      autoAdvanceMs: 150,
+    })
+    // A save written before any of this reads at the defaults rather than
+    // being discarded -- the same widening every other field took.
     const older = JSON.parse(JSON.stringify(chosen)) as Record<string, unknown>
     delete older.settings
-    expect(sanitizeGameSave(older)?.settings.difficulty).toBe('medium')
+    expect(sanitizeGameSave(older)?.settings.progression).toBe(PROGRESSION_MIN)
+    expect(sanitizeGameSave(older)?.settings.trueMode).toBe(false)
+    expect(sanitizeGameSave(older)?.settings.autoAdvanceScope).toBe('nothing')
+    // ...and a scope this build does not know is the default, not a crash.
+    const alien = JSON.parse(JSON.stringify(chosen)) as Record<string, unknown>
+    ;(alien.settings as Record<string, unknown>).autoAdvanceScope = 'untilTheHeatDeath'
+    expect(sanitizeGameSave(alien)?.settings.autoAdvanceScope).toBe('nothing')
   })
 })
 
@@ -510,7 +559,7 @@ describe('renown', () => {
 
 describe('the thumb the run is played under', () => {
   it('is fixed at the start, like the preset, and clamped on the way in', () => {
-    const tuned: GameSave = { ...emptySave(4242), settings: { difficulty: 'hard', successAdjust: 0.35 } }
+    const tuned: GameSave = withTuning(emptySave(4242), { successAdjust: 0.35 })
     const started = choose(enterEntryScreen(tuned, DEPS, NOW), 'welcome:start', DEPS, NOW).save
     expect(activeGame(started)?.successAdjust).toBe(0.35)
 
@@ -525,28 +574,28 @@ describe('the thumb the run is played under', () => {
     expect(sanitizeGameSave(nonsense)?.settings.successAdjust).toBe(0)
   })
 
-  it('is moved LIVE by the debugging slider, unlike the preset', () => {
-    // The one thing that deliberately reaches into a run already under way.
-    // A difficulty preset is frozen at the start because changing it would
-    // rewrite what every fight already fought was worth; the thumb is an
-    // instrument, and one that only took effect next run would be answering
-    // a question nobody asked.
+  it('reaches a run already under way, in free mode, without rewriting it', () => {
+    // The whole use of tuning by feel: the slider moves and the fight on
+    // screen changes. What it does NOT do any more is write the number onto
+    // the run -- the record says what the run was SET UP as and `runTuning`
+    // decides which of the two the fight reads.
     const started = choose(enterEntryScreen(emptySave(4242), DEPS, NOW), 'welcome:start', DEPS, NOW).save
-    const turned = withSuccessAdjust(started, 0.4)
+    const turned = withTuning(started, { successAdjust: 0.4 })
     expect(turned.settings.successAdjust).toBe(0.4)
-    expect(activeGame(turned)?.successAdjust).toBe(0.4)
+    expect(runTuning(activeGame(turned), turned.settings).successAdjust).toBe(0.4)
+    expect(activeGame(turned)?.successAdjust).toBe(0)
 
     // Clamped, and identical in identity when nothing moves -- the host
     // persists on every change, so a no-op must not look like one.
-    expect(withSuccessAdjust(turned, 5).settings.successAdjust).toBe(1)
-    expect(withSuccessAdjust(turned, 0.4)).toBe(turned)
+    expect(withTuning(turned, { successAdjust: 5 }).settings.successAdjust).toBe(1)
+    expect(withTuning(turned, { successAdjust: 0.4 })).toBe(turned)
   })
 
   it('changes how a fight goes, and nothing else about the run', () => {
     // Same seed, same choices, one dial: the run under the thumb has to be a
     // DIFFERENT run, or the parameter is not reaching the rolls.
     const play = (seed: number, successAdjust: number) => {
-      let save: GameSave = { ...emptySave(seed), settings: { difficulty: 'medium', successAdjust } }
+      let save: GameSave = withTuning(emptySave(seed), { successAdjust })
       save = enterEntryScreen(save, DEPS, NOW)
       for (let step = 0; step < 200; step += 1) {
         const screen = currentScreen(save, DEPS)

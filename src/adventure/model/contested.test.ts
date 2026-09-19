@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   actionsRemaining, BASE_DAMAGE, damageFrom, membersDown,
   monsterDefence, MONSTER_TYPES, } from './monsters'
-import { DIFFICULTIES, powerMultiplier } from './difficulty'
+import { clampProgression, PROGRESSION_MAX, PROGRESSION_MIN, PROGRESSION_STEP, powerMultiplier } from './difficulty'
 import { COUNTER_STATS, contestedStat, pressThumb, resolveChance } from './chance'
 import { createStatBlock, deriveStats, DODGE_CHANCE, STAT_KEYS } from './stats'
 import { testMonster } from '../testing/monster'
@@ -108,14 +108,30 @@ describe('the power multiplier', () => {
     }
   })
 
-  it('is one factor per level, for every difficulty', () => {
-    for (const difficulty of DIFFICULTIES) {
-      const base = powerMultiplier(0, difficulty)
-      const step = powerMultiplier(1, difficulty) / base
-      // Compounds on the BASE rather than on itself: three levels is the
-      // base times three growth steps, not the level-one power cubed.
-      expect(powerMultiplier(3, difficulty)).toBeCloseTo(base * step ** 3, 10)
+  it('is one factor per level, at every progression the slider offers', () => {
+    // THE PROPERTY, across the whole range rather than at four named points:
+    // the presets were a list and progression is an interval, so the test
+    // walks the interval the slider actually walks.
+    for (let value = PROGRESSION_MIN; value <= PROGRESSION_MAX + 1e-9; value += PROGRESSION_STEP) {
+      const progression = clampProgression(value)
+      // PAR at level zero, always. The preset's second number -- what a
+      // monster was worth before the curve -- is gone, and the flat axis is
+      // the thumb now (model/difficulty.ts).
+      expect(powerMultiplier(0, progression)).toBe(1)
+      expect(powerMultiplier(1, progression)).toBeCloseTo(progression, 10)
+      expect(powerMultiplier(3, progression)).toBeCloseTo(progression ** 3, 10)
     }
+  })
+
+  it('reads nonsense as the gentlest curve rather than as a monster worth nothing', () => {
+    // A save from another build, or a slider that arrived with a string.
+    // Zero would make every monster worth nothing at every level, which is
+    // the one wrong answer that looks like the game working.
+    for (const bad of [undefined, null, 'plenty', Number.NaN, 0, -3, 99]) {
+      expect(powerMultiplier(5, bad as never)).toBeGreaterThan(0)
+    }
+    expect(clampProgression(0)).toBe(PROGRESSION_MIN)
+    expect(clampProgression(99)).toBe(PROGRESSION_MAX)
   })
 })
 

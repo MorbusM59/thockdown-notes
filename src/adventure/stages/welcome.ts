@@ -18,13 +18,12 @@
 
 import type { StageModule } from '../core/stage'
 import { resumableGame } from '../model/gameState'
-import { SETTINGS_STAGE_ID, WELCOME_STAGE_ID } from './ids'
+import { WELCOME_STAGE_ID } from './ids'
 
 
 const CHOICE = {
   start: 'welcome:start',
   continue: 'welcome:continue',
-  settings: 'welcome:settings',
   leave: 'welcome:leave',
 } as const
 
@@ -62,7 +61,12 @@ export const welcomeStage: StageModule = {
         ...(resumable
           ? [{ id: CHOICE.continue, label: 'Continue previous adventure', icon: 'fa-solid fa-play' }]
           : []),
-        { id: CHOICE.settings, label: 'Change Game Settings', icon: 'fa-solid fa-sliders' },
+        // THE SETTINGS CELL IS GONE, and so is the stage behind it. It held
+        // one choice -- a difficulty preset out of four -- and that is a
+        // SLIDER now, in the options panel beside the thumb it belongs with
+        // (model/difficulty.ts). Two ways to set one number is the overlap
+        // the vectors were separated to end, and a screen inside the game
+        // could not show a continuous value anyway.
         { id: CHOICE.leave, label: 'Leave the game', icon: 'fa-solid fa-xmark' },
       ],
     }
@@ -95,12 +99,6 @@ export const welcomeStage: StageModule = {
         narration: 'You take up where you left off.',
         rng,
       }
-    }
-
-    if (choiceId === CHOICE.settings) {
-      // PUSH: this frame knows whether it is sitting on a suspended run, and
-      // that is not something it could work out again after a replace.
-      return { kind: 'push', stageId: SETTINGS_STAGE_ID, rng }
     }
 
     if (choiceId === CHOICE.leave) return { kind: 'leave', rng }
