@@ -2169,3 +2169,82 @@ placed at 5, 9 and 10 and the level advancing after ten.
 101. **"Hit points" is "Health"** everywhere a player reads it: the derived
      label, the tab bar's readout, a monster's detail. The field is still
      `maxHitPoints`, which is what it IS in the formula.
+
+102. **A BLOW CAN READ ITS TARGET'S HEALTH**, through the door that already
+     existed rather than a new one. `Situation` is the set of optional facts
+     about the moment a profile is resolved in, and absence there already
+     means "not in force" — so the opponent's health is one more field on it
+     (`opponentHealthFraction`) and the effect names whose health it reads
+     (`subject: 'self' | 'target'`). A target effect resolves to nothing on
+     the status bar, at character creation and on every offer screen, because
+     none of them has an opponent — exactly as a self-conditioned effect
+     resolves to nothing with no hit points given. One rule, one door, one
+     absence.
+
+     A FRACTION rather than hit points, unlike the self side, and that
+     asymmetry is honest: this character's maximum is derived right there from
+     their own stats, and the opponent's is the opponent's business.
+
+     **`actingProfile` LOST ITS SHORTCUT** (`stages/combat.ts`). It returned
+     the unconditioned profile unless the action sat on a round's edge, which
+     was true while the edge was the only thing the situation could decide.
+     With a target in it, that early return would have silently dropped every
+     `subject: 'target'` effect in the middle of a round — rule 4's exact
+     shape. Resolving is arithmetic over a handful of modifiers, once per
+     action. Verified: crit 0.500 with no foe, 0.750 against a hurt one,
+     0.500 against a whole one.
+
+     `MoveSituation` grew the same field, and `{ kind: 'targetHealth', band }`
+     joined the triggers — `moveSituationFor` already computed both sides'
+     health and picked one, so it now hands back both.
+
+     Content: **Velkar** (+50% Crit vs injured), **Brannoch** (+60% Damage vs
+     healthy), the Assassin's **Execute** (300% of a blow vs maimed, declared
+     FIRST so it beats Backstab's roll) and the Templar's **Condemn** (vs
+     healthy) — the mirror that makes a glass-cannon opener playable.
+
+103. **A MONSTER'S CONDITIONALS NEVER REACH IT**, pre-existing and now
+     MEASURED rather than suspected: `buildMonster` calls `resolveProfile`
+     with no situation at all, so every `derivedPercentWhileHealth` and
+     `derivedPercentOnAction` on a monster species resolves against the
+     default — `hurtFraction` 1 and neither round edge. A Ghoul built with its
+     two `injured` effects and one built without them have identical `damage`
+     and `maxHitPoints`. Ghoul and Lich are affected today; a `healthy` one
+     would fire ALWAYS rather than conditionally. A Wolf effect written during
+     entry 102 was REMOVED rather than shipped inert. See `TODO.md` for what
+     would have to be true to fix it: a `Monster` would have to stop being a
+     snapshot frozen at offer time.
+
+104. **A TIER STARTS AT ZERO and is earned one per stat point AWARDED**
+     (`statPointsEarned`), spent or not. An advancement is therefore worth two
+     points — one apportioned by the build the moment it lands, one the player
+     places wherever they like. Keying it off the SPEND would make a player
+     saving a point weaker than one who spent theirs badly, which is a choice
+     nobody should be punished for making carefully. Both halves stay derived:
+     what was taken is on the record, what is waiting is read off the ladder.
+
+     `MAX_PLAYER_TIER` is **`MAX_FAME_TIER`** now, because it never named a
+     player's maximum again — a run's tier is base plus earned plus bought,
+     and only the last of those three has a ceiling.
+
+105. **THE GUARDIAN ANGEL** (`model/guardian.ts`) is what makes entry 104
+     survivable: a hidden FLOOR under the run's luckiness, `LUCKINESS_INITIAL`
+     60% on the first level, `LUCKINESS_INITIAL_DECAY` 20% less each level,
+     gone by the fourth.
+
+     **A FLOOR, not an addend**: it supersedes the reader's Luckiness slider
+     only while it is higher, so somebody who turned theirs up never meets it.
+     Adding instead would make the early game harder for a player who
+     deliberately chose a high number, which is the opposite of what a floor
+     is for. **Not a setting**, so true mode does not freeze it and free mode
+     does not override it — it applies under both, after either answer.
+     Invisible to the player on purpose: it is not a mechanic to play around,
+     it is the game declining to be brutal before a run has anything to be
+     brutal with.
+
+106. **A NAMEPLATE IS AS TALL AS THE ROW ITS SIBLINGS DEFINE.** The three
+     vector pills drew short: a `.tag-pill` is sized by its content, and a
+     single icon's line box is shorter than a figure's. `align-self: stretch`
+     against the flex line is the derivation — no pixel value to drift when
+     `--ui-font-scale` moves, and no second opinion about how tall a readout
+     is. Live: 21px, the same as all nine neighbours.

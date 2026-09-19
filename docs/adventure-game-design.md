@@ -1069,3 +1069,34 @@ at the floor but can never push it past the ceiling.
   resolution and is left for its own pass rather than half-built here.
 
   Built as entries 97 to 101 of [adventure-platform.md](adventure-platform.md).
+- **TARGET HEALTH, TIER FROM ZERO, AND THE GUARDIAN ANGEL.** As authored:
+
+  > access to target health is of critical importance, let's build this super
+  > clean and see if we can find a few species and classes where these
+  > conditionals would be a great fit.
+  >
+  > Another unrelated decision I've just made: Let's start the player off with
+  > Tier 0 and have them gain a tier whenever a new stat point becomes
+  > available, regardless of whether it has been spent. This allows the
+  > players to gain 2 stat points on every advancement, one that is
+  > distributed for them based on build and one they can use to refine the
+  > build.
+  >
+  > Since this lowers player power at early levels, let's have a guardian
+  > angel mechanic, that starts the player off with a luckiness of 60% for the
+  > first level and reduce that luckiness by 20% (additive) at the end of each
+  > level so they have a base luckiness of 60% for the first level, 40% for
+  > the second level, 20% for the third level and 0% for levels 4 and on. This
+  > luckiness supersedes the player setting while it is higher than the player
+  > setting. Let's set this via luckinessInitial = 60 and luckinessInitialDecay
+  > = 20, so we can easily tweak this later. This is hidden to the player and
+  > allows them to get a smoother start into the game until they have a few
+  > stat points under their belt.
+
+  The target band is built for the PLAYER only. A monster's conditional
+  effects — of any kind, including the self-health ones Ghoul and Lich already
+  carry — never reach it, because `buildMonster` resolves a monster once at
+  offer time with no situation at all. That is pre-existing and measured; see
+  `TODO.md`.
+
+  Built as entries 102 to 106 of [adventure-platform.md](adventure-platform.md).
