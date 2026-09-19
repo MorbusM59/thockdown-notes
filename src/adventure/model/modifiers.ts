@@ -373,20 +373,60 @@ function signedPercent(fraction: number): string {
 }
 
 /**
- * A percentage of a derived value, in words -- and for a CHANCE, what it is a
- * percentage OF.
+ * HOW MUCH A DESCRIPTION EXPLAINS ITSELF.
+ *
+ * `verbose` says what changed AND what that means: "+20% Accuracy (of your
+ * misses)" spells out that a chance takes a share of what is left rather
+ * than twenty flat points, which is the difference between an item worth
+ * taking and an item worth taking twice.
+ *
+ * `concise` says only WHAT CHANGED. The explanation is the same sentence at
+ * every fight forever once it has been read once, and it is what stops a
+ * narration line fitting a narrow editor slot. Nothing is abbreviated away
+ * that a player could not recover -- the names stay whole, only the gloss
+ * goes.
+ *
+ * ONE ARGUMENT, REQUIRED, threaded from the setting rather than defaulted:
+ * a default would mean a call site that forgot it silently stays verbose,
+ * and this is exactly the rule that has to hold at every describer or at
+ * none. `StageContext.describe` carries it so no stage reads the save for
+ * it twice.
+ */
+export type DescriptionStyle = 'verbose' | 'concise'
+
+/** The style a save's settings ask for. The one place this is decided. */
+export function descriptionStyleOf(settings: { verboseDescriptions: boolean }): DescriptionStyle {
+  return settings.verboseDescriptions ? 'verbose' : 'concise'
+}
+
+/**
+ * A percentage of a derived value, in words -- and, when verbose, what it is
+ * a percentage OF.
  *
  * "+20% Accuracy" is read as twenty points by everybody, and for a chance it
  * is a fifth of the misses instead. The complement is named rather than left
- * to be inferred (stats.ts's CHANCE_COMPLEMENTS), because the difference
- * between the two readings is the difference between an item worth taking and
- * an item worth taking twice.
+ * to be inferred (stats.ts's CHANCE_COMPLEMENTS). Concise drops the
+ * parenthesis and nothing else: the quantity and its name are what changed,
+ * and the rest was the explanation.
  */
-function describePercent(key: DerivedKey, percent: number): string {
+function describePercent(key: DerivedKey, percent: number, style: DescriptionStyle): string {
   const head = `${signedPercent(percent)} ${DERIVED_LABELS[key]}`
-  if (!isChanceKey(key)) return head
+  if (style === 'concise' || !isChanceKey(key)) return head
   const complement = CHANCE_COMPLEMENTS[key]
   return `${head} (of ${percent >= 0 ? complement.failure : complement.success})`
+}
+
+/**
+ * "Initial" and "Final", which is what the two round positions ARE.
+ *
+ * The verbose form is a clause ("on your first action of a round") and reads
+ * as a condition the reader has to apply; the concise form is an ADJECTIVE on
+ * the quantity, which is the same fact in the position a reader already
+ * scans. Both name the stat, so neither loses anything.
+ */
+const ROUND_POSITION_WORD: Readonly<Record<'first' | 'last', string>> = {
+  first: 'Initial',
+  last: 'Final',
 }
 
 /**
@@ -396,12 +436,13 @@ function describePercent(key: DerivedKey, percent: number): string {
  * player reading "+10% per item" still has to count their own items to know
  * what it is doing for them right now.
  */
-export function describeEffect(effect: ModifierEffect, holdings: HoldingCounts): string {
+export function describeEffect(effect: ModifierEffect, holdings: HoldingCounts, style: DescriptionStyle): string {
+  const concise = style === 'concise'
   switch (effect.kind) {
     case 'statDelta':
       return `${signed(effect.amount)} ${STAT_LABELS[effect.stat]}`
     case 'derivedPercent':
-      return describePercent(effect.derived, effect.percent)
+      return describePercent(effect.derived, effect.percent, style)
     case 'derivedPercentPerHolding': {
       const held = holdings[effect.holding === 'item' ? 'items' : 'traits']
       const noun = effect.holding === 'item' ? 'item' : 'trait'
@@ -409,29 +450,48 @@ export function describeEffect(effect: ModifierEffect, holdings: HoldingCounts):
       // held: 130%)" beside "+15% per item" reads as a third number rather
       // than as the sum of the first two, and for a count it read as "1.2",
       // which is not a quantity of anything a player has.
+      //
+      // The total SURVIVES concise, and the "per item" rule is what goes:
+      // what this is worth right now is a fact about the run, not a gloss.
       const total = effect.percentPer * held
-      return `${signedPercent(effect.percentPer)} ${DERIVED_LABELS[effect.derived]} per ${noun} (${held} held: ${signedPercent(total)})`
+      const label = DERIVED_LABELS[effect.derived]
+      if (concise) return `${signedPercent(total)} ${label}`
+      return `${signedPercent(effect.percentPer)} ${label} per ${noun} (${held} held: ${signedPercent(total)})`
     }
-    case 'derivedPercentWhileHurt':
-      return `${describePercent(effect.derived, effect.percent)} below ${Math.round(effect.belowFraction * 100)}% hit points`
-    case 'derivedPercentOnAction':
-      return `${describePercent(effect.derived, effect.percent)} on your ${effect.position} action of a round`
+    case 'derivedPercentWhileHurt': {
+      const head = describePercent(effect.derived, effect.percent, style)
+      const threshold = Math.round(effect.belowFraction * 100)
+      return concise ? `${head} under ${threshold}%` : `${head} below ${threshold}% ${DERIVED_LABELS.maxHitPoints}`
+    }
+    case 'derivedPercentOnAction': {
+      if (concise) {
+        // The position becomes an ADJECTIVE on the quantity rather than a
+        // trailing clause: "+30% Initial Damage", not "+30% Damage on your
+        // first action of a round".
+        return `${signedPercent(effect.percent)} ${ROUND_POSITION_WORD[effect.position]} ${DERIVED_LABELS[effect.derived]}`
+      }
+      return `${describePercent(effect.derived, effect.percent, style)} on your ${effect.position} action of a round`
+    }
     case 'armorSlot':
-      return `${effect.amount} Armor, worn down as it absorbs`
+      return concise ? `${effect.amount} Armor` : `${effect.amount} Armor, worn down as it absorbs`
     case 'armorDecayFloor':
-      return `Its armor never decays below ${effect.floor}`
+      return concise ? `Armor floor ${effect.floor}` : `Armor never decays below ${effect.floor}`
     case 'armorRepairAfterCombat':
-      return `${signed(effect.amount)} Armor to every item after each fight`
+      return concise
+        ? `${signed(effect.amount)} Mending`
+        : `${signed(effect.amount)} Armor to every item after each fight`
     case 'noDecayingArmor':
-      return 'Worn armour counts for nothing'
+      return concise ? 'no Armor' : 'worn Armor counts for nothing'
     case 'naturalArmor':
-      return `${signed(effect.amount)} Armor that cannot decay`
+      return concise
+        ? `${signed(effect.amount)} Natural Armor`
+        : `${signed(effect.amount)} Armor that cannot decay`
   }
 }
 
 /** Every line the tab bar shows while this modifier is in the selection spot. */
-export function describeModifier(modifier: Modifier, holdings: HoldingCounts): string[] {
-  return modifier.effects.map((effect) => describeEffect(effect, holdings))
+export function describeModifier(modifier: Modifier, holdings: HoldingCounts, style: DescriptionStyle): string[] {
+  return modifier.effects.map((effect) => describeEffect(effect, holdings, style))
 }
 
 /** This item's own armor pool, and the floor decay may not take it below. */

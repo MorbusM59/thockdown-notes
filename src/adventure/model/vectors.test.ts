@@ -4,7 +4,7 @@ import { THOCKQUEST } from '../content'
 import { validateContent } from '../content'
 import {
   BASE_PLAYER_TIER, MAX_PLAYER_TIER, MAX_TIER_PURCHASES, MONSTER_BUDDY_CHANCES, MONSTER_TYPES, MONSTER_TYPE_TIER,
-  TIER_PER_FAME_POINT, buildModifier, describeBuild, monsterTier, statsFromTier,
+  TIER_PER_FAME_POINT, buildModifier, buildWeightInitials, describeBuild, monsterTier, statsFromTier,
 } from './vectors'
 import { STAT_KEYS, STAT_LABELS } from './stats'
 import { armMove, describeMove, strikesOf } from './moves'
@@ -193,7 +193,7 @@ describe('a class move', () => {
     // thing that can still go wrong is a move with nothing to say at all.
     for (const combatClass of THOCKQUEST.combatClasses) {
       for (const move of combatClass.moves) {
-        const lines = describeMove(move)
+        const lines = describeMove(move, 'verbose')
         expect(lines.length).toBeGreaterThan(0)
         expect(lines.every((line) => line.trim().length > 0)).toBe(true)
       }
@@ -215,8 +215,37 @@ describe('what the content says about itself', () => {
       const named = STAT_KEYS.filter((key) => (build.weights[key] ?? 0) > 0)
       expect(lines).toHaveLength(named.length)
       for (const key of named) {
-        expect(lines.some((line) => line.startsWith(`${STAT_LABELS[key]}:`))).toBe(true)
+        expect(lines.some((line) => line.startsWith(`${STAT_LABELS[key]} x`))).toBe(true)
       }
+    }
+  })
+
+  it('describes a build as its WEIGHTS and says nothing about tier', () => {
+    // A build is a blueprint for growth and a tier is how far the run has
+    // come. The origins screen used to show what a build came to AT THE
+    // CURRENT TIER, which made the ratio look like a consequence of the tier
+    // rather than the thing being chosen.
+    const brutish = { id: 'x', name: 'Brutish', icon: 'fa-solid fa-hammer', weights: { might: 3, agility: 1 } }
+    expect(describeBuild(brutish)).toEqual(['Might x 3', 'Agility x 1'])
+    for (const build of THOCKQUEST.builds) {
+      for (const line of describeBuild(build)) expect(line.toLowerCase()).not.toContain('tier')
+    }
+  })
+
+  /**
+   * The nameplate on the bar has room for a glyph and a tooltip, so the
+   * weights are written as repeated initials. That is only readable while
+   * the six stats have six DISTINCT initials -- a seventh stat starting with
+   * an M would silently print two builds the same.
+   */
+  it('writes a build\'s weights as repeated initials, on six distinct letters', () => {
+    const initials = new Set(STAT_KEYS.map((key) => STAT_LABELS[key][0]))
+    expect(initials.size).toBe(STAT_KEYS.length)
+    expect(buildWeightInitials({ id: 'x', name: 'Brutish', icon: 'i', weights: { might: 3, agility: 1 } })).toBe('MMMA')
+    // Every real build prints as many letters as it has parts.
+    for (const build of THOCKQUEST.builds) {
+      const parts = STAT_KEYS.reduce((sum, key) => sum + Math.max(0, build.weights[key] ?? 0), 0)
+      expect(buildWeightInitials(build)).toHaveLength(parts)
     }
   })
 

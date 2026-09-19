@@ -110,8 +110,17 @@ export interface EscapeMenuReadout {
    * and the value says how much, and a bar has room for exactly that.
    */
   label: string
-  /** Its current value, already formatted. */
-  value: string
+  /**
+   * Its current value, already formatted -- or ABSENT, for a readout that
+   * names something rather than measuring it.
+   *
+   * A valueless readout draws as a SQUARE pill carrying its icon alone, and
+   * everything it has to say is in the tooltip. That is what a name IS on
+   * this bar: the adventure's build, species and class are three nouns, and
+   * a noun has no business in a column of quantities -- but the glyph does,
+   * because it is how the player recognises the thing they chose.
+   */
+  value?: string
 }
 
 /** One pill on the chrome's strip. Its tooltip is where the detail goes. */

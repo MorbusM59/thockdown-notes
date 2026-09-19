@@ -29,11 +29,10 @@ import { nextSample, type RngState } from '../core/rng'
 import type { JsonObject } from '../core/json'
 import type { StageContext, StageModule } from '../core/stage'
 import { describeModifier, type Modifier } from '../model/modifiers'
-import { holdingCounts, playerTierOf } from '../model/gameState'
+import { holdingCounts } from '../model/gameState'
 import { isUnlocked } from '../model/permanentUnlocks'
 import { describeMove } from '../model/moves'
-import { describeBuild, statsFromTier } from '../model/vectors'
-import { STAT_LABELS, STAT_KEYS } from '../model/stats'
+import { describeBuild } from '../model/vectors'
 import { CHARACTER_CREATION_STAGE_ID, REGION_SELECT_STAGE_ID } from './ids'
 
 /**
@@ -125,16 +124,6 @@ const NARRATION: Readonly<Record<Step, string>> = {
   item: 'You would never leave home without...',
 }
 
-/**
- * The run's tier, or the base one before a game exists. A build's detail
- * shows what it is worth AT THIS TIER, not as a ratio: "2 parts Might" is
- * the rule, "3 Might, 2 Agility" is the answer, and the answer is what a
- * player is choosing between.
- */
-function tierOf(context: StageContext): number {
-  return context.game ? playerTierOf(context.game) : 5
-}
-
 export const characterCreationStage: StageModule = {
   id: CHARACTER_CREATION_STAGE_ID,
   title: 'Origins',
@@ -152,7 +141,6 @@ export const characterCreationStage: StageModule = {
   present: (state, context) => {
     const step = stepOf(state.step)
     const unlocked = context.save.profile.unlocked
-    const tier = tierOf(context)
 
     // A vector the player has not earned is not on the ring at all. The gate
     // is HERE rather than in content, the same way every other reachability
@@ -161,28 +149,25 @@ export const characterCreationStage: StageModule = {
     if (step === 'build') {
       const offered = new Set(dealt(state))
       return {
-        screenKey: `build:${unlocked.length}:${tier}`,
+        screenKey: `build:${unlocked.length}`,
         choices: context.content.builds
           .filter((build) => offered.has(build.id))
-          .map((build) => {
-            const stats = statsFromTier(build, tier)
-            return {
-              id: `build:${build.id}`,
-              label: build.name,
-              icon: build.icon,
-              detail: {
-                title: build.name,
-                // WHAT IT COMES TO, then what the rule was. A player choosing
-                // a build is choosing a stat block, and the ratio is the
-                // reason rather than the answer -- so the numbers lead.
-                lines: [
-                  ...STAT_KEYS.filter((key) => stats[key] > 0).map((key) => `${STAT_LABELS[key]} ${stats[key]}`),
-                  `Tier ${tier}, split:`,
-                  ...describeBuild(build),
-                ],
-              },
-            }
-          }),
+          .map((build) => ({
+            id: `build:${build.id}`,
+            label: build.name,
+            icon: build.icon,
+            detail: {
+              title: build.name,
+              // THE WEIGHTS AND NOTHING ELSE. A build is a blueprint for
+              // growth -- a set of proportions -- and the tier is how far the
+              // run has got, which is a different quantity and belongs to a
+              // different pill. Showing the stat points a build comes to at
+              // the CURRENT tier put the two in one sentence and made the
+              // ratio look like a consequence of the tier rather than the
+              // thing being chosen.
+              lines: describeBuild(build),
+            },
+          })),
       }
     }
 
@@ -205,6 +190,7 @@ export const characterCreationStage: StageModule = {
               lines: describeModifier(
                 { id: species.id, kind: 'trait', name: species.name, icon: species.icon, effects: species.effects },
                 counts,
+                context.describe,
               ),
             },
           })),
@@ -226,7 +212,7 @@ export const characterCreationStage: StageModule = {
               // Every move, named and spelled out. A class is the one vector
               // whose worth cannot be read off a number, so the detail is the
               // whole of what the player has to go on.
-              lines: combatClass.moves.flatMap((move) => [`${move.name}`, ...describeMove(move).map((line) => `  ${line}`)]),
+              lines: combatClass.moves.flatMap((move) => [`${move.name}`, ...describeMove(move, context.describe).map((line) => `  ${line}`)]),
             },
           })),
       }
@@ -243,7 +229,7 @@ export const characterCreationStage: StageModule = {
             id: `offer:${modifier.id}`,
             label: modifier.name,
             icon: modifier.icon,
-            detail: { title: modifier.name, lines: describeModifier(modifier, counts) },
+            detail: { title: modifier.name, lines: describeModifier(modifier, counts, context.describe) },
           },
         ]
       }),

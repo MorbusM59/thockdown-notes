@@ -28,6 +28,21 @@ import type { EscapeMenuCellDetail, EscapeMenuChromeMeter, EscapeMenuChromePill,
  */
 
 /** Tooltip text for a pill or a gauge: its label, then a line per detail. */
+/**
+ * WHAT GOES BETWEEN TWO DESCRIPTIONS: two spaces, a bar, two spaces.
+ *
+ * One string, used by the rendered separator and by the accessible name
+ * alike, so the two cannot describe the same row differently. It was a
+ * centre dot, which reads as an ornament between words; a bar reads as a
+ * division between statements, which is what these are.
+ *
+ * The spaces are IN the string rather than in the margin, because the
+ * accessible name is plain text and has no margins -- and a rule about what
+ * separates two descriptions has to hold in both renderings or it is two
+ * rules. `white-space: pre` on the span is what keeps them from collapsing.
+ */
+const DETAIL_SEPARATOR = '  |  '
+
 function tooltipOf(label: string, detail?: string[]): string {
   return detail && detail.length > 0 ? [label, ...detail].join('\n') : label
 }
@@ -51,14 +66,19 @@ export function EscapeMenuReadouts({ status }: { status: EscapeMenuModeChrome })
       aria-label={`${status.title} state`}
     >
       {status.readouts.map((readout) => (
+        // A readout with NO VALUE names something instead of measuring it
+        // (escapeMenuContract.ts): it draws square, on its icon alone, and
+        // its whole content is the tooltip. The value span is omitted rather
+        // than rendered empty, so the square is the absence of a thing and
+        // not a thing of zero width that has to be styled away.
         <div
           key={readout.key}
-          className="tag-pill escape-menu-readout"
-          data-tooltip={tooltipOf(readout.label, [readout.value])}
-          aria-label={`${readout.label}: ${readout.value}`}
+          className={`tag-pill escape-menu-readout${readout.value === undefined ? ' is-nameplate' : ''}`}
+          data-tooltip={readout.value === undefined ? readout.label : tooltipOf(readout.label, [readout.value])}
+          aria-label={readout.value === undefined ? readout.label : `${readout.label}: ${readout.value}`}
         >
           <span className={readout.icon} aria-hidden="true" />
-          <span className="escape-menu-readout-value">{readout.value}</span>
+          {readout.value === undefined ? null : <span className="escape-menu-readout-value">{readout.value}</span>}
         </div>
       ))}
     </div>
@@ -181,11 +201,11 @@ export function EscapeMenuChromeBarRow({ status, detail }: {
                 <span
                   className="tag-pill escape-menu-choice-detail is-inert"
                   data-tooltip={tooltipOf(detail?.title ?? '', detailLines)}
-                  aria-label={`${detail?.title ?? ''}: ${detailLines.join(', ')}`}
+                  aria-label={`${detail?.title ?? ''}: ${detailLines.join(DETAIL_SEPARATOR)}`}
                 >
                   {detailLines.map((line, index) => (
                     <span key={line} className="escape-menu-choice-detail-line">
-                      {index > 0 ? <span className="escape-menu-choice-detail-sep" aria-hidden="true">·</span> : null}
+                      {index > 0 ? <span className="escape-menu-choice-detail-sep" aria-hidden="true">{DETAIL_SEPARATOR}</span> : null}
                       {line}
                     </span>
                   ))}

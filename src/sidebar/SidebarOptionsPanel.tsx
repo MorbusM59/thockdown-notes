@@ -2271,7 +2271,7 @@ export function SidebarOptionsPanel({
             type="button"
             className="btn-icon options-color-swatch "
             style={{ background: customCursorCenterColor }}
-            data-tooltip="Center dot color -- click to apply, hold right-click to copy"
+            data-tooltip="Center dot color — click to apply, hold right-click to copy"
             onClick={() => applyCursorColorToTarget('center')}
             onMouseDown={(event) => startCursorColorCopyHold('center', event)}
             onMouseUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
@@ -2283,7 +2283,7 @@ export function SidebarOptionsPanel({
             type="button"
             className="btn-icon options-color-swatch"
             style={{ background: customCursorHaloColor }}
-            data-tooltip="Halo color -- click to apply, hold right-click to copy"
+            data-tooltip="Halo color — click to apply, hold right-click to copy"
             onClick={() => applyCursorColorToTarget('halo')}
             onMouseDown={(event) => startCursorColorCopyHold('halo', event)}
             onMouseUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
@@ -2364,7 +2364,7 @@ export function SidebarOptionsPanel({
             type="button"
             className="btn-icon options-color-swatch"
             style={{ background: customCursorDotColor }}
-            data-tooltip="Circling dots color -- click to apply, hold right-click to copy"
+            data-tooltip="Circling dots color — click to apply, hold right-click to copy"
             onClick={() => applyCursorColorToTarget('dot')}
             onMouseDown={(event) => startCursorColorCopyHold('dot', event)}
             onMouseUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
@@ -2376,7 +2376,7 @@ export function SidebarOptionsPanel({
             type="button"
             className="btn-icon options-color-swatch"
             style={{ background: customCursorTrailColor }}
-            data-tooltip="Trail color -- click to apply, hold right-click to copy"
+            data-tooltip="Trail color — click to apply, hold right-click to copy"
             onClick={() => applyCursorColorToTarget('trail')}
             onMouseDown={(event) => startCursorColorCopyHold('trail', event)}
             onMouseUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
@@ -2615,7 +2615,7 @@ export function SidebarOptionsPanel({
             type="button"
             className="btn-icon options-color-swatch"
             style={{ background: caretOutlineColor }}
-            data-tooltip="Caret outline color -- click to apply, hold right-click to copy"
+            data-tooltip="Caret outline color — click to apply, hold right-click to copy"
             onClick={() => applyCaretColorToTarget('outline')}
             onMouseDown={(event) => startCaretColorCopyHold('outline', event)}
             onMouseUp={(event) => { if (event.button !== 2) return; clearCaretColorArmTimer() }}
@@ -2627,7 +2627,7 @@ export function SidebarOptionsPanel({
             type="button"
             className="btn-icon options-color-swatch"
             style={{ background: caretHaloColor }}
-            data-tooltip="Caret halo color -- click to apply, hold right-click to copy"
+            data-tooltip="Caret halo color — click to apply, hold right-click to copy"
             onClick={() => applyCaretColorToTarget('halo')}
             onMouseDown={(event) => startCaretColorCopyHold('halo', event)}
             onMouseUp={(event) => { if (event.button !== 2) return; clearCaretColorArmTimer() }}
@@ -3444,6 +3444,27 @@ export function SidebarOptionsPanel({
             aria-pressed={adventureSettings.trueMode}
           >
             <span className="fa-solid fa-lock" aria-hidden="true" />
+          </button>
+          {/* VERBOSE DESCRIPTIONS. On by default: a player meeting "+20%
+              Accuracy" for the first time cannot know it is a share of the
+              misses rather than twenty flat points. Off once they do, because
+              the explanation is then re-read at every fight forever and it is
+              what stops a narration line fitting a narrow slot. An ordinary
+              click either way -- nothing is at stake. */}
+          <button
+            type="button"
+            className={`btn-icon options-color-swatch options-loadout-btn${adventureSettings.verboseDescriptions ? ' is-active' : ''}`}
+            onClick={() => setAdventureSettings({ verboseDescriptions: !adventureSettings.verboseDescriptions })}
+            data-secondary-press="none"
+            data-tooltip={
+              adventureSettings.verboseDescriptions
+                ? 'Verbose descriptions: on. Effects explain what they mean'
+                : 'Verbose descriptions: off. Effects say only what changed'
+            }
+            aria-label="ThockQuest verbose descriptions"
+            aria-pressed={adventureSettings.verboseDescriptions}
+          >
+            <span className="fa-solid fa-comment-dots" aria-hidden="true" />
           </button>
         </div>
       </AccordionSection>

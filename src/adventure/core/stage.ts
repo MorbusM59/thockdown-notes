@@ -69,7 +69,7 @@
 import type { JsonObject } from './json'
 import type { RngState } from './rng'
 import type { Effect } from '../model/effects'
-import type { EffectiveProfile, Modifier } from '../model/modifiers'
+import type { DescriptionStyle, EffectiveProfile, Modifier } from '../model/modifiers'
 import type { Armor } from '../model/armor'
 import type { GameRecord, GameSave } from '../model/gameState'
 import type { Content } from '../content'
@@ -109,6 +109,12 @@ export interface StageContext {
   armor: Armor
   /** Everything the active game holds, in acquisition order. */
   held: readonly Modifier[]
+  /**
+   * HOW MUCH A DESCRIPTION EXPLAINS ITSELF (model/modifiers.ts), resolved
+   * from the save's settings ONCE by the director rather than re-derived at
+   * every describer call. A stage passes it on; it never reads the setting.
+   */
+  describe: DescriptionStyle
 }
 
 /**

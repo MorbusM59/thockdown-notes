@@ -46,7 +46,7 @@ export const huntStage: StageModule = {
           detail: monster
             ? {
                 title: monsterName(offer, context.content),
-                lines: monsterDetailLines(monster),
+                lines: monsterDetailLines(monster, context.describe),
               }
             : undefined,
         }]

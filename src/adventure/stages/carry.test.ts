@@ -23,6 +23,7 @@ function contextHolding(ids: readonly string[]): StageContext {
     items: rolledPool(THOCKQUEST, 0, 'item'),
     traits: rolledPool(THOCKQUEST, 0, 'trait'),
     armor: NO_ARMOR,
+    describe: 'verbose',
     profile: resolveProfile(createStatBlock(0), held, { items: 0, traits: 0 }),
     held,
   }

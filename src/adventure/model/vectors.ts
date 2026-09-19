@@ -135,14 +135,30 @@ export function buildModifier(build: Build | null, tier: number): Modifier | nul
 
 /** The weights as a player reads them: "2 parts Might, 1 part Agility". */
 export function describeBuild(build: Build): string[] {
-  const parts = STAT_KEYS
+  return weightedStats(build).map(({ key, weight }) => `${STAT_LABELS_LOCAL[key]} x ${weight}`)
+}
+
+/** The stats a build actually weights, in stat order, heaviest ratio intact. */
+function weightedStats(build: Build): { key: StatKey; weight: number }[] {
+  return STAT_KEYS
     .filter((key) => (build.weights[key] ?? 0) > 0)
     .map((key) => ({ key, weight: build.weights[key] as number }))
-  const total = parts.reduce((sum, part) => sum + part.weight, 0)
-  return parts.map((part) => {
-    const share = Math.round((part.weight / total) * 100)
-    return `${STAT_LABELS_LOCAL[part.key]}: ${part.weight} part${part.weight === 1 ? '' : 's'} (${share}%)`
-  })
+}
+
+/**
+ * A build's weights as REPEATED INITIALS -- "MMMA" for three parts Might to
+ * one part Agility.
+ *
+ * For the bar, where there is room for a glyph and a tooltip and nothing
+ * else. The six stats have six distinct initials (Might, Agility,
+ * Perception, Intellect, Charisma, Luck), which is what makes this readable
+ * rather than a code; `vectors.test.ts` holds that property, because a
+ * seventh stat sharing an initial would make two builds print the same.
+ */
+export function buildWeightInitials(build: Build): string {
+  return weightedStats(build)
+    .map(({ key, weight }) => STAT_LABELS_LOCAL[key][0].repeat(weight))
+    .join('')
 }
 
 // Imported lazily as a local map rather than from stats.ts's STAT_LABELS to

@@ -39,6 +39,7 @@ describe('stat resolution', () => {
     const line = describeEffect(
       { kind: 'derivedPercentPerHolding', derived: 'damageMultiplier', percentPer: 0.1, holding: 'item' },
       { items: 3, traits: 0 },
+      'verbose',
     )
     // The tab bar shows this string. If it said only "+10% per item" the
     // player would have to do the arithmetic the game already did.

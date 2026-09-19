@@ -121,6 +121,7 @@ describe('the loot stage', () => {
         ? resolveProfile(activeGame(started)!.baseStats, [], { items: 0, traits: 0 })
         : null,
       held: [],
+      describe: 'verbose' as const,
     }
     const entered = lootStage.enter(
       { screensLeft: screens, motes, offersLoot: true },
@@ -181,6 +182,7 @@ describe('the level counts to ten', () => {
       armor: NO_ARMOR,
       profile: game ? resolveProfile(game.baseStats, [], { items: 0, traits: 0 }) : null,
       held: [],
+      describe: 'verbose' as const,
     }
   }
 
@@ -346,7 +348,19 @@ describe('game settings', () => {
       trueMode: true,
       autoAdvanceScope: 'combat',
       autoAdvanceMs: 150,
+      verboseDescriptions: true,
     })
+    // VERBOSE DEFAULTS TO TRUE, so absence and `false` are different answers
+    // and the sanitizer may not test for `=== true`. Every save written
+    // before this field existed has it absent; reading those as concise
+    // would flip a setting nobody touched.
+    const terse = sanitizeGameSave(JSON.parse(JSON.stringify(
+      { ...chosen, settings: { ...chosen.settings, verboseDescriptions: false } },
+    )))
+    expect(terse?.settings.verboseDescriptions).toBe(false)
+    const pre = JSON.parse(JSON.stringify(chosen)) as { settings: Record<string, unknown> }
+    delete pre.settings.verboseDescriptions
+    expect(sanitizeGameSave(pre)?.settings.verboseDescriptions).toBe(true)
     // A save written before any of this reads at the defaults rather than
     // being discarded -- the same widening every other field took.
     const older = JSON.parse(JSON.stringify(chosen)) as Record<string, unknown>

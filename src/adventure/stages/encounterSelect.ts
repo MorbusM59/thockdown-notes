@@ -140,7 +140,7 @@ export const encounterSelectStage: StageModule = {
             id: `${OMEN_TRAIT_PREFIX}${trait.id}`,
             label: trait.name,
             icon: trait.icon,
-            detail: { title: trait.name, lines: describeModifier(trait, holdingCounts(context.held)) },
+            detail: { title: trait.name, lines: describeModifier(trait, holdingCounts(context.held), context.describe) },
           })),
           {
             id: OMEN_HEAL_CHOICE,
@@ -168,7 +168,7 @@ export const encounterSelectStage: StageModule = {
           detail: monster
             ? {
                 title: monsterName(fixed, context.content),
-                lines: monsterDetailLines(monster),
+                lines: monsterDetailLines(monster, context.describe),
               }
             : undefined,
         }],

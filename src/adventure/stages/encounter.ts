@@ -26,6 +26,7 @@ import type { StageContext } from '../core/stage'
 import type { EncounterOffer } from '../model/encounterOffers'
 import { totalArmor } from '../model/armor'
 import { describeMove } from '../model/moves'
+import type { DescriptionStyle } from '../model/modifiers'
 import { buildMonster, type Monster } from '../model/monsters'
 import { runTuning } from '../model/gameState'
 import { MONSTER_TYPES, MONSTER_TYPE_WORD, monsterTier, type MonsterType } from '../model/vectors'
@@ -132,15 +133,18 @@ export function iconFor(offer: EncounterOffer, context: StageContext): string {
  * knows what the first exchange is going to cost them, which is a decision
  * they can act on rather than a surprise.
  */
-export function monsterDetailLines(monster: Monster, count = monster.count): string[] {
+export function monsterDetailLines(monster: Monster, style: DescriptionStyle, count = monster.count): string[] {
   const armor = totalArmor(monster.armor)
   return [
+    // A MONSTER's tier, which is the one tier that still belongs in a
+    // description: it is how the two offers on a screen are compared. The
+    // PLAYER's tier is a standing quantity of the run and lives on the bar.
     `Tier ${monster.tier}`,
     ...(count > 1 ? [`${count} of them, fought as one`] : []),
-    `${monster.maxHitPoints} hit points`,
-    `${monster.maxActions} action${monster.maxActions === 1 ? '' : 's'} a round`,
-    `${Math.round(monster.damage)} damage a blow`,
-    ...(armor > 0 ? [`${armor} armour, and magic goes through it`] : []),
-    ...(monster.combatClass?.moves ?? []).flatMap((move) => [`${move.name}: ${describeMove(move)[0] ?? ''}`]),
+    `${monster.maxHitPoints} Hit points`,
+    `${monster.maxActions} Action${monster.maxActions === 1 ? '' : 's'} a round`,
+    `${Math.round(monster.damage)} Damage a blow`,
+    ...(armor > 0 ? [`${armor} Armor, and magic goes through it`] : []),
+    ...(monster.combatClass?.moves ?? []).flatMap((move) => [`${move.name}: ${describeMove(move, style)[0] ?? ''}`]),
   ]
 }

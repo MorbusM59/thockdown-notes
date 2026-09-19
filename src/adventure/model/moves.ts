@@ -24,6 +24,7 @@
 import { nextChance, type RngState } from '../core/rng'
 import type { CombatClass, CombatMove } from './vectors'
 import type { Defence } from './defences'
+import type { DescriptionStyle } from './modifiers'
 
 /** What the triggers read. Everything in it is a fact the fight already has. */
 export interface MoveSituation {
@@ -117,30 +118,34 @@ export function damageShareOf(move: CombatMove | null): number {
  * were tuned and whose description was not is a move that lies, and there is
  * no test that can catch a stale sentence.
  */
-export function describeMove(move: CombatMove): string[] {
+export function describeMove(move: CombatMove, style: DescriptionStyle): string[] {
   const lines: string[] = []
   const strikes = strikesOf(move)
   const share = damageShareOf(move)
-  if (strikes > 1) lines.push(`${strikes} strikes, ${Math.round(share * 100)}% damage each`)
+  if (strikes > 1) lines.push(`${strikes} strikes, ${Math.round(share * 100)}% Damage each`)
   else if (share !== 1) lines.push(`${Math.round(share * 100)}% of a blow`)
   if (move.hitShare) lines.push(`${Math.round(move.hitShare * 100)}% of the misses gone`)
   if (move.critShare) lines.push(`${Math.round(move.critShare * 100)}% of the hits turned critical`)
-  if (move.ignoresArmor) lines.push('Armour does not see it')
-  if (move.stealsActions) lines.push(`Costs them ${move.stealsActions} action${move.stealsActions === 1 ? '' : 's'}`)
-  if (move.riposteShare) lines.push(`Strikes back for ${Math.round(move.riposteShare * 100)}% of a blow`)
-  if (move.guard) lines.push(`${move.guard} armour, this blow only`)
+  if (move.ignoresArmor) lines.push('Armor does not see it')
+  if (move.stealsActions) lines.push(`costs them ${move.stealsActions} Action${move.stealsActions === 1 ? '' : 's'}`)
+  if (move.riposteShare) lines.push(`strikes back for ${Math.round(move.riposteShare * 100)}% of a blow`)
+  if (move.guard) lines.push(`${move.guard} Armor, this blow only`)
   lines.push(WHEN_WORDS(move))
-  if (move.flavour) lines.push(move.flavour)
+  // FLAVOUR IS NOT A DESCRIPTION. It is a sentence -- capitalised, with a
+  // full stop -- and it says nothing about what the move does, which is
+  // exactly what concise asks to be rid of. It is the one line here the
+  // description format rules do not govern, because it is not one of them.
+  if (move.flavour && style === 'verbose') lines.push(move.flavour)
   return lines
 }
 
 function WHEN_WORDS(move: CombatMove): string {
   switch (move.when.kind) {
-    case 'always': return 'Every time'
-    case 'firstActionOfEncounter': return 'On the first action of a fight'
-    case 'firstActionOfRound': return 'On the first action of a round'
-    case 'lastActionOfRound': return 'On the last action of a round'
+    case 'always': return 'every time'
+    case 'firstActionOfEncounter': return 'on the first action of a fight'
+    case 'firstActionOfRound': return 'on the first action of a round'
+    case 'lastActionOfRound': return 'on the last action of a round'
     case 'chance': return `${Math.round(move.when.chance * 100)}% of the time`
-    case 'whileHurt': return `Below ${Math.round(move.when.belowFraction * 100)}% health`
+    case 'whileHurt': return `below ${Math.round(move.when.belowFraction * 100)}% Hit points`
   }
 }

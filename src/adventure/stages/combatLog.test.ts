@@ -258,7 +258,7 @@ describe('the blow that ended it', () => {
       save: emptySave(1), game: null, content: THOCKQUEST, catalog: CATALOG,
       items: ITEMS,
       traits: TRAITS,
-      armor: NO_ARMOR, profile: null, held: [],
+      armor: NO_ARMOR, profile: null, held: [], describe: 'verbose' as const,
     }
     const entered = lootStage.enter(
       { encounterIndex: 2, screensLeft: 1, motes: 1, offersLoot: true, killPill: '[fa-solid fa-user-shield|you] x' },
@@ -273,7 +273,7 @@ describe('the blow that ended it', () => {
       save: emptySave(1), game: null, content: THOCKQUEST, catalog: CATALOG,
       items: ITEMS,
       traits: TRAITS,
-      armor: NO_ARMOR, profile: null, held: [],
+      armor: NO_ARMOR, profile: null, held: [], describe: 'verbose' as const,
     }
     const fled = lootStage.enter(
       { encounterIndex: 2, screensLeft: 1, motes: 1, offersLoot: false, killPill: null },

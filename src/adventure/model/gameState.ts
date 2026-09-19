@@ -314,6 +314,16 @@ export interface GameSettings {
   autoAdvanceScope: AutoAdvanceScope
   /** Milliseconds between auto-advanced presses, 50..1000. */
   autoAdvanceMs: number
+  /**
+   * VERBOSE DESCRIPTIONS: whether a description EXPLAINS itself, or only
+   * says what changed (model/modifiers.ts's `DescriptionStyle`).
+   *
+   * On by default, because a player meeting "+20% Accuracy" for the first
+   * time has no way to know it is a share of the misses rather than twenty
+   * points. Off once they do: the explanation is then read at every fight
+   * forever, and it is what stops a narration line fitting a narrow slot.
+   */
+  verboseDescriptions: boolean
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -322,6 +332,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   trueMode: false,
   autoAdvanceScope: DEFAULT_AUTO_ADVANCE_SCOPE,
   autoAdvanceMs: DEFAULT_AUTO_ADVANCE_MS,
+  verboseDescriptions: true,
 }
 
 export interface GameSave {

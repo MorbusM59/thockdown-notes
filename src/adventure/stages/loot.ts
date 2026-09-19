@@ -89,7 +89,7 @@ export const lootStage: StageModule = {
             id: `loot:item:${item.id}`,
             label: item.name,
             icon: item.icon,
-            detail: { title: item.name, lines: describeModifier(item, counts) },
+            detail: { title: item.name, lines: describeModifier(item, counts, context.describe) },
           }]
         }),
       ],

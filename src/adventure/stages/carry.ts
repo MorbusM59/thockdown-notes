@@ -75,7 +75,7 @@ export function dropChoices(context: StageContext, kind: ModifierKind, incomingI
         detail: {
           title: `${verb} ${modifier.name}`,
           lines: [
-            ...describeModifier(modifier, counts),
+            ...describeModifier(modifier, counts, context.describe),
             ...(incoming ? [`Makes room for ${incoming.name}`] : []),
           ],
         },

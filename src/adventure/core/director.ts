@@ -26,6 +26,7 @@
 
 import { applyEffects, activeGame, armorOf, heldModifiers, profileOf, type GameSave, type StageFrame } from '../model/gameState'
 import { NO_ARMOR } from '../model/armor'
+import { descriptionStyleOf } from '../model/modifiers'
 import { catalogFor, rolledPool } from '../content'
 import type { Effect } from '../model/effects'
 import type { Content } from '../content'
@@ -64,6 +65,7 @@ export function buildContext(save: GameSave, deps: DirectorDeps): StageContext {
     profile: game ? profileOf(save, game, deps.content) : null,
     armor: game ? armorOf(save, game, deps.content) : NO_ARMOR,
     held,
+    describe: descriptionStyleOf(save.settings),
   }
 }
 

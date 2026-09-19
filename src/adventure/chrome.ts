@@ -32,7 +32,8 @@ import { displayEncounter } from './stages/levelProgress'
 import { activeGame, armorOf, heldModifiers, holdingCounts, keptModifierIds, playerTierOf, profileOf, type GameRecord, type GameSave } from './model/gameState'
 import { itemArmor } from './model/armor'
 import type { Content } from './content'
-import { describeModifier, type Modifier, type ModifierKind } from './model/modifiers'
+import { buildWeightInitials } from './model/vectors'
+import { describeModifier, descriptionStyleOf, type DescriptionStyle, type Modifier, type ModifierKind } from './model/modifiers'
 import { STAT_ICONS, STAT_KEYS, STAT_LABELS } from './model/stats'
 
 /**
@@ -113,26 +114,36 @@ export function statusReadouts(save: GameSave, content: Content): EscapeMenuRead
       label: 'Armor (natural)',
       value: `${itemArmor(armor)}(${Math.max(0, armor.natural)})`,
     },
-    // WHO YOU ARE, as one pill: the tier is the value and the three content
-    // vectors are its tooltip (model/vectors.ts).
+    // HOW FAR YOU HAVE COME, and nothing else. The tier is a quantity and
+    // the only one fame buys (Ascendant), so it is a figure like every other
+    // pill on this row.
     //
-    // ONE readout rather than four, and the tier is the one that gets to be
-    // the number: a build, a species and a class are NAMES, and a name has
-    // no business in a column of quantities -- three word-pills among eight
-    // glyph-and-figure ones would read as a different bar. The tier is the
-    // single number that says how much character this is, it is the one
-    // thing fame changes about it (Ascendant), and before this there was no
-    // way at all to see either it or what you picked at creation.
-    //
-    // It sits directly above the six stats because that is what it IS: the
-    // budget they were apportioned from, so the pill and the row under it
-    // are one sentence.
+    // It used to carry the three content vectors in its tooltip, which put
+    // two different kinds of fact behind one glyph: a BUILD is how a
+    // character grows -- a set of proportions, fixed from creation -- and a
+    // TIER is how far they have got along it. Reading "Tier -- Hulking
+    // Mertok Duelist" made the tier look like a property of the build. They
+    // are separate now, and the vectors have nameplates of their own below.
     {
       key: 'tier',
       icon: READOUT_ICONS.tier,
-      label: characterLabel(game, content),
+      // The NOUN alone. Every readout on this row composes its own tooltip
+      // and accessible name as "<label>: <value>" (EscapeMenuStatus.tsx), so
+      // a label that already carried the figure read as "Tier: 5: 5".
+      label: 'Tier',
       value: String(playerTierOf(game)),
     },
+    // WHAT YOU ARE: three nameplates, one per content vector, each an icon
+    // and a tooltip and no figure at all (escapeMenuContract.ts). A name is
+    // not a quantity, and three word-pills among eight glyph-and-figure ones
+    // would read as a different bar -- but the glyph is how a player
+    // recognises what they chose, and before this there was no way to see
+    // any of the three again after creation.
+    //
+    // A vector the run has not answered is simply absent, because character
+    // creation asks one screen at a time and a half-built character is a
+    // real state rather than a broken one.
+    ...vectorNameplates(game, content),
     // Effective stats, not base: what a check actually rolls against is
     // what the player needs to see. The base cap is a rule about
     // progression, not about what is true of them right now.
@@ -146,19 +157,25 @@ export function statusReadouts(save: GameSave, content: Content): EscapeMenuRead
 }
 
 /**
- * "Tier -- Hulking Mertok Duelist", or as much of it as the run has chosen.
+ * The build, the species and the class, as icon-only pills.
  *
- * A vector the run has not answered yet is simply LEFT OUT rather than
- * replaced with a word: character creation asks for the three one screen at a
- * time, so a half-answered character is a real state and reads as a shorter
- * sentence. The same rule the monster's name follows (stages/encounter.ts).
+ * The BUILD's tooltip carries its weights as repeated initials -- "Brutish
+ * (MMMA)" -- because the weights are the whole of what a build is and there
+ * is no other place in a run to read them. The other two are nouns and their
+ * name is all there is to say.
+ *
+ * Each vector's own icon, so the pill is recognisable as the thing that was
+ * picked at creation rather than as a generic marker.
  */
-function characterLabel(game: GameRecord, content: Content): string {
+function vectorNameplates(game: GameRecord, content: Content): EscapeMenuReadout[] {
   const build = content.builds.find((candidate) => candidate.id === game.buildId)
   const species = content.species.find((candidate) => candidate.id === game.speciesId)
   const combatClass = content.combatClasses.find((candidate) => candidate.id === game.classId)
-  const words = [build?.name, species?.name, combatClass?.name].filter((word): word is string => !!word)
-  return words.length > 0 ? `Tier -- ${words.join(' ')}` : 'Tier'
+  const plates: EscapeMenuReadout[] = []
+  if (build) plates.push({ key: 'build', icon: build.icon, label: `${build.name} (${buildWeightInitials(build)})` })
+  if (species) plates.push({ key: 'species', icon: species.icon, label: species.name })
+  if (combatClass) plates.push({ key: 'class', icon: combatClass.icon, label: combatClass.name })
+  return plates
 }
 
 const ROMAN: readonly (readonly [number, string])[] = [
@@ -241,6 +258,7 @@ function pillsOf(
   counts: ReturnType<typeof holdingCounts>,
   kept: readonly string[],
   onKeep: ((kind: ModifierKind, modifierId: string) => void) | undefined,
+  describe: DescriptionStyle,
 ): EscapeMenuChromePill[] {
   return held
     .filter((modifier) => modifier.kind === kind)
@@ -252,7 +270,7 @@ function pillsOf(
       icon: modifier.icon,
       label: modifier.name,
       detail: [
-        ...describeModifier(modifier, counts),
+        ...describeModifier(modifier, counts, describe),
         // What the lit one MEANS, said on the pill rather than left to be
         // discovered at the end of the level. Exactly one per kind is lit at
         // all times (`keptModifierId` defaults to the newest find), so this
@@ -283,9 +301,10 @@ export function chromeStrip(
   if (!game) return undefined
   const held = heldModifiers(save, game.id, catalog)
   const counts = holdingCounts(held)
+  const describe = descriptionStyleOf(save.settings)
   return {
-    leading: pillsOf(held, 'item', counts, keptModifierIds(save, game, 'item'), onKeep),
-    trailing: pillsOf(held, 'trait', counts, keptModifierIds(save, game, 'trait'), onKeep),
+    leading: pillsOf(held, 'item', counts, keptModifierIds(save, game, 'item'), onKeep, describe),
+    trailing: pillsOf(held, 'trait', counts, keptModifierIds(save, game, 'trait'), onKeep, describe),
   }
 }
 

@@ -239,6 +239,13 @@ export function sanitizeGameSave(input: unknown): GameSave | null {
       trueMode: settings.trueMode === true,
       autoAdvanceScope: scopeOf(settings.autoAdvanceScope),
       autoAdvanceMs: clampAutoAdvanceMs(settings.autoAdvanceMs),
+      // ABSENT MEANS THE DEFAULT, which for this one is TRUE -- so the test
+      // is `!== false` and not `=== true`. Every save written before this
+      // field existed has it absent, and `=== true` would read all of them
+      // as "concise" and silently flip a setting nobody touched. That is the
+      // `isDoubleSizeMode` failure in the other direction, and it is why
+      // this needs no SAVE_VERSION bump: absence already has a right answer.
+      verboseDescriptions: settings.verboseDescriptions !== false,
     },
     games,
     holdings,

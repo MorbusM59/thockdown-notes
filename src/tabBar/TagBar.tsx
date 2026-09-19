@@ -176,8 +176,8 @@ export function TagBar({ tabs, persistenceReady, activeNoteId, identityNoteId, n
             }}
             data-tooltip={identityNoteId
               ? (isProvisionalId
-                  ? `${identityLabel} -- right-click to give this note an id of its own, click for suggested tags`
-                  : `Note: ${identityLabel} -- click for suggested tags, right-click to rename`)
+                  ? `${identityLabel} — right-click to give this note an id of its own, click for suggested tags`
+                  : `Note: ${identityLabel} — click for suggested tags, right-click to rename`)
               : 'No note open'}
           >
             <span className={`tag-pill-label${isAssigned ? '' : ' tag-pill-label-derived'}`}>{identityLabel}</span>

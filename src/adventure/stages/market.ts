@@ -131,7 +131,7 @@ export const marketStage: StageModule = {
                 icon: modifier.icon,
                 detail: {
                   title: `${modifier.name} — ${MARKET_PRICE} ${FACES[kind].currency}`,
-                  lines: describeModifier(modifier, counts),
+                  lines: describeModifier(modifier, counts, context.describe),
                 },
               }]
             })

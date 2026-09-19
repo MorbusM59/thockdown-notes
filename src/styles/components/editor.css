@@ -156,6 +156,11 @@
    after the first rather than by the gap. */
 .escape-menu-choice-detail-sep {
   color: var(--color-text-50);
+  /* The separator's spaces are part of its text (EscapeMenuStatus.tsx's
+     DETAIL_SEPARATOR), so they must not collapse the way HTML collapses
+     runs of whitespace -- otherwise the rendered row and the accessible
+     name would be spaced differently from the same string. */
+  white-space: pre;
 }
 
 /* State, in the tab bar's strip. The pills are the chapter bar's, unchanged;
@@ -172,6 +177,16 @@
   gap: var(--spacing-small);
   padding: 0 var(--spacing-regular);
   cursor: default;
+}
+
+/* A NAMEPLATE: a readout with no value (escapeMenuContract.ts) -- the build,
+   the species, the class. It carries an icon and nothing else, so the pill
+   loses the gap it was keeping for a number and takes equal padding on both
+   sides, which is what makes it read as a square among the figures rather
+   than as a figure whose number failed to load. */
+.escape-menu-readout.is-nameplate {
+  gap: 0;
+  padding: 0 var(--spacing-small);
 }
 
 /* The number is the part that changes, so it is the part that reads first;

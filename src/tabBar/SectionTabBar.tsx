@@ -300,7 +300,7 @@ export function SectionTabBar({
                         data-secondary-press="action"
                         onContextMenu={(event) => onSectionPickerCandidateContextMenu(event, candidate.id)}
                         onMouseLeave={() => onSectionPickerCandidateMouseLeave(candidate.id)}
-                        data-tooltip={isDeletionPrimed ? `Click again to permanently delete "${candidate.name}"` : `Swap in "${candidate.name}" -- right-click to delete`}
+                        data-tooltip={isDeletionPrimed ? `Click again to permanently delete "${candidate.name}"` : `Swap in "${candidate.name}" — right-click to delete`}
                       >
                         <span className="tag-pill-label">{candidate.name}</span>
                       </button>

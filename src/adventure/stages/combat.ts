@@ -801,8 +801,8 @@ export const combatStage: StageModule = {
       // something else on press.
       const move = moveById(context.game ? runClass(context.game, context.content) : null, state.playerMove)
       const aimed = round.prepared > 0 && stats
-        ? { title: move?.name ?? 'Attack', lines: [...(move ? describeMove(move) : []), ...prepareLines(stats, rider, round.prepared)] }
-        : (move ? { title: move.name, lines: describeMove(move) } : undefined)
+        ? { title: move?.name ?? 'Attack', lines: [...(move ? describeMove(move, context.describe) : []), ...prepareLines(stats, rider, round.prepared)] }
+        : (move ? { title: move.name, lines: describeMove(move, context.describe) } : undefined)
       return {
         // The offered set is part of the question, so it is part of the key:
         // the dial has to treat a round that dealt Meteor as a new screen --
@@ -861,7 +861,7 @@ export const combatStage: StageModule = {
           id: `defence:${defence}`,
           label: move?.name ?? DEFENCE_LABELS[defence].label,
           icon: move?.icon ?? DEFENCE_LABELS[defence].icon,
-          detail: move ? { title: move.name, lines: describeMove(move) } : undefined,
+          detail: move ? { title: move.name, lines: describeMove(move, context.describe) } : undefined,
         }
       }),
     }

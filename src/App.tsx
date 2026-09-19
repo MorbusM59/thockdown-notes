@@ -10676,7 +10676,7 @@ ${markdownHtml}
                     onMouseDown={handleDividerMouseDown(editorSections[index - 1].id, entry.id)}
                     data-secondary-press="action"
                     onContextMenu={handleDividerContextMenu(editorSections[index - 1].id, entry.id)}
-                    data-tooltip="Drag to resize -- right-click to split evenly"
+                    data-tooltip="Drag to resize — right-click to split evenly"
                   />
                 ) : null}
                 <div

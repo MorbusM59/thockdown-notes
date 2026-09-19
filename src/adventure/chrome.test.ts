@@ -215,36 +215,64 @@ describe('the readouts', () => {
 })
 
 describe('who the player is, on the bar', () => {
-  it('reads the tier as the value and the three vectors as its tooltip', () => {
-    // The gap this closes: a run picks a build, a species and a class at
-    // creation and then had no way to see any of them again -- nor its tier,
-    // which fame can buy up and nothing showed.
-    const save = withVectors(createdRun({ seed: 77 }), {
-      build: 'hulking',
-      species: 'mertok',
-      combatClass: 'duelist',
-    })
-    const tier = statusReadouts(save, THOCKQUEST).find((readout) => readout.key === 'tier')
-    expect(tier).toBeDefined()
+  const CHOSEN = { build: 'hulking', species: 'mertok', combatClass: 'duelist' } as const
+  const readoutsOf = (save: GameSave) => statusReadouts(save, THOCKQUEST)
+
+  it('says the tier and ONLY the tier', () => {
+    // A BUILD is how a character grows and a TIER is how far they have come.
+    // They shared a pill once ("Tier -- Hulking Mertok Duelist"), which made
+    // the tier read as a property of the build. The pill is a bare figure now
+    // and the vectors have nameplates of their own.
+    const tier = readoutsOf(withVectors(createdRun({ seed: 77 }), CHOSEN))
+      .find((readout) => readout.key === 'tier')
     expect(tier?.value).toBe(String(BASE_PLAYER_TIER))
-    expect(tier?.label).toBe('Tier -- Hulking Mertok Duelist')
+    // The NOUN alone: the row composes "<label>: <value>" itself, so a
+    // label carrying the figure too would read "Tier: 5: 5".
+    expect(tier?.label).toBe('Tier')
   })
 
-  it('names only what has been chosen, because creation asks one at a time', () => {
-    // A half-answered character is a real state, not a broken one, so a
-    // vector not yet picked is LEFT OUT rather than replaced with a word.
+  it('names no vector anywhere but on that vector\'s own pill', () => {
+    // The property, not one phrasing of it: whatever the tier pill says, it
+    // is not a build, a species or a class.
+    const save = withVectors(createdRun({ seed: 77 }), CHOSEN)
+    const tier = readoutsOf(save).find((readout) => readout.key === 'tier')
+    for (const word of ['Hulking', 'Mertok', 'Duelist']) expect(tier?.label).not.toContain(word)
+  })
+
+  it('gives the build, the species and the class a nameplate each', () => {
+    // A nameplate is a readout with NO VALUE (escapeMenuContract.ts): an icon
+    // and a tooltip, because a name is not a quantity and this row is a row
+    // of quantities. The build's tooltip carries its weights as repeated
+    // initials, which is the only place in a run they can be read.
+    const readouts = readoutsOf(withVectors(createdRun({ seed: 77 }), CHOSEN))
+    const plate = (key: string) => readouts.find((readout) => readout.key === key)
+    for (const key of ['build', 'species', 'class']) {
+      expect(plate(key)).toBeDefined()
+      expect(plate(key)?.value).toBeUndefined()
+      expect(plate(key)?.icon).toBeTruthy()
+    }
+    expect(plate('build')?.label).toMatch(/^Hulking \([MAPICL]+\)$/)
+    expect(plate('species')?.label).toBe('Mertok')
+    expect(plate('class')?.label).toBe('Duelist')
+  })
+
+  it('leaves out a vector that has not been chosen, because creation asks one at a time', () => {
+    // A half-answered character is a real state, not a broken one.
     const save = withVectors(createdRun({ seed: 77 }), { build: 'hulking' })
     const bare = { ...save, games: save.games.map((game) => ({ ...game, speciesId: null, classId: null })) }
-    const tier = statusReadouts(bare, THOCKQUEST).find((readout) => readout.key === 'tier')
-    expect(tier?.label).toBe('Tier -- Hulking')
+    const keys = readoutsOf(bare).map((readout) => readout.key)
+    expect(keys).toContain('build')
+    expect(keys).not.toContain('species')
+    expect(keys).not.toContain('class')
   })
 
-  it('sits directly above the stats it was apportioned into', () => {
-    // The pill and the row under it are one sentence: this budget produced
-    // these numbers. A reader who has to hunt for the tier cannot read it
-    // that way.
-    const keys = statusReadouts(createdRun({ seed: 77 }), THOCKQUEST).map((readout) => readout.key)
-    expect(keys.indexOf('tier')).toBe(keys.indexOf('might') - 1)
+  it('runs tier, then the nameplates, then the stats', () => {
+    // One sentence, read left to right: how far you have come, what you are,
+    // and what that comes to. A reader who has to hunt for the tier cannot
+    // read it that way.
+    const keys = readoutsOf(withVectors(createdRun({ seed: 77 }), CHOSEN)).map((readout) => readout.key)
+    expect(keys.slice(keys.indexOf('tier'), keys.indexOf('might')))
+      .toEqual(['tier', 'build', 'species', 'class'])
     for (const stat of STAT_KEYS) expect(keys).toContain(stat)
   })
 })
