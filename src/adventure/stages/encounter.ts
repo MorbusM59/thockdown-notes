@@ -141,7 +141,7 @@ export function monsterDetailLines(monster: Monster, style: DescriptionStyle, co
     // PLAYER's tier is a standing quantity of the run and lives on the bar.
     `Tier ${monster.tier}`,
     ...(count > 1 ? [`${count} of them, fought as one`] : []),
-    `${monster.maxHitPoints} Hit points`,
+    `${monster.maxHitPoints} Health`,
     `${monster.maxActions} Action${monster.maxActions === 1 ? '' : 's'} a round`,
     `${Math.round(monster.damage)} Damage a blow`,
     ...(armor > 0 ? [`${armor} Armor, and magic goes through it`] : []),

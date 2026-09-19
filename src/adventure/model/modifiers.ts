@@ -79,6 +79,7 @@
 //   5. normalize                          <- counts whole, chances 0..1
 
 import { NO_CHANCE_ADJUSTMENT, resolveChanceWith, type ChanceAdjustment } from './chance'
+import { HEALTH_BAND_BOUNDS, inHealthBand, type HealthBand } from './health'
 import {
   addStats,
   clampBaseStats,
@@ -156,7 +157,7 @@ export type ModifierEffect =
    * at each place the value is used -- is the same rule written once per
    * consumer, which is this codebase's characteristic failure.
    */
-  | { kind: 'derivedPercentWhileHurt'; derived: DerivedKey; percent: number; belowFraction: number }
+  | { kind: 'derivedPercentWhileHealth'; derived: DerivedKey; percent: number; band: HealthBand }
   /**
    * A derived value boosted only on the FIRST or the LAST action of a round.
    *
@@ -177,7 +178,6 @@ export type ModifierEffect =
    */
   | { kind: 'armorSlot'; amount: number }
   /** Decay never takes THIS item's own pool below this. */
-  | { kind: 'armorDecayFloor'; floor: number }
   /**
    * Repairs every armor piece the run is carrying by this much after each
    * fight, on top of whatever the character's own Might and Intellect
@@ -315,8 +315,8 @@ export function resolveProfile(
         case 'derivedPercentPerHolding':
           bank(effect.derived, effect.percentPer * holdings[effect.holding === 'item' ? 'items' : 'traits'])
           break
-        case 'derivedPercentWhileHurt':
-          if (hurtFraction < effect.belowFraction) bank(effect.derived, effect.percent)
+        case 'derivedPercentWhileHealth':
+          if (inHealthBand(hurtFraction, effect.band)) bank(effect.derived, effect.percent)
           break
         case 'derivedPercentOnAction':
           if (actionPosition[effect.position]) bank(effect.derived, effect.percent)
@@ -424,7 +424,7 @@ function describePercent(key: DerivedKey, percent: number, style: DescriptionSty
  * the quantity, which is the same fact in the position a reader already
  * scans. Both name the stat, so neither loses anything.
  */
-const ROUND_POSITION_WORD: Readonly<Record<'first' | 'last', string>> = {
+export const ROUND_POSITION_WORD: Readonly<Record<'first' | 'last', string>> = {
   first: 'Initial',
   last: 'Final',
 }
@@ -436,7 +436,7 @@ const ROUND_POSITION_WORD: Readonly<Record<'first' | 'last', string>> = {
  * player reading "+10% per item" still has to count their own items to know
  * what it is doing for them right now.
  */
-export function describeEffect(effect: ModifierEffect, holdings: HoldingCounts, style: DescriptionStyle): string {
+export function describeEffect(effect: ModifierEffect, style: DescriptionStyle): string {
   const concise = style === 'concise'
   switch (effect.kind) {
     case 'statDelta':
@@ -444,24 +444,21 @@ export function describeEffect(effect: ModifierEffect, holdings: HoldingCounts, 
     case 'derivedPercent':
       return describePercent(effect.derived, effect.percent, style)
     case 'derivedPercentPerHolding': {
-      const held = holdings[effect.holding === 'item' ? 'items' : 'traits']
+      // THE RULE, and never the running total. The total was shown beside it
+      // once -- "+15% per item (2 held: +30%)" -- and it is wrong in the one
+      // place these are read most: at character creation nothing is held, so
+      // a real effect announced itself as +0% and looked like nothing. What
+      // an offer IS does not depend on what you happen to be carrying when
+      // you look at it, and the carried count is on the bar anyway.
       const noun = effect.holding === 'item' ? 'item' : 'trait'
-      // THE TOTAL AS A PERCENTAGE, never as the multiplier it becomes: "(2
-      // held: 130%)" beside "+15% per item" reads as a third number rather
-      // than as the sum of the first two, and for a count it read as "1.2",
-      // which is not a quantity of anything a player has.
-      //
-      // The total SURVIVES concise, and the "per item" rule is what goes:
-      // what this is worth right now is a fact about the run, not a gloss.
-      const total = effect.percentPer * held
-      const label = DERIVED_LABELS[effect.derived]
-      if (concise) return `${signedPercent(total)} ${label}`
-      return `${signedPercent(effect.percentPer)} ${label} per ${noun} (${held} held: ${signedPercent(total)})`
+      return `${signedPercent(effect.percentPer)} ${DERIVED_LABELS[effect.derived]} per ${noun}`
     }
-    case 'derivedPercentWhileHurt': {
+    case 'derivedPercentWhileHealth': {
       const head = describePercent(effect.derived, effect.percent, style)
-      const threshold = Math.round(effect.belowFraction * 100)
-      return concise ? `${head} under ${threshold}%` : `${head} below ${threshold}% ${DERIVED_LABELS.maxHitPoints}`
+      // The band's WORD is the concise form: it is a term the game uses
+      // everywhere, so it needs no gloss once it has been met. Verbose says
+      // where the line actually falls, which is the only place to find out.
+      return concise ? `${head} ${effect.band}` : `${head} while ${effect.band} (${HEALTH_BAND_BOUNDS[effect.band]})`
     }
     case 'derivedPercentOnAction': {
       if (concise) {
@@ -474,8 +471,6 @@ export function describeEffect(effect: ModifierEffect, holdings: HoldingCounts, 
     }
     case 'armorSlot':
       return concise ? `${effect.amount} Armor` : `${effect.amount} Armor, worn down as it absorbs`
-    case 'armorDecayFloor':
-      return concise ? `Armor floor ${effect.floor}` : `Armor never decays below ${effect.floor}`
     case 'armorRepairAfterCombat':
       return concise
         ? `${signed(effect.amount)} Mending`
@@ -490,18 +485,16 @@ export function describeEffect(effect: ModifierEffect, holdings: HoldingCounts, 
 }
 
 /** Every line the tab bar shows while this modifier is in the selection spot. */
-export function describeModifier(modifier: Modifier, holdings: HoldingCounts, style: DescriptionStyle): string[] {
-  return modifier.effects.map((effect) => describeEffect(effect, holdings, style))
+export function describeModifier(modifier: Modifier, style: DescriptionStyle): string[] {
+  return modifier.effects.map((effect) => describeEffect(effect, style))
 }
 
 /** This item's own armor pool, and the floor decay may not take it below. */
-export function armorSlotOf(modifier: Modifier): { amount: number; floor: number } | null {
+export function armorSlotOf(modifier: Modifier): { amount: number } | null {
   let amount: number | null = null
-  let floor = 0
   for (const effect of modifier.effects) {
     if (effect.kind === 'armorSlot') amount = (amount ?? 0) + effect.amount
-    else if (effect.kind === 'armorDecayFloor') floor = Math.max(floor, effect.floor)
   }
   if (amount === null) return null
-  return { amount: Math.max(0, Math.floor(amount)), floor: Math.max(0, Math.min(Math.floor(floor), Math.floor(amount))) }
+  return { amount: Math.max(0, Math.floor(amount)) }
 }

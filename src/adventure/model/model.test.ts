@@ -35,16 +35,17 @@ describe('stat resolution', () => {
     expect(three).toBeCloseTo(none * 1.3)
   })
 
-  it('describes an effect with the number it currently has, not the one it was written with', () => {
-    const line = describeEffect(
-      { kind: 'derivedPercentPerHolding', derived: 'damageMultiplier', percentPer: 0.1, holding: 'item' },
-      { items: 3, traits: 0 },
-      'verbose',
-    )
-    // The tab bar shows this string. If it said only "+10% per item" the
-    // player would have to do the arithmetic the game already did.
-    expect(line).toContain('+10%')
-    expect(line).toContain('3 held')
+  it('describes a per-holding effect as its RULE, never as a running total', () => {
+    const effect = { kind: 'derivedPercentPerHolding', derived: 'damageMultiplier', percentPer: 0.1, holding: 'item' } as const
+    // The total used to ride along ("2 held: +20%") and it is wrong exactly
+    // where these are read most: at character creation nothing is held, so a
+    // real effect announced itself as +0% and looked like nothing at all.
+    // What an offer IS cannot depend on what you happen to be carrying.
+    for (const style of ['verbose', 'concise'] as const) {
+      const line = describeEffect(effect, style)
+      expect(line).toBe('+10% Damage per item')
+      expect(line).not.toContain('held')
+    }
   })
 
   it('keeps counts whole and chances inside 0..1 after modifiers have had their say', () => {
@@ -72,12 +73,12 @@ describe('armor', () => {
     icon: '',
     effects: [{ kind: 'armorSlot', amount: 8 }],
   }
-  const tempered: Modifier = {
-    id: 'tempered',
+  const buckler: Modifier = {
+    id: 'buckler',
     kind: 'item',
-    name: 'Tempered Plate',
+    name: 'Buckler',
     icon: '',
-    effects: [{ kind: 'armorSlot', amount: 4 }, { kind: 'armorDecayFloor', floor: 2 }],
+    effects: [{ kind: 'armorSlot', amount: 4 }],
   }
   const hide: Modifier = {
     id: 'hide',
@@ -98,12 +99,12 @@ describe('armor', () => {
    * with nothing to correct.
    */
   it('gives an item its own pool, full, read from what the item is', () => {
-    expect(pieceOf(plate)).toEqual({ itemId: 'plate', points: 8, max: 8, floor: 0 })
+    expect(pieceOf(plate)).toEqual({ itemId: 'plate', points: 8, max: 8 })
     expect(pieceOf(hide)).toBeNull()
   })
 
   it('reduces damage by the whole shield, every pool together', () => {
-    const result = absorb(armorOf([tempered], 2), 8, 0, 1)
+    const result = absorb(armorOf([buckler], 2), 8, 0, 1)
     expect(result.absorbed).toBe(6)
     expect(result.damage).toBe(2)
   })
@@ -126,17 +127,6 @@ describe('armor', () => {
     expect(itemArmor(armor)).toBe(0)
     expect(armor.natural).toBe(2)
     expect(totalArmor(armor)).toBe(2)
-  })
-
-  it('stops decaying at the floor the item itself carries', () => {
-    let armor = armorOf([tempered])
-    let rng = 5
-    for (let index = 0; index < 200; index += 1) {
-      const result = absorb(armor, 4, 0, rng)
-      armor = result.armor
-      rng = result.rng
-    }
-    expect(armor.pieces[0].points).toBe(2)
   })
 
   /**
@@ -168,22 +158,22 @@ describe('armor', () => {
    */
   it('brings each piece up to what its owner can maintain, and no further', () => {
     expect(maintainedFraction(2, 2)).toBeCloseTo(0.2)
-    const worn: Armor = { natural: 0, pieces: [{ itemId: 'plate', points: 0, max: 10, floor: 0 }] }
+    const worn: Armor = { natural: 0, pieces: [{ itemId: 'plate', points: 0, max: 10 }] }
     expect(repairAfterFight(worn, 2, 2).pieces[0].points).toBe(2)
 
-    const healthy: Armor = { natural: 0, pieces: [{ itemId: 'plate', points: 9, max: 10, floor: 0 }] }
+    const healthy: Armor = { natural: 0, pieces: [{ itemId: 'plate', points: 9, max: 10 }] }
     expect(repairAfterFight(healthy, 2, 2).pieces[0].points).toBe(9)
   })
 
   it('adds what the kit repairs on top of the maintained line, capped at whole', () => {
-    const worn: Armor = { natural: 0, pieces: [{ itemId: 'plate', points: 0, max: 10, floor: 0 }] }
+    const worn: Armor = { natural: 0, pieces: [{ itemId: 'plate', points: 0, max: 10 }] }
     expect(repairAfterFight(worn, 2, 2, 3).pieces[0].points).toBe(5)
-    const nearly: Armor = { natural: 0, pieces: [{ itemId: 'plate', points: 9, max: 10, floor: 0 }] }
+    const nearly: Armor = { natural: 0, pieces: [{ itemId: 'plate', points: 9, max: 10 }] }
     expect(repairAfterFight(nearly, 2, 2, 3).pieces[0].points).toBe(10)
   })
 
   it('makes everything whole again at a new level', () => {
-    const worn: Armor = { natural: 0, pieces: [{ itemId: 'plate', points: 1, max: 10, floor: 0 }] }
+    const worn: Armor = { natural: 0, pieces: [{ itemId: 'plate', points: 1, max: 10 }] }
     expect(refillArmor(worn).pieces[0].points).toBe(10)
   })
 })

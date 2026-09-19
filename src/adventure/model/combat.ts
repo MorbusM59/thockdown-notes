@@ -131,7 +131,6 @@ function pieceFromJson(value: unknown): ArmorPiece | null {
     itemId: row.itemId,
     max,
     points: Math.max(0, Math.min(max, Math.floor(num('points')))),
-    floor: Math.max(0, Math.min(max, Math.floor(num('floor')))),
   }
 }
 

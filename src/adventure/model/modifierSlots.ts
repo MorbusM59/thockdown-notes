@@ -99,6 +99,7 @@ export const SLOT_COUNT_RANGE = [2, 3] as const
 export type VerboseId =
   /** Fights harder with its back to the wall. */
   | 'desperate'
+  | 'hale'
   /** The opening blow of a round. */
   | 'opener'
   /** The last thing you do before the round turns over. */
@@ -108,14 +109,13 @@ export type VerboseId =
   /** Worth more the narrower you have specialised. */
   | 'studied'
   /** This thing's own armor wears only so far. Armour ITEMS only -- a trait's armor never wears. */
-  | 'tempered'
   /** Armor nothing can wear away. Items only -- a trait's armor slot IS this. */
   | 'ward'
   /** Sees to the whole kit after every fight. */
   | 'repair'
 
 export const VERBOSE_IDS: readonly VerboseId[] = [
-  'desperate', 'opener', 'finisher', 'collector', 'studied', 'tempered', 'ward', 'repair',
+  'desperate', 'hale', 'opener', 'finisher', 'collector', 'studied', 'ward', 'repair',
 ]
 
 /**
@@ -203,16 +203,15 @@ function rollDerivedPercent(rng: RngState): { percent: number; rng: RngState } {
  * One verbose effect, built out of the template's own thematic keys.
  *
  * Returns null where the template cannot support the id it named -- a
- * conditional on a derived value needs one of the right kind to draw from, and
- * `tempered` needs a decaying pool to temper. Content should not name one it
- * cannot fill, and `validateTemplate` says so; this stays defensive because the
- * alternative is a modifier that rolled an undefined effect.
+ * conditional on a derived value needs one of the right kind to draw from.
+ * Content should not name one it cannot fill, and `validateTemplate` says so;
+ * this stays defensive because the alternative is a modifier that rolled an
+ * undefined effect.
  */
 function rollVerbose(
   id: VerboseId,
   template: ModifierTemplate,
   rng: RngState,
-  armorAmount: number,
 ): { effect: ModifierEffect | null; rng: RngState } {
   const drawDerived = (state: RngState, within?: readonly DerivedKey[]) => nextPick(
     state,
@@ -221,18 +220,37 @@ function rollVerbose(
 
   switch (id) {
     case 'desperate': {
+      // ONE OF THE TWO HURT BANDS (model/health.ts). `maimed` is the narrower
+      // window and so the bigger swing; `injured` includes it and pays less.
       const key = drawDerived(rng, IN_A_FIGHT)
       if (!key.value) return { effect: null, rng: key.rng }
       const size = nextInt(key.rng, 3, 6)
-      const threshold = nextInt(size.rng, 0, 1)
+      const which = nextInt(size.rng, 0, 1)
       return {
         effect: {
-          kind: 'derivedPercentWhileHurt',
+          kind: 'derivedPercentWhileHealth',
           derived: key.value,
           percent: roundStep(size.value / 10, 0.1),
-          belowFraction: threshold.value === 0 ? 1 / 3 : 1 / 2,
+          band: which.value === 0 ? 'maimed' : 'injured',
         },
-        rng: threshold.rng,
+        rng: which.rng,
+      }
+    }
+    case 'hale': {
+      // THE OTHER SIDE OF THE SAME COIN, and the only way `healthy` is
+      // reachable at all: a bonus for being in good condition, which rewards
+      // a kit built to stay there rather than one built to be nearly dead.
+      const key = drawDerived(rng, IN_A_FIGHT)
+      if (!key.value) return { effect: null, rng: key.rng }
+      const size = nextInt(key.rng, 2, 5)
+      return {
+        effect: {
+          kind: 'derivedPercentWhileHealth',
+          derived: key.value,
+          percent: roundStep(size.value / 10, 0.1),
+          band: 'healthy',
+        },
+        rng: size.rng,
       }
     }
     case 'opener':
@@ -264,15 +282,6 @@ function rollVerbose(
         },
         rng: size.rng,
       }
-    }
-    case 'tempered': {
-      // A FRACTION of whatever this item's armor rolled, not a number of its
-      // own: a floor of four on a piece that rolled three is a piece that
-      // never wears at all, which is a different item. A trait's armor does
-      // not wear, so there is nothing here for one to temper.
-      if (template.kind !== 'item' || armorAmount <= 1) return { effect: null, rng }
-      const share = nextInt(rng, 2, 4)
-      return { effect: { kind: 'armorDecayFloor', floor: Math.min(share.value, armorAmount - 1) }, rng: share.rng }
     }
     case 'ward': {
       // The same range the trait armor slot draws from, because it grants the
@@ -363,7 +372,7 @@ export function rollModifier(template: ModifierTemplate, runSeed: RngState): Mod
     const ids = nextSample(rng, template.verbose, verboseSlots)
     rng = ids.rng
     for (const id of ids.value) {
-      const built = rollVerbose(id, template, rng, armorAmount)
+      const built = rollVerbose(id, template, rng)
       rng = built.rng
       if (built.effect) effects.push(built.effect)
     }
@@ -404,9 +413,6 @@ export function validateTemplate(template: ModifierTemplate): string[] {
     problems.push(`${where} can fill ${capacity} slot(s), and every modifier fills at least ${SLOT_COUNT_RANGE[0]}`)
   }
 
-  if (template.kind !== 'item' && template.verbose.includes('tempered')) {
-    problems.push(`${where} names "tempered", and only an item's armor wears`)
-  }
   if (template.kind !== 'item' && template.verbose.includes('ward')) {
     // A trait's armor slot grants natural armor already, so naming `ward`
     // beside it is naming the same slot twice -- and a trait that rolled both
@@ -414,9 +420,6 @@ export function validateTemplate(template: ModifierTemplate): string[] {
     // nothing. An item's `ward` is a real second thing, because ITS armor slot
     // grants a pool that wears.
     problems.push(`${where} names "ward", which for a trait is what its own armor slot grants`)
-  }
-  if (!template.armor && template.verbose.includes('tempered')) {
-    problems.push(`${where} names "tempered" but carries no armor to temper`)
   }
 
   const standing: readonly VerboseId[] = ['collector', 'studied']

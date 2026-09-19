@@ -29,7 +29,6 @@ import { nextSample, type RngState } from '../core/rng'
 import type { JsonObject } from '../core/json'
 import type { StageContext, StageModule } from '../core/stage'
 import { describeModifier, type Modifier } from '../model/modifiers'
-import { holdingCounts } from '../model/gameState'
 import { isUnlocked } from '../model/permanentUnlocks'
 import { describeMove } from '../model/moves'
 import { describeBuild } from '../model/vectors'
@@ -172,7 +171,6 @@ export const characterCreationStage: StageModule = {
     }
 
     if (step === 'species') {
-      const counts = holdingCounts(context.held)
       const offered = new Set(dealt(state))
       return {
         screenKey: `species:${unlocked.length}`,
@@ -189,9 +187,8 @@ export const characterCreationStage: StageModule = {
               // vocabulary: "+25% hit points" needs no code here at all.
               lines: describeModifier(
                 { id: species.id, kind: 'trait', name: species.name, icon: species.icon, effects: species.effects },
-                counts,
-                context.describe,
-              ),
+              context.describe,
+            ),
             },
           })),
       }
@@ -218,7 +215,6 @@ export const characterCreationStage: StageModule = {
       }
     }
 
-    const counts = holdingCounts(context.held)
     return {
       screenKey: step,
       choices: dealt(state).flatMap((id) => {
@@ -229,7 +225,7 @@ export const characterCreationStage: StageModule = {
             id: `offer:${modifier.id}`,
             label: modifier.name,
             icon: modifier.icon,
-            detail: { title: modifier.name, lines: describeModifier(modifier, counts, context.describe) },
+            detail: { title: modifier.name, lines: describeModifier(modifier, context.describe) },
           },
         ]
       }),

@@ -34,7 +34,6 @@ import {
 } from './carry'
 import { drawOmenTraits, omenHealAmount, omenPool, omenTraitCount } from '../model/specialEvents'
 import { describeModifier } from '../model/modifiers'
-import { holdingCounts } from '../model/gameState'
 import { currentEncounter, isLevelComplete } from './levelProgress'
 import { COMBAT_STAGE_ID, ENCOUNTER_SELECT_STAGE_ID, HUNT_STAGE_ID, REGION_SELECT_STAGE_ID } from './ids'
 
@@ -140,7 +139,7 @@ export const encounterSelectStage: StageModule = {
             id: `${OMEN_TRAIT_PREFIX}${trait.id}`,
             label: trait.name,
             icon: trait.icon,
-            detail: { title: trait.name, lines: describeModifier(trait, holdingCounts(context.held), context.describe) },
+            detail: { title: trait.name, lines: describeModifier(trait, context.describe) },
           })),
           {
             id: OMEN_HEAL_CHOICE,

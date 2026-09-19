@@ -108,7 +108,7 @@ export const DERIVED_KEYS: readonly DerivedKey[] = [
 ]
 
 export const DERIVED_LABELS: Readonly<Record<DerivedKey, string>> = {
-  maxHitPoints: 'Hit points',
+  maxHitPoints: 'Health',
   damageMultiplier: 'Damage',
   dodgeChance: 'Dodge',
   actionsPerRound: 'Actions',

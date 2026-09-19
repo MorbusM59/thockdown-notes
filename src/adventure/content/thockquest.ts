@@ -292,7 +292,7 @@ const TRAITS: readonly ModifierTemplate[] = [
     name: 'Steady Hands',
     icon: 'fa-solid fa-hand-sparkles',
     derived: ['hitChance', 'critChance'],
-    verbose: ['opener', 'finisher'],
+    verbose: ['opener', 'finisher', 'hale'],
   },
   {
     id: 'hoarder',
@@ -349,7 +349,7 @@ const TRAITS: readonly ModifierTemplate[] = [
     name: 'Cold Blooded',
     icon: 'fa-solid fa-snowflake',
     derived: ['critChance', 'hitChance'],
-    verbose: ['finisher', 'opener'],
+    verbose: ['finisher', 'opener', 'hale'],
   },
   {
     id: 'lucky-streak',
@@ -365,7 +365,7 @@ const TRAITS: readonly ModifierTemplate[] = [
     name: 'Wary Traveller',
     icon: 'fa-solid fa-person-walking',
     derived: ['dodgeChance', 'encounterChoices'],
-    verbose: ['opener', 'studied'],
+    verbose: ['opener', 'studied', 'hale'],
   },
   {
     id: 'deep-breather',
@@ -412,7 +412,7 @@ const ITEMS: readonly ModifierTemplate[] = [
     icon: 'fa-solid fa-shirt',
     stats: ['might', 'agility'],
     derived: ['maxHitPoints', 'dodgeChance'],
-    verbose: ['tempered', 'repair', 'desperate'],
+    verbose: ['repair', 'desperate'],
     armor: true,
   },
   {
@@ -422,7 +422,7 @@ const ITEMS: readonly ModifierTemplate[] = [
     icon: 'fa-solid fa-shield-halved',
     stats: ['might'],
     derived: ['dodgeChance', 'damageMultiplier'],
-    verbose: ['tempered', 'ward', 'finisher'],
+    verbose: ['ward', 'finisher', 'hale'],
     armor: true,
   },
   {
@@ -432,7 +432,7 @@ const ITEMS: readonly ModifierTemplate[] = [
     icon: 'fa-solid fa-mitten',
     stats: ['agility', 'might'],
     derived: ['dodgeChance', 'damageMultiplier'],
-    verbose: ['tempered', 'opener'],
+    verbose: ['opener', 'hale'],
     armor: true,
   },
   {
@@ -442,7 +442,7 @@ const ITEMS: readonly ModifierTemplate[] = [
     icon: 'fa-solid fa-helmet-safety',
     stats: ['might', 'perception'],
     derived: ['maxHitPoints', 'hitChance'],
-    verbose: ['tempered', 'ward'],
+    verbose: ['ward', 'hale'],
     armor: true,
   },
   {
@@ -454,7 +454,7 @@ const ITEMS: readonly ModifierTemplate[] = [
     derived: ['maxHitPoints', 'dodgeChance'],
     // The big slow one: most armor in the game, and the verbose options all
     // make it last longer rather than hit harder.
-    verbose: ['tempered', 'repair', 'desperate'],
+    verbose: ['repair', 'desperate'],
     armor: true,
   },
   {
@@ -464,7 +464,7 @@ const ITEMS: readonly ModifierTemplate[] = [
     icon: 'fa-solid fa-socks',
     stats: ['might', 'agility'],
     derived: ['maxHitPoints', 'actionsPerRound'],
-    verbose: ['tempered', 'ward'],
+    verbose: ['ward', 'hale'],
     armor: true,
   },
   {
@@ -476,7 +476,7 @@ const ITEMS: readonly ModifierTemplate[] = [
     // repair, and the repair reads the whole kit rather than itself.
     stats: ['intellect', 'might'],
     derived: ['maxHitPoints', 'damageMultiplier'],
-    verbose: ['repair', 'tempered'],
+    verbose: ['repair'],
     armor: true,
   },
   {
@@ -486,7 +486,7 @@ const ITEMS: readonly ModifierTemplate[] = [
     icon: 'fa-solid fa-bone',
     stats: ['might', 'luck'],
     derived: ['maxHitPoints', 'critChance'],
-    verbose: ['tempered', 'desperate'],
+    verbose: ['desperate'],
     armor: true,
   },
 
@@ -673,7 +673,7 @@ const ITEMS: readonly ModifierTemplate[] = [
     icon: 'fa-solid fa-ribbon',
     stats: ['agility', 'charisma'],
     derived: ['dodgeChance', 'actionsPerRound'],
-    verbose: ['finisher', 'ward'],
+    verbose: ['finisher', 'ward', 'hale'],
   },
   {
     id: 'surveyors-rod',

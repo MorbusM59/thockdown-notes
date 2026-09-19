@@ -136,7 +136,7 @@ describe('one exchange', () => {
   })
 
   it('puts armor between the blow and its target on Defend, and only there', () => {
-    const armor: Armor = { natural: 2, pieces: [{ itemId: 'plate', points: 4, max: 4, floor: 0 }] }
+    const armor: Armor = { natural: 2, pieces: [{ itemId: 'plate', points: 4, max: 4 }] }
     const shared = {
       attacker: 'player' as const, attackerStats: attacker, attackerDamage: 10, defenderStats: defender, dodgeOffered: false, rng: 3,
     }
@@ -176,12 +176,12 @@ describe('fleeing', () => {
     const fast = testMonster({ stats: block({ agility: 40, perception: 40 }), type: 'regular', level: 1, against: PLAYER,
     })
     const result = resolveMonsterAttack({
-      state: freshRound({ playerArmor: { natural: 0, pieces: [{ itemId: 'plate', points: 6, max: 6, floor: 0 }] } }),
+      state: freshRound({ playerArmor: { natural: 0, pieces: [{ itemId: 'plate', points: 6, max: 6 }] } }),
       monster: fast, playerStats: PLAYER, defence: 'flee', rng: 5,
     })
     expect(result.escaped).toBe(false)
     // No armor between them and the blow -- the cost of having tried.
-    expect(result.state.playerArmor).toEqual({ natural: 0, pieces: [{ itemId: 'plate', points: 6, max: 6, floor: 0 }] })
+    expect(result.state.playerArmor).toEqual({ natural: 0, pieces: [{ itemId: 'plate', points: 6, max: 6 }] })
     expect(result.blow?.hit).toBe(true)
   })
 })

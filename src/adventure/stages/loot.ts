@@ -15,7 +15,6 @@ import type { JsonObject } from '../core/json'
 import type { StageContext, StageModule } from '../core/stage'
 import type { Effect } from '../model/effects'
 import { describeModifier } from '../model/modifiers'
-import { holdingCounts } from '../model/gameState'
 import { GOLD_PER_LOOT_SCREEN } from '../model/rewards'
 import {
   DROP_CANCEL, dropCancelledNarration, dropChoices, dropEffects, dropNarration, handsAreFull, readPendingId,
@@ -65,7 +64,6 @@ export const lootStage: StageModule = {
   },
 
   present: (state, context) => {
-    const counts = holdingCounts(context.held)
     const offerIds = Array.isArray(state.offerIds) ? state.offerIds : []
     const screensLeft = readNumber(state.screensLeft, 1)
     // Hands full: the other half of the pick, on the same terms everywhere
@@ -89,7 +87,7 @@ export const lootStage: StageModule = {
             id: `loot:item:${item.id}`,
             label: item.name,
             icon: item.icon,
-            detail: { title: item.name, lines: describeModifier(item, counts, context.describe) },
+            detail: { title: item.name, lines: describeModifier(item, context.describe) },
           }]
         }),
       ],

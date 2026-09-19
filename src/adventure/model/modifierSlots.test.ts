@@ -99,9 +99,6 @@ describe('a rolled item', () => {
           if (!slot) throw new Error(`${template.id} rolled no armor`)
           expect(slot.amount).toBeGreaterThanOrEqual(DECAYING_ARMOR_RANGE[0])
           expect(slot.amount).toBeLessThanOrEqual(DECAYING_ARMOR_RANGE[1])
-          // A floor at or above the pool is a piece that never wears at all,
-          // which is a different item from the one the template describes.
-          expect(slot.floor).toBeLessThan(slot.amount)
         } else {
           // A TRAIT's armor is natural and never wears, so it has no pool to
           // decay and a third of the size -- a point that survives a whole
@@ -211,9 +208,6 @@ describe('the content itself', () => {
 
   it('complains about a template that cannot fill what it names', () => {
     const bare = { icon: '', derived: [], verbose: [] }
-    expect(validateTemplate({
-      ...bare, id: 'bad', kind: 'item', name: 'Bad', verbose: ['tempered'],
-    })).toContain('item template "bad" names "tempered" but carries no armor to temper')
     expect(validateTemplate({
       ...bare, id: 'worse', kind: 'item', name: 'Worse', verbose: ['desperate'],
     }).join(' ')).toContain('a below-hit-points effect but no derived value it could act on')

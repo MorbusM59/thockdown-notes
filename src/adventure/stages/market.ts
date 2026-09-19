@@ -28,7 +28,6 @@ import type { StageContext, StageModule } from '../core/stage'
 import { goldBalance } from '../model/gold'
 import { moteBalance } from '../model/motes'
 import { describeModifier, type ModifierKind } from '../model/modifiers'
-import { holdingCounts } from '../model/gameState'
 import {
   DROP_CANCEL, dropCancelledNarration, dropChoices, dropEffects, dropNarration, handsAreFull, readPendingId,
 } from './carry'
@@ -105,7 +104,6 @@ export const marketStage: StageModule = {
 
   present: (state, context) => {
     const kind = kindOf(state.kind)
-    const counts = holdingCounts(context.held)
     const pending = readPendingId(state)
     if (pending) {
       return { screenKey: `market:drop:${pending}`, choices: dropChoices(context, kind, pending) }
@@ -131,7 +129,7 @@ export const marketStage: StageModule = {
                 icon: modifier.icon,
                 detail: {
                   title: `${modifier.name} — ${MARKET_PRICE} ${FACES[kind].currency}`,
-                  lines: describeModifier(modifier, counts, context.describe),
+                  lines: describeModifier(modifier, context.describe),
                 },
               }]
             })

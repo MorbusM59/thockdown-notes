@@ -29,7 +29,7 @@ import type { EscapeMenuChromeGauge, EscapeMenuChromePill, EscapeMenuModeChrome,
 import { moteBalance, statPointProgress, statPointsAvailable, statPointStanding } from './model/motes'
 import { famePointProgress, famePointsAvailable, famePointStanding, goldBalance } from './model/gold'
 import { displayEncounter } from './stages/levelProgress'
-import { activeGame, armorOf, heldModifiers, holdingCounts, keptModifierIds, playerTierOf, profileOf, type GameRecord, type GameSave } from './model/gameState'
+import { activeGame, armorOf, heldModifiers, keptModifierIds, playerTierOf, profileOf, type GameRecord, type GameSave } from './model/gameState'
 import { itemArmor } from './model/armor'
 import type { Content } from './content'
 import { buildWeightInitials } from './model/vectors'
@@ -90,7 +90,7 @@ export function statusReadouts(save: GameSave, content: Content): EscapeMenuRead
   const armor = armorOf(save, game, content)
 
   return [
-    { key: 'hp', icon: READOUT_ICONS.hp, label: 'Hit points', value: `${game.hitPoints}/${profile.derived.maxHitPoints}` },
+    { key: 'hp', icon: READOUT_ICONS.hp, label: 'Health', value: `${game.hitPoints}/${profile.derived.maxHitPoints}` },
     {
       key: 'armor',
       icon: READOUT_ICONS.armor,
@@ -255,7 +255,6 @@ export function chromeMeters(save: GameSave): EscapeMenuModeChrome['meters'] {
 function pillsOf(
   held: readonly Modifier[],
   kind: Modifier['kind'],
-  counts: ReturnType<typeof holdingCounts>,
   kept: readonly string[],
   onKeep: ((kind: ModifierKind, modifierId: string) => void) | undefined,
   describe: DescriptionStyle,
@@ -270,7 +269,7 @@ function pillsOf(
       icon: modifier.icon,
       label: modifier.name,
       detail: [
-        ...describeModifier(modifier, counts, describe),
+        ...describeModifier(modifier, describe),
         // What the lit one MEANS, said on the pill rather than left to be
         // discovered at the end of the level. Exactly one per kind is lit at
         // all times (`keptModifierId` defaults to the newest find), so this
@@ -300,11 +299,10 @@ export function chromeStrip(
   const game = activeGame(save)
   if (!game) return undefined
   const held = heldModifiers(save, game.id, catalog)
-  const counts = holdingCounts(held)
   const describe = descriptionStyleOf(save.settings)
   return {
-    leading: pillsOf(held, 'item', counts, keptModifierIds(save, game, 'item'), onKeep, describe),
-    trailing: pillsOf(held, 'trait', counts, keptModifierIds(save, game, 'trait'), onKeep, describe),
+    leading: pillsOf(held, 'item', keptModifierIds(save, game, 'item'), onKeep, describe),
+    trailing: pillsOf(held, 'trait', keptModifierIds(save, game, 'trait'), onKeep, describe),
   }
 }
 

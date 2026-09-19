@@ -215,18 +215,46 @@ describe('the thumb on the scale', () => {
 })
 
 describe('a conditional effect', () => {
-  it('fires only while the character is actually hurt', () => {
+  it('fires only inside its own health band', () => {
     const cornered = modifier('cornered', [
-      { kind: 'derivedPercentWhileHurt', derived: 'damageMultiplier', percent: 1, belowFraction: 0.5 },
+      { kind: 'derivedPercentWhileHealth', derived: 'damageMultiplier', percent: 1, band: 'injured' },
     ])
-    const whole = resolveProfile(BASE, [cornered], noHoldings, { hitPoints: 80 })
-    const bleeding = resolveProfile(BASE, [cornered], noHoldings, { hitPoints: 10 })
-    expect(bleeding.derived.damageMultiplier).toBeCloseTo(whole.derived.damageMultiplier * 2, 10)
+    const at = (hitPoints: number) => resolveProfile(BASE, [cornered], noHoldings, { hitPoints })
+    const ceiling = resolveProfile(BASE, [], noHoldings).derived.maxHitPoints
+    const whole = at(ceiling)
+    // Injured is BELOW two thirds, so a hair under the line is in and a hair
+    // over it is out -- the boundary itself, not a number near it.
+    expect(at(Math.ceil(ceiling * (2 / 3))).derived.damageMultiplier)
+      .toBeCloseTo(whole.derived.damageMultiplier, 10)
+    expect(at(Math.floor(ceiling * (2 / 3)) - 1).derived.damageMultiplier)
+      .toBeCloseTo(whole.derived.damageMultiplier * 2, 10)
+    // Maimed is inside injured, so it keeps firing all the way down: an
+    // effect that rewards being hurt must not quit at the worst moment.
+    expect(at(1).derived.damageMultiplier).toBeCloseTo(whole.derived.damageMultiplier * 2, 10)
     // And with no situation at all it is simply not in force, rather than
     // being half applied: a caller asking "what is this character worth"
     // gets the unconditional answer.
     expect(resolveProfile(BASE, [cornered], noHoldings).derived.damageMultiplier)
       .toBeCloseTo(whole.derived.damageMultiplier, 10)
+  })
+
+  it('treats healthy as exactly the complement of injured', () => {
+    // Two constants, one line between them -- so a fraction is in exactly one
+    // of the two and never in neither. Asserted over the range rather than
+    // trusted, because the two are written separately.
+    const hurt = modifier('hurt', [
+      { kind: 'derivedPercentWhileHealth', derived: 'damageMultiplier', percent: 1, band: 'injured' },
+    ])
+    const hale = modifier('hale', [
+      { kind: 'derivedPercentWhileHealth', derived: 'damageMultiplier', percent: 1, band: 'healthy' },
+    ])
+    const ceiling = resolveProfile(BASE, [], noHoldings).derived.maxHitPoints
+    const base = resolveProfile(BASE, [], noHoldings).derived.damageMultiplier
+    for (let points = 1; points <= ceiling; points += 1) {
+      const injured = resolveProfile(BASE, [hurt], noHoldings, { hitPoints: points }).derived.damageMultiplier > base
+      const healthy = resolveProfile(BASE, [hale], noHoldings, { hitPoints: points }).derived.damageMultiplier > base
+      expect(injured).toBe(!healthy)
+    }
   })
 })
 

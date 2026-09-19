@@ -7,7 +7,7 @@
 // stat block -- and it is a POOL PER ITEM plus one pool for everything else:
 //
 //   - `pieces`   -- one per item carrying an armor slot, with its own current
-//                   points, its own maximum, and its own decay floor. Tracked
+//                   points and its own maximum. Tracked
 //                   on the item because that is what it is a property of:
 //                   drop the item and its armor goes with it, with nothing to
 //                   correct afterwards. A player who drops a battered shield
@@ -43,8 +43,6 @@ export interface ArmorPiece {
   points: number
   /** What a new level -- or a fresh acquisition -- fills it to. */
   max: number
-  /** Decay may not take this piece below here. */
-  floor: number
 }
 
 export interface Armor {
@@ -78,7 +76,7 @@ export function pieceOf(modifier: Modifier, points?: number): ArmorPiece | null 
   const slot = armorSlotOf(modifier)
   if (!slot || slot.amount <= 0) return null
   const filled = points === undefined ? slot.amount : Math.max(0, Math.min(slot.amount, Math.floor(points)))
-  return { itemId: modifier.id, points: filled, max: slot.amount, floor: slot.floor }
+  return { itemId: modifier.id, points: filled, max: slot.amount }
 }
 
 /**
@@ -103,7 +101,7 @@ export function armorSurvivalChance(luck: number): number {
 /**
  * WHICH PIECE WEARS, when one has to.
  *
- * The fullest one still above its own floor, earliest acquired breaking a tie.
+ * The fullest one with anything left, earliest acquired breaking a tie.
  * Not random and not the piece that "took the blow" -- the pool absorbs as one
  * thing, so there is no such piece to find. Wearing the fullest spreads the
  * damage across the kit, which is what makes the repair rule (a share of each
@@ -114,7 +112,7 @@ function pieceToWear(pieces: readonly ArmorPiece[]): number {
   let best = -1
   for (let index = 0; index < pieces.length; index += 1) {
     const piece = pieces[index]
-    if (piece.points <= piece.floor || piece.points <= 0) continue
+    if (piece.points <= 0) continue
     if (best === -1 || piece.points > pieces[best].points) best = index
   }
   return best
@@ -158,7 +156,7 @@ export function absorb(
   }
 
   const pieces = armor.pieces.map((piece, at) => (
-    at === index ? { ...piece, points: Math.max(piece.floor, piece.points - 1) } : piece
+    at === index ? { ...piece, points: Math.max(0, piece.points - 1) } : piece
   ))
   return { damage, absorbed, armor: { ...armor, pieces }, decayed: true, rng: survived.rng }
 }

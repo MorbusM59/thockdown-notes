@@ -195,7 +195,7 @@ export function validateContent(content: Content): string[] {
       // An armour SLOT is a pool that decays and is repaired per item. A
       // species is not carried and cannot be dropped, so its toughness is
       // natural armour -- the half decay cannot touch.
-      if (effect.kind === 'armorSlot' || effect.kind === 'armorDecayFloor') {
+      if (effect.kind === 'armorSlot') {
         problems.push(`species "${species.id}" carries ${effect.kind}: a species has no decaying pool, only natural armour`)
       }
     }

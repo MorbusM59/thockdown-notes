@@ -273,7 +273,7 @@ describe('a round survives the disk', () => {
       playerActionsSpent: 2,
       monsterActionsSpent: 3,
       playerHitPoints: 41,
-      playerArmor: { natural: 5, pieces: [{ itemId: 'plate', points: 2, max: 2, floor: 0 }] },
+      playerArmor: { natural: 5, pieces: [{ itemId: 'plate', points: 2, max: 2 }] },
       monsterDamageTaken: 17,
       monsterFleeing: true,
       playerFled: true,

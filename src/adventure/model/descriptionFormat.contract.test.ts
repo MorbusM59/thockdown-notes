@@ -23,14 +23,12 @@
 import { describe, expect, it } from 'vitest'
 
 import { THOCKQUEST, catalogFor } from '../content'
-import { describeModifier, type DescriptionStyle } from './modifiers'
-import { describeMove } from './moves'
+import { ROUND_POSITION_WORD, describeModifier, type DescriptionStyle } from './modifiers'
+import { MOVE_TERMS, describeMove } from './moves'
 import { DERIVED_LABELS, STAT_LABELS } from './stats'
 import { describeBuild } from './vectors'
 
 const STYLES: readonly DescriptionStyle[] = ['verbose', 'concise']
-const COUNTS = { items: 2, traits: 2 }
-
 /**
  * The words a description may open with in upper case: the six stats, the
  * eight derived values, and the names the concise style coins for quantities
@@ -40,11 +38,11 @@ const COUNTS = { items: 2, traits: 2 }
 const CAPITALISED_NOUNS = new Set<string>([
   ...Object.values(STAT_LABELS),
   ...Object.values(DERIVED_LABELS),
+  ...Object.values(ROUND_POSITION_WORD),
+  ...MOVE_TERMS,
   'Natural',
   'Mending',
   'Armor',
-  'Initial',
-  'Final',
 ].map((word) => word.split(' ')[0]))
 
 function complaintsFor(line: string, where: string): string[] {
@@ -63,13 +61,13 @@ function everyDescription(style: DescriptionStyle): { line: string; where: strin
   const catalog = catalogFor(THOCKQUEST, 1234)
   const lines: { line: string; where: string }[] = []
   for (const modifier of catalog.values()) {
-    for (const line of describeModifier(modifier, COUNTS, style)) {
+    for (const line of describeModifier(modifier, style)) {
       lines.push({ line, where: `${modifier.kind} ${modifier.id}` })
     }
   }
   for (const species of THOCKQUEST.species) {
     const asModifier = { id: species.id, kind: 'trait' as const, name: species.name, icon: species.icon, effects: species.effects }
-    for (const line of describeModifier(asModifier, COUNTS, style)) {
+    for (const line of describeModifier(asModifier, style)) {
       lines.push({ line, where: `species ${species.id}` })
     }
   }

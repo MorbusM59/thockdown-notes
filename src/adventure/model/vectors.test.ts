@@ -174,7 +174,7 @@ describe('a class move', () => {
 
     const desperate: CombatClass = {
       ...chancy,
-      moves: [{ id: 'd', name: 'D', icon: 'i', replaces: 'attack', when: { kind: 'whileHurt', belowFraction: 0.5 } }],
+      moves: [{ id: 'd', name: 'D', icon: 'i', replaces: 'attack', when: { kind: 'health', band: 'injured' } }],
     }
     expect(armMove(desperate, 'attack', fresh, 1).move).toBeNull()
     expect(armMove(desperate, 'attack', { ...fresh, healthFraction: 0.2 }, 1).move).not.toBeNull()

@@ -85,8 +85,8 @@ export const SPECIES: readonly Species[] = [
     effects: [
       // Cornered is where they want to be, and they never quite manage to be
       // safe -- the hit points are low so the condition actually fires.
-      { kind: 'derivedPercentWhileHurt', derived: 'damageMultiplier', percent: 1, belowFraction: 0.4 },
-      { kind: 'derivedPercentWhileHurt', derived: 'critChance', percent: 0.3, belowFraction: 0.4 },
+      { kind: 'derivedPercentWhileHealth', derived: 'damageMultiplier', percent: 1, band: 'maimed' },
+      { kind: 'derivedPercentWhileHealth', derived: 'critChance', percent: 0.3, band: 'maimed' },
       { kind: 'derivedPercent', derived: 'maxHitPoints', percent: -0.15 },
     ],
   },
@@ -283,8 +283,8 @@ export const SPECIES: readonly Species[] = [
     name: 'Ghoul',
     icon: 'fa-solid fa-skull-crossbones',
     effects: [
-      { kind: 'derivedPercentWhileHurt', derived: 'damageMultiplier', percent: 0.8, belowFraction: 0.5 },
-      { kind: 'derivedPercentWhileHurt', derived: 'actionsPerRound', percent: 0.5, belowFraction: 0.5 },
+      { kind: 'derivedPercentWhileHealth', derived: 'damageMultiplier', percent: 0.8, band: 'injured' },
+      { kind: 'derivedPercentWhileHealth', derived: 'actionsPerRound', percent: 0.5, band: 'injured' },
       { kind: 'derivedPercent', derived: 'maxHitPoints', percent: -0.2 },
     ],
   },
@@ -390,7 +390,7 @@ export const SPECIES: readonly Species[] = [
     icon: 'fa-solid fa-book-skull',
     effects: [
       { kind: 'derivedPercent', derived: 'damageMultiplier', percent: 0.6 },
-      { kind: 'derivedPercentWhileHurt', derived: 'actionsPerRound', percent: 1, belowFraction: 0.4 },
+      { kind: 'derivedPercentWhileHealth', derived: 'actionsPerRound', percent: 1, band: 'maimed' },
       { kind: 'derivedPercent', derived: 'dodgeChance', percent: -0.25 },
     ],
   },

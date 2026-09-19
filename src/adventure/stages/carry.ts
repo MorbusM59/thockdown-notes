@@ -25,7 +25,6 @@ import type { Effect } from '../model/effects'
 import type { StageContext } from '../core/stage'
 import { carryLimit, holdingsOfKind } from '../model/gameState'
 import { describeModifier, type ModifierKind } from '../model/modifiers'
-import { holdingCounts } from '../model/gameState'
 
 /** The cell id a drop choice carries, so a stage can recognise one. */
 export const DROP_PREFIX = 'drop:'
@@ -62,7 +61,6 @@ export function handsAreFull(context: StageContext, kind: ModifierKind): boolean
  * -- which was wrong about its own design.
  */
 export function dropChoices(context: StageContext, kind: ModifierKind, incomingId: string): Choice[] {
-  const counts = holdingCounts(context.held)
   const incoming = context.catalog.get(incomingId)
   const verb = kind === 'item' ? 'Drop' : 'Lose'
   return [
@@ -75,7 +73,7 @@ export function dropChoices(context: StageContext, kind: ModifierKind, incomingI
         detail: {
           title: `${verb} ${modifier.name}`,
           lines: [
-            ...describeModifier(modifier, counts, context.describe),
+            ...describeModifier(modifier, context.describe),
             ...(incoming ? [`Makes room for ${incoming.name}`] : []),
           ],
         },

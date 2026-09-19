@@ -30,6 +30,7 @@
 
 import type { Modifier, ModifierEffect } from './modifiers'
 import type { Defence } from './defences'
+import type { HealthBand } from './health'
 import { STAT_KEYS, type StatBlock, type StatKey } from './stats'
 
 // --- VECTOR 1: BUILD -------------------------------------------------------
@@ -308,7 +309,7 @@ export type MoveTrigger =
   /** A roll, every time the action comes up. */
   | { kind: 'chance'; chance: number }
   /** Only with their back to the wall. */
-  | { kind: 'whileHurt'; belowFraction: number }
+  | { kind: 'health'; band: HealthBand }
 
 /**
  * ONE COMBAT CHOICE SWAPPED FOR ANOTHER -- the whole of what a class does.
