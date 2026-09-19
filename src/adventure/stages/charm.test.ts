@@ -6,6 +6,7 @@ import { activeGame, applyEffects, emptySave, type GameSave } from '../model/gam
 import { ROOT_STAGE_ID, STAGES } from '../stages'
 import { parseNarration } from '../../escapeMenu/narrationMarkup'
 import { CHARM_ICON } from '../model/charm'
+import { GAME_EXIT_CHOICE } from '../testing/run'
 
 const DEPS: DirectorDeps = {
   stages: STAGES,
@@ -30,7 +31,7 @@ function inAFight(seed: number, charisma: number): GameSave {
     const screen = currentScreen(save, DEPS)
     if (!screen) throw new Error('no screen')
     if (screen.stageId === 'combat') return save
-    const choice = screen.choices.find((candidate) => !candidate.id.endsWith(':leave'))
+    const choice = screen.choices.find((candidate) => candidate.id !== GAME_EXIT_CHOICE)
     if (!choice) throw new Error('nothing to press')
     save = choose(save, choice.id, DEPS, NOW).save
     if (activeGame(save) && (activeGame(save)?.baseStats.charisma ?? 0) < charisma) {

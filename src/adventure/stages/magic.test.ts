@@ -6,7 +6,7 @@ import { activeGame, applyEffects, emptySave, type GameSave } from '../model/gam
 import { ROOT_STAGE_ID, STAGES } from '../stages'
 import { parseNarration } from '../../escapeMenu/narrationMarkup'
 import { SPELLS } from '../model/spells'
-import { withVectors } from '../testing/run'
+import { withVectors, GAME_EXIT_CHOICE } from '../testing/run'
 
 const DEPS: DirectorDeps = {
   stages: STAGES,
@@ -45,7 +45,7 @@ function inAFightWithMagic(
     // screen about half the time and the ring there is answering, not
     // attacking.
     if (screen.stageId === 'combat' && screen.choices.some((choice) => choice.id === 'combat:attack')) return save
-    const choice = screen.choices.find((candidate) => !candidate.id.endsWith(':leave'))
+    const choice = screen.choices.find((candidate) => candidate.id !== GAME_EXIT_CHOICE)
     if (!choice) throw new Error('nothing to press')
     // On a defence screen, the answer that changes least: Defend costs
     // nothing but the monster's action.

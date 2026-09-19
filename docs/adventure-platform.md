@@ -852,45 +852,70 @@ Defend and nowhere else.
 
 ## Still open, and each one blocks something
 
-**NEW, and it blocks the four vectors being balanceable at all: DAMAGE READS
-ONLY MIGHT, so a build that does not weight Might cannot hurt anything.**
+**NEW, and it is what the four vectors made visible: THE SIX STATS ARE NOT
+WORTH THE SAME, and the gap is about seven to one.**
 
-`damageMultiplier = 0.5 + 0.15 × Might` is the design's own formula and is
-unchanged; what changed is that a build now decides how much Might a
-character has at all. Before, everyone shared a base and an origin nudged it;
-now a Fleeting or a Blessed character has a Might of ZERO and every other
-stat multiplies a blow worth five.
+A build is a set of weights over the six stats, so a build is worth whatever
+the stats it weights are worth. That was always true and never legible,
+because before the vectors everybody had roughly the same spread and an
+origin nudged it. Now a build IS the spread, and the ranking reads straight
+off it.
 
-Measured, `--rank-vectors`, 12 runs on Medium (noisy, but the ordering is not
-subtle):
+Measured, `--rank-vectors`, 50 runs on Medium to level 3 (encounters won,
+mean — the baseline with nothing pinned is 10.2):
 
-| build | encounters won | build | encounters won |
-| --- | --- | --- | --- |
-| Brooding (Int 2, Might 1) | 16.4 | Grim | 4.3 |
-| Erudite (Int) | 14.9 | Uncanny | 3.7 |
-| Shrewd (Int 2) | 11.6 | Blessed (Luck) | 2.5 |
-| Wiry | 9.8 | Hawk-Eyed (Perception) | 2.3 |
-| Hulking (Might) | 6.4 | Wayward (Luck 2) | 1.4 |
+| build | what it weights | won |
+| --- | --- | --- |
+| Brooding | Intellect 2, Might 1 | **24.5** |
+| Erudite | Intellect | **23.3** |
+| Shrewd | Intellect 2, Charisma, Luck | 17.7 |
+| Fleeting | Agility | 14.8 |
+| Feral | Might, Agility | 12.8 |
+| Journeyman | one of each | 9.9 |
+| **Hulking** | **Might** | **7.4** |
+| Blessed | Luck | 6.7 |
+| Hawk-Eyed | Perception | 4.7 |
+| Wayward | Luck 2, Agility, Charisma | **3.4** |
 
-Intellect wins because magic is a second damage source that does not read
-Might at all. Luck and Perception lose because both are MULTIPLIERS on a
-blow, so they multiply nothing. A live playthrough shows the same thing from
-the other end: a low-Might run spends **seventy presses** on one encounter,
-against the design's own pace constraint of twenty actions a fight.
+**The first reading of this was wrong and is corrected here**, because the
+correction is the useful part. It looked like "damage reads only Might, so a
+build that does not weight Might cannot hurt anything". Hulking is a pure
+Might build and it comes SEVENTEENTH of twenty-five. The pattern is not about
+Might at all:
 
-This is a RULES question and therefore the author's, not something to patch
-in the model. Three shapes it could take, none of them chosen:
+- **Intellect and Agility buy ACTIONS or a way round the fight.** Magic
+  cannot miss, cannot be dodged and goes through armour, and reaching one
+  spell brings every weaker one; Agility buys more attempts per round.
+- **Might, Luck and Perception all MULTIPLY ONE BLOW.** Might sets how big it
+  is, Perception how reliably it lands and how tight its band, Luck how often
+  it doubles — three stats competing to improve the same single event, in a
+  fight decided by how many events you get.
 
-1. Every stat gets its own damage path, so Agility is many small blows, Luck
-   is rare big ones, Perception is reliability — mostly true already, except
-   that all three scale a number Might sets.
-2. The damage formula reads the whole block rather than one stat.
-3. Builds are required to weight Might, which is the answer that gives up
-   the vector.
+So the question for the author is not the damage formula; it is **whether a
+stat that scales one blow can ever be worth a stat that grants another
+action**, and if not, what the three multiplier stats get instead. A live
+playthrough shows the cost from the other end: a run weighted into the
+multiplier stats spends **seventy presses** on one encounter, against the
+design's own pace constraint of twenty actions a fight.
 
-Until it is settled the ranking table is the instrument: a build's row is
-what that build is worth, and the spread above is what needs closing.
+Three shapes it could take, none chosen — this is a RULES question and
+therefore the author's:
 
+1. The multiplier stats gain a second job apiece, so each buys something the
+   others cannot (Perception an extra attempt, Luck an extra action on a
+   crit, Might a threshold effect).
+2. Magic and actions are brought down to where the multipliers are, rather
+   than the multipliers up.
+3. The stat table is left alone and BUILDS are constrained to shapes that mix
+   a multiplier stat with an action stat — which gives up the vector as a
+   free choice and is the weakest of the three.
+
+Classes spread less and sit the right way round for the sim's "careful"
+policy, which defends often: Duelist 20.0, Berserker 18.3, Warden 17.1 down
+to Assassin 9.2 and Pyromancer 8.7 — the guard-and-riposte moves are ahead
+because a riposte turns a defence into a free attack, which is again the
+actions-versus-multipliers pattern. Species are the flattest of the three
+(15.3 down to 6.5), which is the one of the four that looks roughly tuned.
 
 29, 35, 36 and 37 are **answered and BUILT** — see the design plan, and
 `model/stats.ts`, `model/difficulty.ts`, `model/monsters.ts`:
@@ -1797,12 +1822,10 @@ placed at 5, 9 and 10 and the level advancing after ten.
     it. With the pin moved past creation, every row moves, which is the
     statement that all three content vectors reach the fight.
 
-    **What it is worth, at 12 runs on Medium** (noisy, and recorded as a
-    starting point rather than as balance): builds spread from Brooding 16.4
-    encounters won to Wayward 1.4, with Intellect-weighted shapes clearly
-    ahead -- magic is strong and a build that reaches it is strong. Classes
-    spread from Duelist 13.5 to Reaver 3.6, with the guard-and-riposte
-    defensive classes ahead, which is at least partly the "careful" policy
-    defending constantly. Species are the flattest of the three. **None of
-    this is tuned**, and the spread is wider than it should be; it is written
-    down so the next session starts from a measurement rather than a hunch.
+    **What it is worth** is measured and written up as an open question above
+    -- *the six stats are not worth the same* -- because that is what the
+    table turned out to be about. Short version at 50 runs on Medium: builds
+    spread 24.5 to 3.4, and it is NOT the Might-versus-the-rest split it
+    first looked like (a pure Might build comes seventeenth of twenty-five).
+    The stats that grant actions or bypass the fight beat the three that
+    multiply one blow. **None of this is tuned.**

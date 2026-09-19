@@ -12,7 +12,7 @@ import { killPill, monsterAttackPill, playerAttackPill, statusPill } from './com
 import { lootStage } from './loot'
 import { beginRound, UNTOUCHED_FIGHT } from '../model/combat'
 import { testMonster } from '../testing/monster'
-import { withVectors } from '../testing/run'
+import { withVectorsOnly, GAME_EXIT_CHOICE } from '../testing/run'
 
 const DEPS: DirectorDeps = {
   stages: STAGES,
@@ -145,10 +145,10 @@ function intoCombat(seed: number): GameSave {
     const screen = currentScreen(save, DEPS)
     if (!screen) throw new Error('no screen')
     if (screen.stageId === 'combat') return save
-    const choice = screen.choices.find((candidate) => !candidate.id.endsWith(':leave'))
+    const choice = screen.choices.find((candidate) => candidate.id !== GAME_EXIT_CHOICE)
     if (!choice) throw new Error('nothing to press')
     save = choose(save, choice.id, DEPS, NOW).save
-    if (activeGame(save)) save = withVectors(save, { build: 'journeyman', species: 'masurian', combatClass: 'sentinel' })
+    if (activeGame(save)) save = withVectorsOnly(save, { build: 'journeyman', species: 'masurian', combatClass: 'sentinel' })
   }
   throw new Error('never reached a fight')
 }

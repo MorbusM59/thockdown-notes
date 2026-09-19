@@ -177,4 +177,52 @@ export const BUILDS: readonly Build[] = [
     icon: 'fa-solid fa-person-walking',
     weights: { might: 1, agility: 1, perception: 1, intellect: 1, charisma: 1, luck: 1 },
   },
+  {
+    id: 'indomitable',
+    name: 'Indomitable',
+    icon: 'fa-solid fa-shield',
+    weights: { might: 3, intellect: 1 },
+  },
+  {
+    id: 'mercurial',
+    name: 'Mercurial',
+    icon: 'fa-solid fa-bolt',
+    weights: { agility: 3, luck: 1 },
+  },
+  {
+    id: 'oracular',
+    name: 'Oracular',
+    icon: 'fa-solid fa-eye-low-vision',
+    weights: { intellect: 3, perception: 1 },
+  },
+  {
+    id: 'imperious',
+    name: 'Imperious',
+    icon: 'fa-solid fa-chess-king',
+    weights: { charisma: 3, might: 1 },
+  },
+  {
+    id: 'inscrutable',
+    name: 'Inscrutable',
+    icon: 'fa-solid fa-user-secret',
+    weights: { intellect: 2, agility: 1, luck: 1 },
+  },
+  {
+    id: 'weathered',
+    name: 'Weathered',
+    icon: 'fa-solid fa-tree',
+    weights: { might: 3, perception: 2, agility: 1 },
+  },
+  {
+    id: 'mesmeric',
+    name: 'Mesmeric',
+    icon: 'fa-solid fa-spiral',
+    weights: { charisma: 2, intellect: 2, luck: 1 },
+  },
+  {
+    id: 'relentless',
+    name: 'Relentless',
+    icon: 'fa-solid fa-person-hiking',
+    weights: { might: 2, agility: 2, perception: 1 },
+  },
 ]

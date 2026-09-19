@@ -4,9 +4,9 @@ import { NO_ARMOR } from '../model/armor'
 
 import { catalogFor, rolledPool, THOCKQUEST } from '../content'
 import { choose, currentScreen, enterEntryScreen, enterInterlude, type DirectorDeps } from '../core/director'
-import { activeGame, applyEffects, emptySave, type GameSave } from '../model/gameState'
+import { activeGame, applyEffects, emptySave, profileOf, type GameSave } from '../model/gameState'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
-import { createdRun } from '../testing/run'
+import { createdRun, GAME_EXIT_CHOICE } from '../testing/run'
 import { LEVEL_ENCOUNTER_COUNT } from '../model/encounterOffers'
 import { resolveProfile } from '../model/modifiers'
 import { lootStage } from './loot'
@@ -41,7 +41,7 @@ function walk(steps: number, seed: number): { save: GameSave; visited: string[] 
   for (let step = 0; step < steps; step += 1) {
     const screen = currentScreen(save, DEPS)
     if (!screen) break
-    const choice = screen.choices.find((candidate) => !candidate.id.endsWith(':leave'))
+    const choice = screen.choices.find((candidate) => candidate.id !== GAME_EXIT_CHOICE)
     if (!choice) break
     visited.push(screen.stageId)
     save = choose(save, choice.id, DEPS, NOW).save
@@ -76,7 +76,7 @@ describe('an encounter, end to end', () => {
     for (let step = 0; step < 400 && !sawDamage; step += 1) {
       const screen = currentScreen(save, DEPS)
       if (!screen) break
-      const choice = screen.choices.find((candidate) => !candidate.id.endsWith(':leave'))
+      const choice = screen.choices.find((candidate) => candidate.id !== GAME_EXIT_CHOICE)
       if (!choice) break
       save = choose(save, choice.id, DEPS, NOW).save
       const game = activeGame(save)
@@ -365,10 +365,26 @@ describe('spending a stat point', () => {
   })
 
   it('grants the hit points the point is worth, rather than only the room for them', () => {
+    // AGAINST THE CEILING IT MOVED, not against a number written here. This
+    // said `before + 15`, which is `50 + 15 x Might` with the 50 cancelled --
+    // the hit-point formula, restated in a test, which is the exact defect
+    // the sim's own health policy was caught with. It was true while nothing
+    // could scale hit points; a species that carries "+25% hit points"
+    // (model/vectors.ts) makes the point worth 19 and the test wrong about a
+    // rule that is working.
+    //
+    // The rule is that current follows maximum, so the assertion is that the
+    // gain IS the rise in the maximum -- read from the profile, which is the
+    // thing the rule is about.
     const ready = open(atHubWith(10))
-    const before = activeGame(ready)?.hitPoints ?? 0
+    const game = activeGame(ready)!
+    const before = game.hitPoints
+    const ceilingBefore = profileOf(ready, game, DEPS.content).derived.maxHitPoints
     const spent = choose(ready, 'statPoint:might', DEPS, NOW).save
-    expect(activeGame(spent)?.hitPoints).toBe(before + 15)
+    const after = activeGame(spent)!
+    const ceilingAfter = profileOf(spent, after, DEPS.content).derived.maxHitPoints
+    expect(ceilingAfter).toBeGreaterThan(ceilingBefore)
+    expect(after.hitPoints).toBe(before + (ceilingAfter - ceilingBefore))
   })
 
   it('comes back to the SAME encounter, not a freshly rolled one', () => {
@@ -398,7 +414,7 @@ describe('spending a stat point', () => {
     let save = enterEntryScreen(emptySave(4242), DEPS, NOW)
     for (let step = 0; step < 200 && currentScreen(save, DEPS)?.stageId !== 'combat'; step += 1) {
       const screen = currentScreen(save, DEPS)
-      const choice = screen?.choices.find((candidate) => !candidate.id.endsWith(':leave'))
+      const choice = screen?.choices.find((candidate) => candidate.id !== GAME_EXIT_CHOICE)
       if (!choice) break
       save = choose(save, choice.id, DEPS, NOW).save
     }
@@ -535,7 +551,7 @@ describe('the thumb the run is played under', () => {
       for (let step = 0; step < 200; step += 1) {
         const screen = currentScreen(save, DEPS)
         if (!screen) break
-        const choice = screen.choices.find((candidate) => !candidate.id.endsWith(':leave'))
+        const choice = screen.choices.find((candidate) => candidate.id !== GAME_EXIT_CHOICE)
         if (!choice) break
         save = choose(save, choice.id, DEPS, NOW).save
       }

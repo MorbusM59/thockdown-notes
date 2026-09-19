@@ -68,3 +68,55 @@ export function withVectors(
 export function stageOf(save: GameSave): string {
   return currentScreen(save, DEPS)?.stageId ?? ''
 }
+
+/**
+ * The run's vectors set AND everything it picked up at creation dropped, so
+ * the character is EXACTLY the three vectors and the tier and nothing else.
+ *
+ * Creation hands out a trait and an item as well as the three vectors, and
+ * both are dealt -- so a test that pins only the vectors still has two
+ * unnamed modifiers deciding how hard it hits and how long it lives. That is
+ * fine until the content grows and the deals shift, at which point a suite
+ * whose premise was "a fight that lasts" quietly becomes one about a fight
+ * that does not. Naming the whole character is the only version of the
+ * premise that survives a content edit.
+ */
+export function withVectorsOnly(
+  save: GameSave,
+  vectors: { build?: string; species?: string; combatClass?: string },
+): GameSave {
+  const game = save.games.find((candidate) => candidate.id === save.activeGameId)
+  if (!game) return save
+  const dropped = applyEffects(
+    save,
+    save.holdings
+      .filter((row) => row.gameId === game.id)
+      .map((row) => ({ kind: 'releaseModifier' as const, modifierKind: row.kind, modifierId: row.modifierId })),
+    THOCKQUEST,
+    NOW,
+  )
+  return withVectors(dropped, vectors)
+}
+
+/**
+ * THE CELL A WALKING TEST SHOULD PRESS: the first one that is not the way
+ * OUT OF THE GAME.
+ *
+ * Seven copies of this lived across five suites as
+ * `!candidate.id.endsWith(':leave')`, which is the right idea and the wrong
+ * predicate: it was written to avoid `welcome:leave`, the one cell that shuts
+ * the adventure down, and it also caught `market:leave` -- an ordinary way
+ * back from a screen whose only other cells are things you cannot currently
+ * afford. A walk that reached a market with an empty purse therefore found
+ * nothing to press and stopped, reporting itself as the game stalling.
+ *
+ * Latent for as long as no seed reached that state, and found the day the
+ * content grew enough to shift the deals. Named by id rather than by shape,
+ * because "the cell that ends the game" is one specific cell and there is no
+ * general property that distinguishes it from a way back.
+ */
+export const GAME_EXIT_CHOICE = 'welcome:leave'
+
+export function nextChoiceId(screen: { choices: readonly { id: string }[] } | null): string | null {
+  return screen?.choices.find((choice) => choice.id !== GAME_EXIT_CHOICE)?.id ?? null
+}

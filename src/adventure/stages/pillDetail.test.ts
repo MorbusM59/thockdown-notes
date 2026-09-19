@@ -6,7 +6,7 @@ import { activeGame, applyEffects, emptySave, profileOf, type GameSave } from '.
 import { SPREAD_PIVOT } from '../model/damageRoll'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
 import { splitNarration } from '../../escapeMenu/narrationMarkup'
-import { withVectors } from '../testing/run'
+import { withVectorsOnly, GAME_EXIT_CHOICE } from '../testing/run'
 
 const DEPS: DirectorDeps = {
   stages: STAGES,
@@ -36,12 +36,12 @@ function inAFight(seed: number, stats: Partial<Record<'intellect' | 'charisma' |
     const screen = currentScreen(save, DEPS)
     if (!screen) throw new Error('no screen')
     if (screen.stageId === 'combat') return save
-    const choice = screen.choices.find((candidate) => !candidate.id.endsWith(':leave'))
+    const choice = screen.choices.find((candidate) => candidate.id !== GAME_EXIT_CHOICE)
     if (!choice) throw new Error('nothing to press')
     save = choose(save, choice.id, DEPS, NOW).save
     const game = activeGame(save)
     if (!game) continue
-    save = withVectors(save, { build: 'journeyman', species: 'masurian', combatClass: 'sentinel' })
+    save = withVectorsOnly(save, { build: 'journeyman', species: 'masurian', combatClass: 'sentinel' })
     for (const [stat, amount] of Object.entries(stats)) {
       if (game.baseStats[stat as 'intellect'] < amount) {
         save = applyEffects(save, [{ kind: 'adjustBaseStat', stat: stat as 'intellect', amount }], DEPS.content, NOW)
@@ -134,7 +134,13 @@ describe('what a pill says when you hover it', () => {
   it('shows the charm check behind an effect that fired, and the chance on the round’s own pill', () => {
     for (const seed of [4242, 31337, 7, 99, 1234]) {
       let save = inAFight(seed, { charisma: 6 })
-      const status = currentScreen(save, DEPS)!.narration.find((entry) => entry.includes('fa-masks-theater'))
+      // THE ROUND'S OWN pill, which is the one carrying the mask and NOT a
+      // skull. A charm that FIRED carries the mask too -- that is the point
+      // of the glyph -- so a search for the mask alone finds whichever of the
+      // two happens to be on the bar and then asserts the wrong detail
+      // against it. The fired one is checked on its own terms below.
+      const status = currentScreen(save, DEPS)!.narration
+        .find((entry) => entry.includes('fa-masks-theater') && !entry.includes('fa-skull'))
       if (status) {
         expect(detailOf(status).some((row) => /^Each of its actions: \d+% to be taken$/.test(row))).toBe(true)
       }

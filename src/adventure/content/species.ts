@@ -105,6 +105,44 @@ export const SPECIES: readonly Species[] = [
     ],
   },
 
+  {
+    id: 'brannoch',
+    name: 'Brannoch',
+    icon: 'fa-solid fa-hammer',
+    playable: true,
+    effects: [
+      // Smiths. What they carry lasts, and they mend it between fights.
+      { kind: 'armorRepairAfterCombat', amount: 4 },
+      { kind: 'naturalArmor', amount: 1 },
+      { kind: 'derivedPercent', derived: 'critChance', percent: -0.2 },
+    ],
+  },
+  {
+    id: 'saoric',
+    name: 'Saoric',
+    icon: 'fa-solid fa-wind',
+    playable: true,
+    effects: [
+      // They act more often than anyone and each act is worth less.
+      { kind: 'derivedPercent', derived: 'actionsPerRound', percent: 0.5 },
+      { kind: 'derivedPercent', derived: 'damageMultiplier', percent: -0.25 },
+      { kind: 'derivedPercent', derived: 'hitChance', percent: 0.15 },
+    ],
+  },
+  {
+    id: 'velkar',
+    name: 'Velkar',
+    icon: 'fa-solid fa-eye',
+    playable: true,
+    effects: [
+      // They see what is coming and what is worth taking.
+      { kind: 'derivedPercent', derived: 'encounterChoices', percent: 0.5 },
+      { kind: 'derivedPercent', derived: 'offerChoices', percent: 0.5 },
+      { kind: 'derivedPercent', derived: 'hitChance', percent: 0.25 },
+      { kind: 'derivedPercent', derived: 'maxHitPoints', percent: -0.2 },
+    ],
+  },
+
   // --- What you fight ----------------------------------------------------
   {
     id: 'goblin',
@@ -279,6 +317,93 @@ export const SPECIES: readonly Species[] = [
       { kind: 'derivedPercent', derived: 'hitChance', percent: 0.5 },
       { kind: 'naturalArmor', amount: 2 },
       { kind: 'derivedPercent', derived: 'actionsPerRound', percent: -0.3 },
+    ],
+  },
+  {
+    id: 'gargoyle',
+    name: 'Gargoyle',
+    icon: 'fa-solid fa-chess-rook',
+    effects: [
+      { kind: 'naturalArmor', amount: 4 },
+      { kind: 'armorRepairAfterCombat', amount: 2 },
+      { kind: 'derivedPercent', derived: 'actionsPerRound', percent: -0.25 },
+      { kind: 'derivedPercent', derived: 'damageMultiplier', percent: -0.15 },
+    ],
+  },
+  {
+    id: 'slime',
+    name: 'Slime',
+    icon: 'fa-solid fa-droplet',
+    effects: [
+      // Nothing to cut, and nothing much to hit you with.
+      { kind: 'derivedPercent', derived: 'maxHitPoints', percent: 1 },
+      { kind: 'derivedPercent', derived: 'damageMultiplier', percent: -0.5 },
+      { kind: 'derivedPercent', derived: 'critChance', percent: -0.5 },
+    ],
+  },
+  {
+    id: 'manticore',
+    name: 'Manticore',
+    icon: 'fa-solid fa-dragon',
+    effects: [
+      { kind: 'derivedPercent', derived: 'actionsPerRound', percent: 0.5 },
+      { kind: 'derivedPercent', derived: 'critChance', percent: 0.3 },
+      { kind: 'naturalArmor', amount: 2 },
+      { kind: 'derivedPercent', derived: 'hitChance', percent: -0.2 },
+    ],
+  },
+  {
+    id: 'wisp',
+    name: 'Wisp',
+    icon: 'fa-solid fa-star',
+    effects: [
+      // Almost impossible to touch, and almost nothing when you do.
+      { kind: 'derivedPercent', derived: 'dodgeChance', percent: 0.6 },
+      { kind: 'derivedPercent', derived: 'maxHitPoints', percent: -0.6 },
+      { kind: 'derivedPercent', derived: 'damageMultiplier', percent: -0.2 },
+    ],
+  },
+  {
+    id: 'minotaur',
+    name: 'Minotaur',
+    icon: 'fa-solid fa-khanda',
+    effects: [
+      { kind: 'derivedPercentOnAction', derived: 'damageMultiplier', percent: 1.5, position: 'first' },
+      { kind: 'derivedPercent', derived: 'maxHitPoints', percent: 0.35 },
+      { kind: 'derivedPercent', derived: 'dodgeChance', percent: -0.3 },
+    ],
+  },
+  {
+    id: 'shade',
+    name: 'Shade',
+    icon: 'fa-solid fa-user-secret',
+    effects: [
+      { kind: 'derivedPercentOnAction', derived: 'critChance', percent: 0.8, position: 'first' },
+      { kind: 'derivedPercent', derived: 'hitChance', percent: 0.35 },
+      { kind: 'noDecayingArmor' },
+      { kind: 'derivedPercent', derived: 'maxHitPoints', percent: -0.3 },
+    ],
+  },
+  {
+    id: 'lich',
+    name: 'Lich',
+    icon: 'fa-solid fa-book-skull',
+    effects: [
+      { kind: 'derivedPercent', derived: 'damageMultiplier', percent: 0.6 },
+      { kind: 'derivedPercentWhileHurt', derived: 'actionsPerRound', percent: 1, belowFraction: 0.4 },
+      { kind: 'derivedPercent', derived: 'dodgeChance', percent: -0.25 },
+    ],
+  },
+  {
+    id: 'swarm',
+    name: 'Swarm',
+    icon: 'fa-solid fa-bugs',
+    effects: [
+      // Many small things at once, which is what the action pool is for.
+      { kind: 'derivedPercent', derived: 'actionsPerRound', percent: 1.25 },
+      { kind: 'derivedPercent', derived: 'damageMultiplier', percent: -0.6 },
+      { kind: 'derivedPercent', derived: 'maxHitPoints', percent: -0.4 },
+      { kind: 'derivedPercent', derived: 'dodgeChance', percent: 0.2 },
     ],
   },
 ]
