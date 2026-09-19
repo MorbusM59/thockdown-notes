@@ -981,6 +981,25 @@ export function SidebarOptionsPanel({
      * agree about which of them got there first.
      */
     const trueModeHoldRef = useRef<(() => void) | null>(null)
+
+    /**
+     * WAS THIS PRESS THE GUARDED KIND? Read by the click that follows it.
+     *
+     * Cancelling a `pointerdown`'s default does NOT stop the click: Chromium
+     * suppresses the compatibility mouse events and dispatches `click` from
+     * the activation behaviour regardless. So a completed hold turned true
+     * mode on and the click a moment later turned it straight back off --
+     * found live, as a 900ms hold that wiped the run and left the toggle
+     * reading off. Re-asking the state in the click cannot fix that, because
+     * the state is exactly what the hold just changed and React dispatches
+     * the click against the NEW closure.
+     *
+     * So the click is told what kind of press it belongs to, by the press
+     * itself. Written on every pointerdown (true or false, never left over
+     * from the last one) and cleared when the pointer leaves without
+     * releasing, which is the one way a press produces no click at all.
+     */
+    const trueModeGuardedPressRef = useRef(false)
     const topRowHighlightKeys: HighlightColorKey[] = ['base', 'inputFields', 'appButtons']
     const middleRowHighlightKeys: HighlightColorKey[] = [
       isPreviewMode ? 'textEmbossRender' : 'textEmbossEdit',
@@ -3407,7 +3426,9 @@ export function SidebarOptionsPanel({
             onPointerDown={(event) => {
               if (event.button !== 0) return
               // Only turning it ON can cost anything, and only past level one.
-              if (adventureSettings.trueMode || !adventureTrueModeWouldWipe) return
+              const guarded = !adventureSettings.trueMode && adventureTrueModeWouldWipe
+              trueModeGuardedPressRef.current = guarded
+              if (!guarded) return
               event.preventDefault()
               trueModeHoldRef.current = armHold(() => { setAdventureTrueMode(true) }, HOLD_COMMIT_MS)
             }}
@@ -3422,11 +3443,18 @@ export function SidebarOptionsPanel({
                 trueModeHoldRef.current()
                 trueModeHoldRef.current = null
               }
+              // A press abandoned off the button produces no click, so the
+              // answer it left behind has nobody to read it.
+              trueModeGuardedPressRef.current = false
             }}
             onClick={() => {
-              // The guarded case never reaches here: its pointerdown cancels
-              // the default, so no click follows. This is the plain one.
-              if (!adventureSettings.trueMode && adventureTrueModeWouldWipe) return
+              // A guarded press is the hold's alone -- whether it completed
+              // or was let go early -- and the click that trails it is not a
+              // second decision.
+              if (trueModeGuardedPressRef.current) {
+                trueModeGuardedPressRef.current = false
+                return
+              }
               setAdventureTrueMode(!adventureSettings.trueMode)
             }}
             data-secondary-press="none"

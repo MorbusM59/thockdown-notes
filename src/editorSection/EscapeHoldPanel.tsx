@@ -1051,12 +1051,15 @@ export function EscapeHoldPanel({
    */
   const autoAdvanceTimerRef = useRef<number | null>(null)
   const autoAdvanceBoundaryRef = useRef<string | null>(null)
+  const autoAdvanceReleaseRef = useRef<(() => void) | null>(null)
 
   const stopAutoAdvance = useCallback(() => {
     if (autoAdvanceTimerRef.current !== null) {
       window.clearInterval(autoAdvanceTimerRef.current)
       autoAdvanceTimerRef.current = null
     }
+    autoAdvanceReleaseRef.current?.()
+    autoAdvanceReleaseRef.current = null
     autoAdvanceBoundaryRef.current = null
   }, [])
 
@@ -1114,6 +1117,33 @@ export function EscapeHoldPanel({
         }
         runCellRef.current(next)
       }, Math.max(1, auto.intervalMs))
+
+      // THE RELEASE IS A WINDOW-LEVEL FACT, not the ring's.
+      //
+      // Every advance re-deals the ring's cells, so the focused cell
+      // unmounts and focus churns through `<body>` before the panel takes it
+      // back. A `keyup` bound to the ring can therefore land somewhere else
+      // entirely, and the `blur` that used to stand in for that case fired on
+      // the ring's OWN re-deal -- which ended every hold after exactly one
+      // press. (Found live: holding space in a fight advanced a single
+      // action and then sat there for twenty-four seconds.)
+      //
+      // So the key is watched where it cannot be missed, together with the
+      // one event that means no keyup is ever coming: the window losing
+      // focus. Focus moving INSIDE the app is not an end -- the reader is
+      // still holding the key, and the ring is still on screen; the mode
+      // going away is handled by the effect above, which is where that
+      // question belongs.
+      const onWindowKeyUp = (released: WindowEventMap['keyup']) => {
+        if (released.key === ' ' || released.key === 'Spacebar') stopAutoAdvance()
+      }
+      const onWindowBlur = () => stopAutoAdvance()
+      window.addEventListener('keyup', onWindowKeyUp, true)
+      window.addEventListener('blur', onWindowBlur)
+      autoAdvanceReleaseRef.current = () => {
+        window.removeEventListener('keyup', onWindowKeyUp, true)
+        window.removeEventListener('blur', onWindowBlur)
+      }
       return
     }
 
@@ -1203,11 +1233,6 @@ export function EscapeHoldPanel({
       role="toolbar"
       aria-label="Quick note actions"
       onKeyDown={handleRingKeyDown}
-      // A hold ends when the key comes up, and when the ring stops holding
-      // the keyboard at all -- a `keyup` that lands somewhere else never
-      // arrives here, and a timer that outlived its key would keep pressing.
-      onKeyUp={(event) => { if (event.key === ' ' || event.key === 'Spacebar') stopAutoAdvance() }}
-      onBlur={stopAutoAdvance}
     >
       {/* Centered label of whichever cell is focused, or hovered while the
           mouse is over one -- see displayedLabel above. Sized/shaped in
