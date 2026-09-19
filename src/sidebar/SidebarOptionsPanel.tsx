@@ -3394,7 +3394,7 @@ export function SidebarOptionsPanel({
             glyph that changes with the state would be a second, quieter
             answer to a question `aria-pressed` and the lit look already
             answer. */}
-        <div className="options-loadout-grid" role="group" aria-label="ThockQuest settings">
+        <div className="options-loadout-grid is-below-sliders" role="group" aria-label="ThockQuest settings">
           <button
             type="button"
             className={`btn-icon options-color-swatch options-loadout-btn${adventureSettings.trueMode ? ' is-active' : ''}`}

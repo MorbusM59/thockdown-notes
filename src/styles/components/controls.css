@@ -95,10 +95,15 @@
   gap:            var(--spacing-regular);
 }
 
-/* A slider stack that follows a row of toggle buttons in the same section,
-   rather than opening one. Without this the two sit flush and read as one
-   control group; they are a group and a setting the group governs. */
-.utility-setting-slider-stack.is-below-button-row {
+/* TWO CONTROL GROUPS IN ONE SECTION ARE SEPARATED, whichever order they
+   come in. Without this the two sit flush and read as one control group;
+   they are a group and a setting the group governs, and the reader has to
+   be able to see the seam. Stated once for both arrangements, because it is
+   one rule about a relationship and not two rules about two layouts:
+   Performance puts its buttons first and its slider second, ThockQuest puts
+   its sliders first and its lock second. */
+.utility-setting-slider-stack.is-below-button-row,
+.options-loadout-grid.is-below-sliders {
   margin-top: var(--spacing-regular);
 }
 
