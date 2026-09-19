@@ -790,7 +790,7 @@ deleted:
 16. **Defeat.** Does a run end at zero hit points, or does the round end and
     the run continue?
 17. ~~**Difficulty choice.**~~ **ANSWERED — and not in the ring at all.**
-    Two sliders in the options panel's Adventure section, see entry 90.
+    Two sliders in the options panel's ThockQuest section, see entry 90.
 18. **Gear and trait content.** The catalog type is ready
     (`model/modifiers.ts`) and Thockquest carries a handful of examples;
     a real pool does not exist.
@@ -1877,12 +1877,12 @@ placed at 5, 9 and 10 and the level advancing after ten.
     The four presets of entry 40 and the settings stage that offered them
     (`stages/settings.ts`, `SETTINGS_STAGE_ID`, the `setDifficulty` effect)
     are deleted. What replaces them is two sliders in the options panel's
-    Adventure section, which is where every other thing a reader tunes
+    ThockQuest section, which is where every other thing a reader tunes
     already lives:
 
     | Slider | Range | Default | What it is |
     | --- | --- | --- | --- |
-    | Progression | 1.01 – 1.25, step 0.01 | 1.01 | the base of `power = progression ^ level`, on monster hit points and damage (`model/difficulty.ts`) |
+    | Difficulty | 1.01 – 1.25, step 0.01 | 1.01 | the base of `power = progression ^ level`, on monster hit points and damage (`model/difficulty.ts`). The FIELD is still `progression`, which is what the curve is; the slider is labelled for what a player is choosing. |
     | Luckiness | 0 – 1, step 0.05 | 0 | `successAdjust`, the thumb on the scale (`model/chance.ts`). **Named `Luckiness`, not `Luck`**: Luck is one of the six stats, where it buys damage draws, and one word for two unrelated dials is a collision a reader has no way to resolve. |
 
     **The preset's second number is gone and is not missed.** A preset was a
@@ -1925,9 +1925,9 @@ placed at 5, 9 and 10 and the level advancing after ten.
     6.
 
 91. **HOLDING SPACE PLAYS ON**, at a rate and to a boundary the reader sets
-    (`model/autoAdvance.ts`, two more sliders in the same section: **hold
-    space**, five evenly spaced scopes from `nothing` to the end of the
-    level, and **hold speed**, 50–1000ms in fifties, dead while the scope is
+    (`model/autoAdvance.ts`, two more sliders in the same section: **auto
+    advance**, five evenly spaced scopes from `nothing` to the end of the
+    level, and **auto speed**, 50–1000ms in fifties, dead while the scope is
     `nothing`).
 
     **SPACE AND NOT ENTER** is the browser's doing: a native button fires its

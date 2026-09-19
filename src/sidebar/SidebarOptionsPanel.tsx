@@ -584,15 +584,19 @@ export interface SidebarOptionsPanelProps {
   importLayoutsTdl: () => Promise<void>
 
   /**
-   * THE ADVENTURE'S OWN SETTINGS, all five, and its own section.
+   * THOCKQUEST'S OWN SETTINGS, all five, and its own section.
    *
    * The thumb used to sit alone in Debugging on the argument that it was an
    * instrument rather than a difficulty -- true while the game's difficulty
    * was four presets chosen on a screen inside it. It is a slider now, beside
-   * the thumb, because they are the two axes of one question: progression
+   * the thumb, because they are the two axes of one question: difficulty
    * bends the curve and the thumb lifts the whole line. A control in
    * Debugging and its pair in the game was the split that made neither
    * legible.
+   *
+   * The field behind the difficulty slider is still `progression`, which is
+   * what the curve IS (`model/difficulty.ts`'s `progression ^ level`); the
+   * slider is labelled for what a player is choosing.
    */
   adventureSettings: GameSettings
   setAdventureSettings: (patch: Partial<GameSettings>) => void
@@ -3280,77 +3284,37 @@ export function SidebarOptionsPanel({
         </div>
       </AccordionSection>
 
+      {/* THOCKQUEST'S OWN SETTINGS. Four sliders in a two-by-two, then the
+          toggle that says whether the tuning is an override or a commitment.
+          In that order because it is the order they are read in: what kind of
+          game, then how you play it, then whether it counts.
+
+          LAID OUT LIKE EVERY OTHER SECTION: two `typography-sliders` rows of
+          two, and the button in an `options-loadout-grid` -- the six-wide
+          grid every other section's buttons sit in. It stood in a bespoke
+          `options-toggle-row` that no stylesheet matched, so the button was
+          the one control in the panel with no grid under it. */}
       <AccordionSection
-        className="sidebar-options-section-debug"
-        ariaLabel="Debugging"
-        heading="Debugging"
-      >
-<div className="options-loadout-grid" role="group" aria-label="Debug tools">
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-loadout-btn${debuggingEnabled ? ' is-active' : ''}`}
-            onClick={() => {
-              const next = !debuggingEnabled
-              setDebuggingEnabled(next)
-              if (!next) {
-                // Reset session debug note so a fresh note is created if
-                // debugging is re-enabled later in the same session
-                debugNoteIdRef.current = null
-              }
-              queueAppStateSave(activeNoteId)
-            }}
-            data-tooltip={debuggingEnabled ? 'Disable debug logging' : 'Enable debug logging to a note'}
-            aria-label={debuggingEnabled ? 'Disable debug logging' : 'Enable debug logging to a note'}
-            aria-pressed={debuggingEnabled}
-          >
-            <span className="fa-solid fa-bug" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="btn-icon options-color-swatch options-loadout-btn"
-            onClick={() => window.windowControls?.toggleDevTools()}
-            data-tooltip="Open DevTools (detached window)"
-            aria-label="Open DevTools (detached window)"
-          >
-            <span className="fa-solid fa-code" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-loadout-btn${clearAppStatePrimed ? ' primed' : ''}`}
-            onClick={clearAppState}
-            data-tooltip={clearAppStatePrimed ? 'Click again to clear persisted app state and reload' : 'Clear persisted app state and reload'}
-            aria-label={clearAppStatePrimed ? 'Confirm clearing persisted app state and reload' : 'Clear persisted app state and reload'}
-          >
-            <span className="fa-solid fa-trash" aria-hidden="true" />
-          </button>
-        </div>
-      </AccordionSection>
-      {/* THE ADVENTURE'S OWN SETTINGS. Two tuning sliders, then the two that
-          decide what holding the space bar does, then the toggle that says
-          whether the tuning is an override or a commitment. In that order
-          because it is the order they are read in: what kind of game, then
-          how you play it, then whether it counts. */}
-      <AccordionSection
-        className="sidebar-options-section-adventure"
-        ariaLabel="Adventure"
-        heading="Adventure"
+        className="sidebar-options-section-thockquest"
+        ariaLabel="ThockQuest"
+        heading="ThockQuest"
         iconClass="fa-dice-d20"
         iconTooltip="ThockQuest, reached by right-clicking the User Guide window control."
       >
         <div className="typography-sliders">
-          {/* PROGRESSION: the base of the exponential a monster's power is
+          {/* DIFFICULTY: the base of the exponential a monster's power is
               raised by. The gentlest curve is the default and the leftmost
               position, so the slider reads left-to-right as "harder". */}
           <div className="typography-slider">
             <CompactScrollbarSlider
-              id="adventure-progression"
+              id="adventure-difficulty"
               min={PROGRESSION_MIN}
               max={PROGRESSION_MAX}
               step={PROGRESSION_STEP}
               value={adventureSettings.progression}
-              trackLabel="progression"
-              tooltipLabel="adventure: how fast monsters outgrow you"
-              ariaLabel="Adventure progression"
+              trackLabel="difficulty"
+              tooltipLabel="thockquest: how fast monsters outgrow you"
+              ariaLabel="ThockQuest difficulty"
               defaultValue={DEFAULT_PROGRESSION}
               formatValue={(value) => `+${Math.round((value - 1) * 100)}% a level`}
               onCommit={(value) => setAdventureSettings({ progression: value })}
@@ -3370,45 +3334,48 @@ export function SidebarOptionsPanel({
               step={0.05}
               value={adventureSettings.successAdjust}
               trackLabel="luckiness"
-              tooltipLabel="adventure: the thumb on the scale"
-              ariaLabel="Adventure luckiness"
+              tooltipLabel="thockquest: the thumb on the scale"
+              ariaLabel="ThockQuest luckiness"
               defaultValue={0}
               formatValue={(value) => `${Math.round(value * 100)}%`}
               onCommit={(value) => setAdventureSettings({ successAdjust: value })}
             />
           </div>
-          {/* HOW FAR HOLDING SPACE CARRIES. An INDEX rather than a value, so
-              the five choices are evenly spaced on the track the way the
-              design asks -- the labels are words and words have no scale. */}
+        </div>
+        <div className="typography-sliders">
+          {/* AUTO ADVANCE: how far holding space carries. An INDEX rather than
+              a value, so the five choices are evenly spaced on the track the
+              way the design asks -- the labels are words and words have no
+              scale. */}
           <div className="typography-slider">
             <CompactScrollbarSlider
-              id="adventure-auto-advance-scope"
+              id="adventure-auto-advance"
               min={0}
               max={AUTO_ADVANCE_SCOPES.length - 1}
               step={1}
               value={indexOfScope(adventureSettings.autoAdvanceScope)}
-              trackLabel="hold space"
-              tooltipLabel="adventure: how far holding space carries"
-              ariaLabel="Adventure auto-advance scope"
+              trackLabel="auto advance"
+              tooltipLabel="thockquest: how far holding space carries"
+              ariaLabel="ThockQuest auto advance"
               defaultValue={indexOfScope(DEFAULT_AUTO_ADVANCE_SCOPE)}
               formatValue={(value) => AUTO_ADVANCE_LABELS[scopeAtIndex(value)]}
               onCommit={(value) => setAdventureSettings({ autoAdvanceScope: scopeAtIndex(value) })}
             />
           </div>
-          {/* HOW FAST it carries. Dead while the slider above says nothing,
-              because a rate for something that does not happen is a control
-              that cannot be wrong -- and one the reader would move looking
-              for an effect. */}
+          {/* AUTO SPEED: how fast it carries. Dead while the slider beside it
+              says nothing, because a rate for something that does not happen
+              is a control that cannot be wrong -- and one the reader would
+              move looking for an effect. */}
           <div className="typography-slider">
             <CompactScrollbarSlider
-              id="adventure-auto-advance-speed"
+              id="adventure-auto-speed"
               min={AUTO_ADVANCE_MIN_MS}
               max={AUTO_ADVANCE_MAX_MS}
               step={AUTO_ADVANCE_STEP_MS}
               value={adventureSettings.autoAdvanceMs}
-              trackLabel="hold speed"
-              tooltipLabel="adventure: time between auto-advanced choices"
-              ariaLabel="Adventure auto-advance speed"
+              trackLabel="auto speed"
+              tooltipLabel="thockquest: time between auto-advanced choices"
+              ariaLabel="ThockQuest auto speed"
               defaultValue={DEFAULT_AUTO_ADVANCE_MS}
               disabled={adventureSettings.autoAdvanceScope === 'nothing'}
               formatValue={(value) => `${value}ms`}
@@ -3421,11 +3388,16 @@ export function SidebarOptionsPanel({
             reserves for "I know this is not undoable", which is exactly what
             ending somebody's run is. The tooltip says which it is, because a
             button that sometimes ignores a click and sometimes does not is a
-            button that reads as broken unless it says so first. */}
-        <div className="options-toggle-row">
+            button that reads as broken unless it says so first.
+
+            ONE ICON IN BOTH STATES: the lock is what the control IS, and a
+            glyph that changes with the state would be a second, quieter
+            answer to a question `aria-pressed` and the lit look already
+            answer. */}
+        <div className="options-loadout-grid" role="group" aria-label="ThockQuest settings">
           <button
             type="button"
-            className={`btn-icon options-color-swatch options-loadout-btn${adventureSettings.trueMode ? ' active' : ''}`}
+            className={`btn-icon options-color-swatch options-loadout-btn${adventureSettings.trueMode ? ' is-active' : ''}`}
             onPointerDown={(event) => {
               if (event.button !== 0) return
               // Only turning it ON can cost anything, and only past level one.
@@ -3468,10 +3440,55 @@ export function SidebarOptionsPanel({
                     ? 'True mode will wipe the current run!'
                     : 'True mode: Lock in Difficulty')
             }
-            aria-label="Adventure true mode"
+            aria-label="ThockQuest true mode"
             aria-pressed={adventureSettings.trueMode}
           >
             <span className="fa-solid fa-lock" aria-hidden="true" />
+          </button>
+        </div>
+      </AccordionSection>
+      <AccordionSection
+        className="sidebar-options-section-debug"
+        ariaLabel="Debugging"
+        heading="Debugging"
+      >
+<div className="options-loadout-grid" role="group" aria-label="Debug tools">
+          <button
+            type="button"
+            className={`btn-icon options-color-swatch options-loadout-btn${debuggingEnabled ? ' is-active' : ''}`}
+            onClick={() => {
+              const next = !debuggingEnabled
+              setDebuggingEnabled(next)
+              if (!next) {
+                // Reset session debug note so a fresh note is created if
+                // debugging is re-enabled later in the same session
+                debugNoteIdRef.current = null
+              }
+              queueAppStateSave(activeNoteId)
+            }}
+            data-tooltip={debuggingEnabled ? 'Disable debug logging' : 'Enable debug logging to a note'}
+            aria-label={debuggingEnabled ? 'Disable debug logging' : 'Enable debug logging to a note'}
+            aria-pressed={debuggingEnabled}
+          >
+            <span className="fa-solid fa-bug" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="btn-icon options-color-swatch options-loadout-btn"
+            onClick={() => window.windowControls?.toggleDevTools()}
+            data-tooltip="Open DevTools (detached window)"
+            aria-label="Open DevTools (detached window)"
+          >
+            <span className="fa-solid fa-code" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className={`btn-icon options-color-swatch options-loadout-btn${clearAppStatePrimed ? ' primed' : ''}`}
+            onClick={clearAppState}
+            data-tooltip={clearAppStatePrimed ? 'Click again to clear persisted app state and reload' : 'Clear persisted app state and reload'}
+            aria-label={clearAppStatePrimed ? 'Confirm clearing persisted app state and reload' : 'Clear persisted app state and reload'}
+          >
+            <span className="fa-solid fa-trash" aria-hidden="true" />
           </button>
         </div>
       </AccordionSection>
