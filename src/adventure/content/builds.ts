@@ -1,18 +1,37 @@
 // VECTOR ONE: the builds. An adjective and a set of stat weights.
 //
-// The game uses a strict 3-stat, 2:2:1 spread. Every general build is one of
-// the 15 two-stat pairings, and each pairing gets four variants for the
-// remaining stat, giving 60 builds total. The list is deliberately grouped so a
-// reader can see the cluster and then the four variants inside it.
+// The roster has two layers: the 15 pair-only archetype builds, each with a
+// 1:1 split and a permanent unlock, and the 60 ordinary 2:2:1 builds that are
+// available from the start. The list is deliberately grouped so the pair and
+// its four variants read as one cluster.
 //
 // The weight formula is:
-//   * two stats take 2 points each
-//   * the third stat takes 1 point
-//   * no stat outside that trio is weighted at all
+//   * pair archetypes use 1:1 for their two stats
+//   * ordinary builds use 2:2:1 across three stats
+//   * no stat outside that set is weighted at all
 
 import type { Build } from '../model/vectors'
 
+const ARCHETYPE_BUILDS = [
+  { id: 'might-agility', name: 'Balanced', icon: 'fa-solid fa-hammer', weights: { might: 1, agility: 1 }, requiresUnlock: 'might-agility' },
+  { id: 'might-perception', name: 'Measured', icon: 'fa-solid fa-eye', weights: { might: 1, perception: 1 }, requiresUnlock: 'might-perception' },
+  { id: 'might-intellect', name: 'Steadfast', icon: 'fa-solid fa-brain', weights: { might: 1, intellect: 1 }, requiresUnlock: 'might-intellect' },
+  { id: 'might-charisma', name: 'Commanding', icon: 'fa-solid fa-crown', weights: { might: 1, charisma: 1 }, requiresUnlock: 'might-charisma' },
+  { id: 'might-luck', name: 'Destined', icon: 'fa-solid fa-clover', weights: { might: 1, luck: 1 }, requiresUnlock: 'might-luck' },
+  { id: 'agility-perception', name: 'Nimble', icon: 'fa-solid fa-binoculars', weights: { agility: 1, perception: 1 }, requiresUnlock: 'agility-perception' },
+  { id: 'agility-intellect', name: 'Spry', icon: 'fa-solid fa-bolt', weights: { agility: 1, intellect: 1 }, requiresUnlock: 'agility-intellect' },
+  { id: 'agility-charisma', name: 'Vivacious', icon: 'fa-solid fa-feather', weights: { agility: 1, charisma: 1 }, requiresUnlock: 'agility-charisma' },
+  { id: 'agility-luck', name: 'Cunning', icon: 'fa-solid fa-dice', weights: { agility: 1, luck: 1 }, requiresUnlock: 'agility-luck' },
+  { id: 'perception-intellect', name: 'Observant', icon: 'fa-solid fa-eye-low-vision', weights: { perception: 1, intellect: 1 }, requiresUnlock: 'perception-intellect' },
+  { id: 'perception-charisma', name: 'Dignified', icon: 'fa-solid fa-masks-theater', weights: { perception: 1, charisma: 1 }, requiresUnlock: 'perception-charisma' },
+  { id: 'perception-luck', name: 'Learned', icon: 'fa-solid fa-star', weights: { perception: 1, luck: 1 }, requiresUnlock: 'perception-luck' },
+  { id: 'intellect-charisma', name: 'Mirthful', icon: 'fa-solid fa-scroll', weights: { intellect: 1, charisma: 1 }, requiresUnlock: 'intellect-charisma' },
+  { id: 'intellect-luck', name: 'Incandescent', icon: 'fa-solid fa-moon', weights: { intellect: 1, luck: 1 }, requiresUnlock: 'intellect-luck' },
+  { id: 'charisma-luck', name: 'Glorious', icon: 'fa-solid fa-gem', weights: { charisma: 1, luck: 1 }, requiresUnlock: 'charisma-luck' },
+] satisfies ReadonlyArray<Build>
+
 export const BUILDS: readonly Build[] = [
+  ...ARCHETYPE_BUILDS,
   // --- Might + Agility
   { id: 'might-agility-perception', name: 'Brutal', icon: 'fa-solid fa-hammer', weights: { might: 2, agility: 2, perception: 1 } },
   { id: 'might-agility-intellect', name: 'Ferocious', icon: 'fa-solid fa-hammer', weights: { might: 2, agility: 2, intellect: 1 } },

@@ -84,14 +84,20 @@ describe('the tier, split by the weights', () => {
     expect(buildModifier(null, 20)).toBeNull()
   })
 
-  it('keeps a 60-build matrix with unique 2:2:1 stat shapes', () => {
-    expect(THOCKQUEST.builds).toHaveLength(60)
+  it('keeps a 75-build matrix with unique stat shapes, including the 15 unlocked archetypes', () => {
+    expect(THOCKQUEST.builds).toHaveLength(75)
 
     const seen = new Set<string>()
     for (const build of THOCKQUEST.builds) {
       const positive = STAT_KEYS.filter((key) => (build.weights[key] ?? 0) > 0)
-      expect(positive).toHaveLength(3)
-      expect(positive.map((key) => build.weights[key] as number).sort((a, b) => b - a)).toEqual([2, 2, 1])
+      const weights = positive.map((key) => build.weights[key] as number).sort((a, b) => b - a)
+      expect(weights.length).toBeGreaterThanOrEqual(2)
+      expect(weights.length).toBeLessThanOrEqual(3)
+      if (positive.length === 2) {
+        expect(weights).toEqual([1, 1])
+      } else {
+        expect(weights).toEqual([2, 2, 1])
+      }
 
       const signature = positive
         .map((key) => `${key}:${build.weights[key]}`)

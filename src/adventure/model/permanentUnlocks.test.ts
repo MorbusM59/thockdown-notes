@@ -8,6 +8,7 @@ import { BASE_PLAYER_TIER, statsFromTier } from './vectors'
 import { sanitizeGameSave } from '../save'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
 import { createdRun, withVectors } from '../testing/run'
+import { permanentUnlockById } from './permanentUnlocks'
 
 const DEPS: DirectorDeps = { stages: STAGES, content: THOCKQUEST, rootStageId: ROOT_STAGE_ID }
 const NOW = 1_700_000_000_000
@@ -121,6 +122,28 @@ describe('a class carries nothing but combat choices', () => {
       expect(profile.naturalArmor).toBe(reference.naturalArmor)
       expect(profile.noDecayingArmor).toBe(reference.noDecayingArmor)
     }
+  })
+})
+
+describe('archetype builds', () => {
+  it('adds the fifteen 1:1 pair archetypes, each with its own unlock', () => {
+    const pairBuilds = THOCKQUEST.builds.filter((build) => Object.values(build.weights).filter((weight) => weight !== 0).length === 2)
+    expect(pairBuilds).toHaveLength(15)
+    expect(pairBuilds.every((build) => build.requiresUnlock === build.id)).toBe(true)
+    expect(pairBuilds.every((build) => build.weights.might === 1 || build.weights.agility === 1 || build.weights.perception === 1 || build.weights.intellect === 1 || build.weights.charisma === 1 || build.weights.luck === 1)).toBe(true)
+    expect(THOCKQUEST.builds.find((build) => build.id === 'might-agility')).toMatchObject({
+      id: 'might-agility',
+      requiresUnlock: 'might-agility',
+      weights: { might: 1, agility: 1 },
+    })
+    expect(permanentUnlockById('might-agility')).toBeDefined()
+  })
+
+  it('is earned by maxing both stats in the pair in one run', () => {
+    const unlock = permanentUnlockById('might-agility')!
+    expect(unlock.isEarnedBy({ baseStats: { might: 6, agility: 6, perception: 0, intellect: 0, charisma: 0, luck: 0 } } as any)).toBe(true)
+    expect(unlock.isEarnedBy({ baseStats: { might: 6, agility: 5, perception: 0, intellect: 0, charisma: 0, luck: 0 } } as any)).toBe(false)
+    expect(unlock.isEarnedBy({ baseStats: { might: 5, agility: 5, perception: 1, intellect: 0, charisma: 0, luck: 0 } } as any)).toBe(false)
   })
 })
 

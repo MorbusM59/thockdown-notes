@@ -35,6 +35,24 @@ export interface PermanentUnlock {
   isEarnedBy: (game: GameRecord) => boolean
 }
 
+const PAIR_UNLOCKS = [
+  ['might', 'agility', 'Balanced'],
+  ['might', 'perception', 'Measured'],
+  ['might', 'intellect', 'Steadfast'],
+  ['might', 'charisma', 'Commanding'],
+  ['might', 'luck', 'Destined'],
+  ['agility', 'perception', 'Nimble'],
+  ['agility', 'intellect', 'Spry'],
+  ['agility', 'charisma', 'Vivacious'],
+  ['agility', 'luck', 'Cunning'],
+  ['perception', 'intellect', 'Observant'],
+  ['perception', 'charisma', 'Dignified'],
+  ['perception', 'luck', 'Learned'],
+  ['intellect', 'charisma', 'Mirthful'],
+  ['intellect', 'luck', 'Incandescent'],
+  ['charisma', 'luck', 'Glorious'],
+] as const
+
 export const PERMANENT_UNLOCKS: readonly PermanentUnlock[] = [
   {
     id: 'berserker',
@@ -46,6 +64,12 @@ export const PERMANENT_UNLOCKS: readonly PermanentUnlock[] = [
     // arithmetic in between that could drift from it.
     isEarnedBy: (game) => game.baseStats.might >= BASE_STAT_CAP,
   },
+  ...PAIR_UNLOCKS.map(([left, right, name]) => ({
+    id: `${left}-${right}`,
+    name,
+    earnedFor: `${STAT_LABELS[left]} and ${STAT_LABELS[right]} maxed in one run`,
+    isEarnedBy: (game: GameRecord) => game.baseStats[left] >= BASE_STAT_CAP && game.baseStats[right] >= BASE_STAT_CAP,
+  })),
 ]
 
 export function permanentUnlockById(id: string): PermanentUnlock | undefined {
