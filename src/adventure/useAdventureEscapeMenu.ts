@@ -107,22 +107,37 @@ export function useAdventureEscapeMenu(options: AdventureEscapeMenuOptions): Esc
   commitRef.current = onCommitSave
 
   /**
-   * OPENING the view puts the entry screen on top of whatever was there.
+   * A SLOT SHOWING THE GAME ALWAYS HAS A SCREEN, and this is what makes that
+   * true rather than something each writer has to remember.
    *
-   * Once per opening, which is why this effect depends on nothing but the
-   * opening: it is an event, not a condition to be maintained. Entering a
-   * stage may roll, and a roll during render would make the draw order
-   * depend on how many times React re-rendered -- the one thing a replayable
-   * game cannot survive (core/rng.ts) -- so it happens here rather than in
-   * the render below.
+   * An empty stack means `currentScreen` returns null, which draws as an
+   * occupied slot with nothing in it and a lit window control over it. That
+   * is a real state the game can reach while the view stays up: turning TRUE
+   * MODE on wipes the run in progress and clears the stack with it
+   * (`withTrueMode`), correctly -- a frame parked mid-fight against a run
+   * that no longer exists is the one thing the director cannot present. What
+   * was missing is that nobody put the entry screen back, so the reader was
+   * left looking at the empty state instead of the start screen.
+   *
+   * So the condition is "the view is up AND there is no screen", which is the
+   * impossible state stated directly, and the fix is a DERIVATION rather than
+   * a call bolted to the wipe: a future reason for the stack to empty is
+   * covered without its author knowing this exists. Depending on the whole
+   * SAVE would re-run after every choice, which is the failure
+   * `enterEntryScreen` documents; depending on the one boolean re-asks
+   * exactly when the answer can have changed. Entering a stage may roll, and
+   * a roll during render would make the draw order depend on how many times
+   * React re-rendered -- the one thing a replayable game cannot survive
+   * (core/rng.ts) -- so it happens here rather than in the render below.
    */
+  const hasNoScreen = (save?.director.stack.length ?? 0) === 0
   useEffect(() => {
     if (!isAdventureViewActive) return
     const now = Date.now()
     const current = saveRef.current ?? emptySave(createSeed(now))
     const opened = enterEntryScreen(current, DEPS, now)
     if (opened !== current || saveRef.current === null) commitRef.current(opened)
-  }, [isAdventureViewActive])
+  }, [isAdventureViewActive, hasNoScreen])
 
   const handleChoice = useCallback(
     (choiceId: string) => {

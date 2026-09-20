@@ -334,6 +334,26 @@ describe('game settings', () => {
     expect(relaxed.activeGameId).not.toBeNull()
   })
 
+  it('leaves no screen after the wipe, and the entry screen puts one back', () => {
+    // THE STATE THE SLOT MUST NEVER BE LEFT IN. An empty stack is exactly
+    // what `currentScreen` answers null to, which draws as an occupied slot
+    // with nothing in it under a lit window control -- what the wipe left
+    // behind, because the effect that raises the entry screen fired only on
+    // the view OPENING (`useAdventureEscapeMenu.ts`, which now re-asks
+    // whenever there is no screen).
+    const started = choose(enterEntryScreen(emptySave(4242), DEPS, NOW), 'welcome:start', DEPS, NOW).save
+    const wiped = withTrueMode(started, true)
+    expect(currentScreen(wiped, DEPS)).toBeNull()
+
+    const recovered = enterEntryScreen(wiped, DEPS, NOW)
+    expect(currentScreen(recovered, DEPS)?.stageId).toBe(ROOT_STAGE_ID)
+    // And it offers a NEW run rather than a resume: the suspended-run flag is
+    // read off the stack, which the wipe emptied, so the start screen cannot
+    // offer to continue a game that no longer exists.
+    const choices = currentScreen(recovered, DEPS)?.choices.map((choice) => choice.id) ?? []
+    expect(choices).toContain('welcome:start')
+  })
+
   it('clamps whatever a slider hands it, rather than storing it', () => {
     // A slider stepping by 0.05 arrives carrying 0.6000000000000001, and a
     // caller can ask for anything at all.

@@ -2375,3 +2375,26 @@ placed at 5, 9 and 10 and the level advancing after ten.
      its own session. The one signal that did move is rounds per fight, down
      roughly 10-15% (7.7 to 6.5 at x1.01): both sides land more often near
      parity, so fights resolve faster at the same damage per fight.
+
+
+110. **A SLOT SHOWING THE GAME ALWAYS HAS A SCREEN.** Turning TRUE MODE on
+     past level one wipes the run and clears the director stack with it
+     (`withTrueMode`, entry 91) -- correctly, because a frame parked mid-fight
+     against a run that no longer exists is the one thing the director cannot
+     present. But an empty stack is exactly what `currentScreen` answers null
+     to, and the effect that raises the entry screen fired on the view
+     OPENING alone, so nothing put one back: the reader was left with an
+     occupied slot drawing nothing, under a window control still lit for a
+     game that was not on screen. The control was RIGHT -- the slot really was
+     the adventure's -- so the fault was the missing screen, not the toggle.
+     `useAdventureEscapeMenu`'s opening effect now also depends on "there is
+     no screen", which is that impossible state stated directly. A DERIVATION
+     rather than a call bolted onto the wipe, the same argument as the focus
+     reconciler's: a future reason for the stack to empty is covered without
+     its author knowing this exists. It depends on the one BOOLEAN and not on
+     the save, because depending on the save re-runs after every choice --
+     which is the failure `enterEntryScreen`'s own comment documents -- and
+     `enterEntryScreen` is idempotent, so the one extra no-op run when the
+     stack refills costs nothing. The start screen it puts up offers a NEW run
+     rather than a resume, because `hasSuspendedRun` is read off the stack the
+     wipe emptied.
