@@ -1200,6 +1200,10 @@ The author's own wording:
   > as chance to hit, short "to hit". It fits perfectly, while accuracy is
   > unclear.
 
+A follow-up settled a move's damage share the same way: *"let's actually
+change 'of a blow' as well and go with '+100% Damage' instead of '200% of a
+blow' for move descriptions"*.
+
 So the derived value named `hitChance` reads **Hit** everywhere a player sees
 it, and every percentage of a chance is written `+x% to <Hit|Crit|Dodge>` with
 a minus meaning the same ladder downwards. A percentage of a quantity keeps its

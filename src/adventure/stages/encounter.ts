@@ -159,7 +159,7 @@ export function iconFor(offer: EncounterOffer, context: StageContext): string {
  * armour" on every goblin is a line that says nothing on nine offers in ten.
  *
  * The CLASS'S MOVES are last and are the reason a class is worth naming: a
- * player who reads "Ambush: 250% of a blow, on the first action of a fight"
+ * player who reads "Ambush: +150% Damage, on the first action of a fight"
  * knows what the first exchange is going to cost them, which is a decision
  * they can act on rather than a surprise.
  */

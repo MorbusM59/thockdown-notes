@@ -56,7 +56,7 @@ export const TACTIC_EXPLANATIONS: Readonly<Record<TacticKey, string>> = {
   poison: 'each landed blow leaves a share of itself, paid at the end of every round',
   mark: 'a share of the round\'s first blow is added to its last',
   setup: 'a share of the fight\'s first blow is added to every blow against a maimed foe',
-  counter: 'a free attack for a share of a blow, every time you answer one',
+  counter: 'a free attack every time you answer a blow, worth a share of an ordinary one',
   thorns: 'armour that stops a blow throws a share of itself back',
 }
 
@@ -110,7 +110,7 @@ export function talliesIntoRound(tallies: Tallies): Tallies {
  * Three of the six land here, and they compose the way the vocabulary's
  * quantities always do -- ADDITIVELY, as shares of the nominal, because these
  * are quantities and not chances. Combo is a share per strike already taken,
- * Mark and Setup are shares of a blow that has already happened.
+ * Mark and Setup are shares of a blow that has already landed.
  *
  * Conditional on the moment, not on the character: `isLastOfRound` and
  * `targetIsMaimed` are facts the caller has and this cannot work out, and an

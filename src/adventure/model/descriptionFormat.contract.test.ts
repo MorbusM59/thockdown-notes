@@ -151,6 +151,18 @@ describe('a percentage of a chance', () => {
     }
   })
 
+  it('writes a move\'s damage share as the Damage modifier it is', () => {
+    // "200% of a blow" and "+100% Damage" say the same thing about a
+    // Haymaker, and only one of them is the vocabulary an item uses. A reader
+    // comparing a move against a trait should not have to convert between two
+    // ways of counting.
+    for (const style of STYLES) {
+      for (const { line, where } of everyDescription(style)) {
+        expect(line, where).not.toContain('% of a blow')
+      }
+    }
+  })
+
   it('never writes a transition, in either direction', () => {
     // "-35% miss to hit" is what a negative share used to print: not what a
     // minus means here, and not what the code does. A minus is the same

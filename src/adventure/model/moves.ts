@@ -153,7 +153,17 @@ export function describeMove(move: CombatMove, style: DescriptionStyle): string[
       ? `Split (${strikes}x${pct(share)}%)`
       : `${strikes} strikes, ${pct(share)}% Damage each`)
   } else if (share !== 1) {
-    lines.push(`${pct(share)}% of a blow`)
+    // A SHARE OF A BLOW IS A DAMAGE MODIFIER, so it is written as one --
+    // `+100% Damage`, not `200% of a blow`. Both say the same thing about a
+    // Haymaker, but only one of them is in the vocabulary the player reads
+    // everywhere else: an item that adds half again says `+50% Damage`, and a
+    // move that doubles the blow should not need the reader to convert
+    // between two ways of counting to compare them.
+    //
+    // MINUS ONE, because a share is measured from the whole blow and a
+    // modifier from nothing: 2.0 of a blow is +100%, 0.45 is -55%. The sign
+    // then does the same work it does on a chance.
+    lines.push(describePercent('damageMultiplier', share - 1, style))
   }
   // The two share rules read as conversions, because that is what they are:
   // a share of the misses BECOMES hits, a share of the hits BECOMES crits.
@@ -187,7 +197,11 @@ export function describeMove(move: CombatMove, style: DescriptionStyle): string[
       // blow" -- true of a trait that is always on and false of a move, which
       // is the one action just chosen. The verbose form spells the share out
       // instead, and the reader learns the word itself from the tactic.
-      : `${TACTIC_LABELS.counter} (${pct(move.counter)}): a free attack back for ${pct(move.counter)}% of a blow`)
+      // "worth N% of an ordinary one", NOT "N% Damage": Counter's number is
+      // the whole size of the free attack, where a Damage percentage is a
+      // modifier on top of one. Same reason the share above became `+100%
+      // Damage` -- each quantity says what kind it is.
+      : `${TACTIC_LABELS.counter} (${pct(move.counter)}): a free attack worth ${pct(move.counter)}% of an ordinary one`)
   }
   if (move.guard) lines.push(concise ? `${move.guard} Block` : `${move.guard} Armor, this blow only`)
 
