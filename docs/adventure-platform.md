@@ -2136,7 +2136,7 @@ placed at 5, 9 and 10 and the level advancing after ten.
 
      | verbose | concise |
      | --- | --- |
-     | `4 strikes, 45% Damage each` | `Split (4x45%)` |
+     | `4 strikes, 45% Damage each` | ~~`Split (4x45%)`~~ `180% Damage \| Split (4)`, entry 114 |
      | `50% of the hits turned critical` | `50% hit to crit` |
      | `35% of the misses gone` | `35% miss to hit` |
      | `strikes back for 50% of a blow` | ~~`Vengeance (50%)`~~ superseded by entry 114 |

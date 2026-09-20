@@ -1208,3 +1208,12 @@ So the derived value named `hitChance` reads **Hit** everywhere a player sees
 it, and every percentage of a chance is written `+x% to <Hit|Crit|Dodge>` with
 a minus meaning the same ladder downwards. A percentage of a quantity keeps its
 bare form. Built as entry 114 of [adventure-platform.md](adventure-platform.md).
+
+The author then reconsidered the signed form for a move's own damage, and
+settled the split's notation with it:
+
+  > we should also change "of the time" to "chance" [...] I think what we
+  > should simply do is this: "300% Damage". this avoids forcing the user to
+  > do math and is short and concise. It's an attack, so it's clear that it's
+  > a 300% attack instead of a basic 100% attack. also split follows more
+  > naturally: "Split (4x45)" becomes "180% Damage | Split (4)"

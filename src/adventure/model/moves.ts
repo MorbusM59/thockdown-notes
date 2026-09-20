@@ -143,30 +143,28 @@ export function describeMove(move: CombatMove, style: DescriptionStyle): string[
   const strikes = strikesOf(move)
   const share = damageShareOf(move)
 
-  // SPLIT is the term for one action spent as several blows, and it is named
-  // rather than spelled out because two blows at 60% is a different thing
-  // from one at 120% and a player needs to recognise which they are holding.
-  // Not "Flurry": that is the name of a Juggler move, and a term that also
-  // names one specific move reads as a cross-reference to it.
+  // WHAT THE WHOLE ACTION IS WORTH, as a plain percentage of an ordinary
+  // attack: `300% Damage`. Not `+200%`, and not `300% of a blow` -- an
+  // absolute figure asks the reader for no arithmetic at all, and the SIGN is
+  // what separates the two kinds: an item's `+50% Damage` is a modifier on
+  // top of an attack, a move's `300% Damage` is the attack.
+  //
+  // FOR A SPLIT IT IS THE TOTAL, which is the number the reader actually
+  // wants -- `180% Damage | Split (4)` rather than a per-strike share they
+  // have to multiply. The count stays its own term because it is a different
+  // fact and the one that matters: four blows at 45% is not one at 180%, it
+  // is four chances to miss and four chances to crit.
+  //
+  // SPLIT, and not "Flurry": that is the name of a Juggler move, and a term
+  // that also names one specific move reads as a cross-reference to it.
+  const total = strikes * share
+  if (total !== 1 || strikes > 1) lines.push(`${pct(total)}% Damage`)
   if (strikes > 1) {
     lines.push(concise
-      ? `Split (${strikes}x${pct(share)}%)`
-      : `${strikes} strikes, ${pct(share)}% Damage each`)
-  } else if (share !== 1) {
-    // A SHARE OF A BLOW IS A DAMAGE MODIFIER, so it is written as one --
-    // `+100% Damage`, not `200% of a blow`. Both say the same thing about a
-    // Haymaker, but only one of them is in the vocabulary the player reads
-    // everywhere else: an item that adds half again says `+50% Damage`, and a
-    // move that doubles the blow should not need the reader to convert
-    // between two ways of counting to compare them.
-    //
-    // MINUS ONE, because a share is measured from the whole blow and a
-    // modifier from nothing: 2.0 of a blow is +100%, 0.45 is -55%. The sign
-    // then does the same work it does on a chance.
-    lines.push(describePercent('damageMultiplier', share - 1, style))
+      ? `Split (${strikes})`
+      : `Split (${strikes}): spent as ${strikes} separate blows, each rolled on its own`)
   }
-  // The two share rules read as conversions, because that is what they are:
-  // a share of the misses BECOMES hits, a share of the hits BECOMES crits.
+
   // THE SAME DESCRIBER AN ITEM'S CHANCE EFFECT USES, because it is the same
   // arithmetic to the line: both multiply the one `ChanceAdjustment` and both
   // compose by multiplying keep factors (model/chance.ts). Two vocabularies
@@ -201,7 +199,7 @@ export function describeMove(move: CombatMove, style: DescriptionStyle): string[
       // the whole size of the free attack, where a Damage percentage is a
       // modifier on top of one. Same reason the share above became `+100%
       // Damage` -- each quantity says what kind it is.
-      : `${TACTIC_LABELS.counter} (${pct(move.counter)}): a free attack worth ${pct(move.counter)}% of an ordinary one`)
+      : `${TACTIC_LABELS.counter} (${pct(move.counter)}): a free attack at ${pct(move.counter)}% Damage`)
   }
   if (move.guard) lines.push(concise ? `${move.guard} Block` : `${move.guard} Armor, this blow only`)
 
@@ -234,7 +232,7 @@ function whenWords(move: CombatMove, style: DescriptionStyle): string {
     case 'firstActionOfEncounter': return concise ? 'on Engage' : 'on the first action of a fight'
     case 'firstActionOfRound': return concise ? 'Initial' : 'on the first action of a round'
     case 'lastActionOfRound': return concise ? 'Final' : 'on the last action of a round'
-    case 'chance': return `${Math.round(move.when.chance * 100)}% of the time`
+    case 'chance': return `${Math.round(move.when.chance * 100)}% chance`
     case 'health': return concise
       ? move.when.band
       : `while ${move.when.band} (${HEALTH_BAND_BOUNDS[move.when.band]})`

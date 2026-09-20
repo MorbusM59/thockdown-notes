@@ -151,14 +151,36 @@ describe('a percentage of a chance', () => {
     }
   })
 
-  it('writes a move\'s damage share as the Damage modifier it is', () => {
-    // "200% of a blow" and "+100% Damage" say the same thing about a
-    // Haymaker, and only one of them is the vocabulary an item uses. A reader
-    // comparing a move against a trait should not have to convert between two
-    // ways of counting.
+  it('tells a MODIFIER from an ATTACK by the sign, and never says "of a blow"', () => {
+    // The two forms differ by one character and mean different things:
+    // `+50% Damage` is a modifier on top of an attack, `300% Damage` IS the
+    // attack. A signed percentage is therefore always a modifier, and an
+    // unsigned one is always a whole quantity -- so nothing in the game may
+    // write a bare percentage of something that is not.
     for (const style of STYLES) {
       for (const { line, where } of everyDescription(style)) {
         expect(line, where).not.toContain('% of a blow')
+        const unsigned = /^(\d+)% (\w+)/.exec(line)
+        // `25% chance` is the trigger, not a quantity: it says how often the
+        // move comes up at all, which is the one bare percentage that is not
+        // measuring anything.
+        if (unsigned) expect(['Damage', 'Armor', 'chance'], `${where}: "${line}"`).toContain(unsigned[2])
+      }
+    }
+  })
+
+  it('gives a split move its TOTAL and its count, not a share to multiply', () => {
+    // `180% Damage | Split (4)`. The count stays its own term because it is
+    // the fact that matters: four blows at 45% is not one at 180%, it is four
+    // chances to miss and four chances to crit.
+    for (const combatClass of THOCKQUEST.combatClasses) {
+      for (const move of combatClass.moves) {
+        const strikes = move.strikes ?? 1
+        if (strikes <= 1) continue
+        const lines = describeMove(move, 'concise')
+        expect(lines, move.id).toContain(`Split (${strikes})`)
+        expect(lines.some((line) => /^\d+% Damage$/.test(line)), move.id).toBe(true)
+        expect(lines.join(' '), move.id).not.toContain('x')
       }
     }
   })
