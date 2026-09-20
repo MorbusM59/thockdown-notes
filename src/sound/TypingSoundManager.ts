@@ -558,7 +558,10 @@ export class TypingSoundManager {
   // this sits next to); stored internally as -1..1 to multiply directly
   // against pan values. Never baked/invalidates no caches -- like pitch
   // jitter, pan is applied live at playback time (see resolveEffectivePan),
-  // never into a bounce.
+  // never into a bounce. The sign still selects the mode (negative = mode A,
+  // positive = mode B) but the output uses its magnitude so the same
+  // intensity is heard for +50 and -50 in the explicit-pan paths (such as
+  // the escape menu's ring-burst sounds).
   setSpatialAmount(amount: number): void {
     this.spatialAmount = Math.max(-100, Math.min(100, amount)) / 100
   }
@@ -616,13 +619,16 @@ export class TypingSoundManager {
   // is neutral, mode A has no opinion on this key, or mode B is active but
   // the caller didn't supply a position.
   private resolveEffectivePan(physicalKeyCode: string | undefined, explicitPan: number | undefined): number {
-    if (this.spatialAmount === 0) return 0
+    const magnitude = Math.abs(this.spatialAmount)
+    if (magnitude === 0) return 0
+    if (explicitPan !== undefined) {
+      return Math.max(-1, Math.min(1, explicitPan)) * magnitude
+    }
     if (this.spatialAmount < 0) {
       const keyboardPan = resolveKeyboardPanForCode(physicalKeyCode)
-      return keyboardPan === 0 ? 0 : keyboardPan * -this.spatialAmount
+      return keyboardPan === 0 ? 0 : keyboardPan * magnitude
     }
-    if (explicitPan === undefined) return 0
-    return Math.max(-1, Math.min(1, explicitPan)) * this.spatialAmount
+    return 0
   }
 
   // Skips creating a StereoPannerNode entirely when pan is 0 (the default,

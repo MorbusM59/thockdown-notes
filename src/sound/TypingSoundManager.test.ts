@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  TypingSoundManager,
   resolveKeyboardPanForCode,
   shouldBakeReverbIntoTransient,
   shouldSuppressPlainTypingSoundForInsertion,
@@ -44,6 +45,14 @@ describe('typing sounds', () => {
   it('keeps reverb live instead of baking it into each transient sample', () => {
     expect(shouldBakeReverbIntoTransient(0.4)).toBe(false)
     expect(shouldBakeReverbIntoTransient(0)).toBe(false)
+  })
+
+  it('uses the same explicit-pan intensity for +50 and -50', () => {
+    const manager = new TypingSoundManager() as any
+    manager.spatialAmount = -0.5
+    expect(manager.resolveEffectivePan(undefined, 0.6)).toBeCloseTo(0.3, 10)
+    manager.spatialAmount = 0.5
+    expect(manager.resolveEffectivePan(undefined, 0.6)).toBeCloseTo(0.3, 10)
   })
 
   describe('spatial mode A: keyboard-position pan', () => {
