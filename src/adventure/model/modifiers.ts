@@ -80,6 +80,7 @@
 
 import { NO_CHANCE_ADJUSTMENT, resolveChanceWith, type ChanceAdjustment } from './chance'
 import { HEALTH_BAND_BOUNDS, bandWithArticle, inHealthBand, type HealthBand } from './health'
+import { NO_TACTICS, TACTIC_EXPLANATIONS, TACTIC_LABELS, type TacticKey, type Tactics } from './tactics'
 import {
   addStats,
   clampBaseStats,
@@ -211,6 +212,18 @@ export type ModifierEffect =
    * worn, and could be out-added by a second piece.
    */
   | { kind: 'noDecayingArmor' }
+  /**
+   * A TACTIC: one of the six rules about a fight's SHAPE rather than about
+   * how good anybody is at it (model/tactics.ts). One percentage, banked
+   * additively with every other source of the same one, read at exactly one
+   * named moment of the exchange.
+   *
+   * Not a `derivedPercent`, deliberately: these do not scale a quantity the
+   * stat table derives, they add a rule the fight did not otherwise have, and
+   * folding them in would have `deriveStats` answer for six things no stat
+   * block implies.
+   */
+  | { kind: 'tactic'; tactic: TacticKey; percent: number }
 
 export interface Modifier {
   id: string
@@ -237,6 +250,12 @@ export interface EffectiveProfile {
    * at the moment it is rolled -- see model/chance.ts.
    */
   chances: Readonly<Record<ChanceKey, ChanceAdjustment>>
+  /**
+   * The six fight-shape rules, as fractions, summed over everything held.
+   * Zero throughout for a character carrying none, which is what makes every
+   * reader of them a plain multiplication rather than a branch.
+   */
+  tactics: Tactics
 }
 
 /**
@@ -311,6 +330,9 @@ export function resolveProfile(
     hitChance: { ...NO_CHANCE_ADJUSTMENT },
     critChance: { ...NO_CHANCE_ADJUSTMENT },
   }
+  // ADDITIVE, because a tactic is a quantity and not a chance: two sources of
+  // Combo make one bigger Combo, the same way two sources of Damage do.
+  const tactics: Record<TacticKey, number> = { ...NO_TACTICS }
 
   /**
    * One percentage, banked against its key. A quantity accumulates it
@@ -354,6 +376,9 @@ export function resolveProfile(
         case 'noDecayingArmor':
           noDecayingArmor = true
           break
+        case 'tactic':
+          tactics[effect.tactic] += effect.percent
+          break
 
         case 'naturalArmor':
           naturalArmor += effect.amount
@@ -390,6 +415,7 @@ export function resolveProfile(
     naturalArmor,
     armorRepair,
     chances,
+    tactics,
   }
 }
 
@@ -519,6 +545,13 @@ export function describeEffect(effect: ModifierEffect, style: DescriptionStyle):
       return concise
         ? `${signed(effect.amount)} Natural Armor`
         : `${signed(effect.amount)} Armor that cannot decay`
+    case 'tactic': {
+      // The design writes these as "Combo (5)", so the concise form is
+      // exactly that -- the six names ARE the vocabulary, and a reader who
+      // knows what Combo is needs only the number.
+      const figure = `${TACTIC_LABELS[effect.tactic]} (${Math.round(effect.percent * 100)})`
+      return concise ? figure : `${figure}: ${TACTIC_EXPLANATIONS[effect.tactic]}`
+    }
   }
 }
 

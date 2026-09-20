@@ -30,14 +30,14 @@ const NOW = 1_700_000_000_000
 const ROLL = (rolled: number, needed: number) => ({ rolled, needed, passed: rolled < needed })
 
 const HIT = {
-  hit: true, crit: false, dodged: false, damage: 8, armorDecayed: false,
+  hit: true, crit: false, dodged: false, damage: 8, armorDecayed: false, recoil: 0,
   math: {
     dodge: null, hit: ROLL(0.4, 0.6), crit: ROLL(0.9, 0.3),
     base: 8, rolled: 8, low: 4, high: 8, rolls: 2, critMultiplier: 1, absorbed: 0,
   },
 }
 const MISS = {
-  hit: false, crit: false, dodged: false, damage: 0, armorDecayed: false,
+  hit: false, crit: false, dodged: false, damage: 0, armorDecayed: false, recoil: 0,
   math: {
     dodge: null, hit: ROLL(0.8, 0.6), crit: null,
     base: 8, rolled: 0, low: 4, high: 8, rolls: 2, critMultiplier: 1, absorbed: 0,
@@ -73,9 +73,18 @@ function figures(entry: string): string[] {
 describe('a combat pill', () => {
   it('reads [who] [what] [how much] [to whom], in that order', () => {
     const pill = playerAttackPill(monsterOf('regular'), HIT)
-    expect(glyphs(pill)).toEqual(['fa-solid fa-user-shield', 'fa-solid fa-burst', 'fa-solid fa-skull'])
+    expect(glyphs(pill)).toEqual(['fa-solid fa-user-shield', 'fa-solid fa-gavel', 'fa-solid fa-skull'])
     expect(figures(pill)).toEqual(['8'])
     expect(narrationText(parseNarration(lineOf(pill)))).toBe('you hit 8 it')
+  })
+
+  it('keeps the burst for a CRIT and the gavel for an ordinary hit', () => {
+    // Two marks rather than one, so a reader scanning a round can see where
+    // it turned without reading the figures.
+    const ordinary = playerAttackPill(monsterOf('regular'), HIT)
+    const critical = playerAttackPill(monsterOf('regular'), { ...HIT, crit: true })
+    expect(glyphs(ordinary)[1]).toBe('fa-solid fa-gavel')
+    expect(glyphs(critical)[1]).toBe('fa-solid fa-burst')
   })
 
   it('carries NO number on a miss, so nothing reads as a quantity', () => {

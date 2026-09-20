@@ -57,6 +57,7 @@
 import { nextInt, nextPick, nextSample, seedFrom, type RngState } from '../core/rng'
 import type { Modifier, ModifierEffect, ModifierKind } from './modifiers'
 import type { DerivedKey, StatKey } from './stats'
+import type { TacticKey } from './tactics'
 
 /** What a stat slot is worth. Both ends included. */
 export const STAT_SLOT_RANGE = [1, 3] as const
@@ -113,10 +114,45 @@ export type VerboseId =
   | 'ward'
   /** Sees to the whole kit after every fight. */
   | 'repair'
+  // --- THE SIX FIGHT-SHAPE RULES (model/tactics.ts) ---------------------
+  // One slot each, and they are ordinary verbose slots in every respect: a
+  // template that lists one can roll it, and a template that does not, never
+  // will. That is the whole of "give this thing Poison".
+  /** Each attack this round makes the next ones hit harder. */
+  | 'combo'
+  /** Every landed blow leaves a share of itself, paid at the end of the round. */
+  | 'poison'
+  /** A share of the round's first blow is added to its last. */
+  | 'mark'
+  /** A share of the fight's first blow is added to every blow against a maimed foe. */
+  | 'setup'
+  /** A free attack every time a blow is answered. */
+  | 'counter'
+  /** Armour that stops a blow throws a share of itself back. */
+  | 'thorns'
 
 export const VERBOSE_IDS: readonly VerboseId[] = [
   'desperate', 'hale', 'opener', 'finisher', 'collector', 'studied', 'ward', 'repair',
+  'combo', 'poison', 'mark', 'setup', 'counter', 'thorns',
 ]
+
+/**
+ * WHAT EACH TACTIC SLOT ROLLS, in percentage POINTS.
+ *
+ * One range per slot, like everything else in this file, and they differ
+ * because the six pay out at very different rates: Combo is multiplied by
+ * every strike already taken in the round, Thorns by a whole armour pool, and
+ * Counter buys a whole extra attack -- so a Combo of 5 and a Counter of 50
+ * are the same size of gift. Tuned by hand here and nowhere else.
+ */
+export const TACTIC_RANGES: Readonly<Record<TacticKey, readonly [number, number]>> = {
+  combo: [3, 8],
+  poison: [3, 8],
+  mark: [25, 60],
+  setup: [25, 60],
+  counter: [25, 60],
+  thorns: [50, 150],
+}
 
 /**
  * What a modifier COULD be. Authored in content; never itself a `Modifier`.
@@ -295,6 +331,20 @@ function rollVerbose(
     case 'repair': {
       const size = nextInt(rng, 1, 2)
       return { effect: { kind: 'armorRepairAfterCombat', amount: size.value }, rng: size.rng }
+    }
+    case 'combo':
+    case 'poison':
+    case 'mark':
+    case 'setup':
+    case 'counter':
+    case 'thorns': {
+      // ONE ARM FOR ALL SIX, because a tactic slot differs from its siblings
+      // only in which of them it is and what it may roll -- the `TACTIC_RANGES`
+      // table above is the whole of the difference, so a seventh tactic is a
+      // line there and a line in the union and nothing else here.
+      const [low, high] = TACTIC_RANGES[id]
+      const size = nextInt(rng, low, high)
+      return { effect: { kind: 'tactic', tactic: id, percent: size.value / 100 }, rng: size.rng }
     }
   }
 }

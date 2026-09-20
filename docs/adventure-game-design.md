@@ -1138,3 +1138,43 @@ a RULE and moved to the roll that always enforced it, the availability check
 character never has any effect up. so that settles it for me."*
 
 Built as entry 109 of [adventure-platform.md](adventure-platform.md).
+
+### Six stats that carve out builds
+
+Authored by the user, verbatim:
+
+  > * multi attacks, builds by
+  >    * having a "Combo" stat. "Combo (5)" means that each attack increases the
+  >      damage of all subsequent attacks that round by 5%. so the first attack
+  >      does 100%, the second 105%, the third 110% and so on. This bonus resets
+  >      at the beginning of the next round. Any attack, hit, miss or dodged,
+  >      adds to combo, so it scales with action number regardless of other
+  >      factors.
+  >    * having a "Poison" stat. "Poison (5)" means that the target takes 5
+  >      damage at the end of the round. This damage is based of regular attacks
+  >      without conditional modifiers. A global +Damage does apply though.
+  >      Damage dealt by poison is guaranteed and is not reduced by armor.
+  >      Poison stacks with every landed attack across rounds. this benefits
+  >      quick attacks that hit while not caring about crit rating.
+  > * Ambush and Execute builds
+  >    * by adding a "Mark" stat. Mark(50) means that 50% of the damage done by
+  >      the first attack each round is added to the last attack of that round.
+  >      This increases the impact of Initial attacks.
+  >    * by adding a "Setup" stat. Setup (50) means that 50% of the damage done
+  >      by the first attack in combat is added to all attacks against maimed
+  >      enemies.
+  > * defensive action based builds
+  >    * by adding the "Counter" stat. Counter (50) means that the defender gets
+  >      to execute a free regular attack for 50% damage any time they take a
+  >      defensive action.
+  >    * by adding the "Thorns" stat. Thorns (100) means that every time the
+  >      user reduces damage with armor, the attacker takes 100% of the current
+  >      armor value (combined natural and decaying armor) in damage.
+
+Poison's unit was the one thing the text left open — "Poison (5)" reading as
+five flat damage, or as five percent like the other five stats. Settled by the
+author as **a percentage of a regular attack**, resolved without conditional
+modifiers, so it scales with the character rather than going stale by level 10.
+
+All six are symmetric: a monster's species can carry one. Built as entry 111 of
+[adventure-platform.md](adventure-platform.md).

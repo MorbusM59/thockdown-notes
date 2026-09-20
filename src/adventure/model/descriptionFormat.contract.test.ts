@@ -26,6 +26,7 @@ import { THOCKQUEST, catalogFor } from '../content'
 import { ROUND_POSITION_WORD, describeModifier, type DescriptionStyle } from './modifiers'
 import { MOVE_TERMS, describeMove } from './moves'
 import { DERIVED_LABELS, STAT_LABELS } from './stats'
+import { TACTIC_LABELS } from './tactics'
 import { describeBuild } from './vectors'
 
 const STYLES: readonly DescriptionStyle[] = ['verbose', 'concise']
@@ -40,6 +41,11 @@ const CAPITALISED_NOUNS = new Set<string>([
   ...Object.values(DERIVED_LABELS),
   ...Object.values(ROUND_POSITION_WORD),
   ...MOVE_TERMS,
+  // The six fight-shape rules name themselves, and the name IS the concise
+  // description ("Combo (5)"). Read from the label table for the same reason
+  // MOVE_TERMS is read rather than listed: a renamed tactic must not need a
+  // second edit here to stay legal.
+  ...Object.values(TACTIC_LABELS),
   'Natural',
   'Mending',
   'Armor',

@@ -20,6 +20,7 @@
 import { NO_ARMOR, type Armor } from './armor'
 import { powerMultiplier } from './difficulty'
 import { resolveProfile, type ActionPosition, type Modifier, type Situation } from './modifiers'
+import type { Tactics } from './tactics'
 
 import { buildModifier, type Build, type CombatClass, type MonsterType, type Species } from './vectors'
 import { resolveChanceWith, type ChanceAdjustment } from './chance'
@@ -79,6 +80,13 @@ export interface Monster {
   combatClass: CombatClass | null
   /** What its species does to each contested chance, for the roll to apply. */
   chances: Readonly<Record<ChanceKey, ChanceAdjustment>>
+  /**
+   * Its six fight-shape rules (model/tactics.ts). A monster carries these the
+   * same way a player does -- a species can be poisonous or thorned, and a
+   * rule written for one side and not the other is the failure the vectors
+   * were separated to end.
+   */
+  tactics: Tactics
 }
 
 /**
@@ -232,6 +240,7 @@ export function buildMonster(options: {
     classId: options.combatClass?.id ?? '',
     type: options.type,
     tier: Math.max(0, Math.floor(options.tier)),
+    tactics: profile.tactics,
     count,
     stats: profile.stats,
     // The PROFILE's derived values, not the bare ones: the species has had

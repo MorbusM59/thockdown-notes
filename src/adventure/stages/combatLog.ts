@@ -39,7 +39,19 @@ const PLAYER = 'fa-solid fa-user-shield'
 const MONSTER = 'fa-solid fa-skull'
 /** A boss is not a bigger skull. It is a different thing arriving. */
 const BOSS = 'fa-solid fa-dragon'
-const LANDED = 'fa-solid fa-burst'
+/**
+ * A BLOW THAT ARRIVED, and a blow that arrived HARD. Two marks rather than
+ * one: a crit is the thing a whole build can be about, and a reader scanning
+ * the log for how a fight went should be able to see them without reading the
+ * figures. The burst is the rarer of the two and so keeps the louder glyph.
+ */
+const LANDED = 'fa-solid fa-gavel'
+const CRIT = 'fa-solid fa-burst'
+
+/** Which of the two a blow earned. A blow that is not a crit is an ordinary hit. */
+function landedIcon(blow: Blow | null): string {
+  return blow?.crit === true ? CRIT : LANDED
+}
 /** Nothing arrived: a miss, a dodge, a blow turned aside. */
 const NOTHING = 'fa-solid fa-wind'
 const DEFENDED = 'fa-solid fa-shield'
@@ -82,7 +94,7 @@ function playerActionIcon(action: 'attack' | Defence, blow: Blow | null, escaped
   const landed = blow?.hit === true
   switch (action) {
     case 'attack':
-      return landed ? { icon: LANDED, word: 'hit' } : { icon: NOTHING, word: 'missed' }
+      return landed ? { icon: landedIcon(blow), word: 'hit' } : { icon: NOTHING, word: 'missed' }
     case 'defend':
       // The words read from the ATTACKER, because the pill does: the monster
       // is the subject on every one of these and the player's choice is the
@@ -91,10 +103,10 @@ function playerActionIcon(action: 'attack' | Defence, blow: Blow | null, escaped
     case 'dodge':
       return { icon: NOTHING, word: 'was dodged by' }
     case 'takeTheHit':
-      return { icon: LANDED, word: 'hit' }
+      return { icon: landedIcon(blow), word: 'hit' }
     case 'flee':
       if (escaped) return { icon: FLED, word: 'lost' }
-      return landed ? { icon: LANDED, word: 'caught' } : { icon: NOTHING, word: 'missed' }
+      return landed ? { icon: landedIcon(blow), word: 'caught' } : { icon: NOTHING, word: 'missed' }
   }
 }
 
@@ -299,6 +311,22 @@ export function spellPill(
     ...spell.lines,
     ...detail,
   ])
+}
+
+/** Poison's own mark. One glyph for both directions; the pill says which. */
+const POISON = 'fa-solid fa-skull-crossbones'
+
+/**
+ * POISON BITING when the round turns over, in the same four-part shape every
+ * other pill has. `source` is who LAID it, so the arrow points the way the
+ * damage travels and a poisonous monster reads as the subject of its own
+ * sentence.
+ */
+export function poisonPill(monster: Monster, damage: number, source: 'player' | 'monster'): string {
+  const detail = ['Poison, paid at the end of every round', 'Armor does not see it']
+  return source === 'player'
+    ? pill(PLAYER, 'you', { icon: POISON, word: 'poisoned' }, damage, monsterIcon(monster), 'it', detail)
+    : pill(monsterIcon(monster), 'it', { icon: POISON, word: 'poisoned' }, damage, PLAYER, 'you', detail)
 }
 
 /**

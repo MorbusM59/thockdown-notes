@@ -40,11 +40,12 @@ import {
 } from '../model/spells'
 import { charmCheckChance, charmsOf, interceptMonsterAction, rollCharms } from '../model/charm'
 import { rewardFor } from '../model/rewards'
+import { poisonDamage } from '../model/tactics'
 import { damageFrom } from '../model/monsters'
 import { PREPARE_ICON, prepareLines, resolvePreparedAttack } from '../model/prepare'
 import {
-  blowDetail, charmPill, charmStatusPill, killPill, monsterAttackPill, playerAttackPill, preparePill,
-  ripostePill, spellPill, statusPill, stunPill,
+  blowDetail, charmPill, charmStatusPill, killPill, monsterAttackPill, playerAttackPill, poisonPill,
+  preparePill, ripostePill, spellPill, statusPill, stunPill,
 } from './combatLog'
 import type { Monster } from '../model/monsters'
 import { monsterFor, monsterName, offerFromJson, offerToJson } from './encounter'
@@ -80,7 +81,7 @@ export function defenceRank(defence: Defence, move: { id: string } | null): numb
   return move ? 1 : 2
 }
 
-const ATTACK_ICON = 'fa-solid fa-burst'
+const ATTACK_ICON = 'fa-solid fa-gavel'
 
 const PREPARE_CHOICE = 'combat:prepare'
 
@@ -453,6 +454,37 @@ function actingProfile(context: StageContext, round: RoundState, monster: Monste
 const MAX_AUTOMATIC_STEPS = 64
 
 /**
+ * WHAT POISON TAKES when the round turns over, from both sides at once.
+ *
+ * The pool belongs to whoever LAID it and is owed by the other, which is why
+ * the player's tally pays the monster and vice versa. It is not spent by
+ * paying: a poisoned thing stays poisoned and is bitten again next round,
+ * which is what makes landing often compound (model/tactics.ts).
+ *
+ * Pure, and hands back pills rather than writing any: this is the stage's
+ * own step, and a stage never writes.
+ */
+function payPoison(
+  round: RoundState,
+  monster: Monster,
+): { round: RoundState; pills: string[]; damage: number } {
+  const onMonster = poisonDamage(round.tallies.player)
+  const onPlayer = poisonDamage(round.tallies.monster)
+  let next = round
+  const pills: string[] = []
+  if (onMonster > 0) {
+    next = { ...next, monsterDamageTaken: next.monsterDamageTaken + onMonster }
+    pills.push(poisonPill(monster, onMonster, 'player'))
+  }
+  if (onPlayer > 0) {
+    next = { ...next, playerHitPoints: Math.max(0, next.playerHitPoints - onPlayer) }
+    pills.push(poisonPill(monster, onPlayer, 'monster'))
+  }
+  // Newest first, as every other end-of-round payout reads.
+  return { round: next, pills: pills.reverse(), damage: Math.max(onMonster, onPlayer) }
+}
+
+/**
  * A ROUND OPENS: its hand is dealt, and the log is cut back to what is true
  * of the new round.
  *
@@ -645,6 +677,30 @@ function stepFight(options: {
     }
 
     if (status === 'roundOver') {
+      // POISON IS PAID FIRST, before the lingering spells and before anything
+      // asks where the fight stands: it is owed for the round that just
+      // finished, and a monster that dies of it died this round rather than
+      // at the head of the next one. Both sides are paid out, because a
+      // poisonous species is expressible and a rule written for one side only
+      // is the failure the vectors were separated to end.
+      //
+      // PAID IN ONE PASS AND NEVER RE-ENTERED. It is applied here and the
+      // branch falls THROUGH to the turnover below rather than `continue`-ing
+      // like the spell ticks do -- a poison pool is not spent by paying out,
+      // so a second pass over this branch would bite again for the same
+      // round, and again, for as long as the fight lasted. The one case that
+      // does go back round the loop is a bite that ENDED the fight, where
+      // going back is what reports the kill instead of opening a round nobody
+      // will play.
+      const bitten = payPoison(round, monster)
+      if (bitten.pills.length > 0) {
+        round = bitten.round
+        carried = [...bitten.pills, ...carried]
+        log = [...bitten.pills, ...log]
+        struck = bitten.damage
+        if (!derived || combatStatus(round, monster, derived) !== 'roundOver') continue
+      }
+
       // THE END OF A ROUND IS AN EVENT, not merely a boundary: the lingering
       // spells pay out here (model/spells.ts) and either of them can finish
       // the fight -- so they land before anything asks where the fight stands

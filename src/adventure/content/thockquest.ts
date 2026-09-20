@@ -170,7 +170,8 @@ const TRAITS: readonly ModifierTemplate[] = [
     name: 'Patient Hunter',
     icon: 'fa-solid fa-crosshairs',
     derived: ['hitChance', 'critChance'],
-    verbose: ['desperate', 'finisher'],
+    // MARK: a patient hunter opens well and closes on it.
+    verbose: ['desperate', 'finisher', 'mark'],
   },
   {
     id: 'duelists-read',
@@ -316,7 +317,8 @@ const TRAITS: readonly ModifierTemplate[] = [
     name: 'Scar Tissue',
     icon: 'fa-solid fa-bandage',
     derived: ['maxHitPoints', 'dodgeChance'],
-    verbose: ['desperate', 'finisher'],
+    // THORNS: scar tissue is armour that hurts to hit, said as a rule.
+    verbose: ['desperate', 'finisher', 'thorns'],
     armor: true,
   },
   {
@@ -349,7 +351,10 @@ const TRAITS: readonly ModifierTemplate[] = [
     name: 'Cold Blooded',
     icon: 'fa-solid fa-snowflake',
     derived: ['critChance', 'hitChance'],
-    verbose: ['finisher', 'opener', 'hale'],
+    // SETUP: cold-blooded is the disposition that finishes what it
+    // started, which is what "the fight's first blow is added to every
+    // blow against a maimed foe" says as a rule.
+    verbose: ['finisher', 'opener', 'hale', 'setup'],
   },
   {
     id: 'lucky-streak',
@@ -381,7 +386,10 @@ const TRAITS: readonly ModifierTemplate[] = [
     name: 'Pit Fighter',
     icon: 'fa-solid fa-khanda',
     derived: ['damageMultiplier', 'dodgeChance'],
-    verbose: ['finisher', 'desperate'],
+    // COMBO lives here because a pit fighter is a character who gets
+    // going: the rule pays for a long round, and this is the trait about
+    // long rounds. ONE LINE IS THE WHOLE OF GIVING A THING A TACTIC.
+    verbose: ['finisher', 'desperate', 'combo'],
   },
 ]
 
@@ -422,7 +430,9 @@ const ITEMS: readonly ModifierTemplate[] = [
     icon: 'fa-solid fa-shield-halved',
     stats: ['might'],
     derived: ['dodgeChance', 'damageMultiplier'],
-    verbose: ['ward', 'finisher', 'hale'],
+    // COUNTER: a buckler is a parrying shield, and parrying is answering
+    // a blow with one of your own.
+    verbose: ['ward', 'finisher', 'hale', 'counter'],
     armor: true,
   },
   {
@@ -628,7 +638,8 @@ const ITEMS: readonly ModifierTemplate[] = [
     icon: 'fa-solid fa-flask',
     stats: ['intellect', 'luck'],
     derived: ['damageMultiplier', 'critChance'],
-    verbose: ['desperate', 'finisher'],
+    // POISON: the phial is what a poisoner carries.
+    verbose: ['desperate', 'finisher', 'poison'],
   },
   {
     id: 'iron-knuckles',

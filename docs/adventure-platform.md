@@ -2398,3 +2398,88 @@ placed at 5, 9 and 10 and the level advancing after ten.
      stack refills costs nothing. The start screen it puts up offers a NEW run
      rather than a resume, because `hasSuspendedRun` is read off the stack the
      wipe emptied.
+
+111. **SIX RULES ABOUT A FIGHT'S SHAPE** (`model/tactics.ts`), which is a
+     different question from every stat that came before it. A stat, a derived
+     value and a chance all answer "how good is this character at what they
+     are doing"; these answer "what does the ORDER of what happens make true".
+     Combo pays for a long round, Mark for opening well, Setup for opening
+     well against something that will later be nearly dead, Poison for landing
+     often, Counter for being attacked, and Thorns for being hit while
+     armoured — so each one is a BUILD the content can now point at.
+
+     **ONE KIND, NOT SIX.** Every one of them is a single percentage, banked
+     ADDITIVELY across everything held (the standing rule that an active
+     effect stacks — Combo 5 and Combo 3 is Combo 8), and read at exactly one
+     named moment. So there is one effect kind, `tactic`, one `Tactics` record
+     on the profile, and the moments are FUNCTIONS in one module —
+     `blowDamageWith`, `tallyAfterBlow`, `poisonDamage`, `thornsRecoil` —
+     rather than six special cases grown inside two resolvers that were
+     already the longest thing in the model. Deliberately NOT `derivedPercent`:
+     these do not scale a quantity the stat table derives, they add a rule the
+     fight did not have, and folding them in would make `deriveStats` answer
+     for six things no stat block implies.
+
+     **THE TALLY IS PER SIDE**, and that is the whole cost of keeping them
+     symmetric: a monster's species can be poisonous or thorned, and a rule
+     written for one side and not its sibling is this codebase's characteristic
+     failure. `Monster` carries `tactics` off its own resolved profile, the
+     same way it carries `chances`.
+
+     **TWO OF ITS FOUR NUMBERS RESET AND TWO CARRY**, and `talliesIntoRound` is
+     the one place that says which: `strikes` and `firstBlow` are within-round
+     by definition (Combo builds and is gone; Mark pairs the round's first with
+     its last), while `poison` and `openingBlow` are not (a poisoned thing
+     stays poisoned; Setup names the first blow of the FIGHT).
+
+     **POISON IS PAID IN ONE PASS AND THE BRANCH FALLS THROUGH.** The spell
+     ticks beside it `continue` back round the loop; poison cannot, because a
+     poison pool is NOT spent by paying out — a second pass would bite again
+     for the same round, and again, for as long as the fight lasted. The one
+     case that does go back round is a bite that ENDED the fight, where going
+     back is what reports the kill instead of opening a round nobody will play.
+
+     **THORNS IS READ INSIDE THE EXCHANGE** and nowhere else, because the
+     absorb is what triggers it: reaching that line means armour was consulted
+     and stopped something, which nothing outside `resolveExchange` knows. It
+     reads the pool AFTER the wear (what throws the blow back is what is still
+     standing) and with the guard still in it (a defensive move's shield is
+     armour for exactly this blow, so it is armour to the thing that just hit
+     it). `Blow` gained a `recoil` for it, which the two resolvers take off the
+     ATTACKER.
+
+     **COUNTER IS THE RIPOSTE'S TERMS WITH A DIFFERENT TRIGGER**: no action
+     spent (the choice was already paid for), not resolved from the floor, and
+     answered by nothing. A riposte belongs to one defensive MOVE; a counter
+     answers ANY defensive action, which is what makes it a build rather than
+     a class feature. It is an attack, so it feeds Combo and Poison.
+
+     **EACH IS AN ORDINARY VERBOSE SLOT** (`VerboseId`), so giving a thing a
+     tactic is ONE LINE in its template's `verbose` list and nothing else —
+     which is the whole point, and how the six are meant to be tuned by hand.
+     `TACTIC_RANGES` is the one table of what each may roll, and they differ
+     widely because the six pay out at very different rates: Combo is
+     multiplied by every strike already taken, Thorns by a whole armour pool,
+     Counter buys an entire extra attack, so Combo 3-8 and Counter 25-60 are
+     the same size of gift. Seeded: Pit Fighter has Combo, Glass Phial Poison,
+     Patient Hunter Mark, Cold-Blooded Setup, Iron Buckler Counter, Scar Tissue
+     Thorns. A seventh tactic is a line in the union, a line in the range table
+     and a line in one template.
+
+     **THE CONCISE DESCRIPTION IS THE DESIGN'S OWN NOTATION**, `Combo (5)`, and
+     the six names are therefore proper nouns — `descriptionFormat.contract.test.ts`
+     reads them out of `TACTIC_LABELS` rather than keeping a second list, the
+     same argument as `MOVE_TERMS`.
+
+     **THE SIM COULD NOT MEASURE THIS EITHER** (entry 109): 94-98% death before
+     and after, identical rounds per fight. Held by `tactics.test.ts` as
+     properties instead — Combo over five strikes rather than at the second,
+     Poison across a round boundary, Mark forgetting its opener where Setup
+     keeps it.
+
+112. **THE BURST IS THE CRIT'S NOW, and an ordinary hit is a gavel.** One mark
+     stood for both, so a reader scanning a round's pills could not see where
+     it turned without reading the figures — and with a whole build now able to
+     be about crits, that is the thing most worth seeing. `landedIcon` is the
+     one place that chooses, so the attack cell, the log and every defence that
+     resolves into a landed blow move together.

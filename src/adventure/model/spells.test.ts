@@ -290,6 +290,10 @@ describe('a round survives the disk', () => {
       storming: 3,
       igniteStacks: 3,
       prepared: 1,
+      tallies: {
+        player: { strikes: 2, firstBlow: 9, openingBlow: 7, poison: 1.5 },
+        monster: { strikes: 1, firstBlow: 4, openingBlow: 4, poison: 0.5 },
+      },
     }
     expect(roundFromJson(JSON.parse(JSON.stringify(roundToJson(round))))).toEqual(round)
   })

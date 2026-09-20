@@ -16,6 +16,11 @@
 // rates are unwritten (open question 45).
 
 import { absorb, type Armor, type ArmorPiece } from './armor'
+import { inHealthBand } from './health'
+import {
+  NO_TACTICS, NO_TALLIES, NO_TALLY, blowDamageWith, talliesIntoRound, tallyAfterBlow, thornsRecoil,
+  type SideTally, type Tactics, type Tallies,
+} from './tactics'
 import { rollAttackDamage } from './damageRoll'
 import type { JsonObject, JsonValue } from '../core/json'
 import { NO_SPELLS } from './spellReach'
@@ -97,6 +102,13 @@ export interface RoundState {
   igniteStacks: number
   /** Preparations banked. The next ATTACK spends them all, at once. */
   prepared: number
+
+  /**
+   * WHAT EACH SIDE HAS DONE, which is everything the six tactics read
+   * (model/tactics.ts). Two of its four numbers reset when the round turns
+   * over and two carry; `talliesIntoRound` is the one place that says which.
+   */
+  tallies: Tallies
 }
 
 /**
@@ -117,6 +129,10 @@ export function roundToJson(round: RoundState): JsonObject {
       pieces: round.playerArmor.pieces.map((piece) => ({ ...piece })),
     },
     charms: [...round.charms],
+    tallies: {
+      player: { ...round.tallies.player },
+      monster: { ...round.tallies.monster },
+    },
   }
 }
 
@@ -132,6 +148,20 @@ function pieceFromJson(value: unknown): ArmorPiece | null {
     max,
     points: Math.max(0, Math.min(max, Math.floor(num('points')))),
   }
+}
+
+/** One side's tally as written. Anything unreadable is a side that has done nothing. */
+function tallyFromJson(value: unknown): SideTally {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return NO_TALLY
+  const row = value as Record<string, unknown>
+  const num = (key: string) => (typeof row[key] === 'number' && Number.isFinite(row[key]) ? Math.max(0, row[key] as number) : 0)
+  return { strikes: num('strikes'), firstBlow: num('firstBlow'), openingBlow: num('openingBlow'), poison: num('poison') }
+}
+
+function talliesFromJson(value: unknown): Tallies {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return NO_TALLIES
+  const row = value as Record<string, unknown>
+  return { player: tallyFromJson(row.player), monster: tallyFromJson(row.monster) }
 }
 
 /** A stack count as written, tolerating the BOOLEAN these three used to be. */
@@ -180,6 +210,10 @@ export function roundFromJson(value: JsonValue | undefined): RoundState {
     storming: stacksOf(row.storming),
     igniteStacks: stacksOf(row.igniteStacks),
     prepared: stacksOf(row.prepared),
+    // A save from before the tactics reads as a fight where nobody has done
+    // anything yet, which is the only honest answer: what each side had
+    // already struck is not recoverable from anything else in the round.
+    tallies: talliesFromJson(row.tallies),
   }
 }
 
@@ -203,6 +237,7 @@ export const UNTOUCHED_FIGHT = {
   storming: 0,
   igniteStacks: 0,
   prepared: 0,
+  tallies: NO_TALLIES,
 }
 
 export function beginRound(previous: Omit<RoundState, 'playerActionsSpent' | 'monsterActionsSpent'>): RoundState {
@@ -211,7 +246,24 @@ export function beginRound(previous: Omit<RoundState, 'playerActionsSpent' | 'mo
   // a checkpoint. What a round GRANTS -- its spell reach and its charms -- is
   // rolled by the caller and handed in here, because rolling is not this
   // function's business and it takes no rng.
-  return { ...previous, roundNumber: previous.roundNumber + 1, playerActionsSpent: 0, monsterActionsSpent: 0 }
+  return {
+    ...previous,
+    roundNumber: previous.roundNumber + 1,
+    playerActionsSpent: 0,
+    monsterActionsSpent: 0,
+    // Combo and Mark are explicitly within-round rules and the other two are
+    // not; `talliesIntoRound` holds that split rather than this function.
+    tallies: talliesIntoRound(previous.tallies),
+  }
+}
+
+/**
+ * Whether a side is in the maimed band, which is the only health question the
+ * tactics ask. Stated here rather than at each call site so the two sides
+ * cannot end up reading different thirds -- `model/health.ts` owns the line.
+ */
+function isMaimed(hitPointsLeft: number, maxHitPoints: number): boolean {
+  return inHealthBand(hitPointsLeft / Math.max(1, maxHitPoints), 'maimed')
 }
 
 export function playerActionsLeft(state: RoundState, playerDerived: DerivedStats): number {
@@ -330,6 +382,8 @@ export interface Blow {
   damage: number
   /** Whether this blow cost the defender a point of item armor. */
   armorDecayed: boolean
+  /** What the defender's Thorns threw back at the attacker, if any. */
+  recoil: number
   math: BlowMath
 }
 
@@ -369,6 +423,13 @@ interface ExchangeInput {
   ignoreArmor?: boolean
   /** Extra flat armour for this blow only, from a defensive move. Natural, so nothing decays it. */
   guard?: number
+  /**
+   * The DEFENDER's tactics. Only Thorns is read here, and it has to be read
+   * here because the absorb is what triggers it: the recoil is a share of the
+   * pool that actually stopped something, which nothing outside this function
+   * knows happened.
+   */
+  defenderTactics?: Tactics
   dodgeOffered: boolean
   /** The defender's dodge offer, where the caller rolled one, for the working. */
   dodgeRoll?: Roll | null
@@ -392,7 +453,7 @@ export function resolveExchange(input: ExchangeInput): { blow: Blow; armor: Armo
 
   if (input.defence === 'dodge') {
     return {
-      blow: { hit: false, crit: false, dodged: true, damage: 0, armorDecayed: false, math },
+      blow: { hit: false, crit: false, dodged: true, damage: 0, armorDecayed: false, recoil: 0, math },
       armor,
       rng: input.rng,
     }
@@ -415,7 +476,7 @@ export function resolveExchange(input: ExchangeInput): { blow: Blow; armor: Armo
   }
   if (!landed) {
     return {
-      blow: { hit: false, crit: false, dodged: false, damage: 0, armorDecayed: false, math },
+      blow: { hit: false, crit: false, dodged: false, damage: 0, armorDecayed: false, recoil: 0, math },
       armor,
       rng,
     }
@@ -462,7 +523,7 @@ export function resolveExchange(input: ExchangeInput): { blow: Blow; armor: Armo
   // because it is still on the defender and simply did not help.
   if (input.defence !== 'defend' || input.ignoreArmor) {
     return {
-      blow: { hit: true, crit: critRoll.value.passed, dodged: false, damage: raw, armorDecayed: false, math },
+      blow: { hit: true, crit: critRoll.value.passed, dodged: false, damage: raw, armorDecayed: false, recoil: 0, math },
       armor,
       rng,
     }
@@ -475,6 +536,15 @@ export function resolveExchange(input: ExchangeInput): { blow: Blow; armor: Armo
     ? { ...armor, natural: armor.natural + input.guard }
     : armor
   const absorbed = absorb(guarded, raw, input.defenderStats.luck, rng)
+  // THORNS answers the absorb and nothing else -- reaching this line at all
+  // means armour was consulted and stopped something, which is the condition
+  // the design states. Read off the pool AFTER the wear, because what throws
+  // the blow back is what is still standing there. The guard is still in the
+  // pool at this point, deliberately: a defensive move's shield is armour for
+  // exactly this blow, so it is armour to the thing that just hit it.
+  const recoil = absorbed.absorbed > 0
+    ? thornsRecoil(input.defenderTactics ?? NO_TACTICS, absorbed.armor)
+    : 0
   return {
     blow: {
       hit: true,
@@ -482,6 +552,7 @@ export function resolveExchange(input: ExchangeInput): { blow: Blow; armor: Armo
       dodged: false,
       damage: absorbed.damage,
       armorDecayed: absorbed.decayed,
+      recoil,
       math: { ...math, absorbed: absorbed.absorbed },
     },
     // The guard is TAKEN BACK OUT of what is stored. It was this turn's
@@ -541,13 +612,20 @@ export function resolvePlayerAttack(options: {
   successAdjust?: number
   /** The armed class move, or null for an ordinary attack. */
   move?: CombatMove | null
+  /** The player's six fight-shape rules (model/tactics.ts). */
+  playerTactics?: Tactics
+  /** Whether this action is the round's last, which is the only thing Mark needs. */
+  isLastOfRound?: boolean
   rng: RngState
 }): { state: RoundState; blow: Blow; blows: Blow[]; rng: RngState } {
   const move = options.move ?? null
   const chances = withMoveShares(options.playerChances, move)
   const nominal = damageFrom(options.playerDerived.damageMultiplier) * damageShareOf(move)
+  const tactics = options.playerTactics ?? NO_TACTICS
   let rng = options.rng
   let taken = 0
+  let tally = options.state.tallies.player
+  let recoiled = 0
   const blows: Blow[] = []
 
   for (let strike = 0; strike < strikesOf(move); strike += 1) {
@@ -560,9 +638,21 @@ export function resolvePlayerAttack(options: {
       successAdjust: options.successAdjust,
       rng,
     })
+    // PER STRIKE, not per action: a multi-strike move is a whole exchange
+    // each, so each of its blows both reads the combo and adds to it.
+    const swung = blowDamageWith({
+      nominal,
+      tactics,
+      tally,
+      isLastOfRound: options.isLastOfRound === true,
+      targetIsMaimed: isMaimed(
+        options.monster.maxHitPoints - (options.state.monsterDamageTaken + taken),
+        options.monster.maxHitPoints,
+      ),
+    })
     const exchange = resolveExchange({
       attackerStats: options.playerStats,
-      attackerDamage: nominal,
+      attackerDamage: swung,
       defenderStats: options.monster.stats,
       // The monster's own plate, in the natural pool -- so `absorb` reduces the
       // blow and has nothing it is allowed to wear away (model/armor.ts). There
@@ -576,16 +666,23 @@ export function resolvePlayerAttack(options: {
       ignoreArmor: move?.ignoresArmor,
       dodgeOffered: offered.offered,
       dodgeRoll: offered.roll,
+      // The MONSTER is the defender here, so its Thorns is what answers.
+      defenderTactics: options.monster.tactics,
       rng: offered.rng,
     })
     rng = exchange.rng
     taken += exchange.blow.damage
+    recoiled += exchange.blow.recoil
+    tally = tallyAfterBlow(tally, tactics, exchange.blow.damage)
     blows.push(exchange.blow)
   }
 
   return {
     state: {
       ...options.state,
+      tallies: { ...options.state.tallies, player: tally },
+      // Thorns comes off the ATTACKER, which here is the player.
+      playerHitPoints: options.state.playerHitPoints - recoiled,
       playerActionsSpent: options.state.playerActionsSpent + 1,
       // A STUN IS A SPENT ACTION on the other side's clock, which is the unit
       // a round already counts in -- so nothing had to learn a new kind of
@@ -658,6 +755,12 @@ export function resolveMonsterAttack(options: {
   monsterMove?: CombatMove | null
   /** The player's stats as their modifiers leave them, for a riposte's damage. */
   playerDamage?: number
+  /** The PLAYER's fight-shape rules: theirs is the Counter and the Thorns here. */
+  playerTactics?: Tactics
+  /** The player's full health, so Setup can ask whether the player is maimed. */
+  playerMaxHitPoints?: number
+  /** Whether this action is the round's last, which is the only thing Mark needs. */
+  isLastOfRound?: boolean
   rng: RngState
 }): {
   state: RoundState
@@ -666,6 +769,8 @@ export function resolveMonsterAttack(options: {
   blows: Blow[]
   /** What the player's defensive move struck back for, if it did. */
   riposte: Blow | null
+  /** What the player's Counter struck back for, if they hold any. */
+  counter: Blow | null
   escaped: boolean
   pursuit: Roll | null
   rng: RngState
@@ -686,13 +791,27 @@ export function resolveMonsterAttack(options: {
     rng = chase.rng
     pursuit = chase.value
     if (!chase.value.passed) {
-      return { state: { ...spent, playerFled: true }, blow: null, blows: [], riposte: null, escaped: true, pursuit, rng }
+      return {
+        state: { ...spent, playerFled: true },
+        blow: null, blows: [], riposte: null, counter: null, escaped: true, pursuit, rng,
+      }
     }
   }
 
   const monsterMove = options.monsterMove ?? null
   const defenceMove = options.defenceMove ?? null
-  const nominal = options.monster.damage * damageShareOf(monsterMove)
+  const playerTactics = options.playerTactics ?? NO_TACTICS
+  const monsterTactics = options.monster.tactics
+  let monsterTally = options.state.tallies.monster
+  const nominalBase = options.monster.damage * damageShareOf(monsterMove)
+  const playerMax = options.playerMaxHitPoints ?? Math.max(1, options.state.playerHitPoints)
+  const nominal = blowDamageWith({
+    nominal: nominalBase,
+    tactics: monsterTactics,
+    tally: monsterTally,
+    isLastOfRound: options.isLastOfRound === true,
+    targetIsMaimed: isMaimed(options.state.playerHitPoints, playerMax),
+  })
   const monsterChances = withMoveShares(
     { hitChance: options.monster.chances.hitChance, critChance: options.monster.chances.critChance },
     monsterMove,
@@ -700,6 +819,7 @@ export function resolveMonsterAttack(options: {
 
   let armor = options.state.playerArmor
   let hurt = 0
+  let recoiled = 0
   const blows: Blow[] = []
   for (let strike = 0; strike < strikesOf(monsterMove); strike += 1) {
     const exchange = resolveExchange({
@@ -718,11 +838,15 @@ export function resolveMonsterAttack(options: {
       guard: defenceMove?.guard,
       dodgeOffered: options.defence === 'dodge',
       dodgeRoll: options.dodgeRoll,
+      // The PLAYER is the defender here, so their Thorns is what answers.
+      defenderTactics: playerTactics,
       rng,
     })
     rng = exchange.rng
     armor = exchange.armor
     hurt += exchange.blow.damage
+    recoiled += exchange.blow.recoil
+    monsterTally = tallyAfterBlow(monsterTally, monsterTactics, exchange.blow.damage)
     blows.push(exchange.blow)
   }
 
@@ -757,8 +881,62 @@ export function resolveMonsterAttack(options: {
     state = { ...state, monsterDamageTaken: state.monsterDamageTaken + back.blow.damage }
   }
 
+  // COUNTER, on the same terms as the riposte above and for the same reason:
+  // the player already spent the choice, so the free swing costs no action,
+  // and a corpse does not swing. The difference is what triggers it -- a
+  // riposte belongs to one defensive MOVE, a counter answers ANY defensive
+  // action, which is what makes it a build rather than a class feature.
+  let counter: Blow | null = null
+  if (playerTactics.counter > 0 && state.playerHitPoints > 0 && !state.playerFled) {
+    let playerTally = state.tallies.player
+    const swung = blowDamageWith({
+      nominal: (options.playerDamage ?? 0) * playerTactics.counter,
+      tactics: playerTactics,
+      tally: playerTally,
+      // A counter is never the round's opener or its closer -- it is not an
+      // action, so it has no position of its own to read Mark against.
+      isLastOfRound: false,
+      targetIsMaimed: isMaimed(
+        options.monster.maxHitPoints - state.monsterDamageTaken,
+        options.monster.maxHitPoints,
+      ),
+    })
+    const struck = resolveExchange({
+      attackerStats: options.playerStats,
+      attackerDamage: swung,
+      defenderStats: options.monster.stats,
+      armor: options.monster.armor,
+      attacker: 'player',
+      successAdjust: options.successAdjust,
+      // Answered by nothing, the same as a riposte: the monster is busy
+      // having attacked.
+      defence: 'none',
+      dodgeOffered: false,
+      defenderTactics: monsterTactics,
+      rng,
+    })
+    rng = struck.rng
+    counter = struck.blow
+    // It is an ATTACK, so it feeds Combo and Poison like any other.
+    playerTally = tallyAfterBlow(playerTally, playerTactics, struck.blow.damage)
+    state = {
+      ...state,
+      monsterDamageTaken: state.monsterDamageTaken + struck.blow.damage,
+      playerHitPoints: Math.max(0, state.playerHitPoints - struck.blow.recoil),
+      tallies: { ...state.tallies, player: playerTally },
+    }
+  }
+
+  state = {
+    ...state,
+    tallies: { ...state.tallies, monster: monsterTally },
+    // The player's own Thorns came off the monster while it was attacking.
+    monsterDamageTaken: state.monsterDamageTaken + recoiled,
+  }
+
   return {
     state,
+    counter,
     blow: blows[0] ?? null,
     blows,
     riposte,
