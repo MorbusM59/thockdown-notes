@@ -3,6 +3,7 @@ import { THOCKQUEST, validateContent } from '../content'
 import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from './director'
 import { emptySave, profileOf, type GameSave } from '../model/gameState'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
+import { CHARACTER_CREATION_STAGE_ID } from '../stages/ids'
 import { MAX_STAGE_CHOICES } from './screen'
 import { STAT_KEYS } from '../model/stats'
 import { BASE_PLAYER_TIER } from '../model/vectors'
@@ -20,8 +21,9 @@ function start(seed = 4242): GameSave {
 }
 
 /** The bar's whole strip as one string -- newest entry first, as it reads. */
-function narrationOf(save: GameSave): string {
-  return screenOf(save).narration.join(' ')
+/** Which stage the run is sitting on. What names a screen, where prose does not. */
+function stageOf(save: GameSave): string {
+  return screenOf(save).stageId
 }
 
 function screenOf(save: GameSave) {
@@ -203,11 +205,17 @@ describe('the promises the platform is built on', () => {
 
 describe('a game, played', () => {
   it('runs from the welcome screen to an encounter, carrying what was chosen', () => {
+    // BY STAGE, NOT BY PROSE. This walked the run by quoting each screen's
+    // prompt, so an edit to the copy failed it -- which is what happened to
+    // "What shape are you?" the moment the intro lines were made concise.
+    // What the test is actually about is the ROUTE, and a stage id is what
+    // names a screen; the wording is the author's to change without asking a
+    // test's permission.
     let save = start(2024)
-    expect(narrationOf(save)).toContain('What would you like to do?')
+    expect(stageOf(save)).toBe(ROOT_STAGE_ID)
 
     save = choose(save, 'welcome:start', DEPS, NOW).save
-    expect(narrationOf(save)).toContain('What shape are you?')
+    expect(stageOf(save)).toBe(CHARACTER_CREATION_STAGE_ID)
     expect(save.activeGameId).not.toBeNull()
 
     // THE THREE VECTOR SCREENS, in order: build, species, class.
@@ -224,18 +232,18 @@ describe('a game, played', () => {
     // in: five points, split by whatever build was dealt and taken.
     const spread = profileOf(save, game()!, THOCKQUEST).stats
     expect(STAT_KEYS.reduce((sum, key) => sum + spread[key], 0)).toBe(BASE_PLAYER_TIER)
-    expect(narrationOf(save)).toContain('And what are you?')
+    expect(stageOf(save)).toBe(CHARACTER_CREATION_STAGE_ID)
 
     save = choose(save, firstStageChoiceId(save), DEPS, NOW).save
     expect(game()?.speciesId).not.toBeNull()
-    expect(narrationOf(save)).toContain('when it comes to blows')
+    expect(stageOf(save)).toBe(CHARACTER_CREATION_STAGE_ID)
 
     save = choose(save, firstStageChoiceId(save), DEPS, NOW).save
     expect(game()?.classId).not.toBeNull()
-    expect(narrationOf(save)).toContain('What are you known for?')
+    expect(stageOf(save)).toBe(CHARACTER_CREATION_STAGE_ID)
 
     save = choose(save, firstStageChoiceId(save), DEPS, NOW).save
-    expect(narrationOf(save)).toContain('never leave home without')
+    expect(stageOf(save)).toBe(CHARACTER_CREATION_STAGE_ID)
 
     save = choose(save, firstStageChoiceId(save), DEPS, NOW).save
     expect(screenOf(save).stageId).toBe('regionSelect')
