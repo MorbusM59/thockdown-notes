@@ -238,6 +238,27 @@ describe('an attack spends exactly one action', () => {
     expect(theirs.state.monsterActionsSpent).toBe(1)
     expect(theirs.state.playerActionsSpent).toBe(0)
   })
+
+  it('applies a defensive steal to the monster action pool', () => {
+    const foe = monster()
+    const result = resolveMonsterAttack({
+      state: freshRound(),
+      monster: foe,
+      playerStats: PLAYER,
+      defence: 'defend',
+      defenceMove: {
+        id: 'test:stun',
+        name: 'Stun',
+        icon: 'fa-solid fa-bolt',
+        replaces: 'defend',
+        when: { kind: 'always' },
+        stealsActions: 2,
+      },
+      rng: 11,
+    })
+    expect(result.state.monsterActionsSpent).toBe(3)
+    expect(result.state.playerActionsSpent).toBe(0)
+  })
 })
 
 /**

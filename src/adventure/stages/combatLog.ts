@@ -99,7 +99,9 @@ function playerActionIcon(action: 'attack' | Defence, blow: Blow | null, escaped
       // The words read from the ATTACKER, because the pill does: the monster
       // is the subject on every one of these and the player's choice is the
       // verb's shape. "it blocked you" said the opposite of what happened.
-      return landed ? { icon: DEFENDED, word: 'got through' } : { icon: NOTHING, word: 'missed' }
+      // When the monster misses, the defence still owns the pill -- the miss is
+      // in the word slot instead of a number in the damage slot.
+      return landed ? { icon: DEFENDED, word: 'got through' } : { icon: DEFENDED, word: 'missed' }
     case 'dodge':
       return { icon: NOTHING, word: 'was dodged by' }
     case 'takeTheHit':

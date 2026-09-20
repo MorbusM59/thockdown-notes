@@ -498,9 +498,9 @@ function payPoison(
  * `present` is handed no rng, deliberately (core/stage.ts).
  *
  * The log becomes the status pill, then the charm pill if the round is under
- * anything, then whatever the last round's closing carried over. Newest
- * first: what is true of this round leads, and what happened at the end of
- * the last one reads behind it.
+ * anything, then the last action that closed the round, then whatever the
+ * last round's closing carried over. Newest first: what is true of this
+ * round leads, and what ended it reads behind it.
  */
 function openedRound(
   previous: RoundState,
@@ -737,7 +737,12 @@ function stepFight(options: {
       // restored whatever the player answers, so the only thing it could
       // report was that time had passed, which the status pill now says
       // without spending a press.
-      const opened = openedRound(round, monster, context, rng, carried)
+      //
+      // The action that actually closed the round is kept behind the new head
+      // pill so the bar still reads what ended the previous round, not just the
+      // start of the next one.
+      const closingAction = log[0] ?? null
+      const opened = openedRound(round, monster, context, rng, closingAction ? [closingAction, ...carried] : carried)
       round = opened.round
       log = opened.log
       rng = opened.rng

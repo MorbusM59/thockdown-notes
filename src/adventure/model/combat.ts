@@ -851,7 +851,10 @@ export function resolveMonsterAttack(options: {
   let state: RoundState = {
     ...spent,
     // A monster's stun costs the PLAYER actions, the mirror of the player's own.
+    // A defensive move can steal the MONSTER's actions as well, and it is
+    // the defender's own action that is paying for that choice.
     playerActionsSpent: spent.playerActionsSpent + (monsterMove?.stealsActions ?? 0),
+    monsterActionsSpent: spent.monsterActionsSpent + (defenceMove?.stealsActions ?? 0),
     playerHitPoints: Math.max(0, spent.playerHitPoints - hurt),
     playerArmor: armor,
   }

@@ -109,6 +109,13 @@ describe('a combat pill', () => {
       .toBe('it lost you')
   })
 
+  it('keeps the defend pill when the monster misses, with the miss in the word slot', () => {
+    const pill = monsterAttackPill(monsterOf('regular'), 'defend', MISS, false)
+    expect(glyphs(pill)).toEqual(['fa-solid fa-skull', 'fa-solid fa-shield', 'fa-solid fa-user-shield'])
+    expect(figures(pill)).toEqual([])
+    expect(narrationText(parseNarration(lineOf(pill)))).toBe('it missed you')
+  })
+
   it('says a dodge with the glyph for "nothing arrived", and no figure', () => {
     const pill = monsterAttackPill(monsterOf('regular'), 'dodge', { ...MISS, dodged: true }, false)
     expect(glyphs(pill)[1]).toBe('fa-solid fa-wind')
@@ -201,6 +208,27 @@ describe('a round, as the bar tells it', () => {
     expect(after).toHaveLength(before.length + 1)
     expect(after.slice(1)).toEqual([...before])
     expect(isRoundHead(after[0])).toBe(false)
+  })
+
+  it('keeps the last action visible behind the new round-head when the round turns over', () => {
+    let save = intoCombat(4242)
+    let sawTurnover = false
+    let nextRound: string[] | null = null
+    for (let action = 0; action < 40 && !sawTurnover; action += 1) {
+      const before = currentScreen(save, DEPS)!.narration
+      save = step(save)
+      const screen = currentScreen(save, DEPS)
+      if (!screen || screen.stageId !== 'combat') break
+      if (screen.narration.length < before.length) {
+        nextRound = screen.narration
+        sawTurnover = true
+      }
+    }
+    expect(sawTurnover).toBe(true)
+    expect(nextRound).not.toBeNull()
+    expect(isRoundHead(nextRound![0])).toBe(true)
+    expect(nextRound![1]).toBeDefined()
+    expect(nextRound![1]).not.toContain('fa-explosion')
   })
 
   it('cuts the round back to its status pill when the next one opens', () => {
