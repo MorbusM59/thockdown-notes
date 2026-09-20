@@ -25,7 +25,8 @@ import { nextChance, type RngState } from '../core/rng'
 import type { CombatClass, CombatMove } from './vectors'
 import type { Defence } from './defences'
 import { HEALTH_BAND_BOUNDS, bandWithArticle, inHealthBand } from './health'
-import type { DescriptionStyle } from './modifiers'
+import { describePercent, type DescriptionStyle } from './modifiers'
+import { TACTIC_LABELS } from './tactics'
 
 /** What the triggers read. Everything in it is a fact the fight already has. */
 export interface MoveSituation {
@@ -133,7 +134,7 @@ export function damageShareOf(move: CombatMove | null): number {
  * second hand-written list of them is exactly the drift that rule exists to
  * prevent.
  */
-export const MOVE_TERMS = ['Split', 'Magical', 'Stun', 'Vengeance', 'Block'] as const
+export const MOVE_TERMS = ['Split', 'Magical', 'Stun', 'Block'] as const
 
 export function describeMove(move: CombatMove, style: DescriptionStyle): string[] {
   const concise = style === 'concise'
@@ -156,12 +157,17 @@ export function describeMove(move: CombatMove, style: DescriptionStyle): string[
   }
   // The two share rules read as conversions, because that is what they are:
   // a share of the misses BECOMES hits, a share of the hits BECOMES crits.
-  if (move.hitShare) {
-    lines.push(concise ? `${pct(move.hitShare)}% miss to hit` : `${pct(move.hitShare)}% of the misses gone`)
-  }
-  if (move.critShare) {
-    lines.push(concise ? `${pct(move.critShare)}% hit to crit` : `${pct(move.critShare)}% of the hits turned critical`)
-  }
+  // THE SAME DESCRIBER AN ITEM'S CHANCE EFFECT USES, because it is the same
+  // arithmetic to the line: both multiply the one `ChanceAdjustment` and both
+  // compose by multiplying keep factors (model/chance.ts). Two vocabularies
+  // for it -- an item naming the destination, a move naming the transition --
+  // meant a player holding both was reading one mechanism described two ways,
+  // with no way to tell they would stack. It also fixes a real defect on the
+  // way: this printed "-35% miss to hit" for a NEGATIVE share, which is not
+  // what a minus means here and not what the code does. It is "-35% to Hit",
+  // and a minus is the ladder downwards -- 35% of the hits become misses.
+  if (move.hitShare) lines.push(describePercent('hitChance', move.hitShare, style))
+  if (move.critShare) lines.push(describePercent('critChance', move.critShare, style))
   // MAGICAL, because that is already the game's word for a blow armor does
   // not reduce -- the same rule spells say aloud.
   if (move.ignoresArmor) lines.push(concise ? 'Magical' : 'Armor does not see it')
@@ -170,10 +176,18 @@ export function describeMove(move: CombatMove, style: DescriptionStyle): string[
       ? `Stun (${move.stealsActions})`
       : `costs them ${move.stealsActions} Action${move.stealsActions === 1 ? '' : 's'}`)
   }
-  if (move.riposteShare) {
+  // COUNTER, in the tactic's own notation (model/tactics.ts), because it IS
+  // that tactic: a move's share adds to whatever the character carries.
+  // "Vengeance" was this same rule under a private name, and a second name
+  // for one mechanism is the thing a player cannot tell will compose.
+  if (move.counter) {
     lines.push(concise
-      ? `Vengeance (${pct(move.riposteShare)}%)`
-      : `strikes back for ${pct(move.riposteShare)}% of a blow`)
+      ? `${TACTIC_LABELS.counter} (${pct(move.counter)})`
+      // NOT the tactic's own explanation, which says "every time you answer a
+      // blow" -- true of a trait that is always on and false of a move, which
+      // is the one action just chosen. The verbose form spells the share out
+      // instead, and the reader learns the word itself from the tactic.
+      : `${TACTIC_LABELS.counter} (${pct(move.counter)}): a free attack back for ${pct(move.counter)}% of a blow`)
   }
   if (move.guard) lines.push(concise ? `${move.guard} Block` : `${move.guard} Armor, this blow only`)
 

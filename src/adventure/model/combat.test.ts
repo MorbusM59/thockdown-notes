@@ -8,6 +8,7 @@ import {
 import { MONSTER_TYPES, type Monster, type MonsterType } from './monsters'
 import { createStatBlock, deriveStats, type StatBlock } from './stats'
 import { NO_ARMOR, totalArmor, type Armor } from './armor'
+import { NO_TACTICS } from './tactics'
 import { testMonster } from '../testing/monster'
 
 const block = (over: Partial<StatBlock> = {}): StatBlock => ({ ...createStatBlock(0), ...over })
@@ -360,5 +361,50 @@ describe('a blow rolls its damage', () => {
       return
     }
     throw new Error('no blow landed')
+  })
+})
+
+describe('Counter, from a trait and from a move at once', () => {
+  // The whole reason Vengeance was folded into Counter: a class's strike-back
+  // and a carried one are the same rule, so they have to ADD rather than one
+  // of them silently winning.
+  const swing = (over: { carried?: number; move?: number }) => resolveMonsterAttack({
+    state: freshRound({ playerHitPoints: 500 }),
+    monster: monster(),
+    playerStats: PLAYER,
+    defence: 'defend',
+    playerDamage: 100,
+    playerTactics: { ...NO_TACTICS, counter: over.carried ?? 0 },
+    defenceMove: over.move === undefined ? null : {
+      id: 'test:brace', name: 'Brace', icon: 'fa-solid fa-shield',
+      replaces: 'defend', when: { kind: 'always' }, counter: over.move,
+    },
+    rng: 7,
+  })
+
+  it('adds the two shares rather than taking whichever is larger', () => {
+    // Nothing is rolled for the counter itself beyond the exchange, and the
+    // exchange is seeded, so the same seed makes the three comparable.
+    const carried = swing({ carried: 0.4 }).counter
+    const moved = swing({ move: 1.2 }).counter
+    const both = swing({ carried: 0.4, move: 1.2 }).counter
+    for (const blow of [carried, moved, both]) expect(blow).not.toBeNull()
+    // 40% and 120% is one swing at 160%, not two swings and not 120%.
+    expect(both!.math.base).toBeCloseTo(carried!.math.base + moved!.math.base, 10)
+    expect(both!.math.base).toBeCloseTo(160, 10)
+  })
+
+  it('does not swing at all when neither source carries any', () => {
+    expect(swing({}).counter).toBeNull()
+  })
+
+  it('is one blow however many sources it came from', () => {
+    // There is one path now. Two would have been Vengeance's own resolution
+    // sitting beside the tactic's, which is what let it miss Combo, Poison
+    // and the monster's Thorns when those arrived.
+    const answered = swing({ carried: 0.4, move: 1.2 })
+    expect(answered.counter).not.toBeNull()
+    // It is an ATTACK, so it counts towards the round's Combo like any other.
+    expect(answered.state.tallies.player.strikes).toBe(1)
   })
 })

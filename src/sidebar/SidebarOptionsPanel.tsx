@@ -3446,7 +3446,7 @@ export function SidebarOptionsPanel({
             <span className="fa-solid fa-lock" aria-hidden="true" />
           </button>
           {/* VERBOSE DESCRIPTIONS. On by default: a player meeting "+20%
-              Accuracy" for the first time cannot know it is a share of the
+              to Hit" for the first time cannot know it is a share of the
               misses rather than twenty flat points. Off once they do, because
               the explanation is then re-read at every fight forever and it is
               what stops a narration line fitting a narrow slot. An ordinary

@@ -129,3 +129,37 @@ describe('how a description is written', () => {
     }
   })
 })
+
+describe('a percentage of a chance', () => {
+  it('says "to" wherever it appears, and a quantity never does', () => {
+    // ONE FORM for an item's effect and a class move's share alike: they were
+    // always the same arithmetic and had two vocabularies, which is what made
+    // a player unable to tell that "+20% Crit" and "20% hit to crit" would
+    // compose. The preposition marks the ladder a chance moves an outcome
+    // along; a quantity is added and has no direction to name.
+    for (const style of STYLES) {
+      for (const { line, where } of everyDescription(style)) {
+        if (!/^[+-]\d+%/.test(line)) continue
+        if (/\b(Hit|Crit|Dodge)\b/.test(line)) {
+          // A round-position adjective may sit between the preposition and
+          // its object -- "+50% to Initial Dodge" -- and nothing else may.
+          expect(line, `${where}: "${line}"`).toMatch(/% to (Initial |Final )?(Hit|Crit|Dodge)\b/)
+        } else {
+          expect(line, `${where}: "${line}"`).not.toContain('% to ')
+        }
+      }
+    }
+  })
+
+  it('never writes a transition, in either direction', () => {
+    // "-35% miss to hit" is what a negative share used to print: not what a
+    // minus means here, and not what the code does. A minus is the same
+    // ladder downwards -- 35% of the hits become misses -- and "to Hit" with
+    // a sign says that without a second phrasing.
+    for (const style of STYLES) {
+      for (const { line, where } of everyDescription(style)) {
+        expect(line, where).not.toMatch(/miss to hit|hit to crit|hit to miss|crit to hit/i)
+      }
+    }
+  })
+})

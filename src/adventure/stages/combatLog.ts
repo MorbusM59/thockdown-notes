@@ -220,12 +220,17 @@ export function playerAttackPill(monster: Monster, blow: Blow, moveName?: string
 }
 
 /**
- * A DEFENSIVE MOVE STRUCK BACK. The arrow runs from the player, because the
- * damage did -- it is the player's blow, taken as part of answering one.
+ * THE COUNTER STRUCK BACK. The arrow runs from the player, because the damage
+ * did -- it is the player's blow, taken as part of answering one.
+ *
+ * The move's name rides the DETAIL where a move supplied part of the share,
+ * and is simply absent where the whole of it came from what the character
+ * carries: one pill for one swing, whatever it was made of.
  */
-export function ripostePill(monster: Monster, blow: Blow, moveName: string): string {
+export function counterPill(monster: Monster, blow: Blow, moveName?: string): string {
   const action = playerActionIcon('attack', blow, false)
-  return pill(PLAYER, 'you', action, blow.hit ? blow.damage : null, monsterIcon(monster), 'it', [moveName, ...blowDetail(blow)])
+  const detail = moveName ? [moveName, ...blowDetail(blow)] : blowDetail(blow)
+  return pill(PLAYER, 'you', action, blow.hit ? blow.damage : null, monsterIcon(monster), 'it', detail)
 }
 
 /**

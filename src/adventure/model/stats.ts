@@ -113,7 +113,7 @@ export const DERIVED_LABELS: Readonly<Record<DerivedKey, string>> = {
   dodgeChance: 'Dodge',
   actionsPerRound: 'Actions',
   encounterChoices: 'Encounter choices',
-  hitChance: 'Accuracy',
+  hitChance: 'Hit',
   offerChoices: 'Offers',
   critChance: 'Crit',
 }
@@ -155,10 +155,10 @@ export const CHANCE_DERIVED_KEYS: readonly ChanceKey[] = ['dodgeChance', 'hitCha
  * WHAT A PERCENTAGE OF A CHANCE IS A PERCENTAGE OF, in words.
  *
  * A boost to a chance takes a share of the FAILURES away and a penalty takes a
- * share of the successes (model/chance.ts) -- so "+20% Accuracy" is a fifth of
- * your misses, and "-20% Accuracy" is a fifth of your hits. Those are
- * different quantities, and a description that said only "+20% Accuracy" would
- * be read as twenty points by everybody.
+ * share of the successes (model/chance.ts) -- so "+20% to Hit" is a fifth of
+ * your misses, and "-20% to Hit" is a fifth of your hits. Those are different
+ * quantities, and a description that said only "+20% Hit" would be read as
+ * twenty points by everybody.
  *
  * Kept HERE, beside the chances themselves, rather than in the describer: it
  * is a property of what the chance IS, and the next chance added to the game

@@ -45,7 +45,7 @@ import { damageFrom } from '../model/monsters'
 import { PREPARE_ICON, prepareLines, resolvePreparedAttack } from '../model/prepare'
 import {
   blowDetail, charmPill, charmStatusPill, killPill, monsterAttackPill, playerAttackPill, poisonPill,
-  preparePill, ripostePill, spellPill, statusPill, stunPill,
+  counterPill, preparePill, spellPill, statusPill, stunPill,
 } from './combatLog'
 import type { Monster } from '../model/monsters'
 import { monsterFor, monsterName, offerFromJson, offerToJson } from './encounter'
@@ -1183,9 +1183,9 @@ export const combatStage: StageModule = {
         round: answer.state,
         monster,
         context,
-        // NEWEST FIRST: the riposte answered the blow, so it goes above it.
+        // NEWEST FIRST: the counter answered the blow, so it goes above it.
         entries: [
-          ...(answer.riposte && defenceMove ? [ripostePill(monster, answer.riposte, defenceMove.name)] : []),
+          ...(answer.counter ? [counterPill(monster, answer.counter, defenceMove?.name)] : []),
           ...(monsterArmed.move?.stealsActions ? [stunPill(monster)] : []),
           ...(answer.blows.length > 0
             ? answer.blows.map((blow) => monsterAttackPill(monster, defence, blow, answer.escaped, answer.pursuit)).reverse()
@@ -1193,7 +1193,7 @@ export const combatStage: StageModule = {
         ],
         effects: recordChanges(round, answer.state),
         rng: answer.rng,
-        struck: answer.riposte?.damage ?? 0,
+        struck: answer.counter?.damage ?? 0,
         // The fire bites after it moves, and `stepFight` is the one place
         // that knows -- see `burn` there.
         monsterActed: true,

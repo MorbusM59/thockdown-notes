@@ -1178,3 +1178,29 @@ modifiers, so it scales with the character rather than going stale by level 10.
 
 All six are symmetric: a monster's species can carry one. Built as entry 111 of
 [adventure-platform.md](adventure-platform.md).
+
+### One form for a chance, and Counter absorbs Vengeance
+
+The author's own wording:
+
+  > for the "miss to hit" and "hit to crit", we simply use +x% to crit and the
+  > same for hit consistently everywhere in concise mode. We also simply use a
+  > `-` sign to indicate that hits are converted to missed and crits to hits.
+  > so -30% to crit means, 30% of crits are converted to hits, same for hits
+  >
+  > as for vengeance. let's get rid of it and use the universal counter.
+  > Backdraft, for instance, should have Counter (120%) for that specific
+  > defense move selectively. it is clear that it is a one shot application,
+  > since it is a move, which is by definition a single event the player
+  > actively chooses, not a passive stat from a trait etc.
+  >
+  > important: different sources of counter stack additively.
+  >
+  > please leave accuracy. to hit is clear. Every RPGer is familiar with "CtH"
+  > as chance to hit, short "to hit". It fits perfectly, while accuracy is
+  > unclear.
+
+So the derived value named `hitChance` reads **Hit** everywhere a player sees
+it, and every percentage of a chance is written `+x% to <Hit|Crit|Dodge>` with
+a minus meaning the same ladder downwards. A percentage of a quantity keeps its
+bare form. Built as entry 114 of [adventure-platform.md](adventure-platform.md).

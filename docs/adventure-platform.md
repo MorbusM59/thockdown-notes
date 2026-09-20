@@ -1969,7 +1969,8 @@ placed at 5, 9 and 10 and the level advancing after ten.
 
 92. **A DESCRIPTION EXPLAINS ITSELF ONLY WHEN ASKED** (`model/modifiers.ts`'s
     `DescriptionStyle`). A fifth setting, `verboseDescriptions`, ON by
-    default: a player meeting "+20% Accuracy" for the first time cannot know
+    default: a player meeting "+20% to Hit" (then "+20% Accuracy" -- see
+    entry 114) for the first time cannot know
     it is a share of the misses rather than twenty flat points, and that is
     the difference between an item worth taking and an item worth taking
     twice. Off once it has been read — it is then the same sentence at every
@@ -2138,7 +2139,7 @@ placed at 5, 9 and 10 and the level advancing after ten.
      | `4 strikes, 45% Damage each` | `Split (4x45%)` |
      | `50% of the hits turned critical` | `50% hit to crit` |
      | `35% of the misses gone` | `35% miss to hit` |
-     | `strikes back for 50% of a blow` | `Vengeance (50%)` |
+     | `strikes back for 50% of a blow` | ~~`Vengeance (50%)`~~ superseded by entry 114 |
      | `costs them 1 Action` | `Stun (1)` |
      | `Armor does not see it` | `Magical` |
      | `2 Armor, this blow only` | `2 Block` |
@@ -2519,3 +2520,48 @@ placed at 5, 9 and 10 and the level advancing after ten.
      on the guard: both glyphs must actually appear across the catalogue, since
      one mark used everywhere would pass every other assertion and tell a
      player nothing.
+
+
+114. **ONE FORM FOR A PERCENTAGE OF A CHANCE, AND VENGEANCE IS GONE.** Two
+     findings from one question the author asked, and both were the same
+     fault: a rule stated once that did not hold everywhere it applied.
+
+     **`+20% to Crit` and `20% hit to crit` were the same mechanism.** Not
+     similar -- identical to the line: an item's `derivedPercent` and a move's
+     `critShare` both multiply the same `ChanceAdjustment`'s `failureKeep` and
+     are both consumed by the same `resolveChanceWith`. They had two
+     vocabularies, an item naming the DESTINATION and a move naming the
+     TRANSITION, so a player holding both was reading one mechanism described
+     two ways with no way to tell the two would compose. `describeMove` now
+     calls `describePercent`, and there is one form.
+
+     **THE PREPOSITION CARRIES THE KIND.** `+20% to Crit` for a chance,
+     `+20% Damage` for a quantity — which is the game's two kinds of
+     arithmetic said in one word: a quantity takes its percentage additively,
+     a chance takes a share of what is LEFT and so converts one outcome into
+     another. A MINUS is then the same ladder downwards and needs no second
+     phrasing: `-30% to Crit` turns three crits in ten back into ordinary
+     hits. That fixed a real defect — `describeMove` had no sign branch, so a
+     negative share printed `-35% miss to hit`, which is neither what a minus
+     means nor what the code does.
+
+     **`Accuracy` is `Hit`**, per the author: "to hit" is the term every RPG
+     player already has, where "Accuracy" has to be learned. One label, so the
+     description and the readout name one quantity.
+
+     **The per-holding describer was the one that got away**, printing
+     `+10% Crit per trait` because it built its own head instead of calling
+     `describePercent`. The format contract caught it the moment the rule was
+     stated as a PROPERTY rather than applied by hand, which is the argument
+     for stating it that way.
+
+     **VENGEANCE WAS COUNTER UNDER A PRIVATE NAME** (entry 111) and is
+     deleted: `CombatMove.riposteShare` is `counter`, and a move's share ADDS
+     to whatever the character carries, so Backdraft's 120% over a Counter
+     trait's 40% is one swing at 160%. It needs no note that a move's share is
+     momentary — a move IS the single action just chosen. The two
+     resolution paths became one, which is what fixes the two defects the
+     second path had silently acquired: a riposte fed neither Combo nor Poison
+     and was not answered by the monster's Thorns, where a counter was both.
+     A second name for one mechanism is exactly the thing that lets its
+     siblings drift, and both drifts happened within one release.

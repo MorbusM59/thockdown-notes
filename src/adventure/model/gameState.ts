@@ -319,7 +319,7 @@ export interface GameSettings {
    * VERBOSE DESCRIPTIONS: whether a description EXPLAINS itself, or only
    * says what changed (model/modifiers.ts's `DescriptionStyle`).
    *
-   * On by default, because a player meeting "+20% Accuracy" for the first
+   * On by default, because a player meeting "+20% to Hit" for the first
    * time has no way to know it is a share of the misses rather than twenty
    * points. Off once they do: the explanation is then read at every fight
    * forever, and it is what stops a narration line fitting a narrow slot.

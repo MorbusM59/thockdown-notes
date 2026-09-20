@@ -369,8 +369,20 @@ export interface CombatMove {
   ignoresArmor?: boolean
   /** Actions taken off the OTHER side's pool -- a stun, in the unit the round counts in. */
   stealsActions?: number
-  /** On a DEFENCE: strike back for this share of a nominal blow after surviving. */
-  riposteShare?: number
+  /**
+   * On a DEFENCE: COUNTER, for this one action.
+   *
+   * The same rule the tactic of that name carries (model/tactics.ts) and not
+   * a second mechanism beside it -- Vengeance was exactly that, a class's own
+   * strike-back with its own share, its own describer term and its own
+   * resolution path, which is how it ended up missing the Combo, Poison and
+   * Thorns wiring that the tactic got. A move's share ADDS to whatever the
+   * character already carries, like every other source of a tactic.
+   *
+   * It needs no note that it is momentary: a move is by definition the single
+   * action the player just chose.
+   */
+  counter?: number
   /** On a DEFENCE: extra flat armour, for this blow only. */
   guard?: number
   /** One line, in the class's own words, for the cell's detail. */

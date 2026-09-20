@@ -749,11 +749,11 @@ export function resolveMonsterAttack(options: {
    */
   dodgeRoll?: Roll | null
   successAdjust?: number
-  /** The PLAYER's armed move for the defence they picked. Guards and ripostes. */
+  /** The PLAYER's armed move for the defence they picked. Guards and counters. */
   defenceMove?: CombatMove | null
   /** The MONSTER's armed move for its own attack. Strikes, shares, armour. */
   monsterMove?: CombatMove | null
-  /** The player's stats as their modifiers leave them, for a riposte's damage. */
+  /** The player's stats as their modifiers leave them, for a counter's damage. */
   playerDamage?: number
   /** The PLAYER's fight-shape rules: theirs is the Counter and the Thorns here. */
   playerTactics?: Tactics
@@ -767,9 +767,7 @@ export function resolveMonsterAttack(options: {
   blow: Blow | null
   /** Every blow the monster threw this action -- more than one where its class strikes twice. */
   blows: Blow[]
-  /** What the player's defensive move struck back for, if it did. */
-  riposte: Blow | null
-  /** What the player's Counter struck back for, if they hold any. */
+  /** What the player's Counter struck back for, from any source. */
   counter: Blow | null
   escaped: boolean
   pursuit: Roll | null
@@ -793,7 +791,7 @@ export function resolveMonsterAttack(options: {
     if (!chase.value.passed) {
       return {
         state: { ...spent, playerFled: true },
-        blow: null, blows: [], riposte: null, counter: null, escaped: true, pursuit, rng,
+        blow: null, blows: [], counter: null, escaped: true, pursuit, rng,
       }
     }
   }
@@ -858,39 +856,26 @@ export function resolveMonsterAttack(options: {
     playerArmor: armor,
   }
 
-  // THE RIPOSTE IS PART OF THE DEFENCE, not a free action: it costs the
-  // player nothing because they already spent the choice, and it is resolved
-  // only if they are still standing. Striking back from the floor would make
-  // a Duelist's Riposte a way to win a fight you had already lost.
-  let riposte: Blow | null = null
-  if (defenceMove?.riposteShare && state.playerHitPoints > 0 && !state.playerFled) {
-    const back = resolveExchange({
-      attackerStats: options.playerStats,
-      attackerDamage: (options.playerDamage ?? 0) * defenceMove.riposteShare,
-      defenderStats: options.monster.stats,
-      armor: options.monster.armor,
-      attacker: 'player',
-      successAdjust: options.successAdjust,
-      // The monster is busy having attacked. A riposte is not answered.
-      defence: 'none',
-      dodgeOffered: false,
-      rng,
-    })
-    rng = back.rng
-    riposte = back.blow
-    state = { ...state, monsterDamageTaken: state.monsterDamageTaken + back.blow.damage }
-  }
-
-  // COUNTER, on the same terms as the riposte above and for the same reason:
-  // the player already spent the choice, so the free swing costs no action,
-  // and a corpse does not swing. The difference is what triggers it -- a
-  // riposte belongs to one defensive MOVE, a counter answers ANY defensive
-  // action, which is what makes it a build rather than a class feature.
+  // COUNTER: the free swing back, and the ONLY one. The player already spent
+  // the choice, so it costs no action, and a corpse does not swing.
+  //
+  // A DEFENSIVE MOVE ADDS ITS OWN SHARE to whatever the character carries,
+  // additively, like every other source of a tactic -- Backdraft's 120% on
+  // top of a Counter trait's 40% is one swing at 160%. This replaced
+  // Vengeance, which was this same rule as a class's private mechanism: its
+  // own field, its own describer term and its own resolution path, and that
+  // path is exactly why it silently missed the Combo, the Poison and the
+  // monster's Thorns when those arrived. One rule, one path, and a move's
+  // share is a number rather than a second way of doing it.
+  //
+  // A move needs no note that its share is momentary: a move IS the single
+  // action the player just chose.
+  const counterShare = playerTactics.counter + (defenceMove?.counter ?? 0)
   let counter: Blow | null = null
-  if (playerTactics.counter > 0 && state.playerHitPoints > 0 && !state.playerFled) {
+  if (counterShare > 0 && state.playerHitPoints > 0 && !state.playerFled) {
     let playerTally = state.tallies.player
     const swung = blowDamageWith({
-      nominal: (options.playerDamage ?? 0) * playerTactics.counter,
+      nominal: (options.playerDamage ?? 0) * counterShare,
       tactics: playerTactics,
       tally: playerTally,
       // A counter is never the round's opener or its closer -- it is not an
@@ -908,8 +893,7 @@ export function resolveMonsterAttack(options: {
       armor: options.monster.armor,
       attacker: 'player',
       successAdjust: options.successAdjust,
-      // Answered by nothing, the same as a riposte: the monster is busy
-      // having attacked.
+      // Answered by nothing: the monster is busy having attacked.
       defence: 'none',
       dodgeOffered: false,
       defenderTactics: monsterTactics,
@@ -939,7 +923,6 @@ export function resolveMonsterAttack(options: {
     counter,
     blow: blows[0] ?? null,
     blows,
-    riposte,
     escaped: false,
     pursuit,
     rng,

@@ -431,7 +431,7 @@ function signedPercent(fraction: number): string {
 /**
  * HOW MUCH A DESCRIPTION EXPLAINS ITSELF.
  *
- * `verbose` says what changed AND what that means: "+20% Accuracy (of your
+ * `verbose` says what changed AND what that means: "+20% to Hit (of your
  * misses)" spells out that a chance takes a share of what is left rather
  * than twenty flat points, which is the difference between an item worth
  * taking and an item worth taking twice.
@@ -459,14 +459,33 @@ export function descriptionStyleOf(settings: { verboseDescriptions: boolean }): 
  * A percentage of a derived value, in words -- and, when verbose, what it is
  * a percentage OF.
  *
- * "+20% Accuracy" is read as twenty points by everybody, and for a chance it
+ * "+20% Hit" is read as twenty points by everybody, and for a chance it
  * is a fifth of the misses instead. The complement is named rather than left
  * to be inferred (stats.ts's CHANCE_COMPLEMENTS). Concise drops the
  * parenthesis and nothing else: the quantity and its name are what changed,
  * and the rest was the explanation.
  */
-function describePercent(key: DerivedKey, percent: number, style: DescriptionStyle): string {
-  const head = `${signedPercent(percent)} ${DERIVED_LABELS[key]}`
+/**
+ * A PERCENTAGE OF A CHANCE SAYS "to", AND A PERCENTAGE OF A QUANTITY DOES NOT.
+ *
+ * `+20% to Crit` against `+20% Damage`, and the preposition is carrying the
+ * difference between the game's two kinds of arithmetic (model/chance.ts): a
+ * quantity takes its percentage additively, while a chance takes a share of
+ * what is LEFT and so converts one outcome INTO another. "to Crit" is a
+ * direction up that ladder -- ordinary hits becoming crits -- which is what
+ * the number actually does, and a MINUS is then the same ladder downwards:
+ * `-30% to Crit` turns three crits in ten back into ordinary hits.
+ *
+ * This is also the one form, for an item's effect and for a class move's
+ * share alike. They were always the same arithmetic to the line and had two
+ * vocabularies -- an item named the destination (`+20% Crit`) and a move named
+ * the transition (`20% hit to crit`) -- so a player holding both was reading
+ * one mechanism described two ways, with no way to tell they would compose.
+ */
+export function describePercent(key: DerivedKey, percent: number, style: DescriptionStyle): string {
+  const head = isChanceKey(key)
+    ? `${signedPercent(percent)} to ${DERIVED_LABELS[key]}`
+    : `${signedPercent(percent)} ${DERIVED_LABELS[key]}`
   if (style === 'concise' || !isChanceKey(key)) return head
   const complement = CHANCE_COMPLEMENTS[key]
   return `${head} (of ${percent >= 0 ? complement.failure : complement.success})`
@@ -506,8 +525,14 @@ export function describeEffect(effect: ModifierEffect, style: DescriptionStyle):
       // a real effect announced itself as +0% and looked like nothing. What
       // an offer IS does not depend on what you happen to be carrying when
       // you look at it, and the carried count is on the bar anyway.
+      //
+      // THROUGH `describePercent` like every other percentage, which is what
+      // gives a chance its "to". It built its own head once and so was the one
+      // effect that printed "+10% Crit per trait" where everything else said
+      // "to Crit" -- the format contract caught it the moment the rule was
+      // stated as a property rather than applied by hand.
       const noun = effect.holding === 'item' ? 'item' : 'trait'
-      return `${signedPercent(effect.percentPer)} ${DERIVED_LABELS[effect.derived]} per ${noun}`
+      return `${describePercent(effect.derived, effect.percentPer, style)} per ${noun}`
     }
     case 'derivedPercentWhileHealth': {
       const head = describePercent(effect.derived, effect.percent, style)
@@ -529,7 +554,12 @@ export function describeEffect(effect: ModifierEffect, style: DescriptionStyle):
         // The position becomes an ADJECTIVE on the quantity rather than a
         // trailing clause: "+30% Initial Damage", not "+30% Damage on your
         // first action of a round".
-        return `${signedPercent(effect.percent)} ${ROUND_POSITION_WORD[effect.position]} ${DERIVED_LABELS[effect.derived]}`
+        // The "to" of a chance stays in front of the whole thing, so the
+        // adjective sits on the quantity and not between the preposition and
+        // its object: "+40% to Final Hit", never "+40% Final to Hit".
+        return isChanceKey(effect.derived)
+          ? `${signedPercent(effect.percent)} to ${ROUND_POSITION_WORD[effect.position]} ${DERIVED_LABELS[effect.derived]}`
+          : `${signedPercent(effect.percent)} ${ROUND_POSITION_WORD[effect.position]} ${DERIVED_LABELS[effect.derived]}`
       }
       return `${describePercent(effect.derived, effect.percent, style)} on your ${effect.position} action of a round`
     }
