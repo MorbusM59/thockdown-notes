@@ -14,6 +14,8 @@ const DEPS: DirectorDeps = {
   rootStageId: ROOT_STAGE_ID,
 }
 
+const HEAVY_MIGHT_BUILD = 'might-agility-perception'
+const CHARMY_BUILD = 'might-charisma-perception'
 const NOW = 1_700_000_000_000
 
 /**
@@ -34,7 +36,7 @@ function inAFightWithMagic(
    * needs a long fight to observe something rare asks for one that cannot
    * kill anything quickly.
    */
-  build = 'hulking',
+  build = HEAVY_MIGHT_BUILD,
 ): GameSave {
   let save = enterEntryScreen(emptySave(seed), DEPS, NOW)
   for (let step = 0; step < 300; step += 1) {
@@ -198,7 +200,7 @@ describe('the fire answers the monster, not the round', () => {
     // that lays it on. The coincidence being watched for (a charm taking an
     // action, and the fire answering that action) therefore needs more fights
     // than one to occur in, not more actions.
-    let save = inAFightWithMagic(4242, 20, 'resplendent')
+    let save = inAFightWithMagic(4242, 20, CHARMY_BUILD)
     let burnedAfterCharm = false
 
     for (let action = 0; action < 600 && !burnedAfterCharm; action += 1) {

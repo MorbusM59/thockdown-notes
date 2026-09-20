@@ -14,6 +14,7 @@ const DEPS: DirectorDeps = {
   rootStageId: ROOT_STAGE_ID,
 }
 
+const ORDINARY_BUILD = 'might-agility-perception'
 const NOW = 1_700_000_000_000
 
 /**
@@ -41,7 +42,7 @@ function inAFight(seed: number, stats: Partial<Record<'intellect' | 'charisma' |
     save = choose(save, choice.id, DEPS, NOW).save
     const game = activeGame(save)
     if (!game) continue
-    save = withVectorsOnly(save, { build: 'journeyman', species: 'masurian', combatClass: 'sentinel' })
+    save = withVectorsOnly(save, { build: ORDINARY_BUILD, species: 'masurian', combatClass: 'sentinel' })
     for (const [stat, amount] of Object.entries(stats)) {
       if (game.baseStats[stat as 'intellect'] < amount) {
         save = applyEffects(save, [{ kind: 'adjustBaseStat', stat: stat as 'intellect', amount }], DEPS.content, NOW)

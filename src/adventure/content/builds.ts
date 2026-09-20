@@ -1,228 +1,105 @@
 // VECTOR ONE: the builds. An adjective and a set of stat weights.
 //
-// A build says what SHAPE a creature is, at any tier -- see
-// model/vectors.ts. Reading rules for this list:
+// The game uses a strict 3-stat, 2:2:1 spread. Every general build is one of
+// the 15 two-stat pairings, and each pairing gets four variants for the
+// remaining stat, giving 60 builds total. The list is deliberately grouped so a
+// reader can see the cluster and then the four variants inside it.
 //
-//   * Weights are RATIOS. `{ might: 3 }` and `{ might: 30 }` are the same
-//     build; small integers are used so the ratio is readable at a glance.
-//   * A stat left out weighs nothing. A creature can be genuinely bad at
-//     something, which is where most of the character comes from.
-//   * No two builds may share a normalised ratio -- two names for one shape
-//     is a choice the player cannot make meaningfully. The contract test
-//     checks it.
-//   * The adjective is the FIRST word of a monster's name, so it has to read
-//     in front of a species and a class: "Dashing Orc Bruiser".
+// The weight formula is:
+//   * two stats take 2 points each
+//   * the third stat takes 1 point
+//   * no stat outside that trio is weighted at all
 
 import type { Build } from '../model/vectors'
 
 export const BUILDS: readonly Build[] = [
-  // --- Single-stat: the purest shapes, and the strongest at what they do.
-  {
-    id: 'hulking',
-    name: 'Hulking',
-    icon: 'fa-solid fa-mountain',
-    weights: { might: 1 },
-  },
-  {
-    id: 'fleeting',
-    name: 'Fleeting',
-    icon: 'fa-solid fa-wind',
-    weights: { agility: 1 },
-  },
-  {
-    id: 'hawkeyed',
-    name: 'Hawk-Eyed',
-    icon: 'fa-solid fa-binoculars',
-    weights: { perception: 1 },
-  },
-  {
-    id: 'erudite',
-    name: 'Erudite',
-    icon: 'fa-solid fa-book-open',
-    weights: { intellect: 1 },
-  },
-  {
-    id: 'resplendent',
-    name: 'Resplendent',
-    icon: 'fa-solid fa-crown',
-    weights: { charisma: 1 },
-  },
-  {
-    id: 'blessed',
-    name: 'Blessed',
-    icon: 'fa-solid fa-clover',
-    weights: { luck: 1 },
-  },
+  // --- Might + Agility
+  { id: 'might-agility-perception', name: 'Brutal', icon: 'fa-solid fa-hammer', weights: { might: 2, agility: 2, perception: 1 } },
+  { id: 'might-agility-intellect', name: 'Ferocious', icon: 'fa-solid fa-hammer', weights: { might: 2, agility: 2, intellect: 1 } },
+  { id: 'might-agility-charisma', name: 'Dashing', icon: 'fa-solid fa-hammer', weights: { might: 2, agility: 2, charisma: 1 } },
+  { id: 'might-agility-luck', name: 'Fortunate', icon: 'fa-solid fa-hammer', weights: { might: 2, agility: 2, luck: 1 } },
 
-  // --- Two-stat, weighted: a lead stat and a second it leans on.
-  {
-    id: 'brutish',
-    name: 'Brutish',
-    icon: 'fa-solid fa-hammer',
-    weights: { might: 3, agility: 1 },
-  },
-  {
-    id: 'dashing',
-    name: 'Dashing',
-    icon: 'fa-solid fa-feather',
-    weights: { agility: 2, charisma: 1 },
-  },
-  {
-    id: 'wiry',
-    name: 'Wiry',
-    icon: 'fa-solid fa-person-running',
-    weights: { agility: 2, might: 1 },
-  },
-  {
-    id: 'grim',
-    name: 'Grim',
-    icon: 'fa-solid fa-skull',
-    weights: { might: 2, perception: 1 },
-  },
-  {
-    id: 'sly',
-    name: 'Sly',
-    icon: 'fa-solid fa-mask',
-    weights: { agility: 2, perception: 1 },
-  },
-  {
-    id: 'storied',
-    name: 'Storied',
-    icon: 'fa-solid fa-scroll',
-    weights: { charisma: 2, intellect: 1 },
-  },
-  {
-    id: 'brooding',
-    name: 'Brooding',
-    icon: 'fa-solid fa-cloud-bolt',
-    weights: { intellect: 2, might: 1 },
-  },
-  {
-    id: 'watchful',
-    name: 'Watchful',
-    icon: 'fa-solid fa-eye',
-    weights: { perception: 2, intellect: 1 },
-  },
-  {
-    id: 'ponderous',
-    name: 'Ponderous',
-    icon: 'fa-solid fa-weight-hanging',
-    weights: { might: 4, perception: 1 },
-  },
+  // --- Might + Perception
+  { id: 'might-perception-agility', name: 'Grim', icon: 'fa-solid fa-eye', weights: { might: 2, perception: 2, agility: 1 } },
+  { id: 'might-perception-intellect', name: 'Vigilant', icon: 'fa-solid fa-eye', weights: { might: 2, perception: 2, intellect: 1 } },
+  { id: 'might-perception-charisma', name: 'Imposing', icon: 'fa-solid fa-eye', weights: { might: 2, perception: 2, charisma: 1 } },
+  { id: 'might-perception-luck', name: 'Propitious', icon: 'fa-solid fa-eye', weights: { might: 2, perception: 2, luck: 1 } },
 
-  // --- Two-stat, even: a creature that is two things equally.
-  {
-    id: 'feral',
-    name: 'Feral',
-    icon: 'fa-solid fa-paw',
-    weights: { might: 1, agility: 1 },
-  },
-  {
-    id: 'cunning',
-    name: 'Cunning',
-    icon: 'fa-solid fa-chess-knight',
-    weights: { intellect: 1, perception: 1 },
-  },
-  {
-    id: 'volatile',
-    name: 'Volatile',
-    icon: 'fa-solid fa-fire-flame-curved',
-    weights: { might: 1, luck: 1 },
-  },
-  {
-    id: 'uncanny',
-    name: 'Uncanny',
-    icon: 'fa-solid fa-hat-wizard',
-    weights: { perception: 1, luck: 1 },
-  },
-  {
-    id: 'beguiling',
-    name: 'Beguiling',
-    icon: 'fa-solid fa-masks-theater',
-    weights: { charisma: 1, agility: 1 },
-  },
+  // --- Might + Intellect
+  { id: 'might-intellect-agility', name: 'Stoic', icon: 'fa-solid fa-brain', weights: { might: 2, intellect: 2, agility: 1 } },
+  { id: 'might-intellect-perception', name: 'Sagacious', icon: 'fa-solid fa-brain', weights: { might: 2, intellect: 2, perception: 1 } },
+  { id: 'might-intellect-charisma', name: 'Imperial', icon: 'fa-solid fa-brain', weights: { might: 2, intellect: 2, charisma: 1 } },
+  { id: 'might-intellect-luck', name: 'Blessed', icon: 'fa-solid fa-brain', weights: { might: 2, intellect: 2, luck: 1 } },
 
-  // --- Three and more: less of each, harder to answer.
-  {
-    id: 'nimblefingered',
-    name: 'Nimble-Fingered',
-    icon: 'fa-solid fa-hand-sparkles',
-    weights: { agility: 2, perception: 1, luck: 1 },
-  },
-  {
-    id: 'shrewd',
-    name: 'Shrewd',
-    icon: 'fa-solid fa-scale-balanced',
-    weights: { intellect: 2, charisma: 1, luck: 1 },
-  },
-  {
-    id: 'seasoned',
-    name: 'Seasoned',
-    icon: 'fa-solid fa-shield-halved',
-    weights: { might: 2, perception: 2, intellect: 1 },
-  },
-  {
-    id: 'wayward',
-    name: 'Wayward',
-    icon: 'fa-solid fa-compass',
-    weights: { luck: 2, agility: 1, charisma: 1 },
-  },
-  {
-    // The flat one. It is the WORST build at everything and the only one that
-    // is never caught out, which at low tiers is worth more than it looks --
-    // a tier of 5 spread six ways is six zeroes and a one, so this is a shape
-    // that has to grow into itself.
-    id: 'journeyman',
-    name: 'Journeyman',
-    icon: 'fa-solid fa-person-walking',
-    weights: { might: 1, agility: 1, perception: 1, intellect: 1, charisma: 1, luck: 1 },
-  },
-  {
-    id: 'indomitable',
-    name: 'Indomitable',
-    icon: 'fa-solid fa-shield',
-    weights: { might: 3, intellect: 1 },
-  },
-  {
-    id: 'mercurial',
-    name: 'Mercurial',
-    icon: 'fa-solid fa-bolt',
-    weights: { agility: 3, luck: 1 },
-  },
-  {
-    id: 'oracular',
-    name: 'Oracular',
-    icon: 'fa-solid fa-eye-low-vision',
-    weights: { intellect: 3, perception: 1 },
-  },
-  {
-    id: 'imperious',
-    name: 'Imperious',
-    icon: 'fa-solid fa-chess-king',
-    weights: { charisma: 3, might: 1 },
-  },
-  {
-    id: 'inscrutable',
-    name: 'Inscrutable',
-    icon: 'fa-solid fa-user-secret',
-    weights: { intellect: 2, agility: 1, luck: 1 },
-  },
-  {
-    id: 'weathered',
-    name: 'Weathered',
-    icon: 'fa-solid fa-tree',
-    weights: { might: 3, perception: 2, agility: 1 },
-  },
-  {
-    id: 'mesmeric',
-    name: 'Mesmeric',
-    icon: 'fa-solid fa-spiral',
-    weights: { charisma: 2, intellect: 2, luck: 1 },
-  },
-  {
-    id: 'relentless',
-    name: 'Relentless',
-    icon: 'fa-solid fa-person-hiking',
-    weights: { might: 2, agility: 2, perception: 1 },
-  },
-]
+  // --- Might + Charisma
+  { id: 'might-charisma-agility', name: 'Valiant', icon: 'fa-solid fa-crown', weights: { might: 2, charisma: 2, agility: 1 } },
+  { id: 'might-charisma-perception', name: 'Persuasive', icon: 'fa-solid fa-crown', weights: { might: 2, charisma: 2, perception: 1 } },
+  { id: 'might-charisma-intellect', name: 'Noble', icon: 'fa-solid fa-crown', weights: { might: 2, charisma: 2, intellect: 1 } },
+  { id: 'might-charisma-luck', name: 'Fortuitous', icon: 'fa-solid fa-crown', weights: { might: 2, charisma: 2, luck: 1 } },
+
+  // --- Might + Luck
+  { id: 'might-luck-agility', name: 'Rugged', icon: 'fa-solid fa-clover', weights: { might: 2, luck: 2, agility: 1 } },
+  { id: 'might-luck-perception', name: 'Canny', icon: 'fa-solid fa-clover', weights: { might: 2, luck: 2, perception: 1 } },
+  { id: 'might-luck-intellect', name: 'Regal', icon: 'fa-solid fa-clover', weights: { might: 2, luck: 2, intellect: 1 } },
+  { id: 'might-luck-charisma', name: 'Lucky', icon: 'fa-solid fa-clover', weights: { might: 2, luck: 2, charisma: 1 } },
+
+  // --- Agility + Perception
+  { id: 'agility-perception-might', name: 'Lithe', icon: 'fa-solid fa-binoculars', weights: { agility: 2, perception: 2, might: 1 } },
+  { id: 'agility-perception-intellect', name: 'Keen', icon: 'fa-solid fa-binoculars', weights: { agility: 2, perception: 2, intellect: 1 } },
+  { id: 'agility-perception-charisma', name: 'Poised', icon: 'fa-solid fa-binoculars', weights: { agility: 2, perception: 2, charisma: 1 } },
+  { id: 'agility-perception-luck', name: 'Favored', icon: 'fa-solid fa-binoculars', weights: { agility: 2, perception: 2, luck: 1 } },
+
+  // --- Agility + Intellect
+  { id: 'agility-intellect-might', name: 'Swift', icon: 'fa-solid fa-bolt', weights: { agility: 2, intellect: 2, might: 1 } },
+  { id: 'agility-intellect-perception', name: 'Precise', icon: 'fa-solid fa-bolt', weights: { agility: 2, intellect: 2, perception: 1 } },
+  { id: 'agility-intellect-charisma', name: 'Graceful', icon: 'fa-solid fa-bolt', weights: { agility: 2, intellect: 2, charisma: 1 } },
+  { id: 'agility-intellect-luck', name: 'Serendipitous', icon: 'fa-solid fa-bolt', weights: { agility: 2, intellect: 2, luck: 1 } },
+
+  // --- Agility + Charisma
+  { id: 'agility-charisma-might', name: 'Wily', icon: 'fa-solid fa-feather', weights: { agility: 2, charisma: 2, might: 1 } },
+  { id: 'agility-charisma-perception', name: 'Dapper', icon: 'fa-solid fa-feather', weights: { agility: 2, charisma: 2, perception: 1 } },
+  { id: 'agility-charisma-intellect', name: 'Elegant', icon: 'fa-solid fa-feather', weights: { agility: 2, charisma: 2, intellect: 1 } },
+  { id: 'agility-charisma-luck', name: 'Bountiful', icon: 'fa-solid fa-feather', weights: { agility: 2, charisma: 2, luck: 1 } },
+
+  // --- Agility + Luck
+  { id: 'agility-luck-might', name: 'Elusive', icon: 'fa-solid fa-dice', weights: { agility: 2, luck: 2, might: 1 } },
+  { id: 'agility-luck-perception', name: 'Furtive', icon: 'fa-solid fa-dice', weights: { agility: 2, luck: 2, perception: 1 } },
+  { id: 'agility-luck-intellect', name: 'Lustrous', icon: 'fa-solid fa-dice', weights: { agility: 2, luck: 2, intellect: 1 } },
+  { id: 'agility-luck-charisma', name: 'Fateful', icon: 'fa-solid fa-dice', weights: { agility: 2, luck: 2, charisma: 1 } },
+
+  // --- Perception + Intellect
+  { id: 'perception-intellect-might', name: 'Astute', icon: 'fa-solid fa-eye-low-vision', weights: { perception: 2, intellect: 2, might: 1 } },
+  { id: 'perception-intellect-agility', name: 'Calculated', icon: 'fa-solid fa-eye-low-vision', weights: { perception: 2, intellect: 2, agility: 1 } },
+  { id: 'perception-intellect-charisma', name: 'Refined', icon: 'fa-solid fa-eye-low-vision', weights: { perception: 2, intellect: 2, charisma: 1 } },
+  { id: 'perception-intellect-luck', name: 'Sage', icon: 'fa-solid fa-eye-low-vision', weights: { perception: 2, intellect: 2, luck: 1 } },
+
+  // --- Perception + Charisma
+  { id: 'perception-charisma-might', name: 'Composed', icon: 'fa-solid fa-masks-theater', weights: { perception: 2, charisma: 2, might: 1 } },
+  { id: 'perception-charisma-agility', name: 'Courteous', icon: 'fa-solid fa-masks-theater', weights: { perception: 2, charisma: 2, agility: 1 } },
+  { id: 'perception-charisma-intellect', name: 'Majestic', icon: 'fa-solid fa-masks-theater', weights: { perception: 2, charisma: 2, intellect: 1 } },
+  { id: 'perception-charisma-luck', name: 'Auspicious', icon: 'fa-solid fa-masks-theater', weights: { perception: 2, charisma: 2, luck: 1 } },
+
+  // --- Perception + Luck
+  { id: 'perception-luck-might', name: 'Watchful', icon: 'fa-solid fa-star', weights: { perception: 2, luck: 2, might: 1 } },
+  { id: 'perception-luck-agility', name: 'Wary', icon: 'fa-solid fa-star', weights: { perception: 2, luck: 2, agility: 1 } },
+  { id: 'perception-luck-intellect', name: 'Immaculate', icon: 'fa-solid fa-star', weights: { perception: 2, luck: 2, intellect: 1 } },
+  { id: 'perception-luck-charisma', name: 'Opportune', icon: 'fa-solid fa-star', weights: { perception: 2, luck: 2, charisma: 1 } },
+
+  // --- Intellect + Charisma
+  { id: 'intellect-charisma-might', name: 'Scholarly', icon: 'fa-solid fa-scroll', weights: { intellect: 2, charisma: 2, might: 1 } },
+  { id: 'intellect-charisma-agility', name: 'Polished', icon: 'fa-solid fa-scroll', weights: { intellect: 2, charisma: 2, agility: 1 } },
+  { id: 'intellect-charisma-perception', name: 'Erudite', icon: 'fa-solid fa-scroll', weights: { intellect: 2, charisma: 2, perception: 1 } },
+  { id: 'intellect-charisma-luck', name: 'Provident', icon: 'fa-solid fa-scroll', weights: { intellect: 2, charisma: 2, luck: 1 } },
+
+  // --- Intellect + Luck
+  { id: 'intellect-luck-might', name: 'Arcane', icon: 'fa-solid fa-moon', weights: { intellect: 2, luck: 2, might: 1 } },
+  { id: 'intellect-luck-agility', name: 'Omniscient', icon: 'fa-solid fa-moon', weights: { intellect: 2, luck: 2, agility: 1 } },
+  { id: 'intellect-luck-perception', name: 'Sly', icon: 'fa-solid fa-moon', weights: { intellect: 2, luck: 2, perception: 1 } },
+  { id: 'intellect-luck-charisma', name: 'Premonitory', icon: 'fa-solid fa-moon', weights: { intellect: 2, luck: 2, charisma: 1 } },
+
+  // --- Charisma + Luck
+  { id: 'charisma-luck-might', name: 'Gilded', icon: 'fa-solid fa-gem', weights: { charisma: 2, luck: 2, might: 1 } },
+  { id: 'charisma-luck-agility', name: 'Radiant', icon: 'fa-solid fa-gem', weights: { charisma: 2, luck: 2, agility: 1 } },
+  { id: 'charisma-luck-perception', name: 'Golden', icon: 'fa-solid fa-gem', weights: { charisma: 2, luck: 2, perception: 1 } },
+  { id: 'charisma-luck-intellect', name: 'Splendid', icon: 'fa-solid fa-gem', weights: { charisma: 2, luck: 2, intellect: 1 } },
+] satisfies ReadonlyArray<Build>

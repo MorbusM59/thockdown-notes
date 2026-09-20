@@ -83,6 +83,24 @@ describe('the tier, split by the weights', () => {
   it('has no modifier at all without a build', () => {
     expect(buildModifier(null, 20)).toBeNull()
   })
+
+  it('keeps a 60-build matrix with unique 2:2:1 stat shapes', () => {
+    expect(THOCKQUEST.builds).toHaveLength(60)
+
+    const seen = new Set<string>()
+    for (const build of THOCKQUEST.builds) {
+      const positive = STAT_KEYS.filter((key) => (build.weights[key] ?? 0) > 0)
+      expect(positive).toHaveLength(3)
+      expect(positive.map((key) => build.weights[key] as number).sort((a, b) => b - a)).toEqual([2, 2, 1])
+
+      const signature = positive
+        .map((key) => `${key}:${build.weights[key]}`)
+        .sort()
+        .join('|')
+      expect(seen.has(signature)).toBe(false)
+      seen.add(signature)
+    }
+  })
 })
 
 describe('the rank ladder', () => {
@@ -230,6 +248,11 @@ describe('what the content says about itself', () => {
     for (const build of THOCKQUEST.builds) {
       for (const line of describeBuild(build)) expect(line.toLowerCase()).not.toContain('tier')
     }
+  })
+
+  it('always shows the smallest weight last when describing a build', () => {
+    const build = { id: 'x', name: 'Test', icon: 'fa-solid fa-hammer', weights: { agility: 2, might: 2, perception: 1 } }
+    expect(describeBuild(build)).toEqual(['Might x 2', 'Agility x 2', 'Perception x 1'])
   })
 
   /**

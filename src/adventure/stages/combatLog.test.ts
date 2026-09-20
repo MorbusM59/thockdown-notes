@@ -25,6 +25,7 @@ const DEPS: DirectorDeps = {
 const CATALOG = catalogFor(THOCKQUEST, 0)
 const ITEMS = rolledPool(THOCKQUEST, 0, 'item')
 const TRAITS = rolledPool(THOCKQUEST, 0, 'trait')
+const ORDINARY_BUILD = 'might-agility-perception'
 const NOW = 1_700_000_000_000
 
 const ROLL = (rolled: number, needed: number) => ({ rolled, needed, passed: rolled < needed })
@@ -167,7 +168,7 @@ function intoCombat(seed: number): GameSave {
     const choice = screen.choices.find((candidate) => candidate.id !== GAME_EXIT_CHOICE)
     if (!choice) throw new Error('nothing to press')
     save = choose(save, choice.id, DEPS, NOW).save
-    if (activeGame(save)) save = withVectorsOnly(save, { build: 'journeyman', species: 'masurian', combatClass: 'sentinel' })
+    if (activeGame(save)) save = withVectorsOnly(save, { build: ORDINARY_BUILD, species: 'masurian', combatClass: 'sentinel' })
   }
   throw new Error('never reached a fight')
 }

@@ -139,11 +139,14 @@ export function describeBuild(build: Build): string[] {
   return weightedStats(build).map(({ key, weight }) => `${STAT_LABELS_LOCAL[key]} x ${weight}`)
 }
 
-/** The stats a build actually weights, in stat order, heaviest ratio intact. */
+/** The stats a build actually weights, heaviest ratio first and the lighter stat last. */
 function weightedStats(build: Build): { key: StatKey; weight: number }[] {
+  const statOrder = new Map(STAT_KEYS.map((key, index) => [key, index] as const))
+
   return STAT_KEYS
     .filter((key) => (build.weights[key] ?? 0) > 0)
     .map((key) => ({ key, weight: build.weights[key] as number }))
+    .sort((a, b) => (b.weight - a.weight) || ((statOrder.get(a.key) ?? 0) - (statOrder.get(b.key) ?? 0)))
 }
 
 /**

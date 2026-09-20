@@ -11,6 +11,7 @@ import { createdRun, withVectors } from '../testing/run'
 
 const DEPS: DirectorDeps = { stages: STAGES, content: THOCKQUEST, rootStageId: ROOT_STAGE_ID }
 const NOW = 1_700_000_000_000
+const MIGHTY_BUILD = 'might-agility-perception'
 
 /** A run with its three content vectors set, and nothing else played. */
 function runAs(vectors: { build?: string; species?: string; combatClass?: string }, seed = 4242): GameSave {
@@ -59,9 +60,9 @@ describe('a build stacks with what the player spends', () => {
     // build's share of the tier lands on TOP of it. Read from the build's own
     // apportionment rather than written out, so a content edit moves this
     // test's expectation with it.
-    const spent = spendMight(runAs({ build: 'hulking' }), BASE_STAT_CAP)
+    const spent = spendMight(runAs({ build: MIGHTY_BUILD }), BASE_STAT_CAP)
     const game = activeGame(spent)!
-    const fromTier = statsFromTier(THOCKQUEST.builds.find((build) => build.id === 'hulking')!, BASE_PLAYER_TIER)
+    const fromTier = statsFromTier(THOCKQUEST.builds.find((build) => build.id === MIGHTY_BUILD)!, BASE_PLAYER_TIER)
     expect(game.baseStats.might).toBe(BASE_STAT_CAP)
     expect(profileOf(spent, game, THOCKQUEST).stats.might).toBe(BASE_STAT_CAP + fromTier.might)
   })
@@ -73,8 +74,8 @@ describe('a species carries what is not a stat', () => {
     // vocabulary an item uses -- so it resolves in the same pass and needs no
     // code of its own. Compared against the SAME build, so the only
     // difference between the two characters is the species.
-    const plain = runAs({ build: 'hulking', species: 'davalian' })
-    const tough = runAs({ build: 'hulking', species: 'mertok' })
+    const plain = runAs({ build: MIGHTY_BUILD, species: 'davalian' })
+    const tough = runAs({ build: MIGHTY_BUILD, species: 'mertok' })
     const before = profileOf(plain, activeGame(plain)!, THOCKQUEST)
     const after = profileOf(tough, activeGame(tough)!, THOCKQUEST)
     expect(after.derived.maxHitPoints).toBeGreaterThan(before.derived.maxHitPoints)
@@ -84,8 +85,8 @@ describe('a species carries what is not a stat', () => {
   it('takes worn armour away where it says so, and leaves natural armour alone', () => {
     // The trade a Mertok is FOR: no decaying pool from items, but natural
     // armour still counts, so they can be tough without ever being armoured.
-    const mertok = runAs({ build: 'hulking', species: 'mertok' })
-    const other = runAs({ build: 'hulking', species: 'davalian' })
+    const mertok = runAs({ build: MIGHTY_BUILD, species: 'mertok' })
+    const other = runAs({ build: MIGHTY_BUILD, species: 'davalian' })
     expect(profileOf(mertok, activeGame(mertok)!, THOCKQUEST).noDecayingArmor).toBe(true)
     expect(profileOf(mertok, activeGame(mertok)!, THOCKQUEST).naturalArmor).toBeGreaterThan(0)
     // And the ordinary case is untouched: nothing about worn armour changed
@@ -110,10 +111,10 @@ describe('a class carries nothing but combat choices', () => {
     // runs identical but for their class must resolve to the same profile.
     // Across every class, because "it held for the one I tried" is exactly
     // how the vectors overlapped last time.
-    const baseline = runAs({ build: 'hulking', species: 'mertok', combatClass: 'bruiser' })
+    const baseline = runAs({ build: MIGHTY_BUILD, species: 'mertok', combatClass: 'bruiser' })
     const reference = profileOf(baseline, activeGame(baseline)!, THOCKQUEST)
     for (const combatClass of THOCKQUEST.combatClasses) {
-      const save = runAs({ build: 'hulking', species: 'mertok', combatClass: combatClass.id })
+      const save = runAs({ build: MIGHTY_BUILD, species: 'mertok', combatClass: combatClass.id })
       const profile = profileOf(save, activeGame(save)!, THOCKQUEST)
       expect(profile.stats).toEqual(reference.stats)
       expect(profile.derived).toEqual(reference.derived)
@@ -145,7 +146,7 @@ describe('what a run leaves behind', () => {
     // No effect hands this out. It falls out of the run's own state after
     // whatever effect made it true, which is why spending the sixth point is
     // all it takes and no screen has to remember to award anything.
-    const five = spendMight(runAs({ build: 'hulking' }), BASE_STAT_CAP - 1)
+    const five = spendMight(runAs({ build: MIGHTY_BUILD }), BASE_STAT_CAP - 1)
     expect(five.profile.unlocked).toEqual([])
 
     const six = spendMight(five, 1)
@@ -157,14 +158,14 @@ describe('what a run leaves behind', () => {
     // that could be un-earned by a later effect is a promise the save cannot
     // keep -- and "you had it yesterday" is the one thing a permanent unlock
     // must never say.
-    const earned = spendMight(runAs({ build: 'hulking' }), BASE_STAT_CAP)
+    const earned = spendMight(runAs({ build: MIGHTY_BUILD }), BASE_STAT_CAP)
     const spentDown = applyEffects(earned, [{ kind: 'adjustBaseStat', stat: 'might', amount: -6 }], DEPS.content, NOW)
     expect(activeGame(spentDown)!.baseStats.might).toBe(0)
     expect(spentDown.profile.unlocked).toEqual(['berserker'])
   })
 
   it('outlives the run, and the save', () => {
-    const earned = spendMight(runAs({ build: 'hulking' }), BASE_STAT_CAP)
+    const earned = spendMight(runAs({ build: MIGHTY_BUILD }), BASE_STAT_CAP)
     const reloaded = sanitizeGameSave(JSON.parse(JSON.stringify(earned)))!
     expect(reloaded.profile.unlocked).toEqual(['berserker'])
 

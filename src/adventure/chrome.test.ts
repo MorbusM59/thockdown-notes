@@ -218,7 +218,7 @@ describe('the readouts', () => {
 })
 
 describe('who the player is, on the bar', () => {
-  const CHOSEN = { build: 'hulking', species: 'mertok', combatClass: 'duelist' } as const
+  const CHOSEN = { build: 'might-agility-perception', species: 'mertok', combatClass: 'duelist' } as const
   const readoutsOf = (save: GameSave) => statusReadouts(save, THOCKQUEST)
 
   it('says the tier and ONLY the tier', () => {
@@ -249,12 +249,13 @@ describe('who the player is, on the bar', () => {
     // initials, which is the only place in a run they can be read.
     const readouts = readoutsOf(withVectors(createdRun({ seed: 77 }), CHOSEN))
     const plate = (key: string) => readouts.find((readout) => readout.key === key)
+    const chosenBuild = THOCKQUEST.builds.find((candidate) => candidate.id === CHOSEN.build)!
     for (const key of ['build', 'species', 'class']) {
       expect(plate(key)).toBeDefined()
       expect(plate(key)?.value).toBeUndefined()
       expect(plate(key)?.icon).toBeTruthy()
     }
-    expect(plate('build')?.label).toMatch(/^Hulking \([MAPICL]+\)$/)
+    expect(plate('build')?.label).toMatch(new RegExp(`^${chosenBuild.name} \\([MAPICL]+\\)$`))
     expect(plate('species')?.label).toBe('Mertok')
     expect(plate('class')?.label).toBe('Duelist')
   })
@@ -292,7 +293,7 @@ describe('who the player is, on the bar', () => {
 
   it('leaves out a vector that has not been chosen, because creation asks one at a time', () => {
     // A half-answered character is a real state, not a broken one.
-    const save = withVectors(createdRun({ seed: 77 }), { build: 'hulking' })
+    const save = withVectors(createdRun({ seed: 77 }), { build: 'might-agility-perception' })
     const bare = { ...save, games: save.games.map((game) => ({ ...game, speciesId: null, classId: null })) }
     const keys = readoutsOf(bare).map((readout) => readout.key)
     expect(keys).toContain('build')
