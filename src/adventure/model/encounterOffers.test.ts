@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  BOSS_ENCOUNTER, buildEncounterOffers, fixedTypeAt, MINI_BOSS_ENCOUNTERS, monsterPools, OFFERABLE_TYPES, rollCount,
+  BOSS_ENCOUNTER,
+  buildEncounterOffers,
+  fixedTypeAt,
+  MINI_BOSS_ENCOUNTERS,
+  monsterPools,
+  mostSelectedEncounterPool,
+  OFFERABLE_TYPES,
+  rollCount,
 } from './encounterOffers'
 import { MONSTER_BUDDY_CHANCES } from './vectors'
 import { THOCKQUEST } from '../content/thockquest'
@@ -78,6 +85,15 @@ describe('what an ordinary encounter offers', () => {
     }
   })
 
+  it('assigns every monster species to a valid encounter pool', () => {
+    const monsterSpecies = THOCKQUEST.species.filter((species) => !species.playable)
+    expect(monsterSpecies.length).toBeGreaterThan(0)
+    for (const species of monsterSpecies) {
+      expect(species.encounterPool).toBeTruthy()
+      expect(POOLS.species.some((candidate) => candidate.id === species.id)).toBe(true)
+    }
+  })
+
   it('names only vectors the content actually has', () => {
     const builds = new Set(THOCKQUEST.builds.map((build) => build.id))
     const species = new Set(THOCKQUEST.species.map((entry) => entry.id))
@@ -120,6 +136,14 @@ describe('what an ordinary encounter offers', () => {
     for (let seed = 1; seed <= 60; seed += 1) {
       expect(offersAt(2, 4, seed)).toHaveLength(4)
     }
+  })
+
+  it('chooses the most frequently tracked pool for a fixed encounter, with a random tie break', () => {
+    const tied = mostSelectedEncounterPool(['beasts', 'beasts', 'undead', 'undead', 'spirits'], 7)
+    expect(['beasts', 'undead']).toContain(tied)
+
+    const dominant = mostSelectedEncounterPool(['humanoids', 'humanoids', 'beasts', 'beasts', 'beasts'], 11)
+    expect(dominant).toBe('beasts')
   })
 
   it('returns a SHORTER list rather than looping when the combinations run out', () => {

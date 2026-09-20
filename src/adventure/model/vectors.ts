@@ -300,6 +300,10 @@ export const MONSTER_TYPE_CHARISMA_RESISTANCE: Readonly<Record<MonsterType, numb
  * and a species that could add two Might would be a second, hidden build.
  * `validateContent` fails on it.
  */
+export const ENCOUNTER_POOL_IDS = ['beasts', 'humanoids', 'undead', 'aberrations', 'constructs', 'spirits'] as const
+
+export type EncounterPoolId = (typeof ENCOUNTER_POOL_IDS)[number]
+
 export interface Species {
   id: string
   /** A noun. It is the middle word of a monster's name. */
@@ -308,6 +312,8 @@ export interface Species {
   effects: readonly ModifierEffect[]
   /** True offers it at character creation. Monsters roll from the rest. */
   playable?: boolean
+  /** A monster can only be rolled from the pool a tracker chooses. */
+  encounterPool?: EncounterPoolId
   requiresUnlock?: string
 }
 

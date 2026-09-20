@@ -6,7 +6,7 @@
 
 import type { JsonObject } from '../core/json'
 import type { StageModule } from '../core/stage'
-import { monsterPools, buildEncounterOffers } from '../model/encounterOffers'
+import { ENCOUNTER_TRACKS, monsterPools, buildEncounterOffers } from '../model/encounterOffers'
 import {
   iconFor, monsterCellLabel, monsterDetailLines, monsterFor, offerFromJson, offerToJson,
 } from './encounter'
@@ -18,17 +18,21 @@ export const huntStage: StageModule = {
   id: HUNT_STAGE_ID,
   title: 'The Hunt',
 
-  enter: (_input, context, rng) => {
+  enter: (input, context, rng) => {
     const encounter = currentEncounter(context.game)
+    const targetPool = typeof input.track === 'string' ? input.track : undefined
+    const track = ENCOUNTER_TRACKS.find((candidate) => candidate.id === targetPool)
     const rolled = buildEncounterOffers({
       encounter,
       choiceCount: context.profile?.derived.encounterChoices ?? 2,
-      ...monsterPools(context.content),
+      ...monsterPools(context.content, targetPool),
       rng,
     })
     return {
-      state: { offers: rolled.offers.map(offerToJson) } satisfies JsonObject,
-      narration: 'You cast about for tracks. Something is out there.',
+      state: { offers: rolled.offers.map(offerToJson), track: track?.id ?? null } satisfies JsonObject,
+      narration: track
+        ? `You track ${track.label.toLowerCase()}. Something is out there.`
+        : 'You cast about for tracks. Something is out there.',
       rng: rolled.rng,
     }
   },

@@ -16,7 +16,6 @@ import { statPointStage } from './statPoints'
 import { fameStage } from './fame'
 import { combatStage } from './combat'
 import { lootStage } from './loot'
-import { underConstructionStage } from './underConstruction'
 
 export const STAGES = registerStages([
   welcomeStage,
@@ -30,7 +29,6 @@ export const STAGES = registerStages([
   fameStage,
   combatStage,
   lootStage,
-  underConstructionStage,
 ])
 
 export const ROOT_STAGE_ID = WELCOME_STAGE_ID

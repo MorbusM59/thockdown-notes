@@ -14,7 +14,7 @@
 import type { StatKey } from './stats'
 import type { ModifierKind } from './modifiers'
 import type { JsonObject } from '../core/json'
-
+import type { EncounterPoolId } from './vectors'
 export type Effect =
   /**
    * Opens a new game slot and makes it the active one. Carries no seed and
@@ -98,6 +98,8 @@ export type Effect =
   | { kind: 'setVector'; vector: 'build' | 'species' | 'class'; id: string }
   /** Which region this level is being played in, and therefore which pools are in scope. */
   | { kind: 'setRegion'; regionId: string }
+  /** Which encounter pool the player chose to track for this encounter. */
+  | { kind: 'recordEncounterTrack'; pool: EncounterPoolId }
   /** One of the level's ten encounters spent. See stages/levelProgress.ts. */
   | { kind: 'advanceEncounter' }
   | { kind: 'advanceLevel' }

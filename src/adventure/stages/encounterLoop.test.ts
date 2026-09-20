@@ -218,13 +218,28 @@ describe('the level counts to ten', () => {
       expect(shown.choices).toHaveLength(1)
       expect(shown.choices[0].id).toBe('encounter:fixed')
     }
-    // ...and two ways to look for one everywhere else. Two, not three:
-    // Special Encounter was removed rather than built, and the omen above is
-    // what took its place.
+    // ...and several tracked creature pools to choose from everywhere else:
+    // the omen above is the one exception, and the stage itself is now
+    // named for the act of tracking rather than for going out to hunt.
+    expect(encounterSelectStage.title).toBe('Tracking')
     const open = atEncounter(4)
     const entered = encounterSelectStage.enter({}, open, 5)
     const ways = encounterSelectStage.present(entered.state, open).choices
-    expect(ways.map((choice) => choice.id)).toEqual(['encounter:hunt', 'encounter:explore'])
+    expect(ways).toHaveLength(2)
+    expect(ways.every((choice) => choice.id.startsWith('track:'))).toBe(true)
+    expect(new Set(ways.map((choice) => choice.id)).size).toBe(2)
+  })
+
+  it("offers only as many track choices as the player's perception allows", () => {
+    const base = atEncounter(4)
+    const withPerception = {
+      ...base,
+      profile: resolveProfile({ ...base.game!.baseStats, perception: 3 }, [], { items: 0, traits: 0 }),
+    }
+    const entered = encounterSelectStage.enter({}, withPerception, 5)
+    const choices = encounterSelectStage.present(entered.state, withPerception).choices
+    expect(choices).toHaveLength(3)
+    expect(choices.every((choice) => choice.id.startsWith('track:'))).toBe(true)
   })
 
   it('pays the rest into a hurt character, and cannot overfill a healthy one', () => {

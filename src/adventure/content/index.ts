@@ -17,7 +17,7 @@
 // chose. See docs/adventure-platform.md.
 
 import type { Modifier } from '../model/modifiers'
-import type { Build, CombatClass, Species } from '../model/vectors'
+import { ENCOUNTER_POOL_IDS, type Build, type CombatClass, type Species } from '../model/vectors'
 import { STAT_KEYS } from '../model/stats'
 import { rollModifier, validateTemplate, type ModifierTemplate } from '../model/modifierSlots'
 import type { RngState } from '../core/rng'
@@ -33,6 +33,7 @@ const DEFENCE_IDS: readonly string[] = DEFENCES
  * pair cannot be reached by accident: both are gone, their jobs split across
  * `Build`, `Species` and `CombatClass`.
  */
+export { ENCOUNTER_POOL_IDS, type EncounterPoolId } from '../model/vectors'
 export type { Build, CombatClass, CombatMove, MonsterType, Species } from '../model/vectors'
 
 /**
@@ -187,6 +188,12 @@ export function validateContent(content: Content): string[] {
     check(species.id, `species "${species.name}"`)
     if (species.effects.length === 0) {
       problems.push(`species "${species.id}" does nothing: a species with no effects is a name`)
+    }
+    if (!species.playable && !species.encounterPool) {
+      problems.push(`monster species "${species.id}" is missing an encounterPool: it would never be trackable`)
+    }
+    if (species.encounterPool && !ENCOUNTER_POOL_IDS.includes(species.encounterPool)) {
+      problems.push(`species "${species.id}" is in an unknown encounterPool: ${species.encounterPool}`)
     }
     for (const effect of species.effects) {
       if (effect.kind === 'statDelta') {

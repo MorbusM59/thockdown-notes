@@ -27,7 +27,7 @@
 
 import type { JsonObject } from '../core/json'
 import type { StageModule } from '../core/stage'
-import { monsterPools, buildEncounterOffers, fixedTypeAt, LEVEL_ENCOUNTER_COUNT } from '../model/encounterOffers'
+import { ENCOUNTER_TRACKS, monsterPools, buildEncounterOffers, fixedTypeAt, LEVEL_ENCOUNTER_COUNT, mostSelectedEncounterPool, trackChoicesFor } from '../model/encounterOffers'
 import {
   iconFor, monsterCellLabel, monsterDetailLines, monsterFor, monsterName, offerFromJson, offerToJson,
 } from './encounter'
@@ -61,20 +61,23 @@ const OMEN_TRAIT_PREFIX = 'omen:trait:'
 
 export const encounterSelectStage: StageModule = {
   id: ENCOUNTER_SELECT_STAGE_ID,
-  title: 'Wilds',
+  title: 'Tracking',
 
   enter: (_input, context, rng) => {
     const encounter = currentEncounter(context.game)
     const fixed = fixedTypeAt(encounter)
     if (!fixed || isLevelComplete(encounter)) {
-      return { state: { fixedOffer: null } satisfies JsonObject, rng }
+      const choiceCount = context.profile?.derived.encounterChoices ?? 2
+      const sampled = trackChoicesFor(choiceCount, rng)
+      return { state: { fixedOffer: null, trackIds: sampled.trackIds } satisfies JsonObject, rng: sampled.rng }
     }
     // A boss is PLACED, so it is drawn here rather than offered: one species
     // able to field that rank, and no choice about it.
+    const selectedPool = mostSelectedEncounterPool(context.game?.trackedPools, rng)
     const drawn = buildEncounterOffers({
       encounter,
       choiceCount: 1,
-      ...monsterPools(context.content),
+      ...monsterPools(context.content, selectedPool),
       rng,
     })
     const offer = drawn.offers[0]
@@ -95,6 +98,7 @@ export const encounterSelectStage: StageModule = {
         fixedOffer: offer ? offerToJson(offer) : null,
         omenTraitIds: omen.traits.map((trait) => trait.id),
         omenAnswered: false,
+        trackIds: [],
       } satisfies JsonObject,
       narration: offer
         ? `**${monsterName(offer, context.content)} is ahead.** *The road gives you something first.*`
@@ -176,12 +180,18 @@ export const encounterSelectStage: StageModule = {
       }
     }
 
+    const trackIds = Array.isArray(state.trackIds) ? state.trackIds.filter((id): id is string => typeof id === 'string') : []
+    const tracks = trackIds.length > 0
+      ? ENCOUNTER_TRACKS.filter((track) => trackIds.includes(track.id))
+      : ENCOUNTER_TRACKS
+
     return {
       screenKey: `encounter:open:${encounter}`,
-      choices: [
-        { id: 'encounter:hunt', label: 'Go Hunting', icon: 'fa-solid fa-paw' },
-        { id: 'encounter:explore', label: 'Go Exploring', icon: 'fa-solid fa-compass' },
-      ],
+      choices: tracks.map((track) => ({
+        id: `track:${track.id}`,
+        label: `Track ${track.label}`,
+        icon: track.icon,
+      })),
     }
   },
 
@@ -267,19 +277,13 @@ export const encounterSelectStage: StageModule = {
       }
     }
 
-    if (choiceId === 'encounter:hunt') {
-      return { kind: 'replace', stageId: HUNT_STAGE_ID, rng }
-    }
-
-    if (choiceId === 'encounter:explore') {
-      // Still unbuilt, and the stage says so in the game rather than being
-      // stubbed with something plausible. The encounter is NOT spent by
-      // looking at a wall: nothing advances the count, so it comes back to
-      // the same one.
+    if (choiceId.startsWith('track:')) {
+      const pool = choiceId.slice('track:'.length)
       return {
         kind: 'replace',
-        stageId: 'underConstruction',
-        input: { what: 'Exploring' },
+        stageId: HUNT_STAGE_ID,
+        input: { track: pool },
+        effects: [{ kind: 'recordEncounterTrack', pool: pool as any }],
         rng,
       }
     }

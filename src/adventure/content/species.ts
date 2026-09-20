@@ -156,6 +156,7 @@ export const SPECIES: readonly Species[] = [
     id: 'goblin',
     name: 'Goblin',
     icon: 'fa-solid fa-child-reaching',
+    encounterPool: 'humanoids',
     effects: [
       { kind: 'derivedPercent', derived: 'actionsPerRound', percent: 0.5 },
       { kind: 'derivedPercent', derived: 'maxHitPoints', percent: -0.3 },
@@ -166,6 +167,7 @@ export const SPECIES: readonly Species[] = [
     id: 'orc',
     name: 'Orc',
     icon: 'fa-solid fa-hand-fist',
+    encounterPool: 'humanoids',
     effects: [
       { kind: 'derivedPercent', derived: 'damageMultiplier', percent: 0.4 },
       { kind: 'naturalArmor', amount: 1 },
@@ -176,6 +178,7 @@ export const SPECIES: readonly Species[] = [
     id: 'wolf',
     name: 'Wolf',
     icon: 'fa-solid fa-paw',
+    encounterPool: 'beasts',
     effects: [
       { kind: 'derivedPercentOnAction', derived: 'damageMultiplier', percent: 0.6, position: 'first' },
       { kind: 'derivedPercent', derived: 'dodgeChance', percent: 0.15 },
@@ -189,6 +192,7 @@ export const SPECIES: readonly Species[] = [
     id: 'bear',
     name: 'Bear',
     icon: 'fa-solid fa-otter',
+    encounterPool: 'beasts',
     effects: [
       { kind: 'derivedPercent', derived: 'maxHitPoints', percent: 0.5 },
       { kind: 'naturalArmor', amount: 2 },
@@ -199,6 +203,7 @@ export const SPECIES: readonly Species[] = [
     id: 'spider',
     name: 'Spider',
     icon: 'fa-solid fa-spider',
+    encounterPool: 'beasts',
     effects: [
       { kind: 'derivedPercent', derived: 'hitChance', percent: 0.3 },
       { kind: 'derivedPercent', derived: 'critChance', percent: 0.2 },
@@ -209,6 +214,7 @@ export const SPECIES: readonly Species[] = [
     id: 'troll',
     name: 'Troll',
     icon: 'fa-solid fa-hill-rockslide',
+    encounterPool: 'humanoids',
     effects: [
       { kind: 'derivedPercent', derived: 'maxHitPoints', percent: 0.8 },
       { kind: 'armorRepairAfterCombat', amount: 3 },
@@ -219,6 +225,7 @@ export const SPECIES: readonly Species[] = [
     id: 'wraith',
     name: 'Wraith',
     icon: 'fa-solid fa-ghost',
+    encounterPool: 'undead',
     effects: [
       // Nothing to armour and nothing to hit.
       { kind: 'noDecayingArmor' },
@@ -230,6 +237,7 @@ export const SPECIES: readonly Species[] = [
     id: 'kobold',
     name: 'Kobold',
     icon: 'fa-solid fa-user-ninja',
+    encounterPool: 'humanoids',
     effects: [
       { kind: 'derivedPercent', derived: 'actionsPerRound', percent: 0.25 },
       { kind: 'derivedPercent', derived: 'critChance', percent: 0.3 },
@@ -240,6 +248,7 @@ export const SPECIES: readonly Species[] = [
     id: 'harpy',
     name: 'Harpy',
     icon: 'fa-solid fa-crow',
+    encounterPool: 'beasts',
     effects: [
       { kind: 'derivedPercent', derived: 'dodgeChance', percent: 0.3 },
       { kind: 'derivedPercentOnAction', derived: 'critChance', percent: 0.5, position: 'first' },
@@ -250,6 +259,7 @@ export const SPECIES: readonly Species[] = [
     id: 'ogre',
     name: 'Ogre',
     icon: 'fa-solid fa-hammer',
+    encounterPool: 'humanoids',
     effects: [
       { kind: 'derivedPercent', derived: 'damageMultiplier', percent: 0.9 },
       { kind: 'derivedPercent', derived: 'maxHitPoints', percent: 0.2 },
@@ -261,6 +271,7 @@ export const SPECIES: readonly Species[] = [
     id: 'imp',
     name: 'Imp',
     icon: 'fa-solid fa-fire-flame-simple',
+    encounterPool: 'spirits',
     effects: [
       { kind: 'derivedPercent', derived: 'actionsPerRound', percent: 0.75 },
       { kind: 'derivedPercent', derived: 'damageMultiplier', percent: -0.45 },
@@ -271,6 +282,7 @@ export const SPECIES: readonly Species[] = [
     id: 'serpent',
     name: 'Serpent',
     icon: 'fa-solid fa-staff-snake',
+    encounterPool: 'beasts',
     effects: [
       { kind: 'derivedPercent', derived: 'critChance', percent: 0.45 },
       { kind: 'derivedPercent', derived: 'hitChance', percent: 0.15 },
@@ -282,6 +294,7 @@ export const SPECIES: readonly Species[] = [
     id: 'golem',
     name: 'Golem',
     icon: 'fa-solid fa-cubes-stacked',
+    encounterPool: 'constructs',
     effects: [
       { kind: 'naturalArmor', amount: 5 },
       { kind: 'derivedPercent', derived: 'maxHitPoints', percent: 0.4 },
@@ -293,6 +306,7 @@ export const SPECIES: readonly Species[] = [
     id: 'ghoul',
     name: 'Ghoul',
     icon: 'fa-solid fa-skull-crossbones',
+    encounterPool: 'undead',
     effects: [
       { kind: 'derivedPercentWhileHealth', derived: 'damageMultiplier', percent: 0.8, band: 'injured', subject: 'self' },
       { kind: 'derivedPercentWhileHealth', derived: 'actionsPerRound', percent: 0.5, band: 'injured', subject: 'self' },
@@ -303,6 +317,7 @@ export const SPECIES: readonly Species[] = [
     id: 'boar',
     name: 'Boar',
     icon: 'fa-solid fa-hippo',
+    encounterPool: 'beasts',
     effects: [
       { kind: 'derivedPercentOnAction', derived: 'damageMultiplier', percent: 1.2, position: 'first' },
       { kind: 'naturalArmor', amount: 1 },
@@ -313,6 +328,7 @@ export const SPECIES: readonly Species[] = [
     id: 'drake',
     name: 'Drake',
     icon: 'fa-solid fa-dragon',
+    encounterPool: 'beasts',
     effects: [
       { kind: 'derivedPercent', derived: 'damageMultiplier', percent: 0.5 },
       { kind: 'naturalArmor', amount: 3 },
@@ -324,6 +340,7 @@ export const SPECIES: readonly Species[] = [
     id: 'basilisk',
     name: 'Basilisk',
     icon: 'fa-solid fa-eye',
+    encounterPool: 'aberrations',
     effects: [
       { kind: 'derivedPercent', derived: 'hitChance', percent: 0.5 },
       { kind: 'naturalArmor', amount: 2 },
@@ -334,6 +351,7 @@ export const SPECIES: readonly Species[] = [
     id: 'gargoyle',
     name: 'Gargoyle',
     icon: 'fa-solid fa-chess-rook',
+    encounterPool: 'constructs',
     effects: [
       { kind: 'naturalArmor', amount: 4 },
       { kind: 'armorRepairAfterCombat', amount: 2 },
@@ -345,6 +363,7 @@ export const SPECIES: readonly Species[] = [
     id: 'slime',
     name: 'Slime',
     icon: 'fa-solid fa-droplet',
+    encounterPool: 'aberrations',
     effects: [
       // Nothing to cut, and nothing much to hit you with.
       { kind: 'derivedPercent', derived: 'maxHitPoints', percent: 1 },
@@ -356,6 +375,7 @@ export const SPECIES: readonly Species[] = [
     id: 'manticore',
     name: 'Manticore',
     icon: 'fa-solid fa-dragon',
+    encounterPool: 'beasts',
     effects: [
       { kind: 'derivedPercent', derived: 'actionsPerRound', percent: 0.5 },
       { kind: 'derivedPercent', derived: 'critChance', percent: 0.3 },
@@ -367,6 +387,7 @@ export const SPECIES: readonly Species[] = [
     id: 'wisp',
     name: 'Wisp',
     icon: 'fa-solid fa-star',
+    encounterPool: 'spirits',
     effects: [
       // Almost impossible to touch, and almost nothing when you do.
       { kind: 'derivedPercent', derived: 'dodgeChance', percent: 0.6 },
@@ -378,6 +399,7 @@ export const SPECIES: readonly Species[] = [
     id: 'minotaur',
     name: 'Minotaur',
     icon: 'fa-solid fa-khanda',
+    encounterPool: 'humanoids',
     effects: [
       { kind: 'derivedPercentOnAction', derived: 'damageMultiplier', percent: 1.5, position: 'first' },
       { kind: 'derivedPercent', derived: 'maxHitPoints', percent: 0.35 },
@@ -388,6 +410,7 @@ export const SPECIES: readonly Species[] = [
     id: 'shade',
     name: 'Shade',
     icon: 'fa-solid fa-user-secret',
+    encounterPool: 'undead',
     effects: [
       { kind: 'derivedPercentOnAction', derived: 'critChance', percent: 0.8, position: 'first' },
       { kind: 'derivedPercent', derived: 'hitChance', percent: 0.35 },
@@ -399,6 +422,7 @@ export const SPECIES: readonly Species[] = [
     id: 'lich',
     name: 'Lich',
     icon: 'fa-solid fa-book-skull',
+    encounterPool: 'undead',
     effects: [
       { kind: 'derivedPercent', derived: 'damageMultiplier', percent: 0.6 },
       { kind: 'derivedPercentWhileHealth', derived: 'actionsPerRound', percent: 1, band: 'maimed', subject: 'self' },
@@ -409,6 +433,7 @@ export const SPECIES: readonly Species[] = [
     id: 'swarm',
     name: 'Swarm',
     icon: 'fa-solid fa-bugs',
+    encounterPool: 'aberrations',
     effects: [
       // Many small things at once, which is what the action pool is for.
       { kind: 'derivedPercent', derived: 'actionsPerRound', percent: 1.25 },

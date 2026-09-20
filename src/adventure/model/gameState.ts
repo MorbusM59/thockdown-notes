@@ -41,7 +41,7 @@ import { clampProgression, DEFAULT_PROGRESSION } from './difficulty'
 import {
   clampAutoAdvanceMs, DEFAULT_AUTO_ADVANCE_MS, DEFAULT_AUTO_ADVANCE_SCOPE, type AutoAdvanceScope,
 } from './autoAdvance'
-import { BASE_PLAYER_TIER, buildModifier, type CombatClass } from './vectors'
+import { BASE_PLAYER_TIER, buildModifier, type CombatClass, type EncounterPoolId } from './vectors'
 import { speciesModifier } from './monsters'
 
 /**
@@ -134,6 +134,8 @@ export interface GameRecord {
   endedReason?: 'defeat' | 'retired'
   /** 1-based. */
   level: number
+  /** Tracks the player has followed in the current level, newest last. */
+  trackedPools?: readonly EncounterPoolId[]
   /**
    * WHICH of the level's ten encounters the run is on, 1-based, and it counts
    * PAST the last one -- eleven means the level is done (stages/levelProgress.ts).
@@ -738,6 +740,7 @@ function createGame(id: string, seed: RngState, nowMs: number, settings: GameSet
     updatedAtMs: nowMs,
     status: 'active',
     level: 1,
+    trackedPools: [],
     encounterIndex: 1,
     progression: clampProgression(settings.progression),
     successAdjust: settings.successAdjust,
@@ -972,6 +975,11 @@ export function applyEffect(
     case 'setRegion':
       return replace({ regionId: effect.regionId })
 
+    case 'recordEncounterTrack': {
+      const next = [...(game.trackedPools ?? []), effect.pool]
+      return replace({ trackedPools: next })
+    }
+
     case 'advanceEncounter': {
       // One step along the level's ten, emitted by whatever stage SPENT the
       // encounter -- which is the loot screen on the way out, and combat
@@ -1036,6 +1044,7 @@ export function applyEffect(
               level: candidate.level + 1,
               // A new journey starts at its first encounter. The counter is
               // per level, not per run.
+              trackedPools: [],
               encounterIndex: 1,
               hitPoints: restored,
               // The marks are spent. A new level's default is its own newest

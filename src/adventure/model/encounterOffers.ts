@@ -26,7 +26,7 @@
 
 import { nextChance, nextInt, nextPick, type RngState } from '../core/rng'
 import type { Build, CombatClass, Species } from '../content'
-import { MONSTER_BUDDY_CHANCES, type MonsterType } from './vectors'
+import { ENCOUNTER_POOL_IDS, MONSTER_BUDDY_CHANCES, type EncounterPoolId, type MonsterType } from './vectors'
 
 export const LEVEL_ENCOUNTER_COUNT = 10
 
@@ -119,6 +119,56 @@ function drawOffer(
 const DRAW_ATTEMPTS = 24
 
 /**
+ * The tracks a player can follow to draw a monster from a pool of creatures.
+ */
+export const ENCOUNTER_TRACKS: readonly { id: EncounterPoolId; label: string; icon: string }[] = [
+  { id: 'beasts', label: 'Beasts', icon: 'fa-solid fa-paw' },
+  { id: 'humanoids', label: 'Humanoids', icon: 'fa-solid fa-user' },
+  { id: 'undead', label: 'Undead', icon: 'fa-solid fa-skull-crossbones' },
+  { id: 'aberrations', label: 'Aberrations', icon: 'fa-solid fa-bugs' },
+  { id: 'constructs', label: 'Constructs', icon: 'fa-solid fa-cubes-stacked' },
+  { id: 'spirits', label: 'Spirits', icon: 'fa-solid fa-ghost' },
+]
+
+export function trackChoicesFor(choiceCount: number, rng: RngState): { trackIds: EncounterPoolId[]; rng: RngState } {
+  const wanted = Math.max(0, Math.min(ENCOUNTER_TRACKS.length, Math.floor(choiceCount)))
+  const remaining = [...ENCOUNTER_TRACKS]
+  const trackIds: EncounterPoolId[] = []
+  let state = rng
+
+  while (trackIds.length < wanted && remaining.length > 0) {
+    const draw = nextInt(state, 0, remaining.length - 1)
+    state = draw.rng
+    const picked = remaining.splice(draw.value, 1)[0]
+    if (picked) trackIds.push(picked.id)
+  }
+
+  return { trackIds, rng: state }
+}
+
+export function mostSelectedEncounterPool(
+  trackedPools: readonly EncounterPoolId[] | null | undefined,
+  rng: RngState,
+): EncounterPoolId {
+  if (!trackedPools || trackedPools.length === 0) {
+    const candidates = ENCOUNTER_TRACKS.map((track) => track.id)
+    const draw = nextPick(rng, candidates)
+    return draw.value ?? candidates[0] ?? 'beasts'
+  }
+
+  const counts = new Map<EncounterPoolId, number>()
+  for (const pool of trackedPools) {
+    counts.set(pool, (counts.get(pool) ?? 0) + 1)
+  }
+
+  const highest = Math.max(...counts.values())
+  const candidates = ENCOUNTER_POOL_IDS.filter((pool) => (counts.get(pool) ?? 0) === highest)
+  if (candidates.length === 0) return ENCOUNTER_TRACKS[0].id
+  const draw = nextPick(rng, candidates)
+  return draw.value ?? candidates[0]
+}
+
+/**
  * WHAT A MONSTER MAY BE DRAWN FROM, in one place.
  *
  * Every build and every class, and the species that are NOT one of the
@@ -131,10 +181,10 @@ export function monsterPools(content: {
   builds: readonly Build[]
   species: readonly Species[]
   combatClasses: readonly CombatClass[]
-}): OfferPools {
+}, targetPool?: EncounterPoolId): OfferPools {
   return {
     builds: content.builds,
-    species: content.species.filter((species) => !species.playable),
+    species: content.species.filter((species) => !species.playable && (!targetPool || species.encounterPool === targetPool)),
     classes: content.combatClasses,
   }
 }

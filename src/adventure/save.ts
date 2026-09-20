@@ -17,6 +17,7 @@ import { clampProgression } from './model/difficulty'
 import { clampAutoAdvanceMs, AUTO_ADVANCE_SCOPES, DEFAULT_AUTO_ADVANCE_SCOPE, type AutoAdvanceScope } from './model/autoAdvance'
 import { STAT_KEYS, type StatBlock } from './model/stats'
 import { FIRST_MILESTONE_THRESHOLD } from './model/milestones'
+import { ENCOUNTER_POOL_IDS, type EncounterPoolId } from './model/vectors'
 import type { JsonObject } from './core/json'
 import type { ModifierKind } from './model/modifiers'
 import { toRngState } from './core/rng'
@@ -116,6 +117,9 @@ function sanitizeGame(value: unknown): GameRecord | null {
       ? { endedReason: value.endedReason }
       : {}),
     level: wholeAtLeast(value.level, 1),
+    trackedPools: Array.isArray(value.trackedPools)
+      ? value.trackedPools.flatMap((pool) => ENCOUNTER_POOL_IDS.includes(pool as EncounterPoolId) ? [pool as EncounterPoolId] : [])
+      : [],
     // A save written before the counter moved onto the record has none, and
     // starts the level over at its first encounter -- the same widening the
     // narration list and the tuning numbers took, for the same reason: a
