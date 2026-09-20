@@ -116,11 +116,11 @@ function dealt(state: JsonObject): string[] {
 }
 
 const NARRATION: Readonly<Record<Step, string>> = {
-  build: 'What shape are you? Something...',
-  species: 'And what are you?',
-  class: 'What do you do when it comes to blows?',
-  trait: 'What are you known for?',
-  item: 'You would never leave home without...',
+  build: 'Your build...',
+  species: 'Your homeland...',
+  class: 'Your life...',
+  trait: 'A trait ypu picked up...',
+  item: 'An item you held on to...',
 }
 
 export const characterCreationStage: StageModule = {
