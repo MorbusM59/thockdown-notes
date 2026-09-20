@@ -213,7 +213,7 @@ describe('a round, as the bar tells it', () => {
   it('keeps the last action visible behind the new round-head when the round turns over', () => {
     let save = intoCombat(4242)
     let sawTurnover = false
-    let nextRound: string[] | null = null
+    let nextRound: readonly string[] | null = null
     for (let action = 0; action < 40 && !sawTurnover; action += 1) {
       const before = currentScreen(save, DEPS)!.narration
       save = step(save)

@@ -7,6 +7,7 @@
 import type { JsonObject } from '../core/json'
 import type { StageModule } from '../core/stage'
 import { ENCOUNTER_TRACKS, monsterPools, buildEncounterOffers } from '../model/encounterOffers'
+import type { EncounterPoolId } from '../model/vectors'
 import {
   iconFor, monsterCellLabel, monsterDetailLines, monsterFor, offerFromJson, offerToJson,
 } from './encounter'
@@ -20,7 +21,10 @@ export const huntStage: StageModule = {
 
   enter: (input, context, rng) => {
     const encounter = currentEncounter(context.game)
-    const targetPool = typeof input.track === 'string' ? input.track : undefined
+    const targetPool: EncounterPoolId | undefined = typeof input.track === 'string'
+      && ENCOUNTER_TRACKS.some((candidate) => candidate.id === input.track)
+      ? input.track as EncounterPoolId
+      : undefined
     const track = ENCOUNTER_TRACKS.find((candidate) => candidate.id === targetPool)
     const rolled = buildEncounterOffers({
       encounter,
