@@ -201,6 +201,57 @@ an architecture that no longer existed.
 
 ---
 
+## 10. Write comments for a stranger, in plain technical language.
+
+A comment is read by someone who was not in the conversation that produced it.
+Every comment here is written for that reader: the one who arrives in six
+months with no memory of why any of this happened.
+
+The rule is concrete:
+
+- **Name things the way the code and the domain name them.** A build, a stat,
+  a round, a combat action, a log entry. Not a metaphor invented while the
+  work was being discussed.
+- **State the mechanism, then the intent.** What the code does, then why it
+  does it that way. Both plainly.
+- **No allusion, no shorthand, no in-joke.** If a phrase would need the
+  original conversation to decode, it is not a comment, it is a private note.
+- **Technical terms are good.** Precision is the goal, not simplicity —
+  "resolved against the opponent's stat block" is clearer than "checked
+  against them". Jargon that names a real concept helps; jargon that stands
+  in for one does not.
+- **Length is not the problem; density of allusion is.** A long comment that
+  explains a subtle rule step by step is doing its job. A short one that
+  gestures at three ideas the reader has to reconstruct is not.
+
+*Instance.* This comment shipped in `combatLog.test.ts`:
+
+> Creation deals a build now, and what a round looks like on the bar depends
+> entirely on how long the round is: a Hulking character ends a fight before
+> it turns over and a Resplendent one never lands a blow worth a pill.
+> Journeyman is the shape that produces an ordinary round, which is what
+> these are reading.
+
+Every clause in it is a phrase coined in conversation. "Deals a build", "looks
+like on the bar", "before it turns over", "a blow worth a pill", "the shape
+that produces an ordinary round" — the author could read it because it was
+fresh; nobody else can. What it was trying to say, written for a stranger:
+
+> At character creation the player chooses a build, which decides how the stat
+> points granted by tier are spread across the six stats. The build therefore
+> changes how a combat round plays out, including how many offensive and
+> defensive actions fit into one round. A build with high Might deals high
+> damage per hit, so it can end the fight -- and with it the round -- in a
+> single attack. A build with low Might has low Health, so it can be killed
+> before it gets to act at all. Both produce rounds with almost no log
+> entries, which is not what the tests below are checking. Journeyman is
+> balanced across all six stats and so produces an ordinary, representative
+> round.
+
+Longer, and far easier to read, because nothing in it has to be decoded.
+
+---
+
 ## The order of work
 
 The rules above say what good looks like. This says what to do first, and it

@@ -142,13 +142,21 @@ describe('a combat pill', () => {
 const isRoundHead = (entry: string) => entry.includes('fa-explosion')
 
 /**
- * Into a fight, with the run's vectors PINNED to the flat build.
+ * Plays a new run forward until a fight starts, forcing the Journeyman build.
  *
- * Creation deals a build now, and what a round looks like on the bar depends
- * entirely on how long the round is: a Hulking character ends a fight before
- * it turns over and a Resplendent one never lands a blow worth a pill.
- * Journeyman is the shape that produces an ordinary round, which is what
- * these are reading.
+ * At character creation the player chooses a build, which decides how the
+ * stat points granted by tier are spread across the six stats. The build
+ * therefore changes how a combat round plays out, including how many
+ * offensive and defensive actions fit into one round:
+ *
+ *   - A build with high Might deals high damage per hit, so it can end the
+ *     fight -- and with it the round -- in a single attack.
+ *   - A build with low Might has low Health, so it can be killed before it
+ *     gets to act at all.
+ *
+ * Both produce rounds with almost no log entries, which is not what the tests
+ * below are checking. Journeyman is balanced across all six stats and so
+ * produces an ordinary, representative round.
  */
 function intoCombat(seed: number): GameSave {
   let save = enterEntryScreen(emptySave(seed), DEPS, NOW)
