@@ -87,12 +87,31 @@
   overflow:      hidden;
 }
 
+/* THE ELLIPSIS CLIPS SIDEWAYS ONLY, and the padding is what makes that true.
+   `overflow: hidden` is what `text-overflow: ellipsis` needs, and it clips
+   BOTH axes -- at this element's box, which is one line box tall
+   (`--ui-pill-line-height`, pillbars.css). A font whose ink runs past its own
+   line height therefore lost its ascenders and descenders here, while the
+   note's own id pill in the tag bar did not: that one leaves its label
+   `overflow: visible` (tags.css) and is clipped by the PILL instead, whose box
+   is a whole `--ui-pill-bar-size` plus padding and has the room.
+
+   Padding enlarges the clip rect, and the matching negative margin takes the
+   layout effect back out, so the label occupies exactly the line it did and
+   clips at a box that is taller than any glyph. `overflow-y: visible` is not
+   available: the spec computes it to `auto` the moment the other axis is not
+   visible, which would have added a scroll container. The pill's own
+   `overflow: hidden` is still there and is now what actually bounds the text
+   vertically -- which is the tag bar's behaviour, arrived at deliberately
+   rather than by both pills happening to agree. */
 .tag-pill.note-identity-tab.escape-menu-identity-tab .tag-pill-label {
   overflow:      hidden;
   text-overflow: ellipsis;
   white-space:   nowrap;
   width:         100%;
   text-align:    center;
+  padding-block: 0.5em;
+  margin-block:  -0.5em;
 }
 
 /* The mode's narration pill. It sits in the chapter bar's own well, scroll
