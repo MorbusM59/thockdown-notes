@@ -80,6 +80,16 @@ These `localStorage` flags turn on traces built for defects that only reproduce 
 - `thockdown:debug-focus` (`src/dev/focusDiagnostics.ts`) — every mousedown in the capture phase with `defaultPrevented`, what holds focus one frame and one tick later, and every focusin/focusout naming both parties and their section column.
 - `thockdown:debug-input-lag` — the pre-existing keystroke/scroll-sync trace. Loud; turn it OFF before reading either of the others.
 
+## Combat balance testing is SUSPENDED
+`src/adventure/testing/balance.ts` holds the switch (`BALANCE_TESTING_SUSPENDED`) and the rule. Content is being tuned by hand, so assertions about tuned VALUES are noise until it settles — but the line between the two kinds is load-bearing and is written there rather than here:
+
+- A **balance** test asserts a value tuning may legitimately change (how hard something hits, how long a fight lasts, how often a run ends). Wrap it in `describeBalance` and it sleeps until the switch flips.
+- A **correctness** test asserts a property no content can falsify (a chance stays inside 0..1, Combo pays per strike already taken, a round survives the disk, two sources of Counter add). If one of these breaks after a content edit, **the code or the content is wrong** — that is the test working, and suspending it throws away the only thing still watching.
+
+The question is never "did this fail after I changed content". It is **could a legitimate tuning change make this assertion false without anything being broken?** Only then is it balance. **Never loosen a correctness test to fit new content** — widening a bound until the numbers fit turns a property test into a test of nothing and leaves no mark that it happened; suspending is visible and reversible, loosening is neither.
+
+`npm run adventure:sim` is the real balance instrument and is **not a gate** while this is on, nor evidence that a change is balanced. It is separately saturated (94–98% death at every difficulty whatever changes) and could not answer a balance question today regardless.
+
 ## Verification rigor: match the size of the change
 Two tiers, chosen by judgment, not by rote:
 - **Substantial/structural work** (new features, architecture or contract changes, cross-cutting refactors, anything touching editor/scroll/performance-critical code): gold standard. Live-browser Playwright verification (not just code reading), the full existing regression-script suite, `npm test`, `tsc`/`lint`, and an A/B check (e.g. `git stash`) proving a fix's own test actually fails without it. Update the relevant living doc/JSDoc history.
