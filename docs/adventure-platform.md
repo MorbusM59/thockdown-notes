@@ -2483,3 +2483,39 @@ placed at 5, 9 and 10 and the level advancing after ten.
      be about crits, that is the thing most worth seeing. `landedIcon` is the
      one place that chooses, so the attack cell, the log and every defence that
      resolves into a landed blow move together.
+
+
+113. **A CLASS'S MOVES ARE GROUPED BY SPACING AND ENCLOSURE**, not by
+     punctuation a reader has to interpret. A class is the only vector whose
+     worth is prose rather than a figure, so its cell's detail is the longest
+     thing any choice screen asks anybody to read, and as a flat run of
+     clauses there was no seeing where one move stopped and the next began.
+     The format is
+
+         [ <glyph> NAME | clause | clause ]   [ <glyph> NAME | clause ]
+
+     — the name in CAPITALS so the eye finds the starts, square brackets so
+     each move's extent is visible, and THREE spaces between moves against one
+     inside them, so the gap between two moves is plainly bigger than any gap
+     within one.
+     **THE GLYPH SAYS WHICH CELL THE MOVE STANDS IN FOR**, which is the fact a
+     player needs and the one thing the prose never said: a move does not add
+     a choice, it replaces one. `fa-gavel` for the attack cell and `fa-shield`
+     for a defensive one — the marks the fight already uses (entry 112, and
+     `DEFENDED`), so this teaches no new alphabet. **`fa-mallet` is Pro** and
+     was asked for; the icons contract would have caught it, and a Pro icon
+     does not fail, it renders as an empty box.
+     **ONE DETAIL LINE, not one per move.** The detail pill puts
+     `DETAIL_SEPARATOR` between its lines, and that is the APP's rule rather
+     than this screen's; handing it a single line leaves the separator
+     untouched and lets the spacing above be exactly what it says.
+     **THE DETAIL PILL NOW RENDERS THE MARKUP** it was already being handed
+     strings in — `parseNarration`, the same parser and the same icon
+     vocabulary as the narration pill beside it, so a line with no markup
+     comes back as one plain run and reads exactly as it did. Its tooltip and
+     accessible name take `narrationText`, because an icon carries its own
+     word and a tooltip built from the raw line would have read out class
+     names. `classMoves.contract.test.ts` pins the layout, including a guard
+     on the guard: both glyphs must actually appear across the catalogue, since
+     one mark used everywhere would pass every other assertion and tell a
+     player nothing.

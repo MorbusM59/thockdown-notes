@@ -43,6 +43,11 @@ import type { EscapeMenuCellDetail, EscapeMenuChromeMeter, EscapeMenuChromePill,
  */
 const DETAIL_SEPARATOR = '  |  '
 
+/** One markup line as the words a reader would say. */
+function narrationOf(line: string): string {
+  return narrationText(parseNarration(line))
+}
+
 /** Everything a readout has to say under its name: its figure, then its detail. */
 function readoutLines(readout: EscapeMenuReadout): string[] {
   return [...(readout.value === undefined ? [] : [readout.value]), ...(readout.detail ?? [])]
@@ -210,13 +215,30 @@ export function EscapeMenuChromeBarRow({ status, detail }: {
               {detailLines.length > 0 ? (
                 <span
                   className="tag-pill escape-menu-choice-detail is-inert"
-                  data-tooltip={tooltipOf(detail?.title ?? '', detailLines)}
-                  aria-label={`${detail?.title ?? ''}: ${detailLines.join(DETAIL_SEPARATOR)}`}
+                  // The MARKUP's own words, not the raw line: an icon carries
+                  // the word it stands for (narrationMarkup.ts), so a tooltip
+                  // built from the source string would read out its class
+                  // names. Same treatment the narration pill beside it gets.
+                  data-tooltip={tooltipOf(detail?.title ?? '', detailLines.map(narrationOf))}
+                  aria-label={`${detail?.title ?? ''}: ${detailLines.map(narrationOf).join(DETAIL_SEPARATOR)}`}
                 >
                   {detailLines.map((line, index) => (
                     <span key={line} className="escape-menu-choice-detail-line">
                       {index > 0 ? <span className="escape-menu-choice-detail-sep" aria-hidden="true">{DETAIL_SEPARATOR}</span> : null}
-                      {line}
+                      {/* A detail line is the same small vocabulary a
+                          narration entry is, so it is rendered by the same
+                          parser: a line with no markup in it comes back as one
+                          plain run and reads exactly as it did. */}
+                      {parseNarration(line).map((span, at) => (span.kind === 'icon' ? (
+                        <span key={`${at}:${span.icon}`} className={`${span.icon} escape-menu-narration-icon`} aria-hidden="true" />
+                      ) : (
+                        <span
+                          key={`${at}:${span.text}`}
+                          className={`${span.bold ? 'escape-menu-narration-strong' : ''}${span.italic ? ' escape-menu-narration-em' : ''}`.trim() || undefined}
+                        >
+                          {span.text}
+                        </span>
+                      )))}
                     </span>
                   ))}
                 </span>

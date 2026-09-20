@@ -28,10 +28,10 @@
 import { nextSample, type RngState } from '../core/rng'
 import type { JsonObject } from '../core/json'
 import type { StageContext, StageModule } from '../core/stage'
-import { describeModifier, type Modifier } from '../model/modifiers'
+import { describeModifier, type DescriptionStyle, type Modifier } from '../model/modifiers'
 import { isUnlocked } from '../model/permanentUnlocks'
 import { describeMove } from '../model/moves'
-import { describeBuild } from '../model/vectors'
+import { describeBuild, type CombatClass } from '../model/vectors'
 import { CHARACTER_CREATION_STAGE_ID, REGION_SELECT_STAGE_ID } from './ids'
 
 /**
@@ -123,6 +123,47 @@ const NARRATION: Readonly<Record<Step, string>> = {
   item: 'An item you held on to...',
 }
 
+/** What a move REPLACES, as a glyph: the attack cell, or a defensive one. */
+const OFFENSIVE_MARK = 'fa-solid fa-gavel'
+const DEFENSIVE_MARK = 'fa-solid fa-shield'
+
+/**
+ * A CLASS'S WHOLE MOVE LIST, as one line.
+ *
+ * A class is the one vector whose worth is prose rather than a figure, so this
+ * is the longest thing a choice screen asks anybody to read -- and read as a
+ * flat run of clauses it was impossible to see where one move stopped and the
+ * next began. Three marks fix that without adding a word:
+ *
+ *   [ <glyph> NAME | clause | clause ]   [ <glyph> NAME | clause | clause ]
+ *
+ * The NAME in capitals, so the eye finds the starts; SQUARE BRACKETS around
+ * each move, so its extent is visible; and THREE SPACES between them, wider
+ * than the single space inside, so the gap between moves is bigger than any
+ * gap within one. That is the whole trick -- the grouping is done by spacing
+ * and enclosure rather than by punctuation the reader has to interpret.
+ *
+ * The GLYPH says which cell the move stands in for, which is the fact a
+ * player actually needs and the one thing the prose never said. They are the
+ * marks the fight already uses -- `fa-gavel` is an ordinary attack in the log
+ * and on the attack cell, `fa-shield` is Defend -- so this teaches no new
+ * alphabet.
+ *
+ * ONE LINE and not one per move, because the detail pill puts its own
+ * separator between lines (`DETAIL_SEPARATOR`) and that rule is the app's
+ * rather than this screen's. Handing it a single line leaves the separator
+ * untouched and lets the format above be exactly what it says.
+ */
+export function movesLine(combatClass: CombatClass, style: DescriptionStyle): string {
+  return combatClass.moves
+    .map((move) => {
+      const mark = move.replaces === 'attack' ? OFFENSIVE_MARK : DEFENSIVE_MARK
+      const clauses = describeMove(move, style)
+      return `[ [${mark}|${move.replaces === 'attack' ? 'attack' : 'defence'}] ${move.name.toUpperCase()}${clauses.map((clause) => ` | ${clause}`).join('')} ]`
+    })
+    .join('   ')
+}
+
 export const characterCreationStage: StageModule = {
   id: CHARACTER_CREATION_STAGE_ID,
   title: 'Origins',
@@ -208,8 +249,9 @@ export const characterCreationStage: StageModule = {
               title: combatClass.name,
               // Every move, named and spelled out. A class is the one vector
               // whose worth cannot be read off a number, so the detail is the
-              // whole of what the player has to go on.
-              lines: combatClass.moves.flatMap((move) => [`${move.name}`, ...describeMove(move, context.describe).map((line) => `  ${line}`)]),
+              // whole of what the player has to go on. ONE LINE, deliberately
+              // -- see `movesLine`.
+              lines: [movesLine(combatClass, context.describe)],
             },
           })),
       }
