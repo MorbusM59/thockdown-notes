@@ -21,6 +21,14 @@ import { useNonPassiveWheel } from '../shared/useNonPassiveWheel'
 import type { EscapeHoldRingParams } from './escapeHoldRingLayout'
 import type { EscapeMenuContribution } from '../escapeMenu/escapeMenuContract'
 
+export function directionFromKey(event: Pick<KeyboardEvent<HTMLDivElement>, 'key' | 'shiftKey'>): 1 | -1 | null {
+  const key = event.key.toLowerCase()
+  if (key === 'w' || key === 'a' || key === 'arrowup' || key === 'arrowleft') return -1
+  if (key === 's' || key === 'd' || key === 'arrowdown' || key === 'arrowright') return 1
+  if (key === 'tab') return event.shiftKey ? -1 : 1
+  return null
+}
+
 // Two staggered setTimeout delays, not rAF (see the doc comments on the
 // effect and handler that use these) -- setTimeout with different delays
 // is spec-guaranteed to fire in delay order.
@@ -893,13 +901,6 @@ export function EscapeHoldPanel({
     // it to <body>. Without re-running here, handleRingBlur would see focus
     // outside every ring and close the panel on the player's first choice.
   }, [isOpen, isSectionActive, focusedIndex, ringResetKey])
-
-  const directionFromKey = (event: KeyboardEvent<HTMLDivElement>): 1 | -1 | null => {
-    if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') return -1
-    if (event.key === 'ArrowDown' || event.key === 'ArrowRight') return 1
-    if (event.key === 'Tab') return event.shiftKey ? -1 : 1
-    return null
-  }
 
   // Cheap fallback path for reduceVisualEffects: true -- see the component
   // doc comment. No curve engine at all: every keydown steps by exactly one
