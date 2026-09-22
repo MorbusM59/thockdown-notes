@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { THOCKQUEST } from '../content'
 import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from '../core/director'
-import { activeGame, applyEffects, emptySave, playerTierOf, profileOf, type GameSave } from './gameState'
+import { activeGame, applyEffects, emptySave, playerTierOf, profileOf, type GameRecord, type GameSave } from './gameState'
 import { BASE_STAT_CAP, STAT_KEYS } from './stats'
 import { BASE_PLAYER_TIER, statsFromTier } from './vectors'
 import { sanitizeGameSave } from '../save'
@@ -141,9 +141,9 @@ describe('archetype builds', () => {
 
   it('is earned by maxing both stats in the pair in one run', () => {
     const unlock = permanentUnlockById('might-agility')!
-    expect(unlock.isEarnedBy({ baseStats: { might: 6, agility: 6, perception: 0, intellect: 0, charisma: 0, luck: 0 } } as any)).toBe(true)
-    expect(unlock.isEarnedBy({ baseStats: { might: 6, agility: 5, perception: 0, intellect: 0, charisma: 0, luck: 0 } } as any)).toBe(false)
-    expect(unlock.isEarnedBy({ baseStats: { might: 5, agility: 5, perception: 1, intellect: 0, charisma: 0, luck: 0 } } as any)).toBe(false)
+    expect(unlock.isEarnedBy({ baseStats: { might: 6, agility: 6, perception: 0, intellect: 0, charisma: 0, luck: 0 } } as GameRecord)).toBe(true)
+    expect(unlock.isEarnedBy({ baseStats: { might: 6, agility: 5, perception: 0, intellect: 0, charisma: 0, luck: 0 } } as GameRecord)).toBe(false)
+    expect(unlock.isEarnedBy({ baseStats: { might: 5, agility: 5, perception: 1, intellect: 0, charisma: 0, luck: 0 } } as GameRecord)).toBe(false)
   })
 })
 

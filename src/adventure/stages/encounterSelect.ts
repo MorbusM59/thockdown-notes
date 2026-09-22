@@ -28,6 +28,7 @@
 import type { JsonObject } from '../core/json'
 import type { StageModule } from '../core/stage'
 import { ENCOUNTER_TRACKS, monsterPools, buildEncounterOffers, fixedTypeAt, LEVEL_ENCOUNTER_COUNT, mostSelectedEncounterPool, trackChoicesFor } from '../model/encounterOffers'
+import { ENCOUNTER_POOL_IDS } from '../model/vectors'
 import {
   iconFor, monsterCellLabel, monsterDetailLines, monsterFor, monsterName, offerFromJson, offerToJson,
 } from './encounter'
@@ -279,11 +280,13 @@ export const encounterSelectStage: StageModule = {
 
     if (choiceId.startsWith('track:')) {
       const pool = choiceId.slice('track:'.length)
+      const trackedPool = ENCOUNTER_POOL_IDS.find((candidate) => candidate === pool)
+      if (!trackedPool) return { kind: 'stay', state, rng }
       return {
         kind: 'replace',
         stageId: HUNT_STAGE_ID,
         input: { track: pool },
-        effects: [{ kind: 'recordEncounterTrack', pool: pool as any }],
+        effects: [{ kind: 'recordEncounterTrack', pool: trackedPool }],
         rng,
       }
     }

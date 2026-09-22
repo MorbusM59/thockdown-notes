@@ -48,7 +48,10 @@ describe('typing sounds', () => {
   })
 
   it('uses the same explicit-pan intensity for +50 and -50', () => {
-    const manager = new TypingSoundManager() as any
+    const manager = new TypingSoundManager() as unknown as {
+      spatialAmount: number
+      resolveEffectivePan: (physicalKeyCode: string | undefined, explicitPan: number | undefined) => number
+    }
     manager.spatialAmount = -0.5
     expect(manager.resolveEffectivePan(undefined, 0.6)).toBeCloseTo(0.3, 10)
     manager.spatialAmount = 0.5
