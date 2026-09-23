@@ -3,6 +3,8 @@ import type * as React from 'react'
 import { useRef } from 'react'
 import { AccordionGroup, AccordionSection } from '../components/AccordionSection'
 import { CompactScrollbarSlider } from '../components/CompactScrollbarSlider'
+import { AmbientSoundOptions } from './AmbientSoundOptions'
+import type { AmbientPreferences } from '../shared/ambientSound'
 import {
   CONTINUOUS_DOCUMENT_MAX_THRESHOLD_BLOCKS,
   CONTINUOUS_DOCUMENT_MIN_THRESHOLD_BLOCKS,
@@ -535,6 +537,8 @@ export interface SidebarOptionsPanelProps {
   setTypingSoundEnabled: (value: boolean) => void
   typingSoundSet: 'A' | 'B' | 'C' | 'D'
   setTypingSoundSet: (value: 'A' | 'B' | 'C' | 'D') => void
+  ambientPreferences: AmbientPreferences
+  onAmbientPreferencesChange: (preferences: AmbientPreferences) => void
   audioKeyVolume: number
   setAudioKeyVolume: (value: number) => void
   audioKeyVariance: number
@@ -833,6 +837,8 @@ export function SidebarOptionsPanel({
   setTypingSoundEnabled,
   typingSoundSet,
   setTypingSoundSet,
+  ambientPreferences,
+  onAmbientPreferencesChange,
   audioKeyVolume,
   setAudioKeyVolume,
   audioKeyVariance,
@@ -2956,6 +2962,11 @@ export function SidebarOptionsPanel({
           />
         </div>
       </AccordionSection>
+
+      <AmbientSoundOptions
+        preferences={ambientPreferences}
+        onChange={onAmbientPreferencesChange}
+      />
 
       <AccordionSection
         className="sidebar-options-section-tools"

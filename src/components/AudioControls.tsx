@@ -5,11 +5,12 @@ import {
   AUDIO_GRID_COLUMNS,
   emptyPlaylistCounts,
   getNextActiveSlotsForToggle,
-  PLAYLIST_SLOTS,
+  PLAYLIST_BUTTON_SLOTS,
   PLAYLIST_SLOT_ICONS,
   PLAYLIST_SLOT_THEMES,
   shouldStopCurrentSongOnSlotToggle,
 } from '../shared/audioPlayer'
+import type { AmbientPreferences } from '../shared/ambientSound'
 import {
   fromDisplayLevel,
   nudgeLevel,
@@ -78,6 +79,9 @@ export interface AudioControlsProps {
   /** Which playlist slots are currently toggled active. */
   activeSlots: PlaylistSlot[]
   onActiveSlotsChange: (slots: PlaylistSlot[]) => void
+  /** Procedural ambience preferences; only the enable switch is shown here. */
+  ambientPreferences: AmbientPreferences
+  onAmbientPreferencesChange: (preferences: AmbientPreferences) => void
   /**
    * Whether the bottom row is showing the sound options instead of the
    * playlist buckets. Owned by the parent so it survives a restart.
@@ -111,6 +115,8 @@ export const AudioControls = memo(function AudioControls({
   onReverbBypassedChange,
   activeSlots,
   onActiveSlotsChange,
+  ambientPreferences,
+  onAmbientPreferencesChange,
   isSoundOptionsOpen,
   onSoundOptionsOpenChange,
   initialSongId,
@@ -1001,7 +1007,8 @@ export const AudioControls = memo(function AudioControls({
             />
           </>
         ) : (
-          PLAYLIST_SLOTS.map((slot) => {
+          <>
+          {PLAYLIST_BUTTON_SLOTS.map((slot) => {
             const isEmpty = counts[slot] === 0
             const isActive = activeSlots.includes(slot)
             const isPrimed = primedSlot === slot
@@ -1029,7 +1036,21 @@ export const AudioControls = memo(function AudioControls({
                 <span className={PLAYLIST_SLOT_ICONS[slot]} aria-hidden="true" />
               </button>
             )
-          })
+          })}
+          <button
+            type="button"
+            className={`audio-ctrl-btn audio-ambient-noise-btn${ambientPreferences.enabled ? ' is-active' : ''}`}
+            data-tooltip={ambientPreferences.enabled ? 'Turn ambient noise off' : 'Turn ambient noise on'}
+            aria-label={ambientPreferences.enabled ? 'Turn ambient noise off' : 'Turn ambient noise on'}
+            aria-pressed={ambientPreferences.enabled}
+            onClick={() => onAmbientPreferencesChange({
+              ...ambientPreferences,
+              enabled: !ambientPreferences.enabled,
+            })}
+          >
+            <span className="fa-solid fa-cloud-bolt" aria-hidden="true" />
+          </button>
+          </>
         )}
       </div>
     </div>

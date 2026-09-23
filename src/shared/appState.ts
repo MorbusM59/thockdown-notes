@@ -2,6 +2,7 @@ import type { GameSave } from '../adventure/model/gameState';
 import type { SlotOverlay } from './slotOverlay';
 import type { TextureMaterialsBySurface, TextureSurfaceKey } from '../textures/types';
 import type { GlazeSettings } from './glaze';
+import type { AmbientPreferences } from './ambientSound';
 
 export const APP_STATE_CHANNELS = {
   loadAppState: 'state:app:load',
@@ -204,6 +205,8 @@ export interface PersistedMenuState {
   musicLastSongId?: number;
   musicLastPositionSec?: number;
   musicWasPlaying?: boolean;
+  /** Ambient soundscape controls and custom presets; independent of layout loadouts. */
+  ambientSound?: AmbientPreferences;
   // Legacy render smooth-scroll keys (pre curve-model / pre maxSpeed migration).
   renderScrollSmoothnessSec?: number;
   renderScrollEaseMultiplier?: number;

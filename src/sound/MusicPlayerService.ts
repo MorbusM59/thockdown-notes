@@ -2,7 +2,7 @@
  * MusicPlayerService — Web Audio API based music playback.
  *
  * Signal chain:
- *   HTMLAudioElement → MediaElementSourceNode → GainNode → ConvolverNode → destination
+ *   Music sources and other app audio → shared dynamics limiter → destination
  *
  * The ConvolverNode provides a simple room-reverb effect using a synthetic
  * impulse response.  When reverbAmount is 0 the wet signal is silent and
@@ -192,6 +192,7 @@ export class MusicPlayerService {
   private dryGain: GainNode | null = null;
   private wetGain: GainNode | null = null;
   private convolver: ConvolverNode | null = null;
+  private mixLimiter: DynamicsCompressorNode | null = null;
   private config: MusicPlayerConfig = { volume: 0.8, reverbAmount: 0, reverbRoom: 0.3 };
   private onEndedHandler: PlaybackEndHandler | null = null;
   private currentFilePath: string | null = null;
@@ -230,6 +231,13 @@ export class MusicPlayerService {
   private ensureAudioContext(): AudioContext {
     if (!this.audioCtx || this.audioCtx.state === 'closed') {
       this.audioCtx = new AudioContext();
+      this.mixLimiter = this.audioCtx.createDynamicsCompressor();
+      this.mixLimiter.threshold.value = -1;
+      this.mixLimiter.knee.value = 0;
+      this.mixLimiter.ratio.value = 20;
+      this.mixLimiter.attack.value = 0.003;
+      this.mixLimiter.release.value = 0.08;
+      this.mixLimiter.connect(this.audioCtx.destination);
       this.gainNode = this.audioCtx.createGain();
       this.gainNode.gain.value = this.config.volume;
 
@@ -242,16 +250,30 @@ export class MusicPlayerService {
       this.convolver = this.audioCtx.createConvolver();
       this.convolver.buffer = buildImpulseResponse(this.audioCtx, this.config.reverbRoom);
 
-      // gainNode → dryGain → destination
+      // Both music paths share the output limiter with ambient audio.
       this.gainNode.connect(this.dryGain);
-      this.dryGain.connect(this.audioCtx.destination);
+      this.dryGain.connect(this.mixLimiter);
 
       // gainNode → convolver → wetGain → destination
       this.gainNode.connect(this.convolver);
       this.convolver.connect(this.wetGain);
-      this.wetGain.connect(this.audioCtx.destination);
+      this.wetGain.connect(this.mixLimiter);
     }
     return this.audioCtx;
+  }
+
+  async getAudioContextForMix(): Promise<AudioContext> {
+    const context = this.ensureAudioContext();
+    if (context.state === 'suspended') await context.resume();
+    return context;
+  }
+
+  connectToMix(source: AudioNode): void {
+    const context = this.ensureAudioContext();
+    if (source.context !== context || !this.mixLimiter) {
+      throw new Error('Audio mix input must use the music player audio context.');
+    }
+    source.connect(this.mixLimiter);
   }
 
   // ── Config ─────────────────────────────────────────────────────────────────

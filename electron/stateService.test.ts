@@ -8,6 +8,7 @@ import { THOCKQUEST } from '../src/adventure/content'
 import { choose, enterEntryScreen, type DirectorDeps } from '../src/adventure/core/director'
 import { emptySave } from '../src/adventure/model/gameState'
 import { ROOT_STAGE_ID, STAGES } from '../src/adventure/stages'
+import { DEFAULT_AMBIENT_SETTINGS } from '../src/shared/ambientSound'
 
 // Regression coverage for the exact bug class this file is prone to:
 // sanitizeMenu (private, routed through by both saveAppState and
@@ -45,6 +46,26 @@ describe('StateService app-state field round-trip', () => {
     const reader = new StateService(dataRoot)
     const loaded = await reader.loadAppState()
     expect(loaded.menu?.isDoubleSizeMode).toBe(true)
+  })
+
+  it('round-trips ambient layer settings and named custom presets through real sanitization', async () => {
+    const ambientSound = {
+      enabled: true,
+      settings: {
+        wind: { volume: 0.41, texture: 0.73 },
+        ocean: { volume: 0.12, texture: 0.26 },
+        rain: { volume: 0.88, texture: 0.94 },
+      },
+      activePresetId: 'night-rain',
+      customPresets: [{ id: 'night-rain', name: 'Night rain', settings: DEFAULT_AMBIENT_SETTINGS }],
+    }
+    await new StateService(dataRoot).saveAppState({
+      selectedNoteId: null,
+      menu: { sidebarMode: 'date', selectedMonths: [], selectedYears: [], searchQuery: '', ambientSound },
+    })
+
+    const loaded = await new StateService(dataRoot).loadAppState()
+    expect(loaded.menu?.ambientSound).toEqual(ambientSound)
   })
 
   it('persists isDoubleSizeMode: false explicitly (not just "field present")', async () => {

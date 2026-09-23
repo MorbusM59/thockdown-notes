@@ -5,7 +5,8 @@ import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent 
 import ReactMarkdown from 'react-markdown'
 import { SidebarOptionsPanel } from './sidebar/SidebarOptionsPanel'
 import { AudioControls } from './components/AudioControls'
-import { isPlaylistSlot } from './shared/audioPlayer'
+import { ambientSoundEngine } from './sound/AmbientSoundEngine'
+import { isPlaylistButtonSlot } from './shared/audioPlayer'
 import { isTextEntryElement, mayTakeFocusOnPress, mayHoldKeyboard } from './shared/focusOwnership'
 import { focusEscapeHoldRing } from './editorSection/escapeHoldRingFocus'
 import {
@@ -25,6 +26,7 @@ import {
   typingSoundManager,
 } from './sound/TypingSoundManager'
 import type { PersistedMenuState, PersistedSidebarViewState, PersistedViewportState } from './shared/appState'
+import { DEFAULT_AMBIENT_PREFERENCES, sanitizeAmbientPreferences, type AmbientPreferences } from './shared/ambientSound'
 import { DARK_FACTORY_PRESETS, LIGHT_FACTORY_PRESETS } from './shared/presets'
 import {
   DEFAULT_GLAZE_SETTINGS,
@@ -2698,6 +2700,14 @@ function App() {
   const [musicMuted, setMusicMuted] = useState(false)
   const [musicReverbBypassed, setMusicReverbBypassed] = useState(false)
   const [musicSoundOptionsOpen, setMusicSoundOptionsOpen] = useState(false)
+  const [ambientPreferences, setAmbientPreferences] = useState<AmbientPreferences>(DEFAULT_AMBIENT_PREFERENCES)
+  const handleAmbientPreferencesChange = useCallback((preferences: AmbientPreferences) => {
+    setAmbientPreferences(preferences)
+    ambientSoundEngine.apply(preferences)
+  }, [])
+  useEffect(() => {
+    ambientSoundEngine.apply(ambientPreferences)
+  }, [ambientPreferences])
   const [musicActiveSlots, setMusicActiveSlots] = useState<import('./shared/audioPlayer').PlaylistSlot[]>([])
   // Last-played song/position/playing-state restored from the previous session,
   // handed to AudioControls once as its "initial*" props (see below).
@@ -4485,6 +4495,7 @@ function App() {
       musicMuted,
       musicReverbBypassed,
       musicSoundOptionsOpen,
+      ambientSound: ambientPreferences,
       musicActiveSlots,
       musicLastSongId: musicPlaybackRef.current.songId ?? undefined,
       musicLastPositionSec: musicPlaybackRef.current.positionSec,
@@ -4612,6 +4623,7 @@ function App() {
     musicMuted,
     musicReverbBypassed,
     musicSoundOptionsOpen,
+    ambientPreferences,
     musicActiveSlots,
     darkMode,
     uiMode,
@@ -6843,9 +6855,12 @@ ${markdownHtml}
             setMusicMuted(appState.menu.musicMuted ?? false)
             setMusicReverbBypassed(appState.menu.musicReverbBypassed ?? false)
             setMusicSoundOptionsOpen(appState.menu.musicSoundOptionsOpen ?? false)
+            const restoredAmbient = sanitizeAmbientPreferences(appState.menu.ambientSound)
+            setAmbientPreferences(restoredAmbient)
+            ambientSoundEngine.apply(restoredAmbient)
             if (Array.isArray(appState.menu.musicActiveSlots)) {
               setMusicActiveSlots(
-                (appState.menu.musicActiveSlots as number[]).filter(isPlaylistSlot)
+                (appState.menu.musicActiveSlots as number[]).filter(isPlaylistButtonSlot)
               )
             }
             if (typeof appState.menu.musicLastSongId === 'number') {
@@ -10210,6 +10225,8 @@ ${markdownHtml}
                         setTypingSoundEnabled={setTypingSoundEnabled}
                         typingSoundSet={typingSoundSet}
                         setTypingSoundSet={setTypingSoundSet}
+                        ambientPreferences={ambientPreferences}
+                        onAmbientPreferencesChange={handleAmbientPreferencesChange}
                         audioKeyVolume={audioKeyVolume}
                         setAudioKeyVolume={setAudioKeyVolume}
                         audioKeyVariance={audioKeyVariance}
@@ -10532,6 +10549,8 @@ ${markdownHtml}
                 onReverbBypassedChange={setMusicReverbBypassed}
                 activeSlots={musicActiveSlots}
                 onActiveSlotsChange={setMusicActiveSlots}
+                ambientPreferences={ambientPreferences}
+                onAmbientPreferencesChange={handleAmbientPreferencesChange}
                 initialSongId={musicRestoreSongId}
                 initialPositionSec={musicRestorePositionSec}
                 initialWasPlaying={musicRestoreWasPlaying}

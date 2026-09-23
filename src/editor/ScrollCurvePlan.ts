@@ -54,94 +54,10 @@ export const CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER = 1.5;
 export const RENDER_SCROLL_RAMP_MIN = 0.1;
 export const RENDER_SCROLL_RAMP_MAX = 5;
 
-// Fixed internal CDF resolution. Coarse enough to stay cheap, fine enough that
-// piecewise-linear sampling never produces visible velocity steps at 60+ fps.
-const CDF_SAMPLE_COUNT = 256;
+import { buildCurvePlan, sampleCdf, type CurvePlan } from '../shared/smoothCurve';
 
-// f(x) = 1 / ((1/a) + ((2(x/t) - 1) / b)^2)
-// Exported so other curve-driven interactions (e.g. CursorClickCurve.ts's
-// direct-sampled attack/release envelope, rather than an integrated
-// position plan) can reuse the exact same bell shape.
-export const evaluateCurve = (xSec: number, a: number, b: number, tSec: number): number => {
-  const normalized = (2 * (xSec / tSec)) - 1;
-  return 1 / ((1 / a) + Math.pow(normalized / b, 2));
-};
-
-// Piecewise linear time warp that maps [0, t] -> [0, t] with x = skew*t -> t/2.
-// Used to bias the bell's apex while pinning both endpoints (f(0) and f(t)
-// remain unchanged because warp(0) = 0 and warp(t) = t).
-export const warpForSkew = (xSec: number, tSec: number, skew: number): number => {
-  const split = skew * tSec;
-  const half = tSec * 0.5;
-  if (xSec <= split) {
-    return split > 0 ? (xSec / split) * half : 0;
-  }
-  const tail = tSec - split;
-  return tail > 0 ? half + ((xSec - split) / tail) * half : tSec;
-};
-
-export interface CurvePlan {
-  cdf: Float64Array;
-  // Per-segment normalized slope. slopes[i] = (cdf[i+1] - cdf[i]) * (N - 1).
-  // Equals d(CDF)/dx (with x in [0,1]) within segment i.
-  slopes: Float64Array;
-  // max(slopes). Peak velocity (px/s) = distance * peakSlope / durationSec.
-  peakSlope: number;
-}
-
-export const buildCurvePlan = (a: number, b: number, tSec: number, skew: number): CurvePlan => {
-  const sampleCount = CDF_SAMPLE_COUNT;
-  const weights = new Float64Array(sampleCount);
-  for (let i = 0; i < sampleCount; i += 1) {
-    const xSec = (i / (sampleCount - 1)) * tSec;
-    const warpedXSec = warpForSkew(xSec, tSec, skew);
-    weights[i] = evaluateCurve(warpedXSec, a, b, tSec);
-  }
-
-  const cdf = new Float64Array(sampleCount);
-  cdf[0] = 0;
-  for (let i = 0; i < sampleCount - 1; i += 1) {
-    cdf[i + 1] = cdf[i] + ((weights[i] + weights[i + 1]) * 0.5);
-  }
-
-  const total = cdf[sampleCount - 1];
-  if (!Number.isFinite(total) || total <= 0) {
-    for (let i = 0; i < sampleCount; i += 1) {
-      cdf[i] = i / (sampleCount - 1);
-    }
-    const fallbackSlopes = new Float64Array(sampleCount - 1);
-    fallbackSlopes.fill(1);
-    return { cdf, slopes: fallbackSlopes, peakSlope: 1 };
-  }
-
-  for (let i = 0; i < sampleCount; i += 1) {
-    cdf[i] = cdf[i] / total;
-  }
-  cdf[sampleCount - 1] = 1;
-
-  const slopes = new Float64Array(sampleCount - 1);
-  let maxStep = 0;
-  for (let i = 0; i < sampleCount - 1; i += 1) {
-    const step = cdf[i + 1] - cdf[i];
-    slopes[i] = step * (sampleCount - 1);
-    if (step > maxStep) maxStep = step;
-  }
-  const peakSlope = maxStep * (sampleCount - 1);
-  return { cdf, slopes, peakSlope };
-};
-
-// Exported so other curve-driven interactions (e.g. CursorClickCurve.ts)
-// can build their own release-ramp-down sampling without duplicating this.
-export const sampleCdf = (cdf: Float64Array, progress: number): number => {
-  if (progress <= 0) return 0;
-  if (progress >= 1) return 1;
-  const lastIndex = cdf.length - 1;
-  const positionF = progress * lastIndex;
-  const loIndex = Math.floor(positionF);
-  const hiIndex = Math.min(lastIndex, loIndex + 1);
-  const frac = positionF - loIndex;
-  return cdf[loIndex] + ((cdf[hiIndex] - cdf[loIndex]) * frac);
-};
+export { buildCurvePlan, evaluateCurve, sampleCdf, warpForSkew } from '../shared/smoothCurve';
+export type { CurvePlan } from '../shared/smoothCurve';
 
 // Piecewise scroll plan built from a curve plan plus distance + maxSpeed.
 //

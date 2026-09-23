@@ -18,27 +18,27 @@ export const AUDIO_PLAYER_CHANNELS = {
   getSongById:          'audio-player:get-song-by-id',
 } as const;
 
-/** One slot out of the playlist buttons on the player's bottom row (1-indexed). */
+/** One persisted playlist slot (1-indexed). */
 export type PlaylistSlot = 1 | 2 | 3 | 4 | 5 | 6;
 
 /**
- * Every playlist slot, in the order their buttons appear. This is the single
- * source of truth for how many buckets exist: the renderer's button row, the
- * persisted-state sanitiser's range check, the playlist-count record and the
- * database's own CHECK constraint (plus the rebuild migration that widens it)
- * all derive from this array rather than hard-coding a number. Adding a
- * bucket is a matter of widening `PlaylistSlot`, appending here, and giving
- * it an icon and a theme name below.
+ * Every persisted playlist slot. This is the single source of truth for the
+ * persisted-state range check, playlist-count record and database CHECK
+ * constraint. Slot 1 remains valid for existing libraries but is no longer
+ * presented as a player button.
  */
 export const PLAYLIST_SLOTS: readonly PlaylistSlot[] = [1, 2, 3, 4, 5, 6];
+
+/** Visible music buckets in player order; slot 1 is intentionally omitted. */
+export const PLAYLIST_BUTTON_SLOTS = [2, 4, 5, 6, 3] as const satisfies readonly PlaylistSlot[];
+export type PlaylistButtonSlot = (typeof PLAYLIST_BUTTON_SLOTS)[number];
 
 /** Highest valid slot number -- derived, never written out by hand. */
 export const MAX_PLAYLIST_SLOT: PlaylistSlot = PLAYLIST_SLOTS[PLAYLIST_SLOTS.length - 1];
 
 /**
- * Column count of the player's button grid, which is the bucket count: the
- * bottom row is one button per slot and the top row's playback controls are
- * laid out to fill exactly the same width (play spans two).
+ * Column count of the player's button grid: five visible music buckets plus
+ * the ambient-noise toggle. The top row fills the same width (play spans two).
  *
  * This is a LAYOUT measurement, not just a render detail, and three places
  * need it in agreement or the player visibly breaks:
@@ -54,11 +54,16 @@ export const MAX_PLAYLIST_SLOT: PlaylistSlot = PLAYLIST_SLOTS[PLAYLIST_SLOTS.len
  * (3) cannot import from here at the time it is needed, so it stays a mirrored
  * literal -- its comment carries the arithmetic and names this constant.
  */
-export const AUDIO_GRID_COLUMNS = PLAYLIST_SLOTS.length;
+export const AUDIO_GRID_COLUMNS = PLAYLIST_BUTTON_SLOTS.length + 1;
 
 /** Narrowing guard for values arriving from persisted state or the database. */
 export function isPlaylistSlot(value: unknown): value is PlaylistSlot {
   return Number.isInteger(value) && (PLAYLIST_SLOTS as readonly number[]).includes(value as number);
+}
+
+/** True when a persisted slot is represented by a player bucket button. */
+export function isPlaylistButtonSlot(value: unknown): value is PlaylistButtonSlot {
+  return isPlaylistSlot(value) && (PLAYLIST_BUTTON_SLOTS as readonly number[]).includes(value);
 }
 
 /** An all-zero count record covering exactly the slots that exist. */
@@ -163,9 +168,8 @@ export const AUDIO_EXTENSIONS = new Set([
   '.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac', '.opus', '.weba', '.webm',
 ]);
 
-/** FA icon classes used for each playlist slot button (bottom row). */
-export const PLAYLIST_SLOT_ICONS: Record<PlaylistSlot, string> = {
-  1: 'fa-solid fa-microphone',
+/** FA icon classes used for each visible playlist button (bottom row). */
+export const PLAYLIST_SLOT_ICONS: Record<PlaylistButtonSlot, string> = {
   2: 'fa-solid fa-guitar',
   3: 'fa-solid fa-torii-gate',
   4: 'fa-solid fa-bolt',
@@ -173,10 +177,9 @@ export const PLAYLIST_SLOT_ICONS: Record<PlaylistSlot, string> = {
   6: 'fa-solid fa-mug-hot',
 };
 
-/** Human-readable theme name for each playlist slot button (bottom row). */
-export const PLAYLIST_SLOT_THEMES: Record<PlaylistSlot, string> = {
-  1: 'Vocal',
-  2: 'Instrumental',
+/** Human-readable theme name for each visible playlist button (bottom row). */
+export const PLAYLIST_SLOT_THEMES: Record<PlaylistButtonSlot, string> = {
+  2: 'Pop',
   3: 'Ambient',
   4: 'Rock',
   5: 'Electro',

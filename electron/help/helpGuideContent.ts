@@ -866,6 +866,17 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - Four sound sets — Pops, Pins, Creamy, Forge — plus volume, per-key pitch variance, global pitch, bass/treble mix, reverb, and pitch jitter controls.
 - **Spatial** slider adds stereo panning, centered (off) by default. Left of center pans by keyboard key position (left-hand keys sound from the left, right-hand keys from the right, non-character keys like arrows/Tab/Backspace stay centered); right of center pans by where the caret sits on the current line (line start sounds left, the far edge before an automatic wrap sounds right). The two modes don't blend — the slider picks one or the other by which side of center it's on, with distance from center setting how strong the effect is.
 
+### [Ambient Sound](#ambient-sound)
+
+> **Where?**
+> The cloud-bolt button in the music player turns it on or off. Settings panel → Ambient Sound adjusts the layers and soundscapes.
+
+*Three generated sound layers that can play alongside the music player.*
+
+- Choose one of six soundscapes from the first row, or adjust **Wind**, **Ocean**, and **Rain** independently. Each layer has a **level** and a **texture** slider. Texture moves from a steadier drone toward more motion and irregular swells or patter; it does not simply turn the layer up.
+- The cloud-bolt player button turns all ambient layers on or off without changing their levels. Selecting a soundscape starts ambient playback; music is not required.
+- Adjusting a layer makes the plus button active. Press it to save the current mix as a numbered soundscape button below the factory row. Select a numbered button to restore its mix; right-click it, then click it to remove it. Ambient soundscapes are independent of appearance layouts.
+
 ### [Data](#data-synchronization-settings)
 
 > **Where?**
@@ -918,9 +929,9 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 > **Where?**
 > The window-controls bar, center.
 
-*A built-in music player with six themed playlist slots, each holding your own local audio files.*
+*A built-in music player with five themed playlist slots, each holding your own local audio files, and an independent procedural ambience switch.*
 
-- Slots: Vocal, Instrumental, Ambient, Rock, Electro, Lounge.
+- Music slots: Pop, Rock, Electro, Lounge, Ambient. The cloud-bolt button toggles generated ambient sound independently.
 - **Adding music** — right-click a slot to pick individual files; shift+right-click to add an entire folder at once.
 - **Clearing a slot** — hold a right-click on a slot until it arms, then release to clear every song in it.
 - **Choosing what plays** — click a slot to toggle it in or out of the active playback pool; more than one slot can be active at once.
@@ -929,7 +940,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - **What a 20% click does near an edge** — it lands somewhere sensible rather than partway into a neighbour. With less than 20% of the track left, forward starts the next song from its beginning. Less than 20% in, rewind returns to the start of the song you are on. And in the first two seconds, rewind means the previous song, dropping you 80% of the way through it — near the end, where you were.
 - **Going back** — the player remembers the last hundred songs it played, so right-clicking rewind can step back through them one at a time, not just to the one before this. Fast-forward is deliberately not the mirror of that: right-clicking it always picks a fresh song, exactly as if the current one had reached its end. Once a song you went back to finishes, play carries on as normal.
 - **Mini mode** — the expand button on the player's right leaves mini mode and maximizes the window (its arrows point that way). Your previous window size isn't lost: un-maximizing returns to it.
-- **Sound options** — the headphones button swaps the row of playlist slots for six sound controls, and swaps back. Nothing else opens or closes: volume and reverb live in the player itself, not in the settings panel.
+- **Sound options** — the headphones button swaps the row of five music slots and the ambient-noise switch for six sound controls, and swaps back. Nothing else opens or closes: volume and reverb live in the player itself, not in the settings panel.
 - Scroll over the headphones button to adjust sound without opening the controls: plain scroll for volume, \`Shift\` for reverb, \`Ctrl\` for room size.
   - Three of them are **numbers** — volume, reverb, and room size, each reading 0–99. Hover one and scroll to change it; hold Shift to move by ten. You can also press and hold: left lowers, right raises. The hold starts gently and settles into a steady climb, so a quick press nudges by one and a long one crosses the whole range — it never races away before you can stop it. How long that full sweep takes follows the animation speed in [Settings panel → Animations](${guideLink('APPEARANCE-SETTINGS')}).
   - The other three are **switches**. The speaker mutes (and shows how loud you are: quiet, medium, loud); the antenna turns reverb off; the room icon (a box, a room, a hall, open air, showing which size you're in) is a second face of that same reverb switch, so either one turns it off and both show the crossed circle while it is. Every switch shows that same crossed circle while it is off, whichever one it is. Turning something off never loses its number — switch it back on and it returns to where you left it. So does adjusting the number while it's off: that turns it back on for you.

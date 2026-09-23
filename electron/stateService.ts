@@ -12,6 +12,7 @@ import { sanitizeGameSave } from '../src/adventure/save';
 import { isPlaylistSlot } from '../src/shared/audioPlayer';
 import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '../src/shared/glaze';
 import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureColorHsva, type TextureMaterialSettings, type TextureMaterialsBySurface, type TextureSurfaceKey } from '../src/textures/types';
+import { sanitizeAmbientPreferences } from '../src/shared/ambientSound';
 import { DEFAULT_UI_FONT_KEY, DEFAULT_UI_FONT_SCALE, UI_FONT_OPTIONS, UI_FONT_SCALE_MIN, UI_FONT_SCALE_MAX, roundUiFontScale, type UiFontKey } from '../src/shared/UiTypography';
 
 const APP_STATE_FILE = 'app-state.json';
@@ -551,6 +552,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     musicLastSongId: sanitizeOptionalNumber(input?.musicLastSongId),
     musicLastPositionSec: sanitizeOptionalNumber(input?.musicLastPositionSec),
     musicWasPlaying: sanitizeOptionalBoolean(input?.musicWasPlaying),
+    ambientSound: sanitizeAmbientPreferences(input?.ambientSound),
     scrollEaseMultiplier: sanitizePositive(input?.scrollEaseMultiplier, DEFAULT_APP_STATE.menu!.scrollEaseMultiplier ?? 1),
     scrollDistanceTimeInfluence: sanitizeRatio(input?.scrollDistanceTimeInfluence, DEFAULT_APP_STATE.menu!.scrollDistanceTimeInfluence ?? 0),
     scrollBaseDistanceRows: sanitizePositive(input?.scrollBaseDistanceRows, DEFAULT_APP_STATE.menu!.scrollBaseDistanceRows ?? 1),

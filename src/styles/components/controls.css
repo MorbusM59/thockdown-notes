@@ -95,6 +95,13 @@
   gap:            var(--spacing-regular);
 }
 
+.ambient-layer-controls {
+  display: grid;
+  gap: calc(var(--spacing-regular) * 0.75);
+  padding-top: var(--spacing-regular);
+  border-top: 1px solid var(--color-border-light-70);
+}
+
 /* TWO CONTROL GROUPS IN ONE SECTION ARE SEPARATED, whichever order they
    come in. Without this the two sit flush and read as one control group;
    they are a group and a setting the group governs, and the reader has to
