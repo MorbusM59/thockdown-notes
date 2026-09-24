@@ -19,38 +19,58 @@ class AmbientGenerator extends AudioWorkletProcessor {
     return Math.max(1, Math.floor((-Math.log(Math.max(1e-9, 1 - this.random())) / safeRate) * sampleRate));
   }
 
-  makeChannel(settings) {
+  makeChannel(settings, outputIndex) {
     const channel = {
       ...settings,
-      mode: settings.modulationPeriodSec === 0 ? 'burst' : 'continuous',
+      outputIndex,
+      mode: settings.kind === 'rain'
+        ? 'rain'
+        : settings.modulationPeriodSec === 0 ? 'burst' : 'continuous',
       pink: [0, 0, 0, 0, 0, 0, 0],
       brown: 0,
       phase: this.random(),
-      nextEventFrame: currentFrame + this.eventDelayFrames(settings.densityPer10Sec / 10),
+      nextEventFrame: 0,
       eventAge: -1,
       eventAmplitude: 0,
       eventDurationFrames: 1,
+      activeVoices: [],
       filterMode: null,
       filterAlpha: 0,
       filterLeft: { x: 0, y: 0 },
       filterRight: { x: 0, y: 0 },
     };
+    const rate = settings.kind === 'rain'
+      ? settings.dropsPerSecond
+      : settings.densityPer10Sec / 10;
+    channel.nextEventFrame = currentFrame + this.eventDelayFrames(rate);
     this.configureFilter(channel);
     return channel;
   }
 
   configure(settings) {
     this.soloChannelId = settings.find((channel) => channel.solo)?.id ?? null;
-    const activeSettings = settings.filter((channel) => channel.enabled !== false);
+    const activeSettings = settings
+      .map((channel, index) => ({
+        ...channel,
+        outputIndex: channel.kind === 'rain' ? index - 9 : -1,
+      }))
+      .filter((channel) => channel.enabled !== false);
     const previousById = new Map(this.channels.map((channel) => [channel.id, channel]));
     this.channels = activeSettings.map((next) => {
       const configured = {
         ...next,
-        mode: next.modulationPeriodSec === 0 ? 'burst' : 'continuous',
+        mode: next.kind === 'rain'
+          ? 'rain'
+          : next.modulationPeriodSec === 0 ? 'burst' : 'continuous',
       };
       const previous = previousById.get(next.id);
-      if (!previous) return this.makeChannel(configured);
-      if (configured.mode === 'burst' && (
+      if (!previous) return this.makeChannel(configured, configured.outputIndex);
+      if (configured.mode === 'rain' && (
+        previous.mode !== 'rain'
+        || previous.dropsPerSecond !== next.dropsPerSecond
+      )) {
+        previous.nextEventFrame = currentFrame + this.eventDelayFrames(next.dropsPerSecond);
+      } else if (configured.mode === 'burst' && (
         previous.mode !== 'burst'
         || previous.densityPer10Sec !== next.densityPer10Sec
       )) {
@@ -130,18 +150,108 @@ class AmbientGenerator extends AudioWorkletProcessor {
     return envelope[low] + ((envelope[high] - envelope[low]) * value);
   }
 
+  makeRainModes(count, minFrequency, maxFrequency, minDecay, maxDecay, minAmplitude, maxAmplitude) {
+    const highestFrequency = Math.max(minFrequency, Math.min(maxFrequency, sampleRate * 0.45));
+    const modes = [];
+    for (let index = 0; index < count; index += 1) {
+      const frequency = minFrequency * Math.pow(highestFrequency / minFrequency, this.random());
+      const phase = this.random() * Math.PI * 2;
+      const angle = (Math.PI * 2 * frequency) / sampleRate;
+      const decaySeconds = minDecay + (this.random() * (maxDecay - minDecay));
+      modes.push({
+        frequency,
+        sin: Math.sin(phase),
+        cos: Math.cos(phase),
+        rotationSin: Math.sin(angle),
+        rotationCos: Math.cos(angle),
+        amplitude: minAmplitude + (this.random() * (maxAmplitude - minAmplitude)),
+        decay: Math.exp(-1 / (sampleRate * decaySeconds)),
+      });
+    }
+    return modes;
+  }
+
+  sampleRainModes(modes) {
+    let sample = 0;
+    for (const mode of modes) {
+      sample += mode.sin * mode.amplitude;
+      const nextSin = (mode.sin * mode.rotationCos) + (mode.cos * mode.rotationSin);
+      mode.cos = (mode.cos * mode.rotationCos) - (mode.sin * mode.rotationSin);
+      mode.sin = nextSin;
+      mode.amplitude *= mode.decay;
+    }
+    return sample;
+  }
+
+  makeRainVoice() {
+    return {
+      age: 0,
+      durationFrames: Math.ceil(sampleRate * 0.4),
+      transientAmplitude: 0.24 + (this.random() * 0.2),
+      transientDecay: Math.exp(-1 / (sampleRate * 0.00065)),
+      bassModes: this.makeRainModes(
+        1 + Math.floor(this.random() * 2), 85, 460, 0.025, 0.095, 0.035, 0.14,
+      ),
+      bodyModes: this.makeRainModes(
+        2 + Math.floor(this.random() * 3), 360, 3400, 0.009, 0.065, 0.025, 0.105,
+      ),
+      trebleModes: this.makeRainModes(
+        1 + Math.floor(this.random() * 3), 2100, 9200, 0.004, 0.035, 0.018, 0.075,
+      ),
+    };
+  }
+
+  rainSample(channel, frameNumber) {
+    if (frameNumber >= channel.nextEventFrame) {
+      if (channel.activeVoices.length < 48) channel.activeVoices.push(this.makeRainVoice());
+      channel.nextEventFrame = frameNumber + this.eventDelayFrames(channel.dropsPerSecond);
+    }
+
+    let sample = 0;
+    for (let index = channel.activeVoices.length - 1; index >= 0; index -= 1) {
+      const voice = channel.activeVoices[index];
+      const trebleTransient = ((this.random() * 2) - 1) * voice.transientAmplitude;
+      voice.transientAmplitude *= voice.transientDecay;
+      sample += this.sampleRainModes(voice.bodyModes);
+      sample += this.sampleRainModes(voice.bassModes) * channel.bassGain;
+      sample += (
+        trebleTransient + this.sampleRainModes(voice.trebleModes)
+      ) * channel.trebleGain;
+      voice.age += 1;
+      if (voice.age >= voice.durationFrames) channel.activeVoices.splice(index, 1);
+    }
+    return sample;
+  }
+
   process(_inputs, outputs) {
     const output = outputs[0];
     const left = output[0];
     const right = output[1] ?? left;
+    const rainOutput0 = outputs[1]?.[0];
+    const rainOutput1 = outputs[2]?.[0];
+    const rainOutput2 = outputs[3]?.[0];
     const channelScale = this.soloChannelId !== null
       ? 1
       : this.channels.length > 0 ? 1 / Math.sqrt(this.channels.length) : 0;
     for (let frame = 0; frame < left.length; frame += 1) {
       let leftMix = 0;
       let rightMix = 0;
+      let rainMix0 = 0;
+      let rainMix1 = 0;
+      let rainMix2 = 0;
       const frameNumber = currentFrame + frame;
       for (const channel of this.channels) {
+        if (channel.kind === 'rain') {
+          const rainSample = this.rainSample(channel, frameNumber);
+          if (this.soloChannelId === null || channel.id === this.soloChannelId) {
+            const scaledSample = rainSample * channel.volume;
+            if (channel.outputIndex === 0) rainMix0 += scaledSample;
+            else if (channel.outputIndex === 1) rainMix1 += scaledSample;
+            else if (channel.outputIndex === 2) rainMix2 += scaledSample;
+          }
+          continue;
+        }
+
         const baseLeft = this.noise(channel);
         const baseRight = this.noise(channel);
         let amplitude = 0;
@@ -177,6 +287,9 @@ class AmbientGenerator extends AudioWorkletProcessor {
       }
       left[frame] = leftMix * channelScale;
       right[frame] = rightMix * channelScale;
+      if (rainOutput0) rainOutput0[frame] = rainMix0 * channelScale;
+      if (rainOutput1) rainOutput1[frame] = rainMix1 * channelScale;
+      if (rainOutput2) rainOutput2[frame] = rainMix2 * channelScale;
     }
     return true;
   }

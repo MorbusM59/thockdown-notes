@@ -49,14 +49,29 @@ describe('StateService app-state field round-trip', () => {
   })
 
   it('round-trips ambient layer settings and named custom presets through real sanitization', async () => {
-    const channels = DEFAULT_AMBIENT_SETTINGS.map((channel, index) => ({
-      ...channel,
-      enabled: index === 0 || index === 2,
-      solo: index === 1,
-      volume: [0.41, 0.12, 0.88][index] ?? channel.volume,
-      modulationAmplitude: [0.73, 0.26, 0.94][index] ?? channel.modulationAmplitude,
-      type: (['pink', 'brown', 'white'] as const)[index] ?? channel.type,
-    }))
+    const channels = DEFAULT_AMBIENT_SETTINGS.map((channel, index) => {
+      const common = {
+        enabled: index === 0 || index === 2 || index === 9,
+        solo: index === 1,
+        volume: [0.41, 0.12, 0.88][index] ?? channel.volume,
+      }
+      return channel.kind === 'noise'
+        ? {
+          ...channel,
+          ...common,
+          modulationAmplitude: [0.73, 0.26, 0.94][index] ?? channel.modulationAmplitude,
+          type: (['pink', 'brown', 'white'] as const)[index] ?? channel.type,
+        }
+        : {
+          ...channel,
+          ...common,
+          dropsPerSecond: index === 9 ? 38 : channel.dropsPerSecond,
+          distance: index === 9 ? 0.77 : channel.distance,
+          pan: index === 9 ? -0.34 : channel.pan,
+          bassGain: index === 9 ? 0.83 : channel.bassGain,
+          trebleGain: index === 9 ? 0.61 : channel.trebleGain,
+        }
+    })
     const ambientSound = {
       enabled: true,
       settings: channels,

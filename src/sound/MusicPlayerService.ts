@@ -1,4 +1,6 @@
-﻿/**
+﻿import { buildSyntheticRoomImpulseResponse } from './impulseResponse';
+
+/**
  * MusicPlayerService — Web Audio API based music playback.
  *
  * Signal chain:
@@ -36,24 +38,6 @@ function toMusicUrl(filePath: string): string {
   const encoded = encodeURI(posix).replace(/#/g, '%23').replace(/\?/g, '%3F');
   const withLeadingSlash = encoded.startsWith('/') ? encoded : `/${encoded}`;
   return `thockdown-music://local${withLeadingSlash}`;
-}
-
-/**
- * Build a synthetic reverb impulse response.  The decay is an exponential
- * noise burst whose length is controlled by roomSize (0–1 mapped to 0.1–3 s).
- */
-function buildImpulseResponse(ctx: AudioContext, roomSize: number): AudioBuffer {
-  const sampleRate = ctx.sampleRate;
-  const lengthSec = 0.1 + roomSize * 2.9;   // 0.1 s … 3 s
-  const length = Math.ceil(sampleRate * lengthSec);
-  const buffer = ctx.createBuffer(2, length, sampleRate);
-  for (let ch = 0; ch < 2; ch++) {
-    const data = buffer.getChannelData(ch);
-    for (let i = 0; i < length; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 2);
-    }
-  }
-  return buffer;
 }
 
 /**
@@ -248,7 +232,7 @@ export class MusicPlayerService {
       this.wetGain.gain.value = this.config.reverbAmount;
 
       this.convolver = this.audioCtx.createConvolver();
-      this.convolver.buffer = buildImpulseResponse(this.audioCtx, this.config.reverbRoom);
+      this.convolver.buffer = buildSyntheticRoomImpulseResponse(this.audioCtx, this.config.reverbRoom);
 
       // Both music paths share the output limiter with ambient audio.
       this.gainNode.connect(this.dryGain);
@@ -302,7 +286,7 @@ export class MusicPlayerService {
     }
     // Rebuild impulse response only when roomSize changes (relatively expensive).
     if (this.convolver && this.audioCtx && cfg.reverbRoom !== undefined && cfg.reverbRoom !== prev.reverbRoom) {
-      this.convolver.buffer = buildImpulseResponse(this.audioCtx, this.config.reverbRoom);
+      this.convolver.buffer = buildSyntheticRoomImpulseResponse(this.audioCtx, this.config.reverbRoom);
     }
   }
 

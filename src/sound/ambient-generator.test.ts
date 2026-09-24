@@ -2,14 +2,19 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
-import { createAmbientChannel } from '../shared/ambientSound';
+import { createAmbientChannel, createAmbientRainChannel } from '../shared/ambientSound';
 import { buildAmbientEnvelope } from '../shared/ambientSoundDsp';
 
 const generatorSource = readFileSync(fileURLToPath(new URL('../../public/ambient-generator.js', import.meta.url)), 'utf8');
 
 type TestProcessor = {
-  channels: Array<{ id: string; eventAge: number }>;
+  channels: Array<{ id: string; eventAge: number; activeVoices: unknown[] }>;
   soloChannelId: string | null;
+  makeRainVoice: () => {
+    bassModes: Array<{ frequency: number }>;
+    bodyModes: Array<{ frequency: number }>;
+    trebleModes: Array<{ frequency: number }>;
+  };
   port: { onmessage: ((event: { data: unknown }) => void) | null };
   eventDelayFrames: (ratePerSecond: number) => number;
   envelopeAt: (channel: unknown, progress: number) => number;
@@ -17,7 +22,10 @@ type TestProcessor = {
   process: (inputs: unknown[], outputs: Float32Array[][]) => boolean;
 }
 
-type TestChannel = ReturnType<typeof createAmbientChannel> & { envelope: Float32Array }
+type TestChannel = (
+  | ReturnType<typeof createAmbientChannel>
+  | ReturnType<typeof createAmbientRainChannel>
+) & { envelope?: Float32Array }
 
 function makeChannel(id: string, overrides: Partial<ReturnType<typeof createAmbientChannel>> = {}): TestChannel {
   const settings = {
@@ -27,6 +35,17 @@ function makeChannel(id: string, overrides: Partial<ReturnType<typeof createAmbi
     ...overrides,
   }
   return { ...settings, envelope: buildAmbientEnvelope(settings.ramp, settings.shape) }
+}
+
+function makeRainChannel(id: string, overrides: Partial<ReturnType<typeof createAmbientRainChannel>> = {}): TestChannel {
+  return { ...createAmbientRainChannel(id), volume: 1, ...overrides };
+}
+
+function makeRainSlots(rain: TestChannel[]): TestChannel[] {
+  return [
+    ...Array.from({ length: 9 }, (_, index) => makeChannel(`noise-${index}`, { enabled: false })),
+    ...rain,
+  ];
 }
 
 function createProcessor(seed: number, channels: TestChannel[], sampleRate = 12000) {
@@ -48,14 +67,22 @@ function createProcessor(seed: number, channels: TestChannel[], sampleRate = 120
   return {
     processor,
     render(seconds: number) {
-      const samples = { left: [] as number[], right: [] as number[] };
+      const samples = { left: [] as number[], right: [] as number[], rain: [[], [], []] as number[][] };
       const endFrame = frame + Math.floor(seconds * sampleRate);
       while (frame < endFrame) {
         const blockLength = Math.min(128, endFrame - frame);
-        const outputs = [[new Float32Array(blockLength), new Float32Array(blockLength)]];
+        const outputs = [
+          [new Float32Array(blockLength), new Float32Array(blockLength)],
+          [new Float32Array(blockLength)],
+          [new Float32Array(blockLength)],
+          [new Float32Array(blockLength)],
+        ];
         processor.process([], outputs);
         samples.left.push(...outputs[0][0]);
         samples.right.push(...outputs[0][1]);
+        for (let index = 0; index < samples.rain.length; index += 1) {
+          samples.rain[index].push(...outputs[index + 1][0]);
+        }
         frame += blockLength;
       }
       return samples;
@@ -197,5 +224,46 @@ describe('ambient AudioWorklet generator', () => {
     expect(lowPassSamples.at(-1)).toBeGreaterThan(0.99);
     expect(drySamples.every((sample) => sample === 1)).toBe(true);
     expect(Math.abs(highPassSamples.at(-1) ?? 1)).toBeLessThan(0.001);
+  });
+
+  it('synthesizes overlapping rain impacts on three independent output buses', () => {
+    const generator = createProcessor(307, makeRainSlots([
+      makeRainChannel('rain-near', { dropsPerSecond: 50, distance: 0 }),
+      makeRainChannel('rain-middle', { dropsPerSecond: 36, distance: 0.5 }),
+      makeRainChannel('rain-far', { dropsPerSecond: 24, distance: 1 }),
+    ]));
+    const samples = generator.render(1);
+
+    expect(generator.processor.channels.slice(-3).every((channel) => channel.activeVoices.length > 1)).toBe(true);
+    expect(samples.rain.every((side) => side.some((sample) => Math.abs(sample) > 0.001))).toBe(true);
+    expect(samples.rain[0]).not.toEqual(samples.rain[1]);
+    expect(samples.rain[1]).not.toEqual(samples.rain[2]);
+    expect(samples.left.every((sample) => sample === 0)).toBe(true);
+    expect(samples.right.every((sample) => sample === 0)).toBe(true);
+  });
+
+  it('varies resonant frequencies widely from drop to drop instead of repeating a fixed comb', () => {
+    const generator = createProcessor(419, makeRainSlots([makeRainChannel('rain')]));
+    const voices = Array.from({ length: 12 }, () => generator.processor.makeRainVoice());
+    const bodyFrequencies = voices.flatMap((voice) => voice.bodyModes.map((mode) => mode.frequency));
+
+    expect(new Set(bodyFrequencies.map((frequency) => Math.round(frequency))).size).toBeGreaterThan(20);
+    expect(Math.max(...bodyFrequencies) - Math.min(...bodyFrequencies)).toBeGreaterThan(1500);
+    expect(voices.every((voice) => voice.bassModes.length >= 1 && voice.trebleModes.length >= 1)).toBe(true);
+  });
+
+  it('mixes bass and treble gains as independent impact components', () => {
+    const render = (bassGain: number, trebleGain: number) => createProcessor(523, makeRainSlots([
+      makeRainChannel('rain-mix', { dropsPerSecond: 22, bassGain, trebleGain }),
+    ])).render(1).rain[0];
+    const full = render(1, 1);
+    const noBass = render(0, 1);
+    const noTreble = render(1, 0);
+    const trebleContribution = full.map((sample, index) => sample - noBass[index]);
+    const bassContribution = full.map((sample, index) => sample - noTreble[index]);
+
+    expect(rms(trebleContribution)).toBeGreaterThan(0.001);
+    expect(rms(bassContribution)).toBeGreaterThan(0.001);
+    expect(noBass).not.toEqual(noTreble);
   });
 });
