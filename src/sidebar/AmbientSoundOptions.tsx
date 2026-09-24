@@ -9,8 +9,9 @@ import {
   AMBIENT_NOISE_TYPES,
   AMBIENT_RAIN_DENSITY_MAX,
   AMBIENT_RAIN_DENSITY_MIN,
-  AMBIENT_RAIN_DEFAULT_PANS,
+  AMBIENT_RAIN_DRIPS_MAX_PER_SEC,
   AMBIENT_RAIN_FIRST_INDEX,
+  AMBIENT_RAIN_SURFACES,
   AMBIENT_RAMP_MAX,
   AMBIENT_RAMP_MIN,
   AMBIENT_SHAPE_MAX,
@@ -19,7 +20,10 @@ import {
   AMBIENT_SPEED_MIN_SEC,
   MAX_AMBIENT_CHANNELS,
   MAX_AMBIENT_CUSTOM_PRESETS,
+  DEFAULT_NOISE_CHANNEL,
+  DEFAULT_RAIN_CHANNEL,
   ambientSettingsSignature,
+  defaultRainPan,
   type AmbientChannelBaseSettings,
   type AmbientChannelSettings,
   type AmbientNoiseChannelSettings,
@@ -27,6 +31,7 @@ import {
   type AmbientPreferences,
   type AmbientPreset,
   type AmbientRainChannelSettings,
+  type AmbientRainSurface,
   type AmbientSettings,
 } from '../shared/ambientSound'
 import { armHold, HOLD_CONFIRM_MS } from '../shared/holdTiming'
@@ -34,14 +39,20 @@ import { useNonPassiveWheel } from '../shared/useNonPassiveWheel'
 
 const PRESET_ICONS: Record<string, string> = {
   rain: 'fa-cloud-rain',
+  street: 'fa-road',
+  forest: 'fa-tree',
+  storm: 'fa-cloud-bolt',
   ocean: 'fa-water',
   wind: 'fa-wind',
-  storm: 'fa-cloud-bolt',
-  shore: 'fa-house-flood-water',
-  drone: 'fa-cloud',
 }
 
 const RAIN_LAYER_POSITION_NAMES = ['left', 'center', 'right'] as const
+
+const RAIN_SURFACE_LABELS: Record<AmbientRainSurface, string> = {
+  glass: 'Glass',
+  street: 'Street',
+  forest: 'Forest',
+}
 
 interface AmbientSoundOptionsProps {
   preferences: AmbientPreferences
@@ -54,6 +65,26 @@ function copySettings(settings: AmbientSettings): AmbientSettings {
 
 function typeIndex(type: AmbientNoiseType): number {
   return AMBIENT_NOISE_TYPES.indexOf(type)
+}
+
+function surfaceIndex(surface: AmbientRainSurface): number {
+  return AMBIENT_RAIN_SURFACES.indexOf(surface)
+}
+
+/**
+ * New settings, with the active preset re-derived from them: the preset stays
+ * selected exactly while the settings still match it. Every edit goes
+ * through here, the channel-button wheel included.
+ */
+function withSettings(
+  preferences: AmbientPreferences,
+  settings: AmbientSettings,
+): AmbientPreferences {
+  const signature = ambientSettingsSignature(settings)
+  const matchingPreset = [...AMBIENT_FACTORY_PRESETS, ...preferences.customPresets].find((preset) => (
+    ambientSettingsSignature(preset.settings) === signature
+  ))
+  return { ...preferences, settings, activePresetId: matchingPreset?.id ?? null }
 }
 
 export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptionsProps) {
@@ -95,14 +126,7 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
   }
 
   const commitSettings = (settings: AmbientSettings) => {
-    const matchingPreset = allPresets.find((preset) => (
-      ambientSettingsSignature(preset.settings) === ambientSettingsSignature(settings)
-    ))
-    onChange({
-      ...preferences,
-      settings,
-      activePresetId: matchingPreset?.id ?? null,
-    })
+    onChange(withSettings(preferences, settings))
   }
 
   const updateChannel = (
@@ -178,13 +202,9 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
 
     const volume = Math.max(0, Math.min(1, Math.round((channel.volume + (delta < 0 ? 0.05 : -0.05)) * 100) / 100))
     if (volume === channel.volume) return
-    const settings = preferences.settings.map((item) => (
+    onChange(withSettings(preferences, preferences.settings.map((item) => (
       item.id === channel.id ? { ...item, volume } : item
-    ))
-    const matchingPreset = [...AMBIENT_FACTORY_PRESETS, ...preferences.customPresets].find((preset) => (
-      ambientSettingsSignature(preset.settings) === ambientSettingsSignature(settings)
-    ))
-    onChange({ ...preferences, settings, activePresetId: matchingPreset?.id ?? null })
+    ))))
   }, [onChange, preferences])
   useNonPassiveWheel(channelSelectorRef, handleChannelWheel)
 
@@ -223,7 +243,11 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
 
   const channel = selectedChannel
   const layerNumber = selectedChannelIndex + 1
-  const typeValue = channel?.kind === 'noise' ? typeIndex(channel.type) : 0
+  // 0-based position among the rain slots; meaningful only for a rain layer.
+  const rainIndex = selectedChannelIndex - AMBIENT_RAIN_FIRST_INDEX
+  const layerName = channel?.kind === 'rain'
+    ? `Rain layer ${rainIndex + 1}`
+    : `Ambient layer ${layerNumber}`
 
   return (
     <AccordionSection
@@ -338,23 +362,81 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
             className="ambient-layer-controls"
             key={channel.id}
             role="group"
-            aria-label={`${channel.kind === 'rain' ? 'Rain layer' : 'Ambient sound layer'} ${channel.kind === 'rain' ? layerNumber - AMBIENT_RAIN_FIRST_INDEX : layerNumber}${channel.enabled ? '' : ', disabled'}`}
+            aria-label={`${layerName}${channel.enabled ? '' : ', disabled'}`}
           >
+            <CompactScrollbarSlider
+              id={`ambient-${channel.id}-volume`}
+              min={0}
+              max={1}
+              step={0.01}
+              value={channel.volume}
+              trackLabel="vol"
+              tooltipLabel="Volume; scroll the channel button to adjust"
+              ariaLabel={`${layerName} volume`}
+              disabled={!channel.enabled}
+              defaultValue={channel.kind === 'rain' ? DEFAULT_RAIN_CHANNEL.volume : DEFAULT_NOISE_CHANNEL.volume}
+              formatValue={(value) => value.toFixed(2)}
+              onCommit={(value) => updateChannel(channel.id, { volume: value })}
+            />
             {channel.kind === 'rain' ? (
               <>
+                <CompactScrollbarSlider
+                  id={`ambient-${channel.id}-surface`}
+                  min={0}
+                  max={AMBIENT_RAIN_SURFACES.length - 1}
+                  step={1}
+                  value={surfaceIndex(channel.surface)}
+                  trackLabel="surface"
+                  tooltipLabel="What the rain falls on: glass rings, the street splashes, the forest patters"
+                  ariaLabel={`${layerName} surface`}
+                  disabled={!channel.enabled}
+                  defaultValue={surfaceIndex(DEFAULT_RAIN_CHANNEL.surface)}
+                  formatValue={(value) => RAIN_SURFACE_LABELS[AMBIENT_RAIN_SURFACES[Math.round(value)]]}
+                  onCommit={(value) => updateRainChannel(channel.id, { surface: AMBIENT_RAIN_SURFACES[Math.round(value)] })}
+                />
                 <CompactScrollbarSlider
                   id={`ambient-${channel.id}-density`}
                   min={AMBIENT_RAIN_DENSITY_MIN}
                   max={AMBIENT_RAIN_DENSITY_MAX}
                   step={1}
                   value={channel.dropsPerSecond}
-                  trackLabel="density"
-                  tooltipLabel="Rain drops per second"
-                  ariaLabel={`Rain layer ${layerNumber - AMBIENT_RAIN_FIRST_INDEX} density`}
+                  trackLabel="drops"
+                  tooltipLabel="Nearby drops heard one by one, per second"
+                  ariaLabel={`${layerName} drops per second`}
                   disabled={!channel.enabled}
-                  defaultValue={24}
+                  defaultValue={DEFAULT_RAIN_CHANNEL.dropsPerSecond}
                   formatValue={(value) => `${Math.round(value)} / s`}
                   onCommit={(value) => updateRainChannel(channel.id, { dropsPerSecond: Math.round(value) })}
+                />
+                <CompactScrollbarSlider
+                  id={`ambient-${channel.id}-wash`}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={channel.wash}
+                  trackLabel="wash"
+                  tooltipLabel="The steady hiss of rain too dense to hear drop by drop"
+                  ariaLabel={`${layerName} wash`}
+                  disabled={!channel.enabled}
+                  defaultValue={DEFAULT_RAIN_CHANNEL.wash}
+                  formatValue={(value) => value < 0.01 ? 'Off' : `${Math.round(value * 100)}%`}
+                  onCommit={(value) => updateRainChannel(channel.id, { wash: value })}
+                />
+                <CompactScrollbarSlider
+                  id={`ambient-${channel.id}-drips`}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={channel.drips}
+                  trackLabel="drips"
+                  tooltipLabel="Large, heavy drops from gutters, eaves and branches"
+                  ariaLabel={`${layerName} drips`}
+                  disabled={!channel.enabled}
+                  defaultValue={DEFAULT_RAIN_CHANNEL.drips}
+                  formatValue={(value) => value < 0.01
+                    ? 'Off'
+                    : `${(value * AMBIENT_RAIN_DRIPS_MAX_PER_SEC).toFixed(1)} / s`}
+                  onCommit={(value) => updateRainChannel(channel.id, { drips: value })}
                 />
                 <CompactScrollbarSlider
                   id={`ambient-${channel.id}-distance`}
@@ -364,9 +446,9 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                   value={channel.distance}
                   trackLabel="distance"
                   tooltipLabel="Distance: near and distinct to far and diffuse"
-                  ariaLabel={`Rain layer ${layerNumber - AMBIENT_RAIN_FIRST_INDEX} distance`}
+                  ariaLabel={`${layerName} distance`}
                   disabled={!channel.enabled}
-                  defaultValue={0.5}
+                  defaultValue={DEFAULT_RAIN_CHANNEL.distance}
                   formatValue={(value) => value < 0.01 ? 'Near' : value > 0.99 ? 'Far' : `${Math.round(value * 100)}%`}
                   onCommit={(value) => updateRainChannel(channel.id, { distance: value })}
                 />
@@ -378,9 +460,9 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                   value={channel.pan * 100}
                   trackLabel="pan"
                   tooltipLabel="Stereo pan from left to right"
-                  ariaLabel={`Rain layer ${layerNumber - AMBIENT_RAIN_FIRST_INDEX} pan`}
+                  ariaLabel={`${layerName} pan`}
                   disabled={!channel.enabled}
-                  defaultValue={AMBIENT_RAIN_DEFAULT_PANS[layerNumber - AMBIENT_RAIN_FIRST_INDEX - 1] * 100}
+                  defaultValue={defaultRainPan(rainIndex) * 100}
                   formatValue={(value) => Math.abs(value) < 1
                     ? 'Center'
                     : `${Math.abs(Math.round(value))}% ${value < 0 ? 'L' : 'R'}`}
@@ -393,10 +475,10 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                   step={0.01}
                   value={channel.bassGain}
                   trackLabel="bass"
-                  tooltipLabel="Bass impact component level"
-                  ariaLabel={`Rain layer ${layerNumber - AMBIENT_RAIN_FIRST_INDEX} bass impact level`}
+                  tooltipLabel="Low part of each drop: the ring of glass, the thud on the ground"
+                  ariaLabel={`${layerName} bass level`}
                   disabled={!channel.enabled}
-                  defaultValue={0.55}
+                  defaultValue={DEFAULT_RAIN_CHANNEL.bassGain}
                   formatValue={(value) => value.toFixed(2)}
                   onCommit={(value) => updateRainChannel(channel.id, { bassGain: value })}
                 />
@@ -407,10 +489,10 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                   step={0.01}
                   value={channel.trebleGain}
                   trackLabel="treble"
-                  tooltipLabel="Treble splash component level"
-                  ariaLabel={`Rain layer ${layerNumber - AMBIENT_RAIN_FIRST_INDEX} treble splash level`}
+                  tooltipLabel="High part of each drop: the click, the splash, the plip of a puddle"
+                  ariaLabel={`${layerName} treble level`}
                   disabled={!channel.enabled}
-                  defaultValue={0.45}
+                  defaultValue={DEFAULT_RAIN_CHANNEL.trebleGain}
                   formatValue={(value) => value.toFixed(2)}
                   onCommit={(value) => updateRainChannel(channel.id, { trebleGain: value })}
                 />
@@ -418,134 +500,120 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
             ) : (
               <>
                 <CompactScrollbarSlider
-                  id={`ambient-${channel.id}-volume`}
+                  id={`ambient-${channel.id}-mod-amp`}
                   min={0}
                   max={1}
                   step={0.01}
-                  value={channel.volume}
-                  trackLabel="vol"
-                  tooltipLabel="Volume; scroll the channel button to adjust"
-                  ariaLabel={`Ambient layer ${layerNumber} volume`}
+                  value={channel.modulationAmplitude}
+                  trackLabel="mod amp"
+                  tooltipLabel="Modulation amplitude"
+                  ariaLabel={`${layerName} modulation amplitude`}
                   disabled={!channel.enabled}
-                  defaultValue={0}
+                  defaultValue={DEFAULT_NOISE_CHANNEL.modulationAmplitude}
                   formatValue={(value) => value.toFixed(2)}
-                  onCommit={(value) => updateChannel(channel.id, { volume: value })}
+                  onCommit={(value) => updateNoiseChannel(channel.id, { modulationAmplitude: value })}
                 />
-            <CompactScrollbarSlider
-              id={`ambient-${channel.id}-mod-amp`}
-              min={0}
-              max={1}
-              step={0.01}
-              value={channel.modulationAmplitude}
-              trackLabel="mod amp"
-              tooltipLabel="Modulation amplitude"
-              ariaLabel={`Ambient layer ${layerNumber} modulation amplitude`}
-              disabled={!channel.enabled}
-              defaultValue={0.25}
-              formatValue={(value) => value.toFixed(2)}
-              onCommit={(value) => updateNoiseChannel(channel.id, { modulationAmplitude: value })}
-            />
-            <CompactScrollbarSlider
-              id={`ambient-${channel.id}-mod-period`}
-              min={0}
-              max={AMBIENT_MODULATION_PERIOD_MAX_SEC}
-              step={0.5}
-              value={channel.modulationPeriodSec}
-              trackLabel="mod freq"
-              tooltipLabel="Modulation period; 0 selects burst mode"
-              ariaLabel={`Ambient layer ${layerNumber} modulation period`}
-              disabled={!channel.enabled}
-              defaultValue={30}
-              formatValue={(value) => value === 0 ? 'Burst' : `${value.toFixed(1)} s`}
-              onCommit={(value) => updateNoiseChannel(channel.id, { modulationPeriodSec: value })}
-            />
-            <CompactScrollbarSlider
-              id={`ambient-${channel.id}-ramp`}
-              min={AMBIENT_RAMP_MIN}
-              max={AMBIENT_RAMP_MAX}
-              step={0.05}
-              value={channel.ramp}
-              trackLabel="ramp"
-              ariaLabel={`Ambient layer ${layerNumber} burst ramp`}
-              disabled={!channel.enabled}
-              defaultValue={1.5}
-              formatValue={(value) => value.toFixed(2)}
-              onCommit={(value) => updateNoiseChannel(channel.id, { ramp: value })}
-            />
-            <CompactScrollbarSlider
-              id={`ambient-${channel.id}-shape`}
-              min={AMBIENT_SHAPE_MIN}
-              max={AMBIENT_SHAPE_MAX}
-              step={0.01}
-              value={channel.shape}
-              trackLabel="shape"
-              ariaLabel={`Ambient layer ${layerNumber} burst shape`}
-              disabled={!channel.enabled}
-              defaultValue={0.5}
-              formatValue={(value) => value.toFixed(2)}
-              onCommit={(value) => updateNoiseChannel(channel.id, { shape: value })}
-            />
-            <CompactScrollbarSlider
-              id={`ambient-${channel.id}-speed`}
-              min={AMBIENT_SPEED_MIN_SEC}
-              max={AMBIENT_SPEED_MAX_SEC}
-              step={0.05}
-              value={channel.speedSec}
-              trackLabel="speed"
-              tooltipLabel="Burst duration in seconds"
-              ariaLabel={`Ambient layer ${layerNumber} burst duration`}
-              disabled={!channel.enabled}
-              reverseScale
-              defaultValue={0.4}
-              formatValue={(value) => `${value.toFixed(2)} s`}
-              onCommit={(value) => updateNoiseChannel(channel.id, { speedSec: value })}
-            />
-            <CompactScrollbarSlider
-              id={`ambient-${channel.id}-type`}
-              min={0}
-              max={AMBIENT_NOISE_TYPES.length - 1}
-              step={1}
-              value={typeValue}
-              trackLabel="type"
-              tooltipLabel="Noise type"
-              ariaLabel={`Ambient layer ${layerNumber} noise type`}
-              disabled={!channel.enabled}
-              defaultValue={typeIndex('pink')}
-              formatValue={(value) => AMBIENT_NOISE_TYPES[Math.round(value)]}
-              onCommit={(value) => updateNoiseChannel(channel.id, { type: AMBIENT_NOISE_TYPES[Math.round(value)] })}
-            />
-            <CompactScrollbarSlider
-              id={`ambient-${channel.id}-density`}
-              min={AMBIENT_DENSITY_MIN}
-              max={AMBIENT_DENSITY_MAX}
-              step={1}
-              value={channel.densityPer10Sec}
-              trackLabel="density"
-              tooltipLabel="Average burst events per 10 seconds"
-              ariaLabel={`Ambient layer ${layerNumber} burst density`}
-              disabled={!channel.enabled}
-              defaultValue={8}
-              formatValue={(value) => `${Math.round(value)} / 10 s`}
-              onCommit={(value) => updateNoiseChannel(channel.id, { densityPer10Sec: value })}
-            />
-            <CompactScrollbarSlider
-              id={`ambient-${channel.id}-filter`}
-              min={0}
-              max={1}
-              step={0.01}
-              value={channel.filter}
-              trackLabel="filter"
-              tooltipLabel="Low-pass / none / high-pass"
-              ariaLabel={`Ambient layer ${layerNumber} filter`}
-              disabled={!channel.enabled}
-              defaultValue={0.5}
-              formatValue={(value) => value === 0.5
-                ? 'None'
-                : value < 0.5
-                  ? `Low-pass ${Math.round((0.5 - value) * 200)}%`
-                  : `High-pass ${Math.round((value - 0.5) * 200)}%`}
-              onCommit={(value) => updateNoiseChannel(channel.id, { filter: value })}
-            />
+                <CompactScrollbarSlider
+                  id={`ambient-${channel.id}-mod-period`}
+                  min={0}
+                  max={AMBIENT_MODULATION_PERIOD_MAX_SEC}
+                  step={0.5}
+                  value={channel.modulationPeriodSec}
+                  trackLabel="mod freq"
+                  tooltipLabel="Modulation period; 0 selects burst mode"
+                  ariaLabel={`${layerName} modulation period`}
+                  disabled={!channel.enabled}
+                  defaultValue={DEFAULT_NOISE_CHANNEL.modulationPeriodSec}
+                  formatValue={(value) => value === 0 ? 'Burst' : `${value.toFixed(1)} s`}
+                  onCommit={(value) => updateNoiseChannel(channel.id, { modulationPeriodSec: value })}
+                />
+                <CompactScrollbarSlider
+                  id={`ambient-${channel.id}-ramp`}
+                  min={AMBIENT_RAMP_MIN}
+                  max={AMBIENT_RAMP_MAX}
+                  step={0.05}
+                  value={channel.ramp}
+                  trackLabel="ramp"
+                  ariaLabel={`${layerName} burst ramp`}
+                  disabled={!channel.enabled}
+                  defaultValue={DEFAULT_NOISE_CHANNEL.ramp}
+                  formatValue={(value) => value.toFixed(2)}
+                  onCommit={(value) => updateNoiseChannel(channel.id, { ramp: value })}
+                />
+                <CompactScrollbarSlider
+                  id={`ambient-${channel.id}-shape`}
+                  min={AMBIENT_SHAPE_MIN}
+                  max={AMBIENT_SHAPE_MAX}
+                  step={0.01}
+                  value={channel.shape}
+                  trackLabel="shape"
+                  ariaLabel={`${layerName} burst shape`}
+                  disabled={!channel.enabled}
+                  defaultValue={DEFAULT_NOISE_CHANNEL.shape}
+                  formatValue={(value) => value.toFixed(2)}
+                  onCommit={(value) => updateNoiseChannel(channel.id, { shape: value })}
+                />
+                <CompactScrollbarSlider
+                  id={`ambient-${channel.id}-speed`}
+                  min={AMBIENT_SPEED_MIN_SEC}
+                  max={AMBIENT_SPEED_MAX_SEC}
+                  step={0.05}
+                  value={channel.speedSec}
+                  trackLabel="speed"
+                  tooltipLabel="Burst duration in seconds"
+                  ariaLabel={`${layerName} burst duration`}
+                  disabled={!channel.enabled}
+                  reverseScale
+                  defaultValue={DEFAULT_NOISE_CHANNEL.speedSec}
+                  formatValue={(value) => `${value.toFixed(2)} s`}
+                  onCommit={(value) => updateNoiseChannel(channel.id, { speedSec: value })}
+                />
+                <CompactScrollbarSlider
+                  id={`ambient-${channel.id}-type`}
+                  min={0}
+                  max={AMBIENT_NOISE_TYPES.length - 1}
+                  step={1}
+                  value={typeIndex(channel.type)}
+                  trackLabel="type"
+                  tooltipLabel="Noise type"
+                  ariaLabel={`${layerName} noise type`}
+                  disabled={!channel.enabled}
+                  defaultValue={typeIndex(DEFAULT_NOISE_CHANNEL.type)}
+                  formatValue={(value) => AMBIENT_NOISE_TYPES[Math.round(value)]}
+                  onCommit={(value) => updateNoiseChannel(channel.id, { type: AMBIENT_NOISE_TYPES[Math.round(value)] })}
+                />
+                <CompactScrollbarSlider
+                  id={`ambient-${channel.id}-density`}
+                  min={AMBIENT_DENSITY_MIN}
+                  max={AMBIENT_DENSITY_MAX}
+                  step={1}
+                  value={channel.densityPer10Sec}
+                  trackLabel="density"
+                  tooltipLabel="Average burst events per 10 seconds"
+                  ariaLabel={`${layerName} burst density`}
+                  disabled={!channel.enabled}
+                  defaultValue={DEFAULT_NOISE_CHANNEL.densityPer10Sec}
+                  formatValue={(value) => `${Math.round(value)} / 10 s`}
+                  onCommit={(value) => updateNoiseChannel(channel.id, { densityPer10Sec: value })}
+                />
+                <CompactScrollbarSlider
+                  id={`ambient-${channel.id}-filter`}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={channel.filter}
+                  trackLabel="filter"
+                  tooltipLabel="Low-pass / none / high-pass"
+                  ariaLabel={`${layerName} filter`}
+                  disabled={!channel.enabled}
+                  defaultValue={DEFAULT_NOISE_CHANNEL.filter}
+                  formatValue={(value) => value === 0.5
+                    ? 'None'
+                    : value < 0.5
+                      ? `Low-pass ${Math.round((0.5 - value) * 200)}%`
+                      : `High-pass ${Math.round((value - 0.5) * 200)}%`}
+                  onCommit={(value) => updateNoiseChannel(channel.id, { filter: value })}
+                />
               </>
             )}
           </div>

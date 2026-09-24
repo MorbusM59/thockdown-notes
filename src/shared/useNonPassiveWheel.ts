@@ -13,6 +13,13 @@ import type { RefObject } from 'react'
  * reaches that ancestor, closes that gap (same mechanism App.tsx's
  * options-panel HSVA/texture-control guard already relies on, just owned by
  * the control itself instead of a distant ancestor keeping a selector list).
+ *
+ * The listener is bound when the effect runs, which is on mount and when
+ * `handler` changes -- not when the element behind `ref` is replaced. So the
+ * element must live exactly as long as the component calling this: an
+ * element rendered conditionally inside a longer-lived parent should be its
+ * own component owning its own ref (see AudioControls.tsx's SoundLevelButton
+ * and AmbientNoiseButton).
  */
 export function useNonPassiveWheel<T extends HTMLElement>(
   ref: RefObject<T | null>,

@@ -2,14 +2,25 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
-import { createAmbientChannel, createAmbientRainChannel } from '../shared/ambientSound';
-import { buildAmbientEnvelope } from '../shared/ambientSoundDsp';
+import { createHash } from 'node:crypto';
+import {
+  AMBIENT_RAIN_DRIPS_MAX_PER_SEC,
+  AMBIENT_RAIN_FIRST_INDEX,
+  AMBIENT_RAIN_SURFACES,
+  createAmbientChannel,
+  createAmbientRainChannel,
+} from '../shared/ambientSound';
+import { buildAmbientEnvelope, toWorkletChannels } from '../shared/ambientSoundDsp';
 
-const generatorSource = readFileSync(fileURLToPath(new URL('../../public/ambient-generator.js', import.meta.url)), 'utf8');
+// The worklet's module-scope constants are not reachable from outside a vm
+// script, so the test appends one line exposing the ones it checks.
+const generatorSource = `${readFileSync(fileURLToPath(new URL('../../public/ambient-generator.js', import.meta.url)), 'utf8')}
+;globalThis.__generatorConstants = { RAIN_SURFACE_PROFILES, RAIN_DRIPS_MAX_PER_SEC };`;
 
 type TestProcessor = {
-  channels: Array<{ id: string; eventAge: number; activeVoices: unknown[] }>;
+  channels: Array<{ id: string; eventAge: number; activeVoices: unknown[]; profile?: unknown }>;
   soloChannelId: string | null;
+  makeSurfaceVoice: (profile: unknown, isDrip: boolean) => { gain: number };
   makeRainVoice: () => {
     bassModes: Array<{ frequency: number }>;
     bodyModes: Array<{ frequency: number }>;
@@ -20,6 +31,18 @@ type TestProcessor = {
   envelopeAt: (channel: unknown, progress: number) => number;
   noise: (channel: unknown) => number;
   process: (inputs: unknown[], outputs: Float32Array[][]) => boolean;
+}
+
+/**
+ * A full slot row goes through the same `toWorkletChannels` the engine uses,
+ * so the tests exercise the real output routing; a short noise-only list
+ * (the noise tests' fixture) gets the noise routing directly.
+ */
+function toConfigure(channels: TestChannel[]): unknown[] {
+  if (channels.length > AMBIENT_RAIN_FIRST_INDEX) {
+    return toWorkletChannels(channels as Parameters<typeof toWorkletChannels>[0]);
+  }
+  return channels.map((channel) => ({ ...channel, outputIndex: -1 }));
 }
 
 type TestChannel = (
@@ -43,10 +66,15 @@ function makeRainChannel(id: string, overrides: Partial<ReturnType<typeof create
 
 function makeRainSlots(rain: TestChannel[]): TestChannel[] {
   return [
-    ...Array.from({ length: 9 }, (_, index) => makeChannel(`noise-${index}`, { enabled: false })),
+    ...Array.from({ length: AMBIENT_RAIN_FIRST_INDEX }, (_, index) => makeChannel(`noise-${index}`, { enabled: false })),
     ...rain,
   ];
 }
+
+type GeneratorConstants = {
+  RAIN_SURFACE_PROFILES: Record<string, unknown>;
+  RAIN_DRIPS_MAX_PER_SEC: number;
+};
 
 function createProcessor(seed: number, channels: TestChannel[], sampleRate = 12000) {
   let Processor!: new (options: unknown) => TestProcessor;
@@ -54,7 +82,7 @@ function createProcessor(seed: number, channels: TestChannel[], sampleRate = 120
   class WorkletProcessorStub {
     port = { onmessage: null as ((event: { data: unknown }) => void) | null };
   }
-  const scope = {
+  const scope: Record<string, unknown> = {
     AudioWorkletProcessor: WorkletProcessorStub,
     sampleRate,
     get currentFrame() { return frame; },
@@ -62,10 +90,11 @@ function createProcessor(seed: number, channels: TestChannel[], sampleRate = 120
   };
   runInNewContext(generatorSource, scope);
   const processor = new Processor!({ processorOptions: { seed } });
-  processor.port.onmessage?.({ data: { type: 'configure', channels } });
+  processor.port.onmessage?.({ data: { type: 'configure', channels: toConfigure(channels) } });
 
   return {
     processor,
+    constants: scope.__generatorConstants as GeneratorConstants,
     render(seconds: number) {
       const samples = { left: [] as number[], right: [] as number[], rain: [[], [], []] as number[][] };
       const endFrame = frame + Math.floor(seconds * sampleRate);
@@ -89,6 +118,8 @@ function createProcessor(seed: number, channels: TestChannel[], sampleRate = 120
     },
   };
 }
+
+const GLASS_DIGEST = '99d0ac51e88924f2e118c28bfc40cf804f59cdf77955e13eeeeabb63d58b7083';
 
 function rms(samples: number[]): number {
   return Math.sqrt(samples.reduce((sum, sample) => sum + (sample * sample), 0) / samples.length);
@@ -265,5 +296,101 @@ describe('ambient AudioWorklet generator', () => {
     expect(rms(trebleContribution)).toBeGreaterThan(0.001);
     expect(rms(bassContribution)).toBeGreaterThan(0.001);
     expect(noBass).not.toEqual(noTreble);
+  });
+  it('has a synthesis profile for every rain surface the settings can name', () => {
+    const { constants } = createProcessor(1, []);
+    expect(Object.keys(constants.RAIN_SURFACE_PROFILES).sort()).toEqual([...AMBIENT_RAIN_SURFACES].sort());
+    expect(constants.RAIN_DRIPS_MAX_PER_SEC).toBe(AMBIENT_RAIN_DRIPS_MAX_PER_SEC);
+  });
+
+  // The glass surface is the original rain model and its sound is meant to
+  // stay exactly as it was. This pins a hash of a rendered glass layer: it
+  // was taken from the generator before surfaces existed (verified equal,
+  // sample for sample), so a change here is a change to the glass sound.
+  it('renders the glass surface exactly as the original rain model did', () => {
+    const generator = createProcessor(4242, makeRainSlots([
+      makeRainChannel('glass', {
+        surface: 'glass', wash: 0, drips: 0, volume: 0.3, dropsPerSecond: 30, bassGain: 0.6, trebleGain: 0.5,
+      }),
+    ]), 48000);
+    const samples = Float32Array.from(generator.render(1).rain[0]);
+    const digest = createHash('sha256').update(Buffer.from(samples.buffer)).digest('hex');
+    expect(digest).toBe(GLASS_DIGEST);
+  });
+
+  it('routes each rain layer to the output its slot position names', () => {
+    const generator = createProcessor(11, makeRainSlots([
+      makeRainChannel('first', { enabled: false }),
+      makeRainChannel('second', { enabled: false }),
+      makeRainChannel('third', { dropsPerSecond: 40 }),
+    ]));
+    const samples = generator.render(0.5);
+    expect(samples.rain[0].every((sample) => sample === 0)).toBe(true);
+    expect(samples.rain[1].every((sample) => sample === 0)).toBe(true);
+    expect(rms(samples.rain[2])).toBeGreaterThan(0.001);
+  });
+
+  it('gives the forest a darker impact than the street', () => {
+    const zeroCrossingsPerSecond = (surface: 'street' | 'forest') => {
+      const samples = createProcessor(29, makeRainSlots([
+        makeRainChannel(surface, { surface, wash: 0, drips: 0, dropsPerSecond: 40, bassGain: 0 }),
+      ]), 48000).render(3).rain[0];
+      let crossings = 0;
+      for (let index = 1; index < samples.length; index += 1) {
+        if ((samples[index] >= 0) !== (samples[index - 1] >= 0)) crossings += 1;
+      }
+      return crossings / 3;
+    };
+    expect(zeroCrossingsPerSecond('forest')).toBeLessThan(zeroCrossingsPerSecond('street') * 0.85);
+  });
+
+  it('fills the gaps between drops with the wash, and only when asked', () => {
+    // Share of 20 ms windows carrying audible sound: a bed is continuous,
+    // sparse drops are not.
+    const coverage = (wash: number) => {
+      const samples = createProcessor(37, makeRainSlots([
+        makeRainChannel('bed', { wash, drips: 0, dropsPerSecond: 1 }),
+      ]), 12000).render(4).rain[0];
+      const window = 240;
+      let loud = 0;
+      let windows = 0;
+      for (let start = 0; start + window <= samples.length; start += window) {
+        windows += 1;
+        if (rms(samples.slice(start, start + window)) > 0.002) loud += 1;
+      }
+      return loud / windows;
+    };
+    expect(coverage(1)).toBeGreaterThan(0.95);
+    expect(coverage(0)).toBeLessThan(0.3);
+  });
+
+  it('drops large drips at the rate the drips control sets', () => {
+    const countDrips = (drips: number) => {
+      const generator = createProcessor(53, makeRainSlots([
+        makeRainChannel('drips', { drips, wash: 0, dropsPerSecond: 1 }),
+      ]), 2000);
+      let count = 0;
+      const makeVoice = generator.processor.makeSurfaceVoice.bind(generator.processor);
+      generator.processor.makeSurfaceVoice = (profile, isDrip) => {
+        if (isDrip) count += 1;
+        return makeVoice(profile, isDrip);
+      };
+      generator.render(40);
+      return count;
+    };
+    expect(countDrips(0)).toBe(0);
+    const full = countDrips(1);
+    expect(full).toBeGreaterThan(AMBIENT_RAIN_DRIPS_MAX_PER_SEC * 40 * 0.7);
+    expect(full).toBeLessThan(AMBIENT_RAIN_DRIPS_MAX_PER_SEC * 40 * 1.3);
+  });
+
+  it('stays finite and bounded on every surface at every control extreme', () => {
+    for (const surface of AMBIENT_RAIN_SURFACES) {
+      const samples = createProcessor(61, makeRainSlots([
+        makeRainChannel(surface, { surface, wash: 1, drips: 1, dropsPerSecond: 60, bassGain: 1, trebleGain: 1 }),
+      ]), 48000).render(2).rain[0];
+      expect(samples.every((sample) => Number.isFinite(sample) && Math.abs(sample) < 8)).toBe(true);
+      expect(rms(samples)).toBeGreaterThan(0.005);
+    }
   });
 });

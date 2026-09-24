@@ -79,7 +79,11 @@ export interface AudioControlsProps {
   /** Which playlist slots are currently toggled active. */
   activeSlots: PlaylistSlot[]
   onActiveSlotsChange: (slots: PlaylistSlot[]) => void
-  /** Procedural ambience preferences; only the enable switch is shown here. */
+  /**
+   * Procedural ambience preferences. The player shows only the on/off switch
+   * and the master volume (a wheel over that switch); everything else is in
+   * the settings panel.
+   */
   ambientPreferences: AmbientPreferences
   onAmbientPreferencesChange: (preferences: AmbientPreferences) => void
   /**
@@ -1037,19 +1041,10 @@ export const AudioControls = memo(function AudioControls({
               </button>
             )
           })}
-          <button
-            type="button"
-            className={`audio-ctrl-btn audio-ambient-noise-btn${ambientPreferences.enabled ? ' is-active' : ''}`}
-            data-tooltip={ambientPreferences.enabled ? 'Turn ambient noise off' : 'Turn ambient noise on'}
-            aria-label={ambientPreferences.enabled ? 'Turn ambient noise off' : 'Turn ambient noise on'}
-            aria-pressed={ambientPreferences.enabled}
-            onClick={() => onAmbientPreferencesChange({
-              ...ambientPreferences,
-              enabled: !ambientPreferences.enabled,
-            })}
-          >
-            <span className="fa-solid fa-cloud-bolt" aria-hidden="true" />
-          </button>
+          <AmbientNoiseButton
+            preferences={ambientPreferences}
+            onChange={onAmbientPreferencesChange}
+          />
           </>
         )}
       </div>
@@ -1125,5 +1120,52 @@ function SoundLevelButton({
     >
       {display}
     </div>
+  )
+}
+
+/**
+ * The ambient-noise switch at the end of the playlist row, which is also the
+ * ambient master volume: a click turns ambient sound on or off, and a wheel
+ * over it nudges the level exactly like a music level readout (Shift: by
+ * 10). Wheeling turns ambient sound on if it was off -- the same "adjusting
+ * turns it back on" rule the music volume follows with mute.
+ *
+ * Its own component for the reason SoundLevelButton is: it owns the ref its
+ * native wheel listener is bound to. The playlist row unmounts while the
+ * sound options are showing, and a listener bound from the parent would not
+ * be re-bound to the new button when the row comes back.
+ */
+function AmbientNoiseButton({
+  preferences,
+  onChange,
+}: {
+  preferences: AmbientPreferences
+  onChange: (preferences: AmbientPreferences) => void
+}) {
+  const ref = useRef<HTMLButtonElement | null>(null)
+  const handleWheel = useCallback((event: WheelEvent) => {
+    event.preventDefault()
+    if (event.deltaY === 0) return
+    onChange({
+      ...preferences,
+      enabled: true,
+      masterVolume: nudgeLevel(preferences.masterVolume, event.deltaY, event.shiftKey),
+    })
+  }, [preferences, onChange])
+  useNonPassiveWheel(ref, handleWheel)
+
+  const level = toDisplayLevel(preferences.masterVolume)
+  return (
+    <button
+      ref={ref}
+      type="button"
+      className={`audio-ctrl-btn audio-ambient-noise-btn${preferences.enabled ? ' is-active' : ''}`}
+      data-tooltip={`Ambient noise ${preferences.enabled ? `on, volume ${level}` : 'off'} — click to turn ${preferences.enabled ? 'off' : 'on'}. Scroll to adjust volume (Shift: by 10).`}
+      aria-label={preferences.enabled ? 'Turn ambient noise off' : 'Turn ambient noise on'}
+      aria-pressed={preferences.enabled}
+      onClick={() => onChange({ ...preferences, enabled: !preferences.enabled })}
+    >
+      <span className="fa-solid fa-cloud-bolt" aria-hidden="true" />
+    </button>
   )
 }

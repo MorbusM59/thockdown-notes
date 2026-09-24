@@ -65,6 +65,9 @@ describe('StateService app-state field round-trip', () => {
         : {
           ...channel,
           ...common,
+          surface: index === 9 ? 'forest' as const : channel.surface,
+          wash: index === 9 ? 0.42 : channel.wash,
+          drips: index === 9 ? 0.18 : channel.drips,
           dropsPerSecond: index === 9 ? 38 : channel.dropsPerSecond,
           distance: index === 9 ? 0.77 : channel.distance,
           pan: index === 9 ? -0.34 : channel.pan,
@@ -74,6 +77,7 @@ describe('StateService app-state field round-trip', () => {
     })
     const ambientSound = {
       enabled: true,
+      masterVolume: 0.37,
       settings: channels,
       activePresetId: 'night-rain',
       customPresets: [{

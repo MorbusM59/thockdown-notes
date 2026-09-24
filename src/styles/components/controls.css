@@ -107,33 +107,17 @@
   margin-top: var(--spacing-regular);
 }
 
-.ambient-channel-selector-btn:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-
 .ambient-channel-selector-btn.is-disabled {
   opacity: 0.55;
 }
 
 .ambient-channel-selector-btn.is-solo {
   filter: var(--filter-highlight);
-  outline-offset: -1px;
 }
 
 .ambient-layer-controls .utility-setting-scrollbar-shell {
   grid-column: span 2;
   min-width: 0;
-}
-
-.ambient-channel-action {
-  grid-column: span 1;
-  display: grid;
-  place-items: center;
-  min-width: 0;
-  width: 100%;
-  height: var(--canonical-scroll-thickness);
-  padding: 0;
 }
 
 /* TWO CONTROL GROUPS IN ONE SECTION ARE SEPARATED, whichever order they

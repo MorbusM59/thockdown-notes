@@ -1,15 +1,26 @@
+/**
+ * AmbientSoundEngine -- the Web Audio graph around the ambient worklet.
+ *
+ *   worklet output 0 (noise, stereo) ------------------------------> mixGain
+ *   worklet output 1+i (rain layer i, mono) -> low-pass -> panner -> direct -> mixGain
+ *                                                              \-> reverb send -> reverb -> mixGain
+ *   mixGain -> the music player's shared output limiter
+ *
+ * The graph exists only while something is audible: it is built on the
+ * first audible `apply` and torn down after a short fade once nothing is.
+ * `mixGain` carries both the fade and the listener's master volume.
+ */
 import {
   AMBIENT_RAIN_CHANNEL_COUNT,
   AMBIENT_RAIN_FIRST_INDEX,
-  type AmbientChannelSettings,
   type AmbientPreferences,
-  type AmbientRainChannelSettings,
   type AmbientSettings,
 } from '../shared/ambientSound';
-import { buildAmbientEnvelope, resolveAmbientRainSpace } from '../shared/ambientSoundDsp';
+import { resolveAmbientRainSpace, toWorkletChannels } from '../shared/ambientSoundDsp';
 import { musicPlayerService } from './MusicPlayerService';
 import { buildSyntheticRoomImpulseResponse } from './impulseResponse';
 
+/** Mix level at master volume 1, leaving headroom beside the music. */
 const AMBIENT_MIX_GAIN = 0.34;
 const AMBIENT_FADE_SEC = 0.08;
 const AMBIENT_DISCONNECT_MS = 180;
@@ -22,6 +33,11 @@ interface AmbientRainLayerNodes {
 }
 
 const WORKLET_MODULES = new WeakMap<AudioContext, Promise<void>>();
+
+/** Whether these preferences would make any sound at all. */
+function isAudible(preferences: AmbientPreferences): boolean {
+  return preferences.enabled && preferences.masterVolume > 0 && hasAudibleLayer(preferences.settings);
+}
 
 function hasAudibleLayer(settings: AmbientSettings): boolean {
   const soloChannel = settings.find((channel) => channel.solo);
@@ -42,7 +58,7 @@ export class AmbientSoundEngine {
 
   apply(preferences: AmbientPreferences): void {
     this.preferences = preferences;
-    if (!preferences.enabled || !hasAudibleLayer(preferences.settings)) {
+    if (!isAudible(preferences)) {
       this.fadeOutAndDisconnect();
       return;
     }
@@ -70,7 +86,7 @@ export class AmbientSoundEngine {
       if (!context || context.state === 'closed') return;
       if (context.state === 'suspended') await context.resume();
       if (this.preferences !== preferences || !this.worklet) return;
-      this.updateGraph(preferences.settings);
+      this.updateGraph(preferences);
     } catch (error) {
       console.error('Unable to resume ambient audio', error);
     }
@@ -93,11 +109,11 @@ export class AmbientSoundEngine {
         throw error;
       }
       const preferences = this.preferences;
-      if (!preferences?.enabled || !hasAudibleLayer(preferences.settings)) return;
+      if (!preferences || !isAudible(preferences)) return;
 
       const worklet = new AudioWorkletNode(context, 'ambient-generator', {
         numberOfOutputs: 1 + AMBIENT_RAIN_CHANNEL_COUNT,
-        outputChannelCount: [2, 1, 1, 1],
+        outputChannelCount: [2, ...Array.from({ length: AMBIENT_RAIN_CHANNEL_COUNT }, () => 1)],
         processorOptions: { seed: (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0 },
       });
       worklet.onprocessorerror = () => {
@@ -137,41 +153,38 @@ export class AmbientSoundEngine {
       this.rainReverb = rainReverb;
       this.rainLayerNodes = rainLayerNodes;
       this.mixGainTarget = 0;
-      this.updateGraph(preferences.settings);
+      this.updateGraph(preferences);
     } catch (error) {
       console.error('Unable to start ambient audio', error);
     }
   }
 
-  private updateGraph(settings: AmbientSettings): void {
+  private updateGraph(preferences: AmbientPreferences): void {
     const context = this.context;
     const worklet = this.worklet;
     if (!context || !worklet) return;
+    const settings = preferences.settings;
 
     const now = context.currentTime;
     const mixGain = this.mixGain;
-    if (mixGain && this.mixGainTarget !== AMBIENT_MIX_GAIN) {
+    const mixTarget = AMBIENT_MIX_GAIN * preferences.masterVolume;
+    if (mixGain && this.mixGainTarget !== mixTarget) {
       mixGain.gain.cancelAndHoldAtTime(now);
-      mixGain.gain.setTargetAtTime(AMBIENT_MIX_GAIN, now, AMBIENT_FADE_SEC);
-      this.mixGainTarget = AMBIENT_MIX_GAIN;
+      mixGain.gain.setTargetAtTime(mixTarget, now, AMBIENT_FADE_SEC);
+      this.mixGainTarget = mixTarget;
     }
 
-    const channels = settings.map((channel: AmbientChannelSettings) => (
-      channel.kind === 'noise'
-        ? { ...channel, envelope: buildAmbientEnvelope(channel.ramp, channel.shape) }
-        : channel
-    ));
     for (let index = 0; index < AMBIENT_RAIN_CHANNEL_COUNT; index += 1) {
-      const channel = settings[AMBIENT_RAIN_FIRST_INDEX + index] as AmbientRainChannelSettings | undefined;
+      const channel = settings[AMBIENT_RAIN_FIRST_INDEX + index];
       const nodes = this.rainLayerNodes[index];
-      if (!channel || !nodes) continue;
+      if (channel?.kind !== 'rain' || !nodes) continue;
       const space = resolveAmbientRainSpace(channel.distance);
-      nodes.panner.pan.setTargetAtTime(channel.pan, now, 0.08);
-      nodes.filter.frequency.setTargetAtTime(space.cutoffHz, now, 0.08);
-      nodes.directGain.gain.setTargetAtTime(space.directGain, now, 0.08);
-      nodes.reverbSend.gain.setTargetAtTime(space.reverbSend, now, 0.08);
+      nodes.panner.pan.setTargetAtTime(channel.pan, now, AMBIENT_FADE_SEC);
+      nodes.filter.frequency.setTargetAtTime(space.cutoffHz, now, AMBIENT_FADE_SEC);
+      nodes.directGain.gain.setTargetAtTime(space.directGain, now, AMBIENT_FADE_SEC);
+      nodes.reverbSend.gain.setTargetAtTime(space.reverbSend, now, AMBIENT_FADE_SEC);
     }
-    worklet.port.postMessage({ type: 'configure', channels });
+    worklet.port.postMessage({ type: 'configure', channels: toWorkletChannels(settings) });
   }
 
   private fadeOutAndDisconnect(): void {
@@ -189,7 +202,7 @@ export class AmbientSoundEngine {
     this.disconnectTimer = window.setTimeout(() => {
       this.disconnectTimer = null;
       const latest = this.preferences;
-      if (latest?.enabled && hasAudibleLayer(latest.settings)) return;
+      if (latest && isAudible(latest)) return;
       this.worklet?.disconnect();
       this.mixGain?.disconnect();
       this.rainReverb?.disconnect();

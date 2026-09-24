@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AMBIENT_DEFAULT_MASTER_VOLUME,
   AMBIENT_NOISE_TYPES,
+  AMBIENT_RAIN_SURFACES,
   AMBIENT_FACTORY_PRESETS,
   AMBIENT_MODULATION_PERIOD_MIN_SEC,
   AMBIENT_RAIN_DEFAULT_PANS,
@@ -19,7 +21,7 @@ describe('ambient sound configuration', () => {
     for (const preset of AMBIENT_FACTORY_PRESETS) {
       expect(preset.settings).toHaveLength(MAX_AMBIENT_CHANNELS);
       expect(preset.settings.filter((channel) => channel.enabled)).toHaveLength(
-        ['rain', 'storm'].includes(preset.id) ? 5 : 3,
+        ['rain', 'street', 'forest', 'storm'].includes(preset.id) ? 5 : 3,
       );
       for (const channel of preset.settings) {
         expect(channel.volume).toBeGreaterThanOrEqual(0);
@@ -35,6 +37,11 @@ describe('ambient sound configuration', () => {
           expect(channel.bassGain).toBeLessThanOrEqual(1);
           expect(channel.trebleGain).toBeGreaterThanOrEqual(0);
           expect(channel.trebleGain).toBeLessThanOrEqual(1);
+          expect(AMBIENT_RAIN_SURFACES).toContain(channel.surface);
+          expect(channel.wash).toBeGreaterThanOrEqual(0);
+          expect(channel.wash).toBeLessThanOrEqual(1);
+          expect(channel.drips).toBeGreaterThanOrEqual(0);
+          expect(channel.drips).toBeLessThanOrEqual(1);
         } else {
           expect(channel.modulationAmplitude).toBeGreaterThanOrEqual(0);
           expect(channel.modulationAmplitude).toBeLessThanOrEqual(1);
@@ -239,5 +246,37 @@ describe('ambient rain distance', () => {
     expect(middle.reverbSend).toBeLessThan(far.reverbSend);
     expect(resolveAmbientRainSpace(-1)).toEqual(near);
     expect(resolveAmbientRainSpace(2)).toEqual(far);
+  });
+  it('reads a rain layer saved before surfaces existed as the glass model it was', () => {
+    const legacyRain = DEFAULT_AMBIENT_SETTINGS.map((channel) => {
+      if (channel.kind !== 'rain') return channel;
+      const { surface: _surface, wash: _wash, drips: _drips, ...rest } = channel;
+      return rest;
+    });
+    const settings = sanitizeAmbientSettings(legacyRain);
+    for (const channel of settings.slice(9)) {
+      expect(channel).toMatchObject({ kind: 'rain', surface: 'glass', wash: 0, drips: 0 });
+    }
+  });
+
+  it('keeps a known surface, replaces an unknown one and clamps wash and drips', () => {
+    const input = DEFAULT_AMBIENT_SETTINGS.map((channel, index) => (
+      channel.kind !== 'rain' ? channel
+        : index === 9 ? { ...channel, surface: 'forest', wash: 3, drips: -1 }
+          : { ...channel, surface: 'lava' }
+    ));
+    const settings = sanitizeAmbientSettings(input);
+    expect(settings[9]).toMatchObject({ surface: 'forest', wash: 1, drips: 0 });
+    expect(settings[10]).toMatchObject({ surface: 'street' });
+  });
+
+  it('treats master volume as a listener setting outside the soundscape', () => {
+    expect(sanitizeAmbientPreferences({}).masterVolume).toBe(AMBIENT_DEFAULT_MASTER_VOLUME);
+    expect(sanitizeAmbientPreferences({ masterVolume: 4 }).masterVolume).toBe(1);
+    expect(sanitizeAmbientPreferences({ masterVolume: 0.25 }).masterVolume).toBe(0.25);
+    const surfaceChanged = DEFAULT_AMBIENT_SETTINGS.map((channel) => (
+      channel.kind === 'rain' ? { ...channel, surface: 'forest' as const } : channel
+    ));
+    expect(ambientSettingsSignature(surfaceChanged)).not.toBe(ambientSettingsSignature(DEFAULT_AMBIENT_SETTINGS));
   });
 });

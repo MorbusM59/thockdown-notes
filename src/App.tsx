@@ -2700,11 +2700,11 @@ function App() {
   const [musicMuted, setMusicMuted] = useState(false)
   const [musicReverbBypassed, setMusicReverbBypassed] = useState(false)
   const [musicSoundOptionsOpen, setMusicSoundOptionsOpen] = useState(false)
+  // The ambient engine follows this state and nothing else: every change --
+  // a control, the player's switch, a restore from disk -- reaches it through
+  // this one effect, so there is no path that updates the sound without the
+  // state or the state without the sound.
   const [ambientPreferences, setAmbientPreferences] = useState<AmbientPreferences>(DEFAULT_AMBIENT_PREFERENCES)
-  const handleAmbientPreferencesChange = useCallback((preferences: AmbientPreferences) => {
-    setAmbientPreferences(preferences)
-    ambientSoundEngine.apply(preferences)
-  }, [])
   useEffect(() => {
     ambientSoundEngine.apply(ambientPreferences)
   }, [ambientPreferences])
@@ -6855,9 +6855,7 @@ ${markdownHtml}
             setMusicMuted(appState.menu.musicMuted ?? false)
             setMusicReverbBypassed(appState.menu.musicReverbBypassed ?? false)
             setMusicSoundOptionsOpen(appState.menu.musicSoundOptionsOpen ?? false)
-            const restoredAmbient = sanitizeAmbientPreferences(appState.menu.ambientSound)
-            setAmbientPreferences(restoredAmbient)
-            ambientSoundEngine.apply(restoredAmbient)
+            setAmbientPreferences(sanitizeAmbientPreferences(appState.menu.ambientSound))
             if (Array.isArray(appState.menu.musicActiveSlots)) {
               setMusicActiveSlots(
                 (appState.menu.musicActiveSlots as number[]).filter(isPlaylistButtonSlot)
@@ -10226,7 +10224,7 @@ ${markdownHtml}
                         typingSoundSet={typingSoundSet}
                         setTypingSoundSet={setTypingSoundSet}
                         ambientPreferences={ambientPreferences}
-                        onAmbientPreferencesChange={handleAmbientPreferencesChange}
+                        onAmbientPreferencesChange={setAmbientPreferences}
                         audioKeyVolume={audioKeyVolume}
                         setAudioKeyVolume={setAudioKeyVolume}
                         audioKeyVariance={audioKeyVariance}
@@ -10550,7 +10548,7 @@ ${markdownHtml}
                 activeSlots={musicActiveSlots}
                 onActiveSlotsChange={setMusicActiveSlots}
                 ambientPreferences={ambientPreferences}
-                onAmbientPreferencesChange={handleAmbientPreferencesChange}
+                onAmbientPreferencesChange={setAmbientPreferences}
                 initialSongId={musicRestoreSongId}
                 initialPositionSec={musicRestorePositionSec}
                 initialWasPlaying={musicRestoreWasPlaying}
