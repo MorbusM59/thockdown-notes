@@ -4,7 +4,12 @@
  * MusicPlayerService — Web Audio API based music playback.
  *
  * Signal chain:
- *   Music sources and other app audio → shared dynamics limiter → destination
+ *   HTMLAudioElement → MediaElementSourceNode → GainNode ─┬→ dryGain ────────────────┬→ limiter → destination
+ *                                                          └→ ConvolverNode → wetGain ┘
+ *
+ * The limiter is the app's shared output stage: other audio (the ambient
+ * sound engine) joins it through `connectToMix`, so music and ambience are
+ * limited together rather than each clipping on its own.
  *
  * The ConvolverNode provides a simple room-reverb effect using a synthetic
  * impulse response.  When reverbAmount is 0 the wet signal is silent and
@@ -238,7 +243,7 @@ export class MusicPlayerService {
       this.gainNode.connect(this.dryGain);
       this.dryGain.connect(this.mixLimiter);
 
-      // gainNode → convolver → wetGain → destination
+      // gainNode → convolver → wetGain → limiter
       this.gainNode.connect(this.convolver);
       this.convolver.connect(this.wetGain);
       this.wetGain.connect(this.mixLimiter);

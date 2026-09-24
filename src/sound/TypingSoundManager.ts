@@ -614,10 +614,13 @@ export class TypingSoundManager {
   }
 
   // Single source of truth for both the live-synthesis path (playLayer) and
-  // the bounced fast-path (tryPlayBoundBuffer) so they always agree. Returns
-  // 0 (no panner node needed at all -- see panIfNeeded) whenever the slider
-  // is neutral, mode A has no opinion on this key, or mode B is active but
-  // the caller didn't supply a position.
+  // the bounced fast-path (tryPlayBoundBuffer) so they always agree. An
+  // explicit pan from the caller (a caret position in mode B, or a sound
+  // with a position of its own, such as the escape ring's cells) wins in
+  // either mode, scaled by the slider's distance from centre. Without one,
+  // mode A pans by the key's place on the keyboard and mode B does not pan.
+  // Returns 0 (no panner node needed at all -- see panIfNeeded) whenever the
+  // slider is neutral or nothing gives a position.
   private resolveEffectivePan(physicalKeyCode: string | undefined, explicitPan: number | undefined): number {
     const magnitude = Math.abs(this.spatialAmount)
     if (magnitude === 0) return 0

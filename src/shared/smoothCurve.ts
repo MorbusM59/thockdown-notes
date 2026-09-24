@@ -2,13 +2,22 @@
 // time-shaped interactions. Callers own parameter values; this module has no
 // connection to persisted scroll settings.
 
+// Fixed internal CDF resolution. Coarse enough to stay cheap, fine enough that
+// piecewise-linear sampling never produces visible velocity steps at 60+ fps.
 const CDF_SAMPLE_COUNT = 256;
 
+// f(x) = 1 / ((1/a) + ((2(x/t) - 1) / b)^2)
+// Shared so every curve-driven interaction (scroll plans, CursorClickCurve.ts's
+// directly sampled attack/release envelope, the ambient burst envelope below)
+// uses exactly the same bell shape.
 export const evaluateCurve = (xSec: number, a: number, b: number, tSec: number): number => {
   const normalized = (2 * (xSec / tSec)) - 1;
   return 1 / ((1 / a) + Math.pow(normalized / b, 2));
 };
 
+// Piecewise linear time warp that maps [0, t] -> [0, t] with x = skew*t -> t/2.
+// Used to bias the bell's apex while pinning both endpoints (f(0) and f(t)
+// remain unchanged because warp(0) = 0 and warp(t) = t).
 export const warpForSkew = (xSec: number, tSec: number, skew: number): number => {
   const split = skew * tSec;
   const half = tSec * 0.5;
@@ -21,7 +30,10 @@ export const warpForSkew = (xSec: number, tSec: number, skew: number): number =>
 
 export interface CurvePlan {
   cdf: Float64Array;
+  // Per-segment normalized slope. slopes[i] = (cdf[i+1] - cdf[i]) * (N - 1).
+  // Equals d(CDF)/dx (with x in [0,1]) within segment i.
   slopes: Float64Array;
+  // max(slopes). Peak velocity (px/s) = distance * peakSlope / durationSec.
   peakSlope: number;
 }
 
@@ -66,6 +78,7 @@ export const buildCurvePlan = (a: number, b: number, tSec: number, skew: number)
   return { cdf, slopes, peakSlope };
 };
 
+// Linear interpolation into a CurvePlan's CDF at `progress` in [0, 1].
 export const sampleCdf = (cdf: Float64Array, progress: number): number => {
   if (progress <= 0) return 0;
   if (progress >= 1) return 1;
@@ -77,6 +90,13 @@ export const sampleCdf = (cdf: Float64Array, progress: number): number => {
   return cdf[loIndex] + ((cdf[hiIndex] - cdf[loIndex]) * frac);
 };
 
+/**
+ * The bell sampled as an amplitude envelope over one event: 0 at both ends,
+ * 1 at the apex, which `skew` places (0.5 is centred) and `ramp` sharpens.
+ * The raw bell is rescaled from its start value to its peak and smoothstepped
+ * so it leaves and returns to silence with zero slope -- a burst of ambient
+ * noise that starts on a slope clicks.
+ */
 export function buildBellEnvelope(
   ramp: number,
   skew: number,
