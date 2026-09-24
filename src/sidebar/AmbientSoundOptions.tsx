@@ -40,7 +40,7 @@ interface AmbientSoundOptionsProps {
 }
 
 function copySettings(settings: AmbientSettings): AmbientSettings {
-  return settings.map((channel) => ({ ...channel }))
+  return settings.map((channel) => ({ ...channel, solo: false }))
 }
 
 function typeIndex(type: AmbientNoiseType): number {
@@ -51,6 +51,7 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
   const [pendingDeletePresetId, setPendingDeletePresetId] = useState<string | null>(null)
   const channelSelectorRef = useRef<HTMLDivElement | null>(null)
   const channelHoldRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
+  const suppressNextContextMenuRef = useRef(false)
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(
     () => preferences.settings[0]?.id ?? null,
   )
@@ -71,10 +72,15 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
   const canSave = hasPendingChanges && preferences.customPresets.length < MAX_AMBIENT_CUSTOM_PRESETS
 
   const selectPreset = (preset: AmbientPreset) => {
+    const soloIndex = preferences.settings.findIndex((channel) => channel.solo)
+    const settings = copySettings(preset.settings).map((channel, index) => ({
+      ...channel,
+      solo: index === soloIndex,
+    }))
     onChange({
       ...preferences,
       enabled: true,
-      settings: copySettings(preset.settings),
+      settings,
       activePresetId: preset.id,
     })
   }
@@ -100,6 +106,16 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
     )))
   }
 
+  const toggleChannelSolo = (channelId: string) => {
+    const channel = preferences.settings.find((item) => item.id === channelId)
+    if (!channel) return
+    const shouldSolo = !channel.solo
+    commitSettings(preferences.settings.map((item) => ({
+      ...item,
+      solo: item.id === channelId && shouldSolo,
+    })))
+  }
+
   const startChannelHold = (channel: AmbientChannelSettings, button: number, pointerId: number) => {
     if ((button === 0 && channel.enabled) || (button === 2 && !channel.enabled)) return
     if (button !== 0 && button !== 2) return
@@ -107,7 +123,8 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
     const enabled = button === 0
     const cancel = armHold(() => {
       channelHoldRef.current = null
-      setSelectedChannelId(channel.id)
+      if (button === 2) suppressNextContextMenuRef.current = true
+      else setSelectedChannelId(channel.id)
       updateChannel(channel.id, 'enabled', enabled)
     }, HOLD_CONFIRM_MS)
     channelHoldRef.current = { pointerId, cancel }
@@ -256,16 +273,16 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
               <button
                 key={number}
                 type="button"
-                className={`btn-icon options-color-swatch options-loadout-btn ambient-channel-selector-btn${isSelected ? ' is-active' : ''}${channel?.enabled ? ' is-enabled' : ' is-disabled'}`}
-                aria-label={`Ambient channel ${number}, ${channel?.enabled ? 'enabled' : 'disabled'}`}
+                className={`btn-icon options-color-swatch options-loadout-btn ambient-channel-selector-btn${isSelected ? ' is-active' : ''}${channel?.enabled ? ' is-enabled' : ' is-disabled'}${channel?.solo ? ' is-solo' : ''}`}
+                aria-label={`Ambient channel ${number}, ${channel?.enabled ? 'enabled' : 'disabled'}${channel?.solo ? ', solo' : ''}`}
                 aria-pressed={isSelected}
                 data-tooltip={channel
-                  ? `Channel ${number} is ${channel.enabled ? 'enabled' : 'disabled'}\n${channel.enabled
-                    ? 'Hold right-click to disable; scroll to adjust volume'
-                    : 'Hold left-click to enable; settings are locked'}`
+                  ? `Channel ${number} is ${channel.enabled ? 'enabled' : 'disabled'}${channel.solo ? ', solo' : ''}\n${channel.solo ? 'Right-click to clear solo' : 'Right-click to solo'}; ${channel.enabled
+                    ? 'hold right-click to disable; scroll to adjust volume'
+                    : 'hold left-click to enable; settings are locked'}`
                   : `Channel ${number} is disabled`}
                 data-ambient-channel-id={channel?.id}
-                data-secondary-press={channel?.enabled ? 'action' : 'none'}
+                data-secondary-press={channel ? 'action' : 'none'}
                 onClick={() => channel && setSelectedChannelId(channel.id)}
                 onPointerDown={(event) => channel && startChannelHold(channel, event.button, event.pointerId)}
                 onPointerUp={(event) => endChannelHold(event.pointerId)}
@@ -274,6 +291,11 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                 onContextMenu={(event) => {
                   event.preventDefault()
                   event.stopPropagation()
+                  if (suppressNextContextMenuRef.current) {
+                    suppressNextContextMenuRef.current = false
+                    return
+                  }
+                  if (channel) toggleChannelSolo(channel.id)
                 }}
               >
                 <span className="options-loadout-index">{number}</span>

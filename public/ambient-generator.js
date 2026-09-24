@@ -40,6 +40,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
   }
 
   configure(settings) {
+    this.soloChannelId = settings.find((channel) => channel.solo)?.id ?? null;
     const activeSettings = settings.filter((channel) => channel.enabled !== false);
     const previousById = new Map(this.channels.map((channel) => [channel.id, channel]));
     this.channels = activeSettings.map((next) => {
@@ -133,7 +134,9 @@ class AmbientGenerator extends AudioWorkletProcessor {
     const output = outputs[0];
     const left = output[0];
     const right = output[1] ?? left;
-    const channelScale = this.channels.length > 0 ? 1 / Math.sqrt(this.channels.length) : 0;
+    const channelScale = this.soloChannelId !== null
+      ? 1
+      : this.channels.length > 0 ? 1 / Math.sqrt(this.channels.length) : 0;
     for (let frame = 0; frame < left.length; frame += 1) {
       let leftMix = 0;
       let rightMix = 0;
@@ -165,8 +168,12 @@ class AmbientGenerator extends AudioWorkletProcessor {
           }
         }
         const channelGain = amplitude * channel.volume;
-        leftMix += this.filterSample(channel, baseLeft * channelGain, channel.filterLeft);
-        rightMix += this.filterSample(channel, baseRight * channelGain, channel.filterRight);
+        const filteredLeft = this.filterSample(channel, baseLeft * channelGain, channel.filterLeft);
+        const filteredRight = this.filterSample(channel, baseRight * channelGain, channel.filterRight);
+        if (this.soloChannelId === null || channel.id === this.soloChannelId) {
+          leftMix += filteredLeft;
+          rightMix += filteredRight;
+        }
       }
       left[frame] = leftMix * channelScale;
       right[frame] = rightMix * channelScale;

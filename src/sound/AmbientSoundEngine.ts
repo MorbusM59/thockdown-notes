@@ -13,6 +13,8 @@ const AMBIENT_DISCONNECT_MS = 180;
 const WORKLET_MODULES = new WeakMap<AudioContext, Promise<void>>();
 
 function hasAudibleLayer(settings: AmbientSettings): boolean {
+  const soloChannel = settings.find((channel) => channel.solo);
+  if (soloChannel) return soloChannel.enabled && soloChannel.volume > 0;
   return settings.some((channel) => channel.enabled && channel.volume > 0);
 }
 

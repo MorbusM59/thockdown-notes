@@ -9,6 +9,7 @@ const generatorSource = readFileSync(fileURLToPath(new URL('../../public/ambient
 
 type TestProcessor = {
   channels: Array<{ id: string; eventAge: number }>;
+  soloChannelId: string | null;
   port: { onmessage: ((event: { data: unknown }) => void) | null };
   eventDelayFrames: (ratePerSecond: number) => number;
   envelopeAt: (channel: unknown, progress: number) => number;
@@ -97,6 +98,27 @@ describe('ambient AudioWorklet generator', () => {
     expect(withDisabled.processor.channels.map((channel) => channel.id)).toEqual(['enabled']);
     expect(actual.left).toEqual(expected.left);
     expect(actual.right).toEqual(expected.right);
+  });
+
+  it('passes only the soloed channel without disabling the other channels', () => {
+    const mixed = createProcessor(97, [
+      makeChannel('first', { modulationAmplitude: 0 }),
+      makeChannel('solo', { solo: true, modulationAmplitude: 0 }),
+    ]);
+    const soloOnly = createProcessor(97, [makeChannel('solo', { solo: true, modulationAmplitude: 0 })]);
+    const disabledSolo = createProcessor(97, [
+      makeChannel('disabled-solo', { enabled: false, solo: true }),
+      makeChannel('other', { modulationAmplitude: 0 }),
+    ]);
+    for (const generator of [mixed, soloOnly, disabledSolo]) generator.processor.noise = () => 1;
+
+    const mixedOutput = mixed.render(0.2);
+    const soloOutput = soloOnly.render(0.2);
+    const silentOutput = disabledSolo.render(0.2);
+    expect(mixed.processor.soloChannelId).toBe('solo');
+    expect(mixed.processor.channels.map((channel) => channel.id)).toEqual(['first', 'solo']);
+    expect(mixedOutput.left).toEqual(soloOutput.left);
+    expect(silentOutput.left.every((sample) => sample === 0)).toBe(true);
   });
 
   it('uses modulation amplitude and period to shape continuous noise', () => {

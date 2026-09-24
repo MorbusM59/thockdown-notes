@@ -116,6 +116,11 @@
   opacity: 0.55;
 }
 
+.ambient-channel-selector-btn.is-solo {
+  outline: 1px solid red;
+  outline-offset: -1px;
+}
+
 .ambient-layer-controls .utility-setting-scrollbar-shell {
   grid-column: span 2;
   min-width: 0;

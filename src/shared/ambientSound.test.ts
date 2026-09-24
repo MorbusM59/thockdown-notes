@@ -73,6 +73,20 @@ describe('ambient sound configuration', () => {
     expect(settings[2]).toMatchObject({ id: 'ambient-layer-3', enabled: false });
   });
 
+  it('keeps solo independent from enabled state and normalizes it to one slot', () => {
+    const settings = sanitizeAmbientSettings([
+      { id: 'first', enabled: true, solo: true },
+      { id: 'second', enabled: true, solo: true },
+      { id: 'third', enabled: false, solo: true },
+    ]);
+
+    expect(settings.slice(0, 3).map(({ enabled, solo }) => ({ enabled, solo }))).toEqual([
+      { enabled: true, solo: true },
+      { enabled: true, solo: false },
+      { enabled: false, solo: false },
+    ]);
+  });
+
   it('preserves disabled channel slots and their settings in order', () => {
     const settings = sanitizeAmbientSettings([
       { id: 'first', enabled: true, volume: 0.33 },
@@ -101,14 +115,21 @@ describe('ambient sound configuration', () => {
     expect(ambientSettingsSignature(preset.settings)).not.toBe(ambientSettingsSignature(
       preset.settings.map((channel, index) => index === 0 ? { ...channel, filter: 0.4 } : channel),
     ));
+    expect(ambientSettingsSignature(preset.settings)).toBe(ambientSettingsSignature(
+      preset.settings.map((channel, index) => index === 0 ? { ...channel, solo: true } : channel),
+    ));
   });
 
   it('bounds and deduplicates saved presets, and drops an invalid active id', () => {
+    const soloSettings = DEFAULT_AMBIENT_SETTINGS.map((channel, index) => ({
+      ...channel,
+      solo: index === 1,
+    }));
     const loaded = sanitizeAmbientPreferences({
       enabled: true,
       activePresetId: 'missing',
       customPresets: [
-        { id: 'one', name: ' Saved ', settings: DEFAULT_AMBIENT_SETTINGS },
+        { id: 'one', name: ' Saved ', settings: soloSettings },
         { id: 'one', name: 'Duplicate', settings: DEFAULT_AMBIENT_SETTINGS },
         { id: 'bad', name: ' ', settings: DEFAULT_AMBIENT_SETTINGS },
       ],
@@ -117,6 +138,7 @@ describe('ambient sound configuration', () => {
     expect(loaded.activePresetId).toBeNull();
     expect(loaded.customPresets).toHaveLength(1);
     expect(loaded.customPresets[0].name).toBe('Saved');
+    expect(loaded.customPresets[0].settings[1].solo).toBe(false);
 
     const tooMany = Array.from({ length: MAX_AMBIENT_CUSTOM_PRESETS + 2 }, (_, index) => ({
       id: `preset-${index}`,

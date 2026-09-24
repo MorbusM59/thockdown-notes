@@ -52,6 +52,7 @@ describe('StateService app-state field round-trip', () => {
     const channels = DEFAULT_AMBIENT_SETTINGS.map((channel, index) => ({
       ...channel,
       enabled: index === 0 || index === 2,
+      solo: index === 1,
       volume: [0.41, 0.12, 0.88][index] ?? channel.volume,
       modulationAmplitude: [0.73, 0.26, 0.94][index] ?? channel.modulationAmplitude,
       type: (['pink', 'brown', 'white'] as const)[index] ?? channel.type,
@@ -60,7 +61,11 @@ describe('StateService app-state field round-trip', () => {
       enabled: true,
       settings: channels,
       activePresetId: 'night-rain',
-      customPresets: [{ id: 'night-rain', name: 'Night rain', settings: channels }],
+      customPresets: [{
+        id: 'night-rain',
+        name: 'Night rain',
+        settings: channels.map((channel) => ({ ...channel, solo: false })),
+      }],
     }
     await new StateService(dataRoot).saveAppState({
       selectedNoteId: null,

@@ -4,6 +4,7 @@ export type AmbientNoiseType = (typeof AMBIENT_NOISE_TYPES)[number];
 export interface AmbientChannelSettings {
   id: string;
   enabled: boolean;
+  solo: boolean;
   volume: number;
   modulationAmplitude: number;
   modulationPeriodSec: number;
@@ -74,6 +75,7 @@ function makeDefaultChannel(id: string, overrides: Partial<AmbientChannelSetting
   return {
     id,
     enabled: true,
+    solo: false,
     volume: 0.2,
     modulationAmplitude: 0.25,
     modulationPeriodSec: 30,
@@ -199,7 +201,11 @@ export function sanitizeAmbientSettings(input: unknown): AmbientSettings {
   if (input.length === 0) return DEFAULT_AMBIENT_SETTINGS.map((channel) => ({ ...channel }));
 
   const seenIds = new Set<string>();
-  const channels = input.slice(0, MAX_AMBIENT_CHANNELS).map((item, index) => {
+  const rawChannels = input.slice(0, MAX_AMBIENT_CHANNELS);
+  const soloIndex = rawChannels.findIndex((item) => (
+    item !== null && typeof item === 'object' && (item as { solo?: unknown }).solo === true
+  ));
+  const channels = rawChannels.map((item, index) => {
     const source = item && typeof item === 'object'
       ? item as Partial<AmbientChannelSettings> & { mode?: unknown }
       : {};
@@ -220,6 +226,7 @@ export function sanitizeAmbientSettings(input: unknown): AmbientSettings {
     return {
       id,
       enabled: source.enabled !== false,
+      solo: index === soloIndex,
       volume: finiteUnit(source.volume, fallback.volume),
       modulationAmplitude: finiteUnit(source.modulationAmplitude, fallback.modulationAmplitude),
       modulationPeriodSec: period === 0 ? 0 : Math.max(AMBIENT_MODULATION_PERIOD_MIN_SEC, period),
@@ -252,7 +259,7 @@ export function sanitizeAmbientPreferences(input: unknown): AmbientPreferences {
     return [{
       id: entry.id.slice(0, 80),
       name: entry.name.trim().slice(0, 40),
-      settings: sanitizeAmbientSettings(entry.settings),
+      settings: sanitizeAmbientSettings(entry.settings).map((channel) => ({ ...channel, solo: false })),
     }];
   });
   const activePresetId = typeof source.activePresetId === 'string'
