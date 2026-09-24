@@ -117,7 +117,7 @@
 }
 
 .ambient-channel-selector-btn.is-solo {
-  outline: 1px solid red;
+  filter: var(--filter-highlight);
   outline-offset: -1px;
 }
 
