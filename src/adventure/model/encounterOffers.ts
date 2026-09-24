@@ -119,17 +119,26 @@ function drawOffer(
 const DRAW_ATTEMPTS = 24
 
 /**
- * The tracks a player can follow to draw a monster from a pool of creatures.
+ * How each encounter pool is presented as a track to follow. Keyed by the
+ * pool, so the type fails the build when a pool is added without one.
  */
-export const ENCOUNTER_TRACKS: readonly { id: EncounterPoolId; label: string; icon: string }[] = [
-  { id: 'beasts', label: 'Beasts', icon: 'fa-solid fa-paw' },
-  { id: 'humanoids', label: 'Humanoids', icon: 'fa-solid fa-user' },
-  { id: 'undead', label: 'Undead', icon: 'fa-solid fa-skull-crossbones' },
-  { id: 'aberrations', label: 'Aberrations', icon: 'fa-solid fa-bugs' },
-  { id: 'constructs', label: 'Constructs', icon: 'fa-solid fa-cubes-stacked' },
-  { id: 'spirits', label: 'Spirits', icon: 'fa-solid fa-ghost' },
-]
+const ENCOUNTER_TRACK_LOOKS: Readonly<Record<EncounterPoolId, { label: string; icon: string }>> = {
+  beasts: { label: 'Beasts', icon: 'fa-solid fa-paw' },
+  humanoids: { label: 'Humanoids', icon: 'fa-solid fa-user' },
+  undead: { label: 'Undead', icon: 'fa-solid fa-skull-crossbones' },
+  aberrations: { label: 'Aberrations', icon: 'fa-solid fa-bugs' },
+  constructs: { label: 'Constructs', icon: 'fa-solid fa-cubes-stacked' },
+  spirits: { label: 'Spirits', icon: 'fa-solid fa-ghost' },
+}
 
+/** The tracks a player can follow, one per encounter pool, in pool order. */
+export const ENCOUNTER_TRACKS: readonly { id: EncounterPoolId; label: string; icon: string }[] =
+  ENCOUNTER_POOL_IDS.map((id) => ({ id, ...ENCOUNTER_TRACK_LOOKS[id] }))
+
+/**
+ * Which tracks an open encounter offers: `choiceCount` of them (the
+ * profile's encounter choices), drawn without replacement.
+ */
 export function trackChoicesFor(choiceCount: number, rng: RngState): { trackIds: EncounterPoolId[]; rng: RngState } {
   const wanted = Math.max(0, Math.min(ENCOUNTER_TRACKS.length, Math.floor(choiceCount)))
   const remaining = [...ENCOUNTER_TRACKS]
@@ -146,26 +155,24 @@ export function trackChoicesFor(choiceCount: number, rng: RngState): { trackIds:
   return { trackIds, rng: state }
 }
 
+/**
+ * The pool a placed mini boss or boss is drawn from: the one tracked most
+ * this level, ties broken at random, and any pool at random when nothing has
+ * been tracked yet. Returns the advanced stream like every other draw, so the
+ * boss drawn after it does not reuse the same state.
+ */
 export function mostSelectedEncounterPool(
   trackedPools: readonly EncounterPoolId[] | null | undefined,
   rng: RngState,
-): EncounterPoolId {
-  if (!trackedPools || trackedPools.length === 0) {
-    const candidates = ENCOUNTER_TRACKS.map((track) => track.id)
-    const draw = nextPick(rng, candidates)
-    return draw.value ?? candidates[0] ?? 'beasts'
-  }
-
+): { pool: EncounterPoolId; rng: RngState } {
   const counts = new Map<EncounterPoolId, number>()
-  for (const pool of trackedPools) {
+  for (const pool of trackedPools ?? []) {
     counts.set(pool, (counts.get(pool) ?? 0) + 1)
   }
-
-  const highest = Math.max(...counts.values())
+  const highest = Math.max(0, ...counts.values())
   const candidates = ENCOUNTER_POOL_IDS.filter((pool) => (counts.get(pool) ?? 0) === highest)
-  if (candidates.length === 0) return ENCOUNTER_TRACKS[0].id
   const draw = nextPick(rng, candidates)
-  return draw.value ?? candidates[0]
+  return { pool: draw.value ?? candidates[0], rng: draw.rng }
 }
 
 /**

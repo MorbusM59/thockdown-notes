@@ -57,8 +57,13 @@ const OMEN_TRAIT_PREFIX = 'omen:trait:'
 // back. It was a third cell here whose rules were never written, and what it
 // would have been is now the OMEN -- which arrives on its own at the three
 // fixed encounters rather than being one of the ways you go looking. A cell
-// that leads to a wall is a promise the game cannot keep; the two that remain
-// are the two ways an open encounter is actually found.
+// that leads to a wall is a promise the game cannot keep.
+//
+// AN OPEN ENCOUNTER IS FOUND BY TRACKING. The hub offers as many tracks as the
+// profile's encounter choices, each an encounter pool (model/vectors.ts's
+// ENCOUNTER_POOL_IDS); following one records it on the run and hands the pool
+// to the hunt, which draws only from it. The level's tracks are what decide
+// the pool its placed mini bosses and boss come from.
 
 export const encounterSelectStage: StageModule = {
   id: ENCOUNTER_SELECT_STAGE_ID,
@@ -73,13 +78,14 @@ export const encounterSelectStage: StageModule = {
       return { state: { fixedOffer: null, trackIds: sampled.trackIds } satisfies JsonObject, rng: sampled.rng }
     }
     // A boss is PLACED, so it is drawn here rather than offered: one species
-    // able to field that rank, and no choice about it.
-    const selectedPool = mostSelectedEncounterPool(context.game?.trackedPools, rng)
+    // able to field that rank, from the pool tracked most this level, and no
+    // choice about it.
+    const selected = mostSelectedEncounterPool(context.game?.trackedPools, rng)
     const drawn = buildEncounterOffers({
       encounter,
       choiceCount: 1,
-      ...monsterPools(context.content, selectedPool),
-      rng,
+      ...monsterPools(context.content, selected.pool),
+      rng: selected.rng,
     })
     const offer = drawn.offers[0]
     // The omen is drawn NOW, with the boss, and shown first. Drawing it here

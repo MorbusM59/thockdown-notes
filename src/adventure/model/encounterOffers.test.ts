@@ -10,7 +10,7 @@ import {
   OFFERABLE_TYPES,
   rollCount,
 } from './encounterOffers'
-import { MONSTER_BUDDY_CHANCES } from './vectors'
+import { ENCOUNTER_POOL_IDS, MONSTER_BUDDY_CHANCES } from './vectors'
 import { THOCKQUEST } from '../content/thockquest'
 
 const POOLS = monsterPools(THOCKQUEST)
@@ -140,10 +140,16 @@ describe('what an ordinary encounter offers', () => {
 
   it('chooses the most frequently tracked pool for a fixed encounter, with a random tie break', () => {
     const tied = mostSelectedEncounterPool(['beasts', 'beasts', 'undead', 'undead', 'spirits'], 7)
-    expect(['beasts', 'undead']).toContain(tied)
+    expect(['beasts', 'undead']).toContain(tied.pool)
 
     const dominant = mostSelectedEncounterPool(['humanoids', 'humanoids', 'beasts', 'beasts', 'beasts'], 11)
-    expect(dominant).toBe('beasts')
+    expect(dominant.pool).toBe('beasts')
+  })
+
+  it('advances the stream when it draws a pool, so the boss drawn next is not the same draw', () => {
+    const untracked = mostSelectedEncounterPool([], 5)
+    expect(untracked.rng).not.toBe(5)
+    expect(ENCOUNTER_POOL_IDS).toContain(untracked.pool)
   })
 
   it('returns a SHORTER list rather than looping when the combinations run out', () => {

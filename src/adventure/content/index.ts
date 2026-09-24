@@ -184,6 +184,12 @@ export function validateContent(content: Content): string[] {
     else shapes.set(shape, build.id)
   }
 
+  for (const pool of ENCOUNTER_POOL_IDS) {
+    if (!content.species.some((species) => !species.playable && species.encounterPool === pool)) {
+      problems.push(`encounter pool "${pool}" has no monster species: tracking it would find nothing`)
+    }
+  }
+
   for (const species of content.species) {
     check(species.id, `species "${species.name}"`)
     if (species.effects.length === 0) {

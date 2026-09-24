@@ -572,3 +572,50 @@ the top.
 
 **Noticed.** Making the chrome's gauges observe the same top gap a thumb keeps,
 where the token had to be invented to say in CSS what JS already knew.
+
+### The under-construction stage has no route in
+
+**What.** `src/adventure/stages/underConstruction.ts` and
+`UNDER_CONSTRUCTION_STAGE_ID` in `stages/ids.ts`. The stage shows a wall that
+says, in the game, that a feature is not built yet. Its only caller was the
+hub's "Go Exploring" cell; tracking replaced both hub cells (commit
+`bf946fa`), and the stage was taken out of `stages/index.ts`'s registry at the
+same time, leaving the module and its id behind.
+
+**Why it is suspect.** Nothing can reach it: an unregistered stage cannot be
+entered, so the file is dead code today. But it is also the mechanism
+`docs/adventure-platform.md` names for how the platform treats unbuilt rules
+("routes them to a stage that says so *in the game* rather than stubbing
+them"), so deleting it deletes a policy's vehicle, not just a file.
+
+**What would have to be true to remove it.** A decision that the next unbuilt
+feature will not be surfaced as a reachable cell at all (so the wall has no
+use), plus the doc's "Not built, on purpose" paragraph and its open-questions
+entries that mention the wall updated in the same change. If the opposite is
+decided, the stage goes back into the registry when its next caller arrives,
+and this entry is deleted.
+
+**Noticed.** Documenting tracking during the week-of-24-September quality
+review.
+
+### Playlist slot 1 has songs but no button
+
+**What.** `PLAYLIST_BUTTON_SLOTS` in `src/shared/audioPlayer.ts` omits slot 1
+(formerly "Vocal"), while `PLAYLIST_SLOTS`, the database CHECK constraint and
+the persisted-state sanitizer still accept it. Restoring the active slots
+filters slot 1 out (`isPlaylistButtonSlot` in `App.tsx`).
+
+**Why it is suspect.** A library that had songs in slot 1 still has them, and
+nothing in the UI can play, list, add to or clear them: the data is kept but
+unreachable. Either the slot is retired, in which case its songs are an
+orphan the database holds for nothing, or it is only hidden, in which case the
+player has lost access to part of its own library without being told.
+
+**What would have to be true to remove it.** A decision on what slot 1's songs
+become: moved into another slot by a one-time migration, purged with the
+user's say-so, or given a way back in. Then either `PLAYLIST_SLOTS` shrinks to
+match the buttons (with the database constraint and its rebuild migration) or
+the button returns.
+
+**Noticed.** The Noise Engine change (`98668d0`), which gave slot 1's grid
+column to the ambient-noise switch.

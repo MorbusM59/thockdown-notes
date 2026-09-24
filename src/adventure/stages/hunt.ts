@@ -1,7 +1,9 @@
-// Going hunting: which of these do you take on.
+// Following a track: which of these do you take on.
 //
-// The list is `2 + Perception/2` long, opens on a regular, and never repeats
-// a class-and-rank -- all of which is `model/encounterOffers.ts`. This stage
+// Entered from the hub with the encounter pool the player chose to track
+// (`input.track`), and draws monsters from that pool only. The list is
+// `2 + Perception/2` long, opens on a regular, and never repeats a
+// class-and-rank -- all of which is `model/encounterOffers.ts`. This stage
 // only rolls it once, on entry, and shows it.
 
 import type { JsonObject } from '../core/json'

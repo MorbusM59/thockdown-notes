@@ -70,13 +70,12 @@ entirely the set of transitions the thirteen stages return.
 
   ┌───────────────── encounterSelect — the hub, re-entered once per encounter ─────────────────┐
   │  encounter 5, 9, 10 :  the OMEN first (a `stay`), then the fixed monster — one cell        │
-  │  every other        :  Go Hunting  /  Go Exploring                                         │
+  │  every other        :  Track <pool> — as many tracks as encounter choices                  │
   │  level complete     :  advance ──► regionSelect (+ advanceLevel)                           │
   └────────────────────────────────────────────────────────────────────────────────────────────┘
-        │ hunt              │ explore                │ fixed
-        ▼                   ▼                        ▼
-      hunt ──► combat    underConstruction ──► hub  combat
-                              (encounter NOT spent)
+        │ track (+ recordEncounterTrack)          │ fixed (pool tracked most this level)
+        ▼                                         ▼
+      hunt (that pool only) ──► combat          combat
 
   combat ──┬─ won or the monster fled ──► loot ──► hub  (+ grantExperience, advanceEncounter)
            ├─ the player fled ──────────► hub        (+ advanceEncounter — running still costs it)
@@ -85,11 +84,11 @@ entirely the set of transitions the thirteen stages return.
   from ANY screen, by pressing a rail gauge:  PUSH ──► statPoint | fame ──► pop back
 ```
 
-Five different stages `replace` into the hub — the outpost, the loot screen,
-either end of a fight, the region select, and the under-construction wall —
+Four different stages `replace` into the hub — the outpost, the loot screen,
+either end of a fight, and the region select —
 which is why the omen is a phase OF the hub rather than a stage before it: a
-rule placed at each of five routes in is five copies of one rule, and the
-sixth route would not know to ask. A stage also cannot redirect on `enter`
+rule placed at each of the routes in is a copy of one rule per route, and
+the next route would not know to ask. A stage also cannot redirect on `enter`
 (only `resolve` returns a transition), so an omen stage would have had to
 show the boss screen first and push itself on top of it.
 
@@ -597,7 +596,19 @@ round engine with its four defences, and the loot that pays for it. The two acqu
 GONE — what you carry belongs on the chrome, always visible, not behind a
 permanent cell.
 
-**Not built, on purpose**: exploring, charisma actions, special attacks and
+**TRACKING REPLACED HUNTING AND EXPLORING** (`model/encounterOffers.ts`,
+`stages/hunt.ts`): every monster species belongs to one of six ENCOUNTER
+POOLS (`ENCOUNTER_POOL_IDS` in `model/vectors.ts`), the hub offers as many
+tracks as the profile's encounter choices, and following one records the
+pool on the run (`trackedPools`, cleared per level) and draws the hunt from
+that pool alone. The level's mini bosses and boss come from the pool tracked
+MOST, ties broken at random — so what a player hunts decides what they
+face. `validateContent` fails on a monster with no pool and on a pool with
+no monster, since either is a track that leads nowhere. Exploring left the
+hub with it; `stages/underConstruction.ts` is unregistered and parked in
+`docs/pending-review-and-removal.md`.
+
+**Not built, on purpose**: charisma actions, special attacks and
 spells. (Special encounters were on this list and are now REMOVED rather than
 pending — the omen took what they were for; see `stages/encounterSelect.ts`.) Their rules are still being written, and the
 platform routes them to a stage that says so *in the game* rather than
