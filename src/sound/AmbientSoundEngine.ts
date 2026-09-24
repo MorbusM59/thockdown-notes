@@ -1,10 +1,9 @@
 import {
-  AMBIENT_LAYER_IDS,
-  type AmbientLayerId,
+  type AmbientChannelSettings,
   type AmbientPreferences,
   type AmbientSettings,
 } from '../shared/ambientSound';
-import { buildAmbientEnvelopeBank, resolveAmbientTextureProfile } from '../shared/ambientSoundDsp';
+import { buildAmbientEnvelope } from '../shared/ambientSoundDsp';
 import { musicPlayerService } from './MusicPlayerService';
 
 const AMBIENT_MIX_GAIN = 0.34;
@@ -14,14 +13,14 @@ const AMBIENT_DISCONNECT_MS = 180;
 const WORKLET_MODULES = new WeakMap<AudioContext, Promise<void>>();
 
 function hasAudibleLayer(settings: AmbientSettings): boolean {
-  return AMBIENT_LAYER_IDS.some((layerId) => settings[layerId].volume > 0);
+  return settings.some((channel) => channel.enabled && channel.volume > 0);
 }
 
 export class AmbientSoundEngine {
   private context: AudioContext | null = null;
   private worklet: AudioWorkletNode | null = null;
-  private readonly filters = new Map<AmbientLayerId, BiquadFilterNode>();
-  private readonly gains = new Map<AmbientLayerId, GainNode>();
+  private mixGain: GainNode | null = null;
+  private mixGainTarget = 0;
   private preferences: AmbientPreferences | null = null;
   private starting: Promise<void> | null = null;
   private disconnectTimer: number | null = null;
@@ -82,8 +81,8 @@ export class AmbientSoundEngine {
       if (!preferences?.enabled || !hasAudibleLayer(preferences.settings)) return;
 
       const worklet = new AudioWorkletNode(context, 'ambient-generator', {
-        numberOfOutputs: AMBIENT_LAYER_IDS.length,
-        outputChannelCount: AMBIENT_LAYER_IDS.map(() => 2),
+        numberOfOutputs: 1,
+        outputChannelCount: [2],
         processorOptions: { seed: (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0 },
       });
       worklet.onprocessorerror = () => {
@@ -93,18 +92,12 @@ export class AmbientSoundEngine {
 
       this.context = context;
       this.worklet = worklet;
-      AMBIENT_LAYER_IDS.forEach((layerId, index) => {
-        const filter = context.createBiquadFilter();
-        filter.type = layerId === 'rain' ? 'highpass' : 'lowpass';
-        filter.Q.value = 0.45;
-        const gain = context.createGain();
-        gain.gain.value = 0;
-        worklet.connect(filter, index, 0);
-        filter.connect(gain);
-        musicPlayerService.connectToMix(gain);
-        this.filters.set(layerId, filter);
-        this.gains.set(layerId, gain);
-      });
+      const mixGain = context.createGain();
+      mixGain.gain.value = 0;
+      worklet.connect(mixGain);
+      musicPlayerService.connectToMix(mixGain);
+      this.mixGain = mixGain;
+      this.mixGainTarget = 0;
       this.updateGraph(preferences.settings);
     } catch (error) {
       console.error('Unable to start ambient audio', error);
@@ -117,30 +110,18 @@ export class AmbientSoundEngine {
     if (!context || !worklet) return;
 
     const now = context.currentTime;
-    const layers = Object.fromEntries(AMBIENT_LAYER_IDS.map((layerId) => {
-      const layer = settings[layerId];
-      const filter = this.filters.get(layerId);
-      const gain = this.gains.get(layerId);
-      if (filter) {
-        const frequency = layerId === 'wind'
-          ? 260 + (layer.texture * 1800)
-          : layerId === 'ocean'
-            ? 120 + (layer.texture * 950)
-            : 500 + (layer.texture * 3200);
-        filter.frequency.setTargetAtTime(frequency, now, 0.12);
-      }
-      if (gain) {
-        gain.gain.cancelAndHoldAtTime(now);
-        gain.gain.setTargetAtTime(layer.volume * AMBIENT_MIX_GAIN, now, AMBIENT_FADE_SEC);
-      }
-      return [layerId, {
-        texture: layer.texture,
-        profile: resolveAmbientTextureProfile(layer.texture),
-        envelopes: buildAmbientEnvelopeBank(layer.texture),
-      }];
-    }));
+    const mixGain = this.mixGain;
+    if (mixGain && this.mixGainTarget !== AMBIENT_MIX_GAIN) {
+      mixGain.gain.cancelAndHoldAtTime(now);
+      mixGain.gain.setTargetAtTime(AMBIENT_MIX_GAIN, now, AMBIENT_FADE_SEC);
+      this.mixGainTarget = AMBIENT_MIX_GAIN;
+    }
 
-    worklet.port.postMessage({ type: 'configure', layers });
+    const channels = settings.map((channel: AmbientChannelSettings) => ({
+      ...channel,
+      envelope: buildAmbientEnvelope(channel.ramp, channel.shape),
+    }));
+    worklet.port.postMessage({ type: 'configure', channels });
   }
 
   private fadeOutAndDisconnect(): void {
@@ -149,9 +130,10 @@ export class AmbientSoundEngine {
     if (!context || !worklet) return;
 
     const now = context.currentTime;
-    for (const gain of this.gains.values()) {
-      gain.gain.cancelAndHoldAtTime(now);
-      gain.gain.setTargetAtTime(0, now, 0.025);
+    if (this.mixGain && this.mixGainTarget !== 0) {
+      this.mixGain.gain.cancelAndHoldAtTime(now);
+      this.mixGain.gain.setTargetAtTime(0, now, 0.025);
+      this.mixGainTarget = 0;
     }
     if (this.disconnectTimer !== null) window.clearTimeout(this.disconnectTimer);
     this.disconnectTimer = window.setTimeout(() => {
@@ -159,11 +141,9 @@ export class AmbientSoundEngine {
       const latest = this.preferences;
       if (latest?.enabled && hasAudibleLayer(latest.settings)) return;
       this.worklet?.disconnect();
-      for (const filter of this.filters.values()) filter.disconnect();
-      for (const gain of this.gains.values()) gain.disconnect();
+      this.mixGain?.disconnect();
       this.worklet = null;
-      this.filters.clear();
-      this.gains.clear();
+      this.mixGain = null;
     }, AMBIENT_DISCONNECT_MS);
   }
 }

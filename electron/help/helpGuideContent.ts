@@ -871,10 +871,10 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 > **Where?**
 > The cloud-bolt button in the music player turns it on or off. Settings panel → Ambient Sound adjusts the layers and soundscapes.
 
-*Three generated sound layers that can play alongside the music player.*
+*Up to twelve generated sound layers that can play alongside the music player.*
 
-- Choose one of six soundscapes from the first row, or adjust **Wind**, **Ocean**, and **Rain** independently. Each layer has a **level** and a **texture** slider. Texture moves from a steadier drone toward more motion and irregular swells or patter; it does not simply turn the layer up.
-- The cloud-bolt player button turns all ambient layers on or off without changing their levels. Selecting a soundscape starts ambient playback; music is not required.
+- Choose one of six soundscapes from the first row, then choose a numbered channel to show its controls. All twelve channel slots remain in place. Click a channel to view it; hold left-click on a disabled channel to enable it, or hold right-click on an enabled channel to disable it. Disabled channels keep their settings, and their controls remain visible but cannot be changed. While hovering over an enabled channel button, scroll the mouse wheel to adjust its volume in 5% steps. Each channel controls **volume**, **modulation amplitude**, and **modulation period**; setting modulation period to **0** selects bursts. The remaining controls set burst **ramp**, **shape**, **speed**, noise type, and average of 1–100 randomly spaced events per 10 seconds. The filter slider runs from strong low-pass through no filter at its midpoint to strong high-pass.
+- Disabling a channel removes it from the soundscape without changing its stored controls or shifting any other slot. The cloud-bolt player button turns all ambient layers on or off without changing their settings. Selecting a soundscape starts ambient playback; music is not required.
 - Adjusting a layer makes the plus button active. Press it to save the current mix as a numbered soundscape button below the factory row. Select a numbered button to restore its mix; right-click it, then click it to remove it. Ambient soundscapes are independent of appearance layouts.
 
 ### [Data](#data-synchronization-settings)

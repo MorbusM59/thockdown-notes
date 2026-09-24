@@ -2,22 +2,10 @@ class AmbientGenerator extends AudioWorkletProcessor {
   constructor(options) {
     super();
     this.seed = (options?.processorOptions?.seed ?? 1) >>> 0;
-    this.config = {};
-    this.voices = {
-      wind: this.makeVoices('wind', ['brown', 'pink', 'pink']),
-      ocean: this.makeVoices('ocean', ['brown', 'brown', 'pink']),
-      rain: this.makeVoices('rain', ['white', 'white', 'pink']),
-    };
+    this.channels = [];
     this.port.onmessage = (event) => {
       if (event.data?.type !== 'configure') return;
-      this.config = event.data.layers ?? {};
-      for (const layerId of Object.keys(this.voices)) {
-        const layer = this.config[layerId] ?? {};
-        for (const voice of this.voices[layerId]) {
-          voice.envelopes = layer.envelopes ?? voice.envelopes;
-          voice.nextEventFrame = currentFrame + this.eventDelayFrames(layer.profile?.burstRatePerVoice ?? 0.015);
-        }
-      }
+      this.configure(event.data.channels ?? []);
     };
   }
 
@@ -26,38 +14,100 @@ class AmbientGenerator extends AudioWorkletProcessor {
     return this.seed / 0x100000000;
   }
 
-  makeVoices(layerId, colors) {
-    return colors.map((color, index) => ({
-      color,
-      index,
+  eventDelayFrames(ratePerSecond) {
+    const safeRate = Math.max(0.1, ratePerSecond);
+    return Math.max(1, Math.floor((-Math.log(Math.max(1e-9, 1 - this.random())) / safeRate) * sampleRate));
+  }
+
+  makeChannel(settings) {
+    const channel = {
+      ...settings,
+      mode: settings.modulationPeriodSec === 0 ? 'burst' : 'continuous',
       pink: [0, 0, 0, 0, 0, 0, 0],
       brown: 0,
-      lowpass: [0, 0],
       phase: this.random(),
-      phaseOffset: (this.random() - 0.5) * 0.8,
-      spread: this.random(),
-      nextEventFrame: currentFrame + this.eventDelayFrames(0.12),
+      nextEventFrame: currentFrame + this.eventDelayFrames(settings.densityPer10Sec / 10),
       eventAge: -1,
-      eventDuration: 1,
       eventAmplitude: 0,
-      envelopeIndex: 0,
-      envelopes: [],
-      layerId,
-    }));
+      eventDurationFrames: 1,
+      filterMode: null,
+      filterAlpha: 0,
+      filterLeft: { x: 0, y: 0 },
+      filterRight: { x: 0, y: 0 },
+    };
+    this.configureFilter(channel);
+    return channel;
   }
 
-  eventDelayFrames(rate) {
-    return Math.max(1, Math.floor((-Math.log(Math.max(1e-9, 1 - this.random())) / Math.max(0.001, rate)) * sampleRate));
+  configure(settings) {
+    const activeSettings = settings.filter((channel) => channel.enabled !== false);
+    const previousById = new Map(this.channels.map((channel) => [channel.id, channel]));
+    this.channels = activeSettings.map((next) => {
+      const configured = {
+        ...next,
+        mode: next.modulationPeriodSec === 0 ? 'burst' : 'continuous',
+      };
+      const previous = previousById.get(next.id);
+      if (!previous) return this.makeChannel(configured);
+      if (configured.mode === 'burst' && (
+        previous.mode !== 'burst'
+        || previous.densityPer10Sec !== next.densityPer10Sec
+      )) {
+        previous.eventAge = -1;
+        previous.nextEventFrame = currentFrame + this.eventDelayFrames(next.densityPer10Sec / 10);
+      } else if (previous.mode === 'burst' && configured.mode !== 'burst') {
+        previous.eventAge = -1;
+      }
+      Object.assign(previous, configured);
+      this.configureFilter(previous);
+      return previous;
+    });
   }
 
-  noise(voice) {
-    const white = (this.random() * 2) - 1;
-    if (voice.color === 'white') return white;
-    if (voice.color === 'brown') {
-      voice.brown = (0.997 * voice.brown) + (white * 0.055);
-      return voice.brown;
+  configureFilter(channel) {
+    const amount = channel.filter ?? 0.5;
+    channel.filterLeft.x = 0;
+    channel.filterLeft.y = 0;
+    channel.filterRight.x = 0;
+    channel.filterRight.y = 0;
+    if (amount === 0.5) {
+      channel.filterMode = null;
+      channel.filterAlpha = 0;
+      return;
     }
-    const b = voice.pink;
+
+    const strength = Math.abs(amount - 0.5) * 2;
+    const minHz = 20;
+    const maxHz = 18000;
+    const ratio = maxHz / minHz;
+    channel.filterMode = amount < 0.5 ? 'lowpass' : 'highpass';
+    const cutoff = channel.filterMode === 'lowpass'
+      ? maxHz * (1 / ratio) ** strength
+      : minHz * ratio ** strength;
+    channel.filterAlpha = channel.filterMode === 'lowpass'
+      ? 1 - Math.exp((-2 * Math.PI * cutoff) / sampleRate)
+      : Math.exp((-2 * Math.PI * cutoff) / sampleRate);
+  }
+
+  filterSample(channel, sample, state) {
+    const output = channel.filterMode === 'lowpass'
+      ? state.y + (channel.filterAlpha * (sample - state.y))
+      : channel.filterMode === 'highpass'
+        ? channel.filterAlpha * (state.y + sample - state.x)
+        : sample;
+    state.x = sample;
+    state.y = output;
+    return output;
+  }
+
+  noise(channel) {
+    const white = (this.random() * 2) - 1;
+    if (channel.type === 'white') return white;
+    if (channel.type === 'brown') {
+      channel.brown = (0.997 * channel.brown) + (white * 0.055);
+      return channel.brown;
+    }
+    const b = channel.pink;
     b[0] = (0.99886 * b[0]) + (white * 0.0555179);
     b[1] = (0.99332 * b[1]) + (white * 0.0750759);
     b[2] = (0.969 * b[2]) + (white * 0.153852);
@@ -69,8 +119,8 @@ class AmbientGenerator extends AudioWorkletProcessor {
     return pink;
   }
 
-  envelopeAt(voice, progress) {
-    const envelope = voice.envelopes[voice.envelopeIndex];
+  envelopeAt(channel, progress) {
+    const envelope = channel.envelope;
     if (!envelope?.length) return Math.sin(Math.PI * progress) ** 2;
     const position = progress * (envelope.length - 1);
     const low = Math.floor(position);
@@ -80,84 +130,46 @@ class AmbientGenerator extends AudioWorkletProcessor {
   }
 
   process(_inputs, outputs) {
-    const layerIds = ['wind', 'ocean', 'rain'];
-    for (let layerIndex = 0; layerIndex < layerIds.length; layerIndex += 1) {
-      const layerId = layerIds[layerIndex];
-      const layer = this.config[layerId] ?? {};
-      const texture = Math.max(0, Math.min(1, layer.texture ?? 0));
-      const profile = layer.profile ?? {
-        modulationDepth: 0.018 + (texture * 0.24),
-        modulationCycleSec: 42 - (texture * 39),
-        chaos: texture,
-        burstRatePerVoice: 0.015 + (texture * texture),
-      };
-      const voices = this.voices[layerId];
-      const output = outputs[layerIndex];
-      const left = output[0];
-      const right = output[1] ?? left;
-      for (let frame = 0; frame < left.length; frame += 1) {
-        let leftMix = 0;
-        let rightMix = 0;
-        for (const voice of voices) {
-          const cycle = Math.max(0.5, Math.min(50, profile.modulationCycleSec * (1 + ((voice.spread - 0.5) * profile.chaos * 1.2))));
-          const lfo = Math.sin((voice.phase + voice.phaseOffset) * Math.PI * 2);
-          voice.phase += 1 / (cycle * sampleRate);
-          if (voice.phase >= 1) voice.phase -= 1;
-          const modulation = 0.78 + (profile.modulationDepth * lfo);
-          const eventRate = profile.burstRatePerVoice;
-          if (currentFrame + frame >= voice.nextEventFrame) {
-            voice.eventAge = 0;
-            const baseDuration = layerId === 'rain'
-              ? 0.12 + (this.random() * 0.72)
-              : layerId === 'wind'
-                ? 1.8 + (this.random() * 3.8)
-                : 1.3 + (this.random() * 3.6);
-            voice.eventDuration = Math.max(1, Math.floor(baseDuration * sampleRate * (1 + ((this.random() - 0.5) * texture * 0.8))));
-            voice.eventAmplitude = 0.014 + (texture * 0.035 * (0.45 + (this.random() * 0.75)));
-            voice.envelopeIndex = Math.floor(this.random() * Math.max(1, voice.envelopes.length));
-            voice.nextEventFrame = currentFrame + frame + Math.floor((-Math.log(Math.max(1e-9, 1 - this.random())) / eventRate) * sampleRate);
+    const output = outputs[0];
+    const left = output[0];
+    const right = output[1] ?? left;
+    const channelScale = this.channels.length > 0 ? 1 / Math.sqrt(this.channels.length) : 0;
+    for (let frame = 0; frame < left.length; frame += 1) {
+      let leftMix = 0;
+      let rightMix = 0;
+      const frameNumber = currentFrame + frame;
+      for (const channel of this.channels) {
+        const baseLeft = this.noise(channel);
+        const baseRight = this.noise(channel);
+        let amplitude = 0;
+        if (channel.mode === 'continuous') {
+          const modulation = Math.sin(channel.phase * Math.PI * 2);
+          amplitude = Math.max(0, 1 + (channel.modulationAmplitude * modulation));
+          channel.phase += 1 / (channel.modulationPeriodSec * sampleRate);
+          if (channel.phase >= 1) channel.phase -= 1;
+        } else {
+          if (frameNumber >= channel.nextEventFrame) {
+            channel.eventAge = 0;
+            channel.eventAmplitude = channel.modulationAmplitude;
+            channel.eventDurationFrames = Math.max(128, Math.round(channel.speedSec * sampleRate));
+            channel.nextEventFrame = frameNumber + this.eventDelayFrames(channel.densityPer10Sec / 10);
           }
-
-          const cutoffs = layerId === 'wind'
-            ? [130, 230, 390]
-            : layerId === 'ocean'
-              ? [70, 120, 210]
-              : [900, 1500, 2400];
-          const spread = 1 + ((voice.spread - 0.5) * profile.chaos * 2.2);
-          const cutoff = cutoffs[voice.index] * (1 + (texture * (layerId === 'rain' ? 3.2 : 5.5))) * spread;
-          const coefficient = 1 - Math.exp((-2 * Math.PI * cutoff) / sampleRate);
-          const baseLeft = this.noise(voice);
-          const baseRight = this.noise(voice);
-          let shapedLeft;
-          let shapedRight;
-          if (layerId === 'rain') {
-            voice.lowpass[0] += coefficient * (baseLeft - voice.lowpass[0]);
-            voice.lowpass[1] += coefficient * (baseRight - voice.lowpass[1]);
-            shapedLeft = baseLeft - voice.lowpass[0];
-            shapedRight = baseRight - voice.lowpass[1];
-          } else {
-            voice.lowpass[0] += coefficient * (baseLeft - voice.lowpass[0]);
-            voice.lowpass[1] += coefficient * (baseRight - voice.lowpass[1]);
-            shapedLeft = voice.lowpass[0];
-            shapedRight = voice.lowpass[1];
-          }
-
-          let burst = 0;
-          if (voice.eventAge >= 0) {
-            const progress = voice.eventAge / voice.eventDuration;
+          if (channel.eventAge >= 0) {
+            const progress = channel.eventAge / channel.eventDurationFrames;
             if (progress >= 1) {
-              voice.eventAge = -1;
+              channel.eventAge = -1;
             } else {
-              burst = this.envelopeAt(voice, progress) * voice.eventAmplitude;
-              voice.eventAge += 1;
+              amplitude = this.envelopeAt(channel, progress) * channel.eventAmplitude;
+              channel.eventAge += 1;
             }
           }
-          leftMix += (shapedLeft * modulation) + (shapedLeft * burst);
-          rightMix += (shapedRight * modulation) + (shapedRight * burst);
         }
-        left[frame] = Math.max(-1, Math.min(1, leftMix / voices.length));
-        right[frame] = Math.max(-1, Math.min(1, rightMix / voices.length));
+        const channelGain = amplitude * channel.volume;
+        leftMix += this.filterSample(channel, baseLeft * channelGain, channel.filterLeft);
+        rightMix += this.filterSample(channel, baseRight * channelGain, channel.filterRight);
       }
+      left[frame] = leftMix * channelScale;
+      right[frame] = rightMix * channelScale;
     }
     return true;
   }

@@ -49,15 +49,18 @@ describe('StateService app-state field round-trip', () => {
   })
 
   it('round-trips ambient layer settings and named custom presets through real sanitization', async () => {
+    const channels = DEFAULT_AMBIENT_SETTINGS.map((channel, index) => ({
+      ...channel,
+      enabled: index === 0 || index === 2,
+      volume: [0.41, 0.12, 0.88][index] ?? channel.volume,
+      modulationAmplitude: [0.73, 0.26, 0.94][index] ?? channel.modulationAmplitude,
+      type: (['pink', 'brown', 'white'] as const)[index] ?? channel.type,
+    }))
     const ambientSound = {
       enabled: true,
-      settings: {
-        wind: { volume: 0.41, texture: 0.73 },
-        ocean: { volume: 0.12, texture: 0.26 },
-        rain: { volume: 0.88, texture: 0.94 },
-      },
+      settings: channels,
       activePresetId: 'night-rain',
-      customPresets: [{ id: 'night-rain', name: 'Night rain', settings: DEFAULT_AMBIENT_SETTINGS }],
+      customPresets: [{ id: 'night-rain', name: 'Night rain', settings: channels }],
     }
     await new StateService(dataRoot).saveAppState({
       selectedNoteId: null,
