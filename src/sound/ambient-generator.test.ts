@@ -9,7 +9,7 @@ import {
   createAmbientChannel,
   createAmbientRainChannel,
 } from '../shared/ambientSound';
-import { resolveAmbientSpace, toWorkletChannels } from '../shared/ambientSoundDsp';
+import { resolveAmbientSpace, resolveNoiseTone, toWorkletChannels } from '../shared/ambientSoundDsp';
 import { buildNoiseLoops, createNoiseSource, type NoiseLoops } from '../shared/ambientNoiseLoops';
 import { buildNoiseCycle } from '../shared/ambientNoiseCycle';
 
@@ -51,7 +51,7 @@ function toConfigure(channels: TestChannel[]): unknown[] {
 type TestChannel = (
   | ReturnType<typeof createAmbientChannel>
   | ReturnType<typeof createAmbientRainChannel>
-) & { cycle?: Float32Array; type?: string; space?: ReturnType<typeof resolveAmbientSpace> }
+) & { cycle?: Float32Array; type?: string; space?: ReturnType<typeof resolveAmbientSpace>; tone?: ReturnType<typeof resolveNoiseTone> }
 
 // A noise channel as the worklet receives it. `type` is what the worklet
 // reads; in a full slot row toWorkletChannels replaces it with the slot's.
@@ -65,7 +65,12 @@ function makeChannel(id: string, overrides: NoiseOverrides = {}): TestChannel {
     ...overrides,
   }
   // Resolved as toWorkletChannels resolves them for a slot row.
-  return { ...settings, cycle: buildNoiseCycle(settings.ramp, settings.shape), space: resolveAmbientSpace(settings.distance) }
+  return {
+    ...settings,
+    cycle: buildNoiseCycle(settings.ramp, settings.shape),
+    space: resolveAmbientSpace(settings.distance),
+    tone: resolveNoiseTone(settings.filter, settings.type),
+  }
 }
 
 function makeRainChannel(id: string, overrides: Partial<ReturnType<typeof createAmbientRainChannel>> = {}): TestChannel {
@@ -719,6 +724,41 @@ describe('ambient AudioWorklet generator', () => {
       const explicit = createProcessor(43, [makeChannel('layer', { type: 'brown', distance: 0, width: 1 })], 16000).render(0.5);
       expect(explicit.left).toEqual(plain.left);
       expect(explicit.right).toEqual(plain.right);
+    });
+  });
+  describe('tone', () => {
+    const renderTone = (filter: number, type: 'white' | 'pink' | 'brown', seconds = 1) => createProcessor(51, [makeChannel('layer', {
+      type, filter, modulationAmplitude: 0, volume: 0.5,
+    })], 48000).render(seconds);
+
+    // What makes the slider feel even: sweeping it changes the colour, not
+    // the loudness -- for every noise type, across both halves.
+    it('holds a layer near its loudness across the whole sweep', () => {
+      for (const type of ['white', 'pink', 'brown'] as const) {
+        const reference = rms(renderTone(0.5, type).left);
+        for (const filter of [0, 0.1, 0.25, 0.4, 0.6, 0.75, 0.9, 1]) {
+          const decibels = 20 * Math.log10(rms(renderTone(filter, type).left) / reference);
+          expect(Math.abs(decibels)).toBeLessThan(2);
+        }
+      }
+    });
+
+    it('darkens to the left and brightens to the right, a step at a time', () => {
+      const crossings = (samples: number[]) => samples.reduce((count, value, index) => (
+        index > 0 && (value >= 0) !== (samples[index - 1] >= 0) ? count + 1 : count), 0);
+      const sweep = [0, 0.15, 0.3, 0.45, 0.5, 0.55, 0.7, 0.85, 1].map((filter) => crossings(renderTone(filter, 'pink', 0.5).left));
+      for (let index = 1; index < sweep.length; index += 1) {
+        expect(sweep[index]).toBeGreaterThan(sweep[index - 1]);
+      }
+    });
+
+    it('does not reset the filter when the slider moves', () => {
+      const generator = createProcessor(53, [makeChannel('layer', { type: 'white', filter: 0.2 })], 48000);
+      const before = generator.render(0.2).left;
+      generator.processor.port.onmessage?.({ data: { type: 'configure', channels: toConfigure([makeChannel('layer', { type: 'white', filter: 0.21 })]) } });
+      const after = generator.render(0.01).left;
+      // The first sample after the move continues from the last one before it.
+      expect(Math.abs(after[0] - before.at(-1)!)).toBeLessThan(0.2);
     });
   });
 });

@@ -16,7 +16,15 @@ import {
   sanitizeAmbientPreferences,
   sanitizeAmbientSettings,
 } from './ambientSound';
-import { resolveAmbientSpace } from './ambientSoundDsp';
+import {
+  resolveAmbientSpace,
+  resolveNoiseTone,
+  TONE_HIGHPASS_FROM_HZ,
+  TONE_HIGHPASS_TO_HZ,
+  TONE_LOWPASS_FROM_HZ,
+  TONE_LOWPASS_TO_HZ,
+  TONE_RESONANCE_MAX_Q,
+} from './ambientSoundDsp';
 import { AMBIENT_BELL_RAMP_NEAREST_SINE, buildNoiseCycle } from './ambientNoiseCycle';
 
 describe('ambient sound configuration', () => {
@@ -271,6 +279,41 @@ describe('noise layers grouped by type', () => {
     const settings = sanitizeAmbientSettings([{ id: 'a', distance: 3, width: -2 }, { id: 'b' }]);
     expect(settings[0]).toMatchObject({ distance: 1, width: 0 });
     expect(settings[1]).toMatchObject({ distance: 0, width: 1 });
+  });
+});
+
+describe('noise tone', () => {
+  it('is bypassed at exactly the centre', () => {
+    expect(resolveNoiseTone(0.5, 'pink')).toMatchObject({ mode: 'none', gain: 1 });
+  });
+
+  it('sweeps only the audible range, reaching each end exactly', () => {
+    expect(resolveNoiseTone(0, 'pink')).toMatchObject({ mode: 'lowpass', cutoffHz: TONE_LOWPASS_TO_HZ });
+    expect(resolveNoiseTone(1, 'pink')).toMatchObject({ mode: 'highpass', cutoffHz: TONE_HIGHPASS_TO_HZ });
+    expect(resolveNoiseTone(0.4999, 'pink').cutoffHz).toBeCloseTo(TONE_LOWPASS_FROM_HZ, -2);
+    expect(resolveNoiseTone(0.5001, 'pink').cutoffHz).toBeCloseTo(TONE_HIGHPASS_FROM_HZ, 0);
+  });
+
+  it('moves the cutoff by the same interval for every equal step of the slider', () => {
+    for (const side of [[0.45, 0.35, 0.25, 0.15, 0.05], [0.55, 0.65, 0.75, 0.85, 0.95]]) {
+      const ratios = side.slice(1).map((value, index) => (
+        resolveNoiseTone(value, 'pink').cutoffHz / resolveNoiseTone(side[index], 'pink').cutoffHz
+      ));
+      for (const ratio of ratios) expect(ratio).toBeCloseTo(ratios[0], 6);
+    }
+  });
+
+  it('keeps the first half of each side flat and resonates only toward the ends', () => {
+    expect(resolveNoiseTone(0.45, 'pink').q).toBeLessThan(0.75);
+    expect(resolveNoiseTone(0.25, 'pink').q).toBeLessThan(1.3);
+    expect(resolveNoiseTone(0, 'pink').q).toBeCloseTo(TONE_RESONANCE_MAX_Q, 6);
+    expect(resolveNoiseTone(1, 'pink').q).toBeCloseTo(TONE_RESONANCE_MAX_Q, 6);
+  });
+
+  it('gives back more level where more of that noise type is taken away', () => {
+    // A far low-pass takes most of white's power and little of brown's.
+    expect(resolveNoiseTone(0.05, 'white').gain).toBeGreaterThan(resolveNoiseTone(0.05, 'brown').gain);
+    expect(resolveNoiseTone(0.95, 'brown').gain).toBeGreaterThan(resolveNoiseTone(0.95, 'white').gain);
   });
 });
 

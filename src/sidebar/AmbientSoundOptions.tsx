@@ -31,6 +31,7 @@ import {
   type AmbientRainSurface,
   type AmbientSettings,
 } from '../shared/ambientSound'
+import { resolveNoiseTone } from '../shared/ambientSoundDsp'
 import { armHold, HOLD_CONFIRM_MS } from '../shared/holdTiming'
 import { useNonPassiveWheel } from '../shared/useNonPassiveWheel'
 
@@ -93,6 +94,14 @@ function formatNoiseRamp(value: number): string {
   return value < 0.5
     ? `Plateau ${Math.round(((0.5 - value) / 0.5) * 100)}%`
     : `Swell ${Math.round(((value - 0.5) / 0.5) * 100)}%`
+}
+
+/** The tone slider as read on it: the filter it has become, and its cutoff. */
+function formatNoiseTone(value: number, type: AmbientNoiseType): string {
+  const tone = resolveNoiseTone(value, type)
+  if (tone.mode === 'none') return 'Neutral'
+  const hz = tone.cutoffHz >= 1000 ? `${(tone.cutoffHz / 1000).toFixed(1)} kHz` : `${Math.round(tone.cutoffHz)} Hz`
+  return `${tone.mode === 'lowpass' ? 'Dark' : 'Bright'} · ${hz}`
 }
 
 function surfaceIndex(surface: AmbientRainSurface): number {
@@ -624,16 +633,12 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                   max={1}
                   step={0.01}
                   value={channel.filter}
-                  trackLabel="filter"
-                  tooltipLabel="Low-pass / none / high-pass"
-                  ariaLabel={`${layerName} filter`}
+                  trackLabel="tone"
+                  tooltipLabel="Tone: darker to the left, brighter to the right. Near the ends it starts to resonate: a whistle on the left, an airy hiss on the right"
+                  ariaLabel={`${layerName} tone`}
                   disabled={!channel.enabled}
                   defaultValue={DEFAULT_NOISE_CHANNEL.filter}
-                  formatValue={(value) => value === 0.5
-                    ? 'None'
-                    : value < 0.5
-                      ? `Low-pass ${Math.round((0.5 - value) * 200)}%`
-                      : `High-pass ${Math.round((value - 0.5) * 200)}%`}
+                  formatValue={(value) => formatNoiseTone(value, noiseTypeForSlot(selectedChannelIndex))}
                   onCommit={(value) => updateNoiseChannel(channel.id, { filter: value })}
                 />
               </>

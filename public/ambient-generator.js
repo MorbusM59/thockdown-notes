@@ -269,10 +269,13 @@ class AmbientGenerator extends AudioWorkletProcessor {
       activeVoices: [],
       nextDripFrame: Infinity,
       bed: null,
-      filterMode: null,
-      filterAlpha: 0,
-      filterLeft: { x: 0, y: 0 },
-      filterRight: { x: 0, y: 0 },
+      // The tone filter (configureFilter): a two-pole state-variable filter
+      // per side, or none.
+      toneLeft: null,
+      toneRight: null,
+      toneHighPass: false,
+      toneDamping: 0,
+      toneGain: 1,
       // Distance's darkening (configureSpace): a two-pole low-pass per side.
       darkLeft: null,
       darkRight: null,
@@ -315,33 +318,33 @@ class AmbientGenerator extends AudioWorkletProcessor {
   }
 
   /**
-   * The noise layers' one-pole filter: `filter` 0.5 is off, below it a
-   * low-pass and above it a high-pass, both swept logarithmically from
-   * 20 Hz to 18 kHz as the value moves away from the middle.
+   * A noise layer's tone filter, from the slider as resolved on the main
+   * thread (src/shared/ambientSoundDsp.ts's resolveNoiseTone: which mode, the
+   * cutoff, the resonance and the gain that keeps the layer's loudness). A
+   * slider move changes only the coefficients: the filters keep their memory,
+   * so moving it does not click.
    */
   configureFilter(channel) {
-    const amount = channel.filter ?? 0.5;
-    channel.filterLeft.x = 0;
-    channel.filterLeft.y = 0;
-    channel.filterRight.x = 0;
-    channel.filterRight.y = 0;
-    if (amount === 0.5) {
-      channel.filterMode = null;
-      channel.filterAlpha = 0;
+    const tone = channel.tone;
+    if (!tone || tone.mode === 'none') {
+      channel.toneLeft = null;
+      channel.toneRight = null;
+      channel.toneGain = 1;
       return;
     }
-
-    const strength = Math.abs(amount - 0.5) * 2;
-    const minHz = 20;
-    const maxHz = 18000;
-    const ratio = maxHz / minHz;
-    channel.filterMode = amount < 0.5 ? 'lowpass' : 'highpass';
-    const cutoff = channel.filterMode === 'lowpass'
-      ? maxHz * (1 / ratio) ** strength
-      : minHz * ratio ** strength;
-    channel.filterAlpha = channel.filterMode === 'lowpass'
-      ? 1 - Math.exp((-2 * Math.PI * cutoff) / sampleRate)
-      : Math.exp((-2 * Math.PI * cutoff) / sampleRate);
+    const left = stateVariableFilter(tone.cutoffHz, tone.q);
+    const right = stateVariableFilter(tone.cutoffHz, tone.q);
+    if (channel.toneLeft) {
+      left.s1 = channel.toneLeft.s1;
+      left.s2 = channel.toneLeft.s2;
+      right.s1 = channel.toneRight.s1;
+      right.s2 = channel.toneRight.s2;
+    }
+    channel.toneLeft = left;
+    channel.toneRight = right;
+    channel.toneHighPass = tone.mode === 'highpass';
+    channel.toneDamping = 1 / tone.q;
+    channel.toneGain = tone.gain;
   }
 
   /**
@@ -385,16 +388,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
     channel.darkRight = right;
   }
 
-  filterSample(channel, sample, state) {
-    const output = channel.filterMode === 'lowpass'
-      ? state.y + (channel.filterAlpha * (sample - state.y))
-      : channel.filterMode === 'highpass'
-        ? channel.filterAlpha * (state.y + sample - state.x)
-        : sample;
-    state.x = sample;
-    state.y = output;
-    return output;
-  }
+
 
   /**
    * Bring a rain channel's surface-dependent state in line with its
@@ -1044,6 +1038,19 @@ class AmbientGenerator extends AudioWorkletProcessor {
     let readRight = channel.loopRight;
     const direct = channel.widthDirect;
     const cross = channel.widthCross;
+    // The tone filter, likewise in locals for the block.
+    const tone = channel.toneLeft;
+    const toned = tone !== null;
+    const t1 = toned ? tone.a1 : 0;
+    const t2 = toned ? tone.a2 : 0;
+    const t3 = toned ? tone.a3 : 0;
+    const highPass = channel.toneHighPass;
+    const damping = channel.toneDamping;
+    const toneGain = channel.toneGain;
+    let toneLeftS1 = toned ? tone.s1 : 0;
+    let toneLeftS2 = toned ? tone.s2 : 0;
+    let toneRightS1 = toned ? channel.toneRight.s1 : 0;
+    let toneRightS2 = toned ? channel.toneRight.s2 : 0;
     // Distance's low-pass, state in locals for the block (a per-sample
     // object read and write made it cost three times the rest of the layer).
     const dark = channel.darkLeft;
@@ -1063,8 +1070,24 @@ class AmbientGenerator extends AudioWorkletProcessor {
       const b = loop[readRight];
       const sideLeft = cross === 0 ? a : (direct * a) + (cross * b);
       const sideRight = cross === 0 ? b : (direct * b) + (cross * a);
-      const toneLeft = this.filterSample(channel, sideLeft * level * channel.gainLeft, channel.filterLeft);
-      const toneRight = this.filterSample(channel, sideRight * level * channel.gainRight, channel.filterRight);
+      let toneLeft = sideLeft * level * channel.gainLeft;
+      let toneRight = sideRight * level * channel.gainRight;
+      if (toned) {
+        // stateVariableFilter's step (as in bandPass): low-pass is v2,
+        // high-pass is the input less the damped band and the low.
+        let v3 = toneLeft - toneLeftS2;
+        let v1 = (t1 * toneLeftS1) + (t2 * v3);
+        let v2 = toneLeftS2 + (t2 * toneLeftS1) + (t3 * v3);
+        toneLeftS1 = (2 * v1) - toneLeftS1;
+        toneLeftS2 = (2 * v2) - toneLeftS2;
+        toneLeft = (highPass ? toneLeft - (damping * v1) - v2 : v2) * toneGain;
+        v3 = toneRight - toneRightS2;
+        v1 = (t1 * toneRightS1) + (t2 * v3);
+        v2 = toneRightS2 + (t2 * toneRightS1) + (t3 * v3);
+        toneRightS1 = (2 * v1) - toneRightS1;
+        toneRightS2 = (2 * v2) - toneRightS2;
+        toneRight = (highPass ? toneRight - (damping * v1) - v2 : v2) * toneGain;
+      }
       if (darkened) {
         // stateVariableFilter's step (as in bandPass), read at its low-pass output v2.
         let v3 = toneLeft - leftS2;
@@ -1091,6 +1114,12 @@ class AmbientGenerator extends AudioWorkletProcessor {
     }
     channel.loopLeft = readLeft;
     channel.loopRight = readRight;
+    if (toned) {
+      tone.s1 = toneLeftS1;
+      tone.s2 = toneLeftS2;
+      channel.toneRight.s1 = toneRightS1;
+      channel.toneRight.s2 = toneRightS2;
+    }
     if (darkened) {
       dark.s1 = leftS1;
       dark.s2 = leftS2;
