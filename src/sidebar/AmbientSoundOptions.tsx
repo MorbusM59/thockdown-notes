@@ -113,6 +113,16 @@ function formatThunderShare(value: number): string {
   return `${ratio < 9.95 ? ratio.toFixed(1) : Math.round(ratio)} : 1`
 }
 
+/** A rain layer's mix as read on its slider: which side, and how much of the other is left. */
+function formatRainMix(value: number): string {
+  if (value < 0.005) return 'Wash only'
+  if (value > 0.995) return 'Drops only'
+  if (Math.abs(value - 0.5) < 0.005) return 'Both'
+  return value < 0.5
+    ? `Wash, drops ${Math.round(2 * value * 100)}%`
+    : `Drops, wash ${Math.round(2 * (1 - value) * 100)}%`
+}
+
 interface AmbientSoundOptionsProps {
   preferences: AmbientPreferences
   onChange: (preferences: AmbientPreferences) => void
@@ -484,18 +494,18 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                   onCommit={(value) => updateRainChannel(channel.id, { dropsPerSecond: Math.round(value) })}
                 />
                 <CompactScrollbarSlider
-                  id={`ambient-${channel.id}-wash`}
+                  id={`ambient-${channel.id}-mix`}
                   min={0}
                   max={1}
                   step={0.01}
-                  value={channel.wash}
-                  trackLabel="wash"
-                  tooltipLabel="The steady hiss of rain too dense to hear drop by drop"
-                  ariaLabel={`${layerName} wash`}
+                  value={channel.mix}
+                  trackLabel="mix"
+                  tooltipLabel="Wash or drops: to the left only the steady hiss of rain too dense to hear drop by drop, to the right only the drops heard one by one, and both at full in the middle"
+                  ariaLabel={`${layerName} wash to drops mix`}
                   disabled={!channel.enabled}
-                  defaultValue={DEFAULT_RAIN_CHANNEL.wash}
-                  formatValue={(value) => value < 0.01 ? 'Off' : `${Math.round(value * 100)}%`}
-                  onCommit={(value) => updateRainChannel(channel.id, { wash: value })}
+                  defaultValue={DEFAULT_RAIN_CHANNEL.mix}
+                  formatValue={formatRainMix}
+                  onCommit={(value) => updateRainChannel(channel.id, { mix: value })}
                 />
                 <CompactScrollbarSlider
                   id={`ambient-${channel.id}-drips`}

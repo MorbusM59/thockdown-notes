@@ -492,9 +492,9 @@ describe('ambient AudioWorklet generator', () => {
       ...Array.from({ length: AMBIENT_RAIN_FIRST_INDEX }, (_, index) => makeChannel(`noise-${index}`, {
         enabled: index < 2, type: index === 0 ? 'pink' : 'brown', movement: 0.8, periodSec: 0.6,
       })),
-      makeRainChannel('glass', { surface: 1, wash: 0.4, drips: 0.5, dropsPerSecond: 40 }),
-      makeRainChannel('street', { surface: 0.5, wash: 1, drips: 1, dropsPerSecond: 60 }),
-      makeRainChannel('forest', { surface: 0, wash: 0.7, drips: 1, dropsPerSecond: 50 }),
+      makeRainChannel('glass', { surface: 1, mix: 0.8, drips: 0.5, dropsPerSecond: 40 }),
+      makeRainChannel('street', { surface: 0.5, mix: 0.5, drips: 1, dropsPerSecond: 60 }),
+      makeRainChannel('forest', { surface: 0, mix: 0.65, drips: 1, dropsPerSecond: 50 }),
     ];
     const large = createProcessor(88, layers(), 16000, 128).render(3);
     const small = createProcessor(88, layers(), 16000, 32).render(3);
@@ -522,7 +522,7 @@ describe('ambient AudioWorklet generator', () => {
   it('gives the forest a darker impact than the street', () => {
     const zeroCrossingsPerSecond = (surface: number) => {
       const samples = createProcessor(29, makeRainSlots([
-        makeRainChannel(String(surface), { surface, wash: 0, drips: 0, dropsPerSecond: 40, resonance: 0, wetness: 0 }),
+        makeRainChannel(String(surface), { surface, mix: 1, drips: 0, dropsPerSecond: 40, resonance: 0, wetness: 0 }),
       ]), 48000).render(3).rain[0];
       let crossings = 0;
       for (let index = 1; index < samples.length; index += 1) {
@@ -533,12 +533,12 @@ describe('ambient AudioWorklet generator', () => {
     expect(zeroCrossingsPerSecond(0)).toBeLessThan(zeroCrossingsPerSecond(0.5) * 0.85);
   });
 
-  it('fills the gaps between drops with the wash, and only when asked', () => {
+  it('fills the gaps between drops with the wash, and only when the mix asks for it', () => {
     // Share of 20 ms windows carrying audible sound: a bed is continuous,
     // sparse drops are not.
-    const coverage = (wash: number) => {
+    const coverage = (mix: number) => {
       const samples = createProcessor(37, makeRainSlots([
-        makeRainChannel('bed', { wash, drips: 0, dropsPerSecond: 1 }),
+        makeRainChannel('bed', { mix, drips: 0, dropsPerSecond: 1 }),
       ]), 12000).render(4).rain[0];
       const window = 240;
       let loud = 0;
@@ -549,14 +549,28 @@ describe('ambient AudioWorklet generator', () => {
       }
       return loud / windows;
     };
-    expect(coverage(1)).toBeGreaterThan(0.95);
-    expect(coverage(0)).toBeLessThan(0.3);
+    expect(coverage(0.5)).toBeGreaterThan(0.95);
+    expect(coverage(1)).toBeLessThan(0.3);
+  });
+
+  it('plays the wash alone at one end of the mix, and both at full in the middle', () => {
+    // The bed draws from its own stream, so it is the same bed however
+    // many drops fall beside it: at mix 0 the drops must add nothing.
+    const render = (mix: number, dropsPerSecond: number) => createProcessor(41, makeRainSlots([
+      makeRainChannel('rain', { mix, drips: 0.5, dropsPerSecond }),
+    ]), 12000).render(2).rain[0];
+    expect(render(0, 60)).toEqual(render(0, 1));
+    // In the middle neither side is turned down: the wash is as loud as at
+    // the wash end, so the middle is the two added, not a dip.
+    const washOnly = rms(render(0, 1));
+    const both = rms(render(0.5, 1));
+    expect(both).toBeGreaterThanOrEqual(washOnly * 0.99);
   });
 
   it('drops large drips at the rate the drips control sets', () => {
     const countDrips = (drips: number) => {
       const generator = createProcessor(53, makeRainSlots([
-        makeRainChannel('drips', { drips, wash: 0, dropsPerSecond: 1 }),
+        makeRainChannel('drips', { drips, mix: 1, dropsPerSecond: 1 }),
       ]), 2000);
       let count = 0;
       const addVoice = generator.processor.addVoice.bind(generator.processor);
@@ -576,7 +590,7 @@ describe('ambient AudioWorklet generator', () => {
   it('stays finite and bounded on every surface at every control extreme', () => {
     for (const surface of [0, 0.25, 0.5, 0.75, 1]) {
       const samples = createProcessor(61, makeRainSlots([
-        makeRainChannel(String(surface), { surface, wash: 1, drips: 1, dropsPerSecond: 60, wetness: 1, resonance: 1 }),
+        makeRainChannel(String(surface), { surface, mix: 0.5, drips: 1, dropsPerSecond: 60, wetness: 1, resonance: 1 }),
       ]), 48000).render(2).rain[0];
       expect(samples.every((sample) => Number.isFinite(sample) && Math.abs(sample) < 8)).toBe(true);
       expect(rms(samples)).toBeGreaterThan(0.005);
@@ -771,7 +785,7 @@ describe('ambient AudioWorklet generator', () => {
     }
 
     it('records every drop while filling, then one in four, and holds no more than its size', () => {
-      const generator = createProcessor(19, makeRainSlots([makeRainChannel('rain', { dropsPerSecond: 60, drips: 0, wash: 0 })]), 8000);
+      const generator = createProcessor(19, makeRainSlots([makeRainChannel('rain', { dropsPerSecond: 60, drips: 0, mix: 1 })]), 8000);
       generator.render(2);
       expect(rainOf(generator).dropBank.length).toBe(32);
       const counts = countFresh(generator);
@@ -782,7 +796,7 @@ describe('ambient AudioWorklet generator', () => {
     });
 
     it('plays a recorded drop back exactly as it was recorded', () => {
-      const generator = createProcessor(23, makeRainSlots([makeRainChannel('rain', { dropsPerSecond: 60, drips: 0, wash: 0 })]), 8000);
+      const generator = createProcessor(23, makeRainSlots([makeRainChannel('rain', { dropsPerSecond: 60, drips: 0, mix: 1 })]), 8000);
       generator.render(2);
       const entry = rainOf(generator).dropBank[0] as unknown as { samples: Float32Array; audibleLength: number };
       const left = new Float64Array(entry.audibleLength + 16);
@@ -806,7 +820,7 @@ describe('ambient AudioWorklet generator', () => {
         data: { type: 'configure', channels: toWorkletChannels(slots(changes) as Parameters<typeof toWorkletChannels>[0]) },
       });
       expect(rainOf(generator).dropBank.length).toBe(32);
-      configure({ distance: 0.9, pan: 0.4, wash: 0.2, volume: 0.1 });
+      configure({ distance: 0.9, pan: 0.4, mix: 0.9, volume: 0.1 });
       expect(rainOf(generator).dropBank.length).toBe(32);
       for (const change of [{ wetness: 0.1 }, { resonance: 0.9 }, { surface: 1 }]) {
         configure(change);
@@ -1223,7 +1237,7 @@ describe('rain stereo image', () => {
     return lr / Math.sqrt(ll * rr);
   };
   const render = (pan: number, changes: Partial<ReturnType<typeof createAmbientRainChannel>> = {}) => createProcessor(
-    31, makeRainSlots([makeRainChannel('rain', { pan, dropsPerSecond: 40, wash: 0.8, drips: 0.3, ...changes })]), 8000,
+    31, makeRainSlots([makeRainChannel('rain', { pan, dropsPerSecond: 40, mix: 0.6, drips: 0.3, ...changes })]), 8000,
   ).render(3);
 
   it('fills the whole field in the centre: both sides equally loud and largely independent', () => {

@@ -79,7 +79,7 @@ describe('StateService app-state field round-trip', () => {
           ...channel,
           ...common,
           surface: index === AMBIENT_RAIN_FIRST_INDEX ? 0.3 : channel.surface,
-          wash: index === AMBIENT_RAIN_FIRST_INDEX ? 0.42 : channel.wash,
+          mix: index === AMBIENT_RAIN_FIRST_INDEX ? 0.42 : channel.mix,
           drips: index === AMBIENT_RAIN_FIRST_INDEX ? 0.18 : channel.drips,
           dropsPerSecond: index === AMBIENT_RAIN_FIRST_INDEX ? 38 : channel.dropsPerSecond,
           distance: index === AMBIENT_RAIN_FIRST_INDEX ? 0.77 : channel.distance,

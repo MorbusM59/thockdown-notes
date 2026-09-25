@@ -353,6 +353,16 @@ function stereoImage(pan, width) {
   return { from: centre - halfWidth, to: centre + halfWidth };
 }
 
+/**
+ * A rain layer's `mix` (0 wash only, 1 drops only) as the two gains: each
+ * is full up to the middle and fades only on the other side of it, so the
+ * middle plays both at full rather than dipping.
+ */
+function rainMixGains(mix) {
+  const value = Math.max(0, Math.min(1, mix ?? 0.5));
+  return { wash: Math.min(1, 2 * (1 - value)), drops: Math.min(1, 2 * value) };
+}
+
 /** Equal-power gains for a position from -1 (left) to 1 (right). */
 function panGains(position) {
   const angle = (position + 1) * Math.PI / 4;
@@ -915,10 +925,11 @@ class AmbientGenerator extends AudioWorkletProcessor {
    * impulses plus a noise floor, band-passed, with a slow random swell --
    * twice, independently, one at each edge of the layer's image (stereoImage),
    * each at half the impulse rate and half the power, so together they are
-   * the one bed spread across the image. Nothing is drawn while `wash` is 0.
+   * the one bed spread across the image, at the level the layer's mix gives
+   * it (rainMixGains). Nothing is drawn while that is 0.
    */
   renderBed(channel, left, right, length) {
-    const wash = channel.wash ?? 0;
+    const wash = rainMixGains(channel.mix).wash;
     if (wash <= 0) return;
     this.withStream(channel.bed.stream, () => this.renderBedFrom(channel, left, right, length, wash));
   }
@@ -1266,6 +1277,15 @@ class AmbientGenerator extends AudioWorkletProcessor {
         // Order does not matter to the mix, so the last voice fills the gap.
         voices[index] = voices[voices.length - 1];
         voices.pop();
+      }
+    }
+    // The drops' side of the mix, applied to what the voices wrote before
+    // the bed is added (the bed takes its own side in renderBed).
+    const drops = rainMixGains(channel.mix).drops;
+    if (drops < 1) {
+      for (let index = 0; index < length; index += 1) {
+        left[index] *= drops;
+        right[index] *= drops;
       }
     }
     this.renderBed(channel, left, right, length);

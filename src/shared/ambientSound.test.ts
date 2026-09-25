@@ -56,8 +56,8 @@ describe('ambient sound configuration', () => {
           expect(channel.resonance).toBeLessThanOrEqual(1);
           expect(channel.surface).toBeGreaterThanOrEqual(0);
           expect(channel.surface).toBeLessThanOrEqual(1);
-          expect(channel.wash).toBeGreaterThanOrEqual(0);
-          expect(channel.wash).toBeLessThanOrEqual(1);
+          expect(channel.mix).toBeGreaterThanOrEqual(0);
+          expect(channel.mix).toBeLessThanOrEqual(1);
           expect(channel.drips).toBeGreaterThanOrEqual(0);
           expect(channel.drips).toBeLessThanOrEqual(1);
         } else if (channel.kind === 'thunder') {
@@ -524,26 +524,26 @@ describe('ambient rain distance', () => {
   it('reads a rain layer saved before surfaces existed as the glass model it was', () => {
     const legacyRain = DEFAULT_AMBIENT_SETTINGS.map((channel) => {
       if (channel.kind !== 'rain') return channel;
-      const { surface: _surface, wash: _wash, drips: _drips, ...rest } = channel;
+      const { surface: _surface, mix: _mix, drips: _drips, ...rest } = channel;
       return rest;
     });
     const settings = sanitizeAmbientSettings(legacyRain);
     for (const channel of settings.slice(AMBIENT_RAIN_FIRST_INDEX, AMBIENT_THUNDER_FIRST_INDEX)) {
-      expect(channel).toMatchObject({ kind: 'rain', surface: 1, wash: 0, drips: 0 });
+      expect(channel).toMatchObject({ kind: 'rain', surface: 1, mix: 1, drips: 0 });
     }
   });
 
-  it('keeps a known surface, replaces an unknown one and clamps wash and drips', () => {
+  it('keeps a known surface, replaces an unknown one and clamps mix and drips', () => {
     const input = DEFAULT_AMBIENT_SETTINGS.map((channel, index) => (
       channel.kind !== 'rain' ? channel
-        : index === AMBIENT_RAIN_FIRST_INDEX ? { ...channel, surface: 'forest', wash: 3, drips: -1 }
+        : index === AMBIENT_RAIN_FIRST_INDEX ? { ...channel, surface: 'forest', mix: 3, drips: -1 }
           : index === AMBIENT_RAIN_FIRST_INDEX + 1 ? { ...channel, surface: 'lava' }
             : { ...channel, surface: 1.7 }
     ));
     const settings = sanitizeAmbientSettings(input);
     // A name from before the scale is read as its anchor; an unknown name
     // falls back to the default; a number is clamped into 0..1.
-    expect(settings[AMBIENT_RAIN_FIRST_INDEX]).toMatchObject({ surface: 0, wash: 1, drips: 0 });
+    expect(settings[AMBIENT_RAIN_FIRST_INDEX]).toMatchObject({ surface: 0, mix: 1, drips: 0 });
     expect(settings[AMBIENT_RAIN_FIRST_INDEX + 1]).toMatchObject({ surface: 0.5 });
     expect(settings[AMBIENT_RAIN_FIRST_INDEX + 2]).toMatchObject({ surface: 1 });
   });

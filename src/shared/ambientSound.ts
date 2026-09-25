@@ -115,11 +115,14 @@ export interface AmbientRainChannelSettings extends AmbientChannelBaseSettings {
   /** Individually audible nearby drops per second. */
   dropsPerSecond: number;
   /**
-   * Level (0-1) of the dense bed of rain too many and too small to hear one
-   * at a time. Individual drops alone at any rate read as dripping; the bed
-   * is what makes it read as rain.
+   * The balance of the layer's two sounds, 0-1: at 0 only the WASH (the dense
+   * bed of rain too many and too small to hear one at a time), at 1 only the
+   * DROPS heard one by one (and the drips), and in the middle both at full.
+   * Each fades only on its own side of the middle, so the middle is not a
+   * dip. Drops alone read as dripping; the wash is what makes it read as
+   * rain.
    */
-  wash: number;
+  mix: number;
   /**
    * How often (0-1, scaled to AMBIENT_RAIN_DRIPS_MAX_PER_SEC) a large, slow
    * drop falls -- from a gutter, an eave or a branch.
@@ -283,7 +286,7 @@ export const DEFAULT_RAIN_CHANNEL: Readonly<Omit<AmbientRainChannelSettings, 'id
   volume: 0.2,
   surface: rainSurfaceAt('street'),
   dropsPerSecond: AMBIENT_RAIN_DEFAULT_DENSITY,
-  wash: 0.5,
+  mix: 0.75,
   drips: 0.2,
   distance: 0.5,
   pan: 0,
@@ -421,7 +424,7 @@ function migrateLegacyAmbientSettings(input: unknown): AmbientSettings {
     ...noiseSlots,
     makeDefaultRainChannel('rain', {
       surface: rainSurfaceAt('glass'),
-      wash: 0,
+      mix: 1,
       drips: 0,
       volume: finiteRange(rawRain.volume, 0, 1, legacyRain.volume),
       dropsPerSecond: Math.round(AMBIENT_RAIN_DENSITY_MIN + (rainTexture * (AMBIENT_RAIN_DENSITY_MAX - AMBIENT_RAIN_DENSITY_MIN))),
@@ -462,7 +465,7 @@ export function ambientSettingsSignature(settings: AmbientSettings): string {
         channel.volume,
         channel.surface,
         channel.dropsPerSecond,
-        channel.wash,
+        channel.mix,
         channel.drips,
         channel.distance,
         channel.pan,
@@ -527,36 +530,36 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
     ocean: { volume: 0.04, texture: 0.2 },
     rain: { volume: 0.68, texture: 0.62 },
   }, [
-    { enabled: true, surface: 1, wash: 0, drips: 0, volume: 0.32, dropsPerSecond: 18, distance: 0.12, pan: -0.65, wetness: 0, resonance: 0.5 },
-    { enabled: true, surface: 1, wash: 0, drips: 0, volume: 0.23, dropsPerSecond: 26, distance: 0.55, pan: 0, wetness: 0, resonance: 0.5 },
-    { enabled: true, surface: 1, wash: 0, drips: 0, volume: 0.16, dropsPerSecond: 36, distance: 0.92, pan: 0.65, wetness: 0, resonance: 0.5 },
+    { enabled: true, surface: 1, mix: 1, drips: 0, volume: 0.32, dropsPerSecond: 18, distance: 0.12, pan: -0.65, wetness: 0, resonance: 0.5 },
+    { enabled: true, surface: 1, mix: 1, drips: 0, volume: 0.23, dropsPerSecond: 26, distance: 0.55, pan: 0, wetness: 0, resonance: 0.5 },
+    { enabled: true, surface: 1, mix: 1, drips: 0, volume: 0.16, dropsPerSecond: 36, distance: 0.92, pan: 0.65, wetness: 0, resonance: 0.5 },
   ]),
   preset('street', 'Rain on the street', {
     wind: { volume: 0.05, texture: 0.2 },
     ocean: { volume: 0, texture: 0.2 },
     rain: { volume: 0, texture: 0.35 },
   }, [
-    { enabled: true, surface: 0.5, volume: 0.3, dropsPerSecond: 22, wash: 0.35, drips: 0.35, distance: 0.08, pan: -0.55, wetness: 0.6, resonance: 0.4 },
-    { enabled: true, surface: 0.5, volume: 0.34, dropsPerSecond: 40, wash: 0.7, drips: 0, distance: 0.45, pan: 0.1, wetness: 0.6, resonance: 0.4 },
-    { enabled: true, surface: 0.5, volume: 0.26, dropsPerSecond: 60, wash: 0.9, drips: 0, distance: 0.9, pan: 0.6, wetness: 0.6, resonance: 0.4 },
+    { enabled: true, surface: 0.5, volume: 0.3, dropsPerSecond: 22, mix: 0.825, drips: 0.35, distance: 0.08, pan: -0.55, wetness: 0.6, resonance: 0.4 },
+    { enabled: true, surface: 0.5, volume: 0.34, dropsPerSecond: 40, mix: 0.65, drips: 0, distance: 0.45, pan: 0.1, wetness: 0.6, resonance: 0.4 },
+    { enabled: true, surface: 0.5, volume: 0.26, dropsPerSecond: 60, mix: 0.55, drips: 0, distance: 0.9, pan: 0.6, wetness: 0.6, resonance: 0.4 },
   ]),
   preset('forest', 'Forest rain', {
     wind: { volume: 0.12, texture: 0.35 },
     ocean: { volume: 0, texture: 0.2 },
     rain: { volume: 0, texture: 0.35 },
   }, [
-    { enabled: true, surface: 0, volume: 0.3, dropsPerSecond: 14, wash: 0.3, drips: 0.55, distance: 0.1, pan: -0.5, wetness: 0.1, resonance: 0.35 },
-    { enabled: true, surface: 0, volume: 0.32, dropsPerSecond: 32, wash: 0.65, drips: 0.2, distance: 0.5, pan: 0.15, wetness: 0.1, resonance: 0.35 },
-    { enabled: true, surface: 0, volume: 0.24, dropsPerSecond: 50, wash: 0.85, drips: 0, distance: 0.92, pan: 0.65, wetness: 0.1, resonance: 0.35 },
+    { enabled: true, surface: 0, volume: 0.3, dropsPerSecond: 14, mix: 0.85, drips: 0.55, distance: 0.1, pan: -0.5, wetness: 0.1, resonance: 0.35 },
+    { enabled: true, surface: 0, volume: 0.32, dropsPerSecond: 32, mix: 0.675, drips: 0.2, distance: 0.5, pan: 0.15, wetness: 0.1, resonance: 0.35 },
+    { enabled: true, surface: 0, volume: 0.24, dropsPerSecond: 50, mix: 0.575, drips: 0, distance: 0.92, pan: 0.65, wetness: 0.1, resonance: 0.35 },
   ]),
   preset('storm', 'Passing storm', {
     wind: { volume: 0.42, texture: 0.78 },
     ocean: { volume: 0.42, texture: 0.72 },
     rain: { volume: 0.46, texture: 0.82 },
   }, [
-    { enabled: true, surface: 0.5, volume: 0.46, dropsPerSecond: 44, wash: 0.8, drips: 0.4, distance: 0.12, pan: -0.65, wetness: 0.6, resonance: 0.4 },
-    { enabled: true, surface: 0.5, volume: 0.42, dropsPerSecond: 60, wash: 1, drips: 0, distance: 0.55, pan: 0, wetness: 0.6, resonance: 0.4 },
-    { enabled: true, surface: 0, volume: 0.34, dropsPerSecond: 60, wash: 1, drips: 0, distance: 0.92, pan: 0.65, wetness: 0.1, resonance: 0.35 },
+    { enabled: true, surface: 0.5, volume: 0.46, dropsPerSecond: 44, mix: 0.6, drips: 0.4, distance: 0.12, pan: -0.65, wetness: 0.6, resonance: 0.4 },
+    { enabled: true, surface: 0.5, volume: 0.42, dropsPerSecond: 60, mix: 0.5, drips: 0, distance: 0.55, pan: 0, wetness: 0.6, resonance: 0.4 },
+    { enabled: true, surface: 0, volume: 0.34, dropsPerSecond: 60, mix: 0.5, drips: 0, distance: 0.92, pan: 0.65, wetness: 0.1, resonance: 0.35 },
   ], [
     // A storm cell passing close on the left, another rolling far off to the right.
     { enabled: true, volume: 0.5, share: 0.08, distance: 0.35, pan: -0.4, spread: 0.6, character: 0.75, randomness: 0.6, lengthSec: 12 },
@@ -756,7 +759,7 @@ export function sanitizeAmbientSettings(input: unknown): AmbientSettings {
         ...common,
         kind: 'rain' as const,
         surface: readRainSurface(source.surface, predatesSurfaces),
-        wash: finiteUnit(source.wash, predatesSurfaces ? 0 : DEFAULT_RAIN_CHANNEL.wash),
+        mix: finiteUnit(source.mix, predatesSurfaces ? 1 : DEFAULT_RAIN_CHANNEL.mix),
         drips: finiteUnit(source.drips, predatesSurfaces ? 0 : DEFAULT_RAIN_CHANNEL.drips),
         dropsPerSecond: Math.round(finiteRange(
           source.dropsPerSecond ?? migratedDensity,
