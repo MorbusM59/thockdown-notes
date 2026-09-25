@@ -10,7 +10,8 @@ import {
   createAmbientChannel,
   createAmbientRainChannel,
 } from '../shared/ambientSound';
-import { buildNoiseCycle, toWorkletChannels } from '../shared/ambientSoundDsp';
+import { toWorkletChannels } from '../shared/ambientSoundDsp';
+import { buildNoiseCycle } from '../shared/ambientNoiseCycle';
 
 // The worklet's module-scope constants are not reachable from outside a vm
 // script, so the test appends one line exposing the ones it checks.

@@ -14,7 +14,8 @@ import {
   sanitizeAmbientPreferences,
   sanitizeAmbientSettings,
 } from './ambientSound';
-import { buildNoiseCycle, resolveAmbientRainSpace } from './ambientSoundDsp';
+import { resolveAmbientRainSpace } from './ambientSoundDsp';
+import { AMBIENT_BELL_RAMP_NEAREST_SINE, buildNoiseCycle } from './ambientNoiseCycle';
 
 describe('ambient sound configuration', () => {
   it('defines six complete factory soundscapes with bounded channel values', () => {
@@ -125,14 +126,15 @@ describe('ambient sound configuration', () => {
       { id: 'burst-old-mode', mode: 'burst', modulationPeriodSec: 20, ramp: 0.1, speedSec: 0.2 },
       { id: 'current', periodSec: 8, ramp: 0.3 },
     ]);
-    // Continuous was a sine at its period; its old ramp only shaped bursts.
-    expect(settings[0]).toMatchObject({ periodSec: 12, ramp: 0 });
+    // Continuous was a sine at its period, which is the middle of today's
+    // ramp; its old ramp only shaped bursts.
+    expect(settings[0]).toMatchObject({ periodSec: 12, ramp: 0.5 });
     // A burst was a bell lasting speedSec, at a steepness on the bell's own
-    // scale: the steepest bell is the top of today's ramp.
+    // scale: the steepest bell is the top of today's ramp...
     expect(settings[1]).toMatchObject({ periodSec: 1.5, ramp: 1 });
-    // The gentlest bell is the middle, and a burst shorter than the shortest
+    // ...and the broadest the bottom. A burst shorter than the shortest
     // period is lengthened to it.
-    expect(settings[2]).toMatchObject({ periodSec: AMBIENT_PERIOD_MIN_SEC, ramp: 0.5 });
+    expect(settings[2]).toMatchObject({ periodSec: AMBIENT_PERIOD_MIN_SEC, ramp: 0 });
     expect(settings[3]).toMatchObject({ periodSec: 8, ramp: 0.3 });
     expect(settings[4]).toMatchObject({ id: 'ambient-layer-5', enabled: false });
   });
@@ -251,13 +253,13 @@ describe('ambient noise cycle', () => {
     }
   });
 
-  it('is a pure sine at 0 and changes continuously across the whole slider', () => {
-    const sine = buildNoiseCycle(0, 0.5);
+  it('is a pure sine at the middle and changes continuously across the whole slider', () => {
+    const sine = buildNoiseCycle(0.5, 0.5);
     sine.forEach((value, index) => {
       expect(value).toBeCloseTo(-Math.cos((2 * Math.PI * index) / (sine.length - 1)), 5);
     });
     // Neighbouring slider positions give neighbouring curves -- including
-    // across the middle, where the blend hands over to the bell's steepness.
+    // across the middle, where one half's bell hands over to the other's.
     for (let step = 0; step < 100; step += 1) {
       const a = buildNoiseCycle(step / 100, 0.5);
       const b = buildNoiseCycle((step + 1) / 100, 0.5);
@@ -266,16 +268,27 @@ describe('ambient noise cycle', () => {
     }
   });
 
-  it('spends more of the cycle low as the bell steepens', () => {
-    const lowShare = (ramp: number) => {
+  // The slider runs one way only: from a plateau that is loud most of the
+  // time, through a sine, to a swell that is quiet most of the time. Measured
+  // as the mean level over the cycle, which a single turn-back anywhere along
+  // the slider would make fall and rise again.
+  it('spends more of the cycle low at every step to the right', () => {
+    const meanLevel = (ramp: number) => {
       const cycle = Array.from(buildNoiseCycle(ramp, 0.5));
-      return cycle.filter((value) => value < 0).length / cycle.length;
+      return cycle.reduce((sum, value) => sum + value, 0) / cycle.length;
     };
-    const shares = [0, 0.5, 0.75, 1].map(lowShare);
-    for (let index = 1; index < shares.length; index += 1) {
-      expect(shares[index]).toBeGreaterThanOrEqual(shares[index - 1]);
+    const means = Array.from({ length: 51 }, (_, step) => meanLevel(step / 50));
+    for (let index = 1; index < means.length; index += 1) {
+      expect(means[index]).toBeLessThan(means[index - 1]);
     }
-    expect(shares.at(-1)).toBeGreaterThan(shares[0] + 0.2);
+    expect(means[0]).toBeGreaterThan(0.2);
+    expect(Math.abs(means[25])).toBeLessThan(0.01);
+    expect(means[50]).toBeLessThan(-0.6);
+  });
+
+  it('meets the sine at the bell that is actually nearest to it', () => {
+    expect(AMBIENT_BELL_RAMP_NEAREST_SINE).toBeGreaterThan(0.5);
+    expect(AMBIENT_BELL_RAMP_NEAREST_SINE).toBeLessThan(1);
   });
 });
 

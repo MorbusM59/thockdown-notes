@@ -63,13 +63,14 @@ function typeIndex(type: AmbientNoiseType): number {
 }
 
 /**
- * The noise ramp as read on its slider: how far into the sine-to-bell blend
- * the left half is, and how steep the bell is on the right.
+ * The noise ramp as read on its slider: a sine at the middle, a broader
+ * plateau to the left and a narrower swell to the right.
  */
 function formatNoiseRamp(value: number): string {
-  if (value < 0.005) return 'Sine'
-  if (value < 0.5) return `Sine → bell ${Math.round((value / 0.5) * 100)}%`
-  return `Bell ${Math.round(((value - 0.5) / 0.5) * 100)}%`
+  if (Math.abs(value - 0.5) < 0.005) return 'Sine'
+  return value < 0.5
+    ? `Plateau ${Math.round(((0.5 - value) / 0.5) * 100)}%`
+    : `Swell ${Math.round(((value - 0.5) / 0.5) * 100)}%`
 }
 
 function surfaceIndex(surface: AmbientRainSurface): number {
@@ -539,7 +540,7 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                   step={0.01}
                   value={channel.ramp}
                   trackLabel="ramp"
-                  tooltipLabel="Curve of the rise and fall: a sine on the left, blending into a bell at the middle, the bell growing steeper to the right"
+                  tooltipLabel="Curve of the rise and fall: a sine in the middle; to the left it lingers loud and dips briefly, to the right it stays quiet and swells briefly"
                   ariaLabel={`${layerName} ramp`}
                   disabled={!channel.enabled}
                   defaultValue={DEFAULT_NOISE_CHANNEL.ramp}

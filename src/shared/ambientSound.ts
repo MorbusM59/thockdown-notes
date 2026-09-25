@@ -16,6 +16,8 @@
  * here has a profile there.
  */
 
+import { AMBIENT_BELL_RAMP_MAX, AMBIENT_BELL_RAMP_MIN, noiseRampForBellRamp } from './ambientNoiseCycle';
+
 export const AMBIENT_NOISE_TYPES = ['white', 'pink', 'brown'] as const;
 export type AmbientNoiseType = (typeof AMBIENT_NOISE_TYPES)[number];
 
@@ -48,8 +50,8 @@ export interface AmbientNoiseChannelSettings extends AmbientChannelBaseSettings 
   periodSec: number;
   /**
    * The cycle's curve, 0-1 (src/shared/ambientSoundDsp.ts's
-   * buildNoiseCycle). The left half blends a sine into the gentlest bell;
-   * the right half sharpens that bell up to the steepest one.
+   * buildNoiseCycle): a broad plateau at 0, a sine at 0.5, a narrow swell
+   * at 1.
    */
   ramp: number;
   /** Where in the cycle the peak falls, 0-1 (0.5 is centred). */
@@ -112,13 +114,6 @@ export const MAX_AMBIENT_CUSTOM_PRESETS = 12;
 
 export const AMBIENT_PERIOD_MIN_SEC = 0.5;
 export const AMBIENT_PERIOD_MAX_SEC = 50;
-/**
- * The bell's own steepness range, which the right half of `ramp` sweeps
- * (smoothCurve.ts's buildBellEnvelope). The left half of `ramp` ends at the
- * gentlest of these.
- */
-export const AMBIENT_BELL_RAMP_MIN = 0.1;
-export const AMBIENT_BELL_RAMP_MAX = 5;
 export const AMBIENT_SHAPE_MIN = 0.1;
 export const AMBIENT_SHAPE_MAX = 0.9;
 export const AMBIENT_RAIN_DENSITY_MIN = 1;
@@ -159,7 +154,7 @@ export const DEFAULT_NOISE_CHANNEL: Readonly<Omit<AmbientNoiseChannelSettings, '
   volume: 0.2,
   modulationAmplitude: 0.25,
   periodSec: 30,
-  ramp: 0,
+  ramp: 0.5,
   shape: 0.5,
   type: 'pink',
   filter: 0.5,
@@ -397,9 +392,9 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
  * A noise layer's period and ramp, reading a layer saved before the two
  * modes were merged in their current terms. That model is recognised by
  * `modulationPeriodSec`: a continuous layer was a sine at that period, which
- * is ramp 0; a burst layer (period 0, or the older `mode: 'burst'`) was a
+ * is ramp 0.5; a burst layer (period 0, or the older `mode: 'burst'`) was a
  * bell lasting `speedSec` with a steepness of `ramp` on the bell's own
- * scale, which is the right half of today's ramp. Its silence between
+ * scale, which noiseRampForBellRamp places on today's ramp. Its silence between
  * bursts has no equivalent -- a layer is continuous now -- so the burst's
  * own length becomes the cycle.
  */
@@ -411,11 +406,11 @@ function readNoiseCycle(
     return { periodSec: source.periodSec, ramp: source.ramp };
   }
   const wasBurst = source.mode === 'burst' || source.modulationPeriodSec === 0;
-  if (!wasBurst) return { periodSec: source.modulationPeriodSec, ramp: 0 };
+  if (!wasBurst) return { periodSec: source.modulationPeriodSec, ramp: 0.5 };
   const bellRamp = finiteRange(source.ramp, AMBIENT_BELL_RAMP_MIN, AMBIENT_BELL_RAMP_MAX, AMBIENT_BELL_RAMP_MIN);
   return {
     periodSec: finiteRange(source.speedSec, AMBIENT_PERIOD_MIN_SEC, AMBIENT_PERIOD_MAX_SEC, fallback.periodSec),
-    ramp: 0.5 + (0.5 * (bellRamp - AMBIENT_BELL_RAMP_MIN) / (AMBIENT_BELL_RAMP_MAX - AMBIENT_BELL_RAMP_MIN)),
+    ramp: noiseRampForBellRamp(bellRamp),
   };
 }
 
