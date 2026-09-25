@@ -586,7 +586,7 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                   step={0.01}
                   value={channel.distance}
                   trackLabel="distance"
-                  tooltipLabel="Distance: near cracks and booms, far is a low rolling rumble that arrives slowly"
+                  tooltipLabel="Distance: near claps and booms, far is a low rolling rumble that arrives slowly"
                   ariaLabel={`${layerName} distance`}
                   disabled={!channel.enabled}
                   defaultValue={DEFAULT_THUNDER_CHANNEL.distance}

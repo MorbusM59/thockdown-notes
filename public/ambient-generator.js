@@ -239,9 +239,12 @@ const VOICE_SILENCE = 1e-5;
  * with a slow random roll in its level and a drift across the stereo field.
  * Distance (0 near, 1 far) sets how each sounds, blended geometrically
  * between these ends: the air absorbs highs over kilometres, so far thunder
- * is low, slow to arrive and long; near thunder is brighter and quicker, and
- * opens with a CRACK -- a short burst of bright noise whose level jitters,
- * the tearing of the channel -- once closer than THUNDER_CRACK_FROM.
+ * is low, slow to arrive and long; near thunder is brighter and quicker.
+ * Closer than THUNDER_LEAD_FROM a peal also opens with a LEAD rumble -- the
+ * same brown noise, undelayed, brighter and short -- which is the clap of a
+ * close strike. It is deliberately not a burst of bright white noise: that
+ * was tried, and with any level modulation it reads as a rattle (blinds,
+ * gravel) rather than as part of the thunder.
  * Even the nearest onset takes THUNDER_MIN_ATTACK_SEC to arrive: this plays
  * beside someone concentrating, and a clap from nowhere is a fright, not
  * atmosphere.
@@ -250,9 +253,10 @@ const THUNDER_RUMBLES = [3, 6];
 const THUNDER_ATTACK_SEC = { near: 0.06, far: 1.2 };
 const THUNDER_CUTOFF_HZ = { near: 700, far: 90 };
 const THUNDER_LEVEL = { near: 1, far: 0.6 };
-const THUNDER_CRACK_FROM = 0.65;
-const THUNDER_CRACK = { centerHz: [1500, 5000], q: 0.7, durationSec: [0.15, 0.45], level: 0.9, jitterSec: [0.004, 0.012] };
-const THUNDER_MIN_ATTACK_SEC = 0.02;
+const THUNDER_LEAD_FROM = 0.65;
+/** The lead rumble at its nearest: cutoff, swell, life and level (scaled by nearness). */
+const THUNDER_LEAD = { cutoffHz: 1600, attackSec: 0.04, lifeSec: [1.2, 2.2], level: 1.3 };
+const THUNDER_MIN_ATTACK_SEC = 0.04;
 /** The first peal of a storm that has just started comes within this many seconds. */
 const THUNDER_FIRST_PEAL_SEC = [4, 12];
 /** Average seconds between a rumble's roll targets. */
@@ -1158,26 +1162,22 @@ class AmbientGenerator extends AudioWorkletProcessor {
     const lengthSec = channel.lengthSec;
     const count = THUNDER_RUMBLES[0] + Math.floor(this.random() * (THUNDER_RUMBLES[1] - THUNDER_RUMBLES[0] + 1));
     const loop = this.noiseLoop('brown');
-    const rumbles = [];
-    const levelScale = this.byDistance(THUNDER_LEVEL, d);
-    for (let index = 0; index < count; index += 1) {
-      const attackSec = Math.max(THUNDER_MIN_ATTACK_SEC, this.byDistance(THUNDER_ATTACK_SEC, d) * (0.6 + (0.8 * this.random())));
-      const lifeSec = lengthSec * (0.35 + (0.65 * this.random()));
+    const clampPan = (value) => Math.max(-1, Math.min(1, value));
+    const rumble = (delaySec, attackSec, lifeSec, cutoffHz, level) => {
+      attackSec = Math.max(THUNDER_MIN_ATTACK_SEC, attackSec);
       // Six time constants to the end of its life: -52 dB, below anything
       // still audible over the rest of the mix, so ending there is silent
       // and the length control is how long a rumble actually lasts.
       const tauSec = Math.max(0.1, (lifeSec - attackSec) / 6);
-      const clampPan = (value) => Math.max(-1, Math.min(1, value));
-      rumbles.push({
-        // Rumbles cluster early and trail off, the way a peal arrives.
-        delay: Math.round((this.random() ** 1.5) * lengthSec * 0.45 * sampleRate),
+      return {
+        delay: Math.round(delaySec * sampleRate),
         age: 0,
         attack: Math.max(1, Math.round(attackSec * sampleRate)),
         decay: Math.exp(-1 / (tauSec * sampleRate)),
         life: Math.round((attackSec + (6 * tauSec)) * sampleRate),
         tail: 1,
-        level: levelScale * (0.5 + (0.5 * this.random())),
-        filter: stateVariableFilter(this.byDistance(THUNDER_CUTOFF_HZ, d) * (0.7 + (0.6 * this.random())), 0.9),
+        level,
+        filter: stateVariableFilter(cutoffHz, 0.9),
         read: Math.floor(this.random() * loop.length),
         panFrom: clampPan(channel.pan + (spread * ((this.random() * 2) - 1))),
         panTo: clampPan(channel.pan + (spread * ((this.random() * 2) - 1))),
@@ -1185,32 +1185,32 @@ class AmbientGenerator extends AudioWorkletProcessor {
         roll: 1,
         rollTarget: 1,
         rollFrames: 0,
-      });
-    }
-    let crack = null;
-    if (d < THUNDER_CRACK_FROM) {
-      const nearness = (THUNDER_CRACK_FROM - d) / THUNDER_CRACK_FROM;
-      const whiteLoop = this.noiseLoop('white');
-      crack = {
-        age: 0,
-        attack: Math.round(THUNDER_MIN_ATTACK_SEC * sampleRate),
-        life: Math.round(this.between(THUNDER_CRACK.durationSec) * sampleRate),
-        level: THUNDER_CRACK.level * (nearness ** 1.5),
-        filter: stateVariableFilter(this.between(THUNDER_CRACK.centerHz), THUNDER_CRACK.q),
-        read: Math.floor(this.random() * whiteLoop.length),
-        pan: Math.max(-1, Math.min(1, channel.pan + (spread * 0.3 * ((this.random() * 2) - 1)))),
-        gainLeft: 0,
-        gainRight: 0,
-        jitterSeed: Math.floor(this.random() * 0x100000000) >>> 0,
-        jitter: 1,
-        jitterFrames: 0,
       };
+    };
+    const rumbles = [];
+    const levelScale = this.byDistance(THUNDER_LEVEL, d);
+    for (let index = 0; index < count; index += 1) {
+      rumbles.push(rumble(
+        // Rumbles cluster early and trail off, the way a peal arrives.
+        (this.random() ** 1.5) * lengthSec * 0.45,
+        this.byDistance(THUNDER_ATTACK_SEC, d) * (0.6 + (0.8 * this.random())),
+        lengthSec * (0.35 + (0.65 * this.random())),
+        this.byDistance(THUNDER_CUTOFF_HZ, d) * (0.7 + (0.6 * this.random())),
+        levelScale * (0.5 + (0.5 * this.random())),
+      ));
     }
-    if (crack) {
-      crack.gainLeft = Math.SQRT2 * Math.cos((crack.pan + 1) * Math.PI / 4);
-      crack.gainRight = Math.SQRT2 * Math.sin((crack.pan + 1) * Math.PI / 4);
+    if (d < THUNDER_LEAD_FROM) {
+      const nearness = (THUNDER_LEAD_FROM - d) / THUNDER_LEAD_FROM;
+      const baseCutoff = this.byDistance(THUNDER_CUTOFF_HZ, d);
+      rumbles.push(rumble(
+        0,
+        THUNDER_LEAD.attackSec,
+        this.between(THUNDER_LEAD.lifeSec),
+        baseCutoff * ((THUNDER_LEAD.cutoffHz / baseCutoff) ** nearness),
+        THUNDER_LEAD.level * levelScale * nearness,
+      ));
     }
-    channel.peals.push({ rumbles, crack });
+    channel.peals.push({ rumbles });
   }
 
   /**
@@ -1273,27 +1273,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
             peal.rumbles.pop();
           }
         }
-        const crack = peal.crack;
-        if (crack) {
-          if (crack.jitterFrames <= 0) {
-            crack.jitterSeed = (1664525 * crack.jitterSeed + 1013904223) >>> 0;
-            crack.jitter = 0.2 + (0.8 * (crack.jitterSeed / 0x100000000));
-            crack.jitterSeed = (1664525 * crack.jitterSeed + 1013904223) >>> 0;
-            crack.jitterFrames = Math.round((THUNDER_CRACK.jitterSec[0] + ((THUNDER_CRACK.jitterSec[1] - THUNDER_CRACK.jitterSec[0]) * (crack.jitterSeed / 0x100000000))) * sampleRate);
-          }
-          crack.jitterFrames -= 1;
-          const white = this.noiseLoop('white');
-          const shape = crack.age < crack.attack
-            ? crack.age / crack.attack
-            : Math.max(0, 1 - ((crack.age - crack.attack) / Math.max(1, crack.life - crack.attack))) ** 2;
-          const sample = bandPass(crack.filter, white[crack.read]) * shape * crack.level * crack.jitter;
-          crack.read = crack.read + 1 === white.length ? 0 : crack.read + 1;
-          sumLeft += sample * crack.gainLeft;
-          sumRight += sample * crack.gainRight;
-          crack.age += 1;
-          if (crack.age >= crack.life) peal.crack = null;
-        }
-        if (peal.rumbles.length === 0 && !peal.crack) {
+        if (peal.rumbles.length === 0) {
           channel.peals[pealIndex] = channel.peals[channel.peals.length - 1];
           channel.peals.pop();
         }

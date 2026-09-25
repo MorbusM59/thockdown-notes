@@ -144,13 +144,13 @@ export interface AmbientRainChannelSettings extends AmbientChannelBaseSettings {
  * A thunder layer: one storm cell, pealing now and then. Distance is what
  * shapes each peal (public/ambient-generator.js's startPeal): far thunder is
  * a soft-onset, low, long rolling rumble whose highs the air has absorbed;
- * near thunder opens with a crack and booms before a shorter, fuller roll.
+ * near thunder opens with a sharp clap and booms before a shorter, fuller roll.
  */
 export interface AmbientThunderChannelSettings extends AmbientChannelBaseSettings {
   kind: 'thunder';
   /** Average peals per ten minutes, spaced at random. */
   pealsPer10Min: number;
-  /** 0 (near: a crack, then booms) to 1 (far: a low roll). */
+  /** 0 (near: a sharp clap, then booms) to 1 (far: a low roll). */
   distance: number;
   /** Where the storm is, -1 (left) to 1 (right). */
   pan: number;
