@@ -10,7 +10,7 @@ import {
   PLAYLIST_SLOT_THEMES,
   shouldStopCurrentSongOnSlotToggle,
 } from '../shared/audioPlayer'
-import type { AmbientPreferences } from '../shared/ambientSound'
+import { applyAmbientPreset, nextAmbientPreset, type AmbientPreferences } from '../shared/ambientSound'
 import {
   fromDisplayLevel,
   nudgeLevel,
@@ -1125,9 +1125,10 @@ function SoundLevelButton({
 
 /**
  * The ambient-noise switch at the end of the playlist row, which is also the
- * ambient master volume: a click turns ambient sound on or off, and a wheel
- * over it nudges the level exactly like a music level readout (Shift: by
- * 10). Wheeling turns ambient sound on if it was off -- the same "adjusting
+ * ambient master volume: a click turns ambient sound on or off, a wheel over
+ * it nudges the level exactly like a music level readout (Shift: by 10), and
+ * a right-click steps to the next soundscape -- the user's own, or the
+ * factory ones if there are none (nextAmbientPreset) -- turning ambient on. Wheeling turns ambient sound on if it was off -- the same "adjusting
  * turns it back on" rule the music volume follows with mute.
  *
  * Its own component for the reason SoundLevelButton is: it owns the ref its
@@ -1155,12 +1156,18 @@ function AmbientNoiseButton({
   useNonPassiveWheel(ref, handleWheel)
 
   const level = toDisplayLevel(preferences.masterVolume)
+  const next = nextAmbientPreset(preferences)
   return (
     <button
       ref={ref}
       type="button"
       className={`audio-ctrl-btn audio-ambient-noise-btn${preferences.enabled ? ' is-active' : ''}`}
-      data-tooltip={`Ambient noise ${preferences.enabled ? `on, volume ${level}` : 'off'} — click to turn ${preferences.enabled ? 'off' : 'on'}. Scroll to adjust volume (Shift: by 10).`}
+      data-tooltip={`Ambient noise ${preferences.enabled ? `on, volume ${level}` : 'off'} — click to turn ${preferences.enabled ? 'off' : 'on'}. Scroll to adjust volume (Shift: by 10). Right-click for the next soundscape (${next.name}).`}
+      data-secondary-press="action"
+      onContextMenu={(event) => {
+        event.preventDefault()
+        onChange(applyAmbientPreset(preferences, next))
+      }}
       aria-label={preferences.enabled ? 'Turn ambient noise off' : 'Turn ambient noise on'}
       aria-pressed={preferences.enabled}
       onClick={() => onChange({ ...preferences, enabled: !preferences.enabled })}

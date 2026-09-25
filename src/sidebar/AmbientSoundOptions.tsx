@@ -18,6 +18,7 @@ import {
   DEFAULT_NOISE_CHANNEL,
   DEFAULT_RAIN_CHANNEL,
   ambientSettingsSignature,
+  applyAmbientPreset,
   defaultRainPan,
   type AmbientChannelBaseSettings,
   type AmbientChannelSettings,
@@ -118,18 +119,9 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
   const canSave = hasPendingChanges && preferences.customPresets.length < MAX_AMBIENT_CUSTOM_PRESETS
 
   const selectPreset = (preset: AmbientPreset) => {
-    const soloIndex = preferences.settings.findIndex((channel) => channel.solo)
-    const settings = copySettings(preset.settings).map((channel, index) => ({
-      ...channel,
-      solo: index === soloIndex,
-    }))
-    onChange({
-      ...preferences,
-      enabled: true,
-      settings,
-      activePresetId: preset.id,
-    })
+    onChange(applyAmbientPreset(preferences, preset))
   }
+
 
   const commitSettings = (settings: AmbientSettings) => {
     onChange(withSettings(preferences, settings))

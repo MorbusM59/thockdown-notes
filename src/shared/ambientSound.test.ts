@@ -11,6 +11,8 @@ import {
   MAX_AMBIENT_CHANNELS,
   MAX_AMBIENT_CUSTOM_PRESETS,
   ambientSettingsSignature,
+  applyAmbientPreset,
+  nextAmbientPreset,
   sanitizeAmbientPreferences,
   sanitizeAmbientSettings,
 } from './ambientSound';
@@ -224,6 +226,35 @@ describe('ambient sound configuration', () => {
     }));
     expect(sanitizeAmbientPreferences({ customPresets: tooMany }).customPresets)
       .toHaveLength(MAX_AMBIENT_CUSTOM_PRESETS);
+  });
+});
+
+describe('stepping through soundscapes', () => {
+  const custom = (id: string) => ({ id, name: id, settings: DEFAULT_AMBIENT_SETTINGS.map((channel) => ({ ...channel })) });
+
+  it('walks the factory soundscapes in order and wraps, when there are no custom ones', () => {
+    let preferences = sanitizeAmbientPreferences({});
+    const visited = AMBIENT_FACTORY_PRESETS.map(() => {
+      preferences = applyAmbientPreset(preferences, nextAmbientPreset(preferences));
+      return preferences.activePresetId;
+    });
+    expect(visited).toEqual(AMBIENT_FACTORY_PRESETS.map((preset) => preset.id));
+    expect(nextAmbientPreset(preferences).id).toBe(AMBIENT_FACTORY_PRESETS[0].id);
+  });
+
+  it('walks only the custom soundscapes once any exist, starting from the first', () => {
+    const preferences = { ...sanitizeAmbientPreferences({}), activePresetId: 'storm', customPresets: [custom('a'), custom('b')] };
+    expect(nextAmbientPreset(preferences).id).toBe('a');
+    expect(nextAmbientPreset({ ...preferences, activePresetId: 'a' }).id).toBe('b');
+    expect(nextAmbientPreset({ ...preferences, activePresetId: 'b' }).id).toBe('a');
+  });
+
+  it('turns ambient on, keeps the soloed slot and the listener volume', () => {
+    const base = sanitizeAmbientPreferences({ masterVolume: 0.4 });
+    const soloed = { ...base, settings: base.settings.map((channel, index) => ({ ...channel, solo: index === 3 })) };
+    const applied = applyAmbientPreset(soloed, AMBIENT_FACTORY_PRESETS[2]);
+    expect(applied).toMatchObject({ enabled: true, masterVolume: 0.4, activePresetId: AMBIENT_FACTORY_PRESETS[2].id });
+    expect(applied.settings.map((channel) => channel.solo)).toEqual(applied.settings.map((_, index) => index === 3));
   });
 });
 

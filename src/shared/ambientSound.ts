@@ -533,3 +533,31 @@ export function sanitizeAmbientPreferences(input: unknown): AmbientPreferences {
     customPresets,
   };
 }
+/**
+ * Switch to a soundscape: its settings, ambient sound turned on, and the
+ * preset marked active. Solo is a listening aid rather than part of the
+ * sound, so whichever slot was soloed stays soloed. The one way a preset is
+ * applied, whether from the settings panel or the player's switch.
+ */
+export function applyAmbientPreset(preferences: AmbientPreferences, preset: AmbientPreset): AmbientPreferences {
+  const soloIndex = preferences.settings.findIndex((channel) => channel.solo);
+  return {
+    ...preferences,
+    enabled: true,
+    settings: preset.settings.map((channel, index) => ({ ...channel, solo: index === soloIndex })),
+    activePresetId: preset.id,
+  };
+}
+
+/**
+ * The soundscape after the active one, for stepping through them from the
+ * player: the user's own if there are any, otherwise the factory ones, in
+ * the order the settings panel shows them, wrapping at the end. From a
+ * soundscape outside that list -- none active, or a factory one while
+ * custom ones exist -- it starts at the first.
+ */
+export function nextAmbientPreset(preferences: AmbientPreferences): AmbientPreset {
+  const cycle = preferences.customPresets.length > 0 ? preferences.customPresets : AMBIENT_FACTORY_PRESETS;
+  const current = cycle.findIndex((preset) => preset.id === preferences.activePresetId);
+  return cycle[(current + 1) % cycle.length];
+}
