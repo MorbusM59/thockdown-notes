@@ -236,8 +236,11 @@ const VOICE_SILENCE = 1e-5;
  * brown noise, each through its own low-pass, staggered through the roll-in
  * so the peal builds -- it rises gently to a peak a quarter to two fifths of
  * the way through its length (THUNDER_PEAK_AT) and fades slowly over the
- * rest -- each with a fast, uneven roll in level, the growl of it, and a
- * drift across the stereo field. Distance blends each figure geometrically
+ * rest -- each drifting across the stereo field -- and one or two low
+ * BOOMS (THUNDER_BOOMS) under them. The whole peal shares one uneven roll
+ * in level (THUNDER_ROLL, by character): rolled separately, the rumbles'
+ * dips and surges average out in the sum, and a harsh setting is heard as
+ * a smooth one. Distance blends each figure geometrically
  * between its near and far end: far thunder is darker and quieter.
  * Short bright bursts on top (a crack, then clusters of strokes) were tried
  * and taken out: synthesised that way they read as something falling down
@@ -250,9 +253,42 @@ const THUNDER_PEAK_AT = [0.22, 0.4];
 const THUNDER_LEVEL = { near: 1, far: 0.6 };
 const THUNDER_RUMBLES = [3, 6];
 const THUNDER_CUTOFF_HZ = { near: 420, far: 80 };
-/** Average seconds between a rumble's roll targets, and the lowest target. */
-const THUNDER_ROLL_SEC = [0.08, 0.35];
-const THUNDER_ROLL_FLOOR = 0.3;
+/**
+ * The roll in a peal's level, at character 0 (`smooth`) and 1 (`harsh`),
+ * blended geometrically: seconds between targets, the lowest target, and
+ * how fast the level glides to each (per second). Each target is either a
+ * GAP, down at the floor, with a chance that grows linearly with character
+ * to THUNDER_ROLL_GAP_CHANCE, or else a surge between the floor (at least
+ * half) and full. Smooth is a slow, shallow undulation; harsh alternates
+ * surges and near-silence several times a second and lurches between them
+ * -- the choppy growl of close thunder. A plain draw between floor and full
+ * was tried: dips deep enough to hear were too rare and too brief.
+ */
+const THUNDER_ROLL = {
+  smooth: { sec: [0.25, 0.7], floor: 0.7, glidePerSec: 6 },
+  harsh: { sec: [0.05, 0.2], floor: 0.04, glidePerSec: 120 },
+};
+const THUNDER_ROLL_GAP_CHANCE = 0.45;
+/**
+ * The boom: one or two rumbles per peal through a resonant BAND-pass
+ * centred at 45-90 Hz (lower for far thunder), swelling into the peak --
+ * the weight a peal's upper rumbles lack. A band and not a low-pass: most
+ * of a low-passed brown noise lies far below its cutoff, under the thunder
+ * high-pass, where it adds nothing that is heard.
+ */
+const THUNDER_BOOMS = [1, 2];
+const THUNDER_BOOM_CENTER_HZ = { near: 90, far: 45 };
+const THUNDER_BOOM_Q = 1.6;
+const THUNDER_BOOM_LEVEL = 3;
+/** A peal's overall scale, set so its peaks stay about where they were before the boom. */
+const THUNDER_PEAL_SCALE = 0.6;
+/**
+ * A thunder layer's output is high-passed here. The brown loop is a leaky
+ * random walk, flat down to about 23 Hz at 48 kHz, so without this most of
+ * a rumble's power sits below where it is heard as a boom -- felt at most,
+ * and spending the headroom the boom needs before the shared limiter.
+ */
+const THUNDER_HIGH_PASS_HZ = 30;
 /** The first peal of a storm that has just started comes within this many seconds. */
 const THUNDER_FIRST_PEAL_SEC = [4, 12];
 
@@ -308,6 +344,16 @@ function lowPassStep(filter, input) {
   filter.s1 = (2 * v1) - filter.s1;
   filter.s2 = (2 * v2) - filter.s2;
   return v2;
+}
+
+/** One sample through a stateVariableFilter (q = SQRT1_2 for Butterworth); returns its high-pass output. */
+function highPassStep(filter, input) {
+  const v3 = input - filter.s2;
+  const v1 = (filter.a1 * filter.s1) + (filter.a2 * v3);
+  const v2 = filter.s2 + (filter.a2 * filter.s1) + (filter.a3 * v3);
+  filter.s1 = (2 * v1) - filter.s1;
+  filter.s2 = (2 * v2) - filter.s2;
+  return input - (Math.SQRT2 * v1) - v2;
 }
 
 /** One sample through a stateVariableFilter; returns its band-pass output. */
@@ -1192,6 +1238,10 @@ class AmbientGenerator extends AudioWorkletProcessor {
     channel.directGain = 1;
     channel.reverbSend = 1;
     if (!channel.peals) channel.peals = [];
+    if (!channel.highPass) {
+      // Direct left and right, send left and right.
+      channel.highPass = Array.from({ length: 4 }, () => stateVariableFilter(THUNDER_HIGH_PASS_HZ, Math.SQRT1_2));
+    }
     if (channel.share <= 0) {
       channel.nextPealFrame = Infinity;
     } else if (!before || before.share <= 0 || !Number.isFinite(channel.nextPealFrame)) {
@@ -1219,6 +1269,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
       pan: vary(channel.pan, -1, 1),
       spread: vary(channel.spread, 0, 1),
       lengthSec: vary(channel.lengthSec, lengthLow, lengthHigh),
+      character: vary(channel.character ?? 0.5, 0, 1),
     };
   }
 
@@ -1250,13 +1301,24 @@ class AmbientGenerator extends AudioWorkletProcessor {
     const panAround = () => clampPan(settings.pan + (spread * ((this.random() * 2) - 1)));
     const brown = this.noiseLoop('brown');
     const count = THUNDER_RUMBLES[0] + Math.floor(this.random() * (THUNDER_RUMBLES[1] - THUNDER_RUMBLES[0] + 1));
-    // Several rumbles together are about as loud as three were.
-    const level = this.byDistance(THUNDER_LEVEL, d) * Math.sqrt(3 / count);
+    // Several rumbles together are about as loud as three were, and the
+    // whole peal is scaled so the boom adds weight rather than loudness.
+    const level = this.byDistance(THUNDER_LEVEL, d) * Math.sqrt(3 / count) * THUNDER_PEAL_SCALE;
+    const blend = (smooth, harsh) => smooth * ((harsh / smooth) ** settings.character);
+    const roll = {
+      sec: [blend(THUNDER_ROLL.smooth.sec[0], THUNDER_ROLL.harsh.sec[0]), blend(THUNDER_ROLL.smooth.sec[1], THUNDER_ROLL.harsh.sec[1])],
+      floor: blend(THUNDER_ROLL.smooth.floor, THUNDER_ROLL.harsh.floor),
+      glide: blend(THUNDER_ROLL.smooth.glidePerSec, THUNDER_ROLL.harsh.glidePerSec) / sampleRate,
+      gapChance: THUNDER_ROLL_GAP_CHANCE * settings.character,
+    };
+    const booms = THUNDER_BOOMS[0] + Math.floor(this.random() * (THUNDER_BOOMS[1] - THUNDER_BOOMS[0] + 1));
     const rumbles = [];
-    for (let index = 0; index < count; index += 1) {
+    for (let index = 0; index < count + booms; index += 1) {
+      const isBoom = index >= count;
       // Each swells to about the peak from its own start in the roll-in,
       // and fades with the peal after it.
-      const startSec = peakSec * 0.7 * this.random();
+      // A boom starts later and swells faster, landing on the peak.
+      const startSec = peakSec * (isBoom ? 0.5 + (0.3 * this.random()) : 0.7 * this.random());
       const attackSec = Math.max(0.05, (peakSec - startSec) * (0.8 + (0.4 * this.random())));
       const tauSec = fadeTau * (0.8 + (0.4 * this.random()));
       const lifeSec = attackSec + (5 * tauSec);
@@ -1267,17 +1329,16 @@ class AmbientGenerator extends AudioWorkletProcessor {
         decay: Math.exp(-1 / (tauSec * sampleRate)),
         life: Math.max(2, Math.round(lifeSec * sampleRate)),
         tail: 1,
-        level: level * (0.6 + (0.4 * this.random())),
-        filter: stateVariableFilter(this.byDistance(THUNDER_CUTOFF_HZ, d) * (0.6 + (1.2 * this.random())), 0.8),
+        level: level * (isBoom ? THUNDER_BOOM_LEVEL : 0.6 + (0.4 * this.random())),
+        filter: isBoom
+          ? stateVariableFilter(this.byDistance(THUNDER_BOOM_CENTER_HZ, d) * (0.85 + (0.3 * this.random())), THUNDER_BOOM_Q)
+          : stateVariableFilter(this.byDistance(THUNDER_CUTOFF_HZ, d) * (0.6 + (1.2 * this.random())), 0.8),
         read: Math.floor(this.random() * brown.length),
+        band: isBoom,
         panFrom: panAround(),
         panTo: panAround(),
         gainLeft: 0,
         gainRight: 0,
-        rollSeed: Math.floor(this.random() * 0x100000000) >>> 0,
-        roll: 1,
-        rollTarget: 1,
-        rollFrames: 0,
       });
     }
     rumbles.sort((a, b) => a.start - b.start);
@@ -1288,6 +1349,14 @@ class AmbientGenerator extends AudioWorkletProcessor {
       // The volume slider stays live through a peal: the peal keeps only
       // how far randomness moved it, and adds that to the current setting.
       volumeOffset: settings.volume - channel.volume,
+      rollSeed: Math.floor(this.random() * 0x100000000) >>> 0,
+      rollSec: roll.sec,
+      rollFloor: roll.floor,
+      rollGlide: roll.glide,
+      rollGapChance: roll.gapChance,
+      roll: 1,
+      rollTarget: 1,
+      rollFrames: 0,
       direct: space.directGain,
       send: space.reverbSend,
     });
@@ -1303,7 +1372,6 @@ class AmbientGenerator extends AudioWorkletProcessor {
     right.fill(0, 0, length);
     sendLeft.fill(0, 0, length);
     sendRight.fill(0, 0, length);
-    const rollRate = 30 / sampleRate;
     const brown = this.noiseLoop('brown');
     for (let index = 0; index < length; index += 1) {
       if (currentFrame + index >= channel.nextPealFrame) {
@@ -1323,6 +1391,17 @@ class AmbientGenerator extends AudioWorkletProcessor {
         // Rumbles become live in start order; `next` is the first not yet live.
         while (peal.next < peal.rumbles.length && peal.rumbles[peal.next].start <= peal.age) peal.next += 1;
         peal.age += 1;
+        if (peal.rollFrames <= 0) {
+          peal.rollSeed = (1664525 * peal.rollSeed + 1013904223) >>> 0;
+          const isGap = (peal.rollSeed / 0x100000000) < peal.rollGapChance;
+          peal.rollSeed = (1664525 * peal.rollSeed + 1013904223) >>> 0;
+          const surgeFloor = Math.max(peal.rollFloor, 0.5);
+          peal.rollTarget = isGap ? peal.rollFloor : surgeFloor + ((1 - surgeFloor) * (peal.rollSeed / 0x100000000));
+          peal.rollSeed = (1664525 * peal.rollSeed + 1013904223) >>> 0;
+          peal.rollFrames = Math.round((peal.rollSec[0] + ((peal.rollSec[1] - peal.rollSec[0]) * (peal.rollSeed / 0x100000000))) * sampleRate);
+        }
+        peal.rollFrames -= 1;
+        peal.roll += (peal.rollTarget - peal.roll) * peal.rollGlide;
         let sumLeft = 0;
         let sumRight = 0;
         let live = 0;
@@ -1330,19 +1409,13 @@ class AmbientGenerator extends AudioWorkletProcessor {
           const rumble = peal.rumbles[rumbleIndex];
           if (rumble.age >= rumble.life) continue;
           live += 1;
-          if (rumble.rollFrames <= 0) {
-            rumble.rollSeed = (1664525 * rumble.rollSeed + 1013904223) >>> 0;
-            rumble.rollTarget = THUNDER_ROLL_FLOOR + ((1 - THUNDER_ROLL_FLOOR) * (rumble.rollSeed / 0x100000000));
-            rumble.rollSeed = (1664525 * rumble.rollSeed + 1013904223) >>> 0;
-            rumble.rollFrames = Math.round((THUNDER_ROLL_SEC[0] + ((THUNDER_ROLL_SEC[1] - THUNDER_ROLL_SEC[0]) * (rumble.rollSeed / 0x100000000))) * sampleRate);
-            // Where it is in the field moves on the same clock.
+          // Where it is in the field moves every 1024 samples.
+          if ((rumble.age & 1023) === 0) {
             const progress = Math.min(1, rumble.age / rumble.life);
             const pan = rumble.panFrom + ((rumble.panTo - rumble.panFrom) * progress);
             rumble.gainLeft = Math.SQRT2 * Math.cos((pan + 1) * Math.PI / 4);
             rumble.gainRight = Math.SQRT2 * Math.sin((pan + 1) * Math.PI / 4);
           }
-          rumble.rollFrames -= 1;
-          rumble.roll += (rumble.rollTarget - rumble.roll) * rollRate;
           let envelope;
           if (rumble.age < rumble.attack) {
             const x = rumble.age / rumble.attack;
@@ -1351,13 +1424,14 @@ class AmbientGenerator extends AudioWorkletProcessor {
             rumble.tail *= rumble.decay;
             envelope = rumble.tail;
           }
-          const sample = lowPassStep(rumble.filter, brown[rumble.read]) * rumble.level * envelope * rumble.roll;
+          const noise = brown[rumble.read];
+          const sample = (rumble.band ? bandPass(rumble.filter, noise) : lowPassStep(rumble.filter, noise)) * rumble.level * envelope;
           rumble.read = rumble.read + 1 === brown.length ? 0 : rumble.read + 1;
           sumLeft += sample * rumble.gainLeft;
           sumRight += sample * rumble.gainRight;
           rumble.age += 1;
         }
-        const volume = Math.max(0, Math.min(1, channel.volume + peal.volumeOffset));
+        const volume = Math.max(0, Math.min(1, channel.volume + peal.volumeOffset)) * peal.roll;
         directLeft += sumLeft * volume * peal.direct;
         directRight += sumRight * volume * peal.direct;
         wetLeft += sumLeft * volume * peal.send;
@@ -1367,10 +1441,11 @@ class AmbientGenerator extends AudioWorkletProcessor {
           channel.peals.pop();
         }
       }
-      left[index] = directLeft;
-      right[index] = directRight;
-      sendLeft[index] = wetLeft;
-      sendRight[index] = wetRight;
+      const highPass = channel.highPass;
+      left[index] = highPassStep(highPass[0], directLeft);
+      right[index] = highPassStep(highPass[1], directRight);
+      sendLeft[index] = highPassStep(highPass[2], wetLeft);
+      sendRight[index] = highPassStep(highPass[3], wetRight);
     }
   }
 

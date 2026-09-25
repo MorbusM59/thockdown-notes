@@ -591,6 +591,20 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                   onCommit={(value) => updateThunderChannel(channel.id, { share: value })}
                 />
                 <CompactScrollbarSlider
+                  id={`ambient-${channel.id}-character`}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={channel.character}
+                  trackLabel="character"
+                  tooltipLabel="How harshly the rumble swells and breaks: a smooth, slow roll to the left, a choppy, angry growl to the right"
+                  ariaLabel={`${layerName} character`}
+                  disabled={!channel.enabled}
+                  defaultValue={DEFAULT_THUNDER_CHANNEL.character}
+                  formatValue={(value) => value < 0.01 ? 'Smooth' : value > 0.99 ? 'Harsh' : `${Math.round(value * 100)}%`}
+                  onCommit={(value) => updateThunderChannel(channel.id, { character: value })}
+                />
+                <CompactScrollbarSlider
                   id={`ambient-${channel.id}-randomness`}
                   min={0}
                   max={1}

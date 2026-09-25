@@ -961,6 +961,42 @@ describe('ambient thunder', () => {
     }
   });
 
+  it('puts its weight in the boom band: 40-120 Hz carries a larger share with the booms in it', () => {
+    // Without booms this band holds 0.34-0.37 of a peal at these settings;
+    // with them 0.42-0.44. Below 30 Hz is high-passed away, above 120 Hz is
+    // the upper rumbles.
+    let share = 0;
+    for (const seed of [9, 1, 2]) {
+      const samples = createProcessor(seed, makeThunderSlots([steady({ distance: 0.3, lengthSec: 8, share: 0.01 })]), rate).render(25).left;
+      share += highShare(samples, rate, 40) - highShare(samples, rate, 120);
+    }
+    expect(share / 3).toBeGreaterThan(0.4);
+  });
+
+  it('rolls more harshly with character: its level breaks away to near nothing far more often', () => {
+    // Rumble below a few hundred hertz swings two- or threefold between
+    // 50 ms moments on its own, so frame-to-frame change cannot tell the
+    // settings apart. What harshness adds is the drop-out: a moment below a
+    // fifth of the median of the half second around it.
+    const dropOuts = (character: number) => {
+      let count = 0;
+      for (const seed of [1, 2, 3]) {
+        const samples = createProcessor(seed, makeThunderSlots([steady({ character, lengthSec: 10, share: 0.01 })]), rate).render(25).left;
+        const start = samples.findIndex((value) => value !== 0);
+        const size = rate / 20;
+        const levels: number[] = [];
+        for (let at = start; at + size <= samples.length; at += size) levels.push(rms(samples.slice(at, at + size)));
+        const loudest = Math.max(...levels);
+        for (let index = 5; index < levels.length - 5; index += 1) {
+          const around = levels.slice(index - 5, index + 6).sort((x, y) => x - y)[5];
+          if (around > loudest * 0.1 && levels[index] < around * 0.2) count += 1;
+        }
+      }
+      return count;
+    };
+    expect(dropOuts(1)).toBeGreaterThan(3 * Math.max(1, dropOuts(0)));
+  });
+
   it('is brighter near than far', () => {
     const near = createProcessor(9, makeThunderSlots([steady({ distance: 0, lengthSec: 6, share: 0.01 })]), rate).render(20).left;
     const far = createProcessor(9, makeThunderSlots([steady({ distance: 1, lengthSec: 6, share: 0.01 })]), rate).render(20).left;
