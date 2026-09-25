@@ -597,7 +597,7 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                   step={0.01}
                   value={channel.character}
                   trackLabel="character"
-                  tooltipLabel="How harshly the rumble swells and breaks: a smooth, slow roll to the left, a choppy, angry growl to the right"
+                  tooltipLabel="How harshly the deep boom breaks up: a smooth, slow swell to the left, a choppy, angry growl to the right. The rumble above it stays smooth"
                   ariaLabel={`${layerName} character`}
                   disabled={!channel.enabled}
                   defaultValue={DEFAULT_THUNDER_CHANNEL.character}

@@ -675,7 +675,7 @@ describe('ambient AudioWorklet generator', () => {
         const next = createNoiseSource(type, () => {
           seed = (Math.imul(1664525, seed) + 1013904223) >>> 0;
           return seed / 0x100000000;
-        });
+        }, 48000);
         const live = Array.from({ length: loop.length }, next);
         expect(Math.abs(rms(Array.from(loop)) - rms(live)) / rms(live)).toBeLessThan(0.1);
       }
@@ -973,28 +973,69 @@ describe('ambient thunder', () => {
     expect(share / 3).toBeGreaterThan(0.4);
   });
 
-  it('rolls more harshly with character: its level breaks away to near nothing far more often', () => {
-    // Rumble below a few hundred hertz swings two- or threefold between
-    // 50 ms moments on its own, so frame-to-frame change cannot tell the
-    // settings apart. What harshness adds is the drop-out: a moment below a
-    // fifth of the median of the half second around it.
-    const dropOuts = (character: number) => {
-      let count = 0;
+  describe('character breaks up the boom and only the boom', () => {
+    // The low end below 90 Hz, or what is above 250 Hz, each through a
+    // fourth-order Butterworth (two cascaded biquads, Q 0.54 and 1.31): the
+    // parts meet at 110 Hz, and a gentler filter lets the upper rumbles
+    // leak into the low band and hide what character does to the booms.
+    const band = (samples: number[], side: 'low' | 'high') => {
+      const hz = side === 'low' ? 90 : 250;
+      const stages = [0.5412, 1.3066].map((q) => {
+        const w = (2 * Math.PI * hz) / rate;
+        const alpha = Math.sin(w) / (2 * q);
+        const cos = Math.cos(w);
+        const a0 = 1 + alpha;
+        const b = side === 'low'
+          ? [(1 - cos) / 2, 1 - cos, (1 - cos) / 2]
+          : [(1 + cos) / 2, -(1 + cos), (1 + cos) / 2];
+        return { b: b.map((value) => value / a0), a: [(-2 * cos) / a0, (1 - alpha) / a0], x: [0, 0], y: [0, 0] };
+      });
+      return samples.map((input) => {
+        let value = input;
+        for (const stage of stages) {
+          const out = (stage.b[0] * value) + (stage.b[1] * stage.x[0]) + (stage.b[2] * stage.x[1]) - (stage.a[0] * stage.y[0]) - (stage.a[1] * stage.y[1]);
+          stage.x = [value, stage.x[0]];
+          stage.y = [out, stage.y[0]];
+          value = out;
+        }
+        return value;
+      });
+    };
+    // How far a band's level swings: the mean distance, in log terms, of
+    // each 100 ms moment from the median of the two seconds around it,
+    // within the body of the peal. Rumble swings a good deal on its own, so
+    // this compares settings rather than reading a level; frames and window
+    // are sized to the roll's gaps (a tenth to a third of a second), which a
+    // shorter window would take into its own median and hide.
+    const swing = (character: number, side: 'low' | 'high') => {
+      let sum = 0;
+      let frames = 0;
       for (const seed of [1, 2, 3]) {
-        const samples = createProcessor(seed, makeThunderSlots([steady({ character, lengthSec: 10, share: 0.01 })]), rate).render(25).left;
-        const start = samples.findIndex((value) => value !== 0);
-        const size = rate / 20;
+        const raw = createProcessor(seed, makeThunderSlots([steady({ character, lengthSec: 10, share: 0.01 })]), rate).render(25).left;
+        const start = raw.findIndex((value) => value !== 0);
+        const samples = band(raw, side);
+        const size = rate / 10;
         const levels: number[] = [];
         for (let at = start; at + size <= samples.length; at += size) levels.push(rms(samples.slice(at, at + size)));
         const loudest = Math.max(...levels);
-        for (let index = 5; index < levels.length - 5; index += 1) {
-          const around = levels.slice(index - 5, index + 6).sort((x, y) => x - y)[5];
-          if (around > loudest * 0.1 && levels[index] < around * 0.2) count += 1;
+        for (let index = 10; index < levels.length - 10; index += 1) {
+          const around = levels.slice(index - 10, index + 11).sort((x, y) => x - y)[10];
+          if (around <= loudest * 0.1) continue;
+          sum += Math.abs(Math.log(levels[index] / around));
+          frames += 1;
         }
       }
-      return count;
+      return sum / frames;
     };
-    expect(dropOuts(1)).toBeGreaterThan(3 * Math.max(1, dropOuts(0)));
+
+    it('swings the low end harder at the top of the slider', () => {
+      expect(swing(1, 'low')).toBeGreaterThan(1.25 * swing(0, 'low'));
+    });
+
+    it('leaves the rumble above the boom as it is at the top of the slider', () => {
+      const bottom = swing(0, 'high');
+      expect(Math.abs(swing(1, 'high') - bottom)).toBeLessThan(0.1 * bottom);
+    });
   });
 
   it('is brighter near than far', () => {

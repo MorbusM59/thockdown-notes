@@ -163,7 +163,7 @@ export interface AmbientThunderChannelSettings extends AmbientChannelBaseSetting
   pan: number;
   /** How wide a peal rolls across the stereo field around `pan`, 0-1. */
   spread: number;
-  /** How harshly the rumble's level rolls: 0 a smooth swell, 1 a choppy growl. */
+  /** How harshly the boom under the rumble breaks up: 0 a smooth swell, 1 a choppy growl. The rumble above it always rolls smoothly. */
   character: number;
   /** 0 (every peal as set) to 1 (every other control varied by up to AMBIENT_THUNDER_JITTER). */
   randomness: number;

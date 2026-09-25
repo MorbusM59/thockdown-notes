@@ -30,17 +30,33 @@ function makeRandom(seed: number): () => number {
 }
 
 /**
- * A live noise generator: white, pink (Paul Kellet's filter) or brown (a
- * leaky integrator of white).
+ * Brown noise's corner: below it the leaky integrator is flat, above it
+ * falls 6 dB an octave. It is what the original fixed pole of 0.997 gave at
+ * 48 kHz; stated as a frequency so the noise is the same at every sample
+ * rate -- the fixed pole put it at 4 Hz at 8 kHz, and a test at that rate
+ * measured six times the sub-bass the app plays.
  */
-export function createNoiseSource(type: AmbientNoiseType, random: () => number): () => number {
+const BROWN_CORNER_HZ = 22.9;
+/** The original brown step's gain and pole, at 48 kHz; the level is held to theirs. */
+const BROWN_REFERENCE = { gain: 0.055, pole: 0.997 };
+
+/**
+ * A live noise generator at `sampleRate`: white, pink (Paul Kellet's
+ * filter, whose coefficients are for 44.1 kHz and are not rescaled) or
+ * brown (a leaky integrator of white with its corner at BROWN_CORNER_HZ,
+ * its gain set so its level is the same at every rate).
+ */
+export function createNoiseSource(type: AmbientNoiseType, random: () => number, sampleRate: number): () => number {
   const pink = [0, 0, 0, 0, 0, 0, 0];
   let brown = 0;
+  const brownPole = Math.exp((-2 * Math.PI * BROWN_CORNER_HZ) / sampleRate);
+  // A leaky integrator's output power is gain^2 / (1 - pole^2).
+  const brownGain = BROWN_REFERENCE.gain * Math.sqrt((1 - (brownPole ** 2)) / (1 - (BROWN_REFERENCE.pole ** 2)));
   return () => {
     const white = (random() * 2) - 1;
     if (type === 'white') return white;
     if (type === 'brown') {
-      brown = (0.997 * brown) + (white * 0.055);
+      brown = (brownPole * brown) + (white * brownGain);
       return brown;
     }
     pink[0] = (0.99886 * pink[0]) + (white * 0.0555179);
@@ -65,7 +81,7 @@ export function createNoiseSource(type: AmbientNoiseType, random: () => number):
 export function buildNoiseLoop(type: AmbientNoiseType, sampleRate: number, seed: number): Float32Array {
   const length = Math.round(NOISE_LOOP_SECONDS * sampleRate);
   const fade = Math.round(NOISE_LOOP_CROSSFADE_SECONDS * sampleRate);
-  const next = createNoiseSource(type, makeRandom(seed));
+  const next = createNoiseSource(type, makeRandom(seed), sampleRate);
   const raw = new Float32Array(length + fade);
   for (let index = 0; index < raw.length; index += 1) raw[index] = next();
   const loop = raw.slice(0, length);
