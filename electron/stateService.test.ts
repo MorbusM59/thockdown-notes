@@ -66,7 +66,7 @@ describe('StateService app-state field round-trip', () => {
         : {
           ...channel,
           ...common,
-          surface: index === 9 ? 'forest' as const : channel.surface,
+          surface: index === 9 ? 0.3 : channel.surface,
           wash: index === 9 ? 0.42 : channel.wash,
           drips: index === 9 ? 0.18 : channel.drips,
           dropsPerSecond: index === 9 ? 38 : channel.dropsPerSecond,

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   AMBIENT_DEFAULT_MASTER_VOLUME,
   AMBIENT_NOISE_SLOT_TYPES,
-  AMBIENT_RAIN_SURFACES,
   AMBIENT_FACTORY_PRESETS,
   AMBIENT_PERIOD_MAX_SEC,
   AMBIENT_PERIOD_MIN_SEC,
@@ -49,7 +48,8 @@ describe('ambient sound configuration', () => {
           expect(channel.bassGain).toBeLessThanOrEqual(1);
           expect(channel.trebleGain).toBeGreaterThanOrEqual(0);
           expect(channel.trebleGain).toBeLessThanOrEqual(1);
-          expect(AMBIENT_RAIN_SURFACES).toContain(channel.surface);
+          expect(channel.surface).toBeGreaterThanOrEqual(0);
+          expect(channel.surface).toBeLessThanOrEqual(1);
           expect(channel.wash).toBeGreaterThanOrEqual(0);
           expect(channel.wash).toBeLessThanOrEqual(1);
           expect(channel.drips).toBeGreaterThanOrEqual(0);
@@ -434,7 +434,7 @@ describe('ambient rain distance', () => {
     });
     const settings = sanitizeAmbientSettings(legacyRain);
     for (const channel of settings.slice(9)) {
-      expect(channel).toMatchObject({ kind: 'rain', surface: 'glass', wash: 0, drips: 0 });
+      expect(channel).toMatchObject({ kind: 'rain', surface: 1, wash: 0, drips: 0 });
     }
   });
 
@@ -442,11 +442,15 @@ describe('ambient rain distance', () => {
     const input = DEFAULT_AMBIENT_SETTINGS.map((channel, index) => (
       channel.kind !== 'rain' ? channel
         : index === 9 ? { ...channel, surface: 'forest', wash: 3, drips: -1 }
-          : { ...channel, surface: 'lava' }
+          : index === 10 ? { ...channel, surface: 'lava' }
+            : { ...channel, surface: 1.7 }
     ));
     const settings = sanitizeAmbientSettings(input);
-    expect(settings[9]).toMatchObject({ surface: 'forest', wash: 1, drips: 0 });
-    expect(settings[10]).toMatchObject({ surface: 'street' });
+    // A name from before the scale is read as its anchor; an unknown name
+    // falls back to the default; a number is clamped into 0..1.
+    expect(settings[9]).toMatchObject({ surface: 0, wash: 1, drips: 0 });
+    expect(settings[10]).toMatchObject({ surface: 0.5 });
+    expect(settings[11]).toMatchObject({ surface: 1 });
   });
 
   it('treats master volume as a listener setting outside the soundscape', () => {
@@ -454,7 +458,7 @@ describe('ambient rain distance', () => {
     expect(sanitizeAmbientPreferences({ masterVolume: 4 }).masterVolume).toBe(1);
     expect(sanitizeAmbientPreferences({ masterVolume: 0.25 }).masterVolume).toBe(0.25);
     const surfaceChanged = DEFAULT_AMBIENT_SETTINGS.map((channel) => (
-      channel.kind === 'rain' ? { ...channel, surface: 'forest' as const } : channel
+      channel.kind === 'rain' ? { ...channel, surface: 0.3 } : channel
     ));
     expect(ambientSettingsSignature(surfaceChanged)).not.toBe(ambientSettingsSignature(DEFAULT_AMBIENT_SETTINGS));
   });

@@ -9,7 +9,7 @@ import {
   AMBIENT_RAIN_DENSITY_MIN,
   AMBIENT_RAIN_DRIPS_MAX_PER_SEC,
   AMBIENT_RAIN_FIRST_INDEX,
-  AMBIENT_RAIN_SURFACES,
+  AMBIENT_RAIN_SURFACE_ANCHORS,
   AMBIENT_SHAPE_MAX,
   AMBIENT_SHAPE_MIN,
   MAX_AMBIENT_CHANNELS,
@@ -28,7 +28,6 @@ import {
   type AmbientPreferences,
   type AmbientPreset,
   type AmbientRainChannelSettings,
-  type AmbientRainSurface,
   type AmbientSettings,
 } from '../shared/ambientSound'
 import { resolveNoiseTone } from '../shared/ambientSoundDsp'
@@ -70,10 +69,25 @@ function slotLook(index: number): { icon: string; label: string; number: number 
   return { ...NOISE_GROUP_LOOK[type], number: index - AMBIENT_NOISE_SLOT_TYPES.indexOf(type) + 1 }
 }
 
-const RAIN_SURFACE_LABELS: Record<AmbientRainSurface, string> = {
-  glass: 'Glass',
-  street: 'Street',
+const RAIN_SURFACE_LABELS: Record<(typeof AMBIENT_RAIN_SURFACE_ANCHORS)[number]['name'], string> = {
   forest: 'Forest',
+  street: 'Street',
+  glass: 'Glass',
+}
+
+/**
+ * The surface as read on its slider: an anchor's name at an anchor, and
+ * between two, how far it is from the softer toward the harder.
+ */
+function formatRainSurface(value: number): string {
+  const anchors = AMBIENT_RAIN_SURFACE_ANCHORS
+  const exact = anchors.find((anchor) => Math.abs(anchor.at - value) < 0.005)
+  if (exact) return RAIN_SURFACE_LABELS[exact.name]
+  const upperIndex = anchors.findIndex((anchor) => anchor.at > value)
+  const lower = anchors[upperIndex - 1]
+  const upper = anchors[upperIndex]
+  const share = Math.round(((value - lower.at) / (upper.at - lower.at)) * 100)
+  return `${RAIN_SURFACE_LABELS[lower.name]} → ${RAIN_SURFACE_LABELS[upper.name].toLowerCase()} ${share}%`
 }
 
 interface AmbientSoundOptionsProps {
@@ -102,10 +116,6 @@ function formatNoiseTone(value: number, type: AmbientNoiseType): string {
   if (tone.mode === 'none') return 'Neutral'
   const hz = tone.cutoffHz >= 1000 ? `${(tone.cutoffHz / 1000).toFixed(1)} kHz` : `${Math.round(tone.cutoffHz)} Hz`
   return `${tone.mode === 'lowpass' ? 'Dark' : 'Bright'} · ${hz}`
-}
-
-function surfaceIndex(surface: AmbientRainSurface): number {
-  return AMBIENT_RAIN_SURFACES.indexOf(surface)
 }
 
 /**
@@ -413,16 +423,16 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                 <CompactScrollbarSlider
                   id={`ambient-${channel.id}-surface`}
                   min={0}
-                  max={AMBIENT_RAIN_SURFACES.length - 1}
-                  step={1}
-                  value={surfaceIndex(channel.surface)}
+                  max={1}
+                  step={0.01}
+                  value={channel.surface}
                   trackLabel="surface"
-                  tooltipLabel="What the rain falls on: glass rings, the street splashes, the forest patters"
+                  tooltipLabel="What the rain falls on, soft to hard: leaves patter, the street splashes, glass rings -- and everything in between"
                   ariaLabel={`${layerName} surface`}
                   disabled={!channel.enabled}
-                  defaultValue={surfaceIndex(DEFAULT_RAIN_CHANNEL.surface)}
-                  formatValue={(value) => RAIN_SURFACE_LABELS[AMBIENT_RAIN_SURFACES[Math.round(value)]]}
-                  onCommit={(value) => updateRainChannel(channel.id, { surface: AMBIENT_RAIN_SURFACES[Math.round(value)] })}
+                  defaultValue={DEFAULT_RAIN_CHANNEL.surface}
+                  formatValue={formatRainSurface}
+                  onCommit={(value) => updateRainChannel(channel.id, { surface: value })}
                 />
                 <CompactScrollbarSlider
                   id={`ambient-${channel.id}-density`}

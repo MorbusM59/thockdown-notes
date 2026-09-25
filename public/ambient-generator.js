@@ -41,14 +41,14 @@
  */
 
 /**
- * How each rain surface turns a drop into sound. Every name in
- * AMBIENT_RAIN_SURFACES (src/shared/ambientSound.ts) must have an entry here;
- * ambient-generator.test.ts checks that.
- *
- * - `impact`: the drop's attack. `modal` is the original model -- a white
- *   noise click plus decaying sinusoidal modes, which rings like glass. `band`
- *   is a click of band-passed noise (centre and decay drawn from the ranges
- *   given), plus a few quieter modes for body.
+ * What rain falls on is one number, `surface`, from 0 to 1 -- softest to
+ * hardest -- and every drop, on any surface, is the same model:
+ * - `click`: the impact, a burst of noise whose amplitude and decay are
+ *   drawn from the ranges given. `white` blends it from band-passed (0,
+ *   centre and Q as given) to unfiltered white noise (1).
+ * - `bass`, `body`, `treble`: banks of decaying sinusoidal modes -- the
+ *   surface ringing. `count` modes per bank (an integer range), frequency
+ *   log-uniform in `hz`, decay and amplitude uniform in theirs.
  * - `bubbleChance`: the share of drops that also produce a bubble resonance
  *   (a drop entering standing water traps a small air bubble that rings at a
  *   pitch set by its radius and rises as it collapses toward the surface).
@@ -57,45 +57,97 @@
  *   `swellDepth` so it does not sound like a static noise generator.
  * - `drip`: a large, slow drop. `gain` scales it, `pitchScale` lowers its
  *   frequencies, `bubbleChance` replaces the surface's own.
+ *
+ * Three ANCHORS pin the scale: forest (0: a soft, low pat on leaves, a small
+ * thud, hardly a bubble), street (0.5: a sharp band-passed tick on pavement
+ * and, on a share of drops, the plip of a puddle) and glass (1: a white-noise
+ * click and many long-ringing modes -- hail on glass or on metal pipes).
+ * Between two anchors every number is blended (surfaceProfile): frequencies,
+ * times and rates geometrically, since that is how pitch and time are heard,
+ * and everything else linearly. So the bubble chance rises from the leaves
+ * to the pavement and falls again toward the glass -- water stands on hard,
+ * flat ground; leaves and glass shed it.
+ *
+ * Every anchor must match AMBIENT_RAIN_SURFACE_ANCHORS in
+ * src/shared/ambientSound.ts, name and position; ambient-generator.test.ts
+ * checks that.
  */
-const RAIN_SURFACE_PROFILES = {
-  glass: {
-    impact: { kind: 'modal' },
-    bubbleChance: 0,
-    bed: { ratePerSec: 900, centerHz: 6500, q: 0.7, floor: 0.12, gain: 0.5, swellDepth: 0.25 },
-    drip: { gain: 1.9, pitchScale: 0.55, bubbleChance: 0 },
-  },
-  street: {
-    impact: {
-      kind: 'band',
-      centerHz: [2200, 7500],
-      q: 0.9,
-      decaySec: [0.0012, 0.004],
-      amplitude: [1.1, 2],
-      durationSec: 0.12,
-      bassModes: { count: [1, 1], hz: [70, 190], decaySec: [0.006, 0.02], amplitude: [0.03, 0.07] },
-      bodyModes: { count: [0, 1], hz: [900, 2600], decaySec: [0.002, 0.006], amplitude: [0.01, 0.03] },
-    },
-    bubbleChance: 0.3,
-    bed: { ratePerSec: 2600, centerHz: 4200, q: 0.55, floor: 0.2, gain: 0.55, swellDepth: 0.3 },
-    drip: { gain: 2.2, pitchScale: 0.6, bubbleChance: 0.85 },
-  },
-  forest: {
-    impact: {
-      kind: 'band',
-      centerHz: [700, 2600],
-      q: 1.3,
-      decaySec: [0.004, 0.012],
-      amplitude: [1, 1.8],
-      durationSec: 0.2,
-      bassModes: { count: [1, 1], hz: [110, 320], decaySec: [0.015, 0.05], amplitude: [0.04, 0.09] },
-      bodyModes: { count: [1, 2], hz: [450, 1400], decaySec: [0.004, 0.012], amplitude: [0.012, 0.035] },
-    },
+const GLASS_TREBLE = { count: [1, 3], hz: [2100, 9200], decaySec: [0.004, 0.035], amplitude: [0.018, 0.075] };
+const NO_TREBLE = { ...GLASS_TREBLE, count: [0, 0] };
+const RAIN_SURFACE_ANCHORS = [
+  {
+    name: 'forest',
+    at: 0,
+    click: { white: 0, centerHz: [700, 2600], q: 1.3, decaySec: [0.004, 0.012], amplitude: [1, 1.8] },
+    durationSec: 0.2,
+    bass: { count: [1, 1], hz: [110, 320], decaySec: [0.015, 0.05], amplitude: [0.04, 0.09] },
+    body: { count: [1, 2], hz: [450, 1400], decaySec: [0.004, 0.012], amplitude: [0.012, 0.035] },
+    treble: NO_TREBLE,
     bubbleChance: 0.04,
     bed: { ratePerSec: 1700, centerHz: 1900, q: 0.8, floor: 0.16, gain: 0.6, swellDepth: 0.45 },
     drip: { gain: 3, pitchScale: 0.5, bubbleChance: 0.1 },
   },
-};
+  {
+    name: 'street',
+    at: 0.5,
+    click: { white: 0, centerHz: [2200, 7500], q: 0.9, decaySec: [0.0012, 0.004], amplitude: [1.1, 2] },
+    durationSec: 0.12,
+    bass: { count: [1, 1], hz: [70, 190], decaySec: [0.006, 0.02], amplitude: [0.03, 0.07] },
+    body: { count: [0, 1], hz: [900, 2600], decaySec: [0.002, 0.006], amplitude: [0.01, 0.03] },
+    treble: NO_TREBLE,
+    bubbleChance: 0.3,
+    bed: { ratePerSec: 2600, centerHz: 4200, q: 0.55, floor: 0.2, gain: 0.55, swellDepth: 0.3 },
+    drip: { gain: 2.2, pitchScale: 0.6, bubbleChance: 0.85 },
+  },
+  {
+    // The original rain model, exactly: its click and its three banks.
+    name: 'glass',
+    at: 1,
+    click: { white: 1, centerHz: [6000, 9000], q: 0.7, decaySec: [0.00065, 0.00065], amplitude: [0.24, 0.44] },
+    durationSec: 0.4,
+    bass: { count: [1, 2], hz: [85, 460], decaySec: [0.025, 0.095], amplitude: [0.035, 0.14] },
+    body: { count: [2, 4], hz: [360, 3400], decaySec: [0.009, 0.065], amplitude: [0.025, 0.105] },
+    treble: GLASS_TREBLE,
+    bubbleChance: 0,
+    bed: { ratePerSec: 900, centerHz: 6500, q: 0.7, floor: 0.12, gain: 0.5, swellDepth: 0.25 },
+    drip: { gain: 1.9, pitchScale: 0.55, bubbleChance: 0 },
+  },
+];
+
+/** Keys whose values blend geometrically (see RAIN_SURFACE_ANCHORS). */
+const GEOMETRIC_KEYS = new Set(['centerHz', 'hz', 'decaySec', 'durationSec', 'ratePerSec']);
+
+/** Two anchors' matching values blended at `t`, recursively. */
+function blendProfile(a, b, t, key) {
+  if (typeof a === 'number') {
+    return GEOMETRIC_KEYS.has(key) && a > 0 && b > 0
+      ? a * ((b / a) ** t)
+      : a + ((b - a) * t);
+  }
+  if (Array.isArray(a)) return a.map((value, index) => blendProfile(value, b[index], t, key));
+  if (a && typeof a === 'object') {
+    const blended = {};
+    for (const name of Object.keys(a)) {
+      // A blend lies between two anchors and is neither of them.
+      blended[name] = name === 'name' ? null : blendProfile(a[name], b[name], t, name);
+    }
+    return blended;
+  }
+  return a;
+}
+
+/** The drop model at `surface` (0-1), blended between its two anchors. */
+function surfaceProfile(surface) {
+  const at = Number.isFinite(surface) ? Math.max(0, Math.min(1, surface)) : 1;
+  for (let index = 1; index < RAIN_SURFACE_ANCHORS.length; index += 1) {
+    const lower = RAIN_SURFACE_ANCHORS[index - 1];
+    const upper = RAIN_SURFACE_ANCHORS[index];
+    if (at === lower.at) return lower;
+    if (at === upper.at) return upper;
+    if (at < upper.at) return blendProfile(lower, upper, (at - lower.at) / (upper.at - lower.at), '');
+  }
+  return RAIN_SURFACE_ANCHORS[RAIN_SURFACE_ANCHORS.length - 1];
+}
 
 /**
  * A noise layer's `movement` (0-1) at full: how far one cycle's period may
@@ -398,7 +450,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
    * the drip rate changed.
    */
   configureRain(channel, before) {
-    const profile = RAIN_SURFACE_PROFILES[channel.surface] ?? RAIN_SURFACE_PROFILES.glass;
+    const profile = surfaceProfile(channel.surface);
     channel.profile = profile;
     if (!channel.bed || before?.surface !== channel.surface) {
       channel.bed = {
@@ -527,8 +579,14 @@ class AmbientGenerator extends AudioWorkletProcessor {
     return modes;
   }
 
+  /**
+   * A bank of modes from a profile's spec: an integer count drawn uniformly
+   * from its range, frequencies scaled by `pitchScale` (a drip is lower).
+   */
   makeModesFromSpec(spec, pitchScale) {
-    const count = Math.round(this.between(spec.count));
+    const low = Math.round(spec.count[0]);
+    const high = Math.round(spec.count[1]);
+    const count = low + Math.floor(this.random() * (high - low + 1));
     return this.makeRainModes(
       count,
       spec.hz[0] * pitchScale,
@@ -552,32 +610,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
     return sample;
   }
 
-  /**
-   * The glass drop: the original rain model, kept draw-for-draw so its
-   * sound does not change. A white-noise click (`transientFilter` null) and
-   * three banks of ringing modes.
-   */
-  makeRainVoice() {
-    return {
-      age: 0,
-      durationFrames: Math.ceil(sampleRate * 0.4),
-      gain: 1,
-      transientAmplitude: 0.24 + (this.random() * 0.2),
-      transientDecay: Math.exp(-1 / (sampleRate * 0.00065)),
-      transientFilter: null,
-      clickSeed: 0,
-      bassModes: this.makeRainModes(
-        1 + Math.floor(this.random() * 2), 85, 460, 0.025, 0.095, 0.035, 0.14,
-      ),
-      bodyModes: this.makeRainModes(
-        2 + Math.floor(this.random() * 3), 360, 3400, 0.009, 0.065, 0.025, 0.105,
-      ),
-      trebleModes: this.makeRainModes(
-        1 + Math.floor(this.random() * 3), 2100, 9200, 0.004, 0.035, 0.018, 0.075,
-      ),
-      bubble: null,
-    };
-  }
+
 
   /**
    * A bubble resonance, after van den Doel's model of liquid sounds: a
@@ -631,35 +664,28 @@ class AmbientGenerator extends AudioWorkletProcessor {
   }
 
   /**
-   * One drop on a surface. A drip is the same drop made larger: louder,
-   * lower, and with its own chance of a (larger) bubble.
+   * One drop on the surface `profile` describes (surfaceProfile). A drip is
+   * the same drop made larger: louder, lower, its click slower and its life
+   * twice as long, with its own chance of a (larger) bubble.
    */
   makeSurfaceVoice(profile, isDrip) {
-    if (profile.impact.kind === 'modal') {
-      const voice = this.makeRainVoice();
-      if (isDrip) {
-        voice.gain = profile.drip.gain;
-        for (const bank of [voice.bassModes, voice.bodyModes, voice.trebleModes]) {
-          for (const mode of bank) this.retuneMode(mode, profile.drip.pitchScale);
-        }
-      }
-      return voice;
-    }
-    const impact = profile.impact;
+    const click = profile.click;
     const pitchScale = isDrip ? profile.drip.pitchScale : 1;
-    const decaySec = this.between(impact.decaySec) * (isDrip ? 1.8 : 1);
+    const decaySec = this.between(click.decaySec) * (isDrip ? 1.8 : 1);
     const bubbleChance = isDrip ? profile.drip.bubbleChance : profile.bubbleChance;
     const voice = {
       age: 0,
-      durationFrames: Math.ceil(sampleRate * impact.durationSec * (isDrip ? 2 : 1)),
+      durationFrames: Math.ceil(sampleRate * profile.durationSec * (isDrip ? 2 : 1)),
       gain: isDrip ? profile.drip.gain : 1,
-      transientAmplitude: this.between(impact.amplitude),
+      transientAmplitude: this.between(click.amplitude),
       transientDecay: Math.exp(-1 / (sampleRate * decaySec)),
-      transientFilter: stateVariableFilter(this.between(impact.centerHz) * pitchScale, impact.q),
+      // Fully white needs no filter at all; anything less blends one in.
+      transientFilter: click.white >= 1 ? null : stateVariableFilter(this.between(click.centerHz) * pitchScale, click.q),
+      transientWhite: click.white,
       clickSeed: 0,
-      bassModes: this.makeModesFromSpec(impact.bassModes, pitchScale),
-      bodyModes: this.makeModesFromSpec(impact.bodyModes, pitchScale),
-      trebleModes: [],
+      bassModes: this.makeModesFromSpec(profile.bass, pitchScale),
+      bodyModes: this.makeModesFromSpec(profile.body, pitchScale),
+      trebleModes: this.makeModesFromSpec(profile.treble, pitchScale),
       bubble: null,
     };
     if (bubbleChance > 0 && this.random() < bubbleChance) {
@@ -670,12 +696,6 @@ class AmbientGenerator extends AudioWorkletProcessor {
     return voice;
   }
 
-  retuneMode(mode, pitchScale) {
-    mode.frequency *= pitchScale;
-    const angle = (Math.PI * 2 * mode.frequency) / sampleRate;
-    mode.rotationSin = Math.sin(angle);
-    mode.rotationCos = Math.cos(angle);
-  }
 
   /**
    * The bed, a block at a time, added into `out`: sparse random impulses plus
@@ -903,6 +923,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
     const trebleGain = channel.trebleGain;
     const gain = voice.gain;
     const filter = voice.transientFilter;
+    const white = voice.transientWhite ?? 0;
     const decay = voice.transientDecay;
     let clickAmplitude = voice.transientAmplitude;
     let seed = voice.clickSeed;
@@ -917,9 +938,9 @@ class AmbientGenerator extends AudioWorkletProcessor {
         const click = ((seed / 0x100000000) * 2 - 1) * clickAmplitude;
         clickAmplitude *= decay;
         if (clickAmplitude < SILENCE) clickAmplitude = 0;
-        high = filter ? bandPass(filter, click) : click;
+        high = filter ? (white * click) + ((1 - white) * bandPass(filter, click)) : click;
       } else if (filterActive) {
-        high = bandPass(filter, 0);
+        high = (1 - white) * bandPass(filter, 0);
         filterActive = Math.abs(filter.s1) + Math.abs(filter.s2) > SILENCE;
       }
       high += this.sampleRainModes(voice.trebleModes);

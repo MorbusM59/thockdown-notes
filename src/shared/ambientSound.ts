@@ -37,18 +37,31 @@ export function noiseTypeForSlot(index: number): AmbientNoiseType {
 }
 
 /**
- * What a rain layer's drops land on. Each is a different impact model, not a
- * different filter over one sound:
- * - `glass`: every drop rings a handful of decaying sinusoidal modes -- a
- *   bright, pitched tick, like hail on glass or on metal pipes.
- * - `street`: a very short band-passed noise click on a hard surface, and on
- *   a share of drops a rising-pitch bubble resonance (the "plip" of a drop
- *   entering standing water).
- * - `forest`: a softer, lower pat on leaves with a small thud underneath and
+ * What a rain layer's drops land on, as one number from 0 (softest) to 1
+ * (hardest). Every drop is the same model, and its parameters are blended
+ * between three anchors (public/ambient-generator.js's surfaceProfile), each
+ * a different kind of impact rather than a different filter over one sound:
+ * - forest (0): a soft, low pat on leaves with a small thud underneath and
  *   hardly any bubbles.
+ * - street (0.5): a very short band-passed click on a hard surface, and on a
+ *   share of drops a rising-pitch bubble resonance (the "plip" of a drop
+ *   entering standing water).
+ * - glass (1): every drop rings a handful of decaying sinusoidal modes -- a
+ *   bright, pitched tick, like hail on glass or on metal pipes.
+ * Between them lie surfaces no anchor names -- soil or a wooden deck toward
+ * the leaves, a car or tin roof toward the glass -- blended, not modelled.
  */
-export const AMBIENT_RAIN_SURFACES = ['glass', 'street', 'forest'] as const;
-export type AmbientRainSurface = (typeof AMBIENT_RAIN_SURFACES)[number];
+export const AMBIENT_RAIN_SURFACE_ANCHORS = [
+  { name: 'forest', at: 0 },
+  { name: 'street', at: 0.5 },
+  { name: 'glass', at: 1 },
+] as const;
+export type AmbientRainSurfaceName = (typeof AMBIENT_RAIN_SURFACE_ANCHORS)[number]['name'];
+
+/** The position of a named anchor on the surface scale. */
+export function rainSurfaceAt(name: AmbientRainSurfaceName): number {
+  return AMBIENT_RAIN_SURFACE_ANCHORS.find((anchor) => anchor.name === name)!.at;
+}
 
 export interface AmbientChannelBaseSettings {
   id: string;
@@ -95,7 +108,8 @@ export interface AmbientNoiseChannelSettings extends AmbientChannelBaseSettings 
 
 export interface AmbientRainChannelSettings extends AmbientChannelBaseSettings {
   kind: 'rain';
-  surface: AmbientRainSurface;
+  /** 0 (softest: leaves) to 1 (hardest: glass); see AMBIENT_RAIN_SURFACE_ANCHORS. */
+  surface: number;
   /** Individually audible nearby drops per second. */
   dropsPerSecond: number;
   /**
@@ -201,7 +215,7 @@ export const DEFAULT_RAIN_CHANNEL: Readonly<Omit<AmbientRainChannelSettings, 'id
   enabled: true,
   solo: false,
   volume: 0.2,
-  surface: 'street',
+  surface: rainSurfaceAt('street'),
   dropsPerSecond: AMBIENT_RAIN_DEFAULT_DENSITY,
   wash: 0.5,
   drips: 0.2,
@@ -296,7 +310,7 @@ function migrateLegacyAmbientSettings(input: unknown): AmbientSettings {
   return fillAmbientSlots([
     ...noiseSlots,
     makeDefaultRainChannel('rain', {
-      surface: 'glass',
+      surface: rainSurfaceAt('glass'),
       wash: 0,
       drips: 0,
       volume: finiteRange(rawRain.volume, 0, 1, legacyRain.volume),
@@ -386,36 +400,36 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
     ocean: { volume: 0.04, texture: 0.2 },
     rain: { volume: 0.68, texture: 0.62 },
   }, [
-    { enabled: true, surface: 'glass', wash: 0, drips: 0, volume: 0.32, dropsPerSecond: 18, distance: 0.12, pan: -0.65, bassGain: 0.7, trebleGain: 0.72 },
-    { enabled: true, surface: 'glass', wash: 0, drips: 0, volume: 0.23, dropsPerSecond: 26, distance: 0.55, pan: 0, bassGain: 0.55, trebleGain: 0.52 },
-    { enabled: true, surface: 'glass', wash: 0, drips: 0, volume: 0.16, dropsPerSecond: 36, distance: 0.92, pan: 0.65, bassGain: 0.42, trebleGain: 0.34 },
+    { enabled: true, surface: 1, wash: 0, drips: 0, volume: 0.32, dropsPerSecond: 18, distance: 0.12, pan: -0.65, bassGain: 0.7, trebleGain: 0.72 },
+    { enabled: true, surface: 1, wash: 0, drips: 0, volume: 0.23, dropsPerSecond: 26, distance: 0.55, pan: 0, bassGain: 0.55, trebleGain: 0.52 },
+    { enabled: true, surface: 1, wash: 0, drips: 0, volume: 0.16, dropsPerSecond: 36, distance: 0.92, pan: 0.65, bassGain: 0.42, trebleGain: 0.34 },
   ]),
   preset('street', 'Rain on the street', {
     wind: { volume: 0.05, texture: 0.2 },
     ocean: { volume: 0, texture: 0.2 },
     rain: { volume: 0, texture: 0.35 },
   }, [
-    { enabled: true, surface: 'street', volume: 0.3, dropsPerSecond: 22, wash: 0.35, drips: 0.35, distance: 0.08, pan: -0.55, bassGain: 0.35, trebleGain: 0.7 },
-    { enabled: true, surface: 'street', volume: 0.34, dropsPerSecond: 40, wash: 0.7, drips: 0, distance: 0.45, pan: 0.1, bassGain: 0.4, trebleGain: 0.55 },
-    { enabled: true, surface: 'street', volume: 0.26, dropsPerSecond: 60, wash: 0.9, drips: 0, distance: 0.9, pan: 0.6, bassGain: 0.5, trebleGain: 0.4 },
+    { enabled: true, surface: 0.5, volume: 0.3, dropsPerSecond: 22, wash: 0.35, drips: 0.35, distance: 0.08, pan: -0.55, bassGain: 0.35, trebleGain: 0.7 },
+    { enabled: true, surface: 0.5, volume: 0.34, dropsPerSecond: 40, wash: 0.7, drips: 0, distance: 0.45, pan: 0.1, bassGain: 0.4, trebleGain: 0.55 },
+    { enabled: true, surface: 0.5, volume: 0.26, dropsPerSecond: 60, wash: 0.9, drips: 0, distance: 0.9, pan: 0.6, bassGain: 0.5, trebleGain: 0.4 },
   ]),
   preset('forest', 'Forest rain', {
     wind: { volume: 0.12, texture: 0.35 },
     ocean: { volume: 0, texture: 0.2 },
     rain: { volume: 0, texture: 0.35 },
   }, [
-    { enabled: true, surface: 'forest', volume: 0.3, dropsPerSecond: 14, wash: 0.3, drips: 0.55, distance: 0.1, pan: -0.5, bassGain: 0.6, trebleGain: 0.55 },
-    { enabled: true, surface: 'forest', volume: 0.32, dropsPerSecond: 32, wash: 0.65, drips: 0.2, distance: 0.5, pan: 0.15, bassGain: 0.5, trebleGain: 0.5 },
-    { enabled: true, surface: 'forest', volume: 0.24, dropsPerSecond: 50, wash: 0.85, drips: 0, distance: 0.92, pan: 0.65, bassGain: 0.45, trebleGain: 0.35 },
+    { enabled: true, surface: 0, volume: 0.3, dropsPerSecond: 14, wash: 0.3, drips: 0.55, distance: 0.1, pan: -0.5, bassGain: 0.6, trebleGain: 0.55 },
+    { enabled: true, surface: 0, volume: 0.32, dropsPerSecond: 32, wash: 0.65, drips: 0.2, distance: 0.5, pan: 0.15, bassGain: 0.5, trebleGain: 0.5 },
+    { enabled: true, surface: 0, volume: 0.24, dropsPerSecond: 50, wash: 0.85, drips: 0, distance: 0.92, pan: 0.65, bassGain: 0.45, trebleGain: 0.35 },
   ]),
   preset('storm', 'Passing storm', {
     wind: { volume: 0.42, texture: 0.78 },
     ocean: { volume: 0.42, texture: 0.72 },
     rain: { volume: 0.46, texture: 0.82 },
   }, [
-    { enabled: true, surface: 'street', volume: 0.46, dropsPerSecond: 44, wash: 0.8, drips: 0.4, distance: 0.12, pan: -0.65, bassGain: 0.6, trebleGain: 0.64 },
-    { enabled: true, surface: 'street', volume: 0.42, dropsPerSecond: 60, wash: 1, drips: 0, distance: 0.55, pan: 0, bassGain: 0.55, trebleGain: 0.5 },
-    { enabled: true, surface: 'forest', volume: 0.34, dropsPerSecond: 60, wash: 1, drips: 0, distance: 0.92, pan: 0.65, bassGain: 0.5, trebleGain: 0.35 },
+    { enabled: true, surface: 0.5, volume: 0.46, dropsPerSecond: 44, wash: 0.8, drips: 0.4, distance: 0.12, pan: -0.65, bassGain: 0.6, trebleGain: 0.64 },
+    { enabled: true, surface: 0.5, volume: 0.42, dropsPerSecond: 60, wash: 1, drips: 0, distance: 0.55, pan: 0, bassGain: 0.55, trebleGain: 0.5 },
+    { enabled: true, surface: 0, volume: 0.34, dropsPerSecond: 60, wash: 1, drips: 0, distance: 0.92, pan: 0.65, bassGain: 0.5, trebleGain: 0.35 },
   ]),
   preset('ocean', 'Open water', {
     wind: { volume: 0.14, texture: 0.3 },
@@ -490,6 +504,20 @@ function regroupNoiseByType(raw: unknown[]): unknown[] {
   return [...slots.map((item) => item ?? { enabled: false }), ...raw.slice(AMBIENT_NOISE_CHANNEL_COUNT)];
 }
 
+/**
+ * A saved surface: a number is read as is; a name (from before the surface
+ * became a scale) as its anchor's position; nothing at all as glass, which
+ * is the only rain there was before surfaces existed.
+ */
+function readRainSurface(value: unknown, predatesSurfaces: boolean): number {
+  if (predatesSurfaces) return rainSurfaceAt('glass');
+  if (typeof value === 'string') {
+    const anchor = AMBIENT_RAIN_SURFACE_ANCHORS.find((candidate) => candidate.name === value);
+    return anchor ? anchor.at : DEFAULT_RAIN_CHANNEL.surface;
+  }
+  return finiteUnit(value, DEFAULT_RAIN_CHANNEL.surface);
+}
+
 function finiteUnit(value: unknown, fallback: number): number {
   return finiteRange(value, 0, 1, fallback);
 }
@@ -536,9 +564,7 @@ export function sanitizeAmbientSettings(input: unknown): AmbientSettings {
       return {
         ...common,
         kind: 'rain' as const,
-        surface: AMBIENT_RAIN_SURFACES.includes(source.surface as AmbientRainSurface)
-          ? source.surface as AmbientRainSurface
-          : predatesSurfaces ? 'glass' as const : DEFAULT_RAIN_CHANNEL.surface,
+        surface: readRainSurface(source.surface, predatesSurfaces),
         wash: finiteUnit(source.wash, predatesSurfaces ? 0 : DEFAULT_RAIN_CHANNEL.wash),
         drips: finiteUnit(source.drips, predatesSurfaces ? 0 : DEFAULT_RAIN_CHANNEL.drips),
         dropsPerSecond: Math.round(finiteRange(

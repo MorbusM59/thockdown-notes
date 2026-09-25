@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AMBIENT_RAIN_DRIPS_MAX_PER_SEC,
   AMBIENT_RAIN_FIRST_INDEX,
-  AMBIENT_RAIN_SURFACES,
+  AMBIENT_RAIN_SURFACE_ANCHORS,
   createAmbientChannel,
   createAmbientRainChannel,
 } from '../shared/ambientSound';
@@ -16,7 +16,7 @@ import { buildNoiseCycle } from '../shared/ambientNoiseCycle';
 // The worklet's module-scope constants are not reachable from outside a vm
 // script, so the test appends one line exposing the ones it checks.
 const generatorSource = `${readFileSync(fileURLToPath(new URL('../../public/ambient-generator.js', import.meta.url)), 'utf8')}
-;globalThis.__generatorConstants = { RAIN_SURFACE_PROFILES, RAIN_DRIPS_MAX_PER_SEC };`;
+;globalThis.__generatorConstants = { RAIN_SURFACE_ANCHORS, RAIN_DRIPS_MAX_PER_SEC, surfaceProfile };`;
 
 type TestProcessor = {
   channels: Array<{ id: string; eventAge: number; activeVoices: unknown[]; profile?: unknown }>;
@@ -97,7 +97,8 @@ type GlassVoice = {
 };
 
 type GeneratorConstants = {
-  RAIN_SURFACE_PROFILES: Record<string, unknown>;
+  RAIN_SURFACE_ANCHORS: { name: string; at: number }[];
+  surfaceProfile: (surface: number) => Record<string, any>;
   RAIN_DRIPS_MAX_PER_SEC: number;
 };
 
@@ -308,7 +309,8 @@ describe('ambient AudioWorklet generator', () => {
 
   it('varies resonant frequencies widely from drop to drop instead of repeating a fixed comb', () => {
     const generator = createProcessor(419, makeRainSlots([makeRainChannel('rain')]));
-    const voices = Array.from({ length: 12 }, () => generator.processor.makeRainVoice());
+    const glass = generator.constants.surfaceProfile(1);
+    const voices = Array.from({ length: 12 }, () => generator.processor.makeSurfaceVoice(glass, false) as unknown as ReturnType<TestProcessor['makeRainVoice']>);
     const bodyFrequencies = voices.flatMap((voice) => voice.bodyModes.map((mode) => mode.frequency));
 
     expect(new Set(bodyFrequencies.map((frequency) => Math.round(frequency))).size).toBeGreaterThan(20);
@@ -332,7 +334,8 @@ describe('ambient AudioWorklet generator', () => {
   });
   it('has a synthesis profile for every rain surface the settings can name', () => {
     const { constants } = createProcessor(1, []);
-    expect(Object.keys(constants.RAIN_SURFACE_PROFILES).sort()).toEqual([...AMBIENT_RAIN_SURFACES].sort());
+    expect(constants.RAIN_SURFACE_ANCHORS.map(({ name, at }) => ({ name, at })))
+      .toEqual(AMBIENT_RAIN_SURFACE_ANCHORS.map(({ name, at }) => ({ name, at })));
     expect(constants.RAIN_DRIPS_MAX_PER_SEC).toBe(AMBIENT_RAIN_DRIPS_MAX_PER_SEC);
   });
 
@@ -344,7 +347,7 @@ describe('ambient AudioWorklet generator', () => {
   // not what is heard. (The click is white noise; its own test is below.)
   it('rings a glass drop exactly as the original per-sample formula did', () => {
     const generator = createProcessor(4242, [], 48000);
-    const glass = generator.constants.RAIN_SURFACE_PROFILES.glass;
+    const glass = generator.constants.surfaceProfile(1);
     const voice = generator.processor.makeSurfaceVoice(glass, false);
     voice.transientAmplitude = 0;
     voice.startOffset = 0;
@@ -382,7 +385,7 @@ describe('ambient AudioWorklet generator', () => {
 
   it('gives a glass drop a click that is white, starts at its drawn level and dies within milliseconds', () => {
     const generator = createProcessor(17, [], 48000);
-    const glass = generator.constants.RAIN_SURFACE_PROFILES.glass;
+    const glass = generator.constants.surfaceProfile(1);
     const voice = generator.processor.makeSurfaceVoice(glass, false);
     const level = voice.transientAmplitude;
     for (const bank of [voice.bassModes, voice.bodyModes, voice.trebleModes]) {
@@ -409,9 +412,9 @@ describe('ambient AudioWorklet generator', () => {
       ...Array.from({ length: AMBIENT_RAIN_FIRST_INDEX }, (_, index) => makeChannel(`noise-${index}`, {
         enabled: index < 2, type: index === 0 ? 'pink' : 'brown', movement: 0.8, periodSec: 0.6,
       })),
-      makeRainChannel('glass', { surface: 'glass', wash: 0.4, drips: 0.5, dropsPerSecond: 40 }),
-      makeRainChannel('street', { surface: 'street', wash: 1, drips: 1, dropsPerSecond: 60 }),
-      makeRainChannel('forest', { surface: 'forest', wash: 0.7, drips: 1, dropsPerSecond: 50 }),
+      makeRainChannel('glass', { surface: 1, wash: 0.4, drips: 0.5, dropsPerSecond: 40 }),
+      makeRainChannel('street', { surface: 0.5, wash: 1, drips: 1, dropsPerSecond: 60 }),
+      makeRainChannel('forest', { surface: 0, wash: 0.7, drips: 1, dropsPerSecond: 50 }),
     ];
     const large = createProcessor(88, layers(), 16000, 128).render(3);
     const small = createProcessor(88, layers(), 16000, 32).render(3);
@@ -437,9 +440,9 @@ describe('ambient AudioWorklet generator', () => {
   });
 
   it('gives the forest a darker impact than the street', () => {
-    const zeroCrossingsPerSecond = (surface: 'street' | 'forest') => {
+    const zeroCrossingsPerSecond = (surface: number) => {
       const samples = createProcessor(29, makeRainSlots([
-        makeRainChannel(surface, { surface, wash: 0, drips: 0, dropsPerSecond: 40, bassGain: 0 }),
+        makeRainChannel(String(surface), { surface, wash: 0, drips: 0, dropsPerSecond: 40, bassGain: 0 }),
       ]), 48000).render(3).rain[0];
       let crossings = 0;
       for (let index = 1; index < samples.length; index += 1) {
@@ -447,7 +450,7 @@ describe('ambient AudioWorklet generator', () => {
       }
       return crossings / 3;
     };
-    expect(zeroCrossingsPerSecond('forest')).toBeLessThan(zeroCrossingsPerSecond('street') * 0.85);
+    expect(zeroCrossingsPerSecond(0)).toBeLessThan(zeroCrossingsPerSecond(0.5) * 0.85);
   });
 
   it('fills the gaps between drops with the wash, and only when asked', () => {
@@ -491,9 +494,9 @@ describe('ambient AudioWorklet generator', () => {
   });
 
   it('stays finite and bounded on every surface at every control extreme', () => {
-    for (const surface of AMBIENT_RAIN_SURFACES) {
+    for (const surface of [0, 0.25, 0.5, 0.75, 1]) {
       const samples = createProcessor(61, makeRainSlots([
-        makeRainChannel(surface, { surface, wash: 1, drips: 1, dropsPerSecond: 60, bassGain: 1, trebleGain: 1 }),
+        makeRainChannel(String(surface), { surface, wash: 1, drips: 1, dropsPerSecond: 60, bassGain: 1, trebleGain: 1 }),
       ]), 48000).render(2).rain[0];
       expect(samples.every((sample) => Number.isFinite(sample) && Math.abs(sample) < 8)).toBe(true);
       expect(rms(samples)).toBeGreaterThan(0.005);
@@ -662,7 +665,7 @@ describe('ambient AudioWorklet generator', () => {
       expect(rainOf(generator).dropBank.length).toBe(32);
       configure({ distance: 0.9, pan: 0.4, wash: 0.2, volume: 0.1 });
       expect(rainOf(generator).dropBank.length).toBe(32);
-      for (const change of [{ trebleGain: 0.1 }, { bassGain: 0.9 }, { surface: 'glass' as const }]) {
+      for (const change of [{ trebleGain: 0.1 }, { bassGain: 0.9 }, { surface: 1 }]) {
         configure(change);
         expect(rainOf(generator).dropBank.length).toBe(0);
         generator.render(4);
@@ -759,6 +762,40 @@ describe('ambient AudioWorklet generator', () => {
       const after = generator.render(0.01).left;
       // The first sample after the move continues from the last one before it.
       expect(Math.abs(after[0] - before.at(-1)!)).toBeLessThan(0.2);
+    });
+  });
+  describe('surface scale', () => {
+    const { constants } = createProcessor(1, [], 48000);
+    const profile = constants.surfaceProfile;
+
+    it('is each anchor exactly at its own position', () => {
+      for (const anchor of constants.RAIN_SURFACE_ANCHORS) {
+        expect(profile(anchor.at)).toEqual(anchor);
+      }
+    });
+
+    it('blends pitch and time geometrically and the rest linearly between anchors', () => {
+      const [forest, street] = constants.RAIN_SURFACE_ANCHORS as unknown as Record<string, any>[];
+      const halfway = profile(0.25);
+      expect(halfway.click.centerHz[0]).toBeCloseTo(Math.sqrt(forest.click.centerHz[0] * street.click.centerHz[0]), 6);
+      expect(halfway.durationSec).toBeCloseTo(Math.sqrt(forest.durationSec * street.durationSec), 9);
+      expect(halfway.bubbleChance).toBeCloseTo((forest.bubbleChance + street.bubbleChance) / 2, 9);
+    });
+
+    it('has puddles only where water stands: most at the street, least at the ends', () => {
+      const chances = [0, 0.25, 0.5, 0.75, 1].map((at) => profile(at).bubbleChance);
+      expect(Math.max(...chances)).toBe(chances[2]);
+      expect(chances[4]).toBe(0);
+    });
+
+    it('grows brighter, harder and longer-ringing from the leaves to the glass', () => {
+      const steps = [0, 0.2, 0.4, 0.6, 0.8, 1].map(profile);
+      for (let index = 1; index < steps.length; index += 1) {
+        expect(steps[index].bed.centerHz).toBeGreaterThan(steps[index - 1].bed.centerHz);
+      }
+      // Ringing: the most treble modes a drop may have rises toward the glass.
+      expect(steps[5].treble.count[1]).toBeGreaterThan(steps[3].treble.count[1]);
+      expect(steps[3].treble.count[1]).toBeGreaterThan(steps[0].treble.count[1]);
     });
   });
 });
