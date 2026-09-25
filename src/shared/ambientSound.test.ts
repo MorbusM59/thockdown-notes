@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AMBIENT_RAIN_FIRST_INDEX,
+  AMBIENT_THUNDER_FIRST_INDEX,
+  AMBIENT_THUNDER_DEFAULT_PANS,
+  AMBIENT_THUNDER_LENGTH_MIN_SEC,
+  AMBIENT_THUNDER_LENGTH_MAX_SEC,
+  AMBIENT_THUNDER_PEALS_MIN,
+  AMBIENT_THUNDER_PEALS_MAX,
+  DEFAULT_THUNDER_CHANNEL,
   AMBIENT_DEFAULT_MASTER_VOLUME,
   AMBIENT_NOISE_SLOT_TYPES,
   AMBIENT_FACTORY_PRESETS,
@@ -32,7 +40,7 @@ describe('ambient sound configuration', () => {
     for (const preset of AMBIENT_FACTORY_PRESETS) {
       expect(preset.settings).toHaveLength(MAX_AMBIENT_CHANNELS);
       expect(preset.settings.filter((channel) => channel.enabled)).toHaveLength(
-        ['rain', 'street', 'forest', 'storm'].includes(preset.id) ? 5 : 3,
+        preset.id === 'storm' ? 7 : ['rain', 'street', 'forest'].includes(preset.id) ? 5 : 3,
       );
       for (const channel of preset.settings) {
         expect(channel.volume).toBeGreaterThanOrEqual(0);
@@ -54,6 +62,15 @@ describe('ambient sound configuration', () => {
           expect(channel.wash).toBeLessThanOrEqual(1);
           expect(channel.drips).toBeGreaterThanOrEqual(0);
           expect(channel.drips).toBeLessThanOrEqual(1);
+        } else if (channel.kind === 'thunder') {
+          expect(channel.pealsPer10Min).toBeGreaterThanOrEqual(AMBIENT_THUNDER_PEALS_MIN);
+          expect(channel.pealsPer10Min).toBeLessThanOrEqual(AMBIENT_THUNDER_PEALS_MAX);
+          expect(channel.lengthSec).toBeGreaterThanOrEqual(AMBIENT_THUNDER_LENGTH_MIN_SEC);
+          expect(channel.lengthSec).toBeLessThanOrEqual(AMBIENT_THUNDER_LENGTH_MAX_SEC);
+          expect(channel.distance).toBeGreaterThanOrEqual(0);
+          expect(channel.distance).toBeLessThanOrEqual(1);
+          expect(channel.spread).toBeGreaterThanOrEqual(0);
+          expect(channel.spread).toBeLessThanOrEqual(1);
         } else {
           expect(channel.modulationAmplitude).toBeGreaterThanOrEqual(0);
           expect(channel.modulationAmplitude).toBeLessThanOrEqual(1);
@@ -68,7 +85,7 @@ describe('ambient sound configuration', () => {
         }
       }
     }
-    expect(AMBIENT_FACTORY_PRESETS[0].settings.slice(9).every((channel) => channel.enabled)).toBe(true);
+    expect(AMBIENT_FACTORY_PRESETS[0].settings.slice(AMBIENT_RAIN_FIRST_INDEX, AMBIENT_THUNDER_FIRST_INDEX).every((channel) => channel.enabled)).toBe(true);
   });
 
   it('migrates saved Wind and Ocean settings into their noise groups and moves Rain into its dedicated slot', () => {
@@ -79,39 +96,76 @@ describe('ambient sound configuration', () => {
     expect(settings).toHaveLength(MAX_AMBIENT_CHANNELS);
     // Ocean was brown noise: the first brown slot. Wind was pink: the first pink slot.
     expect(settings[0]).toMatchObject({ id: 'ocean', volume: DEFAULT_AMBIENT_SETTINGS[0].volume });
-    expect(settings[3]).toMatchObject({ id: 'wind', volume: 1, modulationAmplitude: 0 });
+    expect(settings[2]).toMatchObject({ id: 'wind', volume: 1, modulationAmplitude: 0 });
     expect(settings[1]).toMatchObject({ id: 'ambient-layer-2', kind: 'noise', enabled: false });
-    expect(settings[4]).toMatchObject({ enabled: false, filter: 0.5 });
-    expect(settings[9]).toMatchObject({ id: 'rain', kind: 'rain', volume: 0, dropsPerSecond: 42 });
+    expect(settings[3]).toMatchObject({ enabled: false, filter: 0.5 });
+    expect(settings[AMBIENT_RAIN_FIRST_INDEX]).toMatchObject({ id: 'rain', kind: 'rain', volume: 0, dropsPerSecond: 42 });
   });
 
-  it('normalizes the final three saved slots as rain while preserving common channel state', () => {
+  it('normalizes each slot by its position: noise, then rain, then thunder, keeping common channel state', () => {
     const input = Array.from({ length: MAX_AMBIENT_CHANNELS }, (_, index) => ({
       id: `slot-${index + 1}`,
-      enabled: index >= 9,
-      solo: index === 10,
-      volume: 0.1 * (index + 1),
+      enabled: index >= AMBIENT_RAIN_FIRST_INDEX,
+      solo: index === AMBIENT_RAIN_FIRST_INDEX + 1,
+      volume: 0.05 * (index + 1),
       densityPer10Sec: 40,
       filter: 0.25,
     }));
     const settings = sanitizeAmbientSettings(input);
+    const rain = settings.slice(AMBIENT_RAIN_FIRST_INDEX, AMBIENT_THUNDER_FIRST_INDEX);
+    const thunder = settings.slice(AMBIENT_THUNDER_FIRST_INDEX);
 
-    expect(settings.slice(0, 9).every((channel) => channel.kind === 'noise')).toBe(true);
-    expect(settings.slice(9).map((channel) => channel.kind)).toEqual(['rain', 'rain', 'rain']);
-    expect(settings.slice(9).map((channel) => channel.kind === 'rain' ? channel.dropsPerSecond : null))
-      .toEqual([4, 4, 4]);
-    expect(settings.slice(9).map((channel) => channel.kind === 'rain' ? channel.pan : null))
-      .toEqual(AMBIENT_RAIN_DEFAULT_PANS);
-    expect(settings[10]).toMatchObject({ id: 'slot-11', enabled: true, solo: true, volume: 1, distance: 0.5 });
+    expect(settings.slice(0, AMBIENT_RAIN_FIRST_INDEX).every((channel) => channel.kind === 'noise')).toBe(true);
+    expect(rain.map((channel) => channel.kind)).toEqual(['rain', 'rain', 'rain']);
+    expect(rain.map((channel) => channel.kind === 'rain' ? channel.dropsPerSecond : null)).toEqual([4, 4, 4]);
+    expect(rain.map((channel) => channel.kind === 'rain' ? channel.pan : null)).toEqual(AMBIENT_RAIN_DEFAULT_PANS);
+    expect(settings[AMBIENT_RAIN_FIRST_INDEX + 1]).toMatchObject({ id: 'slot-8', enabled: true, solo: true, volume: 0.4, distance: 0.5 });
+    expect(thunder.map((channel) => channel.kind)).toEqual(['thunder', 'thunder', 'thunder']);
+    expect(thunder.map((channel) => channel.kind === 'thunder' ? channel.pan : null)).toEqual(AMBIENT_THUNDER_DEFAULT_PANS);
+    expect(thunder[0]).toMatchObject({ id: 'slot-10', enabled: true, pealsPer10Min: DEFAULT_THUNDER_CHANNEL.pealsPer10Min });
+  });
+
+  it('clamps every thunder field', () => {
+    const input = DEFAULT_AMBIENT_SETTINGS.map((channel, index) => (
+      index === AMBIENT_THUNDER_FIRST_INDEX
+        ? { ...channel, pealsPer10Min: 999, distance: -1, pan: 4, spread: 2, lengthSec: 1 }
+        : channel
+    ));
+    expect(sanitizeAmbientSettings(input)[AMBIENT_THUNDER_FIRST_INDEX]).toMatchObject({
+      kind: 'thunder',
+      pealsPer10Min: AMBIENT_THUNDER_PEALS_MAX,
+      distance: 0,
+      pan: 1,
+      spread: 1,
+      lengthSec: AMBIENT_THUNDER_LENGTH_MIN_SEC,
+    });
+  });
+
+  it('moves a save from before thunder: noise into the six noise slots by type, rain into the rain slots, thunder empty', () => {
+    const preThunderTypes = ['brown', 'brown', 'brown', 'pink', 'pink', 'pink', 'white', 'white', 'white'];
+    const input = [
+      ...preThunderTypes.map((_, index) => ({ id: `n${index}`, kind: 'noise', enabled: index !== 1 })),
+      ...DEFAULT_AMBIENT_SETTINGS.slice(AMBIENT_RAIN_FIRST_INDEX, AMBIENT_THUNDER_FIRST_INDEX)
+        .map((channel, index) => ({ ...channel, id: `r${index}` })),
+    ];
+    const settings = sanitizeAmbientSettings(input);
+    expect(settings).toHaveLength(MAX_AMBIENT_CHANNELS);
+    // Two slots per type, enabled layers first; the third of each is dropped.
+    expect(settings.slice(0, AMBIENT_RAIN_FIRST_INDEX).map((channel) => channel.id))
+      .toEqual(['n0', 'n2', 'n3', 'n4', 'n6', 'n7']);
+    expect(settings.slice(AMBIENT_RAIN_FIRST_INDEX, AMBIENT_THUNDER_FIRST_INDEX).map((channel) => channel.id))
+      .toEqual(['r0', 'r1', 'r2']);
+    expect(settings.slice(AMBIENT_THUNDER_FIRST_INDEX).every((channel) => channel.kind === 'thunder' && !channel.enabled))
+      .toBe(true);
   });
 
   it('clamps rain pan and component gains independently', () => {
     const input = DEFAULT_AMBIENT_SETTINGS.map((channel, index) => (
-      index === 9 && channel.kind === 'rain'
+      index === AMBIENT_RAIN_FIRST_INDEX && channel.kind === 'rain'
         ? { ...channel, pan: -2, wetness: 2, resonance: -1 }
         : channel
     ));
-    const rain = sanitizeAmbientSettings(input)[9];
+    const rain = sanitizeAmbientSettings(input)[AMBIENT_RAIN_FIRST_INDEX];
 
     expect(rain).toMatchObject({ kind: 'rain', pan: -1, wetness: 1, resonance: 0 });
   });
@@ -196,16 +250,28 @@ describe('ambient sound configuration', () => {
     expect(ambientSettingsSignature(preset.settings)).toBe(ambientSettingsSignature(
       preset.settings.map((channel, index) => index === 0 ? { ...channel, solo: true } : channel),
     ));
-    const rain = preset.settings[9];
+    const rain = preset.settings[AMBIENT_RAIN_FIRST_INDEX];
     if (rain.kind === 'rain') {
       for (const change of [
         { ...rain, pan: 0.2 },
         { ...rain, wetness: 0.2 },
         { ...rain, resonance: 0.2 },
       ]) {
-        const changedRain = preset.settings.map((channel, index) => index === 9 ? change : channel);
+        const changedRain = preset.settings.map((channel, index) => index === AMBIENT_RAIN_FIRST_INDEX ? change : channel);
         expect(ambientSettingsSignature(changedRain)).not.toBe(ambientSettingsSignature(preset.settings));
       }
+    }
+  });
+
+  it('tells thunder settings apart in the signature', () => {
+    const settings = DEFAULT_AMBIENT_SETTINGS;
+    const thunder = settings[AMBIENT_THUNDER_FIRST_INDEX];
+    if (thunder.kind !== 'thunder') throw new Error('expected a thunder slot');
+    for (const change of [
+      { pealsPer10Min: 9 }, { distance: 0.1 }, { pan: 0.9 }, { spread: 0.05 }, { lengthSec: 25 },
+    ]) {
+      const changed = settings.map((channel, index) => index === AMBIENT_THUNDER_FIRST_INDEX ? { ...thunder, ...change } : channel);
+      expect(ambientSettingsSignature(changed)).not.toBe(ambientSettingsSignature(settings));
     }
   });
 
@@ -241,8 +307,8 @@ describe('ambient sound configuration', () => {
 
 describe('noise layers grouped by type', () => {
   it('gives every noise slot the type of its group', () => {
-    expect(AMBIENT_NOISE_SLOT_TYPES).toEqual(['brown', 'brown', 'brown', 'pink', 'pink', 'pink', 'white', 'white', 'white']);
-    expect(AMBIENT_NOISE_SLOT_TYPES).toHaveLength(MAX_AMBIENT_CHANNELS - 3);
+    expect(AMBIENT_NOISE_SLOT_TYPES).toEqual(['brown', 'brown', 'pink', 'pink', 'white', 'white']);
+    expect(AMBIENT_NOISE_SLOT_TYPES).toHaveLength(AMBIENT_RAIN_FIRST_INDEX);
   });
 
   it('moves each layer of a save that stored types into its own group, enabled layers first', () => {
@@ -258,16 +324,15 @@ describe('noise layers grouped by type', () => {
     ];
     const settings = sanitizeAmbientSettings(noise);
     const idAt = (index: number) => settings[index].id;
-    expect([idAt(0)]).toEqual(['b1']);
-    expect([idAt(3), idAt(4)]).toEqual(['p1', 'p2']);
-    // Four enabled white layers for three white slots: the first three keep
-    // white, and the fourth takes the first free slot elsewhere. The
-    // disabled one comes last.
-    expect([idAt(6), idAt(7), idAt(8)]).toEqual(['w1', 'w3', 'w4']);
-    expect(idAt(1)).toBe('w5');
-    expect(idAt(2)).toBe('w2');
-    expect(settings.slice(0, 9).find((channel) => channel.id === 'w2')?.enabled).toBe(false);
-    expect(settings[5]).toMatchObject({ enabled: false });
+    expect(idAt(0)).toBe('b1');
+    expect([idAt(2), idAt(3)]).toEqual(['p1', 'p2']);
+    // Four enabled white layers and one disabled for two white slots: the
+    // first two enabled ones keep them, and a layer with no slot of its own
+    // type is dropped rather than put in another group.
+    expect([idAt(4), idAt(5)]).toEqual(['w1', 'w3']);
+    expect(settings[1]).toMatchObject({ kind: 'noise', enabled: false });
+    const ids = settings.map((channel) => channel.id);
+    for (const dropped of ['w2', 'w4', 'w5']) expect(ids).not.toContain(dropped);
   });
 
   it('leaves a save already in slot terms where it is', () => {
@@ -289,7 +354,7 @@ describe('rain wetness and resonance from an older save', () => {
       const { wetness: _wetness, resonance: _resonance, ...rest } = channel;
       return { ...rest, ...changes };
     });
-    return sanitizeAmbientSettings(input)[9];
+    return sanitizeAmbientSettings(input)[AMBIENT_RAIN_FIRST_INDEX];
   };
 
   it('keeps the puddles the surface used to carry, as wetness', () => {
@@ -461,7 +526,7 @@ describe('ambient rain distance', () => {
       return rest;
     });
     const settings = sanitizeAmbientSettings(legacyRain);
-    for (const channel of settings.slice(9)) {
+    for (const channel of settings.slice(AMBIENT_RAIN_FIRST_INDEX, AMBIENT_THUNDER_FIRST_INDEX)) {
       expect(channel).toMatchObject({ kind: 'rain', surface: 1, wash: 0, drips: 0 });
     }
   });
@@ -469,16 +534,16 @@ describe('ambient rain distance', () => {
   it('keeps a known surface, replaces an unknown one and clamps wash and drips', () => {
     const input = DEFAULT_AMBIENT_SETTINGS.map((channel, index) => (
       channel.kind !== 'rain' ? channel
-        : index === 9 ? { ...channel, surface: 'forest', wash: 3, drips: -1 }
-          : index === 10 ? { ...channel, surface: 'lava' }
+        : index === AMBIENT_RAIN_FIRST_INDEX ? { ...channel, surface: 'forest', wash: 3, drips: -1 }
+          : index === AMBIENT_RAIN_FIRST_INDEX + 1 ? { ...channel, surface: 'lava' }
             : { ...channel, surface: 1.7 }
     ));
     const settings = sanitizeAmbientSettings(input);
     // A name from before the scale is read as its anchor; an unknown name
     // falls back to the default; a number is clamped into 0..1.
-    expect(settings[9]).toMatchObject({ surface: 0, wash: 1, drips: 0 });
-    expect(settings[10]).toMatchObject({ surface: 0.5 });
-    expect(settings[11]).toMatchObject({ surface: 1 });
+    expect(settings[AMBIENT_RAIN_FIRST_INDEX]).toMatchObject({ surface: 0, wash: 1, drips: 0 });
+    expect(settings[AMBIENT_RAIN_FIRST_INDEX + 1]).toMatchObject({ surface: 0.5 });
+    expect(settings[AMBIENT_RAIN_FIRST_INDEX + 2]).toMatchObject({ surface: 1 });
   });
 
   it('treats master volume as a listener setting outside the soundscape', () => {

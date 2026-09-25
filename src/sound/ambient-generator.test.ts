@@ -5,10 +5,12 @@ import { describe, expect, it } from 'vitest';
 import {
   AMBIENT_RAIN_DRIPS_MAX_PER_SEC,
   AMBIENT_RAIN_FIRST_INDEX,
+  AMBIENT_THUNDER_FIRST_INDEX,
   AMBIENT_RAIN_SURFACE_ANCHORS,
   AMBIENT_WET_BUBBLE_CHANCE,
   createAmbientChannel,
   createAmbientRainChannel,
+  createAmbientThunderChannel,
 } from '../shared/ambientSound';
 import { resolveAmbientSpace, resolveNoiseTone, toWorkletChannels } from '../shared/ambientSoundDsp';
 import { buildNoiseLoops, createNoiseSource, type NoiseLoops } from '../shared/ambientNoiseLoops';
@@ -35,6 +37,7 @@ type TestProcessor = {
   eventDelayFrames: (ratePerSecond: number) => number;
   noiseLoop: (type: string) => Float32Array;
   process: (inputs: unknown[], outputs: Float32Array[][]) => boolean;
+  startPeal: (channel: unknown) => void;
 }
 
 /**
@@ -52,6 +55,7 @@ function toConfigure(channels: TestChannel[]): unknown[] {
 type TestChannel = (
   | ReturnType<typeof createAmbientChannel>
   | ReturnType<typeof createAmbientRainChannel>
+  | ReturnType<typeof createAmbientThunderChannel>
 ) & { cycle?: Float32Array; type?: string; space?: ReturnType<typeof resolveAmbientSpace>; tone?: ReturnType<typeof resolveNoiseTone> }
 
 // A noise channel as the worklet receives it. `type` is what the worklet
@@ -85,6 +89,29 @@ function makeRainSlots(rain: TestChannel[]): TestChannel[] {
   ];
 }
 
+/** A full slot row with every noise and rain layer off and these thunder layers. */
+function makeThunderSlots(thunder: Array<Partial<ReturnType<typeof createAmbientThunderChannel>>>): TestChannel[] {
+  return [
+    ...Array.from({ length: AMBIENT_RAIN_FIRST_INDEX }, (_, index) => makeChannel(`noise-${index}`, { enabled: false })),
+    ...Array.from({ length: AMBIENT_THUNDER_FIRST_INDEX - AMBIENT_RAIN_FIRST_INDEX }, (_, index) => makeRainChannel(`rain-${index}`, { enabled: false })),
+    ...thunder.map((overrides, index) => ({ ...createAmbientThunderChannel(`thunder-${index}`), enabled: true, volume: 1, ...overrides })),
+  ];
+}
+
+/** Share of the signal's energy above `hz`, by a one-pole high-pass. */
+function highShare(samples: number[], sampleRate: number, hz: number): number {
+  const a = Math.exp((-2 * Math.PI * hz) / sampleRate);
+  let low = 0;
+  let high = 0;
+  let total = 0;
+  for (const sample of samples) {
+    low = (a * low) + ((1 - a) * sample);
+    high += (sample - low) ** 2;
+    total += sample * sample;
+  }
+  return total > 0 ? high / total : 0;
+}
+
 type Mode = { sin: number; cos: number; rotationSin: number; rotationCos: number; amplitude: number; decay: number };
 type GlassVoice = {
   gain: number;
@@ -97,9 +124,17 @@ type GlassVoice = {
   trebleModes: Mode[];
 };
 
+/** The parts of a worklet surface profile the tests read. */
+type SurfaceProfile = {
+  durationSec: number;
+  click: { centerHz: number[] };
+  bed: { gain: number; centerHz: number };
+  treble: { count: number[] };
+} & Record<string, unknown>;
+
 type GeneratorConstants = {
   RAIN_SURFACE_ANCHORS: { name: string; at: number }[];
-  surfaceProfile: (surface: number) => Record<string, any>;
+  surfaceProfile: (surface: number) => SurfaceProfile;
   AUTHORED_LOW_LEVEL: number;
   AUTHORED_HIGH_LEVEL: number;
   WET_BUBBLE_CHANCE: number;
@@ -166,6 +201,13 @@ function createProcessor(seed: number, channels: TestChannel[], sampleRate = 120
 
 /** A noise loop of constant 1, so a noise layer's output IS its level. */
 const ONES = new Float32Array(4096).fill(1);
+
+/** Largest magnitude; a spread of a long render overflows the call stack. */
+function peakOf(samples: number[]): number {
+  let peak = 0;
+  for (const sample of samples) peak = Math.max(peak, Math.abs(sample));
+  return peak;
+}
 
 function rms(samples: number[]): number {
   return Math.sqrt(samples.reduce((sum, sample) => sum + (sample * sample), 0) / samples.length);
@@ -807,7 +849,7 @@ describe('ambient AudioWorklet generator', () => {
     });
 
     it('blends pitch and time geometrically and the rest linearly between anchors', () => {
-      const [forest, street] = constants.RAIN_SURFACE_ANCHORS as unknown as Record<string, any>[];
+      const [forest, street] = constants.RAIN_SURFACE_ANCHORS as unknown as SurfaceProfile[];
       const halfway = profile(0.25);
       expect(halfway.click.centerHz[0]).toBeCloseTo(Math.sqrt(forest.click.centerHz[0] * street.click.centerHz[0]), 6);
       expect(halfway.durationSec).toBeCloseTo(Math.sqrt(forest.durationSec * street.durationSec), 9);
@@ -831,5 +873,76 @@ describe('ambient AudioWorklet generator', () => {
       expect(steps[5].treble.count[1]).toBeGreaterThan(steps[3].treble.count[1]);
       expect(steps[3].treble.count[1]).toBeGreaterThan(steps[0].treble.count[1]);
     });
+  });
+});
+
+describe('ambient thunder', () => {
+  const rate = 8000;
+
+  it('peals within seconds of starting, then is silent between peals', () => {
+    const samples = createProcessor(5, makeThunderSlots([{ pealsPer10Min: 0.5, lengthSec: 4, distance: 0.8 }]), rate).render(30);
+    const loud = samples.left.findIndex((value) => Math.abs(value) > 1e-3) / rate;
+    expect(loud).toBeGreaterThan(3);
+    expect(loud).toBeLessThan(13);
+    // One peal lasting at most 4 s after its last rumble's stagger (under
+    // 2 s), at an average of one every 20 minutes: the last stretch is
+    // exactly silent.
+    expect(samples.left.slice(-rate * 8).every((value) => value === 0)).toBe(true);
+  });
+
+  it('peals about as often as it is asked to', () => {
+    const generator = createProcessor(17, makeThunderSlots([{ pealsPer10Min: 20, lengthSec: 4 }]), 1000);
+    let peals = 0;
+    const startPeal = generator.processor.startPeal.bind(generator.processor);
+    generator.processor.startPeal = (channel) => { peals += 1; startPeal(channel); };
+    generator.render(30 * 60);
+    // 60 expected in half an hour; Poisson spread is about 8.
+    expect(peals).toBeGreaterThan(40);
+    expect(peals).toBeLessThan(80);
+  });
+
+  it('is brighter and quicker near, darker and slower far', () => {
+    const near = createProcessor(9, makeThunderSlots([{ distance: 0, lengthSec: 6 }]), rate).render(20).left;
+    const far = createProcessor(9, makeThunderSlots([{ distance: 1, lengthSec: 6 }]), rate).render(20).left;
+    expect(highShare(near, rate, 800)).toBeGreaterThan(5 * highShare(far, rate, 800));
+    const attack = (samples: number[]) => {
+      const start = samples.findIndex((value) => value !== 0);
+      const peak = peakOf(samples);
+      return samples.findIndex((value) => Math.abs(value) > peak * 0.3) - start;
+    };
+    expect(attack(near)).toBeLessThan(attack(far));
+  });
+
+  it('never jumps from silence: the first 10 ms of a near peal stay quiet', () => {
+    for (const seed of [1, 2, 3, 4]) {
+      const samples = createProcessor(seed, makeThunderSlots([{ distance: 0 }]), rate).render(20).left;
+      const start = samples.findIndex((value) => value !== 0);
+      const peak = peakOf(samples);
+      const opening = peakOf(samples.slice(start, start + (rate / 100)));
+      expect(opening).toBeLessThan(peak * 0.5);
+    }
+  });
+
+  it('holds a peal at its pan when spread is zero', () => {
+    const samples = createProcessor(21, makeThunderSlots([{ pan: -1, spread: 0 }]), rate).render(20);
+    expect(peakOf(samples.left)).toBeGreaterThan(1e-3);
+    expect(peakOf(samples.right)).toBeLessThan(1e-9);
+  });
+
+  it('stays finite and bounded at every extreme, and renders the same whatever the block size', () => {
+    const extremes = [
+      { distance: 0, spread: 1, lengthSec: 30, pealsPer10Min: 20 },
+      { distance: 1, spread: 0, lengthSec: 4, pealsPer10Min: 20 },
+      { distance: 0.5, spread: 1, lengthSec: 30, pealsPer10Min: 0.5, pan: 1 },
+    ];
+    const large = createProcessor(33, makeThunderSlots(extremes), 6000, 128).render(16);
+    const small = createProcessor(33, makeThunderSlots(extremes), 6000, 32).render(16);
+    expect(small.left).toEqual(large.left);
+    expect(small.right).toEqual(large.right);
+    for (const value of [...large.left, ...large.right]) {
+      expect(Number.isFinite(value)).toBe(true);
+      expect(Math.abs(value)).toBeLessThan(4);
+    }
+    expect(peakOf(large.left)).toBeGreaterThan(0.01);
   });
 });

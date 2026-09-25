@@ -10,12 +10,19 @@ import {
   AMBIENT_RAIN_DRIPS_MAX_PER_SEC,
   AMBIENT_RAIN_FIRST_INDEX,
   AMBIENT_RAIN_SURFACE_ANCHORS,
+  AMBIENT_THUNDER_FIRST_INDEX,
+  AMBIENT_THUNDER_LENGTH_MAX_SEC,
+  AMBIENT_THUNDER_LENGTH_MIN_SEC,
+  AMBIENT_THUNDER_PEALS_MAX,
+  AMBIENT_THUNDER_PEALS_MIN,
   AMBIENT_SHAPE_MAX,
   AMBIENT_SHAPE_MIN,
   MAX_AMBIENT_CHANNELS,
   MAX_AMBIENT_CUSTOM_PRESETS,
   DEFAULT_NOISE_CHANNEL,
   DEFAULT_RAIN_CHANNEL,
+  DEFAULT_THUNDER_CHANNEL,
+  defaultThunderPan,
   ambientSettingsSignature,
   applyAmbientPreset,
   noiseTypeForSlot,
@@ -29,6 +36,7 @@ import {
   type AmbientPreset,
   type AmbientRainChannelSettings,
   type AmbientSettings,
+  type AmbientThunderChannelSettings,
 } from '../shared/ambientSound'
 import { resolveNoiseTone } from '../shared/ambientSoundDsp'
 import { armHold, HOLD_CONFIRM_MS } from '../shared/holdTiming'
@@ -56,12 +64,16 @@ const NOISE_GROUP_LOOK: Record<AmbientNoiseType, { icon: string; label: string }
   white: { icon: 'fa-fan', label: 'White noise' },
 }
 const RAIN_GROUP_LOOK = { icon: 'fa-cloud-rain', label: 'Rain' }
+const THUNDER_GROUP_LOOK = { icon: 'fa-bolt-lightning', label: 'Thunder' }
 
 /**
  * A slot's group (its icon and name) and its number within the group; the
  * icon says which group, so the number counts 1-3 inside it.
  */
 function slotLook(index: number): { icon: string; label: string; number: number } {
+  if (index >= AMBIENT_THUNDER_FIRST_INDEX) {
+    return { ...THUNDER_GROUP_LOOK, number: index - AMBIENT_THUNDER_FIRST_INDEX + 1 }
+  }
   if (index >= AMBIENT_RAIN_FIRST_INDEX) {
     return { ...RAIN_GROUP_LOOK, number: index - AMBIENT_RAIN_FIRST_INDEX + 1 }
   }
@@ -194,6 +206,15 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
     )));
   }
 
+  const updateThunderChannel = (
+    channelId: string,
+    changes: Partial<Omit<AmbientThunderChannelSettings, keyof AmbientChannelBaseSettings | 'kind'>>,
+  ) => {
+    commitSettings(preferences.settings.map((channel) => (
+      channel.id === channelId && channel.kind === 'thunder' ? { ...channel, ...changes } : channel
+    )));
+  }
+
   const toggleChannelSolo = (channelId: string) => {
     const channel = preferences.settings.find((item) => item.id === channelId)
     if (!channel) return
@@ -285,6 +306,8 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
   const channel = selectedChannel
   // 0-based position among the rain slots; meaningful only for a rain layer.
   const rainIndex = selectedChannelIndex - AMBIENT_RAIN_FIRST_INDEX
+  // 0-based position among the thunder slots; meaningful only for a thunder layer.
+  const thunderIndex = selectedChannelIndex - AMBIENT_THUNDER_FIRST_INDEX
   const layerName = selectedChannelIndex >= 0
     ? `${slotLook(selectedChannelIndex).label} layer ${slotLook(selectedChannelIndex).number}`
     : ''
@@ -417,7 +440,7 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
               tooltipLabel="Volume; scroll the channel button to adjust"
               ariaLabel={`${layerName} volume`}
               disabled={!channel.enabled}
-              defaultValue={channel.kind === 'rain' ? DEFAULT_RAIN_CHANNEL.volume : DEFAULT_NOISE_CHANNEL.volume}
+              defaultValue={channel.kind === 'rain' ? DEFAULT_RAIN_CHANNEL.volume : channel.kind === 'thunder' ? DEFAULT_THUNDER_CHANNEL.volume : DEFAULT_NOISE_CHANNEL.volume}
               formatValue={(value) => value.toFixed(2)}
               onCommit={(value) => updateChannel(channel.id, { volume: value })}
             />
@@ -538,6 +561,79 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                   defaultValue={DEFAULT_RAIN_CHANNEL.resonance}
                   formatValue={(value) => value < 0.01 ? 'Dead' : Math.abs(value - 0.5) < 0.005 ? 'As is' : value > 0.99 ? 'Ringing' : `${Math.round(value * 100)}%`}
                   onCommit={(value) => updateRainChannel(channel.id, { resonance: value })}
+                />
+              </>
+            ) : channel.kind === 'thunder' ? (
+              <>
+                <CompactScrollbarSlider
+                  id={`ambient-${channel.id}-peals`}
+                  min={AMBIENT_THUNDER_PEALS_MIN}
+                  max={AMBIENT_THUNDER_PEALS_MAX}
+                  step={0.5}
+                  value={channel.pealsPer10Min}
+                  trackLabel="often"
+                  tooltipLabel="How often it thunders, on average: peals per ten minutes, at random"
+                  ariaLabel={`${layerName} peals per ten minutes`}
+                  disabled={!channel.enabled}
+                  defaultValue={DEFAULT_THUNDER_CHANNEL.pealsPer10Min}
+                  formatValue={(value) => `${value.toFixed(1)} / 10 min`}
+                  onCommit={(value) => updateThunderChannel(channel.id, { pealsPer10Min: value })}
+                />
+                <CompactScrollbarSlider
+                  id={`ambient-${channel.id}-distance`}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={channel.distance}
+                  trackLabel="distance"
+                  tooltipLabel="Distance: near cracks and booms, far is a low rolling rumble that arrives slowly"
+                  ariaLabel={`${layerName} distance`}
+                  disabled={!channel.enabled}
+                  defaultValue={DEFAULT_THUNDER_CHANNEL.distance}
+                  formatValue={(value) => value < 0.01 ? 'Near' : value > 0.99 ? 'Far' : `${Math.round(value * 100)}%`}
+                  onCommit={(value) => updateThunderChannel(channel.id, { distance: value })}
+                />
+                <CompactScrollbarSlider
+                  id={`ambient-${channel.id}-pan`}
+                  min={-100}
+                  max={100}
+                  step={1}
+                  value={channel.pan * 100}
+                  trackLabel="pan"
+                  tooltipLabel="Where in the stereo field the storm is, left to right"
+                  ariaLabel={`${layerName} pan`}
+                  disabled={!channel.enabled}
+                  defaultValue={defaultThunderPan(thunderIndex) * 100}
+                  formatValue={(value) => Math.abs(value) < 1 ? 'Center' : `${Math.abs(Math.round(value))}% ${value < 0 ? 'L' : 'R'}`}
+                  onCommit={(value) => updateThunderChannel(channel.id, { pan: value / 100 })}
+                />
+                <CompactScrollbarSlider
+                  id={`ambient-${channel.id}-spread`}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={channel.spread}
+                  trackLabel="spread"
+                  tooltipLabel="How far a peal wanders across the sky around its pan as it rolls"
+                  ariaLabel={`${layerName} spread`}
+                  disabled={!channel.enabled}
+                  defaultValue={DEFAULT_THUNDER_CHANNEL.spread}
+                  formatValue={(value) => value < 0.01 ? 'Point' : value > 0.99 ? 'Wide' : `${Math.round(value * 100)}%`}
+                  onCommit={(value) => updateThunderChannel(channel.id, { spread: value })}
+                />
+                <CompactScrollbarSlider
+                  id={`ambient-${channel.id}-length`}
+                  min={AMBIENT_THUNDER_LENGTH_MIN_SEC}
+                  max={AMBIENT_THUNDER_LENGTH_MAX_SEC}
+                  step={1}
+                  value={channel.lengthSec}
+                  trackLabel="length"
+                  tooltipLabel="How long a peal rolls on before it dies away"
+                  ariaLabel={`${layerName} peal length`}
+                  disabled={!channel.enabled}
+                  defaultValue={DEFAULT_THUNDER_CHANNEL.lengthSec}
+                  formatValue={(value) => `${Math.round(value)} s`}
+                  onCommit={(value) => updateThunderChannel(channel.id, { lengthSec: Math.round(value) })}
                 />
               </>
             ) : (

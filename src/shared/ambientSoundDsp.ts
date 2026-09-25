@@ -28,18 +28,24 @@ export type AmbientWorkletChannel = AmbientChannelSettings & {
  * the rain slots start.
  */
 export function toWorkletChannels(settings: AmbientSettings): AmbientWorkletChannel[] {
-  return settings.map((channel, index) => (
-    channel.kind === 'noise'
-      ? {
+  return settings.map((channel, index): AmbientWorkletChannel => {
+    if (channel.kind === 'noise') {
+      return {
         ...channel,
         outputIndex: -1,
         cycle: buildNoiseCycle(channel.ramp, channel.shape),
         type: noiseTypeForSlot(index),
         space: resolveAmbientSpace(channel.distance),
         tone: resolveNoiseTone(channel.filter, noiseTypeForSlot(index)),
-      }
-      : { ...channel, outputIndex: index - AMBIENT_RAIN_FIRST_INDEX }
-  ));
+      };
+    }
+    if (channel.kind === 'thunder') {
+      // Thunder mixes into the noise layers' stereo bus and reverb send, so
+      // it has no output of its own; its distance resolves the same way.
+      return { ...channel, outputIndex: -1, space: resolveAmbientSpace(channel.distance) };
+    }
+    return { ...channel, outputIndex: index - AMBIENT_RAIN_FIRST_INDEX };
+  });
 }
 
 export interface AmbientSpace {

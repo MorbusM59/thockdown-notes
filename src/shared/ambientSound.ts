@@ -2,10 +2,12 @@
  * Procedural ambient sound: the persisted model, its defaults, the factory
  * soundscapes and the sanitizer every stored value passes through.
  *
- * A soundscape is a fixed row of MAX_AMBIENT_CHANNELS channels. The first
- * AMBIENT_NOISE_CHANNEL_COUNT are noise layers (filtered noise whose level
- * rises and falls in a repeating cycle), in three groups of three by noise
- * type -- brown, pink, white (AMBIENT_NOISE_SLOT_TYPES); the rest are rain layers, each routed to its own output of
+ * A soundscape is a fixed row of MAX_AMBIENT_CHANNELS channels, and what
+ * each slot holds is decided by its position (channelKindForSlot): six noise
+ * layers (filtered noise whose level rises and falls in a repeating cycle),
+ * two of each noise type -- brown, pink, white (AMBIENT_NOISE_SLOT_TYPES) --
+ * then three rain layers, then three thunder layers. Rain and thunder follow
+ * as groups; the rest are rain layers, each routed to its own output of
  * the AudioWorklet so the engine can give it its own pan, distance filter and
  * reverb send (see src/sound/AmbientSoundEngine.ts). A slot's kind is decided
  * by its POSITION, never stored, so a save can never hold a rain layer in a
@@ -23,12 +25,12 @@ export const AMBIENT_NOISE_TYPES = ['white', 'pink', 'brown'] as const;
 export type AmbientNoiseType = (typeof AMBIENT_NOISE_TYPES)[number];
 
 /**
- * The noise type of each noise slot, by position: slots 1-3 brown (deep and
- * slow: surf, rumble), 4-6 pink (balanced: wind, wash), 7-9 white (bright:
+ * The noise type of each noise slot, by position: slots 1-2 brown (deep and
+ * slow: surf, rumble), 3-4 pink (balanced: wind, wash), 5-6 white (bright:
  * hiss, air). Its length is AMBIENT_NOISE_CHANNEL_COUNT.
  */
 export const AMBIENT_NOISE_SLOT_TYPES: readonly AmbientNoiseType[] = [
-  'brown', 'brown', 'brown', 'pink', 'pink', 'pink', 'white', 'white', 'white',
+  'brown', 'brown', 'pink', 'pink', 'white', 'white',
 ];
 
 /** The noise type of the noise slot at `index` (0-based). */
@@ -138,7 +140,28 @@ export interface AmbientRainChannelSettings extends AmbientChannelBaseSettings {
   resonance: number;
 }
 
-export type AmbientChannelSettings = AmbientNoiseChannelSettings | AmbientRainChannelSettings;
+/**
+ * A thunder layer: one storm cell, pealing now and then. Distance is what
+ * shapes each peal (public/ambient-generator.js's startPeal): far thunder is
+ * a soft-onset, low, long rolling rumble whose highs the air has absorbed;
+ * near thunder opens with a crack and booms before a shorter, fuller roll.
+ */
+export interface AmbientThunderChannelSettings extends AmbientChannelBaseSettings {
+  kind: 'thunder';
+  /** Average peals per ten minutes, spaced at random. */
+  pealsPer10Min: number;
+  /** 0 (near: a crack, then booms) to 1 (far: a low roll). */
+  distance: number;
+  /** Where the storm is, -1 (left) to 1 (right). */
+  pan: number;
+  /** How wide a peal rolls across the stereo field around `pan`, 0-1. */
+  spread: number;
+  /** How long a peal's roll lasts, in seconds. */
+  lengthSec: number;
+}
+
+export type AmbientChannelSettings = AmbientNoiseChannelSettings | AmbientRainChannelSettings | AmbientThunderChannelSettings;
+export type AmbientChannelKind = AmbientChannelSettings['kind'];
 export type AmbientSettings = AmbientChannelSettings[];
 
 export interface AmbientPreset {
@@ -160,10 +183,25 @@ export interface AmbientPreferences {
   customPresets: AmbientPreset[];
 }
 
-export const MAX_AMBIENT_CHANNELS = 12;
-export const AMBIENT_NOISE_CHANNEL_COUNT = 9;
-export const AMBIENT_RAIN_CHANNEL_COUNT = MAX_AMBIENT_CHANNELS - AMBIENT_NOISE_CHANNEL_COUNT;
+export const AMBIENT_NOISE_CHANNEL_COUNT = 6;
+export const AMBIENT_RAIN_CHANNEL_COUNT = 3;
+export const AMBIENT_THUNDER_CHANNEL_COUNT = 3;
 export const AMBIENT_RAIN_FIRST_INDEX = AMBIENT_NOISE_CHANNEL_COUNT;
+export const AMBIENT_THUNDER_FIRST_INDEX = AMBIENT_RAIN_FIRST_INDEX + AMBIENT_RAIN_CHANNEL_COUNT;
+export const MAX_AMBIENT_CHANNELS = AMBIENT_THUNDER_FIRST_INDEX + AMBIENT_THUNDER_CHANNEL_COUNT;
+
+/** What the slot at `index` holds, by position. */
+export function channelKindForSlot(index: number): AmbientChannelKind {
+  if (index >= AMBIENT_THUNDER_FIRST_INDEX) return 'thunder';
+  if (index >= AMBIENT_RAIN_FIRST_INDEX) return 'rain';
+  return 'noise';
+}
+
+export const AMBIENT_THUNDER_PEALS_MIN = 0.5;
+export const AMBIENT_THUNDER_PEALS_MAX = 20;
+export const AMBIENT_THUNDER_LENGTH_MIN_SEC = 4;
+export const AMBIENT_THUNDER_LENGTH_MAX_SEC = 30;
+export const AMBIENT_THUNDER_DEFAULT_PANS = [-0.5, 0.1, 0.6] as const;
 export const MAX_AMBIENT_CUSTOM_PRESETS = 12;
 
 export const AMBIENT_PERIOD_MIN_SEC = 0.5;
@@ -232,6 +270,31 @@ export const DEFAULT_RAIN_CHANNEL: Readonly<Omit<AmbientRainChannelSettings, 'id
   resonance: 0.5,
 };
 
+/** As DEFAULT_NOISE_CHANNEL, for thunder layers. Pan defaults per slot instead. */
+export const DEFAULT_THUNDER_CHANNEL: Readonly<Omit<AmbientThunderChannelSettings, 'id'>> = {
+  kind: 'thunder',
+  enabled: true,
+  solo: false,
+  volume: 0.4,
+  pealsPer10Min: 3,
+  distance: 0.7,
+  pan: 0,
+  spread: 0.5,
+  lengthSec: 12,
+};
+
+function makeDefaultThunderChannel(
+  id: string,
+  overrides: Partial<AmbientThunderChannelSettings> = {},
+): AmbientThunderChannelSettings {
+  return { ...DEFAULT_THUNDER_CHANNEL, id, ...overrides };
+}
+
+/** The default pan of the thunder layer at `thunderIndex` (0-based among thunder slots). */
+export function defaultThunderPan(thunderIndex: number): number {
+  return AMBIENT_THUNDER_DEFAULT_PANS[thunderIndex] ?? 0;
+}
+
 function makeDefaultNoiseChannel(
   id: string,
   overrides: Partial<AmbientNoiseChannelSettings> = {},
@@ -251,14 +314,31 @@ export function defaultRainPan(rainIndex: number): number {
   return AMBIENT_RAIN_DEFAULT_PANS[rainIndex] ?? 0;
 }
 
+/** The empty, disabled channel a slot holds when nothing was saved in it. */
+function makeEmptySlot(index: number, id: string): AmbientChannelSettings {
+  const kind = channelKindForSlot(index);
+  if (kind === 'thunder') {
+    return makeDefaultThunderChannel(id, { enabled: false, pan: defaultThunderPan(index - AMBIENT_THUNDER_FIRST_INDEX) });
+  }
+  if (kind === 'rain') {
+    return makeDefaultRainChannel(id, { enabled: false, pan: defaultRainPan(index - AMBIENT_RAIN_FIRST_INDEX) });
+  }
+  return makeDefaultNoiseChannel(id, { enabled: false });
+}
+
+function slotIdPrefix(index: number): string {
+  const kind = channelKindForSlot(index);
+  if (kind === 'thunder') return `ambient-thunder-${index - AMBIENT_THUNDER_FIRST_INDEX + 1}`;
+  if (kind === 'rain') return `ambient-rain-${index - AMBIENT_RAIN_FIRST_INDEX + 1}`;
+  return `ambient-layer-${index + 1}`;
+}
+
 function fillAmbientSlots(settings: AmbientSettings): AmbientSettings {
   const slots = [...settings];
   const seenIds = new Set(slots.map((channel) => channel.id));
   while (slots.length < MAX_AMBIENT_CHANNELS) {
     const index = slots.length;
-    const candidate = index < AMBIENT_RAIN_FIRST_INDEX
-      ? `ambient-layer-${index + 1}`
-      : `ambient-rain-${index - AMBIENT_RAIN_FIRST_INDEX + 1}`;
+    const candidate = slotIdPrefix(index);
     let id = candidate;
     let duplicateIndex = 1;
     while (seenIds.has(id)) {
@@ -266,12 +346,7 @@ function fillAmbientSlots(settings: AmbientSettings): AmbientSettings {
       duplicateIndex += 1;
     }
     seenIds.add(id);
-    slots.push(index < AMBIENT_RAIN_FIRST_INDEX
-      ? makeDefaultNoiseChannel(id, { enabled: false })
-      : makeDefaultRainChannel(id, {
-        enabled: false,
-        pan: defaultRainPan(index - AMBIENT_RAIN_FIRST_INDEX),
-      }));
+    slots.push(makeEmptySlot(index, id));
   }
   return slots;
 }
@@ -282,6 +357,10 @@ export function createAmbientChannel(id: string): AmbientNoiseChannelSettings {
 
 export function createAmbientRainChannel(id: string): AmbientRainChannelSettings {
   return makeDefaultRainChannel(id);
+}
+
+export function createAmbientThunderChannel(id: string): AmbientThunderChannelSettings {
+  return makeDefaultThunderChannel(id);
 }
 
 function migrateLegacyAmbientSettings(input: unknown): AmbientSettings {
@@ -337,6 +416,18 @@ export const DEFAULT_AMBIENT_SETTINGS: AmbientSettings = migrateLegacyAmbientSet
  */
 export function ambientSettingsSignature(settings: AmbientSettings): string {
   return settings.map((channel) => {
+    if (channel.kind === 'thunder') {
+      return [
+        channel.kind,
+        channel.enabled,
+        channel.volume,
+        channel.pealsPer10Min,
+        channel.distance,
+        channel.pan,
+        channel.spread,
+        channel.lengthSec,
+      ].map((value) => typeof value === 'number' ? value.toFixed(4) : value).join(':');
+    }
     const values = channel.kind === 'rain'
       ? [
         channel.kind,
@@ -381,13 +472,15 @@ function preset(
   name: string,
   settings: LegacyAmbientSettings,
   rainLayers: Partial<AmbientRainChannelSettings>[] = [],
+  thunderLayers: Partial<AmbientThunderChannelSettings>[] = [],
 ): AmbientPreset {
   const migrated = migrateLegacyAmbientSettings(settings);
-  const channels = migrated.map((channel, index) => {
+  const channels = migrated.map((channel, index): AmbientChannelSettings => {
     const rainLayer = rainLayers[index - AMBIENT_RAIN_FIRST_INDEX];
-    return channel.kind === 'rain' && rainLayer
-      ? { ...channel, ...rainLayer, kind: 'rain' as const }
-      : channel;
+    const thunderLayer = thunderLayers[index - AMBIENT_THUNDER_FIRST_INDEX];
+    if (channel.kind === 'rain' && rainLayer) return { ...channel, ...rainLayer, kind: 'rain' };
+    if (channel.kind === 'thunder' && thunderLayer) return { ...channel, ...thunderLayer, kind: 'thunder' };
+    return channel;
   });
   return { id, name, settings: channels };
 }
@@ -437,6 +530,10 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
     { enabled: true, surface: 0.5, volume: 0.46, dropsPerSecond: 44, wash: 0.8, drips: 0.4, distance: 0.12, pan: -0.65, wetness: 0.6, resonance: 0.4 },
     { enabled: true, surface: 0.5, volume: 0.42, dropsPerSecond: 60, wash: 1, drips: 0, distance: 0.55, pan: 0, wetness: 0.6, resonance: 0.4 },
     { enabled: true, surface: 0, volume: 0.34, dropsPerSecond: 60, wash: 1, drips: 0, distance: 0.92, pan: 0.65, wetness: 0.1, resonance: 0.35 },
+  ], [
+    // A storm cell passing close on the left, another rolling far off to the right.
+    { enabled: true, volume: 0.5, pealsPer10Min: 4, distance: 0.35, pan: -0.4, spread: 0.6, lengthSec: 10 },
+    { enabled: true, volume: 0.45, pealsPer10Min: 3, distance: 0.9, pan: 0.55, spread: 0.8, lengthSec: 18 },
   ]),
   preset('ocean', 'Open water', {
     wind: { volume: 0.14, texture: 0.3 },
@@ -477,38 +574,54 @@ function readNoiseCycle(
 }
 
 /**
- * A save from before noise slots were grouped by type stored each layer's
- * `type` on the layer. Moving each layer into a slot of its own type's group
- * keeps it sounding as it did: enabled layers are placed first, in slot
- * order, so they are the ones that keep their type if a group is
- * over-full; a layer that finds its group full takes the first slot left
- * anywhere (and with it that slot's type). Slots nothing lands in start
- * empty and disabled. A save with no `type` on any noise layer is already
- * in slot terms and is returned as it is.
+ * Bring a saved slot row into the current layout (channelKindForSlot).
+ *
+ * The layout before thunder was nine noise slots then three rain slots, and
+ * before that each noise layer stored its own `type`. Either is recognised --
+ * a rain layer (a `kind` of 'rain', or rain fields) at slot 10, or a `type`
+ * on any noise layer -- and rebuilt: each old noise layer's type is its
+ * stored `type`, else what its old slot was (brown 1-3, pink 4-6, white 7-9);
+ * it goes to a free slot of its own type's group, enabled layers first in
+ * slot order, so a group that now has fewer slots keeps the layers that were
+ * playing. A layer that finds no slot of its type is dropped rather than
+ * forced into another type's slot, where it would sound like something else.
+ * The old rain layers move to the rain slots; the thunder slots start empty.
+ * A row already in the current layout is returned as it is.
  */
-function regroupNoiseByType(raw: unknown[]): unknown[] {
-  const noise = raw.slice(0, AMBIENT_NOISE_CHANNEL_COUNT);
-  const typeOf = (item: unknown) => (
-    item && typeof item === 'object' ? (item as { type?: unknown }).type : undefined
+const PRE_THUNDER_NOISE_COUNT = 9;
+const PRE_THUNDER_SLOT_TYPES: readonly AmbientNoiseType[] = [
+  'brown', 'brown', 'brown', 'pink', 'pink', 'pink', 'white', 'white', 'white',
+];
+
+function migrateSlotLayout(raw: unknown[]): unknown[] {
+  const field = (item: unknown, name: string) => (
+    item && typeof item === 'object' ? (item as Record<string, unknown>)[name] : undefined
   );
-  if (!noise.some((item) => typeOf(item) !== undefined)) return raw;
-  const layers = noise.map((item, index) => {
-    const saved = typeOf(item);
+  const slotNine = raw[PRE_THUNDER_NOISE_COUNT];
+  // A stored `type` predates grouping, which predates thunder, so a row
+  // carrying one is in the nine-noise layout too.
+  const preThunder = field(slotNine, 'kind') === 'rain'
+    || (field(slotNine, 'kind') === undefined && (field(slotNine, 'dropsPerSecond') !== undefined || field(slotNine, 'surface') !== undefined))
+    || raw.slice(0, PRE_THUNDER_NOISE_COUNT).some((item) => field(item, 'type') !== undefined);
+  if (!preThunder) return raw;
+
+  const oldNoiseCount = PRE_THUNDER_NOISE_COUNT;
+  const oldSlotTypes = PRE_THUNDER_SLOT_TYPES;
+  const layers = raw.slice(0, oldNoiseCount).map((item, index) => {
+    const saved = field(item, 'type');
     return {
       item,
-      type: AMBIENT_NOISE_TYPES.includes(saved as AmbientNoiseType) ? saved as AmbientNoiseType : noiseTypeForSlot(index),
-      enabled: !(item && typeof item === 'object' && (item as { enabled?: unknown }).enabled === false),
+      type: AMBIENT_NOISE_TYPES.includes(saved as AmbientNoiseType) ? saved as AmbientNoiseType : oldSlotTypes[index] ?? 'pink',
+      enabled: field(item, 'enabled') !== false,
     };
   });
   const slots: unknown[] = Array.from({ length: AMBIENT_NOISE_CHANNEL_COUNT }, () => undefined);
-  const overflow: unknown[] = [];
   for (const layer of [...layers.filter((entry) => entry.enabled), ...layers.filter((entry) => !entry.enabled)]) {
     const free = AMBIENT_NOISE_SLOT_TYPES.findIndex((type, index) => type === layer.type && slots[index] === undefined);
     if (free >= 0) slots[free] = layer.item;
-    else overflow.push(layer.item);
   }
-  for (const item of overflow) slots[slots.indexOf(undefined)] = item;
-  return [...slots.map((item) => item ?? { enabled: false }), ...raw.slice(AMBIENT_NOISE_CHANNEL_COUNT)];
+  const rest = raw.slice(PRE_THUNDER_NOISE_COUNT, PRE_THUNDER_NOISE_COUNT + AMBIENT_RAIN_CHANNEL_COUNT);
+  return [...slots.map((item) => item ?? { enabled: false }), ...rest];
 }
 
 /**
@@ -562,7 +675,7 @@ export function sanitizeAmbientSettings(input: unknown): AmbientSettings {
   if (input.length === 0) return DEFAULT_AMBIENT_SETTINGS.map((channel) => ({ ...channel }));
 
   const seenIds = new Set<string>();
-  const rawChannels = regroupNoiseByType(input.slice(0, MAX_AMBIENT_CHANNELS));
+  const rawChannels = migrateSlotLayout(input).slice(0, MAX_AMBIENT_CHANNELS);
   const soloIndex = rawChannels.findIndex((item) => (
     item !== null && typeof item === 'object' && (item as { solo?: unknown }).solo === true
   ));
@@ -587,7 +700,20 @@ export function sanitizeAmbientSettings(input: unknown): AmbientSettings {
       solo: index === soloIndex,
       volume: finiteUnit(source.volume, fallbackChannel.volume),
     };
-    if (index >= AMBIENT_RAIN_FIRST_INDEX) {
+    const kind = channelKindForSlot(index);
+    if (kind === 'thunder') {
+      return {
+        ...common,
+        volume: finiteUnit(source.volume, DEFAULT_THUNDER_CHANNEL.volume),
+        kind: 'thunder' as const,
+        pealsPer10Min: finiteRange(source.pealsPer10Min, AMBIENT_THUNDER_PEALS_MIN, AMBIENT_THUNDER_PEALS_MAX, DEFAULT_THUNDER_CHANNEL.pealsPer10Min),
+        distance: finiteUnit(source.distance, DEFAULT_THUNDER_CHANNEL.distance),
+        pan: finiteRange(source.pan, -1, 1, defaultThunderPan(index - AMBIENT_THUNDER_FIRST_INDEX)),
+        spread: finiteUnit(source.spread, DEFAULT_THUNDER_CHANNEL.spread),
+        lengthSec: finiteRange(source.lengthSec, AMBIENT_THUNDER_LENGTH_MIN_SEC, AMBIENT_THUNDER_LENGTH_MAX_SEC, DEFAULT_THUNDER_CHANNEL.lengthSec),
+      };
+    }
+    if (kind === 'rain') {
       const fallback = fallbackChannel as AmbientRainChannelSettings;
       const migratedDensity = typeof source.densityPer10Sec === 'number'
         ? source.densityPer10Sec / 10

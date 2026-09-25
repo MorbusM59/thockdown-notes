@@ -231,6 +231,33 @@ const SILENCE = 1e-7;
  */
 const VOICE_SILENCE = 1e-5;
 
+/**
+ * Thunder (startPeal). A peal is several overlapping rumbles -- sound from
+ * different parts of a lightning channel kilometres long arrives at
+ * different times -- each the brown noise loop through a low-pass, under a
+ * swell that rises over `attack` and dies away over the rest of its life,
+ * with a slow random roll in its level and a drift across the stereo field.
+ * Distance (0 near, 1 far) sets how each sounds, blended geometrically
+ * between these ends: the air absorbs highs over kilometres, so far thunder
+ * is low, slow to arrive and long; near thunder is brighter and quicker, and
+ * opens with a CRACK -- a short burst of bright noise whose level jitters,
+ * the tearing of the channel -- once closer than THUNDER_CRACK_FROM.
+ * Even the nearest onset takes THUNDER_MIN_ATTACK_SEC to arrive: this plays
+ * beside someone concentrating, and a clap from nowhere is a fright, not
+ * atmosphere.
+ */
+const THUNDER_RUMBLES = [3, 6];
+const THUNDER_ATTACK_SEC = { near: 0.06, far: 1.2 };
+const THUNDER_CUTOFF_HZ = { near: 700, far: 90 };
+const THUNDER_LEVEL = { near: 1, far: 0.6 };
+const THUNDER_CRACK_FROM = 0.65;
+const THUNDER_CRACK = { centerHz: [1500, 5000], q: 0.7, durationSec: [0.15, 0.45], level: 0.9, jitterSec: [0.004, 0.012] };
+const THUNDER_MIN_ATTACK_SEC = 0.02;
+/** The first peal of a storm that has just started comes within this many seconds. */
+const THUNDER_FIRST_PEAL_SEC = [4, 12];
+/** Average seconds between a rumble's roll targets. */
+const THUNDER_ROLL_SEC = [0.25, 0.9];
+
 /** The most rain voices one layer keeps ringing at once. */
 const MAX_RAIN_VOICES = 48;
 
@@ -253,6 +280,16 @@ function stateVariableFilter(centerHz, q) {
   const k = 1 / q;
   const a1 = 1 / (1 + (g * (g + k)));
   return { a1, a2: g * a1, a3: g * g * a1, s1: 0, s2: 0 };
+}
+
+/** One sample through a stateVariableFilter; returns its low-pass output. */
+function lowPassStep(filter, input) {
+  const v3 = input - filter.s2;
+  const v1 = (filter.a1 * filter.s1) + (filter.a2 * v3);
+  const v2 = filter.s2 + (filter.a2 * filter.s1) + (filter.a3 * v3);
+  filter.s1 = (2 * v1) - filter.s1;
+  filter.s2 = (2 * v2) - filter.s2;
+  return v2;
 }
 
 /** One sample through a stateVariableFilter; returns its band-pass output. */
@@ -360,6 +397,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
     };
     this.configureFilter(channel);
     if (channel.kind === 'noise') this.configureSpace(channel);
+    if (channel.kind === 'thunder') this.configureThunder(channel, null);
     if (channel.kind === 'rain') {
       channel.nextEventFrame = currentFrame + this.eventDelayFrames(settings.dropsPerSecond);
       this.configureRain(channel, null);
@@ -387,6 +425,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
         Object.assign(previous, next);
         this.configureFilter(previous);
         if (previous.kind === 'noise') this.configureSpace(previous);
+        if (previous.kind === 'thunder') this.configureThunder(previous, before);
         if (previous.kind === 'rain') this.configureRain(previous, before);
         return previous;
       });
@@ -1090,6 +1129,181 @@ class AmbientGenerator extends AudioWorkletProcessor {
   }
 
   /**
+   * A thunder layer's clock and mixing gains. A storm that has just started
+   * (or had its rate changed) peals within THUNDER_FIRST_PEAL_SEC -- waiting
+   * the mean interval of minutes would read as nothing happening -- and at
+   * random after that. Its distance's direct and reverb-send gains are the
+   * shared rule's (resolveAmbientSpace); its darkening is not applied on top,
+   * because the rumble's own low-pass (startPeal) already is that darkening.
+   */
+  configureThunder(channel, before) {
+    const space = channel.space ?? { directGain: 1, reverbSend: 0 };
+    channel.directGain = space.directGain;
+    channel.reverbSend = space.reverbSend;
+    if (!channel.peals) channel.peals = [];
+    if (!before || before.pealsPer10Min !== channel.pealsPer10Min) {
+      channel.nextPealFrame = currentFrame + Math.round(this.between(THUNDER_FIRST_PEAL_SEC) * sampleRate);
+    }
+  }
+
+  /** Geometric blend from `near` to `far` at distance `d`. */
+  byDistance(range, d) {
+    return range.near * ((range.far / range.near) ** d);
+  }
+
+  /** A new peal, starting at this sample. Everything random is drawn now. */
+  startPeal(channel) {
+    const d = channel.distance;
+    const spread = channel.spread;
+    const lengthSec = channel.lengthSec;
+    const count = THUNDER_RUMBLES[0] + Math.floor(this.random() * (THUNDER_RUMBLES[1] - THUNDER_RUMBLES[0] + 1));
+    const loop = this.noiseLoop('brown');
+    const rumbles = [];
+    const levelScale = this.byDistance(THUNDER_LEVEL, d);
+    for (let index = 0; index < count; index += 1) {
+      const attackSec = Math.max(THUNDER_MIN_ATTACK_SEC, this.byDistance(THUNDER_ATTACK_SEC, d) * (0.6 + (0.8 * this.random())));
+      const lifeSec = lengthSec * (0.35 + (0.65 * this.random()));
+      // Six time constants to the end of its life: -52 dB, below anything
+      // still audible over the rest of the mix, so ending there is silent
+      // and the length control is how long a rumble actually lasts.
+      const tauSec = Math.max(0.1, (lifeSec - attackSec) / 6);
+      const clampPan = (value) => Math.max(-1, Math.min(1, value));
+      rumbles.push({
+        // Rumbles cluster early and trail off, the way a peal arrives.
+        delay: Math.round((this.random() ** 1.5) * lengthSec * 0.45 * sampleRate),
+        age: 0,
+        attack: Math.max(1, Math.round(attackSec * sampleRate)),
+        decay: Math.exp(-1 / (tauSec * sampleRate)),
+        life: Math.round((attackSec + (6 * tauSec)) * sampleRate),
+        tail: 1,
+        level: levelScale * (0.5 + (0.5 * this.random())),
+        filter: stateVariableFilter(this.byDistance(THUNDER_CUTOFF_HZ, d) * (0.7 + (0.6 * this.random())), 0.9),
+        read: Math.floor(this.random() * loop.length),
+        panFrom: clampPan(channel.pan + (spread * ((this.random() * 2) - 1))),
+        panTo: clampPan(channel.pan + (spread * ((this.random() * 2) - 1))),
+        rollSeed: Math.floor(this.random() * 0x100000000) >>> 0,
+        roll: 1,
+        rollTarget: 1,
+        rollFrames: 0,
+      });
+    }
+    let crack = null;
+    if (d < THUNDER_CRACK_FROM) {
+      const nearness = (THUNDER_CRACK_FROM - d) / THUNDER_CRACK_FROM;
+      const whiteLoop = this.noiseLoop('white');
+      crack = {
+        age: 0,
+        attack: Math.round(THUNDER_MIN_ATTACK_SEC * sampleRate),
+        life: Math.round(this.between(THUNDER_CRACK.durationSec) * sampleRate),
+        level: THUNDER_CRACK.level * (nearness ** 1.5),
+        filter: stateVariableFilter(this.between(THUNDER_CRACK.centerHz), THUNDER_CRACK.q),
+        read: Math.floor(this.random() * whiteLoop.length),
+        pan: Math.max(-1, Math.min(1, channel.pan + (spread * 0.3 * ((this.random() * 2) - 1)))),
+        gainLeft: 0,
+        gainRight: 0,
+        jitterSeed: Math.floor(this.random() * 0x100000000) >>> 0,
+        jitter: 1,
+        jitterFrames: 0,
+      };
+    }
+    if (crack) {
+      crack.gainLeft = Math.SQRT2 * Math.cos((crack.pan + 1) * Math.PI / 4);
+      crack.gainRight = Math.SQRT2 * Math.sin((crack.pan + 1) * Math.PI / 4);
+    }
+    channel.peals.push({ rumbles, crack });
+  }
+
+  /**
+   * A thunder layer's block, written into `left`/`right` (overwritten). A
+   * storm between peals costs one comparison per sample and nothing else.
+   */
+  renderThunder(channel, left, right, length) {
+    left.fill(0, 0, length);
+    right.fill(0, 0, length);
+    // Seconds between peals are exponential (a Poisson process), drawn here
+    // rather than by eventDelayFrames, whose floor of 0.1 per second is a
+    // drop rate's and would triple the stormiest setting.
+    const meanFrames = (600 / channel.pealsPer10Min) * sampleRate;
+    for (let index = 0; index < length; index += 1) {
+      if (currentFrame + index >= channel.nextPealFrame) {
+        this.startPeal(channel);
+        channel.nextPealFrame = currentFrame + index
+          + Math.max(1, Math.floor(-Math.log(Math.max(1e-9, 1 - this.random())) * meanFrames));
+      }
+      if (channel.peals.length === 0) continue;
+      let sumLeft = 0;
+      let sumRight = 0;
+      for (let pealIndex = channel.peals.length - 1; pealIndex >= 0; pealIndex -= 1) {
+        const peal = channel.peals[pealIndex];
+        const brown = this.noiseLoop('brown');
+        for (let rumbleIndex = peal.rumbles.length - 1; rumbleIndex >= 0; rumbleIndex -= 1) {
+          const rumble = peal.rumbles[rumbleIndex];
+          if (rumble.delay > 0) {
+            rumble.delay -= 1;
+            continue;
+          }
+          if (rumble.rollFrames <= 0) {
+            rumble.rollSeed = (1664525 * rumble.rollSeed + 1013904223) >>> 0;
+            rumble.rollTarget = 0.35 + (0.65 * (rumble.rollSeed / 0x100000000));
+            rumble.rollSeed = (1664525 * rumble.rollSeed + 1013904223) >>> 0;
+            rumble.rollFrames = Math.round((THUNDER_ROLL_SEC[0] + ((THUNDER_ROLL_SEC[1] - THUNDER_ROLL_SEC[0]) * (rumble.rollSeed / 0x100000000))) * sampleRate);
+            // Where it is in the field moves on the same slow clock.
+            const progress = Math.min(1, rumble.age / rumble.life);
+            const pan = rumble.panFrom + ((rumble.panTo - rumble.panFrom) * progress);
+            rumble.gainLeft = Math.SQRT2 * Math.cos((pan + 1) * Math.PI / 4);
+            rumble.gainRight = Math.SQRT2 * Math.sin((pan + 1) * Math.PI / 4);
+          }
+          rumble.rollFrames -= 1;
+          rumble.roll += (rumble.rollTarget - rumble.roll) * (8 / sampleRate);
+          let envelope;
+          if (rumble.age < rumble.attack) {
+            const t = rumble.age / rumble.attack;
+            envelope = t * t * (3 - (2 * t));
+          } else {
+            rumble.tail *= rumble.decay;
+            envelope = rumble.tail;
+          }
+          const sample = lowPassStep(rumble.filter, brown[rumble.read]) * envelope * rumble.level * rumble.roll;
+          rumble.read = rumble.read + 1 === brown.length ? 0 : rumble.read + 1;
+          sumLeft += sample * rumble.gainLeft;
+          sumRight += sample * rumble.gainRight;
+          rumble.age += 1;
+          if (rumble.age >= rumble.life) {
+            peal.rumbles[rumbleIndex] = peal.rumbles[peal.rumbles.length - 1];
+            peal.rumbles.pop();
+          }
+        }
+        const crack = peal.crack;
+        if (crack) {
+          if (crack.jitterFrames <= 0) {
+            crack.jitterSeed = (1664525 * crack.jitterSeed + 1013904223) >>> 0;
+            crack.jitter = 0.2 + (0.8 * (crack.jitterSeed / 0x100000000));
+            crack.jitterSeed = (1664525 * crack.jitterSeed + 1013904223) >>> 0;
+            crack.jitterFrames = Math.round((THUNDER_CRACK.jitterSec[0] + ((THUNDER_CRACK.jitterSec[1] - THUNDER_CRACK.jitterSec[0]) * (crack.jitterSeed / 0x100000000))) * sampleRate);
+          }
+          crack.jitterFrames -= 1;
+          const white = this.noiseLoop('white');
+          const shape = crack.age < crack.attack
+            ? crack.age / crack.attack
+            : Math.max(0, 1 - ((crack.age - crack.attack) / Math.max(1, crack.life - crack.attack))) ** 2;
+          const sample = bandPass(crack.filter, white[crack.read]) * shape * crack.level * crack.jitter;
+          crack.read = crack.read + 1 === white.length ? 0 : crack.read + 1;
+          sumLeft += sample * crack.gainLeft;
+          sumRight += sample * crack.gainRight;
+          crack.age += 1;
+          if (crack.age >= crack.life) peal.crack = null;
+        }
+        if (peal.rumbles.length === 0 && !peal.crack) {
+          channel.peals[pealIndex] = channel.peals[channel.peals.length - 1];
+          channel.peals.pop();
+        }
+      }
+      left[index] = sumLeft * channel.volume;
+      right[index] = sumRight * channel.volume;
+    }
+  }
+
+  /**
    * A noise layer's level (its cycle scaled by amplitude and volume) and its
    * two pan gains, at its current phase.
    */
@@ -1285,7 +1499,8 @@ class AmbientGenerator extends AudioWorkletProcessor {
         for (let index = 0; index < length; index += 1) target[index] += scratchLeft[index] * scale;
         continue;
       }
-      this.renderNoise(channel, scratchLeft, scratchRight, length);
+      if (channel.kind === 'thunder') this.renderThunder(channel, scratchLeft, scratchRight, length);
+      else this.renderNoise(channel, scratchLeft, scratchRight, length);
       if (!audible) continue;
       const directScale = channelScale * (channel.directGain ?? 1);
       for (let index = 0; index < length; index += 1) {
