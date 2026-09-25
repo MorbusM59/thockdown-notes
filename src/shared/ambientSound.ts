@@ -149,7 +149,7 @@ export interface AmbientRainChannelSettings extends AmbientChannelBaseSettings {
  * share, so 0 never plays, 0.5 is as long silent as sounding, 1 never
  * pauses, and 0.01 with a 20 s peal waits 1980 s. After every peal,
  * `randomness` moves every other control of the next one (volume, share,
- * distance, pan, spread, length, character) by up to AMBIENT_THUNDER_JITTER of its
+ * distance, pan, spread, length, character, contrast) by up to AMBIENT_THUNDER_JITTER of its
  * range either way, capped at the range's ends, always around the setting
  * rather than drifting from the last draw.
  */
@@ -165,6 +165,12 @@ export interface AmbientThunderChannelSettings extends AmbientChannelBaseSetting
   spread: number;
   /** How harshly the boom under the rumble breaks up: 0 a smooth swell, 1 a choppy growl. The rumble above it always rolls smoothly. */
   character: number;
+  /**
+   * -1 to 1, 0 off: how far the peal's loud moments are pushed away from
+   * its quiet ones (above 0) or drawn toward them (below 0), around its own
+   * recent level -- contrast, as for an image.
+   */
+  contrast: number;
   /** 0 (every peal as set) to 1 (every other control varied by up to AMBIENT_THUNDER_JITTER). */
   randomness: number;
   /** How long a peal's roll lasts, in seconds. */
@@ -292,6 +298,7 @@ export const DEFAULT_THUNDER_CHANNEL: Readonly<Omit<AmbientThunderChannelSetting
   pan: 0,
   spread: 0.5,
   character: 0.5,
+  contrast: 0,
   randomness: 0.5,
   lengthSec: 15,
 };
@@ -439,6 +446,7 @@ export function ambientSettingsSignature(settings: AmbientSettings): string {
         channel.pan,
         channel.spread,
         channel.character,
+        channel.contrast,
         channel.randomness,
         channel.lengthSec,
       ].map((value) => typeof value === 'number' ? value.toFixed(4) : value).join(':');
@@ -726,6 +734,7 @@ export function sanitizeAmbientSettings(input: unknown): AmbientSettings {
         pan: finiteRange(source.pan, -1, 1, defaultThunderPan(index - AMBIENT_THUNDER_FIRST_INDEX)),
         spread: finiteUnit(source.spread, DEFAULT_THUNDER_CHANNEL.spread),
         character: finiteUnit(source.character, DEFAULT_THUNDER_CHANNEL.character),
+        contrast: finiteRange(source.contrast, -1, 1, DEFAULT_THUNDER_CHANNEL.contrast),
         randomness: finiteUnit(source.randomness, DEFAULT_THUNDER_CHANNEL.randomness),
         lengthSec: finiteRange(source.lengthSec, AMBIENT_THUNDER_LENGTH_MIN_SEC, AMBIENT_THUNDER_LENGTH_MAX_SEC, DEFAULT_THUNDER_CHANNEL.lengthSec),
       };

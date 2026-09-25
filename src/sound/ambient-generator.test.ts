@@ -1008,6 +1008,54 @@ describe('ambient thunder', () => {
     expect(draws.reduce((sum, draw) => sum + draw.volume, 0) / draws.length).toBeCloseTo(0.5, 1);
   });
 
+  describe('contrast', () => {
+    const render = (contrast: number, seed: number) => createProcessor(
+      seed, makeThunderSlots([steady({ contrast, lengthSec: 10, share: 0.01 })]), rate,
+    ).render(25).left;
+    // How far the level swings: the mean distance, in log terms, of each
+    // 100 ms moment from the median of the two seconds around it, within
+    // the body of the peal. That is the scale of a peal's surges and
+    // breaks; below it, rumble flickers in level by nature, which no
+    // contrast can take out without distorting it.
+    const swing = (contrast: number) => {
+      let sum = 0;
+      let frames = 0;
+      for (const seed of [1, 2, 3]) {
+        const samples = render(contrast, seed);
+        const start = samples.findIndex((value) => value !== 0);
+        const size = rate / 10;
+        const levels: number[] = [];
+        for (let at = start; at + size <= samples.length; at += size) levels.push(rms(samples.slice(at, at + size)));
+        const loudest = Math.max(...levels);
+        for (let index = 10; index < levels.length - 10; index += 1) {
+          const around = levels.slice(index - 10, index + 11).sort((x, y) => x - y)[10];
+          if (around <= loudest * 0.1) continue;
+          sum += Math.abs(Math.log(levels[index] / around));
+          frames += 1;
+        }
+      }
+      return sum / frames;
+    };
+
+    it('pushes loud and quiet apart above zero and draws them together below it', () => {
+      const flat = swing(-1);
+      const off = swing(0);
+      const sharp = swing(1);
+      expect(sharp).toBeGreaterThan(1.3 * off);
+      expect(flat).toBeLessThan(0.85 * off);
+    });
+
+    it('never gains more than its cap, and still never jumps from silence', () => {
+      for (const seed of [1, 2, 3]) {
+        const off = render(0, seed);
+        const sharp = render(1, seed);
+        expect(peakOf(sharp)).toBeLessThanOrEqual(4 * peakOf(off) + 1e-9);
+        const start = sharp.findIndex((value) => value !== 0);
+        expect(peakOf(sharp.slice(start, start + (rate / 100)))).toBeLessThan(peakOf(sharp) * 0.5);
+      }
+    });
+  });
+
   it('plays every peal as set with randomness at zero', () => {
     const generator = createProcessor(3, makeThunderSlots([steady({ share: 0.5, pan: 0.2, lengthSec: 10 })]), rate);
     const processor = generator.processor as unknown as {

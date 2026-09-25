@@ -303,6 +303,27 @@ const THUNDER_BOOMS = [1, 2];
 const THUNDER_BOOM_CENTER_HZ = { near: 90, far: 45 };
 const THUNDER_BOOM_Q = 1.6;
 const THUNDER_BOOM_LEVEL = 3;
+/**
+ * Contrast (renderThunder): the layer's level is followed over
+ * THUNDER_CONTRAST_FOLLOW_SEC, and compared with a PIVOT -- its own recent
+ * level, rising over THUNDER_CONTRAST_PIVOT_SEC.rise and falling over
+ * .fall. The pivot rises fast so a peal's onset is not read as a peak far
+ * above a silent past and boosted: this plays beside someone concentrating.
+ * Contrast acts on the surges and breaks of a peal, a tenth of a second
+ * and up; below that, rumble flickers in level by nature, and flattening
+ * that would distort it. The two ends are not symmetric: at 1 a peal's
+ * swing about doubles, at -1 it loses about a fifth.
+ * The gain is (level / pivot) ^ (contrast x THUNDER_CONTRAST_EXPONENT):
+ * at contrast 1 each doubling of the level against the pivot doubles
+ * again; at -1 half of each is taken away. It is capped at
+ * THUNDER_CONTRAST_GAIN so neither end can blow up or vanish, and the
+ * upper cap spares the shared limiter the music also goes through.
+ */
+const THUNDER_CONTRAST_FOLLOW_SEC = 0.03;
+const THUNDER_CONTRAST_PIVOT_SEC = { rise: 0.3, fall: 3 };
+const THUNDER_CONTRAST_EXPONENT = 1;
+const THUNDER_CONTRAST_GAIN = [0.1, 4];
+
 /** A peal's overall scale, set so its peaks stay about where they were before the boom. */
 const THUNDER_PEAL_SCALE = 0.6;
 /**
@@ -1265,6 +1286,15 @@ class AmbientGenerator extends AudioWorkletProcessor {
       // Direct left and right, send left and right.
       channel.highPass = Array.from({ length: 4 }, () => stateVariableFilter(THUNDER_HIGH_PASS_HZ, Math.SQRT1_2));
     }
+    if (!channel.contrastFollow) {
+      channel.contrastFollow = {
+        level: 0,
+        pivot: 0,
+        rate: 1 - Math.exp(-1 / (THUNDER_CONTRAST_FOLLOW_SEC * sampleRate)),
+        rise: 1 - Math.exp(-1 / (THUNDER_CONTRAST_PIVOT_SEC.rise * sampleRate)),
+        fall: 1 - Math.exp(-1 / (THUNDER_CONTRAST_PIVOT_SEC.fall * sampleRate)),
+      };
+    }
     if (channel.share <= 0) {
       channel.nextPealFrame = Infinity;
     } else if (!before || before.share <= 0 || !Number.isFinite(channel.nextPealFrame)) {
@@ -1293,6 +1323,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
       spread: vary(channel.spread, 0, 1),
       lengthSec: vary(channel.lengthSec, lengthLow, lengthHigh),
       character: vary(channel.character ?? 0.5, 0, 1),
+      contrast: vary(channel.contrast ?? 0, -1, 1),
     };
   }
 
@@ -1432,6 +1463,10 @@ class AmbientGenerator extends AudioWorkletProcessor {
       if (currentFrame + index >= channel.nextPealFrame) {
         const settings = this.thunderPealSettings(channel);
         this.startPeal(channel, settings);
+        // Contrast acts on the layer's mix, so the latest peal's draw of it
+        // holds until the next; the offset from the setting keeps the slider
+        // live, as for volume.
+        channel.contrastOffset = settings.contrast - (channel.contrast ?? 0);
         // Silent for the peal's length x (1 - share) / share after it ends.
         const pauseSec = settings.lengthSec * ((1 - settings.share) / settings.share);
         channel.nextPealFrame = currentFrame + index + Math.max(1, Math.round((settings.lengthSec + pauseSec) * sampleRate));
@@ -1488,6 +1523,22 @@ class AmbientGenerator extends AudioWorkletProcessor {
         if (live === 0 && peal.next === peal.rumbles.length) {
           channel.peals[pealIndex] = channel.peals[channel.peals.length - 1];
           channel.peals.pop();
+        }
+      }
+      const contrast = Math.max(-1, Math.min(1, (channel.contrast ?? 0) + (channel.contrastOffset ?? 0)));
+      if (contrast !== 0) {
+        // Followed as power, so the exponent on the ratio is halved.
+        const power = 0.5 * ((directLeft * directLeft) + (directRight * directRight));
+        const follow = channel.contrastFollow;
+        follow.level += (power - follow.level) * follow.rate;
+        follow.pivot += (follow.level - follow.pivot) * (follow.level > follow.pivot ? follow.rise : follow.fall);
+        if (follow.pivot > 1e-12) {
+          const gain = Math.max(THUNDER_CONTRAST_GAIN[0], Math.min(THUNDER_CONTRAST_GAIN[1],
+            (follow.level / follow.pivot) ** (0.5 * contrast * THUNDER_CONTRAST_EXPONENT)));
+          directLeft *= gain;
+          directRight *= gain;
+          wetLeft *= gain;
+          wetRight *= gain;
         }
       }
       const highPass = channel.highPass;

@@ -605,6 +605,20 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                   onCommit={(value) => updateThunderChannel(channel.id, { character: value })}
                 />
                 <CompactScrollbarSlider
+                  id={`ambient-${channel.id}-contrast`}
+                  min={-1}
+                  max={1}
+                  step={0.01}
+                  value={channel.contrast}
+                  trackLabel="contrast"
+                  tooltipLabel="Contrast: to the right, the loud moments of a peal get louder and the quiet ones quieter; to the left they are drawn together and the roll flattens. Off in the middle"
+                  ariaLabel={`${layerName} contrast`}
+                  disabled={!channel.enabled}
+                  defaultValue={DEFAULT_THUNDER_CHANNEL.contrast}
+                  formatValue={(value) => Math.abs(value) < 0.005 ? 'Off' : `${value > 0 ? '+' : '−'}${Math.round(Math.abs(value) * 100)}%`}
+                  onCommit={(value) => updateThunderChannel(channel.id, { contrast: value })}
+                />
+                <CompactScrollbarSlider
                   id={`ambient-${channel.id}-randomness`}
                   min={0}
                   max={1}
