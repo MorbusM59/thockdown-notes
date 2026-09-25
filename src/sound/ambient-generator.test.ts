@@ -668,6 +668,65 @@ describe('ambient AudioWorklet generator', () => {
       }
     });
 
+    const randomFrom = (start: number) => {
+      let seed = start;
+      return () => {
+        seed = (Math.imul(1664525, seed) + 1013904223) >>> 0;
+        return seed / 0x100000000;
+      };
+    };
+
+    it('is Paul Kellet\'s pink filter exactly at the rate it was fitted for', () => {
+      const next = createNoiseSource('pink', randomFrom(5), 44100);
+      const random = randomFrom(5);
+      const b = [0, 0, 0, 0, 0, 0, 0];
+      for (let index = 0; index < 20000; index += 1) {
+        const white = (random() * 2) - 1;
+        b[0] = (0.99886 * b[0]) + (white * 0.0555179);
+        b[1] = (0.99332 * b[1]) + (white * 0.0750759);
+        b[2] = (0.969 * b[2]) + (white * 0.153852);
+        b[3] = (0.8665 * b[3]) + (white * 0.3104856);
+        b[4] = (0.55 * b[4]) + (white * 0.5329522);
+        b[5] = (-0.7616 * b[5]) - (white * 0.016898);
+        const expected = (b[0] + b[1] + b[2] + b[3] + b[4] + b[5] + b[6] + (white * 0.5362)) * 0.11;
+        b[6] = white * 0.115926;
+        expect(next()).toBeCloseTo(expected, 9);
+      }
+    });
+
+    it('is the same pink and brown noise at every sample rate: the same level and the same balance of low to high', () => {
+      const measure = (type: 'pink' | 'brown', rate: number) => {
+        const next = createNoiseSource(type, randomFrom(11), rate);
+        const samples = Array.from({ length: rate * 20 }, next);
+        // Low: below 200 Hz. High: 1-3 kHz, a band both rates hold (above
+        // 2 kHz would run to 6 kHz at one rate and to 24 kHz at the other).
+        // One-pole filters stated in hertz.
+        const lowPass = (hz: number) => {
+          const a = Math.exp((-2 * Math.PI * hz) / rate);
+          let state = 0;
+          return samples.map((value) => (state = (a * state) + ((1 - a) * value)));
+        };
+        const low = lowPass(200);
+        const belowBand = lowPass(1000);
+        const belowTop = lowPass(3000);
+        return {
+          level: rms(samples),
+          low: rms(low) / rms(samples),
+          high: rms(belowTop.map((value, index) => value - belowBand[index])) / rms(samples),
+        };
+      };
+      for (const type of ['pink', 'brown'] as const) {
+        const slow = measure(type, 12000);
+        const fast = measure(type, 48000);
+        expect(slow.level / fast.level).toBeGreaterThan(0.9);
+        expect(slow.level / fast.level).toBeLessThan(1.1);
+        expect(slow.low / fast.low).toBeGreaterThan(0.9);
+        expect(slow.low / fast.low).toBeLessThan(1.1);
+        expect(slow.high / fast.high).toBeGreaterThan(0.8);
+        expect(slow.high / fast.high).toBeLessThan(1.25);
+      }
+    });
+
     it('is the same noise as generating it live, level for level', () => {
       for (const type of types) {
         const loop = loops[type];

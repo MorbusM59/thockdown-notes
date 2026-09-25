@@ -41,13 +41,73 @@ const BROWN_CORNER_HZ = 22.9;
 const BROWN_REFERENCE = { gain: 0.055, pole: 0.997 };
 
 /**
- * A live noise generator at `sampleRate`: white, pink (Paul Kellet's
- * filter, whose coefficients are for 44.1 kHz and are not rescaled) or
- * brown (a leaky integrator of white with its corner at BROWN_CORNER_HZ,
+ * Pink noise is Paul Kellet's filter: white, plus five one-pole low-pass
+ * stages whose corners are spread over the band, plus a correction stage
+ * with a negative pole near the top of it, plus white one sample late.
+ * Its coefficients were fitted at PINK_REFERENCE_RATE. So the noise is the
+ * same at every rate:
+ * - each low stage's corner is kept in hertz (read off its pole at the
+ *   reference rate), its pole recomputed for the rate, and its gain scaled
+ *   to keep its low-frequency level g / (1 - p);
+ * - the correction stage and the two white terms act relative to the top
+ *   of the band, so they are kept as they are;
+ * - the whole is scaled to the output power the filter has at the
+ *   reference rate, computed from its impulse response (pinkPower).
+ */
+const PINK_REFERENCE_RATE = 44100;
+const PINK_LOW_STAGES: ReadonlyArray<readonly [pole: number, gain: number]> = [
+  [0.99886, 0.0555179],
+  [0.99332, 0.0750759],
+  [0.969, 0.153852],
+  [0.8665, 0.3104856],
+  [0.55, 0.5329522],
+];
+const PINK_CORRECTION = { pole: -0.7616, gain: -0.016898 };
+const PINK_WHITE_GAIN = 0.5362;
+const PINK_LATE_WHITE_GAIN = 0.115926;
+const PINK_OUTPUT_GAIN = 0.11;
+
+/** Kellet's low stages at `sampleRate` (see PINK_LOW_STAGES). */
+function pinkLowStagesAt(sampleRate: number): Array<[number, number]> {
+  return PINK_LOW_STAGES.map(([pole, gain]) => {
+    const cornerHz = (-Math.log(pole) * PINK_REFERENCE_RATE) / (2 * Math.PI);
+    const scaledPole = Math.exp((-2 * Math.PI * cornerHz) / sampleRate);
+    return [scaledPole, gain * ((1 - scaledPole) / (1 - pole))];
+  });
+}
+
+/**
+ * The output power of the pink filter for unit-power white input: the sum
+ * of its squared impulse response, run until the slowest stage has decayed
+ * past any effect on the result.
+ */
+function pinkPower(stages: ReadonlyArray<readonly [number, number]>): number {
+  const slowest = Math.max(...stages.map(([pole]) => pole));
+  const length = Math.ceil(Math.log(1e-9) / Math.log(slowest));
+  let power = 0;
+  for (let n = 0; n < length; n += 1) {
+    let h = PINK_CORRECTION.gain * (PINK_CORRECTION.pole ** n);
+    for (const [pole, gain] of stages) h += gain * (pole ** n);
+    if (n === 0) h += PINK_WHITE_GAIN;
+    if (n === 1) h += PINK_LATE_WHITE_GAIN;
+    power += h * h;
+  }
+  return power;
+}
+
+const PINK_REFERENCE_POWER = pinkPower(PINK_LOW_STAGES);
+
+/**
+ * A live noise generator at `sampleRate`: white, pink (see PINK_LOW_STAGES)
+ * or brown (a leaky integrator of white with its corner at BROWN_CORNER_HZ,
  * its gain set so its level is the same at every rate).
  */
 export function createNoiseSource(type: AmbientNoiseType, random: () => number, sampleRate: number): () => number {
-  const pink = [0, 0, 0, 0, 0, 0, 0];
+  const pinkStages = pinkLowStagesAt(sampleRate);
+  const pinkState = [0, 0, 0, 0, 0];
+  let pinkCorrection = 0;
+  let pinkLateWhite = 0;
+  const pinkGain = PINK_OUTPUT_GAIN * Math.sqrt(PINK_REFERENCE_POWER / pinkPower(pinkStages));
   let brown = 0;
   const brownPole = Math.exp((-2 * Math.PI * BROWN_CORNER_HZ) / sampleRate);
   // A leaky integrator's output power is gain^2 / (1 - pole^2).
@@ -59,15 +119,14 @@ export function createNoiseSource(type: AmbientNoiseType, random: () => number, 
       brown = (brownPole * brown) + (white * brownGain);
       return brown;
     }
-    pink[0] = (0.99886 * pink[0]) + (white * 0.0555179);
-    pink[1] = (0.99332 * pink[1]) + (white * 0.0750759);
-    pink[2] = (0.969 * pink[2]) + (white * 0.153852);
-    pink[3] = (0.8665 * pink[3]) + (white * 0.3104856);
-    pink[4] = (0.55 * pink[4]) + (white * 0.5329522);
-    pink[5] = (-0.7616 * pink[5]) - (white * 0.016898);
-    const value = (pink[0] + pink[1] + pink[2] + pink[3] + pink[4] + pink[5] + pink[6] + (white * 0.5362)) * 0.11;
-    pink[6] = white * 0.115926;
-    return value;
+    let sum = (white * PINK_WHITE_GAIN) + pinkLateWhite;
+    for (let stage = 0; stage < pinkStages.length; stage += 1) {
+      pinkState[stage] = (pinkStages[stage][0] * pinkState[stage]) + (white * pinkStages[stage][1]);
+      sum += pinkState[stage];
+    }
+    pinkCorrection = (PINK_CORRECTION.pole * pinkCorrection) + (white * PINK_CORRECTION.gain);
+    pinkLateWhite = white * PINK_LATE_WHITE_GAIN;
+    return (sum + pinkCorrection) * pinkGain;
   };
 }
 
