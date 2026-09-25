@@ -1,4 +1,10 @@
-import { AMBIENT_RAIN_FIRST_INDEX, type AmbientChannelSettings, type AmbientSettings } from './ambientSound';
+import {
+  AMBIENT_RAIN_FIRST_INDEX,
+  noiseTypeForSlot,
+  type AmbientChannelSettings,
+  type AmbientNoiseType,
+  type AmbientSettings,
+} from './ambientSound';
 import { buildNoiseCycle } from './ambientNoiseCycle';
 
 /** One channel as the worklet (public/ambient-generator.js) receives it. */
@@ -7,6 +13,10 @@ export type AmbientWorkletChannel = AmbientChannelSettings & {
   outputIndex: number;
   /** Precomputed modulation cycle (buildNoiseCycle); noise layers only. */
   cycle?: Float32Array;
+  /** The noise type, from the slot (noiseTypeForSlot); noise layers only. */
+  type?: AmbientNoiseType;
+  /** The layer's distance resolved (resolveAmbientSpace); noise layers only. */
+  space?: AmbientSpace;
 };
 
 /**
@@ -18,22 +28,30 @@ export type AmbientWorkletChannel = AmbientChannelSettings & {
 export function toWorkletChannels(settings: AmbientSettings): AmbientWorkletChannel[] {
   return settings.map((channel, index) => (
     channel.kind === 'noise'
-      ? { ...channel, outputIndex: -1, cycle: buildNoiseCycle(channel.ramp, channel.shape) }
+      ? {
+        ...channel,
+        outputIndex: -1,
+        cycle: buildNoiseCycle(channel.ramp, channel.shape),
+        type: noiseTypeForSlot(index),
+        space: resolveAmbientSpace(channel.distance),
+      }
       : { ...channel, outputIndex: index - AMBIENT_RAIN_FIRST_INDEX }
   ));
 }
 
-/**
- * How far away a rain layer sounds. Distance darkens it (a low-pass swept
- * from 18 kHz down to 2.2 kHz), lowers the direct sound and raises the share
- * sent to the reverb, which is what makes the far layers diffuse rather than
- * merely quiet.
- */
-export function resolveAmbientRainSpace(distance: number): {
+export interface AmbientSpace {
   cutoffHz: number;
   directGain: number;
   reverbSend: number;
-} {
+}
+
+/**
+ * How far away a layer sounds, for rain and noise layers alike. Distance
+ * darkens it (a low-pass swept from 18 kHz down to 2.2 kHz), lowers the
+ * direct sound and raises the share sent to the reverb, which is what makes
+ * the far layers diffuse rather than merely quiet.
+ */
+export function resolveAmbientSpace(distance: number): AmbientSpace {
   const boundedDistance = Number.isFinite(distance) ? Math.max(0, Math.min(1, distance)) : 0;
   return {
     cutoffHz: 18000 * ((2200 / 18000) ** boundedDistance),

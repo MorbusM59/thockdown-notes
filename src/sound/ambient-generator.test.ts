@@ -9,7 +9,7 @@ import {
   createAmbientChannel,
   createAmbientRainChannel,
 } from '../shared/ambientSound';
-import { toWorkletChannels } from '../shared/ambientSoundDsp';
+import { resolveAmbientSpace, toWorkletChannels } from '../shared/ambientSoundDsp';
 import { buildNoiseLoops, createNoiseSource, type NoiseLoops } from '../shared/ambientNoiseLoops';
 import { buildNoiseCycle } from '../shared/ambientNoiseCycle';
 
@@ -51,16 +51,21 @@ function toConfigure(channels: TestChannel[]): unknown[] {
 type TestChannel = (
   | ReturnType<typeof createAmbientChannel>
   | ReturnType<typeof createAmbientRainChannel>
-) & { cycle?: Float32Array }
+) & { cycle?: Float32Array; type?: string; space?: ReturnType<typeof resolveAmbientSpace> }
 
-function makeChannel(id: string, overrides: Partial<ReturnType<typeof createAmbientChannel>> = {}): TestChannel {
+// A noise channel as the worklet receives it. `type` is what the worklet
+// reads; in a full slot row toWorkletChannels replaces it with the slot's.
+type NoiseOverrides = Partial<ReturnType<typeof createAmbientChannel>> & { type?: 'white' | 'pink' | 'brown' };
+
+function makeChannel(id: string, overrides: NoiseOverrides = {}): TestChannel {
   const settings = {
     ...createAmbientChannel(id),
     volume: 1,
     type: 'white' as const,
     ...overrides,
   }
-  return { ...settings, cycle: buildNoiseCycle(settings.ramp, settings.shape) }
+  // Resolved as toWorkletChannels resolves them for a slot row.
+  return { ...settings, cycle: buildNoiseCycle(settings.ramp, settings.shape), space: resolveAmbientSpace(settings.distance) }
 }
 
 function makeRainChannel(id: string, overrides: Partial<ReturnType<typeof createAmbientRainChannel>> = {}): TestChannel {
@@ -111,14 +116,19 @@ function createProcessor(seed: number, channels: TestChannel[], sampleRate = 120
     registerProcessor: (_name: string, processor: new (options: unknown) => TestProcessor) => { Processor = processor; },
   };
   runInNewContext(generatorSource, scope);
-  const processor = new Processor!({ processorOptions: { seed, noiseLoops: noiseLoopsAt(sampleRate) } });
+  // The same output layout the engine creates: noise direct, three rain
+  // outputs, then the noise reverb send.
+  const processor = new Processor!({ processorOptions: { seed, noiseLoops: noiseLoopsAt(sampleRate), noiseSendOutput: 4 } });
   processor.port.onmessage?.({ data: { type: 'configure', channels: toConfigure(channels) } });
 
   return {
     processor,
     constants: scope.__generatorConstants as GeneratorConstants,
     render(seconds: number) {
-      const samples = { left: [] as number[], right: [] as number[], rain: [[], [], []] as number[][] };
+      const samples = {
+        left: [] as number[], right: [] as number[], rain: [[], [], []] as number[][],
+        sendLeft: [] as number[], sendRight: [] as number[],
+      };
       const endFrame = frame + Math.floor(seconds * sampleRate);
       while (frame < endFrame) {
         const blockLength = Math.min(blockSize, endFrame - frame);
@@ -127,8 +137,11 @@ function createProcessor(seed: number, channels: TestChannel[], sampleRate = 120
           [new Float32Array(blockLength)],
           [new Float32Array(blockLength)],
           [new Float32Array(blockLength)],
+          [new Float32Array(blockLength), new Float32Array(blockLength)],
         ];
         processor.process([], outputs);
+        samples.sendLeft.push(...outputs[4][0]);
+        samples.sendRight.push(...outputs[4][1]);
         samples.left.push(...outputs[0][0]);
         samples.right.push(...outputs[0][1]);
         for (let index = 0; index < samples.rain.length; index += 1) {
@@ -667,4 +680,45 @@ describe('ambient AudioWorklet generator', () => {
 
   });
 
+  describe('noise width and distance', () => {
+    const render = (overrides: NoiseOverrides) => createProcessor(41, [makeChannel('layer', {
+      type: 'pink', modulationAmplitude: 0, volume: 0.5, ...overrides,
+    })], 48000).render(1);
+    const correlation = (a: number[], b: number[]) => {
+      let ab = 0; let aa = 0; let bb = 0;
+      for (let index = 0; index < a.length; index += 1) {
+        ab += a[index] * b[index]; aa += a[index] * a[index]; bb += b[index] * b[index];
+      }
+      return ab / Math.sqrt(aa * bb);
+    };
+
+    it('narrows from two unrelated sides to one point without changing the level', () => {
+      const wide = render({ width: 1 });
+      const middle = render({ width: 0.5 });
+      const point = render({ width: 0 });
+      expect(Math.abs(correlation(wide.left, wide.right))).toBeLessThan(0.1);
+      expect(correlation(middle.left, middle.right)).toBeGreaterThan(0.5);
+      expect(point.left).toEqual(point.right);
+      expect(Math.abs(rms(point.left) - rms(wide.left)) / rms(wide.left)).toBeLessThan(0.1);
+    });
+
+    it('moves the sound into the reverb and darkens it with distance', () => {
+      const near = render({ distance: 0, type: 'white' });
+      const far = render({ distance: 1, type: 'white' });
+      // Direct sound falls, the reverb send rises.
+      expect(rms(far.left)).toBeLessThan(rms(near.left) * 0.5);
+      expect(rms(far.sendLeft)).toBeGreaterThan(rms(near.sendLeft) * 3);
+      // Darker: white noise crosses zero far less often once low-passed.
+      const crossings = (samples: number[]) => samples.reduce((count, value, index) => (
+        index > 0 && (value >= 0) !== (samples[index - 1] >= 0) ? count + 1 : count), 0);
+      expect(crossings(far.left)).toBeLessThan(crossings(near.left) * 0.5);
+    });
+
+    it('leaves a near, wide layer exactly as it was', () => {
+      const plain = createProcessor(43, [makeChannel('layer', { type: 'brown' })], 16000).render(0.5);
+      const explicit = createProcessor(43, [makeChannel('layer', { type: 'brown', distance: 0, width: 1 })], 16000).render(0.5);
+      expect(explicit.left).toEqual(plain.left);
+      expect(explicit.right).toEqual(plain.right);
+    });
+  });
 });

@@ -5,7 +5,6 @@ import {
   AMBIENT_FACTORY_PRESETS,
   AMBIENT_PERIOD_MAX_SEC,
   AMBIENT_PERIOD_MIN_SEC,
-  AMBIENT_NOISE_TYPES,
   AMBIENT_RAIN_DENSITY_MAX,
   AMBIENT_RAIN_DENSITY_MIN,
   AMBIENT_RAIN_DRIPS_MAX_PER_SEC,
@@ -19,6 +18,8 @@ import {
   DEFAULT_RAIN_CHANNEL,
   ambientSettingsSignature,
   applyAmbientPreset,
+  noiseTypeForSlot,
+  AMBIENT_NOISE_SLOT_TYPES,
   defaultRainPan,
   type AmbientChannelBaseSettings,
   type AmbientChannelSettings,
@@ -44,6 +45,30 @@ const PRESET_ICONS: Record<string, string> = {
 
 const RAIN_LAYER_POSITION_NAMES = ['left', 'center', 'right'] as const
 
+/**
+ * How a noise group is shown: its buttons share one icon, chosen for the
+ * role the type plays -- brown's deep, slow rumble is surf; pink's balanced
+ * spread is wind; white's bright hiss is moving air.
+ */
+const NOISE_GROUP_LOOK: Record<AmbientNoiseType, { icon: string; label: string }> = {
+  brown: { icon: 'fa-water', label: 'Brown noise' },
+  pink: { icon: 'fa-wind', label: 'Pink noise' },
+  white: { icon: 'fa-fan', label: 'White noise' },
+}
+const RAIN_GROUP_LOOK = { icon: 'fa-cloud-rain', label: 'Rain' }
+
+/**
+ * A slot's group (its icon and name) and its number within the group; the
+ * icon says which group, so the number counts 1-3 inside it.
+ */
+function slotLook(index: number): { icon: string; label: string; number: number } {
+  if (index >= AMBIENT_RAIN_FIRST_INDEX) {
+    return { ...RAIN_GROUP_LOOK, number: index - AMBIENT_RAIN_FIRST_INDEX + 1 }
+  }
+  const type = noiseTypeForSlot(index)
+  return { ...NOISE_GROUP_LOOK[type], number: index - AMBIENT_NOISE_SLOT_TYPES.indexOf(type) + 1 }
+}
+
 const RAIN_SURFACE_LABELS: Record<AmbientRainSurface, string> = {
   glass: 'Glass',
   street: 'Street',
@@ -57,10 +82,6 @@ interface AmbientSoundOptionsProps {
 
 function copySettings(settings: AmbientSettings): AmbientSettings {
   return settings.map((channel) => ({ ...channel, solo: false }))
-}
-
-function typeIndex(type: AmbientNoiseType): number {
-  return AMBIENT_NOISE_TYPES.indexOf(type)
 }
 
 /**
@@ -240,12 +261,11 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
   }
 
   const channel = selectedChannel
-  const layerNumber = selectedChannelIndex + 1
   // 0-based position among the rain slots; meaningful only for a rain layer.
   const rainIndex = selectedChannelIndex - AMBIENT_RAIN_FIRST_INDEX
-  const layerName = channel?.kind === 'rain'
-    ? `Rain layer ${rainIndex + 1}`
-    : `Ambient layer ${layerNumber}`
+  const layerName = selectedChannelIndex >= 0
+    ? `${slotLook(selectedChannelIndex).label} layer ${slotLook(selectedChannelIndex).number}`
+    : ''
 
   return (
     <AccordionSection
@@ -316,22 +336,24 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
           {Array.from({ length: MAX_AMBIENT_CHANNELS }, (_, index) => {
             const channel = preferences.settings[index]
             const number = index + 1
+            const look = slotLook(index)
             const rainLayerPosition = channel?.kind === 'rain'
               ? RAIN_LAYER_POSITION_NAMES[number - AMBIENT_RAIN_FIRST_INDEX - 1]
               : null
+            const layerTitle = `${look.label} layer ${look.number}${rainLayerPosition ? ` (${rainLayerPosition})` : ''}`
             const isSelected = channel?.id === selectedChannel?.id
             return (
               <button
                 key={number}
                 type="button"
                 className={`btn-icon options-color-swatch options-loadout-btn ambient-channel-selector-btn${isSelected ? ' is-active' : ''}${channel?.enabled ? ' is-enabled' : ' is-disabled'}${channel?.solo ? ' is-solo' : ''}`}
-                aria-label={`Ambient channel ${number}${rainLayerPosition ? `, rain ${rainLayerPosition}` : ''}, ${channel?.enabled ? 'enabled' : 'disabled'}${channel?.solo ? ', solo' : ''}`}
+                aria-label={`${layerTitle}, ${channel?.enabled ? 'enabled' : 'disabled'}${channel?.solo ? ', solo' : ''}`}
                 aria-pressed={isSelected}
                 data-tooltip={channel
-                  ? `${channel.kind === 'rain' ? `Rain layer ${number - AMBIENT_RAIN_FIRST_INDEX} (${rainLayerPosition})` : `Noise layer ${number}`} is ${channel.enabled ? 'enabled' : 'disabled'}${channel.solo ? ', solo' : ''}\n${channel.solo ? 'Right-click to clear solo' : 'Right-click to solo'}; ${channel.enabled
+                  ? `${layerTitle} is ${channel.enabled ? 'enabled' : 'disabled'}${channel.solo ? ', solo' : ''}\n${channel.solo ? 'Right-click to clear solo' : 'Right-click to solo'}; ${channel.enabled
                     ? 'hold right-click to disable; scroll to adjust volume'
                     : 'hold left-click to enable; settings are locked'}`
-                  : `Channel ${number} is disabled`}
+                  : `${layerTitle} is disabled`}
                 data-ambient-channel-id={channel?.id}
                 data-secondary-press={channel ? 'action' : 'none'}
                 onClick={() => channel && setSelectedChannelId(channel.id)}
@@ -349,7 +371,8 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                   if (channel) toggleChannelSolo(channel.id)
                 }}
               >
-                <span className="options-loadout-index">{number}</span>
+                <span className={`fa-solid ${look.icon}`} aria-hidden="true" />
+                <span className="ambient-channel-number" aria-hidden="true">{look.number}</span>
               </button>
             )
           })}
@@ -568,18 +591,32 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                   onCommit={(value) => updateNoiseChannel(channel.id, { movement: value })}
                 />
                 <CompactScrollbarSlider
-                  id={`ambient-${channel.id}-type`}
+                  id={`ambient-${channel.id}-noise-distance`}
                   min={0}
-                  max={AMBIENT_NOISE_TYPES.length - 1}
-                  step={1}
-                  value={typeIndex(channel.type)}
-                  trackLabel="type"
-                  tooltipLabel="Noise type"
-                  ariaLabel={`${layerName} noise type`}
+                  max={1}
+                  step={0.01}
+                  value={channel.distance}
+                  trackLabel="distance"
+                  tooltipLabel="Distance: near and dry to far, dark and reverberant"
+                  ariaLabel={`${layerName} distance`}
                   disabled={!channel.enabled}
-                  defaultValue={typeIndex(DEFAULT_NOISE_CHANNEL.type)}
-                  formatValue={(value) => AMBIENT_NOISE_TYPES[Math.round(value)]}
-                  onCommit={(value) => updateNoiseChannel(channel.id, { type: AMBIENT_NOISE_TYPES[Math.round(value)] })}
+                  defaultValue={DEFAULT_NOISE_CHANNEL.distance}
+                  formatValue={(value) => value < 0.01 ? 'Near' : value > 0.99 ? 'Far' : `${Math.round(value * 100)}%`}
+                  onCommit={(value) => updateNoiseChannel(channel.id, { distance: value })}
+                />
+                <CompactScrollbarSlider
+                  id={`ambient-${channel.id}-width`}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={channel.width}
+                  trackLabel="width"
+                  tooltipLabel="Stereo width: a single point (which movement sways across the field) to all around you"
+                  ariaLabel={`${layerName} stereo width`}
+                  disabled={!channel.enabled}
+                  defaultValue={DEFAULT_NOISE_CHANNEL.width}
+                  formatValue={(value) => value < 0.01 ? 'Point' : value > 0.99 ? 'Wide' : `${Math.round(value * 100)}%`}
+                  onCommit={(value) => updateNoiseChannel(channel.id, { width: value })}
                 />
                 <CompactScrollbarSlider
                   id={`ambient-${channel.id}-filter`}

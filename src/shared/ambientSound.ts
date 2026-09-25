@@ -4,11 +4,12 @@
  *
  * A soundscape is a fixed row of MAX_AMBIENT_CHANNELS channels. The first
  * AMBIENT_NOISE_CHANNEL_COUNT are noise layers (filtered noise whose level
- * rises and falls in a repeating cycle); the rest are rain layers, each routed to its own output of
+ * rises and falls in a repeating cycle), in three groups of three by noise
+ * type -- brown, pink, white (AMBIENT_NOISE_SLOT_TYPES); the rest are rain layers, each routed to its own output of
  * the AudioWorklet so the engine can give it its own pan, distance filter and
  * reverb send (see src/sound/AmbientSoundEngine.ts). A slot's kind is decided
  * by its POSITION, never stored, so a save can never hold a rain layer in a
- * noise slot.
+ * noise slot -- and likewise a noise layer's type.
  *
  * The synthesis itself lives in public/ambient-generator.js, which runs in the
  * audio thread and cannot import from here: the rain surfaces below are named
@@ -20,6 +21,20 @@ import { AMBIENT_BELL_RAMP_MAX, AMBIENT_BELL_RAMP_MIN, noiseRampForBellRamp } fr
 
 export const AMBIENT_NOISE_TYPES = ['white', 'pink', 'brown'] as const;
 export type AmbientNoiseType = (typeof AMBIENT_NOISE_TYPES)[number];
+
+/**
+ * The noise type of each noise slot, by position: slots 1-3 brown (deep and
+ * slow: surf, rumble), 4-6 pink (balanced: wind, wash), 7-9 white (bright:
+ * hiss, air). Its length is AMBIENT_NOISE_CHANNEL_COUNT.
+ */
+export const AMBIENT_NOISE_SLOT_TYPES: readonly AmbientNoiseType[] = [
+  'brown', 'brown', 'brown', 'pink', 'pink', 'pink', 'white', 'white', 'white',
+];
+
+/** The noise type of the noise slot at `index` (0-based). */
+export function noiseTypeForSlot(index: number): AmbientNoiseType {
+  return AMBIENT_NOISE_SLOT_TYPES[index] ?? 'pink';
+}
 
 /**
  * What a rain layer's drops land on. Each is a different impact model, not a
@@ -63,7 +78,18 @@ export interface AmbientNoiseChannelSettings extends AmbientChannelBaseSettings 
    * cycle. The worklet's startCycle holds the rule.
    */
   movement: number;
-  type: AmbientNoiseType;
+  /**
+   * How far away the layer sounds, 0-1 -- darker, less direct, more reverb.
+   * The same rule as a rain layer's distance (ambientSoundDsp.ts's
+   * resolveAmbientSpace).
+   */
+  distance: number;
+  /**
+   * Stereo width, 0-1: 1 is the two sides unrelated, enveloping; 0 is the
+   * same on both, a point source -- which the movement sway can then carry
+   * across the field. Energy-preserving, so narrowing does not quieten it.
+   */
+  width: number;
   filter: number;
 }
 
@@ -164,7 +190,8 @@ export const DEFAULT_NOISE_CHANNEL: Readonly<Omit<AmbientNoiseChannelSettings, '
   ramp: 0.5,
   shape: 0.5,
   movement: 0,
-  type: 'pink',
+  distance: 0,
+  width: 1,
   filter: 0.5,
 };
 
@@ -240,6 +267,8 @@ function migrateLegacyAmbientSettings(input: unknown): AmbientSettings {
   const source = input && typeof input === 'object'
     ? input as Partial<Record<LegacyLayerId, unknown>>
     : {};
+  // Wind was pink noise and ocean brown, so each takes the first slot of
+  // its group; every other noise slot starts empty.
   const legacyNoise = LEGACY_LAYER_IDS.slice(0, 2).map((layerId) => {
     const rawLayer = source[layerId] && typeof source[layerId] === 'object'
       ? source[layerId] as Partial<LegacyAmbientSettings[LegacyLayerId]>
@@ -250,19 +279,21 @@ function migrateLegacyAmbientSettings(input: unknown): AmbientSettings {
       volume: finiteRange(rawLayer.volume, 0, 1, legacy.volume),
       modulationAmplitude: texture,
       periodSec: 42 - (texture * 39),
-      type: layerId === 'wind' ? 'pink' : 'brown',
     });
   });
+  const legacySlots: Record<number, AmbientNoiseChannelSettings> = {
+    [AMBIENT_NOISE_SLOT_TYPES.indexOf('pink')]: legacyNoise[0],
+    [AMBIENT_NOISE_SLOT_TYPES.indexOf('brown')]: legacyNoise[1],
+  };
   const rawRain = source.rain && typeof source.rain === 'object'
     ? source.rain as Partial<LegacyAmbientSettings['rain']>
     : {};
   const legacyRain = LEGACY_DEFAULT_SETTINGS.rain;
   const rainTexture = finiteRange(rawRain.texture, 0, 1, legacyRain.texture);
-  const noiseSlots = Array.from({ length: AMBIENT_NOISE_CHANNEL_COUNT - legacyNoise.length }, (_, index) => (
-    makeDefaultNoiseChannel(`ambient-layer-${legacyNoise.length + index + 1}`, { enabled: false })
+  const noiseSlots = Array.from({ length: AMBIENT_NOISE_CHANNEL_COUNT }, (_, index) => (
+    legacySlots[index] ?? makeDefaultNoiseChannel(`ambient-layer-${index + 1}`, { enabled: false })
   ));
   return fillAmbientSlots([
-    ...legacyNoise,
     ...noiseSlots,
     makeDefaultRainChannel('rain', {
       surface: 'glass',
@@ -308,7 +339,8 @@ export function ambientSettingsSignature(settings: AmbientSettings): string {
         channel.ramp,
         channel.shape,
         channel.movement,
-        channel.type,
+        channel.distance,
+        channel.width,
         channel.filter,
       ];
     return values.map((value) => typeof value === 'number' ? value.toFixed(4) : value).join(':');
@@ -423,6 +455,41 @@ function readNoiseCycle(
   };
 }
 
+/**
+ * A save from before noise slots were grouped by type stored each layer's
+ * `type` on the layer. Moving each layer into a slot of its own type's group
+ * keeps it sounding as it did: enabled layers are placed first, in slot
+ * order, so they are the ones that keep their type if a group is
+ * over-full; a layer that finds its group full takes the first slot left
+ * anywhere (and with it that slot's type). Slots nothing lands in start
+ * empty and disabled. A save with no `type` on any noise layer is already
+ * in slot terms and is returned as it is.
+ */
+function regroupNoiseByType(raw: unknown[]): unknown[] {
+  const noise = raw.slice(0, AMBIENT_NOISE_CHANNEL_COUNT);
+  const typeOf = (item: unknown) => (
+    item && typeof item === 'object' ? (item as { type?: unknown }).type : undefined
+  );
+  if (!noise.some((item) => typeOf(item) !== undefined)) return raw;
+  const layers = noise.map((item, index) => {
+    const saved = typeOf(item);
+    return {
+      item,
+      type: AMBIENT_NOISE_TYPES.includes(saved as AmbientNoiseType) ? saved as AmbientNoiseType : noiseTypeForSlot(index),
+      enabled: !(item && typeof item === 'object' && (item as { enabled?: unknown }).enabled === false),
+    };
+  });
+  const slots: unknown[] = Array.from({ length: AMBIENT_NOISE_CHANNEL_COUNT }, () => undefined);
+  const overflow: unknown[] = [];
+  for (const layer of [...layers.filter((entry) => entry.enabled), ...layers.filter((entry) => !entry.enabled)]) {
+    const free = AMBIENT_NOISE_SLOT_TYPES.findIndex((type, index) => type === layer.type && slots[index] === undefined);
+    if (free >= 0) slots[free] = layer.item;
+    else overflow.push(layer.item);
+  }
+  for (const item of overflow) slots[slots.indexOf(undefined)] = item;
+  return [...slots.map((item) => item ?? { enabled: false }), ...raw.slice(AMBIENT_NOISE_CHANNEL_COUNT)];
+}
+
 function finiteUnit(value: unknown, fallback: number): number {
   return finiteRange(value, 0, 1, fallback);
 }
@@ -432,7 +499,7 @@ export function sanitizeAmbientSettings(input: unknown): AmbientSettings {
   if (input.length === 0) return DEFAULT_AMBIENT_SETTINGS.map((channel) => ({ ...channel }));
 
   const seenIds = new Set<string>();
-  const rawChannels = input.slice(0, MAX_AMBIENT_CHANNELS);
+  const rawChannels = regroupNoiseByType(input.slice(0, MAX_AMBIENT_CHANNELS));
   const soloIndex = rawChannels.findIndex((item) => (
     item !== null && typeof item === 'object' && (item as { solo?: unknown }).solo === true
   ));
@@ -496,7 +563,8 @@ export function sanitizeAmbientSettings(input: unknown): AmbientSettings {
       ramp: finiteUnit(cycle.ramp, fallback.ramp),
       shape: finiteRange(source.shape, AMBIENT_SHAPE_MIN, AMBIENT_SHAPE_MAX, fallback.shape),
       movement: finiteUnit(source.movement, 0),
-      type: AMBIENT_NOISE_TYPES.includes(source.type as AmbientNoiseType) ? source.type as AmbientNoiseType : fallback.type,
+      distance: finiteUnit(source.distance, DEFAULT_NOISE_CHANNEL.distance),
+      width: finiteUnit(source.width, DEFAULT_NOISE_CHANNEL.width),
       filter: finiteUnit(source.filter, fallback.filter),
     };
   });

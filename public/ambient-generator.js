@@ -7,11 +7,14 @@
  * are defined in src/shared/ambientSound.ts; the engine
  * (src/sound/AmbientSoundEngine.ts) posts them here as a `configure` message.
  *
- * Outputs: output 0 is the stereo mix of every noise layer. Each rain layer
- * is mono and goes to output `1 + outputIndex`, where `outputIndex` is set by
- * the engine per channel (-1 for a noise layer), so the engine can pan,
- * filter and reverb each rain layer on its own. The worklet does not know how
- * many rain slots exist; it writes to whichever outputs it was given.
+ * Outputs: output 0 is the stereo mix of every noise layer's direct sound.
+ * Each rain layer is mono and goes to output `1 + outputIndex`, where
+ * `outputIndex` is set by the engine per channel (-1 for a noise layer), so
+ * the engine can pan, filter and reverb each rain layer on its own. The
+ * stereo output at `processorOptions.noiseSendOutput` carries the noise
+ * layers' reverb sends, which the engine feeds to the same reverb as the
+ * rain. The worklet does not know how many rain slots exist; it writes to
+ * whichever outputs it was given.
  *
  * Everything random is a seeded linear congruential generator, so a test can
  * render the same sound twice. The processor's root stream only seeds; each
@@ -162,10 +165,13 @@ const RAIN_DRIPS_MAX_PER_SEC = 3;
 const BED_SWELL_PERIOD_SEC = 2.5;
 
 /**
- * State-variable band-pass filter coefficients (the topology-preserving
- * "TPT" form, stable at any centre frequency below Nyquist).
+ * A state-variable filter's coefficients and state (the topology-preserving
+ * "TPT" form, stable at any frequency below Nyquist). One filter has band-
+ * and low-pass outputs: v1 and v2 of the step in bandPass. Band-pass is read
+ * through bandPass; the low-pass (distance's darkening) is read inline in
+ * renderNoise, unrolled for cost.
  */
-function bandPassCoefficients(centerHz, q) {
+function stateVariableFilter(centerHz, q) {
   const safeHz = Math.max(20, Math.min(centerHz, sampleRate * 0.45));
   const g = Math.tan((Math.PI * safeHz) / sampleRate);
   const k = 1 / q;
@@ -173,7 +179,7 @@ function bandPassCoefficients(centerHz, q) {
   return { a1, a2: g * a1, a3: g * g * a1, s1: 0, s2: 0 };
 }
 
-/** One sample through a bandPassCoefficients filter; returns the band output. */
+/** One sample through a stateVariableFilter; returns its band-pass output. */
 function bandPass(filter, input) {
   const v3 = input - filter.s2;
   const v1 = (filter.a1 * filter.s1) + (filter.a2 * v3);
@@ -187,6 +193,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
   constructor(options) {
     super();
     this.rootStream = { seed: (options?.processorOptions?.seed ?? 1) >>> 0 };
+    this.noiseSendOutput = options?.processorOptions?.noiseSendOutput ?? -1;
     // One seamless loop per noise type, rendered on the main thread
     // (src/shared/ambientNoiseLoops.ts) and read by every noise layer.
     this.noiseLoops = options?.processorOptions?.noiseLoops ?? {};
@@ -266,8 +273,14 @@ class AmbientGenerator extends AudioWorkletProcessor {
       filterAlpha: 0,
       filterLeft: { x: 0, y: 0 },
       filterRight: { x: 0, y: 0 },
+      // Distance's darkening (configureSpace): a two-pole low-pass per side.
+      darkLeft: null,
+      darkRight: null,
+      widthDirect: 1,
+      widthCross: 0,
     };
     this.configureFilter(channel);
+    if (channel.kind === 'noise') this.configureSpace(channel);
     if (channel.kind === 'rain') {
       channel.nextEventFrame = currentFrame + this.eventDelayFrames(settings.dropsPerSecond);
       this.configureRain(channel, null);
@@ -294,6 +307,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
         }
         Object.assign(previous, next);
         this.configureFilter(previous);
+        if (previous.kind === 'noise') this.configureSpace(previous);
         if (previous.kind === 'rain') this.configureRain(previous, before);
         return previous;
       });
@@ -330,6 +344,47 @@ class AmbientGenerator extends AudioWorkletProcessor {
       : Math.exp((-2 * Math.PI * cutoff) / sampleRate);
   }
 
+  /**
+   * A noise layer's width and distance, turned into what renderNoise needs.
+   *
+   * Width blends the two unrelated noise reads: each side takes
+   * cos(t) of its own and sin(t) of the other, t = (1 - width) * pi/4. At
+   * width 1 that is the two reads as they are; at 0 both sides are the same
+   * sum. cos^2 + sin^2 = 1, so for unrelated noise the level is the same at
+   * every width.
+   *
+   * Distance arrives resolved (`space`, from resolveAmbientSpace -- the rule
+   * the rain layers use). Its darkening is a two-pole low-pass at Q 0.707,
+   * the same response as the BiquadFilterNode that darkens a rain layer; its
+   * direct and reverb-send gains are applied when the layer is mixed
+   * (process). At distance 0 there is no darkening filter at all, so a near
+   * layer is untouched.
+   */
+  configureSpace(channel) {
+    const angle = (1 - (channel.width ?? 1)) * Math.PI / 4;
+    channel.widthDirect = Math.cos(angle);
+    channel.widthCross = Math.sin(angle);
+    const space = channel.space ?? { cutoffHz: 18000, directGain: 1, reverbSend: 0 };
+    channel.directGain = space.directGain;
+    channel.reverbSend = space.reverbSend;
+    if ((channel.distance ?? 0) <= 0) {
+      channel.darkLeft = null;
+      channel.darkRight = null;
+      return;
+    }
+    // Keep the filters' memory through a slider move; only the coefficients change.
+    const left = stateVariableFilter(space.cutoffHz, Math.SQRT1_2);
+    const right = stateVariableFilter(space.cutoffHz, Math.SQRT1_2);
+    if (channel.darkLeft) {
+      left.s1 = channel.darkLeft.s1;
+      left.s2 = channel.darkLeft.s2;
+      right.s1 = channel.darkRight.s1;
+      right.s2 = channel.darkRight.s2;
+    }
+    channel.darkLeft = left;
+    channel.darkRight = right;
+  }
+
   filterSample(channel, sample, state) {
     const output = channel.filterMode === 'lowpass'
       ? state.y + (channel.filterAlpha * (sample - state.y))
@@ -356,7 +411,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
         // Its own stream, so the bed's per-sample draws and the voices'
         // births each stay in time order whatever the block size.
         stream: { seed: Math.floor(this.random() * 0x100000000) >>> 0 },
-        filter: bandPassCoefficients(profile.bed.centerHz, profile.bed.q),
+        filter: stateVariableFilter(profile.bed.centerHz, profile.bed.q),
         swell: 1,
         swellTarget: 1,
         swellFrames: 0,
@@ -606,7 +661,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
       gain: isDrip ? profile.drip.gain : 1,
       transientAmplitude: this.between(impact.amplitude),
       transientDecay: Math.exp(-1 / (sampleRate * decaySec)),
-      transientFilter: bandPassCoefficients(this.between(impact.centerHz) * pitchScale, impact.q),
+      transientFilter: stateVariableFilter(this.between(impact.centerHz) * pitchScale, impact.q),
       clickSeed: 0,
       bassModes: this.makeModesFromSpec(impact.bassModes, pitchScale),
       bodyModes: this.makeModesFromSpec(impact.bodyModes, pitchScale),
@@ -987,12 +1042,47 @@ class AmbientGenerator extends AudioWorkletProcessor {
     }
     let readLeft = channel.loopLeft;
     let readRight = channel.loopRight;
+    const direct = channel.widthDirect;
+    const cross = channel.widthCross;
+    // Distance's low-pass, state in locals for the block (a per-sample
+    // object read and write made it cost three times the rest of the layer).
+    const dark = channel.darkLeft;
+    const darkened = dark !== null;
+    const a1 = darkened ? dark.a1 : 0;
+    const a2 = darkened ? dark.a2 : 0;
+    const a3 = darkened ? dark.a3 : 0;
+    let leftS1 = darkened ? dark.s1 : 0;
+    let leftS2 = darkened ? dark.s2 : 0;
+    let rightS1 = darkened ? channel.darkRight.s1 : 0;
+    let rightS2 = darkened ? channel.darkRight.s2 : 0;
     for (let index = 0; index < length; index += 1) {
       if (channel.controlFramesLeft === 0) this.beginControlSegment(channel);
       channel.controlFramesLeft -= 1;
       const level = channel.level;
-      left[index] = this.filterSample(channel, loop[readLeft] * level * channel.gainLeft, channel.filterLeft);
-      right[index] = this.filterSample(channel, loop[readRight] * level * channel.gainRight, channel.filterRight);
+      const a = loop[readLeft];
+      const b = loop[readRight];
+      const sideLeft = cross === 0 ? a : (direct * a) + (cross * b);
+      const sideRight = cross === 0 ? b : (direct * b) + (cross * a);
+      const toneLeft = this.filterSample(channel, sideLeft * level * channel.gainLeft, channel.filterLeft);
+      const toneRight = this.filterSample(channel, sideRight * level * channel.gainRight, channel.filterRight);
+      if (darkened) {
+        // stateVariableFilter's step (as in bandPass), read at its low-pass output v2.
+        let v3 = toneLeft - leftS2;
+        let v1 = (a1 * leftS1) + (a2 * v3);
+        let v2 = leftS2 + (a2 * leftS1) + (a3 * v3);
+        leftS1 = (2 * v1) - leftS1;
+        leftS2 = (2 * v2) - leftS2;
+        left[index] = v2;
+        v3 = toneRight - rightS2;
+        v1 = (a1 * rightS1) + (a2 * v3);
+        v2 = rightS2 + (a2 * rightS1) + (a3 * v3);
+        rightS1 = (2 * v1) - rightS1;
+        rightS2 = (2 * v2) - rightS2;
+        right[index] = v2;
+      } else {
+        left[index] = toneLeft;
+        right[index] = toneRight;
+      }
       channel.level += channel.levelStep;
       channel.gainLeft += channel.gainLeftStep;
       channel.gainRight += channel.gainRightStep;
@@ -1001,6 +1091,12 @@ class AmbientGenerator extends AudioWorkletProcessor {
     }
     channel.loopLeft = readLeft;
     channel.loopRight = readRight;
+    if (darkened) {
+      dark.s1 = leftS1;
+      dark.s2 = leftS2;
+      channel.darkRight.s1 = rightS1;
+      channel.darkRight.s2 = rightS2;
+    }
   }
 
   /**
@@ -1028,7 +1124,9 @@ class AmbientGenerator extends AudioWorkletProcessor {
       : this.channels.length > 0 ? 1 / Math.sqrt(this.channels.length) : 0;
     left.fill(0);
     if (right !== left) right.fill(0);
-    for (let index = 1; index < outputs.length; index += 1) outputs[index][0]?.fill(0);
+    for (let index = 1; index < outputs.length; index += 1) {
+      for (const outputChannel of outputs[index]) outputChannel.fill(0);
+    }
 
     for (const channel of this.channels) {
       // A layer at volume 0 still counts in channelScale above -- leaving it
@@ -1049,9 +1147,20 @@ class AmbientGenerator extends AudioWorkletProcessor {
       }
       this.renderNoise(channel, scratchLeft, scratchRight, length);
       if (!audible) continue;
+      const directScale = channelScale * (channel.directGain ?? 1);
       for (let index = 0; index < length; index += 1) {
-        left[index] += scratchLeft[index] * channelScale;
-        if (right !== left) right[index] += scratchRight[index] * channelScale;
+        left[index] += scratchLeft[index] * directScale;
+        if (right !== left) right[index] += scratchRight[index] * directScale;
+      }
+      const send = outputs[this.noiseSendOutput];
+      const sendScale = channelScale * (channel.reverbSend ?? 0);
+      if (send && sendScale > 0) {
+        const sendLeft = send[0];
+        const sendRight = send[1] ?? sendLeft;
+        for (let index = 0; index < length; index += 1) {
+          sendLeft[index] += scratchLeft[index] * sendScale;
+          if (sendRight !== sendLeft) sendRight[index] += scratchRight[index] * sendScale;
+        }
       }
     }
     this.stream = this.rootStream;

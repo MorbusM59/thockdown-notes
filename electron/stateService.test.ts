@@ -60,7 +60,8 @@ describe('StateService app-state field round-trip', () => {
           ...channel,
           ...common,
           modulationAmplitude: [0.73, 0.26, 0.94][index] ?? channel.modulationAmplitude,
-          type: (['pink', 'brown', 'white'] as const)[index] ?? channel.type,
+          width: [0.2, 1, 0.55][index] ?? channel.width,
+          distance: [0.6, 0, 0.3][index] ?? channel.distance,
         }
         : {
           ...channel,
