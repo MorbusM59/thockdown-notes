@@ -13,8 +13,20 @@
  * filter and reverb each rain layer on its own. The worklet does not know how
  * many rain slots exist; it writes to whichever outputs it was given.
  *
- * Everything random comes from one seeded linear congruential generator, so
- * a test can render the same sound twice.
+ * Everything random is a seeded linear congruential generator, so a test can
+ * render the same sound twice. The processor's root stream only seeds; each
+ * channel draws from its own stream, and each rain voice's click noise from
+ * its own again. Streams keep every layer's sound independent of the order
+ * the others are rendered in, which is what lets rendering go a whole block
+ * per voice rather than a sample at a time across everything (see process).
+ *
+ * Render cost is the constraint everything here is written against: a block
+ * is 128 frames, under 3 ms at 48 kHz, on a real-time thread shared with the
+ * rest of the audio. A block that runs late is heard as a tear in the sound,
+ * and it also delays the next `configure` message, so a preset change seems
+ * not to take. Hence: no trigonometry per sample (oscillators are rotated
+ * sin/cos pairs), no work for a component that has gone silent, and one tight
+ * loop per voice.
  */
 
 /**
@@ -84,6 +96,20 @@ const MOVEMENT_PERIOD_OCTAVES = 1;
 const MOVEMENT_RISE_LOSS = 0.5;
 const MOVEMENT_PAN_REACH = 0.6;
 
+/** Samples between re-derivations of a rising bubble's rotation (see makeBubble). */
+const BUBBLE_RETUNE_FRAMES = 32;
+
+/** Below this a click or its filter tail is treated as silent (-140 dB). */
+const SILENCE = 1e-7;
+
+/**
+ * Below this a voice's ringing parts are treated as silent and the voice
+ * ends (-100 dB of full scale, a third of the smallest step 16-bit output can
+ * represent -- and the voice is scaled down further by its layer's volume
+ * before anyone hears it).
+ */
+const VOICE_SILENCE = 1e-5;
+
 /** The most rain voices one layer keeps ringing at once. */
 const MAX_RAIN_VOICES = 48;
 
@@ -118,10 +144,12 @@ function bandPass(filter, input) {
 class AmbientGenerator extends AudioWorkletProcessor {
   constructor(options) {
     super();
-    this.seed = (options?.processorOptions?.seed ?? 1) >>> 0;
+    this.rootStream = { seed: (options?.processorOptions?.seed ?? 1) >>> 0 };
+    // The stream `random()` draws from: the channel being configured or
+    // rendered, else the root. Set by withStream.
+    this.stream = this.rootStream;
     this.channels = [];
     this.soloChannelId = null;
-    this.rainMixes = [];
     this.port.onmessage = (event) => {
       if (event.data?.type !== 'configure') return;
       this.configure(event.data.channels ?? []);
@@ -129,8 +157,20 @@ class AmbientGenerator extends AudioWorkletProcessor {
   }
 
   random() {
-    this.seed = (1664525 * this.seed + 1013904223) >>> 0;
-    return this.seed / 0x100000000;
+    const stream = this.stream;
+    stream.seed = (1664525 * stream.seed + 1013904223) >>> 0;
+    return stream.seed / 0x100000000;
+  }
+
+  /** Run `work` with `random()` drawing from `stream`, then restore. */
+  withStream(stream, work) {
+    const previous = this.stream;
+    this.stream = stream;
+    try {
+      return work();
+    } finally {
+      this.stream = previous;
+    }
   }
 
   between(range) {
@@ -144,8 +184,14 @@ class AmbientGenerator extends AudioWorkletProcessor {
   }
 
   makeChannel(settings) {
+    const stream = { seed: Math.floor(this.random() * 0x100000000) >>> 0 };
+    return this.withStream(stream, () => this.initChannel(settings, stream));
+  }
+
+  initChannel(settings, stream) {
     const channel = {
       ...settings,
+      stream,
       pink: [0, 0, 0, 0, 0, 0, 0],
       brown: 0,
       phase: this.random(),
@@ -185,14 +231,16 @@ class AmbientGenerator extends AudioWorkletProcessor {
     this.channels = activeSettings.map((next) => {
       const previous = previousById.get(next.id);
       if (!previous) return this.makeChannel(next);
-      const before = { ...previous };
-      if (next.kind === 'rain' && previous.dropsPerSecond !== next.dropsPerSecond) {
-        previous.nextEventFrame = currentFrame + this.eventDelayFrames(next.dropsPerSecond);
-      }
-      Object.assign(previous, next);
-      this.configureFilter(previous);
-      if (previous.kind === 'rain') this.configureRain(previous, before);
-      return previous;
+      return this.withStream(previous.stream, () => {
+        const before = { ...previous };
+        if (next.kind === 'rain' && previous.dropsPerSecond !== next.dropsPerSecond) {
+          previous.nextEventFrame = currentFrame + this.eventDelayFrames(next.dropsPerSecond);
+        }
+        Object.assign(previous, next);
+        this.configureFilter(previous);
+        if (previous.kind === 'rain') this.configureRain(previous, before);
+        return previous;
+      });
     });
   }
 
@@ -249,6 +297,9 @@ class AmbientGenerator extends AudioWorkletProcessor {
     channel.profile = profile;
     if (!channel.bed || before?.surface !== channel.surface) {
       channel.bed = {
+        // Its own stream, so the bed's per-sample draws and the voices'
+        // births each stay in time order whatever the block size.
+        stream: { seed: Math.floor(this.random() * 0x100000000) >>> 0 },
         filter: bandPassCoefficients(profile.bed.centerHz, profile.bed.q),
         swell: 1,
         swellTarget: 1,
@@ -406,6 +457,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
       transientAmplitude: 0.24 + (this.random() * 0.2),
       transientDecay: Math.exp(-1 / (sampleRate * 0.00065)),
       transientFilter: null,
+      clickSeed: 0,
       bassModes: this.makeRainModes(
         1 + Math.floor(this.random() * 2), 85, 460, 0.025, 0.095, 0.035, 0.14,
       ),
@@ -426,24 +478,47 @@ class AmbientGenerator extends AudioWorkletProcessor {
    */
   makeBubble(radiusMm, gain) {
     const radius = radiusMm / 1000;
-    const frequency = 3 / radius;
     const damping = (0.13 / radius) + (0.0072 * (radius ** -1.5));
     const rise = (0.05 + (this.random() * 0.15)) * damping;
-    return {
+    const bubble = {
       ringFrames: Math.ceil((5 * sampleRate) / damping),
-      phase: 0,
-      frequency: Math.min(frequency, sampleRate * 0.4),
-      riseFactor: 1 + (rise / sampleRate),
+      // Advanced like a mode: a (sin, cos) pair rotated by a fixed angle per
+      // sample, so no trigonometry runs per sample. The pitch rise is far
+      // too slow to hear within BUBBLE_RETUNE_FRAMES, so the rotation is
+      // re-derived only that often, jumping the frequency by the rise those
+      // frames have accumulated.
+      sin: 0,
+      cos: 1,
+      rotationSin: 0,
+      rotationCos: 1,
+      frequency: Math.min(3 / radius, sampleRate * 0.4),
+      retuneFactor: (1 + (rise / sampleRate)) ** BUBBLE_RETUNE_FRAMES,
+      framesToRetune: BUBBLE_RETUNE_FRAMES,
       amplitude: gain * Math.min(1, radiusMm / 2.5) * 0.35,
       decay: Math.exp(-damping / sampleRate),
     };
+    this.tuneBubble(bubble);
+    return bubble;
+  }
+
+  tuneBubble(bubble) {
+    const angle = (2 * Math.PI * bubble.frequency) / sampleRate;
+    bubble.rotationSin = Math.sin(angle);
+    bubble.rotationCos = Math.cos(angle);
   }
 
   sampleBubble(bubble) {
-    const sample = Math.sin(bubble.phase) * bubble.amplitude;
-    bubble.phase += (2 * Math.PI * bubble.frequency) / sampleRate;
-    bubble.frequency = Math.min(bubble.frequency * bubble.riseFactor, sampleRate * 0.45);
+    const sample = bubble.sin * bubble.amplitude;
+    const nextSin = (bubble.sin * bubble.rotationCos) + (bubble.cos * bubble.rotationSin);
+    bubble.cos = (bubble.cos * bubble.rotationCos) - (bubble.sin * bubble.rotationSin);
+    bubble.sin = nextSin;
     bubble.amplitude *= bubble.decay;
+    bubble.framesToRetune -= 1;
+    if (bubble.framesToRetune === 0) {
+      bubble.framesToRetune = BUBBLE_RETUNE_FRAMES;
+      bubble.frequency = Math.min(bubble.frequency * bubble.retuneFactor, sampleRate * 0.45);
+      this.tuneBubble(bubble);
+    }
     return sample;
   }
 
@@ -473,6 +548,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
       transientAmplitude: this.between(impact.amplitude),
       transientDecay: Math.exp(-1 / (sampleRate * decaySec)),
       transientFilter: bandPassCoefficients(this.between(impact.centerHz) * pitchScale, impact.q),
+      clickSeed: 0,
       bassModes: this.makeModesFromSpec(impact.bassModes, pitchScale),
       bodyModes: this.makeModesFromSpec(impact.bodyModes, pitchScale),
       trebleModes: [],
@@ -494,127 +570,232 @@ class AmbientGenerator extends AudioWorkletProcessor {
   }
 
   /**
-   * The bed: sparse random impulses plus a noise floor, band-passed, with a
-   * slow random swell. Draws nothing from the random stream while `wash` is
-   * 0, so a layer without a bed renders exactly as it did before beds
-   * existed.
+   * The bed, a block at a time, added into `out`: sparse random impulses plus
+   * a noise floor, band-passed, with a slow random swell. Nothing is drawn
+   * while `wash` is 0.
    */
-  bedSample(channel) {
+  renderBed(channel, out, length) {
     const wash = channel.wash ?? 0;
-    if (wash <= 0) return 0;
+    if (wash <= 0) return;
+    this.withStream(channel.bed.stream, () => this.renderBedFrom(channel, out, length, wash));
+  }
+
+  renderBedFrom(channel, out, length, wash) {
     const spec = channel.profile.bed;
     const bed = channel.bed;
-    if (bed.swellFrames <= 0) {
-      bed.swellTarget = 1 - (spec.swellDepth * this.random());
-      bed.swellFrames = this.eventDelayFrames(1 / BED_SWELL_PERIOD_SEC);
+    const filter = bed.filter;
+    const impulseChance = spec.ratePerSec / sampleRate;
+    const swellRate = 1 / (sampleRate * 0.8);
+    const scale = spec.gain * wash;
+    for (let index = 0; index < length; index += 1) {
+      if (bed.swellFrames <= 0) {
+        bed.swellTarget = 1 - (spec.swellDepth * this.random());
+        bed.swellFrames = this.eventDelayFrames(1 / BED_SWELL_PERIOD_SEC);
+      }
+      bed.swellFrames -= 1;
+      bed.swell += (bed.swellTarget - bed.swell) * swellRate;
+      const impulse = this.random() < impulseChance ? ((this.random() * 2) - 1) : 0;
+      const floor = ((this.random() * 2) - 1) * spec.floor;
+      out[index] += bandPass(filter, impulse + floor) * scale * bed.swell;
     }
-    bed.swellFrames -= 1;
-    bed.swell += (bed.swellTarget - bed.swell) * (1 / (sampleRate * 0.8));
-    const impulse = this.random() < (spec.ratePerSec / sampleRate)
-      ? ((this.random() * 2) - 1)
-      : 0;
-    const floor = ((this.random() * 2) - 1) * spec.floor;
-    return bandPass(bed.filter, impulse + floor) * spec.gain * bed.swell * wash;
   }
 
-  rainSample(channel, frameNumber) {
-    const profile = channel.profile;
-    if (frameNumber >= channel.nextEventFrame) {
-      if (channel.activeVoices.length < MAX_RAIN_VOICES) {
-        channel.activeVoices.push(this.makeSurfaceVoice(profile, false));
-      }
-      channel.nextEventFrame = frameNumber + this.eventDelayFrames(channel.dropsPerSecond);
+  /**
+   * Start the drops and drips whose time falls inside this block. A voice
+   * born mid-block records the frame it starts on (`startOffset`) and is
+   * silent before it, so timing is still sample-accurate.
+   */
+  birthVoices(channel, blockStart, length) {
+    const blockEnd = blockStart + length;
+    // A clock that fell behind -- its layer was paused at volume 0 -- starts
+    // afresh from now rather than delivering every drop it missed at once.
+    if (channel.nextEventFrame < blockStart) {
+      channel.nextEventFrame = blockStart + this.eventDelayFrames(channel.dropsPerSecond);
     }
-    if (frameNumber >= channel.nextDripFrame) {
-      if (channel.activeVoices.length < MAX_RAIN_VOICES) {
-        channel.activeVoices.push(this.makeSurfaceVoice(profile, true));
-      }
-      channel.nextDripFrame = frameNumber + this.eventDelayFrames(channel.drips * RAIN_DRIPS_MAX_PER_SEC);
+    if (channel.nextDripFrame < blockStart) {
+      channel.nextDripFrame = blockStart + this.eventDelayFrames(channel.drips * RAIN_DRIPS_MAX_PER_SEC);
     }
+    // Drops and drips are born in time order, whichever clock is next, so
+    // the channel's stream is drawn in the same order whatever the block
+    // size (a drip born after a later drop would reorder the draws at block
+    // boundaries and change every drop that follows).
+    for (;;) {
+      const isDrip = channel.nextDripFrame < channel.nextEventFrame;
+      const at = isDrip ? channel.nextDripFrame : channel.nextEventFrame;
+      if (at >= blockEnd) break;
+      this.addVoice(channel, isDrip, at - blockStart);
+      if (isDrip) channel.nextDripFrame += this.eventDelayFrames(channel.drips * RAIN_DRIPS_MAX_PER_SEC);
+      else channel.nextEventFrame += this.eventDelayFrames(channel.dropsPerSecond);
+    }
+  }
 
-    let sample = 0;
-    for (let index = channel.activeVoices.length - 1; index >= 0; index -= 1) {
-      const voice = channel.activeVoices[index];
-      const click = ((this.random() * 2) - 1) * voice.transientAmplitude;
-      voice.transientAmplitude *= voice.transientDecay;
-      const transient = voice.transientFilter ? bandPass(voice.transientFilter, click) : click;
-      let high = transient + this.sampleRainModes(voice.trebleModes);
+  addVoice(channel, isDrip, offset) {
+    if (channel.activeVoices.length >= MAX_RAIN_VOICES) return;
+    const voice = this.makeSurfaceVoice(channel.profile, isDrip);
+    voice.startOffset = Math.max(0, offset);
+    voice.clickSeed = Math.floor(this.random() * 0x100000000) >>> 0;
+    channel.activeVoices.push(voice);
+  }
+
+  /**
+   * One voice for the rest of this block, added into `out`, in one loop with
+   * the voice's state in locals. The click draws from the voice's own seed
+   * and stops -- no draws, no filtering -- once it and its filter have
+   * decayed below hearing, which for most drops is within a few ms of a
+   * life of up to 0.4 s. Returns false when the voice has finished.
+   */
+  renderVoice(voice, channel, out, length) {
+    const bassGain = channel.bassGain;
+    const trebleGain = channel.trebleGain;
+    const gain = voice.gain;
+    const filter = voice.transientFilter;
+    const decay = voice.transientDecay;
+    let clickAmplitude = voice.transientAmplitude;
+    let seed = voice.clickSeed;
+    let filterActive = filter !== null && (clickAmplitude > 0 || Math.abs(filter.s1) + Math.abs(filter.s2) > SILENCE);
+    const start = voice.startOffset;
+    voice.startOffset = 0;
+    const end = Math.min(length, start + (voice.durationFrames - voice.age));
+    for (let index = start; index < end; index += 1) {
+      let high = 0;
+      if (clickAmplitude > 0) {
+        seed = (1664525 * seed + 1013904223) >>> 0;
+        const click = ((seed / 0x100000000) * 2 - 1) * clickAmplitude;
+        clickAmplitude *= decay;
+        if (clickAmplitude < SILENCE) clickAmplitude = 0;
+        high = filter ? bandPass(filter, click) : click;
+      } else if (filterActive) {
+        high = bandPass(filter, 0);
+        filterActive = Math.abs(filter.s1) + Math.abs(filter.s2) > SILENCE;
+      }
+      high += this.sampleRainModes(voice.trebleModes);
       if (voice.bubble) high += this.sampleBubble(voice.bubble);
-      sample += (
+      out[index] += (
         this.sampleRainModes(voice.bodyModes)
-        + (this.sampleRainModes(voice.bassModes) * channel.bassGain)
-        + (high * channel.trebleGain)
-      ) * voice.gain;
-      voice.age += 1;
-      if (voice.age >= voice.durationFrames) channel.activeVoices.splice(index, 1);
+        + (this.sampleRainModes(voice.bassModes) * bassGain)
+        + (high * trebleGain)
+      ) * gain;
     }
-    return sample + this.bedSample(channel);
+    voice.transientAmplitude = clickAmplitude;
+    voice.clickSeed = seed;
+    voice.age += end - start;
+    return voice.age < voice.durationFrames && !this.voiceIsSilent(voice, filterActive);
   }
 
+  /**
+   * Whether nothing left in a voice can be heard, so it can end before its
+   * nominal duration: the click and its filter done, and every oscillator
+   * below SILENCE. Checked once per block, so a finished voice costs at most
+   * one more block.
+   */
+  voiceIsSilent(voice, filterActive) {
+    if (voice.transientAmplitude > 0 || filterActive) return false;
+    if (voice.bubble && voice.bubble.amplitude > VOICE_SILENCE) return false;
+    return this.modesAreSilent(voice.bassModes)
+      && this.modesAreSilent(voice.bodyModes)
+      && this.modesAreSilent(voice.trebleModes);
+  }
+
+  modesAreSilent(modes) {
+    for (let index = 0; index < modes.length; index += 1) {
+      if (modes[index].amplitude > VOICE_SILENCE) return false;
+    }
+    return true;
+  }
+
+  /** A rain layer's block, written into `out` (overwritten). */
+  renderRain(channel, out, blockStart, length) {
+    out.fill(0, 0, length);
+    this.birthVoices(channel, blockStart, length);
+    const voices = channel.activeVoices;
+    for (let index = voices.length - 1; index >= 0; index -= 1) {
+      if (!this.renderVoice(voices[index], channel, out, length)) {
+        // Order does not matter to the mix, so the last voice fills the gap.
+        voices[index] = voices[voices.length - 1];
+        voices.pop();
+      }
+    }
+    this.renderBed(channel, out, length);
+  }
+
+  /** A noise layer's block, written into `left`/`right` (overwritten). */
+  renderNoise(channel, left, right, length) {
+    for (let index = 0; index < length; index += 1) {
+      const baseLeft = this.noise(channel);
+      const baseRight = this.noise(channel);
+      const cycleValue = this.cycleAt(channel, channel.phase);
+      // riseFactor scales only the part of the swing above the trough
+      // (cycleValue + 1), so the trough is 1 - amplitude whatever it is.
+      const amplitude = channel.riseFactor === 1
+        ? Math.max(0, 1 + (channel.modulationAmplitude * cycleValue))
+        : Math.max(0, 1 + (channel.modulationAmplitude * ((channel.riseFactor * (cycleValue + 1)) - 1)));
+      const pan = channel.panFrom === 0 && channel.panTo === 0 ? 0 : this.swayAt(channel, channel.phase);
+      channel.phase += 1 / (channel.periodSec * channel.periodFactor * sampleRate);
+      if (channel.phase >= 1) {
+        channel.phase -= 1;
+        this.startCycle(channel);
+      }
+      const channelGain = amplitude * channel.volume;
+      // Equal-power balance, normalised so centre is unity on both sides.
+      const leftGain = pan === 0 ? 1 : Math.SQRT2 * Math.cos((pan + 1) * Math.PI / 4);
+      const rightGain = pan === 0 ? 1 : Math.SQRT2 * Math.sin((pan + 1) * Math.PI / 4);
+      left[index] = this.filterSample(channel, baseLeft * channelGain * leftGain, channel.filterLeft);
+      right[index] = this.filterSample(channel, baseRight * channelGain * rightGain, channel.filterRight);
+    }
+  }
+
+  /**
+   * One block. Each channel is rendered whole into a scratch buffer, from
+   * its own random stream, and then mixed; a channel that is not the soloed
+   * one is still rendered, so its voices and clocks keep running and
+   * un-soloing does not restart it.
+   */
   process(_inputs, outputs) {
     const output = outputs[0];
     const left = output[0];
     const right = output[1] ?? left;
-    const rainOutputCount = Math.max(0, outputs.length - 1);
-    if (this.rainMixes.length !== rainOutputCount) {
-      this.rainMixes = new Float64Array(rainOutputCount);
+    const length = left.length;
+    if (!this.scratchLeft || this.scratchLeft.length < length) {
+      this.scratchLeft = new Float64Array(length);
+      this.scratchRight = new Float64Array(length);
     }
-    const rainMixes = this.rainMixes;
+    const scratchLeft = this.scratchLeft;
+    const scratchRight = this.scratchRight;
     // Equal-power scaling across however many layers are playing, so
     // enabling one more layer does not push the sum into the limiter. A
     // soloed layer plays alone and needs none.
     const channelScale = this.soloChannelId !== null
       ? 1
       : this.channels.length > 0 ? 1 / Math.sqrt(this.channels.length) : 0;
-    for (let frame = 0; frame < left.length; frame += 1) {
-      let leftMix = 0;
-      let rightMix = 0;
-      rainMixes.fill(0);
-      const frameNumber = currentFrame + frame;
-      for (const channel of this.channels) {
-        // A layer that is not the soloed one is still rendered, so its
-        // voices and clocks keep running and un-soloing does not restart it.
-        const audible = this.soloChannelId === null || channel.id === this.soloChannelId;
-        if (channel.kind === 'rain') {
-          const rainSample = this.rainSample(channel, frameNumber);
-          if (audible && channel.outputIndex >= 0 && channel.outputIndex < rainMixes.length) {
-            rainMixes[channel.outputIndex] += rainSample * channel.volume;
-          }
-          continue;
-        }
+    left.fill(0);
+    if (right !== left) right.fill(0);
+    for (let index = 1; index < outputs.length; index += 1) outputs[index][0]?.fill(0);
 
-        const baseLeft = this.noise(channel);
-        const baseRight = this.noise(channel);
-        const cycleValue = this.cycleAt(channel, channel.phase);
-        // riseFactor scales only the part of the swing above the trough
-        // (cycleValue + 1), so the trough is 1 - amplitude whatever it is.
-        const amplitude = channel.riseFactor === 1
-          ? Math.max(0, 1 + (channel.modulationAmplitude * cycleValue))
-          : Math.max(0, 1 + (channel.modulationAmplitude * ((channel.riseFactor * (cycleValue + 1)) - 1)));
-        const pan = channel.panFrom === 0 && channel.panTo === 0 ? 0 : this.swayAt(channel, channel.phase);
-        channel.phase += 1 / (channel.periodSec * channel.periodFactor * sampleRate);
-        if (channel.phase >= 1) {
-          channel.phase -= 1;
-          this.startCycle(channel);
-        }
-        const channelGain = amplitude * channel.volume;
-        // Equal-power balance, normalised so centre is unity on both sides.
-        const leftGain = pan === 0 ? 1 : Math.SQRT2 * Math.cos((pan + 1) * Math.PI / 4);
-        const rightGain = pan === 0 ? 1 : Math.SQRT2 * Math.sin((pan + 1) * Math.PI / 4);
-        const filteredLeft = this.filterSample(channel, baseLeft * channelGain * leftGain, channel.filterLeft);
-        const filteredRight = this.filterSample(channel, baseRight * channelGain * rightGain, channel.filterRight);
-        if (audible) {
-          leftMix += filteredLeft;
-          rightMix += filteredRight;
-        }
+    for (const channel of this.channels) {
+      // A layer at volume 0 still counts in channelScale above -- leaving it
+      // out would make every soundscape that carries a silent layer louder --
+      // but nothing it would render can be heard, so it is not rendered: its
+      // cycle and its clocks pause and resume from where they stood (see
+      // birthVoices for why a paused drop clock cannot be trusted).
+      if (channel.volume <= 0) continue;
+      const audible = this.soloChannelId === null || channel.id === this.soloChannelId;
+      this.stream = channel.stream;
+      if (channel.kind === 'rain') {
+        this.renderRain(channel, scratchLeft, currentFrame, length);
+        const target = outputs[channel.outputIndex + 1]?.[0];
+        if (!audible || channel.outputIndex < 0 || !target) continue;
+        const scale = channel.volume * channelScale;
+        for (let index = 0; index < length; index += 1) target[index] += scratchLeft[index] * scale;
+        continue;
       }
-      left[frame] = leftMix * channelScale;
-      right[frame] = rightMix * channelScale;
-      for (let index = 0; index < rainOutputCount; index += 1) {
-        const rainOutput = outputs[index + 1][0];
-        if (rainOutput) rainOutput[frame] = rainMixes[index] * channelScale;
+      this.renderNoise(channel, scratchLeft, scratchRight, length);
+      if (!audible) continue;
+      for (let index = 0; index < length; index += 1) {
+        left[index] += scratchLeft[index] * channelScale;
+        if (right !== left) right[index] += scratchRight[index] * channelScale;
       }
     }
+    this.stream = this.rootStream;
     return true;
   }
 }

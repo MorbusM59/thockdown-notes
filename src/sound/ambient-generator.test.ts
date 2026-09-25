@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
-import { createHash } from 'node:crypto';
 import {
   AMBIENT_RAIN_DRIPS_MAX_PER_SEC,
   AMBIENT_RAIN_FIRST_INDEX,
@@ -21,7 +20,8 @@ const generatorSource = `${readFileSync(fileURLToPath(new URL('../../public/ambi
 type TestProcessor = {
   channels: Array<{ id: string; eventAge: number; activeVoices: unknown[]; profile?: unknown }>;
   soloChannelId: string | null;
-  makeSurfaceVoice: (profile: unknown, isDrip: boolean) => { gain: number };
+  makeSurfaceVoice: (profile: unknown, isDrip: boolean) => GlassVoice;
+  renderVoice: (voice: GlassVoice, channel: { bassGain: number; trebleGain: number }, out: Float64Array, length: number) => boolean;
   startCycle: (channel: { panTo: number; periodFactor: number; riseFactor: number }) => void;
   makeRainVoice: () => {
     bassModes: Array<{ frequency: number }>;
@@ -72,12 +72,24 @@ function makeRainSlots(rain: TestChannel[]): TestChannel[] {
   ];
 }
 
+type Mode = { sin: number; cos: number; rotationSin: number; rotationCos: number; amplitude: number; decay: number };
+type GlassVoice = {
+  gain: number;
+  age: number;
+  startOffset?: number;
+  durationFrames: number;
+  transientAmplitude: number;
+  bassModes: Mode[];
+  bodyModes: Mode[];
+  trebleModes: Mode[];
+};
+
 type GeneratorConstants = {
   RAIN_SURFACE_PROFILES: Record<string, unknown>;
   RAIN_DRIPS_MAX_PER_SEC: number;
 };
 
-function createProcessor(seed: number, channels: TestChannel[], sampleRate = 12000) {
+function createProcessor(seed: number, channels: TestChannel[], sampleRate = 12000, blockSize = 128) {
   let Processor!: new (options: unknown) => TestProcessor;
   let frame = 0;
   class WorkletProcessorStub {
@@ -100,7 +112,7 @@ function createProcessor(seed: number, channels: TestChannel[], sampleRate = 120
       const samples = { left: [] as number[], right: [] as number[], rain: [[], [], []] as number[][] };
       const endFrame = frame + Math.floor(seconds * sampleRate);
       while (frame < endFrame) {
-        const blockLength = Math.min(128, endFrame - frame);
+        const blockLength = Math.min(blockSize, endFrame - frame);
         const outputs = [
           [new Float32Array(blockLength), new Float32Array(blockLength)],
           [new Float32Array(blockLength)],
@@ -119,8 +131,6 @@ function createProcessor(seed: number, channels: TestChannel[], sampleRate = 120
     },
   };
 }
-
-const GLASS_DIGEST = '99d0ac51e88924f2e118c28bfc40cf804f59cdf77955e13eeeeabb63d58b7083';
 
 function rms(samples: number[]): number {
   return Math.sqrt(samples.reduce((sum, sample) => sum + (sample * sample), 0) / samples.length);
@@ -280,19 +290,92 @@ describe('ambient AudioWorklet generator', () => {
     expect(constants.RAIN_DRIPS_MAX_PER_SEC).toBe(AMBIENT_RAIN_DRIPS_MAX_PER_SEC);
   });
 
-  // The glass surface is the original rain model and its sound is meant to
-  // stay exactly as it was. This pins a hash of a rendered glass layer: it
-  // was taken from the generator before surfaces existed (verified equal,
-  // sample for sample), so a change here is a change to the glass sound.
-  it('renders the glass surface exactly as the original rain model did', () => {
-    const generator = createProcessor(4242, makeRainSlots([
-      makeRainChannel('glass', {
-        surface: 'glass', wash: 0, drips: 0, volume: 0.3, dropsPerSecond: 30, bassGain: 0.6, trebleGain: 0.5,
-      }),
-    ]), 48000);
-    const samples = Float32Array.from(generator.render(1).rain[0]);
-    const digest = createHash('sha256').update(Buffer.from(samples.buffer)).digest('hex');
-    expect(digest).toBe(GLASS_DIGEST);
+  // The glass surface is the original rain model and is meant to sound as it
+  // always has. Its drops are drawn by the unchanged makeRainVoice; what this
+  // pins is that the block renderer plays a drop's ringing modes exactly as
+  // the original per-sample formula did -- body, plus bass and treble each
+  // at their gain -- so moving to block rendering changed when work is done,
+  // not what is heard. (The click is white noise; its own test is below.)
+  it('rings a glass drop exactly as the original per-sample formula did', () => {
+    const generator = createProcessor(4242, [], 48000);
+    const glass = generator.constants.RAIN_SURFACE_PROFILES.glass;
+    const voice = generator.processor.makeSurfaceVoice(glass, false);
+    voice.transientAmplitude = 0;
+    voice.startOffset = 0;
+    const reference = structuredClone(voice);
+    const channel = { bassGain: 0.6, trebleGain: 0.5 };
+
+    const rendered = new Float64Array(voice.durationFrames);
+    for (let start = 0; start < voice.durationFrames; start += 128) {
+      const block = new Float64Array(128);
+      const alive = generator.processor.renderVoice(voice, channel, block, 128);
+      rendered.set(block.subarray(0, Math.min(128, voice.durationFrames - start)), start);
+      if (!alive) break;
+    }
+
+    const ring = (modes: Mode[]) => {
+      let sample = 0;
+      for (const mode of modes) {
+        sample += mode.sin * mode.amplitude;
+        const nextSin = (mode.sin * mode.rotationCos) + (mode.cos * mode.rotationSin);
+        mode.cos = (mode.cos * mode.rotationCos) - (mode.sin * mode.rotationSin);
+        mode.sin = nextSin;
+        mode.amplitude *= mode.decay;
+      }
+      return sample;
+    };
+    for (let index = 0; index < reference.durationFrames; index += 1) {
+      const expected = ring(reference.bodyModes)
+        + (ring(reference.bassModes) * channel.bassGain)
+        + (ring(reference.trebleModes) * channel.trebleGain);
+      // A voice may retire early once it is below -100 dB; after that the
+      // reference is too.
+      expect(Math.abs(rendered[index] - expected)).toBeLessThan(1e-5);
+    }
+  });
+
+  it('gives a glass drop a click that is white, starts at its drawn level and dies within milliseconds', () => {
+    const generator = createProcessor(17, [], 48000);
+    const glass = generator.constants.RAIN_SURFACE_PROFILES.glass;
+    const voice = generator.processor.makeSurfaceVoice(glass, false);
+    const level = voice.transientAmplitude;
+    for (const bank of [voice.bassModes, voice.bodyModes, voice.trebleModes]) {
+      for (const mode of bank) mode.amplitude = 0;
+    }
+    voice.startOffset = 0;
+    const out = new Float64Array(128);
+    generator.processor.renderVoice(voice, { bassGain: 1, trebleGain: 1 }, out, 128);
+    expect(Math.max(...out.map(Math.abs))).toBeLessThanOrEqual(level);
+    expect(Math.max(...out.slice(0, 8).map(Math.abs))).toBeGreaterThan(level * 0.2);
+    // 0.65 ms time constant: after 2 ms (96 samples) it is under 5% of itself.
+    expect(Math.max(...out.slice(96).map(Math.abs))).toBeLessThan(level * 0.05);
+  });
+
+  // Rendering whole blocks per voice must not leave seams: the same seed
+  // gives the same sound whatever size the blocks come in, which holds only
+  // if every voice born mid-block starts on its exact frame and every stream
+  // is drawn in time order. (It caught drops and drips being born in two
+  // passes per block, which reordered the draws at block edges.) Noise is
+  // exact. Rain may differ by what a voice still carries when it retires --
+  // checked once per block, at -100 dB -- so the bound there is -80 dB.
+  it('renders the same sound whatever the block size', () => {
+    const layers = () => [
+      ...Array.from({ length: AMBIENT_RAIN_FIRST_INDEX }, (_, index) => makeChannel(`noise-${index}`, {
+        enabled: index < 2, type: index === 0 ? 'pink' : 'brown', movement: 0.8, periodSec: 0.6,
+      })),
+      makeRainChannel('glass', { surface: 'glass', wash: 0.4, drips: 0.5, dropsPerSecond: 40 }),
+      makeRainChannel('street', { surface: 'street', wash: 1, drips: 1, dropsPerSecond: 60 }),
+      makeRainChannel('forest', { surface: 'forest', wash: 0.7, drips: 1, dropsPerSecond: 50 }),
+    ];
+    const large = createProcessor(88, layers(), 16000, 128).render(3);
+    const small = createProcessor(88, layers(), 16000, 32).render(3);
+    expect(small.left).toEqual(large.left);
+    expect(small.right).toEqual(large.right);
+    for (let index = 0; index < 3; index += 1) {
+      const largest = Math.max(...small.rain[index].map((value, frame) => Math.abs(value - large.rain[index][frame])));
+      expect(largest).toBeLessThan(1e-4);
+      expect(Math.max(...large.rain[index].map(Math.abs))).toBeGreaterThan(0.1);
+    }
   });
 
   it('routes each rain layer to the output its slot position names', () => {
@@ -423,5 +506,22 @@ describe('ambient AudioWorklet generator', () => {
       expect(cycles.every((cycle) => cycle.panTo === 0 && cycle.periodFactor === 1 && cycle.riseFactor === 1)).toBe(true);
       expect(samples.left).toEqual(samples.right);
     });
+  });
+  it('does not render a silent layer, and a layer turned back up does not deliver the drops it missed', () => {
+    const generator = createProcessor(29, makeRainSlots([makeRainChannel('rain', { volume: 0, dropsPerSecond: 60 })]));
+    let births = 0;
+    const makeVoice = generator.processor.makeSurfaceVoice.bind(generator.processor);
+    generator.processor.makeSurfaceVoice = (profile, isDrip) => {
+      births += 1;
+      return makeVoice(profile, isDrip);
+    };
+    generator.render(2);
+    expect(births).toBe(0);
+    generator.processor.port.onmessage?.({
+      data: { type: 'configure', channels: toWorkletChannels(makeRainSlots([makeRainChannel('rain', { volume: 1, dropsPerSecond: 60 })]) as Parameters<typeof toWorkletChannels>[0]) },
+    });
+    generator.render(0.05);
+    // 60 a second for 50 ms is about three; the two paused seconds are not owed.
+    expect(births).toBeLessThan(15);
   });
 });
