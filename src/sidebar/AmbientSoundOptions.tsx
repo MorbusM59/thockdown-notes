@@ -198,6 +198,9 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
     const channel = preferences.settings.find((item) => item.id === channelId)
     if (!channel) return
     const shouldSolo = !channel.solo
+    // Soloing a channel is listening to it on its own, which is when its
+    // controls are wanted, so it is shown too. Clearing solo leaves the view.
+    if (shouldSolo) setSelectedChannelId(channel.id)
     commitSettings(preferences.settings.map((item) => ({
       ...item,
       solo: item.id === channelId && shouldSolo,
