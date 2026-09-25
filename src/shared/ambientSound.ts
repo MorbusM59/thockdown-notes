@@ -161,7 +161,11 @@ export interface AmbientThunderChannelSettings extends AmbientChannelBaseSetting
   distance: number;
   /** Where the storm is, -1 (left) to 1 (right). */
   pan: number;
-  /** How wide a peal rolls across the stereo field around `pan`, 0-1. */
+  /**
+   * How much of the stereo field a peal fills around its pan, 0-1, of the
+   * room the pan leaves: 1 in the centre is the whole width, narrowing onto
+   * a side as the pan moves toward it (the rule rain's pan follows).
+   */
   spread: number;
   /** How harshly the boom under the rumble breaks up: 0 a smooth swell, 1 a choppy growl. The rumble above it always rolls smoothly. */
   character: number;

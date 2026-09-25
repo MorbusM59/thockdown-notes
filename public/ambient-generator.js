@@ -337,16 +337,19 @@ const THUNDER_HIGH_PASS_HZ = 30;
 const THUNDER_FIRST_PEAL_SEC = [4, 12];
 
 /**
- * A rain layer's stereo image (rainImage). Its pan places the image's centre
- * and also sets how wide it is: 1 - |pan| to either side, so a layer in the
- * centre fills the whole field from left to right, and one panned toward a
- * side narrows onto that side, to a point at the edge. Each drop is placed
- * at birth anywhere within the image; the wash is two independent noises at
- * its two edges.
+ * A layer's stereo image: the positions its sources are placed between.
+ * Its pan places the image's centre and also bounds how wide it can be --
+ * 1 - |pan| to either side, so an image in the centre can fill the whole
+ * field from left to right, and one panned toward a side narrows onto that
+ * side, to a point at the edge. `width` (0..1) is how much of that room it
+ * takes. A rain layer takes all of it (each drop placed anywhere within,
+ * the wash two independent noises at its edges); a thunder layer takes its
+ * `spread` (each upper rumble drifting between two places within, the
+ * booms at its centre).
  */
-function rainImage(pan) {
+function stereoImage(pan, width) {
   const centre = Math.max(-1, Math.min(1, pan ?? 0));
-  const halfWidth = 1 - Math.abs(centre);
+  const halfWidth = (1 - Math.abs(centre)) * Math.max(0, Math.min(1, width));
   return { from: centre - halfWidth, to: centre + halfWidth };
 }
 
@@ -910,7 +913,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
   /**
    * The bed, a block at a time, added into `left`/`right`: sparse random
    * impulses plus a noise floor, band-passed, with a slow random swell --
-   * twice, independently, one at each edge of the layer's image (rainImage),
+   * twice, independently, one at each edge of the layer's image (stereoImage),
    * each at half the impulse rate and half the power, so together they are
    * the one bed spread across the image. Nothing is drawn while `wash` is 0.
    */
@@ -925,7 +928,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
     const bed = channel.bed;
     const filterA = bed.filterA;
     const filterB = bed.filterB;
-    const image = rainImage(channel.pan);
+    const image = stereoImage(channel.pan, 1);
     const edgeA = panGains(image.from);
     const edgeB = panGains(image.to);
     const impulseChance = spec.ratePerSec / (2 * sampleRate);
@@ -991,7 +994,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
     const startOffset = Math.max(0, offset);
     // Where in the layer's image this drop falls, drawn first so every birth
     // draws it in the same place in the stream.
-    const image = rainImage(channel.pan);
+    const image = stereoImage(channel.pan, 1);
     const gains = panGains(image.from + ((image.to - image.from) * this.random()));
     let slot = -1;
     if (bank.length < size) {
@@ -1385,8 +1388,8 @@ class AmbientGenerator extends AudioWorkletProcessor {
     const peakSec = lengthSec * this.between(THUNDER_PEAK_AT);
     const fadeTau = Math.max(0.1, (lengthSec - peakSec) / 5);
     const space = this.thunderSpaceAt(channel, d);
-    const clampPan = (value) => Math.max(-1, Math.min(1, value));
-    const panAround = () => clampPan(settings.pan + (spread * ((this.random() * 2) - 1)));
+    const image = stereoImage(settings.pan, spread);
+    const panAround = () => image.from + ((image.to - image.from) * this.random());
     const brown = this.noiseLoop('brown');
     const count = THUNDER_RUMBLES[0] + Math.floor(this.random() * (THUNDER_RUMBLES[1] - THUNDER_RUMBLES[0] + 1));
     // Several rumbles together are about as loud as three were, and the
@@ -1427,8 +1430,11 @@ class AmbientGenerator extends AudioWorkletProcessor {
         ],
         read: Math.floor(this.random() * brown.length),
         band: isBoom,
-        panFrom: panAround(),
-        panTo: panAround(),
+        // A boom stays at the peal's pan: bass is barely heard as coming
+        // from anywhere, and one or two of them carry most of a peal's
+        // power, so a boom drawn to one side leans the whole peal there.
+        panFrom: isBoom ? settings.pan : panAround(),
+        panTo: isBoom ? settings.pan : panAround(),
         gainLeft: 0,
         gainRight: 0,
       });

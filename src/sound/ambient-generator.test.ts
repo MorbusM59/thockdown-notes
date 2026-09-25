@@ -1174,6 +1174,17 @@ describe('ambient thunder', () => {
     }
   });
 
+  it('fills the whole field in the centre at full spread, and narrows onto a side as it is panned', () => {
+    const render = (pan: number) => createProcessor(21, makeThunderSlots([steady({ pan, spread: 1, share: 0.01, lengthSec: 8 })]), rate).render(20);
+    const centre = render(0);
+    expect(rms(centre.left) / rms(centre.right)).toBeGreaterThan(0.7);
+    expect(rms(centre.left) / rms(centre.right)).toBeLessThan(1.4);
+    const half = render(0.5);
+    expect(rms(half.right)).toBeGreaterThan(1.5 * rms(half.left));
+    const edge = render(-1);
+    expect(peakOf(edge.right)).toBeLessThan(1e-9);
+  });
+
   it('holds a peal at its pan when spread is zero', () => {
     const samples = createProcessor(21, makeThunderSlots([steady({ pan: -1, spread: 0, share: 0.01 })]), rate).render(20);
     expect(peakOf(samples.left)).toBeGreaterThan(1e-3);

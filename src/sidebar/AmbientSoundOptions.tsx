@@ -328,8 +328,6 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
       className="sidebar-options-section-ambient"
       ariaLabel="Ambient Sound"
       heading="Ambient Sound"
-      iconClass="fa-water"
-      iconTooltip="Procedural ambient layers can play alongside music."
     >
       <div className="utility-setting-slider-stack" aria-label="Ambient sound controls">
         <div className="options-loadout-grid ambient-preset-grid" role="group" aria-label="Factory ambient soundscapes">
@@ -667,7 +665,7 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                   step={0.01}
                   value={channel.spread}
                   trackLabel="spread"
-                  tooltipLabel="How far a peal wanders across the sky around its pan as it rolls"
+                  tooltipLabel="How much of the stereo field a peal fills: in the centre, up to the whole width; panned toward a side, it narrows onto that side"
                   ariaLabel={`${layerName} spread`}
                   disabled={!channel.enabled}
                   defaultValue={DEFAULT_THUNDER_CHANNEL.spread}
