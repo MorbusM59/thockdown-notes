@@ -3,8 +3,8 @@
  * soundscapes and the sanitizer every stored value passes through.
  *
  * A soundscape is a fixed row of MAX_AMBIENT_CHANNELS channels. The first
- * AMBIENT_NOISE_CHANNEL_COUNT are noise layers (continuous or bursting
- * filtered noise); the rest are rain layers, each routed to its own output of
+ * AMBIENT_NOISE_CHANNEL_COUNT are noise layers (filtered noise whose level
+ * rises and falls in a repeating cycle); the rest are rain layers, each routed to its own output of
  * the AudioWorklet so the engine can give it its own pan, distance filter and
  * reverb send (see src/sound/AmbientSoundEngine.ts). A slot's kind is decided
  * by its POSITION, never stored, so a save can never hold a rain layer in a
@@ -42,13 +42,19 @@ export interface AmbientChannelBaseSettings {
 
 export interface AmbientNoiseChannelSettings extends AmbientChannelBaseSettings {
   kind: 'noise';
+  /** How far (0-1) the level swings around its mean over one cycle. */
   modulationAmplitude: number;
-  modulationPeriodSec: number;
+  /** Seconds per cycle of the level's rise and fall. */
+  periodSec: number;
+  /**
+   * The cycle's curve, 0-1 (src/shared/ambientSoundDsp.ts's
+   * buildNoiseCycle). The left half blends a sine into the gentlest bell;
+   * the right half sharpens that bell up to the steepest one.
+   */
   ramp: number;
+  /** Where in the cycle the peak falls, 0-1 (0.5 is centred). */
   shape: number;
-  speedSec: number;
   type: AmbientNoiseType;
-  densityPer10Sec: number;
   filter: number;
 }
 
@@ -104,16 +110,17 @@ export const AMBIENT_RAIN_CHANNEL_COUNT = MAX_AMBIENT_CHANNELS - AMBIENT_NOISE_C
 export const AMBIENT_RAIN_FIRST_INDEX = AMBIENT_NOISE_CHANNEL_COUNT;
 export const MAX_AMBIENT_CUSTOM_PRESETS = 12;
 
-export const AMBIENT_MODULATION_PERIOD_MIN_SEC = 0.5;
-export const AMBIENT_MODULATION_PERIOD_MAX_SEC = 50;
-export const AMBIENT_RAMP_MIN = 0.1;
-export const AMBIENT_RAMP_MAX = 5;
+export const AMBIENT_PERIOD_MIN_SEC = 0.5;
+export const AMBIENT_PERIOD_MAX_SEC = 50;
+/**
+ * The bell's own steepness range, which the right half of `ramp` sweeps
+ * (smoothCurve.ts's buildBellEnvelope). The left half of `ramp` ends at the
+ * gentlest of these.
+ */
+export const AMBIENT_BELL_RAMP_MIN = 0.1;
+export const AMBIENT_BELL_RAMP_MAX = 5;
 export const AMBIENT_SHAPE_MIN = 0.1;
 export const AMBIENT_SHAPE_MAX = 0.9;
-export const AMBIENT_SPEED_MIN_SEC = 0;
-export const AMBIENT_SPEED_MAX_SEC = 2;
-export const AMBIENT_DENSITY_MIN = 1;
-export const AMBIENT_DENSITY_MAX = 100;
 export const AMBIENT_RAIN_DENSITY_MIN = 1;
 export const AMBIENT_RAIN_DENSITY_MAX = 60;
 export const AMBIENT_RAIN_DEFAULT_DENSITY = 24;
@@ -151,12 +158,10 @@ export const DEFAULT_NOISE_CHANNEL: Readonly<Omit<AmbientNoiseChannelSettings, '
   solo: false,
   volume: 0.2,
   modulationAmplitude: 0.25,
-  modulationPeriodSec: 30,
-  ramp: 1.5,
+  periodSec: 30,
+  ramp: 0,
   shape: 0.5,
-  speedSec: 0.4,
   type: 'pink',
-  densityPer10Sec: 8,
   filter: 0.5,
 };
 
@@ -241,8 +246,7 @@ function migrateLegacyAmbientSettings(input: unknown): AmbientSettings {
     return makeDefaultNoiseChannel(layerId, {
       volume: finiteRange(rawLayer.volume, 0, 1, legacy.volume),
       modulationAmplitude: texture,
-      modulationPeriodSec: 42 - (texture * 39),
-      densityPer10Sec: clamp(Math.round((0.015 + (texture * texture)) * 30), 1, 100),
+      periodSec: 42 - (texture * 39),
       type: layerId === 'wind' ? 'pink' : 'brown',
     });
   });
@@ -297,12 +301,10 @@ export function ambientSettingsSignature(settings: AmbientSettings): string {
         channel.enabled,
         channel.volume,
         channel.modulationAmplitude,
-        channel.modulationPeriodSec,
+        channel.periodSec,
         channel.ramp,
         channel.shape,
-        channel.speedSec,
         channel.type,
-        channel.densityPer10Sec,
         channel.filter,
       ];
     return values.map((value) => typeof value === 'number' ? value.toFixed(4) : value).join(':');
@@ -391,6 +393,32 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
   }),
 ];
 
+/**
+ * A noise layer's period and ramp, reading a layer saved before the two
+ * modes were merged in their current terms. That model is recognised by
+ * `modulationPeriodSec`: a continuous layer was a sine at that period, which
+ * is ramp 0; a burst layer (period 0, or the older `mode: 'burst'`) was a
+ * bell lasting `speedSec` with a steepness of `ramp` on the bell's own
+ * scale, which is the right half of today's ramp. Its silence between
+ * bursts has no equivalent -- a layer is continuous now -- so the burst's
+ * own length becomes the cycle.
+ */
+function readNoiseCycle(
+  source: Record<string, unknown>,
+  fallback: AmbientNoiseChannelSettings,
+): { periodSec: unknown; ramp: unknown } {
+  if (source.periodSec !== undefined || source.modulationPeriodSec === undefined) {
+    return { periodSec: source.periodSec, ramp: source.ramp };
+  }
+  const wasBurst = source.mode === 'burst' || source.modulationPeriodSec === 0;
+  if (!wasBurst) return { periodSec: source.modulationPeriodSec, ramp: 0 };
+  const bellRamp = finiteRange(source.ramp, AMBIENT_BELL_RAMP_MIN, AMBIENT_BELL_RAMP_MAX, AMBIENT_BELL_RAMP_MIN);
+  return {
+    periodSec: finiteRange(source.speedSec, AMBIENT_PERIOD_MIN_SEC, AMBIENT_PERIOD_MAX_SEC, fallback.periodSec),
+    ramp: 0.5 + (0.5 * (bellRamp - AMBIENT_BELL_RAMP_MIN) / (AMBIENT_BELL_RAMP_MAX - AMBIENT_BELL_RAMP_MIN)),
+  };
+}
+
 function finiteUnit(value: unknown, fallback: number): number {
   return finiteRange(value, 0, 1, fallback);
 }
@@ -455,24 +483,15 @@ export function sanitizeAmbientSettings(input: unknown): AmbientSettings {
       };
     }
     const fallback = fallbackChannel as AmbientNoiseChannelSettings;
-    const rawPeriod = source.mode === 'burst' ? 0 : source.modulationPeriodSec;
-    const period = finiteRange(rawPeriod, 0, AMBIENT_MODULATION_PERIOD_MAX_SEC, fallback.modulationPeriodSec);
-
+    const cycle = readNoiseCycle(source, fallback);
     return {
       ...common,
       kind: 'noise' as const,
       modulationAmplitude: finiteUnit(source.modulationAmplitude, fallback.modulationAmplitude),
-      modulationPeriodSec: period === 0 ? 0 : Math.max(AMBIENT_MODULATION_PERIOD_MIN_SEC, period),
-      ramp: finiteRange(source.ramp, AMBIENT_RAMP_MIN, AMBIENT_RAMP_MAX, fallback.ramp),
+      periodSec: finiteRange(cycle.periodSec, AMBIENT_PERIOD_MIN_SEC, AMBIENT_PERIOD_MAX_SEC, fallback.periodSec),
+      ramp: finiteUnit(cycle.ramp, fallback.ramp),
       shape: finiteRange(source.shape, AMBIENT_SHAPE_MIN, AMBIENT_SHAPE_MAX, fallback.shape),
-      speedSec: finiteRange(source.speedSec, AMBIENT_SPEED_MIN_SEC, AMBIENT_SPEED_MAX_SEC, fallback.speedSec),
       type: AMBIENT_NOISE_TYPES.includes(source.type as AmbientNoiseType) ? source.type as AmbientNoiseType : fallback.type,
-      densityPer10Sec: Math.round(finiteRange(
-        source.densityPer10Sec,
-        AMBIENT_DENSITY_MIN,
-        AMBIENT_DENSITY_MAX,
-        fallback.densityPer10Sec,
-      )),
       filter: finiteUnit(source.filter, fallback.filter),
     };
   });

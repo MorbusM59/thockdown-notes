@@ -10,7 +10,7 @@ import {
   createAmbientChannel,
   createAmbientRainChannel,
 } from '../shared/ambientSound';
-import { buildAmbientEnvelope, toWorkletChannels } from '../shared/ambientSoundDsp';
+import { buildNoiseCycle, toWorkletChannels } from '../shared/ambientSoundDsp';
 
 // The worklet's module-scope constants are not reachable from outside a vm
 // script, so the test appends one line exposing the ones it checks.
@@ -28,7 +28,6 @@ type TestProcessor = {
   };
   port: { onmessage: ((event: { data: unknown }) => void) | null };
   eventDelayFrames: (ratePerSecond: number) => number;
-  envelopeAt: (channel: unknown, progress: number) => number;
   noise: (channel: unknown) => number;
   process: (inputs: unknown[], outputs: Float32Array[][]) => boolean;
 }
@@ -48,7 +47,7 @@ function toConfigure(channels: TestChannel[]): unknown[] {
 type TestChannel = (
   | ReturnType<typeof createAmbientChannel>
   | ReturnType<typeof createAmbientRainChannel>
-) & { envelope?: Float32Array }
+) & { cycle?: Float32Array }
 
 function makeChannel(id: string, overrides: Partial<ReturnType<typeof createAmbientChannel>> = {}): TestChannel {
   const settings = {
@@ -57,7 +56,7 @@ function makeChannel(id: string, overrides: Partial<ReturnType<typeof createAmbi
     type: 'white' as const,
     ...overrides,
   }
-  return { ...settings, envelope: buildAmbientEnvelope(settings.ramp, settings.shape) }
+  return { ...settings, cycle: buildNoiseCycle(settings.ramp, settings.shape) }
 }
 
 function makeRainChannel(id: string, overrides: Partial<ReturnType<typeof createAmbientRainChannel>> = {}): TestChannel {
@@ -182,15 +181,15 @@ describe('ambient AudioWorklet generator', () => {
   it('uses modulation amplitude and period to shape continuous noise', () => {
     const unmodulatedGenerator = createProcessor(119, [makeChannel('unmodulated', {
       modulationAmplitude: 0,
-      modulationPeriodSec: 0.5,
+      periodSec: 0.5,
     })]);
     const modulatedGenerator = createProcessor(119, [makeChannel('modulated', {
       modulationAmplitude: 1,
-      modulationPeriodSec: 0.5,
+      periodSec: 0.5,
     })]);
     const slowerGenerator = createProcessor(119, [makeChannel('slower', {
       modulationAmplitude: 1,
-      modulationPeriodSec: 1,
+      periodSec: 1,
     })]);
     for (const generator of [unmodulatedGenerator, modulatedGenerator, slowerGenerator]) {
       generator.processor.noise = () => 1;
@@ -204,43 +203,19 @@ describe('ambient AudioWorklet generator', () => {
     expect(modulated.left).not.toEqual(slower.left);
   });
 
-  it('spaces burst events randomly and increases their average rate with density', () => {
-    const lowDensity = createProcessor(211, [makeChannel('low', {
-      modulationPeriodSec: 0,
-      densityPer10Sec: 1,
-      speedSec: 0,
-    })], 1000);
-    const highDensity = createProcessor(211, [makeChannel('high', {
-      modulationPeriodSec: 0,
-      densityPer10Sec: 100,
-      speedSec: 0,
-    })], 1000);
-    const lowDelay = lowDensity.processor.eventDelayFrames.bind(lowDensity.processor);
-    const highDelay = highDensity.processor.eventDelayFrames.bind(highDensity.processor);
-    let randomDelayCount = 0;
-    const randomDelays = Array.from({ length: 8 }, () => {
-      randomDelayCount += 1;
-      return highDelay(5);
-    });
-    let lowBurstStarts = 0;
-    let highBurstStarts = 0;
-    const countStarts = (generator: ReturnType<typeof createProcessor>, counter: () => void) => {
-      const envelopeAt = generator.processor.envelopeAt.bind(generator.processor);
-      generator.processor.envelopeAt = (channel, progress) => {
-        if (progress === 0) counter();
-        return envelopeAt(channel, progress);
-      };
-    };
-    countStarts(lowDensity, () => { lowBurstStarts += 1; });
-    countStarts(highDensity, () => { highBurstStarts += 1; });
-    lowDensity.processor.eventDelayFrames = lowDelay;
-    highDensity.processor.eventDelayFrames = highDelay;
-    lowDensity.render(10);
-    highDensity.render(10);
-    expect(randomDelayCount).toBe(8);
-    expect(new Set(randomDelays).size).toBeGreaterThan(1);
-    expect(highBurstStarts).toBeGreaterThan(50);
-    expect(highBurstStarts).toBeGreaterThan(lowBurstStarts * 10);
+  it('repeats its level exactly once per period', () => {
+    // With the noise itself held at 1, the output IS the level. A period of
+    // 0.5 s at 1000 Hz repeats every 500 samples, whatever the curve.
+    for (const ramp of [0, 0.5, 1]) {
+      const generator = createProcessor(5, [makeChannel('cycle', {
+        modulationAmplitude: 1, periodSec: 0.5, ramp,
+      })], 1000);
+      generator.processor.noise = () => 1;
+      const level = generator.render(2).left;
+      for (let index = 0; index + 500 < level.length; index += 37) {
+        expect(level[index + 500]).toBeCloseTo(level[index], 2);
+      }
+    }
   });
 
   it('applies low-pass and high-pass filtering while the midpoint bypasses filtering', () => {

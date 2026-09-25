@@ -133,22 +133,13 @@ class AmbientGenerator extends AudioWorkletProcessor {
     return Math.max(1, Math.floor((-Math.log(Math.max(1e-9, 1 - this.random())) / safeRate) * sampleRate));
   }
 
-  modeOf(settings) {
-    if (settings.kind === 'rain') return 'rain';
-    return settings.modulationPeriodSec === 0 ? 'burst' : 'continuous';
-  }
-
   makeChannel(settings) {
     const channel = {
       ...settings,
-      mode: this.modeOf(settings),
       pink: [0, 0, 0, 0, 0, 0, 0],
       brown: 0,
       phase: this.random(),
       nextEventFrame: 0,
-      eventAge: -1,
-      eventAmplitude: 0,
-      eventDurationFrames: 1,
       activeVoices: [],
       nextDripFrame: Infinity,
       bed: null,
@@ -157,46 +148,33 @@ class AmbientGenerator extends AudioWorkletProcessor {
       filterLeft: { x: 0, y: 0 },
       filterRight: { x: 0, y: 0 },
     };
-    const rate = settings.kind === 'rain'
-      ? settings.dropsPerSecond
-      : settings.densityPer10Sec / 10;
-    channel.nextEventFrame = currentFrame + this.eventDelayFrames(rate);
     this.configureFilter(channel);
-    if (channel.mode === 'rain') this.configureRain(channel, null);
+    if (channel.kind === 'rain') {
+      channel.nextEventFrame = currentFrame + this.eventDelayFrames(settings.dropsPerSecond);
+      this.configureRain(channel, null);
+    }
     return channel;
   }
 
   /**
    * Replace the channel list. A channel that keeps its id keeps its running
-   * state (voices, filter memory, phase) so a slider move does not click;
-   * only a change to an event rate reschedules that rate's next event.
+   * state (voices, filter memory, the noise cycle's phase) so a slider move
+   * does not click; only a change to a drop rate reschedules the next drop.
    */
   configure(settings) {
     this.soloChannelId = settings.find((channel) => channel.solo)?.id ?? null;
     const activeSettings = settings.filter((channel) => channel.enabled !== false);
     const previousById = new Map(this.channels.map((channel) => [channel.id, channel]));
     this.channels = activeSettings.map((next) => {
-      const configured = { ...next, mode: this.modeOf(next) };
       const previous = previousById.get(next.id);
-      if (!previous) return this.makeChannel(configured);
+      if (!previous) return this.makeChannel(next);
       const before = { ...previous };
-      if (configured.mode === 'rain' && (
-        previous.mode !== 'rain'
-        || previous.dropsPerSecond !== next.dropsPerSecond
-      )) {
+      if (next.kind === 'rain' && previous.dropsPerSecond !== next.dropsPerSecond) {
         previous.nextEventFrame = currentFrame + this.eventDelayFrames(next.dropsPerSecond);
-      } else if (configured.mode === 'burst' && (
-        previous.mode !== 'burst'
-        || previous.densityPer10Sec !== next.densityPer10Sec
-      )) {
-        previous.eventAge = -1;
-        previous.nextEventFrame = currentFrame + this.eventDelayFrames(next.densityPer10Sec / 10);
-      } else if (previous.mode === 'burst' && configured.mode !== 'burst') {
-        previous.eventAge = -1;
       }
-      Object.assign(previous, configured);
+      Object.assign(previous, next);
       this.configureFilter(previous);
-      if (previous.mode === 'rain') this.configureRain(previous, before);
+      if (previous.kind === 'rain') this.configureRain(previous, before);
       return previous;
     });
   }
@@ -287,14 +265,18 @@ class AmbientGenerator extends AudioWorkletProcessor {
     return pink;
   }
 
-  envelopeAt(channel, progress) {
-    const envelope = channel.envelope;
-    if (!envelope?.length) return Math.sin(Math.PI * progress) ** 2;
-    const position = progress * (envelope.length - 1);
+  /**
+   * The noise cycle's value (-1..1) at `phase` (0..1), interpolated from the
+   * table the engine built (src/shared/ambientSoundDsp.ts's buildNoiseCycle).
+   * A layer configured without one plays a plain sine.
+   */
+  cycleAt(channel, phase) {
+    const cycle = channel.cycle;
+    if (!cycle?.length) return -Math.cos(2 * Math.PI * phase);
+    const position = phase * (cycle.length - 1);
     const low = Math.floor(position);
-    const high = Math.min(envelope.length - 1, low + 1);
-    const value = position - low;
-    return envelope[low] + ((envelope[high] - envelope[low]) * value);
+    const high = Math.min(cycle.length - 1, low + 1);
+    return cycle[low] + ((cycle[high] - cycle[low]) * (position - low));
   }
 
   /**
@@ -540,29 +522,9 @@ class AmbientGenerator extends AudioWorkletProcessor {
 
         const baseLeft = this.noise(channel);
         const baseRight = this.noise(channel);
-        let amplitude = 0;
-        if (channel.mode === 'continuous') {
-          const modulation = Math.sin(channel.phase * Math.PI * 2);
-          amplitude = Math.max(0, 1 + (channel.modulationAmplitude * modulation));
-          channel.phase += 1 / (channel.modulationPeriodSec * sampleRate);
-          if (channel.phase >= 1) channel.phase -= 1;
-        } else {
-          if (frameNumber >= channel.nextEventFrame) {
-            channel.eventAge = 0;
-            channel.eventAmplitude = channel.modulationAmplitude;
-            channel.eventDurationFrames = Math.max(128, Math.round(channel.speedSec * sampleRate));
-            channel.nextEventFrame = frameNumber + this.eventDelayFrames(channel.densityPer10Sec / 10);
-          }
-          if (channel.eventAge >= 0) {
-            const progress = channel.eventAge / channel.eventDurationFrames;
-            if (progress >= 1) {
-              channel.eventAge = -1;
-            } else {
-              amplitude = this.envelopeAt(channel, progress) * channel.eventAmplitude;
-              channel.eventAge += 1;
-            }
-          }
-        }
+        const amplitude = Math.max(0, 1 + (channel.modulationAmplitude * this.cycleAt(channel, channel.phase)));
+        channel.phase += 1 / (channel.periodSec * sampleRate);
+        if (channel.phase >= 1) channel.phase -= 1;
         const channelGain = amplitude * channel.volume;
         const filteredLeft = this.filterSample(channel, baseLeft * channelGain, channel.filterLeft);
         const filteredRight = this.filterSample(channel, baseRight * channelGain, channel.filterRight);

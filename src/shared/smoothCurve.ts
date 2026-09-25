@@ -8,7 +8,7 @@ const CDF_SAMPLE_COUNT = 256;
 
 // f(x) = 1 / ((1/a) + ((2(x/t) - 1) / b)^2)
 // Shared so every curve-driven interaction (scroll plans, CursorClickCurve.ts's
-// directly sampled attack/release envelope, the ambient burst envelope below)
+// directly sampled attack/release envelope, the ambient noise cycle's bell)
 // uses exactly the same bell shape.
 export const evaluateCurve = (xSec: number, a: number, b: number, tSec: number): number => {
   const normalized = (2 * (xSec / tSec)) - 1;
@@ -94,8 +94,8 @@ export const sampleCdf = (cdf: Float64Array, progress: number): number => {
  * The bell sampled as an amplitude envelope over one event: 0 at both ends,
  * 1 at the apex, which `skew` places (0.5 is centred) and `ramp` sharpens.
  * The raw bell is rescaled from its start value to its peak and smoothstepped
- * so it leaves and returns to silence with zero slope -- a burst of ambient
- * noise that starts on a slope clicks.
+ * so it leaves and returns to its floor with zero slope -- an ambient noise
+ * cycle whose level turned a corner at the trough would be heard as a kink.
  */
 export function buildBellEnvelope(
   ramp: number,

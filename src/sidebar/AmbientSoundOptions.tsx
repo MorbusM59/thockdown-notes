@@ -2,22 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AccordionSection } from '../components/AccordionSection'
 import { CompactScrollbarSlider } from '../components/CompactScrollbarSlider'
 import {
-  AMBIENT_DENSITY_MAX,
-  AMBIENT_DENSITY_MIN,
   AMBIENT_FACTORY_PRESETS,
-  AMBIENT_MODULATION_PERIOD_MAX_SEC,
+  AMBIENT_PERIOD_MAX_SEC,
+  AMBIENT_PERIOD_MIN_SEC,
   AMBIENT_NOISE_TYPES,
   AMBIENT_RAIN_DENSITY_MAX,
   AMBIENT_RAIN_DENSITY_MIN,
   AMBIENT_RAIN_DRIPS_MAX_PER_SEC,
   AMBIENT_RAIN_FIRST_INDEX,
   AMBIENT_RAIN_SURFACES,
-  AMBIENT_RAMP_MAX,
-  AMBIENT_RAMP_MIN,
   AMBIENT_SHAPE_MAX,
   AMBIENT_SHAPE_MIN,
-  AMBIENT_SPEED_MAX_SEC,
-  AMBIENT_SPEED_MIN_SEC,
   MAX_AMBIENT_CHANNELS,
   MAX_AMBIENT_CUSTOM_PRESETS,
   DEFAULT_NOISE_CHANNEL,
@@ -65,6 +60,16 @@ function copySettings(settings: AmbientSettings): AmbientSettings {
 
 function typeIndex(type: AmbientNoiseType): number {
   return AMBIENT_NOISE_TYPES.indexOf(type)
+}
+
+/**
+ * The noise ramp as read on its slider: how far into the sine-to-bell blend
+ * the left half is, and how steep the bell is on the right.
+ */
+function formatNoiseRamp(value: number): string {
+  if (value < 0.005) return 'Sine'
+  if (value < 0.5) return `Sine → bell ${Math.round((value / 0.5) * 100)}%`
+  return `Bell ${Math.round(((value - 0.5) / 0.5) * 100)}%`
 }
 
 function surfaceIndex(surface: AmbientRainSurface): number {
@@ -514,30 +519,31 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                   onCommit={(value) => updateNoiseChannel(channel.id, { modulationAmplitude: value })}
                 />
                 <CompactScrollbarSlider
-                  id={`ambient-${channel.id}-mod-period`}
-                  min={0}
-                  max={AMBIENT_MODULATION_PERIOD_MAX_SEC}
+                  id={`ambient-${channel.id}-period`}
+                  min={AMBIENT_PERIOD_MIN_SEC}
+                  max={AMBIENT_PERIOD_MAX_SEC}
                   step={0.5}
-                  value={channel.modulationPeriodSec}
-                  trackLabel="mod freq"
-                  tooltipLabel="Modulation period; 0 selects burst mode"
-                  ariaLabel={`${layerName} modulation period`}
+                  value={channel.periodSec}
+                  trackLabel="period"
+                  tooltipLabel="Seconds for one full rise and fall"
+                  ariaLabel={`${layerName} period`}
                   disabled={!channel.enabled}
-                  defaultValue={DEFAULT_NOISE_CHANNEL.modulationPeriodSec}
-                  formatValue={(value) => value === 0 ? 'Burst' : `${value.toFixed(1)} s`}
-                  onCommit={(value) => updateNoiseChannel(channel.id, { modulationPeriodSec: value })}
+                  defaultValue={DEFAULT_NOISE_CHANNEL.periodSec}
+                  formatValue={(value) => `${value.toFixed(1)} s`}
+                  onCommit={(value) => updateNoiseChannel(channel.id, { periodSec: value })}
                 />
                 <CompactScrollbarSlider
                   id={`ambient-${channel.id}-ramp`}
-                  min={AMBIENT_RAMP_MIN}
-                  max={AMBIENT_RAMP_MAX}
-                  step={0.05}
+                  min={0}
+                  max={1}
+                  step={0.01}
                   value={channel.ramp}
                   trackLabel="ramp"
-                  ariaLabel={`${layerName} burst ramp`}
+                  tooltipLabel="Curve of the rise and fall: a sine on the left, blending into a bell at the middle, the bell growing steeper to the right"
+                  ariaLabel={`${layerName} ramp`}
                   disabled={!channel.enabled}
                   defaultValue={DEFAULT_NOISE_CHANNEL.ramp}
-                  formatValue={(value) => value.toFixed(2)}
+                  formatValue={formatNoiseRamp}
                   onCommit={(value) => updateNoiseChannel(channel.id, { ramp: value })}
                 />
                 <CompactScrollbarSlider
@@ -547,26 +553,12 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                   step={0.01}
                   value={channel.shape}
                   trackLabel="shape"
-                  ariaLabel={`${layerName} burst shape`}
+                  tooltipLabel="Where in the cycle the peak falls"
+                  ariaLabel={`${layerName} shape`}
                   disabled={!channel.enabled}
                   defaultValue={DEFAULT_NOISE_CHANNEL.shape}
                   formatValue={(value) => value.toFixed(2)}
                   onCommit={(value) => updateNoiseChannel(channel.id, { shape: value })}
-                />
-                <CompactScrollbarSlider
-                  id={`ambient-${channel.id}-speed`}
-                  min={AMBIENT_SPEED_MIN_SEC}
-                  max={AMBIENT_SPEED_MAX_SEC}
-                  step={0.05}
-                  value={channel.speedSec}
-                  trackLabel="speed"
-                  tooltipLabel="Burst duration in seconds"
-                  ariaLabel={`${layerName} burst duration`}
-                  disabled={!channel.enabled}
-                  reverseScale
-                  defaultValue={DEFAULT_NOISE_CHANNEL.speedSec}
-                  formatValue={(value) => `${value.toFixed(2)} s`}
-                  onCommit={(value) => updateNoiseChannel(channel.id, { speedSec: value })}
                 />
                 <CompactScrollbarSlider
                   id={`ambient-${channel.id}-type`}
@@ -581,20 +573,6 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                   defaultValue={typeIndex(DEFAULT_NOISE_CHANNEL.type)}
                   formatValue={(value) => AMBIENT_NOISE_TYPES[Math.round(value)]}
                   onCommit={(value) => updateNoiseChannel(channel.id, { type: AMBIENT_NOISE_TYPES[Math.round(value)] })}
-                />
-                <CompactScrollbarSlider
-                  id={`ambient-${channel.id}-density`}
-                  min={AMBIENT_DENSITY_MIN}
-                  max={AMBIENT_DENSITY_MAX}
-                  step={1}
-                  value={channel.densityPer10Sec}
-                  trackLabel="density"
-                  tooltipLabel="Average burst events per 10 seconds"
-                  ariaLabel={`${layerName} burst density`}
-                  disabled={!channel.enabled}
-                  defaultValue={DEFAULT_NOISE_CHANNEL.densityPer10Sec}
-                  formatValue={(value) => `${Math.round(value)} / 10 s`}
-                  onCommit={(value) => updateNoiseChannel(channel.id, { densityPer10Sec: value })}
                 />
                 <CompactScrollbarSlider
                   id={`ambient-${channel.id}-filter`}
