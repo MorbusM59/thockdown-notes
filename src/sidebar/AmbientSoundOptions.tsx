@@ -525,7 +525,7 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                   step={1}
                   value={channel.pan * 100}
                   trackLabel="pan"
-                  tooltipLabel="Stereo pan from left to right"
+                  tooltipLabel="Where the rain falls: in the centre it fills the whole stereo field, and toward either side it narrows onto that side"
                   ariaLabel={`${layerName} pan`}
                   disabled={!channel.enabled}
                   defaultValue={defaultRainPan(rainIndex) * 100}

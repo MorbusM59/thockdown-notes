@@ -161,8 +161,8 @@ function createProcessor(seed: number, channels: TestChannel[], sampleRate = 120
     registerProcessor: (_name: string, processor: new (options: unknown) => TestProcessor) => { Processor = processor; },
   };
   runInNewContext(generatorSource, scope);
-  // The same output layout the engine creates: noise direct, three rain
-  // outputs, then the noise reverb send.
+  // The same output layout the engine creates: noise direct, three stereo
+  // rain outputs, then the noise reverb send.
   const processor = new Processor!({ processorOptions: { seed, noiseLoops: noiseLoopsAt(sampleRate), noiseSendOutput: 4 } });
   processor.port.onmessage?.({ data: { type: 'configure', channels: toConfigure(channels) } });
 
@@ -172,6 +172,7 @@ function createProcessor(seed: number, channels: TestChannel[], sampleRate = 120
     render(seconds: number) {
       const samples = {
         left: [] as number[], right: [] as number[], rain: [[], [], []] as number[][],
+        rainLeft: [[], [], []] as number[][], rainRight: [[], [], []] as number[][],
         sendLeft: [] as number[], sendRight: [] as number[],
       };
       const endFrame = frame + Math.floor(seconds * sampleRate);
@@ -179,9 +180,9 @@ function createProcessor(seed: number, channels: TestChannel[], sampleRate = 120
         const blockLength = Math.min(blockSize, endFrame - frame);
         const outputs = [
           [new Float32Array(blockLength), new Float32Array(blockLength)],
-          [new Float32Array(blockLength)],
-          [new Float32Array(blockLength)],
-          [new Float32Array(blockLength)],
+          [new Float32Array(blockLength), new Float32Array(blockLength)],
+          [new Float32Array(blockLength), new Float32Array(blockLength)],
+          [new Float32Array(blockLength), new Float32Array(blockLength)],
           [new Float32Array(blockLength), new Float32Array(blockLength)],
         ];
         processor.process([], outputs);
@@ -190,7 +191,12 @@ function createProcessor(seed: number, channels: TestChannel[], sampleRate = 120
         samples.left.push(...outputs[0][0]);
         samples.right.push(...outputs[0][1]);
         for (let index = 0; index < samples.rain.length; index += 1) {
-          samples.rain[index].push(...outputs[index + 1][0]);
+          const [rainLeft, rainRight] = outputs[index + 1];
+          samples.rainLeft[index].push(...rainLeft);
+          samples.rainRight[index].push(...rainRight);
+          // The layer summed to one channel, for the tests about what it
+          // plays rather than where.
+          samples.rain[index].push(...rainLeft.map((value, frame) => value + rainRight[frame]));
         }
         frame += blockLength;
       }
@@ -720,11 +726,15 @@ describe('ambient AudioWorklet generator', () => {
       const generator = createProcessor(23, makeRainSlots([makeRainChannel('rain', { dropsPerSecond: 60, drips: 0, wash: 0 })]), 8000);
       generator.render(2);
       const entry = rainOf(generator).dropBank[0] as unknown as { samples: Float32Array; audibleLength: number };
-      const out = new Float64Array(entry.audibleLength + 16);
-      const voice = { live: null, entry, position: 0, startOffset: 16, level: 1 };
-      (generator.processor as unknown as { playDrop: (v: unknown, o: Float64Array, n: number) => boolean }).playDrop(voice, out, out.length);
-      expect(Array.from(out.subarray(0, 16)).every((value) => value === 0)).toBe(true);
-      expect(Array.from(out.subarray(16))).toEqual(Array.from(entry.samples.subarray(0, entry.audibleLength)));
+      const left = new Float64Array(entry.audibleLength + 16);
+      const right = new Float64Array(entry.audibleLength + 16);
+      // Hard left: the recording lands whole on one side, and not at all on the other.
+      const voice = { live: null, entry, position: 0, startOffset: 16, level: 1, gainLeft: 1, gainRight: 0 };
+      (generator.processor as unknown as { playDrop: (v: unknown, l: Float64Array, r: Float64Array, n: number) => boolean })
+        .playDrop(voice, left, right, left.length);
+      expect(Array.from(left.subarray(0, 16)).every((value) => value === 0)).toBe(true);
+      expect(Array.from(left.subarray(16))).toEqual(Array.from(entry.samples.subarray(0, entry.audibleLength)));
+      expect(right.every((value) => value === 0)).toBe(true);
       // Only silence was cut: nothing past the playback length is audible.
       expect(Array.from(entry.samples.subarray(entry.audibleLength)).every((value) => Math.abs(value) <= 1e-5)).toBe(true);
     });
@@ -993,3 +1003,44 @@ describe('ambient thunder', () => {
     expect(peakOf(large.left)).toBeGreaterThan(0.01);
   });
 });
+
+describe('rain stereo image', () => {
+  /** Correlation of left and right: 1 for the same signal on both, near 0 for independent ones. */
+  const correlation = (left: number[], right: number[]) => {
+    let lr = 0;
+    let ll = 0;
+    let rr = 0;
+    for (let index = 0; index < left.length; index += 1) {
+      lr += left[index] * right[index];
+      ll += left[index] * left[index];
+      rr += right[index] * right[index];
+    }
+    return lr / Math.sqrt(ll * rr);
+  };
+  const render = (pan: number, changes: Partial<ReturnType<typeof createAmbientRainChannel>> = {}) => createProcessor(
+    31, makeRainSlots([makeRainChannel('rain', { pan, dropsPerSecond: 40, wash: 0.8, drips: 0.3, ...changes })]), 8000,
+  ).render(3);
+
+  it('fills the whole field in the centre: both sides equally loud and largely independent', () => {
+    const samples = render(0);
+    const left = rms(samples.rainLeft[0]);
+    const right = rms(samples.rainRight[0]);
+    expect(left / right).toBeGreaterThan(0.8);
+    expect(left / right).toBeLessThan(1.25);
+    expect(correlation(samples.rainLeft[0], samples.rainRight[0])).toBeLessThan(0.6);
+  });
+
+  it('narrows as it is panned: more alike on both sides, and louder on its own side', () => {
+    const centre = render(0);
+    const half = render(0.5);
+    expect(correlation(half.rainLeft[0], half.rainRight[0])).toBeGreaterThan(correlation(centre.rainLeft[0], centre.rainRight[0]));
+    expect(rms(half.rainRight[0])).toBeGreaterThan(1.5 * rms(half.rainLeft[0]));
+  });
+
+  it('is a point at the edge: all of it on that side', () => {
+    const samples = render(-1);
+    expect(rms(samples.rainLeft[0])).toBeGreaterThan(0.001);
+    expect(peakOf(samples.rainRight[0])).toBeLessThan(1e-9);
+  });
+});
+

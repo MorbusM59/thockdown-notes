@@ -2,13 +2,14 @@
  * AmbientSoundEngine -- the Web Audio graph around the ambient worklet.
  *
  *   worklet output 0 (noise direct, stereo) -----------------------> mixGain
- *   worklet output 1+i (rain layer i, mono) -> low-pass -> panner -> direct -> mixGain
- *                                                              \-> reverb send -> reverb -> mixGain
+ *   worklet output 1+i (rain layer i, stereo) -> low-pass -> direct -> mixGain
+ *                                                     \-> reverb send -> reverb -> mixGain
  *   worklet output NOISE_SEND_OUTPUT (noise reverb sends, stereo) -> reverb
  *
  * A noise layer's distance is applied inside the worklet (its layers share
  * one output, so no per-layer node could do it); a rain layer's here. Both
- * follow resolveAmbientSpace.
+ * follow resolveAmbientSpace. A rain layer's pan is applied in the worklet,
+ * drop by drop, because it sets the layer's width as well as its place.
  *   mixGain -> the music player's shared output limiter
  *
  * The graph exists only while something is audible: it is built on the
@@ -36,7 +37,6 @@ const AMBIENT_DISCONNECT_MS = 180;
 
 interface AmbientRainLayerNodes {
   filter: BiquadFilterNode;
-  panner: StereoPannerNode;
   directGain: GainNode;
   reverbSend: GainNode;
 }
@@ -138,7 +138,7 @@ export class AmbientSoundEngine {
 
       const worklet = new AudioWorkletNode(context, 'ambient-generator', {
         numberOfOutputs: NOISE_SEND_OUTPUT + 1,
-        outputChannelCount: [2, ...Array.from({ length: AMBIENT_RAIN_CHANNEL_COUNT }, () => 1), 2],
+        outputChannelCount: [2, ...Array.from({ length: AMBIENT_RAIN_CHANNEL_COUNT }, () => 2), 2],
         processorOptions: {
           seed: (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0,
           noiseLoops: noiseLoopsFor(context.sampleRate),
@@ -165,17 +165,14 @@ export class AmbientSoundEngine {
         filter.type = 'lowpass';
         filter.frequency.value = 18000;
         filter.Q.value = 0.707;
-        const panner = context.createStereoPanner();
-        panner.pan.value = 0;
         const directGain = context.createGain();
         const reverbSend = context.createGain();
         worklet.connect(filter, index + 1);
-        filter.connect(panner);
-        panner.connect(directGain);
+        filter.connect(directGain);
         directGain.connect(mixGain);
-        panner.connect(reverbSend);
+        filter.connect(reverbSend);
         reverbSend.connect(reverb);
-        return { filter, panner, directGain, reverbSend };
+        return { filter, directGain, reverbSend };
       });
 
       musicPlayerService.connectToMix(mixGain);
@@ -209,7 +206,6 @@ export class AmbientSoundEngine {
       const nodes = this.rainLayerNodes[index];
       if (channel?.kind !== 'rain' || !nodes) continue;
       const space = resolveAmbientSpace(channel.distance);
-      nodes.panner.pan.setTargetAtTime(channel.pan, now, AMBIENT_FADE_SEC);
       nodes.filter.frequency.setTargetAtTime(space.cutoffHz, now, AMBIENT_FADE_SEC);
       nodes.directGain.gain.setTargetAtTime(space.directGain, now, AMBIENT_FADE_SEC);
       nodes.reverbSend.gain.setTargetAtTime(space.reverbSend, now, AMBIENT_FADE_SEC);
@@ -238,7 +234,6 @@ export class AmbientSoundEngine {
       this.reverb?.disconnect();
       for (const nodes of this.rainLayerNodes) {
         nodes.filter.disconnect();
-        nodes.panner.disconnect();
         nodes.directGain.disconnect();
         nodes.reverbSend.disconnect();
       }

@@ -283,6 +283,26 @@ const THUNDER_STROKE_SEND = 0.25;
 /** The first peal of a storm that has just started comes within this many seconds. */
 const THUNDER_FIRST_PEAL_SEC = [4, 12];
 
+/**
+ * A rain layer's stereo image (rainImage). Its pan places the image's centre
+ * and also sets how wide it is: 1 - |pan| to either side, so a layer in the
+ * centre fills the whole field from left to right, and one panned toward a
+ * side narrows onto that side, to a point at the edge. Each drop is placed
+ * at birth anywhere within the image; the wash is two independent noises at
+ * its two edges.
+ */
+function rainImage(pan) {
+  const centre = Math.max(-1, Math.min(1, pan ?? 0));
+  const halfWidth = 1 - Math.abs(centre);
+  return { from: centre - halfWidth, to: centre + halfWidth };
+}
+
+/** Equal-power gains for a position from -1 (left) to 1 (right). */
+function panGains(position) {
+  const angle = (position + 1) * Math.PI / 4;
+  return { left: Math.SQRT2 * Math.cos(angle), right: Math.SQRT2 * Math.sin(angle) };
+}
+
 /** The most rain voices one layer keeps ringing at once. */
 const MAX_RAIN_VOICES = 48;
 
@@ -545,7 +565,9 @@ class AmbientGenerator extends AudioWorkletProcessor {
         // Its own stream, so the bed's per-sample draws and the voices'
         // births each stay in time order whatever the block size.
         stream: { seed: Math.floor(this.random() * 0x100000000) >>> 0 },
-        filter: stateVariableFilter(profile.bed.centerHz, profile.bed.q),
+        // One filter per edge of the image: two independent noises.
+        filterA: stateVariableFilter(profile.bed.centerHz, profile.bed.q),
+        filterB: stateVariableFilter(profile.bed.centerHz, profile.bed.q),
         swell: 1,
         swellTarget: 1,
         swellFrames: 0,
@@ -823,23 +845,29 @@ class AmbientGenerator extends AudioWorkletProcessor {
 
 
   /**
-   * The bed, a block at a time, added into `out`: sparse random impulses plus
-   * a noise floor, band-passed, with a slow random swell. Nothing is drawn
-   * while `wash` is 0.
+   * The bed, a block at a time, added into `left`/`right`: sparse random
+   * impulses plus a noise floor, band-passed, with a slow random swell --
+   * twice, independently, one at each edge of the layer's image (rainImage),
+   * each at half the impulse rate and half the power, so together they are
+   * the one bed spread across the image. Nothing is drawn while `wash` is 0.
    */
-  renderBed(channel, out, length) {
+  renderBed(channel, left, right, length) {
     const wash = channel.wash ?? 0;
     if (wash <= 0) return;
-    this.withStream(channel.bed.stream, () => this.renderBedFrom(channel, out, length, wash));
+    this.withStream(channel.bed.stream, () => this.renderBedFrom(channel, left, right, length, wash));
   }
 
-  renderBedFrom(channel, out, length, wash) {
+  renderBedFrom(channel, left, right, length, wash) {
     const spec = channel.profile.bed;
     const bed = channel.bed;
-    const filter = bed.filter;
-    const impulseChance = spec.ratePerSec / sampleRate;
+    const filterA = bed.filterA;
+    const filterB = bed.filterB;
+    const image = rainImage(channel.pan);
+    const edgeA = panGains(image.from);
+    const edgeB = panGains(image.to);
+    const impulseChance = spec.ratePerSec / (2 * sampleRate);
     const swellRate = 1 / (sampleRate * 0.8);
-    const scale = spec.gain * wash;
+    const scale = spec.gain * wash * Math.SQRT1_2;
     for (let index = 0; index < length; index += 1) {
       if (bed.swellFrames <= 0) {
         bed.swellTarget = 1 - (spec.swellDepth * this.random());
@@ -847,9 +875,13 @@ class AmbientGenerator extends AudioWorkletProcessor {
       }
       bed.swellFrames -= 1;
       bed.swell += (bed.swellTarget - bed.swell) * swellRate;
-      const impulse = this.random() < impulseChance ? ((this.random() * 2) - 1) : 0;
-      const floor = ((this.random() * 2) - 1) * spec.floor;
-      out[index] += bandPass(filter, impulse + floor) * scale * bed.swell;
+      const level = scale * bed.swell;
+      const impulseA = this.random() < impulseChance ? ((this.random() * 2) - 1) : 0;
+      const a = bandPass(filterA, impulseA + (((this.random() * 2) - 1) * spec.floor)) * level;
+      const impulseB = this.random() < impulseChance ? ((this.random() * 2) - 1) : 0;
+      const b = bandPass(filterB, impulseB + (((this.random() * 2) - 1) * spec.floor)) * level;
+      left[index] += (a * edgeA.left) + (b * edgeB.left);
+      right[index] += (a * edgeA.right) + (b * edgeB.right);
     }
   }
 
@@ -894,6 +926,10 @@ class AmbientGenerator extends AudioWorkletProcessor {
     const bank = isDrip ? channel.dripBank : channel.dropBank;
     const size = isDrip ? DRIP_BANK_SIZE : DROP_BANK_SIZE;
     const startOffset = Math.max(0, offset);
+    // Where in the layer's image this drop falls, drawn first so every birth
+    // draws it in the same place in the stream.
+    const image = rainImage(channel.pan);
+    const gains = panGains(image.from + ((image.to - image.from) * this.random()));
     let slot = -1;
     if (bank.length < size) {
       slot = bank.length;
@@ -911,6 +947,8 @@ class AmbientGenerator extends AudioWorkletProcessor {
           position: 0,
           startOffset,
           level: 1 + (DROP_PLAYBACK_LEVEL_SPREAD * ((this.random() * 2) - 1)),
+          gainLeft: gains.left,
+          gainRight: gains.right,
         });
         return;
       }
@@ -933,7 +971,9 @@ class AmbientGenerator extends AudioWorkletProcessor {
       if (bank[slot]) this.evictRecording(channel, bank[slot]);
       bank[slot] = entry;
     }
-    channel.activeVoices.push({ live, entry, position: 0, startOffset, level: 1 });
+    channel.activeVoices.push({
+      live, entry, position: 0, startOffset, level: 1, gainLeft: gains.left, gainRight: gains.right,
+    });
   }
 
   /**
@@ -988,7 +1028,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
    * it is complete exactly when its entry said it would be; once it is, the
    * entry's playback length is cut back to its last audible sample.
    */
-  playLiveDrop(voice, channel, out, length) {
+  playLiveDrop(voice, channel, left, right, length) {
     const scratch = this.dropScratch;
     const start = voice.startOffset;
     scratch.fill(0, start, length);
@@ -996,7 +1036,12 @@ class AmbientGenerator extends AudioWorkletProcessor {
     const before = live.age;
     const alive = this.renderVoice(live, scratch, length, voice.entry === null);
     const end = start + (live.age - before);
-    for (let index = start; index < end; index += 1) out[index] += scratch[index];
+    const gainLeft = voice.gainLeft;
+    const gainRight = voice.gainRight;
+    for (let index = start; index < end; index += 1) {
+      left[index] += scratch[index] * gainLeft;
+      right[index] += scratch[index] * gainRight;
+    }
     if (voice.entry) voice.entry.samples.set(scratch.subarray(start, end), voice.position);
     voice.position += end - start;
     voice.startOffset = 0;
@@ -1016,17 +1061,23 @@ class AmbientGenerator extends AudioWorkletProcessor {
     return 0;
   }
 
-  /** A recorded drop for the rest of this block; false once it has ended. */
-  playDrop(voice, out, length) {
+  /**
+   * A recorded drop for the rest of this block; false once it has ended.
+   * The recording is mono: where it falls is the voice's, not the take's.
+   */
+  playDrop(voice, left, right, length) {
     const samples = voice.entry.samples;
     const playLength = voice.entry.audibleLength;
-    const level = voice.level;
+    const levelLeft = voice.level * voice.gainLeft;
+    const levelRight = voice.level * voice.gainRight;
     let position = voice.position;
     const start = voice.startOffset;
     voice.startOffset = 0;
     const end = Math.min(length, start + (playLength - position));
     for (let index = start; index < end; index += 1) {
-      out[index] += samples[position] * level;
+      const sample = samples[position];
+      left[index] += sample * levelLeft;
+      right[index] += sample * levelRight;
       position += 1;
     }
     voice.position = position;
@@ -1132,17 +1183,18 @@ class AmbientGenerator extends AudioWorkletProcessor {
     return true;
   }
 
-  /** A rain layer's block, written into `out` (overwritten). */
-  renderRain(channel, out, blockStart, length) {
+  /** A rain layer's block, written into `left`/`right` (overwritten). */
+  renderRain(channel, left, right, blockStart, length) {
     if (!this.dropScratch || this.dropScratch.length < length) this.dropScratch = new Float64Array(length);
-    out.fill(0, 0, length);
+    left.fill(0, 0, length);
+    right.fill(0, 0, length);
     this.birthVoices(channel, blockStart, length);
     const voices = channel.activeVoices;
     for (let index = voices.length - 1; index >= 0; index -= 1) {
       const voice = voices[index];
       const alive = voice.live
-        ? this.playLiveDrop(voice, channel, out, length)
-        : this.playDrop(voice, out, length);
+        ? this.playLiveDrop(voice, channel, left, right, length)
+        : this.playDrop(voice, left, right, length);
       if (!alive && !voice.live) this.releaseRecording(channel, voice.entry);
       if (!alive) {
         // Order does not matter to the mix, so the last voice fills the gap.
@@ -1150,7 +1202,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
         voices.pop();
       }
     }
-    this.renderBed(channel, out, length);
+    this.renderBed(channel, left, right, length);
   }
 
   /**
@@ -1554,11 +1606,16 @@ class AmbientGenerator extends AudioWorkletProcessor {
       const audible = this.soloChannelId === null || channel.id === this.soloChannelId;
       this.stream = channel.stream;
       if (channel.kind === 'rain') {
-        this.renderRain(channel, scratchLeft, currentFrame, length);
-        const target = outputs[channel.outputIndex + 1]?.[0];
-        if (!audible || channel.outputIndex < 0 || !target) continue;
+        this.renderRain(channel, scratchLeft, scratchRight, currentFrame, length);
+        const target = outputs[channel.outputIndex + 1];
+        if (!audible || channel.outputIndex < 0 || !target?.[0]) continue;
+        const targetLeft = target[0];
+        const targetRight = target[1] ?? targetLeft;
         const scale = channel.volume * channelScale;
-        for (let index = 0; index < length; index += 1) target[index] += scratchLeft[index] * scale;
+        for (let index = 0; index < length; index += 1) {
+          targetLeft[index] += scratchLeft[index] * scale;
+          if (targetRight !== targetLeft) targetRight[index] += scratchRight[index] * scale;
+        }
         continue;
       }
       // A noise layer sends what it plays; thunder sends its own mix, in
