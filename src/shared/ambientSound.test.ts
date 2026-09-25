@@ -44,10 +44,10 @@ describe('ambient sound configuration', () => {
           expect(channel.distance).toBeLessThanOrEqual(1);
           expect(channel.pan).toBeGreaterThanOrEqual(-1);
           expect(channel.pan).toBeLessThanOrEqual(1);
-          expect(channel.bassGain).toBeGreaterThanOrEqual(0);
-          expect(channel.bassGain).toBeLessThanOrEqual(1);
-          expect(channel.trebleGain).toBeGreaterThanOrEqual(0);
-          expect(channel.trebleGain).toBeLessThanOrEqual(1);
+          expect(channel.wetness).toBeGreaterThanOrEqual(0);
+          expect(channel.wetness).toBeLessThanOrEqual(1);
+          expect(channel.resonance).toBeGreaterThanOrEqual(0);
+          expect(channel.resonance).toBeLessThanOrEqual(1);
           expect(channel.surface).toBeGreaterThanOrEqual(0);
           expect(channel.surface).toBeLessThanOrEqual(1);
           expect(channel.wash).toBeGreaterThanOrEqual(0);
@@ -108,12 +108,12 @@ describe('ambient sound configuration', () => {
   it('clamps rain pan and component gains independently', () => {
     const input = DEFAULT_AMBIENT_SETTINGS.map((channel, index) => (
       index === 9 && channel.kind === 'rain'
-        ? { ...channel, pan: -2, bassGain: 2, trebleGain: -1 }
+        ? { ...channel, pan: -2, wetness: 2, resonance: -1 }
         : channel
     ));
     const rain = sanitizeAmbientSettings(input)[9];
 
-    expect(rain).toMatchObject({ kind: 'rain', pan: -1, bassGain: 1, trebleGain: 0 });
+    expect(rain).toMatchObject({ kind: 'rain', pan: -1, wetness: 1, resonance: 0 });
   });
 
   it('clamps and bounds dynamic channel settings while ensuring one channel remains', () => {
@@ -200,8 +200,8 @@ describe('ambient sound configuration', () => {
     if (rain.kind === 'rain') {
       for (const change of [
         { ...rain, pan: 0.2 },
-        { ...rain, bassGain: 0.2 },
-        { ...rain, trebleGain: 0.2 },
+        { ...rain, wetness: 0.2 },
+        { ...rain, resonance: 0.2 },
       ]) {
         const changedRain = preset.settings.map((channel, index) => index === 9 ? change : channel);
         expect(ambientSettingsSignature(changedRain)).not.toBe(ambientSettingsSignature(preset.settings));
@@ -279,6 +279,34 @@ describe('noise layers grouped by type', () => {
     const settings = sanitizeAmbientSettings([{ id: 'a', distance: 3, width: -2 }, { id: 'b' }]);
     expect(settings[0]).toMatchObject({ distance: 1, width: 0 });
     expect(settings[1]).toMatchObject({ distance: 0, width: 1 });
+  });
+});
+
+describe('rain wetness and resonance from an older save', () => {
+  const legacyRain = (changes: Record<string, unknown>) => {
+    const input = DEFAULT_AMBIENT_SETTINGS.map((channel) => {
+      if (channel.kind !== 'rain') return channel;
+      const { wetness: _wetness, resonance: _resonance, ...rest } = channel;
+      return { ...rest, ...changes };
+    });
+    return sanitizeAmbientSettings(input)[9];
+  };
+
+  it('keeps the puddles the surface used to carry, as wetness', () => {
+    const street = legacyRain({ surface: 'street' });
+    const glass = legacyRain({ surface: 'glass' });
+    const forest = legacyRain({ surface: 'forest' });
+    expect(street.kind === 'rain' && street.wetness).toBeCloseTo(0.3 / 0.7, 6);
+    expect(glass.kind === 'rain' && glass.wetness).toBe(0);
+    expect(forest.kind === 'rain' && forest.wetness).toBeCloseTo(0.04 / 0.7, 6);
+  });
+
+  it('reads the old bass level as resonance, its default as the surface as authored', () => {
+    expect(legacyRain({ surface: 1, bassGain: 0.55, trebleGain: 0.45 })).toMatchObject({ resonance: 0.5 });
+    expect(legacyRain({ surface: 1, bassGain: 0, trebleGain: 0.45 })).toMatchObject({ resonance: 0 });
+    const loud = legacyRain({ surface: 1, bassGain: 1, trebleGain: 0.45 });
+    expect(loud.kind === 'rain' && loud.resonance).toBeCloseTo(1 / 1.1, 6);
+    expect(legacyRain({ surface: 1 })).not.toHaveProperty('bassGain');
   });
 });
 

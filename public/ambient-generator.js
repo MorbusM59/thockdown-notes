@@ -49,14 +49,15 @@
  * - `bass`, `body`, `treble`: banks of decaying sinusoidal modes -- the
  *   surface ringing. `count` modes per bank (an integer range), frequency
  *   log-uniform in `hz`, decay and amplitude uniform in theirs.
- * - `bubbleChance`: the share of drops that also produce a bubble resonance
- *   (a drop entering standing water traps a small air bubble that rings at a
- *   pitch set by its radius and rises as it collapses toward the surface).
  * - `bed`: the dense wash of distant drops. Impulses at `ratePerSec` with a
  *   noise floor, band-passed around `centerHz`, slowly swelling by up to
  *   `swellDepth` so it does not sound like a static noise generator.
  * - `drip`: a large, slow drop. `gain` scales it, `pitchScale` lowers its
- *   frequencies, `bubbleChance` replaces the surface's own.
+ *   frequencies.
+ *
+ * The surface is the MATERIAL only. Standing water on it is the layer's
+ * `wetness`, and how much the material rings is its `resonance` (see
+ * makeSurfaceVoice); both apply on top of any surface.
  *
  * Three ANCHORS pin the scale: forest (0: a soft, low pat on leaves, a small
  * thud, hardly a bubble), street (0.5: a sharp band-passed tick on pavement
@@ -64,9 +65,7 @@
  * click and many long-ringing modes -- hail on glass or on metal pipes).
  * Between two anchors every number is blended (surfaceProfile): frequencies,
  * times and rates geometrically, since that is how pitch and time are heard,
- * and everything else linearly. So the bubble chance rises from the leaves
- * to the pavement and falls again toward the glass -- water stands on hard,
- * flat ground; leaves and glass shed it.
+ * and everything else linearly.
  *
  * Every anchor must match AMBIENT_RAIN_SURFACE_ANCHORS in
  * src/shared/ambientSound.ts, name and position; ambient-generator.test.ts
@@ -83,9 +82,8 @@ const RAIN_SURFACE_ANCHORS = [
     bass: { count: [1, 1], hz: [110, 320], decaySec: [0.015, 0.05], amplitude: [0.04, 0.09] },
     body: { count: [1, 2], hz: [450, 1400], decaySec: [0.004, 0.012], amplitude: [0.012, 0.035] },
     treble: NO_TREBLE,
-    bubbleChance: 0.04,
     bed: { ratePerSec: 1700, centerHz: 1900, q: 0.8, floor: 0.16, gain: 0.6, swellDepth: 0.45 },
-    drip: { gain: 3, pitchScale: 0.5, bubbleChance: 0.1 },
+    drip: { gain: 3, pitchScale: 0.5 },
   },
   {
     name: 'street',
@@ -95,9 +93,8 @@ const RAIN_SURFACE_ANCHORS = [
     bass: { count: [1, 1], hz: [70, 190], decaySec: [0.006, 0.02], amplitude: [0.03, 0.07] },
     body: { count: [0, 1], hz: [900, 2600], decaySec: [0.002, 0.006], amplitude: [0.01, 0.03] },
     treble: NO_TREBLE,
-    bubbleChance: 0.3,
     bed: { ratePerSec: 2600, centerHz: 4200, q: 0.55, floor: 0.2, gain: 0.55, swellDepth: 0.3 },
-    drip: { gain: 2.2, pitchScale: 0.6, bubbleChance: 0.85 },
+    drip: { gain: 2.2, pitchScale: 0.6 },
   },
   {
     // The original rain model, exactly: its click and its three banks.
@@ -108,11 +105,38 @@ const RAIN_SURFACE_ANCHORS = [
     bass: { count: [1, 2], hz: [85, 460], decaySec: [0.025, 0.095], amplitude: [0.035, 0.14] },
     body: { count: [2, 4], hz: [360, 3400], decaySec: [0.009, 0.065], amplitude: [0.025, 0.105] },
     treble: GLASS_TREBLE,
-    bubbleChance: 0,
     bed: { ratePerSec: 900, centerHz: 6500, q: 0.7, floor: 0.12, gain: 0.5, swellDepth: 0.25 },
-    drip: { gain: 1.9, pitchScale: 0.55, bubbleChance: 0 },
+    drip: { gain: 1.9, pitchScale: 0.55 },
   },
 ];
+
+/**
+ * The balance a drop's parts were authored at, relative to its body modes:
+ * the low bank at AUTHORED_LOW_LEVEL, the click, high bank, bubble and splash
+ * at AUTHORED_HIGH_LEVEL. (These were the defaults of the bass and treble
+ * sliders that used to adjust them per layer.)
+ */
+const AUTHORED_LOW_LEVEL = 0.55;
+const AUTHORED_HIGH_LEVEL = 0.45;
+
+/** A layer's character when none is given: the surface as authored, dry. */
+const NEUTRAL_CHARACTER = { wetness: 0, resonance: 0.5 };
+
+/**
+ * Wetness (see makeSurfaceVoice) at 1: the share of drops that land in water
+ * and produce a bubble, and of drips; how much of a surface's ring a film of
+ * water damps (its decay time shortened, its level lowered); and the
+ * splash's level, the bright attack of a drop entering water.
+ */
+const WET_BUBBLE_CHANCE = 0.7;
+const WET_DRIP_BUBBLE_CHANCE = 1;
+const WET_DECAY_DAMPING = 0.6;
+const WET_LEVEL_DAMPING = 0.4;
+const SPLASH_LEVEL = [0.9, 1.6];
+/** The splash: a very short burst of bright noise, band-passed high. */
+const SPLASH = { centerHz: [6500, 11000], q: 0.8, decaySec: 0.0003 };
+/** Spray: finer droplets after a splash -- how many, when, how loud. */
+const SPRAY = { count: [1, 4], withinSec: [0.004, 0.045], level: [0.15, 0.45] };
 
 /** Keys whose values blend geometrically (see RAIN_SURFACE_ANCHORS). */
 const GEOMETRIC_KEYS = new Set(['centerHz', 'hz', 'decaySec', 'durationSec', 'ratePerSec']);
@@ -469,7 +493,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
     // Recordings still under way go with them: they keep playing, but into
     // an entry nothing refers to any more.
     if (!channel.dropBank || !before || before.surface !== channel.surface
-      || before.bassGain !== channel.bassGain || before.trebleGain !== channel.trebleGain) {
+      || before.wetness !== channel.wetness || before.resonance !== channel.resonance) {
       if (!channel.spareRecordings) channel.spareRecordings = [];
       for (const entry of [...(channel.dropBank ?? []), ...(channel.dripBank ?? [])]) {
         this.evictRecording(channel, entry);
@@ -664,18 +688,31 @@ class AmbientGenerator extends AudioWorkletProcessor {
   }
 
   /**
-   * One drop on the surface `profile` describes (surfaceProfile). A drip is
-   * the same drop made larger: louder, lower, its click slower and its life
-   * twice as long, with its own chance of a (larger) bubble.
+   * One drop on the surface `profile` describes (surfaceProfile), shaped by
+   * the layer's `character`:
+   * - `resonance` (0-1): how much the material rings. 0.5 is the surface as
+   *   authored; below it the modes grow quieter, reaching none at 0 (only
+   *   the impact); above it they ring longer, up to twice as long at 1.
+   *   Decay time scales by 2^(2 * resonance - 1), level by
+   *   min(1, 2 * resonance).
+   * - `wetness` (0-1): standing water. It damps the ring (a film of water
+   *   deadens a surface), sends a share of drops into the water, where they
+   *   splash -- a very short bright attack, then a few finer spray ticks --
+   *   and trap a bubble, whose rising "plip" follows.
+   * A drip is the same drop made larger: louder, lower, its click slower and
+   * its life twice as long, and likelier to land in water.
    */
-  makeSurfaceVoice(profile, isDrip) {
+  makeSurfaceVoice(profile, isDrip, character = NEUTRAL_CHARACTER) {
     const click = profile.click;
+    const wetness = character.wetness;
+    const resonance = character.resonance;
     const pitchScale = isDrip ? profile.drip.pitchScale : 1;
     const decaySec = this.between(click.decaySec) * (isDrip ? 1.8 : 1);
-    const bubbleChance = isDrip ? profile.drip.bubbleChance : profile.bubbleChance;
+    const ringDecay = (2 ** ((2 * resonance) - 1)) * (1 - (WET_DECAY_DAMPING * wetness));
+    const ringLevel = Math.min(1, 2 * resonance) * (1 - (WET_LEVEL_DAMPING * wetness));
     const voice = {
       age: 0,
-      durationFrames: Math.ceil(sampleRate * profile.durationSec * (isDrip ? 2 : 1)),
+      durationFrames: Math.ceil(sampleRate * profile.durationSec * (isDrip ? 2 : 1) * Math.max(1, ringDecay)),
       gain: isDrip ? profile.drip.gain : 1,
       transientAmplitude: this.between(click.amplitude),
       transientDecay: Math.exp(-1 / (sampleRate * decaySec)),
@@ -683,18 +720,42 @@ class AmbientGenerator extends AudioWorkletProcessor {
       transientFilter: click.white >= 1 ? null : stateVariableFilter(this.between(click.centerHz) * pitchScale, click.q),
       transientWhite: click.white,
       clickSeed: 0,
-      bassModes: this.makeModesFromSpec(profile.bass, pitchScale),
-      bodyModes: this.makeModesFromSpec(profile.body, pitchScale),
-      trebleModes: this.makeModesFromSpec(profile.treble, pitchScale),
+      bassModes: this.shapeModes(this.makeModesFromSpec(profile.bass, pitchScale), ringLevel, ringDecay),
+      bodyModes: this.shapeModes(this.makeModesFromSpec(profile.body, pitchScale), ringLevel, ringDecay),
+      trebleModes: this.shapeModes(this.makeModesFromSpec(profile.treble, pitchScale), ringLevel, ringDecay),
       bubble: null,
+      splashAmplitude: 0,
+      splashDecay: Math.exp(-1 / (sampleRate * SPLASH.decaySec)),
+      splashFilter: null,
+      sprayFrames: [],
+      sprayLevels: [],
     };
+    const bubbleChance = Math.min(1, wetness * (isDrip ? WET_DRIP_BUBBLE_CHANCE : WET_BUBBLE_CHANCE));
     if (bubbleChance > 0 && this.random() < bubbleChance) {
       const radiusMm = isDrip ? this.between([2.5, 5]) : this.between([0.8, 2.6]);
       voice.bubble = this.makeBubble(radiusMm, 1);
       voice.durationFrames = Math.max(voice.durationFrames, voice.bubble.ringFrames);
+      voice.splashAmplitude = this.between(SPLASH_LEVEL) * wetness;
+      voice.splashFilter = stateVariableFilter(this.between(SPLASH.centerHz), SPLASH.q);
+      const sprays = Math.round(SPRAY.count[0] + (this.random() * (SPRAY.count[1] - SPRAY.count[0]) * wetness));
+      for (let index = 0; index < sprays; index += 1) {
+        voice.sprayFrames.push(Math.round(this.between(SPRAY.withinSec) * sampleRate));
+        voice.sprayLevels.push(this.between(SPRAY.level) * voice.splashAmplitude);
+      }
     }
     return voice;
   }
+
+  /** A bank of modes with its level and decay time scaled (see makeSurfaceVoice). */
+  shapeModes(modes, level, decayScale) {
+    for (const mode of modes) {
+      mode.amplitude *= level;
+      // decay is exp(-1 / (sampleRate * t)): scaling t by k raises it to 1/k.
+      mode.decay = mode.decay ** (1 / decayScale);
+    }
+    return level > 0 ? modes : [];
+  }
+
 
 
   /**
@@ -790,7 +851,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
         return;
       }
     }
-    const live = this.makeSurfaceVoice(channel.profile, isDrip);
+    const live = this.makeSurfaceVoice(channel.profile, isDrip, channel);
     live.startOffset = startOffset;
     live.clickSeed = Math.floor(this.random() * 0x100000000) >>> 0;
     let entry = null;
@@ -869,7 +930,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
     scratch.fill(0, start, length);
     const live = voice.live;
     const before = live.age;
-    const alive = this.renderVoice(live, channel, scratch, length, voice.entry === null);
+    const alive = this.renderVoice(live, scratch, length, voice.entry === null);
     const end = start + (live.age - before);
     for (let index = start; index < end; index += 1) out[index] += scratch[index];
     if (voice.entry) voice.entry.samples.set(scratch.subarray(start, end), voice.position);
@@ -918,10 +979,14 @@ class AmbientGenerator extends AudioWorkletProcessor {
    * nominal length, or earlier once silent if `retireWhenSilent` (a voice
    * being recorded must run its full length -- see addVoice).
    */
-  renderVoice(voice, channel, out, length, retireWhenSilent = true) {
-    const bassGain = channel.bassGain;
-    const trebleGain = channel.trebleGain;
+  renderVoice(voice, out, length, retireWhenSilent = true) {
     const gain = voice.gain;
+    const splashFilter = voice.splashFilter;
+    const splashDecay = voice.splashDecay;
+    let splashAmplitude = voice.splashAmplitude;
+    let splashActive = splashFilter !== null && (splashAmplitude > 0 || voice.sprayFrames.length > 0
+      || Math.abs(splashFilter.s1) + Math.abs(splashFilter.s2) > SILENCE);
+    let age = voice.age;
     const filter = voice.transientFilter;
     const white = voice.transientWhite ?? 0;
     const decay = voice.transientDecay;
@@ -943,18 +1008,43 @@ class AmbientGenerator extends AudioWorkletProcessor {
         high = (1 - white) * bandPass(filter, 0);
         filterActive = Math.abs(filter.s1) + Math.abs(filter.s2) > SILENCE;
       }
+      if (splashActive) {
+        // Spray ticks re-strike the splash at their frames (sorted not
+        // needed: each is checked on its own frame).
+        const sprays = voice.sprayFrames;
+        for (let spray = sprays.length - 1; spray >= 0; spray -= 1) {
+          if (sprays[spray] === age) {
+            splashAmplitude += voice.sprayLevels[spray];
+            sprays.splice(spray, 1);
+            voice.sprayLevels.splice(spray, 1);
+          }
+        }
+        let splash = 0;
+        if (splashAmplitude > 0) {
+          seed = (1664525 * seed + 1013904223) >>> 0;
+          splash = ((seed / 0x100000000) * 2 - 1) * splashAmplitude;
+          splashAmplitude *= splashDecay;
+          if (splashAmplitude < SILENCE) splashAmplitude = 0;
+        }
+        high += bandPass(splashFilter, splash);
+        splashActive = splashAmplitude > 0 || sprays.length > 0
+          || Math.abs(splashFilter.s1) + Math.abs(splashFilter.s2) > SILENCE;
+      }
       high += this.sampleRainModes(voice.trebleModes);
       if (voice.bubble) high += this.sampleBubble(voice.bubble);
       out[index] += (
         this.sampleRainModes(voice.bodyModes)
-        + (this.sampleRainModes(voice.bassModes) * bassGain)
-        + (high * trebleGain)
+        + (this.sampleRainModes(voice.bassModes) * AUTHORED_LOW_LEVEL)
+        + (high * AUTHORED_HIGH_LEVEL)
       ) * gain;
+      age += 1;
     }
+    voice.splashAmplitude = splashAmplitude;
     voice.transientAmplitude = clickAmplitude;
     voice.clickSeed = seed;
     voice.age += end - start;
-    return voice.age < voice.durationFrames && !(retireWhenSilent && this.voiceIsSilent(voice, filterActive));
+    const silent = !splashActive && this.voiceIsSilent(voice, filterActive);
+    return voice.age < voice.durationFrames && !(retireWhenSilent && silent);
   }
 
   /**

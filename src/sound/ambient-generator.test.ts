@@ -6,6 +6,7 @@ import {
   AMBIENT_RAIN_DRIPS_MAX_PER_SEC,
   AMBIENT_RAIN_FIRST_INDEX,
   AMBIENT_RAIN_SURFACE_ANCHORS,
+  AMBIENT_WET_BUBBLE_CHANCE,
   createAmbientChannel,
   createAmbientRainChannel,
 } from '../shared/ambientSound';
@@ -16,14 +17,14 @@ import { buildNoiseCycle } from '../shared/ambientNoiseCycle';
 // The worklet's module-scope constants are not reachable from outside a vm
 // script, so the test appends one line exposing the ones it checks.
 const generatorSource = `${readFileSync(fileURLToPath(new URL('../../public/ambient-generator.js', import.meta.url)), 'utf8')}
-;globalThis.__generatorConstants = { RAIN_SURFACE_ANCHORS, RAIN_DRIPS_MAX_PER_SEC, surfaceProfile };`;
+;globalThis.__generatorConstants = { RAIN_SURFACE_ANCHORS, RAIN_DRIPS_MAX_PER_SEC, surfaceProfile, AUTHORED_LOW_LEVEL, AUTHORED_HIGH_LEVEL, WET_BUBBLE_CHANCE };`;
 
 type TestProcessor = {
   channels: Array<{ id: string; eventAge: number; activeVoices: unknown[]; profile?: unknown }>;
   soloChannelId: string | null;
-  makeSurfaceVoice: (profile: unknown, isDrip: boolean) => GlassVoice;
+  makeSurfaceVoice: (profile: unknown, isDrip: boolean, character?: { wetness: number; resonance: number }) => GlassVoice;
   addVoice: (channel: unknown, isDrip: boolean, offset: number, at: number) => void;
-  renderVoice: (voice: GlassVoice, channel: { bassGain: number; trebleGain: number }, out: Float64Array, length: number) => boolean;
+  renderVoice: (voice: GlassVoice, out: Float64Array, length: number) => boolean;
   startCycle: (channel: { panTo: number; periodFactor: number; riseFactor: number }) => void;
   makeRainVoice: () => {
     bassModes: Array<{ frequency: number }>;
@@ -99,6 +100,9 @@ type GlassVoice = {
 type GeneratorConstants = {
   RAIN_SURFACE_ANCHORS: { name: string; at: number }[];
   surfaceProfile: (surface: number) => Record<string, any>;
+  AUTHORED_LOW_LEVEL: number;
+  AUTHORED_HIGH_LEVEL: number;
+  WET_BUBBLE_CHANCE: number;
   RAIN_DRIPS_MAX_PER_SEC: number;
 };
 
@@ -318,20 +322,45 @@ describe('ambient AudioWorklet generator', () => {
     expect(voices.every((voice) => voice.bassModes.length >= 1 && voice.trebleModes.length >= 1)).toBe(true);
   });
 
-  it('mixes bass and treble gains as independent impact components', () => {
-    const render = (bassGain: number, trebleGain: number) => createProcessor(523, makeRainSlots([
-      makeRainChannel('rain-mix', { dropsPerSecond: 22, bassGain, trebleGain }),
-    ])).render(1).rain[0];
-    const full = render(1, 1);
-    const noBass = render(0, 1);
-    const noTreble = render(1, 0);
-    const trebleContribution = full.map((sample, index) => sample - noBass[index]);
-    const bassContribution = full.map((sample, index) => sample - noTreble[index]);
+  describe('rain wetness and resonance', () => {
+    const { processor, constants } = createProcessor(523, [], 48000);
+    type Voice = GlassVoice & { bubble: unknown; splashAmplitude: number; sprayFrames: number[] };
+    const voices = (surface: number, character: { wetness: number; resonance: number }, count = 400) => (
+      Array.from({ length: count }, () => processor.makeSurfaceVoice(constants.surfaceProfile(surface), false, character) as Voice)
+    );
+    const decayTime = (mode: Mode) => -1 / (48000 * Math.log(mode.decay));
 
-    expect(rms(trebleContribution)).toBeGreaterThan(0.001);
-    expect(rms(bassContribution)).toBeGreaterThan(0.001);
-    expect(noBass).not.toEqual(noTreble);
+    it('sends a share of drops into water with wetness, each with a splash, spray and a bubble', () => {
+      const dry = voices(0.5, { wetness: 0, resonance: 0.5 });
+      const soaked = voices(0.5, { wetness: 1, resonance: 0.5 });
+      expect(dry.every((voice) => voice.bubble === null && voice.splashAmplitude === 0)).toBe(true);
+      const wet = soaked.filter((voice) => voice.bubble !== null);
+      expect(wet.length / soaked.length).toBeGreaterThan(constants.WET_BUBBLE_CHANCE - 0.07);
+      expect(wet.length / soaked.length).toBeLessThan(constants.WET_BUBBLE_CHANCE + 0.07);
+      expect(wet.every((voice) => voice.splashAmplitude > 0 && voice.sprayFrames.length >= 1)).toBe(true);
+    });
+
+    it('damps the ring as the surface gets wetter', () => {
+      const ring = (wetness: number) => voices(1, { wetness, resonance: 0.5 }, 60)
+        .flatMap((voice) => voice.bassModes).reduce((sum, mode) => sum + decayTime(mode), 0);
+      expect(ring(1)).toBeLessThan(ring(0) * 0.6);
+    });
+
+    it('rings not at all when dead, as authored in the middle, twice as long at the top', () => {
+      expect(voices(1, { wetness: 0, resonance: 0 }, 20).every((voice) => (
+        voice.bassModes.length + voice.bodyModes.length + voice.trebleModes.length === 0
+      ))).toBe(true);
+      const middle = createProcessor(7, [], 48000).processor;
+      const top = createProcessor(7, [], 48000).processor;
+      const authored = middle.makeSurfaceVoice(constants.surfaceProfile(1), false, { wetness: 0, resonance: 0.5 });
+      const ringing = top.makeSurfaceVoice(constants.surfaceProfile(1), false, { wetness: 0, resonance: 1 });
+      authored.bassModes.forEach((mode, index) => {
+        expect(decayTime(ringing.bassModes[index])).toBeCloseTo(decayTime(mode) * 2, 6);
+        expect(ringing.bassModes[index].amplitude).toBeCloseTo(mode.amplitude, 9);
+      });
+    });
   });
+
   it('has a synthesis profile for every rain surface the settings can name', () => {
     const { constants } = createProcessor(1, []);
     expect(constants.RAIN_SURFACE_ANCHORS.map(({ name, at }) => ({ name, at })))
@@ -342,9 +371,10 @@ describe('ambient AudioWorklet generator', () => {
   // The glass surface is the original rain model and is meant to sound as it
   // always has. Its drops are drawn by the unchanged makeRainVoice; what this
   // pins is that the block renderer plays a drop's ringing modes exactly as
-  // the original per-sample formula did -- body, plus bass and treble each
-  // at their gain -- so moving to block rendering changed when work is done,
-  // not what is heard. (The click is white noise; its own test is below.)
+  // the original per-sample formula did -- body, plus the low and high banks
+  // at the balance they were authored at (what the bass and treble sliders'
+  // defaults were) -- at resonance 0.5 and wetness 0, the surface as it is.
+  // (The click is white noise; its own test is below.)
   it('rings a glass drop exactly as the original per-sample formula did', () => {
     const generator = createProcessor(4242, [], 48000);
     const glass = generator.constants.surfaceProfile(1);
@@ -352,12 +382,13 @@ describe('ambient AudioWorklet generator', () => {
     voice.transientAmplitude = 0;
     voice.startOffset = 0;
     const reference = structuredClone(voice);
-    const channel = { bassGain: 0.6, trebleGain: 0.5 };
+    const low = generator.constants.AUTHORED_LOW_LEVEL;
+    const high = generator.constants.AUTHORED_HIGH_LEVEL;
 
     const rendered = new Float64Array(voice.durationFrames);
     for (let start = 0; start < voice.durationFrames; start += 128) {
       const block = new Float64Array(128);
-      const alive = generator.processor.renderVoice(voice, channel, block, 128);
+      const alive = generator.processor.renderVoice(voice, block, 128);
       rendered.set(block.subarray(0, Math.min(128, voice.durationFrames - start)), start);
       if (!alive) break;
     }
@@ -375,8 +406,8 @@ describe('ambient AudioWorklet generator', () => {
     };
     for (let index = 0; index < reference.durationFrames; index += 1) {
       const expected = ring(reference.bodyModes)
-        + (ring(reference.bassModes) * channel.bassGain)
-        + (ring(reference.trebleModes) * channel.trebleGain);
+        + (ring(reference.bassModes) * low)
+        + (ring(reference.trebleModes) * high);
       // A voice may retire early once it is below -100 dB; after that the
       // reference is too.
       expect(Math.abs(rendered[index] - expected)).toBeLessThan(1e-5);
@@ -393,11 +424,12 @@ describe('ambient AudioWorklet generator', () => {
     }
     voice.startOffset = 0;
     const out = new Float64Array(128);
-    generator.processor.renderVoice(voice, { bassGain: 1, trebleGain: 1 }, out, 128);
-    expect(Math.max(...out.map(Math.abs))).toBeLessThanOrEqual(level);
-    expect(Math.max(...out.slice(0, 8).map(Math.abs))).toBeGreaterThan(level * 0.2);
+    generator.processor.renderVoice(voice, out, 128);
+    const heard = level * generator.constants.AUTHORED_HIGH_LEVEL;
+    expect(Math.max(...out.map(Math.abs))).toBeLessThanOrEqual(heard);
+    expect(Math.max(...out.slice(0, 8).map(Math.abs))).toBeGreaterThan(heard * 0.2);
     // 0.65 ms time constant: after 2 ms (96 samples) it is under 5% of itself.
-    expect(Math.max(...out.slice(96).map(Math.abs))).toBeLessThan(level * 0.05);
+    expect(Math.max(...out.slice(96).map(Math.abs))).toBeLessThan(heard * 0.05);
   });
 
   // Rendering whole blocks per voice must not leave seams: the same seed
@@ -442,7 +474,7 @@ describe('ambient AudioWorklet generator', () => {
   it('gives the forest a darker impact than the street', () => {
     const zeroCrossingsPerSecond = (surface: number) => {
       const samples = createProcessor(29, makeRainSlots([
-        makeRainChannel(String(surface), { surface, wash: 0, drips: 0, dropsPerSecond: 40, bassGain: 0 }),
+        makeRainChannel(String(surface), { surface, wash: 0, drips: 0, dropsPerSecond: 40, resonance: 0, wetness: 0 }),
       ]), 48000).render(3).rain[0];
       let crossings = 0;
       for (let index = 1; index < samples.length; index += 1) {
@@ -496,7 +528,7 @@ describe('ambient AudioWorklet generator', () => {
   it('stays finite and bounded on every surface at every control extreme', () => {
     for (const surface of [0, 0.25, 0.5, 0.75, 1]) {
       const samples = createProcessor(61, makeRainSlots([
-        makeRainChannel(String(surface), { surface, wash: 1, drips: 1, dropsPerSecond: 60, bassGain: 1, trebleGain: 1 }),
+        makeRainChannel(String(surface), { surface, wash: 1, drips: 1, dropsPerSecond: 60, wetness: 1, resonance: 1 }),
       ]), 48000).render(2).rain[0];
       expect(samples.every((sample) => Number.isFinite(sample) && Math.abs(sample) < 8)).toBe(true);
       expect(rms(samples)).toBeGreaterThan(0.005);
@@ -665,7 +697,7 @@ describe('ambient AudioWorklet generator', () => {
       expect(rainOf(generator).dropBank.length).toBe(32);
       configure({ distance: 0.9, pan: 0.4, wash: 0.2, volume: 0.1 });
       expect(rainOf(generator).dropBank.length).toBe(32);
-      for (const change of [{ trebleGain: 0.1 }, { bassGain: 0.9 }, { surface: 1 }]) {
+      for (const change of [{ wetness: 0.1 }, { resonance: 0.9 }, { surface: 1 }]) {
         configure(change);
         expect(rainOf(generator).dropBank.length).toBe(0);
         generator.render(4);
@@ -674,7 +706,7 @@ describe('ambient AudioWorklet generator', () => {
     });
 
     it('keeps nothing recorded before the settings changed', () => {
-      const slots = (trebleGain: number) => makeRainSlots([makeRainChannel('rain', { dropsPerSecond: 60, trebleGain })]);
+      const slots = (resonance: number) => makeRainSlots([makeRainChannel('rain', { dropsPerSecond: 60, resonance })]);
       const generator = createProcessor(31, slots(0.4), 8000);
       generator.render(0.1);
       const before = new Set(rainOf(generator).dropBank);
@@ -779,14 +811,16 @@ describe('ambient AudioWorklet generator', () => {
       const halfway = profile(0.25);
       expect(halfway.click.centerHz[0]).toBeCloseTo(Math.sqrt(forest.click.centerHz[0] * street.click.centerHz[0]), 6);
       expect(halfway.durationSec).toBeCloseTo(Math.sqrt(forest.durationSec * street.durationSec), 9);
-      expect(halfway.bubbleChance).toBeCloseTo((forest.bubbleChance + street.bubbleChance) / 2, 9);
+      expect(halfway.bed.gain).toBeCloseTo((forest.bed.gain + street.bed.gain) / 2, 9);
     });
 
-    it('has puddles only where water stands: most at the street, least at the ends', () => {
-      const chances = [0, 0.25, 0.5, 0.75, 1].map((at) => profile(at).bubbleChance);
-      expect(Math.max(...chances)).toBe(chances[2]);
-      expect(chances[4]).toBe(0);
+    it('is the material only: standing water is the layer wetness, not part of the surface', () => {
+      for (const at of [0, 0.25, 0.5, 0.75, 1]) {
+        expect(JSON.stringify(profile(at))).not.toMatch(/bubble/i);
+      }
+      expect(constants.WET_BUBBLE_CHANCE).toBe(AMBIENT_WET_BUBBLE_CHANCE);
     });
+
 
     it('grows brighter, harder and longer-ringing from the leaves to the glass', () => {
       const steps = [0, 0.2, 0.4, 0.6, 0.8, 1].map(profile);

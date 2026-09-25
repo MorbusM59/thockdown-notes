@@ -125,10 +125,17 @@ export interface AmbientRainChannelSettings extends AmbientChannelBaseSettings {
   drips: number;
   distance: number;
   pan: number;
-  /** Level of the low component of each impact (resonance or thud). */
-  bassGain: number;
-  /** Level of the high component of each impact (click, splash, bubble). */
-  trebleGain: number;
+  /**
+   * Standing water on the surface, 0 (dry) to 1 (soaked): the share of drops
+   * that land in water -- a bright splash, finer spray and the rising "plip"
+   * of a trapped bubble -- and how much the water damps the surface's ring.
+   */
+  wetness: number;
+  /**
+   * How much the surface itself rings, 0 (dead: only the impact) to 1 (twice
+   * as long); 0.5 is the surface as authored.
+   */
+  resonance: number;
 }
 
 export type AmbientChannelSettings = AmbientNoiseChannelSettings | AmbientRainChannelSettings;
@@ -221,8 +228,8 @@ export const DEFAULT_RAIN_CHANNEL: Readonly<Omit<AmbientRainChannelSettings, 'id
   drips: 0.2,
   distance: 0.5,
   pan: 0,
-  bassGain: 0.55,
-  trebleGain: 0.45,
+  wetness: 0.5,
+  resonance: 0.5,
 };
 
 function makeDefaultNoiseChannel(
@@ -341,8 +348,8 @@ export function ambientSettingsSignature(settings: AmbientSettings): string {
         channel.drips,
         channel.distance,
         channel.pan,
-        channel.bassGain,
-        channel.trebleGain,
+        channel.wetness,
+        channel.resonance,
       ]
       : [
         channel.kind,
@@ -400,36 +407,36 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
     ocean: { volume: 0.04, texture: 0.2 },
     rain: { volume: 0.68, texture: 0.62 },
   }, [
-    { enabled: true, surface: 1, wash: 0, drips: 0, volume: 0.32, dropsPerSecond: 18, distance: 0.12, pan: -0.65, bassGain: 0.7, trebleGain: 0.72 },
-    { enabled: true, surface: 1, wash: 0, drips: 0, volume: 0.23, dropsPerSecond: 26, distance: 0.55, pan: 0, bassGain: 0.55, trebleGain: 0.52 },
-    { enabled: true, surface: 1, wash: 0, drips: 0, volume: 0.16, dropsPerSecond: 36, distance: 0.92, pan: 0.65, bassGain: 0.42, trebleGain: 0.34 },
+    { enabled: true, surface: 1, wash: 0, drips: 0, volume: 0.32, dropsPerSecond: 18, distance: 0.12, pan: -0.65, wetness: 0, resonance: 0.5 },
+    { enabled: true, surface: 1, wash: 0, drips: 0, volume: 0.23, dropsPerSecond: 26, distance: 0.55, pan: 0, wetness: 0, resonance: 0.5 },
+    { enabled: true, surface: 1, wash: 0, drips: 0, volume: 0.16, dropsPerSecond: 36, distance: 0.92, pan: 0.65, wetness: 0, resonance: 0.5 },
   ]),
   preset('street', 'Rain on the street', {
     wind: { volume: 0.05, texture: 0.2 },
     ocean: { volume: 0, texture: 0.2 },
     rain: { volume: 0, texture: 0.35 },
   }, [
-    { enabled: true, surface: 0.5, volume: 0.3, dropsPerSecond: 22, wash: 0.35, drips: 0.35, distance: 0.08, pan: -0.55, bassGain: 0.35, trebleGain: 0.7 },
-    { enabled: true, surface: 0.5, volume: 0.34, dropsPerSecond: 40, wash: 0.7, drips: 0, distance: 0.45, pan: 0.1, bassGain: 0.4, trebleGain: 0.55 },
-    { enabled: true, surface: 0.5, volume: 0.26, dropsPerSecond: 60, wash: 0.9, drips: 0, distance: 0.9, pan: 0.6, bassGain: 0.5, trebleGain: 0.4 },
+    { enabled: true, surface: 0.5, volume: 0.3, dropsPerSecond: 22, wash: 0.35, drips: 0.35, distance: 0.08, pan: -0.55, wetness: 0.6, resonance: 0.4 },
+    { enabled: true, surface: 0.5, volume: 0.34, dropsPerSecond: 40, wash: 0.7, drips: 0, distance: 0.45, pan: 0.1, wetness: 0.6, resonance: 0.4 },
+    { enabled: true, surface: 0.5, volume: 0.26, dropsPerSecond: 60, wash: 0.9, drips: 0, distance: 0.9, pan: 0.6, wetness: 0.6, resonance: 0.4 },
   ]),
   preset('forest', 'Forest rain', {
     wind: { volume: 0.12, texture: 0.35 },
     ocean: { volume: 0, texture: 0.2 },
     rain: { volume: 0, texture: 0.35 },
   }, [
-    { enabled: true, surface: 0, volume: 0.3, dropsPerSecond: 14, wash: 0.3, drips: 0.55, distance: 0.1, pan: -0.5, bassGain: 0.6, trebleGain: 0.55 },
-    { enabled: true, surface: 0, volume: 0.32, dropsPerSecond: 32, wash: 0.65, drips: 0.2, distance: 0.5, pan: 0.15, bassGain: 0.5, trebleGain: 0.5 },
-    { enabled: true, surface: 0, volume: 0.24, dropsPerSecond: 50, wash: 0.85, drips: 0, distance: 0.92, pan: 0.65, bassGain: 0.45, trebleGain: 0.35 },
+    { enabled: true, surface: 0, volume: 0.3, dropsPerSecond: 14, wash: 0.3, drips: 0.55, distance: 0.1, pan: -0.5, wetness: 0.1, resonance: 0.35 },
+    { enabled: true, surface: 0, volume: 0.32, dropsPerSecond: 32, wash: 0.65, drips: 0.2, distance: 0.5, pan: 0.15, wetness: 0.1, resonance: 0.35 },
+    { enabled: true, surface: 0, volume: 0.24, dropsPerSecond: 50, wash: 0.85, drips: 0, distance: 0.92, pan: 0.65, wetness: 0.1, resonance: 0.35 },
   ]),
   preset('storm', 'Passing storm', {
     wind: { volume: 0.42, texture: 0.78 },
     ocean: { volume: 0.42, texture: 0.72 },
     rain: { volume: 0.46, texture: 0.82 },
   }, [
-    { enabled: true, surface: 0.5, volume: 0.46, dropsPerSecond: 44, wash: 0.8, drips: 0.4, distance: 0.12, pan: -0.65, bassGain: 0.6, trebleGain: 0.64 },
-    { enabled: true, surface: 0.5, volume: 0.42, dropsPerSecond: 60, wash: 1, drips: 0, distance: 0.55, pan: 0, bassGain: 0.55, trebleGain: 0.5 },
-    { enabled: true, surface: 0, volume: 0.34, dropsPerSecond: 60, wash: 1, drips: 0, distance: 0.92, pan: 0.65, bassGain: 0.5, trebleGain: 0.35 },
+    { enabled: true, surface: 0.5, volume: 0.46, dropsPerSecond: 44, wash: 0.8, drips: 0.4, distance: 0.12, pan: -0.65, wetness: 0.6, resonance: 0.4 },
+    { enabled: true, surface: 0.5, volume: 0.42, dropsPerSecond: 60, wash: 1, drips: 0, distance: 0.55, pan: 0, wetness: 0.6, resonance: 0.4 },
+    { enabled: true, surface: 0, volume: 0.34, dropsPerSecond: 60, wash: 1, drips: 0, distance: 0.92, pan: 0.65, wetness: 0.1, resonance: 0.35 },
   ]),
   preset('ocean', 'Open water', {
     wind: { volume: 0.14, texture: 0.3 },
@@ -505,6 +512,34 @@ function regroupNoiseByType(raw: unknown[]): unknown[] {
 }
 
 /**
+ * Reading a rain layer saved before wetness and resonance existed, when its
+ * standing water was part of the surface and its ring was the "bass" level:
+ * - wetness is the puddle share the surface itself carried then -- 4% of
+ *   drops at the forest, 30% at the street, none at the glass, blended
+ *   linearly between -- as a share of what wetness 1 sends into water now;
+ * - resonance is the old bass level relative to its default of 0.55, which
+ *   is resonance 0.5 (the surface as authored).
+ * The old treble level has no counterpart: the balance of a drop's parts is
+ * part of the surface now.
+ */
+const LEGACY_DEFAULT_BASS_GAIN = 0.55;
+const LEGACY_PUDDLE_SHARE = { forest: 0.04, street: 0.3, glass: 0 } as const;
+/**
+ * The share of drops that land in water at wetness 1. Mirrors
+ * WET_BUBBLE_CHANCE in public/ambient-generator.js, which ambient-generator
+ * test holds it to.
+ */
+export const AMBIENT_WET_BUBBLE_CHANCE = 0.7;
+
+function legacyWetnessAt(surface: number): number {
+  const street = rainSurfaceAt('street');
+  const share = surface <= street
+    ? LEGACY_PUDDLE_SHARE.forest + ((LEGACY_PUDDLE_SHARE.street - LEGACY_PUDDLE_SHARE.forest) * (surface / street))
+    : LEGACY_PUDDLE_SHARE.street + ((LEGACY_PUDDLE_SHARE.glass - LEGACY_PUDDLE_SHARE.street) * ((surface - street) / (1 - street)));
+  return share / AMBIENT_WET_BUBBLE_CHANCE;
+}
+
+/**
  * A saved surface: a number is read as is; a name (from before the surface
  * became a scale) as its anchor's position; nothing at all as glass, which
  * is the only rain there was before surfaces existed.
@@ -575,8 +610,11 @@ export function sanitizeAmbientSettings(input: unknown): AmbientSettings {
         )),
         distance: finiteUnit(source.distance, fallback.distance),
         pan: finiteRange(source.pan, -1, 1, defaultRainPan(index - AMBIENT_RAIN_FIRST_INDEX)),
-        bassGain: finiteUnit(source.bassGain, fallback.bassGain),
-        trebleGain: finiteUnit(source.trebleGain, fallback.trebleGain),
+        wetness: finiteUnit(source.wetness, legacyWetnessAt(readRainSurface(source.surface, predatesSurfaces))),
+        resonance: finiteUnit(
+          source.resonance,
+          typeof source.bassGain === 'number' ? source.bassGain / LEGACY_DEFAULT_BASS_GAIN / 2 : DEFAULT_RAIN_CHANNEL.resonance,
+        ),
       };
     }
     const fallback = fallbackChannel as AmbientNoiseChannelSettings;

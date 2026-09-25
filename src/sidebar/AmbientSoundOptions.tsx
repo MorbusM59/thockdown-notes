@@ -509,32 +509,32 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                   onCommit={(value) => updateRainChannel(channel.id, { pan: value / 100 })}
                 />
                 <CompactScrollbarSlider
-                  id={`ambient-${channel.id}-bass`}
+                  id={`ambient-${channel.id}-wetness`}
                   min={0}
                   max={1}
                   step={0.01}
-                  value={channel.bassGain}
-                  trackLabel="bass"
-                  tooltipLabel="Low part of each drop: the ring of glass, the thud on the ground"
-                  ariaLabel={`${layerName} bass level`}
+                  value={channel.wetness}
+                  trackLabel="wetness"
+                  tooltipLabel="Standing water: drops land in it with a bright splash and the plip of a bubble, and it deadens the surface's ring"
+                  ariaLabel={`${layerName} wetness`}
                   disabled={!channel.enabled}
-                  defaultValue={DEFAULT_RAIN_CHANNEL.bassGain}
-                  formatValue={(value) => value.toFixed(2)}
-                  onCommit={(value) => updateRainChannel(channel.id, { bassGain: value })}
+                  defaultValue={DEFAULT_RAIN_CHANNEL.wetness}
+                  formatValue={(value) => value < 0.01 ? 'Dry' : value > 0.99 ? 'Soaked' : `${Math.round(value * 100)}%`}
+                  onCommit={(value) => updateRainChannel(channel.id, { wetness: value })}
                 />
                 <CompactScrollbarSlider
-                  id={`ambient-${channel.id}-treble`}
+                  id={`ambient-${channel.id}-resonance`}
                   min={0}
                   max={1}
                   step={0.01}
-                  value={channel.trebleGain}
-                  trackLabel="treble"
-                  tooltipLabel="High part of each drop: the click, the splash, the plip of a puddle"
-                  ariaLabel={`${layerName} treble level`}
+                  value={channel.resonance}
+                  trackLabel="resonance"
+                  tooltipLabel="How much the surface rings: dead to the left, as it is in the middle, ringing long to the right"
+                  ariaLabel={`${layerName} resonance`}
                   disabled={!channel.enabled}
-                  defaultValue={DEFAULT_RAIN_CHANNEL.trebleGain}
-                  formatValue={(value) => value.toFixed(2)}
-                  onCommit={(value) => updateRainChannel(channel.id, { trebleGain: value })}
+                  defaultValue={DEFAULT_RAIN_CHANNEL.resonance}
+                  formatValue={(value) => value < 0.01 ? 'Dead' : Math.abs(value - 0.5) < 0.005 ? 'As is' : value > 0.99 ? 'Ringing' : `${Math.round(value * 100)}%`}
+                  onCommit={(value) => updateRainChannel(channel.id, { resonance: value })}
                 />
               </>
             ) : (

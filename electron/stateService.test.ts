@@ -72,8 +72,8 @@ describe('StateService app-state field round-trip', () => {
           dropsPerSecond: index === 9 ? 38 : channel.dropsPerSecond,
           distance: index === 9 ? 0.77 : channel.distance,
           pan: index === 9 ? -0.34 : channel.pan,
-          bassGain: index === 9 ? 0.83 : channel.bassGain,
-          trebleGain: index === 9 ? 0.61 : channel.trebleGain,
+          wetness: index === 9 ? 0.83 : channel.wetness,
+          resonance: index === 9 ? 0.61 : channel.resonance,
         }
     })
     const ambientSound = {
