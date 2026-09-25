@@ -74,6 +74,16 @@ const RAIN_SURFACE_PROFILES = {
   },
 };
 
+/**
+ * A noise layer's `movement` (0-1) at full: how far one cycle's period may
+ * stretch or shrink (as a power of two, so 1 is anywhere from half to double),
+ * the largest share of the swell's rise one cycle may lose, and the furthest
+ * the sway takes the layer from centre.
+ */
+const MOVEMENT_PERIOD_OCTAVES = 1;
+const MOVEMENT_RISE_LOSS = 0.5;
+const MOVEMENT_PAN_REACH = 0.6;
+
 /** The most rain voices one layer keeps ringing at once. */
 const MAX_RAIN_VOICES = 48;
 
@@ -139,6 +149,13 @@ class AmbientGenerator extends AudioWorkletProcessor {
       pink: [0, 0, 0, 0, 0, 0, 0],
       brown: 0,
       phase: this.random(),
+      // Movement's per-cycle draw (see startCycle). The neutral values make
+      // a layer with no movement play exactly as one without the feature.
+      periodFactor: 1,
+      riseFactor: 1,
+      swaySide: 0,
+      panFrom: 0,
+      panTo: 0,
       nextEventFrame: 0,
       activeVoices: [],
       nextDripFrame: Infinity,
@@ -244,6 +261,52 @@ class AmbientGenerator extends AudioWorkletProcessor {
         ? currentFrame + this.eventDelayFrames(dripRate)
         : Infinity;
     }
+  }
+
+  /**
+   * A new cycle has begun (the phase just wrapped, so the level is at its
+   * trough and flat): roll this cycle's deviations, scaled by `movement`.
+   * - the period is multiplied by 2^(movement * u), u uniform in -1..1, so
+   *   the mean tempo is still the period set;
+   * - the rise above the trough keeps a random share of itself, never less
+   *   than 1 - movement * MOVEMENT_RISE_LOSS -- the trough stays where it is,
+   *   so the swap cannot make the level jump;
+   * - the sway moves to the OTHER side of centre from where it was heading,
+   *   by a random reach up to movement * MOVEMENT_PAN_REACH, starting from
+   *   wherever it is now. The first cycle with movement picks a side at
+   *   random, so several layers do not all swing together.
+   * With no movement nothing is drawn from the random stream and every
+   * factor is neutral, so the layer renders exactly as it always has.
+   */
+  startCycle(channel) {
+    const movement = channel.movement ?? 0;
+    if (movement <= 0) {
+      channel.periodFactor = 1;
+      channel.riseFactor = 1;
+      channel.panFrom = channel.panTo;
+      channel.panTo = 0;
+      return;
+    }
+    channel.periodFactor = 2 ** (movement * MOVEMENT_PERIOD_OCTAVES * ((this.random() * 2) - 1));
+    channel.riseFactor = 1 - (movement * MOVEMENT_RISE_LOSS * this.random());
+    channel.swaySide = channel.swaySide === 0 ? (this.random() < 0.5 ? -1 : 1) : -channel.swaySide;
+    channel.panFrom = channel.panTo;
+    channel.panTo = channel.swaySide * movement * MOVEMENT_PAN_REACH * (0.5 + (0.5 * this.random()));
+  }
+
+  /**
+   * Where the sway is at `phase`: travelling from panFrom to panTo so that
+   * it is halfway exactly at the swell's peak (phase = shape), on a
+   * smoothstep so it leaves and arrives at rest. The sound therefore sweeps
+   * past while it is loudest, like a gust going by.
+   */
+  swayAt(channel, phase) {
+    const peak = channel.shape ?? 0.5;
+    const progress = phase <= peak
+      ? (peak > 0 ? 0.5 * (phase / peak) : 0.5)
+      : 0.5 + (0.5 * ((phase - peak) / Math.max(1e-9, 1 - peak)));
+    const eased = progress * progress * (3 - (2 * progress));
+    return channel.panFrom + ((channel.panTo - channel.panFrom) * eased);
   }
 
   noise(channel) {
@@ -522,12 +585,24 @@ class AmbientGenerator extends AudioWorkletProcessor {
 
         const baseLeft = this.noise(channel);
         const baseRight = this.noise(channel);
-        const amplitude = Math.max(0, 1 + (channel.modulationAmplitude * this.cycleAt(channel, channel.phase)));
-        channel.phase += 1 / (channel.periodSec * sampleRate);
-        if (channel.phase >= 1) channel.phase -= 1;
+        const cycleValue = this.cycleAt(channel, channel.phase);
+        // riseFactor scales only the part of the swing above the trough
+        // (cycleValue + 1), so the trough is 1 - amplitude whatever it is.
+        const amplitude = channel.riseFactor === 1
+          ? Math.max(0, 1 + (channel.modulationAmplitude * cycleValue))
+          : Math.max(0, 1 + (channel.modulationAmplitude * ((channel.riseFactor * (cycleValue + 1)) - 1)));
+        const pan = channel.panFrom === 0 && channel.panTo === 0 ? 0 : this.swayAt(channel, channel.phase);
+        channel.phase += 1 / (channel.periodSec * channel.periodFactor * sampleRate);
+        if (channel.phase >= 1) {
+          channel.phase -= 1;
+          this.startCycle(channel);
+        }
         const channelGain = amplitude * channel.volume;
-        const filteredLeft = this.filterSample(channel, baseLeft * channelGain, channel.filterLeft);
-        const filteredRight = this.filterSample(channel, baseRight * channelGain, channel.filterRight);
+        // Equal-power balance, normalised so centre is unity on both sides.
+        const leftGain = pan === 0 ? 1 : Math.SQRT2 * Math.cos((pan + 1) * Math.PI / 4);
+        const rightGain = pan === 0 ? 1 : Math.SQRT2 * Math.sin((pan + 1) * Math.PI / 4);
+        const filteredLeft = this.filterSample(channel, baseLeft * channelGain * leftGain, channel.filterLeft);
+        const filteredRight = this.filterSample(channel, baseRight * channelGain * rightGain, channel.filterRight);
         if (audible) {
           leftMix += filteredLeft;
           rightMix += filteredRight;

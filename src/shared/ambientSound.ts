@@ -56,6 +56,13 @@ export interface AmbientNoiseChannelSettings extends AmbientChannelBaseSettings 
   ramp: number;
   /** Where in the cycle the peak falls, 0-1 (0.5 is centred). */
   shape: number;
+  /**
+   * How much each cycle departs from the last, 0-1: its length, the height
+   * of its swell, and a sway that takes the layer to alternate sides of the
+   * stereo field, crossing centre at the peak. 0 is a strictly repeating
+   * cycle. The worklet's startCycle holds the rule.
+   */
+  movement: number;
   type: AmbientNoiseType;
   filter: number;
 }
@@ -156,6 +163,7 @@ export const DEFAULT_NOISE_CHANNEL: Readonly<Omit<AmbientNoiseChannelSettings, '
   periodSec: 30,
   ramp: 0.5,
   shape: 0.5,
+  movement: 0,
   type: 'pink',
   filter: 0.5,
 };
@@ -299,6 +307,7 @@ export function ambientSettingsSignature(settings: AmbientSettings): string {
         channel.periodSec,
         channel.ramp,
         channel.shape,
+        channel.movement,
         channel.type,
         channel.filter,
       ];
@@ -486,6 +495,7 @@ export function sanitizeAmbientSettings(input: unknown): AmbientSettings {
       periodSec: finiteRange(cycle.periodSec, AMBIENT_PERIOD_MIN_SEC, AMBIENT_PERIOD_MAX_SEC, fallback.periodSec),
       ramp: finiteUnit(cycle.ramp, fallback.ramp),
       shape: finiteRange(source.shape, AMBIENT_SHAPE_MIN, AMBIENT_SHAPE_MAX, fallback.shape),
+      movement: finiteUnit(source.movement, 0),
       type: AMBIENT_NOISE_TYPES.includes(source.type as AmbientNoiseType) ? source.type as AmbientNoiseType : fallback.type,
       filter: finiteUnit(source.filter, fallback.filter),
     };

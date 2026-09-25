@@ -22,6 +22,7 @@ type TestProcessor = {
   channels: Array<{ id: string; eventAge: number; activeVoices: unknown[]; profile?: unknown }>;
   soloChannelId: string | null;
   makeSurfaceVoice: (profile: unknown, isDrip: boolean) => { gain: number };
+  startCycle: (channel: { panTo: number; periodFactor: number; riseFactor: number }) => void;
   makeRainVoice: () => {
     bassModes: Array<{ frequency: number }>;
     bodyModes: Array<{ frequency: number }>;
@@ -368,5 +369,59 @@ describe('ambient AudioWorklet generator', () => {
       expect(samples.every((sample) => Number.isFinite(sample) && Math.abs(sample) < 8)).toBe(true);
       expect(rms(samples)).toBeGreaterThan(0.005);
     }
+  });
+  describe('movement', () => {
+    // Records every cycle's draw by wrapping startCycle.
+    function recordCycles(movement: number, seconds: number, sampleRate = 2000) {
+      const generator = createProcessor(71, [makeChannel('moving', {
+        modulationAmplitude: 1, periodSec: 0.5, movement,
+      })], sampleRate);
+      generator.processor.noise = () => 1;
+      const cycles: { panTo: number; periodFactor: number; riseFactor: number }[] = [];
+      const startCycle = generator.processor.startCycle.bind(generator.processor);
+      generator.processor.startCycle = (channel) => {
+        startCycle(channel);
+        cycles.push({ panTo: channel.panTo, periodFactor: channel.periodFactor, riseFactor: channel.riseFactor });
+      };
+      const samples = generator.render(seconds);
+      return { cycles, samples };
+    }
+
+    it('sways to the other side of centre on every cycle, within its reach', () => {
+      const { cycles } = recordCycles(1, 60);
+      expect(cycles.length).toBeGreaterThan(50);
+      for (let index = 1; index < cycles.length; index += 1) {
+        expect(Math.sign(cycles[index].panTo)).toBe(-Math.sign(cycles[index - 1].panTo));
+      }
+      expect(cycles.every((cycle) => Math.abs(cycle.panTo) <= 0.6 + 1e-9)).toBe(true);
+    });
+
+    it('varies the length of each cycle while keeping the tempo it was given', () => {
+      const { cycles } = recordCycles(1, 200);
+      const factors = cycles.map((cycle) => cycle.periodFactor);
+      expect(Math.min(...factors)).toBeLessThan(0.7);
+      expect(Math.max(...factors)).toBeGreaterThan(1.4);
+      // Symmetric in octaves: the mean log-factor is near zero.
+      const meanOctaves = factors.reduce((sum, factor) => sum + Math.log2(factor), 0) / factors.length;
+      expect(Math.abs(meanOctaves)).toBeLessThan(0.1);
+    });
+
+    it('never makes the level jump where one cycle hands over to the next', () => {
+      // With the noise held at 1 the left output is the level times the
+      // sway's gain; both move smoothly, so neighbouring samples stay close
+      // even across cycle boundaries, where the new draw takes effect.
+      const { samples } = recordCycles(1, 30);
+      let largestStep = 0;
+      for (let index = 1; index < samples.left.length; index += 1) {
+        largestStep = Math.max(largestStep, Math.abs(samples.left[index] - samples.left[index - 1]));
+      }
+      expect(largestStep).toBeLessThan(0.05);
+    });
+
+    it('draws nothing and sways nowhere with no movement', () => {
+      const { cycles, samples } = recordCycles(0, 10);
+      expect(cycles.every((cycle) => cycle.panTo === 0 && cycle.periodFactor === 1 && cycle.riseFactor === 1)).toBe(true);
+      expect(samples.left).toEqual(samples.right);
+    });
   });
 });

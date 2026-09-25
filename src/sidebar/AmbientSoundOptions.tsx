@@ -562,6 +562,20 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                   onCommit={(value) => updateNoiseChannel(channel.id, { shape: value })}
                 />
                 <CompactScrollbarSlider
+                  id={`ambient-${channel.id}-movement`}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={channel.movement}
+                  trackLabel="movement"
+                  tooltipLabel="How much each cycle varies in length and strength, and how far it sways between left and right"
+                  ariaLabel={`${layerName} movement`}
+                  disabled={!channel.enabled}
+                  defaultValue={DEFAULT_NOISE_CHANNEL.movement}
+                  formatValue={(value) => value < 0.005 ? 'Still' : `${Math.round(value * 100)}%`}
+                  onCommit={(value) => updateNoiseChannel(channel.id, { movement: value })}
+                />
+                <CompactScrollbarSlider
                   id={`ambient-${channel.id}-type`}
                   min={0}
                   max={AMBIENT_NOISE_TYPES.length - 1}
