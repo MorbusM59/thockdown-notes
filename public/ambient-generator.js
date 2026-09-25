@@ -232,54 +232,27 @@ const SILENCE = 1e-7;
 const VOICE_SILENCE = 1e-5;
 
 /**
- * Thunder (startPeal). A peal follows one ENVELOPE: it rolls in gently,
- * builds to a peak a quarter to two fifths of the way through its length
- * (THUNDER_PEAK_AT) and fades slowly over the rest. Everything in it is
- * placed and scaled by that envelope, so the loudest moment is never the
- * first. It is made of two kinds of source:
- * - STROKES: short bursts of pink noise through a low-pass. A lightning
- *   channel is kilometres of jagged segments, each sending its own sharp
- *   pressure pulse, arriving at different times; strokes are those pulses.
- *   They come in CLUSTERS of several in quick succession -- the cascading
- *   "krakakoom" -- at a rate that follows the envelope, sparse while it
- *   rolls in and densest at the peak. Later strokes are darker: their
- *   sound travelled further. They go mostly dry (THUNDER_STROKE_SEND), so
- *   their attacks keep their definition.
- * - the BED: a few long rumbles of brown noise through a lower low-pass,
- *   each swelling to the peak and dying with the envelope, with a fast,
- *   uneven roll in level -- a growl rather than a swell. The bed is what
- *   the reverb carries.
- * Character (0..1) moves the balance from the bed (a smooth roll) toward
- * the strokes (a cracking cascade). Distance blends each figure
- * geometrically between its near and far end: far thunder is darker,
- * quieter and its strokes are smeared longer.
- * Every source starts from silence over at least a few milliseconds, and
- * the envelope keeps the first strokes quiet: this plays beside someone
- * concentrating, and a clap from nowhere is a fright, not atmosphere.
+ * Thunder (startPeal). A peal is rumbling only: several long rumbles of
+ * brown noise, each through its own low-pass, staggered through the roll-in
+ * so the peal builds -- it rises gently to a peak a quarter to two fifths of
+ * the way through its length (THUNDER_PEAK_AT) and fades slowly over the
+ * rest -- each with a fast, uneven roll in level, the growl of it, and a
+ * drift across the stereo field. Distance blends each figure geometrically
+ * between its near and far end: far thunder is darker and quieter.
+ * Short bright bursts on top (a crack, then clusters of strokes) were tried
+ * and taken out: synthesised that way they read as something falling down
+ * stairs, or popcorn, rather than as thunder.
+ * Between peals a layer is silent for L x (1 - share) / share, L the peal's
+ * length (see AmbientThunderChannelSettings); and before each peal the
+ * layer's randomness varies that peal's controls (thunderPealSettings).
  */
 const THUNDER_PEAK_AT = [0.22, 0.4];
 const THUNDER_LEVEL = { near: 1, far: 0.6 };
-const THUNDER_BED_RUMBLES = [2, 4];
-const THUNDER_BED_CUTOFF_HZ = { near: 380, far: 80 };
-/**
- * Average seconds between a bed rumble's roll targets, and the lowest
- * target at character 0 and 1: a smooth roll only undulates, an angry one
- * growls down to near nothing between surges.
- */
+const THUNDER_RUMBLES = [3, 6];
+const THUNDER_CUTOFF_HZ = { near: 420, far: 80 };
+/** Average seconds between a rumble's roll targets, and the lowest target. */
 const THUNDER_ROLL_SEC = [0.08, 0.35];
-const THUNDER_ROLL_FLOOR = [0.6, 0.15];
-/** Clusters per second at the envelope's peak, at character 0 and 1. */
-const THUNDER_CLUSTER_RATE = [0.4, 1.8];
-/** Strokes in a cluster, at character 0 and 1 (drawn up to this). */
-const THUNDER_CLUSTER_STROKES = [2, 6];
-const THUNDER_STROKE_GAP_SEC = [0.05, 0.18];
-const THUNDER_STROKE_SEC = [0.03, 0.14];
-const THUNDER_STROKE_ATTACK_SEC = 0.006;
-/** How much longer a stroke is at the far end: distance smears it. */
-const THUNDER_STROKE_SMEAR = { near: 1, far: 3 };
-const THUNDER_STROKE_CUTOFF_HZ = { near: 3000, far: 280 };
-/** A stroke's share of the reverb send, against the bed's 1. */
-const THUNDER_STROKE_SEND = 0.25;
+const THUNDER_ROLL_FLOOR = 0.3;
 /** The first peal of a storm that has just started comes within this many seconds. */
 const THUNDER_FIRST_PEAL_SEC = [4, 12];
 
@@ -1214,13 +1187,46 @@ class AmbientGenerator extends AudioWorkletProcessor {
    * because the rumble's own low-pass (startPeal) already is that darkening.
    */
   configureThunder(channel, before) {
-    const space = channel.space ?? { directGain: 1, reverbSend: 0 };
-    channel.directGain = space.directGain;
-    channel.reverbSend = space.reverbSend;
+    // Each peal carries its own distance's gains (a peal's distance can be
+    // randomised), applied in renderThunder; the shared mix adds nothing.
+    channel.directGain = 1;
+    channel.reverbSend = 1;
     if (!channel.peals) channel.peals = [];
-    if (!before || before.pealsPer10Min !== channel.pealsPer10Min) {
+    if (channel.share <= 0) {
+      channel.nextPealFrame = Infinity;
+    } else if (!before || before.share <= 0 || !Number.isFinite(channel.nextPealFrame)) {
       channel.nextPealFrame = currentFrame + Math.round(this.between(THUNDER_FIRST_PEAL_SEC) * sampleRate);
     }
+  }
+
+  /**
+   * The controls one peal plays with: the layer's own, each moved by up to
+   * `randomness` x `jitter` of its range either way and capped at the
+   * range's ends. Drawn around the SETTING every time, so a storm wanders
+   * about where it was put rather than drifting off.
+   */
+  thunderPealSettings(channel) {
+    const reach = (channel.randomness ?? 0) * (channel.jitter ?? 0);
+    const vary = (value, low, high) => (reach <= 0
+      ? value
+      : Math.max(low, Math.min(high, value + (reach * (high - low) * ((this.random() * 2) - 1)))));
+    const [lengthLow, lengthHigh] = channel.lengthRangeSec ?? [channel.lengthSec, channel.lengthSec];
+    return {
+      volume: vary(channel.volume, 0, 1),
+      // A layer that plays at all keeps playing: its share is not moved to 0.
+      share: Math.max(0.001, vary(channel.share, 0, 1)),
+      distance: vary(channel.distance, 0, 1),
+      pan: vary(channel.pan, -1, 1),
+      spread: vary(channel.spread, 0, 1),
+      lengthSec: vary(channel.lengthSec, lengthLow, lengthHigh),
+    };
+  }
+
+  /** resolveAmbientSpace at `distance`, from the table the main thread built. */
+  thunderSpaceAt(channel, distance) {
+    const table = channel.spaceTable;
+    if (!table || table.length === 0) return { directGain: 1, reverbSend: 0 };
+    return table[Math.round(distance * (table.length - 1))];
   }
 
   /** Geometric blend from `near` to `far` at distance `d`. */
@@ -1229,104 +1235,62 @@ class AmbientGenerator extends AudioWorkletProcessor {
   }
 
   /**
-   * A new peal, starting at this sample. Everything random is drawn now,
-   * into a list of sources sorted by start; renderThunder only plays them.
+   * A new peal, starting at this sample, played with `settings`
+   * (thunderPealSettings). Everything random is drawn now, into a list of
+   * rumbles sorted by start; renderThunder only plays them.
    */
-  startPeal(channel) {
-    const d = channel.distance;
-    const spread = channel.spread;
-    const character = channel.character ?? 0.5;
-    const lengthSec = channel.lengthSec;
+  startPeal(channel, settings) {
+    const d = settings.distance;
+    const spread = settings.spread;
+    const lengthSec = settings.lengthSec;
     const peakSec = lengthSec * this.between(THUNDER_PEAK_AT);
     const fadeTau = Math.max(0.1, (lengthSec - peakSec) / 5);
-    const envelope = (t) => {
-      if (t < peakSec) {
-        const x = t / peakSec;
-        return x * x * (3 - (2 * x));
-      }
-      return Math.exp(-(t - peakSec) / fadeTau);
-    };
-    const levelScale = this.byDistance(THUNDER_LEVEL, d);
+    const space = this.thunderSpaceAt(channel, d);
     const clampPan = (value) => Math.max(-1, Math.min(1, value));
-    const panAround = (width) => clampPan(channel.pan + (spread * width * ((this.random() * 2) - 1)));
-    const sources = [];
-    const source = (startSec, attackSec, tauSec, lifeSec, cutoffHz, level, loop, send, panFrom, panTo, rolls) => ({
-      start: Math.round(startSec * sampleRate),
-      age: 0,
-      attack: Math.max(1, Math.round(attackSec * sampleRate)),
-      decay: Math.exp(-1 / (Math.max(0.005, tauSec) * sampleRate)),
-      life: Math.max(2, Math.round(lifeSec * sampleRate)),
-      tail: 1,
-      level,
-      loop,
-      send,
-      filter: stateVariableFilter(cutoffHz, 0.8),
-      read: Math.floor(this.random() * loop.length),
-      panFrom,
-      panTo,
-      gainLeft: 0,
-      gainRight: 0,
-      rolls,
-      rollFloor: THUNDER_ROLL_FLOOR[0] + ((THUNDER_ROLL_FLOOR[1] - THUNDER_ROLL_FLOOR[0]) * character),
-      rollSeed: Math.floor(this.random() * 0x100000000) >>> 0,
-      roll: 1,
-      rollTarget: 1,
-      rollFrames: 0,
-    });
-
-    // The bed: each rumble swells to the peak from its own start in the
-    // roll-in, and fades with the envelope after it.
+    const panAround = () => clampPan(settings.pan + (spread * ((this.random() * 2) - 1)));
     const brown = this.noiseLoop('brown');
-    const bedCount = THUNDER_BED_RUMBLES[0] + Math.floor(this.random() * (THUNDER_BED_RUMBLES[1] - THUNDER_BED_RUMBLES[0] + 1));
-    const bedLevel = levelScale * (1 - (0.7 * character));
-    for (let index = 0; index < bedCount; index += 1) {
-      const startSec = peakSec * 0.6 * this.random();
+    const count = THUNDER_RUMBLES[0] + Math.floor(this.random() * (THUNDER_RUMBLES[1] - THUNDER_RUMBLES[0] + 1));
+    // Several rumbles together are about as loud as three were.
+    const level = this.byDistance(THUNDER_LEVEL, d) * Math.sqrt(3 / count);
+    const rumbles = [];
+    for (let index = 0; index < count; index += 1) {
+      // Each swells to about the peak from its own start in the roll-in,
+      // and fades with the peal after it.
+      const startSec = peakSec * 0.7 * this.random();
       const attackSec = Math.max(0.05, (peakSec - startSec) * (0.8 + (0.4 * this.random())));
       const tauSec = fadeTau * (0.8 + (0.4 * this.random()));
-      sources.push(source(
-        startSec, attackSec, tauSec, attackSec + (5 * tauSec),
-        this.byDistance(THUNDER_BED_CUTOFF_HZ, d) * (0.7 + (0.6 * this.random())),
-        bedLevel * (0.6 + (0.4 * this.random())),
-        brown, 1, panAround(1), panAround(1), true,
-      ));
+      const lifeSec = attackSec + (5 * tauSec);
+      rumbles.push({
+        start: Math.round(startSec * sampleRate),
+        age: 0,
+        attack: Math.max(1, Math.round(attackSec * sampleRate)),
+        decay: Math.exp(-1 / (tauSec * sampleRate)),
+        life: Math.max(2, Math.round(lifeSec * sampleRate)),
+        tail: 1,
+        level: level * (0.6 + (0.4 * this.random())),
+        filter: stateVariableFilter(this.byDistance(THUNDER_CUTOFF_HZ, d) * (0.6 + (1.2 * this.random())), 0.8),
+        read: Math.floor(this.random() * brown.length),
+        panFrom: panAround(),
+        panTo: panAround(),
+        gainLeft: 0,
+        gainRight: 0,
+        rollSeed: Math.floor(this.random() * 0x100000000) >>> 0,
+        roll: 1,
+        rollTarget: 1,
+        rollFrames: 0,
+      });
     }
-
-    // The strokes: clusters as a Poisson process whose rate follows the
-    // envelope, by thinning -- candidates at the peak rate, each kept with
-    // the envelope's value at its moment.
-    const pink = this.noiseLoop('pink');
-    const peakRate = THUNDER_CLUSTER_RATE[0] + ((THUNDER_CLUSTER_RATE[1] - THUNDER_CLUSTER_RATE[0]) * character);
-    const maxStrokes = Math.round(THUNDER_CLUSTER_STROKES[0] + ((THUNDER_CLUSTER_STROKES[1] - THUNDER_CLUSTER_STROKES[0]) * character));
-    const strokeLevel = levelScale * (0.15 + (1.2 * character));
-    const smear = this.byDistance(THUNDER_STROKE_SMEAR, d);
-    const cutoffNear = this.byDistance(THUNDER_STROKE_CUTOFF_HZ, d);
-    let t = 0;
-    for (;;) {
-      t += -Math.log(Math.max(1e-9, 1 - this.random())) / peakRate;
-      if (t >= lengthSec) break;
-      const strength = envelope(t);
-      if (this.random() >= strength) continue;
-      const strokes = 1 + Math.floor(this.random() * maxStrokes);
-      // A cluster comes from one stretch of the channel: one place in the
-      // field, from which its strokes scatter a little.
-      const clusterPan = panAround(1);
-      let at = t;
-      for (let index = 0; index < strokes; index += 1) {
-        const durationSec = this.between(THUNDER_STROKE_SEC) * smear;
-        const attackSec = THUNDER_STROKE_ATTACK_SEC * smear * (1 + this.random());
-        // Darker the later it comes: down to half the cutoff by the end.
-        const cutoffHz = cutoffNear * (0.5 ** (at / lengthSec)) * (0.7 + (0.6 * this.random()));
-        const pan = clampPan(clusterPan + (spread * 0.2 * ((this.random() * 2) - 1)));
-        sources.push(source(
-          at, attackSec, durationSec / 4, attackSec + durationSec, cutoffHz,
-          strokeLevel * strength * (0.5 + (0.5 * this.random())),
-          pink, THUNDER_STROKE_SEND, pan, pan, false,
-        ));
-        at += this.between(THUNDER_STROKE_GAP_SEC) * smear;
-      }
-    }
-    sources.sort((a, b) => a.start - b.start);
-    channel.peals.push({ sources, next: 0, age: 0 });
+    rumbles.sort((a, b) => a.start - b.start);
+    channel.peals.push({
+      rumbles,
+      next: 0,
+      age: 0,
+      // The volume slider stays live through a peal: the peal keeps only
+      // how far randomness moved it, and adds that to the current setting.
+      volumeOffset: settings.volume - channel.volume,
+      direct: space.directGain,
+      send: space.reverbSend,
+    });
   }
 
   /**
@@ -1339,79 +1303,74 @@ class AmbientGenerator extends AudioWorkletProcessor {
     right.fill(0, 0, length);
     sendLeft.fill(0, 0, length);
     sendRight.fill(0, 0, length);
-    // Seconds between peals are exponential (a Poisson process), drawn here
-    // rather than by eventDelayFrames, whose floor of 0.1 per second is a
-    // drop rate's and would triple the stormiest setting.
-    const meanFrames = (600 / channel.pealsPer10Min) * sampleRate;
     const rollRate = 30 / sampleRate;
+    const brown = this.noiseLoop('brown');
     for (let index = 0; index < length; index += 1) {
       if (currentFrame + index >= channel.nextPealFrame) {
-        this.startPeal(channel);
-        channel.nextPealFrame = currentFrame + index
-          + Math.max(1, Math.floor(-Math.log(Math.max(1e-9, 1 - this.random())) * meanFrames));
+        const settings = this.thunderPealSettings(channel);
+        this.startPeal(channel, settings);
+        // Silent for the peal's length x (1 - share) / share after it ends.
+        const pauseSec = settings.lengthSec * ((1 - settings.share) / settings.share);
+        channel.nextPealFrame = currentFrame + index + Math.max(1, Math.round((settings.lengthSec + pauseSec) * sampleRate));
       }
       if (channel.peals.length === 0) continue;
-      let sumLeft = 0;
-      let sumRight = 0;
+      let directLeft = 0;
+      let directRight = 0;
       let wetLeft = 0;
       let wetRight = 0;
       for (let pealIndex = channel.peals.length - 1; pealIndex >= 0; pealIndex -= 1) {
         const peal = channel.peals[pealIndex];
-        // Sources become live in start order; `next` is the first not yet live.
-        while (peal.next < peal.sources.length && peal.sources[peal.next].start <= peal.age) peal.next += 1;
+        // Rumbles become live in start order; `next` is the first not yet live.
+        while (peal.next < peal.rumbles.length && peal.rumbles[peal.next].start <= peal.age) peal.next += 1;
         peal.age += 1;
+        let sumLeft = 0;
+        let sumRight = 0;
         let live = 0;
-        for (let sourceIndex = 0; sourceIndex < peal.next; sourceIndex += 1) {
-          const item = peal.sources[sourceIndex];
-          if (item.age >= item.life) continue;
+        for (let rumbleIndex = 0; rumbleIndex < peal.next; rumbleIndex += 1) {
+          const rumble = peal.rumbles[rumbleIndex];
+          if (rumble.age >= rumble.life) continue;
           live += 1;
-          if (item.age === 0 || (item.rolls && item.rollFrames <= 0)) {
-            if (item.rolls) {
-              item.rollSeed = (1664525 * item.rollSeed + 1013904223) >>> 0;
-              item.rollTarget = item.rollFloor + ((1 - item.rollFloor) * (item.rollSeed / 0x100000000));
-              item.rollSeed = (1664525 * item.rollSeed + 1013904223) >>> 0;
-              item.rollFrames = Math.round((THUNDER_ROLL_SEC[0] + ((THUNDER_ROLL_SEC[1] - THUNDER_ROLL_SEC[0]) * (item.rollSeed / 0x100000000))) * sampleRate);
-            }
-            // Where it is in the field moves on the same slow clock.
-            const progress = Math.min(1, item.age / item.life);
-            const pan = item.panFrom + ((item.panTo - item.panFrom) * progress);
-            item.gainLeft = Math.SQRT2 * Math.cos((pan + 1) * Math.PI / 4);
-            item.gainRight = Math.SQRT2 * Math.sin((pan + 1) * Math.PI / 4);
+          if (rumble.rollFrames <= 0) {
+            rumble.rollSeed = (1664525 * rumble.rollSeed + 1013904223) >>> 0;
+            rumble.rollTarget = THUNDER_ROLL_FLOOR + ((1 - THUNDER_ROLL_FLOOR) * (rumble.rollSeed / 0x100000000));
+            rumble.rollSeed = (1664525 * rumble.rollSeed + 1013904223) >>> 0;
+            rumble.rollFrames = Math.round((THUNDER_ROLL_SEC[0] + ((THUNDER_ROLL_SEC[1] - THUNDER_ROLL_SEC[0]) * (rumble.rollSeed / 0x100000000))) * sampleRate);
+            // Where it is in the field moves on the same clock.
+            const progress = Math.min(1, rumble.age / rumble.life);
+            const pan = rumble.panFrom + ((rumble.panTo - rumble.panFrom) * progress);
+            rumble.gainLeft = Math.SQRT2 * Math.cos((pan + 1) * Math.PI / 4);
+            rumble.gainRight = Math.SQRT2 * Math.sin((pan + 1) * Math.PI / 4);
           }
+          rumble.rollFrames -= 1;
+          rumble.roll += (rumble.rollTarget - rumble.roll) * rollRate;
           let envelope;
-          if (item.age < item.attack) {
-            const x = item.age / item.attack;
+          if (rumble.age < rumble.attack) {
+            const x = rumble.age / rumble.attack;
             envelope = x * x * (3 - (2 * x));
           } else {
-            item.tail *= item.decay;
-            envelope = item.tail;
+            rumble.tail *= rumble.decay;
+            envelope = rumble.tail;
           }
-          let level = item.level * envelope;
-          if (item.rolls) {
-            item.rollFrames -= 1;
-            item.roll += (item.rollTarget - item.roll) * rollRate;
-            level *= item.roll;
-          }
-          const loop = item.loop;
-          const sample = lowPassStep(item.filter, loop[item.read]) * level;
-          item.read = item.read + 1 === loop.length ? 0 : item.read + 1;
-          const sampleLeft = sample * item.gainLeft;
-          const sampleRight = sample * item.gainRight;
-          sumLeft += sampleLeft;
-          sumRight += sampleRight;
-          wetLeft += sampleLeft * item.send;
-          wetRight += sampleRight * item.send;
-          item.age += 1;
+          const sample = lowPassStep(rumble.filter, brown[rumble.read]) * rumble.level * envelope * rumble.roll;
+          rumble.read = rumble.read + 1 === brown.length ? 0 : rumble.read + 1;
+          sumLeft += sample * rumble.gainLeft;
+          sumRight += sample * rumble.gainRight;
+          rumble.age += 1;
         }
-        if (live === 0 && peal.next === peal.sources.length) {
+        const volume = Math.max(0, Math.min(1, channel.volume + peal.volumeOffset));
+        directLeft += sumLeft * volume * peal.direct;
+        directRight += sumRight * volume * peal.direct;
+        wetLeft += sumLeft * volume * peal.send;
+        wetRight += sumRight * volume * peal.send;
+        if (live === 0 && peal.next === peal.rumbles.length) {
           channel.peals[pealIndex] = channel.peals[channel.peals.length - 1];
           channel.peals.pop();
         }
       }
-      left[index] = sumLeft * channel.volume;
-      right[index] = sumRight * channel.volume;
-      sendLeft[index] = wetLeft * channel.volume;
-      sendRight[index] = wetRight * channel.volume;
+      left[index] = directLeft;
+      right[index] = directRight;
+      sendLeft[index] = wetLeft;
+      sendRight[index] = wetRight;
     }
   }
 

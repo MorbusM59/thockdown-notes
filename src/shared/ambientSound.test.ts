@@ -5,8 +5,6 @@ import {
   AMBIENT_THUNDER_DEFAULT_PANS,
   AMBIENT_THUNDER_LENGTH_MIN_SEC,
   AMBIENT_THUNDER_LENGTH_MAX_SEC,
-  AMBIENT_THUNDER_PEALS_MIN,
-  AMBIENT_THUNDER_PEALS_MAX,
   DEFAULT_THUNDER_CHANNEL,
   AMBIENT_DEFAULT_MASTER_VOLUME,
   AMBIENT_NOISE_SLOT_TYPES,
@@ -63,8 +61,10 @@ describe('ambient sound configuration', () => {
           expect(channel.drips).toBeGreaterThanOrEqual(0);
           expect(channel.drips).toBeLessThanOrEqual(1);
         } else if (channel.kind === 'thunder') {
-          expect(channel.pealsPer10Min).toBeGreaterThanOrEqual(AMBIENT_THUNDER_PEALS_MIN);
-          expect(channel.pealsPer10Min).toBeLessThanOrEqual(AMBIENT_THUNDER_PEALS_MAX);
+          expect(channel.share).toBeGreaterThan(0);
+          expect(channel.share).toBeLessThanOrEqual(1);
+          expect(channel.randomness).toBeGreaterThanOrEqual(0);
+          expect(channel.randomness).toBeLessThanOrEqual(1);
           expect(channel.lengthSec).toBeGreaterThanOrEqual(AMBIENT_THUNDER_LENGTH_MIN_SEC);
           expect(channel.lengthSec).toBeLessThanOrEqual(AMBIENT_THUNDER_LENGTH_MAX_SEC);
           expect(channel.distance).toBeGreaterThanOrEqual(0);
@@ -122,22 +122,22 @@ describe('ambient sound configuration', () => {
     expect(settings[AMBIENT_RAIN_FIRST_INDEX + 1]).toMatchObject({ id: 'slot-8', enabled: true, solo: true, volume: 0.4, distance: 0.5 });
     expect(thunder.map((channel) => channel.kind)).toEqual(['thunder', 'thunder', 'thunder']);
     expect(thunder.map((channel) => channel.kind === 'thunder' ? channel.pan : null)).toEqual(AMBIENT_THUNDER_DEFAULT_PANS);
-    expect(thunder[0]).toMatchObject({ id: 'slot-10', enabled: true, pealsPer10Min: DEFAULT_THUNDER_CHANNEL.pealsPer10Min });
+    expect(thunder[0]).toMatchObject({ id: 'slot-10', enabled: true, share: DEFAULT_THUNDER_CHANNEL.share });
   });
 
   it('clamps every thunder field', () => {
     const input = DEFAULT_AMBIENT_SETTINGS.map((channel, index) => (
       index === AMBIENT_THUNDER_FIRST_INDEX
-        ? { ...channel, pealsPer10Min: 999, distance: -1, pan: 4, spread: 2, character: -3, lengthSec: 1 }
+        ? { ...channel, share: 999, distance: -1, pan: 4, spread: 2, randomness: -3, lengthSec: 1 }
         : channel
     ));
     expect(sanitizeAmbientSettings(input)[AMBIENT_THUNDER_FIRST_INDEX]).toMatchObject({
       kind: 'thunder',
-      pealsPer10Min: AMBIENT_THUNDER_PEALS_MAX,
+      share: 1,
       distance: 0,
       pan: 1,
       spread: 1,
-      character: 0,
+      randomness: 0,
       lengthSec: AMBIENT_THUNDER_LENGTH_MIN_SEC,
     });
   });
@@ -269,7 +269,7 @@ describe('ambient sound configuration', () => {
     const thunder = settings[AMBIENT_THUNDER_FIRST_INDEX];
     if (thunder.kind !== 'thunder') throw new Error('expected a thunder slot');
     for (const change of [
-      { pealsPer10Min: 9 }, { distance: 0.1 }, { pan: 0.9 }, { spread: 0.05 }, { character: 0.1 }, { lengthSec: 25 },
+      { share: 0.3 }, { distance: 0.1 }, { pan: 0.9 }, { spread: 0.05 }, { randomness: 0.1 }, { lengthSec: 25 },
     ]) {
       const changed = settings.map((channel, index) => index === AMBIENT_THUNDER_FIRST_INDEX ? { ...thunder, ...change } : channel);
       expect(ambientSettingsSignature(changed)).not.toBe(ambientSettingsSignature(settings));

@@ -37,7 +37,7 @@ type TestProcessor = {
   eventDelayFrames: (ratePerSecond: number) => number;
   noiseLoop: (type: string) => Float32Array;
   process: (inputs: unknown[], outputs: Float32Array[][]) => boolean;
-  startPeal: (channel: unknown) => void;
+  startPeal: (channel: unknown, settings: unknown) => void;
 }
 
 /**
@@ -888,91 +888,101 @@ describe('ambient AudioWorklet generator', () => {
 
 describe('ambient thunder', () => {
   const rate = 8000;
+  // Every peal as set, unless a test is about randomness.
+  const steady = (overrides: Partial<ReturnType<typeof createAmbientThunderChannel>>) => ({ randomness: 0, ...overrides });
+  const countPeals = (generator: ReturnType<typeof createProcessor>) => {
+    let peals = 0;
+    const startPeal = generator.processor.startPeal.bind(generator.processor);
+    generator.processor.startPeal = (channel, settings) => { peals += 1; startPeal(channel, settings); };
+    return () => peals;
+  };
 
-  it('peals within seconds of starting, then is silent between peals', () => {
-    const samples = createProcessor(5, makeThunderSlots([{ pealsPer10Min: 0.5, lengthSec: 4, distance: 0.8 }]), rate).render(30);
-    const loud = samples.left.findIndex((value) => Math.abs(value) > 1e-3) / rate;
+  it('peals within seconds of starting, then is silent for as long as its share says', () => {
+    // 1 : 99 of a 4 s peal: 396 s of quiet after it.
+    const samples = createProcessor(5, makeThunderSlots([steady({ share: 0.01, lengthSec: 4, distance: 0.8 })]), rate).render(30);
+    const loud = samples.left.findIndex((value) => Math.abs(value) > 1e-4) / rate;
     expect(loud).toBeGreaterThan(3);
     expect(loud).toBeLessThan(13);
-    // One peal lasting at most 4 s after its last rumble's stagger (under
-    // 2 s), at an average of one every 20 minutes: the last stretch is
-    // exactly silent.
     expect(samples.left.slice(-rate * 8).every((value) => value === 0)).toBe(true);
   });
 
-  it('peals about as often as it is asked to', () => {
-    const generator = createProcessor(17, makeThunderSlots([{ pealsPer10Min: 20, lengthSec: 4 }]), 1000);
-    let peals = 0;
-    const startPeal = generator.processor.startPeal.bind(generator.processor);
-    generator.processor.startPeal = (channel) => { peals += 1; startPeal(channel); };
-    generator.render(30 * 60);
-    // 60 expected in half an hour; Poisson spread is about 8.
-    expect(peals).toBeGreaterThan(40);
-    expect(peals).toBeLessThan(80);
+  it('spaces peals by the share: as long silent as sounding at the middle, no pause at the top, never at zero', () => {
+    const peals = (share: number) => {
+      const generator = createProcessor(17, makeThunderSlots([steady({ share, lengthSec: 4 })]), 1000);
+      const count = countPeals(generator);
+      generator.render(100);
+      return count();
+    };
+    expect(peals(0)).toBe(0);
+    // The first peal comes 4-12 s in; after it, one every 8 s at 1 : 1 and
+    // every 4 s with no pause.
+    expect(peals(0.5)).toBeGreaterThanOrEqual(12);
+    expect(peals(0.5)).toBeLessThanOrEqual(13);
+    expect(peals(1)).toBeGreaterThanOrEqual(23);
+    expect(peals(1)).toBeLessThanOrEqual(25);
+  });
+
+  it('varies each peal around the setting, within randomness x the jitter of each range, capped at its ends', () => {
+    const generator = createProcessor(3, makeThunderSlots([{ randomness: 1, share: 0.5, pan: 0.9, distance: 0.1, spread: 0.5, lengthSec: 10, volume: 0.5 }]), rate);
+    const processor = generator.processor as unknown as {
+      channels: Array<{ kind: string }>;
+      thunderPealSettings: (channel: unknown) => Record<string, number>;
+    };
+    const channel = processor.channels.find((item) => item.kind === 'thunder');
+    const draws = Array.from({ length: 2000 }, () => processor.thunderPealSettings(channel));
+    const range = (key: string) => [Math.min(...draws.map((draw) => draw[key])), Math.max(...draws.map((draw) => draw[key]))];
+    // A quarter of each range either way, capped at the range's ends.
+    const [panLow, panHigh] = range('pan');
+    expect(panLow).toBeGreaterThanOrEqual(0.4 - 1e-9);
+    expect(panLow).toBeLessThan(0.45);
+    expect(panHigh).toBe(1);
+    const [lengthLow, lengthHigh] = range('lengthSec');
+    expect(lengthLow).toBeGreaterThanOrEqual(10 - 6.5);
+    expect(lengthHigh).toBeLessThanOrEqual(10 + 6.5);
+    expect(lengthHigh - lengthLow).toBeGreaterThan(12);
+    const [distanceLow] = range('distance');
+    expect(distanceLow).toBe(0);
+    const [shareLow, shareHigh] = range('share');
+    expect(shareLow).toBeGreaterThanOrEqual(0.25);
+    expect(shareHigh).toBeLessThanOrEqual(0.75);
+    // Around the setting, not drifting: the average stays where it was put.
+    expect(draws.reduce((sum, draw) => sum + draw.volume, 0) / draws.length).toBeCloseTo(0.5, 1);
+  });
+
+  it('plays every peal as set with randomness at zero', () => {
+    const generator = createProcessor(3, makeThunderSlots([steady({ share: 0.5, pan: 0.2, lengthSec: 10 })]), rate);
+    const processor = generator.processor as unknown as {
+      channels: Array<{ kind: string }>;
+      thunderPealSettings: (channel: unknown) => Record<string, number>;
+    };
+    const channel = processor.channels.find((item) => item.kind === 'thunder');
+    for (let index = 0; index < 20; index += 1) {
+      expect(processor.thunderPealSettings(channel)).toMatchObject({ share: 0.5, pan: 0.2, lengthSec: 10 });
+    }
   });
 
   it('is brighter near than far', () => {
-    const near = createProcessor(9, makeThunderSlots([{ distance: 0, lengthSec: 6 }]), rate).render(20).left;
-    const far = createProcessor(9, makeThunderSlots([{ distance: 1, lengthSec: 6 }]), rate).render(20).left;
-    expect(highShare(near, rate, 800)).toBeGreaterThan(5 * highShare(far, rate, 800));
+    const near = createProcessor(9, makeThunderSlots([steady({ distance: 0, lengthSec: 6, share: 0.01 })]), rate).render(20).left;
+    const far = createProcessor(9, makeThunderSlots([steady({ distance: 1, lengthSec: 6, share: 0.01 })]), rate).render(20).left;
+    expect(highShare(near, rate, 300)).toBeGreaterThan(2 * highShare(far, rate, 300));
   });
-
-  /** RMS of consecutive 20 ms frames from the peal's first sound. */
-  const frames = (samples: number[]) => {
-    const start = samples.findIndex((value) => value !== 0);
-    const size = rate / 50;
-    const out: number[] = [];
-    for (let at = start; at + size <= samples.length; at += size) out.push(rms(samples.slice(at, at + size)));
-    return out;
-  };
 
   it('rolls in: the loudest moment comes well after the first sound', () => {
     for (const seed of [1, 2, 3, 4, 5]) {
-      const levels = frames(createProcessor(seed, makeThunderSlots([{ lengthSec: 10, pealsPer10Min: 0.5 }]), rate).render(25).left);
+      const samples = createProcessor(seed, makeThunderSlots([steady({ lengthSec: 10, share: 0.01 })]), rate).render(25).left;
+      const start = samples.findIndex((value) => value !== 0);
+      const size = rate / 50;
+      const levels: number[] = [];
+      for (let at = start; at + size <= samples.length; at += size) levels.push(rms(samples.slice(at, at + size)));
       const peakFrame = levels.indexOf(Math.max(...levels));
-      // 10 s long, peak at 22-40% of it; allow the loudest single stroke to
-      // land a little early.
       expect(peakFrame * 0.02).toBeGreaterThan(1);
-      // And the opening half second is well below the peak.
       expect(Math.max(...levels.slice(0, 25))).toBeLessThan(levels[peakFrame] * 0.4);
     }
   });
 
-  it('gains structure with character: a cracking peal has many more sharp onsets than a rolling one', () => {
-    // An onset: a 10 ms frame at least three times the level of the 30 ms
-    // before it, within the body of the peal. Counted above 500 Hz: the
-    // bed lives below that, and 10 ms frames of 100 Hz noise swing on their
-    // own, so the full band cannot see a stroke from the bed's own jitter.
-    const onsets = (character: number) => {
-      let count = 0;
-      for (const seed of [1, 2, 3]) {
-        const raw = createProcessor(seed, makeThunderSlots([{ character, distance: 0.3, lengthSec: 10, pealsPer10Min: 0.5 }]), rate).render(25).left;
-        const a = Math.exp((-2 * Math.PI * 500) / rate);
-        let low = 0;
-        const samples = raw.map((value) => {
-          low = (a * low) + ((1 - a) * value);
-          return value === 0 ? 0 : value - low;
-        });
-        const start = samples.findIndex((value) => value !== 0);
-        const size = rate / 100;
-        const levels: number[] = [];
-        for (let at = start; at + size <= samples.length; at += size) levels.push(rms(samples.slice(at, at + size)));
-        const loudest = Math.max(...levels);
-        for (let index = 3; index < levels.length; index += 1) {
-          const before = (levels[index - 1] + levels[index - 2] + levels[index - 3]) / 3;
-          if (levels[index] > loudest * 0.1 && levels[index] > 3 * before) count += 1;
-        }
-      }
-      return count;
-    };
-    const rolling = onsets(0);
-    const cracking = onsets(1);
-    expect(cracking).toBeGreaterThan(3 * Math.max(1, rolling));
-  });
-
   it('never jumps from silence: the first 10 ms of a near peal stay quiet', () => {
     for (const seed of [1, 2, 3, 4]) {
-      const samples = createProcessor(seed, makeThunderSlots([{ distance: 0 }]), rate).render(20).left;
+      const samples = createProcessor(seed, makeThunderSlots([steady({ distance: 0, share: 0.01 })]), rate).render(20).left;
       const start = samples.findIndex((value) => value !== 0);
       const peak = peakOf(samples);
       const opening = peakOf(samples.slice(start, start + (rate / 100)));
@@ -981,16 +991,16 @@ describe('ambient thunder', () => {
   });
 
   it('holds a peal at its pan when spread is zero', () => {
-    const samples = createProcessor(21, makeThunderSlots([{ pan: -1, spread: 0 }]), rate).render(20);
+    const samples = createProcessor(21, makeThunderSlots([steady({ pan: -1, spread: 0, share: 0.01 })]), rate).render(20);
     expect(peakOf(samples.left)).toBeGreaterThan(1e-3);
     expect(peakOf(samples.right)).toBeLessThan(1e-9);
   });
 
   it('stays finite and bounded at every extreme, and renders the same whatever the block size', () => {
     const extremes = [
-      { distance: 0, spread: 1, lengthSec: 30, pealsPer10Min: 20 },
-      { distance: 1, spread: 0, lengthSec: 4, pealsPer10Min: 20 },
-      { distance: 0.5, spread: 1, lengthSec: 30, pealsPer10Min: 0.5, pan: 1 },
+      { distance: 0, spread: 1, lengthSec: 30, share: 1, randomness: 1 },
+      { distance: 1, spread: 0, lengthSec: 4, share: 1, randomness: 0 },
+      { distance: 0.5, spread: 1, lengthSec: 30, share: 0.005, pan: 1, randomness: 1, volume: 1 },
     ];
     const large = createProcessor(33, makeThunderSlots(extremes), 6000, 128).render(16);
     const small = createProcessor(33, makeThunderSlots(extremes), 6000, 32).render(16);

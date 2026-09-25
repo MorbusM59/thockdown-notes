@@ -1,5 +1,8 @@
 import {
   AMBIENT_RAIN_FIRST_INDEX,
+  AMBIENT_THUNDER_JITTER,
+  AMBIENT_THUNDER_LENGTH_MAX_SEC,
+  AMBIENT_THUNDER_LENGTH_MIN_SEC,
   noiseTypeForSlot,
   type AmbientChannelSettings,
   type AmbientNoiseType,
@@ -19,6 +22,15 @@ export type AmbientWorkletChannel = AmbientChannelSettings & {
   space?: AmbientSpace;
   /** The layer's tone slider resolved (resolveNoiseTone); noise layers only. */
   tone?: NoiseTone;
+  /**
+   * resolveAmbientSpace at THUNDER_SPACE_STEPS + 1 even distances, for a
+   * thunder layer to resolve each peal's own (randomised) distance.
+   */
+  spaceTable?: readonly AmbientSpace[];
+  /** The length slider's range, which randomness is a share of; thunder only. */
+  lengthRangeSec?: readonly [number, number];
+  /** AMBIENT_THUNDER_JITTER, the reach of randomness at 1; thunder only. */
+  jitter?: number;
 };
 
 /**
@@ -42,7 +54,9 @@ export function toWorkletChannels(settings: AmbientSettings): AmbientWorkletChan
     if (channel.kind === 'thunder') {
       // Thunder mixes into the noise layers' stereo bus and reverb send, so
       // it has no output of its own; its distance resolves the same way.
-      return { ...channel, outputIndex: -1, space: resolveAmbientSpace(channel.distance) };
+      // A peal's distance can be moved by randomness, so the worklet gets the
+      // shared distance rule as a table to look each peal's up in.
+      return { ...channel, outputIndex: -1, spaceTable: THUNDER_SPACE_TABLE, lengthRangeSec: THUNDER_LENGTH_RANGE_SEC, jitter: AMBIENT_THUNDER_JITTER };
     }
     return { ...channel, outputIndex: index - AMBIENT_RAIN_FIRST_INDEX };
   });
@@ -142,3 +156,11 @@ function filteredPowerShare(mode: 'lowpass' | 'highpass', cutoffHz: number, q: n
   }
   return kept / total;
 }
+
+/** Steps in a thunder layer's distance table: finer than the slider moves. */
+const THUNDER_SPACE_STEPS = 100;
+const THUNDER_SPACE_TABLE: readonly AmbientSpace[] = Array.from(
+  { length: THUNDER_SPACE_STEPS + 1 },
+  (_, index) => resolveAmbientSpace(index / THUNDER_SPACE_STEPS),
+);
+const THUNDER_LENGTH_RANGE_SEC = [AMBIENT_THUNDER_LENGTH_MIN_SEC, AMBIENT_THUNDER_LENGTH_MAX_SEC] as const;

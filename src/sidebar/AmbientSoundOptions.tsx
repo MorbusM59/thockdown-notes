@@ -13,8 +13,7 @@ import {
   AMBIENT_THUNDER_FIRST_INDEX,
   AMBIENT_THUNDER_LENGTH_MAX_SEC,
   AMBIENT_THUNDER_LENGTH_MIN_SEC,
-  AMBIENT_THUNDER_PEALS_MAX,
-  AMBIENT_THUNDER_PEALS_MIN,
+  AMBIENT_THUNDER_JITTER,
   AMBIENT_SHAPE_MAX,
   AMBIENT_SHAPE_MIN,
   MAX_AMBIENT_CHANNELS,
@@ -100,6 +99,18 @@ function formatRainSurface(value: number): string {
   const upper = anchors[upperIndex]
   const share = Math.round(((value - lower.at) / (upper.at - lower.at)) * 100)
   return `${RAIN_SURFACE_LABELS[lower.name]} → ${RAIN_SURFACE_LABELS[upper.name].toLowerCase()} ${share}%`
+}
+
+/**
+ * A thunder layer's share of the time, read as sound to silence: "1 : 99"
+ * is one second of rumbling to 99 of quiet.
+ */
+function formatThunderShare(value: number): string {
+  if (value < 0.0025) return 'Never'
+  if (value > 0.9975) return 'No pause'
+  if (value < 0.5) return `1 : ${Math.round((1 - value) / value)}`
+  const ratio = value / (1 - value)
+  return `${ratio < 9.95 ? ratio.toFixed(1) : Math.round(ratio)} : 1`
 }
 
 interface AmbientSoundOptionsProps {
@@ -566,32 +577,32 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
             ) : channel.kind === 'thunder' ? (
               <>
                 <CompactScrollbarSlider
-                  id={`ambient-${channel.id}-peals`}
-                  min={AMBIENT_THUNDER_PEALS_MIN}
-                  max={AMBIENT_THUNDER_PEALS_MAX}
-                  step={0.5}
-                  value={channel.pealsPer10Min}
+                  id={`ambient-${channel.id}-share`}
+                  min={0}
+                  max={1}
+                  step={0.005}
+                  value={channel.share}
                   trackLabel="often"
-                  tooltipLabel="How often it thunders, on average: peals per ten minutes, at random"
-                  ariaLabel={`${layerName} peals per ten minutes`}
+                  tooltipLabel="How much of the time it thunders, as sound to silence: never on the left, as long silent as rumbling in the middle, rumbling without a pause on the right"
+                  ariaLabel={`${layerName} share of the time it thunders`}
                   disabled={!channel.enabled}
-                  defaultValue={DEFAULT_THUNDER_CHANNEL.pealsPer10Min}
-                  formatValue={(value) => `${value.toFixed(1)} / 10 min`}
-                  onCommit={(value) => updateThunderChannel(channel.id, { pealsPer10Min: value })}
+                  defaultValue={DEFAULT_THUNDER_CHANNEL.share}
+                  formatValue={formatThunderShare}
+                  onCommit={(value) => updateThunderChannel(channel.id, { share: value })}
                 />
                 <CompactScrollbarSlider
-                  id={`ambient-${channel.id}-character`}
+                  id={`ambient-${channel.id}-randomness`}
                   min={0}
                   max={1}
                   step={0.01}
-                  value={channel.character}
-                  trackLabel="character"
-                  tooltipLabel="Character: a smooth, low roll to the left, a cracking cascade of strikes to the right"
-                  ariaLabel={`${layerName} character`}
+                  value={channel.randomness}
+                  trackLabel="random"
+                  tooltipLabel={`After every peal, varies each of this layer's other controls for the next one, by up to ${Math.round(AMBIENT_THUNDER_JITTER * 100)}% of its range either way`}
+                  ariaLabel={`${layerName} randomness`}
                   disabled={!channel.enabled}
-                  defaultValue={DEFAULT_THUNDER_CHANNEL.character}
-                  formatValue={(value) => value < 0.01 ? 'Rolling' : value > 0.99 ? 'Cracking' : `${Math.round(value * 100)}%`}
-                  onCommit={(value) => updateThunderChannel(channel.id, { character: value })}
+                  defaultValue={DEFAULT_THUNDER_CHANNEL.randomness}
+                  formatValue={(value) => value < 0.005 ? 'Off' : `±${Math.round(value * AMBIENT_THUNDER_JITTER * 100)}%`}
+                  onCommit={(value) => updateThunderChannel(channel.id, { randomness: value })}
                 />
                 <CompactScrollbarSlider
                   id={`ambient-${channel.id}-distance`}
@@ -600,7 +611,7 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                   step={0.01}
                   value={channel.distance}
                   trackLabel="distance"
-                  tooltipLabel="Distance: near is bright and sharp, far is a dark, smeared, distant roll"
+                  tooltipLabel="Distance: near is fuller and brighter, far a low, soft roll"
                   ariaLabel={`${layerName} distance`}
                   disabled={!channel.enabled}
                   defaultValue={DEFAULT_THUNDER_CHANNEL.distance}

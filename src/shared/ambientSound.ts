@@ -141,23 +141,30 @@ export interface AmbientRainChannelSettings extends AmbientChannelBaseSettings {
 }
 
 /**
- * A thunder layer: one storm cell, pealing now and then. Distance is what
- * shapes each peal (public/ambient-generator.js's startPeal): far thunder is
- * a soft-onset, low, long rolling rumble whose highs the air has absorbed;
- * near thunder opens with a sharp clap and booms before a shorter, fuller roll.
+ * A thunder layer: one storm cell, rumbling now and then. Each peal is a
+ * roll of rumbling (public/ambient-generator.js's startPeal); distance
+ * darkens and softens it, as the air absorbs highs over kilometres.
+ * `share` is the part of the time it sounds, and its slider is that share
+ * directly: after a peal of length L it is silent for L x (1 - share) /
+ * share, so 0 never plays, 0.5 is as long silent as sounding, 1 never
+ * pauses, and 0.01 with a 20 s peal waits 1980 s. After every peal,
+ * `randomness` moves every other control of the next one (volume, share,
+ * distance, pan, spread, length) by up to AMBIENT_THUNDER_JITTER of its
+ * range either way, capped at the range's ends, always around the setting
+ * rather than drifting from the last draw.
  */
 export interface AmbientThunderChannelSettings extends AmbientChannelBaseSettings {
   kind: 'thunder';
-  /** Average peals per ten minutes, spaced at random. */
-  pealsPer10Min: number;
-  /** 0 (near: a sharp clap, then booms) to 1 (far: a low roll). */
+  /** The part of the time it sounds, 0 (never) to 1 (no pause). */
+  share: number;
+  /** 0 (near: fuller and brighter) to 1 (far: a low, soft roll). */
   distance: number;
   /** Where the storm is, -1 (left) to 1 (right). */
   pan: number;
   /** How wide a peal rolls across the stereo field around `pan`, 0-1. */
   spread: number;
-  /** 0 (a smooth roll, all rumble) to 1 (a cracking cascade of strokes). */
-  character: number;
+  /** 0 (every peal as set) to 1 (every other control varied by up to AMBIENT_THUNDER_JITTER). */
+  randomness: number;
   /** How long a peal's roll lasts, in seconds. */
   lengthSec: number;
 }
@@ -199,8 +206,8 @@ export function channelKindForSlot(index: number): AmbientChannelKind {
   return 'noise';
 }
 
-export const AMBIENT_THUNDER_PEALS_MIN = 0.5;
-export const AMBIENT_THUNDER_PEALS_MAX = 20;
+/** The most `randomness` moves a control, as a share of its range, either way. */
+export const AMBIENT_THUNDER_JITTER = 0.25;
 export const AMBIENT_THUNDER_LENGTH_MIN_SEC = 4;
 export const AMBIENT_THUNDER_LENGTH_MAX_SEC = 30;
 export const AMBIENT_THUNDER_DEFAULT_PANS = [-0.5, 0.1, 0.6] as const;
@@ -278,12 +285,12 @@ export const DEFAULT_THUNDER_CHANNEL: Readonly<Omit<AmbientThunderChannelSetting
   enabled: true,
   solo: false,
   volume: 0.4,
-  pealsPer10Min: 3,
+  share: 0.05,
   distance: 0.7,
   pan: 0,
   spread: 0.5,
-  character: 0.6,
-  lengthSec: 12,
+  randomness: 0.5,
+  lengthSec: 15,
 };
 
 function makeDefaultThunderChannel(
@@ -424,11 +431,11 @@ export function ambientSettingsSignature(settings: AmbientSettings): string {
         channel.kind,
         channel.enabled,
         channel.volume,
-        channel.pealsPer10Min,
+        channel.share,
         channel.distance,
         channel.pan,
         channel.spread,
-        channel.character,
+        channel.randomness,
         channel.lengthSec,
       ].map((value) => typeof value === 'number' ? value.toFixed(4) : value).join(':');
     }
@@ -536,8 +543,8 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
     { enabled: true, surface: 0, volume: 0.34, dropsPerSecond: 60, wash: 1, drips: 0, distance: 0.92, pan: 0.65, wetness: 0.1, resonance: 0.35 },
   ], [
     // A storm cell passing close on the left, another rolling far off to the right.
-    { enabled: true, volume: 0.5, pealsPer10Min: 4, distance: 0.35, pan: -0.4, spread: 0.6, character: 0.8, lengthSec: 10 },
-    { enabled: true, volume: 0.45, pealsPer10Min: 3, distance: 0.9, pan: 0.55, spread: 0.8, character: 0.4, lengthSec: 18 },
+    { enabled: true, volume: 0.5, share: 0.08, distance: 0.35, pan: -0.4, spread: 0.6, randomness: 0.6, lengthSec: 12 },
+    { enabled: true, volume: 0.45, share: 0.12, distance: 0.9, pan: 0.55, spread: 0.8, randomness: 0.7, lengthSec: 20 },
   ]),
   preset('ocean', 'Open water', {
     wind: { volume: 0.14, texture: 0.3 },
@@ -710,11 +717,11 @@ export function sanitizeAmbientSettings(input: unknown): AmbientSettings {
         ...common,
         volume: finiteUnit(source.volume, DEFAULT_THUNDER_CHANNEL.volume),
         kind: 'thunder' as const,
-        pealsPer10Min: finiteRange(source.pealsPer10Min, AMBIENT_THUNDER_PEALS_MIN, AMBIENT_THUNDER_PEALS_MAX, DEFAULT_THUNDER_CHANNEL.pealsPer10Min),
+        share: finiteUnit(source.share, DEFAULT_THUNDER_CHANNEL.share),
         distance: finiteUnit(source.distance, DEFAULT_THUNDER_CHANNEL.distance),
         pan: finiteRange(source.pan, -1, 1, defaultThunderPan(index - AMBIENT_THUNDER_FIRST_INDEX)),
         spread: finiteUnit(source.spread, DEFAULT_THUNDER_CHANNEL.spread),
-        character: finiteUnit(source.character, DEFAULT_THUNDER_CHANNEL.character),
+        randomness: finiteUnit(source.randomness, DEFAULT_THUNDER_CHANNEL.randomness),
         lengthSec: finiteRange(source.lengthSec, AMBIENT_THUNDER_LENGTH_MIN_SEC, AMBIENT_THUNDER_LENGTH_MAX_SEC, DEFAULT_THUNDER_CHANNEL.lengthSec),
       };
     }
