@@ -128,7 +128,7 @@ describe('ambient sound configuration', () => {
   it('clamps every thunder field', () => {
     const input = DEFAULT_AMBIENT_SETTINGS.map((channel, index) => (
       index === AMBIENT_THUNDER_FIRST_INDEX
-        ? { ...channel, pealsPer10Min: 999, distance: -1, pan: 4, spread: 2, lengthSec: 1 }
+        ? { ...channel, pealsPer10Min: 999, distance: -1, pan: 4, spread: 2, character: -3, lengthSec: 1 }
         : channel
     ));
     expect(sanitizeAmbientSettings(input)[AMBIENT_THUNDER_FIRST_INDEX]).toMatchObject({
@@ -137,6 +137,7 @@ describe('ambient sound configuration', () => {
       distance: 0,
       pan: 1,
       spread: 1,
+      character: 0,
       lengthSec: AMBIENT_THUNDER_LENGTH_MIN_SEC,
     });
   });
@@ -268,7 +269,7 @@ describe('ambient sound configuration', () => {
     const thunder = settings[AMBIENT_THUNDER_FIRST_INDEX];
     if (thunder.kind !== 'thunder') throw new Error('expected a thunder slot');
     for (const change of [
-      { pealsPer10Min: 9 }, { distance: 0.1 }, { pan: 0.9 }, { spread: 0.05 }, { lengthSec: 25 },
+      { pealsPer10Min: 9 }, { distance: 0.1 }, { pan: 0.9 }, { spread: 0.05 }, { character: 0.1 }, { lengthSec: 25 },
     ]) {
       const changed = settings.map((channel, index) => index === AMBIENT_THUNDER_FIRST_INDEX ? { ...thunder, ...change } : channel);
       expect(ambientSettingsSignature(changed)).not.toBe(ambientSettingsSignature(settings));

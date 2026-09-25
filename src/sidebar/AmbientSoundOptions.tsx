@@ -580,13 +580,27 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                   onCommit={(value) => updateThunderChannel(channel.id, { pealsPer10Min: value })}
                 />
                 <CompactScrollbarSlider
+                  id={`ambient-${channel.id}-character`}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={channel.character}
+                  trackLabel="character"
+                  tooltipLabel="Character: a smooth, low roll to the left, a cracking cascade of strikes to the right"
+                  ariaLabel={`${layerName} character`}
+                  disabled={!channel.enabled}
+                  defaultValue={DEFAULT_THUNDER_CHANNEL.character}
+                  formatValue={(value) => value < 0.01 ? 'Rolling' : value > 0.99 ? 'Cracking' : `${Math.round(value * 100)}%`}
+                  onCommit={(value) => updateThunderChannel(channel.id, { character: value })}
+                />
+                <CompactScrollbarSlider
                   id={`ambient-${channel.id}-distance`}
                   min={0}
                   max={1}
                   step={0.01}
                   value={channel.distance}
                   trackLabel="distance"
-                  tooltipLabel="Distance: near claps and booms, far is a low rolling rumble that arrives slowly"
+                  tooltipLabel="Distance: near is bright and sharp, far is a dark, smeared, distant roll"
                   ariaLabel={`${layerName} distance`}
                   disabled={!channel.enabled}
                   defaultValue={DEFAULT_THUNDER_CHANNEL.distance}

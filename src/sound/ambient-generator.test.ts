@@ -901,16 +901,63 @@ describe('ambient thunder', () => {
     expect(peals).toBeLessThan(80);
   });
 
-  it('is brighter and quicker near, darker and slower far', () => {
+  it('is brighter near than far', () => {
     const near = createProcessor(9, makeThunderSlots([{ distance: 0, lengthSec: 6 }]), rate).render(20).left;
     const far = createProcessor(9, makeThunderSlots([{ distance: 1, lengthSec: 6 }]), rate).render(20).left;
     expect(highShare(near, rate, 800)).toBeGreaterThan(5 * highShare(far, rate, 800));
-    const attack = (samples: number[]) => {
-      const start = samples.findIndex((value) => value !== 0);
-      const peak = peakOf(samples);
-      return samples.findIndex((value) => Math.abs(value) > peak * 0.3) - start;
+  });
+
+  /** RMS of consecutive 20 ms frames from the peal's first sound. */
+  const frames = (samples: number[]) => {
+    const start = samples.findIndex((value) => value !== 0);
+    const size = rate / 50;
+    const out: number[] = [];
+    for (let at = start; at + size <= samples.length; at += size) out.push(rms(samples.slice(at, at + size)));
+    return out;
+  };
+
+  it('rolls in: the loudest moment comes well after the first sound', () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const levels = frames(createProcessor(seed, makeThunderSlots([{ lengthSec: 10, pealsPer10Min: 0.5 }]), rate).render(25).left);
+      const peakFrame = levels.indexOf(Math.max(...levels));
+      // 10 s long, peak at 22-40% of it; allow the loudest single stroke to
+      // land a little early.
+      expect(peakFrame * 0.02).toBeGreaterThan(1);
+      // And the opening half second is well below the peak.
+      expect(Math.max(...levels.slice(0, 25))).toBeLessThan(levels[peakFrame] * 0.4);
+    }
+  });
+
+  it('gains structure with character: a cracking peal has many more sharp onsets than a rolling one', () => {
+    // An onset: a 10 ms frame at least three times the level of the 30 ms
+    // before it, within the body of the peal. Counted above 500 Hz: the
+    // bed lives below that, and 10 ms frames of 100 Hz noise swing on their
+    // own, so the full band cannot see a stroke from the bed's own jitter.
+    const onsets = (character: number) => {
+      let count = 0;
+      for (const seed of [1, 2, 3]) {
+        const raw = createProcessor(seed, makeThunderSlots([{ character, distance: 0.3, lengthSec: 10, pealsPer10Min: 0.5 }]), rate).render(25).left;
+        const a = Math.exp((-2 * Math.PI * 500) / rate);
+        let low = 0;
+        const samples = raw.map((value) => {
+          low = (a * low) + ((1 - a) * value);
+          return value === 0 ? 0 : value - low;
+        });
+        const start = samples.findIndex((value) => value !== 0);
+        const size = rate / 100;
+        const levels: number[] = [];
+        for (let at = start; at + size <= samples.length; at += size) levels.push(rms(samples.slice(at, at + size)));
+        const loudest = Math.max(...levels);
+        for (let index = 3; index < levels.length; index += 1) {
+          const before = (levels[index - 1] + levels[index - 2] + levels[index - 3]) / 3;
+          if (levels[index] > loudest * 0.1 && levels[index] > 3 * before) count += 1;
+        }
+      }
+      return count;
     };
-    expect(attack(near)).toBeLessThan(attack(far));
+    const rolling = onsets(0);
+    const cracking = onsets(1);
+    expect(cracking).toBeGreaterThan(3 * Math.max(1, rolling));
   });
 
   it('never jumps from silence: the first 10 ms of a near peal stay quiet', () => {

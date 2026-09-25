@@ -156,6 +156,8 @@ export interface AmbientThunderChannelSettings extends AmbientChannelBaseSetting
   pan: number;
   /** How wide a peal rolls across the stereo field around `pan`, 0-1. */
   spread: number;
+  /** 0 (a smooth roll, all rumble) to 1 (a cracking cascade of strokes). */
+  character: number;
   /** How long a peal's roll lasts, in seconds. */
   lengthSec: number;
 }
@@ -280,6 +282,7 @@ export const DEFAULT_THUNDER_CHANNEL: Readonly<Omit<AmbientThunderChannelSetting
   distance: 0.7,
   pan: 0,
   spread: 0.5,
+  character: 0.6,
   lengthSec: 12,
 };
 
@@ -425,6 +428,7 @@ export function ambientSettingsSignature(settings: AmbientSettings): string {
         channel.distance,
         channel.pan,
         channel.spread,
+        channel.character,
         channel.lengthSec,
       ].map((value) => typeof value === 'number' ? value.toFixed(4) : value).join(':');
     }
@@ -532,8 +536,8 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
     { enabled: true, surface: 0, volume: 0.34, dropsPerSecond: 60, wash: 1, drips: 0, distance: 0.92, pan: 0.65, wetness: 0.1, resonance: 0.35 },
   ], [
     // A storm cell passing close on the left, another rolling far off to the right.
-    { enabled: true, volume: 0.5, pealsPer10Min: 4, distance: 0.35, pan: -0.4, spread: 0.6, lengthSec: 10 },
-    { enabled: true, volume: 0.45, pealsPer10Min: 3, distance: 0.9, pan: 0.55, spread: 0.8, lengthSec: 18 },
+    { enabled: true, volume: 0.5, pealsPer10Min: 4, distance: 0.35, pan: -0.4, spread: 0.6, character: 0.8, lengthSec: 10 },
+    { enabled: true, volume: 0.45, pealsPer10Min: 3, distance: 0.9, pan: 0.55, spread: 0.8, character: 0.4, lengthSec: 18 },
   ]),
   preset('ocean', 'Open water', {
     wind: { volume: 0.14, texture: 0.3 },
@@ -710,6 +714,7 @@ export function sanitizeAmbientSettings(input: unknown): AmbientSettings {
         distance: finiteUnit(source.distance, DEFAULT_THUNDER_CHANNEL.distance),
         pan: finiteRange(source.pan, -1, 1, defaultThunderPan(index - AMBIENT_THUNDER_FIRST_INDEX)),
         spread: finiteUnit(source.spread, DEFAULT_THUNDER_CHANNEL.spread),
+        character: finiteUnit(source.character, DEFAULT_THUNDER_CHANNEL.character),
         lengthSec: finiteRange(source.lengthSec, AMBIENT_THUNDER_LENGTH_MIN_SEC, AMBIENT_THUNDER_LENGTH_MAX_SEC, DEFAULT_THUNDER_CHANNEL.lengthSec),
       };
     }
