@@ -17,6 +17,7 @@ import {
   type AmbientSettings,
 } from '../shared/ambientSound';
 import { resolveAmbientRainSpace, toWorkletChannels } from '../shared/ambientSoundDsp';
+import { buildNoiseLoops, type NoiseLoops } from '../shared/ambientNoiseLoops';
 import { musicPlayerService } from './MusicPlayerService';
 import { buildSyntheticRoomImpulseResponse } from './impulseResponse';
 
@@ -33,6 +34,22 @@ interface AmbientRainLayerNodes {
 }
 
 const WORKLET_MODULES = new WeakMap<AudioContext, Promise<void>>();
+
+/**
+ * The noise loops, per sample rate. Built once on the main thread (tens of
+ * milliseconds) and copied into each worklet at creation, so the audio
+ * thread never generates noise.
+ */
+const NOISE_LOOPS = new Map<number, NoiseLoops>();
+
+function noiseLoopsFor(sampleRate: number): NoiseLoops {
+  let loops = NOISE_LOOPS.get(sampleRate);
+  if (!loops) {
+    loops = buildNoiseLoops(sampleRate);
+    NOISE_LOOPS.set(sampleRate, loops);
+  }
+  return loops;
+}
 
 /** Whether these preferences would make any sound at all. */
 function isAudible(preferences: AmbientPreferences): boolean {
@@ -114,7 +131,10 @@ export class AmbientSoundEngine {
       const worklet = new AudioWorkletNode(context, 'ambient-generator', {
         numberOfOutputs: 1 + AMBIENT_RAIN_CHANNEL_COUNT,
         outputChannelCount: [2, ...Array.from({ length: AMBIENT_RAIN_CHANNEL_COUNT }, () => 1)],
-        processorOptions: { seed: (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0 },
+        processorOptions: {
+          seed: (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0,
+          noiseLoops: noiseLoopsFor(context.sampleRate),
+        },
       });
       worklet.onprocessorerror = () => {
         console.error('Ambient audio worklet stopped unexpectedly');

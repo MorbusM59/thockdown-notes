@@ -22,11 +22,19 @@
  *
  * Render cost is the constraint everything here is written against: a block
  * is 128 frames, under 3 ms at 48 kHz, on a real-time thread shared with the
- * rest of the audio. A block that runs late is heard as a tear in the sound,
- * and it also delays the next `configure` message, so a preset change seems
- * not to take. Hence: no trigonometry per sample (oscillators are rotated
- * sin/cos pairs), no work for a component that has gone silent, and one tight
- * loop per voice.
+ * rest of the audio -- music included. A block that runs late is heard as a
+ * tear, and it also delays the next `configure` message, so a preset change
+ * seems not to take. Hence:
+ * - work that repeats is done once. Noise is read from loops rendered on the
+ *   main thread (src/shared/ambientNoiseLoops.ts); rain drops are played
+ *   back from a per-layer bank of recordings, a quarter of them recorded
+ *   live as they play so the bank keeps changing (addVoice).
+ * - what changes slowly is computed slowly. A noise layer's level and pan
+ *   are computed every CONTROL_FRAMES samples and ramped between.
+ * - nothing large is allocated while playing: the garbage collector pauses
+ *   this thread, so recording buffers are recycled (takeSpareRecording).
+ * - no trigonometry per sample (oscillators are rotated sin/cos pairs), no
+ *   work for a component that has gone silent, one tight loop per voice.
  */
 
 /**
@@ -96,8 +104,42 @@ const MOVEMENT_PERIOD_OCTAVES = 1;
 const MOVEMENT_RISE_LOSS = 0.5;
 const MOVEMENT_PAN_REACH = 0.6;
 
+/**
+ * A noise layer's level and pan move over periods of half a second or more,
+ * so they are computed every CONTROL_FRAMES samples and ramped linearly in
+ * between (see beginControlSegment) -- a ramp of under a millisecond, about
+ * 1/750 of the shortest cycle.
+ */
+const CONTROL_FRAMES = 32;
+
+/**
+ * The drop bank (see addVoice): each rain layer keeps up to DROP_BANK_SIZE
+ * drops (DRIP_BANK_SIZE drips) recorded at its current settings, and plays a
+ * drop by reading one back. While the bank fills, and on one birth in
+ * DROP_BANK_REFRESH_EVERY after that, a drop is instead synthesised live and
+ * recorded as it plays -- so a new recording costs what playing it live
+ * always cost, spread over its own life rather than rendered in one block;
+ * the bank never stops changing, and a quarter of what is heard is new.
+ *
+ * A recording takes its slot when it is BORN, marked available from the
+ * frame it will be complete on (birth plus its fixed length), and playback
+ * chooses only among recordings already available. The bank's contents
+ * therefore change only at births, which happen in time order, so what any
+ * drop plays does not depend on where block boundaries fall.
+ * Each playback also varies in level by up to +/-DROP_PLAYBACK_LEVEL_SPREAD,
+ * symmetric so the mean level is unchanged, which keeps repeats of one baked
+ * drop from sounding alike.
+ */
+const DROP_BANK_SIZE = 32;
+const DRIP_BANK_SIZE = 12;
+const DROP_BANK_REFRESH_EVERY = 4;
+const DROP_PLAYBACK_LEVEL_SPREAD = 0.15;
+
 /** Samples between re-derivations of a rising bubble's rotation (see makeBubble). */
 const BUBBLE_RETUNE_FRAMES = 32;
+
+/** What a noise layer reads when its noise type was not provided. */
+const SILENT_LOOP = new Float32Array(1);
 
 /** Below this a click or its filter tail is treated as silent (-140 dB). */
 const SILENCE = 1e-7;
@@ -145,6 +187,9 @@ class AmbientGenerator extends AudioWorkletProcessor {
   constructor(options) {
     super();
     this.rootStream = { seed: (options?.processorOptions?.seed ?? 1) >>> 0 };
+    // One seamless loop per noise type, rendered on the main thread
+    // (src/shared/ambientNoiseLoops.ts) and read by every noise layer.
+    this.noiseLoops = options?.processorOptions?.noiseLoops ?? {};
     // The stream `random()` draws from: the channel being configured or
     // rendered, else the root. Set by withStream.
     this.stream = this.rootStream;
@@ -192,8 +237,19 @@ class AmbientGenerator extends AudioWorkletProcessor {
     const channel = {
       ...settings,
       stream,
-      pink: [0, 0, 0, 0, 0, 0, 0],
-      brown: 0,
+      // Where this layer reads the shared noise loop, as a fraction of it;
+      // the right side reads half a loop away, so the two are unrelated.
+      loopStart: this.random(),
+      loopLeft: -1,
+      loopRight: -1,
+      controlFramesLeft: 0,
+      controlReady: false,
+      level: 0,
+      levelStep: 0,
+      gainLeft: 1,
+      gainLeftStep: 0,
+      gainRight: 1,
+      gainRightStep: 0,
       phase: this.random(),
       // Movement's per-cycle draw (see startCycle). The neutral values make
       // a layer with no movement play exactly as one without the feature.
@@ -306,6 +362,20 @@ class AmbientGenerator extends AudioWorkletProcessor {
         swellFrames: 0,
       };
     }
+    // A baked drop has the surface and the bass and treble levels in it, so
+    // a change to any of them empties the bank (drops already playing keep
+    // theirs). It refills from the drops that fall next.
+    // Recordings still under way go with them: they keep playing, but into
+    // an entry nothing refers to any more.
+    if (!channel.dropBank || !before || before.surface !== channel.surface
+      || before.bassGain !== channel.bassGain || before.trebleGain !== channel.trebleGain) {
+      if (!channel.spareRecordings) channel.spareRecordings = [];
+      for (const entry of [...(channel.dropBank ?? []), ...(channel.dripBank ?? [])]) {
+        this.evictRecording(channel, entry);
+      }
+      channel.dropBank = [];
+      channel.dripBank = [];
+    }
     const dripRate = (channel.drips ?? 0) * RAIN_DRIPS_MAX_PER_SEC;
     if (!before || before.drips !== channel.drips) {
       channel.nextDripFrame = dripRate > 0
@@ -360,23 +430,12 @@ class AmbientGenerator extends AudioWorkletProcessor {
     return channel.panFrom + ((channel.panTo - channel.panFrom) * eased);
   }
 
-  noise(channel) {
-    const white = (this.random() * 2) - 1;
-    if (channel.type === 'white') return white;
-    if (channel.type === 'brown') {
-      channel.brown = (0.997 * channel.brown) + (white * 0.055);
-      return channel.brown;
-    }
-    const b = channel.pink;
-    b[0] = (0.99886 * b[0]) + (white * 0.0555179);
-    b[1] = (0.99332 * b[1]) + (white * 0.0750759);
-    b[2] = (0.969 * b[2]) + (white * 0.153852);
-    b[3] = (0.8665 * b[3]) + (white * 0.3104856);
-    b[4] = (0.55 * b[4]) + (white * 0.5329522);
-    b[5] = (-0.7616 * b[5]) - (white * 0.016898);
-    const pink = (b[0] + b[1] + b[2] + b[3] + b[4] + b[5] + b[6] + (white * 0.5362)) * 0.11;
-    b[6] = white * 0.115926;
-    return pink;
+  /**
+   * The loop for a noise type. A type the engine did not provide plays as
+   * silence rather than failing the whole generator.
+   */
+  noiseLoop(type) {
+    return this.noiseLoops[type] ?? SILENT_LOOP;
   }
 
   /**
@@ -623,28 +682,174 @@ class AmbientGenerator extends AudioWorkletProcessor {
       const isDrip = channel.nextDripFrame < channel.nextEventFrame;
       const at = isDrip ? channel.nextDripFrame : channel.nextEventFrame;
       if (at >= blockEnd) break;
-      this.addVoice(channel, isDrip, at - blockStart);
+      this.addVoice(channel, isDrip, at - blockStart, at);
       if (isDrip) channel.nextDripFrame += this.eventDelayFrames(channel.drips * RAIN_DRIPS_MAX_PER_SEC);
       else channel.nextEventFrame += this.eventDelayFrames(channel.dropsPerSecond);
     }
   }
 
-  addVoice(channel, isDrip, offset) {
+  /**
+   * Start one drop (or drip) at absolute frame `at`, `offset` frames into
+   * the block: play one back from the layer's bank, or synthesise a new one
+   * live and record it -- while the bank is filling, and on one birth in
+   * DROP_BANK_REFRESH_EVERY once it is full. A live drop with nothing ready
+   * to play back yet (early in a fill) is synthesised without recording.
+   */
+  addVoice(channel, isDrip, offset, at) {
     if (channel.activeVoices.length >= MAX_RAIN_VOICES) return;
-    const voice = this.makeSurfaceVoice(channel.profile, isDrip);
-    voice.startOffset = Math.max(0, offset);
-    voice.clickSeed = Math.floor(this.random() * 0x100000000) >>> 0;
-    channel.activeVoices.push(voice);
+    const bank = isDrip ? channel.dripBank : channel.dropBank;
+    const size = isDrip ? DRIP_BANK_SIZE : DROP_BANK_SIZE;
+    const startOffset = Math.max(0, offset);
+    let slot = -1;
+    if (bank.length < size) {
+      slot = bank.length;
+    } else if (this.random() * DROP_BANK_REFRESH_EVERY < 1) {
+      slot = Math.floor(this.random() * size);
+    }
+    if (slot < 0) {
+      const ready = this.readyRecordings(bank, at);
+      if (ready.length > 0) {
+        const entry = ready[Math.floor(this.random() * ready.length)];
+        entry.users += 1;
+        channel.activeVoices.push({
+          live: null,
+          entry,
+          position: 0,
+          startOffset,
+          level: 1 + (DROP_PLAYBACK_LEVEL_SPREAD * ((this.random() * 2) - 1)),
+        });
+        return;
+      }
+    }
+    const live = this.makeSurfaceVoice(channel.profile, isDrip);
+    live.startOffset = startOffset;
+    live.clickSeed = Math.floor(this.random() * 0x100000000) >>> 0;
+    let entry = null;
+    if (slot >= 0) {
+      const buffer = this.takeSpareRecording(channel, live.durationFrames);
+      entry = {
+        buffer,
+        samples: buffer.subarray(0, live.durationFrames),
+        audibleLength: live.durationFrames,
+        availableFrom: at + live.durationFrames,
+        // The recording voice is its first user; inBank until replaced.
+        users: 1,
+        inBank: true,
+      };
+      if (bank[slot]) this.evictRecording(channel, bank[slot]);
+      bank[slot] = entry;
+    }
+    channel.activeVoices.push({ live, entry, position: 0, startOffset, level: 1 });
   }
+
+  /**
+   * Recording buffers are recycled rather than left to the garbage
+   * collector, whose pauses on this thread are heard as tears: a recording
+   * returns its buffer to the layer's spares once it is out of the bank AND
+   * no voice is playing it, and a new recording takes a spare first.
+   */
+  takeSpareRecording(channel, length) {
+    const spares = channel.spareRecordings;
+    for (let index = spares.length - 1; index >= 0; index -= 1) {
+      if (spares[index].length >= length) {
+        const buffer = spares[index];
+        spares[index] = spares[spares.length - 1];
+        spares.pop();
+        return buffer;
+      }
+    }
+    return new Float32Array(length);
+  }
+
+  evictRecording(channel, entry) {
+    entry.inBank = false;
+    this.releaseRecordingIfUnused(channel, entry);
+  }
+
+  releaseRecording(channel, entry) {
+    entry.users -= 1;
+    this.releaseRecordingIfUnused(channel, entry);
+  }
+
+  releaseRecordingIfUnused(channel, entry) {
+    if (entry.inBank || entry.users > 0 || !entry.buffer) return;
+    // At most a bank's worth of spares; beyond that the buffer is let go.
+    if (channel.spareRecordings.length < DROP_BANK_SIZE + DRIP_BANK_SIZE) channel.spareRecordings.push(entry.buffer);
+    entry.buffer = null;
+  }
+
+  /** The recordings in `bank` complete by frame `at`. */
+  readyRecordings(bank, at) {
+    const ready = [];
+    for (let index = 0; index < bank.length; index += 1) {
+      if (bank[index].availableFrom <= at) ready.push(bank[index]);
+    }
+    return ready;
+  }
+
+  /**
+   * A live drop for the rest of this block: synthesised into scratch, added
+   * to the mix, and -- if it is being recorded -- copied into its entry. A
+   * recorded drop plays its full length (never retiring early as silent) so
+   * it is complete exactly when its entry said it would be; once it is, the
+   * entry's playback length is cut back to its last audible sample.
+   */
+  playLiveDrop(voice, channel, out, length) {
+    const scratch = this.dropScratch;
+    const start = voice.startOffset;
+    scratch.fill(0, start, length);
+    const live = voice.live;
+    const before = live.age;
+    const alive = this.renderVoice(live, channel, scratch, length, voice.entry === null);
+    const end = start + (live.age - before);
+    for (let index = start; index < end; index += 1) out[index] += scratch[index];
+    if (voice.entry) voice.entry.samples.set(scratch.subarray(start, end), voice.position);
+    voice.position += end - start;
+    voice.startOffset = 0;
+    if (alive) return true;
+    if (voice.entry) {
+      voice.entry.audibleLength = this.audibleLength(voice.entry.samples);
+      this.releaseRecording(channel, voice.entry);
+    }
+    return false;
+  }
+
+  /** How much of a recording is above VOICE_SILENCE; the rest need not be played. */
+  audibleLength(samples) {
+    for (let index = samples.length - 1; index >= 0; index -= 1) {
+      if (Math.abs(samples[index]) > VOICE_SILENCE) return index + 1;
+    }
+    return 0;
+  }
+
+  /** A recorded drop for the rest of this block; false once it has ended. */
+  playDrop(voice, out, length) {
+    const samples = voice.entry.samples;
+    const playLength = voice.entry.audibleLength;
+    const level = voice.level;
+    let position = voice.position;
+    const start = voice.startOffset;
+    voice.startOffset = 0;
+    const end = Math.min(length, start + (playLength - position));
+    for (let index = start; index < end; index += 1) {
+      out[index] += samples[position] * level;
+      position += 1;
+    }
+    voice.position = position;
+    return position < playLength;
+  }
+
 
   /**
    * One voice for the rest of this block, added into `out`, in one loop with
    * the voice's state in locals. The click draws from the voice's own seed
    * and stops -- no draws, no filtering -- once it and its filter have
    * decayed below hearing, which for most drops is within a few ms of a
-   * life of up to 0.4 s. Returns false when the voice has finished.
+   * life of up to 0.4 s. Returns false when the voice has finished: at its
+   * nominal length, or earlier once silent if `retireWhenSilent` (a voice
+   * being recorded must run its full length -- see addVoice).
    */
-  renderVoice(voice, channel, out, length) {
+  renderVoice(voice, channel, out, length, retireWhenSilent = true) {
     const bassGain = channel.bassGain;
     const trebleGain = channel.trebleGain;
     const gain = voice.gain;
@@ -679,7 +884,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
     voice.transientAmplitude = clickAmplitude;
     voice.clickSeed = seed;
     voice.age += end - start;
-    return voice.age < voice.durationFrames && !this.voiceIsSilent(voice, filterActive);
+    return voice.age < voice.durationFrames && !(retireWhenSilent && this.voiceIsSilent(voice, filterActive));
   }
 
   /**
@@ -705,11 +910,17 @@ class AmbientGenerator extends AudioWorkletProcessor {
 
   /** A rain layer's block, written into `out` (overwritten). */
   renderRain(channel, out, blockStart, length) {
+    if (!this.dropScratch || this.dropScratch.length < length) this.dropScratch = new Float64Array(length);
     out.fill(0, 0, length);
     this.birthVoices(channel, blockStart, length);
     const voices = channel.activeVoices;
     for (let index = voices.length - 1; index >= 0; index -= 1) {
-      if (!this.renderVoice(voices[index], channel, out, length)) {
+      const voice = voices[index];
+      const alive = voice.live
+        ? this.playLiveDrop(voice, channel, out, length)
+        : this.playDrop(voice, out, length);
+      if (!alive && !voice.live) this.releaseRecording(channel, voice.entry);
+      if (!alive) {
         // Order does not matter to the mix, so the last voice fills the gap.
         voices[index] = voices[voices.length - 1];
         voices.pop();
@@ -718,30 +929,78 @@ class AmbientGenerator extends AudioWorkletProcessor {
     this.renderBed(channel, out, length);
   }
 
-  /** A noise layer's block, written into `left`/`right` (overwritten). */
-  renderNoise(channel, left, right, length) {
-    for (let index = 0; index < length; index += 1) {
-      const baseLeft = this.noise(channel);
-      const baseRight = this.noise(channel);
-      const cycleValue = this.cycleAt(channel, channel.phase);
-      // riseFactor scales only the part of the swing above the trough
-      // (cycleValue + 1), so the trough is 1 - amplitude whatever it is.
-      const amplitude = channel.riseFactor === 1
-        ? Math.max(0, 1 + (channel.modulationAmplitude * cycleValue))
-        : Math.max(0, 1 + (channel.modulationAmplitude * ((channel.riseFactor * (cycleValue + 1)) - 1)));
-      const pan = channel.panFrom === 0 && channel.panTo === 0 ? 0 : this.swayAt(channel, channel.phase);
-      channel.phase += 1 / (channel.periodSec * channel.periodFactor * sampleRate);
-      if (channel.phase >= 1) {
-        channel.phase -= 1;
-        this.startCycle(channel);
-      }
-      const channelGain = amplitude * channel.volume;
-      // Equal-power balance, normalised so centre is unity on both sides.
-      const leftGain = pan === 0 ? 1 : Math.SQRT2 * Math.cos((pan + 1) * Math.PI / 4);
-      const rightGain = pan === 0 ? 1 : Math.SQRT2 * Math.sin((pan + 1) * Math.PI / 4);
-      left[index] = this.filterSample(channel, baseLeft * channelGain * leftGain, channel.filterLeft);
-      right[index] = this.filterSample(channel, baseRight * channelGain * rightGain, channel.filterRight);
+  /**
+   * A noise layer's level (its cycle scaled by amplitude and volume) and its
+   * two pan gains, at its current phase.
+   */
+  noiseControl(channel) {
+    const cycleValue = this.cycleAt(channel, channel.phase);
+    // riseFactor scales only the part of the swing above the trough
+    // (cycleValue + 1), so the trough is 1 - amplitude whatever it is.
+    const swing = channel.riseFactor === 1 ? cycleValue : (channel.riseFactor * (cycleValue + 1)) - 1;
+    const level = Math.max(0, 1 + (channel.modulationAmplitude * swing)) * channel.volume;
+    const pan = channel.panFrom === 0 && channel.panTo === 0 ? 0 : this.swayAt(channel, channel.phase);
+    // Equal-power balance, normalised so centre is unity on both sides.
+    const gainLeft = pan === 0 ? 1 : Math.SQRT2 * Math.cos((pan + 1) * Math.PI / 4);
+    const gainRight = pan === 0 ? 1 : Math.SQRT2 * Math.sin((pan + 1) * Math.PI / 4);
+    return { level, gainLeft, gainRight };
+  }
+
+  /**
+   * The next CONTROL_FRAMES samples: advance the cycle to their end (a new
+   * cycle begins here if it wraps), and set per-sample steps that take the
+   * level and gains from where they are to where they will be. Segments are
+   * counted per channel from its first sample, so they fall on the same
+   * frames whatever the block size.
+   */
+  beginControlSegment(channel) {
+    if (!channel.controlReady) {
+      const start = this.noiseControl(channel);
+      channel.level = start.level;
+      channel.gainLeft = start.gainLeft;
+      channel.gainRight = start.gainRight;
+      channel.controlReady = true;
     }
+    channel.phase += CONTROL_FRAMES / (channel.periodSec * channel.periodFactor * sampleRate);
+    if (channel.phase >= 1) {
+      channel.phase -= 1;
+      this.startCycle(channel);
+    }
+    const target = this.noiseControl(channel);
+    channel.levelStep = (target.level - channel.level) / CONTROL_FRAMES;
+    channel.gainLeftStep = (target.gainLeft - channel.gainLeft) / CONTROL_FRAMES;
+    channel.gainRightStep = (target.gainRight - channel.gainRight) / CONTROL_FRAMES;
+    channel.controlFramesLeft = CONTROL_FRAMES;
+  }
+
+  /**
+   * A noise layer's block, written into `left`/`right` (overwritten): the
+   * shared loop read at the layer's own offsets, times its ramped level and
+   * gains, through its one-pole filter.
+   */
+  renderNoise(channel, left, right, length) {
+    const loop = this.noiseLoop(channel.type);
+    const loopLength = loop.length;
+    if (channel.loopLeft < 0 || channel.loopLeft >= loopLength) {
+      channel.loopLeft = Math.floor(channel.loopStart * loopLength) % loopLength;
+      channel.loopRight = (channel.loopLeft + Math.floor(loopLength / 2)) % loopLength;
+    }
+    let readLeft = channel.loopLeft;
+    let readRight = channel.loopRight;
+    for (let index = 0; index < length; index += 1) {
+      if (channel.controlFramesLeft === 0) this.beginControlSegment(channel);
+      channel.controlFramesLeft -= 1;
+      const level = channel.level;
+      left[index] = this.filterSample(channel, loop[readLeft] * level * channel.gainLeft, channel.filterLeft);
+      right[index] = this.filterSample(channel, loop[readRight] * level * channel.gainRight, channel.filterRight);
+      channel.level += channel.levelStep;
+      channel.gainLeft += channel.gainLeftStep;
+      channel.gainRight += channel.gainRightStep;
+      readLeft = readLeft + 1 === loopLength ? 0 : readLeft + 1;
+      readRight = readRight + 1 === loopLength ? 0 : readRight + 1;
+    }
+    channel.loopLeft = readLeft;
+    channel.loopRight = readRight;
   }
 
   /**

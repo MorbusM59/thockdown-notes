@@ -10,6 +10,7 @@ import {
   createAmbientRainChannel,
 } from '../shared/ambientSound';
 import { toWorkletChannels } from '../shared/ambientSoundDsp';
+import { buildNoiseLoops, createNoiseSource, type NoiseLoops } from '../shared/ambientNoiseLoops';
 import { buildNoiseCycle } from '../shared/ambientNoiseCycle';
 
 // The worklet's module-scope constants are not reachable from outside a vm
@@ -21,6 +22,7 @@ type TestProcessor = {
   channels: Array<{ id: string; eventAge: number; activeVoices: unknown[]; profile?: unknown }>;
   soloChannelId: string | null;
   makeSurfaceVoice: (profile: unknown, isDrip: boolean) => GlassVoice;
+  addVoice: (channel: unknown, isDrip: boolean, offset: number, at: number) => void;
   renderVoice: (voice: GlassVoice, channel: { bassGain: number; trebleGain: number }, out: Float64Array, length: number) => boolean;
   startCycle: (channel: { panTo: number; periodFactor: number; riseFactor: number }) => void;
   makeRainVoice: () => {
@@ -30,7 +32,7 @@ type TestProcessor = {
   };
   port: { onmessage: ((event: { data: unknown }) => void) | null };
   eventDelayFrames: (ratePerSecond: number) => number;
-  noise: (channel: unknown) => number;
+  noiseLoop: (type: string) => Float32Array;
   process: (inputs: unknown[], outputs: Float32Array[][]) => boolean;
 }
 
@@ -89,6 +91,13 @@ type GeneratorConstants = {
   RAIN_DRIPS_MAX_PER_SEC: number;
 };
 
+// Built as the engine builds them, once per sample rate.
+const loopsBySampleRate = new Map<number, NoiseLoops>();
+function noiseLoopsAt(sampleRate: number): NoiseLoops {
+  if (!loopsBySampleRate.has(sampleRate)) loopsBySampleRate.set(sampleRate, buildNoiseLoops(sampleRate));
+  return loopsBySampleRate.get(sampleRate)!;
+}
+
 function createProcessor(seed: number, channels: TestChannel[], sampleRate = 12000, blockSize = 128) {
   let Processor!: new (options: unknown) => TestProcessor;
   let frame = 0;
@@ -102,7 +111,7 @@ function createProcessor(seed: number, channels: TestChannel[], sampleRate = 120
     registerProcessor: (_name: string, processor: new (options: unknown) => TestProcessor) => { Processor = processor; },
   };
   runInNewContext(generatorSource, scope);
-  const processor = new Processor!({ processorOptions: { seed } });
+  const processor = new Processor!({ processorOptions: { seed, noiseLoops: noiseLoopsAt(sampleRate) } });
   processor.port.onmessage?.({ data: { type: 'configure', channels: toConfigure(channels) } });
 
   return {
@@ -132,6 +141,9 @@ function createProcessor(seed: number, channels: TestChannel[], sampleRate = 120
   };
 }
 
+/** A noise loop of constant 1, so a noise layer's output IS its level. */
+const ONES = new Float32Array(4096).fill(1);
+
 function rms(samples: number[]): number {
   return Math.sqrt(samples.reduce((sum, sample) => sum + (sample * sample), 0) / samples.length);
 }
@@ -159,7 +171,7 @@ describe('ambient AudioWorklet generator', () => {
       makeChannel('disabled', { enabled: false }),
     ]);
     for (const generator of [enabledOnly, withDisabled]) {
-      generator.processor.noise = () => 1;
+      generator.processor.noiseLoop = () => ONES;
     }
 
     const expected = enabledOnly.render(0.2);
@@ -179,7 +191,7 @@ describe('ambient AudioWorklet generator', () => {
       makeChannel('disabled-solo', { enabled: false, solo: true }),
       makeChannel('other', { modulationAmplitude: 0 }),
     ]);
-    for (const generator of [mixed, soloOnly, disabledSolo]) generator.processor.noise = () => 1;
+    for (const generator of [mixed, soloOnly, disabledSolo]) generator.processor.noiseLoop = () => ONES;
 
     const mixedOutput = mixed.render(0.2);
     const soloOutput = soloOnly.render(0.2);
@@ -204,7 +216,7 @@ describe('ambient AudioWorklet generator', () => {
       periodSec: 1,
     })]);
     for (const generator of [unmodulatedGenerator, modulatedGenerator, slowerGenerator]) {
-      generator.processor.noise = () => 1;
+      generator.processor.noiseLoop = () => ONES;
     }
     const unmodulated = unmodulatedGenerator.render(2);
     const modulated = modulatedGenerator.render(2);
@@ -217,15 +229,17 @@ describe('ambient AudioWorklet generator', () => {
 
   it('repeats its level exactly once per period', () => {
     // With the noise itself held at 1, the output IS the level. A period of
-    // 0.5 s at 1000 Hz repeats every 500 samples, whatever the curve.
+    // 0.5 s at 16 kHz repeats every 8000 samples, whatever the curve -- a
+    // whole number of the 32-sample control segments, so the ramped level
+    // lands on the same values each time round.
     for (const ramp of [0, 0.5, 1]) {
       const generator = createProcessor(5, [makeChannel('cycle', {
         modulationAmplitude: 1, periodSec: 0.5, ramp,
-      })], 1000);
-      generator.processor.noise = () => 1;
+      })], 16000);
+      generator.processor.noiseLoop = () => ONES;
       const level = generator.render(2).left;
-      for (let index = 0; index + 500 < level.length; index += 37) {
-        expect(level[index + 500]).toBeCloseTo(level[index], 2);
+      for (let index = 0; index + 8000 < level.length; index += 37) {
+        expect(level[index + 8000]).toBeCloseTo(level[index], 3);
       }
     }
   });
@@ -234,7 +248,7 @@ describe('ambient AudioWorklet generator', () => {
     const lowPass = createProcessor(19, [makeChannel('low-pass', { filter: 0, modulationAmplitude: 0 })], 48000);
     const dry = createProcessor(19, [makeChannel('dry', { filter: 0.5, modulationAmplitude: 0 })], 48000);
     const highPass = createProcessor(19, [makeChannel('high-pass', { filter: 1, modulationAmplitude: 0 })], 48000);
-    for (const generator of [lowPass, dry, highPass]) generator.processor.noise = () => 1;
+    for (const generator of [lowPass, dry, highPass]) generator.processor.noiseLoop = () => ONES;
 
     const lowPassSamples = lowPass.render(0.5).left;
     const drySamples = dry.render(0.5).left;
@@ -250,9 +264,23 @@ describe('ambient AudioWorklet generator', () => {
       makeRainChannel('rain-middle', { dropsPerSecond: 36, distance: 0.5 }),
       makeRainChannel('rain-far', { dropsPerSecond: 24, distance: 1 }),
     ]));
-    const samples = generator.render(1);
+    // Overlap is a property of the whole render, not of whichever instant it
+    // stops on, so the most voices each layer held at once is what is checked.
+    const mostVoices = [0, 0, 0];
+    const chunks = Array.from({ length: 20 }, () => {
+      const chunk = generator.render(0.05);
+      generator.processor.channels.slice(-3).forEach((channel, index) => {
+        mostVoices[index] = Math.max(mostVoices[index], channel.activeVoices.length);
+      });
+      return chunk;
+    });
+    const samples = {
+      left: chunks.flatMap((chunk) => chunk.left),
+      right: chunks.flatMap((chunk) => chunk.right),
+      rain: [0, 1, 2].map((index) => chunks.flatMap((chunk) => chunk.rain[index])),
+    };
 
-    expect(generator.processor.channels.slice(-3).every((channel) => channel.activeVoices.length > 1)).toBe(true);
+    expect(mostVoices.every((count) => count > 1)).toBe(true);
     expect(samples.rain.every((side) => side.some((sample) => Math.abs(sample) > 0.001))).toBe(true);
     expect(samples.rain[0]).not.toEqual(samples.rain[1]);
     expect(samples.rain[1]).not.toEqual(samples.rain[2]);
@@ -430,10 +458,10 @@ describe('ambient AudioWorklet generator', () => {
         makeRainChannel('drips', { drips, wash: 0, dropsPerSecond: 1 }),
       ]), 2000);
       let count = 0;
-      const makeVoice = generator.processor.makeSurfaceVoice.bind(generator.processor);
-      generator.processor.makeSurfaceVoice = (profile, isDrip) => {
+      const addVoice = generator.processor.addVoice.bind(generator.processor);
+      generator.processor.addVoice = (channel, isDrip, offset, at) => {
         if (isDrip) count += 1;
-        return makeVoice(profile, isDrip);
+        addVoice(channel, isDrip, offset, at);
       };
       generator.render(40);
       return count;
@@ -459,7 +487,7 @@ describe('ambient AudioWorklet generator', () => {
       const generator = createProcessor(71, [makeChannel('moving', {
         modulationAmplitude: 1, periodSec: 0.5, movement,
       })], sampleRate);
-      generator.processor.noise = () => 1;
+      generator.processor.noiseLoop = () => ONES;
       const cycles: { panTo: number; periodFactor: number; riseFactor: number }[] = [];
       const startCycle = generator.processor.startCycle.bind(generator.processor);
       generator.processor.startCycle = (channel) => {
@@ -510,10 +538,10 @@ describe('ambient AudioWorklet generator', () => {
   it('does not render a silent layer, and a layer turned back up does not deliver the drops it missed', () => {
     const generator = createProcessor(29, makeRainSlots([makeRainChannel('rain', { volume: 0, dropsPerSecond: 60 })]));
     let births = 0;
-    const makeVoice = generator.processor.makeSurfaceVoice.bind(generator.processor);
-    generator.processor.makeSurfaceVoice = (profile, isDrip) => {
+    const addVoice = generator.processor.addVoice.bind(generator.processor);
+    generator.processor.addVoice = (channel, isDrip, offset, at) => {
       births += 1;
-      return makeVoice(profile, isDrip);
+      addVoice(channel, isDrip, offset, at);
     };
     generator.render(2);
     expect(births).toBe(0);
@@ -524,4 +552,119 @@ describe('ambient AudioWorklet generator', () => {
     // 60 a second for 50 ms is about three; the two paused seconds are not owed.
     expect(births).toBeLessThan(15);
   });
+  describe('noise loop', () => {
+    const types = ['white', 'pink', 'brown'] as const;
+    const loops = noiseLoopsAt(48000);
+
+    // Brown noise moves by small steps, so a seam that jumped would stand out
+    // against every other step in the loop; white is the control.
+    it('crosses from its end back to its start like any other step', () => {
+      for (const type of types) {
+        const loop = loops[type];
+        const steps = Array.from({ length: loop.length - 1 }, (_, index) => Math.abs(loop[index + 1] - loop[index])).sort((a, b) => a - b);
+        const seam = Math.abs(loop[0] - loop[loop.length - 1]);
+        expect(seam).toBeLessThanOrEqual(steps[Math.floor(steps.length * 0.999)]);
+      }
+    });
+
+    it('is the same noise as generating it live, level for level', () => {
+      for (const type of types) {
+        const loop = loops[type];
+        let seed = 7;
+        const next = createNoiseSource(type, () => {
+          seed = (Math.imul(1664525, seed) + 1013904223) >>> 0;
+          return seed / 0x100000000;
+        });
+        const live = Array.from({ length: loop.length }, next);
+        expect(Math.abs(rms(Array.from(loop)) - rms(live)) / rms(live)).toBeLessThan(0.1);
+      }
+    });
+
+    it('is what every noise layer of that type reads, and a missing type plays silence', () => {
+      const generator = createProcessor(12, [], 48000);
+      expect(generator.processor.noiseLoop('pink')).toBe(loops.pink);
+      const bare = createProcessor(12, [makeChannel('missing', { type: 'pink' })], 48000);
+      (bare.processor as unknown as { noiseLoops: object }).noiseLoops = {};
+      expect(bare.render(0.1).left.every((sample) => sample === 0)).toBe(true);
+    });
+  });
+
+  describe('drop bank', () => {
+    type RainState = { dropBank: unknown[]; activeVoices: { live: unknown }[] };
+    const rainOf = (generator: ReturnType<typeof createProcessor>) => generator.processor.channels.at(-1) as unknown as RainState;
+
+    // A fresh drop is one synthesised live (and recorded); the rest are
+    // played back from the bank.
+    function countFresh(generator: ReturnType<typeof createProcessor>) {
+      const counts = { births: 0, fresh: 0 };
+      const addVoice = generator.processor.addVoice.bind(generator.processor);
+      const makeVoice = generator.processor.makeSurfaceVoice.bind(generator.processor);
+      generator.processor.addVoice = (channel, isDrip, offset, at) => {
+        counts.births += 1;
+        addVoice(channel, isDrip, offset, at);
+      };
+      generator.processor.makeSurfaceVoice = (profile, isDrip) => {
+        counts.fresh += 1;
+        return makeVoice(profile, isDrip);
+      };
+      return counts;
+    }
+
+    it('records every drop while filling, then one in four, and holds no more than its size', () => {
+      const generator = createProcessor(19, makeRainSlots([makeRainChannel('rain', { dropsPerSecond: 60, drips: 0, wash: 0 })]), 8000);
+      generator.render(2);
+      expect(rainOf(generator).dropBank.length).toBe(32);
+      const counts = countFresh(generator);
+      generator.render(60);
+      expect(rainOf(generator).dropBank.length).toBe(32);
+      expect(counts.fresh / counts.births).toBeGreaterThan(0.2);
+      expect(counts.fresh / counts.births).toBeLessThan(0.3);
+    });
+
+    it('plays a recorded drop back exactly as it was recorded', () => {
+      const generator = createProcessor(23, makeRainSlots([makeRainChannel('rain', { dropsPerSecond: 60, drips: 0, wash: 0 })]), 8000);
+      generator.render(2);
+      const entry = rainOf(generator).dropBank[0] as unknown as { samples: Float32Array; audibleLength: number };
+      const out = new Float64Array(entry.audibleLength + 16);
+      const voice = { live: null, entry, position: 0, startOffset: 16, level: 1 };
+      (generator.processor as unknown as { playDrop: (v: unknown, o: Float64Array, n: number) => boolean }).playDrop(voice, out, out.length);
+      expect(Array.from(out.subarray(0, 16)).every((value) => value === 0)).toBe(true);
+      expect(Array.from(out.subarray(16))).toEqual(Array.from(entry.samples.subarray(0, entry.audibleLength)));
+      // Only silence was cut: nothing past the playback length is audible.
+      expect(Array.from(entry.samples.subarray(entry.audibleLength)).every((value) => Math.abs(value) <= 1e-5)).toBe(true);
+    });
+
+    it('empties when what a drop is recorded with changes, and not otherwise', () => {
+      const slots = (changes: Partial<ReturnType<typeof createAmbientRainChannel>>) => makeRainSlots([makeRainChannel('rain', { dropsPerSecond: 60, ...changes })]);
+      const generator = createProcessor(19, slots({}), 8000);
+      generator.render(4);
+      const configure = (changes: Partial<ReturnType<typeof createAmbientRainChannel>>) => generator.processor.port.onmessage?.({
+        data: { type: 'configure', channels: toWorkletChannels(slots(changes) as Parameters<typeof toWorkletChannels>[0]) },
+      });
+      expect(rainOf(generator).dropBank.length).toBe(32);
+      configure({ distance: 0.9, pan: 0.4, wash: 0.2, volume: 0.1 });
+      expect(rainOf(generator).dropBank.length).toBe(32);
+      for (const change of [{ trebleGain: 0.1 }, { bassGain: 0.9 }, { surface: 'glass' as const }]) {
+        configure(change);
+        expect(rainOf(generator).dropBank.length).toBe(0);
+        generator.render(4);
+        expect(rainOf(generator).dropBank.length).toBe(32);
+      }
+    });
+
+    it('keeps nothing recorded before the settings changed', () => {
+      const slots = (trebleGain: number) => makeRainSlots([makeRainChannel('rain', { dropsPerSecond: 60, trebleGain })]);
+      const generator = createProcessor(31, slots(0.4), 8000);
+      generator.render(0.1);
+      const before = new Set(rainOf(generator).dropBank);
+      expect(before.size).toBeGreaterThan(0);
+      generator.processor.port.onmessage?.({
+        data: { type: 'configure', channels: toWorkletChannels(slots(0.9) as Parameters<typeof toWorkletChannels>[0]) },
+      });
+      generator.render(2);
+      expect(rainOf(generator).dropBank.some((entry) => before.has(entry))).toBe(false);
+    });
+
+  });
+
 });
