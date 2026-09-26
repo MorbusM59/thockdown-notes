@@ -130,8 +130,11 @@
   opacity: 0.6;
 }
 
-.ambient-scene-selector {
-  margin-top: calc(var(--spacing-regular) * 0.5);
+.ambient-scene-controls {
+  padding-top: 0;
+  padding-bottom: var(--spacing-regular);
+  border-top: none;
+  border-bottom: 1px solid var(--color-border-light-70);
 }
 
 .ambient-layer-controls .utility-setting-scrollbar-shell {

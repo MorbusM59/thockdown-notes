@@ -68,12 +68,8 @@ const KIND_LOOK: Record<AmbientChannelKind, { icon: string; label: string }> = {
   chimes: { icon: 'fa-bell', label: 'Chimes' },
 }
 
-/** The two scene-wide settings, selectable beside the channels. */
-const SCENE_TARGETS = [
-  { id: 'space', icon: 'fa-mountain-sun', label: 'Space' },
-  { id: 'weather', icon: 'fa-cloud-sun', label: 'Weather' },
-] as const
-type SceneTarget = (typeof SCENE_TARGETS)[number]['id']
+/** The scene-wide settings: shared by every channel, and shown above them all. */
+type SceneTarget = 'space' | 'weather'
 
 // ---------------------------------------------------------------------------
 // How values read.
@@ -378,7 +374,6 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
   useEffect(() => () => channelHoldRef.current?.cancel(), [])
   const channels = preferences.settings.channels
   const selectedChannel = channels.find((channel) => channel.id === selectedId) ?? null
-  const selectedScene = SCENE_TARGETS.find((target) => target.id === selectedId)?.id ?? null
   const allPresets = [...AMBIENT_FACTORY_PRESETS, ...preferences.customPresets]
   const currentSignature = ambientSettingsSignature(preferences.settings)
   const matchingPresets = allPresets.filter((preset) => ambientSettingsSignature(preset.settings) === currentSignature)
@@ -501,6 +496,24 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
       heading="Ambient Sound"
     >
       <div className="utility-setting-slider-stack" aria-label="Ambient sound controls">
+        {/* Space and weather belong to the whole soundscape rather than to a
+            channel, so they stand above the soundscapes and channels,
+            always shown, rather than behind a channel-like button. */}
+        <div className="ambient-layer-controls ambient-scene-controls" role="group" aria-label="Across all channels">
+          {(['space', 'weather'] as const).map((target) => (
+            <ControlGroups
+              key={target}
+              idPrefix={`ambient-${target}`}
+              groups={target === 'space' ? SPACE_CONTROLS : WEATHER_CONTROLS}
+              values={preferences.settings[target] as unknown as Record<string, number>}
+              defaults={(target === 'space' ? DEFAULT_AMBIENT_SPACE : DEFAULT_AMBIENT_WEATHER) as unknown as Record<string, number>}
+              disabled={false}
+              name={target === 'space' ? 'Space' : 'Weather'}
+              onCommit={(key, value) => updateScene(target, key, value)}
+            />
+          ))}
+        </div>
+
         <div className="options-loadout-grid ambient-preset-grid" role="group" aria-label="Factory ambient soundscapes">
           {AMBIENT_FACTORY_PRESETS.map((preset) => (
             <button
@@ -598,24 +611,6 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
           })}
         </div>
 
-        <div className="options-loadout-grid ambient-scene-selector" role="group" aria-label="Soundscape space and weather">
-          {SCENE_TARGETS.map((target) => (
-            <button
-              key={target.id}
-              type="button"
-              className={`btn-icon options-color-swatch options-loadout-btn ambient-scene-btn${selectedId === target.id ? ' is-active' : ''}`}
-              aria-label={target.label}
-              aria-pressed={selectedId === target.id}
-              data-tooltip={target.id === 'space'
-                ? 'Space: the place every layer plays in'
-                : 'Weather: the gusts layers can follow'}
-              onClick={() => setSelectedId(target.id)}
-            >
-              <span className={`fa-solid ${target.icon}`} aria-hidden="true" />
-            </button>
-          ))}
-        </div>
-
         {selectedChannel && rosterEntry && (
           <div
             className="ambient-layer-controls"
@@ -631,19 +626,6 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
               disabled={!selectedChannel.enabled}
               name={layerName}
               onCommit={(key, value) => updateChannel(selectedChannel.id, { [key]: value })}
-            />
-          </div>
-        )}
-        {selectedScene && (
-          <div className="ambient-layer-controls" key={selectedScene} role="group" aria-label={selectedScene === 'space' ? 'Space' : 'Weather'}>
-            <ControlGroups
-              idPrefix={`ambient-${selectedScene}`}
-              groups={selectedScene === 'space' ? SPACE_CONTROLS : WEATHER_CONTROLS}
-              values={preferences.settings[selectedScene] as unknown as Record<string, number>}
-              defaults={(selectedScene === 'space' ? DEFAULT_AMBIENT_SPACE : DEFAULT_AMBIENT_WEATHER) as unknown as Record<string, number>}
-              disabled={false}
-              name={selectedScene === 'space' ? 'Space' : 'Weather'}
-              onCommit={(key, value) => updateScene(selectedScene, key, value)}
             />
           </div>
         )}
