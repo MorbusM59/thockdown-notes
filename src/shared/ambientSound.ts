@@ -628,11 +628,12 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
     name: 'Campsite',
     settings: soundscape({
       'chimes-1': { activity: 0.77, distance: 0, hardness: 0.34, material: 0.08, pan: 0.38, pitchHz: 440, ringSec: 13.644, scale: 30, tubes: 4, unison: 0.7, volume: 0.32 },
-      'fire-1': { crackle: 0.77, flicker: 0.27, flickerDynamics: 0.64, flickerPeriodSec: 0.207, pan: 0.3, size: 0.81, sizzleLevel: 0.58, volume: 0.86, width: 0.35 },
+      'fire-1': { crackle: 0.77, flicker: 0.27, flickerDynamics: 0.82, flickerPeriodSec: 0.207, pan: 0.3, size: 0.81, sizzleLevel: 0.43, volume: 0.88, width: 0.15 },
       'noise-1': { brightnessHz: 4775.16, colour: 0.73, depth: 0.75, distance: 0.73, periodSec: 11.782, skew: 0.41, sweep: -0.08, variation: 0.65, volume: 0.61 },
       'noise-2': { brightnessHz: 153.23, colour: 0.22, depth: 0.42, focus: 0.84, skew: 0.28, sway: 0.19, variation: 0.98, volume: 0.64 },
+      'noise-3': { brightnessHz: 223.87, colour: 0.04, distance: 0.1, focus: 0.76, volume: 0.48 },
       'water-1': { bubbleLevel: 0.7, bubbles: 0.45, distance: 0.57, pan: -0.37, ring: 0.39, rise: 0.27, rushLevel: 0.98, rushTone: 0.62, size: 0.85, sizeSpread: 0.82, turbulence: 0.46, volume: 0.59, width: 0.56 },
-    }, { damping: 0.35, echoes: 0.55, size: 0.6 }, { paceSec: 13 }),
+    }, { amount: 0.7, size: 0.06 }, { paceSec: 11.927 }),
   },
   {
     id: 'storm',
