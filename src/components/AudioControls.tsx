@@ -10,7 +10,7 @@ import {
   PLAYLIST_SLOT_THEMES,
   shouldStopCurrentSongOnSlotToggle,
 } from '../shared/audioPlayer'
-import { applyAmbientPreset, nextAmbientPreset, type AmbientPreferences } from '../shared/ambientSound'
+import { AMBIENT_FACTORY_PRESETS, applyAmbientPreset, nextAmbientPreset, type AmbientPreferences } from '../shared/ambientSound'
 import {
   fromDisplayLevel,
   nudgeLevel,
@@ -1166,12 +1166,21 @@ function AmbientNoiseButton({
 
   const level = toDisplayLevel(preferences.masterVolume)
   const next = nextAmbientPreset(preferences)
+  // A null or unknown active id means the mix was hand-edited away from any
+  // saved soundscape, so it has no name to show.
+  const current = [...preferences.customPresets, ...AMBIENT_FACTORY_PRESETS]
+    .find((preset) => preset.id === preferences.activePresetId)
+  const tooltip = [
+    `Soundscape: ${preferences.enabled ? (current?.name ?? 'Custom') : 'OFF'}`,
+    `[Scroll] Volume: ${level}`,
+    `[Right] ${next.name}`,
+  ].join('\n')
   return (
     <button
       ref={ref}
       type="button"
       className={`audio-ctrl-btn audio-ambient-noise-btn${preferences.enabled ? ' is-active' : ''}`}
-      data-tooltip={`Ambient noise ${preferences.enabled ? `on, volume ${level}` : 'off'} — click to turn ${preferences.enabled ? 'off' : 'on'}. Scroll to adjust volume (Shift: by 10). Right-click for the next soundscape (${next.name}).`}
+      data-tooltip={tooltip}
       data-secondary-press="action"
       onContextMenu={(event) => {
         event.preventDefault()
