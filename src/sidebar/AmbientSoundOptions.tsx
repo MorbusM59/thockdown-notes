@@ -54,7 +54,7 @@ import { exportSoundscapes } from './soundscapeFileActions'
 import { useNonPassiveWheel } from '../shared/useNonPassiveWheel'
 
 const PRESET_ICONS: Record<string, string> = {
-  glass: 'fa-cloud-rain',
+  'stormy-night': 'fa-cloud-moon-rain',
   street: 'fa-road',
   forest: 'fa-tree',
   tent: 'fa-campground',
