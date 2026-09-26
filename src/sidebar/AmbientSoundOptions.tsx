@@ -59,14 +59,8 @@ const PRESET_ICONS: Record<string, string> = {
   parking: 'fa-car',
   forest: 'fa-tree',
   tent: 'fa-umbrella',
-  roof: 'fa-house',
+  campsite: 'fa-campground',
   storm: 'fa-cloud-bolt',
-  ocean: 'fa-water',
-  wind: 'fa-wind',
-  camp: 'fa-campground',
-  fireside: 'fa-fire',
-  rift: 'fa-infinity',
-  pulse: 'fa-wave-square',
 }
 
 const KIND_LOOK: Record<AmbientChannelKind, { icon: string; label: string }> = {

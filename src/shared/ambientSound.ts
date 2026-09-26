@@ -624,16 +624,15 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
     }, { size: 0.15, damping: 0.7, echoes: 0, amount: 0.35 }, { gustiness: 0.5, paceSec: 12 }),
   },
   {
-    id: 'roof',
-    name: 'Tin roof',
+    id: 'campsite',
+    name: 'Campsite',
     settings: soundscape({
-      'rain-1': { surface: 0.75, intensity: 0.65, washLevel: 0.54, drips: 0.25, wetness: 0.2, resonance: 0.6, distance: 0.05, pan: -0.35, width: 0.8, volume: 0.7 },
-      'rain-2': { surface: 0.72, intensity: 0.8, dropTone: 0.4, washLevel: 0.69, drips: 0, wetness: 0.1, resonance: 0.5, distance: 0.15, pan: 0.35, width: 0.8, volume: 0.68, weather: 0.6 },
-      'rain-3': { surface: 0.5, intensity: 0.5, washLevel: 0.56, drips: 0.8, dripLevel: 0.85, dripTone: 0.3, wetness: 0.9, splashLevel: 0.8, distance: 0.45, pan: 0.7, volume: 0.6 },
-      'water-1': { bubbles: 0.7, size: 0.6, turbulence: 0.7, rushLevel: 0.81, rushTone: 0.46, distance: 0.35, pan: -0.8, volume: 0.55 },
-      'noise-1': { colour: 0.1, brightnessHz: 300, depth: 0.25, periodSec: 22, variation: 0.5, distance: 0.8, volume: 0.45, weather: 0.8 },
-      'thunder-1': { share: 0.06, distance: 0.85, pan: 0.3, spread: 0.7, character: 0.5, randomness: 0.6, lengthSec: 16, volume: 0.7, weather: 0.5 },
-    }, { size: 0.25, damping: 0.45, echoes: 0.15, amount: 0.45 }, { gustiness: 0.55, paceSec: 11 }),
+      'chimes-1': { activity: 0.77, distance: 0, hardness: 0.34, material: 0.08, pan: 0.38, pitchHz: 440, ringSec: 13.644, scale: 30, tubes: 4, unison: 0.7, volume: 0.32 },
+      'fire-1': { crackle: 0.77, flicker: 0.27, flickerDynamics: 0.64, flickerPeriodSec: 0.207, pan: 0.3, size: 0.81, sizzleLevel: 0.58, volume: 0.86, width: 0.35 },
+      'noise-1': { brightnessHz: 4775.16, colour: 0.73, depth: 0.75, distance: 0.73, periodSec: 11.782, skew: 0.41, sweep: -0.08, variation: 0.65, volume: 0.61 },
+      'noise-2': { brightnessHz: 153.23, colour: 0.22, depth: 0.42, focus: 0.84, skew: 0.28, sway: 0.19, variation: 0.98, volume: 0.64 },
+      'water-1': { bubbleLevel: 0.7, bubbles: 0.45, distance: 0.57, pan: -0.37, ring: 0.39, rise: 0.27, rushLevel: 0.98, rushTone: 0.62, size: 0.85, sizeSpread: 0.82, turbulence: 0.46, volume: 0.59, width: 0.56 },
+    }, { damping: 0.35, echoes: 0.55, size: 0.6 }, { paceSec: 13 }),
   },
   {
     id: 'storm',
@@ -651,86 +650,6 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
       'thunder-2': { character: 0.81, contrast: 0.28, distance: 0.29, lengthSec: 25, share: 0.865, volume: 0.92 },
       'thunder-3': { pan: 0.49, share: 0.705, spread: 0.92, weather: 0.76 },
     }, { damping: 0.35, echoes: 0.55, size: 0.51 }, { gustiness: 1, paceSec: 4.681 }),
-  },
-  {
-    id: 'ocean',
-    name: 'Rolling ocean',
-    settings: soundscape({
-      // The swell: deep, slow, rising long and breaking fast.
-      'noise-1': { colour: 0, brightnessHz: 380, depth: 0.85, periodSec: 12, curve: 0.6, skew: 0.7, sweep: 0.5, variation: 0.45, sway: 0.2, distance: 0.3, volume: 0.85 },
-      // The break: a bright crash on the same period, peaking late and brief.
-      'noise-2': { colour: 0.65, brightnessHz: 3500, focus: 0.15, depth: 1, periodSec: 12, curve: 0.85, skew: 0.75, sweep: 0.9, variation: 0.45, sway: 0.3, width: 1, distance: 0.2, volume: 0.72 },
-      // The wash running back up the sand after it.
-      'noise-3': { colour: 0.85, brightnessHz: 6500, focus: 0.1, depth: 0.9, periodSec: 12, curve: 0.3, skew: 0.2, sweep: -0.4, variation: 0.45, width: 0.9, distance: 0.1, volume: 0.5 },
-      // A second set of waves further out, out of step with the first.
-      'noise-4': { colour: 0.3, brightnessHz: 1100, depth: 0.7, periodSec: 17, curve: 0.65, skew: 0.65, sweep: 0.6, variation: 0.6, sway: 0.5, distance: 0.75, volume: 0.62 },
-      'noise-5': { colour: 0.5, brightnessHz: 2400, focus: 0.3, depth: 0.5, periodSec: 9, sweep: 0.6, variation: 0.8, sway: 0.5, width: 0.6, distance: 0.6, volume: 0.45, weather: 1 },
-      'water-1': { bubbles: 0.9, size: 0.2, turbulence: 0.95, rushLevel: 0.85, rushTone: 0.61, distance: 0.2, pan: -0.4, volume: 0.45 },
-      'water-2': { bubbles: 0.8, size: 0.3, turbulence: 0.9, rushLevel: 0.83, rushTone: 0.57, distance: 0.3, pan: 0.5, volume: 0.42 },
-    }, { size: 1, damping: 0.6, echoes: 0, amount: 0.6 }, { gustiness: 0.6, paceSec: 14 }),
-  },
-  {
-    id: 'wind',
-    name: 'Pine wind',
-    settings: soundscape({
-      'noise-1': { colour: 0.5, brightnessHz: 1800, focus: 0.3, depth: 0.55, periodSec: 13, curve: 0.55, sweep: 0.8, variation: 0.7, sway: 0.45, width: 0.8, distance: 0.4, volume: 0.72, weather: 1 },
-      'noise-2': { colour: 0.8, brightnessHz: 4200, focus: 0.45, depth: 0.7, periodSec: 8, curve: 0.65, skew: 0.4, sweep: 0.7, variation: 0.8, sway: 0.6, width: 0.5, distance: 0.55, volume: 0.55, weather: 1 },
-      'noise-3': { colour: 0.15, brightnessHz: 400, depth: 0.3, periodSec: 25, variation: 0.5, distance: 0.7, volume: 0.55, weather: 0.8 },
-      'noise-4': { colour: 0.6, brightnessHz: 900, focus: 0.75, depth: 0.8, periodSec: 6, curve: 0.8, skew: 0.3, sweep: 0.6, variation: 0.9, sway: 0.7, width: 0.3, distance: 0.8, volume: 0.35, weather: 1 },
-      'chimes-1': { material: 1 / 3, pitchHz: chimeSemitoneHz(3), tubes: 5, ringSec: 8, activity: 0.2, hardness: 0.55, unison: 0.3, scale: 0, distance: 0.45, pan: 0.4, volume: 0.55, weather: 1 },
-      'chimes-2': { material: 0, pitchHz: chimeSemitoneHz(-9), tubes: 6, ringSec: 3, activity: 0.15, hardness: 0.3, unison: 0.6, scale: 0, distance: 0.75, pan: -0.55, volume: 0.5, weather: 1 },
-    }, { size: 0.7, damping: 0.75, echoes: 0, amount: 0.55 }, { gustiness: 0.8, paceSec: 10 }),
-  },
-  {
-    id: 'camp',
-    name: 'Quiet camp',
-    settings: soundscape({
-      'fire-1': { size: 0.35, width: 0.5, crackle: 0.45, crackleLevel: 0.7, pops: 0.25, sizzle: 0.35, sizzleLevel: 0.65, flicker: 0.4, flickerPeriodSec: 0.6, flickerDynamics: 0.3, distance: 0.12, pan: -0.1, volume: 0.66, weather: 0.4 },
-      'water-1': { bubbles: 0.4, size: 0.4, turbulence: 0.55, rushLevel: 0.71, rushTone: 0.54, distance: 0.55, pan: 0.55, volume: 0.6 },
-      'water-2': { bubbles: 0.25, size: 0.25, turbulence: 0.35, rushLevel: 0.64, rushTone: 0.59, distance: 0.75, pan: 0.8, volume: 0.5 },
-      'noise-1': { colour: 0.45, brightnessHz: 1500, focus: 0.2, depth: 0.45, periodSec: 17, sweep: 0.6, variation: 0.6, sway: 0.35, distance: 0.8, volume: 0.42, weather: 1 },
-      'noise-2': { colour: 0.1, brightnessHz: 250, depth: 0.2, periodSec: 30, variation: 0.5, distance: 0.9, volume: 0.4, weather: 0.6 },
-    }, { size: 0.9, damping: 0.8, echoes: 0.12, amount: 0.5 }, { gustiness: 0.35, paceSec: 16 }),
-  },
-  {
-    id: 'fireside',
-    name: 'Fireside',
-    settings: soundscape({
-      'fire-1': { size: 0.5, width: 0.7, crackle: 0.55, pops: 0.35, sizzle: 0.5, flicker: 0.45, flickerPeriodSec: 0.55, flickerDynamics: 0.3, distance: 0.1, volume: 0.74 },
-      'fire-2': { size: 0.2, width: 0.4, crackle: 0.3, crackleTone: 0.7, crackleLevel: 0.6, pops: 0.1, sizzle: 0.8, flicker: 0.2, flickerPeriodSec: 1.2, distance: 0.2, pan: 0.3, volume: 0.5 },
-      'rain-1': { surface: 1, intensity: 0.45, washLevel: 0.5, drips: 0.1, wetness: 0.3, distance: 0.7, pan: 0.45, width: 0.6, volume: 0.52 },
-      'rain-2': { surface: 0.7, intensity: 0.6, washLevel: 0.6, drips: 0.3, dripTone: 0.4, wetness: 0.5, distance: 0.9, pan: -0.5, volume: 0.45 },
-      'noise-1': { colour: 0.1, brightnessHz: 450, depth: 0.4, periodSec: 18, variation: 0.6, distance: 0.8, volume: 0.45, weather: 1 },
-      'noise-2': { colour: 0.6, brightnessHz: 700, focus: 0.7, depth: 0.8, periodSec: 7, curve: 0.8, sweep: 0.6, variation: 0.9, width: 0.3, distance: 0.85, volume: 0.3, weather: 1 },
-    }, { size: 0.2, damping: 0.65, echoes: 0, amount: 0.4 }, { gustiness: 0.6, paceSec: 12 }),
-  },
-  {
-    id: 'rift',
-    name: 'Interdimensional',
-    settings: soundscape({
-      // Two resonant whistles, drifting against each other.
-      'noise-1': { colour: 0.7, brightnessHz: 520, focus: 0.95, depth: 0.7, periodSec: 23, curve: 0.3, sweep: 1, variation: 0.9, sway: 0.9, width: 0.4, distance: 0.7, volume: 0.45 },
-      'noise-2': { colour: 0.7, brightnessHz: 1480, focus: 0.9, depth: 0.8, periodSec: 31, curve: 0.4, skew: 0.8, sweep: -0.9, variation: 0.9, sway: 1, width: 0.3, distance: 0.85, volume: 0.38 },
-      // A deep bed that breathes very slowly.
-      'noise-3': { colour: 0, brightnessHz: 90, focus: 0.4, depth: 0.6, periodSec: 45, curve: 0.5, variation: 0.3, distance: 0.6, volume: 0.7 },
-      'noise-4': { colour: 1, brightnessHz: 9000, focus: 0.6, depth: 1, periodSec: 3.3, curve: 0.9, skew: 0.15, sweep: 0.8, variation: 0.7, sway: 1, width: 0.2, distance: 0.95, volume: 0.28 },
-      'chimes-1': { material: 1, pitchHz: chimeSemitoneHz(-6), tubes: 8, ringSec: 15, activity: 0.2, hardness: 0.25, unison: 0.7, scale: 63, distance: 0.9, pan: -0.5, volume: 0.6, weather: 0.6 },
-      'chimes-2': { material: 2 / 3, pitchHz: chimeSemitoneHz(9), tubes: 7, ringSec: 12, activity: 0.12, hardness: 0.8, unison: 0.2, scale: 62, distance: 0.95, pan: 0.6, volume: 0.45, weather: 0.8 },
-      'water-1': { bubbles: 0.15, size: 0, turbulence: 1, rushLevel: 0.55, rushTone: 0.68, distance: 1, pan: 0.2, volume: 0.35 },
-      'thunder-1': { share: 0.3, distance: 1, spread: 1, character: 0, contrast: -0.6, randomness: 0.9, lengthSec: 30, volume: 0.55 },
-    }, { size: 1, damping: 0.15, echoes: 1, amount: 1 }, { gustiness: 0.7, paceSec: 25 }),
-  },
-  {
-    id: 'pulse',
-    name: 'Tidal noise',
-    settings: soundscape({
-      // Plain noise in three registers, each breathing at its own pace, so
-      // the swells meet and part in a slow rhythm that never quite repeats.
-      'noise-1': { colour: 0.15, brightnessHz: 900, depth: 0.35, periodSec: 8, curve: 0.5, skew: 0.4, sweep: 0.3, variation: 0.15, sway: 0.2, distance: 0.3, volume: 0.72 },
-      'noise-2': { colour: 0.45, brightnessHz: 3000, depth: 0.45, periodSec: 5, curve: 0.7, skew: 0.3, sweep: 0.4, variation: 0.2, sway: 0.4, width: 0.8, distance: 0.4, volume: 0.5 },
-      'noise-3': { colour: 0.75, brightnessHz: 8000, depth: 0.55, periodSec: 13, curve: 0.8, skew: 0.65, sweep: 0.5, variation: 0.25, sway: 0.6, width: 0.6, distance: 0.5, volume: 0.35 },
-      'noise-4': { colour: 0, brightnessHz: 140, depth: 0.25, periodSec: 21, variation: 0.2, distance: 0.4, volume: 0.62 },
-    }, { size: 0.5, damping: 0.6, echoes: 0, amount: 0.35 }, { gustiness: 0.1, paceSec: 30 }),
   },
 ];
 
