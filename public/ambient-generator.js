@@ -656,26 +656,6 @@ const WEATHER_CHIME_CASCADE = 0.2;
 const CHIME_CLICK = { q: [1.2, 2], decaySec: [0.0006, 0.0015], level: [0.2, 0.3] };
 
 /**
- * A mark tree (renderMarkTree): its bars are small SOLID free bars -- the
- * bar modes, bright and short-ringing, their doublets narrow -- struck by the
- * chimes' tube machinery (strikeTube, renderTubes) but hung in a line and
- * played by a SWEEP: a stick drawn across the whole row, striking each bar in
- * turn, `sweepSec` from the first to the last, each strike's time jittered
- * by up to MARK_TREE_SWEEP_JITTER of the spacing. A sweep swells into its
- * middle and falls away (MARK_TREE_SWEEP_FORCE at the ends and the middle).
- * A struck bar swings into its neighbour: with MARK_TREE_JANGLE_CHANCE it
- * taps it within MARK_TREE_JANGLE_SEC, at MARK_TREE_JANGLE_FORCE of its own
- * strike -- the shimmer that carries on after the stick has passed.
- */
-const MARK_TREE_BAR = { ratios: [1, 2.756, 5.404], weights: [1, 0.45, 0.25], ringScale: 1, decayExponent: 0.9, doubletHz: [0.05, 0.3], attackSec: 0, click: 0.6, clickHz: [5000, 9000] };
-const MARK_TREE_SWEEP_JITTER = 0.35;
-const MARK_TREE_SWEEP_FORCE = [0.45, 1];
-const MARK_TREE_JANGLE_CHANCE = 0.35;
-const MARK_TREE_JANGLE_SEC = [0.04, 0.2];
-const MARK_TREE_JANGLE_FORCE = 0.25;
-const MAX_MARK_TREE_PENDING = 256;
-
-/**
  * A state-variable filter's coefficients and state (the topology-preserving
  * "TPT" form, stable at any frequency below Nyquist). One filter has band-
  * and low-pass outputs: v1 and v2 of the step in bandPass. Band-pass is read
@@ -817,7 +797,6 @@ class AmbientGenerator extends AudioWorkletProcessor {
         this.initFire(channel);
         break;
       case 'chimes':
-      case 'marktree':
         this.configureChimes(channel, null);
         break;
       default:
@@ -858,7 +837,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
         if (previous.kind === 'thunder') this.configureThunder(previous, before);
         if (previous.kind === 'water') this.configureWater(previous);
         if (previous.kind === 'fire') this.configureFire(previous, before);
-        if (previous.kind === 'chimes' || previous.kind === 'marktree') this.configureChimes(previous, before);
+        if (previous.kind === 'chimes') this.configureChimes(previous, before);
         this.configureSpace(previous);
         return previous;
       });
@@ -2765,20 +2744,16 @@ class AmbientGenerator extends AudioWorkletProcessor {
     const frequencies = channel.tubeHz ?? [];
     const old = channel.tubeState ?? [];
     const ringSec = Math.max(0.1, channel.ringSec ?? 6);
-    // A mark tree's bars are one material, hung in a line in pitch order.
-    const isRow = channel.kind === 'marktree';
-    const material = isRow ? MARK_TREE_BAR : chimeMaterial(channel.material);
+    const material = chimeMaterial(channel.material);
     channel.chimeMaterial = material;
     channel.attackRate = material.attackSec > 0.001 ? 1 - Math.exp(-1 / (material.attackSec * sampleRate)) : 0;
-    const image = stereoImage(channel.pan, isRow ? (channel.width ?? 1) : 1);
+    const image = stereoImage(channel.pan, 1);
     channel.tubeState = frequencies.map((hz, index) => {
       const tube = old[index] ?? {
         detune: 2 ** ((CHIME_DETUNE_CENTS * ((this.random() * 2) - 1)) / 1200),
         // Where in the material's doublet range each mode's split falls.
         splits: material.ratios.map(() => this.random()),
-        placement: isRow
-          ? index / Math.max(1, frequencies.length - 1)
-          : (index + 0.25 + (0.5 * this.random())) / Math.max(1, frequencies.length),
+        placement: (index + 0.25 + (0.5 * this.random())) / Math.max(1, frequencies.length),
         oscillators: material.ratios.flatMap(() => [0, 1].map(() => ({ sin: 0, cos: 1, rotationSin: 0, rotationCos: 1, amplitude: 0, feed: 0, decay: 1, audible: true }))),
         active: false,
       };
@@ -2807,13 +2782,6 @@ class AmbientGenerator extends AudioWorkletProcessor {
       return tube;
     });
     if (!channel.bursts) channel.bursts = [];
-    if (isRow) {
-      if (!channel.pending) channel.pending = [];
-      if (!before || before.sweeps !== channel.sweeps || !Number.isFinite(channel.nextSweepFrame)) {
-        channel.nextSweepFrame = currentFrame + this.eventDelayFrames(this.markTreeSweepRate(channel));
-      }
-      return;
-    }
     if (!before || before.activity !== channel.activity || !Number.isFinite(channel.nextStrikeFrame)) {
       channel.nextStrikeFrame = currentFrame + this.eventDelayFrames(this.chimeStrikeRate(channel));
     }
@@ -2986,86 +2954,6 @@ class AmbientGenerator extends AudioWorkletProcessor {
     this.renderBursts(channel.bursts, left, right, length);
   }
 
-  markTreeSweepRate(channel) {
-    const [low, high] = channel.strikeRange ?? [0.02, 0.5];
-    const sweeps = Math.max(0, Math.min(1, channel.sweeps ?? 0.3));
-    return low * ((high / low) ** sweeps) * (2 ** (WEATHER_CHIME_RATE_OCTAVES * this.weatherFactor(channel)));
-  }
-
-  /** Queue a strike at absolute frame `frame`, kept in time order. */
-  queueBarStrike(channel, frame, bar, force) {
-    const pending = channel.pending;
-    if (pending.length >= MAX_MARK_TREE_PENDING) return;
-    let index = pending.length;
-    while (index > 0 && pending[index - 1].frame > frame) index -= 1;
-    pending.splice(index, 0, { frame, bar, force });
-  }
-
-  /**
-   * Draw a stick across the row from absolute frame `start`: every bar in
-   * turn, rising or falling as `direction` makes likely, each strike's time
-   * jittered around an even spacing and its force swelling into the middle
-   * of the sweep and falling away.
-   */
-  startSweep(channel, start) {
-    const bars = channel.tubeState.length;
-    if (bars === 0) return;
-    const falling = this.random() < Math.max(0, Math.min(1, channel.direction ?? 0.5));
-    const spacing = (Math.max(0.05, channel.sweepSec ?? 1.2) * sampleRate) / Math.max(1, bars - 1);
-    const strength = 0.75 + (0.25 * this.random());
-    for (let step = 0; step < bars; step += 1) {
-      const bar = falling ? bars - 1 - step : step;
-      const along = bars > 1 ? step / (bars - 1) : 0.5;
-      const swell = MARK_TREE_SWEEP_FORCE[0] + ((MARK_TREE_SWEEP_FORCE[1] - MARK_TREE_SWEEP_FORCE[0]) * Math.sin(Math.PI * along));
-      const jitter = (this.random() - 0.5) * 2 * MARK_TREE_SWEEP_JITTER * spacing;
-      this.queueBarStrike(channel, Math.max(start, Math.round(start + (step * spacing) + jitter)), bar, swell * strength * (0.85 + (0.3 * this.random())));
-    }
-  }
-
-  /**
-   * A mark tree's block, written into `left`/`right` (overwritten). Sweeps
-   * come at a rate `sweeps` sets and the weather moves; every strike -- a
-   * sweep's or a jangle's -- is queued in time order and played on its own
-   * frame, the bars rendered in segments between them.
-   */
-  renderMarkTree(channel, left, right, blockStart, length) {
-    left.fill(0, 0, length);
-    right.fill(0, 0, length);
-    const bars = channel.tubeState;
-    const blockEnd = blockStart + length;
-    const rate = this.markTreeSweepRate(channel);
-    if (channel.nextSweepFrame < blockStart) channel.nextSweepFrame = blockStart + this.eventDelayFrames(rate);
-    const pending = channel.pending;
-    while (pending.length > 0 && pending[0].frame < blockStart) pending.shift();
-    const click = { ...CHIME_CLICK, hz: MARK_TREE_BAR.clickHz };
-    let position = 0;
-    for (;;) {
-      const sweepNext = channel.nextSweepFrame <= (pending.length > 0 ? pending[0].frame : Infinity);
-      const at = sweepNext ? channel.nextSweepFrame : pending[0].frame;
-      if (at >= blockEnd) break;
-      if (sweepNext) {
-        this.startSweep(channel, at);
-        channel.nextSweepFrame += this.eventDelayFrames(rate);
-        continue;
-      }
-      const strike = pending.shift();
-      const offset = at - blockStart;
-      this.renderTubes(channel, left, right, position, offset);
-      position = offset;
-      const tube = bars[strike.bar];
-      if (!tube) continue;
-      this.strikeTube(channel, tube, strike.force);
-      this.spawnBurst(channel.bursts, 32, offset, click, strike.force * (channel.hardness ?? 0.5) * MARK_TREE_BAR.click, tube.pan);
-      // The bar swings into a neighbour, which rings a little in turn.
-      if (strike.force > 0.05 && bars.length > 1 && this.random() < MARK_TREE_JANGLE_CHANCE) {
-        const neighbour = strike.bar === 0 ? 1 : strike.bar === bars.length - 1 ? strike.bar - 1 : strike.bar + (this.random() < 0.5 ? -1 : 1);
-        this.queueBarStrike(channel, at + Math.max(1, Math.round(this.between(MARK_TREE_JANGLE_SEC) * sampleRate)), neighbour, strike.force * MARK_TREE_JANGLE_FORCE);
-      }
-    }
-    this.renderTubes(channel, left, right, position, length);
-    this.renderBursts(channel.bursts, left, right, length);
-  }
-
   /**
    * One block. Each layer is rendered whole into scratch, from its own
    * random stream, and placed (placeLayer) into the direct and send outputs;
@@ -3111,9 +2999,6 @@ class AmbientGenerator extends AudioWorkletProcessor {
           break;
         case 'chimes':
           this.renderChimes(channel, left, right, currentFrame, length);
-          break;
-        case 'marktree':
-          this.renderMarkTree(channel, left, right, currentFrame, length);
           break;
         case 'thunder': {
           this.renderThunder(channel, left, right, this.scratchSendLeft, this.scratchSendRight, length);

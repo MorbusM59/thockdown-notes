@@ -13,8 +13,6 @@ import {
   AMBIENT_THUNDER_LENGTH_MIN_SEC,
   AMBIENT_CHIME_RATE_MAX_PER_SEC,
   AMBIENT_CHIME_RATE_MIN_PER_SEC,
-  AMBIENT_MARK_TREE_SWEEP_RATE_MAX_PER_SEC,
-  AMBIENT_MARK_TREE_SWEEP_RATE_MIN_PER_SEC,
   ambientFaderGain,
   type AmbientChannelKind,
   type AmbientChannelSettings,
@@ -38,7 +36,6 @@ export const AMBIENT_KIND_GAIN: Record<AmbientChannelKind, number> = {
   water: 2.7,
   fire: 1.3,
   chimes: 1.45,
-  marktree: 0.35,
 };
 
 export interface AmbientSpace {
@@ -161,21 +158,6 @@ export function chimeTubeFrequencies(pitchHz: number, tubes: number, scale = 0):
   return chimeScaleCents(scale, tubes).map((value) => pitchHz * (2 ** (value / 1200)));
 }
 
-/**
- * A mark tree's bar pitches, lowest first. Its bars are cut to lengths that
- * shorten by an equal step from one to the next, and a free bar's pitch
- * goes as 1 / length^2, so the pitches crowd together toward the top rather
- * than climbing evenly -- the sound of a real mark tree's sweep. The
- * shortest is `spanOctaves` above the longest.
- */
-export function markTreeBarFrequencies(pitchHz: number, spanOctaves: number, bars: number): number[] {
-  const shortest = 2 ** (-spanOctaves / 2);
-  return Array.from({ length: bars }, (_, index) => {
-    const length = 1 - ((1 - shortest) * (index / Math.max(1, bars - 1)));
-    return pitchHz / (length * length);
-  });
-}
-
 // ---------------------------------------------------------------------------
 // The configure message.
 
@@ -241,14 +223,6 @@ export function toWorkletChannel(channel: AmbientChannelSettings): AmbientWorkle
         tubeHz: chimeTubeFrequencies(channel.pitchHz, channel.tubes, channel.scale),
         strikeRange: CHIME_STRIKE_RANGE,
       };
-    case 'marktree':
-      return {
-        ...channel,
-        gain,
-        space: resolveAmbientSpace(channel.distance),
-        tubeHz: markTreeBarFrequencies(channel.pitchHz, channel.spanOctaves, channel.bars),
-        strikeRange: MARK_TREE_SWEEP_RANGE,
-      };
     default:
       return { ...channel, gain, space: resolveAmbientSpace(channel.distance) };
   }
@@ -257,7 +231,6 @@ export function toWorkletChannel(channel: AmbientChannelSettings): AmbientWorkle
 const TONE_TABLE_RANGE_HZ = [NOISE_TONE_TABLE_MIN_HZ, NOISE_TONE_TABLE_MAX_HZ] as const;
 const RAIN_DROPS_RANGE = [AMBIENT_RAIN_DROPS_MIN_PER_SEC, AMBIENT_RAIN_DROPS_MAX_PER_SEC] as const;
 const CHIME_STRIKE_RANGE = [AMBIENT_CHIME_RATE_MIN_PER_SEC, AMBIENT_CHIME_RATE_MAX_PER_SEC] as const;
-const MARK_TREE_SWEEP_RANGE = [AMBIENT_MARK_TREE_SWEEP_RATE_MIN_PER_SEC, AMBIENT_MARK_TREE_SWEEP_RATE_MAX_PER_SEC] as const;
 
 /** Steps in a thunder layer's distance table: finer than the slider moves. */
 const THUNDER_SPACE_STEPS = 100;

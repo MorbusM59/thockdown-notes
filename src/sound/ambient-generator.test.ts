@@ -7,7 +7,7 @@ import {
   ambientPartGain,
   type AmbientChannelSettings,
 } from '../shared/ambientSound';
-import { chimeTubeFrequencies, markTreeBarFrequencies } from '../shared/ambientSoundDsp';
+import { chimeTubeFrequencies } from '../shared/ambientSoundDsp';
 import { CHIME_SCALES, chimeScaleCents } from '../shared/ambientChimeScales';
 import { AMBIENT_CHIME_MATERIALS } from '../shared/ambientSound';
 import { buildNoiseLoops, createNoiseSource } from '../shared/ambientNoiseLoops';
@@ -50,7 +50,7 @@ function holdGust(generator: ReturnType<typeof createProcessor>, gust: number) {
   generator.processor.advanceWeather = function advanceWeather(this: { gust: number }) { this.gust = gust; };
 }
 
-const KINDS = ['noise', 'rain', 'thunder', 'water', 'fire', 'chimes', 'marktree'] as const;
+const KINDS = ['noise', 'rain', 'thunder', 'water', 'fire', 'chimes'] as const;
 /** A layer of each kind that sounds within a couple of seconds. */
 const busy = (kind: (typeof KINDS)[number]) => (kind === 'thunder' ? layer('thunder', { share: 1, randomness: 0 }) : layer(kind));
 
@@ -98,18 +98,12 @@ describe('the ambient worklet', () => {
       const render = (blockSize: number) => createProcessor([busy(kind)], { sampleRate: 6000, blockSize, weather: { gustiness: 0, paceSec: 2 } }).render(kind === 'thunder' ? 14 : 6);
       const large = render(128);
       const small = render(32);
-      // Equal but for the order sums are taken in (voices that retire at a
-      // block's end are dropped from a list in a different order) and for
-      // what lies below the silence floor:
+      // Equal but for the order sums are taken in: voices that retire at a
+      // block's end are dropped from a list in a different order, which
+      // moves the last bit of a float and nothing a listener could hear.
       const worst = (a: number[], b: number[]) => a.reduce((max, value, index) => Math.max(max, Math.abs(value - b[index])), 0);
-      // An oscillator decayed below the worklet's silence floor (-100 dB) is
-      // cut at the start of whichever render segment first sees it, and
-      // segments follow the block size; a tube struck again after that
-      // differs by that remnant. So "the same" means the same above the
-      // floor -- a timing error would differ by orders of magnitude more.
-      const tolerance = 5e-5 * Math.max(1, peak(large.left));
-      expect(worst(small.left, large.left)).toBeLessThan(tolerance);
-      expect(worst(small.sendRight, large.sendRight)).toBeLessThan(tolerance);
+      expect(worst(small.left, large.left)).toBeLessThan(1e-6);
+      expect(worst(small.sendRight, large.sendRight)).toBeLessThan(1e-6);
       expect(peak(large.left)).toBeGreaterThan(1e-3);
     }
   });
@@ -1104,60 +1098,5 @@ describe('chimes: unison, material and scale', () => {
     const bohlenPierce = CHIME_SCALES.findIndex((scale) => scale.name.startsWith('Bohlen'));
     expect(chimeTubeFrequencies(100, 8, bohlenPierce).length).toBe(8);
     expect(CHIME_SCALES[bohlenPierce].period).toBeCloseTo(1200 * Math.log2(3), 2);
-  });
-});
-
-describe('mark tree', () => {
-  it('grades its bars as a row cut to evenly shortening lengths: pitches crowding toward the top', () => {
-    const bars = markTreeBarFrequencies(1000, 2, 25);
-    expect(bars[0]).toBeCloseTo(1000, 9);
-    expect(bars.at(-1)).toBeCloseTo(4000, 6);
-    const steps = bars.slice(1).map((hz, index) => Math.log2(hz / bars[index]));
-    for (let index = 1; index < steps.length; index += 1) expect(steps[index]).toBeGreaterThan(steps[index - 1]);
-    // In length, the steps are equal.
-    const lengths = bars.map((hz) => 1 / Math.sqrt(hz));
-    const lengthSteps = lengths.slice(1).map((value, index) => lengths[index] - value);
-    for (const step of lengthSteps) expect(step).toBeCloseTo(lengthSteps[0], 9);
-  });
-
-  it('sweeps every bar in order across its sweep time, rising or falling as its direction says', () => {
-    const sweep = (direction: number) => {
-      const generator = createProcessor([layer('marktree', { bars: 20, sweepSec: 1, direction, sweeps: 0 })], { sampleRate: 8000 });
-      const channel = generator.processor.channels[0];
-      generator.processor.startSweep(channel, 0);
-      const strikes = [...channel.pending] as Array<{ frame: number; bar: number }>;
-      return strikes;
-    };
-    for (const [direction, rising] of [[0, true], [1, false]] as const) {
-      const strikes = sweep(direction);
-      expect(strikes.length).toBe(20);
-      expect(new Set(strikes.map((strike) => strike.bar)).size).toBe(20);
-      const first = strikes[0].bar;
-      const last = strikes.at(-1)!.bar;
-      expect(rising ? first < last : first > last).toBe(true);
-      const span = (strikes.at(-1)!.frame - strikes[0].frame) / 8000;
-      expect(span).toBeGreaterThan(0.85);
-      expect(span).toBeLessThan(1.15);
-    }
-  });
-
-  it('shimmers on after the sweep as struck bars knock their neighbours', () => {
-    const generator = createProcessor([layer('marktree', { bars: 20, sweepSec: 0.5, sweeps: 0 })], { sampleRate: 8000 });
-    const channel = generator.processor.channels[0];
-    generator.processor.startSweep(channel, 0);
-    let strikes = 0;
-    const strike = generator.processor.strikeTube.bind(generator.processor);
-    generator.processor.strikeTube = (...args: unknown[]) => { strikes += 1; strike(...args); };
-    generator.render(3);
-    expect(strikes).toBeGreaterThan(22);
-  });
-
-  it('spreads its row across the field with width, and gathers it to a point without', () => {
-    const at = (width: number) => {
-      const generator = createProcessor([layer('marktree', { bars: 20, width, pan: 0, distance: 0, sweeps: 0 })], { sampleRate: 8000 });
-      return generator.processor.channels[0].tubeState.map((tube: { pan: number }) => tube.pan);
-    };
-    expect(Math.max(...at(1)) - Math.min(...at(1))).toBeGreaterThan(1.9);
-    expect(Math.max(...at(0)) - Math.min(...at(0))).toBeLessThan(1e-9);
   });
 });

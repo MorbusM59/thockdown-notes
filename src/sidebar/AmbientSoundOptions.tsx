@@ -4,16 +4,6 @@ import { CompactScrollbarSlider } from '../components/CompactScrollbarSlider'
 import {
   AMBIENT_CHANNEL_ROSTER,
   AMBIENT_CHIME_MATERIALS,
-  AMBIENT_MARK_TREE_BARS_MAX,
-  AMBIENT_MARK_TREE_BARS_MIN,
-  AMBIENT_MARK_TREE_PITCH_MAX_HZ,
-  AMBIENT_MARK_TREE_PITCH_MIN_HZ,
-  AMBIENT_MARK_TREE_RING_MAX_SEC,
-  AMBIENT_MARK_TREE_RING_MIN_SEC,
-  AMBIENT_MARK_TREE_SPAN_MAX_OCTAVES,
-  AMBIENT_MARK_TREE_SPAN_MIN_OCTAVES,
-  AMBIENT_MARK_TREE_SWEEP_MAX_SEC,
-  AMBIENT_MARK_TREE_SWEEP_MIN_SEC,
   AMBIENT_CHIME_PITCH_MAX_HZ,
   AMBIENT_CHIME_PITCH_MIN_HZ,
   AMBIENT_CHIME_RING_MAX_SEC,
@@ -45,7 +35,6 @@ import {
   ambientSettingsSignature,
   applyAmbientPreset,
   chimeStrikesPerSecond,
-  markTreeSweepsPerSecond,
   cloneSettings,
   createAmbientChannel,
   rainDropsPerSecond,
@@ -82,7 +71,6 @@ const KIND_LOOK: Record<AmbientChannelKind, { icon: string; label: string }> = {
   water: { icon: 'fa-droplet', label: 'Water' },
   fire: { icon: 'fa-fire', label: 'Fire' },
   chimes: { icon: 'fa-bell', label: 'Chimes' },
-  marktree: { icon: 'fa-wand-sparkles', label: 'Mark tree' },
 }
 
 const ENVIRONMENT_DEFAULTS = { ...DEFAULT_AMBIENT_SPACE, ...DEFAULT_AMBIENT_WEATHER } as unknown as Record<string, number>
@@ -335,32 +323,7 @@ const CONTROLS: { [K in AmbientChannelKind]: ControlGroup[] } = {
       ],
     },
     { label: 'Place', controls: [DISTANCE, PAN, { ...WEATHER, tooltip: 'How much gusts set the striker moving, harder and into more of the ring' }] },
-  ],  marktree: [
-    {
-      label: 'Sound',
-      controls: [
-        VOLUME,
-        { key: 'pitchHz', track: 'pitch', tooltip: 'The longest bar\'s pitch', min: AMBIENT_MARK_TREE_PITCH_MIN_HZ, max: AMBIENT_MARK_TREE_PITCH_MAX_HZ, log: true, format: formatPitch },
-        { key: 'spanOctaves', track: 'span', tooltip: 'How far above it the shortest bar sounds; the pitches crowd together toward the top, as a real row of bars cut to evenly shortening lengths does', min: AMBIENT_MARK_TREE_SPAN_MIN_OCTAVES, max: AMBIENT_MARK_TREE_SPAN_MAX_OCTAVES, step: 0.05, format: (value) => `${value.toFixed(1)} oct` },
-        { key: 'bars', track: 'bars', tooltip: 'How many bars', min: AMBIENT_MARK_TREE_BARS_MIN, max: AMBIENT_MARK_TREE_BARS_MAX, step: 1, format: (value) => `${Math.round(value)} bars` },
-        { key: 'ringSec', track: 'ring', tooltip: 'How long a struck bar rings', min: AMBIENT_MARK_TREE_RING_MIN_SEC, max: AMBIENT_MARK_TREE_RING_MAX_SEC, log: true, format: formatSeconds },
-        unit('hardness', 'hardness', 'A soft beater, warm, to a hard one, bright and ticking', (value) => formatAmount(value, 'Soft', 'Hard')),
-        unit('sweeps', 'sweeps', 'How often the stick is drawn across the row', (value) => { const every = 1 / markTreeSweepsPerSecond(value); return `every ${every < 10 ? every.toFixed(1) : Math.round(every)} s` }),
-        { key: 'sweepSec', track: 'speed', tooltip: 'How long a sweep takes to cross every bar', min: AMBIENT_MARK_TREE_SWEEP_MIN_SEC, max: AMBIENT_MARK_TREE_SWEEP_MAX_SEC, log: true, format: formatSeconds },
-        unit('direction', 'direction', 'Which way the stick runs: always rising, either way, or always falling', (value) => (value < 0.01 ? 'Rising' : value > 0.99 ? 'Falling' : Math.abs(value - 0.5) < 0.01 ? 'Either' : `${Math.round(value * 100)}% falling`)),
-      ],
-    },
-    {
-      label: 'Place',
-      controls: [
-        DISTANCE,
-        PAN,
-        unit('width', 'width', 'The row gathered to a point at its pan, or spread as wide as its pan allows', (value) => formatAmount(value, 'Point', 'Wide')),
-        { ...WEATHER, tooltip: 'How much gusts bring sweeps more often' },
-      ],
-    },
   ],
-
 }
 
 /**
