@@ -556,7 +556,7 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
     name: 'Stormy Night',
     settings: soundscape({
       'chimes-1': { activity: 0.79, distance: 0.86, hardness: 1, material: 0.68, pan: -0.61, pitchHz: chimeSemitoneHz(-10), ringSec: 15, scale: 1, tubes: 8, unison: 0, volume: 0.66 },
-      'chimes-2': { activity: 0.69, distance: 0.8, hardness: 0.22, material: 0.06, pan: 0.57, pitchHz: chimeSemitoneHz(2), ringSec: 15, scale: 1, unison: 0.84, volume: 0.57, weather: 1 },
+      'chimes-2': { activity: 0.69, distance: 0.8, hardness: 0.22, material: 0.06, pan: 0.57, pitchHz: chimeSemitoneHz(2), ringSec: 15, scale: 0, unison: 0.84, volume: 0.57, weather: 1 },
       'noise-1': { brightnessHz: 1232.94, colour: 0.8, curve: 0.58, depth: 0.35, distance: 0.6, focus: 0.28, periodSec: 10.706, sweep: 0.38, variation: 0.64, volume: 0.76, weather: 0.5, width: 0.98 },
       'noise-2': { brightnessHz: 661.36, volume: 0.79 },
       'noise-3': { brightnessHz: 120.09, colour: 0, focus: 0.35, volume: 0.75 },
