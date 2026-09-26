@@ -664,21 +664,65 @@ describe('fire', () => {
     expect(Math.abs(steps[start])).toBeGreaterThanOrEqual(Math.abs(steps[start + 1]));
   });
 
-  it('hisses as strongly as its hiss says, and higher with its tone, at about the same loudness', () => {
-    // The hiss alone: the same fire rendered without it, taken away. The
-    // hiss draws nothing from the random stream, so all else is identical.
-    const render = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'fire' }>>) => (
-      createProcessor([layer('fire', { crackle: 0, pops: 0, flicker: 0, ...overrides })], { sampleRate: 32000 }).render(4).left
-    );
-    const hissOf = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'fire' }>>) => {
-      const bare = render({ ...overrides, hiss: 0 });
-      return render(overrides).map((sample, index) => sample - bare[index]);
+  /** A fire with its roar silenced (a silent brown loop), so what is left is the hiss and the bursts. */
+  const withoutRoar = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'fire' }>>, sampleRate = 32000) => {
+    const generator = createProcessor([layer('fire', { crackle: 0, pops: 0, ...overrides })], { sampleRate });
+    const loop = generator.processor.noiseLoop.bind(generator.processor);
+    const silent = new Float32Array(sampleRate);
+    generator.processor.noiseLoop = (type: string) => (type === 'brown' ? silent : loop(type));
+    return generator;
+  };
+
+  it('sizzles in pockets: as many at once as its hiss asks, none at zero', () => {
+    const meanPockets = (hiss: number) => {
+      const generator = withoutRoar({ hiss }, 4000);
+      let sum = 0;
+      // A pocket lives about 15 s, so a count settles only over minutes.
+      for (let second = 0; second < 300; second += 1) {
+        generator.render(1);
+        sum += generator.processor.channels[0].pockets.length;
+      }
+      return sum / 300;
     };
-    expect(rms(hissOf({ hiss: 1 })) / rms(hissOf({ hiss: 0.5 }))).toBeCloseTo(2, 3);
-    const dull = hissOf({ hissTone: 0 });
-    const thin = hissOf({ hissTone: 1 });
-    // The share below 2 kHz, through a fourth-order low-pass: a dull hiss
-    // keeps much of itself there, a thin one hardly any.
+    expect(meanPockets(0)).toBe(0);
+    expect(rms(withoutRoar({ hiss: 0 }).render(4).left)).toBe(0);
+    expect(meanPockets(1)).toBeGreaterThan(3);
+    expect(meanPockets(1)).toBeLessThan(5);
+    expect(meanPockets(1)).toBeGreaterThan(1.3 * meanPockets(0.5));
+  });
+
+  it('fades each pocket in and out over seconds and barely moves it in between', () => {
+    const generator = withoutRoar({ hiss: 1 });
+    const { processor } = generator;
+    const channel = processor.channels[0];
+    for (const pocket of channel.pockets) {
+      // Raised-cosine ramps: from nothing, over at least the shortest rise.
+      expect(processor.pocketEnvelope(pocket, 0)).toBe(0);
+      expect(pocket.rise / 32000).toBeGreaterThanOrEqual(1.5);
+      expect(pocket.fall / 32000).toBeGreaterThanOrEqual(2);
+      expect(processor.pocketEnvelope(pocket, pocket.rise + 1)).toBe(1);
+      let steepest = 0;
+      for (let age = 1; age < pocket.rise + pocket.hold + pocket.fall; age += 64) {
+        steepest = Math.max(steepest, Math.abs(processor.pocketEnvelope(pocket, age) - processor.pocketEnvelope(pocket, age - 64)));
+      }
+      // The largest change in 2 ms, over a rise of at least 1.5 s.
+      expect(steepest).toBeLessThan(0.01);
+    }
+    // The wobble within the plateau stays near the baseline.
+    let low = 1;
+    let high = 1;
+    for (let segment = 0; segment < 20000; segment += 1) {
+      generator.render(32 / 32000);
+      for (const pocket of channel.pockets) {
+        low = Math.min(low, pocket.wobbleTo);
+        high = Math.max(high, pocket.wobbleTo);
+      }
+    }
+    expect(low).toBeGreaterThanOrEqual(0.87);
+    expect(high).toBeLessThanOrEqual(1.13);
+  });
+
+  it('hisses higher with its tone', () => {
     const lowShare = (samples: number[]) => {
       const g = Math.tan((Math.PI * 2000) / 32000);
       const k = Math.SQRT2;
@@ -699,15 +743,15 @@ describe('fire', () => {
       const second = stage();
       return (rms(samples.map((value) => second(first(value)))) / rms(samples)) ** 2;
     };
+    const dull = withoutRoar({ hiss: 1, hissTone: 0 }).render(8).left;
+    const thin = withoutRoar({ hiss: 1, hissTone: 1 }).render(8).left;
     expect(lowShare(thin)).toBeLessThan(0.3 * lowShare(dull));
-    const db = 20 * Math.log10(rms(thin) / rms(dull));
-    expect(Math.abs(db)).toBeLessThan(4);
   });
 
-  it('pops like a small explosion: loudest right at its start', () => {
-    // Where each pop is loudest, by its energy in quarter-millisecond
-    // windows (one sample of noise can fall near zero by chance). A pop
-    // through a narrow band alone swelled for a median 3 ms, up to 18 ms.
+  it('pops dry: loudest right at its start, and all but gone within 3 ms', () => {
+    // Energy in quarter-millisecond windows (one sample of noise can fall
+    // near zero by chance). A narrow band swelled for a median 3 ms; a
+    // resonant one rang on after the burst -- the tin a pop must not be.
     const generator = createProcessor([], { sampleRate: 48000 });
     const peaksMs: number[] = [];
     for (let trial = 0; trial < 40; trial += 1) {
@@ -722,10 +766,13 @@ describe('fire', () => {
         energies.push(energy);
       }
       peaksMs.push(energies.indexOf(Math.max(...energies)) * 0.25);
+      const total = energies.reduce((sum, value) => sum + value, 0);
+      const tail = energies.slice(12).reduce((sum, value) => sum + value, 0);
+      expect(tail / total).toBeLessThan(0.01);
     }
     peaksMs.sort((a, b) => a - b);
-    expect(peaksMs[20]).toBeLessThanOrEqual(0.5);
-    expect(peaksMs[39]).toBeLessThanOrEqual(2);
+    expect(peaksMs[20]).toBeLessThanOrEqual(0.25);
+    expect(peaksMs[39]).toBeLessThanOrEqual(1);
   });
 
   it('roars louder and lower as it grows', () => {
