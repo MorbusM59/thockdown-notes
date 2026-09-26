@@ -212,7 +212,7 @@ export interface AmbientWaterChannelSettings extends AmbientChannelBaseSettings 
 }
 
 /**
- * A wood fire: the roar of the flames, their hiss, the crackle of burning
+ * A wood fire: the roar of the flames, the crackle of burning
  * fibres and the pop of sap.
  */
 export interface AmbientFireChannelSettings extends AmbientChannelBaseSettings {
@@ -233,12 +233,16 @@ export interface AmbientFireChannelSettings extends AmbientChannelBaseSettings {
   popLevel: number;
   /** 0 a dull thud to 1 a bright crack: the pop darkened, never made to ring. */
   popTone: number;
-  /** How many pockets of moisture sizzle at once, 0 none to 1 about four. */
-  hiss: number;
-  /** The sizzle's level, as crackleLevel. */
-  hissLevel: number;
+  /**
+   * The chance a pop sets off a SIZZLE -- moisture the burst has opened,
+   * boiling out of the wood at the pop's place -- 0 never to 1 always, while
+   * fewer than AMBIENT_FIRE_MAX_SIZZLES are sizzling.
+   */
+  sizzle: number;
+  /** The sizzle's level (ambientPartGain). */
+  sizzleLevel: number;
   /** The sizzle's pitch, 0 low (2 kHz) to 1 high (8 kHz). */
-  hissTone: number;
+  sizzleTone: number;
   /** How far the roar swings as the flames move, 0 a steady burn to 1 surging and faltering. */
   flicker: number;
   /** The average length of one movement of the flames, in seconds. */
@@ -363,10 +367,14 @@ export const AMBIENT_RAIN_DRIPS_MAX_PER_SEC = 3;
 export const AMBIENT_THUNDER_JITTER = 0.25;
 export const AMBIENT_THUNDER_LENGTH_MIN_SEC = 4;
 export const AMBIENT_THUNDER_LENGTH_MAX_SEC = 30;
+export const AMBIENT_FIRE_MAX_SIZZLES = 4;
 export const AMBIENT_FIRE_PERIOD_MIN_SEC = 0.08;
 export const AMBIENT_FIRE_PERIOD_MAX_SEC = 2;
-export const AMBIENT_CHIME_PITCH_MIN_HZ = 150;
-export const AMBIENT_CHIME_PITCH_MAX_HZ = 1500;
+/** The chimes' pitch range, in whole semitones from A440 (about 156 Hz to 1480 Hz). */
+export const AMBIENT_CHIME_SEMITONE_MIN = -18;
+export const AMBIENT_CHIME_SEMITONE_MAX = 21;
+export const AMBIENT_CHIME_PITCH_MIN_HZ = 440 * (2 ** (AMBIENT_CHIME_SEMITONE_MIN / 12));
+export const AMBIENT_CHIME_PITCH_MAX_HZ = 440 * (2 ** (AMBIENT_CHIME_SEMITONE_MAX / 12));
 export const AMBIENT_CHIME_TUBES_MIN = 3;
 export const AMBIENT_CHIME_TUBES_MAX = 8;
 export const AMBIENT_CHIME_RING_MIN_SEC = 1;
@@ -416,6 +424,19 @@ export function logLerp(from: number, to: number, t: number): number {
 /** A rain layer's intensity as drops heard one by one per second. */
 export function rainDropsPerSecond(intensity: number): number {
   return logLerp(AMBIENT_RAIN_DROPS_MIN_PER_SEC, AMBIENT_RAIN_DROPS_MAX_PER_SEC, clamp(intensity, 0, 1));
+}
+
+/**
+ * Chime pitch is tuned in equal-tempered semitones from A440: the pitch of
+ * semitone `n` above (or below) it.
+ */
+export function chimeSemitoneHz(semitone: number): number {
+  return 440 * (2 ** (semitone / 12));
+}
+
+/** The semitone (from A440) nearest `hz`. */
+export function chimeSemitoneOf(hz: number): number {
+  return Math.round(12 * Math.log2(hz / 440));
 }
 
 /** A chimes layer's activity as strikes per second. */
@@ -481,21 +502,12 @@ export const AMBIENT_CHANNEL_DEFAULTS: KindDefaults = {
   fire: {
     kind: 'fire', enabled: true, solo: false, volume: 0.7, distance: 0.15,
     size: 0.5, width: 1, crackle: 0.5, crackleLevel: 0.75, crackleTone: 0.5, pops: 0.3, popLevel: 0.75, popTone: 0.7,
-    hiss: 0.5, hissLevel: 0.75, hissTone: 0.2, flicker: 0.6, flickerPeriodSec: 0.4, flickerDynamics: 0.4, pan: 0, weather: 0,
+    sizzle: 0.5, sizzleLevel: 0.75, sizzleTone: 0.2, flicker: 0.6, flickerPeriodSec: 0.4, flickerDynamics: 0.4, pan: 0, weather: 0,
   },
   chimes: {
     kind: 'chimes', enabled: true, solo: false, volume: 0.6, distance: 0.35,
-    pitchHz: 520, tubes: 5, ringSec: 6, activity: 0.3, hardness: 0.6, unison: 0.3, material: 1 / 3, scale: 0, pan: 0, weather: 0.8,
+    pitchHz: chimeSemitoneHz(3), tubes: 5, ringSec: 6, activity: 0.3, hardness: 0.6, unison: 0.3, material: 1 / 3, scale: 0, pan: 0, weather: 0.8,
   },
-};
-
-/** The pan each positional slot starts at, so a kind's layers begin spread across the field. */
-const DEFAULT_PANS: Partial<Record<AmbientChannelKind, readonly number[]>> = {
-  rain: [-0.6, 0, 0.6],
-  thunder: [-0.5, 0.1, 0.6],
-  water: [-0.3, 0.4],
-  fire: [0, -0.4],
-  chimes: [0.35, -0.45],
 };
 
 export const DEFAULT_AMBIENT_SPACE: Readonly<AmbientSpaceSettings> = { size: 0.45, damping: 0.5, echoes: 0.1, amount: 0.7 };
@@ -507,11 +519,8 @@ export function createAmbientChannel<K extends AmbientChannelKind>(
   kind: K,
   overrides: Partial<AmbientChannelOfKind<K>> = {},
 ): AmbientChannelOfKind<K> {
-  const entry = AMBIENT_CHANNEL_ROSTER.find((item) => item.id === id);
-  const pan = entry ? DEFAULT_PANS[kind]?.[entry.number - 1] : undefined;
   return {
     ...AMBIENT_CHANNEL_DEFAULTS[kind],
-    ...(pan !== undefined ? { pan } : {}),
     id,
     ...overrides,
   } as unknown as AmbientChannelOfKind<K>;
@@ -653,8 +662,8 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
     id: 'porch',
     name: 'Porch chimes',
     settings: soundscape({
-      'chimes-1': { pitchHz: 520, tubes: 5, ringSec: 7, activity: 0.25, hardness: 0.6, distance: 0.3, pan: 0.35, volume: 0.6, weather: 0.9 },
-      'chimes-2': { pitchHz: 260, tubes: 4, ringSec: 11, activity: 0.12, hardness: 0.35, distance: 0.7, pan: -0.5, volume: 0.52, weather: 0.9 },
+      'chimes-1': { pitchHz: chimeSemitoneHz(3), tubes: 5, ringSec: 7, activity: 0.25, hardness: 0.6, distance: 0.3, pan: 0.35, volume: 0.6, weather: 0.9 },
+      'chimes-2': { pitchHz: chimeSemitoneHz(-9), tubes: 4, ringSec: 11, activity: 0.12, hardness: 0.35, distance: 0.7, pan: -0.5, volume: 0.52, weather: 0.9 },
       'noise-1': { colour: 0.5, brightnessHz: 2200, focus: 0.15, depth: 0.5, periodSec: 12, sweep: 0.6, variation: 0.6, sway: 0.4, distance: 0.5, volume: 0.55, weather: 1 },
       'noise-2': { colour: 0.1, brightnessHz: 500, depth: 0.3, periodSec: 22, variation: 0.5, distance: 0.8, volume: 0.45, weather: 0.8 },
     }, { size: 0.6, damping: 0.6, echoes: 0.2, amount: 0.55 }, { gustiness: 0.6, paceSec: 12 }),
@@ -740,7 +749,7 @@ export const AMBIENT_FIELD_BOUNDS: { [K in AmbientChannelKind]: FieldBounds } = 
   water: { ...COMMON_BOUNDS, flow: UNIT, size: UNIT, turbulence: UNIT, pan: SIGNED },
   fire: {
     ...COMMON_BOUNDS, size: UNIT, width: UNIT, crackle: UNIT, crackleLevel: UNIT, crackleTone: UNIT, pops: UNIT, popLevel: UNIT, popTone: UNIT,
-    hiss: UNIT, hissLevel: UNIT, hissTone: UNIT, flicker: UNIT, flickerPeriodSec: [AMBIENT_FIRE_PERIOD_MIN_SEC, AMBIENT_FIRE_PERIOD_MAX_SEC],
+    sizzle: UNIT, sizzleLevel: UNIT, sizzleTone: UNIT, flicker: UNIT, flickerPeriodSec: [AMBIENT_FIRE_PERIOD_MIN_SEC, AMBIENT_FIRE_PERIOD_MAX_SEC],
     flickerDynamics: UNIT, pan: SIGNED, weather: UNIT,
   },
   chimes: {
@@ -788,8 +797,11 @@ export function sanitizeAmbientSettings(input: unknown): AmbientSettings {
     if (!saved) return fallback;
     const solo = saved.solo === true && !soloSeen;
     if (solo) soloSeen = true;
+    const fields = sanitizeFields(saved, AMBIENT_FIELD_BOUNDS[entry.kind], fallback) as unknown as Record<string, unknown>;
+    // Chimes are tuned in semitones: a stored pitch lands on the nearest one.
+    if (entry.kind === 'chimes') fields.pitchHz = chimeSemitoneHz(chimeSemitoneOf(fields.pitchHz as number));
     return {
-      ...sanitizeFields(saved, AMBIENT_FIELD_BOUNDS[entry.kind], fallback),
+      ...fields,
       id: entry.id,
       kind: entry.kind,
       enabled: saved.enabled !== false,

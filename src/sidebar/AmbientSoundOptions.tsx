@@ -34,6 +34,8 @@ import {
   ambientPartDb,
   ambientSettingsSignature,
   applyAmbientPreset,
+  chimeSemitoneHz,
+  chimeSemitoneOf,
   chimeStrikesPerSecond,
   cloneSettings,
   createAmbientChannel,
@@ -166,6 +168,8 @@ interface ControlSpec {
   max: number
   step?: number
   log?: boolean
+  /** A pitch in Hz stepped in equal-tempered semitones from A440: the slider moves one semitone per step. */
+  semitones?: boolean
   format: (value: number) => string
 }
 
@@ -299,9 +303,9 @@ const CONTROLS: { [K in AmbientChannelKind]: ControlGroup[] } = {
         unit('pops', 'pops', 'How often sap pops and sizzles', (value) => formatAmount(value, 'Never', 'Often')),
         unit('popLevel', 'level', 'How loud the pops are', formatPartLevel),
         unit('popTone', 'tone', 'A dull thud to a bright crack', (value) => formatAmount(value, 'Thud', 'Crack')),
-        unit('hiss', 'hiss', 'Moisture boiling out of the wood: pockets that sizzle for a while, fading in and out over seconds, several at once', (value) => (value < 0.005 ? 'Off' : `${(value * 4).toFixed(1)} pockets`)),
-        unit('hissLevel', 'level', 'How loud the sizzle is', formatPartLevel),
-        unit('hissTone', 'tone', 'The pitch of the sizzle', (value) => `around ${formatHz(2000 * (4 ** value))}`),
+        unit('sizzle', 'sizzle', 'The chance a pop opens a pocket of moisture that sizzles on at its place for a while (at most four at once)', (value) => (value < 0.005 ? 'Never' : value > 0.995 ? 'Every pop' : `${Math.round(value * 100)}% of pops`)),
+        unit('sizzleLevel', 'level', 'How loud the sizzle is', formatPartLevel),
+        unit('sizzleTone', 'tone', 'The pitch of the sizzle', (value) => `around ${formatHz(2000 * (4 ** value))}`),
         unit('flicker', 'flicker', 'How far the roar swings as the flames move: a steady burn, or surging and faltering', (value) => formatAmount(value, 'Steady', 'Guttering')),
         { key: 'flickerPeriodSec', track: 'period', tooltip: 'The average length of one movement of the flames', min: AMBIENT_FIRE_PERIOD_MIN_SEC, max: AMBIENT_FIRE_PERIOD_MAX_SEC, log: true, format: formatSeconds },
         unit('flickerDynamics', 'dynamics', 'Soft swells at an even pace, or sudden lurches at an uneven one', (value) => formatAmount(value, 'Gentle', 'Wild')),
@@ -314,7 +318,7 @@ const CONTROLS: { [K in AmbientChannelKind]: ControlGroup[] } = {
       label: 'Sound',
       controls: [
         VOLUME,
-        { key: 'pitchHz', track: 'pitch', tooltip: 'The lowest tube; the rest climb the scale', min: AMBIENT_CHIME_PITCH_MIN_HZ, max: AMBIENT_CHIME_PITCH_MAX_HZ, log: true, format: formatPitch },
+        { key: 'pitchHz', track: 'pitch', tooltip: 'The lowest tube, in semitones from A440; the rest climb the scale', min: AMBIENT_CHIME_PITCH_MIN_HZ, max: AMBIENT_CHIME_PITCH_MAX_HZ, semitones: true, format: formatPitch },
         { key: 'tubes', track: 'tubes', tooltip: 'How many tubes', min: AMBIENT_CHIME_TUBES_MIN, max: AMBIENT_CHIME_TUBES_MAX, step: 1, format: (value) => `${Math.round(value)} tubes` },
         { key: 'ringSec', track: 'ring', tooltip: 'How long a struck tube rings (for metal; wood knocks far shorter, glass a little shorter, the veil longer)', min: AMBIENT_CHIME_RING_MIN_SEC, max: AMBIENT_CHIME_RING_MAX_SEC, log: true, format: formatSeconds },
         unit('activity', 'activity', 'How often the striker is set moving, before the wind has any say', (value) => `${chimeStrikesPerSecond(value).toFixed(chimeStrikesPerSecond(value) < 1 ? 2 : 1)} / s`),
@@ -366,10 +370,12 @@ function withSettings(preferences: AmbientPreferences, settings: AmbientSettings
 }
 
 function toPosition(spec: ControlSpec, value: number): number {
+  if (spec.semitones) return chimeSemitoneOf(value)
   return spec.log ? Math.log(value / spec.min) / Math.log(spec.max / spec.min) : value
 }
 
 function fromPosition(spec: ControlSpec, position: number): number {
+  if (spec.semitones) return chimeSemitoneHz(Math.round(position))
   const value = spec.log ? spec.min * ((spec.max / spec.min) ** position) : position
   return spec.step === 1 ? Math.round(value) : value
 }
@@ -394,9 +400,9 @@ function ControlGroups({ idPrefix, groups, values, defaults, disabled, name, onC
             <CompactScrollbarSlider
               key={spec.key}
               id={`${idPrefix}-${spec.key}`}
-              min={spec.log ? 0 : spec.min}
-              max={spec.log ? 1 : spec.max}
-              step={spec.log ? 0.005 : spec.step ?? 0.01}
+              min={spec.semitones ? chimeSemitoneOf(spec.min) : spec.log ? 0 : spec.min}
+              max={spec.semitones ? chimeSemitoneOf(spec.max) : spec.log ? 1 : spec.max}
+              step={spec.semitones ? 1 : spec.log ? 0.005 : spec.step ?? 0.01}
               value={toPosition(spec, values[spec.key])}
               trackLabel={spec.track}
               tooltipLabel={spec.tooltip}
@@ -686,7 +692,6 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                 }}
               >
                 <span className={`fa-solid ${look.icon}`} aria-hidden="true" />
-                <span className="ambient-channel-number" aria-hidden="true">{entry.number}</span>
               </button>
             )
           })}

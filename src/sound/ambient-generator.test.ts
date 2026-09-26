@@ -765,56 +765,65 @@ describe('fire', () => {
     return generator;
   };
 
-  it('sizzles in pockets: as many at once as its hiss asks, none at zero', () => {
-    const meanPockets = (hiss: number) => {
-      const generator = withoutRoar({ hiss }, 4000);
-      let sum = 0;
-      // A pocket lives about 15 s, so a count settles only over minutes.
-      for (let second = 0; second < 300; second += 1) {
-        generator.render(1);
-        sum += generator.processor.channels[0].pockets.length;
-      }
-      return sum / 300;
-    };
-    expect(meanPockets(0)).toBe(0);
-    expect(rms(withoutRoar({ hiss: 0 }).render(4).left)).toBe(0);
-    expect(meanPockets(1)).toBeGreaterThan(3);
-    expect(meanPockets(1)).toBeLessThan(5);
-    expect(meanPockets(1)).toBeGreaterThan(1.3 * meanPockets(0.5));
-  });
-
-  it('fades each pocket in and out over seconds and barely moves it in between', () => {
-    const generator = withoutRoar({ hiss: 1 });
-    const { processor } = generator;
-    const channel = processor.channels[0];
-    for (const pocket of channel.pockets) {
-      // Raised-cosine ramps: from nothing, over at least the shortest rise.
-      expect(processor.pocketEnvelope(pocket, 0)).toBe(0);
-      expect(pocket.rise / 32000).toBeGreaterThanOrEqual(1.5);
-      expect(pocket.fall / 32000).toBeGreaterThanOrEqual(2);
-      expect(processor.pocketEnvelope(pocket, pocket.rise + 1)).toBe(1);
-      let steepest = 0;
-      for (let age = 1; age < pocket.rise + pocket.hold + pocket.fall; age += 64) {
-        steepest = Math.max(steepest, Math.abs(processor.pocketEnvelope(pocket, age) - processor.pocketEnvelope(pocket, age - 64)));
-      }
-      // The largest change in 2 ms, over a rise of at least 1.5 s.
-      expect(steepest).toBeLessThan(0.01);
+  it('sizzles only where a pop has burst, at the pop\'s place, from the pop\'s moment, never more than four at once', () => {
+    const generator = withoutRoar({ pops: 1, sizzle: 1, width: 1 }, 8000)
+    const { processor } = generator
+    const pops: Array<{ offset: number; pan: number }> = []
+    const spawn = processor.spawnBurst.bind(processor)
+    processor.spawnBurst = (bursts: unknown, max: number, offset: number, spec: { spatter?: unknown }, level: number, pan: number) => {
+      if (spec.spatter) pops.push({ offset, pan })
+      spawn(bursts, max, offset, spec, level, pan)
     }
-    // The wobble within the plateau stays near the baseline.
-    let low = 1;
-    let high = 1;
+    const sizzles: Array<{ offset: number; pan: number }> = []
+    const add = processor.addSizzle.bind(processor)
+    processor.addSizzle = (channel: unknown, offset: number, pan: number) => { sizzles.push({ offset, pan }); add(channel, offset, pan) }
+    let most = 0
+    for (let block = 0; block < (8000 * 60) / 128; block += 1) {
+      generator.render(128 / 8000)
+      most = Math.max(most, processor.channels[0].sizzles.length)
+    }
+    expect(sizzles.length).toBeGreaterThan(3)
+    expect(most).toBeLessThanOrEqual(4)
+    // Every sizzle is born on a pop's frame, at that pop's pan.
+    for (const sizzle of sizzles) expect(pops.some((pop) => pop.offset === sizzle.offset && pop.pan === sizzle.pan)).toBe(true)
+    // No pops, or no chance: no sizzle.
+    for (const overrides of [{ pops: 0, sizzle: 1 }, { pops: 1, sizzle: 0 }]) {
+      const quiet = withoutRoar(overrides, 8000)
+      quiet.render(30)
+      expect(quiet.processor.channels[0].sizzles.length).toBe(0)
+    }
+  })
+
+  it('starts each sizzle with its pop, holds it with only a gentle wobble, and fades it over seconds', () => {
+    const generator = withoutRoar({ pops: 1, sizzle: 1 })
+    const { processor } = generator
+    const channel = processor.channels[0]
+    processor.addSizzle(channel, 0, 0)
+    const sizzle = channel.sizzles[0]
+    // Full within 5 ms of the pop: it pops in rather than fading in.
+    expect(sizzle.rise / 32000).toBeLessThanOrEqual(0.006)
+    expect(processor.sizzleEnvelope(sizzle, sizzle.rise + 1)).toBe(1)
+    expect(sizzle.fall / 32000).toBeGreaterThanOrEqual(2)
+    let steepest = 0
+    for (let age = sizzle.rise + 64; age < sizzle.rise + sizzle.hold + sizzle.fall; age += 64) {
+      steepest = Math.max(steepest, Math.abs(processor.sizzleEnvelope(sizzle, age) - processor.sizzleEnvelope(sizzle, age - 64)))
+    }
+    // After the onset, the largest change in 2 ms, over a fall of at least 2 s.
+    expect(steepest).toBeLessThan(0.01)
+    let low = 1
+    let high = 1
     for (let segment = 0; segment < 20000; segment += 1) {
-      generator.render(32 / 32000);
-      for (const pocket of channel.pockets) {
-        low = Math.min(low, pocket.wobbleTo);
-        high = Math.max(high, pocket.wobbleTo);
+      generator.render(32 / 32000)
+      for (const current of channel.sizzles) {
+        low = Math.min(low, current.wobbleTo)
+        high = Math.max(high, current.wobbleTo)
       }
     }
-    expect(low).toBeGreaterThanOrEqual(0.87);
-    expect(high).toBeLessThanOrEqual(1.13);
-  });
+    expect(low).toBeGreaterThanOrEqual(0.87)
+    expect(high).toBeLessThanOrEqual(1.13)
+  })
 
-  it('hisses higher with its tone', () => {
+  it('sizzles higher with its tone', () => {
     const lowShare = (samples: number[]) => {
       const g = Math.tan((Math.PI * 2000) / 32000);
       const k = Math.SQRT2;
@@ -835,8 +844,15 @@ describe('fire', () => {
       const second = stage();
       return (rms(samples.map((value) => second(first(value)))) / rms(samples)) ** 2;
     };
-    const dull = withoutRoar({ hiss: 1, hissTone: 0 }).render(8).left;
-    const thin = withoutRoar({ hiss: 1, hissTone: 1 }).render(8).left;
+    const sizzling = (sizzleTone: number) => {
+      const generator = withoutRoar({ pops: 0, sizzleTone });
+      const channel = generator.processor.channels[0];
+      for (let index = 0; index < 4; index += 1) generator.processor.addSizzle(channel, 0, 0);
+      // Pops off, so only the sizzles sound; their tick-free bands alone.
+      return generator.render(2).left;
+    };
+    const dull = sizzling(0);
+    const thin = sizzling(1);
     expect(lowShare(thin)).toBeLessThan(0.3 * lowShare(dull));
   });
 

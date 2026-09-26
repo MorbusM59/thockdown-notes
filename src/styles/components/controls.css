@@ -406,21 +406,4 @@
 /* A channel button shows its group's icon, and its number within the group
    small in the corner -- the icon says which group, so the number only has
    to count 1-3 inside it. */
-.ambient-channel-selector-btn {
-  position: relative;
-}
 
-/* The icon steps back from the corner the number sits in. */
-.ambient-channel-selector-btn > .fa-solid {
-  font-size: 0.85em;
-  translate: -2px -2px;
-}
-
-.ambient-channel-number {
-  position: absolute;
-  right: 3px;
-  bottom: 1px;
-  font-size: 0.62em;
-  line-height: 1;
-  opacity: 0.8;
-}

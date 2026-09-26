@@ -12,6 +12,7 @@ import {
   ambientSettingsSignature,
   applyAmbientPreset,
   cloneSettings,
+  chimeSemitoneHz,
   createAmbientChannel,
   DEFAULT_AMBIENT_SPACE,
   hasAudibleAmbientLayer,
@@ -56,6 +57,30 @@ describe('the roster', () => {
     }
   });
 });
+
+describe('defaults', () => {
+  it('start every channel centred', () => {
+    for (const entry of AMBIENT_CHANNEL_ROSTER) {
+      const channel = createAmbientChannel(entry.id, entry.kind) as { pan?: number }
+      if (channel.pan !== undefined) expect(channel.pan, entry.id).toBe(0)
+    }
+  })
+
+  it('tune chimes in semitones from A440, a stored pitch landing on the nearest', () => {
+    expect(chimeSemitoneHz(0)).toBe(440)
+    expect(chimeSemitoneHz(12)).toBeCloseTo(880, 9)
+    const settings = sanitizeAmbientSettings({ channels: [{ id: 'chimes-1', pitchHz: 450 }, { id: 'chimes-2', pitchHz: 5000 }] })
+    expect(settings.channels.find((channel) => channel.id === 'chimes-1')).toMatchObject({ pitchHz: 440 })
+    expect((settings.channels.find((channel) => channel.id === 'chimes-2') as { pitchHz: number }).pitchHz).toBeCloseTo(chimeSemitoneHz(21), 9)
+    for (const preset of AMBIENT_FACTORY_PRESETS) {
+      for (const channel of preset.settings.channels) {
+        if (channel.kind !== 'chimes') continue
+        const semitones = 12 * Math.log2(channel.pitchHz / 440)
+        expect(Math.abs(semitones - Math.round(semitones))).toBeLessThan(1e-9)
+      }
+    }
+  })
+})
 
 describe('factory soundscapes', () => {
   it('are complete, in roster order, bounded, and each sounds', () => {

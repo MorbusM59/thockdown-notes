@@ -505,10 +505,10 @@ const MAX_WATER_BUBBLES = 96;
 
 /**
  * Fire (renderFire), after Farnell's model: a ROAR (brown noise low-passed,
- * fluttering in level as the flames lap), a HISS (pockets of moisture
- * sizzling as they boil off, see FIRE_POCKET), CRACKLES (sub-millisecond to few-millisecond
+ * fluttering in level as the flames lap), SIZZLES (moisture boiling out
+ * of the wood where a pop has opened it, see FIRE_SIZZLE), CRACKLES (sub-millisecond to few-millisecond
  * bursts of noise through a resonant band, often in small clusters) and POPS
- * (louder, lower, longer bursts, each followed by a short sizzle of crackles
+ * (louder, lower, longer bursts, each followed by a short spatter of crackles
  * -- sap boiling out of the wood).
  */
 const FIRE_ROAR_HZ = [420, 150];
@@ -532,28 +532,27 @@ const FIRE_FLUTTER_RANGE = [0.45, 1.3];
 const FIRE_PERIOD_SPREAD = [0.1, 0.9];
 const FIRE_EDGE_GLIDE_SHARE = [1.2, 0.04];
 /**
- * The hiss is not the flames': it is moisture boiling out of the wood, one
- * POCKET at a time (renderFirePockets). Each pocket is a band of noise -- a
- * high wash, like rain's -- that fades in over `riseSec`, holds for
- * `holdSec` with only a gentle wobble (+/- `wobble`, gliding over
- * `wobbleSec`, never moving the baseline far), and fades out over `fallSec`,
- * on raised-cosine ramps. Pockets overlap: on average `hiss` x
- * FIRE_POCKETS_AT_FULL of them sound at once, each at its own pitch (within
- * `spreadOctaves` of the tone) and its own place. `hissTone` places the
- * bands between FIRE_HISS_HZ, and `hissLevel` sets their level (partGain); a band's level is scaled by
- * sqrt(FIRE_HISS_REFERENCE_HZ / centre), the inverse of the white-noise
- * power a band of fixed Q holds, so the tone moves the colour and not the
- * loudness. The first version was one high-passed noise whose level
- * wandered with the flames, and was as erratic as they are.
+ * A SIZZLE is moisture boiling out of the wood where a pop has burst it
+ * open (renderFireSizzles): a band of noise -- a high wash, like rain's --
+ * that starts WITH the pop, at the pop's own place, and holds for `holdSec`
+ * with only a gentle wobble (+/- `wobble`, gliding over `wobbleSec`) before
+ * fading out over `fallSec` on a raised cosine. Its onset is `riseSec`: short
+ * enough to be heard as starting with the pop, long enough not to click. A
+ * pop sets one off with the chance `sizzle` gives, while fewer than
+ * FIRE_MAX_SIZZLES are sizzling (mirrors AMBIENT_FIRE_MAX_SIZZLES); each at
+ * its own pitch within `spreadOctaves` of the tone. `sizzleTone` places the
+ * bands between FIRE_SIZZLE_HZ and `sizzleLevel` sets their level
+ * (partGain); a band's level is scaled by sqrt(FIRE_SIZZLE_REFERENCE_HZ /
+ * centre), the inverse of the white-noise power a band of fixed Q holds, so
+ * the tone moves the colour and not the loudness.
  */
-const FIRE_HISS_HZ = [2000, 8000];
-const FIRE_HISS_REFERENCE_HZ = 2530;
-const FIRE_HISS_LEVEL = [0.015, 0.08];
-const FIRE_POCKET = { riseSec: [1.5, 4], holdSec: [3, 14], fallSec: [2, 5], level: [0.5, 1], spreadOctaves: 0.5, q: 0.9, wobble: 0.12, wobbleSec: [0.4, 1.5] };
-const FIRE_POCKETS_AT_FULL = 4;
-const MAX_FIRE_POCKETS = 10;
-/** Brings the pockets' combined level to that of the single hiss they replaced, at the defaults. */
-const FIRE_POCKET_GAIN = 1.9;
+const FIRE_SIZZLE_HZ = [2000, 8000];
+const FIRE_SIZZLE_REFERENCE_HZ = 2530;
+const FIRE_SIZZLE_LEVEL = [0.015, 0.08];
+const FIRE_SIZZLE = { riseSec: 0.005, holdSec: [3, 14], fallSec: [2, 5], level: [0.5, 1], spreadOctaves: 0.5, q: 0.9, wobble: 0.12, wobbleSec: [0.4, 1.5] };
+const FIRE_MAX_SIZZLES = 4;
+/** A sizzle's level, set by ear against the roar at the defaults. */
+const FIRE_SIZZLE_GAIN = 1.9;
 const FIRE_CRACKLES_PER_SEC = [0.3, 30];
 const FIRE_CRACKLE_CLUSTER_CHANCE = 0.45;
 const FIRE_CRACKLE_CLUSTER_SEC = [0.005, 0.04];
@@ -567,9 +566,9 @@ const FIRE_POPS_PER_SEC = 1.2;
  * which only gives the crack a little low body. Any resonance rings on after
  * the burst: at Q 2-3.5 that tail read as a tin struck with a soft blow.
  */
-const FIRE_POP = { hz: [300, 900], q: [0.5, 0.5], decaySec: [0.0003, 0.001], level: [1.6, 2.8], white: 0.8, sizzle: [3, 8], sizzleSec: [0.05, 0.2] };
+const FIRE_POP = { hz: [300, 900], q: [0.5, 0.5], decaySec: [0.0003, 0.001], level: [1.6, 2.8], white: 0.8, spatter: [3, 8], spatterSec: [0.05, 0.2] };
 /**
- * The crackles', pops' and hiss's level sliders follow partGain. The crackle tone moves the
+ * The crackles', pops' and sizzles' level sliders follow partGain. The crackle tone moves the
  * crackles' band by +/- FIRE_TONE_OCTAVES. The pop tone darkens the whole
  * pop through a one-pole low-pass, FIRE_POP_TONE_HZ from its first value
  * (a thud) to its second (a crack), and moves its body's band by
@@ -2281,7 +2280,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
   }
 
   /**
-   * A slowly wandering level (a flame's flutter, the hiss's flicker, the
+   * A slowly wandering level (a flame's flutter, a sizzle's wobble, the
    * water's bursts): toward a target drawn every `sec` range, gliding with a
    * time constant of `glideSec` (two stages, see below), moved on by one control segment. Returns the
    * level at the segment's start and end, for a linear ramp across it.
@@ -2484,12 +2483,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
   initFire(channel) {
     channel.bursts = [];
     channel.roarWander = { value: 1, target: 1, framesLeft: 0 };
-    channel.pockets = [];
-    // A fire that has just been lit is already sizzling: the pockets it
-    // would have on average are born part-way through their lives.
-    const expected = Math.round(Math.max(0, channel.hiss ?? 0.5) * FIRE_POCKETS_AT_FULL);
-    for (let index = 0; index < expected; index += 1) this.addPocket(channel, 0, this.random());
-    channel.nextPocketFrame = this.firePocketRate(channel) > 0 ? currentFrame + this.eventDelayFrames(this.firePocketRate(channel)) : Infinity;
+    channel.sizzles = [];
     channel.fireStart = this.random();
     channel.fireRead = -1;
     channel.roarLeft = null;
@@ -2509,38 +2503,26 @@ class AmbientGenerator extends AudioWorkletProcessor {
     return FIRE_CRACKLES_PER_SEC[0] * ((FIRE_CRACKLES_PER_SEC[1] / FIRE_CRACKLES_PER_SEC[0]) ** crackle);
   }
 
-  fireHissHz(channel) {
-    const tone = Math.max(0, Math.min(1, channel.hissTone ?? 0.5));
-    return FIRE_HISS_HZ[0] * ((FIRE_HISS_HZ[1] / FIRE_HISS_HZ[0]) ** tone);
+  fireSizzleHz(channel) {
+    const tone = Math.max(0, Math.min(1, channel.sizzleTone ?? 0.5));
+    return FIRE_SIZZLE_HZ[0] * ((FIRE_SIZZLE_HZ[1] / FIRE_SIZZLE_HZ[0]) ** tone);
   }
 
-  /** Pockets born per second: as many as `hiss` asks to sound at once, over a pocket's mean life. */
-  firePocketRate(channel) {
-    const mean = (range) => (range[0] + range[1]) / 2;
-    const life = mean(FIRE_POCKET.riseSec) + mean(FIRE_POCKET.holdSec) + mean(FIRE_POCKET.fallSec);
-    return (Math.max(0, channel.hiss ?? 0.5) * FIRE_POCKETS_AT_FULL) / life;
-  }
-
-  /**
-   * A new pocket, `offset` frames into the block. `startAt` (0-1) begins it
-   * part-way through its life, for a fire lit already sizzling.
-   */
-  addPocket(channel, offset, startAt = 0) {
-    if (channel.pockets.length >= MAX_FIRE_POCKETS) return;
-    const rise = Math.round(this.between(FIRE_POCKET.riseSec) * sampleRate);
-    const hold = Math.round(this.between(FIRE_POCKET.holdSec) * sampleRate);
-    const fall = Math.round(this.between(FIRE_POCKET.fallSec) * sampleRate);
-    const image = stereoImage(channel.pan, channel.width ?? 1);
-    const gains = panGains(image.from + ((image.to - image.from) * this.random()));
-    const pitch = 2 ** (FIRE_POCKET.spreadOctaves * ((this.random() * 2) - 1));
-    channel.pockets.push({
-      age: Math.round(startAt * (rise + hold + fall)),
+  /** A new sizzle, `offset` frames into the block, at `pan` (the pop's). */
+  addSizzle(channel, offset, pan) {
+    const rise = Math.max(1, Math.round(FIRE_SIZZLE.riseSec * sampleRate));
+    const hold = Math.round(this.between(FIRE_SIZZLE.holdSec) * sampleRate);
+    const fall = Math.round(this.between(FIRE_SIZZLE.fallSec) * sampleRate);
+    const gains = panGains(pan);
+    const pitch = 2 ** (FIRE_SIZZLE.spreadOctaves * ((this.random() * 2) - 1));
+    channel.sizzles.push({
+      age: 0,
       rise,
       hold,
       fall,
       startOffset: Math.max(0, offset),
       pitch,
-      level: this.between(FIRE_POCKET.level),
+      level: this.between(FIRE_SIZZLE.level),
       read: Math.floor(this.random() * 0x7fffffff),
       filter: null,
       gainLeft: gains.left,
@@ -2549,28 +2531,28 @@ class AmbientGenerator extends AudioWorkletProcessor {
       wobbleFrom: 1,
       wobbleTo: 1,
     });
-    this.tunePocket(channel, channel.pockets[channel.pockets.length - 1]);
+    this.tuneSizzle(channel, channel.sizzles[channel.sizzles.length - 1]);
   }
 
-  /** A pocket's band at the layer's tone and its own pitch; its filter keeps its memory. */
-  tunePocket(channel, pocket) {
-    const centre = Math.min(sampleRate * 0.4, this.fireHissHz(channel) * pocket.pitch);
-    const filter = stateVariableFilter(centre, FIRE_POCKET.q);
-    if (pocket.filter) {
-      filter.s1 = pocket.filter.s1;
-      filter.s2 = pocket.filter.s2;
+  /** A sizzle's band at the layer's tone and its own pitch; its filter keeps its memory. */
+  tuneSizzle(channel, sizzle) {
+    const centre = Math.min(sampleRate * 0.4, this.fireSizzleHz(channel) * sizzle.pitch);
+    const filter = stateVariableFilter(centre, FIRE_SIZZLE.q);
+    if (sizzle.filter) {
+      filter.s1 = sizzle.filter.s1;
+      filter.s2 = sizzle.filter.s2;
     }
-    pocket.filter = filter;
-    pocket.bandGain = Math.sqrt(FIRE_HISS_REFERENCE_HZ / centre) / FIRE_POCKET.q;
+    sizzle.filter = filter;
+    sizzle.bandGain = Math.sqrt(FIRE_SIZZLE_REFERENCE_HZ / centre) / FIRE_SIZZLE.q;
   }
 
-  /** A pocket's envelope at `age`: raised-cosine rise, a plateau, raised-cosine fall; 0 outside. */
-  pocketEnvelope(pocket, age) {
+  /** A sizzle's envelope at `age`: its short onset, a plateau, a raised-cosine fall; 0 outside. */
+  sizzleEnvelope(sizzle, age) {
     if (age < 0) return 0;
-    if (age < pocket.rise) return 0.5 - (0.5 * Math.cos(Math.PI * (age / pocket.rise)));
-    if (age < pocket.rise + pocket.hold) return 1;
-    const fallAge = age - pocket.rise - pocket.hold;
-    if (fallAge < pocket.fall) return 0.5 + (0.5 * Math.cos(Math.PI * (fallAge / pocket.fall)));
+    if (age < sizzle.rise) return 0.5 - (0.5 * Math.cos(Math.PI * (age / sizzle.rise)));
+    if (age < sizzle.rise + sizzle.hold) return 1;
+    const fallAge = age - sizzle.rise - sizzle.hold;
+    if (fallAge < sizzle.fall) return 0.5 + (0.5 * Math.cos(Math.PI * (fallAge / sizzle.fall)));
     return 0;
   }
 
@@ -2587,14 +2569,9 @@ class AmbientGenerator extends AudioWorkletProcessor {
     }
     channel.roarLeft = left;
     channel.roarRight = right;
-    // A new tone retunes the pockets already sizzling, keeping their memory.
-    if (before && before.hissTone !== channel.hissTone) {
-      for (const pocket of channel.pockets) this.tunePocket(channel, pocket);
-    }
-    if (before && before.hiss !== channel.hiss) {
-      // eventDelayFrames floors a rate at 0.1 per second, so no hiss is Infinity rather than a slow one.
-      const rate = this.firePocketRate(channel);
-      channel.nextPocketFrame = rate > 0 ? currentFrame + this.eventDelayFrames(rate) : Infinity;
+    // A new tone retunes the sizzles already sizzling, keeping their memory.
+    if (before && before.sizzleTone !== channel.sizzleTone) {
+      for (const sizzle of channel.sizzles) this.tuneSizzle(channel, sizzle);
     }
     if (!before || before.pops !== channel.pops) {
       const rate = (channel.pops ?? 0) * FIRE_POPS_PER_SEC;
@@ -2620,8 +2597,8 @@ class AmbientGenerator extends AudioWorkletProcessor {
     if (channel.nextPopFrame < blockStart) channel.nextPopFrame = popRate > 0 ? blockStart + this.eventDelayFrames(popRate) : Infinity;
     const size = this.fireSize(channel);
     const roarLevel = FIRE_ROAR_LEVEL[0] * ((FIRE_ROAR_LEVEL[1] / FIRE_ROAR_LEVEL[0]) ** size) * (this.noiseGains.brown ?? 1);
-    const hissLevel = (FIRE_HISS_LEVEL[0] + ((FIRE_HISS_LEVEL[1] - FIRE_HISS_LEVEL[0]) * size))
-      * FIRE_POCKET_GAIN * partGain(channel.hissLevel) * (this.noiseGains.white ?? 1);
+    const sizzleLevel = (FIRE_SIZZLE_LEVEL[0] + ((FIRE_SIZZLE_LEVEL[1] - FIRE_SIZZLE_LEVEL[0]) * size))
+      * FIRE_SIZZLE_GAIN * partGain(channel.sizzleLevel) * (this.noiseGains.white ?? 1);
     const crackleLevel = partGain(channel.crackleLevel);
     const popLevel = partGain(channel.popLevel);
     const crackleShift = toneShift(channel.crackleTone, FIRE_TONE_OCTAVES);
@@ -2633,8 +2610,6 @@ class AmbientGenerator extends AudioWorkletProcessor {
       hz: [FIRE_POP.hz[0] * popShift, FIRE_POP.hz[1] * popShift],
       lowpassHz: FIRE_POP_TONE_HZ[0] * ((FIRE_POP_TONE_HZ[1] / FIRE_POP_TONE_HZ[0]) ** popTone),
     };
-    const pocketRate = this.firePocketRate(channel);
-    if (channel.nextPocketFrame < blockStart) channel.nextPocketFrame = pocketRate > 0 ? blockStart + this.eventDelayFrames(pocketRate) : Infinity;
     const brown = this.noiseLoop('brown');
     const white = this.noiseLoop('white');
     const loopLength = Math.min(brown.length, white.length);
@@ -2660,9 +2635,9 @@ class AmbientGenerator extends AudioWorkletProcessor {
     let flutterTo = 1;
     this.forEachSegment(channel, length, () => {
       [flutterFrom, flutterTo] = this.stepWander(channel.roarWander, wanderSec, roarMeanSec * glideShare, drawLevel, 1 - dynamics);
-      for (const pocket of channel.pockets) {
-        [pocket.wobbleFrom, pocket.wobbleTo] = this.stepWander(pocket.wobble, FIRE_POCKET.wobbleSec, 0.5 * (FIRE_POCKET.wobbleSec[0] + FIRE_POCKET.wobbleSec[1]),
-          () => 1 + (FIRE_POCKET.wobble * ((this.random() * 2) - 1)));
+      for (const sizzle of channel.sizzles) {
+        [sizzle.wobbleFrom, sizzle.wobbleTo] = this.stepWander(sizzle.wobble, FIRE_SIZZLE.wobbleSec, 0.5 * (FIRE_SIZZLE.wobbleSec[0] + FIRE_SIZZLE.wobbleSec[1]),
+          () => 1 + (FIRE_SIZZLE.wobble * ((this.random() * 2) - 1)));
       }
     }, (offset, count, position) => {
       // Crackles and pops are born in time order, whichever clock is next,
@@ -2675,12 +2650,17 @@ class AmbientGenerator extends AudioWorkletProcessor {
         if (at >= spanEnd) break;
         const burstOffset = at - blockStart;
         if (isPop) {
-          this.spawnBurst(channel.bursts, MAX_FIRE_BURSTS, burstOffset, popSpec, popLevel, placeAt());
-          // The sizzle: a few crackles over the next moments, sap boiling out.
-          const sizzle = Math.round(this.between(FIRE_POP.sizzle));
-          const sizzleFrames = this.between(FIRE_POP.sizzleSec) * sampleRate;
-          for (let spark = 0; spark < sizzle; spark += 1) {
-            this.spawnBurst(channel.bursts, MAX_FIRE_BURSTS, burstOffset + Math.round(this.random() * sizzleFrames), crackleSpec, 0.5 * popLevel, placeAt());
+          const popPan = placeAt();
+          this.spawnBurst(channel.bursts, MAX_FIRE_BURSTS, burstOffset, popSpec, popLevel, popPan);
+          // The burst may open a pocket of moisture, which sizzles from here, at the pop's place.
+          if (this.random() < Math.max(0, Math.min(1, channel.sizzle ?? 0.5)) && channel.sizzles.length < FIRE_MAX_SIZZLES) {
+            this.addSizzle(channel, burstOffset, popPan);
+          }
+          // The spatter: a few crackles over the next moments, sap flung out.
+          const spatter = Math.round(this.between(FIRE_POP.spatter));
+          const spatterFrames = this.between(FIRE_POP.spatterSec) * sampleRate;
+          for (let spark = 0; spark < spatter; spark += 1) {
+            this.spawnBurst(channel.bursts, MAX_FIRE_BURSTS, burstOffset + Math.round(this.random() * spatterFrames), crackleSpec, 0.5 * popLevel, placeAt());
           }
           channel.nextPopFrame += this.eventDelayFrames(popRate);
         } else {
@@ -2691,11 +2671,6 @@ class AmbientGenerator extends AudioWorkletProcessor {
             ? Math.max(1, Math.round(this.between(FIRE_CRACKLE_CLUSTER_SEC) * sampleRate))
             : this.eventDelayFrames(crackleRate);
         }
-      }
-      // New pockets, in time order.
-      while (channel.nextPocketFrame < spanEnd) {
-        this.addPocket(channel, channel.nextPocketFrame - blockStart);
-        channel.nextPocketFrame = pocketRate > 0 ? channel.nextPocketFrame + this.eventDelayFrames(pocketRate) : Infinity;
       }
       // The roar.
       let read = channel.fireRead;
@@ -2711,43 +2686,43 @@ class AmbientGenerator extends AudioWorkletProcessor {
         read = read + 1 === loopLength ? 0 : read + 1;
       }
       channel.fireRead = read;
-      this.renderFirePockets(channel, left, right, offset, count, position, hissLevel, white);
+      this.renderFireSizzles(channel, left, right, offset, count, position, sizzleLevel, white);
     });
     this.renderBursts(channel.bursts, left, right, length);
   }
 
   /**
-   * The hiss for one span: every pocket's band of noise at its envelope and
-   * wobble, placed at its pan. A pocket whose life is over is dropped.
+   * The sizzles for one span: every sizzle's band of noise at its envelope and
+   * wobble, placed at its pan. A sizzle whose life is over is dropped.
    */
-  renderFirePockets(channel, left, right, offset, count, position, hissLevel, white) {
-    const pockets = channel.pockets;
+  renderFireSizzles(channel, left, right, offset, count, position, sizzleLevel, white) {
+    const sizzles = channel.sizzles;
     const loopLength = white.length;
-    for (let index = pockets.length - 1; index >= 0; index -= 1) {
-      const pocket = pockets[index];
-      const start = Math.max(offset, pocket.startOffset);
+    for (let index = sizzles.length - 1; index >= 0; index -= 1) {
+      const sizzle = sizzles[index];
+      const start = Math.max(offset, sizzle.startOffset);
       const end = offset + count;
       if (start >= end) continue;
-      const filter = pocket.filter;
-      const k = 1 / FIRE_POCKET.q;
-      const scale = hissLevel * pocket.level * pocket.bandGain * k;
-      let read = pocket.read % loopLength;
-      let age = pocket.age;
+      const filter = sizzle.filter;
+      const k = 1 / FIRE_SIZZLE.q;
+      const scale = sizzleLevel * sizzle.level * sizzle.bandGain * k;
+      let read = sizzle.read % loopLength;
+      let age = sizzle.age;
       for (let frame = start; frame < end; frame += 1) {
         const t = (position + (frame - offset)) / CONTROL_FRAMES;
-        const wobble = pocket.wobbleFrom + ((pocket.wobbleTo - pocket.wobbleFrom) * t);
-        const sample = bandPass(filter, white[read]) * scale * wobble * this.pocketEnvelope(pocket, age);
-        left[frame] += sample * pocket.gainLeft;
-        right[frame] += sample * pocket.gainRight;
+        const wobble = sizzle.wobbleFrom + ((sizzle.wobbleTo - sizzle.wobbleFrom) * t);
+        const sample = bandPass(filter, white[read]) * scale * wobble * this.sizzleEnvelope(sizzle, age);
+        left[frame] += sample * sizzle.gainLeft;
+        right[frame] += sample * sizzle.gainRight;
         read = read + 1 === loopLength ? 0 : read + 1;
         age += 1;
       }
-      pocket.read = read;
-      pocket.age = age;
-      if (end >= pocket.startOffset) pocket.startOffset = 0;
-      if (age >= pocket.rise + pocket.hold + pocket.fall) {
-        pockets[index] = pockets[pockets.length - 1];
-        pockets.pop();
+      sizzle.read = read;
+      sizzle.age = age;
+      if (end >= sizzle.startOffset) sizzle.startOffset = 0;
+      if (age >= sizzle.rise + sizzle.hold + sizzle.fall) {
+        sizzles[index] = sizzles[sizzles.length - 1];
+        sizzles.pop();
       }
     }
   }
