@@ -856,6 +856,34 @@ describe('fire', () => {
     expect(lowShare(thin)).toBeLessThan(0.3 * lowShare(dull));
   });
 
+  it('frazzles at the lowest tone and hisses smoothly at the highest, at about the same loudness', () => {
+    // Frazzle is sparse impulses: a spiky signal, whose peaks stand far
+    // above its RMS (a high crest factor over short windows); a smooth hiss
+    // is steady noise, with a crest factor near that of Gaussian noise.
+    const sizzling = (sizzleTone: number) => {
+      const generator = withoutRoar({ pops: 0, sizzleTone });
+      const channel = generator.processor.channels[0];
+      for (let index = 0; index < 4; index += 1) generator.processor.addSizzle(channel, 0, 0);
+      return generator.render(2).left;
+    };
+    const kurtosis = (samples: ArrayLike<number>) => {
+      let second = 0;
+      let fourth = 0;
+      for (let index = 0; index < samples.length; index += 1) {
+        const squared = samples[index] * samples[index];
+        second += squared;
+        fourth += squared * squared;
+      }
+      return (fourth / samples.length) / ((second / samples.length) ** 2);
+    };
+    const frazzled = sizzling(0);
+    const smooth = sizzling(1);
+    expect(kurtosis(frazzled)).toBeGreaterThan(2 * kurtosis(smooth));
+    const ratio = rms(frazzled) / rms(smooth);
+    expect(ratio).toBeGreaterThan(0.5);
+    expect(ratio).toBeLessThan(2);
+  });
+
   it('pops dry: loudest right at its start, and all but gone within 3 ms', () => {
     // Energy in quarter-millisecond windows (one sample of noise can fall
     // near zero by chance). A narrow band swelled for a median 3 ms; a

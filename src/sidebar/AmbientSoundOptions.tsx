@@ -305,7 +305,7 @@ const CONTROLS: { [K in AmbientChannelKind]: ControlGroup[] } = {
         unit('popTone', 'tone', 'A dull thud to a bright crack', (value) => formatAmount(value, 'Thud', 'Crack')),
         unit('sizzle', 'sizzle', 'The chance a pop opens a pocket of moisture that sizzles on at its place for a while (at most four at once)', (value) => (value < 0.005 ? 'Never' : value > 0.995 ? 'Every pop' : `${Math.round(value * 100)}% of pops`)),
         unit('sizzleLevel', 'level', 'How loud the sizzle is', formatPartLevel),
-        unit('sizzleTone', 'tone', 'The pitch of the sizzle', (value) => `around ${formatHz(2000 * (4 ** value))}`),
+        unit('sizzleTone', 'tone', 'The pitch of the sizzle and its texture: low is frazzled, crackling with sparse bursts; high is a smooth hiss', (value) => `around ${formatHz(4000 * (2 ** value))}`),
         unit('flicker', 'flicker', 'How far the roar swings as the flames move: a steady burn, or surging and faltering', (value) => formatAmount(value, 'Steady', 'Guttering')),
         { key: 'flickerPeriodSec', track: 'period', tooltip: 'The average length of one movement of the flames', min: AMBIENT_FIRE_PERIOD_MIN_SEC, max: AMBIENT_FIRE_PERIOD_MAX_SEC, log: true, format: formatSeconds },
         unit('flickerDynamics', 'dynamics', 'Soft swells at an even pace, or sudden lurches at an uneven one', (value) => formatAmount(value, 'Gentle', 'Wild')),
