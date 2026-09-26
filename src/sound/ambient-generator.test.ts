@@ -288,6 +288,30 @@ describe('noise layers', () => {
     expect(peakOverTrough(-1)).toBeLessThan(0.7);
   });
 
+  // The swell must follow its curve smoothly whatever else rides on it. The
+  // level is traced per control segment and its corners measured: the
+  // largest change of slope between neighbouring segments, relative to the
+  // typical slope. The filter's loudness compensation (with sweep) and the
+  // weather (a new gust target) each once put corners several times the
+  // cycle's own into it, heard as the swell moving in sections.
+  it('follows its curve without corners, with the filter sweeping and the weather gusting', () => {
+    const worstCorner = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'noise' }>>, gustiness = 0) => {
+      const generator = createProcessor([layer('noise', { depth: 0.6, periodSec: 12, variation: 0, ...overrides })], { sampleRate: 8000, weather: { gustiness, paceSec: 12 } });
+      const levels: number[] = [];
+      for (let segment = 0; segment < (8000 * 60) / 32; segment += 1) {
+        generator.render(32 / 8000);
+        levels.push(generator.processor.channels[0].level);
+      }
+      const slopes = levels.slice(1).map((value, index) => value - levels[index]);
+      const typical = slopes.reduce((sum, value) => sum + Math.abs(value), 0) / slopes.length;
+      return Math.max(...slopes.slice(1).map((value, index) => Math.abs(value - slopes[index]) / typical));
+    };
+    const plain = worstCorner({});
+    expect(worstCorner({ sweep: 1, brightnessHz: 1200 })).toBeLessThan(2 * plain);
+    expect(worstCorner({ sweep: -1, brightnessHz: 3000, focus: 0.6 })).toBeLessThan(2 * plain);
+    expect(worstCorner({ weather: 1 }, 0.4)).toBeLessThan(2 * plain);
+  });
+
   it('varies each cycle\'s length around its period, keeping the tempo', () => {
     const generator = createProcessor([layer('noise', { variation: 1 })], { sampleRate: 4000 });
     const channel = generator.processor.channels[0];

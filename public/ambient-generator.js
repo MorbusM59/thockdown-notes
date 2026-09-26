@@ -430,11 +430,13 @@ const SWAY_PAN_REACH = 0.8;
 const CONTROL_FRAMES = 32;
 /** The lowest a noise layer's filter may be pushed by sweep and weather together. */
 const NOISE_CUTOFF_FLOOR_HZ = 40;
+/** How gently a swept cutoff meets its floor and ceiling, in octaves (limitCutoff). */
+const CUTOFF_KNEE_OCTAVES = 0.35;
 
 /**
  * The weather (advanceWeather): gusts and lulls as targets drawn in -1..1,
- * one on average every `paceSec`, the signal gliding toward each over
- * WEATHER_GLIDE_SHARE of the pace. What a layer does with a full gust
+ * one on average every `paceSec`, the signal easing toward each over
+ * WEATHER_GLIDE_SHARE of the pace (two glides in series, see advanceWeather). What a layer does with a full gust
  * (its `weather` amount x the scene's gustiness x the signal, -1..1):
  */
 const WEATHER_GLIDE_SHARE = 0.35;
@@ -592,6 +594,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
       gustiness: 0,
       paceSec: 12,
       value: 0,
+      leading: 0,
       target: 0,
       framesLeft: 0,
     };
@@ -818,8 +821,13 @@ class AmbientGenerator extends AudioWorkletProcessor {
         weather.framesLeft = Math.max(1, Math.round(-Math.log(Math.max(1e-9, 1 - this.random())) * weather.paceSec * sampleRate));
       });
     }
-    const glide = 1 - Math.exp(-length / (WEATHER_GLIDE_SHARE * weather.paceSec * sampleRate));
-    weather.value += (weather.target - weather.value) * glide;
+    // Two glides in series: a new target moves the first, and the signal
+    // follows the first, so each gust eases in -- one glide alone would set
+    // off toward a new target at full speed the moment it is drawn, a corner
+    // in every layer that follows the weather.
+    const glide = 1 - Math.exp(-length / (0.5 * WEATHER_GLIDE_SHARE * weather.paceSec * sampleRate));
+    weather.leading += (weather.target - weather.leading) * glide;
+    weather.value += (weather.leading - weather.value) * glide;
     this.gust = weather.gustiness * weather.value;
   }
 
@@ -993,7 +1001,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
     const swing = channel.riseFactor === 1 ? cycleValue : (channel.riseFactor * (cycleValue + 1)) - 1;
     const factor = this.weatherFactor(channel);
     const octaves = ((channel.sweepOctaves ?? 0) * swing) + (WEATHER_NOISE_BRIGHT_OCTAVES * factor);
-    const cutoff = Math.max(NOISE_CUTOFF_FLOOR_HZ, Math.min(sampleRate * 0.45, (channel.brightnessHz ?? 18000) * (2 ** octaves)));
+    const cutoff = this.limitCutoff(channel, (channel.brightnessHz ?? 18000) * (2 ** octaves));
     const level = Math.max(0, 1 + ((channel.depth ?? 0) * swing))
       * (2 ** (WEATHER_NOISE_LEVEL_OCTAVES * factor))
       * this.toneGainAt(channel, cutoff);
@@ -1002,6 +1010,30 @@ class AmbientGenerator extends AudioWorkletProcessor {
     const gainLeft = pan === 0 ? 1 : Math.SQRT2 * Math.cos((pan + 1) * Math.PI / 4);
     const gainRight = pan === 0 ? 1 : Math.SQRT2 * Math.sin((pan + 1) * Math.PI / 4);
     return { level, gainLeft, gainRight, cutoff };
+  }
+
+  /**
+   * Keep a swept cutoff inside what the filter and its gain table can hold
+   * (NOISE_CUTOFF_FLOOR_HZ up to the lower of 0.45 x the sample rate and the
+   * table's top) by a SOFT limit, in octaves: the cutoff eases into the
+   * ceiling or the floor rather than stopping dead at it. A hard clamp
+   * stopped the filter and its loudness compensation abruptly wherever the
+   * sweep carried the cutoff past a bound -- a corner in the swell, and one
+   * nearly every sweeping layer met, the brightness's own top sitting a
+   * fraction of an octave under the ceiling. The knee is CUTOFF_KNEE_OCTAVES;
+   * far from both bounds the cutoff is untouched (within a hundredth of an
+   * octave).
+   */
+  limitCutoff(channel, cutoffHz) {
+    const ceiling = Math.log2(Math.min(sampleRate * 0.45, channel.toneTableRangeHz?.[1] ?? Infinity));
+    const floor = Math.log2(NOISE_CUTOFF_FLOOR_HZ);
+    const knee = CUTOFF_KNEE_OCTAVES;
+    let octave = Math.log2(Math.max(1e-3, cutoffHz));
+    // softplus(x) = knee x ln(1 + e^(x / knee)), written to stay finite far out.
+    const softplus = (x) => (x > 0 ? x + (knee * Math.log1p(Math.exp(-x / knee))) : knee * Math.log1p(Math.exp(x / knee)));
+    octave = ceiling - softplus(ceiling - octave);
+    octave = floor + softplus(octave - floor);
+    return 2 ** octave;
   }
 
   /** The filter's coefficients (stateVariableFilter's) at `cutoffHz`, with the layer's own Q. */
