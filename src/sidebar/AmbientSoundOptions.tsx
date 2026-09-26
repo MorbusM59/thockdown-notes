@@ -10,6 +10,8 @@ import {
   AMBIENT_CHIME_TUBES_MAX,
   AMBIENT_CHIME_TUBES_MIN,
   AMBIENT_FACTORY_PRESETS,
+  AMBIENT_FIRE_PERIOD_MAX_SEC,
+  AMBIENT_FIRE_PERIOD_MIN_SEC,
   AMBIENT_NOISE_BRIGHTNESS_MAX_HZ,
   AMBIENT_NOISE_BRIGHTNESS_MIN_HZ,
   AMBIENT_NOISE_SWEEP_OCTAVES,
@@ -119,6 +121,16 @@ const SURFACE_NAMES: Record<(typeof AMBIENT_RAIN_SURFACE_ANCHORS)[number]['name'
 }
 const SURFACE_POINTS = AMBIENT_RAIN_SURFACE_ANCHORS.map((anchor) => ({ name: SURFACE_NAMES[anchor.name], at: anchor.at }))
 const COLOUR_POINTS = [{ name: 'Brown', at: 0 }, { name: 'Pink', at: 0.5 }, { name: 'White', at: 1 }]
+
+function formatFireLevel(value: number): string {
+  const db = (value - 0.5) * 24
+  return Math.abs(db) < 0.25 ? 'As is' : `${db > 0 ? '+' : '−'}${Math.abs(db).toFixed(1)} dB`
+}
+
+function formatFireShift(value: number): string {
+  const octaves = (value - 0.5) * 4
+  return Math.abs(octaves) < 0.02 ? 'As is' : `${octaves > 0 ? '+' : '−'}${Math.abs(octaves).toFixed(1)} oct`
+}
 
 function formatRainMix(value: number): string {
   if (value < 0.005) return 'Wash only'
@@ -255,16 +267,24 @@ const CONTROLS: { [K in AmbientChannelKind]: ControlGroup[] } = {
   fire: [
     {
       label: 'Sound',
+      // Rows of three: the whole fire, then crackle, pops and hiss each as
+      // amount, level and tone, then how the flames move.
       controls: [
         VOLUME,
-        unit('size', 'size', 'Embers to a blaze: the weight and depth of the roar, and the hiss', (value) => formatAmount(value, 'Embers', 'Blaze')),
+        unit('size', 'size', 'Embers to a blaze: the weight and depth of the roar', (value) => formatAmount(value, 'Embers', 'Blaze')),
+        unit('width', 'width', 'A point at its pan to as wide as its pan allows', (value) => formatAmount(value, 'Point', 'Wide')),
         unit('crackle', 'crackle', 'How often the wood crackles', (value) => formatAmount(value, 'Rarely', 'Constantly')),
+        unit('crackleLevel', 'level', 'How loud the crackles are', formatFireLevel),
+        unit('crackleTone', 'tone', 'The crackles\' pitch, two octaves either way', formatFireShift),
         unit('pops', 'pops', 'How often sap pops and sizzles', (value) => formatAmount(value, 'Never', 'Often')),
+        unit('popLevel', 'level', 'How loud the pops are', formatFireLevel),
+        unit('popTone', 'tone', 'A dull thud to a bright crack', (value) => formatAmount(value, 'Thud', 'Crack')),
         unit('hiss', 'hiss', 'Moisture boiling out of the wood: pockets that sizzle for a while, fading in and out over seconds, several at once', (value) => (value < 0.005 ? 'Off' : `${(value * 4).toFixed(1)} pockets`)),
-        unit('hissTone', 'hiss tone', 'The pitch of the sizzle: a dull hiss low down, or a thin whistle-like sizzle high up', (value) => `around ${formatHz(800 * (10 ** value))}`),
+        unit('hissLevel', 'level', 'How loud the sizzle is', formatFireLevel),
+        unit('hissTone', 'tone', 'The pitch of the sizzle', (value) => `around ${formatHz(2000 * (4 ** value))}`),
         unit('flicker', 'flicker', 'How far the roar swings as the flames move: a steady burn, or surging and faltering', (value) => formatAmount(value, 'Steady', 'Guttering')),
-        unit('flickerPace', 'pace', 'How often the flames change: one every couple of seconds, or several a second', (value) => { const sec = 2 * ((0.08 / 2) ** value); return sec >= 1 ? `every ${sec.toFixed(1)} s` : `${(1 / sec).toFixed(1)} / s` }),
-        unit('flickerEdge', 'edge', 'How sharp each change is: a soft swell that eases in and out, or an abrupt lurch', (value) => formatAmount(value, 'Soft', 'Sharp')),
+        { key: 'flickerPeriodSec', track: 'period', tooltip: 'The average length of one movement of the flames', min: AMBIENT_FIRE_PERIOD_MIN_SEC, max: AMBIENT_FIRE_PERIOD_MAX_SEC, log: true, format: formatSeconds },
+        unit('flickerDynamics', 'dynamics', 'Soft swells at an even pace, or sudden lurches at an uneven one', (value) => formatAmount(value, 'Gentle', 'Wild')),
       ],
     },
     { label: 'Place', controls: [DISTANCE, PAN, { ...WEATHER, tooltip: 'How much the wind fans the flames' }] },

@@ -186,28 +186,37 @@ export interface AmbientWaterChannelSettings extends AmbientChannelBaseSettings 
  */
 export interface AmbientFireChannelSettings extends AmbientChannelBaseSettings {
   kind: 'fire';
-  /** 0 embers to 1 a blaze: the roar's weight and depth, and the hiss. */
+  /** 0 embers to 1 a blaze: the roar's weight and depth. */
   size: number;
-  /** How often the fire crackles, 0 almost never to 1 constantly. */
+  /** Stereo width, 0 a point at the pan to 1 the whole room the pan leaves. */
+  width: number;
+  /** How often the wood crackles, 0 rarely to 1 constantly. */
   crackle: number;
+  /** The crackles' level, 0-1: -12 dB to +12 dB around the level as authored at 0.5. */
+  crackleLevel: number;
+  /** The crackles' band, 0 two octaves lower to 1 two octaves higher; 0.5 as authored. */
+  crackleTone: number;
   /** How often sap pops, 0 never to 1 often. */
   pops: number;
-  /**
-   * How far the roar and the hiss swing in level as the flames move, 0 a
-   * steady burn to 1 surging and faltering (the depth of each change).
-   */
-  flicker: number;
-  /** How often those changes come, 0 one every couple of seconds to 1 several a second. */
-  flickerPace: number;
-  /**
-   * How sharp each change is, 0 a soft swell that eases in and out to 1 an
-   * abrupt lurch -- as a share of the pace, so it holds at any pace.
-   */
-  flickerEdge: number;
-  /** The hiss over the flames, 0 none to 1 twice as authored (0.5). */
+  /** The pops' level, as crackleLevel. */
+  popLevel: number;
+  /** 0 a dull thud to 1 a bright crack: the pop darkened, never made to ring. */
+  popTone: number;
+  /** How many pockets of moisture sizzle at once, 0 none to 1 about four. */
   hiss: number;
-  /** Where the hiss begins, 0 a dull hiss from 800 Hz to 1 a thin sizzle from 8 kHz. */
+  /** The sizzle's level, as crackleLevel. */
+  hissLevel: number;
+  /** The sizzle's pitch, 0 low (2 kHz) to 1 high (8 kHz). */
   hissTone: number;
+  /** How far the roar swings as the flames move, 0 a steady burn to 1 surging and faltering. */
+  flicker: number;
+  /** The average length of one movement of the flames, in seconds. */
+  flickerPeriodSec: number;
+  /**
+   * How abrupt and how irregular the movements are, 0 soft swells at an
+   * even pace to 1 sudden lurches at an uneven one.
+   */
+  flickerDynamics: number;
   pan: number;
   /** Wind fans the flames. */
   weather: number;
@@ -309,6 +318,8 @@ export const AMBIENT_RAIN_DRIPS_MAX_PER_SEC = 3;
 export const AMBIENT_THUNDER_JITTER = 0.25;
 export const AMBIENT_THUNDER_LENGTH_MIN_SEC = 4;
 export const AMBIENT_THUNDER_LENGTH_MAX_SEC = 30;
+export const AMBIENT_FIRE_PERIOD_MIN_SEC = 0.08;
+export const AMBIENT_FIRE_PERIOD_MAX_SEC = 2;
 export const AMBIENT_CHIME_PITCH_MIN_HZ = 150;
 export const AMBIENT_CHIME_PITCH_MAX_HZ = 1500;
 export const AMBIENT_CHIME_TUBES_MIN = 3;
@@ -405,7 +416,8 @@ export const AMBIENT_CHANNEL_DEFAULTS: KindDefaults = {
   },
   fire: {
     kind: 'fire', enabled: true, solo: false, volume: 0.7, distance: 0.15,
-    size: 0.5, crackle: 0.5, pops: 0.3, flicker: 0.6, flickerPace: 0.5, flickerEdge: 0.4, hiss: 0.5, hissTone: 0.5, pan: 0, weather: 0,
+    size: 0.5, width: 1, crackle: 0.5, crackleLevel: 0.5, crackleTone: 0.5, pops: 0.3, popLevel: 0.5, popTone: 0.7,
+    hiss: 0.5, hissLevel: 0.5, hissTone: 0.2, flicker: 0.6, flickerPeriodSec: 0.4, flickerDynamics: 0.4, pan: 0, weather: 0,
   },
   chimes: {
     kind: 'chimes', enabled: true, solo: false, volume: 0.6, distance: 0.35,
@@ -559,7 +571,7 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
     id: 'fireside',
     name: 'Fireside',
     settings: soundscape({
-      'fire-1': { size: 0.45, crackle: 0.55, pops: 0.35, flicker: 0.45, flickerPace: 0.4, flickerEdge: 0.3, distance: 0.1, pan: 0, volume: 0.74 },
+      'fire-1': { size: 0.45, width: 0.7, crackle: 0.55, pops: 0.35, flicker: 0.45, flickerPeriodSec: 0.55, flickerDynamics: 0.3, distance: 0.1, pan: 0, volume: 0.74 },
       'rain-1': { surface: 1, intensity: 0.45, mix: 0.75, drips: 0, wetness: 0.1, distance: 0.75, pan: 0.4, volume: 0.52 },
       'noise-1': { colour: 0.1, brightnessHz: 450, depth: 0.35, periodSec: 18, variation: 0.6, distance: 0.8, volume: 0.42, weather: 1 },
     }, { size: 0.2, damping: 0.6, echoes: 0, amount: 0.4 }, { gustiness: 0.5, paceSec: 14 }),
@@ -568,7 +580,7 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
     id: 'campfire',
     name: 'Campfire',
     settings: soundscape({
-      'fire-1': { size: 0.8, crackle: 0.7, pops: 0.5, flicker: 0.7, flickerPace: 0.6, flickerEdge: 0.5, distance: 0.2, pan: -0.1, volume: 0.76, weather: 0.5 },
+      'fire-1': { size: 0.8, crackle: 0.7, pops: 0.5, flicker: 0.7, flickerPeriodSec: 0.3, flickerDynamics: 0.5, distance: 0.2, pan: -0.1, volume: 0.76, weather: 0.5 },
       'water-1': { flow: 0.4, size: 0.5, turbulence: 0.5, distance: 0.85, pan: 0.6, volume: 0.55 },
       'noise-1': { colour: 0.45, brightnessHz: 1600, focus: 0.2, depth: 0.45, periodSec: 16, sweep: 0.6, variation: 0.6, sway: 0.35, distance: 0.7, volume: 0.5, weather: 1 },
     }, { size: 0.85, damping: 0.8, echoes: 0.1, amount: 0.5 }, { gustiness: 0.5, paceSec: 13 }),
@@ -660,7 +672,11 @@ export const AMBIENT_FIELD_BOUNDS: { [K in AmbientChannelKind]: FieldBounds } = 
     lengthSec: [AMBIENT_THUNDER_LENGTH_MIN_SEC, AMBIENT_THUNDER_LENGTH_MAX_SEC], weather: UNIT,
   },
   water: { ...COMMON_BOUNDS, flow: UNIT, size: UNIT, turbulence: UNIT, pan: SIGNED },
-  fire: { ...COMMON_BOUNDS, size: UNIT, crackle: UNIT, pops: UNIT, flicker: UNIT, flickerPace: UNIT, flickerEdge: UNIT, hiss: UNIT, hissTone: UNIT, pan: SIGNED, weather: UNIT },
+  fire: {
+    ...COMMON_BOUNDS, size: UNIT, width: UNIT, crackle: UNIT, crackleLevel: UNIT, crackleTone: UNIT, pops: UNIT, popLevel: UNIT, popTone: UNIT,
+    hiss: UNIT, hissLevel: UNIT, hissTone: UNIT, flicker: UNIT, flickerPeriodSec: [AMBIENT_FIRE_PERIOD_MIN_SEC, AMBIENT_FIRE_PERIOD_MAX_SEC],
+    flickerDynamics: UNIT, pan: SIGNED, weather: UNIT,
+  },
   chimes: {
     ...COMMON_BOUNDS, pitchHz: [AMBIENT_CHIME_PITCH_MIN_HZ, AMBIENT_CHIME_PITCH_MAX_HZ],
     tubes: [AMBIENT_CHIME_TUBES_MIN, AMBIENT_CHIME_TUBES_MAX, 'integer'],

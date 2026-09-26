@@ -635,30 +635,30 @@ describe('fire', () => {
     expect(spread(roarTrace({ flicker: 1 }))).toBeGreaterThan(1.8 * spread(roarTrace({ flicker: 0.5 })));
   });
 
-  it('changes more often at a faster pace', () => {
+  it('changes more often at a shorter period', () => {
     // Turns of direction per second.
-    const turns = (flickerPace: number) => {
-      const levels = roarTrace({ flicker: 1, flickerPace, flickerEdge: 0.5 }, 30);
+    const turns = (flickerPeriodSec: number) => {
+      const levels = roarTrace({ flicker: 1, flickerPeriodSec, flickerDynamics: 0.5 }, 30);
       let count = 0;
       for (let index = 2; index < levels.length; index += 1) {
         if ((levels[index] - levels[index - 1]) * (levels[index - 1] - levels[index - 2]) < 0) count += 1;
       }
       return count;
     };
-    expect(turns(1)).toBeGreaterThan(4 * turns(0.3));
+    expect(turns(0.08)).toBeGreaterThan(4 * turns(0.8));
   });
 
-  it('lurches at a sharp edge and eases in at a soft one, at the same depth and pace', () => {
+  it('lurches at wild dynamics and eases in at gentle ones, at the same depth and period', () => {
     // The steepest step, as a share of the level's own spread.
-    const steepest = (flickerEdge: number) => {
-      const levels = roarTrace({ flicker: 1, flickerPace: 0.3, flickerEdge });
+    const steepest = (flickerDynamics: number) => {
+      const levels = roarTrace({ flicker: 1, flickerPeriodSec: 0.8, flickerDynamics });
       const steps = levels.slice(1).map((value, index) => Math.abs(value - levels[index]));
       return Math.max(...steps) / spread(levels);
     };
     expect(steepest(1)).toBeGreaterThan(5 * steepest(0));
     // A sharp edge sets off at full speed: the largest step of a change is
     // its first, with no easing in ahead of it.
-    const levels = roarTrace({ flicker: 1, flickerPace: 0.3, flickerEdge: 1 });
+    const levels = roarTrace({ flicker: 1, flickerPeriodSec: 0.8, flickerDynamics: 1 });
     const steps = levels.slice(1).map((value, index) => value - levels[index]);
     const start = steps.findIndex((step) => Math.abs(step) > 1e-6);
     expect(Math.abs(steps[start])).toBeGreaterThanOrEqual(Math.abs(steps[start + 1]));
@@ -773,6 +773,73 @@ describe('fire', () => {
     peaksMs.sort((a, b) => a - b);
     expect(peaksMs[20]).toBeLessThanOrEqual(0.25);
     expect(peaksMs[39]).toBeLessThanOrEqual(1);
+  });
+
+  it('strays from its period more at wilder dynamics, keeping the period on average', () => {
+    const intervals = (flickerDynamics: number) => {
+      const generator = createProcessor([layer('fire', { crackle: 0, pops: 0, flickerPeriodSec: 0.5, flickerDynamics })], { sampleRate: 4000 });
+      const drawn: number[] = [];
+      const step = generator.processor.stepWander.bind(generator.processor);
+      generator.processor.stepWander = (wander: { framesLeft: number }, ...rest: unknown[]) => {
+        const channel = generator.processor.channels[0];
+        const before = wander.framesLeft;
+        const result = step(wander, ...rest);
+        if (wander === channel.roarWander && wander.framesLeft > before) drawn.push((wander.framesLeft + 32) / 4000);
+        return result;
+      };
+      generator.render(120);
+      const mean = drawn.reduce((sum, value) => sum + value, 0) / drawn.length;
+      return { mean, spread: Math.max(...drawn) - Math.min(...drawn) };
+    };
+    const gentle = intervals(0);
+    const wild = intervals(1);
+    expect(wild.spread).toBeGreaterThan(4 * gentle.spread);
+    expect(gentle.mean).toBeCloseTo(0.5, 1);
+    expect(wild.mean).toBeCloseTo(0.5, 1);
+  });
+
+  it('sets each part\'s level twelve decibels either way, and moves the crackles\' band with their tone', () => {
+    const spawned = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'fire' }>>) => {
+      const generator = createProcessor([layer('fire', { crackle: 1, pops: 0, ...overrides })], { sampleRate: 8000 });
+      const calls: Array<{ hz: number[]; level: number }> = [];
+      const spawn = generator.processor.spawnBurst.bind(generator.processor);
+      generator.processor.spawnBurst = (bursts: unknown, max: number, offset: number, spec: { hz: number[] }, level: number, pan: number) => {
+        calls.push({ hz: spec.hz, level });
+        spawn(bursts, max, offset, spec, level, pan);
+      };
+      generator.render(2);
+      return calls;
+    };
+    const quiet = spawned({ crackleLevel: 0 });
+    const loud = spawned({ crackleLevel: 1 });
+    expect(loud[0].level / quiet[0].level).toBeCloseTo(10 ** (24 / 20), 6);
+    expect(spawned({ crackleTone: 1 })[0].hz[0] / spawned({ crackleTone: 0 })[0].hz[0]).toBeCloseTo(16, 6);
+  });
+
+  it('darkens a pop with its tone without making it ring', () => {
+    const generator = createProcessor([], { sampleRate: 48000 });
+    const pop = (lowpassHz: number) => {
+      const bursts: unknown[] = [];
+      generator.processor.spawnBurst(bursts, 4, 0, { ...generator.constants.FIRE_POP, lowpassHz }, 1, 0);
+      const left = new Float64Array(4800);
+      generator.processor.renderBursts(bursts, left, new Float64Array(4800), 4800);
+      return Array.from(left);
+    };
+    const thud = pop(700);
+    const crack = pop(20000);
+    expect(highShare(thud, 48000, 3000)).toBeLessThan(0.5 * highShare(crack, 48000, 3000));
+    // Still dry: nearly all of it within the first 3 ms.
+    const energy = (samples: number[]) => samples.reduce((sum, value) => sum + (value * value), 0);
+    expect(energy(thud.slice(144)) / energy(thud)).toBeLessThan(0.02);
+  });
+
+  it('narrows to a point at its pan at no width', () => {
+    const narrow = createProcessor([layer('fire', { width: 0, pan: 0 })], { sampleRate: 8000 }).render(4);
+    const wide = createProcessor([layer('fire', { width: 1, pan: 0 })], { sampleRate: 8000 }).render(4);
+    expect(correlation(narrow.left, narrow.right)).toBeGreaterThan(0.99);
+    expect(correlation(wide.left, wide.right)).toBeLessThan(0.5);
+    const left = createProcessor([layer('fire', { width: 0, pan: -1 })], { sampleRate: 8000 }).render(4);
+    expect(peak(left.right)).toBeLessThan(1e-6);
   });
 
   it('roars louder and lower as it grows', () => {

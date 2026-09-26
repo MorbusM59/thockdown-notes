@@ -498,18 +498,19 @@ const FIRE_ROAR_LEVEL = [0.25, 1];
  * The roar's wander (renderFire), set by three controls:
  * - `flicker`, the depth: a target level is drawn from FIRE_FLUTTER_RANGE
  *   narrowed toward 1 (a steady burn at 0);
- * - `flickerPace`, how often: the mean seconds between targets runs
- *   geometrically over FIRE_PACE_SEC;
- * - `flickerEdge`, how sharp: the glide to each target takes a share of the
- *   interval, running geometrically over FIRE_EDGE_GLIDE_SHARE -- longer
- *   than the interval at 0, so the level never settles and swells smoothly,
- *   a small fraction of it at 1, so it lurches and holds -- and the edge
- *   also decides whether each change eases in (stepWander's `ease`): fully
- *   at 0, not at all at 1, where a change sets off at full speed the
- *   moment it is drawn, as the flames of a real fire do.
+ * - `flickerPeriodSec`, the mean seconds from one target to the next;
+ * - `flickerDynamics`, how abrupt and how irregular: the glide to each
+ *   target takes a share of the period running geometrically over
+ *   FIRE_EDGE_GLIDE_SHARE (longer than the period at 0, so the level never
+ *   settles and swells smoothly; a small fraction of it at 1, so it lurches
+ *   and holds); whether a change eases in (stepWander's `ease`: fully at 0,
+ *   not at all at 1, where it sets off at full speed the moment it is
+ *   drawn, as the flames of a real fire do); and how far each interval may
+ *   stray from the period, +/- FIRE_PERIOD_SPREAD running from its first
+ *   value to its second.
  */
 const FIRE_FLUTTER_RANGE = [0.45, 1.3];
-const FIRE_PACE_SEC = [2, 0.08];
+const FIRE_PERIOD_SPREAD = [0.1, 0.9];
 const FIRE_EDGE_GLIDE_SHARE = [1.2, 0.04];
 /**
  * The hiss is not the flames': it is moisture boiling out of the wood, one
@@ -520,13 +521,13 @@ const FIRE_EDGE_GLIDE_SHARE = [1.2, 0.04];
  * on raised-cosine ramps. Pockets overlap: on average `hiss` x
  * FIRE_POCKETS_AT_FULL of them sound at once, each at its own pitch (within
  * `spreadOctaves` of the tone) and its own place. `hissTone` places the
- * bands between FIRE_HISS_HZ; a band's level is scaled by
+ * bands between FIRE_HISS_HZ, and `hissLevel` sets their level (FIRE_LEVEL_RANGE_DB); a band's level is scaled by
  * sqrt(FIRE_HISS_REFERENCE_HZ / centre), the inverse of the white-noise
  * power a band of fixed Q holds, so the tone moves the colour and not the
  * loudness. The first version was one high-passed noise whose level
  * wandered with the flames, and was as erratic as they are.
  */
-const FIRE_HISS_HZ = [800, 8000];
+const FIRE_HISS_HZ = [2000, 8000];
 const FIRE_HISS_REFERENCE_HZ = 2530;
 const FIRE_HISS_LEVEL = [0.015, 0.08];
 const FIRE_POCKET = { riseSec: [1.5, 4], holdSec: [3, 14], fallSec: [2, 5], level: [0.5, 1], spreadOctaves: 0.5, q: 0.9, wobble: 0.12, wobbleSec: [0.4, 1.5] };
@@ -548,6 +549,18 @@ const FIRE_POPS_PER_SEC = 1.2;
  * the burst: at Q 2-3.5 that tail read as a tin struck with a soft blow.
  */
 const FIRE_POP = { hz: [300, 900], q: [0.5, 0.5], decaySec: [0.0003, 0.001], level: [1.6, 2.8], white: 0.8, sizzle: [3, 8], sizzleSec: [0.05, 0.2] };
+/**
+ * The crackles', pops' and hiss's level sliders: +/- FIRE_LEVEL_RANGE_DB
+ * around the level as authored, at 0.5. The crackle tone moves the
+ * crackles' band by +/- FIRE_TONE_OCTAVES. The pop tone darkens the whole
+ * pop through a one-pole low-pass, FIRE_POP_TONE_HZ from its first value
+ * (a thud) to its second (a crack), and moves its body's band by
+ * +/- FIRE_POP_BODY_OCTAVES -- darkened, never made to ring.
+ */
+const FIRE_LEVEL_RANGE_DB = 12;
+const FIRE_TONE_OCTAVES = 2;
+const FIRE_POP_TONE_HZ = [700, 20000];
+const FIRE_POP_BODY_OCTAVES = 1;
 const MAX_FIRE_BURSTS = 48;
 
 /**
@@ -2102,6 +2115,10 @@ class AmbientGenerator extends AudioWorkletProcessor {
       filter: stateVariableFilter(spec.hz[0] * ((spec.hz[1] / spec.hz[0]) ** this.random()), q),
       k: 1 / q,
       white: spec.white ?? 0,
+      // An optional one-pole low-pass over the whole burst (spec.lowpassHz),
+      // which darkens without ringing.
+      lowpass: spec.lowpassHz ? 1 - Math.exp((-2 * Math.PI * Math.min(spec.lowpassHz, sampleRate * 0.45)) / sampleRate) : 1,
+      lowpassState: 0,
       seed: Math.floor(this.random() * 0x100000000) >>> 0,
       startOffset: Math.max(0, offset),
       gainLeft: gains.left,
@@ -2130,14 +2147,16 @@ class AmbientGenerator extends AudioWorkletProcessor {
           amplitude *= decay;
           if (amplitude < SILENCE) amplitude = 0;
         }
-        const y = (burst.white * x) + ((1 - burst.white) * bandPass(filter, x) * k);
+        const raw = (burst.white * x) + ((1 - burst.white) * bandPass(filter, x) * k);
+        burst.lowpassState += (raw - burst.lowpassState) * burst.lowpass;
+        const y = burst.lowpassState;
         left[frame] += y * burst.gainLeft;
         right[frame] += y * burst.gainRight;
       }
       burst.startOffset = 0;
       burst.amplitude = amplitude;
       burst.seed = seed;
-      if (amplitude <= 0 && Math.abs(filter.s1) + Math.abs(filter.s2) <= SILENCE) {
+      if (amplitude <= 0 && Math.abs(filter.s1) + Math.abs(filter.s2) + Math.abs(burst.lowpassState) <= SILENCE) {
         bursts[index] = bursts[bursts.length - 1];
         bursts.pop();
       }
@@ -2394,7 +2413,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
     const rise = Math.round(this.between(FIRE_POCKET.riseSec) * sampleRate);
     const hold = Math.round(this.between(FIRE_POCKET.holdSec) * sampleRate);
     const fall = Math.round(this.between(FIRE_POCKET.fallSec) * sampleRate);
-    const image = stereoImage(channel.pan, 1);
+    const image = stereoImage(channel.pan, channel.width ?? 1);
     const gains = panGains(image.from + ((image.to - image.from) * this.random()));
     const pitch = 2 ** (FIRE_POCKET.spreadOctaves * ((this.random() * 2) - 1));
     channel.pockets.push({
@@ -2475,7 +2494,8 @@ class AmbientGenerator extends AudioWorkletProcessor {
   renderFire(channel, left, right, blockStart, length) {
     left.fill(0, 0, length);
     right.fill(0, 0, length);
-    const image = stereoImage(channel.pan, 1);
+    const width = Math.max(0, Math.min(1, channel.width ?? 1));
+    const image = stereoImage(channel.pan, width);
     const placeAt = () => image.from + ((image.to - image.from) * this.random());
     const crackleRate = this.fireCrackleRate(channel);
     const popRate = (channel.pops ?? 0) * FIRE_POPS_PER_SEC;
@@ -2483,8 +2503,20 @@ class AmbientGenerator extends AudioWorkletProcessor {
     if (channel.nextPopFrame < blockStart) channel.nextPopFrame = popRate > 0 ? blockStart + this.eventDelayFrames(popRate) : Infinity;
     const size = this.fireSize(channel);
     const roarLevel = FIRE_ROAR_LEVEL[0] * ((FIRE_ROAR_LEVEL[1] / FIRE_ROAR_LEVEL[0]) ** size) * (this.noiseGains.brown ?? 1);
+    const dbOf = (position) => 10 ** ((((position ?? 0.5) - 0.5) * 2 * FIRE_LEVEL_RANGE_DB) / 20);
     const hissLevel = (FIRE_HISS_LEVEL[0] + ((FIRE_HISS_LEVEL[1] - FIRE_HISS_LEVEL[0]) * size))
-      * FIRE_POCKET_GAIN * (this.noiseGains.white ?? 1);
+      * FIRE_POCKET_GAIN * dbOf(channel.hissLevel) * (this.noiseGains.white ?? 1);
+    const crackleLevel = dbOf(channel.crackleLevel);
+    const popLevel = dbOf(channel.popLevel);
+    const crackleShift = 2 ** (((channel.crackleTone ?? 0.5) - 0.5) * 2 * FIRE_TONE_OCTAVES);
+    const crackleSpec = { ...FIRE_CRACKLE, hz: [FIRE_CRACKLE.hz[0] * crackleShift, FIRE_CRACKLE.hz[1] * crackleShift] };
+    const popTone = Math.max(0, Math.min(1, channel.popTone ?? 0.7));
+    const popShift = 2 ** ((popTone - 0.5) * 2 * FIRE_POP_BODY_OCTAVES);
+    const popSpec = {
+      ...FIRE_POP,
+      hz: [FIRE_POP.hz[0] * popShift, FIRE_POP.hz[1] * popShift],
+      lowpassHz: FIRE_POP_TONE_HZ[0] * ((FIRE_POP_TONE_HZ[1] / FIRE_POP_TONE_HZ[0]) ** popTone),
+    };
     const pocketRate = this.firePocketRate(channel);
     if (channel.nextPocketFrame < blockStart) channel.nextPocketFrame = pocketRate > 0 ? blockStart + this.eventDelayFrames(pocketRate) : Infinity;
     const brown = this.noiseLoop('brown');
@@ -2492,20 +2524,26 @@ class AmbientGenerator extends AudioWorkletProcessor {
     const loopLength = Math.min(brown.length, white.length);
     if (channel.fireRead < 0 || channel.fireRead >= loopLength) channel.fireRead = Math.floor(channel.fireStart * loopLength) % loopLength;
     const half = Math.floor(loopLength / 2);
-    // Flicker, its pace and its edge (see FIRE_FLUTTER_RANGE).
+    // Flicker, its period and its dynamics (see FIRE_FLUTTER_RANGE).
     const depth = Math.max(0, Math.min(1, channel.flicker ?? 1));
-    const pace = Math.max(0, Math.min(1, channel.flickerPace ?? 0.5));
-    const edge = Math.max(0, Math.min(1, channel.flickerEdge ?? 0.5));
+    const dynamics = Math.max(0, Math.min(1, channel.flickerDynamics ?? 0.5));
     const wanderLow = 1 - ((1 - FIRE_FLUTTER_RANGE[0]) * depth);
     const wanderHigh = 1 + ((FIRE_FLUTTER_RANGE[1] - 1) * depth);
     const drawLevel = () => wanderLow + ((wanderHigh - wanderLow) * this.random());
-    const roarMeanSec = FIRE_PACE_SEC[0] * ((FIRE_PACE_SEC[1] / FIRE_PACE_SEC[0]) ** pace);
-    const glideShare = FIRE_EDGE_GLIDE_SHARE[0] * ((FIRE_EDGE_GLIDE_SHARE[1] / FIRE_EDGE_GLIDE_SHARE[0]) ** edge);
-    const wanderSec = [roarMeanSec * 0.4, roarMeanSec * 1.6];
+    const roarMeanSec = Math.max(0.01, channel.flickerPeriodSec ?? 0.4);
+    const glideShare = FIRE_EDGE_GLIDE_SHARE[0] * ((FIRE_EDGE_GLIDE_SHARE[1] / FIRE_EDGE_GLIDE_SHARE[0]) ** dynamics);
+    const stray = FIRE_PERIOD_SPREAD[0] + ((FIRE_PERIOD_SPREAD[1] - FIRE_PERIOD_SPREAD[0]) * dynamics);
+    const wanderSec = [roarMeanSec * (1 - stray), roarMeanSec * (1 + stray)];
+    // The roar's width: its two unrelated reads blended toward one (as a
+    // noise layer's width), then placed at the pan.
+    const widthAngle = (1 - width) * Math.PI / 4;
+    const roarDirect = Math.cos(widthAngle);
+    const roarCross = Math.sin(widthAngle);
+    const roarPan = panGains(Math.max(-1, Math.min(1, channel.pan ?? 0)));
     let flutterFrom = 1;
     let flutterTo = 1;
     this.forEachSegment(channel, length, () => {
-      [flutterFrom, flutterTo] = this.stepWander(channel.roarWander, wanderSec, roarMeanSec * glideShare, drawLevel, 1 - edge);
+      [flutterFrom, flutterTo] = this.stepWander(channel.roarWander, wanderSec, roarMeanSec * glideShare, drawLevel, 1 - dynamics);
       for (const pocket of channel.pockets) {
         [pocket.wobbleFrom, pocket.wobbleTo] = this.stepWander(pocket.wobble, FIRE_POCKET.wobbleSec, 0.5 * (FIRE_POCKET.wobbleSec[0] + FIRE_POCKET.wobbleSec[1]),
           () => 1 + (FIRE_POCKET.wobble * ((this.random() * 2) - 1)));
@@ -2521,18 +2559,18 @@ class AmbientGenerator extends AudioWorkletProcessor {
         if (at >= spanEnd) break;
         const burstOffset = at - blockStart;
         if (isPop) {
-          this.spawnBurst(channel.bursts, MAX_FIRE_BURSTS, burstOffset, FIRE_POP, 1, placeAt());
+          this.spawnBurst(channel.bursts, MAX_FIRE_BURSTS, burstOffset, popSpec, popLevel, placeAt());
           // The sizzle: a few crackles over the next moments, sap boiling out.
           const sizzle = Math.round(this.between(FIRE_POP.sizzle));
           const sizzleFrames = this.between(FIRE_POP.sizzleSec) * sampleRate;
           for (let spark = 0; spark < sizzle; spark += 1) {
-            this.spawnBurst(channel.bursts, MAX_FIRE_BURSTS, burstOffset + Math.round(this.random() * sizzleFrames), FIRE_CRACKLE, 0.5, placeAt());
+            this.spawnBurst(channel.bursts, MAX_FIRE_BURSTS, burstOffset + Math.round(this.random() * sizzleFrames), crackleSpec, 0.5 * popLevel, placeAt());
           }
           channel.nextPopFrame += this.eventDelayFrames(popRate);
         } else {
           // Loudness is skewed low: most crackles are faint, a few are sharp.
           const skew = this.random();
-          this.spawnBurst(channel.bursts, MAX_FIRE_BURSTS, burstOffset, FIRE_CRACKLE, 0.25 + (0.75 * skew * skew), placeAt());
+          this.spawnBurst(channel.bursts, MAX_FIRE_BURSTS, burstOffset, crackleSpec, (0.25 + (0.75 * skew * skew)) * crackleLevel, placeAt());
           channel.nextCrackleFrame += this.random() < FIRE_CRACKLE_CLUSTER_CHANCE
             ? Math.max(1, Math.round(this.between(FIRE_CRACKLE_CLUSTER_SEC) * sampleRate))
             : this.eventDelayFrames(crackleRate);
@@ -2550,8 +2588,10 @@ class AmbientGenerator extends AudioWorkletProcessor {
         const readRight = read + half >= loopLength ? read + half - loopLength : read + half;
         const roar = roarLevel * flutter;
         const frame = offset + step;
-        left[frame] += lowPassStep(channel.roarLeft, brown[read]) * roar;
-        right[frame] += lowPassStep(channel.roarRight, brown[readRight]) * roar;
+        const a = lowPassStep(channel.roarLeft, brown[read]);
+        const b = lowPassStep(channel.roarRight, brown[readRight]);
+        left[frame] += ((roarDirect * a) + (roarCross * b)) * roar * roarPan.left;
+        right[frame] += ((roarDirect * b) + (roarCross * a)) * roar * roarPan.right;
         read = read + 1 === loopLength ? 0 : read + 1;
       }
       channel.fireRead = read;
