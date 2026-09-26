@@ -49,7 +49,7 @@ import {
 import { spaceDecaySec } from '../shared/ambientSpace'
 import { CHIME_SCALE_COUNT, CHIME_SCALES } from '../shared/ambientChimeScales'
 import { armHold, HOLD_COMMIT_MS, HOLD_CONFIRM_MS } from '../shared/holdTiming'
-import { newSoundscapeId } from '../shared/ambientSoundscapeFile'
+import { newSoundscapeId, neutralSoundscape } from '../shared/ambientSoundscapeFile'
 import { exportSoundscapes } from './soundscapeFileActions'
 import { useNonPassiveWheel } from '../shared/useNonPassiveWheel'
 
@@ -431,6 +431,7 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
   // click), never by the contextmenu event, which Chromium fires on the press
   // on some platforms and on the release on others.
   const presetExportHoldRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
+  const resetHoldRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
   useEffect(() => () => {
     channelHoldRef.current?.cancel()
     presetExportHoldRef.current?.cancel()
@@ -647,11 +648,42 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
             type="button"
             className={`btn-icon options-color-swatch options-loadout-btn options-loadout-plus ambient-custom-preset-plus${hasPendingChanges ? ' is-active' : ''}`}
             aria-label="Save current soundscape as a custom preset"
-            data-tooltip={preferences.customPresets.length >= MAX_AMBIENT_CUSTOM_PRESETS
+            data-tooltip={`${preferences.customPresets.length >= MAX_AMBIENT_CUSTOM_PRESETS
               ? 'Custom soundscape limit reached'
-              : hasPendingChanges ? 'Save current soundscape as a custom preset' : 'No unsaved soundscape changes'}
-            disabled={!canSave}
-            onClick={savePreset}
+              : hasPendingChanges ? 'Save current soundscape as a custom preset' : 'No unsaved soundscape changes'}\nHold right-click to reset every channel to its defaults and turn it off.`}
+            // Not `disabled`: a disabled button receives no pointer events,
+            // and the hold-to-reset below must work whether or not there is
+            // anything to save.
+            aria-disabled={!canSave}
+            data-secondary-press="action"
+            onClick={() => { if (canSave) savePreset() }}
+            onPointerDown={(event) => {
+              if (event.button !== 2) return
+              resetHoldRef.current?.cancel()
+              const cancel = armHold(() => {
+                resetHoldRef.current = null
+                // Every channel back to its defaults, and off; the space and the weather are left as they are.
+                commitSettings({ ...preferences.settings, channels: neutralSoundscape().channels })
+              }, HOLD_COMMIT_MS)
+              resetHoldRef.current = { pointerId: event.pointerId, cancel }
+            }}
+            onPointerUp={(event) => {
+              if (resetHoldRef.current?.pointerId !== event.pointerId) return
+              resetHoldRef.current.cancel()
+              resetHoldRef.current = null
+            }}
+            onPointerCancel={() => {
+              resetHoldRef.current?.cancel()
+              resetHoldRef.current = null
+            }}
+            onMouseLeave={() => {
+              resetHoldRef.current?.cancel()
+              resetHoldRef.current = null
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+            }}
           >
             <span className="options-loadout-plus-glyph fa-solid fa-plus" aria-hidden="true" />
           </button>
