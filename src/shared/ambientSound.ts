@@ -288,13 +288,44 @@ export interface AmbientChimesChannelSettings extends AmbientChannelBaseSettings
   weather: number;
 }
 
+/**
+ * A mark tree: the orchestral bar chimes -- a row of short, solid bars hung
+ * from a rail, graded by length, swept with a stick into a glittering
+ * glissando that shimmers on as neighbouring bars knock together.
+ */
+export interface AmbientMarkTreeChannelSettings extends AmbientChannelBaseSettings {
+  kind: 'marktree';
+  /** The longest (lowest) bar's pitch, in Hz. */
+  pitchHz: number;
+  /** How far above it the shortest bar sounds, in octaves. */
+  spanOctaves: number;
+  /** How many bars, AMBIENT_MARK_TREE_BARS_MIN-MAX. */
+  bars: number;
+  /** How long a struck bar rings, in seconds. */
+  ringSec: number;
+  /** 0 a soft beater, warm, to 1 a hard one, bright and ticking. */
+  hardness: number;
+  /** How often a sweep comes, 0-1 (AMBIENT_MARK_TREE_SWEEP_RATE_*). */
+  sweeps: number;
+  /** How long a sweep takes to cross every bar, in seconds. */
+  sweepSec: number;
+  /** Which way a sweep runs: 0 always rising, 1 always falling, either in between. */
+  direction: number;
+  pan: number;
+  /** Stereo width, 0 a point at the pan to 1 the row spread across all the room the pan leaves. */
+  width: number;
+  /** Gusts bring sweeps more often. */
+  weather: number;
+}
+
 export type AmbientChannelSettings =
   | AmbientNoiseChannelSettings
   | AmbientRainChannelSettings
   | AmbientThunderChannelSettings
   | AmbientWaterChannelSettings
   | AmbientFireChannelSettings
-  | AmbientChimesChannelSettings;
+  | AmbientChimesChannelSettings
+  | AmbientMarkTreeChannelSettings;
 export type AmbientChannelKind = AmbientChannelSettings['kind'];
 export type AmbientChannelOfKind<K extends AmbientChannelKind> = Extract<AmbientChannelSettings, { kind: K }>;
 
@@ -373,6 +404,18 @@ export const AMBIENT_CHIME_RING_MIN_SEC = 1;
 export const AMBIENT_CHIME_RING_MAX_SEC = 15;
 export const AMBIENT_CHIME_RATE_MIN_PER_SEC = 0.05;
 export const AMBIENT_CHIME_RATE_MAX_PER_SEC = 4;
+export const AMBIENT_MARK_TREE_PITCH_MIN_HZ = 400;
+export const AMBIENT_MARK_TREE_PITCH_MAX_HZ = 3000;
+export const AMBIENT_MARK_TREE_SPAN_MIN_OCTAVES = 0.5;
+export const AMBIENT_MARK_TREE_SPAN_MAX_OCTAVES = 3;
+export const AMBIENT_MARK_TREE_BARS_MIN = 8;
+export const AMBIENT_MARK_TREE_BARS_MAX = 36;
+export const AMBIENT_MARK_TREE_RING_MIN_SEC = 0.5;
+export const AMBIENT_MARK_TREE_RING_MAX_SEC = 6;
+export const AMBIENT_MARK_TREE_SWEEP_MIN_SEC = 0.25;
+export const AMBIENT_MARK_TREE_SWEEP_MAX_SEC = 4;
+export const AMBIENT_MARK_TREE_SWEEP_RATE_MIN_PER_SEC = 0.02;
+export const AMBIENT_MARK_TREE_SWEEP_RATE_MAX_PER_SEC = 0.5;
 export const AMBIENT_WEATHER_PACE_MIN_SEC = 2;
 export const AMBIENT_WEATHER_PACE_MAX_SEC = 60;
 export const MAX_AMBIENT_CUSTOM_PRESETS = 12;
@@ -418,6 +461,11 @@ export function rainDropsPerSecond(intensity: number): number {
   return logLerp(AMBIENT_RAIN_DROPS_MIN_PER_SEC, AMBIENT_RAIN_DROPS_MAX_PER_SEC, clamp(intensity, 0, 1));
 }
 
+/** A mark tree's `sweeps` as sweeps per second. */
+export function markTreeSweepsPerSecond(sweeps: number): number {
+  return logLerp(AMBIENT_MARK_TREE_SWEEP_RATE_MIN_PER_SEC, AMBIENT_MARK_TREE_SWEEP_RATE_MAX_PER_SEC, clamp(sweeps, 0, 1));
+}
+
 /** A chimes layer's activity as strikes per second. */
 export function chimeStrikesPerSecond(activity: number): number {
   return logLerp(AMBIENT_CHIME_RATE_MIN_PER_SEC, AMBIENT_CHIME_RATE_MAX_PER_SEC, clamp(activity, 0, 1));
@@ -440,6 +488,7 @@ const ROSTER_COUNTS: ReadonlyArray<readonly [AmbientChannelKind, number]> = [
   ['water', 2],
   ['fire', 2],
   ['chimes', 2],
+  ['marktree', 2],
 ];
 
 /** Every channel a soundscape has, in the order the settings panel shows them. */
@@ -487,6 +536,11 @@ export const AMBIENT_CHANNEL_DEFAULTS: KindDefaults = {
     kind: 'chimes', enabled: true, solo: false, volume: 0.6, distance: 0.35,
     pitchHz: 520, tubes: 5, ringSec: 6, activity: 0.3, hardness: 0.6, unison: 0.3, material: 1 / 3, scale: 0, pan: 0, weather: 0.8,
   },
+  marktree: {
+    kind: 'marktree', enabled: true, solo: false, volume: 0.6, distance: 0.3,
+    pitchHz: 1100, spanOctaves: 2, bars: 25, ringSec: 2, hardness: 0.6,
+    sweeps: 0.3, sweepSec: 1.2, direction: 0.5, pan: 0, width: 0.8, weather: 0.5,
+  },
 };
 
 /** The pan each positional slot starts at, so a kind's layers begin spread across the field. */
@@ -496,6 +550,7 @@ const DEFAULT_PANS: Partial<Record<AmbientChannelKind, readonly number[]>> = {
   water: [-0.3, 0.4],
   fire: [0, -0.4],
   chimes: [0.35, -0.45],
+  marktree: [0, 0.5],
 };
 
 export const DEFAULT_AMBIENT_SPACE: Readonly<AmbientSpaceSettings> = { size: 0.45, damping: 0.5, echoes: 0.1, amount: 0.7 };
@@ -748,6 +803,13 @@ export const AMBIENT_FIELD_BOUNDS: { [K in AmbientChannelKind]: FieldBounds } = 
     tubes: [AMBIENT_CHIME_TUBES_MIN, AMBIENT_CHIME_TUBES_MAX, 'integer'],
     ringSec: [AMBIENT_CHIME_RING_MIN_SEC, AMBIENT_CHIME_RING_MAX_SEC], activity: UNIT, hardness: UNIT, unison: UNIT, material: UNIT,
     scale: [0, CHIME_SCALE_COUNT - 1, 'integer'], pan: SIGNED, weather: UNIT,
+  },
+  marktree: {
+    ...COMMON_BOUNDS, pitchHz: [AMBIENT_MARK_TREE_PITCH_MIN_HZ, AMBIENT_MARK_TREE_PITCH_MAX_HZ],
+    spanOctaves: [AMBIENT_MARK_TREE_SPAN_MIN_OCTAVES, AMBIENT_MARK_TREE_SPAN_MAX_OCTAVES],
+    bars: [AMBIENT_MARK_TREE_BARS_MIN, AMBIENT_MARK_TREE_BARS_MAX, 'integer'],
+    ringSec: [AMBIENT_MARK_TREE_RING_MIN_SEC, AMBIENT_MARK_TREE_RING_MAX_SEC], hardness: UNIT, sweeps: UNIT,
+    sweepSec: [AMBIENT_MARK_TREE_SWEEP_MIN_SEC, AMBIENT_MARK_TREE_SWEEP_MAX_SEC], direction: UNIT, pan: SIGNED, width: UNIT, weather: UNIT,
   },
 };
 
