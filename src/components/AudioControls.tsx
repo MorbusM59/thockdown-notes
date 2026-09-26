@@ -839,6 +839,15 @@ export const AudioControls = memo(function AudioControls({
   }, [nudgeVolume, nudgeReverb, nudgeRoom])
   useNonPassiveWheel(soundOptionsButtonRef, handleSoundOptionsWheel)
 
+  // The tooltip states the wheel mapping above with the live levels, so the
+  // button teaches its own gesture. A muted/bypassed level still shows its
+  // number (what adjusting would resume from) marked as off.
+  const soundOptionsTooltip = [
+    `[Scroll] Volume: ${toDisplayLevel(volume)}${isMuted ? ' (muted)' : ''}`,
+    `[Shift] Reverb: ${toDisplayLevel(reverbAmount)}${isReverbBypassed ? ' (off)' : ''}`,
+    `[Ctrl] Room: ${toDisplayLevel(reverbRoom)}${isReverbBypassed ? ' (off)' : ''}`,
+  ].join('\n')
+
   // The hold gesture speaks in printed 0-99 levels; the graph wants fractions.
   const handleVolumeLevel = useCallback((display: number) => {
     onVolumeChange(fromDisplayLevel(display))
@@ -936,7 +945,7 @@ export const AudioControls = memo(function AudioControls({
           ref={soundOptionsButtonRef}
           type="button"
           className={`audio-ctrl-btn${isSoundOptionsOpen ? ' is-active' : ''}`}
-          data-tooltip={isSoundOptionsOpen ? 'Back to playlists' : 'Sound options'}
+          data-tooltip={soundOptionsTooltip}
           aria-label={isSoundOptionsOpen ? 'Show playlists' : 'Show sound options'}
           aria-pressed={isSoundOptionsOpen}
           onClick={() => onSoundOptionsOpenChange(!isSoundOptionsOpen)}
