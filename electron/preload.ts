@@ -22,6 +22,8 @@ import type { AudioBounceCacheApi } from '../src/shared/audioBounceCache'
 import { AUDIO_BOUNCE_CHANNELS } from '../src/shared/audioBounceCache'
 import type { UiLoadoutApi } from '../src/shared/loadouts'
 import { LOADOUT_CHANNELS } from '../src/shared/loadouts'
+import type { SoundscapeFileApi } from '../src/shared/ambientSoundscapeFile'
+import { SOUNDSCAPE_FILE_CHANNELS } from '../src/shared/ambientSoundscapeFile'
 import type { FileSyncApi } from '../src/shared/fileSync'
 import { FILE_SYNC_CHANNELS } from '../src/shared/fileSync'
 import type { AudioPlayerApi } from '../src/shared/audioPlayer'
@@ -211,6 +213,13 @@ const uiLoadoutApi: UiLoadoutApi = {
 }
 
 contextBridge.exposeInMainWorld('thockdownLoadouts', uiLoadoutApi)
+
+const soundscapeFileApi: SoundscapeFileApi = {
+  save: (content, defaultName) => ipcRenderer.invoke(SOUNDSCAPE_FILE_CHANNELS.save, content, defaultName),
+  open: () => ipcRenderer.invoke(SOUNDSCAPE_FILE_CHANNELS.open),
+}
+
+contextBridge.exposeInMainWorld('thockdownSoundscapeFiles', soundscapeFileApi)
 
 const fileSyncApi: FileSyncApi = {
   syncExistingNotes: () => ipcRenderer.invoke(FILE_SYNC_CHANNELS.syncExistingNotes),

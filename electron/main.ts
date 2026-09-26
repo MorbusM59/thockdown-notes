@@ -1,3 +1,4 @@
+import { SOUNDSCAPE_FILE_CHANNELS, SOUNDSCAPE_FILE_EXTENSION } from '../src/shared/ambientSoundscapeFile';
 import { app, BrowserWindow, Menu, ipcMain, dialog, protocol, shell } from 'electron'
 import type { Session, PrintToPDFOptions } from 'electron'
 import { fileURLToPath } from 'node:url'
@@ -1023,6 +1024,31 @@ function registerIpcHandlers() {
     if (canceled || filePaths.length === 0) return databaseService!.listUiLoadouts();
     const content = await fsPromises.readFile(filePaths[0], 'utf-8');
     return databaseService!.importTdlLoadouts(content);
+  });
+
+  // ---- Soundscape files ----------------------------------------------------
+  // Only the dialogs and the file: soundscapes live in the renderer's state
+  // (see src/shared/ambientSoundscapeFile.ts).
+
+  ipcMain.handle(SOUNDSCAPE_FILE_CHANNELS.save, async (_event, content: unknown, defaultName: unknown) => {
+    if (typeof content !== 'string') return;
+    const { filePath, canceled } = await dialog.showSaveDialog({
+      title: 'Export soundscapes',
+      defaultPath: typeof defaultName === 'string' && defaultName ? defaultName : `my-soundscapes.${SOUNDSCAPE_FILE_EXTENSION}`,
+      filters: [{ name: 'Thockdown Soundscape', extensions: [SOUNDSCAPE_FILE_EXTENSION] }],
+    });
+    if (canceled || !filePath) return;
+    await fsPromises.writeFile(filePath, content, 'utf-8');
+  });
+
+  ipcMain.handle(SOUNDSCAPE_FILE_CHANNELS.open, async () => {
+    const { filePaths, canceled } = await dialog.showOpenDialog({
+      title: 'Import soundscapes',
+      filters: [{ name: 'Thockdown Soundscape', extensions: [SOUNDSCAPE_FILE_EXTENSION] }],
+      properties: ['openFile'],
+    });
+    if (canceled || filePaths.length === 0) return null;
+    return fsPromises.readFile(filePaths[0], 'utf-8');
   });
 
   // ---- Music player --------------------------------------------------------

@@ -4,6 +4,7 @@ import { useRef } from 'react'
 import { AccordionGroup, AccordionSection } from '../components/AccordionSection'
 import { CompactScrollbarSlider } from '../components/CompactScrollbarSlider'
 import { AmbientSoundOptions } from './AmbientSoundOptions'
+import { exportSoundscapes, importSoundscapes } from './soundscapeFileActions'
 import type { AmbientPreferences } from '../shared/ambientSound'
 import {
   CONTINUOUS_DOCUMENT_MAX_THRESHOLD_BLOCKS,
@@ -3291,6 +3292,29 @@ export function SidebarOptionsPanel({
             aria-label="Import layouts from a .tdl file"
           >
             <span className="fa-solid fa-file-arrow-up" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="btn-icon options-color-swatch options-loadout-btn"
+            onClick={() => void exportSoundscapes(ambientPreferences.customPresets, 'my-soundscapes')}
+            disabled={ambientPreferences.customPresets.length === 0}
+            data-tooltip={ambientPreferences.customPresets.length === 0 ? 'No custom soundscapes to export' : 'Export custom soundscapes to a .tds file'}
+            aria-label="Export custom soundscapes to a .tds file"
+          >
+            <span className="fa-solid fa-file-audio" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="btn-icon options-color-swatch options-loadout-btn"
+            onClick={() => {
+              void importSoundscapes(ambientPreferences).then((next) => {
+                if (next) onAmbientPreferencesChange(next)
+              })
+            }}
+            data-tooltip="Import soundscapes from a .tds file"
+            aria-label="Import soundscapes from a .tds file"
+          >
+            <span className="fa-solid fa-music" aria-hidden="true" />
           </button>
         </div>
       </AccordionSection>

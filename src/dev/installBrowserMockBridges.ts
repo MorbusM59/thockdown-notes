@@ -2126,6 +2126,13 @@ export function installBrowserMockBridges(): void {
   if (!window.thockdownTextures) {
     window.thockdownTextures = buildTextureBridge(storeRef)
   }
+  if (!window.thockdownSoundscapeFiles) {
+    // Browser dev mode has no file dialogs: export does nothing, import finds no file.
+    window.thockdownSoundscapeFiles = {
+      async save() {},
+      async open() { return null },
+    }
+  }
   if (!window.thockdownLoadouts) {
     window.thockdownLoadouts = buildLoadoutBridge(storeRef)
   }

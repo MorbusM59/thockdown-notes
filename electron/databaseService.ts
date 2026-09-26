@@ -1,3 +1,4 @@
+import { buildObjectDiff, formatPresetLine, formatPresetScalar, parsePresetLines, stableStringify } from '../src/shared/presetFile';
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, promises as fs } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -644,38 +645,6 @@ const TDL_OBJECT_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
   'glaze', 'highlightColors', 'editorTextColors', 'textureMaterials',
 ];
 
-function formatTdlScalar(value: unknown): string {
-  if (typeof value === 'string') return `'${value}'`;
-  return String(value); // number or boolean
-}
-
-function buildNeutralBaseObjectDiff(value: unknown, baseValue: unknown): unknown | undefined {
-  if (value === null || typeof value !== 'object') {
-    return stableStringify(value) !== stableStringify(baseValue) ? value : undefined;
-  }
-
-  if (Array.isArray(value)) {
-    return stableStringify(value) !== stableStringify(baseValue) ? value : undefined;
-  }
-
-  const entries = Object.entries(value as Record<string, unknown>)
-    .sort(([left], [right]) => left.localeCompare(right));
-  const result: Record<string, unknown> = {};
-  const baseObject = typeof baseValue === 'object' && baseValue !== null && !Array.isArray(baseValue)
-    ? (baseValue as Record<string, unknown>)
-    : {};
-
-  for (const [key, nestedValue] of entries) {
-    const nestedBaseValue = baseObject[key];
-    const diff = buildNeutralBaseObjectDiff(nestedValue, nestedBaseValue);
-    if (diff !== undefined) {
-      result[key] = diff;
-    }
-  }
-
-  return Object.keys(result).length > 0 ? result : undefined;
-}
-
 /** Build the override fragment of one .tdl line against NEUTRAL_BASE. */
 function buildNeutralBaseDiff(payload: Record<string, unknown>): string[] {
   const base = NEUTRAL_BASE as Record<string, unknown>;
@@ -685,7 +654,7 @@ function buildNeutralBaseDiff(payload: Record<string, unknown>): string[] {
     const val = payload[key];
     const baseVal = base[key];
     if (val !== undefined && val !== baseVal) {
-      parts.push(`${key}: ${formatTdlScalar(val)}`);
+      parts.push(`${key}: ${formatPresetScalar(val)}`);
     }
   }
 
@@ -694,121 +663,13 @@ function buildNeutralBaseDiff(payload: Record<string, unknown>): string[] {
     const baseVal = base[key];
     if (val === undefined) continue;
 
-    const diff = buildNeutralBaseObjectDiff(val, baseVal);
+    const diff = buildObjectDiff(val, baseVal);
     if (diff !== undefined) {
       parts.push(`${key}: ${JSON.stringify(diff)}`);
     }
   }
 
   return parts;
-}
-
-/** Parse unquoted-key override string from a .tdl line. */
-function parseTdlOverrides(overrideStr: string): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  let pos = 0;
-  const str = overrideStr.trim();
-
-  while (pos < str.length) {
-    // skip commas and whitespace between fields
-    while (pos < str.length && /[,\s]/.test(str[pos])) pos++;
-    if (pos >= str.length) break;
-
-    // unquoted identifier key
-    const keyMatch = /^([a-zA-Z_]\w*)/.exec(str.slice(pos));
-    if (!keyMatch) break;
-    const key = keyMatch[1];
-    pos += key.length;
-
-    // skip colon and surrounding whitespace
-    while (pos < str.length && (str[pos] === ':' || str[pos] === ' ')) pos++;
-    if (pos >= str.length) break;
-
-    const rest = str.slice(pos);
-
-    if (rest[0] === '{') {
-      // inline JSON object — balance braces
-      let depth = 0;
-      let endIdx = -1;
-      for (let i = 0; i < rest.length; i++) {
-        if (rest[i] === '{') depth++;
-        else if (rest[i] === '}') {
-          depth--;
-          if (depth === 0) { endIdx = i; break; }
-        }
-      }
-      if (endIdx < 0) break;
-      try {
-        result[key] = JSON.parse(rest.slice(0, endIdx + 1));
-      } catch {
-        // malformed — skip this field
-      }
-      pos += endIdx + 1;
-    } else if (rest[0] === "'") {
-      // single-quoted string
-      let end = 1;
-      while (end < rest.length && rest[end] !== "'") end++;
-      result[key] = rest.slice(1, end);
-      pos += end + 1;
-    } else if (rest[0] === '"') {
-      // double-quoted string
-      let end = 1;
-      while (end < rest.length && rest[end] !== '"') end++;
-      result[key] = rest.slice(1, end);
-      pos += end + 1;
-    } else if (rest.startsWith('true')) {
-      result[key] = true; pos += 4;
-    } else if (rest.startsWith('false')) {
-      result[key] = false; pos += 5;
-    } else {
-      const numMatch = /^-?\d+(?:\.\d+)?/.exec(rest);
-      if (numMatch) {
-        result[key] = parseFloat(numMatch[0]);
-        pos += numMatch[0].length;
-      } else {
-        break; // can't parse — bail
-      }
-    }
-  }
-
-  return result;
-}
-
-/** Parse an entire .tdl file into (original-id, overrides) pairs. */
-function parseTdlContent(content: string): Array<{ id: number; overrides: Record<string, unknown> }> {
-  const result: Array<{ id: number; overrides: Record<string, unknown> }> = [];
-
-  for (const rawLine of content.split('\n')) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith('//')) continue;
-
-    // e.g.  8: { ...NEUTRAL_BASE, filterInvert: 1 },
-    const m = /^(-?\d+):\s*\{\s*\.\.\.\s*NEUTRAL_BASE\s*(?:,\s*([\s\S]*?))?\s*\},?\s*$/.exec(line);
-    if (!m) continue;
-
-    const id = parseInt(m[1], 10);
-    if (!Number.isFinite(id) || id === 0) continue;
-
-    const overrides = m[2] ? parseTdlOverrides(m[2]) : {};
-    result.push({ id, overrides });
-  }
-
-  return result;
-}
-
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== 'object') {
-    return JSON.stringify(value);
-  }
-
-  if (Array.isArray(value)) {
-    return `[${value.map((item) => stableStringify(item)).join(',')}]`;
-  }
-
-  const entries = Object.entries(value as Record<string, unknown>)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, nested]) => `${JSON.stringify(key)}:${stableStringify(nested)}`);
-  return `{${entries.join(',')}}`;
 }
 
 export class DatabaseService {
@@ -3611,9 +3472,7 @@ export class DatabaseService {
       } catch {
         continue;
       }
-      const diff = buildNeutralBaseDiff(payload);
-      const diffStr = diff.length > 0 ? ', ' + diff.join(', ') : '';
-      lines.push(`  ${row.id}: { ...NEUTRAL_BASE${diffStr} },`);
+      lines.push(formatPresetLine(row.id, 'NEUTRAL_BASE', buildNeutralBaseDiff(payload)));
     }
 
     return lines.join('\n');
@@ -3649,9 +3508,7 @@ export class DatabaseService {
       '',
     ];
 
-    const diff = buildNeutralBaseDiff(payload);
-    const diffStr = diff.length > 0 ? ', ' + diff.join(', ') : '';
-    lines.push(`  ${row.id}: { ...NEUTRAL_BASE${diffStr} },`);
+    lines.push(formatPresetLine(row.id, 'NEUTRAL_BASE', buildNeutralBaseDiff(payload)));
 
     return lines.join('\n');
   }
@@ -3665,7 +3522,7 @@ export class DatabaseService {
     this.ensureLoadoutsSeeded();
     const db = this.requireDb();
 
-    const parsed = parseTdlContent(fileContent);
+    const parsed = parsePresetLines(fileContent, 'NEUTRAL_BASE');
     if (parsed.length === 0) return this.buildListResult();
 
     const timestamp = Date.now();

@@ -46,7 +46,9 @@ import {
 } from '../shared/ambientSound'
 import { spaceDecaySec } from '../shared/ambientSpace'
 import { CHIME_SCALE_COUNT, CHIME_SCALES } from '../shared/ambientChimeScales'
-import { armHold, HOLD_CONFIRM_MS } from '../shared/holdTiming'
+import { armHold, HOLD_COMMIT_MS, HOLD_CONFIRM_MS } from '../shared/holdTiming'
+import { newSoundscapeId } from '../shared/ambientSoundscapeFile'
+import { exportSoundscapes } from './soundscapeFileActions'
 import { useNonPassiveWheel } from '../shared/useNonPassiveWheel'
 
 const PRESET_ICONS: Record<string, string> = {
@@ -417,7 +419,16 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
   const channelHoldRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
   const suppressNextContextMenuRef = useRef(false)
   const [selectedId, setSelectedId] = useState<string>(() => AMBIENT_CHANNEL_ROSTER[0].id)
-  useEffect(() => () => channelHoldRef.current?.cancel(), [])
+  // Holding right-click on a custom soundscape exports it, as it does on a
+  // custom layout; a short right-click primes it for deletion instead. Which
+  // one is decided on the RELEASE (the hold still pending there is a short
+  // click), never by the contextmenu event, which Chromium fires on the press
+  // on some platforms and on the release on others.
+  const presetExportHoldRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
+  useEffect(() => () => {
+    channelHoldRef.current?.cancel()
+    presetExportHoldRef.current?.cancel()
+  }, [])
   const channels = preferences.settings.channels
   const selectedChannel = channels.find((channel) => channel.id === selectedId) ?? null
   const allPresets = [...AMBIENT_FACTORY_PRESETS, ...preferences.customPresets]
@@ -507,7 +518,7 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
 
   const savePreset = () => {
     if (!canSave) return
-    const id = `ambient-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const id = newSoundscapeId()
     const settings = cloneSettings(preferences.settings)
     const saved: AmbientPreset = {
       id,
@@ -588,14 +599,38 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                 className={`btn-icon options-color-swatch options-loadout-btn ambient-custom-preset-btn${selectedPresetId === preset.id ? ' is-active' : ''}${isPrimed ? ' primed' : ''}`}
                 aria-label={isPrimed ? `Delete ${label}` : label}
                 aria-pressed={selectedPresetId === preset.id}
-                data-tooltip={isPrimed ? `Click to delete ${label}` : `${label}\nRight-click to mark for deletion, then click.`}
+                data-tooltip={isPrimed ? `Click to delete ${label}` : `${label}\nRight-click to mark for deletion, then click.\nHold right-click to export.`}
                 data-secondary-press="action"
                 onClick={() => activatePreset(preset)}
-                onMouseLeave={() => setPendingDeletePresetId(null)}
+                onPointerDown={(event) => {
+                  if (event.button !== 2) return
+                  presetExportHoldRef.current?.cancel()
+                  const cancel = armHold(() => {
+                    presetExportHoldRef.current = null
+                    setPendingDeletePresetId(null)
+                    void exportSoundscapes([preset], preset.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'))
+                  }, HOLD_COMMIT_MS)
+                  presetExportHoldRef.current = { pointerId: event.pointerId, cancel }
+                }}
+                onPointerUp={(event) => {
+                  if (event.button !== 2 || presetExportHoldRef.current?.pointerId !== event.pointerId) return
+                  // Released before the hold completed: a short click, which primes deletion.
+                  presetExportHoldRef.current.cancel()
+                  presetExportHoldRef.current = null
+                  setPendingDeletePresetId(preset.id)
+                }}
+                onPointerCancel={() => {
+                  presetExportHoldRef.current?.cancel()
+                  presetExportHoldRef.current = null
+                }}
+                onMouseLeave={() => {
+                  presetExportHoldRef.current?.cancel()
+                  presetExportHoldRef.current = null
+                  setPendingDeletePresetId(null)
+                }}
                 onContextMenu={(event) => {
                   event.preventDefault()
                   event.stopPropagation()
-                  setPendingDeletePresetId(preset.id)
                 }}
               >
                 <span className="options-loadout-index">{number}</span>
