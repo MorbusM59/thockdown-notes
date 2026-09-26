@@ -698,6 +698,19 @@ describe('water', () => {
     }
   });
 
+  it('moves the rush only a little with the tumble: a quarter of the bursts\' swing', () => {
+    // The spread of the rush's loudness over tenth-second windows, in dB.
+    const swing = (turbulence: number) => {
+      const left = createProcessor([layer('water', { turbulence, bubbleLevel: 0 })], { sampleRate: 16000 }).render(20).left;
+      const levels: number[] = [];
+      for (let at = 0; at + 1600 <= left.length; at += 1600) levels.push(20 * Math.log10(rms(left.slice(at, at + 1600))));
+      const mean = levels.reduce((sum, value) => sum + value, 0) / levels.length;
+      return Math.sqrt(levels.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / levels.length);
+    };
+    // A full share would swing it by sigma/2 nepers, about 3.5 dB; a quarter, under 1 dB on top of the noise's own.
+    expect(swing(1) - swing(0)).toBeLessThan(1);
+  });
+
   it('plays the rush and the bubbles each at its own level, either alone', () => {
     const energy = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'water' }>>) => (
       rms(createProcessor([layer('water', { turbulence: 0, ...overrides })], { sampleRate: 8000 }).render(4).left)

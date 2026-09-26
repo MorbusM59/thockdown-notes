@@ -284,7 +284,7 @@ const CONTROLS: { [K in AmbientChannelKind]: ControlGroup[] } = {
       // loud, how big), their shape, and the rush beneath them.
       controls: [
         VOLUME,
-        unit('turbulence', 'tumble', 'An even flow, or water arriving in bursts as it tumbles over stones; moves the bubbles and the rush together', (value) => formatAmount(value, 'Even')),
+        unit('turbulence', 'tumble', 'An even flow, or water arriving in bursts as it tumbles over stones; bunches the bubbles, and sways the rush a little', (value) => formatAmount(value, 'Even')),
         unit('width', 'width', 'A point at its pan to as wide as its pan allows', (value) => formatAmount(value, 'Point', 'Wide')),
         unit('bubbles', 'bubbles', 'How many bubbles: a few to a froth', (value) => {
           const perSec = AMBIENT_WATER_BUBBLES_PER_SEC[0] * ((AMBIENT_WATER_BUBBLES_PER_SEC[1] / AMBIENT_WATER_BUBBLES_PER_SEC[0]) ** value)

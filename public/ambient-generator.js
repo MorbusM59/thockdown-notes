@@ -511,11 +511,17 @@ const WATER_RUSH_IMPULSES_PER_SEC = [150, 48000];
 const WATER_RUSH_TONE_OCTAVES = 2;
 /** p(r) proportional to r^-WATER_RADIUS_EXPONENT between the bounds. */
 const WATER_RADIUS_EXPONENT = 2;
-/** Mean seconds between the burst process's targets; its glide, in seconds. */
+/**
+ * Mean seconds between the burst process's targets, and its glide in
+ * seconds: stepWander's two stages in series, so a burst eases in and out
+ * rather than switching on and off.
+ */
 const WATER_BURST_SEC = 0.22;
-const WATER_BURST_GLIDE_SEC = 0.03;
+const WATER_BURST_GLIDE_SEC = 0.08;
 /** The burst multiplier's spread (log-normal sigma) at turbulence 1. */
-const WATER_BURST_SIGMA = 1.3;
+const WATER_BURST_SIGMA = 0.8;
+/** The share of the bursts' swing (in dB) the rush follows; the bubbles follow all of it. */
+const WATER_RUSH_BURST_SHARE = 0.25;
 const WATER_RUSH_HZ = 540;
 /** The rush's level at rushLevel 0.75. */
 const WATER_RUSH_LEVEL = 0.13;
@@ -2479,12 +2485,13 @@ class AmbientGenerator extends AudioWorkletProcessor {
         }
         channel.nextBubbleFrame += this.eventDelayFrames(rate);
       }
-      // The rush: pink noise, band-passed low, breathing with the bursts.
+      // The rush: pink noise, band-passed low, breathing a little with the bursts.
       let read = channel.rushRead;
       let seed = channel.rushSeed;
       for (let step = 0; step < count; step += 1) {
         const burst = burstFrom + ((burstTo - burstFrom) * ((position + step) / CONTROL_FRAMES));
-        const level = rushBase * Math.sqrt(burst);
+        // The bubble rate follows the burst; the rush's power follows a quarter of its swing.
+        const level = rushBase * (burst ** (0.5 * WATER_RUSH_BURST_SHARE));
         const readRight = read + half >= loopLength ? read + half - loopLength : read + half;
         // Steady noise when the chance is 1; otherwise sparse impulses (the gravel).
         let inLeft = pink[read];
