@@ -30,6 +30,7 @@ import {
   DEFAULT_AMBIENT_WEATHER,
   MAX_AMBIENT_CUSTOM_PRESETS,
   ambientFaderDb,
+  ambientPartDb,
   ambientSettingsSignature,
   applyAmbientPreset,
   chimeStrikesPerSecond,
@@ -122,21 +123,17 @@ const SURFACE_NAMES: Record<(typeof AMBIENT_RAIN_SURFACE_ANCHORS)[number]['name'
 const SURFACE_POINTS = AMBIENT_RAIN_SURFACE_ANCHORS.map((anchor) => ({ name: SURFACE_NAMES[anchor.name], at: anchor.at }))
 const COLOUR_POINTS = [{ name: 'Brown', at: 0 }, { name: 'Pink', at: 0.5 }, { name: 'White', at: 1 }]
 
-function formatFireLevel(value: number): string {
-  const db = (value - 0.5) * 24
-  return Math.abs(db) < 0.25 ? 'As is' : `${db > 0 ? '+' : '−'}${Math.abs(db).toFixed(1)} dB`
+/** A part's level slider (ambientPartGain): off, as authored, or how far from it. */
+function formatPartLevel(value: number): string {
+  const db = ambientPartDb(value)
+  if (db === -Infinity) return 'Off'
+  return Math.abs(db) < 0.5 ? 'As is' : `${db > 0 ? '+' : '−'}${Math.abs(db).toFixed(1)} dB`
 }
 
-function formatFireShift(value: number): string {
-  const octaves = (value - 0.5) * 4
-  return Math.abs(octaves) < 0.02 ? 'As is' : `${octaves > 0 ? '+' : '−'}${Math.abs(octaves).toFixed(1)} oct`
-}
-
-function formatRainMix(value: number): string {
-  if (value < 0.005) return 'Wash only'
-  if (value > 0.995) return 'Drops only'
-  if (Math.abs(value - 0.5) < 0.005) return 'Both'
-  return value < 0.5 ? `Wash, drops ${Math.round(2 * value * 100)}%` : `Drops, wash ${Math.round(2 * (1 - value) * 100)}%`
+/** A tone slider: how far, in octaves, from the part as authored. */
+function formatShift(value: number, octaves: number): string {
+  const shift = (value - 0.5) * 2 * octaves
+  return Math.abs(shift) < 0.02 ? 'As is' : `${shift > 0 ? '+' : '−'}${Math.abs(shift).toFixed(1)} oct`
 }
 
 function formatThunderShare(value: number): string {
@@ -218,17 +215,35 @@ const CONTROLS: { [K in AmbientChannelKind]: ControlGroup[] } = {
   rain: [
     {
       label: 'Sound',
+      // Rows of three: the surface, then drops, wash, drips and splashes
+      // each as amount, level and tone.
       controls: [
         VOLUME,
-        unit('intensity', 'intensity', 'Drizzle to downpour: how many drops, how loud the wash, how heavy the drops', (value) => `${rainDropsPerSecond(value) < 10 ? rainDropsPerSecond(value).toFixed(1) : Math.round(rainDropsPerSecond(value))} drops / s`),
         unit('surface', 'surface', 'What it falls on, soft to hard: leaves, canvas, street, tin, glass, and every blend between', (value) => formatScale(value, SURFACE_POINTS)),
-        unit('mix', 'mix', 'The steady wash of rain too dense to hear drop by drop, the drops heard one by one, or both at full in the middle', formatRainMix),
-        unit('drips', 'drips', 'Large, heavy drops from gutters, eaves and branches', (value) => (value < 0.01 ? 'Off' : `${(value * AMBIENT_RAIN_DRIPS_MAX_PER_SEC).toFixed(1)} / s`)),
-        unit('wetness', 'wetness', 'Standing water: splashes, spray and the plip of trapped bubbles, and a surface deadened by the film', (value) => formatAmount(value, 'Dry', 'Soaked')),
         unit('resonance', 'ring', 'How much the surface rings: only the impact, as it is, or twice as long', (value) => (value < 0.01 ? 'Dead' : Math.abs(value - 0.5) < 0.005 ? 'As is' : value > 0.99 ? 'Ringing' : percent(value))),
+        unit('intensity', 'drops', 'The drops heard one by one: drizzle to downpour, how many and how heavy', (value) => `${rainDropsPerSecond(value) < 10 ? rainDropsPerSecond(value).toFixed(1) : Math.round(rainDropsPerSecond(value))} / s`),
+        unit('dropLevel', 'level', 'How loud the drops are', formatPartLevel),
+        unit('dropTone', 'tone', 'The drops\' pitch, an octave either way', (value) => formatShift(value, 1)),
+        unit('washDensity', 'wash', 'The steady wash of rain too dense to hear drop by drop: a sparse patter to a smooth hiss', (value) => formatAmount(value, 'Patter', 'Hiss')),
+        unit('washLevel', 'level', 'How loud the wash is; off leaves the drops alone, which sounds like dripping', formatPartLevel),
+        unit('washTone', 'tone', 'The wash\'s pitch, two octaves either way', (value) => formatShift(value, 2)),
+        unit('drips', 'drips', 'Large, heavy drops from gutters, eaves and branches', (value) => (value < 0.01 ? 'Off' : `${(value * AMBIENT_RAIN_DRIPS_MAX_PER_SEC).toFixed(1)} / s`)),
+        unit('dripLevel', 'level', 'How loud the drips are', formatPartLevel),
+        unit('dripTone', 'tone', 'The drips\' pitch, an octave either way', (value) => formatShift(value, 1)),
+        unit('wetness', 'wet', 'Standing water: how many drops land in it, and how much its film deadens the surface', (value) => formatAmount(value, 'Dry', 'Soaked')),
+        unit('splashLevel', 'level', 'How loud the splashes and the plip of trapped bubbles are', formatPartLevel),
+        unit('splashTone', 'tone', 'The splashes\' pitch and the bubbles\' size, an octave either way', (value) => formatShift(value, 1)),
       ],
     },
-    { label: 'Place', controls: [DISTANCE, PAN, WEATHER] },
+    {
+      label: 'Place',
+      controls: [
+        DISTANCE,
+        PAN,
+        unit('width', 'width', 'A point at its pan to as wide as its pan allows', (value) => formatAmount(value, 'Point', 'Wide')),
+        WEATHER,
+      ],
+    },
   ],
   thunder: [
     {
@@ -274,13 +289,13 @@ const CONTROLS: { [K in AmbientChannelKind]: ControlGroup[] } = {
         unit('size', 'size', 'Embers to a blaze: the weight and depth of the roar', (value) => formatAmount(value, 'Embers', 'Blaze')),
         unit('width', 'width', 'A point at its pan to as wide as its pan allows', (value) => formatAmount(value, 'Point', 'Wide')),
         unit('crackle', 'crackle', 'How often the wood crackles', (value) => formatAmount(value, 'Rarely', 'Constantly')),
-        unit('crackleLevel', 'level', 'How loud the crackles are', formatFireLevel),
-        unit('crackleTone', 'tone', 'The crackles\' pitch, two octaves either way', formatFireShift),
+        unit('crackleLevel', 'level', 'How loud the crackles are', formatPartLevel),
+        unit('crackleTone', 'tone', 'The crackles\' pitch, two octaves either way', (value) => formatShift(value, 2)),
         unit('pops', 'pops', 'How often sap pops and sizzles', (value) => formatAmount(value, 'Never', 'Often')),
-        unit('popLevel', 'level', 'How loud the pops are', formatFireLevel),
+        unit('popLevel', 'level', 'How loud the pops are', formatPartLevel),
         unit('popTone', 'tone', 'A dull thud to a bright crack', (value) => formatAmount(value, 'Thud', 'Crack')),
         unit('hiss', 'hiss', 'Moisture boiling out of the wood: pockets that sizzle for a while, fading in and out over seconds, several at once', (value) => (value < 0.005 ? 'Off' : `${(value * 4).toFixed(1)} pockets`)),
-        unit('hissLevel', 'level', 'How loud the sizzle is', formatFireLevel),
+        unit('hissLevel', 'level', 'How loud the sizzle is', formatPartLevel),
         unit('hissTone', 'tone', 'The pitch of the sizzle', (value) => `around ${formatHz(2000 * (4 ** value))}`),
         unit('flicker', 'flicker', 'How far the roar swings as the flames move: a steady burn, or surging and faltering', (value) => formatAmount(value, 'Steady', 'Guttering')),
         { key: 'flickerPeriodSec', track: 'period', tooltip: 'The average length of one movement of the flames', min: AMBIENT_FIRE_PERIOD_MIN_SEC, max: AMBIENT_FIRE_PERIOD_MAX_SEC, log: true, format: formatSeconds },

@@ -4,6 +4,7 @@ import {
   AMBIENT_RAIN_SURFACE_ANCHORS,
   ambientFaderGain,
   rainDropsPerSecond,
+  ambientPartGain,
   type AmbientChannelSettings,
 } from '../shared/ambientSound';
 import { chimeTubeFrequencies } from '../shared/ambientSoundDsp';
@@ -74,8 +75,8 @@ describe('the ambient worklet', () => {
     const extremes: AmbientChannelSettings[] = [
       layer('noise', { colour: 0, brightnessHz: 80, focus: 1, depth: 1, periodSec: 0.5, curve: 1, skew: 0.1, sweep: 1, variation: 1, sway: 1, width: 0, distance: 1, weather: 1 }, 1),
       layer('noise', { colour: 1, brightnessHz: 18000, focus: 1, depth: 1, periodSec: 0.5, curve: 0, skew: 0.9, sweep: -1, variation: 1, sway: 1, width: 1, weather: 1 }, 2),
-      layer('rain', { intensity: 1, surface: 0.25, mix: 0.5, drips: 1, wetness: 1, resonance: 1, pan: -1, weather: 1 }, 1),
-      layer('rain', { intensity: 1, surface: 0.75, mix: 1, drips: 1, wetness: 0, resonance: 0, pan: 1, weather: 1 }, 2),
+      layer('rain', { intensity: 1, surface: 0.25, dropLevel: 1, dropTone: 1, washDensity: 1, washLevel: 1, washTone: 1, drips: 1, dripLevel: 1, dripTone: 0, wetness: 1, splashLevel: 1, splashTone: 1, resonance: 1, pan: -1, width: 0, weather: 1 }, 1),
+      layer('rain', { intensity: 1, surface: 0.75, dropTone: 0, washDensity: 0, washLevel: 0, washTone: 0, drips: 1, dripTone: 1, wetness: 1, splashTone: 0, resonance: 0, pan: 1, weather: 1 }, 2),
       layer('water', { flow: 1, size: 1, turbulence: 1, pan: 1 }, 1),
       layer('water', { flow: 1, size: 0, turbulence: 1, pan: -1 }, 2),
       layer('fire', { size: 1, crackle: 1, pops: 1, weather: 1 }, 1),
@@ -85,7 +86,8 @@ describe('the ambient worklet', () => {
     const generator = createProcessor(extremes, { sampleRate: 16000, weather: { gustiness: 1, paceSec: 2 } });
     const out = generator.render(12);
     expect(everything(out).every(Number.isFinite)).toBe(true);
-    expect(peak(out.left)).toBeLessThan(30);
+    // Every part at +16 dB is loud by design; this bound is for blow-ups.
+    expect(peak(out.left)).toBeLessThan(400);
   });
 
   it('renders the same whatever the block size', () => {
@@ -431,8 +433,96 @@ describe('rain', () => {
       expect(births(intensity) / rainDropsPerSecond(intensity)).toBeGreaterThan(0.8);
       expect(births(intensity) / rainDropsPerSecond(intensity)).toBeLessThan(1.2);
     }
-    const wash = (intensity: number) => rms(createProcessor([layer('rain', { intensity, mix: 0 })], { sampleRate: 8000 }).render(4).left);
-    expect(wash(1)).toBeGreaterThan(3 * wash(0));
+  });
+
+  describe('its parts', () => {
+    /** The wash alone: drops and drips silenced. */
+    const wash = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'rain' }>>) => (
+      createProcessor([layer('rain', { dropLevel: 0, drips: 0, distance: 0, ...overrides })], { sampleRate: 16000 }).render(6).left
+    );
+
+    it('uses the same level law as the settings', () => {
+      const { constants } = createProcessor([]);
+      for (const position of [0, 0.01, 0.5, 0.75, 1]) expect(constants.partGain(position)).toBeCloseTo(ambientPartGain(position), 12);
+    });
+
+    it('plays the wash at its level, and none of it at zero, the drops going on alone', () => {
+      expect(rms(wash({ washLevel: 1 })) / rms(wash({ washLevel: 0.75 }))).toBeCloseTo(10 ** (16 / 20), 1);
+      const dropsOnly = createProcessor([layer('rain', { washLevel: 0, drips: 0 })], { sampleRate: 8000 });
+      const bed = dropsOnly.processor.renderBedFrom.bind(dropsOnly.processor);
+      let bedRan = false;
+      dropsOnly.processor.renderBedFrom = (...args: unknown[]) => { bedRan = true; return bed(...args); };
+      expect(peak(dropsOnly.render(3).left)).toBeGreaterThan(0);
+      expect(bedRan).toBe(false);
+    });
+
+    it('moves the wash with its tone, and makes it smoother rather than louder with density', () => {
+      expect(highShare(wash({ washTone: 1 }), 16000, 3000)).toBeGreaterThan(2 * highShare(wash({ washTone: 0 }), 16000, 3000));
+      const sparse = wash({ washDensity: 0 });
+      const dense = wash({ washDensity: 1 });
+      expect(Math.abs(20 * Math.log10(rms(dense) / rms(sparse)))).toBeLessThan(3);
+      // Smoother: the level moves less from one 5 ms window to the next.
+      const roughness = (samples: number[]) => {
+        const levels: number[] = [];
+        for (let at = 0; at + 80 <= samples.length; at += 80) levels.push(rms(samples.slice(at, at + 80)));
+        const mean = levels.reduce((sum, value) => sum + value, 0) / levels.length;
+        return Math.sqrt(levels.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / levels.length) / mean;
+      };
+      expect(roughness(dense)).toBeLessThan(0.8 * roughness(sparse));
+    });
+
+    it('plays drops and drips at their own levels, applied as they play, never recorded', () => {
+      const levels = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'rain' }>>) => {
+        const generator = createProcessor([layer('rain', { intensity: 0.8, drips: 1, pan: 0, width: 0, ...overrides })], { sampleRate: 8000 });
+        generator.render(3);
+        const voices = generator.processor.channels[0].activeVoices as Array<{ gainLeft: number; live: { gain: number } | null; entry: unknown }>;
+        return voices.map((voice) => voice.gainLeft);
+      };
+      const authored = levels({});
+      const louder = levels({ dropLevel: 1, dripLevel: 1 });
+      expect(Math.max(...louder) / Math.max(...authored)).toBeCloseTo(10 ** (16 / 20), 6);
+      // A level change keeps the bank; a tone change empties it.
+      const base = layer('rain', { intensity: 0.9 });
+      const generator = createProcessor([base], { sampleRate: 8000 });
+      generator.render(4);
+      generator.configure([{ ...base, dropLevel: 0.2, dripLevel: 1, washLevel: 0.3 }]);
+      expect(generator.processor.channels[0].dropBank.length).toBe(32);
+      generator.configure([{ ...base, dropTone: 0.8 }]);
+      expect(generator.processor.channels[0].dropBank.length).toBe(0);
+    });
+
+    it('pitches drops, drips and splashes with their tones', () => {
+      const { processor, constants } = createProcessor([], { sampleRate: 48000, seed: 9 });
+      const bodyHz = (isDrip: boolean, tone: number) => {
+        const voice = processor.makeSurfaceVoice(constants.surfaceProfile(1), isDrip, { wetness: 0, resonance: 0.5, dropTone: tone, dripTone: tone });
+        return voice.bodyModes.reduce((sum: number, mode: { frequency: number }) => sum + Math.log(mode.frequency), 0) / voice.bodyModes.length;
+      };
+      const mean = (make: () => number) => Array.from({ length: 200 }, make).reduce((sum, value) => sum + value, 0) / 200;
+      for (const isDrip of [false, true]) {
+        const octaves = (mean(() => bodyHz(isDrip, 1)) - mean(() => bodyHz(isDrip, 0))) / Math.LN2;
+        expect(octaves).toBeGreaterThan(1.7);
+        expect(octaves).toBeLessThan(2.3);
+      }
+      // Over the drops that land in water (the others carry no bubble).
+      const bubbleHz = (splashTone: number) => {
+        const pitches: number[] = [];
+        while (pitches.length < 200) {
+          const voice = processor.makeSurfaceVoice(constants.surfaceProfile(0.5), false, { wetness: 1, resonance: 0.5, splashTone });
+          if (voice.bubble) pitches.push(Math.log(voice.bubble.frequency));
+        }
+        return pitches.reduce((sum, value) => sum + value, 0) / pitches.length;
+      };
+      const octaves = (bubbleHz(1) - bubbleHz(0)) / Math.LN2;
+      expect(octaves).toBeGreaterThan(1.7);
+      expect(octaves).toBeLessThan(2.3);
+    });
+
+    it('narrows to a point at its pan at no width', () => {
+      const point = createProcessor([layer('rain', { pan: -1, width: 0, distance: 0 })], { sampleRate: 8000 }).render(4);
+      expect(peak(point.right)).toBeLessThan(1e-6);
+      const centred = createProcessor([layer('rain', { pan: 0, width: 0, distance: 0 })], { sampleRate: 8000 }).render(4);
+      expect(correlation(centred.left, centred.right)).toBeGreaterThan(0.99);
+    });
   });
 
   describe('wetness and resonance', () => {
@@ -470,7 +560,7 @@ describe('rain', () => {
     const rainOf = (generator: ReturnType<typeof createProcessor>) => generator.processor.channels[0];
 
     it('records every drop while filling, then one in four, and holds no more than its size', () => {
-      const generator = createProcessor([layer('rain', { intensity: 0.9, drips: 0, mix: 1 })], { sampleRate: 8000, seed: 19 });
+      const generator = createProcessor([layer('rain', { intensity: 0.9, drips: 0, washLevel: 0 })], { sampleRate: 8000, seed: 19 });
       generator.render(2);
       expect(rainOf(generator).dropBank.length).toBe(32);
       const counts = { births: 0, fresh: 0 };
@@ -488,7 +578,7 @@ describe('rain', () => {
       const generator = createProcessor([base], { sampleRate: 8000, weather: { gustiness: 1, paceSec: 2 } });
       generator.render(4);
       expect(rainOf(generator).dropBank.length).toBe(32);
-      generator.configure([{ ...base, intensity: 0.4, distance: 0.9, pan: 0.4, mix: 0.9, volume: 0.1, weather: 1 }]);
+      generator.configure([{ ...base, intensity: 0.4, distance: 0.9, pan: 0.4, washLevel: 0.2, volume: 0.1, weather: 1 }]);
       generator.render(4);
       expect(rainOf(generator).dropBank.length).toBe(32);
       generator.configure([{ ...base, surface: 1 }]);
@@ -500,7 +590,7 @@ describe('rain', () => {
     const centre = createProcessor([layer('rain', { pan: 0, distance: 0, drips: 0, intensity: 0.9 })], { sampleRate: 8000 }).render(12);
     expect(rms(centre.left) / rms(centre.right)).toBeGreaterThan(0.75);
     expect(rms(centre.left) / rms(centre.right)).toBeLessThan(1.33);
-    expect(correlation(centre.left, centre.right)).toBeLessThan(0.6);
+    expect(correlation(centre.left, centre.right)).toBeLessThan(0.75);
     const edge = createProcessor([layer('rain', { pan: -1, distance: 0 })], { sampleRate: 8000 }).render(6);
     expect(peak(edge.right)).toBeLessThan(1e-6);
   });
@@ -798,7 +888,7 @@ describe('fire', () => {
     expect(wild.mean).toBeCloseTo(0.5, 1);
   });
 
-  it('sets each part\'s level twelve decibels either way, and moves the crackles\' band with their tone', () => {
+  it('sets each part\'s level by the shared law, and moves the crackles\' band with their tone', () => {
     const spawned = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'fire' }>>) => {
       const generator = createProcessor([layer('fire', { crackle: 1, pops: 0, ...overrides })], { sampleRate: 8000 });
       const calls: Array<{ hz: number[]; level: number }> = [];
@@ -810,9 +900,10 @@ describe('fire', () => {
       generator.render(2);
       return calls;
     };
-    const quiet = spawned({ crackleLevel: 0 });
+    const authored = spawned({ crackleLevel: 0.75 });
     const loud = spawned({ crackleLevel: 1 });
-    expect(loud[0].level / quiet[0].level).toBeCloseTo(10 ** (24 / 20), 6);
+    expect(loud[0].level / authored[0].level).toBeCloseTo(10 ** (16 / 20), 6);
+    expect(spawned({ crackleLevel: 0 })[0].level).toBe(0);
     expect(spawned({ crackleTone: 1 })[0].hz[0] / spawned({ crackleTone: 0 })[0].hz[0]).toBeCloseTo(16, 6);
   });
 

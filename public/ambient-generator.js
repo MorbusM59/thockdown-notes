@@ -373,13 +373,21 @@ function stereoImage(pan, width) {
 }
 
 /**
- * A rain layer's `mix` (0 wash only, 1 drops only) as the two gains: each
- * is full up to the middle and fades only on the other side of it, so the
- * middle plays both at full rather than dipping.
+ * A part's level slider as a gain; mirrors ambientPartGain in
+ * src/shared/ambientSound.ts, which ambient-generator.test.ts holds it to:
+ * silence at 0, as authored at PART_AUTHORED, PART_DB_PER_UNIT decibels per
+ * unit of travel either side.
  */
-function rainMixGains(mix) {
-  const value = Math.max(0, Math.min(1, mix ?? 0.5));
-  return { wash: Math.min(1, 2 * (1 - value)), drops: Math.min(1, 2 * value) };
+const PART_AUTHORED = 0.75;
+const PART_DB_PER_UNIT = 64;
+function partGain(position) {
+  const p = position ?? PART_AUTHORED;
+  return p > 0 ? 10 ** ((PART_DB_PER_UNIT * (Math.min(1, p) - PART_AUTHORED)) / 20) : 0;
+}
+
+/** A tone slider (0.5 as authored) as a frequency factor, `octaves` either way. */
+function toneShift(position, octaves) {
+  return 2 ** (((position ?? 0.5) - 0.5) * 2 * octaves);
 }
 
 /** Equal-power gains for a position from -1 (left) to 1 (right). */
@@ -456,11 +464,22 @@ const WEATHER_FIRE_REACH = 0.3;
 
 /**
  * A rain layer's intensity (0-1), beyond its drop rate (dropsRange, set on
- * the main thread): the wash rises by WASH_INTENSITY_DB over the slider, and
- * the drops weigh more -- played louder -- by DROP_INTENSITY_LEVEL.
+ * the main thread): the drops weigh more -- played louder -- by
+ * DROP_INTENSITY_LEVEL. The weather moves the intensity, and the wash with
+ * it by WEATHER_WASH_DB at a full gust.
+ *
+ * Each of rain's parts has a tone: the drops' and the drips' pitch
+ * (RAIN_DROP_TONE_OCTAVES), the wash's band (RAIN_WASH_TONE_OCTAVES), the
+ * splashes' band and the bubbles' size (RAIN_SPLASH_TONE_OCTAVES). And the
+ * wash a density: its impulses per second times RAIN_WASH_DENSITY_RANGE
+ * either way (a sparse patter to a smooth hiss).
  */
-const WASH_INTENSITY_DB = 15;
 const DROP_INTENSITY_LEVEL = [0.75, 1.25];
+const WEATHER_WASH_DB = 4.5;
+const RAIN_DROP_TONE_OCTAVES = 1;
+const RAIN_WASH_TONE_OCTAVES = 2;
+const RAIN_SPLASH_TONE_OCTAVES = 1;
+const RAIN_WASH_DENSITY_RANGE = 4;
 
 /**
  * Water (renderWater): bubbles, each van den Doel's model (makeBubble) --
@@ -521,7 +540,7 @@ const FIRE_EDGE_GLIDE_SHARE = [1.2, 0.04];
  * on raised-cosine ramps. Pockets overlap: on average `hiss` x
  * FIRE_POCKETS_AT_FULL of them sound at once, each at its own pitch (within
  * `spreadOctaves` of the tone) and its own place. `hissTone` places the
- * bands between FIRE_HISS_HZ, and `hissLevel` sets their level (FIRE_LEVEL_RANGE_DB); a band's level is scaled by
+ * bands between FIRE_HISS_HZ, and `hissLevel` sets their level (partGain); a band's level is scaled by
  * sqrt(FIRE_HISS_REFERENCE_HZ / centre), the inverse of the white-noise
  * power a band of fixed Q holds, so the tone moves the colour and not the
  * loudness. The first version was one high-passed noise whose level
@@ -550,14 +569,12 @@ const FIRE_POPS_PER_SEC = 1.2;
  */
 const FIRE_POP = { hz: [300, 900], q: [0.5, 0.5], decaySec: [0.0003, 0.001], level: [1.6, 2.8], white: 0.8, sizzle: [3, 8], sizzleSec: [0.05, 0.2] };
 /**
- * The crackles', pops' and hiss's level sliders: +/- FIRE_LEVEL_RANGE_DB
- * around the level as authored, at 0.5. The crackle tone moves the
+ * The crackles', pops' and hiss's level sliders follow partGain. The crackle tone moves the
  * crackles' band by +/- FIRE_TONE_OCTAVES. The pop tone darkens the whole
  * pop through a one-pole low-pass, FIRE_POP_TONE_HZ from its first value
  * (a thud) to its second (a crack), and moves its body's band by
  * +/- FIRE_POP_BODY_OCTAVES -- darkened, never made to ring.
  */
-const FIRE_LEVEL_RANGE_DB = 12;
 const FIRE_TONE_OCTAVES = 2;
 const FIRE_POP_TONE_HZ = [700, 20000];
 const FIRE_POP_BODY_OCTAVES = 1;
@@ -1200,17 +1217,18 @@ class AmbientGenerator extends AudioWorkletProcessor {
 
   /**
    * A rain layer's intensity now -- the slider, moved by the weather -- as
-   * what the layer plays with: its drop rate (dropsRange, geometric), the
-   * wash's level (WASH_INTENSITY_DB over the slider) and the drops' weight
-   * (DROP_INTENSITY_LEVEL). All of them act at playback, none is baked into
-   * a recorded drop, so the weather moving them never empties the drop bank.
+   * what the layer plays with: its drop rate (dropsRange, geometric) and
+   * the drops' weight (DROP_INTENSITY_LEVEL); and the wash's gain, its level
+   * slider moved by the weather (WEATHER_WASH_DB). All of them act at
+   * playback, none is baked into a recorded drop, so the weather moving them
+   * never empties the drop bank.
    */
   updateRainIntensity(channel) {
     const intensity = Math.max(0, Math.min(1, (channel.intensity ?? 0.5) + (WEATHER_RAIN_REACH * this.weatherFactor(channel))));
     const [low, high] = channel.dropsRange ?? [1, 100];
     channel.dropsPerSecond = low * ((high / low) ** intensity);
-    channel.washLevel = 10 ** (((intensity - 1) * WASH_INTENSITY_DB) / 20);
-    channel.dropLevel = DROP_INTENSITY_LEVEL[0] + ((DROP_INTENSITY_LEVEL[1] - DROP_INTENSITY_LEVEL[0]) * intensity);
+    channel.washGain = partGain(channel.washLevel) * (10 ** ((WEATHER_WASH_DB * this.weatherFactor(channel)) / 20));
+    channel.dropWeight = DROP_INTENSITY_LEVEL[0] + ((DROP_INTENSITY_LEVEL[1] - DROP_INTENSITY_LEVEL[0]) * intensity);
   }
 
   /**
@@ -1223,26 +1241,39 @@ class AmbientGenerator extends AudioWorkletProcessor {
   configureRain(channel, before) {
     const profile = surfaceProfile(channel.surface);
     channel.profile = profile;
+    const washHz = profile.bed.centerHz * toneShift(channel.washTone, RAIN_WASH_TONE_OCTAVES);
     if (!channel.bed || before?.surface !== channel.surface) {
       channel.bed = {
         // Its own stream, so the bed's per-sample draws and the voices'
         // births each stay in time order whatever the block size.
         stream: { seed: Math.floor(this.random() * 0x100000000) >>> 0 },
         // One filter per edge of the image: two independent noises.
-        filterA: stateVariableFilter(profile.bed.centerHz, profile.bed.q),
-        filterB: stateVariableFilter(profile.bed.centerHz, profile.bed.q),
+        filterA: stateVariableFilter(washHz, profile.bed.q),
+        filterB: stateVariableFilter(washHz, profile.bed.q),
         swell: 1,
         swellTarget: 1,
         swellFrames: 0,
       };
+    } else if (before?.washTone !== channel.washTone) {
+      // A new tone changes only the coefficients; the filters keep their memory.
+      for (const name of ['filterA', 'filterB']) {
+        const filter = stateVariableFilter(washHz, profile.bed.q);
+        filter.s1 = channel.bed[name].s1;
+        filter.s2 = channel.bed[name].s2;
+        channel.bed[name] = filter;
+      }
     }
-    // A baked drop has the surface and the bass and treble levels in it, so
-    // a change to any of them empties the bank (drops already playing keep
-    // theirs). It refills from the drops that fall next.
+    // A recorded drop has the surface, the wetness, the ring and the drops',
+    // drips' and splashes' tones and the splashes' level in it, so a change
+    // to any of them empties the bank (drops already playing keep theirs).
+    // It refills from the drops that fall next. Levels of drops and drips
+    // act at playback and do not.
     // Recordings still under way go with them: they keep playing, but into
     // an entry nothing refers to any more.
     if (!channel.dropBank || !before || before.surface !== channel.surface
-      || before.wetness !== channel.wetness || before.resonance !== channel.resonance) {
+      || before.wetness !== channel.wetness || before.resonance !== channel.resonance
+      || before.dropTone !== channel.dropTone || before.dripTone !== channel.dripTone
+      || before.splashTone !== channel.splashTone || before.splashLevel !== channel.splashLevel) {
       if (!channel.spareRecordings) channel.spareRecordings = [];
       for (const entry of [...(channel.dropBank ?? []), ...(channel.dripBank ?? [])]) {
         this.evictRecording(channel, entry);
@@ -1387,7 +1418,10 @@ class AmbientGenerator extends AudioWorkletProcessor {
     const click = profile.click;
     const wetness = character.wetness;
     const resonance = character.resonance;
-    const pitchScale = isDrip ? profile.drip.pitchScale : 1;
+    const pitchScale = (isDrip ? profile.drip.pitchScale : 1)
+      * toneShift(isDrip ? character.dripTone : character.dropTone, RAIN_DROP_TONE_OCTAVES);
+    const splashShift = toneShift(character.splashTone, RAIN_SPLASH_TONE_OCTAVES);
+    const splashGain = partGain(character.splashLevel);
     const decaySec = this.between(click.decaySec) * (isDrip ? 1.8 : 1);
     const ringDecay = (2 ** ((2 * resonance) - 1)) * (1 - (WET_DECAY_DAMPING * wetness));
     const ringLevel = Math.min(1, 2 * resonance) * (1 - (WET_LEVEL_DAMPING * wetness));
@@ -1413,11 +1447,12 @@ class AmbientGenerator extends AudioWorkletProcessor {
     };
     const bubbleChance = Math.min(1, wetness * (isDrip ? WET_DRIP_BUBBLE_CHANCE : WET_BUBBLE_CHANCE));
     if (bubbleChance > 0 && this.random() < bubbleChance) {
-      const radiusMm = isDrip ? this.between([2.5, 5]) : this.between([0.8, 2.6]);
-      voice.bubble = this.makeBubble(radiusMm, 1);
+      // A higher splash tone is a smaller bubble: its pitch is 3 / radius.
+      const radiusMm = (isDrip ? this.between([2.5, 5]) : this.between([0.8, 2.6])) / splashShift;
+      voice.bubble = this.makeBubble(radiusMm, splashGain);
       voice.durationFrames = Math.max(voice.durationFrames, voice.bubble.ringFrames);
-      voice.splashAmplitude = this.between(SPLASH_LEVEL) * wetness;
-      voice.splashFilter = stateVariableFilter(this.between(SPLASH.centerHz), SPLASH.q);
+      voice.splashAmplitude = this.between(SPLASH_LEVEL) * wetness * splashGain;
+      voice.splashFilter = stateVariableFilter(this.between(SPLASH.centerHz) * splashShift, SPLASH.q);
       const sprays = Math.round(SPRAY.count[0] + (this.random() * (SPRAY.count[1] - SPRAY.count[0]) * wetness));
       for (let index = 0; index < sprays; index += 1) {
         voice.sprayFrames.push(Math.round(this.between(SPRAY.withinSec) * sampleRate));
@@ -1442,12 +1477,14 @@ class AmbientGenerator extends AudioWorkletProcessor {
    * impulses plus a noise floor, band-passed, with a slow random swell --
    * twice, independently, one at each edge of the layer's image (stereoImage),
    * each at half the impulse rate and half the power, so together they are
-   * the one bed spread across the image, at the level the layer's mix gives
-   * it (rainMixGains) and the layer's intensity (washLevel). Nothing is drawn
-   * while that is 0.
+   * the one bed spread across the image, at the wash's gain (washGain: its
+   * level slider and the weather). Its density scales the impulse rate by
+   * up to RAIN_WASH_DENSITY_RANGE either way, and their size by the inverse
+   * square root, so a denser wash is smoother rather than louder. Nothing
+   * is drawn while the gain is 0.
    */
   renderBed(channel, left, right, length) {
-    const wash = rainMixGains(channel.mix).wash * (channel.washLevel ?? 1);
+    const wash = channel.washGain ?? 1;
     if (wash <= 0) return;
     this.withStream(channel.bed.stream, () => this.renderBedFrom(channel, left, right, length, wash));
   }
@@ -1457,10 +1494,12 @@ class AmbientGenerator extends AudioWorkletProcessor {
     const bed = channel.bed;
     const filterA = bed.filterA;
     const filterB = bed.filterB;
-    const image = stereoImage(channel.pan, 1);
+    const image = stereoImage(channel.pan, channel.width ?? 1);
     const edgeA = panGains(image.from);
     const edgeB = panGains(image.to);
-    const impulseChance = spec.ratePerSec / (2 * sampleRate);
+    const density = RAIN_WASH_DENSITY_RANGE ** (((channel.washDensity ?? 0.5) - 0.5) * 2);
+    const impulseChance = Math.min(1, (spec.ratePerSec * density) / (2 * sampleRate));
+    const impulseSize = 1 / Math.sqrt(density);
     const swellRate = 1 / (sampleRate * 0.8);
     const scale = spec.gain * wash * Math.SQRT1_2;
     for (let index = 0; index < length; index += 1) {
@@ -1471,9 +1510,9 @@ class AmbientGenerator extends AudioWorkletProcessor {
       bed.swellFrames -= 1;
       bed.swell += (bed.swellTarget - bed.swell) * swellRate;
       const level = scale * bed.swell;
-      const impulseA = this.random() < impulseChance ? ((this.random() * 2) - 1) : 0;
+      const impulseA = this.random() < impulseChance ? ((this.random() * 2) - 1) * impulseSize : 0;
       const a = bandPass(filterA, impulseA + (((this.random() * 2) - 1) * spec.floor)) * level;
-      const impulseB = this.random() < impulseChance ? ((this.random() * 2) - 1) : 0;
+      const impulseB = this.random() < impulseChance ? ((this.random() * 2) - 1) * impulseSize : 0;
       const b = bandPass(filterB, impulseB + (((this.random() * 2) - 1) * spec.floor)) * level;
       left[index] += (a * edgeA.left) + (b * edgeB.left);
       right[index] += (a * edgeA.right) + (b * edgeB.right);
@@ -1523,8 +1562,11 @@ class AmbientGenerator extends AudioWorkletProcessor {
     const startOffset = Math.max(0, offset);
     // Where in the layer's image this drop falls, drawn first so every birth
     // draws it in the same place in the stream.
-    const image = stereoImage(channel.pan, 1);
-    const gains = panGains(image.from + ((image.to - image.from) * this.random()));
+    const image = stereoImage(channel.pan, channel.width ?? 1);
+    const place = panGains(image.from + ((image.to - image.from) * this.random()));
+    // A drop's or drip's level slider, applied at playback, never recorded.
+    const partLevel = partGain(isDrip ? channel.dripLevel : channel.dropLevel);
+    const gains = { left: place.left * partLevel, right: place.right * partLevel };
     let slot = -1;
     if (bank.length < size) {
       slot = bank.length;
@@ -1798,9 +1840,9 @@ class AmbientGenerator extends AudioWorkletProcessor {
         voices.pop();
       }
     }
-    // The drops' side of the mix, applied to what the voices wrote before
-    // the bed is added (the bed takes its own side in renderBed).
-    const drops = rainMixGains(channel.mix).drops * (channel.dropLevel ?? 1);
+    // The drops' weight (their intensity), applied to what the voices wrote
+    // before the bed is added.
+    const drops = channel.dropWeight ?? 1;
     if (drops !== 1) {
       for (let index = 0; index < length; index += 1) {
         left[index] *= drops;
@@ -2503,12 +2545,11 @@ class AmbientGenerator extends AudioWorkletProcessor {
     if (channel.nextPopFrame < blockStart) channel.nextPopFrame = popRate > 0 ? blockStart + this.eventDelayFrames(popRate) : Infinity;
     const size = this.fireSize(channel);
     const roarLevel = FIRE_ROAR_LEVEL[0] * ((FIRE_ROAR_LEVEL[1] / FIRE_ROAR_LEVEL[0]) ** size) * (this.noiseGains.brown ?? 1);
-    const dbOf = (position) => 10 ** ((((position ?? 0.5) - 0.5) * 2 * FIRE_LEVEL_RANGE_DB) / 20);
     const hissLevel = (FIRE_HISS_LEVEL[0] + ((FIRE_HISS_LEVEL[1] - FIRE_HISS_LEVEL[0]) * size))
-      * FIRE_POCKET_GAIN * dbOf(channel.hissLevel) * (this.noiseGains.white ?? 1);
-    const crackleLevel = dbOf(channel.crackleLevel);
-    const popLevel = dbOf(channel.popLevel);
-    const crackleShift = 2 ** (((channel.crackleTone ?? 0.5) - 0.5) * 2 * FIRE_TONE_OCTAVES);
+      * FIRE_POCKET_GAIN * partGain(channel.hissLevel) * (this.noiseGains.white ?? 1);
+    const crackleLevel = partGain(channel.crackleLevel);
+    const popLevel = partGain(channel.popLevel);
+    const crackleShift = toneShift(channel.crackleTone, FIRE_TONE_OCTAVES);
     const crackleSpec = { ...FIRE_CRACKLE, hz: [FIRE_CRACKLE.hz[0] * crackleShift, FIRE_CRACKLE.hz[1] * crackleShift] };
     const popTone = Math.max(0, Math.min(1, channel.popTone ?? 0.7));
     const popShift = 2 ** ((popTone - 0.5) * 2 * FIRE_POP_BODY_OCTAVES);

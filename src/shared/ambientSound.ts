@@ -118,24 +118,41 @@ export interface AmbientNoiseChannelSettings extends AmbientChannelBaseSettings 
 /** Rain falling on a surface, near drops heard one by one over the wash of the rest. */
 export interface AmbientRainChannelSettings extends AmbientChannelBaseSettings {
   kind: 'rain';
-  /** 0 drizzle to 1 downpour: the drop rate, the wash's level and the drops' weight. */
-  intensity: number;
   /** 0 (softest: leaves) to 1 (hardest: glass); see AMBIENT_RAIN_SURFACE_ANCHORS. */
   surface: number;
-  /**
-   * The balance of the wash (the dense bed of rain too many and too small to
-   * hear one at a time) and the drops heard one by one: wash only at 0, drops
-   * only at 1, both at full in the middle.
-   */
-  mix: number;
-  /** How often (0-1, of AMBIENT_RAIN_DRIPS_MAX_PER_SEC) a large, slow drop falls from a gutter or a branch. */
-  drips: number;
-  /** Standing water, 0 dry to 1 soaked: splashes, spray and the plip of trapped bubbles, and a damped ring. */
-  wetness: number;
   /** How much the surface rings, 0 dead to 1 twice as long; 0.5 is the surface as authored. */
   resonance: number;
-  /** Where the layer is, -1 to 1; toward a side it also narrows onto that side. */
+  /** The drops heard one by one: 0 drizzle to 1 downpour -- how many, and how heavy. */
+  intensity: number;
+  /** The drops' level (ambientPartGain). */
+  dropLevel: number;
+  /** The drops' pitch, 0 an octave lower to 1 an octave higher; 0.5 as authored. */
+  dropTone: number;
+  /**
+   * The wash -- the dense bed of rain too many and too small to hear one at
+   * a time: 0 a sparse patter to 1 a smooth hiss (how many tiny impacts).
+   */
+  washDensity: number;
+  /** The wash's level (ambientPartGain); at 0 there is none, and the drops play alone. */
+  washLevel: number;
+  /** The wash's pitch, 0 two octaves lower to 1 two octaves higher; 0.5 as authored. */
+  washTone: number;
+  /** How often (0-1, of AMBIENT_RAIN_DRIPS_MAX_PER_SEC) a large, slow drop falls from a gutter or a branch. */
+  drips: number;
+  /** The drips' level (ambientPartGain). */
+  dripLevel: number;
+  /** The drips' pitch, 0 an octave lower to 1 an octave higher; 0.5 as authored. */
+  dripTone: number;
+  /** Standing water, 0 dry to 1 soaked: the share of drops that land in it, and a surface its film deadens. */
+  wetness: number;
+  /** The splashes' and bubbles' level (ambientPartGain). */
+  splashLevel: number;
+  /** The splashes' and bubbles' pitch, 0 an octave lower (larger bubbles) to 1 an octave higher. */
+  splashTone: number;
+  /** Where the layer is, -1 to 1. */
   pan: number;
+  /** Stereo width, 0 a point at the pan to 1 the whole room the pan leaves. */
+  width: number;
   weather: number;
 }
 
@@ -192,7 +209,7 @@ export interface AmbientFireChannelSettings extends AmbientChannelBaseSettings {
   width: number;
   /** How often the wood crackles, 0 rarely to 1 constantly. */
   crackle: number;
-  /** The crackles' level, 0-1: -12 dB to +12 dB around the level as authored at 0.5. */
+  /** The crackles' level (ambientPartGain). */
   crackleLevel: number;
   /** The crackles' band, 0 two octaves lower to 1 two octaves higher; 0.5 as authored. */
   crackleTone: number;
@@ -348,6 +365,21 @@ export function ambientFaderDb(position: number): number {
   return position > 0 ? -AMBIENT_FADER_RANGE_DB * (1 - Math.min(1, position)) : -Infinity;
 }
 
+/**
+ * A part's level slider (a fire's crackle, a rain's wash, ...): silence at
+ * 0, the part as authored at AMBIENT_PART_AUTHORED, and evenly in decibels
+ * AMBIENT_PART_DB_PER_UNIT per unit of travel either side -- from -48 dB just
+ * above 0 to +16 dB at the top. Mirrored as partGain in the worklet.
+ */
+export const AMBIENT_PART_AUTHORED = 0.75;
+export const AMBIENT_PART_DB_PER_UNIT = 64;
+export function ambientPartDb(position: number): number {
+  return position > 0 ? AMBIENT_PART_DB_PER_UNIT * (Math.min(1, position) - AMBIENT_PART_AUTHORED) : -Infinity;
+}
+export function ambientPartGain(position: number): number {
+  return position > 0 ? 10 ** (ambientPartDb(position) / 20) : 0;
+}
+
 /** Geometric interpolation: equal steps of `t` are equal ratios. */
 export function logLerp(from: number, to: number, t: number): number {
   return from * ((to / from) ** t);
@@ -403,8 +435,12 @@ export const AMBIENT_CHANNEL_DEFAULTS: KindDefaults = {
   },
   rain: {
     kind: 'rain', enabled: true, solo: false, volume: 0.7, distance: 0.4,
-    intensity: 0.6, surface: rainSurfaceAt('street'), mix: 0.6, drips: 0.1,
-    wetness: 0.5, resonance: 0.5, pan: 0, weather: 0,
+    surface: rainSurfaceAt('street'), resonance: 0.5,
+    intensity: 0.6, dropLevel: 0.75, dropTone: 0.5,
+    washDensity: 0.5, washLevel: 0.626, washTone: 0.5,
+    drips: 0.1, dripLevel: 0.75, dripTone: 0.5,
+    wetness: 0.5, splashLevel: 0.75, splashTone: 0.5,
+    pan: 0, width: 1, weather: 0,
   },
   thunder: {
     kind: 'thunder', enabled: true, solo: false, volume: 0.8, distance: 0.7,
@@ -416,8 +452,8 @@ export const AMBIENT_CHANNEL_DEFAULTS: KindDefaults = {
   },
   fire: {
     kind: 'fire', enabled: true, solo: false, volume: 0.7, distance: 0.15,
-    size: 0.5, width: 1, crackle: 0.5, crackleLevel: 0.5, crackleTone: 0.5, pops: 0.3, popLevel: 0.5, popTone: 0.7,
-    hiss: 0.5, hissLevel: 0.5, hissTone: 0.2, flicker: 0.6, flickerPeriodSec: 0.4, flickerDynamics: 0.4, pan: 0, weather: 0,
+    size: 0.5, width: 1, crackle: 0.5, crackleLevel: 0.75, crackleTone: 0.5, pops: 0.3, popLevel: 0.75, popTone: 0.7,
+    hiss: 0.5, hissLevel: 0.75, hissTone: 0.2, flicker: 0.6, flickerPeriodSec: 0.4, flickerDynamics: 0.4, pan: 0, weather: 0,
   },
   chimes: {
     kind: 'chimes', enabled: true, solo: false, volume: 0.6, distance: 0.35,
@@ -482,9 +518,9 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
     id: 'glass',
     name: 'Rain on glass',
     settings: soundscape({
-      'rain-1': { surface: 1, intensity: 0.55, mix: 0.8, drips: 0, wetness: 0.15, distance: 0.1, pan: -0.5, volume: 0.72 },
-      'rain-2': { surface: 1, intensity: 0.7, mix: 0.6, drips: 0, wetness: 0.1, distance: 0.5, pan: 0.3, volume: 0.66 },
-      'rain-3': { surface: 0.5, intensity: 0.85, mix: 0.3, drips: 0.05, wetness: 0.7, distance: 0.9, pan: 0, volume: 0.62 },
+      'rain-1': { surface: 1, intensity: 0.55, dropLevel: 0.75, washLevel: 0.52, drips: 0, wetness: 0.15, distance: 0.1, pan: -0.5, volume: 0.72 },
+      'rain-2': { surface: 1, intensity: 0.7, dropLevel: 0.75, washLevel: 0.649, drips: 0, wetness: 0.1, distance: 0.5, pan: 0.3, volume: 0.66 },
+      'rain-3': { surface: 0.5, intensity: 0.85, dropLevel: 0.681, washLevel: 0.715, drips: 0.05, wetness: 0.7, distance: 0.9, pan: 0, volume: 0.62 },
       'noise-1': { colour: 0.15, brightnessHz: 600, depth: 0.2, periodSec: 20, variation: 0.5, distance: 0.6, volume: 0.45, weather: 0.5 },
     }, { size: 0.2, damping: 0.4, echoes: 0, amount: 0.5 }, { gustiness: 0.3, paceSec: 15 }),
   },
@@ -492,9 +528,9 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
     id: 'street',
     name: 'Rain on the street',
     settings: soundscape({
-      'rain-1': { surface: 0.5, intensity: 0.6, mix: 0.75, drips: 0.35, wetness: 0.65, resonance: 0.4, distance: 0.08, pan: -0.55, volume: 0.72 },
-      'rain-2': { surface: 0.55, intensity: 0.75, mix: 0.55, drips: 0.1, wetness: 0.6, resonance: 0.45, distance: 0.45, pan: 0.15, volume: 0.72 },
-      'rain-3': { surface: 0.75, intensity: 0.5, mix: 0.7, drips: 0.2, wetness: 0.3, distance: 0.7, pan: 0.65, volume: 0.58 },
+      'rain-1': { surface: 0.5, intensity: 0.6, dropLevel: 0.75, washLevel: 0.562, drips: 0.35, wetness: 0.65, resonance: 0.4, distance: 0.08, pan: -0.55, volume: 0.72 },
+      'rain-2': { surface: 0.55, intensity: 0.75, dropLevel: 0.75, washLevel: 0.677, drips: 0.1, wetness: 0.6, resonance: 0.45, distance: 0.45, pan: 0.15, volume: 0.72 },
+      'rain-3': { surface: 0.75, intensity: 0.5, dropLevel: 0.75, washLevel: 0.563, drips: 0.2, wetness: 0.3, distance: 0.7, pan: 0.65, volume: 0.58 },
       'noise-1': { colour: 0.35, brightnessHz: 1400, depth: 0.25, periodSec: 18, variation: 0.6, distance: 0.7, volume: 0.42, weather: 0.6 },
     }, { size: 0.55, damping: 0.35, echoes: 0.45, amount: 0.7 }, { gustiness: 0.35, paceSec: 14 }),
   },
@@ -502,9 +538,9 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
     id: 'forest',
     name: 'Forest rain',
     settings: soundscape({
-      'rain-1': { surface: 0, intensity: 0.5, mix: 0.8, drips: 0.55, wetness: 0.1, resonance: 0.35, distance: 0.1, pan: -0.5, volume: 0.72, weather: 0.4 },
-      'rain-2': { surface: 0.05, intensity: 0.7, mix: 0.6, drips: 0.2, wetness: 0.1, resonance: 0.35, distance: 0.5, pan: 0.2, volume: 0.72, weather: 0.5 },
-      'rain-3': { surface: 0, intensity: 0.85, mix: 0.4, drips: 0, wetness: 0.1, distance: 0.9, pan: 0.6, volume: 0.66, weather: 0.6 },
+      'rain-1': { surface: 0, intensity: 0.5, dropLevel: 0.75, washLevel: 0.508, drips: 0.55, wetness: 0.1, resonance: 0.35, distance: 0.1, pan: -0.5, volume: 0.72, weather: 0.4 },
+      'rain-2': { surface: 0.05, intensity: 0.7, dropLevel: 0.75, washLevel: 0.649, drips: 0.2, wetness: 0.1, resonance: 0.35, distance: 0.5, pan: 0.2, volume: 0.72, weather: 0.5 },
+      'rain-3': { surface: 0, intensity: 0.85, dropLevel: 0.72, washLevel: 0.715, drips: 0, wetness: 0.1, distance: 0.9, pan: 0.6, volume: 0.66, weather: 0.6 },
       'noise-1': { colour: 0.55, brightnessHz: 2400, focus: 0.15, depth: 0.45, periodSec: 14, sweep: 0.4, variation: 0.6, sway: 0.3, distance: 0.55, volume: 0.55, weather: 0.9 },
     }, { size: 0.5, damping: 0.8, echoes: 0, amount: 0.65 }, { gustiness: 0.5, paceSec: 11 }),
   },
@@ -512,9 +548,9 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
     id: 'tent',
     name: 'Rain on a tent',
     settings: soundscape({
-      'rain-1': { surface: 0.25, intensity: 0.55, mix: 0.85, drips: 0.25, wetness: 0.1, resonance: 0.55, distance: 0, pan: -0.25, volume: 0.76 },
-      'rain-2': { surface: 0.25, intensity: 0.7, mix: 0.6, drips: 0, wetness: 0.05, resonance: 0.5, distance: 0.05, pan: 0.3, volume: 0.72 },
-      'rain-3': { surface: 0, intensity: 0.8, mix: 0.35, drips: 0.1, wetness: 0.1, distance: 0.85, pan: 0, volume: 0.6, weather: 0.5 },
+      'rain-1': { surface: 0.25, intensity: 0.55, dropLevel: 0.75, washLevel: 0.481, drips: 0.25, wetness: 0.1, resonance: 0.55, distance: 0, pan: -0.25, volume: 0.76 },
+      'rain-2': { surface: 0.25, intensity: 0.7, dropLevel: 0.75, washLevel: 0.649, drips: 0, wetness: 0.05, resonance: 0.5, distance: 0.05, pan: 0.3, volume: 0.72 },
+      'rain-3': { surface: 0, intensity: 0.8, dropLevel: 0.702, washLevel: 0.703, drips: 0.1, wetness: 0.1, distance: 0.85, pan: 0, volume: 0.6, weather: 0.5 },
       'noise-1': { colour: 0.4, brightnessHz: 1200, depth: 0.4, periodSec: 16, sweep: 0.5, variation: 0.6, distance: 0.75, volume: 0.45, weather: 0.9 },
     }, { size: 0.15, damping: 0.7, echoes: 0, amount: 0.35 }, { gustiness: 0.45, paceSec: 12 }),
   },
@@ -522,18 +558,18 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
     id: 'roof',
     name: 'Tin roof',
     settings: soundscape({
-      'rain-1': { surface: 0.75, intensity: 0.65, mix: 0.8, drips: 0.2, wetness: 0.2, resonance: 0.55, distance: 0.05, pan: -0.3, volume: 0.7 },
-      'rain-2': { surface: 0.72, intensity: 0.8, mix: 0.55, drips: 0, wetness: 0.1, resonance: 0.5, distance: 0.15, pan: 0.35, volume: 0.68 },
-      'rain-3': { surface: 0.5, intensity: 0.5, mix: 0.7, drips: 0.6, wetness: 0.9, distance: 0.5, pan: 0.7, volume: 0.6 },
+      'rain-1': { surface: 0.75, intensity: 0.65, dropLevel: 0.75, washLevel: 0.544, drips: 0.2, wetness: 0.2, resonance: 0.55, distance: 0.05, pan: -0.3, volume: 0.7 },
+      'rain-2': { surface: 0.72, intensity: 0.8, dropLevel: 0.75, washLevel: 0.689, drips: 0, wetness: 0.1, resonance: 0.5, distance: 0.15, pan: 0.35, volume: 0.68 },
+      'rain-3': { surface: 0.5, intensity: 0.5, dropLevel: 0.75, washLevel: 0.563, drips: 0.6, wetness: 0.9, distance: 0.5, pan: 0.7, volume: 0.6 },
     }, { size: 0.25, damping: 0.45, echoes: 0.15, amount: 0.45 }),
   },
   {
     id: 'storm',
     name: 'Passing storm',
     settings: soundscape({
-      'rain-1': { surface: 0.5, intensity: 0.8, mix: 0.6, drips: 0.4, wetness: 0.7, resonance: 0.4, distance: 0.12, pan: -0.6, volume: 0.76, weather: 0.6 },
-      'rain-2': { surface: 0.5, intensity: 0.95, mix: 0.45, drips: 0, wetness: 0.7, distance: 0.55, pan: 0, volume: 0.76, weather: 0.8 },
-      'rain-3': { surface: 0, intensity: 1, mix: 0.35, drips: 0, wetness: 0.2, distance: 0.92, pan: 0.6, volume: 0.7, weather: 0.8 },
+      'rain-1': { surface: 0.5, intensity: 0.8, dropLevel: 0.75, washLevel: 0.673, drips: 0.4, wetness: 0.7, resonance: 0.4, distance: 0.12, pan: -0.6, volume: 0.76, weather: 0.6 },
+      'rain-2': { surface: 0.5, intensity: 0.95, dropLevel: 0.736, washLevel: 0.738, drips: 0, wetness: 0.7, distance: 0.55, pan: 0, volume: 0.76, weather: 0.8 },
+      'rain-3': { surface: 0, intensity: 1, dropLevel: 0.702, washLevel: 0.75, drips: 0, wetness: 0.2, distance: 0.92, pan: 0.6, volume: 0.7, weather: 0.8 },
       'noise-1': { colour: 0.2, brightnessHz: 900, focus: 0.1, depth: 0.6, periodSec: 9, sweep: 0.7, variation: 0.7, sway: 0.4, distance: 0.45, volume: 0.66, weather: 1 },
       'noise-2': { colour: 0.7, brightnessHz: 2200, focus: 0.55, depth: 0.7, periodSec: 7, curve: 0.7, skew: 0.35, sweep: 0.8, variation: 0.8, sway: 0.5, width: 0.6, distance: 0.6, volume: 0.5, weather: 1 },
       'thunder-1': { volume: 0.86, share: 0.08, distance: 0.35, pan: -0.4, spread: 0.6, character: 0.75, randomness: 0.6, lengthSec: 12, weather: 0.6 },
@@ -572,7 +608,7 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
     name: 'Fireside',
     settings: soundscape({
       'fire-1': { size: 0.45, width: 0.7, crackle: 0.55, pops: 0.35, flicker: 0.45, flickerPeriodSec: 0.55, flickerDynamics: 0.3, distance: 0.1, pan: 0, volume: 0.74 },
-      'rain-1': { surface: 1, intensity: 0.45, mix: 0.75, drips: 0, wetness: 0.1, distance: 0.75, pan: 0.4, volume: 0.52 },
+      'rain-1': { surface: 1, intensity: 0.45, dropLevel: 0.75, washLevel: 0.527, drips: 0, wetness: 0.1, distance: 0.75, pan: 0.4, volume: 0.52 },
       'noise-1': { colour: 0.1, brightnessHz: 450, depth: 0.35, periodSec: 18, variation: 0.6, distance: 0.8, volume: 0.42, weather: 1 },
     }, { size: 0.2, damping: 0.6, echoes: 0, amount: 0.4 }, { gustiness: 0.5, paceSec: 14 }),
   },
@@ -665,7 +701,9 @@ export const AMBIENT_FIELD_BOUNDS: { [K in AmbientChannelKind]: FieldBounds } = 
     skew: [AMBIENT_SKEW_MIN, AMBIENT_SKEW_MAX], sweep: SIGNED, variation: UNIT, sway: UNIT, width: UNIT, weather: UNIT,
   },
   rain: {
-    ...COMMON_BOUNDS, intensity: UNIT, surface: UNIT, mix: UNIT, drips: UNIT, wetness: UNIT, resonance: UNIT, pan: SIGNED, weather: UNIT,
+    ...COMMON_BOUNDS, surface: UNIT, resonance: UNIT, intensity: UNIT, dropLevel: UNIT, dropTone: UNIT,
+    washDensity: UNIT, washLevel: UNIT, washTone: UNIT, drips: UNIT, dripLevel: UNIT, dripTone: UNIT,
+    wetness: UNIT, splashLevel: UNIT, splashTone: UNIT, pan: SIGNED, width: UNIT, weather: UNIT,
   },
   thunder: {
     ...COMMON_BOUNDS, share: UNIT, pan: SIGNED, spread: UNIT, character: UNIT, contrast: SIGNED, randomness: UNIT,
