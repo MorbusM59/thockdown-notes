@@ -856,27 +856,32 @@ describe('fire', () => {
     expect(lowShare(thin)).toBeLessThan(0.3 * lowShare(dull));
   });
 
-  it('draws each sizzle\'s loudness skewed low, as a chime\'s strike, and sinks its tone by a fifth to two fifths of the track over its fall', () => {
+  it('draws each sizzle\'s loudness skewed low, as a chime\'s strike, and starts at its own tone and sinks it by a fifth to two fifths of the track over its fall', () => {
     const generator = withoutRoar({ pops: 0, sizzleTone: 0.8 });
     const channel = generator.processor.channels[0];
     const levels: number[] = [];
+    const starts: number[] = [];
     for (let trial = 0; trial < 400; trial += 1) {
       channel.sizzles = [];
       generator.processor.addSizzle(channel, 0, 0);
       const sizzle = channel.sizzles[0];
       levels.push(sizzle.level);
-      expect(generator.processor.sizzleTone(channel, sizzle)).toBeCloseTo(0.8, 9);
+      const start = generator.processor.sizzleTone(channel, sizzle);
+      expect(Math.abs(start - 0.8)).toBeLessThanOrEqual(0.25);
+      starts.push(start);
       sizzle.age = sizzle.rise + sizzle.hold + sizzle.fall;
-      const lost = 0.8 - generator.processor.sizzleTone(channel, sizzle);
+      const lost = start - generator.processor.sizzleTone(channel, sizzle);
       expect(lost).toBeGreaterThanOrEqual(0.2);
       expect(lost).toBeLessThanOrEqual(0.4);
       sizzle.age = sizzle.rise + sizzle.hold + (sizzle.fall / 2);
-      expect(0.8 - generator.processor.sizzleTone(channel, sizzle)).toBeCloseTo(lost / 2, 9);
+      expect(start - generator.processor.sizzleTone(channel, sizzle)).toBeCloseTo(lost / 2, 9);
     }
     levels.sort((a, b) => a - b);
     // Most are quiet, a few loud: the median well under the middle, the top near full.
     expect(levels[200]).toBeLessThan(0.35);
     expect(levels[396]).toBeGreaterThan(0.85);
+    // Each starts at its own place on the track, spread across a quarter either way.
+    expect(Math.max(...starts) - Math.min(...starts)).toBeGreaterThan(0.4);
   });
 
   it('frazzles at the lowest tone and hisses smoothly at the highest, at about the same loudness', () => {
