@@ -79,8 +79,8 @@ describe('the ambient worklet', () => {
       layer('noise', { colour: 1, brightnessHz: 18000, focus: 1, depth: 1, periodSec: 0.5, curve: 0, skew: 0.9, sweep: -1, variation: 1, sway: 1, width: 1, weather: 1 }, 2),
       layer('rain', { intensity: 1, surface: 0.25, dropLevel: 1, dropTone: 1, washDensity: 1, washLevel: 1, washTone: 1, drips: 1, dripLevel: 1, dripTone: 0, wetness: 1, splashLevel: 1, splashTone: 1, resonance: 1, pan: -1, width: 0, weather: 1 }, 1),
       layer('rain', { intensity: 1, surface: 0.75, dropTone: 0, washDensity: 0, washLevel: 0, washTone: 0, drips: 1, dripTone: 1, wetness: 1, splashTone: 0, resonance: 0, pan: 1, weather: 1 }, 2),
-      layer('water', { flow: 1, size: 1, turbulence: 1, pan: 1 }, 1),
-      layer('water', { flow: 1, size: 0, turbulence: 1, pan: -1 }, 2),
+      layer('water', { bubbles: 1, size: 1, turbulence: 1, pan: 1, sizeSpread: 1, rise: 1, ring: 1, rush: 0, rushLevel: 1, rushTone: 1, bubbleLevel: 1, width: 0 }, 1),
+      layer('water', { bubbles: 1, size: 0, turbulence: 1, pan: -1, sizeSpread: 0, rise: 0, ring: 0, rush: 1, rushLevel: 1, rushTone: 0, bubbleLevel: 1 }, 2),
       layer('fire', { size: 1, crackle: 1, pops: 1, weather: 1 }, 1),
       layer('chimes', { pitchHz: 1500, tubes: 8, ringSec: 15, activity: 1, hardness: 1, weather: 1 }, 1),
       layer('chimes', { pitchHz: 150, tubes: 3, ringSec: 1, activity: 1, hardness: 0 }, 2),
@@ -660,13 +660,13 @@ describe('water', () => {
     return times;
   };
 
-  it('bubbles faster as it flows harder', () => {
-    expect(births({ flow: 1, turbulence: 0 }).length).toBeGreaterThan(5 * births({ flow: 0.2, turbulence: 0 }).length);
+  it('bubbles faster the more bubbles it is set to', () => {
+    expect(births({ bubbles: 1, turbulence: 0 }).length).toBeGreaterThan(5 * births({ bubbles: 0.2, turbulence: 0 }).length);
   });
 
   it('keeps its average flow at any turbulence, but clumps it into bursts', () => {
     const counts = (turbulence: number) => {
-      const times = births({ flow: 0.6, turbulence }, 40);
+      const times = births({ bubbles: 0.6, turbulence }, 40);
       const windows = new Array(400).fill(0);
       for (const frame of times) windows[Math.min(399, Math.floor(frame / 800))] += 1;
       const mean = windows.reduce((sum, value) => sum + value, 0) / windows.length;
@@ -681,8 +681,57 @@ describe('water', () => {
   });
 
   it('sounds lower with larger bubbles', () => {
-    const share = (size: number) => highShare(createProcessor([layer('water', { size, flow: 0.7 })], { sampleRate: 16000 }).render(6).left, 16000, 2500);
+    const share = (size: number) => highShare(createProcessor([layer('water', { size, bubbles: 0.7, rushLevel: 0 })], { sampleRate: 16000 }).render(6).left, 16000, 2500);
     expect(share(1)).toBeLessThan(share(0));
+  });
+
+  it('spreads its bubble sizes by the spread: one size at none, the authored bounds at the middle, their square at full', () => {
+    const { waterRadiusBounds } = createProcessor([], { sampleRate: 8000 }).constants;
+    for (const size of [0, 0.4, 1]) {
+      const [low0, high0] = waterRadiusBounds(size, 0);
+      const [low5, high5] = waterRadiusBounds(size, 0.5);
+      const [low1, high1] = waterRadiusBounds(size, 1);
+      expect(high0 / low0).toBeCloseTo(1, 9);
+      expect(high1 / low1).toBeCloseTo((high5 / low5) ** 2, 6);
+      // The centre stays put whatever the spread.
+      expect(Math.sqrt(low1 * high1)).toBeCloseTo(Math.sqrt(low0 * high0), 9);
+    }
+  });
+
+  it('plays the rush and the bubbles each at its own level, either alone', () => {
+    const energy = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'water' }>>) => (
+      rms(createProcessor([layer('water', { turbulence: 0, ...overrides })], { sampleRate: 8000 }).render(4).left)
+    );
+    expect(energy({ bubbleLevel: 0, rushLevel: 0 })).toBe(0);
+    expect(energy({ bubbleLevel: 0 })).toBeGreaterThan(0);
+    expect(energy({ rushLevel: 0 })).toBeGreaterThan(0);
+  });
+
+  it('rattles like gravel at the rush\'s low end and rushes smoothly at its top, at about the same loudness', () => {
+    const rush = (value: number) => createProcessor([layer('water', { turbulence: 0, bubbleLevel: 0, rush: value })], { sampleRate: 16000 }).render(4).left;
+    const kurtosis = (samples: ArrayLike<number>) => {
+      let second = 0;
+      let fourth = 0;
+      for (let index = 0; index < samples.length; index += 1) {
+        const squared = samples[index] * samples[index];
+        second += squared;
+        fourth += squared * squared;
+      }
+      return (fourth / samples.length) / ((second / samples.length) ** 2);
+    };
+    const gravel = rush(0);
+    const smooth = rush(1);
+    expect(kurtosis(gravel)).toBeGreaterThan(2 * kurtosis(smooth));
+    expect(rms(gravel) / rms(smooth)).toBeGreaterThan(0.5);
+    expect(rms(gravel) / rms(smooth)).toBeLessThan(2);
+  });
+
+  it('rings its bubbles longer and climbs them further as ring and rise go up', () => {
+    const generator = createProcessor([], { sampleRate: 16000 });
+    const bubble = (rise: number, damping: number) => generator.processor.makeBubble(2, 1, rise, damping);
+    expect(bubble(1, 0.25).ringFrames).toBeGreaterThan(3.9 * bubble(1, 1).ringFrames);
+    expect(bubble(4, 1).retuneFactor - 1).toBeGreaterThan(3 * (bubble(1, 1).retuneFactor - 1));
+    expect(bubble(0, 1).retuneFactor).toBe(1);
   });
 });
 

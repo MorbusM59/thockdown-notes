@@ -57,7 +57,7 @@ describe('StateService app-state field round-trip', () => {
         case 'noise': return { ...channel, colour: 0.83, sweep: -0.4, solo: channel.id === 'noise-2' }
         case 'rain': return { ...channel, intensity: 0.31, surface: 0.27 }
         case 'thunder': return { ...channel, share: 0.25, contrast: -0.3 }
-        case 'water': return { ...channel, enabled: true, flow: 0.77, turbulence: 0.12 }
+        case 'water': return { ...channel, enabled: true, bubbles: 0.77, turbulence: 0.12, sizeSpread: 0.2, rush: 0.3 }
         case 'fire': return { ...channel, pops: 0.66, sizzle: 0.3 }
         case 'chimes': return { ...channel, tubes: 7, pitchHz: 440 * (2 ** (-5 / 12)) }
         default: return channel

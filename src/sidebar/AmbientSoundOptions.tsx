@@ -19,6 +19,7 @@ import {
   AMBIENT_PERIOD_MAX_SEC,
   AMBIENT_PERIOD_MIN_SEC,
   AMBIENT_RAIN_DRIPS_MAX_PER_SEC,
+  AMBIENT_WATER_BUBBLES_PER_SEC,
   AMBIENT_RAIN_SURFACE_ANCHORS,
   AMBIENT_SKEW_MAX,
   AMBIENT_SKEW_MIN,
@@ -279,11 +280,24 @@ const CONTROLS: { [K in AmbientChannelKind]: ControlGroup[] } = {
   water: [
     {
       label: 'Sound',
+      // Rows of three: the whole brook, then the bubbles (how many, how
+      // loud, how big), their shape, and the rush beneath them.
       controls: [
         VOLUME,
-        unit('flow', 'flow', 'A trickle to a torrent: how many bubbles, and the rush beneath them', (value) => formatAmount(value, 'Trickle', 'Torrent')),
+        unit('turbulence', 'tumble', 'An even flow, or water arriving in bursts as it tumbles over stones; moves the bubbles and the rush together', (value) => formatAmount(value, 'Even')),
+        unit('width', 'width', 'A point at its pan to as wide as its pan allows', (value) => formatAmount(value, 'Point', 'Wide')),
+        unit('bubbles', 'bubbles', 'How many bubbles: a few to a froth', (value) => {
+          const perSec = AMBIENT_WATER_BUBBLES_PER_SEC[0] * ((AMBIENT_WATER_BUBBLES_PER_SEC[1] / AMBIENT_WATER_BUBBLES_PER_SEC[0]) ** value)
+          return `${Math.round(perSec)} / s`
+        }),
+        unit('bubbleLevel', 'level', 'How loud the bubbles are', formatPartLevel),
         unit('size', 'size', 'Small, high, glassy bubbles to large, low gurgles', (value) => formatAmount(value, 'Fine', 'Deep')),
-        unit('turbulence', 'tumble', 'An even patter, or water arriving in bursts as it tumbles over stones', (value) => formatAmount(value, 'Even')),
+        unit('sizeSpread', 'spread', 'How much the bubbles vary in size: all alike, as authored, or far apart', (value) => (value < 0.005 ? 'Alike' : Math.abs(value - 0.5) < 0.005 ? 'As is' : percent(value))),
+        unit('rise', 'rise', 'How far a bubble\'s pitch climbs as it rises: a flat plop to a chirp', (value) => (value < 0.005 ? 'Flat' : Math.abs(value - 0.5) < 0.005 ? 'As is' : `×${((2 * value) ** 2).toFixed(1)}`)),
+        unit('ring', 'ring', 'How long a bubble rings: a dead plop to a ringing note', (value) => (Math.abs(value - 0.5) < 0.005 ? 'As is' : value < 0.5 ? 'Duller' : 'Longer')),
+        unit('rush', 'rush', 'The texture of the flow beneath the bubbles: a sparse gravelly rattle to a smooth rush', (value) => formatAmount(value, 'Gravel', 'Smooth')),
+        unit('rushLevel', 'level', 'How loud the rush is; off leaves the bubbles alone', formatPartLevel),
+        unit('rushTone', 'tone', 'The rush\'s pitch, two octaves either way', (value) => formatShift(value, 2)),
       ],
     },
     { label: 'Place', controls: [DISTANCE, PAN] },

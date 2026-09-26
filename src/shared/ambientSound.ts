@@ -198,16 +198,33 @@ export interface AmbientThunderChannelSettings extends AmbientChannelBaseSetting
  * Running water -- a brook, a stream, a fountain: a cloud of bubbles, each
  * ringing at the pitch its radius sets and rising as it nears the surface
  * (the same bubble model as a raindrop landing in a puddle), over the low
- * rush of the flow.
+ * rush of the flow. Bubbles and rush are controlled separately; the tumble
+ * moves both.
  */
 export interface AmbientWaterChannelSettings extends AmbientChannelBaseSettings {
   kind: 'water';
-  /** 0 a trickle to 1 a torrent: bubbles per second and the rush under them. */
-  flow: number;
+  /** 0 an even patter to 1 bubbles and rush arriving in bursts, as water tumbles over stones. */
+  turbulence: number;
+  /** Stereo width, 0 a point at the pan to 1 the whole room the pan leaves. */
+  width: number;
+  /** How many bubbles, 0 a few to 1 a froth (AMBIENT_WATER_BUBBLES_PER_SEC). */
+  bubbles: number;
+  /** The bubbles' level (ambientPartGain). */
+  bubbleLevel: number;
   /** 0 small, high, glassy bubbles to 1 large, low gurgles. */
   size: number;
-  /** 0 an even patter to 1 bubbles arriving in bursts, as water tumbles over stones. */
-  turbulence: number;
+  /** How much the bubbles' sizes vary: 0 all one size, 0.5 as authored, 1 far apart. */
+  sizeSpread: number;
+  /** How far a bubble's pitch climbs as it rises: 0 flat, 0.5 as authored, 1 four times as far. */
+  rise: number;
+  /** How long a bubble rings: 0 a dead plop, 0.5 as authored, 1 a ringing note. */
+  ring: number;
+  /** The rush's texture: 0 a sparse, gravelly rattle to 1 a smooth rush. */
+  rush: number;
+  /** The rush's level (ambientPartGain); at 0 there is none. */
+  rushLevel: number;
+  /** The rush's pitch, 0 two octaves lower to 1 two octaves higher. */
+  rushTone: number;
   pan: number;
 }
 
@@ -377,6 +394,8 @@ export const AMBIENT_CHIME_PITCH_MIN_HZ = 440 * (2 ** (AMBIENT_CHIME_SEMITONE_MI
 export const AMBIENT_CHIME_PITCH_MAX_HZ = 440 * (2 ** (AMBIENT_CHIME_SEMITONE_MAX / 12));
 export const AMBIENT_CHIME_TUBES_MIN = 3;
 export const AMBIENT_CHIME_TUBES_MAX = 8;
+/** A water layer's bubbles per second at bubbles 0 and 1; mirrors WATER_BUBBLES_PER_SEC in public/ambient-generator.js. */
+export const AMBIENT_WATER_BUBBLES_PER_SEC = [15, 500] as const;
 export const AMBIENT_CHIME_RING_MIN_SEC = 1;
 export const AMBIENT_CHIME_RING_MAX_SEC = 15;
 export const AMBIENT_CHIME_RATE_MIN_PER_SEC = 0.05;
@@ -497,7 +516,8 @@ export const AMBIENT_CHANNEL_DEFAULTS: KindDefaults = {
   },
   water: {
     kind: 'water', enabled: true, solo: false, volume: 0.7, distance: 0.3,
-    flow: 0.5, size: 0.4, turbulence: 0.5, pan: 0,
+    turbulence: 0.5, width: 1, bubbles: 0.5, bubbleLevel: 0.75, size: 0.4, sizeSpread: 0.5, rise: 0.5, ring: 0.5,
+    rush: 1, rushLevel: 0.75, rushTone: 0.5, pan: 0,
   },
   fire: {
     kind: 'fire', enabled: true, solo: false, volume: 0.7, distance: 0.15,
@@ -573,8 +593,8 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
       'rain-1': { surface: 0.5, intensity: 0.6, washLevel: 0.6, washDensity: 0.7, drips: 0.45, dripTone: 0.4, wetness: 0.75, splashLevel: 0.7, resonance: 0.4, distance: 0.08, pan: -0.55, width: 0.6, volume: 0.72 },
       'rain-2': { surface: 0.7, intensity: 0.5, dropTone: 0.6, washLevel: 0.55, drips: 0.6, dripLevel: 0.8, wetness: 0.4, resonance: 0.6, distance: 0.3, pan: 0.5, width: 0.5, volume: 0.62 },
       'rain-3': { surface: 0.5, intensity: 0.85, washLevel: 0.75, washDensity: 0.8, washTone: 0.4, drips: 0, wetness: 0.6, distance: 0.85, volume: 0.7, weather: 0.5 },
-      'water-1': { flow: 0.35, size: 0.3, turbulence: 0.35, distance: 0.25, pan: 0.7, volume: 0.55 },
-      'water-2': { flow: 0.6, size: 0.55, turbulence: 0.6, distance: 0.6, pan: -0.75, volume: 0.5 },
+      'water-1': { bubbles: 0.35, size: 0.3, turbulence: 0.35, rushLevel: 0.69, rushTone: 0.57, distance: 0.25, pan: 0.7, volume: 0.55 },
+      'water-2': { bubbles: 0.6, size: 0.55, turbulence: 0.6, rushLevel: 0.78, rushTone: 0.48, distance: 0.6, pan: -0.75, volume: 0.5 },
       'noise-1': { colour: 0.3, brightnessHz: 1200, depth: 0.25, periodSec: 18, sweep: 0.3, variation: 0.6, distance: 0.75, volume: 0.45, weather: 0.6 },
       'noise-2': { colour: 0, brightnessHz: 160, depth: 0.2, periodSec: 30, variation: 0.5, distance: 0.9, volume: 0.5 },
     }, { size: 0.6, damping: 0.35, echoes: 0.55, amount: 0.7 }, { gustiness: 0.4, paceSec: 13 }),
@@ -586,7 +606,7 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
       'rain-1': { surface: 0, intensity: 0.45, dropTone: 0.4, washLevel: 0.5, drips: 0.7, dripLevel: 0.8, dripTone: 0.35, wetness: 0.15, resonance: 0.35, distance: 0.1, pan: -0.45, width: 0.7, volume: 0.72, weather: 0.4 },
       'rain-2': { surface: 0.1, intensity: 0.7, washLevel: 0.65, washDensity: 0.75, drips: 0.35, wetness: 0.2, resonance: 0.3, distance: 0.5, pan: 0.35, volume: 0.7, weather: 0.6 },
       'rain-3': { surface: 0, intensity: 0.9, washLevel: 0.75, washDensity: 0.9, washTone: 0.4, drips: 0, wetness: 0.1, distance: 0.92, volume: 0.66, weather: 0.8 },
-      'water-1': { flow: 0.5, size: 0.45, turbulence: 0.65, distance: 0.7, pan: 0.6, volume: 0.5 },
+      'water-1': { bubbles: 0.5, size: 0.45, turbulence: 0.65, rushLevel: 0.75, rushTone: 0.52, distance: 0.7, pan: 0.6, volume: 0.5 },
       'noise-1': { colour: 0.55, brightnessHz: 2400, focus: 0.15, depth: 0.5, periodSec: 14, curve: 0.6, skew: 0.35, sweep: 0.5, variation: 0.7, sway: 0.35, distance: 0.55, volume: 0.58, weather: 1 },
       'noise-2': { colour: 0.2, brightnessHz: 380, depth: 0.3, periodSec: 26, variation: 0.6, distance: 0.8, volume: 0.5, weather: 0.8 },
       'chimes-1': { material: 0, pitchHz: chimeSemitoneHz(-14), tubes: 6, ringSec: 3, activity: 0.12, hardness: 0.3, unison: 0.5, scale: 4, distance: 0.8, pan: -0.6, volume: 0.45, weather: 1 },
@@ -611,7 +631,7 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
       'rain-1': { surface: 0.75, intensity: 0.65, washLevel: 0.54, drips: 0.25, wetness: 0.2, resonance: 0.6, distance: 0.05, pan: -0.35, width: 0.8, volume: 0.7 },
       'rain-2': { surface: 0.72, intensity: 0.8, dropTone: 0.4, washLevel: 0.69, drips: 0, wetness: 0.1, resonance: 0.5, distance: 0.15, pan: 0.35, width: 0.8, volume: 0.68, weather: 0.6 },
       'rain-3': { surface: 0.5, intensity: 0.5, washLevel: 0.56, drips: 0.8, dripLevel: 0.85, dripTone: 0.3, wetness: 0.9, splashLevel: 0.8, distance: 0.45, pan: 0.7, volume: 0.6 },
-      'water-1': { flow: 0.7, size: 0.6, turbulence: 0.7, distance: 0.35, pan: -0.8, volume: 0.55 },
+      'water-1': { bubbles: 0.7, size: 0.6, turbulence: 0.7, rushLevel: 0.81, rushTone: 0.46, distance: 0.35, pan: -0.8, volume: 0.55 },
       'noise-1': { colour: 0.1, brightnessHz: 300, depth: 0.25, periodSec: 22, variation: 0.5, distance: 0.8, volume: 0.45, weather: 0.8 },
       'thunder-1': { share: 0.06, distance: 0.85, pan: 0.3, spread: 0.7, character: 0.5, randomness: 0.6, lengthSec: 16, volume: 0.7, weather: 0.5 },
     }, { size: 0.25, damping: 0.45, echoes: 0.15, amount: 0.45 }, { gustiness: 0.55, paceSec: 11 }),
@@ -623,7 +643,7 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
       'rain-1': { surface: 0.5, intensity: 0.8, washLevel: 0.67, drips: 0.4, wetness: 0.7, resonance: 0.4, distance: 0.12, pan: -0.6, volume: 0.76, weather: 0.6 },
       'rain-2': { surface: 0.5, intensity: 0.95, washLevel: 0.74, drips: 0, wetness: 0.7, distance: 0.55, volume: 0.76, weather: 0.8 },
       'rain-3': { surface: 0, intensity: 1, washLevel: 0.75, washDensity: 0.9, drips: 0, wetness: 0.2, distance: 0.92, pan: 0.6, volume: 0.7, weather: 0.8 },
-      'water-1': { flow: 0.85, size: 0.6, turbulence: 0.8, distance: 0.4, pan: 0.75, volume: 0.5 },
+      'water-1': { bubbles: 0.85, size: 0.6, turbulence: 0.8, rushLevel: 0.84, rushTone: 0.46, distance: 0.4, pan: 0.75, volume: 0.5 },
       'noise-1': { colour: 0.2, brightnessHz: 900, focus: 0.1, depth: 0.6, periodSec: 9, sweep: 0.7, variation: 0.7, sway: 0.4, distance: 0.45, volume: 0.66, weather: 1 },
       'noise-2': { colour: 0.7, brightnessHz: 2200, focus: 0.55, depth: 0.7, periodSec: 7, curve: 0.7, skew: 0.35, sweep: 0.8, variation: 0.8, sway: 0.5, width: 0.6, distance: 0.6, volume: 0.5, weather: 1 },
       'noise-3': { colour: 0, brightnessHz: 110, depth: 0.4, periodSec: 20, variation: 0.6, distance: 0.8, volume: 0.6, weather: 1 },
@@ -644,8 +664,8 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
       // A second set of waves further out, out of step with the first.
       'noise-4': { colour: 0.3, brightnessHz: 1100, depth: 0.7, periodSec: 17, curve: 0.65, skew: 0.65, sweep: 0.6, variation: 0.6, sway: 0.5, distance: 0.75, volume: 0.62 },
       'noise-5': { colour: 0.5, brightnessHz: 2400, focus: 0.3, depth: 0.5, periodSec: 9, sweep: 0.6, variation: 0.8, sway: 0.5, width: 0.6, distance: 0.6, volume: 0.45, weather: 1 },
-      'water-1': { flow: 0.9, size: 0.2, turbulence: 0.95, distance: 0.2, pan: -0.4, volume: 0.45 },
-      'water-2': { flow: 0.8, size: 0.3, turbulence: 0.9, distance: 0.3, pan: 0.5, volume: 0.42 },
+      'water-1': { bubbles: 0.9, size: 0.2, turbulence: 0.95, rushLevel: 0.85, rushTone: 0.61, distance: 0.2, pan: -0.4, volume: 0.45 },
+      'water-2': { bubbles: 0.8, size: 0.3, turbulence: 0.9, rushLevel: 0.83, rushTone: 0.57, distance: 0.3, pan: 0.5, volume: 0.42 },
     }, { size: 1, damping: 0.6, echoes: 0, amount: 0.6 }, { gustiness: 0.6, paceSec: 14 }),
   },
   {
@@ -665,8 +685,8 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
     name: 'Quiet camp',
     settings: soundscape({
       'fire-1': { size: 0.35, width: 0.5, crackle: 0.45, crackleLevel: 0.7, pops: 0.25, sizzle: 0.35, sizzleLevel: 0.65, flicker: 0.4, flickerPeriodSec: 0.6, flickerDynamics: 0.3, distance: 0.12, pan: -0.1, volume: 0.66, weather: 0.4 },
-      'water-1': { flow: 0.4, size: 0.4, turbulence: 0.55, distance: 0.55, pan: 0.55, volume: 0.6 },
-      'water-2': { flow: 0.25, size: 0.25, turbulence: 0.35, distance: 0.75, pan: 0.8, volume: 0.5 },
+      'water-1': { bubbles: 0.4, size: 0.4, turbulence: 0.55, rushLevel: 0.71, rushTone: 0.54, distance: 0.55, pan: 0.55, volume: 0.6 },
+      'water-2': { bubbles: 0.25, size: 0.25, turbulence: 0.35, rushLevel: 0.64, rushTone: 0.59, distance: 0.75, pan: 0.8, volume: 0.5 },
       'noise-1': { colour: 0.45, brightnessHz: 1500, focus: 0.2, depth: 0.45, periodSec: 17, sweep: 0.6, variation: 0.6, sway: 0.35, distance: 0.8, volume: 0.42, weather: 1 },
       'noise-2': { colour: 0.1, brightnessHz: 250, depth: 0.2, periodSec: 30, variation: 0.5, distance: 0.9, volume: 0.4, weather: 0.6 },
     }, { size: 0.9, damping: 0.8, echoes: 0.12, amount: 0.5 }, { gustiness: 0.35, paceSec: 16 }),
@@ -695,7 +715,7 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
       'noise-4': { colour: 1, brightnessHz: 9000, focus: 0.6, depth: 1, periodSec: 3.3, curve: 0.9, skew: 0.15, sweep: 0.8, variation: 0.7, sway: 1, width: 0.2, distance: 0.95, volume: 0.28 },
       'chimes-1': { material: 1, pitchHz: chimeSemitoneHz(-6), tubes: 8, ringSec: 15, activity: 0.2, hardness: 0.25, unison: 0.7, scale: 63, distance: 0.9, pan: -0.5, volume: 0.6, weather: 0.6 },
       'chimes-2': { material: 2 / 3, pitchHz: chimeSemitoneHz(9), tubes: 7, ringSec: 12, activity: 0.12, hardness: 0.8, unison: 0.2, scale: 62, distance: 0.95, pan: 0.6, volume: 0.45, weather: 0.8 },
-      'water-1': { flow: 0.15, size: 0, turbulence: 1, distance: 1, pan: 0.2, volume: 0.35 },
+      'water-1': { bubbles: 0.15, size: 0, turbulence: 1, rushLevel: 0.55, rushTone: 0.68, distance: 1, pan: 0.2, volume: 0.35 },
       'thunder-1': { share: 0.3, distance: 1, spread: 1, character: 0, contrast: -0.6, randomness: 0.9, lengthSec: 30, volume: 0.55 },
     }, { size: 1, damping: 0.15, echoes: 1, amount: 1 }, { gustiness: 0.7, paceSec: 25 }),
   },
@@ -789,7 +809,10 @@ export const AMBIENT_FIELD_BOUNDS: { [K in AmbientChannelKind]: FieldBounds } = 
     ...COMMON_BOUNDS, share: UNIT, pan: SIGNED, spread: UNIT, character: UNIT, contrast: SIGNED, randomness: UNIT,
     lengthSec: [AMBIENT_THUNDER_LENGTH_MIN_SEC, AMBIENT_THUNDER_LENGTH_MAX_SEC], weather: UNIT,
   },
-  water: { ...COMMON_BOUNDS, flow: UNIT, size: UNIT, turbulence: UNIT, pan: SIGNED },
+  water: {
+    ...COMMON_BOUNDS, turbulence: UNIT, width: UNIT, bubbles: UNIT, bubbleLevel: UNIT, size: UNIT, sizeSpread: UNIT,
+    rise: UNIT, ring: UNIT, rush: UNIT, rushLevel: UNIT, rushTone: UNIT, pan: SIGNED,
+  },
   fire: {
     ...COMMON_BOUNDS, size: UNIT, width: UNIT, crackle: UNIT, crackleLevel: UNIT, crackleTone: UNIT, pops: UNIT, popLevel: UNIT, popTone: UNIT,
     sizzle: UNIT, sizzleLevel: UNIT, sizzleTone: UNIT, flicker: UNIT, flickerPeriodSec: [AMBIENT_FIRE_PERIOD_MIN_SEC, AMBIENT_FIRE_PERIOD_MAX_SEC],

@@ -482,16 +482,33 @@ const RAIN_SPLASH_TONE_OCTAVES = 1;
 const RAIN_WASH_DENSITY_RANGE = 4;
 
 /**
- * Water (renderWater): bubbles, each van den Doel's model (makeBubble) --
- * ringing near 3/r Hz, damped by r, rising in pitch -- born at a rate `flow`
- * sets, in bursts `turbulence` sets, with radii drawn from a power law
- * between two bounds `size` sets (small bubbles far outnumber large ones in
- * running water). Under them, the RUSH: pink noise band-passed low, the
- * sound of the flow itself.
+ * Water (renderWater), two parts, each with its own controls, both moved by
+ * `turbulence` (the tumble: bursts and gaps, see below) and placed across
+ * the image `width` leaves:
+ * - BUBBLES, each van den Doel's model (makeBubble) -- ringing near 3/r Hz,
+ *   damped by r, rising in pitch -- born at a rate `bubbles` sets
+ *   (WATER_BUBBLES_PER_SEC), at `bubbleLevel` (partGain). Radii are drawn
+ *   from a power law (small bubbles far outnumber large ones in running
+ *   water) between two bounds around a centre `size` sets; `sizeSpread`
+ *   sets how far apart the bounds are, from one size at 0 through the
+ *   authored ratio at 0.5 to its square at 1 (waterRadiusBounds). `rise`
+ *   scales how far each bubble's pitch climbs, (2 x rise)^2 of the authored
+ *   rise -- flat at 0, four times at 1 -- and `ring` its damping, by
+ *   WATER_RING_RANGE either way (a dead plop to a ringing note).
+ * - The RUSH: pink noise band-passed low, the sound of the flow itself, at
+ *   `rushLevel` (partGain). `rush` is its texture, as rain's wash density:
+ *   sparse impulses at 0, a gravelly rattle, to steady noise at 1, the
+ *   impulses scaled by 1/sqrt(their chance per frame) so the texture moves
+ *   and the loudness does not (WATER_RUSH_IMPULSES_PER_SEC). `rushTone`
+ *   moves its band WATER_RUSH_TONE_OCTAVES either way from WATER_RUSH_HZ.
  */
 const WATER_BUBBLES_PER_SEC = [15, 500];
 const WATER_RADIUS_MIN_MM = [0.4, 1.5];
 const WATER_RADIUS_MAX_MM = [1.6, 7];
+/** A bubble's damping is divided by this at ring 1 and multiplied by it at ring 0. */
+const WATER_RING_RANGE = 4;
+const WATER_RUSH_IMPULSES_PER_SEC = [150, 48000];
+const WATER_RUSH_TONE_OCTAVES = 2;
 /** p(r) proportional to r^-WATER_RADIUS_EXPONENT between the bounds. */
 const WATER_RADIUS_EXPONENT = 2;
 /** Mean seconds between the burst process's targets; its glide, in seconds. */
@@ -499,9 +516,23 @@ const WATER_BURST_SEC = 0.22;
 const WATER_BURST_GLIDE_SEC = 0.03;
 /** The burst multiplier's spread (log-normal sigma) at turbulence 1. */
 const WATER_BURST_SIGMA = 1.3;
-const WATER_RUSH_HZ = [900, 320];
-const WATER_RUSH_LEVEL = 0.3;
+const WATER_RUSH_HZ = 540;
+/** The rush's level at rushLevel 0.75. */
+const WATER_RUSH_LEVEL = 0.13;
 const MAX_WATER_BUBBLES = 96;
+
+/**
+ * A water layer's bubble radius bounds (mm): around the geometric centre of
+ * the authored bounds at `size`, their ratio raised to 2 x `spread` -- one
+ * size at 0, the authored spread at 0.5, its square at 1.
+ */
+function waterRadiusBounds(size, spread) {
+  const low = WATER_RADIUS_MIN_MM[0] * ((WATER_RADIUS_MIN_MM[1] / WATER_RADIUS_MIN_MM[0]) ** size);
+  const high = WATER_RADIUS_MAX_MM[0] * ((WATER_RADIUS_MAX_MM[1] / WATER_RADIUS_MAX_MM[0]) ** size);
+  const centre = Math.sqrt(low * high);
+  const half = Math.sqrt((high / low) ** (2 * Math.max(0, Math.min(1, spread))));
+  return [centre / half, centre * half];
+}
 
 /**
  * Fire (renderFire), after Farnell's model: a ROAR (brown noise low-passed,
@@ -1442,10 +1473,10 @@ class AmbientGenerator extends AudioWorkletProcessor {
    * bubble of radius r rings near 3/r Hz (Minnaert), damps at a rate set by
    * r, and its pitch rises linearly as it nears the surface.
    */
-  makeBubble(radiusMm, gain) {
+  makeBubble(radiusMm, gain, riseScale = 1, dampingScale = 1) {
     const radius = radiusMm / 1000;
-    const damping = (0.13 / radius) + (0.0072 * (radius ** -1.5));
-    const rise = (0.05 + (this.random() * 0.15)) * damping;
+    const damping = ((0.13 / radius) + (0.0072 * (radius ** -1.5))) * dampingScale;
+    const rise = (0.05 + (this.random() * 0.15)) * damping * riseScale / dampingScale;
     const bubble = {
       ringFrames: Math.ceil((5 * sampleRate) / damping),
       // Advanced like a mode: a (sin, cos) pair rotated by a fixed angle per
@@ -2348,7 +2379,10 @@ class AmbientGenerator extends AudioWorkletProcessor {
   // Water.
 
   initWater(channel) {
-    channel.bubbles = [];
+    channel.bubbleVoices = [];
+    // The rush's gravel draws from its own stream, so that how the block is
+    // cut into spans cannot reorder them against the bubbles' births.
+    channel.rushSeed = Math.floor(this.random() * 0x7fffffff) || 1;
     channel.nextBubbleFrame = currentFrame + 1;
     channel.burst = { value: 1, target: 1, framesLeft: 0 };
     channel.rushStart = this.random();
@@ -2358,10 +2392,10 @@ class AmbientGenerator extends AudioWorkletProcessor {
     this.configureWater(channel);
   }
 
-  /** The rush's band follows the bubble size: bigger water, lower rush. Filter memory is kept. */
+  /** The rush's band at its tone, and the bubbles' radius bounds. Filter memory is kept. */
   configureWater(channel) {
     const size = Math.max(0, Math.min(1, channel.size ?? 0.5));
-    const centre = WATER_RUSH_HZ[0] * ((WATER_RUSH_HZ[1] / WATER_RUSH_HZ[0]) ** size);
+    const centre = WATER_RUSH_HZ * toneShift(channel.rushTone, WATER_RUSH_TONE_OCTAVES);
     const left = stateVariableFilter(centre, 0.6);
     const right = stateVariableFilter(centre, 0.6);
     if (channel.rushLeft) {
@@ -2372,8 +2406,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
     }
     channel.rushLeft = left;
     channel.rushRight = right;
-    channel.radiusMinMm = WATER_RADIUS_MIN_MM[0] * ((WATER_RADIUS_MIN_MM[1] / WATER_RADIUS_MIN_MM[0]) ** size);
-    channel.radiusMaxMm = WATER_RADIUS_MAX_MM[0] * ((WATER_RADIUS_MAX_MM[1] / WATER_RADIUS_MAX_MM[0]) ** size);
+    [channel.radiusMinMm, channel.radiusMaxMm] = waterRadiusBounds(size, channel.sizeSpread ?? 0.5);
   }
 
   /**
@@ -2398,14 +2431,26 @@ class AmbientGenerator extends AudioWorkletProcessor {
     left.fill(0, 0, length);
     right.fill(0, 0, length);
     const sigma = Math.max(0, Math.min(1, channel.turbulence ?? 0)) * WATER_BURST_SIGMA;
-    const flow = Math.max(0, Math.min(1, channel.flow ?? 0.5));
-    const baseRate = WATER_BUBBLES_PER_SEC[0] * ((WATER_BUBBLES_PER_SEC[1] / WATER_BUBBLES_PER_SEC[0]) ** flow);
-    const image = stereoImage(channel.pan, 1);
+    const bubbleAmount = Math.max(0, Math.min(1, channel.bubbles ?? 0.5));
+    const baseRate = WATER_BUBBLES_PER_SEC[0] * ((WATER_BUBBLES_PER_SEC[1] / WATER_BUBBLES_PER_SEC[0]) ** bubbleAmount);
+    const width = Math.max(0, Math.min(1, channel.width ?? 1));
+    const image = stereoImage(channel.pan, width);
+    const bubbleGain = partGain(channel.bubbleLevel);
+    const riseScale = (2 * Math.max(0, Math.min(1, channel.rise ?? 0.5))) ** 2;
+    const dampingScale = WATER_RING_RANGE ** ((0.5 - Math.max(0, Math.min(1, channel.ring ?? 0.5))) * 2);
+    // The rush's two reads blended toward one as the width narrows, then placed at the pan (as the fire's roar).
+    const widthAngle = (1 - width) * Math.PI / 4;
+    const rushDirect = Math.cos(widthAngle);
+    const rushCross = Math.sin(widthAngle);
+    const rushPan = panGains(Math.max(-1, Math.min(1, channel.pan ?? 0)));
+    const smooth = Math.max(0, Math.min(1, channel.rush ?? 1));
+    const impulseChance = Math.min(1, (WATER_RUSH_IMPULSES_PER_SEC[0] * ((WATER_RUSH_IMPULSES_PER_SEC[1] / WATER_RUSH_IMPULSES_PER_SEC[0]) ** smooth)) / sampleRate);
+    const impulseSize = 1 / Math.sqrt(impulseChance);
     const pink = this.noiseLoop('pink');
     const loopLength = pink.length;
     if (channel.rushRead < 0 || channel.rushRead >= loopLength) channel.rushRead = Math.floor(channel.rushStart * loopLength) % loopLength;
     const half = Math.floor(loopLength / 2);
-    const rushBase = WATER_RUSH_LEVEL * (flow ** 1.2) * (this.noiseGains.pink ?? 1);
+    const rushBase = WATER_RUSH_LEVEL * partGain(channel.rushLevel) * (this.noiseGains.pink ?? 1);
     const rushK = 1 / 0.6;
     if (channel.nextBubbleFrame < blockStart) channel.nextBubbleFrame = blockStart + this.eventDelayFrames(baseRate);
     let burstFrom = 1;
@@ -2423,30 +2468,43 @@ class AmbientGenerator extends AudioWorkletProcessor {
       while (channel.nextBubbleFrame < spanEnd) {
         const radius = this.waterRadius(channel);
         const place = image.from + ((image.to - image.from) * this.random());
-        const bubble = this.makeBubble(radius, 0.6 + (0.4 * this.random()));
-        if (channel.bubbles.length < MAX_WATER_BUBBLES) {
+        const bubble = this.makeBubble(radius, (0.6 + (0.4 * this.random())) * bubbleGain, riseScale, dampingScale);
+        if (channel.bubbleVoices.length < MAX_WATER_BUBBLES) {
           const gains = panGains(place);
           bubble.age = 0;
           bubble.startOffset = channel.nextBubbleFrame - blockStart;
           bubble.gainLeft = gains.left;
           bubble.gainRight = gains.right;
-          channel.bubbles.push(bubble);
+          channel.bubbleVoices.push(bubble);
         }
         channel.nextBubbleFrame += this.eventDelayFrames(rate);
       }
       // The rush: pink noise, band-passed low, breathing with the bursts.
       let read = channel.rushRead;
+      let seed = channel.rushSeed;
       for (let step = 0; step < count; step += 1) {
         const burst = burstFrom + ((burstTo - burstFrom) * ((position + step) / CONTROL_FRAMES));
         const level = rushBase * Math.sqrt(burst);
         const readRight = read + half >= loopLength ? read + half - loopLength : read + half;
-        left[offset + step] += bandPass(channel.rushLeft, pink[read]) * rushK * level;
-        right[offset + step] += bandPass(channel.rushRight, pink[readRight]) * rushK * level;
+        // Steady noise when the chance is 1; otherwise sparse impulses (the gravel).
+        let inLeft = pink[read];
+        let inRight = pink[readRight];
+        if (impulseChance < 1) {
+          seed = (Math.imul(seed, 1103515245) + 12345) >>> 0;
+          inLeft = (seed / 4294967296) < impulseChance ? inLeft * impulseSize : 0;
+          seed = (Math.imul(seed, 1103515245) + 12345) >>> 0;
+          inRight = (seed / 4294967296) < impulseChance ? inRight * impulseSize : 0;
+        }
+        const a = bandPass(channel.rushLeft, inLeft) * rushK * level;
+        const b = bandPass(channel.rushRight, inRight) * rushK * level;
+        left[offset + step] += ((rushDirect * a) + (rushCross * b)) * rushPan.left;
+        right[offset + step] += ((rushDirect * b) + (rushCross * a)) * rushPan.right;
         read = read + 1 === loopLength ? 0 : read + 1;
       }
       channel.rushRead = read;
+      channel.rushSeed = seed;
     });
-    const bubbles = channel.bubbles;
+    const bubbles = channel.bubbleVoices;
     for (let index = bubbles.length - 1; index >= 0; index -= 1) {
       const bubble = bubbles[index];
       const start = bubble.startOffset;
