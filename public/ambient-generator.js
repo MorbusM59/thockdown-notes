@@ -640,7 +640,29 @@ function chimeMaterial(material) {
 /** How far a soft clapper (hardness 0) suppresses the upper modes: weight x ratio^-this. */
 const CHIME_SOFT_TILT = 1.3;
 const CHIME_DETUNE_CENTS = 6;
-const CHIME_STRIKE_FORCE = [0.35, 1];
+/**
+ * How hard the striker meets a tube (strikeTube's `force`, its speed at
+ * contact, 0-1). A striker swung by a gusty wind mostly grazes and taps and
+ * only now and then lands square, so a strike's speed is drawn skewed low:
+ * CHIME_STRIKE_FORCE[0] + span x u^CHIME_STRIKE_SKEW, u uniform. Speed
+ * shapes a hit three ways, as it does on a real chime:
+ * - loudness: every mode's amplitude is proportional to it;
+ * - brightness: a faster impact is a shorter contact, and a shorter contact
+ *   excites the upper modes more. The contact's sharpness is
+ *   force^CHIME_CONTACT_EXPONENT, and it moves the hit's hardness from the
+ *   layer's by up to CHIME_CONTACT_REACH either way (unchanged at a
+ *   sharpness of 0.5, a force of 0.25) -- a touch is dull, a clang brings
+ *   the upper partials in;
+ * - the tick: the striker's click rises with the square of the speed, so a
+ *   touch barely clicks and a direct hit clangs.
+ * The ring's decay is the tube's and does not change: a soft hit starts
+ * quieter, so it sinks below hearing sooner, and that is all the shorter
+ * ring a light touch has.
+ */
+const CHIME_STRIKE_FORCE = [0.05, 1];
+const CHIME_STRIKE_SKEW = 2.2;
+const CHIME_CONTACT_EXPONENT = 0.5;
+const CHIME_CONTACT_REACH = 0.35;
 /**
  * The striker's cascade: the chance a rebound strikes again at unison 1
  * (at unison u it is u x this, plus the weather's WEATHER_CHIME_CASCADE at a
@@ -2805,7 +2827,9 @@ class AmbientGenerator extends AudioWorkletProcessor {
    * strike as FEED instead, poured into the ringing over its attack time.
    */
   strikeTube(channel, tube, force) {
-    const hardness = Math.max(0, Math.min(1, channel.hardness ?? 0.5));
+    // A faster strike is a shorter contact, and so brighter (see CHIME_STRIKE_FORCE).
+    const contact = Math.max(0, Math.min(1, force)) ** CHIME_CONTACT_EXPONENT;
+    const hardness = Math.max(0, Math.min(1, (channel.hardness ?? 0.5) + (CHIME_CONTACT_REACH * ((2 * contact) - 1))));
     const material = channel.chimeMaterial;
     const swells = channel.attackRate > 0;
     material.ratios.forEach((ratio, mode) => {
@@ -2936,10 +2960,12 @@ class AmbientGenerator extends AudioWorkletProcessor {
         const index = isRebound ? channel.cascade.tube : Math.floor(this.random() * tubes.length);
         const force = isRebound
           ? channel.cascade.force
-          : Math.max(0.05, this.between(CHIME_STRIKE_FORCE) * (1 + (WEATHER_CHIME_FORCE * factor)));
+          : Math.min(1, (CHIME_STRIKE_FORCE[0] + ((CHIME_STRIKE_FORCE[1] - CHIME_STRIKE_FORCE[0]) * (this.random() ** CHIME_STRIKE_SKEW)))
+            * (1 + (WEATHER_CHIME_FORCE * factor)));
         this.strikeTube(channel, tubes[index], force);
         // The striker's tick, as bright as it is hard, as loud as the material makes it.
-        if (material.click > 0) this.spawnBurst(channel.bursts, 16, offset, click, force * (channel.hardness ?? 0.5) * material.click, tubes[index].pan);
+        // The tick rises with the square of the striker's speed (see CHIME_STRIKE_FORCE).
+        if (material.click > 0) this.spawnBurst(channel.bursts, 16, offset, click, force * force * (channel.hardness ?? 0.5) * material.click, tubes[index].pan);
         const rebound = force * CHIME_CASCADE_DAMPING;
         if (tubes.length > 1 && rebound >= CHIME_CASCADE_MIN_FORCE && this.random() < cascadeChance) {
           const gap = Math.max(1, Math.round(cascadeSec * (0.6 + (0.8 * this.random())) * sampleRate));

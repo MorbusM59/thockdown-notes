@@ -993,6 +993,45 @@ describe('chimes', () => {
     expect(upperShare(1)).toBeGreaterThan(2 * upperShare(0));
   });
 
+  it('strikes mostly lightly and only now and then square, as a wind-swung striker does', () => {
+    const generator = createProcessor([layer('chimes', { activity: 1, unison: 0, weather: 0 })], { sampleRate: 4000 });
+    const forces: number[] = [];
+    const strike = generator.processor.strikeTube.bind(generator.processor);
+    generator.processor.strikeTube = (channel: unknown, tube: unknown, force: number) => { forces.push(force); strike(channel, tube, force); };
+    generator.render(300);
+    forces.sort((a, b) => a - b);
+    const median = forces[Math.floor(forces.length / 2)];
+    expect(median).toBeLessThan(0.35);
+    expect(forces.at(-1)!).toBeGreaterThan(0.9);
+    expect(forces[0]).toBeGreaterThanOrEqual(0.05);
+  });
+
+  it('brightens with the force of a hit: a touch dull, a clang bright, and ticks with its square', () => {
+    const upperShare = (force: number) => {
+      const generator = createProcessor([layer('chimes', { hardness: 0.5, activity: 0 })], { sampleRate: 48000, seed: 3 });
+      const channel = generator.processor.channels[0];
+      const tube = channel.tubeState[0];
+      generator.processor.strikeTube(channel, tube, force);
+      const amplitudes = tube.oscillators.map((oscillator: { amplitude: number }) => oscillator.amplitude);
+      return amplitudes.slice(2).reduce((sum: number, value: number) => sum + value, 0) / (amplitudes[0] + amplitudes[1]);
+    };
+    expect(upperShare(1)).toBeGreaterThan(1.5 * upperShare(0.05));
+    // The tick: its level over the square of the force is the same for every hit.
+    const generator = createProcessor([layer('chimes', { hardness: 0.5, activity: 1, unison: 0 })], { sampleRate: 4000 });
+    let lastForce = 0;
+    const ratios: number[] = [];
+    const strike = generator.processor.strikeTube.bind(generator.processor);
+    generator.processor.strikeTube = (channel: unknown, tube: unknown, hit: number) => { lastForce = hit; strike(channel, tube, hit); };
+    const spawn = generator.processor.spawnBurst.bind(generator.processor);
+    generator.processor.spawnBurst = (bursts: unknown, max: number, offset: number, spec: unknown, level: number, pan: number) => {
+      ratios.push(level / (lastForce * lastForce));
+      spawn(bursts, max, offset, spec, level, pan);
+    };
+    generator.render(30);
+    expect(ratios.length).toBeGreaterThan(20);
+    for (const ratio of ratios) expect(ratio).toBeCloseTo(ratios[0], 9);
+  });
+
   it('keeps its tubes ringing through a retune', () => {
     const base = layer('chimes', { activity: 0, pitchHz: 400 });
     const generator = createProcessor([base], { sampleRate: 16000 });
