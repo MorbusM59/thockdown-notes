@@ -57,15 +57,15 @@ const PRESET_ICONS: Record<string, string> = {
   'stormy-night': 'fa-cloud-moon-rain',
   street: 'fa-road',
   forest: 'fa-tree',
-  tent: 'fa-campground',
+  tent: 'fa-umbrella',
   roof: 'fa-house',
   storm: 'fa-cloud-bolt',
   ocean: 'fa-water',
   wind: 'fa-wind',
-  brook: 'fa-droplet',
+  camp: 'fa-campground',
   fireside: 'fa-fire',
-  campfire: 'fa-fire-flame-curved',
-  porch: 'fa-bell',
+  rift: 'fa-infinity',
+  pulse: 'fa-wave-square',
 }
 
 const KIND_LOOK: Record<AmbientChannelKind, { icon: string; label: string }> = {
