@@ -5,7 +5,6 @@
  * noise cycle and filter-gain tables, the chimes' tuning.
  */
 import {
-  AMBIENT_CHIME_TUBES_MAX,
   AMBIENT_NOISE_SWEEP_OCTAVES,
   AMBIENT_RAIN_DROPS_MAX_PER_SEC,
   AMBIENT_RAIN_DROPS_MIN_PER_SEC,
@@ -20,6 +19,7 @@ import {
   type AmbientSettings,
 } from './ambientSound';
 import { buildNoiseCycle } from './ambientNoiseCycle';
+import { chimeScaleCents } from './ambientChimeScales';
 
 /**
  * Each kind's level at a fader of 1, relative to the others: set so that
@@ -153,12 +153,9 @@ export function buildNoiseToneTable(colour: number, focus: number): Float32Array
 // ---------------------------------------------------------------------------
 // Chimes.
 
-/** Semitones of a major pentatonic scale, enough for the most tubes. */
-export const CHIME_SCALE_SEMITONES = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21].slice(0, AMBIENT_CHIME_TUBES_MAX);
-
-/** The fundamental of each tube, lowest first. */
-export function chimeTubeFrequencies(pitchHz: number, tubes: number): number[] {
-  return CHIME_SCALE_SEMITONES.slice(0, tubes).map((semitones) => pitchHz * (2 ** (semitones / 12)));
+/** The fundamental of each tube, lowest first, on the layer's scale (ambientChimeScales.ts). */
+export function chimeTubeFrequencies(pitchHz: number, tubes: number, scale = 0): number[] {
+  return chimeScaleCents(scale, tubes).map((value) => pitchHz * (2 ** (value / 1200)));
 }
 
 // ---------------------------------------------------------------------------
@@ -223,7 +220,7 @@ export function toWorkletChannel(channel: AmbientChannelSettings): AmbientWorkle
         ...channel,
         gain,
         space: resolveAmbientSpace(channel.distance),
-        tubeHz: chimeTubeFrequencies(channel.pitchHz, channel.tubes),
+        tubeHz: chimeTubeFrequencies(channel.pitchHz, channel.tubes, channel.scale),
         strikeRange: CHIME_STRIKE_RANGE,
       };
     default:

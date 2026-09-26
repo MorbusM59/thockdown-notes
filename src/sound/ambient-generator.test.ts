@@ -8,6 +8,8 @@ import {
   type AmbientChannelSettings,
 } from '../shared/ambientSound';
 import { chimeTubeFrequencies } from '../shared/ambientSoundDsp';
+import { CHIME_SCALES, chimeScaleCents } from '../shared/ambientChimeScales';
+import { AMBIENT_CHIME_MATERIALS } from '../shared/ambientSound';
 import { buildNoiseLoops, createNoiseSource } from '../shared/ambientNoiseLoops';
 import { createProcessor, layer, noiseAt, peak, rms, type Rendered } from './ambient-generator.harness';
 
@@ -950,7 +952,8 @@ describe('chimes', () => {
     const tube = generator.processor.channels[0].tubeState[0];
     const frequencyOf = (oscillator: { rotationSin: number; rotationCos: number }) => (Math.atan2(oscillator.rotationSin, oscillator.rotationCos) * 48000) / (2 * Math.PI);
     const fundamental = frequencyOf(tube.oscillators[0]);
-    generator.constants.CHIME_MODE_RATIOS.forEach((ratio: number, mode: number) => {
+    // Metal, the default: a free-free bar.
+    generator.constants.CHIME_MATERIALS.find((material: { name: string }) => material.name === 'metal').ratios.forEach((ratio: number, mode: number) => {
       expect(frequencyOf(tube.oscillators[mode * 2]) / fundamental).toBeCloseTo(ratio, 6);
       // The doublet's partner, a fraction of a hertz above.
       const split = frequencyOf(tube.oscillators[(mode * 2) + 1]) - frequencyOf(tube.oscillators[mode * 2]);
@@ -998,5 +1001,102 @@ describe('chimes', () => {
     const before = channel.tubeState[0].oscillators[0].amplitude;
     generator.configure([{ ...base, pitchHz: 600 }]);
     expect(generator.processor.channels[0].tubeState[0].oscillators[0].amplitude).toBe(before);
+  });
+});
+
+describe('chimes: unison, material and scale', () => {
+  /** Every strike of a chimes layer over `seconds`, with the time it landed, and whether it was a rebound. */
+  const strikes = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'chimes' }>>, seconds = 300) => {
+    const generator = createProcessor([layer('chimes', { activity: 0.3, weather: 0, ...overrides })], { sampleRate: 4000 });
+    const record: Array<{ frame: number; rebound: boolean; tube: number }> = [];
+    const strike = generator.processor.strikeTube.bind(generator.processor);
+    generator.processor.strikeTube = (channel: { tubeState: unknown[]; cascade: { frame: number } }, tube: unknown, force: number) => {
+      record.push({ frame: generator.frame, rebound: false, tube: channel.tubeState.indexOf(tube) });
+      strike(channel, tube, force);
+    };
+    generator.render(seconds);
+    return record;
+  };
+
+  it('sounds its tubes together more, and closer together, the higher its unison', () => {
+    // Strikes per burst: strikes separated by less than 0.4 s belong to one.
+    const bursts = (unison: number) => {
+      const record = strikes({ unison });
+      const sizes: number[] = [];
+      let size = 0;
+      let last = -Infinity;
+      for (const { frame } of record) {
+        if (frame - last > 0.4 * 4000) {
+          if (size > 0) sizes.push(size);
+          size = 0;
+        }
+        size += 1;
+        last = frame;
+      }
+      if (size > 0) sizes.push(size);
+      return sizes.reduce((sum, value) => sum + value, 0) / sizes.length;
+    };
+    // At 0 only chance brings two independent strikes within 0.4 s.
+    expect(bursts(0)).toBeLessThan(1.2);
+    expect(bursts(1)).toBeGreaterThan(2.2);
+    expect(bursts(1)).toBeGreaterThan(bursts(0.5));
+  });
+
+  it('rebounds across the ring, never onto the tube it just struck', () => {
+    const generator = createProcessor([layer('chimes', { tubes: 6 })], { sampleRate: 4000 });
+    const across: number[] = [];
+    for (let trial = 0; trial < 2000; trial += 1) {
+      const next = generator.processor.chimeRebound(2, 6);
+      expect(next).not.toBe(2);
+      across.push(Math.min(Math.abs(next - 2), 6 - Math.abs(next - 2)));
+    }
+    // Mostly the far side of a ring of six: three tubes round, give or take one.
+    expect(across.filter((distance) => distance >= 2).length / across.length).toBeGreaterThan(0.8);
+  });
+
+  it('has a model for every material the settings can name', () => {
+    const { constants } = createProcessor([]);
+    expect(constants.CHIME_MATERIALS.map(({ name, at }: { name: string; at: number }) => ({ name, at })))
+      .toEqual(AMBIENT_CHIME_MATERIALS.map(({ name, at }) => ({ name, at })));
+  });
+
+  it('knocks briefly as wood, rings long as metal, shorter and brighter as glass, and swells in as a veil', () => {
+    const struck = (material: number, seconds: number) => {
+      const generator = createProcessor([layer('chimes', { activity: 0, material, ringSec: 6, pitchHz: 400, distance: 0 })], { sampleRate: 16000 });
+      const channel = generator.processor.channels[0];
+      generator.processor.strikeTube(channel, channel.tubeState[0], 1);
+      return generator.render(seconds).left;
+    };
+    const energyAfter = (samples: number[], fromSec: number) => samples.slice(Math.floor(fromSec * 16000)).reduce((sum, value) => sum + (value * value), 0);
+    const wood = struck(0, 3);
+    const metal = struck(1 / 3, 3);
+    const glass = struck(2 / 3, 3);
+    expect(energyAfter(wood, 0.5) / energyAfter(wood, 0)).toBeLessThan(0.01);
+    expect(energyAfter(metal, 0.5) / energyAfter(metal, 0)).toBeGreaterThan(10 * (energyAfter(wood, 0.5) / energyAfter(wood, 0)));
+    expect(energyAfter(glass, 0.5) / energyAfter(glass, 0)).toBeLessThan(energyAfter(metal, 0.5) / energyAfter(metal, 0));
+    expect(highShare(glass, 16000, 1500)).toBeGreaterThan(highShare(metal, 16000, 1500));
+    // The veil swells: its loudest 50 ms comes well after the strike.
+    const veil = struck(1, 2);
+    const windows: number[] = [];
+    for (let at = 0; at + 800 <= veil.length; at += 800) windows.push(rms(veil.slice(at, at + 800)));
+    expect(windows.indexOf(Math.max(...windows))).toBeGreaterThanOrEqual(4);
+  });
+
+  it('offers over fifty distinct scales, the domestic major pentatonic first', () => {
+    expect(CHIME_SCALES.length).toBeGreaterThanOrEqual(50);
+    expect(CHIME_SCALES[0].name).toBe('Major pentatonic');
+    const signatures = new Set(CHIME_SCALES.map((scale) => `${scale.cents.map((value) => value.toFixed(2)).join(',')}/${scale.period}`));
+    expect(signatures.size).toBe(CHIME_SCALES.length);
+    for (let index = 0; index < CHIME_SCALES.length; index += 1) {
+      // Every scale's tubes climb, strictly, however many there are.
+      const climb = chimeScaleCents(index, 8);
+      expect(climb[0]).toBe(0);
+      for (let tube = 1; tube < climb.length; tube += 1) expect(climb[tube], CHIME_SCALES[index].name).toBeGreaterThan(climb[tube - 1]);
+    }
+    expect(chimeTubeFrequencies(400, 7, 0).map((hz) => Math.round(12 * Math.log2(hz / 400)))).toEqual([0, 2, 4, 7, 9, 12, 14]);
+    // Bohlen-Pierce repeats at the tritave (3:1), not the octave.
+    const bohlenPierce = CHIME_SCALES.findIndex((scale) => scale.name.startsWith('Bohlen'));
+    expect(chimeTubeFrequencies(100, 8, bohlenPierce).length).toBe(8);
+    expect(CHIME_SCALES[bohlenPierce].period).toBeCloseTo(1200 * Math.log2(3), 2);
   });
 });

@@ -21,6 +21,20 @@
  * that every surface named here has a profile there.
  */
 
+import { CHIME_SCALE_COUNT } from './ambientChimeScales';
+
+/**
+ * What chimes can be made of, and where each sits on the material slider;
+ * mirrored by CHIME_MATERIALS in public/ambient-generator.js, which
+ * ambient-generator.test.ts holds to these.
+ */
+export const AMBIENT_CHIME_MATERIALS = [
+  { name: 'wood', at: 0 },
+  { name: 'metal', at: 1 / 3 },
+  { name: 'glass', at: 2 / 3 },
+  { name: 'veil', at: 1 },
+] as const;
+
 export const AMBIENT_NOISE_TYPES = ['brown', 'pink', 'white'] as const;
 export type AmbientNoiseType = (typeof AMBIENT_NOISE_TYPES)[number];
 
@@ -255,6 +269,20 @@ export interface AmbientChimesChannelSettings extends AmbientChannelBaseSettings
   activity: number;
   /** 0 a soft wooden clapper (warm, fundamental-heavy) to 1 a hard metal one (bright, with a tick). */
   hardness: number;
+  /**
+   * How much the chimes sound together, 0-1: the chance that the striker,
+   * having hit a tube, rebounds across the ring into another, and how
+   * quickly -- single notes at 0, a near-simultaneous cascade at 1.
+   */
+  unison: number;
+  /**
+   * What the tubes are made of, blended between AMBIENT_CHIME_MATERIALS:
+   * wood (bamboo: a hollow knock), metal (long-ringing tubes), glass (a
+   * bright, shorter tinkle) and veil (an ethereal shimmer that swells in).
+   */
+  material: number;
+  /** Which scale the tubes are tuned to, an index into CHIME_SCALES (0 the major pentatonic). */
+  scale: number;
   pan: number;
   /** Chimes are moved by the wind: gusts strike them more often and harder. */
   weather: number;
@@ -457,7 +485,7 @@ export const AMBIENT_CHANNEL_DEFAULTS: KindDefaults = {
   },
   chimes: {
     kind: 'chimes', enabled: true, solo: false, volume: 0.6, distance: 0.35,
-    pitchHz: 520, tubes: 5, ringSec: 6, activity: 0.3, hardness: 0.6, pan: 0, weather: 0.8,
+    pitchHz: 520, tubes: 5, ringSec: 6, activity: 0.3, hardness: 0.6, unison: 0.3, material: 1 / 3, scale: 0, pan: 0, weather: 0.8,
   },
 };
 
@@ -718,7 +746,8 @@ export const AMBIENT_FIELD_BOUNDS: { [K in AmbientChannelKind]: FieldBounds } = 
   chimes: {
     ...COMMON_BOUNDS, pitchHz: [AMBIENT_CHIME_PITCH_MIN_HZ, AMBIENT_CHIME_PITCH_MAX_HZ],
     tubes: [AMBIENT_CHIME_TUBES_MIN, AMBIENT_CHIME_TUBES_MAX, 'integer'],
-    ringSec: [AMBIENT_CHIME_RING_MIN_SEC, AMBIENT_CHIME_RING_MAX_SEC], activity: UNIT, hardness: UNIT, pan: SIGNED, weather: UNIT,
+    ringSec: [AMBIENT_CHIME_RING_MIN_SEC, AMBIENT_CHIME_RING_MAX_SEC], activity: UNIT, hardness: UNIT, unison: UNIT, material: UNIT,
+    scale: [0, CHIME_SCALE_COUNT - 1, 'integer'], pan: SIGNED, weather: UNIT,
   },
 };
 

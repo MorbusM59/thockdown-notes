@@ -581,26 +581,79 @@ const FIRE_POP_BODY_OCTAVES = 1;
 const MAX_FIRE_BURSTS = 48;
 
 /**
- * Chimes (renderChimes): each tube a free-free bar, its modes at these
- * ratios of its fundamental (Euler-Bernoulli: (2n+1)^2 approximately, the
- * first four), each a DOUBLET -- two oscillators a fraction of a hertz apart,
- * as the slight asymmetry of a real tube splits every mode -- which is the
- * slow shimmer a struck chime has and a pure sine does not. Higher modes die
- * faster (CHIME_MODE_DECAY_EXPONENT). A tube is one object: striking it again
- * adds to what it is already ringing rather than starting a new voice.
+ * Chimes (renderChimes). Each tube has four modes, each a DOUBLET -- two
+ * oscillators a fraction of a hertz apart, as the slight asymmetry of a real
+ * tube splits every mode -- which is the slow shimmer a struck chime has and
+ * a pure sine does not. A tube is one object: striking it again adds to what
+ * it is already ringing rather than starting a new voice.
+ *
+ * What a tube is made of decides its modes (CHIME_MATERIALS), blended
+ * between anchors by the `material` slider as rain's surface is:
+ * - wood: bamboo. A hollow tube whose air column and wall ring near-
+ *   harmonically, damped within a fraction of a second -- a knock with a
+ *   pitch in it -- and a strong, woody attack.
+ * - metal: a free-free bar (Euler-Bernoulli: modes at 1, 2.756, 5.404,
+ *   8.933 of the fundamental), ringing for seconds, the upper modes dying
+ *   faster; the classic garden chime.
+ * - glass: the same bar modes, but the upper ones stronger and the whole
+ *   ring shorter and brighter, with a glassy tick.
+ * - veil: not a physical object -- nearly harmonic partials with wide
+ *   doublets (a slow chorus), a long ring and a soft attack that swells in
+ *   rather than strikes. What a synthesised "magical" chime is.
+ * Frequencies, ring and doublet widths blend geometrically, the rest
+ * linearly.
+ *
+ * How the chimes are struck follows a real wind chime: the tubes hang in a
+ * ring around a striker, which the wind moves through a sail below it. A
+ * strike rebounds the striker across the ring, where it may strike again,
+ * weaker and sooner; `unison` is how likely each rebound is to land and how
+ * quickly it follows (CHIME_CASCADE_*). At 0 each strike is a single note;
+ * at 1 a strike sets off a near-simultaneous cascade across the ring.
  */
-const CHIME_MODE_RATIOS = [1, 2.756, 5.404, 8.933];
-const CHIME_MODE_WEIGHTS = [1, 0.55, 0.35, 0.2];
-const CHIME_MODE_DECAY_EXPONENT = 0.7;
+const CHIME_MATERIALS = [
+  { name: 'wood', at: 0, ratios: [1, 2.02, 3.1, 4.3], weights: [1, 0.45, 0.2, 0.1], ringScale: 0.05, decayExponent: 1.2, doubletHz: [0.01, 0.05], attackSec: 0, click: 3, clickHz: [700, 1800] },
+  { name: 'metal', at: 1 / 3, ratios: [1, 2.756, 5.404, 8.933], weights: [1, 0.55, 0.35, 0.2], ringScale: 1, decayExponent: 0.7, doubletHz: [0.2, 1.4], attackSec: 0, click: 1, clickHz: [2500, 5500] },
+  { name: 'glass', at: 2 / 3, ratios: [1, 2.756, 5.404, 8.933], weights: [0.8, 0.8, 0.6, 0.45], ringScale: 0.35, decayExponent: 1, doubletHz: [0.05, 0.4], attackSec: 0, click: 1.5, clickHz: [5000, 9000] },
+  { name: 'veil', at: 1, ratios: [1, 2.005, 3.012, 4.03], weights: [1, 0.6, 0.45, 0.35], ringScale: 1.6, decayExponent: 0.3, doubletHz: [1.5, 4], attackSec: 0.35, click: 0, clickHz: [3000, 6000] },
+];
+const CHIME_GEOMETRIC = new Set(['ratios', 'ringScale', 'doubletHz', 'clickHz']);
+
+/** The chime material at `material` (0-1), blended between its two anchors. */
+function chimeMaterial(material) {
+  const at = Number.isFinite(material) ? Math.max(0, Math.min(1, material)) : 1 / 3;
+  for (let index = 1; index < CHIME_MATERIALS.length; index += 1) {
+    const lower = CHIME_MATERIALS[index - 1];
+    const upper = CHIME_MATERIALS[index];
+    if (at > upper.at) continue;
+    const t = (at - lower.at) / (upper.at - lower.at);
+    const blended = {};
+    for (const key of Object.keys(lower)) {
+      if (key === 'name' || key === 'at') continue;
+      const mix = (a, b) => (CHIME_GEOMETRIC.has(key) && a > 0 && b > 0 ? a * ((b / a) ** t) : a + ((b - a) * t));
+      blended[key] = Array.isArray(lower[key]) ? lower[key].map((value, i) => mix(value, upper[key][i])) : mix(lower[key], upper[key]);
+    }
+    return blended;
+  }
+  return CHIME_MATERIALS[CHIME_MATERIALS.length - 1];
+}
+
 /** How far a soft clapper (hardness 0) suppresses the upper modes: weight x ratio^-this. */
 const CHIME_SOFT_TILT = 1.3;
-const CHIME_DOUBLET_HZ = [0.2, 1.4];
 const CHIME_DETUNE_CENTS = 6;
-/** A clapper bounces: the chance of a second strike on a neighbouring tube, and how soon. */
-const CHIME_BOUNCE_CHANCE = 0.4;
-const CHIME_BOUNCE_SEC = [0.07, 0.3];
 const CHIME_STRIKE_FORCE = [0.35, 1];
-const CHIME_CLICK = { hz: [2500, 5500], q: [1.2, 2], decaySec: [0.0006, 0.0015], level: [0.2, 0.3] };
+/**
+ * The striker's cascade: the chance a rebound strikes again at unison 1
+ * (at unison u it is u x this, plus the weather's WEATHER_CHIME_CASCADE at a
+ * full gust); the gap to it, geometrically from the first value at unison 0
+ * to the second at 1, varied +/-40%; the force each rebound keeps; and the
+ * weakest strike that still rings.
+ */
+const CHIME_CASCADE_CHANCE = 0.9;
+const CHIME_CASCADE_SEC = [0.16, 0.012];
+const CHIME_CASCADE_DAMPING = 0.7;
+const CHIME_CASCADE_MIN_FORCE = 0.08;
+const WEATHER_CHIME_CASCADE = 0.2;
+const CHIME_CLICK = { q: [1.2, 2], decaySec: [0.0006, 0.0015], level: [0.2, 0.3] };
 
 /**
  * A state-variable filter's coefficients and state (the topology-preserving
@@ -2691,27 +2744,35 @@ class AmbientGenerator extends AudioWorkletProcessor {
     const frequencies = channel.tubeHz ?? [];
     const old = channel.tubeState ?? [];
     const ringSec = Math.max(0.1, channel.ringSec ?? 6);
+    const material = chimeMaterial(channel.material);
+    channel.chimeMaterial = material;
+    channel.attackRate = material.attackSec > 0.001 ? 1 - Math.exp(-1 / (material.attackSec * sampleRate)) : 0;
     const image = stereoImage(channel.pan, 1);
     channel.tubeState = frequencies.map((hz, index) => {
       const tube = old[index] ?? {
         detune: 2 ** ((CHIME_DETUNE_CENTS * ((this.random() * 2) - 1)) / 1200),
-        splits: CHIME_MODE_RATIOS.map(() => this.between(CHIME_DOUBLET_HZ)),
+        // Where in the material's doublet range each mode's split falls.
+        splits: material.ratios.map(() => this.random()),
         placement: (index + 0.25 + (0.5 * this.random())) / Math.max(1, frequencies.length),
-        oscillators: CHIME_MODE_RATIOS.flatMap(() => [0, 1].map(() => ({ sin: 0, cos: 1, rotationSin: 0, rotationCos: 1, amplitude: 0, decay: 1, audible: true }))),
+        oscillators: material.ratios.flatMap(() => [0, 1].map(() => ({ sin: 0, cos: 1, rotationSin: 0, rotationCos: 1, amplitude: 0, feed: 0, decay: 1, audible: true }))),
         active: false,
       };
       const fundamental = hz * tube.detune;
-      CHIME_MODE_RATIOS.forEach((ratio, mode) => {
-        const decay = Math.exp(-6.9078 / (ringSec * (ratio ** -CHIME_MODE_DECAY_EXPONENT) * sampleRate));
+      material.ratios.forEach((ratio, mode) => {
+        const decay = Math.exp(-6.9078 / (ringSec * material.ringScale * (ratio ** -material.decayExponent) * sampleRate));
+        const split = material.doubletHz[0] * ((material.doubletHz[1] / material.doubletHz[0]) ** tube.splits[mode]);
         [0, 1].forEach((half) => {
           const oscillator = tube.oscillators[(mode * 2) + half];
-          const frequency = (fundamental * ratio) + (half === 1 ? tube.splits[mode] : 0);
+          const frequency = (fundamental * ratio) + (half === 1 ? split : 0);
           oscillator.audible = frequency < sampleRate * 0.45;
           const angle = (2 * Math.PI * Math.min(frequency, sampleRate * 0.45)) / sampleRate;
           oscillator.rotationSin = Math.sin(angle);
           oscillator.rotationCos = Math.cos(angle);
           oscillator.decay = decay;
-          if (!oscillator.audible) oscillator.amplitude = 0;
+          if (!oscillator.audible) {
+            oscillator.amplitude = 0;
+            oscillator.feed = 0;
+          }
         });
       });
       tube.pan = image.from + ((image.to - image.from) * tube.placement);
@@ -2724,7 +2785,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
     if (!before || before.activity !== channel.activity || !Number.isFinite(channel.nextStrikeFrame)) {
       channel.nextStrikeFrame = currentFrame + this.eventDelayFrames(this.chimeStrikeRate(channel));
     }
-    if (!channel.bounce) channel.bounce = { frame: Infinity, tube: 0 };
+    if (!channel.cascade) channel.cascade = { frame: Infinity, tube: 0, force: 0 };
   }
 
   chimeStrikeRate(channel) {
@@ -2740,16 +2801,24 @@ class AmbientGenerator extends AudioWorkletProcessor {
    * leaves the output at that instant exactly where it was: no click, and a
    * second strike on a ringing tube reinforces or partly cancels it, as it
    * does on a real one. A hard clapper excites the upper modes; a soft one
-   * mostly the fundamental.
+   * mostly the fundamental. A material with an attack (the veil) takes the
+   * strike as FEED instead, poured into the ringing over its attack time.
    */
   strikeTube(channel, tube, force) {
     const hardness = Math.max(0, Math.min(1, channel.hardness ?? 0.5));
-    CHIME_MODE_RATIOS.forEach((ratio, mode) => {
-      const weight = CHIME_MODE_WEIGHTS[mode] * (ratio ** (-(1 - hardness) * CHIME_SOFT_TILT)) * force * (0.8 + (0.4 * this.random()));
+    const material = channel.chimeMaterial;
+    const swells = channel.attackRate > 0;
+    material.ratios.forEach((ratio, mode) => {
+      const weight = material.weights[mode] * (ratio ** (-(1 - hardness) * CHIME_SOFT_TILT)) * force * (0.8 + (0.4 * this.random()));
       const share = 0.35 + (0.3 * this.random());
       [share, 1 - share].forEach((part, half) => {
         const oscillator = tube.oscillators[(mode * 2) + half];
         if (!oscillator.audible) return;
+        if (swells) {
+          // A material with an attack pours the strike in over it (renderTubes).
+          oscillator.feed += weight * part;
+          return;
+        }
         const x = (oscillator.amplitude * oscillator.cos) + (weight * part);
         const y = oscillator.amplitude * oscillator.sin;
         const amplitude = Math.hypot(x, y);
@@ -2767,7 +2836,33 @@ class AmbientGenerator extends AudioWorkletProcessor {
       if (!tube.active) continue;
       const oscillators = tube.oscillators;
       let loudest = 0;
+      const attackRate = channel.attackRate;
       for (const oscillator of oscillators) {
+        if (oscillator.feed > VOICE_SILENCE) {
+          // Swelling in: the feed pours into the ringing amplitude, in phase,
+          // so the swell is continuous; the ring decays as it fills.
+          let sin = oscillator.sin;
+          let cos = oscillator.cos;
+          let amplitude = oscillator.amplitude;
+          let feed = oscillator.feed;
+          for (let frame = from; frame < to; frame += 1) {
+            const pour = feed * attackRate;
+            feed -= pour;
+            amplitude = (amplitude + pour) * oscillator.decay;
+            const sample = sin * amplitude;
+            left[frame] += sample * tube.gainLeft;
+            right[frame] += sample * tube.gainRight;
+            const nextSin = (sin * oscillator.rotationCos) + (cos * oscillator.rotationSin);
+            cos = (cos * oscillator.rotationCos) - (sin * oscillator.rotationSin);
+            sin = nextSin;
+          }
+          oscillator.sin = sin;
+          oscillator.cos = cos;
+          oscillator.amplitude = amplitude;
+          oscillator.feed = feed > VOICE_SILENCE ? feed : 0;
+          loudest = Math.max(loudest, amplitude + oscillator.feed);
+          continue;
+        }
         if (oscillator.amplitude <= VOICE_SILENCE) {
           oscillator.amplitude = 0;
           continue;
@@ -2799,11 +2894,21 @@ class AmbientGenerator extends AudioWorkletProcessor {
   }
 
   /**
+   * Where the striker lands after rebounding off tube `index`: across the
+   * ring, give or take a tube (a triangular spread), never the same tube.
+   */
+  chimeRebound(index, count) {
+    const offset = Math.floor(count / 2) + Math.round((this.random() + this.random() - 1) * 1.5);
+    const next = ((index + offset) % count + count) % count;
+    return next === index ? (index + 1) % count : next;
+  }
+
+  /**
    * A chimes layer's block, written into `left`/`right` (overwritten). The
-   * clapper strikes at a rate `activity` sets and the weather moves; after a
-   * strike it may bounce onto a neighbouring tube. The tubes are rendered in
-   * segments between strikes, so each strike lands on its own frame and the
-   * sound does not depend on the block size.
+   * striker strikes at a rate `activity` sets and the weather moves; each
+   * strike may rebound into another (the cascade, see CHIME_CASCADE_*). The
+   * tubes are rendered in segments between strikes, so each strike lands on
+   * its own frame and the sound does not depend on the block size.
    */
   renderChimes(channel, left, right, blockStart, length) {
     left.fill(0, 0, length);
@@ -2812,35 +2917,42 @@ class AmbientGenerator extends AudioWorkletProcessor {
     const blockEnd = blockStart + length;
     const rate = this.chimeStrikeRate(channel);
     const factor = this.weatherFactor(channel);
+    const unison = Math.max(0, Math.min(1, channel.unison ?? 0));
+    const cascadeChance = Math.max(0, Math.min(0.95, (unison * CHIME_CASCADE_CHANCE) + (WEATHER_CHIME_CASCADE * factor)));
+    const cascadeSec = CHIME_CASCADE_SEC[0] * ((CHIME_CASCADE_SEC[1] / CHIME_CASCADE_SEC[0]) ** unison);
+    const material = channel.chimeMaterial;
+    const click = { ...CHIME_CLICK, hz: material.clickHz };
     if (channel.nextStrikeFrame < blockStart) channel.nextStrikeFrame = blockStart + this.eventDelayFrames(rate);
-    if (channel.bounce.frame < blockStart) channel.bounce.frame = Infinity;
+    if (channel.cascade.frame < blockStart) channel.cascade.frame = Infinity;
     let position = 0;
     for (;;) {
-      const isBounce = channel.bounce.frame < channel.nextStrikeFrame;
-      const at = isBounce ? channel.bounce.frame : channel.nextStrikeFrame;
+      const isRebound = channel.cascade.frame < channel.nextStrikeFrame;
+      const at = isRebound ? channel.cascade.frame : channel.nextStrikeFrame;
       if (at >= blockEnd) break;
       const offset = at - blockStart;
       this.renderTubes(channel, left, right, position, offset);
       position = offset;
       if (tubes.length > 0) {
-        const index = isBounce ? channel.bounce.tube : Math.floor(this.random() * tubes.length);
-        const force = Math.max(0.05, this.between(CHIME_STRIKE_FORCE) * (1 + (WEATHER_CHIME_FORCE * factor)) * (isBounce ? 0.5 : 1));
+        const index = isRebound ? channel.cascade.tube : Math.floor(this.random() * tubes.length);
+        const force = isRebound
+          ? channel.cascade.force
+          : Math.max(0.05, this.between(CHIME_STRIKE_FORCE) * (1 + (WEATHER_CHIME_FORCE * factor)));
         this.strikeTube(channel, tubes[index], force);
-        // The clapper's tick, as bright as it is hard.
-        this.spawnBurst(channel.bursts, 16, offset, CHIME_CLICK, force * (channel.hardness ?? 0.5), tubes[index].pan);
-        if (!isBounce && tubes.length > 1 && this.random() < CHIME_BOUNCE_CHANCE) {
-          const neighbour = index === 0 ? 1 : index === tubes.length - 1 ? index - 1 : index + (this.random() < 0.5 ? -1 : 1);
-          channel.bounce = { frame: at + Math.max(1, Math.round(this.between(CHIME_BOUNCE_SEC) * sampleRate)), tube: neighbour };
-        } else if (isBounce) {
-          channel.bounce = { frame: Infinity, tube: 0 };
+        // The striker's tick, as bright as it is hard, as loud as the material makes it.
+        if (material.click > 0) this.spawnBurst(channel.bursts, 16, offset, click, force * (channel.hardness ?? 0.5) * material.click, tubes[index].pan);
+        const rebound = force * CHIME_CASCADE_DAMPING;
+        if (tubes.length > 1 && rebound >= CHIME_CASCADE_MIN_FORCE && this.random() < cascadeChance) {
+          const gap = Math.max(1, Math.round(cascadeSec * (0.6 + (0.8 * this.random())) * sampleRate));
+          channel.cascade = { frame: at + gap, tube: this.chimeRebound(index, tubes.length), force: rebound };
+        } else {
+          channel.cascade = { frame: Infinity, tube: 0, force: 0 };
         }
       }
-      if (!isBounce) channel.nextStrikeFrame += this.eventDelayFrames(rate);
+      if (!isRebound) channel.nextStrikeFrame += this.eventDelayFrames(rate);
     }
     this.renderTubes(channel, left, right, position, length);
     this.renderBursts(channel.bursts, left, right, length);
   }
-
 
   /**
    * One block. Each layer is rendered whole into scratch, from its own

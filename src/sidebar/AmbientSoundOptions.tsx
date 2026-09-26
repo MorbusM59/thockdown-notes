@@ -3,6 +3,7 @@ import { AccordionSection } from '../components/AccordionSection'
 import { CompactScrollbarSlider } from '../components/CompactScrollbarSlider'
 import {
   AMBIENT_CHANNEL_ROSTER,
+  AMBIENT_CHIME_MATERIALS,
   AMBIENT_CHIME_PITCH_MAX_HZ,
   AMBIENT_CHIME_PITCH_MIN_HZ,
   AMBIENT_CHIME_RING_MAX_SEC,
@@ -44,6 +45,7 @@ import {
   type AmbientSettings,
 } from '../shared/ambientSound'
 import { spaceDecaySec } from '../shared/ambientSpace'
+import { CHIME_SCALE_COUNT, CHIME_SCALES } from '../shared/ambientChimeScales'
 import { armHold, HOLD_CONFIRM_MS } from '../shared/holdTiming'
 import { useNonPassiveWheel } from '../shared/useNonPassiveWheel'
 
@@ -121,6 +123,7 @@ const SURFACE_NAMES: Record<(typeof AMBIENT_RAIN_SURFACE_ANCHORS)[number]['name'
   forest: 'Leaves', canvas: 'Canvas', street: 'Street', tin: 'Tin', glass: 'Glass',
 }
 const SURFACE_POINTS = AMBIENT_RAIN_SURFACE_ANCHORS.map((anchor) => ({ name: SURFACE_NAMES[anchor.name], at: anchor.at }))
+const MATERIAL_POINTS = AMBIENT_CHIME_MATERIALS.map((material) => ({ name: material.name[0].toUpperCase() + material.name.slice(1), at: material.at }))
 const COLOUR_POINTS = [{ name: 'Brown', at: 0 }, { name: 'Pink', at: 0.5 }, { name: 'White', at: 1 }]
 
 /** A part's level slider (ambientPartGain): off, as authored, or how far from it. */
@@ -309,14 +312,17 @@ const CONTROLS: { [K in AmbientChannelKind]: ControlGroup[] } = {
       label: 'Sound',
       controls: [
         VOLUME,
-        { key: 'pitchHz', track: 'pitch', tooltip: 'The lowest tube; the rest climb a pentatonic scale', min: AMBIENT_CHIME_PITCH_MIN_HZ, max: AMBIENT_CHIME_PITCH_MAX_HZ, log: true, format: formatPitch },
+        { key: 'pitchHz', track: 'pitch', tooltip: 'The lowest tube; the rest climb the scale', min: AMBIENT_CHIME_PITCH_MIN_HZ, max: AMBIENT_CHIME_PITCH_MAX_HZ, log: true, format: formatPitch },
         { key: 'tubes', track: 'tubes', tooltip: 'How many tubes', min: AMBIENT_CHIME_TUBES_MIN, max: AMBIENT_CHIME_TUBES_MAX, step: 1, format: (value) => `${Math.round(value)} tubes` },
-        { key: 'ringSec', track: 'ring', tooltip: 'How long a struck tube rings', min: AMBIENT_CHIME_RING_MIN_SEC, max: AMBIENT_CHIME_RING_MAX_SEC, log: true, format: formatSeconds },
-        unit('activity', 'activity', 'How often the clapper strikes, before the wind moves it', (value) => `${chimeStrikesPerSecond(value).toFixed(chimeStrikesPerSecond(value) < 1 ? 2 : 1)} / s`),
-        unit('hardness', 'hardness', 'A soft wooden clapper, warm and round, to a hard metal one, bright with a tick', (value) => formatAmount(value, 'Soft', 'Hard')),
+        { key: 'ringSec', track: 'ring', tooltip: 'How long a struck tube rings (for metal; wood knocks far shorter, glass a little shorter, the veil longer)', min: AMBIENT_CHIME_RING_MIN_SEC, max: AMBIENT_CHIME_RING_MAX_SEC, log: true, format: formatSeconds },
+        unit('activity', 'activity', 'How often the striker is set moving, before the wind has any say', (value) => `${chimeStrikesPerSecond(value).toFixed(chimeStrikesPerSecond(value) < 1 ? 2 : 1)} / s`),
+        unit('hardness', 'hardness', 'A soft striker, warm and round, to a hard one, bright with a tick', (value) => formatAmount(value, 'Soft', 'Hard')),
+        unit('unison', 'unison', 'How much the chimes sound together: single notes, or the striker rebounding across the ring into a cascade', (value) => formatAmount(value, 'Single', 'Cascade')),
+        unit('material', 'material', 'What the tubes are made of: wood (bamboo), metal, glass, and a veil of shimmering, swelling tones, and every blend between', (value) => formatScale(value, MATERIAL_POINTS)),
+        { key: 'scale', track: 'scale', tooltip: 'The scale the tubes are tuned to', min: 0, max: CHIME_SCALE_COUNT - 1, step: 1, format: (value) => CHIME_SCALES[Math.round(value)].name },
       ],
     },
-    { label: 'Place', controls: [DISTANCE, PAN, { ...WEATHER, tooltip: 'How much gusts strike them more often and harder' }] },
+    { label: 'Place', controls: [DISTANCE, PAN, { ...WEATHER, tooltip: 'How much gusts set the striker moving, harder and into more of the ring' }] },
   ],
 }
 

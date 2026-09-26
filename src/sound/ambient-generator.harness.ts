@@ -6,7 +6,7 @@ import { toWorkletChannel } from '../shared/ambientSoundDsp';
 import { buildNoiseLoops, noiseLoopGains, type NoiseLoops } from '../shared/ambientNoiseLoops';
 
 export const generatorSource = `${readFileSync(fileURLToPath(new URL('../../public/ambient-generator.js', import.meta.url)), 'utf8')}
-;globalThis.__generator = { RAIN_SURFACE_ANCHORS, surfaceProfile, faderGain, WET_BUBBLE_CHANCE, RAIN_DRIPS_MAX_PER_SEC, CHIME_MODE_RATIOS, FIRE_POP, partGain };`;
+;globalThis.__generator = { RAIN_SURFACE_ANCHORS, surfaceProfile, faderGain, WET_BUBBLE_CHANCE, RAIN_DRIPS_MAX_PER_SEC, CHIME_MATERIALS, chimeMaterial, FIRE_POP, partGain };`;
 
 const loopsByRate = new Map<number, { loops: NoiseLoops; gains: Record<string, number> }>();
 export function noiseAt(sampleRate: number) {
