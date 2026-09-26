@@ -549,7 +549,13 @@ const FIRE_EDGE_GLIDE_SHARE = [1.2, 0.04];
  * Each sizzle's impulse rate is the tone's times its own factor within
  * `frazzleSpread` octaves, so no two frazzle alike. The impulses are scaled
  * by 1/sqrt(their chance per frame), keeping the power of steady noise, so
- * frazzle changes the texture and not the loudness. `sizzleLevel` sets their level
+ * frazzle changes the texture and not the loudness. While a sizzle fades
+ * it also sinks down the tone track -- lower and more frazzled, the pocket
+ * drying out -- by `toneLoss` of the whole track (drawn per sizzle), reached
+ * at the end of its fall along the same raised cosine, never below the
+ * track's foot. Each sizzle's loudness is drawn as a chime's strike force
+ * is (see CHIME_STRIKE_FORCE): `level[0]` + span x u^`levelSkew`, mostly
+ * quiet with now and then a loud one. `sizzleLevel` sets their level
  * (partGain); a band's level is scaled by sqrt(FIRE_SIZZLE_REFERENCE_HZ /
  * centre), the inverse of the white-noise power a band of fixed Q holds, so
  * the tone moves the colour and not the loudness.
@@ -558,10 +564,10 @@ const FIRE_SIZZLE_HZ = [4000, 8000];
 const FIRE_SIZZLE_FRAZZLE_PER_SEC = [300, 48000];
 const FIRE_SIZZLE_REFERENCE_HZ = 5060;
 const FIRE_SIZZLE_LEVEL = [0.015, 0.08];
-const FIRE_SIZZLE = { riseSec: 0.005, holdSec: [1, 14], fallSec: [1, 6], level: [0.5, 1], spreadOctaves: 0.5, driftOctaves: 0.25, frazzleSpread: 1.5, q: 0.9, wobble: 0.12, wobbleSec: [0.4, 1.5] };
+const FIRE_SIZZLE = { riseSec: 0.005, holdSec: [1, 14], fallSec: [1, 6], level: [0.05, 1], levelSkew: 2.2, toneLoss: [0.2, 0.4], spreadOctaves: 0.5, driftOctaves: 0.25, frazzleSpread: 1.5, q: 0.9, wobble: 0.12, wobbleSec: [0.4, 1.5] };
 const FIRE_MAX_SIZZLES = 4;
 /** A sizzle's level, set by ear against the roar at the defaults. */
-const FIRE_SIZZLE_GAIN = 1.9;
+const FIRE_SIZZLE_GAIN = 2.9;
 const FIRE_CRACKLES_PER_SEC = [0.3, 30];
 const FIRE_CRACKLE_CLUSTER_CHANCE = 0.45;
 const FIRE_CRACKLE_CLUSTER_SEC = [0.005, 0.04];
@@ -2512,8 +2518,15 @@ class AmbientGenerator extends AudioWorkletProcessor {
     return FIRE_CRACKLES_PER_SEC[0] * ((FIRE_CRACKLES_PER_SEC[1] / FIRE_CRACKLES_PER_SEC[0]) ** crackle);
   }
 
-  fireSizzleHz(channel) {
+  /** A sizzle's tone now: the layer's, less what it has lost so far in its fall. */
+  sizzleTone(channel, sizzle) {
     const tone = Math.max(0, Math.min(1, channel.sizzleTone ?? 0.5));
+    const fallAge = sizzle.age - sizzle.rise - sizzle.hold;
+    const fallen = fallAge <= 0 ? 0 : 0.5 - (0.5 * Math.cos(Math.PI * Math.min(1, fallAge / sizzle.fall)));
+    return Math.max(0, tone - (sizzle.toneLoss * fallen));
+  }
+
+  fireSizzleHz(tone) {
     return FIRE_SIZZLE_HZ[0] * ((FIRE_SIZZLE_HZ[1] / FIRE_SIZZLE_HZ[0]) ** tone);
   }
 
@@ -2534,7 +2547,8 @@ class AmbientGenerator extends AudioWorkletProcessor {
       pitch,
       frazzle,
       drift: { value: 0, target: 0, framesLeft: 0 },
-      level: this.between(FIRE_SIZZLE.level),
+      level: FIRE_SIZZLE.level[0] + ((FIRE_SIZZLE.level[1] - FIRE_SIZZLE.level[0]) * (this.random() ** FIRE_SIZZLE.levelSkew)),
+      toneLoss: this.between(FIRE_SIZZLE.toneLoss),
       read: Math.floor(this.random() * 0x7fffffff),
       filter: null,
       gainLeft: gains.left,
@@ -2546,10 +2560,6 @@ class AmbientGenerator extends AudioWorkletProcessor {
     this.tuneSizzle(channel, channel.sizzles[channel.sizzles.length - 1]);
   }
 
-  /** How frazzled the layer's tone makes a sizzle: 0 at the highest tone (smooth), 1 at the lowest. */
-  fireSizzleFrazzle(channel) {
-    return 1 - Math.max(0, Math.min(1, channel.sizzleTone ?? 0.5));
-  }
 
   /**
    * A sizzle's band at the layer's tone, its own pitch and its drift, and its
@@ -2557,8 +2567,9 @@ class AmbientGenerator extends AudioWorkletProcessor {
    */
   tuneSizzle(channel, sizzle) {
     const drift = 2 ** (sizzle.drift?.value ?? 0);
-    const centre = Math.min(sampleRate * 0.4, this.fireSizzleHz(channel) * sizzle.pitch * drift);
-    const smooth = 1 - this.fireSizzleFrazzle(channel);
+    // The tone is the smoothness too: the lowest tone the most frazzled.
+    const smooth = this.sizzleTone(channel, sizzle);
+    const centre = Math.min(sampleRate * 0.4, this.fireSizzleHz(smooth) * sizzle.pitch * drift);
     const rate = FIRE_SIZZLE_FRAZZLE_PER_SEC[0] * ((FIRE_SIZZLE_FRAZZLE_PER_SEC[1] / FIRE_SIZZLE_FRAZZLE_PER_SEC[0]) ** smooth);
     sizzle.impulseChance = Math.min(1, (rate * sizzle.frazzle) / sampleRate);
     sizzle.impulseSize = 1 / Math.sqrt(sizzle.impulseChance);
