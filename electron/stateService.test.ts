@@ -8,7 +8,7 @@ import { THOCKQUEST } from '../src/adventure/content'
 import { choose, enterEntryScreen, type DirectorDeps } from '../src/adventure/core/director'
 import { emptySave } from '../src/adventure/model/gameState'
 import { ROOT_STAGE_ID, STAGES } from '../src/adventure/stages'
-import { AMBIENT_RAIN_FIRST_INDEX, AMBIENT_THUNDER_FIRST_INDEX, DEFAULT_AMBIENT_SETTINGS } from '../src/shared/ambientSound'
+import { AMBIENT_FACTORY_PRESETS, cloneSettings } from '../src/shared/ambientSound'
 
 // Regression coverage for the exact bug class this file is prone to:
 // sanitizeMenu (private, routed through by both saveAppState and
@@ -49,54 +49,31 @@ describe('StateService app-state field round-trip', () => {
   })
 
   it('round-trips ambient layer settings and named custom presets through real sanitization', async () => {
-    const channels = DEFAULT_AMBIENT_SETTINGS.map((channel, index) => {
-      const common = {
-        enabled: index === 0 || index === 2 || index === AMBIENT_RAIN_FIRST_INDEX,
-        solo: index === 1,
-        volume: [0.41, 0.12, 0.88][index] ?? channel.volume,
+    // A factory soundscape with at least one field of every kind moved, the
+    // space and the weather moved, and a channel soloed.
+    const settings = cloneSettings(AMBIENT_FACTORY_PRESETS[5].settings)
+    settings.channels = settings.channels.map((channel) => {
+      switch (channel.kind) {
+        case 'noise': return { ...channel, colour: 0.83, sweep: -0.4, solo: channel.id === 'noise-2' }
+        case 'rain': return { ...channel, intensity: 0.31, surface: 0.27 }
+        case 'thunder': return { ...channel, share: 0.25, contrast: -0.3 }
+        case 'water': return { ...channel, enabled: true, flow: 0.77, turbulence: 0.12 }
+        case 'fire': return { ...channel, pops: 0.66 }
+        case 'chimes': return { ...channel, tubes: 7, pitchHz: 333 }
+        default: return channel
       }
-      if (channel.kind === 'thunder') {
-        return {
-          ...channel,
-          ...common,
-          enabled: index === AMBIENT_THUNDER_FIRST_INDEX,
-          share: index === AMBIENT_THUNDER_FIRST_INDEX ? 0.25 : channel.share,
-          randomness: index === AMBIENT_THUNDER_FIRST_INDEX ? 0.8 : channel.randomness,
-          distance: index === AMBIENT_THUNDER_FIRST_INDEX ? 0.2 : channel.distance,
-          spread: index === AMBIENT_THUNDER_FIRST_INDEX ? 0.9 : channel.spread,
-          lengthSec: index === AMBIENT_THUNDER_FIRST_INDEX ? 21 : channel.lengthSec,
-        }
-      }
-      return channel.kind === 'noise'
-        ? {
-          ...channel,
-          ...common,
-          modulationAmplitude: [0.73, 0.26, 0.94][index] ?? channel.modulationAmplitude,
-          width: [0.2, 1, 0.55][index] ?? channel.width,
-          distance: [0.6, 0, 0.3][index] ?? channel.distance,
-        }
-        : {
-          ...channel,
-          ...common,
-          surface: index === AMBIENT_RAIN_FIRST_INDEX ? 0.3 : channel.surface,
-          mix: index === AMBIENT_RAIN_FIRST_INDEX ? 0.42 : channel.mix,
-          drips: index === AMBIENT_RAIN_FIRST_INDEX ? 0.18 : channel.drips,
-          dropsPerSecond: index === AMBIENT_RAIN_FIRST_INDEX ? 38 : channel.dropsPerSecond,
-          distance: index === AMBIENT_RAIN_FIRST_INDEX ? 0.77 : channel.distance,
-          pan: index === AMBIENT_RAIN_FIRST_INDEX ? -0.34 : channel.pan,
-          wetness: index === AMBIENT_RAIN_FIRST_INDEX ? 0.83 : channel.wetness,
-          resonance: index === AMBIENT_RAIN_FIRST_INDEX ? 0.61 : channel.resonance,
-        }
     })
+    settings.space = { size: 0.12, damping: 0.93, echoes: 0.44, amount: 0.21 }
+    settings.weather = { gustiness: 0.71, paceSec: 33 }
     const ambientSound = {
       enabled: true,
       masterVolume: 0.37,
-      settings: channels,
+      settings,
       activePresetId: 'night-rain',
       customPresets: [{
         id: 'night-rain',
         name: 'Night rain',
-        settings: channels.map((channel) => ({ ...channel, solo: false })),
+        settings: { ...settings, channels: settings.channels.map((channel) => ({ ...channel, solo: false })) },
       }],
     }
     await new StateService(dataRoot).saveAppState({

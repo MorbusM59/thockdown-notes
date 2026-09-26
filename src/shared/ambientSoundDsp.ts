@@ -1,66 +1,42 @@
+/**
+ * What the worklet (public/ambient-generator.js) is told about each layer:
+ * the stored settings plus everything cheaper to derive once on the main
+ * thread than per block on the audio thread -- gains, the distance rule, the
+ * noise cycle and filter-gain tables, the chimes' tuning.
+ */
 import {
-  AMBIENT_RAIN_FIRST_INDEX,
+  AMBIENT_CHIME_TUBES_MAX,
+  AMBIENT_NOISE_SWEEP_OCTAVES,
+  AMBIENT_RAIN_DROPS_MAX_PER_SEC,
+  AMBIENT_RAIN_DROPS_MIN_PER_SEC,
   AMBIENT_THUNDER_JITTER,
   AMBIENT_THUNDER_LENGTH_MAX_SEC,
   AMBIENT_THUNDER_LENGTH_MIN_SEC,
-  noiseTypeForSlot,
+  AMBIENT_CHIME_RATE_MAX_PER_SEC,
+  AMBIENT_CHIME_RATE_MIN_PER_SEC,
+  ambientFaderGain,
+  type AmbientChannelKind,
   type AmbientChannelSettings,
-  type AmbientNoiseType,
   type AmbientSettings,
 } from './ambientSound';
 import { buildNoiseCycle } from './ambientNoiseCycle';
 
-/** One channel as the worklet (public/ambient-generator.js) receives it. */
-export type AmbientWorkletChannel = AmbientChannelSettings & {
-  /** Which rain output (0-based, after the noise mix) it goes to; -1 for noise. */
-  outputIndex: number;
-  /** Precomputed modulation cycle (buildNoiseCycle); noise layers only. */
-  cycle?: Float32Array;
-  /** The noise type, from the slot (noiseTypeForSlot); noise layers only. */
-  type?: AmbientNoiseType;
-  /** The layer's distance resolved (resolveAmbientSpace); noise layers only. */
-  space?: AmbientSpace;
-  /** The layer's tone slider resolved (resolveNoiseTone); noise layers only. */
-  tone?: NoiseTone;
-  /**
-   * resolveAmbientSpace at THUNDER_SPACE_STEPS + 1 even distances, for a
-   * thunder layer to resolve each peal's own (randomised) distance.
-   */
-  spaceTable?: readonly AmbientSpace[];
-  /** The length slider's range, which randomness is a share of; thunder only. */
-  lengthRangeSec?: readonly [number, number];
-  /** AMBIENT_THUNDER_JITTER, the reach of randomness at 1; thunder only. */
-  jitter?: number;
-};
-
 /**
- * The `configure` message's channel list. This is the one place a rain
- * layer's worklet output is decided -- its position among the rain slots --
- * so the worklet, which cannot import this module, never has to know where
- * the rain slots start.
+ * Each kind's level at a fader of 1, relative to the others: set so that
+ * layers of different kinds at the same fader sit at a comparable loudness
+ * (measured as the RMS of a default layer rendered on its own at fader 1:
+ * about 0.2 for the steady kinds, a little under for the ones made of
+ * transients, whose peaks carry them). The engine's bus limiter catches the
+ * sum of several near full scale.
  */
-export function toWorkletChannels(settings: AmbientSettings): AmbientWorkletChannel[] {
-  return settings.map((channel, index): AmbientWorkletChannel => {
-    if (channel.kind === 'noise') {
-      return {
-        ...channel,
-        outputIndex: -1,
-        cycle: buildNoiseCycle(channel.ramp, channel.shape),
-        type: noiseTypeForSlot(index),
-        space: resolveAmbientSpace(channel.distance),
-        tone: resolveNoiseTone(channel.filter, noiseTypeForSlot(index)),
-      };
-    }
-    if (channel.kind === 'thunder') {
-      // Thunder mixes into the noise layers' stereo bus and reverb send, so
-      // it has no output of its own; its distance resolves the same way.
-      // A peal's distance can be moved by randomness, so the worklet gets the
-      // shared distance rule as a table to look each peal's up in.
-      return { ...channel, outputIndex: -1, spaceTable: THUNDER_SPACE_TABLE, lengthRangeSec: THUNDER_LENGTH_RANGE_SEC, jitter: AMBIENT_THUNDER_JITTER };
-    }
-    return { ...channel, outputIndex: index - AMBIENT_RAIN_FIRST_INDEX };
-  });
-}
+export const AMBIENT_KIND_GAIN: Record<AmbientChannelKind, number> = {
+  noise: 0.8,
+  rain: 3,
+  thunder: 4.4,
+  water: 2.7,
+  fire: 1.3,
+  chimes: 1.45,
+};
 
 export interface AmbientSpace {
   cutoffHz: number;
@@ -69,93 +45,195 @@ export interface AmbientSpace {
 }
 
 /**
- * How far away a layer sounds, for rain and noise layers alike. Distance
- * darkens it (a low-pass swept from 18 kHz down to 2.2 kHz), lowers the
- * direct sound and raises the share sent to the reverb, which is what makes
- * the far layers diffuse rather than merely quiet.
+ * How far away a layer sounds, for every kind. Distance darkens it (a
+ * low-pass swept from 18 kHz down to 2.2 kHz), lowers the direct sound and
+ * raises the share sent to the space's reverb, which is what makes far layers
+ * diffuse rather than merely quiet.
  */
 export function resolveAmbientSpace(distance: number): AmbientSpace {
-  const boundedDistance = Number.isFinite(distance) ? Math.max(0, Math.min(1, distance)) : 0;
+  const bounded = Number.isFinite(distance) ? Math.max(0, Math.min(1, distance)) : 0;
   return {
-    cutoffHz: 18000 * ((2200 / 18000) ** boundedDistance),
-    directGain: 1 - (0.78 * boundedDistance),
-    reverbSend: 0.025 + (0.34 * boundedDistance),
+    cutoffHz: 18000 * ((2200 / 18000) ** bounded),
+    directGain: 1 - (0.78 * bounded),
+    reverbSend: 0.06 + (0.6 * bounded),
   };
 }
 
+// ---------------------------------------------------------------------------
+// Noise colour and filter.
+
 /**
- * A noise layer's tone slider (`filter`, 0-1), resolved into the filter the
- * worklet runs: a two-pole state-variable filter, low-pass left of centre and
- * high-pass right of it, bypassed at exactly 0.5.
- *
- * Only the audible range is swept, logarithmically, so each step moves the
- * cutoff by the same musical interval: the low-pass from TONE_LOWPASS_FROM_HZ
- * (just below where noise starts to lose air) down to TONE_LOWPASS_TO_HZ,
- * the high-pass from TONE_HIGHPASS_FROM_HZ up to TONE_HIGHPASS_TO_HZ. The old
- * one-pole sweep spent most of its travel where nothing audible happened.
- *
- * Resonance rises with the distance from centre, quadratically, from Q 0.707
- * (flat, no peak) to TONE_RESONANCE_MAX_Q at the ends: the first half of each
- * side only darkens or thins, and the far ends whistle (low-pass) or turn to
- * an airy hiss (high-pass). One slider, and no way to reach a harsh peak on
- * a gentle cutoff.
- *
- * `gain` holds the layer's loudness through the sweep: the power the filter
- * takes out of this noise type's own spectrum, put back (capped at
- * TONE_MAX_GAIN_DB), so the slider changes the colour and not the volume.
+ * A noise layer's colour (0 brown, 0.5 pink, 1 white) as the three loops'
+ * gains: an equal-power crossfade between the two neighbours, so the noises
+ * (unrelated to each other) sum to the same power at every colour.
  */
-export interface NoiseTone {
-  mode: 'none' | 'lowpass' | 'highpass';
-  cutoffHz: number;
-  q: number;
-  gain: number;
+export function noiseColourWeights(colour: number): [brown: number, pink: number, white: number] {
+  const c = Number.isFinite(colour) ? Math.max(0, Math.min(1, colour)) : 0.5;
+  const t = c <= 0.5 ? c / 0.5 : (c - 0.5) / 0.5;
+  const a = Math.cos(t * Math.PI / 2);
+  const b = Math.sin(t * Math.PI / 2);
+  return c <= 0.5 ? [a, b, 0] : [0, a, b];
 }
 
-export const TONE_LOWPASS_FROM_HZ = 16000;
-export const TONE_LOWPASS_TO_HZ = 150;
-export const TONE_HIGHPASS_FROM_HZ = 30;
-export const TONE_HIGHPASS_TO_HZ = 3000;
-export const TONE_RESONANCE_MAX_Q = 3;
-export const TONE_MAX_GAIN_DB = 18;
-
+export const NOISE_FOCUS_MAX_Q = 12;
 const FLAT_Q = Math.SQRT1_2;
 
-export function resolveNoiseTone(filter: number, type: AmbientNoiseType): NoiseTone {
-  const amount = Number.isFinite(filter) ? Math.max(0, Math.min(1, filter)) : 0.5;
-  if (amount === 0.5) return { mode: 'none', cutoffHz: 0, q: FLAT_Q, gain: 1 };
-  const reach = Math.abs(amount - 0.5) * 2;
-  const mode = amount < 0.5 ? 'lowpass' : 'highpass';
-  const cutoffHz = mode === 'lowpass'
-    ? TONE_LOWPASS_FROM_HZ * ((TONE_LOWPASS_TO_HZ / TONE_LOWPASS_FROM_HZ) ** reach)
-    : TONE_HIGHPASS_FROM_HZ * ((TONE_HIGHPASS_TO_HZ / TONE_HIGHPASS_FROM_HZ) ** reach);
-  const q = FLAT_Q + ((TONE_RESONANCE_MAX_Q - FLAT_Q) * reach * reach);
-  const kept = filteredPowerShare(mode, cutoffHz, q, type);
-  const maxGain = 10 ** (TONE_MAX_GAIN_DB / 20);
-  return { mode, cutoffHz, q, gain: Math.min(maxGain, 1 / Math.sqrt(Math.max(1e-12, kept))) };
+/** The filter's resonance at a focus: flat at 0, rising geometrically to NOISE_FOCUS_MAX_Q. */
+export function noiseFocusQ(focus: number): number {
+  const f = Number.isFinite(focus) ? Math.max(0, Math.min(1, focus)) : 0;
+  return FLAT_Q * ((NOISE_FOCUS_MAX_Q / FLAT_Q) ** f);
 }
 
 /**
- * The share of a noise type's power a two-pole filter keeps, from its
- * analogue response |H|^2 = 1 / ((1 - x^2)^2 + (x/Q)^2), x = f / cutoff
- * (times x^4 for the high-pass), weighted by the type's spectrum -- white
- * flat, pink 1/f, brown 1/f^2 -- and summed on a log grid over 20 Hz-20 kHz.
+ * The cutoffs the filter-gain table is sampled at, log-spaced: the worklet
+ * reads it by the log of the cutoff (the sweep moves the cutoff every few
+ * milliseconds, too often to integrate a spectrum each time).
  */
-function filteredPowerShare(mode: 'lowpass' | 'highpass', cutoffHz: number, q: number, type: AmbientNoiseType): number {
-  const steps = 240;
-  let total = 0;
-  let kept = 0;
-  for (let step = 0; step < steps; step += 1) {
-    const frequency = 20 * (1000 ** ((step + 0.5) / steps));
-    // Power per log-frequency step is spectrum x f: white f, pink 1, brown 1/f.
-    const weight = type === 'white' ? frequency : type === 'pink' ? 1 : 1 / frequency;
-    const x = frequency / cutoffHz;
-    const denominator = ((1 - (x * x)) ** 2) + ((x / q) ** 2);
-    const response = mode === 'lowpass' ? 1 / denominator : (x ** 4) / denominator;
-    total += weight;
-    kept += weight * response;
-  }
-  return kept / total;
+export const NOISE_TONE_TABLE_MIN_HZ = 40;
+export const NOISE_TONE_TABLE_MAX_HZ = 20000;
+export const NOISE_TONE_TABLE_POINTS = 64;
+export const NOISE_TONE_MAX_GAIN_DB = 24;
+
+/**
+ * The filter's response power at `x` = f / cutoff: a blend of the state-
+ * variable filter's low-pass and its unity-peak band-pass, (1 - focus) of
+ * one and focus of the other, both at the focus's Q. At focus 0 a
+ * Butterworth low-pass; at 1 a narrow band.
+ */
+export function noiseFilterPower(x: number, focus: number): number {
+  const k = 1 / noiseFocusQ(focus);
+  const numerator = ((1 - focus) ** 2) + ((focus * k * x) ** 2);
+  const denominator = ((1 - (x * x)) ** 2) + ((k * x) ** 2);
+  return numerator / denominator;
 }
+
+/**
+ * The gain that holds a noise layer's loudness wherever its filter sits: the
+ * power the filter takes out of this colour's spectrum, put back (capped at
+ * NOISE_TONE_MAX_GAIN_DB), at each of the table's cutoffs. The colour's
+ * spectrum per log-frequency step is brown 1/f, pink flat, white f, each
+ * normalised (the loops are, see noiseLoopGains), blended by the colour's
+ * crossfade weights squared.
+ */
+export function buildNoiseToneTable(colour: number, focus: number): Float32Array {
+  const [brown, pink, white] = noiseColourWeights(colour).map((weight) => weight * weight);
+  const steps = 200;
+  const frequencies: number[] = [];
+  const shapes = { brown: [] as number[], pink: [] as number[], white: [] as number[] };
+  for (let step = 0; step < steps; step += 1) {
+    const f = 20 * (1000 ** ((step + 0.5) / steps));
+    frequencies.push(f);
+    shapes.brown.push(1 / f);
+    shapes.pink.push(1);
+    shapes.white.push(f);
+  }
+  const normalise = (values: number[]) => {
+    const total = values.reduce((sum, value) => sum + value, 0);
+    return values.map((value) => value / total);
+  };
+  const b = normalise(shapes.brown);
+  const p = normalise(shapes.pink);
+  const w = normalise(shapes.white);
+  const weight = frequencies.map((_, index) => (brown * b[index]) + (pink * p[index]) + (white * w[index]));
+  const maxGain = 10 ** (NOISE_TONE_MAX_GAIN_DB / 20);
+  const table = new Float32Array(NOISE_TONE_TABLE_POINTS);
+  for (let point = 0; point < NOISE_TONE_TABLE_POINTS; point += 1) {
+    const cutoff = NOISE_TONE_TABLE_MIN_HZ * ((NOISE_TONE_TABLE_MAX_HZ / NOISE_TONE_TABLE_MIN_HZ) ** (point / (NOISE_TONE_TABLE_POINTS - 1)));
+    let kept = 0;
+    let total = 0;
+    for (let index = 0; index < frequencies.length; index += 1) {
+      kept += weight[index] * noiseFilterPower(frequencies[index] / cutoff, focus);
+      total += weight[index];
+    }
+    table[point] = Math.min(maxGain, 1 / Math.sqrt(Math.max(1e-12, kept / total)));
+  }
+  return table;
+}
+
+// ---------------------------------------------------------------------------
+// Chimes.
+
+/** Semitones of a major pentatonic scale, enough for the most tubes. */
+export const CHIME_SCALE_SEMITONES = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21].slice(0, AMBIENT_CHIME_TUBES_MAX);
+
+/** The fundamental of each tube, lowest first. */
+export function chimeTubeFrequencies(pitchHz: number, tubes: number): number[] {
+  return CHIME_SCALE_SEMITONES.slice(0, tubes).map((semitones) => pitchHz * (2 ** (semitones / 12)));
+}
+
+// ---------------------------------------------------------------------------
+// The configure message.
+
+/** One channel as the worklet receives it. */
+export type AmbientWorkletChannel = AmbientChannelSettings & {
+  /** The fader and the kind's level, as one gain. */
+  gain: number;
+  /** The distance resolved; every kind but thunder, which resolves each peal's own. */
+  space?: AmbientSpace;
+  cycle?: Float32Array;
+  colourWeights?: [number, number, number];
+  q?: number;
+  toneTable?: Float32Array;
+  toneTableRangeHz?: readonly [number, number];
+  sweepOctaves?: number;
+  dropsRange?: readonly [number, number];
+  spaceTable?: readonly AmbientSpace[];
+  lengthRangeSec?: readonly [number, number];
+  jitter?: number;
+  /** The kind's level alone, for thunder, which applies each peal's own fader. */
+  kindGain?: number;
+  tubeHz?: number[];
+  strikeRange?: readonly [number, number];
+};
+
+export interface AmbientWorkletConfiguration {
+  channels: AmbientWorkletChannel[];
+  weather: AmbientSettings['weather'];
+}
+
+/** The `configure` message's payload. */
+export function toWorkletConfiguration(settings: AmbientSettings): AmbientWorkletConfiguration {
+  return {
+    weather: { ...settings.weather },
+    channels: settings.channels.map((channel) => toWorkletChannel(channel)),
+  };
+}
+
+export function toWorkletChannel(channel: AmbientChannelSettings): AmbientWorkletChannel {
+  const gain = ambientFaderGain(channel.volume) * AMBIENT_KIND_GAIN[channel.kind];
+  switch (channel.kind) {
+    case 'noise':
+      return {
+        ...channel,
+        gain,
+        space: resolveAmbientSpace(channel.distance),
+        cycle: buildNoiseCycle(channel.curve, channel.skew),
+        colourWeights: noiseColourWeights(channel.colour),
+        q: noiseFocusQ(channel.focus),
+        toneTable: buildNoiseToneTable(channel.colour, channel.focus),
+        toneTableRangeHz: TONE_TABLE_RANGE_HZ,
+        sweepOctaves: channel.sweep * AMBIENT_NOISE_SWEEP_OCTAVES,
+      };
+    case 'rain':
+      return { ...channel, gain, space: resolveAmbientSpace(channel.distance), dropsRange: RAIN_DROPS_RANGE };
+    case 'thunder':
+      return { ...channel, gain, kindGain: AMBIENT_KIND_GAIN.thunder, spaceTable: THUNDER_SPACE_TABLE, lengthRangeSec: THUNDER_LENGTH_RANGE_SEC, jitter: AMBIENT_THUNDER_JITTER };
+    case 'chimes':
+      return {
+        ...channel,
+        gain,
+        space: resolveAmbientSpace(channel.distance),
+        tubeHz: chimeTubeFrequencies(channel.pitchHz, channel.tubes),
+        strikeRange: CHIME_STRIKE_RANGE,
+      };
+    default:
+      return { ...channel, gain, space: resolveAmbientSpace(channel.distance) };
+  }
+}
+
+const TONE_TABLE_RANGE_HZ = [NOISE_TONE_TABLE_MIN_HZ, NOISE_TONE_TABLE_MAX_HZ] as const;
+const RAIN_DROPS_RANGE = [AMBIENT_RAIN_DROPS_MIN_PER_SEC, AMBIENT_RAIN_DROPS_MAX_PER_SEC] as const;
+const CHIME_STRIKE_RANGE = [AMBIENT_CHIME_RATE_MIN_PER_SEC, AMBIENT_CHIME_RATE_MAX_PER_SEC] as const;
 
 /** Steps in a thunder layer's distance table: finer than the slider moves. */
 const THUNDER_SPACE_STEPS = 100;

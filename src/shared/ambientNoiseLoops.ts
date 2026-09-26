@@ -157,3 +157,30 @@ export function buildNoiseLoops(sampleRate: number, seed = 1): NoiseLoops {
     [type, buildNoiseLoop(type, sampleRate, (seed + Math.imul(index + 1, 0x9e3779b9)) >>> 0)]
   ))) as NoiseLoops;
 }
+
+/** The RMS every noise layer's loop is brought to before its colour is mixed (noiseLoopGains). */
+export const NOISE_LOOP_REFERENCE_RMS = 0.25;
+
+/**
+ * The gain that brings each loop's AUDIBLE power -- above 20 Hz, by a
+ * one-pole high-pass -- to NOISE_LOOP_REFERENCE_RMS. Brown noise keeps much
+ * of its power below hearing, so equalising the raw RMS would leave it
+ * quieter than the others; equalised above 20 Hz, a noise layer's colour can
+ * move between the three without its loudness jumping. Thunder reads the raw
+ * brown loop and does not use these.
+ */
+export function noiseLoopGains(loops: NoiseLoops, sampleRate: number): Record<AmbientNoiseType, number> {
+  const pole = Math.exp((-2 * Math.PI * 20) / sampleRate);
+  return Object.fromEntries(AMBIENT_NOISE_TYPES.map((type) => {
+    const loop = loops[type];
+    let low = 0;
+    let power = 0;
+    for (let index = 0; index < loop.length; index += 1) {
+      low = (pole * low) + ((1 - pole) * loop[index]);
+      const high = loop[index] - low;
+      power += high * high;
+    }
+    const rms = Math.sqrt(power / Math.max(1, loop.length));
+    return [type, rms > 0 ? NOISE_LOOP_REFERENCE_RMS / rms : 0];
+  })) as Record<AmbientNoiseType, number>;
+}

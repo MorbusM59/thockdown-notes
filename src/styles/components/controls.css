@@ -115,6 +115,25 @@
   filter: var(--filter-highlight);
 }
 
+/* A group is a heading and its sliders on the layer's own grid: the group
+   element contributes no box, so its sliders flow three to a row like any
+   others, and the heading takes a row of its own. */
+.ambient-control-group {
+  display: contents;
+}
+
+.ambient-control-group-label {
+  grid-column: 1 / -1;
+  font-size: 0.75em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.ambient-scene-selector {
+  margin-top: calc(var(--spacing-regular) * 0.5);
+}
+
 .ambient-layer-controls .utility-setting-scrollbar-shell {
   grid-column: span 2;
   min-width: 0;

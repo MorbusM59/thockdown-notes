@@ -1,7 +1,7 @@
 /**
  * A synthetic reverb impulse response: stereo white noise under a quadratic
- * decay, whose length `roomSize` (0-1) maps to 0.1-3 s. Shared by the music
- * player's reverb and the ambient rain layers' distance reverb.
+ * decay, whose length `roomSize` (0-1) maps to 0.1-3 s: the music player's
+ * room reverb. Ambient sound builds its own space (src/shared/ambientSpace.ts).
  */
 export function buildSyntheticRoomImpulseResponse(ctx: AudioContext, roomSize: number): AudioBuffer {
   const sampleRate = ctx.sampleRate;

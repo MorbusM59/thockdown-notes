@@ -1,102 +1,18 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
 import {
   AMBIENT_RAIN_DRIPS_MAX_PER_SEC,
-  AMBIENT_RAIN_FIRST_INDEX,
-  AMBIENT_THUNDER_FIRST_INDEX,
   AMBIENT_RAIN_SURFACE_ANCHORS,
-  AMBIENT_WET_BUBBLE_CHANCE,
-  createAmbientChannel,
-  createAmbientRainChannel,
-  createAmbientThunderChannel,
+  ambientFaderGain,
+  rainDropsPerSecond,
+  type AmbientChannelSettings,
 } from '../shared/ambientSound';
-import { resolveAmbientSpace, resolveNoiseTone, toWorkletChannels } from '../shared/ambientSoundDsp';
-import { buildNoiseLoops, createNoiseSource, type NoiseLoops } from '../shared/ambientNoiseLoops';
-import { buildNoiseCycle } from '../shared/ambientNoiseCycle';
+import { chimeTubeFrequencies } from '../shared/ambientSoundDsp';
+import { buildNoiseLoops, createNoiseSource } from '../shared/ambientNoiseLoops';
+import { createProcessor, layer, noiseAt, peak, rms, type Rendered } from './ambient-generator.harness';
 
-// The worklet's module-scope constants are not reachable from outside a vm
-// script, so the test appends one line exposing the ones it checks.
-const generatorSource = `${readFileSync(fileURLToPath(new URL('../../public/ambient-generator.js', import.meta.url)), 'utf8')}
-;globalThis.__generatorConstants = { RAIN_SURFACE_ANCHORS, RAIN_DRIPS_MAX_PER_SEC, surfaceProfile, AUTHORED_LOW_LEVEL, AUTHORED_HIGH_LEVEL, WET_BUBBLE_CHANCE };`;
-
-type TestProcessor = {
-  channels: Array<{ id: string; eventAge: number; activeVoices: unknown[]; profile?: unknown }>;
-  soloChannelId: string | null;
-  makeSurfaceVoice: (profile: unknown, isDrip: boolean, character?: { wetness: number; resonance: number }) => GlassVoice;
-  addVoice: (channel: unknown, isDrip: boolean, offset: number, at: number) => void;
-  renderVoice: (voice: GlassVoice, out: Float64Array, length: number) => boolean;
-  startCycle: (channel: { panTo: number; periodFactor: number; riseFactor: number }) => void;
-  makeRainVoice: () => {
-    bassModes: Array<{ frequency: number }>;
-    bodyModes: Array<{ frequency: number }>;
-    trebleModes: Array<{ frequency: number }>;
-  };
-  port: { onmessage: ((event: { data: unknown }) => void) | null };
-  eventDelayFrames: (ratePerSecond: number) => number;
-  noiseLoop: (type: string) => Float32Array;
-  process: (inputs: unknown[], outputs: Float32Array[][]) => boolean;
-  startPeal: (channel: unknown, settings: unknown) => void;
-}
-
-/**
- * A full slot row goes through the same `toWorkletChannels` the engine uses,
- * so the tests exercise the real output routing; a short noise-only list
- * (the noise tests' fixture) gets the noise routing directly.
- */
-function toConfigure(channels: TestChannel[]): unknown[] {
-  if (channels.length > AMBIENT_RAIN_FIRST_INDEX) {
-    return toWorkletChannels(channels as Parameters<typeof toWorkletChannels>[0]);
-  }
-  return channels.map((channel) => ({ ...channel, outputIndex: -1 }));
-}
-
-type TestChannel = (
-  | ReturnType<typeof createAmbientChannel>
-  | ReturnType<typeof createAmbientRainChannel>
-  | ReturnType<typeof createAmbientThunderChannel>
-) & { cycle?: Float32Array; type?: string; space?: ReturnType<typeof resolveAmbientSpace>; tone?: ReturnType<typeof resolveNoiseTone> }
-
-// A noise channel as the worklet receives it. `type` is what the worklet
-// reads; in a full slot row toWorkletChannels replaces it with the slot's.
-type NoiseOverrides = Partial<ReturnType<typeof createAmbientChannel>> & { type?: 'white' | 'pink' | 'brown' };
-
-function makeChannel(id: string, overrides: NoiseOverrides = {}): TestChannel {
-  const settings = {
-    ...createAmbientChannel(id),
-    volume: 1,
-    type: 'white' as const,
-    ...overrides,
-  }
-  // Resolved as toWorkletChannels resolves them for a slot row.
-  return {
-    ...settings,
-    cycle: buildNoiseCycle(settings.ramp, settings.shape),
-    space: resolveAmbientSpace(settings.distance),
-    tone: resolveNoiseTone(settings.filter, settings.type),
-  }
-}
-
-function makeRainChannel(id: string, overrides: Partial<ReturnType<typeof createAmbientRainChannel>> = {}): TestChannel {
-  return { ...createAmbientRainChannel(id), volume: 1, ...overrides };
-}
-
-function makeRainSlots(rain: TestChannel[]): TestChannel[] {
-  return [
-    ...Array.from({ length: AMBIENT_RAIN_FIRST_INDEX }, (_, index) => makeChannel(`noise-${index}`, { enabled: false })),
-    ...rain,
-  ];
-}
-
-/** A full slot row with every noise and rain layer off and these thunder layers. */
-function makeThunderSlots(thunder: Array<Partial<ReturnType<typeof createAmbientThunderChannel>>>): TestChannel[] {
-  return [
-    ...Array.from({ length: AMBIENT_RAIN_FIRST_INDEX }, (_, index) => makeChannel(`noise-${index}`, { enabled: false })),
-    ...Array.from({ length: AMBIENT_THUNDER_FIRST_INDEX - AMBIENT_RAIN_FIRST_INDEX }, (_, index) => makeRainChannel(`rain-${index}`, { enabled: false })),
-    ...thunder.map((overrides, index) => ({ ...createAmbientThunderChannel(`thunder-${index}`), enabled: true, volume: 1, ...overrides })),
-  ];
-}
+// Tests here assert properties no tuning can falsify -- a level that holds,
+// a rate that follows its slider, a rendering that does not depend on the
+// block size. How any of it SOUNDS is for a listener, not for these.
 
 /** Share of the signal's energy above `hz`, by a one-pole high-pass. */
 function highShare(samples: number[], sampleRate: number, hz: number): number {
@@ -112,1154 +28,631 @@ function highShare(samples: number[], sampleRate: number, hz: number): number {
   return total > 0 ? high / total : 0;
 }
 
-type Mode = { sin: number; cos: number; rotationSin: number; rotationCos: number; amplitude: number; decay: number };
-type GlassVoice = {
-  gain: number;
-  age: number;
-  startOffset?: number;
-  durationFrames: number;
-  transientAmplitude: number;
-  bassModes: Mode[];
-  bodyModes: Mode[];
-  trebleModes: Mode[];
-};
-
-/** The parts of a worklet surface profile the tests read. */
-type SurfaceProfile = {
-  durationSec: number;
-  click: { centerHz: number[] };
-  bed: { gain: number; centerHz: number };
-  treble: { count: number[] };
-} & Record<string, unknown>;
-
-type GeneratorConstants = {
-  RAIN_SURFACE_ANCHORS: { name: string; at: number }[];
-  surfaceProfile: (surface: number) => SurfaceProfile;
-  AUTHORED_LOW_LEVEL: number;
-  AUTHORED_HIGH_LEVEL: number;
-  WET_BUBBLE_CHANCE: number;
-  RAIN_DRIPS_MAX_PER_SEC: number;
-};
-
-// Built as the engine builds them, once per sample rate.
-const loopsBySampleRate = new Map<number, NoiseLoops>();
-function noiseLoopsAt(sampleRate: number): NoiseLoops {
-  if (!loopsBySampleRate.has(sampleRate)) loopsBySampleRate.set(sampleRate, buildNoiseLoops(sampleRate));
-  return loopsBySampleRate.get(sampleRate)!;
-}
-
-function createProcessor(seed: number, channels: TestChannel[], sampleRate = 12000, blockSize = 128) {
-  let Processor!: new (options: unknown) => TestProcessor;
-  let frame = 0;
-  class WorkletProcessorStub {
-    port = { onmessage: null as ((event: { data: unknown }) => void) | null };
+function correlation(a: number[], b: number[]): number {
+  let ab = 0;
+  let aa = 0;
+  let bb = 0;
+  for (let index = 0; index < a.length; index += 1) {
+    ab += a[index] * b[index];
+    aa += a[index] * a[index];
+    bb += b[index] * b[index];
   }
-  const scope: Record<string, unknown> = {
-    AudioWorkletProcessor: WorkletProcessorStub,
-    sampleRate,
-    get currentFrame() { return frame; },
-    registerProcessor: (_name: string, processor: new (options: unknown) => TestProcessor) => { Processor = processor; },
-  };
-  runInNewContext(generatorSource, scope);
-  // The same output layout the engine creates: noise direct, three stereo
-  // rain outputs, then the noise reverb send.
-  const processor = new Processor!({ processorOptions: { seed, noiseLoops: noiseLoopsAt(sampleRate), noiseSendOutput: 4 } });
-  processor.port.onmessage?.({ data: { type: 'configure', channels: toConfigure(channels) } });
-
-  return {
-    processor,
-    constants: scope.__generatorConstants as GeneratorConstants,
-    render(seconds: number) {
-      const samples = {
-        left: [] as number[], right: [] as number[], rain: [[], [], []] as number[][],
-        rainLeft: [[], [], []] as number[][], rainRight: [[], [], []] as number[][],
-        sendLeft: [] as number[], sendRight: [] as number[],
-      };
-      const endFrame = frame + Math.floor(seconds * sampleRate);
-      while (frame < endFrame) {
-        const blockLength = Math.min(blockSize, endFrame - frame);
-        const outputs = [
-          [new Float32Array(blockLength), new Float32Array(blockLength)],
-          [new Float32Array(blockLength), new Float32Array(blockLength)],
-          [new Float32Array(blockLength), new Float32Array(blockLength)],
-          [new Float32Array(blockLength), new Float32Array(blockLength)],
-          [new Float32Array(blockLength), new Float32Array(blockLength)],
-        ];
-        processor.process([], outputs);
-        samples.sendLeft.push(...outputs[4][0]);
-        samples.sendRight.push(...outputs[4][1]);
-        samples.left.push(...outputs[0][0]);
-        samples.right.push(...outputs[0][1]);
-        for (let index = 0; index < samples.rain.length; index += 1) {
-          const [rainLeft, rainRight] = outputs[index + 1];
-          samples.rainLeft[index].push(...rainLeft);
-          samples.rainRight[index].push(...rainRight);
-          // The layer summed to one channel, for the tests about what it
-          // plays rather than where.
-          samples.rain[index].push(...rainLeft.map((value, frame) => value + rainRight[frame]));
-        }
-        frame += blockLength;
-      }
-      return samples;
-    },
-  };
+  return ab / Math.sqrt(aa * bb);
 }
 
-/** A noise loop of constant 1, so a noise layer's output IS its level. */
-const ONES = new Float32Array(4096).fill(1);
+const everything = (out: Rendered) => [...out.left, ...out.right, ...out.sendLeft, ...out.sendRight];
 
-/** Largest magnitude; a spread of a long render overflows the call stack. */
-function peakOf(samples: number[]): number {
-  let peak = 0;
-  for (const sample of samples) peak = Math.max(peak, Math.abs(sample));
-  return peak;
+/** Hold the scene's gust at `gust` (-1..1) instead of letting the weather move it. */
+function holdGust(generator: ReturnType<typeof createProcessor>, gust: number) {
+  generator.processor.advanceWeather = function advanceWeather(this: { gust: number }) { this.gust = gust; };
 }
 
-function rms(samples: number[]): number {
-  return Math.sqrt(samples.reduce((sum, sample) => sum + (sample * sample), 0) / samples.length);
-}
+const KINDS = ['noise', 'rain', 'thunder', 'water', 'fire', 'chimes'] as const;
+/** A layer of each kind that sounds within a couple of seconds. */
+const busy = (kind: (typeof KINDS)[number]) => (kind === 'thunder' ? layer('thunder', { share: 1, randomness: 0 }) : layer(kind));
 
-describe('ambient AudioWorklet generator', () => {
-  it('mixes dynamic channels into one finite, bounded, non-silent stereo output', () => {
-    const generator = createProcessor(73, [
-      makeChannel('white', { type: 'white' }),
-      makeChannel('pink', { type: 'pink' }),
-      makeChannel('brown', { type: 'brown' }),
-    ]);
-    const samples = generator.render(0.4);
-    expect(generator.processor.channels).toHaveLength(3);
-    for (const side of [samples.left, samples.right]) {
-      expect(side.some((sample) => Math.abs(sample) > 0.001)).toBe(true);
-      expect(side.every((sample) => Number.isFinite(sample) && Math.abs(sample) <= 2.2)).toBe(true);
-    }
-    expect(samples.left).not.toEqual(samples.right);
-  });
-
-  it('omits disabled channels from the active mix without changing enabled output', () => {
-    const enabledOnly = createProcessor(83, [makeChannel('enabled')]);
-    const withDisabled = createProcessor(83, [
-      makeChannel('enabled'),
-      makeChannel('disabled', { enabled: false }),
-    ]);
-    for (const generator of [enabledOnly, withDisabled]) {
-      generator.processor.noiseLoop = () => ONES;
-    }
-
-    const expected = enabledOnly.render(0.2);
-    const actual = withDisabled.render(0.2);
-    expect(withDisabled.processor.channels.map((channel) => channel.id)).toEqual(['enabled']);
-    expect(actual.left).toEqual(expected.left);
-    expect(actual.right).toEqual(expected.right);
-  });
-
-  it('passes only the soloed channel without disabling the other channels', () => {
-    const mixed = createProcessor(97, [
-      makeChannel('first', { modulationAmplitude: 0 }),
-      makeChannel('solo', { solo: true, modulationAmplitude: 0 }),
-    ]);
-    const soloOnly = createProcessor(97, [makeChannel('solo', { solo: true, modulationAmplitude: 0 })]);
-    const disabledSolo = createProcessor(97, [
-      makeChannel('disabled-solo', { enabled: false, solo: true }),
-      makeChannel('other', { modulationAmplitude: 0 }),
-    ]);
-    for (const generator of [mixed, soloOnly, disabledSolo]) generator.processor.noiseLoop = () => ONES;
-
-    const mixedOutput = mixed.render(0.2);
-    const soloOutput = soloOnly.render(0.2);
-    const silentOutput = disabledSolo.render(0.2);
-    expect(mixed.processor.soloChannelId).toBe('solo');
-    expect(mixed.processor.channels.map((channel) => channel.id)).toEqual(['first', 'solo']);
-    expect(mixedOutput.left).toEqual(soloOutput.left);
-    expect(silentOutput.left.every((sample) => sample === 0)).toBe(true);
-  });
-
-  it('uses modulation amplitude and period to shape continuous noise', () => {
-    const unmodulatedGenerator = createProcessor(119, [makeChannel('unmodulated', {
-      modulationAmplitude: 0,
-      periodSec: 0.5,
-    })]);
-    const modulatedGenerator = createProcessor(119, [makeChannel('modulated', {
-      modulationAmplitude: 1,
-      periodSec: 0.5,
-    })]);
-    const slowerGenerator = createProcessor(119, [makeChannel('slower', {
-      modulationAmplitude: 1,
-      periodSec: 1,
-    })]);
-    for (const generator of [unmodulatedGenerator, modulatedGenerator, slowerGenerator]) {
-      generator.processor.noiseLoop = () => ONES;
-    }
-    const unmodulated = unmodulatedGenerator.render(2);
-    const modulated = modulatedGenerator.render(2);
-    const slower = slowerGenerator.render(2);
-    expect(Math.min(...modulated.left)).toBeLessThan(0.001);
-    expect(Math.max(...modulated.left)).toBeGreaterThan(1.99);
-    expect(rms(modulated.left)).toBeGreaterThan(rms(unmodulated.left));
-    expect(modulated.left).not.toEqual(slower.left);
-  });
-
-  it('repeats its level exactly once per period', () => {
-    // With the noise itself held at 1, the output IS the level. A period of
-    // 0.5 s at 16 kHz repeats every 8000 samples, whatever the curve -- a
-    // whole number of the 32-sample control segments, so the ramped level
-    // lands on the same values each time round.
-    for (const ramp of [0, 0.5, 1]) {
-      const generator = createProcessor(5, [makeChannel('cycle', {
-        modulationAmplitude: 1, periodSec: 0.5, ramp,
-      })], 16000);
-      generator.processor.noiseLoop = () => ONES;
-      const level = generator.render(2).left;
-      for (let index = 0; index + 8000 < level.length; index += 37) {
-        expect(level[index + 8000]).toBeCloseTo(level[index], 3);
-      }
+describe('the ambient worklet', () => {
+  it('uses the same fader law as the settings', () => {
+    const { constants } = createProcessor([]);
+    for (const position of [0, 0.01, 0.25, 0.5, 0.75, 1]) {
+      expect(constants.faderGain(position)).toBeCloseTo(ambientFaderGain(position), 12);
     }
   });
 
-  it('applies low-pass and high-pass filtering while the midpoint bypasses filtering', () => {
-    const lowPass = createProcessor(19, [makeChannel('low-pass', { filter: 0, modulationAmplitude: 0 })], 48000);
-    const dry = createProcessor(19, [makeChannel('dry', { filter: 0.5, modulationAmplitude: 0 })], 48000);
-    const highPass = createProcessor(19, [makeChannel('high-pass', { filter: 1, modulationAmplitude: 0 })], 48000);
-    for (const generator of [lowPass, dry, highPass]) generator.processor.noiseLoop = () => ONES;
-
-    const lowPassSamples = lowPass.render(0.5).left;
-    const drySamples = dry.render(0.5).left;
-    const highPassSamples = highPass.render(0.5).left;
-    expect(lowPassSamples.at(-1)).toBeGreaterThan(0.99);
-    expect(drySamples.every((sample) => sample === 1)).toBe(true);
-    expect(Math.abs(highPassSamples.at(-1) ?? 1)).toBeLessThan(0.001);
+  it('renders every kind finite and bounded, and silent at fader 0', () => {
+    for (const kind of KINDS) {
+      const out = createProcessor([busy(kind)], { sampleRate: 8000 }).render(14);
+      expect(everything(out).every(Number.isFinite)).toBe(true);
+      expect(peak(out.left)).toBeGreaterThan(1e-3);
+      expect(peak(out.left)).toBeLessThan(8);
+      const silent = createProcessor([{ ...busy(kind), volume: 0 } as AmbientChannelSettings], { sampleRate: 8000 }).render(2);
+      expect(everything(silent).every((value) => value === 0)).toBe(true);
+    }
   });
 
-  it('synthesizes overlapping rain impacts on three independent output buses', () => {
-    const generator = createProcessor(307, makeRainSlots([
-      makeRainChannel('rain-near', { dropsPerSecond: 50, distance: 0 }),
-      makeRainChannel('rain-middle', { dropsPerSecond: 36, distance: 0.5 }),
-      makeRainChannel('rain-far', { dropsPerSecond: 24, distance: 1 }),
-    ]));
-    // Overlap is a property of the whole render, not of whichever instant it
-    // stops on, so the most voices each layer held at once is what is checked.
-    const mostVoices = [0, 0, 0];
-    const chunks = Array.from({ length: 20 }, () => {
-      const chunk = generator.render(0.05);
-      generator.processor.channels.slice(-3).forEach((channel, index) => {
-        mostVoices[index] = Math.max(mostVoices[index], channel.activeVoices.length);
-      });
-      return chunk;
-    });
-    const samples = {
-      left: chunks.flatMap((chunk) => chunk.left),
-      right: chunks.flatMap((chunk) => chunk.right),
-      rain: [0, 1, 2].map((index) => chunks.flatMap((chunk) => chunk.rain[index])),
+  it('stays finite and bounded at every control extreme', () => {
+    const extremes: AmbientChannelSettings[] = [
+      layer('noise', { colour: 0, brightnessHz: 80, focus: 1, depth: 1, periodSec: 0.5, curve: 1, skew: 0.1, sweep: 1, variation: 1, sway: 1, width: 0, distance: 1, weather: 1 }, 1),
+      layer('noise', { colour: 1, brightnessHz: 18000, focus: 1, depth: 1, periodSec: 0.5, curve: 0, skew: 0.9, sweep: -1, variation: 1, sway: 1, width: 1, weather: 1 }, 2),
+      layer('rain', { intensity: 1, surface: 0.25, mix: 0.5, drips: 1, wetness: 1, resonance: 1, pan: -1, weather: 1 }, 1),
+      layer('rain', { intensity: 1, surface: 0.75, mix: 1, drips: 1, wetness: 0, resonance: 0, pan: 1, weather: 1 }, 2),
+      layer('water', { flow: 1, size: 1, turbulence: 1, pan: 1 }, 1),
+      layer('water', { flow: 1, size: 0, turbulence: 1, pan: -1 }, 2),
+      layer('fire', { size: 1, crackle: 1, pops: 1, weather: 1 }, 1),
+      layer('chimes', { pitchHz: 1500, tubes: 8, ringSec: 15, activity: 1, hardness: 1, weather: 1 }, 1),
+      layer('chimes', { pitchHz: 150, tubes: 3, ringSec: 1, activity: 1, hardness: 0 }, 2),
+    ];
+    const generator = createProcessor(extremes, { sampleRate: 16000, weather: { gustiness: 1, paceSec: 2 } });
+    const out = generator.render(12);
+    expect(everything(out).every(Number.isFinite)).toBe(true);
+    expect(peak(out.left)).toBeLessThan(30);
+  });
+
+  it('renders the same whatever the block size', () => {
+    for (const kind of KINDS) {
+      // Thunder's first peal comes 4-12 s in.
+      const render = (blockSize: number) => createProcessor([busy(kind)], { sampleRate: 6000, blockSize, weather: { gustiness: 0, paceSec: 2 } }).render(kind === 'thunder' ? 14 : 6);
+      const large = render(128);
+      const small = render(32);
+      // Equal but for the order sums are taken in: voices that retire at a
+      // block's end are dropped from a list in a different order, which
+      // moves the last bit of a float and nothing a listener could hear.
+      const worst = (a: number[], b: number[]) => a.reduce((max, value, index) => Math.max(max, Math.abs(value - b[index])), 0);
+      expect(worst(small.left, large.left)).toBeLessThan(1e-6);
+      expect(worst(small.sendRight, large.sendRight)).toBeLessThan(1e-6);
+      expect(peak(large.left)).toBeGreaterThan(1e-3);
+    }
+  });
+
+  it('plays each layer at its own level: another layer does not change it', () => {
+    const rain = layer('rain');
+    const alone = createProcessor([rain], { sampleRate: 8000 }).render(3);
+    // A second layer, silent: if levels were shared out across the enabled
+    // layers, the rain would come out quieter beside it.
+    const beside = createProcessor([rain, layer('noise', { volume: 0 })], { sampleRate: 8000 }).render(3);
+    expect(beside.left).toEqual(alone.left);
+  });
+
+  it('omits disabled layers and plays only the soloed one', () => {
+    const noise = layer('noise');
+    const fire = layer('fire');
+    const noiseAlone = createProcessor([noise], { sampleRate: 8000 }).render(2);
+    const withDisabled = createProcessor([noise, { ...fire, enabled: false }], { sampleRate: 8000 }).render(2);
+    expect(withDisabled.left).toEqual(noiseAlone.left);
+    // The fire soloed sounds exactly as the fire with the noise silenced:
+    // the noise still runs, but none of it is heard.
+    const soloed = createProcessor([noise, { ...fire, solo: true }], { sampleRate: 8000 }).render(2);
+    const fireOnly = createProcessor([{ ...noise, volume: 0 }, fire], { sampleRate: 8000 }).render(2);
+    expect(soloed.left).toEqual(fireOnly.left);
+    expect(peak(soloed.left)).toBeGreaterThan(0);
+  });
+
+  it('moves every kind into the space and darkens it with distance, by one rule', () => {
+    for (const kind of ['noise', 'rain', 'water', 'fire', 'chimes'] as const) {
+      const at = (distance: number) => createProcessor([layer(kind, { distance } as never)], { sampleRate: 16000 }).render(8);
+      const near = at(0);
+      const far = at(1);
+      const sendShare = (out: Rendered) => rms(out.sendLeft) / rms(out.left);
+      expect(sendShare(far)).toBeGreaterThan(4 * sendShare(near));
+      expect(rms(far.left)).toBeLessThan(rms(near.left));
+      expect(highShare(far.left, 16000, 3000)).toBeLessThan(highShare(near.left, 16000, 3000));
+    }
+  });
+});
+
+describe('the weather', () => {
+  it('leaves a layer that does not follow it exactly as it was', () => {
+    const noise = layer('noise', { weather: 0 });
+    const calm = createProcessor([noise], { sampleRate: 8000, weather: { gustiness: 0, paceSec: 4 } }).render(6);
+    const squall = createProcessor([noise], { sampleRate: 8000, weather: { gustiness: 1, paceSec: 2 } }).render(6);
+    expect(squall.left).toEqual(calm.left);
+  });
+
+  it('moves between gusts and lulls at about its pace, and only as far as the gustiness', () => {
+    const generator = createProcessor([], { sampleRate: 4000, weather: { gustiness: 0.5, paceSec: 4 } });
+    const gusts: number[] = [];
+    for (let block = 0; block < 4000; block += 1) {
+      generator.render(128 / 4000);
+      gusts.push(generator.processor.gust);
+    }
+    expect(Math.max(...gusts.map(Math.abs))).toBeLessThanOrEqual(0.5);
+    expect(Math.max(...gusts) - Math.min(...gusts)).toBeGreaterThan(0.3);
+  });
+
+  it('makes a noise layer louder and brighter in a gust and quieter and darker in a lull', () => {
+    const noise = layer('noise', { weather: 1, brightnessHz: 1500, depth: 0 });
+    const at = (gust: number) => {
+      const generator = createProcessor([noise], { sampleRate: 16000 });
+      holdGust(generator, gust);
+      return generator.render(3).left;
     };
-
-    expect(mostVoices.every((count) => count > 1)).toBe(true);
-    expect(samples.rain.every((side) => side.some((sample) => Math.abs(sample) > 0.001))).toBe(true);
-    expect(samples.rain[0]).not.toEqual(samples.rain[1]);
-    expect(samples.rain[1]).not.toEqual(samples.rain[2]);
-    expect(samples.left.every((sample) => sample === 0)).toBe(true);
-    expect(samples.right.every((sample) => sample === 0)).toBe(true);
+    const gust = at(1);
+    const lull = at(-1);
+    expect(rms(gust)).toBeGreaterThan(1.5 * rms(lull));
+    expect(highShare(gust, 16000, 2000)).toBeGreaterThan(highShare(lull, 16000, 2000));
   });
 
-  it('varies resonant frequencies widely from drop to drop instead of repeating a fixed comb', () => {
-    const generator = createProcessor(419, makeRainSlots([makeRainChannel('rain')]));
-    const glass = generator.constants.surfaceProfile(1);
-    const voices = Array.from({ length: 12 }, () => generator.processor.makeSurfaceVoice(glass, false) as unknown as ReturnType<TestProcessor['makeRainVoice']>);
-    const bodyFrequencies = voices.flatMap((voice) => voice.bodyModes.map((mode) => mode.frequency));
+  it('makes rain heavier, chimes busier and thunder sooner in a gust', () => {
+    const rainAt = (gust: number) => {
+      const generator = createProcessor([layer('rain', { intensity: 0.5, weather: 1 })], { sampleRate: 8000 });
+      holdGust(generator, gust);
+      generator.render(0.1);
+      return generator.processor.channels[0].dropsPerSecond as number;
+    };
+    expect(rainAt(1)).toBeCloseTo(rainDropsPerSecond(0.8), 6);
+    expect(rainAt(-1)).toBeCloseTo(rainDropsPerSecond(0.2), 6);
 
-    expect(new Set(bodyFrequencies.map((frequency) => Math.round(frequency))).size).toBeGreaterThan(20);
-    expect(Math.max(...bodyFrequencies) - Math.min(...bodyFrequencies)).toBeGreaterThan(1500);
-    expect(voices.every((voice) => voice.bassModes.length >= 1 && voice.trebleModes.length >= 1)).toBe(true);
+    const strikeRate = (gust: number) => {
+      const generator = createProcessor([layer('chimes', { activity: 0.4, weather: 1 })], { sampleRate: 4000 });
+      holdGust(generator, gust);
+      generator.render(0.05);
+      return generator.processor.chimeStrikeRate(generator.processor.channels[0]);
+    };
+    expect(strikeRate(1) / strikeRate(0)).toBeCloseTo(4, 6);
+    expect(strikeRate(0) / strikeRate(-1)).toBeCloseTo(4, 6);
+
+    const peals = (gust: number) => {
+      const generator = createProcessor([layer('thunder', { share: 0.3, lengthSec: 4, randomness: 0, weather: 1 })], { sampleRate: 1000 });
+      holdGust(generator, gust);
+      let count = 0;
+      const start = generator.processor.startPeal.bind(generator.processor);
+      generator.processor.startPeal = (...args: unknown[]) => { count += 1; start(...args); };
+      generator.render(300);
+      return count;
+    };
+    expect(peals(1)).toBeGreaterThan(1.8 * peals(0));
+  });
+});
+
+describe('noise layers', () => {
+  const rate = 16000;
+  const steady = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'noise' }>>) => layer('noise', { depth: 0, variation: 0, ...overrides });
+
+  it('darkens from white through pink to brown', () => {
+    const share = (colour: number) => highShare(createProcessor([steady({ colour })], { sampleRate: rate }).render(3).left, rate, 1000);
+    expect(share(1)).toBeGreaterThan(share(0.5));
+    expect(share(0.5)).toBeGreaterThan(share(0));
   });
 
-  describe('rain wetness and resonance', () => {
-    const { processor, constants } = createProcessor(523, [], 48000);
-    type Voice = GlassVoice & { bubble: unknown; splashAmplitude: number; sprayFrames: number[] };
+  it('holds its loudness across colour, and across the filter at any focus', () => {
+    const level = (overrides: Parameters<typeof steady>[0]) => rms(createProcessor([steady(overrides)], { sampleRate: rate }).render(4).left);
+    const reference = level({ colour: 0.5 });
+    for (const colour of [0, 0.25, 0.75, 1]) {
+      expect(20 * Math.log10(level({ colour }) / reference)).toBeLessThan(3);
+      expect(20 * Math.log10(level({ colour }) / reference)).toBeGreaterThan(-3);
+    }
+    for (const focus of [0, 0.5, 1]) {
+      for (const brightnessHz of [200, 1000, 5000]) {
+        const db = 20 * Math.log10(level({ colour: 0.5, focus, brightnessHz }) / reference);
+        expect(Math.abs(db)).toBeLessThan(4);
+      }
+    }
+  });
+
+  it('focuses into a band around its brightness', () => {
+    // Energy within a narrow band at the brightness (a two-pole band-pass,
+    // Q 4), as a share of all of it.
+    const inBand = (samples: number[], hz: number) => {
+      const g = Math.tan((Math.PI * hz) / rate);
+      const k = 1 / 4;
+      const a1 = 1 / (1 + (g * (g + k)));
+      let s1 = 0;
+      let s2 = 0;
+      const band = samples.map((input) => {
+        const v3 = input - s2;
+        const v1 = (a1 * s1) + (g * a1 * v3);
+        const v2 = s2 + (g * a1 * s1) + (g * g * a1 * v3);
+        s1 = (2 * v1) - s1;
+        s2 = (2 * v2) - s2;
+        return v1 * k;
+      });
+      return (rms(band) / rms(samples)) ** 2;
+    };
+    const share = (focus: number) => inBand(createProcessor([steady({ colour: 1, brightnessHz: 1500, focus })], { sampleRate: rate }).render(4).left, 1500);
+    expect(share(1)).toBeGreaterThan(3 * share(0));
+  });
+
+  it('repeats its level exactly once per period with no variation', () => {
+    const period = 2;
+    const generator = createProcessor([layer('noise', { depth: 1, periodSec: period, variation: 0 })], { sampleRate: 4000 });
+    const levels: number[] = [];
+    for (let step = 0; step < 4000 * period * 2; step += 32) {
+      generator.render(32 / 4000);
+      levels.push(generator.processor.channels[0].level);
+    }
+    const perPeriod = (4000 * period) / 32;
+    for (let index = 0; index < perPeriod; index += 7) {
+      expect(levels[index + perPeriod]).toBeCloseTo(levels[index], 3);
+    }
+  });
+
+  it('opens its filter as the swell rises when it sweeps, and closes it when it sweeps the other way', () => {
+    // Brightness at the swell's peak against its trough.
+    const peakOverTrough = (sweep: number) => {
+      const generator = createProcessor([layer('noise', { colour: 1, brightnessHz: 1200, depth: 0.9, periodSec: 4, curve: 0.5, skew: 0.5, sweep, variation: 0 })], { sampleRate: rate });
+      const out = generator.render(8).left;
+      const phases: number[] = [];
+      const window = rate / 10;
+      const shares: Array<{ level: number; share: number }> = [];
+      for (let at = 0; at + window <= out.length; at += window) {
+        const slice = out.slice(at, at + window);
+        shares.push({ level: rms(slice), share: highShare(slice, rate, 2400) });
+        phases.push(at);
+      }
+      shares.sort((a, b) => a.level - b.level);
+      const quiet = shares.slice(0, 10).reduce((sum, item) => sum + item.share, 0);
+      const loud = shares.slice(-10).reduce((sum, item) => sum + item.share, 0);
+      return loud / quiet;
+    };
+    expect(peakOverTrough(1)).toBeGreaterThan(1.5);
+    expect(peakOverTrough(-1)).toBeLessThan(0.7);
+  });
+
+  it('varies each cycle\'s length around its period, keeping the tempo', () => {
+    const generator = createProcessor([layer('noise', { variation: 1 })], { sampleRate: 4000 });
+    const channel = generator.processor.channels[0];
+    const factors = Array.from({ length: 3000 }, () => {
+      generator.processor.startCycle(channel);
+      return Math.log2(channel.periodFactor);
+    });
+    expect(Math.max(...factors)).toBeLessThanOrEqual(1);
+    expect(Math.min(...factors)).toBeGreaterThanOrEqual(-1);
+    expect(factors.reduce((sum, value) => sum + value, 0) / factors.length).toBeCloseTo(0, 1);
+  });
+
+  it('sways to the other side of centre on every cycle, within its reach, and nowhere at 0', () => {
+    const generator = createProcessor([layer('noise', { sway: 1 })], { sampleRate: 4000 });
+    const channel = generator.processor.channels[0];
+    let last = 0;
+    for (let index = 0; index < 50; index += 1) {
+      generator.processor.startCycle(channel);
+      expect(Math.abs(channel.panTo)).toBeLessThanOrEqual(0.8);
+      if (last !== 0) expect(Math.sign(channel.panTo)).toBe(-Math.sign(last));
+      last = channel.panTo;
+    }
+    const still = createProcessor([layer('noise', { sway: 0, variation: 1 })], { sampleRate: 4000 });
+    const stillChannel = still.processor.channels[0];
+    still.processor.startCycle(stillChannel);
+    expect(stillChannel.panTo).toBe(0);
+  });
+
+  it('narrows from two unrelated sides to one point without changing its level', () => {
+    const at = (width: number) => createProcessor([steady({ width })], { sampleRate: rate }).render(3);
+    const wide = at(1);
+    const point = at(0);
+    expect(Math.abs(correlation(wide.left, wide.right))).toBeLessThan(0.1);
+    expect(correlation(point.left, point.right)).toBeGreaterThan(0.99);
+    expect(rms(point.left) / rms(wide.left)).toBeGreaterThan(0.9);
+    expect(rms(point.left) / rms(wide.left)).toBeLessThan(1.1);
+  });
+});
+
+describe('noise loops', () => {
+  const types = ['white', 'pink', 'brown'] as const;
+  const loops = buildNoiseLoops(48000);
+  const randomFrom = (start: number) => {
+    let seed = start;
+    return () => {
+      seed = (Math.imul(1664525, seed) + 1013904223) >>> 0;
+      return seed / 0x100000000;
+    };
+  };
+
+  it('cross from their end back to their start like any other step', () => {
+    for (const type of types) {
+      const loop = loops[type];
+      const steps = Array.from({ length: loop.length - 1 }, (_, index) => Math.abs(loop[index + 1] - loop[index])).sort((a, b) => a - b);
+      expect(Math.abs(loop[0] - loop[loop.length - 1])).toBeLessThanOrEqual(steps[Math.floor(steps.length * 0.999)]);
+    }
+  });
+
+  it('are Paul Kellet\'s pink filter exactly at the rate it was fitted for', () => {
+    const next = createNoiseSource('pink', randomFrom(5), 44100);
+    const random = randomFrom(5);
+    const b = [0, 0, 0, 0, 0, 0, 0];
+    for (let index = 0; index < 20000; index += 1) {
+      const white = (random() * 2) - 1;
+      b[0] = (0.99886 * b[0]) + (white * 0.0555179);
+      b[1] = (0.99332 * b[1]) + (white * 0.0750759);
+      b[2] = (0.969 * b[2]) + (white * 0.153852);
+      b[3] = (0.8665 * b[3]) + (white * 0.3104856);
+      b[4] = (0.55 * b[4]) + (white * 0.5329522);
+      b[5] = (-0.7616 * b[5]) - (white * 0.016898);
+      const expected = (b[0] + b[1] + b[2] + b[3] + b[4] + b[5] + b[6] + (white * 0.5362)) * 0.11;
+      b[6] = white * 0.115926;
+      expect(next()).toBeCloseTo(expected, 9);
+    }
+  });
+
+  it('are brought to one audible level, so colour can move between them', () => {
+    const { loops: rateLoops, gains } = noiseAt(16000);
+    for (const type of types) {
+      const loop = rateLoops[type];
+      const pole = Math.exp((-2 * Math.PI * 20) / 16000);
+      let low = 0;
+      let power = 0;
+      for (const sample of loop) {
+        low = (pole * low) + ((1 - pole) * sample);
+        power += (sample - low) ** 2;
+      }
+      expect(Math.sqrt(power / loop.length) * gains[type]).toBeCloseTo(0.25, 6);
+    }
+  });
+});
+
+describe('rain', () => {
+  it('has a synthesis profile for every surface the settings can name', () => {
+    const { constants } = createProcessor([]);
+    expect(constants.RAIN_SURFACE_ANCHORS.map(({ name, at }: { name: string; at: number }) => ({ name, at })))
+      .toEqual(AMBIENT_RAIN_SURFACE_ANCHORS.map(({ name, at }) => ({ name, at })));
+    expect(constants.RAIN_DRIPS_MAX_PER_SEC).toBe(AMBIENT_RAIN_DRIPS_MAX_PER_SEC);
+    // Every anchor carries every field the blend reads.
+    const keys = (value: object): string[] => Object.entries(value).flatMap(([key, inner]) => (
+      inner && typeof inner === 'object' && !Array.isArray(inner) ? keys(inner).map((sub) => `${key}.${sub}`) : [key]
+    )).sort();
+    const first = keys(constants.RAIN_SURFACE_ANCHORS[0]);
+    for (const anchor of constants.RAIN_SURFACE_ANCHORS) expect(keys(anchor)).toEqual(first);
+  });
+
+  it('falls at the rate its intensity sets, and washes louder as it gets heavier', () => {
+    const births = (intensity: number) => {
+      const generator = createProcessor([layer('rain', { intensity, drips: 0 })], { sampleRate: 4000 });
+      let count = 0;
+      const add = generator.processor.addVoice.bind(generator.processor);
+      generator.processor.addVoice = (...args: unknown[]) => { count += 1; add(...args); };
+      generator.render(40);
+      return count / 40;
+    };
+    for (const intensity of [0.2, 0.6]) {
+      expect(births(intensity) / rainDropsPerSecond(intensity)).toBeGreaterThan(0.8);
+      expect(births(intensity) / rainDropsPerSecond(intensity)).toBeLessThan(1.2);
+    }
+    const wash = (intensity: number) => rms(createProcessor([layer('rain', { intensity, mix: 0 })], { sampleRate: 8000 }).render(4).left);
+    expect(wash(1)).toBeGreaterThan(3 * wash(0));
+  });
+
+  describe('wetness and resonance', () => {
+    const generator = createProcessor([], { sampleRate: 48000, seed: 523 });
+    const { processor, constants } = generator;
     const voices = (surface: number, character: { wetness: number; resonance: number }, count = 400) => (
-      Array.from({ length: count }, () => processor.makeSurfaceVoice(constants.surfaceProfile(surface), false, character) as Voice)
+      Array.from({ length: count }, () => processor.makeSurfaceVoice(constants.surfaceProfile(surface), false, character))
     );
-    const decayTime = (mode: Mode) => -1 / (48000 * Math.log(mode.decay));
+    const decayTime = (mode: { decay: number }) => -1 / (48000 * Math.log(mode.decay));
 
     it('sends a share of drops into water with wetness, each with a splash, spray and a bubble', () => {
       const dry = voices(0.5, { wetness: 0, resonance: 0.5 });
       const soaked = voices(0.5, { wetness: 1, resonance: 0.5 });
-      expect(dry.every((voice) => voice.bubble === null && voice.splashAmplitude === 0)).toBe(true);
-      const wet = soaked.filter((voice) => voice.bubble !== null);
+      expect(dry.every((voice: { bubble: unknown }) => voice.bubble === null)).toBe(true);
+      const wet = soaked.filter((voice: { bubble: unknown }) => voice.bubble !== null);
       expect(wet.length / soaked.length).toBeGreaterThan(constants.WET_BUBBLE_CHANCE - 0.07);
       expect(wet.length / soaked.length).toBeLessThan(constants.WET_BUBBLE_CHANCE + 0.07);
-      expect(wet.every((voice) => voice.splashAmplitude > 0 && voice.sprayFrames.length >= 1)).toBe(true);
     });
 
     it('damps the ring as the surface gets wetter', () => {
       const ring = (wetness: number) => voices(1, { wetness, resonance: 0.5 }, 60)
-        .flatMap((voice) => voice.bassModes).reduce((sum, mode) => sum + decayTime(mode), 0);
+        .flatMap((voice: { bassModes: Array<{ decay: number }> }) => voice.bassModes)
+        .reduce((sum: number, mode: { decay: number }) => sum + decayTime(mode), 0);
       expect(ring(1)).toBeLessThan(ring(0) * 0.6);
     });
 
-    it('rings not at all when dead, as authored in the middle, twice as long at the top', () => {
-      expect(voices(1, { wetness: 0, resonance: 0 }, 20).every((voice) => (
+    it('rings not at all when dead', () => {
+      expect(voices(1, { wetness: 0, resonance: 0 }, 20).every((voice: { bassModes: unknown[]; bodyModes: unknown[]; trebleModes: unknown[] }) => (
         voice.bassModes.length + voice.bodyModes.length + voice.trebleModes.length === 0
       ))).toBe(true);
-      const middle = createProcessor(7, [], 48000).processor;
-      const top = createProcessor(7, [], 48000).processor;
-      const authored = middle.makeSurfaceVoice(constants.surfaceProfile(1), false, { wetness: 0, resonance: 0.5 });
-      const ringing = top.makeSurfaceVoice(constants.surfaceProfile(1), false, { wetness: 0, resonance: 1 });
-      authored.bassModes.forEach((mode, index) => {
-        expect(decayTime(ringing.bassModes[index])).toBeCloseTo(decayTime(mode) * 2, 6);
-        expect(ringing.bassModes[index].amplitude).toBeCloseTo(mode.amplitude, 9);
-      });
-    });
-  });
-
-  it('has a synthesis profile for every rain surface the settings can name', () => {
-    const { constants } = createProcessor(1, []);
-    expect(constants.RAIN_SURFACE_ANCHORS.map(({ name, at }) => ({ name, at })))
-      .toEqual(AMBIENT_RAIN_SURFACE_ANCHORS.map(({ name, at }) => ({ name, at })));
-    expect(constants.RAIN_DRIPS_MAX_PER_SEC).toBe(AMBIENT_RAIN_DRIPS_MAX_PER_SEC);
-  });
-
-  // The glass surface is the original rain model and is meant to sound as it
-  // always has. Its drops are drawn by the unchanged makeRainVoice; what this
-  // pins is that the block renderer plays a drop's ringing modes exactly as
-  // the original per-sample formula did -- body, plus the low and high banks
-  // at the balance they were authored at (what the bass and treble sliders'
-  // defaults were) -- at resonance 0.5 and wetness 0, the surface as it is.
-  // (The click is white noise; its own test is below.)
-  it('rings a glass drop exactly as the original per-sample formula did', () => {
-    const generator = createProcessor(4242, [], 48000);
-    const glass = generator.constants.surfaceProfile(1);
-    const voice = generator.processor.makeSurfaceVoice(glass, false);
-    voice.transientAmplitude = 0;
-    voice.startOffset = 0;
-    const reference = structuredClone(voice);
-    const low = generator.constants.AUTHORED_LOW_LEVEL;
-    const high = generator.constants.AUTHORED_HIGH_LEVEL;
-
-    const rendered = new Float64Array(voice.durationFrames);
-    for (let start = 0; start < voice.durationFrames; start += 128) {
-      const block = new Float64Array(128);
-      const alive = generator.processor.renderVoice(voice, block, 128);
-      rendered.set(block.subarray(0, Math.min(128, voice.durationFrames - start)), start);
-      if (!alive) break;
-    }
-
-    const ring = (modes: Mode[]) => {
-      let sample = 0;
-      for (const mode of modes) {
-        sample += mode.sin * mode.amplitude;
-        const nextSin = (mode.sin * mode.rotationCos) + (mode.cos * mode.rotationSin);
-        mode.cos = (mode.cos * mode.rotationCos) - (mode.sin * mode.rotationSin);
-        mode.sin = nextSin;
-        mode.amplitude *= mode.decay;
-      }
-      return sample;
-    };
-    for (let index = 0; index < reference.durationFrames; index += 1) {
-      const expected = ring(reference.bodyModes)
-        + (ring(reference.bassModes) * low)
-        + (ring(reference.trebleModes) * high);
-      // A voice may retire early once it is below -100 dB; after that the
-      // reference is too.
-      expect(Math.abs(rendered[index] - expected)).toBeLessThan(1e-5);
-    }
-  });
-
-  it('gives a glass drop a click that is white, starts at its drawn level and dies within milliseconds', () => {
-    const generator = createProcessor(17, [], 48000);
-    const glass = generator.constants.surfaceProfile(1);
-    const voice = generator.processor.makeSurfaceVoice(glass, false);
-    const level = voice.transientAmplitude;
-    for (const bank of [voice.bassModes, voice.bodyModes, voice.trebleModes]) {
-      for (const mode of bank) mode.amplitude = 0;
-    }
-    voice.startOffset = 0;
-    const out = new Float64Array(128);
-    generator.processor.renderVoice(voice, out, 128);
-    const heard = level * generator.constants.AUTHORED_HIGH_LEVEL;
-    expect(Math.max(...out.map(Math.abs))).toBeLessThanOrEqual(heard);
-    expect(Math.max(...out.slice(0, 8).map(Math.abs))).toBeGreaterThan(heard * 0.2);
-    // 0.65 ms time constant: after 2 ms (96 samples) it is under 5% of itself.
-    expect(Math.max(...out.slice(96).map(Math.abs))).toBeLessThan(heard * 0.05);
-  });
-
-  // Rendering whole blocks per voice must not leave seams: the same seed
-  // gives the same sound whatever size the blocks come in, which holds only
-  // if every voice born mid-block starts on its exact frame and every stream
-  // is drawn in time order. (It caught drops and drips being born in two
-  // passes per block, which reordered the draws at block edges.) Noise is
-  // exact. Rain may differ by what a voice still carries when it retires --
-  // checked once per block, at -100 dB -- so the bound there is -80 dB.
-  it('renders the same sound whatever the block size', () => {
-    const layers = () => [
-      ...Array.from({ length: AMBIENT_RAIN_FIRST_INDEX }, (_, index) => makeChannel(`noise-${index}`, {
-        enabled: index < 2, type: index === 0 ? 'pink' : 'brown', movement: 0.8, periodSec: 0.6,
-      })),
-      makeRainChannel('glass', { surface: 1, mix: 0.8, drips: 0.5, dropsPerSecond: 40 }),
-      makeRainChannel('street', { surface: 0.5, mix: 0.5, drips: 1, dropsPerSecond: 60 }),
-      makeRainChannel('forest', { surface: 0, mix: 0.65, drips: 1, dropsPerSecond: 50 }),
-    ];
-    const large = createProcessor(88, layers(), 16000, 128).render(3);
-    const small = createProcessor(88, layers(), 16000, 32).render(3);
-    expect(small.left).toEqual(large.left);
-    expect(small.right).toEqual(large.right);
-    for (let index = 0; index < 3; index += 1) {
-      const largest = Math.max(...small.rain[index].map((value, frame) => Math.abs(value - large.rain[index][frame])));
-      expect(largest).toBeLessThan(1e-4);
-      expect(Math.max(...large.rain[index].map(Math.abs))).toBeGreaterThan(0.1);
-    }
-  });
-
-  it('routes each rain layer to the output its slot position names', () => {
-    const generator = createProcessor(11, makeRainSlots([
-      makeRainChannel('first', { enabled: false }),
-      makeRainChannel('second', { enabled: false }),
-      makeRainChannel('third', { dropsPerSecond: 40 }),
-    ]));
-    const samples = generator.render(0.5);
-    expect(samples.rain[0].every((sample) => sample === 0)).toBe(true);
-    expect(samples.rain[1].every((sample) => sample === 0)).toBe(true);
-    expect(rms(samples.rain[2])).toBeGreaterThan(0.001);
-  });
-
-  it('gives the forest a darker impact than the street', () => {
-    const zeroCrossingsPerSecond = (surface: number) => {
-      const samples = createProcessor(29, makeRainSlots([
-        makeRainChannel(String(surface), { surface, mix: 1, drips: 0, dropsPerSecond: 40, resonance: 0, wetness: 0 }),
-      ]), 48000).render(3).rain[0];
-      let crossings = 0;
-      for (let index = 1; index < samples.length; index += 1) {
-        if ((samples[index] >= 0) !== (samples[index - 1] >= 0)) crossings += 1;
-      }
-      return crossings / 3;
-    };
-    expect(zeroCrossingsPerSecond(0)).toBeLessThan(zeroCrossingsPerSecond(0.5) * 0.85);
-  });
-
-  it('fills the gaps between drops with the wash, and only when the mix asks for it', () => {
-    // Share of 20 ms windows carrying audible sound: a bed is continuous,
-    // sparse drops are not.
-    const coverage = (mix: number) => {
-      const samples = createProcessor(37, makeRainSlots([
-        makeRainChannel('bed', { mix, drips: 0, dropsPerSecond: 1 }),
-      ]), 12000).render(4).rain[0];
-      const window = 240;
-      let loud = 0;
-      let windows = 0;
-      for (let start = 0; start + window <= samples.length; start += window) {
-        windows += 1;
-        if (rms(samples.slice(start, start + window)) > 0.002) loud += 1;
-      }
-      return loud / windows;
-    };
-    expect(coverage(0.5)).toBeGreaterThan(0.95);
-    expect(coverage(1)).toBeLessThan(0.3);
-  });
-
-  it('plays the wash alone at one end of the mix, and both at full in the middle', () => {
-    // The bed draws from its own stream, so it is the same bed however
-    // many drops fall beside it: at mix 0 the drops must add nothing.
-    const render = (mix: number, dropsPerSecond: number) => createProcessor(41, makeRainSlots([
-      makeRainChannel('rain', { mix, drips: 0.5, dropsPerSecond }),
-    ]), 12000).render(2).rain[0];
-    expect(render(0, 60)).toEqual(render(0, 1));
-    // In the middle neither side is turned down: the wash is as loud as at
-    // the wash end, so the middle is the two added, not a dip.
-    const washOnly = rms(render(0, 1));
-    const both = rms(render(0.5, 1));
-    expect(both).toBeGreaterThanOrEqual(washOnly * 0.99);
-  });
-
-  it('drops large drips at the rate the drips control sets', () => {
-    const countDrips = (drips: number) => {
-      const generator = createProcessor(53, makeRainSlots([
-        makeRainChannel('drips', { drips, mix: 1, dropsPerSecond: 1 }),
-      ]), 2000);
-      let count = 0;
-      const addVoice = generator.processor.addVoice.bind(generator.processor);
-      generator.processor.addVoice = (channel, isDrip, offset, at) => {
-        if (isDrip) count += 1;
-        addVoice(channel, isDrip, offset, at);
-      };
-      generator.render(40);
-      return count;
-    };
-    expect(countDrips(0)).toBe(0);
-    const full = countDrips(1);
-    expect(full).toBeGreaterThan(AMBIENT_RAIN_DRIPS_MAX_PER_SEC * 40 * 0.7);
-    expect(full).toBeLessThan(AMBIENT_RAIN_DRIPS_MAX_PER_SEC * 40 * 1.3);
-  });
-
-  it('stays finite and bounded on every surface at every control extreme', () => {
-    for (const surface of [0, 0.25, 0.5, 0.75, 1]) {
-      const samples = createProcessor(61, makeRainSlots([
-        makeRainChannel(String(surface), { surface, mix: 0.5, drips: 1, dropsPerSecond: 60, wetness: 1, resonance: 1 }),
-      ]), 48000).render(2).rain[0];
-      expect(samples.every((sample) => Number.isFinite(sample) && Math.abs(sample) < 8)).toBe(true);
-      expect(rms(samples)).toBeGreaterThan(0.005);
-    }
-  });
-  describe('movement', () => {
-    // Records every cycle's draw by wrapping startCycle.
-    function recordCycles(movement: number, seconds: number, sampleRate = 2000) {
-      const generator = createProcessor(71, [makeChannel('moving', {
-        modulationAmplitude: 1, periodSec: 0.5, movement,
-      })], sampleRate);
-      generator.processor.noiseLoop = () => ONES;
-      const cycles: { panTo: number; periodFactor: number; riseFactor: number }[] = [];
-      const startCycle = generator.processor.startCycle.bind(generator.processor);
-      generator.processor.startCycle = (channel) => {
-        startCycle(channel);
-        cycles.push({ panTo: channel.panTo, periodFactor: channel.periodFactor, riseFactor: channel.riseFactor });
-      };
-      const samples = generator.render(seconds);
-      return { cycles, samples };
-    }
-
-    it('sways to the other side of centre on every cycle, within its reach', () => {
-      const { cycles } = recordCycles(1, 60);
-      expect(cycles.length).toBeGreaterThan(50);
-      for (let index = 1; index < cycles.length; index += 1) {
-        expect(Math.sign(cycles[index].panTo)).toBe(-Math.sign(cycles[index - 1].panTo));
-      }
-      expect(cycles.every((cycle) => Math.abs(cycle.panTo) <= 0.6 + 1e-9)).toBe(true);
-    });
-
-    it('varies the length of each cycle while keeping the tempo it was given', () => {
-      const { cycles } = recordCycles(1, 200);
-      const factors = cycles.map((cycle) => cycle.periodFactor);
-      expect(Math.min(...factors)).toBeLessThan(0.7);
-      expect(Math.max(...factors)).toBeGreaterThan(1.4);
-      // Symmetric in octaves: the mean log-factor is near zero.
-      const meanOctaves = factors.reduce((sum, factor) => sum + Math.log2(factor), 0) / factors.length;
-      expect(Math.abs(meanOctaves)).toBeLessThan(0.1);
-    });
-
-    it('never makes the level jump where one cycle hands over to the next', () => {
-      // With the noise held at 1 the left output is the level times the
-      // sway's gain; both move smoothly, so neighbouring samples stay close
-      // even across cycle boundaries, where the new draw takes effect.
-      const { samples } = recordCycles(1, 30);
-      let largestStep = 0;
-      for (let index = 1; index < samples.left.length; index += 1) {
-        largestStep = Math.max(largestStep, Math.abs(samples.left[index] - samples.left[index - 1]));
-      }
-      expect(largestStep).toBeLessThan(0.05);
-    });
-
-    it('draws nothing and sways nowhere with no movement', () => {
-      const { cycles, samples } = recordCycles(0, 10);
-      expect(cycles.every((cycle) => cycle.panTo === 0 && cycle.periodFactor === 1 && cycle.riseFactor === 1)).toBe(true);
-      expect(samples.left).toEqual(samples.right);
-    });
-  });
-  it('does not render a silent layer, and a layer turned back up does not deliver the drops it missed', () => {
-    const generator = createProcessor(29, makeRainSlots([makeRainChannel('rain', { volume: 0, dropsPerSecond: 60 })]));
-    let births = 0;
-    const addVoice = generator.processor.addVoice.bind(generator.processor);
-    generator.processor.addVoice = (channel, isDrip, offset, at) => {
-      births += 1;
-      addVoice(channel, isDrip, offset, at);
-    };
-    generator.render(2);
-    expect(births).toBe(0);
-    generator.processor.port.onmessage?.({
-      data: { type: 'configure', channels: toWorkletChannels(makeRainSlots([makeRainChannel('rain', { volume: 1, dropsPerSecond: 60 })]) as Parameters<typeof toWorkletChannels>[0]) },
-    });
-    generator.render(0.05);
-    // 60 a second for 50 ms is about three; the two paused seconds are not owed.
-    expect(births).toBeLessThan(15);
-  });
-  describe('noise loop', () => {
-    const types = ['white', 'pink', 'brown'] as const;
-    const loops = noiseLoopsAt(48000);
-
-    // Brown noise moves by small steps, so a seam that jumped would stand out
-    // against every other step in the loop; white is the control.
-    it('crosses from its end back to its start like any other step', () => {
-      for (const type of types) {
-        const loop = loops[type];
-        const steps = Array.from({ length: loop.length - 1 }, (_, index) => Math.abs(loop[index + 1] - loop[index])).sort((a, b) => a - b);
-        const seam = Math.abs(loop[0] - loop[loop.length - 1]);
-        expect(seam).toBeLessThanOrEqual(steps[Math.floor(steps.length * 0.999)]);
-      }
-    });
-
-    const randomFrom = (start: number) => {
-      let seed = start;
-      return () => {
-        seed = (Math.imul(1664525, seed) + 1013904223) >>> 0;
-        return seed / 0x100000000;
-      };
-    };
-
-    it('is Paul Kellet\'s pink filter exactly at the rate it was fitted for', () => {
-      const next = createNoiseSource('pink', randomFrom(5), 44100);
-      const random = randomFrom(5);
-      const b = [0, 0, 0, 0, 0, 0, 0];
-      for (let index = 0; index < 20000; index += 1) {
-        const white = (random() * 2) - 1;
-        b[0] = (0.99886 * b[0]) + (white * 0.0555179);
-        b[1] = (0.99332 * b[1]) + (white * 0.0750759);
-        b[2] = (0.969 * b[2]) + (white * 0.153852);
-        b[3] = (0.8665 * b[3]) + (white * 0.3104856);
-        b[4] = (0.55 * b[4]) + (white * 0.5329522);
-        b[5] = (-0.7616 * b[5]) - (white * 0.016898);
-        const expected = (b[0] + b[1] + b[2] + b[3] + b[4] + b[5] + b[6] + (white * 0.5362)) * 0.11;
-        b[6] = white * 0.115926;
-        expect(next()).toBeCloseTo(expected, 9);
-      }
-    });
-
-    it('is the same pink and brown noise at every sample rate: the same level and the same balance of low to high', () => {
-      const measure = (type: 'pink' | 'brown', rate: number) => {
-        const next = createNoiseSource(type, randomFrom(11), rate);
-        const samples = Array.from({ length: rate * 20 }, next);
-        // Low: below 200 Hz. High: 1-3 kHz, a band both rates hold (above
-        // 2 kHz would run to 6 kHz at one rate and to 24 kHz at the other).
-        // One-pole filters stated in hertz.
-        const lowPass = (hz: number) => {
-          const a = Math.exp((-2 * Math.PI * hz) / rate);
-          let state = 0;
-          return samples.map((value) => (state = (a * state) + ((1 - a) * value)));
-        };
-        const low = lowPass(200);
-        const belowBand = lowPass(1000);
-        const belowTop = lowPass(3000);
-        return {
-          level: rms(samples),
-          low: rms(low) / rms(samples),
-          high: rms(belowTop.map((value, index) => value - belowBand[index])) / rms(samples),
-        };
-      };
-      for (const type of ['pink', 'brown'] as const) {
-        const slow = measure(type, 12000);
-        const fast = measure(type, 48000);
-        expect(slow.level / fast.level).toBeGreaterThan(0.9);
-        expect(slow.level / fast.level).toBeLessThan(1.1);
-        expect(slow.low / fast.low).toBeGreaterThan(0.9);
-        expect(slow.low / fast.low).toBeLessThan(1.1);
-        expect(slow.high / fast.high).toBeGreaterThan(0.8);
-        expect(slow.high / fast.high).toBeLessThan(1.25);
-      }
-    });
-
-    it('is the same noise as generating it live, level for level', () => {
-      for (const type of types) {
-        const loop = loops[type];
-        let seed = 7;
-        const next = createNoiseSource(type, () => {
-          seed = (Math.imul(1664525, seed) + 1013904223) >>> 0;
-          return seed / 0x100000000;
-        }, 48000);
-        const live = Array.from({ length: loop.length }, next);
-        expect(Math.abs(rms(Array.from(loop)) - rms(live)) / rms(live)).toBeLessThan(0.1);
-      }
-    });
-
-    it('is what every noise layer of that type reads, and a missing type plays silence', () => {
-      const generator = createProcessor(12, [], 48000);
-      expect(generator.processor.noiseLoop('pink')).toBe(loops.pink);
-      const bare = createProcessor(12, [makeChannel('missing', { type: 'pink' })], 48000);
-      (bare.processor as unknown as { noiseLoops: object }).noiseLoops = {};
-      expect(bare.render(0.1).left.every((sample) => sample === 0)).toBe(true);
     });
   });
 
   describe('drop bank', () => {
-    type RainState = { dropBank: unknown[]; activeVoices: { live: unknown }[] };
-    const rainOf = (generator: ReturnType<typeof createProcessor>) => generator.processor.channels.at(-1) as unknown as RainState;
-
-    // A fresh drop is one synthesised live (and recorded); the rest are
-    // played back from the bank.
-    function countFresh(generator: ReturnType<typeof createProcessor>) {
-      const counts = { births: 0, fresh: 0 };
-      const addVoice = generator.processor.addVoice.bind(generator.processor);
-      const makeVoice = generator.processor.makeSurfaceVoice.bind(generator.processor);
-      generator.processor.addVoice = (channel, isDrip, offset, at) => {
-        counts.births += 1;
-        addVoice(channel, isDrip, offset, at);
-      };
-      generator.processor.makeSurfaceVoice = (profile, isDrip) => {
-        counts.fresh += 1;
-        return makeVoice(profile, isDrip);
-      };
-      return counts;
-    }
+    const rainOf = (generator: ReturnType<typeof createProcessor>) => generator.processor.channels[0];
 
     it('records every drop while filling, then one in four, and holds no more than its size', () => {
-      const generator = createProcessor(19, makeRainSlots([makeRainChannel('rain', { dropsPerSecond: 60, drips: 0, mix: 1 })]), 8000);
+      const generator = createProcessor([layer('rain', { intensity: 0.9, drips: 0, mix: 1 })], { sampleRate: 8000, seed: 19 });
       generator.render(2);
       expect(rainOf(generator).dropBank.length).toBe(32);
-      const counts = countFresh(generator);
-      generator.render(60);
-      expect(rainOf(generator).dropBank.length).toBe(32);
+      const counts = { births: 0, fresh: 0 };
+      const add = generator.processor.addVoice.bind(generator.processor);
+      const make = generator.processor.makeSurfaceVoice.bind(generator.processor);
+      generator.processor.addVoice = (...args: unknown[]) => { counts.births += 1; add(...args); };
+      generator.processor.makeSurfaceVoice = (...args: unknown[]) => { counts.fresh += 1; return make(...args); };
+      generator.render(30);
       expect(counts.fresh / counts.births).toBeGreaterThan(0.2);
       expect(counts.fresh / counts.births).toBeLessThan(0.3);
     });
 
-    it('plays a recorded drop back exactly as it was recorded', () => {
-      const generator = createProcessor(23, makeRainSlots([makeRainChannel('rain', { dropsPerSecond: 60, drips: 0, mix: 1 })]), 8000);
-      generator.render(2);
-      const entry = rainOf(generator).dropBank[0] as unknown as { samples: Float32Array; audibleLength: number };
-      const left = new Float64Array(entry.audibleLength + 16);
-      const right = new Float64Array(entry.audibleLength + 16);
-      // Hard left: the recording lands whole on one side, and not at all on the other.
-      const voice = { live: null, entry, position: 0, startOffset: 16, level: 1, gainLeft: 1, gainRight: 0 };
-      (generator.processor as unknown as { playDrop: (v: unknown, l: Float64Array, r: Float64Array, n: number) => boolean })
-        .playDrop(voice, left, right, left.length);
-      expect(Array.from(left.subarray(0, 16)).every((value) => value === 0)).toBe(true);
-      expect(Array.from(left.subarray(16))).toEqual(Array.from(entry.samples.subarray(0, entry.audibleLength)));
-      expect(right.every((value) => value === 0)).toBe(true);
-      // Only silence was cut: nothing past the playback length is audible.
-      expect(Array.from(entry.samples.subarray(entry.audibleLength)).every((value) => Math.abs(value) <= 1e-5)).toBe(true);
-    });
-
-    it('empties when what a drop is recorded with changes, and not otherwise', () => {
-      const slots = (changes: Partial<ReturnType<typeof createAmbientRainChannel>>) => makeRainSlots([makeRainChannel('rain', { dropsPerSecond: 60, ...changes })]);
-      const generator = createProcessor(19, slots({}), 8000);
+    it('empties when what a drop is recorded with changes, and not for intensity, placement or the weather', () => {
+      const base = layer('rain', { intensity: 0.9 });
+      const generator = createProcessor([base], { sampleRate: 8000, weather: { gustiness: 1, paceSec: 2 } });
       generator.render(4);
-      const configure = (changes: Partial<ReturnType<typeof createAmbientRainChannel>>) => generator.processor.port.onmessage?.({
-        data: { type: 'configure', channels: toWorkletChannels(slots(changes) as Parameters<typeof toWorkletChannels>[0]) },
-      });
       expect(rainOf(generator).dropBank.length).toBe(32);
-      configure({ distance: 0.9, pan: 0.4, mix: 0.9, volume: 0.1 });
+      generator.configure([{ ...base, intensity: 0.4, distance: 0.9, pan: 0.4, mix: 0.9, volume: 0.1, weather: 1 }]);
+      generator.render(4);
       expect(rainOf(generator).dropBank.length).toBe(32);
-      for (const change of [{ wetness: 0.1 }, { resonance: 0.9 }, { surface: 1 }]) {
-        configure(change);
-        expect(rainOf(generator).dropBank.length).toBe(0);
-        generator.render(4);
-        expect(rainOf(generator).dropBank.length).toBe(32);
-      }
-    });
-
-    it('keeps nothing recorded before the settings changed', () => {
-      const slots = (resonance: number) => makeRainSlots([makeRainChannel('rain', { dropsPerSecond: 60, resonance })]);
-      const generator = createProcessor(31, slots(0.4), 8000);
-      generator.render(0.1);
-      const before = new Set(rainOf(generator).dropBank);
-      expect(before.size).toBeGreaterThan(0);
-      generator.processor.port.onmessage?.({
-        data: { type: 'configure', channels: toWorkletChannels(slots(0.9) as Parameters<typeof toWorkletChannels>[0]) },
-      });
-      generator.render(2);
-      expect(rainOf(generator).dropBank.some((entry) => before.has(entry))).toBe(false);
-    });
-
-  });
-
-  describe('noise width and distance', () => {
-    const render = (overrides: NoiseOverrides) => createProcessor(41, [makeChannel('layer', {
-      type: 'pink', modulationAmplitude: 0, volume: 0.5, ...overrides,
-    })], 48000).render(1);
-    const correlation = (a: number[], b: number[]) => {
-      let ab = 0; let aa = 0; let bb = 0;
-      for (let index = 0; index < a.length; index += 1) {
-        ab += a[index] * b[index]; aa += a[index] * a[index]; bb += b[index] * b[index];
-      }
-      return ab / Math.sqrt(aa * bb);
-    };
-
-    it('narrows from two unrelated sides to one point without changing the level', () => {
-      const wide = render({ width: 1 });
-      const middle = render({ width: 0.5 });
-      const point = render({ width: 0 });
-      expect(Math.abs(correlation(wide.left, wide.right))).toBeLessThan(0.1);
-      expect(correlation(middle.left, middle.right)).toBeGreaterThan(0.5);
-      expect(point.left).toEqual(point.right);
-      expect(Math.abs(rms(point.left) - rms(wide.left)) / rms(wide.left)).toBeLessThan(0.1);
-    });
-
-    it('moves the sound into the reverb and darkens it with distance', () => {
-      const near = render({ distance: 0, type: 'white' });
-      const far = render({ distance: 1, type: 'white' });
-      // Direct sound falls, the reverb send rises.
-      expect(rms(far.left)).toBeLessThan(rms(near.left) * 0.5);
-      expect(rms(far.sendLeft)).toBeGreaterThan(rms(near.sendLeft) * 3);
-      // Darker: white noise crosses zero far less often once low-passed.
-      const crossings = (samples: number[]) => samples.reduce((count, value, index) => (
-        index > 0 && (value >= 0) !== (samples[index - 1] >= 0) ? count + 1 : count), 0);
-      expect(crossings(far.left)).toBeLessThan(crossings(near.left) * 0.5);
-    });
-
-    it('leaves a near, wide layer exactly as it was', () => {
-      const plain = createProcessor(43, [makeChannel('layer', { type: 'brown' })], 16000).render(0.5);
-      const explicit = createProcessor(43, [makeChannel('layer', { type: 'brown', distance: 0, width: 1 })], 16000).render(0.5);
-      expect(explicit.left).toEqual(plain.left);
-      expect(explicit.right).toEqual(plain.right);
+      generator.configure([{ ...base, surface: 1 }]);
+      expect(rainOf(generator).dropBank.length).toBe(0);
     });
   });
-  describe('tone', () => {
-    const renderTone = (filter: number, type: 'white' | 'pink' | 'brown', seconds = 1) => createProcessor(51, [makeChannel('layer', {
-      type, filter, modulationAmplitude: 0, volume: 0.5,
-    })], 48000).render(seconds);
 
-    // What makes the slider feel even: sweeping it changes the colour, not
-    // the loudness -- for every noise type, across both halves.
-    it('holds a layer near its loudness across the whole sweep', () => {
-      for (const type of ['white', 'pink', 'brown'] as const) {
-        const reference = rms(renderTone(0.5, type).left);
-        for (const filter of [0, 0.1, 0.25, 0.4, 0.6, 0.75, 0.9, 1]) {
-          const decibels = 20 * Math.log10(rms(renderTone(filter, type).left) / reference);
-          expect(Math.abs(decibels)).toBeLessThan(2);
-        }
-      }
-    });
-
-    it('darkens to the left and brightens to the right, a step at a time', () => {
-      const crossings = (samples: number[]) => samples.reduce((count, value, index) => (
-        index > 0 && (value >= 0) !== (samples[index - 1] >= 0) ? count + 1 : count), 0);
-      const sweep = [0, 0.15, 0.3, 0.45, 0.5, 0.55, 0.7, 0.85, 1].map((filter) => crossings(renderTone(filter, 'pink', 0.5).left));
-      for (let index = 1; index < sweep.length; index += 1) {
-        expect(sweep[index]).toBeGreaterThan(sweep[index - 1]);
-      }
-    });
-
-    it('does not reset the filter when the slider moves', () => {
-      const generator = createProcessor(53, [makeChannel('layer', { type: 'white', filter: 0.2 })], 48000);
-      const before = generator.render(0.2).left;
-      generator.processor.port.onmessage?.({ data: { type: 'configure', channels: toConfigure([makeChannel('layer', { type: 'white', filter: 0.21 })]) } });
-      const after = generator.render(0.01).left;
-      // The first sample after the move continues from the last one before it.
-      expect(Math.abs(after[0] - before.at(-1)!)).toBeLessThan(0.2);
-    });
-  });
-  describe('surface scale', () => {
-    const { constants } = createProcessor(1, [], 48000);
-    const profile = constants.surfaceProfile;
-
-    it('is each anchor exactly at its own position', () => {
-      for (const anchor of constants.RAIN_SURFACE_ANCHORS) {
-        expect(profile(anchor.at)).toEqual(anchor);
-      }
-    });
-
-    it('blends pitch and time geometrically and the rest linearly between anchors', () => {
-      const [forest, street] = constants.RAIN_SURFACE_ANCHORS as unknown as SurfaceProfile[];
-      const halfway = profile(0.25);
-      expect(halfway.click.centerHz[0]).toBeCloseTo(Math.sqrt(forest.click.centerHz[0] * street.click.centerHz[0]), 6);
-      expect(halfway.durationSec).toBeCloseTo(Math.sqrt(forest.durationSec * street.durationSec), 9);
-      expect(halfway.bed.gain).toBeCloseTo((forest.bed.gain + street.bed.gain) / 2, 9);
-    });
-
-    it('is the material only: standing water is the layer wetness, not part of the surface', () => {
-      for (const at of [0, 0.25, 0.5, 0.75, 1]) {
-        expect(JSON.stringify(profile(at))).not.toMatch(/bubble/i);
-      }
-      expect(constants.WET_BUBBLE_CHANCE).toBe(AMBIENT_WET_BUBBLE_CHANCE);
-    });
-
-
-    it('grows brighter, harder and longer-ringing from the leaves to the glass', () => {
-      const steps = [0, 0.2, 0.4, 0.6, 0.8, 1].map(profile);
-      for (let index = 1; index < steps.length; index += 1) {
-        expect(steps[index].bed.centerHz).toBeGreaterThan(steps[index - 1].bed.centerHz);
-      }
-      // Ringing: the most treble modes a drop may have rises toward the glass.
-      expect(steps[5].treble.count[1]).toBeGreaterThan(steps[3].treble.count[1]);
-      expect(steps[3].treble.count[1]).toBeGreaterThan(steps[0].treble.count[1]);
-    });
+  it('fills the field in the centre and is all on one side at the edge', () => {
+    const centre = createProcessor([layer('rain', { pan: 0, distance: 0, drips: 0, intensity: 0.9 })], { sampleRate: 8000 }).render(12);
+    expect(rms(centre.left) / rms(centre.right)).toBeGreaterThan(0.75);
+    expect(rms(centre.left) / rms(centre.right)).toBeLessThan(1.33);
+    expect(correlation(centre.left, centre.right)).toBeLessThan(0.6);
+    const edge = createProcessor([layer('rain', { pan: -1, distance: 0 })], { sampleRate: 8000 }).render(6);
+    expect(peak(edge.right)).toBeLessThan(1e-6);
   });
 });
 
-describe('ambient thunder', () => {
-  const rate = 8000;
-  // Every peal as set, unless a test is about randomness.
-  const steady = (overrides: Partial<ReturnType<typeof createAmbientThunderChannel>>) => ({ randomness: 0, ...overrides });
+describe('thunder', () => {
+  const steady = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'thunder' }>>) => layer('thunder', { randomness: 0, ...overrides });
   const countPeals = (generator: ReturnType<typeof createProcessor>) => {
     let peals = 0;
-    const startPeal = generator.processor.startPeal.bind(generator.processor);
-    generator.processor.startPeal = (channel, settings) => { peals += 1; startPeal(channel, settings); };
+    const start = generator.processor.startPeal.bind(generator.processor);
+    generator.processor.startPeal = (...args: unknown[]) => { peals += 1; start(...args); };
     return () => peals;
   };
 
   it('peals within seconds of starting, then is silent for as long as its share says', () => {
-    // 1 : 99 of a 4 s peal: 396 s of quiet after it.
-    const samples = createProcessor(5, makeThunderSlots([steady({ share: 0.01, lengthSec: 4, distance: 0.8 })]), rate).render(30);
-    const loud = samples.left.findIndex((value) => Math.abs(value) > 1e-4) / rate;
-    expect(loud).toBeGreaterThan(3);
-    expect(loud).toBeLessThan(13);
-    expect(samples.left.slice(-rate * 8).every((value) => value === 0)).toBe(true);
+    const out = createProcessor([steady({ share: 0.01, lengthSec: 4, distance: 0.8 })], { sampleRate: 8000, seed: 5 }).render(30);
+    const first = out.left.findIndex((value) => Math.abs(value) > 1e-4) / 8000;
+    expect(first).toBeGreaterThan(3);
+    expect(first).toBeLessThan(13);
+    expect(out.left.slice(-8000 * 8).every((value) => value === 0)).toBe(true);
   });
 
   it('spaces peals by the share: as long silent as sounding at the middle, no pause at the top, never at zero', () => {
     const peals = (share: number) => {
-      const generator = createProcessor(17, makeThunderSlots([steady({ share, lengthSec: 4 })]), 1000);
+      const generator = createProcessor([steady({ share, lengthSec: 4 })], { sampleRate: 1000, seed: 17, weather: { gustiness: 0, paceSec: 10 } });
       const count = countPeals(generator);
       generator.render(100);
       return count();
     };
     expect(peals(0)).toBe(0);
-    // The first peal comes 4-12 s in; after it, one every 8 s at 1 : 1 and
-    // every 4 s with no pause.
     expect(peals(0.5)).toBeGreaterThanOrEqual(12);
     expect(peals(0.5)).toBeLessThanOrEqual(13);
     expect(peals(1)).toBeGreaterThanOrEqual(23);
     expect(peals(1)).toBeLessThanOrEqual(25);
   });
 
-  it('varies each peal around the setting, within randomness x the jitter of each range, capped at its ends', () => {
-    const generator = createProcessor(3, makeThunderSlots([{ randomness: 1, share: 0.5, pan: 0.9, distance: 0.1, spread: 0.5, lengthSec: 10, volume: 0.5 }]), rate);
-    const processor = generator.processor as unknown as {
-      channels: Array<{ kind: string }>;
-      thunderPealSettings: (channel: unknown) => Record<string, number>;
-    };
-    const channel = processor.channels.find((item) => item.kind === 'thunder');
-    const draws = Array.from({ length: 2000 }, () => processor.thunderPealSettings(channel));
-    const range = (key: string) => [Math.min(...draws.map((draw) => draw[key])), Math.max(...draws.map((draw) => draw[key]))];
-    // A quarter of each range either way, capped at the range's ends.
-    const [panLow, panHigh] = range('pan');
-    expect(panLow).toBeGreaterThanOrEqual(0.4 - 1e-9);
-    expect(panLow).toBeLessThan(0.45);
-    expect(panHigh).toBe(1);
-    const [lengthLow, lengthHigh] = range('lengthSec');
-    expect(lengthLow).toBeGreaterThanOrEqual(10 - 6.5);
-    expect(lengthHigh).toBeLessThanOrEqual(10 + 6.5);
-    expect(lengthHigh - lengthLow).toBeGreaterThan(12);
-    const [distanceLow] = range('distance');
-    expect(distanceLow).toBe(0);
-    const [shareLow, shareHigh] = range('share');
-    expect(shareLow).toBeGreaterThanOrEqual(0.25);
-    expect(shareHigh).toBeLessThanOrEqual(0.75);
-    // Around the setting, not drifting: the average stays where it was put.
-    expect(draws.reduce((sum, draw) => sum + draw.volume, 0) / draws.length).toBeCloseTo(0.5, 1);
-  });
-
-  describe('contrast', () => {
-    const render = (contrast: number, seed: number) => createProcessor(
-      seed, makeThunderSlots([steady({ contrast, lengthSec: 10, share: 0.01 })]), rate,
-    ).render(25).left;
-    // How far the level swings: the mean distance, in log terms, of each
-    // 100 ms moment from the median of the two seconds around it, within
-    // the body of the peal. That is the scale of a peal's surges and
-    // breaks; below it, rumble flickers in level by nature, which no
-    // contrast can take out without distorting it.
-    const swing = (contrast: number) => {
-      let sum = 0;
-      let frames = 0;
-      for (const seed of [1, 2, 3]) {
-        const samples = render(contrast, seed);
-        const start = samples.findIndex((value) => value !== 0);
-        const size = rate / 10;
-        const levels: number[] = [];
-        for (let at = start; at + size <= samples.length; at += size) levels.push(rms(samples.slice(at, at + size)));
-        const loudest = Math.max(...levels);
-        for (let index = 10; index < levels.length - 10; index += 1) {
-          const around = levels.slice(index - 10, index + 11).sort((x, y) => x - y)[10];
-          if (around <= loudest * 0.1) continue;
-          sum += Math.abs(Math.log(levels[index] / around));
-          frames += 1;
-        }
-      }
-      return sum / frames;
-    };
-
-    it('pushes loud and quiet apart above zero and draws them together below it', () => {
-      const flat = swing(-1);
-      const off = swing(0);
-      const sharp = swing(1);
-      expect(sharp).toBeGreaterThan(1.3 * off);
-      expect(flat).toBeLessThan(0.85 * off);
-    });
-
-    it('never gains more than its cap, and still never jumps from silence', () => {
-      for (const seed of [1, 2, 3]) {
-        const off = render(0, seed);
-        const sharp = render(1, seed);
-        expect(peakOf(sharp)).toBeLessThanOrEqual(4 * peakOf(off) + 1e-9);
-        const start = sharp.findIndex((value) => value !== 0);
-        expect(peakOf(sharp.slice(start, start + (rate / 100)))).toBeLessThan(peakOf(sharp) * 0.5);
-      }
-    });
-  });
-
-  it('plays every peal as set with randomness at zero', () => {
-    const generator = createProcessor(3, makeThunderSlots([steady({ share: 0.5, pan: 0.2, lengthSec: 10 })]), rate);
-    const processor = generator.processor as unknown as {
-      channels: Array<{ kind: string }>;
-      thunderPealSettings: (channel: unknown) => Record<string, number>;
-    };
-    const channel = processor.channels.find((item) => item.kind === 'thunder');
-    for (let index = 0; index < 20; index += 1) {
-      expect(processor.thunderPealSettings(channel)).toMatchObject({ share: 0.5, pan: 0.2, lengthSec: 10 });
-    }
-  });
-
-  it('puts its weight in the boom band: 40-120 Hz carries a larger share with the booms in it', () => {
-    // Without booms this band holds 0.34-0.37 of a peal at these settings;
-    // with them 0.42-0.44. Below 30 Hz is high-passed away, above 120 Hz is
-    // the upper rumbles.
-    let share = 0;
-    for (const seed of [9, 1, 2]) {
-      const samples = createProcessor(seed, makeThunderSlots([steady({ distance: 0.3, lengthSec: 8, share: 0.01 })]), rate).render(25).left;
-      share += highShare(samples, rate, 40) - highShare(samples, rate, 120);
-    }
-    expect(share / 3).toBeGreaterThan(0.4);
-  });
-
-  describe('character breaks up the boom and only the boom', () => {
-    // The low end below 90 Hz, or what is above 250 Hz, each through a
-    // fourth-order Butterworth (two cascaded biquads, Q 0.54 and 1.31): the
-    // parts meet at 110 Hz, and a gentler filter lets the upper rumbles
-    // leak into the low band and hide what character does to the booms.
-    const band = (samples: number[], side: 'low' | 'high') => {
-      const hz = side === 'low' ? 90 : 250;
-      const stages = [0.5412, 1.3066].map((q) => {
-        const w = (2 * Math.PI * hz) / rate;
-        const alpha = Math.sin(w) / (2 * q);
-        const cos = Math.cos(w);
-        const a0 = 1 + alpha;
-        const b = side === 'low'
-          ? [(1 - cos) / 2, 1 - cos, (1 - cos) / 2]
-          : [(1 + cos) / 2, -(1 + cos), (1 + cos) / 2];
-        return { b: b.map((value) => value / a0), a: [(-2 * cos) / a0, (1 - alpha) / a0], x: [0, 0], y: [0, 0] };
-      });
-      return samples.map((input) => {
-        let value = input;
-        for (const stage of stages) {
-          const out = (stage.b[0] * value) + (stage.b[1] * stage.x[0]) + (stage.b[2] * stage.x[1]) - (stage.a[0] * stage.y[0]) - (stage.a[1] * stage.y[1]);
-          stage.x = [value, stage.x[0]];
-          stage.y = [out, stage.y[0]];
-          value = out;
-        }
-        return value;
-      });
-    };
-    // How far a band's level swings: the mean distance, in log terms, of
-    // each 100 ms moment from the median of the two seconds around it,
-    // within the body of the peal. Rumble swings a good deal on its own, so
-    // this compares settings rather than reading a level; frames and window
-    // are sized to the roll's gaps (a tenth to a third of a second), which a
-    // shorter window would take into its own median and hide.
-    const swing = (character: number, side: 'low' | 'high') => {
-      let sum = 0;
-      let frames = 0;
-      for (const seed of [1, 2, 3]) {
-        const raw = createProcessor(seed, makeThunderSlots([steady({ character, lengthSec: 10, share: 0.01 })]), rate).render(25).left;
-        const start = raw.findIndex((value) => value !== 0);
-        const samples = band(raw, side);
-        const size = rate / 10;
-        const levels: number[] = [];
-        for (let at = start; at + size <= samples.length; at += size) levels.push(rms(samples.slice(at, at + size)));
-        const loudest = Math.max(...levels);
-        for (let index = 10; index < levels.length - 10; index += 1) {
-          const around = levels.slice(index - 10, index + 11).sort((x, y) => x - y)[10];
-          if (around <= loudest * 0.1) continue;
-          sum += Math.abs(Math.log(levels[index] / around));
-          frames += 1;
-        }
-      }
-      return sum / frames;
-    };
-
-    it('swings the low end harder at the top of the slider', () => {
-      expect(swing(1, 'low')).toBeGreaterThan(1.25 * swing(0, 'low'));
-    });
-
-    it('leaves the rumble above the boom as it is at the top of the slider', () => {
-      const bottom = swing(0, 'high');
-      expect(Math.abs(swing(1, 'high') - bottom)).toBeLessThan(0.1 * bottom);
-    });
-  });
-
   it('is brighter near than far', () => {
-    const near = createProcessor(9, makeThunderSlots([steady({ distance: 0, lengthSec: 6, share: 0.01 })]), rate).render(20).left;
-    const far = createProcessor(9, makeThunderSlots([steady({ distance: 1, lengthSec: 6, share: 0.01 })]), rate).render(20).left;
-    expect(highShare(near, rate, 300)).toBeGreaterThan(2 * highShare(far, rate, 300));
-  });
-
-  it('rolls in: the loudest moment comes well after the first sound', () => {
-    for (const seed of [1, 2, 3, 4, 5]) {
-      const samples = createProcessor(seed, makeThunderSlots([steady({ lengthSec: 10, share: 0.01 })]), rate).render(25).left;
-      const start = samples.findIndex((value) => value !== 0);
-      const size = rate / 50;
-      const levels: number[] = [];
-      for (let at = start; at + size <= samples.length; at += size) levels.push(rms(samples.slice(at, at + size)));
-      const peakFrame = levels.indexOf(Math.max(...levels));
-      expect(peakFrame * 0.02).toBeGreaterThan(1);
-      expect(Math.max(...levels.slice(0, 25))).toBeLessThan(levels[peakFrame] * 0.4);
-    }
+    const near = createProcessor([steady({ distance: 0, lengthSec: 6, share: 0.01 })], { sampleRate: 8000, seed: 9 }).render(20).left;
+    const far = createProcessor([steady({ distance: 1, lengthSec: 6, share: 0.01 })], { sampleRate: 8000, seed: 9 }).render(20).left;
+    expect(highShare(near, 8000, 300)).toBeGreaterThan(2 * highShare(far, 8000, 300));
   });
 
   it('never jumps from silence: the first 10 ms of a near peal stay quiet', () => {
-    for (const seed of [1, 2, 3, 4]) {
-      const samples = createProcessor(seed, makeThunderSlots([steady({ distance: 0, share: 0.01 })]), rate).render(20).left;
-      const start = samples.findIndex((value) => value !== 0);
-      const peak = peakOf(samples);
-      const opening = peakOf(samples.slice(start, start + (rate / 100)));
-      expect(opening).toBeLessThan(peak * 0.5);
+    for (const seed of [1, 2, 3]) {
+      const out = createProcessor([steady({ distance: 0, share: 0.01 })], { sampleRate: 8000, seed }).render(20).left;
+      const start = out.findIndex((value) => value !== 0);
+      expect(peak(out.slice(start, start + 80))).toBeLessThan(peak(out) * 0.5);
     }
-  });
-
-  it('fills the whole field in the centre at full spread, and narrows onto a side as it is panned', () => {
-    const render = (pan: number) => createProcessor(21, makeThunderSlots([steady({ pan, spread: 1, share: 0.01, lengthSec: 8 })]), rate).render(20);
-    const centre = render(0);
-    expect(rms(centre.left) / rms(centre.right)).toBeGreaterThan(0.7);
-    expect(rms(centre.left) / rms(centre.right)).toBeLessThan(1.4);
-    const half = render(0.5);
-    expect(rms(half.right)).toBeGreaterThan(1.5 * rms(half.left));
-    const edge = render(-1);
-    expect(peakOf(edge.right)).toBeLessThan(1e-9);
   });
 
   it('holds a peal at its pan when spread is zero', () => {
-    const samples = createProcessor(21, makeThunderSlots([steady({ pan: -1, spread: 0, share: 0.01 })]), rate).render(20);
-    expect(peakOf(samples.left)).toBeGreaterThan(1e-3);
-    expect(peakOf(samples.right)).toBeLessThan(1e-9);
-  });
-
-  it('stays finite and bounded at every extreme, and renders the same whatever the block size', () => {
-    const extremes = [
-      { distance: 0, spread: 1, lengthSec: 30, share: 1, randomness: 1 },
-      { distance: 1, spread: 0, lengthSec: 4, share: 1, randomness: 0 },
-      { distance: 0.5, spread: 1, lengthSec: 30, share: 0.005, pan: 1, randomness: 1, volume: 1 },
-    ];
-    const large = createProcessor(33, makeThunderSlots(extremes), 6000, 128).render(16);
-    const small = createProcessor(33, makeThunderSlots(extremes), 6000, 32).render(16);
-    expect(small.left).toEqual(large.left);
-    expect(small.right).toEqual(large.right);
-    for (const value of [...large.left, ...large.right]) {
-      expect(Number.isFinite(value)).toBe(true);
-      expect(Math.abs(value)).toBeLessThan(4);
-    }
-    expect(peakOf(large.left)).toBeGreaterThan(0.01);
+    const out = createProcessor([steady({ pan: -1, spread: 0, share: 0.01 })], { sampleRate: 8000, seed: 21 }).render(20);
+    expect(peak(out.left)).toBeGreaterThan(1e-3);
+    expect(peak(out.right)).toBeLessThan(1e-9);
   });
 });
 
-describe('rain stereo image', () => {
-  /** Correlation of left and right: 1 for the same signal on both, near 0 for independent ones. */
-  const correlation = (left: number[], right: number[]) => {
-    let lr = 0;
-    let ll = 0;
-    let rr = 0;
-    for (let index = 0; index < left.length; index += 1) {
-      lr += left[index] * right[index];
-      ll += left[index] * left[index];
-      rr += right[index] * right[index];
-    }
-    return lr / Math.sqrt(ll * rr);
+describe('water', () => {
+  const births = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'water' }>>, seconds = 20) => {
+    const generator = createProcessor([layer('water', overrides)], { sampleRate: 8000 });
+    const times: number[] = [];
+    const make = generator.processor.makeBubble.bind(generator.processor);
+    generator.processor.makeBubble = (...args: unknown[]) => { times.push(generator.frame); return make(...args); };
+    generator.render(seconds);
+    return times;
   };
-  const render = (pan: number, changes: Partial<ReturnType<typeof createAmbientRainChannel>> = {}) => createProcessor(
-    31, makeRainSlots([makeRainChannel('rain', { pan, dropsPerSecond: 40, mix: 0.6, drips: 0.3, ...changes })]), 8000,
-  ).render(3);
 
-  it('fills the whole field in the centre: both sides equally loud and largely independent', () => {
-    const samples = render(0);
-    const left = rms(samples.rainLeft[0]);
-    const right = rms(samples.rainRight[0]);
-    expect(left / right).toBeGreaterThan(0.8);
-    expect(left / right).toBeLessThan(1.25);
-    expect(correlation(samples.rainLeft[0], samples.rainRight[0])).toBeLessThan(0.6);
+  it('bubbles faster as it flows harder', () => {
+    expect(births({ flow: 1, turbulence: 0 }).length).toBeGreaterThan(5 * births({ flow: 0.2, turbulence: 0 }).length);
   });
 
-  it('narrows as it is panned: more alike on both sides, and louder on its own side', () => {
-    const centre = render(0);
-    const half = render(0.5);
-    expect(correlation(half.rainLeft[0], half.rainRight[0])).toBeGreaterThan(correlation(centre.rainLeft[0], centre.rainRight[0]));
-    expect(rms(half.rainRight[0])).toBeGreaterThan(1.5 * rms(half.rainLeft[0]));
+  it('keeps its average flow at any turbulence, but clumps it into bursts', () => {
+    const counts = (turbulence: number) => {
+      const times = births({ flow: 0.6, turbulence }, 40);
+      const windows = new Array(400).fill(0);
+      for (const frame of times) windows[Math.min(399, Math.floor(frame / 800))] += 1;
+      const mean = windows.reduce((sum, value) => sum + value, 0) / windows.length;
+      const variance = windows.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / windows.length;
+      return { mean, spread: variance / mean };
+    };
+    const even = counts(0);
+    const tumbling = counts(1);
+    expect(tumbling.mean / even.mean).toBeGreaterThan(0.7);
+    expect(tumbling.mean / even.mean).toBeLessThan(1.4);
+    expect(tumbling.spread).toBeGreaterThan(3 * even.spread);
   });
 
-  it('is a point at the edge: all of it on that side', () => {
-    const samples = render(-1);
-    expect(rms(samples.rainLeft[0])).toBeGreaterThan(0.001);
-    expect(peakOf(samples.rainRight[0])).toBeLessThan(1e-9);
+  it('sounds lower with larger bubbles', () => {
+    const share = (size: number) => highShare(createProcessor([layer('water', { size, flow: 0.7 })], { sampleRate: 16000 }).render(6).left, 16000, 2500);
+    expect(share(1)).toBeLessThan(share(0));
   });
 });
 
+describe('fire', () => {
+  it('crackles at the rate its slider sets, and pops only when asked', () => {
+    const bursts = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'fire' }>>) => {
+      const generator = createProcessor([layer('fire', overrides)], { sampleRate: 8000 });
+      let count = 0;
+      const spawn = generator.processor.spawnBurst.bind(generator.processor);
+      generator.processor.spawnBurst = (...args: unknown[]) => { count += 1; spawn(...args); };
+      generator.render(30);
+      return count;
+    };
+    expect(bursts({ crackle: 1, pops: 0 })).toBeGreaterThan(8 * bursts({ crackle: 0.2, pops: 0 }));
+    const popsOf = (pops: number) => {
+      const generator = createProcessor([layer('fire', { crackle: 0, pops })], { sampleRate: 8000 });
+      return generator.processor.channels[0].nextPopFrame;
+    };
+    expect(popsOf(0)).toBe(Infinity);
+    expect(Number.isFinite(popsOf(0.5))).toBe(true);
+  });
+
+  it('roars louder and lower as it grows', () => {
+    const low = (size: number) => {
+      const out = createProcessor([layer('fire', { size, crackle: 0, pops: 0 })], { sampleRate: 8000 }).render(6).left;
+      return rms(out) * (1 - highShare(out, 8000, 300));
+    };
+    expect(low(1)).toBeGreaterThan(2 * low(0));
+  });
+});
+
+describe('chimes', () => {
+  it('tunes its tubes up a pentatonic scale, each ringing the modes of a free bar', () => {
+    const tubes = chimeTubeFrequencies(400, 5);
+    expect(tubes.map((hz) => 12 * Math.log2(hz / 400))).toEqual([0, 2, 4, 7, 9].map((value) => expect.closeTo(value, 9)));
+    const generator = createProcessor([layer('chimes', { pitchHz: 400, tubes: 5 })], { sampleRate: 48000 });
+    const tube = generator.processor.channels[0].tubeState[0];
+    const frequencyOf = (oscillator: { rotationSin: number; rotationCos: number }) => (Math.atan2(oscillator.rotationSin, oscillator.rotationCos) * 48000) / (2 * Math.PI);
+    const fundamental = frequencyOf(tube.oscillators[0]);
+    generator.constants.CHIME_MODE_RATIOS.forEach((ratio: number, mode: number) => {
+      expect(frequencyOf(tube.oscillators[mode * 2]) / fundamental).toBeCloseTo(ratio, 6);
+      // The doublet's partner, a fraction of a hertz above.
+      const split = frequencyOf(tube.oscillators[(mode * 2) + 1]) - frequencyOf(tube.oscillators[mode * 2]);
+      expect(split).toBeGreaterThan(0.1);
+      expect(split).toBeLessThan(1.5);
+    });
+  });
+
+  it('adds a strike to a ringing tube without a jump in its output', () => {
+    const generator = createProcessor([layer('chimes', { activity: 0 })], { sampleRate: 48000 });
+    const channel = generator.processor.channels[0];
+    const tube = channel.tubeState[0];
+    generator.processor.strikeTube(channel, tube, 1);
+    const left = new Float64Array(500);
+    const right = new Float64Array(500);
+    generator.processor.renderTubes(channel, left, right, 0, 250);
+    const before = tube.oscillators.map((oscillator: { sin: number; amplitude: number }) => oscillator.sin * oscillator.amplitude);
+    generator.processor.strikeTube(channel, tube, 1);
+    const after = tube.oscillators.map((oscillator: { sin: number; amplitude: number }) => oscillator.sin * oscillator.amplitude);
+    after.forEach((value: number, index: number) => expect(value).toBeCloseTo(before[index], 12));
+    generator.processor.renderTubes(channel, left, right, 250, 500);
+    let jump = 0;
+    for (let index = 1; index < 500; index += 1) jump = Math.max(jump, Math.abs(left[index] - left[index - 1]));
+    expect(jump).toBeLessThan(peak(Array.from(left)) * 0.5);
+  });
+
+  it('rings its upper modes harder with a hard clapper', () => {
+    const upperShare = (hardness: number) => {
+      const generator = createProcessor([layer('chimes', { hardness, activity: 0 })], { sampleRate: 48000, seed: 3 });
+      const channel = generator.processor.channels[0];
+      const tube = channel.tubeState[0];
+      generator.processor.strikeTube(channel, tube, 1);
+      const amplitudes = tube.oscillators.map((oscillator: { amplitude: number }) => oscillator.amplitude);
+      const fundamental = amplitudes[0] + amplitudes[1];
+      return (amplitudes.slice(2).reduce((sum: number, value: number) => sum + value, 0)) / fundamental;
+    };
+    expect(upperShare(1)).toBeGreaterThan(2 * upperShare(0));
+  });
+
+  it('keeps its tubes ringing through a retune', () => {
+    const base = layer('chimes', { activity: 0, pitchHz: 400 });
+    const generator = createProcessor([base], { sampleRate: 16000 });
+    const channel = generator.processor.channels[0];
+    generator.processor.strikeTube(channel, channel.tubeState[0], 1);
+    const before = channel.tubeState[0].oscillators[0].amplitude;
+    generator.configure([{ ...base, pitchHz: 600 }]);
+    expect(generator.processor.channels[0].tubeState[0].oscillators[0].amplitude).toBe(before);
+  });
+});

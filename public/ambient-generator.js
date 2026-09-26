@@ -4,36 +4,45 @@
  *
  * It is plain JavaScript under public/ because an AudioWorklet module is
  * loaded by URL and cannot import the app's TypeScript. The settings it reads
- * are defined in src/shared/ambientSound.ts; the engine
+ * are defined in src/shared/ambientSound.ts and resolved for it in
+ * src/shared/ambientSoundDsp.ts (toWorkletConfiguration); the engine
  * (src/sound/AmbientSoundEngine.ts) posts them here as a `configure` message.
  *
- * Outputs: output 0 is the stereo mix of every noise layer's direct sound.
- * Each rain layer is mono and goes to output `1 + outputIndex`, where
- * `outputIndex` is set by the engine per channel (-1 for a noise layer), so
- * the engine can pan, filter and reverb each rain layer on its own. The
- * stereo output at `processorOptions.noiseSendOutput` carries the noise
- * layers' reverb sends, which the engine feeds to the same reverb as the
- * rain. The worklet does not know how many rain slots exist; it writes to
- * whichever outputs it was given.
+ * Outputs: two stereo outputs -- 0 the DIRECT sound of every layer, 1 what
+ * every layer SENDS to the space (the engine's reverb). Every layer, of every
+ * kind, reaches them through one stage (placeLayer): its distance darkens it
+ * and splits it between the two, by one rule (resolveAmbientSpace). Thunder
+ * alone places itself, because a peal's distance is drawn per peal.
+ *
+ * Levels are absolute: a layer's `gain` (its fader times its kind's level) is
+ * all that scales it. Enabling another layer does not change any other
+ * layer's level.
+ *
+ * WEATHER is one slow gust signal for the whole scene (advanceWeather), and
+ * each layer that has a `weather` amount follows it in its own terms: a noise
+ * layer grows louder and brighter, rain heavier, chimes are struck more often
+ * and harder, a fire is fanned, thunder comes sooner. One signal, so a gust
+ * reaches all of them at once.
  *
  * Everything random is a seeded linear congruential generator, so a test can
  * render the same sound twice. The processor's root stream only seeds; each
- * channel draws from its own stream, and each rain voice's click noise from
- * its own again. Streams keep every layer's sound independent of the order
- * the others are rendered in, which is what lets rendering go a whole block
- * per voice rather than a sample at a time across everything (see process).
+ * channel draws from its own stream, the weather from its own, and each rain
+ * voice's click noise from its own again. Streams keep every layer's sound
+ * independent of the order the others are rendered in, which is what lets
+ * rendering go a whole block per layer (see process).
  *
  * Render cost is the constraint everything here is written against: a block
  * is 128 frames, under 3 ms at 48 kHz, on a real-time thread shared with the
  * rest of the audio -- music included. A block that runs late is heard as a
- * tear, and it also delays the next `configure` message, so a preset change
- * seems not to take. Hence:
+ * tear, and it also delays the next `configure` message. Hence:
  * - work that repeats is done once. Noise is read from loops rendered on the
  *   main thread (src/shared/ambientNoiseLoops.ts); rain drops are played
  *   back from a per-layer bank of recordings, a quarter of them recorded
- *   live as they play so the bank keeps changing (addVoice).
- * - what changes slowly is computed slowly. A noise layer's level and pan
- *   are computed every CONTROL_FRAMES samples and ramped between.
+ *   live as they play so the bank keeps changing (addVoice); the noise
+ *   filter's loudness compensation is a table built on the main thread.
+ * - what changes slowly is computed slowly. A noise layer's level, pan and
+ *   filter are computed every CONTROL_FRAMES samples and ramped between;
+ *   the weather once a block.
  * - nothing large is allocated while playing: the garbage collector pauses
  *   this thread, so recording buffers are recycled (takeSpareRecording).
  * - no trigonometry per sample (oscillators are rotated sin/cos pairs), no
@@ -59,10 +68,12 @@
  * `wetness`, and how much the material rings is its `resonance` (see
  * makeSurfaceVoice); both apply on top of any surface.
  *
- * Three ANCHORS pin the scale: forest (0: a soft, low pat on leaves, a small
- * thud, hardly a bubble), street (0.5: a sharp band-passed tick on pavement
- * and, on a share of drops, the plip of a puddle) and glass (1: a white-noise
- * click and many long-ringing modes -- hail on glass or on metal pipes).
+ * Five ANCHORS pin the scale: forest (0: a soft, low pat on leaves, a small
+ * thud, hardly a bubble), canvas (0.25: a taut membrane -- a dull, low thump
+ * with its highs damped by the cloth), street (0.5: a sharp band-passed tick
+ * on pavement), tin (0.75: a thin metal sheet -- a bright tick and a cluster
+ * of ringing modes) and glass (1: a white-noise click and many long-ringing
+ * modes -- hail on glass or on metal pipes).
  * Between two anchors every number is blended (surfaceProfile): frequencies,
  * times and rates geometrically, since that is how pitch and time are heard,
  * and everything else linearly.
@@ -86,6 +97,19 @@ const RAIN_SURFACE_ANCHORS = [
     drip: { gain: 3, pitchScale: 0.5 },
   },
   {
+    // A membrane: the cloth moves as a whole, so the impact is a low thump
+    // with little above a kilohertz, and the tension rings a low mode or two.
+    name: 'canvas',
+    at: 0.25,
+    click: { white: 0, centerHz: [380, 950], q: 1.1, decaySec: [0.003, 0.008], amplitude: [1.3, 2.1] },
+    durationSec: 0.18,
+    bass: { count: [1, 2], hz: [85, 210], decaySec: [0.02, 0.06], amplitude: [0.08, 0.16] },
+    body: { count: [1, 2], hz: [240, 700], decaySec: [0.008, 0.025], amplitude: [0.03, 0.06] },
+    treble: NO_TREBLE,
+    bed: { ratePerSec: 1500, centerHz: 950, q: 0.7, floor: 0.18, gain: 0.62, swellDepth: 0.35 },
+    drip: { gain: 3, pitchScale: 0.6 },
+  },
+  {
     name: 'street',
     at: 0.5,
     click: { white: 0, centerHz: [2200, 7500], q: 0.9, decaySec: [0.0012, 0.004], amplitude: [1.1, 2] },
@@ -95,6 +119,19 @@ const RAIN_SURFACE_ANCHORS = [
     treble: NO_TREBLE,
     bed: { ratePerSec: 2600, centerHz: 4200, q: 0.55, floor: 0.2, gain: 0.55, swellDepth: 0.3 },
     drip: { gain: 2.2, pitchScale: 0.6 },
+  },
+  {
+    // A thin metal sheet: a bright tick, and a cluster of modes that ring
+    // longer than pavement's but shorter and denser than glass's.
+    name: 'tin',
+    at: 0.75,
+    click: { white: 0.5, centerHz: [3000, 8000], q: 0.8, decaySec: [0.0008, 0.002], amplitude: [0.5, 0.9] },
+    durationSec: 0.45,
+    bass: { count: [1, 1], hz: [120, 380], decaySec: [0.03, 0.08], amplitude: [0.03, 0.08] },
+    body: { count: [3, 5], hz: [800, 4200], decaySec: [0.04, 0.16], amplitude: [0.02, 0.06] },
+    treble: { count: [1, 2], hz: [2500, 7000], decaySec: [0.01, 0.05], amplitude: [0.015, 0.05] },
+    bed: { ratePerSec: 1800, centerHz: 5000, q: 0.6, floor: 0.15, gain: 0.5, swellDepth: 0.3 },
+    drip: { gain: 2, pitchScale: 0.55 },
   },
   {
     // The original rain model, exactly: its click and its three banks.
@@ -172,24 +209,6 @@ function surfaceProfile(surface) {
   }
   return RAIN_SURFACE_ANCHORS[RAIN_SURFACE_ANCHORS.length - 1];
 }
-
-/**
- * A noise layer's `movement` (0-1) at full: how far one cycle's period may
- * stretch or shrink (as a power of two, so 1 is anywhere from half to double),
- * the largest share of the swell's rise one cycle may lose, and the furthest
- * the sway takes the layer from centre.
- */
-const MOVEMENT_PERIOD_OCTAVES = 1;
-const MOVEMENT_RISE_LOSS = 0.5;
-const MOVEMENT_PAN_REACH = 0.6;
-
-/**
- * A noise layer's level and pan move over periods of half a second or more,
- * so they are computed every CONTROL_FRAMES samples and ramped linearly in
- * between (see beginControlSegment) -- a ramp of under a millisecond, about
- * 1/750 of the shortest cycle.
- */
-const CONTROL_FRAMES = 32;
 
 /**
  * The drop bank (see addVoice): each rain layer keeps up to DROP_BANK_SIZE
@@ -378,6 +397,136 @@ const RAIN_DRIPS_MAX_PER_SEC = 3;
 /** Average seconds between the bed's swell targets. */
 const BED_SWELL_PERIOD_SEC = 2.5;
 
+
+/**
+ * A fader position (0-1) as a gain; mirrors ambientFaderGain in
+ * src/shared/ambientSound.ts, which ambient-generator.test.ts holds it to.
+ * Thunder needs it here because randomness moves each peal's fader.
+ */
+const FADER_RANGE_DB = 48;
+function faderGain(position) {
+  if (!(position > 0)) return 0;
+  return 10 ** ((-FADER_RANGE_DB * (1 - Math.min(1, position))) / 20);
+}
+
+/**
+ * A noise layer's `variation` (0-1) at full: how far one cycle's period may
+ * stretch or shrink (as a power of two, so 1 is anywhere from half to
+ * double) and the largest share of the swell's rise one cycle may lose.
+ * Its `sway` at full: the furthest the sway takes it from centre.
+ */
+const VARIATION_PERIOD_OCTAVES = 1;
+const VARIATION_RISE_LOSS = 0.5;
+const SWAY_PAN_REACH = 0.8;
+
+/**
+ * A noise layer's level, pan and filter move over periods of half a second
+ * or more, so they are computed every CONTROL_FRAMES samples and ramped
+ * linearly in between (see beginControlSegment) -- a ramp of under a
+ * millisecond. The filter's coefficients are stepped, not ramped: the
+ * state-variable filter is stable under modulation and a step of a few
+ * cents every 32 samples is inaudible.
+ */
+const CONTROL_FRAMES = 32;
+/** The lowest a noise layer's filter may be pushed by sweep and weather together. */
+const NOISE_CUTOFF_FLOOR_HZ = 40;
+
+/**
+ * The weather (advanceWeather): gusts and lulls as targets drawn in -1..1,
+ * one on average every `paceSec`, the signal gliding toward each over
+ * WEATHER_GLIDE_SHARE of the pace. What a layer does with a full gust
+ * (its `weather` amount x the scene's gustiness x the signal, -1..1):
+ */
+const WEATHER_GLIDE_SHARE = 0.35;
+/** A noise layer's level: +/- this many octaves of gain (6 dB each). */
+const WEATHER_NOISE_LEVEL_OCTAVES = 1;
+/** A noise layer's filter: +/- this many octaves of cutoff. */
+const WEATHER_NOISE_BRIGHT_OCTAVES = 1;
+/** A rain layer's intensity: +/- this much of the slider. */
+const WEATHER_RAIN_REACH = 0.3;
+/** Thunder's pauses: shortened (gust) or lengthened (lull) by up to this many octaves. */
+const WEATHER_THUNDER_OCTAVES = 1.5;
+/** Chimes: strike rate +/- this many octaves, force +/- this share. */
+const WEATHER_CHIME_RATE_OCTAVES = 2;
+const WEATHER_CHIME_FORCE = 0.5;
+/** A fire: size and crackle +/- this much of their sliders. */
+const WEATHER_FIRE_REACH = 0.3;
+
+/**
+ * A rain layer's intensity (0-1), beyond its drop rate (dropsRange, set on
+ * the main thread): the wash rises by WASH_INTENSITY_DB over the slider, and
+ * the drops weigh more -- played louder -- by DROP_INTENSITY_LEVEL.
+ */
+const WASH_INTENSITY_DB = 15;
+const DROP_INTENSITY_LEVEL = [0.75, 1.25];
+
+/**
+ * Water (renderWater): bubbles, each van den Doel's model (makeBubble) --
+ * ringing near 3/r Hz, damped by r, rising in pitch -- born at a rate `flow`
+ * sets, in bursts `turbulence` sets, with radii drawn from a power law
+ * between two bounds `size` sets (small bubbles far outnumber large ones in
+ * running water). Under them, the RUSH: pink noise band-passed low, the
+ * sound of the flow itself.
+ */
+const WATER_BUBBLES_PER_SEC = [15, 500];
+const WATER_RADIUS_MIN_MM = [0.4, 1.5];
+const WATER_RADIUS_MAX_MM = [1.6, 7];
+/** p(r) proportional to r^-WATER_RADIUS_EXPONENT between the bounds. */
+const WATER_RADIUS_EXPONENT = 2;
+/** Mean seconds between the burst process's targets; its glide, in seconds. */
+const WATER_BURST_SEC = 0.22;
+const WATER_BURST_GLIDE_SEC = 0.03;
+/** The burst multiplier's spread (log-normal sigma) at turbulence 1. */
+const WATER_BURST_SIGMA = 1.3;
+const WATER_RUSH_HZ = [900, 320];
+const WATER_RUSH_LEVEL = 0.3;
+const MAX_WATER_BUBBLES = 96;
+
+/**
+ * Fire (renderFire), after Farnell's model: a ROAR (brown noise low-passed,
+ * fluttering in level as the flames lap), a HISS (white noise high-passed,
+ * flickering erratically), CRACKLES (sub-millisecond to few-millisecond
+ * bursts of noise through a resonant band, often in small clusters) and POPS
+ * (louder, lower, longer bursts, each followed by a short sizzle of crackles
+ * -- sap boiling out of the wood).
+ */
+const FIRE_ROAR_HZ = [420, 150];
+const FIRE_ROAR_LEVEL = [0.25, 1];
+const FIRE_FLUTTER_SEC = [0.06, 0.25];
+const FIRE_FLUTTER_RANGE = [0.45, 1.3];
+const FIRE_HISS_HZ = 2600;
+const FIRE_HISS_LEVEL = [0.015, 0.08];
+const FIRE_HISS_FLICKER_SEC = [0.02, 0.08];
+const FIRE_CRACKLES_PER_SEC = [0.3, 30];
+const FIRE_CRACKLE_CLUSTER_CHANCE = 0.45;
+const FIRE_CRACKLE_CLUSTER_SEC = [0.005, 0.04];
+const FIRE_CRACKLE = { hz: [1500, 7000], q: [1.5, 4], decaySec: [0.0003, 0.0025], level: [0.1, 1] };
+const FIRE_POPS_PER_SEC = 1.2;
+const FIRE_POP = { hz: [350, 1400], q: [5, 9], decaySec: [0.006, 0.02], level: [1.2, 2.2], sizzle: [3, 8], sizzleSec: [0.05, 0.2] };
+const MAX_FIRE_BURSTS = 48;
+
+/**
+ * Chimes (renderChimes): each tube a free-free bar, its modes at these
+ * ratios of its fundamental (Euler-Bernoulli: (2n+1)^2 approximately, the
+ * first four), each a DOUBLET -- two oscillators a fraction of a hertz apart,
+ * as the slight asymmetry of a real tube splits every mode -- which is the
+ * slow shimmer a struck chime has and a pure sine does not. Higher modes die
+ * faster (CHIME_MODE_DECAY_EXPONENT). A tube is one object: striking it again
+ * adds to what it is already ringing rather than starting a new voice.
+ */
+const CHIME_MODE_RATIOS = [1, 2.756, 5.404, 8.933];
+const CHIME_MODE_WEIGHTS = [1, 0.55, 0.35, 0.2];
+const CHIME_MODE_DECAY_EXPONENT = 0.7;
+/** How far a soft clapper (hardness 0) suppresses the upper modes: weight x ratio^-this. */
+const CHIME_SOFT_TILT = 1.3;
+const CHIME_DOUBLET_HZ = [0.2, 1.4];
+const CHIME_DETUNE_CENTS = 6;
+/** A clapper bounces: the chance of a second strike on a neighbouring tube, and how soon. */
+const CHIME_BOUNCE_CHANCE = 0.4;
+const CHIME_BOUNCE_SEC = [0.07, 0.3];
+const CHIME_STRIKE_FORCE = [0.35, 1];
+const CHIME_CLICK = { hz: [2500, 5500], q: [1.2, 2], decaySec: [0.0006, 0.0015], level: [0.2, 0.3] };
+
 /**
  * A state-variable filter's coefficients and state (the topology-preserving
  * "TPT" form, stable at any frequency below Nyquist). One filter has band-
@@ -426,19 +575,31 @@ function bandPass(filter, input) {
 class AmbientGenerator extends AudioWorkletProcessor {
   constructor(options) {
     super();
-    this.rootStream = { seed: (options?.processorOptions?.seed ?? 1) >>> 0 };
-    this.noiseSendOutput = options?.processorOptions?.noiseSendOutput ?? -1;
+    const processorOptions = options?.processorOptions ?? {};
+    this.rootStream = { seed: (processorOptions.seed ?? 1) >>> 0 };
     // One seamless loop per noise type, rendered on the main thread
-    // (src/shared/ambientNoiseLoops.ts) and read by every noise layer.
-    this.noiseLoops = options?.processorOptions?.noiseLoops ?? {};
+    // (src/shared/ambientNoiseLoops.ts), and the gain that brings each to
+    // the same audible level (noiseLoopGains).
+    this.noiseLoops = processorOptions.noiseLoops ?? {};
+    this.noiseGains = processorOptions.noiseGains ?? {};
     // The stream `random()` draws from: the channel being configured or
     // rendered, else the root. Set by withStream.
     this.stream = this.rootStream;
     this.channels = [];
     this.soloChannelId = null;
+    this.weather = {
+      stream: { seed: Math.floor(this.random() * 0x100000000) >>> 0 },
+      gustiness: 0,
+      paceSec: 12,
+      value: 0,
+      target: 0,
+      framesLeft: 0,
+    };
+    // The scene's gust this block, -1..1: the weather signal x gustiness.
+    this.gust = 0;
     this.port.onmessage = (event) => {
       if (event.data?.type !== 'configure') return;
-      this.configure(event.data.channels ?? []);
+      this.configure(event.data.channels ?? [], event.data.weather ?? null);
     };
   }
 
@@ -474,135 +635,95 @@ class AmbientGenerator extends AudioWorkletProcessor {
     return this.withStream(stream, () => this.initChannel(settings, stream));
   }
 
+
   initChannel(settings, stream) {
     const channel = {
       ...settings,
       stream,
-      // Where this layer reads the shared noise loop, as a fraction of it;
-      // the right side reads half a loop away, so the two are unrelated.
-      loopStart: this.random(),
-      loopLeft: -1,
-      loopRight: -1,
-      controlFramesLeft: 0,
-      controlReady: false,
-      level: 0,
-      levelStep: 0,
-      gainLeft: 1,
-      gainLeftStep: 0,
-      gainRight: 1,
-      gainRightStep: 0,
-      phase: this.random(),
-      // Movement's per-cycle draw (see startCycle). The neutral values make
-      // a layer with no movement play exactly as one without the feature.
-      periodFactor: 1,
-      riseFactor: 1,
-      swaySide: 0,
-      panFrom: 0,
-      panTo: 0,
-      nextEventFrame: 0,
-      activeVoices: [],
-      nextDripFrame: Infinity,
-      bed: null,
-      // The tone filter (configureFilter): a two-pole state-variable filter
-      // per side, or none.
-      toneLeft: null,
-      toneRight: null,
-      toneHighPass: false,
-      toneDamping: 0,
-      toneGain: 1,
       // Distance's darkening (configureSpace): a two-pole low-pass per side.
       darkLeft: null,
       darkRight: null,
-      widthDirect: 1,
-      widthCross: 0,
+      directGain: 1,
+      reverbSend: 0,
     };
-    this.configureFilter(channel);
-    if (channel.kind === 'noise') this.configureSpace(channel);
-    if (channel.kind === 'thunder') this.configureThunder(channel, null);
-    if (channel.kind === 'rain') {
-      channel.nextEventFrame = currentFrame + this.eventDelayFrames(settings.dropsPerSecond);
-      this.configureRain(channel, null);
+    switch (channel.kind) {
+      case 'noise':
+        this.initNoise(channel);
+        break;
+      case 'rain':
+        channel.activeVoices = [];
+        channel.nextDripFrame = Infinity;
+        channel.bed = null;
+        this.updateRainIntensity(channel);
+        channel.nextEventFrame = currentFrame + this.eventDelayFrames(channel.dropsPerSecond);
+        this.configureRain(channel, null);
+        break;
+      case 'thunder':
+        this.configureThunder(channel, null);
+        break;
+      case 'water':
+        this.initWater(channel);
+        break;
+      case 'fire':
+        this.initFire(channel);
+        break;
+      case 'chimes':
+        this.configureChimes(channel, null);
+        break;
+      default:
+        break;
     }
+    this.configureSpace(channel);
     return channel;
   }
 
   /**
-   * Replace the channel list. A channel that keeps its id keeps its running
-   * state (voices, filter memory, the noise cycle's phase) so a slider move
-   * does not click; only a change to a drop rate reschedules the next drop.
+   * Replace the channel list and the weather. A channel that keeps its id
+   * keeps its running state (voices, filter memory, the noise cycle's phase,
+   * a tube's ring) so a slider move does not click; only a change to a rate
+   * reschedules what that rate drives.
    */
-  configure(settings) {
+  configure(settings, weather) {
+    if (weather) {
+      this.weather.gustiness = Math.max(0, Math.min(1, weather.gustiness ?? 0));
+      this.weather.paceSec = Math.max(0.1, weather.paceSec ?? 12);
+    }
     this.soloChannelId = settings.find((channel) => channel.solo)?.id ?? null;
     const activeSettings = settings.filter((channel) => channel.enabled !== false);
     const previousById = new Map(this.channels.map((channel) => [channel.id, channel]));
     this.channels = activeSettings.map((next) => {
       const previous = previousById.get(next.id);
-      if (!previous) return this.makeChannel(next);
+      if (!previous || previous.kind !== next.kind) return this.makeChannel(next);
       return this.withStream(previous.stream, () => {
         const before = { ...previous };
-        if (next.kind === 'rain' && previous.dropsPerSecond !== next.dropsPerSecond) {
-          previous.nextEventFrame = currentFrame + this.eventDelayFrames(next.dropsPerSecond);
-        }
         Object.assign(previous, next);
-        this.configureFilter(previous);
-        if (previous.kind === 'noise') this.configureSpace(previous);
+        if (previous.kind === 'noise') this.configureNoise(previous);
+        if (previous.kind === 'rain') {
+          this.updateRainIntensity(previous);
+          if (before.intensity !== previous.intensity) {
+            previous.nextEventFrame = currentFrame + this.eventDelayFrames(previous.dropsPerSecond);
+          }
+          this.configureRain(previous, before);
+        }
         if (previous.kind === 'thunder') this.configureThunder(previous, before);
-        if (previous.kind === 'rain') this.configureRain(previous, before);
+        if (previous.kind === 'water') this.configureWater(previous);
+        if (previous.kind === 'fire') this.configureFire(previous, before);
+        if (previous.kind === 'chimes') this.configureChimes(previous, before);
+        this.configureSpace(previous);
         return previous;
       });
     });
   }
 
   /**
-   * A noise layer's tone filter, from the slider as resolved on the main
-   * thread (src/shared/ambientSoundDsp.ts's resolveNoiseTone: which mode, the
-   * cutoff, the resonance and the gain that keeps the layer's loudness). A
-   * slider move changes only the coefficients: the filters keep their memory,
-   * so moving it does not click.
-   */
-  configureFilter(channel) {
-    const tone = channel.tone;
-    if (!tone || tone.mode === 'none') {
-      channel.toneLeft = null;
-      channel.toneRight = null;
-      channel.toneGain = 1;
-      return;
-    }
-    const left = stateVariableFilter(tone.cutoffHz, tone.q);
-    const right = stateVariableFilter(tone.cutoffHz, tone.q);
-    if (channel.toneLeft) {
-      left.s1 = channel.toneLeft.s1;
-      left.s2 = channel.toneLeft.s2;
-      right.s1 = channel.toneRight.s1;
-      right.s2 = channel.toneRight.s2;
-    }
-    channel.toneLeft = left;
-    channel.toneRight = right;
-    channel.toneHighPass = tone.mode === 'highpass';
-    channel.toneDamping = 1 / tone.q;
-    channel.toneGain = tone.gain;
-  }
-
-  /**
-   * A noise layer's width and distance, turned into what renderNoise needs.
-   *
-   * Width blends the two unrelated noise reads: each side takes
-   * cos(t) of its own and sin(t) of the other, t = (1 - width) * pi/4. At
-   * width 1 that is the two reads as they are; at 0 both sides are the same
-   * sum. cos^2 + sin^2 = 1, so for unrelated noise the level is the same at
-   * every width.
-   *
-   * Distance arrives resolved (`space`, from resolveAmbientSpace -- the rule
-   * the rain layers use). Its darkening is a two-pole low-pass at Q 0.707,
-   * the same response as the BiquadFilterNode that darkens a rain layer; its
-   * direct and reverb-send gains are applied when the layer is mixed
-   * (process). At distance 0 there is no darkening filter at all, so a near
-   * layer is untouched.
+   * A layer's distance, turned into what placeLayer needs: its direct and
+   * reverb-send gains, and its darkening -- a two-pole low-pass at Q 0.707
+   * per side. Distance arrives resolved (`space`, resolveAmbientSpace). At
+   * distance 0 there is no darkening filter at all, so a near layer is
+   * untouched. Thunder places each peal itself and has none of this.
    */
   configureSpace(channel) {
-    const angle = (1 - (channel.width ?? 1)) * Math.PI / 4;
-    channel.widthDirect = Math.cos(angle);
-    channel.widthCross = Math.sin(angle);
+    if (channel.kind === 'thunder') return;
     const space = channel.space ?? { cutoffHz: 18000, directGain: 1, reverbSend: 0 };
     channel.directGain = space.directGain;
     channel.reverbSend = space.reverbSend;
@@ -624,7 +745,385 @@ class AmbientGenerator extends AudioWorkletProcessor {
     channel.darkRight = right;
   }
 
+  /**
+   * A layer's block, from `left`/`right` (which it darkens in place) into
+   * the direct and send outputs, at its gain. The one way every layer but
+   * thunder reaches the outputs.
+   */
+  placeLayer(channel, left, right, length, direct, send) {
+    const dark = channel.darkLeft;
+    if (dark) {
+      // stateVariableFilter's step, read at its low-pass output v2, with the
+      // state in locals for the block (a per-sample object read and write
+      // cost three times the rest of a noise layer).
+      const a1 = dark.a1;
+      const a2 = dark.a2;
+      const a3 = dark.a3;
+      let leftS1 = dark.s1;
+      let leftS2 = dark.s2;
+      let rightS1 = channel.darkRight.s1;
+      let rightS2 = channel.darkRight.s2;
+      for (let index = 0; index < length; index += 1) {
+        let v3 = left[index] - leftS2;
+        let v1 = (a1 * leftS1) + (a2 * v3);
+        let v2 = leftS2 + (a2 * leftS1) + (a3 * v3);
+        leftS1 = (2 * v1) - leftS1;
+        leftS2 = (2 * v2) - leftS2;
+        left[index] = v2;
+        v3 = right[index] - rightS2;
+        v1 = (a1 * rightS1) + (a2 * v3);
+        v2 = rightS2 + (a2 * rightS1) + (a3 * v3);
+        rightS1 = (2 * v1) - rightS1;
+        rightS2 = (2 * v2) - rightS2;
+        right[index] = v2;
+      }
+      dark.s1 = leftS1;
+      dark.s2 = leftS2;
+      channel.darkRight.s1 = rightS1;
+      channel.darkRight.s2 = rightS2;
+    }
+    const directScale = channel.gain * channel.directGain;
+    const sendScale = channel.gain * channel.reverbSend;
+    const directLeft = direct[0];
+    const directRight = direct[1] ?? directLeft;
+    for (let index = 0; index < length; index += 1) {
+      directLeft[index] += left[index] * directScale;
+      if (directRight !== directLeft) directRight[index] += right[index] * directScale;
+    }
+    if (!send?.[0] || sendScale <= 0) return;
+    const sendLeft = send[0];
+    const sendRight = send[1] ?? sendLeft;
+    for (let index = 0; index < length; index += 1) {
+      sendLeft[index] += left[index] * sendScale;
+      if (sendRight !== sendLeft) sendRight[index] += right[index] * sendScale;
+    }
+  }
 
+  // -------------------------------------------------------------------------
+  // Weather.
+
+  /**
+   * Move the scene's gust signal on by one block. A new target, anywhere in
+   * -1 (a lull) .. 1 (a gust), is drawn on average once every `paceSec`, and
+   * the signal glides toward it with a time constant of WEATHER_GLIDE_SHARE
+   * of the pace, so a gust builds and falls away rather than switching. It
+   * draws from its own stream, so it is the same whichever layers play.
+   */
+  advanceWeather(length) {
+    const weather = this.weather;
+    weather.framesLeft -= length;
+    if (weather.framesLeft <= 0) {
+      this.withStream(weather.stream, () => {
+        weather.target = (this.random() * 2) - 1;
+        weather.framesLeft = Math.max(1, Math.round(-Math.log(Math.max(1e-9, 1 - this.random())) * weather.paceSec * sampleRate));
+      });
+    }
+    const glide = 1 - Math.exp(-length / (WEATHER_GLIDE_SHARE * weather.paceSec * sampleRate));
+    weather.value += (weather.target - weather.value) * glide;
+    this.gust = weather.gustiness * weather.value;
+  }
+
+  /** How far the weather moves this layer now, -1..1: its `weather` amount x the scene's gust. */
+  weatherFactor(channel) {
+    return (channel.weather ?? 0) * this.gust;
+  }
+
+  // -------------------------------------------------------------------------
+  // Noise.
+
+  initNoise(channel) {
+    // Where this layer reads the noise loops, as a fraction of them; the
+    // right side reads half a loop away, so the two are unrelated.
+    channel.loopStart = this.random();
+    channel.loopLeft = -1;
+    channel.loopRight = -1;
+    channel.controlFramesLeft = 0;
+    channel.controlReady = false;
+    channel.level = 0;
+    channel.levelStep = 0;
+    channel.gainLeft = 1;
+    channel.gainLeftStep = 0;
+    channel.gainRight = 1;
+    channel.gainRightStep = 0;
+    channel.phase = this.random();
+    // Variation's and sway's per-cycle draw (see startCycle); neutral values
+    // make a layer with neither play exactly as a plain cycle.
+    channel.periodFactor = 1;
+    channel.riseFactor = 1;
+    channel.swaySide = 0;
+    channel.panFrom = 0;
+    channel.panTo = 0;
+    // The filter's state per side, and its coefficients (set per control segment).
+    channel.filterLeft = { s1: 0, s2: 0 };
+    channel.filterRight = { s1: 0, s2: 0 };
+    channel.filterA1 = 1;
+    channel.filterA2 = 0;
+    channel.filterA3 = 0;
+    this.configureNoise(channel);
+  }
+
+  /**
+   * A noise layer's width and colour, turned into what renderNoise needs.
+   *
+   * Width blends the two unrelated noise reads: each side takes cos(t) of
+   * its own and sin(t) of the other, t = (1 - width) * pi/4. cos^2 + sin^2 =
+   * 1, so for unrelated noise the level is the same at every width.
+   *
+   * Colour arrives as the three loops' crossfade weights (noiseColourWeights),
+   * each folded here with its loop's level-matching gain.
+   */
+  configureNoise(channel) {
+    const angle = (1 - (channel.width ?? 1)) * Math.PI / 4;
+    channel.widthDirect = Math.cos(angle);
+    channel.widthCross = Math.sin(angle);
+    const weights = channel.colourWeights ?? [0, 1, 0];
+    channel.mixBrown = weights[0] * (this.noiseGains.brown ?? 1);
+    channel.mixPink = weights[1] * (this.noiseGains.pink ?? 1);
+    channel.mixWhite = weights[2] * (this.noiseGains.white ?? 1);
+    const focus = Math.max(0, Math.min(1, channel.focus ?? 0));
+    const k = 1 / (channel.q ?? Math.SQRT1_2);
+    channel.filterK = k;
+    // Low-pass and unity-peak band-pass, blended by focus
+    // (ambientSoundDsp.ts's noiseFilterPower is this response).
+    channel.lowMix = 1 - focus;
+    channel.bandMix = focus * k;
+    // A filter change must reach the next segment's coefficients.
+    channel.controlReady = false;
+  }
+
+  /**
+   * A new cycle has begun (the phase just wrapped, so the level is at its
+   * trough and flat): roll this cycle's deviations.
+   * - variation: the period is multiplied by 2^(variation * u), u uniform in
+   *   -1..1, so the mean tempo is still the period set; the rise above the
+   *   trough keeps a random share of itself, never less than 1 - variation *
+   *   VARIATION_RISE_LOSS -- the trough stays where it is, so the swap
+   *   cannot make the level jump.
+   * - sway: the layer heads to the OTHER side of centre from where it was
+   *   heading, by a random reach up to sway * SWAY_PAN_REACH, starting from
+   *   wherever it is now. The first cycle picks a side at random, so several
+   *   layers do not all swing together.
+   * Neither draws anything from the stream at 0.
+   */
+  startCycle(channel) {
+    const variation = channel.variation ?? 0;
+    if (variation > 0) {
+      channel.periodFactor = 2 ** (variation * VARIATION_PERIOD_OCTAVES * ((this.random() * 2) - 1));
+      channel.riseFactor = 1 - (variation * VARIATION_RISE_LOSS * this.random());
+    } else {
+      channel.periodFactor = 1;
+      channel.riseFactor = 1;
+    }
+    channel.panFrom = channel.panTo;
+    const sway = channel.sway ?? 0;
+    if (sway > 0) {
+      channel.swaySide = channel.swaySide === 0 ? (this.random() < 0.5 ? -1 : 1) : -channel.swaySide;
+      channel.panTo = channel.swaySide * sway * SWAY_PAN_REACH * (0.5 + (0.5 * this.random()));
+    } else {
+      channel.panTo = 0;
+    }
+  }
+
+  /**
+   * Where the sway is at `phase`: travelling from panFrom to panTo so that
+   * it is halfway exactly at the swell's peak (phase = skew), on a
+   * smoothstep so it leaves and arrives at rest. The sound therefore sweeps
+   * past while it is loudest, like a gust going by.
+   */
+  swayAt(channel, phase) {
+    const peak = channel.skew ?? 0.5;
+    const progress = phase <= peak
+      ? (peak > 0 ? 0.5 * (phase / peak) : 0.5)
+      : 0.5 + (0.5 * ((phase - peak) / Math.max(1e-9, 1 - peak)));
+    const eased = progress * progress * (3 - (2 * progress));
+    return channel.panFrom + ((channel.panTo - channel.panFrom) * eased);
+  }
+
+  /** The loop for a noise type; a type the engine did not provide plays as silence. */
+  noiseLoop(type) {
+    return this.noiseLoops[type] ?? SILENT_LOOP;
+  }
+
+  /**
+   * The noise cycle's value (-1..1) at `phase` (0..1), interpolated from the
+   * table the engine built (src/shared/ambientSoundDsp.ts's buildNoiseCycle).
+   * A layer configured without one plays a plain sine.
+   */
+  cycleAt(channel, phase) {
+    const cycle = channel.cycle;
+    if (!cycle?.length) return -Math.cos(2 * Math.PI * phase);
+    const position = phase * (cycle.length - 1);
+    const low = Math.floor(position);
+    const high = Math.min(cycle.length - 1, low + 1);
+    return cycle[low] + ((cycle[high] - cycle[low]) * (position - low));
+  }
+
+
+  /**
+   * The gain that holds a noise layer's loudness with its filter at
+   * `cutoffHz`, read by the log of the cutoff from the table the main thread
+   * built for its colour and focus (ambientSoundDsp.ts's buildNoiseToneTable).
+   */
+  toneGainAt(channel, cutoffHz) {
+    const table = channel.toneTable;
+    const range = channel.toneTableRangeHz;
+    if (!table?.length || !range) return 1;
+    const span = Math.log(range[1] / range[0]);
+    const position = Math.max(0, Math.min(table.length - 1, (Math.log(cutoffHz / range[0]) / span) * (table.length - 1)));
+    const low = Math.floor(position);
+    const high = Math.min(table.length - 1, low + 1);
+    return table[low] + ((table[high] - table[low]) * (position - low));
+  }
+
+  /**
+   * A noise layer's level, pan gains and filter cutoff at its current phase.
+   *
+   * The swing (the cycle, -1 at the trough to 1 at the peak, with this
+   * cycle's rise) moves the level by `depth` and the cutoff by `sweepOctaves`
+   * -- so a swell can open the filter as it rises, as a gust whistles higher
+   * or a wave brightens as it breaks. The weather moves both again, by the
+   * layer's share of the scene's gust. The level carries the filter's
+   * loudness compensation at that cutoff, so the ramp between segments
+   * carries it too.
+   */
+  noiseControl(channel) {
+    const cycleValue = this.cycleAt(channel, channel.phase);
+    // riseFactor scales only the part of the swing above the trough
+    // (cycleValue + 1), so the trough is 1 - depth whatever it is.
+    const swing = channel.riseFactor === 1 ? cycleValue : (channel.riseFactor * (cycleValue + 1)) - 1;
+    const factor = this.weatherFactor(channel);
+    const octaves = ((channel.sweepOctaves ?? 0) * swing) + (WEATHER_NOISE_BRIGHT_OCTAVES * factor);
+    const cutoff = Math.max(NOISE_CUTOFF_FLOOR_HZ, Math.min(sampleRate * 0.45, (channel.brightnessHz ?? 18000) * (2 ** octaves)));
+    const level = Math.max(0, 1 + ((channel.depth ?? 0) * swing))
+      * (2 ** (WEATHER_NOISE_LEVEL_OCTAVES * factor))
+      * this.toneGainAt(channel, cutoff);
+    const pan = channel.panFrom === 0 && channel.panTo === 0 ? 0 : this.swayAt(channel, channel.phase);
+    // Equal-power balance, normalised so centre is unity on both sides.
+    const gainLeft = pan === 0 ? 1 : Math.SQRT2 * Math.cos((pan + 1) * Math.PI / 4);
+    const gainRight = pan === 0 ? 1 : Math.SQRT2 * Math.sin((pan + 1) * Math.PI / 4);
+    return { level, gainLeft, gainRight, cutoff };
+  }
+
+  /** The filter's coefficients (stateVariableFilter's) at `cutoffHz`, with the layer's own Q. */
+  setNoiseFilter(channel, cutoffHz) {
+    const g = Math.tan((Math.PI * cutoffHz) / sampleRate);
+    const a1 = 1 / (1 + (g * (g + channel.filterK)));
+    channel.filterA1 = a1;
+    channel.filterA2 = g * a1;
+    channel.filterA3 = g * g * a1;
+  }
+
+  /**
+   * The next CONTROL_FRAMES samples: advance the cycle to their end (a new
+   * cycle begins here if it wraps), set per-sample steps that take the level
+   * and gains from where they are to where they will be, and set the filter
+   * for the segment. Segments are counted per channel from its first sample,
+   * so they fall on the same frames whatever the block size.
+   */
+  beginControlSegment(channel) {
+    if (!channel.controlReady) {
+      const start = this.noiseControl(channel);
+      channel.level = start.level;
+      channel.gainLeft = start.gainLeft;
+      channel.gainRight = start.gainRight;
+      channel.controlReady = true;
+    }
+    channel.phase += CONTROL_FRAMES / ((channel.periodSec ?? 12) * channel.periodFactor * sampleRate);
+    if (channel.phase >= 1) {
+      channel.phase -= 1;
+      this.startCycle(channel);
+    }
+    const target = this.noiseControl(channel);
+    this.setNoiseFilter(channel, target.cutoff);
+    channel.levelStep = (target.level - channel.level) / CONTROL_FRAMES;
+    channel.gainLeftStep = (target.gainLeft - channel.gainLeft) / CONTROL_FRAMES;
+    channel.gainRightStep = (target.gainRight - channel.gainRight) / CONTROL_FRAMES;
+    channel.controlFramesLeft = CONTROL_FRAMES;
+  }
+
+  /**
+   * A noise layer's block, written into `left`/`right` (overwritten): the
+   * three loops read at the layer's own offsets and blended to its colour,
+   * its width, its ramped level and gains, through its filter.
+   */
+  renderNoise(channel, left, right, length) {
+    const brown = this.noiseLoop('brown');
+    const pink = this.noiseLoop('pink');
+    const white = this.noiseLoop('white');
+    // The loops are all NOISE_LOOP_SECONDS long; the shortest bounds the read.
+    const loopLength = Math.min(brown.length, pink.length, white.length);
+    if (channel.loopLeft < 0 || channel.loopLeft >= loopLength) {
+      channel.loopLeft = Math.floor(channel.loopStart * loopLength) % loopLength;
+      channel.loopRight = (channel.loopLeft + Math.floor(loopLength / 2)) % loopLength;
+    }
+    let readLeft = channel.loopLeft;
+    let readRight = channel.loopRight;
+    const mixBrown = channel.mixBrown;
+    const mixPink = channel.mixPink;
+    const mixWhite = channel.mixWhite;
+    const direct = channel.widthDirect;
+    const cross = channel.widthCross;
+    const lowMix = channel.lowMix;
+    const bandMix = channel.bandMix;
+    let leftS1 = channel.filterLeft.s1;
+    let leftS2 = channel.filterLeft.s2;
+    let rightS1 = channel.filterRight.s1;
+    let rightS2 = channel.filterRight.s2;
+    for (let index = 0; index < length; index += 1) {
+      if (channel.controlFramesLeft === 0) this.beginControlSegment(channel);
+      channel.controlFramesLeft -= 1;
+      const a1 = channel.filterA1;
+      const a2 = channel.filterA2;
+      const a3 = channel.filterA3;
+      const a = (brown[readLeft] * mixBrown) + (pink[readLeft] * mixPink) + (white[readLeft] * mixWhite);
+      const b = (brown[readRight] * mixBrown) + (pink[readRight] * mixPink) + (white[readRight] * mixWhite);
+      const level = channel.level;
+      const inLeft = (cross === 0 ? a : (direct * a) + (cross * b)) * level * channel.gainLeft;
+      const inRight = (cross === 0 ? b : (direct * b) + (cross * a)) * level * channel.gainRight;
+      // stateVariableFilter's step: low-pass v2, band-pass v1 (x k for unity peak).
+      let v3 = inLeft - leftS2;
+      let v1 = (a1 * leftS1) + (a2 * v3);
+      let v2 = leftS2 + (a2 * leftS1) + (a3 * v3);
+      leftS1 = (2 * v1) - leftS1;
+      leftS2 = (2 * v2) - leftS2;
+      left[index] = (lowMix * v2) + (bandMix * v1);
+      v3 = inRight - rightS2;
+      v1 = (a1 * rightS1) + (a2 * v3);
+      v2 = rightS2 + (a2 * rightS1) + (a3 * v3);
+      rightS1 = (2 * v1) - rightS1;
+      rightS2 = (2 * v2) - rightS2;
+      right[index] = (lowMix * v2) + (bandMix * v1);
+      channel.level += channel.levelStep;
+      channel.gainLeft += channel.gainLeftStep;
+      channel.gainRight += channel.gainRightStep;
+      readLeft = readLeft + 1 === loopLength ? 0 : readLeft + 1;
+      readRight = readRight + 1 === loopLength ? 0 : readRight + 1;
+    }
+    channel.loopLeft = readLeft;
+    channel.loopRight = readRight;
+    channel.filterLeft.s1 = leftS1;
+    channel.filterLeft.s2 = leftS2;
+    channel.filterRight.s1 = rightS1;
+    channel.filterRight.s2 = rightS2;
+  }
+
+  // -------------------------------------------------------------------------
+  // Rain intensity.
+
+  /**
+   * A rain layer's intensity now -- the slider, moved by the weather -- as
+   * what the layer plays with: its drop rate (dropsRange, geometric), the
+   * wash's level (WASH_INTENSITY_DB over the slider) and the drops' weight
+   * (DROP_INTENSITY_LEVEL). All of them act at playback, none is baked into
+   * a recorded drop, so the weather moving them never empties the drop bank.
+   */
+  updateRainIntensity(channel) {
+    const intensity = Math.max(0, Math.min(1, (channel.intensity ?? 0.5) + (WEATHER_RAIN_REACH * this.weatherFactor(channel))));
+    const [low, high] = channel.dropsRange ?? [1, 100];
+    channel.dropsPerSecond = low * ((high / low) ** intensity);
+    channel.washLevel = 10 ** (((intensity - 1) * WASH_INTENSITY_DB) / 20);
+    channel.dropLevel = DROP_INTENSITY_LEVEL[0] + ((DROP_INTENSITY_LEVEL[1] - DROP_INTENSITY_LEVEL[0]) * intensity);
+  }
 
   /**
    * Bring a rain channel's surface-dependent state in line with its
@@ -669,74 +1168,6 @@ class AmbientGenerator extends AudioWorkletProcessor {
         ? currentFrame + this.eventDelayFrames(dripRate)
         : Infinity;
     }
-  }
-
-  /**
-   * A new cycle has begun (the phase just wrapped, so the level is at its
-   * trough and flat): roll this cycle's deviations, scaled by `movement`.
-   * - the period is multiplied by 2^(movement * u), u uniform in -1..1, so
-   *   the mean tempo is still the period set;
-   * - the rise above the trough keeps a random share of itself, never less
-   *   than 1 - movement * MOVEMENT_RISE_LOSS -- the trough stays where it is,
-   *   so the swap cannot make the level jump;
-   * - the sway moves to the OTHER side of centre from where it was heading,
-   *   by a random reach up to movement * MOVEMENT_PAN_REACH, starting from
-   *   wherever it is now. The first cycle with movement picks a side at
-   *   random, so several layers do not all swing together.
-   * With no movement nothing is drawn from the random stream and every
-   * factor is neutral, so the layer renders exactly as it always has.
-   */
-  startCycle(channel) {
-    const movement = channel.movement ?? 0;
-    if (movement <= 0) {
-      channel.periodFactor = 1;
-      channel.riseFactor = 1;
-      channel.panFrom = channel.panTo;
-      channel.panTo = 0;
-      return;
-    }
-    channel.periodFactor = 2 ** (movement * MOVEMENT_PERIOD_OCTAVES * ((this.random() * 2) - 1));
-    channel.riseFactor = 1 - (movement * MOVEMENT_RISE_LOSS * this.random());
-    channel.swaySide = channel.swaySide === 0 ? (this.random() < 0.5 ? -1 : 1) : -channel.swaySide;
-    channel.panFrom = channel.panTo;
-    channel.panTo = channel.swaySide * movement * MOVEMENT_PAN_REACH * (0.5 + (0.5 * this.random()));
-  }
-
-  /**
-   * Where the sway is at `phase`: travelling from panFrom to panTo so that
-   * it is halfway exactly at the swell's peak (phase = shape), on a
-   * smoothstep so it leaves and arrives at rest. The sound therefore sweeps
-   * past while it is loudest, like a gust going by.
-   */
-  swayAt(channel, phase) {
-    const peak = channel.shape ?? 0.5;
-    const progress = phase <= peak
-      ? (peak > 0 ? 0.5 * (phase / peak) : 0.5)
-      : 0.5 + (0.5 * ((phase - peak) / Math.max(1e-9, 1 - peak)));
-    const eased = progress * progress * (3 - (2 * progress));
-    return channel.panFrom + ((channel.panTo - channel.panFrom) * eased);
-  }
-
-  /**
-   * The loop for a noise type. A type the engine did not provide plays as
-   * silence rather than failing the whole generator.
-   */
-  noiseLoop(type) {
-    return this.noiseLoops[type] ?? SILENT_LOOP;
-  }
-
-  /**
-   * The noise cycle's value (-1..1) at `phase` (0..1), interpolated from the
-   * table the engine built (src/shared/ambientSoundDsp.ts's buildNoiseCycle).
-   * A layer configured without one plays a plain sine.
-   */
-  cycleAt(channel, phase) {
-    const cycle = channel.cycle;
-    if (!cycle?.length) return -Math.cos(2 * Math.PI * phase);
-    const position = phase * (cycle.length - 1);
-    const low = Math.floor(position);
-    const high = Math.min(cycle.length - 1, low + 1);
-    return cycle[low] + ((cycle[high] - cycle[low]) * (position - low));
   }
 
   /**
@@ -918,18 +1349,17 @@ class AmbientGenerator extends AudioWorkletProcessor {
     return level > 0 ? modes : [];
   }
 
-
-
   /**
    * The bed, a block at a time, added into `left`/`right`: sparse random
    * impulses plus a noise floor, band-passed, with a slow random swell --
    * twice, independently, one at each edge of the layer's image (stereoImage),
    * each at half the impulse rate and half the power, so together they are
    * the one bed spread across the image, at the level the layer's mix gives
-   * it (rainMixGains). Nothing is drawn while that is 0.
+   * it (rainMixGains) and the layer's intensity (washLevel). Nothing is drawn
+   * while that is 0.
    */
   renderBed(channel, left, right, length) {
-    const wash = rainMixGains(channel.mix).wash;
+    const wash = rainMixGains(channel.mix).wash * (channel.washLevel ?? 1);
     if (wash <= 0) return;
     this.withStream(channel.bed.stream, () => this.renderBedFrom(channel, left, right, length, wash));
   }
@@ -1262,6 +1692,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
 
   /** A rain layer's block, written into `left`/`right` (overwritten). */
   renderRain(channel, left, right, blockStart, length) {
+    this.updateRainIntensity(channel);
     if (!this.dropScratch || this.dropScratch.length < length) this.dropScratch = new Float64Array(length);
     left.fill(0, 0, length);
     right.fill(0, 0, length);
@@ -1281,8 +1712,8 @@ class AmbientGenerator extends AudioWorkletProcessor {
     }
     // The drops' side of the mix, applied to what the voices wrote before
     // the bed is added (the bed takes its own side in renderBed).
-    const drops = rainMixGains(channel.mix).drops;
-    if (drops < 1) {
+    const drops = rainMixGains(channel.mix).drops * (channel.dropLevel ?? 1);
+    if (drops !== 1) {
       for (let index = 0; index < length; index += 1) {
         left[index] *= drops;
         right[index] *= drops;
@@ -1296,14 +1727,10 @@ class AmbientGenerator extends AudioWorkletProcessor {
    * (or had its rate changed) peals within THUNDER_FIRST_PEAL_SEC -- waiting
    * the mean interval of minutes would read as nothing happening -- and at
    * random after that. Its distance's direct and reverb-send gains are the
-   * shared rule's (resolveAmbientSpace); its darkening is not applied on top,
+   * shared rule's (resolveAmbientSpace), per peal; its darkening is not applied on top,
    * because the rumble's own low-pass (startPeal) already is that darkening.
    */
   configureThunder(channel, before) {
-    // Each peal carries its own distance's gains (a peal's distance can be
-    // randomised), applied in renderThunder; the shared mix adds nothing.
-    channel.directGain = 1;
-    channel.reverbSend = 1;
     if (!channel.peals) channel.peals = [];
     if (!channel.highPass) {
       // Direct left and right, send left and right.
@@ -1494,7 +1921,9 @@ class AmbientGenerator extends AudioWorkletProcessor {
         // live, as for volume.
         channel.contrastOffset = settings.contrast - (channel.contrast ?? 0);
         // Silent for the peal's length x (1 - share) / share after it ends.
-        const pauseSec = settings.lengthSec * ((1 - settings.share) / settings.share);
+        // A gust brings the next peal sooner, a lull puts it off.
+        const pauseSec = settings.lengthSec * ((1 - settings.share) / settings.share)
+          * (2 ** (-WEATHER_THUNDER_OCTAVES * this.weatherFactor(channel)));
         channel.nextPealFrame = currentFrame + index + Math.max(1, Math.round((settings.lengthSec + pauseSec) * sampleRate));
       }
       if (channel.peals.length === 0) continue;
@@ -1541,7 +1970,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
           sumRight += rolled * rumble.gainRight;
           rumble.age += 1;
         }
-        const volume = Math.max(0, Math.min(1, channel.volume + peal.volumeOffset));
+        const volume = faderGain(Math.max(0, Math.min(1, channel.volume + peal.volumeOffset))) * (channel.kindGain ?? 1);
         directLeft += sumLeft * volume * peal.direct;
         directRight += sumRight * volume * peal.direct;
         wetLeft += sumLeft * volume * peal.send;
@@ -1575,236 +2004,614 @@ class AmbientGenerator extends AudioWorkletProcessor {
     }
   }
 
-  /**
-   * A noise layer's level (its cycle scaled by amplitude and volume) and its
-   * two pan gains, at its current phase.
-   */
-  noiseControl(channel) {
-    const cycleValue = this.cycleAt(channel, channel.phase);
-    // riseFactor scales only the part of the swing above the trough
-    // (cycleValue + 1), so the trough is 1 - amplitude whatever it is.
-    const swing = channel.riseFactor === 1 ? cycleValue : (channel.riseFactor * (cycleValue + 1)) - 1;
-    const level = Math.max(0, 1 + (channel.modulationAmplitude * swing)) * channel.volume;
-    const pan = channel.panFrom === 0 && channel.panTo === 0 ? 0 : this.swayAt(channel, channel.phase);
-    // Equal-power balance, normalised so centre is unity on both sides.
-    const gainLeft = pan === 0 ? 1 : Math.SQRT2 * Math.cos((pan + 1) * Math.PI / 4);
-    const gainRight = pan === 0 ? 1 : Math.SQRT2 * Math.sin((pan + 1) * Math.PI / 4);
-    return { level, gainLeft, gainRight };
-  }
+
+  // -------------------------------------------------------------------------
+  // Bursts: short noise bursts through a resonant band, shared by the fire's
+  // crackles and pops and the chimes' strike clicks.
 
   /**
-   * The next CONTROL_FRAMES samples: advance the cycle to their end (a new
-   * cycle begins here if it wraps), and set per-sample steps that take the
-   * level and gains from where they are to where they will be. Segments are
-   * counted per channel from its first sample, so they fall on the same
-   * frames whatever the block size.
+   * Queue one burst `offset` frames into the current block (an offset past
+   * the block carries into the next; see renderBursts). `spec` gives the
+   * band's centre and Q ranges, the decay range and the level range; the
+   * burst is placed at `pan` (-1..1).
    */
-  beginControlSegment(channel) {
-    if (!channel.controlReady) {
-      const start = this.noiseControl(channel);
-      channel.level = start.level;
-      channel.gainLeft = start.gainLeft;
-      channel.gainRight = start.gainRight;
-      channel.controlReady = true;
-    }
-    channel.phase += CONTROL_FRAMES / (channel.periodSec * channel.periodFactor * sampleRate);
-    if (channel.phase >= 1) {
-      channel.phase -= 1;
-      this.startCycle(channel);
-    }
-    const target = this.noiseControl(channel);
-    channel.levelStep = (target.level - channel.level) / CONTROL_FRAMES;
-    channel.gainLeftStep = (target.gainLeft - channel.gainLeft) / CONTROL_FRAMES;
-    channel.gainRightStep = (target.gainRight - channel.gainRight) / CONTROL_FRAMES;
-    channel.controlFramesLeft = CONTROL_FRAMES;
+  spawnBurst(bursts, max, offset, spec, levelScale, pan) {
+    if (bursts.length >= max) return;
+    const q = this.between(spec.q);
+    const gains = panGains(pan);
+    bursts.push({
+      amplitude: this.between(spec.level) * levelScale,
+      decay: Math.exp(-1 / (sampleRate * this.between(spec.decaySec))),
+      filter: stateVariableFilter(spec.hz[0] * ((spec.hz[1] / spec.hz[0]) ** this.random()), q),
+      k: 1 / q,
+      seed: Math.floor(this.random() * 0x100000000) >>> 0,
+      startOffset: Math.max(0, offset),
+      gainLeft: gains.left,
+      gainRight: gains.right,
+    });
   }
 
-  /**
-   * A noise layer's block, written into `left`/`right` (overwritten): the
-   * shared loop read at the layer's own offsets, times its ramped level and
-   * gains, through its one-pole filter.
-   */
-  renderNoise(channel, left, right, length) {
-    const loop = this.noiseLoop(channel.type);
-    const loopLength = loop.length;
-    if (channel.loopLeft < 0 || channel.loopLeft >= loopLength) {
-      channel.loopLeft = Math.floor(channel.loopStart * loopLength) % loopLength;
-      channel.loopRight = (channel.loopLeft + Math.floor(loopLength / 2)) % loopLength;
-    }
-    let readLeft = channel.loopLeft;
-    let readRight = channel.loopRight;
-    const direct = channel.widthDirect;
-    const cross = channel.widthCross;
-    // The tone filter, likewise in locals for the block.
-    const tone = channel.toneLeft;
-    const toned = tone !== null;
-    const t1 = toned ? tone.a1 : 0;
-    const t2 = toned ? tone.a2 : 0;
-    const t3 = toned ? tone.a3 : 0;
-    const highPass = channel.toneHighPass;
-    const damping = channel.toneDamping;
-    const toneGain = channel.toneGain;
-    let toneLeftS1 = toned ? tone.s1 : 0;
-    let toneLeftS2 = toned ? tone.s2 : 0;
-    let toneRightS1 = toned ? channel.toneRight.s1 : 0;
-    let toneRightS2 = toned ? channel.toneRight.s2 : 0;
-    // Distance's low-pass, state in locals for the block (a per-sample
-    // object read and write made it cost three times the rest of the layer).
-    const dark = channel.darkLeft;
-    const darkened = dark !== null;
-    const a1 = darkened ? dark.a1 : 0;
-    const a2 = darkened ? dark.a2 : 0;
-    const a3 = darkened ? dark.a3 : 0;
-    let leftS1 = darkened ? dark.s1 : 0;
-    let leftS2 = darkened ? dark.s2 : 0;
-    let rightS1 = darkened ? channel.darkRight.s1 : 0;
-    let rightS2 = darkened ? channel.darkRight.s2 : 0;
-    for (let index = 0; index < length; index += 1) {
-      if (channel.controlFramesLeft === 0) this.beginControlSegment(channel);
-      channel.controlFramesLeft -= 1;
-      const level = channel.level;
-      const a = loop[readLeft];
-      const b = loop[readRight];
-      const sideLeft = cross === 0 ? a : (direct * a) + (cross * b);
-      const sideRight = cross === 0 ? b : (direct * b) + (cross * a);
-      let toneLeft = sideLeft * level * channel.gainLeft;
-      let toneRight = sideRight * level * channel.gainRight;
-      if (toned) {
-        // stateVariableFilter's step (as in bandPass): low-pass is v2,
-        // high-pass is the input less the damped band and the low.
-        let v3 = toneLeft - toneLeftS2;
-        let v1 = (t1 * toneLeftS1) + (t2 * v3);
-        let v2 = toneLeftS2 + (t2 * toneLeftS1) + (t3 * v3);
-        toneLeftS1 = (2 * v1) - toneLeftS1;
-        toneLeftS2 = (2 * v2) - toneLeftS2;
-        toneLeft = (highPass ? toneLeft - (damping * v1) - v2 : v2) * toneGain;
-        v3 = toneRight - toneRightS2;
-        v1 = (t1 * toneRightS1) + (t2 * v3);
-        v2 = toneRightS2 + (t2 * toneRightS1) + (t3 * v3);
-        toneRightS1 = (2 * v1) - toneRightS1;
-        toneRightS2 = (2 * v2) - toneRightS2;
-        toneRight = (highPass ? toneRight - (damping * v1) - v2 : v2) * toneGain;
+  /** Every queued burst for this block, added into `left`/`right`; spent ones are dropped. */
+  renderBursts(bursts, left, right, length) {
+    for (let index = bursts.length - 1; index >= 0; index -= 1) {
+      const burst = bursts[index];
+      if (burst.startOffset >= length) {
+        burst.startOffset -= length;
+        continue;
       }
-      if (darkened) {
-        // stateVariableFilter's step (as in bandPass), read at its low-pass output v2.
-        let v3 = toneLeft - leftS2;
-        let v1 = (a1 * leftS1) + (a2 * v3);
-        let v2 = leftS2 + (a2 * leftS1) + (a3 * v3);
-        leftS1 = (2 * v1) - leftS1;
-        leftS2 = (2 * v2) - leftS2;
-        left[index] = v2;
-        v3 = toneRight - rightS2;
-        v1 = (a1 * rightS1) + (a2 * v3);
-        v2 = rightS2 + (a2 * rightS1) + (a3 * v3);
-        rightS1 = (2 * v1) - rightS1;
-        rightS2 = (2 * v2) - rightS2;
-        right[index] = v2;
-      } else {
-        left[index] = toneLeft;
-        right[index] = toneRight;
+      const filter = burst.filter;
+      let amplitude = burst.amplitude;
+      let seed = burst.seed;
+      const decay = burst.decay;
+      const k = burst.k;
+      for (let frame = burst.startOffset; frame < length; frame += 1) {
+        let x = 0;
+        if (amplitude > 0) {
+          seed = (1664525 * seed + 1013904223) >>> 0;
+          x = ((seed / 0x100000000) * 2 - 1) * amplitude;
+          amplitude *= decay;
+          if (amplitude < SILENCE) amplitude = 0;
+        }
+        const y = bandPass(filter, x) * k;
+        left[frame] += y * burst.gainLeft;
+        right[frame] += y * burst.gainRight;
       }
-      channel.level += channel.levelStep;
-      channel.gainLeft += channel.gainLeftStep;
-      channel.gainRight += channel.gainRightStep;
-      readLeft = readLeft + 1 === loopLength ? 0 : readLeft + 1;
-      readRight = readRight + 1 === loopLength ? 0 : readRight + 1;
-    }
-    channel.loopLeft = readLeft;
-    channel.loopRight = readRight;
-    if (toned) {
-      tone.s1 = toneLeftS1;
-      tone.s2 = toneLeftS2;
-      channel.toneRight.s1 = toneRightS1;
-      channel.toneRight.s2 = toneRightS2;
-    }
-    if (darkened) {
-      dark.s1 = leftS1;
-      dark.s2 = leftS2;
-      channel.darkRight.s1 = rightS1;
-      channel.darkRight.s2 = rightS2;
+      burst.startOffset = 0;
+      burst.amplitude = amplitude;
+      burst.seed = seed;
+      if (amplitude <= 0 && Math.abs(filter.s1) + Math.abs(filter.s2) <= SILENCE) {
+        bursts[index] = bursts[bursts.length - 1];
+        bursts.pop();
+      }
     }
   }
 
   /**
-   * One block. Each channel is rendered whole into a scratch buffer, from
-   * its own random stream, and then mixed; a channel that is not the soloed
+   * A slowly wandering level (a flame's flutter, the hiss's flicker, the
+   * water's bursts): toward a target drawn every `sec` range, gliding with a
+   * one-pole of `glideSec`, moved on by one control segment. Returns the
+   * level at the segment's start and end, for a linear ramp across it.
+   */
+  stepWander(wander, secRange, glideSec, draw) {
+    const length = CONTROL_FRAMES;
+    const from = wander.value;
+    wander.framesLeft -= length;
+    if (wander.framesLeft <= 0) {
+      wander.target = draw();
+      wander.framesLeft = Math.max(1, Math.round(this.between(secRange) * sampleRate));
+    }
+    wander.value += (wander.target - wander.value) * (1 - Math.exp(-length / (glideSec * sampleRate)));
+    return [from, wander.value];
+  }
+
+  /**
+   * Walk a block in spans that never cross a CONTROL_FRAMES boundary of the
+   * channel's OWN clock (counted from its first sample, as a noise layer's
+   * segments are), calling `begin()` at each boundary and `span(offset,
+   * count, position)` for each piece, `position` being how far into its
+   * segment the piece starts. Control values computed in `begin` therefore
+   * change on the same frames whatever the block size.
+   */
+  forEachSegment(channel, length, begin, span) {
+    let offset = 0;
+    while (offset < length) {
+      if (!(channel.segmentLeft > 0)) {
+        begin();
+        channel.segmentLeft = CONTROL_FRAMES;
+      }
+      const count = Math.min(channel.segmentLeft, length - offset);
+      span(offset, count, CONTROL_FRAMES - channel.segmentLeft);
+      offset += count;
+      channel.segmentLeft -= count;
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Water.
+
+  initWater(channel) {
+    channel.bubbles = [];
+    channel.nextBubbleFrame = currentFrame + 1;
+    channel.burst = { value: 1, target: 1, framesLeft: 0 };
+    channel.rushStart = this.random();
+    channel.rushRead = -1;
+    channel.rushLeft = null;
+    channel.rushRight = null;
+    this.configureWater(channel);
+  }
+
+  /** The rush's band follows the bubble size: bigger water, lower rush. Filter memory is kept. */
+  configureWater(channel) {
+    const size = Math.max(0, Math.min(1, channel.size ?? 0.5));
+    const centre = WATER_RUSH_HZ[0] * ((WATER_RUSH_HZ[1] / WATER_RUSH_HZ[0]) ** size);
+    const left = stateVariableFilter(centre, 0.6);
+    const right = stateVariableFilter(centre, 0.6);
+    if (channel.rushLeft) {
+      left.s1 = channel.rushLeft.s1;
+      left.s2 = channel.rushLeft.s2;
+      right.s1 = channel.rushRight.s1;
+      right.s2 = channel.rushRight.s2;
+    }
+    channel.rushLeft = left;
+    channel.rushRight = right;
+    channel.radiusMinMm = WATER_RADIUS_MIN_MM[0] * ((WATER_RADIUS_MIN_MM[1] / WATER_RADIUS_MIN_MM[0]) ** size);
+    channel.radiusMaxMm = WATER_RADIUS_MAX_MM[0] * ((WATER_RADIUS_MAX_MM[1] / WATER_RADIUS_MAX_MM[0]) ** size);
+  }
+
+  /**
+   * A bubble radius from p(r) ~ r^-WATER_RADIUS_EXPONENT between the layer's
+   * bounds, by inverting its cumulative distribution.
+   */
+  waterRadius(channel) {
+    const low = channel.radiusMinMm;
+    const high = channel.radiusMaxMm;
+    const e = 1 - WATER_RADIUS_EXPONENT;
+    const u = this.random();
+    return ((low ** e) + (u * ((high ** e) - (low ** e)))) ** (1 / e);
+  }
+
+  /**
+   * A water layer's block, written into `left`/`right` (overwritten). The
+   * burst process multiplies the bubble rate by a log-normal factor of mean
+   * 1 -- flat at turbulence 0, clumped into bursts and gaps at 1 -- so the
+   * average flow is what `flow` says whatever the turbulence.
+   */
+  renderWater(channel, left, right, blockStart, length) {
+    left.fill(0, 0, length);
+    right.fill(0, 0, length);
+    const sigma = Math.max(0, Math.min(1, channel.turbulence ?? 0)) * WATER_BURST_SIGMA;
+    const flow = Math.max(0, Math.min(1, channel.flow ?? 0.5));
+    const baseRate = WATER_BUBBLES_PER_SEC[0] * ((WATER_BUBBLES_PER_SEC[1] / WATER_BUBBLES_PER_SEC[0]) ** flow);
+    const image = stereoImage(channel.pan, 1);
+    const pink = this.noiseLoop('pink');
+    const loopLength = pink.length;
+    if (channel.rushRead < 0 || channel.rushRead >= loopLength) channel.rushRead = Math.floor(channel.rushStart * loopLength) % loopLength;
+    const half = Math.floor(loopLength / 2);
+    const rushBase = WATER_RUSH_LEVEL * (flow ** 1.2) * (this.noiseGains.pink ?? 1);
+    const rushK = 1 / 0.6;
+    if (channel.nextBubbleFrame < blockStart) channel.nextBubbleFrame = blockStart + this.eventDelayFrames(baseRate);
+    let burstFrom = 1;
+    let burstTo = 1;
+    this.forEachSegment(channel, length, () => {
+      [burstFrom, burstTo] = this.stepWander(channel.burst, [WATER_BURST_SEC * 0.3, WATER_BURST_SEC * 1.7], WATER_BURST_GLIDE_SEC, () => {
+        if (sigma <= 0) return 1;
+        // Box-Muller: one standard normal from two uniforms.
+        const gaussian = Math.sqrt(-2 * Math.log(Math.max(1e-9, this.random()))) * Math.cos(2 * Math.PI * this.random());
+        return Math.exp((sigma * gaussian) - ((sigma * sigma) / 2));
+      });
+    }, (offset, count, position) => {
+      const rate = baseRate * burstTo;
+      const spanEnd = blockStart + offset + count;
+      while (channel.nextBubbleFrame < spanEnd) {
+        const radius = this.waterRadius(channel);
+        const place = image.from + ((image.to - image.from) * this.random());
+        const bubble = this.makeBubble(radius, 0.6 + (0.4 * this.random()));
+        if (channel.bubbles.length < MAX_WATER_BUBBLES) {
+          const gains = panGains(place);
+          bubble.age = 0;
+          bubble.startOffset = channel.nextBubbleFrame - blockStart;
+          bubble.gainLeft = gains.left;
+          bubble.gainRight = gains.right;
+          channel.bubbles.push(bubble);
+        }
+        channel.nextBubbleFrame += this.eventDelayFrames(rate);
+      }
+      // The rush: pink noise, band-passed low, breathing with the bursts.
+      let read = channel.rushRead;
+      for (let step = 0; step < count; step += 1) {
+        const burst = burstFrom + ((burstTo - burstFrom) * ((position + step) / CONTROL_FRAMES));
+        const level = rushBase * Math.sqrt(burst);
+        const readRight = read + half >= loopLength ? read + half - loopLength : read + half;
+        left[offset + step] += bandPass(channel.rushLeft, pink[read]) * rushK * level;
+        right[offset + step] += bandPass(channel.rushRight, pink[readRight]) * rushK * level;
+        read = read + 1 === loopLength ? 0 : read + 1;
+      }
+      channel.rushRead = read;
+    });
+    const bubbles = channel.bubbles;
+    for (let index = bubbles.length - 1; index >= 0; index -= 1) {
+      const bubble = bubbles[index];
+      const start = bubble.startOffset;
+      bubble.startOffset = 0;
+      const end = Math.min(length, start + (bubble.ringFrames - bubble.age));
+      let sin = bubble.sin;
+      let cos = bubble.cos;
+      let rotationSin = bubble.rotationSin;
+      let rotationCos = bubble.rotationCos;
+      let amplitude = bubble.amplitude;
+      let framesToRetune = bubble.framesToRetune;
+      const decay = bubble.decay;
+      const gainLeft = bubble.gainLeft;
+      const gainRight = bubble.gainRight;
+      for (let frame = start; frame < end; frame += 1) {
+        const sample = sin * amplitude;
+        left[frame] += sample * gainLeft;
+        right[frame] += sample * gainRight;
+        const nextSin = (sin * rotationCos) + (cos * rotationSin);
+        cos = (cos * rotationCos) - (sin * rotationSin);
+        sin = nextSin;
+        amplitude *= decay;
+        framesToRetune -= 1;
+        if (framesToRetune === 0) {
+          framesToRetune = BUBBLE_RETUNE_FRAMES;
+          bubble.frequency = Math.min(bubble.frequency * bubble.retuneFactor, sampleRate * 0.45);
+          const angle = (2 * Math.PI * bubble.frequency) / sampleRate;
+          rotationSin = Math.sin(angle);
+          rotationCos = Math.cos(angle);
+        }
+      }
+      bubble.sin = sin;
+      bubble.cos = cos;
+      bubble.rotationSin = rotationSin;
+      bubble.rotationCos = rotationCos;
+      bubble.amplitude = amplitude;
+      bubble.framesToRetune = framesToRetune;
+      bubble.age += end - start;
+      if (bubble.age >= bubble.ringFrames || amplitude < VOICE_SILENCE) {
+        bubbles[index] = bubbles[bubbles.length - 1];
+        bubbles.pop();
+      }
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Fire.
+
+  initFire(channel) {
+    channel.bursts = [];
+    channel.flutter = { value: 1, target: 1, framesLeft: 0 };
+    channel.flicker = { value: 1, target: 1, framesLeft: 0 };
+    channel.fireStart = this.random();
+    channel.fireRead = -1;
+    channel.roarLeft = null;
+    channel.roarRight = null;
+    channel.hissLeft = stateVariableFilter(FIRE_HISS_HZ, Math.SQRT1_2);
+    channel.hissRight = stateVariableFilter(FIRE_HISS_HZ, Math.SQRT1_2);
+    channel.nextCrackleFrame = currentFrame + this.eventDelayFrames(this.fireCrackleRate(channel));
+    channel.nextPopFrame = Infinity;
+    this.configureFire(channel, null);
+  }
+
+  /** The fire's size now (the slider, fanned by the weather). */
+  fireSize(channel) {
+    return Math.max(0, Math.min(1, (channel.size ?? 0.5) + (WEATHER_FIRE_REACH * this.weatherFactor(channel))));
+  }
+
+  fireCrackleRate(channel) {
+    const crackle = Math.max(0, Math.min(1, (channel.crackle ?? 0.5) + (WEATHER_FIRE_REACH * this.weatherFactor(channel))));
+    return FIRE_CRACKLES_PER_SEC[0] * ((FIRE_CRACKLES_PER_SEC[1] / FIRE_CRACKLES_PER_SEC[0]) ** crackle);
+  }
+
+  /** The roar's cutoff follows the size: a bigger fire roars lower. Filter memory is kept. */
+  configureFire(channel, before) {
+    const cutoff = FIRE_ROAR_HZ[0] * ((FIRE_ROAR_HZ[1] / FIRE_ROAR_HZ[0]) ** Math.max(0, Math.min(1, channel.size ?? 0.5)));
+    const left = stateVariableFilter(cutoff, 0.8);
+    const right = stateVariableFilter(cutoff, 0.8);
+    if (channel.roarLeft) {
+      left.s1 = channel.roarLeft.s1;
+      left.s2 = channel.roarLeft.s2;
+      right.s1 = channel.roarRight.s1;
+      right.s2 = channel.roarRight.s2;
+    }
+    channel.roarLeft = left;
+    channel.roarRight = right;
+    if (!before || before.pops !== channel.pops) {
+      const rate = (channel.pops ?? 0) * FIRE_POPS_PER_SEC;
+      channel.nextPopFrame = rate > 0 ? currentFrame + this.eventDelayFrames(rate) : Infinity;
+    }
+  }
+
+  /**
+   * A fire layer's block, written into `left`/`right` (overwritten).
+   * Crackles and pops are born in time order, whichever clock is next, so
+   * the stream is drawn in the same order whatever the block size (the rule
+   * rain's drops and drips follow).
+   */
+  renderFire(channel, left, right, blockStart, length) {
+    left.fill(0, 0, length);
+    right.fill(0, 0, length);
+    const image = stereoImage(channel.pan, 1);
+    const placeAt = () => image.from + ((image.to - image.from) * this.random());
+    const crackleRate = this.fireCrackleRate(channel);
+    const popRate = (channel.pops ?? 0) * FIRE_POPS_PER_SEC;
+    if (channel.nextCrackleFrame < blockStart) channel.nextCrackleFrame = blockStart + this.eventDelayFrames(crackleRate);
+    if (channel.nextPopFrame < blockStart) channel.nextPopFrame = popRate > 0 ? blockStart + this.eventDelayFrames(popRate) : Infinity;
+    const size = this.fireSize(channel);
+    const roarLevel = FIRE_ROAR_LEVEL[0] * ((FIRE_ROAR_LEVEL[1] / FIRE_ROAR_LEVEL[0]) ** size) * (this.noiseGains.brown ?? 1);
+    const hissLevel = (FIRE_HISS_LEVEL[0] + ((FIRE_HISS_LEVEL[1] - FIRE_HISS_LEVEL[0]) * size)) * (this.noiseGains.white ?? 1);
+    const brown = this.noiseLoop('brown');
+    const white = this.noiseLoop('white');
+    const loopLength = Math.min(brown.length, white.length);
+    if (channel.fireRead < 0 || channel.fireRead >= loopLength) channel.fireRead = Math.floor(channel.fireStart * loopLength) % loopLength;
+    const half = Math.floor(loopLength / 2);
+    let flutterFrom = 1;
+    let flutterTo = 1;
+    let flickerFrom = 1;
+    let flickerTo = 1;
+    this.forEachSegment(channel, length, () => {
+      [flutterFrom, flutterTo] = this.stepWander(channel.flutter, FIRE_FLUTTER_SEC, 0.02, () => this.between(FIRE_FLUTTER_RANGE));
+      [flickerFrom, flickerTo] = this.stepWander(channel.flicker, FIRE_HISS_FLICKER_SEC, 0.008, () => this.between(FIRE_FLUTTER_RANGE));
+    }, (offset, count, position) => {
+      // Crackles and pops are born in time order, whichever clock is next,
+      // so the stream is drawn in the same order whatever the block size
+      // (the rule rain's drops and drips follow).
+      const spanEnd = blockStart + offset + count;
+      for (;;) {
+        const isPop = channel.nextPopFrame < channel.nextCrackleFrame;
+        const at = isPop ? channel.nextPopFrame : channel.nextCrackleFrame;
+        if (at >= spanEnd) break;
+        const burstOffset = at - blockStart;
+        if (isPop) {
+          this.spawnBurst(channel.bursts, MAX_FIRE_BURSTS, burstOffset, FIRE_POP, 1, placeAt());
+          // The sizzle: a few crackles over the next moments, sap boiling out.
+          const sizzle = Math.round(this.between(FIRE_POP.sizzle));
+          const sizzleFrames = this.between(FIRE_POP.sizzleSec) * sampleRate;
+          for (let spark = 0; spark < sizzle; spark += 1) {
+            this.spawnBurst(channel.bursts, MAX_FIRE_BURSTS, burstOffset + Math.round(this.random() * sizzleFrames), FIRE_CRACKLE, 0.5, placeAt());
+          }
+          channel.nextPopFrame += this.eventDelayFrames(popRate);
+        } else {
+          // Loudness is skewed low: most crackles are faint, a few are sharp.
+          const skew = this.random();
+          this.spawnBurst(channel.bursts, MAX_FIRE_BURSTS, burstOffset, FIRE_CRACKLE, 0.25 + (0.75 * skew * skew), placeAt());
+          channel.nextCrackleFrame += this.random() < FIRE_CRACKLE_CLUSTER_CHANCE
+            ? Math.max(1, Math.round(this.between(FIRE_CRACKLE_CLUSTER_SEC) * sampleRate))
+            : this.eventDelayFrames(crackleRate);
+        }
+      }
+      // The roar and the hiss.
+      let read = channel.fireRead;
+      for (let step = 0; step < count; step += 1) {
+        const t = (position + step) / CONTROL_FRAMES;
+        const flutter = flutterFrom + ((flutterTo - flutterFrom) * t);
+        const flicker = flickerFrom + ((flickerTo - flickerFrom) * t);
+        const readRight = read + half >= loopLength ? read + half - loopLength : read + half;
+        const roar = roarLevel * flutter;
+        const hiss = hissLevel * flicker * flicker;
+        const frame = offset + step;
+        left[frame] += (lowPassStep(channel.roarLeft, brown[read]) * roar) + (highPassStep(channel.hissLeft, white[readRight]) * hiss);
+        right[frame] += (lowPassStep(channel.roarRight, brown[readRight]) * roar) + (highPassStep(channel.hissRight, white[read]) * hiss);
+        read = read + 1 === loopLength ? 0 : read + 1;
+      }
+      channel.fireRead = read;
+    });
+    this.renderBursts(channel.bursts, left, right, length);
+  }
+
+  // -------------------------------------------------------------------------
+  // Chimes.
+
+  /**
+   * Build or retune a chimes layer's tubes. A tube keeps its oscillators'
+   * state (phase and ring) through a retune, so moving pitch or ring length
+   * while tubes are sounding bends them rather than cutting them off. Each
+   * tube draws its detune and its modes' doublet splits once, when it is
+   * first made, so it is the same object for as long as the layer lives.
+   */
+  configureChimes(channel, before) {
+    const frequencies = channel.tubeHz ?? [];
+    const old = channel.tubeState ?? [];
+    const ringSec = Math.max(0.1, channel.ringSec ?? 6);
+    const image = stereoImage(channel.pan, 1);
+    channel.tubeState = frequencies.map((hz, index) => {
+      const tube = old[index] ?? {
+        detune: 2 ** ((CHIME_DETUNE_CENTS * ((this.random() * 2) - 1)) / 1200),
+        splits: CHIME_MODE_RATIOS.map(() => this.between(CHIME_DOUBLET_HZ)),
+        placement: (index + 0.25 + (0.5 * this.random())) / Math.max(1, frequencies.length),
+        oscillators: CHIME_MODE_RATIOS.flatMap(() => [0, 1].map(() => ({ sin: 0, cos: 1, rotationSin: 0, rotationCos: 1, amplitude: 0, decay: 1, audible: true }))),
+        active: false,
+      };
+      const fundamental = hz * tube.detune;
+      CHIME_MODE_RATIOS.forEach((ratio, mode) => {
+        const decay = Math.exp(-6.9078 / (ringSec * (ratio ** -CHIME_MODE_DECAY_EXPONENT) * sampleRate));
+        [0, 1].forEach((half) => {
+          const oscillator = tube.oscillators[(mode * 2) + half];
+          const frequency = (fundamental * ratio) + (half === 1 ? tube.splits[mode] : 0);
+          oscillator.audible = frequency < sampleRate * 0.45;
+          const angle = (2 * Math.PI * Math.min(frequency, sampleRate * 0.45)) / sampleRate;
+          oscillator.rotationSin = Math.sin(angle);
+          oscillator.rotationCos = Math.cos(angle);
+          oscillator.decay = decay;
+          if (!oscillator.audible) oscillator.amplitude = 0;
+        });
+      });
+      tube.pan = image.from + ((image.to - image.from) * tube.placement);
+      const gains = panGains(tube.pan);
+      tube.gainLeft = gains.left;
+      tube.gainRight = gains.right;
+      return tube;
+    });
+    if (!channel.bursts) channel.bursts = [];
+    if (!before || before.activity !== channel.activity || !Number.isFinite(channel.nextStrikeFrame)) {
+      channel.nextStrikeFrame = currentFrame + this.eventDelayFrames(this.chimeStrikeRate(channel));
+    }
+    if (!channel.bounce) channel.bounce = { frame: Infinity, tube: 0 };
+  }
+
+  chimeStrikeRate(channel) {
+    const [low, high] = channel.strikeRange ?? [0.05, 4];
+    const activity = Math.max(0, Math.min(1, channel.activity ?? 0.3));
+    return low * ((high / low) ** activity) * (2 ** (WEATHER_CHIME_RATE_OCTAVES * this.weatherFactor(channel)));
+  }
+
+  /**
+   * Strike a tube. A strike is an impulse: it starts each mode from rest at
+   * zero displacement, so it is ADDED to what the mode is already doing as a
+   * phasor -- (amplitude x cos, amplitude x sin) plus (strike, 0) -- which
+   * leaves the output at that instant exactly where it was: no click, and a
+   * second strike on a ringing tube reinforces or partly cancels it, as it
+   * does on a real one. A hard clapper excites the upper modes; a soft one
+   * mostly the fundamental.
+   */
+  strikeTube(channel, tube, force) {
+    const hardness = Math.max(0, Math.min(1, channel.hardness ?? 0.5));
+    CHIME_MODE_RATIOS.forEach((ratio, mode) => {
+      const weight = CHIME_MODE_WEIGHTS[mode] * (ratio ** (-(1 - hardness) * CHIME_SOFT_TILT)) * force * (0.8 + (0.4 * this.random()));
+      const share = 0.35 + (0.3 * this.random());
+      [share, 1 - share].forEach((part, half) => {
+        const oscillator = tube.oscillators[(mode * 2) + half];
+        if (!oscillator.audible) return;
+        const x = (oscillator.amplitude * oscillator.cos) + (weight * part);
+        const y = oscillator.amplitude * oscillator.sin;
+        const amplitude = Math.hypot(x, y);
+        oscillator.amplitude = amplitude;
+        oscillator.sin = amplitude > 0 ? y / amplitude : 0;
+        oscillator.cos = amplitude > 0 ? x / amplitude : 1;
+      });
+    });
+    tube.active = true;
+  }
+
+  /** The tubes, from frame `from` to `to` of the block, added into `left`/`right`. */
+  renderTubes(channel, left, right, from, to) {
+    for (const tube of channel.tubeState) {
+      if (!tube.active) continue;
+      const oscillators = tube.oscillators;
+      let loudest = 0;
+      for (const oscillator of oscillators) {
+        if (oscillator.amplitude <= VOICE_SILENCE) {
+          oscillator.amplitude = 0;
+          continue;
+        }
+        let sin = oscillator.sin;
+        let cos = oscillator.cos;
+        let amplitude = oscillator.amplitude;
+        const rotationSin = oscillator.rotationSin;
+        const rotationCos = oscillator.rotationCos;
+        const decay = oscillator.decay;
+        const gainLeft = tube.gainLeft;
+        const gainRight = tube.gainRight;
+        for (let frame = from; frame < to; frame += 1) {
+          const sample = sin * amplitude;
+          left[frame] += sample * gainLeft;
+          right[frame] += sample * gainRight;
+          const nextSin = (sin * rotationCos) + (cos * rotationSin);
+          cos = (cos * rotationCos) - (sin * rotationSin);
+          sin = nextSin;
+          amplitude *= decay;
+        }
+        oscillator.sin = sin;
+        oscillator.cos = cos;
+        oscillator.amplitude = amplitude;
+        loudest = Math.max(loudest, amplitude);
+      }
+      if (loudest <= VOICE_SILENCE) tube.active = false;
+    }
+  }
+
+  /**
+   * A chimes layer's block, written into `left`/`right` (overwritten). The
+   * clapper strikes at a rate `activity` sets and the weather moves; after a
+   * strike it may bounce onto a neighbouring tube. The tubes are rendered in
+   * segments between strikes, so each strike lands on its own frame and the
+   * sound does not depend on the block size.
+   */
+  renderChimes(channel, left, right, blockStart, length) {
+    left.fill(0, 0, length);
+    right.fill(0, 0, length);
+    const tubes = channel.tubeState;
+    const blockEnd = blockStart + length;
+    const rate = this.chimeStrikeRate(channel);
+    const factor = this.weatherFactor(channel);
+    if (channel.nextStrikeFrame < blockStart) channel.nextStrikeFrame = blockStart + this.eventDelayFrames(rate);
+    if (channel.bounce.frame < blockStart) channel.bounce.frame = Infinity;
+    let position = 0;
+    for (;;) {
+      const isBounce = channel.bounce.frame < channel.nextStrikeFrame;
+      const at = isBounce ? channel.bounce.frame : channel.nextStrikeFrame;
+      if (at >= blockEnd) break;
+      const offset = at - blockStart;
+      this.renderTubes(channel, left, right, position, offset);
+      position = offset;
+      if (tubes.length > 0) {
+        const index = isBounce ? channel.bounce.tube : Math.floor(this.random() * tubes.length);
+        const force = Math.max(0.05, this.between(CHIME_STRIKE_FORCE) * (1 + (WEATHER_CHIME_FORCE * factor)) * (isBounce ? 0.5 : 1));
+        this.strikeTube(channel, tubes[index], force);
+        // The clapper's tick, as bright as it is hard.
+        this.spawnBurst(channel.bursts, 16, offset, CHIME_CLICK, force * (channel.hardness ?? 0.5), tubes[index].pan);
+        if (!isBounce && tubes.length > 1 && this.random() < CHIME_BOUNCE_CHANCE) {
+          const neighbour = index === 0 ? 1 : index === tubes.length - 1 ? index - 1 : index + (this.random() < 0.5 ? -1 : 1);
+          channel.bounce = { frame: at + Math.max(1, Math.round(this.between(CHIME_BOUNCE_SEC) * sampleRate)), tube: neighbour };
+        } else if (isBounce) {
+          channel.bounce = { frame: Infinity, tube: 0 };
+        }
+      }
+      if (!isBounce) channel.nextStrikeFrame += this.eventDelayFrames(rate);
+    }
+    this.renderTubes(channel, left, right, position, length);
+    this.renderBursts(channel.bursts, left, right, length);
+  }
+
+
+  /**
+   * One block. Each layer is rendered whole into scratch, from its own
+   * random stream, and placed (placeLayer) into the direct and send outputs;
+   * thunder writes its own direct and send. A layer that is not the soloed
    * one is still rendered, so its voices and clocks keep running and
-   * un-soloing does not restart it.
+   * un-soloing does not restart it. A layer at gain 0 is not rendered at
+   * all: nothing it would render could be heard, so its clocks pause and
+   * resume from where they stood.
    */
   process(_inputs, outputs) {
-    const output = outputs[0];
-    const left = output[0];
-    const right = output[1] ?? left;
-    const length = left.length;
+    const direct = outputs[0];
+    const send = outputs[1];
+    const length = direct[0].length;
+    for (const output of outputs) {
+      for (const outputChannel of output) outputChannel.fill(0);
+    }
     if (!this.scratchLeft || this.scratchLeft.length < length) {
       this.scratchLeft = new Float64Array(length);
       this.scratchRight = new Float64Array(length);
       this.scratchSendLeft = new Float64Array(length);
       this.scratchSendRight = new Float64Array(length);
     }
-    const scratchLeft = this.scratchLeft;
-    const scratchRight = this.scratchRight;
-    // Equal-power scaling across however many layers are playing, so
-    // enabling one more layer does not push the sum into the limiter. A
-    // soloed layer plays alone and needs none.
-    const channelScale = this.soloChannelId !== null
-      ? 1
-      : this.channels.length > 0 ? 1 / Math.sqrt(this.channels.length) : 0;
-    left.fill(0);
-    if (right !== left) right.fill(0);
-    for (let index = 1; index < outputs.length; index += 1) {
-      for (const outputChannel of outputs[index]) outputChannel.fill(0);
-    }
+    const left = this.scratchLeft;
+    const right = this.scratchRight;
+    this.advanceWeather(length);
 
     for (const channel of this.channels) {
-      // A layer at volume 0 still counts in channelScale above -- leaving it
-      // out would make every soundscape that carries a silent layer louder --
-      // but nothing it would render can be heard, so it is not rendered: its
-      // cycle and its clocks pause and resume from where they stood (see
-      // birthVoices for why a paused drop clock cannot be trusted).
-      if (channel.volume <= 0) continue;
+      if (!(channel.gain > 0)) continue;
       const audible = this.soloChannelId === null || channel.id === this.soloChannelId;
       this.stream = channel.stream;
-      if (channel.kind === 'rain') {
-        this.renderRain(channel, scratchLeft, scratchRight, currentFrame, length);
-        const target = outputs[channel.outputIndex + 1];
-        if (!audible || channel.outputIndex < 0 || !target?.[0]) continue;
-        const targetLeft = target[0];
-        const targetRight = target[1] ?? targetLeft;
-        const scale = channel.volume * channelScale;
-        for (let index = 0; index < length; index += 1) {
-          targetLeft[index] += scratchLeft[index] * scale;
-          if (targetRight !== targetLeft) targetRight[index] += scratchRight[index] * scale;
+      switch (channel.kind) {
+        case 'noise':
+          this.renderNoise(channel, left, right, length);
+          break;
+        case 'rain':
+          this.renderRain(channel, left, right, currentFrame, length);
+          break;
+        case 'water':
+          this.renderWater(channel, left, right, currentFrame, length);
+          break;
+        case 'fire':
+          this.renderFire(channel, left, right, currentFrame, length);
+          break;
+        case 'chimes':
+          this.renderChimes(channel, left, right, currentFrame, length);
+          break;
+        case 'thunder': {
+          this.renderThunder(channel, left, right, this.scratchSendLeft, this.scratchSendRight, length);
+          if (!audible) continue;
+          const directLeft = direct[0];
+          const directRight = direct[1] ?? directLeft;
+          for (let index = 0; index < length; index += 1) {
+            directLeft[index] += left[index];
+            if (directRight !== directLeft) directRight[index] += right[index];
+          }
+          if (send?.[0]) {
+            const sendLeft = send[0];
+            const sendRight = send[1] ?? sendLeft;
+            for (let index = 0; index < length; index += 1) {
+              sendLeft[index] += this.scratchSendLeft[index];
+              if (sendRight !== sendLeft) sendRight[index] += this.scratchSendRight[index];
+            }
+          }
+          continue;
         }
-        continue;
+        default:
+          continue;
       }
-      // A noise layer sends what it plays; thunder sends its own mix, in
-      // which the strokes are mostly dry (see startPeal).
-      let sendSourceLeft = scratchLeft;
-      let sendSourceRight = scratchRight;
-      if (channel.kind === 'thunder') {
-        this.renderThunder(channel, scratchLeft, scratchRight, this.scratchSendLeft, this.scratchSendRight, length);
-        sendSourceLeft = this.scratchSendLeft;
-        sendSourceRight = this.scratchSendRight;
-      } else {
-        this.renderNoise(channel, scratchLeft, scratchRight, length);
-      }
-      if (!audible) continue;
-      const directScale = channelScale * (channel.directGain ?? 1);
-      for (let index = 0; index < length; index += 1) {
-        left[index] += scratchLeft[index] * directScale;
-        if (right !== left) right[index] += scratchRight[index] * directScale;
-      }
-      const send = outputs[this.noiseSendOutput];
-      const sendScale = channelScale * (channel.reverbSend ?? 0);
-      if (send && sendScale > 0) {
-        const sendLeft = send[0];
-        const sendRight = send[1] ?? sendLeft;
-        for (let index = 0; index < length; index += 1) {
-          sendLeft[index] += sendSourceLeft[index] * sendScale;
-          if (sendRight !== sendLeft) sendRight[index] += sendSourceRight[index] * sendScale;
-        }
-      }
+      if (audible) this.placeLayer(channel, left, right, length, direct, send);
     }
     this.stream = this.rootStream;
     return true;

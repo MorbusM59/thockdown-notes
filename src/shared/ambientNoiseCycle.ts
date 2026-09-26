@@ -1,9 +1,6 @@
 /**
- * The shape of a noise layer's level over one cycle. Its own module, depending
- * only on smoothCurve.ts, because ambientSound.ts needs it (to read old saves)
- * and ambientSoundDsp.ts needs ambientSound.ts: with the maths in either of
- * those, the two would import each other and the load-time search below
- * would read constants that do not exist yet.
+ * The shape of a noise layer's level over one cycle (its `curve` and `skew`),
+ * as a table the worklet plays on repeat. Depends only on smoothCurve.ts.
  */
 import { buildBellEnvelope, warpForSkew } from './smoothCurve';
 
@@ -63,7 +60,7 @@ export const AMBIENT_BELL_RAMP_NEAREST_SINE: number = (() => {
  * worklet plays it on repeat at the layer's period and applies it as
  * `1 + modulationAmplitude * value`.
  *
- * `ramp` (0-1) decides how much of the cycle is spent near the top, in one
+ * `ramp` (the layer's `curve`, 0-1) decides how much of the cycle is spent near the top, in one
  * direction across the whole slider, with an exact sine at the middle:
  * - 0 is the broadest bell (AMBIENT_BELL_RAMP_MIN): a plateau that stays
  *   loud and dips briefly;
@@ -75,7 +72,7 @@ export const AMBIENT_BELL_RAMP_NEAREST_SINE: number = (() => {
  * (geometrically) toward the one nearest a sine. Because that bell is almost a
  * sine already, the handover at the middle has no audible seam.
  *
- * `shape` places the peak for both curves the same way: the sine's phase goes
+ * `shape` (the layer's `skew`) places the peak for both curves the same way: the sine's phase goes
  * through the bell's own skew warp (smoothCurve.ts's warpForSkew), so moving
  * the peak never changes which curve is playing, and moving `ramp` never
  * moves the peak.
@@ -90,16 +87,3 @@ export function buildNoiseCycle(ramp: number, shape: number, sampleCount = NOISE
   const sine = sineCycle(sampleCount, shape);
   return bell.map((value, index) => ((1 - towardSine) * value) + (towardSine * sine[index]));
 }
-
-/**
- * The inverse, for reading a burst saved on the bell's own steepness scale:
- * the `ramp` whose bell has that steepness.
- */
-export function noiseRampForBellRamp(bellRamp: number): number {
-  const bounded = Math.max(AMBIENT_BELL_RAMP_MIN, Math.min(AMBIENT_BELL_RAMP_MAX, bellRamp));
-  if (bounded <= AMBIENT_BELL_RAMP_NEAREST_SINE) {
-    return 0.5 * (Math.log(bounded / AMBIENT_BELL_RAMP_MIN) / Math.log(AMBIENT_BELL_RAMP_NEAREST_SINE / AMBIENT_BELL_RAMP_MIN));
-  }
-  return 1 - (0.5 * (Math.log(AMBIENT_BELL_RAMP_MAX / bounded) / Math.log(AMBIENT_BELL_RAMP_MAX / AMBIENT_BELL_RAMP_NEAREST_SINE)));
-}
-
