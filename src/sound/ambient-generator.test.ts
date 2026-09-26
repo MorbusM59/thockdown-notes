@@ -613,6 +613,57 @@ describe('fire', () => {
     expect(Number.isFinite(popsOf(0.5))).toBe(true);
   });
 
+  // The level the flames move the roar by, traced per control segment: what
+  // flicker, pace and edge set, without the noise's own fluctuation on top.
+  const roarTrace = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'fire' }>>, seconds = 40) => {
+    const generator = createProcessor([layer('fire', { crackle: 0, pops: 0, ...overrides })], { sampleRate: 4000 });
+    // From before the first segment, so the first change's onset is seen.
+    const levels: number[] = [generator.processor.channels[0].roarWander.value];
+    for (let segment = 0; segment < (4000 * seconds) / 32; segment += 1) {
+      generator.render(32 / 4000);
+      levels.push(generator.processor.channels[0].roarWander.value);
+    }
+    return levels;
+  };
+  const spread = (levels: number[]) => {
+    const mean = levels.reduce((sum, value) => sum + value, 0) / levels.length;
+    return Math.sqrt(levels.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / levels.length);
+  };
+
+  it('swings as far as its flicker says, and not at all at none', () => {
+    expect(spread(roarTrace({ flicker: 0 }))).toBeLessThan(1e-9);
+    expect(spread(roarTrace({ flicker: 1 }))).toBeGreaterThan(1.8 * spread(roarTrace({ flicker: 0.5 })));
+  });
+
+  it('changes more often at a faster pace', () => {
+    // Turns of direction per second.
+    const turns = (flickerPace: number) => {
+      const levels = roarTrace({ flicker: 1, flickerPace, flickerEdge: 0.5 }, 30);
+      let count = 0;
+      for (let index = 2; index < levels.length; index += 1) {
+        if ((levels[index] - levels[index - 1]) * (levels[index - 1] - levels[index - 2]) < 0) count += 1;
+      }
+      return count;
+    };
+    expect(turns(1)).toBeGreaterThan(4 * turns(0.3));
+  });
+
+  it('lurches at a sharp edge and eases in at a soft one, at the same depth and pace', () => {
+    // The steepest step, as a share of the level's own spread.
+    const steepest = (flickerEdge: number) => {
+      const levels = roarTrace({ flicker: 1, flickerPace: 0.3, flickerEdge });
+      const steps = levels.slice(1).map((value, index) => Math.abs(value - levels[index]));
+      return Math.max(...steps) / spread(levels);
+    };
+    expect(steepest(1)).toBeGreaterThan(5 * steepest(0));
+    // A sharp edge sets off at full speed: the largest step of a change is
+    // its first, with no easing in ahead of it.
+    const levels = roarTrace({ flicker: 1, flickerPace: 0.3, flickerEdge: 1 });
+    const steps = levels.slice(1).map((value, index) => value - levels[index]);
+    const start = steps.findIndex((step) => Math.abs(step) > 1e-6);
+    expect(Math.abs(steps[start])).toBeGreaterThanOrEqual(Math.abs(steps[start + 1]));
+  });
+
   it('roars louder and lower as it grows', () => {
     const low = (size: number) => {
       const out = createProcessor([layer('fire', { size, crackle: 0, pops: 0 })], { sampleRate: 8000 }).render(6).left;

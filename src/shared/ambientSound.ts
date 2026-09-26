@@ -192,6 +192,18 @@ export interface AmbientFireChannelSettings extends AmbientChannelBaseSettings {
   crackle: number;
   /** How often sap pops, 0 never to 1 often. */
   pops: number;
+  /**
+   * How far the roar and the hiss swing in level as the flames move, 0 a
+   * steady burn to 1 surging and faltering (the depth of each change).
+   */
+  flicker: number;
+  /** How often those changes come, 0 one every couple of seconds to 1 several a second. */
+  flickerPace: number;
+  /**
+   * How sharp each change is, 0 a soft swell that eases in and out to 1 an
+   * abrupt lurch -- as a share of the pace, so it holds at any pace.
+   */
+  flickerEdge: number;
   pan: number;
   /** Wind fans the flames. */
   weather: number;
@@ -389,7 +401,7 @@ export const AMBIENT_CHANNEL_DEFAULTS: KindDefaults = {
   },
   fire: {
     kind: 'fire', enabled: true, solo: false, volume: 0.7, distance: 0.15,
-    size: 0.5, crackle: 0.5, pops: 0.3, pan: 0, weather: 0,
+    size: 0.5, crackle: 0.5, pops: 0.3, flicker: 0.6, flickerPace: 0.5, flickerEdge: 0.4, pan: 0, weather: 0,
   },
   chimes: {
     kind: 'chimes', enabled: true, solo: false, volume: 0.6, distance: 0.35,
@@ -543,7 +555,7 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
     id: 'fireside',
     name: 'Fireside',
     settings: soundscape({
-      'fire-1': { size: 0.45, crackle: 0.55, pops: 0.35, distance: 0.1, pan: 0, volume: 0.74 },
+      'fire-1': { size: 0.45, crackle: 0.55, pops: 0.35, flicker: 0.45, flickerPace: 0.4, flickerEdge: 0.3, distance: 0.1, pan: 0, volume: 0.74 },
       'rain-1': { surface: 1, intensity: 0.45, mix: 0.75, drips: 0, wetness: 0.1, distance: 0.75, pan: 0.4, volume: 0.52 },
       'noise-1': { colour: 0.1, brightnessHz: 450, depth: 0.35, periodSec: 18, variation: 0.6, distance: 0.8, volume: 0.42, weather: 1 },
     }, { size: 0.2, damping: 0.6, echoes: 0, amount: 0.4 }, { gustiness: 0.5, paceSec: 14 }),
@@ -552,7 +564,7 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
     id: 'campfire',
     name: 'Campfire',
     settings: soundscape({
-      'fire-1': { size: 0.8, crackle: 0.7, pops: 0.5, distance: 0.2, pan: -0.1, volume: 0.76, weather: 0.5 },
+      'fire-1': { size: 0.8, crackle: 0.7, pops: 0.5, flicker: 0.7, flickerPace: 0.6, flickerEdge: 0.5, distance: 0.2, pan: -0.1, volume: 0.76, weather: 0.5 },
       'water-1': { flow: 0.4, size: 0.5, turbulence: 0.5, distance: 0.85, pan: 0.6, volume: 0.55 },
       'noise-1': { colour: 0.45, brightnessHz: 1600, focus: 0.2, depth: 0.45, periodSec: 16, sweep: 0.6, variation: 0.6, sway: 0.35, distance: 0.7, volume: 0.5, weather: 1 },
     }, { size: 0.85, damping: 0.8, echoes: 0.1, amount: 0.5 }, { gustiness: 0.5, paceSec: 13 }),
@@ -644,7 +656,7 @@ export const AMBIENT_FIELD_BOUNDS: { [K in AmbientChannelKind]: FieldBounds } = 
     lengthSec: [AMBIENT_THUNDER_LENGTH_MIN_SEC, AMBIENT_THUNDER_LENGTH_MAX_SEC], weather: UNIT,
   },
   water: { ...COMMON_BOUNDS, flow: UNIT, size: UNIT, turbulence: UNIT, pan: SIGNED },
-  fire: { ...COMMON_BOUNDS, size: UNIT, crackle: UNIT, pops: UNIT, pan: SIGNED, weather: UNIT },
+  fire: { ...COMMON_BOUNDS, size: UNIT, crackle: UNIT, pops: UNIT, flicker: UNIT, flickerPace: UNIT, flickerEdge: UNIT, pan: SIGNED, weather: UNIT },
   chimes: {
     ...COMMON_BOUNDS, pitchHz: [AMBIENT_CHIME_PITCH_MIN_HZ, AMBIENT_CHIME_PITCH_MAX_HZ],
     tubes: [AMBIENT_CHIME_TUBES_MIN, AMBIENT_CHIME_TUBES_MAX, 'integer'],

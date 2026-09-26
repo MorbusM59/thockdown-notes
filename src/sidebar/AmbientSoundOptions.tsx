@@ -68,8 +68,7 @@ const KIND_LOOK: Record<AmbientChannelKind, { icon: string; label: string }> = {
   chimes: { icon: 'fa-bell', label: 'Chimes' },
 }
 
-/** The scene-wide settings: shared by every channel, and shown above them all. */
-type SceneTarget = 'space' | 'weather'
+const ENVIRONMENT_DEFAULTS = { ...DEFAULT_AMBIENT_SPACE, ...DEFAULT_AMBIENT_WEATHER } as unknown as Record<string, number>
 
 // ---------------------------------------------------------------------------
 // How values read.
@@ -158,6 +157,8 @@ interface ControlSpec {
 
 interface ControlGroup {
   label: string
+  /** Whether the label is shown above the group; it names the group for assistive technology either way. */
+  hideLabel?: boolean
   controls: ControlSpec[]
 }
 
@@ -259,6 +260,9 @@ const CONTROLS: { [K in AmbientChannelKind]: ControlGroup[] } = {
         unit('size', 'size', 'Embers to a blaze: the weight and depth of the roar, and the hiss', (value) => formatAmount(value, 'Embers', 'Blaze')),
         unit('crackle', 'crackle', 'How often the wood crackles', (value) => formatAmount(value, 'Rarely', 'Constantly')),
         unit('pops', 'pops', 'How often sap pops and sizzles', (value) => formatAmount(value, 'Never', 'Often')),
+        unit('flicker', 'flicker', 'How far the roar and hiss swing as the flames move: a steady burn, or surging and faltering', (value) => formatAmount(value, 'Steady', 'Guttering')),
+        unit('flickerPace', 'pace', 'How often the flames change: one every couple of seconds, or several a second', (value) => { const sec = 2 * ((0.08 / 2) ** value); return sec >= 1 ? `every ${sec.toFixed(1)} s` : `${(1 / sec).toFixed(1)} / s` }),
+        unit('flickerEdge', 'edge', 'How sharp each change is: a soft swell that eases in and out, or an abrupt lurch', (value) => formatAmount(value, 'Soft', 'Sharp')),
       ],
     },
     { label: 'Place', controls: [DISTANCE, PAN, { ...WEATHER, tooltip: 'How much the wind fans the flames' }] },
@@ -279,19 +283,18 @@ const CONTROLS: { [K in AmbientChannelKind]: ControlGroup[] } = {
   ],
 }
 
-const SPACE_CONTROLS: ControlGroup[] = [{
-  label: 'Space',
+/**
+ * The environment: the space every channel plays in and the weather they may
+ * follow -- settings across all channels, shown above them as one group.
+ */
+const ENVIRONMENT_CONTROLS: ControlGroup[] = [{
+  label: 'Environment',
+  hideLabel: true,
   controls: [
     unit('size', 'size', 'A small room to a wide valley: how long the space rings, and how late its first reflection', (value) => `${formatSeconds(spaceDecaySec(value))} decay`),
     unit('damping', 'damping', 'A bright tail, or one that darkens fast, as open air and foliage swallow the highs', (value) => formatAmount(value, 'Bright', 'Dark')),
     unit('echoes', 'echoes', 'Distinct echoes off walls, buildings or cliffs', (value) => formatAmount(value, 'None')),
     unit('amount', 'amount', 'How much of the space is heard', (value) => formatAmount(value, 'Dry', 'Full')),
-  ],
-}]
-
-const WEATHER_CONTROLS: ControlGroup[] = [{
-  label: 'Weather',
-  controls: [
     unit('gustiness', 'gusts', 'Calm to squally: how far a gust or a lull moves every layer that follows the weather', (value) => formatAmount(value, 'Calm', 'Squally')),
     { key: 'paceSec', track: 'pace', tooltip: 'Average seconds from one gust or lull to the next', min: AMBIENT_WEATHER_PACE_MIN_SEC, max: AMBIENT_WEATHER_PACE_MAX_SEC, log: true, format: formatSeconds },
   ],
@@ -341,7 +344,7 @@ function ControlGroups({ idPrefix, groups, values, defaults, disabled, name, onC
     <>
       {groups.map((group) => (
         <div className="ambient-control-group" role="group" aria-label={`${name} ${group.label.toLowerCase()}`} key={group.label}>
-          <div className="ambient-control-group-label" aria-hidden="true">{group.label}</div>
+          {!group.hideLabel && <div className="ambient-control-group-label" aria-hidden="true">{group.label}</div>}
           {group.controls.map((spec) => (
             <CompactScrollbarSlider
               key={spec.key}
@@ -396,7 +399,10 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
     })
   }
 
-  const updateScene = (target: SceneTarget, key: string, value: number) => {
+  // One group, two stored records: each key belongs to exactly one of them.
+  const environmentValues = { ...preferences.settings.space, ...preferences.settings.weather } as unknown as Record<string, number>
+  const updateEnvironment = (key: string, value: number) => {
+    const target = key in preferences.settings.space ? 'space' : 'weather'
     commitSettings({ ...preferences.settings, [target]: { ...preferences.settings[target], [key]: value } })
   }
 
@@ -499,19 +505,16 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
         {/* Space and weather belong to the whole soundscape rather than to a
             channel, so they stand above the soundscapes and channels,
             always shown, rather than behind a channel-like button. */}
-        <div className="ambient-layer-controls ambient-scene-controls" role="group" aria-label="Across all channels">
-          {(['space', 'weather'] as const).map((target) => (
-            <ControlGroups
-              key={target}
-              idPrefix={`ambient-${target}`}
-              groups={target === 'space' ? SPACE_CONTROLS : WEATHER_CONTROLS}
-              values={preferences.settings[target] as unknown as Record<string, number>}
-              defaults={(target === 'space' ? DEFAULT_AMBIENT_SPACE : DEFAULT_AMBIENT_WEATHER) as unknown as Record<string, number>}
-              disabled={false}
-              name={target === 'space' ? 'Space' : 'Weather'}
-              onCommit={(key, value) => updateScene(target, key, value)}
-            />
-          ))}
+        <div className="ambient-layer-controls ambient-scene-controls" role="group" aria-label="Environment, across all channels">
+          <ControlGroups
+            idPrefix="ambient-environment"
+            groups={ENVIRONMENT_CONTROLS}
+            values={environmentValues}
+            defaults={ENVIRONMENT_DEFAULTS}
+            disabled={false}
+            name="Environment"
+            onCommit={updateEnvironment}
+          />
         </div>
 
         <div className="options-loadout-grid ambient-preset-grid" role="group" aria-label="Factory ambient soundscapes">

@@ -494,11 +494,26 @@ const MAX_WATER_BUBBLES = 96;
  */
 const FIRE_ROAR_HZ = [420, 150];
 const FIRE_ROAR_LEVEL = [0.25, 1];
-const FIRE_FLUTTER_SEC = [0.06, 0.25];
+/**
+ * The roar's and the hiss's wander (renderFire), set by three controls:
+ * - `flicker`, the depth: a target level is drawn from FIRE_FLUTTER_RANGE
+ *   narrowed toward 1 (a steady burn at 0);
+ * - `flickerPace`, how often: the roar's mean seconds between targets runs
+ *   geometrically over FIRE_PACE_SEC, the hiss's FIRE_HISS_PACE_SHARE of it;
+ * - `flickerEdge`, how sharp: the glide to each target takes a share of the
+ *   interval, running geometrically over FIRE_EDGE_GLIDE_SHARE -- longer
+ *   than the interval at 0, so the level never settles and swells smoothly,
+ *   a small fraction of it at 1, so it lurches and holds -- and the edge
+ *   also decides whether each change eases in (stepWander's `ease`): fully
+ *   at 0, not at all at 1, where a change sets off at full speed the
+ *   moment it is drawn, as the flames of a real fire do.
+ */
 const FIRE_FLUTTER_RANGE = [0.45, 1.3];
+const FIRE_PACE_SEC = [2, 0.08];
+const FIRE_HISS_PACE_SHARE = 0.35;
+const FIRE_EDGE_GLIDE_SHARE = [1.2, 0.04];
 const FIRE_HISS_HZ = 2600;
 const FIRE_HISS_LEVEL = [0.015, 0.08];
-const FIRE_HISS_FLICKER_SEC = [0.02, 0.08];
 const FIRE_CRACKLES_PER_SEC = [0.3, 30];
 const FIRE_CRACKLE_CLUSTER_CHANCE = 0.45;
 const FIRE_CRACKLE_CLUSTER_SEC = [0.005, 0.04];
@@ -2101,10 +2116,10 @@ class AmbientGenerator extends AudioWorkletProcessor {
   /**
    * A slowly wandering level (a flame's flutter, the hiss's flicker, the
    * water's bursts): toward a target drawn every `sec` range, gliding with a
-   * one-pole of `glideSec`, moved on by one control segment. Returns the
+   * time constant of `glideSec` (two stages, see below), moved on by one control segment. Returns the
    * level at the segment's start and end, for a linear ramp across it.
    */
-  stepWander(wander, secRange, glideSec, draw) {
+  stepWander(wander, secRange, glideSec, draw, ease = 1) {
     const length = CONTROL_FRAMES;
     const from = wander.value;
     wander.framesLeft -= length;
@@ -2112,7 +2127,17 @@ class AmbientGenerator extends AudioWorkletProcessor {
       wander.target = draw();
       wander.framesLeft = Math.max(1, Math.round(this.between(secRange) * sampleRate));
     }
-    wander.value += (wander.target - wander.value) * (1 - Math.exp(-length / (glideSec * sampleRate)));
+    // Two glides in series, so a new target is eased into rather than set
+    // off toward at full speed -- one glide alone puts a corner in the level
+    // at every target, an abrupt onset a listener hears. `ease` (0-1) is how
+    // much of the time the first stage takes: at 0 it jumps straight to the
+    // target and what is left is one glide, onset and all -- a flame's real
+    // lurch, which a fire should still be able to have.
+    const leadingSec = glideSec * 0.5 * ease;
+    const followingSec = glideSec * (1 - (0.5 * ease));
+    const leading = wander.leading ?? wander.value;
+    wander.leading = leadingSec > 0 ? leading + ((wander.target - leading) * (1 - Math.exp(-length / (leadingSec * sampleRate)))) : wander.target;
+    wander.value += (wander.leading - wander.value) * (1 - Math.exp(-length / (followingSec * sampleRate)));
     return [from, wander.value];
   }
 
@@ -2291,8 +2316,8 @@ class AmbientGenerator extends AudioWorkletProcessor {
 
   initFire(channel) {
     channel.bursts = [];
-    channel.flutter = { value: 1, target: 1, framesLeft: 0 };
-    channel.flicker = { value: 1, target: 1, framesLeft: 0 };
+    channel.roarWander = { value: 1, target: 1, framesLeft: 0 };
+    channel.hissWander = { value: 1, target: 1, framesLeft: 0 };
     channel.fireStart = this.random();
     channel.fireRead = -1;
     channel.roarLeft = null;
@@ -2356,13 +2381,25 @@ class AmbientGenerator extends AudioWorkletProcessor {
     const loopLength = Math.min(brown.length, white.length);
     if (channel.fireRead < 0 || channel.fireRead >= loopLength) channel.fireRead = Math.floor(channel.fireStart * loopLength) % loopLength;
     const half = Math.floor(loopLength / 2);
+    // Flicker, its pace and its edge (see FIRE_FLUTTER_RANGE).
+    const depth = Math.max(0, Math.min(1, channel.flicker ?? 1));
+    const pace = Math.max(0, Math.min(1, channel.flickerPace ?? 0.5));
+    const edge = Math.max(0, Math.min(1, channel.flickerEdge ?? 0.5));
+    const wanderLow = 1 - ((1 - FIRE_FLUTTER_RANGE[0]) * depth);
+    const wanderHigh = 1 + ((FIRE_FLUTTER_RANGE[1] - 1) * depth);
+    const drawLevel = () => wanderLow + ((wanderHigh - wanderLow) * this.random());
+    const roarMeanSec = FIRE_PACE_SEC[0] * ((FIRE_PACE_SEC[1] / FIRE_PACE_SEC[0]) ** pace);
+    const hissMeanSec = roarMeanSec * FIRE_HISS_PACE_SHARE;
+    const glideShare = FIRE_EDGE_GLIDE_SHARE[0] * ((FIRE_EDGE_GLIDE_SHARE[1] / FIRE_EDGE_GLIDE_SHARE[0]) ** edge);
+    const wanderSec = [roarMeanSec * 0.4, roarMeanSec * 1.6];
+    const hissSec = [hissMeanSec * 0.4, hissMeanSec * 1.6];
     let flutterFrom = 1;
     let flutterTo = 1;
     let flickerFrom = 1;
     let flickerTo = 1;
     this.forEachSegment(channel, length, () => {
-      [flutterFrom, flutterTo] = this.stepWander(channel.flutter, FIRE_FLUTTER_SEC, 0.02, () => this.between(FIRE_FLUTTER_RANGE));
-      [flickerFrom, flickerTo] = this.stepWander(channel.flicker, FIRE_HISS_FLICKER_SEC, 0.008, () => this.between(FIRE_FLUTTER_RANGE));
+      [flutterFrom, flutterTo] = this.stepWander(channel.roarWander, wanderSec, roarMeanSec * glideShare, drawLevel, 1 - edge);
+      [flickerFrom, flickerTo] = this.stepWander(channel.hissWander, hissSec, hissMeanSec * glideShare, drawLevel, 1 - edge);
     }, (offset, count, position) => {
       // Crackles and pops are born in time order, whichever clock is next,
       // so the stream is drawn in the same order whatever the block size
