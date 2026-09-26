@@ -437,10 +437,10 @@ export interface SidebarOptionsPanelProps {
   customSlotEntriesForCurrentMode: UiLoadoutEntry[]
   primedCustomLayoutId: number | null
   handleCustomLoadoutSlotClick: (id: number) => void
-  handleCustomLoadoutSlotRightMouseDown: (event: MouseEvent<HTMLButtonElement>, id: number) => void
-  handleCustomLoadoutSlotRightMouseUp: (event: MouseEvent<HTMLButtonElement>, id: number) => void
-  handleCustomLoadoutSlotMouseLeave: () => void
-  handleCustomLoadoutSlotContextMenu: (event: MouseEvent<HTMLButtonElement>, id: number) => void
+  handleCustomLoadoutSlotRightPointerDown: (event: PointerEvent<HTMLButtonElement>, id: number) => void
+  handleCustomLoadoutSlotRightPointerUp: (event: PointerEvent<HTMLButtonElement>, id: number) => void
+  handleCustomLoadoutSlotPointerLeave: () => void
+  handleCustomLoadoutSlotContextMenu: (event: MouseEvent<HTMLButtonElement>) => void
   hasUnsavedUiLoadoutChanges: boolean
   saveCustomLoadout: () => Promise<void>
   resetCustomLoadout: () => Promise<void>
@@ -743,9 +743,9 @@ export function SidebarOptionsPanel({
   customSlotEntriesForCurrentMode,
   primedCustomLayoutId,
   handleCustomLoadoutSlotClick,
-  handleCustomLoadoutSlotRightMouseDown,
-  handleCustomLoadoutSlotRightMouseUp,
-  handleCustomLoadoutSlotMouseLeave,
+  handleCustomLoadoutSlotRightPointerDown,
+  handleCustomLoadoutSlotRightPointerUp,
+  handleCustomLoadoutSlotPointerLeave,
   handleCustomLoadoutSlotContextMenu,
   hasUnsavedUiLoadoutChanges,
   saveCustomLoadout,
@@ -1357,17 +1357,16 @@ export function SidebarOptionsPanel({
               onClick={() => {
                 handleCustomLoadoutSlotClick(entry.id)
               }}
-              onMouseDown={(event) => {
-                handleCustomLoadoutSlotRightMouseDown(event, entry.id)
+              onPointerDown={(event) => {
+                handleCustomLoadoutSlotRightPointerDown(event, entry.id)
               }}
-              onMouseUp={(event) => {
-                handleCustomLoadoutSlotRightMouseUp(event, entry.id)
+              onPointerUp={(event) => {
+                handleCustomLoadoutSlotRightPointerUp(event, entry.id)
               }}
-              onMouseLeave={handleCustomLoadoutSlotMouseLeave}
+              onPointerCancel={handleCustomLoadoutSlotPointerLeave}
+              onPointerLeave={handleCustomLoadoutSlotPointerLeave}
               data-secondary-press="action"
-              onContextMenu={(event) => {
-                handleCustomLoadoutSlotContextMenu(event, entry.id)
-              }}
+              onContextMenu={handleCustomLoadoutSlotContextMenu}
             >
               <span className="options-loadout-index">{Math.abs(entry.id) - LOADOUT_FACTORY_PRESET_COUNT - 2}</span>
             </button>

@@ -251,7 +251,7 @@ import {
   TEXTURE_VSTEPS_MAX,
 } from './textures/types'
 import { TEXTURE_ALGORITHM_VERSION, TEXTURE_REPEAT_TILE_SIZE, useTextureSurface } from './textures/useTextureSurface'
-import { armHold, HOLD_CONFIRM_MS } from './shared/holdTiming'
+import { armHold, HOLD_COMMIT_MS, HOLD_CONFIRM_MS } from './shared/holdTiming'
 import { noteRightPressAction } from './editorSection/useNoteProtectionActions'
 import { WorkIndicatorGlyph } from './components/WorkIndicatorGlyph'
 
@@ -3588,14 +3588,18 @@ function App() {
   }, [resetCustomLayoutPrimed, uiMode, applyEntryToLiveState])
 
   const [primedCustomLayoutId, setPrimedCustomLayoutId] = useState<number | null>(null)
-  const customLoadoutRightClickHoldTimerRef = useRef<number | null>(null)
-  const customLoadoutHoldExportEntryIdRef = useRef<number | null>(null)
+  // Holding right-click on a custom layout exports it; a short right-click
+  // primes it for deletion. The hold is armHold's (so it announces itself on
+  // the cursor, at the threshold every "I mean it" hold uses), on pointer
+  // events, and which of the two it was is decided on the RELEASE: the
+  // contextmenu event is no guide, since Chromium fires it on the press on
+  // some platforms and on the release on others. The soundscape buttons
+  // (AmbientSoundOptions.tsx) do the same gesture the same way.
+  const customLoadoutExportHoldRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
 
-  const clearCustomLoadoutRightClickHoldTimer = useCallback(() => {
-    if (customLoadoutRightClickHoldTimerRef.current !== null) {
-      window.clearTimeout(customLoadoutRightClickHoldTimerRef.current)
-      customLoadoutRightClickHoldTimerRef.current = null
-    }
+  const cancelCustomLoadoutExportHold = useCallback(() => {
+    customLoadoutExportHoldRef.current?.cancel()
+    customLoadoutExportHoldRef.current = null
   }, [])
 
   const triggerCustomLoadoutExport = useCallback(async (entryId: number) => {
@@ -3630,52 +3634,36 @@ function App() {
     void selectLoadoutPreset(entryId)
   }, [primedCustomLayoutId, handleDeleteCustomLoadout, selectLoadoutPreset])
 
-  const handleCustomLoadoutSlotRightMouseDown = useCallback((event: MouseEvent<HTMLButtonElement>, entryId: number) => {
+  const handleCustomLoadoutSlotRightPointerDown = useCallback((event: PointerEvent<HTMLButtonElement>, entryId: number) => {
     if (event.button !== 2) return
-
     setPrimedCustomLayoutId(null)
-    clearCustomLoadoutRightClickHoldTimer()
-    customLoadoutHoldExportEntryIdRef.current = null
-    customLoadoutRightClickHoldTimerRef.current = window.setTimeout(() => {
-      customLoadoutRightClickHoldTimerRef.current = null
-      customLoadoutHoldExportEntryIdRef.current = entryId
+    cancelCustomLoadoutExportHold()
+    const cancel = armHold(() => {
+      customLoadoutExportHoldRef.current = null
       void triggerCustomLoadoutExport(entryId)
-    }, 500)
-  }, [clearCustomLoadoutRightClickHoldTimer, triggerCustomLoadoutExport])
+    }, HOLD_COMMIT_MS)
+    customLoadoutExportHoldRef.current = { pointerId: event.pointerId, cancel }
+  }, [cancelCustomLoadoutExportHold, triggerCustomLoadoutExport])
 
-  const handleCustomLoadoutSlotRightMouseUp = useCallback((event: MouseEvent<HTMLButtonElement>, entryId: number) => {
-    if (event.button !== 2) return
+  const handleCustomLoadoutSlotRightPointerUp = useCallback((event: PointerEvent<HTMLButtonElement>, entryId: number) => {
+    if (event.button !== 2 || customLoadoutExportHoldRef.current?.pointerId !== event.pointerId) return
+    // Released before the hold completed: a short click, which primes deletion.
+    cancelCustomLoadoutExportHold()
+    setPrimedCustomLayoutId(entryId)
+  }, [cancelCustomLoadoutExportHold])
 
-    if (customLoadoutRightClickHoldTimerRef.current !== null) {
-      clearCustomLoadoutRightClickHoldTimer()
-      setPrimedCustomLayoutId(entryId)
-      event.preventDefault()
-      event.stopPropagation()
-      return
-    }
-
-    if (customLoadoutHoldExportEntryIdRef.current === entryId) {
-      event.preventDefault()
-      event.stopPropagation()
-      customLoadoutHoldExportEntryIdRef.current = null
-    }
-  }, [clearCustomLoadoutRightClickHoldTimer])
-
-  const handleCustomLoadoutSlotMouseLeave = useCallback(() => {
-    clearCustomLoadoutRightClickHoldTimer()
+  const handleCustomLoadoutSlotPointerLeave = useCallback(() => {
+    cancelCustomLoadoutExportHold()
     setPrimedCustomLayoutId(null)
-  }, [clearCustomLoadoutRightClickHoldTimer])
+  }, [cancelCustomLoadoutExportHold])
 
-  const handleCustomLoadoutSlotContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>, entryId: number) => {
-    if (customLoadoutHoldExportEntryIdRef.current === entryId || primedCustomLayoutId === entryId) {
-      event.preventDefault()
-      event.stopPropagation()
-      if (customLoadoutHoldExportEntryIdRef.current === entryId) {
-        customLoadoutHoldExportEntryIdRef.current = null
-      }
-      return
-    }
-  }, [primedCustomLayoutId])
+  // The right press is the button's own gesture; no menu ever follows it.
+  const handleCustomLoadoutSlotContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+  }, [])
+
+  useEffect(() => cancelCustomLoadoutExportHold, [cancelCustomLoadoutExportHold])
 
   const exportLayoutsTdl = useCallback(async () => {
     if (!window.thockdownLoadouts) return
@@ -3699,20 +3687,6 @@ function App() {
     }
   }, [])
 
-  useEffect(() => {
-    const handleGlobalMouseUp = (event: globalThis.MouseEvent) => {
-      if (event.button !== 2) return
-      if (customLoadoutHoldExportEntryIdRef.current === null) return
-      event.preventDefault()
-      event.stopPropagation()
-      customLoadoutHoldExportEntryIdRef.current = null
-    }
-
-    window.addEventListener('mouseup', handleGlobalMouseUp, true)
-    return () => {
-      window.removeEventListener('mouseup', handleGlobalMouseUp, true)
-    }
-  }, [])
 
   const toggleUiMode = useCallback(() => {
     setUiMode((previousMode) => {
@@ -10118,9 +10092,9 @@ ${markdownHtml}
                         customSlotEntriesForCurrentMode={customSlotEntriesForCurrentMode}
                         primedCustomLayoutId={primedCustomLayoutId}
                         handleCustomLoadoutSlotClick={handleCustomLoadoutSlotClick}
-                        handleCustomLoadoutSlotRightMouseDown={handleCustomLoadoutSlotRightMouseDown}
-                        handleCustomLoadoutSlotRightMouseUp={handleCustomLoadoutSlotRightMouseUp}
-                        handleCustomLoadoutSlotMouseLeave={handleCustomLoadoutSlotMouseLeave}
+                        handleCustomLoadoutSlotRightPointerDown={handleCustomLoadoutSlotRightPointerDown}
+                        handleCustomLoadoutSlotRightPointerUp={handleCustomLoadoutSlotRightPointerUp}
+                        handleCustomLoadoutSlotPointerLeave={handleCustomLoadoutSlotPointerLeave}
                         handleCustomLoadoutSlotContextMenu={handleCustomLoadoutSlotContextMenu}
                         hasUnsavedUiLoadoutChanges={hasUnsavedUiLoadoutChanges}
                         saveCustomLoadout={saveCustomLoadout}
