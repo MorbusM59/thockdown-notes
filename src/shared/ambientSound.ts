@@ -588,7 +588,7 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
   },
   {
     id: 'parking',
-    name: 'Rain at the parking lot',
+    name: 'Forest rain',
     settings: soundscape({
       'noise-1': { brightnessHz: 562.18, colour: 0.14, depth: 0.65, distance: 0.41, periodSec: 16.083, sweep: 0.3, variation: 0.6, volume: 0.81, weather: 0.82 },
       'noise-2': { brightnessHz: 6976.55, colour: 0.76, curve: 0.4, depth: 0.54, distance: 0.9, periodSec: 30, sweep: 1, variation: 0.65, volume: 0.79, weather: 0.97 },

@@ -56,7 +56,7 @@ import { useNonPassiveWheel } from '../shared/useNonPassiveWheel'
 
 const PRESET_ICONS: Record<string, string> = {
   'stormy-night': 'fa-cloud-moon-rain',
-  parking: 'fa-car',
+  parking: 'fa-tree',
   winds: 'fa-wind',
   underwater: 'fa-fish',
   campsite: 'fa-campground',
