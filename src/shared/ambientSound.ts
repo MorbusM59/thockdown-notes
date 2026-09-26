@@ -204,6 +204,10 @@ export interface AmbientFireChannelSettings extends AmbientChannelBaseSettings {
    * abrupt lurch -- as a share of the pace, so it holds at any pace.
    */
   flickerEdge: number;
+  /** The hiss over the flames, 0 none to 1 twice as authored (0.5). */
+  hiss: number;
+  /** Where the hiss begins, 0 a dull hiss from 800 Hz to 1 a thin sizzle from 8 kHz. */
+  hissTone: number;
   pan: number;
   /** Wind fans the flames. */
   weather: number;
@@ -401,7 +405,7 @@ export const AMBIENT_CHANNEL_DEFAULTS: KindDefaults = {
   },
   fire: {
     kind: 'fire', enabled: true, solo: false, volume: 0.7, distance: 0.15,
-    size: 0.5, crackle: 0.5, pops: 0.3, flicker: 0.6, flickerPace: 0.5, flickerEdge: 0.4, pan: 0, weather: 0,
+    size: 0.5, crackle: 0.5, pops: 0.3, flicker: 0.6, flickerPace: 0.5, flickerEdge: 0.4, hiss: 0.5, hissTone: 0.5, pan: 0, weather: 0,
   },
   chimes: {
     kind: 'chimes', enabled: true, solo: false, volume: 0.6, distance: 0.35,
@@ -656,7 +660,7 @@ export const AMBIENT_FIELD_BOUNDS: { [K in AmbientChannelKind]: FieldBounds } = 
     lengthSec: [AMBIENT_THUNDER_LENGTH_MIN_SEC, AMBIENT_THUNDER_LENGTH_MAX_SEC], weather: UNIT,
   },
   water: { ...COMMON_BOUNDS, flow: UNIT, size: UNIT, turbulence: UNIT, pan: SIGNED },
-  fire: { ...COMMON_BOUNDS, size: UNIT, crackle: UNIT, pops: UNIT, flicker: UNIT, flickerPace: UNIT, flickerEdge: UNIT, pan: SIGNED, weather: UNIT },
+  fire: { ...COMMON_BOUNDS, size: UNIT, crackle: UNIT, pops: UNIT, flicker: UNIT, flickerPace: UNIT, flickerEdge: UNIT, hiss: UNIT, hissTone: UNIT, pan: SIGNED, weather: UNIT },
   chimes: {
     ...COMMON_BOUNDS, pitchHz: [AMBIENT_CHIME_PITCH_MIN_HZ, AMBIENT_CHIME_PITCH_MAX_HZ],
     tubes: [AMBIENT_CHIME_TUBES_MIN, AMBIENT_CHIME_TUBES_MAX, 'integer'],

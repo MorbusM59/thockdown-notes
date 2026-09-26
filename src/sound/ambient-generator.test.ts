@@ -664,6 +664,70 @@ describe('fire', () => {
     expect(Math.abs(steps[start])).toBeGreaterThanOrEqual(Math.abs(steps[start + 1]));
   });
 
+  it('hisses as strongly as its hiss says, and higher with its tone, at about the same loudness', () => {
+    // The hiss alone: the same fire rendered without it, taken away. The
+    // hiss draws nothing from the random stream, so all else is identical.
+    const render = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'fire' }>>) => (
+      createProcessor([layer('fire', { crackle: 0, pops: 0, flicker: 0, ...overrides })], { sampleRate: 32000 }).render(4).left
+    );
+    const hissOf = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'fire' }>>) => {
+      const bare = render({ ...overrides, hiss: 0 });
+      return render(overrides).map((sample, index) => sample - bare[index]);
+    };
+    expect(rms(hissOf({ hiss: 1 })) / rms(hissOf({ hiss: 0.5 }))).toBeCloseTo(2, 3);
+    const dull = hissOf({ hissTone: 0 });
+    const thin = hissOf({ hissTone: 1 });
+    // The share below 2 kHz, through a fourth-order low-pass: a dull hiss
+    // keeps much of itself there, a thin one hardly any.
+    const lowShare = (samples: number[]) => {
+      const g = Math.tan((Math.PI * 2000) / 32000);
+      const k = Math.SQRT2;
+      const a1 = 1 / (1 + (g * (g + k)));
+      const stage = () => {
+        let s1 = 0;
+        let s2 = 0;
+        return (input: number) => {
+          const v3 = input - s2;
+          const v1 = (a1 * s1) + (g * a1 * v3);
+          const v2 = s2 + (g * a1 * s1) + (g * g * a1 * v3);
+          s1 = (2 * v1) - s1;
+          s2 = (2 * v2) - s2;
+          return v2;
+        };
+      };
+      const first = stage();
+      const second = stage();
+      return (rms(samples.map((value) => second(first(value)))) / rms(samples)) ** 2;
+    };
+    expect(lowShare(thin)).toBeLessThan(0.3 * lowShare(dull));
+    const db = 20 * Math.log10(rms(thin) / rms(dull));
+    expect(Math.abs(db)).toBeLessThan(4);
+  });
+
+  it('pops like a small explosion: loudest right at its start', () => {
+    // Where each pop is loudest, by its energy in quarter-millisecond
+    // windows (one sample of noise can fall near zero by chance). A pop
+    // through a narrow band alone swelled for a median 3 ms, up to 18 ms.
+    const generator = createProcessor([], { sampleRate: 48000 });
+    const peaksMs: number[] = [];
+    for (let trial = 0; trial < 40; trial += 1) {
+      const bursts: unknown[] = [];
+      generator.processor.spawnBurst(bursts, 4, 0, generator.constants.FIRE_POP, 1, 0);
+      const left = new Float64Array(4800);
+      generator.processor.renderBursts(bursts, left, new Float64Array(4800), 4800);
+      const energies: number[] = [];
+      for (let at = 0; at + 12 <= left.length; at += 12) {
+        let energy = 0;
+        for (let index = at; index < at + 12; index += 1) energy += left[index] * left[index];
+        energies.push(energy);
+      }
+      peaksMs.push(energies.indexOf(Math.max(...energies)) * 0.25);
+    }
+    peaksMs.sort((a, b) => a - b);
+    expect(peaksMs[20]).toBeLessThanOrEqual(0.5);
+    expect(peaksMs[39]).toBeLessThanOrEqual(2);
+  });
+
   it('roars louder and lower as it grows', () => {
     const low = (size: number) => {
       const out = createProcessor([layer('fire', { size, crackle: 0, pops: 0 })], { sampleRate: 8000 }).render(6).left;

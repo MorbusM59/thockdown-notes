@@ -260,6 +260,8 @@ const CONTROLS: { [K in AmbientChannelKind]: ControlGroup[] } = {
         unit('size', 'size', 'Embers to a blaze: the weight and depth of the roar, and the hiss', (value) => formatAmount(value, 'Embers', 'Blaze')),
         unit('crackle', 'crackle', 'How often the wood crackles', (value) => formatAmount(value, 'Rarely', 'Constantly')),
         unit('pops', 'pops', 'How often sap pops and sizzles', (value) => formatAmount(value, 'Never', 'Often')),
+        unit('hiss', 'hiss', 'The hiss over the flames: none, as authored in the middle, or twice as strong', (value) => (value < 0.005 ? 'Off' : Math.abs(value - 0.5) < 0.005 ? 'As is' : `${value > 0.5 ? '+' : '−'}${Math.abs(Math.round(20 * Math.log10(2 * value)))} dB`)),
+        unit('hissTone', 'hiss tone', 'Where the hiss begins: a dull hiss low down, or a thin sizzle high up', (value) => `from ${formatHz(800 * (10 ** value))}`),
         unit('flicker', 'flicker', 'How far the roar and hiss swing as the flames move: a steady burn, or surging and faltering', (value) => formatAmount(value, 'Steady', 'Guttering')),
         unit('flickerPace', 'pace', 'How often the flames change: one every couple of seconds, or several a second', (value) => { const sec = 2 * ((0.08 / 2) ** value); return sec >= 1 ? `every ${sec.toFixed(1)} s` : `${(1 / sec).toFixed(1)} / s` }),
         unit('flickerEdge', 'edge', 'How sharp each change is: a soft swell that eases in and out, or an abrupt lurch', (value) => formatAmount(value, 'Soft', 'Sharp')),

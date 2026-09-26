@@ -512,14 +512,31 @@ const FIRE_FLUTTER_RANGE = [0.45, 1.3];
 const FIRE_PACE_SEC = [2, 0.08];
 const FIRE_HISS_PACE_SHARE = 0.35;
 const FIRE_EDGE_GLIDE_SHARE = [1.2, 0.04];
-const FIRE_HISS_HZ = 2600;
+/**
+ * The hiss: white noise high-passed at a cutoff `hissTone` runs over
+ * FIRE_HISS_HZ (geometrically; 0.5 is 2.5 kHz), at FIRE_HISS_LEVEL by size,
+ * times 2 x `hiss` (so 0.5 is the level as authored). Moving the cutoff up
+ * leaves less of the noise; the level is put back by the white-noise power
+ * above the cutoff relative to that at FIRE_HISS_REFERENCE_HZ, so the tone
+ * slider changes the colour and not the loudness.
+ */
+const FIRE_HISS_HZ = [800, 8000];
+const FIRE_HISS_REFERENCE_HZ = 2530;
+const FIRE_HISS_BAND_TOP_HZ = 20000;
 const FIRE_HISS_LEVEL = [0.015, 0.08];
 const FIRE_CRACKLES_PER_SEC = [0.3, 30];
 const FIRE_CRACKLE_CLUSTER_CHANCE = 0.45;
 const FIRE_CRACKLE_CLUSTER_SEC = [0.005, 0.04];
 const FIRE_CRACKLE = { hz: [1500, 7000], q: [1.5, 4], decaySec: [0.0003, 0.0025], level: [0.1, 1] };
 const FIRE_POPS_PER_SEC = 1.2;
-const FIRE_POP = { hz: [350, 1400], q: [5, 9], decaySec: [0.006, 0.02], level: [1.2, 2.2], sizzle: [3, 8], sizzleSec: [0.05, 0.2] };
+/**
+ * A pop is a small explosion: it peaks on its first sample. Its burst is
+ * part broadband (`white`, the crack itself, loudest the instant it starts)
+ * and part through a moderately resonant band (the body of the wood). A
+ * narrow band alone -- the first version -- takes several cycles to build,
+ * so every pop swelled to its peak milliseconds late and read as a plop.
+ */
+const FIRE_POP = { hz: [400, 1600], q: [2, 3.5], decaySec: [0.002, 0.008], level: [1.2, 2.2], white: 0.45, sizzle: [3, 8], sizzleSec: [0.05, 0.2] };
 const MAX_FIRE_BURSTS = 48;
 
 /**
@@ -2060,7 +2077,9 @@ class AmbientGenerator extends AudioWorkletProcessor {
    * Queue one burst `offset` frames into the current block (an offset past
    * the block carries into the next; see renderBursts). `spec` gives the
    * band's centre and Q ranges, the decay range and the level range; the
-   * burst is placed at `pan` (-1..1).
+   * burst is placed at `pan` (-1..1). `spec.white` (0-1, default 0) is the
+   * share of the burst that bypasses the band: broadband, and loudest on
+   * its first sample.
    */
   spawnBurst(bursts, max, offset, spec, levelScale, pan) {
     if (bursts.length >= max) return;
@@ -2071,6 +2090,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
       decay: Math.exp(-1 / (sampleRate * this.between(spec.decaySec))),
       filter: stateVariableFilter(spec.hz[0] * ((spec.hz[1] / spec.hz[0]) ** this.random()), q),
       k: 1 / q,
+      white: spec.white ?? 0,
       seed: Math.floor(this.random() * 0x100000000) >>> 0,
       startOffset: Math.max(0, offset),
       gainLeft: gains.left,
@@ -2099,7 +2119,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
           amplitude *= decay;
           if (amplitude < SILENCE) amplitude = 0;
         }
-        const y = bandPass(filter, x) * k;
+        const y = (burst.white * x) + ((1 - burst.white) * bandPass(filter, x) * k);
         left[frame] += y * burst.gainLeft;
         right[frame] += y * burst.gainRight;
       }
@@ -2322,8 +2342,8 @@ class AmbientGenerator extends AudioWorkletProcessor {
     channel.fireRead = -1;
     channel.roarLeft = null;
     channel.roarRight = null;
-    channel.hissLeft = stateVariableFilter(FIRE_HISS_HZ, Math.SQRT1_2);
-    channel.hissRight = stateVariableFilter(FIRE_HISS_HZ, Math.SQRT1_2);
+    channel.hissLeft = null;
+    channel.hissRight = null;
     channel.nextCrackleFrame = currentFrame + this.eventDelayFrames(this.fireCrackleRate(channel));
     channel.nextPopFrame = Infinity;
     this.configureFire(channel, null);
@@ -2339,6 +2359,11 @@ class AmbientGenerator extends AudioWorkletProcessor {
     return FIRE_CRACKLES_PER_SEC[0] * ((FIRE_CRACKLES_PER_SEC[1] / FIRE_CRACKLES_PER_SEC[0]) ** crackle);
   }
 
+  fireHissHz(channel) {
+    const tone = Math.max(0, Math.min(1, channel.hissTone ?? 0.5));
+    return Math.min(sampleRate * 0.45, FIRE_HISS_HZ[0] * ((FIRE_HISS_HZ[1] / FIRE_HISS_HZ[0]) ** tone));
+  }
+
   /** The roar's cutoff follows the size: a bigger fire roars lower. Filter memory is kept. */
   configureFire(channel, before) {
     const cutoff = FIRE_ROAR_HZ[0] * ((FIRE_ROAR_HZ[1] / FIRE_ROAR_HZ[0]) ** Math.max(0, Math.min(1, channel.size ?? 0.5)));
@@ -2352,6 +2377,20 @@ class AmbientGenerator extends AudioWorkletProcessor {
     }
     channel.roarLeft = left;
     channel.roarRight = right;
+    // The hiss's cutoff follows its tone; its filters keep their memory.
+    const hissHz = this.fireHissHz(channel);
+    const hissLeft = stateVariableFilter(hissHz, Math.SQRT1_2);
+    const hissRight = stateVariableFilter(hissHz, Math.SQRT1_2);
+    if (channel.hissLeft) {
+      hissLeft.s1 = channel.hissLeft.s1;
+      hissLeft.s2 = channel.hissLeft.s2;
+      hissRight.s1 = channel.hissRight.s1;
+      hissRight.s2 = channel.hissRight.s2;
+    }
+    channel.hissLeft = hissLeft;
+    channel.hissRight = hissRight;
+    const top = Math.min(FIRE_HISS_BAND_TOP_HZ, sampleRate / 2);
+    channel.hissToneGain = Math.sqrt(Math.max(1, top - FIRE_HISS_REFERENCE_HZ) / Math.max(1, top - hissHz));
     if (!before || before.pops !== channel.pops) {
       const rate = (channel.pops ?? 0) * FIRE_POPS_PER_SEC;
       channel.nextPopFrame = rate > 0 ? currentFrame + this.eventDelayFrames(rate) : Infinity;
@@ -2375,7 +2414,8 @@ class AmbientGenerator extends AudioWorkletProcessor {
     if (channel.nextPopFrame < blockStart) channel.nextPopFrame = popRate > 0 ? blockStart + this.eventDelayFrames(popRate) : Infinity;
     const size = this.fireSize(channel);
     const roarLevel = FIRE_ROAR_LEVEL[0] * ((FIRE_ROAR_LEVEL[1] / FIRE_ROAR_LEVEL[0]) ** size) * (this.noiseGains.brown ?? 1);
-    const hissLevel = (FIRE_HISS_LEVEL[0] + ((FIRE_HISS_LEVEL[1] - FIRE_HISS_LEVEL[0]) * size)) * (this.noiseGains.white ?? 1);
+    const hissLevel = (FIRE_HISS_LEVEL[0] + ((FIRE_HISS_LEVEL[1] - FIRE_HISS_LEVEL[0]) * size))
+      * 2 * Math.max(0, channel.hiss ?? 0.5) * (channel.hissToneGain ?? 1) * (this.noiseGains.white ?? 1);
     const brown = this.noiseLoop('brown');
     const white = this.noiseLoop('white');
     const loopLength = Math.min(brown.length, white.length);
