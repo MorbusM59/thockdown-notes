@@ -552,14 +552,19 @@ function soundscape(
 /** The factory soundscapes, in the order the settings panel shows them. */
 export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
   {
-    id: 'glass',
-    name: 'Rain on glass',
+    id: 'stormy-night',
+    name: 'Stormy Night',
     settings: soundscape({
-      'rain-1': { surface: 1, intensity: 0.55, dropLevel: 0.75, washLevel: 0.52, drips: 0, wetness: 0.15, distance: 0.1, pan: -0.5, volume: 0.72 },
-      'rain-2': { surface: 1, intensity: 0.7, dropLevel: 0.75, washLevel: 0.649, drips: 0, wetness: 0.1, distance: 0.5, pan: 0.3, volume: 0.66 },
-      'rain-3': { surface: 0.5, intensity: 0.85, dropLevel: 0.681, washLevel: 0.715, drips: 0.05, wetness: 0.7, distance: 0.9, pan: 0, volume: 0.62 },
-      'noise-1': { colour: 0.15, brightnessHz: 600, depth: 0.2, periodSec: 20, variation: 0.5, distance: 0.6, volume: 0.45, weather: 0.5 },
-    }, { size: 0.2, damping: 0.4, echoes: 0, amount: 0.5 }, { gustiness: 0.3, paceSec: 15 }),
+      'chimes-1': { activity: 0.79, distance: 0.86, hardness: 1, material: 0.68, pan: -0.61, pitchHz: chimeSemitoneHz(-10), ringSec: 15, scale: 1, tubes: 8, unison: 0, volume: 0.66 },
+      'chimes-2': { activity: 0.69, distance: 0.8, hardness: 0.22, material: 0.06, pan: 0.57, pitchHz: chimeSemitoneHz(2), ringSec: 15, scale: 1, unison: 0.84, volume: 0.57, weather: 1 },
+      'noise-1': { brightnessHz: 1232.94, colour: 0.8, curve: 0.58, depth: 0.35, distance: 0.6, focus: 0.28, periodSec: 10.706, sweep: 0.38, variation: 0.64, volume: 0.76, weather: 0.5, width: 0.98 },
+      'noise-2': { brightnessHz: 661.36, volume: 0.79 },
+      'noise-3': { brightnessHz: 120.09, colour: 0, focus: 0.35, volume: 0.75 },
+      'rain-1': { distance: 0.1, drips: 0.55, intensity: 0.55, pan: -0.5, resonance: 0.15, splashLevel: 0.57, surface: 0.39, volume: 0.74, washDensity: 0.85, washLevel: 0.77, washTone: 0.23, wetness: 0.73 },
+      'rain-2': { distance: 0.5, drips: 0.72, dropLevel: 0.74, intensity: 0.45, pan: 0.3, resonance: 0.83, splashLevel: 0.51, volume: 0.69, washDensity: 0.95, washLevel: 0.84, washTone: 0.23, wetness: 0.51 },
+      'rain-3': { distance: 0.9, drips: 0.38, dropLevel: 0.681, intensity: 0.85, resonance: 0.82, splashLevel: 0.49, surface: 0.44, volume: 0.97, washDensity: 0.69, washLevel: 0.89, washTone: 0.46, wetness: 0.7 },
+      'thunder-1': { character: 0.87, contrast: 0.47, distance: 0.6, lengthSec: 30, pan: -0.28, randomness: 0.11, share: 0.67, spread: 1, volume: 1 },
+    }, { amount: 0.42, damping: 0.82, echoes: 0.63, size: 0.76 }, { gustiness: 0.88, paceSec: 4.681 }),
   },
   {
     id: 'street',

@@ -30,7 +30,7 @@ describe('soundscape files', () => {
     const file = buildSoundscapeFile([{ id: 'x', name: 'Silence', settings: neutralSoundscape() }])
     const [line] = parsePresetLines(file, 'NEUTRAL_SOUNDSCAPE')
     expect(line.overrides).toEqual({ name: 'Silence' })
-    const rain = buildSoundscapeFile([AMBIENT_FACTORY_PRESETS[0]])
+    const rain = buildSoundscapeFile([AMBIENT_FACTORY_PRESETS.find((preset) => preset.id === 'street')!])
     // Disabled channels at their defaults are not written at all.
     expect(rain).not.toContain('"thunder-1"')
     expect(rain).toContain('"rain-1"')
