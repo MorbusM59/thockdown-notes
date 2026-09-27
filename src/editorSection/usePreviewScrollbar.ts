@@ -34,6 +34,7 @@ import {
   buildWheelSpinProfile,
   sampleWheelSpinProfile,
   wheelSpinProfileSpeedPxPerMs,
+  wheelSpinProfileUndeliveredCarryPx,
   type WheelSpinProfile,
 } from '../editor/wheelSpinProfile'
 import {
@@ -1735,7 +1736,11 @@ export function usePreviewScrollbar({
             )
           }
           refreshWheelSpinCoast(spinState, performance.now(), action.averageGapMs, action.rows)
-          startPreviewWheelSpin(direction, action.rows, action.averageGapMs, direction * action.rows)
+          // The new coast replaces this one, so it inherits whatever this one
+          // was still folding in, as the glide's remainder is inherited
+          // below: distance the hand turned is owed whoever delivers it.
+          const undeliveredPx = wheelSpinProfileUndeliveredCarryPx(profile, previewWheelSpinClockMsRef.current)
+          startPreviewWheelSpin(direction, action.rows, action.averageGapMs, (direction * action.rows) + undeliveredPx)
           return
         }
         // Not faster: it is still three nudges the reader asked for.

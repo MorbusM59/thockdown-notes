@@ -12,6 +12,7 @@ import {
   sampleWheelSpinProfile,
   wheelSpinProfileEndMs,
   wheelSpinProfileSpeedPxPerMs,
+  wheelSpinProfileUndeliveredCarryPx,
 } from './wheelSpinProfile'
 
 const PIXELS_PER_NUDGE = 76.8
@@ -395,5 +396,22 @@ describe('buildWheelSpinProfile', () => {
       // against the coast's original gap.
       expect(late).toBeLessThan(opening * 0.25)
     })
+  })
+})
+
+describe('what a replaced coast still owes', () => {
+  it('is every carry not yet folded in, signed, and nothing once they have landed', () => {
+    for (const direction of [1, -1] as const) {
+      const profile = buildDefault({ direction, carryPx: direction * 200, carryBlendMs: 100 })
+      addWheelSpinProfileCarry(profile, direction * PIXELS_PER_NUDGE, 50, 60)
+      expect(wheelSpinProfileUndeliveredCarryPx(profile, 0)).toBeCloseTo(direction * (200 + PIXELS_PER_NUDGE), 9)
+      let previous = Infinity
+      for (let atMs = 0; atMs <= 120; atMs += 5) {
+        const owed = Math.abs(wheelSpinProfileUndeliveredCarryPx(profile, atMs))
+        expect(owed).toBeLessThanOrEqual(previous)
+        previous = owed
+      }
+      expect(Math.abs(wheelSpinProfileUndeliveredCarryPx(profile, 111))).toBe(0)
+    }
   })
 })

@@ -395,6 +395,23 @@ function carryAt(profile: WheelSpinProfile, elapsedMs: number): number {
 }
 
 /**
+ * Signed distance the profile's carries still owe at `atMs`: asked for by
+ * the hand, not yet folded into the scroll.
+ *
+ * What a coast being REPLACED must hand to its successor. A respin builds a
+ * new profile from scratch, and without this the nudges that were still
+ * folding in -- the extends that began the respin streak, the rest of the
+ * spin's own opening carry -- were simply never scrolled.
+ */
+export function wheelSpinProfileUndeliveredCarryPx(profile: WheelSpinProfile, atMs: number): number {
+  let owed = 0
+  for (const carry of profile.carries) {
+    owed += carry.px * (1 - smootherstep((atMs - carry.startMs) / carry.blendMs))
+  }
+  return profile.direction * owed
+}
+
+/**
  * Add distance to a coast already running, folded in from `atMs`.
  *
  * This is what a nudge in the coast's own direction does: the reader asking
