@@ -1,8 +1,8 @@
 /**
- * Procedural ambient sound: the persisted model, its defaults, the factory
+ * Soundscapes: the persisted model, its defaults, the factory
  * soundscapes and the sanitizer every stored value passes through.
  *
- * A soundscape is a fixed ROSTER of channels (AMBIENT_CHANNEL_ROSTER) plus
+ * A soundscape is a fixed ROSTER of channels (SOUNDSCAPE_CHANNEL_ROSTER) plus
  * two scene-wide settings: the SPACE every layer plays in (the shared reverb)
  * and the WEATHER (one slow gust signal that layers may follow, so a gust
  * lifts the wind, the rain and the chimes together rather than each on its
@@ -14,34 +14,34 @@
  * layer is therefore new roster entries and nothing else -- a save made
  * before it simply finds those channels at their disabled defaults.
  *
- * The synthesis lives in public/ambient-generator.js (an AudioWorklet, which
+ * The synthesis lives in public/soundscape-generator.js (an AudioWorklet, which
  * cannot import from here); the per-layer values it needs that are cheaper to
- * derive on the main thread are resolved in ambientSoundDsp.ts. The rain
- * surfaces are named in both places, and ambient-generator.test.ts asserts
+ * derive on the main thread are resolved in soundscapeDsp.ts. The rain
+ * surfaces are named in both places, and soundscape-generator.test.ts asserts
  * that every surface named here has a profile there.
  */
 
-import { CHIME_SCALE_COUNT } from './ambientChimeScales';
+import { CHIME_SCALE_COUNT } from './soundscapeChimeScales';
 
 /**
  * What chimes can be made of, and where each sits on the material slider;
- * mirrored by CHIME_MATERIALS in public/ambient-generator.js, which
- * ambient-generator.test.ts holds to these.
+ * mirrored by CHIME_MATERIALS in public/soundscape-generator.js, which
+ * soundscape-generator.test.ts holds to these.
  */
-export const AMBIENT_CHIME_MATERIALS = [
+export const SOUNDSCAPE_CHIME_MATERIALS = [
   { name: 'wood', at: 0 },
   { name: 'metal', at: 1 / 3 },
   { name: 'glass', at: 2 / 3 },
   { name: 'veil', at: 1 },
 ] as const;
 
-export const AMBIENT_NOISE_TYPES = ['brown', 'pink', 'white'] as const;
-export type AmbientNoiseType = (typeof AMBIENT_NOISE_TYPES)[number];
+export const SOUNDSCAPE_NOISE_TYPES = ['brown', 'pink', 'white'] as const;
+export type SoundscapeNoiseType = (typeof SOUNDSCAPE_NOISE_TYPES)[number];
 
 /**
  * What a rain layer's drops land on, one number from 0 (softest) to 1
  * (hardest). Every drop is the same model, its parameters blended between
- * these anchors (public/ambient-generator.js's surfaceProfile), each a
+ * these anchors (public/soundscape-generator.js's surfaceProfile), each a
  * different kind of impact rather than a different filter over one sound:
  * - forest (0): a soft, low pat on leaves with a small thud underneath.
  * - canvas (0.25): a taut membrane -- a tent, an awning, an umbrella -- a
@@ -52,33 +52,33 @@ export type AmbientNoiseType = (typeof AMBIENT_NOISE_TYPES)[number];
  * - glass (1): a white-noise click and many long-ringing modes, like hail on
  *   glass or on metal pipes.
  */
-export const AMBIENT_RAIN_SURFACE_ANCHORS = [
+export const SOUNDSCAPE_RAIN_SURFACE_ANCHORS = [
   { name: 'forest', at: 0 },
   { name: 'canvas', at: 0.25 },
   { name: 'street', at: 0.5 },
   { name: 'tin', at: 0.75 },
   { name: 'glass', at: 1 },
 ] as const;
-export type AmbientRainSurfaceName = (typeof AMBIENT_RAIN_SURFACE_ANCHORS)[number]['name'];
+export type SoundscapeRainSurfaceName = (typeof SOUNDSCAPE_RAIN_SURFACE_ANCHORS)[number]['name'];
 
 /** The position of a named anchor on the surface scale. */
-export function rainSurfaceAt(name: AmbientRainSurfaceName): number {
-  return AMBIENT_RAIN_SURFACE_ANCHORS.find((anchor) => anchor.name === name)!.at;
+export function rainSurfaceAt(name: SoundscapeRainSurfaceName): number {
+  return SOUNDSCAPE_RAIN_SURFACE_ANCHORS.find((anchor) => anchor.name === name)!.at;
 }
 
 /**
  * Every layer's common state. `volume` is a FADER position, 0-1, not a gain:
- * ambientFaderGain turns it into one on a decibel law, so equal travel is an
+ * soundscapeFaderGain turns it into one on a decibel law, so equal travel is an
  * equal change in loudness and the top half of the slider is not wasted.
  */
-export interface AmbientChannelBaseSettings {
+export interface SoundscapeChannelBaseSettings {
   id: string;
   enabled: boolean;
   solo: boolean;
   volume: number;
   /**
    * How far away the layer sounds, 0-1: darker, less direct, more of it in
-   * the space's reverb (ambientSoundDsp.ts's resolveAmbientSpace). One rule
+   * the space's reverb (soundscapeDsp.ts's resolveSoundscapeSpace). One rule
    * for every kind.
    */
   distance: number;
@@ -88,7 +88,7 @@ export interface AmbientChannelBaseSettings {
  * A noise layer: noise of any colour through one filter, its level rising
  * and falling in a repeating cycle -- surf, wind, a steady wash.
  */
-export interface AmbientNoiseChannelSettings extends AmbientChannelBaseSettings {
+export interface SoundscapeNoiseChannelSettings extends SoundscapeChannelBaseSettings {
   kind: 'noise';
   /** The noise's spectral slope: 0 brown, 0.5 pink, 1 white, blended between. */
   colour: number;
@@ -104,7 +104,7 @@ export interface AmbientNoiseChannelSettings extends AmbientChannelBaseSettings 
   /** Seconds per cycle of the level's rise and fall. */
   periodSec: number;
   /**
-   * The cycle's curve, 0-1 (ambientNoiseCycle.ts's buildNoiseCycle): a
+   * The cycle's curve, 0-1 (soundscapeNoiseCycle.ts's buildNoiseCycle): a
    * broad plateau at 0, a sine at 0.5, a narrow swell at 1.
    */
   curve: number;
@@ -113,7 +113,7 @@ export interface AmbientNoiseChannelSettings extends AmbientChannelBaseSettings 
   /**
    * How far the filter follows the swell, -1 to 1: above 0 it opens as the
    * level rises (a gust whistling higher, a wave brightening as it breaks),
-   * below 0 it closes. In units of AMBIENT_NOISE_SWEEP_OCTAVES.
+   * below 0 it closes. In units of SOUNDSCAPE_NOISE_SWEEP_OCTAVES.
    */
   sweep: number;
   /** How much each cycle departs from the last in length and height, 0-1. */
@@ -130,15 +130,15 @@ export interface AmbientNoiseChannelSettings extends AmbientChannelBaseSettings 
 }
 
 /** Rain falling on a surface, near drops heard one by one over the wash of the rest. */
-export interface AmbientRainChannelSettings extends AmbientChannelBaseSettings {
+export interface SoundscapeRainChannelSettings extends SoundscapeChannelBaseSettings {
   kind: 'rain';
-  /** 0 (softest: leaves) to 1 (hardest: glass); see AMBIENT_RAIN_SURFACE_ANCHORS. */
+  /** 0 (softest: leaves) to 1 (hardest: glass); see SOUNDSCAPE_RAIN_SURFACE_ANCHORS. */
   surface: number;
   /** How much the surface rings, 0 dead to 1 twice as long; 0.5 is the surface as authored. */
   resonance: number;
   /** The drops heard one by one: 0 drizzle to 1 downpour -- how many, and how heavy. */
   intensity: number;
-  /** The drops' level (ambientPartGain). */
+  /** The drops' level (soundscapePartGain). */
   dropLevel: number;
   /** The drops' pitch, 0 an octave lower to 1 an octave higher; 0.5 as authored. */
   dropTone: number;
@@ -147,19 +147,19 @@ export interface AmbientRainChannelSettings extends AmbientChannelBaseSettings {
    * a time: 0 a sparse patter to 1 a smooth hiss (how many tiny impacts).
    */
   washDensity: number;
-  /** The wash's level (ambientPartGain); at 0 there is none, and the drops play alone. */
+  /** The wash's level (soundscapePartGain); at 0 there is none, and the drops play alone. */
   washLevel: number;
   /** The wash's pitch, 0 two octaves lower to 1 two octaves higher; 0.5 as authored. */
   washTone: number;
-  /** How often (0-1, of AMBIENT_RAIN_DRIPS_MAX_PER_SEC) a large, slow drop falls from a gutter or a branch. */
+  /** How often (0-1, of SOUNDSCAPE_RAIN_DRIPS_MAX_PER_SEC) a large, slow drop falls from a gutter or a branch. */
   drips: number;
-  /** The drips' level (ambientPartGain). */
+  /** The drips' level (soundscapePartGain). */
   dripLevel: number;
   /** The drips' pitch, 0 an octave lower to 1 an octave higher; 0.5 as authored. */
   dripTone: number;
   /** Standing water, 0 dry to 1 soaked: the share of drops that land in it, and a surface its film deadens. */
   wetness: number;
-  /** The splashes' and bubbles' level (ambientPartGain). */
+  /** The splashes' and bubbles' level (soundscapePartGain). */
   splashLevel: number;
   /** The splashes' and bubbles' pitch, 0 an octave lower (larger bubbles) to 1 an octave higher. */
   splashTone: number;
@@ -171,13 +171,13 @@ export interface AmbientRainChannelSettings extends AmbientChannelBaseSettings {
 }
 
 /**
- * One storm cell, rumbling now and then (public/ambient-generator.js's
+ * One storm cell, rumbling now and then (public/soundscape-generator.js's
  * startPeal). `share` is the part of the time it sounds: after a peal of
  * length L it is silent for L x (1 - share) / share. After every peal
  * `randomness` moves every other control of the next one by up to
- * AMBIENT_THUNDER_JITTER of its range either way, around the setting.
+ * SOUNDSCAPE_THUNDER_JITTER of its range either way, around the setting.
  */
-export interface AmbientThunderChannelSettings extends AmbientChannelBaseSettings {
+export interface SoundscapeThunderChannelSettings extends SoundscapeChannelBaseSettings {
   kind: 'thunder';
   share: number;
   pan: number;
@@ -201,15 +201,15 @@ export interface AmbientThunderChannelSettings extends AmbientChannelBaseSetting
  * rush of the flow. Bubbles and rush are controlled separately; the tumble
  * moves both.
  */
-export interface AmbientWaterChannelSettings extends AmbientChannelBaseSettings {
+export interface SoundscapeWaterChannelSettings extends SoundscapeChannelBaseSettings {
   kind: 'water';
   /** 0 an even patter to 1 bubbles and rush arriving in bursts, as water tumbles over stones. */
   turbulence: number;
   /** Stereo width, 0 a point at the pan to 1 the whole room the pan leaves. */
   width: number;
-  /** How many bubbles, 0 a few to 1 a froth (AMBIENT_WATER_BUBBLES_PER_SEC). */
+  /** How many bubbles, 0 a few to 1 a froth (SOUNDSCAPE_WATER_BUBBLES_PER_SEC). */
   bubbles: number;
-  /** The bubbles' level (ambientPartGain). */
+  /** The bubbles' level (soundscapePartGain). */
   bubbleLevel: number;
   /** 0 small, high, glassy bubbles to 1 large, low gurgles. */
   size: number;
@@ -221,7 +221,7 @@ export interface AmbientWaterChannelSettings extends AmbientChannelBaseSettings 
   ring: number;
   /** The rush's texture: 0 a sparse, gravelly rattle to 1 a smooth rush. */
   rush: number;
-  /** The rush's level (ambientPartGain); at 0 there is none. */
+  /** The rush's level (soundscapePartGain); at 0 there is none. */
   rushLevel: number;
   /** The rush's pitch, 0 two octaves lower to 1 two octaves higher. */
   rushTone: number;
@@ -232,7 +232,7 @@ export interface AmbientWaterChannelSettings extends AmbientChannelBaseSettings 
  * A wood fire: the roar of the flames, the crackle of burning
  * fibres and the pop of sap.
  */
-export interface AmbientFireChannelSettings extends AmbientChannelBaseSettings {
+export interface SoundscapeFireChannelSettings extends SoundscapeChannelBaseSettings {
   kind: 'fire';
   /** 0 embers to 1 a blaze: the roar's weight and depth. */
   size: number;
@@ -240,7 +240,7 @@ export interface AmbientFireChannelSettings extends AmbientChannelBaseSettings {
   width: number;
   /** How often the wood crackles, 0 rarely to 1 constantly. */
   crackle: number;
-  /** The crackles' level (ambientPartGain). */
+  /** The crackles' level (soundscapePartGain). */
   crackleLevel: number;
   /** The crackles' band, 0 two octaves lower to 1 two octaves higher; 0.5 as authored. */
   crackleTone: number;
@@ -253,10 +253,10 @@ export interface AmbientFireChannelSettings extends AmbientChannelBaseSettings {
   /**
    * The chance a pop sets off a SIZZLE -- moisture the burst has opened,
    * boiling out of the wood at the pop's place -- 0 never to 1 always, while
-   * fewer than AMBIENT_FIRE_MAX_SIZZLES are sizzling.
+   * fewer than SOUNDSCAPE_FIRE_MAX_SIZZLES are sizzling.
    */
   sizzle: number;
-  /** The sizzle's level (ambientPartGain). */
+  /** The sizzle's level (soundscapePartGain). */
   sizzleLevel: number;
   /** The sizzle's pitch, 0 low (2 kHz) to 1 high (8 kHz). */
   sizzleTone: number;
@@ -278,15 +278,15 @@ export interface AmbientFireChannelSettings extends AmbientChannelBaseSettings {
  * Wind chimes: a set of metal tubes tuned to a pentatonic scale, each
  * ringing the inharmonic modes of a free bar when the clapper strikes it.
  */
-export interface AmbientChimesChannelSettings extends AmbientChannelBaseSettings {
+export interface SoundscapeChimesChannelSettings extends SoundscapeChannelBaseSettings {
   kind: 'chimes';
   /** The lowest tube's fundamental, in Hz. */
   pitchHz: number;
-  /** How many tubes, AMBIENT_CHIME_TUBES_MIN-MAX. */
+  /** How many tubes, SOUNDSCAPE_CHIME_TUBES_MIN-MAX. */
   tubes: number;
   /** How long a struck tube rings, in seconds (its fundamental's decay to -60 dB). */
   ringSec: number;
-  /** How often the clapper strikes, 0-1 (AMBIENT_CHIME_RATE_*). */
+  /** How often the clapper strikes, 0-1 (SOUNDSCAPE_CHIME_RATE_*). */
   activity: number;
   /** 0 a soft wooden clapper (warm, fundamental-heavy) to 1 a hard metal one (bright, with a tick). */
   hardness: number;
@@ -297,7 +297,7 @@ export interface AmbientChimesChannelSettings extends AmbientChannelBaseSettings
    */
   unison: number;
   /**
-   * What the tubes are made of, blended between AMBIENT_CHIME_MATERIALS:
+   * What the tubes are made of, blended between SOUNDSCAPE_CHIME_MATERIALS:
    * wood (bamboo: a hollow knock), metal (long-ringing tubes), glass (a
    * bright, shorter tinkle) and veil (an ethereal shimmer that swells in).
    */
@@ -309,21 +309,21 @@ export interface AmbientChimesChannelSettings extends AmbientChannelBaseSettings
   weather: number;
 }
 
-export type AmbientChannelSettings =
-  | AmbientNoiseChannelSettings
-  | AmbientRainChannelSettings
-  | AmbientThunderChannelSettings
-  | AmbientWaterChannelSettings
-  | AmbientFireChannelSettings
-  | AmbientChimesChannelSettings;
-export type AmbientChannelKind = AmbientChannelSettings['kind'];
-export type AmbientChannelOfKind<K extends AmbientChannelKind> = Extract<AmbientChannelSettings, { kind: K }>;
+export type SoundscapeChannelSettings =
+  | SoundscapeNoiseChannelSettings
+  | SoundscapeRainChannelSettings
+  | SoundscapeThunderChannelSettings
+  | SoundscapeWaterChannelSettings
+  | SoundscapeFireChannelSettings
+  | SoundscapeChimesChannelSettings;
+export type SoundscapeChannelKind = SoundscapeChannelSettings['kind'];
+export type SoundscapeChannelOfKind<K extends SoundscapeChannelKind> = Extract<SoundscapeChannelSettings, { kind: K }>;
 
 /**
  * The space every layer plays in: the shared reverb
- * (ambientSpace.ts's buildAmbientImpulseResponse).
+ * (soundscapeSpace.ts's buildSoundscapeImpulseResponse).
  */
-export interface AmbientSpaceSettings {
+export interface SoundscapeSpaceSettings {
   /** 0 a small room to 1 a wide valley: the decay time and the pre-delay. */
   size: number;
   /** 0 a bright tail to 1 a tail that darkens fast, as open air and foliage absorb the highs. */
@@ -335,104 +335,104 @@ export interface AmbientSpaceSettings {
 }
 
 /** The scene's one gust signal (the worklet's advanceWeather). */
-export interface AmbientWeatherSettings {
+export interface SoundscapeWeatherSettings {
   /** 0 calm to 1 squally: how far a gust or a lull moves the layers that follow it. */
   gustiness: number;
   /** Average seconds from one gust or lull to the next. */
   paceSec: number;
 }
 
-export interface AmbientSettings {
-  channels: AmbientChannelSettings[];
-  space: AmbientSpaceSettings;
-  weather: AmbientWeatherSettings;
+export interface SoundscapeSettings {
+  channels: SoundscapeChannelSettings[];
+  space: SoundscapeSpaceSettings;
+  weather: SoundscapeWeatherSettings;
 }
 
-export interface AmbientPreset {
+export interface SoundscapePreset {
   id: string;
   name: string;
-  settings: AmbientSettings;
+  settings: SoundscapeSettings;
 }
 
-export interface AmbientPreferences {
+export interface SoundscapePreferences {
   enabled: boolean;
   /**
-   * Overall ambient level (0-1), applied after the mix of every layer. Like
+   * Overall soundscape level (0-1), applied after the mix of every layer. Like
    * `enabled` it belongs to the listener, not to the soundscape: it is not
    * part of a preset and does not affect which preset reads as selected.
    */
   masterVolume: number;
-  settings: AmbientSettings;
+  settings: SoundscapeSettings;
   activePresetId: string | null;
-  customPresets: AmbientPreset[];
+  customPresets: SoundscapePreset[];
 }
 
 // ---------------------------------------------------------------------------
 // Ranges. Every control's bounds are here, read by the sanitizer and the UI.
 
-export const AMBIENT_FADER_RANGE_DB = 48;
-export const AMBIENT_NOISE_BRIGHTNESS_MIN_HZ = 80;
-export const AMBIENT_NOISE_BRIGHTNESS_MAX_HZ = 18000;
-export const AMBIENT_NOISE_SWEEP_OCTAVES = 2;
-export const AMBIENT_PERIOD_MIN_SEC = 0.5;
-export const AMBIENT_PERIOD_MAX_SEC = 60;
-export const AMBIENT_SKEW_MIN = 0.1;
-export const AMBIENT_SKEW_MAX = 0.9;
-export const AMBIENT_RAIN_DROPS_MIN_PER_SEC = 1;
-export const AMBIENT_RAIN_DROPS_MAX_PER_SEC = 100;
-export const AMBIENT_RAIN_DRIPS_MAX_PER_SEC = 3;
-export const AMBIENT_THUNDER_JITTER = 0.25;
-export const AMBIENT_THUNDER_LENGTH_MIN_SEC = 4;
-export const AMBIENT_THUNDER_LENGTH_MAX_SEC = 30;
-export const AMBIENT_FIRE_MAX_SIZZLES = 4;
-export const AMBIENT_FIRE_PERIOD_MIN_SEC = 0.08;
-export const AMBIENT_FIRE_PERIOD_MAX_SEC = 2;
+export const SOUNDSCAPE_FADER_RANGE_DB = 48;
+export const SOUNDSCAPE_NOISE_BRIGHTNESS_MIN_HZ = 80;
+export const SOUNDSCAPE_NOISE_BRIGHTNESS_MAX_HZ = 18000;
+export const SOUNDSCAPE_NOISE_SWEEP_OCTAVES = 2;
+export const SOUNDSCAPE_PERIOD_MIN_SEC = 0.5;
+export const SOUNDSCAPE_PERIOD_MAX_SEC = 60;
+export const SOUNDSCAPE_SKEW_MIN = 0.1;
+export const SOUNDSCAPE_SKEW_MAX = 0.9;
+export const SOUNDSCAPE_RAIN_DROPS_MIN_PER_SEC = 1;
+export const SOUNDSCAPE_RAIN_DROPS_MAX_PER_SEC = 100;
+export const SOUNDSCAPE_RAIN_DRIPS_MAX_PER_SEC = 3;
+export const SOUNDSCAPE_THUNDER_JITTER = 0.25;
+export const SOUNDSCAPE_THUNDER_LENGTH_MIN_SEC = 4;
+export const SOUNDSCAPE_THUNDER_LENGTH_MAX_SEC = 30;
+export const SOUNDSCAPE_FIRE_MAX_SIZZLES = 4;
+export const SOUNDSCAPE_FIRE_PERIOD_MIN_SEC = 0.08;
+export const SOUNDSCAPE_FIRE_PERIOD_MAX_SEC = 2;
 /** The chimes' pitch range, in whole semitones from A440 (about 156 Hz to 1480 Hz). */
-export const AMBIENT_CHIME_SEMITONE_MIN = -18;
-export const AMBIENT_CHIME_SEMITONE_MAX = 21;
-export const AMBIENT_CHIME_PITCH_MIN_HZ = 440 * (2 ** (AMBIENT_CHIME_SEMITONE_MIN / 12));
-export const AMBIENT_CHIME_PITCH_MAX_HZ = 440 * (2 ** (AMBIENT_CHIME_SEMITONE_MAX / 12));
-export const AMBIENT_CHIME_TUBES_MIN = 3;
-export const AMBIENT_CHIME_TUBES_MAX = 8;
-/** A water layer's bubbles per second at bubbles 0 and 1; mirrors WATER_BUBBLES_PER_SEC in public/ambient-generator.js. */
-export const AMBIENT_WATER_BUBBLES_PER_SEC = [15, 500] as const;
-export const AMBIENT_CHIME_RING_MIN_SEC = 1;
-export const AMBIENT_CHIME_RING_MAX_SEC = 15;
-export const AMBIENT_CHIME_RATE_MIN_PER_SEC = 0.05;
-export const AMBIENT_CHIME_RATE_MAX_PER_SEC = 4;
-export const AMBIENT_WEATHER_PACE_MIN_SEC = 2;
-export const AMBIENT_WEATHER_PACE_MAX_SEC = 60;
-export const MAX_AMBIENT_CUSTOM_PRESETS = 12;
-export const AMBIENT_DEFAULT_MASTER_VOLUME = 1;
+export const SOUNDSCAPE_CHIME_SEMITONE_MIN = -18;
+export const SOUNDSCAPE_CHIME_SEMITONE_MAX = 21;
+export const SOUNDSCAPE_CHIME_PITCH_MIN_HZ = 440 * (2 ** (SOUNDSCAPE_CHIME_SEMITONE_MIN / 12));
+export const SOUNDSCAPE_CHIME_PITCH_MAX_HZ = 440 * (2 ** (SOUNDSCAPE_CHIME_SEMITONE_MAX / 12));
+export const SOUNDSCAPE_CHIME_TUBES_MIN = 3;
+export const SOUNDSCAPE_CHIME_TUBES_MAX = 8;
+/** A water layer's bubbles per second at bubbles 0 and 1; mirrors WATER_BUBBLES_PER_SEC in public/soundscape-generator.js. */
+export const SOUNDSCAPE_WATER_BUBBLES_PER_SEC = [15, 500] as const;
+export const SOUNDSCAPE_CHIME_RING_MIN_SEC = 1;
+export const SOUNDSCAPE_CHIME_RING_MAX_SEC = 15;
+export const SOUNDSCAPE_CHIME_RATE_MIN_PER_SEC = 0.05;
+export const SOUNDSCAPE_CHIME_RATE_MAX_PER_SEC = 4;
+export const SOUNDSCAPE_WEATHER_PACE_MIN_SEC = 2;
+export const SOUNDSCAPE_WEATHER_PACE_MAX_SEC = 60;
+export const MAX_SOUNDSCAPE_CUSTOM_PRESETS = 12;
+export const SOUNDSCAPE_DEFAULT_MASTER_VOLUME = 1;
 
 /**
  * A fader position (0-1) as a gain: silence at 0, and otherwise
- * AMBIENT_FADER_RANGE_DB below unity at the bottom rising evenly in decibels
+ * SOUNDSCAPE_FADER_RANGE_DB below unity at the bottom rising evenly in decibels
  * to unity at the top.
  */
-export function ambientFaderGain(position: number): number {
+export function soundscapeFaderGain(position: number): number {
   if (!(position > 0)) return 0;
-  return 10 ** ((-AMBIENT_FADER_RANGE_DB * (1 - Math.min(1, position))) / 20);
+  return 10 ** ((-SOUNDSCAPE_FADER_RANGE_DB * (1 - Math.min(1, position))) / 20);
 }
 
 /** A fader position in decibels (-Infinity at 0). */
-export function ambientFaderDb(position: number): number {
-  return position > 0 ? -AMBIENT_FADER_RANGE_DB * (1 - Math.min(1, position)) : -Infinity;
+export function soundscapeFaderDb(position: number): number {
+  return position > 0 ? -SOUNDSCAPE_FADER_RANGE_DB * (1 - Math.min(1, position)) : -Infinity;
 }
 
 /**
  * A part's level slider (a fire's crackle, a rain's wash, ...): silence at
- * 0, the part as authored at AMBIENT_PART_AUTHORED, and evenly in decibels
- * AMBIENT_PART_DB_PER_UNIT per unit of travel either side -- from -48 dB just
+ * 0, the part as authored at SOUNDSCAPE_PART_AUTHORED, and evenly in decibels
+ * SOUNDSCAPE_PART_DB_PER_UNIT per unit of travel either side -- from -48 dB just
  * above 0 to +16 dB at the top. Mirrored as partGain in the worklet.
  */
-export const AMBIENT_PART_AUTHORED = 0.75;
-export const AMBIENT_PART_DB_PER_UNIT = 64;
-export function ambientPartDb(position: number): number {
-  return position > 0 ? AMBIENT_PART_DB_PER_UNIT * (Math.min(1, position) - AMBIENT_PART_AUTHORED) : -Infinity;
+export const SOUNDSCAPE_PART_AUTHORED = 0.75;
+export const SOUNDSCAPE_PART_DB_PER_UNIT = 64;
+export function soundscapePartDb(position: number): number {
+  return position > 0 ? SOUNDSCAPE_PART_DB_PER_UNIT * (Math.min(1, position) - SOUNDSCAPE_PART_AUTHORED) : -Infinity;
 }
-export function ambientPartGain(position: number): number {
-  return position > 0 ? 10 ** (ambientPartDb(position) / 20) : 0;
+export function soundscapePartGain(position: number): number {
+  return position > 0 ? 10 ** (soundscapePartDb(position) / 20) : 0;
 }
 
 /** Geometric interpolation: equal steps of `t` are equal ratios. */
@@ -442,7 +442,7 @@ export function logLerp(from: number, to: number, t: number): number {
 
 /** A rain layer's intensity as drops heard one by one per second. */
 export function rainDropsPerSecond(intensity: number): number {
-  return logLerp(AMBIENT_RAIN_DROPS_MIN_PER_SEC, AMBIENT_RAIN_DROPS_MAX_PER_SEC, clamp(intensity, 0, 1));
+  return logLerp(SOUNDSCAPE_RAIN_DROPS_MIN_PER_SEC, SOUNDSCAPE_RAIN_DROPS_MAX_PER_SEC, clamp(intensity, 0, 1));
 }
 
 /**
@@ -460,20 +460,20 @@ export function chimeSemitoneOf(hz: number): number {
 
 /** A chimes layer's activity as strikes per second. */
 export function chimeStrikesPerSecond(activity: number): number {
-  return logLerp(AMBIENT_CHIME_RATE_MIN_PER_SEC, AMBIENT_CHIME_RATE_MAX_PER_SEC, clamp(activity, 0, 1));
+  return logLerp(SOUNDSCAPE_CHIME_RATE_MIN_PER_SEC, SOUNDSCAPE_CHIME_RATE_MAX_PER_SEC, clamp(activity, 0, 1));
 }
 
 // ---------------------------------------------------------------------------
 // The roster.
 
-export interface AmbientRosterEntry {
+export interface SoundscapeRosterEntry {
   id: string;
-  kind: AmbientChannelKind;
+  kind: SoundscapeChannelKind;
   /** 1-based number within its kind, as the channel button shows it. */
   number: number;
 }
 
-const ROSTER_COUNTS: ReadonlyArray<readonly [AmbientChannelKind, number]> = [
+const ROSTER_COUNTS: ReadonlyArray<readonly [SoundscapeChannelKind, number]> = [
   ['noise', 6],
   ['rain', 3],
   ['thunder', 3],
@@ -483,21 +483,21 @@ const ROSTER_COUNTS: ReadonlyArray<readonly [AmbientChannelKind, number]> = [
 ];
 
 /** Every channel a soundscape has, in the order the settings panel shows them. */
-export const AMBIENT_CHANNEL_ROSTER: readonly AmbientRosterEntry[] = ROSTER_COUNTS.flatMap(([kind, count]) => (
+export const SOUNDSCAPE_CHANNEL_ROSTER: readonly SoundscapeRosterEntry[] = ROSTER_COUNTS.flatMap(([kind, count]) => (
   Array.from({ length: count }, (_, index) => ({ id: `${kind}-${index + 1}`, kind, number: index + 1 }))
 ));
-export const MAX_AMBIENT_CHANNELS = AMBIENT_CHANNEL_ROSTER.length;
+export const MAX_SOUNDSCAPE_CHANNELS = SOUNDSCAPE_CHANNEL_ROSTER.length;
 
-type KindDefaults = { [K in AmbientChannelKind]: Readonly<Omit<AmbientChannelOfKind<K>, 'id'>> };
+type KindDefaults = { [K in SoundscapeChannelKind]: Readonly<Omit<SoundscapeChannelOfKind<K>, 'id'>> };
 
 /**
  * The value every control starts at and resets to, per kind. The settings
  * panel's reset-to-default reads these rather than restating them.
  */
-export const AMBIENT_CHANNEL_DEFAULTS: KindDefaults = {
+export const SOUNDSCAPE_CHANNEL_DEFAULTS: KindDefaults = {
   noise: {
     kind: 'noise', enabled: true, solo: false, volume: 0.7, distance: 0,
-    colour: 0.5, brightnessHz: AMBIENT_NOISE_BRIGHTNESS_MAX_HZ, focus: 0,
+    colour: 0.5, brightnessHz: SOUNDSCAPE_NOISE_BRIGHTNESS_MAX_HZ, focus: 0,
     depth: 0.3, periodSec: 12, curve: 0.5, skew: 0.5, sweep: 0,
     variation: 0.3, sway: 0, width: 1, weather: 0,
   },
@@ -530,47 +530,60 @@ export const AMBIENT_CHANNEL_DEFAULTS: KindDefaults = {
   },
 };
 
-export const DEFAULT_AMBIENT_SPACE: Readonly<AmbientSpaceSettings> = { size: 0.45, damping: 0.5, echoes: 0.1, amount: 0.7 };
-export const DEFAULT_AMBIENT_WEATHER: Readonly<AmbientWeatherSettings> = { gustiness: 0.4, paceSec: 12 };
+export const DEFAULT_SOUNDSCAPE_SPACE: Readonly<SoundscapeSpaceSettings> = { size: 0.45, damping: 0.5, echoes: 0.1, amount: 0.7 };
+export const DEFAULT_SOUNDSCAPE_WEATHER: Readonly<SoundscapeWeatherSettings> = { gustiness: 0.4, paceSec: 12 };
 
 /** A roster channel at its defaults (enabled unless said otherwise). */
-export function createAmbientChannel<K extends AmbientChannelKind>(
+export function createSoundscapeChannel<K extends SoundscapeChannelKind>(
   id: string,
   kind: K,
-  overrides: Partial<AmbientChannelOfKind<K>> = {},
-): AmbientChannelOfKind<K> {
+  overrides: Partial<SoundscapeChannelOfKind<K>> = {},
+): SoundscapeChannelOfKind<K> {
   return {
-    ...AMBIENT_CHANNEL_DEFAULTS[kind],
+    ...SOUNDSCAPE_CHANNEL_DEFAULTS[kind],
     id,
     ...overrides,
-  } as unknown as AmbientChannelOfKind<K>;
+  } as unknown as SoundscapeChannelOfKind<K>;
 }
 
 // ---------------------------------------------------------------------------
 // Factory soundscapes, authored directly.
 
-type ChannelFields<C> = C extends AmbientChannelSettings ? Partial<Omit<C, 'id' | 'kind'>> : never;
-type ChannelOverrides = { [id: string]: ChannelFields<AmbientChannelSettings> };
+type ChannelFields<C> = C extends SoundscapeChannelSettings ? Partial<Omit<C, 'id' | 'kind'>> : never;
+type ChannelOverrides = { [id: string]: ChannelFields<SoundscapeChannelSettings> };
 
 function soundscape(
   channels: ChannelOverrides,
-  space: Partial<AmbientSpaceSettings> = {},
-  weather: Partial<AmbientWeatherSettings> = {},
-): AmbientSettings {
+  space: Partial<SoundscapeSpaceSettings> = {},
+  weather: Partial<SoundscapeWeatherSettings> = {},
+): SoundscapeSettings {
   return {
-    channels: AMBIENT_CHANNEL_ROSTER.map((entry) => {
+    channels: SOUNDSCAPE_CHANNEL_ROSTER.map((entry) => {
       const overrides = channels[entry.id];
-      return createAmbientChannel(entry.id, entry.kind, overrides
-        ? { enabled: true, ...overrides } as Partial<AmbientChannelSettings>
+      return createSoundscapeChannel(entry.id, entry.kind, overrides
+        ? { enabled: true, ...overrides } as Partial<SoundscapeChannelSettings>
         : { enabled: false });
     }),
-    space: { ...DEFAULT_AMBIENT_SPACE, ...space },
-    weather: { ...DEFAULT_AMBIENT_WEATHER, ...weather },
+    space: { ...DEFAULT_SOUNDSCAPE_SPACE, ...space },
+    weather: { ...DEFAULT_SOUNDSCAPE_WEATHER, ...weather },
   };
 }
 
+/**
+ * The Font Awesome icon each factory soundscape is drawn with, by id. A custom
+ * soundscape has none: it is shown by its number in the custom row instead.
+ */
+export const FACTORY_SOUNDSCAPE_ICONS: Readonly<Record<string, string>> = {
+  'stormy-night': 'fa-cloud-moon-rain',
+  forest: 'fa-tree',
+  winds: 'fa-wind',
+  underwater: 'fa-fish',
+  campsite: 'fa-campground',
+  storm: 'fa-cloud-bolt',
+};
+
 /** The factory soundscapes, in the order the settings panel shows them. */
-export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
+export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
   {
     id: 'stormy-night',
     name: 'Stormy Night',
@@ -654,17 +667,17 @@ export const AMBIENT_FACTORY_PRESETS: readonly AmbientPreset[] = [
   },
 ];
 
-export const DEFAULT_AMBIENT_SETTINGS: AmbientSettings = cloneSettings(AMBIENT_FACTORY_PRESETS[0].settings);
+export const DEFAULT_SOUNDSCAPE_SETTINGS: SoundscapeSettings = cloneSettings(SOUNDSCAPE_FACTORY_PRESETS[0].settings);
 
-export const DEFAULT_AMBIENT_PREFERENCES: AmbientPreferences = {
+export const DEFAULT_SOUNDSCAPE_PREFERENCES: SoundscapePreferences = {
   enabled: false,
-  masterVolume: AMBIENT_DEFAULT_MASTER_VOLUME,
-  settings: cloneSettings(DEFAULT_AMBIENT_SETTINGS),
-  activePresetId: AMBIENT_FACTORY_PRESETS[0].id,
+  masterVolume: SOUNDSCAPE_DEFAULT_MASTER_VOLUME,
+  settings: cloneSettings(DEFAULT_SOUNDSCAPE_SETTINGS),
+  activePresetId: SOUNDSCAPE_FACTORY_PRESETS[0].id,
   customPresets: [],
 };
 
-export function cloneSettings(settings: AmbientSettings): AmbientSettings {
+export function cloneSettings(settings: SoundscapeSettings): SoundscapeSettings {
   return {
     channels: settings.channels.map((channel) => ({ ...channel })),
     space: { ...settings.space },
@@ -679,10 +692,10 @@ export function cloneSettings(settings: AmbientSettings): AmbientSettings {
  * Used to tell which preset, if any, the current settings match. It leaves
  * out `id`s' order-independent identity (channels are in roster order) and
  * `solo` (a listening aid, not part of the sound), and everything on
- * AmbientPreferences outside `settings`. A disabled channel's controls are
+ * SoundscapePreferences outside `settings`. A disabled channel's controls are
  * still part of it: they are what enabling the channel brings back.
  */
-export function ambientSettingsSignature(settings: AmbientSettings): string {
+export function soundscapeSettingsSignature(settings: SoundscapeSettings): string {
   const fields = (record: object, skip: ReadonlySet<string>) => Object.entries(record)
     .filter(([key]) => !skip.has(key))
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
@@ -715,11 +728,11 @@ const COMMON_BOUNDS: FieldBounds = { volume: [0, 1], distance: [0, 1] };
 const UNIT = [0, 1] as const;
 const SIGNED = [-1, 1] as const;
 
-export const AMBIENT_FIELD_BOUNDS: { [K in AmbientChannelKind]: FieldBounds } = {
+export const SOUNDSCAPE_FIELD_BOUNDS: { [K in SoundscapeChannelKind]: FieldBounds } = {
   noise: {
-    ...COMMON_BOUNDS, colour: UNIT, brightnessHz: [AMBIENT_NOISE_BRIGHTNESS_MIN_HZ, AMBIENT_NOISE_BRIGHTNESS_MAX_HZ],
-    focus: UNIT, depth: UNIT, periodSec: [AMBIENT_PERIOD_MIN_SEC, AMBIENT_PERIOD_MAX_SEC], curve: UNIT,
-    skew: [AMBIENT_SKEW_MIN, AMBIENT_SKEW_MAX], sweep: SIGNED, variation: UNIT, sway: UNIT, width: UNIT, weather: UNIT,
+    ...COMMON_BOUNDS, colour: UNIT, brightnessHz: [SOUNDSCAPE_NOISE_BRIGHTNESS_MIN_HZ, SOUNDSCAPE_NOISE_BRIGHTNESS_MAX_HZ],
+    focus: UNIT, depth: UNIT, periodSec: [SOUNDSCAPE_PERIOD_MIN_SEC, SOUNDSCAPE_PERIOD_MAX_SEC], curve: UNIT,
+    skew: [SOUNDSCAPE_SKEW_MIN, SOUNDSCAPE_SKEW_MAX], sweep: SIGNED, variation: UNIT, sway: UNIT, width: UNIT, weather: UNIT,
   },
   rain: {
     ...COMMON_BOUNDS, surface: UNIT, resonance: UNIT, intensity: UNIT, dropLevel: UNIT, dropTone: UNIT,
@@ -728,7 +741,7 @@ export const AMBIENT_FIELD_BOUNDS: { [K in AmbientChannelKind]: FieldBounds } = 
   },
   thunder: {
     ...COMMON_BOUNDS, share: UNIT, pan: SIGNED, spread: UNIT, character: UNIT, contrast: SIGNED, randomness: UNIT,
-    lengthSec: [AMBIENT_THUNDER_LENGTH_MIN_SEC, AMBIENT_THUNDER_LENGTH_MAX_SEC], weather: UNIT,
+    lengthSec: [SOUNDSCAPE_THUNDER_LENGTH_MIN_SEC, SOUNDSCAPE_THUNDER_LENGTH_MAX_SEC], weather: UNIT,
   },
   water: {
     ...COMMON_BOUNDS, turbulence: UNIT, width: UNIT, bubbles: UNIT, bubbleLevel: UNIT, size: UNIT, sizeSpread: UNIT,
@@ -736,19 +749,19 @@ export const AMBIENT_FIELD_BOUNDS: { [K in AmbientChannelKind]: FieldBounds } = 
   },
   fire: {
     ...COMMON_BOUNDS, size: UNIT, width: UNIT, crackle: UNIT, crackleLevel: UNIT, crackleTone: UNIT, pops: UNIT, popLevel: UNIT, popTone: UNIT,
-    sizzle: UNIT, sizzleLevel: UNIT, sizzleTone: UNIT, flicker: UNIT, flickerPeriodSec: [AMBIENT_FIRE_PERIOD_MIN_SEC, AMBIENT_FIRE_PERIOD_MAX_SEC],
+    sizzle: UNIT, sizzleLevel: UNIT, sizzleTone: UNIT, flicker: UNIT, flickerPeriodSec: [SOUNDSCAPE_FIRE_PERIOD_MIN_SEC, SOUNDSCAPE_FIRE_PERIOD_MAX_SEC],
     flickerDynamics: UNIT, pan: SIGNED, weather: UNIT,
   },
   chimes: {
-    ...COMMON_BOUNDS, pitchHz: [AMBIENT_CHIME_PITCH_MIN_HZ, AMBIENT_CHIME_PITCH_MAX_HZ],
-    tubes: [AMBIENT_CHIME_TUBES_MIN, AMBIENT_CHIME_TUBES_MAX, 'integer'],
-    ringSec: [AMBIENT_CHIME_RING_MIN_SEC, AMBIENT_CHIME_RING_MAX_SEC], activity: UNIT, hardness: UNIT, unison: UNIT, material: UNIT,
+    ...COMMON_BOUNDS, pitchHz: [SOUNDSCAPE_CHIME_PITCH_MIN_HZ, SOUNDSCAPE_CHIME_PITCH_MAX_HZ],
+    tubes: [SOUNDSCAPE_CHIME_TUBES_MIN, SOUNDSCAPE_CHIME_TUBES_MAX, 'integer'],
+    ringSec: [SOUNDSCAPE_CHIME_RING_MIN_SEC, SOUNDSCAPE_CHIME_RING_MAX_SEC], activity: UNIT, hardness: UNIT, unison: UNIT, material: UNIT,
     scale: [0, CHIME_SCALE_COUNT - 1, 'integer'], pan: SIGNED, weather: UNIT,
   },
 };
 
-export const AMBIENT_SPACE_BOUNDS: FieldBounds = { size: UNIT, damping: UNIT, echoes: UNIT, amount: UNIT };
-export const AMBIENT_WEATHER_BOUNDS: FieldBounds = { gustiness: UNIT, paceSec: [AMBIENT_WEATHER_PACE_MIN_SEC, AMBIENT_WEATHER_PACE_MAX_SEC] };
+export const SOUNDSCAPE_SPACE_BOUNDS: FieldBounds = { size: UNIT, damping: UNIT, echoes: UNIT, amount: UNIT };
+export const SOUNDSCAPE_WEATHER_BOUNDS: FieldBounds = { gustiness: UNIT, paceSec: [SOUNDSCAPE_WEATHER_PACE_MIN_SEC, SOUNDSCAPE_WEATHER_PACE_MAX_SEC] };
 
 function sanitizeFields<T extends object>(source: Record<string, unknown>, bounds: FieldBounds, fallback: T): T {
   const result: Record<string, unknown> = { ...(fallback as Record<string, unknown>) };
@@ -769,22 +782,22 @@ function asRecord(value: unknown): Record<string, unknown> {
  * nothing stored starts disabled at its defaults. Anything not in this shape
  * -- a save from before the roster -- reads as the default soundscape.
  */
-export function sanitizeAmbientSettings(input: unknown): AmbientSettings {
+export function sanitizeSoundscapeSettings(input: unknown): SoundscapeSettings {
   const source = asRecord(input);
-  if (!Array.isArray(source.channels)) return cloneSettings(DEFAULT_AMBIENT_SETTINGS);
+  if (!Array.isArray(source.channels)) return cloneSettings(DEFAULT_SOUNDSCAPE_SETTINGS);
   const stored = new Map<string, Record<string, unknown>>();
   for (const item of source.channels) {
     const record = asRecord(item);
     if (typeof record.id === 'string' && !stored.has(record.id)) stored.set(record.id, record);
   }
   let soloSeen = false;
-  const channels = AMBIENT_CHANNEL_ROSTER.map((entry): AmbientChannelSettings => {
+  const channels = SOUNDSCAPE_CHANNEL_ROSTER.map((entry): SoundscapeChannelSettings => {
     const saved = stored.get(entry.id);
-    const fallback = createAmbientChannel(entry.id, entry.kind, { enabled: false });
+    const fallback = createSoundscapeChannel(entry.id, entry.kind, { enabled: false });
     if (!saved) return fallback;
     const solo = saved.solo === true && !soloSeen;
     if (solo) soloSeen = true;
-    const fields = sanitizeFields(saved, AMBIENT_FIELD_BOUNDS[entry.kind], fallback) as unknown as Record<string, unknown>;
+    const fields = sanitizeFields(saved, SOUNDSCAPE_FIELD_BOUNDS[entry.kind], fallback) as unknown as Record<string, unknown>;
     // Chimes are tuned in semitones: a stored pitch lands on the nearest one.
     if (entry.kind === 'chimes') fields.pitchHz = chimeSemitoneHz(chimeSemitoneOf(fields.pitchHz as number));
     return {
@@ -793,26 +806,26 @@ export function sanitizeAmbientSettings(input: unknown): AmbientSettings {
       kind: entry.kind,
       enabled: saved.enabled !== false,
       solo,
-    } as AmbientChannelSettings;
+    } as SoundscapeChannelSettings;
   });
   return {
     channels,
-    space: sanitizeFields(asRecord(source.space), AMBIENT_SPACE_BOUNDS, { ...DEFAULT_AMBIENT_SPACE }),
-    weather: sanitizeFields(asRecord(source.weather), AMBIENT_WEATHER_BOUNDS, { ...DEFAULT_AMBIENT_WEATHER }),
+    space: sanitizeFields(asRecord(source.space), SOUNDSCAPE_SPACE_BOUNDS, { ...DEFAULT_SOUNDSCAPE_SPACE }),
+    weather: sanitizeFields(asRecord(source.weather), SOUNDSCAPE_WEATHER_BOUNDS, { ...DEFAULT_SOUNDSCAPE_WEATHER }),
   };
 }
 
-export function sanitizeAmbientPreferences(input: unknown): AmbientPreferences {
+export function sanitizeSoundscapePreferences(input: unknown): SoundscapePreferences {
   const source = asRecord(input);
   const rawCustom = Array.isArray(source.customPresets) ? source.customPresets : [];
   const seenIds = new Set<string>();
-  const customPresets = rawCustom.slice(0, MAX_AMBIENT_CUSTOM_PRESETS).flatMap((item): AmbientPreset[] => {
+  const customPresets = rawCustom.slice(0, MAX_SOUNDSCAPE_CUSTOM_PRESETS).flatMap((item): SoundscapePreset[] => {
     const entry = asRecord(item);
     if (typeof entry.id !== 'string' || !entry.id || seenIds.has(entry.id)) return [];
     if (typeof entry.name !== 'string' || !entry.name.trim()) return [];
     if (!Array.isArray(asRecord(entry.settings).channels)) return [];
     seenIds.add(entry.id);
-    const settings = sanitizeAmbientSettings(entry.settings);
+    const settings = sanitizeSoundscapeSettings(entry.settings);
     return [{
       id: entry.id.slice(0, 80),
       name: entry.name.trim().slice(0, 40),
@@ -820,27 +833,27 @@ export function sanitizeAmbientPreferences(input: unknown): AmbientPreferences {
     }];
   });
   const activePresetId = typeof source.activePresetId === 'string'
-    && (AMBIENT_FACTORY_PRESETS.some((item) => item.id === source.activePresetId)
+    && (SOUNDSCAPE_FACTORY_PRESETS.some((item) => item.id === source.activePresetId)
       || customPresets.some((item) => item.id === source.activePresetId))
     ? source.activePresetId
     : null;
 
   return {
     enabled: source.enabled === true,
-    masterVolume: finiteRange(source.masterVolume, 0, 1, AMBIENT_DEFAULT_MASTER_VOLUME),
-    settings: sanitizeAmbientSettings(source.settings),
+    masterVolume: finiteRange(source.masterVolume, 0, 1, SOUNDSCAPE_DEFAULT_MASTER_VOLUME),
+    settings: sanitizeSoundscapeSettings(source.settings),
     activePresetId,
     customPresets,
   };
 }
 
 /**
- * Switch to a soundscape: its settings, ambient sound turned on, and the
+ * Switch to a soundscape: its settings, soundscapes turned on, and the
  * preset marked active. Solo is a listening aid rather than part of the
  * sound, so whichever channel was soloed stays soloed. The one way a preset
  * is applied, whether from the settings panel or the player's switch.
  */
-export function applyAmbientPreset(preferences: AmbientPreferences, preset: AmbientPreset): AmbientPreferences {
+export function applySoundscapePreset(preferences: SoundscapePreferences, preset: SoundscapePreset): SoundscapePreferences {
   const soloId = preferences.settings.channels.find((channel) => channel.solo)?.id ?? null;
   const settings = cloneSettings(preset.settings);
   return {
@@ -856,14 +869,14 @@ export function applyAmbientPreset(preferences: AmbientPreferences, preset: Ambi
  * player: the user's own if there are any, otherwise the factory ones, in
  * the order the settings panel shows them, wrapping at the end.
  */
-export function nextAmbientPreset(preferences: AmbientPreferences): AmbientPreset {
-  const cycle = preferences.customPresets.length > 0 ? preferences.customPresets : AMBIENT_FACTORY_PRESETS;
+export function nextSoundscapePreset(preferences: SoundscapePreferences): SoundscapePreset {
+  const cycle = preferences.customPresets.length > 0 ? preferences.customPresets : SOUNDSCAPE_FACTORY_PRESETS;
   const current = cycle.findIndex((preset) => preset.id === preferences.activePresetId);
   return cycle[(current + 1) % cycle.length];
 }
 
 /** Whether a soundscape has any layer that could be heard (solo respected). */
-export function hasAudibleAmbientLayer(settings: AmbientSettings): boolean {
+export function hasAudibleSoundscapeLayer(settings: SoundscapeSettings): boolean {
   const soloChannel = settings.channels.find((channel) => channel.solo);
   if (soloChannel) return soloChannel.enabled && soloChannel.volume > 0;
   return settings.channels.some((channel) => channel.enabled && channel.volume > 0);

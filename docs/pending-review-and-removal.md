@@ -619,7 +619,7 @@ match the buttons (with the database constraint and its rebuild migration) or
 the button returns.
 
 **Noticed.** The Noise Engine change (`98668d0`), which gave slot 1's grid
-column to the ambient-noise switch.
+column to the Soundscapes switch.
 
 ### The render view's restore effect re-runs on every text commit
 

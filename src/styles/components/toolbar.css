@@ -397,11 +397,6 @@
   transform: rotate(90deg);
 }
 
-.sidebar-options-divider {
-  width:      100%;
-  height:     16px;
-}
-
 .preset-section, .typography-section {
   margin:         auto;
   display:        block;

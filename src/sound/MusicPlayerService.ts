@@ -7,7 +7,7 @@
  *   HTMLAudioElement → MediaElementSourceNode → GainNode ─┬→ dryGain ────────────────┬→ limiter → destination
  *                                                          └→ ConvolverNode → wetGain ┘
  *
- * The limiter is the app's shared output stage: other audio (the ambient
+ * The limiter is the app's shared output stage: other audio (the soundscape
  * sound engine) joins it through `connectToMix`, so music and ambience are
  * limited together rather than each clipping on its own.
  *
@@ -239,7 +239,7 @@ export class MusicPlayerService {
       this.convolver = this.audioCtx.createConvolver();
       this.convolver.buffer = buildSyntheticRoomImpulseResponse(this.audioCtx, this.config.reverbRoom);
 
-      // Both music paths share the output limiter with ambient audio.
+      // Both music paths share the output limiter with soundscape audio.
       this.gainNode.connect(this.dryGain);
       this.dryGain.connect(this.mixLimiter);
 

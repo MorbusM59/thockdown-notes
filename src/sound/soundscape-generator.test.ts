@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
-  AMBIENT_RAIN_DRIPS_MAX_PER_SEC,
-  AMBIENT_RAIN_SURFACE_ANCHORS,
-  ambientFaderGain,
+  SOUNDSCAPE_RAIN_DRIPS_MAX_PER_SEC,
+  SOUNDSCAPE_RAIN_SURFACE_ANCHORS,
+  soundscapeFaderGain,
   rainDropsPerSecond,
-  ambientPartGain,
-  type AmbientChannelSettings,
-} from '../shared/ambientSound';
-import { chimeTubeFrequencies } from '../shared/ambientSoundDsp';
-import { CHIME_SCALES, chimeScaleCents } from '../shared/ambientChimeScales';
-import { AMBIENT_CHIME_MATERIALS } from '../shared/ambientSound';
-import { buildNoiseLoops, createNoiseSource } from '../shared/ambientNoiseLoops';
-import { createProcessor, layer, noiseAt, peak, rms, type Rendered } from './ambient-generator.harness';
+  soundscapePartGain,
+  type SoundscapeChannelSettings,
+} from '../shared/soundscape';
+import { chimeTubeFrequencies } from '../shared/soundscapeDsp';
+import { CHIME_SCALES, chimeScaleCents } from '../shared/soundscapeChimeScales';
+import { SOUNDSCAPE_CHIME_MATERIALS } from '../shared/soundscape';
+import { buildNoiseLoops, createNoiseSource } from '../shared/soundscapeNoiseLoops';
+import { createProcessor, layer, noiseAt, peak, rms, type Rendered } from './soundscape-generator.harness';
 
 // Tests here assert properties no tuning can falsify -- a level that holds,
 // a rate that follows its slider, a rendering that does not depend on the
@@ -54,11 +54,11 @@ const KINDS = ['noise', 'rain', 'thunder', 'water', 'fire', 'chimes'] as const;
 /** A layer of each kind that sounds within a couple of seconds. */
 const busy = (kind: (typeof KINDS)[number]) => (kind === 'thunder' ? layer('thunder', { share: 1, randomness: 0 }) : layer(kind));
 
-describe('the ambient worklet', () => {
+describe('the soundscape worklet', () => {
   it('uses the same fader law as the settings', () => {
     const { constants } = createProcessor([]);
     for (const position of [0, 0.01, 0.25, 0.5, 0.75, 1]) {
-      expect(constants.faderGain(position)).toBeCloseTo(ambientFaderGain(position), 12);
+      expect(constants.faderGain(position)).toBeCloseTo(soundscapeFaderGain(position), 12);
     }
   });
 
@@ -68,13 +68,13 @@ describe('the ambient worklet', () => {
       expect(everything(out).every(Number.isFinite)).toBe(true);
       expect(peak(out.left)).toBeGreaterThan(1e-3);
       expect(peak(out.left)).toBeLessThan(8);
-      const silent = createProcessor([{ ...busy(kind), volume: 0 } as AmbientChannelSettings], { sampleRate: 8000 }).render(2);
+      const silent = createProcessor([{ ...busy(kind), volume: 0 } as SoundscapeChannelSettings], { sampleRate: 8000 }).render(2);
       expect(everything(silent).every((value) => value === 0)).toBe(true);
     }
   });
 
   it('stays finite and bounded at every control extreme', () => {
-    const extremes: AmbientChannelSettings[] = [
+    const extremes: SoundscapeChannelSettings[] = [
       layer('noise', { colour: 0, brightnessHz: 80, focus: 1, depth: 1, periodSec: 0.5, curve: 1, skew: 0.1, sweep: 1, variation: 1, sway: 1, width: 0, distance: 1, weather: 1 }, 1),
       layer('noise', { colour: 1, brightnessHz: 18000, focus: 1, depth: 1, periodSec: 0.5, curve: 0, skew: 0.9, sweep: -1, variation: 1, sway: 1, width: 1, weather: 1 }, 2),
       layer('rain', { intensity: 1, surface: 0.25, dropLevel: 1, dropTone: 1, washDensity: 1, washLevel: 1, washTone: 1, drips: 1, dripLevel: 1, dripTone: 0, wetness: 1, splashLevel: 1, splashTone: 1, resonance: 1, pan: -1, width: 0, weather: 1 }, 1),
@@ -210,7 +210,7 @@ describe('the weather', () => {
 
 describe('noise layers', () => {
   const rate = 16000;
-  const steady = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'noise' }>>) => layer('noise', { depth: 0, variation: 0, ...overrides });
+  const steady = (overrides: Partial<Extract<SoundscapeChannelSettings, { kind: 'noise' }>>) => layer('noise', { depth: 0, variation: 0, ...overrides });
 
   it('darkens from white through pink to brown', () => {
     const share = (colour: number) => highShare(createProcessor([steady({ colour })], { sampleRate: rate }).render(3).left, rate, 1000);
@@ -299,7 +299,7 @@ describe('noise layers', () => {
   // weather (a new gust target) each once put corners several times the
   // cycle's own into it, heard as the swell moving in sections.
   it('follows its curve without corners, with the filter sweeping and the weather gusting', () => {
-    const worstCorner = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'noise' }>>, gustiness = 0) => {
+    const worstCorner = (overrides: Partial<Extract<SoundscapeChannelSettings, { kind: 'noise' }>>, gustiness = 0) => {
       const generator = createProcessor([layer('noise', { depth: 0.6, periodSec: 12, variation: 0, ...overrides })], { sampleRate: 8000, weather: { gustiness, paceSec: 12 } });
       const levels: number[] = [];
       for (let segment = 0; segment < (8000 * 60) / 32; segment += 1) {
@@ -412,8 +412,8 @@ describe('rain', () => {
   it('has a synthesis profile for every surface the settings can name', () => {
     const { constants } = createProcessor([]);
     expect(constants.RAIN_SURFACE_ANCHORS.map(({ name, at }: { name: string; at: number }) => ({ name, at })))
-      .toEqual(AMBIENT_RAIN_SURFACE_ANCHORS.map(({ name, at }) => ({ name, at })));
-    expect(constants.RAIN_DRIPS_MAX_PER_SEC).toBe(AMBIENT_RAIN_DRIPS_MAX_PER_SEC);
+      .toEqual(SOUNDSCAPE_RAIN_SURFACE_ANCHORS.map(({ name, at }) => ({ name, at })));
+    expect(constants.RAIN_DRIPS_MAX_PER_SEC).toBe(SOUNDSCAPE_RAIN_DRIPS_MAX_PER_SEC);
     // Every anchor carries every field the blend reads.
     const keys = (value: object): string[] => Object.entries(value).flatMap(([key, inner]) => (
       inner && typeof inner === 'object' && !Array.isArray(inner) ? keys(inner).map((sub) => `${key}.${sub}`) : [key]
@@ -439,13 +439,13 @@ describe('rain', () => {
 
   describe('its parts', () => {
     /** The wash alone: drops and drips silenced. */
-    const wash = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'rain' }>>) => (
+    const wash = (overrides: Partial<Extract<SoundscapeChannelSettings, { kind: 'rain' }>>) => (
       createProcessor([layer('rain', { dropLevel: 0, drips: 0, distance: 0, ...overrides })], { sampleRate: 16000 }).render(6).left
     );
 
     it('uses the same level law as the settings', () => {
       const { constants } = createProcessor([]);
-      for (const position of [0, 0.01, 0.5, 0.75, 1]) expect(constants.partGain(position)).toBeCloseTo(ambientPartGain(position), 12);
+      for (const position of [0, 0.01, 0.5, 0.75, 1]) expect(constants.partGain(position)).toBeCloseTo(soundscapePartGain(position), 12);
     });
 
     it('plays the wash at its level, and none of it at zero, the drops going on alone', () => {
@@ -474,7 +474,7 @@ describe('rain', () => {
     });
 
     it('plays drops and drips at their own levels, applied as they play, never recorded', () => {
-      const levels = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'rain' }>>) => {
+      const levels = (overrides: Partial<Extract<SoundscapeChannelSettings, { kind: 'rain' }>>) => {
         const generator = createProcessor([layer('rain', { intensity: 0.8, drips: 1, pan: 0, width: 0, ...overrides })], { sampleRate: 8000 });
         generator.render(3);
         const voices = generator.processor.channels[0].activeVoices as Array<{ gainLeft: number; live: { gain: number } | null; entry: unknown }>;
@@ -599,7 +599,7 @@ describe('rain', () => {
 });
 
 describe('thunder', () => {
-  const steady = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'thunder' }>>) => layer('thunder', { randomness: 0, ...overrides });
+  const steady = (overrides: Partial<Extract<SoundscapeChannelSettings, { kind: 'thunder' }>>) => layer('thunder', { randomness: 0, ...overrides });
   const countPeals = (generator: ReturnType<typeof createProcessor>) => {
     let peals = 0;
     const start = generator.processor.startPeal.bind(generator.processor);
@@ -651,7 +651,7 @@ describe('thunder', () => {
 });
 
 describe('water', () => {
-  const births = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'water' }>>, seconds = 20) => {
+  const births = (overrides: Partial<Extract<SoundscapeChannelSettings, { kind: 'water' }>>, seconds = 20) => {
     const generator = createProcessor([layer('water', overrides)], { sampleRate: 8000 });
     const times: number[] = [];
     const make = generator.processor.makeBubble.bind(generator.processor);
@@ -712,7 +712,7 @@ describe('water', () => {
   });
 
   it('plays the rush and the bubbles each at its own level, either alone', () => {
-    const energy = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'water' }>>) => (
+    const energy = (overrides: Partial<Extract<SoundscapeChannelSettings, { kind: 'water' }>>) => (
       rms(createProcessor([layer('water', { turbulence: 0, ...overrides })], { sampleRate: 8000 }).render(4).left)
     );
     expect(energy({ bubbleLevel: 0, rushLevel: 0 })).toBe(0);
@@ -750,7 +750,7 @@ describe('water', () => {
 
 describe('fire', () => {
   it('crackles at the rate its slider sets, and pops only when asked', () => {
-    const bursts = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'fire' }>>) => {
+    const bursts = (overrides: Partial<Extract<SoundscapeChannelSettings, { kind: 'fire' }>>) => {
       const generator = createProcessor([layer('fire', overrides)], { sampleRate: 8000 });
       let count = 0;
       const spawn = generator.processor.spawnBurst.bind(generator.processor);
@@ -769,7 +769,7 @@ describe('fire', () => {
 
   // The level the flames move the roar by, traced per control segment: what
   // flicker, pace and edge set, without the noise's own fluctuation on top.
-  const roarTrace = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'fire' }>>, seconds = 40) => {
+  const roarTrace = (overrides: Partial<Extract<SoundscapeChannelSettings, { kind: 'fire' }>>, seconds = 40) => {
     const generator = createProcessor([layer('fire', { crackle: 0, pops: 0, ...overrides })], { sampleRate: 4000 });
     // From before the first segment, so the first change's onset is seen.
     const levels: number[] = [generator.processor.channels[0].roarWander.value];
@@ -819,7 +819,7 @@ describe('fire', () => {
   });
 
   /** A fire with its roar silenced (a silent brown loop), so what is left is the hiss and the bursts. */
-  const withoutRoar = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'fire' }>>, sampleRate = 32000) => {
+  const withoutRoar = (overrides: Partial<Extract<SoundscapeChannelSettings, { kind: 'fire' }>>, sampleRate = 32000) => {
     const generator = createProcessor([layer('fire', { crackle: 0, pops: 0, ...overrides })], { sampleRate });
     const loop = generator.processor.noiseLoop.bind(generator.processor);
     const silent = new Float32Array(sampleRate);
@@ -1025,7 +1025,7 @@ describe('fire', () => {
   });
 
   it('sets each part\'s level by the shared law, and moves the crackles\' band with their tone', () => {
-    const spawned = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'fire' }>>) => {
+    const spawned = (overrides: Partial<Extract<SoundscapeChannelSettings, { kind: 'fire' }>>) => {
       const generator = createProcessor([layer('fire', { crackle: 1, pops: 0, ...overrides })], { sampleRate: 8000 });
       const calls: Array<{ hz: number[]; level: number }> = [];
       const spawn = generator.processor.spawnBurst.bind(generator.processor);
@@ -1179,7 +1179,7 @@ describe('chimes', () => {
 
 describe('chimes: unison, material and scale', () => {
   /** Every strike of a chimes layer over `seconds`, with the time it landed, and whether it was a rebound. */
-  const strikes = (overrides: Partial<Extract<AmbientChannelSettings, { kind: 'chimes' }>>, seconds = 300) => {
+  const strikes = (overrides: Partial<Extract<SoundscapeChannelSettings, { kind: 'chimes' }>>, seconds = 300) => {
     const generator = createProcessor([layer('chimes', { activity: 0.3, weather: 0, ...overrides })], { sampleRate: 4000 });
     const record: Array<{ frame: number; rebound: boolean; tube: number }> = [];
     const strike = generator.processor.strikeTube.bind(generator.processor);
@@ -1230,7 +1230,7 @@ describe('chimes: unison, material and scale', () => {
   it('has a model for every material the settings can name', () => {
     const { constants } = createProcessor([]);
     expect(constants.CHIME_MATERIALS.map(({ name, at }: { name: string; at: number }) => ({ name, at })))
-      .toEqual(AMBIENT_CHIME_MATERIALS.map(({ name, at }) => ({ name, at })));
+      .toEqual(SOUNDSCAPE_CHIME_MATERIALS.map(({ name, at }) => ({ name, at })));
   });
 
   it('knocks briefly as wood, rings long as metal, shorter and brighter as glass, and swells in as a veil', () => {

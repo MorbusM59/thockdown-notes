@@ -1,25 +1,25 @@
 /**
- * What the worklet (public/ambient-generator.js) is told about each layer:
+ * What the worklet (public/soundscape-generator.js) is told about each layer:
  * the stored settings plus everything cheaper to derive once on the main
  * thread than per block on the audio thread -- gains, the distance rule, the
  * noise cycle and filter-gain tables, the chimes' tuning.
  */
 import {
-  AMBIENT_NOISE_SWEEP_OCTAVES,
-  AMBIENT_RAIN_DROPS_MAX_PER_SEC,
-  AMBIENT_RAIN_DROPS_MIN_PER_SEC,
-  AMBIENT_THUNDER_JITTER,
-  AMBIENT_THUNDER_LENGTH_MAX_SEC,
-  AMBIENT_THUNDER_LENGTH_MIN_SEC,
-  AMBIENT_CHIME_RATE_MAX_PER_SEC,
-  AMBIENT_CHIME_RATE_MIN_PER_SEC,
-  ambientFaderGain,
-  type AmbientChannelKind,
-  type AmbientChannelSettings,
-  type AmbientSettings,
-} from './ambientSound';
-import { buildNoiseCycle } from './ambientNoiseCycle';
-import { chimeScaleCents } from './ambientChimeScales';
+  SOUNDSCAPE_NOISE_SWEEP_OCTAVES,
+  SOUNDSCAPE_RAIN_DROPS_MAX_PER_SEC,
+  SOUNDSCAPE_RAIN_DROPS_MIN_PER_SEC,
+  SOUNDSCAPE_THUNDER_JITTER,
+  SOUNDSCAPE_THUNDER_LENGTH_MAX_SEC,
+  SOUNDSCAPE_THUNDER_LENGTH_MIN_SEC,
+  SOUNDSCAPE_CHIME_RATE_MAX_PER_SEC,
+  SOUNDSCAPE_CHIME_RATE_MIN_PER_SEC,
+  soundscapeFaderGain,
+  type SoundscapeChannelKind,
+  type SoundscapeChannelSettings,
+  type SoundscapeSettings,
+} from './soundscape';
+import { buildNoiseCycle } from './soundscapeNoiseCycle';
+import { chimeScaleCents } from './soundscapeChimeScales';
 
 /**
  * Each kind's level at a fader of 1, relative to the others: set so that
@@ -29,7 +29,7 @@ import { chimeScaleCents } from './ambientChimeScales';
  * transients, whose peaks carry them). The engine's bus limiter catches the
  * sum of several near full scale.
  */
-export const AMBIENT_KIND_GAIN: Record<AmbientChannelKind, number> = {
+export const SOUNDSCAPE_KIND_GAIN: Record<SoundscapeChannelKind, number> = {
   noise: 0.8,
   rain: 3,
   thunder: 4.4,
@@ -38,7 +38,7 @@ export const AMBIENT_KIND_GAIN: Record<AmbientChannelKind, number> = {
   chimes: 1.45,
 };
 
-export interface AmbientSpace {
+export interface SoundscapeSpace {
   cutoffHz: number;
   directGain: number;
   reverbSend: number;
@@ -50,7 +50,7 @@ export interface AmbientSpace {
  * raises the share sent to the space's reverb, which is what makes far layers
  * diffuse rather than merely quiet.
  */
-export function resolveAmbientSpace(distance: number): AmbientSpace {
+export function resolveSoundscapeSpace(distance: number): SoundscapeSpace {
   const bounded = Number.isFinite(distance) ? Math.max(0, Math.min(1, distance)) : 0;
   return {
     cutoffHz: 18000 * ((2200 / 18000) ** bounded),
@@ -153,7 +153,7 @@ export function buildNoiseToneTable(colour: number, focus: number): Float32Array
 // ---------------------------------------------------------------------------
 // Chimes.
 
-/** The fundamental of each tube, lowest first, on the layer's scale (ambientChimeScales.ts). */
+/** The fundamental of each tube, lowest first, on the layer's scale (soundscapeChimeScales.ts). */
 export function chimeTubeFrequencies(pitchHz: number, tubes: number, scale = 0): number[] {
   return chimeScaleCents(scale, tubes).map((value) => pitchHz * (2 ** (value / 1200)));
 }
@@ -162,11 +162,11 @@ export function chimeTubeFrequencies(pitchHz: number, tubes: number, scale = 0):
 // The configure message.
 
 /** One channel as the worklet receives it. */
-export type AmbientWorkletChannel = AmbientChannelSettings & {
+export type SoundscapeWorkletChannel = SoundscapeChannelSettings & {
   /** The fader and the kind's level, as one gain. */
   gain: number;
   /** The distance resolved; every kind but thunder, which resolves each peal's own. */
-  space?: AmbientSpace;
+  space?: SoundscapeSpace;
   cycle?: Float32Array;
   colourWeights?: [number, number, number];
   q?: number;
@@ -174,7 +174,7 @@ export type AmbientWorkletChannel = AmbientChannelSettings & {
   toneTableRangeHz?: readonly [number, number];
   sweepOctaves?: number;
   dropsRange?: readonly [number, number];
-  spaceTable?: readonly AmbientSpace[];
+  spaceTable?: readonly SoundscapeSpace[];
   lengthRangeSec?: readonly [number, number];
   jitter?: number;
   /** The kind's level alone, for thunder, which applies each peal's own fader. */
@@ -183,59 +183,59 @@ export type AmbientWorkletChannel = AmbientChannelSettings & {
   strikeRange?: readonly [number, number];
 };
 
-export interface AmbientWorkletConfiguration {
-  channels: AmbientWorkletChannel[];
-  weather: AmbientSettings['weather'];
+export interface SoundscapeWorkletConfiguration {
+  channels: SoundscapeWorkletChannel[];
+  weather: SoundscapeSettings['weather'];
 }
 
 /** The `configure` message's payload. */
-export function toWorkletConfiguration(settings: AmbientSettings): AmbientWorkletConfiguration {
+export function toWorkletConfiguration(settings: SoundscapeSettings): SoundscapeWorkletConfiguration {
   return {
     weather: { ...settings.weather },
     channels: settings.channels.map((channel) => toWorkletChannel(channel)),
   };
 }
 
-export function toWorkletChannel(channel: AmbientChannelSettings): AmbientWorkletChannel {
-  const gain = ambientFaderGain(channel.volume) * AMBIENT_KIND_GAIN[channel.kind];
+export function toWorkletChannel(channel: SoundscapeChannelSettings): SoundscapeWorkletChannel {
+  const gain = soundscapeFaderGain(channel.volume) * SOUNDSCAPE_KIND_GAIN[channel.kind];
   switch (channel.kind) {
     case 'noise':
       return {
         ...channel,
         gain,
-        space: resolveAmbientSpace(channel.distance),
+        space: resolveSoundscapeSpace(channel.distance),
         cycle: buildNoiseCycle(channel.curve, channel.skew),
         colourWeights: noiseColourWeights(channel.colour),
         q: noiseFocusQ(channel.focus),
         toneTable: buildNoiseToneTable(channel.colour, channel.focus),
         toneTableRangeHz: TONE_TABLE_RANGE_HZ,
-        sweepOctaves: channel.sweep * AMBIENT_NOISE_SWEEP_OCTAVES,
+        sweepOctaves: channel.sweep * SOUNDSCAPE_NOISE_SWEEP_OCTAVES,
       };
     case 'rain':
-      return { ...channel, gain, space: resolveAmbientSpace(channel.distance), dropsRange: RAIN_DROPS_RANGE };
+      return { ...channel, gain, space: resolveSoundscapeSpace(channel.distance), dropsRange: RAIN_DROPS_RANGE };
     case 'thunder':
-      return { ...channel, gain, kindGain: AMBIENT_KIND_GAIN.thunder, spaceTable: THUNDER_SPACE_TABLE, lengthRangeSec: THUNDER_LENGTH_RANGE_SEC, jitter: AMBIENT_THUNDER_JITTER };
+      return { ...channel, gain, kindGain: SOUNDSCAPE_KIND_GAIN.thunder, spaceTable: THUNDER_SPACE_TABLE, lengthRangeSec: THUNDER_LENGTH_RANGE_SEC, jitter: SOUNDSCAPE_THUNDER_JITTER };
     case 'chimes':
       return {
         ...channel,
         gain,
-        space: resolveAmbientSpace(channel.distance),
+        space: resolveSoundscapeSpace(channel.distance),
         tubeHz: chimeTubeFrequencies(channel.pitchHz, channel.tubes, channel.scale),
         strikeRange: CHIME_STRIKE_RANGE,
       };
     default:
-      return { ...channel, gain, space: resolveAmbientSpace(channel.distance) };
+      return { ...channel, gain, space: resolveSoundscapeSpace(channel.distance) };
   }
 }
 
 const TONE_TABLE_RANGE_HZ = [NOISE_TONE_TABLE_MIN_HZ, NOISE_TONE_TABLE_MAX_HZ] as const;
-const RAIN_DROPS_RANGE = [AMBIENT_RAIN_DROPS_MIN_PER_SEC, AMBIENT_RAIN_DROPS_MAX_PER_SEC] as const;
-const CHIME_STRIKE_RANGE = [AMBIENT_CHIME_RATE_MIN_PER_SEC, AMBIENT_CHIME_RATE_MAX_PER_SEC] as const;
+const RAIN_DROPS_RANGE = [SOUNDSCAPE_RAIN_DROPS_MIN_PER_SEC, SOUNDSCAPE_RAIN_DROPS_MAX_PER_SEC] as const;
+const CHIME_STRIKE_RANGE = [SOUNDSCAPE_CHIME_RATE_MIN_PER_SEC, SOUNDSCAPE_CHIME_RATE_MAX_PER_SEC] as const;
 
 /** Steps in a thunder layer's distance table: finer than the slider moves. */
 const THUNDER_SPACE_STEPS = 100;
-const THUNDER_SPACE_TABLE: readonly AmbientSpace[] = Array.from(
+const THUNDER_SPACE_TABLE: readonly SoundscapeSpace[] = Array.from(
   { length: THUNDER_SPACE_STEPS + 1 },
-  (_, index) => resolveAmbientSpace(index / THUNDER_SPACE_STEPS),
+  (_, index) => resolveSoundscapeSpace(index / THUNDER_SPACE_STEPS),
 );
-const THUNDER_LENGTH_RANGE_SEC = [AMBIENT_THUNDER_LENGTH_MIN_SEC, AMBIENT_THUNDER_LENGTH_MAX_SEC] as const;
+const THUNDER_LENGTH_RANGE_SEC = [SOUNDSCAPE_THUNDER_LENGTH_MIN_SEC, SOUNDSCAPE_THUNDER_LENGTH_MAX_SEC] as const;

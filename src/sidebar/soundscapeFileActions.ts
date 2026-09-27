@@ -1,19 +1,19 @@
 /**
  * Exporting and importing soundscapes from the settings panel: the renderer
- * builds and reads the .tds text (ambientSoundscapeFile.ts); the main
+ * builds and reads the .tds text (soundscapeFile.ts); the main
  * process only asks where (window.thockdownSoundscapeFiles).
  */
-import type { AmbientPreferences, AmbientPreset } from '../shared/ambientSound'
+import type { SoundscapePreferences, SoundscapePreset } from '../shared/soundscape'
 import {
   SOUNDSCAPE_FILE_EXTENSION,
   buildSoundscapeFile,
   mergeImportedSoundscapes,
   newSoundscapeId,
   parseSoundscapeFile,
-} from '../shared/ambientSoundscapeFile'
+} from '../shared/soundscapeFile'
 
 /** Save `presets` to a .tds file the reader picks; `defaultName` without extension. */
-export async function exportSoundscapes(presets: readonly AmbientPreset[], defaultName: string): Promise<void> {
+export async function exportSoundscapes(presets: readonly SoundscapePreset[], defaultName: string): Promise<void> {
   if (!window.thockdownSoundscapeFiles || presets.length === 0) return
   try {
     await window.thockdownSoundscapeFiles.save(buildSoundscapeFile(presets), `${defaultName}.${SOUNDSCAPE_FILE_EXTENSION}`)
@@ -27,7 +27,7 @@ export async function exportSoundscapes(presets: readonly AmbientPreset[], defau
  * (mergeImportedSoundscapes). Resolves to the new preferences, or null when
  * nothing was chosen or nothing could be read.
  */
-export async function importSoundscapes(preferences: AmbientPreferences): Promise<AmbientPreferences | null> {
+export async function importSoundscapes(preferences: SoundscapePreferences): Promise<SoundscapePreferences | null> {
   if (!window.thockdownSoundscapeFiles) return null
   try {
     const content = await window.thockdownSoundscapeFiles.open()

@@ -1,6 +1,6 @@
 /**
- * The space the ambient layers play in, as a stereo impulse response for the
- * engine's ConvolverNode (src/sound/AmbientSoundEngine.ts). Pure, and built
+ * The space the soundscape layers play in, as a stereo impulse response for the
+ * engine's ConvolverNode (src/sound/SoundscapeEngine.ts). Pure, and built
  * on the main thread whenever the soundscape's space changes.
  *
  * What makes a synthetic reverb read as a place rather than as an effect:
@@ -16,7 +16,7 @@
  * - and, for walls, buildings or cliffs, a few DISCRETE ECHOES standing out
  *   of the tail, spaced further apart in a larger space.
  */
-import { logLerp, type AmbientSpaceSettings } from './ambientSound';
+import { logLerp, type SoundscapeSpaceSettings } from './soundscape';
 
 export const SPACE_DECAY_MIN_SEC = 0.35;
 export const SPACE_DECAY_MAX_SEC = 7;
@@ -44,8 +44,8 @@ function makeRandom(seed: number): () => number {
   };
 }
 
-export function buildAmbientImpulseResponse(
-  space: Pick<AmbientSpaceSettings, 'size' | 'damping' | 'echoes'>,
+export function buildSoundscapeImpulseResponse(
+  space: Pick<SoundscapeSpaceSettings, 'size' | 'damping' | 'echoes'>,
   sampleRate: number,
   seed = 7,
 ): [Float32Array<ArrayBuffer>, Float32Array<ArrayBuffer>] {

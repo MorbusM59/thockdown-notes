@@ -1,35 +1,35 @@
 import { describe, expect, it } from 'vitest';
 import {
-  AMBIENT_CHANNEL_DEFAULTS,
-  AMBIENT_CHANNEL_ROSTER,
-  AMBIENT_FACTORY_PRESETS,
-  AMBIENT_FIELD_BOUNDS,
-  AMBIENT_SPACE_BOUNDS,
-  AMBIENT_WEATHER_BOUNDS,
-  DEFAULT_AMBIENT_SETTINGS,
-  ambientFaderDb,
-  ambientFaderGain,
-  ambientSettingsSignature,
-  applyAmbientPreset,
+  SOUNDSCAPE_CHANNEL_DEFAULTS,
+  SOUNDSCAPE_CHANNEL_ROSTER,
+  SOUNDSCAPE_FACTORY_PRESETS,
+  SOUNDSCAPE_FIELD_BOUNDS,
+  SOUNDSCAPE_SPACE_BOUNDS,
+  SOUNDSCAPE_WEATHER_BOUNDS,
+  DEFAULT_SOUNDSCAPE_SETTINGS,
+  soundscapeFaderDb,
+  soundscapeFaderGain,
+  soundscapeSettingsSignature,
+  applySoundscapePreset,
   cloneSettings,
   chimeSemitoneHz,
-  createAmbientChannel,
-  DEFAULT_AMBIENT_SPACE,
-  hasAudibleAmbientLayer,
-  nextAmbientPreset,
-  sanitizeAmbientPreferences,
-  sanitizeAmbientSettings,
-  type AmbientPreferences,
-} from './ambientSound';
+  createSoundscapeChannel,
+  DEFAULT_SOUNDSCAPE_SPACE,
+  hasAudibleSoundscapeLayer,
+  nextSoundscapePreset,
+  sanitizeSoundscapePreferences,
+  sanitizeSoundscapeSettings,
+  type SoundscapePreferences,
+} from './soundscape';
 import {
   buildNoiseToneTable,
   noiseColourWeights,
   noiseFilterPower,
-  resolveAmbientSpace,
+  resolveSoundscapeSpace,
   toWorkletConfiguration,
-} from './ambientSoundDsp';
-import { AMBIENT_BELL_RAMP_NEAREST_SINE, buildNoiseCycle } from './ambientNoiseCycle';
-import { buildAmbientImpulseResponse, spaceDecaySec } from './ambientSpace';
+} from './soundscapeDsp';
+import { SOUNDSCAPE_BELL_RAMP_NEAREST_SINE, buildNoiseCycle } from './soundscapeNoiseCycle';
+import { buildSoundscapeImpulseResponse, spaceDecaySec } from './soundscapeSpace';
 
 function inBounds(record: Record<string, unknown>, bounds: Record<string, readonly unknown[]>) {
   for (const [field, range] of Object.entries(bounds)) {
@@ -43,25 +43,25 @@ function inBounds(record: Record<string, unknown>, bounds: Record<string, readon
 
 describe('the roster', () => {
   it('names every channel once, numbered within its kind', () => {
-    const ids = AMBIENT_CHANNEL_ROSTER.map((entry) => entry.id);
+    const ids = SOUNDSCAPE_CHANNEL_ROSTER.map((entry) => entry.id);
     expect(new Set(ids).size).toBe(ids.length);
-    for (const entry of AMBIENT_CHANNEL_ROSTER) {
-      const ofKind = AMBIENT_CHANNEL_ROSTER.filter((item) => item.kind === entry.kind);
+    for (const entry of SOUNDSCAPE_CHANNEL_ROSTER) {
+      const ofKind = SOUNDSCAPE_CHANNEL_ROSTER.filter((item) => item.kind === entry.kind);
       expect(ofKind.indexOf(entry) + 1).toBe(entry.number);
     }
   });
 
   it('gives every kind a default for every field the sanitizer bounds, inside its bounds', () => {
-    for (const [kind, defaults] of Object.entries(AMBIENT_CHANNEL_DEFAULTS)) {
-      inBounds(defaults as unknown as Record<string, unknown>, AMBIENT_FIELD_BOUNDS[kind as keyof typeof AMBIENT_FIELD_BOUNDS]);
+    for (const [kind, defaults] of Object.entries(SOUNDSCAPE_CHANNEL_DEFAULTS)) {
+      inBounds(defaults as unknown as Record<string, unknown>, SOUNDSCAPE_FIELD_BOUNDS[kind as keyof typeof SOUNDSCAPE_FIELD_BOUNDS]);
     }
   });
 });
 
 describe('defaults', () => {
   it('start every channel centred', () => {
-    for (const entry of AMBIENT_CHANNEL_ROSTER) {
-      const channel = createAmbientChannel(entry.id, entry.kind) as { pan?: number }
+    for (const entry of SOUNDSCAPE_CHANNEL_ROSTER) {
+      const channel = createSoundscapeChannel(entry.id, entry.kind) as { pan?: number }
       if (channel.pan !== undefined) expect(channel.pan, entry.id).toBe(0)
     }
   })
@@ -69,10 +69,10 @@ describe('defaults', () => {
   it('tune chimes in semitones from A440, a stored pitch landing on the nearest', () => {
     expect(chimeSemitoneHz(0)).toBe(440)
     expect(chimeSemitoneHz(12)).toBeCloseTo(880, 9)
-    const settings = sanitizeAmbientSettings({ channels: [{ id: 'chimes-1', pitchHz: 450 }, { id: 'chimes-2', pitchHz: 5000 }] })
+    const settings = sanitizeSoundscapeSettings({ channels: [{ id: 'chimes-1', pitchHz: 450 }, { id: 'chimes-2', pitchHz: 5000 }] })
     expect(settings.channels.find((channel) => channel.id === 'chimes-1')).toMatchObject({ pitchHz: 440 })
     expect((settings.channels.find((channel) => channel.id === 'chimes-2') as { pitchHz: number }).pitchHz).toBeCloseTo(chimeSemitoneHz(21), 9)
-    for (const preset of AMBIENT_FACTORY_PRESETS) {
+    for (const preset of SOUNDSCAPE_FACTORY_PRESETS) {
       for (const channel of preset.settings.channels) {
         if (channel.kind !== 'chimes') continue
         const semitones = 12 * Math.log2(channel.pitchHz / 440)
@@ -85,56 +85,56 @@ describe('defaults', () => {
 describe('factory soundscapes', () => {
   it('are complete, in roster order, bounded, and each sounds', () => {
     const ids = new Set<string>();
-    for (const preset of AMBIENT_FACTORY_PRESETS) {
+    for (const preset of SOUNDSCAPE_FACTORY_PRESETS) {
       expect(ids.has(preset.id)).toBe(false);
       ids.add(preset.id);
-      expect(preset.settings.channels.map((channel) => channel.id)).toEqual(AMBIENT_CHANNEL_ROSTER.map((entry) => entry.id));
+      expect(preset.settings.channels.map((channel) => channel.id)).toEqual(SOUNDSCAPE_CHANNEL_ROSTER.map((entry) => entry.id));
       for (const channel of preset.settings.channels) {
-        expect(channel.kind).toBe(AMBIENT_CHANNEL_ROSTER.find((entry) => entry.id === channel.id)?.kind);
+        expect(channel.kind).toBe(SOUNDSCAPE_CHANNEL_ROSTER.find((entry) => entry.id === channel.id)?.kind);
         expect(channel.solo).toBe(false);
-        inBounds(channel as unknown as Record<string, unknown>, AMBIENT_FIELD_BOUNDS[channel.kind]);
+        inBounds(channel as unknown as Record<string, unknown>, SOUNDSCAPE_FIELD_BOUNDS[channel.kind]);
       }
-      inBounds(preset.settings.space as unknown as Record<string, unknown>, AMBIENT_SPACE_BOUNDS);
-      inBounds(preset.settings.weather as unknown as Record<string, unknown>, AMBIENT_WEATHER_BOUNDS);
-      expect(hasAudibleAmbientLayer(preset.settings)).toBe(true);
+      inBounds(preset.settings.space as unknown as Record<string, unknown>, SOUNDSCAPE_SPACE_BOUNDS);
+      inBounds(preset.settings.weather as unknown as Record<string, unknown>, SOUNDSCAPE_WEATHER_BOUNDS);
+      expect(hasAudibleSoundscapeLayer(preset.settings)).toBe(true);
       // Sanitizing a preset changes nothing: it is already in the stored shape.
-      expect(sanitizeAmbientSettings(preset.settings)).toEqual(preset.settings);
+      expect(sanitizeSoundscapeSettings(preset.settings)).toEqual(preset.settings);
     }
   });
 
   it('are told apart by their signatures', () => {
-    const signatures = new Set(AMBIENT_FACTORY_PRESETS.map((preset) => ambientSettingsSignature(preset.settings)));
-    expect(signatures.size).toBe(AMBIENT_FACTORY_PRESETS.length);
+    const signatures = new Set(SOUNDSCAPE_FACTORY_PRESETS.map((preset) => soundscapeSettingsSignature(preset.settings)));
+    expect(signatures.size).toBe(SOUNDSCAPE_FACTORY_PRESETS.length);
   });
 });
 
 describe('sanitizing', () => {
   it('reads anything not in the current shape -- an older save included -- as the default soundscape', () => {
     for (const input of [undefined, null, 3, [], [{ kind: 'noise', volume: 0.4 }], { wind: { volume: 0.2, texture: 0.3 } }, { channels: 'x' }]) {
-      expect(sanitizeAmbientSettings(input)).toEqual(DEFAULT_AMBIENT_SETTINGS);
+      expect(sanitizeSoundscapeSettings(input)).toEqual(DEFAULT_SOUNDSCAPE_SETTINGS);
     }
   });
 
   it('matches channels by id, drops unknown ones, and starts a missing one disabled at its defaults', () => {
-    const settings = sanitizeAmbientSettings({
+    const settings = sanitizeSoundscapeSettings({
       channels: [
         { id: 'fire-1', kind: 'noise', enabled: true, volume: 0.3, size: 0.9 },
         { id: 'ghost-1', enabled: true, volume: 1 },
         { id: 'noise-2', enabled: false, colour: 7, brightnessHz: 5, periodSec: 1000 },
       ],
     });
-    expect(settings.channels.map((channel) => channel.id)).toEqual(AMBIENT_CHANNEL_ROSTER.map((entry) => entry.id));
+    expect(settings.channels.map((channel) => channel.id)).toEqual(SOUNDSCAPE_CHANNEL_ROSTER.map((entry) => entry.id));
     const fire = settings.channels.find((channel) => channel.id === 'fire-1');
     // The kind is the roster's, never the stored one.
     expect(fire).toMatchObject({ kind: 'fire', enabled: true, volume: 0.3, size: 0.9 });
     const noise = settings.channels.find((channel) => channel.id === 'noise-2');
     expect(noise).toMatchObject({ kind: 'noise', enabled: false, colour: 1, brightnessHz: 80, periodSec: 60 });
     const water = settings.channels.find((channel) => channel.id === 'water-1');
-    expect(water).toEqual(createAmbientChannel('water-1', 'water', { enabled: false }));
+    expect(water).toEqual(createSoundscapeChannel('water-1', 'water', { enabled: false }));
   });
 
   it('keeps at most one channel soloed, and rounds a whole-number field', () => {
-    const settings = sanitizeAmbientSettings({
+    const settings = sanitizeSoundscapeSettings({
       channels: [
         { id: 'rain-2', solo: true },
         { id: 'noise-1', solo: true },
@@ -146,14 +146,14 @@ describe('sanitizing', () => {
   });
 
   it('bounds the space and the weather', () => {
-    const settings = sanitizeAmbientSettings({ channels: [], space: { size: 3, damping: -1, echoes: 'x' }, weather: { paceSec: 0 } });
-    expect(settings.space).toMatchObject({ size: 1, damping: 0, echoes: DEFAULT_AMBIENT_SPACE.echoes });
+    const settings = sanitizeSoundscapeSettings({ channels: [], space: { size: 3, damping: -1, echoes: 'x' }, weather: { paceSec: 0 } });
+    expect(settings.space).toMatchObject({ size: 1, damping: 0, echoes: DEFAULT_SOUNDSCAPE_SPACE.echoes });
     expect(settings.weather.paceSec).toBe(2);
   });
 
   it('bounds and deduplicates saved presets, drops ones from before the roster, and an invalid active id', () => {
-    const settings = cloneSettings(AMBIENT_FACTORY_PRESETS[2].settings);
-    const preferences = sanitizeAmbientPreferences({
+    const settings = cloneSettings(SOUNDSCAPE_FACTORY_PRESETS[2].settings);
+    const preferences = sanitizeSoundscapePreferences({
       enabled: true,
       masterVolume: 4,
       settings,
@@ -173,43 +173,43 @@ describe('sanitizing', () => {
 
 describe('the signature', () => {
   it('changes with every field of every channel, the space and the weather, and not with solo', () => {
-    const base = cloneSettings(DEFAULT_AMBIENT_SETTINGS);
-    const signature = ambientSettingsSignature(base);
+    const base = cloneSettings(DEFAULT_SOUNDSCAPE_SETTINGS);
+    const signature = soundscapeSettingsSignature(base);
     for (const [index, channel] of base.channels.entries()) {
-      for (const field of Object.keys(AMBIENT_FIELD_BOUNDS[channel.kind])) {
+      for (const field of Object.keys(SOUNDSCAPE_FIELD_BOUNDS[channel.kind])) {
         const changed = cloneSettings(base);
         const target = changed.channels[index] as unknown as Record<string, number>;
         target[field] = target[field] + 0.5;
-        expect(ambientSettingsSignature(changed), `${channel.id}.${field}`).not.toBe(signature);
+        expect(soundscapeSettingsSignature(changed), `${channel.id}.${field}`).not.toBe(signature);
       }
     }
     const soloed = cloneSettings(base);
     soloed.channels[3].solo = true;
-    expect(ambientSettingsSignature(soloed)).toBe(signature);
-    expect(ambientSettingsSignature({ ...base, space: { ...base.space, echoes: 0.9 } })).not.toBe(signature);
-    expect(ambientSettingsSignature({ ...base, weather: { ...base.weather, paceSec: 40 } })).not.toBe(signature);
+    expect(soundscapeSettingsSignature(soloed)).toBe(signature);
+    expect(soundscapeSettingsSignature({ ...base, space: { ...base.space, echoes: 0.9 } })).not.toBe(signature);
+    expect(soundscapeSettingsSignature({ ...base, weather: { ...base.weather, paceSec: 40 } })).not.toBe(signature);
   });
 });
 
 describe('stepping through soundscapes', () => {
-  const preferences = sanitizeAmbientPreferences({});
+  const preferences = sanitizeSoundscapePreferences({});
 
   it('walks the factory soundscapes in order and wraps, when there are no custom ones', () => {
-    let current: AmbientPreferences = { ...preferences, activePresetId: null };
-    const seen = AMBIENT_FACTORY_PRESETS.map(() => {
-      current = applyAmbientPreset(current, nextAmbientPreset(current));
+    let current: SoundscapePreferences = { ...preferences, activePresetId: null };
+    const seen = SOUNDSCAPE_FACTORY_PRESETS.map(() => {
+      current = applySoundscapePreset(current, nextSoundscapePreset(current));
       return current.activePresetId;
     });
-    expect(seen).toEqual(AMBIENT_FACTORY_PRESETS.map((preset) => preset.id));
-    expect(nextAmbientPreset(current).id).toBe(AMBIENT_FACTORY_PRESETS[0].id);
+    expect(seen).toEqual(SOUNDSCAPE_FACTORY_PRESETS.map((preset) => preset.id));
+    expect(nextSoundscapePreset(current).id).toBe(SOUNDSCAPE_FACTORY_PRESETS[0].id);
   });
 
-  it('turns ambient on and keeps the soloed channel', () => {
+  it('turns soundscape on and keeps the soloed channel', () => {
     const soloed = {
       ...preferences,
       settings: { ...preferences.settings, channels: preferences.settings.channels.map((channel) => ({ ...channel, solo: channel.id === 'rain-2' })) },
     };
-    const next = applyAmbientPreset(soloed, AMBIENT_FACTORY_PRESETS[3]);
+    const next = applySoundscapePreset(soloed, SOUNDSCAPE_FACTORY_PRESETS[3]);
     expect(next.enabled).toBe(true);
     expect(next.settings.channels.filter((channel) => channel.solo).map((channel) => channel.id)).toEqual(['rain-2']);
   });
@@ -217,10 +217,10 @@ describe('stepping through soundscapes', () => {
 
 describe('the fader', () => {
   it('is silent at 0, unity at the top, and even in decibels between', () => {
-    expect(ambientFaderGain(0)).toBe(0);
-    expect(ambientFaderGain(1)).toBe(1);
-    expect(ambientFaderDb(0.5)).toBeCloseTo(-24, 9);
-    expect(ambientFaderDb(0.75) - ambientFaderDb(0.5)).toBeCloseTo(ambientFaderDb(0.5) - ambientFaderDb(0.25), 9);
+    expect(soundscapeFaderGain(0)).toBe(0);
+    expect(soundscapeFaderGain(1)).toBe(1);
+    expect(soundscapeFaderDb(0.5)).toBeCloseTo(-24, 9);
+    expect(soundscapeFaderDb(0.75) - soundscapeFaderDb(0.5)).toBeCloseTo(soundscapeFaderDb(0.5) - soundscapeFaderDb(0.25), 9);
   });
 });
 
@@ -253,9 +253,9 @@ describe('noise colour and filter', () => {
 
 describe('distance', () => {
   it('moves monotonically from direct and bright to quieter, filtered, and in the space', () => {
-    let previous = resolveAmbientSpace(0);
+    let previous = resolveSoundscapeSpace(0);
     for (let step = 1; step <= 10; step += 1) {
-      const next = resolveAmbientSpace(step / 10);
+      const next = resolveSoundscapeSpace(step / 10);
       expect(next.cutoffHz).toBeLessThan(previous.cutoffHz);
       expect(next.directGain).toBeLessThan(previous.directGain);
       expect(next.reverbSend).toBeGreaterThan(previous.reverbSend);
@@ -266,9 +266,9 @@ describe('distance', () => {
 
 describe('the configure message', () => {
   it('carries every enabled and disabled channel, and the weather', () => {
-    const configuration = toWorkletConfiguration(DEFAULT_AMBIENT_SETTINGS);
-    expect(configuration.channels.map((channel) => channel.id)).toEqual(AMBIENT_CHANNEL_ROSTER.map((entry) => entry.id));
-    expect(configuration.weather).toEqual(DEFAULT_AMBIENT_SETTINGS.weather);
+    const configuration = toWorkletConfiguration(DEFAULT_SOUNDSCAPE_SETTINGS);
+    expect(configuration.channels.map((channel) => channel.id)).toEqual(SOUNDSCAPE_CHANNEL_ROSTER.map((entry) => entry.id));
+    expect(configuration.weather).toEqual(DEFAULT_SOUNDSCAPE_SETTINGS.weather);
     for (const channel of configuration.channels) {
       expect(channel.gain).toBeGreaterThanOrEqual(0);
       if (channel.kind !== 'thunder') expect(channel.space).toBeDefined();
@@ -286,7 +286,7 @@ describe('the space', () => {
 
   it('decays to about -60 dB at the decay time its size gives', () => {
     for (const size of [0.2, 0.6]) {
-      const [left] = buildAmbientImpulseResponse({ size, damping: 0, echoes: 0 }, rate);
+      const [left] = buildSoundscapeImpulseResponse({ size, damping: 0, echoes: 0 }, rate);
       const decay = spaceDecaySec(size);
       // Energy in a window at time t, relative to one near the start.
       const window = (atSec: number) => energyAfter(left.subarray(0, Math.floor((atSec + 0.05) * rate)), atSec);
@@ -297,7 +297,7 @@ describe('the space', () => {
   });
 
   it('starts after a pre-delay, and its two sides are unrelated', () => {
-    const [left, right] = buildAmbientImpulseResponse({ size: 0.8, damping: 0.5, echoes: 0 }, rate);
+    const [left, right] = buildSoundscapeImpulseResponse({ size: 0.8, damping: 0.5, echoes: 0 }, rate);
     expect(left.subarray(0, 32).every((value) => value === 0)).toBe(true);
     let ab = 0;
     let aa = 0;
@@ -312,7 +312,7 @@ describe('the space', () => {
 
   it('darkens its tail with damping', () => {
     const lateBrightness = (damping: number) => {
-      const [left] = buildAmbientImpulseResponse({ size: 0.6, damping, echoes: 0 }, rate);
+      const [left] = buildSoundscapeImpulseResponse({ size: 0.6, damping, echoes: 0 }, rate);
       const late = left.subarray(Math.floor(rate * 1.5));
       let diff = 0;
       let total = 0;
@@ -326,8 +326,8 @@ describe('the space', () => {
   });
 
   it('adds distinct echoes only when asked', () => {
-    const [plain] = buildAmbientImpulseResponse({ size: 0.5, damping: 0.5, echoes: 0 }, rate);
-    const [echoing] = buildAmbientImpulseResponse({ size: 0.5, damping: 0.5, echoes: 1 }, rate);
+    const [plain] = buildSoundscapeImpulseResponse({ size: 0.5, damping: 0.5, echoes: 0 }, rate);
+    const [echoing] = buildSoundscapeImpulseResponse({ size: 0.5, damping: 0.5, echoes: 1 }, rate);
     const peakOf = (data: Float32Array) => data.reduce((max, value) => Math.max(max, Math.abs(value)), 0);
     expect(peakOf(echoing)).toBeGreaterThan(3 * peakOf(plain));
   });
@@ -393,7 +393,7 @@ describe("the noise cycle", () => {
   });
 
   it('meets the sine at the bell that is actually nearest to it', () => {
-    expect(AMBIENT_BELL_RAMP_NEAREST_SINE).toBeGreaterThan(0.5);
-    expect(AMBIENT_BELL_RAMP_NEAREST_SINE).toBeLessThan(1);
+    expect(SOUNDSCAPE_BELL_RAMP_NEAREST_SINE).toBeGreaterThan(0.5);
+    expect(SOUNDSCAPE_BELL_RAMP_NEAREST_SINE).toBeLessThan(1);
   });
 });

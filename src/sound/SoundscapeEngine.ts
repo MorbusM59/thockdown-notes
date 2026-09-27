@@ -1,5 +1,5 @@
 /**
- * AmbientSoundEngine -- the Web Audio graph around the ambient worklet.
+ * SoundscapeEngine -- the Web Audio graph around the soundscape worklet.
  *
  *   worklet output 0 (every layer's direct sound, stereo) -------------> mixGain
  *   worklet output 1 (every layer's send to the space, stereo) -> space -> mixGain
@@ -8,11 +8,11 @@
  * Every layer is placed -- its distance, its direct and send gains -- inside
  * the worklet, by one rule; this graph only carries the two buses. The SPACE
  * is a convolution with the soundscape's own impulse response
- * (src/shared/ambientSpace.ts). It is two convolvers crossfaded: a changed
+ * (src/shared/soundscapeSpace.ts). It is two convolvers crossfaded: a changed
  * space is built into whichever is silent and faded in over the other, since
  * swapping a playing convolver's buffer is heard as a click.
  *
- * `busLimiter` is ambient sound's own dynamics, ahead of the limiter the
+ * `busLimiter` is the soundscapes' own dynamics, ahead of the limiter the
  * music shares: a thunder peal is caught here, gently, rather than making the
  * music's hard limiter pump.
  *
@@ -21,21 +21,21 @@
  * `mixGain` carries both the fade and the listener's master volume.
  */
 import {
-  hasAudibleAmbientLayer,
-  type AmbientPreferences,
-  type AmbientSpaceSettings,
-} from '../shared/ambientSound';
-import { toWorkletConfiguration } from '../shared/ambientSoundDsp';
-import { buildNoiseLoops, noiseLoopGains, type NoiseLoops } from '../shared/ambientNoiseLoops';
-import { buildAmbientImpulseResponse } from '../shared/ambientSpace';
+  hasAudibleSoundscapeLayer,
+  type SoundscapePreferences,
+  type SoundscapeSpaceSettings,
+} from '../shared/soundscape';
+import { toWorkletConfiguration } from '../shared/soundscapeDsp';
+import { buildNoiseLoops, noiseLoopGains, type NoiseLoops } from '../shared/soundscapeNoiseLoops';
+import { buildSoundscapeImpulseResponse } from '../shared/soundscapeSpace';
 import { musicPlayerService } from './MusicPlayerService';
 
 /** Mix level at master volume 1, leaving headroom beside the music. */
-const AMBIENT_MIX_GAIN = 0.5;
+const SOUNDSCAPE_MIX_GAIN = 0.5;
 /** The space's return at `amount` 1. */
-const AMBIENT_SPACE_RETURN = 1.2;
-const AMBIENT_FADE_SEC = 0.08;
-const AMBIENT_DISCONNECT_MS = 180;
+const SOUNDSCAPE_SPACE_RETURN = 1.2;
+const SOUNDSCAPE_FADE_SEC = 0.08;
+const SOUNDSCAPE_DISCONNECT_MS = 180;
 /** How long a new space takes to fade in over the old, and how long a slider must rest before one is built. */
 const SPACE_CROSSFADE_SEC = 0.35;
 const SPACE_REBUILD_DELAY_MS = 120;
@@ -60,11 +60,11 @@ function noiseLoopsFor(sampleRate: number) {
 }
 
 /** Whether these preferences would make any sound at all. */
-function isAudible(preferences: AmbientPreferences): boolean {
-  return preferences.enabled && preferences.masterVolume > 0 && hasAudibleAmbientLayer(preferences.settings);
+function isAudible(preferences: SoundscapePreferences): boolean {
+  return preferences.enabled && preferences.masterVolume > 0 && hasAudibleSoundscapeLayer(preferences.settings);
 }
 
-function spaceKey(space: AmbientSpaceSettings): string {
+function spaceKey(space: SoundscapeSpaceSettings): string {
   return [space.size, space.damping, space.echoes].map((value) => value.toFixed(3)).join(':');
 }
 
@@ -73,7 +73,7 @@ interface SpaceSlot {
   gain: GainNode;
 }
 
-export class AmbientSoundEngine {
+export class SoundscapeEngine {
   private context: AudioContext | null = null;
   private worklet: AudioWorkletNode | null = null;
   private mixGain: GainNode | null = null;
@@ -85,11 +85,11 @@ export class AmbientSoundEngine {
   private spaceTimer: number | null = null;
   private spaceReturnTarget = -1;
   private mixGainTarget = 0;
-  private preferences: AmbientPreferences | null = null;
+  private preferences: SoundscapePreferences | null = null;
   private starting: Promise<void> | null = null;
   private disconnectTimer: number | null = null;
 
-  apply(preferences: AmbientPreferences): void {
+  apply(preferences: SoundscapePreferences): void {
     this.preferences = preferences;
     if (!isAudible(preferences)) {
       this.fadeOutAndDisconnect();
@@ -113,7 +113,7 @@ export class AmbientSoundEngine {
     }
   }
 
-  private async resumeAndUpdate(preferences: AmbientPreferences): Promise<void> {
+  private async resumeAndUpdate(preferences: SoundscapePreferences): Promise<void> {
     try {
       const context = this.context;
       if (!context || context.state === 'closed') return;
@@ -121,7 +121,7 @@ export class AmbientSoundEngine {
       if (this.preferences !== preferences || !this.worklet) return;
       this.updateGraph(preferences);
     } catch (error) {
-      console.error('Unable to resume ambient audio', error);
+      console.error('Unable to resume soundscape audio', error);
     }
   }
 
@@ -131,7 +131,7 @@ export class AmbientSoundEngine {
       if (context.state === 'closed') return;
       let modulePromise = WORKLET_MODULES.get(context);
       if (!modulePromise) {
-        const moduleUrl = new URL('ambient-generator.js', window.location.href).toString();
+        const moduleUrl = new URL('soundscape-generator.js', window.location.href).toString();
         modulePromise = context.audioWorklet.addModule(moduleUrl);
         WORKLET_MODULES.set(context, modulePromise);
       }
@@ -145,7 +145,7 @@ export class AmbientSoundEngine {
       if (!preferences || !isAudible(preferences)) return;
 
       const noise = noiseLoopsFor(context.sampleRate);
-      const worklet = new AudioWorkletNode(context, 'ambient-generator', {
+      const worklet = new AudioWorkletNode(context, 'soundscape-generator', {
         numberOfInputs: 0,
         numberOfOutputs: 2,
         outputChannelCount: [2, 2],
@@ -156,7 +156,7 @@ export class AmbientSoundEngine {
         },
       });
       worklet.onprocessorerror = () => {
-        console.error('Ambient audio worklet stopped unexpectedly');
+        console.error('Soundscape audio worklet stopped unexpectedly');
         // A processor that threw does not run again, so the graph around it
         // is torn down now rather than after a fade: the delayed teardown
         // stands down while the preferences are still audible, which they
@@ -200,25 +200,25 @@ export class AmbientSoundEngine {
       this.mixGainTarget = 0;
       this.updateGraph(preferences);
     } catch (error) {
-      console.error('Unable to start ambient audio', error);
+      console.error('Unable to start soundscape audio', error);
     }
   }
 
-  private updateGraph(preferences: AmbientPreferences): void {
+  private updateGraph(preferences: SoundscapePreferences): void {
     const context = this.context;
     const worklet = this.worklet;
     if (!context || !worklet) return;
     const now = context.currentTime;
-    const mixTarget = AMBIENT_MIX_GAIN * preferences.masterVolume;
+    const mixTarget = SOUNDSCAPE_MIX_GAIN * preferences.masterVolume;
     if (this.mixGain && this.mixGainTarget !== mixTarget) {
       this.mixGain.gain.cancelAndHoldAtTime(now);
-      this.mixGain.gain.setTargetAtTime(mixTarget, now, AMBIENT_FADE_SEC);
+      this.mixGain.gain.setTargetAtTime(mixTarget, now, SOUNDSCAPE_FADE_SEC);
       this.mixGainTarget = mixTarget;
     }
     const space = preferences.settings.space;
-    const returnTarget = AMBIENT_SPACE_RETURN * space.amount;
+    const returnTarget = SOUNDSCAPE_SPACE_RETURN * space.amount;
     if (this.spaceInput && this.spaceReturnTarget !== returnTarget) {
-      this.spaceInput.gain.setTargetAtTime(returnTarget, now, AMBIENT_FADE_SEC);
+      this.spaceInput.gain.setTargetAtTime(returnTarget, now, SOUNDSCAPE_FADE_SEC);
       this.spaceReturnTarget = returnTarget;
     }
     this.scheduleSpace(space);
@@ -230,7 +230,7 @@ export class AmbientSoundEngine {
    * SPACE_REBUILD_DELAY_MS (a slider drag would otherwise build dozens),
    * immediately for the first one.
    */
-  private scheduleSpace(space: AmbientSpaceSettings): void {
+  private scheduleSpace(space: SoundscapeSpaceSettings): void {
     const key = spaceKey(space);
     if (key === this.spaceKey) return;
     if (this.spaceTimer !== null) window.clearTimeout(this.spaceTimer);
@@ -242,10 +242,10 @@ export class AmbientSoundEngine {
     else this.spaceTimer = window.setTimeout(build, SPACE_REBUILD_DELAY_MS);
   }
 
-  private installSpace(space: AmbientSpaceSettings, key: string): void {
+  private installSpace(space: SoundscapeSpaceSettings, key: string): void {
     const context = this.context;
     if (!context || this.spaceSlots.length < 2) return;
-    const [left, right] = buildAmbientImpulseResponse(space, context.sampleRate);
+    const [left, right] = buildSoundscapeImpulseResponse(space, context.sampleRate);
     const buffer = context.createBuffer(2, left.length, context.sampleRate);
     buffer.copyToChannel(left, 0);
     buffer.copyToChannel(right, 1);
@@ -281,12 +281,12 @@ export class AmbientSoundEngine {
       const latest = this.preferences;
       if (latest && isAudible(latest)) return;
       this.teardown();
-    }, AMBIENT_DISCONNECT_MS);
+    }, SOUNDSCAPE_DISCONNECT_MS);
   }
 
   /**
    * Take the graph down and let its processor go. The `stop` message is what
-   * lets the audio thread drop the processor (see ambient-generator.js);
+   * lets the audio thread drop the processor (see soundscape-generator.js);
    * disconnecting the node alone leaves it rendering.
    */
   private teardown(): void {
@@ -312,4 +312,4 @@ export class AmbientSoundEngine {
   }
 }
 
-export const ambientSoundEngine = new AmbientSoundEngine();
+export const soundscapeEngine = new SoundscapeEngine();

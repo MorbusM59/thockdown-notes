@@ -8,7 +8,7 @@ import { THOCKQUEST } from '../src/adventure/content'
 import { choose, enterEntryScreen, type DirectorDeps } from '../src/adventure/core/director'
 import { emptySave } from '../src/adventure/model/gameState'
 import { ROOT_STAGE_ID, STAGES } from '../src/adventure/stages'
-import { AMBIENT_FACTORY_PRESETS, cloneSettings } from '../src/shared/ambientSound'
+import { SOUNDSCAPE_FACTORY_PRESETS, cloneSettings } from '../src/shared/soundscape'
 
 // Regression coverage for the exact bug class this file is prone to:
 // sanitizeMenu (private, routed through by both saveAppState and
@@ -48,10 +48,10 @@ describe('StateService app-state field round-trip', () => {
     expect(loaded.menu?.isDoubleSizeMode).toBe(true)
   })
 
-  it('round-trips ambient layer settings and named custom presets through real sanitization', async () => {
+  it('round-trips soundscape layer settings and named custom presets through real sanitization', async () => {
     // A factory soundscape with at least one field of every kind moved, the
     // space and the weather moved, and a channel soloed.
-    const settings = cloneSettings(AMBIENT_FACTORY_PRESETS[5].settings)
+    const settings = cloneSettings(SOUNDSCAPE_FACTORY_PRESETS[5].settings)
     settings.channels = settings.channels.map((channel) => {
       switch (channel.kind) {
         case 'noise': return { ...channel, colour: 0.83, sweep: -0.4, solo: channel.id === 'noise-2' }
@@ -65,7 +65,7 @@ describe('StateService app-state field round-trip', () => {
     })
     settings.space = { size: 0.12, damping: 0.93, echoes: 0.44, amount: 0.21 }
     settings.weather = { gustiness: 0.71, paceSec: 33 }
-    const ambientSound = {
+    const soundscape = {
       enabled: true,
       masterVolume: 0.37,
       settings,
@@ -78,11 +78,11 @@ describe('StateService app-state field round-trip', () => {
     }
     await new StateService(dataRoot).saveAppState({
       selectedNoteId: null,
-      menu: { sidebarMode: 'date', selectedMonths: [], selectedYears: [], searchQuery: '', ambientSound },
+      menu: { sidebarMode: 'date', selectedMonths: [], selectedYears: [], searchQuery: '', soundscapes: soundscape },
     })
 
     const loaded = await new StateService(dataRoot).loadAppState()
-    expect(loaded.menu?.ambientSound).toEqual(ambientSound)
+    expect(loaded.menu?.soundscapes).toEqual(soundscape)
   })
 
   it('persists isDoubleSizeMode: false explicitly (not just "field present")', async () => {

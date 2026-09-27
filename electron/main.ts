@@ -1,4 +1,4 @@
-import { SOUNDSCAPE_FILE_CHANNELS, SOUNDSCAPE_FILE_EXTENSION } from '../src/shared/ambientSoundscapeFile';
+import { SOUNDSCAPE_FILE_CHANNELS, SOUNDSCAPE_FILE_EXTENSION } from '../src/shared/soundscapeFile';
 import { app, BrowserWindow, Menu, ipcMain, dialog, protocol, shell } from 'electron'
 import type { Session, PrintToPDFOptions } from 'electron'
 import { fileURLToPath } from 'node:url'
@@ -1029,7 +1029,7 @@ function registerIpcHandlers() {
 
   // ---- Soundscape files ----------------------------------------------------
   // Only the dialogs and the file: soundscapes live in the renderer's state
-  // (see src/shared/ambientSoundscapeFile.ts).
+  // (see src/shared/soundscapeFile.ts).
 
   ipcMain.handle(SOUNDSCAPE_FILE_CHANNELS.save, async (_event, content: unknown, defaultName: unknown) => {
     if (typeof content !== 'string') return;

@@ -5,7 +5,7 @@ import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent,
 import ReactMarkdown from 'react-markdown'
 import { SidebarOptionsPanel } from './sidebar/SidebarOptionsPanel'
 import { AudioControls } from './components/AudioControls'
-import { ambientSoundEngine } from './sound/AmbientSoundEngine'
+import { soundscapeEngine } from './sound/SoundscapeEngine'
 import { isPlaylistButtonSlot } from './shared/audioPlayer'
 import { isTextEntryElement, mayTakeFocusOnPress, mayHoldKeyboard } from './shared/focusOwnership'
 import { focusEscapeHoldRing } from './editorSection/escapeHoldRingFocus'
@@ -26,7 +26,7 @@ import {
   typingSoundManager,
 } from './sound/TypingSoundManager'
 import type { PersistedMenuState, PersistedSidebarViewState } from './shared/appState'
-import { DEFAULT_AMBIENT_PREFERENCES, sanitizeAmbientPreferences, type AmbientPreferences } from './shared/ambientSound'
+import { DEFAULT_SOUNDSCAPE_PREFERENCES, sanitizeSoundscapePreferences, type SoundscapePreferences } from './shared/soundscape'
 import { DARK_FACTORY_PRESETS, LIGHT_FACTORY_PRESETS } from './shared/presets'
 import {
   DEFAULT_GLAZE_SETTINGS,
@@ -2711,14 +2711,14 @@ function App() {
   const [musicMuted, setMusicMuted] = useState(false)
   const [musicReverbBypassed, setMusicReverbBypassed] = useState(false)
   const [musicSoundOptionsOpen, setMusicSoundOptionsOpen] = useState(false)
-  // The ambient engine follows this state and nothing else: every change --
+  // The soundscape engine follows this state and nothing else: every change --
   // a control, the player's switch, a restore from disk -- reaches it through
   // this one effect, so there is no path that updates the sound without the
   // state or the state without the sound.
-  const [ambientPreferences, setAmbientPreferences] = useState<AmbientPreferences>(DEFAULT_AMBIENT_PREFERENCES)
+  const [soundscapePreferences, setSoundscapePreferences] = useState<SoundscapePreferences>(DEFAULT_SOUNDSCAPE_PREFERENCES)
   useEffect(() => {
-    ambientSoundEngine.apply(ambientPreferences)
-  }, [ambientPreferences])
+    soundscapeEngine.apply(soundscapePreferences)
+  }, [soundscapePreferences])
   const [musicActiveSlots, setMusicActiveSlots] = useState<import('./shared/audioPlayer').PlaylistSlot[]>([])
   // Last-played song/position/playing-state restored from the previous session,
   // handed to AudioControls once as its "initial*" props (see below).
@@ -3589,7 +3589,7 @@ function App() {
   // events, and which of the two it was is decided on the RELEASE: the
   // contextmenu event is no guide, since Chromium fires it on the press on
   // some platforms and on the release on others. The soundscape buttons
-  // (AmbientSoundOptions.tsx) do the same gesture the same way.
+  // (SoundscapeOptions.tsx) do the same gesture the same way.
   const customLoadoutExportHoldRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
 
   const cancelCustomLoadoutExportHold = useCallback(() => {
@@ -4464,7 +4464,7 @@ function App() {
       musicMuted,
       musicReverbBypassed,
       musicSoundOptionsOpen,
-      ambientSound: ambientPreferences,
+      soundscapes: soundscapePreferences,
       musicActiveSlots,
       musicLastSongId: musicPlaybackRef.current.songId ?? undefined,
       musicLastPositionSec: musicPlaybackRef.current.positionSec,
@@ -4592,7 +4592,7 @@ function App() {
     musicMuted,
     musicReverbBypassed,
     musicSoundOptionsOpen,
-    ambientPreferences,
+    soundscapePreferences,
     musicActiveSlots,
     darkMode,
     uiMode,
@@ -6787,7 +6787,7 @@ ${markdownHtml}
             setMusicMuted(appState.menu.musicMuted ?? false)
             setMusicReverbBypassed(appState.menu.musicReverbBypassed ?? false)
             setMusicSoundOptionsOpen(appState.menu.musicSoundOptionsOpen ?? false)
-            setAmbientPreferences(sanitizeAmbientPreferences(appState.menu.ambientSound))
+            setSoundscapePreferences(sanitizeSoundscapePreferences(appState.menu.soundscapes))
             if (Array.isArray(appState.menu.musicActiveSlots)) {
               setMusicActiveSlots(
                 (appState.menu.musicActiveSlots as number[]).filter(isPlaylistButtonSlot)
@@ -10155,8 +10155,8 @@ ${markdownHtml}
                         setTypingSoundEnabled={setTypingSoundEnabled}
                         typingSoundSet={typingSoundSet}
                         setTypingSoundSet={setTypingSoundSet}
-                        ambientPreferences={ambientPreferences}
-                        onAmbientPreferencesChange={setAmbientPreferences}
+                        soundscapePreferences={soundscapePreferences}
+                        onSoundscapePreferencesChange={setSoundscapePreferences}
                         audioKeyVolume={audioKeyVolume}
                         setAudioKeyVolume={setAudioKeyVolume}
                         audioKeyVariance={audioKeyVariance}
@@ -10479,8 +10479,8 @@ ${markdownHtml}
                 onReverbBypassedChange={setMusicReverbBypassed}
                 activeSlots={musicActiveSlots}
                 onActiveSlotsChange={setMusicActiveSlots}
-                ambientPreferences={ambientPreferences}
-                onAmbientPreferencesChange={setAmbientPreferences}
+                soundscapePreferences={soundscapePreferences}
+                onSoundscapePreferencesChange={setSoundscapePreferences}
                 initialSongId={musicRestoreSongId}
                 initialPositionSec={musicRestorePositionSec}
                 initialWasPlaying={musicRestoreWasPlaying}

@@ -1,11 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
-import { createAmbientChannel, AMBIENT_CHANNEL_ROSTER, DEFAULT_AMBIENT_WEATHER, type AmbientChannelSettings, type AmbientWeatherSettings } from '../shared/ambientSound';
-import { toWorkletChannel } from '../shared/ambientSoundDsp';
-import { buildNoiseLoops, noiseLoopGains, type NoiseLoops } from '../shared/ambientNoiseLoops';
+import { createSoundscapeChannel, SOUNDSCAPE_CHANNEL_ROSTER, DEFAULT_SOUNDSCAPE_WEATHER, type SoundscapeChannelSettings, type SoundscapeWeatherSettings } from '../shared/soundscape';
+import { toWorkletChannel } from '../shared/soundscapeDsp';
+import { buildNoiseLoops, noiseLoopGains, type NoiseLoops } from '../shared/soundscapeNoiseLoops';
 
-export const generatorSource = `${readFileSync(fileURLToPath(new URL('../../public/ambient-generator.js', import.meta.url)), 'utf8')}
+export const generatorSource = `${readFileSync(fileURLToPath(new URL('../../public/soundscape-generator.js', import.meta.url)), 'utf8')}
 ;globalThis.__generator = { RAIN_SURFACE_ANCHORS, surfaceProfile, faderGain, WET_BUBBLE_CHANCE, RAIN_DRIPS_MAX_PER_SEC, CHIME_MATERIALS, chimeMaterial, FIRE_POP, partGain, waterRadiusBounds };`;
 
 const loopsByRate = new Map<number, { loops: NoiseLoops; gains: Record<string, number> }>();
@@ -20,8 +20,8 @@ export function noiseAt(sampleRate: number) {
 export interface Rendered { left: number[]; right: number[]; sendLeft: number[]; sendRight: number[] }
 
 export function createProcessor(
-  channels: AmbientChannelSettings[],
-  { seed = 1, sampleRate = 16000, blockSize = 128, weather = DEFAULT_AMBIENT_WEATHER as AmbientWeatherSettings, loops }: { seed?: number; sampleRate?: number; blockSize?: number; weather?: AmbientWeatherSettings; loops?: NoiseLoops } = {},
+  channels: SoundscapeChannelSettings[],
+  { seed = 1, sampleRate = 16000, blockSize = 128, weather = DEFAULT_SOUNDSCAPE_WEATHER as SoundscapeWeatherSettings, loops }: { seed?: number; sampleRate?: number; blockSize?: number; weather?: SoundscapeWeatherSettings; loops?: NoiseLoops } = {},
 ) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let Processor!: new (options: unknown) => any;
@@ -37,7 +37,7 @@ export function createProcessor(
   runInNewContext(generatorSource, scope);
   const noise = noiseAt(sampleRate);
   const processor = new Processor({ processorOptions: { seed, noiseLoops: loops ?? noise.loops, noiseGains: loops ? { brown: 1, pink: 1, white: 1 } : noise.gains } });
-  const configure = (next: AmbientChannelSettings[], nextWeather = weather) => {
+  const configure = (next: SoundscapeChannelSettings[], nextWeather = weather) => {
     processor.port.onmessage?.({ data: { type: 'configure', channels: next.map(toWorkletChannel), weather: nextWeather } });
   };
   configure(channels);
@@ -66,9 +66,9 @@ export function createProcessor(
 }
 
 /** One roster channel of `kind`, enabled at fader 1, near and centred, with overrides. */
-export function layer<K extends AmbientChannelSettings['kind']>(kind: K, overrides: Partial<Extract<AmbientChannelSettings, { kind: K }>> = {}, number = 1) {
-  const entry = AMBIENT_CHANNEL_ROSTER.filter((item) => item.kind === kind)[number - 1];
-  return createAmbientChannel(entry.id, kind, { enabled: true, volume: 1, ...overrides } as never);
+export function layer<K extends SoundscapeChannelSettings['kind']>(kind: K, overrides: Partial<Extract<SoundscapeChannelSettings, { kind: K }>> = {}, number = 1) {
+  const entry = SOUNDSCAPE_CHANNEL_ROSTER.filter((item) => item.kind === kind)[number - 1];
+  return createSoundscapeChannel(entry.id, kind, { enabled: true, volume: 1, ...overrides } as never);
 }
 
 export function rms(samples: number[]): number {

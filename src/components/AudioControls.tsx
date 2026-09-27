@@ -10,7 +10,7 @@ import {
   PLAYLIST_SLOT_THEMES,
   shouldStopCurrentSongOnSlotToggle,
 } from '../shared/audioPlayer'
-import { AMBIENT_FACTORY_PRESETS, applyAmbientPreset, nextAmbientPreset, type AmbientPreferences } from '../shared/ambientSound'
+import { FACTORY_SOUNDSCAPE_ICONS, SOUNDSCAPE_FACTORY_PRESETS, applySoundscapePreset, nextSoundscapePreset, type SoundscapePreferences } from '../shared/soundscape'
 import {
   fromDisplayLevel,
   nudgeLevel,
@@ -84,8 +84,8 @@ export interface AudioControlsProps {
    * and the master volume (a wheel over that switch); everything else is in
    * the settings panel.
    */
-  ambientPreferences: AmbientPreferences
-  onAmbientPreferencesChange: (preferences: AmbientPreferences) => void
+  soundscapePreferences: SoundscapePreferences
+  onSoundscapePreferencesChange: (preferences: SoundscapePreferences) => void
   /**
    * Whether the bottom row is showing the sound options instead of the
    * playlist buckets. Owned by the parent so it survives a restart.
@@ -119,8 +119,8 @@ export const AudioControls = memo(function AudioControls({
   onReverbBypassedChange,
   activeSlots,
   onActiveSlotsChange,
-  ambientPreferences,
-  onAmbientPreferencesChange,
+  soundscapePreferences,
+  onSoundscapePreferencesChange,
   isSoundOptionsOpen,
   onSoundOptionsOpenChange,
   initialSongId,
@@ -1070,9 +1070,9 @@ export const AudioControls = memo(function AudioControls({
               </button>
             )
           })}
-          <AmbientNoiseButton
-            preferences={ambientPreferences}
-            onChange={onAmbientPreferencesChange}
+          <SoundscapesButton
+            preferences={soundscapePreferences}
+            onChange={onSoundscapePreferencesChange}
           />
           </>
         )}
@@ -1153,24 +1153,29 @@ function SoundLevelButton({
 }
 
 /**
- * The ambient-noise switch at the end of the playlist row, which is also the
- * ambient master volume: a click turns ambient sound on or off, a wheel over
+ * The Soundscapes switch at the end of the playlist row, which is also the
+ * Soundscapes master volume: a click turns soundscapes on or off, a wheel over
  * it nudges the level exactly like a music level readout (Shift: by 10), and
  * a right-click steps to the next soundscape -- the user's own, or the
- * factory ones if there are none (nextAmbientPreset) -- turning ambient on. Wheeling turns ambient sound on if it was off -- the same "adjusting
+ * factory ones if there are none (nextSoundscapePreset) -- turning soundscapes on. Wheeling turns soundscapes on if it was off -- the same "adjusting
  * turns it back on" rule the music volume follows with mute.
  *
  * Its own component for the reason SoundLevelButton is: it owns the ref its
  * native wheel listener is bound to. The playlist row unmounts while the
  * sound options are showing, and a listener bound from the parent would not
  * be re-bound to the new button when the row comes back.
+ *
+ * Its face is the soundscape a click would play -- the current settings, on or
+ * off: a factory soundscape's icon, a custom one's number (as its button in the
+ * options panel shows it), and the cloud-bolt when the settings match no saved
+ * soundscape and so have no face of their own.
  */
-function AmbientNoiseButton({
+function SoundscapesButton({
   preferences,
   onChange,
 }: {
-  preferences: AmbientPreferences
-  onChange: (preferences: AmbientPreferences) => void
+  preferences: SoundscapePreferences
+  onChange: (preferences: SoundscapePreferences) => void
 }) {
   const ref = useRef<HTMLButtonElement | null>(null)
   const handleWheel = useCallback((event: WheelEvent) => {
@@ -1185,11 +1190,12 @@ function AmbientNoiseButton({
   useNonPassiveWheel(ref, handleWheel)
 
   const level = toDisplayLevel(preferences.masterVolume)
-  const next = nextAmbientPreset(preferences)
+  const next = nextSoundscapePreset(preferences)
   // A null or unknown active id means the mix was hand-edited away from any
   // saved soundscape, so it has no name to show.
-  const current = [...preferences.customPresets, ...AMBIENT_FACTORY_PRESETS]
+  const current = [...preferences.customPresets, ...SOUNDSCAPE_FACTORY_PRESETS]
     .find((preset) => preset.id === preferences.activePresetId)
+  const customNumber = preferences.customPresets.findIndex((preset) => preset.id === preferences.activePresetId) + 1
   const tooltip = [
     `Soundscape: ${preferences.enabled ? (current?.name ?? 'Custom') : 'OFF'}`,
     `[Scroll] Volume: ${level}`,
@@ -1199,18 +1205,20 @@ function AmbientNoiseButton({
     <button
       ref={ref}
       type="button"
-      className={`audio-ctrl-btn audio-ambient-noise-btn${preferences.enabled ? ' is-active' : ''}`}
+      className={`audio-ctrl-btn audio-soundscapes-btn${preferences.enabled ? ' is-active' : ''}`}
       data-tooltip={tooltip}
       data-secondary-press="action"
       onContextMenu={(event) => {
         event.preventDefault()
-        onChange(applyAmbientPreset(preferences, next))
+        onChange(applySoundscapePreset(preferences, next))
       }}
-      aria-label={preferences.enabled ? 'Turn ambient noise off' : 'Turn ambient noise on'}
+      aria-label={preferences.enabled ? 'Turn soundscapes off' : 'Turn soundscapes on'}
       aria-pressed={preferences.enabled}
       onClick={() => onChange({ ...preferences, enabled: !preferences.enabled })}
     >
-      <span className="fa-solid fa-cloud-bolt" aria-hidden="true" />
+      {customNumber > 0
+        ? <span className="options-loadout-index" aria-hidden="true">{customNumber}</span>
+        : <span className={`fa-solid ${FACTORY_SOUNDSCAPE_ICONS[preferences.activePresetId ?? ''] ?? 'fa-cloud-bolt'}`} aria-hidden="true" />}
     </button>
   )
 }

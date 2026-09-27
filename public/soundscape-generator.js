@@ -1,17 +1,17 @@
 /**
- * Ambient sound generator: the AudioWorklet that synthesises every ambient
+ * Soundscape generator: the AudioWorklet that synthesises every soundscape
  * layer, sample by sample, on the audio thread.
  *
  * It is plain JavaScript under public/ because an AudioWorklet module is
  * loaded by URL and cannot import the app's TypeScript. The settings it reads
- * are defined in src/shared/ambientSound.ts and resolved for it in
- * src/shared/ambientSoundDsp.ts (toWorkletConfiguration); the engine
- * (src/sound/AmbientSoundEngine.ts) posts them here as a `configure` message.
+ * are defined in src/shared/soundscape.ts and resolved for it in
+ * src/shared/soundscapeDsp.ts (toWorkletConfiguration); the engine
+ * (src/sound/SoundscapeEngine.ts) posts them here as a `configure` message.
  *
  * Outputs: two stereo outputs -- 0 the DIRECT sound of every layer, 1 what
  * every layer SENDS to the space (the engine's reverb). Every layer, of every
  * kind, reaches them through one stage (placeLayer): its distance darkens it
- * and splits it between the two, by one rule (resolveAmbientSpace). Thunder
+ * and splits it between the two, by one rule (resolveSoundscapeSpace). Thunder
  * alone places itself, because a peal's distance is drawn per peal.
  *
  * Levels are absolute: a layer's `gain` (its fader times its kind's level) is
@@ -36,7 +36,7 @@
  * rest of the audio -- music included. A block that runs late is heard as a
  * tear, and it also delays the next `configure` message. Hence:
  * - work that repeats is done once. Noise is read from loops rendered on the
- *   main thread (src/shared/ambientNoiseLoops.ts); rain drops are played
+ *   main thread (src/shared/soundscapeNoiseLoops.ts); rain drops are played
  *   back from a per-layer bank of recordings, a quarter of them recorded
  *   live as they play so the bank keeps changing (addVoice); the noise
  *   filter's loudness compensation is a table built on the main thread.
@@ -78,8 +78,8 @@
  * times and rates geometrically, since that is how pitch and time are heard,
  * and everything else linearly.
  *
- * Every anchor must match AMBIENT_RAIN_SURFACE_ANCHORS in
- * src/shared/ambientSound.ts, name and position; ambient-generator.test.ts
+ * Every anchor must match SOUNDSCAPE_RAIN_SURFACE_ANCHORS in
+ * src/shared/soundscape.ts, name and position; soundscape-generator.test.ts
  * checks that.
  */
 const GLASS_TREBLE = { count: [1, 3], hz: [2100, 9200], decaySec: [0.004, 0.035], amplitude: [0.018, 0.075] };
@@ -268,7 +268,7 @@ const VOICE_SILENCE = 1e-5;
  * and taken out: synthesised that way they read as something falling down
  * stairs, or popcorn, rather than as thunder.
  * Between peals a layer is silent for L x (1 - share) / share, L the peal's
- * length (see AmbientThunderChannelSettings); and before each peal the
+ * length (see SoundscapeThunderChannelSettings); and before each peal the
  * layer's randomness varies that peal's controls (thunderPealSettings).
  */
 const THUNDER_PEAK_AT = [0.22, 0.4];
@@ -373,8 +373,8 @@ function stereoImage(pan, width) {
 }
 
 /**
- * A part's level slider as a gain; mirrors ambientPartGain in
- * src/shared/ambientSound.ts, which ambient-generator.test.ts holds it to:
+ * A part's level slider as a gain; mirrors soundscapePartGain in
+ * src/shared/soundscape.ts, which soundscape-generator.test.ts holds it to:
  * silence at 0, as authored at PART_AUTHORED, PART_DB_PER_UNIT decibels per
  * unit of travel either side.
  */
@@ -399,7 +399,7 @@ function panGains(position) {
 /** The most rain voices one layer keeps ringing at once. */
 const MAX_RAIN_VOICES = 48;
 
-/** Large drops per second at `drips` = 1; mirrors AMBIENT_RAIN_DRIPS_MAX_PER_SEC. */
+/** Large drops per second at `drips` = 1; mirrors SOUNDSCAPE_RAIN_DRIPS_MAX_PER_SEC. */
 const RAIN_DRIPS_MAX_PER_SEC = 3;
 
 /** Average seconds between the bed's swell targets. */
@@ -407,8 +407,8 @@ const BED_SWELL_PERIOD_SEC = 2.5;
 
 
 /**
- * A fader position (0-1) as a gain; mirrors ambientFaderGain in
- * src/shared/ambientSound.ts, which ambient-generator.test.ts holds it to.
+ * A fader position (0-1) as a gain; mirrors soundscapeFaderGain in
+ * src/shared/soundscape.ts, which soundscape-generator.test.ts holds it to.
  * Thunder needs it here because randomness moves each peal's fader.
  */
 const FADER_RANGE_DB = 48;
@@ -576,7 +576,7 @@ const FIRE_EDGE_GLIDE_SHARE = [1.2, 0.04];
  * fading out over `fallSec` on a raised cosine. Its onset is `riseSec`: short
  * enough to be heard as starting with the pop, long enough not to click. A
  * pop sets one off with the chance `sizzle` gives, while fewer than
- * FIRE_MAX_SIZZLES are sizzling (mirrors AMBIENT_FIRE_MAX_SIZZLES); each at
+ * FIRE_MAX_SIZZLES are sizzling (mirrors SOUNDSCAPE_FIRE_MAX_SIZZLES); each at
  * its own place on the tone track, within `toneSpread` of the slider either
  * way (so its own pitch and frazzle together), and its pitch drifts
  * while it sizzles (+/- `driftOctaves`, gliding over `wobbleSec`).
@@ -763,13 +763,13 @@ function bandPass(filter, input) {
   return v1;
 }
 
-class AmbientGenerator extends AudioWorkletProcessor {
+class SoundscapeGenerator extends AudioWorkletProcessor {
   constructor(options) {
     super();
     const processorOptions = options?.processorOptions ?? {};
     this.rootStream = { seed: (processorOptions.seed ?? 1) >>> 0 };
     // One seamless loop per noise type, rendered on the main thread
-    // (src/shared/ambientNoiseLoops.ts), and the gain that brings each to
+    // (src/shared/soundscapeNoiseLoops.ts), and the gain that brings each to
     // the same audible level (noiseLoopGains).
     this.noiseLoops = processorOptions.noiseLoops ?? {};
     this.noiseGains = processorOptions.noiseGains ?? {};
@@ -790,10 +790,10 @@ class AmbientGenerator extends AudioWorkletProcessor {
     // The scene's gust this block, -1..1: the weather signal x gustiness.
     this.gust = 0;
     // Set by a `stop` message when the engine tears the graph down
-    // (AmbientSoundEngine's teardown). process() then returns false, which is
+    // (SoundscapeEngine's teardown). process() then returns false, which is
     // the only way a processor tells the browser it may be collected: one
     // that keeps returning true is kept alive and keeps rendering after its
-    // node has been disconnected, and every ambient on/off would add one.
+    // node has been disconnected, and every soundscape on/off would add one.
     this.stopped = false;
     this.port.onmessage = (event) => {
       if (event.data?.type === 'stop') {
@@ -920,7 +920,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
   /**
    * A layer's distance, turned into what placeLayer needs: its direct and
    * reverb-send gains, and its darkening -- a two-pole low-pass at Q 0.707
-   * per side. Distance arrives resolved (`space`, resolveAmbientSpace). At
+   * per side. Distance arrives resolved (`space`, resolveSoundscapeSpace). At
    * distance 0 there is no darkening filter at all, so a near layer is
    * untouched. Thunder places each peal itself and has none of this.
    */
@@ -1091,7 +1091,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
     const k = 1 / (channel.q ?? Math.SQRT1_2);
     channel.filterK = k;
     // Low-pass and unity-peak band-pass, blended by focus
-    // (ambientSoundDsp.ts's noiseFilterPower is this response).
+    // (soundscapeDsp.ts's noiseFilterPower is this response).
     channel.lowMix = 1 - focus;
     channel.bandMix = focus * k;
     // A filter change must reach the next segment's coefficients.
@@ -1153,7 +1153,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
 
   /**
    * The noise cycle's value (-1..1) at `phase` (0..1), interpolated from the
-   * table the engine built (src/shared/ambientSoundDsp.ts's buildNoiseCycle).
+   * table the engine built (src/shared/soundscapeDsp.ts's buildNoiseCycle).
    * A layer configured without one plays a plain sine.
    */
   cycleAt(channel, phase) {
@@ -1169,7 +1169,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
   /**
    * The gain that holds a noise layer's loudness with its filter at
    * `cutoffHz`, read by the log of the cutoff from the table the main thread
-   * built for its colour and focus (ambientSoundDsp.ts's buildNoiseToneTable).
+   * built for its colour and focus (soundscapeDsp.ts's buildNoiseToneTable).
    */
   toneGainAt(channel, cutoffHz) {
     const table = channel.toneTable;
@@ -1983,7 +1983,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
    * (or had its rate changed) peals within THUNDER_FIRST_PEAL_SEC -- waiting
    * the mean interval of minutes would read as nothing happening -- and at
    * random after that. Its distance's direct and reverb-send gains are the
-   * shared rule's (resolveAmbientSpace), per peal; its darkening is not applied on top,
+   * shared rule's (resolveSoundscapeSpace), per peal; its darkening is not applied on top,
    * because the rumble's own low-pass (startPeal) already is that darkening.
    */
   configureThunder(channel, before) {
@@ -2033,7 +2033,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
     };
   }
 
-  /** resolveAmbientSpace at `distance`, from the table the main thread built. */
+  /** resolveSoundscapeSpace at `distance`, from the table the main thread built. */
   thunderSpaceAt(channel, distance) {
     const table = channel.spaceTable;
     if (!table || table.length === 0) return { directGain: 1, reverbSend: 0 };
@@ -3325,4 +3325,4 @@ class AmbientGenerator extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor('ambient-generator', AmbientGenerator);
+registerProcessor('soundscape-generator', SoundscapeGenerator);

@@ -19,7 +19,7 @@ import type { RefObject } from 'react'
  * element must live exactly as long as the component calling this: an
  * element rendered conditionally inside a longer-lived parent should be its
  * own component owning its own ref (see AudioControls.tsx's SoundLevelButton
- * and AmbientNoiseButton).
+ * and SoundscapeNoiseButton).
  */
 export function useNonPassiveWheel<T extends HTMLElement>(
   ref: RefObject<T | null>,

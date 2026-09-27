@@ -1,7 +1,7 @@
 /**
- * The noise the ambient noise layers are made of, rendered once on the main
+ * The noise the soundscape's noise layers are made of, rendered once on the main
  * thread and handed to the AudioWorklet when it is created
- * (src/sound/AmbientSoundEngine.ts, public/ambient-generator.js).
+ * (src/sound/SoundscapeEngine.ts, public/soundscape-generator.js).
  *
  * A noise layer reads one of these loops rather than generating noise per
  * sample: noise has no features for an ear to recognise, each layer reads
@@ -12,13 +12,13 @@
  * everything that thread plays -- the music included -- for longer than a
  * block lasts.
  */
-import { AMBIENT_NOISE_TYPES, type AmbientNoiseType } from './ambientSound';
+import { SOUNDSCAPE_NOISE_TYPES, type SoundscapeNoiseType } from './soundscape';
 
 export const NOISE_LOOP_SECONDS = 10;
 /** The loop's ends are crossfaded over this long so the loop has no seam. */
 export const NOISE_LOOP_CROSSFADE_SECONDS = 0.25;
 
-export type NoiseLoops = Record<AmbientNoiseType, Float32Array>;
+export type NoiseLoops = Record<SoundscapeNoiseType, Float32Array>;
 
 /** A seeded linear congruential generator, returning values in 0..1. */
 function makeRandom(seed: number): () => number {
@@ -102,7 +102,7 @@ const PINK_REFERENCE_POWER = pinkPower(PINK_LOW_STAGES);
  * or brown (a leaky integrator of white with its corner at BROWN_CORNER_HZ,
  * its gain set so its level is the same at every rate).
  */
-export function createNoiseSource(type: AmbientNoiseType, random: () => number, sampleRate: number): () => number {
+export function createNoiseSource(type: SoundscapeNoiseType, random: () => number, sampleRate: number): () => number {
   const pinkStages = pinkLowStagesAt(sampleRate);
   const pinkState = [0, 0, 0, 0, 0];
   let pinkCorrection = 0;
@@ -137,7 +137,7 @@ export function createNoiseSource(type: AmbientNoiseType, random: () => number, 
  * making. Brown noise is a slow random walk, so a hard seam there would be a
  * step; the crossfade makes the seam one more ordinary step.
  */
-export function buildNoiseLoop(type: AmbientNoiseType, sampleRate: number, seed: number): Float32Array {
+export function buildNoiseLoop(type: SoundscapeNoiseType, sampleRate: number, seed: number): Float32Array {
   const length = Math.round(NOISE_LOOP_SECONDS * sampleRate);
   const fade = Math.round(NOISE_LOOP_CROSSFADE_SECONDS * sampleRate);
   const next = createNoiseSource(type, makeRandom(seed), sampleRate);
@@ -153,7 +153,7 @@ export function buildNoiseLoop(type: AmbientNoiseType, sampleRate: number, seed:
 
 /** All three loops, each from its own seed. */
 export function buildNoiseLoops(sampleRate: number, seed = 1): NoiseLoops {
-  return Object.fromEntries(AMBIENT_NOISE_TYPES.map((type, index) => (
+  return Object.fromEntries(SOUNDSCAPE_NOISE_TYPES.map((type, index) => (
     [type, buildNoiseLoop(type, sampleRate, (seed + Math.imul(index + 1, 0x9e3779b9)) >>> 0)]
   ))) as NoiseLoops;
 }
@@ -169,9 +169,9 @@ export const NOISE_LOOP_REFERENCE_RMS = 0.25;
  * move between the three without its loudness jumping. Thunder reads the raw
  * brown loop and does not use these.
  */
-export function noiseLoopGains(loops: NoiseLoops, sampleRate: number): Record<AmbientNoiseType, number> {
+export function noiseLoopGains(loops: NoiseLoops, sampleRate: number): Record<SoundscapeNoiseType, number> {
   const pole = Math.exp((-2 * Math.PI * 20) / sampleRate);
-  return Object.fromEntries(AMBIENT_NOISE_TYPES.map((type) => {
+  return Object.fromEntries(SOUNDSCAPE_NOISE_TYPES.map((type) => {
     const loop = loops[type];
     let low = 0;
     let power = 0;
@@ -182,5 +182,5 @@ export function noiseLoopGains(loops: NoiseLoops, sampleRate: number): Record<Am
     }
     const rms = Math.sqrt(power / Math.max(1, loop.length));
     return [type, rms > 0 ? NOISE_LOOP_REFERENCE_RMS / rms : 0];
-  })) as Record<AmbientNoiseType, number>;
+  })) as Record<SoundscapeNoiseType, number>;
 }

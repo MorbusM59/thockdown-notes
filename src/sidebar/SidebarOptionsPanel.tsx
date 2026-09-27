@@ -3,9 +3,10 @@ import type * as React from 'react'
 import { useRef } from 'react'
 import { AccordionGroup, AccordionSection } from '../components/AccordionSection'
 import { CompactScrollbarSlider } from '../components/CompactScrollbarSlider'
-import { AmbientSoundOptions } from './AmbientSoundOptions'
+import { SoundscapeOptions } from './SoundscapeOptions'
+import { OptionsSubsectionLabel } from './OptionsSubsectionLabel'
 import { exportSoundscapes, importSoundscapes } from './soundscapeFileActions'
-import type { AmbientPreferences } from '../shared/ambientSound'
+import type { SoundscapePreferences } from '../shared/soundscape'
 import {
   CONTINUOUS_DOCUMENT_MAX_THRESHOLD_BLOCKS,
   CONTINUOUS_DOCUMENT_MIN_THRESHOLD_BLOCKS,
@@ -538,8 +539,8 @@ export interface SidebarOptionsPanelProps {
   setTypingSoundEnabled: (value: boolean) => void
   typingSoundSet: 'A' | 'B' | 'C' | 'D'
   setTypingSoundSet: (value: 'A' | 'B' | 'C' | 'D') => void
-  ambientPreferences: AmbientPreferences
-  onAmbientPreferencesChange: (preferences: AmbientPreferences) => void
+  soundscapePreferences: SoundscapePreferences
+  onSoundscapePreferencesChange: (preferences: SoundscapePreferences) => void
   audioKeyVolume: number
   setAudioKeyVolume: (value: number) => void
   audioKeyVariance: number
@@ -838,8 +839,8 @@ export function SidebarOptionsPanel({
   setTypingSoundEnabled,
   typingSoundSet,
   setTypingSoundSet,
-  ambientPreferences,
-  onAmbientPreferencesChange,
+  soundscapePreferences,
+  onSoundscapePreferencesChange,
   audioKeyVolume,
   setAudioKeyVolume,
   audioKeyVariance,
@@ -1769,14 +1770,14 @@ export function SidebarOptionsPanel({
           </div>
         </div>
 
-        <div className="sidebar-options-divider" aria-hidden="true" />
+        <OptionsSubsectionLabel>Surfaces</OptionsSubsectionLabel>
 
         <div className="options-color-grid options-element-grid options-row-grid options-row-grid-top" role="group" aria-label="App base and texture colors">
           {topRowHighlightKeys.map((key) => renderHighlightSwatchButton(key))}
           {textureTargets.map((surface) => renderTextureSwatchButton(surface))}
         </div>
 
-        <div className="sidebar-options-divider" aria-hidden="true" />
+        <OptionsSubsectionLabel>Text</OptionsSubsectionLabel>
 
         <div className="options-color-grid options-element-grid options-row-grid options-row-grid-middle" role="group" aria-label="Mode text and selection colors">
           <button
@@ -1825,11 +1826,11 @@ export function SidebarOptionsPanel({
 
         {!isPreviewMode ? (
           <>
-            <div className="sidebar-options-divider" aria-hidden="true" />
+            <OptionsSubsectionLabel>Boxes</OptionsSubsectionLabel>
             <div className="options-color-grid options-element-grid options-row-grid options-row-grid-bottom" role="group" aria-label="Edit mode box colors">
               {BOX_HIGHLIGHT_COLOR_ORDER.map((key) => renderHighlightSwatchButton(key))}
             </div>
-            <div className="sidebar-options-divider" aria-hidden="true" />
+            <OptionsSubsectionLabel>Markdown</OptionsSubsectionLabel>
             <div className="options-color-grid options-element-grid options-row-grid options-row-grid-edit-markdown" role="group" aria-label="Edit mode markdown colors">
               {MARKDOWN_HIGHLIGHT_COLOR_ORDER.map((key) => renderHighlightSwatchButton(key))}
             </div>
@@ -1983,6 +1984,7 @@ export function SidebarOptionsPanel({
             </div>
           </div>
 
+          <OptionsSubsectionLabel>Light</OptionsSubsectionLabel>
           <div className="options-glaze-cell options-glaze-cell-span-3">
             <CompactScrollbarSlider
               id="glaze-linear-stack-count"
@@ -2057,6 +2059,7 @@ export function SidebarOptionsPanel({
             />
           </div>
 
+          <OptionsSubsectionLabel>Shape</OptionsSubsectionLabel>
           <div className="options-glaze-cell options-glaze-cell-span-2">
             <CompactScrollbarSlider
               id="glaze-gloom-position"
@@ -2417,6 +2420,7 @@ export function SidebarOptionsPanel({
           ><span className="options-hsva-glyph fa-solid fa-eye" aria-hidden="true" /></button>
 
 
+          <OptionsSubsectionLabel>Trail</OptionsSubsectionLabel>
           <div className="options-glaze-cell options-glaze-cell-span-3">
             <CompactScrollbarSlider
               id="cursor-dot-count"
@@ -2497,6 +2501,7 @@ export function SidebarOptionsPanel({
           </div>
 
 
+          <OptionsSubsectionLabel>Pulse</OptionsSubsectionLabel>
           <div className="options-glaze-cell options-glaze-cell-span-3">
             <CompactScrollbarSlider
               id="cursor-pulse-magnitude"
@@ -2524,6 +2529,7 @@ export function SidebarOptionsPanel({
             />
           </div>
 
+          <OptionsSubsectionLabel>Click</OptionsSubsectionLabel>
           <div className="options-glaze-cell options-glaze-cell-span-2">
             <CompactScrollbarSlider
               id="cursor-click-ramp"
@@ -2746,6 +2752,7 @@ export function SidebarOptionsPanel({
             />
           </div>
 
+          <OptionsSubsectionLabel>Blink</OptionsSubsectionLabel>
           {/* Animation shape. One button per curve, same visual language as the
               custom-layout slots -- the selected one carries .is-active. */}
           <div className="options-caret-preset-row" role="group" aria-label="Caret blink animation">
@@ -2814,6 +2821,7 @@ export function SidebarOptionsPanel({
         iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout."
       >
 <div className="utility-setting-slider-stack" aria-label="Sounds controls">
+          <OptionsSubsectionLabel>Keys</OptionsSubsectionLabel>
           <div className="utility-setting-button-row" role="group" aria-label="Typing sound controls">
             <button
               type="button"
@@ -2886,6 +2894,7 @@ export function SidebarOptionsPanel({
               typingSoundManager.setTypingSoundPitch(nextValue)
             }}
           />
+          <OptionsSubsectionLabel>Mix</OptionsSubsectionLabel>
           <CompactScrollbarSlider
             id="audio-bass-volume"
             min={0}
@@ -2963,9 +2972,9 @@ export function SidebarOptionsPanel({
         </div>
       </AccordionSection>
 
-      <AmbientSoundOptions
-        preferences={ambientPreferences}
-        onChange={onAmbientPreferencesChange}
+      <SoundscapeOptions
+        preferences={soundscapePreferences}
+        onChange={onSoundscapePreferencesChange}
       />
 
       <AccordionSection
@@ -3058,6 +3067,7 @@ export function SidebarOptionsPanel({
         ariaLabel="Scrolling"
         heading="Scrolling"
       >
+        <OptionsSubsectionLabel>Wheel</OptionsSubsectionLabel>
 <div className="utility-setting-slider-stack" aria-label="Wheel scrolling settings">
           {/* Spin-to-keep-scrolling: `auto scroll` sets what counts as a
               spin, `dampen` what happens after one, so they read in that
@@ -3147,6 +3157,7 @@ export function SidebarOptionsPanel({
         ariaLabel="Performance"
         heading="Performance"
       >
+        <OptionsSubsectionLabel>Modes</OptionsSubsectionLabel>
 <div className="utility-setting-button-row" role="group" aria-label="Performance controls">
           <button
             type="button"
@@ -3216,12 +3227,13 @@ export function SidebarOptionsPanel({
             <span className="fa-solid fa-text-height" aria-hidden="true" />
           </button>
         </div>
+        <OptionsSubsectionLabel>Large notes</OptionsSubsectionLabel>
         {/* Where the reader puts the line between a note whose scrollbar is
             measured in pixels and one whose scrollbar counts characters --
             see editor/documentPosition.ts for what each side means and why
             the choice is theirs. The rail names the setting; the tooltip
             names the unit, which is the more useful of the two on hover. */}
-        <div className="utility-setting-slider-stack is-below-button-row" aria-label="Note size threshold">
+        <div className="utility-setting-slider-stack" aria-label="Note size threshold">
           <CompactScrollbarSlider
             id="note-size-threshold"
             min={CONTINUOUS_DOCUMENT_MIN_THRESHOLD_BLOCKS}
@@ -3246,6 +3258,7 @@ export function SidebarOptionsPanel({
         ariaLabel="Notes and Import"
         heading="Data"
       >
+        <OptionsSubsectionLabel>Notes</OptionsSubsectionLabel>
 <div className="options-loadout-grid" role="group" aria-label="Note sync and import actions">
           <button
             type="button"
@@ -3274,6 +3287,9 @@ export function SidebarOptionsPanel({
           >
             <span className="fa-solid fa-folder" aria-hidden="true" />
           </button>
+        </div>
+        <OptionsSubsectionLabel>Layouts</OptionsSubsectionLabel>
+        <div className="options-loadout-grid" role="group" aria-label="Custom layouts">
           <button
             type="button"
             className="btn-icon options-color-swatch options-loadout-btn"
@@ -3292,12 +3308,15 @@ export function SidebarOptionsPanel({
           >
             <span className="fa-solid fa-file-arrow-up" aria-hidden="true" />
           </button>
+        </div>
+        <OptionsSubsectionLabel>Soundscapes</OptionsSubsectionLabel>
+        <div className="options-loadout-grid" role="group" aria-label="Custom soundscapes">
           <button
             type="button"
             className="btn-icon options-color-swatch options-loadout-btn"
-            onClick={() => void exportSoundscapes(ambientPreferences.customPresets, 'my-soundscapes')}
-            disabled={ambientPreferences.customPresets.length === 0}
-            data-tooltip={ambientPreferences.customPresets.length === 0 ? 'No custom soundscapes to export' : 'Export custom soundscapes to a .tds file'}
+            onClick={() => void exportSoundscapes(soundscapePreferences.customPresets, 'my-soundscapes')}
+            disabled={soundscapePreferences.customPresets.length === 0}
+            data-tooltip={soundscapePreferences.customPresets.length === 0 ? 'No custom soundscapes to export' : 'Export custom soundscapes to a .tds file'}
             aria-label="Export custom soundscapes to a .tds file"
           >
             <span className="fa-solid fa-file-audio" aria-hidden="true" />
@@ -3306,8 +3325,8 @@ export function SidebarOptionsPanel({
             type="button"
             className="btn-icon options-color-swatch options-loadout-btn"
             onClick={() => {
-              void importSoundscapes(ambientPreferences).then((next) => {
-                if (next) onAmbientPreferencesChange(next)
+              void importSoundscapes(soundscapePreferences).then((next) => {
+                if (next) onSoundscapePreferencesChange(next)
               })
             }}
             data-tooltip="Import soundscapes from a .tds file"
@@ -3335,6 +3354,7 @@ export function SidebarOptionsPanel({
         iconClass="fa-dice-d20"
         iconTooltip="ThockQuest, reached by right-clicking the User Guide window control."
       >
+        <OptionsSubsectionLabel>Difficulty</OptionsSubsectionLabel>
         <div className="typography-sliders">
           {/* DIFFICULTY: the base of the exponential a monster's power is
               raised by. The gentlest curve is the default and the leftmost
@@ -3376,6 +3396,7 @@ export function SidebarOptionsPanel({
             />
           </div>
         </div>
+        <OptionsSubsectionLabel>Auto play</OptionsSubsectionLabel>
         <div className="typography-sliders">
           {/* AUTO ADVANCE: how far holding space carries. An INDEX rather than
               a value, so the five choices are evenly spaced on the track the
@@ -3417,6 +3438,7 @@ export function SidebarOptionsPanel({
             />
           </div>
         </div>
+        <OptionsSubsectionLabel>Mode</OptionsSubsectionLabel>
         {/* TRUE MODE. A CLICK while nothing is at stake and a HOLD once a run
             has survived a level -- `HOLD_COMMIT_MS`, the threshold this app
             reserves for "I know this is not undoable", which is exactly what
@@ -3428,7 +3450,7 @@ export function SidebarOptionsPanel({
             glyph that changes with the state would be a second, quieter
             answer to a question `aria-pressed` and the lit look already
             answer. */}
-        <div className="options-loadout-grid is-below-sliders" role="group" aria-label="ThockQuest settings">
+        <div className="options-loadout-grid" role="group" aria-label="ThockQuest settings">
           <button
             type="button"
             className={`btn-icon options-color-swatch options-loadout-btn${adventureSettings.trueMode ? ' is-active' : ''}`}

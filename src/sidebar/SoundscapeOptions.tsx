@@ -2,68 +2,61 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AccordionSection } from '../components/AccordionSection'
 import { CompactScrollbarSlider } from '../components/CompactScrollbarSlider'
 import {
-  AMBIENT_CHANNEL_ROSTER,
-  AMBIENT_CHIME_MATERIALS,
-  AMBIENT_CHIME_PITCH_MAX_HZ,
-  AMBIENT_CHIME_PITCH_MIN_HZ,
-  AMBIENT_CHIME_RING_MAX_SEC,
-  AMBIENT_CHIME_RING_MIN_SEC,
-  AMBIENT_CHIME_TUBES_MAX,
-  AMBIENT_CHIME_TUBES_MIN,
-  AMBIENT_FACTORY_PRESETS,
-  AMBIENT_FIRE_PERIOD_MAX_SEC,
-  AMBIENT_FIRE_PERIOD_MIN_SEC,
-  AMBIENT_NOISE_BRIGHTNESS_MAX_HZ,
-  AMBIENT_NOISE_BRIGHTNESS_MIN_HZ,
-  AMBIENT_NOISE_SWEEP_OCTAVES,
-  AMBIENT_PERIOD_MAX_SEC,
-  AMBIENT_PERIOD_MIN_SEC,
-  AMBIENT_RAIN_DRIPS_MAX_PER_SEC,
-  AMBIENT_WATER_BUBBLES_PER_SEC,
-  AMBIENT_RAIN_SURFACE_ANCHORS,
-  AMBIENT_SKEW_MAX,
-  AMBIENT_SKEW_MIN,
-  AMBIENT_THUNDER_JITTER,
-  AMBIENT_THUNDER_LENGTH_MAX_SEC,
-  AMBIENT_THUNDER_LENGTH_MIN_SEC,
-  AMBIENT_WEATHER_PACE_MAX_SEC,
-  AMBIENT_WEATHER_PACE_MIN_SEC,
-  DEFAULT_AMBIENT_SPACE,
-  DEFAULT_AMBIENT_WEATHER,
-  MAX_AMBIENT_CUSTOM_PRESETS,
-  ambientFaderDb,
-  ambientPartDb,
-  ambientSettingsSignature,
-  applyAmbientPreset,
+  SOUNDSCAPE_CHANNEL_ROSTER,
+  SOUNDSCAPE_CHIME_MATERIALS,
+  SOUNDSCAPE_CHIME_PITCH_MAX_HZ,
+  SOUNDSCAPE_CHIME_PITCH_MIN_HZ,
+  SOUNDSCAPE_CHIME_RING_MAX_SEC,
+  SOUNDSCAPE_CHIME_RING_MIN_SEC,
+  SOUNDSCAPE_CHIME_TUBES_MAX,
+  SOUNDSCAPE_CHIME_TUBES_MIN,
+  FACTORY_SOUNDSCAPE_ICONS,
+  SOUNDSCAPE_FACTORY_PRESETS,
+  SOUNDSCAPE_FIRE_PERIOD_MAX_SEC,
+  SOUNDSCAPE_FIRE_PERIOD_MIN_SEC,
+  SOUNDSCAPE_NOISE_BRIGHTNESS_MAX_HZ,
+  SOUNDSCAPE_NOISE_BRIGHTNESS_MIN_HZ,
+  SOUNDSCAPE_NOISE_SWEEP_OCTAVES,
+  SOUNDSCAPE_PERIOD_MAX_SEC,
+  SOUNDSCAPE_PERIOD_MIN_SEC,
+  SOUNDSCAPE_RAIN_DRIPS_MAX_PER_SEC,
+  SOUNDSCAPE_WATER_BUBBLES_PER_SEC,
+  SOUNDSCAPE_RAIN_SURFACE_ANCHORS,
+  SOUNDSCAPE_SKEW_MAX,
+  SOUNDSCAPE_SKEW_MIN,
+  SOUNDSCAPE_THUNDER_JITTER,
+  SOUNDSCAPE_THUNDER_LENGTH_MAX_SEC,
+  SOUNDSCAPE_THUNDER_LENGTH_MIN_SEC,
+  SOUNDSCAPE_WEATHER_PACE_MAX_SEC,
+  SOUNDSCAPE_WEATHER_PACE_MIN_SEC,
+  DEFAULT_SOUNDSCAPE_SPACE,
+  DEFAULT_SOUNDSCAPE_WEATHER,
+  MAX_SOUNDSCAPE_CUSTOM_PRESETS,
+  soundscapeFaderDb,
+  soundscapePartDb,
+  soundscapeSettingsSignature,
+  applySoundscapePreset,
   chimeSemitoneHz,
   chimeSemitoneOf,
   chimeStrikesPerSecond,
   cloneSettings,
-  createAmbientChannel,
+  createSoundscapeChannel,
   rainDropsPerSecond,
-  type AmbientChannelKind,
-  type AmbientChannelSettings,
-  type AmbientPreferences,
-  type AmbientPreset,
-  type AmbientSettings,
-} from '../shared/ambientSound'
-import { spaceDecaySec } from '../shared/ambientSpace'
-import { CHIME_SCALE_COUNT, CHIME_SCALES } from '../shared/ambientChimeScales'
+  type SoundscapeChannelKind,
+  type SoundscapeChannelSettings,
+  type SoundscapePreferences,
+  type SoundscapePreset,
+  type SoundscapeSettings,
+} from '../shared/soundscape'
+import { spaceDecaySec } from '../shared/soundscapeSpace'
+import { CHIME_SCALE_COUNT, CHIME_SCALES } from '../shared/soundscapeChimeScales'
 import { armHold, HOLD_COMMIT_MS, HOLD_CONFIRM_MS } from '../shared/holdTiming'
-import { newSoundscapeId, neutralSoundscape } from '../shared/ambientSoundscapeFile'
+import { newSoundscapeId, neutralSoundscape } from '../shared/soundscapeFile'
 import { exportSoundscapes } from './soundscapeFileActions'
 import { useNonPassiveWheel } from '../shared/useNonPassiveWheel'
+import { OptionsSubsectionLabel } from './OptionsSubsectionLabel'
 
-const PRESET_ICONS: Record<string, string> = {
-  'stormy-night': 'fa-cloud-moon-rain',
-  forest: 'fa-tree',
-  winds: 'fa-wind',
-  underwater: 'fa-fish',
-  campsite: 'fa-campground',
-  storm: 'fa-cloud-bolt',
-}
-
-const KIND_LOOK: Record<AmbientChannelKind, { icon: string; label: string }> = {
+const KIND_LOOK: Record<SoundscapeChannelKind, { icon: string; label: string }> = {
   noise: { icon: 'fa-wave-square', label: 'Noise' },
   rain: { icon: 'fa-cloud-rain', label: 'Rain' },
   thunder: { icon: 'fa-bolt-lightning', label: 'Thunder' },
@@ -72,7 +65,7 @@ const KIND_LOOK: Record<AmbientChannelKind, { icon: string; label: string }> = {
   chimes: { icon: 'fa-bell', label: 'Chimes' },
 }
 
-const ENVIRONMENT_DEFAULTS = { ...DEFAULT_AMBIENT_SPACE, ...DEFAULT_AMBIENT_WEATHER } as unknown as Record<string, number>
+const ENVIRONMENT_DEFAULTS = { ...DEFAULT_SOUNDSCAPE_SPACE, ...DEFAULT_SOUNDSCAPE_WEATHER } as unknown as Record<string, number>
 
 // ---------------------------------------------------------------------------
 // How values read.
@@ -92,7 +85,7 @@ function formatPan(value: number): string {
 }
 
 function formatVolume(value: number): string {
-  const db = ambientFaderDb(value)
+  const db = soundscapeFaderDb(value)
   return db === -Infinity ? 'Off' : `${Math.round(db)} dB`
 }
 
@@ -118,16 +111,16 @@ function formatScale(value: number, points: ReadonlyArray<{ name: string; at: nu
   return `${lower.name} → ${upper.name.toLowerCase()} ${Math.round(((value - lower.at) / (upper.at - lower.at)) * 100)}%`
 }
 
-const SURFACE_NAMES: Record<(typeof AMBIENT_RAIN_SURFACE_ANCHORS)[number]['name'], string> = {
+const SURFACE_NAMES: Record<(typeof SOUNDSCAPE_RAIN_SURFACE_ANCHORS)[number]['name'], string> = {
   forest: 'Leaves', canvas: 'Canvas', street: 'Street', tin: 'Tin', glass: 'Glass',
 }
-const SURFACE_POINTS = AMBIENT_RAIN_SURFACE_ANCHORS.map((anchor) => ({ name: SURFACE_NAMES[anchor.name], at: anchor.at }))
-const MATERIAL_POINTS = AMBIENT_CHIME_MATERIALS.map((material) => ({ name: material.name[0].toUpperCase() + material.name.slice(1), at: material.at }))
+const SURFACE_POINTS = SOUNDSCAPE_RAIN_SURFACE_ANCHORS.map((anchor) => ({ name: SURFACE_NAMES[anchor.name], at: anchor.at }))
+const MATERIAL_POINTS = SOUNDSCAPE_CHIME_MATERIALS.map((material) => ({ name: material.name[0].toUpperCase() + material.name.slice(1), at: material.at }))
 const COLOUR_POINTS = [{ name: 'Brown', at: 0 }, { name: 'Pink', at: 0.5 }, { name: 'White', at: 1 }]
 
-/** A part's level slider (ambientPartGain): off, as authored, or how far from it. */
+/** A part's level slider (soundscapePartGain): off, as authored, or how far from it. */
 function formatPartLevel(value: number): string {
-  const db = ambientPartDb(value)
+  const db = soundscapePartDb(value)
   if (db === -Infinity) return 'Off'
   return Math.abs(db) < 0.5 ? 'As is' : `${db > 0 ? '+' : '−'}${Math.abs(db).toFixed(1)} dB`
 }
@@ -170,8 +163,6 @@ interface ControlSpec {
 
 interface ControlGroup {
   label: string
-  /** Whether the label is shown above the group; it names the group for assistive technology either way. */
-  hideLabel?: boolean
   controls: ControlSpec[]
 }
 
@@ -184,14 +175,14 @@ const DISTANCE = unit('distance', 'distance', 'Near and distinct to far, darker 
 const PAN: ControlSpec = { key: 'pan', track: 'pan', tooltip: 'Where it is; toward a side it also narrows onto that side', min: -1, max: 1, format: formatPan }
 const WEATHER = unit('weather', 'weather', 'How closely it follows the weather\'s gusts', (value) => formatAmount(value, 'Ignores', 'Fully'))
 
-const CONTROLS: { [K in AmbientChannelKind]: ControlGroup[] } = {
+const CONTROLS: { [K in SoundscapeChannelKind]: ControlGroup[] } = {
   noise: [
     {
       label: 'Sound',
       controls: [
         VOLUME,
         unit('colour', 'colour', 'The noise itself: deep brown, balanced pink, bright white, and every blend between', (value) => formatScale(value, COLOUR_POINTS)),
-        { key: 'brightnessHz', track: 'bright', tooltip: 'Where the filter sits: the cutoff of a darkening low-pass, or the pitch of the band when focused', min: AMBIENT_NOISE_BRIGHTNESS_MIN_HZ, max: AMBIENT_NOISE_BRIGHTNESS_MAX_HZ, log: true, format: (value) => (value >= AMBIENT_NOISE_BRIGHTNESS_MAX_HZ * 0.99 ? 'Open' : formatHz(value)) },
+        { key: 'brightnessHz', track: 'bright', tooltip: 'Where the filter sits: the cutoff of a darkening low-pass, or the pitch of the band when focused', min: SOUNDSCAPE_NOISE_BRIGHTNESS_MIN_HZ, max: SOUNDSCAPE_NOISE_BRIGHTNESS_MAX_HZ, log: true, format: (value) => (value >= SOUNDSCAPE_NOISE_BRIGHTNESS_MAX_HZ * 0.99 ? 'Open' : formatHz(value)) },
         unit('focus', 'focus', 'A gentle low-pass to a narrow resonant band: a whistle at the brightness', (value) => formatAmount(value, 'Broad', 'Whistle')),
       ],
     },
@@ -199,10 +190,10 @@ const CONTROLS: { [K in AmbientChannelKind]: ControlGroup[] } = {
       label: 'Motion',
       controls: [
         unit('depth', 'depth', 'How far the level rises and falls over a cycle', (value) => formatAmount(value, 'Steady')),
-        { key: 'periodSec', track: 'period', tooltip: 'Seconds per cycle', min: AMBIENT_PERIOD_MIN_SEC, max: AMBIENT_PERIOD_MAX_SEC, log: true, format: formatSeconds },
+        { key: 'periodSec', track: 'period', tooltip: 'Seconds per cycle', min: SOUNDSCAPE_PERIOD_MIN_SEC, max: SOUNDSCAPE_PERIOD_MAX_SEC, log: true, format: formatSeconds },
         unit('curve', 'curve', 'A broad plateau with brief dips, a sine, or long quiet with a short swell', (value) => (Math.abs(value - 0.5) < 0.005 ? 'Sine' : value < 0.5 ? `Plateau ${Math.round(((0.5 - value) / 0.5) * 100)}%` : `Swell ${Math.round(((value - 0.5) / 0.5) * 100)}%`)),
-        { key: 'skew', track: 'skew', tooltip: 'Where the peak falls: a fast rise and slow fall (a wave), or a slow build and sudden drop', min: AMBIENT_SKEW_MIN, max: AMBIENT_SKEW_MAX, format: (value) => (Math.abs(value - 0.5) < 0.005 ? 'Even' : value < 0.5 ? `Fast rise ${Math.round(((0.5 - value) / 0.4) * 100)}%` : `Fast fall ${Math.round(((value - 0.5) / 0.4) * 100)}%`) },
-        { key: 'sweep', track: 'sweep', tooltip: 'How far the filter follows the swell: opening as it rises (a gust whistling higher, a wave brightening as it breaks), or closing', min: -1, max: 1, format: (value) => (Math.abs(value) < 0.005 ? 'Fixed' : `${value > 0 ? 'Opens' : 'Closes'} ${(Math.abs(value) * AMBIENT_NOISE_SWEEP_OCTAVES).toFixed(1)} oct`) },
+        { key: 'skew', track: 'skew', tooltip: 'Where the peak falls: a fast rise and slow fall (a wave), or a slow build and sudden drop', min: SOUNDSCAPE_SKEW_MIN, max: SOUNDSCAPE_SKEW_MAX, format: (value) => (Math.abs(value - 0.5) < 0.005 ? 'Even' : value < 0.5 ? `Fast rise ${Math.round(((0.5 - value) / 0.4) * 100)}%` : `Fast fall ${Math.round(((value - 0.5) / 0.4) * 100)}%`) },
+        { key: 'sweep', track: 'sweep', tooltip: 'How far the filter follows the swell: opening as it rises (a gust whistling higher, a wave brightening as it breaks), or closing', min: -1, max: 1, format: (value) => (Math.abs(value) < 0.005 ? 'Fixed' : `${value > 0 ? 'Opens' : 'Closes'} ${(Math.abs(value) * SOUNDSCAPE_NOISE_SWEEP_OCTAVES).toFixed(1)} oct`) },
         unit('variation', 'vary', 'How much each cycle departs from the last in length and height', (value) => formatAmount(value, 'Regular')),
       ],
     },
@@ -231,7 +222,7 @@ const CONTROLS: { [K in AmbientChannelKind]: ControlGroup[] } = {
         unit('washDensity', 'wash', 'The steady wash of rain too dense to hear drop by drop: a sparse patter to a smooth hiss', (value) => formatAmount(value, 'Patter', 'Hiss')),
         unit('washLevel', 'level', 'How loud the wash is; off leaves the drops alone, which sounds like dripping', formatPartLevel),
         unit('washTone', 'tone', 'The wash\'s pitch, two octaves either way', (value) => formatShift(value, 2)),
-        unit('drips', 'drips', 'Large, heavy drops from gutters, eaves and branches', (value) => (value < 0.01 ? 'Off' : `${(value * AMBIENT_RAIN_DRIPS_MAX_PER_SEC).toFixed(1)} / s`)),
+        unit('drips', 'drips', 'Large, heavy drops from gutters, eaves and branches', (value) => (value < 0.01 ? 'Off' : `${(value * SOUNDSCAPE_RAIN_DRIPS_MAX_PER_SEC).toFixed(1)} / s`)),
         unit('dripLevel', 'level', 'How loud the drips are', formatPartLevel),
         unit('dripTone', 'tone', 'The drips\' pitch, an octave either way', (value) => formatShift(value, 1)),
         unit('wetness', 'wet', 'Standing water: how many drops land in it, and how much its film deadens the surface', (value) => formatAmount(value, 'Dry', 'Soaked')),
@@ -255,10 +246,10 @@ const CONTROLS: { [K in AmbientChannelKind]: ControlGroup[] } = {
       controls: [
         VOLUME,
         { key: 'share', track: 'share', tooltip: 'Rumbling to silence', min: 0, max: 1, step: 0.005, format: formatThunderShare },
-        { key: 'lengthSec', track: 'length', tooltip: 'How long a peal rolls', min: AMBIENT_THUNDER_LENGTH_MIN_SEC, max: AMBIENT_THUNDER_LENGTH_MAX_SEC, step: 1, format: formatSeconds },
+        { key: 'lengthSec', track: 'length', tooltip: 'How long a peal rolls', min: SOUNDSCAPE_THUNDER_LENGTH_MIN_SEC, max: SOUNDSCAPE_THUNDER_LENGTH_MAX_SEC, step: 1, format: formatSeconds },
         unit('character', 'character', 'How the boom under the rumble breaks up: a smooth swell or a choppy growl', (value) => formatAmount(value, 'Smooth', 'Harsh')),
         { key: 'contrast', track: 'contrast', tooltip: 'Loud and quiet pushed apart, or drawn together', min: -1, max: 1, format: (value) => (Math.abs(value) < 0.005 ? 'Off' : `${value > 0 ? '+' : '−'}${percent(Math.abs(value))}`) },
-        unit('randomness', 'random', 'How much each peal varies around these settings', (value) => (value < 0.005 ? 'Off' : `±${Math.round(value * AMBIENT_THUNDER_JITTER * 100)}%`)),
+        unit('randomness', 'random', 'How much each peal varies around these settings', (value) => (value < 0.005 ? 'Off' : `±${Math.round(value * SOUNDSCAPE_THUNDER_JITTER * 100)}%`)),
       ],
     },
     {
@@ -281,7 +272,7 @@ const CONTROLS: { [K in AmbientChannelKind]: ControlGroup[] } = {
         unit('turbulence', 'tumble', 'An even flow, or water arriving in bursts as it tumbles over stones; bunches the bubbles, and sways the rush a little', (value) => formatAmount(value, 'Even')),
         unit('width', 'width', 'A point at its pan to as wide as its pan allows', (value) => formatAmount(value, 'Point', 'Wide')),
         unit('bubbles', 'bubbles', 'How many bubbles: a few to a froth', (value) => {
-          const perSec = AMBIENT_WATER_BUBBLES_PER_SEC[0] * ((AMBIENT_WATER_BUBBLES_PER_SEC[1] / AMBIENT_WATER_BUBBLES_PER_SEC[0]) ** value)
+          const perSec = SOUNDSCAPE_WATER_BUBBLES_PER_SEC[0] * ((SOUNDSCAPE_WATER_BUBBLES_PER_SEC[1] / SOUNDSCAPE_WATER_BUBBLES_PER_SEC[0]) ** value)
           return `${Math.round(perSec)} / s`
         }),
         unit('bubbleLevel', 'level', 'How loud the bubbles are', formatPartLevel),
@@ -315,7 +306,7 @@ const CONTROLS: { [K in AmbientChannelKind]: ControlGroup[] } = {
         unit('sizzleLevel', 'level', 'How loud the sizzle is', formatPartLevel),
         unit('sizzleTone', 'tone', 'The pitch of the sizzle and its texture: low is frazzled, crackling with sparse bursts; high is a smooth hiss', (value) => `around ${formatHz(4000 * (2 ** value))}`),
         unit('flicker', 'flicker', 'How far the roar swings as the flames move: a steady burn, or surging and faltering', (value) => formatAmount(value, 'Steady', 'Guttering')),
-        { key: 'flickerPeriodSec', track: 'period', tooltip: 'The average length of one movement of the flames', min: AMBIENT_FIRE_PERIOD_MIN_SEC, max: AMBIENT_FIRE_PERIOD_MAX_SEC, log: true, format: formatSeconds },
+        { key: 'flickerPeriodSec', track: 'period', tooltip: 'The average length of one movement of the flames', min: SOUNDSCAPE_FIRE_PERIOD_MIN_SEC, max: SOUNDSCAPE_FIRE_PERIOD_MAX_SEC, log: true, format: formatSeconds },
         unit('flickerDynamics', 'dynamics', 'Soft swells at an even pace, or sudden lurches at an uneven one', (value) => formatAmount(value, 'Gentle', 'Wild')),
       ],
     },
@@ -326,9 +317,9 @@ const CONTROLS: { [K in AmbientChannelKind]: ControlGroup[] } = {
       label: 'Sound',
       controls: [
         VOLUME,
-        { key: 'pitchHz', track: 'pitch', tooltip: 'The lowest tube, in semitones from A440; the rest climb the scale', min: AMBIENT_CHIME_PITCH_MIN_HZ, max: AMBIENT_CHIME_PITCH_MAX_HZ, semitones: true, format: formatPitch },
-        { key: 'tubes', track: 'tubes', tooltip: 'How many tubes', min: AMBIENT_CHIME_TUBES_MIN, max: AMBIENT_CHIME_TUBES_MAX, step: 1, format: (value) => `${Math.round(value)} tubes` },
-        { key: 'ringSec', track: 'ring', tooltip: 'How long a struck tube rings (for metal; wood knocks far shorter, glass a little shorter, the veil longer)', min: AMBIENT_CHIME_RING_MIN_SEC, max: AMBIENT_CHIME_RING_MAX_SEC, log: true, format: formatSeconds },
+        { key: 'pitchHz', track: 'pitch', tooltip: 'The lowest tube, in semitones from A440; the rest climb the scale', min: SOUNDSCAPE_CHIME_PITCH_MIN_HZ, max: SOUNDSCAPE_CHIME_PITCH_MAX_HZ, semitones: true, format: formatPitch },
+        { key: 'tubes', track: 'tubes', tooltip: 'How many tubes', min: SOUNDSCAPE_CHIME_TUBES_MIN, max: SOUNDSCAPE_CHIME_TUBES_MAX, step: 1, format: (value) => `${Math.round(value)} tubes` },
+        { key: 'ringSec', track: 'ring', tooltip: 'How long a struck tube rings (for metal; wood knocks far shorter, glass a little shorter, the veil longer)', min: SOUNDSCAPE_CHIME_RING_MIN_SEC, max: SOUNDSCAPE_CHIME_RING_MAX_SEC, log: true, format: formatSeconds },
         unit('activity', 'activity', 'How often the striker is set moving, before the wind has any say', (value) => `${chimeStrikesPerSecond(value).toFixed(chimeStrikesPerSecond(value) < 1 ? 2 : 1)} / s`),
         unit('hardness', 'hardness', 'A soft striker, warm and round, to a hard one, bright with a tick', (value) => formatAmount(value, 'Soft', 'Hard')),
         unit('unison', 'unison', 'How much the chimes sound together: single notes, or the striker rebounding across the ring into a cascade', (value) => formatAmount(value, 'Single', 'Cascade')),
@@ -346,22 +337,21 @@ const CONTROLS: { [K in AmbientChannelKind]: ControlGroup[] } = {
  */
 const ENVIRONMENT_CONTROLS: ControlGroup[] = [{
   label: 'Environment',
-  hideLabel: true,
   controls: [
     unit('size', 'size', 'A small room to a wide valley: how long the space rings, and how late its first reflection', (value) => `${formatSeconds(spaceDecaySec(value))} decay`),
     unit('damping', 'damping', 'A bright tail, or one that darkens fast, as open air and foliage swallow the highs', (value) => formatAmount(value, 'Bright', 'Dark')),
     unit('echoes', 'echoes', 'Distinct echoes off walls, buildings or cliffs', (value) => formatAmount(value, 'None')),
     unit('amount', 'amount', 'How much of the space is heard', (value) => formatAmount(value, 'Dry', 'Full')),
     unit('gustiness', 'gusts', 'Calm to squally: how far a gust or a lull moves every layer that follows the weather', (value) => formatAmount(value, 'Calm', 'Squally')),
-    { key: 'paceSec', track: 'pace', tooltip: 'Average seconds from one gust or lull to the next', min: AMBIENT_WEATHER_PACE_MIN_SEC, max: AMBIENT_WEATHER_PACE_MAX_SEC, log: true, format: formatSeconds },
+    { key: 'paceSec', track: 'pace', tooltip: 'Average seconds from one gust or lull to the next', min: SOUNDSCAPE_WEATHER_PACE_MIN_SEC, max: SOUNDSCAPE_WEATHER_PACE_MAX_SEC, log: true, format: formatSeconds },
   ],
 }]
 
 // ---------------------------------------------------------------------------
 
-interface AmbientSoundOptionsProps {
-  preferences: AmbientPreferences
-  onChange: (preferences: AmbientPreferences) => void
+interface SoundscapeOptionsProps {
+  preferences: SoundscapePreferences
+  onChange: (preferences: SoundscapePreferences) => void
 }
 
 /**
@@ -369,10 +359,10 @@ interface AmbientSoundOptionsProps {
  * selected exactly while the settings still match it. Every edit goes
  * through here, the channel-button wheel included.
  */
-function withSettings(preferences: AmbientPreferences, settings: AmbientSettings): AmbientPreferences {
-  const signature = ambientSettingsSignature(settings)
-  const matchingPreset = [...AMBIENT_FACTORY_PRESETS, ...preferences.customPresets].find((preset) => (
-    ambientSettingsSignature(preset.settings) === signature
+function withSettings(preferences: SoundscapePreferences, settings: SoundscapeSettings): SoundscapePreferences {
+  const signature = soundscapeSettingsSignature(settings)
+  const matchingPreset = [...SOUNDSCAPE_FACTORY_PRESETS, ...preferences.customPresets].find((preset) => (
+    soundscapeSettingsSignature(preset.settings) === signature
   ))
   return { ...preferences, settings, activePresetId: matchingPreset?.id ?? null }
 }
@@ -402,8 +392,8 @@ function ControlGroups({ idPrefix, groups, values, defaults, disabled, name, onC
   return (
     <>
       {groups.map((group) => (
-        <div className="ambient-control-group" role="group" aria-label={`${name} ${group.label.toLowerCase()}`} key={group.label}>
-          {!group.hideLabel && <div className="ambient-control-group-label" aria-hidden="true">{group.label}</div>}
+        <div className="soundscape-control-group" role="group" aria-label={`${name} ${group.label.toLowerCase()}`} key={group.label}>
+          <OptionsSubsectionLabel>{group.label}</OptionsSubsectionLabel>
           {group.controls.map((spec) => (
             <CompactScrollbarSlider
               key={spec.key}
@@ -427,7 +417,7 @@ function ControlGroups({ idPrefix, groups, values, defaults, disabled, name, onC
   )
 }
 
-export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptionsProps) {
+export function SoundscapeOptions({ preferences, onChange }: SoundscapeOptionsProps) {
   const [pendingDeletePresetId, setPendingDeletePresetId] = useState<string | null>(null)
   const channelSelectorRef = useRef<HTMLDivElement | null>(null)
   const channelHoldRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
@@ -438,7 +428,7 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
   // arrives on the press on some platforms, which soloed the channel at the
   // start of every hold-to-disable.
   const channelRightPressRef = useRef<{ pointerId: number; channelId: string } | null>(null)
-  const [selectedId, setSelectedId] = useState<string>(() => AMBIENT_CHANNEL_ROSTER[0].id)
+  const [selectedId, setSelectedId] = useState<string>(() => SOUNDSCAPE_CHANNEL_ROSTER[0].id)
   // Holding right-click on a custom soundscape exports it, as it does on a
   // custom layout; a short right-click primes it for deletion instead. Which
   // one is decided on the RELEASE (the hold still pending there is a short
@@ -453,16 +443,16 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
   }, [])
   const channels = preferences.settings.channels
   const selectedChannel = channels.find((channel) => channel.id === selectedId) ?? null
-  const allPresets = [...AMBIENT_FACTORY_PRESETS, ...preferences.customPresets]
-  const currentSignature = ambientSettingsSignature(preferences.settings)
-  const matchingPresets = allPresets.filter((preset) => ambientSettingsSignature(preset.settings) === currentSignature)
+  const allPresets = [...SOUNDSCAPE_FACTORY_PRESETS, ...preferences.customPresets]
+  const currentSignature = soundscapeSettingsSignature(preferences.settings)
+  const matchingPresets = allPresets.filter((preset) => soundscapeSettingsSignature(preset.settings) === currentSignature)
   const selectedPresetId = matchingPresets.find((preset) => preset.id === preferences.activePresetId)?.id
     ?? matchingPresets[0]?.id
     ?? null
   const hasPendingChanges = matchingPresets.length === 0
-  const canSave = hasPendingChanges && preferences.customPresets.length < MAX_AMBIENT_CUSTOM_PRESETS
+  const canSave = hasPendingChanges && preferences.customPresets.length < MAX_SOUNDSCAPE_CUSTOM_PRESETS
 
-  const commitSettings = (settings: AmbientSettings) => {
+  const commitSettings = (settings: SoundscapeSettings) => {
     onChange(withSettings(preferences, settings))
   }
 
@@ -470,7 +460,7 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
     commitSettings({
       ...preferences.settings,
       channels: channels.map((channel) => (
-        channel.id === channelId ? { ...channel, ...changes } as AmbientChannelSettings : channel
+        channel.id === channelId ? { ...channel, ...changes } as SoundscapeChannelSettings : channel
       )),
     })
   }
@@ -495,7 +485,7 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
     })
   }
 
-  const startChannelHold = (channel: AmbientChannelSettings, button: number, pointerId: number) => {
+  const startChannelHold = (channel: SoundscapeChannelSettings, button: number, pointerId: number) => {
     if (button === 2) channelRightPressRef.current = { pointerId, channelId: channel.id }
     if ((button === 0 && channel.enabled) || (button === 2 && !channel.enabled)) return
     if (button !== 0 && button !== 2) return
@@ -527,8 +517,8 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
   const handleChannelWheel = useCallback((event: WheelEvent) => {
     const target = event.target
     if (!(target instanceof Element)) return
-    const button = target.closest<HTMLButtonElement>('[data-ambient-channel-id]')
-    const channelId = button?.dataset.ambientChannelId
+    const button = target.closest<HTMLButtonElement>('[data-soundscape-channel-id]')
+    const channelId = button?.dataset.soundscapeChannelId
     const channel = preferences.settings.channels.find((item) => item.id === channelId)
     if (!channel?.enabled) return
 
@@ -550,7 +540,7 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
     if (!canSave) return
     const id = newSoundscapeId()
     const settings = cloneSettings(preferences.settings)
-    const saved: AmbientPreset = {
+    const saved: SoundscapePreset = {
       id,
       name: `Soundscape ${preferences.customPresets.length + 1}`,
       settings: { ...settings, channels: settings.channels.map((channel) => ({ ...channel, solo: false })) },
@@ -567,31 +557,31 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
     setPendingDeletePresetId(null)
   }
 
-  const activatePreset = (preset: AmbientPreset) => {
+  const activatePreset = (preset: SoundscapePreset) => {
     if (pendingDeletePresetId === preset.id) {
       deletePreset(preset.id)
       return
     }
     setPendingDeletePresetId(null)
-    onChange(applyAmbientPreset(preferences, preset))
+    onChange(applySoundscapePreset(preferences, preset))
   }
 
-  const rosterEntry = AMBIENT_CHANNEL_ROSTER.find((entry) => entry.id === selectedChannel?.id)
+  const rosterEntry = SOUNDSCAPE_CHANNEL_ROSTER.find((entry) => entry.id === selectedChannel?.id)
   const layerName = rosterEntry ? `${KIND_LOOK[rosterEntry.kind].label} layer ${rosterEntry.number}` : ''
 
   return (
     <AccordionSection
-      className="sidebar-options-section-ambient"
-      ariaLabel="Ambient Sound"
-      heading="Ambient Sound"
+      className="sidebar-options-section-soundscape"
+      ariaLabel="Soundscapes"
+      heading="Soundscapes"
     >
-      <div className="utility-setting-slider-stack" aria-label="Ambient sound controls">
+      <div className="utility-setting-slider-stack" aria-label="Soundscape controls">
         {/* Space and weather belong to the whole soundscape rather than to a
             channel, so they stand above the soundscapes and channels,
             always shown, rather than behind a channel-like button. */}
-        <div className="ambient-layer-controls ambient-scene-controls" role="group" aria-label="Environment, across all channels">
+        <div className="soundscape-layer-controls" role="group" aria-label="Environment, across all channels">
           <ControlGroups
-            idPrefix="ambient-environment"
+            idPrefix="soundscape-environment"
             groups={ENVIRONMENT_CONTROLS}
             values={environmentValues}
             defaults={ENVIRONMENT_DEFAULTS}
@@ -601,23 +591,24 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
           />
         </div>
 
-        <div className="options-loadout-grid ambient-preset-grid" role="group" aria-label="Factory ambient soundscapes">
-          {AMBIENT_FACTORY_PRESETS.map((preset) => (
+        <OptionsSubsectionLabel>Soundscapes</OptionsSubsectionLabel>
+        <div className="options-loadout-grid soundscape-preset-grid" role="group" aria-label="Factory soundscapes">
+          {SOUNDSCAPE_FACTORY_PRESETS.map((preset) => (
             <button
               key={preset.id}
               type="button"
-              className={`btn-icon options-color-swatch options-loadout-btn ambient-preset-btn${selectedPresetId === preset.id ? ' is-active' : ''}`}
+              className={`btn-icon options-color-swatch options-loadout-btn soundscape-preset-btn${selectedPresetId === preset.id ? ' is-active' : ''}`}
               aria-label={preset.name}
               aria-pressed={selectedPresetId === preset.id}
               data-tooltip={preset.name}
               onClick={() => activatePreset(preset)}
             >
-              <span className={`fa-solid ${PRESET_ICONS[preset.id]}`} aria-hidden="true" />
+              <span className={`fa-solid ${FACTORY_SOUNDSCAPE_ICONS[preset.id]}`} aria-hidden="true" />
             </button>
           ))}
         </div>
 
-        <div className="options-loadout-grid ambient-custom-presets-grid" role="group" aria-label="Custom ambient soundscapes">
+        <div className="options-loadout-grid soundscape-custom-presets-grid" role="group" aria-label="Custom soundscapes">
           {preferences.customPresets.map((preset, index) => {
             const number = index + 1
             const isPrimed = pendingDeletePresetId === preset.id
@@ -626,7 +617,7 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
               <button
                 key={preset.id}
                 type="button"
-                className={`btn-icon options-color-swatch options-loadout-btn ambient-custom-preset-btn${selectedPresetId === preset.id ? ' is-active' : ''}${isPrimed ? ' primed' : ''}`}
+                className={`btn-icon options-color-swatch options-loadout-btn soundscape-custom-preset-btn${selectedPresetId === preset.id ? ' is-active' : ''}${isPrimed ? ' primed' : ''}`}
                 aria-label={isPrimed ? `Delete ${label}` : label}
                 aria-pressed={selectedPresetId === preset.id}
                 data-tooltip={isPrimed ? `Click to delete ${label}` : `${label}\nRight-click to mark for deletion, then click.\nHold right-click to export.`}
@@ -669,9 +660,9 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
           })}
           <button
             type="button"
-            className={`btn-icon options-color-swatch options-loadout-btn options-loadout-plus ambient-custom-preset-plus${hasPendingChanges ? ' is-active' : ''}`}
+            className={`btn-icon options-color-swatch options-loadout-btn options-loadout-plus soundscape-custom-preset-plus${hasPendingChanges ? ' is-active' : ''}`}
             aria-label="Save current soundscape as a custom preset"
-            data-tooltip={`${preferences.customPresets.length >= MAX_AMBIENT_CUSTOM_PRESETS
+            data-tooltip={`${preferences.customPresets.length >= MAX_SOUNDSCAPE_CUSTOM_PRESETS
               ? 'Custom soundscape limit reached'
               : hasPendingChanges ? 'Save current soundscape as a custom preset' : 'No unsaved soundscape changes'}\nHold right-click to reset every channel to its defaults and turn it off.`}
             // Not `disabled`: a disabled button receives no pointer events,
@@ -712,8 +703,9 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
           </button>
         </div>
 
-        <div className="options-loadout-grid ambient-channel-selector" role="group" aria-label="Ambient channels" ref={channelSelectorRef}>
-          {AMBIENT_CHANNEL_ROSTER.map((entry) => {
+        <OptionsSubsectionLabel>Channels</OptionsSubsectionLabel>
+        <div className="options-loadout-grid soundscape-channel-selector" role="group" aria-label="Soundscape channels" ref={channelSelectorRef}>
+          {SOUNDSCAPE_CHANNEL_ROSTER.map((entry) => {
             const channel = channels.find((item) => item.id === entry.id)
             if (!channel) return null
             const look = KIND_LOOK[entry.kind]
@@ -723,13 +715,13 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
               <button
                 key={entry.id}
                 type="button"
-                className={`btn-icon options-color-swatch options-loadout-btn ambient-channel-selector-btn${isSelected ? ' is-active' : ''}${channel.enabled ? ' is-enabled' : ' is-disabled'}${channel.solo ? ' is-solo' : ''}`}
+                className={`btn-icon options-color-swatch options-loadout-btn soundscape-channel-selector-btn${isSelected ? ' is-active' : ''}${channel.enabled ? ' is-enabled' : ' is-disabled'}${channel.solo ? ' is-solo' : ''}`}
                 aria-label={`${layerTitle}, ${channel.enabled ? 'enabled' : 'disabled'}${channel.solo ? ', solo' : ''}`}
                 aria-pressed={isSelected}
                 data-tooltip={`${layerTitle} is ${channel.enabled ? 'enabled' : 'disabled'}${channel.solo ? ', solo' : ''}\n${channel.solo ? 'Right-click to clear solo' : 'Right-click to solo'}; ${channel.enabled
                   ? 'hold right-click to disable; scroll to adjust volume'
                   : 'hold left-click to enable; settings are locked'}`}
-                data-ambient-channel-id={channel.id}
+                data-soundscape-channel-id={channel.id}
                 data-secondary-press="action"
                 onClick={() => setSelectedId(channel.id)}
                 onPointerDown={(event) => startChannelHold(channel, event.button, event.pointerId)}
@@ -750,16 +742,16 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
 
         {selectedChannel && rosterEntry && (
           <div
-            className="ambient-layer-controls"
+            className="soundscape-layer-controls"
             key={selectedChannel.id}
             role="group"
             aria-label={`${layerName}${selectedChannel.enabled ? '' : ', disabled'}`}
           >
             <ControlGroups
-              idPrefix={`ambient-${selectedChannel.id}`}
+              idPrefix={`soundscape-${selectedChannel.id}`}
               groups={CONTROLS[rosterEntry.kind]}
               values={selectedChannel as unknown as Record<string, number>}
-              defaults={createAmbientChannel(rosterEntry.id, rosterEntry.kind) as unknown as Record<string, number>}
+              defaults={createSoundscapeChannel(rosterEntry.id, rosterEntry.kind) as unknown as Record<string, number>}
               disabled={!selectedChannel.enabled}
               name={layerName}
               onCommit={(key, value) => updateChannel(selectedChannel.id, { [key]: value })}

@@ -8,8 +8,8 @@ import { buildBellEnvelope, warpForSkew } from './smoothCurve';
  * The bell's own steepness range (smoothCurve.ts's buildBellEnvelope): the
  * two ends of a noise layer's `ramp`.
  */
-export const AMBIENT_BELL_RAMP_MIN = 0.1;
-export const AMBIENT_BELL_RAMP_MAX = 5;
+export const SOUNDSCAPE_BELL_RAMP_MIN = 0.1;
+export const SOUNDSCAPE_BELL_RAMP_MAX = 5;
 
 /** Samples per noise cycle table; the worklet interpolates between them. */
 export const NOISE_CYCLE_SAMPLES = 256;
@@ -38,12 +38,12 @@ function logLerp(from: number, to: number, t: number): number {
  * so it follows the bell if smoothCurve.ts's formula ever changes. It is where
  * the two halves of `ramp` meet a sine without a seam. Around 0.75 today.
  */
-export const AMBIENT_BELL_RAMP_NEAREST_SINE: number = (() => {
+export const SOUNDSCAPE_BELL_RAMP_NEAREST_SINE: number = (() => {
   const sine = sineCycle(NOISE_CYCLE_SAMPLES, 0.5);
-  let best = AMBIENT_BELL_RAMP_MIN;
+  let best = SOUNDSCAPE_BELL_RAMP_MIN;
   let bestDistance = Infinity;
   for (let step = 0; step <= 400; step += 1) {
-    const candidate = logLerp(AMBIENT_BELL_RAMP_MIN, AMBIENT_BELL_RAMP_MAX, step / 400);
+    const candidate = logLerp(SOUNDSCAPE_BELL_RAMP_MIN, SOUNDSCAPE_BELL_RAMP_MAX, step / 400);
     const bell = bellCycle(candidate, 0.5, NOISE_CYCLE_SAMPLES);
     const distance = Math.max(...Array.from(bell, (value, index) => Math.abs(value - sine[index])));
     if (distance < bestDistance) {
@@ -62,10 +62,10 @@ export const AMBIENT_BELL_RAMP_NEAREST_SINE: number = (() => {
  *
  * `ramp` (the layer's `curve`, 0-1) decides how much of the cycle is spent near the top, in one
  * direction across the whole slider, with an exact sine at the middle:
- * - 0 is the broadest bell (AMBIENT_BELL_RAMP_MIN): a plateau that stays
+ * - 0 is the broadest bell (SOUNDSCAPE_BELL_RAMP_MIN): a plateau that stays
  *   loud and dips briefly;
  * - 0.5 is a sine;
- * - 1 is the steepest bell (AMBIENT_BELL_RAMP_MAX): quiet for most of the
+ * - 1 is the steepest bell (SOUNDSCAPE_BELL_RAMP_MAX): quiet for most of the
  *   cycle with a short swell, which is what a burst used to be.
  * Each half overlays a bell and the sine, sample by sample, with the sine's
  * weight rising to 1 at the middle while the bell's steepness moves
@@ -81,8 +81,8 @@ export function buildNoiseCycle(ramp: number, shape: number, sampleCount = NOISE
   const bounded = Number.isFinite(ramp) ? Math.max(0, Math.min(1, ramp)) : 0.5;
   const towardSine = bounded <= 0.5 ? bounded / 0.5 : (1 - bounded) / 0.5;
   const bellRamp = bounded <= 0.5
-    ? logLerp(AMBIENT_BELL_RAMP_MIN, AMBIENT_BELL_RAMP_NEAREST_SINE, towardSine)
-    : logLerp(AMBIENT_BELL_RAMP_MAX, AMBIENT_BELL_RAMP_NEAREST_SINE, towardSine);
+    ? logLerp(SOUNDSCAPE_BELL_RAMP_MIN, SOUNDSCAPE_BELL_RAMP_NEAREST_SINE, towardSine)
+    : logLerp(SOUNDSCAPE_BELL_RAMP_MAX, SOUNDSCAPE_BELL_RAMP_NEAREST_SINE, towardSine);
   const bell = bellCycle(bellRamp, shape, sampleCount);
   const sine = sineCycle(sampleCount, shape);
   return bell.map((value, index) => ((1 - towardSine) * value) + (towardSine * sine[index]));

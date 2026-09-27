@@ -24,12 +24,12 @@ Check the result: the release (Alpha Release #18, a prerelease) should carry a `
 
 ## 2. Release notes (paste as-is)
 
-A big one. **Ambient sound** arrives: a generated soundscape of wind, surf, rain, thunder, running water, fire and wind chimes that plays beside the music, all in one shared space and under one sky. The Escape menu becomes a **dial**, the player gains **sound options** of its own, the wheel learns to **spin**, and large notes open and scroll **without blocking**. Then there is a small secret behind the User Guide button.
+A big one. **Soundscapes** arrive: a generated soundscape of wind, surf, rain, thunder, running water, fire and wind chimes that plays beside the music, all in one shared space and under one sky. The Escape menu becomes a **dial**, the player gains **sound options** of its own, the wheel learns to **spin**, and large notes open and scroll **without blocking**. Then there is a small secret behind the User Guide button.
 
-## Ambient sound
+## Soundscapes
 
-- **The cloud-bolt button in the music player** turns it on or off. Scroll over it for volume, and right-click it for the next soundscape. Six factory soundscapes are included: Stormy Night, Forest rain, Strong winds, Under water, Campsite and Passing thunderstorm.
-- **Settings → Ambient Sound** has eighteen channels (noise, rain, thunder, water, fire and chimes), each with a distance and a place in the stereo field, plus a shared **space** (room to valley) and **weather** (gusts and lulls every channel can follow).
+- **The Soundscapes button in the music player** turns them on or off, and shows the icon of the soundscape it will play. Scroll over it for volume, and right-click it for the next soundscape. Six factory soundscapes are included: Stormy Night, Forest rain, Strong winds, Under water, Campsite and Passing thunderstorm.
+- **Settings → Soundscapes** has eighteen channels (noise, rain, thunder, water, fire and chimes), each with a distance and a place in the stereo field, plus a shared **space** (room to valley) and **weather** (gusts and lulls every channel can follow).
 - Save your own soundscapes, and export or import them as `.tds` files, the same way layouts travel as `.tdl`.
 
 ## Music player
@@ -54,7 +54,7 @@ A big one. **Ambient sound** arrives: a generated soundscape of wind, surf, rain
 - Saving an external file no longer marks it as unsaved again after a restart.
 - A music scrub no longer ends with an extra 20% jump.
 - A fast turn of the wheel in render view no longer travels less than it should.
-- Turning ambient sound off and on no longer leaves the old generator running in the background, and thunder costs well under half of what it did.
+- Turning soundscapes off and on no longer leaves the old generator running in the background, and thunder costs well under half of what it did.
 - Pressing a note card's archive, trash or save button no longer takes the keyboard away from the editor.
 - The User Guide and the welcome note were corrected wherever they had fallen behind the app.
 - The options cogwheel turns about its own centre instead of wobbling.
@@ -67,10 +67,10 @@ A big one. **Ambient sound** arrives: a generated soundscape of wind, surf, rain
 These fixes were verified with tests and in `dev:browser` only, never in a packaged Electron build:
 
 - **Saving an external file** (`useNoteProtectionActions.ts`). Open a `.md` from outside the notes folder, edit it, save, restart. It should not come back marked unsaved. This is the one the browser mock cannot exercise at all.
-- **Ambient on/off** (`AmbientSoundEngine.ts` sends `stop`; the worklet's `process()` then returns false). Toggle ambient a few times and confirm the sound stops and restarts cleanly, and that audio-thread CPU does not climb.
+- **Soundscapes on/off** (`SoundscapeEngine.ts` sends `stop`; the worklet's `process()` then returns false). Toggle soundscapes a few times and confirm the sound stops and restarts cleanly, and that audio-thread CPU does not climb.
 - **External file IPC** (`electron/main.ts`) now uses async `fs`. Open, save and import an external file once.
 - **Music scrub**: hold rewind to scrub, then release. There should be no extra 20% jump after it.
-- **macOS**: hold right-click on an ambient channel to disable it. It should not solo the channel first, and the next short right-click should still solo. On Windows `contextmenu` fires on release, so this path mattered on the Mac.
+- **macOS**: hold right-click on a soundscape channel to disable it. It should not solo the channel first, and the next short right-click should still solo. On Windows `contextmenu` fires on release, so this path mattered on the Mac.
 - **Reopening a large external file in render view**: drag the same big file in, close it, drag it in again a few times. The cursor should keep moving, and the note should appear without a multi-second freeze (it was ~3.5s per reopen, now ~0.4s in headless Chromium).
 - **Options cogwheel**: it is now an SVG (`WorkIndicatorGlyph.tsx`). Check it looks the same at rest in light and dark, and holds still at the centre while it turns.
 - **Render-view wheel**: spin, re-spin and fast notches should feel slightly longer than before. They used to lose distance; `wheelNotchTravel.ts` and `wheelSpinProfile.ts` now conserve it.

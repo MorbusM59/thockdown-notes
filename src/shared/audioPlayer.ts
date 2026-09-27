@@ -38,7 +38,7 @@ export const MAX_PLAYLIST_SLOT: PlaylistSlot = PLAYLIST_SLOTS[PLAYLIST_SLOTS.len
 
 /**
  * Column count of the player's button grid: five visible music buckets plus
- * the ambient-noise toggle. The top row fills the same width (play spans two).
+ * the Soundscapes toggle. The top row fills the same width (play spans two).
  *
  * This is a LAYOUT measurement, not just a render detail, and three places
  * need it in agreement or the player visibly breaks:
