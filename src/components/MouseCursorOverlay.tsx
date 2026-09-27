@@ -524,9 +524,14 @@ export function MouseCursorOverlay({
     }
 
     function handleWindowMouseUp(event: PointerEvent) {
-      if (event.button !== 0 && event.button !== 2) return
       const press = clickPressRef.current
-      if (!press || press.button !== event.button) return
+      if (!press) return
+      // A CHORD reports only its last release: pointer events fire pointerup
+      // once, when the final button lets go, carrying THAT button -- the
+      // releases before it arrive as pointermoves. So a press whose own
+      // button went up mid-chord ends on whichever release empties the
+      // buttons, or it would hold the orbit deformed until the next press.
+      if (press.button !== event.button && event.buttons !== 0) return
 
       const heldMs = performance.now() - press.startMs
       const remainingMs = clickMinHoldMs - heldMs
