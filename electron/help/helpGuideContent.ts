@@ -150,6 +150,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - Left out: emoji, Chinese, Japanese and Korean characters (they take two cells), and invisible characters such as zero-width spaces and joiners (they take none). They simply do not appear when you type or paste them.
 - Wider or narrower spaces become an ordinary space, and an accent typed as a separate mark is joined to its letter.
 - A note or file that already contains such characters has them removed when it opens.
+- Some fonts cannot draw every symbol (arrows, box drawing, Greek letters) at the width of one cell. In the edit view such a character shows as an empty cell, so nothing after it shifts; it is still in the note, and render view, search and exports show it. Another editor font may draw it.
 
 ### [Edit and Preview Modes](#edit-and-preview-modes)
 

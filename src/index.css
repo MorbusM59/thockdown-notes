@@ -456,6 +456,14 @@ body {
 }
 
 /* Caret Box Tricks */
+/* A character the editor font cannot draw at one cell, blanked by
+   editor/gridCellGuard.ts: an invisible '0', so it takes exactly one cell by
+   the same glyph-plus-letter-spacing every other character does. */
+.editor-text .cm-grid-blank-cell {
+  color: transparent;
+  text-shadow: none;
+}
+
 .editor-text {
   caret-color: transparent; /* Hide the native OS caret */
 }

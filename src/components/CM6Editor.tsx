@@ -46,6 +46,7 @@ import { createCommittedThumbHeight } from '../editor/scrollThumbMetrics';
 import { sampleCurveRampProgress } from '../editor/ScrollCurvePlan';
 import type { ScrollJourneyTiming } from '../editor/scrollJourney';
 import { sanitizeDocumentText, sanitizeDocumentTextExtended } from '../shared/textSanitization';
+import { gridCellGuard } from '../editor/gridCellGuard';
 import { resolveScopeRange, isSameRange, type SelectionScope } from '../editor/ContractBridgeRangeUtils';
 import { computeMinimalTextReplacement } from '../editor/MinimalTextDiff';
 import { createCanonicalTextFilter } from '../editor/CanonicalTextFilter';
@@ -792,6 +793,9 @@ export function CM6Editor({
   // effect originally installed via `readOnlyCompartmentRef.current.of(...)`.
   const readOnlyCompartmentRef = useRef(new Compartment());
   const spellCheckCompartmentRef = useRef(new Compartment());
+  // The grid-cell guard judges characters against the current font, so it
+  // is reconfigured whenever the font, its size or its loaded state changes.
+  const gridCellGuardCompartmentRef = useRef(new Compartment());
   // Bridges reconcileSelectionJumpScroll (defined inside the CM6 mount
   // effect, below) out to the separate adapterRef-assignment effect's
   // applySnapshot, which needs to center a newly-applied selection (search
@@ -3397,6 +3401,7 @@ export function CM6Editor({
       EditorView.lineWrapping,
       readOnlyCompartmentRef.current.of(EditorView.editable.of(!editorReadOnly)),
       spellCheckCompartmentRef.current.of(EditorView.contentAttributes.of({ class: 'editor-text', spellcheck: String(spellCheckEnabled) })),
+      gridCellGuardCompartmentRef.current.of(gridCellGuard({ family: fontFamily, sizePx: fontSizePx, ready: fontReady })),
       // CM6's own drawSelection() extension is deliberately NOT included --
       // both the cursor (block-grid caret overlay below) and the
       // non-collapsed selection background (highlightRects overlay below)
@@ -4821,6 +4826,16 @@ export function CM6Editor({
       ),
     });
   }, [spellCheckEnabled]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: gridCellGuardCompartmentRef.current.reconfigure(
+        gridCellGuard({ family: fontFamily, sizePx: fontSizePx, ready: fontReady }),
+      ),
+    });
+  }, [fontFamily, fontSizePx, fontReady]);
 
   // Note-switch hydration: replace the whole document when noteId changes.
   // For a genuine note switch this stays a full replace (Slice-1
