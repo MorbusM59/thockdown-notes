@@ -316,6 +316,56 @@ describe('noise layers', () => {
     expect(worstCorner({ weather: 1 }, 0.4)).toBeLessThan(2 * plain);
   });
 
+  // A level that glides toward a target drawn afresh every so often must ease
+  // into each new target, not set off toward it at full speed: one glide
+  // alone turns the moment of every new target into a corner, heard as the
+  // swell lurching in sections a few hundred milliseconds apart. Measured as
+  // the jump in SLOPE across the moment a target is drawn -- the level is
+  // usually still moving toward the old one, so steepness alone says nothing
+  // -- against the steepest the level gets before the next target: near 0
+  // when eased, large when the new target is set off toward at full speed.
+  const worstOnset = (trace: Array<{ value: number; target: number }>) => {
+    let worst = 0
+    for (let index = 2; index < trace.length - 1; index += 1) {
+      if (trace[index].target === trace[index - 1].target) continue
+      let end = index + 1
+      while (end < trace.length && trace[end].target === trace[index].target) end += 1
+      if (end - index < 8) continue
+      const slopeBefore = trace[index - 1].value - trace[index - 2].value
+      const slopeAfter = trace[index].value - trace[index - 1].value
+      const steepest = Math.max(...trace.slice(index, end).map((point, offset) => Math.abs(point.value - trace[index - 1 + offset].value)))
+      if (steepest > 1e-9) worst = Math.max(worst, Math.abs(slopeAfter - slopeBefore) / steepest)
+    }
+    return worst
+  }
+
+  it('eases a thunder roll into each new surge, unless the character asks for lurches', () => {
+    const generator = createProcessor([layer('thunder')], { sampleRate: 8000 })
+    const trace = (harshness: number) => {
+      const roll = generator.processor.makeThunderRoll(harshness)
+      const points: Array<{ value: number; target: number }> = []
+      for (let sample = 0; sample < 8000 * 20; sample += 1) {
+        const value = generator.processor.stepThunderRoll(roll)
+        points.push({ value, target: roll.target })
+      }
+      return points
+    }
+    expect(worstOnset(trace(0))).toBeLessThan(0.1)
+    // The harsh end keeps its lurch: that is what the character is for.
+    expect(worstOnset(trace(1))).toBeGreaterThan(0.9)
+  })
+
+  it('eases the rain wash into each new swell', () => {
+    const generator = createProcessor([layer('rain', { washLevel: 1, washDensity: 1 })], { sampleRate: 8000 })
+    const bed = generator.processor.channels[0].bed
+    const points: Array<{ value: number; target: number }> = []
+    for (let step = 0; step < (8000 * 30) / 32; step += 1) {
+      generator.render(32 / 8000)
+      points.push({ value: bed.swell, target: bed.swellTarget })
+    }
+    expect(worstOnset(points)).toBeLessThan(0.1)
+  })
+
   it('varies each cycle\'s length around its period, keeping the tempo', () => {
     const generator = createProcessor([layer('noise', { variation: 1 })], { sampleRate: 4000 });
     const channel = generator.processor.channels[0];

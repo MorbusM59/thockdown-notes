@@ -1626,7 +1626,11 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
     const density = RAIN_WASH_DENSITY_RANGE ** (((channel.washDensity ?? 0.5) - 0.5) * 2);
     const impulseChance = Math.min(1, (spec.ratePerSec * density) / (2 * sampleRate));
     const impulseSize = 1 / Math.sqrt(density);
-    const swellRate = 1 / (sampleRate * 0.8);
+    // Two glides in series, 0.4 s each (the 0.8 s the single glide had,
+    // split): a new swell target is eased into rather than set off toward at
+    // full speed. One glide alone put a corner in the wash's level at every
+    // target -- the same abrupt onset the weather and stepWander avoid.
+    const swellRate = 1 / (sampleRate * 0.4);
     const scale = spec.gain * wash * Math.SQRT1_2;
     for (let index = 0; index < length; index += 1) {
       if (bed.swellFrames <= 0) {
@@ -1634,7 +1638,8 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
         bed.swellFrames = this.eventDelayFrames(1 / BED_SWELL_PERIOD_SEC);
       }
       bed.swellFrames -= 1;
-      bed.swell += (bed.swellTarget - bed.swell) * swellRate;
+      bed.swellLeading = (bed.swellLeading ?? bed.swell) + ((bed.swellTarget - (bed.swellLeading ?? bed.swell)) * swellRate);
+      bed.swell += (bed.swellLeading - bed.swell) * swellRate;
       const level = scale * bed.swell;
       const impulseA = this.random() < impulseChance ? ((this.random() * 2) - 1) * impulseSize : 0;
       const a = bandPass(filterA, impulseA + (((this.random() * 2) - 1) * spec.floor)) * level;
@@ -2054,10 +2059,25 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
     return {
       sec: [blend(THUNDER_ROLL.smooth.sec[0], THUNDER_ROLL.harsh.sec[0]), blend(THUNDER_ROLL.smooth.sec[1], THUNDER_ROLL.harsh.sec[1])],
       floor: blend(THUNDER_ROLL.smooth.floor, THUNDER_ROLL.harsh.floor),
-      glide: blend(THUNDER_ROLL.smooth.glidePerSec, THUNDER_ROLL.harsh.glidePerSec) / sampleRate,
+      // The glide's time constant split into two stages in series, eased by
+      // smoothness exactly as stepWander's `ease`: at harshness 0 half the
+      // time is spent easing into each new target, so a surge swells in; at
+      // 1 the first stage is instant and what is left is one glide, the
+      // choppy growl's real lurch. The total time constant is unchanged.
+      ...(() => {
+        const timeConstantSec = 1 / blend(THUNDER_ROLL.smooth.glidePerSec, THUNDER_ROLL.harsh.glidePerSec);
+        const ease = 1 - harshness;
+        const leadingSec = timeConstantSec * 0.5 * ease;
+        const followingSec = timeConstantSec * (1 - (0.5 * ease));
+        return {
+          leadingGlide: leadingSec > 0 ? Math.min(1, 1 / (leadingSec * sampleRate)) : 1,
+          glide: Math.min(1, 1 / (followingSec * sampleRate)),
+        };
+      })(),
       gapChance: THUNDER_ROLL_GAP_CHANCE * harshness,
       seed: Math.floor(this.random() * 0x100000000) >>> 0,
       value: 1,
+      leading: 1,
       target: 1,
       frames: 0,
     };
@@ -2075,7 +2095,8 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
       roll.frames = Math.round((roll.sec[0] + ((roll.sec[1] - roll.sec[0]) * (roll.seed / 0x100000000))) * sampleRate);
     }
     roll.frames -= 1;
-    roll.value += (roll.target - roll.value) * roll.glide;
+    roll.leading += (roll.target - roll.leading) * roll.leadingGlide;
+    roll.value += (roll.leading - roll.value) * roll.glide;
     return roll.value;
   }
 
