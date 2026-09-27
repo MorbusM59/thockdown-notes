@@ -66,6 +66,7 @@ export interface HoldToAdjustHandlers {
   onPointerDown: (event: ReactPointerEvent) => void
   onPointerUp: (event: ReactPointerEvent) => void
   onPointerCancel: (event: ReactPointerEvent) => void
+  onLostPointerCapture: (event: ReactPointerEvent) => void
   onContextMenu: (event: ReactMouseEvent) => void
   /**
    * A right press IS a gesture here (it raises), so the control has to look
@@ -183,12 +184,14 @@ export function useHoldToAdjust(options: HoldToAdjustOptions): HoldToAdjustHandl
   const handlePointerUp = useCallback((event: ReactPointerEvent) => {
     const hold = holdRef.current
     if (!hold || event.pointerId !== hold.pointerId) return
+    // Ended BEFORE capture is released, so the lostpointercapture that the
+    // release produces finds no hold and cannot cancel away the tap step.
+    endHold()
     try {
       (event.currentTarget as Element).releasePointerCapture(event.pointerId)
     } catch {
       // Already released, or never captured.
     }
-    endHold()
   }, [endHold])
 
   const handlePointerCancel = useCallback((event: ReactPointerEvent) => {
@@ -198,6 +201,14 @@ export function useHoldToAdjust(options: HoldToAdjustOptions): HoldToAdjustHandl
     stopTicking()
     holdRef.current = null
   }, [stopTicking])
+
+  // Capture can be taken away without a pointerup ever arriving here (the
+  // window losing focus mid-press, among others). Left running, the ramp
+  // would carry on to the end of the range and every later press would be
+  // refused as "mid-hold". Treated as a cancel. A normal release also ends
+  // in lostpointercapture, but by then the hold is already over and this
+  // finds nothing to stop.
+  const handleLostPointerCapture = handlePointerCancel
 
   const handleContextMenu = useCallback((event: ReactMouseEvent) => {
     // Right-press is a direction here, so the native menu must never appear.
@@ -210,6 +221,7 @@ export function useHoldToAdjust(options: HoldToAdjustOptions): HoldToAdjustHandl
     onPointerDown: handlePointerDown,
     onPointerUp: handlePointerUp,
     onPointerCancel: handlePointerCancel,
+    onLostPointerCapture: handleLostPointerCapture,
     onContextMenu: handleContextMenu,
     'data-secondary-press': 'action',
   }
