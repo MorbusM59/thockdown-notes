@@ -60,7 +60,16 @@ export function isTextEntryElement(element: Element | null | undefined): boolean
  */
 export function mayTakeFocusOnPress(target: Element | null | undefined): boolean {
   if (!target) return false
-  return isTextEntryElement(target) || Boolean(target.closest(NATIVE_PRESS_SELECTOR))
+  if (isTextEntryElement(target)) return true
+  const native = target.closest(NATIVE_PRESS_SELECTOR)
+  if (!native) return false
+  // A BUTTON INSIDE a drag source or read-only text is a button first: the
+  // press is aimed at it, not at dragging or selecting its container, so it
+  // gets the press and not the keyboard like every other button. Without
+  // this, a note row's save/close/archive/trash buttons -- inside a
+  // draggable row -- took focus on every press.
+  const button = target.closest('button')
+  return !(button && button !== native && native.contains(button))
 }
 
 /**
@@ -90,5 +99,9 @@ export function mayTakeFocusOnPress(target: Element | null | undefined): boolean
  */
 export function mayHoldKeyboard(holder: Element | null | undefined): boolean {
   if (!holder) return false
-  return isTextEntryElement(holder) || Boolean(holder.closest('[tabindex]'))
+  // The holder ITSELF must carry the tabindex: focus lands on the element
+  // that is focusable, so a natively focusable button inside a tabindex
+  // container (a note row's action buttons) has not declared anything, and
+  // an ancestor's declaration is not its own.
+  return isTextEntryElement(holder) || holder.matches('[tabindex]')
 }
