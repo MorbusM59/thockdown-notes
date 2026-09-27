@@ -157,7 +157,12 @@ export class AmbientSoundEngine {
       });
       worklet.onprocessorerror = () => {
         console.error('Ambient audio worklet stopped unexpectedly');
-        this.fadeOutAndDisconnect();
+        // A processor that threw does not run again, so the graph around it
+        // is torn down now rather than after a fade: the delayed teardown
+        // stands down while the preferences are still audible, which they
+        // always are here, and would leave every later apply() configuring
+        // a dead node. With the graph gone, the next apply() builds a new one.
+        if (this.worklet === worklet) this.teardown();
       };
 
       this.context = context;
@@ -275,23 +280,35 @@ export class AmbientSoundEngine {
       this.disconnectTimer = null;
       const latest = this.preferences;
       if (latest && isAudible(latest)) return;
-      if (this.spaceTimer !== null) window.clearTimeout(this.spaceTimer);
-      this.spaceTimer = null;
-      this.worklet?.disconnect();
-      this.mixGain?.disconnect();
-      this.busLimiter?.disconnect();
-      this.spaceInput?.disconnect();
-      for (const slot of this.spaceSlots) {
-        slot.convolver.disconnect();
-        slot.gain.disconnect();
-      }
-      this.worklet = null;
-      this.mixGain = null;
-      this.busLimiter = null;
-      this.spaceInput = null;
-      this.spaceSlots = [];
-      this.spaceKey = null;
+      this.teardown();
     }, AMBIENT_DISCONNECT_MS);
+  }
+
+  /**
+   * Take the graph down and let its processor go. The `stop` message is what
+   * lets the audio thread drop the processor (see ambient-generator.js);
+   * disconnecting the node alone leaves it rendering.
+   */
+  private teardown(): void {
+    if (this.disconnectTimer !== null) window.clearTimeout(this.disconnectTimer);
+    this.disconnectTimer = null;
+    if (this.spaceTimer !== null) window.clearTimeout(this.spaceTimer);
+    this.spaceTimer = null;
+    this.worklet?.port.postMessage({ type: 'stop' });
+    this.worklet?.disconnect();
+    this.mixGain?.disconnect();
+    this.busLimiter?.disconnect();
+    this.spaceInput?.disconnect();
+    for (const slot of this.spaceSlots) {
+      slot.convolver.disconnect();
+      slot.gain.disconnect();
+    }
+    this.worklet = null;
+    this.mixGain = null;
+    this.busLimiter = null;
+    this.spaceInput = null;
+    this.spaceSlots = [];
+    this.spaceKey = null;
   }
 }
 

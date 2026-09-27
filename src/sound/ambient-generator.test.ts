@@ -1273,3 +1273,16 @@ describe('chimes: unison, material and scale', () => {
     expect(CHIME_SCALES[bohlenPierce].period).toBeCloseTo(1200 * Math.log2(3), 2);
   });
 });
+
+describe('stopping', () => {
+  // The engine's teardown sends `stop`; a processor only lets the browser
+  // collect it by returning false, and one left returning true keeps
+  // rendering after its node is disconnected.
+  it('keeps running until told to stop, and then asks to be released', () => {
+    const generator = createProcessor([layer('noise')], { sampleRate: 8000 });
+    const outputs = () => [[new Float32Array(128), new Float32Array(128)], [new Float32Array(128), new Float32Array(128)]];
+    expect(generator.processor.process([], outputs())).toBe(true);
+    generator.processor.port.onmessage?.({ data: { type: 'stop' } });
+    expect(generator.processor.process([], outputs())).toBe(false);
+  });
+});

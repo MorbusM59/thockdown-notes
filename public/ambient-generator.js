@@ -789,7 +789,17 @@ class AmbientGenerator extends AudioWorkletProcessor {
     };
     // The scene's gust this block, -1..1: the weather signal x gustiness.
     this.gust = 0;
+    // Set by a `stop` message when the engine tears the graph down
+    // (AmbientSoundEngine's teardown). process() then returns false, which is
+    // the only way a processor tells the browser it may be collected: one
+    // that keeps returning true is kept alive and keeps rendering after its
+    // node has been disconnected, and every ambient on/off would add one.
+    this.stopped = false;
     this.port.onmessage = (event) => {
+      if (event.data?.type === 'stop') {
+        this.stopped = true;
+        return;
+      }
       if (event.data?.type !== 'configure') return;
       this.configure(event.data.channels ?? [], event.data.weather ?? null);
     };
@@ -3249,6 +3259,7 @@ class AmbientGenerator extends AudioWorkletProcessor {
    * resume from where they stood.
    */
   process(_inputs, outputs) {
+    if (this.stopped) return false;
     const direct = outputs[0];
     const send = outputs[1];
     const length = direct[0].length;
