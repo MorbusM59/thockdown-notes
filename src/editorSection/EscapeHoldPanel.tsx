@@ -1279,13 +1279,14 @@ export function EscapeHoldPanel({
               // pointer -- that gap is the entire reason
               // refreshHoverFromPointer exists -- so this fires for pointer
               // movement and nothing else.
-              setHoveredIndex((current) => {
-                if (current === index) return current
-                void typingSoundManager.playRandomClick(
-                  hoverStepVoice(current ?? focusedIndex, index, cellsRef.current.length),
-                )
-                return index
-              })
+              // Played HERE and not inside a state updater: React may run an
+              // updater twice (StrictMode, a replayed render), and a sound is
+              // not something a pure function may do.
+              if (hoveredIndex === index) return
+              void typingSoundManager.playRandomClick(
+                hoverStepVoice(hoveredIndex ?? focusedIndex, index, cellsRef.current.length),
+              )
+              setHoveredIndex(index)
             }}
             onMouseLeave={() => setHoveredIndex((current) => (current === index ? null : current))}
           >
