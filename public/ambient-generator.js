@@ -753,16 +753,6 @@ function lowPassStep(filter, input) {
   return v2;
 }
 
-/** One sample through a stateVariableFilter (q = SQRT1_2 for Butterworth); returns its high-pass output. */
-function highPassStep(filter, input) {
-  const v3 = input - filter.s2;
-  const v1 = (filter.a1 * filter.s1) + (filter.a2 * v3);
-  const v2 = filter.s2 + (filter.a2 * filter.s1) + (filter.a3 * v3);
-  filter.s1 = (2 * v1) - filter.s1;
-  filter.s2 = (2 * v2) - filter.s2;
-  return input - (Math.SQRT2 * v1) - v2;
-}
-
 /** One sample through a stateVariableFilter; returns its band-pass output. */
 function bandPass(filter, input) {
   const v3 = input - filter.s2;
@@ -2161,6 +2151,16 @@ class AmbientGenerator extends AudioWorkletProcessor {
    * A thunder layer's block: the direct sound into `left`/`right` and what
    * goes to the reverb into `sendLeft`/`sendRight` (all overwritten). A
    * storm between peals costs one comparison per sample and nothing else.
+   *
+   * Rendered rumble-major: the block is cut at every peal start into
+   * segments, and within a segment each peal's two rolls are stepped into
+   * scratch first, then each rumble runs its whole stretch in one loop with
+   * its filter state in locals, then the peal's sum is scaled into the
+   * layer's mix. Every sample comes out of the same arithmetic in the same
+   * order as a sample-major walk (each rumble adds into the peal's sum in
+   * rumble order, each peal into the mix in reverse peal order), which is
+   * what keeps the output identical to it; the walk cost several times as
+   * much, in per-sample function calls and object property traffic.
    */
   renderThunder(channel, left, right, sendLeft, sendRight, length) {
     left.fill(0, 0, length);
@@ -2168,8 +2168,35 @@ class AmbientGenerator extends AudioWorkletProcessor {
     sendLeft.fill(0, 0, length);
     sendRight.fill(0, 0, length);
     const brown = this.noiseLoop('brown');
-    for (let index = 0; index < length; index += 1) {
-      if (currentFrame + index >= channel.nextPealFrame) {
+    if (!this.thunderScratch || this.thunderScratch.bodyRoll.length < length) {
+      this.thunderScratch = {
+        bodyRoll: new Float64Array(length),
+        boomRoll: new Float64Array(length),
+        sumLeft: new Float64Array(length),
+        sumRight: new Float64Array(length),
+        directLeft: new Float64Array(length),
+        directRight: new Float64Array(length),
+        wetLeft: new Float64Array(length),
+        wetRight: new Float64Array(length),
+        active: new Uint8Array(length),
+      };
+    }
+    const scratch = this.thunderScratch;
+    const directLeft = scratch.directLeft;
+    const directRight = scratch.directRight;
+    const wetLeft = scratch.wetLeft;
+    const wetRight = scratch.wetRight;
+    directLeft.fill(0, 0, length);
+    directRight.fill(0, 0, length);
+    wetLeft.fill(0, 0, length);
+    wetRight.fill(0, 0, length);
+    // Whether any peal was present at each sample: a sample with none is
+    // left silent and moves neither the contrast follower nor the high-pass.
+    const active = scratch.active;
+    active.fill(0, 0, length);
+    let segmentStart = 0;
+    while (segmentStart < length) {
+      if (currentFrame + segmentStart >= channel.nextPealFrame) {
         const settings = this.thunderPealSettings(channel);
         this.startPeal(channel, settings);
         // Contrast acts on the layer's mix, so the latest peal's draw of it
@@ -2180,84 +2207,236 @@ class AmbientGenerator extends AudioWorkletProcessor {
         // A gust brings the next peal sooner, a lull puts it off.
         const pauseSec = settings.lengthSec * ((1 - settings.share) / settings.share)
           * (2 ** (-WEATHER_THUNDER_OCTAVES * this.weatherFactor(channel)));
-        channel.nextPealFrame = currentFrame + index + Math.max(1, Math.round((settings.lengthSec + pauseSec) * sampleRate));
+        channel.nextPealFrame = currentFrame + segmentStart + Math.max(1, Math.round((settings.lengthSec + pauseSec) * sampleRate));
       }
-      if (channel.peals.length === 0) continue;
-      let directLeft = 0;
-      let directRight = 0;
-      let wetLeft = 0;
-      let wetRight = 0;
+      const segmentEnd = Math.min(length, Math.max(segmentStart + 1, channel.nextPealFrame - currentFrame));
+      // Reverse order, as the mix sums peals in that order; a spent peal is
+      // swapped out only after the segment, which leaves its (silent) share
+      // of the sums unchanged.
+      // A peal is present up to and including the first sample on which it
+      // has nothing left to play, and is swapped out of the list on that
+      // sample; removals are replayed in that order (and, within a sample,
+      // in reverse list order) so the list keeps the order the mix sums in.
+      const removals = [];
+      let presentUntil = segmentStart;
       for (let pealIndex = channel.peals.length - 1; pealIndex >= 0; pealIndex -= 1) {
         const peal = channel.peals[pealIndex];
-        // Rumbles become live in start order; `next` is the first not yet live.
-        while (peal.next < peal.rumbles.length && peal.rumbles[peal.next].start <= peal.age) peal.next += 1;
-        peal.age += 1;
-        const bodyRoll = this.stepThunderRoll(peal.bodyRoll);
-        const boomRoll = this.stepThunderRoll(peal.boomRoll);
-        let sumLeft = 0;
-        let sumRight = 0;
-        let live = 0;
-        for (let rumbleIndex = 0; rumbleIndex < peal.next; rumbleIndex += 1) {
-          const rumble = peal.rumbles[rumbleIndex];
-          if (rumble.age >= rumble.life) continue;
-          live += 1;
-          // Where it is in the field moves every 1024 samples.
-          if ((rumble.age & 1023) === 0) {
-            const progress = Math.min(1, rumble.age / rumble.life);
-            const pan = rumble.panFrom + ((rumble.panTo - rumble.panFrom) * progress);
-            rumble.gainLeft = Math.SQRT2 * Math.cos((pan + 1) * Math.PI / 4);
-            rumble.gainRight = Math.SQRT2 * Math.sin((pan + 1) * Math.PI / 4);
-          }
-          let envelope;
-          if (rumble.age < rumble.attack) {
-            const x = rumble.age / rumble.attack;
-            envelope = x * x * (3 - (2 * x));
-          } else {
-            rumble.tail *= rumble.decay;
-            envelope = rumble.tail;
-          }
-          const noise = brown[rumble.read];
-          const sample = (rumble.band
-            ? lowPassStep(rumble.lowPass[1], lowPassStep(rumble.lowPass[0], bandPass(rumble.filter, noise)))
-            : highPassStep(rumble.highPass[1], highPassStep(rumble.highPass[0], lowPassStep(rumble.filter, noise)))) * rumble.level * envelope;
-          rumble.read = rumble.read + 1 === brown.length ? 0 : rumble.read + 1;
-          const rolled = sample * (rumble.band ? boomRoll : bodyRoll);
-          sumLeft += rolled * rumble.gainLeft;
-          sumRight += rolled * rumble.gainRight;
-          rumble.age += 1;
-        }
-        const volume = faderGain(Math.max(0, Math.min(1, channel.volume + peal.volumeOffset))) * (channel.kindGain ?? 1);
-        directLeft += sumLeft * volume * peal.direct;
-        directRight += sumRight * volume * peal.direct;
-        wetLeft += sumLeft * volume * peal.send;
-        wetRight += sumRight * volume * peal.send;
-        if (live === 0 && peal.next === peal.rumbles.length) {
-          channel.peals[pealIndex] = channel.peals[channel.peals.length - 1];
-          channel.peals.pop();
-        }
+        const spentAt = this.renderPealSegment(channel, peal, brown, scratch, segmentStart, segmentEnd);
+        presentUntil = Math.max(presentUntil, spentAt < segmentEnd ? spentAt + 1 : segmentEnd);
+        if (spentAt < segmentEnd) removals.push({ peal, spentAt, order: removals.length });
       }
-      const contrast = Math.max(-1, Math.min(1, (channel.contrast ?? 0) + (channel.contrastOffset ?? 0)));
+      active.fill(1, segmentStart, presentUntil);
+      removals.sort((a, b) => (a.spentAt - b.spentAt) || (a.order - b.order));
+      for (const { peal } of removals) {
+        const pealIndex = channel.peals.indexOf(peal);
+        channel.peals[pealIndex] = channel.peals[channel.peals.length - 1];
+        channel.peals.pop();
+      }
+      segmentStart = segmentEnd;
+    }
+    const contrast = Math.max(-1, Math.min(1, (channel.contrast ?? 0) + (channel.contrastOffset ?? 0)));
+    const follow = channel.contrastFollow;
+    const highPass = channel.highPass;
+    const h0a1 = highPass[0].a1; const h0a2 = highPass[0].a2; const h0a3 = highPass[0].a3;
+    let h0s1 = highPass[0].s1; let h0s2 = highPass[0].s2;
+    const h1a1 = highPass[1].a1; const h1a2 = highPass[1].a2; const h1a3 = highPass[1].a3;
+    let h1s1 = highPass[1].s1; let h1s2 = highPass[1].s2;
+    const h2a1 = highPass[2].a1; const h2a2 = highPass[2].a2; const h2a3 = highPass[2].a3;
+    let h2s1 = highPass[2].s1; let h2s2 = highPass[2].s2;
+    const h3a1 = highPass[3].a1; const h3a2 = highPass[3].a2; const h3a3 = highPass[3].a3;
+    let h3s1 = highPass[3].s1; let h3s2 = highPass[3].s2;
+    for (let index = 0; index < length; index += 1) {
+      if (active[index] === 0) continue;
+      let dl = directLeft[index];
+      let dr = directRight[index];
+      let wl = wetLeft[index];
+      let wr = wetRight[index];
       if (contrast !== 0) {
         // Followed as power, so the exponent on the ratio is halved.
-        const power = 0.5 * ((directLeft * directLeft) + (directRight * directRight));
-        const follow = channel.contrastFollow;
+        const power = 0.5 * ((dl * dl) + (dr * dr));
         follow.level += (power - follow.level) * follow.rate;
         follow.pivot += (follow.level - follow.pivot) * (follow.level > follow.pivot ? follow.rise : follow.fall);
         if (follow.pivot > 1e-12) {
           const gain = Math.max(THUNDER_CONTRAST_GAIN[0], Math.min(THUNDER_CONTRAST_GAIN[1],
             (follow.level / follow.pivot) ** (0.5 * contrast * THUNDER_CONTRAST_EXPONENT)));
-          directLeft *= gain;
-          directRight *= gain;
-          wetLeft *= gain;
-          wetRight *= gain;
+          dl *= gain;
+          dr *= gain;
+          wl *= gain;
+          wr *= gain;
         }
       }
-      const highPass = channel.highPass;
-      left[index] = highPassStep(highPass[0], directLeft);
-      right[index] = highPassStep(highPass[1], directRight);
-      sendLeft[index] = highPassStep(highPass[2], wetLeft);
-      sendRight[index] = highPassStep(highPass[3], wetRight);
+      // Each of the four outputs through its stateVariableFilter (Q 0.707)
+      // read as a high-pass -- input - SQRT2 x band - low -- unrolled with
+      // the state in locals for the block.
+      let v3 = dl - h0s2;
+      let v1 = (h0a1 * h0s1) + (h0a2 * v3);
+      let v2 = h0s2 + (h0a2 * h0s1) + (h0a3 * v3);
+      h0s1 = (2 * v1) - h0s1; h0s2 = (2 * v2) - h0s2;
+      left[index] = dl - (Math.SQRT2 * v1) - v2;
+      v3 = dr - h1s2;
+      v1 = (h1a1 * h1s1) + (h1a2 * v3);
+      v2 = h1s2 + (h1a2 * h1s1) + (h1a3 * v3);
+      h1s1 = (2 * v1) - h1s1; h1s2 = (2 * v2) - h1s2;
+      right[index] = dr - (Math.SQRT2 * v1) - v2;
+      v3 = wl - h2s2;
+      v1 = (h2a1 * h2s1) + (h2a2 * v3);
+      v2 = h2s2 + (h2a2 * h2s1) + (h2a3 * v3);
+      h2s1 = (2 * v1) - h2s1; h2s2 = (2 * v2) - h2s2;
+      sendLeft[index] = wl - (Math.SQRT2 * v1) - v2;
+      v3 = wr - h3s2;
+      v1 = (h3a1 * h3s1) + (h3a2 * v3);
+      v2 = h3s2 + (h3a2 * h3s1) + (h3a3 * v3);
+      h3s1 = (2 * v1) - h3s1; h3s2 = (2 * v2) - h3s2;
+      sendRight[index] = wr - (Math.SQRT2 * v1) - v2;
     }
+    highPass[0].s1 = h0s1; highPass[0].s2 = h0s2;
+    highPass[1].s1 = h1s1; highPass[1].s2 = h1s2;
+    highPass[2].s1 = h2s1; highPass[2].s2 = h2s2;
+    highPass[3].s1 = h3s1; highPass[3].s2 = h3s2;
+  }
+
+  /**
+   * One peal over samples [start, end) of the block, added into the
+   * scratch mix (renderThunder). A rumble becomes live on the sample its
+   * start is reached; each runs to the segment's end or its own life.
+   * Returns the first sample on which the peal has nothing left to play
+   * (every rumble started and none live), or `end` if it has not got there.
+   */
+  renderPealSegment(channel, peal, brown, scratch, start, end) {
+    const bodyRoll = scratch.bodyRoll;
+    const boomRoll = scratch.boomRoll;
+    const sumLeft = scratch.sumLeft;
+    const sumRight = scratch.sumRight;
+    for (let index = start; index < end; index += 1) {
+      bodyRoll[index] = this.stepThunderRoll(peal.bodyRoll);
+      boomRoll[index] = this.stepThunderRoll(peal.boomRoll);
+    }
+    sumLeft.fill(0, start, end);
+    sumRight.fill(0, start, end);
+    const ageAtStart = peal.age;
+    while (peal.next < peal.rumbles.length && peal.rumbles[peal.next].start <= ageAtStart + (end - start - 1)) peal.next += 1;
+    const loopLength = brown.length;
+    let lastLive = start - 1;
+    for (let rumbleIndex = 0; rumbleIndex < peal.next; rumbleIndex += 1) {
+      const rumble = peal.rumbles[rumbleIndex];
+      let age = rumble.age;
+      if (age >= rumble.life) continue;
+      const first = start + Math.max(0, rumble.start - ageAtStart);
+      const last = Math.min(end, first + (rumble.life - age));
+      if (first >= last) continue;
+      const attack = rumble.attack;
+      const decay = rumble.decay;
+      const level = rumble.level;
+      const life = rumble.life;
+      const isBand = rumble.band;
+      const roll = isBand ? boomRoll : bodyRoll;
+      const filter = rumble.filter;
+      const first2 = isBand ? rumble.lowPass[0] : rumble.highPass[0];
+      const second2 = isBand ? rumble.lowPass[1] : rumble.highPass[1];
+      // The three filters' coefficients and state in locals, each step the
+      // stateVariableFilter update unrolled (see bandPass and lowPassStep);
+      // the high-pass output is input - SQRT2 x band - low.
+      const fa1 = filter.a1; const fa2 = filter.a2; const fa3 = filter.a3;
+      let fs1 = filter.s1; let fs2 = filter.s2;
+      const pa1 = first2.a1; const pa2 = first2.a2; const pa3 = first2.a3;
+      let ps1 = first2.s1; let ps2 = first2.s2;
+      const qa1 = second2.a1; const qa2 = second2.a2; const qa3 = second2.a3;
+      let qs1 = second2.s1; let qs2 = second2.s2;
+      let tail = rumble.tail;
+      let read = rumble.read;
+      let gainLeft = rumble.gainLeft;
+      let gainRight = rumble.gainRight;
+      for (let index = first; index < last; index += 1) {
+        // Where it is in the field moves every 1024 samples.
+        if ((age & 1023) === 0) {
+          const progress = Math.min(1, age / life);
+          const pan = rumble.panFrom + ((rumble.panTo - rumble.panFrom) * progress);
+          gainLeft = Math.SQRT2 * Math.cos((pan + 1) * Math.PI / 4);
+          gainRight = Math.SQRT2 * Math.sin((pan + 1) * Math.PI / 4);
+        }
+        let envelope;
+        if (age < attack) {
+          const x = age / attack;
+          envelope = x * x * (3 - (2 * x));
+        } else {
+          tail *= decay;
+          envelope = tail;
+        }
+        const noise = brown[read];
+        let v3 = noise - fs2;
+        let v1 = (fa1 * fs1) + (fa2 * v3);
+        let v2 = fs2 + (fa2 * fs1) + (fa3 * v3);
+        fs1 = (2 * v1) - fs1;
+        fs2 = (2 * v2) - fs2;
+        let out;
+        if (isBand) {
+          // band-pass, then two low-passes
+          out = v1;
+          v3 = out - ps2;
+          v1 = (pa1 * ps1) + (pa2 * v3);
+          v2 = ps2 + (pa2 * ps1) + (pa3 * v3);
+          ps1 = (2 * v1) - ps1;
+          ps2 = (2 * v2) - ps2;
+          out = v2;
+          v3 = out - qs2;
+          v1 = (qa1 * qs1) + (qa2 * v3);
+          v2 = qs2 + (qa2 * qs1) + (qa3 * v3);
+          qs1 = (2 * v1) - qs1;
+          qs2 = (2 * v2) - qs2;
+          out = v2;
+        } else {
+          // low-pass, then two high-passes
+          out = v2;
+          let input = out;
+          v3 = input - ps2;
+          v1 = (pa1 * ps1) + (pa2 * v3);
+          v2 = ps2 + (pa2 * ps1) + (pa3 * v3);
+          ps1 = (2 * v1) - ps1;
+          ps2 = (2 * v2) - ps2;
+          out = input - (Math.SQRT2 * v1) - v2;
+          input = out;
+          v3 = input - qs2;
+          v1 = (qa1 * qs1) + (qa2 * v3);
+          v2 = qs2 + (qa2 * qs1) + (qa3 * v3);
+          qs1 = (2 * v1) - qs1;
+          qs2 = (2 * v2) - qs2;
+          out = input - (Math.SQRT2 * v1) - v2;
+        }
+        const sample = out * level * envelope;
+        read = read + 1 === loopLength ? 0 : read + 1;
+        const rolled = sample * roll[index];
+        sumLeft[index] += rolled * gainLeft;
+        sumRight[index] += rolled * gainRight;
+        age += 1;
+      }
+      filter.s1 = fs1; filter.s2 = fs2;
+      first2.s1 = ps1; first2.s2 = ps2;
+      second2.s1 = qs1; second2.s2 = qs2;
+      rumble.tail = tail;
+      rumble.read = read;
+      rumble.gainLeft = gainLeft;
+      rumble.gainRight = gainRight;
+      rumble.age = age;
+      lastLive = Math.max(lastLive, last - 1);
+    }
+    const ageAtEnd = peal.age + (end - start);
+    peal.age = ageAtEnd;
+    const volume = faderGain(Math.max(0, Math.min(1, channel.volume + peal.volumeOffset))) * (channel.kindGain ?? 1);
+    const direct = peal.direct;
+    const send = peal.send;
+    const directLeft = scratch.directLeft;
+    const directRight = scratch.directRight;
+    const wetLeft = scratch.wetLeft;
+    const wetRight = scratch.wetRight;
+    for (let index = start; index < end; index += 1) {
+      directLeft[index] += sumLeft[index] * volume * direct;
+      directRight[index] += sumRight[index] * volume * direct;
+      wetLeft[index] += sumLeft[index] * volume * send;
+      wetRight[index] += sumRight[index] * volume * send;
+    }
+    if (peal.next < peal.rumbles.length) return end;
+    for (const rumble of peal.rumbles) if (rumble.age < rumble.life) return end;
+    return lastLive + 1;
   }
 
 
