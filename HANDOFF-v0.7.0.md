@@ -57,6 +57,7 @@ A big one. **Ambient sound** arrives: a generated soundscape of wind, surf, rain
 - Pressing a note card's archive, trash or save button no longer takes the keyboard away from the editor.
 - The User Guide and the welcome note were corrected wherever they had fallen behind the app.
 - The options cogwheel turns about its own centre instead of wobbling.
+- Reopening a large external file in render view no longer freezes the app for seconds.
 
 
 ## 3. Worth checking in the real app
@@ -68,6 +69,7 @@ These fixes were verified with tests and in `dev:browser` only, never in a packa
 - **External file IPC** (`electron/main.ts`) now uses async `fs`. Open, save and import an external file once.
 - **Music scrub**: hold rewind to scrub, then release. There should be no extra 20% jump after it.
 - **macOS**: hold right-click on an ambient channel to disable it. It should not solo the channel first, and the next short right-click should still solo. On Windows `contextmenu` fires on release, so this path mattered on the Mac.
+- **Reopening a large external file in render view**: drag the same big file in, close it, drag it in again a few times. The cursor should keep moving, and the note should appear without a multi-second freeze (it was ~3.5s per reopen, now ~0.4s in headless Chromium).
 - **Options cogwheel**: it is now an SVG (`WorkIndicatorGlyph.tsx`). Check it looks the same at rest in light and dark, and holds still at the centre while it turns.
 - **Render-view wheel**: spin, re-spin and fast notches should feel slightly longer than before. They used to lose distance; `wheelNotchTravel.ts` and `wheelSpinProfile.ts` now conserve it.
 

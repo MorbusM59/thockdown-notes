@@ -4252,3 +4252,34 @@ other `position.start.offset`; making the nodes cross between modules turned
 that into a type error, which was the shapes pointing out that they were the
 same shape.
 
+
+## Session: reopening a large external file in render view froze the app
+
+Reported as "the first import is smooth, reopening the same file gets sluggish
+and freezes the cursor". Measured by dragging a 2MB file in and closing it ten
+times, in each slot mode (`scripts/perf/verifyExternalReopenWindow.mjs`; the
+browser mock now imports external files as the real service does).
+
+- **The database was not it.** The real `DatabaseService`, running the exact
+  call sequence of one import and close, costs a flat ~400ms per cycle with no
+  growth. That is a standing cost, not the freeze; see `TODO.md`.
+- **Edit mode: flat at ~200ms per open.** Render view: ~460ms on the first
+  open, then ~3.5s on every reopen, nearly all in one long task. Profiled, it
+  was forced synchronous layout (toolbar and tab-bar measurements, plus the
+  window's own) over a transient ~22,000-node DOM.
+- **Cause:** on a reopen the pane shows its scroller before it mounts the
+  block window, and `usePreviewWindow`'s adjustment passes ran against it.
+  `rebuildMeasurements` found no container and recorded a content height of 0,
+  and `resolvePreviewWindowAdjustment` then saw a real viewport over "no
+  content" and grew the range by a screenful per pass: ~110 passes to the whole
+  document, rendered in one commit when the window mounted.
+  `thockdown:debug-preview-window` shows it as a run of `win adjust ... h=0`
+  lines with the range climbing by 78 blocks each time.
+- **Fix:** a pass declines while no window is mounted (`win wait` in the
+  trace), and the window's element is tracked as state (`containerEl`, set by
+  a callback ref), so its arrival runs the first real pass through the layout
+  effect and the ResizeObserver. That also let the observer drop `range` from
+  its dependencies, where it had been re-subscribing on every window move.
+  Render-view reopen: ~360ms, peak window nodes ~200. The regression scripts
+  for the window (`verifyPreviewWindow`, `...NoteSwitch`, `...TrackLanding`,
+  `...RestStability`, `verifyEndOfTrackClick`) pass exactly as before.

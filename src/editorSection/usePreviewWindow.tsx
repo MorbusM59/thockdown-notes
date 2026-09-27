@@ -231,6 +231,23 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
   } = options
 
   const containerRef = useRef<HTMLDivElement | null>(null)
+  /**
+   * The window's element as STATE as well as a ref, because its arriving is
+   * an event the window must react to. The pane can show the scroller before
+   * it mounts the window (a note still being split, a view still settling),
+   * and adjustment passes run against the scroller all the while. With no
+   * window to measure they used to see "no content" and grow the range by a
+   * screenful's worth of blocks per pass -- on a 2MB note, ~110 passes to the
+   * whole document, rendered in one commit the moment the element mounted:
+   * ~22,000 nodes laid out synchronously, a 3-4s freeze, on every reopen of a
+   * large external file in render view. A pass now declines while there is
+   * no window, and the element mounting is what runs the first real one.
+   */
+  const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null)
+  const attachContainer = useCallback((element: HTMLDivElement | null) => {
+    containerRef.current = element
+    setContainerEl(element)
+  }, [])
   const [range, setRange] = useState<PreviewWindowRange>({ startIndex: 0, endIndex: -1 })
   const rangeRef = useRef(range)
   rangeRef.current = range
@@ -505,7 +522,7 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
     scroller.scrollTop = target
     scroller.style.scrollBehavior = previousBehavior
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, range, rebuildMeasurements, applyPendingScroll, previewScrollRef])
+  }, [enabled, range, containerEl, rebuildMeasurements, applyPendingScroll, previewScrollRef])
 
   const readLastScreenChars = useCallback(() => lastScreenCharsRef.current, [])
 
@@ -653,6 +670,12 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
       scheduleAdjustRef.current?.()
       return
     }
+    // No window mounted: there is nothing to size, only a scroller holding
+    // something else. See `containerEl`; its arrival runs the pass that counts.
+    if (!containerRef.current) {
+      traceScroll(() => `win wait    no window mounted, win=${rangeRef.current.startIndex}..${rangeRef.current.endIndex}`)
+      return
+    }
     traceScroll(() => `win adjust  top=${Math.round(scroller.scrollTop)} h=${Math.round(contentHeightRef.current)} win=${rangeRef.current.startIndex}..${rangeRef.current.endIndex} avg=${Math.round(averageBlockHeightRef.current)}`)
     const blockCount = previewBlocksRef.current.length
     const next = resolvePreviewWindowAdjustment(rangeRef.current, blockCount, {
@@ -715,17 +738,21 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
 
   // Content that changes height after it mounts (a font finishing loading, an
   // image, a details element opening) invalidates every offset below it.
+  //
+  // Keyed on the ELEMENT, not on the window's range: the container is the same
+  // element across window moves, and re-subscribing on every move cost a
+  // fresh observer's initial callback -- a full re-measure and an extra pass
+  // -- on each one. What does need a new subscription is the element itself
+  // arriving or being replaced, which `containerEl` says directly.
   useEffect(() => {
-    if (!enabled) return undefined
-    const container = containerRef.current
-    if (!container) return undefined
+    if (!enabled || !containerEl) return undefined
     const observer = new ResizeObserver(() => {
       rebuildMeasurements()
       adjust()
     })
-    observer.observe(container)
+    observer.observe(containerEl)
     return () => observer.disconnect()
-  }, [enabled, rebuildMeasurements, adjust, range])
+  }, [enabled, rebuildMeasurements, adjust, containerEl])
 
   // A NEW DOCUMENT starts a new window. The same document, edited, does not.
   //
@@ -938,7 +965,7 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
     }
 
     return (
-      <div ref={containerRef} className="preview-window">
+      <div ref={attachContainer} className="preview-window">
         {overlay}
         {tail.length > 0 ? (
           <div
@@ -952,7 +979,7 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
         {blocks}
       </div>
     )
-  }, [enabled, range, previewBlocks, renderBlock, overlay, tailProbeBlocks])
+  }, [enabled, range, previewBlocks, renderBlock, overlay, tailProbeBlocks, attachContainer])
 
   return { element, api }
 }

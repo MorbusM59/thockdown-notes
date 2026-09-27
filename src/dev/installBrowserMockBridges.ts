@@ -557,7 +557,18 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
         })
         // Mirrors noteLifecycleService.ts's createNote: a genuine standalone
         // note is born with a provisional $n id (shared/assignedIds.ts).
-        created.assignedId = buildNextAutoAssignedId(store.notes.map((note) => note.assignedId))
+        // An external file's temp note, as noteLifecycleService.ts's createNote
+        // makes it: tagged `external`, carrying its path, and with no
+        // provisional id (the external branch returns before assigning one).
+        // Without this, a dropped file imported as an ordinary note here, so
+        // the reopen and close paths could not be exercised in the browser.
+        if (input?.externalPath) {
+          created.tags = ['external']
+          created.externalPath = input.externalPath
+          if (input.title) created.title = input.title
+        } else {
+          created.assignedId = buildNextAutoAssignedId(store.notes.map((note) => note.assignedId))
+        }
         store.notes.push(created)
         // Mirrors noteLifecycleService.ts's createNote: every genuine new
         // standalone note gets its own auto-TOC chapter from birth. No
