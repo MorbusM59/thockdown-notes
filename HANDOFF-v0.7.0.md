@@ -6,6 +6,7 @@ Temporary. **Delete this file in the same commit that closes the release out**; 
 
 - The pre-release sweep is merged: bug fixes, the User Guide and welcome-note corrections, and the thunder render cost cut from 32% to 13% of real time with bit-identical output. Lint, `tsc` and 1,735 tests passed at the time.
 - `f25828f` is **`Release v0.7.0`**: `package.json` and `package-lock.json` are at 0.7.0. It is **not tagged**. The cloud session's git proxy refused the tag push (HTTP 403), and so did the Actions token when it tried to create the tag through a release. The most likely cause is a repository rule letting only the owner create `v*` tags.
+- After the version bump, `main` gained more work, all intended for this release: the cogwheel fix, the render-view reopen freeze fix, note text moved out of the FTS table, and the typing memory-leak fix (below). At the tip, lint and `tsc` are clean and 1,743 tests pass. The regression scripts were compared against the commit before the leak fix: 14 of them fail identically on both, so none of those failures is new (see section 4).
 - A failed run of `.github/workflows/release-windows.yml` exists (Actions → "Release from CI" → run #1). It created nothing: no tag, no release, no assets.
 
 ## 1. Cut the release
@@ -58,6 +59,7 @@ A big one. **Ambient sound** arrives: a generated soundscape of wind, surf, rain
 - The User Guide and the welcome note were corrected wherever they had fallen behind the app.
 - The options cogwheel turns about its own centre instead of wobbling.
 - Reopening a large external file in render view no longer freezes the app for seconds.
+- Typing no longer leaks memory. Every keystroke used to keep a full copy of the note alive until restart, about 2 MB per keystroke on a 2 MB note. Long writing sessions now stay flat.
 
 
 ## 3. Worth checking in the real app
@@ -73,13 +75,27 @@ These fixes were verified with tests and in `dev:browser` only, never in a packa
 - **Options cogwheel**: it is now an SVG (`WorkIndicatorGlyph.tsx`). Check it looks the same at rest in light and dark, and holds still at the centre while it turns.
 - **Render-view wheel**: spin, re-spin and fast notches should feel slightly longer than before. They used to lose distance; `wheelNotchTravel.ts` and `wheelSpinProfile.ts` now conserve it.
 
+### The memory-leak fix (largest change, and never run in Electron)
+
+The note's text moved out of React state; see `CLAUDE.md` → `useDisplayedNoteText.ts` for the rule. This touched the editor's hydration path, the notes list, and the main process's note summaries: they now carry `leadLine` instead of the full text, and App's `setNotes` moves the text into a store. Check:
+
+- **Memory:** type in a large note for ten minutes with Electron's task manager (or Chrome DevTools → Memory) open. The renderer should level off, not climb. The automated gate is `node scripts/perf/measureTypingRetention.mjs` (browser mock).
+- **Sidebar search** still finds notes by words in their body, not only titles.
+- **Labels:** tab, tag-bar and chapter pills still show titles. A chapter with no `## ` first line shows "Missing title".
+- **Links into another note** (`$id#anchor`, `§chapter`) still land on the anchor.
+- **Time Machine:** browse snapshots and return to the present. The editor and render view must show the snapshot, then the live text.
+- **Section buttons** (rename, swap, clear, delete, dock/undock) still work. They now go through `useStableCallbacks`.
+- **External-file save while typing:** hold Enter in a large external note, and save during it. No lines should disappear. Two write-backs that could roll the editor back were removed.
+
 ## 4. Loose ends needing a decision
 
 All three are written up in full under "Needs a decision" at the bottom of `TODO.md`:
 
 1. The wheel's learned notch size only ever shrinks. A fast trackpad swipe, or possibly double-size zoom, can make a mouse scroll several rows per notch.
 2. Stale full-document parses queue up in the worker when a large note's text changes while its first split is pending. The fix is a cancel message in `documentFacts.worker.ts`.
-3. `usePreviewWindow.tsx` re-subscribes its ResizeObserver on every window move, costing one extra forced layout per move. Swap the `range` dependency for a callback ref, and measure with `thockdown:debug-frame-cost` before and after.
+3. `useHeadlineLevelGuard.ts` has had no caller since `58fdfceb`, but several comments still describe it as active. Decide whether to delete it or remount it; see `docs/pending-review-and-removal.md`.
+4. `saveNote` sends the whole note back over IPC on every save, which is wasteful now that the renderer keeps note text in its own store (`TODO.md`).
+5. Fourteen regression scripts fail on `main`, both before and after the leak fix. Five are early CM6-migration scripts (`verifyCM6Phase2Slice9/11/13/17/20`) and may simply be stale. The others are `verifyEditRowGrid` (a `flushSync` warning), `verifyNoHydrationOverwrite` (+820 characters for 40 Enters), `verifyPreviewBlockGeometry`, `verifyPreviewCharThumb`, `verifyPreviewPrewarmSafety` (render view never shown), `verifyScrollbarSemantics`, `verifyTagBarSuggestionFit`, `verifyScrollBridge` and `verifyModeToggleRoundTrip`. Triage them before relying on the suite as a gate.
 
 Also:
 
