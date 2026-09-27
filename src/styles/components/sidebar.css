@@ -290,6 +290,7 @@
 }
 
 .notes-sidebar .view-toggle .icon-btn.btn-options .view-toggle-options-glyph {
+  display:   block;
   font-size: calc(55cqw + 3*var(--spacing-small));
 }
 

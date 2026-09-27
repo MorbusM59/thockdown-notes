@@ -4,8 +4,10 @@
 // The work indicator turns the sidebar's cogwheel in fixed increments, and
 // the whole illusion -- a mechanism that clicks round and comes to rest
 // looking like itself -- depends on that increment being the icon's actual
-// symmetry. Getting it wrong does not look like an error, it looks like a
-// wobble, which is how it was reported.
+// symmetry. Getting it wrong makes the rests look uneven. (It was once
+// blamed for the reported wobble, the centre moving during a turn; that was a
+// separate defect, an off-centre rotation pivot -- see
+// src/shared/workIndicatorSpin.ts.)
 //
 // Assumed to be 45° (an eight-tooth cog) and measured at 60°: Font Awesome's
 // gear has SIX teeth. 45° differed by 30.6% of inked pixels, 60° by 0.6%,

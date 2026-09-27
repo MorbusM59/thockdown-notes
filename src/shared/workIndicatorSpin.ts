@@ -42,9 +42,16 @@ import {
  * MEASURED, not assumed. This was 45 on the reasoning that a cog has eight
  * teeth; Font Awesome's gear has SIX. Stepping 45° on a six-tooth gear leaves
  * it a third of a tooth out at every rest, so no two rests look alike -- which
- * is not read as an error but as a WOBBLE, and was reported as one. The
- * suspicion at the time was an off-centre glyph; the origin turned out to be
- * exactly right (ink centre = box centre, 50%/50%) and the tooth count wrong.
+ * is read as unevenness at rest. The tooth count was wrong and is fixed
+ * here -- but it was NOT the wobble, which is a different defect: the
+ * centre moving while the wheel turns. That was an off-centre pivot after
+ * all. The font glyph sat about 0.75 CSS px from the centre of the box
+ * `transform` rotates about, so the centre hole traced a circle of that
+ * radius once a revolution (measured on the rendered element by locating the
+ * hole in screenshots at several angles). An earlier reading of "ink centre =
+ * box centre" was taken on a static frame and missed it. Fixed by drawing the
+ * gear as an SVG whose box centre IS the artwork's centre
+ * (components/WorkIndicatorGlyph.tsx).
  *
  *   45° -> 30.6% of inked pixels differ    60° -> 0.6% (antialiasing)
  *   90° -> 44.8%                          120° -> 0.9%
