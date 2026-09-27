@@ -309,7 +309,16 @@ export function useNoteProtectionActions({
         writeAttemptedViaNoteApi,
         writeAttemptedViaExternalApi,
       })
-    } else {
+    }
+
+    // Persisted into the database only AFTER the new baseline is recorded
+    // below: the main process's saveNote decides whether an external note
+    // is clean by comparing against its latest from-disk snapshot, so run
+    // before that snapshot it compares against the file as it was BEFORE
+    // this save and stores the note as unsaved -- which is what every
+    // restart then showed, for a file the disk already matched.
+    const persistSavedText = async () => {
+      if (!writeSucceeded || !window.thockdownNotes) return
       // Only when nothing has been typed since the snapshot -- otherwise this
       // assignment walks the app's own newest-text ref BACKWARDS, and every
       // consumer of it (including the editor's hydration path) follows.
@@ -364,6 +373,7 @@ export function useNoteProtectionActions({
     }
 
     if (diskSanityText === null) {
+      await persistSavedText()
       return
     }
 
@@ -423,6 +433,7 @@ export function useNoteProtectionActions({
     } catch (error) {
       console.error('[external-note] failed to persist external note snapshots', { noteId, error })
     }
+    await persistSavedText()
   }, [
     activeNoteId,
     activeNoteText,
