@@ -700,3 +700,28 @@ describe('the thumb the run is played under', () => {
   })
 
 })
+
+describe('a reload mid-run', () => {
+  // docs/adventure-platform.md promises a run resumes on the EXACT screen it
+  // was left on. The entry screen goes on top when the view opens
+  // (enterEntryScreen), so a reload lands on Camp by design; the promise is
+  // that Continue pops back to the screen underneath, through the sanitizer
+  // that every real reload goes through.
+  it('comes back to the exact screen it left, by Continue from the entry screen', () => {
+    for (const seed of [11, 4242, 90210]) {
+      const { save } = walk(40, seed)
+      const before = currentScreen(save, DEPS)!
+      expect(before.stageId).not.toBe(ROOT_STAGE_ID)
+
+      const reloaded = sanitizeGameSave(JSON.parse(JSON.stringify(save)))!
+      expect(reloaded.director.stack).toEqual(save.director.stack)
+      const opened = enterEntryScreen(reloaded, DEPS, NOW)
+      expect(currentScreen(opened, DEPS)!.stageId).toBe(ROOT_STAGE_ID)
+
+      const resumed = choose(opened, 'welcome:continue', DEPS, NOW).save
+      const after = currentScreen(resumed, DEPS)!
+      expect(after.stageId).toBe(before.stageId)
+      expect(after.choices.map((choice) => choice.id)).toEqual(before.choices.map((choice) => choice.id))
+    }
+  })
+})
