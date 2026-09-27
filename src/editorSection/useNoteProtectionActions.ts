@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent, MutableRefObject } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
-import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote, isSameNoteSummary } from '../shared/noteLifecycle'
+import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote } from '../shared/noteLifecycle'
+import { withSavedNote } from '../shared/noteContentStore'
 import { applyProtectedTagDestination } from '../shared/protectedTagActions'
 import { normalizeInternalText } from '../editor/TextPolicy'
 import { armHold, HOLD_CONFIRM_MS } from '../shared/holdTiming'
@@ -336,19 +337,7 @@ export function useNoteProtectionActions({
           hasUnsavedChanges: hasLiveTextMovedOn(),
         }
 
-        setNotes((previous) => {
-          const index = previous.findIndex((note) => note.id === normalizedNextSummary.id)
-          if (index < 0) return previous
-
-          const existing = previous[index]
-          if (isSameNoteSummary(existing, normalizedNextSummary)) {
-            return previous
-          }
-
-          const next = [...previous]
-          next[index] = normalizedNextSummary
-          return next
-        })
+        setNotes((previous) => withSavedNote(previous, normalizedNextSummary, currentText))
 
       } catch (error) {
         console.error('[external-note] saveExternalNoteToFile failed to persist temp note in DB', { noteId, externalPath, error })

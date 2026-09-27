@@ -9,6 +9,7 @@ import type {
   DeleteNoteSnapshotInput,
   LoadNoteInput,
   NoteDocument,
+  NoteSummary,
   NoteSummaryWithContent,
   NoteUiState,
   NoteUiStatePayload,
@@ -35,6 +36,17 @@ const EXTERNAL_TAG = 'EXTERNAL';
 type ParsedNoteMetadata = {
   bodyText: string;
 };
+
+/**
+ * A summary without the note's content. A save's caller is the renderer, which
+ * already holds the text it just saved; sending it back cost a structured
+ * clone of the whole note on every save (2 MB per save on a 2 MB note) for the
+ * renderer to store what it had.
+ */
+function withoutContent(summary: NoteSummaryWithContent): NoteSummary {
+  const { contentText: _contentText, ...rest } = summary;
+  return rest;
+}
 
 function normalizeText(text: string): string {
   return sanitizeDocumentText(text);
@@ -930,7 +942,7 @@ export class NoteLifecycleService {
   // anchors on the fly (computeHeadingAnchors) instead of rewriting heading
   // source into the note itself, so there's no write-triggers-another-write
   // recursion risk here to guard against on that side either.
-  async saveNote(input: SaveNoteInput, options?: { skipAutoChapterHooks?: boolean }): Promise<NoteSummaryWithContent> {
+  async saveNote(input: SaveNoteInput, options?: { skipAutoChapterHooks?: boolean }): Promise<NoteSummary> {
     const record = this.databaseService.getNoteRecord(input.id);
     const filePath = record?.filePath ?? path.join(this.notesDir, idToFileName(input.id));
     const text = normalizeText(input.text);
@@ -990,7 +1002,7 @@ export class NoteLifecycleService {
         throw new Error(`Failed to read saved temp note summary for id=${input.id}`);
       }
 
-      return summary;
+      return withoutContent(summary);
     }
 
     // Cheap "is this note part of a chapter family" check up front (a
@@ -1087,7 +1099,7 @@ export class NoteLifecycleService {
       }
     }
 
-    return summary;
+    return withoutContent(summary);
   }
 
   // Chapters have no life outside their parent -- deleting a parent note

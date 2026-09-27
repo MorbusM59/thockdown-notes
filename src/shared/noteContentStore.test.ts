@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { adoptNoteSummaries } from './noteContentStore'
+import { adoptNoteSummaries, keepIfUnchanged, withSavedNote } from './noteContentStore'
 import type { NoteSummary } from './noteLifecycle'
 
 function summary(id: string, extra: Record<string, unknown> = {}): NoteSummary {
@@ -44,5 +44,34 @@ describe('adoptNoteSummaries', () => {
         if (carried !== undefined) expect(store.get(entry.id)).toBe(carried)
       }
     }
+  })
+})
+
+describe('a save, through the setter App uses', () => {
+  // App's setNotes, as a pure function of the list it had.
+  const setNotesOnce = (previous: NoteSummary[], store: Map<string, string>, update: (list: NoteSummary[]) => NoteSummary[]) =>
+    keepIfUnchanged(adoptNoteSummaries(update(previous), store), previous)
+
+  it('stores the text that was saved, although the saved summary carries none', () => {
+    const store = new Map([['a', 'old text']])
+    const listed = [summary('a'), summary('b')]
+    const saved = summary('a', { updatedAtMs: 2 })
+    const next = setNotesOnce(listed, store, (previous) => withSavedNote(previous, saved, 'new text'))
+    expect(store.get('a')).toBe('new text')
+    expect(next[0]).toEqual(saved)
+    expect((next[0] as NoteSummary & { contentText?: string }).contentText).toBeUndefined()
+  })
+
+  it('keeps the previous list when only the content changed, so nothing re-renders', () => {
+    const store = new Map([['a', 'old text']])
+    const listed = [summary('a'), summary('b')]
+    const next = setNotesOnce(listed, store, (previous) => withSavedNote(previous, summary('a'), 'new text'))
+    expect(next).toBe(listed)
+    expect(store.get('a')).toBe('new text')
+  })
+
+  it('leaves the list alone for a note that is not listed', () => {
+    const listed = [summary('a')]
+    expect(withSavedNote(listed, summary('z'), 'text')).toBe(listed)
   })
 })

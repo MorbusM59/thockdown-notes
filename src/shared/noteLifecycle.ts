@@ -191,7 +191,8 @@ export interface NoteLifecycleApi {
   listNotes(): Promise<NoteSummaryWithContent[]>;
   loadNote(input: LoadNoteInput): Promise<NoteDocument>;
   createNote(input?: CreateNoteInput): Promise<NoteDocument>;
-  saveNote(input: SaveNoteInput): Promise<NoteSummaryWithContent>;
+  /** Returns the summary WITHOUT content: the caller holds the text it saved (see the renderer's save queue). */
+  saveNote(input: SaveNoteInput): Promise<NoteSummary>;
   deleteNote(input: DeleteNoteInput): Promise<void>;
   getNoteTags(input: NoteTagsInput): Promise<string[]>;
   addTagToNote(input: AddTagInput): Promise<string[]>;

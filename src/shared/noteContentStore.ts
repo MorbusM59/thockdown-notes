@@ -1,4 +1,4 @@
-import type { NoteSummary } from './noteLifecycle'
+import { isSameNoteSummary, type NoteSummary } from './noteLifecycle'
 
 /**
  * Moves every note's content out of a list of summaries bound for React state
@@ -35,4 +35,35 @@ export function adoptNoteSummaries(entries: readonly NoteSummary[], contentById:
     if (!listed.has(id)) contentById.delete(id)
   }
   return moved ? adopted : (entries as NoteSummary[])
+}
+
+/**
+ * Puts a just-saved note's summary into `previous`, carrying the text that was
+ * saved so `adoptNoteSummaries` stores it. `saveNote` no longer sends content
+ * back -- the renderer is the one that saved it -- so this is how the store
+ * learns the new text; without it search and labels would keep the old one.
+ * Returns `previous` when the note is not listed.
+ */
+export function withSavedNote(previous: readonly NoteSummary[], summary: NoteSummary, savedText: string): NoteSummary[] {
+  const index = previous.findIndex((note) => note.id === summary.id)
+  if (index < 0) return previous as NoteSummary[]
+  const next = [...previous]
+  next[index] = { ...summary, contentText: savedText } as NoteSummary
+  return next
+}
+
+/**
+ * `adopted` itself, or `previous` when every summary in it is the same as the
+ * one already there -- so an update that only brought new CONTENT (now in the
+ * store) does not re-render everything that reads the list. The save queue
+ * used to get this by bailing out before `setNotes`; content now has to reach
+ * the store even when the summary has not changed, so the bail-out lives here.
+ */
+export function keepIfUnchanged(adopted: NoteSummary[], previous: readonly NoteSummary[]): NoteSummary[] {
+  if (adopted === previous) return adopted
+  if (adopted.length !== previous.length) return adopted
+  for (let index = 0; index < adopted.length; index += 1) {
+    if (!isSameNoteSummary(adopted[index], previous[index])) return adopted
+  }
+  return previous as NoteSummary[]
 }

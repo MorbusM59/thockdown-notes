@@ -1,7 +1,8 @@
 import { useCallback, useRef } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
-import { isExternalNote, isSameNoteSummary } from '../shared/noteLifecycle'
+import { isExternalNote } from '../shared/noteLifecycle'
+import { withSavedNote } from '../shared/noteContentStore'
 import { normalizeInternalText } from '../editor/TextPolicy'
 import type { PreviewBlockSplitCache } from '../editor/PreviewBlockSplit'
 import { buildPersistedBlockMap } from '../editor/persistedBlockMap'
@@ -104,19 +105,11 @@ export function useNoteSaveQueue(options: UseNoteSaveQueueOptions): UseNoteSaveQ
         // (the bug useNoteProtectionActions' explicit save describes).
       }
 
-      setNotes((previous) => {
-        const index = previous.findIndex((note) => note.id === savedSummary.id)
-        if (index < 0) return previous
-
-        const existing = previous[index]
-        if (isSameNoteSummary(existing, savedSummary)) {
-          return previous
-        }
-
-        const next = [...previous]
-        next[index] = savedSummary
-        return next
-      })
+      // The saved text rides along into the note-content store: a save
+      // returns no content (it is this text), and an unchanged summary still
+      // has new content to record -- App's setNotes keeps the old list when
+      // nothing but content changed.
+      setNotes((previous) => withSavedNote(previous, savedSummary, normalizedText))
 
       onSaveCompleted?.(activeNoteId)
     } catch (error) {

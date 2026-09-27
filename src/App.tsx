@@ -48,7 +48,7 @@ import {
 } from './shared/loadouts'
 import type { NoteSummary } from './shared/noteLifecycle'
 import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote, isSameNoteSummary } from './shared/noteLifecycle'
-import { adoptNoteSummaries } from './shared/noteContentStore'
+import { adoptNoteSummaries, keepIfUnchanged, withSavedNote } from './shared/noteContentStore'
 import { getNoteListMetaKind } from './shared/noteListMeta'
 import {
   DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS,
@@ -1928,15 +1928,15 @@ function App() {
    * Every listed note's content, by id -- kept out of `notes` itself, which is
    * React state (see shared/noteContentStore.ts). Written only by `setNotes`
    * below, read through `readNoteContent`. What it holds is as current as the
-   * last summary the main process sent for that note, exactly as the
-   * summaries' own `contentText` used to be.
+   * last summary the main process sent for that note, or the text the
+   * renderer itself last saved (`withSavedNote`: a save returns no content).
    */
   const noteContentByIdRef = useRef(new Map<string, string>())
   const setNotes = useCallback((next: SetStateAction<NoteSummary[]>) => {
-    setNoteSummaries((previous) => adoptNoteSummaries(
+    setNoteSummaries((previous) => keepIfUnchanged(adoptNoteSummaries(
       typeof next === 'function' ? next(previous) : next,
       noteContentByIdRef.current,
-    ))
+    ), previous))
   }, [])
   const readNoteContent = useCallback((noteId: string) => noteContentByIdRef.current.get(noteId) ?? '', [])
   const notesRef = useRef<NoteSummary[]>([])
@@ -5564,17 +5564,9 @@ function App() {
 
     try {
       const loaded = await window.thockdownNotes.loadNote({ id: noteId })
-      const updated = await window.thockdownNotes.saveNote({
-        id: noteId,
-        text: `${loaded.text}${section}`,
-      })
-      setNotes((previous) => {
-        const index = previous.findIndex(n => n.id === updated.id)
-        if (index < 0) return previous
-        const next = [...previous]
-        next[index] = updated
-        return next
-      })
+      const savedText = `${loaded.text}${section}`
+      const updated = await window.thockdownNotes.saveNote({ id: noteId, text: savedText })
+      setNotes((previous) => withSavedNote(previous, updated, savedText))
     } catch (error) {
       const originalError = originalConsoleMethodsRef.current.error ?? console.error
       originalError.call(console, 'Failed to write debug entry', error)

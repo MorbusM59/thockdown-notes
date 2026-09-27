@@ -22,6 +22,7 @@ import type {
   DeleteNoteInput,
   LoadNoteInput,
   NoteDocument,
+  NoteSummary,
   NoteSummaryWithContent,
   NoteLifecycleApi,
   NoteTagsInput,
@@ -601,7 +602,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
       })
     },
 
-    async saveNote(input: SaveNoteInput): Promise<NoteSummaryWithContent> {
+    async saveNote(input: SaveNoteInput): Promise<NoteSummary> {
       return mutate((store) => {
         const note = store.notes.find((entry) => entry.id === input.id)
         if (!note) {
@@ -647,7 +648,10 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
           }
         }
 
-        return clone(toSummary(note))
+        // No content, as the real saveNote (noteLifecycleService.ts's
+        // withoutContent): the renderer holds the text it saved.
+        const { contentText: _contentText, ...summary } = clone(toSummary(note))
+        return summary
       })
     },
 
