@@ -7,11 +7,6 @@ import { beginBackgroundWork } from '../shared/backgroundWork';
 export const TEXTURE_ALGORITHM_VERSION = 2;
 export const TEXTURE_REPEAT_TILE_SIZE = 512;
 
-function quantizeDimension(value: number): number {
-  const safe = Math.max(64, Math.min(4096, Math.floor(value)));
-  return Math.ceil(safe / 64) * 64;
-}
-
 function revokeUrl(url: string | null): void {
   if (!url) return;
   URL.revokeObjectURL(url);
@@ -38,30 +33,25 @@ function swapUrl(nextUrl: string, currentUrlRef: React.MutableRefObject<string |
   }
 }
 
+/**
+ * A texture for one surface, as a CSS `url(...)`. Every surface is one
+ * TEXTURE_REPEAT_TILE_SIZE square tile that the stylesheets repeat
+ * (`mask-repeat: repeat` at `--texture-tile-size`), so how big the surface is
+ * on screen never changes what is generated -- which is why this takes no
+ * size, and why nothing needs to watch a surface being resized.
+ */
 export function useTextureSurface(params: {
   enabled: boolean;
   surface: TextureSurfaceKey;
-  width: number;
-  height: number;
   material: TextureMaterialSettings;
   usePersistentCache?: boolean;
-  useFixedTile?: boolean;
 }): string {
   const { enabled, surface } = params;
   const usePersistentCache = params.usePersistentCache ?? true;
-  const useFixedTile = params.useFixedTile ?? true;
   const material = useMemo(() => clampMaterialSettings(params.material), [params.material]);
   const materialSeed = material.seed;
   const materialGranularity = material.granularity;
   const materialVSteps = material.vSteps;
-  const width = useMemo(
-    () => (useFixedTile ? TEXTURE_REPEAT_TILE_SIZE : quantizeDimension(params.width)),
-    [params.width, useFixedTile],
-  );
-  const height = useMemo(
-    () => (useFixedTile ? TEXTURE_REPEAT_TILE_SIZE : quantizeDimension(params.height)),
-    [params.height, useFixedTile],
-  );
   const [url, setUrl] = useState<string | null>(null);
   const currentUrlRef = useRef<string | null>(null);
   const workerRef = useRef<Worker | null>(null);
@@ -87,8 +77,8 @@ export function useTextureSurface(params: {
 
     const cacheKey: TextureCacheRequest = {
       surface,
-      width,
-      height,
+      width: TEXTURE_REPEAT_TILE_SIZE,
+      height: TEXTURE_REPEAT_TILE_SIZE,
       seed: materialSeed,
       granularity: materialGranularity,
       vSteps: materialVSteps,
@@ -122,8 +112,8 @@ export function useTextureSurface(params: {
         // turning forever.
         const work = beginBackgroundWork('texture');
         const workerRequest: TextureWorkerRequest = {
-          width,
-          height,
+          width: TEXTURE_REPEAT_TILE_SIZE,
+          height: TEXTURE_REPEAT_TILE_SIZE,
           seed: materialSeed,
           granularity: materialGranularity,
           vSteps: materialVSteps,
@@ -177,14 +167,11 @@ export function useTextureSurface(params: {
     };
   }, [
     enabled,
-    height,
     materialGranularity,
     materialSeed,
     materialVSteps,
     surface,
     usePersistentCache,
-    useFixedTile,
-    width,
   ]);
 
   useEffect(() => {

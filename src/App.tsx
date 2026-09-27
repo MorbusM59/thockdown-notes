@@ -1140,10 +1140,6 @@ function areTextureMaterialsEqual(a: TextureMaterialSettings, b: TextureMaterial
   )
 }
 
-function quantizeTextureSize(value: number): number {
-  return Math.max(128, Math.ceil(Math.max(0, value) / 64) * 64)
-}
-
 const syncTextureToScroll = (scrollTop: number, maskEl: HTMLElement) => {
   maskEl.style.maskPosition = `0 ${-scrollTop}px`;
   maskEl.style.webkitMaskPosition = `0 ${-scrollTop}px`;
@@ -1920,7 +1916,6 @@ function App() {
   const windowControlsGridRef = useRef<HTMLElement | null>(null)
   const sidebarContentRef = useRef<HTMLDivElement | null>(null)
   const optionsContentRef = useRef<HTMLDivElement | null>(null)
-  const editorStageRef = useRef<HTMLDivElement | null>(null)
   const sidebarSearchInputRef = useRef<HTMLInputElement | null>(null)
   const documentReplaceInputRef = useRef<HTMLInputElement | null>(null)
   const pageJumpInputRef = useRef<HTMLInputElement | null>(null)
@@ -2721,9 +2716,6 @@ function App() {
     positionSec: 0,
     wasPlaying: false,
   })
-  const [appGridTextureSize, setAppGridTextureSize] = useState({ width: 1280, height: 720 })
-  const [sidebarTextureSize, setSidebarTextureSize] = useState({ width: 512, height: 720 })
-  const [editorStageTextureSize, setEditorStageTextureSize] = useState({ width: 1280, height: 720 })
   const [primedColorSource, setPrimedColorSource] = useState<ColorArmSource>({ kind: 'active-color' })
   const [activeColorHsva, setActiveColorHsva] = useState<HsvaColor>(() => {
     const seed = parseCssColorToRgba(DEFAULT_HIGHLIGHT_COLORS.caret) ?? { r: 120, g: 115, b: 112, a: 0.8 }
@@ -2782,39 +2774,28 @@ function App() {
   const appGridTextureCss = useTextureSurface({
     enabled: textureEnabled && textureMaterials.appGrid.enabled,
     surface: 'appGrid',
-    width: appGridTextureSize.width,
-    height: appGridTextureSize.height,
     material: textureMaterials.appGrid,
   })
   const sidebarTextureCss = useTextureSurface({
     enabled: textureEnabled && textureMaterials.sidebarContent.enabled,
     surface: 'sidebarContent',
-    width: sidebarTextureSize.width,
-    height: sidebarTextureSize.height,
     material: textureMaterials.sidebarContent,
   })
   const editorEditTextTextureCss = useTextureSurface({
     enabled: textureEnabled && textureMaterials.editorEditText.enabled,
     surface: 'editorEditText',
-    width: editorStageTextureSize.width,
-    height: editorStageTextureSize.height,
     material: textureMaterials.editorEditText,
   })
   const editorRenderTextTextureCss = useTextureSurface({
     enabled: textureEnabled && textureMaterials.editorRenderText.enabled,
     surface: 'editorRenderText',
-    width: editorStageTextureSize.width,
-    height: editorStageTextureSize.height,
     material: textureMaterials.editorRenderText,
   })
   const texturePreviewCss = useTextureSurface({
     enabled: true,
     surface: TEXTURE_PREVIEW_SURFACE,
-    width: 96,
-    height: 32,
     material: texturePreviewMaterial,
     usePersistentCache: false,
-    useFixedTile: true,
   })
   const activeColorRgba = useMemo(() => hsvaToRgba(activeColorHsva), [activeColorHsva])
   const activeColorCss = useMemo(() => rgbaToCssColor(activeColorRgba), [activeColorRgba])
@@ -5086,52 +5067,6 @@ function App() {
       cancelled = true
     }
   }, [editorStyle, editorRuntimeMetrics.fontSizePx])
-
-  useLayoutEffect(() => {
-    const appGridEl = appShellRef.current
-    const sidebarEl = sidebarContentRef.current
-    const stageEl = editorStageRef.current
-    if (!appGridEl || !sidebarEl || !stageEl) return
-
-    const updateAppGrid = () => {
-      const rect = appGridEl.getBoundingClientRect()
-      setAppGridTextureSize({
-        width: quantizeTextureSize(rect.width),
-        height: quantizeTextureSize(rect.height),
-      })
-    }
-    const updateSidebar = () => {
-      const rect = sidebarEl.getBoundingClientRect()
-      setSidebarTextureSize({
-        width: quantizeTextureSize(rect.width),
-        height: quantizeTextureSize(rect.height),
-      })
-    }
-    const updateEditorStage = () => {
-      const rect = stageEl.getBoundingClientRect()
-      setEditorStageTextureSize({
-        width: quantizeTextureSize(rect.width),
-        height: quantizeTextureSize(rect.height),
-      })
-    }
-
-    updateAppGrid()
-    updateSidebar()
-    updateEditorStage()
-
-    const observer = new ResizeObserver(() => {
-      updateAppGrid()
-      updateSidebar()
-      updateEditorStage()
-    })
-    observer.observe(appGridEl)
-    observer.observe(sidebarEl)
-    observer.observe(stageEl)
-
-    return () => {
-      observer.disconnect()
-    }
-  }, [activeSectionSnapshot?.isPreviewMode])
 
   const layout = useMemo(() => {
     const toolbarWidthPx = Math.max(
@@ -10747,7 +10682,6 @@ ${markdownHtml}
                   viewFontSize={viewFontSize}
                   viewSpacing={viewSpacing}
                   viewLetterSpacingEm={viewLetterSpacingEm}
-                  editorStageRef={editorStageRef}
                   editorFontFamily={editorFontFamily}
                   editorFontLoadVersion={editorFontLoadVersion}
                   spellCheckEditEnabled={spellCheckEnabled}

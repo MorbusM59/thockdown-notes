@@ -243,7 +243,6 @@ export function EditorSection({
   viewFontSize,
   viewSpacing,
   viewLetterSpacingEm,
-  editorStageRef,
   editorFontFamily,
   editorFontLoadVersion,
   spellCheckEditEnabled,
@@ -2288,7 +2287,6 @@ export function EditorSection({
         sectionId={sectionId}
         isSectionActive={sectionId === activeSectionId}
         isPreviewMode={isPreviewMode}
-        editorStageRef={editorStageRef}
         sectionContainerRef={sectionContainerRef}
         previewedSnapshotId={previewedSnapshotId}
         bindings={bindings}

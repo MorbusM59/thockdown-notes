@@ -24,7 +24,6 @@ export interface SectionEditorAreaProps {
   sectionId: string
   isSectionActive: boolean
   isPreviewMode: boolean
-  editorStageRef: RefObject<HTMLDivElement>
   sectionContainerRef: MutableRefObject<HTMLDivElement | null>
   previewedSnapshotId: number | null
   bindings: EditorBindings
@@ -163,7 +162,6 @@ export function SectionEditorArea({
   sectionId,
   isSectionActive,
   isPreviewMode,
-  editorStageRef,
   sectionContainerRef,
   previewedSnapshotId,
   bindings,
@@ -267,9 +265,8 @@ export function SectionEditorArea({
   const isSealedNote = isSealedNoteId(menuIdentityNoteId) || isSealedNoteId(activeNoteId)
 
   const setStageEl = useCallback((el: HTMLDivElement | null) => {
-    (editorStageRef as MutableRefObject<HTMLDivElement | null>).current = el
     sectionContainerRef.current = el
-  }, [editorStageRef, sectionContainerRef])
+  }, [sectionContainerRef])
 
   // Bumped on click to reroll the scene below -- an undocumented easter egg,
   // so it deliberately carries no hover/cursor affordance (see .editor-empty-state
