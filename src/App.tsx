@@ -1,7 +1,7 @@
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { renderToStaticMarkup } from 'react-dom/server'
-import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent } from 'react'
+import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent, SetStateAction } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { SidebarOptionsPanel } from './sidebar/SidebarOptionsPanel'
 import { AudioControls } from './components/AudioControls'
@@ -47,6 +47,7 @@ import {
 } from './shared/loadouts'
 import type { NoteSummary } from './shared/noteLifecycle'
 import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote, isSameNoteSummary } from './shared/noteLifecycle'
+import { adoptNoteSummaries } from './shared/noteContentStore'
 import { getNoteListMetaKind } from './shared/noteListMeta'
 import {
   DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS,
@@ -1328,7 +1329,7 @@ const NoteListItem = memo(function NoteListItem({
   const displayTitle = isExternal
     ? note.fileName
     : isChapter
-      ? formatIdWithSigil(resolveIdentityLabel(note.chapterId, note.contentText, 'chapter').text, '§')
+      ? formatIdWithSigil(resolveIdentityLabel(note.chapterId, note.leadLine, 'chapter').text, '§')
       : note.title
   const noteListMetaKind = getNoteListMetaKind(note)
   // The meta-left slot shows which note this chapter belongs to instead of
@@ -1922,7 +1923,22 @@ function App() {
   const textureSeedInputRef = useRef<HTMLInputElement | null>(null)
   const glazeLinearSeedInputRef = useRef<HTMLInputElement | null>(null)
   const glazeRadialSeedInputRef = useRef<HTMLInputElement | null>(null)
-  const [notes, setNotes] = useState<NoteSummary[]>([])
+  const [notes, setNoteSummaries] = useState<NoteSummary[]>([])
+  /**
+   * Every listed note's content, by id -- kept out of `notes` itself, which is
+   * React state (see shared/noteContentStore.ts). Written only by `setNotes`
+   * below, read through `readNoteContent`. What it holds is as current as the
+   * last summary the main process sent for that note, exactly as the
+   * summaries' own `contentText` used to be.
+   */
+  const noteContentByIdRef = useRef(new Map<string, string>())
+  const setNotes = useCallback((next: SetStateAction<NoteSummary[]>) => {
+    setNoteSummaries((previous) => adoptNoteSummaries(
+      typeof next === 'function' ? next(previous) : next,
+      noteContentByIdRef.current,
+    ))
+  }, [])
+  const readNoteContent = useCallback((noteId: string) => noteContentByIdRef.current.get(noteId) ?? '', [])
   const notesRef = useRef<NoteSummary[]>([])
 
   useEffect(() => {
@@ -5460,7 +5476,7 @@ function App() {
       console.error('Failed to create debug note', error)
       return null
     }
-  }, [])
+  }, [setNotes])
 
   const findExistingDebugNoteId = useCallback(async (): Promise<string | null> => {
     if (!window.thockdownNotes) return null
@@ -5484,7 +5500,7 @@ function App() {
     } catch {
       return null
     }
-  }, [])
+  }, [setNotes])
 
   const ensureDebugNoteExists = useCallback(async (): Promise<string | null> => {
     if (!debuggingEnabled || !window.thockdownNotes) return null
@@ -5565,7 +5581,7 @@ function App() {
     } finally {
       isWritingDebugEntryRef.current = false
     }
-  }, [debuggingEnabled, ensureDebugNoteExists])
+  }, [debuggingEnabled, ensureDebugNoteExists, setNotes])
   writeDebugEntryRef.current = writeDebugEntry
 
   useEffect(() => {
@@ -5701,7 +5717,7 @@ function App() {
     const section = getActiveSection()
     const activeNoteId = section?.activeNoteId
     if (!section || !activeNoteId) return null
-    const liveText = normalizeInternalText(section.latestEditorTextRef.current || section.activeNoteText || '')
+    const liveText = section.readEditorText()
     const parentNoteId = section.menuIdentityNoteId ?? activeNoteId
     if (scope === 'note' || !window.thockdownChapters || !window.thockdownNotes) {
       return { text: liveText, title: deriveNoteTitleFromText(liveText) }
@@ -5785,7 +5801,7 @@ ${markdownHtml}
     // array -- only this fallback selection needs it excluded.
     const selectable = listed.filter((note) => !HELP_GUIDE_NOTE_IDS.has(note.id))
     return selectable[0]?.id ?? null
-  }, [])
+  }, [setNotes])
 
   const [, setFileSyncStatus] = useState<string | null>(null)
 
@@ -6169,7 +6185,7 @@ ${markdownHtml}
       }
       return next
     })
-  }, [getActiveSection])
+  }, [getActiveSection, setNotes])
   updateActiveNoteTitlePreviewRef.current = updateActiveNoteTitlePreview
 
   /**
@@ -6201,7 +6217,7 @@ ${markdownHtml}
     const template = NEW_NOTE_TEMPLATE.trim()
     await handle?.flushPendingSaveNow?.().catch(() => undefined)
     const persisted = await window.thockdownNotes?.loadNote({ id: pending.noteId }).catch(() => null)
-    const liveText = handle?.activeNoteText ?? null
+    const liveText = handle?.readEditorText() ?? null
     const isUntouched = persisted !== null
       && persisted !== undefined
       && (persisted.text ?? '').trim() === template
@@ -6496,10 +6512,7 @@ ${markdownHtml}
     if (note.id === activeSectionSnapshot?.activeNoteId) {
       const baseline = externalNoteOriginalTextByIdRef.current.get(note.id)
       if (baseline === undefined) return Boolean(note.hasUnsavedChanges)
-      const liveText = activeSectionSnapshot?.latestEditorTextRef.current
-        || activeSectionSnapshot?.activeNoteText
-        || ''
-      return normalizeInternalText(liveText) !== baseline
+      return activeSectionSnapshot.readEditorText() !== baseline
     }
 
     // A note that is not open has no live document to compare; its persisted
@@ -6509,7 +6522,7 @@ ${markdownHtml}
 
   const updateNoteAssignedId = useCallback((noteId: string, assignedId: string) => {
     setNotes((previous) => previous.map((note) => (note.id === noteId ? { ...note, assignedId } : note)))
-  }, [])
+  }, [setNotes])
 
   // Session-only memory (never persisted) of the last anchor set via the
   // toolbar button or Shift+Ctrl+L, anywhere in the app -- not scoped to any
@@ -8038,12 +8051,12 @@ ${markdownHtml}
           title: note.title,
           fileName: note.fileName,
           tags: note.tags,
-          contentText: note.contentText,
+          contentText: readNoteContent(note.id),
         },
         searchQuery,
         isSearchQueryCaseSensitive,
       ))
-  }, [isSearchQueryCaseSensitive, searchQuery, sortedNotes])
+  }, [isSearchQueryCaseSensitive, readNoteContent, searchQuery, sortedNotes])
 
   const isFindMode = sidebarMode === 'find'
   const isReplaceMode = isFindMode && Boolean(activeSectionSnapshot?.isDocumentReplaceMode)
@@ -8251,7 +8264,7 @@ ${markdownHtml}
     // Clear only whichever filter is actually hiding the note -- never one
     // that isn't in the way.
     if (isSidebarSearchActive && !matchesNoteSearchQuery(
-      { title: activeNoteSummary.title, fileName: activeNoteSummary.fileName, tags: activeNoteSummary.tags, contentText: activeNoteSummary.contentText },
+      { title: activeNoteSummary.title, fileName: activeNoteSummary.fileName, tags: activeNoteSummary.tags, contentText: readNoteContent(activeNoteSummary.id) },
       searchQuery,
       isSearchQueryCaseSensitive,
     )) {
@@ -8324,7 +8337,7 @@ ${markdownHtml}
         }
       }
     })
-  }, [getActiveSection, focusActiveNoteInSidebarMode, hasDateFilter, isSearchQueryCaseSensitive, isSidebarSearchActive, matchesSelectedDateFilter, runSidebarMenuTransition, searchQuery, sidebarMode])
+  }, [getActiveSection, focusActiveNoteInSidebarMode, hasDateFilter, isSearchQueryCaseSensitive, isSidebarSearchActive, matchesSelectedDateFilter, readNoteContent, runSidebarMenuTransition, searchQuery, sidebarMode])
   revealNoteInMenuRef.current = revealNoteInMenu
 
   const totalPages = Math.max(1, Math.ceil(totalPagedNotes / Math.max(1, itemsPerPage)))
@@ -9152,7 +9165,7 @@ ${markdownHtml}
         && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
         event.preventDefault()
         const adapter = activeSection.adapterRef.current
-        const targetOffset = event.key === 'ArrowUp' ? 0 : activeSection.currentEditorText.length
+        const targetOffset = event.key === 'ArrowUp' ? 0 : activeSection.readEditorText().length
         adapter?.applySnapshot({
           selection: {
             anchor: targetOffset,
@@ -10636,6 +10649,7 @@ ${markdownHtml}
                   persistenceReady={persistenceReady}
                   notes={notes}
                   setNotes={setNotes}
+                  readNoteContent={readNoteContent}
                   notesRef={notesRef}
                   activeSectionId={activeSectionId}
                   // The section derives what its own slot is showing from the

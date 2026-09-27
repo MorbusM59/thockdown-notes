@@ -279,9 +279,10 @@ export function buildTableOfContentsInsertion(
 
 export interface UseMarkdownFormattingToolbarOptions {
   activeNoteId: string | null
-  currentEditorText: string
+  /** The section's live text, read when needed, and its version -- never the string itself (see useDisplayedNoteText.ts). */
+  readEditorText: () => string
+  editorTextVersion: number
   editorSelection: EditorSelectionState
-  latestEditorTextRef: MutableRefObject<string>
   latestEditorSelectionRef: MutableRefObject<EditorSelectionState>
   applyProgrammaticEditorText: (nextText: string, selectionStart?: number, selectionEnd?: number) => void
   /** Consumed by useEditorSectionMount, which is called earlier than these builders are defined -- see the handover doc's Gotcha #2. This hook keeps the refs current via a plain assignment, same as before the relocation. */
@@ -351,9 +352,9 @@ export interface UseMarkdownFormattingToolbarResult {
  */
 export function useMarkdownFormattingToolbar({
   activeNoteId,
-  currentEditorText,
+  readEditorText,
+  editorTextVersion,
   editorSelection,
-  latestEditorTextRef,
   latestEditorSelectionRef,
   applyProgrammaticEditorText,
   markdownInlineCacheRef,
@@ -381,7 +382,7 @@ export function useMarkdownFormattingToolbar({
     )
   }, [])
 
-  // This memo re-runs on literally every keystroke (currentEditorText
+  // This memo re-runs on literally every keystroke (the text version
   // changes each edit) to keep the toolbar's active-format highlighting
   // live -- resolveMarkdownSelectionContext's inline-state/line-index scan
   // is O(document length), which made this the confirmed dominant per-
@@ -393,49 +394,79 @@ export function useMarkdownFormattingToolbar({
   // during a render React might discard (Strict Mode's double-invoke),
   // matching usePreviewMarkdownRendering.tsx's identical pattern for its
   // own incremental cache.
-  const selectionContextResult = useMemo(
-    () => resolveMarkdownSelectionContextIncremental(
-      currentEditorText,
-      editorSelection,
-      markdownInlineCacheRef.current,
-      markdownEditRef.current,
-    ),
+  //
+  // What it returns is FLAGS, never the resolver's result. The result carries
+  // the inline-state cache (the whole text and its line array) and the caret's
+  // line text, which is a substring -- and V8 keeps a long substring as a
+  // slice of its parent, so holding the line holds the document. Either one
+  // as a variable of this hook would be captured by the callbacks below and
+  // retained once per edit (see useDisplayedNoteText.ts). The cache instead
+  // goes into a private ref and is committed by the layout effect below;
+  // it is verified against the text by every reader, so a render React later
+  // discards only leaves a valid cache for some other text behind.
+  const pendingInlineCacheRef = useRef<InlineStateLineCache | null>(null)
+  const selectionFlags = useMemo(
+    () => {
+      const { context, cache } = resolveMarkdownSelectionContextIncremental(
+        readEditorText(),
+        editorSelection,
+        markdownInlineCacheRef.current,
+        markdownEditRef.current,
+      )
+      pendingInlineCacheRef.current = cache
+      const { inline, line } = context
+      const isChecklistActive = /^\s*(?:>\s*)*[-*+]\s+\[[ xX]\]\s+/.test(line.lineText)
+      return {
+        inBold: inline.inBold,
+        inItalic: inline.inItalic,
+        inStrikethrough: inline.inStrikethrough,
+        activeHeadingLevel: line.headingLevel,
+        isChecklistActive,
+        isBulletedListActive: line.listKind === 'unordered' && !isChecklistActive,
+        isNumberedListActive: line.listKind === 'ordered',
+        isBlockquoteActive: line.blockquoteDepth > 0,
+        isCodeBlockActive: inline.inFencedCodeBlock,
+        isInlineCodeActive: inline.inInlineCode,
+      }
+    },
     // markdownInlineCacheRef/markdownEditRef are refs on purpose: they are
     // caches, not inputs. Their contents never change what this computes,
     // only how fast it gets there, so re-running on their identity would be
-    // noise. The cache is verified against `currentEditorText` inside the
-    // resolver and falls back when it does not match.
+    // noise. The cache is verified against the text inside the resolver and
+    // falls back when it does not match. editorTextVersion is not read: it is
+    // the signal that readEditorText's answer changed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentEditorText, editorSelection],
+    [readEditorText, editorTextVersion, editorSelection],
   )
   useLayoutEffect(() => {
-    markdownInlineCacheRef.current = selectionContextResult.cache
-  }, [markdownInlineCacheRef, selectionContextResult])
-  const markdownSelectionContext = selectionContextResult.context
+    if (pendingInlineCacheRef.current) markdownInlineCacheRef.current = pendingInlineCacheRef.current
+  }, [markdownInlineCacheRef, selectionFlags])
 
   const activeDecorationFormats = useMemo(() => {
     const active = new Set<TextDecorationFormat>()
 
-    if (markdownSelectionContext.inline.inBold) {
+    if (selectionFlags.inBold) {
       active.add('bold')
     }
-    if (markdownSelectionContext.inline.inItalic) {
+    if (selectionFlags.inItalic) {
       active.add('italic')
     }
-    if (markdownSelectionContext.inline.inStrikethrough) {
+    if (selectionFlags.inStrikethrough) {
       active.add('strikethrough')
     }
 
     return active
-  }, [markdownSelectionContext])
+  }, [selectionFlags])
 
-  const activeHeadingLevel = markdownSelectionContext.line.headingLevel
-  const isChecklistActive = /^\s*(?:>\s*)*[-*+]\s+\[[ xX]\]\s+/.test(markdownSelectionContext.line.lineText)
-  const isBulletedListActive = markdownSelectionContext.line.listKind === 'unordered' && !isChecklistActive
-  const isNumberedListActive = markdownSelectionContext.line.listKind === 'ordered'
-  const isBlockquoteActive = markdownSelectionContext.line.blockquoteDepth > 0
-  const isCodeBlockActive = markdownSelectionContext.inline.inFencedCodeBlock
-  const isInlineCodeActive = markdownSelectionContext.inline.inInlineCode
+  const {
+    activeHeadingLevel,
+    isChecklistActive,
+    isBulletedListActive,
+    isNumberedListActive,
+    isBlockquoteActive,
+    isCodeBlockActive,
+    isInlineCodeActive,
+  } = selectionFlags
 
   useEffect(() => {
     if (activeHeadingLevel > 0) {
@@ -535,11 +566,11 @@ export function useMarkdownFormattingToolbar({
   const applyTextDecoration = useCallback((format: TextDecorationFormat) => {
     if (!activeNoteId) return
 
-    const next = buildTextDecorationTransform(currentEditorText, editorSelection, format)
+    const next = buildTextDecorationTransform(readEditorText(), editorSelection, format)
     if (!next) return
 
     applyProgrammaticEditorText(next.text, next.selection.anchor, next.selection.focus)
-  }, [activeNoteId, applyProgrammaticEditorText, buildTextDecorationTransform, currentEditorText, editorSelection])
+  }, [activeNoteId, applyProgrammaticEditorText, buildTextDecorationTransform, readEditorText, editorSelection])
 
   const resolveSelectionBoundsFromSelection = useCallback((text: string, selection: EditorSelectionState) => {
     const start = Math.max(0, Math.min(selection.start, text.length))
@@ -554,7 +585,7 @@ export function useMarkdownFormattingToolbar({
   const applyWrappedMarker = useCallback((open: string, close: string, collapsedPlaceholder = '') => {
     if (!activeNoteId) return
 
-    const sourceText = currentEditorText
+    const sourceText = readEditorText()
     const { start, end } = resolveSelectionBounds(sourceText)
     const hasWrapping = isSelectionWrappedBy(sourceText, editorSelection, open, close)
 
@@ -584,7 +615,7 @@ export function useMarkdownFormattingToolbar({
     const nextStart = start + open.length
     const nextEnd = nextStart + (end - start)
     applyProgrammaticEditorText(nextText, nextStart, nextEnd)
-  }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, editorSelection, isSelectionWrappedBy, resolveSelectionBounds])
+  }, [activeNoteId, applyProgrammaticEditorText, readEditorText, editorSelection, isSelectionWrappedBy, resolveSelectionBounds])
 
   const resolveLineRange = useCallback((text: string, start: number, end: number) => {
     const lineStart = text.lastIndexOf('\n', Math.max(0, start - 1)) + 1
@@ -689,13 +720,13 @@ export function useMarkdownFormattingToolbar({
   const transformSelectedLines = useCallback((transform: (line: string, index: number) => string) => {
     if (!activeNoteId) return
 
-    const sourceText = currentEditorText
+    const sourceText = readEditorText()
     const next = transformSelectedLinesForSelection(sourceText, latestEditorSelectionRef.current, transform)
     applyProgrammaticEditorText(next.text, next.selection.anchor, next.selection.focus)
   }, [
     activeNoteId,
     applyProgrammaticEditorText,
-    currentEditorText,
+    readEditorText,
     latestEditorSelectionRef,
     transformSelectedLinesForSelection,
   ])
@@ -802,7 +833,7 @@ export function useMarkdownFormattingToolbar({
   const toggleCurrentLineHeading = useCallback(() => {
     if (!activeNoteId) return
 
-    const sourceText = normalizeInternalText(latestEditorTextRef.current || currentEditorText)
+    const sourceText = readEditorText()
     const next = buildToggleCurrentLineHeadingTransform(sourceText, latestEditorSelectionRef.current)
     if (!next) return
     applyProgrammaticEditorText(next.text, next.selection.anchor, next.selection.focus)
@@ -810,9 +841,8 @@ export function useMarkdownFormattingToolbar({
     activeNoteId,
     applyProgrammaticEditorText,
     buildToggleCurrentLineHeadingTransform,
-    currentEditorText,
+    readEditorText,
     latestEditorSelectionRef,
-    latestEditorTextRef,
   ])
 
   const buildToggleBulletedListTransform = useCallback((
@@ -924,14 +954,14 @@ export function useMarkdownFormattingToolbar({
   buildToggleNumberedListTransformRef.current = buildToggleNumberedListTransform
 
   const toggleBulletedList = useCallback(() => {
-    const next = buildToggleBulletedListTransform(currentEditorText, latestEditorSelectionRef.current)
+    const next = buildToggleBulletedListTransform(readEditorText(), latestEditorSelectionRef.current)
     applyProgrammaticEditorText(next.text, next.selection.anchor, next.selection.focus)
-  }, [applyProgrammaticEditorText, buildToggleBulletedListTransform, currentEditorText, latestEditorSelectionRef])
+  }, [applyProgrammaticEditorText, buildToggleBulletedListTransform, readEditorText, latestEditorSelectionRef])
 
   const toggleNumberedList = useCallback(() => {
-    const next = buildToggleNumberedListTransform(currentEditorText, latestEditorSelectionRef.current)
+    const next = buildToggleNumberedListTransform(readEditorText(), latestEditorSelectionRef.current)
     applyProgrammaticEditorText(next.text, next.selection.anchor, next.selection.focus)
-  }, [applyProgrammaticEditorText, buildToggleNumberedListTransform, currentEditorText, latestEditorSelectionRef])
+  }, [applyProgrammaticEditorText, buildToggleNumberedListTransform, readEditorText, latestEditorSelectionRef])
 
   const buildToggleChecklistListTransform = useCallback((
     sourceText: string,
@@ -987,13 +1017,13 @@ export function useMarkdownFormattingToolbar({
   }, [resolveLineRange, resolveSelectionBoundsFromSelection, transformSelectedLinesForSelection])
 
   const toggleChecklistList = useCallback(() => {
-    const next = buildToggleChecklistListTransform(currentEditorText, latestEditorSelectionRef.current)
+    const next = buildToggleChecklistListTransform(readEditorText(), latestEditorSelectionRef.current)
     applyProgrammaticEditorText(next.text, next.selection.anchor, next.selection.focus)
-  }, [applyProgrammaticEditorText, buildToggleChecklistListTransform, currentEditorText, latestEditorSelectionRef])
+  }, [applyProgrammaticEditorText, buildToggleChecklistListTransform, readEditorText, latestEditorSelectionRef])
 
   const toggleBlockquote = useCallback(() => {
     const quotePattern = /^>\s?/
-    const sourceText = currentEditorText
+    const sourceText = readEditorText()
     const { start, end } = resolveSelectionBounds(sourceText)
     const { lineStart, lineEndExclusive } = resolveLineRange(sourceText, start, end)
     const lines = sourceText.slice(lineStart, lineEndExclusive).split('\n')
@@ -1003,7 +1033,7 @@ export function useMarkdownFormattingToolbar({
       if (line.trim().length === 0) return line
       return allQuoted ? line.replace(quotePattern, '') : `> ${line}`
     })
-  }, [currentEditorText, resolveLineRange, resolveSelectionBounds, transformSelectedLines])
+  }, [readEditorText, resolveLineRange, resolveSelectionBounds, transformSelectedLines])
 
   const applyLink = useCallback(() => {
     const target = getLinkTargetPrefill?.() ?? 'url'
@@ -1016,7 +1046,7 @@ export function useMarkdownFormattingToolbar({
     // there's no sensible placeholder to fall back to here.
     if (editorSelection.isCollapsed) return
 
-    const sourceText = currentEditorText
+    const sourceText = readEditorText()
     const { start, end } = resolveSelectionBounds(sourceText)
     const selectedText = sourceText.slice(start, end)
     const anchorId = slugifyAnchorId(selectedText)
@@ -1027,7 +1057,7 @@ export function useMarkdownFormattingToolbar({
     const nextEnd = nextStart + selectedText.length
     applyProgrammaticEditorText(nextText, nextStart, nextEnd)
     onAnchorCreated?.(anchorId)
-  }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, editorSelection, onAnchorCreated, resolveSelectionBounds])
+  }, [activeNoteId, applyProgrammaticEditorText, readEditorText, editorSelection, onAnchorCreated, resolveSelectionBounds])
 
   const applyInlineCode = useCallback(() => {
     applyWrappedMarker('`', '`', 'code')
@@ -1040,7 +1070,7 @@ export function useMarkdownFormattingToolbar({
   const insertHorizontalRule = useCallback(() => {
     if (!activeNoteId) return
 
-    const sourceText = currentEditorText
+    const sourceText = readEditorText()
     const { start, end } = resolveSelectionBounds(sourceText)
     const needsLeadingNewline = start > 0 && sourceText[start - 1] !== '\n'
     const needsTrailingNewline = end < sourceText.length && sourceText[end] !== '\n'
@@ -1048,7 +1078,7 @@ export function useMarkdownFormattingToolbar({
     const nextText = `${sourceText.slice(0, start)}${inserted}${sourceText.slice(end)}`
     const cursor = start + inserted.length
     applyProgrammaticEditorText(nextText, cursor, cursor)
-  }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, resolveSelectionBounds])
+  }, [activeNoteId, applyProgrammaticEditorText, readEditorText, resolveSelectionBounds])
 
   // NOT debounced, and not a candidate for it. This looks like a passive
   // display -- it draws the is-active class on one toolbar button -- but it
@@ -1062,24 +1092,30 @@ export function useMarkdownFormattingToolbar({
   // noteHasTableOfContents: a note with no table of contents at all -- almost
   // all of them -- is ruled out by one allocation-free substring scan.
   const isTableOfContentsActive = useMemo(
-    () => noteHasTableOfContents(
-      currentEditorText,
-      tocTitleLevel,
-      tocLevel,
-      // selectionContextResult was computed from currentEditorText in this
-      // same render, so its line array is current -- unlike the ref, which
-      // is only committed in a layout effect afterwards.
-      selectionContextResult.cache.index.text === currentEditorText
-        ? selectionContextResult.cache.index.lines
-        : null,
-    ),
-    [currentEditorText, selectionContextResult, tocTitleLevel, tocLevel],
+    () => {
+      const text = readEditorText()
+      return noteHasTableOfContents(
+        text,
+        tocTitleLevel,
+        tocLevel,
+        // selectionFlags' memo, which runs first in this same render whenever
+        // the text changed, left its cache here; its line array is current
+        // whenever its text matches -- unlike markdownInlineCacheRef, which is
+        // only committed in a layout effect afterwards.
+        pendingInlineCacheRef.current?.index.text === text
+          ? pendingInlineCacheRef.current.index.lines
+          : null,
+      )
+    },
+    // editorTextVersion is not read: see selectionFlags above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [readEditorText, editorTextVersion, tocTitleLevel, tocLevel],
   )
 
   const toggleTableOfContents = useCallback(() => {
     if (!activeNoteId) return
 
-    const sourceText = normalizeInternalText(currentEditorText)
+    const sourceText = readEditorText()
     if (noteHasTableOfContents(sourceText, tocTitleLevel, tocLevel)) {
       const nextText = removeTableOfContentsAndAnchors(sourceText, tocLevel)
       const nextSelection = latestEditorSelectionRef.current
@@ -1089,7 +1125,7 @@ export function useMarkdownFormattingToolbar({
 
     const next = buildTableOfContentsInsertion(sourceText, latestEditorSelectionRef.current, tocTitleLevel, tocLevel)
     applyProgrammaticEditorText(next.text, next.selection.anchor, next.selection.focus)
-  }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, latestEditorSelectionRef, tocTitleLevel, tocLevel])
+  }, [activeNoteId, applyProgrammaticEditorText, readEditorText, latestEditorSelectionRef, tocTitleLevel, tocLevel])
 
   const insertTableOfContents = useCallback(() => {
     if (!activeNoteId) return
@@ -1099,9 +1135,9 @@ export function useMarkdownFormattingToolbar({
       return
     }
 
-    const next = buildTableOfContentsInsertion(currentEditorText, latestEditorSelectionRef.current, tocTitleLevel, tocLevel)
+    const next = buildTableOfContentsInsertion(readEditorText(), latestEditorSelectionRef.current, tocTitleLevel, tocLevel)
     applyProgrammaticEditorText(next.text, next.selection.anchor, next.selection.focus)
-  }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, isTableOfContentsActive, latestEditorSelectionRef, toggleTableOfContents, tocTitleLevel, tocLevel])
+  }, [activeNoteId, applyProgrammaticEditorText, readEditorText, isTableOfContentsActive, latestEditorSelectionRef, toggleTableOfContents, tocTitleLevel, tocLevel])
 
   /**
    * The text this effect last brought the table of contents in line with.
@@ -1125,26 +1161,29 @@ export function useMarkdownFormattingToolbar({
     // note with a table of contents this effect runs on every keystroke.
     // Almost every keystroke edits prose, and prose cannot change a table of
     // contents -- so establish that first, from the edit, in O(edited lines).
+    const currentText = readEditorText()
     const change = markdownEditRef.current
     if (
       change !== null
       && lastTocSyncedTextRef.current === change.previousText
-      && !editCouldChangeTableOfContents(change.previousText, currentEditorText, change.edit)
+      && !editCouldChangeTableOfContents(change.previousText, currentText, change.edit)
     ) {
-      lastTocSyncedTextRef.current = currentEditorText
+      lastTocSyncedTextRef.current = currentText
       return
     }
 
-    const stripped = removeTableOfContentsAndAnchors(currentEditorText, tocLevel)
+    const stripped = removeTableOfContentsAndAnchors(currentText, tocLevel)
     const canonical = buildTableOfContentsInsertion(stripped, latestEditorSelectionRef.current, tocTitleLevel, tocLevel)
     const nextText = canonical.text
 
     lastTocSyncedTextRef.current = nextText
 
-    if (nextText !== currentEditorText) {
+    if (nextText !== currentText) {
       applyProgrammaticEditorText(nextText, latestEditorSelectionRef.current.anchor, latestEditorSelectionRef.current.focus)
     }
-  }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, isTableOfContentsActive, latestEditorSelectionRef, markdownEditRef, tocTitleLevel, tocLevel])
+    // editorTextVersion is not read: every new text is a chance the table of
+    // contents fell out of line with it.
+  }, [activeNoteId, applyProgrammaticEditorText, readEditorText, editorTextVersion, isTableOfContentsActive, latestEditorSelectionRef, markdownEditRef, tocTitleLevel, tocLevel])
 
   return {
     activeDecorationFormats,

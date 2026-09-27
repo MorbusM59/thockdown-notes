@@ -28,11 +28,11 @@ export type UseNoteSnapshotsResult = {
   latestManualContent: string | null
   /** Content of the most recent snapshot, whether manual or automatic. */
   latestSnapshotContent: string | null
-  /** Whether `liveText` differs from the latest manual snapshot (or there is no manual snapshot at all). */
+  /** Whether the live text differs from the latest manual snapshot (or there is no manual snapshot at all). */
   hasPendingManualChanges: boolean
   /** Re-fetches from the DB -- call after a save or a branch so the rail reflects the new snapshot immediately. */
   refresh: () => Promise<void>
-  /** Records a manual snapshot of `liveText` and refreshes. */
+  /** Records a manual snapshot of the live text and refreshes. */
   createManualSnapshot: () => Promise<void>
 }
 
@@ -48,7 +48,19 @@ export type UseNoteSnapshotsResult = {
  * timeline," and so a consistency check can confirm it matches the
  * sectionId every sibling section-scoped hook was given.
  */
-export function useNoteSnapshots(sectionId: string, noteId: string | null, liveText: string, curveConstant = 10): UseNoteSnapshotsResult {
+/**
+ * The live text arrives as a reader and a version rather than as a string,
+ * for the reason useDisplayedNoteText.ts gives: a string here would be a
+ * variable of this hook's render scope, and every memoized callback below
+ * would keep one copy of the note alive per keystroke.
+ */
+export function useNoteSnapshots(
+  sectionId: string,
+  noteId: string | null,
+  readLiveText: () => string,
+  liveTextVersion: number,
+  curveConstant = 10,
+): UseNoteSnapshotsResult {
   void sectionId
   const [snapshots, setSnapshots] = useState<NoteSnapshotRecord[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -110,9 +122,9 @@ export function useNoteSnapshots(sectionId: string, noteId: string | null, liveT
   }, [snapshots])
 
   // Snapshot content is immutable once fetched -- normalizing it only
-  // depends on `snapshots`, never on `liveText`. Without this, every
+  // depends on `snapshots`, never on the live text. Without this, every
   // snapshot's content was re-normalized from scratch on every keystroke
-  // (liveText changes every edit), an O(document length x snapshot count)
+  // (the live text changes every edit), an O(document length x snapshot count)
   // cost for work whose actual result never changes between keystrokes.
   // This useMemo is still keyed on `snapshots` itself, so a fresh fetch
   // (even one returning identical records) still recomputes the whole map
@@ -127,8 +139,8 @@ export function useNoteSnapshots(sectionId: string, noteId: string | null, liveT
     return map
   }, [snapshots])
 
-  // Debounced rather than tracking `liveText` directly: normalizeForComparison
-  // is an O(document length) regex-replace pass, and snapshotIdsMatchingPresent/
+  // Debounced rather than tracking every edit: normalizeForComparison is an
+  // O(document length) regex-replace pass, and snapshotIdsMatchingPresent/
   // hasPendingManualChanges below (its only consumers) purely drive the Time
   // Machine timeline's "present" dot -- a passive display, not editor state or
   // save logic -- so recomputing it synchronously on every keystroke (measured
@@ -136,44 +148,47 @@ export function useNoteSnapshots(sectionId: string, noteId: string | null, liveT
   // buys no correctness the debounced value doesn't already provide. Same
   // "deferred/off-critical-path work" fix as EditorSection.tsx's
   // activeNoteDocumentStats (see docs/large-document-performance-handover.md).
-  const [debouncedLiveText, setDebouncedLiveText] = useState(liveText)
+  // What is debounced is the VERSION; the text is read once it settles.
+  const [settledLiveTextVersion, setSettledLiveTextVersion] = useState(liveTextVersion)
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => setDebouncedLiveText(liveText), 200)
+    const timeoutId = window.setTimeout(() => setSettledLiveTextVersion(liveTextVersion), 200)
     return () => window.clearTimeout(timeoutId)
-  }, [liveText])
-
-  // Also shared between snapshotIdsMatchingPresent and hasPendingManualChanges
-  // below so debouncedLiveText is only normalized once per settle, not twice.
-  const normalizedLiveText = useMemo(() => normalizeForComparison(debouncedLiveText), [debouncedLiveText])
-
-  const snapshotIdsMatchingPresent = useMemo(() => {
-    const result = new Set<number>()
-    for (const snapshot of snapshots) {
-      if (normalizedSnapshotContentById.get(snapshot.id) === normalizedLiveText) {
-        result.add(snapshot.id)
-      }
-    }
-    return result
-  }, [snapshots, normalizedSnapshotContentById, normalizedLiveText])
-
-  const latestSnapshotContent = useMemo(() => {
-    return snapshots.length > 0 ? snapshots[0].content : null
-  }, [snapshots])
+  }, [liveTextVersion])
 
   const normalizedLatestManualContent = useMemo(() => {
     return latestManualContent !== null ? normalizeForComparison(latestManualContent) : null
   }, [latestManualContent])
 
-  const hasPendingManualChanges = useMemo(() => {
-    if (normalizedLatestManualContent === null) return true // nothing to be "on" yet
-    return normalizedLiveText !== normalizedLatestManualContent
-  }, [normalizedLatestManualContent, normalizedLiveText])
+  // Both answers come out of one pass so the normalized live text is only
+  // ever a local of this factory: held in a variable of the hook's scope it
+  // would be captured, and retained, the way the raw text would.
+  const { snapshotIdsMatchingPresent, hasPendingManualChanges } = useMemo(() => {
+    const normalizedLiveText = normalizeForComparison(readLiveText())
+    const matching = new Set<number>()
+    for (const snapshot of snapshots) {
+      if (normalizedSnapshotContentById.get(snapshot.id) === normalizedLiveText) {
+        matching.add(snapshot.id)
+      }
+    }
+    return {
+      snapshotIdsMatchingPresent: matching,
+      // Nothing to be "on" yet when there is no manual snapshot.
+      hasPendingManualChanges: normalizedLatestManualContent === null || normalizedLiveText !== normalizedLatestManualContent,
+    }
+    // settledLiveTextVersion is not read: it is the signal that the text
+    // readLiveText returns has settled on a new value.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapshots, normalizedSnapshotContentById, normalizedLatestManualContent, readLiveText, settledLiveTextVersion])
+
+  const latestSnapshotContent = useMemo(() => {
+    return snapshots.length > 0 ? snapshots[0].content : null
+  }, [snapshots])
 
   const createManualSnapshot = useCallback(async () => {
     if (!noteId || !window.thockdownNotes) return
-    await window.thockdownNotes.saveNoteSnapshot({ id: noteId, content: liveText, isManual: true })
+    await window.thockdownNotes.saveNoteSnapshot({ id: noteId, content: readLiveText(), isManual: true })
     await fetchSnapshots()
-  }, [fetchSnapshots, liveText, noteId])
+  }, [fetchSnapshots, readLiveText, noteId])
 
   return {
     placements,

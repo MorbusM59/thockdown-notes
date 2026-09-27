@@ -66,12 +66,11 @@ export interface UseDocumentFindNavigationOptions {
    * arrives.
    */
   previewBlockCount: number
-  currentEditorText: string
+  /** The section's live text, read when needed (see useDisplayedNoteText.ts for why it is never a string here). */
+  readEditorText: () => string
   syncPreviewCustomScrollbar: () => void
   isPreviewMode: boolean
   adapterRef: MutableRefObject<EditorAdapter | null>
-  latestEditorTextRef: MutableRefObject<string>
-  activeNoteText: string
   documentFindQuery: string
   documentReplaceQuery: string
   isDocumentReplaceMode: boolean
@@ -108,12 +107,10 @@ export function useDocumentFindNavigation({
   documentFindHits,
   effectiveCaseSensitive,
   preserveCase,
-  currentEditorText,
+  readEditorText,
   syncPreviewCustomScrollbar,
   isPreviewMode,
   adapterRef,
-  latestEditorTextRef,
-  activeNoteText,
   documentFindQuery,
   documentReplaceQuery,
   isDocumentReplaceMode,
@@ -147,7 +144,7 @@ export function useDocumentFindNavigation({
    * below be found with two binary searches instead of a scan.
    */
   const hitSourceLines = useMemo(() => {
-    const sourceText = normalizeInternalText(currentEditorText)
+    const sourceText = readEditorText()
     const lines = new Int32Array(documentFindHits.length)
     let line = 0
     let cursor = 0
@@ -160,7 +157,10 @@ export function useDocumentFindNavigation({
       lines[hitIndex] = line
     }
     return lines
-  }, [currentEditorText, documentFindHits])
+    // The hit list is what changes with the text: it is recomputed on every
+    // text version, so it is the dependency that stands for both.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documentFindHits])
 
   const [visibleDocumentFindHitRange, setVisibleDocumentFindHitRange] = useState<{ from: number; to: number } | null>(null)
 
@@ -298,7 +298,7 @@ export function useDocumentFindNavigation({
       if (frameId !== null) cancelAnimationFrame(frameId)
     }
     // documentFindHits is a dependency because a new hit list re-indexes
-    // everything; currentEditorText reaches this through hitSourceLines;
+    // everything, and it is also how a change to the text reaches this;
     // previewBlockCount because it is what makes the pane answerable at all
     // (see recompute).
   }, [isPreviewMode, documentFindHits, previewBlockCount, lowerBound, hitSourceLines, previewScrollRef, previewDocumentPositionRef, adapterRef])
@@ -331,13 +331,13 @@ export function useDocumentFindNavigation({
     if (!scroller || !normalizedNeedle) return null
     return resolvePreviewHitRange({
       scroller,
-      sourceText: normalizeInternalText(currentEditorText),
+      sourceText: readEditorText(),
       hit,
       hits: documentFindHits,
       needle: normalizedNeedle,
       caseSensitive: effectiveCaseSensitive,
     })
-  }, [currentEditorText, documentFindDirective.findText, documentFindHits, effectiveCaseSensitive, previewScrollRef])
+  }, [readEditorText, documentFindDirective.findText, documentFindHits, effectiveCaseSensitive, previewScrollRef])
 
   /**
    * The `.search-hit` span a hit is rendered as.
@@ -419,7 +419,7 @@ export function useDocumentFindNavigation({
     const normalizedNeedle = normalizeInternalText(documentFindDirective.findText)
     if (!normalizedNeedle) return
 
-    const sourceText = normalizeInternalText(currentEditorText)
+    const sourceText = readEditorText()
     const sourceLine = resolveSourceLineForOffset(sourceText, hit.index)
 
     /** Where the pane has to sit for this hit to read comfortably, in pixels. */
@@ -534,7 +534,7 @@ export function useDocumentFindNavigation({
     }
     requestAnimationFrame(() => refine(30))
   }, [
-    currentEditorText,
+    readEditorText,
     documentFindDirective.findText,
     syncPreviewCustomScrollbar,
     previewScrollRef,
@@ -574,7 +574,7 @@ export function useDocumentFindNavigation({
     // behind the scroll, and a click must not do one thing while the card says
     // another.
     const visibleLines = adapter.readVisibleSourceLineRange()
-    const hitLine = resolveSourceLineForOffset(normalizeInternalText(currentEditorText), hit.index)
+    const hitLine = resolveSourceLineForOffset(readEditorText(), hit.index)
     const isVisible = visibleLines !== null
       && hitLine >= visibleLines.fromLine
       && hitLine <= visibleLines.toLine
@@ -589,10 +589,10 @@ export function useDocumentFindNavigation({
       },
       selectionScrollBehavior: isVisible ? 'preserve-scroll' : 'center-caged',
     })
-  }, [isPreviewMode, jumpToPreviewDocumentFindHit, adapterRef, markPreviewHitInPlace, currentEditorText])
+  }, [isPreviewMode, jumpToPreviewDocumentFindHit, adapterRef, markPreviewHitInPlace, readEditorText])
 
   const replaceDocumentFindHit = useCallback((hit: DocumentFindHit) => {
-    const sourceText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+    const sourceText = readEditorText()
     const directive = resolveDocumentFindDirective(documentFindQuery, documentReplaceQuery, isDocumentReplaceMode)
 
     // Right-click should still behave like a normal jump when replace mode is not active.
@@ -614,10 +614,10 @@ export function useDocumentFindNavigation({
     const nextText = `${sourceText.slice(0, hit.index)}${replacementText}${sourceText.slice(hit.index + hit.matchLength)}`
     const replacementEnd = hit.index + replacementText.length
     applyProgrammaticEditorText(nextText, hit.index, replacementEnd)
-  }, [activeNoteText, applyProgrammaticEditorText, documentFindQuery, documentReplaceQuery, effectiveCaseSensitive, handleJumpToDocumentFindHit, isDocumentReplaceMode, preserveCase, latestEditorTextRef])
+  }, [applyProgrammaticEditorText, documentFindQuery, documentReplaceQuery, effectiveCaseSensitive, handleJumpToDocumentFindHit, isDocumentReplaceMode, preserveCase, readEditorText])
 
   const replaceAllDocumentFindHits = useCallback(() => {
-    const sourceText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+    const sourceText = readEditorText()
     const directive = resolveDocumentFindDirective(documentFindQuery, documentReplaceQuery, isDocumentReplaceMode)
     if (!directive.isReplaceMode || !directive.findText) {
       return
@@ -646,7 +646,7 @@ export function useDocumentFindNavigation({
     const firstHitStart = hits[0]?.index ?? 0
     const firstHitEnd = firstHitStart + firstReplacementLength
     applyProgrammaticEditorText(nextText, firstHitStart, firstHitEnd)
-  }, [activeNoteText, applyProgrammaticEditorText, documentFindQuery, documentReplaceQuery, effectiveCaseSensitive, isDocumentReplaceMode, preserveCase, latestEditorTextRef])
+  }, [applyProgrammaticEditorText, documentFindQuery, documentReplaceQuery, effectiveCaseSensitive, isDocumentReplaceMode, preserveCase, readEditorText])
 
   return {
     visibleDocumentFindHitRange,

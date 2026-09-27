@@ -34,9 +34,18 @@ export interface SectionHandle extends
   UseNoteChaptersResult {
   sectionId: string
   activeNoteId: string | null
-  activeNoteText: string
-  currentEditorText: string
-  latestEditorTextRef: MutableRefObject<string>
+  /**
+   * The section's live text, read when needed. Never a string field: the
+   * handle is captured by App's callbacks, and a text on it would be retained
+   * once per keystroke (editorSection/useDisplayedNoteText.ts).
+   */
+  readEditorText: () => string
+  /**
+   * Bumped on every text commit. Part of the handle so that App -- which
+   * learns about a section by shallow-comparing successive handles -- sees a
+   * new handle whenever the text changes.
+   */
+  editorTextVersion: number
   activeNoteSummary: NoteSummary | null
   /**
    * The note identity that "menu views" (sidebar highlight/reveal, tab bar

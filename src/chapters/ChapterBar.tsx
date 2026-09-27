@@ -323,7 +323,7 @@ export function ChapterBar({
               const isEditing = !isInteractionDisabled && editingChapterNoteId === chapter.chapterNoteId
               const isActive = chapter.chapterNoteId === activeNoteId
               const note = notes.find((entry) => entry.id === chapter.chapterNoteId)
-              const { text: label, isAssigned } = resolveIdentityLabel(chapter.chapterId, note?.contentText, 'chapter')
+              const { text: label, isAssigned } = resolveIdentityLabel(chapter.chapterId, note?.leadLine, 'chapter')
               const isSplitArmed = !isInteractionDisabled && splitArmedChapter?.chapterNoteId === chapter.chapterNoteId
 
               return (

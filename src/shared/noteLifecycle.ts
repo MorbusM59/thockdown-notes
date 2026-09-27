@@ -33,7 +33,19 @@ export interface NoteSummary {
   fileName: string;
   title: string;
   tags: string[];
-  contentText?: string;
+  /**
+   * The first line of the note's content, or null when the content is blank
+   * -- all an identity label needs (tabLabels.ts's resolveIdentityLabel).
+   *
+   * The content itself is deliberately NOT part of a summary. Summaries are
+   * React state, and a render scope that holds one keeps it alive for as
+   * long as any memoized callback created in that render survives -- so a
+   * summary carrying a note's text retained one copy of the note per save
+   * (editorSection/useDisplayedNoteText.ts has the mechanism). The main
+   * process still sends the content (NoteSummaryWithContent); App's notes
+   * setter moves it into a store and hands out `readNoteContent` instead.
+   */
+  leadLine: string | null;
   createdAtMs: number;
   updatedAtMs: number;
   sizeBytes: number;
@@ -59,7 +71,12 @@ export interface NoteSummary {
   chapterId: string | null;
 }
 
-export interface NoteDocument extends NoteSummary {
+/** A summary as the main process sends it: with the note's content, which the renderer keeps out of React state (see NoteSummary.leadLine). */
+export interface NoteSummaryWithContent extends NoteSummary {
+  contentText: string;
+}
+
+export interface NoteDocument extends NoteSummaryWithContent {
   text: string;
 }
 
@@ -171,10 +188,10 @@ export type NoteUiState = {
 };
 
 export interface NoteLifecycleApi {
-  listNotes(): Promise<NoteSummary[]>;
+  listNotes(): Promise<NoteSummaryWithContent[]>;
   loadNote(input: LoadNoteInput): Promise<NoteDocument>;
   createNote(input?: CreateNoteInput): Promise<NoteDocument>;
-  saveNote(input: SaveNoteInput): Promise<NoteSummary>;
+  saveNote(input: SaveNoteInput): Promise<NoteSummaryWithContent>;
   deleteNote(input: DeleteNoteInput): Promise<void>;
   getNoteTags(input: NoteTagsInput): Promise<string[]>;
   addTagToNote(input: AddTagInput): Promise<string[]>;
@@ -184,7 +201,7 @@ export interface NoteLifecycleApi {
   listTags(): Promise<TagSummary[]>;
   saveNoteUiState(input: { id: string; payload: NoteUiStatePayload }): Promise<void>;
   getNoteUiState(input: LoadNoteInput): Promise<NoteUiState>;
-  updateExternalNoteState(input: { id: string; hasUnsavedChanges: boolean; syncMode: boolean }): Promise<NoteSummary>;
+  updateExternalNoteState(input: { id: string; hasUnsavedChanges: boolean; syncMode: boolean }): Promise<NoteSummaryWithContent>;
   syncExternalNoteToFile(input: { id: string; content: string }): Promise<boolean>;
   getNoteIdByExternalPath(input: { externalPath: string }): Promise<string | null>;
   /** Returns the resulting snapshot's ID -- either newly inserted, or the existing latest one if the content is unchanged (dedup). */
@@ -202,9 +219,9 @@ export interface NoteLifecycleApi {
   getSnapshotAnchor(input: { snapshotId: number }): Promise<number>;
   branchNoteFromSnapshot(input: BranchNoteFromSnapshotInput): Promise<NoteDocument>;
   /** Explicit `$id` assignment. Overwrites any existing ID; resolves collisions with a "-2", "-3", ... suffix. The only way a note's assignedId is ever written -- never auto-assigned as a side effect of anything else (pinning a tab, the auto-generated TOC needing one to link through, ...). */
-  setNoteAssignedId(input: { id: string; requestedId: string }): Promise<NoteSummary | null>;
+  setNoteAssignedId(input: { id: string; requestedId: string }): Promise<NoteSummaryWithContent | null>;
   /** Freezes/unfreezes the whole chapter family `id` belongs to -- see databaseService.ts's freezeNoteFamily/unfreezeNoteFamily. */
-  setNoteTimeless(input: { id: string; value: boolean }): Promise<NoteSummary | null>;
+  setNoteTimeless(input: { id: string; value: boolean }): Promise<NoteSummaryWithContent | null>;
 }
 
 export function isArchivedNote(note: NoteSummary): boolean {
@@ -232,6 +249,7 @@ export function isSameNoteSummary(a: NoteSummary, b: NoteSummary): boolean {
     a.id === b.id &&
     a.fileName === b.fileName &&
     a.title === b.title &&
+    a.leadLine === b.leadLine &&
     a.tags.length === b.tags.length &&
     a.tags.every((tag, index) => tag === b.tags[index]) &&
     a.createdAtMs === b.createdAtMs &&

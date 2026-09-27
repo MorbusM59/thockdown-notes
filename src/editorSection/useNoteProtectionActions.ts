@@ -19,11 +19,12 @@ type SidebarModeForRemoval = 'date' | 'trash' | 'category' | 'archive' | 'find' 
 export interface UseNoteProtectionActionsOptions {
   notes: NoteSummary[]
   activeNoteId: string | null
-  activeNoteText: string
-  latestEditorTextRef: MutableRefObject<string>
+  /** The displayed note's text, read when needed -- see useDisplayedNoteText.ts. */
+  readEditorText: () => string
   setNotes: (updater: (previous: NoteSummary[]) => NoteSummary[]) => void
   setActiveNoteId: (noteId: string | null) => void
-  setActiveNoteText: (text: string) => void
+  /** useDisplayedNoteText's writer. */
+  commitEditorText: (text?: string) => void
   activateNote: (noteId: string, overrideCursorPos?: number) => Promise<void>
   flushPendingSaveNow: () => Promise<void>
   cancelPendingSave: () => void
@@ -92,11 +93,10 @@ export function noteRightPressAction(
 export function useNoteProtectionActions({
   notes,
   activeNoteId,
-  activeNoteText,
-  latestEditorTextRef,
+  readEditorText,
   setNotes,
   setActiveNoteId,
-  setActiveNoteText,
+  commitEditorText,
   activateNote,
   flushPendingSaveNow,
   cancelPendingSave,
@@ -194,7 +194,7 @@ export function useNoteProtectionActions({
       return
     }
 
-    const currentText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+    const currentText = readEditorText()
 
     /**
      * Whether the reader has typed since this save took its snapshot above.
@@ -206,7 +206,7 @@ export function useNoteProtectionActions({
      * still typing through all of it.
      *
      * Every write-back below used to publish that photograph unconditionally
-     * -- into `latestEditorTextRef`, into `activeNoteText`, and so, by way of
+     * -- into the section's text store, and so, by way of
      * CM6Editor's hydration effect, into the LIVE DOCUMENT. Anything typed
      * during the save was deleted by it. That is the reported bug: hold Enter
      * on a large external note and the blank lines are taken back off you, in
@@ -218,7 +218,7 @@ export function useNoteProtectionActions({
      * instant the reader types during a save, which is exactly true.
      */
     const hasLiveTextMovedOn = (): boolean => (
-      normalizeInternalText(latestEditorTextRef.current || activeNoteText) !== currentText
+      readEditorText() !== currentText
     )
 
     console.debug('[external-note] explicit save path starting', {
@@ -319,12 +319,11 @@ export function useNoteProtectionActions({
     // restart then showed, for a file the disk already matched.
     const persistSavedText = async () => {
       if (!writeSucceeded || !window.thockdownNotes) return
-      // Only when nothing has been typed since the snapshot -- otherwise this
-      // assignment walks the app's own newest-text ref BACKWARDS, and every
-      // consumer of it (including the editor's hydration path) follows.
-      if (!hasLiveTextMovedOn()) {
-        latestEditorTextRef.current = currentText
-      }
+      // Nothing is written back into the editor's text, here or below. Only
+      // two cases exist: nothing was typed since the snapshot, and the text
+      // already IS `currentText`; or something was, and writing it would walk
+      // the text BACKWARDS, taking the editor (through its hydration path)
+      // with it. The first write is a no-op and the second is the bug above.
       try {
         const savedSummary = await window.thockdownNotes.saveNote({ id: noteId, text: currentText })
         console.debug('[external-note] saveExternalNoteToFile persisted temp note text into DB', { noteId, externalPath, savedSummary })
@@ -351,9 +350,6 @@ export function useNoteProtectionActions({
           return next
         })
 
-        if (activeNoteId === noteId && !hasLiveTextMovedOn()) {
-          setActiveNoteText(currentText)
-        }
       } catch (error) {
         console.error('[external-note] saveExternalNoteToFile failed to persist temp note in DB', { noteId, externalPath, error })
       }
@@ -396,9 +392,6 @@ export function useNoteProtectionActions({
             : undefined,
         })
         externalNoteOriginalTextByIdRef.current.set(noteId, currentText)
-        if (activeNoteId === noteId && !hasLiveTextMovedOn()) {
-          setActiveNoteText(currentText)
-        }
         setNotes((previous) => {
           const index = previous.findIndex((note) => note.id === noteId)
           if (index < 0) return previous
@@ -425,9 +418,6 @@ export function useNoteProtectionActions({
             : undefined,
         })
         externalNoteOriginalTextByIdRef.current.set(noteId, diskSanityNormalized)
-        if (activeNoteId === noteId && !hasLiveTextMovedOn()) {
-          setActiveNoteText(currentText)
-        }
         console.error('[external-note] disk sanity mismatch after save', { noteId, writeSucceeded })
       }
     } catch (error) {
@@ -436,12 +426,10 @@ export function useNoteProtectionActions({
     await persistSavedText()
   }, [
     activeNoteId,
-    activeNoteText,
     notes,
     activeNoteExternalPathRef,
     externalNoteOriginalTextByIdRef,
-    latestEditorTextRef,
-    setActiveNoteText,
+    readEditorText,
     setNotes,
   ])
 
@@ -464,7 +452,7 @@ export function useNoteProtectionActions({
 
         if (activeNoteId === noteId) {
           setActiveNoteId(null)
-          setActiveNoteText('')
+          commitEditorText('')
         }
 
         return
@@ -479,14 +467,14 @@ export function useNoteProtectionActions({
       await refreshNotes(activeNoteId ?? noteId)
       if (activeNoteId === noteId) {
         setActiveNoteId(null)
-        setActiveNoteText('')
+        commitEditorText('')
       }
     } catch (error) {
       console.error('Failed to apply note action', error)
     } finally {
       noteTransitionLockRef.current = false
     }
-  }, [activeNoteId, applyProtectedNoteDestination, flushPendingSaveNow, notes, persistenceReady, refreshNotes, noteTransitionLockRef, setActiveNoteId, setActiveNoteText, onNotePermanentlyDeleted])
+  }, [activeNoteId, applyProtectedNoteDestination, flushPendingSaveNow, notes, persistenceReady, refreshNotes, noteTransitionLockRef, setActiveNoteId, commitEditorText, onNotePermanentlyDeleted])
 
   const applyQuickProtectedRightClickAction = useCallback(async (noteId: string, action: Exclude<ProtectedQuickReleaseAction, null>) => {
     if (!window.thockdownNotes) return
@@ -539,12 +527,12 @@ export function useNoteProtectionActions({
 
       if (activeNoteId === noteId) {
         setActiveNoteId(null)
-        setActiveNoteText('')
+        commitEditorText('')
       }
     } catch (error) {
       console.error('Failed to delete external temp note', error)
     }
-  }, [activeNoteId, cancelPendingSave, clearNoteArmTimer, externalNoteOriginalTextByIdRef, setNotes, setActiveNoteId, setActiveNoteText, onNotePermanentlyDeleted])
+  }, [activeNoteId, cancelPendingSave, clearNoteArmTimer, externalNoteOriginalTextByIdRef, setNotes, setActiveNoteId, commitEditorText, onNotePermanentlyDeleted])
 
   const handleNoteRightPressStart = useCallback((
     noteId: string,
@@ -663,14 +651,14 @@ export function useNoteProtectionActions({
       await refreshNotes(activeNoteId ?? noteId)
       if (activeNoteId === noteId) {
         setActiveNoteId(null)
-        setActiveNoteText('')
+        commitEditorText('')
       }
     } catch (error) {
       console.error('Failed to archive note', error)
     } finally {
       noteTransitionLockRef.current = false
     }
-  }, [activeNoteId, applyProtectedNoteDestination, flushPendingSaveNow, persistenceReady, refreshNotes, noteTransitionLockRef, setActiveNoteId, setActiveNoteText])
+  }, [activeNoteId, applyProtectedNoteDestination, flushPendingSaveNow, persistenceReady, refreshNotes, noteTransitionLockRef, setActiveNoteId, commitEditorText])
 
   const handleTrashClick = useCallback(async (noteId: string) => {
     if (!window.thockdownNotes || !persistenceReady) return
@@ -693,14 +681,14 @@ export function useNoteProtectionActions({
       await refreshNotes(activeNoteId ?? noteId)
       if (activeNoteId === noteId) {
         setActiveNoteId(null)
-        setActiveNoteText('')
+        commitEditorText('')
       }
     } catch (error) {
       console.error('Failed to trash note', error)
     } finally {
       noteTransitionLockRef.current = false
     }
-  }, [activeNoteId, applyProtectedNoteDestination, flushPendingSaveNow, notes, persistenceReady, refreshNotes, noteTransitionLockRef, setActiveNoteId, setActiveNoteText, onNotePermanentlyDeleted])
+  }, [activeNoteId, applyProtectedNoteDestination, flushPendingSaveNow, notes, persistenceReady, refreshNotes, noteTransitionLockRef, setActiveNoteId, commitEditorText, onNotePermanentlyDeleted])
 
   const purgeDeletedNotesPermanently = useCallback(async () => {
     if (!window.thockdownNotes) return
@@ -729,14 +717,14 @@ export function useNoteProtectionActions({
 
       if (activeDeleted) {
         setActiveNoteId(null)
-        setActiveNoteText('')
+        commitEditorText('')
       }
     } catch (error) {
       console.error('Failed to permanently purge deleted notes', error)
     } finally {
       noteTransitionLockRef.current = false
     }
-  }, [activeNoteId, flushPendingSaveNow, notes, persistenceReady, refreshNotes, noteTransitionLockRef, setActiveNoteId, setActiveNoteText, onNotePermanentlyDeleted])
+  }, [activeNoteId, flushPendingSaveNow, notes, persistenceReady, refreshNotes, noteTransitionLockRef, setActiveNoteId, commitEditorText, onNotePermanentlyDeleted])
 
   const handleTrashViewButtonMouseDown = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     if (event.button !== 2) return

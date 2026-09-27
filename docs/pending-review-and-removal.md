@@ -516,10 +516,11 @@ edit, whereas a 16-second freeze is not. Decide that before deleting anything.
 **Noticed.** Making the split asynchronous end to end, where this became the
 last exception to a rule the rest of the codebase now holds by construction.
 
-### `hiddenSplitText`'s reasoning predates the split having a producer
+### `hiddenSplitKey`'s reasoning predates the split having a producer
 
-**What.** `usePreviewMarkdownRendering` keeps `hiddenSplitText`, a frozen copy
-of the text to split while the render pane is hidden, so that typing in edit
+**What.** `usePreviewMarkdownRendering` keeps `hiddenSplitKey`, which freezes
+which text is split while the render pane is hidden (it was `hiddenSplitText`,
+a copy of the text itself, until the text stopped being React state), so that typing in edit
 mode does not drive the split. Its long doc comment argues the case from a
 measurement -- ~1 second per Enter on list-structured markdown -- taken when
 the split ran synchronously in render on every keystroke.
@@ -537,8 +538,8 @@ is cheap for every keystroke shape on a large list-dense document -- the
 original measurement said the split was pathologically slow there *whatever
 the delta*, which if still true would mean the incremental path is not the
 cheap thing this assumes, and that is worth re-measuring on its own before
-touching anything. If it is cheap, `splitSourceText` collapses to
-`renderedDisplayText` and the state, its effect and the seeding exception all
+touching anything. If it is cheap, `splitSourceKey` collapses to
+`displayedTextKey` and the state, its effect and the seeding exception all
 go.
 
 **Noticed.** Making the split asynchronous, where the seeded initial value
@@ -619,3 +620,53 @@ the button returns.
 
 **Noticed.** The Noise Engine change (`98668d0`), which gave slot 1's grid
 column to the ambient-noise switch.
+
+### The render view's restore effect re-runs on every text commit
+
+**What.** The preview scroll-restore effect in `useEditorSectionMount.ts`
+lists `editorTextVersion` among its dependencies without reading it. It is
+there because the text itself used to be a dependency, so the effect has
+always re-run on every commit. After the first restore for a target, a re-run
+only releases the settle gate and returns, but its cleanup also cancels a
+restore still in flight.
+
+**Why it is suspect.** A text commit is not a new restore target: the
+restore key is the note plus the snapshot being browsed. The dependency looks
+like an accident of the old data flow rather than a decision, and cancelling an
+in-flight restore because an unrelated commit landed (a save's write-back, an
+external reload) is a behaviour nobody chose.
+
+**What would have to be true to remove it.** That no restore path relies on
+being re-run by a commit: in particular, that a note's first activation always
+has its text committed in the same render as its id (`activateNote` commits
+both together today). Then the dependency goes, and the settle trace
+(`thockdown:debug-preview-settle`) should show no reveal reasons change across
+note switches, mode toggles and snapshot browsing.
+
+**Noticed.** Moving the note's text out of React state (the per-keystroke
+retention fix), which had to decide, dependency by dependency, which effects
+mean "the text changed" and which merely inherited it.
+
+### `useHeadlineLevelGuard` has no caller
+
+**What.** `src/editorSection/useHeadlineLevelGuard.ts` clamps a note's heading
+levels to its rule. Nothing mounts it: `58fdfceb` ("simplfied headline
+enforcement") removed its call from `EditorSection.tsx` and left the hook in
+place. Comments elsewhere still describe it as live, for example
+`useMarkdownFormattingToolbar.ts`'s "or useHeadlineLevelGuard immediately
+reclamps it out from under".
+
+**Why it is suspect.** Either the enforcement it performed was meant to go
+(then the file and those comments are dead and misleading), or the removal
+dropped something that was meant to stay (then it is a regression). Its
+`currentEditorText: string` parameter also predates the rule that the text is
+never passed as a string (`useDisplayedNoteText.ts`); it would need converting
+before being mounted again.
+
+**What would have to be true to remove it.** The author confirming the
+simplified enforcement replaces it. Then the file goes, and the comments that
+cite it are rewritten to describe what enforces the rule now.
+
+**Noticed.** Converting every consumer of the note's text to the text store:
+this was the one consumer with no caller to convert.
+

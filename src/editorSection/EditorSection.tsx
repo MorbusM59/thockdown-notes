@@ -60,7 +60,7 @@ type ViewStyleKey =
 export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   'sectionId' | 'isSectionActive' | 'activeNoteId' | 'isPreviewMode' | 'previewedSnapshotId' | 'bindings' | 'adapterRef' | 'sectionContainerRef'
   | 'onEditorSurfaceReady'
-  | 'editorDisplayText' | 'activeNoteHasDebugTag' | 'isPreviewingSnapshot' | 'isCaretSuspended' | 'previewTextureRef' | 'previewBridgeHostRef'
+  | 'readDisplayedText' | 'displayedTextKey' | 'activeNoteHasDebugTag' | 'isPreviewingSnapshot' | 'isCaretSuspended' | 'previewTextureRef' | 'previewBridgeHostRef'
   | 'previewScrollRef' | 'handlePreviewScroll' | 'blockPreviewEditMutation' | 'previewMarkdownElement'
   | 'previewScrollbarTrackRef' | 'handlePreviewTrackMouseDown' | 'handlePreviewTrackContextMenu' | 'previewScrollbarThumbRef' | 'isDraggingPreviewScrollThumb'
   | 'isPreviewScrollThumbActive' | 'handlePreviewThumbMouseDown' | 'activeNoteDocumentStats' | 'noteSnapshots'
@@ -122,6 +122,8 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   notes: NoteSummary[]
   setNotes: Dispatch<SetStateAction<NoteSummary[]>>
   notesRef: MutableRefObject<NoteSummary[]>
+  /** A note's content by id -- summaries do not carry it (see shared/noteContentStore.ts). */
+  readNoteContent: (noteId: string) => string
 
   activeSectionId: string
   registerSectionHandle: (sectionId: string, handle: SectionHandle) => void
@@ -208,6 +210,7 @@ export function EditorSection({
   notes,
   setNotes,
   notesRef,
+  readNoteContent,
   activeSectionId,
   registerSectionHandle,
   reportSectionHandle,
@@ -365,50 +368,23 @@ export function EditorSection({
   isPreviewModeRef.current = isPreviewMode
   const { activeNoteId, setActiveNoteId } = useActiveNoteId(sectionId)
   const {
-    activeNoteText,
-    setActiveNoteText,
+    readEditorText,
     editorTextVersion,
-    setEditorTextVersion,
+    commitEditorText,
     latestEditorTextRef,
   } = useDisplayedNoteText(sectionId)
   const { previewedSnapshotId, setPreviewedSnapshotId } = usePreviewedSnapshot(sectionId)
   /** See useEditorSectionMount's doc comment on this ref: distinguishes a hibernated live section from a genuine Time Machine browse, both of which drive previewedSnapshotId. */
   const isFrozenSectionPreviewRef = useRef(false)
   const { editorSelection, setEditorSelection, latestEditorSelectionRef } = useDisplayedNoteSelection(sectionId)
-  // Moved ahead of useNoteChapters (which needs it to read the live
-  // selection text for the extract-into-chapter action) from its original
-  // spot further down, alongside the rest of useNoteSnapshotTimeline's
-  // inputs -- kept here since it only depends on values already available
-  // this early (activeNoteText/editorTextVersion/latestEditorTextRef).
-  const currentEditorText = useMemo(() => {
-    // latestEditorTextRef, once populated, is always already canonical (it's
-    // set directly from ContractBridgePlugin's canonical event.text) -- only
-    // the activeNoteText fallback (used before the ref is first populated,
-    // e.g. right after a note switch) still needs normalizing here.
-    const latest = latestEditorTextRef.current
-    return latest ? latest : normalizeInternalText(activeNoteText)
-    // editorTextVersion isn't read here -- it's a version counter bumped
-    // alongside every latestEditorTextRef mutation, the only signal that
-    // tells this memo to recompute (ref writes aren't reactive on their own).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeNoteText, editorTextVersion, latestEditorTextRef])
   const [isCaretSuspended, setIsCaretSuspended] = useState(false)
   // Owned here so useNoteSaveQueue (which must be declared earlier) and
   // useEditorSectionMount share the same preview-block split cache.
   const previewBlockSplitCacheRef = useRef<PreviewBlockSplitCache | null>(null)
   const previewBlocksCacheRef = useRef<{ text: string; blocks: PreviewMarkdownBlock[] } | null>(null)
-  // Mirrors activeNoteText into a ref so activateNote can read the latest
-  // value without taking a reactive dependency that would recreate the
-  // callback (and the SectionHandle that contains it) on every keystroke.
-  const activeNoteTextRef = useRef(activeNoteText)
-  useEffect(() => {
-    activeNoteTextRef.current = activeNoteText
-  }, [activeNoteText])
-
   // useNoteChapters (which owns refreshChapters) is declared further down
   // this function than useNoteSaveQueue needs it -- routed through a ref,
-  // kept current by the effect right after useNoteChapters below, same
-  // pattern as activeNoteTextRef above.
+  // kept current by the effect right after useNoteChapters below.
   const refreshChaptersRef = useRef<() => Promise<void>>(async () => {})
   // useSectionTabs (which owns pinnedTabs) is declared further down this
   // function than activateNote needs it -- routed through a ref, same
@@ -432,9 +408,7 @@ export function EditorSection({
     activeNoteId,
     persistenceReady,
     notesRef,
-    latestEditorTextRef,
     previewBlockSplitCacheRef,
-    setActiveNoteText,
     setNotes,
     onSaveCompleted: handleSaveCompleted,
   })
@@ -486,9 +460,9 @@ export function EditorSection({
     ...editorSectionMountRest
   } = useEditorSectionMount({
     activeNoteId,
-    activeNoteText,
-    setActiveNoteText,
-    setEditorTextVersion,
+    readEditorText,
+    editorTextVersion,
+    commitEditorText,
     editorSelection,
     setEditorSelection,
     isPreviewMode,
@@ -562,10 +536,6 @@ export function EditorSection({
     scheduleFocusEditorInEditMode({ restoreSelection: true })
   }, [sectionId, activeSectionId, isPreviewMode, activeNoteId, scheduleFocusEditorInEditMode, sectionContainerRef])
 
-  const getActiveNoteLiveText = useCallback(() => (
-    latestEditorTextRef.current || activeNoteText
-  ), [activeNoteText, latestEditorTextRef])
-
   // A permanently-deleted note's id can never be loaded again, so any
   // per-note-id cache keyed on it (unlike the note-switch caches these
   // maps/sets otherwise exist for) is pure dead weight from this point on --
@@ -603,7 +573,7 @@ export function EditorSection({
     noteId: activeNoteId,
     previewedSnapshotId,
     setPreviewedSnapshotId,
-    getLiveText: getActiveNoteLiveText,
+    getLiveText: readEditorText,
     flushPendingSaveNow,
     isNoteOpenInOtherSection,
     captureEditModeSnapshotFromEditor: (id) => { captureEditModeSnapshotFromEditor(id) },
@@ -675,7 +645,7 @@ export function EditorSection({
       if (anchorBlockIndex !== null) {
         const cursorPos = readCurrentEditUiPayload()?.cursorPos
           ?? editModeSnapshotByNoteIdRef.current.get(previousNoteId)?.fullSelection.end
-        const leavingText = normalizeInternalText(latestEditorTextRef.current || activeNoteTextRef.current)
+        const leavingText = readEditorText()
         const previewBlockMap = await buildPersistedBlockMap(previewBlockSplitCacheRef.current, leavingText)
         // Whether the note being LEFT stays warm. Silent until it was
         // measured: this used to hand-roll the record with a hardcoded
@@ -893,10 +863,9 @@ export function EditorSection({
     logStep('external note setup', externalStart)
 
     const stateUpdateStart = performance.now()
-    latestEditorTextRef.current = hydratedText
+    commitEditorText(hydratedText)
     pendingEditRestoreSnapshotRef.current = preloadedSnapshot
     setActiveNoteId(loaded.id)
-    setActiveNoteText(hydratedText)
     await saveSelectedNoteState(loaded.id)
     logStep('state updates + save selected note', stateUpdateStart)
     logStep('total activateNote', activateStart)
@@ -928,17 +897,16 @@ export function EditorSection({
     sectionId,
     updateEditModeSnapshotCache,
     activeNoteExternalPathRef,
-    activeNoteTextRef,
+    commitEditorText,
     editModeSnapshotByNoteIdRef,
     externalNoteOriginalTextByIdRef,
     latestEditViewportRef,
-    latestEditorTextRef,
     latestViewportRef,
     pendingEditRestoreSnapshotRef,
     pendingRenderViewSourceAnchorRef,
     readCurrentEditUiPayload,
+    readEditorText,
     setActiveNoteId,
-    setActiveNoteText,
     setIsForcedPreviewNote,
   ])
 
@@ -965,10 +933,9 @@ export function EditorSection({
       }
     }
 
-    latestEditorTextRef.current = ''
+    commitEditorText('')
     pendingEditRestoreSnapshotRef.current = null
     setActiveNoteId(null)
-    setActiveNoteText('')
     await saveSelectedNoteState(null)
     void window.thockdownSections?.setActiveNote(sectionId, null)
   }, [
@@ -979,11 +946,10 @@ export function EditorSection({
     saveSelectedNoteState,
     sectionId,
     editModeSnapshotByNoteIdRef,
-    latestEditorTextRef,
+    commitEditorText,
     pendingEditRestoreSnapshotRef,
     readCurrentEditUiPayload,
     setActiveNoteId,
-    setActiveNoteText,
   ])
 
   const activeNoteSummary = useMemo(() => {
@@ -1157,7 +1123,7 @@ export function EditorSection({
     persistenceReady,
     activateNote,
     refreshNotes,
-    currentEditorText,
+    readEditorText,
     isPreviewMode,
     isForcedPreviewNote,
     setIsPreviewMode,
@@ -1293,11 +1259,10 @@ export function EditorSection({
   } = useNoteProtectionActions({
     notes,
     activeNoteId,
-    activeNoteText,
-    latestEditorTextRef,
+    readEditorText,
     setNotes,
     setActiveNoteId,
-    setActiveNoteText,
+    commitEditorText,
     activateNote,
     flushPendingSaveNow,
     cancelPendingSave,
@@ -1350,8 +1315,8 @@ export function EditorSection({
     setTimelineCurveConstant,
     setTimelineTrackLengthPx,
     isPreviewingSnapshot,
-    editorDisplayText,
-    renderedDisplayText,
+    readDisplayedText,
+    displayedTextKey,
     handleNavigateSnapshot,
     handleCreateManualSnapshot,
     handleMergeAdjacentSnapshots,
@@ -1360,9 +1325,9 @@ export function EditorSection({
     handleBranchError,
   } = useNoteSnapshotTimeline({
     activeNoteId,
-    activeNoteText,
-    currentEditorText,
-    latestEditorTextRef,
+    readEditorText,
+    editorTextVersion,
+    previewedSnapshotContentRef,
     previewedSnapshotId,
     setPreviewedSnapshotId,
     captureEditModeSnapshotFromEditor,
@@ -1417,10 +1382,8 @@ export function EditorSection({
     // it's still the note actually on screen, otherwise this would
     // silently overwrite whatever the user has since navigated to.
     if (activeNoteIdRef.current !== noteIdAtClick) return
-    const hydratedText = normalizeInternalText(refreshed.text)
-    latestEditorTextRef.current = hydratedText
-    setActiveNoteText(hydratedText)
-  }, [activeNoteSummary, activeNoteId, isViewingAutoTocChapter, isViewingAutoOpenItemsChapter, handleCreateManualSnapshot, latestEditorTextRef, setActiveNoteText])
+    commitEditorText(normalizeInternalText(refreshed.text))
+  }, [activeNoteSummary, activeNoteId, isViewingAutoTocChapter, isViewingAutoOpenItemsChapter, handleCreateManualSnapshot, commitEditorText])
 
   // The repurposed line-numbers/review-flags button's preview-mode
   // behavior (SectionEditorArea.tsx) -- freezes/unfreezes the active
@@ -1450,13 +1413,6 @@ export function EditorSection({
     }
   }, [activeNoteId, isViewingTimelessNote, activateNote, flushPendingSaveNow, noteTransitionLockRef, persistenceReady, refreshNotes])
 
-  // See useEditorSectionMount's UseEditorSectionMountOptions doc comment --
-  // a plain render-time ref mutation (not an effect) so this hook's own
-  // effects, which read it lazily when their callbacks fire, always see the
-  // value that matches whatever `previewedSnapshotId` they're reacting to on
-  // this same commit.
-  previewedSnapshotContentRef.current = isPreviewingSnapshot ? editorDisplayText : null
-
   // Word count is now "establish once, track the delta" (WordCount.ts):
   // countWords is the full O(document length) scan, run only when there's
   // no usable previous count to track forward from (note switch, or the
@@ -1472,30 +1428,32 @@ export function EditorSection({
   const documentWordCountBaselineRef = useRef<{ noteId: string | null; text: string; wordCount: number } | null>(null)
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
+      const liveText = readEditorText()
       const hasSelection = !editorSelection.isCollapsed && editorSelection.end > editorSelection.start
-      const selectionStart = Math.max(0, Math.min(currentEditorText.length, editorSelection.start))
-      const selectionEnd = Math.max(selectionStart, Math.min(currentEditorText.length, editorSelection.end))
+      const selectionStart = Math.max(0, Math.min(liveText.length, editorSelection.start))
+      const selectionEnd = Math.max(selectionStart, Math.min(liveText.length, editorSelection.end))
 
       if (hasSelection) {
         // Bounded by the selection's own size, not the document's -- no
         // baseline to track against (the selection can jump anywhere), and
         // a full scan of a user-selected range is never the O(document)
         // per-keystroke cost this was built to eliminate.
-        const text = currentEditorText.slice(selectionStart, selectionEnd)
+        const text = liveText.slice(selectionStart, selectionEnd)
         setActiveNoteDocumentStats({ wordCount: countWords(text), characterCount: text.length })
         return
       }
 
       const baseline = documentWordCountBaselineRef.current
       const wordCount = baseline && baseline.noteId === activeNoteId
-        ? trackWordCount(baseline.text, baseline.wordCount, currentEditorText)
-        : countWords(currentEditorText)
-      documentWordCountBaselineRef.current = { noteId: activeNoteId, text: currentEditorText, wordCount }
+        ? trackWordCount(baseline.text, baseline.wordCount, liveText)
+        : countWords(liveText)
+      documentWordCountBaselineRef.current = { noteId: activeNoteId, text: liveText, wordCount }
 
-      setActiveNoteDocumentStats({ wordCount, characterCount: currentEditorText.length })
+      setActiveNoteDocumentStats({ wordCount, characterCount: liveText.length })
     }, 200)
     return () => window.clearTimeout(timeoutId)
-  }, [activeNoteId, currentEditorText, editorSelection.end, editorSelection.isCollapsed, editorSelection.start])
+    // editorTextVersion is not read: it is what schedules a recount.
+  }, [activeNoteId, readEditorText, editorTextVersion, editorSelection.end, editorSelection.isCollapsed, editorSelection.start])
 
   /**
    * Whether find is actually being looked at.
@@ -1529,7 +1487,8 @@ export function EditorSection({
   } = useDocumentFind({
     sectionId,
     isFindActive,
-    sourceText: currentEditorText,
+    readSourceText: readEditorText,
+    sourceTextVersion: editorTextVersion,
     initialCaseSensitive: restoredDocumentFindCaseSensitive,
     isPreviewMode,
   })
@@ -1568,8 +1527,8 @@ export function EditorSection({
   const { previewMarkdownElement, previewBlockCount } = usePreviewMarkdownRendering({
     notes,
     activeNoteId,
-    activeNoteText,
-    latestEditorTextRef,
+    readEditorText,
+    readNoteContent,
     activateNote,
     previewScrollRef,
     isPreviewMode,
@@ -1577,7 +1536,8 @@ export function EditorSection({
     documentFindDirective,
     isDocumentFindCaseSensitive: effectiveCaseSensitive,
     isSearchHighlightActive: isFindActive,
-    renderedDisplayText,
+    readDisplayedText,
+    displayedTextKey,
     previewScrollToSourceLineRef: editorSectionMountRest.previewScrollToSourceLineRef,
     previewDocumentPositionRef,
     previewBlockSplitCacheRef,
@@ -1611,7 +1571,8 @@ export function EditorSection({
     previewDocumentPositionRef,
     previewBridgeHostRef,
     activeNoteId,
-    currentEditorText,
+    readEditorText,
+    editorTextVersion,
     viewStyle,
     viewFontSize,
     viewSpacing,
@@ -1649,12 +1610,10 @@ export function EditorSection({
     documentFindHits,
     effectiveCaseSensitive,
     preserveCase,
-    currentEditorText,
+    readEditorText,
     syncPreviewCustomScrollbar,
     isPreviewMode,
     adapterRef,
-    latestEditorTextRef,
-    activeNoteText,
     documentFindQuery,
     documentReplaceQuery,
     isDocumentReplaceMode,
@@ -1699,11 +1658,11 @@ export function EditorSection({
     toggleTableOfContents,
   } = useMarkdownFormattingToolbar({
     activeNoteId,
-    currentEditorText,
+    readEditorText,
+    editorTextVersion,
     editorSelection,
     markdownInlineCacheRef,
     markdownEditRef,
-    latestEditorTextRef,
     latestEditorSelectionRef,
     applyProgrammaticEditorText,
     buildTextDecorationTransformRef,
@@ -1879,9 +1838,8 @@ export function EditorSection({
     sectionId,
     activeNoteId,
     setActiveNoteId,
-    activeNoteText,
-    currentEditorText,
-    latestEditorTextRef,
+    readEditorText,
+    editorTextVersion,
     activeNoteSummary,
     menuIdentityNoteId,
     menuIdentityNoteSummary,
@@ -2269,7 +2227,8 @@ export function EditorSection({
         adapterRef={adapterRef}
         onEditorSurfaceReady={handleEditorSurfaceReady}
         activeNoteId={activeNoteId}
-        editorDisplayText={editorDisplayText}
+        readDisplayedText={readDisplayedText}
+        displayedTextKey={displayedTextKey}
         scrollbarHostEl={scrollbarHostEl}
         setScrollbarHostEl={setScrollbarHostEl}
         editorFontFamily={editorFontFamily}

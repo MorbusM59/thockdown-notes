@@ -208,8 +208,8 @@ export interface UsePreviewWindowOptions {
    * do -- which is exactly the set of changes that invalidate the answer.
    */
   geometryProbeRef?: MutableRefObject<HTMLElement | null>
-  /** Changes whenever the rendered document does, so the window can reset. */
-  renderedDisplayText: string
+  /** Changes whenever the rendered document does (useNoteSnapshotTimeline's `displayedTextKey`), so the window can reset. */
+  displayedTextKey: string
   activeNoteId: string | null
 }
 
@@ -226,7 +226,7 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
     renderBlock,
     overlay,
     geometryProbeRef,
-    renderedDisplayText,
+    displayedTextKey,
     activeNoteId,
   } = options
 
@@ -572,7 +572,7 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
     if (!enabled || !isPaneVisible) return undefined
     const handle = window.setTimeout(restartTailProbe, PREVIEW_TAIL_PROBE_SETTLE_MS)
     return () => window.clearTimeout(handle)
-  }, [enabled, isPaneVisible, previewBlocks, renderedDisplayText, restartTailProbe])
+  }, [enabled, isPaneVisible, previewBlocks, displayedTextKey, restartTailProbe])
 
   // A change of typography or pane width is the subtle one, and it was missed
   // on the first pass: the answer is a count of characters in one SCREEN, so it
@@ -757,7 +757,7 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
   // A NEW DOCUMENT starts a new window. The same document, edited, does not.
   //
   // This effect used to say "or the same one re-rendered" and list
-  // `renderedDisplayText` and `previewBlocks` in its dependencies -- both of
+  // the rendered text and `previewBlocks` in its dependencies -- both of
   // which change on every keystroke. So every keystroke re-planned the window
   // around block 0 at PREVIEW_WINDOW_INITIAL_BLOCKS, and the adjustment pass
   // immediately trimmed it back to what the viewport actually needs. Measured

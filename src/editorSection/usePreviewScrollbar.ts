@@ -103,7 +103,9 @@ export interface UsePreviewScrollbarOptions {
    */
   previewBridgeHostRef?: MutableRefObject<HTMLDivElement | null>
   activeNoteId: string | null
-  currentEditorText: string
+  /** The section's live text, read when needed, and its version (see useDisplayedNoteText.ts). */
+  readEditorText: () => string
+  editorTextVersion: number
   viewStyle: ViewStyleKey
   viewFontSize: number
   viewSpacing: number
@@ -126,7 +128,8 @@ export function usePreviewScrollbar({
   previewDocumentPositionRef,
   previewBridgeHostRef,
   activeNoteId,
-  currentEditorText,
+  readEditorText,
+  editorTextVersion,
   viewStyle,
   viewFontSize,
   viewSpacing,
@@ -332,7 +335,7 @@ export function usePreviewScrollbar({
     const nextThumbHeight = thumbHeightCommitRef.current.resolve({
       signature: [
         activeNoteId ?? '',
-        currentEditorTextRef.current.length,
+        readEditorText().length,
         viewportHeight,
         usableTrackHeight,
         viewStyle,
@@ -366,7 +369,7 @@ export function usePreviewScrollbar({
 
     applyPreviewThumbDom(nextThumbTop, nextThumbHeight)
     setIsPreviewScrollThumbActive(true)
-  }, [applyPreviewThumbDom, isDraggingPreviewScrollThumb, isPreviewMode, previewScrollRef, previewDocumentPositionRef, activeNoteId, viewStyle, viewFontSize, viewSpacing, viewLetterSpacingEm])
+  }, [applyPreviewThumbDom, isDraggingPreviewScrollThumb, isPreviewMode, previewScrollRef, previewDocumentPositionRef, activeNoteId, readEditorText, viewStyle, viewFontSize, viewSpacing, viewLetterSpacingEm])
 
   /**
    * The thumb during a bridged journey: it stretches rather than slides.
@@ -531,7 +534,9 @@ export function usePreviewScrollbar({
   useEffect(() => {
     if (!isPreviewMode) return
     syncPreviewCustomScrollbar()
-  }, [isPreviewMode, syncPreviewCustomScrollbar, activeNoteId, currentEditorText, viewStyle, viewFontSize, viewSpacing, viewLetterSpacingEm])
+    // editorTextVersion is not read: a new text is one of the things that
+    // changes the thumb's size.
+  }, [isPreviewMode, syncPreviewCustomScrollbar, activeNoteId, editorTextVersion, viewStyle, viewFontSize, viewSpacing, viewLetterSpacingEm])
 
   /**
    * Offers this pane a curtain for long journeys (editor/scrollBridge.ts).
@@ -545,9 +550,6 @@ export function usePreviewScrollbar({
    * `readStyle` is read fresh at the start of every journey, so a change of
    * font, size, spacing or theme needs no invalidation of its own.
    */
-  const currentEditorTextRef = useRef(currentEditorText)
-  useEffect(() => { currentEditorTextRef.current = currentEditorText }, [currentEditorText])
-
   useEffect(() => {
     const scroller = previewScrollRef.current
     const host = previewBridgeHostRef?.current
@@ -582,7 +584,7 @@ export function usePreviewScrollbar({
 
         const usableWidthPx = Math.max(1, scroller.clientWidth - paddingLeftPx - paddingRightPx)
         return {
-          text: currentEditorTextRef.current,
+          text: readEditorText(),
           charsPerLine: Math.max(1, Math.round(usableWidthPx / averageCharWidthPx)),
           lineHeightPx,
           fontPx,
@@ -593,7 +595,7 @@ export function usePreviewScrollbar({
         }
       },
     })
-  }, [previewScrollRef, previewBridgeHostRef, activeNoteId])
+  }, [previewScrollRef, previewBridgeHostRef, activeNoteId, readEditorText])
 
   useEffect(() => {
     if (!isPreviewMode) return

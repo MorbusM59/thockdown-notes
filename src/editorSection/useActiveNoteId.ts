@@ -8,7 +8,7 @@ export interface UseActiveNoteIdResult {
 
 /**
  * Which note a section is currently showing. Deliberately the *only* thing
- * this hook owns for now -- activeNoteText, save/debounce, selection
+ * this hook owns for now -- the note's text, save/debounce, selection
  * tracking, and viewport persistence are still global in App.tsx and read
  * this hook's value rather than a raw local state var. They're the next
  * slice of this extraction, not bundled in here, because they change

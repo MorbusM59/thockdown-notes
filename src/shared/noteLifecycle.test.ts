@@ -6,6 +6,7 @@ function baseSummary(overrides: Partial<NoteSummary> = {}): NoteSummary {
     id: 'note-1',
     fileName: 'note-1.md',
     title: 'Note One',
+    leadLine: '# Note One',
     tags: [],
     createdAtMs: 1000,
     updatedAtMs: 1000,

@@ -322,7 +322,7 @@ export function SectionTabBar({
                   </div>
                   {tempTabNoteId ? (() => {
                     const note = notes.find((entry) => entry.id === tempTabNoteId)
-                    const { text: label, isAssigned } = resolveIdentityLabel(note?.assignedId, note?.contentText)
+                    const { text: label, isAssigned } = resolveIdentityLabel(note?.assignedId, note?.leadLine)
                     const isGhost = note ? (isArchivedNote(note) || isDeletedNote(note)) : true
                     const isPrimed = unpinPrimedTabNoteId === tempTabNoteId
                     const isPinArming = pinArmingTabNoteId === tempTabNoteId
@@ -370,7 +370,7 @@ export function SectionTabBar({
                   })() : null}
                   {pinnedTabs.map((tab, index) => {
                     const note = notes.find((entry) => entry.id === tab.noteId)
-                    const { text: label, isAssigned } = resolveIdentityLabel(note?.assignedId, note?.contentText)
+                    const { text: label, isAssigned } = resolveIdentityLabel(note?.assignedId, note?.leadLine)
                     const isGhost = note ? (isArchivedNote(note) || isDeletedNote(note)) : true
                     const isActive = tab.noteId === tabIdentityNoteId
                     const isPrimed = unpinPrimedTabNoteId === tab.noteId

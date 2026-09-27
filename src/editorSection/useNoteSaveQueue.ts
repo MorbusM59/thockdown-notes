@@ -14,10 +14,8 @@ export interface UseNoteSaveQueueOptions {
   persistenceReady: boolean
   /** The full shared notes list, mirrored into a ref for the same reason the rest of the app reads it this way -- avoids re-subscribing the debounce timer callback to `notes` itself. */
   notesRef: MutableRefObject<NoteSummary[]>
-  latestEditorTextRef: MutableRefObject<string>
   /** Warm-start cache from useEditorSectionMount's background preview-block parse. Used to persist the structural split alongside the note text so the next startup can warm-start. */
   previewBlockSplitCacheRef: MutableRefObject<PreviewBlockSplitCache | null>
-  setActiveNoteText: Dispatch<SetStateAction<string>>
   setNotes: Dispatch<SetStateAction<NoteSummary[]>>
   /**
    * Fires after every successful save with the saved note's id. The chapter
@@ -60,7 +58,7 @@ export interface UseNoteSaveQueueResult {
  * whatever text it's handed.
  */
 export function useNoteSaveQueue(options: UseNoteSaveQueueOptions): UseNoteSaveQueueResult {
-  const { activeNoteId, persistenceReady, notesRef, latestEditorTextRef, previewBlockSplitCacheRef, setActiveNoteText, setNotes, onSaveCompleted } = options
+  const { activeNoteId, persistenceReady, notesRef, previewBlockSplitCacheRef, setNotes, onSaveCompleted } = options
 
   const pendingSaveTextRef = useRef<string | null>(null)
   const pendingSaveCursorPosRef = useRef<number | null>(null)
@@ -99,8 +97,11 @@ export function useNoteSaveQueue(options: UseNoteSaveQueueOptions): UseNoteSaveQ
 
       if (isExternal) {
         await window.thockdownNotes?.saveNoteSnapshot({ id: activeNoteId, content: normalizedText, isManual: false })
-        latestEditorTextRef.current = normalizedText
-        setActiveNoteText(normalizedText)
+        // Deliberately no write of `normalizedText` back into the editor's
+        // text. It is the text this save was queued with, so it either already
+        // is the live text or is older than what was typed during the awaits
+        // above -- and writing an older text back rolls the editor back with it
+        // (the bug useNoteProtectionActions' explicit save describes).
       }
 
       setNotes((previous) => {
@@ -121,7 +122,7 @@ export function useNoteSaveQueue(options: UseNoteSaveQueueOptions): UseNoteSaveQ
     } catch (error) {
       console.error('Failed to persist note', error)
     }
-  }, [activeNoteId, notesRef, latestEditorTextRef, previewBlockSplitCacheRef, setActiveNoteText, setNotes, onSaveCompleted])
+  }, [activeNoteId, notesRef, previewBlockSplitCacheRef, setNotes, onSaveCompleted])
 
   const queueSave = useCallback((text: string, cursorPos?: number | null) => {
     if (!persistenceReady) return

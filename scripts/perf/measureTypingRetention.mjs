@@ -2,23 +2,35 @@
 // How much memory does typing into a large note keep alive?
 //
 // Opens a 2MB note (dropped in as an external file, the one path the browser
-// mock can hand a large document through), types 120 characters in edit
-// mode, and reads the JS heap after a forced GC every 20 characters. On a
-// production build (`vite build --mode browser` + `vite preview`), so React's
-// development-only fields (`_debugOwner` and friends) cannot hold anything.
+// mock can hand a large document through) in edit mode and types in CYCLES:
+// twenty characters 120ms apart, then a pause long enough for the save queue
+// (350ms debounce) to save. So every cycle exercises both ways typing can
+// retain the document -- per keystroke, and per save.
 //
-// What it found, and what it guards: every keystroke kept about one full copy
-// of the document alive for good -- ~3.1MB per character on a 2MB note, +375MB
-// after 120, linear with no plateau; ~50KB per character on a 20KB note. A
-// heap snapshot attributed every copy to chains of stale closure contexts:
-// memoized callbacks that close over the document text (or over objects that
-// carry it: the section handle, the formatting toolbar's actions, the
-// snapshot timeline) keep an older render's scope alive, whose captured
-// callbacks keep an older one alive, and so on. See TODO.md.
+// The property is a FIXED POINT: once a couple of warm-up cycles have filled
+// every bounded cache (the editor's previous text, the inline-state cache,
+// the word-count baseline, the block-split cache...), further cycles must not
+// grow the heap. Asserted as total growth over the measured cycles staying
+// under one document copy -- i.e. nothing is retained per cycle.
 //
-// Asserts that retention stays under MAX_RETAINED_COPIES document copies over
-// the whole run. That FAILS on main as of this script's commit; it is the gate
-// for the fix, not a description of today.
+// On a production build (`vite build --mode browser` + `vite preview`), so
+// React's development-only fields (`_debugOwner` and friends) cannot hold
+// anything. The heap is read through CDP after a forced GC:
+// `performance.memory` is quantized unless Chromium runs with
+// --enable-precise-memory-info, and read that way this script reported a
+// flat heap through a 375MB leak.
+//
+// What it found: every keystroke kept about one full copy of the document
+// alive for good (+267MB after 120 characters, linear). Every copy was held by
+// a chain of stale render scopes -- memoized callbacks keep the scope they
+// were created in, which holds the memoized callbacks current then, and so
+// on -- and each scope held the text because the text was React state
+// passed down as a string. See editorSection/useDisplayedNoteText.ts.
+//
+// Still FAILS as of this revision, at one document copy per cycle: a save
+// hands back a note summary carrying the note's full text
+// (`NoteSummary.contentText`), and the same chains keep the old summaries.
+// See TODO.md.
 
 import { chromium } from 'playwright'
 import { existsSync, readdirSync } from 'node:fs'
@@ -39,8 +51,10 @@ function resolveChromiumExecutable() {
 
 const port = Number(process.env.PORT || 5195)
 const DOC_CHARS = Number(process.env.DOC_CHARS || 2_000_000)
-const KEYSTROKES = 120
-const MAX_RETAINED_COPIES = 3
+const KEYS_PER_CYCLE = 20
+const WARMUP_CYCLES = 2
+const MEASURED_CYCLES = 8
+const MAX_RETAINED_COPIES = 1
 
 const doc = generateSyntheticDocument(DOC_CHARS)
 const server = await startPreviewServer(port)
@@ -84,25 +98,32 @@ try {
   await page.waitForTimeout(3000)
   await page.click('.cm-content')
   await page.keyboard.press('Control+End')
-  const start = await heapMb()
-  console.log(`      after open: ${start.toFixed(1)}MB`)
-  let end = start
-  for (let typed = 20; typed <= KEYSTROKES; typed += 20) {
-    for (let k = 0; k < 20; k += 1) { await page.keyboard.type('x'); await page.waitForTimeout(120) }
+  const docMb = DOC_CHARS / 1e6
+  const cycle = async () => {
+    for (let k = 0; k < KEYS_PER_CYCLE; k += 1) { await page.keyboard.type('x'); await page.waitForTimeout(120) }
     await page.waitForTimeout(1500)
-    end = await heapMb()
-    console.log(`      after ${typed} keystrokes: ${end.toFixed(1)}MB`)
+    return heapMb()
   }
+
+  console.log(`      after open: ${(await heapMb()).toFixed(1)}MB`)
+  for (let n = 1; n <= WARMUP_CYCLES; n += 1) console.log(`      warm-up ${n}: ${(await cycle()).toFixed(1)}MB`)
+  const base = await heapMb()
+  let end = base
+  for (let n = 1; n <= MEASURED_CYCLES; n += 1) {
+    end = await cycle()
+    console.log(`      cycle ${n}: ${end.toFixed(1)}MB`)
+  }
+
   // A pass is only evidence if the keystrokes reached the document.
+  const expected = (WARMUP_CYCLES + MEASURED_CYCLES) * KEYS_PER_CYCLE
   const typedCount = await page.evaluate(() => (document.querySelector('.cm-content')?.textContent ?? '').match(/x+$/)?.[0].length ?? 0)
-  if (typedCount < KEYSTROKES) {
-    console.log(`FAIL  only ${typedCount} of ${KEYSTROKES} keystrokes reached the document; the measurement is void`)
+  if (typedCount < expected) {
+    console.log(`FAIL  only ${typedCount} of ${expected} keystrokes reached the document; the measurement is void`)
     failed = true
   }
-  const docMb = DOC_CHARS / 1e6
-  const retainedCopies = (end - start) / docMb
-  failed = failed || retainedCopies > MAX_RETAINED_COPIES
-  console.log(`${failed ? 'FAIL' : 'PASS'}  typing ${KEYSTROKES} characters retained ${(end - start).toFixed(1)}MB, ${retainedCopies.toFixed(1)} document copies (limit ${MAX_RETAINED_COPIES})`)
+  const copies = (end - base) / docMb
+  failed = failed || copies > MAX_RETAINED_COPIES
+  console.log(`${failed ? 'FAIL' : 'PASS'}  ${MEASURED_CYCLES} cycles of ${KEYS_PER_CYCLE} keystrokes and a save retained ${(end - base).toFixed(1)}MB, ${copies.toFixed(1)} document copies (limit ${MAX_RETAINED_COPIES}); ${((end - base) / MEASURED_CYCLES).toFixed(2)}MB per cycle`)
 } finally {
   await browser.close()
   await server.stop()

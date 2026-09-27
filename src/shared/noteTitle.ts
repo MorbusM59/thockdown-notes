@@ -1,5 +1,6 @@
 import { normalizeInternalText } from '../editor/TextPolicy'
 import { truncateTitle } from './textSanitization'
+import { detachString } from './detachString'
 
 /**
  * Everything normalizeInternalText turns into a line break. The line and
@@ -44,5 +45,7 @@ function readCanonicalFirstLine(text: string): string {
 export function deriveNoteTitleFromText(text: string): string {
   const firstLine = readCanonicalFirstLine(text)
   if (!firstLine.startsWith('# ')) return 'Missing title'
-  return truncateTitle(firstLine.slice(2).trim()) || 'Missing title'
+  // Detached because a title is kept (in the notes list, on every keystroke
+  // that edits the first line) and a slice of the note would keep the note.
+  return detachString(truncateTitle(firstLine.slice(2).trim())) || 'Missing title'
 }

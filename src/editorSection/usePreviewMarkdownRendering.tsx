@@ -172,8 +172,10 @@ export type PreviewScrollToSourceLineFn = (
 export interface UsePreviewMarkdownRenderingOptions {
   notes: NoteSummary[]
   activeNoteId: string | null
-  activeNoteText: string
-  latestEditorTextRef: MutableRefObject<string>
+  /** The section's live text, read when needed (see useDisplayedNoteText.ts for why it is never a string here). */
+  readEditorText: () => string
+  /** Another note's content, by id, as of its last summary -- App's note-content store (see shared/noteContentStore.ts). */
+  readNoteContent: (noteId: string) => string
   activateNote: (noteId: string, overrideCursorPos?: number, overrideSourceAnchorLine?: number) => Promise<void>
   previewScrollRef: MutableRefObject<HTMLDivElement | null>
   /**
@@ -198,7 +200,13 @@ export interface UsePreviewMarkdownRenderingOptions {
    * view needs no such gate: it only ever selects the hit you click.
    */
   isSearchHighlightActive: boolean
-  renderedDisplayText: string
+  /**
+   * What the pane shows -- the live text, or the Time Machine snapshot being
+   * browsed -- and the key that changes exactly when that may have changed
+   * (useNoteSnapshotTimeline's `displayedTextKey`).
+   */
+  readDisplayedText: () => string
+  displayedTextKey: string
   /**
    * Written (not read) by this hook so `useEditorSectionMount`'s scroll-
    * restore logic -- which mounts earlier in the same component and so
@@ -346,8 +354,8 @@ const PreviewMarkdownBlock = memo(function PreviewMarkdownBlock({
 export function usePreviewMarkdownRendering({
   notes,
   activeNoteId,
-  activeNoteText,
-  latestEditorTextRef,
+  readEditorText,
+  readNoteContent,
   activateNote,
   previewScrollRef,
   isPreviewMode,
@@ -355,7 +363,8 @@ export function usePreviewMarkdownRendering({
   documentFindDirective,
   isDocumentFindCaseSensitive,
   isSearchHighlightActive,
-  renderedDisplayText,
+  readDisplayedText,
+  displayedTextKey,
   previewScrollToSourceLineRef,
   previewDocumentPositionRef,
   previewBlockSplitCacheRef,
@@ -367,12 +376,11 @@ export function usePreviewMarkdownRendering({
   onPreviewCommitted,
   isPreviewSettleHolding,
 }: UsePreviewMarkdownRenderingOptions): UsePreviewMarkdownRenderingResult {
-  // Mirrors `notes`/`activeNoteText` for navigateToInternalPreviewLink's
+  // Mirrors `notes` for navigateToInternalPreviewLink's
   // call-time-only reads below, so that callback's identity -- and in turn
   // previewMarkdownComponents' -- stays stable across every keystroke. Both
-  // props otherwise change on every keystroke (title-preview and
-  // save-queue bookkeeping touch `notes`; typing itself touches
-  // `activeNoteText`), which would force every PreviewMarkdownBlock to
+  // prop otherwise changes on every keystroke (title-preview and save-queue
+  // bookkeeping touch `notes`), which would force every PreviewMarkdownBlock to
   // treat `components` as "changed" and re-render, defeating the whole
   // point of splitting the preview into independently memoized blocks.
   const notesRef = useRef(notes)
@@ -403,7 +411,7 @@ export function usePreviewMarkdownRendering({
   // through on the source note -- this store lives above the virtualized
   // block tree, so it survives that.
   //
-  // Reset whenever `renderedDisplayText` itself changes, not just on note
+  // Reset whenever the displayed text itself changes, not just on note
   // switch: a manual refresh (the present-state circle's regenerateAllOpenItems)
   // rewrites this very note's own text WITHOUT switching notes, dropping
   // whatever lines got checked off -- but every OTHER line's own line
@@ -419,7 +427,7 @@ export function usePreviewMarkdownRendering({
   }
   useEffect(() => {
     openItemsToggleStoreRef.current?.reset()
-  }, [activeNoteId, renderedDisplayText])
+  }, [activeNoteId, displayedTextKey])
 
   // Fires the actual checkbox-click side effect -- see
   // noteLifecycleService.ts's toggleOpenItemCheckedState for what this does
@@ -444,11 +452,6 @@ export function usePreviewMarkdownRendering({
       })
   }, [activeNoteId])
 
-  const activeNoteTextRef = useRef(activeNoteText)
-  useEffect(() => {
-    activeNoteTextRef.current = activeNoteText
-  }, [activeNoteText])
-
   // The regular-preview counterpart of handleToggleOpenItem above: writes
   // straight to the active note's own live text via applyProgrammaticEditorText
   // (the same mechanism the formatting toolbar and find & replace already
@@ -460,11 +463,10 @@ export function usePreviewMarkdownRendering({
   // on (ChecklistCaretClickTogglePolicy.ts), so a click means the same
   // thing in both modes.
   const handleToggleChecklistAtLine = useCallback((sourceLine: number) => {
-    const currentText = normalizeInternalText(latestEditorTextRef.current || activeNoteTextRef.current)
-    const next = resolveMarkdownChecklistLineToggleTransform(currentText, sourceLine)
+    const next = resolveMarkdownChecklistLineToggleTransform(readEditorText(), sourceLine)
     if (!next) return
     applyProgrammaticEditorText(next.text, next.selection.anchor, next.selection.focus)
-  }, [applyProgrammaticEditorText, latestEditorTextRef])
+  }, [applyProgrammaticEditorText, readEditorText])
 
   // Mirrors `isPreviewMode` for the navigation callbacks below, which are
   // deliberately identity-stable across renders but have to read the
@@ -600,7 +602,7 @@ export function usePreviewMarkdownRendering({
     }
   }, [previewScrollRef, scrollEditorToAnchor])
 
-  // Recomputed on every renderedDisplayText change to learn the current
+  // Recomputed on every displayed-text change to learn the current
   // block boundaries. The actual, expensive ReactMarkdown parse+render per
   // block is gated by PreviewMarkdownBlock's own memo, not by this -- but
   // the boundary recompute itself is a full remark parse of the whole
@@ -624,7 +626,7 @@ export function usePreviewMarkdownRendering({
    *
    * While the pane is HIDDEN the split does not run at all -- with one
    * exception worth naming, since the sentence above read as absolute and is
-   * not: `hiddenSplitText` is SEEDED with the text present at mount, so the
+   * not: `hiddenSplitKey` is SEEDED with the text present at mount, so the
    * first note a freshly-mounted section shows does get split even in edit
    * mode. That is not waste (the map is wanted anyway -- for the anchor, for
    * the toggle, and to persist) and it is not on the main thread, but it is
@@ -656,12 +658,20 @@ export function usePreviewMarkdownRendering({
    * cost that remains is a real one and is the next thing to fix -- see the
    * handover doc -- but it belongs at a mode toggle, not between keystrokes.
    */
-  const [hiddenSplitText, setHiddenSplitText] = useState(renderedDisplayText)
+  const [hiddenSplitKey, setHiddenSplitKey] = useState(displayedTextKey)
   useEffect(() => {
     if (!isPreviewMode) return
-    setHiddenSplitText(renderedDisplayText)
-  }, [renderedDisplayText, isPreviewMode])
-  const splitSourceText = isPreviewMode ? renderedDisplayText : hiddenSplitText
+    setHiddenSplitKey(displayedTextKey)
+  }, [displayedTextKey, isPreviewMode])
+  const splitSourceKey = isPreviewMode ? displayedTextKey : hiddenSplitKey
+  // The text for that key, read once, in the first render that names the
+  // key, and held in a ref rather than a variable: everything below that
+  // needs it reads the ref, so no closure in this hook captures the text
+  // (see useDisplayedNoteText.ts).
+  const splitSourceRef = useRef<{ key: string; text: string } | null>(null)
+  if (splitSourceRef.current?.key !== splitSourceKey) {
+    splitSourceRef.current = { key: splitSourceKey, text: readDisplayedText() }
+  }
   // Warm-start from useEditorSectionMount's background prewarm if the text
   // matches. This avoids a second full remark parse on the first preview
   // render after edit mode had already parsed the document in the background.
@@ -693,6 +703,7 @@ export function usePreviewMarkdownRendering({
     () => {
       const cache = splitCacheRef.current
       const start = typeof window !== 'undefined' && window.localStorage.getItem('thockdown:debug-input-lag') === '1' ? performance.now() : 0
+      const splitSourceText = splitSourceRef.current?.text ?? ''
       const incremental = splitPreviewBlocksWithoutFullParse(splitSourceText, cache)
       const fromWorker = workerSplit?.cache.text === splitSourceText ? workerSplit : null
       const resolved = incremental ? { cache: incremental, isComplete: true } : fromWorker
@@ -710,7 +721,9 @@ export function usePreviewMarkdownRendering({
       if (resolved) return resolved
       return { cache: { text: splitSourceText, ranges: [], blocks: [] } as PreviewBlockSplitCache, isComplete: false }
     },
-    [splitSourceText, splitCacheRef, workerSplit],
+    // splitSourceKey is not read: it names the text splitSourceRef holds.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [splitSourceKey, splitCacheRef, workerSplit],
   )
   const splitResult = splitState.cache
 
@@ -727,13 +740,13 @@ export function usePreviewMarkdownRendering({
   useEffect(() => {
     if (splitState.isComplete) return
     let cancelled = false
-    void requestFullBlockSplit(splitSourceText, (partial) => {
+    void requestFullBlockSplit(splitSourceRef.current?.text ?? '', (partial) => {
       if (!cancelled) setWorkerSplit({ cache: partial, isComplete: false })
     }).then((cache) => {
       if (!cancelled) setWorkerSplit({ cache, isComplete: true })
     })
     return () => { cancelled = true }
-  }, [splitState.isComplete, splitSourceText])
+  }, [splitState.isComplete, splitSourceKey])
 
   // Committed in an effect, not during the useMemo above, so this cache
   // update never happens during a render React might discard (Strict Mode's
@@ -1129,7 +1142,7 @@ export function usePreviewMarkdownRendering({
         // previewBlocks actually reflects -- not the (possibly stale)
         // stored contentText used for the existence check at the call site.
         const anchorSourceText = isAlreadyActive
-          ? (latestEditorTextRef.current || activeNoteTextRef.current)
+          ? readEditorText()
           : contentTextForExistenceCheck
         const sourceLine = anchorTarget.resolveLine(anchorSourceText)
         if (sourceLine !== null) anchorTarget.scrollTo(sourceLine, !isAlreadyActive, targetNoteId)
@@ -1149,7 +1162,7 @@ export function usePreviewMarkdownRendering({
         preResolvedLandingLine ?? undefined,
       ).then(followUp)
     }
-  }, [activeNoteId, activateNote, resolveAnchorTarget, scrollPreviewToTop, latestEditorTextRef])
+  }, [activeNoteId, activateNote, resolveAnchorTarget, scrollPreviewToTop, readEditorText])
 
   // Resolves and follows a `$`, `$#anchor-id`, `$NOTE-ID`,
   // `$NOTE-ID#anchor-id`, `$NOTE-ID§CHAPTER-ID`, or
@@ -1208,7 +1221,7 @@ export function usePreviewMarkdownRendering({
         // needs no assigned id and so has no business here.
         const chapterEntry = chapters.find((entry) => entry.chapterId && normalizeInternalIdForLookup(entry.chapterId) === normalizedChapterTarget)
         if (!chapterEntry) return
-        const chapterContentText = notesRef.current.find((note) => note.id === chapterEntry.chapterNoteId)?.contentText ?? ''
+        const chapterContentText = readNoteContent(chapterEntry.chapterNoteId)
         if (target.anchorId !== null && resolveAnchorTarget(target.anchorId).resolveLine(chapterContentText) === null) return
         activateAndScroll(chapterEntry.chapterNoteId, chapterContentText, target.anchorId)
       })
@@ -1217,7 +1230,7 @@ export function usePreviewMarkdownRendering({
 
     if (target.noteIdRaw !== null) {
       if (!contextNote) return
-      const targetContentText = contextNote.contentText ?? ''
+      const targetContentText = readNoteContent(contextNote.id)
       if (target.anchorId !== null && resolveAnchorTarget(target.anchorId).resolveLine(targetContentText) === null) return
       activateAndScroll(contextNote.id, targetContentText, target.anchorId)
       return
@@ -1225,12 +1238,12 @@ export function usePreviewMarkdownRendering({
 
     // No noteIdRaw and no chapterIdRaw means "this note" (a bare `$` or `$#anchor-id`).
     if (target.anchorId === null || !activeNoteId) return
-    const currentText = latestEditorTextRef.current || activeNoteTextRef.current
+    const currentText = readEditorText()
     const anchorTarget = resolveAnchorTarget(target.anchorId)
     const sourceLine = anchorTarget.resolveLine(currentText)
     if (sourceLine === null) return
     anchorTarget.scrollTo(sourceLine, false)
-  }, [activeNoteId, activateAndScroll, resolveAnchorTarget, latestEditorTextRef])
+  }, [activeNoteId, activateAndScroll, resolveAnchorTarget, readEditorText, readNoteContent])
 
   // Resolves and follows an `@noteId[#fragment]` app-authored link -- the
   // addressing scheme of content this app writes rather than the user
@@ -1250,22 +1263,20 @@ export function usePreviewMarkdownRendering({
   // uses manual anchors, so that reasoning no longer holds -- and the
   // prefix already distinguishes the two cases, so one resolver covers both.
   const navigateToInternalNoteLink = useCallback((target: ParsedInternalNoteLink) => {
-    const targetContentText = notesRef.current.find((note) => note.id === target.noteId)?.contentText ?? ''
+    const targetContentText = readNoteContent(target.noteId)
     if (target.fragment === null) {
       activateAndScroll(target.noteId, targetContentText, null)
       return
     }
     if (resolveAnchorTarget(target.fragment).resolveLine(targetContentText) === null) return
     activateAndScroll(target.noteId, targetContentText, target.fragment)
-  }, [activateAndScroll, resolveAnchorTarget])
+  }, [activateAndScroll, readNoteContent, resolveAnchorTarget])
 
-  // navigateToInternalPreviewLink itself still isn't fully keystroke-stable
-  // -- it depends (transitively, via `activateNote`) on other callbacks
-  // elsewhere in the section that legitimately need the latest
-  // activeNoteText for THEIR OWN purposes (persisting edit-UI state on
-  // note switch) and so recreate on every keystroke regardless of anything
-  // this hook does. Forwarding through a ref, and building `components`
-  // exactly once, fully decouples its identity from that upstream churn --
+  // navigateToInternalPreviewLink's identity follows `activateNote`'s, and
+  // through it every callback elsewhere in the section that activateNote
+  // depends on -- none of which this hook controls. Forwarding through a
+  // ref, and building `components` exactly once, fully decouples its
+  // identity from that upstream churn --
   // clicks still always run the latest navigation logic, since the
   // forwarding wrapper reads the ref at call time, not at creation time.
   const navigateToInternalPreviewLinkRef = useRef(navigateToInternalPreviewLink)
@@ -1444,7 +1455,7 @@ export function usePreviewMarkdownRendering({
     renderBlock: renderPreviewBlock,
     overlay: isWindowed ? typographyProbeElement : null,
     geometryProbeRef: charRulerRef,
-    renderedDisplayText,
+    displayedTextKey,
     activeNoteId,
   })
   previewWindowApiRef.current = isWindowed ? previewWindow.api : null

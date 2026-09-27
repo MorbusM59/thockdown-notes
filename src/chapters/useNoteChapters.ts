@@ -41,8 +41,8 @@ export interface UseNoteChaptersOptions {
   /** EditorSection.tsx's own `activateNote`. Which parent a chapter belongs to is a DB fact now (a chapter has exactly one parent, ever), not navigation state, so this no longer takes a parent-context param. */
   activateNote: (noteId: string, overrideCursorPos?: number) => Promise<void>
   refreshNotes: (preferredId?: string | null) => Promise<string | null>
-  /** Whatever's actually loaded in the editor right now (parent or a chapter) -- see EditorSection.tsx's own `currentEditorText` doc comment for why this, not `activeNoteText`, is the canonical live read. */
-  currentEditorText: string
+  /** Whatever's actually loaded in the editor right now (parent or a chapter), read when an action runs -- never passed as a string (see editorSection/useDisplayedNoteText.ts). */
+  readEditorText: () => string
   isPreviewMode: boolean
   isForcedPreviewNote: boolean
   setIsPreviewMode: Dispatch<SetStateAction<boolean>>
@@ -187,7 +187,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     persistenceReady,
     activateNote,
     refreshNotes,
-    currentEditorText,
+    readEditorText,
     isPreviewMode,
     isForcedPreviewNote,
     setIsPreviewMode,
@@ -523,21 +523,22 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     // time it's viewed, so treat it the same as viewing nothing extractable.
     if (activeNoteId === autoTocChapterNoteId || activeNoteId === autoOpenItemsChapterNoteId) return
 
-    const start = Math.max(0, Math.min(editorSelection.start, currentEditorText.length))
+    const liveText = readEditorText()
+    const start = Math.max(0, Math.min(editorSelection.start, liveText.length))
     // A collapsed selection is just a caret -- there's nothing to highlight,
     // so it extracts from the caret to the end of the document instead of
     // no-op'ing. An expanded selection extracts exactly what's highlighted.
     const end = editorSelection.isCollapsed
-      ? currentEditorText.length
-      : Math.max(start, Math.min(editorSelection.end, currentEditorText.length))
+      ? liveText.length
+      : Math.max(start, Math.min(editorSelection.end, liveText.length))
     if (start >= end) return
 
     // Leading/trailing blank lines are trimmed off the extracted content
     // itself (the new chapter's own text), separately from the surgery-site
     // cleanup below (which tidies the document being cut *from*).
-    const extractedText = trimBlankLines(currentEditorText.slice(start, end))
-    const before = currentEditorText.slice(0, start)
-    const after = currentEditorText.slice(end)
+    const extractedText = trimBlankLines(liveText.slice(start, end))
+    const before = liveText.slice(0, start)
+    const after = liveText.slice(end)
     // Tidy up the surgery site: a paragraph cut from between two blank lines
     // would otherwise leave both stacked behind it.
     const { text: remainingText, seamPos } = collapseSurgerySite(before, after)
@@ -583,7 +584,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     autoTocChapterNoteId,
     autoOpenItemsChapterNoteId,
     editorSelection,
-    currentEditorText,
+    readEditorText,
     applyProgrammaticEditorText,
     flushPendingSaveNow,
     refreshNotes,
@@ -611,7 +612,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     if (currentIndex < 0) return
 
     const currentChapterNoteId = activeNoteId
-    const currentContent = currentEditorText
+    const currentContent = readEditorText()
     // The first chapter's "previous" is the parent note itself; every other
     // chapter's previous is whichever one sits immediately before it.
     const previousId = currentIndex > 0 ? reorderableChapters[currentIndex - 1].chapterNoteId : menuIdentityNoteId
@@ -632,7 +633,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     await refreshNotes(previousId)
     // Caret at the end of the merged note.
     await activateNote(previousId, mergedText.length)
-  }, [menuIdentityNoteId, activeNoteId, autoTocChapterNoteId, autoOpenItemsChapterNoteId, reorderableChapters, currentEditorText, refreshNotes, activateNote, onNotePermanentlyDeleted])
+  }, [menuIdentityNoteId, activeNoteId, autoTocChapterNoteId, autoOpenItemsChapterNoteId, reorderableChapters, readEditorText, refreshNotes, activateNote, onNotePermanentlyDeleted])
 
   const handleChapterForwardSplitOrMerge = useCallback(async () => {
     if (!window.thockdownChapters || !window.thockdownNotes || !menuIdentityNoteId || !activeNoteId) return
@@ -641,12 +642,13 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     // chapter sequence.
     if (activeNoteId === autoTocChapterNoteId || activeNoteId === autoOpenItemsChapterNoteId) return
 
-    const selectionEnd = Math.max(0, Math.min(editorSelection.end, currentEditorText.length))
-    const afterSelection = currentEditorText.slice(selectionEnd)
+    const liveText = readEditorText()
+    const selectionEnd = Math.max(0, Math.min(editorSelection.end, liveText.length))
+    const afterSelection = liveText.slice(selectionEnd)
 
     if (/\S/.test(afterSelection)) {
       const extractedText = trimBlankLines(afterSelection)
-      const { text: remainingText, seamPos } = collapseSurgerySite(currentEditorText.slice(0, selectionEnd), '')
+      const { text: remainingText, seamPos } = collapseSurgerySite(liveText.slice(0, selectionEnd), '')
 
       applyProgrammaticEditorText(remainingText, seamPos, seamPos)
       await flushPendingSaveNow()
@@ -686,7 +688,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     if (!nextChapterId) return
 
     const nextDoc = await window.thockdownNotes.loadNote({ id: nextChapterId })
-    const { text: mergedText, seamPos } = collapseSurgerySite(currentEditorText, nextDoc.text)
+    const { text: mergedText, seamPos } = collapseSurgerySite(liveText, nextDoc.text)
 
     // Update the live buffer + caret in place and flush before deleting the
     // source chapter -- same crash-safety ordering as the extract path
@@ -700,7 +702,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
 
     setChapters(updatedChapters)
     await refreshNotes()
-  }, [menuIdentityNoteId, activeNoteId, autoTocChapterNoteId, autoOpenItemsChapterNoteId, reorderableChapters, currentEditorText, editorSelection, applyProgrammaticEditorText, flushPendingSaveNow, refreshNotes, onNotePermanentlyDeleted])
+  }, [menuIdentityNoteId, activeNoteId, autoTocChapterNoteId, autoOpenItemsChapterNoteId, reorderableChapters, readEditorText, editorSelection, applyProgrammaticEditorText, flushPendingSaveNow, refreshNotes, onNotePermanentlyDeleted])
 
   const handleChapterBackwardSplitOrMerge = useCallback(async () => {
     if (!window.thockdownChapters || !window.thockdownNotes || !menuIdentityNoteId || !activeNoteId) return
@@ -709,8 +711,9 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     // chapter sequence.
     if (activeNoteId === autoTocChapterNoteId || activeNoteId === autoOpenItemsChapterNoteId) return
 
-    const selectionStart = Math.max(0, Math.min(editorSelection.start, currentEditorText.length))
-    const beforeSelection = currentEditorText.slice(0, selectionStart)
+    const liveText = readEditorText()
+    const selectionStart = Math.max(0, Math.min(editorSelection.start, liveText.length))
+    const beforeSelection = liveText.slice(0, selectionStart)
 
     if (/\S/.test(beforeSelection)) {
       // Viewing the parent: there's no chapter-list slot "before" it to
@@ -722,7 +725,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
       // new first chapter), which we switch to -- same as every other
       // freshly-created chapter.
       if (activeNoteId === menuIdentityNoteId) {
-        const cutText = trimBlankLines(currentEditorText.slice(selectionStart))
+        const cutText = trimBlankLines(liveText.slice(selectionStart))
         const { text: keptText, seamPos } = collapseSurgerySite(beforeSelection, '')
 
         applyProgrammaticEditorText(keptText, seamPos, seamPos)
@@ -761,7 +764,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
       }
 
       const extractedText = trimBlankLines(beforeSelection)
-      const { text: remainingText, seamPos } = collapseSurgerySite('', currentEditorText.slice(selectionStart))
+      const { text: remainingText, seamPos } = collapseSurgerySite('', liveText.slice(selectionStart))
 
       applyProgrammaticEditorText(remainingText, seamPos, seamPos)
       await flushPendingSaveNow()
@@ -797,7 +800,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     const previousChapterId = reorderableChapters[currentIndex - 1].chapterNoteId
 
     const previousDoc = await window.thockdownNotes.loadNote({ id: previousChapterId })
-    const { text: mergedText, seamPos } = collapseSurgerySite(previousDoc.text, currentEditorText)
+    const { text: mergedText, seamPos } = collapseSurgerySite(previousDoc.text, liveText)
 
     applyProgrammaticEditorText(mergedText, seamPos, seamPos)
     await flushPendingSaveNow()
@@ -816,7 +819,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
       autoTocChapterNoteId,
       autoOpenItemsChapterNoteId,
       reorderableChapters,
-      currentEditorText,
+      readEditorText,
       editorSelection,
       applyProgrammaticEditorText,
       flushPendingSaveNow,

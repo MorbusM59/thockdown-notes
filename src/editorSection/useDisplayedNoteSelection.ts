@@ -7,7 +7,7 @@ const ZERO_SELECTION: EditorSelectionState = { anchor: 0, focus: 0, start: 0, en
 export interface UseDisplayedNoteSelectionResult {
   editorSelection: EditorSelectionState
   setEditorSelection: Dispatch<SetStateAction<EditorSelectionState>>
-  /** The synchronous source of truth for "the selection right now" -- same relationship to `editorSelection` as `latestEditorTextRef` has to `activeNoteText`. */
+  /** The synchronous source of truth for "the selection right now" -- written on every editor change, while `editorSelection` is the committed state a render reads. (The text has no state counterpart at all: see useDisplayedNoteText.ts.) */
   latestEditorSelectionRef: MutableRefObject<EditorSelectionState>
 }
 

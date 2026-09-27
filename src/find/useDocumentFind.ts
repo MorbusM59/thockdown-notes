@@ -42,13 +42,20 @@ export interface UseDocumentFindOptions {
    */
   isFindActive: boolean
   /**
-   * The text to search -- deliberately just a string, not "the active
-   * note" or "the active editor". The caller decides which section's live
-   * text this is; today there's only one, but this is the seam a future
-   * "find targets whichever section last had focus" story plugs into
-   * without this hook needing to know sections exist.
+   * The text to search -- deliberately just text, not "the active note" or
+   * "the active editor". The caller decides which section's live text this
+   * is; today there's only one, but this is the seam a future "find targets
+   * whichever section last had focus" story plugs into without this hook
+   * needing to know sections exist.
+   *
+   * A reader and a version rather than a string: a string would be a
+   * variable of this hook's render scope and be retained, one copy per
+   * keystroke, by the closures created here (see
+   * editorSection/useDisplayedNoteText.ts). The version changes exactly when
+   * the reader's answer may have.
    */
-  sourceText: string
+  readSourceText: () => string
+  sourceTextVersion: number
   /** Applied once (e.g. after the persisted app-state round-trip resolves); null/omitted leaves the default (case-insensitive). */
   initialCaseSensitive?: boolean | null
   /**
@@ -102,7 +109,7 @@ export interface UseDocumentFindResult {
  * `documentFindDirective` back out to drive them.
  */
 export function useDocumentFind(options: UseDocumentFindOptions): UseDocumentFindResult {
-  const { sectionId, sourceText, initialCaseSensitive, isPreviewMode, isFindActive } = options
+  const { sectionId, readSourceText, sourceTextVersion, initialCaseSensitive, isPreviewMode, isFindActive } = options
   void sectionId
 
   const [documentFindQuery, setDocumentFindQuery] = useState('')
@@ -193,7 +200,7 @@ export function useDocumentFind(options: UseDocumentFindOptions): UseDocumentFin
    * packaged build, not in a test -- which is the argument for deriving it.
    */
   const [previewAnswer, setPreviewAnswer] = useState<{
-    text: string
+    sourceTextVersion: number
     query: string
     caseSensitive: boolean
     hits: DocumentFindHit[]
@@ -204,17 +211,20 @@ export function useDocumentFind(options: UseDocumentFindOptions): UseDocumentFin
     // Cheap per call, but it is a whole-document scan and it re-runs on every
     // keystroke -- there is no reason to pay it for a panel nobody is looking
     // at either.
-    return buildDocumentFindHits(sourceText, documentFindDirective.findText, effectiveCaseSensitive)
-  }, [isFindActive, sourceText, documentFindDirective.findText, effectiveCaseSensitive, isPreviewMode])
+    return buildDocumentFindHits(readSourceText(), documentFindDirective.findText, effectiveCaseSensitive)
+    // sourceTextVersion is not read: it is the signal that readSourceText's
+    // answer changed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFindActive, readSourceText, sourceTextVersion, documentFindDirective.findText, effectiveCaseSensitive, isPreviewMode])
 
   useEffect(() => {
     if (!isFindActive || !isPreviewMode || !documentFindDirective.findText) return
     let cancelled = false
-    void requestPreviewFindHits(sourceText, documentFindDirective.findText, effectiveCaseSensitive)
+    void requestPreviewFindHits(readSourceText(), documentFindDirective.findText, effectiveCaseSensitive)
       .then((hits: DocumentFindHit[]) => {
         if (cancelled) return
         setPreviewAnswer({
-          text: sourceText,
+          sourceTextVersion,
           query: documentFindDirective.findText,
           caseSensitive: effectiveCaseSensitive,
           hits,
@@ -224,10 +234,10 @@ export function useDocumentFind(options: UseDocumentFindOptions): UseDocumentFin
     // showing it would make the list flicker backwards through superseded
     // queries on a slow note.
     return () => { cancelled = true }
-  }, [isFindActive, sourceText, documentFindDirective.findText, effectiveCaseSensitive, isPreviewMode])
+  }, [isFindActive, readSourceText, sourceTextVersion, documentFindDirective.findText, effectiveCaseSensitive, isPreviewMode])
 
   const previewAnswerIsCurrent = previewAnswer !== null
-    && previewAnswer.text === sourceText
+    && previewAnswer.sourceTextVersion === sourceTextVersion
     && previewAnswer.query === documentFindDirective.findText
     && previewAnswer.caseSensitive === effectiveCaseSensitive
 

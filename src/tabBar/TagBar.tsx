@@ -105,7 +105,7 @@ export function TagBar({ tabs, persistenceReady, activeNoteId, identityNoteId, n
   }
 
   const identityNote = identityNoteId ? notes.find((entry) => entry.id === identityNoteId) : undefined
-  const { text: identityLabel, isAssigned } = resolveIdentityLabel(identityNote?.assignedId, identityNote?.contentText)
+  const { text: identityLabel, isAssigned } = resolveIdentityLabel(identityNote?.assignedId, identityNote?.leadLine)
   // Provisional until the user commits to an id of their own -- see
   // isAutoAssignedId for why this is derived from the value rather than stored.
   const isProvisionalId = isAutoAssignedId(identityNote?.assignedId)

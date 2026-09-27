@@ -476,6 +476,10 @@ a common-prefix/common-suffix diff of two 1.5M-character strings.
 rebuilding the document with `doc.toJSON().join('\n')` every keystroke.
 Bonus: the equality check becomes O(1) on identity, because during typing
 `initialText` *is* the string the updateListener handed to React.
+(Still true, with one change of route: the editor now reads its text through
+the section's text store -- `readText`/`textKey`, see "What a keystroke may
+retain" below -- rather than an `initialText` prop, and the store holds the
+very string the updateListener produced.)
 
 **4. `noteHasTableOfContents` got a necessary-condition guard.** It rescanned
 the whole note on every keystroke to style one toolbar button. Both heading
@@ -555,6 +559,55 @@ not close with it: **a profile only shows the code your fixture reaches.**
 Before concluding that a surface is fast, check which of its branches the
 fixture actually enters. The instrument caveats above are all about *how* to
 measure; this one is about *what*.
+
+# What a keystroke may retain (session 5)
+
+Typing kept **one full copy of the document alive per keystroke, for good**:
++267MB after 120 characters on a 2MB note, linear, measured on a production
+build after forced GCs. Nothing here was slow; the app simply grew until the
+reader restarted it. `scripts/perf/measureTypingRetention.mjs` is the gate.
+
+**The mechanism** is ordinary React and ordinary V8, and it is worth knowing
+because it is invisible in the code. V8 gives every closure created in one
+function call a single shared scope object holding every variable ANY of
+those closures captures. A memoized callback kept from render k keeps render
+k's scope alive; that scope holds the memoized callbacks current at render k,
+which keep older renders' scopes alive, and so on. The chains are normal and
+cost nothing while each scope is small. The note's text was React state
+(`activeNoteText`), passed down as a string through a dozen hooks -- so every
+scope on every chain held its own copy.
+
+**The rule that replaced it:** the displayed note's text is never a React
+value. It lives in one ref per section (`useDisplayedNoteText`), is read
+through a stable `readEditorText()` at the moment it is needed, and anything
+that must re-run when it changes keys on `editorTextVersion`. What a slot
+DISPLAYS (live text, or a Time Machine snapshot) is published the same way
+(`readDisplayedText` + `displayedTextKey`), and the editor itself takes
+`readText`/`textKey` rather than a text prop. The same rule covers anything
+derived from the text that a render scope would hold:
+
+* **A substring is the document.** V8 keeps a substring of 13+ characters as
+  a slice pointing at its parent, so a title cut from the first line retained
+  the whole note (+85MB over 40 keystrokes typed on line 1). Derived strings
+  that are KEPT go through `shared/detachString.ts`.
+* **A memo's value is a variable.** The formatting toolbar's memo returned the
+  resolver's result -- the inline cache (whole text + line array) and the
+  caret's line text -- and its callbacks captured it. It returns flags now.
+* **Note summaries do not carry content.** `NoteSummary.contentText` put a new
+  copy of the note into the notes list on every save. Summaries now carry
+  `leadLine` (all an identity label needs), and App's notes setter moves the
+  content into a store read by id (`shared/noteContentStore.ts`).
+
+Measured after: 0.13MB per cycle of twenty keystrokes and a save, against
+~44MB before -- the ordinary cost of small render scopes, no document copies.
+
+**Instrument caveat:** read the heap through CDP `Runtime.getHeapUsage`.
+`performance.memory` is quantized in Chromium unless launched with
+`--enable-precise-memory-info`, and the first version of the gate reported a
+flat 33.1MB throughout the 375MB leak. To find what holds a copy, take a heap
+snapshot of an UNMINIFIED production build (`vite build --mode browser
+--minify false`) and group `system / Context` nodes by the variable holding
+the big string -- the variable names identify the hooks directly.
 
 # Still open
 

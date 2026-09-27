@@ -424,6 +424,11 @@ below; don't re-merge them, the fixes are unrelated.
 note... document initial and text enters at the wrong place."** Not a restore-time issue at all —
 found and fixed in `CM6Editor.tsx`'s same-note hydration path.
 
+*(Since superseded in form, not in substance: the editor no longer takes an `initialText` prop.
+It reads the section's text store through `readText` and re-runs on `textKey` -- see
+`docs/editor-input-pipeline-plan.md`, "What a keystroke may retain". The same-note/note-switch
+branching described here is unchanged.)*
+
 Root cause: the hydration effect (keyed on `[noteId, initialText]`) is *expected* to re-run on
 every keystroke (React's `initialText` prop, sourced from `activeNoteText`, changes every
 keystroke) and is *expected* to almost always no-op via its own guard (`currentText === initialText

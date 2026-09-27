@@ -277,7 +277,16 @@ export interface CM6EditorProps {
    */
   isEditPaneVisible?: boolean;
   noteId?: string | null;
-  initialText?: string;
+  /**
+   * The text this editor should hold, read when it is needed, and a key that
+   * changes exactly when that text may have. Not a string prop: every closure
+   * in this component shares one scope object per render, so a text prop
+   * would be kept alive by whichever of this component's memoized callbacks
+   * were created alongside it (editorSection/useDisplayedNoteText.ts has the
+   * whole mechanism). Omitted: an empty document.
+   */
+  readText?: () => string;
+  textKey?: string;
   scrollbarHost?: HTMLElement | null;
   fontFamily: string;
   fontSizePx: number;
@@ -747,6 +756,10 @@ const lineTokenPlugin = ViewPlugin.fromClass(class {
   decorations: (pluginValue) => pluginValue.decorations,
 });
 
+function readNoText(): string {
+  return '';
+}
+
 export function CM6Editor({
   bindings,
   adapterRef,
@@ -754,7 +767,8 @@ export function CM6Editor({
   isSectionActive = true,
   isEditPaneVisible = true,
   noteId,
-  initialText = '',
+  readText = readNoText,
+  textKey = '',
   scrollbarHost = null,
   fontFamily,
   fontSizePx,
@@ -1811,7 +1825,7 @@ export function CM6Editor({
     // unchanged, the thumb would otherwise stay hidden at 0/0 until some
     // unrelated event nudges a metric. This effect closes that race by
     // re-syncing the moment the gate itself flips.
-  }, [syncCustomScrollbar, scrollerClientHeightPx, initialText, topBoundaryPxDisplay, bottomBoundaryPxDisplay, hasViewportLines, isSnapshotRestorePending]);
+  }, [syncCustomScrollbar, scrollerClientHeightPx, textKey, topBoundaryPxDisplay, bottomBoundaryPxDisplay, hasViewportLines, isSnapshotRestorePending]);
 
   useEffect(() => {
     let rafId: number | null = null;
@@ -4025,6 +4039,7 @@ export function CM6Editor({
       }),
     ];
 
+    const initialText = readText();
     const view = new EditorView({
       state: EditorState.create({ doc: initialText, extensions }),
       parent: containerRef.current,
@@ -4773,7 +4788,7 @@ export function CM6Editor({
       reconcileSelectionJumpScrollRef.current = null;
       rightClickCycleRef.current = null;
     };
-    // Deliberately mount-once: noteId/initialText changes are handled by the
+    // Deliberately mount-once: noteId/text changes are handled by the
     // hydration effect below (matching NoteTextHydrationPlugin's own
     // "patch, don't remount" discipline), not by tearing this effect down.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -4815,7 +4830,7 @@ export function CM6Editor({
   // entire reason for existing performance-wise; see the Phase 1 audit).
   //
   // For the *same* note, this effect can still fire on a transient mismatch
-  // between `initialText` (React's view, sourced from activeNoteText) and
+  // between `initialText` (the section's text store, read below) and
   // CM6's own live document -- this is expected, not a "the note changed
   // under us" event, and critically has no restore-snapshot mechanism
   // running afterward the way a real note switch does. The previous version
@@ -4842,16 +4857,17 @@ export function CM6Editor({
     // docChanged transaction (this effect's own hydration dispatch
     // included), which is the property all five transform handlers already
     // rely on. Materializing it again here -- this effect is keyed on
-    // `initialText`, so it runs every keystroke -- cost an O(document)
+    // `textKey`, so it runs every keystroke -- cost an O(document)
     // toJSON().join per keypress to reproduce a string the editor was
     // already holding.
     //
     // It also makes the equality check below O(1) in the common case rather
     // than O(document): during typing, `initialText` IS the string the
-    // updateListener produced and handed to React, so the two are the same
+    // updateListener produced and handed to the section's store, so the two are the same
     // object and `===` short-circuits on identity. A rebuilt copy is a
     // distinct object with equal contents, which is the one case string
     // comparison has to walk in full.
+    const initialText = readText();
     const currentText = previousTextRef.current;
     const isNoteSwitch = lastHydratedNoteIdRef.current !== (noteId ?? null);
     if (!isNoteSwitch && currentText === initialText) return;
@@ -4919,7 +4935,8 @@ export function CM6Editor({
         console.log(`[input-lag] note-switch noteId=${noteId} docLen=${initialText.length} paintMs=${paintMs.toFixed(1)}`);
       });
     }
-  }, [noteId, initialText, debugInputLagEnabled]);
+    // textKey is not read: it is the signal that readText's answer changed.
+  }, [noteId, textKey, readText, debugInputLagEnabled]);
 
   // Review-flag load on note switch. Declared textually AFTER the hydration
   // effect above so React runs it after: it needs view.state.doc to already
@@ -5383,7 +5400,7 @@ export function CM6Editor({
           viewportEvents: true,
           snapshotRead: true,
           // Still not `true`: snapshotWriteText is false (text restore is via
-          // the noteId/initialText prop + hydration effect, not applySnapshot,
+          // the noteId/readText props + hydration effect, not applySnapshot,
           // matching Editor.tsx's own architecture) -- snapshotWrite requires
           // all three.
           snapshotWrite: false,

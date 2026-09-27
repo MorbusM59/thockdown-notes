@@ -31,7 +31,9 @@ export interface SectionEditorAreaProps {
   /** Passed to the editor as `onSurfaceReady` -- see useEditorSectionMount's handleEditorSurfaceReady. */
   onEditorSurfaceReady: () => void
   activeNoteId: string | null
-  editorDisplayText: string
+  /** What the editor shows (the live text, or a Time Machine snapshot) and the key that changes with it -- see useNoteSnapshotTimeline. */
+  readDisplayedText: () => string
+  displayedTextKey: string
   scrollbarHostEl: HTMLDivElement | null
   setScrollbarHostEl: (element: HTMLDivElement | null) => void
   editorFontFamily: string
@@ -168,7 +170,8 @@ export function SectionEditorArea({
   adapterRef,
   onEditorSurfaceReady,
   activeNoteId,
-  editorDisplayText,
+  readDisplayedText,
+  displayedTextKey,
   scrollbarHostEl,
   setScrollbarHostEl,
   editorFontFamily,
@@ -415,7 +418,8 @@ export function SectionEditorArea({
                   isSectionActive={isSectionActive}
                   isEditPaneVisible={!isPreviewMode}
                   noteId={activeNoteId}
-                  initialText={editorDisplayText}
+                  readText={readDisplayedText}
+                  textKey={displayedTextKey}
                   scrollbarHost={scrollbarHostEl}
                   fontFamily={editorFontFamily}
                   fontSizePx={editorRuntimeMetrics.fontSizePx}

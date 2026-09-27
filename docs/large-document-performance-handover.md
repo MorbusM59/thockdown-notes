@@ -4283,3 +4283,18 @@ browser mock now imports external files as the real service does).
   Render-view reopen: ~360ms, peak window nodes ~200. The regression scripts
   for the window (`verifyPreviewWindow`, `...NoteSwitch`, `...TrackLanding`,
   `...RestStability`, `verifyEndOfTrackClick`) pass exactly as before.
+
+## Session: typing retained a copy of the note per keystroke (fixed)
+
+Not a speed problem, a memory one, and invisible to every timing instrument
+in this document: +267MB after 120 characters on a 2MB note, never released.
+Fixed by taking the note's text out of React state entirely -- the full
+mechanism, the rule and the gate are in `docs/editor-input-pipeline-plan.md`,
+"What a keystroke may retain", and the rule itself heads
+`src/editorSection/useDisplayedNoteText.ts`. Earlier sections of this
+document name `activeNoteText`, `currentEditorText`, `renderedDisplayText`
+and an `initialText` prop: those are the pre-fix data flow. The text is now
+`readEditorText()` + `editorTextVersion`, what a slot displays is
+`readDisplayedText()` + `displayedTextKey`, and the editor reads
+`readText`/`textKey`.
+

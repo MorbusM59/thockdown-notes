@@ -22,8 +22,8 @@ import type {
   DeleteNoteInput,
   LoadNoteInput,
   NoteDocument,
+  NoteSummaryWithContent,
   NoteLifecycleApi,
-  NoteSummary,
   NoteTagsInput,
   NoteUiState,
   NoteUiStatePayload,
@@ -39,7 +39,7 @@ import { DEFAULT_EDITOR_SECTION_ID } from '../shared/sections'
 import type { ChapterEntry, ChaptersApi } from '../shared/chapters'
 import type { ReviewFlagEntry, ReviewFlagsApi } from '../shared/reviewFlags'
 import { normalizeChapterHeadings } from '../shared/markdownHeadings'
-import { resolveIdentityLabel } from '../shared/tabLabels'
+import { leadLineOf, resolveIdentityLabel } from '../shared/tabLabels'
 import { computeHeadingAnchors, formatHeadingAnchorFragment, formatOutlineEntryLine, formatOutlineRootTitleLine, parseMarkdownHeading, stripMarkdownInlineFormatting } from '../shared/tableOfContentsText'
 import { formatInternalNoteLink } from '../shared/internalNoteLinks'
 import {
@@ -52,7 +52,7 @@ import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChang
 const MOCK_STORAGE_KEY = 'thockdown-notes:browser-mock:v1'
 
 type BrowserMockStore = {
-  notes: NoteDocument[]
+  notes: MockNote[]
   noteUiStates: Record<string, NoteUiState>
   /** Mirrors databaseService.ts's note_snapshots.anchorBlockIndex -- keyed by the synthetic snapshot id saveNoteSnapshot returns (see its own doc comment: the browser mock doesn't persist snapshot history, so this is a best-effort mirror only). */
   snapshotAnchors: Record<number, number>
@@ -66,7 +66,7 @@ type BrowserMockStore = {
   /** Slot geometry, keyed by position -- the mock mirror of the editor_slots table. */
   editorSlots: EditorSlotEntry[]
   chapters: ChapterEntry[]
-  /** Mirrors databaseService.ts's notes.detachedChapterParentId/Position/ChapterId/Sequence columns -- where a chapter was detached from while it's sitting outside the chapters table (Trash or an Archive fold-out). Keyed by chapterNoteId. NoteDocument.detachedChapterParentId itself is kept in sync on the note object too (same duplicated-cache convention as chapterParentId), but `position`/`chapterId`/`sequence` have no renderer-facing use, so they live here only. */
+  /** Mirrors databaseService.ts's notes.detachedChapterParentId/Position/ChapterId/Sequence columns -- where a chapter was detached from while it's sitting outside the chapters table (Trash or an Archive fold-out). Keyed by chapterNoteId. MockNote.detachedChapterParentId itself is kept in sync on the note object too (same duplicated-cache convention as chapterParentId), but `position`/`chapterId`/`sequence` have no renderer-facing use, so they live here only. */
   detachedChapters: Record<string, { parentNoteId: string; position: number; chapterId: string | null; sequence: number }>
   /** Mirrors the real DB's single global (not per-parent) monotonic detach counter -- see detachChapter's own doc comment. */
   nextDetachSequence: number
@@ -99,7 +99,19 @@ function deriveTitle(text: string): string {
   return firstLine.replace(/^#+\s*/, '').trim() || 'Untitled'
 }
 
-function normalizeDocument(note: NoteDocument): NoteDocument {
+/**
+ * A note as this mock stores it: a NoteDocument without the fields derived
+ * from its text (`contentText`, `leadLine`), which are rebuilt on the way out
+ * (toDocument, toSummary) rather than persisted -- the whole store is
+ * re-serialised on every write, and the content twice over would double that.
+ */
+type MockNote = Omit<NoteDocument, 'contentText' | 'leadLine'>
+
+function toDocument(note: MockNote): NoteDocument {
+  return { ...note, contentText: note.text, leadLine: leadLineOf(note.text) }
+}
+
+function normalizeDocument(note: MockNote): MockNote {
   const text = typeof note.text === 'string' ? note.text : ''
   const createdAtMs = Number.isFinite(note.createdAtMs) ? note.createdAtMs : Date.now()
   const updatedAtMs = Number.isFinite(note.updatedAtMs) ? note.updatedAtMs : createdAtMs
@@ -125,7 +137,7 @@ function normalizeDocument(note: NoteDocument): NoteDocument {
   }
 }
 
-function toSummary(note: NoteDocument): NoteSummary {
+function toSummary(note: MockNote): NoteSummaryWithContent {
   return {
     id: note.id,
     fileName: note.fileName,
@@ -150,6 +162,7 @@ function toSummary(note: NoteDocument): NoteSummary {
     // link silently no-ops in the browser mock regardless of whether the
     // anchor actually exists.
     contentText: note.text,
+    leadLine: leadLineOf(note.text),
   }
 }
 
@@ -163,13 +176,13 @@ function createDefaultEditorSections(): EditorSectionEntry[] {
   return [{ id: DEFAULT_EDITOR_SECTION_ID, name: null, position: 0, widthFraction: null, fixedWidthPx: null, lastActiveNoteId: null, noteSlotInitialized: false }]
 }
 
-function sortNotesDesc(notes: NoteDocument[]): NoteDocument[] {
+function sortNotesDesc(notes: MockNote[]): MockNote[] {
   return notes
     .slice()
     .sort((a, b) => b.updatedAtMs - a.updatedAtMs || b.createdAtMs - a.createdAtMs || a.id.localeCompare(b.id))
 }
 
-function resolveUniqueAssignedId(notes: NoteDocument[], requestedBase: string, excludeNoteId: string): string {
+function resolveUniqueAssignedId(notes: MockNote[], requestedBase: string, excludeNoteId: string): string {
   const used = new Set(
     notes.filter((note) => note.id !== excludeNoteId && note.assignedId).map((note) => note.assignedId as string),
   )
@@ -238,7 +251,7 @@ function stableStringify(value: unknown): string {
  * chapter rather than seventeen, and placeholder prose. Anything that reads
  * the guide's actual text still needs the real app.
  */
-function seedHelpGuideNotes(): NoteDocument[] {
+function seedHelpGuideNotes(): MockNote[] {
   // A fixed timestamp, like the real seed's: the guide must not sort into
   // "today" and must be stable across reloads.
   const seededAtMs = Date.UTC(2026, 6, 4)
@@ -356,7 +369,7 @@ function loadStore(): BrowserMockStore {
 
     const parsed = JSON.parse(raw) as Partial<BrowserMockStore>
     const notes = Array.isArray(parsed.notes)
-      ? parsed.notes.map((note) => normalizeDocument(note as NoteDocument))
+      ? parsed.notes.map((note) => normalizeDocument(note as MockNote))
       : []
 
     const noteUiStates = typeof parsed.noteUiStates === 'object' && parsed.noteUiStates !== null
@@ -514,7 +527,7 @@ function persistStore(store: BrowserMockStore): void {
 function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycleApi {
   /** External notes' from-disk baselines, in memory only (see saveNoteSnapshot below). */
   const fromDiskBaselineById = new Map<string, { content: string; timestamp: string }>()
-  const getById = (id: string): NoteDocument | undefined => storeRef.current.notes.find((note) => note.id === id)
+  const getById = (id: string): MockNote | undefined => storeRef.current.notes.find((note) => note.id === id)
 
   const mutate = <T,>(transform: (store: BrowserMockStore) => T): T => {
     const result = transform(storeRef.current)
@@ -523,7 +536,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
   }
 
   return {
-    async listNotes(): Promise<NoteSummary[]> {
+    async listNotes(): Promise<NoteSummaryWithContent[]> {
       return sortNotesDesc(storeRef.current.notes).map((note) => toSummary(note))
     },
 
@@ -532,7 +545,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
       if (!note) {
         throw new Error(`Note not found: ${input.id}`)
       }
-      return clone(note)
+      return toDocument(clone(note))
     },
 
     async createNote(input?: CreateNoteInput): Promise<NoteDocument> {
@@ -540,7 +553,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
         const now = Date.now()
         const id = createId()
         const text = typeof input?.initialText === 'string' ? input.initialText : '# '
-        const created: NoteDocument = normalizeDocument({
+        const created: MockNote = normalizeDocument({
           id,
           fileName: `${id}.md`,
           title: '',
@@ -584,11 +597,11 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
         } catch (error) {
           console.error(`Failed to create auto-TOC chapter for new note ${id}`, error)
         }
-        return clone(store.notes.find((note) => note.id === id) ?? created)
+        return toDocument(clone(store.notes.find((note) => note.id === id) ?? created))
       })
     },
 
-    async saveNote(input: SaveNoteInput): Promise<NoteSummary> {
+    async saveNote(input: SaveNoteInput): Promise<NoteSummaryWithContent> {
       return mutate((store) => {
         const note = store.notes.find((entry) => entry.id === input.id)
         if (!note) {
@@ -665,7 +678,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
       }
     },
 
-    async updateExternalNoteState(input: { id: string; hasUnsavedChanges: boolean; syncMode: boolean }): Promise<NoteSummary> {
+    async updateExternalNoteState(input: { id: string; hasUnsavedChanges: boolean; syncMode: boolean }): Promise<NoteSummaryWithContent> {
       const note = getById(input.id)
       if (!note) {
         throw new Error(`Note not found: ${input.id}`)
@@ -725,7 +738,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
       throw new Error('Branching from a snapshot is only available in the desktop app.')
     },
 
-    async setNoteAssignedId(input: { id: string; requestedId: string }): Promise<NoteSummary | null> {
+    async setNoteAssignedId(input: { id: string; requestedId: string }): Promise<NoteSummaryWithContent | null> {
       return mutate((store) => {
         const note = store.notes.find((entry) => entry.id === input.id)
         if (!note) return null
@@ -742,7 +755,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
     // stamps isTimeless on the family root + its live chapters. Clearing
     // snapshot history has nothing to do here: the browser mock never
     // persists real snapshot history to begin with (see getNoteSnapshots).
-    async setNoteTimeless(input: { id: string; value: boolean }): Promise<NoteSummary | null> {
+    async setNoteTimeless(input: { id: string; value: boolean }): Promise<NoteSummaryWithContent | null> {
       return mutate((store) => {
         const note = store.notes.find((entry) => entry.id === input.id)
         if (!note) return null
@@ -1277,7 +1290,7 @@ function getRealChapterRowsInStore(store: BrowserMockStore, parentNoteId: string
  * `mutate()` callback instead of a second round-trip. Throws if one already
  * exists for this parent, same as the real backend.
  */
-function createAutoTocChapterInStore(store: BrowserMockStore, parentNoteId: string): NoteDocument {
+function createAutoTocChapterInStore(store: BrowserMockStore, parentNoteId: string): MockNote {
   const alreadyExists = store.chapters.some((chapter) => (
     chapter.parentNoteId === parentNoteId && store.notes.find((note) => note.id === chapter.chapterNoteId)?.isAutoToc
   ))
@@ -1287,7 +1300,7 @@ function createAutoTocChapterInStore(store: BrowserMockStore, parentNoteId: stri
 
   const now = Date.now()
   const id = createId()
-  const created: NoteDocument = normalizeDocument({
+  const created: MockNote = normalizeDocument({
     id,
     fileName: `${id}.md`,
     title: '',
@@ -1346,7 +1359,7 @@ function regenerateAutoTocInStore(store: BrowserMockStore, parentNoteId: string)
 
     const [rootHeading, ...restHeadings] = computeHeadingAnchors(chapterNote.text)
     const rootHref = formatInternalNoteLink(row.chapterNoteId)
-    const rootLabel = rootHeading ? rootHeading.label : resolveIdentityLabel(row.chapterId, chapterNote.text).text
+    const rootLabel = rootHeading ? rootHeading.label : resolveIdentityLabel(row.chapterId, leadLineOf(chapterNote.text)).text
     lines.push(formatOutlineEntryLine(0, rootLabel, rootHref))
     for (const heading of restHeadings) {
       const depth = rootHeading ? Math.max(1, heading.level - rootHeading.level) : 1
@@ -1441,7 +1454,7 @@ function regenerateOpenItemsGroupInStore(store: BrowserMockStore, parentNoteId: 
     } else {
       const chapterRow = store.chapters.find((chapter) => chapter.parentNoteId === parentNoteId && chapter.chapterNoteId === changedNoteId)
       if (!chapterRow) return
-      groupLabel = resolveIdentityLabel(chapterRow.chapterId, changedNote.text).text
+      groupLabel = resolveIdentityLabel(chapterRow.chapterId, leadLineOf(changedNote.text)).text
     }
   }
 
@@ -1459,7 +1472,7 @@ function regenerateOpenItemsGroupInStore(store: BrowserMockStore, parentNoteId: 
   if (!openItemsChapter) {
     const now = Date.now()
     const id = createId()
-    const created: NoteDocument = normalizeDocument({
+    const created: MockNote = normalizeDocument({
       id,
       fileName: `${id}.md`,
       title: '',
@@ -1550,7 +1563,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
       return mutate((store) => {
         const now = Date.now()
         const id = createId()
-        const created: NoteDocument = normalizeDocument({
+        const created: MockNote = normalizeDocument({
           id,
           fileName: `${id}.md`,
           title: '',
@@ -1574,7 +1587,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
           .reduce((max, chapter) => Math.max(max, chapter.position), -1)
         store.chapters.push({ parentNoteId, chapterNoteId: id, position: maxPosition + 1, chapterId: null })
 
-        return { chapters: sorted(store, parentNoteId), created: clone(created) }
+        return { chapters: sorted(store, parentNoteId), created: toDocument(clone(created)) }
       })
     },
 
@@ -1594,7 +1607,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
         const now = Date.now()
         const id = createId()
         const clonedText = normalizeChapterHeadings(source.text)
-        const created: NoteDocument = normalizeDocument({
+        const created: MockNote = normalizeDocument({
           id,
           fileName: `${id}.md`,
           title: source.title,
@@ -1618,7 +1631,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
           .reduce((max, chapter) => Math.max(max, chapter.position), -1)
         store.chapters.push({ parentNoteId, chapterNoteId: id, position: maxPosition + 1, chapterId: null })
 
-        return { chapters: sorted(store, parentNoteId), created: clone(created) }
+        return { chapters: sorted(store, parentNoteId), created: toDocument(clone(created)) }
       })
     },
 
@@ -1810,7 +1823,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
     async createAutoTocChapter(parentNoteId: string): Promise<{ chapters: ChapterEntry[]; created: NoteDocument }> {
       return mutate((store) => {
         const created = createAutoTocChapterInStore(store, parentNoteId)
-        return { chapters: sorted(store, parentNoteId), created: clone(created) }
+        return { chapters: sorted(store, parentNoteId), created: toDocument(clone(created)) }
       })
     },
 
@@ -1829,7 +1842,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
         if (!refreshed) {
           throw new Error(`Auto-TOC chapter note ${tocChapter.chapterNoteId} missing from store`)
         }
-        return { chapters: sorted(store, parentNoteId), created: clone(refreshed) }
+        return { chapters: sorted(store, parentNoteId), created: toDocument(clone(refreshed)) }
       })
     },
 

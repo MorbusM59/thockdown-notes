@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MutableRefObject } from 'react'
 import { useNoteSnapshots } from '../editor/useNoteSnapshots'
 import type { PlacedSnapshot } from '../editor/SnapshotTimelineCurve'
-import { normalizeInternalText } from '../editor/TextPolicy'
 import { ZERO_EDITOR_SELECTION, ZERO_PERSISTED_VIEWPORT, type EditRestoreSnapshot } from '../editor/EditRestoreMath'
 import { DEFAULT_EDITOR_SECTION_ID } from '../shared/sections'
 
@@ -75,9 +74,15 @@ function computeSnapshotsToDelete(
 
 export interface UseNoteSnapshotTimelineOptions {
   activeNoteId: string | null
-  activeNoteText: string
-  currentEditorText: string
-  latestEditorTextRef: MutableRefObject<string>
+  /** The live text and its version -- see useDisplayedNoteText.ts for why it is never passed as a string. */
+  readEditorText: () => string
+  editorTextVersion: number
+  /**
+   * Written here, during render, with the previewed snapshot's content (null
+   * when showing the live note). Owned by the caller because
+   * useEditorSectionMount, declared before this hook, reads it too.
+   */
+  previewedSnapshotContentRef: MutableRefObject<string | null>
   previewedSnapshotId: number | null
   setPreviewedSnapshotId: (id: number | null) => void
   captureEditModeSnapshotFromEditor: (noteId: string) => EditRestoreSnapshot | null
@@ -105,9 +110,9 @@ export interface UseNoteSnapshotTimelineOptions {
  */
 export function useNoteSnapshotTimeline({
   activeNoteId,
-  activeNoteText,
-  currentEditorText,
-  latestEditorTextRef,
+  readEditorText,
+  editorTextVersion,
+  previewedSnapshotContentRef,
   previewedSnapshotId,
   setPreviewedSnapshotId,
   captureEditModeSnapshotFromEditor,
@@ -123,7 +128,7 @@ export function useNoteSnapshotTimeline({
 }: UseNoteSnapshotTimelineOptions) {
   const [timelineCurveConstant, setTimelineCurveConstant] = useState(10)
   const [timelineTrackLengthPx, setTimelineTrackLengthPx] = useState(0)
-  const noteSnapshots = useNoteSnapshots(DEFAULT_EDITOR_SECTION_ID, activeNoteId, currentEditorText, timelineCurveConstant)
+  const noteSnapshots = useNoteSnapshots(DEFAULT_EDITOR_SECTION_ID, activeNoteId, readEditorText, editorTextVersion, timelineCurveConstant)
   const { latestSnapshotContent, refresh: refreshSnapshots } = noteSnapshots
   const lastAutoCompactNoteIdRef = useRef<string | null>(null)
 
@@ -135,22 +140,28 @@ export function useNoteSnapshotTimeline({
     setTimelineCurveConstant(16)
   }, [activeNoteId, setPreviewedSnapshotId])
 
-  const previewedSnapshotContent = previewedSnapshotId !== null
-    ? noteSnapshots.snapshotsById.get(previewedSnapshotId)?.content
+  // What the section DISPLAYS: the previewed snapshot's content while one is
+  // being browsed, otherwise the live text. Published as a reader and a key
+  // rather than as a string, for useDisplayedNoteText.ts's reason. The ref is
+  // written during render (not in an effect) so everything reading it on
+  // this commit sees the snapshot that `previewedSnapshotId` names.
+  const previewedSnapshot = previewedSnapshotId !== null
+    ? noteSnapshots.snapshotsById.get(previewedSnapshotId)
     : undefined
-
-  const isPreviewingSnapshot = previewedSnapshotContent !== undefined
-  // Two panes, two different non-preview sources -- preserved exactly as
-  // they were before snapshot preview existed (editorDisplayText mirrors the
-  // Editor's original `activeNoteText`, renderedDisplayText mirrors the
-  // rendered pane's original `currentEditorText`). Unifying these into one
-  // variable would mean feeding the Editor its own live-typed text back
-  // through `initialText` on every keystroke instead of only on save-commit
-  // -- cheap per keystroke, but an unnecessary behavior change for a
-  // performance-sensitive component. Word count / find-in-document /
-  // autosave keep using currentEditorText directly, untouched by preview.
-  const editorDisplayText = isPreviewingSnapshot ? previewedSnapshotContent : activeNoteText
-  const renderedDisplayText = isPreviewingSnapshot ? previewedSnapshotContent : currentEditorText
+  const isPreviewingSnapshot = previewedSnapshot !== undefined
+  previewedSnapshotContentRef.current = previewedSnapshot?.content ?? null
+  const readDisplayedText = useCallback(
+    () => previewedSnapshotContentRef.current ?? readEditorText(),
+    [previewedSnapshotContentRef, readEditorText],
+  )
+  /**
+   * Changes exactly when `readDisplayedText()` may return something new: on
+   * every live commit, and on entering, leaving or moving between snapshots.
+   * A live edit while previewing is not displayed (useEditorSectionMount's
+   * onTextChange ignores the editor while it shows history), so the version
+   * is not part of a snapshot's key.
+   */
+  const displayedTextKey = previewedSnapshot ? `snapshot:${previewedSnapshot.id}` : `live:${editorTextVersion}`
 
   const handleNavigateSnapshot = useCallback((snapshotId: number | null) => {
     // Capture exactly where the user was in the live document before
@@ -227,7 +238,7 @@ export function useNoteSnapshotTimeline({
     const intervalId = window.setInterval(async () => {
       if (!activeNoteId || !notesApi || isPreviewingSnapshot || isViewingEphemeralAutoChapter || isViewingTimelessNote) return
 
-      const currentText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+      const currentText = readEditorText()
       const normalizedLatestSnapshot = latestSnapshotContent ? normalizeForComparison(latestSnapshotContent) : null
       const normalizedCurrent = normalizeForComparison(currentText)
 
@@ -250,7 +261,11 @@ export function useNoteSnapshotTimeline({
     return () => {
       window.clearInterval(intervalId)
     }
-  }, [activeNoteId, activeNoteText, latestSnapshotContent, noteSnapshots.placements, refreshSnapshots, isPreviewingSnapshot, timelineTrackLengthPx, latestEditorTextRef, isViewingEphemeralAutoChapter, isViewingTimelessNote])
+    // editorTextVersion is not read: listing it restarts the 60s interval on
+    // every commit, so an automatic snapshot is taken only after a minute
+    // without an edit -- which is how this has always behaved, since the
+    // text used to be a dependency itself.
+  }, [activeNoteId, editorTextVersion, latestSnapshotContent, noteSnapshots.placements, refreshSnapshots, isPreviewingSnapshot, timelineTrackLengthPx, readEditorText, isViewingEphemeralAutoChapter, isViewingTimelessNote])
 
   const handleReturnToPresent = useCallback(() => {
     if (previewedSnapshotId !== null) {
@@ -308,8 +323,8 @@ export function useNoteSnapshotTimeline({
     timelineTrackLengthPx,
     setTimelineTrackLengthPx,
     isPreviewingSnapshot,
-    editorDisplayText,
-    renderedDisplayText,
+    readDisplayedText,
+    displayedTextKey,
     handleNavigateSnapshot,
     handleCreateManualSnapshot,
     handleMergeAdjacentSnapshots,

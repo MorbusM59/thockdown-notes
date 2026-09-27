@@ -9,7 +9,7 @@ import type {
   DeleteNoteSnapshotInput,
   LoadNoteInput,
   NoteDocument,
-  NoteSummary,
+  NoteSummaryWithContent,
   NoteUiState,
   NoteUiStatePayload,
   ReorderTagsInput,
@@ -18,6 +18,7 @@ import type {
   SaveNoteInput,
   TagSummary,
 } from '../src/shared/noteLifecycle';
+import { leadLineOf } from '../src/shared/tabLabels';
 import { sanitizeDocumentText, sanitizedFirstLine, truncateTitle } from '../src/shared/textSanitization';
 import { computeHeadingAnchors, formatHeadingAnchorFragment, formatOutlineEntryLine, formatOutlineRootTitleLine, headingsChanged, parseMarkdownHeading, stripMarkdownInlineFormatting } from '../src/shared/tableOfContentsText';
 import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, findOpenItemSourceAtLine, parseOpenItemsGroups, toggleChecklistItemByText } from '../src/shared/openItemsText';
@@ -138,7 +139,7 @@ export class NoteLifecycleService {
     };
   }
 
-  private async readSummary(record: NoteRecord): Promise<NoteSummary | null> {
+  private async readSummary(record: NoteRecord): Promise<NoteSummaryWithContent | null> {
     try {
       const text = record.isTemp
         ? (this.databaseService.readStoredNoteContent(record.id) ?? '')
@@ -160,6 +161,7 @@ export class NoteLifecycleService {
         id: record.id,
         fileName,
         title: titleFromText(parsed.bodyText),
+        leadLine: leadLineOf(parsed.bodyText),
         tags,
         contentText: parsed.bodyText,
         createdAtMs: stat.birthtimeMs || record.createdAtMs,
@@ -183,12 +185,12 @@ export class NoteLifecycleService {
     }
   }
 
-  async listNotes(): Promise<NoteSummary[]> {
+  async listNotes(): Promise<NoteSummaryWithContent[]> {
     const records = this.databaseService.listNoteRecords();
     const summaries = await Promise.all(records.map((record) => this.readSummary(record)));
 
     return summaries
-      .filter((summary): summary is NoteSummary => summary !== null)
+      .filter((summary): summary is NoteSummaryWithContent => summary !== null)
       .sort((a, b) => b.updatedAtMs - a.updatedAtMs);
   }
 
@@ -282,6 +284,7 @@ export class NoteLifecycleService {
       id: input.id,
       fileName,
       title: titleFromText(parsed.bodyText),
+      leadLine: leadLineOf(parsed.bodyText),
       tags,
       contentText: parsed.bodyText,
       createdAtMs: stat.birthtimeMs || record?.createdAtMs || stat.mtimeMs,
@@ -927,7 +930,7 @@ export class NoteLifecycleService {
   // anchors on the fly (computeHeadingAnchors) instead of rewriting heading
   // source into the note itself, so there's no write-triggers-another-write
   // recursion risk here to guard against on that side either.
-  async saveNote(input: SaveNoteInput, options?: { skipAutoChapterHooks?: boolean }): Promise<NoteSummary> {
+  async saveNote(input: SaveNoteInput, options?: { skipAutoChapterHooks?: boolean }): Promise<NoteSummaryWithContent> {
     const record = this.databaseService.getNoteRecord(input.id);
     const filePath = record?.filePath ?? path.join(this.notesDir, idToFileName(input.id));
     const text = normalizeText(input.text);
@@ -1138,7 +1141,7 @@ export class NoteLifecycleService {
     };
   }
 
-  async updateExternalNoteState(input: { id: string; hasUnsavedChanges: boolean; syncMode: boolean }): Promise<NoteSummary> {
+  async updateExternalNoteState(input: { id: string; hasUnsavedChanges: boolean; syncMode: boolean }): Promise<NoteSummaryWithContent> {
     this.databaseService.updateTempNoteState(input.id, input.hasUnsavedChanges, input.syncMode);
     const summary = await this.readSummary(this.databaseService.getNoteRecord(input.id)!);
     if (!summary) {
@@ -1256,7 +1259,7 @@ export class NoteLifecycleService {
    * get an incremental "-2", "-3", ... suffix. Returns the refreshed
    * summary so the renderer can pick up the resolved ID immediately.
    */
-  async setNoteAssignedId(input: { id: string; requestedId: string }): Promise<NoteSummary | null> {
+  async setNoteAssignedId(input: { id: string; requestedId: string }): Promise<NoteSummaryWithContent | null> {
     this.databaseService.setNoteAssignedId(input.id, input.requestedId);
     const record = this.databaseService.getNoteRecord(input.id);
     if (!record) return null;
@@ -1270,7 +1273,7 @@ export class NoteLifecycleService {
    * while viewing any chapter affects the same root+chapters set
    * freezeNoteFamily/unfreezeNoteFamily themselves already operate on.
    */
-  async setNoteTimeless(input: { id: string; value: boolean }): Promise<NoteSummary | null> {
+  async setNoteTimeless(input: { id: string; value: boolean }): Promise<NoteSummaryWithContent | null> {
     const rootNoteId = this.databaseService.getChapterParent(input.id) ?? input.id;
     // A sealed family (the built-in User Guide) can never be unfrozen from
     // here. This is the whole hard-protection mechanism: writes are already
