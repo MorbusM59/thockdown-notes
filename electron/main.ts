@@ -3,7 +3,7 @@ import { app, BrowserWindow, Menu, ipcMain, dialog, protocol, shell } from 'elec
 import type { Session, PrintToPDFOptions } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import { existsSync, promises as fsPromises, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, promises as fsPromises } from 'node:fs'
 import { NoteLifecycleService } from './noteLifecycleService'
 import { FILE_SYNC_CHANNELS } from '../src/shared/fileSync'
 import { NOTE_LIFECYCLE_CHANNELS } from '../src/shared/noteLifecycle'
@@ -820,7 +820,7 @@ function registerIpcHandlers() {
     if (typeof filePath !== 'string' || !isOpenableExternalFile(filePath)) return null;
     const normalizedPath = normalizeExternalFilePath(filePath);
     try {
-      return readFileSync(normalizedPath, 'utf8');
+      return await fsPromises.readFile(normalizedPath, 'utf8');
     } catch {
       return null;
     }
@@ -834,8 +834,8 @@ function registerIpcHandlers() {
       // describes a file at least as new as the bytes returned, so the
       // mismatch is detectable. The other order can report an mtime older
       // than the content, which reads as "unchanged" and is not.
-      const content = readFileSync(normalizedPath, 'utf8');
-      const stat = statSync(normalizedPath);
+      const content = await fsPromises.readFile(normalizedPath, 'utf8');
+      const stat = await fsPromises.stat(normalizedPath);
       return { content, modifiedAtMs: stat.mtimeMs };
     } catch {
       return null;
@@ -847,7 +847,7 @@ function registerIpcHandlers() {
     if (!isOpenableExternalFile(filePath)) return false;
     const normalizedPath = normalizeExternalFilePath(filePath);
     try {
-      writeFileSync(normalizedPath, content, 'utf8');
+      await fsPromises.writeFile(normalizedPath, content, 'utf8');
       return true;
     } catch {
       return false;
