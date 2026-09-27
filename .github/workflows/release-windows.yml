@@ -1,0 +1,160 @@
+name: Release from CI (Windows build, notes, checksums)
+
+# The other half of a release, run on GitHub's runners instead of the
+# maintainer's Windows machine -- for a release cut from somewhere that cannot
+# build Windows or has no `gh` (a cloud session). It does what
+# scripts/release.mjs does after the tag is pushed: create or update the
+# prerelease with its notes and "Alpha Release #N" title, build and upload the
+# Windows installer and portable zip, wait for the macOS DMG from
+# build-mac.yml, verify every asset against a hash taken where it was built,
+# and publish SHA256SUMS.txt. See docs/release-protocol.md.
+#
+# DISPATCH ONLY, on purpose: a tag push already runs build-mac.yml, and the
+# ordinary `npm run release` uploads its own locally built Windows files. If
+# this also ran on every tag, two different builds of the same filenames
+# would race to the release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, already pushed (e.g. v0.7.0)"
+        required: true
+      notes:
+        description: "Release notes (markdown); becomes the release body verbatim"
+        required: true
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    outputs:
+      hashes: ${{ steps.hash.outputs.hashes }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Check out the tagged source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The test suite runs on the mac build of the same tag; running it here
+      # too would only add a second chance for an environment difference to
+      # hold the release back without saying anything about the code.
+      - name: Build Windows installer and portable zip
+        # Spelled out rather than `npm run build`, because an argument appended
+        # to that reaches only its last command, and `--publish never` has to
+        # reach both builder runs (see build-mac.yml for why it matters).
+        run: |
+          npx tsc
+          npx vite build
+          npx electron-builder --win --publish never
+          npx electron-builder --config electron-builder.portable.json5 --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Create or update the prerelease
+        env:
+          NOTES: ${{ inputs.notes }}
+        run: |
+          printf '%s\n' "$NOTES" > notes.md
+          # Continue the "Alpha Release #N" numbering, ignoring this tag's own
+          # release (the mac job may already have created it, titled by tag).
+          NEXT=$(gh release list --limit 100 --json name,tagName \
+            --jq "[.[] | select(.tagName != \"$TAG\") | .name | capture(\"Alpha Release #(?<n>[0-9]+)\") | .n | tonumber] | (max // 0) + 1")
+          TITLE="Alpha Release #$NEXT"
+          echo "title: $TITLE"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$TITLE" --notes-file notes.md --prerelease
+          else
+            gh release create "$TAG" --prerelease --title "$TITLE" --notes-file notes.md
+          fi
+
+      - name: Hash and upload the Windows artifacts
+        id: hash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          mapfile -t FILES < <(find "release/$VERSION" -maxdepth 1 -type f \( -name '*.exe' -o -name '*.zip' \))
+          if [ "${#FILES[@]}" -lt 2 ]; then echo "expected an .exe and a .zip, found: ${FILES[*]}"; exit 1; fi
+          # GitHub rewrites spaces in asset names to dots; key on that form.
+          HASHES=""
+          for f in "${FILES[@]}"; do
+            h=$(sha256sum "$f" | awk '{print $1}')
+            name=$(basename "$f" | sed 's/ /./g')
+            HASHES="$HASHES$h  $name;"
+            echo "$h  $name"
+          done
+          echo "hashes=$HASHES" >> "$GITHUB_OUTPUT"
+          gh release upload "$TAG" "${FILES[@]}" --clobber
+
+  checksums:
+    needs: windows
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ inputs.tag }}
+      WINDOWS_HASHES: ${{ needs.windows.outputs.hashes }}
+    steps:
+      - name: Wait for the macOS build of this tag
+        run: |
+          RUN_ID=$(gh run list -R "$GITHUB_REPOSITORY" --workflow build-mac.yml --limit 30 \
+            --json databaseId,headBranch --jq "[.[] | select(.headBranch == \"$TAG\")][0].databaseId")
+          if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
+            echo "::warning::no build-mac run found for $TAG -- the DMG will be missing"
+            exit 0
+          fi
+          gh run watch -R "$GITHUB_REPOSITORY" "$RUN_ID" --exit-status || echo "::warning::build-mac for $TAG did not succeed"
+
+      - name: Verify every asset and publish SHA256SUMS.txt
+        run: |
+          set -euo pipefail
+          declare -A LOCAL
+          IFS=';' read -ra PAIRS <<< "$WINDOWS_HASHES"
+          for pair in "${PAIRS[@]}"; do
+            [ -z "$pair" ] && continue
+            LOCAL["${pair#*  }"]="${pair%%  *}"
+          done
+          mkdir -p verify
+          if gh release download "$TAG" -R "$GITHUB_REPOSITORY" --pattern '*.dmg.sha256' --dir verify 2>/dev/null; then
+            for f in verify/*.sha256; do
+              line=$(tr -d '\r' < "$f")
+              # "<hash>  <filename with spaces>": split on the first run of spaces only.
+              h="${line%% *}"; name="$(echo "${line#* }" | sed 's/^ *//; s/ /./g')"
+              LOCAL["$name"]="$h"
+            done
+          else
+            echo "::warning::no DMG checksum sidecar on the release"
+          fi
+          gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json assets \
+            --jq '.assets[] | select((.name | endswith(".sha256")) or .name == "SHA256SUMS.txt" | not) | "\(.digest // "")  \(.name)"' > remote.txt
+          : > SHA256SUMS.txt
+          FAIL=0
+          while read -r digest name; do
+            remote="${digest#sha256:}"
+            if [ -z "$remote" ]; then echo "::warning::$name has no digest"; continue; fi
+            echo "$remote  $name" >> SHA256SUMS.txt
+            local_hash="${LOCAL[$name]:-}"
+            if [ -z "$local_hash" ]; then echo "--  $name (no build-side hash)"; continue; fi
+            if [ "$local_hash" = "$remote" ]; then echo "ok  $name"; else echo "::error::$name: built $local_hash != GitHub $remote"; FAIL=1; fi
+          done < remote.txt
+          [ "$FAIL" = 0 ] || { echo "checksum verification failed -- not publishing SHA256SUMS.txt"; exit 1; }
+          sort -k2 -o SHA256SUMS.txt SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          gh release upload "$TAG" -R "$GITHUB_REPOSITORY" SHA256SUMS.txt --clobber
