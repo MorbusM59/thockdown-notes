@@ -63,10 +63,19 @@ async function main() {
     // two 0.05 steps -> 16*1.7=27.2 -> round 27, ODD -- half is fractional).
     await page.click('[aria-label="View options"]')
     await page.waitForTimeout(300)
+    // The options sections are accordions that start collapsed, and a slider
+    // inside a closed <details> cannot take focus.
+    await page.click('section[aria-label="Editor Font"] summary')
+    await page.waitForTimeout(300)
     const spacingSlider = page.locator('#typography-spacing')
-    await spacingSlider.focus()
-    await page.keyboard.press('ArrowRight')
-    await page.keyboard.press('ArrowRight')
+    // Refocused before each step: a slider commit hands the keyboard back to
+    // the editor (scheduleFocusEditorInEditMode), so a second press would
+    // otherwise land in the text.
+    for (let step = 0; step < 2; step++) {
+      await spacingSlider.focus()
+      await page.keyboard.press('ArrowRight')
+      await page.waitForTimeout(50)
+    }
     await page.waitForTimeout(300)
 
     const info = await page.evaluate(() => {

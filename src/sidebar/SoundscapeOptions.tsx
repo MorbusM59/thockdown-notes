@@ -54,14 +54,15 @@ import { armHold, HOLD_COMMIT_MS, HOLD_CONFIRM_MS } from '../shared/holdTiming'
 import { newSoundscapeId, neutralSoundscape } from '../shared/soundscapeFile'
 import { exportSoundscapes } from './soundscapeFileActions'
 import { useNonPassiveWheel } from '../shared/useNonPassiveWheel'
+import { toDisplayLevel } from '../shared/musicSoundOptions'
 import { OptionsSliderRows } from './OptionsSliderRows'
 import { OptionsSubsectionLabel } from './OptionsSubsectionLabel'
 
 const KIND_LOOK: Record<SoundscapeChannelKind, { icon: string; label: string }> = {
-  noise: { icon: 'fa-wave-square', label: 'Noise' },
+  noise: { icon: 'fa-wind', label: 'Wind' },
   rain: { icon: 'fa-cloud-rain', label: 'Rain' },
   thunder: { icon: 'fa-bolt-lightning', label: 'Thunder' },
-  water: { icon: 'fa-droplet', label: 'Water' },
+  water: { icon: 'fa-droplet', label: 'Stream' },
   fire: { icon: 'fa-fire', label: 'Fire' },
   chimes: { icon: 'fa-bell', label: 'Chimes' },
 }
@@ -726,9 +727,7 @@ export function SoundscapeOptions({ preferences, onChange }: SoundscapeOptionsPr
                 className={`btn-icon options-color-swatch options-loadout-btn soundscape-channel-selector-btn${isSelected ? ' is-active' : ''}${channel.enabled ? ' is-enabled' : ' is-disabled'}${channel.solo ? ' is-solo' : ''}`}
                 aria-label={`${layerTitle}, ${channel.enabled ? 'enabled' : 'disabled'}${channel.solo ? ', solo' : ''}`}
                 aria-pressed={isSelected}
-                data-tooltip={`${layerTitle} is ${channel.enabled ? 'enabled' : 'disabled'}${channel.solo ? ', solo' : ''}\n${channel.solo ? 'Right-click to clear solo' : 'Right-click to solo'}; ${channel.enabled
-                  ? 'hold right-click to disable; scroll to adjust volume'
-                  : 'hold left-click to enable; settings are locked'}`}
+                data-tooltip={`${look.label} [${entry.number}]: ${toDisplayLevel(channel.volume)}`}
                 data-soundscape-channel-id={channel.id}
                 data-secondary-press="action"
                 onClick={() => setSelectedId(channel.id)}

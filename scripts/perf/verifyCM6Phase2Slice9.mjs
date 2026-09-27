@@ -1,8 +1,8 @@
 // Live-browser verification for Phase 2 slice 9 (paste sanitization ported
 // into CM6Editor: PasteSanitizationPlugin.tsx's own clipboard handling --
 // HTML-tag stripping, emoji/control-char stripping, tab normalization,
-// paragraph reconstruction, bullet normalization, and the Ctrl+Shift+V
-// "plain paste" escape hatch).
+// and -- on Ctrl+Shift+V only, the "smart" paste -- paragraph reconstruction
+// and bullet normalization).
 import { chromium } from 'playwright'
 import { existsSync, readdirSync } from 'node:fs'
 import path from 'node:path'
@@ -94,28 +94,29 @@ async function main() {
     }
     console.error(`[verify] HTML/emoji/tabs sanitized: ${JSON.stringify(sanitized)}`)
 
-    // --- Paragraph reconstruction (extended sanitization): a sentence
-    // wrapped across lines by a PDF/word-processor should rejoin into one
-    // line, since the wrap wasn't a real paragraph break ---
+    // --- A plain paste gets only the plain sanitization: a sentence
+    // hard-wrapped across lines keeps its line break. (The default was
+    // reversed from the original, whose smart paste rewrote text the reader
+    // had not asked it to touch -- see CM6Editor.tsx's paste sanitization.) ---
     await page.keyboard.press('Control+a')
     await page.keyboard.press('Delete')
     await dispatchPaste(page, 'This is one sentence that was\nhard-wrapped mid-thought.', null)
-    const reconstructed = await readSavedText(page)
-    if (reconstructed !== 'This is one sentence that was hard-wrapped mid-thought.') {
-      throw new Error(`FAIL: wrapped paragraph not reconstructed. Got: ${JSON.stringify(reconstructed)}`)
+    const plainPasted = await readSavedText(page)
+    if (plainPasted !== 'This is one sentence that was\nhard-wrapped mid-thought.') {
+      throw new Error(`FAIL: plain paste rewrote line breaks. Got: ${JSON.stringify(plainPasted)}`)
     }
-    console.error(`[verify] paragraph reconstruction: ${JSON.stringify(reconstructed)}`)
+    console.error(`[verify] plain paste preserved line breaks: ${JSON.stringify(plainPasted)}`)
 
-    // --- Ctrl+Shift+V requests plain (non-extended) sanitization: the same
-    // wrapped text should NOT be rejoined. Dispatched as a synthetic
-    // KeyboardEvent rather than a real Playwright keypress -- a real,
-    // CDP-level Ctrl+Shift+V triggers Chromium's own native
-    // "paste without formatting" clipboard action (with the test's empty
-    // sandboxed OS clipboard), producing a SECOND, unwanted real paste event
-    // that consumes plainPasteRequested before this test's own synthetic
-    // dispatchPaste() below gets to it. A synthetic keydown carries the same
-    // key/modifier info CM6's keymap reads without triggering that native
-    // browser behavior.
+    // --- Ctrl+Shift+V requests the extended ("smart") sanitization: the same
+    // wrapped text rejoins into one line, since the wrap was not a real
+    // paragraph break. Dispatched as a synthetic KeyboardEvent rather than a
+    // real Playwright keypress -- a real, CDP-level Ctrl+Shift+V triggers
+    // Chromium's own native "paste without formatting" clipboard action (with
+    // the test's empty sandboxed OS clipboard), producing a SECOND, unwanted
+    // real paste event that consumes the request before this test's own
+    // synthetic dispatchPaste() below gets to it. A synthetic keydown carries
+    // the same key/modifier info CM6's keymap reads without triggering that
+    // native browser behavior. ---
     await page.keyboard.press('Control+a')
     await page.keyboard.press('Delete')
     await page.evaluate(() => {
@@ -123,11 +124,11 @@ async function main() {
       target.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }))
     })
     await dispatchPaste(page, 'This is one sentence that was\nhard-wrapped mid-thought.', null)
-    const plainPasted = await readSavedText(page)
-    if (plainPasted !== 'This is one sentence that was\nhard-wrapped mid-thought.') {
-      throw new Error(`FAIL: Ctrl+Shift+V plain paste incorrectly reconstructed paragraphs. Got: ${JSON.stringify(plainPasted)}`)
+    const reconstructed = await readSavedText(page)
+    if (reconstructed !== 'This is one sentence that was hard-wrapped mid-thought.') {
+      throw new Error(`FAIL: Ctrl+Shift+V smart paste did not reconstruct the wrapped paragraph. Got: ${JSON.stringify(reconstructed)}`)
     }
-    console.error(`[verify] Ctrl+Shift+V plain paste preserved line breaks: ${JSON.stringify(plainPasted)}`)
+    console.error(`[verify] Ctrl+Shift+V paragraph reconstruction: ${JSON.stringify(reconstructed)}`)
 
     // --- Paste at a mid-document cursor position must insert, not replace ---
     await page.keyboard.press('Control+a')

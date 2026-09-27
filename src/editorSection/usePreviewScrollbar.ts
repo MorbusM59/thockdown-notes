@@ -1,3 +1,4 @@
+import { SCROLL_TRACK_EDGE_GAP_PX } from '../shared/scrollTrackGeometry'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MouseEvent, MutableRefObject } from 'react'
 import type { PreviewDocumentPositionApi } from './usePreviewMarkdownRendering'
@@ -61,7 +62,6 @@ type ViewStyleKey =
   | 'faunaone'
   | 'fredericka'
   | 'bubblerone'
-const SCROLL_TRACK_EDGE_GAP_PX = 3
 const PREVIEW_CONTINUOUS_SCROLL_APEX_MULTIPLIER = CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER
 
 function clamp(value: number, min: number, max: number): number {

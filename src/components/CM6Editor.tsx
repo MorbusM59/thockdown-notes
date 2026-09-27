@@ -1,3 +1,4 @@
+import { SCROLL_TRACK_EDGE_GAP_PX } from '../shared/scrollTrackGeometry';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Annotation, Compartment, EditorState, EditorSelection, Prec, RangeSetBuilder, type ChangeSet } from '@codemirror/state';
@@ -487,8 +488,6 @@ const CM6_DEFAULT_KEYMAP_WITHOUT_ALT_ARROW = defaultKeymap
       : binding
   ));
 
-/** Ported verbatim from Editor.tsx -- the custom scrollbar's own geometry constants. */
-const SCROLL_TRACK_EDGE_GAP_PX = 3;
 
 type ScrollbarGeometry = {
   viewportHeight: number;

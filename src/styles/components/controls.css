@@ -98,7 +98,7 @@
 .soundscape-layer-controls {
   display: flex;
   flex-direction: column;
-  gap: calc(var(--spacing-regular) * 0.75);
+  gap: var(--spacing-regular);
 }
 
 .soundscape-channel-selector-btn.is-disabled {
@@ -137,8 +137,11 @@
   grid-column:    1 / -1;
   box-sizing:     border-box;
   width:          100%;
-  margin-top:     var(--spacing-large);
-  margin-bottom:     var(--spacing-regular);
+  /* Every container a label sits in spaces its children by
+     --spacing-regular (see .sidebar-options-accordion-body), so the label
+     adds only what takes the space above it up to --spacing-large, and
+     nothing below it: the gap already is the space below. */
+  margin:         calc(var(--spacing-large) - var(--spacing-regular)) 0 0;
   padding:       var(--spacing-small) var(--spacing-regular);
   border:  1px solid var(--color-subsection-border);
   border-radius:  var(--border-radius-small);
@@ -151,7 +154,13 @@
   background-color: var(--color-input-backdrop);
 }
 
-.options-subsection-label:first-child {
+/* A label that opens its section has nothing above it to be set apart from.
+   Spelled out per depth because a label can open its section from inside the
+   section's own wrappers (the Soundscapes environment sits four deep). */
+.sidebar-options-accordion-body > .options-subsection-label:first-child,
+.sidebar-options-accordion-body > :first-child > .options-subsection-label:first-child,
+.sidebar-options-accordion-body > :first-child > :first-child > .options-subsection-label:first-child,
+.sidebar-options-accordion-body > :first-child > :first-child > :first-child > .options-subsection-label:first-child {
   margin-top: 0;
 }
 

@@ -493,11 +493,12 @@ export function useDocumentFindNavigation({
     const didTravel = ratio !== null && travelPreviewToRatio(ratio)
 
     if (!didTravel) {
-      // Through the virtualizer, not a raw scrollTop write: this path exists
-      // for the frames before the document can answer in ratios, and
-      // scrollToIndex is what both mounts the target block and keeps the
-      // virtualizer's own offset bookkeeping in step.
-      const didScroll = previewScrollToSourceLineRef.current?.(sourceLine, { align: 'center', behavior: 'smooth' }) ?? false
+      // Through the pane's own landing, not a raw scrollTop write: this path
+      // exists for the frames before the document can answer in ratios, and
+      // the landing is what brings the target block into the mounted window.
+      // It lands the block at the top; the centering is the in-block
+      // correction below.
+      const didScroll = previewScrollToSourceLineRef.current?.(sourceLine, { behavior: 'smooth' }) ?? false
       if (!didScroll) {
         scrollToFallback()
         return

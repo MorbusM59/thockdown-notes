@@ -401,89 +401,6 @@ shaped `## A ... # B`, where the current code returns the later `# B`.
 **Noticed.** Profiling a note with a table of contents, after the regeneration
 effect that dominated it was fixed.
 
-### AccordionSection's `forceOpenNonce` now has no callers
-
-**What.** `AccordionSection` (`src/components/AccordionSection.tsx`) accepts a
-`forceOpenNonce` prop: bumping the number force-opens the section, so a
-control elsewhere in the app can send the user to a collapsed settings
-section already unfolded. It had exactly one user -- the music player's
-headphones button, which opened the sidebar's Options panel with the Music
-accordion forced open.
-
-**Why it is suspect.** The music player now owns its volume and reverb
-controls directly (its headphones button swaps its own bottom row instead of
-opening the sidebar), so the Music accordion is gone and with it the only
-caller. The prop, its `useEffect`, and the "clear the one-shot intent when
-leaving options mode" reset it needed in `App.tsx` are all now unexercised
-machinery kept alive only by the component's own signature.
-
-**What would have to be true to remove it.** That no other feature is about
-to want "deep-link into a collapsed settings section" -- it is a reasonable
-generic capability for a settings panel, and the next feature that needs it
-would rebuild the same thing. Either find a second caller and keep it, or
-confirm none is planned and delete the prop with its effect; do not leave it
-half-alive.
-
-**Noticed.** Moving the music volume/reverb sliders out of the options menu
-and into the player's own sound-options row.
-
-### `previewMeasurementPrewarm.ts` is gone but is still cited by five places
-
-**What.** Three live code comments and two perf scripts point at
-`src/editorSection/previewMeasurementPrewarm.ts`, which no longer exists (it
-went with the virtualizer): `usePreviewMarkdownRendering.tsx:89` (a
-`/** Progress of the background block survey */` doc line attached to
-`OpenItemsToggleStore`, which is not that and never was),
-`usePreviewMarkdownRendering.tsx:1207` (a section banner over what is now
-just `spacerRef`/`charRulerRef`), `styles/components/editor.css:773` (the
-"discovery progress" bar's own comment), and
-`scripts/perf/measurePreviewSurveyThroughput.mjs` /
-`scripts/perf/verifyPreviewPrewarmSafety.mjs`, both of which measure a survey
-that no longer runs.
-
-**Why it is suspect.** A survey exists to guess heights for blocks that are
-not mounted. The continuous pane mounts every block and reads the browser's
-own geometry; the windowed pane has no whole-document height for a survey to
-be right about. So the mechanism has no remaining purpose in either pane --
-which raises the real question the comments obscure: is the *discovery
-progress bar* in the timeline slot still reachable at all, and if not, that is
-a piece of UI plus its CSS plus its state that should go with the scripts.
-
-**What would have to be true to remove it.** That nothing still drives the
-discovery-progress UI (trace its state back to a producer that actually
-fires), and that neither perf script measures anything a live pane still does
--- `measurePreviewSurveyThroughput` in particular is only meaningful if some
-survey still has a throughput. Then delete both scripts, the CSS block, the UI,
-and correct the two code comments. Do NOT merely repoint the comments at
-another file: half of what they describe is the thing that should be deleted.
-
-**Noticed.** Rebuilding the render view's page-margin and landing rules, where
-the same removal had also left a dead `.preview-prewarm-first-block` selector
-in `markdown.css` (deleted in that change).
-
-### `PreviewScrollToSourceLineFn`'s `align` option is never read
-
-**What.** The `align?: 'start' | 'center'` option on
-`PreviewScrollToSourceLineFn` (`usePreviewMarkdownRendering.tsx`) is passed by
-callers -- the restore passes `'start'`, find navigation passes `'center'` --
-and the implementation has never looked at it. Both alignments land the block
-at the same place; find navigation gets its centering from a separate
-`scrollIntoView` correction in `scrollToRenderedElement` afterwards.
-
-**Why it is suspect.** A parameter that changes nothing is worse than absent:
-the restore reads as though it chose start-alignment deliberately, and a future
-caller will reasonably expect `'center'` to centre.
-
-**What would have to be true to remove it.** Either the two callers genuinely
-want the same landing (drop the option, and let find navigation keep owning its
-own centering), or centering belongs in the landing after all -- in which case
-implement it in `previewLanding.ts` rather than re-adding a second corrective
-scroll write. Deciding which is the whole task; the option cannot just be
-deleted without answering it.
-
-**Noticed.** Threading a real `offsetPx` through the same options object while
-rebuilding the landing arithmetic.
-
 ### `documentFactsClient`'s main-thread fallback may have no reachable trigger
 
 **What.** `ensureWorker()` in `src/editor/documentFactsClient.ts` catches a failed
@@ -545,34 +462,6 @@ go.
 **Noticed.** Making the split asynchronous, where the seeded initial value
 turned out to be why a freshly-mounted section splits its first note even in
 edit mode.
-
-### The scrollbar's track-edge gap is written down twice
-
-**What.** `SCROLL_TRACK_EDGE_GAP_PX = 3` in `usePreviewScrollbar.ts` (also read
-by `CM6Editor.tsx`) and `--canonical-scroll-track-edge-gap: 3px` in
-`tokens.css` are the same measurement, kept in agreement by hand. The token was
-added so the escape-menu chrome's gauges could stop a full bar exactly where a
-real thumb stops; the constant exists because the thumb's position is computed
-in JS, which cannot read a token.
-
-**Why it is suspect.** This is the drift shape the codebase already knows: a
-rule stated once has to hold everywhere it applies, and two numbers that must
-match but are not derived from each other will eventually not match. The
-failure is silent and cosmetic-looking — a gauge a few pixels off a thumb reads
-as sloppiness rather than as a bug — which is exactly the kind nobody chases.
-
-**What would have to be true to remove it.** That one side can be derived from
-the other at run time: either the scrollbar reads the computed token
-(`getComputedStyle(el).getPropertyValue('--canonical-scroll-track-edge-gap')`)
-once per layout pass rather than holding a literal, or the token is written
-onto the root from the JS constant at startup. The first is preferable — the
-stylesheet stays the single place a designer changes it — but it needs a check
-that the read is not on a hot layout path, and that a missing or malformed
-token has a defined answer rather than a NaN that silently pins every thumb to
-the top.
-
-**Noticed.** Making the chrome's gauges observe the same top gap a thumb keeps,
-where the token had to be invented to say in CSS what JS already knew.
 
 ### The under-construction stage has no route in
 

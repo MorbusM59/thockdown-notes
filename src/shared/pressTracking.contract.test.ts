@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { fileURLToPath } from 'node:url'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import ts from 'typescript'
@@ -22,7 +23,7 @@ import { SECONDARY_PRESS_ATTRIBUTE } from './pressTracking'
  * identifier in a list, which are not JSX at all.
  */
 
-const SRC = new URL('..', import.meta.url).pathname
+const SRC = fileURLToPath(new URL('..', import.meta.url))
 
 function tsxFiles(dir: string): string[] {
   const out: string[] = []

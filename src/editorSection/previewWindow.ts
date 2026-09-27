@@ -1,11 +1,11 @@
 // The window: which blocks of a chunked document are mounted right now.
 //
 // WHY THIS EXISTS
-// The virtualized preview gives its scroller the height of the WHOLE document,
-// which means inventing a height for every block nobody has looked at. That
-// invention is what the background survey, the fitted height model, the
-// geometry caches and the discovery progress bar all exist to make convincing
-// -- and it is never right, only less wrong (measured across four documents:
+// The virtualized preview this replaced gave its scroller the height of the
+// WHOLE document, which meant inventing a height for every block nobody had
+// looked at. That invention is what its background survey, fitted height
+// model, geometry caches and discovery progress bar all existed to make
+// convincing -- and it was never right, only less wrong (measured across four documents:
 // +29%, -35%, +94%, +102% against the settled truth).
 //
 // A window does not invent anything. The scroller holds a contiguous run of

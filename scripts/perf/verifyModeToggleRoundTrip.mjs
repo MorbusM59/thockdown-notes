@@ -70,10 +70,12 @@ const main = async () => {
   try {
     await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'load' })
     await waitForAppReady(page)
+    const documentText = generateSyntheticDocument(200000)
+    const totalSourceLines = documentText.split('\n').length
     await page.evaluate(async (text) => {
       const note = await window.thockdownNotes.createNote({ initialText: text })
       await window.thockdownSections.setActiveNote('default', note.id)
-    }, generateSyntheticDocument(200000))
+    }, documentText)
     await page.reload()
     await waitForAppReady(page)
     await ensureEditMode(page)
@@ -98,15 +100,23 @@ const main = async () => {
     await toggle.first().click()
     await page.waitForTimeout(2500)
     const inRender = await readState(page)
-    // The preview should be somewhere comparable, as a fraction of its own
-    // scrollable range, to where edit was. Generous on purpose: this is here
-    // to catch "landed near the top", not to police a few percent.
+    // The preview should be somewhere comparable, as a fraction of the
+    // DOCUMENT, to where edit was. Read from the source line of the first
+    // block showing at the pane's top, not from the pane's scrollTop: a note
+    // this size is windowed in render view (previewWindow.ts), so its scroller
+    // holds only the mounted run and a fraction of its scroll range says
+    // nothing about where in the document the reader is. Generous on purpose:
+    // this is here to catch "landed near the top", not to police a few percent.
     const editFraction = before.editMax > 0 ? before.editTop / before.editMax : 0
-    const previewMax = await page.evaluate(() => {
+    const previewTopLine = await page.evaluate(() => {
       const pv = document.querySelector('.markdown-preview')
-      return pv ? Math.round(pv.scrollHeight - pv.clientHeight) : 0
+      if (!pv) return null
+      const top = pv.getBoundingClientRect().top
+      const first = [...pv.querySelectorAll('[data-source-line-start]')]
+        .find((el) => el.getBoundingClientRect().bottom > top)
+      return first ? Number(first.getAttribute('data-source-line-start')) : null
     })
-    const previewFraction = previewMax > 0 ? inRender.previewTop / previewMax : 0
+    const previewFraction = previewTopLine === null ? 0 : previewTopLine / totalSourceLines
     check('entering render view lands near where edit was',
       Math.abs(previewFraction - editFraction) < 0.15,
       `edit at ${(editFraction * 100).toFixed(1)}%, preview at ${(previewFraction * 100).toFixed(1)}%`)

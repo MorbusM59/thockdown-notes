@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { fileURLToPath } from 'node:url'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import ts from 'typescript'
@@ -31,7 +32,7 @@ import ts from 'typescript'
  * the same characters -- is precisely the one a regex cannot draw.
  */
 
-const ROOT = new URL('../..', import.meta.url).pathname
+const ROOT = fileURLToPath(new URL('../..', import.meta.url))
 
 /** Attributes whose value is read by a person rather than by a machine. */
 const READER_FACING_ATTRIBUTES = new Set([

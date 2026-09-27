@@ -1,4 +1,5 @@
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { SCROLL_TRACK_EDGE_GAP_PX } from './shared/scrollTrackGeometry'
 import { flushSync } from 'react-dom'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent, SetStateAction } from 'react'
@@ -299,7 +300,6 @@ const DEFAULT_BORDER_RADIUS_REGULAR_PX = 6
 const DEFAULT_BORDER_ALPHA_PERCENT = 100
 const DEFAULT_BOX_SHADOW_ALPHA_PERCENT = 100
 const TEXTURE_PREVIEW_SURFACE: TextureSurfaceKey = 'appGrid'
-const SCROLL_TRACK_EDGE_GAP_PX = 3
 // Holding a swatch to copy its colour is "I meant this one" -- the app's
 // CONFIRM threshold (`shared/holdTiming.ts`), which also announces the
 // completion in the cursor. Was 300ms of its own.

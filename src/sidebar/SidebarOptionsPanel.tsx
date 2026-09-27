@@ -3080,7 +3080,6 @@ export function SidebarOptionsPanel({
         ariaLabel="Scrolling"
         heading="Scrolling"
       >
-        <OptionsSubsectionLabel>Wheel</OptionsSubsectionLabel>
 <div className="utility-setting-slider-stack" aria-label="Wheel scrolling settings">
           <OptionsSliderRows rows={[3, 2]}>
             {/* Spin-to-keep-scrolling: `auto scroll` sets what counts as a

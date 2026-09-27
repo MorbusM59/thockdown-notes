@@ -2614,7 +2614,6 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       lastKnownPreviewAnchorLineRef.current = clampedSourceLine
 
       const landed = previewScrollToSourceLineRef.current?.(clampedSourceLine, {
-        align: 'start',
         offsetPx: RESTORE_OFFSET_LINES * readPreviewLineHeightPx(container),
       }) ?? false
 

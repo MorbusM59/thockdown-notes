@@ -75,8 +75,6 @@ interface AccordionSectionProps {
   className?: string
   headingClassName?: string
   ariaLabel?: string
-  /** Increment to programmatically open this section (e.g. from an external button). */
-  forceOpenNonce?: number
   /** fa-solid icon class for the heading, e.g. "fa-rectangle-list". Defaults to the global-scope icon. */
   iconClass?: string
   /** Tooltip shown when hovering the icon. Pass '' to suppress the tooltip attribute entirely. */
@@ -99,7 +97,6 @@ export function AccordionSection({
   className,
   headingClassName,
   ariaLabel,
-  forceOpenNonce,
   iconClass = DEFAULT_ICON_CLASS,
   iconTooltip = DEFAULT_ICON_TOOLTIP,
 }: AccordionSectionProps) {
@@ -188,15 +185,6 @@ export function AccordionSection({
     return () => group?.unregister(id)
   }, [group, id, close])
 
-  // Open programmatically when the nonce increments (e.g. external button).
-  useEffect(() => {
-    if (forceOpenNonce) {
-      group?.closeOthers(id)
-      open()
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [forceOpenNonce])
-
   useEffect(() => () => cancelAnim(), [cancelAnim])
 
   const handleClick = useCallback((e: MouseEvent<HTMLElement>) => {
@@ -233,7 +221,7 @@ export function AccordionSection({
           />
           {heading}
         </summary>
-        <div ref={contentRef}>
+        <div ref={contentRef} className="sidebar-options-accordion-body">
           {children}
         </div>
       </details>

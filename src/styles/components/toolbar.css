@@ -375,6 +375,15 @@
   display: none;
 }
 
+/* THE ONE FLOW RULE of an options section: its blocks stand --spacing-regular
+   apart and carry no margins of their own, so two spacings never meet and
+   add up. A sub-section label is the only exception, and adds its own. */
+.sidebar-options-accordion-body {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--spacing-regular);
+}
+
 .sidebar-options-section-heading {
   margin:    0;
   padding:   0;
@@ -448,7 +457,6 @@
   display: flex;
   gap: var(--toolbar-options-gap);
   width: 100%;
-  margin-top: var(--toolbar-options-gap);
   height: var(--canonical-scroll-thickness);
 }
 

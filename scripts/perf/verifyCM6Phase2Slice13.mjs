@@ -74,22 +74,25 @@ async function main() {
     }
     console.error('[verify] grid lines correctly have pointer-events: none')
 
-    // z-index ordering: grid must sit above caret/selection but below the
-    // actual text container, matching Editor.tsx's own design (text paints
-    // over the grid; the grid paints over caret/selection fills).
+    // z-index ordering: text over the caret over the grid. The caret sits on
+    // the grid (scenery) but below the text, so the glyph it is on stays
+    // readable through it -- see the caret's own zIndex comment in
+    // CM6Editor.tsx. (Originally the grid painted over the caret; that was
+    // reversed deliberately when the caret gained its outline and halo.)
     const caretZ = await page.evaluate(() => {
       const caret = document.querySelector('.thockdown-block-caret')
       return caret ? parseInt(getComputedStyle(caret).zIndex, 10) : null
     })
     const containerZ = await page.evaluate(() => parseInt(getComputedStyle(document.querySelector('.cm6-editor-root')).zIndex, 10))
 
-    if (!(gridInfo.outlineZIndex > (caretZ ?? -Infinity)) || !(gridInfo.linesZIndex > (caretZ ?? -Infinity))) {
-      throw new Error(`FAIL: grid line z-index (outline=${gridInfo.outlineZIndex}, lines=${gridInfo.linesZIndex}) is not above the caret's (${caretZ})`)
+    if (caretZ === null) throw new Error('FAIL: no caret to compare against')
+    if (!(caretZ > gridInfo.outlineZIndex) || !(caretZ > gridInfo.linesZIndex)) {
+      throw new Error(`FAIL: caret z-index (${caretZ}) is not above the grid lines (outline=${gridInfo.outlineZIndex}, lines=${gridInfo.linesZIndex})`)
     }
-    if (!(containerZ > gridInfo.outlineZIndex) || !(containerZ > gridInfo.linesZIndex)) {
-      throw new Error(`FAIL: text container z-index (${containerZ}) is not above the grid lines (outline=${gridInfo.outlineZIndex}, lines=${gridInfo.linesZIndex}) -- text would render behind the grid`)
+    if (!(containerZ > caretZ)) {
+      throw new Error(`FAIL: text container z-index (${containerZ}) is not above the caret (${caretZ}) -- the caret would hide the glyph it sits on`)
     }
-    console.error(`[verify] z-index ordering correct: text (${containerZ}) > grid lines (${gridInfo.outlineZIndex}/${gridInfo.linesZIndex}) > caret (${caretZ})`)
+    console.error(`[verify] z-index ordering correct: text (${containerZ}) > caret (${caretZ}) > grid lines (${gridInfo.outlineZIndex}/${gridInfo.linesZIndex})`)
 
     if (consoleErrors.length > 0) {
       console.error('[verify] console errors:')

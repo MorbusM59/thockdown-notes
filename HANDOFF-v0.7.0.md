@@ -29,7 +29,7 @@ A big one. **Soundscapes** arrive: a generated soundscape of wind, surf, rain, t
 ## Soundscapes
 
 - **The Soundscapes button in the music player** turns them on or off, and shows the icon of the soundscape it will play. Scroll over it for volume, and right-click it for the next soundscape. Six factory soundscapes are included: Stormy Night, Forest rain, Strong winds, Under water, Campsite and Passing thunderstorm.
-- **Settings → Soundscapes** has eighteen channels (noise, rain, thunder, water, fire and chimes), each with a distance and a place in the stereo field, plus a shared **space** (room to valley) and **weather** (gusts and lulls every channel can follow).
+- **Settings → Soundscapes** has eighteen channels (wind, rain, thunder, stream, fire and chimes), each with a distance and a place in the stereo field, plus a shared **space** (room to valley) and **weather** (gusts and lulls every channel can follow).
 - Save your own soundscapes, and export or import them as `.tds` files, the same way layouts travel as `.tdl`.
 
 ## Music player
@@ -95,7 +95,7 @@ All three are written up in full under "Needs a decision" at the bottom of `TODO
 2. Stale full-document parses queue up in the worker when a large note's text changes while its first split is pending. The fix is a cancel message in `documentFacts.worker.ts`.
 3. `useHeadlineLevelGuard.ts` has had no caller since `58fdfceb`, but several comments still describe it as active. Decide whether to delete it or remount it; see `docs/pending-review-and-removal.md`.
 4. `saveNote` sends the whole note back over IPC on every save, which is wasteful now that the renderer keeps note text in its own store (`TODO.md`).
-5. Fourteen regression scripts fail on `main`, both before and after the leak fix. Five are early CM6-migration scripts (`verifyCM6Phase2Slice9/11/13/17/20`) and may simply be stale. The others are `verifyEditRowGrid` (a `flushSync` warning), `verifyNoHydrationOverwrite` (+820 characters for 40 Enters), `verifyPreviewBlockGeometry`, `verifyPreviewCharThumb`, `verifyPreviewPrewarmSafety` (render view never shown), `verifyScrollbarSemantics`, `verifyTagBarSuggestionFit`, `verifyScrollBridge` and `verifyModeToggleRoundTrip`. Triage them before relying on the suite as a gate.
+5. Thirteen regression scripts fail on `main`, both before and after the leak fix. Five are early CM6-migration scripts (`verifyCM6Phase2Slice9/11/13/17/20`) and may simply be stale. The others are `verifyEditRowGrid` (a `flushSync` warning), `verifyNoHydrationOverwrite` (+820 characters for 40 Enters), `verifyPreviewBlockGeometry`, `verifyPreviewCharThumb`, `verifyScrollbarSemantics`, `verifyTagBarSuggestionFit`, `verifyScrollBridge` and `verifyModeToggleRoundTrip`. Triage them before relying on the suite as a gate.
 
 Also:
 

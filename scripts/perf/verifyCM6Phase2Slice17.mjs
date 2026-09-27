@@ -95,10 +95,19 @@ async function main() {
     // spacing 1.6 -> two 0.05 steps lands at 1.7, i.e. round(16*1.7) = 27).
     await page.click('[aria-label="View options"]')
     await page.waitForTimeout(300)
+    // The options sections are accordions that start collapsed, and a slider
+    // inside a closed <details> cannot take focus.
+    await page.click('section[aria-label="Editor Font"] summary')
+    await page.waitForTimeout(300)
     const spacingSlider = page.locator('#typography-spacing')
-    await spacingSlider.focus()
-    await page.keyboard.press('ArrowRight')
-    await page.keyboard.press('ArrowRight')
+    // Refocused before each step: a slider commit hands the keyboard back to
+    // the editor (scheduleFocusEditorInEditMode), so a second press would
+    // otherwise land in the text.
+    for (let step = 0; step < 2; step++) {
+      await spacingSlider.focus()
+      await page.keyboard.press('ArrowRight')
+      await page.waitForTimeout(50)
+    }
 
     // No explicit scroll anywhere below -- the fix must make this settle on
     // its own. 300ms is generous (the observed self-correction lands within

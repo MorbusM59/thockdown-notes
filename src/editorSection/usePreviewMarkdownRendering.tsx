@@ -88,7 +88,6 @@ const PREVIEW_CHAR_RULER_TEXT = 'the quick brown fox jumps over the lazy dog and
 
 
 
-/** Progress of the background block survey -- see previewMeasurementPrewarm.ts. */
 interface OpenItemsToggleStore {
   isChecked: (sourceLine: number) => boolean
   subscribeToLine: (sourceLine: number, listener: () => void) => () => void
@@ -154,7 +153,6 @@ function createOpenItemsToggleStore(): OpenItemsToggleStore {
 export type PreviewScrollToSourceLineFn = (
   sourceLine: number,
   opts?: {
-    align?: 'start' | 'center'
     behavior?: 'auto' | 'smooth'
     /**
      * How far below the pane's top edge to leave the block, in pixels.
@@ -1337,15 +1335,14 @@ export function usePreviewMarkdownRendering({
   )
 
   // ---------------------------------------------------------------------
-  // Background measurement prewarm -- see previewMeasurementPrewarm.ts for
-  // why this exists and what makes it fragile.
+  // The spacer and the character ruler.
   //
-  // CONTINUOUS DOCUMENTS ONLY. Under CONTINUOUS_DOCUMENT_MAX_CHARS every block
-  // is measured outright, which is what turns `scrollHeight` into a true total
+  // CONTINUOUS DOCUMENTS measure every block outright (under
+  // CONTINUOUS_DOCUMENT_MAX_CHARS), which is what turns `scrollHeight` into a true total
   // and lets the scrollbar use the plain pixel identity (editor/
   // documentPosition.ts). Over that threshold the document is windowed
-  // (previewWindow.ts): its scroller holds only the mounted run, so there is no
-  // whole-document height for a survey to be right about and none runs.
+  // (previewWindow.ts): its scroller holds only the mounted run. Neither pane
+  // estimates the heights of unmounted blocks, so nothing surveys them.
   // ---------------------------------------------------------------------
   const spacerRef = useRef<HTMLDivElement | null>(null)
   const [spacerReady, setSpacerReady] = useState(false)

@@ -157,9 +157,16 @@ async function main() {
     check(after.overwrites.length === 0,
       'the hydration path never overwrote the live document',
       after.overwrites.length + ' overwrite(s), ' + deletedTotal + ' characters deleted')
-    check(charsGained === args.presses,
+    // One character per press holds only for a printable key. Enter continues
+    // the line it breaks -- a list marker, a quote, the indentation -- so it
+    // adds more than one; for Enter, the line count below and the overwrite
+    // check above are what say nothing was lost. Run with --key=a for the
+    // character-exact version of this check.
+    check(args.key === 'Enter' || charsGained === args.presses,
       'every typed character survived',
-      'typed ' + args.presses + ', document gained ' + charsGained)
+      args.key === 'Enter'
+        ? 'not a printable key -- see the line count instead (document gained ' + charsGained + ')'
+        : 'typed ' + args.presses + ', document gained ' + charsGained)
     check(args.key !== 'Enter' || linesGained === args.presses,
       'every Enter produced exactly one line',
       'pressed ' + args.presses + ', gained ' + linesGained + ' lines')

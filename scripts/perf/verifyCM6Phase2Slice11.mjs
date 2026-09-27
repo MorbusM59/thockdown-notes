@@ -22,7 +22,9 @@ const PORT = 5239
 async function getDragHandles(page) {
   return page.evaluate(() => {
     const layer = document.querySelector('.cm6-editor-root').parentElement
-    const divs = Array.from(layer.children).filter((el) => getComputedStyle(el).cursor === 'ns-resize')
+    // Found by class, not by computed cursor: the app hides the native cursor
+    // everywhere (it draws its own), so every element computes to `none`.
+    const divs = Array.from(layer.children).filter((el) => el.classList.contains('cursor-ns-resize'))
     return divs.map((el) => {
       const r = el.getBoundingClientRect()
       return { top: r.top, left: r.left, width: r.width, height: r.height }
@@ -54,8 +56,8 @@ async function main() {
     await ensureEditMode(page)
     await page.waitForTimeout(300)
 
-    // --- Two drag handles must exist, and be reachable/clickable even at a
-    // 0 boundary (the negative-offset-clamped-to-0 case) ---
+    // --- Two drag handles must exist, and be reachable (with Ctrl held) even
+    // at a 0 boundary (the negative-offset-clamped-to-0 case) ---
     const handles = await getDragHandles(page)
     if (handles.length !== 2) {
       throw new Error(`FAIL: expected 2 drag handles, found ${handles.length}`)
@@ -67,10 +69,15 @@ async function main() {
     const bottomHandle = handles[1]
     const startX = bottomHandle.left + bottomHandle.width / 2
     const startY = bottomHandle.top + bottomHandle.height / 2
+    // The handles take the mouse only while Ctrl is held, so a plain drag
+    // over the text selects it instead of moving a boundary.
+    await page.keyboard.down('Control')
+    await page.waitForTimeout(50) // let the handles re-render with pointer events on
     await page.mouse.move(startX, startY)
     await page.mouse.down()
     await page.mouse.move(startX, startY - 78, { steps: 10 })
     await page.mouse.up()
+    await page.keyboard.up('Control')
     await page.waitForTimeout(300)
 
     const paddingBottom = await page.evaluate(() => parseFloat(document.querySelector('.cm6-editor-root .cm-content').style.paddingBottom || '0'))
