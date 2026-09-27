@@ -6,8 +6,8 @@ import { isCanonicalInternalText, normalizeInternalText } from './TextPolicy'
  * ingress must pass through.
  *
  * The app's internal text model is canonical: no CR, no tab, no line/
- * paragraph separator, no leading BOM (`TextPolicy.ts`'s
- * normalizeInternalText defines it). Note hydration already normalizes
+ * paragraph separator, and every character exactly one cell of the grid
+ * (`TextPolicy.ts`'s normalizeInternalText defines it). Note hydration already normalizes
  * (EditorSection.tsx), paste is sanitized (CM6Editor.tsx's paste handler),
  * and the save queue normalizes -- so the document was canonical in
  * practice, but only by the coincidence that every ingress had been handled
@@ -57,9 +57,9 @@ export function createCanonicalTextFilter(hydrationAnnotation: AnnotationType<tr
     if (!tr.docChanged) return tr
 
     let needsNormalization = false
-    tr.changes.iterChanges((_fromA, _toA, fromB, _toB, inserted) => {
+    tr.changes.iterChanges((_fromA, _toA, _fromB, _toB, inserted) => {
       if (needsNormalization || inserted.length === 0) return
-      if (!isCanonicalInternalText(inserted.toString(), fromB)) {
+      if (!isCanonicalInternalText(inserted.toString())) {
         needsNormalization = true
       }
     })

@@ -3,7 +3,6 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import { isExternalNote } from '../shared/noteLifecycle'
 import { withSavedNote } from '../shared/noteContentStore'
-import { normalizeInternalText } from '../editor/TextPolicy'
 import type { PreviewBlockSplitCache } from '../editor/PreviewBlockSplit'
 import { buildPersistedBlockMap } from '../editor/persistedBlockMap'
 
@@ -76,7 +75,13 @@ export function useNoteSaveQueue(options: UseNoteSaveQueueOptions): UseNoteSaveQ
     try {
       const noteSummary = notesRef.current.find((note) => note.id === activeNoteId)
       const isExternal = noteSummary ? isExternalNote(noteSummary) : false
-      const normalizedText = normalizeInternalText(nextText)
+      // Already canonical, not re-normalized here: everything queued is the
+      // editor's own text, which CanonicalTextFilter keeps canonical at every
+      // ingress, or programmatic text normalized before it is queued. A pass
+      // here cost the whole document on every save (~10 ms on a 2 MB note
+      // since the single-cell rule joined the canonical form), and the main
+      // process applies the same rule on save regardless (sanitizeDocumentText).
+      const normalizedText = nextText
 
       const previewBlockCache = await buildPersistedBlockMap(previewBlockSplitCacheRef.current, normalizedText)
 
@@ -119,11 +124,7 @@ export function useNoteSaveQueue(options: UseNoteSaveQueueOptions): UseNoteSaveQ
 
   const queueSave = useCallback((text: string, cursorPos?: number | null) => {
     if (!persistenceReady) return
-    // flushSave always re-normalizes pendingSaveTextRef.current right before
-    // it's used (saveNote/saveNoteSnapshot/the isExternal branch all consume
-    // its own normalizedText, never this raw value) -- normalizing here too
-    // is a redundant O(document length) pass on every keystroke regardless of
-    // whether `text` is already canonical.
+    // Not normalized: `text` is canonical by construction (see flushSave).
     pendingSaveTextRef.current = text
     pendingSaveCursorPosRef.current = cursorPos ?? null
     if (saveTimerRef.current !== null) {

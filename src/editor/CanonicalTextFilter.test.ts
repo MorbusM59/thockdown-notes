@@ -37,11 +37,12 @@ describe('isCanonicalInternalText', () => {
     }
   })
 
-  it('only treats a BOM as non-canonical at offset 0', () => {
-    // stripBom is positional, so a fragment landing mid-document keeps a BOM
-    // it happens to start with -- the scan has to know where it will land.
-    expect(isCanonicalInternalText('﻿a', 0)).toBe(false)
-    expect(isCanonicalInternalText('﻿a', 5)).toBe(true)
+  it('treats a BOM as non-canonical wherever it stands', () => {
+    // A BOM is a zero-width character, so the single-cell rule removes it
+    // anywhere -- it used to be stripped only at the start of the text.
+    expect(isCanonicalInternalText('﻿a')).toBe(false)
+    expect(isCanonicalInternalText('a﻿b')).toBe(false)
+    expect(normalizeInternalText('a﻿b')).toBe('ab')
   })
 })
 

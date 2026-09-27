@@ -140,6 +140,17 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - Autosave briefly pauses while you're actively editing the title line, so a half-typed title is never saved as the note's name.
 - Switching into preview mode forces an immediate save first, so what you see is always current.
 
+### [Characters the Editor Keeps](#characters-the-editor-keeps)
+
+> **Where?**
+> Everywhere text enters a note — typing, pasting, dropping, and opening a note or file.
+
+*Every character takes exactly one cell of the editor's grid; characters that would not are left out.*
+
+- Left out: emoji, Chinese, Japanese and Korean characters (they take two cells), and invisible characters such as zero-width spaces and joiners (they take none). They simply do not appear when you type or paste them.
+- Wider or narrower spaces become an ordinary space, and an accent typed as a separate mark is joined to its letter.
+- A note or file that already contains such characters has them removed when it opens.
+
 ### [Edit and Preview Modes](#edit-and-preview-modes)
 
 > **Where?**
@@ -147,7 +158,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 *Toggles between the raw Markdown you type and the rendered, formatted view.*
 
-- Preview renders GitHub-Flavored Markdown: headings, bold/italic/strikethrough, lists (including task checklists with ☐/☑), tables, blockquotes, syntax-highlighted code blocks, horizontal rules, images, and links.
+- Preview renders GitHub-Flavored Markdown: headings, bold/italic/strikethrough, lists (including task checklists with tick boxes), tables, blockquotes, syntax-highlighted code blocks, horizontal rules, images, and links.
 - A task checklist's box is clickable right there in preview, same as [clicking its caret in edit mode](${guideLink('TOOLBAR-FORMATTING', 'formatting-group')}) — it's the same checkbox either way, so the note's own text (and edit mode's view of it) updates immediately.
 - \`Esc\` also blurs a focused field (like search) before it starts toggling modes, so it's safe to hit repeatedly.
 - **In a slot that isn't showing a note** — the User Guide, or the adventure — there is no other view to switch to, so the same button becomes an **exit** and closes what the slot is showing. \`Esc\` follows it, because \`Esc\` *is* that button: one key, one position, one meaning — leave whatever this slot is currently doing.
@@ -243,7 +254,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Defining an Anchor](#defining-an-anchor)
 
 > **Where?**
-> Typed directly into a note's text, anywhere, in either edit or preview source — or select some text and hit the anchor button (⚓, right behind the link button) or \`Shift+Ctrl+L\`.
+> Typed directly into a note's text, anywhere, in either edit or preview source — or select some text and hit the anchor button (right behind the link button) or \`Shift+Ctrl+L\`.
 
 *Turns a heading or phrase into a jump target with \`[Anchor Text](#anchor-id)\` — a real link whose destination is never clicked.*
 
@@ -267,7 +278,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Linking to Notes and Anchors](#linking-to-notes-and-anchors)
 
 > **Where?**
-> Typed directly into a note's text, using standard Markdown link syntax \`[text](destination)\` — or select some text and hit the link button (🔗) or \`Ctrl+L\`.
+> Typed directly into a note's text, using standard Markdown link syntax \`[text](destination)\` — or select some text and hit the link button or \`Ctrl+L\`.
 
 *One link syntax covers jumping within a note, to another note, or straight to a spot inside another note — the \`$\` always means "go somewhere," never "you are here."*
 
@@ -594,6 +605,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 - Becomes a temporary note tagged \`external\`, appearing only in the Date view (not Category, Archive, or Trash).
 - Your edits autosave into the app's own database as you type, but never touch the original file until you explicitly save.
+- Characters that do not fit the editor's grid (see [Characters the Editor Keeps](#characters-the-editor-keeps)) are removed when the file opens, so saving it writes the file back without them.
 
 ### [Saving an External File](#saving-an-external-file)
 

@@ -1,15 +1,24 @@
+import { isSingleCellText, singleCellText } from '../shared/singleCellText';
+
+/**
+ * The app's canonical internal text: LF line endings, no tab, no line or
+ * paragraph separator -- and every character exactly one cell of the
+ * monospace grid (shared/singleCellText.ts), which also removes a BOM wherever
+ * it stands, being a zero-width character. Tabs become spaces BEFORE the
+ * single-cell rule runs, which would otherwise drop them as control
+ * characters.
+ */
 export function normalizeInternalText(input: string): string {
-  return stripBom(input)
+  return singleCellText(input
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
     .replace(/[\u2028\u2029]/g, '\n')
-    .replace(/\t/g, '   ');
+    .replace(/\t/g, '   '));
 }
 
 /**
- * Every character normalizeInternalText would rewrite, and nothing else. A
- * BOM is only stripped at offset 0, so it is deliberately absent here and
- * handled by the offset check in isCanonicalInternalText.
+ * The characters normalizeInternalText rewrites before the single-cell rule;
+ * everything that rule removes is checked by isSingleCellText.
  */
 const NON_CANONICAL_CHARS = /[\r\t\u2028\u2029]/;
 
@@ -25,22 +34,9 @@ const NON_CANONICAL_CHARS = /[\r\t\u2028\u2029]/;
  * intermediate string per pass, so calling it "just in case" on a hot path
  * costs the whole document per keystroke to produce, almost always, a
  * character-for-character copy of its own input.
- *
- * `offset` is where `input` will land in the document, so the BOM rule --
- * which only applies at the very start of the text -- can be evaluated
- * correctly for an inserted fragment rather than assumed.
  */
-export function isCanonicalInternalText(input: string, offset = 0): boolean {
+export function isCanonicalInternalText(input: string): boolean {
   if (!input) return true;
-  if (offset === 0 && input.charCodeAt(0) === 0xfeff) return false;
-  return !NON_CANONICAL_CHARS.test(input);
+  return !NON_CANONICAL_CHARS.test(input) && isSingleCellText(input);
 }
 
-
-function stripBom(input: string): string {
-  if (!input) {
-    return input;
-  }
-
-  return input.charCodeAt(0) === 0xfeff ? input.slice(1) : input;
-}

@@ -57,6 +57,7 @@ A big one. **Soundscapes** arrive: a generated soundscape of wind, surf, rain, t
 - Turning soundscapes off and on no longer leaves the old generator running in the background, and thunder costs well under half of what it did.
 - Pressing a note card's archive, trash or save button no longer takes the keyboard away from the editor.
 - The User Guide and the welcome note were corrected wherever they had fallen behind the app.
+- Every character in a note now takes exactly one cell of the editor's grid: emoji, Chinese, Japanese and Korean characters, and invisible characters are left out wherever text comes in, and removed from notes that already contain them. A typed emoji used to show in the editor and vanish on the next restart.
 - The options cogwheel turns about its own centre instead of wobbling.
 - Reopening a large external file in render view no longer freezes the app for seconds.
 - Typing no longer leaks memory. Every keystroke used to keep a full copy of the note alive until restart, about 2 MB per keystroke on a 2 MB note. Long writing sessions now stay flat.
