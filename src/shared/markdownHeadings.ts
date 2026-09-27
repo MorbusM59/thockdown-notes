@@ -75,103 +75,20 @@ export function normalizeChapterHeadings(text: string): string {
   return `## Unnamed Chapter\n\n${shiftedText}`
 }
 
-export interface HeadingLevelEdit {
-  /** Offset (in the ORIGINAL text) where the corrected line begins. */
-  lineStart: number
-  /** Offset (in the ORIGINAL text) where the '#' run itself begins. */
-  markerStart: number
-  oldLevel: number
-  newLevel: number
-}
-
 export interface HeadlineLevelRule {
-  /** Required level for the first line, if it's a heading. */
+  /** The level of the first line, if it's a heading. */
   firstLineLevel: number
-  /** Minimum level every other heading must be at least as deep as. */
+  /** The shallowest level every other heading is written at. */
   minOtherLevel: number
 }
 
-/** A real chapter's own invariant: first line exactly `##`, everything else `###` or deeper. */
+/**
+ * The heading levels a real chapter is written in: first line `##`, everything
+ * else `###` or deeper. Not enforced on the text -- a note whose first line is
+ * not its title shows "Missing title" instead (shared/noteTitle.ts) -- but it
+ * is what the app itself writes, e.g. the formatting toolbar's generated headings.
+ */
 export const CHAPTER_HEADLINE_LEVEL_RULE: HeadlineLevelRule = { firstLineLevel: 2, minOtherLevel: 3 }
 
-/** A regular (non-chapter) note's invariant: first line exactly `#`, everything else `##` or deeper. */
+/** The same for a regular (non-chapter) note: first line `#`, everything else `##` or deeper. */
 export const NOTE_HEADLINE_LEVEL_RULE: HeadlineLevelRule = { firstLineLevel: 1, minOtherLevel: 2 }
-
-/**
- * Live-editing counterpart to `normalizeChapterHeadings`: clamps (never
- * shifts) heading levels that violate `rule` -- the first line, if it's a
- * heading, must be exactly `rule.firstLineLevel`; every other heading must
- * be `rule.minOtherLevel` or deeper. Unlike `normalizeChapterHeadings`, this
- * never synthesizes a heading where none exists and never touches a heading
- * that already satisfies the rule (a `####` stays `####`) -- it's meant to
- * run on every edit, so it must be a no-op on already-valid text. Used both
- * for a real chapter's own invariant (`CHAPTER_HEADLINE_LEVEL_RULE`) and a
- * regular note's (`NOTE_HEADLINE_LEVEL_RULE`) -- see useHeadlineLevelGuard.ts,
- * which picks the right one per note and runs this on every keystroke.
- *
- * `skipLineIndex` (0-based) exempts one line from correction even if it
- * currently violates the invariant -- the caller uses this for whichever
- * line the caret is still actively editing, so backspacing a heading marker
- * down through the minimum level (or all the way to plain text) isn't fought
- * mid-edit; the exempted line is corrected normally as soon as the caret
- * moves elsewhere.
- */
-export function clampHeadlineLevels(text: string, rule: HeadlineLevelRule, skipLineIndex: number | null = null): { text: string; edits: HeadingLevelEdit[] } {
-  const lines = text.split('\n')
-  let inFence = false
-  let offset = 0
-  const edits: HeadingLevelEdit[] = []
-
-  const nextLines = lines.map((line, index) => {
-    const lineStart = offset
-    offset += line.length + 1
-
-    if (FENCE_LINE.test(line)) {
-      inFence = !inFence
-      return line
-    }
-    if (inFence) return line
-    if (index === skipLineIndex) return line
-    if (!ATX_HEADING_LINE.test(line)) return line
-
-    const oldLevel = line.match(/^#+/)?.[0].length ?? 0
-    const newLevel = index === 0 ? rule.firstLineLevel : Math.max(rule.minOtherLevel, oldLevel)
-    if (newLevel === oldLevel) return line
-
-    edits.push({ lineStart, markerStart: lineStart, oldLevel, newLevel })
-    return line.replace(/^#+/, '#'.repeat(newLevel))
-  })
-
-  return { text: nextLines.join('\n'), edits }
-}
-
-/**
- * Remaps a single document offset across the corrections
- * `clampHeadlineLevels` made -- an offset before a corrected marker is
- * untouched, one that fell inside the old `#` run clamps to the end of the
- * new one, and one after it shifts by that correction's own level delta,
- * with each earlier correction's delta accumulated first. `edits` must be
- * in ascending `lineStart` order, exactly as `clampHeadlineLevels` already
- * returns them.
- */
-export function remapOffsetThroughHeadingLevelEdits(offset: number, edits: HeadingLevelEdit[]): number {
-  let result = offset
-  let cumulativeDelta = 0
-
-  for (const edit of edits) {
-    const delta = edit.newLevel - edit.oldLevel
-
-    if (offset <= edit.markerStart) {
-      // Untouched -- still need this edit's delta accumulated for later edits.
-    } else if (offset <= edit.markerStart + edit.oldLevel) {
-      const relative = offset - edit.markerStart
-      result = edit.markerStart + cumulativeDelta + Math.min(relative, edit.newLevel)
-    } else {
-      result = offset + cumulativeDelta + delta
-    }
-
-    cumulativeDelta += delta
-  }
-
-  return result
-}

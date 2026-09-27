@@ -20,10 +20,8 @@ export type TextDecorationFormat = 'bold' | 'italic' | 'strikethrough'
 // means whatever `titleLevel` the caller resolved for the active note's own
 // HeadlineLevelRule (see resolveHeadlineLevelDetails below) -- level 1 for a
 // regular note, level 2 for a chapter. `titleLevel: null` (an external note,
-// exempt from any enforced rule -- see useHeadlineLevelGuard.ts) falls back
-// to the pre-chapters behavior: the first heading of ANY level, since an
-// external file's own structure isn't something this app enforces or can
-// assume.
+// a file this app does not own and whose structure it cannot assume) falls
+// back to the first heading of ANY level.
 function findOwnTitleLineIndex(lines: readonly string[], titleLevel: number | null): number {
   let inFence = false
   for (let index = 0; index < lines.length; index += 1) {
@@ -47,13 +45,10 @@ function findOwnTitleLineIndex(lines: readonly string[], titleLevel: number | nu
 // note written before that changed still gets recognized, cleaned up, and
 // regenerated in the new plain form the next time it's touched (toggling
 // off, or the live auto-refresh effect) -- not a format anyone has to
-// migrate by hand. `tocLevel` is the active note's own required level (see
-// resolveHeadlineLevelDetails): 2 for a regular note, 3 for a chapter (one
-// level under its own forced-level-2 title, same relationship
-// useHeadlineLevelGuard.ts's CHAPTER_HEADLINE_LEVEL_RULE enforces for every
-// other heading) -- a chapter's generated block has to honor that same
-// invariant, or useHeadlineLevelGuard immediately reclamps it out from under
-// this feature on the very next render.
+// migrate by hand. `tocLevel` is the level one under the active note's own
+// title (see resolveHeadlineLevelDetails): 2 for a regular note, 3 for a
+// chapter, whose title is written at level 2 -- so the generated block sits
+// under the title rather than beside it.
 function isTableOfContentsHeadingLine(line: string, tocLevel: number): boolean {
   const heading = parseMarkdownHeading(line)
   if (!heading || heading.level !== tocLevel) return false
@@ -210,8 +205,8 @@ const TEXT_DECORATION_MARKERS: Record<TextDecorationFormat, { open: string; clos
  * `titleLevel`/`tocLevel` default to a regular note's own levels (1/2) so
  * existing callers/tests keep working unchanged; a chapter passes
  * CHAPTER_HEADLINE_LEVEL_RULE's own levels (2/3) instead -- see
- * resolveHeadlineLevelDetails below for why this has to track
- * useHeadlineLevelGuard.ts's own per-note rule, not a hardcoded level 2.
+ * resolveHeadlineLevelDetails below: the block belongs one level under the
+ * note's own title, which is not always level 1.
  */
 export function buildTableOfContentsInsertion(
   sourceText: string,
@@ -300,16 +295,12 @@ export interface UseMarkdownFormattingToolbarOptions {
   /**
    * The active note's own HeadlineLevelRule -- CHAPTER_HEADLINE_LEVEL_RULE
    * for a chapter, NOTE_HEADLINE_LEVEL_RULE for a regular note, or `null`
-   * for anything useHeadlineLevelGuard.ts itself exempts (an external note,
-   * or the auto-TOC/auto-Open-Items synthetic chapters, which never reach
-   * this toolbar anyway). The single-note TOC block's own heading level and
-   * title detection MUST track this: it's inserted right after the note's
-   * title, and if it doesn't land on the same level useHeadlineLevelGuard
-   * enforces for "every other heading," that hook immediately reclamps it
-   * out from under this feature on the very next render (the bug this
-   * option exists to fix -- a chapter's forced level-2 title meant a
-   * hardcoded `## Table of Contents` collided with the chapter's own
-   * `minOtherLevel: 3`). `null` falls back to the pre-chapters behavior:
+   * for a note with no rule of its own (an external note, or the
+   * auto-TOC/auto-Open-Items synthetic chapters, which never reach this
+   * toolbar anyway). The single-note TOC block's own heading level and title
+   * detection track this: it's inserted right after the note's title and
+   * belongs one level under it -- a chapter's title is level 2, so a
+   * hardcoded `## Table of Contents` would sit beside it instead. `null` falls back to the pre-chapters behavior:
    * title is the first heading of any level, TOC block is always `##`.
    */
   headlineRule: HeadlineLevelRule | null

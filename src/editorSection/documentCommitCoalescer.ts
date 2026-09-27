@@ -6,7 +6,7 @@
  *
  * The invariant: the committed text and the committed selection are always
  * one snapshot. Every consumer of the pair (the formatting toolbar's active
- * state, useHeadlineLevelGuard, extract-to-chapter, ...) indexes the
+ * state, extract-to-chapter, ...) indexes the
  * selection into the text, so a selection one keystroke newer than its text
  * is not a slightly stale answer but a wrong one: typing at the end of a
  * heading put the caret one past the old line's end -- the start of the NEXT

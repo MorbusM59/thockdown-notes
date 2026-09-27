@@ -1624,12 +1624,11 @@ export function EditorSection(rawProps: EditorSectionProps) {
     applyProgrammaticEditorText,
   })
 
-  // Same exemption useHeadlineLevelGuard.ts's own effect applies (the guard
-  // this rule has to stay in lockstep with -- see
-  // UseMarkdownFormattingToolbarOptions' headlineRule doc comment for why):
-  // an external note's structure isn't this app's to enforce, and the
-  // auto-TOC/auto-Open-Items synthetic chapters are generated, read-only
-  // output this toolbar never actually reaches.
+  // The heading levels the app writes into this note (see
+  // UseMarkdownFormattingToolbarOptions' headlineRule doc comment). None for
+  // an external note, whose structure isn't this app's to assume, or for the
+  // auto-TOC/auto-Open-Items synthetic chapters, generated read-only output
+  // this toolbar never actually reaches.
   const activeHeadlineRule = useMemo(() => {
     if (!activeNoteSummary) return null
     if (activeNoteSummary.isAutoToc || activeNoteSummary.isAutoOpenItems || isExternalNote(activeNoteSummary)) return null

@@ -93,7 +93,7 @@ All three are written up in full under "Needs a decision" at the bottom of `TODO
 
 1. The wheel notch-size learning: decided (learn only from deltas that look like notches), scheduled for after the release. See `TODO.md`.
 2. Stale full-document parses queue up in the worker when a large note's text changes while its first split is pending. The fix is a cancel message in `documentFacts.worker.ts`.
-3. `useHeadlineLevelGuard.ts` has had no caller since `58fdfceb`, but several comments still describe it as active. Decide whether to delete it or remount it; see `docs/pending-review-and-removal.md`.
+3. `useHeadlineLevelGuard.ts`: deleted with its dead helpers; `58fdfceb` had deliberately replaced heading enforcement with "Missing title".
 4. `saveNote` sends the whole note back over IPC on every save, which is wasteful now that the renderer keeps note text in its own store (`TODO.md`).
 5. The failing regression scripts are triaged. Twelve were stale against contracts that had changed on purpose and are updated (CM6 slices 9/11/13/17/20, NoHydrationOverwrite, ModeToggleRoundTrip, ScrollbarSemantics, ScrollBridge, PreviewBlockGeometry, and TagBarSuggestionFit, which was a flake). ModeToggleRoundTrip and EditRowGrid found a real defect -- switching a large note into render view landed at the top, and the caret came back at the document end -- now fixed. `verifyPreviewCharThumb` still needs a rewrite: it assumed character-threshold windowing, and a note that is one giant block (a long loose list) is continuous under the block threshold and shows nothing until its whole parse is done.
 

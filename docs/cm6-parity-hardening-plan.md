@@ -2758,6 +2758,11 @@ above (also surfaced by chapter/TOC work, not this doc's own scroll/caret focus)
 one shared definition per concept, consistently consumed -- but turned up one real, live bug plus
 several dead-code/duplication leftovers from the exploratory commits that built it.
 
+> **Superseded (2026-09-27).** `useHeadlineLevelGuard.ts` no longer exists: `58fdfceb` stopped rewriting a note's
+> heading levels (a note whose first line is not its title shows "Missing title" instead), and the unmounted hook
+> was deleted with its helpers. The TOC-level fix below still stands on its own -- the generated block belongs one
+> level under the note's title -- but the enforcement it describes is gone.
+
 **Bug (fixed)**: `useHeadlineLevelGuard.ts` enforces `CHAPTER_HEADLINE_LEVEL_RULE` on any chapter
 note -- first line forced to level 2, every other heading clamped to level 3+ -- but the
 single-note Table of Contents toolbar button (`useMarkdownFormattingToolbar.ts`) hardcoded its

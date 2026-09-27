@@ -191,14 +191,12 @@ describe('removeTableOfContentsAndAnchors', () => {
 })
 
 // Regression coverage for the chapter/TOC-button collision: a chapter's own
-// title is forced to level 2 by useHeadlineLevelGuard.ts's
-// CHAPTER_HEADLINE_LEVEL_RULE, and every OTHER heading (including a
-// generated TOC block) must be level 3 or deeper -- so on a chapter, this
-// feature has to build/recognize a `### Table of Contents` block, not the
-// regular note's hardcoded `##`, or the guard immediately reclamps it out
-// from under the toolbar on the very next render (the button would then
-// never recognize its own output as active, so it could never be toggled
-// off, and every click would insert yet another orphaned block).
+// title is written at level 2 (CHAPTER_HEADLINE_LEVEL_RULE), so the
+// generated TOC block belongs at level 3 -- on a chapter, this feature has to
+// build AND recognize a `### Table of Contents` block, not the regular note's
+// hardcoded `##`. If it built one level and looked for another, the button
+// would never recognize its own output as active, so it could never be
+// toggled off, and every click would insert yet another block.
 describe('buildTableOfContentsInsertion / removeTableOfContentsAndAnchors on a chapter (CHAPTER_HEADLINE_LEVEL_RULE)', () => {
   const { firstLineLevel: titleLevel, minOtherLevel: tocLevel } = CHAPTER_HEADLINE_LEVEL_RULE
 

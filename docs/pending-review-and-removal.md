@@ -535,27 +535,3 @@ note switches, mode toggles and snapshot browsing.
 **Noticed.** Moving the note's text out of React state (the per-keystroke
 retention fix), which had to decide, dependency by dependency, which effects
 mean "the text changed" and which merely inherited it.
-
-### `useHeadlineLevelGuard` has no caller
-
-**What.** `src/editorSection/useHeadlineLevelGuard.ts` clamps a note's heading
-levels to its rule. Nothing mounts it: `58fdfceb` ("simplfied headline
-enforcement") removed its call from `EditorSection.tsx` and left the hook in
-place. Comments elsewhere still describe it as live, for example
-`useMarkdownFormattingToolbar.ts`'s "or useHeadlineLevelGuard immediately
-reclamps it out from under".
-
-**Why it is suspect.** Either the enforcement it performed was meant to go
-(then the file and those comments are dead and misleading), or the removal
-dropped something that was meant to stay (then it is a regression). Its
-`currentEditorText: string` parameter also predates the rule that the text is
-never passed as a string (`useDisplayedNoteText.ts`); it would need converting
-before being mounted again.
-
-**What would have to be true to remove it.** The author confirming the
-simplified enforcement replaces it. Then the file goes, and the comments that
-cite it are rewritten to describe what enforces the rule now.
-
-**Noticed.** Converting every consumer of the note's text to the text store:
-this was the one consumer with no caller to convert.
-
