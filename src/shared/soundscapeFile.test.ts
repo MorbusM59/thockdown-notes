@@ -30,7 +30,13 @@ describe('soundscape files', () => {
     const file = buildSoundscapeFile([{ id: 'x', name: 'Silence', settings: neutralSoundscape() }])
     const [line] = parsePresetLines(file, 'NEUTRAL_SOUNDSCAPE')
     expect(line.overrides).toEqual({ name: 'Silence' })
-    const rain = buildSoundscapeFile([SOUNDSCAPE_FACTORY_PRESETS.find((preset) => preset.id === 'forest')!])
+    // Its own fixture rather than a factory preset, so editing a preset cannot
+    // quietly take away the case this asserts: one channel switched on, every
+    // other one off and at its defaults.
+    const settings = neutralSoundscape()
+    const rainChannel = settings.channels.find((channel) => channel.id === 'rain-1')!
+    rainChannel.enabled = true
+    const rain = buildSoundscapeFile([{ id: 'rain', name: 'Rain', settings }])
     // Disabled channels at their defaults are not written at all.
     expect(rain).not.toContain('"thunder-1"')
     expect(rain).toContain('"rain-1"')

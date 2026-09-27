@@ -28,7 +28,7 @@ A big one. **Soundscapes** arrive: a generated soundscape of wind, surf, rain, t
 
 ## Soundscapes
 
-- **The Soundscapes button in the music player** turns them on or off, and shows the icon of the soundscape it will play. Scroll over it for volume, and right-click it for the next soundscape. Six factory soundscapes are included: Stormy Night, Forest rain, Strong winds, Under water, Campsite and Passing thunderstorm.
+- **The Soundscapes button in the music player** turns them on or off, and shows the icon of the soundscape it will play. Scroll over it for volume, and right-click it for the next soundscape. Six factory soundscapes are included: Stormy Night, Wild Sea, Strong winds, Under water, Campsite and Thunderstorm.
 - **Settings → Soundscapes** has eighteen channels (wind, rain, thunder, stream, fire and chimes), each with a distance and a place in the stereo field, plus a shared **space** (room to valley) and **weather** (gusts and lulls every channel can follow).
 - Save your own soundscapes, and export or import them as `.tds` files, the same way layouts travel as `.tdl`.
 
