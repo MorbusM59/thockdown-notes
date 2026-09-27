@@ -36,7 +36,7 @@ describe('ensureHelpGuide', () => {
     // stated, and a change to it is still a type error.
     const raw = (db as unknown as { requireDb: () => { prepare: (sql: string) => { run: (...args: unknown[]) => unknown } } }).requireDb()
     raw.prepare('DELETE FROM notes WHERE id = ?').run('26-07-04_00-00_WELCOME00')
-    raw.prepare('DELETE FROM notes_fts WHERE noteId = ?').run('26-07-04_00-00_WELCOME00')
+    raw.prepare('DELETE FROM note_content WHERE noteId = ?').run('26-07-04_00-00_WELCOME00')
 
     await ensureHelpGuide(db, lifecycle)
 

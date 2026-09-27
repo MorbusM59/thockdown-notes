@@ -108,6 +108,22 @@ export function sanitizeDocumentText(input: string): string {
   return sanitizeTextFragment(input).replace(HTML_TAGS, '');
 }
 
+/**
+ * `sanitizeDocumentText(input).split('\n', 1)[0]`, without sanitising the
+ * rest of the document.
+ *
+ * Exact, not an approximation: nothing in sanitizeDocumentText works across
+ * a line break (line separators are normalised to \n first, and the HTML tag
+ * pattern cannot contain one), so the first line's sanitised form depends on
+ * the first line alone -- cut at the same separators normalizeLineSeparators
+ * turns into \n. Titles are read on every save; sanitising a multi-megabyte
+ * note to read its first line cost tens of milliseconds each time.
+ */
+export function sanitizedFirstLine(input: string): string {
+  const end = input.search(/[\r\n\u2028\u2029]/)
+  return sanitizeDocumentText(end === -1 ? input : input.slice(0, end))
+}
+
 export function sanitizeDocumentTextExtended(input: string): string {
   return normalizeBulletMarkers(
     reconstructParagraphs(

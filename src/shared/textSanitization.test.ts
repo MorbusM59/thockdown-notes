@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sanitizeDocumentText, sanitizeTextFragment } from './textSanitization';
+import { sanitizeDocumentText, sanitizedFirstLine, sanitizeTextFragment } from './textSanitization';
 import { normalizeInternalText } from '../editor/TextPolicy';
 
 describe('tab normalization protocol', () => {
@@ -38,3 +38,17 @@ describe('sanitizeTextFragment already satisfies normalizeInternalText', () => {
     expect(normalizeInternalText(sanitized)).toBe(sanitized);
   });
 });
+
+describe('sanitizedFirstLine', () => {
+  it('equals the first line of the sanitised document, for any text', () => {
+    const alphabet = ['a', 'B', ' ', '#', '\n', '\r', '\r\n', ' ', ' ', '\t', '<', '>', '<b>', '​', '﻿', '😀', '️', '\u0007', '-']
+    let seed = 11
+    const next = () => { seed = (1664525 * seed + 1013904223) >>> 0; return seed / 0x100000000 }
+    for (let trial = 0; trial < 3000; trial += 1) {
+      const length = Math.floor(next() * 24)
+      let text = ''
+      for (let i = 0; i < length; i += 1) text += alphabet[Math.floor(next() * alphabet.length)]
+      expect(sanitizedFirstLine(text)).toBe(sanitizeDocumentText(text).split('\n', 1)[0])
+    }
+  })
+})

@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, promises as fs } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import { sanitizeDocumentText, truncateTitle } from '../src/shared/textSanitization';
+import { sanitizeDocumentText, sanitizedFirstLine, truncateTitle } from '../src/shared/textSanitization';
 import { buildNextAutoAssignedId, buildNextAutoChapterId, isAutoAssignedChapterId, isAutoAssignedId, isValidUserAssignedId, normalizeAssignedIdInput } from '../src/shared/assignedIds';
 import { SEALED_ROOT_NOTE_IDS } from '../src/shared/helpGuide';
 import { ensureHelpNote } from './help/helpNote';
@@ -346,7 +346,7 @@ function checksumText(text: string): string {
 }
 
 function titleFromText(text: string): string {
-  const firstLine = normalizeText(text).split('\n', 1)[0] ?? '';
+  const firstLine = sanitizedFirstLine(text);
   if (firstLine.startsWith('# ')) {
     return truncateTitle(firstLine.slice(2).trim());
   }
@@ -804,13 +804,6 @@ export class DatabaseService {
     const findTagStmt = db.prepare('SELECT id FROM tags WHERE name = ?');
     const insertTagStmt = db.prepare('INSERT INTO tags (name) VALUES (?)');
 
-    // notes_fts is an FTS5 virtual table with no real unique constraint on
-    // noteId, so "INSERT OR REPLACE" can never detect a conflict -- it always
-    // inserts a fresh row, leaving the previous one in place. Must delete the
-    // old row first, same pattern already used by upsertNoteContent below.
-    const deleteFtsForNoteStmt = db.prepare('DELETE FROM notes_fts WHERE noteId = ?');
-    const insertFtsStmt = db.prepare('INSERT INTO notes_fts (noteId, title, content) VALUES (?, ?, ?)');
-    const deleteMissingFtsStmt = db.prepare('DELETE FROM notes_fts WHERE noteId = ?');
 
     const toIso = (timestampMs: number): string => new Date(timestampMs).toISOString();
 
@@ -863,16 +856,15 @@ export class DatabaseService {
         }
 
         deleteMissingNotesStmt.run(id);
-        deleteMissingFtsStmt.run(id);
+        this.removeStoredContent(id);
       }
     });
 
     tx(syncedRows);
 
-    for (const row of syncedRows) {
-      deleteFtsForNoteStmt.run(row.id);
-      insertFtsStmt.run(row.id, row.title, row.text);
-    }
+    db.transaction(() => {
+      for (const row of syncedRows) this.writeStoredContent(row.id, row.title, row.text);
+    })();
 
     this.normalizeAllTagPositions();
   }
@@ -882,19 +874,10 @@ export class DatabaseService {
    * bootstrapFromFilesystem() (see main.ts). Two independent fixes, each
    * safe by construction and unable to lose real user data:
    *
-   * 1. Dedupe notes_fts: keep only the highest-rowid (most recently
-   *    written) row per noteId, deleting older copies. This guards against
-   *    the "INSERT OR REPLACE never actually replaces on an FTS5 virtual
-   *    table" bug bootstrapFromFilesystem used to have (fixed at the
-   *    source, but any existing installation upgrading to this version
-   *    still carries the accumulated duplicates baked into its own .db
-   *    file -- this is the one-time migration that cleans those up) and
-   *    self-heals any future regression of the same class before it can
-   *    accumulate silently forever. notes_fts is a derived search index,
-   *    never the canonical source of a note's content (that's the `notes`
-   *    table plus the .md files bootstrapFromFilesystem already re-syncs
-   *    from every launch) -- so deleting extra rows here can only ever
-   *    discard stale search-index duplicates, never a user's actual note.
+   * 1. Drop stored content whose note no longer exists. Every deletion
+   *    path removes it (removeStoredContent), so an orphan is a leftover
+   *    from an older build or a future regression; note_content is only ever
+   *    a copy of a note that exists, so this cannot lose a live note's text.
    * 2. Conditionally VACUUM (see shouldVacuumForBloat's own doc comment for
    *    the threshold reasoning): SQLite never shrinks its file after
    *    deletes on its own, so a database that once had this same
@@ -902,7 +885,7 @@ export class DatabaseService {
    *    VACUUM doesn't touch any row's content -- it only repacks how the
    *    existing, already-correct rows are laid out on disk.
    */
-  sanitizeDatabase(): { dedupedFtsRows: number; backfilledNoteIds: number; backfilledChapterIds: number; repairedNoteIds: number; resealedFamilies: number; vacuumed: boolean; reclaimedBytes: number } {
+  sanitizeDatabase(): { orphanedContentRows: number; backfilledNoteIds: number; backfilledChapterIds: number; repairedNoteIds: number; resealedFamilies: number; vacuumed: boolean; reclaimedBytes: number } {
     const db = this.requireDb();
 
     const resealedFamilies = this.resealSealedFamilies();
@@ -910,9 +893,8 @@ export class DatabaseService {
     const backfilledNoteIds = this.backfillMissingNoteAssignedIds();
     const backfilledChapterIds = this.backfillMissingChapterIds();
 
-    const dedupedFtsRows = db.prepare(`
-      DELETE FROM notes_fts
-      WHERE rowid NOT IN (SELECT MAX(rowid) FROM notes_fts GROUP BY noteId)
+    const orphanedContentRows = db.prepare(`
+      DELETE FROM note_content WHERE noteId NOT IN (SELECT id FROM notes)
     `).run().changes;
 
     const pageCount = db.pragma('page_count', { simple: true }) as number;
@@ -929,7 +911,7 @@ export class DatabaseService {
       vacuumed = true;
     }
 
-    return { dedupedFtsRows, backfilledNoteIds, backfilledChapterIds, repairedNoteIds, resealedFamilies, vacuumed, reclaimedBytes };
+    return { orphanedContentRows, backfilledNoteIds, backfilledChapterIds, repairedNoteIds, resealedFamilies, vacuumed, reclaimedBytes };
   }
 
   /**
@@ -1236,9 +1218,7 @@ export class DatabaseService {
       input.previewBlockCache ?? null,
     );
 
-    db.prepare('DELETE FROM notes_fts WHERE noteId = ?').run(input.id);
-    db.prepare('INSERT INTO notes_fts (noteId, title, content) VALUES (?, ?, ?)')
-      .run(input.id, input.title, normalizedText);
+    this.writeStoredContent(input.id, input.title, normalizedText);
   }
 
   listNoteRecords(): NoteRecord[] {
@@ -2127,7 +2107,7 @@ export class DatabaseService {
    * guesses over one undifferentiated table.
    *
    * History is derived from content, never the reverse. So the stored content
-   * (`notes_fts`, written by upsertNoteContent on every save) is the answer,
+   * (`note_content`, written by upsertNoteContent on every save) is the answer,
    * and snapshots are consulted only as a legacy fallback: a note last written
    * by an older build may have no stored content row yet, and returning null
    * for it would present an existing note as empty.
@@ -2135,9 +2115,9 @@ export class DatabaseService {
   readStoredNoteContent(noteId: string): string | null {
     const db = this.requireDb();
 
-    const ftsRow = db.prepare('SELECT content FROM notes_fts WHERE noteId = ?').get(noteId) as { content: string } | undefined;
-    if (ftsRow?.content !== undefined && ftsRow.content !== null) {
-      return ftsRow.content;
+    const contentRow = db.prepare('SELECT content FROM note_content WHERE noteId = ?').get(noteId) as { content: string } | undefined;
+    if (contentRow?.content !== undefined && contentRow.content !== null) {
+      return contentRow.content;
     }
 
     const snapshotRow = db.prepare(`
@@ -2195,10 +2175,10 @@ export class DatabaseService {
     const tx = db.transaction(() => {
       for (const chapterNoteId of chapterNoteIds) {
         db.prepare('DELETE FROM notes WHERE id = ?').run(chapterNoteId);
-        db.prepare('DELETE FROM notes_fts WHERE noteId = ?').run(chapterNoteId);
+        this.removeStoredContent(chapterNoteId);
       }
       db.prepare('DELETE FROM notes WHERE id = ?').run(id);
-      db.prepare('DELETE FROM notes_fts WHERE noteId = ?').run(id);
+      this.removeStoredContent(id);
     });
     tx();
   }
@@ -2815,7 +2795,7 @@ export class DatabaseService {
     const tx = db.transaction(() => {
       db.prepare('DELETE FROM note_snapshots WHERE noteId = ?').run(noteId);
       db.prepare('DELETE FROM notes WHERE id = ?').run(noteId);
-      db.prepare('DELETE FROM notes_fts WHERE noteId = ?').run(noteId);
+      this.removeStoredContent(noteId);
     });
     tx();
   }
@@ -3857,10 +3837,15 @@ export class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_note_snapshots_note_timestamp
       ON note_snapshots(noteId, timestamp DESC);
 
-      CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
-        noteId UNINDEXED,
-        title,
-        content
+      -- Each note's stored text (see writeStoredContent). This is where an
+      -- external note's content lives, and the copy readStoredNoteContent
+      -- serves for every other note. A plain table keyed on the note id: it
+      -- used to be an FTS5 table (notes_fts), which tokenised the whole
+      -- document on every save for a full-text index nothing ever queried.
+      CREATE TABLE IF NOT EXISTS note_content (
+        noteId TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL
       );
 
       CREATE TABLE IF NOT EXISTS texture_pattern_cache (
@@ -4127,6 +4112,7 @@ export class DatabaseService {
     // is a no-op on a database that already has the table, so a widened
     // CHECK constraint only reaches an existing install through a rebuild.
     this.migrateMusicSongsSlotRange();
+    this.migrateStoredContentOutOfFts();
     this.purgeParentlessChapters();
     this.ensureNoteSnapshotsColumn('anchorBlockIndex', 'INTEGER');
     this.ensureNoteSnapshotsColumn('isFromDisk', 'INTEGER NOT NULL DEFAULT 0');
@@ -4303,6 +4289,51 @@ export class DatabaseService {
   }
 
   /**
+   * A note's stored text, written or replaced (and removed, below).
+   *
+   * The only two writers of note_content. The text used to live in an FTS5
+   * table addressed with `WHERE noteId = ?`, which FTS5 cannot index (every
+   * lookup read every stored document), and whose every write tokenised the
+   * whole text for a search index nothing queries -- measured on a 2MB
+   * external note as ~200ms synchronous on import and ~90ms on each save,
+   * plus a per-note scan of the whole index on every launch, since
+   * bootstrapFromFilesystem rewrites every note's row.
+   */
+  private writeStoredContent(noteId: string, title: string, content: string): void {
+    this.requireDb().prepare(`
+      INSERT INTO note_content (noteId, title, content) VALUES (?, ?, ?)
+      ON CONFLICT(noteId) DO UPDATE SET title = excluded.title, content = excluded.content
+    `).run(noteId, title, content);
+  }
+
+  private removeStoredContent(noteId: string): void {
+    this.requireDb().prepare('DELETE FROM note_content WHERE noteId = ?').run(noteId);
+  }
+
+  /**
+   * Moves the stored text out of the FTS5 table an older build kept it in,
+   * the newest row per note winning (that table accumulated duplicates, see
+   * sanitizeDatabase's history), then drops it. Idempotent: it does nothing
+   * once notes_fts is gone.
+   */
+  private migrateStoredContentOutOfFts(): void {
+    const db = this.requireDb();
+    const hasFts = db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'notes_fts'").get();
+    db.transaction(() => {
+      if (hasFts) {
+        db.prepare(`
+          INSERT INTO note_content (noteId, title, content)
+          SELECT noteId, title, content FROM notes_fts
+          WHERE rowid IN (SELECT MAX(rowid) FROM notes_fts GROUP BY noteId)
+          ON CONFLICT(noteId) DO NOTHING
+        `).run();
+        db.exec('DROP TABLE notes_fts');
+      }
+      db.exec('DROP TABLE IF EXISTS notes_fts_map');
+    })();
+  }
+
+  /**
    * A `chapterOnly` note with no `chapters` row and no live remembered
    * parent can't be reached from anywhere -- it isn't shown in any menu
    * view, it isn't anyone's chapter, and nothing can ever restore it.
@@ -4318,16 +4349,17 @@ export class DatabaseService {
    */
   private purgeParentlessChapters(): void {
     const db = this.requireDb();
-    db.exec(`
-      DELETE FROM notes_fts WHERE noteId IN (
-        SELECT id FROM notes WHERE chapterOnly = 1
-          AND id NOT IN (SELECT chapterNoteId FROM chapters)
-          AND (detachedChapterParentId IS NULL OR detachedChapterParentId NOT IN (SELECT id FROM notes))
-      );
-      DELETE FROM notes WHERE chapterOnly = 1
+    const parentless = db.prepare(`
+      SELECT id FROM notes WHERE chapterOnly = 1
         AND id NOT IN (SELECT chapterNoteId FROM chapters)
-        AND (detachedChapterParentId IS NULL OR detachedChapterParentId NOT IN (SELECT id FROM notes));
-    `);
+        AND (detachedChapterParentId IS NULL OR detachedChapterParentId NOT IN (SELECT id FROM notes))
+    `).all() as Array<{ id: string }>;
+    db.transaction(() => {
+      for (const { id } of parentless) {
+        this.removeStoredContent(id);
+        db.prepare('DELETE FROM notes WHERE id = ?').run(id);
+      }
+    })();
   }
 
   private ensureProtectedTags(): void {

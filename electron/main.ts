@@ -1589,7 +1589,7 @@ app.whenReady().then(async () => {
   await databaseService.initialize()
   await databaseService.bootstrapFromFilesystem()
   const sanitation = databaseService.sanitizeDatabase()
-  if (sanitation.dedupedFtsRows > 0 || sanitation.vacuumed) {
+  if (sanitation.orphanedContentRows > 0 || sanitation.vacuumed) {
     console.log('[db] startup sanitation', sanitation)
   }
   const sanity = databaseService.runSanityChecks()

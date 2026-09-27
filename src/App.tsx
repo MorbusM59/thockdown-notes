@@ -6355,9 +6355,11 @@ ${markdownHtml}
       const noteId = created.id
       console.debug('[external-note] created temp note for external file', { noteId, filePath })
 
+      // No saveNote here. createNote already stored this text through the
+      // same main-process normalisation saveNote would apply, and set the
+      // note clean and in sync; a second call wrote the whole file again
+      // (and re-indexed it) for nothing.
       const normalizedContent = normalizeInternalText(content)
-      await notesApi.saveNote({ id: noteId, text: normalizedContent })
-      console.debug('[external-note] saved imported external content into temp note', { noteId, filePath, contentLength: normalizedContent.length })
       // The note's baseline: what the FILE held, stamped with the file's own
       // modified time rather than the moment of import. Marked isFromDisk so
       // it is identifiable outright -- everything that later asks "has this

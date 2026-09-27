@@ -18,7 +18,7 @@ import type {
   SaveNoteInput,
   TagSummary,
 } from '../src/shared/noteLifecycle';
-import { sanitizeDocumentText, truncateTitle } from '../src/shared/textSanitization';
+import { sanitizeDocumentText, sanitizedFirstLine, truncateTitle } from '../src/shared/textSanitization';
 import { computeHeadingAnchors, formatHeadingAnchorFragment, formatOutlineEntryLine, formatOutlineRootTitleLine, headingsChanged, parseMarkdownHeading, stripMarkdownInlineFormatting } from '../src/shared/tableOfContentsText';
 import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, findOpenItemSourceAtLine, parseOpenItemsGroups, toggleChecklistItemByText } from '../src/shared/openItemsText';
 import { resolveIdentityLabel } from '../src/shared/tabLabels';
@@ -52,7 +52,7 @@ function checksumText(text: string): string {
 }
 
 function titleFromText(text: string): string {
-  const firstLine = normalizeText(text).split('\n', 1)[0] ?? '';
+  const firstLine = sanitizedFirstLine(text);
   if (firstLine.startsWith('# ')) {
     return truncateTitle(firstLine.slice(2).trim());
   }
