@@ -18,18 +18,59 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag, already pushed (e.g. v0.7.0)"
+        description: "Release tag (e.g. v0.7.0); created at `target` if it does not exist yet"
         required: true
+      target:
+        description: "Commit to tag when the tag does not exist yet (blank = the tip of the dispatched ref)"
+        required: false
+        default: ""
       notes:
         description: "Release notes (markdown); becomes the release body verbatim"
         required: true
 
 permissions:
   contents: write
-  actions: read
+  actions: write
 
 jobs:
+  # Creates the release (and, through it, the tag -- some environments cannot
+  # push tags) with its notes and title, then starts the macOS build of that
+  # tag. A tag made with this workflow's token triggers nothing by itself,
+  # so build-mac.yml is dispatched explicitly, which the token is allowed to do.
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      dispatched_at: ${{ steps.mac.outputs.dispatched_at }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Create or update the prerelease
+        env:
+          NOTES: ${{ inputs.notes }}
+          TARGET: ${{ inputs.target || github.sha }}
+        run: |
+          printf '%s\n' "$NOTES" > notes.md
+          # Continue the "Alpha Release #N" numbering, ignoring this tag's own
+          # release (build-mac may already have created one titled by tag).
+          NEXT=$(gh release list -R "$GITHUB_REPOSITORY" --limit 100 --json name,tagName \
+            --jq "[.[] | select(.tagName != \"$TAG\") | .name | capture(\"Alpha Release #(?<n>[0-9]+)\") | .n | tonumber] | (max // 0) + 1")
+          TITLE="Alpha Release #$NEXT"
+          echo "title: $TITLE"
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --title "$TITLE" --notes-file notes.md --prerelease
+          else
+            gh release create "$TAG" -R "$GITHUB_REPOSITORY" --prerelease --title "$TITLE" --notes-file notes.md --target "$TARGET"
+          fi
+
+      - name: Start the macOS build of the tag
+        id: mac
+        run: |
+          echo "dispatched_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          gh workflow run build-mac.yml -R "$GITHUB_REPOSITORY" --ref "${{ github.ref_name }}" -f tag="$TAG"
+
   windows:
+    needs: prepare
     runs-on: windows-latest
     outputs:
       hashes: ${{ steps.hash.outputs.hashes }}
@@ -70,23 +111,6 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
-      - name: Create or update the prerelease
-        env:
-          NOTES: ${{ inputs.notes }}
-        run: |
-          printf '%s\n' "$NOTES" > notes.md
-          # Continue the "Alpha Release #N" numbering, ignoring this tag's own
-          # release (the mac job may already have created it, titled by tag).
-          NEXT=$(gh release list --limit 100 --json name,tagName \
-            --jq "[.[] | select(.tagName != \"$TAG\") | .name | capture(\"Alpha Release #(?<n>[0-9]+)\") | .n | tonumber] | (max // 0) + 1")
-          TITLE="Alpha Release #$NEXT"
-          echo "title: $TITLE"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release edit "$TAG" --title "$TITLE" --notes-file notes.md --prerelease
-          else
-            gh release create "$TAG" --prerelease --title "$TITLE" --notes-file notes.md
-          fi
-
       - name: Hash and upload the Windows artifacts
         id: hash
         run: |
@@ -105,7 +129,7 @@ jobs:
           gh release upload "$TAG" "${FILES[@]}" --clobber
 
   checksums:
-    needs: windows
+    needs: [prepare, windows]
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -113,10 +137,19 @@ jobs:
       WINDOWS_HASHES: ${{ needs.windows.outputs.hashes }}
     steps:
       - name: Wait for the macOS build of this tag
+        env:
+          SINCE: ${{ needs.prepare.outputs.dispatched_at }}
         run: |
-          RUN_ID=$(gh run list -R "$GITHUB_REPOSITORY" --workflow build-mac.yml --limit 30 \
-            --json databaseId,headBranch --jq "[.[] | select(.headBranch == \"$TAG\")][0].databaseId")
-          if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
+          # The run prepare dispatched: the first build-mac dispatch at or after
+          # that moment. Created within seconds, so a short bounded look.
+          RUN_ID=""
+          for attempt in 1 2 3 4 5 6; do
+            RUN_ID=$(gh run list -R "$GITHUB_REPOSITORY" --workflow build-mac.yml --event workflow_dispatch --limit 20 \
+              --json databaseId,createdAt --jq "[.[] | select(.createdAt >= \"$SINCE\")] | sort_by(.createdAt) | .[0].databaseId // empty")
+            [ -n "$RUN_ID" ] && break
+            sleep 10
+          done
+          if [ -z "$RUN_ID" ]; then
             echo "::warning::no build-mac run found for $TAG -- the DMG will be missing"
             exit 0
           fi

@@ -115,11 +115,14 @@ To redo the notes for a release that already exists, edit
 `.github/workflows/release-windows.yml` is the second half of the protocol run
 on GitHub's runners, for a release cut from somewhere that cannot build
 Windows or has no `gh` (a cloud session). Bump `package.json` and
-`package-lock.json`, commit `Release vX.Y.Z` on `main`, tag it, push both --
-which starts `build-mac.yml` as usual -- then dispatch the workflow from
-`main` with the tag and the release notes as inputs. It creates or updates
-the prerelease (notes, `Alpha Release #N` title), builds and uploads the
-Windows installer and portable zip, waits for the tag's mac run, verifies
+`package-lock.json`, commit `Release vX.Y.Z` on `main` and push it, then
+dispatch the workflow from `main` with the tag, the commit to tag (`target`)
+and the release notes as inputs. It creates or updates the prerelease
+(notes, `Alpha Release #N` title) -- creating the tag with it, because a
+cloud session's git proxy refuses tag pushes -- dispatches `build-mac.yml`
+for that tag (a tag made by the workflow's own token triggers no other
+workflow), builds and uploads the Windows installer and portable zip, waits
+for that mac run, verifies
 every asset against the hash taken where it was built, and publishes
 `SHA256SUMS.txt` -- the same end state as `npm run release`, so a later
 `npm run release` sees a complete release and bumps normally.
