@@ -54,6 +54,7 @@ import { armHold, HOLD_COMMIT_MS, HOLD_CONFIRM_MS } from '../shared/holdTiming'
 import { newSoundscapeId, neutralSoundscape } from '../shared/soundscapeFile'
 import { exportSoundscapes } from './soundscapeFileActions'
 import { useNonPassiveWheel } from '../shared/useNonPassiveWheel'
+import { OptionsSliderRows } from './OptionsSliderRows'
 import { OptionsSubsectionLabel } from './OptionsSubsectionLabel'
 
 const KIND_LOOK: Record<SoundscapeChannelKind, { icon: string; label: string }> = {
@@ -164,6 +165,8 @@ interface ControlSpec {
 interface ControlGroup {
   label: string
   controls: ControlSpec[]
+  /** Row sizes, where the default rule (OptionsSliderRows) would split sliders that belong together. */
+  rows?: number[]
 }
 
 const unit = (key: string, track: string, tooltip: string, format: (value: number) => string): ControlSpec => (
@@ -210,7 +213,7 @@ const CONTROLS: { [K in SoundscapeChannelKind]: ControlGroup[] } = {
   rain: [
     {
       label: 'Sound',
-      // Rows of three: the surface, then drops, wash, drips and splashes
+      // In rows of three (OptionsSliderRows): the surface, then drops, wash, drips and splashes
       // each as amount, level and tone.
       controls: [
         VOLUME,
@@ -265,7 +268,7 @@ const CONTROLS: { [K in SoundscapeChannelKind]: ControlGroup[] } = {
   water: [
     {
       label: 'Sound',
-      // Rows of three: the whole brook, then the bubbles (how many, how
+      // In rows of three (OptionsSliderRows): the whole brook, then the bubbles (how many, how
       // loud, how big), their shape, and the rush beneath them.
       controls: [
         VOLUME,
@@ -290,7 +293,7 @@ const CONTROLS: { [K in SoundscapeChannelKind]: ControlGroup[] } = {
   fire: [
     {
       label: 'Sound',
-      // Rows of three: the whole fire, then crackle, pops and hiss each as
+      // In rows of three (OptionsSliderRows): the whole fire, then crackle, pops and hiss each as
       // amount, level and tone, then how the flames move.
       controls: [
         VOLUME,
@@ -337,6 +340,9 @@ const CONTROLS: { [K in SoundscapeChannelKind]: ControlGroup[] } = {
  */
 const ENVIRONMENT_CONTROLS: ControlGroup[] = [{
   label: 'Environment',
+  // Four sliders shape the space and two the weather, so rows of two keep
+  // each together where rows of three would put amount beside the gusts.
+  rows: [2, 2, 2],
   controls: [
     unit('size', 'size', 'A small room to a wide valley: how long the space rings, and how late its first reflection', (value) => `${formatSeconds(spaceDecaySec(value))} decay`),
     unit('damping', 'damping', 'A bright tail, or one that darkens fast, as open air and foliage swallow the highs', (value) => formatAmount(value, 'Bright', 'Dark')),
@@ -394,6 +400,7 @@ function ControlGroups({ idPrefix, groups, values, defaults, disabled, name, onC
       {groups.map((group) => (
         <div className="soundscape-control-group" role="group" aria-label={`${name} ${group.label.toLowerCase()}`} key={group.label}>
           <OptionsSubsectionLabel>{group.label}</OptionsSubsectionLabel>
+          <OptionsSliderRows rows={group.rows}>
           {group.controls.map((spec) => (
             <CompactScrollbarSlider
               key={spec.key}
@@ -411,6 +418,7 @@ function ControlGroups({ idPrefix, groups, values, defaults, disabled, name, onC
               onCommit={(position) => onCommit(spec.key, fromPosition(spec, position))}
             />
           ))}
+          </OptionsSliderRows>
         </div>
       ))}
     </>

@@ -4,6 +4,7 @@ import { useRef } from 'react'
 import { AccordionGroup, AccordionSection } from '../components/AccordionSection'
 import { CompactScrollbarSlider } from '../components/CompactScrollbarSlider'
 import { SoundscapeOptions } from './SoundscapeOptions'
+import { OptionsSliderRows } from './OptionsSliderRows'
 import { OptionsSubsectionLabel } from './OptionsSubsectionLabel'
 import { exportSoundscapes, importSoundscapes } from './soundscapeFileActions'
 import type { SoundscapePreferences } from '../shared/soundscape'
@@ -2179,13 +2180,16 @@ export function SidebarOptionsPanel({
         iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout."
       >
 <div className="utility-setting-slider-stack" aria-label="CSS filter controls">
-          <CompactScrollbarSlider id="filter-invert" min={0} max={1} step={0.01} value={filterInvert} trackLabel="invert" ariaLabel="Invert" defaultValue={0} onCommit={setFilterInvert} />
-          <CompactScrollbarSlider id="filter-sepia" min={0} max={1} step={0.01} value={filterSepia} trackLabel="sepia" ariaLabel="Sepia" defaultValue={0} onCommit={setFilterSepia} />
-          <CompactScrollbarSlider id="filter-hue-rotate" min={0} max={360} step={1} value={filterHueRotate} trackLabel="hue-rotate" ariaLabel="Hue rotate (degrees)" defaultValue={0} onCommit={setFilterHueRotate} />
-          <CompactScrollbarSlider id="filter-brightness" min={0} max={2} step={0.01} value={filterBrightness} trackLabel="brightness" ariaLabel="Brightness" defaultValue={1} onCommit={setFilterBrightness} />
-          <CompactScrollbarSlider id="filter-contrast" min={0} max={2} step={0.01} value={filterContrast} trackLabel="contrast" ariaLabel="Contrast" defaultValue={1} onCommit={setFilterContrast} />
-          <CompactScrollbarSlider id="filter-saturate" min={0} max={1} step={0.001} value={filterSaturate} trackLabel="saturate" ariaLabel="Saturate" defaultValue={0.5} onCommit={setFilterSaturate} />
-          <CompactScrollbarSlider id="filter-colorize" min={0} max={1} step={0.01} value={filterColorize} trackLabel="colorize" ariaLabel="Colorize opacity" defaultValue={0} onCommit={setFilterColorize} />
+          {/* Colour, then light, then the whole-image effects. */}
+          <OptionsSliderRows rows={[3, 2, 2]}>
+            <CompactScrollbarSlider id="filter-hue-rotate" min={0} max={360} step={1} value={filterHueRotate} trackLabel="hue-rotate" ariaLabel="Hue rotate (degrees)" defaultValue={0} onCommit={setFilterHueRotate} />
+            <CompactScrollbarSlider id="filter-saturate" min={0} max={1} step={0.001} value={filterSaturate} trackLabel="saturate" ariaLabel="Saturate" defaultValue={0.5} onCommit={setFilterSaturate} />
+            <CompactScrollbarSlider id="filter-colorize" min={0} max={1} step={0.01} value={filterColorize} trackLabel="colorize" ariaLabel="Colorize opacity" defaultValue={0} onCommit={setFilterColorize} />
+            <CompactScrollbarSlider id="filter-brightness" min={0} max={2} step={0.01} value={filterBrightness} trackLabel="brightness" ariaLabel="Brightness" defaultValue={1} onCommit={setFilterBrightness} />
+            <CompactScrollbarSlider id="filter-contrast" min={0} max={2} step={0.01} value={filterContrast} trackLabel="contrast" ariaLabel="Contrast" defaultValue={1} onCommit={setFilterContrast} />
+            <CompactScrollbarSlider id="filter-invert" min={0} max={1} step={0.01} value={filterInvert} trackLabel="invert" ariaLabel="Invert" defaultValue={0} onCommit={setFilterInvert} />
+            <CompactScrollbarSlider id="filter-sepia" min={0} max={1} step={0.01} value={filterSepia} trackLabel="sepia" ariaLabel="Sepia" defaultValue={0} onCommit={setFilterSepia} />
+          </OptionsSliderRows>
         </div>
       </AccordionSection>
 
@@ -2197,74 +2201,76 @@ export function SidebarOptionsPanel({
         iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout."
       >
 <div className="utility-setting-slider-stack" aria-label="Borders and spacing controls">
-          <CompactScrollbarSlider
-            id="ui-border-radius"
-            min={BORDER_RADIUS_REGULAR_MIN_PX}
-            max={BORDER_RADIUS_REGULAR_MAX_PX}
-            step={1}
-            value={borderRadiusRegularPx}
-            trackLabel="radius"
-            ariaLabel="UI border radius in pixels"
-            defaultValue={BORDER_RADIUS_REGULAR_DEFAULT_PX}
-            onCommit={(value) => setBorderRadiusRegularPx(
-              clamp(
-                Math.round(value),
-                BORDER_RADIUS_REGULAR_MIN_PX,
-                BORDER_RADIUS_REGULAR_MAX_PX,
-              ),
-            )}
-          />
-          <CompactScrollbarSlider
-            id="ui-spacing-regular"
-            min={SPACING_REGULAR_MIN_PX}
-            max={SPACING_REGULAR_MAX_PX}
-            step={1}
-            value={spacingRegularPx}
-            trackLabel="spacing"
-            ariaLabel="UI spacing in pixels"
-            defaultValue={SPACING_REGULAR_DEFAULT_PX}
-            onCommit={(value) => setSpacingRegularPx(
-              clamp(
-                Math.round(value),
-                SPACING_REGULAR_MIN_PX,
-                SPACING_REGULAR_MAX_PX,
-              ),
-            )}
-          />
-          <CompactScrollbarSlider
-            id="ui-border-alpha"
-            min={BORDER_ALPHA_PERCENT_MIN}
-            max={BORDER_ALPHA_PERCENT_MAX}
-            step={1}
-            value={borderAlphaPercent}
-            trackLabel="border α"
-            ariaLabel="Border alpha adjustment, percent"
-            defaultValue={BORDER_ALPHA_PERCENT_DEFAULT}
-            onCommit={(value) => setBorderAlphaPercent(
-              clamp(
-                Math.round(value),
-                BORDER_ALPHA_PERCENT_MIN,
-                BORDER_ALPHA_PERCENT_MAX,
-              ),
-            )}
-          />
-          <CompactScrollbarSlider
-            id="ui-box-shadow-alpha"
-            min={BOX_SHADOW_ALPHA_PERCENT_MIN}
-            max={BOX_SHADOW_ALPHA_PERCENT_MAX}
-            step={1}
-            value={boxShadowAlphaPercent}
-            trackLabel="shadow α"
-            ariaLabel="Box shadow alpha adjustment, percent"
-            defaultValue={BOX_SHADOW_ALPHA_PERCENT_DEFAULT}
-            onCommit={(value) => setBoxShadowAlphaPercent(
-              clamp(
-                Math.round(value),
-                BOX_SHADOW_ALPHA_PERCENT_MIN,
-                BOX_SHADOW_ALPHA_PERCENT_MAX,
-              ),
-            )}
-          />
+          <OptionsSliderRows>
+            <CompactScrollbarSlider
+              id="ui-border-radius"
+              min={BORDER_RADIUS_REGULAR_MIN_PX}
+              max={BORDER_RADIUS_REGULAR_MAX_PX}
+              step={1}
+              value={borderRadiusRegularPx}
+              trackLabel="radius"
+              ariaLabel="UI border radius in pixels"
+              defaultValue={BORDER_RADIUS_REGULAR_DEFAULT_PX}
+              onCommit={(value) => setBorderRadiusRegularPx(
+                clamp(
+                  Math.round(value),
+                  BORDER_RADIUS_REGULAR_MIN_PX,
+                  BORDER_RADIUS_REGULAR_MAX_PX,
+                ),
+              )}
+            />
+            <CompactScrollbarSlider
+              id="ui-spacing-regular"
+              min={SPACING_REGULAR_MIN_PX}
+              max={SPACING_REGULAR_MAX_PX}
+              step={1}
+              value={spacingRegularPx}
+              trackLabel="spacing"
+              ariaLabel="UI spacing in pixels"
+              defaultValue={SPACING_REGULAR_DEFAULT_PX}
+              onCommit={(value) => setSpacingRegularPx(
+                clamp(
+                  Math.round(value),
+                  SPACING_REGULAR_MIN_PX,
+                  SPACING_REGULAR_MAX_PX,
+                ),
+              )}
+            />
+            <CompactScrollbarSlider
+              id="ui-border-alpha"
+              min={BORDER_ALPHA_PERCENT_MIN}
+              max={BORDER_ALPHA_PERCENT_MAX}
+              step={1}
+              value={borderAlphaPercent}
+              trackLabel="border α"
+              ariaLabel="Border alpha adjustment, percent"
+              defaultValue={BORDER_ALPHA_PERCENT_DEFAULT}
+              onCommit={(value) => setBorderAlphaPercent(
+                clamp(
+                  Math.round(value),
+                  BORDER_ALPHA_PERCENT_MIN,
+                  BORDER_ALPHA_PERCENT_MAX,
+                ),
+              )}
+            />
+            <CompactScrollbarSlider
+              id="ui-box-shadow-alpha"
+              min={BOX_SHADOW_ALPHA_PERCENT_MIN}
+              max={BOX_SHADOW_ALPHA_PERCENT_MAX}
+              step={1}
+              value={boxShadowAlphaPercent}
+              trackLabel="shadow α"
+              ariaLabel="Box shadow alpha adjustment, percent"
+              defaultValue={BOX_SHADOW_ALPHA_PERCENT_DEFAULT}
+              onCommit={(value) => setBoxShadowAlphaPercent(
+                clamp(
+                  Math.round(value),
+                  BOX_SHADOW_ALPHA_PERCENT_MIN,
+                  BOX_SHADOW_ALPHA_PERCENT_MAX,
+                ),
+              )}
+            />
+          </OptionsSliderRows>
         </div>
       </AccordionSection>
 
@@ -2853,122 +2859,127 @@ export function SidebarOptionsPanel({
               </button>
             ))}
           </div>
-          <CompactScrollbarSlider
-            id="audio-key-volume"
-            min={0}
-            max={1}
-            step={0.01}
-            value={audioKeyVolume}
-            trackLabel="key"
-            ariaLabel="Key volume"
-            defaultValue={0.5}
-            onCommit={(value) => setAudioKeyVolume(clamp(value, 0, 1))}
-          />
-          <CompactScrollbarSlider
-            id="audio-key-variance"
-            min={0}
-            max={0.5}
-            step={0.005}
-            value={audioKeyVariance}
-            trackLabel="variance"
-            ariaLabel="Key sound variance"
-            defaultValue={0}
-            onCommit={(value) => {
-              const nextValue = clamp(value, 0, 0.5)
-              setAudioKeyVariance(nextValue)
-              typingSoundManager.setTypingSoundVariance(nextValue)
-            }}
-          />
-          <CompactScrollbarSlider
-            id="audio-pitch"
-            min={-100}
-            max={100}
-            step={1}
-            value={audioPitch}
-            trackLabel="pitch"
-            ariaLabel="Global pitch"
-            defaultValue={0}
-            onCommit={(value) => {
-              const nextValue = clamp(value, -100, 100)
-              setAudioPitch(nextValue)
-              typingSoundManager.setTypingSoundPitch(nextValue)
-            }}
-          />
+          <OptionsSliderRows>
+            <CompactScrollbarSlider
+              id="audio-key-volume"
+              min={0}
+              max={1}
+              step={0.01}
+              value={audioKeyVolume}
+              trackLabel="key"
+              ariaLabel="Key volume"
+              defaultValue={0.5}
+              onCommit={(value) => setAudioKeyVolume(clamp(value, 0, 1))}
+            />
+            <CompactScrollbarSlider
+              id="audio-key-variance"
+              min={0}
+              max={0.5}
+              step={0.005}
+              value={audioKeyVariance}
+              trackLabel="variance"
+              ariaLabel="Key sound variance"
+              defaultValue={0}
+              onCommit={(value) => {
+                const nextValue = clamp(value, 0, 0.5)
+                setAudioKeyVariance(nextValue)
+                typingSoundManager.setTypingSoundVariance(nextValue)
+              }}
+            />
+            <CompactScrollbarSlider
+              id="audio-pitch"
+              min={-100}
+              max={100}
+              step={1}
+              value={audioPitch}
+              trackLabel="pitch"
+              ariaLabel="Global pitch"
+              defaultValue={0}
+              onCommit={(value) => {
+                const nextValue = clamp(value, -100, 100)
+                setAudioPitch(nextValue)
+                typingSoundManager.setTypingSoundPitch(nextValue)
+              }}
+            />
+            <CompactScrollbarSlider
+              id="audio-pitch-jitter"
+              min={0}
+              max={0.5}
+              step={0.01}
+              value={pitchJitterAmount}
+              trackLabel="jitter"
+              ariaLabel="Pitch jitter"
+              defaultValue={0}
+              onCommit={(value) => {
+                const nextValue = clamp(value, 0, 0.5)
+                setPitchJitterAmount(nextValue)
+                typingSoundManager.setPitchJitterAmount(nextValue)
+              }}
+            />
+          </OptionsSliderRows>
           <OptionsSubsectionLabel>Mix</OptionsSubsectionLabel>
-          <CompactScrollbarSlider
-            id="audio-bass-volume"
-            min={0}
-            max={1}
-            step={0.01}
-            value={audioBassVolume}
-            trackLabel="bass"
-            ariaLabel="Bass volume"
-            defaultValue={0}
-            onCommit={(value) => setAudioBassVolume(clamp(value, 0, 1))}
-          />
-          <CompactScrollbarSlider
-            id="audio-treble-volume"
-            min={0}
-            max={1}
-            step={0.01}
-            value={audioTrebleVolume}
-            trackLabel="treble"
-            ariaLabel="Treble volume"
-            defaultValue={0}
-            onCommit={(value) => setAudioTrebleVolume(clamp(value, 0, 1))}
-          />
-          <CompactScrollbarSlider
-            id="audio-reverb-strength"
-            min={0}
-            max={1}
-            step={0.01}
-            value={audioReverbStrength}
-            trackLabel="reverb"
-            ariaLabel="Reverb strength"
-            defaultValue={0}
-            onCommit={(value) => setAudioReverbStrength(clamp(value, 0, 1))}
-          />
-          <CompactScrollbarSlider
-            id="audio-reverb-space"
-            min={0}
-            max={1}
-            step={0.01}
-            value={audioReverbSpace}
-            trackLabel="room"
-            ariaLabel="Reverb space"
-            defaultValue={0}
-            onCommit={(value) => setAudioReverbSpace(clamp(value, 0, 1))}
-          />
-          <CompactScrollbarSlider
-            id="audio-pitch-jitter"
-            min={0}
-            max={0.5}
-            step={0.01}
-            value={pitchJitterAmount}
-            trackLabel="jitter"
-            ariaLabel="Pitch jitter"
-            defaultValue={0}
-            onCommit={(value) => {
-              const nextValue = clamp(value, 0, 0.5)
-              setPitchJitterAmount(nextValue)
-              typingSoundManager.setPitchJitterAmount(nextValue)
-            }}
-          />
-          <CompactScrollbarSlider
-            id="audio-spatial"
-            min={-100}
-            max={100}
-            step={1}
-            value={audioSpatial}
-            trackLabel="spatial"
-            ariaLabel="Stereo spatial mode: left of center pans by keyboard key position, right of center pans by caret position on the line"
-            defaultValue={0}
-            onCommit={(value) => {
-              const nextValue = clamp(value, -100, 100)
-              setAudioSpatial(nextValue)
-              typingSoundManager.setSpatialAmount(nextValue)
-            }}
-          />
+          {/* Tone, then the space the keys sound in. */}
+          <OptionsSliderRows rows={[2, 3]}>
+            <CompactScrollbarSlider
+              id="audio-bass-volume"
+              min={0}
+              max={1}
+              step={0.01}
+              value={audioBassVolume}
+              trackLabel="bass"
+              ariaLabel="Bass volume"
+              defaultValue={0}
+              onCommit={(value) => setAudioBassVolume(clamp(value, 0, 1))}
+            />
+            <CompactScrollbarSlider
+              id="audio-treble-volume"
+              min={0}
+              max={1}
+              step={0.01}
+              value={audioTrebleVolume}
+              trackLabel="treble"
+              ariaLabel="Treble volume"
+              defaultValue={0}
+              onCommit={(value) => setAudioTrebleVolume(clamp(value, 0, 1))}
+            />
+            <CompactScrollbarSlider
+              id="audio-reverb-strength"
+              min={0}
+              max={1}
+              step={0.01}
+              value={audioReverbStrength}
+              trackLabel="reverb"
+              ariaLabel="Reverb strength"
+              defaultValue={0}
+              onCommit={(value) => setAudioReverbStrength(clamp(value, 0, 1))}
+            />
+            <CompactScrollbarSlider
+              id="audio-reverb-space"
+              min={0}
+              max={1}
+              step={0.01}
+              value={audioReverbSpace}
+              trackLabel="room"
+              ariaLabel="Reverb space"
+              defaultValue={0}
+              onCommit={(value) => setAudioReverbSpace(clamp(value, 0, 1))}
+            />
+            <CompactScrollbarSlider
+              id="audio-spatial"
+              min={-100}
+              max={100}
+              step={1}
+              value={audioSpatial}
+              trackLabel="spatial"
+              ariaLabel="Stereo spatial mode: left of center pans by keyboard key position, right of center pans by caret position on the line"
+              defaultValue={0}
+              onCommit={(value) => {
+                const nextValue = clamp(value, -100, 100)
+                setAudioSpatial(nextValue)
+                typingSoundManager.setSpatialAmount(nextValue)
+              }}
+            />
+          </OptionsSliderRows>
         </div>
       </AccordionSection>
 
@@ -3004,53 +3015,55 @@ export function SidebarOptionsPanel({
         heading="Animations"
       >
 <div className="utility-setting-slider-stack" aria-label="Scroll curve settings">
-          <CompactScrollbarSlider
-            id="render-scroll-dynamic"
-            min={0.1}
-            max={5}
-            step={0.05}
-            value={renderScrollDynamic}
-            trackLabel="ramp"
-            ariaLabel="Curve dynamic parameter a"
-            defaultValue={5 / 3}
-            onCommit={(value) => setRenderScrollDynamic(clamp(value, 0.1, 5))}
-          />
-          <CompactScrollbarSlider
-            id="render-scroll-skew"
-            min={RENDER_SCROLL_SKEW_MIN}
-            max={RENDER_SCROLL_SKEW_MAX}
-            step={0.01}
-            value={renderScrollSkew}
-            trackLabel="shape"
-            ariaLabel="Curve skew (apex bias)"
-            defaultValue={0.5}
-            onCommit={(value) => setRenderScrollSkew(
-              Math.max(RENDER_SCROLL_SKEW_MIN, Math.min(RENDER_SCROLL_SKEW_MAX, value)),
-            )}
-          />
-          <CompactScrollbarSlider
-            id="render-scroll-total-time"
-            min={0}
-            max={2}
-            step={0.05}
-            value={renderScrollTotalTimeSec}
-            trackLabel="speed"
-            ariaLabel="Total time parameter t in seconds"
-            reverseScale
-            defaultValue={0.4}
-            onCommit={(value) => setRenderScrollTotalTimeSec(clamp(value, 0, 2))}
-          />
-          <CompactScrollbarSlider
-            id="render-scroll-max-speed"
-            min={1000}
-            max={100000}
-            step={1000}
-            value={renderScrollMaxSpeedPxPerSec}
-            trackLabel="max speed"
-            ariaLabel="Maximum scroll speed in pixels per second"
-            defaultValue={DEFAULT_RENDER_SCROLL_MAX_SPEED_PX_PER_SEC}
-            onCommit={(value) => setRenderScrollMaxSpeedPxPerSec(clamp(value, 1000, 100000))}
-          />
+          <OptionsSliderRows>
+            <CompactScrollbarSlider
+              id="render-scroll-dynamic"
+              min={0.1}
+              max={5}
+              step={0.05}
+              value={renderScrollDynamic}
+              trackLabel="ramp"
+              ariaLabel="Curve dynamic parameter a"
+              defaultValue={5 / 3}
+              onCommit={(value) => setRenderScrollDynamic(clamp(value, 0.1, 5))}
+            />
+            <CompactScrollbarSlider
+              id="render-scroll-skew"
+              min={RENDER_SCROLL_SKEW_MIN}
+              max={RENDER_SCROLL_SKEW_MAX}
+              step={0.01}
+              value={renderScrollSkew}
+              trackLabel="shape"
+              ariaLabel="Curve skew (apex bias)"
+              defaultValue={0.5}
+              onCommit={(value) => setRenderScrollSkew(
+                Math.max(RENDER_SCROLL_SKEW_MIN, Math.min(RENDER_SCROLL_SKEW_MAX, value)),
+              )}
+            />
+            <CompactScrollbarSlider
+              id="render-scroll-total-time"
+              min={0}
+              max={2}
+              step={0.05}
+              value={renderScrollTotalTimeSec}
+              trackLabel="speed"
+              ariaLabel="Total time parameter t in seconds"
+              reverseScale
+              defaultValue={0.4}
+              onCommit={(value) => setRenderScrollTotalTimeSec(clamp(value, 0, 2))}
+            />
+            <CompactScrollbarSlider
+              id="render-scroll-max-speed"
+              min={1000}
+              max={100000}
+              step={1000}
+              value={renderScrollMaxSpeedPxPerSec}
+              trackLabel="max speed"
+              ariaLabel="Maximum scroll speed in pixels per second"
+              defaultValue={DEFAULT_RENDER_SCROLL_MAX_SPEED_PX_PER_SEC}
+              onCommit={(value) => setRenderScrollMaxSpeedPxPerSec(clamp(value, 1000, 100000))}
+            />
+          </OptionsSliderRows>
         </div>
       </AccordionSection>
 
@@ -3069,86 +3082,88 @@ export function SidebarOptionsPanel({
       >
         <OptionsSubsectionLabel>Wheel</OptionsSubsectionLabel>
 <div className="utility-setting-slider-stack" aria-label="Wheel scrolling settings">
-          {/* Spin-to-keep-scrolling: `auto scroll` sets what counts as a
-              spin, `dampen` what happens after one, so they read in that
-              order. */}
-          <CompactScrollbarSlider
-            id="wheel-spin-threshold"
-            min={WHEEL_SPIN_THRESHOLD_OFF}
-            max={WHEEL_SPIN_THRESHOLD_MAX_MS}
-            step={WHEEL_SPIN_THRESHOLD_STEP_MS}
-            value={wheelSpinThresholdMs}
-            trackLabel="auto scroll"
-            formatValue={formatWheelSpinThreshold}
-            ariaLabel="Spin the wheel to keep scrolling: how close together nudges must be, in milliseconds. All the way left turns it off."
-            defaultValue={DEFAULT_WHEEL_SPIN_THRESHOLD_MS}
-            onCommit={(value) => setWheelSpinThresholdMs(
-              clamp(value, WHEEL_SPIN_THRESHOLD_OFF, WHEEL_SPIN_THRESHOLD_MAX_MS),
-            )}
-          />
-          {/* Reversed: the stored number is the divisor c, which gets
-              SMALLER as damping gets stronger, and a control whose right-hand
-              end damps less than its left would read backwards. */}
-          <CompactScrollbarSlider
-            id="wheel-spin-dampen"
-            min={WHEEL_SPIN_DAMPEN_ENDLESS}
-            max={WHEEL_SPIN_DAMPEN_DIVISOR_MAX}
-            step={WHEEL_SPIN_DAMPEN_DIVISOR_STEP}
-            value={wheelSpinDampenDivisor}
-            trackLabel="dampen"
-            ariaLabel="How quickly a wheel spin coasts to a stop. All the way left, it never stops on its own."
-            defaultValue={DEFAULT_WHEEL_SPIN_DAMPEN_DIVISOR}
-            onCommit={(value) => setWheelSpinDampenDivisor(
-              clamp(value, WHEEL_SPIN_DAMPEN_ENDLESS, WHEEL_SPIN_DAMPEN_DIVISOR_MAX),
-            )}
-          />
-          <CompactScrollbarSlider
-            id="wheel-spin-cutoff"
-            min={WHEEL_SPIN_CUTOFF_MIN_MS}
-            max={WHEEL_SPIN_CUTOFF_MAX_MS}
-            step={WHEEL_SPIN_CUTOFF_STEP_MS}
-            value={wheelSpinCutoffMs}
-            trackLabel="cut off"
-            ariaLabel="How slow a free scroll may get, in milliseconds between rows, before it stops."
-            defaultValue={DEFAULT_WHEEL_SPIN_CUTOFF_MS}
-            onCommit={(value) => setWheelSpinCutoffMs(
-              clamp(value, WHEEL_SPIN_CUTOFF_MIN_MS, WHEEL_SPIN_CUTOFF_MAX_MS),
-            )}
-          />
-          {/* What one notch is worth, per pane. Two controls rather than one
-              because the panes count in different units and always have: the
-              edit view lands on row boundaries, so its step can only be a
-              whole number of rows, while the render view has no grid to land
-              on and can take a fraction of a line. A single shared number
-              would have to be one or the other, and would be lying to one of
-              the panes. */}
-          <CompactScrollbarSlider
-            id="wheel-step-rows"
-            min={WHEEL_STEP_ROWS_MIN}
-            max={WHEEL_STEP_ROWS_MAX}
-            step={WHEEL_STEP_ROWS_STEP}
-            value={wheelStepRows}
-            trackLabel="edit step"
-            ariaLabel="How many rows one notch of the wheel scrolls in edit mode."
-            defaultValue={DEFAULT_WHEEL_STEP_ROWS}
-            onCommit={(value) => setWheelStepRows(
-              clamp(Math.round(value), WHEEL_STEP_ROWS_MIN, WHEEL_STEP_ROWS_MAX),
-            )}
-          />
-          <CompactScrollbarSlider
-            id="wheel-step-lines"
-            min={WHEEL_STEP_LINES_MIN}
-            max={WHEEL_STEP_LINES_MAX}
-            step={WHEEL_STEP_LINES_STEP}
-            value={wheelStepLines}
-            trackLabel="view step"
-            formatValue={formatWheelStepLines}
-            ariaLabel="How many lines of text one notch of the wheel scrolls in render view."
-            defaultValue={DEFAULT_WHEEL_STEP_LINES}
-            onCommit={(value) => setWheelStepLines(
-              clamp(value, WHEEL_STEP_LINES_MIN, WHEEL_STEP_LINES_MAX),
-            )}
-          />
+          <OptionsSliderRows rows={[3, 2]}>
+            {/* Spin-to-keep-scrolling: `auto scroll` sets what counts as a
+                spin, `dampen` what happens after one, so they read in that
+                order. */}
+            <CompactScrollbarSlider
+              id="wheel-spin-threshold"
+              min={WHEEL_SPIN_THRESHOLD_OFF}
+              max={WHEEL_SPIN_THRESHOLD_MAX_MS}
+              step={WHEEL_SPIN_THRESHOLD_STEP_MS}
+              value={wheelSpinThresholdMs}
+              trackLabel="auto scroll"
+              formatValue={formatWheelSpinThreshold}
+              ariaLabel="Spin the wheel to keep scrolling: how close together nudges must be, in milliseconds. All the way left turns it off."
+              defaultValue={DEFAULT_WHEEL_SPIN_THRESHOLD_MS}
+              onCommit={(value) => setWheelSpinThresholdMs(
+                clamp(value, WHEEL_SPIN_THRESHOLD_OFF, WHEEL_SPIN_THRESHOLD_MAX_MS),
+              )}
+            />
+            {/* Reversed: the stored number is the divisor c, which gets
+                SMALLER as damping gets stronger, and a control whose right-hand
+                end damps less than its left would read backwards. */}
+            <CompactScrollbarSlider
+              id="wheel-spin-dampen"
+              min={WHEEL_SPIN_DAMPEN_ENDLESS}
+              max={WHEEL_SPIN_DAMPEN_DIVISOR_MAX}
+              step={WHEEL_SPIN_DAMPEN_DIVISOR_STEP}
+              value={wheelSpinDampenDivisor}
+              trackLabel="dampen"
+              ariaLabel="How quickly a wheel spin coasts to a stop. All the way left, it never stops on its own."
+              defaultValue={DEFAULT_WHEEL_SPIN_DAMPEN_DIVISOR}
+              onCommit={(value) => setWheelSpinDampenDivisor(
+                clamp(value, WHEEL_SPIN_DAMPEN_ENDLESS, WHEEL_SPIN_DAMPEN_DIVISOR_MAX),
+              )}
+            />
+            <CompactScrollbarSlider
+              id="wheel-spin-cutoff"
+              min={WHEEL_SPIN_CUTOFF_MIN_MS}
+              max={WHEEL_SPIN_CUTOFF_MAX_MS}
+              step={WHEEL_SPIN_CUTOFF_STEP_MS}
+              value={wheelSpinCutoffMs}
+              trackLabel="cut off"
+              ariaLabel="How slow a free scroll may get, in milliseconds between rows, before it stops."
+              defaultValue={DEFAULT_WHEEL_SPIN_CUTOFF_MS}
+              onCommit={(value) => setWheelSpinCutoffMs(
+                clamp(value, WHEEL_SPIN_CUTOFF_MIN_MS, WHEEL_SPIN_CUTOFF_MAX_MS),
+              )}
+            />
+            {/* What one notch is worth, per pane. Two controls rather than one
+                because the panes count in different units and always have: the
+                edit view lands on row boundaries, so its step can only be a
+                whole number of rows, while the render view has no grid to land
+                on and can take a fraction of a line. A single shared number
+                would have to be one or the other, and would be lying to one of
+                the panes. */}
+            <CompactScrollbarSlider
+              id="wheel-step-rows"
+              min={WHEEL_STEP_ROWS_MIN}
+              max={WHEEL_STEP_ROWS_MAX}
+              step={WHEEL_STEP_ROWS_STEP}
+              value={wheelStepRows}
+              trackLabel="edit step"
+              ariaLabel="How many rows one notch of the wheel scrolls in edit mode."
+              defaultValue={DEFAULT_WHEEL_STEP_ROWS}
+              onCommit={(value) => setWheelStepRows(
+                clamp(Math.round(value), WHEEL_STEP_ROWS_MIN, WHEEL_STEP_ROWS_MAX),
+              )}
+            />
+            <CompactScrollbarSlider
+              id="wheel-step-lines"
+              min={WHEEL_STEP_LINES_MIN}
+              max={WHEEL_STEP_LINES_MAX}
+              step={WHEEL_STEP_LINES_STEP}
+              value={wheelStepLines}
+              trackLabel="view step"
+              formatValue={formatWheelStepLines}
+              ariaLabel="How many lines of text one notch of the wheel scrolls in render view."
+              defaultValue={DEFAULT_WHEEL_STEP_LINES}
+              onCommit={(value) => setWheelStepLines(
+                clamp(value, WHEEL_STEP_LINES_MIN, WHEEL_STEP_LINES_MAX),
+              )}
+            />
+          </OptionsSliderRows>
         </div>
       </AccordionSection>
 

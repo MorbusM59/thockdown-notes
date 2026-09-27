@@ -96,8 +96,8 @@
 }
 
 .soundscape-layer-controls {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: calc(var(--spacing-regular) * 0.75);
 }
 
@@ -109,15 +109,22 @@
   filter: var(--filter-highlight);
 }
 
-/* A group is a heading and its sliders on the layer's own grid: the group
-   element contributes no box, so its sliders flow three to a row like any
-   others, and its label takes a row of its own. */
+/* A group is a label and its rows of sliders in the layer's own column: the
+   group element contributes no box, so its label and rows are spaced like the
+   rest of the layer. */
 .soundscape-control-group {
   display: contents;
 }
 
-.soundscape-layer-controls .utility-setting-scrollbar-shell {
-  grid-column: span 2;
+/* A ROW OF SLIDERS in an options section, as OptionsSliderRows breaks a group
+   into them: each slider an equal share of the width. */
+.options-slider-row {
+  display: flex;
+  gap:     var(--toolbar-options-gap);
+}
+
+.options-slider-row > * {
+  flex:      1 1 0;
   min-width: 0;
 }
 
@@ -130,8 +137,8 @@
   grid-column:    1 / -1;
   box-sizing:     border-box;
   width:          100%;
-  margin-top:     var(--spacing-regular);
-  margin-bottom:     var(--spacing-small);
+  margin-top:     var(--spacing-large);
+  margin-bottom:     var(--spacing-regular);
   padding:       var(--spacing-small) var(--spacing-regular);
   border:  1px solid var(--color-subsection-border);
   border-radius:  var(--border-radius-small);
@@ -141,6 +148,7 @@
   text-align:     right;
   color:          var(--color-text-60);
   user-select:    none;
+  background-color: var(--color-input-backdrop);
 }
 
 .options-subsection-label:first-child {
