@@ -431,7 +431,13 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
   const [pendingDeletePresetId, setPendingDeletePresetId] = useState<string | null>(null)
   const channelSelectorRef = useRef<HTMLDivElement | null>(null)
   const channelHoldRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
-  const suppressNextContextMenuRef = useRef(false)
+  // A right press on a channel, until its release decides what it was: a
+  // short one solos, a held one has already disabled the channel (the hold
+  // clears this when it fires). Decided on the RELEASE rather than from
+  // contextmenu for the reason the preset export below gives -- contextmenu
+  // arrives on the press on some platforms, which soloed the channel at the
+  // start of every hold-to-disable.
+  const channelRightPressRef = useRef<{ pointerId: number; channelId: string } | null>(null)
   const [selectedId, setSelectedId] = useState<string>(() => AMBIENT_CHANNEL_ROSTER[0].id)
   // Holding right-click on a custom soundscape exports it, as it does on a
   // custom layout; a short right-click primes it for deletion instead. Which
@@ -443,6 +449,7 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
   useEffect(() => () => {
     channelHoldRef.current?.cancel()
     presetExportHoldRef.current?.cancel()
+    resetHoldRef.current?.cancel()
   }, [])
   const channels = preferences.settings.channels
   const selectedChannel = channels.find((channel) => channel.id === selectedId) ?? null
@@ -489,24 +496,32 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
   }
 
   const startChannelHold = (channel: AmbientChannelSettings, button: number, pointerId: number) => {
+    if (button === 2) channelRightPressRef.current = { pointerId, channelId: channel.id }
     if ((button === 0 && channel.enabled) || (button === 2 && !channel.enabled)) return
     if (button !== 0 && button !== 2) return
     channelHoldRef.current?.cancel()
     const enabled = button === 0
     const cancel = armHold(() => {
       channelHoldRef.current = null
-      if (button === 2) suppressNextContextMenuRef.current = true
+      if (button === 2) channelRightPressRef.current = null
       else setSelectedId(channel.id)
       updateChannel(channel.id, { enabled })
     }, HOLD_CONFIRM_MS)
     channelHoldRef.current = { pointerId, cancel }
   }
 
-  const endChannelHold = (pointerId: number) => {
+  /** `released` is a real release on the button; a cancel or the pointer leaving decides nothing. */
+  const endChannelHold = (pointerId: number, released: boolean) => {
     const hold = channelHoldRef.current
-    if (!hold || hold.pointerId !== pointerId) return
-    hold.cancel()
-    channelHoldRef.current = null
+    if (hold && hold.pointerId === pointerId) {
+      hold.cancel()
+      channelHoldRef.current = null
+    }
+    const rightPress = channelRightPressRef.current
+    if (rightPress && rightPress.pointerId === pointerId) {
+      channelRightPressRef.current = null
+      if (released) toggleChannelSolo(rightPress.channelId)
+    }
   }
 
   const handleChannelWheel = useCallback((event: WheelEvent) => {
@@ -718,17 +733,13 @@ export function AmbientSoundOptions({ preferences, onChange }: AmbientSoundOptio
                 data-secondary-press="action"
                 onClick={() => setSelectedId(channel.id)}
                 onPointerDown={(event) => startChannelHold(channel, event.button, event.pointerId)}
-                onPointerUp={(event) => endChannelHold(event.pointerId)}
-                onPointerCancel={(event) => endChannelHold(event.pointerId)}
-                onPointerLeave={(event) => endChannelHold(event.pointerId)}
+                onPointerUp={(event) => endChannelHold(event.pointerId, true)}
+                onPointerCancel={(event) => endChannelHold(event.pointerId, false)}
+                onPointerLeave={(event) => endChannelHold(event.pointerId, false)}
                 onContextMenu={(event) => {
+                  // The solo itself is decided on the release (endChannelHold).
                   event.preventDefault()
                   event.stopPropagation()
-                  if (suppressNextContextMenuRef.current) {
-                    suppressNextContextMenuRef.current = false
-                    return
-                  }
-                  toggleChannelSolo(channel.id)
                 }}
               >
                 <span className={`fa-solid ${look.icon}`} aria-hidden="true" />
