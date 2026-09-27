@@ -140,6 +140,16 @@ export const AudioControls = memo(function AudioControls({
   const seekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const seekIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const isSeekScrubbing = useRef(false)
+  /**
+   * Set by the release that ends a scrub, to swallow the click the browser
+   * dispatches right after it: pointerup has already cleared
+   * `isSeekScrubbing` by then, so without this every left-button scrub ended
+   * with an extra 20% press on top. The click follows its pointerup within
+   * the same task, so the mark is dropped at the end of that task -- a
+   * release off the button produces no click, and must not leave the next
+   * genuine one swallowed.
+   */
+  const swallowScrubClickRef = useRef(false)
   const activeRef = useRef(activeSlots)
   activeRef.current = activeSlots
 
@@ -595,7 +605,13 @@ export const AudioControls = memo(function AudioControls({
     if (event.button !== 0 && event.button !== 2) return
     const wasScrubbing = isSeekScrubbing.current
     stopSeekScrub()
-    if (wasScrubbing) return
+    if (wasScrubbing) {
+      if (event.button === 0) {
+        swallowScrubClickRef.current = true
+        window.setTimeout(() => { swallowScrubClickRef.current = false }, 0)
+      }
+      return
+    }
     if (event.button === 2) void jumpSong(direction)
   }, [stopSeekScrub, jumpSong])
 
@@ -608,6 +624,10 @@ export const AudioControls = memo(function AudioControls({
   const handleSeekActivate = useCallback(async (direction: SeekDirection) => {
     // A hold that already scrubbed swallows the click that ends it, so a
     // release after scrubbing does not tack an extra 20% on top.
+    if (swallowScrubClickRef.current) {
+      swallowScrubClickRef.current = false
+      return
+    }
     if (isSeekScrubbing.current || isCrossingSongRef.current) return
 
     const outcome = resolveSeekPress(
