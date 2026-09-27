@@ -58,7 +58,7 @@ describe('wheelNotchTravel', () => {
   it('carries the unpaid remainder into the next notch', () => {
     const first = retargetWheelNotchTravel(null, NOTCH_PX, 0)
     const { paidPx } = playTo(first, 0, 30)
-    const remaining = remainingWheelNotchTravelPx(first, 30)
+    const remaining = remainingWheelNotchTravelPx(first)
     expect(paidPx + remaining).toBeCloseTo(NOTCH_PX, 4)
 
     const second = retargetWheelNotchTravel(first, NOTCH_PX, 30)
@@ -113,6 +113,30 @@ describe('wheelNotchTravel', () => {
     expect(paidPx).toBeLessThan(0)
   })
 
+  it('loses nothing when a notch lands between frames', () => {
+    // Frames every 16ms; each notch arrives part-way between two of them,
+    // when the curve has moved on from what the scroller was last paid.
+    let travel = retargetWheelNotchTravel(null, NOTCH_PX, 0)
+    let totalPaid = 0
+    let frameMs = 0
+    for (let n = 1; n < 6; n += 1) {
+      while (frameMs + 16 < n * 23) {
+        frameMs += 16
+        totalPaid += takeWheelNotchTravelStep(travel, frameMs).pixels
+      }
+      travel = retargetWheelNotchTravel(travel, NOTCH_PX, n * 23)
+      frameMs = n * 23
+    }
+    totalPaid += playTo(travel, frameMs, frameMs + resolveWheelNotchTravelMs() + 40, 16).paidPx
+    expect(totalPaid).toBeCloseTo(NOTCH_PX * 6, 4)
+  })
+
+  it('hands a coast exactly what the scroller has not yet received', () => {
+    const travel = retargetWheelNotchTravel(null, NOTCH_PX, 0)
+    const { paidPx } = playTo(travel, 0, 32, 16)
+    expect(paidPx + remainingWheelNotchTravelPx(travel)).toBeCloseTo(NOTCH_PX, 6)
+  })
+
   it('owes the same total however coarsely it is sampled', () => {
     const fine = retargetWheelNotchTravel(null, NOTCH_PX, 0)
     const coarse = retargetWheelNotchTravel(null, NOTCH_PX, 0)
@@ -129,9 +153,8 @@ describe('wheelNotchTravel', () => {
     /** Where the notch has got to at a quarter, half and three quarters. */
     const notchProgress = () => {
       const durationMs = resolveWheelNotchTravelMs()
-      const travel = retargetWheelNotchTravel(null, NOTCH_PX, 0)
       const at = (fraction: number) =>
-        NOTCH_PX - remainingWheelNotchTravelPx(travel, durationMs * fraction)
+        playTo(retargetWheelNotchTravel(null, NOTCH_PX, 0), 0, durationMs * fraction, 1).paidPx
       return [at(0.25), at(0.5), at(0.75)]
     }
 

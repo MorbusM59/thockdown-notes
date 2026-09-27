@@ -165,13 +165,23 @@ function legDistance(leg: WheelNotchLeg): number {
  * -- a coast, which must not silently drop the notches the hand already
  * turned.
  */
-export function remainingWheelNotchTravelPx(
-  travel: WheelNotchTravel | null,
-  nowMs: number,
-): number {
+export function remainingWheelNotchTravelPx(travel: WheelNotchTravel | null): number {
   if (!travel) return 0
-  const elapsedSec = Math.max(0, (nowMs - travel.startMs) / 1000)
-  return legDistance(travel.leg) - sampleLeg(travel.leg, elapsedSec)
+  return owedPx(travel)
+}
+
+/**
+ * What the leg owes the SCROLLER: its distance less what has actually been
+ * paid out (`paidPx`), not less where the curve has got to by now. Between
+ * frames those differ by whatever the curve has covered since the last paid
+ * step, and measuring from the curve dropped that gap at every splice -- up
+ * to a frame of peak-speed travel per notch, so a fast turn of the wheel
+ * went visibly less far than the step setting. Measured from what was paid,
+ * distance is conserved by construction, and the monotonicity guard's
+ * surplus (paid ahead of the curve) is not paid twice.
+ */
+function owedPx(travel: WheelNotchTravel): number {
+  return legDistance(travel.leg) - travel.paidPx
 }
 
 /**
@@ -204,8 +214,7 @@ export function retargetWheelNotchTravel(
     (atSec) => sampleLeg(travel.leg, atSec),
     elapsedSec,
   )
-  const remainingPx = legDistance(travel.leg) - sampleLeg(travel.leg, elapsedSec)
-  const signedDistance = remainingPx + addedPx
+  const signedDistance = owedPx(travel) + addedPx
 
   return {
     leg: {

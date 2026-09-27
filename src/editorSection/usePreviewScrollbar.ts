@@ -1758,7 +1758,7 @@ export function usePreviewScrollbar({
       // as its carry, so a spin travels the distance the hand actually
       // turned. Then the glide is torn down, because two owners writing the
       // same scroller is the one thing this pane must never do.
-      const carryPx = remainingWheelNotchTravelPx(previewNotchTravelRef.current, performance.now())
+      const carryPx = remainingWheelNotchTravelPx(previewNotchTravelRef.current)
         + (direction * action.rows)
       if (isWheelTraceOn()) appendWheelTrace(`${traceLabel} carry=${carryPx.toFixed(2)}`)
       // The mean gap of the spin just detected -- the one thing the coast
