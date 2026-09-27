@@ -100,16 +100,24 @@ const READ_THUMB = () => {
 }
 
 async function openPreview(page, port, text) {
-  await page.goto(`http://localhost:${port}/`)
   // Both documents on the CHARACTER thumb. Which pane a note gets is decided
   // by its BLOCK count, and the loose list below is a single block -- so on
   // defaults it is continuous, with a pixel thumb, and "same length, same
   // thumb" would be comparing two different kinds of scrollbar. The override
-  // is the app's own (Debugging), persisted in the menu state.
-  await page.evaluate(async () => {
-    const state = await window.thockdownState.loadAppState()
-    await window.thockdownState.saveAppState({ ...state, menu: { ...state.menu, forceCharacterScrollbarThumb: true } })
+  // is the app's own (Debugging), persisted in the menu state -- written into
+  // the browser mock's stored state BEFORE the app boots, on every load:
+  // saving it through the running app does not hold, because the app writes
+  // its own menu state back.
+  await page.addInitScript(() => {
+    const key = 'thockdown-notes:browser-mock:v1'
+    try {
+      const store = JSON.parse(localStorage.getItem(key) ?? 'null')
+      if (!store?.appState) return
+      store.appState.menu = { ...(store.appState.menu ?? {}), forceCharacterScrollbarThumb: true }
+      localStorage.setItem(key, JSON.stringify(store))
+    } catch { /* a first load has no store yet; the reload after seeding does */ }
   })
+  await page.goto(`http://localhost:${port}/`)
   await seedLargeNoteAndReload(page, text)
   await placeCaretAt(page, 'start')
   await page.keyboard.press('Escape')

@@ -149,7 +149,9 @@ function biggestJump(frames) {
 
 async function runPane(page, pane) {
   paneLabel = pane.label
-  await seed(page, pane, generateSyntheticDocument(400000))
+  const documentText = generateSyntheticDocument(400000)
+  const totalSourceLines = documentText.split('\n').length
+  await seed(page, pane, documentText)
 
   // -- a long journey ---------------------------------------------------
   const watching = page.evaluate(WATCH(pane, 2500))
@@ -170,14 +172,25 @@ async function runPane(page, pane) {
   check('the cut happens only while the pane is covered', jump.covering,
     `biggest single-frame move was ${Math.round(jump.deltaPx)}px`)
 
-  const settled = frames[frames.length - 1].scrollTop
-  const geometry = await page.evaluate((selector) => {
+  // Where in the DOCUMENT the journey ended. The render pane is windowed on a
+  // note this size (previewWindow.ts): its scroller holds only the mounted
+  // run, so scrollTop over scrollHeight is a position in the run, and moved
+  // with how the window happened to settle rather than with where the reader
+  // was. The first block showing names its own source line instead. The edit
+  // pane holds its whole document, so its pixels are the document's.
+  const landedFraction = await page.evaluate(({ selector, totalLines }) => {
     const scroller = document.querySelector(selector)
-    return { maxScrollTop: scroller.scrollHeight - scroller.clientHeight }
-  }, pane.scroller)
+    if (selector !== '.markdown-preview') {
+      return scroller.scrollTop / Math.max(1, scroller.scrollHeight - scroller.clientHeight)
+    }
+    const top = scroller.getBoundingClientRect().top
+    const first = [...scroller.querySelectorAll('[data-source-line-start]')]
+      .find((el) => el.getBoundingClientRect().bottom > top)
+    return first ? Number(first.getAttribute('data-source-line-start')) / totalLines : 0
+  }, { selector: pane.scroller, totalLines: totalSourceLines })
   check('the journey ends somewhere near the bottom, where it was aimed',
-    settled > geometry.maxScrollTop * 0.5,
-    `landed at ${Math.round((settled / geometry.maxScrollTop) * 100)}% of the document`)
+    landedFraction > 0.5,
+    `landed at ${Math.round(landedFraction * 100)}% of the document`)
 
   check('no curtain is left behind',
     await page.evaluate(() => document.querySelectorAll('.scroll-bridge').length) === 0)

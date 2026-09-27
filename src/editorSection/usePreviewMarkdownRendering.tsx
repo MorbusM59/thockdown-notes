@@ -2008,12 +2008,18 @@ export function usePreviewMarkdownRendering({
 
       ratioForScrollOffsetPx,
 
-      // Both strategies are final from their first answer now: a chunked
-      // ratio is line-based, and a continuous one is read off a scrollHeight
-      // that is true the moment the pane has laid out, because every block
-      // that contributes to it is mounted. Kept on the interface because the
-      // scrollbar still asks, and the honest answer is "yes, always".
-      isThumbRatioSettled: () => true,
+      // Final once the note's split is complete, and not before. Both
+      // strategies read the document through the blocks delivered so far: a
+      // chunked ratio divides the screen's character capacity by the blocks'
+      // total characters, a continuous one reads a scrollHeight made of the
+      // blocks mounted. The split arrives in instalments, top first, so an
+      // earlier answer is about part of the document -- and the scrollbar
+      // COMMITS the thumb's size on the first settled answer and holds it
+      // (scrollThumbMetrics.ts), keyed on the full text's length, which a
+      // later instalment does not change. Answering "yes, always" froze a
+      // large note's thumb at the size of its first instalment: twice the
+      // right height on a 400,000-character note.
+      isThumbRatioSettled: () => isSplitCompleteRef.current,
 
       // Only a windowed pane has an end that is not the document's, and only a
       // windowed pane's scrollTop stops counting at a window boundary.

@@ -39,34 +39,73 @@ async function waitForServer(url, timeoutMs) {
 }
 
 /**
+ * Resolves once THIS server process has said it is serving `port`, and the
+ * port answers -- not merely once something answers there. A dev server left
+ * running by an earlier script still answers on the port, and waiting for an
+ * answer alone let a script run against that stale server, serving whatever
+ * code it had started with, while its own server exited on --strictPort
+ * unnoticed. That was two intermittent "failures" that were not failures of
+ * the app: a page that stopped being the app halfway through a run. Now a held
+ * port makes this server exit, and `exitedEarly` says so.
+ */
+function waitForOwnServer(proc, port, readOutput, exitedEarly) {
+  const announced = new Promise((resolve) => {
+    const check = () => {
+      // Colour codes stripped first: Vite prints the port in bold where it
+      // decides the terminal supports colour, as `localhost:\x1b[1m5202\x1b[22m/`,
+      // and whether it decides so depends on the shell that started it.
+      // eslint-disable-next-line no-control-regex -- the ANSI escape character is the match target
+      if (!readOutput().replace(/\x1b\[[0-9;]*m/g, '').includes(`localhost:${port}/`)) return
+      proc.stdout.off('data', check)
+      resolve()
+    }
+    proc.stdout.on('data', check)
+    check()
+  })
+  return Promise.race([
+    announced.then(() => waitForServer(`http://localhost:${port}/`, 30000)),
+    exitedEarly,
+  ])
+}
+
+/**
+ * The path of Vite's own entry script. The servers are started as Node running
+ * this directly, not through `npm run` or `npx`: those put a chain of wrapper
+ * processes (a shell, npm, another shell) between the script and the server,
+ * and on Windows no reliable way ends that chain -- `taskkill /T` on the outer
+ * shell killed the shell and left npm and Vite running, holding the port for
+ * the next script. With no wrappers, the process spawned IS the server.
+ */
+const VITE_BIN = path.join(REPO_ROOT, 'node_modules', 'vite', 'bin', 'vite.js')
+
+function spawnVite(args) {
+  return spawn(process.execPath, [VITE_BIN, ...args], {
+    cwd: REPO_ROOT,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+}
+
+/**
+ * Stops a server started by spawnVite. It is the server process itself (see
+ * VITE_BIN), so ending it is ending the server, on every platform. Resolves
+ * once it has exited, for a caller that awaits.
+ */
+function stopServer(proc) {
+  const exited = new Promise((resolve) => {
+    if (proc.exitCode !== null || proc.signalCode !== null) resolve()
+    else proc.once('exit', () => resolve())
+  })
+  proc.kill()
+  return exited
+}
+
+/**
  * Starts `npm run dev:browser` on `port` and resolves once it's serving.
  * Caller owns calling `stop()` when done (including on error paths --
  * leaving this running leaks a process across harness invocations).
  */
 export async function startDevServer(port) {
-  const isWindows = process.platform === 'win32'
-  // detached so the child gets its own process group -- `npm run` spawns
-  // vite as a grandchild, and a plain SIGTERM to the npm process alone
-  // doesn't reliably reach it, leaving the dev server (and its open port)
-  // running after this script exits. Killing the whole group (negative pid)
-  // in stop() below takes both out together. Windows has no such thing as a
-  // POSIX process group/negative-pid kill, and plain `spawn('npm', ...)`
-  // fails outright there (`ENOENT` -- Windows' npm is `npm.cmd`, not on the
-  // executable search path the same way `npm` is on POSIX); `shell: true`
-  // resolves that the same way a real shell invocation would, and cleanup
-  // uses `taskkill /T` (kills the whole process tree) instead of a signal.
-  //
-  // `shell` is not optional on Windows, it is the only thing that works:
-  // since the CVE-2024-27980 fix, Node refuses to spawn a `.cmd` at all
-  // without one and throws EINVAL from spawn() itself. This comment used to
-  // describe a `shell: true` the options object did not actually carry, which
-  // meant every script in this directory died on its first line on Windows.
-  const proc = spawn(isWindows ? 'npm.cmd' : 'npm', ['run', 'dev:browser', '--', '--port', String(port), '--strictPort'], {
-    cwd: REPO_ROOT,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    detached: !isWindows,
-    shell: isWindows,
-  })
+  const proc = spawnVite(['--mode', 'browser', '--port', String(port), '--strictPort'])
 
   let output = ''
   proc.stdout.on('data', (chunk) => { output += chunk.toString() })
@@ -80,24 +119,11 @@ export async function startDevServer(port) {
     })
   })
 
-  await Promise.race([
-    waitForServer(`http://localhost:${port}/`, 30000),
-    exitedEarly,
-  ])
+  await waitForOwnServer(proc, port, () => output, exitedEarly)
 
   return {
     port,
-    stop() {
-      if (isWindows) {
-        spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { stdio: 'ignore' })
-        return
-      }
-      try {
-        process.kill(-proc.pid, 'SIGTERM')
-      } catch {
-        proc.kill('SIGTERM')
-      }
-    },
+    stop: () => stopServer(proc),
   }
 }
 
@@ -121,14 +147,9 @@ export async function startDevServer(port) {
  * So this removes React's dev overhead, not the mock's.
  */
 export async function startPreviewServer(port) {
-  const isWindows = process.platform === 'win32'
 
   await new Promise((resolve, reject) => {
-    const build = spawn(isWindows ? 'npx.cmd' : 'npx', ['vite', 'build', '--mode', 'browser'], {
-      cwd: REPO_ROOT,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      shell: isWindows,
-    })
+    const build = spawnVite(['build', '--mode', 'browser'])
     let buildOutput = ''
     build.stdout.on('data', (chunk) => { buildOutput += chunk.toString() })
     build.stderr.on('data', (chunk) => { buildOutput += chunk.toString() })
@@ -138,12 +159,7 @@ export async function startPreviewServer(port) {
     })
   })
 
-  const proc = spawn(isWindows ? 'npx.cmd' : 'npx', ['vite', 'preview', '--mode', 'browser', '--port', String(port), '--strictPort'], {
-    cwd: REPO_ROOT,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    detached: !isWindows,
-    shell: isWindows,
-  })
+  const proc = spawnVite(['preview', '--mode', 'browser', '--port', String(port), '--strictPort'])
 
   let output = ''
   proc.stdout.on('data', (chunk) => { output += chunk.toString() })
@@ -157,24 +173,11 @@ export async function startPreviewServer(port) {
     })
   })
 
-  await Promise.race([
-    waitForServer(`http://localhost:${port}/`, 30000),
-    exitedEarly,
-  ])
+  await waitForOwnServer(proc, port, () => output, exitedEarly)
 
   return {
     port,
-    stop() {
-      if (isWindows) {
-        spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { stdio: 'ignore' })
-        return
-      }
-      try {
-        process.kill(-proc.pid, 'SIGTERM')
-      } catch {
-        proc.kill('SIGTERM')
-      }
-    },
+    stop: () => stopServer(proc),
   }
 }
 
