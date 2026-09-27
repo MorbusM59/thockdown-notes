@@ -91,7 +91,7 @@ The note's text moved out of React state; see `CLAUDE.md` → `useDisplayedNoteT
 
 All three are written up in full under "Needs a decision" at the bottom of `TODO.md`:
 
-1. The wheel's learned notch size only ever shrinks. A fast trackpad swipe, or possibly double-size zoom, can make a mouse scroll several rows per notch.
+1. The wheel notch-size learning: decided (learn only from deltas that look like notches), scheduled for after the release. See `TODO.md`.
 2. Stale full-document parses queue up in the worker when a large note's text changes while its first split is pending. The fix is a cancel message in `documentFacts.worker.ts`.
 3. `useHeadlineLevelGuard.ts` has had no caller since `58fdfceb`, but several comments still describe it as active. Decide whether to delete it or remount it; see `docs/pending-review-and-removal.md`.
 4. `saveNote` sends the whole note back over IPC on every save, which is wasteful now that the renderer keeps note text in its own store (`TODO.md`).
