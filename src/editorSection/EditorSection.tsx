@@ -20,6 +20,7 @@ import { SectionEditorArea, type SectionEditorAreaProps } from './SectionEditorA
 import { useDisplayedNoteRenderMode } from './useDisplayedNoteRenderMode'
 import { useActiveNoteId } from './useActiveNoteId'
 import { useDisplayedNoteText } from './useDisplayedNoteText'
+import { useStableCallbacks } from '../shared/useStableCallbacks'
 import { usePreviewedSnapshot } from './usePreviewedSnapshot'
 import { useDisplayedNoteSelection } from './useDisplayedNoteSelection'
 import { useNoteSaveQueue } from './useNoteSaveQueue'
@@ -195,7 +196,10 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
  * in window.thockdownSections.listSections() (Phase 4c), side by side in
  * a plain flex row -- no divider/drag/create/close UI yet (Phase 6).
  */
-export function EditorSection({
+export function EditorSection(rawProps: EditorSectionProps) {
+  // Callback props go through stable wrappers so this component's memoized
+  // callbacks never capture an App render scope (see useStableCallbacks.ts).
+  const {
   sectionId,
   slotOverlay,
   reportSlotOccupancy,
@@ -276,7 +280,7 @@ export function EditorSection({
   onDeleteSection,
   unpinNoteFromSection,
   isNoteOpenInOtherSection,
-}: EditorSectionProps) {
+} = useStableCallbacks(rawProps)
   // Local, not a prop: the scrollbar-slot DOM node lives entirely within
   // this section's own SectionEditorArea render, so each section needs its
   // own -- sharing one across instances would have every section but the

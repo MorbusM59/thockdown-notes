@@ -598,7 +598,16 @@ derived from the text that a render scope would hold:
   `leadLine` (all an identity label needs), and App's notes setter moves the
   content into a store read by id (`shared/noteContentStore.ts`).
 
-Measured after: 0.13MB per cycle of twenty keystrokes and a save, against
+* **A parent's fresh callback props are a bridge between two chains.** App
+  passed new arrows to each EditorSection on every render; the section's
+  memoized callbacks captured them, and App's scope held the section's handle
+  -- one chain across both components, still ~20KB per cycle. EditorSection's
+  callback props now go through `shared/useStableCallbacks.ts`, and App's one
+  per-keystroke memoized callback (`getCurrentExternalNoteModifiedState`)
+  looks the section up when called instead of depending on it.
+
+Measured over 50 cycles after all of it: 2KB per cycle over the last twenty,
+the remainder being V8 compiling code as it warms up. Earlier figure: 0.13MB per cycle of twenty keystrokes and a save, against
 ~44MB before -- the ordinary cost of small render scopes, no document copies.
 
 **Instrument caveat:** read the heap through CDP `Runtime.getHeapUsage`.

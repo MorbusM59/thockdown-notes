@@ -6509,16 +6509,27 @@ ${markdownHtml}
     // The comparison itself is cheap where it now sits: an edit almost always
     // changes the document's LENGTH, and V8 settles unequal-length strings
     // without reading their characters.
-    if (note.id === activeSectionSnapshot?.activeNoteId) {
+    //
+    // The section is looked up when this runs, not taken as a dependency.
+    // This is only ever called while App renders the sidebar list, and App
+    // re-renders on every commit of the section's text, so the answer is
+    // always current. Depending on the section's handle instead recreated
+    // this callback on every keystroke, and a memoized callback recreated
+    // at a different rate from its neighbours in App's scope is what links
+    // stale render scopes into an unbounded chain (see
+    // editorSection/useDisplayedNoteText.ts) -- measured, this one made the
+    // chain 300 links deep in 50 cycles of typing.
+    const section = getActiveSection()
+    if (note.id === section?.activeNoteId) {
       const baseline = externalNoteOriginalTextByIdRef.current.get(note.id)
       if (baseline === undefined) return Boolean(note.hasUnsavedChanges)
-      return activeSectionSnapshot.readEditorText() !== baseline
+      return section.readEditorText() !== baseline
     }
 
     // A note that is not open has no live document to compare; its persisted
     // flag is the last thing a save or close recorded about it.
     return Boolean(note.hasUnsavedChanges)
-  }, [activeSectionSnapshot, externalNoteOriginalTextByIdRef])
+  }, [getActiveSection, externalNoteOriginalTextByIdRef])
 
   const updateNoteAssignedId = useCallback((noteId: string, assignedId: string) => {
     setNotes((previous) => previous.map((note) => (note.id === noteId ? { ...note, assignedId } : note)))
