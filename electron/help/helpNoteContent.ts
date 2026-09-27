@@ -23,7 +23,7 @@ There is another advantage: Writing in markdown forces you to employ a certain c
 ## So how do you actually apply styling?
 Instead of clicking buttons in a rich text editor, you just **type special characters** to format your notes. To make things a bit more convenient. There are also **buttons in the toolbar** to do that job for you. So, in a way, this isn't as different from using a regular text editor, but you ned up with universally compatible output.
 
-*Hint: To see what your formatting might look like when interpreted, hit "Esc" or click the button on the top left of your toolbar. This switches between "Edit Mode" and "Render View".*
+*Hint: To see what your formatting might look like when interpreted, hit "Esc" or click the pen button at the right end of the tab bar above your editor. This switches between "Edit Mode" and "Render View".*
 
 Here are the essentials:
 
@@ -77,7 +77,7 @@ For numbered lists, just use numbers:
 
 Ready to write? Here's how:
 
-1. Hit **Ctrl+N** or click the **"File Icon" button** in the top menu to create a new note.
+1. Hit **Ctrl+N** or click the **"+"** at the start of the tab bar above your editor to create a new note.
 2. Start typing your note! Your note **automatically saves** as you write.
 3. The **first line** of the note behind the "#" will automatically be recognized as the **note's title** in the menu.
 4. Write your thoughts, ideas, tasks, or anything else.
@@ -86,11 +86,11 @@ Ready to write? Here's how:
 
 Tags help you organize and categorize your notes:
 
-1. **Add a tag** by clicking the tag input field in the top right area of the editor.
+1. **Add a tag** by clicking the tag button at the left end of the bar below your editor, then clicking the tag input field.
 2. **Type a tag name** (no spaces or special characters — try \`work\`, \`ideas\`, \`personal\`, etc.).
 3. **Press Enter** to add it.
 4. You can add as many tags as you want.
-5. You can find previously used tags listed to the right of the input field.
+5. You can find previously used tags suggested next to the input field.
 
 Tags make it easy to find related notes later. In the left sidebar, you can filter by tags or search by date.
 
@@ -98,37 +98,33 @@ Tags make it easy to find related notes later. In the left sidebar, you can filt
 
 ### Sidebar
 On the left, you'll see your notes organized:
-- **Date view** (default) — see notes grouped by when you created them.
+- **Date view** (default) — see notes ordered by when you last changed them.
 - **Category view** — see notes grouped by the first two tags you assigned.
-- **Archive view** — see notes that you archived (right click on a note card in the menu). These notes no longer appear in date or category view.
-- **Trash** — you'll find notes that you deleted (hold right click on a note card in the menu). You can hold right click on the trash icon to delete all notes in trash permanently.
-- **Search** — find words in a note. Use "abc > xyz" to replace "abc" with "xyz". Left click on a hit to select the found word(s) in the text. Right click on a hit to apply the replacement to that hit.
-- **Filter** bar on top — filter words that contain the expression or that have a #tag.
-- **Date Filter** at the bottom — filter words by selected months/years or tags.
+- **Archive view** — see notes that you archived (the archive button on a note card, or hold right click on a card in the category view). These notes no longer appear in date or category view.
+- **Trash** — you'll find notes that you deleted (the trash button on a note card). You can hold right click on the trash icon to delete all notes in trash permanently. A quick right click on an archived or deleted note brings it back.
+- **Find** — find words in the note you have open. Ctrl+H adds a replace field.
+- **Search** field on top — filter notes that contain the expression or that have a #tag.
+- **Date Filter** at the bottom — filter notes by selected months/years.
 
-### Top Bar
+### Toolbar
+- **Dark Mode** and **Double Size** toggles on the left.
+- **Text tools** — one click formatting for whatever you have selected.
 
-#### Left side
-- **Toggle View / New Note / Spell Check**
-- **Text tools** in Edit Mode
-- **Export tools** in Render View
+### Hold Esc
+- **New Note / New Chapter / Export / User Guide** — hold the Esc key for a moment to bring them up.
 
-### Right side
-- **Font / Size / Spacing**
-- **Dark Mode** toggle
-- **Options** — a kazillion settings to customize your experience!
+### Options
+- The cogwheel among the sidebar's icons — a kazillion settings to customize your experience!
 
 ### Editor Area
 This is where you write. The app automatically saves your changes, so you never have to worry about losing anything.
 
-- **Cage** You can drag top and bottom boundaries in Edit Mode, resulting in a more focused typing experience. You can still see the text above and below, but the boundaries keep your typing focused in the middle section. This also affects pg down and pg up scrolling, which will scroll by exactly one middle section's worth of lines.
-
 ## Pro Tips
 
-1. **Right click** on a word (repeatedly) to select the whole word, the whole sentence or the whole paragraph.
+1. **Right click** on a word (repeatedly) to select the whole word, then its clause, the whole sentence, the line or the whole paragraph.
 2. **Hover over elements** to read what they do. There is a LOT to discover that can facilitate your workflow.
 3. **Shortcuts** can make your life easier. For example. use Ctrl+Shift+N to create a new note with the content of your clipboard as a title. This is great way to get started with a note about an existing topic quickly.
-4. **Smart pasting** tries to eliminate needless line breaks when copying text from preformatted formats like PDFs. Use Ctrl+Shift+V to paste without sanitation.
+4. **Smart pasting** tries to eliminate needless line breaks when copying text from preformatted formats like PDFs. Use Ctrl+Shift+V to paste that way; Ctrl+V pastes the text as-is.
 5. More tips and a comprehensive list of all features will follow later. For now, have fun exploring and hunting undocumented features.
 
 ## Ready to Dive In?

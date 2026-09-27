@@ -113,7 +113,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Creating Notes](#creating-notes)
 
 > **Where?**
-> Toolbar's file icon (left cluster), or \`Ctrl+N\` / \`Ctrl+Shift+N\` from anywhere.
+> The leading \`+\` pill in a slot's tab bar, New Note in the [Quick Actions Menu]($#quick-actions-menu), or \`Ctrl+N\` / \`Ctrl+Shift+N\` from anywhere.
 
 *Starts a new note, either blank or pre-titled from your clipboard.*
 
@@ -157,16 +157,16 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 > **Where?**
 > Hold \`Esc\` for about a quarter of a second, anywhere in the editor area — works with a note open, an empty editor, or a read-only auto-generated one (Table of Contents, Open Items, the User Guide, ...).
 
-*A small on-editor grid for the note actions you reach for most, without leaving the keyboard.*
+*A small ring of choices over the editor for the note actions you reach for most, without leaving the keyboard.*
 
 - Keeps showing while you hold \`Esc\`; tapping \`Esc\` once more dismisses it without doing anything. Clicking outside it does *not* — the menu is only ever dismissed deliberately, so a stray click can't end something you were in the middle of.
 - Navigate with the arrow keys, \`Tab\`/\`Shift+Tab\`, or by rolling the mouse wheel while the pointer is over the menu — one notch is one step, the same as one arrow press. The choices turn *under* the pointer, so you can leave the mouse where it is, wheel until the one you want is beneath it, and click: the whole menu is reachable without moving the mouse at all. Then \`Enter\`/\`Space\` or a click to run the highlighted action. Running an action closes the menu — unless it's something that carries on *inside* the menu, in which case the menu stays up and its cells change to whatever comes next.
-- Currently wired up: New Note, New Chapter, Export, Export All, Help (opens this page — see [The User Guide]($#the-user-guide)). New Note and Help always work; New Chapter and Export only appear with a note open (New Chapter not for a note that can't take one, like a read-only auto-generated chapter), and Export All only for a note that has chapters — see [Export All]($#export-all). The remaining grid cells are reserved for future actions.
+- Currently wired up: New Note, New Chapter, Export, Export All, User Guide (opens this page — see [The User Guide]($#the-user-guide)). New Note and User Guide always appear; New Chapter and Export only appear with a note open (New Chapter not for a note that can't take one, like one frozen in time), and Export All only for a note that has chapters — see [Export All]($#export-all).
 
 ### [The User Guide](#the-user-guide)
 
 > **Where?**
-> The lightbulb button in the window controls (top right, above Maximize), or the Help button in the Quick Actions Menu above — both do the same thing.
+> The graduation-cap button in the window controls (top right, above Maximize), or the User Guide choice in the Quick Actions Menu above — both do the same thing.
 
 *This page, opened as an ordinary (timeless, read-only) note in whichever slot you triggered it from.*
 
@@ -236,7 +236,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 *Underlines misspelled words using your OS's native spell checker.*
 
-- Edit mode and preview/render mode each have their own independent on/off state.
+- One switch for the whole app; it underlines in the editor you are typing in.
 `,
   `## Internal Linking
 
@@ -329,7 +329,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Sidebar Views](#sidebar-views)
 
 > **Where?**
-> The row of icons at the top of the sidebar.
+> The row of icons at the top of the sidebar, just below the search field.
 
 *Five different ways to browse your notes, switched with one click.*
 
@@ -337,8 +337,8 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - **Category** — a two-level collapsible tree grouped by primary tag, then secondary tag.
 - **Archive** — the same tree layout as Category, restricted to archived notes.
 - **Trash** — a flat, paginated list of notes marked for deletion, awaiting purge or restore.
-- **Find** — the search view, described below.
-- A sixth icon opens Settings, which replaces the sidebar content rather than being a note-browsing view — see [Settings Panel](${guideLink('APPEARANCE-SETTINGS', 'settings-panel')}).
+- **Find** — find (and replace) inside the note you have open, see [Find and Replace](${guideLink('FIND-REPLACE', 'find-and-replace')}).
+- A sixth icon, the cogwheel, opens Settings, which replaces the sidebar content rather than being a note-browsing view — see [Settings Panel](${guideLink('APPEARANCE-SETTINGS', 'settings-panel')}).
 
 ### [Pagination](#pagination)
 
@@ -352,7 +352,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Search](#search)
 
 > **Where?**
-> The search field in the sidebar's Find view.
+> The search field at the top of the sidebar, in the Date, Category, Archive and Trash views. (In the Find view the same field searches inside the open note instead.)
 
 *Filters your notes by title, content, filename, or tag as you type.*
 
@@ -418,22 +418,22 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Chapters](#chapters)
 
 > **Where?**
-> The chapter bar's own trailing \`+\` pill, right below the tab bar — or the bottom utility bar's New Chapter action (\`Shift+Alt+N\`), which does the same thing.
+> The bookmark pill at the start of the chapter bar's strip, below the editor — or New Chapter in the [Quick Actions Menu](${guideLink('NOTES-EDITING', 'quick-actions-menu')}), or \`Shift+Alt+N\`, which all do the same thing.
 
 *Splits a note into sub-notes, browsable from a bar of their own.*
 
-- The chapter bar is always showing for whatever note is open, with or without chapters yet — there's no manual show/hide toggle, and no need to reach for the bottom utility bar just to start a note's first chapter. Either \`+\` (the chapter bar's own trailing pill, or the bottom utility bar's New Chapter action) creates a new empty chapter and switches straight to it. \`Shift+Alt+N\` does exactly the same thing from the keyboard.
-- The bar's leading icon buttons, before the tab strip, act on the slot as a whole rather than on one chapter: an **edit/render toggle** (the pen icon, lit while you're in edit mode — the same switch \`Esc\` makes), then the auto-generated Table of Contents and Open Items chapters when they exist. On a note that's always rendered — an auto chapter, or a note frozen in time — the pen toggle sits unlit and unclickable, since there's no edit mode to switch to.
-- The chapter bar's first tab is always the parent note itself; every chapter follows in order. Click the parent tab or any chapter pill to switch between them — each keeps and saves its own text independently. Too many chapters to fit scrolls horizontally, fading at whichever edge has more off-screen, same as the tab bar.
+- The chapter bar is always showing for whatever note is open, with or without chapters yet — there's no manual show/hide toggle. The bookmark pill at the start of its strip creates a new empty chapter at the end of the note and switches straight to it; New Chapter in the Quick Actions Menu and \`Shift+Alt+N\` do exactly the same thing.
+- The bar's leading icon buttons, before the chapter strip: the **tag toggle** (see [Tabs and Tags Mode]($#tabs-and-tags-mode)), then the auto-generated Open Items and Table of Contents chapters when they exist. The **edit/render toggle** is not here — it belongs to the slot, so it sits at the right end of the slot's tab bar (see [Edit and Preview Modes](${guideLink('NOTES-EDITING', 'edit-and-preview-modes')})).
+- The chapter strip's first tab after the bookmark pill is always the parent note itself (the house); every chapter follows in order. Click the parent tab or any chapter pill to switch between them — each keeps and saves its own text independently. Too many chapters to fit scrolls horizontally, fading at whichever edge has more off-screen, same as the tab bar.
 - Drag a chapter pill to reorder it among its siblings — same drag-and-drop as reordering pinned tabs or tags: drop directly on another pill to land in front of it, or on the bar's empty space to send it to the end.
-- The moment a note has its first chapter, an auto-generated **Table of Contents** chapter appears too — no button to press, it just shows up pinned first in the bar (before every real chapter, not draggable) and disappears again the moment the last real chapter does, the same automatic show/hide the chapter panel itself already does. It lists every heading across the parent and all of its chapters, each one a working link — always, whether or not the parent or any chapter has an assigned \`$id\`/\`§id\`, since it navigates internally rather than through the same link syntax you'd hand-type. Following one lands you in whichever mode you were already in: render view scrolls to the heading, edit mode puts the caret on it, ready to type. The parent's own title sits at the top, bold and unbulleted, apart from the list below it; every \`##\` heading after that — the parent's own, and each chapter's title — is a bullet at the same level, with that heading's own deeper headings nested under it. It's regenerated fresh every time you open it, so it's always accurate without costing anything while you're not looking at it — meaning it's also read-only (anything you tried to type would just be overwritten on your next visit) and opens straight into render view. Since it's a generated view rather than something you write, it has no [Time Machine Timeline](${guideLink('TIME-MACHINE', 'time-machine-timeline')}) of its own — the present-state circle stays live while viewing it, but re-runs the same regeneration instead of taking a save point (see [Present-State Circle](${guideLink('TIME-MACHINE', 'present-state-circle')})).
-- An auto-generated **Open Items** chapter appears right after the Table of Contents (same pinned, non-draggable treatment) the moment any checklist item (\`- [ ]\`) anywhere in the parent or one of its chapters is unchecked, and disappears again once none are left anywhere in the family — including whenever the last real chapter itself disappears. It groups every open item under whichever heading it falls under, linked the same way the Table of Contents is — headings with nothing open under them are skipped entirely, so it's a pruned outline, not a full copy of every heading. Unlike the Table of Contents, it isn't regenerated on every visit: it only updates when a checklist item is actually created or its checked state flips, patching in just that one note's own part — so if you're looking at it in one editor while checking something off in another, it can go briefly stale until the next change anywhere in the family refreshes it, or until you click its present-state circle to force a full refresh on demand (see [Present-State Circle](${guideLink('TIME-MACHINE', 'present-state-circle')})). Same as the Table of Contents, it's read-only, has no Time Machine Timeline of its own, and opens straight into render view — but its own checkboxes are the one exception to "read-only": clicking one checks the real item off in its own source chapter without removing it from this list, so you can click it again to undo. The list itself doesn't update as you go — it only catches up (dropping anything actually checked off) the next time something elsewhere refreshes it, or when you force one with the present-state circle.
-- A chapter is a full note in its own right — its own regular tags don't exist; tags always belong to the parent — but it doesn't appear on its own in Date/Category/Find, only through its one parent's chapter bar. The exceptions are Trash, once deleted, and Archive, once archived (see below for both). A chapter belongs to exactly one parent, ever, and a chapter can't have chapters of its own. Dragging a note from the sidebar onto the chapter bar copies its content into a brand-new chapter and switches you to it, same as creating one any other way — the dragged note itself is untouched and stays independent, not linked to the copy. Dropping it on the bar's empty space (or its trailing \`+\` pill) adds it as the last chapter; dropping it directly on an existing chapter pill instead inserts it right in front of that one. Every heading in the copy shifts down one level (\`#\` becomes \`##\`, and so on) so its own title-heading nests under the parent's instead of competing with it — the original note's headings are untouched.
+- The moment a note has its first chapter, an auto-generated **Table of Contents** chapter appears too — no button to press, it just shows up as an icon button ahead of the chapter strip (before every real chapter, not draggable) and disappears again the moment the last real chapter does, the same automatic show/hide the chapter panel itself already does. It lists every heading across the parent and all of its chapters, each one a working link — always, whether or not the parent or any chapter has an assigned \`$id\`/\`§id\`, since it navigates internally rather than through the same link syntax you'd hand-type. Following one lands you in whichever mode you were already in: render view scrolls to the heading, edit mode puts the caret on it, ready to type. The parent's own title sits at the top, bold and unbulleted, apart from the list below it; every \`##\` heading after that — the parent's own, and each chapter's title — is a bullet at the same level, with that heading's own deeper headings nested under it. It's regenerated fresh every time you open it, so it's always accurate without costing anything while you're not looking at it — meaning it's also read-only (anything you tried to type would just be overwritten on your next visit) and opens straight into render view. Since it's a generated view rather than something you write, it has no [Time Machine Timeline](${guideLink('TIME-MACHINE', 'time-machine-timeline')}) of its own — the present-state circle stays live while viewing it, but re-runs the same regeneration instead of taking a save point (see [Present-State Circle](${guideLink('TIME-MACHINE', 'present-state-circle')})).
+- An auto-generated **Open Items** chapter appears beside the Table of Contents (same pinned, non-draggable treatment) the moment any checklist item (\`- [ ]\`) anywhere in the parent or one of its chapters is unchecked, and disappears again once none are left anywhere in the family — including whenever the last real chapter itself disappears. It groups every open item under whichever heading it falls under, linked the same way the Table of Contents is — headings with nothing open under them are skipped entirely, so it's a pruned outline, not a full copy of every heading. Unlike the Table of Contents, it isn't regenerated on every visit: it only updates when a checklist item is actually created or its checked state flips, patching in just that one note's own part — so if you're looking at it in one editor while checking something off in another, it can go briefly stale until the next change anywhere in the family refreshes it, or until you click its present-state circle to force a full refresh on demand (see [Present-State Circle](${guideLink('TIME-MACHINE', 'present-state-circle')})). Same as the Table of Contents, it's read-only, has no Time Machine Timeline of its own, and opens straight into render view — but its own checkboxes are the one exception to "read-only": clicking one checks the real item off in its own source chapter without removing it from this list, so you can click it again to undo. The list itself doesn't update as you go — it only catches up (dropping anything actually checked off) the next time something elsewhere refreshes it, or when you force one with the present-state circle.
+- A chapter is a full note in its own right — its own regular tags don't exist; tags always belong to the parent — but it doesn't appear on its own in Date/Category/Find, only through its one parent's chapter bar. The exceptions are Trash, once deleted, and Archive, once archived (see below for both). A chapter belongs to exactly one parent, ever, and a chapter can't have chapters of its own. Dragging a note from the sidebar onto the chapter bar copies its content into a brand-new chapter and switches you to it, same as creating one any other way — the dragged note itself is untouched and stays independent, not linked to the copy. Dropping it on the bar's empty space adds it as the last chapter; dropping it directly on an existing chapter pill instead inserts it right in front of that one. Every heading in the copy shifts down one level (\`#\` becomes \`##\`, and so on) so its own title-heading nests under the parent's instead of competing with it — the original note's headings are untouched.
 - While a chapter is open, its parent stays the one shown as active in the sidebar and the tab bar — the chapter bar itself shows which chapter you're in.
 - A chapter's fate is tied to its parent's: permanently deleting a parent note permanently deletes all of its chapters with it.
 - Right-click a chapter tab to give it a short id (\`§1: ···\` becomes \`§1: INTRO\`, say) — same rules as a note's \`$id\`. Link straight to it with \`[text]($NOTE-ID§CHAPTER-ID)\`, optionally down to one of its own anchors with \`[text]($NOTE-ID§CHAPTER-ID#anchor-id)\`; opening it this way keeps the parent shown as active exactly like clicking the pill would.
 - Hold a right-click on a chapter pill (same threshold as the sidebar's own [Right-Click-Hold Note Gesture](${guideLink('ARCHIVE-TRASH', 'right-click-hold-note-gesture')})) to split it into two small buttons in place of the pill: archive and delete. Clicking delete removes the chapter from the bar and moves it to Trash, where it's prefixed \`§ \` to read as a chapter, with its parent's title (prefixed \`$ \`) shown in place of a created date; clicking archive does the same but moves it into its parent's own fold-out row in the Archive tree instead (see [Archiving and Trash](${guideLink('ARCHIVE-TRASH', 'archiving-and-trash')})). A quick right-click on it there restores it to its exact original position among its siblings, shifting whatever's there — and everything after it — back by one, same restore gesture as a note's own (see [Restoring from Archive or Trash](${guideLink('ARCHIVE-TRASH', 'restoring-from-archive-or-trash')})). Moving the pointer off the split pill without clicking either button reverts it to normal.
-- Two small buttons flank the chapter tab strip. The scissors on the right cuts whatever's currently selected in the editor — or, with just a caret and nothing highlighted, everything from the caret to the end of the document — out of the note you're viewing (parent or chapter) and pastes it into a brand-new chapter, caret landing right after the pasted text. The new chapter always lands directly behind the one you cut from (or first, if you cut from the parent), pushing later chapters back by one; any blank-line run left behind at the cut site collapses down to a single blank line, and any blank lines swept up at the start or end of the extracted text itself are trimmed off. A quick way to split a long note as you write it. The merge icon on the left collapses the chapter you're currently viewing: its content is appended to the end of the previous chapter (or the parent, if it's the first chapter), the now-empty chapter is permanently deleted (chapters have no Trash of their own — its content has already been moved out), and you land in the destination note with the caret at the end. Collapsing a note's last remaining chapter this way leaves the chapter bar showing, same as it does for any note with no chapters yet — just its book pill and the trailing \`+\` pill.
+- Two small buttons flank the chapter tab strip. The scissors on the right cuts whatever's currently selected in the editor — or, with just a caret and nothing highlighted, everything from the caret to the end of the document — out of the note you're viewing (parent or chapter) and pastes it into a brand-new chapter, caret landing right after the pasted text. The new chapter always lands directly behind the one you cut from (or first, if you cut from the parent), pushing later chapters back by one; any blank-line run left behind at the cut site collapses down to a single blank line, and any blank lines swept up at the start or end of the extracted text itself are trimmed off. A quick way to split a long note as you write it. The merge icon on the left collapses the chapter you're currently viewing: its content is appended to the end of the previous chapter (or the parent, if it's the first chapter), the now-empty chapter is permanently deleted (chapters have no Trash of their own — its content has already been moved out), and you land in the destination note with the caret at the end. Collapsing a note's last remaining chapter this way leaves the chapter bar showing, same as it does for any note with no chapters yet — just its bookmark and house pills.
 - \`Shift+Alt+Delete\` and \`Shift+Alt+Backspace\` do the scissors/merge dance above from the keyboard, without leaving whatever you're viewing:
   - With visible (non-whitespace) text after the caret/selection, \`Shift+Alt+Delete\` cuts everything from there to the end of the document into a brand-new chapter directly behind the one you're in — same as the scissors button, but you stay put with the caret at the end of what's left.
   - With nothing but whitespace after the caret (effectively at the end), it instead pulls the *next* chapter in: appends its text to the end of the current one and deletes it, caret landing exactly where the two texts meet. No jump, no note switch.
@@ -550,7 +550,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 *One global toolbar that always acts on whichever slot is currently active.*
 
-- Left cluster: a split button pairing the dark-mode toggle (top) with double size (bottom), plus an export button that switches between PDF (preview mode) and Markdown (edit mode). Switching between edit and render view is done with Esc or the chapter bar's pen toggle (see [Chapters](${guideLink('SPLIT-VIEW-TABS', 'chapters')})); creating a note with Ctrl+N.
+- Left: a split button pairing the dark-mode toggle (top) with double size (bottom). Switching between edit and render view is each slot's own business — \`Esc\` or the pen toggle at the right end of that slot's tab bar (see [Edit and Preview Modes](${guideLink('NOTES-EDITING', 'edit-and-preview-modes')})); exporting is in the [Quick Actions Menu](${guideLink('NOTES-EDITING', 'quick-actions-menu')}); creating a note is \`Ctrl+N\`.
 - The rest of the bar holds the formatting group, always visible in both edit and render view.
 
 ### [Formatting Group](#formatting-group)
@@ -572,13 +572,13 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Find and Replace](#find-and-replace)
 
 > **Where?**
-> \`Ctrl+F\` / \`Ctrl+H\`, or the search field that appears above the editor.
+> \`Ctrl+F\` / \`Ctrl+H\`, or the sidebar's Find view — the search field at the top of the sidebar.
 
 *Finds and optionally replaces text within the single open note.*
 
 - \`Ctrl+F\` opens the find field and focuses it; \`Ctrl+H\` opens it in replace mode.
 - \`Tab\` moves between the find and replace fields.
-- \`Ctrl+Enter\` replaces every match at once.
+- \`Ctrl+Enter\` replaces every match at once, and so does a right-click on the sidebar's Find icon.
 - The \`Aa\` toggle means "case-sensitive" in plain find mode; in replace mode it's repurposed as "keep case," searching case-insensitively but re-casing each replacement to match what it's replacing.
 - What gets searched follows the mode you're in: in edit mode, the note's Markdown exactly as you typed it; in rendered mode, only the text the page actually shows. A link's target, an image's URL, a heading's \`#\` marks are invisible there, so they never produce a match you can't see — searching \`anchor\` against a rendered \`[anchor](#anchor)\` finds the one word on screen, not two.
 - For searching across *all* notes rather than one, use [Search](${guideLink('SIDEBAR-SEARCH', 'search')}) instead.
@@ -684,6 +684,10 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 | \`Ctrl+Enter\` (in find mode) | Replace all matches |
 | \`Alt+Left\` / \`Alt+Right\` | Previous / next slot |
 | \`Ctrl+Up\` / \`Ctrl+Down\` | Jump caret to start / end of document |
+| \`Shift+Alt+N\` | New chapter |
+| \`Shift+Alt+Delete\` / \`Shift+Alt+Backspace\` | Cut to a new chapter, or pull in the next / previous one (see [Chapters](${guideLink('SPLIT-VIEW-TABS', 'chapters')})) |
+| \`Ctrl+L\` | Insert a link |
+| \`Shift+Ctrl+L\` | Set an anchor |
 | \`Ctrl+B\` | Bold |
 | \`Ctrl+I\` | Italic |
 | \`Ctrl+J\` | Strikethrough |
@@ -703,13 +707,12 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 *Thockdown runs frameless, with no OS menu bar — every window action lives here.*
 
-- **Settings (gear)** — opens/closes the Settings panel, see [Settings Panel](${guideLink('APPEARANCE-SETTINGS', 'settings-panel')}).
 - **Music player** — see [Music Player](${guideLink('MUSIC-PLAYER')}).
 - **Mini mode** — collapses the window into a compact strip; the music player stays fully usable, sound options included. The button that got you there expands back out, maximized — see [Music Player](${guideLink('MUSIC-PLAYER')}).
 - **Immersive mode** (\`F11\` or \`Ctrl+Shift+Space\`) — the window goes full screen with just the editor you're working in, edge to edge: no sidebar, toolbar, tabs or other slots. Press either shortcut again to come back exactly as you were. Opening the sidebar any way you normally would (\`Ctrl+Space\`, \`Ctrl+F\`, \`Ctrl+H\`) also brings you back, with the sidebar showing. Not available from mini mode.
   - In edit view the scrollbar lives in the grid itself: the rightmost column of boxes is the track, and the darker boxes show where you are. Click anywhere else on it to travel there; hold to jump straight there. Its colour is **Immersive Scroll Thumb** in the colour settings.
 - **Minimize / Maximize–Restore / Close** — standard window controls.
-- **User Guide (lightbulb)** — the upper half of the split maximize button. Opens this guide, exactly like the Quick Actions Menu's own Help cell, see [The User Guide](${guideLink('NOTES-EDITING', 'the-user-guide')}).
+- **User Guide (graduation cap)** — the upper half of the split maximize button. Opens this guide, exactly like the Quick Actions Menu's own Help cell, see [The User Guide](${guideLink('NOTES-EDITING', 'the-user-guide')}).
 - **Dark mode / Double size** — a split button in the toolbar's left cluster (not in this bar): the top half switches the whole app between light and dark presets, the bottom half is double size (2x). Double size doubles the app's page zoom and, to match, the window's minimum size, so 2x content gets 2x room instead of being squeezed into the same space. Toggling off relaxes the minimum again but doesn't shrink a window you've since resized larger. Persists across restarts. Font sizes — edit view, render view and the interface — are remembered separately for normal and double size: set them once in each, and switching back and forth keeps both.
 - **How small the window goes** is worked out from what actually has to fit rather than being a fixed number: across, the sidebar, the toolbar's formatting buttons at three groups of three per row, and this bar; down, enough of the Date view to show four note cards. Both scale with the spacing setting, so a roomier spacing raises the floor and a tighter one lowers it. Hiding the sidebar drops the width floor by the sidebar's own width, and each extra split-view slot raises it once the slots need more room than the chrome does.
 - **Drag the toolbar or this top bar to move the window; double-click either to maximize/restore.** Dragging a maximized window from these areas restores it, ending up positioned under the cursor as if the drag had been followed the whole way. Dragging elsewhere in the app also moves the window, but won't restore it from maximized.
@@ -719,7 +722,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Settings Panel](#settings-panel)
 
 > **Where?**
-> The gear icon in the window-controls bar.
+> The cogwheel, the last of the sidebar's view icons.
 
 *The home for every appearance, sound, sync, and performance control in the app, organized into collapsible sections.*
 
@@ -830,7 +833,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 > **Where?**
 > Settings panel → Cursor.
 
-*An optional animated cursor replacement: orbiting dots with fading trails, a center dot, a soft halo, and a breathing pulse, all pinned to the real pointer position. Off by default — flip it on in [Performance]($#performance).*
+*An optional animated cursor replacement: orbiting dots with fading trails, a center dot, a soft halo, and a breathing pulse, all pinned to the real pointer position. On by default — switch it off in [Performance]($#performance).*
 
 - Top-left button is a halo color swatch. The 4 buttons beside it (H, S, V, A) stage a color by dragging up/down or scrolling on each — left-click a swatch (halo, circling dots, center dot, trail) to paint it onto that element; hold right-click on a swatch to load its current color back into H/S/V/A.
 - Sliders: number of circling dots, orbit radius, spin speed (-4Hz to 4Hz, negative reverses direction, 0 freezes it), trail fade duration (how long a trail particle takes to decay after the head passes it — e.g. 1000ms at 1Hz spin sweeps exactly one full revolution), trail thickness (0–12px, 0 hides it), dot size (0–12px, 0 hides it), center dot size (0–12px, 0 hides it), halo radius (0 hides it, capped at the same max as orbit radius), fall-off (0–100 — how far out the halo's glow stays near-opaque before fading to nothing at its edge; low values fade fast near the center, high values stay bright almost all the way to the rim), and a pulse effect that breathes the orbit's radius outward — magnitude 0 keeps it locked at its base size, magnitude 1 breathes up to 200% of it — at a given speed. The halo is rendered centered behind the center dot. Colors and these sliders are saved per layout, same as the rest of your theming.
@@ -907,10 +910,10 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 - **Reduce visual effects** forces [Glaze]($#glaze), [Filters]($#filters), and the colorize filter off, without discarding your slider positions (Invert is kept, since it's often load-bearing for dark layouts).
 - **Reduce caret animation** stops the idle caret blink, easing compositor load.
-- **Defer preview on rapid input** coalesces preview updates onto one frame during fast key-repeat (e.g. held Backspace).
+- **Allow asynchronous input** coalesces preview updates onto one frame during fast key-repeat (e.g. held Backspace).
 - **Force character based scrollbar thumb** puts every note on the character reading described under [Scrollbar Navigation](${guideLink('NOTES-EDITING', 'scrollbar-navigation')}), however short it is.
 - **Note size threshold** is where that switch happens when the toggle above is off: how many paragraphs a note may have before its scrollbar starts counting characters instead of measuring height. A whole list counts as one paragraph, as does a table or a code block. Hover the slider to read the current number.
-- The cursor button toggles the [custom cursor]($#mouse-options) on/off; while on, the native cursor is hidden everywhere in the app, not just the editor — sidebar, toolbar, dialogs, all of it. This toggle always starts on for a fresh install and isn't part of a layout — it stays as you left it across layout switches and app restarts until you flip it again.
+- The mouse button switches the [custom cursor]($#mouse-options) off (it is lit while the cursor is off); while the custom cursor is on, the native cursor is hidden everywhere in the app, not just the editor — sidebar, toolbar, dialogs, all of it. This toggle always starts on for a fresh install and isn't part of a layout — it stays as you left it across layout switches and app restarts until you flip it again.
 
 ### [ThockQuest](#thockquest-settings)
 
