@@ -67,7 +67,7 @@ const KIND_LOOK: Record<SoundscapeChannelKind, { icon: string; label: string }> 
   chimes: { icon: 'fa-bell', label: 'Chimes' },
 }
 
-const ENVIRONMENT_DEFAULTS = { ...DEFAULT_SOUNDSCAPE_SPACE, ...DEFAULT_SOUNDSCAPE_WEATHER } as unknown as Record<string, number>
+const ENVIRONMENT_DEFAULTS = { ...DEFAULT_SOUNDSCAPE_SPACE, ...DEFAULT_SOUNDSCAPE_WEATHER, volume: 1 } as unknown as Record<string, number>
 
 // ---------------------------------------------------------------------------
 // How values read.
@@ -341,10 +341,12 @@ const CONTROLS: { [K in SoundscapeChannelKind]: ControlGroup[] } = {
  */
 const ENVIRONMENT_CONTROLS: ControlGroup[] = [{
   label: 'Environment',
-  // Four sliders shape the space and two the weather, so rows of two keep
-  // each together where rows of three would put amount beside the gusts.
-  rows: [2, 2, 2],
+  // The soundscape's own volume on a row of its own, then four sliders that
+  // shape the space and two the weather: rows of two keep each together
+  // where rows of three would put amount beside the gusts.
+  rows: [1, 2, 2, 2],
   controls: [
+    unit('volume', 'volume', 'How loud this whole soundscape is. Lower it if the loudest moments make the rest of it duck', formatVolume),
     unit('size', 'size', 'A small room to a wide valley: how long the space rings, and how late its first reflection', (value) => `${formatSeconds(spaceDecaySec(value))} decay`),
     unit('damping', 'damping', 'A bright tail, or one that darkens fast, as open air and foliage swallow the highs', (value) => formatAmount(value, 'Bright', 'Dark')),
     unit('echoes', 'echoes', 'Distinct echoes off walls, buildings or cliffs', (value) => formatAmount(value, 'None')),
@@ -475,8 +477,12 @@ export function SoundscapeOptions({ preferences, onChange }: SoundscapeOptionsPr
   }
 
   // One group, two stored records: each key belongs to exactly one of them.
-  const environmentValues = { ...preferences.settings.space, ...preferences.settings.weather } as unknown as Record<string, number>
+  const environmentValues = { ...preferences.settings.space, ...preferences.settings.weather, volume: preferences.settings.volume } as unknown as Record<string, number>
   const updateEnvironment = (key: string, value: number) => {
+    if (key === 'volume') {
+      commitSettings({ ...preferences.settings, volume: value })
+      return
+    }
     const target = key in preferences.settings.space ? 'space' : 'weather'
     commitSettings({ ...preferences.settings, [target]: { ...preferences.settings[target], [key]: value } })
   }
@@ -585,22 +591,7 @@ export function SoundscapeOptions({ preferences, onChange }: SoundscapeOptionsPr
       heading="Soundscapes"
     >
       <div className="utility-setting-slider-stack" aria-label="Soundscape controls">
-        {/* Space and weather belong to the whole soundscape rather than to a
-            channel, so they stand above the soundscapes and channels,
-            always shown, rather than behind a channel-like button. */}
-        <div className="soundscape-layer-controls" role="group" aria-label="Environment, across all channels">
-          <ControlGroups
-            idPrefix="soundscape-environment"
-            groups={ENVIRONMENT_CONTROLS}
-            values={environmentValues}
-            defaults={ENVIRONMENT_DEFAULTS}
-            disabled={false}
-            name="Environment"
-            onCommit={updateEnvironment}
-          />
-        </div>
-
-        <OptionsSubsectionLabel>Soundscapes</OptionsSubsectionLabel>
+        <OptionsSubsectionLabel>Presets</OptionsSubsectionLabel>
         <div className="options-loadout-grid soundscape-preset-grid" role="group" aria-label="Factory soundscapes">
           {SOUNDSCAPE_FACTORY_PRESETS.map((preset) => (
             <button
@@ -710,6 +701,21 @@ export function SoundscapeOptions({ preferences, onChange }: SoundscapeOptionsPr
           >
             <span className="options-loadout-plus-glyph fa-solid fa-plus" aria-hidden="true" />
           </button>
+        </div>
+
+        {/* The volume, space and weather belong to the whole soundscape
+            rather than to a channel, so they stand above the channels, always
+            shown, rather than behind a channel-like button. */}
+        <div className="soundscape-layer-controls" role="group" aria-label="Environment, across all channels">
+          <ControlGroups
+            idPrefix="soundscape-environment"
+            groups={ENVIRONMENT_CONTROLS}
+            values={environmentValues}
+            defaults={ENVIRONMENT_DEFAULTS}
+            disabled={false}
+            name="Environment"
+            onCommit={updateEnvironment}
+          />
         </div>
 
         <OptionsSubsectionLabel>Channels</OptionsSubsectionLabel>

@@ -26,6 +26,16 @@ describe('soundscape files', () => {
     })
   })
 
+  it('carry a soundscape\'s own volume, and read one saved before it existed as unity', () => {
+    const settings = { ...neutralSoundscape(), volume: 0.62 }
+    const file = buildSoundscapeFile([{ id: 'quiet', name: 'Quiet', settings }])
+    expect(file).toContain('volume: 0.62')
+    expect(parseSoundscapeFile(file)[0].settings.volume).toBe(0.62)
+    // A preference saved before the field existed has no volume at all.
+    const { volume: _volume, ...older } = neutralSoundscape()
+    expect(sanitizeSoundscapePreferences({ settings: older }).settings.volume).toBe(1)
+  })
+
   it('write only what differs from the neutral soundscape', () => {
     const file = buildSoundscapeFile([{ id: 'x', name: 'Silence', settings: neutralSoundscape() }])
     const [line] = parsePresetLines(file, 'NEUTRAL_SOUNDSCAPE')

@@ -12,9 +12,10 @@
  * space is built into whichever is silent and faded in over the other, since
  * swapping a playing convolver's buffer is heard as a click.
  *
- * `busLimiter` is the soundscapes' own dynamics, ahead of the limiter the
- * music shares: a thunder peal is caught here, gently, rather than making the
- * music's hard limiter pump.
+ * `busLimiter` is a gentle safety net ahead of the limiter the music shares:
+ * a soundscape is meant to be kept out of it by its own volume (see
+ * SOUNDSCAPE_MIX_GAIN), and what does reach it is turned down softly rather
+ * than making the music's hard limiter pump.
  *
  * The graph exists only while something is audible: it is built on the
  * first audible `apply` and torn down after a short fade once nothing is.
@@ -22,6 +23,7 @@
  */
 import {
   hasAudibleSoundscapeLayer,
+  soundscapeFaderGain,
   type SoundscapePreferences,
   type SoundscapeSpaceSettings,
 } from '../shared/soundscape';
@@ -30,7 +32,18 @@ import { buildNoiseLoops, noiseLoopGains, type NoiseLoops } from '../shared/soun
 import { buildSoundscapeImpulseResponse } from '../shared/soundscapeSpace';
 import { musicPlayerService } from './MusicPlayerService';
 
-/** Mix level at master volume 1, leaving headroom beside the music. */
+/**
+ * Mix level at master volume 1 and a soundscape volume of 1.
+ *
+ * Keeping a soundscape out of the compressor is the soundscape's own volume
+ * (SoundscapeSettings.volume), applied here ahead of busLimiter and set per
+ * soundscape: a natural environment has no compression, and a compressor
+ * working on a soundscape is heard as every layer ducking whenever one of
+ * them peaks. Measured through the real chain in an OfflineAudioContext (42 s
+ * per seed), at this gain Thunderstorm peaked at +7.3 dBFS and was compressed
+ * 71-87% of the time; the knee begins at -14 dBFS, so it needs roughly
+ * -24 dB of its own volume to stay clear of it.
+ */
 const SOUNDSCAPE_MIX_GAIN = 0.5;
 /** The space's return at `amount` 1. */
 const SOUNDSCAPE_SPACE_RETURN = 1.2;
@@ -170,11 +183,17 @@ export class SoundscapeEngine {
       const mixGain = context.createGain();
       mixGain.gain.value = 0;
       const busLimiter = context.createDynamicsCompressor();
-      busLimiter.threshold.value = -10;
-      busLimiter.knee.value = 8;
-      busLimiter.ratio.value = 6;
-      busLimiter.attack.value = 0.01;
-      busLimiter.release.value = 0.25;
+      // Gentle, for a soundscape whose own volume leaves it loud enough to
+      // reach it (see SOUNDSCAPE_MIX_GAIN). A low ratio and a
+      // wide knee turn a peak down a little rather than clamping it, and a
+      // slow release lets the level drift back rather than breathe after
+      // every peak -- the pumping this used to put on every layer. The knee
+      // begins at -14 dBFS (-8 threshold minus half the 12 dB knee).
+      busLimiter.threshold.value = -8;
+      busLimiter.knee.value = 12;
+      busLimiter.ratio.value = 3;
+      busLimiter.attack.value = 0.02;
+      busLimiter.release.value = 0.8;
       mixGain.connect(busLimiter);
       worklet.connect(mixGain, 0);
 
@@ -209,7 +228,7 @@ export class SoundscapeEngine {
     const worklet = this.worklet;
     if (!context || !worklet) return;
     const now = context.currentTime;
-    const mixTarget = SOUNDSCAPE_MIX_GAIN * preferences.masterVolume;
+    const mixTarget = SOUNDSCAPE_MIX_GAIN * soundscapeFaderGain(preferences.settings.volume) * preferences.masterVolume;
     if (this.mixGain && this.mixGainTarget !== mixTarget) {
       this.mixGain.gain.cancelAndHoldAtTime(now);
       this.mixGain.gain.setTargetAtTime(mixTarget, now, SOUNDSCAPE_FADE_SEC);

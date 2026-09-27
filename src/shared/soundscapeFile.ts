@@ -37,6 +37,7 @@ export function neutralSoundscape(): SoundscapeSettings {
     channels: SOUNDSCAPE_CHANNEL_ROSTER.map((entry) => createSoundscapeChannel(entry.id, entry.kind, { enabled: false })),
     space: { ...DEFAULT_SOUNDSCAPE_SPACE },
     weather: { ...DEFAULT_SOUNDSCAPE_WEATHER },
+    volume: 1,
   };
 }
 
@@ -60,6 +61,7 @@ function soundscapeParts(preset: SoundscapePreset): string[] {
   if (space !== undefined) parts.push(`space: ${JSON.stringify(space)}`);
   const weather = buildObjectDiff(preset.settings.weather, base.weather);
   if (weather !== undefined) parts.push(`weather: ${JSON.stringify(weather)}`);
+  if (preset.settings.volume !== base.volume) parts.push(`volume: ${preset.settings.volume}`);
   return parts;
 }
 
@@ -89,6 +91,7 @@ export function parseSoundscapeFile(content: string): Array<{ name: string; sett
       channels: base.channels.map((channel) => ({ ...channel, ...(channels[channel.id] ?? {}) })),
       space: { ...base.space, ...(typeof overrides.space === 'object' ? overrides.space as object : {}) },
       weather: { ...base.weather, ...(typeof overrides.weather === 'object' ? overrides.weather as object : {}) },
+      volume: overrides.volume ?? base.volume,
     });
     const name = typeof overrides.name === 'string' && overrides.name.trim() ? fileSafeName(overrides.name) : `Soundscape ${id}`;
     return { name, settings: { ...settings, channels: settings.channels.map((channel) => ({ ...channel, solo: false })) } };
