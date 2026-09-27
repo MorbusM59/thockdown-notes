@@ -57,8 +57,10 @@ function buildDocument(targetChars) {
 
 const readScrollbar = () => {
   const scroller = document.querySelector('.markdown-preview')
-  const track = document.querySelector('.thockdown-scroll-track')
-  const thumb = document.querySelector('.thockdown-scroll-thumb')
+  // The editor slot's own rail: the sidebar draws a scrollbar with the same
+  // classes, and it comes first in the DOM.
+  const track = document.querySelector('.editor-scrollbar-slot-inner .thockdown-scroll-track')
+  const thumb = document.querySelector('.editor-scrollbar-slot-inner .thockdown-scroll-thumb')
   if (!scroller || !track || !thumb) return null
   const trackRect = track.getBoundingClientRect()
   const thumbRect = thumb.getBoundingClientRect()
@@ -87,7 +89,7 @@ async function seed(page, text) {
 
 /** Clicks the track at `ratio` of its height and waits for the travel to land. */
 async function clickTrackAt(page, ratio) {
-  const track = page.locator('.thockdown-scroll-track')
+  const track = page.locator('.editor-scrollbar-slot-inner .thockdown-scroll-track')
   const box = await track.boundingBox()
   await page.mouse.click(box.x + box.width / 2, box.y + box.height * ratio)
   await page.waitForTimeout(2500)
@@ -106,7 +108,10 @@ async function main() {
     await waitForAppReady(page)
 
     // ── below the threshold: pixels are truth, so be exact ───────────────
-    const smallDoc = buildDocument(20000)
+    // Under DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS (100) blocks, so it really
+    // is continuous: the threshold counts BLOCKS, and 20,000 characters of
+    // this generator is ~120 of them -- windowed, with a character thumb.
+    const smallDoc = buildDocument(8000)
     await seed(page, smallDoc)
     console.log(`\nsmall document: ${smallDoc.length} chars`)
 
@@ -183,12 +188,11 @@ async function main() {
     // that is always visible, expressed with the same ratio that sizes the
     // thumb -- which is what makes the thumb reach the end of its track
     // exactly when the reader reaches the end of the document.
-    await page.evaluate(async () => {
-      const scroller = document.querySelector('.markdown-preview')
-      scroller.style.scrollBehavior = 'auto'
-      scroller.scrollTop = scroller.scrollHeight
-      await new Promise((r) => setTimeout(r, 1500))
-    })
+    // Travelled there through the track, not by writing scrollTop: this
+    // document is windowed (previewWindow.ts), so its scroller holds only the
+    // mounted run, and scrollTop = scrollHeight reaches the end of the RUN,
+    // not of the document.
+    await clickTrackAt(page, 0.999)
     await page.waitForTimeout(2000)
     const bottom = await page.evaluate(readScrollbar)
     const bottomGap = (bottom.trackTop + bottom.trackHeight - TRACK_EDGE_GAP_PX)
@@ -229,8 +233,8 @@ async function main() {
 
     const walk = await page.evaluate(async () => {
       const scroller = document.querySelector('.markdown-preview')
-      const track = document.querySelector('.thockdown-scroll-track')
-      const thumb = document.querySelector('.thockdown-scroll-thumb')
+      const track = document.querySelector('.editor-scrollbar-slot-inner .thockdown-scroll-track')
+      const thumb = document.querySelector('.editor-scrollbar-slot-inner .thockdown-scroll-thumb')
       scroller.style.scrollBehavior = 'auto'
       const tops = []
       const max = scroller.scrollHeight - scroller.clientHeight

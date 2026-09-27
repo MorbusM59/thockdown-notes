@@ -414,9 +414,14 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
    * character they asked for -- and it took four clicks to walk to the top of
    * the document one journey at a time.
    *
-   * `flushSync` is safe here because every caller is an event handler or an
-   * animation frame, never a render. It is also the cheapest possible moment
-   * for a synchronous commit: the pane is covered by the curtain.
+   * `flushSync` needs a caller OUTSIDE React's render and commit phases: an
+   * event handler, an animation frame, a microtask or an await continuation.
+   * Called from inside an effect it cannot flush -- React warns and defers the
+   * update, and a caller reading back the landing gets the old window. The
+   * restore on a mode toggle was exactly that caller until it moved its call
+   * into a microtask (useEditorSectionMount's preview restore). For the
+   * bridged journey it is also the cheapest possible moment for a synchronous
+   * commit: the pane is covered by the curtain.
    */
   const anchorWindowOn = useCallback((blockIndex: number, fraction: number, moveReader: boolean) => {
     const blockCount = previewBlocksRef.current.length

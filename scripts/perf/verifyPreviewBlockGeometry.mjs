@@ -1,5 +1,8 @@
 // Regression check for the preview's rendered block geometry: does every
-// block occupy exactly the vertical slot the virtualizer gave it?
+// block occupy exactly its own slot, with nothing overlapping and no phantom
+// gap? (Written against the virtualizer, which placed blocks by a height
+// model; the history below is why the property matters. Blocks are in normal
+// flow now, so this reads their real rects.)
 //
 // The preview positions each block absolutely, at an offset that is the
 // running sum of the heights the virtualizer believes in. When a believed
@@ -19,9 +22,9 @@
 // exist to hold.
 //
 // The leading-margin reset on the first block is checked here too, because it
-// is the one thing that makes block 0's height unlike every other heading's --
-// and because it used to be applied by DOM position (`:first-child`), which in
-// a virtualized list means "whichever block is mounted right now".
+// is the one thing that makes block 0's height unlike every other heading's.
+// That it follows block 0 and not DOM position is unit-tested
+// (previewBlockGeometry.test.ts).
 //
 // Usage: node scripts/perf/verifyPreviewBlockGeometry.mjs
 
@@ -72,17 +75,18 @@ function openItemsDocument() {
  * offset) against its rendered height. `slack` is what react-virtual's own
  * integer rounding of a measured element costs, per block.
  */
+// Blocks are laid out in normal flow in both panes (the continuous pane
+// mounts all of them, the windowed pane a run), so a block's slot is where
+// the browser actually put it -- read from its rect. The virtualizer this was
+// written against positioned each block by a translateY of its own, which no
+// longer exists; reading that transform now yields nothing, and every block
+// then "misses" its slot by exactly its own height.
 const readBlockGeometry = () => {
   const scroller = document.querySelector('.markdown-preview')
-  const spacer = scroller?.querySelector(':scope > div')
-  if (!spacer) return []
-  const readTop = (el) => {
-    const match = /translateY\(([-\d.]+)px\)/.exec(el.style.transform || '')
-    return match ? Number(match[1]) : null
-  }
-  const rows = [...spacer.querySelectorAll(':scope > [data-index]')].map((el) => ({
+  if (!scroller) return []
+  const rows = [...scroller.querySelectorAll('[data-index]')].map((el) => ({
     index: Number(el.getAttribute('data-index')),
-    top: readTop(el),
+    top: el.getBoundingClientRect().top,
     height: el.getBoundingClientRect().height,
   })).sort((a, b) => a.index - b.index)
   return rows.slice(0, -1).map((row, i) => ({
@@ -141,48 +145,26 @@ async function main() {
 
     const margins = await page.evaluate(() => {
       const scroller = document.querySelector('.markdown-preview')
-      const firstBlockHeading = scroller.querySelector(':scope > div > [data-index="0"] h1')
+      const firstBlockHeading = scroller.querySelector('[data-index="0"] h1')
       return { firstBlockMarginTop: firstBlockHeading ? getComputedStyle(firstBlockHeading).marginTop : null }
     })
     check('the document does not open with a gap above its own title',
       margins.firstBlockMarginTop === '0px', `margin-top: ${margins.firstBlockMarginTop}`)
 
-    // The reset belongs to block 0, not to "whatever is mounted first". With a
-    // `:first-child` rule this heading loses its margin the moment the reader
-    // scrolls it to the top of the mounted range, and gets it back on the way
-    // out -- a height that changes for no reason the virtualizer can see.
-    const scrolledHeading = await page.evaluate(async () => {
-      const scroller = document.querySelector('.markdown-preview')
-      scroller.style.scrollBehavior = 'auto'
-      const spacer = scroller.querySelector(':scope > div')
-      // Finely, not in screenfuls: the mounted range leads the viewport by
-      // PREVIEW_BLOCK_OVERSCAN blocks, so a heading only leads it at one
-      // particular scroll offset, and a coarse sweep walks straight past it.
-      for (let top = 0; top < 12000; top += 60) {
-        scroller.scrollTop = top
-        await new Promise((r) => setTimeout(r, 40))
-        const mounted = [...spacer.querySelectorAll(':scope > [data-index]')]
-          .sort((a, b) => Number(a.getAttribute('data-index')) - Number(b.getAttribute('data-index')))
-        const heading = mounted[0]?.querySelector('h1, h2')
-        if (heading && Number(mounted[0].getAttribute('data-index')) > 0) {
-          return { index: Number(mounted[0].getAttribute('data-index')), marginTop: getComputedStyle(heading).marginTop }
-        }
-      }
-      return null
-    })
-    check('a mid-document heading keeps its margin when it is the first mounted block',
-      scrolledHeading !== null && scrolledHeading.marginTop !== '0px',
-      scrolledHeading ? `block ${scrolledHeading.index} margin-top: ${scrolledHeading.marginTop}` : 'no heading ever led the mounted range')
+    // That the reset belongs to block 0 and not to "whatever is mounted
+    // first" is a property of resolvePreviewEdgeBlockClass, asserted in
+    // previewBlockGeometry.test.ts rather than hunted for here by sweeping the
+    // window until a heading happens to lead it.
 
     // ── a resize re-fits the model; the geometry must survive it ──────────
     await page.setViewportSize({ width: 900, height: 900 })
     await page.waitForTimeout(4000)
-    await page.evaluate(() => {
-      const scroller = document.querySelector('.markdown-preview')
-      scroller.style.scrollBehavior = 'auto'
-      scroller.scrollTop = 0
-    })
-    await page.waitForTimeout(1500)
+    // Back to the document's start through the track: a raw scrollTop = 0
+    // reaches the top of the mounted RUN, which on a windowed pane need not
+    // hold block 0 at all.
+    const track = await page.locator('.editor-scrollbar-slot-inner .thockdown-scroll-track').boundingBox()
+    await page.mouse.click(track.x + track.width / 2, track.y + 1)
+    await page.waitForTimeout(2500)
     const afterResize = await page.evaluate(readBlockGeometry)
     const firstAfterResize = afterResize.find((row) => row.index === 0)
     check('the first block still does not overlap after a window resize',

@@ -138,18 +138,19 @@ const main = async () => {
     await page.keyboard.press('ArrowUp')
     await page.waitForTimeout(1200)
     const afterArrow = await readState(page)
-    // REPORTED, NOT CHECKED, and deliberately so. Caret restoration across a
-    // mode toggle is a separate open defect (TODO.md) and it is INTERMITTENT:
-    // measured at 16% of the document on one run and flung to the very end on
-    // the next, with identical code -- confirmed by running this with and
-    // without the change under test and getting the same failure either way.
-    // Asserting on it would make this file fail at random, and a gate that
-    // fails at random is one people stop reading. Promote these back to
-    // check() when the caret defect is fixed; they will hold then.
-    const atEnd = afterArrow.editMax > 0 && afterArrow.editTop > afterArrow.editMax * 0.9
-    console.log(`INFO  caret after the round trip: ${afterArrow.editTop}px of ${afterArrow.editMax}px`
-      + ` (${((afterArrow.editTop / Math.max(1, afterArrow.editMax)) * 100).toFixed(1)}% of the document)`
-      + `${atEnd ? ' -- at the document end, so no cursor was restored on this run' : ''}`)
+    // The caret comes back where it was. This used to be REPORTED rather than
+    // checked because it was intermittent -- and the intermittency was render
+    // view's landing: when it failed (the split not yet arrived), render view
+    // never moved and edit was simply shown again; when it succeeded, the
+    // landing's own scroll was misread as the reader moving (the line asked
+    // for against the block line read back), and the trip back rebuilt edit
+    // from render view with its caret-at-the-end fallback. Both are fixed, so
+    // this asserts. A caret thrown to the document end also drags the view
+    // there on ArrowUp, which is what this measures.
+    const caretDriftPx = afterArrow.editTop - before.editTop
+    check('the caret comes back on the line it left',
+      Math.abs(caretDriftPx) <= TOLERANCE_BLOCKS * APPROX_BLOCK_HEIGHT_PX,
+      `ArrowUp from the restored caret shows ${afterArrow.editTop}px of ${afterArrow.editMax}px, left at ${before.editTop}px`)
 
     check('no page errors', errors.length === 0, errors.slice(0, 2).join(' | '))
   } finally {

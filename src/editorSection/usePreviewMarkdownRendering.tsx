@@ -155,6 +155,25 @@ export type PreviewScrollToSourceLineFn = (
   opts?: {
     behavior?: 'auto' | 'smooth'
     /**
+     * Opt-in: a landing the pane cannot serve YET is parked instead of
+     * refused, and this is called once it has actually landed -- at once when
+     * the block is already there, or when the split delivers it.
+     *
+     * "Cannot serve yet" means the pane has no block it can PROVE covers the
+     * line: the split arrives in instalments, top of the document first, and
+     * until a later block exists (or the split is complete) the last delivered
+     * block would claim every line past it. Landing there is landing on the
+     * wrong block, silently -- so without this option the call returns false.
+     * It also waits until the pane knows whether it is windowed (see
+     * isLayoutSettledRef), since that decision resets the scroller.
+     *
+     * At most one landing is parked; a newer one replaces it. Aborting
+     * `signal` drops it, which is how a restore superseded by a note switch
+     * keeps its landing from arriving on the next note's blocks.
+     */
+    whenReady?: () => void
+    signal?: AbortSignal
+    /**
      * How far below the pane's top edge to leave the block, in pixels.
      *
      * Omitted means flush at the top. A restore passes
@@ -792,6 +811,10 @@ export function usePreviewMarkdownRendering({
    */
   const previewBlocksRef = useRef(previewBlocks)
   previewBlocksRef.current = previewBlocks
+  // Written during render for the same reason: a landing asked for in this
+  // commit must know whether the blocks it sees are all there will be.
+  const isSplitCompleteRef = useRef(splitState.isComplete)
+  isSplitCompleteRef.current = splitState.isComplete
 
   // react-virtual's own scroll-correction loop (`reconcileScroll`)
   // re-invokes this whenever a target block's real, measured height
@@ -854,9 +877,23 @@ export function usePreviewMarkdownRendering({
   // that forbids a direct reference. Null on a continuous document.
   const previewWindowApiRef = useRef<PreviewWindowApi | null>(null)
 
+  const parkedLandingRef = useRef<{ sourceLine: number; opts: NonNullable<Parameters<PreviewScrollToSourceLineFn>[1]> } | null>(null)
+
   const scrollPreviewToSourceLine = useCallback<PreviewScrollToSourceLineFn>((sourceLine, opts) => {
-    const index = resolvePreviewBlockIndexForSourceLine(previewBlocksRef.current, sourceLine)
-    if (index < 0) return false
+    const blocks = previewBlocksRef.current
+    const index = resolvePreviewBlockIndexForSourceLine(blocks, sourceLine)
+    // Covered only when a LATER block exists or the split is complete: until
+    // then the last delivered block claims every line past it (see
+    // `whenReady` on PreviewScrollToSourceLineFn).
+    const isCovered = index >= 0 && (isSplitCompleteRef.current || index + 1 < blocks.length)
+    // And only once the pane's strategy is final: a landing made in the
+    // continuous pane is thrown away when it becomes windowed. Read at call
+    // time; the ref is declared further down the file.
+    if (!isCovered || !isLayoutSettledRef.current) {
+      if (!opts?.whenReady || opts.signal?.aborted) return false
+      parkedLandingRef.current = { sourceLine, opts }
+      return true
+    }
 
     const scrollerForLanding = previewScrollRef.current
     if (!scrollerForLanding) return false
@@ -914,6 +951,7 @@ export function usePreviewMarkdownRendering({
         ? landedPx - readPreviewEdgePaddingPx(scrollerForLanding)
         : Number.POSITIVE_INFINITY
       land(landedPx, contentAbovePx)
+      opts?.whenReady?.()
       return true
     }
 
@@ -925,6 +963,7 @@ export function usePreviewMarkdownRendering({
     // The whole document is in this scroller, so the content above the block is
     // simply everything between the page margin and it.
     land(measurement.start, measurement.start - readPreviewEdgePaddingPx(scrollerForLanding))
+    opts?.whenReady?.()
     return true
   // blockCharOffsetsRef is deliberately absent from the deps: it is declared
   // further down the file, so naming it here would be a temporal dead zone
@@ -1390,6 +1429,18 @@ export function usePreviewMarkdownRendering({
   const isWindowedRef = useRef(isWindowed)
   isWindowedRef.current = isWindowed
 
+  /**
+   * Whether `isWindowed` is FINAL for this document. It is decided from the
+   * blocks delivered so far, and a large note's split arrives in instalments:
+   * its first ones are under the threshold, so the pane starts continuous and
+   * flips to windowed part-way through -- resetting the scroller, and with it
+   * any landing already made. The block count only grows, so windowed is
+   * final the moment it is reached; continuous is final only once the split
+   * is complete. A landing waits for this (see `whenReady`).
+   */
+  const isLayoutSettledRef = useRef(false)
+  isLayoutSettledRef.current = isWindowed || splitState.isComplete
+
   const renderPreviewBlock = useCallback((block: { text: string; startLine: number }, index: number) => (
     <PreviewMarkdownBlock
       key={index}
@@ -1519,6 +1570,31 @@ export function usePreviewMarkdownRendering({
     observer.observe(container)
     return () => observer.disconnect()
   }, [isWindowed, previewBlocks, rebuildContinuousMeasurements, spacerReady])
+
+  /**
+   * Releases a parked landing (see `whenReady`) when the blocks it waited for
+   * are committed. Declared after the continuous pane's measurement effect so
+   * the geometry it lands on is this commit's.
+   *
+   * Through a microtask, not from this effect's body: on a windowed note the
+   * landing re-anchors the block window and reads back where the target
+   * ended up, which needs a synchronous commit (usePreviewWindow's
+   * anchorWindowOn, a flushSync), and React cannot commit from inside its own
+   * commit. A microtask runs once this commit has finished and still before
+   * the browser paints. If the landing still cannot be served it simply parks
+   * itself again, to wait for the next instalment -- a wait on the blocks,
+   * not a retry.
+   */
+  useLayoutEffect(() => {
+    const parked = parkedLandingRef.current
+    if (!parked) return
+    queueMicrotask(() => {
+      if (parkedLandingRef.current !== parked) return
+      parkedLandingRef.current = null
+      if (parked.opts.signal?.aborted) return
+      scrollPreviewToSourceLine(parked.sourceLine, parked.opts)
+    })
+  }, [previewBlocks, isWindowed, spacerReady, scrollPreviewToSourceLine])
 
   const readCharViewport = useCallback((): PreviewCharViewport | null => {
     if (isWindowed) return previewWindow.api.readCharViewport()

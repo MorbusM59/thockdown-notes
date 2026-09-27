@@ -61,7 +61,7 @@ const WATCH = (pane, ms) => `(async () => {
   const scroller = document.querySelector(${JSON.stringify(pane.scroller)})
   const hostAnchor = document.querySelector(${JSON.stringify(pane.host)})
   const host = ${pane.hostIsParent ? 'hostAnchor.parentElement' : 'hostAnchor'}
-  const thumb = document.querySelector('.thockdown-scroll-thumb')
+  const thumb = document.querySelector('.editor-scrollbar-slot-inner .thockdown-scroll-thumb')
   const frames = []
   const t0 = performance.now()
   while (performance.now() - t0 < ${ms}) {
@@ -120,10 +120,18 @@ async function goToTop(page, pane) {
     scroller.style.scrollBehavior = previous
   }, pane.scroller)
   await page.waitForTimeout(500)
+  // A raw scrollTop write reaches the top of the SCROLLER, which on a windowed
+  // render pane is the top of the mounted run, not of the document -- the
+  // window then re-anchors and carries the reader, and the next journey sets
+  // off from somewhere in the middle of the note. The track's own top is the
+  // app's route to the document's start; on a pane already there (the edit
+  // view holds its whole document) the click travels nowhere.
+  await clickTrackAt(page, 0)
+  await page.waitForTimeout(1500)
 }
 
 async function clickTrackAt(page, ratio) {
-  const box = await page.locator('.thockdown-scroll-track').boundingBox()
+  const box = await page.locator('.editor-scrollbar-slot-inner .thockdown-scroll-track').boundingBox()
   await page.mouse.click(box.x + box.width / 2, box.y + box.height * ratio, { delay: 0 })
 }
 
@@ -294,13 +302,19 @@ async function runPane(page, pane) {
   await goToTop(page, pane)
   const shortWatch = page.evaluate(WATCH(pane, 1500))
   await page.waitForTimeout(60)
-  const box = await page.locator('.thockdown-scroll-track').boundingBox()
-  await page.mouse.click(box.x + box.width / 2, box.y + (box.height * 0.05), { delay: 0 })
+  const box = await page.locator('.editor-scrollbar-slot-inner .thockdown-scroll-track').boundingBox()
+  // Just below the thumb, which is the shortest journey a track click can ask
+  // for. A fixed fraction of the track is not: from the top of a windowed note
+  // 5% lands on the thumb itself, and nothing travels at all.
+  const shortThumb = await page.locator('.editor-scrollbar-slot-inner .thockdown-scroll-thumb').boundingBox()
+  await page.mouse.click(box.x + box.width / 2, shortThumb.y + shortThumb.height + 6, { delay: 0 })
   const shortFrames = await shortWatch
   const shortDistance = Math.abs(shortFrames[shortFrames.length - 1].scrollTop - shortFrames[0].scrollTop)
   // Asserted rather than assumed: a "short" journey that turned out to be
   // long would otherwise pass this by being bridged for a good reason.
-  check('the short-journey case really is short', shortDistance < 11000,
+  // Asserted from both sides: a journey that went nowhere passes the checks
+  // below by having nothing to show, which is not the same as passing them.
+  check('the short-journey case really is short', shortDistance > 0 && shortDistance < 11000,
     `travelled ${Math.round(shortDistance)}px`)
   check('a short journey does not raise one',
     shortFrames.every((frame) => !frame.hasBand),
@@ -327,8 +341,8 @@ async function runPane(page, pane) {
     await page.evaluate(() => document.querySelectorAll('.scroll-bridge').length) === 0)
   check('an interrupted journey lets the thumb go too',
     await page.evaluate(() => {
-      const thumb = document.querySelector('.thockdown-scroll-thumb')
-      const track = document.querySelector('.thockdown-scroll-track')
+      const thumb = document.querySelector('.editor-scrollbar-slot-inner .thockdown-scroll-thumb')
+      const track = document.querySelector('.editor-scrollbar-slot-inner .thockdown-scroll-track')
       return parseFloat(thumb.style.height) < track.clientHeight * 0.9
     }),
     'thumb left stretched across the track')
@@ -344,7 +358,7 @@ async function runPane(page, pane) {
   // stayed extended and kept stretching toward a target nobody was going to.
   await goToTop(page, pane)
   const restingBeforeSnap = await page.evaluate(() => Math.round(
-    parseFloat(document.querySelector('.thockdown-scroll-thumb').style.height) || 0))
+    parseFloat(document.querySelector('.editor-scrollbar-slot-inner .thockdown-scroll-thumb').style.height) || 0))
   await clickTrackAt(page, 0.9)
   await page.waitForTimeout(140)
   // Held, not clicked -- scrollTrackHold resolves a hold to a snap.
@@ -355,8 +369,8 @@ async function runPane(page, pane) {
   await page.waitForTimeout(2500)
 
   const afterSnap = await page.evaluate(() => {
-    const thumb = document.querySelector('.thockdown-scroll-thumb')
-    const track = document.querySelector('.thockdown-scroll-track')
+    const thumb = document.querySelector('.editor-scrollbar-slot-inner .thockdown-scroll-thumb')
+    const track = document.querySelector('.editor-scrollbar-slot-inner .thockdown-scroll-track')
     return {
       heightPx: Math.round(parseFloat(thumb.style.height) || 0),
       topPx: Math.round(parseFloat(thumb.style.top) || 0),

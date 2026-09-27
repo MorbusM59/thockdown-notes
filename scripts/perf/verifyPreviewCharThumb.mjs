@@ -101,10 +101,23 @@ const READ_THUMB = () => {
 
 async function openPreview(page, port, text) {
   await page.goto(`http://localhost:${port}/`)
+  // Both documents on the CHARACTER thumb. Which pane a note gets is decided
+  // by its BLOCK count, and the loose list below is a single block -- so on
+  // defaults it is continuous, with a pixel thumb, and "same length, same
+  // thumb" would be comparing two different kinds of scrollbar. The override
+  // is the app's own (Debugging), persisted in the menu state.
+  await page.evaluate(async () => {
+    const state = await window.thockdownState.loadAppState()
+    await window.thockdownState.saveAppState({ ...state, menu: { ...state.menu, forceCharacterScrollbarThumb: true } })
+  })
   await seedLargeNoteAndReload(page, text)
   await placeCaretAt(page, 'start')
   await page.keyboard.press('Escape')
   await page.waitForSelector('.markdown-preview', { timeout: 15000 })
+  // Until a block is actually mounted, not for a fixed time: a note that is
+  // one giant block shows nothing until its whole parse is done, which can
+  // take seconds (the split cannot deliver a single block in instalments).
+  await page.waitForSelector('.markdown-preview [data-index]', { timeout: 60000 })
   await page.waitForTimeout(1500)
 }
 

@@ -75,6 +75,23 @@ function debugLogCheckpoint(label: string): void {
 }
 
 /** Same opt-in flag as debugLogCheckpoint, but not tied to a keydown origin -- for logging mode-toggle scroll-sync diagnostics, which don't happen inside a keydown at all. */
+/**
+ * The offset just past the last character of 0-based `line` in `text` (before
+ * its newline), or the text's end for a line past the last. Walks newlines with
+ * indexOf rather than splitting: this runs on a multi-megabyte note, and a
+ * split would allocate every line to find one.
+ */
+function resolveLineEndOffset(text: string, line: number): number {
+  let lineStart = 0
+  for (let index = 0; index < line; index += 1) {
+    const newline = text.indexOf('\n', lineStart)
+    if (newline < 0) return text.length
+    lineStart = newline + 1
+  }
+  const lineEnd = text.indexOf('\n', lineStart)
+  return lineEnd < 0 ? text.length : lineEnd
+}
+
 function debugLogScrollSync(label: string): void {
   if (typeof window === 'undefined') return
   if (window.localStorage.getItem('thockdown:debug-input-lag') !== '1') return
@@ -2159,13 +2176,13 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       }
       const fallbackViewport = latestEditViewportRef.current ?? latestViewportRef.current
       const topBoundaryLines = fallbackViewport?.topBoundaryLines ?? 0
-      // No character-level cursor is derivable from a preview scroll
-      // position (only a block/line), so this collapses to a fallback
-      // rather than a real restored position -- the end of the note, not
-      // its start (0), so e.g. switching a freshly-created note from
-      // preview to edit lands the caret behind its just-typed content
-      // instead of in front of it.
-      const collapsedTextEndOffset = text.length
+      // The reader scrolled in render view, so the caret they left in edit
+      // is somewhere they have moved away from. A render-view position names
+      // a LINE, not a character, so the caret goes to the END of the line
+      // being looked at -- the top line of the view once edit follows the
+      // anchor -- because the end is where a reader resumes typing. (It used
+      // to go to the end of the whole note, far from anything on screen.)
+      const collapsedTextEndOffset = resolveLineEndOffset(text, sourceAnchorLine)
       const collapsedSelection: EditorSelectionState = {
         anchor: collapsedTextEndOffset,
         focus: collapsedTextEndOffset,
@@ -2545,6 +2562,9 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     if (!activeNoteId) return
 
     let cancelled = false
+    // Drops a landing the pane has parked for this run (see
+    // PreviewScrollToSourceLineFn's `whenReady`) when the run is superseded.
+    const landingAbort = new AbortController()
 
     // The settle generation this run belongs to (opened by the effect
     // above, in this same commit). Captured once, so a restore that
@@ -2613,23 +2633,42 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       // none of them represent an actual change worth reacting to.
       lastKnownPreviewAnchorLineRef.current = clampedSourceLine
 
-      const landed = previewScrollToSourceLineRef.current?.(clampedSourceLine, {
+      // Tells the gate the restore is done. Called when the landing actually
+      // happens -- which, while the note's split is still arriving, is when the
+      // pane has the block, not when this asked for it: reporting at the ask
+      // revealed an empty pane that then never landed. And called at once if
+      // the pane refused outright, because the gate's whole contract is that
+      // it never outlives the operation it is waiting on.
+      const finish = () => {
+        // Remember where the pane now READS as being, not the line that was
+        // asked for. The scroll listener compares its capture against this,
+        // and the capture names the line of the block it picks (the block's
+        // own start), which is rarely the exact source line a landing aimed
+        // at -- asked for 429, read back as 410. Compared across those two
+        // units, the landing's own scroll looked like the reader moving in
+        // render view, and the trip back to edit re-derived its position (and
+        // its caret) from render view instead of simply showing edit again.
+        const captured = resolvePreviewSourceAnchorFromContainer(container)
+        if (captured) lastKnownPreviewAnchorLineRef.current = captured.sourceAnchorLine
+        traceSettle(() => `restore line=${clampedSourceLine} landed`
+          + ` scrollTop=${container.scrollTop.toFixed(1)}`
+          + ` offset=${(RESTORE_OFFSET_LINES * readPreviewLineHeightPx(container)).toFixed(1)}`
+          + ` edgePadding=${readPreviewEdgePaddingPx(container).toFixed(1)}`)
+        container.style.scrollBehavior = previousScrollBehavior
+        previewScrollTransitionControllerRef.current.forceComplete(previewTransitionId)
+        if (settleGeneration !== null) {
+          previewSettleGateRef.current?.markRestoreApplied(settleGeneration)
+        }
+      }
+
+      const accepted = previewScrollToSourceLineRef.current?.(clampedSourceLine, {
         offsetPx: RESTORE_OFFSET_LINES * readPreviewLineHeightPx(container),
+        whenReady: finish,
+        signal: landingAbort.signal,
       }) ?? false
-
-      traceSettle(() => `restore line=${clampedSourceLine} landed=${landed}`
-        + ` scrollTop=${container.scrollTop.toFixed(1)}`
-        + ` offset=${(RESTORE_OFFSET_LINES * readPreviewLineHeightPx(container)).toFixed(1)}`
-        + ` edgePadding=${readPreviewEdgePaddingPx(container).toFixed(1)}`)
-
-      container.style.scrollBehavior = previousScrollBehavior
-      previewScrollTransitionControllerRef.current.forceComplete(previewTransitionId)
-      // Tell the gate the restore is done EITHER way -- landed or given up. A
-      // restore that can't find its target must still let the preview become
-      // visible; the gate's whole contract is that it never outlives the
-      // operation it's waiting on.
-      if (settleGeneration !== null) {
-        previewSettleGateRef.current?.markRestoreApplied(settleGeneration)
+      if (!accepted) {
+        traceSettle(() => `restore line=${clampedSourceLine} refused`)
+        finish()
       }
     }
 
@@ -2639,10 +2678,23 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     if (pendingSourceAnchor) {
       pendingRenderViewSourceAnchorRef.current = null
       previewRestoreCompletedForNoteIdRef.current.add(previewRestoreKey)
-      applyPreviewSourceAnchor(pendingSourceAnchor.sourceAnchorLine)
+      // Applied from a microtask, not from this layout effect's body. On a
+      // windowed note the landing re-anchors the block window and reads back
+      // where the target ended up, which needs the new window COMMITTED first
+      // (usePreviewWindow's anchorWindowOn, a flushSync) -- and React cannot
+      // commit from inside its own commit phase: it warns and defers the
+      // update. A microtask runs once this commit has finished and still
+      // before the browser paints. The load restore below makes the same call
+      // after an await, which is outside the commit already.
+      const sourceAnchorLine = pendingSourceAnchor.sourceAnchorLine
+      queueMicrotask(() => {
+        if (cancelled) return
+        applyPreviewSourceAnchor(sourceAnchorLine)
+      })
 
       return () => {
         cancelled = true
+        landingAbort.abort()
         releaseSettleGate()
         setPreviewScrollBehavior('')
       }
@@ -2663,6 +2715,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       releaseSettleGate()
       return () => {
         cancelled = true
+        landingAbort.abort()
         setPreviewScrollBehavior('')
       }
     }
@@ -2716,6 +2769,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
 
     return () => {
       cancelled = true
+      landingAbort.abort()
       releaseSettleGate()
       setPreviewScrollBehavior('')
     }
@@ -2724,7 +2778,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     // first restore for a target, a re-run only releases the settle gate.
     // Whether anything relies on that is parked in
     // docs/pending-review-and-removal.md.
-  }, [activeNoteId, isPreviewMode, editorTextVersion, lineHeightPx, readEditorText, previewedSnapshotId, previewedSnapshotContentRef, getPreviewBlocksForText, beginPreviewRestoreTransition])
+  }, [activeNoteId, isPreviewMode, editorTextVersion, lineHeightPx, readEditorText, previewedSnapshotId, previewedSnapshotContentRef, getPreviewBlocksForText, beginPreviewRestoreTransition, resolvePreviewSourceAnchorFromContainer])
 
   useEffect(() => {
     if (!isPreviewMode) return
