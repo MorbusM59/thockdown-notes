@@ -12,12 +12,12 @@ Temporary. **Delete this file in the same commit that closes the release out**; 
 
 ```
 git pull origin main
-git tag -a v0.7.0 f25828f -m "Thockdown Notes v0.7.0"
+git tag -a v0.7.0 origin/main -m "Thockdown Notes v0.7.0"
 git push origin v0.7.0          # starts build-mac.yml
 npm run release -- 0.7.0        # tag exists -> skips the bump, resumes
 ```
 
-Without the tag, `npm run release -- 0.7.0` dies with "version is already 0.7.0 and no tag v0.7.0 exists". The tag goes on `f25828f` and not on `main`'s tip, because the commits after it change only the CI workflow and its docs. When the script pauses for notes, paste the text below into `release-notes/v0.7.0.md`.
+Without the tag, `npm run release -- 0.7.0` dies with "version is already 0.7.0 and no tag v0.7.0 exists". Tag `main`'s tip, not `f25828f`: the cogwheel fix came after the version bump and belongs in this release. (Delete this handoff before tagging, or tag the commit that deletes it.) When the script pauses for notes, paste the text below into `release-notes/v0.7.0.md`.
 
 Check the result: the release (Alpha Release #18, a prerelease) should carry a `.dmg`, `.dmg.sha256`, `.exe`, `.zip` and `SHA256SUMS.txt`.
 
@@ -56,6 +56,7 @@ A big one. **Ambient sound** arrives: a generated soundscape of wind, surf, rain
 - Turning ambient sound off and on no longer leaves the old generator running in the background, and thunder costs well under half of what it did.
 - Pressing a note card's archive, trash or save button no longer takes the keyboard away from the editor.
 - The User Guide and the welcome note were corrected wherever they had fallen behind the app.
+- The options cogwheel turns about its own centre instead of wobbling.
 
 
 ## 3. Worth checking in the real app
@@ -67,6 +68,7 @@ These fixes were verified with tests and in `dev:browser` only, never in a packa
 - **External file IPC** (`electron/main.ts`) now uses async `fs`. Open, save and import an external file once.
 - **Music scrub**: hold rewind to scrub, then release. There should be no extra 20% jump after it.
 - **macOS**: hold right-click on an ambient channel to disable it. It should not solo the channel first, and the next short right-click should still solo. On Windows `contextmenu` fires on release, so this path mattered on the Mac.
+- **Options cogwheel**: it is now an SVG (`WorkIndicatorGlyph.tsx`). Check it looks the same at rest in light and dark, and holds still at the centre while it turns.
 - **Render-view wheel**: spin, re-spin and fast notches should feel slightly longer than before. They used to lose distance; `wheelNotchTravel.ts` and `wheelSpinProfile.ts` now conserve it.
 
 ## 4. Loose ends needing a decision
