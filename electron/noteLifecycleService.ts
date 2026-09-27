@@ -1162,6 +1162,11 @@ export class NoteLifecycleService {
     });
   }
 
+  async getFromDiskBaseline(input: LoadNoteInput): Promise<{ content: string; timestamp: string } | null> {
+    const row = this.databaseService.getLatestFromDiskSnapshot(input.id);
+    return row ? { content: row.content, timestamp: row.timestamp } : null;
+  }
+
   async getNoteSnapshots(input: LoadNoteInput): Promise<Array<{ id: number; noteId: string; content: string; timestamp: string; isManual: boolean; isFromDisk: boolean }>> {
     return this.databaseService.getNoteSnapshots(input.id);
   }

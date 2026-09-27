@@ -512,6 +512,8 @@ function persistStore(store: BrowserMockStore): void {
 }
 
 function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycleApi {
+  /** External notes' from-disk baselines, in memory only (see saveNoteSnapshot below). */
+  const fromDiskBaselineById = new Map<string, { content: string; timestamp: string }>()
   const getById = (id: string): NoteDocument | undefined => storeRef.current.notes.find((note) => note.id === id)
 
   const mutate = <T,>(transform: (store: BrowserMockStore) => T): T => {
@@ -680,10 +682,20 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
       return note?.id ?? null
     },
 
-    async saveNoteSnapshot(_input: { id: string; content: string; isManual?: boolean; isFromDisk?: boolean; timestamp?: string }): Promise<number> {
-      // Browser mock does not persist snapshots; synthesize an ID so callers
-      // that need one (e.g. freeze-on-hibernate) still get a valid contract.
+    async saveNoteSnapshot(input: { id: string; content: string; isManual?: boolean; isFromDisk?: boolean; timestamp?: string }): Promise<number> {
+      // Browser mock does not persist snapshot history; synthesize an ID so
+      // callers that need one (e.g. freeze-on-hibernate) still get a valid
+      // contract. The one exception is an external note's from-disk
+      // baseline, kept in memory so activation finds it the way the real
+      // app does instead of taking the legacy backfill path every time.
+      if (input.isFromDisk) {
+        fromDiskBaselineById.set(input.id, { content: input.content, timestamp: input.timestamp ?? new Date().toISOString() })
+      }
       return Date.now()
+    },
+
+    async getFromDiskBaseline(input: LoadNoteInput): Promise<{ content: string; timestamp: string } | null> {
+      return fromDiskBaselineById.get(input.id) ?? null
     },
 
     async getNoteSnapshots(_input: LoadNoteInput): Promise<Array<{ id: number; noteId: string; content: string; timestamp: string; isManual: boolean; isFromDisk: boolean }>> {

@@ -36,7 +36,6 @@ import type { PreviewDocumentPositionApi } from './usePreviewMarkdownRendering'
 import { usePreviewScrollbar } from './usePreviewScrollbar'
 import { useDocumentFindNavigation } from './useDocumentFindNavigation'
 import { useMarkdownFormattingToolbar } from './useMarkdownFormattingToolbar'
-import { hashNormalizedText } from '../shared/hashText'
 import type { PreviewMarkdownBlock, PreviewBlockSplitCache } from '../editor/PreviewBlockSplit'
 import type { SectionHandle } from './sectionRegistry'
 import { buildPersistedBlockMap, restorePersistedBlockMap } from '../editor/persistedBlockMap'
@@ -848,15 +847,13 @@ export function EditorSection({
 
     const externalStart = performance.now()
     let originalText: string | null = null
-    let originalHash: string | null = null
 
     if (isExternalNote(loaded)) {
-      // Rows come back newest-first, so the first from-disk row IS the most
-      // recent record of what the file held -- identified by its own column
-      // rather than by scanning for one that isn't manual (which stopped
-      // meaning "the original" as soon as a second automatic snapshot existed).
-      const snapshotRows = await window.thockdownNotes?.getNoteSnapshots({ id: loaded.id }) ?? []
-      let baselineRow = snapshotRows.find((row) => row.isFromDisk) ?? null
+      // The newest record of what the file held, fetched on its own. This
+      // used to load EVERY snapshot of the note, each a full copy of its text,
+      // over IPC, just to pick this one row out of them.
+      let baselineRow: { content: string; timestamp: string } | null =
+        await window.thockdownNotes?.getFromDiskBaseline({ id: loaded.id }) ?? null
 
       // A note imported by an older build has no from-disk row yet. Establish
       // one from the FILE, not from the hydrated database text: a baseline is
@@ -876,12 +873,8 @@ export function EditorSection({
             timestamp: new Date(diskSnapshot.modifiedAtMs).toISOString(),
           })
           baselineRow = {
-            id: -1,
-            noteId: loaded.id,
             content: diskContent,
             timestamp: new Date(diskSnapshot.modifiedAtMs).toISOString(),
-            isManual: true,
-            isFromDisk: true,
           }
           console.warn('[external-note] backfilled from-disk baseline for a legacy external note', {
             noteId: loaded.id, textLength: diskContent.length, modifiedAtMs: diskSnapshot.modifiedAtMs,
@@ -895,13 +888,7 @@ export function EditorSection({
       originalText = baselineRow ? normalizeInternalText(baselineRow.content) : hydratedText
 
       externalNoteOriginalTextByIdRef.current.set(loaded.id, originalText)
-      originalHash = await hashNormalizedText(originalText)
       activeNoteExternalPathRef.current = loaded.externalPath ?? null
-      console.warn('[external-note] stored original hash for external note', {
-        noteId: loaded.id,
-        originalHash,
-        externalPath: loaded.externalPath,
-      })
     }
     logStep('external note setup', externalStart)
 

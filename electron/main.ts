@@ -467,6 +467,7 @@ function registerIpcHandlers() {
   ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.updateExternalNoteState, async (_event, input) => noteLifecycleService!.updateExternalNoteState(input));
   ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.saveNoteSnapshot, async (_event, input) => noteLifecycleService!.saveNoteSnapshot(input));
   ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.getNoteSnapshots, async (_event, input) => noteLifecycleService!.getNoteSnapshots(input));
+  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.getFromDiskBaseline, async (_event, input) => noteLifecycleService!.getFromDiskBaseline(input));
   ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.deleteNoteSnapshot, async (_event, input) => noteLifecycleService!.deleteNoteSnapshot(input));
   ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.saveSnapshotAnchor, async (_event, input) => noteLifecycleService!.saveSnapshotAnchor(input));
   ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.getSnapshotAnchor, async (_event, input) => noteLifecycleService!.getSnapshotAnchor(input));

@@ -19,6 +19,7 @@ export const NOTE_LIFECYCLE_CHANNELS = {
   getNoteIdByExternalPath: 'notes:get-note-id-by-external-path',
   saveNoteSnapshot: 'notes:save-note-snapshot',
   getNoteSnapshots: 'notes:get-note-snapshots',
+  getFromDiskBaseline: 'notes:get-from-disk-baseline',
   deleteNoteSnapshot: 'notes:delete-note-snapshot',
   saveSnapshotAnchor: 'notes:save-snapshot-anchor',
   getSnapshotAnchor: 'notes:get-snapshot-anchor',
@@ -189,6 +190,12 @@ export interface NoteLifecycleApi {
   /** Returns the resulting snapshot's ID -- either newly inserted, or the existing latest one if the content is unchanged (dedup). */
   saveNoteSnapshot(input: { id: string; content: string; isManual?: boolean; isFromDisk?: boolean; timestamp?: string }): Promise<number>;
   getNoteSnapshots(input: LoadNoteInput): Promise<Array<{ id: number; noteId: string; content: string; timestamp: string; isManual: boolean; isFromDisk: boolean }>>;
+  /**
+   * An external note's baseline: the newest record of what its FILE held
+   * (the latest snapshot with isFromDisk), or null if none was ever taken.
+   * One row, where getNoteSnapshots returns every snapshot with its full text.
+   */
+  getFromDiskBaseline(input: LoadNoteInput): Promise<{ content: string; timestamp: string } | null>;
   deleteNoteSnapshot(input: DeleteNoteSnapshotInput): Promise<void>;
   /** A Timeline snapshot's own canonical BLOCK, independent of the live note's -- see docs/editor-contract.md's Viewport Model section. */
   saveSnapshotAnchor(input: { snapshotId: number; anchorBlockIndex: number | null }): Promise<void>;
