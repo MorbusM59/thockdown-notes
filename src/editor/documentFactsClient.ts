@@ -122,19 +122,35 @@ function ensureWorker(): Worker | null {
       // One failure retires the worker for the session: whatever broke it is
       // not going to be better on the next note, and every request from here
       // takes the main-thread path rather than hanging on a dead port.
-      for (const [, request] of pending) {
-        request.work.done()
-        request.resolve(splitMarkdownIntoPreviewBlocksIncremental(request.text, null))
-      }
+      //
+      // Retired and emptied BEFORE anything is settled: settling means
+      // parsing here, and a parse can throw -- the input that broke the
+      // worker is the likeliest one to -- which would otherwise leave the
+      // dead worker in place and every later request for the same text
+      // handed a promise that never settles.
+      worker = null
+      const orphaned = [...pending.values()]
+      const orphanedFinds = [...pendingFinds.values()]
       pending.clear()
       pendingByText.clear()
       inFlightByText.clear()
-      for (const [, waiting] of pendingFinds) {
+      pendingFinds.clear()
+      for (const waiting of orphanedFinds) {
         waiting.work.done()
         waiting.resolve([])
       }
-      pendingFinds.clear()
-      worker = null
+      for (const request of orphaned) {
+        request.work.done()
+        let cache: PreviewBlockSplitCache
+        try {
+          cache = splitMarkdownIntoPreviewBlocksIncremental(request.text, null)
+        } catch {
+          // Whatever the worker had delivered before it died is still a
+          // true map of the top of the document.
+          cache = restorePreviewBlockSplitCacheFromRanges(request.text, request.ranges)
+        }
+        request.resolve(cache)
+      }
     }
     worker = created
   } catch {
