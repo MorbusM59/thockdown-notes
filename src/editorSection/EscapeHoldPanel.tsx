@@ -1019,9 +1019,12 @@ export function EscapeHoldPanel({
   const wheelNotchStateRef = useRef(createWheelNotchState())
   const handleRingWheel = useCallback((event: WheelEvent) => {
     if (!isOpenRef.current) return
+    // Prevented before the notch is resolved: a trackpad's sub-notch deltas
+    // turn nothing yet, but they are still over the ring and must not
+    // scroll the note behind it.
+    event.preventDefault()
     const units = resolveWheelEventUnits(event, wheelNotchStateRef.current, performance.now())
     if (units === 0) return
-    event.preventDefault()
     rotateOneStepRef.current(units < 0 ? -1 : 1)
   }, [])
   useNonPassiveWheel(ringRef, handleRingWheel)

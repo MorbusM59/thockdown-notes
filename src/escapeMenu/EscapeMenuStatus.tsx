@@ -186,7 +186,9 @@ export function EscapeMenuChromeBarRow({ status, detail }: {
           </span>
         </div>
       ) : null}
-      {status.narration.length > 0 ? (
+      {/* Either one fills the strip: a screen with no history yet can still
+          have a choice being weighed, and its preview must not vanish with it. */}
+      {status.narration.length > 0 || detailLines.length > 0 ? (
         <div className="chapter-tab-mode-shell">
           <div className={`chapter-bar-scroll-shell${strip.fadeClassName}`}>
             <div
