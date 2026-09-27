@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Dispatch, DragEvent, MouseEvent, MutableRefObject, SetStateAction } from 'react'
 import type { NoteSummary, NoteUiStatePayload } from '../shared/noteLifecycle'
 import { isExternalNote } from '../shared/noteLifecycle'
-import type { PersistedViewportState } from '../shared/appState'
 import { NOTE_DRAG_MIME_TYPE, parseNoteDragPayload } from '../shared/noteDrag'
 import { normalizeInternalText } from '../editor/TextPolicy'
 import { CHAPTER_HEADLINE_LEVEL_RULE, NOTE_HEADLINE_LEVEL_RULE } from '../shared/markdownHeadings'
@@ -129,8 +128,6 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   registerSectionHandle: (sectionId: string, handle: SectionHandle) => void
   reportSectionHandle: (sectionId: string, handle: SectionHandle) => void
 
-  isApplyingInitialViewportRef: MutableRefObject<boolean>
-  pendingViewportRestoreRef: MutableRefObject<PersistedViewportState | null>
   externalNoteOriginalTextByIdRef: MutableRefObject<Map<string, string>>
   activeNoteExternalPathRef: MutableRefObject<string | null>
 
@@ -215,8 +212,6 @@ export function EditorSection({
   activeSectionId,
   registerSectionHandle,
   reportSectionHandle,
-  isApplyingInitialViewportRef,
-  pendingViewportRestoreRef,
   externalNoteOriginalTextByIdRef,
   activeNoteExternalPathRef,
   queueAppStateSaveStable,
@@ -505,8 +500,6 @@ export function EditorSection({
     deferPreviewOnRapidInput,
     latestEditorTextRef,
     latestEditorSelectionRef,
-    isApplyingInitialViewportRef,
-    pendingViewportRestoreRef,
     notes,
     activeNoteHasDebugTagRef,
     setIsCaretSuspended,
@@ -917,7 +910,6 @@ export function EditorSection({
     pendingEditRestoreSnapshotRef.current = preloadedSnapshot
     setActiveNoteId(loaded.id)
     setActiveNoteText(hydratedText)
-    pendingViewportRestoreRef.current = null
     await saveSelectedNoteState(loaded.id)
     logStep('state updates + save selected note', stateUpdateStart)
     logStep('total activateNote', activateStart)
@@ -957,7 +949,6 @@ export function EditorSection({
     latestViewportRef,
     pendingEditRestoreSnapshotRef,
     pendingRenderViewSourceAnchorRef,
-    pendingViewportRestoreRef,
     readCurrentEditUiPayload,
     setActiveNoteId,
     setActiveNoteText,
@@ -991,7 +982,6 @@ export function EditorSection({
     pendingEditRestoreSnapshotRef.current = null
     setActiveNoteId(null)
     setActiveNoteText('')
-    pendingViewportRestoreRef.current = null
     await saveSelectedNoteState(null)
     void window.thockdownSections?.setActiveNote(sectionId, null)
   }, [
@@ -1004,7 +994,6 @@ export function EditorSection({
     editModeSnapshotByNoteIdRef,
     latestEditorTextRef,
     pendingEditRestoreSnapshotRef,
-    pendingViewportRestoreRef,
     readCurrentEditUiPayload,
     setActiveNoteId,
     setActiveNoteText,

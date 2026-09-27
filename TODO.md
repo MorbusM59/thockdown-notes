@@ -39,7 +39,7 @@
 
 ## Split-view rough edges (carried over from split-view handover doc)
 - [x] `editorStageRef` (App.tsx) was one shared ref across all sections for the background-texture-sizing `ResizeObserver`. Deleted rather than made per-section: every texture is one repeating 512px tile (`useTextureSurface` always generated at `TEXTURE_REPEAT_TILE_SIZE`; the stylesheets repeat it), so the sizes that observer measured -- app grid, sidebar and stage -- were never read, and all it did was re-render `App` during a window resize. The hook no longer takes a size.
-- [ ] `pendingViewportRestoreRef`/`isApplyingInitialViewportRef` are shared across sections, so one section's viewport-restore-in-progress window can transiently suppress another's save.
+- [x] `pendingViewportRestoreRef`/`isApplyingInitialViewportRef` were shared across sections. Deleted rather than split: their only writer was `seedInitialViewport`, which nothing called, so both were permanently null/false and every branch reading them was unreachable -- including the guard in `queueAppStateSave` and the pending-restore branch of `onViewportChange`.
 - [ ] In `npm run dev:browser`, `appShellWidthPx` was once observed stuck at a stale, too-narrow value after a sequence of interactions, hiding the "+" button even with room. Never root-caused; may be a browser-mock-only artifact.
 - [ ] Hibernation rendering has never been exercised with real N>1 typing load — confirm inactive sections actually stop wiring live-typing listeners.
 - [ ] Cold-start restore with 2+ sections has only been verified via browser-mock reloads, not an actual Electron app restart.

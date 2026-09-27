@@ -11,7 +11,6 @@ import type {
   EditorTextEdit,
   EditorTransformResult,
   EditorViewportChangeEvent,
-  EditorViewportState,
 } from '../editor/EditorContract'
 import {
   type EditRestoreSnapshot,
@@ -107,9 +106,6 @@ export interface UseEditorSectionMountOptions {
   deferPreviewOnRapidInput: boolean
   latestEditorTextRef: MutableRefObject<string>
   latestEditorSelectionRef: MutableRefObject<EditorSelectionState>
-  /** Owned in App.tsx, not here -- queueAppStateSave and activateNote (both staying in App.tsx) also read/write these. */
-  isApplyingInitialViewportRef: MutableRefObject<boolean>
-  pendingViewportRestoreRef: MutableRefObject<PersistedViewportState | null>
 
   /** The full shared notes list -- read (not just written) by onTextChange's external-note bookkeeping. */
   notes: NoteSummary[]
@@ -247,27 +243,6 @@ export interface UseEditorSectionMountResult {
   isPreviewScrollInteractionBlocked: () => boolean
   applyProgrammaticEditorText: (nextText: string, selectionStart?: number, selectionEnd?: number) => void
   /**
-   * Seeds the initial editor state on cold start -- viewport *and*
-   * selection -- retrying against the adapter until it's ready. Replaces a
-   * separate effect that used to watch a ref for this -- called directly
-   * from App.tsx's bootstrap flow once, right after persisted app state and
-   * the initial note's own saved UI state both resolve. Safe against a fast
-   * note-switch racing the retry loop: activateNote already nulls
-   * pendingViewportRestoreRef on every switch, and the retry loop checks
-   * that it's still the same pending value before applying.
-   *
-   * Deliberately its own function rather than a thin call to
-   * `applyEditRestoreSnapshot` -- this one also owns
-   * `isApplyingInitialViewportRef`/`pendingViewportRestoreRef`, the guard
-   * that stops `queueAppStateSave` from persisting a spurious intermediate
-   * viewport over the one just restored (see `onViewportChange`).
-   * `applyEditRestoreSnapshot` doesn't touch those refs at all -- note
-   * switches aren't behind that particular guard -- so folding this into
-   * that function would either lose the guard or require threading it
-   * through a codepath that has no other reason to know about it.
-   */
-  seedInitialViewport: (snapshot: EditRestoreSnapshot) => void
-  /**
    * Background preview-block split cache. Populated by a deferred parse
    * while in edit mode so the first toggle to preview can warm-start
    * usePreviewMarkdownRendering's incremental parser instead of paying for
@@ -305,8 +280,6 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     deferPreviewOnRapidInput,
     latestEditorTextRef,
     latestEditorSelectionRef,
-    isApplyingInitialViewportRef,
-    pendingViewportRestoreRef,
     notes,
     activeNoteHasDebugTagRef,
     setIsCaretSuspended,
@@ -1140,8 +1113,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       // "user-input" (see docs/editor-contract.md's Event Semantics) and
       // gets read by onViewportChange as a genuine user scroll, re-dirtying
       // sectionRequiresScrollUpdateRef right after this restore and forcing
-      // an unnecessary slow-path toggle next time. seedInitialViewport
-      // already guards its own applySnapshot call the same way.
+      // an unnecessary slow-path toggle next time.
       ignoreNextUserViewportChangeRef.current = true
       adapter.applySnapshot({
         selectionScrollBehavior: 'preserve-scroll',
@@ -1403,20 +1375,6 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   // always win over our own post-restore re-correction polling, not fight
   // it for up to MAX_SETTLE_RECHECK_FRAMES).
   const userScrollInterruptTokenRef = useRef(0)
-
-  // Pure predicate, single call site (onViewportChange below) -- no reason
-  // for this to be a useCallback with its own identity.
-  const areMatchingViewportLines = (expected: PersistedViewportState, event: EditorViewportState): boolean => {
-    const lineHeight = Math.max(1, event.lineHeightPx)
-    const actualTop = Math.max(0, Math.round(event.topBoundaryPx / lineHeight))
-    const actualBottom = Math.max(0, Math.round(event.bottomBoundaryPx / lineHeight))
-    const actualScrollTop = Math.max(0, Math.round(event.scrollTopPx / lineHeight))
-    return (
-      actualTop === expected.topBoundaryLines &&
-      actualBottom === expected.bottomBoundaryLines &&
-      actualScrollTop === expected.scrollTopLines
-    )
-  }
 
   const shouldPlayTypingSound = useCallback((event: EditorTextChangeEvent) => {
     if (event.source !== 'user-input') return false
@@ -1849,19 +1807,6 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         return
       }
 
-      const pendingRestore = pendingViewportRestoreRef.current
-      if (pendingRestore) {
-        if (event.source === 'programmatic' && areMatchingViewportLines(pendingRestore, event.viewport)) {
-          pendingViewportRestoreRef.current = null
-          isApplyingInitialViewportRef.current = false
-          if (typeof event.transitionId === 'number' && event.transitionId === expectedTransitionId) {
-            expectedViewportRestoreTransitionIdRef.current = null
-          }
-        } else {
-          return
-        }
-      }
-
       if (event.source !== 'user-input') {
         return
       }
@@ -1955,10 +1900,8 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     documentCommit,
     deriveTypingSoundKeyId,
     resolveTypingSoundSpatialPan,
-    isApplyingInitialViewportRef,
     latestEditorSelectionRef,
     latestEditorTextRef,
-    pendingViewportRestoreRef,
     shouldPlayReverseTypingSound,
     shouldPlayTypingSound,
   ])
@@ -2984,51 +2927,6 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   ])
 
 
-  const seedInitialViewport = useCallback((snapshot: EditRestoreSnapshot) => {
-    const viewport = snapshot.viewport
-    pendingViewportRestoreRef.current = viewport
-    latestViewportRef.current = viewport
-    isApplyingInitialViewportRef.current = true
-
-    const applyViewport = () => {
-      // If activateNote (or another seed) has since superseded this pending
-      // restore, this attempt is stale -- bail rather than clobber whatever
-      // the user has already moved on to.
-      if (pendingViewportRestoreRef.current !== viewport) return
-
-      const adapter = adapterRef.current
-      if (!adapter) {
-        requestAnimationFrame(applyViewport)
-        return
-      }
-
-      // Restoring from integer line counts is direct: no clamping or
-      // measurement-dependent math happens here (see EditorViewportLines /
-      // clampBoundaryLines in Editor.tsx). This call is correct even before
-      // the editor's container has been measured. Selection restores the
-      // same way activateNote's own restore does (applyEditRestoreSnapshot)
-      // -- this used to be viewport-only, which is why cold start never
-      // restored cursor position the way every other note switch does.
-      const viewportRestoreTransitionId = allocateViewportRestoreTransitionId()
-      expectedViewportRestoreTransitionIdRef.current = viewportRestoreTransitionId
-      ignoreNextUserViewportChangeRef.current = true
-      adapter.applySnapshot({
-        viewportLines: viewport,
-        selectionScrollBehavior: 'preserve-scroll',
-        selection: snapshot.fullSelection,
-        transitionId: viewportRestoreTransitionId,
-      })
-
-      latestViewportRef.current = viewport
-      latestEditViewportRef.current = viewport
-      // Keep the pending restore until the editor reports the matching
-      // restored viewport (see onViewportChange above). This guards against
-      // an intermediate 0/0/0 programmatic event that can arrive directly
-      // after applySnapshot.
-    }
-
-    requestAnimationFrame(applyViewport)
-  }, [allocateViewportRestoreTransitionId, isApplyingInitialViewportRef, pendingViewportRestoreRef])
 
   return {
     adapterRef,
@@ -3059,7 +2957,6 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     toggleRenderViewMode,
     isPreviewScrollInteractionBlocked,
     applyProgrammaticEditorText,
-    seedInitialViewport,
     previewBlockSplitCacheRef,
     previewBlocksCacheRef,
   }

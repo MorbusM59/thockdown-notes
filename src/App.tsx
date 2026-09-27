@@ -25,7 +25,7 @@ import {
   DEFAULT_TYPING_SOUND_SET,
   typingSoundManager,
 } from './sound/TypingSoundManager'
-import type { PersistedMenuState, PersistedSidebarViewState, PersistedViewportState } from './shared/appState'
+import type { PersistedMenuState, PersistedSidebarViewState } from './shared/appState'
 import { DEFAULT_AMBIENT_PREFERENCES, sanitizeAmbientPreferences, type AmbientPreferences } from './shared/ambientSound'
 import { DARK_FACTORY_PRESETS, LIGHT_FACTORY_PRESETS } from './shared/presets'
 import {
@@ -2742,8 +2742,6 @@ function App() {
   // Stay here rather than move into useEditorSectionMount: activateNote and
   // queueAppStateSave (both still in App.tsx) also read/write these, and
   // the hook receives them as injected refs, same as latestEditorTextRef.
-  const pendingViewportRestoreRef = useRef<PersistedViewportState | null>(null)
-  const isApplyingInitialViewportRef = useRef(false)
 
   const dateFilteredNotesRef = useRef<NoteSummary[]>([])
   const trashFilteredNotesRef = useRef<NoteSummary[]>([])
@@ -5651,7 +5649,6 @@ function App() {
   const queueAppStateSave = useCallback((selectedNoteId: string | null) => {
     if (!window.thockdownState) return
     if (!persistenceReady) return
-    if (isApplyingInitialViewportRef.current || pendingViewportRestoreRef.current) return
 
     if (appStateSaveTimerRef.current !== null) {
       window.clearTimeout(appStateSaveTimerRef.current)
@@ -10654,8 +10651,6 @@ ${markdownHtml}
                   onSetAsideUndockedNote={() => void handleSetAsideUndockedNote()}
                   registerSectionHandle={registerSectionHandle}
                   reportSectionHandle={reportSectionHandle}
-                  isApplyingInitialViewportRef={isApplyingInitialViewportRef}
-                  pendingViewportRestoreRef={pendingViewportRestoreRef}
                   externalNoteOriginalTextByIdRef={externalNoteOriginalTextByIdRef}
                   activeNoteExternalPathRef={activeNoteExternalPathRef}
                   queueAppStateSaveStable={queueAppStateSaveStable}
