@@ -499,6 +499,15 @@ export function EscapeHoldPanel({
         )
       }, note.delayMs + arrival),
     ])
+    // ONCE THE DEAL IS DONE, every slot has arrived -- including any the
+    // screen gains later under the same key (a note-dependent action
+    // appearing while the ring is up), or all of them when it opened empty.
+    // The count above only ever reaches the cells there were at the start,
+    // and a slot past it would stay an empty chip until the next screen.
+    const lastDelayMs = notes.reduce((latest, note) => Math.max(latest, note.delayMs), 0)
+    timers.push(window.setTimeout(() => {
+      setArrivedCount(Number.MAX_SAFE_INTEGER)
+    }, notes.length > 0 ? lastDelayMs : 0))
     return () => { for (const timer of timers) window.clearTimeout(timer) }
     // cellsRef rather than `cells`: the burst is about the screen ARRIVING,
     // so it must not re-fire when a cell's label or availability changes
