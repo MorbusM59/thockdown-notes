@@ -8709,10 +8709,14 @@ ${markdownHtml}
     const scroller = sidebarTreeScrollerEl || sidebarContentRef.current
     if (!scroller) return
 
+    // Coalesced, not debounced: a request while one is pending joins it. It
+    // used to cancel the pending frame and ask for the next one, which never
+    // ran while something mutated the sidebar every frame -- an accordion
+    // section animating its height writes a style each frame, from its own
+    // rAF callback, whose mutation records cancelled this frame's sync before
+    // it came up. The thumb then stood still for the whole animation.
     const scheduleSync = () => {
-      if (sidebarScrollbarRafRef.current !== null) {
-        cancelAnimationFrame(sidebarScrollbarRafRef.current)
-      }
+      if (sidebarScrollbarRafRef.current !== null) return
 
       sidebarScrollbarRafRef.current = requestAnimationFrame(() => {
         sidebarScrollbarRafRef.current = null
