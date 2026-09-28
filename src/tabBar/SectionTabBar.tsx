@@ -6,6 +6,7 @@ import { InlinePillOrInput } from '../shared/InlinePillOrInput'
 import { TEMP_TAB_PIN_HOLD_MS, type UseSectionTabsResult } from './useSectionTabs'
 import type { EscapeMenuModeChrome } from '../escapeMenu/escapeMenuContract'
 import { EscapeMenuReadouts } from '../escapeMenu/EscapeMenuStatus'
+import { armPointerDrag } from '../shared/pointerDrag'
 
 export interface SectionTabBarProps {
   tabs: UseSectionTabsResult
@@ -167,7 +168,6 @@ export function SectionTabBar({
     handleTabDragStart,
     handleTabDragEnd,
     handleTabDrop,
-    handleTabsContainerDragOver,
     handleTabsContainerDrop,
   } = tabs
 
@@ -249,7 +249,6 @@ export function SectionTabBar({
               ref={tabsScrollerRef}
               onScroll={updateTabsScrollEdges}
               onWheel={handleTabsWheel}
-              onDragOver={handleTabsContainerDragOver}
               onDrop={handleTabsContainerDrop}
             >
               {/* An undocked note shows an empty strip: it is in no collection,
@@ -389,7 +388,8 @@ export function SectionTabBar({
                       >
                         <div
                           className={`tag-pill note-tab-pill${isActive ? ' is-active' : ''}${isGhost ? ' ghost' : ''}${isPrimed ? ' unpin-primed' : ''}${isUnpinArming ? ' unpin-arming' : ''}`}
-                          draggable
+                          data-drag-source=""
+                          onPointerDown={armPointerDrag}
                           onDragStart={(event) => handleTabDragStart(event, index)}
                           onDragEnd={handleTabDragEnd}
                           onDrop={(event) => handleTabDrop(event, index)}

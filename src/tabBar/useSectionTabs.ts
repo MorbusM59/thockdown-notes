@@ -71,7 +71,6 @@ export interface UseSectionTabsResult {
   handleTagDragStart: (event: DragEvent<HTMLDivElement>, index: number) => void
   handleTagDragEnd: () => void
   handleTagDrop: (event: DragEvent<HTMLDivElement>, targetIndex: number) => void
-  handleTagContainerDragOver: (event: DragEvent<HTMLDivElement>) => void
   handleTagContainerDrop: (event: DragEvent<HTMLDivElement>) => void
   handleTagContextMenu: (event: MouseEvent<HTMLDivElement>, tagName: string) => void
   /** Callback ref -- attach with `ref={...}`; see useObservedBoxRef for why this is not an object ref. */
@@ -131,7 +130,6 @@ export interface UseSectionTabsResult {
   handleTabDragStart: (event: DragEvent<HTMLDivElement>, index: number) => void
   handleTabDragEnd: () => void
   handleTabDrop: (event: DragEvent<HTMLDivElement>, targetIndex: number) => void
-  handleTabsContainerDragOver: (event: DragEvent<HTMLDivElement>) => void
   handleTabsContainerDrop: (event: DragEvent<HTMLDivElement>) => void
   /** Removes a note's pinned tab in this section, without touching activation -- used when a foreign section claims it via drag-and-drop. */
   unpinNoteTab: (noteId: string) => Promise<void>
@@ -408,7 +406,6 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     const tagName = orderedActiveTags[index] ?? ''
     if (isProtectedTagName(tagName) || activeNoteIsTimeless) return
 
-    event.dataTransfer.effectAllowed = 'move'
     event.dataTransfer.setData('text/plain', tagName)
     setDraggedTagIndex(index)
   }, [activeNoteIsTimeless, orderedActiveTags])
@@ -445,16 +442,6 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
       await window.thockdownNotes!.reorderNoteTags({ id: noteId, tagNames: reordered })
     })
   }, [draggedTagIndex, orderedActiveTags, runActiveNoteTagMutation])
-
-  const handleTagContainerDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
-    if (draggedTagIndex === null) {
-      return
-    }
-
-    event.preventDefault()
-    event.stopPropagation()
-    event.dataTransfer.dropEffect = 'move'
-  }, [draggedTagIndex])
 
   const handleTagContainerDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
     if (draggedTagIndex === null) {
@@ -1002,7 +989,6 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     const tab = pinnedTabs[index]
     if (!tab) return
 
-    event.dataTransfer.effectAllowed = 'move'
     event.dataTransfer.setData(NOTE_DRAG_MIME_TYPE, serializeNoteDragPayload({ noteId: tab.noteId, sourceSectionId: sectionId }))
     setDraggedTabIndex(index)
   }, [pinnedTabs, sectionId])
@@ -1035,13 +1021,6 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
 
     void reorderPinnedTabsTo(reordered)
   }, [draggedTabIndex, pinnedTabs, reorderPinnedTabsTo])
-
-  const handleTabsContainerDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
-    if (draggedTabIndex === null) return
-    event.preventDefault()
-    event.stopPropagation()
-    event.dataTransfer.dropEffect = 'move'
-  }, [draggedTabIndex])
 
   const handleTabsContainerDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
     if (draggedTabIndex === null) return
@@ -1086,7 +1065,6 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     handleTagDragStart,
     handleTagDragEnd,
     handleTagDrop,
-    handleTagContainerDragOver,
     handleTagContainerDrop,
     handleTagContextMenu,
     isSuggestedTagsExpanded,
@@ -1135,7 +1113,6 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     handleTabDragStart,
     handleTabDragEnd,
     handleTabDrop,
-    handleTabsContainerDragOver,
     handleTabsContainerDrop,
     unpinNoteTab,
     pinNoteAsRightmostTab,

@@ -1,16 +1,16 @@
 import { useEffect } from 'react'
 import {
   WINDOW_DRAG_EXCLUDED_SELECTOR,
-  WINDOW_DRAG_THRESHOLD_PX,
   WINDOW_RESTORE_DRAG_THRESHOLD_PX,
   WINDOW_TITLEBAR_SELECTOR,
 } from '../shared/windowDrag'
+import { hasTravelledDragThreshold } from '../shared/pointerDrag'
 
 /**
  * Global, mount-once replacement for `-webkit-app-region: drag`. Listens for
  * a primary-button mousedown anywhere that isn't inside
  * WINDOW_DRAG_EXCLUDED_SELECTOR, then -- only once the cursor has actually
- * moved WINDOW_DRAG_THRESHOLD_PX from that point while still held -- starts
+ * moved DRAG_THRESHOLD_PX from that point while still held -- starts
  * moving the OS window via the `windowControls` IPC bridge (see
  * electron/main.ts's window-drag:* handlers). Listening at `window` in the
  * capture phase (not on any specific element) means it sees every mousedown
@@ -32,7 +32,7 @@ import {
  * a drag that starts on a maximized window's title-bar chrome tracks the
  * cursor without moving anything, and only "arms" the restore once the
  * cursor has moved WINDOW_RESTORE_DRAG_THRESHOLD_PX from mousedown -- a
- * larger grace distance than WINDOW_DRAG_THRESHOLD_PX because collapsing
+ * larger grace distance than DRAG_THRESHOLD_PX because collapsing
  * maximized mode is a much more disruptive false positive than a stray
  * window nudge, and an ordinary click naturally jitters a pixel or two
  * before release. Then on the actual mouseup -- by then a genuine release,
@@ -90,9 +90,7 @@ export function useWindowDragRegion() {
       }
 
       if (!isDragging) {
-        const dx = event.screenX - candidateOrigin.x
-        const dy = event.screenY - candidateOrigin.y
-        if (Math.hypot(dx, dy) < WINDOW_DRAG_THRESHOLD_PX) return
+        if (!hasTravelledDragThreshold(candidateOrigin.x, candidateOrigin.y, event.screenX, event.screenY)) return
         isDragging = true
         controls!.startWindowDrag!(candidateOrigin.x, candidateOrigin.y)
       }

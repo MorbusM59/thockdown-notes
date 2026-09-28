@@ -239,7 +239,7 @@
   box-shadow: inset 0 0 3px #00000055, inset 0 0 12px var(--color-archive-glow);
 }
 
-.tag-pill.is-active.protected[draggable='false'] {
+.tag-pill.is-active.protected:not([data-drag-source]) {
   cursor: default;
 }
 

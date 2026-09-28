@@ -837,7 +837,6 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
   const handleChapterDragStart = useCallback((event: DragEvent<HTMLDivElement>, index: number) => {
     const chapter = reorderableChapters[index]
     if (!chapter) return
-    event.dataTransfer.effectAllowed = 'move'
     event.dataTransfer.setData('text/plain', chapter.chapterNoteId)
     setDraggedChapterIndex(index)
   }, [reorderableChapters])

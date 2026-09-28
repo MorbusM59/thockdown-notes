@@ -16,7 +16,7 @@
 // seven named refs and five CSS selectors in it and had already fallen
 // behind. A predicate about the element itself cannot go stale.
 //
-// Three kinds genuinely need the browser's own behaviour on a press:
+// Two kinds genuinely need the browser's own behaviour on a press:
 //
 //   TEXT ENTRY -- an input, a textarea, a select, or the editor itself.
 //   Typing is the whole point; these are the only things the reader ever
@@ -27,17 +27,20 @@
 //   selection drag with it, so a carve-out here is what keeps select-and-copy
 //   working where there is nothing to type into.
 //
-//   A DRAG SOURCE -- `draggable="true"`. A native drag begins from the press
-//   default; prevent it and the element simply cannot be dragged.
-//
 // Everything else -- every button, pill, gauge, tab and bar in the app --
 // gets the press and not the keyboard.
 
 /** Text-entry surfaces: the things a reader deliberately types into. */
 const TEXT_ENTRY_SELECTOR = 'input, textarea, select, [contenteditable=""], [contenteditable="true"]'
 
-/** Read-only text (selectable) and drag sources: native press behaviour, no typing. */
-const NATIVE_PRESS_SELECTOR = '[contenteditable="false"], [draggable="true"]'
+/**
+ * Read-only text: native press behaviour (the selection drag), no typing.
+ * A drag SOURCE is not here: an in-app drag is started by
+ * `shared/pointerDrag.ts` from pointer events, which need nothing from the
+ * press default, so a dragged row or pill keeps the keyboard where it was
+ * like every other control.
+ */
+const NATIVE_PRESS_SELECTOR = '[contenteditable="false"]'
 
 /**
  * Is this element one the reader types into?
@@ -56,18 +59,16 @@ export function isTextEntryElement(element: Element | null | undefined): boolean
  * `closest` rather than a test on the element itself, because a press lands
  * on whatever is under the pointer -- the span inside a pill, the text node's
  * parent inside a contenteditable -- and the decision belongs to the nearest
- * ancestor that is one of the three kinds above.
+ * ancestor that is one of the two kinds above.
  */
 export function mayTakeFocusOnPress(target: Element | null | undefined): boolean {
   if (!target) return false
   if (isTextEntryElement(target)) return true
   const native = target.closest(NATIVE_PRESS_SELECTOR)
   if (!native) return false
-  // A BUTTON INSIDE a drag source or read-only text is a button first: the
-  // press is aimed at it, not at dragging or selecting its container, so it
-  // gets the press and not the keyboard like every other button. Without
-  // this, a note row's save/close/archive/trash buttons -- inside a
-  // draggable row -- took focus on every press.
+  // A BUTTON INSIDE read-only text is a button first: the press is aimed at
+  // it, not at selecting its container, so it gets the press and not the
+  // keyboard like every other button.
   const button = target.closest('button')
   return !(button && button !== native && native.contains(button))
 }

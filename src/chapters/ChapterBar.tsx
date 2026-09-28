@@ -7,6 +7,7 @@ import { resolveIdentityLabel } from '../shared/tabLabels'
 import { InlinePillOrInput } from '../shared/InlinePillOrInput'
 import type { ChapterPillSplitArm } from './useChapterPillActions'
 import { usePillStripScroll } from '../shared/usePillStripScroll'
+import { armPointerDrag } from '../shared/pointerDrag'
 
 export interface ChapterBarProps {
   parentNoteId: string
@@ -364,14 +365,10 @@ export function ChapterBar({
                       key="pill"
                       className={`tag-pill note-tab-pill chapter-pill${isActive ? ' is-active' : ''}${isGhost ? ' is-archived-ghost' : ''}`}
                       data-chapter-note-id={chapter.chapterNoteId}
-                      draggable={!isInteractionDisabled}
+                      data-drag-source={isInteractionDisabled ? undefined : ''}
+                      onPointerDown={isInteractionDisabled ? undefined : armPointerDrag}
                       onDragStart={isInteractionDisabled ? undefined : (event) => onChapterDragStart(event, liveIndex)}
                       onDragEnd={isInteractionDisabled ? undefined : onChapterDragEnd}
-                      onDragOver={isInteractionDisabled ? undefined : (event) => {
-                        event.preventDefault()
-                        event.stopPropagation()
-                        event.dataTransfer.dropEffect = 'move'
-                      }}
                       onDrop={isInteractionDisabled ? undefined : (event) => onChapterDrop(event, liveIndex)}
                       onClick={() => onChapterClick(chapter.chapterNoteId)}
                       onMouseDown={isInteractionDisabled ? undefined : (event) => onChapterPillMouseDown(event, chapter.chapterNoteId)}

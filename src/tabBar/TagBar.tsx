@@ -6,6 +6,7 @@ import { resolveIdentityLabel } from '../shared/tabLabels'
 import { buildNextAutoAssignedId, isAutoAssignedId } from '../shared/assignedIds'
 import { InlinePillOrInput } from '../shared/InlinePillOrInput'
 import type { UseSectionTabsResult } from './useSectionTabs'
+import { armPointerDrag } from '../shared/pointerDrag'
 
 export interface TagBarProps {
   tabs: UseSectionTabsResult
@@ -57,7 +58,6 @@ export function TagBar({ tabs, persistenceReady, activeNoteId, identityNoteId, n
     handleTagDragStart,
     handleTagDragEnd,
     handleTagDrop,
-    handleTagContainerDragOver,
     handleTagContainerDrop,
     handleTagContextMenu,
     activeTagsScrollerRef,
@@ -257,7 +257,6 @@ export function TagBar({ tabs, persistenceReady, activeNoteId, identityNoteId, n
                 ref={activeTagsScrollerRef}
                 onScroll={updateActiveTagsScrollEdges}
                 onWheel={handleActiveTagsWheel}
-                onDragOver={handleTagContainerDragOver}
                 onDrop={handleTagContainerDrop}
               >
                 {!activeNoteId ? (
@@ -282,14 +281,10 @@ export function TagBar({ tabs, persistenceReady, activeNoteId, identityNoteId, n
                       >
                         <div
                           className={`tag-pill is-active${deletePrimedTagName === tagName ? ' primed' : ''}${isProtected ? ` protected ${normalized}` : ''}`}
-                          draggable={!isProtected}
+                          data-drag-source={isProtected ? undefined : ''}
+                          onPointerDown={isProtected ? undefined : armPointerDrag}
                           onDragStart={(event) => handleTagDragStart(event, index)}
                           onDragEnd={handleTagDragEnd}
-                          onDragOver={(event) => {
-                            event.preventDefault()
-                            event.stopPropagation()
-                            event.dataTransfer.dropEffect = 'move'
-                          }}
                           onDrop={(event) => handleTagDrop(event, index)}
                           onClick={() => handleTagChipClick(tagName)}
                           data-secondary-press="action"
