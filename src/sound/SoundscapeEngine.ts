@@ -19,11 +19,15 @@
  *
  * The graph exists only while something is audible: it is built on the
  * first audible `apply` and torn down after a short fade once nothing is.
- * `mixGain` carries both the fade and the listener's master volume.
+ * `mixGain` carries both the fade and the listener's master volume. The
+ * soundscape's OWN volume is not on it: that is applied inside the worklet,
+ * in the same `configure` as the channels it belongs to, because a switch
+ * from one soundscape to another changes both at once and two separately
+ * timed paths (a message to the audio thread, a glide on an AudioParam) play
+ * the new channels at the old soundscape's level until the glide catches up.
  */
 import {
   hasAudibleSoundscapeLayer,
-  soundscapeFaderGain,
   type SoundscapePreferences,
   type SoundscapeSpaceSettings,
 } from '../shared/soundscape';
@@ -36,7 +40,7 @@ import { musicPlayerService } from './MusicPlayerService';
  * Mix level at master volume 1 and a soundscape volume of 1.
  *
  * Keeping a soundscape out of the compressor is the soundscape's own volume
- * (SoundscapeSettings.volume), applied here ahead of busLimiter and set per
+ * (SoundscapeSettings.volume), applied in the worklet ahead of busLimiter and set per
  * soundscape: a natural environment has no compression, and a compressor
  * working on a soundscape is heard as every layer ducking whenever one of
  * them peaks. Measured through the real chain in an OfflineAudioContext (42 s
@@ -228,7 +232,7 @@ export class SoundscapeEngine {
     const worklet = this.worklet;
     if (!context || !worklet) return;
     const now = context.currentTime;
-    const mixTarget = SOUNDSCAPE_MIX_GAIN * soundscapeFaderGain(preferences.settings.volume) * preferences.masterVolume;
+    const mixTarget = SOUNDSCAPE_MIX_GAIN * preferences.masterVolume;
     if (this.mixGain && this.mixGainTarget !== mixTarget) {
       this.mixGain.gain.cancelAndHoldAtTime(now);
       this.mixGain.gain.setTargetAtTime(mixTarget, now, SOUNDSCAPE_FADE_SEC);

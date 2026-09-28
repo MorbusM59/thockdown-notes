@@ -37,8 +37,8 @@ export function createProcessor(
   runInNewContext(generatorSource, scope);
   const noise = noiseAt(sampleRate);
   const processor = new Processor({ processorOptions: { seed, noiseLoops: loops ?? noise.loops, noiseGains: loops ? { brown: 1, pink: 1, white: 1 } : noise.gains } });
-  const configure = (next: SoundscapeChannelSettings[], nextWeather = weather) => {
-    processor.port.onmessage?.({ data: { type: 'configure', channels: next.map(toWorkletChannel), weather: nextWeather } });
+  const configure = (next: SoundscapeChannelSettings[], nextWeather = weather, level = 1) => {
+    processor.port.onmessage?.({ data: { type: 'configure', channels: next.map(toWorkletChannel), weather: nextWeather, level } });
   };
   configure(channels);
   return {

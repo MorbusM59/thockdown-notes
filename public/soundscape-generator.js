@@ -778,6 +778,16 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
     this.stream = this.rootStream;
     this.channels = [];
     this.soloChannelId = null;
+    // The soundscape's own volume (SoundscapeSettings.volume, as a gain),
+    // applied to both outputs. It lives here rather than on the engine's
+    // mixGain because it belongs to the channels: a `configure` that swaps
+    // one soundscape for another changes both in the same block, where a
+    // gain glided on the main thread would play the new channels at the old
+    // soundscape's level until it caught up. `level` is what the last block
+    // ended on and `levelTarget` what the next one ramps to; null until the
+    // first configure, which starts at its target.
+    this.level = null;
+    this.levelTarget = 1;
     this.weather = {
       stream: { seed: Math.floor(this.random() * 0x100000000) >>> 0 },
       gustiness: 0,
@@ -801,7 +811,7 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
         return;
       }
       if (event.data?.type !== 'configure') return;
-      this.configure(event.data.channels ?? [], event.data.weather ?? null);
+      this.configure(event.data.channels ?? [], event.data.weather ?? null, event.data.level ?? 1);
     };
   }
 
@@ -885,7 +895,9 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
    * a tube's ring) so a slider move does not click; only a change to a rate
    * reschedules what that rate drives.
    */
-  configure(settings, weather) {
+  configure(settings, weather, level = 1) {
+    this.levelTarget = Math.max(0, level);
+    if (this.level === null) this.level = this.levelTarget;
     if (weather) {
       this.weather.gustiness = Math.max(0, Math.min(1, weather.gustiness ?? 0));
       this.weather.paceSec = Math.max(0.1, weather.paceSec ?? 12);
@@ -3278,6 +3290,11 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
    * un-soloing does not restart it. A layer at gain 0 is not rendered at
    * all: nothing it would render could be heard, so its clocks pause and
    * resume from where they stood.
+   *
+   * The soundscape's level is applied last, to both outputs, ramped
+   * linearly across the block from where the last one ended: a slider move
+   * does not step, and a new soundscape's first block already sits at its
+   * own level (see `level` in the constructor).
    */
   process(_inputs, outputs) {
     if (this.stopped) return false;
@@ -3342,7 +3359,23 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
       if (audible) this.placeLayer(channel, left, right, length, direct, send);
     }
     this.stream = this.rootStream;
+    this.applyLevel(outputs, length);
     return true;
+  }
+
+  applyLevel(outputs, length) {
+    const from = this.level ?? this.levelTarget;
+    const to = this.levelTarget;
+    this.level = to;
+    if (from === 1 && to === 1) return;
+    const step = (to - from) / length;
+    for (const output of outputs) {
+      for (const outputChannel of output) {
+        for (let index = 0; index < length; index += 1) {
+          outputChannel[index] *= from + (step * (index + 1));
+        }
+      }
+    }
   }
 }
 

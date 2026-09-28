@@ -1336,3 +1336,33 @@ describe('stopping', () => {
     expect(generator.processor.process([], outputs())).toBe(false);
   });
 });
+
+describe('the soundscape level', () => {
+  // The soundscape's own volume travels in the same `configure` as its
+  // channels, so a switch to another soundscape cannot play its channels at
+  // the previous one's level. Two processors with one history, told the same
+  // thing at different levels, must differ by exactly the level from the
+  // block after the message on, and by no more than a ramp inside it.
+  it('reaches a new level within the block that carries it', () => {
+    const blockSize = 128;
+    const from = [layer('noise'), layer('rain')];
+    const to = [layer('rain', {}, 2), layer('water')];
+    const reference = createProcessor(from, { blockSize });
+    const quieter = createProcessor(from, { blockSize });
+    reference.render(0.5);
+    quieter.render(0.5);
+    reference.configure(to, undefined, 1);
+    quieter.configure(to, undefined, 0.1);
+    const a = reference.render(0.5);
+    const b = quieter.render(0.5);
+    let ramped = 1;
+    for (let i = 0; i < a.left.length; i += 1) {
+      for (const [x, y] of [[a.left[i], b.left[i]], [a.sendLeft[i], b.sendLeft[i]]]) {
+        if (i >= blockSize) expect(y).toBeCloseTo(x * 0.1, 5);
+        else if (Math.abs(x) > 1e-4) ramped = Math.min(ramped, 1 - (Math.abs(y / x) - 0.1));
+      }
+    }
+    expect(ramped).toBeGreaterThanOrEqual(0);
+    expect(peak(b.left.slice(0, blockSize))).toBeLessThanOrEqual(peak(a.left.slice(0, blockSize)));
+  });
+});

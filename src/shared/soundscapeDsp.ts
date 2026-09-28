@@ -186,12 +186,18 @@ export type SoundscapeWorkletChannel = SoundscapeChannelSettings & {
 export interface SoundscapeWorkletConfiguration {
   channels: SoundscapeWorkletChannel[];
   weather: SoundscapeSettings['weather'];
+  /**
+   * The soundscape's own volume as a gain (soundscapeFaderGain). Carried with
+   * the channels so the worklet changes both in the same block.
+   */
+  level: number;
 }
 
 /** The `configure` message's payload. */
 export function toWorkletConfiguration(settings: SoundscapeSettings): SoundscapeWorkletConfiguration {
   return {
     weather: { ...settings.weather },
+    level: soundscapeFaderGain(settings.volume),
     channels: settings.channels.map((channel) => toWorkletChannel(channel)),
   };
 }
