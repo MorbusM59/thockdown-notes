@@ -55,7 +55,10 @@ export function resolveSoundscapeSpace(distance: number): SoundscapeSpace {
   return {
     cutoffHz: 18000 * ((2200 / 18000) ** bounded),
     directGain: 1 - (0.78 * bounded),
-    reverbSend: 0.06 + (0.6 * bounded),
+    // Even a layer at distance 0 is IN the space: 0.15 is enough of it to
+    // hear the room around a near sound (0.06, as it was, left the space
+    // inaudible on near layers). The far end, 0.66, is unchanged.
+    reverbSend: 0.15 + (0.51 * bounded),
   };
 }
 
