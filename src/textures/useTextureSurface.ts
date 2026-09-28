@@ -34,6 +34,58 @@ function swapUrl(nextUrl: string, currentUrlRef: React.MutableRefObject<string |
 }
 
 /**
+ * One texture worker and the request it is answering, owned together.
+ *
+ * `Worker.terminate()` ends a worker without firing `message` or `error`, so a
+ * promise waiting on either never settles once the worker is terminated from
+ * outside -- and a `finally` behind that promise never runs. This hook
+ * terminates its worker whenever the texture's settings change mid-generation
+ * or the surface unmounts, so ending the background-work entry in the
+ * awaiting code's `finally` leaked one entry per cancelled generation and
+ * left the sidebar's cogwheel turning for the rest of the session. A fresh
+ * install, which has no cached texture and settles its settings during the
+ * first generation, did this on every launch until a texture reached the
+ * cache.
+ *
+ * So the only way to end a worker is `retire`, which terminates it, ends the
+ * background-work entry and rejects the pending request in one step. It is
+ * idempotent: the answer arriving and a later cleanup both retire.
+ */
+interface TextureJob {
+  answer: Promise<TextureWorkerResponse>;
+  retire: () => void;
+}
+
+export function startTextureJob(request: TextureWorkerRequest): TextureJob {
+  const worker = new Worker(new URL('./textureWorker.ts', import.meta.url), { type: 'module' });
+  // Announced through the one register of work in flight
+  // (shared/backgroundWork.ts), which is what turns the sidebar's cogwheel.
+  const work = beginBackgroundWork('texture');
+  let settle: ((error?: unknown) => void) | null = null;
+  const answer = new Promise<TextureWorkerResponse>((resolve, reject) => {
+    worker.onmessage = (event: MessageEvent<TextureWorkerResponse>) => {
+      resolve(event.data);
+      retire();
+    };
+    worker.onerror = (error) => {
+      reject(error);
+      retire();
+    };
+    settle = reject;
+  });
+  let retired = false;
+  const retire = () => {
+    if (retired) return;
+    retired = true;
+    worker.terminate();
+    work.done();
+    settle?.(new Error('texture worker retired'));
+  };
+  worker.postMessage(request);
+  return { answer, retire };
+}
+
+/**
  * A texture for one surface, as a CSS `url(...)`. Every surface is one
  * TEXTURE_REPEAT_TILE_SIZE square tile that the stylesheets repeat
  * (`mask-repeat: repeat` at `--texture-tile-size`), so how big the surface is
@@ -54,7 +106,7 @@ export function useTextureSurface(params: {
   const materialVSteps = material.vSteps;
   const [url, setUrl] = useState<string | null>(null);
   const currentUrlRef = useRef<string | null>(null);
-  const workerRef = useRef<Worker | null>(null);
+  const jobRef = useRef<TextureJob | null>(null);
   const generationTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -63,10 +115,8 @@ export function useTextureSurface(params: {
         window.clearTimeout(generationTimeoutRef.current);
         generationTimeoutRef.current = null;
       }
-      if (workerRef.current) {
-        workerRef.current.terminate();
-        workerRef.current = null;
-      }
+      jobRef.current?.retire();
+      jobRef.current = null;
       revokeUrl(currentUrlRef.current);
       currentUrlRef.current = null;
       setUrl(null);
@@ -97,40 +147,22 @@ export function useTextureSurface(params: {
           }
         }
 
-        if (workerRef.current) {
-          workerRef.current.terminate();
-          workerRef.current = null;
-        }
+        // The cache lookup is awaited, and the effect may have been cleaned up
+        // meanwhile; a job started now would have no cleanup left to retire it.
+        if (cancelled) return;
+        jobRef.current?.retire();
+        jobRef.current = null;
 
-        const worker = new Worker(new URL('./textureWorker.ts', import.meta.url), { type: 'module' });
-        workerRef.current = worker;
-        // Announced to the reader through the one register of work in flight
-        // (shared/backgroundWork.ts), which is what turns the sidebar's
-        // cogwheel. Ended in `finally` rather than after the await, because
-        // this path has three exits -- resolved, rejected into the catch, and
-        // cancelled -- and a register that leaks an entry leaves the wheel
-        // turning forever.
-        const work = beginBackgroundWork('texture');
-        const workerRequest: TextureWorkerRequest = {
+        const job = startTextureJob({
           width: TEXTURE_REPEAT_TILE_SIZE,
           height: TEXTURE_REPEAT_TILE_SIZE,
           seed: materialSeed,
           granularity: materialGranularity,
           vSteps: materialVSteps,
-        };
-
-        let response: TextureWorkerResponse;
-        try {
-          response = await new Promise<TextureWorkerResponse>((resolve, reject) => {
-            worker.onmessage = (event: MessageEvent<TextureWorkerResponse>) => resolve(event.data);
-            worker.onerror = (error) => reject(error);
-            worker.postMessage(workerRequest);
-          });
-        } finally {
-          work.done();
-        }
-        worker.terminate();
-        workerRef.current = null;
+        });
+        jobRef.current = job;
+        const response = await job.answer;
+        if (jobRef.current === job) jobRef.current = null;
 
         if (cancelled) return;
 
@@ -160,10 +192,8 @@ export function useTextureSurface(params: {
         window.clearTimeout(generationTimeoutRef.current);
         generationTimeoutRef.current = null;
       }
-      if (workerRef.current) {
-        workerRef.current.terminate();
-        workerRef.current = null;
-      }
+      jobRef.current?.retire();
+      jobRef.current = null;
     };
   }, [
     enabled,
@@ -180,10 +210,8 @@ export function useTextureSurface(params: {
         window.clearTimeout(generationTimeoutRef.current);
         generationTimeoutRef.current = null;
       }
-      if (workerRef.current) {
-        workerRef.current.terminate();
-        workerRef.current = null;
-      }
+      jobRef.current?.retire();
+      jobRef.current = null;
       revokeUrl(currentUrlRef.current);
       currentUrlRef.current = null;
     };
