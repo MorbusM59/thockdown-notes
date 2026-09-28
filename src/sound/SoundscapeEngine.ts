@@ -206,6 +206,10 @@ export class SoundscapeEngine {
       worklet.connect(spaceInput, 1);
       this.spaceSlots = [0, 1].map(() => {
         const convolver = context.createConvolver();
+        // Calibrated by buildSoundscapeImpulseResponse instead; the browser's
+        // normalisation would rescale away what damping and echoes change.
+        // Must be set before a buffer is assigned.
+        convolver.normalize = false;
         const gain = context.createGain();
         gain.gain.value = 0;
         spaceInput.connect(convolver);

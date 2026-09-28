@@ -325,6 +325,51 @@ describe('the space', () => {
     expect(lateBrightness(1)).toBeLessThan(0.5 * lateBrightness(0));
   });
 
+  it('damps the highs where the tail is heard, not only at its end', () => {
+    // Share of energy above ~1.5 kHz in the first 50-300 ms of the tail, by
+    // first difference (a rough high-pass).
+    const earlyBrightness = (damping: number) => {
+      const [left] = buildSoundscapeImpulseResponse({ size: 0.5, damping, echoes: 0 }, rate);
+      const pre = left.findIndex((value) => value !== 0);
+      const early = left.subarray(pre + Math.floor(0.05 * rate), pre + Math.floor(0.3 * rate));
+      let diff = 0;
+      let total = 0;
+      for (let index = 1; index < early.length; index += 1) {
+        diff += (early[index] - early[index - 1]) ** 2;
+        total += early[index] ** 2;
+      }
+      return diff / total;
+    };
+    expect(earlyBrightness(1)).toBeLessThan(0.7 * earlyBrightness(0));
+  });
+
+  it('is calibrated from its undamped tail, so damping takes energy away rather than being rebalanced', () => {
+    const power = (damping: number) => {
+      const [left, right] = buildSoundscapeImpulseResponse({ size: 0.5, damping, echoes: 0 }, rate);
+      let sum = 0;
+      for (let index = 0; index < left.length; index += 1) sum += (left[index] ** 2) + (right[index] ** 2);
+      return Math.sqrt(sum / (2 * left.length));
+    };
+    expect(power(0)).toBeCloseTo((0.00125 * 44100) / rate, 6);
+    expect(power(1)).toBeLessThan(power(0));
+  });
+
+  it('keeps its echoes far enough apart to be heard as echoes, never as a comb', () => {
+    for (const size of [0, 0.5, 1]) {
+      const [plain, plainRight] = buildSoundscapeImpulseResponse({ size, damping: 0.5, echoes: 0 }, rate);
+      const [left, right] = buildSoundscapeImpulseResponse({ size, damping: 0.5, echoes: 1 }, rate);
+      const pre = plain.findIndex((value) => value !== 0);
+      const at: number[] = [];
+      for (let index = 0; index < left.length; index += 1) {
+        const added = Math.max(Math.abs(left[index] - plain[index]), Math.abs(right[index] - plainRight[index]));
+        if (added > 1e-9 && (at.length === 0 || index - at[at.length - 1] > 2)) at.push(index);
+      }
+      expect(at.length).toBeGreaterThan(0);
+      expect(at[0] - pre).toBeGreaterThanOrEqual(0.05 * rate);
+      for (let index = 1; index < at.length; index += 1) expect(at[index] - at[index - 1]).toBeGreaterThanOrEqual(0.05 * rate);
+    }
+  });
+
   it('adds distinct echoes only when asked', () => {
     const [plain] = buildSoundscapeImpulseResponse({ size: 0.5, damping: 0.5, echoes: 0 }, rate);
     const [echoing] = buildSoundscapeImpulseResponse({ size: 0.5, damping: 0.5, echoes: 1 }, rate);

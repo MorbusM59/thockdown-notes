@@ -348,8 +348,8 @@ const ENVIRONMENT_CONTROLS: ControlGroup[] = [{
   controls: [
     unit('volume', 'volume', 'How loud this whole soundscape is. Lower it if the loudest moments make the rest of it duck', formatVolume),
     unit('size', 'size', 'A small room to a wide valley: how long the space rings, and how late its first reflection', (value) => `${formatSeconds(spaceDecaySec(value))} decay`),
-    unit('damping', 'damping', 'A bright tail, or one that darkens fast, as open air and foliage swallow the highs', (value) => formatAmount(value, 'Bright', 'Dark')),
-    unit('echoes', 'echoes', 'Distinct echoes off walls, buildings or cliffs', (value) => formatAmount(value, 'None')),
+    unit('damping', 'damping', 'A bright tail, or one whose highs die away quickly, as open air and foliage swallow them', (value) => formatAmount(value, 'Bright', 'Dark')),
+    unit('echoes', 'echoes', 'Distinct echoes off walls, buildings or cliffs, heard on drops, drips, strikes and thunder', (value) => formatAmount(value, 'None')),
     unit('amount', 'amount', 'How much of the space is heard', (value) => formatAmount(value, 'Dry', 'Full')),
     unit('gustiness', 'gusts', 'Calm to squally: how far a gust or a lull moves every layer that follows the weather', (value) => formatAmount(value, 'Calm', 'Squally')),
     { key: 'paceSec', track: 'pace', tooltip: 'Average seconds from one gust or lull to the next', min: SOUNDSCAPE_WEATHER_PACE_MIN_SEC, max: SOUNDSCAPE_WEATHER_PACE_MAX_SEC, log: true, format: formatSeconds },
