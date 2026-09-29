@@ -61,8 +61,27 @@ describe('stepWheelNotch', () => {
 
   it('gives a reversal a full first notch, not a discounted one', () => {
     const state = createWheelNotchState()
-    stepWheelNotch(state, 60, 1000) // learns 60, leaves 60 pending
-    expect(stepWheelNotch(state, -60, 1040)).toBe(-1)
+    stepWheelNotch(state, 50, 1000) // learns 50, moves one row
+    stepWheelNotch(state, 25, 1040) // learns 25 (50 is two of them): pending 0
+    stepWheelNotch(state, 10, 1080) // under the floor: learns nothing, 10px pending
+    expect(stepWheelNotch(state, -25, 1120)).toBe(-1)
+  })
+
+  it('is not taught a small unit by a trackpad swipe', () => {
+    // The laptop case: a swipe streams irregular deltas above the floor, then
+    // the reader goes back to the mouse wheel's 100px notches.
+    const state = createWheelNotchState()
+    let t = 1000
+    for (const delta of [14, 27, 41, 38, 22, 17, 13]) stepWheelNotch(state, delta, (t += 16))
+    expect(state.notchPx).toBe(WHEEL_NOTCH_DEFAULT_PX)
+    t += WHEEL_GESTURE_IDLE_MS * 2
+    expect([100, 100, 100].map((delta) => stepWheelNotch(state, delta, (t += 40)))).toEqual([1, 1, 1])
+  })
+
+  it('still learns a notch that divides the standing one, under display scaling', () => {
+    const state = createWheelNotchState()
+    stepWheelNotch(state, 33.34, 1000)
+    expect(state.notchPx).toBeCloseTo(33.34)
   })
 
   it('turns a fast multi-notch event into that many rows', () => {

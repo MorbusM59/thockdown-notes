@@ -36,6 +36,23 @@
 // is used later in the same session, which then scrolls a shade fast and
 // never scrolls dead. Fast is a preference; dead is a bug.
 //
+// ## What may shrink it
+//
+// Only a delta that is plausibly a NOTCH: one the current unit is a
+// near-whole multiple of (100 -> 50 yes, 100 -> 33.3 yes, 100 -> 27 no).
+// Taking the plain minimum was the first version, and one fast trackpad
+// swipe on a laptop then taught it a small unit -- trackpad deltas of 12px
+// and up pass the floor below -- after which every click of a real mouse
+// wheel on the same machine scrolled several rows and turned the escape ring
+// several cells, until the editor remounted. A real notch size divides every
+// notch the device has sent, because a fast turn sends whole multiples of
+// it; a trackpad's continuous stream has no such unit, so its deltas almost
+// never divide the one already standing. The unit only ever moves by
+// divisible steps, so everything it has been is a multiple of what it is
+// now, and checking the current unit is checking all of them. The browser
+// does not say which device sent an event, so per-device learning is not an
+// option; this is the question that can be answered from the deltas alone.
+//
 // Deltas below WHEEL_NOTCH_MIN_PX never teach anything: those are trackpad
 // pixel-scroll events, which have no notch to measure and would otherwise
 // drive the unit down to a couple of pixels and make the wheel wildly
@@ -66,6 +83,14 @@ export const WHEEL_NOTCH_MIN_PX = 12
  */
 export const WHEEL_GESTURE_IDLE_MS = 500
 
+/**
+ * How far from a whole number `unit / candidate` may be and still count as
+ * one. Deltas arrive in fractional pixels under display scaling (a 100px
+ * notch at 125% arrives as 80 on one machine and 79.99 on another), so an
+ * exact test would refuse real notches.
+ */
+export const WHEEL_NOTCH_RATIO_TOLERANCE = 0.05
+
 export interface WheelNotchState {
   /** The pixel size of one notch, as currently understood. */
   notchPx: number
@@ -79,11 +104,16 @@ export function createWheelNotchState(): WheelNotchState {
   return { notchPx: WHEEL_NOTCH_DEFAULT_PX, pendingPx: 0, lastEventMs: null }
 }
 
-/** The notch size after seeing `deltaPx`; only ever shrinks. */
+/**
+ * The notch size after seeing `deltaPx`. Only ever shrinks, and only to a
+ * delta the current size is a near-whole multiple of -- see the module
+ * comment.
+ */
 export function resolveWheelNotchPx(currentNotchPx: number, deltaPx: number): number {
   const magnitude = Math.abs(deltaPx)
-  if (!Number.isFinite(magnitude) || magnitude < WHEEL_NOTCH_MIN_PX) return currentNotchPx
-  return Math.min(currentNotchPx, magnitude)
+  if (!Number.isFinite(magnitude) || magnitude < WHEEL_NOTCH_MIN_PX || magnitude >= currentNotchPx) return currentNotchPx
+  const ratio = currentNotchPx / magnitude
+  return Math.abs(ratio - Math.round(ratio)) <= WHEEL_NOTCH_RATIO_TOLERANCE ? magnitude : currentNotchPx
 }
 
 /**
