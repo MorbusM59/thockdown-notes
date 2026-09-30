@@ -4,6 +4,8 @@
 // adapter) can share exactly one classifier instead of drifting apart.
 // Zero framework imports by design -- this must stay portable.
 
+import { isTableDividerLine, isTableLine } from './MarkdownTable';
+
 export type TokenPresentation = {
   tokenType: string;
   classes: string[];
@@ -20,16 +22,19 @@ const isMarkdownThematicBreak = (line: string) => {
 
 const isMarkdownFence = (line: string) => /^\s{0,3}(?:`{3,}|~{3,})/.test(line);
 
-const isMarkdownTableDivider = (line: string) =>
-  /^\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?\s*$/.test(line);
-
-const isMarkdownTableRow = (line: string) => {
-  if (isMarkdownTableDivider(line)) return false;
-  const trimmed = line.trim();
-  return trimmed.startsWith('|') && trimmed.includes('|');
+/**
+ * The lines directly above the one being classified, which a table divider
+ * needs: a divider-shaped line is a divider only as a table's second line
+ * (MarkdownTable.ts's isTableDividerLine). Required rather than optional so
+ * no caller can classify a divider without having been asked for them; null
+ * where there is no such line.
+ */
+export type LinesAbove = {
+  previous: string | null;
+  beforePrevious: string | null;
 };
 
-export function buildTokenPresentation(line: string): TokenPresentation | null {
+export function buildTokenPresentation(line: string, above: LinesAbove): TokenPresentation | null {
   const raw = line;
   const classes = ['thockdown-md-line'];
   const data: Record<string, string> = {};
@@ -58,7 +63,7 @@ export function buildTokenPresentation(line: string): TokenPresentation | null {
     };
   }
 
-  if (isMarkdownTableDivider(raw)) {
+  if (isTableDividerLine(raw, above.previous, above.beforePrevious)) {
     return {
       tokenType: 'table-divider',
       classes: [...classes, 'thockdown-md-line--table-divider'],
@@ -66,7 +71,7 @@ export function buildTokenPresentation(line: string): TokenPresentation | null {
     };
   }
 
-  if (isMarkdownTableRow(raw)) {
+  if (isTableLine(raw)) {
     return {
       tokenType: 'table-row',
       classes: [...classes, 'thockdown-md-line--table-row'],

@@ -829,6 +829,21 @@ function resolveInFencedCodeBlock(
   return toMarkdownInlineState(scanInlineStateFrom(text, lineStart, entering, caretOffset)).inFencedCodeBlock
 }
 
+/**
+ * Whether `offset` sits inside a fenced code block -- the public form of
+ * resolveInFencedCodeBlock, for callers that have an offset but not its
+ * line start. Same cost rules: cheap with a cache current for `text`, the
+ * O(document) ground truth without one.
+ */
+export function isOffsetInFencedCodeBlock(
+  text: string,
+  offset: number,
+  inlineCache: InlineStateLineCache | null | undefined,
+): boolean {
+  const lineStart = offset <= 0 ? 0 : text.lastIndexOf('\n', offset - 1) + 1
+  return resolveInFencedCodeBlock(text, offset, lineStart, inlineCache)
+}
+
 export function applyMarkdownEnter(
   text: string,
   selection: EditorSelectionState,

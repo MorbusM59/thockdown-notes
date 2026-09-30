@@ -87,10 +87,14 @@ This contract isolates app features from editor engine internals. Features that 
   - `source = user-input` for user-driven scrolling.
   - `source = programmatic` for boundary updates and snapshot application.
 - `onTextChange` and `onSelectionChange` are active.
-- Command transform hooks are active for tab, markdown shortcuts, and enter:
+- Command transform hooks (each a pure function of text and selection returning one `EditorTransformResult`, or null to let the key do what it does anywhere else):
   - `onTabIndentTransform`
   - `onMarkdownShortcutTransform`
   - `onEnterTransform`
+  - `onCharacterInsertTransform` (a single typed character)
+  - `onModifiedBackspaceTransform` (Shift+Backspace and Ctrl+Backspace only; plain Backspace never reaches it)
+  - `onCaretClickTransform` (a plain primary click, with `clickOffset` the box under the pointer; each policy decides which clicks it acts on)
+- A result may carry a `prelude`: a step applied first and recorded as its own undo entry, so one undo takes back the result and keeps the prelude. Both are dispatched in ONE view update, so everything downstream sees one text change for the keypress. The table rules use it for the tidy that Enter performs (`src/editor/MarkdownTableTransforms.ts`, over the one table reading in `src/editor/MarkdownTable.ts`).
 - Current source mapping is conservative but deterministic:
   - `restore` updates map to `programmatic`.
   - `history-redo` tag maps to `history-redo`.

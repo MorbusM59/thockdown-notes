@@ -572,12 +572,30 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 *One-click Markdown formatting for the current selection or line.*
 
-- Bold, italic, strikethrough; heading levels H1–H3; bulleted, numbered, and checklist lists; blockquote; code block and inline code; horizontal rule; link insertion; table of contents.
+- Bold, italic, strikethrough; heading levels H1–H3; bulleted, numbered, and checklist lists; blockquote; code block and inline code; horizontal rule; [table]($#tables); link insertion; table of contents.
 - The buttons resize themselves to the room the toolbar has: full-size squares on a single row whenever they all fit, and mini squares — wrapping onto a second row if they still don't fit — when they don't. Full-size, they carry the same glyph size and rounding as the chapter bar's own icon buttons, inset evenly from every edge of the toolbar. Nothing is ever dropped, and the toolbar keeps the same height either way, so widening or narrowing the window never shifts anything below it.
 - The group stays on screen in render view too, so the toolbar doesn't change shape when you flip modes. While a slot is in render view, clicking any of these buttons switches that slot to edit mode instead of formatting — it deliberately doesn't also apply the formatting, so a stray click on a rendered note can't quietly edit it. Click again once you're in edit mode to actually apply it. (On a chapter that's always rendered — an auto table of contents or Open Items — the buttons are disabled, since there's no edit mode to switch to.)
 - Each button reflects whether the current selection or line already has that formatting applied.
 - Most double as the keyboard shortcuts listed in [Keyboard Shortcuts](${guideLink('SHORTCUTS')}).
 - A checklist item's box (\`- [ ]\`) can be toggled two ways once the caret sits between its brackets: type any character to check it off with that character (type a space to uncheck it again), or click the caret itself — with the caret already there and not moving — to flip \`[ ]\`/\`[X]\` without touching the keyboard.
+
+### [Tables](#tables)
+
+> **Where?**
+> The table button in the toolbar, next to the horizontal rule — or just type a line starting with \`|\`.
+
+*Tables are ordinary Markdown text. A few keys work differently inside a table line, so you can build one cell by cell without counting pipes.*
+
+- **The button** starts a table: an empty cell, \`|   |\`, on the current line if it's empty or on a new line below it, with the caret inside. With the caret already in a table the button reads *Tidy table* and lines the whole table up instead.
+- **Typing into an empty cell** fills it from the middle, wherever in the cell the caret was, so \`|   |\` becomes \`| a |\`.
+- **\`Tab\`** goes to the next cell, and at the end of a row adds a new cell. Once the table has its divider (below), a row can't have more cells than the top row, so \`Tab\` from a full row goes on to the next row instead, starting a new one at the end. **\`Shift+Tab\`** goes back a cell. Inside a table, \`Tab\` never indents.
+- **\`Enter\`** on the first row adds the divider line under it (what makes it a table) and starts the next row. After that, \`Enter\` in any row starts a new row below it — it never splits a row in two. **\`Enter\` in an empty last row ends the table.** \`Enter\` on a first row that is a single empty cell cancels the table instead.
+- **A table with no header**: leave the first row's cells empty and press \`Enter\`. Markdown tables always have a header row, so this one is simply blank.
+- **Tidying**: each \`Enter\` lines up the row you just left with the rest of the table, filling in any cells it's missing. Only if that row sticks out — a wider cell, or more cells than the table has — is the whole table re-lined up to match. Ending a table tidies nothing. The tidy is its own undo step: \`Ctrl+Z\` once takes back the tidy and keeps your new row.
+- **Alignment**: click the divider line. The left part of a column's divider aligns that column left, the middle centres it, the right part aligns it right; clicking the part that matches the current alignment clears it again. (Clicking the divider changes it, so use the keyboard to put the caret there.)
+- **Deleting**: \`Backspace\` and \`Delete\` work exactly as everywhere else, pipes included. **\`Shift+Backspace\`** empties the whole cell (and from an empty cell moves to the previous one). **\`Ctrl+Backspace\`** still deletes a word, but at the start of a cell it deletes the last word of the *previous* cell rather than the pipe between them.
+- **\`Shift+Enter\`** is a plain line break, for the rare time you want one in the middle of a table.
+- Tables you type or paste by hand get the same keys, and any \`|\` you add yourself counts: the next tidy makes room for it.
 `,
   `## Find & Replace
 
@@ -707,6 +725,8 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 | \`Ctrl+T\` | Toggle current line's heading level |
 | \`Ctrl+-\` | Toggle bulleted list |
 | \`Ctrl+#\` (or \`Ctrl+Shift+3\`) | Toggle numbered list |
+| \`Tab\` / \`Shift+Tab\` (in a table) | Next / previous cell (see [Tables](${guideLink('TOOLBAR-FORMATTING', 'tables')})) |
+| \`Shift+Backspace\` (in a table) | Empty the cell |
 | \`Ctrl+Z\` / \`Ctrl+Y\` | Undo / redo |
 | \`Ctrl+V\` | Paste the text as-is |
 | \`Ctrl+Shift+V\` | Smart paste: rejoins lines broken mid-paragraph and tidies list markers |

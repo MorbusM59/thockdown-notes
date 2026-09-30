@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import type { MutableRefObject } from 'react'
-import { resolveMarkdownSelectionContext, resolveMarkdownSelectionContextIncremental, type InlineStateLineCache } from '../editor/MarkdownContext'
+import { isOffsetInFencedCodeBlock, resolveMarkdownSelectionContext, resolveMarkdownSelectionContextIncremental, type InlineStateLineCache } from '../editor/MarkdownContext'
+import { isTableLine } from '../editor/MarkdownTable'
+import { resolveTableToolbarTransform } from '../editor/MarkdownTableTransforms'
 import { normalizeInternalText } from '../editor/TextPolicy'
 import type { EditorSelectionState, EditorTextEdit, EditorTransformResult } from '../editor/EditorContract'
 import { buildTransformResult, collapsedSelectionAt } from '../editor/TransformResult'
@@ -316,6 +318,8 @@ export interface UseMarkdownFormattingToolbarResult {
   isCodeBlockActive: boolean
   isInlineCodeActive: boolean
   isTableOfContentsActive: boolean
+  /** True while the caret is in a table line outside code: the table button then tidies the table rather than starting one. */
+  isTableActive: boolean
   applyTextDecoration: (format: TextDecorationFormat) => void
   applyHeading: (level: 1 | 2 | 3 | 4 | 5 | 6) => void
   toggleCurrentLineHeading: () => void
@@ -328,6 +332,8 @@ export interface UseMarkdownFormattingToolbarResult {
   applyInlineCode: () => void
   applyCodeBlock: () => void
   insertHorizontalRule: () => void
+  /** Starts a table, or tidies the one the caret is in (MarkdownTableTransforms.ts's resolveTableToolbarTransform). */
+  applyTable: () => void
   insertTableOfContents: () => void
   toggleTableOfContents: () => void
 }
@@ -418,6 +424,7 @@ export function useMarkdownFormattingToolbar({
         isBlockquoteActive: line.blockquoteDepth > 0,
         isCodeBlockActive: inline.inFencedCodeBlock,
         isInlineCodeActive: inline.inInlineCode,
+        isTableActive: isTableLine(line.lineText) && !inline.inFencedCodeBlock,
       }
     },
     // markdownInlineCacheRef/markdownEditRef are refs on purpose: they are
@@ -1071,6 +1078,18 @@ export function useMarkdownFormattingToolbar({
     applyProgrammaticEditorText(nextText, cursor, cursor)
   }, [activeNoteId, applyProgrammaticEditorText, readEditorText, resolveSelectionBounds])
 
+  const applyTable = useCallback(() => {
+    if (!activeNoteId) return
+
+    const sourceText = readEditorText()
+    const next = resolveTableToolbarTransform(
+      { text: sourceText, selection: editorSelection },
+      (offset) => isOffsetInFencedCodeBlock(sourceText, offset, markdownInlineCacheRef.current),
+    )
+    if (!next) return
+    applyProgrammaticEditorText(next.text, next.selection.anchor, next.selection.focus)
+  }, [activeNoteId, applyProgrammaticEditorText, editorSelection, markdownInlineCacheRef, readEditorText])
+
   // NOT debounced, and not a candidate for it. This looks like a passive
   // display -- it draws the is-active class on one toolbar button -- but it
   // also decides whether insertTableOfContents inserts or removes, and gates
@@ -1186,6 +1205,7 @@ export function useMarkdownFormattingToolbar({
     isCodeBlockActive,
     isInlineCodeActive,
     isTableOfContentsActive,
+    isTableActive: selectionFlags.isTableActive,
     applyTextDecoration,
     applyHeading,
     toggleCurrentLineHeading,
@@ -1198,6 +1218,7 @@ export function useMarkdownFormattingToolbar({
     applyInlineCode,
     applyCodeBlock,
     insertHorizontalRule,
+    applyTable,
     insertTableOfContents,
     toggleTableOfContents,
   }

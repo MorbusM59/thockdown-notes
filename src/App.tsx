@@ -10572,6 +10572,7 @@ ${markdownHtml}
               isCodeBlockActive={activeSection?.isCodeBlockActive ?? false}
               isInlineCodeActive={activeSection?.isInlineCodeActive ?? false}
               isTableOfContentsActive={activeSection?.isTableOfContentsActive ?? false}
+              isTableActive={activeSection?.isTableActive ?? false}
               applyTextDecoration={activeSection?.applyTextDecoration ?? noop}
               applyHeading={activeSection?.applyHeading ?? noop}
               toggleCurrentLineHeading={activeSection?.toggleCurrentLineHeading ?? noop}
@@ -10584,6 +10585,7 @@ ${markdownHtml}
               applyInlineCode={activeSection?.applyInlineCode ?? noop}
               applyCodeBlock={activeSection?.applyCodeBlock ?? noop}
               insertHorizontalRule={activeSection?.insertHorizontalRule ?? noop}
+              applyTable={activeSection?.applyTable ?? noop}
               insertTableOfContents={activeSection?.insertTableOfContents ?? noop}
               toggleTableOfContents={activeSection?.toggleTableOfContents ?? noop}
             />

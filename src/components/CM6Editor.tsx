@@ -1,10 +1,10 @@
 import { SCROLL_TRACK_EDGE_GAP_PX } from '../shared/scrollTrackGeometry';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Annotation, Compartment, EditorState, EditorSelection, Prec, RangeSetBuilder, type ChangeSet } from '@codemirror/state';
+import { Annotation, Compartment, EditorState, EditorSelection, Prec, RangeSetBuilder, type ChangeSet, type TransactionSpec } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
 import { EditorView, Decoration, ViewPlugin, keymap, type DecorationSet } from '@codemirror/view';
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import { defaultKeymap, history, historyKeymap, isolateHistory } from '@codemirror/commands';
 import { buildTokenPresentation } from '../editor/MarkdownLineClassification';
 import { suppressNextPlainTypingSoundOnce, typingSoundManager } from '../sound/TypingSoundManager';
 import { ARROW_KEY_VOICES, SHIFT_TAB_KEY_VOICE, TAB_KEY_VOICE } from '../sound/keyVoices';
@@ -394,23 +394,39 @@ function readSingleRangeEdit(changes: ChangeSet): EditorTextEdit | null {
  * regardless of how small the actual edit was.
  */
 function applyTransformResult(view: EditorView, oldText: string, next: EditorTransformResult): void {
+  if (!next.prelude) {
+    view.dispatch(transformStepSpec(oldText, next, false));
+    return;
+  }
+  // A prelude is its own undo entry, and so is what follows it: both are
+  // isolated on both sides, so neither merges into the other or into
+  // whatever was typed just before (EditorTransformResult.prelude). The two
+  // are still dispatched TOGETHER, as one view update, because to everything
+  // downstream of the editor they are one keypress: one onTextChange (one
+  // key sound, one save, one inline-cache advance) rather than an
+  // intermediate text that nobody typed and a second event for the rest.
+  const preludeTransaction = view.state.update(transformStepSpec(oldText, next.prelude, true));
+  const mainTransaction = preludeTransaction.state.update(transformStepSpec(next.prelude.text, next, true));
+  view.dispatch([preludeTransaction, mainTransaction]);
+}
+
+function transformStepSpec(oldText: string, next: EditorTransformResult, isolate: boolean): TransactionSpec {
   const anchor = Math.max(0, Math.min(next.text.length, next.selection.anchor));
   const focus = Math.max(0, Math.min(next.text.length, next.selection.focus));
   const { from, to, insert } = next.edit;
+  const selection = EditorSelection.single(anchor, focus);
 
-  if (from === to && insert.length === 0) {
-    view.dispatch({ selection: EditorSelection.single(anchor, focus) });
-    return;
-  }
+  if (from === to && insert.length === 0) return { selection };
 
-  view.dispatch({
+  return {
     changes: {
       from: Math.max(0, Math.min(oldText.length, from)),
       to: Math.max(0, Math.min(oldText.length, to)),
       insert,
     },
-    selection: EditorSelection.single(anchor, focus),
-  });
+    selection,
+    annotations: isolate ? isolateHistory.of('full') : undefined,
+  };
 }
 
 /**
@@ -743,7 +759,11 @@ const lineTokenPlugin = ViewPlugin.fromClass(class {
       let pos = from;
       while (pos <= to) {
         const line = view.state.doc.lineAt(pos);
-        const presentation = buildTokenPresentation(line.text);
+        const doc = view.state.doc;
+        const presentation = buildTokenPresentation(line.text, {
+          previous: line.number > 1 ? doc.line(line.number - 1).text : null,
+          beforePrevious: line.number > 2 ? doc.line(line.number - 2).text : null,
+        });
         if (presentation) {
           builder.add(line.from, line.from, Decoration.line({ class: presentation.classes.join(' ') }));
         }
@@ -3579,6 +3599,24 @@ export function CM6Editor({
             return true;
           }
 
+          if (event.key === 'Backspace' && event.shiftKey !== event.ctrlKey && !event.altKey && !event.metaKey) {
+            // Shift+Backspace and Ctrl+Backspace, offered to the bindings
+            // first; null leaves the key to the default keymap (plain
+            // character delete for Shift, previous-word delete for Ctrl).
+            // Plain Backspace never comes through here.
+            const callback = bindingsRef.current?.onModifiedBackspaceTransform;
+            if (callback) {
+              const text = previousTextRef.current;
+              const selection = toSelectionState(view.state.selection.main);
+              const next = callback({ modifier: event.shiftKey ? 'shift' : 'ctrl', text, selection });
+              if (next) {
+                event.preventDefault();
+                applyTransformResult(view, text, next);
+                return true;
+              }
+            }
+          }
+
           if (event.key === 'Enter') {
             const callback = bindingsRef.current?.onEnterTransform;
             if (!callback) return false;
@@ -3801,20 +3839,23 @@ export function CM6Editor({
             // already sitting there, not being moved by this click) -- see
             // ChecklistCaretClickTogglePolicy.ts for the narrow markdown-
             // checkbox pattern match.
-            const toggleCallback = bindingsRef.current?.onCaretClickTransform;
-            if (toggleCallback) {
-              const currentSelection = view.state.selection.main;
-              if (currentSelection.from === currentSelection.to) {
-                const clickOffset = resolveBoxAtCoords(view, event.clientX, event.clientY);
-                if (clickOffset === currentSelection.head) {
-                  const text = previousTextRef.current;
-                  const selection = toSelectionState(currentSelection);
-                  const next = toggleCallback({ text, selection });
-                  if (next) {
-                    event.preventDefault();
-                    applyTransformResult(view, text, next);
-                    return true;
-                  }
+            //
+            // Which clicks a policy acts on is the policy's own decision
+            // (EditorBindings.onCaretClickTransform): the checkbox toggle
+            // wants the caret's own box, a table divider any box. Only a
+            // plain click is offered -- a modified one (Shift to extend a
+            // selection, and so on) is never reinterpreted.
+            const clickCallback = bindingsRef.current?.onCaretClickTransform;
+            if (clickCallback && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
+              const clickOffset = resolveBoxAtCoords(view, event.clientX, event.clientY);
+              if (clickOffset !== null) {
+                const text = previousTextRef.current;
+                const selection = toSelectionState(view.state.selection.main);
+                const next = clickCallback({ text, selection, clickOffset });
+                if (next) {
+                  event.preventDefault();
+                  applyTransformResult(view, text, next);
+                  return true;
                 }
               }
             }

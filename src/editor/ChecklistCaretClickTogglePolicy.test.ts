@@ -20,6 +20,7 @@ function buildEvent(text: string, selectionOffset: number): ChecklistCaretClickT
   return {
     text,
     selection: collapsedSelection(selectionOffset),
+    clickOffset: selectionOffset,
   }
 }
 
@@ -80,6 +81,7 @@ describe('resolveMarkdownChecklistCaretClickToggleTransform', () => {
 
     const result = resolveMarkdownChecklistCaretClickToggleTransform({
       text,
+      clickOffset: offset,
       selection: {
         anchor: offset,
         focus: offset + 1,
@@ -141,5 +143,17 @@ describe('resolveMarkdownChecklistLineToggleTransform', () => {
 
     expect(resolveMarkdownChecklistLineToggleTransform(text, -1)).toBeNull()
     expect(resolveMarkdownChecklistLineToggleTransform(text, 5)).toBeNull()
+  })
+
+  it('does not toggle when the click lands somewhere other than the caret', () => {
+    const text = '- [ ] task'
+    const selectionOffset = text.indexOf('[') + 1
+
+    const result = resolveMarkdownChecklistCaretClickToggleTransform({
+      ...buildEvent(text, selectionOffset),
+      clickOffset: selectionOffset + 3,
+    })
+
+    expect(result).toBeNull()
   })
 })

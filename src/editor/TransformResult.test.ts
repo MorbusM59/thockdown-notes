@@ -84,7 +84,7 @@ describe('transform edits stay proportional to what changed', () => {
   it('checklist caret-click toggle reports a single-character edit', () => {
     const text = `${filler}\n- [ ] task\n${filler}`
     const caret = text.indexOf('- [ ] task') + 3
-    const result = resolveMarkdownChecklistCaretClickToggleTransform({ text, selection: collapsedAt(caret) })
+    const result = resolveMarkdownChecklistCaretClickToggleTransform({ text, selection: collapsedAt(caret), clickOffset: caret })
 
     expect(result).not.toBeNull()
     expect(applyEdit(text, result!)).toBe(result!.text)

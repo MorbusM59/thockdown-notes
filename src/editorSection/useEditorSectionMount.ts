@@ -36,6 +36,7 @@ import { resolvePreviewBlockIndexForSourceLine, resolveSourceLineForAnchorBlockI
 import { selectPreviewAnchorCandidate } from '../editor/PreviewAnchorSelection'
 import {
   indentSelectionByStep,
+  isOffsetInFencedCodeBlock,
   resolveMarkdownSelectionContext,
   resolveMarkdownSelectionContextIncremental,
   type InlineStateLineCache,
@@ -43,6 +44,13 @@ import {
 import { resolveMarkdownEnterTransform } from '../editor/EnterTransformPolicy'
 import { resolveMarkdownChecklistTypeoverTransform } from '../editor/ChecklistTypingTransformPolicy'
 import { resolveMarkdownChecklistCaretClickToggleTransform } from '../editor/ChecklistCaretClickTogglePolicy'
+import {
+  resolveTableCharacterTransform,
+  resolveTableDeleteTransform,
+  resolveTableDividerClickTransform,
+  resolveTableEnterTransform,
+  resolveTableTabTransform,
+} from '../editor/MarkdownTableTransforms'
 import {
   shouldSuppressPlainTypingSoundForInsertion,
   suppressNextPlainTypingSoundOnce,
@@ -1494,6 +1502,16 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     return next
   }, [commitEditorText, latestEditorSelectionRef, queueSave, setEditorSelection, updateActiveNoteTitlePreview])
 
+  /**
+   * The table transforms' code-block check, bound to one text. Reads the
+   * section's inline-state cache, which makes it a scan of the caret's own
+   * line when the cache is current and falls back to the whole-document
+   * ground truth when it is not -- the same rule Enter's fence check follows.
+   */
+  const isInFence = useCallback((text: string) => (offset: number) => (
+    isOffsetInFencedCodeBlock(text, offset, markdownInlineCacheRef.current)
+  ), [markdownInlineCacheRef])
+
   const bindings = useMemo<EditorBindings>(() => ({
     onLifecycle: (event) => {
       if (event.phase !== 'ready') return
@@ -1650,6 +1668,9 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       // would be unsound in exactly the case where it did anything, since
       // `selection` indexes the un-normalized document.
       const sourceText = text
+      const tableNext = resolveTableTabTransform({ shiftKey, text: sourceText, selection }, isInFence(sourceText))
+      if (tableNext) return commitTransformResult(tableNext)
+
       const lineContext = resolveMarkdownSelectionContext(sourceText, selection).line
 
       if (lineContext.headingLevel > 0) {
@@ -1753,18 +1774,19 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       // would be unsound in exactly the case where it did anything, since
       // `selection` indexes the un-normalized document.
       const sourceText = text
-      const next = resolveMarkdownChecklistTypeoverTransform({
-        char,
-        text: sourceText,
-        selection,
-      })
+      const next = resolveTableCharacterTransform({ char, text: sourceText, selection }, isInFence(sourceText))
+        ?? resolveMarkdownChecklistTypeoverTransform({
+          char,
+          text: sourceText,
+          selection,
+        })
       if (!next) {
         return null
       }
 
       return commitTransformResult(next)
     },
-    onCaretClickTransform: ({ text, selection }) => {
+    onCaretClickTransform: ({ text, selection, clickOffset }) => {
       if (previewedSnapshotId !== null) {
         return null
       }
@@ -1776,10 +1798,12 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       // would be unsound in exactly the case where it did anything, since
       // `selection` indexes the un-normalized document.
       const sourceText = text
-      const next = resolveMarkdownChecklistCaretClickToggleTransform({
-        text: sourceText,
-        selection,
-      })
+      const next = resolveTableDividerClickTransform({ text: sourceText, clickOffset }, isInFence(sourceText))
+        ?? resolveMarkdownChecklistCaretClickToggleTransform({
+          text: sourceText,
+          selection,
+          clickOffset,
+        })
       if (!next) {
         return null
       }
@@ -1797,12 +1821,22 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       // check from a scan of everything before the caret into a scan of the
       // caret's own line. Verified against the text inside applyMarkdownEnter,
       // so a cache that has fallen behind costs correctness nothing.
-      const next = resolveMarkdownEnterTransform(event, markdownInlineCacheRef.current)
+      const isPlainEnter = !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey
+      const next = (isPlainEnter ? resolveTableEnterTransform(event, isInFence(event.text)) : null)
+        ?? resolveMarkdownEnterTransform(event, markdownInlineCacheRef.current)
       if (!next) {
         return null
       }
 
       return commitTransformResult(next)
+    },
+    onModifiedBackspaceTransform: ({ modifier, text, selection }) => {
+      if (previewedSnapshotId !== null) {
+        return null
+      }
+      if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
+      const next = resolveTableDeleteTransform({ modifier, text, selection }, isInFence(text))
+      return next ? commitTransformResult(next) : null
     },
     onViewportChange: (event: EditorViewportChangeEvent) => {
       if (ignoreNextUserViewportChangeRef.current && event.source === 'user-input') {
@@ -1895,6 +1929,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     activeNoteId,
     advanceMarkdownInlineCache,
     commitTransformResult,
+    isInFence,
     markdownInlineCacheRef,
     isPreviewMode,
     persistenceReady,

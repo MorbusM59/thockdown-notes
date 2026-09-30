@@ -119,6 +119,7 @@ export function EditorToolbar({
   isCodeBlockActive,
   isInlineCodeActive,
   isTableOfContentsActive,
+  isTableActive,
   applyTextDecoration,
   applyHeading,
   toggleBulletedList,
@@ -130,6 +131,7 @@ export function EditorToolbar({
   applyInlineCode,
   applyCodeBlock,
   insertHorizontalRule,
+  applyTable,
   insertTableOfContents,
   toggleTableOfContents,
 }: EditorToolbarProps) {
@@ -262,6 +264,16 @@ export function EditorToolbar({
           <div className="toolbar-group">
             <button type="button" className="btn-icon" data-tooltip="Horizontal rule" aria-label="Horizontal rule" onClick={inEditMode(insertHorizontalRule)} disabled={formattingDisabled}>
               <span className="fa-solid fa-window-minimize" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className={`btn-icon ${isTableActive ? 'is-active' : ''}`}
+              data-tooltip={isTableActive ? 'Tidy table' : 'Table'}
+              aria-label={isTableActive ? 'Tidy table' : 'Table'}
+              onClick={inEditMode(applyTable)}
+              disabled={formattingDisabled}
+            >
+              <span className="fa-solid fa-table" aria-hidden="true" />
             </button>
             <button type="button" className="btn-icon" data-tooltip="Link (Ctrl+L)" onClick={inEditMode(applyLink)} disabled={formattingDisabled}><span className="fa-solid fa-link" aria-hidden="true" /></button>
             <button type="button" className="btn-icon" data-tooltip="Set anchor (Shift+Ctrl+L)" onClick={inEditMode(applyAnchor)} disabled={formattingDisabled}><span className="fa-solid fa-anchor" aria-hidden="true" /></button>

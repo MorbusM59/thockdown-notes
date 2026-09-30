@@ -4,6 +4,8 @@ import { buildTransformResult, collapsedSelectionAt } from './TransformResult'
 export interface ChecklistCaretClickToggleEvent {
   text: string
   selection: EditorSelectionState
+  /** The box the click landed on; the toggle needs it to be the caret's own. */
+  clickOffset: number
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -22,7 +24,7 @@ function clamp(value: number, min: number, max: number): number {
 export function resolveMarkdownChecklistCaretClickToggleTransform(
   event: ChecklistCaretClickToggleEvent,
 ): EditorTransformResult | null {
-  if (!event.selection.isCollapsed) {
+  if (!event.selection.isCollapsed || event.clickOffset !== event.selection.focus) {
     return null
   }
 
@@ -95,6 +97,7 @@ export function resolveMarkdownChecklistLineToggleTransform(
 
   return resolveMarkdownChecklistCaretClickToggleTransform({
     text: sourceText,
+    clickOffset: caretOffset,
     selection: {
       anchor: caretOffset,
       focus: caretOffset,

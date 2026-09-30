@@ -57,6 +57,17 @@ export interface EditorTransformResult {
   text: string;
   selection: EditorSelectionState;
   edit: EditorTextEdit;
+  /**
+   * A step applied BEFORE this one and recorded in the undo history as a
+   * separate entry, so one undo takes back this result and leaves the
+   * prelude in place, and a second takes back the prelude. Used where one
+   * keypress does two things the reader may want to keep apart -- a table's
+   * Enter tidies the row just left, then starts a new row
+   * (MarkdownTableTransforms.ts). This result's `edit` and `selection` index
+   * the prelude's `text`, not the text the transform was given; `text` is
+   * the final document either way.
+   */
+  prelude?: EditorTransformResult;
 }
 
 export type EditorViewportChangeOrigin = 'viewport-drag' | 'scroll' | 'programmatic';
@@ -284,7 +295,26 @@ export interface EditorBindings {
     text: string;
     selection: EditorSelectionState;
   }) => EditorTransformResult | null;
+  /**
+   * A primary click in the edit view, before the click moves the caret.
+   * `clickOffset` is the box under the pointer (boxPointer.ts's
+   * resolveBoxAtCoords); `selection` is still where the caret was. Each
+   * policy decides for itself which clicks it acts on -- a checkbox toggles
+   * only when the click lands on the caret's own box, a table divider on
+   * any click. Returning null lets the click place the caret as usual.
+   */
   onCaretClickTransform?: (event: {
+    text: string;
+    selection: EditorSelectionState;
+    clickOffset: number;
+  }) => EditorTransformResult | null;
+  /**
+   * Shift+Backspace and Ctrl+Backspace, before the editor's own handling.
+   * Plain Backspace never reaches this. Returning null leaves the key to do
+   * what it does anywhere else (Ctrl+Backspace: delete the previous word).
+   */
+  onModifiedBackspaceTransform?: (event: {
+    modifier: 'shift' | 'ctrl';
     text: string;
     selection: EditorSelectionState;
   }) => EditorTransformResult | null;
