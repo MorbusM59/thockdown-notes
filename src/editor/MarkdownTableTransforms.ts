@@ -189,15 +189,15 @@ export function resolveTableTabTransform(
   const next = nextContentRow(left.table, rowIndex)
   if (next !== null) return withPrelude(left.prelude, caretTo(afterTidy, left.table, { row: next, column: 0 }))
   const tidiedRow = left.table.rows[rowIndex]
-  return withPrelude(left.prelude, appendRowAfter(afterTidy, tidiedRow.lineTo, tidiedRow.indent))
+  return withPrelude(left.prelude, appendRowAfter(afterTidy, tidiedRow.lineTo))
 }
 
-function appendRowAfter(text: string, lineTo: number, indent: string): EditorTransformResult {
-  const insert = `\n${indent}${EMPTY_TABLE_ROW}`
+function appendRowAfter(text: string, lineTo: number): EditorTransformResult {
+  const insert = `\n${EMPTY_TABLE_ROW}`
   return buildTransformResult(
     text,
     { from: lineTo, to: lineTo, insert },
-    collapsedSelectionAt(lineTo + 1 + indent.length + 2),
+    collapsedSelectionAt(lineTo + 3),
   )
 }
 
@@ -245,12 +245,12 @@ export function resolveTableEnterTransform(
       return buildTransformResult(text, { from: row.lineFrom, to: row.lineTo, insert: '' }, collapsedSelectionAt(row.lineFrom))
     }
     const widths = columnWidthsOf(table, row.cells.length)
-    const header = renderContentRow(row.indent, row.cells.map((cell) => cell.content), widths)
+    const header = renderContentRow(row.cells.map((cell) => cell.content), widths)
     const prelude = replaceIfChanged(text, row.lineFrom, row.lineTo, header)
     const afterPrelude = prelude ? prelude.text : text
     const headerEnd = row.lineFrom + header.length
-    const divider = renderDividerRow(row.indent, row.cells.map((): TableAlignment => 'none'), widths)
-    const insert = `\n${divider}\n${row.indent}${EMPTY_TABLE_ROW}`
+    const divider = renderDividerRow(row.cells.map((): TableAlignment => 'none'), widths)
+    const insert = `\n${divider}\n${EMPTY_TABLE_ROW}`
     const main = buildTransformResult(
       afterPrelude,
       { from: headerEnd, to: headerEnd, insert },
@@ -267,7 +267,7 @@ export function resolveTableEnterTransform(
   const left = tidyRowBeingLeft(text, table, rowIndex)
   if (!left) return null
   const anchorRow = left.table.rows[Math.max(rowIndex, 1)]
-  return withPrelude(left.prelude, appendRowAfter(left.prelude?.text ?? text, anchorRow.lineTo, anchorRow.indent))
+  return withPrelude(left.prelude, appendRowAfter(left.prelude?.text ?? text, anchorRow.lineTo))
 }
 
 /**

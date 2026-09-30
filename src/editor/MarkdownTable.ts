@@ -23,7 +23,9 @@
  * a string's length IS its on-screen width, and padding with spaces aligns the
  * pipes exactly.
  *
- * The tidy layout. A tidied row is `| ` + each cell's content padded with
+ * The tidy layout. A tidied row starts at the line's first column (leading
+ * spaces are dropped: indenting a table means nothing in Markdown), then is
+ * `| ` + each cell's content padded with
  * trailing spaces to its column width, joined by ` | `, + ` |`. A column's
  * width is the longest content in it, at least 1. The divider fills each
  * cell's whole segment (width + 2) with dashes, with a colon at the left end,
@@ -52,8 +54,6 @@ export interface TableRow {
   /** Offset of the line's end (the newline, or the end of the text). */
   lineTo: number
   text: string
-  /** Whitespace before the leading pipe, kept on every rewrite of the row. */
-  indent: string
   cells: TableCell[]
   /** Whether the row ends with a pipe (trailing spaces after it allowed). */
   closed: boolean
@@ -87,8 +87,10 @@ export function isTableLine(line: string): boolean {
 
 /** Splits one table line into cells. Pipes escaped with a backslash are content. */
 export function parseTableRow(text: string, lineFrom: number): TableRow {
+  // Whitespace before the leading pipe is read past and never written back:
+  // indenting a table changes nothing in Markdown, so a tidied row starts
+  // with its pipe (renderContentRow).
   const indentLength = text.length - text.trimStart().length
-  const indent = text.slice(0, indentLength)
   const pipePositions: number[] = []
   for (let index = indentLength + 1; index < text.length; index += 1) {
     const code = text.charCodeAt(index)
@@ -127,7 +129,7 @@ export function parseTableRow(text: string, lineFrom: number): TableRow {
     })
   }
 
-  return { lineFrom, lineTo: lineFrom + text.length, text, indent, cells, closed }
+  return { lineFrom, lineTo: lineFrom + text.length, text, cells, closed }
 }
 
 export function isDividerRow(row: TableRow): boolean {
@@ -235,9 +237,9 @@ export function columnWidthsOf(table: MarkdownTable, columnCount: number): numbe
   return widths
 }
 
-export function renderContentRow(indent: string, contents: readonly string[], widths: readonly number[]): string {
+export function renderContentRow(contents: readonly string[], widths: readonly number[]): string {
   const cells = widths.map((width, column) => (contents[column] ?? '').padEnd(width))
-  return `${indent}| ${cells.join(' | ')} |`
+  return `| ${cells.join(' | ')} |`
 }
 
 /** One divider cell filling a segment of `length` characters. */
@@ -250,8 +252,8 @@ export function renderDividerCell(alignment: TableAlignment, length: number): st
   return `:${'-'.repeat(Math.max(1, length - 2))}:`
 }
 
-export function renderDividerRow(indent: string, alignments: readonly TableAlignment[], widths: readonly number[]): string {
-  return `${indent}|${widths.map((width, column) => renderDividerCell(alignments[column] ?? 'none', width + 2)).join('|')}|`
+export function renderDividerRow(alignments: readonly TableAlignment[], widths: readonly number[]): string {
+  return `|${widths.map((width, column) => renderDividerCell(alignments[column] ?? 'none', width + 2)).join('|')}|`
 }
 
 /**
@@ -282,7 +284,7 @@ export function tidyRowText(table: MarkdownTable, rowIndex: number): string {
   const columnCount = columnCountOf(table)
   const widths = columnWidthsOf(table, columnCount)
   const row = table.rows[rowIndex]
-  return renderContentRow(row.indent, row.cells.map((cell) => cell.content), widths)
+  return renderContentRow(row.cells.map((cell) => cell.content), widths)
 }
 
 /**
@@ -300,8 +302,8 @@ export function tidyTableText(table: MarkdownTable): string {
   const alignments = table.hasDivider ? table.rows[1].cells.map(alignmentOf) : []
   return table.rows.map((row, rowIndex) => (
     isContentRow(table, rowIndex)
-      ? renderContentRow(row.indent, row.cells.map((cell) => cell.content), widths)
-      : renderDividerRow(row.indent, alignments, widths)
+      ? renderContentRow(row.cells.map((cell) => cell.content), widths)
+      : renderDividerRow(alignments, widths)
   )).join('\n')
 }
 

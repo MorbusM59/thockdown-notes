@@ -111,9 +111,9 @@ describe('tidying', () => {
     ].join('\n'))
   })
 
-  it('keeps each line\'s indentation', () => {
-    const table = findTableAt('  | a |\n  |---|', 0)!
-    expect(tidyTableText(table)).toBe('  | a |\n  |---|')
+  it('drops leading spaces from every row', () => {
+    const table = findTableAt('  | a |\n |---|\n   | b |', 0)!
+    expect(tidyTableText(table)).toBe('| a |\n|---|\n| b |')
   })
 
   it('is a fixed point: tidying tidy text changes nothing', () => {

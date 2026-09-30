@@ -177,6 +177,10 @@ describe('Enter', () => {
     expect(show(result)).toBe('| a    | b |\n|------|---|\n| wide | c |\n| ^  |')
   })
 
+  it('drops the leading spaces of the row it tidies, and starts the new row unindented', () => {
+    expect(show(enter('| a |\n|---|\n   | b^ |'))).toBe('| a |\n|---|\n| b |\n| ^  |')
+  })
+
   it('makes no undo step for a row that is already tidy', () => {
     const result = enter('| a | b |\n|---|---|\n| c | d^ |')!
     expect(result.prelude).toBeUndefined()
