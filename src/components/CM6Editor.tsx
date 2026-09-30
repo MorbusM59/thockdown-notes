@@ -472,7 +472,6 @@ function resolveCM6CaretTopInScroll(
 }
 
 const CARET_INSET_PX = 1;
-const EMPTY_LINE_TOP_TOLERANCE_PX = 2;
 const EDITOR_PAGE_CONTINUOUS_SCROLL_APEX_MULTIPLIER = CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER;
 
 /**
@@ -701,46 +700,6 @@ interface ReviewGutterEdgeLines {
   bottomLine: number;
   topBoxTopPx: number;
   bottomBoxTopPx: number;
-}
-
-/** Ported verbatim from BlockSelectionPlugin.tsx -- walks up from `node` to the .cm-line element that's a direct child of `rootEl` (view.contentDOM), mirroring that file's own "top-level child" notion. */
-function findTopLevelChild(rootEl: HTMLElement, node: Node | null): HTMLElement | null {
-  let current: Node | null = node;
-  while (current && current.parentElement !== rootEl) {
-    current = current.parentElement;
-  }
-  return current instanceof HTMLElement ? current : null;
-}
-
-/**
- * Ported verbatim from BlockSelectionPlugin.tsx's own collectEmptyLineTops:
- * top (viewport) coordinates of every empty line spanned by the selection,
- * start to end inclusive -- a Range crossing an empty line still yields a
- * full-width client rect for it, which would otherwise paint a stray
- * full-row highlight on a line with nothing selected.
- */
-function collectEmptyLineTops(rootEl: HTMLElement, domSelection: Selection): number[] {
-  const startEl = findTopLevelChild(rootEl, domSelection.anchorNode);
-  const endEl = findTopLevelChild(rootEl, domSelection.focusNode);
-  if (!startEl || !endEl) return [];
-
-  const children = Array.from(rootEl.children);
-  const startIndex = children.indexOf(startEl);
-  const endIndex = children.indexOf(endEl);
-  if (startIndex === -1 || endIndex === -1) return [];
-
-  const lo = Math.min(startIndex, endIndex);
-  const hi = Math.max(startIndex, endIndex);
-
-  const tops: number[] = [];
-  for (let i = lo; i <= hi; i++) {
-    const child = children[i];
-    if (child.textContent === '') {
-      tops.push(child.getBoundingClientRect().top);
-    }
-  }
-
-  return tops;
 }
 
 const lineTokenPlugin = ViewPlugin.fromClass(class {
@@ -2176,10 +2135,10 @@ export function CM6Editor({
   }, []);
 
   /**
-   * Ported verbatim from BlockSelectionPlugin.tsx's own updateSelection --
-   * same algorithm (readSelectionLineRects, empty-line filtering, quantized
-   * row merging, viewport clipping), sourced from the CM6 EditorView instead
-   * of Lexical's editor state. Doesn't require focus the way updateCaret
+   * Descended from BlockSelectionPlugin.tsx's own updateSelection:
+   * readSelectionLineRects (which covers selected characters only, so no
+   * empty space and no empty line is ever painted), quantized row merging,
+   * viewport clipping, sourced from the CM6 EditorView. Doesn't require focus the way updateCaret
    * does: a read-only note's native text selection still works (and should
    * still highlight) even though it never becomes document.activeElement.
    * Recomputes the review-gutter's line layout in lockstep (updateLineLayout)
@@ -2213,8 +2172,6 @@ export function CM6Editor({
       return;
     }
 
-    const emptyLineTops = collectEmptyLineTops(rootEl, domSelection);
-
     const scrollerRect = scroller.getBoundingClientRect();
     const layerRect = layerEl.getBoundingClientRect();
     const scrollerLeftInLayer = scrollerRect.left - layerRect.left;
@@ -2226,11 +2183,6 @@ export function CM6Editor({
     const rowsByQuantizedTop = new Map<number, { left: number; right: number }>();
 
     for (const lineRect of lineRects) {
-      const isEmptyLine = emptyLineTops.some(
-        (top) => Math.abs(top - lineRect.top) < EMPTY_LINE_TOP_TOLERANCE_PX,
-      );
-      if (isEmptyLine) continue;
-
       const topInScroll = (lineRect.top - scrollerRect.top) + scroller.scrollTop;
       // Same phase-aware quantization as updateCaret's own -- see
       // quantizeToPhase's comment.
