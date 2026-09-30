@@ -843,6 +843,33 @@ export function useMarkdownFormattingToolbar({
     latestEditorSelectionRef,
   ])
 
+  /**
+   * The list buttons' answer for a selection of nothing but blank lines --
+   * most often a caret on an empty line. Everywhere else a blank line inside
+   * the selection is a paragraph gap and is deliberately left alone, but
+   * when the blank lines are ALL there is, pressing the button can only mean
+   * "start a list here": each line gets the marker (after any whitespace it
+   * already has, which is its indentation) and the caret goes after the
+   * marker, ready to type the item. Null when any selected line has text, so
+   * the caller's ordinary per-line toggle runs.
+   */
+  const startListOnBlankLines = useCallback((
+    sourceText: string,
+    baseSelection: EditorSelectionState,
+    markerForLine: (index: number) => string,
+  ): EditorTransformResult | null => {
+    const { start, end } = resolveSelectionBoundsFromSelection(sourceText, baseSelection)
+    const { lineStart, lineEndExclusive } = resolveLineRange(sourceText, start, end)
+    const lines = sourceText.slice(lineStart, lineEndExclusive).split('\n')
+    if (!lines.every((line) => line.trim().length === 0)) return null
+    const insert = lines.map((line, index) => `${line}${markerForLine(index)}`).join('\n')
+    return buildTransformResult(
+      sourceText,
+      { from: lineStart, to: lineEndExclusive, insert },
+      collapsedSelectionAt(lineStart + insert.length),
+    )
+  }, [resolveLineRange, resolveSelectionBoundsFromSelection])
+
   const buildToggleBulletedListTransform = useCallback((
     sourceText: string,
     baseSelection: EditorSelectionState,
@@ -861,6 +888,8 @@ export function useMarkdownFormattingToolbar({
     const { start, end } = resolveSelectionBoundsFromSelection(sourceText, baseSelection)
     const { lineStart, lineEndExclusive } = resolveLineRange(sourceText, start, end)
     const lines = sourceText.slice(lineStart, lineEndExclusive).split('\n')
+    const onBlankLines = startListOnBlankLines(sourceText, baseSelection, () => '- ')
+    if (onBlankLines) return onBlankLines
     const allBulleted = lines.every((line) => line.trim().length === 0 || bulletPattern.test(line))
 
     const resolveContentStart = (line: string) => {
@@ -894,7 +923,7 @@ export function useMarkdownFormattingToolbar({
 
       return localOffsetInLine + (newContentStart - oldContentStart)
     })
-  }, [resolveLineRange, resolveSelectionBoundsFromSelection, transformSelectedLinesForSelection])
+  }, [resolveLineRange, resolveSelectionBoundsFromSelection, startListOnBlankLines, transformSelectedLinesForSelection])
   buildToggleBulletedListTransformRef.current = buildToggleBulletedListTransform
 
   const buildToggleNumberedListTransform = useCallback((
@@ -915,6 +944,8 @@ export function useMarkdownFormattingToolbar({
     const { start, end } = resolveSelectionBoundsFromSelection(sourceText, baseSelection)
     const { lineStart, lineEndExclusive } = resolveLineRange(sourceText, start, end)
     const lines = sourceText.slice(lineStart, lineEndExclusive).split('\n')
+    const onBlankLines = startListOnBlankLines(sourceText, baseSelection, (index) => `${index + 1}. `)
+    if (onBlankLines) return onBlankLines
     const allNumbered = lines.every((line) => line.trim().length === 0 || numberedPattern.test(line))
 
     const resolveContentStart = (line: string) => {
@@ -948,7 +979,7 @@ export function useMarkdownFormattingToolbar({
 
       return localOffsetInLine + (newContentStart - oldContentStart)
     })
-  }, [resolveLineRange, resolveSelectionBoundsFromSelection, transformSelectedLinesForSelection])
+  }, [resolveLineRange, resolveSelectionBoundsFromSelection, startListOnBlankLines, transformSelectedLinesForSelection])
   buildToggleNumberedListTransformRef.current = buildToggleNumberedListTransform
 
   const toggleBulletedList = useCallback(() => {
@@ -985,6 +1016,8 @@ export function useMarkdownFormattingToolbar({
     const { lineStart, lineEndExclusive } = resolveLineRange(sourceText, start, end)
     const selectedBlock = sourceText.slice(lineStart, lineEndExclusive)
     const lines = selectedBlock.split('\n')
+    const onBlankLines = startListOnBlankLines(sourceText, baseSelection, () => '- [ ] ')
+    if (onBlankLines) return onBlankLines
     const allChecklist = lines.every((line) => line.trim().length === 0 || checklistPattern.test(line))
 
     return transformSelectedLinesForSelection(sourceText, baseSelection, (line) => {
@@ -1012,7 +1045,7 @@ export function useMarkdownFormattingToolbar({
       }
       return localOffsetInLine + (newContentStart - oldContentStart)
     })
-  }, [resolveLineRange, resolveSelectionBoundsFromSelection, transformSelectedLinesForSelection])
+  }, [resolveLineRange, resolveSelectionBoundsFromSelection, startListOnBlankLines, transformSelectedLinesForSelection])
 
   const toggleChecklistList = useCallback(() => {
     const next = buildToggleChecklistListTransform(readEditorText(), latestEditorSelectionRef.current)
