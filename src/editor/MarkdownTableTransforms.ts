@@ -98,12 +98,43 @@ function locate(text: string, selection: EditorSelectionState, isInFencedCodeBlo
 }
 
 /**
+ * The tidy done when the caret LEAVES a row of a real table -- by Enter, or
+ * by Tab / Shift+Tab crossing into another row. One rule for all three: the
+ * row alone is padded to the table's columns, unless it stretches the table
+ * (more cells than it has columns, or a cell wider than its column), in which
+ * case the whole table is re-laid out. Returns that step (null when it would
+ * change nothing, so no empty undo entry is made) and the table read again
+ * from the tidied text, since the tidy may have moved every line of it; a
+ * tidy never adds or removes rows, so row indices carry across.
+ *
+ * Nothing is tidied in a block that is not yet a table (no divider): its
+ * columns are not defined yet.
+ */
+function tidyRowBeingLeft(
+  text: string,
+  table: MarkdownTable,
+  rowIndex: number,
+): { prelude: EditorTransformResult | null; table: MarkdownTable } | null {
+  if (!table.hasDivider || !isContentRow(table, rowIndex)) return { prelude: null, table }
+  const row = table.rows[rowIndex]
+  const prelude = rowStretchesTable(table, rowIndex)
+    ? replaceIfChanged(text, tableFrom(table), tableTo(table), tidyTableText(table))
+    : replaceIfChanged(text, row.lineFrom, row.lineTo, tidyRowText(table, rowIndex))
+  if (!prelude) return { prelude: null, table }
+  const tidied = findTableAt(prelude.text, tableFrom(table))
+  return tidied ? { prelude, table: tidied } : null
+}
+
+/**
  * Tab moves to the next cell. In the last cell it adds a cell while the row
  * is still short of the table's columns (always, before the divider exists,
  * since the header row is what defines them); a full row instead goes on to
  * the next row, and past the last row a new one-cell row is started. Shift+Tab
  * moves to the previous cell. At the very first cell Shift+Tab is swallowed
  * rather than falling through to outdenting a table line.
+ *
+ * Crossing into another row, either way, tidies the row being left
+ * (tidyRowBeingLeft) as its own undo step. Moves within a row tidy nothing.
  */
 export function resolveTableTabTransform(
   event: { shiftKey: boolean; text: string; selection: EditorSelectionState },
@@ -124,7 +155,14 @@ export function resolveTableTabTransform(
 
   if (shiftKey) {
     const previous = previousCell(table, { row: rowIndex, column })
-    return previous ? caretTo(text, table, previous) : moveCaret(text, event.selection.focus)
+    if (!previous) return moveCaret(text, event.selection.focus)
+    if (previous.row === rowIndex) return caretTo(text, table, previous)
+    const left = tidyRowBeingLeft(text, table, rowIndex)
+    if (!left) return null
+    // Read the target in the tidied table: a whole-table tidy may have given
+    // the previous row more cells, and its last cell is where the caret goes.
+    const target = previousCell(left.table, { row: rowIndex, column: 0 })!
+    return withPrelude(left.prelude, caretTo(left.prelude?.text ?? text, left.table, target))
   }
 
   if (column < row.cells.length - 1) return caretTo(text, table, { row: rowIndex, column: column + 1 })
@@ -145,9 +183,13 @@ export function resolveTableTabTransform(
     )
   }
 
-  const next = nextContentRow(table, rowIndex)
-  if (next !== null) return caretTo(text, table, { row: next, column: 0 })
-  return appendRowAfter(text, row.lineTo, row.indent)
+  const left = tidyRowBeingLeft(text, table, rowIndex)
+  if (!left) return null
+  const afterTidy = left.prelude?.text ?? text
+  const next = nextContentRow(left.table, rowIndex)
+  if (next !== null) return withPrelude(left.prelude, caretTo(afterTidy, left.table, { row: next, column: 0 }))
+  const tidiedRow = left.table.rows[rowIndex]
+  return withPrelude(left.prelude, appendRowAfter(afterTidy, tidiedRow.lineTo, tidiedRow.indent))
 }
 
 function appendRowAfter(text: string, lineTo: number, indent: string): EditorTransformResult {
@@ -180,10 +222,9 @@ function replaceIfChanged(text: string, from: number, to: number, insert: string
  *
  * In a table that has its divider: a blank last row is emptied, which ends
  * the table. Any other row is tidied and a new one-cell row is started below
- * it (below the divider, from the header). The tidy is the row alone, unless
- * the row stretches the table (more cells than it has columns, or a cell
- * wider than its column), in which case it is the whole table. The tidy is
- * its own undo step, so undo first takes back the tidy and leaves the new row.
+ * it (below the divider, from the header). The row is tidied as it is left
+ * (tidyRowBeingLeft), as its own undo step, so undo first takes back the new
+ * row and leaves the tidy.
  *
  * A block of pipe lines whose second line is not a divider is not a table,
  * and Enter there is an ordinary Enter.
@@ -223,19 +264,10 @@ export function resolveTableEnterTransform(
     return buildTransformResult(text, { from: row.lineFrom, to: row.lineTo, insert: '' }, collapsedSelectionAt(row.lineFrom))
   }
 
-  let prelude: EditorTransformResult | null = null
-  if (isContentRow(table, rowIndex)) {
-    prelude = rowStretchesTable(table, rowIndex)
-      ? replaceIfChanged(text, tableFrom(table), tableTo(table), tidyTableText(table))
-      : replaceIfChanged(text, row.lineFrom, row.lineTo, tidyRowText(table, rowIndex))
-  }
-  const afterPrelude = prelude ? prelude.text : text
-  // The tidy may have moved every line of the table, so the row the new one
-  // goes under is read again from the tidied text.
-  const tidied = findTableAt(afterPrelude, tableFrom(table))
-  if (!tidied) return null
-  const anchorRow = tidied.rows[Math.max(rowIndex, 1)]
-  return withPrelude(prelude, appendRowAfter(afterPrelude, anchorRow.lineTo, anchorRow.indent))
+  const left = tidyRowBeingLeft(text, table, rowIndex)
+  if (!left) return null
+  const anchorRow = left.table.rows[Math.max(rowIndex, 1)]
+  return withPrelude(left.prelude, appendRowAfter(left.prelude?.text ?? text, anchorRow.lineTo, anchorRow.indent))
 }
 
 /**

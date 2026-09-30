@@ -100,13 +100,43 @@ try {
     await tableText(),
   )
 
+  // 5b. Tab from a full row into the next one tidies the row it leaves, as
+  //     its own undo step; Shift+Tab back into the previous row does the same.
+  await page.keyboard.type('x')
+  await page.keyboard.press('Tab')
+  await page.keyboard.type('4')
+  await page.keyboard.press('Tab')
+  await settle()
+  const afterTabTidy = '| name        | age |\n|-------------|-----|\n| al          |     |\n| bartholomew |     |\n| x           | 4   |\n|   |'
+  check(await tableText() === afterTabTidy, 'Tab into a new row tidies the row it leaves', await tableText())
+  await page.keyboard.type('y')
+  await page.keyboard.press('Shift+Tab')
+  await settle()
+  check(
+    (await tableText()).endsWith('| x           | 4   |\n| y           |     |'),
+    'Shift+Tab into the previous row tidies the row it leaves',
+    await tableText(),
+  )
+  await page.keyboard.press('Control+z')
+  await settle()
+  check((await tableText()).endsWith('| x           | 4   |\n| y |'), 'one undo takes back only the Shift+Tab tidy', await tableText())
+  // Put the table back to one empty last row for what follows.
+  await page.keyboard.press('Control+End')
+  await page.keyboard.press('Shift+Home')
+  await page.keyboard.press('Backspace')
+  await page.keyboard.type('|   |')
+  await page.keyboard.press('ArrowLeft')
+  await page.keyboard.press('ArrowLeft')
+  await page.keyboard.press('ArrowLeft')
+  await settle()
+
   // 6. Enter in the empty last row ends the table.
   await page.keyboard.press('Enter')
   await settle()
   check(!(await docText()).includes('|   |'), 'Enter on an empty last row ends the table', await docText())
   await page.keyboard.type('after')
   await settle()
-  check((await docText()).endsWith('| bartholomew |     |\nafter'), 'typing continues below the table', await docText())
+  check((await docText()).endsWith('| x           | 4   |\nafter'), 'typing continues below the table', await docText())
 
   // 7. Clicking the middle of the first divider cell centres that column;
   //    clicking it again resets it.

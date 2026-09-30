@@ -109,6 +109,36 @@ describe('Tab', () => {
     expect(tab('| a^ |', true)).toBe('| a^ |')
   })
 
+  it('tidies the row it leaves when going on to the next row, as its own undo step', () => {
+    const { text, selection } = parse('| name | age |\n|------|-----|\n| al | 3^ |\n| b | c |')
+    const result = resolveTableTabTransform({ shiftKey: false, text, selection }, fence(text))!
+    expect(result.prelude?.text).toBe('| name | age |\n|------|-----|\n| al   | 3   |\n| b | c |')
+    expect(show(result)).toBe('| name | age |\n|------|-----|\n| al   | 3   |\n| b^ | c |')
+  })
+
+  it('tidies the whole table when the row it leaves stretches it, then starts a new row', () => {
+    expect(tab('| a | b |\n|---|---|\n| wide | c^ |')).toBe('| a    | b |\n|------|---|\n| wide | c |\n| ^  |')
+  })
+
+  it('Shift+Tab tidies the row it leaves when going back to the previous row', () => {
+    const { text, selection } = parse('| a | b |\n|---|---|\n| c | d |\n| ^x |')
+    const result = resolveTableTabTransform({ shiftKey: true, text, selection }, fence(text))!
+    expect(result.prelude?.text).toBe('| a | b |\n|---|---|\n| c | d |\n| x |   |')
+    expect(show(result)).toBe('| a | b |\n|---|---|\n| c | d^ |\n| x |   |')
+  })
+
+  it('Shift+Tab lands on the previous row\'s last cell as the tidy leaves it', () => {
+    // Leaving a row with a third cell stretches the table, which gives the
+    // row above a third cell too; the caret goes to that one.
+    expect(tab('| a | b |\n|---|---|\n| c | d |\n| ^x | y | z |', true))
+      .toBe('| a | b |   |\n|---|---|---|\n| c | d | ^  |\n| x | y | z |')
+  })
+
+  it('tidies nothing for a move within a row', () => {
+    const { text, selection } = parse('| a | b |\n|---|---|\n| c^ |  d |')
+    expect(resolveTableTabTransform({ shiftKey: false, text, selection }, fence(text))!.prelude).toBeUndefined()
+  })
+
   it('is not a table rule outside a table line or inside code', () => {
     expect(tab('prose^')).toBeNull()
     expect(tab('```\n| a^ |\n```')).toBeNull()
