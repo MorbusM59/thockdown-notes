@@ -53,6 +53,22 @@ export interface EditorTextEdit {
  * The scan was what forced a flatten. Making the whole-document string
  * itself unnecessary is a separate, larger change to how app state is held.
  */
+/**
+ * What a click in the edit view does (EditorBindings.onCaretClickTransform).
+ * `click` is applied when the press is released -- at once, when there is no
+ * `hold`. With a `hold`, the press is a press-and-hold (src/shared/
+ * holdTiming.ts's armHold, HOLD_CONFIRM_MS, with its cursor feedback): held
+ * to the threshold it applies `hold` instead, released early it applies
+ * `click`. Each is a thunk because applying is also committing -- the
+ * binding commits whichever one is actually chosen, and the other is never
+ * computed into the app's state. Both were decided against the text at the
+ * press; the editor drops the press if the text changed before it resolved.
+ */
+export interface EditorClickOutcome {
+  click: () => EditorTransformResult | null;
+  hold?: () => EditorTransformResult | null;
+}
+
 export interface EditorTransformResult {
   text: string;
   selection: EditorSelectionState;
@@ -68,6 +84,14 @@ export interface EditorTransformResult {
    * the final document either way.
    */
   prelude?: EditorTransformResult;
+  /**
+   * Record this result as its own undo entry, never merged with the edits
+   * around it. CodeMirror otherwise joins adjacent changes made within half
+   * a second into one entry, which is right for typing and wrong for a
+   * restructure: moving a row, then a column, then deleting a column in
+   * quick succession must undo one step at a time.
+   */
+  isolated?: boolean;
 }
 
 export type EditorViewportChangeOrigin = 'viewport-drag' | 'scroll' | 'programmatic';
@@ -307,14 +331,24 @@ export interface EditorBindings {
     text: string;
     selection: EditorSelectionState;
     clickOffset: number;
-  }) => EditorTransformResult | null;
+  }) => EditorClickOutcome | null;
   /**
-   * Shift+Backspace and Ctrl+Backspace, before the editor's own handling.
-   * Plain Backspace never reaches this. Returning null leaves the key to do
-   * what it does anywhere else (Ctrl+Backspace: delete the previous word).
+   * Shift+Backspace, Ctrl+Backspace and Ctrl+Shift+Backspace, before the
+   * editor's own handling. Plain Backspace never reaches this. Returning
+   * null leaves the key to do what it does anywhere else (Ctrl+Backspace:
+   * delete the previous word).
    */
   onModifiedBackspaceTransform?: (event: {
-    modifier: 'shift' | 'ctrl';
+    modifier: 'shift' | 'ctrl' | 'ctrl-shift';
+    text: string;
+    selection: EditorSelectionState;
+  }) => EditorTransformResult | null;
+  /**
+   * Ctrl+Shift+Arrow, before the editor's own handling (which extends the
+   * selection by a word or a line). Returning null leaves it to that.
+   */
+  onTableMoveTransform?: (event: {
+    direction: 'left' | 'right' | 'up' | 'down';
     text: string;
     selection: EditorSelectionState;
   }) => EditorTransformResult | null;

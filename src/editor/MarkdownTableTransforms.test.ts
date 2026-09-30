@@ -5,7 +5,10 @@ import { isOffsetInFencedCodeBlock } from './MarkdownContext'
 import {
   resolveTableCharacterTransform,
   resolveTableDeleteTransform,
-  resolveTableDividerClickTransform,
+  resolveTableDeleteColumnTransform,
+  resolveTableDividerPress,
+  resolveTableMoveTransform,
+  resolveTableSelectionStep,
   resolveTableEnterTransform,
   resolveTableTabTransform,
   resolveTableToolbarTransform,
@@ -50,7 +53,7 @@ function del(marked: string, modifier: 'shift' | 'ctrl') {
 }
 
 function click(text: string, clickOffset: number) {
-  return resolveTableDividerClickTransform({ text, clickOffset }, fence(text))?.text ?? null
+  return resolveTableDividerPress({ text, clickOffset }, fence(text))?.click.text ?? null
 }
 
 describe('typing into a blank cell', () => {
@@ -290,5 +293,95 @@ describe('toolbar button', () => {
 
   it('tidies the table the caret is in and keeps the caret in its cell', () => {
     expect(press('|a|bb^|\n|---|---|\n|ccc|d|')).toBe('| a   | bb^ |\n|-----|----|\n| ccc | d  |')
+  })
+})
+
+// A selection written with `[` and `]` around it, for the move and ladder tests.
+function parseRange(marked: string) {
+  const start = marked.indexOf('[')
+  const end = marked.indexOf(']') - 1
+  const text = marked.replace('[', '').replace(']', '')
+  return { text, selection: { anchor: start, focus: end, start, end, isCollapsed: start === end } }
+}
+
+function showRange(text: string, range: { start: number; end: number }) {
+  return `${text.slice(0, range.start)}[${text.slice(range.start, range.end)}]${text.slice(range.end)}`
+}
+
+describe('deleting a column', () => {
+  const table = '| a | bb | c |\n|---|:--:|---|\n| d | ee | f |'
+
+  it('Ctrl+Shift+Backspace deletes the caret\'s column from every row, alignment included', () => {
+    const { text, selection } = parse('| a | bb | c |\n|---|:--:|---|\n| d | e^e | f |')
+    expect(show(resolveTableDeleteColumnTransform({ text, selection }, fence(text))))
+      .toBe('| a | c |\n|---|---|\n| d | f^ |')
+  })
+
+  it('holding a divider cell deletes that column', () => {
+    const dividerCell = table.indexOf(':--:')
+    expect(resolveTableDividerPress({ text: table, clickOffset: dividerCell }, fence(table))?.hold.text)
+      .toBe('| a | c |\n|---|---|\n| d | f |')
+  })
+
+  it('deleting the only column deletes the table and its line break', () => {
+    const { text, selection } = parse('before\n| a^ |\n|---|\nafter')
+    expect(show(resolveTableDeleteColumnTransform({ text, selection }, fence(text)))).toBe('before\n^after')
+    const atEnd = parse('before\n| a^ |\n|---|')
+    expect(show(resolveTableDeleteColumnTransform(atEnd, fence(atEnd.text)))).toBe('before^')
+  })
+})
+
+describe('moving rows and columns', () => {
+  function move(marked: string, direction: 'left' | 'right' | 'up' | 'down') {
+    const { text, selection } = marked.includes('^') ? parse(marked) : parseRange(marked)
+    const result = resolveTableMoveTransform({ direction, text, selection }, fence(text))
+    if (!result) return null
+    return result.selection.isCollapsed ? show(result) : showRange(result.text, result.selection)
+  }
+  it('moves a column with its alignment, the caret going with it', () => {
+    expect(move('| a | b |\n|:--|---|\n| c^ | d |\n| e | f |', 'right')).toBe('| b | a |\n|---|:--|\n| d | c^ |\n| f | e |')
+  })
+
+  it('moves a row among the content rows, the divider staying put', () => {
+    expect(move('| a | b |\n|:--|---|\n| c | d |\n| e^ | f |', 'up')).toBe('| a | b |\n|:--|---|\n| e^ | f |\n| c | d |')
+    expect(move('| a | b |\n|:--|---|\n| c^ | d |\n| e | f |', 'up')).toBe('| c^ | d |\n|:--|---|\n| a | b |\n| e | f |')
+  })
+
+  it('carries a selected cell with it', () => {
+    expect(move('| a | b |\n|:--|---|\n| [c] | d |\n| e | f |', 'down')).toBe('| a | b |\n|:--|---|\n| e | f |\n| [c] | d |')
+  })
+
+  it('is swallowed at the table\'s edge', () => {
+    expect(move('| a^ | b |\n|:--|---|\n| c | d |', 'left')).toBe('| a^ | b |\n|:--|---|\n| c | d |')
+    expect(move('| a | b |\n|:--|---|\n| c^ | d |', 'down')).toBe('| a | b |\n|:--|---|\n| c^ | d |')
+  })
+
+  it('is not a table rule outside a table', () => {
+    expect(move('prose^', 'left')).toBeNull()
+  })
+})
+
+describe('the right-click ladder in a table', () => {
+  function step(marked: string, clickOffsetIn: string) {
+    const { text, selection } = marked.includes('[') ? parseRange(marked) : { text: marked, selection: collapsedSelectionAt(0) }
+    const clickOffset = text.indexOf(clickOffsetIn)
+    const range = resolveTableSelectionStep({ text, clickOffset, selection }, fence(text))
+    return range ? showRange(text, range) : null
+  }
+  const table = '| one two | x |\n|---|---|\n| y | z |'
+
+  it('goes word, cell, row, table', () => {
+    expect(step(table, 'two')).toBe('| one [two] | x |\n|---|---|\n| y | z |')
+    expect(step('| one [two] | x |\n|---|---|\n| y | z |', 'two')).toBe('| [one two] | x |\n|---|---|\n| y | z |')
+    expect(step('| [one two] | x |\n|---|---|\n| y | z |', 'two')).toBe('[| one two | x |]\n|---|---|\n| y | z |')
+    expect(step('[| one two | x |]\n|---|---|\n| y | z |', 'two')).toBe('[| one two | x |\n|---|---|\n| y | z |]')
+  })
+
+  it('selects the spaces between the pipes of an empty cell', () => {
+    expect(step('|   | x |', '  ')).toBe('|[   ]| x |')
+  })
+
+  it('leaves prose to the prose ladder', () => {
+    expect(step('just prose', 'prose')).toBeNull()
   })
 })

@@ -47,8 +47,10 @@ import { resolveMarkdownChecklistCaretClickToggleTransform } from '../editor/Che
 import {
   resolveTableCharacterTransform,
   resolveTableDeleteTransform,
-  resolveTableDividerClickTransform,
+  resolveTableDeleteColumnTransform,
+  resolveTableDividerPress,
   resolveTableEnterTransform,
+  resolveTableMoveTransform,
   resolveTableTabTransform,
 } from '../editor/MarkdownTableTransforms'
 import {
@@ -1798,17 +1800,19 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       // would be unsound in exactly the case where it did anything, since
       // `selection` indexes the un-normalized document.
       const sourceText = text
-      const next = resolveTableDividerClickTransform({ text: sourceText, clickOffset }, isInFence(sourceText))
-        ?? resolveMarkdownChecklistCaretClickToggleTransform({
-          text: sourceText,
-          selection,
-          clickOffset,
-        })
-      if (!next) {
-        return null
+      const divider = resolveTableDividerPress({ text: sourceText, clickOffset }, isInFence(sourceText))
+      if (divider) {
+        return {
+          click: () => commitTransformResult(divider.click),
+          hold: () => commitTransformResult(divider.hold),
+        }
       }
-
-      return commitTransformResult(next)
+      const next = resolveMarkdownChecklistCaretClickToggleTransform({
+        text: sourceText,
+        selection,
+        clickOffset,
+      })
+      return next ? { click: () => commitTransformResult(next) } : null
     },
     onEnterTransform: (event) => {
       if (previewedSnapshotId !== null) {
@@ -1835,7 +1839,17 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         return null
       }
       if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
-      const next = resolveTableDeleteTransform({ modifier, text, selection }, isInFence(text))
+      const next = modifier === 'ctrl-shift'
+        ? resolveTableDeleteColumnTransform({ text, selection }, isInFence(text))
+        : resolveTableDeleteTransform({ modifier, text, selection }, isInFence(text))
+      return next ? commitTransformResult(next) : null
+    },
+    onTableMoveTransform: ({ direction, text, selection }) => {
+      if (previewedSnapshotId !== null) {
+        return null
+      }
+      if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
+      const next = resolveTableMoveTransform({ direction, text, selection }, isInFence(text))
       return next ? commitTransformResult(next) : null
     },
     onViewportChange: (event: EditorViewportChangeEvent) => {

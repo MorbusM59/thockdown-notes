@@ -167,6 +167,81 @@ try {
   await clickDividerAt(19)
   check((await tableText()).split('\n')[1] === '|-------------|----:|', 'a click on the right part aligns right', await tableText())
 
+  // 7b. Restructuring. The table is now:
+  //   | name        | age |
+  //   |-------------|----:|
+  //   | al          |     |
+  //   | bartholomew |     |
+  //   | x           | 4   |
+  const boxAt = async (lineText, charIndex) => page.evaluate(([wanted, index]) => {
+    const line = [...document.querySelectorAll('.cm-content .cm-line')].find((el) => el.textContent.includes(wanted))
+    const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT)
+    let remaining = index
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (remaining < node.length) {
+        const range = document.createRange()
+        range.setStart(node, remaining)
+        range.setEnd(node, remaining + 1)
+        const rect = range.getBoundingClientRect()
+        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+      }
+      remaining -= node.length
+    }
+    return null
+  }, [lineText, charIndex])
+  const selectedText = () => page.evaluate(() => window.getSelection().toString())
+
+  const bart = await boxAt('bartholomew', 5)
+  await page.mouse.click(bart.x, bart.y, { button: 'right' })
+  await settle()
+  check(await selectedText() === 'bartholomew', 'a right-click in a cell selects its word', await selectedText())
+  await page.mouse.click(bart.x, bart.y, { button: 'right' })
+  await settle()
+  check(await selectedText() === '| bartholomew |     |', 'a second right-click goes to the row, past the cell whose content the word already was', await selectedText())
+
+  const al = await boxAt('| al ', 2)
+  await page.mouse.click(al.x, al.y, { button: 'right' })
+  await settle()
+  await page.keyboard.press('Control+Shift+ArrowDown')
+  await settle()
+  check(
+    await tableText() === '| name        | age |\n|-------------|----:|\n| bartholomew |     |\n| al          |     |\n| x           | 4   |',
+    'Ctrl+Shift+Down moves the selected cell\'s row down',
+    await tableText(),
+  )
+  check(await selectedText() === 'al', 'the selection travels with the cell', await selectedText())
+  await page.keyboard.press('Control+Shift+ArrowRight')
+  await settle()
+  check(
+    await tableText() === '| age | name        |\n|----:|-------------|\n|     | bartholomew |\n|     | al          |\n| 4   | x           |',
+    'Ctrl+Shift+Right moves the column, its alignment with it',
+    await tableText(),
+  )
+
+  // Hold the `age` column's divider cell past the hold threshold.
+  const dividerCell = await boxAt('|----:|', 2)
+  await page.mouse.move(dividerCell.x, dividerCell.y)
+  await page.mouse.down()
+  await page.waitForTimeout(450)
+  await page.mouse.up()
+  await settle()
+  check(
+    await tableText() === '| name        |\n|-------------|\n| bartholomew |\n| al          |\n| x           |',
+    'holding a divider cell deletes its column',
+    await tableText(),
+  )
+  await page.keyboard.press('Control+z')
+  await settle()
+  check((await tableText()).startsWith('| age | name'), 'undo brings the column back', await tableText())
+  await page.keyboard.press('Control+y')
+  await settle()
+
+  const xCell = await boxAt('| x ', 2)
+  await page.mouse.click(xCell.x, xCell.y)
+  await page.keyboard.press('Control+Shift+Backspace')
+  await settle()
+  check(await tableText() === '', 'Ctrl+Shift+Backspace on the last column deletes the table', await docText())
+
   // 8. Tab outside a table still indents.
   await page.keyboard.press('Control+End')
   await page.keyboard.press('Home')

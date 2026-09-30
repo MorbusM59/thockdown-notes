@@ -593,6 +593,9 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - **A table with no header**: leave the first row's cells empty and press \`Enter\`. Markdown tables always have a header row, so this one is simply blank.
 - **Tidying**: leaving a row — with \`Enter\`, or with \`Tab\` / \`Shift+Tab\` into the next or previous row — lines that row up with the rest of the table, filling in any cells it's missing and removing any indentation (an indented table is no different in Markdown). Moving between cells of the same row tidies nothing. Only if that row sticks out — a wider cell, or more cells than the table has — is the whole table re-lined up to match. Ending a table tidies nothing. The tidy is its own undo step: after \`Enter\`, \`Ctrl+Z\` once takes back the new row and keeps the tidy, and a second \`Ctrl+Z\` takes back the tidy.
 - **Alignment**: click the divider line. The left part of a column's divider aligns that column left, the middle centres it, the right part aligns it right; clicking the part that matches the current alignment clears it again. (Clicking the divider changes it, so use the keyboard to put the caret there.)
+- **Selecting**: right-clicking in a table grows the selection by table steps instead of sentences — the word, then the whole cell, then the row, then the table. Right-click again inside the selection for the next step.
+- **Moving rows and columns**: \`Ctrl+Shift+←\`/\`→\` moves the caret's column, \`Ctrl+Shift+↑\`/\`↓\` its row; a column takes its alignment with it, and a row moved to the top becomes the header. With a whole cell selected, the selection travels with it, so you can walk a cell to where it belongs. Inside a table these keys no longer extend the selection by a word.
+- **Deleting a column**: \`Ctrl+Shift+Backspace\` in any of its cells, or press and hold its part of the divider line until the cursor's halo fills. Deleting the last column deletes the table. Every move and delete is its own undo step.
 - **Deleting**: \`Backspace\` and \`Delete\` work exactly as everywhere else, pipes included. **\`Shift+Backspace\`** empties the whole cell (and from an empty cell moves to the previous one). **\`Ctrl+Backspace\`** still deletes a word, but at the start of a cell it deletes the last word of the *previous* cell rather than the pipe between them.
 - **\`Shift+Enter\`** is a plain line break, for the rare time you want one in the middle of a table.
 - Tables you type or paste by hand get the same keys, and any \`|\` you add yourself counts: the next tidy makes room for it.
@@ -727,6 +730,8 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 | \`Ctrl+#\` (or \`Ctrl+Shift+3\`) | Toggle numbered list |
 | \`Tab\` / \`Shift+Tab\` (in a table) | Next / previous cell (see [Tables](${guideLink('TOOLBAR-FORMATTING', 'tables')})) |
 | \`Shift+Backspace\` (in a table) | Empty the cell |
+| \`Ctrl+Shift+Backspace\` (in a table) | Delete the column |
+| \`Ctrl+Shift+Arrow\` (in a table) | Move the column (←/→) or row (↑/↓) |
 | \`Ctrl+Z\` / \`Ctrl+Y\` | Undo / redo |
 | \`Ctrl+V\` | Paste the text as-is |
 | \`Ctrl+Shift+V\` | Smart paste: rejoins lines broken mid-paragraph and tidies list markers |

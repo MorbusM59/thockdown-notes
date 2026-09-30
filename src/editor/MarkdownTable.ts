@@ -288,23 +288,98 @@ export function tidyRowText(table: MarkdownTable, rowIndex: number): string {
 }
 
 /**
- * Every line of the table re-laid out: each row given the widest cell count
- * in the table, every column padded to its widest content, the divider (when
- * there is one) rewritten to fit with its alignments kept. Joined with `\n`,
- * to replace the text from the first row's start to the last row's end.
+ * A table as data: the content of every content row (header first, divider
+ * excluded), and the divider's alignments -- null when the table has no
+ * divider yet. What the structural edits (move a row or a column, delete a
+ * column) operate on, and what every whole-table rewrite is rendered from,
+ * so a restructure and a tidy lay a table out in exactly the same way.
  */
+export interface TableGrid {
+  rows: string[][]
+  alignments: TableAlignment[] | null
+}
+
+export function gridOf(table: MarkdownTable): TableGrid {
+  const rows = table.rows
+    .filter((_, rowIndex) => isContentRow(table, rowIndex))
+    .map((row) => row.cells.map((cell) => cell.content))
+  return { rows, alignments: table.hasDivider ? table.rows[1].cells.map(alignmentOf) : null }
+}
+
+/** The table row index of a grid row: the divider sits between grid rows 0 and 1. */
+export function tableRowOfGridRow(table: MarkdownTable, gridRow: number): number {
+  return table.hasDivider && gridRow > 0 ? gridRow + 1 : gridRow
+}
+
+/** The grid row of a content row's table index (the inverse of tableRowOfGridRow). */
+export function gridRowOfTableRow(table: MarkdownTable, rowIndex: number): number {
+  return table.hasDivider && rowIndex > 1 ? rowIndex - 1 : rowIndex
+}
+
+/**
+ * The grid laid out as table text: every row given the widest cell count,
+ * every column padded to its widest content, the divider (when there is one)
+ * under the first row, fitted to the widths with its alignments kept. Joined
+ * with `\n`, to replace the table from its first row's start to its last
+ * row's end.
+ */
+export function renderGrid(grid: TableGrid): string {
+  const columnCount = grid.rows.reduce((count, row) => Math.max(count, row.length), 0)
+  const widths = new Array<number>(columnCount).fill(1)
+  for (const row of grid.rows) row.forEach((content, column) => { widths[column] = Math.max(widths[column], content.length) })
+  const lines = grid.rows.map((row) => renderContentRow(row, widths))
+  if (grid.alignments) lines.splice(1, 0, renderDividerRow(grid.alignments, widths))
+  return lines.join('\n')
+}
+
+/** Every line of the table re-laid out (renderGrid over the table as it stands). */
 export function tidyTableText(table: MarkdownTable): string {
-  const columnCount = table.rows.reduce(
-    (count, row, rowIndex) => (isContentRow(table, rowIndex) ? Math.max(count, row.cells.length) : count),
-    0,
-  )
-  const widths = columnWidthsOf(table, columnCount)
-  const alignments = table.hasDivider ? table.rows[1].cells.map(alignmentOf) : []
-  return table.rows.map((row, rowIndex) => (
-    isContentRow(table, rowIndex)
-      ? renderContentRow(row.cells.map((cell) => cell.content), widths)
-      : renderDividerRow(alignments, widths)
-  )).join('\n')
+  return renderGrid(gridOf(table))
+}
+
+function columnCountOfGrid(grid: TableGrid): number {
+  return grid.rows.reduce((count, row) => Math.max(count, row.length), 0)
+}
+
+/** Every row padded to the full column count, so a column exists in every row before it is moved. */
+function squared(grid: TableGrid): TableGrid {
+  const columnCount = columnCountOfGrid(grid)
+  return {
+    rows: grid.rows.map((row) => [...row, ...new Array<string>(columnCount - row.length).fill('')]),
+    alignments: grid.alignments
+      ? [...grid.alignments, ...new Array<TableAlignment>(Math.max(0, columnCount - grid.alignments.length)).fill('none')]
+      : null,
+  }
+}
+
+/** The grid with column `from` moved to position `to`, its alignment going with it. */
+export function moveGridColumn(grid: TableGrid, from: number, to: number): TableGrid {
+  const full = squared(grid)
+  const move = <T>(items: T[]) => {
+    const next = [...items]
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    return next
+  }
+  return { rows: full.rows.map(move), alignments: full.alignments ? move(full.alignments) : null }
+}
+
+/** The grid with row `from` moved to position `to`. Row 0 is the header, so moving a row there makes it the header. */
+export function moveGridRow(grid: TableGrid, from: number, to: number): TableGrid {
+  const rows = [...grid.rows]
+  const [moved] = rows.splice(from, 1)
+  rows.splice(to, 0, moved)
+  return { rows, alignments: grid.alignments }
+}
+
+/** The grid without column `column`, or null when that was its only column. */
+export function deleteGridColumn(grid: TableGrid, column: number): TableGrid | null {
+  const full = squared(grid)
+  if (columnCountOfGrid(full) <= 1) return null
+  return {
+    rows: full.rows.map((row) => row.filter((_, index) => index !== column)),
+    alignments: full.alignments ? full.alignments.filter((_, index) => index !== column) : null,
+  }
 }
 
 export function tableFrom(table: MarkdownTable): number {

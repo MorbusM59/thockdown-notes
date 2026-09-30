@@ -10,6 +10,9 @@ import { suppressNextPlainTypingSoundOnce, typingSoundManager } from '../sound/T
 import { ARROW_KEY_VOICES, SHIFT_TAB_KEY_VOICE, TAB_KEY_VOICE } from '../sound/keyVoices';
 import { readSelectionRect, type SelectionRect } from '../editor/CaretRect';
 import { readSelectionLineRects } from '../editor/SelectionRects';
+import { armHold, HOLD_CONFIRM_MS } from '../shared/holdTiming';
+import { isOffsetInFencedCodeBlock } from '../editor/MarkdownContext';
+import { resolveTableSelectionStep } from '../editor/MarkdownTableTransforms';
 import { createWheelNotchState, resolveWheelEventUnits } from '../editor/wheelNotch';
 import { getWheelStepRows } from '../editor/wheelStep';
 import { appendWheelTrace, isWheelTraceOn } from '../editor/wheelTrace';
@@ -50,7 +53,7 @@ import { gridCellGuard } from '../editor/gridCellGuard';
 import { resolveScopeRange, isSameRange, type SelectionScope } from '../editor/ContractBridgeRangeUtils';
 import { computeMinimalTextReplacement } from '../editor/MinimalTextDiff';
 import { createCanonicalTextFilter } from '../editor/CanonicalTextFilter';
-import type { EditorTextEdit, EditorTransformResult } from '../editor/EditorContract';
+import type { EditorClickOutcome, EditorTextEdit, EditorTransformResult } from '../editor/EditorContract';
 import { ScrollTransitionController } from '../editor/ScrollTransitionController';
 import type { ReviewFlagEntry, ReviewFlagRemap, ReviewFlagSeverity } from '../shared/reviewFlags';
 import { hashLineText, reviewFlagSeverityRank } from '../shared/reviewFlags';
@@ -410,6 +413,54 @@ function applyTransformResult(view: EditorView, oldText: string, next: EditorTra
   view.dispatch([preludeTransaction, mainTransaction]);
 }
 
+/**
+ * Carries out a click's outcome (EditorClickOutcome). Without a `hold` the
+ * click applies at once. With one, the press is armed as a press-and-hold
+ * through armHold -- the app's one hold timer, which also drives the cursor
+ * halo -- and resolved exactly once: by the threshold (the hold) or by the
+ * release (the click), whichever comes first. The release is watched on the
+ * window as a pointer event, because a press listener on anything narrower
+ * misses a release outside it, and mouse events are suppressed after a
+ * cancelled pointer event (see src/shared/pressTracking.ts). A pointercancel
+ * resolves to nothing. Whatever resolves it is dropped if the note's text
+ * changed during the press, since both outcomes index the text at the press.
+ */
+function resolveClickOutcome(view: EditorView, text: string, outcome: EditorClickOutcome): void {
+  // CodeMirror documents are immutable values, so "unchanged since the
+  // press" is an identity check rather than a comparison of the text.
+  const docAtPress = view.state.doc;
+  const apply = (choose: (() => EditorTransformResult | null) | null) => {
+    if (!choose || view.state.doc !== docAtPress) return;
+    const next = choose();
+    if (next) applyTransformResult(view, text, next);
+  };
+  const hold = outcome.hold;
+  if (!hold) {
+    apply(outcome.click);
+    return;
+  }
+
+  let settled = false;
+  const settle = (choose: (() => EditorTransformResult | null) | null) => {
+    if (settled) return;
+    settled = true;
+    window.removeEventListener('pointerup', onRelease, true);
+    window.removeEventListener('pointercancel', onCancel, true);
+    apply(choose);
+  };
+  const cancelHold = armHold(() => settle(hold), HOLD_CONFIRM_MS);
+  const onRelease = () => {
+    cancelHold();
+    settle(outcome.click);
+  };
+  const onCancel = () => {
+    cancelHold();
+    settle(null);
+  };
+  window.addEventListener('pointerup', onRelease, true);
+  window.addEventListener('pointercancel', onCancel, true);
+}
+
 function transformStepSpec(oldText: string, next: EditorTransformResult, isolate: boolean): TransactionSpec {
   const anchor = Math.max(0, Math.min(next.text.length, next.selection.anchor));
   const focus = Math.max(0, Math.min(next.text.length, next.selection.focus));
@@ -425,7 +476,7 @@ function transformStepSpec(oldText: string, next: EditorTransformResult, isolate
       insert,
     },
     selection,
-    annotations: isolate ? isolateHistory.of('full') : undefined,
+    annotations: isolate || next.isolated ? isolateHistory.of('full') : undefined,
   };
 }
 
@@ -3480,6 +3531,24 @@ export function CM6Editor({
             pendingCageIntent = true;
           }
 
+          if (event.key.startsWith('Arrow') && event.ctrlKey && event.shiftKey && !event.metaKey && !event.altKey) {
+            // Ctrl+Shift+Arrow is offered to the bindings first (in a table
+            // it moves the caret's row or column); null leaves it to the
+            // default keymap's selection extension.
+            const callback = bindingsRef.current?.onTableMoveTransform;
+            if (callback) {
+              const direction = event.key.slice('Arrow'.length).toLowerCase() as 'left' | 'right' | 'up' | 'down';
+              const text = previousTextRef.current;
+              const selection = toSelectionState(view.state.selection.main);
+              const next = callback({ direction, text, selection });
+              if (next) {
+                event.preventDefault();
+                applyTransformResult(view, text, next);
+                return true;
+              }
+            }
+          }
+
           if ((event.key === 'ArrowUp' || event.key === 'ArrowDown') && event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
             // Ctrl+Up/Down jumps to the nearest flagged line off the top/
             // bottom of the currently rendered gutter range -- the keyboard
@@ -3551,16 +3620,17 @@ export function CM6Editor({
             return true;
           }
 
-          if (event.key === 'Backspace' && event.shiftKey !== event.ctrlKey && !event.altKey && !event.metaKey) {
-            // Shift+Backspace and Ctrl+Backspace, offered to the bindings
-            // first; null leaves the key to the default keymap (plain
-            // character delete for Shift, previous-word delete for Ctrl).
-            // Plain Backspace never comes through here.
+          if (event.key === 'Backspace' && (event.shiftKey || event.ctrlKey) && !event.altKey && !event.metaKey) {
+            // Shift+Backspace, Ctrl+Backspace and Ctrl+Shift+Backspace,
+            // offered to the bindings first; null leaves the key to the
+            // default keymap (plain character delete for Shift, previous-word
+            // delete for Ctrl). Plain Backspace never comes through here.
             const callback = bindingsRef.current?.onModifiedBackspaceTransform;
             if (callback) {
               const text = previousTextRef.current;
               const selection = toSelectionState(view.state.selection.main);
-              const next = callback({ modifier: event.shiftKey ? 'shift' : 'ctrl', text, selection });
+              const modifier = event.shiftKey && event.ctrlKey ? 'ctrl-shift' : event.shiftKey ? 'shift' : 'ctrl';
+              const next = callback({ modifier, text, selection });
               if (next) {
                 event.preventDefault();
                 applyTransformResult(view, text, next);
@@ -3730,6 +3800,20 @@ export function CM6Editor({
           const text = view.state.doc.toJSON().join('\n');
           const currentSelection = toSelectionState(view.state.selection.main);
 
+          // In a table the ladder is word, cell, row, table instead
+          // (resolveTableSelectionStep); the prose ladder's steps run
+          // across the pipes. It keeps no cycle state of its own, so the
+          // prose cycle is reset: leaving the table starts it fresh.
+          const tableStep = resolveTableSelectionStep(
+            { text, clickOffset, selection: currentSelection },
+            (offset) => isOffsetInFencedCodeBlock(text, offset, null),
+          );
+          if (tableStep) {
+            view.dispatch({ selection: EditorSelection.single(tableStep.start, tableStep.end) });
+            rightClickCycleRef.current = null;
+            return true;
+          }
+
           const priorCycle = rightClickCycleRef.current;
           const clickedInsideCurrentSelection = !currentSelection.isCollapsed
             && clickOffset >= currentSelection.start
@@ -3803,10 +3887,10 @@ export function CM6Editor({
               if (clickOffset !== null) {
                 const text = previousTextRef.current;
                 const selection = toSelectionState(view.state.selection.main);
-                const next = clickCallback({ text, selection, clickOffset });
-                if (next) {
+                const outcome = clickCallback({ text, selection, clickOffset });
+                if (outcome) {
                   event.preventDefault();
-                  applyTransformResult(view, text, next);
+                  resolveClickOutcome(view, text, outcome);
                   return true;
                 }
               }

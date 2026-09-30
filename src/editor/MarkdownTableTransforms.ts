@@ -1,25 +1,34 @@
 import type { EditorSelectionState, EditorTransformResult } from './EditorContract'
 import { buildTransformResult, collapsedSelectionAt } from './TransformResult'
+import { resolveWordRange } from './ContractBridgeRangeUtils'
 import {
   EMPTY_TABLE_ROW,
   alignmentOf,
   cellIndexAt,
   columnCountOf,
   columnWidthsOf,
+  deleteGridColumn,
   findTableAt,
+  gridOf,
+  gridRowOfTableRow,
   isBlankRow,
   isContentRow,
   lineStartAt,
+  moveGridColumn,
+  moveGridRow,
+  renderGrid,
   renderContentRow,
   renderDividerCell,
   renderDividerRow,
   rowStretchesTable,
   tableFrom,
+  tableRowOfGridRow,
   tableTo,
   tidyRowText,
   tidyTableText,
   type MarkdownTable,
   type TableAlignment,
+  type TableGrid,
   type TableCell,
 } from './MarkdownTable'
 
@@ -354,10 +363,10 @@ export function resolveTableDeleteTransform(
  * Clicks on the divider's pipes, and on dividers that are not a table's
  * second line, are ordinary clicks.
  */
-export function resolveTableDividerClickTransform(
+export function resolveTableDividerPress(
   event: { text: string; clickOffset: number },
   isInFencedCodeBlock: FenceCheck,
-): EditorTransformResult | null {
+): { click: EditorTransformResult; hold: EditorTransformResult } | null {
   const { text, clickOffset } = event
   const table = findTableAt(text, clickOffset)
   if (!table || !table.hasDivider || table.caretRow !== 1) return null
@@ -372,11 +381,167 @@ export function resolveTableDividerClickTransform(
   const target: TableAlignment = position < side ? 'left' : position >= length - side ? 'right' : 'center'
   const next = alignmentOf(cell) === target ? 'none' : target
   const insert = renderDividerCell(next, length)
-  return buildTransformResult(
-    text,
-    { from: cell.from, to: cell.to, insert },
-    collapsedSelectionAt(Math.min(clickOffset, cell.from + insert.length - 1)),
-  )
+  const click = {
+    ...buildTransformResult(
+      text,
+      { from: cell.from, to: cell.to, insert },
+      collapsedSelectionAt(Math.min(clickOffset, cell.from + insert.length - 1)),
+    ),
+    isolated: true,
+  }
+  return { click, hold: deleteColumn(text, table, cellIndexAt(row, clickOffset), 0) }
+}
+
+/**
+ * The table re-laid out from `grid`, with the caret (or, when `selectCell`,
+ * the cell's content selected) in the cell at `gridRow`/`column` of the
+ * result. Every structural edit ends here, so all of them leave a tidy table
+ * and none of them has its own idea of where the caret goes.
+ */
+function replaceTableWithGrid(
+  text: string,
+  table: MarkdownTable,
+  grid: TableGrid,
+  gridRow: number,
+  column: number,
+  selectCell: boolean,
+): EditorTransformResult {
+  const from = tableFrom(table)
+  const insert = renderGrid(grid)
+  const nextText = text.slice(0, from) + insert + text.slice(tableTo(table))
+  const next = findTableAt(nextText, from)!
+  const row = next.rows[tableRowOfGridRow(next, gridRow)]
+  const cell = row.cells[Math.min(column, row.cells.length - 1)]
+  const selection = selectCell && cell.content.length > 0
+    ? { anchor: cell.contentFrom, focus: cell.contentTo, start: cell.contentFrom, end: cell.contentTo, isCollapsed: false }
+    : collapsedSelectionAt(caretOffsetInCell(cell))
+  return { ...buildTransformResult(text, { from, to: tableTo(table), insert }, selection), isolated: true }
+}
+
+/**
+ * Deletes a column from every row, the header and the divider included, and
+ * tidies what is left. Deleting a table's only column deletes the table,
+ * together with the line break that separated it from what follows (or,
+ * at the end of the note, from what precedes it).
+ */
+function deleteColumn(text: string, table: MarkdownTable, column: number, gridRow: number): EditorTransformResult {
+  const grid = deleteGridColumn(gridOf(table), column)
+  if (grid) return replaceTableWithGrid(text, table, grid, gridRow, column, false)
+  const from = tableFrom(table)
+  const to = tableTo(table)
+  if (to < text.length) {
+    return { ...buildTransformResult(text, { from, to: to + 1, insert: '' }, collapsedSelectionAt(from)), isolated: true }
+  }
+  const start = Math.max(0, from - 1)
+  return { ...buildTransformResult(text, { from: start, to, insert: '' }, collapsedSelectionAt(start)), isolated: true }
+}
+
+/**
+ * Ctrl+Shift+Backspace in a table: deletes the caret's column (see
+ * deleteColumn). The column-wide step of the Backspace ladder -- a
+ * character, Shift a cell, Ctrl+Shift the column.
+ */
+export function resolveTableDeleteColumnTransform(
+  event: { text: string; selection: EditorSelectionState },
+  isInFencedCodeBlock: FenceCheck,
+): EditorTransformResult | null {
+  const table = findTableAt(event.text, event.selection.start)
+  if (!table || !table.hasDivider || isInFencedCodeBlock(event.selection.start)) return null
+  const row = table.rows[table.caretRow]
+  const gridRow = isContentRow(table, table.caretRow) ? gridRowOfTableRow(table, table.caretRow) : 0
+  return deleteColumn(event.text, table, cellIndexAt(row, event.selection.start), gridRow)
+}
+
+export type TableMoveDirection = 'left' | 'right' | 'up' | 'down'
+
+/**
+ * Ctrl+Shift+Arrow in a table moves the caret's column (left/right) or row
+ * (up/down) one step, and the caret goes with it. When the whole content of
+ * a cell is selected -- which is what the right-click ladder's second step
+ * gives -- the selection travels with the cell, so a cell can be walked to
+ * where it belongs one arrow at a time.
+ *
+ * A row moves among the content rows, the divider staying where it is: a
+ * row moved to the top becomes the header. A column takes its alignment
+ * with it. The whole table is re-laid out (renderGrid), as a tidy would.
+ * At the table's edge the key is swallowed rather than falling through to
+ * its ordinary meaning, which would extend a selection out of the table.
+ */
+export function resolveTableMoveTransform(
+  event: { direction: TableMoveDirection; text: string; selection: EditorSelectionState },
+  isInFencedCodeBlock: FenceCheck,
+): EditorTransformResult | null {
+  const { text, selection, direction } = event
+  const table = findTableAt(text, selection.start)
+  if (!table || !table.hasDivider || isInFencedCodeBlock(selection.start)) return null
+  if (selection.end > tableTo(table)) return null
+  const row = table.rows[table.caretRow]
+  const column = cellIndexAt(row, selection.start)
+  const unchanged = buildTransformResult(text, { from: selection.start, to: selection.start, insert: '' }, selection)
+  const grid = gridOf(table)
+  const cell = row.cells[column]
+  const selectCell = !selection.isCollapsed && selection.start === cell.contentFrom && selection.end === cell.contentTo
+
+  if (direction === 'left' || direction === 'right') {
+    const columnCount = grid.rows.reduce((count, cells) => Math.max(count, cells.length), 0)
+    const target = column + (direction === 'left' ? -1 : 1)
+    if (target < 0 || target >= columnCount) return unchanged
+    const gridRow = isContentRow(table, table.caretRow) ? gridRowOfTableRow(table, table.caretRow) : 0
+    return replaceTableWithGrid(text, table, moveGridColumn(grid, column, target), gridRow, target, selectCell)
+  }
+
+  if (!isContentRow(table, table.caretRow)) return unchanged
+  const gridRow = gridRowOfTableRow(table, table.caretRow)
+  const target = gridRow + (direction === 'up' ? -1 : 1)
+  if (target < 0 || target >= grid.rows.length) return unchanged
+  return replaceTableWithGrid(text, table, moveGridRow(grid, gridRow, target), target, column, selectCell)
+}
+
+/**
+ * The right-click ladder inside a table: word, cell, row, table. Replaces
+ * the prose ladder (word, clause, sentence, line, block) there, whose steps
+ * run straight across the pipes. Stateless: a right-click inside the current
+ * selection takes the next step that strictly contains it; any other
+ * right-click starts from the smallest step at the click. The word step is
+ * clipped to the cell and skipped where the click is not on a word; a
+ * cell's step is its content, or the spaces between its pipes when it is
+ * empty. Null when the click is not in a table line outside code, so the
+ * prose ladder runs.
+ */
+export function resolveTableSelectionStep(
+  event: { text: string; clickOffset: number; selection: EditorSelectionState },
+  isInFencedCodeBlock: FenceCheck,
+): { start: number; end: number } | null {
+  const { text, clickOffset, selection } = event
+  const table = findTableAt(text, clickOffset)
+  if (!table || isInFencedCodeBlock(clickOffset)) return null
+  const row = table.rows[table.caretRow]
+  const cell = row.cells[cellIndexAt(row, clickOffset)]
+
+  const steps: Array<{ start: number; end: number }> = []
+  const cellStep = cell.content.length > 0
+    ? { start: cell.contentFrom, end: cell.contentTo }
+    : { start: cell.from, end: cell.to }
+  if (cell.content.length > 0 && clickOffset >= cell.contentFrom && clickOffset < cell.contentTo) {
+    const word = resolveWordRange(text, clickOffset)
+    const start = Math.max(word.start, cell.contentFrom)
+    const end = Math.min(word.end, cell.contentTo)
+    if (end > start) steps.push({ start, end })
+  }
+  steps.push(cellStep)
+  // The row and the table start at their leading pipe, past any indentation.
+  steps.push({ start: row.cells[0].from - 1, end: row.lineTo })
+  steps.push({ start: table.rows[0].cells[0].from - 1, end: tableTo(table) })
+
+  const inside = !selection.isCollapsed && clickOffset >= selection.start && clickOffset < selection.end
+  if (inside) {
+    const larger = steps.find((step) => (
+      step.start <= selection.start && step.end >= selection.end
+      && (step.start !== selection.start || step.end !== selection.end)
+    ))
+    return larger ?? { start: selection.start, end: selection.end }
+  }
+  return steps[0]
 }
 
 /**
