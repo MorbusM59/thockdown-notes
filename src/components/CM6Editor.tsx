@@ -12,7 +12,8 @@ import { readSelectionRect, type SelectionRect } from '../editor/CaretRect';
 import { readSelectionLineRects } from '../editor/SelectionRects';
 import { armHold, HOLD_CONFIRM_MS } from '../shared/holdTiming';
 import { isOffsetInFencedCodeBlock } from '../editor/MarkdownContext';
-import { resolveTableSelectionStep } from '../editor/MarkdownTableTransforms';
+import { isTableCellDragStart, resolveTableCellDrop, resolveTableSelectionStep } from '../editor/MarkdownTableTransforms';
+import { hasTravelledDragThreshold } from '../shared/pointerDrag';
 import { createWheelNotchState, resolveWheelEventUnits } from '../editor/wheelNotch';
 import { getWheelStepRows } from '../editor/wheelStep';
 import { appendWheelTrace, isWheelTraceOn } from '../editor/wheelTrace';
@@ -948,6 +949,13 @@ export function CM6Editor({
   // frame that computed it. See applyCaretStyle below for why that matters.
   const caretElRef = useRef<HTMLDivElement | null>(null);
   const [highlightRects, setHighlightRects] = useState<HighlightRect[]>([]);
+  // A dragged table cell's drop target: the range of the note it covers,
+  // while a drag is over one, drawn in the selection's own highlight
+  // (layoutRangeHighlight) so the reader sees where the release will put
+  // the cell. Kept as a range rather than as rects so it is re-laid out on
+  // every scroll and resize the selection highlight is.
+  const dropTargetRangeRef = useRef<{ from: number; to: number } | null>(null);
+  const [dropTargetRects, setDropTargetRects] = useState<HighlightRect[]>([]);
   const highlightAnimationFrameRef = useRef<number | null>(null);
 
   // Review/warning-flag gutter state. reviewFlagsRef mirrors reviewFlags (the
@@ -2186,42 +2194,15 @@ export function CM6Editor({
   }, []);
 
   /**
-   * Descended from BlockSelectionPlugin.tsx's own updateSelection:
-   * readSelectionLineRects (which covers selected characters only, so no
-   * empty space and no empty line is ever painted), quantized row merging,
-   * viewport clipping, sourced from the CM6 EditorView. Doesn't require focus the way updateCaret
-   * does: a read-only note's native text selection still works (and should
-   * still highlight) even though it never becomes document.activeElement.
-   * Recomputes the review-gutter's line layout in lockstep (updateLineLayout)
-   * -- both need to resync on exactly the same doc/viewport/scroll/resize
-   * triggers, so this reuses the one already-correct schedule instead of a
-   * second parallel one that risked drifting out of sync with it.
+   * The highlight rects for a DOM range: one per visual row, covering the
+   * range's characters only (readSelectionLineRects), snapped to the row and
+   * cell grid with the same phase-aware quantization as the caret, clipped to
+   * the viewport, in the overlay layer's coordinates.
    */
-  const updateSelectionHighlight = useCallback(() => {
-    updateLineLayout();
-
-    const view = viewRef.current;
-    const layerEl = layerRef.current;
-    if (!view || !layerEl) return;
-
-    const domSelection = window.getSelection();
-    if (!domSelection || domSelection.rangeCount === 0 || domSelection.isCollapsed) {
-      setHighlightRects([]);
-      return;
-    }
-
-    const rootEl = view.contentDOM;
-    if (!rootEl.contains(domSelection.anchorNode) || !rootEl.contains(domSelection.focusNode)) {
-      setHighlightRects([]);
-      return;
-    }
-
+  const layoutRangeHighlight = useCallback((view: EditorView, layerEl: HTMLElement, range: Range): HighlightRect[] => {
     const scroller = view.scrollDOM;
-    const lineRects = readSelectionLineRects(domSelection.getRangeAt(0));
-    if (lineRects.length === 0) {
-      setHighlightRects([]);
-      return;
-    }
+    const lineRects = readSelectionLineRects(range);
+    if (lineRects.length === 0) return [];
 
     const scrollerRect = scroller.getBoundingClientRect();
     const layerRect = layerEl.getBoundingClientRect();
@@ -2276,8 +2257,57 @@ export function CM6Editor({
       });
     }
 
-    setHighlightRects(nextRects);
-  }, [updateLineLayout]);
+    return nextRects;
+  }, []);
+
+  /**
+   * Descended from BlockSelectionPlugin.tsx's own updateSelection, sourced
+   * from the CM6 EditorView: the DOM selection laid out by
+   * layoutRangeHighlight (characters only, so no empty space and no empty
+   * line is ever painted). Doesn't require focus the way updateCaret does: a
+   * read-only note's native text selection still works (and should still
+   * highlight) even though it never becomes document.activeElement. Also
+   * lays out a dragged table cell's drop target, the other thing drawn in
+   * this highlight. Recomputes the review-gutter's line layout in lockstep
+   * (updateLineLayout) -- both need to resync on exactly the same
+   * doc/viewport/scroll/resize triggers, so this reuses the one
+   * already-correct schedule instead of a second parallel one that risked
+   * drifting out of sync with it.
+   */
+  const updateSelectionHighlight = useCallback(() => {
+    updateLineLayout();
+
+    const view = viewRef.current;
+    const layerEl = layerRef.current;
+    if (!view || !layerEl) return;
+
+    const dropTarget = dropTargetRangeRef.current;
+    let dropRects: HighlightRect[] = [];
+    if (dropTarget) {
+      try {
+        const start = view.domAtPos(dropTarget.from);
+        const end = view.domAtPos(dropTarget.to);
+        const range = document.createRange();
+        range.setStart(start.node, start.offset);
+        range.setEnd(end.node, end.offset);
+        dropRects = layoutRangeHighlight(view, layerEl, range);
+      } catch {
+        // Out of the rendered DOM (scrolled far away mid-drag): nothing to draw.
+      }
+    }
+    setDropTargetRects(dropRects);
+
+    const domSelection = window.getSelection();
+    const rootEl = view.contentDOM;
+    if (
+      !domSelection || domSelection.rangeCount === 0 || domSelection.isCollapsed
+      || !rootEl.contains(domSelection.anchorNode) || !rootEl.contains(domSelection.focusNode)
+    ) {
+      setHighlightRects([]);
+      return;
+    }
+    setHighlightRects(layoutRangeHighlight(view, layerEl, domSelection.getRangeAt(0)));
+  }, [layoutRangeHighlight, updateLineLayout]);
 
   const scheduleSelectionHighlightUpdate = useCallback(() => {
     if (highlightAnimationFrameRef.current !== null) {
@@ -2288,6 +2318,72 @@ export function CM6Editor({
       updateSelectionHighlight();
     });
   }, [updateSelectionHighlight]);
+
+  /**
+   * One drag of a selected table cell, from its press to its release: the
+   * press itself was claimed by the mousedown handler. The drop target is
+   * recomputed from the box under the pointer on every move and drawn in the
+   * selection highlight (dropTargetRangeRef); the release applies the drop
+   * through onTableCellDropTransform. Released before the drag threshold, it
+   * was a click after all, and the caret goes where it was pressed. Escape
+   * and pointercancel abandon the drag. Listens on the window, as pointer
+   * events, for the same reasons resolveClickOutcome does.
+   */
+  const beginTableCellDrag = (
+    view: EditorView,
+    press: MouseEvent,
+    text: string,
+    selection: ReturnType<typeof toSelectionState>,
+    pressOffset: number,
+    isInFence: (offset: number) => boolean,
+  ) => {
+    const docAtPress = view.state.doc;
+    let dragging = false;
+    let targetOffset: number | null = null;
+
+    const setTarget = (range: { from: number; to: number } | null) => {
+      const current = dropTargetRangeRef.current;
+      if (current?.from === range?.from && current?.to === range?.to) return;
+      dropTargetRangeRef.current = range;
+      scheduleSelectionHighlightUpdate();
+    };
+    const finish = () => {
+      window.removeEventListener('pointermove', onMove, true);
+      window.removeEventListener('pointerup', onRelease, true);
+      window.removeEventListener('pointercancel', finish, true);
+      window.removeEventListener('keydown', onKey, true);
+      setTarget(null);
+    };
+    const onMove = (event: PointerEvent) => {
+      if (!dragging && !hasTravelledDragThreshold(press.clientX, press.clientY, event.clientX, event.clientY)) return;
+      dragging = true;
+      const offset = resolveBoxAtCoords(view, event.clientX, event.clientY);
+      const drop = offset === null ? null : resolveTableCellDrop({ text, selection, targetOffset: offset }, isInFence);
+      targetOffset = drop ? offset : null;
+      setTarget(drop ? drop.target : null);
+    };
+    const onRelease = () => {
+      finish();
+      if (view.state.doc !== docAtPress) return;
+      if (!dragging) {
+        view.dispatch({ selection: EditorSelection.cursor(pressOffset) });
+        return;
+      }
+      if (targetOffset === null) return;
+      const next = bindingsRef.current?.onTableCellDropTransform?.({ text, selection, targetOffset });
+      if (next) applyTransformResult(view, text, next);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      finish();
+    };
+    window.addEventListener('pointermove', onMove, true);
+    window.addEventListener('pointerup', onRelease, true);
+    window.addEventListener('pointercancel', finish, true);
+    window.addEventListener('keydown', onKey, true);
+  };
 
   /**
    * Recomputes each flag's current line number (from its live, ChangeSet-
@@ -3869,6 +3965,24 @@ export function CM6Editor({
         mousedown: (event, view) => {
           if (event.button === 0) {
             rightClickCycleRef.current = null;
+
+            // A press on a selected table cell picks it up
+            // (isTableCellDragStart): dragged past the app's drag threshold,
+            // the cell under the pointer is drawn as selected, and the
+            // release drops the cell there (onTableCellDropTransform). A
+            // press that never travels that far is an ordinary click and
+            // puts the caret where it landed.
+            if (!event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
+              const pressOffset = resolveBoxAtCoords(view, event.clientX, event.clientY);
+              const text = previousTextRef.current;
+              const selection = toSelectionState(view.state.selection.main);
+              const isInFence = (offset: number) => isOffsetInFencedCodeBlock(text, offset, null);
+              if (pressOffset !== null && isTableCellDragStart({ text, selection, pressOffset }, isInFence)) {
+                event.preventDefault();
+                beginTableCellDrag(view, event, text, selection, pressOffset, isInFence);
+                return true;
+              }
+            }
 
             // Checkbox caret-click toggle: only fires when the click lands
             // exactly on the caret's own current offset (i.e. the caret was
@@ -6149,7 +6263,7 @@ export function CM6Editor({
           )}
         </>
       )}
-      {hasViewportLines && fontReady && !caretHidden && highlightRects.map((rect, index) => (
+      {hasViewportLines && fontReady && !caretHidden && [...highlightRects, ...dropTargetRects].map((rect, index) => (
         <div
           key={index}
           className="thockdown-block-selection"

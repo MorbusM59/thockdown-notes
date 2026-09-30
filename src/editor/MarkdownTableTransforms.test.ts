@@ -3,6 +3,8 @@ import type { EditorTransformResult } from './EditorContract'
 import { collapsedSelectionAt } from './TransformResult'
 import { isOffsetInFencedCodeBlock } from './MarkdownContext'
 import {
+  isTableCellDragStart,
+  resolveTableCellDrop,
   resolveTableCharacterTransform,
   resolveTableDeleteTransform,
   resolveTableDeleteColumnTransform,
@@ -383,5 +385,31 @@ describe('the right-click ladder in a table', () => {
 
   it('leaves prose to the prose ladder', () => {
     expect(step('just prose', 'prose')).toBeNull()
+  })
+})
+
+describe('dragging a selected cell', () => {
+  const marked = '| a | b |\n|---|:--|\n| [c] | d |\n| e | f |'
+  const { text, selection } = parseRange(marked)
+
+  it('starts only from a press inside a selection that is exactly one cell\'s content', () => {
+    expect(isTableCellDragStart({ text, selection, pressOffset: selection.start }, fence(text))).toBe(true)
+    expect(isTableCellDragStart({ text, selection, pressOffset: 0 }, fence(text))).toBe(false)
+    const word = parseRange('| a | b |\n|---|---|\n| [c] d | e |')
+    const partial = { ...word.selection }
+    expect(isTableCellDragStart({ text: word.text, selection: partial, pressOffset: partial.start }, fence(word.text))).toBe(false)
+  })
+
+  it('moves the cell\'s row and column so its content lands in the target cell, still selected', () => {
+    const drop = resolveTableCellDrop({ text, selection, targetOffset: text.indexOf('b') }, fence(text))!
+    expect(showRange(drop.result.text, drop.result.selection)).toBe('| d | [c] |\n|:--|---|\n| b | a |\n| f | e |')
+    expect(text.slice(drop.target.from, drop.target.to)).toBe(' b ')
+  })
+
+  it('has no target on the divider, on its own cell, or outside the table', () => {
+    expect(resolveTableCellDrop({ text, selection, targetOffset: text.indexOf(':--') }, fence(text))).toBeNull()
+    expect(resolveTableCellDrop({ text, selection, targetOffset: selection.start }, fence(text))).toBeNull()
+    const withProse = `${text}\n\nprose`
+    expect(resolveTableCellDrop({ text: withProse, selection, targetOffset: withProse.indexOf('prose') }, fence(withProse))).toBeNull()
   })
 })

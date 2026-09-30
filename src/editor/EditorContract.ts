@@ -347,6 +347,15 @@ export interface EditorBindings {
    * Ctrl+Shift+Arrow, before the editor's own handling (which extends the
    * selection by a word or a line). Returning null leaves it to that.
    */
+  /**
+   * The release of a drag that picked up a selected table cell, over the box
+   * at `targetOffset`. Returning null leaves the text as it is.
+   */
+  onTableCellDropTransform?: (event: {
+    text: string;
+    selection: EditorSelectionState;
+    targetOffset: number;
+  }) => EditorTransformResult | null;
   onTableMoveTransform?: (event: {
     direction: 'left' | 'right' | 'up' | 'down';
     text: string;

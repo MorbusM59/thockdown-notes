@@ -94,6 +94,7 @@ This contract isolates app features from editor engine internals. Features that 
   - `onCharacterInsertTransform` (a single typed character)
   - `onModifiedBackspaceTransform` (Shift+, Ctrl+ and Ctrl+Shift+Backspace only; plain Backspace never reaches it)
   - `onTableMoveTransform` (Ctrl+Shift+Arrow)
+  - `onTableCellDropTransform` (the release of a drag that picked up a selected table cell; the drag itself, and its drop-target highlight, are the editor's)
   - `onCaretClickTransform` (a plain primary click, with `clickOffset` the box under the pointer; each policy decides which clicks it acts on). It returns an `EditorClickOutcome`: a `click`, applied on release, and optionally a `hold`, which makes the press a press-and-hold through `armHold` (the table divider: a click aligns, a hold deletes the column). Both are thunks, because applying is committing.
 - A result marked `isolated` is its own undo entry, never merged with the edits around it (CodeMirror otherwise joins adjacent changes made within half a second): every table restructure is one.
 - A result may carry a `prelude`: a step applied first and recorded as its own undo entry, so one undo takes back the result and keeps the prelude. Both are dispatched in ONE view update, so everything downstream sees one text change for the keypress. The table rules use it for the tidy that Enter performs (`src/editor/MarkdownTableTransforms.ts`, over the one table reading in `src/editor/MarkdownTable.ts`).

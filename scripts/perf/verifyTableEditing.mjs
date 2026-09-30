@@ -174,9 +174,10 @@ try {
   //   | bartholomew |     |
   //   | x           | 4   |
   const boxAt = async (lineText, charIndex) => page.evaluate(([wanted, index]) => {
+    // `index` counts from where `wanted` begins in its line.
     const line = [...document.querySelectorAll('.cm-content .cm-line')].find((el) => el.textContent.includes(wanted))
     const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT)
-    let remaining = index
+    let remaining = line.textContent.indexOf(wanted) + index
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       if (remaining < node.length) {
         const range = document.createRange()
@@ -217,6 +218,37 @@ try {
     'Ctrl+Shift+Right moves the column, its alignment with it',
     await tableText(),
   )
+
+  // Drag the still-selected `al` cell onto the `age` header cell: while over
+  // it, the target is drawn in the selection highlight beside the source.
+  const alBox = await boxAt('| al ', 2)
+  const ageBox = await boxAt('| age |', 3)
+  await page.mouse.move(alBox.x, alBox.y)
+  await page.mouse.down()
+  for (let i = 1; i <= 12; i += 1) await page.mouse.move(alBox.x + (ageBox.x - alBox.x) * i / 12, alBox.y + (ageBox.y - alBox.y) * i / 12)
+  await page.waitForTimeout(150)
+  const highlights = await page.$$eval('.thockdown-block-selection', (els) => els.map((el) => Math.round(parseFloat(el.style.width))))
+  check(highlights.length === 2, 'during the drag the source and the target cell are both highlighted', highlights)
+  const cellWidth = await page.evaluate(() => {
+    const range = document.createRange()
+    const node = document.querySelector('.cm-content .cm-line').firstChild
+    range.setStart(node, 0)
+    range.setEnd(node, 1)
+    return range.getBoundingClientRect().width
+  })
+  check(highlights.some((width) => Math.abs(width - 5 * cellWidth) < 1), 'the target highlight spans the target cell\'s five boxes, ` age `', { highlights, cellWidth })
+  await page.mouse.up()
+  await settle()
+  check(
+    await tableText() === '| al          |     |\n|-------------|----:|\n| name        | age |\n| bartholomew |     |\n| x           | 4   |',
+    'the release moves the cell\'s row and column onto the target',
+    await tableText(),
+  )
+  check(await selectedText() === 'al', 'the dropped cell stays selected', await selectedText())
+  check(await page.$$eval('.thockdown-block-selection', (els) => els.length) === 1, 'the target highlight is gone after the release')
+  await page.keyboard.press('Control+z')
+  await settle()
+  check((await tableText()).startsWith('| age | name'), 'one undo takes the drop back', await tableText())
 
   // Hold the `age` column's divider cell past the hold threshold.
   const dividerCell = await boxAt('|----:|', 2)

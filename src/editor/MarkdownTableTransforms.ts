@@ -599,3 +599,62 @@ export function resolveTableToolbarTransform(
     collapsedSelectionAt(lineTo + 3),
   )
 }
+
+/**
+ * The cell a selection is, when it is exactly one cell's content in a real
+ * table's content row -- what the right-click ladder's cell step selects --
+ * or null. Only such a selection can be dragged to another cell
+ * (resolveTableCellDrop); a press on anything else is an ordinary press.
+ */
+function selectedCell(text: string, selection: EditorSelectionState, isInFencedCodeBlock: FenceCheck) {
+  if (selection.isCollapsed) return null
+  const table = findTableAt(text, selection.start)
+  if (!table || !table.hasDivider || !isContentRow(table, table.caretRow)) return null
+  const row = table.rows[table.caretRow]
+  const column = cellIndexAt(row, selection.start)
+  const cell = row.cells[column]
+  if (selection.start !== cell.contentFrom || selection.end !== cell.contentTo) return null
+  if (isInFencedCodeBlock(selection.start)) return null
+  return { table, gridRow: gridRowOfTableRow(table, table.caretRow), column }
+}
+
+/** Whether a press at `pressOffset` would pick up the selected cell (see resolveTableCellDrop). */
+export function isTableCellDragStart(
+  event: { text: string; selection: EditorSelectionState; pressOffset: number },
+  isInFencedCodeBlock: FenceCheck,
+): boolean {
+  const { selection, pressOffset } = event
+  if (pressOffset < selection.start || pressOffset >= selection.end) return false
+  return selectedCell(event.text, selection, isInFencedCodeBlock) !== null
+}
+
+/**
+ * Dropping a selected cell (selectedCell) on another cell of the same table:
+ * its row moves to the target's row and its column to the target's column,
+ * so its content lands in the target cell, still selected -- the same two
+ * moves Ctrl+Shift+Arrow makes one step at a time, done at once, as one undo
+ * entry. `target` is the target cell's extent between its pipes in the text
+ * as it is now, which is what a drag shows while it is over it. Null when
+ * the offset is not on a content cell of the same table, or is the source's
+ * own cell.
+ */
+export function resolveTableCellDrop(
+  event: { text: string; selection: EditorSelectionState; targetOffset: number },
+  isInFencedCodeBlock: FenceCheck,
+): { target: { from: number; to: number }; result: EditorTransformResult } | null {
+  const { text, selection, targetOffset } = event
+  const source = selectedCell(text, selection, isInFencedCodeBlock)
+  if (!source) return null
+  const table = findTableAt(text, targetOffset)
+  if (!table || tableFrom(table) !== tableFrom(source.table) || !isContentRow(table, table.caretRow)) return null
+  const row = table.rows[table.caretRow]
+  const column = cellIndexAt(row, targetOffset)
+  const gridRow = gridRowOfTableRow(table, table.caretRow)
+  if (gridRow === source.gridRow && column === source.column) return null
+  const grid = moveGridColumn(moveGridRow(gridOf(table), source.gridRow, gridRow), source.column, column)
+  const cell = row.cells[column]
+  return {
+    target: { from: cell.from, to: cell.to },
+    result: replaceTableWithGrid(text, table, grid, gridRow, column, true),
+  }
+}

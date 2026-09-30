@@ -45,6 +45,7 @@ import { resolveMarkdownEnterTransform } from '../editor/EnterTransformPolicy'
 import { resolveMarkdownChecklistTypeoverTransform } from '../editor/ChecklistTypingTransformPolicy'
 import { resolveMarkdownChecklistCaretClickToggleTransform } from '../editor/ChecklistCaretClickTogglePolicy'
 import {
+  resolveTableCellDrop,
   resolveTableCharacterTransform,
   resolveTableDeleteTransform,
   resolveTableDeleteColumnTransform,
@@ -1843,6 +1844,14 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         ? resolveTableDeleteColumnTransform({ text, selection }, isInFence(text))
         : resolveTableDeleteTransform({ modifier, text, selection }, isInFence(text))
       return next ? commitTransformResult(next) : null
+    },
+    onTableCellDropTransform: ({ text, selection, targetOffset }) => {
+      if (previewedSnapshotId !== null) {
+        return null
+      }
+      if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
+      const drop = resolveTableCellDrop({ text, selection, targetOffset }, isInFence(text))
+      return drop ? commitTransformResult(drop.result) : null
     },
     onTableMoveTransform: ({ direction, text, selection }) => {
       if (previewedSnapshotId !== null) {
