@@ -29,6 +29,7 @@
 import {
   isSoundscapeAudible,
   type SoundscapePreferences,
+  type SoundscapeSettings,
 } from '../shared/soundscape';
 import { toGeneratorConfiguration } from '../shared/soundscapeDsp';
 import type { ConfigureMessage } from './soundscapeRenderAhead';
@@ -36,29 +37,6 @@ import { createWebPlayback } from './soundscapeWebPlayback';
 
 /** How long the output takes to fade out before it is closed. */
 const SOUNDSCAPE_DISCONNECT_MS = 180;
-
-/**
- * What playback looks like from the output, for diagnosing dropouts: its
- * own account of its queue and of the silence it had to play, and, where
- * the platform reports it, the audio device's.
- */
-export interface SoundscapePlaybackStats {
-  /** Seconds the output has played since it opened, or null where it does not say. */
-  playedSec: number | null;
-  /** Seconds of audio queued at the output, past what it has played. */
-  queuedSec: number;
-  /** Seconds the output played as silence for want of queued audio, and how many separate times. */
-  outputDrySec: number;
-  outputDryEvents: number;
-  /**
-   * The audio device's underruns: silence it played because the output did
-   * not deliver in time. Null where the platform does not report them.
-   */
-  deviceUnderruns: number | null;
-  /** How often the output had to rebuild its device stream, and the last error that made it; null where not reported. */
-  outputRestarts: number | null;
-  lastOutputError: number | null;
-}
 
 /** A running soundscape: a renderer and an output, wherever they are. */
 export interface SoundscapePlayback {
@@ -70,20 +48,30 @@ export interface SoundscapePlayback {
 }
 
 export interface SoundscapePlaybackHandlers {
-  onStats(stats: SoundscapePlaybackStats): void;
   /** The playback stopped and will not play again; the engine closes it, and the next apply opens a new one. */
   onFailure(message: string): void;
 }
 
 export type SoundscapePlaybackFactory = (handlers: SoundscapePlaybackHandlers) => Promise<SoundscapePlayback>;
 
+/**
+ * The renderer's configuration for `settings`, exactly as the engine sends
+ * it. Exported so the mobile app can hand the native session the same
+ * configuration for each soundscape its media controls step to: the native
+ * renderer skips a configuration identical to the one in force, so the
+ * engine's own send that follows does not re-render it.
+ */
+export function soundscapeConfiguration(settings: SoundscapeSettings): ConfigureMessage {
+  return {
+    type: 'configure',
+    generator: { type: 'configure', ...toGeneratorConfiguration(settings) },
+    space: settings.space,
+  };
+}
+
 /** The fade on a volume change, and the faster one on the way out. */
 const VOLUME_TIME_CONSTANT_SEC = 0.08;
 const FADE_OUT_TIME_CONSTANT_SEC = 0.025;
-
-type StatsListener = (stats: SoundscapePlaybackStats) => void;
-type FailureListener = (failure: string) => void;
-
 
 export class SoundscapeEngine {
   private playbackFactory: SoundscapePlaybackFactory = createWebPlayback;
@@ -98,29 +86,10 @@ export class SoundscapeEngine {
   private preferences: SoundscapePreferences | null = null;
   private starting: Promise<void> | null = null;
   private disconnectTimer: number | null = null;
-  private readonly statsListeners = new Set<StatsListener>();
-  private readonly failureListeners = new Set<FailureListener>();
 
   /** Play through `factory`'s playbacks from the next start on (the mobile app's native one). */
   usePlayback(factory: SoundscapePlaybackFactory): void {
     this.playbackFactory = factory;
-  }
-
-  /** Receive playback statistics, a few times a second while a soundscape plays. Returns the unsubscribe. */
-  subscribeStats(listener: StatsListener): () => void {
-    this.statsListeners.add(listener);
-    return () => { this.statsListeners.delete(listener); };
-  }
-
-  /** Be told when playback failed and was torn down, with what failed. Returns the unsubscribe. */
-  subscribeFailures(listener: FailureListener): () => void {
-    this.failureListeners.add(listener);
-    return () => { this.failureListeners.delete(listener); };
-  }
-
-  private reportFailure(failure: string): void {
-    console.error(failure);
-    for (const listener of this.failureListeners) listener(failure);
   }
 
   apply(preferences: SoundscapePreferences): void {
@@ -148,11 +117,8 @@ export class SoundscapeEngine {
     let playback: SoundscapePlayback | null = null;
     try {
       playback = await this.playbackFactory({
-        onStats: (stats) => {
-          for (const listener of this.statsListeners) listener(stats);
-        },
         onFailure: (message) => {
-          this.reportFailure(message);
+          console.error(message);
           // It does not play again, so it is torn down now rather than after
           // a fade: with it gone, the next apply() opens a new one.
           if (this.playback === playback) this.teardown();
@@ -169,7 +135,7 @@ export class SoundscapeEngine {
       this.update(preferences);
     } catch (error) {
       playback?.close();
-      this.reportFailure(`Unable to start soundscape audio: ${String(error)}`);
+      console.error(`Unable to start soundscape audio: ${String(error)}`);
     }
   }
 
@@ -180,11 +146,7 @@ export class SoundscapeEngine {
       playback.setVolume(preferences.masterVolume, VOLUME_TIME_CONSTANT_SEC);
       this.volumeTarget = preferences.masterVolume;
     }
-    const configuration: ConfigureMessage = {
-      type: 'configure',
-      generator: { type: 'configure', ...toGeneratorConfiguration(preferences.settings) },
-      space: preferences.settings.space,
-    };
+    const configuration = soundscapeConfiguration(preferences.settings);
     const serialised = JSON.stringify(configuration);
     if (serialised !== this.sentConfiguration) {
       playback.configure(configuration);

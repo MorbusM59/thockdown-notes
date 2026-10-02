@@ -1,14 +1,7 @@
 package com.thockdown.soundscapes;
 
 import android.content.Context;
-import android.util.Base64;
-import androidx.javascriptengine.IsolateStartupParameters;
 import androidx.javascriptengine.JavaScriptIsolate;
-import androidx.javascriptengine.JavaScriptSandbox;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicReference;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -33,6 +26,11 @@ import org.json.JSONObject;
  * lead is full). Settings changes are spliced against that same playhead,
  * read in this process at the moment of the change, so the margin only has
  * to cover what the device has already been handed.
+ *
+ * A configuration identical to the one in force is not applied: the web
+ * page and the media controls (SoundscapeSession) can both send the same
+ * soundscape, and applying it again would re-render from near the playhead
+ * and crossfade it into a different take of itself.
  */
 final class SoundscapeRenderer {
     interface Listener {
@@ -52,6 +50,8 @@ final class SoundscapeRenderer {
     private final AtomicReference<String> pendingConfiguration = new AtomicReference<>(null);
     private volatile boolean running = true;
     private boolean woken = false;
+    /** The configuration in force; only the renderer's thread reads or writes it. */
+    private String applied = null;
 
     SoundscapeRenderer(Context context, SoundscapeAudioOutput output, Listener listener) {
         this.context = context.getApplicationContext();
@@ -59,11 +59,6 @@ final class SoundscapeRenderer {
         this.listener = listener;
         thread = new Thread(this::run, "SoundscapeRenderer");
         thread.start();
-    }
-
-    /** Whether this device's WebView can provide the sandbox the renderer runs in. */
-    static boolean isSupported() {
-        return JavaScriptSandbox.isSupported();
     }
 
     /** New settings (a ConfigureMessage as JSON); applied before the next step. */
@@ -83,6 +78,8 @@ final class SoundscapeRenderer {
     void close() {
         running = false;
         wake();
+        // Closed from its own thread when it reports a failure: it ends by itself.
+        if (Thread.currentThread() == thread) return;
         try {
             thread.join(1000);
         } catch (InterruptedException ignored) {
@@ -91,17 +88,9 @@ final class SoundscapeRenderer {
     }
 
     private void run() {
-        JavaScriptSandbox sandbox = null;
         JavaScriptIsolate isolate = null;
         try {
-            sandbox = JavaScriptSandbox.createConnectedInstanceAsync(context).get();
-            IsolateStartupParameters parameters = new IsolateStartupParameters();
-            if (sandbox.isFeatureSupported(JavaScriptSandbox.JS_FEATURE_ISOLATE_MAX_HEAP_SIZE)) {
-                // The convolution's spectra for an 8-second room are about 25 MB.
-                parameters.setMaxHeapSizeBytes(256L * 1024 * 1024);
-            }
-            isolate = sandbox.createIsolate(parameters);
-            isolate.evaluateJavaScriptAsync(readAsset("soundscape-renderer.js")).get();
+            isolate = SharedSandbox.openRendererIsolate(context);
             JSONObject init = new JSONObject();
             init.put("sampleRate", output.sampleRate);
             init.put("seed", (int) (System.nanoTime() & 0x7fffffff));
@@ -110,7 +99,8 @@ final class SoundscapeRenderer {
 
             while (running) {
                 String configuration = pendingConfiguration.getAndSet(null);
-                if (configuration != null) {
+                if (configuration != null && !configuration.equals(applied)) {
+                    applied = configuration;
                     // The playhead first, so the splice is measured from now.
                     isolate.evaluateJavaScriptAsync("soundscapeStep(" + output.playheadFrame() + ", 0)").get();
                     isolate.evaluateJavaScriptAsync("soundscapeConfigure(" + JSONObject.quote(configuration) + ")").get();
@@ -120,7 +110,7 @@ final class SoundscapeRenderer {
                 JSONArray chunks = new JSONArray(result);
                 for (int index = 0; index < chunks.length(); index += 1) {
                     JSONObject chunk = chunks.getJSONObject(index);
-                    output.write(chunk.getLong("s"), decode(chunk.getString("d")));
+                    output.write(chunk.getLong("s"), SharedSandbox.decodeHalfScale(chunk.getString("d")));
                 }
                 if (chunks.length() > 0) continue;
                 synchronized (signal) {
@@ -133,27 +123,7 @@ final class SoundscapeRenderer {
         } catch (Exception error) {
             if (running) listener.onFailure("Soundscape renderer stopped: " + error);
         } finally {
-            if (isolate != null) isolate.close();
-            if (sandbox != null) sandbox.close();
+            if (isolate != null) SharedSandbox.close(isolate);
         }
-    }
-
-    private String readAsset(String name) throws IOException {
-        try (InputStream in = context.getAssets().open(name)) {
-            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-            byte[] buffer = new byte[16384];
-            int read;
-            while ((read = in.read(buffer)) > 0) bytes.write(buffer, 0, read);
-            return bytes.toString(StandardCharsets.UTF_8.name());
-        }
-    }
-
-    private static short[] decode(String base64) {
-        byte[] bytes = Base64.decode(base64, Base64.DEFAULT);
-        short[] samples = new short[bytes.length / 2];
-        for (int index = 0; index < samples.length; index += 1) {
-            samples[index] = (short) ((bytes[index * 2] & 0xff) | (bytes[(index * 2) + 1] << 8));
-        }
-        return samples;
     }
 }

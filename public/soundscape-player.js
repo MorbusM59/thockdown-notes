@@ -22,14 +22,8 @@
  *   every REPORT_FRAMES, which is what lets the worker render more.
  * - `stop` ends the processor (process() returns false, which is how a
  *   processor tells the browser it may be collected).
- *
- * Statistics: every STATS_FRAMES played it posts `{ type: 'stats',
- * queuedFrames, dryFrames, dryEvents }` on its own port: what is queued past
- * the playhead, and the frames it played as silence for want of queued
- * audio, and how many separate times that began.
  */
 const REPORT_FRAMES = 2048;
-const STATS_FRAMES = 8192;
 
 class SoundscapePlayer extends AudioWorkletProcessor {
   constructor() {
@@ -42,10 +36,6 @@ class SoundscapePlayer extends AudioWorkletProcessor {
     this.started = false;
     this.unreported = 0;
     this.stopped = false;
-    this.dryFrames = 0;
-    this.dryEvents = 0;
-    this.wasDry = false;
-    this.framesSinceStats = 0;
     this.port.onmessage = (event) => {
       const data = event.data;
       if (data?.type === 'stop') {
@@ -90,13 +80,6 @@ class SoundscapePlayer extends AudioWorkletProcessor {
     this.chunks.push({ start, left, right });
   }
 
-  /** Frames queued past the playhead. */
-  queued() {
-    if (this.chunks.length === 0) return 0;
-    const last = this.chunks[this.chunks.length - 1];
-    return Math.max(0, last.start + last.left.length - this.playhead);
-  }
-
   process(_inputs, outputs) {
     if (this.stopped) return false;
     const outLeft = outputs[0][0];
@@ -126,14 +109,6 @@ class SoundscapePlayer extends AudioWorkletProcessor {
       if (this.renderer && this.unreported >= REPORT_FRAMES) {
         this.renderer.postMessage({ type: 'played', frame: this.playhead });
         this.unreported = 0;
-      }
-      if (dry > 0 && !this.wasDry) this.dryEvents += 1;
-      this.wasDry = dry > 0;
-      this.dryFrames += dry;
-      this.framesSinceStats += length;
-      if (this.framesSinceStats >= STATS_FRAMES) {
-        this.framesSinceStats = 0;
-        this.port.postMessage({ type: 'stats', queuedFrames: this.queued(), dryFrames: this.dryFrames, dryEvents: this.dryEvents });
       }
     }
     return true;

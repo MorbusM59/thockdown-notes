@@ -41,11 +41,6 @@ function noiseLoopsFor(sampleRate: number) {
   return entry;
 }
 
-function deviceUnderruns(context: AudioContext): number | null {
-  const stats = (context as AudioContext & { playbackStats?: { underrunEvents?: number } }).playbackStats;
-  return stats && typeof stats.underrunEvents === 'number' ? stats.underrunEvents : null;
-}
-
 export async function createWebPlayback(handlers: SoundscapePlaybackHandlers): Promise<SoundscapePlayback> {
   const context = await resumedOutputContext();
   let modulePromise = WORKLET_MODULES.get(context);
@@ -72,18 +67,6 @@ export async function createWebPlayback(handlers: SoundscapePlaybackHandlers): P
 
   const link = new MessageChannel();
   player.port.postMessage({ type: 'connect', port: link.port1 }, [link.port1]);
-  player.port.onmessage = (event: MessageEvent<{ type: string; queuedFrames: number; dryFrames: number; dryEvents: number }>) => {
-    if (event.data?.type !== 'stats') return;
-    handlers.onStats({
-      playedSec: null,
-      outputRestarts: null,
-      lastOutputError: null,
-      queuedSec: event.data.queuedFrames / context.sampleRate,
-      outputDrySec: event.data.dryFrames / context.sampleRate,
-      outputDryEvents: event.data.dryEvents,
-      deviceUnderruns: deviceUnderruns(context),
-    });
-  };
   player.onprocessorerror = () => handlers.onFailure('Soundscape player stopped unexpectedly');
 
   const noise = noiseLoopsFor(context.sampleRate);

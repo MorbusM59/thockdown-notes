@@ -34,20 +34,15 @@ body {
   font-size: 24px;
 }
 
-/* TEMPORARY, with PlaybackDiagnostics.tsx. */
-.mobile-diagnostics {
-  margin: 0;
-  font-size: 14px;
-  color: var(--color-text-70);
+/* A long press is a gesture here (SoundscapeControls' touch path), so it
+   must not also select text or raise the system's callout. */
+.mobile-app-shell {
+  -webkit-touch-callout: none;
+  user-select: none;
 }
 
-.mobile-diagnostics > div {
-  display: flex;
-  justify-content: space-between;
-  padding: 2px 4px;
-}
-
-.mobile-diagnostics dd {
-  margin: 0;
+/* The clip button shows how far the render has got in place of its icon. */
+.mobile-clip-progress {
+  font-size: 15px;
   font-variant-numeric: tabular-nums;
 }

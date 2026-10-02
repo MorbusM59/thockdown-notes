@@ -58,6 +58,13 @@ import { toDisplayLevel } from '../shared/musicSoundOptions'
 import { OptionsSliderRows } from './OptionsSliderRows'
 import { OptionsSubsectionLabel } from './OptionsSubsectionLabel'
 
+/**
+ * Two taps on the same channel this close together are a double tap, which
+ * is how a touch screen solos a channel (a right-click on a mouse). The
+ * system's own double-tap interval is not readable from a page.
+ */
+const DOUBLE_TAP_MS = 300
+
 const KIND_LOOK: Record<SoundscapeChannelKind, { icon: string; label: string }> = {
   noise: { icon: 'fa-wind', label: 'Wind' },
   rain: { icon: 'fa-cloud-rain', label: 'Rain' },
@@ -465,11 +472,58 @@ export function SoundscapeControls({ preferences, onChange }: SoundscapeOptionsP
   // on some platforms and on the release on others.
   const presetExportHoldRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
   const resetHoldRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
+  // TOUCH has one button where a mouse has two, so each right-button gesture
+  // above has a touch equivalent instead (`pointerType === 'touch'`, so a
+  // desktop touch screen gets them too):
+  // - a channel: a long press turns it on or off (either way, where a mouse
+  //   holds the left button to turn on and the right to turn off), a double
+  //   tap solos it (a right-click);
+  // - a custom soundscape: a long press marks it for deletion (a right-click);
+  //   then a tap deletes it, as a click does. Exporting one alone has no
+  //   touch gesture: the mobile app exports them all from its own controls;
+  // - the save button: a long press resets every channel (a right-hold).
+  // A long press is followed by a click when the finger lifts, which must
+  // not also act (it would select, delete or save), so a completed touch
+  // hold swallows the next click. Every touch press clears that first, so a
+  // hold whose finger slid off and produced no click cannot swallow a later
+  // tap.
+  const touchHoldRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
+  const swallowClickRef = useRef(false)
+  const lastChannelTapRef = useRef<{ channelId: string; at: number } | null>(null)
   useEffect(() => () => {
     channelHoldRef.current?.cancel()
     presetExportHoldRef.current?.cancel()
     resetHoldRef.current?.cancel()
+    touchHoldRef.current?.cancel()
   }, [])
+
+  /** Arm a touch long press: `action` runs if the finger is still down after `ms`. */
+  const startTouchHold = (pointerId: number, ms: number, action: () => void) => {
+    swallowClickRef.current = false
+    touchHoldRef.current?.cancel()
+    const cancel = armHold(() => {
+      touchHoldRef.current = null
+      swallowClickRef.current = true
+      action()
+    }, ms)
+    touchHoldRef.current = { pointerId, cancel }
+  }
+
+  /** End a touch press; true when it was a tap (released before its hold completed). */
+  const endTouchHold = (pointerId: number): boolean => {
+    const hold = touchHoldRef.current
+    if (!hold || hold.pointerId !== pointerId) return false
+    hold.cancel()
+    touchHoldRef.current = null
+    return true
+  }
+
+  /** Whether a click is the tail of a completed touch hold, and so does nothing. */
+  const swallowsClick = () => {
+    const swallow = swallowClickRef.current
+    swallowClickRef.current = false
+    return swallow
+  }
   const channels = preferences.settings.channels
   const selectedChannel = channels.find((channel) => channel.id === selectedId) ?? null
   const allPresets = [...SOUNDSCAPE_FACTORY_PRESETS, ...preferences.customPresets]
@@ -581,6 +635,11 @@ export function SoundscapeControls({ preferences, onChange }: SoundscapeOptionsP
     onChange({ ...preferences, activePresetId: id, customPresets: [...preferences.customPresets, saved] })
   }
 
+  /** Every channel back to its defaults, and off; the space and the weather are left as they are. */
+  const resetChannels = () => {
+    commitSettings({ ...preferences.settings, channels: neutralSoundscape().channels })
+  }
+
   const deletePreset = (presetId: string) => {
     onChange({
       ...preferences,
@@ -635,8 +694,12 @@ export function SoundscapeControls({ preferences, onChange }: SoundscapeOptionsP
                 aria-pressed={selectedPresetId === preset.id}
                 data-tooltip={isPrimed ? `Click to delete ${label}` : `${label}\nRight-click to mark for deletion, then click.\nHold right-click to export.`}
                 data-secondary-press="action"
-                onClick={() => activatePreset(preset)}
+                onClick={() => { if (!swallowsClick()) activatePreset(preset) }}
                 onPointerDown={(event) => {
+                  if (event.pointerType === 'touch') {
+                    startTouchHold(event.pointerId, HOLD_CONFIRM_MS, () => setPendingDeletePresetId(preset.id))
+                    return
+                  }
                   if (event.button !== 2) return
                   presetExportHoldRef.current?.cancel()
                   const cancel = armHold(() => {
@@ -647,13 +710,15 @@ export function SoundscapeControls({ preferences, onChange }: SoundscapeOptionsP
                   presetExportHoldRef.current = { pointerId: event.pointerId, cancel }
                 }}
                 onPointerUp={(event) => {
+                  endTouchHold(event.pointerId)
                   if (event.button !== 2 || presetExportHoldRef.current?.pointerId !== event.pointerId) return
                   // Released before the hold completed: a short click, which primes deletion.
                   presetExportHoldRef.current.cancel()
                   presetExportHoldRef.current = null
                   setPendingDeletePresetId(preset.id)
                 }}
-                onPointerCancel={() => {
+                onPointerCancel={(event) => {
+                  endTouchHold(event.pointerId)
                   presetExportHoldRef.current?.cancel()
                   presetExportHoldRef.current = null
                 }}
@@ -683,23 +748,28 @@ export function SoundscapeControls({ preferences, onChange }: SoundscapeOptionsP
             // anything to save.
             aria-disabled={!canSave}
             data-secondary-press="action"
-            onClick={() => { if (canSave) savePreset() }}
+            onClick={() => { if (!swallowsClick() && canSave) savePreset() }}
             onPointerDown={(event) => {
+              if (event.pointerType === 'touch') {
+                startTouchHold(event.pointerId, HOLD_COMMIT_MS, resetChannels)
+                return
+              }
               if (event.button !== 2) return
               resetHoldRef.current?.cancel()
               const cancel = armHold(() => {
                 resetHoldRef.current = null
-                // Every channel back to its defaults, and off; the space and the weather are left as they are.
-                commitSettings({ ...preferences.settings, channels: neutralSoundscape().channels })
+                resetChannels()
               }, HOLD_COMMIT_MS)
               resetHoldRef.current = { pointerId: event.pointerId, cancel }
             }}
             onPointerUp={(event) => {
+              endTouchHold(event.pointerId)
               if (resetHoldRef.current?.pointerId !== event.pointerId) return
               resetHoldRef.current.cancel()
               resetHoldRef.current = null
             }}
-            onPointerCancel={() => {
+            onPointerCancel={(event) => {
+              endTouchHold(event.pointerId)
               resetHoldRef.current?.cancel()
               resetHoldRef.current = null
             }}
@@ -749,11 +819,39 @@ export function SoundscapeControls({ preferences, onChange }: SoundscapeOptionsP
                 data-tooltip={`${look.label} [${entry.number}]: ${toDisplayLevel(channel.volume)}`}
                 data-soundscape-channel-id={channel.id}
                 data-secondary-press="action"
-                onClick={() => setSelectedId(channel.id)}
-                onPointerDown={(event) => startChannelHold(channel, event.button, event.pointerId)}
-                onPointerUp={(event) => endChannelHold(event.pointerId, true)}
-                onPointerCancel={(event) => endChannelHold(event.pointerId, false)}
-                onPointerLeave={(event) => endChannelHold(event.pointerId, false)}
+                onClick={() => { if (!swallowsClick()) setSelectedId(channel.id) }}
+                onPointerDown={(event) => {
+                  if (event.pointerType !== 'touch') {
+                    startChannelHold(channel, event.button, event.pointerId)
+                    return
+                  }
+                  startTouchHold(event.pointerId, HOLD_CONFIRM_MS, () => {
+                    setSelectedId(channel.id)
+                    updateChannel(channel.id, { enabled: !channel.enabled })
+                  })
+                }}
+                onPointerUp={(event) => {
+                  if (event.pointerType !== 'touch') {
+                    endChannelHold(event.pointerId, true)
+                    return
+                  }
+                  if (!endTouchHold(event.pointerId)) return
+                  const last = lastChannelTapRef.current
+                  if (last && last.channelId === channel.id && event.timeStamp - last.at < DOUBLE_TAP_MS) {
+                    lastChannelTapRef.current = null
+                    toggleChannelSolo(channel.id)
+                  } else {
+                    lastChannelTapRef.current = { channelId: channel.id, at: event.timeStamp }
+                  }
+                }}
+                onPointerCancel={(event) => {
+                  endChannelHold(event.pointerId, false)
+                  endTouchHold(event.pointerId)
+                }}
+                onPointerLeave={(event) => {
+                  endChannelHold(event.pointerId, false)
+                  endTouchHold(event.pointerId)
+                }}
                 onContextMenu={(event) => {
                   // The solo itself is decided on the release (endChannelHold).
                   event.preventDefault()

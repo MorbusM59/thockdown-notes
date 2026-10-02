@@ -11,14 +11,8 @@ const BLOCK = 128;
 function createPlayer() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let Processor: any;
-  const stats: Array<{ queuedFrames: number; dryFrames: number; dryEvents: number }> = [];
   class AudioWorkletProcessor {
-    port = {
-      onmessage: null as ((event: { data: unknown }) => void) | null,
-      postMessage: (message: { type: string; queuedFrames: number; dryFrames: number; dryEvents: number }) => {
-        if (message.type === 'stats') stats.push(message);
-      },
-    };
+    port = { onmessage: null as ((event: { data: unknown }) => void) | null };
   }
   runInNewContext(playerSource, {
     AudioWorkletProcessor,
@@ -33,7 +27,6 @@ function createPlayer() {
   processor.port.onmessage({ data: { type: 'connect', port: renderer } });
   return {
     played,
-    stats,
     /** Deliver a chunk at `startFrame` whose samples are `samples` (right is the negative of left). */
     chunk(startFrame: number, samples: number[]) {
       const left = Float32Array.from(samples);
@@ -98,20 +91,6 @@ describe('soundscape player', () => {
     player.play(8192);
     expect(player.played.at(-1)).toBe(8192);
     expect(player.played.every((frame, index) => index === 0 || frame > player.played[index - 1])).toBe(true);
-  });
-
-  it('counts the silence it plays for want of audio, and how many times it began', () => {
-    const player = createPlayer();
-    player.chunk(0, counting(0, 1000));
-    player.play(2048);
-    player.chunk(2048, counting(2048, 3000));
-    // To 8192 frames in all: statistics are posted every 8192.
-    player.play(8192 - 2048);
-    const last = player.stats.at(-1)!;
-    // Dry from 1000 to 2048, then from 5048 (2048 + 3000) to 8192.
-    expect(last.dryEvents).toBe(2);
-    expect(last.dryFrames).toBe((2048 - 1000) + (8192 - 5048));
-    expect(last.queuedFrames).toBe(0);
   });
 
   it('ends when stopped', () => {

@@ -11,90 +11,143 @@ import android.media.MediaMetadata;
 import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.PowerManager;
 
 /**
- * Foreground service of type mediaPlayback, held while a soundscape is
- * audible (see BackgroundAudioPlugin). Its presence is what lets the app's
- * WebView keep generating audio with the app in the background or the screen
- * off; it carries no audio of its own.
+ * Foreground service of type mediaPlayback, running whenever a soundscape
+ * session (SoundscapeSession) exists, playing or paused. Its presence is
+ * what keeps Android from freezing or killing the process with the app in
+ * the background or the screen off.
  *
- * It also owns the media session, so the soundscape appears in the
- * notification shade and on the lock screen with a stop control, and the
- * partial wake lock that keeps the CPU running with the screen off.
+ * It DRAWS the session and RELAYS its controls, and holds no state of its
+ * own: the media session (the lock screen and the system's media controls)
+ * and the notification show the session's title and whether it plays, and
+ * their play, pause, next, previous and stop go to the session's control
+ * methods. Every change redraws from the session (refresh).
  *
- * Whether the wake lock is needed at all is one of the things the background
- * playback test on a real device is meant to settle: an active audio output
- * may already keep the CPU awake. If playback survives without it, delete it.
+ * It stays in the foreground while paused, so the controls stay, and a
+ * paused soundscape can be resumed from the lock screen: a foreground
+ * service may not be started again from the background. Stop (the
+ * notification's close control, or dismissing it) ends the session and the
+ * service.
+ *
+ * The partial wake lock is held while playing only. Whether it is needed at
+ * all (an active audio output may already keep the CPU awake) is still to
+ * be settled on a device; if playback survives without it, delete it.
  */
 public class SoundscapePlaybackService extends Service {
-    static final String ACTION_START = "com.thockdown.soundscapes.START";
-    static final String ACTION_STOP_PRESSED = "com.thockdown.soundscapes.STOP_PRESSED";
-    static final String EXTRA_TITLE = "title";
+    private static final String ACTION_PLAY = "com.thockdown.soundscapes.PLAY";
+    private static final String ACTION_PAUSE = "com.thockdown.soundscapes.PAUSE";
+    private static final String ACTION_NEXT = "com.thockdown.soundscapes.NEXT";
+    private static final String ACTION_PREVIOUS = "com.thockdown.soundscapes.PREVIOUS";
+    private static final String ACTION_STOP = "com.thockdown.soundscapes.STOP";
 
     private static final String CHANNEL_ID = "soundscape-playback";
     private static final int NOTIFICATION_ID = 1;
 
+    private static SoundscapePlaybackService running;
+    private static final Handler MAIN = new Handler(Looper.getMainLooper());
+
+    private SoundscapeSession soundscape;
     private MediaSession session;
     private PowerManager.WakeLock wakeLock;
+
+    /** Redraw the running service from the session; false when it is not running. */
+    static boolean refreshIfRunning() {
+        SoundscapePlaybackService service = running;
+        if (service == null) return false;
+        MAIN.post(service::refresh);
+        return true;
+    }
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        running = this;
+        soundscape = SoundscapeSession.get(this);
+        session = new MediaSession(this, "ThockdownSoundscape");
+        session.setCallback(new MediaSession.Callback() {
+            @Override public void onPlay() { soundscape.controlPlay(); }
+            @Override public void onPause() { soundscape.controlPause(); }
+            @Override public void onSkipToNext() { soundscape.controlSkip(1); }
+            @Override public void onSkipToPrevious() { soundscape.controlSkip(-1); }
+            @Override public void onStop() { soundscape.controlStop(); }
+        });
+        session.setActive(true);
+    }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent == null ? null : intent.getAction();
-        if (ACTION_STOP_PRESSED.equals(action)) {
-            // Stop at once rather than waiting for the web side's stop(), so
-            // the control works even if the WebView is slow to answer; the
-            // web side's own stop() that follows is then a no-op.
-            BackgroundAudioPlugin.reportStopRequested();
+        if (ACTION_PLAY.equals(action)) soundscape.controlPlay();
+        else if (ACTION_PAUSE.equals(action)) soundscape.controlPause();
+        else if (ACTION_NEXT.equals(action)) soundscape.controlSkip(1);
+        else if (ACTION_PREVIOUS.equals(action)) soundscape.controlSkip(-1);
+        else if (ACTION_STOP.equals(action)) {
+            soundscape.controlStop();
+            return START_NOT_STICKY;
+        }
+        if (!soundscape.isActive()) {
+            // Started for a session that has already ended.
             stopSelf();
             return START_NOT_STICKY;
         }
+        refresh();
+        // Not sticky: if the system kills the process, the session is gone
+        // with it, and a restarted service would announce a soundscape that
+        // is not playing.
+        return START_NOT_STICKY;
+    }
 
-        String title = intent == null ? "Soundscape" : intent.getStringExtra(EXTRA_TITLE);
-        if (title == null) title = "Soundscape";
-        ensureSession(title);
-        Notification notification = buildNotification(title);
+    private void refresh() {
+        if (running != this || !soundscape.isActive()) return;
+        boolean playing = soundscape.isPlaying();
+        String title = soundscape.title();
+        session.setMetadata(new MediaMetadata.Builder()
+            .putString(MediaMetadata.METADATA_KEY_TITLE, title)
+            .putString(MediaMetadata.METADATA_KEY_ARTIST, "Thockdown Soundscapes")
+            .build());
+        session.setPlaybackState(new PlaybackState.Builder()
+            .setActions(PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE | PlaybackState.ACTION_PLAY_PAUSE
+                | PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS | PlaybackState.ACTION_STOP)
+            .setState(playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED,
+                PlaybackState.PLAYBACK_POSITION_UNKNOWN, playing ? 1f : 0f)
+            .build());
+        Notification notification = buildNotification(title, playing);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
         } else {
             startForeground(NOTIFICATION_ID, notification);
         }
-        if (wakeLock == null) {
+        holdWakeLock(playing);
+    }
+
+    private void holdWakeLock(boolean hold) {
+        if (hold && wakeLock == null) {
             PowerManager power = (PowerManager) getSystemService(POWER_SERVICE);
             wakeLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "thockdown:soundscape");
             wakeLock.acquire();
+        } else if (!hold && wakeLock != null) {
+            if (wakeLock.isHeld()) wakeLock.release();
+            wakeLock = null;
         }
-        // Not sticky: if the system kills the process, the WebView that makes
-        // the sound is gone too, and a restarted service would announce a
-        // soundscape that is not playing.
-        return START_NOT_STICKY;
     }
 
-    private void ensureSession(String title) {
-        if (session == null) {
-            session = new MediaSession(this, "ThockdownSoundscape");
-            session.setCallback(new MediaSession.Callback() {
-                @Override public void onPause() { requestStop(); }
-                @Override public void onStop() { requestStop(); }
-            });
-            session.setPlaybackState(new PlaybackState.Builder()
-                .setActions(PlaybackState.ACTION_PAUSE | PlaybackState.ACTION_STOP)
-                .setState(PlaybackState.STATE_PLAYING, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1f)
-                .build());
-            session.setActive(true);
-        }
-        session.setMetadata(new MediaMetadata.Builder()
-            .putString(MediaMetadata.METADATA_KEY_TITLE, title)
-            .putString(MediaMetadata.METADATA_KEY_ARTIST, "Thockdown Soundscapes")
-            .build());
+    private PendingIntent control(String action, int requestCode) {
+        int immutable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0;
+        return PendingIntent.getService(this, requestCode,
+            new Intent(this, SoundscapePlaybackService.class).setAction(action), immutable);
     }
 
-    private void requestStop() {
-        startService(new Intent(this, SoundscapePlaybackService.class).setAction(ACTION_STOP_PRESSED));
+    @SuppressWarnings("deprecation")
+    private Notification.Action action(int icon, String title, PendingIntent intent) {
+        return new Notification.Action.Builder(icon, title, intent).build();
     }
 
-    private Notification buildNotification(String title) {
+    private Notification buildNotification(String title, boolean playing) {
         NotificationManager manager = getSystemService(NotificationManager.class);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && manager.getNotificationChannel(CHANNEL_ID) == null) {
             NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "Soundscape playback", NotificationManager.IMPORTANCE_LOW);
@@ -104,37 +157,37 @@ public class SoundscapePlaybackService extends Service {
         int immutable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0;
         PendingIntent open = PendingIntent.getActivity(this, 0,
             new Intent(this, MainActivity.class).setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), immutable);
-        PendingIntent stop = PendingIntent.getService(this, 1,
-            new Intent(this, SoundscapePlaybackService.class).setAction(ACTION_STOP_PRESSED), immutable);
 
         Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
             ? new Notification.Builder(this, CHANNEL_ID)
             : new Notification.Builder(this);
         return builder
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_stat_soundscape)
             .setContentTitle(title)
-            .setContentText("Soundscape playing")
+            .setContentText(playing ? "Soundscape playing" : "Soundscape paused")
             .setContentIntent(open)
-            .setOngoing(true)
+            .setDeleteIntent(control(ACTION_STOP, 5))
+            .setOngoing(playing)
+            .setShowWhen(false)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
-            .addAction(new Notification.Action.Builder(null, "Stop", stop).build())
+            .addAction(action(android.R.drawable.ic_media_previous, "Previous", control(ACTION_PREVIOUS, 1)))
+            .addAction(playing
+                ? action(android.R.drawable.ic_media_pause, "Pause", control(ACTION_PAUSE, 2))
+                : action(android.R.drawable.ic_media_play, "Play", control(ACTION_PLAY, 3)))
+            .addAction(action(android.R.drawable.ic_media_next, "Next", control(ACTION_NEXT, 4)))
+            .addAction(action(android.R.drawable.ic_menu_close_clear_cancel, "Stop", control(ACTION_STOP, 5)))
             .setStyle(new Notification.MediaStyle()
                 .setMediaSession(session.getSessionToken())
-                .setShowActionsInCompactView(0))
+                .setShowActionsInCompactView(0, 1, 2))
             .build();
     }
 
     @Override
     public void onDestroy() {
-        if (session != null) {
-            session.setActive(false);
-            session.release();
-            session = null;
-        }
-        if (wakeLock != null) {
-            if (wakeLock.isHeld()) wakeLock.release();
-            wakeLock = null;
-        }
+        if (running == this) running = null;
+        session.setActive(false);
+        session.release();
+        holdWakeLock(false);
         super.onDestroy();
     }
 

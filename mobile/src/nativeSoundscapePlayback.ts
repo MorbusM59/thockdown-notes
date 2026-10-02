@@ -1,29 +1,23 @@
 /**
  * The soundscape's playback on Android (see SoundscapeEngine's
- * SoundscapePlayback): the native service renders and plays it
- * (BackgroundAudioPlugin.java, SoundscapeRenderer.java,
+ * SoundscapePlayback): the native session renders and plays it
+ * (SoundscapeSession.java, SoundscapeRenderer.java,
  * SoundscapeAudioOutput.java), so nothing on its audio path is in the
  * WebView, whose JavaScript is paused in the background. This side only
- * forwards settings and the volume, and passes statistics and failures back.
+ * forwards settings and the volume, and passes failures back.
+ *
+ * Closing PAUSES the session rather than ending it: the session, and the
+ * notification and lock-screen controls with it, stay up so a soundscape
+ * turned off can be turned on again from there. Only those controls'
+ * stop ends it.
  */
 import type { SoundscapePlaybackFactory } from '../../src/sound/SoundscapeEngine'
 import type { NativeSoundscapePlugin } from './backgroundAudioHost'
 
 export function nativeSoundscapePlayback(plugin: NativeSoundscapePlugin): SoundscapePlaybackFactory {
   return async (handlers) => {
-    const handles = await Promise.all([
-      plugin.addListener('outputStats', (stats) => handlers.onStats({
-        playedSec: stats.playedFrames / stats.sampleRate,
-        outputRestarts: stats.trackRestarts,
-        lastOutputError: stats.trackRestarts > 0 ? stats.lastError : null,
-        queuedSec: stats.queuedFrames / stats.sampleRate,
-        outputDrySec: stats.dryFrames / stats.sampleRate,
-        outputDryEvents: stats.dryEvents,
-        deviceUnderruns: stats.deviceUnderruns,
-      })),
-      plugin.addListener('rendererFailure', ({ message }) => handlers.onFailure(message)),
-    ])
-    await plugin.openRenderer()
+    const failure = await plugin.addListener('rendererFailure', ({ message }) => handlers.onFailure(message))
+    await plugin.play()
     return {
       configure(configuration) {
         void plugin.configure({ configuration: JSON.stringify(configuration) })
@@ -32,8 +26,8 @@ export function nativeSoundscapePlayback(plugin: NativeSoundscapePlugin): Sounds
         void plugin.setVolume({ volume, timeConstantSec })
       },
       close() {
-        for (const handle of handles) void handle.remove()
-        void plugin.closeRenderer()
+        void failure.remove()
+        void plugin.pause()
       },
     }
   }

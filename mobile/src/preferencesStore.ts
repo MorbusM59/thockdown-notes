@@ -7,7 +7,9 @@
 import {
   DEFAULT_SOUNDSCAPE_PREFERENCES,
   sanitizeSoundscapePreferences,
+  sanitizeSoundscapeSettings,
   type SoundscapePreferences,
+  type SoundscapeSettings,
 } from '../../src/shared/soundscape'
 
 const STORAGE_KEY = 'thockdown:soundscape-preferences'
@@ -27,6 +29,27 @@ export function savePreferences(preferences: SoundscapePreferences): void {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences))
   } catch (error) {
     console.error('Failed to save soundscape preferences', error)
+  }
+}
+
+const SCRATCH_STORAGE_KEY = 'thockdown:soundscape-scratch'
+
+/** The unsaved changes the media controls can step back to (sessionEntries.ts), or null. */
+export function loadScratch(): SoundscapeSettings | null {
+  try {
+    const raw = localStorage.getItem(SCRATCH_STORAGE_KEY)
+    return raw === null ? null : sanitizeSoundscapeSettings(JSON.parse(raw))
+  } catch {
+    return null
+  }
+}
+
+export function saveScratch(scratch: SoundscapeSettings | null): void {
+  try {
+    if (scratch === null) localStorage.removeItem(SCRATCH_STORAGE_KEY)
+    else localStorage.setItem(SCRATCH_STORAGE_KEY, JSON.stringify(scratch))
+  } catch (error) {
+    console.error('Failed to save unsaved soundscape changes', error)
   }
 }
 

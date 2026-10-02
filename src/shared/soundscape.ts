@@ -893,12 +893,18 @@ export function applySoundscapePreset(preferences: SoundscapePreferences, preset
 }
 
 /**
- * The soundscape after the active one, for stepping through them from the
- * player: the user's own if there are any, otherwise the factory ones, in
- * the order the settings panel shows them, wrapping at the end.
+ * The soundscapes stepping goes through, from the desktop player's
+ * soundscape button and the mobile app's media controls alike: the user's
+ * own if there are any, otherwise the factory ones, in the order the
+ * settings panel shows them.
  */
+export function soundscapeCycle(preferences: Pick<SoundscapePreferences, 'customPresets'>): readonly SoundscapePreset[] {
+  return preferences.customPresets.length > 0 ? preferences.customPresets : SOUNDSCAPE_FACTORY_PRESETS;
+}
+
+/** The soundscape after the active one in soundscapeCycle, wrapping at the end. */
 export function nextSoundscapePreset(preferences: SoundscapePreferences): SoundscapePreset {
-  const cycle = preferences.customPresets.length > 0 ? preferences.customPresets : SOUNDSCAPE_FACTORY_PRESETS;
+  const cycle = soundscapeCycle(preferences);
   const current = cycle.findIndex((preset) => preset.id === preferences.activePresetId);
   return cycle[(current + 1) % cycle.length];
 }

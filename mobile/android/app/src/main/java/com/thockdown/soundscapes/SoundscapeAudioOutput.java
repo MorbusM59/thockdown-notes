@@ -32,32 +32,34 @@ import android.os.Process;
  * as far as a splice can no longer reach; every REPORT_FRAMES it calls the
  * listener's onProgress, which is what lets the renderer render more.
  *
+ * PAUSED, it glides to silence, then pauses the AudioTrack and stops
+ * moving the playhead, so the queue waits where it is and the renderer,
+ * its lead full, waits with it. Resuming carries on from the same frame.
+ *
  * A write the AudioTrack refuses (a negative result: ERROR_DEAD_OBJECT when
  * the audio system has invalidated the track, for instance on a route
  * change or a restart of the audio server) is not the end of playback: the
- * track is released and built again, and the refusal is counted and
- * reported in the statistics. Stopping there instead would leave the queue
- * full, the app showing a soundscape playing, and nothing heard.
+ * track is released and built again. Stopping there instead would leave the
+ * queue full, the app showing a soundscape playing, and nothing heard.
  */
 final class SoundscapeAudioOutput {
     interface Listener {
         void onProgress();
-        void onStats(long playedFrames, long queuedFrames, long dryFrames, int dryEvents, int deviceUnderruns, int trackRestarts, int lastError);
     }
 
     private static final double CAPACITY_SEC = 12;
     private static final int BLOCK_FRAMES = 1024;
     private static final int REPORT_FRAMES = 2048;
-    private static final int STATS_FRAMES = 8192;
     /** The web side encodes samples at 1/HEADROOM of their value. */
-    private static final float HEADROOM = 2f;
+    static final float HEADROOM = 2f;
+    /** Below this gain a paused output is silent enough to stop. */
+    private static final float SILENT = 1e-4f;
+    private static final double PAUSE_FADE_SEC = 0.03;
 
     final int sampleRate;
     private final Listener listener;
     private AudioTrack track;
     private final int bufferBytes;
-    private int trackRestarts = 0;
-    private int lastError = 0;
     private final Thread writer;
     private volatile boolean running = true;
 
@@ -70,10 +72,8 @@ final class SoundscapeAudioOutput {
     private float volume = 0f;
     private volatile float volumeTarget = 0f;
     private volatile float volumeStep = 1f;
-
-    private long dryFrames = 0;
-    private int dryEvents = 0;
-    private boolean wasDry = false;
+    private float listenerVolume = 0f;
+    private boolean paused = false;
 
     SoundscapeAudioOutput(Listener listener) {
         this.listener = listener;
@@ -143,14 +143,30 @@ final class SoundscapeAudioOutput {
         end = startFrame + frames;
     }
 
-    /** Glide to `target` with time constant `timeConstantSec`. */
-    void setVolume(float target, double timeConstantSec) {
+    /** The listener's volume: glide to `target` with time constant `timeConstantSec` (once resumed, if paused). */
+    synchronized void setVolume(float target, double timeConstantSec) {
+        listenerVolume = target;
+        if (!paused) glideTo(target, timeConstantSec);
+    }
+
+    /** Fade out and hold the playhead where it is, or fade back in from it. */
+    synchronized void setPaused(boolean pause) {
+        if (pause == paused) return;
+        paused = pause;
+        glideTo(pause ? 0f : listenerVolume, PAUSE_FADE_SEC);
+        notifyAll();
+    }
+
+    private void glideTo(float target, double timeConstantSec) {
         volumeStep = (float) (1 - Math.exp(-1 / (Math.max(0.001, timeConstantSec) * sampleRate)));
         volumeTarget = target;
     }
 
     void close() {
-        running = false;
+        synchronized (this) {
+            running = false;
+            notifyAll();
+        }
         writer.interrupt();
         try {
             writer.join(500);
@@ -165,11 +181,18 @@ final class SoundscapeAudioOutput {
         Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO);
         short[] block = new short[BLOCK_FRAMES * 2];
         int sinceReport = 0;
-        int sinceStats = 0;
         while (running) {
-            long reachedFrame;
-            long queued;
             synchronized (this) {
+                if (paused && Math.abs(volume) < SILENT) {
+                    track.pause();
+                    try {
+                        while (running && paused) wait();
+                    } catch (InterruptedException ignored) {
+                        return;
+                    }
+                    if (!running) return;
+                    track.play();
+                }
                 int available = started ? (int) Math.max(0, Math.min(BLOCK_FRAMES, end - playhead)) : 0;
                 for (int index = 0; index < available; index += 1) {
                     int slot = (int) ((playhead + index) % capacity) * 2;
@@ -177,16 +200,8 @@ final class SoundscapeAudioOutput {
                     block[(index * 2) + 1] = ring[slot + 1];
                 }
                 java.util.Arrays.fill(block, available * 2, block.length, (short) 0);
-                if (started) {
-                    int dry = BLOCK_FRAMES - available;
-                    if (dry > 0 && !wasDry) dryEvents += 1;
-                    wasDry = dry > 0;
-                    dryFrames += dry;
-                    // Silence still moves the playhead: positions are time.
-                    playhead += BLOCK_FRAMES;
-                }
-                reachedFrame = playhead;
-                queued = Math.max(0, end - playhead);
+                // Silence still moves the playhead: positions are time.
+                if (started) playhead += BLOCK_FRAMES;
             }
             float target = volumeTarget;
             float step = volumeStep;
@@ -202,8 +217,6 @@ final class SoundscapeAudioOutput {
             while (running && offset < block.length) {
                 int written = track.write(block, offset, block.length - offset, AudioTrack.WRITE_BLOCKING);
                 if (written < 0) {
-                    lastError = written;
-                    trackRestarts += 1;
                     try {
                         track.release();
                     } catch (RuntimeException ignored) {
@@ -219,14 +232,9 @@ final class SoundscapeAudioOutput {
             }
             if (!started) continue;
             sinceReport += BLOCK_FRAMES;
-            sinceStats += BLOCK_FRAMES;
             if (sinceReport >= REPORT_FRAMES) {
                 sinceReport = 0;
                 listener.onProgress();
-            }
-            if (sinceStats >= STATS_FRAMES) {
-                sinceStats = 0;
-                listener.onStats(reachedFrame, queued, dryFrames, dryEvents, track.getUnderrunCount(), trackRestarts, lastError);
             }
         }
     }

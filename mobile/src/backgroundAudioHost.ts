@@ -1,65 +1,60 @@
 /**
- * What the platform must do for the soundscape to keep playing while the app
- * is in the background or the screen is off. The web side only states WHETHER
- * a soundscape is audible (and what to call it); keeping the process and its
- * WebView alive, and putting a notification and lock-screen control up, is
- * the native shell's job.
+ * The web page's interface to the native soundscape session
+ * (mobile/android/.../BackgroundAudioPlugin.java, SoundscapeSession.java).
  *
- * Android: a foreground service of type mediaPlayback
- * (mobile/android/.../BackgroundAudioPlugin.kt). iOS, later: an AVAudioSession
- * in the playback category, behind this same interface.
+ * The session renders and plays the soundscape in the app's own process,
+ * keeps the foreground service and its notification and lock-screen
+ * controls up while it exists, and outlives the web page. The page drives
+ * it while the page runs; the media controls drive it while the page is
+ * paused or gone, and the page catches up through `getState` and the
+ * `sessionChanged` event (see MobileSoundscapeApp.tsx).
  *
- * In a plain browser (vite dev) there is no native side and every call is a
- * no-op, so the app runs there unchanged, minus background playback.
+ * In a plain browser (vite dev) there is no native side: `nativeSoundscape`
+ * is null, the engine keeps its web playback, and there are no media
+ * controls, clips or sharing.
  */
 import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core'
 
-export interface BackgroundAudioPlugin {
-  /** Start, or update, the session. Idempotent. */
-  start(options: { title: string }): Promise<void>
-  /** End the session. Idempotent. */
-  stop(): Promise<void>
-  /** The listener pressed the notification's / lock screen's stop control. */
-  addListener(event: 'stopRequested', listener: () => void): Promise<PluginListenerHandle>
+/** One soundscape the media controls step through. */
+export interface SessionEntry {
+  id: string
+  name: string
+  /** A ConfigureMessage as JSON, as the engine would send it (soundscapeConfiguration). */
+  configuration: string
 }
 
-/**
- * The soundscape running natively (BackgroundAudioPlugin.java: the
- * renderer in a JavaScriptSandbox and Android's own audio output); used
- * through nativeSoundscapePlayback.ts.
- */
+export interface SessionState {
+  playing: boolean
+  /** The entry playing, or null if none of the published entries is. */
+  currentId: string | null
+}
+
 export interface NativeSoundscapePlugin {
   isRendererSupported(): Promise<{ supported: boolean }>
-  openRenderer(): Promise<void>
+  /** The soundscapes the media controls step through, which one is current, and the listener's volume. */
+  publish(options: { entries: SessionEntry[]; currentId: string | null; masterVolume: number }): Promise<void>
+  getState(): Promise<SessionState>
+  /** Start playing, or carry on; idempotent. */
+  play(): Promise<void>
+  /** Hold where it is, keeping the session and its controls up. */
+  pause(): Promise<void>
   /** `configuration` is a ConfigureMessage as JSON. */
   configure(options: { configuration: string }): Promise<void>
   setVolume(options: { volume: number; timeConstantSec: number }): Promise<void>
-  closeRenderer(): Promise<void>
-  addListener(
-    event: 'outputStats',
-    listener: (data: {
-      sampleRate: number
-      playedFrames: number
-      queuedFrames: number
-      dryFrames: number
-      dryEvents: number
-      deviceUnderruns: number
-      trackRestarts: number
-      lastError: number
-    }) => void,
-  ): Promise<PluginListenerHandle>
+  /** Render `seconds` of `configuration` to `<name>.m4a` and offer it through the share sheet. */
+  renderClip(options: { configuration: string; seconds: number; name: string }): Promise<void>
+  cancelClip(): Promise<void>
+  /** Write `content` to a file named `name` and offer it through the share sheet. */
+  shareText(options: { content: string; name: string }): Promise<void>
+  /** A media control changed what plays. */
+  addListener(event: 'sessionChanged', listener: (state: SessionState) => void): Promise<PluginListenerHandle>
   addListener(event: 'rendererFailure', listener: (data: { message: string }) => void): Promise<PluginListenerHandle>
+  addListener(event: 'clipProgress', listener: (data: { fraction: number }) => void): Promise<PluginListenerHandle>
+  /** The clip is done: `shared` is false when it failed or was cancelled. */
+  addListener(event: 'clipFinished', listener: (data: { shared: boolean }) => void): Promise<PluginListenerHandle>
 }
 
-const nativePlugin = Capacitor.isNativePlatform()
-  ? registerPlugin<BackgroundAudioPlugin & NativeSoundscapePlugin>('BackgroundAudio')
+/** The native session, or null in a plain browser. */
+export const nativeSoundscape: NativeSoundscapePlugin | null = Capacitor.isNativePlatform()
+  ? registerPlugin<NativeSoundscapePlugin>('BackgroundAudio')
   : null
-
-export const backgroundAudioHost: BackgroundAudioPlugin = nativePlugin ?? {
-  start: async () => {},
-  stop: async () => {},
-  addListener: async () => ({ remove: async () => {} }),
-}
-
-/** The native soundscape, or null in a plain browser, where the engine keeps its web playback. */
-export const nativeSoundscapePlugin: NativeSoundscapePlugin | null = nativePlugin
