@@ -53,6 +53,9 @@ export async function createWebAudioOutput(handlers: SoundscapeOutputHandlers): 
   player.port.onmessage = (event: MessageEvent<{ type: string; queuedFrames: number; dryFrames: number; dryEvents: number }>) => {
     if (event.data?.type !== 'stats') return;
     handlers.onStats({
+      playedSec: null,
+      outputRestarts: null,
+      lastOutputError: null,
       queuedSec: event.data.queuedFrames / context.sampleRate,
       outputDrySec: event.data.dryFrames / context.sampleRate,
       outputDryEvents: event.data.dryEvents,

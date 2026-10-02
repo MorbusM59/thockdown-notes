@@ -30,11 +30,18 @@ import android.os.Process;
  * not queued is played as silence and counted. `played` reports how far it
  * has handed audio to the AudioTrack, which is as far as a splice can no
  * longer reach.
+ *
+ * A write the AudioTrack refuses (a negative result: ERROR_DEAD_OBJECT when
+ * the audio system has invalidated the track, for instance on a route
+ * change or a restart of the audio server) is not the end of playback: the
+ * track is released and built again, and the refusal is counted and
+ * reported in the statistics. Stopping there instead would leave the queue
+ * full, the app showing a soundscape playing, and nothing heard.
  */
 final class SoundscapeAudioOutput {
     interface Listener {
         void onPlayed(long frame);
-        void onStats(long queuedFrames, long dryFrames, int dryEvents, int deviceUnderruns);
+        void onStats(long playedFrames, long queuedFrames, long dryFrames, int dryEvents, int deviceUnderruns, int trackRestarts, int lastError);
     }
 
     private static final double CAPACITY_SEC = 12;
@@ -46,7 +53,10 @@ final class SoundscapeAudioOutput {
 
     final int sampleRate;
     private final Listener listener;
-    private final AudioTrack track;
+    private AudioTrack track;
+    private final int bufferBytes;
+    private int trackRestarts = 0;
+    private int lastError = 0;
     private final Thread writer;
     private volatile boolean running = true;
 
@@ -70,7 +80,16 @@ final class SoundscapeAudioOutput {
         capacity = (int) Math.ceil(CAPACITY_SEC * sampleRate);
         ring = new short[capacity * 2];
         int minimum = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT);
-        track = new AudioTrack.Builder()
+        // A small device buffer: the long one is the queue above.
+        bufferBytes = Math.max(minimum * 2, BLOCK_FRAMES * 4 * 4);
+        track = buildTrack();
+        track.play();
+        writer = new Thread(this::run, "SoundscapeAudioOutput");
+        writer.start();
+    }
+
+    private AudioTrack buildTrack() {
+        return new AudioTrack.Builder()
             .setAudioAttributes(new AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_MEDIA)
                 .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
@@ -80,13 +99,9 @@ final class SoundscapeAudioOutput {
                 .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
                 .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
                 .build())
-            // A small device buffer: the long one is the queue above.
-            .setBufferSizeInBytes(Math.max(minimum * 2, BLOCK_FRAMES * 4 * 4))
+            .setBufferSizeInBytes(bufferBytes)
             .setTransferMode(AudioTrack.MODE_STREAM)
             .build();
-        track.play();
-        writer = new Thread(this::run, "SoundscapeAudioOutput");
-        writer.start();
     }
 
     /** Queue `samples` (interleaved stereo) at `startFrame`, replacing whatever is queued from there on. */
@@ -176,7 +191,17 @@ final class SoundscapeAudioOutput {
             while (running && offset < block.length) {
                 int written = track.write(block, offset, block.length - offset, AudioTrack.WRITE_BLOCKING);
                 if (written < 0) {
-                    running = false;
+                    lastError = written;
+                    trackRestarts += 1;
+                    try {
+                        track.release();
+                    } catch (RuntimeException ignored) {
+                        // Already unusable; it is being replaced.
+                    }
+                    track = buildTrack();
+                    track.play();
+                    // The block is dropped rather than retried into the new
+                    // track: positions are time, and it is already late.
                     break;
                 }
                 offset += written;
@@ -190,7 +215,7 @@ final class SoundscapeAudioOutput {
             }
             if (sinceStats >= STATS_FRAMES) {
                 sinceStats = 0;
-                listener.onStats(queued, dryFrames, dryEvents, track.getUnderrunCount());
+                listener.onStats(reachedFrame, queued, dryFrames, dryEvents, track.getUnderrunCount(), trackRestarts, lastError);
             }
         }
     }

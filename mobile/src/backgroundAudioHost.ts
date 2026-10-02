@@ -37,7 +37,15 @@ export interface NativeOutputPlugin {
   addListener(event: 'played', listener: (data: { frame: number }) => void): Promise<PluginListenerHandle>
   addListener(
     event: 'outputStats',
-    listener: (data: { queuedFrames: number; dryFrames: number; dryEvents: number; deviceUnderruns: number }) => void,
+    listener: (data: {
+      playedFrames: number
+      queuedFrames: number
+      dryFrames: number
+      dryEvents: number
+      deviceUnderruns: number
+      trackRestarts: number
+      lastError: number
+    }) => void,
   ): Promise<PluginListenerHandle>
 }
 

@@ -87,8 +87,11 @@ public class BackgroundAudioPlugin extends Plugin {
             }
 
             @Override
-            public void onStats(long queuedFrames, long dryFrames, int dryEvents, int deviceUnderruns) {
+            public void onStats(long playedFrames, long queuedFrames, long dryFrames, int dryEvents, int deviceUnderruns, int trackRestarts, int lastError) {
                 JSObject data = new JSObject();
+                data.put("playedFrames", playedFrames);
+                data.put("trackRestarts", trackRestarts);
+                data.put("lastError", lastError);
                 data.put("queuedFrames", queuedFrames);
                 data.put("dryFrames", dryFrames);
                 data.put("dryEvents", dryEvents);

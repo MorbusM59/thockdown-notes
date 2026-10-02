@@ -50,6 +50,9 @@ export function nativeSoundscapeOutput(plugin: NativeOutputPlugin): SoundscapeOu
     const handles = await Promise.all([
       plugin.addListener('played', ({ frame }) => port.postMessage({ type: 'played', frame })),
       plugin.addListener('outputStats', (stats) => handlers.onStats({
+        playedSec: stats.playedFrames / sampleRate,
+        outputRestarts: stats.trackRestarts,
+        lastOutputError: stats.trackRestarts > 0 ? stats.lastError : null,
         queuedSec: stats.queuedFrames / sampleRate,
         outputDrySec: stats.dryFrames / sampleRate,
         outputDryEvents: stats.dryEvents,

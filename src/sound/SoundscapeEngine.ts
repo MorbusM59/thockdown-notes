@@ -43,6 +43,8 @@ const SOUNDSCAPE_DISCONNECT_MS = 180;
  * the platform reports it, the audio device's.
  */
 export interface SoundscapePlaybackStats {
+  /** Seconds the output has played since it opened, or null where it does not say. */
+  playedSec: number | null;
   /** Seconds of audio queued at the output, past what it has played. */
   queuedSec: number;
   /** Seconds the output played as silence for want of queued audio, and how many separate times. */
@@ -53,6 +55,9 @@ export interface SoundscapePlaybackStats {
    * not deliver in time. Null where the platform does not report them.
    */
   deviceUnderruns: number | null;
+  /** How often the output had to rebuild its device stream, and the last error that made it; null where not reported. */
+  outputRestarts: number | null;
+  lastOutputError: number | null;
 }
 
 /** Where the finished soundscape is played. */
@@ -101,6 +106,7 @@ function noiseLoopsFor(sampleRate: number) {
 }
 
 type StatsListener = (stats: SoundscapePlaybackStats) => void;
+type FailureListener = (failure: string) => void;
 
 export class SoundscapeEngine {
   private outputFactory: SoundscapeOutputFactory = createWebAudioOutput;
@@ -118,6 +124,18 @@ export class SoundscapeEngine {
   private starting: Promise<void> | null = null;
   private disconnectTimer: number | null = null;
   private readonly statsListeners = new Set<StatsListener>();
+  private readonly failureListeners = new Set<FailureListener>();
+
+  /** Be told when playback failed and was torn down, with what failed. Returns the unsubscribe. */
+  subscribeFailures(listener: FailureListener): () => void {
+    this.failureListeners.add(listener);
+    return () => { this.failureListeners.delete(listener); };
+  }
+
+  private reportFailure(failure: string): void {
+    console.error(failure);
+    for (const listener of this.failureListeners) listener(failure);
+  }
 
   /** Play through `factory`'s outputs from the next start on (the mobile app's native output). */
   useOutput(factory: SoundscapeOutputFactory): void {
@@ -159,7 +177,7 @@ export class SoundscapeEngine {
           for (const listener of this.statsListeners) listener(stats);
         },
         onFailure: () => {
-          console.error('Soundscape output stopped unexpectedly');
+          this.reportFailure('Soundscape output stopped unexpectedly');
           // It does not run again, so the graph is torn down now rather
           // than after a fade: with it gone, the next apply() builds a new one.
           if (this.output === output) this.teardown();
@@ -184,7 +202,7 @@ export class SoundscapeEngine {
         output: output.port,
       }, [output.port]);
       renderWorker.onerror = (event) => {
-        console.error('Soundscape render worker stopped unexpectedly', event.message);
+        this.reportFailure(`Soundscape render worker stopped: ${event.message}`);
         if (this.renderWorker === renderWorker) this.teardown();
       };
       this.output = output;
@@ -194,7 +212,7 @@ export class SoundscapeEngine {
       this.update(preferences);
     } catch (error) {
       output?.close();
-      console.error('Unable to start soundscape audio', error);
+      this.reportFailure(`Unable to start soundscape audio: ${String(error)}`);
     }
   }
 
