@@ -212,8 +212,18 @@ export function MobileSoundscapeApp() {
                     </button>
                     <button
                       type="button"
+                      className="btn-icon options-color-swatch options-loadout-btn"
+                      aria-label={`Visual preset: ${PRESET_NAMES[look.mode][look.preset[look.mode]]}. Press for the next`}
+                      onClick={() => setLook((current) => ({
+                        ...current,
+                        preset: { ...current.preset, [current.mode]: (current.preset[current.mode] + 1) % PRESETS[current.mode].length },
+                      }))}
+                    >
+                      <span className={PRESET_ICONS[look.mode][look.preset[look.mode]]} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
                       className={`btn-icon options-color-swatch options-loadout-btn${look.mode === 'dark' ? ' is-active' : ''}`}
-                      style={{ gridColumn: 6 }}
                       aria-pressed={look.mode === 'dark'}
                       aria-label="Dark mode"
                       onClick={() => setLook((current) => ({ ...current, mode: current.mode === 'dark' ? 'light' : 'dark' }))}
@@ -234,20 +244,6 @@ export function MobileSoundscapeApp() {
                       onCommit={(value) => setPreferences((current) => ({ ...current, masterVolume: value / 100 }))}
                     />
                   </OptionsSliderRows>
-                  <div className="options-loadout-grid" role="group" aria-label="Visual presets">
-                    {PRESETS[look.mode].map((_, index) => (
-                      <button
-                        key={`${look.mode}-${index}`}
-                        type="button"
-                        className={`btn-icon options-color-swatch options-loadout-btn${look.preset[look.mode] === index ? ' is-active' : ''}`}
-                        aria-label={PRESET_NAMES[look.mode][index]}
-                        aria-pressed={look.preset[look.mode] === index}
-                        onClick={() => setLook((current) => ({ ...current, preset: { ...current.preset, [current.mode]: index } }))}
-                      >
-                        <span className={PRESET_ICONS[look.mode][index]} aria-hidden="true" />
-                      </button>
-                    ))}
-                  </div>
                 </div>
                 <SoundscapeControls preferences={preferences} onChange={handleChange} />
               </div>

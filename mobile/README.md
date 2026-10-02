@@ -11,8 +11,9 @@ reaches both.
 
 ## Look
 Any of the desktop's ten factory visual presets, chosen in the Master section
-(the five of the current mode, plus a dark mode switch that returns to the
-preset last used in that mode; Paper, light, by default; kept in
+(one button stepping through the five of the current mode, showing the
+current one's icon, plus a dark mode switch that returns to the preset last
+used in that mode; Paper, light, by default; kept in
 localStorage by `preferencesStore.ts`). They are drawn by the same code the
 desktop uses (`src/shared/loadoutTheme.ts` for the variables, filter and
 overlays, `src/components/ThemeLayers.tsx` for the glaze and blend layers;
