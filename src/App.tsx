@@ -8,7 +8,7 @@ import { SidebarOptionsPanel } from './sidebar/SidebarOptionsPanel'
 import { AudioControls } from './components/AudioControls'
 import { soundscapeEngine } from './sound/SoundscapeEngine'
 import { isPlaylistButtonSlot } from './shared/audioPlayer'
-import { isTextEntryElement, mayTakeFocusOnPress, mayHoldKeyboard } from './shared/focusOwnership'
+import { isTextEntryElement, keepFocusOnPress, mayHoldKeyboard } from './shared/focusOwnership'
 import { focusEscapeHoldRing } from './editorSection/escapeHoldRingFocus'
 import {
   BTN_SQUARE_LARGE_SIZE_PX,
@@ -9048,9 +9048,7 @@ ${markdownHtml}
     const onMouseDownCapture = (event: globalThis.MouseEvent) => {
       const target = event.target
       if (!(target instanceof HTMLElement)) return
-      if (mayTakeFocusOnPress(target)) return
-
-      event.preventDefault()
+      if (!keepFocusOnPress(event)) return
 
       // Resolve which section to refocus from the click's own DOM position
       // (via .editor-section-column's data-section-id), NOT from

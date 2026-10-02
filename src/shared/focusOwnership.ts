@@ -74,6 +74,25 @@ export function mayTakeFocusOnPress(target: Element | null | undefined): boolean
 }
 
 /**
+ * A PRESS DOES NOT MOVE THE KEYBOARD: cancel a `mousedown`'s default --
+ * which is what focuses a pressed button -- unless the element may take
+ * focus on a press (mayTakeFocusOnPress). Returns whether it cancelled.
+ *
+ * The rule for every surface that hosts these controls, installed once per
+ * host at window level in the capture phase: the desktop app (App.tsx,
+ * which then restores the keyboard where it belongs) and the mobile app
+ * (mobile/src/main.tsx). A touch press arrives as a compatibility
+ * `mousedown` too, so it is covered without touching the touch events that
+ * scroll the page.
+ */
+export function keepFocusOnPress(event: MouseEvent): boolean {
+  const target = event.target
+  if (!(target instanceof Element) || mayTakeFocusOnPress(target)) return false
+  event.preventDefault()
+  return true
+}
+
+/**
  * MAY THIS ELEMENT HOLD THE KEYBOARD?
  *
  * Two kinds, and the second is a DECLARATION the markup already makes:

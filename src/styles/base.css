@@ -91,10 +91,16 @@ button,
   outline: none;
 }
 
-button:hover,
-.ui-btn:hover {
-  background:   var(--btn-bg-hover);
-  border-color: var(--btn-border-hover);
+/* Only where something can hover. A touch screen emulates :hover on the
+   last element tapped and keeps it there until the next tap elsewhere, so a
+   button looked selected for no reason (an empty schedule slot, in the
+   mobile app). */
+@media (hover: hover) {
+  button:hover,
+  .ui-btn:hover {
+    background:   var(--btn-bg-hover);
+    border-color: var(--btn-border-hover);
+  }
 }
 
 button[data-pressed],
