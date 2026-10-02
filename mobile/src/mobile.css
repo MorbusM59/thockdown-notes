@@ -5,8 +5,13 @@ html, body, #root {
 }
 
 body {
-  background: var(--sidebar-bg, #f9f6f3);
   overscroll-behavior: none;
+}
+
+/* The desktop's .app-shell is the app's grid; here it holds one column. */
+.mobile-app-shell {
+  display: block;
+  height: 100%;
 }
 
 .mobile-soundscape-shell {

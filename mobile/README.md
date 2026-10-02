@@ -9,6 +9,14 @@ copy: the panel, the engine (`src/sound/SoundscapeEngine.ts`), the worklet
 (`src/shared/soundscape*.ts`) are the desktop's own files, so a change there
 reaches both.
 
+## Look
+The desktop's **Paper** light preset, fixed. It is drawn by the same code the
+desktop uses (`src/shared/loadoutTheme.ts` for the variables, filter and
+overlays, `src/components/ThemeLayers.tsx` for the glaze and blend layers),
+inside the same frame elements, so a change to Paper reaches both. Textures
+are the one part of a preset the phone does not draw: they are rendered by a
+worker and cached by the desktop's main process.
+
 ## Layout
 - `mobile/src/` — the web app: `MobileSoundscapeApp.tsx` (the screen),
   `preferencesStore.ts` (localStorage, through the desktop's sanitizer),

@@ -31,10 +31,6 @@ import { DEFAULT_SOUNDSCAPE_PREFERENCES, sanitizeSoundscapePreferences, type Sou
 import { DARK_FACTORY_PRESETS, LIGHT_FACTORY_PRESETS } from './shared/presets'
 import {
   DEFAULT_GLAZE_SETTINGS,
-  GLAZE_GLOOM_OPACITY_MAX,
-  GLAZE_LINEAR_OPACITY_MAX,
-  GLAZE_RADIAL_OPACITY_MAX,
-  GLAZE_SHEEN_OPACITY_MAX,
   sanitizeGlazeSettings,
   type GlazeSettings,
 } from './shared/glaze'
@@ -63,10 +59,8 @@ import {
   parseCssColorToRgba,
   rgbaToCssColor,
   rgbaToHex,
-  invertRgbaColor,
   rgbaToHsva,
   hsvaToRgba,
-  scaleAlphaInCssValue,
 } from './shared/colorMath'
 import type { HighlightColorKey, HighlightColors } from './shared/highlightColors'
 import {
@@ -130,7 +124,8 @@ import {
   BOX_SHADOW_ALPHA_PERCENT_MIN,
   BOX_SHADOW_ALPHA_PERCENT_MAX,
 } from './shared/uiBounds'
-import { BORDER_ALPHA_TOKENS, BOX_SHADOW_ALPHA_TOKENS } from './shared/borderShadowAlphaTokens'
+import { applyDocumentTheme, themeFrame } from './shared/loadoutTheme'
+import { ThemeBlendOverlays, ThemeGlazeLayers } from './components/ThemeLayers'
 import { DEBUG_TAG_NAME, PROTECTED_TAGS, normalizeTagName } from './shared/tags'
 import { EditorSection } from './editorSection/EditorSection'
 import { EditorToolbar } from './toolbar/EditorToolbar'
@@ -378,14 +373,6 @@ const DEFAULT_HIGHLIGHT_COLORS: HighlightColors = {
   markdownUnchecked: 'rgba(255, 0, 0, 1)',
 }
 
-const DEFAULT_BASE_PALETTE_COLOR = '#f9f6f4'
-const DEFAULT_PALETTE_LIGHT = '#f5f3f2'
-const DEFAULT_PALETTE_MID = '#e9e5e2'
-const DEFAULT_PALETTE_DARK = '#ece8e4'
-const DEFAULT_PALETTE_INPUT = '#ffffff'
-const DEFAULT_PALETTE_SHADOW_LO = '#fcf9f677'
-const DEFAULT_PALETTE_SHADOW_MID = '#fcf9f6bb'
-const DEFAULT_PALETTE_SHADOW_HI = '#fcf9f6ee'
 
 const DEFAULT_EDITOR_TEXT_COLORS: Record<EditorTextColorTargetKey, string> = {
   editorEditText: '#000000DD',
@@ -412,7 +399,6 @@ type EditorTextColorTargetKey = 'editorEditText' | 'editorRenderText'
 type HsvaControlKey = 'h' | 's' | 'v' | 'a'
 type CursorColorTargetKey = 'dot' | 'center' | 'trail' | 'halo'
 type CaretColorTargetKey = 'outline' | 'halo'
-const GLAZE_RADIAL_CORNERS = ['top left', 'top right', 'bottom right', 'bottom left'] as const
 
 // Fallbacks for chrome reading through the section registry before any
 // section has registered -- never actually hit in practice (registration
@@ -434,19 +420,6 @@ type DarkModePresetValues = {
   filterColorize: number
 }
 
-// Saturate slider: position x in [0,1] maps to CSS saturate value via
-// s(x) = x / (1 - 4^(x-1)), capped at SATURATE_MAX.
-// At x=0: s=0 (greyscale), x=0.5: s=1 (neutral), xâ†’1: sâ†’âˆž (capped).
-const SATURATE_MAX = 64
-
-function saturatePosToValue(x: number): number {
-  const xClamped = Math.max(0, Math.min(0.9999, x))
-  if (xClamped <= 0) return 0
-  const denom = 1 - Math.pow(4, xClamped - 1)
-  if (Math.abs(denom) < 1e-9) return SATURATE_MAX
-  const s = xClamped / denom
-  return Math.max(0, Math.min(SATURATE_MAX, s))
-}
 
 const DARK_MODE_PRESET_VALUES: Record<DarkModeKey, DarkModePresetValues> = {
   none:   { filterInvert: 0, filterSepia: 0, filterHueRotate: 0,   filterBrightness: 1,    filterContrast: 1,    filterSaturate: 0.5000, filterColorize: 0 },
@@ -618,57 +591,6 @@ function sanitizeClipboardTitle(raw: string): string {
   return truncateTitle(withoutHeadingPrefix) || FALLBACK_NEW_NOTE_TITLE
 }
 
-type DerivedPaletteColors = {
-  parchmentLightest: string
-  parchmentLight: string
-  parchmentMid: string
-  parchmentDark: string
-  parchmentInput: string
-  shadowWhiteLo: string
-  shadowWhiteMid: string
-  shadowWhiteHi: string
-}
-
-function derivePaletteTokensFromBaseColor(baseColorCss: string): DerivedPaletteColors {
-  const fallbackBase = parseCssColorToRgba(DEFAULT_BASE_PALETTE_COLOR) ?? { r: 249, g: 246, b: 244, a: 1 }
-  const baseRgba = parseCssColorToRgba(baseColorCss) ?? fallbackBase
-  const baseHsva = rgbaToHsva(baseRgba)
-  const defaultBaseHsva = rgbaToHsva(fallbackBase)
-  const safeBaseDefaultV = Math.max(0.0001, defaultBaseHsva.v)
-
-  const defaultLightHsva = rgbaToHsva(parseCssColorToRgba(DEFAULT_PALETTE_LIGHT) ?? fallbackBase)
-  const defaultMidHsva = rgbaToHsva(parseCssColorToRgba(DEFAULT_PALETTE_MID) ?? fallbackBase)
-  const defaultDarkHsva = rgbaToHsva(parseCssColorToRgba(DEFAULT_PALETTE_DARK) ?? fallbackBase)
-  const defaultInputHsva = rgbaToHsva(parseCssColorToRgba(DEFAULT_PALETTE_INPUT) ?? fallbackBase)
-
-  const defaultShadowLo = parseCssColorToRgba(DEFAULT_PALETTE_SHADOW_LO) ?? { ...fallbackBase, a: 0.466 }
-  const defaultShadowMid = parseCssColorToRgba(DEFAULT_PALETTE_SHADOW_MID) ?? { ...fallbackBase, a: 0.733 }
-  const defaultShadowHi = parseCssColorToRgba(DEFAULT_PALETTE_SHADOW_HI) ?? { ...fallbackBase, a: 0.933 }
-  const defaultShadowLoHsva = rgbaToHsva(defaultShadowLo)
-  const defaultShadowMidHsva = rgbaToHsva(defaultShadowMid)
-  const defaultShadowHiHsva = rgbaToHsva(defaultShadowHi)
-
-  const withScaledValue = (valueScale: number, alpha = 1): string => {
-    const nextHsva: HsvaColor = {
-      h: baseHsva.h,
-      s: baseHsva.s,
-      v: clamp(baseHsva.v * valueScale, 0, 1),
-      a: clamp(alpha, 0, 1),
-    }
-    return rgbaToCssColor(hsvaToRgba(nextHsva))
-  }
-
-  return {
-    parchmentLightest: rgbaToCssColor({ ...baseRgba}),
-    parchmentLight: withScaledValue(defaultLightHsva.v / safeBaseDefaultV, 1),
-    parchmentMid: withScaledValue(defaultMidHsva.v / safeBaseDefaultV, 1),
-    parchmentDark: withScaledValue(defaultDarkHsva.v / safeBaseDefaultV, 1),
-    parchmentInput: withScaledValue(defaultInputHsva.v / safeBaseDefaultV, 1),
-    shadowWhiteLo: withScaledValue(defaultShadowLoHsva.v / safeBaseDefaultV, defaultShadowLo.a),
-    shadowWhiteMid: withScaledValue(defaultShadowMidHsva.v / safeBaseDefaultV, defaultShadowMid.a),
-    shadowWhiteHi: withScaledValue(defaultShadowHiHsva.v / safeBaseDefaultV, defaultShadowHi.a),
-  }
-}
 
 
 function titleFromFileBasename(fileName: string): string {
@@ -752,132 +674,7 @@ function resolvePersistedViewLetterSpacingEm(value: unknown, fallback: number): 
   return fallback
 }
 
-// Border/box-shadow tokens can reference other custom properties (e.g.
-// `--btn-shadow-active` embeds `var(--color-shadow-white)`), and
-// getComputedStyle().getPropertyValue() returns custom properties verbatim,
-// unresolved. Inline every var() reference (recursively, since palette
-// tokens can chain) so scaleAlphaInCssValue sees the literal colors.
-function resolveCssVarValueDeep(rawValue: string, rootStyle: CSSStyleDeclaration, depth = 0): string {
-  if (depth > 6) return rawValue
-  let sawVar = false
-  const resolved = rawValue.replace(/var\(\s*(--[a-zA-Z0-9-]+)\s*(?:,\s*([^)]+))?\)/g, (_match, name: string, fallback?: string) => {
-    sawVar = true
-    const resolvedValue = rootStyle.getPropertyValue(name).trim()
-    return resolvedValue || (fallback ? fallback.trim() : '')
-  })
-  return sawVar ? resolveCssVarValueDeep(resolved, rootStyle, depth + 1) : resolved
-}
 
-function mulberry32(seed: number): () => number {
-  let state = (seed >>> 0) + 0x6d2b79f5
-  return () => {
-    state = (state + 0x6d2b79f5) >>> 0
-    let t = Math.imul(state ^ (state >>> 15), 1 | state)
-    t ^= t + Math.imul(t ^ (t >>> 7), 61 | t)
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
-
-function buildLinearGlazeLayers(settings: GlazeSettings): string[] {
-  if (settings.linearStackCount <= 0 || settings.linearOpacity <= 0) return []
-
-  const rand = mulberry32(settings.linearSeed)
-  const averageDistancePx = 28 + (rand() * 128)
-  const lightRatio = 0.2 + (rand() * 0.65)
-  const layers: string[] = []
-
-  for (let layerIndex = 0; layerIndex < settings.linearStackCount; layerIndex += 1) {
-    const angle = 45
-    const phase = rand() * averageDistancePx
-    const stops: string[] = []
-    let cursor = 0
-
-    for (let stripIndex = 0; stripIndex < 18; stripIndex += 1) {
-      const distance = Math.max(12, averageDistancePx * (0.55 + (rand() * 1.05)))
-      const litWidth = Math.max(3, distance * lightRatio * (0.7 + (rand() * 0.65)))
-      const clearWidth = Math.max(4, distance - litWidth)
-      const lightAlpha = clamp(settings.linearOpacity * (0.55 + (rand() * 0.9)), 0, GLAZE_LINEAR_OPACITY_MAX)
-      const warmJitter = Math.round((rand() * 22) - 11)
-      const red = clamp(245 + warmJitter, 0, 255)
-      const green = clamp(245 + warmJitter, 0, 255)
-      const blue = clamp(255 - Math.round(rand() * 18), 0, 255)
-      const clearEnd = cursor + clearWidth
-      const lightEnd = clearEnd + litWidth
-      stops.push(`transparent ${Math.max(0, cursor - phase).toFixed(1)}px`)
-      stops.push(`transparent ${Math.max(0, clearEnd - phase).toFixed(1)}px`)
-      stops.push(`rgba(${red}, ${green}, ${blue}, ${lightAlpha.toFixed(3)}) ${Math.max(0, clearEnd - phase).toFixed(1)}px`)
-      stops.push(`rgba(${red}, ${green}, ${blue}, ${lightAlpha.toFixed(3)}) ${Math.max(0, lightEnd - phase).toFixed(1)}px`)
-      cursor += distance
-    }
-
-    layers.push(`repeating-linear-gradient(${angle}deg, ${stops.join(', ')})`)
-  }
-
-  return layers
-}
-
-function buildRadialGlazeLayers(settings: GlazeSettings): string[] {
-  if (settings.radialCount <= 0 || settings.radialOpacity <= 0) return []
-
-  const rand = mulberry32(settings.radialSeed)
-  const layers: string[] = []
-
-  const nextPrismaticRgb = (): [number, number, number] => {
-    const channels: [number, number, number] = [0, 0, 0]
-    const channelOrder: [number, number, number] = [0, 1, 2]
-
-    for (let i = channelOrder.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(rand() * (i + 1))
-      const temp = channelOrder[i]
-      channelOrder[i] = channelOrder[j]
-      channelOrder[j] = temp
-    }
-
-    channels[channelOrder[0]] = 255
-    channels[channelOrder[1]] = 127 + Math.round(rand() * 128)
-    channels[channelOrder[2]] = 0
-    return channels
-  }
-
-  for (let index = 0; index < settings.radialCount; index += 1) {
-    const corner = GLAZE_RADIAL_CORNERS[index % GLAZE_RADIAL_CORNERS.length]
-    const [innerR, innerG, innerB] = nextPrismaticRgb()
-    const [midR, midG, midB] = nextPrismaticRgb()
-    const [outerR, outerG, outerB] = nextPrismaticRgb()
-    const radiusInner = Math.round(18 + (rand() * 14))
-    const radiusMid = Math.round(46 + (rand() * 20))
-    const radiusOuter = Math.round(74 + (rand() * 22))
-    const alphaScale = clamp(settings.radialOpacity * (0.8 + (rand() * 0.7)), 0, GLAZE_RADIAL_OPACITY_MAX)
-    const alphaInner = clamp(alphaScale * (1.0 + (rand() * 0.2)), 0, GLAZE_RADIAL_OPACITY_MAX)
-    const alphaMid = clamp(alphaScale * (0.8 + (rand() * 0.2)), 0, GLAZE_RADIAL_OPACITY_MAX)
-    const alphaOuter = clamp(alphaScale * (0.52 + (rand() * 0.2)), 0, GLAZE_RADIAL_OPACITY_MAX)
-    layers.push(
-      `radial-gradient(circle at ${corner}, rgba(${innerR}, ${innerG}, ${innerB}, ${alphaInner.toFixed(3)}) ${radiusInner}%, rgba(${midR}, ${midG}, ${midB}, ${alphaMid.toFixed(3)}) ${radiusMid}%, rgba(${outerR}, ${outerG}, ${outerB}, ${alphaOuter.toFixed(3)}) ${radiusOuter}%, transparent 100%)`,
-    )
-  }
-
-  return layers
-}
-
-function buildGloomGlazeLayer(settings: GlazeSettings, useLightColor: boolean): string {
-  if (settings.gloomOpacity <= 0) return 'none'
-  const centerPct = clamp(settings.gloomPosition, -0.5, 1.5) * 100
-  const edgeScale = clamp(settings.gloomShape, 0, 2)
-  const edgeAlpha = clamp(settings.gloomOpacity * edgeScale, 0, GLAZE_GLOOM_OPACITY_MAX)
-  const centerAlpha = clamp(settings.gloomOpacity, 0, GLAZE_GLOOM_OPACITY_MAX)
-  const channel = useLightColor ? 255 : 0
-  return `linear-gradient(180deg, rgba(${channel}, ${channel}, ${channel}, ${edgeAlpha.toFixed(3)}) -100%, rgba(${channel}, ${channel}, ${channel}, ${centerAlpha.toFixed(3)}) ${centerPct.toFixed(1)}%, rgba(${channel}, ${channel}, ${channel}, ${edgeAlpha.toFixed(3)}) 200%)`
-}
-
-function buildSheenGlazeLayer(settings: GlazeSettings, useDarkColor: boolean): string {
-  if (settings.sheenOpacity <= 0) return 'none'
-  const centerPct = clamp(settings.sheenPosition, -0.5, 1.5) * 100
-  const edgeScale = clamp(settings.sheenShape, 0, 2)
-  const edgeAlpha = clamp(settings.sheenOpacity * edgeScale, 0, GLAZE_SHEEN_OPACITY_MAX)
-  const centerAlpha = clamp(settings.sheenOpacity, 0, GLAZE_SHEEN_OPACITY_MAX)
-  const channel = useDarkColor ? 0 : 255
-  return `linear-gradient(180deg, rgba(${channel}, ${channel}, ${channel}, ${edgeAlpha.toFixed(3)}) -100%, rgba(${channel}, ${channel}, ${channel}, ${centerAlpha.toFixed(3)}) ${centerPct.toFixed(1)}%, rgba(${channel}, ${channel}, ${channel}, ${edgeAlpha.toFixed(3)}) 200%)`
-}
 
 // Converts a pixel scroll position (e.g. from the legacy per-note SQLite
 // scrollTop column) to an integer line count for storage in
@@ -2028,7 +1825,6 @@ function App() {
   const [spacingRegularPx, setSpacingRegularPx] = useState<number>(DEFAULT_SPACING_REGULAR_PX)
   const [borderAlphaPercent, setBorderAlphaPercent] = useState<number>(DEFAULT_BORDER_ALPHA_PERCENT)
   const [boxShadowAlphaPercent, setBoxShadowAlphaPercent] = useState<number>(DEFAULT_BOX_SHADOW_ALPHA_PERCENT)
-  const borderShadowAlphaBaseValuesRef = useRef<Map<string, string>>(new Map())
 
   // The window-controls column is sized to exactly what's in it -- the audio
   // player on the left, the window buttons on the right, one spacing-regular
@@ -2796,78 +2592,45 @@ function App() {
   const sidebarTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.sidebarContent.color)), [textureMaterials.sidebarContent.color])
   const editorEditTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.editorEditText.color)), [textureMaterials.editorEditText.color])
   const editorRenderTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.editorRenderText.color)), [textureMaterials.editorRenderText.color])
-  const editorEditTextColorCss = useMemo(() => editorTextColors.editorEditText, [editorTextColors.editorEditText])
-  const editorRenderTextColorCss = useMemo(() => editorTextColors.editorRenderText, [editorTextColors.editorRenderText])
   const texturePreviewTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(texturePreviewMaterial.color)), [texturePreviewMaterial.color])
-  const derivedPaletteColors = useMemo(
-    () => derivePaletteTokensFromBaseColor(highlightColors.base),
-    [highlightColors.base],
-  )
-  // Opaque #RRGGBB form of the app's current root background (same color
-  // driving .window-mode-transition-overlay's fill). Reported to the main
-  // process so the native BrowserWindow's own paint fallback matches the
-  // active theme instead of defaulting to white during native bounds changes.
-  const rootBackgroundColorHex = useMemo(() => {
-    const rgba = parseCssColorToRgba(derivedPaletteColors.parchmentLightest)
-      ?? { r: 249, g: 246, b: 244, a: 1 }
-    return rgbaToHex({ ...rgba, a: 1 }).slice(0, 7)
-  }, [derivedPaletteColors.parchmentLightest])
-  const textEmbossUiPrimaryRgba = useMemo(
-    () => parseCssColorToRgba(highlightColors.textEmbossUi) ?? { r: 255, g: 255, b: 255, a: 1 },
-    [highlightColors.textEmbossUi],
-  )
-  const textEmbossUiSecondaryCss = useMemo(
-    () => rgbaToCssColor(invertRgbaColor(textEmbossUiPrimaryRgba, 0.22)),
-    [textEmbossUiPrimaryRgba],
-  )
-  // Line-number gutter color: rendered as an opaque color (its shadow stays
-  // the same emboss shadow as the rest of the editor text, unaffected by
-  // this color's own alpha) with the chosen color's alpha applied as
-  // `opacity` on the whole glyph+shadow element instead -- so a translucent
-  // pick fades the number and its shadow uniformly as one composited unit,
-  // rather than tinting each independently which read as muddy/inconsistent
-  // (per direct user testing).
-  const lineNumberRgba = useMemo(
-    () => parseCssColorToRgba(highlightColors.lineNumber) ?? { r: 0, g: 0, b: 0, a: 0.6 },
-    [highlightColors.lineNumber],
-  )
-  const lineNumberOpaqueCss = useMemo(
-    () => rgbaToCssColor({ ...lineNumberRgba, a: 1 }),
-    [lineNumberRgba],
-  )
-  const textEmbossEditPrimaryRgba = useMemo(
-    () => parseCssColorToRgba(highlightColors.textEmbossEdit) ?? { r: 255, g: 255, b: 255, a: 1 },
-    [highlightColors.textEmbossEdit],
-  )
-  const textEmbossEditSecondaryCss = useMemo(
-    () => rgbaToCssColor(invertRgbaColor(textEmbossEditPrimaryRgba, 0.22)),
-    [textEmbossEditPrimaryRgba],
-  )
-  const textEmbossRenderPrimaryRgba = useMemo(
-    () => parseCssColorToRgba(highlightColors.textEmbossRender) ?? { r: 255, g: 255, b: 255, a: 1 },
-    [highlightColors.textEmbossRender],
-  )
-  const textEmbossRenderSecondaryCss = useMemo(
-    () => rgbaToCssColor(invertRgbaColor(textEmbossRenderPrimaryRgba, 0.22)),
-    [textEmbossRenderPrimaryRgba],
-  )
-  const textBaseRgba = useMemo(
-    () => parseCssColorToRgba(highlightColors.textBase) ?? { r: 0, g: 0, b: 0, a: 0.867 },
-    [highlightColors.textBase],
-  )
-  const textColorWithAlphaScale = useCallback((alphaScale: number) => rgbaToCssColor({
-    ...textBaseRgba,
-    a: clamp(textBaseRgba.a * alphaScale, 0, 1),
-  }), [textBaseRgba])
-  const textColor90 = useMemo(() => textColorWithAlphaScale(0.9), [textColorWithAlphaScale])
-  const textColor80 = useMemo(() => textColorWithAlphaScale(0.8), [textColorWithAlphaScale])
-  const textColor70 = useMemo(() => textColorWithAlphaScale(0.7), [textColorWithAlphaScale])
-  const textColor60 = useMemo(() => textColorWithAlphaScale(0.6), [textColorWithAlphaScale])
-  const textColor50 = useMemo(() => textColorWithAlphaScale(0.5), [textColorWithAlphaScale])
-  const textColor40 = useMemo(() => textColorWithAlphaScale(0.4), [textColorWithAlphaScale])
-  const textColor30 = useMemo(() => textColorWithAlphaScale(0.3), [textColorWithAlphaScale])
-  const textColor20 = useMemo(() => textColorWithAlphaScale(0.2), [textColorWithAlphaScale])
-  const textColor10 = useMemo(() => textColorWithAlphaScale(0.1), [textColorWithAlphaScale])
+  // Everything the visual loadout decides about the look, in one place
+  // (shared/loadoutTheme.ts), which the mobile app uses as well.
+  const theme = useMemo(() => themeFrame({
+    borderRadiusRegularPx,
+    spacingRegularPx,
+    borderAlphaPercent,
+    boxShadowAlphaPercent,
+    highlightColors,
+    editorTextColors,
+    glaze: glazeSettings,
+    filterInvert,
+    filterSepia,
+    filterHueRotate,
+    filterBrightness,
+    filterContrast,
+    filterSaturate,
+    filterColorize,
+  }, {
+    reduceVisualEffects,
+    isPreviewMode: activeSectionSnapshot?.isPreviewMode ?? false,
+  }), [
+    borderRadiusRegularPx,
+    spacingRegularPx,
+    borderAlphaPercent,
+    boxShadowAlphaPercent,
+    highlightColors,
+    editorTextColors,
+    glazeSettings,
+    filterInvert,
+    filterSepia,
+    filterHueRotate,
+    filterBrightness,
+    filterContrast,
+    filterSaturate,
+    filterColorize,
+    reduceVisualEffects,
+    activeSectionSnapshot?.isPreviewMode,
+  ])
 
   useEffect(() => {
     const textureApi = window.thockdownTextures
@@ -4991,8 +4754,8 @@ function App() {
   }, [])
 
   useEffect(() => {
-    window.windowControls?.reportBackgroundColor?.(rootBackgroundColorHex)
-  }, [rootBackgroundColorHex])
+    window.windowControls?.reportBackgroundColor?.(theme.backgroundHex)
+  }, [theme.backgroundHex])
 
   useEffect(() => {
     applyRenderScrollDynamic(renderScrollDynamic)
@@ -5079,26 +4842,9 @@ function App() {
   )
 
   const appShellStyle = useMemo(() => {
-    const borderRadiusRegularPxCss = `${borderRadiusRegularPx}px`
-    const borderRadiusSmallPxCss = `${Math.max(0, borderRadiusRegularPx / 2)}px`
-    const spacingRegularPxCss = `${spacingRegularPx}px`
     const style: CSSProperties & Record<string, string> = {
       gridTemplateColumns: layout.gridTemplateColumns,
-      '--border-radius-regular': borderRadiusRegularPxCss,
-      '--border-radius-small': borderRadiusSmallPxCss,
-      '--spacing-regular': spacingRegularPxCss,
-      '--color-bg-regular': highlightColors.background,
-      '--color-bg-leading': highlightColors.topBackground,
-      '--color-bg-trailing': highlightColors.bottomBackground,
-      '--color-grid-outline': highlightColors.gridOutline,
-      '--color-grid-bg': highlightColors.grid,
-      '--color-gutter-bg': highlightColors.gutterBackground,
-      '--color-immersive-scroll-thumb': highlightColors.immersiveScrollThumb,
-      '--color-review-line': highlightColors.reviewLine,
-      '--color-warning-line': highlightColors.warningLine,
-      '--color-line-number': lineNumberOpaqueCss,
-      '--line-number-opacity': String(lineNumberRgba.a),
-      '--color-caret': highlightColors.caret,
+      ...theme.shellVariables,
       // Caret outline/halo geometry + colours (Options > Caret). The blink
       // keyframes read these same vars so fill, outline and halo fade as one
       // -- see buildCaretBlinkKeyframesCss.
@@ -5108,31 +4854,6 @@ function App() {
       '--caret-halo-blur': `${caretHaloBlurPx}px`,
       '--caret-halo-color': caretHaloColor,
       '--caret-animation-duration': `${caretAnimationDurationMs}ms`,
-      '--color-selection': activeSectionSnapshot?.isPreviewMode ? highlightColors.selectionRender : highlightColors.selectionEdit,
-      '--color-input-backdrop': highlightColors.inputFields,
-      '--canonical-scroll-track-bg': highlightColors.inputFields,
-      '--btn-bg-default': highlightColors.appButtons,
-      '--canonical-handle-bg': highlightColors.appButtons,
-      '--text-shadow-emboss-main': highlightColors.textEmbossUi,
-      '--text-shadow-emboss-secondary': textEmbossUiSecondaryCss,
-      '--text-shadow-emboss-ui-main': highlightColors.textEmbossUi,
-      '--text-shadow-emboss-ui-secondary': textEmbossUiSecondaryCss,
-      '--text-shadow-emboss-edit-main': highlightColors.textEmbossEdit,
-      '--text-shadow-emboss-edit-secondary': textEmbossEditSecondaryCss,
-      '--text-shadow-emboss-render-main': highlightColors.textEmbossRender,
-      '--text-shadow-emboss-render-secondary': textEmbossRenderSecondaryCss,
-      '--color-text-base': highlightColors.textBase,
-      '--color-text-90': textColor90,
-      '--color-text-80': textColor80,
-      '--color-text-70': textColor70,
-      '--color-text-60': textColor60,
-      '--color-text-50': textColor50,
-      '--color-text-40': textColor40,
-      '--color-text-30': textColor30,
-      '--color-text-20': textColor20,
-      '--color-text-10': textColor10,
-      '--color-editor-edit-text': editorEditTextColorCss,
-      '--color-editor-render-text': editorRenderTextColorCss,
       '--texture-app-grid': appGridTextureCss,
       '--texture-sidebar-content': sidebarTextureCss,
       '--texture-editor-edit': editorEditTextTextureCss,
@@ -5141,144 +4862,26 @@ function App() {
       '--texture-sidebar-content-tint': sidebarTextureTintCss,
       '--texture-editor-edit-tint': editorEditTextureTintCss,
       '--texture-editor-render-tint': editorRenderTextureTintCss,
-      '--markdown-headline-color': highlightColors.markdownHeadline,
-      '--markdown-list-color': highlightColors.markdownList,
-      '--markdown-blockquote-color': highlightColors.markdownBlockquote,
-      '--markdown-code-color': highlightColors.markdownCode,
-      '--markdown-checked-color': highlightColors.markdownChecked,
-      '--markdown-unchecked-color': highlightColors.markdownUnchecked,
     }
     return style
   }, [
+    theme.shellVariables,
     appGridTextureCss,
     appGridTextureTintCss,
-    borderRadiusRegularPx,
-    spacingRegularPx,
     editorEditTextTextureCss,
     editorEditTextureTintCss,
     editorRenderTextTextureCss,
     editorRenderTextureTintCss,
-    highlightColors,
     caretOutlineWidthPx,
     caretOutlineColor,
     caretHaloSpreadPx,
     caretHaloBlurPx,
     caretHaloColor,
     caretAnimationDurationMs,
-    activeSectionSnapshot?.isPreviewMode,
-    editorEditTextColorCss,
-    editorRenderTextColorCss,
     layout.gridTemplateColumns,
     sidebarTextureCss,
     sidebarTextureTintCss,
-    textEmbossUiSecondaryCss,
-    textEmbossEditSecondaryCss,
-    textEmbossRenderSecondaryCss,
-    lineNumberOpaqueCss,
-    lineNumberRgba,
-    textColor90,
-    textColor80,
-    textColor70,
-    textColor60,
-    textColor50,
-    textColor40,
-    textColor30,
-    textColor20,
-    textColor10,
   ])
-
-  // Apply all filter sliders at one wrapper level so the full composited scene
-  // (base backdrop + glaze + sheen + app-shell + colorize) is filtered as one.
-  //
-  // Invert is treated as a real binary (filterInvert > 0.5, same threshold
-  // already used elsewhere -- gloom/sheen color choice, shadow-flip) rather
-  // than folded into the same continuous filter chain as the purely
-  // decorative sliders: it's the app's core dark/light theming primitive
-  // (every dark preset sets it), not an optional tint. When it's the ONLY
-  // active visual effect -- which is exactly what "reduce visual effects +
-  // dark mode" is -- it skips `filter` entirely and applies via a
-  // mix-blend-mode overlay instead (see the invertViaBlendMode render
-  // below), which is materially cheaper: filter forces re-rasterization of
-  // this whole subtree on every repaint underneath it (see C2), while a
-  // blend-mode overlay just changes how an already-current frame composites,
-  // at the cost every frame pays anyway.
-  //
-  // This can ONLY be done risk-free when nothing else in the chain is
-  // active: invert doesn't commute with sepia/brightness/contrast (unlike
-  // hue-rotate, which is a pure hue-domain rotation and does commute with
-  // invert) -- reordering invert relative to those would visibly change
-  // every existing dark preset's tuned appearance (mono/dusk/neon/matrix all
-  // pair invert with sepia/brightness/contrast). So whenever any of those
-  // are also active, invert stays in the filter chain, in its original
-  // first position, exactly as before -- zero behavior change for the
-  // shipped presets.
-  const { appOuterStyle, invertViaBlendMode } = useMemo(() => {
-    const nonInvertFilterParts: string[] = []
-    // Low-power toggle: a `filter` on this wrapper forces re-rasterization
-    // of everything under it on every repaint (see C2) -- force the
-    // decorative sliders off here rather than making the user reset every
-    // one to get that back. Invert is handled separately below since it's
-    // functional, not decorative.
-    if (!reduceVisualEffects) {
-      if (filterSepia > 0) nonInvertFilterParts.push(`sepia(${filterSepia})`)
-      if (filterHueRotate !== 0) nonInvertFilterParts.push(`hue-rotate(${filterHueRotate}deg)`)
-      if (filterBrightness !== 1) nonInvertFilterParts.push(`brightness(${filterBrightness})`)
-      if (filterContrast !== 1) nonInvertFilterParts.push(`contrast(${filterContrast})`)
-
-      const saturateCssValue = saturatePosToValue(filterSaturate)
-      if (Math.abs(saturateCssValue - 1) > 0.001) {
-        nonInvertFilterParts.push(`saturate(${saturateCssValue.toFixed(4)})`)
-      }
-    }
-
-    const invertActive = filterInvert > 0.5
-    const cheapInvert = invertActive && nonInvertFilterParts.length === 0
-
-    const style: CSSProperties = {
-      backgroundColor: 'var(--palette-parchment-lightest)',
-    }
-    const filterParts = cheapInvert
-      ? nonInvertFilterParts
-      : (filterInvert > 0 ? [`invert(${filterInvert})`, ...nonInvertFilterParts] : nonInvertFilterParts)
-    if (filterParts.length > 0) {
-      style.filter = filterParts.join(' ')
-    }
-    return { appOuterStyle: style, invertViaBlendMode: cheapInvert }
-  }, [
-    filterBrightness,
-    filterContrast,
-    filterHueRotate,
-    filterInvert,
-    filterSepia,
-    filterSaturate,
-    reduceVisualEffects,
-  ])
-
-  // Low-power toggle: forces every glaze layer's background-image to 'none'
-  // regardless of individual slider positions -- combined with C1's
-  // conditional mounting, this means the glaze-overlay-layer divs (and
-  // their per-repaint mix-blend-mode cost) simply don't mount at all.
-  const glazeLinearBackgroundImage = useMemo(() => {
-    if (reduceVisualEffects) return 'none'
-    const linearLayers = buildLinearGlazeLayers(glazeSettings)
-    return linearLayers.length > 0 ? linearLayers.join(', ') : 'none'
-  }, [glazeSettings, reduceVisualEffects])
-
-  const glazeRadialBackgroundImage = useMemo(() => {
-    if (reduceVisualEffects) return 'none'
-    const radialLayers = buildRadialGlazeLayers(glazeSettings)
-    return radialLayers.length > 0 ? radialLayers.join(', ') : 'none'
-  }, [glazeSettings, reduceVisualEffects])
-
-  const glazeGloomBackgroundImage = useMemo(() => {
-    if (reduceVisualEffects) return 'none'
-    return buildGloomGlazeLayer(glazeSettings, filterInvert > 0.5)
-  }, [glazeSettings, filterInvert, reduceVisualEffects])
-
-  const glazeSheenBackgroundImage = useMemo(() => {
-    if (reduceVisualEffects) return 'none'
-    return buildSheenGlazeLayer(glazeSettings, filterInvert > 0.5)
-  }, [glazeSettings, filterInvert, reduceVisualEffects])
 
   // The caret's blink keyframes are generated rather than shipped statically:
   // every part of the rule (stop positions, per-segment step counts, how many
@@ -5313,80 +4916,19 @@ function App() {
     ],
   )
 
-  const appRootStyle = useMemo(() => {
-    const borderRadiusRegularPxCss = `${borderRadiusRegularPx}px`
-    const borderRadiusSmallPxCss = `${Math.max(0, borderRadiusRegularPx / 2)}px`
-    const spacingRegularPxCss = `${spacingRegularPx}px`
-    return {
-      '--border-radius-regular': borderRadiusRegularPxCss,
-      '--border-radius-small': borderRadiusSmallPxCss,
-      '--spacing-regular': spacingRegularPxCss,
-      '--glaze-linear-background-image': glazeLinearBackgroundImage,
-      '--glaze-radial-background-image': glazeRadialBackgroundImage,
-      '--glaze-gloom-background-image': glazeGloomBackgroundImage,
-      '--glaze-sheen-background-image': glazeSheenBackgroundImage,
-      '--text-shadow-emboss-main': highlightColors.textEmbossUi,
-      '--text-shadow-emboss-secondary': textEmbossUiSecondaryCss,
-      '--text-shadow-emboss-ui-main': highlightColors.textEmbossUi,
-      '--text-shadow-emboss-ui-secondary': textEmbossUiSecondaryCss,
-      '--text-shadow-emboss-edit-main': highlightColors.textEmbossEdit,
-      '--text-shadow-emboss-edit-secondary': textEmbossEditSecondaryCss,
-      '--text-shadow-emboss-render-main': highlightColors.textEmbossRender,
-      '--text-shadow-emboss-render-secondary': textEmbossRenderSecondaryCss,
-      '--color-text-base': highlightColors.textBase,
-      '--color-text-90': textColor90,
-      '--color-text-80': textColor80,
-      '--color-text-70': textColor70,
-      '--color-text-60': textColor60,
-      '--color-text-50': textColor50,
-      '--color-text-40': textColor40,
-      '--color-text-30': textColor30,
-      '--color-text-20': textColor20,
-      '--color-text-10': textColor10,
-      '--palette-parchment-lightest': derivedPaletteColors.parchmentLightest,
-      '--palette-parchment-light': derivedPaletteColors.parchmentLight,
-      '--palette-parchment-mid': derivedPaletteColors.parchmentMid,
-      '--palette-parchment-dark': derivedPaletteColors.parchmentDark,
-      '--palette-parchment-input': derivedPaletteColors.parchmentInput,
-      '--palette-shadow-white-lo': derivedPaletteColors.shadowWhiteLo,
-      '--palette-shadow-white-mid': derivedPaletteColors.shadowWhiteMid,
-      '--palette-shadow-white-hi': derivedPaletteColors.shadowWhiteHi,
-    } as CSSProperties & Record<string, string>
-  }, [
-    derivedPaletteColors,
-    borderRadiusRegularPx,
-    spacingRegularPx,
-    glazeLinearBackgroundImage,
-    glazeRadialBackgroundImage,
-    glazeGloomBackgroundImage,
-    glazeSheenBackgroundImage,
-    highlightColors.textEmbossUi,
-    highlightColors.textEmbossEdit,
-    highlightColors.textEmbossRender,
-    highlightColors.textBase,
-    textEmbossUiSecondaryCss,
-    textEmbossEditSecondaryCss,
-    textEmbossRenderSecondaryCss,
-    textColor90,
-    textColor80,
-    textColor70,
-    textColor60,
-    textColor50,
-    textColor40,
-    textColor30,
-    textColor20,
-    textColor10,
-  ])
+  const appRootStyle = useMemo(
+    () => theme.rootVariables as CSSProperties & Record<string, string>,
+    [theme.rootVariables],
+  )
 
   useEffect(() => {
-    const rootStyle = document.documentElement.style
-    rootStyle.setProperty('--border-radius-regular', `${borderRadiusRegularPx}px`)
-    rootStyle.setProperty('--border-radius-small', `${Math.max(0, borderRadiusRegularPx / 2)}px`)
-  }, [borderRadiusRegularPx])
-
-  useEffect(() => {
-    document.documentElement.style.setProperty('--spacing-regular', `${spacingRegularPx}px`)
-  }, [spacingRegularPx])
+    applyDocumentTheme(document.documentElement, {
+      borderRadiusRegularPx,
+      spacingRegularPx,
+      borderAlphaPercent,
+      boxShadowAlphaPercent,
+    })
+  }, [borderRadiusRegularPx, spacingRegularPx, borderAlphaPercent, boxShadowAlphaPercent])
 
   useEffect(() => {
     const rootStyle = document.documentElement.style
@@ -5394,38 +4936,6 @@ function App() {
     rootStyle.setProperty('--ui-font-scale', String(uiFontScale))
     document.documentElement.dataset.uiFont = uiFontStyle
   }, [uiFontStyle, uiFontScale])
-
-  // Base (un-scaled) value of each border/box-shadow token, captured the
-  // first time it's read -- i.e. from tokens.css, before this effect ever
-  // overrides it -- so repeated slider moves always scale from the original
-  // design value instead of compounding on the previous override.
-  useEffect(() => {
-    const root = document.documentElement
-    const computed = getComputedStyle(root)
-    const factor = borderAlphaPercent / 100
-    BORDER_ALPHA_TOKENS.forEach((token) => {
-      let base = borderShadowAlphaBaseValuesRef.current.get(token)
-      if (base === undefined) {
-        base = resolveCssVarValueDeep(computed.getPropertyValue(token).trim(), computed)
-        borderShadowAlphaBaseValuesRef.current.set(token, base)
-      }
-      root.style.setProperty(token, scaleAlphaInCssValue(base, factor))
-    })
-  }, [borderAlphaPercent])
-
-  useEffect(() => {
-    const root = document.documentElement
-    const computed = getComputedStyle(root)
-    const factor = boxShadowAlphaPercent / 100
-    BOX_SHADOW_ALPHA_TOKENS.forEach((token) => {
-      let base = borderShadowAlphaBaseValuesRef.current.get(token)
-      if (base === undefined) {
-        base = resolveCssVarValueDeep(computed.getPropertyValue(token).trim(), computed)
-        borderShadowAlphaBaseValuesRef.current.set(token, base)
-      }
-      root.style.setProperty(token, scaleAlphaInCssValue(base, factor))
-    })
-  }, [boxShadowAlphaPercent])
 
   // Writes a structured debug entry to a session-scoped debug note (tagged
   // "debug"). No-ops when debuggingEnabled is false. Safe to call from any
@@ -9679,16 +9189,8 @@ ${markdownHtml}
         </div>
       ) : null}
       <style>{caretBlinkKeyframesCss}</style>
-      <div className="app-saturate-wrapper" style={{ ...appOuterStyle, position: 'fixed', inset: 0 }}>
-        <div className={`glaze-overlay-stack${glazeSettings.radialAboveLinear ? ' radial-above-linear' : ''}`} aria-hidden="true">
-          {/* mix-blend-mode forces the browser to blend against every repaint
-              underneath it (i.e. every keystroke's repaint of the editor),
-              not just paint once -- only mount a layer when its glaze
-              setting is actually active. */}
-          {glazeLinearBackgroundImage !== 'none' && <div className="glaze-overlay-layer glaze-overlay-layer-linear" />}
-          {glazeRadialBackgroundImage !== 'none' && <div className="glaze-overlay-layer glaze-overlay-layer-radial" />}
-          {glazeGloomBackgroundImage !== 'none' && <div className="glaze-overlay-layer glaze-overlay-layer-gloom" />}
-        </div>
+      <div className="app-saturate-wrapper" style={{ ...theme.wrapperStyle, position: 'fixed', inset: 0 }}>
+        <ThemeGlazeLayers glaze={theme.glaze} radialAboveLinear={glazeSettings.radialAboveLinear} />
         {/* Mounted here (inside .app-saturate-wrapper, not as a sibling of
             it like MouseCursorOverlay) deliberately -- unlike the cursor
             overlay, tooltips should still pick up this wrapper's own
@@ -10709,46 +10211,7 @@ ${markdownHtml}
             </div>
           </div>
         </div>
-        {invertViaBlendMode && (
-          <div
-            style={{
-              position: 'fixed',
-              inset: 0,
-              backgroundColor: '#fff',
-              // 'difference' against a solid white top layer is an exact
-              // per-channel invert (|255 - c| = 255 - c) -- unlike the
-              // filter: invert() this replaces, this is a genuinely cheap
-              // compositor blend rather than a re-rasterize-on-every-repaint
-              // filter effect (see the appOuterStyle comment above).
-              mixBlendMode: 'difference',
-              pointerEvents: 'none',
-              zIndex: 9998,
-            }}
-            aria-hidden="true"
-          />
-        )}
-        {filterColorize > 0 && !reduceVisualEffects && (
-          <div
-            style={{
-              position: 'fixed',
-              inset: 0,
-              // 50% saturation gives a GIMP-colorize-like result: strong enough to
-              // be visible on neutral text colours, not so strong it oversaturates
-              // already-colourful UI elements. Lightness 50% keeps the hue pure.
-              background: `hsl(${filterHueRotate}deg, 50%, 50%)`,
-              opacity: filterColorize,
-              // 'color' blend mode takes hue+saturation from this overlay and keeps
-              // only the backdrop's luminosity â€” unlike 'hue', it still colorizes
-              // near-neutral/grey pixels (e.g. text at #222) since the saturation
-              // comes entirely from the overlay rather than being multiplied by
-              // the (near-zero) backdrop saturation.
-              mixBlendMode: 'color',
-              pointerEvents: 'none',
-              zIndex: 9999,
-            }}
-            aria-hidden="true"
-          />
-        )}
+        <ThemeBlendOverlays theme={theme} />
       </div>
       {/* Mounted once, app-wide -- not scoped to the editor. See that
           component's own doc comment for why it's a sibling of
