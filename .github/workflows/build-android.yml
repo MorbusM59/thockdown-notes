@@ -1,7 +1,13 @@
-# Builds the mobile soundscape app (mobile/README.md) as a debug APK and
-# uploads it as a workflow artifact, so it can be installed on a phone
-# without Android Studio. Run by hand from the Actions tab, or on any push
-# that touches what goes into it.
+# Builds the mobile soundscape app (mobile/README.md) as a debug APK, so it
+# can be installed on a phone without Android Studio. Run by hand from the
+# Actions tab, or on any push that touches what goes into it.
+#
+# Every build uploads a workflow artifact. A build of main ALSO replaces the
+# APK on the `android-latest` prerelease, because an artifact always
+# downloads as a zip and a phone cannot install from inside one: the release
+# asset is the plain .apk at a fixed address. The tag does not start with
+# `v`, so it does not trigger build-mac.yml, and its title does not match
+# "Alpha Release #N", so release-windows.yml's numbering ignores it.
 name: Build Android APK
 
 on:
@@ -16,6 +22,9 @@ on:
       - "public/soundscape-generator.js"
       - "capacitor.config.ts"
       - ".github/workflows/build-android.yml"
+
+permissions:
+  contents: write
 
 jobs:
   build-android:
@@ -49,3 +58,20 @@ jobs:
         with:
           name: thockdown-soundscapes-debug-apk
           path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Publish to the android-latest prerelease
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp mobile/android/app/build/outputs/apk/debug/app-debug.apk thockdown-soundscapes.apk
+          # Move the tag to this commit, so the release says what it was built from.
+          git tag -f android-latest
+          git push -f origin refs/tags/android-latest
+          if gh release view android-latest >/dev/null 2>&1; then
+            gh release upload android-latest thockdown-soundscapes.apk --clobber
+          else
+            gh release create android-latest thockdown-soundscapes.apk --prerelease \
+              --title "Android soundscapes (latest build)" \
+              --notes "Debug build of the mobile soundscape app from the latest main. Replaced on every build; see mobile/README.md."
+          fi

@@ -43,8 +43,11 @@ is why the DSP must stay free of DOM dependencies.
 
 ## Build
 - Browser, for the interface: `npm run mobile:dev`.
-- APK without Android Studio: run the **Build Android APK** workflow from the
-  Actions tab and download the `thockdown-soundscapes-debug-apk` artifact.
+- APK without Android Studio: on the phone, open
+  `https://github.com/MorbusM59/thockdown-notes/releases/download/android-latest/thockdown-soundscapes.apk`
+  (rebuilt on every push to `main` that touches the app). Any other build's
+  APK is the zipped `thockdown-soundscapes-debug-apk` artifact on its
+  workflow run.
 - Locally, with the Android SDK: `npm run mobile:build`, then
   `cd mobile/android && ./gradlew assembleDebug` (or open `mobile/android` in
   Android Studio).
