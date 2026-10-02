@@ -1,30 +1,33 @@
 /**
- * The dedicated worker that renders a soundscape ahead of playback
- * (soundscapeRenderAhead.ts). Created by SoundscapeEngine, one per running
- * soundscape, and terminated with it.
+ * The dedicated worker that renders the finished soundscape ahead of
+ * playback (soundscapeRenderAhead.ts). Created by SoundscapeEngine, one per
+ * running soundscape, and terminated with it.
  *
  * Messages from the engine:
- * - `init`: the sample rate, the generator's options, and a MessagePort to
- *   the player worklet. Chunks go to the player over that port directly, and
- *   the player's `consumed` reports come back over it, so the main thread is
- *   not on the audio's path (and its throttling in a background app cannot
- *   starve playback).
- * - `configure`: new settings, as built by toGeneratorConfiguration.
+ * - `init`: the sample rate, the generator's options, the output's splice
+ *   margin, and a MessagePort to the output. Chunks go to the output over
+ *   that port and its `played` reports come back over it. On desktop the
+ *   port's other end is the player worklet, so the main thread is not on
+ *   the audio's path at all; on Android it is the main thread, which hands
+ *   the chunks to the native output.
+ * - `configure`: new settings (a ConfigureMessage).
  */
 import generatorSource from './soundscape-generator.js?raw';
 import { hostGenerator, type GeneratorOptions } from './soundscapeGeneratorHost';
-import { RenderAhead } from './soundscapeRenderAhead';
+import { SoundscapeMix } from './soundscapeMix';
+import { RenderAhead, type ConfigureMessage } from './soundscapeRenderAhead';
 
 interface InitMessage {
   type: 'init';
   sampleRate: number;
   options: GeneratorOptions;
-  player: MessagePort;
+  spliceMarginSec: number;
+  output: MessagePort;
 }
 
 let renderer: RenderAhead | null = null;
 // A configure that arrived before init finished (both are posted at start).
-let pendingConfigure: unknown = null;
+let pendingConfigure: ConfigureMessage | null = null;
 
 // Yields to waiting messages between chunks without a timer: a message
 // posted to oneself is queued behind everything already waiting.
@@ -36,21 +39,23 @@ const schedule = (work: () => void) => {
   yieldChannel.port2.postMessage(null);
 };
 
-self.onmessage = (event: MessageEvent<InitMessage | { type: 'configure' }>) => {
+self.onmessage = (event: MessageEvent<InitMessage | ConfigureMessage>) => {
   const message = event.data;
   if (message.type === 'init') {
-    const player = message.player;
+    const output = message.output;
     const generator = hostGenerator(generatorSource, message.sampleRate, message.options);
     renderer = new RenderAhead(
       generator,
+      new SoundscapeMix(message.sampleRate),
       message.sampleRate,
-      (chunk, transfer) => player.postMessage(chunk, transfer),
+      message.spliceMarginSec,
+      (chunk, transfer) => output.postMessage(chunk, transfer),
       schedule,
     );
-    player.onmessage = (reply: MessageEvent<{ type: 'consumed'; generation: number; frames: number }>) => {
-      if (reply.data?.type === 'consumed') renderer?.consumed(reply.data.generation, reply.data.frames);
+    output.onmessage = (reply: MessageEvent<{ type: 'played'; frame: number }>) => {
+      if (reply.data?.type === 'played') renderer?.played(reply.data.frame);
     };
-    if (pendingConfigure !== null) renderer.configure(pendingConfigure);
+    if (pendingConfigure) renderer.configure(pendingConfigure);
     pendingConfigure = null;
     return;
   }

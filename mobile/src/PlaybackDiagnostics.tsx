@@ -1,10 +1,11 @@
 /**
  * TEMPORARY: a readout of the soundscape's playback statistics
- * (SoundscapeEngine.subscribeStats), for finding where the dropouts on an
- * app switch come from. Read after switching away and back:
- * - "Player ran dry" rising means the render worker fell behind;
- * - "Output underruns" rising while the player never ran dry means audio
- *   was queued and the output path below the player stalled anyway.
+ * (SoundscapeEngine.subscribeStats), kept until playback through the native
+ * output is confirmed on a device:
+ * - "Queued ahead": audio queued at the output past what it has played;
+ * - "Output ran dry": silence the output played for want of queued audio;
+ * - "Device underruns": the audio device's own count (AudioTrack's on
+ *   Android), silence it played because the output did not deliver in time.
  * Delete this, and its mount in MobileSoundscapeApp, once that is settled.
  */
 import { useEffect, useState } from 'react'
@@ -19,10 +20,8 @@ export function PlaybackDiagnostics() {
   const rows: Array<[string, string]> = stats
     ? [
         ['Queued ahead', seconds(stats.queuedSec)],
-        ['Player ran dry', `${stats.playerDryEvents} times, ${seconds(stats.playerDrySec)}`],
-        ['Output underruns', stats.outputUnderrunEvents === null
-          ? 'not reported by this WebView'
-          : `${stats.outputUnderrunEvents} times, ${seconds(stats.outputUnderrunSec ?? 0)}`],
+        ['Output ran dry', `${stats.outputDryEvents} times, ${seconds(stats.outputDrySec)}`],
+        ['Device underruns', stats.deviceUnderruns === null ? 'not reported' : String(stats.deviceUnderruns)],
       ]
     : [['Status', 'start a soundscape']]
   return (

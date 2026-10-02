@@ -21,30 +21,44 @@ elements, so a change to a preset reaches both. Textures are the one part of
 a preset the phone does not draw: they are rendered by a worker and cached by
 the desktop's main process. The desktop's custom layouts are not offered.
 
-## Playback: rendered ahead, then buffered
-Two layers protect playback against a busy CPU; both apply to the desktop
-app as well, which shares the engine.
+## Playback: rendered ahead, played natively
+The whole soundscape -- the generator (`src/sound/soundscape-generator.js`)
+and the mix after it (`src/sound/soundscapeMix.ts`: the space as a
+partitioned convolution, the mix gain, the bus compressor) -- is rendered in
+a worker (`soundscapeRender.worker.ts`, `soundscapeRenderAhead.ts`), up to
+ten seconds ahead of playback. The output only plays finished samples and
+applies the listener's volume:
+- **On Android** that output is native (`nativeSoundscapeOutput.ts` ->
+  `BackgroundAudioPlugin.java` -> `SoundscapeAudioOutput.java`): a queue in
+  the app's own process, written to the platform's AudioTrack by a thread of
+  audio priority. This is the fix for the dropout heard on every switch to
+  another app. Diagnostics showed audio queued in the WebView and still
+  cutting out: the WebView's own audio output pauses or stalls on the
+  switch, so no queue inside the WebView could cover it. A queue outside it
+  does.
+- **On desktop** it is the player worklet (`public/soundscape-player.js`,
+  `soundscapeWebAudioOutput.ts`) into the shared output limiter, where the
+  music joins it.
 
-**Render-ahead** (`src/sound/soundscapeRenderAhead.ts`, run by
-`soundscapeRender.worker.ts`). The generator (`src/sound/soundscape-generator.js`)
-renders in a worker, off the audio thread, and keeps up to ten seconds of
-finished audio queued at the player worklet (`public/soundscape-player.js`),
-which only copies samples. A stall from another app now has to starve the
-worker for ten seconds before anything is heard. A settings change starts a
-new generation: the worker renders from the new settings at once, the player
-crossfades to it over 50 ms (measured in a browser: heard within 100 ms), and
-the lead rebuilds from zero, so playback is only as robust as the output
-buffer alone for a few seconds after a change. Master volume and on/off act
-after the player and never discard the lead.
+Both outputs are plain queues of frames at absolute positions. A settings
+change is spliced in a margin past the output's last reported position and
+crossfaded by the WORKER from the audio it already sent, so no output
+computes anything. Heard in a browser within 100-150 ms.
 
-**Output buffer** (`src/sound/audioOutputBus.ts`): 200 ms requested, which
-Chromium clamps to its maximum (8192 frames, about 171 ms at 48 kHz). This is
-what covers the seconds after a change, and the player's own copying.
+**Measured against the Web Audio graph it replaced**, on the same generator
+output for all six factory soundscapes (20 s each at 48 kHz): the
+convolution equals the ConvolverNode's to within 1e-7 of full scale, and the
+compressor, which uses Chromium's static curve and makeup gain
+(`dynamicsCompressor.ts`), matches the node's loudness to 0.00 dB in every
+100 ms window, with correlation 1.000.
 
-Not yet known: whether Android keeps a worker in the WebView scheduled with
-the screen off under the foreground service. The worker renders only when
-the player reports consumption, never on a timer, so timer throttling cannot
-starve it; scheduling of the thread itself is the device test.
+Samples cross the plugin bridge as 16-bit at half scale (the native side
+applies the volume and doubles them back), so a mix above full scale before
+the volume is not clipped early.
+
+Not yet known: the dropout on an app switch is expected to be gone, and
+that is the device test. The main thread hands chunks to the native side; a
+pause of the main thread is covered by the seconds queued natively.
 
 ## Layout
 - `mobile/src/` — the web app: `MobileSoundscapeApp.tsx` (the screen),

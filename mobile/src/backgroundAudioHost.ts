@@ -23,8 +23,26 @@ export interface BackgroundAudioPlugin {
   addListener(event: 'stopRequested', listener: () => void): Promise<PluginListenerHandle>
 }
 
+/**
+ * The native soundscape output (BackgroundAudioPlugin.java,
+ * SoundscapeAudioOutput.java); used through nativeSoundscapeOutput.ts.
+ */
+export interface NativeOutputPlugin {
+  /** Open the output; its sample rate is the device's. */
+  openOutput(): Promise<{ sampleRate: number }>
+  /** Queue `data` (base64 of interleaved 16-bit little-endian stereo at half scale) at `startFrame`. */
+  write(options: { startFrame: number; data: string }): Promise<void>
+  setVolume(options: { volume: number; timeConstantSec: number }): Promise<void>
+  closeOutput(): Promise<void>
+  addListener(event: 'played', listener: (data: { frame: number }) => void): Promise<PluginListenerHandle>
+  addListener(
+    event: 'outputStats',
+    listener: (data: { queuedFrames: number; dryFrames: number; dryEvents: number; deviceUnderruns: number }) => void,
+  ): Promise<PluginListenerHandle>
+}
+
 const nativePlugin = Capacitor.isNativePlatform()
-  ? registerPlugin<BackgroundAudioPlugin>('BackgroundAudio')
+  ? registerPlugin<BackgroundAudioPlugin & NativeOutputPlugin>('BackgroundAudio')
   : null
 
 export const backgroundAudioHost: BackgroundAudioPlugin = nativePlugin ?? {
@@ -32,3 +50,6 @@ export const backgroundAudioHost: BackgroundAudioPlugin = nativePlugin ?? {
   stop: async () => {},
   addListener: async () => ({ remove: async () => {} }),
 }
+
+/** The native output, or null in a plain browser, where the engine keeps its Web Audio output. */
+export const nativeOutputPlugin: NativeOutputPlugin | null = nativePlugin

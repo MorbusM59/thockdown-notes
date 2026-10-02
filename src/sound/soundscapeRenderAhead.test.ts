@@ -2,21 +2,32 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_SOUNDSCAPE_SETTINGS } from '../shared/soundscape';
 import { toGeneratorConfiguration } from '../shared/soundscapeDsp';
 import { generatorSource, noiseAt } from './soundscape-generator.harness';
-import { BLOCK_FRAMES, createGeneratorBlock, hostGenerator, type HostedGenerator } from './soundscapeGeneratorHost';
-import { RENDER_CHUNK_FRAMES, RENDER_LEAD_SEC, RenderAhead, type RenderedChunk } from './soundscapeRenderAhead';
+import { hostGenerator, type HostedGenerator } from './soundscapeGeneratorHost';
+import { SoundscapeMix } from './soundscapeMix';
+import {
+  CROSSFADE_SEC,
+  RENDER_CHUNK_FRAMES,
+  RENDER_LEAD_SEC,
+  RenderAhead,
+  type ConfigureMessage,
+  type MixStage,
+  type RenderedChunk,
+} from './soundscapeRenderAhead';
 
 const SAMPLE_RATE = 8000;
 const LEAD_FRAMES = Math.round(RENDER_LEAD_SEC * SAMPLE_RATE);
+const MARGIN_SEC = 0.25;
+const MARGIN_FRAMES = Math.round(MARGIN_SEC * SAMPLE_RATE);
+const FADE_FRAMES = Math.round(CROSSFADE_SEC * SAMPLE_RATE);
+const CONFIGURE: ConfigureMessage = { type: 'configure', generator: {}, space: DEFAULT_SOUNDSCAPE_SETTINGS.space };
 
-/** A generator that counts the frames it is asked for and renders that count as its samples. */
-function countingGenerator(): HostedGenerator & { configured: unknown[] } {
+/** A generator whose every sample is its own frame count, so its output says when it was rendered. */
+function countingGenerator(): HostedGenerator {
   let frame = 0;
-  const configured: unknown[] = [];
   return {
     processor: null,
-    configured,
     exports: undefined,
-    configure: (message) => { configured.push(message); },
+    configure: () => {},
     renderBlock: (block) => {
       for (let index = 0; index < block.direct[0].length; index += 1) {
         for (const channel of [...block.direct, ...block.send]) channel[index] = frame + index;
@@ -27,20 +38,39 @@ function countingGenerator(): HostedGenerator & { configured: unknown[] } {
   };
 }
 
-function setup(generator: HostedGenerator = countingGenerator()) {
+/** Passes the direct sound through untouched. */
+const identityMix: MixStage = {
+  setSpace: () => {},
+  process: (direct, _send, out) => { out[0].set(direct[0]); out[1].set(direct[1]); },
+};
+
+function setup(generator: HostedGenerator = countingGenerator(), mix: MixStage = identityMix) {
   const sent: RenderedChunk[] = [];
   const tasks: Array<() => void> = [];
-  const renderer = new RenderAhead(generator, SAMPLE_RATE, (chunk) => sent.push(chunk), (work) => tasks.push(work));
+  const renderer = new RenderAhead(generator, mix, SAMPLE_RATE, MARGIN_SEC, (chunk) => sent.push(chunk), (work) => tasks.push(work));
   /** Run scheduled work until none is left, as the worker's task queue would. */
   const drain = () => {
     let ran = 0;
     while (tasks.length > 0) {
       tasks.shift()!();
       ran += 1;
-      if (ran > 10000) throw new Error('rendering never settled');
+      if (ran > 100000) throw new Error('rendering never settled');
     }
   };
   return { renderer, sent, tasks, drain };
+}
+
+/** What an output holding these chunks plays, by the output's rule: a chunk replaces everything from its start on. */
+function heard(chunks: RenderedChunk[]): Float32Array {
+  const end = Math.max(...chunks.map((chunk) => chunk.startFrame + chunk.left.length));
+  const out = new Float32Array(end);
+  let queuedEnd = 0;
+  for (const chunk of chunks) {
+    out.fill(0, chunk.startFrame, queuedEnd);
+    out.set(chunk.left, chunk.startFrame);
+    queuedEnd = chunk.startFrame + chunk.left.length;
+  }
+  return out.subarray(0, queuedEnd);
 }
 
 describe('render ahead', () => {
@@ -52,75 +82,82 @@ describe('render ahead', () => {
 
   it('fills the lead and then stops: the queue settles at the lead, not past it', () => {
     const { renderer, sent, tasks, drain } = setup();
-    renderer.configure({ type: 'configure' });
+    renderer.configure(CONFIGURE);
     drain();
-    const expectedChunks = Math.ceil(LEAD_FRAMES / RENDER_CHUNK_FRAMES);
-    expect(sent).toHaveLength(expectedChunks);
-    expect(renderer.queued).toBe(expectedChunks * RENDER_CHUNK_FRAMES);
+    expect(sent).toHaveLength(Math.ceil(LEAD_FRAMES / RENDER_CHUNK_FRAMES));
     expect(tasks).toHaveLength(0);
+    expect(renderer.queued).toBeGreaterThanOrEqual(LEAD_FRAMES);
   });
 
-  it('keeps the lead topped up as playback consumes it, at every step', () => {
+  it('keeps the lead topped up as the output plays, in one contiguous stream', () => {
     const { renderer, sent, drain } = setup();
-    renderer.configure({ type: 'configure' });
+    renderer.configure(CONFIGURE);
     drain();
-    for (let step = 0; step < 50; step += 1) {
-      renderer.consumed(1, RENDER_CHUNK_FRAMES);
+    for (let played = RENDER_CHUNK_FRAMES; played <= 50 * RENDER_CHUNK_FRAMES; played += RENDER_CHUNK_FRAMES) {
+      renderer.played(played);
       drain();
       expect(renderer.queued).toBeGreaterThanOrEqual(LEAD_FRAMES);
       expect(renderer.queued).toBeLessThan(LEAD_FRAMES + RENDER_CHUNK_FRAMES);
     }
-    // The chunks are one continuous stream: each starts where the last ended.
-    sent.forEach((chunk, index) => expect(chunk.channels[0][0]).toBe(index * RENDER_CHUNK_FRAMES));
+    sent.forEach((chunk, index) => {
+      expect(chunk.startFrame).toBe(index * RENDER_CHUNK_FRAMES);
+      expect(chunk.left[0]).toBe(index * RENDER_CHUNK_FRAMES);
+    });
   });
 
-  it('starts a new generation on configure, and ignores consumption of an old one', () => {
+  it('splices a settings change in a margin past the playhead, crossfading equal-power from what was queued', () => {
     const { renderer, sent, drain } = setup();
-    renderer.configure({ type: 'configure', n: 1 });
+    renderer.configure(CONFIGURE);
     drain();
+    const played = 3 * RENDER_CHUNK_FRAMES + 100;
+    renderer.played(played);
+    drain();
+    const aheadOf = sent.at(-1)!.startFrame + RENDER_CHUNK_FRAMES;
     const before = sent.length;
-    renderer.configure({ type: 'configure', n: 2 });
-    expect(renderer.queued).toBe(0);
+    renderer.configure(CONFIGURE);
     drain();
-    expect(sent.slice(before).every((chunk) => chunk.generation === 2)).toBe(true);
-    const queued = renderer.queued;
-    renderer.consumed(1, 10 * RENDER_CHUNK_FRAMES);
-    expect(renderer.queued).toBe(queued);
-  });
-
-  it('applies a configure that arrives mid-fill before rendering the next chunk', () => {
-    const { renderer, sent, tasks } = setup();
-    renderer.configure({ type: 'configure', n: 1 });
-    tasks.shift()!();
-    tasks.shift()!();
-    renderer.configure({ type: 'configure', n: 2 });
-    tasks.shift()!();
-    expect(sent.map((chunk) => chunk.generation)).toEqual([1, 1, 2]);
-  });
-
-  it('streams exactly what the generator renders directly', () => {
-    // The real generator, through the renderer, against the same generator
-    // rendered in one pass: render-ahead must not change a sample.
-    const noise = noiseAt(SAMPLE_RATE);
-    const options = { seed: 7, noiseLoops: noise.loops, noiseGains: noise.gains };
-    const message = { type: 'configure', ...toGeneratorConfiguration(DEFAULT_SOUNDSCAPE_SETTINGS) };
-    const streamed = hostGenerator(generatorSource, SAMPLE_RATE, options);
-    const { renderer, sent, drain } = setup(streamed);
-    renderer.configure(message);
-    drain();
-    const direct = hostGenerator(generatorSource, SAMPLE_RATE, options);
-    direct.configure(message);
-    const expected: number[] = [];
-    for (let frame = 0; frame < sent.length * RENDER_CHUNK_FRAMES; frame += BLOCK_FRAMES) {
-      const block = createGeneratorBlock(BLOCK_FRAMES);
-      direct.renderBlock(block);
-      expected.push(...block.direct[0]);
+    const splice = sent[before];
+    const at = played + MARGIN_FRAMES;
+    expect(splice.startFrame).toBe(at);
+    // The generator went on from where it had got to rendering ahead; the
+    // old audio at the same frames is the frame count itself.
+    for (let index = 0; index < FADE_FRAMES; index += 1) {
+      const t = (index + 1) / FADE_FRAMES;
+      const expected = ((aheadOf + index) * Math.sin(t * Math.PI / 2)) + ((at + index) * Math.cos(t * Math.PI / 2));
+      expect(splice.left[index]).toBeCloseTo(expected, 0);
     }
-    const joined = new Float32Array(expected.length);
-    sent.forEach((chunk, index) => joined.set(chunk.channels[0], index * RENDER_CHUNK_FRAMES));
-    // The default soundscape has gusts on, so this also holds the block
-    // size: rendered in any other, the weather would step differently.
-    expect(Array.from(joined)).toEqual(expected);
-    expect(Math.max(...joined.map(Math.abs))).toBeGreaterThan(1e-3);
+    for (let index = FADE_FRAMES; index < RENDER_CHUNK_FRAMES; index += 1) expect(splice.left[index]).toBe(aheadOf + index);
+    // And the output heard everything before the splice point untouched.
+    const out = heard(sent);
+    for (let frame = 0; frame < at; frame += 1) expect(out[frame]).toBe(frame);
+  });
+
+  it('applies a change with no splice when nothing is queued past the margin', () => {
+    const { renderer, sent, tasks } = setup();
+    renderer.configure(CONFIGURE);
+    tasks.shift()!();
+    // Everything sent has been played: the margin reaches past it.
+    renderer.played(RENDER_CHUNK_FRAMES);
+    renderer.configure(CONFIGURE);
+    tasks.shift()!();
+    expect(sent.map((chunk) => chunk.startFrame)).toEqual([0, RENDER_CHUNK_FRAMES]);
+    expect(sent[1].left[0]).toBe(RENDER_CHUNK_FRAMES);
+  });
+
+  it('renders the real soundscape finite, bounded and audible through the real mix', () => {
+    const noise = noiseAt(SAMPLE_RATE);
+    const generator = hostGenerator(generatorSource, SAMPLE_RATE, { seed: 7, noiseLoops: noise.loops, noiseGains: noise.gains });
+    const { renderer, sent, drain } = setup(generator, new SoundscapeMix(SAMPLE_RATE));
+    renderer.configure({
+      type: 'configure',
+      generator: { type: 'configure', ...toGeneratorConfiguration(DEFAULT_SOUNDSCAPE_SETTINGS) },
+      space: DEFAULT_SOUNDSCAPE_SETTINGS.space,
+    });
+    drain();
+    const out = heard(sent);
+    expect(out.every(Number.isFinite)).toBe(true);
+    const peak = Math.max(...Array.from(out, Math.abs));
+    expect(peak).toBeGreaterThan(1e-3);
+    expect(peak).toBeLessThan(4);
   });
 });

@@ -1,7 +1,8 @@
 /**
  * The space the soundscape layers play in, as a stereo impulse response for the
- * engine's ConvolverNode (src/sound/SoundscapeEngine.ts). Pure, and built
- * on the main thread whenever the soundscape's space changes.
+ * mix's convolution (src/sound/soundscapeMix.ts, partitionedConvolver.ts).
+ * Pure, and built in the render worker whenever the soundscape's space
+ * changes.
  *
  * What makes a synthetic reverb read as a place rather than as an effect:
  * - an EXPONENTIAL decay (energy falls a fixed number of decibels per second;
@@ -28,8 +29,9 @@
  *   heard on a sound with an onset -- a drop, a drip, a strike, thunder --
  *   and not on a steady one, which it only colours.
  *
- * LEVEL. The engine's ConvolverNode does not normalise (`normalize = false`):
- * the browser's normalisation rescales every response to one power, which
+ * LEVEL. The convolution does not normalise. It replaced a ConvolverNode set
+ * to `normalize = false`, because the browser's normalisation rescales every
+ * response to one power, which
  * turned a darker tail back up and hid damping. The response is calibrated
  * here instead, once, from its UNDAMPED tail: scaled to the power Chromium's
  * normalisation gave it (SPACE_CALIBRATION), so a space at damping 0 with no
