@@ -22,14 +22,17 @@ a preset the phone does not draw: they are rendered by a worker and cached by
 the desktop's main process. The desktop's custom layouts are not offered.
 
 ## Output buffer
-The shared output context (`src/sound/audioOutputBus.ts`) is created with
-`latencyHint: 'playback'`, so the browser uses a larger output buffer than
-its interactive default and a short CPU stall is absorbed instead of heard
-as a crackle. Measured in desktop Chromium on Linux: base latency 10 ms
-(interactive) against 23 ms (playback). Android's playback buffer is chosen
-by the platform and has not been measured on a device. If crackling
-persists, the next step is a NUMBER for `latencyHint` (seconds), which asks
-for a specific buffer size.
+The shared output context (`src/sound/audioOutputBus.ts`) asks for a 200 ms
+buffer, which Chromium clamps to its maximum (8192 frames, about 171 ms at
+48 kHz), so a CPU stall shorter than that is absorbed instead of heard as a
+click. `'playback'` came first and gave 23 ms (desktop Chromium) and still
+clicked on a phone, most audibly in Under water: rendered offline it is one
+of the cheapest soundscapes (12% of real time at 48 kHz, against
+Thunderstorm's 45%) and its signal is free of discontinuities, so the clicks
+are output dropouts that its smooth sound fails to mask, not artefacts of
+the soundscape. There is no larger buffer to ask the browser for; if clicks
+remain, the cause is sustained load rather than a stall, and the generator
+has to cost less.
 
 ## Layout
 - `mobile/src/` — the web app: `MobileSoundscapeApp.tsx` (the screen),

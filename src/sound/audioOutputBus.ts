@@ -5,25 +5,36 @@
  * here, so music and ambience share one ceiling instead of each clipping on
  * its own.
  *
- * The context is created with latencyHint 'playback': the browser then uses
- * a larger output buffer than its default ('interactive', sized for sound
- * that must answer a keypress at once), so a short stall of the CPU is
- * absorbed by the buffer instead of being heard as a crackle when the
- * output runs dry. Nothing routed here needs that immediacy: a soundscape
- * and a music track only start, stop and fade. Typing sounds, which do,
- * have their own context (TypingSoundManager).
+ * The context asks for a large output buffer (OUTPUT_BUFFER_SEC) instead of
+ * the browser's default, which is sized for sound that must answer a
+ * keypress at once. A stall of the CPU shorter than the buffer is then
+ * absorbed instead of being heard as a click where the output ran dry --
+ * heard worst in a smooth soundscape such as Under water, which has no noise
+ * to mask a gap. Nothing routed here needs immediacy: a soundscape and a
+ * music track only start, stop, fade and seek, and each of those now takes
+ * effect up to one buffer later. Typing sounds, which do need it, have their
+ * own context (TypingSoundManager).
  *
  * It lives apart from both of its users so that neither depends on the
  * other: the mobile build ships the soundscape engine without the music
  * player, and the desktop build is unchanged by that.
  */
+/**
+ * Requested output buffer, in seconds. Chromium clamps a numeric latencyHint
+ * to its largest Web Audio buffer (8192 frames: about 186 ms at 44.1 kHz,
+ * 171 ms at 48 kHz, measured in desktop Chromium), so this asks for that
+ * maximum. The 'playback' hint, used before, gave 23 ms on the same machine
+ * and still clicked on a phone.
+ */
+const OUTPUT_BUFFER_SEC = 0.2;
+
 let context: AudioContext | null = null;
 let limiter: DynamicsCompressorNode | null = null;
 
 /** The shared context, built on first use and rebuilt if it was closed. */
 export function outputContext(): AudioContext {
   if (!context || context.state === 'closed') {
-    context = new AudioContext({ latencyHint: 'playback' });
+    context = new AudioContext({ latencyHint: OUTPUT_BUFFER_SEC });
     limiter = context.createDynamicsCompressor();
     limiter.threshold.value = -1;
     limiter.knee.value = 0;
