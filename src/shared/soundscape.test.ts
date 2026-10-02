@@ -26,7 +26,7 @@ import {
   noiseColourWeights,
   noiseFilterPower,
   resolveSoundscapeSpace,
-  toWorkletConfiguration,
+  toGeneratorConfiguration,
 } from './soundscapeDsp';
 import { SOUNDSCAPE_BELL_RAMP_NEAREST_SINE, buildNoiseCycle } from './soundscapeNoiseCycle';
 import { buildSoundscapeImpulseResponse, spaceDecaySec } from './soundscapeSpace';
@@ -266,7 +266,7 @@ describe('distance', () => {
 
 describe('the configure message', () => {
   it('carries every enabled and disabled channel, and the weather', () => {
-    const configuration = toWorkletConfiguration(DEFAULT_SOUNDSCAPE_SETTINGS);
+    const configuration = toGeneratorConfiguration(DEFAULT_SOUNDSCAPE_SETTINGS);
     expect(configuration.channels.map((channel) => channel.id)).toEqual(SOUNDSCAPE_CHANNEL_ROSTER.map((entry) => entry.id));
     expect(configuration.weather).toEqual(DEFAULT_SOUNDSCAPE_SETTINGS.weather);
     for (const channel of configuration.channels) {

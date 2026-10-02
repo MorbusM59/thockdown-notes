@@ -14,8 +14,8 @@
  * layer is therefore new roster entries and nothing else -- a save made
  * before it simply finds those channels at their disabled defaults.
  *
- * The synthesis lives in public/soundscape-generator.js (an AudioWorklet, which
- * cannot import from here); the per-layer values it needs that are cheaper to
+ * The synthesis lives in src/sound/soundscape-generator.js (plain JavaScript,
+ * evaluated by its host, which cannot import from here); the per-layer values it needs that are cheaper to
  * derive on the main thread are resolved in soundscapeDsp.ts. The rain
  * surfaces are named in both places, and soundscape-generator.test.ts asserts
  * that every surface named here has a profile there.
@@ -25,7 +25,7 @@ import { CHIME_SCALE_COUNT } from './soundscapeChimeScales';
 
 /**
  * What chimes can be made of, and where each sits on the material slider;
- * mirrored by CHIME_MATERIALS in public/soundscape-generator.js, which
+ * mirrored by CHIME_MATERIALS in src/sound/soundscape-generator.js, which
  * soundscape-generator.test.ts holds to these.
  */
 export const SOUNDSCAPE_CHIME_MATERIALS = [
@@ -41,7 +41,7 @@ export type SoundscapeNoiseType = (typeof SOUNDSCAPE_NOISE_TYPES)[number];
 /**
  * What a rain layer's drops land on, one number from 0 (softest) to 1
  * (hardest). Every drop is the same model, its parameters blended between
- * these anchors (public/soundscape-generator.js's surfaceProfile), each a
+ * these anchors (src/sound/soundscape-generator.js's surfaceProfile), each a
  * different kind of impact rather than a different filter over one sound:
  * - forest (0): a soft, low pat on leaves with a small thud underneath.
  * - canvas (0.25): a taut membrane -- a tent, an awning, an umbrella -- a
@@ -171,7 +171,7 @@ export interface SoundscapeRainChannelSettings extends SoundscapeChannelBaseSett
 }
 
 /**
- * One storm cell, rumbling now and then (public/soundscape-generator.js's
+ * One storm cell, rumbling now and then (src/sound/soundscape-generator.js's
  * startPeal). `share` is the part of the time it sounds: after a peal of
  * length L it is silent for L x (1 - share) / share. After every peal
  * `randomness` moves every other control of the next one by up to
@@ -334,7 +334,7 @@ export interface SoundscapeSpaceSettings {
   amount: number;
 }
 
-/** The scene's one gust signal (the worklet's advanceWeather). */
+/** The scene's one gust signal (the generator's advanceWeather). */
 export interface SoundscapeWeatherSettings {
   /** 0 calm to 1 squally: how far a gust or a lull moves the layers that follow it. */
   gustiness: number;
@@ -402,7 +402,7 @@ export const SOUNDSCAPE_CHIME_PITCH_MIN_HZ = 440 * (2 ** (SOUNDSCAPE_CHIME_SEMIT
 export const SOUNDSCAPE_CHIME_PITCH_MAX_HZ = 440 * (2 ** (SOUNDSCAPE_CHIME_SEMITONE_MAX / 12));
 export const SOUNDSCAPE_CHIME_TUBES_MIN = 3;
 export const SOUNDSCAPE_CHIME_TUBES_MAX = 8;
-/** A water layer's bubbles per second at bubbles 0 and 1; mirrors WATER_BUBBLES_PER_SEC in public/soundscape-generator.js. */
+/** A water layer's bubbles per second at bubbles 0 and 1; mirrors WATER_BUBBLES_PER_SEC in src/sound/soundscape-generator.js. */
 export const SOUNDSCAPE_WATER_BUBBLES_PER_SEC = [15, 500] as const;
 export const SOUNDSCAPE_CHIME_RING_MIN_SEC = 1;
 export const SOUNDSCAPE_CHIME_RING_MAX_SEC = 15;
@@ -432,7 +432,7 @@ export function soundscapeFaderDb(position: number): number {
  * A part's level slider (a fire's crackle, a rain's wash, ...): silence at
  * 0, the part as authored at SOUNDSCAPE_PART_AUTHORED, and evenly in decibels
  * SOUNDSCAPE_PART_DB_PER_UNIT per unit of travel either side -- from -48 dB just
- * above 0 to +16 dB at the top. Mirrored as partGain in the worklet.
+ * above 0 to +16 dB at the top. Mirrored as partGain in the generator.
  */
 export const SOUNDSCAPE_PART_AUTHORED = 0.75;
 export const SOUNDSCAPE_PART_DB_PER_UNIT = 64;

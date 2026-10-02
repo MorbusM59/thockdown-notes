@@ -1,6 +1,6 @@
 /**
  * The shape of a noise layer's level over one cycle (its `curve` and `skew`),
- * as a table the worklet plays on repeat. Depends only on smoothCurve.ts.
+ * as a table the generator plays on repeat. Depends only on smoothCurve.ts.
  */
 import { buildBellEnvelope, warpForSkew } from './smoothCurve';
 
@@ -11,7 +11,7 @@ import { buildBellEnvelope, warpForSkew } from './smoothCurve';
 export const SOUNDSCAPE_BELL_RAMP_MIN = 0.1;
 export const SOUNDSCAPE_BELL_RAMP_MAX = 5;
 
-/** Samples per noise cycle table; the worklet interpolates between them. */
+/** Samples per noise cycle table; the generator interpolates between them. */
 export const NOISE_CYCLE_SAMPLES = 256;
 
 function sineCycle(sampleCount: number, shape: number): Float32Array {
@@ -57,7 +57,7 @@ export const SOUNDSCAPE_BELL_RAMP_NEAREST_SINE: number = (() => {
 /**
  * One cycle of a noise layer's level modulation, as a table of values in
  * -1..1 over phase 0..1: -1 at both ends (the trough), +1 at the peak. The
- * worklet plays it on repeat at the layer's period and applies it as
+ * generator plays it on repeat at the layer's period and applies it as
  * `1 + modulationAmplitude * value`.
  *
  * `ramp` (the layer's `curve`, 0-1) decides how much of the cycle is spent near the top, in one

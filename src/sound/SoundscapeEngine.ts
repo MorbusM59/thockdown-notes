@@ -1,12 +1,22 @@
 /**
- * SoundscapeEngine -- the Web Audio graph around the soundscape worklet.
+ * SoundscapeEngine -- the Web Audio graph around the soundscape player.
  *
- *   worklet output 0 (every layer's direct sound, stereo) -------------> mixGain
- *   worklet output 1 (every layer's send to the space, stereo) -> space -> mixGain
+ * The soundscape is synthesised AHEAD of playback by the generator
+ * (src/sound/soundscape-generator.js) running in a worker
+ * (soundscapeRender.worker.ts, soundscapeRenderAhead.ts), which keeps up to
+ * ten seconds of finished audio queued at the player worklet
+ * (public/soundscape-player.js). The audio thread then only copies samples,
+ * so a stall of the CPU from another app is covered by that lead instead of
+ * by one output buffer. Worker and player talk over their own MessageChannel;
+ * this engine only starts them, sends settings to the worker, and builds the
+ * graph after the player:
+ *
+ *   player output 0 (every layer's direct sound, stereo) -------------> mixGain
+ *   player output 1 (every layer's send to the space, stereo) -> space -> mixGain
  *   mixGain -> busLimiter -> the shared output limiter (audioOutputBus.ts)
  *
  * Every layer is placed -- its distance, its direct and send gains -- inside
- * the worklet, by one rule; this graph only carries the two buses. The SPACE
+ * the generator, by one rule; this graph only carries the two buses. The SPACE
  * is a convolution with the soundscape's own impulse response
  * (src/shared/soundscapeSpace.ts). It is two convolvers crossfaded: a changed
  * space is built into whichever is silent and faded in over the other, since
@@ -20,10 +30,10 @@
  * The graph exists only while something is audible: it is built on the
  * first audible `apply` and torn down after a short fade once nothing is.
  * `mixGain` carries both the fade and the listener's master volume. The
- * soundscape's OWN volume is not on it: that is applied inside the worklet,
+ * soundscape's OWN volume is not on it: that is applied inside the generator,
  * in the same `configure` as the channels it belongs to, because a switch
  * from one soundscape to another changes both at once and two separately
- * timed paths (a message to the audio thread, a glide on an AudioParam) play
+ * timed paths (a message to the generator, a glide on an AudioParam) play
  * the new channels at the old soundscape's level until the glide catches up.
  */
 import {
@@ -31,7 +41,7 @@ import {
   type SoundscapePreferences,
   type SoundscapeSpaceSettings,
 } from '../shared/soundscape';
-import { toWorkletConfiguration } from '../shared/soundscapeDsp';
+import { toGeneratorConfiguration } from '../shared/soundscapeDsp';
 import { buildNoiseLoops, noiseLoopGains, type NoiseLoops } from '../shared/soundscapeNoiseLoops';
 import { buildSoundscapeImpulseResponse } from '../shared/soundscapeSpace';
 import { connectToOutput, resumedOutputContext } from './audioOutputBus';
@@ -40,7 +50,7 @@ import { connectToOutput, resumedOutputContext } from './audioOutputBus';
  * Mix level at master volume 1 and a soundscape volume of 1.
  *
  * Keeping a soundscape out of the compressor is the soundscape's own volume
- * (SoundscapeSettings.volume), applied in the worklet ahead of busLimiter and set per
+ * (SoundscapeSettings.volume), applied in the generator ahead of busLimiter and set per
  * soundscape: a natural environment has no compression, and a compressor
  * working on a soundscape is heard as every layer ducking whenever one of
  * them peaks. Measured through the real chain in an OfflineAudioContext (42 s
@@ -62,7 +72,7 @@ const WORKLET_MODULES = new WeakMap<AudioContext, Promise<void>>();
 /**
  * The noise loops and their level-matching gains, per sample rate. Built
  * once on the main thread (tens of milliseconds) and copied into each
- * worklet at creation, so the audio thread never generates noise.
+ * render worker at creation, so the generator never generates noise.
  */
 const NOISE_LOOPS = new Map<number, { loops: NoiseLoops; gains: ReturnType<typeof noiseLoopGains> }>();
 
@@ -88,6 +98,14 @@ interface SpaceSlot {
 export class SoundscapeEngine {
   private context: AudioContext | null = null;
   private worklet: AudioWorkletNode | null = null;
+  private renderWorker: Worker | null = null;
+  /**
+   * The last configuration sent to the render worker, serialised. Each one
+   * starts a new generation there and discards the audio rendered ahead, so
+   * a change that does not touch the generator (master volume, the space's
+   * return, on/off fades) must not send one.
+   */
+  private sentConfiguration: string | null = null;
   private mixGain: GainNode | null = null;
   private busLimiter: DynamicsCompressorNode | null = null;
   private spaceInput: GainNode | null = null;
@@ -143,7 +161,7 @@ export class SoundscapeEngine {
       if (context.state === 'closed') return;
       let modulePromise = WORKLET_MODULES.get(context);
       if (!modulePromise) {
-        const moduleUrl = new URL('soundscape-generator.js', window.location.href).toString();
+        const moduleUrl = new URL('soundscape-player.js', window.location.href).toString();
         modulePromise = context.audioWorklet.addModule(moduleUrl);
         WORKLET_MODULES.set(context, modulePromise);
       }
@@ -157,28 +175,45 @@ export class SoundscapeEngine {
       if (!preferences || !isSoundscapeAudible(preferences)) return;
 
       const noise = noiseLoopsFor(context.sampleRate);
-      const worklet = new AudioWorkletNode(context, 'soundscape-generator', {
+      const worklet = new AudioWorkletNode(context, 'soundscape-player', {
         numberOfInputs: 0,
         numberOfOutputs: 2,
         outputChannelCount: [2, 2],
-        processorOptions: {
+      });
+      const renderWorker = new Worker(new URL('./soundscapeRender.worker.ts', import.meta.url), { type: 'module' });
+      // Chunks go from the worker to the player directly, and the player's
+      // consumption reports come back the same way.
+      const link = new MessageChannel();
+      worklet.port.postMessage({ type: 'connect', port: link.port1 }, [link.port1]);
+      renderWorker.postMessage({
+        type: 'init',
+        sampleRate: context.sampleRate,
+        options: {
           seed: (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0,
           noiseLoops: noise.loops,
           noiseGains: noise.gains,
         },
-      });
+        player: link.port2,
+      }, [link.port2]);
+      // Neither the player nor the worker runs again after an error, so the
+      // graph around them is torn down now rather than after a fade: the
+      // delayed teardown stands down while the preferences are still
+      // audible, which they always are here, and would leave every later
+      // apply() configuring a dead graph. With it gone, the next apply()
+      // builds a new one.
       worklet.onprocessorerror = () => {
-        console.error('Soundscape audio worklet stopped unexpectedly');
-        // A processor that threw does not run again, so the graph around it
-        // is torn down now rather than after a fade: the delayed teardown
-        // stands down while the preferences are still audible, which they
-        // always are here, and would leave every later apply() configuring
-        // a dead node. With the graph gone, the next apply() builds a new one.
+        console.error('Soundscape player stopped unexpectedly');
         if (this.worklet === worklet) this.teardown();
+      };
+      renderWorker.onerror = (event) => {
+        console.error('Soundscape render worker stopped unexpectedly', event.message);
+        if (this.renderWorker === renderWorker) this.teardown();
       };
 
       this.context = context;
       this.worklet = worklet;
+      this.renderWorker = renderWorker;
+      this.sentConfiguration = null;
       const mixGain = context.createGain();
       mixGain.gain.value = 0;
       const busLimiter = context.createDynamicsCompressor();
@@ -244,7 +279,12 @@ export class SoundscapeEngine {
       this.spaceReturnTarget = returnTarget;
     }
     this.scheduleSpace(space);
-    worklet.port.postMessage({ type: 'configure', ...toWorkletConfiguration(preferences.settings) });
+    const configuration = { type: 'configure', ...toGeneratorConfiguration(preferences.settings) };
+    const serialised = JSON.stringify(configuration);
+    if (serialised !== this.sentConfiguration && this.renderWorker) {
+      this.renderWorker.postMessage(configuration);
+      this.sentConfiguration = serialised;
+    }
   }
 
   /**
@@ -307,9 +347,9 @@ export class SoundscapeEngine {
   }
 
   /**
-   * Take the graph down and let its processor go. The `stop` message is what
-   * lets the audio thread drop the processor (see soundscape-generator.js);
-   * disconnecting the node alone leaves it rendering.
+   * Take the graph down and let its processor and worker go. The `stop`
+   * message is what lets the audio thread drop the processor (see
+   * soundscape-player.js); disconnecting the node alone leaves it running.
    */
   private teardown(): void {
     if (this.disconnectTimer !== null) window.clearTimeout(this.disconnectTimer);
@@ -317,6 +357,9 @@ export class SoundscapeEngine {
     if (this.spaceTimer !== null) window.clearTimeout(this.spaceTimer);
     this.spaceTimer = null;
     this.worklet?.port.postMessage({ type: 'stop' });
+    this.renderWorker?.terminate();
+    this.renderWorker = null;
+    this.sentConfiguration = null;
     this.worklet?.disconnect();
     this.mixGain?.disconnect();
     this.busLimiter?.disconnect();

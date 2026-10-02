@@ -1,16 +1,17 @@
 /**
- * The noise the soundscape's noise layers are made of, rendered once on the main
- * thread and handed to the AudioWorklet when it is created
- * (src/sound/SoundscapeEngine.ts, public/soundscape-generator.js).
+ * The noise the soundscape's noise layers are made of, rendered once per
+ * sample rate on the main thread and handed to the generator's render worker
+ * when it is created (src/sound/SoundscapeEngine.ts,
+ * src/sound/soundscape-generator.js).
  *
  * A noise layer reads one of these loops rather than generating noise per
  * sample: noise has no features for an ear to recognise, each layer reads
  * from its own offset under its own level cycle, sway and filter, and
  * reading a table is a fraction of the cost of generating it. They are made
- * here rather than in the worklet because the worklet runs on the audio
- * thread, where rendering a few million samples at once would stall
- * everything that thread plays -- the music included -- for longer than a
- * block lasts.
+ * here rather than by the generator so that they are made once and kept
+ * (SoundscapeEngine's NOISE_LOOPS), not again by every worker a soundscape
+ * starts: a few million samples, which would delay the first sound of
+ * every start.
  */
 import { SOUNDSCAPE_NOISE_TYPES, type SoundscapeNoiseType } from './soundscape';
 

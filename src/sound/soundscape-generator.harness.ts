@@ -1,12 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { runInNewContext } from 'node:vm';
 import { createSoundscapeChannel, SOUNDSCAPE_CHANNEL_ROSTER, DEFAULT_SOUNDSCAPE_WEATHER, type SoundscapeChannelSettings, type SoundscapeWeatherSettings } from '../shared/soundscape';
-import { toWorkletChannel } from '../shared/soundscapeDsp';
+import { toGeneratorChannel } from '../shared/soundscapeDsp';
 import { buildNoiseLoops, noiseLoopGains, type NoiseLoops } from '../shared/soundscapeNoiseLoops';
+import { createGeneratorBlock, hostGenerator } from './soundscapeGeneratorHost';
 
-export const generatorSource = `${readFileSync(fileURLToPath(new URL('../../public/soundscape-generator.js', import.meta.url)), 'utf8')}
-;globalThis.__generator = { RAIN_SURFACE_ANCHORS, surfaceProfile, faderGain, WET_BUBBLE_CHANCE, RAIN_DRIPS_MAX_PER_SEC, CHIME_MATERIALS, chimeMaterial, FIRE_POP, partGain, waterRadiusBounds };`;
+export const generatorSource = readFileSync(fileURLToPath(new URL('./soundscape-generator.js', import.meta.url)), 'utf8');
+/** The generator's constants the tests compare against the app's own. */
+const GENERATOR_EXPORTS = '{ RAIN_SURFACE_ANCHORS, surfaceProfile, faderGain, WET_BUBBLE_CHANCE, RAIN_DRIPS_MAX_PER_SEC, CHIME_MATERIALS, chimeMaterial, FIRE_POP, partGain, waterRadiusBounds }';
 
 const loopsByRate = new Map<number, { loops: NoiseLoops; gains: Record<string, number> }>();
 export function noiseAt(sampleRate: number) {
@@ -23,42 +24,32 @@ export function createProcessor(
   channels: SoundscapeChannelSettings[],
   { seed = 1, sampleRate = 16000, blockSize = 128, weather = DEFAULT_SOUNDSCAPE_WEATHER as SoundscapeWeatherSettings, loops }: { seed?: number; sampleRate?: number; blockSize?: number; weather?: SoundscapeWeatherSettings; loops?: NoiseLoops } = {},
 ) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let Processor!: new (options: unknown) => any;
-  let frame = 0;
-  class WorkletProcessorStub { port = { onmessage: null as ((event: { data: unknown }) => void) | null }; }
-  const scope: Record<string, unknown> = {
-    AudioWorkletProcessor: WorkletProcessorStub,
-    sampleRate,
-    get currentFrame() { return frame; },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    registerProcessor: (_name: string, processor: any) => { Processor = processor; },
-  };
-  runInNewContext(generatorSource, scope);
   const noise = noiseAt(sampleRate);
-  const processor = new Processor({ processorOptions: { seed, noiseLoops: loops ?? noise.loops, noiseGains: loops ? { brown: 1, pink: 1, white: 1 } : noise.gains } });
+  const generator = hostGenerator(generatorSource, sampleRate, {
+    seed,
+    noiseLoops: loops ?? noise.loops,
+    noiseGains: loops ? { brown: 1, pink: 1, white: 1 } : noise.gains,
+  }, GENERATOR_EXPORTS);
   const configure = (next: SoundscapeChannelSettings[], nextWeather = weather, level = 1) => {
-    processor.port.onmessage?.({ data: { type: 'configure', channels: next.map(toWorkletChannel), weather: nextWeather, level } });
+    generator.configure({ type: 'configure', channels: next.map(toGeneratorChannel), weather: nextWeather, level });
   };
   configure(channels);
   return {
-    processor,
+    processor: generator.processor,
     configure,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    constants: scope.__generator as any,
-    get frame() { return frame; },
+    constants: generator.exports as any,
+    get frame() { return generator.frame; },
     render(seconds: number): Rendered {
       const out: Rendered = { left: [], right: [], sendLeft: [], sendRight: [] };
-      const end = frame + Math.floor(seconds * sampleRate);
-      while (frame < end) {
-        const length = Math.min(blockSize, end - frame);
-        const outputs = [[new Float32Array(length), new Float32Array(length)], [new Float32Array(length), new Float32Array(length)]];
-        processor.process([], outputs);
-        for (let i = 0; i < length; i += 1) {
-          out.left.push(outputs[0][0][i]); out.right.push(outputs[0][1][i]);
-          out.sendLeft.push(outputs[1][0][i]); out.sendRight.push(outputs[1][1][i]);
+      const end = generator.frame + Math.floor(seconds * sampleRate);
+      while (generator.frame < end) {
+        const block = createGeneratorBlock(Math.min(blockSize, end - generator.frame));
+        generator.renderBlock(block);
+        for (let i = 0; i < block.direct[0].length; i += 1) {
+          out.left.push(block.direct[0][i]); out.right.push(block.direct[1][i]);
+          out.sendLeft.push(block.send[0][i]); out.sendRight.push(block.send[1][i]);
         }
-        frame += length;
       }
       return out;
     },

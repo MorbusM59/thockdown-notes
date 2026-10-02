@@ -5,7 +5,7 @@ The whole interface is `SoundscapeControls` from
 `src/sidebar/SoundscapeOptions.tsx` plus an on/off switch and a master
 volume, which the desktop keeps on the audio bar instead. Nothing here is a
 copy: the panel, the engine (`src/sound/SoundscapeEngine.ts`), the worklet
-(`public/soundscape-generator.js`) and the settings model
+(`src/sound/soundscape-generator.js`) and the settings model
 (`src/shared/soundscape*.ts`) are the desktop's own files, so a change there
 reaches both.
 
@@ -21,18 +21,30 @@ elements, so a change to a preset reaches both. Textures are the one part of
 a preset the phone does not draw: they are rendered by a worker and cached by
 the desktop's main process. The desktop's custom layouts are not offered.
 
-## Output buffer
-The shared output context (`src/sound/audioOutputBus.ts`) asks for a 200 ms
-buffer, which Chromium clamps to its maximum (8192 frames, about 171 ms at
-48 kHz), so a CPU stall shorter than that is absorbed instead of heard as a
-click. `'playback'` came first and gave 23 ms (desktop Chromium) and still
-clicked on a phone, most audibly in Under water: rendered offline it is one
-of the cheapest soundscapes (12% of real time at 48 kHz, against
-Thunderstorm's 45%) and its signal is free of discontinuities, so the clicks
-are output dropouts that its smooth sound fails to mask, not artefacts of
-the soundscape. There is no larger buffer to ask the browser for; if clicks
-remain, the cause is sustained load rather than a stall, and the generator
-has to cost less.
+## Playback: rendered ahead, then buffered
+Two layers protect playback against a busy CPU; both apply to the desktop
+app as well, which shares the engine.
+
+**Render-ahead** (`src/sound/soundscapeRenderAhead.ts`, run by
+`soundscapeRender.worker.ts`). The generator (`src/sound/soundscape-generator.js`)
+renders in a worker, off the audio thread, and keeps up to ten seconds of
+finished audio queued at the player worklet (`public/soundscape-player.js`),
+which only copies samples. A stall from another app now has to starve the
+worker for ten seconds before anything is heard. A settings change starts a
+new generation: the worker renders from the new settings at once, the player
+crossfades to it over 50 ms (measured in a browser: heard within 100 ms), and
+the lead rebuilds from zero, so playback is only as robust as the output
+buffer alone for a few seconds after a change. Master volume and on/off act
+after the player and never discard the lead.
+
+**Output buffer** (`src/sound/audioOutputBus.ts`): 200 ms requested, which
+Chromium clamps to its maximum (8192 frames, about 171 ms at 48 kHz). This is
+what covers the seconds after a change, and the player's own copying.
+
+Not yet known: whether Android keeps a worker in the WebView scheduled with
+the screen off under the foreground service. The worker renders only when
+the player reports consumption, never on a timer, so timer throttling cannot
+starve it; scheduling of the thread itself is the device test.
 
 ## Layout
 - `mobile/src/` — the web app: `MobileSoundscapeApp.tsx` (the screen),

@@ -1,7 +1,7 @@
 /**
- * What the worklet (public/soundscape-generator.js) is told about each layer:
+ * What the generator (src/sound/soundscape-generator.js) is told about each layer:
  * the stored settings plus everything cheaper to derive once on the main
- * thread than per block on the audio thread -- gains, the distance rule, the
+ * thread than per block in the generator -- gains, the distance rule, the
  * noise cycle and filter-gain tables, the chimes' tuning.
  */
 import {
@@ -88,7 +88,7 @@ export function noiseFocusQ(focus: number): number {
 }
 
 /**
- * The cutoffs the filter-gain table is sampled at, log-spaced: the worklet
+ * The cutoffs the filter-gain table is sampled at, log-spaced: the generator
  * reads it by the log of the cutoff (the sweep moves the cutoff every few
  * milliseconds, too often to integrate a spectrum each time).
  */
@@ -164,7 +164,7 @@ export function chimeTubeFrequencies(pitchHz: number, tubes: number, scale = 0):
 // ---------------------------------------------------------------------------
 // The configure message.
 
-/** One channel as the worklet receives it. */
+/** One channel as the generator receives it. */
 export type SoundscapeWorkletChannel = SoundscapeChannelSettings & {
   /** The fader and the kind's level, as one gain. */
   gain: number;
@@ -191,21 +191,21 @@ export interface SoundscapeWorkletConfiguration {
   weather: SoundscapeSettings['weather'];
   /**
    * The soundscape's own volume as a gain (soundscapeFaderGain). Carried with
-   * the channels so the worklet changes both in the same block.
+   * the channels so the generator changes both in the same block.
    */
   level: number;
 }
 
 /** The `configure` message's payload. */
-export function toWorkletConfiguration(settings: SoundscapeSettings): SoundscapeWorkletConfiguration {
+export function toGeneratorConfiguration(settings: SoundscapeSettings): SoundscapeWorkletConfiguration {
   return {
     weather: { ...settings.weather },
     level: soundscapeFaderGain(settings.volume),
-    channels: settings.channels.map((channel) => toWorkletChannel(channel)),
+    channels: settings.channels.map((channel) => toGeneratorChannel(channel)),
   };
 }
 
-export function toWorkletChannel(channel: SoundscapeChannelSettings): SoundscapeWorkletChannel {
+export function toGeneratorChannel(channel: SoundscapeChannelSettings): SoundscapeWorkletChannel {
   const gain = soundscapeFaderGain(channel.volume) * SOUNDSCAPE_KIND_GAIN[channel.kind];
   switch (channel.kind) {
     case 'noise':
