@@ -48,7 +48,7 @@ import {
   saveScratch,
   type MobileLook,
 } from './preferencesStore'
-import { currentEntryId, followSession, matchingPresetId, nextScratch, sessionEntries } from './sessionEntries'
+import { currentEntryId, followSession, nextScratch, sessionEntries } from './sessionEntries'
 import { allPresets, sanitizeSchedule, scheduleEvents, scheduledPresetAt, type Schedule } from './schedule'
 import { ScheduleGrid } from './ScheduleGrid'
 import { armHold, HOLD_CONFIRM_MS } from '../../src/shared/holdTiming'
@@ -86,6 +86,8 @@ export function MobileSoundscapeApp() {
   // playback instead.
   const [native, setNative] = useState<boolean | null>(null)
   const [clipProgress, setClipProgress] = useState<number | null>(null)
+  // The soundscape picked up for filling schedule slots (ScheduleGrid); not persisted.
+  const [pickedPresetId, setPickedPresetId] = useState<string | null>(null)
 
   useEffect(() => { void nativePlayback.then(setNative) }, [])
 
@@ -333,11 +335,16 @@ export function MobileSoundscapeApp() {
                   <ScheduleGrid
                     schedule={schedule}
                     customPresets={customPresets}
-                    assignablePresetId={matchingPresetId(preferences)}
+                    pickedPresetId={pickedPresetId}
                     onChange={setSchedule}
                   />
                 </div>
-                <SoundscapeControls preferences={preferences} onChange={handleChange} />
+                <SoundscapeControls
+                  preferences={preferences}
+                  onChange={handleChange}
+                  pickedPresetId={pickedPresetId}
+                  onPickPreset={setPickedPresetId}
+                />
               </div>
             </div>
           </div>

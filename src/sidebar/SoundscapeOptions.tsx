@@ -371,6 +371,20 @@ interface SoundscapeOptionsProps {
 }
 
 /**
+ * PICKING UP a soundscape, which a host may offer (the mobile app does, for
+ * its schedule): on touch, a long press on a soundscape picks it up without
+ * playing it, and a tap on the picked-up one puts it down. While one of the
+ * user's own soundscapes is picked up, the save button becomes a DELETE
+ * button for it -- which replaces the touch long-press that otherwise marks
+ * a custom soundscape for deletion. What a picked-up soundscape is FOR is
+ * the host's business.
+ */
+interface SoundscapeControlsProps extends SoundscapeOptionsProps {
+  pickedPresetId?: string | null
+  onPickPreset?: (presetId: string | null) => void
+}
+
+/**
  * New settings, with the active preset re-derived from them: the preset stays
  * selected exactly while the settings still match it. Every edit goes
  * through here, the channel-button wheel included.
@@ -453,7 +467,7 @@ export function SoundscapeOptions(props: SoundscapeOptionsProps) {
  * mobile app (mobile/) shows these controls as its whole interface, where a
  * collapsible section heading would have nothing to collapse against.
  */
-export function SoundscapeControls({ preferences, onChange }: SoundscapeOptionsProps) {
+export function SoundscapeControls({ preferences, onChange, pickedPresetId = null, onPickPreset }: SoundscapeControlsProps) {
   const [pendingDeletePresetId, setPendingDeletePresetId] = useState<string | null>(null)
   const channelSelectorRef = useRef<HTMLDivElement | null>(null)
   const channelHoldRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
@@ -650,6 +664,10 @@ export function SoundscapeControls({ preferences, onChange }: SoundscapeOptionsP
   }
 
   const activatePreset = (preset: SoundscapePreset) => {
+    if (onPickPreset && pickedPresetId === preset.id) {
+      onPickPreset(null)
+      return
+    }
     if (pendingDeletePresetId === preset.id) {
       deletePreset(preset.id)
       return
@@ -657,6 +675,8 @@ export function SoundscapeControls({ preferences, onChange }: SoundscapeOptionsP
     setPendingDeletePresetId(null)
     onChange(applySoundscapePreset(preferences, preset))
   }
+
+  const pickedCustomPreset = preferences.customPresets.find((preset) => preset.id === pickedPresetId) ?? null
 
   const rosterEntry = SOUNDSCAPE_CHANNEL_ROSTER.find((entry) => entry.id === selectedChannel?.id)
   const layerName = rosterEntry ? `${KIND_LOOK[rosterEntry.kind].label} layer ${rosterEntry.number}` : ''
@@ -669,11 +689,19 @@ export function SoundscapeControls({ preferences, onChange }: SoundscapeOptionsP
             <button
               key={preset.id}
               type="button"
-              className={`btn-icon options-color-swatch options-loadout-btn soundscape-preset-btn${selectedPresetId === preset.id ? ' is-active' : ''}`}
-              aria-label={preset.name}
+              className={`btn-icon options-color-swatch options-loadout-btn soundscape-preset-btn${selectedPresetId === preset.id ? ' is-active' : ''}${pickedPresetId === preset.id ? ' is-picked' : ''}`}
+              aria-label={pickedPresetId === preset.id ? `${preset.name}, picked up` : preset.name}
               aria-pressed={selectedPresetId === preset.id}
               data-tooltip={preset.name}
-              onClick={() => activatePreset(preset)}
+              data-secondary-press="none"
+              onClick={() => { if (!swallowsClick()) activatePreset(preset) }}
+              onPointerDown={(event) => {
+                if (event.pointerType === 'touch' && onPickPreset) startTouchHold(event.pointerId, HOLD_CONFIRM_MS, () => onPickPreset(preset.id))
+              }}
+              onPointerUp={(event) => endTouchHold(event.pointerId)}
+              onPointerCancel={(event) => endTouchHold(event.pointerId)}
+              onPointerLeave={(event) => endTouchHold(event.pointerId)}
+              onContextMenu={(event) => event.preventDefault()}
             >
               <span className={`fa-solid ${FACTORY_SOUNDSCAPE_ICONS[preset.id]}`} aria-hidden="true" />
             </button>
@@ -689,15 +717,15 @@ export function SoundscapeControls({ preferences, onChange }: SoundscapeOptionsP
               <button
                 key={preset.id}
                 type="button"
-                className={`btn-icon options-color-swatch options-loadout-btn soundscape-custom-preset-btn${selectedPresetId === preset.id ? ' is-active' : ''}${isPrimed ? ' primed' : ''}`}
-                aria-label={isPrimed ? `Delete ${label}` : label}
+                className={`btn-icon options-color-swatch options-loadout-btn soundscape-custom-preset-btn${selectedPresetId === preset.id ? ' is-active' : ''}${isPrimed ? ' primed' : ''}${pickedPresetId === preset.id ? ' is-picked' : ''}`}
+                aria-label={isPrimed ? `Delete ${label}` : pickedPresetId === preset.id ? `${label}, picked up` : label}
                 aria-pressed={selectedPresetId === preset.id}
                 data-tooltip={isPrimed ? `Click to delete ${label}` : `${label}\nRight-click to mark for deletion, then click.\nHold right-click to export.`}
                 data-secondary-press="action"
                 onClick={() => { if (!swallowsClick()) activatePreset(preset) }}
                 onPointerDown={(event) => {
                   if (event.pointerType === 'touch') {
-                    startTouchHold(event.pointerId, HOLD_CONFIRM_MS, () => setPendingDeletePresetId(preset.id))
+                    startTouchHold(event.pointerId, HOLD_CONFIRM_MS, () => (onPickPreset ? onPickPreset(preset.id) : setPendingDeletePresetId(preset.id)))
                     return
                   }
                   if (event.button !== 2) return
@@ -736,6 +764,21 @@ export function SoundscapeControls({ preferences, onChange }: SoundscapeOptionsP
               </button>
             )
           })}
+          {pickedCustomPreset ? (
+            <button
+              type="button"
+              className="btn-icon options-color-swatch options-loadout-btn options-loadout-plus soundscape-custom-preset-plus primed"
+              aria-label={`Delete ${pickedCustomPreset.name}`}
+              data-secondary-press="none"
+              onClick={() => {
+                deletePreset(pickedCustomPreset.id)
+                onPickPreset?.(null)
+              }}
+              onContextMenu={(event) => event.preventDefault()}
+            >
+              <span className="options-loadout-plus-glyph fa-solid fa-trash" aria-hidden="true" />
+            </button>
+          ) : (
           <button
             type="button"
             className={`btn-icon options-color-swatch options-loadout-btn options-loadout-plus soundscape-custom-preset-plus${hasPendingChanges ? ' is-active' : ''}`}
@@ -784,6 +827,7 @@ export function SoundscapeControls({ preferences, onChange }: SoundscapeOptionsP
           >
             <span className="options-loadout-plus-glyph fa-solid fa-plus" aria-hidden="true" />
           </button>
+          )}
         </div>
 
         {/* The volume, space and weather belong to the whole soundscape

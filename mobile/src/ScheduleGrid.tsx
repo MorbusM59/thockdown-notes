@@ -7,10 +7,15 @@
  * on its own button), dimmed when the slot is off, or the minute when it is
  * a run's start or end. The current hour is outlined.
  *
+ * A soundscape PICKED UP in the panel below (a long press on it) is what a
+ * slot is filled with: while one is picked up every slot shows its HOUR,
+ * so the hours can be found, and every tap puts it into the tapped slot
+ * and turns the slot on -- slot after slot, until it is put down. Without
+ * one, a tap only ever edits a minute, which is why picking up is a state
+ * of its own rather than "whatever is playing": something always is.
+ *
  * Touch, the only input on a phone:
- * - a TAP on an empty or off slot, or the inside of a run, puts the
- *   soundscape playing now into it (and turns it on); on a start or end slot
- *   it steps the minute by 5;
+ * - a TAP, with nothing picked up, steps a start or end slot's minute by 5;
  * - a DOUBLE TAP on a start or end slot sets :00, or from :00 :30
  *   (doubleTappedMinute, which accounts for the first tap's step);
  * - a LONG PRESS turns a slot holding a soundscape on or off; an off slot
@@ -37,8 +42,8 @@ const CELLS = 6
 interface ScheduleGridProps {
   schedule: Schedule
   customPresets: readonly SoundscapePreset[]
-  /** The soundscape a tap puts into a slot: the one playing now, or null when the settings are unsaved. */
-  assignablePresetId: string | null
+  /** The soundscape picked up, which a tap puts into a slot; null for none. */
+  pickedPresetId: string | null
   onChange: (schedule: Schedule) => void
 }
 
@@ -54,7 +59,7 @@ function useCurrentHour(): number {
   return hour
 }
 
-export function ScheduleGrid({ schedule, customPresets, assignablePresetId, onChange }: ScheduleGridProps) {
+export function ScheduleGrid({ schedule, customPresets, pickedPresetId, onChange }: ScheduleGridProps) {
   const currentHour = useCurrentHour()
   const holdRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
   const swallowClickRef = useRef(false)
@@ -72,15 +77,17 @@ export function ScheduleGrid({ schedule, customPresets, assignablePresetId, onCh
     const last = lastTapRef.current
     const isDouble = last !== null && last.hour === hour && timeStamp - last.at < DOUBLE_TAP_MS
     lastTapRef.current = isDouble ? null : { hour, at: timeStamp }
-    if (role === 'start' || role === 'end') {
-      onChange(withSlot(hour, { minute: isDouble ? doubleTappedMinute(slot.minute) : tappedMinute(slot.minute) }))
+    if (pickedPresetId !== null) {
+      if (!(slot.on && slot.presetId === pickedPresetId)) onChange(withSlot(hour, { presetId: pickedPresetId, on: true }))
       return
     }
-    if (assignablePresetId === null || (slot.on && slot.presetId === assignablePresetId)) return
-    onChange(withSlot(hour, { presetId: assignablePresetId, on: true }))
+    if (role === 'start' || role === 'end') {
+      onChange(withSlot(hour, { minute: isDouble ? doubleTappedMinute(slot.minute) : tappedMinute(slot.minute) }))
+    }
   }
 
   const label = (slot: ScheduleSlot, hour: number) => {
+    if (pickedPresetId !== null) return <span className="mobile-schedule-minute">{hour}</span>
     const role = slotRole(schedule, hour)
     if (role === 'start' || role === 'end') {
       return <span className="mobile-schedule-minute">{String(slot.minute).padStart(2, '0')}</span>

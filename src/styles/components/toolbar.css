@@ -1005,6 +1005,12 @@
   filter: var(--filter-primed-delete);
 }
 
+/* A soundscape picked up (SoundscapeControls' onPickPreset): held, not playing. */
+.options-loadout-btn.is-picked {
+  outline: 2px dashed var(--color-text-80);
+  outline-offset: -4px;
+}
+
 /* HSVA drag cursor override */
 body.hsva-dragging,
 body.hsva-dragging * {

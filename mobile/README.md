@@ -117,8 +117,12 @@ session, controls, clips or sharing.
 ## The schedule
 Twenty-four hourly slots (`schedule.ts`, drawn by `ScheduleGrid.tsx` as one
 row of six cells, four half-size slots each: 0h-11h on top, 12h-23h below).
-A tap puts the soundscape playing now into a slot, a long press turns a slot
-on or off; active slots form RUNS round the clock (23h and 0h are
+A long press on a soundscape in the panel PICKS IT UP without playing it
+(the panel's `onPickPreset`, a host option the desktop does not take): every
+slot then shows its hour and every tap fills the tapped slot with it, until
+a tap on it puts it down; one of the user's own, picked up, turns the save
+button into a delete button for it. A long press on a slot turns it on or
+off; active slots form RUNS round the clock (23h and 0h are
 neighbours), a run's first and last slots carry the minute it starts and
 stops at (a tap steps 5 minutes, a double tap goes to :00, or from :00 to
 :30), and a run of one slot is its whole hour. A long press on the power
