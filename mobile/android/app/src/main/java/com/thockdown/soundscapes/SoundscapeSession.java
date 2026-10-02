@@ -190,6 +190,7 @@ final class SoundscapeSession {
         renderer.configure(entry.configuration);
         // A soundscape chosen by hand: the schedule no longer decides.
         SoundscapeSchedule.disable(context);
+        scheduleDisabled();
         refreshService();
         report();
     }
@@ -239,16 +240,16 @@ final class SoundscapeSession {
             currentId = entry.id;
             if (output == null) {
                 open();
-                output.setFade(0f, 0);
+                output.fadeFrom(0f, 1f, SCHEDULE_FADE_SEC);
             } else if (!playing) {
-                output.setFade(0f, 0);
                 renderer.configure(entry.configuration);
+                output.fadeFrom(0f, 1f, SCHEDULE_FADE_SEC);
                 output.setPaused(false);
             } else {
+                // Already playing: the change is the transition itself.
                 renderer.transition(entry.configuration, SCHEDULE_FADE_SEC);
             }
             output.setVolume(masterVolume, VOLUME_TIME_CONSTANT_SEC);
-            output.setFade(1f, playing ? RESTORE_FADE_SEC : SCHEDULE_FADE_SEC);
             playing = true;
         } else {
             // A switch: heard if playing; if paused, the run carries on
@@ -260,6 +261,15 @@ final class SoundscapeSession {
         }
         refreshService();
         report();
+    }
+
+    /**
+     * The schedule was turned off (by hand, here or in the app): whatever it
+     * had under way is abandoned, so a stop it began does not end what the
+     * listener now chose to hear.
+     */
+    synchronized void scheduleDisabled() {
+        cancelScheduledStop();
     }
 
     /** A scheduled stop's fade-out, abandoned: something chose to play. */
@@ -327,7 +337,18 @@ final class SoundscapeSession {
     private void refreshService() {
         if (output == null) return;
         if (SoundscapePlaybackService.refreshIfRunning()) return;
-        ContextCompat.startForegroundService(context, new Intent(context, SoundscapePlaybackService.class));
+        try {
+            ContextCompat.startForegroundService(context, new Intent(context, SoundscapePlaybackService.class));
+        } catch (RuntimeException refused) {
+            // The system refused a start from the background (Android 12
+            // and later allow it only from an exact alarm or the app in
+            // front): end the session rather than play with no service to
+            // keep the process, or the listener, informed.
+            close();
+            playing = false;
+            Listener current = listener;
+            if (current != null) current.onFailure("Soundscape could not start in the background: " + refused);
+        }
     }
 
     /** An entry of the published cycle, or failing that of the schedule, which may name soundscapes outside the cycle. */

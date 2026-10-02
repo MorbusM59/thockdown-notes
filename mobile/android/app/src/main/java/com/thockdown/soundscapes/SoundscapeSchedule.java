@@ -43,6 +43,9 @@ final class SoundscapeSchedule {
     }
 
     static final String ACTION_ALARM = "com.thockdown.soundscapes.SCHEDULE_ALARM";
+    /** Apply the schedule's state now (after a reboot), from an alarm, which may start the service where the boot broadcast may not. */
+    static final String ACTION_APPLY_STATE = "com.thockdown.soundscapes.SCHEDULE_APPLY_STATE";
+    private static final long APPLY_STATE_DELAY_MS = 5000;
     static final String EXTRA_MINUTE = "minute";
     private static final String PREFERENCES = "soundscape-schedule";
     private static final String KEY = "schedule";
@@ -121,11 +124,22 @@ final class SoundscapeSchedule {
         return null;
     }
 
-    /** The events due at `minute` of the day. */
-    List<Event> dueAt(int minute) {
+    /**
+     * The events from `fromMinute` up to and including this minute, in order,
+     * round midnight if need be. An alarm armed for `fromMinute` may arrive
+     * late (Android defers exact alarms in deep sleep, by minutes when two
+     * fall close together), and an event between the two would otherwise be
+     * skipped, since the next alarm is armed for after now.
+     */
+    List<Event> dueSince(int fromMinute) {
+        int now = minuteOfDay(Calendar.getInstance());
+        int span = Math.floorMod(now - fromMinute, MINUTES_PER_DAY);
         List<Event> due = new ArrayList<>();
-        for (Event event : events) {
-            if (event.minute == minute) due.add(event);
+        for (int offset = 0; offset <= span; offset += 1) {
+            int minute = (fromMinute + offset) % MINUTES_PER_DAY;
+            for (Event event : events) {
+                if (event.minute == minute) due.add(event);
+            }
         }
         return due;
     }
@@ -150,6 +164,21 @@ final class SoundscapeSchedule {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true;
         AlarmManager alarms = context.getSystemService(AlarmManager.class);
         return alarms.canScheduleExactAlarms();
+    }
+
+    /**
+     * After a reboot: arm a one-off alarm a few seconds from now that applies
+     * the schedule's state (ScheduleReceiver). The boot broadcast itself may
+     * not start a media-playback service on Android 15 and later; an exact
+     * alarm may.
+     */
+    static void armApplyState(Context context) {
+        Context app = context.getApplicationContext();
+        if (!load(app).enabled || !canArm(app)) return;
+        Intent intent = new Intent(app, ScheduleReceiver.class).setAction(ACTION_APPLY_STATE);
+        app.getSystemService(AlarmManager.class).setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,
+            System.currentTimeMillis() + APPLY_STATE_DELAY_MS,
+            PendingIntent.getBroadcast(app, 1, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE));
     }
 
     /** Arm the alarm for the stored schedule's next event, or cancel it if the schedule is off. */

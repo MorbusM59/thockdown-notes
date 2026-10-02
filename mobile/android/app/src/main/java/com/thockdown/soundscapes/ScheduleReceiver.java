@@ -6,11 +6,13 @@ import android.content.Intent;
 
 /**
  * Where the schedule acts with the app closed (SoundscapeSchedule):
- * - its alarm: the events due at that minute go to the session, then the
- *   next alarm is armed;
- * - a reboot or an app update, which clear alarms: the schedule's state at
- *   this moment is applied (a run in progress plays), and the alarm armed
- *   again;
+ * - its alarm: the events due since the minute it was armed for go to the
+ *   session (an alarm can arrive late, and an event in between must not be
+ *   skipped), then the next alarm is armed;
+ * - a reboot or an app update, which clear alarms: the alarm is armed
+ *   again, and so is a one-off alarm a few seconds away that applies the
+ *   schedule's state then (a run in progress plays) -- from an alarm,
+ *   because the boot broadcast may not start the playback service;
  * - a change of the clock or the time zone: the alarm is armed again for
  *   the new time.
  */
@@ -23,10 +25,14 @@ public class ScheduleReceiver extends BroadcastReceiver {
             SoundscapeSchedule schedule = SoundscapeSchedule.load(context);
             if (schedule.enabled) {
                 int minute = intent.getIntExtra(SoundscapeSchedule.EXTRA_MINUTE, -1);
-                for (SoundscapeSchedule.Event event : schedule.dueAt(minute)) session.applyScheduleEvent(schedule, event);
+                if (minute >= 0) {
+                    for (SoundscapeSchedule.Event event : schedule.dueSince(minute)) session.applyScheduleEvent(schedule, event);
+                }
             }
-        } else if (Intent.ACTION_BOOT_COMPLETED.equals(action) || Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {
+        } else if (SoundscapeSchedule.ACTION_APPLY_STATE.equals(action)) {
             session.applyScheduleState();
+        } else if (Intent.ACTION_BOOT_COMPLETED.equals(action) || Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {
+            SoundscapeSchedule.armApplyState(context);
         }
         SoundscapeSchedule.arm(context);
     }

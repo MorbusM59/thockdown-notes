@@ -78,8 +78,10 @@ final class SoundscapeAudioOutput {
     private volatile float volumeStep = 1f;
     private float listenerVolume = 0f;
     private float fade = 1f;
-    private volatile float fadeTarget = 1f;
-    private volatile float fadeStep = 1f;
+    private float fadeTarget = 1f;
+    private float fadeStep = 1f;
+    /** A value the fade must start from, set by fadeFrom and taken by the writer at its next block; NaN for none. */
+    private float fadeStart = Float.NaN;
     private boolean paused = false;
 
     SoundscapeAudioOutput(Listener listener) {
@@ -156,10 +158,20 @@ final class SoundscapeAudioOutput {
         if (!paused) glideTo(target, timeConstantSec);
     }
 
-    /** Move the fade gain linearly to `target` (0..1) over `seconds`. */
-    void setFade(float target, double seconds) {
+    /** Move the fade gain linearly to `target` (0..1) over `seconds`, from where it is. */
+    synchronized void setFade(float target, double seconds) {
         fadeStep = (float) (1 / Math.max(1, seconds * sampleRate));
         fadeTarget = target;
+    }
+
+    /**
+     * Set the fade gain to `from` at the next block, then move it to `to`
+     * over `seconds`. One call, because "jump to silence, then ramp up" as
+     * two calls arrives as one: the writer only ever saw the second.
+     */
+    synchronized void fadeFrom(float from, float to, double seconds) {
+        fadeStart = from;
+        setFade(to, seconds);
     }
 
     /** Fade out and hold the playhead where it is, or fade back in from it. */
@@ -194,6 +206,8 @@ final class SoundscapeAudioOutput {
         Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO);
         short[] block = new short[BLOCK_FRAMES * 2];
         int sinceReport = 0;
+        float toFade;
+        float fadeBy;
         while (running) {
             synchronized (this) {
                 if (paused && Math.abs(volume) < SILENT) {
@@ -215,11 +229,15 @@ final class SoundscapeAudioOutput {
                 java.util.Arrays.fill(block, available * 2, block.length, (short) 0);
                 // Silence still moves the playhead: positions are time.
                 if (started) playhead += BLOCK_FRAMES;
+                if (!Float.isNaN(fadeStart)) {
+                    fade = fadeStart;
+                    fadeStart = Float.NaN;
+                }
+                toFade = fadeTarget;
+                fadeBy = fadeStep;
             }
             float target = volumeTarget;
             float step = volumeStep;
-            float toFade = fadeTarget;
-            float fadeBy = fadeStep;
             for (int index = 0; index < BLOCK_FRAMES; index += 1) {
                 volume += (target - volume) * step;
                 fade = fade < toFade ? Math.min(toFade, fade + fadeBy) : Math.max(toFade, fade - fadeBy);
