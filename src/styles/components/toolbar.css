@@ -1005,10 +1005,21 @@
   filter: var(--filter-primed-delete);
 }
 
-/* A soundscape picked up (SoundscapeControls' onPickPreset): held, not playing. */
+/* A soundscape picked up (SoundscapeControls' onPickPreset): held, not
+   playing. Its own frame rather than an outline: a long press also FOCUSES
+   the button, and `.app-shell button:focus` clears the outline -- the mark
+   was invisible until focus moved elsewhere. */
 .options-loadout-btn.is-picked {
-  outline: 2px dashed var(--color-text-80);
-  outline-offset: -4px;
+  position: relative;
+}
+
+.options-loadout-btn.is-picked::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 2px dashed var(--color-text-80);
+  border-radius: inherit;
+  pointer-events: none;
 }
 
 /* HSVA drag cursor override */
