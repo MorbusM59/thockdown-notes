@@ -33,3 +33,21 @@ body {
   aspect-ratio: 1;
   font-size: 24px;
 }
+
+/* TEMPORARY, with PlaybackDiagnostics.tsx. */
+.mobile-diagnostics {
+  margin: 0;
+  font-size: 14px;
+  color: var(--color-text-70);
+}
+
+.mobile-diagnostics > div {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 4px;
+}
+
+.mobile-diagnostics dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}

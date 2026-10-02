@@ -13,8 +13,14 @@ const FADE_FRAMES = Math.round(0.05 * SAMPLE_RATE);
 function createPlayer() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let Processor: any;
+  const stats: Array<{ queuedFrames: number; dryFrames: number; dryEvents: number }> = [];
   class AudioWorkletProcessor {
-    port = { onmessage: null as ((event: { data: unknown }) => void) | null, postMessage() {} };
+    port = {
+      onmessage: null as ((event: { data: unknown }) => void) | null,
+      postMessage: (message: { type: string; queuedFrames: number; dryFrames: number; dryEvents: number }) => {
+        if (message.type === 'stats') stats.push(message);
+      },
+    };
   }
   runInNewContext(playerSource, {
     AudioWorkletProcessor,
@@ -31,6 +37,7 @@ function createPlayer() {
   processor.port.onmessage({ data: { type: 'connect', port: renderer } });
   return {
     reports,
+    stats,
     /** Deliver a chunk whose four channels all hold `samples`. */
     chunk(generation: number, samples: number[]) {
       const channels = [0, 1, 2, 3].map(() => Float32Array.from(samples));
@@ -133,6 +140,27 @@ describe('soundscape player', () => {
     expect(total).toBeLessThanOrEqual(8192);
     expect(8192 - total).toBeLessThan(2048);
     for (const report of player.reports) expect(report.frames).toBeGreaterThanOrEqual(2048);
+  });
+
+  it('counts the silence it plays for want of audio, and how many times it began', () => {
+    const player = createPlayer();
+    player.chunk(1, constant(1, 1000));
+    player.play(2048);
+    player.chunk(1, constant(1, 3000));
+    // To 8192 frames in all: statistics are posted every 8192.
+    player.play(8192 - 2048);
+    const last = player.stats.at(-1)!;
+    // Dry from frame 1000 to 2048, then from 5048 (2048 + 3000) to 8192.
+    expect(last.dryEvents).toBe(2);
+    expect(last.dryFrames).toBe((2048 - 1000) + (8192 - 5048));
+    expect(last.queuedFrames).toBe(0);
+  });
+
+  it('reports what the playing generation has left', () => {
+    const player = createPlayer();
+    player.chunk(1, constant(1, 20000));
+    player.play(8192);
+    expect(player.stats.at(-1)).toEqual({ type: 'stats', queuedFrames: 20000 - 8192, dryFrames: 0, dryEvents: 0 });
   });
 
   it('ends when stopped', () => {

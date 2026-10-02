@@ -21,6 +21,15 @@
  * - `stop` ends the processor (process() returns false, which is how a
  *   processor tells the browser it may be collected).
  *
+ * Statistics: every STATS_FRAMES played it posts `{ type: 'stats',
+ * queuedFrames, dryFrames, dryEvents }` on its own port. `queuedFrames` is
+ * what the playing generation has left; `dryFrames`/`dryEvents` count, since
+ * the player started, the frames it had to play as silence because the
+ * playing generation had nothing queued, and how many separate times that
+ * began. They tell a starved render worker (the player ran dry) apart from a
+ * stall further down the output path (the output ran dry while this player
+ * still had audio queued), which need different fixes.
+ *
  * GENERATIONS. Each change of settings starts a new generation in the
  * worker. When the first chunk of a newer generation arrives, the player
  * crossfades to it from what it is playing over CROSSFADE_SEC, equal-power
@@ -35,6 +44,7 @@
  */
 const CROSSFADE_SEC = 0.05;
 const REPORT_FRAMES = 2048;
+const STATS_FRAMES = 8192;
 
 /** One generation's queued audio, read front to back. */
 class Stream {
@@ -43,11 +53,14 @@ class Stream {
     this.chunks = [];
     // Frames already read from chunks[0].
     this.offset = 0;
+    // Frames queued and not yet read.
+    this.available = 0;
     this.unreported = 0;
   }
 
   push(channels) {
     this.chunks.push(channels);
+    this.available += channels[0].length;
   }
 
   /**
@@ -71,6 +84,7 @@ class Stream {
     }
     for (let channel = 0; channel < 4; channel += 1) into[channel].fill(0, written);
     this.unreported += written;
+    this.available -= written;
     return written;
   }
 }
@@ -86,6 +100,10 @@ class SoundscapePlayer extends AudioWorkletProcessor {
     this.fadeFrames = Math.max(1, Math.round(CROSSFADE_SEC * sampleRate));
     this.newestGeneration = -1;
     this.stopped = false;
+    this.dryFrames = 0;
+    this.dryEvents = 0;
+    this.wasDry = false;
+    this.framesSinceStats = 0;
     this.scratchA = [0, 1, 2, 3].map(() => new Float32Array(128));
     this.scratchB = [0, 1, 2, 3].map(() => new Float32Array(128));
     this.port.onmessage = (event) => {
@@ -125,6 +143,22 @@ class SoundscapePlayer extends AudioWorkletProcessor {
     }
   }
 
+  /** Count `dry` silent frames of a block of `length`, and post statistics when due. */
+  countDry(dry, length) {
+    if (dry > 0 && !this.wasDry) this.dryEvents += 1;
+    this.wasDry = dry > 0;
+    this.dryFrames += dry;
+    this.framesSinceStats += length;
+    if (this.framesSinceStats < STATS_FRAMES) return;
+    this.framesSinceStats = 0;
+    this.port.postMessage({
+      type: 'stats',
+      queuedFrames: this.current ? this.current.available : 0,
+      dryFrames: this.dryFrames,
+      dryEvents: this.dryEvents,
+    });
+  }
+
   report(stream) {
     if (!this.renderer || stream.unreported < REPORT_FRAMES) return;
     this.renderer.postMessage({ type: 'consumed', generation: stream.generation, frames: stream.unreported });
@@ -144,8 +178,9 @@ class SoundscapePlayer extends AudioWorkletProcessor {
       return true;
     }
     const a = this.scratchA;
-    this.current.read(a, length);
+    const read = this.current.read(a, length);
     this.report(this.current);
+    this.countDry(length - read, length);
     if (!this.incoming) {
       for (let channel = 0; channel < 4; channel += 1) targets[channel].set(a[channel].subarray(0, length));
       return true;

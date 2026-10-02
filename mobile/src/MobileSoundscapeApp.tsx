@@ -31,6 +31,7 @@ import { OptionsSubsectionLabel } from '../../src/sidebar/OptionsSubsectionLabel
 import { applyDocumentTheme, themeFrame } from '../../src/shared/loadoutTheme'
 import { ThemeBlendOverlays, ThemeGlazeLayers } from '../../src/components/ThemeLayers'
 import { backgroundAudioHost } from './backgroundAudioHost'
+import { PlaybackDiagnostics } from './PlaybackDiagnostics'
 import { loadLook, loadPreferences, saveLook, savePreferences, type MobileLook } from './preferencesStore'
 
 const PRESETS = { light: LIGHT_FACTORY_PRESETS, dark: DARK_FACTORY_PRESETS }
@@ -145,6 +146,7 @@ export function MobileSoundscapeApp() {
                   </div>
                 </div>
                 <SoundscapeControls preferences={preferences} onChange={handleChange} />
+                <PlaybackDiagnostics />
               </div>
             </div>
           </div>

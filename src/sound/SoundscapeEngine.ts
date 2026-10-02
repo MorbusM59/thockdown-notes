@@ -86,6 +86,35 @@ function noiseLoopsFor(sampleRate: number) {
   return entry;
 }
 
+/**
+ * What playback looks like from both sides of the output, for diagnosing
+ * dropouts: the player's own account (soundscape-player.js's statistics)
+ * and, where the browser reports it, the output device's.
+ */
+export interface SoundscapePlaybackStats {
+  /** Seconds of audio queued at the player for the playing generation. */
+  queuedSec: number;
+  /** Seconds the player played as silence for want of queued audio, and how many separate times. */
+  playerDrySec: number;
+  playerDryEvents: number;
+  /**
+   * The output device's underruns since the context started: silence it
+   * played because the audio context delivered nothing in time. Null where
+   * the browser does not report them (AudioContext.playbackStats is
+   * experimental).
+   */
+  outputUnderrunSec: number | null;
+  outputUnderrunEvents: number | null;
+}
+
+type StatsListener = (stats: SoundscapePlaybackStats) => void;
+
+function outputUnderruns(context: AudioContext): { sec: number; events: number } | null {
+  const stats = (context as AudioContext & { playbackStats?: { underrunDuration?: number; underrunEvents?: number } }).playbackStats;
+  if (!stats || typeof stats.underrunEvents !== 'number') return null;
+  return { sec: stats.underrunDuration ?? 0, events: stats.underrunEvents };
+}
+
 function spaceKey(space: SoundscapeSpaceSettings): string {
   return [space.size, space.damping, space.echoes].map((value) => value.toFixed(3)).join(':');
 }
@@ -106,6 +135,13 @@ export class SoundscapeEngine {
    * return, on/off fades) must not send one.
    */
   private sentConfiguration: string | null = null;
+  private readonly statsListeners = new Set<StatsListener>();
+
+  /** Receive playback statistics, about every 0.2 s while a soundscape plays. Returns the unsubscribe. */
+  subscribeStats(listener: StatsListener): () => void {
+    this.statsListeners.add(listener);
+    return () => { this.statsListeners.delete(listener); };
+  }
   private mixGain: GainNode | null = null;
   private busLimiter: DynamicsCompressorNode | null = null;
   private spaceInput: GainNode | null = null;
@@ -201,6 +237,18 @@ export class SoundscapeEngine {
       // audible, which they always are here, and would leave every later
       // apply() configuring a dead graph. With it gone, the next apply()
       // builds a new one.
+      worklet.port.onmessage = (event: MessageEvent<{ type: string; queuedFrames: number; dryFrames: number; dryEvents: number }>) => {
+        if (event.data?.type !== 'stats' || this.statsListeners.size === 0) return;
+        const output = outputUnderruns(context);
+        const stats: SoundscapePlaybackStats = {
+          queuedSec: event.data.queuedFrames / context.sampleRate,
+          playerDrySec: event.data.dryFrames / context.sampleRate,
+          playerDryEvents: event.data.dryEvents,
+          outputUnderrunSec: output?.sec ?? null,
+          outputUnderrunEvents: output?.events ?? null,
+        };
+        for (const listener of this.statsListeners) listener(stats);
+      };
       worklet.onprocessorerror = () => {
         console.error('Soundscape player stopped unexpectedly');
         if (this.worklet === worklet) this.teardown();
