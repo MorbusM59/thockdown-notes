@@ -15,7 +15,6 @@
 import { soundscapeConfiguration } from '../../src/sound/SoundscapeEngine'
 import {
   SOUNDSCAPE_FACTORY_PRESETS,
-  applySoundscapePreset,
   cloneSettings,
   soundscapeCycle,
   soundscapeSettingsSignature,
@@ -72,7 +71,9 @@ export function matchingPresetId(preferences: SoundscapePreferences): string | n
 
 /**
  * The preferences on entry `id`, playing or not: what the page does when a
- * media control or the schedule moved the session. The schedule may name a
+ * media control or the schedule moved the session. Solo is not carried
+ * across: it is a way of listening, and the session plays the soundscape
+ * whole. The schedule may name a
  * soundscape outside the cycle, so any soundscape is looked up.
  */
 export function followSession(
@@ -83,7 +84,12 @@ export function followSession(
   let next = preferences
   if (state.currentId !== null && state.currentId !== currentEntryId(preferences, scratch) && state.currentId !== matchingPresetId(preferences)) {
     const preset = [...SOUNDSCAPE_FACTORY_PRESETS, ...preferences.customPresets].find((candidate) => candidate.id === state.currentId)
-    if (preset) next = applySoundscapePreset(next, preset)
+    // Exactly the soundscape the session now plays, so the engine's next
+    // configuration is the one already in force: not applySoundscapePreset,
+    // which carries a soloed channel across, while the session switched
+    // without it -- and the solo then arrived as a second change in the
+    // middle of the schedule's crossfade.
+    if (preset) next = { ...next, settings: cloneSettings(preset.settings), activePresetId: preset.id }
     else if (state.currentId === UNSAVED_ENTRY_ID && scratch) next = { ...next, settings: cloneSettings(scratch), activePresetId: null }
   }
   return next.enabled === state.playing ? next : { ...next, enabled: state.playing }

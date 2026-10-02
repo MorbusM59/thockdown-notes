@@ -51,4 +51,12 @@ describe('media-control cycle', () => {
     expect(paused.enabled).toBe(false)
     expect(paused.settings).toBe(playing.settings)
   })
-})
+  it('follows the session to exactly the soundscape it plays, a soloed channel included', () => {
+    const playing = onPreset(0)
+    const soloed = { ...playing, settings: { ...playing.settings, channels: playing.settings.channels.map((channel, index) => ({ ...channel, solo: index === 0 })) } }
+    const target = SOUNDSCAPE_FACTORY_PRESETS[1]
+    const followed = followSession(soloed, null, { playing: true, currentId: target.id })
+    expect(followed.settings).toEqual(target.settings)
+    expect(followed.settings.channels.some((channel) => channel.solo)).toBe(false)
+  })
+});
