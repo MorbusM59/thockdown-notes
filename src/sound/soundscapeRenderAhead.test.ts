@@ -160,4 +160,42 @@ describe('render ahead', () => {
     expect(peak).toBeGreaterThan(1e-3);
     expect(peak).toBeLessThan(4);
   });
+
+  it('transitions to a new voice by an equal-power crossfade that starts at the end of the lead, then plays the new voice alone', () => {
+    /** A generator whose every sample is `value`. */
+    const constant = (value: number): HostedGenerator => ({
+      processor: null,
+      exports: undefined,
+      configure: () => {},
+      renderBlock: (block) => { for (const channel of [...block.direct, ...block.send]) channel.fill(value); },
+      frame: 0,
+    });
+    const sent: RenderedChunk[] = [];
+    const tasks: Array<() => void> = [];
+    const renderer = new RenderAhead(
+      constant(1), identityMix, SAMPLE_RATE, MARGIN_SEC, (chunk) => sent.push(chunk), (work) => tasks.push(work),
+      () => ({ generator: constant(-1), mix: identityMix }),
+    );
+    const drain = () => { while (tasks.length > 0) tasks.shift()!(); };
+    renderer.configure(CONFIGURE);
+    drain();
+    const from = renderer.queued;
+    const fadeFrames = 3 * RENDER_CHUNK_FRAMES;
+    renderer.transition(CONFIGURE, fadeFrames / SAMPLE_RATE);
+    // Play through the fade and a little past it.
+    for (let played = 0; played <= from + fadeFrames + RENDER_CHUNK_FRAMES; played += RENDER_CHUNK_FRAMES) {
+      renderer.played(played);
+      drain();
+    }
+    const out = heard(sent);
+    // Nothing before the transition point is touched.
+    expect(Array.from(out.subarray(0, from)).every((value) => value === 1)).toBe(true);
+    // Through the fade: old * cos + new * sin, the old being 1 and the new -1.
+    for (const index of [0, fadeFrames / 2, fadeFrames - 1]) {
+      const t = (index + 1) / fadeFrames;
+      expect(out[from + index]).toBeCloseTo(Math.cos(t * Math.PI / 2) - Math.sin(t * Math.PI / 2), 5);
+    }
+    // After it, the new voice alone.
+    expect(Array.from(out.subarray(from + fadeFrames)).every((value) => value === -1)).toBe(true);
+  });
 });

@@ -9,8 +9,10 @@ import {
   sanitizeSoundscapePreferences,
   sanitizeSoundscapeSettings,
   type SoundscapePreferences,
+  type SoundscapePreset,
   type SoundscapeSettings,
 } from '../../src/shared/soundscape'
+import { sanitizeSchedule, type Schedule } from './schedule'
 
 const STORAGE_KEY = 'thockdown:soundscape-preferences'
 
@@ -29,6 +31,26 @@ export function savePreferences(preferences: SoundscapePreferences): void {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences))
   } catch (error) {
     console.error('Failed to save soundscape preferences', error)
+  }
+}
+
+const SCHEDULE_STORAGE_KEY = 'thockdown:soundscape-schedule'
+
+/** The daily schedule (schedule.ts), checked against the soundscapes that exist. */
+export function loadSchedule(customPresets: readonly SoundscapePreset[]): Schedule {
+  try {
+    const raw = localStorage.getItem(SCHEDULE_STORAGE_KEY)
+    return sanitizeSchedule(raw === null ? null : JSON.parse(raw), customPresets)
+  } catch {
+    return sanitizeSchedule(null, customPresets)
+  }
+}
+
+export function saveSchedule(schedule: Schedule): void {
+  try {
+    localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(schedule))
+  } catch (error) {
+    console.error('Failed to save the schedule', error)
   }
 }
 

@@ -2,7 +2,7 @@ package com.thockdown.soundscapes;
 
 import android.content.Context;
 import androidx.javascriptengine.JavaScriptIsolate;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -47,7 +47,8 @@ final class SoundscapeRenderer {
     private final Listener listener;
     private final Thread thread;
     private final Object signal = new Object();
-    private final AtomicReference<String> pendingConfiguration = new AtomicReference<>(null);
+    /** Settings changes not yet applied, in order: a configuration and, for a transition, its length (0 for a plain configure). */
+    private final ConcurrentLinkedQueue<Object[]> pending = new ConcurrentLinkedQueue<>();
     private volatile boolean running = true;
     private boolean woken = false;
     /** The configuration in force; only the renderer's thread reads or writes it. */
@@ -63,7 +64,13 @@ final class SoundscapeRenderer {
 
     /** New settings (a ConfigureMessage as JSON); applied before the next step. */
     void configure(String configurationJson) {
-        pendingConfiguration.set(configurationJson);
+        pending.add(new Object[] { configurationJson, 0.0 });
+        wake();
+    }
+
+    /** Change to `configurationJson` by a crossfade of `seconds` from what plays (RenderAhead's transition). */
+    void transition(String configurationJson, double seconds) {
+        pending.add(new Object[] { configurationJson, seconds });
         wake();
     }
 
@@ -98,12 +105,17 @@ final class SoundscapeRenderer {
             isolate.evaluateJavaScriptAsync("soundscapeInit(" + JSONObject.quote(init.toString()) + ")").get();
 
             while (running) {
-                String configuration = pendingConfiguration.getAndSet(null);
-                if (configuration != null && !configuration.equals(applied)) {
+                Object[] change;
+                while ((change = pending.poll()) != null) {
+                    String configuration = (String) change[0];
+                    double seconds = (Double) change[1];
+                    if (configuration.equals(applied)) continue;
                     applied = configuration;
-                    // The playhead first, so the splice is measured from now.
+                    // The playhead first, so a splice is measured from now.
                     isolate.evaluateJavaScriptAsync("soundscapeStep(" + output.playheadFrame() + ", 0)").get();
-                    isolate.evaluateJavaScriptAsync("soundscapeConfigure(" + JSONObject.quote(configuration) + ")").get();
+                    isolate.evaluateJavaScriptAsync(seconds > 0
+                        ? "soundscapeTransition(" + JSONObject.quote(configuration) + ", " + seconds + ")"
+                        : "soundscapeConfigure(" + JSONObject.quote(configuration) + ")").get();
                 }
                 String result = isolate.evaluateJavaScriptAsync(
                     "soundscapeStep(" + output.playheadFrame() + ", " + MAX_CHUNKS_PER_STEP + ")").get();

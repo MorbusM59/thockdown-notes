@@ -114,6 +114,31 @@ Without the JavaScriptSandbox (a WebView older than about 110) the web
 playback is used instead: it plays only in the foreground and has no
 session, controls, clips or sharing.
 
+## The schedule
+Twenty-four hourly slots (`schedule.ts`, drawn by `ScheduleGrid.tsx` as one
+row of six cells, four half-size slots each: 0h-11h on top, 12h-23h below).
+A tap puts the soundscape playing now into a slot, a long press turns a slot
+on or off; active slots form RUNS round the clock (23h and 0h are
+neighbours), a run's first and last slots carry the minute it starts and
+stops at (a tap steps 5 minutes, a double tap goes to :00, or from :00 to
+:30), and a run of one slot is its whole hour. A long press on the power
+button turns the schedule on (it then shows a clock); a tap pauses whatever
+plays. A soundscape chosen by hand turns the schedule off.
+
+`schedule.ts` is the ONLY place the slot rules are written: it turns the
+slots into EVENTS (start, switch, stop, each at a minute of the day), tested
+minute by minute against the slots, and the native side runs those
+(`SoundscapeSchedule.java`, stored in SharedPreferences so it acts with the
+app closed and after a reboot) by one exact alarm at a time
+(`ScheduleReceiver.java`, which also re-arms after a reboot, an update or a
+change of clock). Exact alarms need the listener's permission on Android 12
+and later; it is asked for when the schedule is turned on, and they are also
+what allow the session to start from the background. A start fades in over
+a minute, a stop fades out over a minute, and a change of soundscape within
+a run is a minute's TRANSITION: two voices rendered side by side and
+crossfaded (`RenderAhead.transition`), starting at the end of the rendered
+lead, so up to ten seconds after its minute.
+
 ## Clips, export and import
 - A CLIP is five minutes of the current soundscape rendered OFFLINE
   (`ClipRenderer.java`): the same renderer in its own isolate of the shared

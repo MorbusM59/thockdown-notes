@@ -40,13 +40,18 @@ import { nativePlayback } from './playbackMode'
 import {
   loadLook,
   loadPreferences,
+  loadSchedule,
   loadScratch,
   saveLook,
+  saveSchedule,
   savePreferences,
   saveScratch,
   type MobileLook,
 } from './preferencesStore'
-import { currentEntryId, followSession, nextScratch, sessionEntries } from './sessionEntries'
+import { currentEntryId, followSession, matchingPresetId, nextScratch, sessionEntries } from './sessionEntries'
+import { allPresets, sanitizeSchedule, scheduleEvents, scheduledPresetAt, type Schedule } from './schedule'
+import { ScheduleGrid } from './ScheduleGrid'
+import { armHold, HOLD_CONFIRM_MS } from '../../src/shared/holdTiming'
 import { installSoundscapeFiles } from './soundscapeFiles'
 
 installSoundscapeFiles()
@@ -75,6 +80,7 @@ export function MobileSoundscapeApp() {
   const theme = useMemo(() => themeFrame(loadout, { reduceVisualEffects: false, isPreviewMode: false }), [loadout])
 
   const [scratch, setScratch] = useState<SoundscapeSettings | null>(loadScratch)
+  const customPresets = preferences.customPresets
   // Whether the native session plays (playbackMode.ts); the engine is not
   // started before that is settled, or its first start would open the web
   // playback instead.
@@ -91,8 +97,27 @@ export function MobileSoundscapeApp() {
 
   useEffect(() => saveScratch(scratch), [scratch])
 
+  // The daily schedule (schedule.ts). Its events are worked out here and
+  // handed to the native session, which runs them with or without this page.
+  const [schedule, setSchedule] = useState<Schedule>(() => loadSchedule(preferences.customPresets))
+  useEffect(() => saveSchedule(schedule), [schedule])
+  // A deleted soundscape empties the slots that held it.
+  useEffect(() => setSchedule((current) => sanitizeSchedule(current, customPresets)), [customPresets])
+  const events = useMemo(() => scheduleEvents(schedule), [schedule])
+  useEffect(() => {
+    if (!native) return
+    const named = new Set(events.map((event) => event.presetId))
+    void nativeSoundscape!.setSchedule({
+      enabled: schedule.enabled,
+      masterVolume: preferences.masterVolume,
+      events,
+      entries: allPresets(customPresets)
+        .filter((preset) => named.has(preset.id))
+        .map((preset) => ({ id: preset.id, name: preset.name, configuration: JSON.stringify(soundscapeConfiguration(preset.settings)) })),
+    })
+  }, [native, schedule.enabled, events, customPresets, preferences.masterVolume])
+
   // What the media controls step through, published whenever it changes.
-  const customPresets = preferences.customPresets
   const entries = useMemo(() => sessionEntries(customPresets, scratch), [customPresets, scratch])
   const currentId = currentEntryId(preferences, scratch)
   useEffect(() => {
@@ -107,7 +132,10 @@ export function MobileSoundscapeApp() {
   scratchRef.current = scratch
   useEffect(() => {
     if (!native) return undefined
-    const follow = (state: SessionState) => setPreferences((current) => followSession(current, scratchRef.current, state))
+    const follow = (state: SessionState) => {
+      setPreferences((current) => followSession(current, scratchRef.current, state))
+      setSchedule((current) => (current.enabled === state.scheduleEnabled ? current : { ...current, enabled: state.scheduleEnabled }))
+    }
     const handles = [
       nativeSoundscape!.addListener('sessionChanged', follow),
       nativeSoundscape!.addListener('clipProgress', ({ fraction }) => setClipProgress(fraction)),
@@ -150,7 +178,48 @@ export function MobileSoundscapeApp() {
     saveLook(look)
   }, [loadout, look])
 
-  const handleChange = useCallback((next: SoundscapePreferences) => setPreferences(next), [])
+  // A soundscape chosen or changed by hand turns the schedule off and plays
+  // on for as long as it is left.
+  const preferencesRef = useRef(preferences)
+  preferencesRef.current = preferences
+  const handleChange = useCallback((next: SoundscapePreferences) => {
+    if (next.settings !== preferencesRef.current.settings) {
+      setSchedule((current) => (current.enabled ? { ...current, enabled: false } : current))
+    }
+    setPreferences(next)
+  }, [])
+
+  // The power button: a tap pauses whatever plays, or plays; a long press
+  // turns the schedule on or off. Playing outside a scheduled run is a
+  // choice by hand, so it turns the schedule off; resuming a paused run is
+  // not. The click after a long press is swallowed.
+  const powerHoldRef = useRef<(() => void) | null>(null)
+  const swallowPowerClickRef = useRef(false)
+  useEffect(() => () => powerHoldRef.current?.(), [])
+  const tapPower = () => {
+    if (swallowPowerClickRef.current) {
+      swallowPowerClickRef.current = false
+      return
+    }
+    if (preferences.enabled) {
+      setPreferences((current) => ({ ...current, enabled: false }))
+      return
+    }
+    const now = new Date()
+    if (schedule.enabled && scheduledPresetAt(events, (now.getHours() * 60) + now.getMinutes()) === null) {
+      setSchedule((current) => ({ ...current, enabled: false }))
+    }
+    setPreferences((current) => ({ ...current, enabled: true }))
+  }
+  const toggleSchedule = async () => {
+    if (schedule.enabled) {
+      setSchedule((current) => ({ ...current, enabled: false }))
+      return
+    }
+    // The schedule needs exact alarms; without them it cannot act on time.
+    if (native && !(await nativeSoundscape!.ensureExactAlarms()).granted) return
+    setSchedule((current) => ({ ...current, enabled: true }))
+  }
 
   // The desktop's frame, outermost first (see shared/loadoutTheme.ts), so the
   // shared stylesheet and theme variables land where they expect to.
@@ -167,12 +236,26 @@ export function MobileSoundscapeApp() {
                   <div className="options-loadout-grid" role="group" aria-label="Soundscape and display mode">
                     <button
                       type="button"
-                      className={`btn-icon options-color-swatch options-loadout-btn${preferences.enabled ? ' is-active' : ''}`}
+                      className={`btn-icon options-color-swatch options-loadout-btn${preferences.enabled || schedule.enabled ? ' is-active' : ''}`}
                       aria-pressed={preferences.enabled}
-                      aria-label={preferences.enabled ? 'Turn soundscape off' : 'Turn soundscape on'}
-                      onClick={() => setPreferences((current) => ({ ...current, enabled: !current.enabled }))}
+                      data-secondary-press="none"
+                      aria-label={`${preferences.enabled ? 'Pause' : 'Play'} soundscape; hold to turn the schedule ${schedule.enabled ? 'off' : 'on'}`}
+                      onClick={tapPower}
+                      onPointerDown={() => {
+                        swallowPowerClickRef.current = false
+                        powerHoldRef.current?.()
+                        powerHoldRef.current = armHold(() => {
+                          powerHoldRef.current = null
+                          swallowPowerClickRef.current = true
+                          void toggleSchedule()
+                        }, HOLD_CONFIRM_MS)
+                      }}
+                      onPointerUp={() => { powerHoldRef.current?.(); powerHoldRef.current = null }}
+                      onPointerCancel={() => { powerHoldRef.current?.(); powerHoldRef.current = null }}
+                      onPointerLeave={() => { powerHoldRef.current?.(); powerHoldRef.current = null }}
+                      onContextMenu={(event) => event.preventDefault()}
                     >
-                      <span className="fa-solid fa-power-off" aria-hidden="true" />
+                      <span className={`fa-solid ${schedule.enabled ? 'fa-clock' : 'fa-power-off'}`} aria-hidden="true" />
                     </button>
                     <button
                       type="button"
@@ -244,6 +327,15 @@ export function MobileSoundscapeApp() {
                       onCommit={(value) => setPreferences((current) => ({ ...current, masterVolume: value / 100 }))}
                     />
                   </OptionsSliderRows>
+                </div>
+                <div className="utility-setting-slider-stack" aria-label="Schedule">
+                  <OptionsSubsectionLabel>Schedule</OptionsSubsectionLabel>
+                  <ScheduleGrid
+                    schedule={schedule}
+                    customPresets={customPresets}
+                    assignablePresetId={matchingPresetId(preferences)}
+                    onChange={setSchedule}
+                  />
                 </div>
                 <SoundscapeControls preferences={preferences} onChange={handleChange} />
               </div>

@@ -34,11 +34,21 @@ import java.util.List;
  * Next and previous configure the renderer from the published list
  * directly; when the web page then follows, the engine sends the same
  * configuration, which the renderer recognises and does not apply again.
+ *
+ * THE SCHEDULE (SoundscapeSchedule) is a third client, acting through its
+ * alarm with or without a web page: a run's START opens or resumes the
+ * session and fades it in over SCHEDULE_FADE_SEC, a SWITCH within a run is
+ * a transition of that length from one soundscape to the next, a run's
+ * STOP fades out over the same time and ends the session. A choice of
+ * soundscape by hand -- next or previous here, or in the app -- turns the
+ * schedule off and leaves that soundscape playing for as long as it is
+ * left; pausing does not, and a paused run plays again at the next start.
+ * Like the media controls, the schedule's changes are reported.
  */
 final class SoundscapeSession {
     interface Listener {
-        /** A media control changed what plays: `currentId` is a published entry's id. */
-        void onChanged(boolean playing, String currentId);
+        /** A media control or the schedule changed what plays: `currentId` is an entry's id. */
+        void onChanged(boolean playing, String currentId, boolean scheduleEnabled);
         void onFailure(String message);
     }
 
@@ -56,6 +66,10 @@ final class SoundscapeSession {
     }
 
     private static final double VOLUME_TIME_CONSTANT_SEC = 0.08;
+    /** How long the schedule's fades and transitions take. */
+    private static final double SCHEDULE_FADE_SEC = 60;
+    /** A fade back from a scheduled stop that was interrupted. */
+    private static final double RESTORE_FADE_SEC = 0.5;
     private static SoundscapeSession instance;
 
     private final Context context;
@@ -66,10 +80,16 @@ final class SoundscapeSession {
     private boolean playing = false;
     private List<Entry> entries = Collections.emptyList();
     private String currentId = null;
-    private float masterVolume = 1f;
+    private float masterVolume;
+    /** The end of a scheduled stop's fade-out, while one is under way. */
+    private Runnable pendingStop = null;
+    private final android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
 
     private SoundscapeSession(Context context) {
         this.context = context.getApplicationContext();
+        // Until the web page publishes it: the schedule may start a session
+        // with no web page at all.
+        masterVolume = SoundscapeSchedule.load(this.context).masterVolume;
     }
 
     static synchronized SoundscapeSession get(Context context) {
@@ -116,6 +136,7 @@ final class SoundscapeSession {
 
     /** Start playing, or carry on: opening what does not exist yet, resuming what is paused. */
     synchronized void play() {
+        cancelScheduledStop();
         if (output == null) open();
         else output.setPaused(false);
         playing = true;
@@ -141,6 +162,7 @@ final class SoundscapeSession {
 
     synchronized void controlPlay() {
         if (output == null) return;
+        cancelScheduledStop();
         output.setPaused(false);
         // The web page may have faded the output to silence before it
         // paused it: come back at the listener's volume.
@@ -166,12 +188,89 @@ final class SoundscapeSession {
         Entry entry = entries.get(next);
         currentId = entry.id;
         renderer.configure(entry.configuration);
+        // A soundscape chosen by hand: the schedule no longer decides.
+        SoundscapeSchedule.disable(context);
         refreshService();
         report();
     }
 
     /** End everything: the notification was dismissed or its stop control pressed. */
     synchronized void controlStop() {
+        cancelScheduledStop();
+        endSession();
+    }
+
+    // --- From the schedule ---
+
+    /** Apply the schedule's state at this moment: what a run in progress plays, or nothing. */
+    synchronized void applyScheduleState() {
+        SoundscapeSchedule schedule = SoundscapeSchedule.load(context);
+        if (!schedule.enabled) return;
+        SoundscapeSchedule.Event current = schedule.current();
+        if (current == null || "stop".equals(current.kind)) {
+            if (output != null) applyScheduleEvent(schedule, new SoundscapeSchedule.Event(current == null ? 0 : current.minute, "stop", null));
+            return;
+        }
+        applyScheduleEvent(schedule, new SoundscapeSchedule.Event(current.minute, "start", current.presetId));
+    }
+
+    synchronized void applyScheduleEvent(SoundscapeSchedule schedule, SoundscapeSchedule.Event event) {
+        if ("stop".equals(event.kind)) {
+            if (output == null) return;
+            if (!playing) {
+                endSession();
+                return;
+            }
+            output.setFade(0f, SCHEDULE_FADE_SEC);
+            cancelScheduledStop();
+            pendingStop = () -> {
+                synchronized (SoundscapeSession.this) {
+                    pendingStop = null;
+                    endSession();
+                }
+            };
+            main.postDelayed(pendingStop, Math.round(SCHEDULE_FADE_SEC * 1000));
+            return;
+        }
+        Entry entry = schedule.entry(event.presetId);
+        if (entry == null) return;
+        cancelScheduledStop();
+        if ("start".equals(event.kind)) {
+            currentId = entry.id;
+            if (output == null) {
+                open();
+                output.setFade(0f, 0);
+            } else if (!playing) {
+                output.setFade(0f, 0);
+                renderer.configure(entry.configuration);
+                output.setPaused(false);
+            } else {
+                renderer.transition(entry.configuration, SCHEDULE_FADE_SEC);
+            }
+            output.setVolume(masterVolume, VOLUME_TIME_CONSTANT_SEC);
+            output.setFade(1f, playing ? RESTORE_FADE_SEC : SCHEDULE_FADE_SEC);
+            playing = true;
+        } else {
+            // A switch: heard if playing; if paused, the run carries on
+            // silently and plays its current soundscape when resumed.
+            if (output == null) return;
+            currentId = entry.id;
+            if (playing) renderer.transition(entry.configuration, SCHEDULE_FADE_SEC);
+            else renderer.configure(entry.configuration);
+        }
+        refreshService();
+        report();
+    }
+
+    /** A scheduled stop's fade-out, abandoned: something chose to play. */
+    private void cancelScheduledStop() {
+        if (pendingStop == null) return;
+        main.removeCallbacks(pendingStop);
+        pendingStop = null;
+        if (output != null) output.setFade(1f, RESTORE_FADE_SEC);
+    }
+
+    private void endSession() {
         close();
         playing = false;
         context.stopService(new Intent(context, SoundscapePlaybackService.class));
@@ -216,7 +315,7 @@ final class SoundscapeSession {
     }
 
     private void report() {
-        if (listener != null) listener.onChanged(playing, currentId);
+        if (listener != null) listener.onChanged(playing, currentId, SoundscapeSchedule.load(context).enabled);
     }
 
     /**
@@ -231,9 +330,11 @@ final class SoundscapeSession {
         ContextCompat.startForegroundService(context, new Intent(context, SoundscapePlaybackService.class));
     }
 
+    /** An entry of the published cycle, or failing that of the schedule, which may name soundscapes outside the cycle. */
     private Entry find(String id) {
         int index = indexOf(id);
-        return index < 0 ? null : entries.get(index);
+        if (index >= 0) return entries.get(index);
+        return id == null ? null : SoundscapeSchedule.load(context).entry(id);
     }
 
     private int indexOf(String id) {

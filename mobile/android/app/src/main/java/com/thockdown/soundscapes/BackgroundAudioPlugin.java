@@ -39,8 +39,8 @@ public class BackgroundAudioPlugin extends Plugin {
 
     private final SoundscapeSession.Listener sessionListener = new SoundscapeSession.Listener() {
         @Override
-        public void onChanged(boolean playing, String currentId) {
-            notifyListeners("sessionChanged", state(playing, currentId));
+        public void onChanged(boolean playing, String currentId, boolean scheduleEnabled) {
+            notifyListeners("sessionChanged", state(playing, currentId, scheduleEnabled));
         }
 
         @Override
@@ -63,10 +63,11 @@ public class BackgroundAudioPlugin extends Plugin {
         if (clip != null) clip.cancel();
     }
 
-    private static JSObject state(boolean playing, String currentId) {
+    private static JSObject state(boolean playing, String currentId, boolean scheduleEnabled) {
         JSObject data = new JSObject();
         data.put("playing", playing);
         data.put("currentId", currentId);
+        data.put("scheduleEnabled", scheduleEnabled);
         return data;
     }
 
@@ -81,7 +82,45 @@ public class BackgroundAudioPlugin extends Plugin {
     /** What the session is doing: for the page to catch up with on coming back to the foreground. */
     @PluginMethod
     public void getState(PluginCall call) {
-        call.resolve(state(session.isPlaying(), session.currentId()));
+        call.resolve(state(session.isPlaying(), session.currentId(), SoundscapeSchedule.load(getContext()).enabled));
+    }
+
+    /**
+     * The schedule: `{ enabled, masterVolume, events, entries }` (see
+     * SoundscapeSchedule). Stored and armed; turning it on also applies its
+     * state at this moment, so a run in progress starts playing.
+     */
+    @PluginMethod
+    public void setSchedule(PluginCall call) {
+        try {
+            JSObject json = call.getData();
+            SoundscapeSchedule.fromJson(json);
+            boolean wasEnabled = SoundscapeSchedule.load(getContext()).enabled;
+            SoundscapeSchedule.save(getContext(), json);
+            if (json.getBoolean("enabled") && !wasEnabled) session.applyScheduleState();
+            SoundscapeSchedule.arm(getContext());
+            call.resolve();
+        } catch (Exception error) {
+            call.reject("Invalid schedule: " + error);
+        }
+    }
+
+    /**
+     * Whether the schedule's alarms can be exact (`{ granted }`). If not, the
+     * system's page for granting it is opened, and the schedule cannot be
+     * turned on until it has been.
+     */
+    @PluginMethod
+    public void ensureExactAlarms(PluginCall call) {
+        boolean granted = SoundscapeSchedule.canArm(getContext());
+        if (!granted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            Intent settings = new Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                Uri.parse("package:" + getContext().getPackageName())).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(settings);
+        }
+        JSObject result = new JSObject();
+        result.put("granted", granted);
+        call.resolve(result);
     }
 
     /** `entries`: `[{ id, name, configuration }]`; `currentId`; `masterVolume`. */

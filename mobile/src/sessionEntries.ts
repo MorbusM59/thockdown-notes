@@ -62,15 +62,27 @@ export function currentEntryId(preferences: SoundscapePreferences, scratch: Soun
   return null
 }
 
-/** The preferences on entry `id`, playing or not: what the page does when a media control moved the session. */
+/** The soundscape (factory or the user's) the settings sound the same as, preferring the active one; null for none. */
+export function matchingPresetId(preferences: SoundscapePreferences): string | null {
+  const signature = soundscapeSettingsSignature(preferences.settings)
+  const matching = [...SOUNDSCAPE_FACTORY_PRESETS, ...preferences.customPresets]
+    .filter((preset) => soundscapeSettingsSignature(preset.settings) === signature)
+  return (matching.find((preset) => preset.id === preferences.activePresetId) ?? matching[0])?.id ?? null
+}
+
+/**
+ * The preferences on entry `id`, playing or not: what the page does when a
+ * media control or the schedule moved the session. The schedule may name a
+ * soundscape outside the cycle, so any soundscape is looked up.
+ */
 export function followSession(
   preferences: SoundscapePreferences,
   scratch: SoundscapeSettings | null,
   state: { playing: boolean; currentId: string | null },
 ): SoundscapePreferences {
   let next = preferences
-  if (state.currentId !== null && state.currentId !== currentEntryId(preferences, scratch)) {
-    const preset = soundscapeCycle(preferences).find((candidate) => candidate.id === state.currentId)
+  if (state.currentId !== null && state.currentId !== currentEntryId(preferences, scratch) && state.currentId !== matchingPresetId(preferences)) {
+    const preset = [...SOUNDSCAPE_FACTORY_PRESETS, ...preferences.customPresets].find((candidate) => candidate.id === state.currentId)
     if (preset) next = applySoundscapePreset(next, preset)
     else if (state.currentId === UNSAVED_ENTRY_ID && scratch) next = { ...next, settings: cloneSettings(scratch), activePresetId: null }
   }

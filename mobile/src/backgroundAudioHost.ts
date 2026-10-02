@@ -14,6 +14,7 @@
  * controls, clips or sharing.
  */
 import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core'
+import type { ScheduleEvent } from './schedule'
 
 /** One soundscape the media controls step through. */
 export interface SessionEntry {
@@ -25,8 +26,20 @@ export interface SessionEntry {
 
 export interface SessionState {
   playing: boolean
-  /** The entry playing, or null if none of the published entries is. */
+  /** The soundscape playing (an entry's id), or null if none of the published or scheduled ones is. */
   currentId: string | null
+  /** Whether the schedule is on: a soundscape chosen by hand turns it off. */
+  scheduleEnabled: boolean
+}
+
+/** The schedule as the native side runs it (schedule.ts works it out). */
+export interface NativeSchedule {
+  enabled: boolean
+  /** The listener's volume, for a run started with no web page to ask. */
+  masterVolume: number
+  events: ScheduleEvent[]
+  /** Every soundscape the events name. */
+  entries: SessionEntry[]
 }
 
 export interface NativeSoundscapePlugin {
@@ -34,6 +47,10 @@ export interface NativeSoundscapePlugin {
   /** The soundscapes the media controls step through, which one is current, and the listener's volume. */
   publish(options: { entries: SessionEntry[]; currentId: string | null; masterVolume: number }): Promise<void>
   getState(): Promise<SessionState>
+  /** Store and arm the schedule; turning it on applies its state at this moment. */
+  setSchedule(schedule: NativeSchedule): Promise<void>
+  /** Whether exact alarms are allowed; if not, opens the system page that grants them. */
+  ensureExactAlarms(): Promise<{ granted: boolean }>
   /** Start playing, or carry on; idempotent. */
   play(): Promise<void>
   /** Hold where it is, keeping the session and its controls up. */
@@ -46,7 +63,7 @@ export interface NativeSoundscapePlugin {
   cancelClip(): Promise<void>
   /** Write `content` to a file named `name` and offer it through the share sheet. */
   shareText(options: { content: string; name: string }): Promise<void>
-  /** A media control changed what plays. */
+  /** A media control or the schedule changed what plays. */
   addListener(event: 'sessionChanged', listener: (state: SessionState) => void): Promise<PluginListenerHandle>
   addListener(event: 'rendererFailure', listener: (data: { message: string }) => void): Promise<PluginListenerHandle>
   addListener(event: 'clipProgress', listener: (data: { fraction: number }) => void): Promise<PluginListenerHandle>

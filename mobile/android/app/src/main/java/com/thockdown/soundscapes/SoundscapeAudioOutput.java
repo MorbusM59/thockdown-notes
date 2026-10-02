@@ -32,6 +32,10 @@ import android.os.Process;
  * as far as a splice can no longer reach; every REPORT_FRAMES it calls the
  * listener's onProgress, which is what lets the renderer render more.
  *
+ * A FADE is a second gain, linear over a set time, for the schedule's
+ * fade in and out of a run (SoundscapeSession): separate from the volume,
+ * which is the listener's and is restored on its own.
+ *
  * PAUSED, it glides to silence, then pauses the AudioTrack and stops
  * moving the playhead, so the queue waits where it is and the renderer,
  * its lead full, waits with it. Resuming carries on from the same frame.
@@ -73,6 +77,9 @@ final class SoundscapeAudioOutput {
     private volatile float volumeTarget = 0f;
     private volatile float volumeStep = 1f;
     private float listenerVolume = 0f;
+    private float fade = 1f;
+    private volatile float fadeTarget = 1f;
+    private volatile float fadeStep = 1f;
     private boolean paused = false;
 
     SoundscapeAudioOutput(Listener listener) {
@@ -149,6 +156,12 @@ final class SoundscapeAudioOutput {
         if (!paused) glideTo(target, timeConstantSec);
     }
 
+    /** Move the fade gain linearly to `target` (0..1) over `seconds`. */
+    void setFade(float target, double seconds) {
+        fadeStep = (float) (1 / Math.max(1, seconds * sampleRate));
+        fadeTarget = target;
+    }
+
     /** Fade out and hold the playhead where it is, or fade back in from it. */
     synchronized void setPaused(boolean pause) {
         if (pause == paused) return;
@@ -205,9 +218,12 @@ final class SoundscapeAudioOutput {
             }
             float target = volumeTarget;
             float step = volumeStep;
+            float toFade = fadeTarget;
+            float fadeBy = fadeStep;
             for (int index = 0; index < BLOCK_FRAMES; index += 1) {
                 volume += (target - volume) * step;
-                float gain = volume * HEADROOM;
+                fade = fade < toFade ? Math.min(toFade, fade + fadeBy) : Math.max(toFade, fade - fadeBy);
+                float gain = volume * fade * HEADROOM;
                 for (int channel = 0; channel < 2; channel += 1) {
                     float value = block[(index * 2) + channel] * gain;
                     block[(index * 2) + channel] = (short) Math.max(-32768, Math.min(32767, Math.round(value)));
