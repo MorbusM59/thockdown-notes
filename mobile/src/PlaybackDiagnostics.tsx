@@ -12,6 +12,8 @@ import { useEffect, useState } from 'react'
 import { soundscapeEngine, type SoundscapePlaybackStats } from '../../src/sound/SoundscapeEngine'
 import { OptionsSubsectionLabel } from '../../src/sidebar/OptionsSubsectionLabel'
 
+declare const __MOBILE_BUILD_ID__: string
+
 const seconds = (value: number) => `${value.toFixed(2)} s`
 
 export function PlaybackDiagnostics() {
@@ -24,6 +26,7 @@ export function PlaybackDiagnostics() {
         ['Device underruns', stats.deviceUnderruns === null ? 'not reported' : String(stats.deviceUnderruns)],
       ]
     : [['Status', 'start a soundscape']]
+  rows.push(['Build', __MOBILE_BUILD_ID__])
   return (
     <div className="utility-setting-slider-stack" aria-label="Playback diagnostics">
       <OptionsSubsectionLabel>Diagnostics</OptionsSubsectionLabel>
