@@ -1,0 +1,27 @@
+/* Only what a phone needs on top of the desktop panel's own styles. */
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--sidebar-bg, #f9f6f3);
+  overscroll-behavior: none;
+}
+
+.mobile-soundscape-shell {
+  height: 100%;
+  overflow-y: auto;
+  padding: calc(env(safe-area-inset-top) + 8px) 12px calc(env(safe-area-inset-bottom) + 16px);
+}
+
+.mobile-soundscape-master {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.mobile-soundscape-master > :last-child {
+  flex: 1;
+}

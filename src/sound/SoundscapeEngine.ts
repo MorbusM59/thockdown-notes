@@ -3,7 +3,7 @@
  *
  *   worklet output 0 (every layer's direct sound, stereo) -------------> mixGain
  *   worklet output 1 (every layer's send to the space, stereo) -> space -> mixGain
- *   mixGain -> busLimiter -> the music player's shared output limiter
+ *   mixGain -> busLimiter -> the shared output limiter (audioOutputBus.ts)
  *
  * Every layer is placed -- its distance, its direct and send gains -- inside
  * the worklet, by one rule; this graph only carries the two buses. The SPACE
@@ -27,14 +27,14 @@
  * the new channels at the old soundscape's level until the glide catches up.
  */
 import {
-  hasAudibleSoundscapeLayer,
+  isSoundscapeAudible,
   type SoundscapePreferences,
   type SoundscapeSpaceSettings,
 } from '../shared/soundscape';
 import { toWorkletConfiguration } from '../shared/soundscapeDsp';
 import { buildNoiseLoops, noiseLoopGains, type NoiseLoops } from '../shared/soundscapeNoiseLoops';
 import { buildSoundscapeImpulseResponse } from '../shared/soundscapeSpace';
-import { musicPlayerService } from './MusicPlayerService';
+import { connectToOutput, resumedOutputContext } from './audioOutputBus';
 
 /**
  * Mix level at master volume 1 and a soundscape volume of 1.
@@ -76,11 +76,6 @@ function noiseLoopsFor(sampleRate: number) {
   return entry;
 }
 
-/** Whether these preferences would make any sound at all. */
-function isAudible(preferences: SoundscapePreferences): boolean {
-  return preferences.enabled && preferences.masterVolume > 0 && hasAudibleSoundscapeLayer(preferences.settings);
-}
-
 function spaceKey(space: SoundscapeSpaceSettings): string {
   return [space.size, space.damping, space.echoes].map((value) => value.toFixed(3)).join(':');
 }
@@ -108,7 +103,7 @@ export class SoundscapeEngine {
 
   apply(preferences: SoundscapePreferences): void {
     this.preferences = preferences;
-    if (!isAudible(preferences)) {
+    if (!isSoundscapeAudible(preferences)) {
       this.fadeOutAndDisconnect();
       return;
     }
@@ -144,7 +139,7 @@ export class SoundscapeEngine {
 
   private async start(): Promise<void> {
     try {
-      const context = await musicPlayerService.getAudioContextForMix();
+      const context = await resumedOutputContext();
       if (context.state === 'closed') return;
       let modulePromise = WORKLET_MODULES.get(context);
       if (!modulePromise) {
@@ -159,7 +154,7 @@ export class SoundscapeEngine {
         throw error;
       }
       const preferences = this.preferences;
-      if (!preferences || !isAudible(preferences)) return;
+      if (!preferences || !isSoundscapeAudible(preferences)) return;
 
       const noise = noiseLoopsFor(context.sampleRate);
       const worklet = new AudioWorkletNode(context, 'soundscape-generator', {
@@ -218,7 +213,7 @@ export class SoundscapeEngine {
         return { convolver, gain };
       });
 
-      musicPlayerService.connectToMix(busLimiter);
+      connectToOutput(busLimiter);
       this.mixGain = mixGain;
       this.busLimiter = busLimiter;
       this.spaceInput = spaceInput;
@@ -306,7 +301,7 @@ export class SoundscapeEngine {
     this.disconnectTimer = window.setTimeout(() => {
       this.disconnectTimer = null;
       const latest = this.preferences;
-      if (latest && isAudible(latest)) return;
+      if (latest && isSoundscapeAudible(latest)) return;
       this.teardown();
     }, SOUNDSCAPE_DISCONNECT_MS);
   }

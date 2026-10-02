@@ -1,4 +1,5 @@
 ﻿import { buildSyntheticRoomImpulseResponse } from './impulseResponse';
+import { connectToOutput, outputContext } from './audioOutputBus';
 
 /**
  * MusicPlayerService — Web Audio API based music playback.
@@ -7,9 +8,9 @@
  *   HTMLAudioElement → MediaElementSourceNode → GainNode ─┬→ dryGain ────────────────┬→ limiter → destination
  *                                                          └→ ConvolverNode → wetGain ┘
  *
- * The limiter is the app's shared output stage: other audio (the soundscape
- * sound engine) joins it through `connectToMix`, so music and ambience are
- * limited together rather than each clipping on its own.
+ * The limiter is the app's shared output stage (audioOutputBus.ts), which the
+ * soundscape engine joins as well, so music and ambience are limited
+ * together rather than each clipping on its own.
  *
  * The ConvolverNode provides a simple room-reverb effect using a synthetic
  * impulse response.  When reverbAmount is 0 the wet signal is silent and
@@ -181,7 +182,6 @@ export class MusicPlayerService {
   private dryGain: GainNode | null = null;
   private wetGain: GainNode | null = null;
   private convolver: ConvolverNode | null = null;
-  private mixLimiter: DynamicsCompressorNode | null = null;
   private config: MusicPlayerConfig = { volume: 0.8, reverbAmount: 0, reverbRoom: 0.3 };
   private onEndedHandler: PlaybackEndHandler | null = null;
   private currentFilePath: string | null = null;
@@ -218,51 +218,31 @@ export class MusicPlayerService {
   // ── Audio graph ────────────────────────────────────────────────────────────
 
   private ensureAudioContext(): AudioContext {
-    if (!this.audioCtx || this.audioCtx.state === 'closed') {
-      this.audioCtx = new AudioContext();
-      this.mixLimiter = this.audioCtx.createDynamicsCompressor();
-      this.mixLimiter.threshold.value = -1;
-      this.mixLimiter.knee.value = 0;
-      this.mixLimiter.ratio.value = 20;
-      this.mixLimiter.attack.value = 0.003;
-      this.mixLimiter.release.value = 0.08;
-      this.mixLimiter.connect(this.audioCtx.destination);
-      this.gainNode = this.audioCtx.createGain();
+    const context = outputContext();
+    if (this.audioCtx !== context) {
+      // A new shared context (first use, or the old one was closed): the
+      // music graph belongs to a context, so it is rebuilt with it.
+      this.audioCtx = context;
+      this.gainNode = context.createGain();
       this.gainNode.gain.value = this.config.volume;
 
-      this.dryGain = this.audioCtx.createGain();
+      this.dryGain = context.createGain();
       this.dryGain.gain.value = 1 - this.config.reverbAmount;
 
-      this.wetGain = this.audioCtx.createGain();
+      this.wetGain = context.createGain();
       this.wetGain.gain.value = this.config.reverbAmount;
 
-      this.convolver = this.audioCtx.createConvolver();
-      this.convolver.buffer = buildSyntheticRoomImpulseResponse(this.audioCtx, this.config.reverbRoom);
+      this.convolver = context.createConvolver();
+      this.convolver.buffer = buildSyntheticRoomImpulseResponse(context, this.config.reverbRoom);
 
-      // Both music paths share the output limiter with soundscape audio.
+      // gainNode → dryGain → limiter, and gainNode → convolver → wetGain → limiter
       this.gainNode.connect(this.dryGain);
-      this.dryGain.connect(this.mixLimiter);
-
-      // gainNode → convolver → wetGain → limiter
+      connectToOutput(this.dryGain);
       this.gainNode.connect(this.convolver);
       this.convolver.connect(this.wetGain);
-      this.wetGain.connect(this.mixLimiter);
+      connectToOutput(this.wetGain);
     }
-    return this.audioCtx;
-  }
-
-  async getAudioContextForMix(): Promise<AudioContext> {
-    const context = this.ensureAudioContext();
-    if (context.state === 'suspended') await context.resume();
     return context;
-  }
-
-  connectToMix(source: AudioNode): void {
-    const context = this.ensureAudioContext();
-    if (source.context !== context || !this.mixLimiter) {
-      throw new Error('Audio mix input must use the music player audio context.');
-    }
-    source.connect(this.mixLimiter);
   }
 
   // ── Config ─────────────────────────────────────────────────────────────────

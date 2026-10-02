@@ -909,3 +909,12 @@ export function hasAudibleSoundscapeLayer(settings: SoundscapeSettings): boolean
   if (soloChannel) return soloChannel.enabled && soloChannel.volume > 0;
   return settings.channels.some((channel) => channel.enabled && channel.volume > 0);
 }
+
+/**
+ * Whether these preferences would make any sound at all: the one rule for
+ * when the engine builds its graph, and for when the mobile app holds a
+ * background-playback session open.
+ */
+export function isSoundscapeAudible(preferences: SoundscapePreferences): boolean {
+  return preferences.enabled && preferences.masterVolume > 0 && hasAudibleSoundscapeLayer(preferences.settings);
+}

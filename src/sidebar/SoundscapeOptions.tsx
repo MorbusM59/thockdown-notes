@@ -428,7 +428,25 @@ function ControlGroups({ idPrefix, groups, values, defaults, disabled, name, onC
   )
 }
 
-export function SoundscapeOptions({ preferences, onChange }: SoundscapeOptionsProps) {
+/** The soundscape section of the options panel. */
+export function SoundscapeOptions(props: SoundscapeOptionsProps) {
+  return (
+    <AccordionSection
+      className="sidebar-options-section-soundscape"
+      ariaLabel="Soundscapes"
+      heading="Soundscapes"
+    >
+      <SoundscapeControls {...props} />
+    </AccordionSection>
+  )
+}
+
+/**
+ * Everything inside that section, without the accordion around it: the
+ * mobile app (mobile/) shows these controls as its whole interface, where a
+ * collapsible section heading would have nothing to collapse against.
+ */
+export function SoundscapeControls({ preferences, onChange }: SoundscapeOptionsProps) {
   const [pendingDeletePresetId, setPendingDeletePresetId] = useState<string | null>(null)
   const channelSelectorRef = useRef<HTMLDivElement | null>(null)
   const channelHoldRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
@@ -585,11 +603,6 @@ export function SoundscapeOptions({ preferences, onChange }: SoundscapeOptionsPr
   const layerName = rosterEntry ? `${KIND_LOOK[rosterEntry.kind].label} layer ${rosterEntry.number}` : ''
 
   return (
-    <AccordionSection
-      className="sidebar-options-section-soundscape"
-      ariaLabel="Soundscapes"
-      heading="Soundscapes"
-    >
       <div className="utility-setting-slider-stack" aria-label="Soundscape controls">
         <OptionsSubsectionLabel>Presets</OptionsSubsectionLabel>
         <div className="options-loadout-grid soundscape-preset-grid" role="group" aria-label="Factory soundscapes">
@@ -772,6 +785,5 @@ export function SoundscapeOptions({ preferences, onChange }: SoundscapeOptionsPr
           </div>
         )}
       </div>
-    </AccordionSection>
   )
 }
