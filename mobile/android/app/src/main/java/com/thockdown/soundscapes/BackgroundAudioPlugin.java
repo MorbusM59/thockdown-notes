@@ -3,7 +3,6 @@ package com.thockdown.soundscapes;
 import android.Manifest;
 import android.content.Intent;
 import android.os.Build;
-import android.util.Base64;
 import com.getcapacitor.JSObject;
 import androidx.core.content.ContextCompat;
 import com.getcapacitor.Plugin;
@@ -18,11 +17,11 @@ import com.getcapacitor.annotation.Permission;
  * Two jobs. It holds a foreground service of type mediaPlayback open for as
  * long as the web side says a soundscape is audible (start/stop), which is
  * what keeps Android from freezing or killing the process once the app is in
- * the background or the screen is off. And it is the soundscape's OUTPUT
- * (openOutput/write/setVolume/closeOutput; SoundscapeAudioOutput): the web
- * side renders the finished audio ahead in a worker and hands it here, and
- * it is played from this process, outside the WebView, by the platform's
- * own audio output.
+ * the background or the screen is off. And it runs the soundscape itself
+ * (openRenderer/configure/setVolume/closeRenderer): SoundscapeRenderer
+ * renders it ahead in this process and SoundscapeAudioOutput plays it, so
+ * neither depends on the WebView, whose JavaScript is paused in the
+ * background. The web side only sends settings and the volume.
  *
  * The web side is the only authority on whether a soundscape is playing: it
  * calls start() and stop() from the same effect that drives the engine. The
@@ -44,7 +43,7 @@ public class BackgroundAudioPlugin extends Plugin {
 
     @Override
     protected void handleOnDestroy() {
-        closeCurrentOutput();
+        closeCurrent();
         if (instance == this) instance = null;
     }
 
@@ -73,22 +72,34 @@ public class BackgroundAudioPlugin extends Plugin {
     }
 
     private SoundscapeAudioOutput output;
+    private SoundscapeRenderer renderer;
 
-    /** Open the output (replacing any open one); resolves with its `sampleRate`. */
+    /** Whether the renderer can run on this device (its WebView provides the JavaScriptSandbox). */
     @PluginMethod
-    public void openOutput(PluginCall call) {
-        closeCurrentOutput();
+    public void isRendererSupported(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("supported", SoundscapeRenderer.isSupported());
+        call.resolve(result);
+    }
+
+    /** Open the output and start the renderer (replacing any running). */
+    @PluginMethod
+    public void openRenderer(PluginCall call) {
+        closeCurrent();
+        // The renderer reads the output's playhead, and the output wakes
+        // the renderer as it plays: each needs the other, so the output's
+        // listener reaches the renderer through the field.
         output = new SoundscapeAudioOutput(new SoundscapeAudioOutput.Listener() {
             @Override
-            public void onPlayed(long frame) {
-                JSObject data = new JSObject();
-                data.put("frame", frame);
-                notifyListeners("played", data);
+            public void onProgress() {
+                SoundscapeRenderer current = renderer;
+                if (current != null) current.wake();
             }
 
             @Override
             public void onStats(long playedFrames, long queuedFrames, long dryFrames, int dryEvents, int deviceUnderruns, int trackRestarts, int lastError) {
                 JSObject data = new JSObject();
+                data.put("sampleRate", output != null ? output.sampleRate : 0);
                 data.put("playedFrames", playedFrames);
                 data.put("trackRestarts", trackRestarts);
                 data.put("lastError", lastError);
@@ -99,27 +110,20 @@ public class BackgroundAudioPlugin extends Plugin {
                 notifyListeners("outputStats", data);
             }
         });
-        JSObject result = new JSObject();
-        result.put("sampleRate", output.sampleRate);
-        call.resolve(result);
+        renderer = new SoundscapeRenderer(getContext(), output, message -> {
+            JSObject data = new JSObject();
+            data.put("message", message);
+            notifyListeners("rendererFailure", data);
+        });
+        call.resolve();
     }
 
-    /** Queue `data` (base64 of interleaved 16-bit little-endian stereo) at `startFrame`. */
+    /** New settings: `configuration` is a ConfigureMessage as JSON. */
     @PluginMethod
-    public void write(PluginCall call) {
-        SoundscapeAudioOutput current = output;
-        Double startFrame = call.getDouble("startFrame");
-        String data = call.getString("data");
-        if (current == null || startFrame == null || data == null) {
-            call.resolve();
-            return;
-        }
-        byte[] bytes = Base64.decode(data, Base64.DEFAULT);
-        short[] samples = new short[bytes.length / 2];
-        for (int index = 0; index < samples.length; index += 1) {
-            samples[index] = (short) ((bytes[index * 2] & 0xff) | (bytes[(index * 2) + 1] << 8));
-        }
-        current.write(startFrame.longValue(), samples);
+    public void configure(PluginCall call) {
+        SoundscapeRenderer current = renderer;
+        String configuration = call.getString("configuration");
+        if (current != null && configuration != null) current.configure(configuration);
         call.resolve();
     }
 
@@ -133,12 +137,16 @@ public class BackgroundAudioPlugin extends Plugin {
     }
 
     @PluginMethod
-    public void closeOutput(PluginCall call) {
-        closeCurrentOutput();
+    public void closeRenderer(PluginCall call) {
+        closeCurrent();
         call.resolve();
     }
 
-    private void closeCurrentOutput() {
+    private void closeCurrent() {
+        if (renderer != null) {
+            renderer.close();
+            renderer = null;
+        }
         if (output != null) {
             output.close();
             output = null;

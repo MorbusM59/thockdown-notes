@@ -11,12 +11,15 @@
  *   Android);
  * - "Output restarts": device streams rebuilt after the system refused a
  *   write, with the last error code;
+ * - "Playback": native (rendered and played by the app's service) or the
+ *   web page's, and why;
  * - "Last failure": anything that tore playback down.
  * Delete this, and its mount in MobileSoundscapeApp, once that is settled.
  */
 import { useEffect, useState } from 'react'
 import { soundscapeEngine, type SoundscapePlaybackStats } from '../../src/sound/SoundscapeEngine'
 import { OptionsSubsectionLabel } from '../../src/sidebar/OptionsSubsectionLabel'
+import { playbackMode } from './playbackMode'
 
 declare const __MOBILE_BUILD_ID__: string
 
@@ -26,6 +29,8 @@ export function PlaybackDiagnostics() {
   const [stats, setStats] = useState<{ value: SoundscapePlaybackStats; at: number } | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
+  const [mode, setMode] = useState('…')
+  useEffect(() => { void playbackMode.then(setMode) }, [])
   useEffect(() => soundscapeEngine.subscribeStats((value) => setStats({ value, at: Date.now() })), [])
   useEffect(() => soundscapeEngine.subscribeFailures((value) => setFailure(`${new Date().toLocaleTimeString()}: ${value}`)), [])
   useEffect(() => {
@@ -46,6 +51,7 @@ export function PlaybackDiagnostics() {
   } else {
     rows.push(['Status', 'start a soundscape'])
   }
+  rows.push(['Playback', mode])
   rows.push(['Last failure', failure ?? 'none'])
   rows.push(['Build', __MOBILE_BUILD_ID__])
   return (

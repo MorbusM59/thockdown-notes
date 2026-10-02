@@ -21,44 +21,54 @@ elements, so a change to a preset reaches both. Textures are the one part of
 a preset the phone does not draw: they are rendered by a worker and cached by
 the desktop's main process. The desktop's custom layouts are not offered.
 
-## Playback: rendered ahead, played natively
-The whole soundscape -- the generator (`src/sound/soundscape-generator.js`)
-and the mix after it (`src/sound/soundscapeMix.ts`: the space as a
-partitioned convolution, the mix gain, the bus compressor) -- is rendered in
-a worker (`soundscapeRender.worker.ts`, `soundscapeRenderAhead.ts`), up to
-ten seconds ahead of playback. The output only plays finished samples and
-applies the listener's volume:
-- **On Android** that output is native (`nativeSoundscapeOutput.ts` ->
-  `BackgroundAudioPlugin.java` -> `SoundscapeAudioOutput.java`): a queue in
-  the app's own process, written to the platform's AudioTrack by a thread of
-  audio priority. This is the fix for the dropout heard on every switch to
-  another app. Diagnostics showed audio queued in the WebView and still
-  cutting out: the WebView's own audio output pauses or stalls on the
-  switch, so no queue inside the WebView could cover it. A queue outside it
-  does.
-- **On desktop** it is the player worklet (`public/soundscape-player.js`,
-  `soundscapeWebAudioOutput.ts`) into the shared output limiter, where the
-  music joins it.
+## Playback: rendered and played in the app's own service
+The soundscape is rendered ahead of playback by one piece of code
+(`src/sound/soundscapeRenderAhead.ts`: the generator,
+`src/sound/soundscape-generator.js`, then the mix, `soundscapeMix.ts` --
+the space as a partitioned convolution, the mix gain, the bus compressor),
+keeping ten seconds of finished audio queued at an output. Where it runs is
+the platform's:
+- **On Android**, in the app's native service, never in the WebView: the
+  same renderer, built as one script (`src/sound/soundscapeSandbox.ts` ->
+  `assets/soundscape-renderer.js` by `mobile/vite.renderer.config.ts`), runs
+  in a JavaScriptSandbox (`androidx.javascriptengine`, a V8 isolate the app
+  owns) driven by `SoundscapeRenderer.java`, and `SoundscapeAudioOutput.java`
+  plays it through the platform's AudioTrack from a queue in the app's
+  process. The web page only sends settings and the volume
+  (`nativeSoundscapePlayback.ts`).
+- **On desktop** (and in a plain browser, or a WebView too old to provide
+  the sandbox), in a worker, played by the player worklet
+  (`soundscapeWebPlayback.ts`, `public/soundscape-player.js`).
 
-Both outputs are plain queues of frames at absolute positions. A settings
-change is spliced in a margin past the output's last reported position and
-crossfaded by the WORKER from the audio it already sent, so no output
-computes anything. Heard in a browser within 100-150 ms.
+How it got here, because each step was measured on a device:
+1. In the WebView, the generator on the audio thread clicked under load:
+   the output buffer was raised to the browser's maximum.
+2. Render-ahead in a worker changed nothing for the gap on an app switch;
+   diagnostics showed audio queued in the WebView and its OUTPUT stalling
+   (six underruns, a second in all, with the player never dry).
+3. Playing from a native queue fixed the switch, but playback stopped
+   about 100 s into the background: the web page's JavaScript, worker
+   included, is paused there, and the native queue ran dry ten seconds
+   later. Hence rendering in the service itself.
 
-**Measured against the Web Audio graph it replaced**, on the same generator
-output for all six factory soundscapes (20 s each at 48 kHz): the
+Outputs are plain queues at absolute frame positions. A settings change is
+spliced a margin past the playhead and crossfaded by the RENDERER from its
+history of what it sent; on Android the playhead is read in the same
+process at the moment of the change, so the margin only covers what the
+device has already been handed (its buffer and one writer block).
+
+**Measured against the Web Audio graph the mix replaced**, on the same
+generator output for all six factory soundscapes (20 s each at 48 kHz): the
 convolution equals the ConvolverNode's to within 1e-7 of full scale, and the
 compressor, which uses Chromium's static curve and makeup gain
 (`dynamicsCompressor.ts`), matches the node's loudness to 0.00 dB in every
 100 ms window, with correlation 1.000.
 
-Samples cross the plugin bridge as 16-bit at half scale (the native side
-applies the volume and doubles them back), so a mix above full scale before
-the volume is not clipped early.
-
-Not yet known: the dropout on an app switch is expected to be gone, and
-that is the device test. The main thread hands chunks to the native side; a
-pause of the main thread is covered by the seconds queued natively.
+Samples cross from the sandbox as 16-bit at half scale (`halfScalePcm.ts`;
+the native side applies the volume and doubles them back), so a mix above
+full scale before the volume is not clipped early. The sandbox needs a
+WebView of about version 110; `soundscapeSandbox.test.ts` runs the shipped
+bundle in a context with no web APIs, as the sandbox has none.
 
 ## Layout
 - `mobile/src/` — the web app: `MobileSoundscapeApp.tsx` (the screen),

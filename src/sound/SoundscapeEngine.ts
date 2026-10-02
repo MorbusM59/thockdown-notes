@@ -1,28 +1,29 @@
 /**
- * SoundscapeEngine -- runs the soundscape: a render worker that produces the
- * finished audio ahead of playback, and an OUTPUT that plays it.
+ * SoundscapeEngine -- runs the soundscape by driving a PLAYBACK: something
+ * that renders the finished audio ahead of time and plays it. The engine
+ * only opens and closes it, sends it new settings, and sets its volume.
  *
- * The worker (soundscapeRender.worker.ts, soundscapeRenderAhead.ts) runs the
- * generator (src/sound/soundscape-generator.js) and the mix
- * (soundscapeMix.ts: the space, the mix gain, the bus compressor) and keeps
- * ten seconds of finished stereo audio queued at the output. The output is
- * a queue of frames and a volume, and nothing more:
- * - on desktop, the player worklet into the shared output limiter, where the
- *   music joins it (soundscapeWebAudioOutput.ts, the default);
- * - on Android, the platform's own audio output in the app's native
- *   process, outside the WebView (mobile/src/nativeSoundscapeOutput.ts,
- *   installed with useOutput), so that what the WebView does with its own
- *   audio on an app switch cannot reach the queue.
+ * Rendering is always the same code (soundscapeRenderAhead.ts: the
+ * generator, src/sound/soundscape-generator.js, and the mix,
+ * soundscapeMix.ts) keeping ten seconds of finished audio queued at an
+ * output; where it runs is the playback's business:
+ * - on desktop, in a worker, played by the player worklet into the shared
+ *   output limiter where the music joins it (soundscapeWebPlayback.ts, the
+ *   default);
+ * - on Android, in the app's native service: a JavaScriptSandbox runs the
+ *   same renderer and Android's own audio output plays it
+ *   (mobile/src/nativeSoundscapePlayback.ts, installed with usePlayback).
+ *   A web page's JavaScript is paused in the background; that service's is
+ *   not, and neither is its audio.
  *
- * This engine starts the two, connects them over a MessageChannel, sends the
- * worker new settings, and sets the output's volume. The listener's master
- * volume and the on/off fade are the output's, applied live, so they never
- * wait on the audio already rendered ahead. The soundscape's OWN volume is
- * not: it is applied inside the generator, in the same `configure` as the
- * channels it belongs to, because a switch from one soundscape to another
- * changes both at once and must change them together.
+ * The listener's master volume and the on/off fade are the playback's,
+ * applied live at its output, so they never wait on the audio already
+ * rendered ahead. The soundscape's OWN volume is not: it is applied inside
+ * the generator, in the same configuration as the channels it belongs to,
+ * because a switch from one soundscape to another changes both at once and
+ * must change them together.
  *
- * The output exists only while something is audible: it is opened on the
+ * The playback exists only while something is audible: it is opened on the
  * first audible `apply` and closed after a short fade once nothing is.
  */
 import {
@@ -30,9 +31,8 @@ import {
   type SoundscapePreferences,
 } from '../shared/soundscape';
 import { toGeneratorConfiguration } from '../shared/soundscapeDsp';
-import { buildNoiseLoops, noiseLoopGains, type NoiseLoops } from '../shared/soundscapeNoiseLoops';
 import type { ConfigureMessage } from './soundscapeRenderAhead';
-import { createWebAudioOutput } from './soundscapeWebAudioOutput';
+import { createWebPlayback } from './soundscapeWebPlayback';
 
 /** How long the output takes to fade out before it is closed. */
 const SOUNDSCAPE_DISCONNECT_MS = 180;
@@ -60,63 +60,38 @@ export interface SoundscapePlaybackStats {
   lastOutputError: number | null;
 }
 
-/** Where the finished soundscape is played. */
-export interface SoundscapeOutput {
-  readonly sampleRate: number;
-  /**
-   * How far past its last `played` report the output may already have
-   * committed audio it can no longer replace; settings changes are spliced
-   * in no nearer than this (soundscapeRenderAhead.ts).
-   */
-  readonly spliceMarginSec: number;
-  /** The worker's end of the output's channel: chunks in, `played` reports out. */
-  readonly port: MessagePort;
+/** A running soundscape: a renderer and an output, wherever they are. */
+export interface SoundscapePlayback {
+  /** New settings for the renderer; spliced in near the playhead. */
+  configure(configuration: ConfigureMessage): void;
   /** The listener's volume (0..1); the output glides to it over about `timeConstantSec`. */
   setVolume(volume: number, timeConstantSec: number): void;
   close(): void;
 }
 
-export interface SoundscapeOutputHandlers {
+export interface SoundscapePlaybackHandlers {
   onStats(stats: SoundscapePlaybackStats): void;
-  /** The output stopped and will not play again; the engine closes it and builds a new one on the next apply. */
-  onFailure(): void;
+  /** The playback stopped and will not play again; the engine closes it, and the next apply opens a new one. */
+  onFailure(message: string): void;
 }
 
-export type SoundscapeOutputFactory = (handlers: SoundscapeOutputHandlers) => Promise<SoundscapeOutput>;
+export type SoundscapePlaybackFactory = (handlers: SoundscapePlaybackHandlers) => Promise<SoundscapePlayback>;
 
 /** The fade on a volume change, and the faster one on the way out. */
 const VOLUME_TIME_CONSTANT_SEC = 0.08;
 const FADE_OUT_TIME_CONSTANT_SEC = 0.025;
 
-/**
- * The noise loops and their level-matching gains, per sample rate. Built
- * once on the main thread (tens of milliseconds) and copied into each
- * render worker at creation, so the generator never generates noise.
- */
-const NOISE_LOOPS = new Map<number, { loops: NoiseLoops; gains: ReturnType<typeof noiseLoopGains> }>();
-
-function noiseLoopsFor(sampleRate: number) {
-  let entry = NOISE_LOOPS.get(sampleRate);
-  if (!entry) {
-    const loops = buildNoiseLoops(sampleRate);
-    entry = { loops, gains: noiseLoopGains(loops, sampleRate) };
-    NOISE_LOOPS.set(sampleRate, entry);
-  }
-  return entry;
-}
-
 type StatsListener = (stats: SoundscapePlaybackStats) => void;
 type FailureListener = (failure: string) => void;
 
+
 export class SoundscapeEngine {
-  private outputFactory: SoundscapeOutputFactory = createWebAudioOutput;
-  private output: SoundscapeOutput | null = null;
-  private renderWorker: Worker | null = null;
+  private playbackFactory: SoundscapePlaybackFactory = createWebPlayback;
+  private playback: SoundscapePlayback | null = null;
   /**
-   * The last configuration sent to the render worker, serialised. Each one
-   * rewinds the audio rendered ahead to near the playhead and renders it
-   * again, so a change that does not touch it (master volume, on/off) must
-   * not send one.
+   * The last configuration sent, serialised. Each one re-renders from near
+   * the playhead, so a change that does not touch it (master volume,
+   * on/off) must not send one.
    */
   private sentConfiguration: string | null = null;
   private volumeTarget = -1;
@@ -125,6 +100,17 @@ export class SoundscapeEngine {
   private disconnectTimer: number | null = null;
   private readonly statsListeners = new Set<StatsListener>();
   private readonly failureListeners = new Set<FailureListener>();
+
+  /** Play through `factory`'s playbacks from the next start on (the mobile app's native one). */
+  usePlayback(factory: SoundscapePlaybackFactory): void {
+    this.playbackFactory = factory;
+  }
+
+  /** Receive playback statistics, a few times a second while a soundscape plays. Returns the unsubscribe. */
+  subscribeStats(listener: StatsListener): () => void {
+    this.statsListeners.add(listener);
+    return () => { this.statsListeners.delete(listener); };
+  }
 
   /** Be told when playback failed and was torn down, with what failed. Returns the unsubscribe. */
   subscribeFailures(listener: FailureListener): () => void {
@@ -137,17 +123,6 @@ export class SoundscapeEngine {
     for (const listener of this.failureListeners) listener(failure);
   }
 
-  /** Play through `factory`'s outputs from the next start on (the mobile app's native output). */
-  useOutput(factory: SoundscapeOutputFactory): void {
-    this.outputFactory = factory;
-  }
-
-  /** Receive playback statistics, a few times a second while a soundscape plays. Returns the unsubscribe. */
-  subscribeStats(listener: StatsListener): () => void {
-    this.statsListeners.add(listener);
-    return () => { this.statsListeners.delete(listener); };
-  }
-
   apply(preferences: SoundscapePreferences): void {
     this.preferences = preferences;
     if (!isSoundscapeAudible(preferences)) {
@@ -158,7 +133,7 @@ export class SoundscapeEngine {
       window.clearTimeout(this.disconnectTimer);
       this.disconnectTimer = null;
     }
-    if (this.output) {
+    if (this.playback) {
       this.update(preferences);
       return;
     }
@@ -170,57 +145,39 @@ export class SoundscapeEngine {
   }
 
   private async start(): Promise<void> {
-    let output: SoundscapeOutput | null = null;
+    let playback: SoundscapePlayback | null = null;
     try {
-      output = await this.outputFactory({
+      playback = await this.playbackFactory({
         onStats: (stats) => {
           for (const listener of this.statsListeners) listener(stats);
         },
-        onFailure: () => {
-          this.reportFailure('Soundscape output stopped unexpectedly');
-          // It does not run again, so the graph is torn down now rather
-          // than after a fade: with it gone, the next apply() builds a new one.
-          if (this.output === output) this.teardown();
+        onFailure: (message) => {
+          this.reportFailure(message);
+          // It does not play again, so it is torn down now rather than after
+          // a fade: with it gone, the next apply() opens a new one.
+          if (this.playback === playback) this.teardown();
         },
       });
       const preferences = this.preferences;
       if (!preferences || !isSoundscapeAudible(preferences)) {
-        output.close();
+        playback.close();
         return;
       }
-      const noise = noiseLoopsFor(output.sampleRate);
-      const renderWorker = new Worker(new URL('./soundscapeRender.worker.ts', import.meta.url), { type: 'module' });
-      renderWorker.postMessage({
-        type: 'init',
-        sampleRate: output.sampleRate,
-        options: {
-          seed: (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0,
-          noiseLoops: noise.loops,
-          noiseGains: noise.gains,
-        },
-        spliceMarginSec: output.spliceMarginSec,
-        output: output.port,
-      }, [output.port]);
-      renderWorker.onerror = (event) => {
-        this.reportFailure(`Soundscape render worker stopped: ${event.message}`);
-        if (this.renderWorker === renderWorker) this.teardown();
-      };
-      this.output = output;
-      this.renderWorker = renderWorker;
+      this.playback = playback;
       this.sentConfiguration = null;
       this.volumeTarget = -1;
       this.update(preferences);
     } catch (error) {
-      output?.close();
+      playback?.close();
       this.reportFailure(`Unable to start soundscape audio: ${String(error)}`);
     }
   }
 
   private update(preferences: SoundscapePreferences): void {
-    const output = this.output;
-    if (!output || !this.renderWorker) return;
+    const playback = this.playback;
+    if (!playback) return;
     if (this.volumeTarget !== preferences.masterVolume) {
-      output.setVolume(preferences.masterVolume, VOLUME_TIME_CONSTANT_SEC);
+      playback.setVolume(preferences.masterVolume, VOLUME_TIME_CONSTANT_SEC);
       this.volumeTarget = preferences.masterVolume;
     }
     const configuration: ConfigureMessage = {
@@ -230,16 +187,16 @@ export class SoundscapeEngine {
     };
     const serialised = JSON.stringify(configuration);
     if (serialised !== this.sentConfiguration) {
-      this.renderWorker.postMessage(configuration);
+      playback.configure(configuration);
       this.sentConfiguration = serialised;
     }
   }
 
   private fadeOutAndClose(): void {
-    const output = this.output;
-    if (!output) return;
+    const playback = this.playback;
+    if (!playback) return;
     if (this.volumeTarget !== 0) {
-      output.setVolume(0, FADE_OUT_TIME_CONSTANT_SEC);
+      playback.setVolume(0, FADE_OUT_TIME_CONSTANT_SEC);
       this.volumeTarget = 0;
     }
     if (this.disconnectTimer !== null) window.clearTimeout(this.disconnectTimer);
@@ -254,10 +211,8 @@ export class SoundscapeEngine {
   private teardown(): void {
     if (this.disconnectTimer !== null) window.clearTimeout(this.disconnectTimer);
     this.disconnectTimer = null;
-    this.renderWorker?.terminate();
-    this.renderWorker = null;
-    this.output?.close();
-    this.output = null;
+    this.playback?.close();
+    this.playback = null;
     this.sentConfiguration = null;
     this.volumeTarget = -1;
   }

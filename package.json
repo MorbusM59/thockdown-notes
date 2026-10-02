@@ -12,7 +12,7 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "mobile:dev": "vite --config mobile/vite.config.ts",
-    "mobile:build": "tsc -p mobile && vite build --config mobile/vite.config.ts && cap sync android",
+    "mobile:build": "tsc -p mobile && vite build --config mobile/vite.config.ts && vite build --config mobile/vite.renderer.config.ts && cap sync android",
     "pretest": "node scripts/killStrayElectronDev.mjs && npm rebuild better-sqlite3",
     "test": "vitest run",
     "adventure:sim": "vite-node scripts/adventure/simulate.ts --",

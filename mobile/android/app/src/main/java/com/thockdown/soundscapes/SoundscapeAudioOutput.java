@@ -7,9 +7,9 @@ import android.media.AudioTrack;
 import android.os.Process;
 
 /**
- * Android's output for the soundscape (see src/sound/SoundscapeEngine.ts):
- * the finished audio, rendered ahead by the web side's worker, played by
- * the platform's AudioTrack from a queue held HERE, in the app's own process.
+ * Android's output for the soundscape: the finished audio, rendered ahead
+ * by SoundscapeRenderer in this same process, played by the platform's
+ * AudioTrack from a queue held here.
  *
  * This is what keeps playback going through an app switch. The WebView's
  * own audio output pauses or stalls briefly whenever the app leaves the
@@ -27,9 +27,10 @@ import android.os.Process;
  * THE WRITER takes BLOCK_FRAMES at a time from the playhead, applies the
  * listener's volume (glided, so a change is not heard as a step), and
  * writes them to the AudioTrack, blocking while its buffer is full; what is
- * not queued is played as silence and counted. `played` reports how far it
- * has handed audio to the AudioTrack, which is as far as a splice can no
- * longer reach.
+ * not queued is played as silence and counted. The playhead
+ * (playheadFrame) is how far it has handed audio to the AudioTrack, which is
+ * as far as a splice can no longer reach; every REPORT_FRAMES it calls the
+ * listener's onProgress, which is what lets the renderer render more.
  *
  * A write the AudioTrack refuses (a negative result: ERROR_DEAD_OBJECT when
  * the audio system has invalidated the track, for instance on a route
@@ -40,7 +41,7 @@ import android.os.Process;
  */
 final class SoundscapeAudioOutput {
     interface Listener {
-        void onPlayed(long frame);
+        void onProgress();
         void onStats(long playedFrames, long queuedFrames, long dryFrames, int dryEvents, int deviceUnderruns, int trackRestarts, int lastError);
     }
 
@@ -102,6 +103,16 @@ final class SoundscapeAudioOutput {
             .setBufferSizeInBytes(bufferBytes)
             .setTransferMode(AudioTrack.MODE_STREAM)
             .build();
+    }
+
+    /** How far audio has been handed to the device: as far as a splice can no longer reach. */
+    synchronized long playheadFrame() {
+        return playhead;
+    }
+
+    /** Frames the device buffer and one writer block hold beyond the playhead: the least a splice must leave. */
+    double committedSec() {
+        return ((double) bufferBytes / 4 + BLOCK_FRAMES) / sampleRate;
     }
 
     /** Queue `samples` (interleaved stereo) at `startFrame`, replacing whatever is queued from there on. */
@@ -211,7 +222,7 @@ final class SoundscapeAudioOutput {
             sinceStats += BLOCK_FRAMES;
             if (sinceReport >= REPORT_FRAMES) {
                 sinceReport = 0;
-                listener.onPlayed(reachedFrame);
+                listener.onProgress();
             }
             if (sinceStats >= STATS_FRAMES) {
                 sinceStats = 0;

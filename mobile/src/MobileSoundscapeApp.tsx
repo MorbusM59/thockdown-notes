@@ -30,18 +30,16 @@ import { OptionsSliderRows } from '../../src/sidebar/OptionsSliderRows'
 import { OptionsSubsectionLabel } from '../../src/sidebar/OptionsSubsectionLabel'
 import { applyDocumentTheme, themeFrame } from '../../src/shared/loadoutTheme'
 import { ThemeBlendOverlays, ThemeGlazeLayers } from '../../src/components/ThemeLayers'
-import { backgroundAudioHost, nativeOutputPlugin } from './backgroundAudioHost'
-import { nativeSoundscapeOutput } from './nativeSoundscapeOutput'
+import { backgroundAudioHost } from './backgroundAudioHost'
 import { PlaybackDiagnostics } from './PlaybackDiagnostics'
+// Chooses the native playback where the device supports it.
+import './playbackMode'
 import { loadLook, loadPreferences, saveLook, savePreferences, type MobileLook } from './preferencesStore'
 
 const PRESETS = { light: LIGHT_FACTORY_PRESETS, dark: DARK_FACTORY_PRESETS }
 const PRESET_ICONS = { light: LIGHT_PRESET_ICONS, dark: DARK_PRESET_ICONS }
 const PRESET_NAMES = { light: LIGHT_PRESET_THEMES, dark: DARK_PRESET_THEMES }
 
-// In the app, play through Android's own audio output rather than the
-// WebView's (nativeSoundscapeOutput.ts); in a plain browser keep Web Audio.
-if (nativeOutputPlugin) soundscapeEngine.useOutput(nativeSoundscapeOutput(nativeOutputPlugin))
 
 function sessionTitle(preferences: SoundscapePreferences): string {
   const preset = [...preferences.customPresets, ...SOUNDSCAPE_FACTORY_PRESETS]
