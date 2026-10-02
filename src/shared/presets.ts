@@ -179,6 +179,42 @@ export const DEFAULT_CUSTOM_DARK: UiLayoutLoadout = {
   filterInvert: 1,
 };
 
+// How each factory preset is shown on its button: an icon and a name, in the
+// same order as LIGHT_FACTORY_PRESETS / DARK_FACTORY_PRESETS below. Shared by
+// the desktop options panel and the mobile app.
+export const LIGHT_PRESET_ICONS: string[] = [
+  'fa-solid fa-sun',
+  'fa-solid fa-mound',
+  'fa-solid fa-cloud',
+  'fa-regular fa-file',
+  'fa-solid fa-ring',
+]
+
+export const DARK_PRESET_ICONS: string[] = [
+  'fa-solid fa-moon',
+  'fa-solid fa-archway',
+  'fa-solid fa-droplet',
+  'fa-solid fa-burst',
+  'fa-solid fa-shield',
+]
+
+// Names for the 5 factory presets per mode, indexed by abs(id) - 1 (0-based).
+export const LIGHT_PRESET_THEMES: string[] = [
+  'Light (Default)',
+  'Sand',
+  'Sky',
+  'Paper',
+  'Gold',
+]
+
+export const DARK_PRESET_THEMES: string[] = [
+  'Dark (Default)',
+  'Ancient',
+  'Ocean',
+  'Bubblegum',
+  'Metal',
+]
+
 // --- Placeholder factory presets -------------------------------------------
 // Each preset is based on neutral base with only changed values specified.
 

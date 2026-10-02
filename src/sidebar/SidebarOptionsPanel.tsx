@@ -179,6 +179,7 @@ import {
   type GlazeSettings,
 } from '../shared/glaze'
 import { LOADOUT_FACTORY_PRESET_COUNT, type UiLoadoutEntry } from '../shared/loadouts'
+import { DARK_PRESET_ICONS, DARK_PRESET_THEMES, LIGHT_PRESET_ICONS, LIGHT_PRESET_THEMES } from '../shared/presets'
 import { typingSoundManager } from '../sound/TypingSoundManager'
 import {
   DEFAULT_WHEEL_SPIN_DAMPEN_DIVISOR,
@@ -357,40 +358,6 @@ const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
   markdownChecked: 'fa-solid fa-square-check',
   markdownUnchecked: 'fa-regular fa-square',
 }
-
-// Icons for the 5 factory presets per mode, indexed by abs(id) - 1 (0-based).
-const LIGHT_PRESET_ICONS: string[] = [
-  'fa-solid fa-sun',
-  'fa-solid fa-mound',
-  'fa-solid fa-cloud',
-  'fa-regular fa-file',
-  'fa-solid fa-ring',
-]
-
-const DARK_PRESET_ICONS: string[] = [
-  'fa-solid fa-moon',
-  'fa-solid fa-archway',
-  'fa-solid fa-droplet',
-  'fa-solid fa-burst',
-  'fa-solid fa-shield',
-]
-
-// Names for the 5 factory presets per mode, indexed by abs(id) - 1 (0-based).
-const LIGHT_PRESET_THEMES: string[] = [
-  'Light (Default)',
-  'Sand',
-  'Sky',
-  'Paper',
-  'Gold',
-]
-
-const DARK_PRESET_THEMES: string[] = [
-  'Dark (Default)',
-  'Ancient',
-  'Ocean',
-  'Bubblegum',
-  'Metal',
-]
 
 const TEXTURE_SURFACE_TITLES: Record<TextureSurfaceKey, string> = {
   appGrid: 'App grid texture color',

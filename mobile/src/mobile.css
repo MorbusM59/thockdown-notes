@@ -19,14 +19,3 @@ body {
   overflow-y: auto;
   padding: calc(env(safe-area-inset-top) + 8px) 12px calc(env(safe-area-inset-bottom) + 16px);
 }
-
-.mobile-soundscape-master {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.mobile-soundscape-master > :last-child {
-  flex: 1;
-}

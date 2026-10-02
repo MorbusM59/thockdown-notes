@@ -10,12 +10,26 @@ copy: the panel, the engine (`src/sound/SoundscapeEngine.ts`), the worklet
 reaches both.
 
 ## Look
-The desktop's **Paper** light preset, fixed. It is drawn by the same code the
+Any of the desktop's ten factory visual presets, chosen in the Master section
+(the five of the current mode, plus a dark mode switch that returns to the
+preset last used in that mode; Paper, light, by default; kept in
+localStorage by `preferencesStore.ts`). They are drawn by the same code the
 desktop uses (`src/shared/loadoutTheme.ts` for the variables, filter and
-overlays, `src/components/ThemeLayers.tsx` for the glaze and blend layers),
-inside the same frame elements, so a change to Paper reaches both. Textures
-are the one part of a preset the phone does not draw: they are rendered by a
-worker and cached by the desktop's main process.
+overlays, `src/components/ThemeLayers.tsx` for the glaze and blend layers;
+icons and names from `src/shared/presets.ts`), inside the same frame
+elements, so a change to a preset reaches both. Textures are the one part of
+a preset the phone does not draw: they are rendered by a worker and cached by
+the desktop's main process. The desktop's custom layouts are not offered.
+
+## Output buffer
+The shared output context (`src/sound/audioOutputBus.ts`) is created with
+`latencyHint: 'playback'`, so the browser uses a larger output buffer than
+its interactive default and a short CPU stall is absorbed instead of heard
+as a crackle. Measured in desktop Chromium on Linux: base latency 10 ms
+(interactive) against 23 ms (playback). Android's playback buffer is chosen
+by the platform and has not been measured on a device. If crackling
+persists, the next step is a NUMBER for `latencyHint` (seconds), which asks
+for a specific buffer size.
 
 ## Layout
 - `mobile/src/` — the web app: `MobileSoundscapeApp.tsx` (the screen),

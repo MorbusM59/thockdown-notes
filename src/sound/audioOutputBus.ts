@@ -5,6 +5,14 @@
  * here, so music and ambience share one ceiling instead of each clipping on
  * its own.
  *
+ * The context is created with latencyHint 'playback': the browser then uses
+ * a larger output buffer than its default ('interactive', sized for sound
+ * that must answer a keypress at once), so a short stall of the CPU is
+ * absorbed by the buffer instead of being heard as a crackle when the
+ * output runs dry. Nothing routed here needs that immediacy: a soundscape
+ * and a music track only start, stop and fade. Typing sounds, which do,
+ * have their own context (TypingSoundManager).
+ *
  * It lives apart from both of its users so that neither depends on the
  * other: the mobile build ships the soundscape engine without the music
  * player, and the desktop build is unchanged by that.
@@ -15,7 +23,7 @@ let limiter: DynamicsCompressorNode | null = null;
 /** The shared context, built on first use and rebuilt if it was closed. */
 export function outputContext(): AudioContext {
   if (!context || context.state === 'closed') {
-    context = new AudioContext();
+    context = new AudioContext({ latencyHint: 'playback' });
     limiter = context.createDynamicsCompressor();
     limiter.threshold.value = -1;
     limiter.knee.value = 0;
