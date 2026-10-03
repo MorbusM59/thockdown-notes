@@ -128,7 +128,9 @@ turns the save button into a delete button for it. With nothing picked up,
 a TAP turns a slot on or off, a DRAG on an inactive slot clears it, a DRAG
 sideways from an active slot extends its soundscape over every slot it
 passes, and a DRAG up or down on a run's first or last slot moves the minute
-it starts or stops at (5 minutes per slot-height of travel, wrapping). Active slots form
+it starts or stops at (5 minutes per slot-height of travel, wrapping). A press
+becomes a drag only once the finger leaves the slot, by the edge that sets
+its direction; anything released inside the slot is a tap. Active slots form
 RUNS round the clock (23h and 0h are neighbours), and a run of one slot is
 its whole hour. A long press on the power
 button turns the schedule on (it then shows a clock); a tap pauses whatever

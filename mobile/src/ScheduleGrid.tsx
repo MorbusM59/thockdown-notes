@@ -13,27 +13,26 @@
  * and turns the slot on -- slot after slot, until it is put down. That is
  * the only thing a slot does while one is picked up.
  *
- * With nothing picked up, a slot is worked by TAP and DRAG, told apart by
- * how far the finger travels (DRAG_THRESHOLD_PX, the app's one threshold
- * for a press becoming a drag):
+ * With nothing picked up, a slot is worked by TAP and DRAG. A press becomes
+ * a drag only once the finger LEAVES THE SLOT, and the edge it leaves by
+ * decides the axis -- so a finger that wobbles inside the slot is still a
+ * tap, and a drag never starts in a direction the reader did not mean:
  * - a TAP turns a slot holding a soundscape on or off; an off slot keeps its
  *   soundscape, dimmed;
  * - a DRAG, in any direction, on an INACTIVE slot (off, or empty) clears it;
- * - a drag on an ACTIVE slot goes by the axis it sets off along, decided
- *   once, when it crosses the threshold:
+ * - a drag on an ACTIVE slot goes by the edge it left by:
  *   - LEFT or RIGHT extends the slot's soundscape over every slot the finger
  *     passes and turns them on (slots it skips between two moves within one
  *     row are filled too, since a fast finger does not report every slot);
  *   - UP or DOWN, on a run's START or END slot, moves its minute: up is
  *     later, down is earlier, 5 minutes per step, wrapping past :55 and
- *     :00. A step is the slot's own height, so the minute moves by a slot's
- *     worth of travel at a time and can be set exactly; it is measured
- *     from where the drag began, so moving back undoes it. Up or down on the
+ *     :00. A step is the slot's own height, measured from where the press
+ *     began, so leaving the slot is the first step, each slot's worth of
+ *     travel after it is another, and moving back undoes them. Up or down on the
  *     inside of a run does nothing. The page does not scroll under
  * a finger (PageScrollbar.tsx), so a drag here is always the slot's.
  */
 import { useEffect, useRef, useState } from 'react'
-import { DRAG_THRESHOLD_PX } from '../../src/shared/pointerDrag'
 import { FACTORY_SOUNDSCAPE_ICONS, type SoundscapePreset } from '../../src/shared/soundscape'
 import {
   HOURS,
@@ -61,6 +60,8 @@ interface SlotPress {
   hour: number
   x: number
   y: number
+  /** The slot's box when pressed: leaving it is what starts a drag. */
+  box: DOMRect
   /** Decided when the press began: what a drag on this slot does. */
   role: SlotRole
   minute: number
@@ -118,9 +119,10 @@ export function ScheduleGrid({ schedule, customPresets, pickedPresetId, onChange
   /** The press has moved: start the drag once past the threshold, then apply it. */
   const drag = (press: SlotPress, x: number, y: number) => {
     if (!press.dragging) {
-      const dx = x - press.x
-      const dy = y - press.y
-      if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return
+      const { box } = press
+      const outsideX = x < box.left || x > box.right
+      const outsideY = y < box.top || y > box.bottom
+      if (!outsideX && !outsideY) return
       press.dragging = true
       if (pickedPresetId !== null) return
       if (press.role === 'inactive') {
@@ -128,7 +130,10 @@ export function ScheduleGrid({ schedule, customPresets, pickedPresetId, onChange
         if (slot.presetId !== null || slot.on) onChange(withSlot(press.hour, { presetId: null, on: false, minute: 0 }))
         return
       }
-      press.axis = Math.abs(dx) > Math.abs(dy) ? 'horizontal' : 'vertical'
+      // The edge it left by; through a corner, the larger overshoot.
+      const overX = Math.max(box.left - x, x - box.right, 0)
+      const overY = Math.max(box.top - y, y - box.bottom, 0)
+      press.axis = overX > overY ? 'horizontal' : 'vertical'
     }
     if (pickedPresetId !== null || press.role === 'inactive') return
     if (press.axis === 'horizontal') {
@@ -185,6 +190,7 @@ export function ScheduleGrid({ schedule, customPresets, pickedPresetId, onChange
             hour,
             x: event.clientX,
             y: event.clientY,
+            box: event.currentTarget.getBoundingClientRect(),
             role,
             minute: slot.minute,
             stepPx: Math.max(1, event.currentTarget.offsetHeight),
