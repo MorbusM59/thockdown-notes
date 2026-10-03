@@ -161,7 +161,7 @@ describe('render ahead', () => {
     expect(peak).toBeLessThan(4);
   });
 
-  it('transitions to a new voice by an equal-power crossfade that starts at the end of the lead, then plays the new voice alone', () => {
+  it('transitions to a new voice by an equal-power crossfade spliced a margin past the playhead, then plays the new voice alone', () => {
     /** A generator whose every sample is `value`. */
     const constant = (value: number): HostedGenerator => ({
       processor: null,
@@ -179,11 +179,11 @@ describe('render ahead', () => {
     const drain = () => { while (tasks.length > 0) tasks.shift()!(); };
     renderer.configure(CONFIGURE);
     drain();
-    const from = renderer.queued;
+    const from = MARGIN_FRAMES;
     const fadeFrames = 3 * RENDER_CHUNK_FRAMES;
     renderer.transition(CONFIGURE, fadeFrames / SAMPLE_RATE);
     // Play through the fade and a little past it.
-    for (let played = 0; played <= from + fadeFrames + RENDER_CHUNK_FRAMES; played += RENDER_CHUNK_FRAMES) {
+    for (let played = 0; played <= LEAD_FRAMES + fadeFrames + RENDER_CHUNK_FRAMES; played += RENDER_CHUNK_FRAMES) {
       renderer.played(played);
       drain();
     }
@@ -197,5 +197,42 @@ describe('render ahead', () => {
     }
     // After it, the new voice alone.
     expect(Array.from(out.subarray(from + fadeFrames)).every((value) => value === -1)).toBe(true);
+  });
+
+  it('a transition during a transition fades from the blend being heard, without a jump, wherever the output is', () => {
+    const constant = (value: number): HostedGenerator => ({
+      processor: null,
+      exports: undefined,
+      configure: () => {},
+      renderBlock: (block) => { for (const channel of [...block.direct, ...block.send]) channel.fill(value); },
+      frame: 0,
+    });
+    const values = [-1, 0.5];
+    const sent: RenderedChunk[] = [];
+    const tasks: Array<() => void> = [];
+    const renderer = new RenderAhead(
+      constant(1), identityMix, SAMPLE_RATE, MARGIN_SEC, (chunk) => sent.push(chunk), (work) => tasks.push(work),
+      () => ({ generator: constant(values.shift()!), mix: identityMix }),
+    );
+    const drain = () => { while (tasks.length > 0) tasks.shift()!(); };
+    renderer.configure(CONFIGURE);
+    drain();
+    const longFade = 2 * LEAD_FRAMES;
+    renderer.transition(CONFIGURE, longFade / SAMPLE_RATE);
+    drain();
+    // Part-way through the first fade, and part-way through the lead.
+    const playedAt = 3 * RENDER_CHUNK_FRAMES;
+    renderer.played(playedAt);
+    drain();
+    renderer.transition(CONFIGURE, longFade / SAMPLE_RATE);
+    for (let played = playedAt; played <= 3 * LEAD_FRAMES; played += RENDER_CHUNK_FRAMES) {
+      renderer.played(played);
+      drain();
+    }
+    const out = heard(sent);
+    // Equal-power fades over two leads move a sample by far less than this per frame.
+    let largestStep = 0;
+    for (let index = 1; index < out.length; index += 1) largestStep = Math.max(largestStep, Math.abs(out[index] - out[index - 1]));
+    expect(largestStep).toBeLessThan(1e-3);
   });
 });

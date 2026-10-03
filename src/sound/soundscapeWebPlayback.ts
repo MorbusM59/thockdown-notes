@@ -85,8 +85,8 @@ export async function createWebPlayback(handlers: SoundscapePlaybackHandlers): P
   renderWorker.onerror = (event) => handlers.onFailure(`Soundscape render worker stopped: ${event.message}`);
 
   return {
-    configure(configuration) {
-      renderWorker.postMessage(configuration);
+    configure(configuration, transitionSec) {
+      renderWorker.postMessage(transitionSec > 0 ? { type: 'transition', configuration, seconds: transitionSec } : configuration);
     },
     setVolume(target, timeConstantSec) {
       const now = context.currentTime;

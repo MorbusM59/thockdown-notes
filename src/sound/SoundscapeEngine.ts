@@ -40,8 +40,12 @@ const SOUNDSCAPE_DISCONNECT_MS = 180;
 
 /** A running soundscape: a renderer and an output, wherever they are. */
 export interface SoundscapePlayback {
-  /** New settings for the renderer; spliced in near the playhead. */
-  configure(configuration: ConfigureMessage): void;
+  /**
+   * New settings for the renderer, spliced in near the playhead: with
+   * `transitionSec` 0 a settings change (a short crossfade within one
+   * soundscape), otherwise a change of soundscape crossfaded over that long.
+   */
+  configure(configuration: ConfigureMessage, transitionSec: number): void;
   /** The listener's volume (0..1); the output glides to it over about `timeConstantSec`. */
   setVolume(volume: number, timeConstantSec: number): void;
   close(): void;
@@ -72,6 +76,12 @@ export function soundscapeConfiguration(settings: SoundscapeSettings): Configure
 /** The fade on a volume change, and the faster one on the way out. */
 const VOLUME_TIME_CONSTANT_SEC = 0.08;
 const FADE_OUT_TIME_CONSTANT_SEC = 0.025;
+/**
+ * A change of SOUNDSCAPE (another one chosen) crossfades at least this
+ * long, where a settings change within one is a splice of a few
+ * milliseconds. Longer fades (the mobile app's schedule) are the session's.
+ */
+export const SOUNDSCAPE_SWITCH_SEC = 0.5;
 
 export class SoundscapeEngine {
   private playbackFactory: SoundscapePlaybackFactory = createWebPlayback;
@@ -82,6 +92,8 @@ export class SoundscapeEngine {
    * on/off) must not send one.
    */
   private sentConfiguration: string | null = null;
+  /** The soundscape the sent configuration was chosen as: another one is a change of soundscape, not of settings. */
+  private sentPresetId: string | null = null;
   private volumeTarget = -1;
   private preferences: SoundscapePreferences | null = null;
   private starting: Promise<void> | null = null;
@@ -149,9 +161,16 @@ export class SoundscapeEngine {
     const configuration = soundscapeConfiguration(preferences.settings);
     const serialised = JSON.stringify(configuration);
     if (serialised !== this.sentConfiguration) {
-      playback.configure(configuration);
+      // The first configuration of a playback starts it (its fade-in is
+      // the output's); after that, choosing another soundscape is a
+      // transition, and anything else a settings change.
+      const switching = this.sentConfiguration !== null
+        && preferences.activePresetId !== null
+        && preferences.activePresetId !== this.sentPresetId;
+      playback.configure(configuration, switching ? SOUNDSCAPE_SWITCH_SEC : 0);
       this.sentConfiguration = serialised;
     }
+    this.sentPresetId = preferences.activePresetId;
   }
 
   private fadeOutAndClose(): void {
@@ -176,6 +195,7 @@ export class SoundscapeEngine {
     this.playback?.close();
     this.playback = null;
     this.sentConfiguration = null;
+    this.sentPresetId = null;
     this.volumeTarget = -1;
   }
 }

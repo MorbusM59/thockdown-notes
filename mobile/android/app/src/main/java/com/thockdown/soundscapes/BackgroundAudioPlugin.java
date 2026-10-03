@@ -176,11 +176,11 @@ public class BackgroundAudioPlugin extends Plugin {
         call.resolve(toJs(session.stop()));
     }
 
-    /** New settings: `configuration` is a ConfigureMessage as JSON. */
+    /** New settings: `configuration` is a ConfigureMessage as JSON; `transitionSec` 0 for a settings change, else a change of soundscape crossfaded that long. */
     @PluginMethod
     public void configure(PluginCall call) {
         String configuration = call.getString("configuration");
-        if (configuration != null) session.configure(configuration);
+        if (configuration != null) session.configure(configuration, call.getDouble("transitionSec", 0.0));
         call.resolve();
     }
 

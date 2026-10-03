@@ -64,8 +64,8 @@ export interface NativeSoundscapePlugin {
   pause(): Promise<void>
   /** Regular mode STOPPED: the schedule takes over, or the session ends. Resolves the outcome. */
   stop(): Promise<SessionState>
-  /** `configuration` is a ConfigureMessage as JSON. */
-  configure(options: { configuration: string }): Promise<void>
+  /** `configuration` is a ConfigureMessage as JSON; `transitionSec` 0 for a settings change, else a change of soundscape crossfaded that long. */
+  configure(options: { configuration: string; transitionSec: number }): Promise<void>
   setVolume(options: { volume: number; timeConstantSec: number }): Promise<void>
   /** Ask where to save `<name>.m4a` (the system's "Save as" dialog), then render `seconds` of `configuration` into it. */
   renderClip(options: { configuration: string; seconds: number; name: string }): Promise<void>

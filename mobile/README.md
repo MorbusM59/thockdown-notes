@@ -55,7 +55,10 @@ How it got here, because each step was measured on a device:
 
 Outputs are plain queues at absolute frame positions. A settings change is
 spliced a margin past the playhead and crossfaded by the RENDERER from its
-history of what it sent; on Android the playhead is read in the same
+history of what it sent (50 ms). A change of SOUNDSCAPE is spliced at the
+same frame and crossfaded into a fresh voice over at least half a second
+(the schedule's fades are a minute, a stop's hand-over ten seconds), and a
+start from silence or a pause fades in over half a second; on Android the playhead is read in the same
 process at the moment of the change, so the margin only covers what the
 device has already been handed (its buffer and one writer block).
 

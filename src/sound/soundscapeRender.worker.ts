@@ -11,6 +11,7 @@
  *   the audio's path at all; on Android it is the main thread, which hands
  *   the chunks to the native output.
  * - `configure`: new settings (a ConfigureMessage).
+ * - `transition`: a change of soundscape, crossfaded over `seconds`.
  */
 import generatorSource from './soundscape-generator.js?raw';
 import { hostGenerator, type GeneratorOptions } from './soundscapeGeneratorHost';
@@ -23,6 +24,12 @@ interface InitMessage {
   options: GeneratorOptions;
   spliceMarginSec: number;
   output: MessagePort;
+}
+
+interface TransitionMessage {
+  type: 'transition';
+  configuration: ConfigureMessage;
+  seconds: number;
 }
 
 let renderer: RenderAhead | null = null;
@@ -39,18 +46,28 @@ const schedule = (work: () => void) => {
   yieldChannel.port2.postMessage(null);
 };
 
-self.onmessage = (event: MessageEvent<InitMessage | ConfigureMessage>) => {
+self.onmessage = (event: MessageEvent<InitMessage | ConfigureMessage | TransitionMessage>) => {
   const message = event.data;
   if (message.type === 'init') {
     const output = message.output;
-    const generator = hostGenerator(generatorSource, message.sampleRate, message.options);
+    const { sampleRate, options } = message;
+    let voices = 0;
+    // Each voice its own seed, so two voices of one soundscape are not one take.
+    const createVoice = () => {
+      voices += 1;
+      return {
+        generator: hostGenerator(generatorSource, sampleRate, { ...options, seed: (options.seed + (voices * 0x9e3779b1)) >>> 0 }),
+        mix: new SoundscapeMix(sampleRate),
+      };
+    };
     renderer = new RenderAhead(
-      generator,
-      new SoundscapeMix(message.sampleRate),
-      message.sampleRate,
+      hostGenerator(generatorSource, sampleRate, options),
+      new SoundscapeMix(sampleRate),
+      sampleRate,
       message.spliceMarginSec,
       (chunk, transfer) => output.postMessage(chunk, transfer),
       schedule,
+      createVoice,
     );
     output.onmessage = (reply: MessageEvent<{ type: 'played'; frame: number }>) => {
       if (reply.data?.type === 'played') renderer?.played(reply.data.frame);
@@ -62,5 +79,9 @@ self.onmessage = (event: MessageEvent<InitMessage | ConfigureMessage>) => {
   if (message.type === 'configure') {
     if (renderer) renderer.configure(message);
     else pendingConfigure = message;
+    return;
   }
+  // Before init, nothing plays yet to fade from: it is the first configuration.
+  if (renderer) renderer.transition(message.configuration, message.seconds);
+  else pendingConfigure = message.configuration;
 };

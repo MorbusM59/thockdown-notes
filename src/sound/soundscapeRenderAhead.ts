@@ -36,15 +36,19 @@
  * crossfade hides the seam.
  *
  * TRANSITIONS. A `transition` is a change from one soundscape to another
- * heard as one: a long equal-power crossfade (the mobile app's schedule
- * uses a minute) between TWO VOICES -- the one playing, which carries on,
- * and a new generator and mix built for the new settings -- rendered side
- * by side until the fade is over, when the old voice is dropped. The
- * history cannot supply a fade that long (it holds the lead, ten seconds),
- * and the old voice cannot be rewound, so a transition is not spliced: it
- * starts where rendering has got to, the end of the lead, which puts it at
- * most RENDER_LEAD_SEC after it was asked for. A `configure` during a
- * transition goes to the new voice, as the settings now in force.
+ * heard as one: an equal-power crossfade of any length (the mobile app's
+ * schedule uses a minute, a change of soundscape half a second) from what
+ * was playing to a NEW VOICE -- a fresh generator and mix built for the new
+ * settings. It is spliced at the same frame a `configure` would be, so it is
+ * heard as soon as a settings change is. The old side of the fade is what
+ * the output already holds from that frame on, taken from the history (a
+ * snapshot, since the history is overwritten as rendering continues), and
+ * past the end of it the old voice CARRYING ON from where it had rendered
+ * to -- it cannot be rewound, and need not be: its continuation is the
+ * same sound. When the fade is over the old side is dropped. A transition
+ * during a transition fades from the blend being heard, so nothing jumps.
+ * A `configure` during a transition goes to the new voice, as the settings
+ * now in force.
  */
 import type { SoundscapeSpaceSettings } from '../shared/soundscape';
 import { BLOCK_FRAMES, type HostedGenerator } from './soundscapeGeneratorHost';
@@ -84,6 +88,105 @@ export interface RenderVoice {
   mix: MixStage;
 }
 
+type Stereo = [Float32Array<ArrayBuffer>, Float32Array<ArrayBuffer>];
+
+/** Audio by absolute frame: fills `left`/`right` with the frames from `start` on. */
+interface AudioSource {
+  read(start: number, left: Float32Array, right: Float32Array): void;
+}
+
+/**
+ * A voice as a stream: it renders in whole chunks, carries on from where it
+ * got to whatever frame is asked for (the generator is never rewound), and
+ * keeps what a partial read left over.
+ */
+class VoiceSource implements AudioSource {
+  private spareLeft = new Float32Array(0);
+  private spareRight = new Float32Array(0);
+  private spareAt = 0;
+
+  constructor(readonly voice: RenderVoice) {}
+
+  read(_start: number, left: Float32Array, right: Float32Array): void {
+    let filled = 0;
+    while (filled < left.length) {
+      if (this.spareAt >= this.spareLeft.length) {
+        [this.spareLeft, this.spareRight] = renderVoice(this.voice);
+        this.spareAt = 0;
+      }
+      const take = Math.min(left.length - filled, this.spareLeft.length - this.spareAt);
+      left.set(this.spareLeft.subarray(this.spareAt, this.spareAt + take), filled);
+      right.set(this.spareRight.subarray(this.spareAt, this.spareAt + take), filled);
+      this.spareAt += take;
+      filled += take;
+    }
+  }
+}
+
+/** What the output already holds from `from` to `end`, then `rest` carrying on. */
+class HeldSource implements AudioSource {
+  constructor(
+    private readonly left: Float32Array,
+    private readonly right: Float32Array,
+    private readonly from: number,
+    private readonly rest: AudioSource,
+  ) {}
+
+  read(start: number, left: Float32Array, right: Float32Array): void {
+    const end = this.from + this.left.length;
+    const held = Math.max(0, Math.min(left.length, end - start));
+    for (let index = 0; index < held; index += 1) {
+      left[index] = this.left[start + index - this.from];
+      right[index] = this.right[start + index - this.from];
+    }
+    if (held < left.length) this.rest.read(start + held, left.subarray(held), right.subarray(held));
+  }
+}
+
+/** An equal-power crossfade from `from` to `to` over `frames` from `start`; `to` alone after it. */
+class BlendSource implements AudioSource {
+  constructor(
+    readonly from: AudioSource,
+    readonly to: VoiceSource,
+    readonly start: number,
+    readonly frames: number,
+  ) {}
+
+  done(frame: number): boolean {
+    return frame >= this.start + this.frames;
+  }
+
+  read(start: number, left: Float32Array, right: Float32Array): void {
+    this.to.read(start, left, right);
+    if (this.done(start)) return;
+    const oldLeft = new Float32Array(left.length);
+    const oldRight = new Float32Array(right.length);
+    this.from.read(start, oldLeft, oldRight);
+    for (let index = 0; index < left.length; index += 1) {
+      // Equal-power: the two soundscapes are uncorrelated.
+      const t = Math.min(1, Math.max(0, (start + index - this.start + 1) / this.frames));
+      const into = Math.sin(t * Math.PI * 0.5);
+      const out = Math.cos(t * Math.PI * 0.5);
+      left[index] = (left[index] * into) + (oldLeft[index] * out);
+      right[index] = (right[index] * into) + (oldRight[index] * out);
+    }
+  }
+}
+
+/** One chunk of `voice`'s finished audio. */
+function renderVoice(voice: RenderVoice): Stereo {
+  const direct: [Float32Array, Float32Array] = [new Float32Array(RENDER_CHUNK_FRAMES), new Float32Array(RENDER_CHUNK_FRAMES)];
+  const send: [Float32Array, Float32Array] = [new Float32Array(RENDER_CHUNK_FRAMES), new Float32Array(RENDER_CHUNK_FRAMES)];
+  // In the generator's own block size (see BLOCK_FRAMES), through views.
+  for (let offset = 0; offset < RENDER_CHUNK_FRAMES; offset += BLOCK_FRAMES) {
+    const view = (channel: Float32Array) => channel.subarray(offset, offset + BLOCK_FRAMES);
+    voice.generator.renderBlock({ direct: [view(direct[0]), view(direct[1])], send: [view(send[0]), view(send[1])] });
+  }
+  const out: Stereo = [new Float32Array(RENDER_CHUNK_FRAMES), new Float32Array(RENDER_CHUNK_FRAMES)];
+  voice.mix.process(direct, send, out);
+  return out;
+}
+
 export class RenderAhead {
   private readonly sampleRate: number;
   private readonly leadFrames: number;
@@ -97,8 +200,10 @@ export class RenderAhead {
   private configured = false;
   private scheduled = false;
   private fade: { from: number; frames: number } | null = null;
-  private voice: RenderVoice;
-  private incoming: { voice: RenderVoice; from: number; frames: number } | null = null;
+  /** The voice the settings in force are rendered by: a `configure` goes to it. */
+  private voice: VoiceSource;
+  /** What is rendered: that voice, or a transition's blend into it. */
+  private source: AudioSource;
 
   /**
    * @param spliceMarginSec how far past its last `played` report the
@@ -119,7 +224,8 @@ export class RenderAhead {
     private readonly schedule: (work: () => void) => void,
     private readonly createVoice?: () => RenderVoice,
   ) {
-    this.voice = { generator, mix };
+    this.voice = new VoiceSource({ generator, mix });
+    this.source = this.voice;
     this.sampleRate = sampleRate;
     this.leadFrames = Math.round(RENDER_LEAD_SEC * sampleRate);
     this.marginFrames = Math.round(spliceMarginSec * sampleRate);
@@ -131,9 +237,8 @@ export class RenderAhead {
 
   /** Apply new settings from a frame as near to now as the output allows. */
   configure(message: ConfigureMessage): void {
-    const target = this.incoming?.voice ?? this.voice;
-    target.generator.configure(message.generator);
-    target.mix.setSpace(message.space);
+    this.voice.voice.generator.configure(message.generator);
+    this.voice.voice.mix.setSpace(message.space);
     if (this.configured) {
       const spliceAt = this.playedFrame + this.marginFrames;
       if (spliceAt < this.writeFrame) {
@@ -155,11 +260,30 @@ export class RenderAhead {
       this.configure(message);
       return;
     }
-    if (this.incoming) this.voice = this.incoming.voice;
-    const voice = this.createVoice();
-    voice.generator.configure(message.generator);
-    voice.mix.setSpace(message.space);
-    this.incoming = { voice, from: this.writeFrame, frames: Math.max(1, Math.round(seconds * this.sampleRate)) };
+    const voice = new VoiceSource(this.createVoice());
+    voice.voice.generator.configure(message.generator);
+    voice.voice.mix.setSpace(message.space);
+    const spliceAt = this.playedFrame + this.marginFrames;
+    let from = this.source;
+    if (spliceAt < this.writeFrame) {
+      // What the output holds from the splice on, copied: the history is
+      // overwritten as rendering continues.
+      const size = this.historyLeft.length;
+      const heldLeft = new Float32Array(this.writeFrame - spliceAt);
+      const heldRight = new Float32Array(heldLeft.length);
+      for (let index = 0; index < heldLeft.length; index += 1) {
+        const slot = (spliceAt + index) % size;
+        heldLeft[index] = this.historyLeft[slot];
+        heldRight[index] = this.historyRight[slot];
+      }
+      from = new HeldSource(heldLeft, heldRight, spliceAt, this.source);
+      this.writeFrame = spliceAt;
+      // The blend replaces a settings change's splice still under way.
+      this.fade = null;
+    }
+    const start = Math.max(spliceAt, this.writeFrame);
+    this.source = new BlendSource(from, voice, start, Math.max(1, Math.round(seconds * this.sampleRate)));
+    this.voice = voice;
     this.pump();
   }
 
@@ -184,39 +308,13 @@ export class RenderAhead {
     });
   }
 
-  /** One chunk of `voice`'s finished audio. */
-  private renderVoice(voice: RenderVoice): [Float32Array<ArrayBuffer>, Float32Array<ArrayBuffer>] {
-    const direct: [Float32Array, Float32Array] = [new Float32Array(RENDER_CHUNK_FRAMES), new Float32Array(RENDER_CHUNK_FRAMES)];
-    const send: [Float32Array, Float32Array] = [new Float32Array(RENDER_CHUNK_FRAMES), new Float32Array(RENDER_CHUNK_FRAMES)];
-    // In the generator's own block size (see BLOCK_FRAMES), through views.
-    for (let offset = 0; offset < RENDER_CHUNK_FRAMES; offset += BLOCK_FRAMES) {
-      const view = (channel: Float32Array) => channel.subarray(offset, offset + BLOCK_FRAMES);
-      voice.generator.renderBlock({ direct: [view(direct[0]), view(direct[1])], send: [view(send[0]), view(send[1])] });
-    }
-    const out: [Float32Array<ArrayBuffer>, Float32Array<ArrayBuffer>] = [new Float32Array(RENDER_CHUNK_FRAMES), new Float32Array(RENDER_CHUNK_FRAMES)];
-    voice.mix.process(direct, send, out);
-    return out;
-  }
-
   private renderChunk(): void {
-    const [left, right] = this.renderVoice(this.voice);
     const start = this.writeFrame;
-    const incoming = this.incoming;
-    if (incoming) {
-      const [newLeft, newRight] = this.renderVoice(incoming.voice);
-      for (let index = 0; index < RENDER_CHUNK_FRAMES; index += 1) {
-        // Equal-power, as below: the two soundscapes are uncorrelated.
-        const t = Math.min(1, Math.max(0, (start + index - incoming.from + 1) / incoming.frames));
-        const into = Math.sin(t * Math.PI * 0.5);
-        const out = Math.cos(t * Math.PI * 0.5);
-        left[index] = (newLeft[index] * into) + (left[index] * out);
-        right[index] = (newRight[index] * into) + (right[index] * out);
-      }
-      if (start + RENDER_CHUNK_FRAMES >= incoming.from + incoming.frames) {
-        this.voice = incoming.voice;
-        this.incoming = null;
-      }
-    }
+    const left = new Float32Array(RENDER_CHUNK_FRAMES);
+    const right = new Float32Array(RENDER_CHUNK_FRAMES);
+    this.source.read(start, left, right);
+    // A blend that is over is the new voice alone; the old side is dropped.
+    if (this.source instanceof BlendSource && this.source.done(start + RENDER_CHUNK_FRAMES)) this.source = this.source.to;
 
     const size = this.historyLeft.length;
     for (let index = 0; index < RENDER_CHUNK_FRAMES; index += 1) {

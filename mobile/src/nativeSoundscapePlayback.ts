@@ -20,8 +20,8 @@ export function nativeSoundscapePlayback(plugin: NativeSoundscapePlugin): Sounds
     const failure = await plugin.addListener('rendererFailure', ({ message }) => handlers.onFailure(message))
     await plugin.play()
     return {
-      configure(configuration) {
-        void plugin.configure({ configuration: JSON.stringify(configuration) })
+      configure(configuration, transitionSec) {
+        void plugin.configure({ configuration: JSON.stringify(configuration), transitionSec })
       },
       setVolume(volume, timeConstantSec) {
         void plugin.setVolume({ volume, timeConstantSec })
