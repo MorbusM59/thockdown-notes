@@ -81,6 +81,25 @@ const isActive = (schedule: Schedule, hour: number) => {
   return slot.on && slot.presetId !== null
 }
 
+/**
+ * The run `hour` belongs to, by its first and last hour (round the clock,
+ * so `first` may be the larger), or null when the slot is inactive or every
+ * slot is active (a ring has no first or last).
+ */
+export function runAround(schedule: Schedule, hour: number): { first: number; last: number } | null {
+  if (!isActive(schedule, hour)) return null
+  let first = hour
+  let steps = 0
+  while (isActive(schedule, first - 1)) {
+    first = (first + HOURS - 1) % HOURS
+    steps += 1
+    if (steps >= HOURS) return null
+  }
+  let last = hour
+  while (isActive(schedule, last + 1)) last = (last + 1) % HOURS
+  return { first, last }
+}
+
 export function slotRole(schedule: Schedule, hour: number): SlotRole {
   if (!isActive(schedule, hour)) return 'inactive'
   const before = isActive(schedule, hour - 1)

@@ -23,6 +23,10 @@
  * - LEFT or RIGHT PAINTS the slot pressed onto every slot the finger passes:
  *   an active slot its soundscape, turned on; an inactive one (off, or
  *   empty) EMPTINESS, so an empty slot dragged over full ones clears them.
+ *   Extending a run carries its EDGE MINUTES with it: the minute its first
+ *   slot starts at moves to the new first slot, the minute its last slot
+ *   stops at to the new last slot -- when that new edge is one this drag
+ *   painted (merging into another run leaves that run's edge its own);
  *   It goes by HOURS, not by what is under the finger: each slot's width of
  *   travel is the next hour round the clock, so a drag carried past the end
  *   of a row continues at the matching end of the other one (past 11h into
@@ -42,6 +46,7 @@ import { FACTORY_SOUNDSCAPE_ICONS, type SoundscapePreset } from '../../src/share
 import {
   HOURS,
   allPresets,
+  runAround,
   slotRole,
   type Schedule,
   type ScheduleSlot,
@@ -81,6 +86,9 @@ interface SlotPress {
   pitchPx: number
   /** How many hours from the pressed one the paint has reached, either way. */
   reached: number
+  /** The run's start and stop minutes when the press began, carried to the edges a drag extends; null for a run of one slot. */
+  startMinute: number | null
+  stopMinute: number | null
 }
 
 function useCurrentHour(): number {
@@ -117,7 +125,8 @@ export function ScheduleGrid({ schedule, customPresets, pickedPresetId, onChange
    * Paint the hours `from` to `to` hours away from `hour` (round the clock,
    * either way) with `presetId` turned on, or with emptiness for null.
    */
-  const paint = (hour: number, presetId: string | null, from: number, to: number) => {
+  const paint = (press: SlotPress, from: number, to: number) => {
+    const { hour, presetId } = press
     const painted = new Set<number>()
     for (let offset = Math.min(from, to); offset <= Math.max(from, to); offset += 1) {
       painted.add((((hour + offset) % HOURS) + HOURS) % HOURS)
@@ -126,9 +135,21 @@ export function ScheduleGrid({ schedule, customPresets, pickedPresetId, onChange
       if (!painted.has(index)) return slot
       return presetId === null ? { presetId: null, on: false, minute: 0 } : { ...slot, presetId, on: true }
     })
-    if (next.some((slot, index) => slot.presetId !== schedule.slots[index].presetId || slot.on !== schedule.slots[index].on)) {
+    if (presetId !== null) {
+      const run = runAround({ ...schedule, slots: next }, hour)
+      if (run && press.startMinute !== null && painted.has(run.first)) next[run.first] = { ...next[run.first], minute: press.startMinute }
+      if (run && press.stopMinute !== null && painted.has(run.last)) next[run.last] = { ...next[run.last], minute: press.stopMinute }
+    }
+    if (next.some((slot, index) => slot.presetId !== schedule.slots[index].presetId || slot.on !== schedule.slots[index].on || slot.minute !== schedule.slots[index].minute)) {
       onChange({ ...schedule, slots: next })
     }
+  }
+
+  /** The start and stop minutes of the run `hour` is in, for a drag to carry; none for a single slot. */
+  const edgeMinutes = (hour: number) => {
+    const run = runAround(schedule, hour)
+    if (!run || run.first === run.last) return { startMinute: null, stopMinute: null }
+    return { startMinute: schedule.slots[run.first].minute, stopMinute: schedule.slots[run.last].minute }
   }
 
   /** The press has moved: start the drag once the finger leaves the slot, then apply it. */
@@ -144,13 +165,13 @@ export function ScheduleGrid({ schedule, customPresets, pickedPresetId, onChange
       const overX = Math.max(box.left - x, x - box.right, 0)
       const overY = Math.max(box.top - y, y - box.bottom, 0)
       press.axis = overX > overY ? 'horizontal' : 'vertical'
-      if (press.role === 'inactive') paint(press.hour, null, 0, 0)
+      if (press.role === 'inactive') paint(press, 0, 0)
     }
     if (pickedPresetId !== null) return
     if (press.axis === 'horizontal') {
       const offset = Math.round((x - press.x) / press.pitchPx)
       if (offset === press.reached) return
-      paint(press.hour, press.presetId, press.reached, offset)
+      paint(press, press.reached, offset)
       press.reached = offset
       return
     }
@@ -209,6 +230,7 @@ export function ScheduleGrid({ schedule, customPresets, pickedPresetId, onChange
             presetId: role === 'inactive' ? null : slot.presetId,
             pitchPx: Math.max(1, (event.currentTarget.closest('.mobile-schedule-grid')?.getBoundingClientRect().width ?? 0) / (HOURS / 2)),
             reached: 0,
+            ...edgeMinutes(hour),
           }
         }}
         onPointerMove={(event) => {
