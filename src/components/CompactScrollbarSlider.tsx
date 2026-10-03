@@ -69,6 +69,8 @@ export function CompactScrollbarSlider({
   formatValue,
   onCommit,
 }: CompactScrollbarSliderProps) {
+  /** The kind of pointer that last pressed the slider: a `contextmenu` cannot say whether it came from a mouse. */
+  const pressPointerTypeRef = useRef('mouse')
   const railRef = useRef<HTMLDivElement | null>(null)
   const shellRef = useRef<HTMLDivElement | null>(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -174,6 +176,7 @@ export function CompactScrollbarSlider({
         }
       }}
       onPointerDown={(event) => {
+        pressPointerTypeRef.current = event.pointerType
         if (disabled) return
         if (event.button !== 0) return
         event.preventDefault()
@@ -194,6 +197,10 @@ export function CompactScrollbarSlider({
       data-secondary-press="action"
       onContextMenu={(event) => {
         event.preventDefault()
+        // A right-click resets; a long press is not one. Android raises
+        // `contextmenu` for a long press too, which reset a slider the reader
+        // was holding to adjust.
+        if (pressPointerTypeRef.current !== 'mouse') return
         if (disabled) return
         if (defaultValue !== undefined) onCommit(snapValue(defaultValue))
       }}

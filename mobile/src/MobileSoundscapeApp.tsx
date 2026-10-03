@@ -51,6 +51,7 @@ import {
 import { currentEntryId, followSession, nextScratch, sessionEntries } from './sessionEntries'
 import { allPresets, sanitizeSchedule, scheduleEvents, scheduledPresetAt, type Schedule } from './schedule'
 import { ScheduleGrid } from './ScheduleGrid'
+import { PageScrollbar } from './PageScrollbar'
 import { armHold, HOLD_CONFIRM_MS } from '../../src/shared/holdTiming'
 import { installSoundscapeFiles } from './soundscapeFiles'
 
@@ -88,6 +89,20 @@ export function MobileSoundscapeApp() {
   const [clipProgress, setClipProgress] = useState<number | null>(null)
   // The soundscape picked up for filling schedule slots (ScheduleGrid); not persisted.
   const [pickedPresetId, setPickedPresetId] = useState<string | null>(null)
+  const pageScrollerRef = useRef<HTMLDivElement | null>(null)
+  // Pressing anything that does not act on the picked-up soundscape puts it
+  // down, and the press then does what it always does. Decided on the press
+  // (capture phase, before any control's own handler), so the control sees
+  // the state the reader now expects.
+  useEffect(() => {
+    if (pickedPresetId === null) return undefined
+    const putDown = (event: PointerEvent) => {
+      if (event.target instanceof Element && event.target.closest('[data-pick-target]')) return
+      setPickedPresetId(null)
+    }
+    window.addEventListener('pointerdown', putDown, { capture: true })
+    return () => window.removeEventListener('pointerdown', putDown, { capture: true })
+  }, [pickedPresetId])
 
   useEffect(() => { void nativePlayback.then(setNative) }, [])
 
@@ -231,8 +246,9 @@ export function MobileSoundscapeApp() {
         <ThemeGlazeLayers glaze={theme.glaze} radialAboveLinear={loadout.glaze.radialAboveLinear} />
         <div className="app-sheen">
           <div className={`app-shell mobile-app-shell${theme.shadowFlip ? ' shadow-flip' : ''}`} style={theme.shellVariables}>
+            <div className="mobile-page">
             <div className="mobile-soundscape-shell notes-sidebar">
-              <div className="options-content sidebar-options-content mode-edit">
+              <div ref={pageScrollerRef} className="options-content sidebar-options-content mode-edit thockdown-custom-scrollbar mobile-page-scroller">
                 <div className="utility-setting-slider-stack" aria-label="Master controls">
                   <OptionsSubsectionLabel>Master</OptionsSubsectionLabel>
                   <div className="options-loadout-grid" role="group" aria-label="Soundscape and display mode">
@@ -346,6 +362,8 @@ export function MobileSoundscapeApp() {
                   onPickPreset={setPickedPresetId}
                 />
               </div>
+            </div>
+            <PageScrollbar scrollerRef={pageScrollerRef} />
             </div>
           </div>
         </div>

@@ -1,5 +1,5 @@
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { SCROLL_TRACK_EDGE_GAP_PX } from './shared/scrollTrackGeometry'
+import { scrollThumbFor, scrollTopForThumb } from './shared/scrollTrackGeometry'
 import { flushSync } from 'react-dom'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent, SetStateAction } from 'react'
@@ -7864,41 +7864,9 @@ ${markdownHtml}
       syncTextureToScroll(scroller.scrollTop, sidebarTextureRef.current)
     }
 
-    const viewportHeight = scroller.clientHeight
-    const contentHeight = scroller.scrollHeight
-    const trackHeight = track.clientHeight
-    const usableTrackHeight = Math.max(0, trackHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2))
-    if (viewportHeight <= 0 || contentHeight <= 0 || trackHeight <= 0) {
-      applySidebarThumbDom(0, 0)
-      setIsSidebarScrollThumbActive(false)
-      return
-    }
-
-    if (contentHeight <= viewportHeight) {
-      applySidebarThumbDom(SCROLL_TRACK_EDGE_GAP_PX, usableTrackHeight)
-      setIsSidebarScrollThumbActive(false)
-      return
-    }
-
-    const visibleRatio = viewportHeight / contentHeight
-    // The thumb's floor is its own WIDTH, so the smallest it can be is a
-    // square -- the rule the edit and render views' thumbs follow too. It
-    // used to be a hardcoded 28px, which on a 10px-wide thumb made the
-    // smallest one nearly three times taller than wide. Recomputed on every
-    // sync (nothing is held here), so the 0 of a thumb not yet laid out is
-    // gone by the next one.
-    const nextThumbHeight = Math.max(
-      sidebarScrollbarThumbRef.current?.offsetWidth ?? 0,
-      Math.min(usableTrackHeight, Math.round(usableTrackHeight * visibleRatio)),
-    )
-
-    const maxScrollTop = contentHeight - viewportHeight
-    const maxThumbTop = Math.max(0, usableTrackHeight - nextThumbHeight)
-    const scrollRatio = maxScrollTop > 0 ? scroller.scrollTop / maxScrollTop : 0
-    const nextThumbTop = SCROLL_TRACK_EDGE_GAP_PX + Math.round(maxThumbTop * scrollRatio)
-
-    applySidebarThumbDom(nextThumbTop, nextThumbHeight)
-    setIsSidebarScrollThumbActive(true)
+    const thumb = scrollThumbFor(scroller, track.clientHeight, sidebarScrollbarThumbRef.current?.offsetWidth ?? 0)
+    applySidebarThumbDom(thumb.top, thumb.height)
+    setIsSidebarScrollThumbActive(thumb.active)
   }, [applySidebarThumbDom, isSidebarScrollbarMode, sidebarTreeScrollerEl])
 
   const sidebarScrollFromThumbTop = useCallback((thumbTopPx: number) => {
@@ -7906,15 +7874,7 @@ ${markdownHtml}
     const track = sidebarScrollbarTrackRef.current
     if (!scroller || !track) return
 
-    const trackHeight = track.clientHeight
-    const usableTrackHeight = Math.max(0, trackHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2))
-    const maxThumbTravel = Math.max(0, usableTrackHeight - sidebarScrollThumbHeightRef.current)
-    const minThumbTop = SCROLL_TRACK_EDGE_GAP_PX
-    const maxThumbTop = SCROLL_TRACK_EDGE_GAP_PX + maxThumbTravel
-    const clampedTop = Math.max(minThumbTop, Math.min(thumbTopPx, maxThumbTop))
-    const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
-    const ratio = maxThumbTravel > 0 ? (clampedTop - SCROLL_TRACK_EDGE_GAP_PX) / maxThumbTravel : 0
-    scroller.scrollTop = ratio * maxScrollTop
+    scroller.scrollTop = scrollTopForThumb(scroller, track.clientHeight, sidebarScrollThumbHeightRef.current, thumbTopPx)
   }, [sidebarTreeScrollerEl])
 
   const pagedVisibleNotes = useMemo(() => {
@@ -8280,26 +8240,13 @@ ${markdownHtml}
     const clickY = event.clientY - rect.top
     const thumbHeightPx = sidebarScrollThumbHeightRef.current
     const targetThumbTop = clickY - (thumbHeightPx / 2)
-    const trackHeight = track.clientHeight
-    const usableTrackHeight = Math.max(0, trackHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2))
-    const maxThumbTravel = Math.max(0, usableTrackHeight - thumbHeightPx)
-    const minThumbTop = SCROLL_TRACK_EDGE_GAP_PX
-    const maxThumbTop = SCROLL_TRACK_EDGE_GAP_PX + maxThumbTravel
-    const clampedTop = Math.max(minThumbTop, Math.min(targetThumbTop, maxThumbTop))
 
     const scroller = sidebarTreeScrollerEl || sidebarContentRef.current
-    if (!scroller) {
-      sidebarScrollFromThumbTop(clampedTop)
-      syncSidebarCustomScrollbar()
-      return
-    }
-
-    const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
-    const ratio = maxThumbTravel > 0 ? (clampedTop - SCROLL_TRACK_EDGE_GAP_PX) / maxThumbTravel : 0
-    const targetScrollTop = ratio * maxScrollTop
+    if (!scroller) return
+    const targetScrollTop = scrollTopForThumb(scroller, track.clientHeight, thumbHeightPx, targetThumbTop)
 
     scrollToNonQuantizedSmooth(scroller, targetScrollTop)
-  }, [sidebarScrollFromThumbTop, sidebarTreeScrollerEl, syncSidebarCustomScrollbar])
+  }, [sidebarTreeScrollerEl])
 
   const handleSidebarThumbMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
     event.preventDefault()

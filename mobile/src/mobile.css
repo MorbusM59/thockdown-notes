@@ -14,9 +14,18 @@ body {
   height: 100%;
 }
 
-.mobile-soundscape-shell {
+/* The page: the scroller and its scrollbar (PageScrollbar.tsx) side by side. */
+.mobile-page {
+  display: flex;
   height: 100%;
-  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.mobile-soundscape-shell {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
   padding: calc(env(safe-area-inset-top) + 8px) 12px calc(env(safe-area-inset-bottom) + 16px);
 }
 
@@ -76,4 +85,24 @@ body {
 .mobile-schedule-minute {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+}
+
+/* The element that scrolls is the panel's own options content (a scroller
+   in the desktop's styles). No scrolling under a finger: the scrollbar
+   scrolls the page (PageScrollbar.tsx), so every other drag belongs to the
+   control it starts on. */
+.mobile-page-scroller {
+  touch-action: none;
+}
+
+/* The page's scrollbar, in the desktop sidebar's slot geometry. */
+.mobile-scrollbar-slot {
+  position: relative;
+  flex: 0 0 calc(var(--canonical-scroll-thickness) + var(--spacing-regular));
+  margin: calc(env(safe-area-inset-top) + 8px) 0 calc(env(safe-area-inset-bottom) + 16px);
+}
+
+.mobile-scroll-rail {
+  padding: 0 0 0 var(--spacing-regular);
+  touch-action: none;
 }

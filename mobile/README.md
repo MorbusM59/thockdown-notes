@@ -156,6 +156,14 @@ lead, so up to ten seconds after its minute.
   is where a phone saves one, and picked with the system file picker.
 
 ## Touch
+The page does not scroll under a finger: its scrollbar (`PageScrollbar.tsx`,
+the desktop's track and thumb) scrolls it, so every other drag belongs to the
+control it starts on -- nearly everything on the page is dragged or held. A
+slider resets to its default on a mouse right-click only, never on a long
+press. A picked-up soundscape is put down by a press on anything that does
+not act on it (anything without `data-pick-target`), which then does what it
+always does.
+
 The panel's right-button gestures have touch equivalents in the panel itself
 (`SoundscapeControls`, on `pointerType === 'touch'`): a long press turns a
 channel on or off, a double tap solos it, a long press marks a custom

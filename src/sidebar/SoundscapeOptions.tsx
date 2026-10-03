@@ -377,7 +377,10 @@ interface SoundscapeOptionsProps {
  * user's own soundscapes is picked up, the save button becomes a DELETE
  * button for it -- which replaces the touch long-press that otherwise marks
  * a custom soundscape for deletion. What a picked-up soundscape is FOR is
- * the host's business.
+ * the host's business, and so is putting it down when the reader presses
+ * something else; the controls that act ON it (the picked-up button itself,
+ * the delete button) carry `data-pick-target` so the host can tell them
+ * apart.
  */
 interface SoundscapeControlsProps extends SoundscapeOptionsProps {
   pickedPresetId?: string | null
@@ -691,6 +694,7 @@ export function SoundscapeControls({ preferences, onChange, pickedPresetId = nul
               type="button"
               className={`btn-icon options-color-swatch options-loadout-btn soundscape-preset-btn${selectedPresetId === preset.id ? ' is-active' : ''}${pickedPresetId === preset.id ? ' is-picked' : ''}`}
               aria-label={pickedPresetId === preset.id ? `${preset.name}, picked up` : preset.name}
+              data-pick-target={pickedPresetId === preset.id ? '' : undefined}
               aria-pressed={selectedPresetId === preset.id}
               data-tooltip={preset.name}
               data-secondary-press="none"
@@ -719,6 +723,7 @@ export function SoundscapeControls({ preferences, onChange, pickedPresetId = nul
                 type="button"
                 className={`btn-icon options-color-swatch options-loadout-btn soundscape-custom-preset-btn${selectedPresetId === preset.id ? ' is-active' : ''}${isPrimed ? ' primed' : ''}${pickedPresetId === preset.id ? ' is-picked' : ''}`}
                 aria-label={isPrimed ? `Delete ${label}` : pickedPresetId === preset.id ? `${label}, picked up` : label}
+                data-pick-target={pickedPresetId === preset.id ? '' : undefined}
                 aria-pressed={selectedPresetId === preset.id}
                 data-tooltip={isPrimed ? `Click to delete ${label}` : `${label}\nRight-click to mark for deletion, then click.\nHold right-click to export.`}
                 data-secondary-press="action"
@@ -769,6 +774,7 @@ export function SoundscapeControls({ preferences, onChange, pickedPresetId = nul
               type="button"
               className="btn-icon options-color-swatch options-loadout-btn options-loadout-plus soundscape-custom-preset-plus primed"
               aria-label={`Delete ${pickedCustomPreset.name}`}
+              data-pick-target=""
               data-secondary-press="none"
               onClick={() => {
                 deletePreset(pickedCustomPreset.id)

@@ -114,6 +114,7 @@ export function ScheduleGrid({ schedule, customPresets, pickedPresetId, onChange
         className={`btn-icon options-color-swatch mobile-schedule-slot${role !== 'inactive' ? ' is-active' : ''}${slot.presetId !== null && !slot.on ? ' is-off' : ''}${hour === currentHour ? ' is-now' : ''}`}
         aria-label={`${hour}h: ${name}${slot.presetId !== null && !slot.on ? ', off' : ''}${minuteText}`}
         data-secondary-press="none"
+        data-pick-target=""
         onClick={(event) => {
           if (swallowClickRef.current) {
             swallowClickRef.current = false
