@@ -96,6 +96,11 @@ body {
   touch-action: none;
 }
 
+/* In help mode nothing on the page is a control, so a finger scrolls it. */
+.mobile-page-scroller.is-help {
+  touch-action: pan-y;
+}
+
 /* The page's scrollbar, at the right edge where the system's would be: a
    column a fingertip wide, the desktop's track drawn in its middle, and the
    whole column grabs (PageScrollbar.tsx). */

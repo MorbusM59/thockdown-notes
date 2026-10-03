@@ -1028,6 +1028,19 @@
   color: var(--color-text-80);
 }
 
+.options-subsection-help-paragraph {
+  margin: 0;
+}
+
+.options-subsection-help-paragraph + .options-subsection-help-paragraph {
+  margin-top: 0.75em;
+}
+
+.options-subsection-help-paragraph strong {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
 /* A channel's volume while it is dragged on a touch screen, in place of its icon. */
 .soundscape-channel-volume {
   font-size: 0.6em;

@@ -105,41 +105,10 @@ export function MobileSoundscapeApp() {
   const [pickedPresetId, setPickedPresetId] = useState<string | null>(null)
   const pageScrollerRef = useRef<HTMLDivElement | null>(null)
   // HELP MODE: every subsection shows an explanation in place of its
-  // controls (helpText.ts). A tap anywhere but the page's scrollbar ends it
-  // and does nothing else -- the controls it would have reached are not on
-  // the screen -- so its click is swallowed.
+  // controls (helpText.ts). Nothing on the page acts while it is up, so the
+  // page scrolls under a finger like any page (`is-help`), and the system's
+  // back gesture ends it (takeBack, below).
   const [helpMode, setHelpMode] = useState(false)
-  // The click to swallow outlives help mode: ending it puts the controls
-  // back before the tap's click arrives, so the listener that swallows it
-  // cannot be one that help mode ending removes.
-  const swallowHelpClickRef = useRef(false)
-  useEffect(() => {
-    const swallow = (event: MouseEvent) => {
-      if (!swallowHelpClickRef.current) return
-      swallowHelpClickRef.current = false
-      event.preventDefault()
-      event.stopPropagation()
-    }
-    // A tap that ended help mode but produced no click (it became a drag)
-    // must not swallow the next one.
-    const reset = () => { swallowHelpClickRef.current = false }
-    window.addEventListener('click', swallow, { capture: true })
-    window.addEventListener('pointerdown', reset, { capture: true })
-    return () => {
-      window.removeEventListener('click', swallow, { capture: true })
-      window.removeEventListener('pointerdown', reset, { capture: true })
-    }
-  }, [])
-  useEffect(() => {
-    if (!helpMode) return undefined
-    const end = (event: PointerEvent) => {
-      if (event.target instanceof Element && event.target.closest('.mobile-scrollbar-slot')) return
-      swallowHelpClickRef.current = true
-      setHelpMode(false)
-    }
-    window.addEventListener('pointerdown', end, { capture: true })
-    return () => window.removeEventListener('pointerdown', end, { capture: true })
-  }, [helpMode])
   // While help is up, the system's back gesture closes it rather than
   // leaving the app.
   useEffect(() => {
@@ -340,10 +309,10 @@ export function MobileSoundscapeApp() {
           <div className={`app-shell mobile-app-shell${theme.shadowFlip ? ' shadow-flip' : ''}`} style={theme.shellVariables}>
             <div className="mobile-page">
             <div className="mobile-soundscape-shell notes-sidebar">
-              <div ref={pageScrollerRef} className="options-content sidebar-options-content mode-edit thockdown-custom-scrollbar mobile-page-scroller">
+              <div ref={pageScrollerRef} className={`options-content sidebar-options-content mode-edit thockdown-custom-scrollbar mobile-page-scroller${helpMode ? ' is-help' : ''}`}>
                 <div className="utility-setting-slider-stack" aria-label="Master controls">
                   <OptionsSubsectionLabel>Master</OptionsSubsectionLabel>
-                  {helpMode ? <SubsectionHelp text={helpFor('Master')!} /> : (<>
+                  {helpMode ? <SubsectionHelp paragraphs={helpFor('Master')!} /> : (<>
                   <div className="options-loadout-grid" role="group" aria-label="Soundscape and display mode">
                     <button
                       type="button"
@@ -458,7 +427,7 @@ export function MobileSoundscapeApp() {
                 </div>
                 <div className="utility-setting-slider-stack" aria-label="Schedule">
                   <OptionsSubsectionLabel>Schedule</OptionsSubsectionLabel>
-                  {helpMode ? <SubsectionHelp text={helpFor('Schedule')!} /> : <ScheduleGrid
+                  {helpMode ? <SubsectionHelp paragraphs={helpFor('Schedule')!} /> : <ScheduleGrid
                     schedule={schedule}
                     customPresets={customPresets}
                     pickedPresetId={pickedPresetId}

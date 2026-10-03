@@ -392,20 +392,32 @@ interface SoundscapeControlsProps extends SoundscapeOptionsProps {
    * to show the controls. The words are the host's, since what a control
    * does by touch is not what it does by mouse.
    */
-  help?: (heading: string) => string | null
+  help?: (heading: string) => readonly string[] | null
 }
 
 /**
  * A subsection's explanation, where its controls would be
  * (SoundscapeControlsProps.help): ONE tile drawn as a button of the panel's
  * grid and spanning all of it, so help reads as the same surface the
- * controls sit on rather than as loose text between them.
+ * controls sit on rather than as loose text between them. It does nothing
+ * when pressed, so it is drawn with the button classes on a plain element.
+ *
+ * `paragraphs` are spaced apart; one that opens with a short "Label:" has the
+ * label drawn bold on a line of its own, the rest below it.
  */
-export function SubsectionHelp({ text }: { text: string }) {
+export function SubsectionHelp({ paragraphs }: { paragraphs: readonly string[] }) {
   return (
     <div className="options-loadout-grid options-subsection-help-grid">
-      {/* A button: pressing it is how help mode ends (the host's choice of what a press does). */}
-      <button type="button" className="btn-icon options-color-swatch options-loadout-btn options-subsection-help">{text}</button>
+      <div className="btn-icon options-color-swatch options-loadout-btn options-subsection-help">
+        {paragraphs.map((paragraph) => {
+          const labelled = /^([^:.]{1,40}):\s+([\s\S]*)$/.exec(paragraph)
+          return (
+            <p key={paragraph} className="options-subsection-help-paragraph">
+              {labelled ? <><strong>{labelled[1]}:</strong><br />{labelled[2]}</> : paragraph}
+            </p>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -435,7 +447,7 @@ function fromPosition(spec: ControlSpec, position: number): number {
 }
 
 interface ControlGroupsProps {
-  help?: (heading: string) => string | null
+  help?: (heading: string) => readonly string[] | null
   idPrefix: string
   groups: ControlGroup[]
   values: Record<string, number>
@@ -453,7 +465,7 @@ function ControlGroups({ idPrefix, groups, values, defaults, disabled, name, onC
         return (
         <div className="soundscape-control-group" role="group" aria-label={`${name} ${group.label.toLowerCase()}`} key={group.label}>
           <OptionsSubsectionLabel>{group.label}</OptionsSubsectionLabel>
-          {helpText !== null ? <SubsectionHelp text={helpText} /> : (
+          {helpText !== null ? <SubsectionHelp paragraphs={helpText} /> : (
           <OptionsSliderRows rows={group.rows}>
           {group.controls.map((spec) => (
             <CompactScrollbarSlider
@@ -728,7 +740,7 @@ export function SoundscapeControls({ preferences, onChange, pickedPresetId = nul
   return (
       <div className="utility-setting-slider-stack" aria-label="Soundscape controls">
         <OptionsSubsectionLabel>Presets</OptionsSubsectionLabel>
-        {presetsHelp !== null ? <SubsectionHelp text={presetsHelp} /> : (<>
+        {presetsHelp !== null ? <SubsectionHelp paragraphs={presetsHelp} /> : (<>
         <div className="options-loadout-grid soundscape-preset-grid" role="group" aria-label="Factory soundscapes">
           {SOUNDSCAPE_FACTORY_PRESETS.map((preset) => (
             <button
@@ -896,7 +908,7 @@ export function SoundscapeControls({ preferences, onChange, pickedPresetId = nul
         </div>
 
         <OptionsSubsectionLabel>Channels</OptionsSubsectionLabel>
-        {channelsHelp !== null ? <SubsectionHelp text={channelsHelp} /> : (
+        {channelsHelp !== null ? <SubsectionHelp paragraphs={channelsHelp} /> : (
         <div className="options-loadout-grid soundscape-channel-selector" role="group" aria-label="Soundscape channels" ref={channelSelectorRef}>
           {SOUNDSCAPE_CHANNEL_ROSTER.map((entry) => {
             const channel = channels.find((item) => item.id === entry.id)

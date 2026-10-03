@@ -164,13 +164,14 @@ session, controls, clips or saving to files.
 The help button (Master row, third) puts the page in HELP MODE: under every
 subsection heading, one button-tile spanning the grid explains the controls
 it stands in for (`helpText.ts`, written for a finger; the panel takes it
-through its `help` option and draws it with `SubsectionHelp`). A tap
-anywhere but the scrollbar ends help mode and does nothing else, and so does
-the system's back gesture, which the page takes while help is up
+through its `help` option and draws it with `SubsectionHelp`: paragraphs,
+each opening "Label:" set bold on a line of its own). Nothing on the page is
+a control while help is up, so the page scrolls under a finger then; the
+system's back gesture ends help mode, which the page takes while help is up
 (`takeBack`) rather than leaving the app.
 
 ## Touch
-The page does not scroll under a finger: its scrollbar (`PageScrollbar.tsx`,
+The page does not scroll under a finger (except in help mode): its scrollbar (`PageScrollbar.tsx`,
 the desktop's track and thumb, worked from a fingertip-wide column at the
 right edge; the WebView's own scrollbar is switched off in `MainActivity`)
 scrolls it, so every other drag belongs to the

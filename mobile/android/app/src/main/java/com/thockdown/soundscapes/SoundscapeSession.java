@@ -126,12 +126,17 @@ final class SoundscapeSession {
     private String regularId = null;
     private float masterVolume;
     /**
-     * Set when regular mode starts playing: the page's next configuration
-     * replaces whatever was heard before (the schedule's soundscape, or the
-     * one regular mode was paused on), so it is a change of soundscape
-     * whatever the page says -- the page only knows its own last one.
+     * How the page's next configuration is applied, set when regular mode
+     * starts playing; the page only knows its own last configuration, not
+     * what the session was doing.
+     * - CROSSFADE: something was heard (the schedule's soundscape), so the
+     *   new one is a change of soundscape whatever the page says.
+     * - REPLACE: nothing was heard (a new output, or one paused), so there
+     *   is nothing to crossfade from: the new soundscape simply replaces
+     *   what was queued and fades in alone.
      */
-    private boolean takingOver = false;
+    private enum NextConfigure { AS_SENT, CROSSFADE, REPLACE }
+    private NextConfigure nextConfigure = NextConfigure.AS_SENT;
     /** The end of a fade-out that ends the session, while one is under way. */
     private Runnable pendingEnd = null;
     private final android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
@@ -203,7 +208,9 @@ final class SoundscapeSession {
     /** Regular mode PLAYING (the engine opened its playback): open, resume, or take over from the schedule. */
     synchronized void play() {
         cancelPendingEnd();
-        if (regular != Regular.PLAYING) takingOver = true;
+        if (regular != Regular.PLAYING) {
+            nextConfigure = output != null && !output.isPaused() ? NextConfigure.CROSSFADE : NextConfigure.REPLACE;
+        }
         regular = Regular.PLAYING;
         if (output == null) {
             open(find(regularId));
@@ -232,8 +239,9 @@ final class SoundscapeSession {
     /** From the page's engine: `transitionSec` 0 for a settings change, else a change of soundscape crossfaded that long. */
     synchronized void configure(String configuration, double transitionSec) {
         if (renderer == null || regular != Regular.PLAYING) return;
-        if (takingOver) transitionSec = Math.max(transitionSec, SWITCH_FADE_SEC);
-        takingOver = false;
+        if (nextConfigure == NextConfigure.CROSSFADE) transitionSec = Math.max(transitionSec, SWITCH_FADE_SEC);
+        if (nextConfigure == NextConfigure.REPLACE) transitionSec = 0;
+        nextConfigure = NextConfigure.AS_SENT;
         if (transitionSec > 0) renderer.transition(configuration, transitionSec);
         else renderer.configure(configuration);
     }
@@ -277,8 +285,14 @@ final class SoundscapeSession {
         cancelPendingEnd();
         regularId = entry.id;
         regular = Regular.PLAYING;
-        renderer.transition(entry.configuration, SWITCH_FADE_SEC);
-        if (output.isPaused()) fadeIn(SWITCH_FADE_SEC);
+        // From a pause nothing is heard to crossfade from: the new soundscape
+        // replaces what was queued and fades in alone.
+        if (output.isPaused()) {
+            renderer.configure(entry.configuration);
+            fadeIn(SWITCH_FADE_SEC);
+        } else {
+            renderer.transition(entry.configuration, SWITCH_FADE_SEC);
+        }
         output.setVolume(masterVolume, VOLUME_TIME_CONSTANT_SEC);
         refreshService();
         report();
