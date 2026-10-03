@@ -7,6 +7,7 @@ import ReactMarkdown from 'react-markdown'
 import { SidebarOptionsPanel } from './sidebar/SidebarOptionsPanel'
 import { AudioControls } from './components/AudioControls'
 import { soundscapeEngine } from './sound/SoundscapeEngine'
+import { RESTORE_FADE_IN_SEC } from './sound/audioOutputBus'
 import { isPlaylistButtonSlot } from './shared/audioPlayer'
 import { isTextEntryElement, keepFocusOnPress, mayHoldKeyboard } from './shared/focusOwnership'
 import { focusEscapeHoldRing } from './editorSection/escapeHoldRingFocus'
@@ -6265,6 +6266,8 @@ ${markdownHtml}
             setMusicMuted(appState.menu.musicMuted ?? false)
             setMusicReverbBypassed(appState.menu.musicReverbBypassed ?? false)
             setMusicSoundOptionsOpen(appState.menu.musicSoundOptionsOpen ?? false)
+            // Restored from the previous session: it rises from silence, as the music does.
+            soundscapeEngine.fadeInNextStart(RESTORE_FADE_IN_SEC)
             setSoundscapePreferences(sanitizeSoundscapePreferences(appState.menu.soundscapes))
             if (Array.isArray(appState.menu.musicActiveSlots)) {
               setMusicActiveSlots(

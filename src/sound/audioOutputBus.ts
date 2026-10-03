@@ -20,6 +20,13 @@
  * player, and the desktop build is unchanged by that.
  */
 /**
+ * How long sound resumed from the previous session takes to rise from
+ * silence, so the app does not open at full volume: the music player's
+ * restored song and the soundscape both use it.
+ */
+export const RESTORE_FADE_IN_SEC = 10;
+
+/**
  * Requested output buffer, in seconds. Chromium clamps a numeric latencyHint
  * to its largest Web Audio buffer (8192 frames: about 186 ms at 44.1 kHz,
  * 171 ms at 48 kHz, measured in desktop Chromium), so this asks for that

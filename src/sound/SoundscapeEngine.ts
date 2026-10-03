@@ -95,6 +95,8 @@ export class SoundscapeEngine {
   /** The soundscape the sent configuration was chosen as: another one is a change of soundscape, not of settings. */
   private sentPresetId: string | null = null;
   private volumeTarget = -1;
+  /** A slow fade from silence for the next start (fadeInNextStart); null for the usual quick one. */
+  private startFadeSec: number | null = null;
   private preferences: SoundscapePreferences | null = null;
   private starting: Promise<void> | null = null;
   private disconnectTimer: number | null = null;
@@ -104,9 +106,20 @@ export class SoundscapeEngine {
     this.playbackFactory = factory;
   }
 
+  /**
+   * Let the next start rise from silence over `seconds` rather than at once:
+   * for a soundscape restored from the previous session, so the app does not
+   * open at full volume. Only the volume fades. Dropped if what is applied
+   * next is silent, so a later start by hand is quick again.
+   */
+  fadeInNextStart(seconds: number): void {
+    this.startFadeSec = seconds;
+  }
+
   apply(preferences: SoundscapePreferences): void {
     this.preferences = preferences;
     if (!isSoundscapeAudible(preferences)) {
+      this.startFadeSec = null;
       this.fadeOutAndClose();
       return;
     }
@@ -155,7 +168,10 @@ export class SoundscapeEngine {
     const playback = this.playback;
     if (!playback) return;
     if (this.volumeTarget !== preferences.masterVolume) {
-      playback.setVolume(preferences.masterVolume, VOLUME_TIME_CONSTANT_SEC);
+      // A glide reaching ~98% of the target in four time constants.
+      const fade = this.volumeTarget < 0 && this.startFadeSec !== null ? this.startFadeSec / 4 : VOLUME_TIME_CONSTANT_SEC;
+      this.startFadeSec = null;
+      playback.setVolume(preferences.masterVolume, fade);
       this.volumeTarget = preferences.masterVolume;
     }
     const configuration = soundscapeConfiguration(preferences.settings);

@@ -29,6 +29,9 @@ import {
 import { useHoldToAdjust } from '../shared/useHoldToAdjust'
 import { useNonPassiveWheel } from '../shared/useNonPassiveWheel'
 import { musicPlayerService, MissingFileError, resolveSeekPress } from '../sound/MusicPlayerService'
+// Playback resumed from the previous session (the initialWasPlaying restore
+// below) starts at silence and full reverb and ramps up over this span.
+import { RESTORE_FADE_IN_SEC } from '../sound/audioOutputBus'
 import { armHold, HOLD_COMMIT_MS } from '../shared/holdTiming'
 
 // Purging a song from the library and clearing a playlist slot are both
@@ -37,11 +40,6 @@ import { armHold, HOLD_COMMIT_MS } from '../shared/holdTiming'
 // cursor. Was 700ms of its own.
 const HOLD_THRESHOLD_MS = HOLD_COMMIT_MS
 
-// Fade-in duration (seconds) for playback resumed from the previous
-// session (see the initialWasPlaying restore below) -- starts at silence
-// and full reverb, ramping up to the persisted volume/reverb over this
-// span, rather than jumping straight in at launch.
-const RESTORE_PLAYBACK_FADE_IN_SEC = 10
 
 
 
@@ -358,7 +356,7 @@ export const AudioControls = memo(function AudioControls({
       if (initialWasPlaying) {
         try {
           await musicPlayerService.play(song.filePath)
-          musicPlayerService.beginFadeIn(RESTORE_PLAYBACK_FADE_IN_SEC)
+          musicPlayerService.beginFadeIn(RESTORE_FADE_IN_SEC)
           if (pendingSeekSecRef.current) musicPlayerService.setCurrentTime(pendingSeekSecRef.current)
           pendingSeekSecRef.current = null
           setIsPlaying(true)
