@@ -172,6 +172,13 @@ lead, so up to ten seconds after its minute.
   desktop) and opened with the system file picker. Not the share sheet,
   which only hands a file to another app.
 
+## Help
+The help button (Master row, second) puts the page in HELP MODE: under every
+subsection heading, one button-tile spanning the grid explains the controls
+it stands in for (`helpText.ts`, written for a finger; the panel takes it
+through its `help` option and draws it with `SubsectionHelp`). A tap
+anywhere but the scrollbar ends help mode and does nothing else.
+
 ## Touch
 The page does not scroll under a finger: its scrollbar (`PageScrollbar.tsx`,
 the desktop's track and thumb, worked from a fingertip-wide column at the

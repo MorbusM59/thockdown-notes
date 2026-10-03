@@ -385,6 +385,29 @@ interface SoundscapeOptionsProps {
 interface SoundscapeControlsProps extends SoundscapeOptionsProps {
   pickedPresetId?: string | null
   onPickPreset?: (presetId: string | null) => void
+  /**
+   * HELP, which a host may offer (the mobile app does): the explanation for
+   * a subsection by its heading ("Presets", "Channels", "Environment",
+   * "Sound", ...), shown under the heading IN PLACE OF its controls, or null
+   * to show the controls. The words are the host's, since what a control
+   * does by touch is not what it does by mouse.
+   */
+  help?: (heading: string) => string | null
+}
+
+/**
+ * A subsection's explanation, where its controls would be
+ * (SoundscapeControlsProps.help): ONE tile drawn as a button of the panel's
+ * grid and spanning all of it, so help reads as the same surface the
+ * controls sit on rather than as loose text between them.
+ */
+export function SubsectionHelp({ text }: { text: string }) {
+  return (
+    <div className="options-loadout-grid options-subsection-help-grid">
+      {/* A button: pressing it is how help mode ends (the host's choice of what a press does). */}
+      <button type="button" className="btn-icon options-color-swatch options-loadout-btn options-subsection-help">{text}</button>
+    </div>
+  )
 }
 
 /**
@@ -412,6 +435,7 @@ function fromPosition(spec: ControlSpec, position: number): number {
 }
 
 interface ControlGroupsProps {
+  help?: (heading: string) => string | null
   idPrefix: string
   groups: ControlGroup[]
   values: Record<string, number>
@@ -421,12 +445,15 @@ interface ControlGroupsProps {
   onCommit: (key: string, value: number) => void
 }
 
-function ControlGroups({ idPrefix, groups, values, defaults, disabled, name, onCommit }: ControlGroupsProps) {
+function ControlGroups({ idPrefix, groups, values, defaults, disabled, name, onCommit, help }: ControlGroupsProps) {
   return (
     <>
-      {groups.map((group) => (
+      {groups.map((group) => {
+        const helpText = help?.(group.label) ?? null
+        return (
         <div className="soundscape-control-group" role="group" aria-label={`${name} ${group.label.toLowerCase()}`} key={group.label}>
           <OptionsSubsectionLabel>{group.label}</OptionsSubsectionLabel>
+          {helpText !== null ? <SubsectionHelp text={helpText} /> : (
           <OptionsSliderRows rows={group.rows}>
           {group.controls.map((spec) => (
             <CompactScrollbarSlider
@@ -446,8 +473,10 @@ function ControlGroups({ idPrefix, groups, values, defaults, disabled, name, onC
             />
           ))}
           </OptionsSliderRows>
+          )}
         </div>
-      ))}
+        )
+      })}
     </>
   )
 }
@@ -470,7 +499,7 @@ export function SoundscapeOptions(props: SoundscapeOptionsProps) {
  * mobile app (mobile/) shows these controls as its whole interface, where a
  * collapsible section heading would have nothing to collapse against.
  */
-export function SoundscapeControls({ preferences, onChange, pickedPresetId = null, onPickPreset }: SoundscapeControlsProps) {
+export function SoundscapeControls({ preferences, onChange, pickedPresetId = null, onPickPreset, help }: SoundscapeControlsProps) {
   const [pendingDeletePresetId, setPendingDeletePresetId] = useState<string | null>(null)
   const channelSelectorRef = useRef<HTMLDivElement | null>(null)
   const channelHoldRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
@@ -679,6 +708,8 @@ export function SoundscapeControls({ preferences, onChange, pickedPresetId = nul
     onChange(applySoundscapePreset(preferences, preset))
   }
 
+  const presetsHelp = help?.('Presets') ?? null
+  const channelsHelp = help?.('Channels') ?? null
   const pickedCustomPreset = preferences.customPresets.find((preset) => preset.id === pickedPresetId) ?? null
 
   const rosterEntry = SOUNDSCAPE_CHANNEL_ROSTER.find((entry) => entry.id === selectedChannel?.id)
@@ -687,6 +718,7 @@ export function SoundscapeControls({ preferences, onChange, pickedPresetId = nul
   return (
       <div className="utility-setting-slider-stack" aria-label="Soundscape controls">
         <OptionsSubsectionLabel>Presets</OptionsSubsectionLabel>
+        {presetsHelp !== null ? <SubsectionHelp text={presetsHelp} /> : (<>
         <div className="options-loadout-grid soundscape-preset-grid" role="group" aria-label="Factory soundscapes">
           {SOUNDSCAPE_FACTORY_PRESETS.map((preset) => (
             <button
@@ -835,6 +867,7 @@ export function SoundscapeControls({ preferences, onChange, pickedPresetId = nul
           </button>
           )}
         </div>
+        </>)}
 
         {/* The volume, space and weather belong to the whole soundscape
             rather than to a channel, so they stand above the channels, always
@@ -848,10 +881,12 @@ export function SoundscapeControls({ preferences, onChange, pickedPresetId = nul
             disabled={false}
             name="Environment"
             onCommit={updateEnvironment}
+            help={help}
           />
         </div>
 
         <OptionsSubsectionLabel>Channels</OptionsSubsectionLabel>
+        {channelsHelp !== null ? <SubsectionHelp text={channelsHelp} /> : (
         <div className="options-loadout-grid soundscape-channel-selector" role="group" aria-label="Soundscape channels" ref={channelSelectorRef}>
           {SOUNDSCAPE_CHANNEL_ROSTER.map((entry) => {
             const channel = channels.find((item) => item.id === entry.id)
@@ -913,6 +948,7 @@ export function SoundscapeControls({ preferences, onChange, pickedPresetId = nul
             )
           })}
         </div>
+        )}
 
         {selectedChannel && rosterEntry && (
           <div
@@ -929,6 +965,7 @@ export function SoundscapeControls({ preferences, onChange, pickedPresetId = nul
               disabled={!selectedChannel.enabled}
               name={layerName}
               onCommit={(key, value) => updateChannel(selectedChannel.id, { [key]: value })}
+              help={help}
             />
           </div>
         )}

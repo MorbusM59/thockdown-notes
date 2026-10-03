@@ -13,7 +13,6 @@
  * are more controls, not a second path to the engine.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { SoundscapeControls } from '../../src/sidebar/SoundscapeOptions'
 import { CompactScrollbarSlider } from '../../src/components/CompactScrollbarSlider'
 import { soundscapeConfiguration, soundscapeEngine } from '../../src/sound/SoundscapeEngine'
 import { resumedOutputContext } from '../../src/sound/audioOutputBus'
@@ -51,6 +50,8 @@ import {
 import { currentEntryId, followSession, nextScratch, sessionEntries } from './sessionEntries'
 import { allPresets, sanitizeSchedule, scheduleEvents, scheduledPresetAt, type Schedule } from './schedule'
 import { ScheduleGrid } from './ScheduleGrid'
+import { helpFor } from './helpText'
+import { SoundscapeControls, SubsectionHelp } from '../../src/sidebar/SoundscapeOptions'
 import { PageScrollbar } from './PageScrollbar'
 import { armHold, HOLD_CONFIRM_MS } from '../../src/shared/holdTiming'
 import { installSoundscapeFiles } from './soundscapeFiles'
@@ -90,6 +91,43 @@ export function MobileSoundscapeApp() {
   // The soundscape picked up for filling schedule slots (ScheduleGrid); not persisted.
   const [pickedPresetId, setPickedPresetId] = useState<string | null>(null)
   const pageScrollerRef = useRef<HTMLDivElement | null>(null)
+  // HELP MODE: every subsection shows an explanation in place of its
+  // controls (helpText.ts). A tap anywhere but the page's scrollbar ends it
+  // and does nothing else -- the controls it would have reached are not on
+  // the screen -- so its click is swallowed.
+  const [helpMode, setHelpMode] = useState(false)
+  // The click to swallow outlives help mode: ending it puts the controls
+  // back before the tap's click arrives, so the listener that swallows it
+  // cannot be one that help mode ending removes.
+  const swallowHelpClickRef = useRef(false)
+  useEffect(() => {
+    const swallow = (event: MouseEvent) => {
+      if (!swallowHelpClickRef.current) return
+      swallowHelpClickRef.current = false
+      event.preventDefault()
+      event.stopPropagation()
+    }
+    // A tap that ended help mode but produced no click (it became a drag)
+    // must not swallow the next one.
+    const reset = () => { swallowHelpClickRef.current = false }
+    window.addEventListener('click', swallow, { capture: true })
+    window.addEventListener('pointerdown', reset, { capture: true })
+    return () => {
+      window.removeEventListener('click', swallow, { capture: true })
+      window.removeEventListener('pointerdown', reset, { capture: true })
+    }
+  }, [])
+  useEffect(() => {
+    if (!helpMode) return undefined
+    const end = (event: PointerEvent) => {
+      if (event.target instanceof Element && event.target.closest('.mobile-scrollbar-slot')) return
+      swallowHelpClickRef.current = true
+      setHelpMode(false)
+    }
+    window.addEventListener('pointerdown', end, { capture: true })
+    return () => window.removeEventListener('pointerdown', end, { capture: true })
+  }, [helpMode])
+  const help = helpMode ? helpFor : undefined
   // Pressing anything that does not act on the picked-up soundscape puts it
   // down, and the press then does what it always does. Decided on the press
   // (capture phase, before any control's own handler), so the control sees
@@ -256,6 +294,7 @@ export function MobileSoundscapeApp() {
               <div ref={pageScrollerRef} className="options-content sidebar-options-content mode-edit thockdown-custom-scrollbar mobile-page-scroller">
                 <div className="utility-setting-slider-stack" aria-label="Master controls">
                   <OptionsSubsectionLabel>Master</OptionsSubsectionLabel>
+                  {helpMode ? <SubsectionHelp text={helpFor('Master')!} /> : (<>
                   <div className="options-loadout-grid" role="group" aria-label="Soundscape and display mode">
                     <button
                       type="button"
@@ -279,6 +318,15 @@ export function MobileSoundscapeApp() {
                       onContextMenu={(event) => event.preventDefault()}
                     >
                       <span className={`fa-solid ${schedule.enabled ? 'fa-clock' : 'fa-power-off'}`} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn-icon options-color-swatch options-loadout-btn${helpMode ? ' is-active' : ''}`}
+                      aria-pressed={helpMode}
+                      aria-label="Help: explain the controls"
+                      onClick={() => setHelpMode(true)}
+                    >
+                      <span className="fa-solid fa-circle-question" aria-hidden="true" />
                     </button>
                     <button
                       type="button"
@@ -326,7 +374,6 @@ export function MobileSoundscapeApp() {
                     <button
                       type="button"
                       className="btn-icon options-color-swatch options-loadout-btn"
-                      style={{ gridColumn: 5 }}
                       aria-label={`Visual preset: ${PRESET_NAMES[look.mode][look.preset[look.mode]]}. Press for the next`}
                       onClick={() => setLook((current) => ({
                         ...current,
@@ -338,7 +385,6 @@ export function MobileSoundscapeApp() {
                     <button
                       type="button"
                       className={`btn-icon options-color-swatch options-loadout-btn${look.mode === 'dark' ? ' is-active' : ''}`}
-                      style={{ gridColumn: 6 }}
                       aria-pressed={look.mode === 'dark'}
                       aria-label="Dark mode"
                       onClick={() => setLook((current) => ({ ...current, mode: current.mode === 'dark' ? 'light' : 'dark' }))}
@@ -359,21 +405,23 @@ export function MobileSoundscapeApp() {
                       onCommit={(value) => setPreferences((current) => ({ ...current, masterVolume: value / 100 }))}
                     />
                   </OptionsSliderRows>
+                  </>)}
                 </div>
                 <div className="utility-setting-slider-stack" aria-label="Schedule">
                   <OptionsSubsectionLabel>Schedule</OptionsSubsectionLabel>
-                  <ScheduleGrid
+                  {helpMode ? <SubsectionHelp text={helpFor('Schedule')!} /> : <ScheduleGrid
                     schedule={schedule}
                     customPresets={customPresets}
                     pickedPresetId={pickedPresetId}
                     onChange={setSchedule}
-                  />
+                  />}
                 </div>
                 <SoundscapeControls
                   preferences={preferences}
                   onChange={handleChange}
                   pickedPresetId={pickedPresetId}
                   onPickPreset={setPickedPresetId}
+                  help={help}
                 />
               </div>
             </div>

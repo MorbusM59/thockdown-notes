@@ -1005,6 +1005,29 @@
   filter: var(--filter-primed-delete);
 }
 
+/* A subsection's explanation in help mode, in place of its controls
+   (SoundscapeControls' help option): one button-tile across the whole grid,
+   as tall as its text. */
+.options-subsection-help-grid {
+  width: 100%;
+}
+
+/* Three classes: it must outrank any host rule that sizes every grid cell
+   (the mobile app squares them), whatever order the stylesheets load in. */
+.options-loadout-grid > .options-loadout-btn.options-subsection-help {
+  grid-column: 1 / -1;
+  aspect-ratio: auto;
+  width: auto;
+  height: auto;
+  display: block;
+  padding: 8px 10px;
+  text-align: left;
+  font-weight: normal;
+  font-size: calc(13px * var(--ui-font-scale));
+  line-height: 1.45;
+  color: var(--color-text-80);
+}
+
 /* A soundscape picked up (SoundscapeControls' onPickPreset): held, not
    playing. Its own frame rather than an outline: a long press also FOCUSES
    the button, and `.app-shell button:focus` clears the outline -- the mark
