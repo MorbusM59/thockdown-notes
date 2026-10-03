@@ -16,14 +16,17 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+    # Whole folders, not a list of the files the app uses: the app shares
+    # most of src/ with the desktop (the panel, the engine and renderer, the
+    # press and focus rules), and a hand-kept list of those had drifted --
+    # it still named the generator at its old path in public/.
     paths:
       - "mobile/**"
-      - "src/shared/soundscape*.ts"
-      - "src/sound/SoundscapeEngine.ts"
-      - "src/sound/audioOutputBus.ts"
-      - "src/sidebar/SoundscapeOptions.tsx"
-      - "public/soundscape-generator.js"
+      - "src/**"
+      - "public/**"
       - "capacitor.config.ts"
+      - "package.json"
+      - "package-lock.json"
       - ".github/workflows/build-android.yml"
 
 permissions:
