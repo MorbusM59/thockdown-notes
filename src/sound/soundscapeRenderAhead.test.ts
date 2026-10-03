@@ -8,6 +8,7 @@ import {
   CROSSFADE_SEC,
   RENDER_CHUNK_FRAMES,
   RENDER_LEAD_SEC,
+  ROOM_BUILD_LEAD_SEC,
   RenderAhead,
   type ConfigureMessage,
   type MixStage,
@@ -41,6 +42,8 @@ function countingGenerator(): HostedGenerator {
 /** Passes the direct sound through untouched. */
 const identityMix: MixStage = {
   setSpace: () => {},
+  roomPending: false,
+  buildRoom: () => {},
   process: (direct, _send, out) => { out[0].set(direct[0]); out[1].set(direct[1]); },
 };
 
@@ -234,5 +237,43 @@ describe('render ahead', () => {
     let largestStep = 0;
     for (let index = 1; index < out.length; index += 1) largestStep = Math.max(largestStep, Math.abs(out[index] - out[index - 1]));
     expect(largestStep).toBeLessThan(1e-3);
+  });
+
+  it('builds a new room only with enough queued to cover the build, then splices it in at the playhead', () => {
+    /** A mix whose room is its space's size, recording how much was queued at each build. */
+    const builtAtQueued: number[] = [];
+    let renderer: RenderAhead | null = null;
+    let built: number | null = null;
+    let pending: number | null = null;
+    const roomMix: MixStage = {
+      setSpace: (space) => { pending = space.size === built ? null : space.size; },
+      get roomPending() { return pending !== null; },
+      buildRoom: () => {
+        if (pending === null) return;
+        if (renderer) builtAtQueued.push(renderer.queued);
+        built = pending;
+        pending = null;
+      },
+      process: identityMix.process,
+    };
+    const { renderer: created, sent, tasks } = setup(countingGenerator(), roomMix);
+    renderer = created;
+    const drain = () => { while (tasks.length > 0) tasks.shift()!(); };
+    renderer.configure(CONFIGURE);
+    drain();
+    expect(builtAtQueued).toEqual([0]);
+    const playedAt = 4 * RENDER_CHUNK_FRAMES;
+    renderer.played(playedAt);
+    drain();
+    sent.length = 0;
+    // A room change: nothing is built on the spot, with only the margin queued.
+    renderer.configure({ ...CONFIGURE, space: { ...CONFIGURE.space, size: CONFIGURE.space.size + 0.1 } });
+    expect(builtAtQueued).toHaveLength(1);
+    drain();
+    expect(builtAtQueued).toHaveLength(2);
+    expect(builtAtQueued[1]).toBeGreaterThanOrEqual(Math.round(ROOM_BUILD_LEAD_SEC * SAMPLE_RATE));
+    // Once built it is heard from the playhead's margin, not after the refilled lead.
+    const spliceStarts = sent.map((chunk) => chunk.startFrame).filter((start, index, all) => index > 0 && start <= all[index - 1]);
+    expect(spliceStarts).toEqual([playedAt + MARGIN_FRAMES]);
   });
 });

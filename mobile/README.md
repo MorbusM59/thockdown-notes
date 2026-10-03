@@ -56,7 +56,10 @@ How it got here, because each step was measured on a device:
 
 Outputs are plain queues at absolute frame positions. A settings change is
 spliced a margin past the playhead and crossfaded by the RENDERER from its
-history of what it sent (50 ms). A change of SOUNDSCAPE is spliced at the
+history of what it sent (50 ms). A new room (size, damping, echoes) is the
+one expensive change -- about a tenth of a second to build, longer than a
+splice's margin -- so it is built only once half a second is queued again,
+then spliced in at the playhead (`soundscapeRenderAhead.ts`, THE ROOM). A change of SOUNDSCAPE is spliced at the
 same frame and crossfaded into a fresh voice over at least two seconds
 (the schedule's fades are a minute, a stop's hand-over ten seconds), and a
 start from silence or a pause fades in, and a stop with no run to hand over

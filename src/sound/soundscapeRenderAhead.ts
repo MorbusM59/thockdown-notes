@@ -49,6 +49,22 @@
  * during a transition fades from the blend being heard, so nothing jumps.
  * A `configure` during a transition goes to the new voice, as the settings
  * now in force.
+ *
+ * THE ROOM is the one expensive part of a change: a new space (its size,
+ * damping or echoes) means building an impulse response and transforming
+ * it, around a tenth of a second of work, which is longer than a splice's
+ * margin. Done on the spot, it ran the output dry after every step of a
+ * room slider, because the splice had just discarded everything queued
+ * past the margin. So the mix only RECORDS a new room (MixStage.roomPending)
+ * and this renderer builds it when it can afford to: once at least
+ * ROOM_BUILD_LEAD_SEC is queued again, which is more than the build takes.
+ * Then it splices from as near the playhead as the output allows, so the
+ * room is heard within a few tenths of a second of being asked for, never
+ * at the end of the lead. A newer room asked for before then replaces the
+ * pending one, so a slider dragged across builds only the rooms it can
+ * keep up with. A transition's new voice has a room of its own to build,
+ * so its blend starts the same way, once that room is ready. The first
+ * room is built at once: nothing is playing yet.
  */
 import type { SoundscapeSpaceSettings } from '../shared/soundscape';
 import { BLOCK_FRAMES, type HostedGenerator } from './soundscapeGeneratorHost';
@@ -60,6 +76,8 @@ export const RENDER_LEAD_SEC = 10;
 export const RENDER_CHUNK_FRAMES = MIX_BLOCK;
 /** The crossfade from old audio to new on a settings change. */
 export const CROSSFADE_SEC = 0.05;
+/** How much must be queued before a new room is built (see THE ROOM above): more than a build takes. */
+export const ROOM_BUILD_LEAD_SEC = 0.5;
 
 export interface RenderedChunk {
   type: 'chunk';
@@ -77,7 +95,12 @@ export interface ConfigureMessage {
 
 /** What follows the generator: SoundscapeMix, or a stand-in in tests. */
 export interface MixStage {
+  /** Take a space; a new room is only recorded (roomPending), to be built by buildRoom. */
   setSpace(space: SoundscapeSpaceSettings): void;
+  /** A room has been asked for and not built yet. */
+  readonly roomPending: boolean;
+  /** Build the pending room and crossfade it in from here on: the expensive part of a change. */
+  buildRoom(): void;
   /** One RENDER_CHUNK_FRAMES block of generator output into `out` (overwritten). */
   process(direct: [Float32Array, Float32Array], send: [Float32Array, Float32Array], out: [Float32Array, Float32Array]): void;
 }
@@ -204,6 +227,9 @@ export class RenderAhead {
   private voice: VoiceSource;
   /** What is rendered: that voice, or a transition's blend into it. */
   private source: AudioSource;
+  /** A transition waiting for its voice's room (see THE ROOM above), then blended in over `frames`. */
+  private pendingBlend: { voice: VoiceSource; frames: number } | null = null;
+  private readonly roomLeadFrames: number;
 
   /**
    * @param spliceMarginSec how far past its last `played` report the
@@ -230,6 +256,7 @@ export class RenderAhead {
     this.leadFrames = Math.round(RENDER_LEAD_SEC * sampleRate);
     this.marginFrames = Math.round(spliceMarginSec * sampleRate);
     this.crossfadeFrames = Math.max(1, Math.round(CROSSFADE_SEC * sampleRate));
+    this.roomLeadFrames = Math.round(ROOM_BUILD_LEAD_SEC * sampleRate);
     const historyFrames = this.leadFrames + (2 * RENDER_CHUNK_FRAMES);
     this.historyLeft = new Float32Array(historyFrames);
     this.historyRight = new Float32Array(historyFrames);
@@ -239,15 +266,20 @@ export class RenderAhead {
   configure(message: ConfigureMessage): void {
     this.voice.voice.generator.configure(message.generator);
     this.voice.voice.mix.setSpace(message.space);
-    if (this.configured) {
-      const spliceAt = this.playedFrame + this.marginFrames;
-      if (spliceAt < this.writeFrame) {
-        this.writeFrame = spliceAt;
-        this.fade = { from: spliceAt, frames: this.crossfadeFrames };
-      }
-    }
+    // Nothing plays yet: the first room is built now.
+    if (!this.configured) this.voice.voice.mix.buildRoom();
+    if (this.configured) this.splice();
     this.configured = true;
     this.pump();
+  }
+
+  /** Re-render from as near the playhead as the output allows, crossfading from what it holds. */
+  private splice(): void {
+    const spliceAt = this.playedFrame + this.marginFrames;
+    if (spliceAt < this.writeFrame) {
+      this.writeFrame = spliceAt;
+      this.fade = { from: spliceAt, frames: this.crossfadeFrames };
+    }
   }
 
   /**
@@ -263,6 +295,14 @@ export class RenderAhead {
     const voice = new VoiceSource(this.createVoice());
     voice.voice.generator.configure(message.generator);
     voice.voice.mix.setSpace(message.space);
+    // Settings from now on go to the new voice; it is heard once its room is built.
+    this.voice = voice;
+    this.pendingBlend = { voice, frames: Math.max(1, Math.round(seconds * this.sampleRate)) };
+    this.pump();
+  }
+
+  /** Blend into the pending transition's voice from as near the playhead as the output allows. */
+  private startBlend(voice: VoiceSource, frames: number): void {
     const spliceAt = this.playedFrame + this.marginFrames;
     let from = this.source;
     if (spliceAt < this.writeFrame) {
@@ -282,9 +322,21 @@ export class RenderAhead {
       this.fade = null;
     }
     const start = Math.max(spliceAt, this.writeFrame);
-    this.source = new BlendSource(from, voice, start, Math.max(1, Math.round(seconds * this.sampleRate)));
-    this.voice = voice;
-    this.pump();
+    this.source = new BlendSource(from, voice, start, frames);
+  }
+
+  /** Room work waiting (see THE ROOM above). */
+  private get roomWork(): boolean {
+    return this.pendingBlend !== null || this.voice.voice.mix.roomPending;
+  }
+
+  /** Build what is pending, then splice it in: the current voice's new room, or a transition's voice. */
+  private doRoomWork(): void {
+    this.voice.voice.mix.buildRoom();
+    const blend = this.pendingBlend;
+    this.pendingBlend = null;
+    if (blend) this.startBlend(blend.voice, blend.frames);
+    else this.splice();
   }
 
   /** The output has played up to `frame`. */
@@ -299,11 +351,14 @@ export class RenderAhead {
   }
 
   private pump(): void {
-    if (this.scheduled || !this.configured || this.queued >= this.leadFrames) return;
+    if (this.scheduled || !this.configured) return;
+    if (this.queued >= this.leadFrames && !this.roomWork) return;
     this.scheduled = true;
     this.schedule(() => {
       this.scheduled = false;
-      if (this.queued < this.leadFrames) this.renderChunk();
+      // Room work only with enough queued to cover it; rendering first otherwise.
+      if (this.roomWork && this.queued >= Math.min(this.roomLeadFrames, this.leadFrames)) this.doRoomWork();
+      else if (this.queued < this.leadFrames) this.renderChunk();
       this.pump();
     });
   }

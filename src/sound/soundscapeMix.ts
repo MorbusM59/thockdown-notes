@@ -63,7 +63,9 @@ export class SoundscapeMix {
   private readonly compressor: DynamicsCompressor;
   private readonly wetLeft = new Float32Array(MIX_BLOCK);
   private readonly wetRight = new Float32Array(MIX_BLOCK);
+  /** The room built and heard; null before the first. */
   private spaceKey: string | null = null;
+  private pendingRoom: SoundscapeSpaceSettings | null = null;
   private returnGain = 0;
   private returnTarget = 0;
 
@@ -74,15 +76,28 @@ export class SoundscapeMix {
   }
 
   /**
-   * Apply a space: a changed room is built and crossfaded in over
-   * SPACE_CROSSFADE_SEC; a changed amount glides over the next block.
+   * Take a space: a changed amount glides over the next block; a changed
+   * ROOM is only recorded, because building it is the expensive part of a
+   * change, and the renderer decides when it can afford to (buildRoom; see
+   * soundscapeRenderAhead.ts, THE ROOM). A newer room replaces one not yet built.
    */
   setSpace(space: SoundscapeSpaceSettings): void {
     this.returnTarget = SOUNDSCAPE_SPACE_RETURN * space.amount;
     const key = spaceKey(space);
-    if (key === this.spaceKey) return;
+    this.pendingRoom = key === this.spaceKey ? null : { ...space };
+  }
+
+  get roomPending(): boolean {
+    return this.pendingRoom !== null;
+  }
+
+  /** Build the pending room and crossfade it in over SPACE_CROSSFADE_SEC (at once, for the first). */
+  buildRoom(): void {
+    const space = this.pendingRoom;
+    if (space === null) return;
+    this.pendingRoom = null;
     const first = this.spaceKey === null;
-    this.spaceKey = key;
+    this.spaceKey = spaceKey(space);
     const [left, right] = buildSoundscapeImpulseResponse(space, this.sampleRate);
     const fade = first ? 0 : Math.round(SPACE_CROSSFADE_SEC * this.sampleRate);
     this.convolvers[0].setImpulse(left, fade);
