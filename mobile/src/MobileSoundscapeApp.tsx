@@ -50,6 +50,7 @@ import {
 import { currentEntryId, followSession, nextScratch, sessionEntries } from './sessionEntries'
 import { allPresets, sanitizeSchedule, scheduleEvents, scheduledPresetAt, type Schedule } from './schedule'
 import { ScheduleGrid } from './ScheduleGrid'
+import { LookButton } from './LookButton'
 import { helpFor } from './helpText'
 import { SoundscapeControls, SubsectionHelp } from '../../src/sidebar/SoundscapeOptions'
 import { PageScrollbar } from './PageScrollbar'
@@ -371,26 +372,13 @@ export function MobileSoundscapeApp() {
                         ? <span className="mobile-clip-progress" aria-hidden="true">{Math.round(clipProgress * 100)}%</span>
                         : <span className="fa-solid fa-file-audio" aria-hidden="true" />}
                     </button>
-                    <button
-                      type="button"
-                      className="btn-icon options-color-swatch options-loadout-btn"
-                      aria-label={`Visual preset: ${PRESET_NAMES[look.mode][look.preset[look.mode]]}. Press for the next`}
-                      onClick={() => setLook((current) => ({
-                        ...current,
-                        preset: { ...current.preset, [current.mode]: (current.preset[current.mode] + 1) % PRESETS[current.mode].length },
-                      }))}
-                    >
-                      <span className={PRESET_ICONS[look.mode][look.preset[look.mode]]} aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      className={`btn-icon options-color-swatch options-loadout-btn${look.mode === 'dark' ? ' is-active' : ''}`}
-                      aria-pressed={look.mode === 'dark'}
-                      aria-label="Dark mode"
-                      onClick={() => setLook((current) => ({ ...current, mode: current.mode === 'dark' ? 'light' : 'dark' }))}
-                    >
-                      <span className="fa-solid fa-moon" aria-hidden="true" />
-                    </button>
+                    <LookButton
+                      look={look}
+                      presetCount={PRESETS[look.mode].length}
+                      icon={PRESET_ICONS[look.mode][look.preset[look.mode]]}
+                      presetName={PRESET_NAMES[look.mode][look.preset[look.mode]]}
+                      onChange={setLook}
+                    />
                   </div>
                   <OptionsSliderRows>
                     <CompactScrollbarSlider

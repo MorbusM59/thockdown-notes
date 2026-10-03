@@ -11,9 +11,10 @@ reaches both.
 
 ## Look
 Any of the desktop's ten factory visual presets, chosen in the Master section
-(one button stepping through the five of the current mode, showing the
-current one's icon, plus a dark mode switch that returns to the preset last
-used in that mode; Paper, light, by default; kept in
+(one button, `LookButton.tsx`, showing the current one's icon: a tap switches
+between light and dark mode, each returning to the preset last used in it,
+and a drag up or down steps through the current mode's five; Paper in light
+mode and Ancient in dark by default; kept in
 localStorage by `preferencesStore.ts`). They are drawn by the same code the
 desktop uses (`src/shared/loadoutTheme.ts` for the variables, filter and
 overlays, `src/components/ThemeLayers.tsx` for the glaze and blend layers;

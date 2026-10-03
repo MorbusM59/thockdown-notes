@@ -9,7 +9,7 @@ const HELP: Record<string, string> = {
     'Power: tap to play or pause; hold to turn the daily schedule on or off (it shows a clock while on). '
     + 'Files: tap to import soundscapes, hold to save yours to a file. '
     + 'Clip: save a five-minute recording of the soundscape. '
-    + 'Then the next visual preset, and dark mode. The slider is the overall volume.',
+    + 'Look: tap for dark or light mode, drag up or down for another look. The slider is the overall volume.',
   Schedule:
     'One slot per hour: 0 to 11 above, 12 to 23 below; the current hour is outlined. '
     + 'Hold a soundscape under Presets to pick it up, then tap slots to fill them; tap anywhere else to put it down. '
