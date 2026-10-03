@@ -193,7 +193,8 @@ always does.
 
 The panel's right-button gestures have touch equivalents in the panel itself
 (`SoundscapeControls`, on `pointerType === 'touch'`): a long press turns a
-channel on or off, a double tap solos it, a long press marks a custom
+channel on or off, a double tap solos it, a drag up or down out of an enabled
+one changes its volume (the desktop's wheel, in the same 5% steps), a long press marks a custom
 soundscape for deletion, a long press on the save button resets the
 channels.
 

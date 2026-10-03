@@ -1028,6 +1028,12 @@
   color: var(--color-text-80);
 }
 
+/* A channel's volume while it is dragged on a touch screen, in place of its icon. */
+.soundscape-channel-volume {
+  font-size: 0.6em;
+  font-variant-numeric: tabular-nums;
+}
+
 /* A soundscape picked up (SoundscapeControls' onPickPreset): held, not
    playing. Its own frame rather than an outline: a long press also FOCUSES
    the button, and `.app-shell button:focus` clears the outline -- the mark

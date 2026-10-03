@@ -25,7 +25,7 @@ const HELP: Record<string, string> = {
     + 'its echoes and how much of it is heard), and the weather (how gusty, and how often a gust comes).',
   Channels:
     'Eighteen sound sources. Tap one to show its controls below; hold to turn it on or off; '
-    + 'double-tap to hear it on its own, and again to hear them all.',
+    + 'double-tap to hear it on its own, and again to hear them all; drag up or down out of one to change its volume.',
   Sound: 'How the channel shown sounds: its level and its tone.',
   Motion: 'How the channel shown moves over time: how far and how fast it rises and falls, and how regularly.',
   Place: 'Where the channel shown sits: how near, how wide, and how it sways from side to side.',

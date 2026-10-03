@@ -536,6 +536,16 @@ export function SoundscapeControls({ preferences, onChange, pickedPresetId = nul
   const touchHoldRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
   const swallowClickRef = useRef(false)
   const lastChannelTapRef = useRef<{ channelId: string; at: number } | null>(null)
+  // A touch press on an ENABLED channel that may become a volume drag -- the
+  // touch counterpart of the desktop's wheel over a channel, in the same 5%
+  // steps. It becomes one only once the finger LEAVES the button (as the
+  // mobile app's schedule slots and look button do), which cancels the long
+  // press and swallows the click, so a drag never also toggles, selects or
+  // solos. A step is half the button's height, the size of a schedule slot,
+  // measured from where the press began; moving back undoes steps.
+  const channelDragRef = useRef<{ pointerId: number; channelId: string; y: number; box: DOMRect; volume: number; stepPx: number } | null>(null)
+  /** The channel being dragged, showing its volume in place of its icon (a touch screen has no tooltip). */
+  const [volumeDragChannelId, setVolumeDragChannelId] = useState<string | null>(null)
   useEffect(() => () => {
     channelHoldRef.current?.cancel()
     presetExportHoldRef.current?.cancel()
@@ -911,15 +921,46 @@ export function SoundscapeControls({ preferences, onChange, pickedPresetId = nul
                     return
                   }
                   startTouchHold(event.pointerId, HOLD_CONFIRM_MS, () => {
+                    // The long press won: this press is not a volume drag.
+                    channelDragRef.current = null
                     setSelectedId(channel.id)
                     updateChannel(channel.id, { enabled: !channel.enabled })
                   })
+                  channelDragRef.current = channel.enabled
+                    ? {
+                        pointerId: event.pointerId,
+                        channelId: channel.id,
+                        y: event.clientY,
+                        box: event.currentTarget.getBoundingClientRect(),
+                        volume: channel.volume,
+                        stepPx: Math.max(1, event.currentTarget.offsetHeight / 2),
+                      }
+                    : null
+                }}
+                onPointerMove={(event) => {
+                  const press = channelDragRef.current
+                  if (!press || press.pointerId !== event.pointerId) return
+                  if (volumeDragChannelId !== press.channelId) {
+                    const { box } = press
+                    if (event.clientX >= box.left && event.clientX <= box.right && event.clientY >= box.top && event.clientY <= box.bottom) return
+                    // Now a drag: not a long press, and its click selects nothing.
+                    endTouchHold(event.pointerId)
+                    swallowClickRef.current = true
+                    lastChannelTapRef.current = null
+                    setVolumeDragChannelId(press.channelId)
+                  }
+                  // Up is louder: screen y grows downwards.
+                  const steps = Math.round((press.y - event.clientY) / press.stepPx)
+                  const volume = Math.max(0, Math.min(1, Math.round((press.volume + (steps * 0.05)) * 100) / 100))
+                  if (volume !== channel.volume) updateChannel(press.channelId, { volume })
                 }}
                 onPointerUp={(event) => {
                   if (event.pointerType !== 'touch') {
                     endChannelHold(event.pointerId, true)
                     return
                   }
+                  channelDragRef.current = null
+                  setVolumeDragChannelId(null)
                   if (!endTouchHold(event.pointerId)) return
                   const last = lastChannelTapRef.current
                   if (last && last.channelId === channel.id && event.timeStamp - last.at < DOUBLE_TAP_MS) {
@@ -932,10 +973,14 @@ export function SoundscapeControls({ preferences, onChange, pickedPresetId = nul
                 onPointerCancel={(event) => {
                   endChannelHold(event.pointerId, false)
                   endTouchHold(event.pointerId)
+                  channelDragRef.current = null
+                  setVolumeDragChannelId(null)
                 }}
                 onPointerLeave={(event) => {
                   endChannelHold(event.pointerId, false)
-                  endTouchHold(event.pointerId)
+                  // A touch is captured by the button it began on, so leaving
+                  // its box is the volume drag's business, not an end.
+                  if (event.pointerType !== 'touch') endTouchHold(event.pointerId)
                 }}
                 onContextMenu={(event) => {
                   // The solo itself is decided on the release (endChannelHold).
@@ -943,7 +988,9 @@ export function SoundscapeControls({ preferences, onChange, pickedPresetId = nul
                   event.stopPropagation()
                 }}
               >
-                <span className={`fa-solid ${look.icon}`} aria-hidden="true" />
+                {volumeDragChannelId === channel.id
+                  ? <span className="soundscape-channel-volume" aria-hidden="true">{toDisplayLevel(channel.volume)}</span>
+                  : <span className={`fa-solid ${look.icon}`} aria-hidden="true" />}
               </button>
             )
           })}
