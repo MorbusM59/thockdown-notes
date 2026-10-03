@@ -72,6 +72,9 @@ WebView of about version 110; `soundscapeSandbox.test.ts` runs the shipped
 bundle in a context with no web APIs, as the sandbox has none.
 
 ## Layout
+Portrait only (`android:screenOrientation` in the manifest): the panel is one
+six-column grid laid out for a phone held upright.
+
 - `mobile/src/` — the web app: `MobileSoundscapeApp.tsx` (the screen),
   `preferencesStore.ts` (localStorage, through the desktop's sanitizer),
   `backgroundAudioHost.ts` (the interface to the native side),
