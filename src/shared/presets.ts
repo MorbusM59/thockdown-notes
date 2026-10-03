@@ -191,7 +191,7 @@ export const LIGHT_PRESET_ICONS: string[] = [
 ]
 
 export const DARK_PRESET_ICONS: string[] = [
-  'fa-solid fa-moon',
+  'fa-solid fa-cloud-moon',
   'fa-solid fa-archway',
   'fa-solid fa-droplet',
   'fa-solid fa-burst',
