@@ -9,9 +9,10 @@
  *
  * A soundscape PICKED UP in the panel below (a long press on it) is what a
  * slot is filled with: while one is picked up every slot shows its HOUR,
- * so the hours can be found, and every tap puts it into the tapped slot
- * and turns the slot on -- slot after slot, until it is put down. That is
- * the only thing a slot does while one is picked up.
+ * so the hours can be found -- except the slots already holding it, which
+ * keep its icon, so what has been placed shows -- and every tap puts it
+ * into the tapped slot and turns the slot on, slot after slot, until it is
+ * put down. That is the only thing a slot does while one is picked up.
  *
  * With nothing picked up, a slot is worked by TAP and DRAG. A press becomes
  * a drag only once the finger LEAVES THE SLOT, and the edge it leaves by
@@ -19,18 +20,22 @@
  * tap, and a drag never starts in a direction the reader did not mean:
  * - a TAP turns a slot holding a soundscape on or off; an off slot keeps its
  *   soundscape, dimmed;
- * - a DRAG, in any direction, on an INACTIVE slot (off, or empty) clears it;
- * - a drag on an ACTIVE slot goes by the edge it left by:
- *   - LEFT or RIGHT extends the slot's soundscape over every slot the finger
- *     passes and turns them on (slots it skips between two moves within one
- *     row are filled too, since a fast finger does not report every slot);
- *   - UP or DOWN, on a run's START or END slot, moves its minute: up is
- *     later, down is earlier, 5 minutes per step, wrapping past :55 and
- *     :00. A step is the slot's own height, measured from where the press
- *     began, so leaving the slot is the first step, each slot's worth of
- *     travel after it is another, and moving back undoes them. Up or down on the
- *     inside of a run does nothing. The page does not scroll under
- * a finger (PageScrollbar.tsx), so a drag here is always the slot's.
+ * - LEFT or RIGHT PAINTS the slot pressed onto every slot the finger passes:
+ *   an active slot its soundscape, turned on; an inactive one (off, or
+ *   empty) EMPTINESS, so an empty slot dragged over full ones clears them.
+ *   It goes by HOURS, not by what is under the finger: each slot's width of
+ *   travel is the next hour round the clock, so a drag carried past the end
+ *   of a row continues at the matching end of the other one (past 11h into
+ *   12h, past 23h into 0h, and the same leftwards), and a fast finger that
+ *   jumps slots between two moves still fills every hour between;
+ * - UP or DOWN on an inactive slot clears it; on a run's START or END slot
+ *   it moves the minute: up is later, down is earlier, 5 minutes per step,
+ *   wrapping past :55 and :00. A step is the slot's own height, measured
+ *   from where the press began, so leaving the slot is the first step, each
+ *   slot's worth of travel after it is another, and moving back undoes
+ *   them. Up or down on the inside of a run does nothing.
+ * The page does not scroll under a finger (PageScrollbar.tsx), so a drag
+ * here is always the slot's.
  */
 import { useEffect, useRef, useState } from 'react'
 import { FACTORY_SOUNDSCAPE_ICONS, type SoundscapePreset } from '../../src/shared/soundscape'
@@ -70,9 +75,12 @@ interface SlotPress {
   dragging: boolean
   /** Set when the drag starts on an active slot: extending sideways, or moving the minute. */
   axis: 'horizontal' | 'vertical' | null
-  /** The soundscape being extended, and the last slot it reached. */
+  /** What a sideways drag paints: the slot's soundscape, or null for emptiness. */
   presetId: string | null
-  lastHour: number
+  /** One hour of sideways travel, in px: the distance from one slot to the next in a row. */
+  pitchPx: number
+  /** How many hours from the pressed one the paint has reached, either way. */
+  reached: number
 }
 
 function useCurrentHour(): number {
@@ -105,18 +113,25 @@ export function ScheduleGrid({ schedule, customPresets, pickedPresetId, onChange
     if (slot.presetId !== null) onChange(withSlot(hour, { on: !slot.on }))
   }
 
-  /** Fill the slots from `from` to `to` (one row, either way round) with `presetId`, turned on. */
-  const extend = (presetId: string, from: number, to: number) => {
-    const [low, high] = from <= to ? [from, to] : [to, from]
-    const changed = schedule.slots.some((slot, hour) => hour >= low && hour <= high && !(slot.on && slot.presetId === presetId))
-    if (!changed) return
-    onChange({
-      ...schedule,
-      slots: schedule.slots.map((slot, hour) => (hour >= low && hour <= high ? { ...slot, presetId, on: true } : slot)),
+  /**
+   * Paint the hours `from` to `to` hours away from `hour` (round the clock,
+   * either way) with `presetId` turned on, or with emptiness for null.
+   */
+  const paint = (hour: number, presetId: string | null, from: number, to: number) => {
+    const painted = new Set<number>()
+    for (let offset = Math.min(from, to); offset <= Math.max(from, to); offset += 1) {
+      painted.add((((hour + offset) % HOURS) + HOURS) % HOURS)
+    }
+    const next = schedule.slots.map((slot, index) => {
+      if (!painted.has(index)) return slot
+      return presetId === null ? { presetId: null, on: false, minute: 0 } : { ...slot, presetId, on: true }
     })
+    if (next.some((slot, index) => slot.presetId !== schedule.slots[index].presetId || slot.on !== schedule.slots[index].on)) {
+      onChange({ ...schedule, slots: next })
+    }
   }
 
-  /** The press has moved: start the drag once past the threshold, then apply it. */
+  /** The press has moved: start the drag once the finger leaves the slot, then apply it. */
   const drag = (press: SlotPress, x: number, y: number) => {
     if (!press.dragging) {
       const { box } = press
@@ -125,25 +140,18 @@ export function ScheduleGrid({ schedule, customPresets, pickedPresetId, onChange
       if (!outsideX && !outsideY) return
       press.dragging = true
       if (pickedPresetId !== null) return
-      if (press.role === 'inactive') {
-        const slot = schedule.slots[press.hour]
-        if (slot.presetId !== null || slot.on) onChange(withSlot(press.hour, { presetId: null, on: false, minute: 0 }))
-        return
-      }
       // The edge it left by; through a corner, the larger overshoot.
       const overX = Math.max(box.left - x, x - box.right, 0)
       const overY = Math.max(box.top - y, y - box.bottom, 0)
       press.axis = overX > overY ? 'horizontal' : 'vertical'
+      if (press.role === 'inactive') paint(press.hour, null, 0, 0)
     }
-    if (pickedPresetId !== null || press.role === 'inactive') return
+    if (pickedPresetId !== null) return
     if (press.axis === 'horizontal') {
-      const under = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-schedule-hour]')
-      const hour = under ? Number(under.dataset.scheduleHour) : press.lastHour
-      if (hour === press.lastHour || press.presetId === null) return
-      // Within one row the slots between are filled too; across rows, the slot reached.
-      const sameRow = (hour < HOURS / 2) === (press.lastHour < HOURS / 2)
-      extend(press.presetId, sameRow ? press.lastHour : hour, hour)
-      press.lastHour = hour
+      const offset = Math.round((x - press.x) / press.pitchPx)
+      if (offset === press.reached) return
+      paint(press.hour, press.presetId, press.reached, offset)
+      press.reached = offset
       return
     }
     if (press.role !== 'start' && press.role !== 'end') return
@@ -154,9 +162,11 @@ export function ScheduleGrid({ schedule, customPresets, pickedPresetId, onChange
   }
 
   const label = (slot: ScheduleSlot, hour: number) => {
-    if (pickedPresetId !== null) return <span className="mobile-schedule-minute">{hour}</span>
+    const holdsPicked = pickedPresetId !== null && slot.on && slot.presetId === pickedPresetId
+    if (pickedPresetId !== null && !holdsPicked) return <span className="mobile-schedule-minute">{hour}</span>
     const role = slotRole(schedule, hour)
-    if (role === 'start' || role === 'end') {
+    // While picking up, the slots already holding it show its icon, minutes and all.
+    if (!holdsPicked && (role === 'start' || role === 'end')) {
       return <span className="mobile-schedule-minute">{String(slot.minute).padStart(2, '0')}</span>
     }
     if (slot.presetId === null) return null
@@ -196,8 +206,9 @@ export function ScheduleGrid({ schedule, customPresets, pickedPresetId, onChange
             stepPx: Math.max(1, event.currentTarget.offsetHeight),
             dragging: false,
             axis: null,
-            presetId: slot.presetId,
-            lastHour: hour,
+            presetId: role === 'inactive' ? null : slot.presetId,
+            pitchPx: Math.max(1, (event.currentTarget.closest('.mobile-schedule-grid')?.getBoundingClientRect().width ?? 0) / (HOURS / 2)),
+            reached: 0,
           }
         }}
         onPointerMove={(event) => {

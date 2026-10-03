@@ -12,7 +12,11 @@
  *
  * It is the desktop's scrollbar -- its track and thumb (the thumb padded
  * inside the track) and the shared thumb arithmetic in scrollTrackGeometry.ts
- * -- driven by pointer events so a finger works the same as a mouse.
+ * -- driven by pointer events so a finger works the same as a mouse. Being
+ * the page's only scroll, it is worked from its WHOLE COLUMN, not the thin
+ * track drawn in the middle of it: a press level with the thumb grabs it,
+ * anywhere else travels there, so a finger does not have to land on a few
+ * pixels to scroll.
  */
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { scrollThumbFor, scrollTopForThumb } from '../../src/shared/scrollTrackGeometry'
@@ -56,40 +60,48 @@ export function PageScrollbar({ scrollerRef }: { scrollerRef: RefObject<HTMLElem
     }
   }, [scrollerRef, sync])
 
+  const endDrag = () => {
+    dragRef.current = null
+    setDragging(false)
+  }
+
   return (
-    <aside className="mobile-scrollbar-slot" aria-hidden="true">
+    <aside
+      className="mobile-scrollbar-slot"
+      aria-hidden="true"
+      onPointerDown={(event) => {
+        const scroller = scrollerRef.current
+        const track = trackRef.current
+        const thumb = thumbRef.current
+        if (!scroller || !track || !thumb || !active) return
+        event.preventDefault()
+        const trackTop = track.getBoundingClientRect().top
+        const y = event.clientY - trackTop
+        if (y >= thumb.offsetTop && y <= thumb.offsetTop + thumb.offsetHeight) {
+          // Level with the thumb: grab it.
+          event.currentTarget.setPointerCapture(event.pointerId)
+          dragRef.current = { pointerId: event.pointerId, pointerY: event.clientY, thumbTop: thumb.offsetTop }
+          setDragging(true)
+          return
+        }
+        // Anywhere else in the column: travel so the thumb is centred there.
+        scrollToNonQuantizedSmooth(scroller, scrollTopForThumb(scroller, track.clientHeight, thumbHeightRef.current, y - (thumbHeightRef.current / 2)))
+      }}
+      onPointerMove={(event) => {
+        const drag = dragRef.current
+        const scroller = scrollerRef.current
+        const track = trackRef.current
+        if (!drag || drag.pointerId !== event.pointerId || !scroller || !track) return
+        scroller.scrollTop = scrollTopForThumb(scroller, track.clientHeight, thumbHeightRef.current, drag.thumbTop + (event.clientY - drag.pointerY))
+      }}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+    >
       <div className="thockdown-scroll-rail mobile-scroll-rail">
-        <div
-          ref={trackRef}
-          className="thockdown-scroll-track"
-          onPointerDown={(event) => {
-            // A press on the track (not the thumb): travel so the thumb is centred there.
-            const scroller = scrollerRef.current
-            const track = trackRef.current
-            if (!scroller || !track || event.target !== track) return
-            const y = event.clientY - track.getBoundingClientRect().top
-            scrollToNonQuantizedSmooth(scroller, scrollTopForThumb(scroller, track.clientHeight, thumbHeightRef.current, y - (thumbHeightRef.current / 2)))
-          }}
-        >
+        <div ref={trackRef} className="thockdown-scroll-track">
           <div
             ref={thumbRef}
             className={`thockdown-scroll-thumb${dragging ? ' is-dragging' : ''}${active ? '' : ' is-inactive'}`}
-            onPointerDown={(event) => {
-              if (!active || !thumbRef.current) return
-              event.preventDefault()
-              event.currentTarget.setPointerCapture(event.pointerId)
-              dragRef.current = { pointerId: event.pointerId, pointerY: event.clientY, thumbTop: thumbRef.current.offsetTop }
-              setDragging(true)
-            }}
-            onPointerMove={(event) => {
-              const drag = dragRef.current
-              const scroller = scrollerRef.current
-              const track = trackRef.current
-              if (!drag || drag.pointerId !== event.pointerId || !scroller || !track) return
-              scroller.scrollTop = scrollTopForThumb(scroller, track.clientHeight, thumbHeightRef.current, drag.thumbTop + (event.clientY - drag.pointerY))
-            }}
-            onPointerUp={() => { dragRef.current = null; setDragging(false) }}
-            onPointerCancel={() => { dragRef.current = null; setDragging(false) }}
           />
         </div>
       </div>

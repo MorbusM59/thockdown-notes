@@ -122,13 +122,17 @@ Twenty-four hourly slots (`schedule.ts`, drawn by `ScheduleGrid.tsx` as one
 row of six cells, four half-size slots each: 0h-11h on top, 12h-23h below).
 A long press on a soundscape in the panel PICKS IT UP without playing it
 (the panel's `onPickPreset`, a host option the desktop does not take): every
-slot then shows its hour and every tap fills the tapped slot with it, until
-a press on anything else puts it down; one of the user's own, picked up,
-turns the save button into a delete button for it. With nothing picked up,
-a TAP turns a slot on or off, a DRAG on an inactive slot clears it, a DRAG
-sideways from an active slot extends its soundscape over every slot it
-passes, and a DRAG up or down on a run's first or last slot moves the minute
-it starts or stops at (5 minutes per slot-height of travel, wrapping). A press
+slot then shows its hour -- the slots already holding it show its icon --
+and every tap fills the tapped slot with it, until a press on anything else
+puts it down; one of the user's own, picked up, turns the save button into a
+delete button for it. With nothing picked up, a TAP turns a slot on or off;
+a DRAG sideways paints the pressed slot onto every hour it passes (an active
+slot its soundscape, an inactive one emptiness), counted in hours round the
+clock so it carries past the end of a row into the other; a DRAG up or down
+clears an inactive slot, and on a run's first or last slot moves the minute
+it starts or stops at (5 minutes per slot-height of travel, wrapping). Active
+slots form RUNS round the clock (23h and 0h are neighbours), and a run of one
+slot is its whole hour. A press
 becomes a drag only once the finger leaves the slot, by the edge that sets
 its direction; anything released inside the slot is a tap. Active slots form
 RUNS round the clock (23h and 0h are neighbours), and a run of one slot is
@@ -164,7 +168,9 @@ lead, so up to ten seconds after its minute.
 
 ## Touch
 The page does not scroll under a finger: its scrollbar (`PageScrollbar.tsx`,
-the desktop's track and thumb) scrolls it, so every other drag belongs to the
+the desktop's track and thumb, worked from a fingertip-wide column at the
+right edge; the WebView's own scrollbar is switched off in `MainActivity`)
+scrolls it, so every other drag belongs to the
 control it starts on -- nearly everything on the page is dragged or held. A
 slider resets to its default on a mouse right-click only, never on a long
 press. A picked-up soundscape is put down by a press on anything that does

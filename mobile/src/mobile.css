@@ -18,7 +18,6 @@ body {
 .mobile-page {
   display: flex;
   height: 100%;
-  padding-right: 4px;
 }
 
 .mobile-soundscape-shell {
@@ -26,7 +25,8 @@ body {
   min-width: 0;
   height: 100%;
   overflow: hidden;
-  padding: calc(env(safe-area-inset-top) + 8px) 12px calc(env(safe-area-inset-bottom) + 16px);
+  /* No right padding: the scrollbar's column is the right margin. */
+  padding: calc(env(safe-area-inset-top) + 8px) 0 calc(env(safe-area-inset-bottom) + 16px) 12px;
 }
 
 /* Every button grid is six equal columns spanning the row, with square
@@ -95,14 +95,18 @@ body {
   touch-action: none;
 }
 
-/* The page's scrollbar, in the desktop sidebar's slot geometry. */
+/* The page's scrollbar, at the right edge where the system's would be: a
+   column a fingertip wide, the desktop's track drawn in its middle, and the
+   whole column grabs (PageScrollbar.tsx). */
 .mobile-scrollbar-slot {
   position: relative;
-  flex: 0 0 calc(var(--canonical-scroll-thickness) + var(--spacing-regular));
+  flex: 0 0 44px;
   margin: calc(env(safe-area-inset-top) + 8px) 0 calc(env(safe-area-inset-bottom) + 16px);
+  touch-action: none;
 }
 
 .mobile-scroll-rail {
-  padding: 0 0 0 var(--spacing-regular);
-  touch-action: none;
+  padding: 0;
+  justify-content: center;
+  pointer-events: none;
 }
