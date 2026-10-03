@@ -1,7 +1,9 @@
 /**
  * Runs the soundscape generator (src/sound/soundscape-generator.js) outside an
- * AudioWorklet: in the render-ahead worker (soundscapeRender.worker.ts) and
- * in the test harness (soundscape-generator.harness.ts).
+ * AudioWorklet: in Android's render-ahead renderer (soundscapeSandbox.ts,
+ * soundscapeRenderAhead.ts) and in the test harness
+ * (soundscape-generator.harness.ts). The desktop runs it in a real
+ * AudioWorklet (soundscapeLivePlayback.ts).
  *
  * The generator is written as an AudioWorkletProcessor and reads four names
  * an AudioWorkletGlobalScope provides: the `AudioWorkletProcessor` base

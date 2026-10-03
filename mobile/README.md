@@ -24,14 +24,26 @@ elements, so a change to a preset reaches both. Textures are the one part of
 a preset the phone does not draw: they are rendered by a worker and cached by
 the desktop's main process. The desktop's custom layouts are not offered.
 
-## Playback: rendered and played in the app's own service
-The soundscape is rendered ahead of playback by one piece of code
-(`src/sound/soundscapeRenderAhead.ts`: the generator,
-`src/sound/soundscape-generator.js`, then the mix, `soundscapeMix.ts` --
-the space as a partitioned convolution, the mix gain, the bus compressor),
-keeping ten seconds of finished audio queued at an output. Where it runs is
-the platform's:
-- **On Android**, in the app's native service, never in the WebView: the
+## Playback: what is shared, and what is Android's alone
+The SOUND is shared: the generator (`src/sound/soundscape-generator.js`),
+the settings model, the mix's numbers (`soundscapeMix.ts`: mix gain, the
+space's return, the compressor's curve), the impulse response
+(`soundscapeSpace.ts`), and the rule that a change of soundscape is a
+crossfade between two voices. HOW it reaches the speaker is not:
+- **On desktop** (and in a plain browser, or a WebView too old to provide
+  the sandbox) it plays LIVE (`soundscapeLivePlayback.ts`): the generator in
+  an AudioWorklet and the browser's own ConvolverNode and
+  DynamicsCompressorNode, so a slider is heard at the next audio block.
+  The desktop rendered ahead for a while, inherited from this app, and every
+  slider became a remote control: each change discarded the queued audio
+  and re-rendered it, and a room change outlasted the splice margin and
+  crackled. Nothing on the desktop needed rendering ahead.
+- **On Android** the soundscape is rendered AHEAD of playback by
+  `src/sound/soundscapeRenderAhead.ts` (the generator, then the mix in
+  JavaScript, `soundscapeMix.ts` -- the space as a partitioned convolution,
+  the mix gain, the bus compressor -- because the sandbox has no Web
+  Audio), keeping ten seconds of finished audio queued, in the app's native
+  service, never in the WebView: the
   same renderer, built as one script (`src/sound/soundscapeSandbox.ts` ->
   `assets/soundscape-renderer.js` by `mobile/vite.renderer.config.ts`), runs
   in a JavaScriptSandbox (`androidx.javascriptengine`, a V8 isolate the app
@@ -39,9 +51,6 @@ the platform's:
   plays it through the platform's AudioTrack from a queue in the app's
   process. The web page only sends settings and the volume
   (`nativeSoundscapePlayback.ts`).
-- **On desktop** (and in a plain browser, or a WebView too old to provide
-  the sandbox), in a worker, played by the player worklet
-  (`soundscapeWebPlayback.ts`, `public/soundscape-player.js`).
 
 How it got here, because each step was measured on a device:
 1. In the WebView, the generator on the audio thread clicked under load:

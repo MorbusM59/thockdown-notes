@@ -1,16 +1,16 @@
 /**
  * Renders the finished soundscape ahead of playback: the generator, then
- * the mix (space, mix gain, compressor; soundscapeMix.ts). Runs in a
- * dedicated worker (soundscapeRender.worker.ts) and keeps RENDER_LEAD_SEC
- * of finished stereo audio queued at the OUTPUT, so the output only plays
- * samples it already holds.
- *
- * The output is a plain queue of frames at absolute positions: the player
- * worklet on desktop (public/soundscape-player.js), Android's own audio
- * output on mobile (BackgroundAudioPlugin.java). On Android that is what
- * matters: the queue lives in the app's native process, outside the
- * WebView, so a stall or pause of the WebView's audio (heard on every
- * switch to another app) cannot reach what is already queued.
+ * the mix (space, mix gain, compressor; soundscapeMix.ts), and keeps
+ * RENDER_LEAD_SEC of finished stereo audio queued at the OUTPUT, so the
+ * output only plays samples it already holds. ANDROID ONLY: it runs in the
+ * app's native service (soundscapeSandbox.ts, SoundscapeRenderer.java) and
+ * the output is Android's own (SoundscapeAudioOutput.java), so a stall or
+ * pause of the WebView, heard on every switch to another app, cannot reach
+ * what is already queued. Offline clips render through it too
+ * (ClipRenderer.java). The desktop does not render ahead: it plays live
+ * (soundscapeLivePlayback.ts), because a settings change rendered ahead has
+ * to discard and re-render the lead, which a slider moved continuously turns
+ * into a remote, delayed control.
  *
  * PROTOCOL, over one MessagePort:
  * - to the output: `{ type: 'chunk', startFrame, left, right }`. A chunk
@@ -26,7 +26,7 @@
  * output has played (the margin is the output's: how far ahead of its
  * report it may already be committed), rewinds to F, and renders from there
  * with the new settings, crossfading equal-power from the old audio over
- * CROSSFADE_SEC. The old audio for that is the worker's own: it keeps a
+ * CROSSFADE_SEC. The old audio for that is the renderer's own: it keeps a
  * history of what it sent. The crossfade is done here, once, so every
  * output stays a queue with nothing to compute.
  *

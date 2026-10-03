@@ -1,24 +1,24 @@
 /**
- * SoundscapeEngine -- runs the soundscape by driving a PLAYBACK: something
- * that renders the finished audio ahead of time and plays it. The engine
- * only opens and closes it, sends it new settings, and sets its volume.
- *
- * Rendering is always the same code (soundscapeRenderAhead.ts: the
- * generator, src/sound/soundscape-generator.js, and the mix,
- * soundscapeMix.ts) keeping ten seconds of finished audio queued at an
- * output; where it runs is the playback's business:
- * - on desktop, in a worker, played by the player worklet into the shared
- *   output limiter where the music joins it (soundscapeWebPlayback.ts, the
- *   default);
- * - on Android, in the app's native service: a JavaScriptSandbox runs the
- *   same renderer and Android's own audio output plays it
- *   (mobile/src/nativeSoundscapePlayback.ts, installed with usePlayback).
- *   A web page's JavaScript is paused in the background; that service's is
- *   not, and neither is its audio.
+ * SoundscapeEngine -- runs the soundscape by driving a PLAYBACK. The engine
+ * only opens and closes it, sends it new settings (with whether they are a
+ * change of soundscape, to be crossfaded), and sets its volume. The sound
+ * itself is shared by every playback: the generator
+ * (src/sound/soundscape-generator.js) and the mix's settings
+ * (soundscapeMix.ts, soundscapeSpace.ts). Where and how it is played is the
+ * playback's business:
+ * - on desktop, LIVE (soundscapeLivePlayback.ts, the default): the generator
+ *   as an AudioWorklet and the browser's own nodes for the mix, so a slider
+ *   is heard at the next audio block;
+ * - on Android, rendered AHEAD in the app's native service: a
+ *   JavaScriptSandbox runs the renderer (soundscapeRenderAhead.ts) and
+ *   Android's own audio output plays it (mobile/src/nativeSoundscapePlayback.ts,
+ *   installed with usePlayback). A web page's JavaScript is paused in the
+ *   background and its audio stalls on an app switch; that service's is not
+ *   and does not.
  *
  * The listener's master volume and the on/off fade are the playback's,
- * applied live at its output, so they never wait on the audio already
- * rendered ahead. The soundscape's OWN volume is not: it is applied inside
+ * applied at its output, so they never wait on audio rendered ahead. The
+ * soundscape's OWN volume is not: it is applied inside
  * the generator, in the same configuration as the channels it belongs to,
  * because a switch from one soundscape to another changes both at once and
  * must change them together.
@@ -33,7 +33,7 @@ import {
 } from '../shared/soundscape';
 import { toGeneratorConfiguration } from '../shared/soundscapeDsp';
 import type { ConfigureMessage } from './soundscapeRenderAhead';
-import { createWebPlayback } from './soundscapeWebPlayback';
+import { createLivePlayback } from './soundscapeLivePlayback';
 
 /** How long the output takes to fade out before it is closed. */
 const SOUNDSCAPE_DISCONNECT_MS = 180;
@@ -84,12 +84,12 @@ const FADE_OUT_TIME_CONSTANT_SEC = 0.025;
 export const SOUNDSCAPE_SWITCH_SEC = 2;
 
 export class SoundscapeEngine {
-  private playbackFactory: SoundscapePlaybackFactory = createWebPlayback;
+  private playbackFactory: SoundscapePlaybackFactory = createLivePlayback;
   private playback: SoundscapePlayback | null = null;
   /**
-   * The last configuration sent, serialised. Each one re-renders from near
-   * the playhead, so a change that does not touch it (master volume,
-   * on/off) must not send one.
+   * The last configuration sent, serialised. Rendered ahead (Android), each
+   * one re-renders from near the playhead, so a change that does not touch
+   * it (master volume, on/off) must not send one.
    */
   private sentConfiguration: string | null = null;
   /** The soundscape the sent configuration was chosen as: another one is a change of soundscape, not of settings. */

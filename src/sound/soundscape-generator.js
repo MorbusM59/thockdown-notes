@@ -1,20 +1,21 @@
 /**
  * Soundscape generator: synthesises every soundscape layer, sample by sample.
  *
- * It is written as an AudioWorkletProcessor but no longer runs in one: the
- * app renders it AHEAD of playback in a worker
- * (src/sound/soundscapeRender.worker.ts), which hosts this file through
- * src/sound/soundscapeGeneratorHost.ts -- that host supplies the four names
- * an AudioWorkletGlobalScope would (AudioWorkletProcessor, registerProcessor,
- * sampleRate, currentFrame), so this file is unchanged by where it runs. The
- * finished audio is played by public/soundscape-player.js. Tests host it the
- * same way (src/sound/soundscape-generator.harness.ts).
+ * An AudioWorkletProcessor, and it runs in two places unchanged: LIVE in an
+ * AudioWorklet on the desktop (src/sound/soundscapeLivePlayback.ts), and
+ * AHEAD of playback on Android, hosted by src/sound/soundscapeGeneratorHost.ts
+ * inside the renderer (soundscapeRenderAhead.ts) -- that host supplies the
+ * four names an AudioWorkletGlobalScope would (AudioWorkletProcessor,
+ * registerProcessor, sampleRate, currentFrame). Tests host it the same way
+ * (src/sound/soundscape-generator.harness.ts).
  *
  * It is plain JavaScript because the host evaluates its text. The settings it
  * reads are defined in src/shared/soundscape.ts and resolved for it in
  * src/shared/soundscapeDsp.ts (toGeneratorConfiguration); the engine
- * (src/sound/SoundscapeEngine.ts) sends them to the worker, which applies
- * them here as a `configure` message.
+ * (src/sound/SoundscapeEngine.ts) sends them through its playback, which
+ * applies them here as a `configure` message. A `stop` message ends the
+ * processor (process() returns false, which is how an AudioWorklet lets one
+ * go; disconnecting the node alone leaves it running).
  *
  * Outputs: two stereo outputs -- 0 the DIRECT sound of every layer, 1 what
  * every layer SENDS to the space (the engine's reverb). Every layer, of every
@@ -807,7 +808,9 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
     };
     // The scene's gust this block, -1..1: the weather signal x gustiness.
     this.gust = 0;
+    this.stopped = false;
     this.port.onmessage = (event) => {
+      if (event.data?.type === 'stop') this.stopped = true;
       if (event.data?.type !== 'configure') return;
       this.configure(event.data.channels ?? [], event.data.weather ?? null, event.data.level ?? 1);
     };
@@ -3295,6 +3298,7 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
    * own level (see `level` in the constructor).
    */
   process(_inputs, outputs) {
+    if (this.stopped) return false;
     const direct = outputs[0];
     const send = outputs[1];
     const length = direct[0].length;
