@@ -16,7 +16,26 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // CI signs every build with ONE key (the ANDROID_KEYSTORE_* repository
+    // secrets, see build-android.yml): Android installs an update only when
+    // its signature matches the installed app's, and the debug key a fresh
+    // runner generates differs every time. A local build without the
+    // variables keeps the machine's own debug key.
+    signingConfigs {
+        if (System.getenv("SOUNDSCAPES_KEYSTORE")) {
+            shared {
+                storeFile file(System.getenv("SOUNDSCAPES_KEYSTORE"))
+                storeType "pkcs12"
+                storePassword System.getenv("SOUNDSCAPES_KEYSTORE_PASSWORD")
+                keyAlias "soundscapes"
+                keyPassword System.getenv("SOUNDSCAPES_KEYSTORE_PASSWORD")
+            }
+        }
+    }
     buildTypes {
+        debug {
+            if (System.getenv("SOUNDSCAPES_KEYSTORE")) signingConfig signingConfigs.shared
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'

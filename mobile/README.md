@@ -188,6 +188,11 @@ interface.
   (rebuilt on every push to `main` that touches the app). Any other build's
   APK is the zipped `thockdown-soundscapes-debug-apk` artifact on its
   workflow run.
+- Every CI build is signed with the app's one key (repository secrets
+  `ANDROID_KEYSTORE_BASE64`, a PKCS12 keystore with alias `soundscapes`,
+  and `ANDROID_KEYSTORE_PASSWORD`), so a new APK installs as an update.
+  The build fails without them. Lose the key and the next install needs
+  an uninstall first.
 - Locally, with the Android SDK: `npm run mobile:build`, then
   `cd mobile/android && ./gradlew assembleDebug` (or open `mobile/android` in
   Android Studio).

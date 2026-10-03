@@ -56,9 +56,20 @@ jobs:
       - name: Build web app and sync it into the Android project
         run: npm run mobile:build
 
-      - name: Build debug APK
+      - name: Build debug APK, signed with the app's one key
         working-directory: mobile/android
-        run: ./gradlew assembleDebug --no-daemon
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          SOUNDSCAPES_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          # Without the key every build is signed differently and the phone
+          # refuses it as an update: fail rather than publish that.
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$SOUNDSCAPES_KEYSTORE_PASSWORD" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD secrets are required"
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/soundscapes.p12"
+          SOUNDSCAPES_KEYSTORE="$RUNNER_TEMP/soundscapes.p12" ./gradlew assembleDebug --no-daemon
 
       - uses: actions/upload-artifact@v4
         with:
