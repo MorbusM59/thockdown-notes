@@ -28,7 +28,8 @@ the desktop's main process. The desktop's custom layouts are not offered.
 The SOUND is shared: the generator (`src/sound/soundscape-generator.js`),
 the settings model, the mix's numbers (`soundscapeMix.ts`: mix gain, the
 space's return, the compressor's curve), the impulse response
-(`soundscapeSpace.ts`), and the rule that a change of soundscape is a
+(`soundscapeSpace.ts`: size and foliage), brilliance's bands and loudness
+makeup (`soundscapeBrilliance.ts`, built from one list on both), and the rule that a change of soundscape is a
 crossfade between two voices. HOW it reaches the speaker is not:
 - **On desktop** (and in a plain browser, or a WebView too old to provide
   the sandbox) it plays LIVE (`soundscapeLivePlayback.ts`): the generator in
@@ -65,7 +66,7 @@ How it got here, because each step was measured on a device:
 
 Outputs are plain queues at absolute frame positions. A settings change is
 spliced a margin past the playhead and crossfaded by the RENDERER from its
-history of what it sent (50 ms). A new room (size, damping, echoes) is the
+history of what it sent (50 ms). A new room (size, foliage) is the
 one expensive change -- about a tenth of a second to build, longer than a
 splice's margin -- so it is built only once half a second is queued again,
 then spliced in at the playhead (`soundscapeRenderAhead.ts`, THE ROOM). A change of SOUNDSCAPE is spliced at the

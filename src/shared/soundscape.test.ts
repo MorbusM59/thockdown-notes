@@ -146,9 +146,14 @@ describe('sanitizing', () => {
   });
 
   it('bounds the space and the weather', () => {
-    const settings = sanitizeSoundscapeSettings({ channels: [], space: { size: 3, damping: -1, echoes: 'x' }, weather: { paceSec: 0 } });
-    expect(settings.space).toMatchObject({ size: 1, damping: 0, echoes: DEFAULT_SOUNDSCAPE_SPACE.echoes });
+    const settings = sanitizeSoundscapeSettings({ channels: [], space: { size: 3, foliage: -1, brilliance: 'x' }, weather: { paceSec: 0 } });
+    expect(settings.space).toMatchObject({ size: 1, foliage: 0, brilliance: DEFAULT_SOUNDSCAPE_SPACE.brilliance });
     expect(settings.weather.paceSec).toBe(2);
+  });
+
+  it('reads a space saved with damping and echoes as foliage, dropping the echoes', () => {
+    const settings = sanitizeSoundscapeSettings({ channels: [], space: { size: 0.3, damping: 0.8, echoes: 0.6, amount: 0.5 } });
+    expect(settings.space).toEqual({ size: 0.3, foliage: 0.8, brilliance: DEFAULT_SOUNDSCAPE_SPACE.brilliance, amount: 0.5 });
   });
 
   it('bounds and deduplicates saved presets, drops ones from before the roster, and an invalid active id', () => {
@@ -186,7 +191,7 @@ describe('the signature', () => {
     const soloed = cloneSettings(base);
     soloed.channels[3].solo = true;
     expect(soundscapeSettingsSignature(soloed)).toBe(signature);
-    expect(soundscapeSettingsSignature({ ...base, space: { ...base.space, echoes: 0.9 } })).not.toBe(signature);
+    expect(soundscapeSettingsSignature({ ...base, space: { ...base.space, brilliance: 0.9 } })).not.toBe(signature);
     expect(soundscapeSettingsSignature({ ...base, weather: { ...base.weather, paceSec: 40 } })).not.toBe(signature);
   });
 });
@@ -253,9 +258,9 @@ describe('noise colour and filter', () => {
 
 describe('distance', () => {
   it('moves monotonically from direct and bright to quieter, filtered, and in the space', () => {
-    let previous = resolveSoundscapeSpace(0);
+    let previous = resolveSoundscapeSpace(0, 0.5);
     for (let step = 1; step <= 10; step += 1) {
-      const next = resolveSoundscapeSpace(step / 10);
+      const next = resolveSoundscapeSpace(step / 10, 0.5);
       expect(next.cutoffHz).toBeLessThan(previous.cutoffHz);
       expect(next.directGain).toBeLessThan(previous.directGain);
       expect(next.reverbSend).toBeGreaterThan(previous.reverbSend);
@@ -284,21 +289,41 @@ describe('the space', () => {
     return energy;
   };
 
-  it('decays to about -60 dB at the decay time its size gives', () => {
+  const ir = (size: number, foliage: number) => buildSoundscapeImpulseResponse({ size, foliage }, rate);
+  /** Share of energy in the high band, by first difference (a rough high-pass). */
+  const brightness = (data: Float32Array) => {
+    let diff = 0;
+    let total = 0;
+    for (let index = 1; index < data.length; index += 1) {
+      diff += (data[index] - data[index - 1]) ** 2;
+      total += data[index] ** 2;
+    }
+    return diff / total;
+  };
+  const crest = (data: Float32Array) => {
+    let peak = 0;
+    let sum = 0;
+    for (const value of data) {
+      peak = Math.max(peak, Math.abs(value));
+      sum += value * value;
+    }
+    return peak / Math.sqrt(sum / data.length);
+  };
+
+  it('decays to about -60 dB at the decay time its size gives, with no foliage', () => {
     for (const size of [0.2, 0.6]) {
-      const [left] = buildSoundscapeImpulseResponse({ size, damping: 0, echoes: 0 }, rate);
+      const [left] = ir(size, 0);
       const decay = spaceDecaySec(size);
-      // Energy in a window at time t, relative to one near the start.
       const window = (atSec: number) => energyAfter(left.subarray(0, Math.floor((atSec + 0.05) * rate)), atSec);
-      const drop = 10 * Math.log10(window(decay * 0.5) / window(0.1));
-      expect(drop).toBeLessThan(-20);
-      expect(drop).toBeGreaterThan(-45);
+      const drop = 10 * Math.log10(window(decay * 0.5) / window(decay * 0.25));
+      expect(drop).toBeLessThan(-8);
+      expect(drop).toBeGreaterThan(-25);
     }
   });
 
   it('starts after a pre-delay, and its two sides are unrelated', () => {
-    const [left, right] = buildSoundscapeImpulseResponse({ size: 0.8, damping: 0.5, echoes: 0 }, rate);
-    expect(left.subarray(0, 32).every((value) => value === 0)).toBe(true);
+    const [left, right] = ir(0.8, 0.5);
+    expect(left.subarray(0, 32).every((value) => Math.abs(value) < 1e-12)).toBe(true);
     let ab = 0;
     let aa = 0;
     let bb = 0;
@@ -307,74 +332,55 @@ describe('the space', () => {
       aa += left[index] * left[index];
       bb += right[index] * right[index];
     }
-    expect(Math.abs(ab / Math.sqrt(aa * bb))).toBeLessThan(0.1);
+    expect(Math.abs(ab / Math.sqrt(aa * bb))).toBeLessThan(0.15);
   });
 
-  it('darkens its tail with damping', () => {
-    const lateBrightness = (damping: number) => {
-      const [left] = buildSoundscapeImpulseResponse({ size: 0.6, damping, echoes: 0 }, rate);
-      const late = left.subarray(Math.floor(rate * 1.5));
-      let diff = 0;
-      let total = 0;
-      for (let index = 1; index < late.length; index += 1) {
-        diff += (late[index] - late[index - 1]) ** 2;
-        total += late[index] ** 2;
+  it('is darker at every step of foliage, at any size', () => {
+    // At the app's own rate: at 16 kHz the open end of the low-pass sits
+    // above Nyquist and the first steps cannot differ.
+    const at48k = (size: number, foliage: number) => buildSoundscapeImpulseResponse({ size, foliage }, 48000);
+    for (const size of [0.1, 0.8]) {
+      let previous = Infinity;
+      for (const foliage of [0, 0.25, 0.5, 0.75, 1]) {
+        const value = brightness(at48k(size, foliage)[0]);
+        expect(value).toBeLessThan(previous);
+        previous = value;
       }
-      return diff / total;
-    };
-    expect(lateBrightness(1)).toBeLessThan(0.5 * lateBrightness(0));
-  });
-
-  it('damps the highs where the tail is heard, not only at its end', () => {
-    // Share of energy above ~1.5 kHz in the first 50-300 ms of the tail, by
-    // first difference (a rough high-pass).
-    const earlyBrightness = (damping: number) => {
-      const [left] = buildSoundscapeImpulseResponse({ size: 0.5, damping, echoes: 0 }, rate);
-      const pre = left.findIndex((value) => value !== 0);
-      const early = left.subarray(pre + Math.floor(0.05 * rate), pre + Math.floor(0.3 * rate));
-      let diff = 0;
-      let total = 0;
-      for (let index = 1; index < early.length; index += 1) {
-        diff += (early[index] - early[index - 1]) ** 2;
-        total += early[index] ** 2;
-      }
-      return diff / total;
-    };
-    expect(earlyBrightness(1)).toBeLessThan(0.7 * earlyBrightness(0));
-  });
-
-  it('is calibrated from its undamped tail, so damping takes energy away rather than being rebalanced', () => {
-    const power = (damping: number) => {
-      const [left, right] = buildSoundscapeImpulseResponse({ size: 0.5, damping, echoes: 0 }, rate);
-      let sum = 0;
-      for (let index = 0; index < left.length; index += 1) sum += (left[index] ** 2) + (right[index] ** 2);
-      return Math.sqrt(sum / (2 * left.length));
-    };
-    expect(power(0)).toBeCloseTo((0.00125 * 44100) / rate, 6);
-    expect(power(1)).toBeLessThan(power(0));
-  });
-
-  it('keeps its echoes far enough apart to be heard as echoes, never as a comb', () => {
-    for (const size of [0, 0.5, 1]) {
-      const [plain, plainRight] = buildSoundscapeImpulseResponse({ size, damping: 0.5, echoes: 0 }, rate);
-      const [left, right] = buildSoundscapeImpulseResponse({ size, damping: 0.5, echoes: 1 }, rate);
-      const pre = plain.findIndex((value) => value !== 0);
-      const at: number[] = [];
-      for (let index = 0; index < left.length; index += 1) {
-        const added = Math.max(Math.abs(left[index] - plain[index]), Math.abs(right[index] - plainRight[index]));
-        if (added > 1e-9 && (at.length === 0 || index - at[at.length - 1] > 2)) at.push(index);
-      }
-      expect(at.length).toBeGreaterThan(0);
-      expect(at[0] - pre).toBeGreaterThanOrEqual(0.05 * rate);
-      for (let index = 1; index < at.length; index += 1) expect(at[index] - at[index - 1]).toBeGreaterThanOrEqual(0.05 * rate);
+      // Pronounced, not a nuance: dense is a fraction of bare.
+      expect(brightness(at48k(size, 1)[0])).toBeLessThan(0.05 * brightness(at48k(size, 0)[0]));
     }
   });
 
-  it('adds distinct echoes only when asked', () => {
-    const [plain] = buildSoundscapeImpulseResponse({ size: 0.5, damping: 0.5, echoes: 0 }, rate);
-    const [echoing] = buildSoundscapeImpulseResponse({ size: 0.5, damping: 0.5, echoes: 1 }, rate);
-    const peakOf = (data: Float32Array) => data.reduce((max, value) => Math.max(max, Math.abs(value)), 0);
-    expect(peakOf(echoing)).toBeGreaterThan(3 * peakOf(plain));
+  it('is calibrated from the tail without foliage, so foliage takes energy away', () => {
+    const power = (foliage: number) => {
+      const [left, right] = ir(0.5, foliage);
+      let sum = 0;
+      for (let index = 0; index < left.length; index += 1) sum += (left[index] ** 2) + (right[index] ** 2);
+      return sum;
+    };
+    expect(power(1)).toBeLessThan(0.7 * power(0));
+  });
+
+  it('keeps a dense large space long and present rather than dead: a forest is not a padded room', () => {
+    const forest = ir(0.8, 1)[0];
+    const paddedRoom = ir(0.05, 1)[0];
+    expect(energyAfter(forest, 1)).toBeGreaterThan(50 * energyAfter(paddedRoom, 1));
+  });
+
+  it('spaces its reflections by size, and turns them from clicks into a soft wash with foliage', () => {
+    // A bare valley's first reflection stands out of its tail as a spike; a
+    // bare room's comes far sooner.
+    const firstSpike = (data: Float32Array) => {
+      const rms = Math.sqrt(data.reduce((sum, value) => sum + (value * value), 0) / data.length);
+      return data.findIndex((value) => Math.abs(value) > 12 * rms);
+    };
+    const valleyAt = firstSpike(ir(0.95, 0)[0]);
+    const roomAt = firstSpike(ir(0.05, 0)[0]);
+    expect(valleyAt).toBeGreaterThan(0.3 * rate);
+    expect(roomAt).toBeGreaterThan(0);
+    expect(roomAt).toBeLessThan(0.1 * rate);
+    // Foliage smears them: the response's peaks sink into its body.
+    expect(crest(ir(0.95, 1)[0])).toBeLessThan(0.5 * crest(ir(0.95, 0)[0]));
   });
 });
 

@@ -20,7 +20,11 @@
  *   generator out 0 (direct) ----------------------------------> voice gain
  *   generator out 1 (send) -> return gain -> convolver A -> gain A -> voice gain
  *                                         -> convolver B -> gain B ->
- *   every voice gain -> mix gain -> bus compressor -> volume -> shared limiter
+ *   every voice gain -> mix gain -> bus compressor -> brilliance -> volume -> shared limiter
+ *
+ * BRILLIANCE (soundscapeBrilliance.ts) is the mix's, not a voice's: three
+ * BiquadFilterNodes and a makeup gain, gliding to a new setting; across a
+ * change of soundscape they glide over the crossfade.
  *
  * A settings change goes to the current voice: the generator takes it at
  * its next block, the return glides, and a changed ROOM is built on the
@@ -32,15 +36,18 @@
  */
 import { buildNoiseLoops, noiseLoopGains, type NoiseLoops } from '../shared/soundscapeNoiseLoops';
 import type { SoundscapeSpaceSettings } from '../shared/soundscape';
-import { buildSoundscapeImpulseResponse } from '../shared/soundscapeSpace';
+import { buildSoundscapeImpulseResponse, soundscapeRoomKey } from '../shared/soundscapeSpace';
 import type { SoundscapePlayback, SoundscapePlaybackHandlers } from './SoundscapeEngine';
 import { connectToOutput, resumedOutputContext } from './audioOutputBus';
+import { brillianceCurve, BRILLIANCE_BANDS } from './soundscapeBrilliance';
 import { BUS_COMPRESSOR, SOUNDSCAPE_MIX_GAIN, SOUNDSCAPE_SPACE_RETURN, SPACE_CROSSFADE_SEC } from './soundscapeMix';
 import type { ConfigureMessage } from './soundscapeRenderAhead';
 import generatorUrl from './soundscape-generator.js?url';
 
 /** How long a room slider must rest before its room is built (a drag would otherwise build dozens). */
 const SPACE_REBUILD_DELAY_MS = 120;
+/** The glide on the tone when brilliance changes. */
+const BRILLIANCE_GLIDE_SEC = 0.05;
 /** The glide on the space's return when its amount changes. */
 const RETURN_TIME_CONSTANT_SEC = 0.08;
 
@@ -59,9 +66,6 @@ function noiseLoopsFor(sampleRate: number) {
   return entry;
 }
 
-function roomKey(space: SoundscapeSpaceSettings): string {
-  return [space.size, space.damping, space.echoes].map((value) => value.toFixed(3)).join(':');
-}
 
 /** An equal-power fade, 0 to 1 (or 1 to 0), as a gain curve. */
 function equalPowerCurve(rising: boolean): Float32Array {
@@ -106,8 +110,8 @@ class Voice {
     this.rooms = [0, 1].map(() => {
       const convolver = context.createConvolver();
       // The impulse response is calibrated by buildSoundscapeImpulseResponse;
-      // the browser's normalisation would rescale away what damping and
-      // echoes change. Must be set before a buffer is assigned.
+      // the browser's normalisation would rescale away what foliage
+      // takes away. Must be set before a buffer is assigned.
       convolver.normalize = false;
       const gain = context.createGain();
       gain.gain.value = 0;
@@ -128,7 +132,7 @@ class Voice {
       else this.returnGain.gain.setTargetAtTime(returnTarget, now, RETURN_TIME_CONSTANT_SEC);
       this.returnTarget = returnTarget;
     }
-    const key = roomKey(space);
+    const key = soundscapeRoomKey(space);
     if (key === this.roomKey) return;
     if (this.roomTimer !== null) window.clearTimeout(this.roomTimer);
     this.roomTimer = null;
@@ -211,8 +215,39 @@ export async function createLivePlayback(handlers: SoundscapePlaybackHandlers): 
   compressor.release.value = BUS_COMPRESSOR.releaseSec;
   const volume = context.createGain();
   volume.gain.value = 0;
+  const bands = BRILLIANCE_BANDS.map((band) => {
+    const filter = context.createBiquadFilter();
+    filter.type = band.kind;
+    filter.frequency.value = band.frequencyHz;
+    if (band.kind === 'peaking') filter.Q.value = band.q;
+    return filter;
+  });
+  const makeup = context.createGain();
   mixGain.connect(compressor);
-  compressor.connect(volume);
+  let tail: AudioNode = compressor;
+  for (const filter of bands) {
+    tail.connect(filter);
+    tail = filter;
+  }
+  tail.connect(makeup);
+  makeup.connect(volume);
+  let brilliance: number | null = null;
+  /** Glide the tone to `value` with time constant `seconds` (at once, for the first). */
+  const setBrilliance = (value: number, seconds: number) => {
+    if (value === brilliance) return;
+    const curve = brillianceCurve(value, context.sampleRate);
+    const now = context.currentTime;
+    const targets: Array<[AudioParam, number]> = [
+      ...bands.map((filter, index): [AudioParam, number] => [filter.gain, curve.gainsDb[index]]),
+      [makeup.gain, curve.makeup],
+    ];
+    for (const [param, target] of targets) {
+      param.cancelScheduledValues(now);
+      if (brilliance === null) param.setValueAtTime(target, now);
+      else param.setTargetAtTime(target, now, seconds);
+    }
+    brilliance = value;
+  };
   connectToOutput(volume);
 
   let closed = false;
@@ -225,6 +260,7 @@ export async function createLivePlayback(handlers: SoundscapePlaybackHandlers): 
 
   return {
     configure(configuration, transitionSec) {
+      setBrilliance(configuration.space.brilliance, transitionSec > 0 ? transitionSec / 3 : BRILLIANCE_GLIDE_SEC);
       if (transitionSec <= 0) {
         voice.configure(configuration);
         return;
@@ -253,6 +289,8 @@ export async function createLivePlayback(handlers: SoundscapePlaybackHandlers): 
       leaving.clear();
       voice.close();
       mixGain.disconnect();
+      for (const filter of bands) filter.disconnect();
+      makeup.disconnect();
       compressor.disconnect();
       volume.disconnect();
     },

@@ -28,7 +28,10 @@ const HELP: Record<string, string[]> = {
   ],
   Environment: [
     'Volume: How loud this soundscape is overall.',
-    'Room: The space the sound plays in: how big it is, how quickly its echo dies away, whether you hear distinct echoes, and how much of that room sound is mixed in.',
+    'Size: How big the place is: how long sound takes to come back, how far apart its echoes are, and how long it rings.',
+    'Foliage: What fills the place. Bare and hard gives clear echoes and a bright ring, like a mountain valley; dense and soft scatters every echo into a dark, gentle wash and muffles distant sounds, like a forest. Read it together with size: small and bare is a closed room, small and dense a room lined with foam.',
+    'Brilliance: How sharply you hear it all. Left is soft and warm, the middle is neutral, right is crisp and sparkling with fuller bass. It changes the character, not the volume.',
+    'Amount: How much of the room sound you hear at all.',
     'Weather: A wind that blows through the whole scene, picking up into gusts and dying down into calm spells. Gusts sets how strong those swings are; pace sets how often they come.',
     'How the weather affects channels: Each channel has its own weather control. The higher it is set, the more that channel reacts to the wind: wind and other noise get louder and brighter, rain gets heavier, a fire flares up, chimes ring more often and harder, and thunder comes sooner. All channels react at the same moment, so a gust is heard across the whole scene. A channel with its weather control at zero is not affected at all.',
   ],

@@ -320,16 +320,25 @@ export type SoundscapeChannelKind = SoundscapeChannelSettings['kind'];
 export type SoundscapeChannelOfKind<K extends SoundscapeChannelKind> = Extract<SoundscapeChannelSettings, { kind: K }>;
 
 /**
- * The space every layer plays in: the shared reverb
- * (soundscapeSpace.ts's buildSoundscapeImpulseResponse).
+ * The space every layer plays in, and how it is heard. Two sliders make the
+ * PLACE and are meant to be read together, a room being one point on their
+ * plane: SIZE is how far sound travels before it comes back (the pre-delay,
+ * the reflections' spacing, the tail's length) and FOLIAGE what the space
+ * does to it on the way (hard surfaces return it intact, as distinct
+ * reflections and a bright tail; soft, dense, obstructing ones scatter it
+ * into a dark diffuse wash and dull distant sounds). A closed room, a room
+ * lined with foam, a mountain valley and a fir forest are the four corners
+ * (soundscapeSpace.ts). BRILLIANCE is not the place but how sharply it is
+ * heard, a tone on the whole mix (sound/soundscapeBrilliance.ts), and
+ * AMOUNT how much of the space is heard at all.
  */
 export interface SoundscapeSpaceSettings {
-  /** 0 a small room to 1 a wide valley: the decay time and the pre-delay. */
+  /** 0 a small room to 1 a wide valley: the pre-delay, the reflections' spacing, the tail's length. */
   size: number;
-  /** 0 a bright tail to 1 a tail that darkens fast, as open air and foliage absorb the highs. */
-  damping: number;
-  /** Discrete echoes off walls, buildings or cliffs, 0 none to 1 strong. */
-  echoes: number;
+  /** 0 hard, open surfaces to 1 dense, soft, obstructing ones (see above). */
+  foliage: number;
+  /** 0 soft and warm, 0.5 neutral, 1 crisp and chiselled: the tone of the whole mix. */
+  brilliance: number;
   /** How much of the space is heard at all, 0 dry to 1 full. */
   amount: number;
 }
@@ -538,7 +547,7 @@ export const SOUNDSCAPE_CHANNEL_DEFAULTS: KindDefaults = {
   },
 };
 
-export const DEFAULT_SOUNDSCAPE_SPACE: Readonly<SoundscapeSpaceSettings> = { size: 0.45, damping: 0.5, echoes: 0.1, amount: 0.7 };
+export const DEFAULT_SOUNDSCAPE_SPACE: Readonly<SoundscapeSpaceSettings> = { size: 0.45, foliage: 0.5, brilliance: 0.5, amount: 0.7 };
 export const DEFAULT_SOUNDSCAPE_WEATHER: Readonly<SoundscapeWeatherSettings> = { gustiness: 0.4, paceSec: 12 };
 
 /** A roster channel at its defaults (enabled unless said otherwise). */
@@ -617,7 +626,7 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
       'rain-2': { distance: 0.5, drips: 0.72, dropLevel: 0.74, intensity: 0.45, pan: 0.3, resonance: 0.83, splashLevel: 0.51, volume: 0.69, washDensity: 0.95, washLevel: 0.84, washTone: 0.23, wetness: 0.51 },
       'rain-3': { distance: 0.9, drips: 0.38, dropLevel: 0.681, intensity: 0.85, resonance: 0.82, splashLevel: 0.49, surface: 0.44, volume: 0.97, washDensity: 0.69, washLevel: 0.89, washTone: 0.46, wetness: 0.7 },
       'thunder-1': { character: 0.87, contrast: 0.47, distance: 0.6, lengthSec: 30, pan: -0.28, randomness: 0.11, share: 0.67, spread: 1, volume: 1 },
-    }, { amount: 0.42, damping: 0.82, echoes: 0.63, size: 0.76 }, { gustiness: 0.88, paceSec: 4.681 }, volumeDb(-10)),
+    }, { amount: 0.42, foliage: 0.82, size: 0.76 }, { gustiness: 0.88, paceSec: 4.681 }, volumeDb(-10)),
   },
   {
     id: 'wild-sea',
@@ -633,7 +642,7 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
       'thunder-1': { distance: 0.21, enabled: false, pan: -0.36, share: 0.71, spread: 0.85, weather: 0.65 },
       'thunder-2': { character: 0.85, contrast: 0.38, lengthSec: 26, randomness: 0.78, share: 0.32, spread: 0.77, weather: 0.94 },
       'thunder-3': { distance: 0.99, enabled: false, pan: 0.45, share: 1, spread: 0.93 },
-    }, { amount: 0.42, damping: 0.79, echoes: 0.63, size: 0.76 }, { gustiness: 1, paceSec: 4.681 }, volumeDb(-15)),
+    }, { amount: 0.42, foliage: 0.79, size: 0.76 }, { gustiness: 1, paceSec: 4.681 }, volumeDb(-15)),
   },
   {
     id: 'winds',
@@ -646,7 +655,7 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
       'noise-5': { colour: 0.45, depth: 0.11, distance: 0.39, periodSec: 9.729, skew: 0.28, sway: 0.19, sweep: 0.22, variation: 0.92, volume: 0.76, weather: 0.63 },
       'noise-6': { brightnessHz: 5930.28, colour: 0.65, focus: 0.11, periodSec: 4.012, sway: 0.01, variation: 0.87, volume: 0.54, weather: 0.83 },
       'thunder-2': { character: 0.95, contrast: 0.28, distance: 0.72, lengthSec: 24, randomness: 0.81, share: 0.825, spread: 1, volume: 1, weather: 0.63 },
-    }, { echoes: 0.55 }, { paceSec: 13 }, volumeDb(-10)),
+    }, {}, { paceSec: 13 }, volumeDb(-10)),
   },
   {
     id: 'underwater',
@@ -658,7 +667,7 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
       'noise-4': { brightnessHz: 80, colour: 0.02, depth: 0.28, focus: 0.31, skew: 0.38, sweep: 0.36, variation: 0, volume: 0.84 },
       'water-1': { bubbleLevel: 0.62, bubbles: 0.26, distance: 0.32, ring: 0.33, rise: 0.13, rushLevel: 0.79, rushTone: 0.2, size: 0.9, sizeSpread: 0.62, turbulence: 0.7, volume: 0.52 },
       'water-2': { bubbleLevel: 0.8, bubbles: 0.34, distance: 0.54, ring: 0.23, rise: 0.35, rush: 0.66, rushLevel: 0, rushTone: 0.84, sizeSpread: 0.48, turbulence: 0.73, volume: 0.26 },
-    }, { damping: 0.35, echoes: 0.55, size: 0.6 }, { paceSec: 13 }, volumeDb(-5)),
+    }, { foliage: 0.35, size: 0.6 }, { paceSec: 13 }, volumeDb(-5)),
   },
   {
     id: 'campsite',
@@ -687,7 +696,7 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
       'thunder-1': { character: 0.94, contrast: 0.77, pan: -0.3, share: 0.715, spread: 0.89, volume: 0.91 },
       'thunder-2': { character: 0.81, contrast: 0.28, distance: 0.29, lengthSec: 25, share: 0.865, volume: 0.92 },
       'thunder-3': { pan: 0.49, share: 0.705, spread: 0.92, weather: 0.76 },
-    }, { damping: 0.35, echoes: 0.55, size: 0.51 }, { gustiness: 1, paceSec: 4.681 }, volumeDb(-10)),
+    }, { foliage: 0.35, size: 0.51 }, { gustiness: 1, paceSec: 4.681 }, volumeDb(-10)),
   },
 ];
 
@@ -786,7 +795,7 @@ export const SOUNDSCAPE_FIELD_BOUNDS: { [K in SoundscapeChannelKind]: FieldBound
   },
 };
 
-export const SOUNDSCAPE_SPACE_BOUNDS: FieldBounds = { size: UNIT, damping: UNIT, echoes: UNIT, amount: UNIT };
+export const SOUNDSCAPE_SPACE_BOUNDS: FieldBounds = { size: UNIT, foliage: UNIT, brilliance: UNIT, amount: UNIT };
 export const SOUNDSCAPE_WEATHER_BOUNDS: FieldBounds = { gustiness: UNIT, paceSec: [SOUNDSCAPE_WEATHER_PACE_MIN_SEC, SOUNDSCAPE_WEATHER_PACE_MAX_SEC] };
 
 function sanitizeFields<T extends object>(source: Record<string, unknown>, bounds: FieldBounds, fallback: T): T {
@@ -796,6 +805,15 @@ function sanitizeFields<T extends object>(source: Record<string, unknown>, bound
     result[field] = range[2] === 'integer' ? Math.round(value) : value;
   }
   return result as T;
+}
+
+/**
+ * A space saved before foliage replaced damping and echoes: damping, which
+ * meant the same direction (open and bright to dark and absorbing), becomes
+ * foliage; echoes are dropped, reflections now coming from the room itself.
+ */
+function legacySpace(space: Record<string, unknown>): Record<string, unknown> {
+  return space.foliage === undefined && space.damping !== undefined ? { ...space, foliage: space.damping } : space;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -836,7 +854,7 @@ export function sanitizeSoundscapeSettings(input: unknown): SoundscapeSettings {
   });
   return {
     channels,
-    space: sanitizeFields(asRecord(source.space), SOUNDSCAPE_SPACE_BOUNDS, { ...DEFAULT_SOUNDSCAPE_SPACE }),
+    space: sanitizeFields(legacySpace(asRecord(source.space)), SOUNDSCAPE_SPACE_BOUNDS, { ...DEFAULT_SOUNDSCAPE_SPACE }),
     weather: sanitizeFields(asRecord(source.weather), SOUNDSCAPE_WEATHER_BOUNDS, { ...DEFAULT_SOUNDSCAPE_WEATHER }),
     // Absent in everything saved before the field existed, which is unity.
     volume: finiteRange(source.volume, 0, 1, 1),

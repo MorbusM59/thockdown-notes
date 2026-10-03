@@ -104,6 +104,12 @@ function formatAmount(value: number, zero: string, one?: string): string {
   return percent(value)
 }
 
+/** Brilliance is centred: soft below the middle, crisp above it. */
+function formatBrilliance(value: number): string {
+  if (Math.abs(value - 0.5) < 0.01) return 'Neutral'
+  return value < 0.5 ? `Soft ${percent((0.5 - value) * 2)}` : `Crisp ${percent((value - 0.5) * 2)}`
+}
+
 const NOTE_NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B']
 function formatPitch(hz: number): string {
   const midi = Math.round(69 + (12 * Math.log2(hz / 440)))
@@ -348,15 +354,15 @@ const CONTROLS: { [K in SoundscapeChannelKind]: ControlGroup[] } = {
  */
 const ENVIRONMENT_CONTROLS: ControlGroup[] = [{
   label: 'Environment',
-  // The soundscape's own volume on a row of its own, then four sliders that
-  // shape the space and two the weather: rows of two keep each together
-  // where rows of three would put amount beside the gusts.
+  // The soundscape's own volume on a row of its own; then the place (size
+  // and foliage, read together), how it is heard (brilliance and amount),
+  // and the weather -- rows of two keep each pair together.
   rows: [1, 2, 2, 2],
   controls: [
     unit('volume', 'volume', 'How loud this whole soundscape is. Lower it if the loudest moments make the rest of it duck', formatVolume),
-    unit('size', 'size', 'A small room to a wide valley: how long the space rings, and how late its first reflection', (value) => `${formatSeconds(spaceDecaySec(value))} decay`),
-    unit('damping', 'damping', 'A bright tail, or one whose highs die away quickly, as open air and foliage swallow them', (value) => formatAmount(value, 'Bright', 'Dark')),
-    unit('echoes', 'echoes', 'Distinct echoes off walls, buildings or cliffs, heard on drops, drips, strikes and thunder', (value) => formatAmount(value, 'None')),
+    unit('size', 'size', 'A small room to a wide valley: how far sound travels before it comes back, how far apart its echoes are, how long it rings', (value) => `${formatSeconds(spaceDecaySec(value))} decay`),
+    unit('foliage', 'foliage', 'Bare, hard surfaces to dense, soft ones: clear echoes and a bright ring, or every echo scattered into a dark, soft wash, and distant sounds muffled', (value) => formatAmount(value, 'Bare', 'Dense')),
+    unit('brilliance', 'brilliance', 'How sharply it is all heard: soft and warm, neutral in the middle, or crisp, sparkling and full-bodied', formatBrilliance),
     unit('amount', 'amount', 'How much of the space is heard', (value) => formatAmount(value, 'Dry', 'Full')),
     unit('gustiness', 'gusts', 'Calm to squally: how far a gust or a lull moves every layer that follows the weather', (value) => formatAmount(value, 'Calm', 'Squally')),
     { key: 'paceSec', track: 'pace', tooltip: 'Average seconds from one gust or lull to the next', min: SOUNDSCAPE_WEATHER_PACE_MIN_SEC, max: SOUNDSCAPE_WEATHER_PACE_MAX_SEC, log: true, format: formatSeconds },

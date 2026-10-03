@@ -45,15 +45,29 @@ export interface SoundscapeSpace {
 }
 
 /**
- * How far away a layer sounds, for every kind. Distance darkens it (a
- * low-pass swept from 18 kHz down to 2.2 kHz), lowers the direct sound and
- * raises the share sent to the space's reverb, which is what makes far layers
- * diffuse rather than merely quiet.
+ * How far away a layer sounds, for every kind. Distance darkens it, lowers
+ * the direct sound and raises the share sent to the space's reverb, which is
+ * what makes far layers diffuse rather than merely quiet.
+ *
+ * How fast distance darkens is the space's FOLIAGE (soundscapeSpace.ts): in
+ * open, bare surroundings a far sound stays clear (the low-pass reaches
+ * DISTANCE_CUTOFF_FAR_OPEN_HZ at the far end), among dense, soft obstacles
+ * it dulls fast (DISTANCE_CUTOFF_FAR_DENSE_HZ), and even a near sound is
+ * slightly obstructed. Near things crisp and far things soft is the
+ * strongest single cue of standing among trees.
  */
-export function resolveSoundscapeSpace(distance: number): SoundscapeSpace {
+const DISTANCE_CUTOFF_NEAR_OPEN_HZ = 18000;
+const DISTANCE_CUTOFF_NEAR_DENSE_HZ = 7000;
+const DISTANCE_CUTOFF_FAR_OPEN_HZ = 4000;
+const DISTANCE_CUTOFF_FAR_DENSE_HZ = 700;
+
+export function resolveSoundscapeSpace(distance: number, foliage: number): SoundscapeSpace {
   const bounded = Number.isFinite(distance) ? Math.max(0, Math.min(1, distance)) : 0;
+  const dense = Number.isFinite(foliage) ? Math.max(0, Math.min(1, foliage)) : 0;
+  const near = DISTANCE_CUTOFF_NEAR_OPEN_HZ * ((DISTANCE_CUTOFF_NEAR_DENSE_HZ / DISTANCE_CUTOFF_NEAR_OPEN_HZ) ** dense);
+  const far = DISTANCE_CUTOFF_FAR_OPEN_HZ * ((DISTANCE_CUTOFF_FAR_DENSE_HZ / DISTANCE_CUTOFF_FAR_OPEN_HZ) ** dense);
   return {
-    cutoffHz: 18000 * ((2200 / 18000) ** bounded),
+    cutoffHz: near * ((far / near) ** bounded),
     directGain: 1 - (0.78 * bounded),
     // Even a layer at distance 0 is IN the space: 0.15 is enough of it to
     // hear the room around a near sound (0.06, as it was, left the space
@@ -201,18 +215,19 @@ export function toGeneratorConfiguration(settings: SoundscapeSettings): Soundsca
   return {
     weather: { ...settings.weather },
     level: soundscapeFaderGain(settings.volume),
-    channels: settings.channels.map((channel) => toGeneratorChannel(channel)),
+    channels: settings.channels.map((channel) => toGeneratorChannel(channel, settings.space.foliage)),
   };
 }
 
-export function toGeneratorChannel(channel: SoundscapeChannelSettings): SoundscapeWorkletChannel {
+/** A channel as the generator takes it; `foliage` is the space's (see resolveSoundscapeSpace). */
+export function toGeneratorChannel(channel: SoundscapeChannelSettings, foliage: number): SoundscapeWorkletChannel {
   const gain = soundscapeFaderGain(channel.volume) * SOUNDSCAPE_KIND_GAIN[channel.kind];
   switch (channel.kind) {
     case 'noise':
       return {
         ...channel,
         gain,
-        space: resolveSoundscapeSpace(channel.distance),
+        space: resolveSoundscapeSpace(channel.distance, foliage),
         cycle: buildNoiseCycle(channel.curve, channel.skew),
         colourWeights: noiseColourWeights(channel.colour),
         q: noiseFocusQ(channel.focus),
@@ -221,19 +236,19 @@ export function toGeneratorChannel(channel: SoundscapeChannelSettings): Soundsca
         sweepOctaves: channel.sweep * SOUNDSCAPE_NOISE_SWEEP_OCTAVES,
       };
     case 'rain':
-      return { ...channel, gain, space: resolveSoundscapeSpace(channel.distance), dropsRange: RAIN_DROPS_RANGE };
+      return { ...channel, gain, space: resolveSoundscapeSpace(channel.distance, foliage), dropsRange: RAIN_DROPS_RANGE };
     case 'thunder':
-      return { ...channel, gain, kindGain: SOUNDSCAPE_KIND_GAIN.thunder, spaceTable: THUNDER_SPACE_TABLE, lengthRangeSec: THUNDER_LENGTH_RANGE_SEC, jitter: SOUNDSCAPE_THUNDER_JITTER };
+      return { ...channel, gain, kindGain: SOUNDSCAPE_KIND_GAIN.thunder, spaceTable: thunderSpaceTable(foliage), lengthRangeSec: THUNDER_LENGTH_RANGE_SEC, jitter: SOUNDSCAPE_THUNDER_JITTER };
     case 'chimes':
       return {
         ...channel,
         gain,
-        space: resolveSoundscapeSpace(channel.distance),
+        space: resolveSoundscapeSpace(channel.distance, foliage),
         tubeHz: chimeTubeFrequencies(channel.pitchHz, channel.tubes, channel.scale),
         strikeRange: CHIME_STRIKE_RANGE,
       };
     default:
-      return { ...channel, gain, space: resolveSoundscapeSpace(channel.distance) };
+      return { ...channel, gain, space: resolveSoundscapeSpace(channel.distance, foliage) };
   }
 }
 
@@ -243,8 +258,8 @@ const CHIME_STRIKE_RANGE = [SOUNDSCAPE_CHIME_RATE_MIN_PER_SEC, SOUNDSCAPE_CHIME_
 
 /** Steps in a thunder layer's distance table: finer than the slider moves. */
 const THUNDER_SPACE_STEPS = 100;
-const THUNDER_SPACE_TABLE: readonly SoundscapeSpace[] = Array.from(
-  { length: THUNDER_SPACE_STEPS + 1 },
-  (_, index) => resolveSoundscapeSpace(index / THUNDER_SPACE_STEPS),
-);
+/** A peal's distance is drawn per peal, so thunder takes the whole distance rule as a table, for the space's foliage. */
+function thunderSpaceTable(foliage: number): readonly SoundscapeSpace[] {
+  return Array.from({ length: THUNDER_SPACE_STEPS + 1 }, (_, index) => resolveSoundscapeSpace(index / THUNDER_SPACE_STEPS, foliage));
+}
 const THUNDER_LENGTH_RANGE_SEC = [SOUNDSCAPE_THUNDER_LENGTH_MIN_SEC, SOUNDSCAPE_THUNDER_LENGTH_MAX_SEC] as const;

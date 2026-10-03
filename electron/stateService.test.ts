@@ -63,7 +63,7 @@ describe('StateService app-state field round-trip', () => {
         default: return channel
       }
     })
-    settings.space = { size: 0.12, damping: 0.93, echoes: 0.44, amount: 0.21 }
+    settings.space = { size: 0.12, foliage: 0.93, brilliance: 0.44, amount: 0.21 }
     settings.weather = { gustiness: 0.71, paceSec: 33 }
     const soundscape = {
       enabled: true,
