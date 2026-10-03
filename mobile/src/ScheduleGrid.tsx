@@ -20,8 +20,10 @@
  * tap, and a drag never starts in a direction the reader did not mean:
  * - a TAP turns a slot holding a soundscape on or off; an off slot keeps its
  *   soundscape, dimmed;
- * - a DRAG in any direction out of an INACTIVE slot (off, or empty) clears
- *   that slot, and only that slot;
+ * - a DRAG in any direction out of a slot that is OFF clears that slot, and
+ *   only that slot;
+ * - a drag LEFT or RIGHT out of an EMPTY slot paints emptiness: it clears
+ *   every slot the finger passes, by the same hour rule as painting below;
  * - LEFT or RIGHT out of an ACTIVE slot PAINTS its soundscape, turned on,
  *   onto every slot the finger passes. Extending a run carries its EDGE MINUTES with it: the minute its first
  *   slot starts at moves to the new first slot, the minute its last slot
@@ -77,8 +79,10 @@ interface SlotPress {
   /** One 5-minute step of vertical travel, in px: the slot's own height. */
   stepPx: number
   dragging: boolean
-  /** Set when the drag starts on an active slot: extending sideways, or moving the minute. */
+  /** Set when the drag starts: sideways (painting), or up and down (moving the minute). */
   axis: 'horizontal' | 'vertical' | null
+  /** The pressed slot held no soundscape: a sideways drag clears what it passes. */
+  empty: boolean
   /** What a sideways drag paints: the slot's soundscape, or null for emptiness. */
   presetId: string | null
   /** One hour of sideways travel, in px: the distance from one slot to the next in a row. */
@@ -166,8 +170,10 @@ export function ScheduleGrid({ schedule, customPresets, pickedPresetId, onChange
       press.axis = overX > overY ? 'horizontal' : 'vertical'
       if (press.role === 'inactive') paint(press, 0, 0)
     }
-    // An inactive slot's drag cleared that slot when it began, and that is all it does.
-    if (pickedPresetId !== null || press.role === 'inactive') return
+    if (pickedPresetId !== null) return
+    // An off slot's drag cleared that slot when it began, and that is all it
+    // does; an empty slot's sideways drag goes on clearing (presetId null).
+    if (press.role === 'inactive' && !(press.empty && press.axis === 'horizontal')) return
     if (press.axis === 'horizontal') {
       const offset = Math.round((x - press.x) / press.pitchPx)
       if (offset === press.reached) return
@@ -227,6 +233,7 @@ export function ScheduleGrid({ schedule, customPresets, pickedPresetId, onChange
             stepPx: Math.max(1, event.currentTarget.offsetHeight),
             dragging: false,
             axis: null,
+            empty: slot.presetId === null,
             presetId: role === 'inactive' ? null : slot.presetId,
             pitchPx: Math.max(1, (event.currentTarget.closest('.mobile-schedule-grid')?.getBoundingClientRect().width ?? 0) / (HOURS / 2)),
             reached: 0,

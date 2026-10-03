@@ -16,7 +16,7 @@ const HELP: Record<string, string[]> = {
   Schedule: [
     'How it works: The schedule plays soundscapes for you at set times of day. There is one slot for every hour: the top row is midnight to 11 in the morning, the bottom row is noon to 11 at night. The slot for the current hour has an outline.',
     'Filling slots: Hold a soundscape in the Presets section until it is picked up. Then tap the slots you want it to play in. Tap anywhere else when you are done.',
-    'Turning slots on and off: Tap a filled slot to switch it on or off; a slot that is off keeps its soundscape, shown faded. To empty a slot, drag your finger out of it while it is off.',
+    'Turning slots on and off: Tap a filled slot to switch it on or off; a slot that is off keeps its soundscape, shown faded. To empty a slot, drag your finger out of it while it is off. To empty several, start on an empty slot and drag sideways across them.',
     'Making a run longer: Drag sideways out of a slot that is on, and the soundscape is copied into every hour you pass over.',
     'Exact start and stop times: The first and last slot of a run show the minute it starts and stops. Drag up or down out of one of them to move that time by 5 minutes.',
     'What you hear: When the schedule is on, a run fades in at its start, fades out at its end, and blends into the next soundscape on the hour, each over a minute. If you are playing or have paused a soundscape yourself, that comes first: the schedule waits until you stop it.',
