@@ -81,7 +81,7 @@ const FADE_OUT_TIME_CONSTANT_SEC = 0.025;
  * long, where a settings change within one is a splice of a few
  * milliseconds. Longer fades (the mobile app's schedule) are the session's.
  */
-export const SOUNDSCAPE_SWITCH_SEC = 0.5;
+export const SOUNDSCAPE_SWITCH_SEC = 2;
 
 export class SoundscapeEngine {
   private playbackFactory: SoundscapePlaybackFactory = createWebPlayback;

@@ -95,12 +95,13 @@ final class SoundscapeSession {
     private static final double SCHEDULE_FADE_SEC = 60;
     /**
      * The shortest a change of what is heard may take: a change of
-     * soundscape is crossfaded, and a start from silence (opening, resuming
-     * from a pause) faded in, at least this long. The engine's
+     * soundscape is crossfaded, a start from silence (opening, resuming
+     * from a pause) faded in, and a stop with nothing to hand over to faded
+     * out, at least this long. The engine's
      * SOUNDSCAPE_SWITCH_SEC (SoundscapeEngine.ts), which the page's own
      * changes of soundscape arrive with.
      */
-    private static final double SWITCH_FADE_SEC = 0.5;
+    private static final double SWITCH_FADE_SEC = 2;
     /** How long the hand-over takes when the listener stops regular mode: they asked for the change, so it comes promptly. */
     private static final double HANDOVER_FADE_SEC = 10;
     /** A fade back from an ending that was interrupted. */
@@ -224,7 +225,7 @@ final class SoundscapeSession {
     /** Regular mode STOPPED: the schedule takes over, or the session ends. Returns the outcome. */
     synchronized State stop() {
         regular = Regular.STOPPED;
-        settle(HANDOVER_FADE_SEC);
+        settle(HANDOVER_FADE_SEC, SWITCH_FADE_SEC);
         return state();
     }
 
@@ -286,7 +287,7 @@ final class SoundscapeSession {
     /** The notification's close control, or the app being closed: regular mode stops; the schedule carries on. */
     synchronized void controlStop() {
         regular = Regular.STOPPED;
-        settle(HANDOVER_FADE_SEC);
+        settle(HANDOVER_FADE_SEC, SWITCH_FADE_SEC);
         report();
     }
 
@@ -294,7 +295,7 @@ final class SoundscapeSession {
 
     /** The schedule changed (turned on or off, or its slots edited), or the device rebooted: apply its state at this moment. */
     synchronized void applyScheduleState() {
-        settle(SCHEDULE_FADE_SEC);
+        settle(SCHEDULE_FADE_SEC, SCHEDULE_FADE_SEC);
         // Reported even when the page changed the schedule: what is heard,
         // and from which source, is the session's to work out.
         report();
@@ -303,7 +304,7 @@ final class SoundscapeSession {
     /** The schedule's alarm: its events are due. A run STARTING ends a pause, which would otherwise silence it. */
     synchronized void applyScheduleEvents(boolean runStarted) {
         if (runStarted && regular == Regular.PAUSED) regular = Regular.STOPPED;
-        settle(SCHEDULE_FADE_SEC);
+        settle(SCHEDULE_FADE_SEC, SCHEDULE_FADE_SEC);
         report();
     }
 
@@ -317,17 +318,18 @@ final class SoundscapeSession {
      * Make what is heard follow regular mode and the schedule, after either
      * changed: with regular mode STOPPED, play the schedule's run -- fading
      * in from silence, or transitioning from whatever was heard -- or, with
-     * no run, fade out and end, over `fadeSec`. Regular mode PLAYING or
-     * PAUSED is already what is heard, and the schedule changes nothing.
+     * no run, fade out and end: over `fadeSec` into the run, over
+     * `endSec` into silence. Regular mode PLAYING or PAUSED is already what
+     * is heard, and the schedule changes nothing.
      */
-    private void settle(double fadeSec) {
+    private void settle(double fadeSec, double endSec) {
         scheduled = scheduledNow(SoundscapeSchedule.load(context));
         if (regular != Regular.STOPPED) {
             refreshService();
             return;
         }
         if (scheduled == null) {
-            endSession(fadeSec);
+            endSession(endSec);
             return;
         }
         cancelPendingEnd();

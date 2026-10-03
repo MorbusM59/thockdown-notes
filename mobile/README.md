@@ -11,9 +11,10 @@ reaches both.
 
 ## Look
 Any of the desktop's ten factory visual presets, chosen in the Master section
-(one button, `LookButton.tsx`, showing the current one's icon: a tap switches
-between light and dark mode, each returning to the preset last used in it,
-and a drag up or down steps through the current mode's five; Paper in light
+(one button, `LookButton.tsx`, showing a moon: a tap switches between light
+and dark mode, each returning to the preset last used in it, and a drag up
+or down steps through the current mode's five, showing the preset's icon
+while it does and for two seconds after; Paper in light
 mode and Ancient in dark by default; kept in
 localStorage by `preferencesStore.ts`). They are drawn by the same code the
 desktop uses (`src/shared/loadoutTheme.ts` for the variables, filter and
@@ -56,9 +57,11 @@ How it got here, because each step was measured on a device:
 Outputs are plain queues at absolute frame positions. A settings change is
 spliced a margin past the playhead and crossfaded by the RENDERER from its
 history of what it sent (50 ms). A change of SOUNDSCAPE is spliced at the
-same frame and crossfaded into a fresh voice over at least half a second
+same frame and crossfaded into a fresh voice over at least two seconds
 (the schedule's fades are a minute, a stop's hand-over ten seconds), and a
-start from silence or a pause fades in over half a second; on Android the playhead is read in the same
+start from silence or a pause fades in, and a stop with no run to hand over
+to fades out, over two seconds (counted from the first rendered sample, not
+from the moment of asking); on Android the playhead is read in the same
 process at the moment of the change, so the margin only covers what the
 device has already been handed (its buffer and one writer block).
 
@@ -110,8 +113,8 @@ regular mode; closing the app (the service's `onTaskRemoved`) stops it too;
 pause always silences -- pausing the schedule's run makes it regular mode,
 paused on that soundscape; a run's start ends a paused regular mode (a
 forgotten pause must not silence tomorrow's run) but never a playing one.
-A stop hands over within ten seconds (the schedule's own changes take a
-minute). The schedule's button toggles it and carries the picked-up dashed
+A stop hands over within ten seconds, or fades out over two with no run in
+progress (the schedule's own changes take a minute). The schedule's button toggles it and carries the picked-up dashed
 frame while what is heard is the schedule's -- from the moment of the
 hand-over, while the old soundscape is still fading; the notification says "Playing", "Paused" or "Scheduled until
 07:30".
@@ -138,7 +141,10 @@ playback is used instead: it plays only in the foreground and has no
 session, controls, clips or saving to files.
 
 ## Clips, export and import
-- A CLIP is five minutes of the current soundscape rendered OFFLINE
+- A CLIP is the current soundscape rendered OFFLINE, two minutes to an hour
+  long (a drag up or down on the clip button steps through 2, 5, 15, 30 and
+  60 minutes, shown while dragging and for two seconds after; the same
+  `useStepDrag.ts` as the look button)
   (`ClipRenderer.java`): the same renderer in its own isolate of the shared
   sandbox (`SharedSandbox.java`, because a process can connect only one),
   stepped as fast as it renders, encoded to AAC in an .m4a (Opus files need
@@ -155,11 +161,13 @@ session, controls, clips or saving to files.
   which only hands a file to another app.
 
 ## Help
-The help button (Master row, second) puts the page in HELP MODE: under every
+The help button (Master row, third) puts the page in HELP MODE: under every
 subsection heading, one button-tile spanning the grid explains the controls
 it stands in for (`helpText.ts`, written for a finger; the panel takes it
 through its `help` option and draws it with `SubsectionHelp`). A tap
-anywhere but the scrollbar ends help mode and does nothing else.
+anywhere but the scrollbar ends help mode and does nothing else, and so does
+the system's back gesture, which the page takes while help is up
+(`takeBack`) rather than leaving the app.
 
 ## Touch
 The page does not scroll under a finger: its scrollbar (`PageScrollbar.tsx`,

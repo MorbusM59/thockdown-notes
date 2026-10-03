@@ -37,10 +37,13 @@ import { ThemeBlendOverlays, ThemeGlazeLayers } from '../../src/components/Theme
 import { nativeSoundscape, type RegularMode, type SessionState, type SoundSource } from './backgroundAudioHost'
 import { nativePlayback } from './playbackMode'
 import {
+  CLIP_MINUTES,
+  loadClipMinutes,
   loadLook,
   loadPreferences,
   loadSchedule,
   loadScratch,
+  saveClipMinutes,
   saveLook,
   saveSchedule,
   savePreferences,
@@ -56,22 +59,25 @@ import { SoundscapeControls, SubsectionHelp } from '../../src/sidebar/Soundscape
 import { PageScrollbar } from './PageScrollbar'
 import { armHold, HOLD_CONFIRM_MS } from '../../src/shared/holdTiming'
 import { installSoundscapeFiles } from './soundscapeFiles'
+import { useStepDrag } from './useStepDrag'
 
 installSoundscapeFiles()
-
-/** How long a clip is. */
-const CLIP_SECONDS = 5 * 60
 
 const PRESETS = { light: LIGHT_FACTORY_PRESETS, dark: DARK_FACTORY_PRESETS }
 const PRESET_ICONS = { light: LIGHT_PRESET_ICONS, dark: DARK_PRESET_ICONS }
 const PRESET_NAMES = { light: LIGHT_PRESET_THEMES, dark: DARK_PRESET_THEMES }
 
 
+/** A clip length as the button shows it: 5m, 1h. */
+function clipLengthLabel(minutes: number): string {
+  return minutes % 60 === 0 ? `${minutes / 60}h` : `${minutes}m`
+}
+
 /** The name a clip of the current soundscape is saved under. */
-function clipName(preferences: SoundscapePreferences): string {
+function clipName(preferences: SoundscapePreferences, minutes: number): string {
   const preset = [...preferences.customPresets, ...SOUNDSCAPE_FACTORY_PRESETS]
     .find((candidate) => candidate.id === preferences.activePresetId)
-  return `${preset?.name ?? 'Soundscape'} - ${CLIP_SECONDS / 60} min`.replace(/[^\w .-]+/g, '')
+  return `${preset?.name ?? 'Soundscape'} - ${minutes} min`.replace(/[^\w .-]+/g, '')
 }
 
 export function MobileSoundscapeApp() {
@@ -94,6 +100,7 @@ export function MobileSoundscapeApp() {
   // playback instead.
   const [native, setNative] = useState<boolean | null>(null)
   const [clipProgress, setClipProgress] = useState<number | null>(null)
+  const [clipMinutes, setClipMinutes] = useState(loadClipMinutes)
   // The soundscape picked up for filling schedule slots (ScheduleGrid); not persisted.
   const [pickedPresetId, setPickedPresetId] = useState<string | null>(null)
   const pageScrollerRef = useRef<HTMLDivElement | null>(null)
@@ -133,6 +140,17 @@ export function MobileSoundscapeApp() {
     window.addEventListener('pointerdown', end, { capture: true })
     return () => window.removeEventListener('pointerdown', end, { capture: true })
   }, [helpMode])
+  // While help is up, the system's back gesture closes it rather than
+  // leaving the app.
+  useEffect(() => {
+    if (!native || !helpMode) return undefined
+    void nativeSoundscape!.takeBack({ taken: true })
+    const handle = nativeSoundscape!.addListener('back', () => setHelpMode(false))
+    return () => {
+      void nativeSoundscape!.takeBack({ taken: false })
+      void handle.then((h) => h.remove())
+    }
+  }, [native, helpMode])
   const help = helpMode ? helpFor : undefined
   // Pressing anything that does not act on the picked-up soundscape puts it
   // down, and the press then does what it always does. Decided on the press
@@ -227,10 +245,23 @@ export function MobileSoundscapeApp() {
     setClipProgress(0)
     void nativeSoundscape!.renderClip({
       configuration: JSON.stringify(soundscapeConfiguration(preferences.settings)),
-      seconds: CLIP_SECONDS,
-      name: clipName(preferences),
+      seconds: clipMinutes * 60,
+      name: clipName(preferences, clipMinutes),
     })
   }
+  // A drag up or down on the clip button steps through the lengths,
+  // stopping at either end; not while a clip is being made.
+  const clipDrag = useStepDrag({
+    begin: () => CLIP_MINUTES.indexOf(clipMinutes as typeof CLIP_MINUTES[number]),
+    step: (base, steps) => {
+      if (clipProgress !== null) return
+      const minutes = CLIP_MINUTES[Math.max(0, Math.min(CLIP_MINUTES.length - 1, base + steps))]
+      if (minutes === clipMinutes) return
+      setClipMinutes(minutes)
+      saveClipMinutes(minutes)
+    },
+    tap: toggleClip,
+  })
 
   // A browser (not the native shell, which allows playback without a
   // gesture) keeps the audio context suspended until the first touch.
@@ -384,20 +415,23 @@ export function MobileSoundscapeApp() {
                       onPointerLeave={() => { filesHoldRef.current?.(); filesHoldRef.current = null }}
                       onContextMenu={(event) => event.preventDefault()}
                     >
-                      <span className="fa-solid fa-file-import" aria-hidden="true" />
+                      <span className="fa-solid fa-rotate" aria-hidden="true" />
                     </button>
                     <button
                       type="button"
                       className={`btn-icon options-color-swatch options-loadout-btn${clipProgress !== null ? ' is-active' : ''}`}
                       aria-label={clipProgress !== null
-                        ? `Rendering a ${CLIP_SECONDS / 60} minute clip, ${Math.round(clipProgress * 100)}%: press to cancel`
-                        : `Save a ${CLIP_SECONDS / 60} minute clip of this soundscape`}
+                        ? `Rendering a ${clipMinutes} minute clip, ${Math.round(clipProgress * 100)}%: press to cancel`
+                        : `Save a ${clipMinutes} minute clip of this soundscape; drag up or down to change its length`}
                       aria-disabled={!native}
-                      onClick={toggleClip}
+                      data-secondary-press="none"
+                      {...clipDrag.handlers}
                     >
                       {clipProgress !== null
                         ? <span className="mobile-clip-progress" aria-hidden="true">{Math.round(clipProgress * 100)}%</span>
-                        : <span className="fa-solid fa-file-audio" aria-hidden="true" />}
+                        : clipDrag.adjusting
+                          ? <span className="mobile-clip-progress" aria-hidden="true">{clipLengthLabel(clipMinutes)}</span>
+                          : <span className="fa-solid fa-circle-down" aria-hidden="true" />}
                     </button>
                     <LookButton
                       look={look}

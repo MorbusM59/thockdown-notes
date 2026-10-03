@@ -242,9 +242,15 @@ final class SoundscapeAudioOutput {
             }
             float target = volumeTarget;
             float step = volumeStep;
+            // The gains move only once audio has arrived: the renderer takes
+            // a moment to start, and a fade-in run over that silence would be
+            // over before the first sample, which then starts at full level.
+            boolean ramp = started;
             for (int index = 0; index < BLOCK_FRAMES; index += 1) {
-                volume += (target - volume) * step;
-                fade = fade < toFade ? Math.min(toFade, fade + fadeBy) : Math.max(toFade, fade - fadeBy);
+                if (ramp) {
+                    volume += (target - volume) * step;
+                    fade = fade < toFade ? Math.min(toFade, fade + fadeBy) : Math.max(toFade, fade - fadeBy);
+                }
                 float gain = volume * fade * HEADROOM;
                 for (int channel = 0; channel < 2; channel += 1) {
                     float value = block[(index * 2) + channel] * gain;

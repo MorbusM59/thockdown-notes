@@ -8,7 +8,8 @@ const HELP: Record<string, string> = {
   Master:
     'Play: tap to play or pause the soundscape you chose (it shows what it is doing); hold to stop it, '
     + 'handing back to the schedule. Clock: turn the daily schedule on or off; it is outlined while what you hear is the schedule\'s. '
-    + 'Files: tap to import soundscapes, hold to save yours to a file. Clip: save a five-minute recording of the soundscape. '
+    + 'Files: tap to import soundscapes, hold to save yours to a file. '
+    + 'Clip: tap to save a recording of the soundscape; drag up or down to choose its length, from two minutes to an hour. '
     + 'Look: tap for dark or light mode, drag up or down for another look. The slider is the overall volume.',
   Schedule:
     'One slot per hour: 0 to 11 above, 12 to 23 below; the current hour is outlined. '
@@ -23,13 +24,17 @@ const HELP: Record<string, string> = {
     + 'With one of your own picked up, plus becomes a bin that deletes it.',
   Environment:
     'Shared by every channel: the soundscape\'s volume, the room it plays in (its size, how damped it is, '
-    + 'its echoes and how much of it is heard), and the weather (how gusty, and how often a gust comes).',
+    + 'its echoes and how much of it is heard), and the weather. The weather is one wind for the whole scene, '
+    + 'rising into gusts and falling into lulls: gusts sets how far it swings, pace how often a gust or lull comes. '
+    + 'It moves only the channels whose own weather control is turned up, each in its own way and all at the same moment: '
+    + 'wind and other noise grows louder and brighter, rain heavier, a fire is fanned, chimes are struck more often and harder, '
+    + 'thunder comes sooner. A channel with its weather at zero ignores it.',
   Channels:
     'Eighteen sound sources. Tap one to show its controls below; hold to turn it on or off; '
     + 'double-tap to hear it on its own, and again to hear them all; drag up or down out of one to change its volume.',
-  Sound: 'How the channel shown sounds: its level and its tone.',
-  Motion: 'How the channel shown moves over time: how far and how fast it rises and falls, and how regularly.',
-  Place: 'Where the channel shown sits: how near, how wide, and how it sways from side to side.',
+  Sound: 'How the selected channel sounds: its level and its tone.',
+  Motion: 'How the selected channel moves over time: how far and how fast it rises and falls, and how regularly.',
+  Place: 'Where the selected channel sits: how near, how wide, and how it sways from side to side.',
 }
 
 export function helpFor(heading: string): string | null {

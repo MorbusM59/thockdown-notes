@@ -72,8 +72,11 @@ export interface NativeSoundscapePlugin {
   cancelClip(): Promise<void>
   /** Save `content` as a file named `name`, where the reader chooses in the system's "Save as" dialog. */
   saveText(options: { content: string; name: string }): Promise<{ saved: boolean }>
+  /** Whether the page takes the system's back gesture, which then arrives as `back` instead of leaving the app. */
+  takeBack(options: { taken: boolean }): Promise<void>
   /** A media control or the schedule changed what plays. */
   addListener(event: 'sessionChanged', listener: (state: SessionState) => void): Promise<PluginListenerHandle>
+  addListener(event: 'back', listener: () => void): Promise<PluginListenerHandle>
   addListener(event: 'rendererFailure', listener: (data: { message: string }) => void): Promise<PluginListenerHandle>
   addListener(event: 'clipProgress', listener: (data: { fraction: number }) => void): Promise<PluginListenerHandle>
   /** The clip is done: `saved` is false when it failed or was cancelled (the dialog included). */

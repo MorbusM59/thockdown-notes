@@ -119,3 +119,25 @@ export function saveLook(look: MobileLook): void {
     console.error('Failed to save the look', error)
   }
 }
+
+/** The lengths a clip may be, in minutes, in the order the clip button's drag steps through them. */
+export const CLIP_MINUTES = [2, 5, 15, 30, 60] as const
+const CLIP_STORAGE_KEY = 'thockdown:clip-minutes'
+const DEFAULT_CLIP_MINUTES = 5
+
+export function loadClipMinutes(): number {
+  try {
+    const value = Number(localStorage.getItem(CLIP_STORAGE_KEY))
+    return (CLIP_MINUTES as readonly number[]).includes(value) ? value : DEFAULT_CLIP_MINUTES
+  } catch {
+    return DEFAULT_CLIP_MINUTES
+  }
+}
+
+export function saveClipMinutes(minutes: number): void {
+  try {
+    localStorage.setItem(CLIP_STORAGE_KEY, String(minutes))
+  } catch (error) {
+    console.error('Failed to save the clip length', error)
+  }
+}

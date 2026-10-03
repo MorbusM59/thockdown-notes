@@ -4,6 +4,7 @@ import android.Manifest;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
+import androidx.activity.OnBackPressedCallback;
 import androidx.activity.result.ActivityResult;
 import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.JSArray;
@@ -40,6 +41,18 @@ public class BackgroundAudioPlugin extends Plugin {
     private SoundscapeSession session;
     private ClipRenderer clip;
 
+    /**
+     * The system's back gesture, taken by the page while it has something
+     * to go back FROM (help mode): enabled, it reports `back` instead of
+     * leaving the app; disabled, back does what it always does.
+     */
+    private final OnBackPressedCallback backCallback = new OnBackPressedCallback(false) {
+        @Override
+        public void handleOnBackPressed() {
+            notifyListeners("back", new JSObject());
+        }
+    };
+
     private final SoundscapeSession.Listener sessionListener = new SoundscapeSession.Listener() {
         @Override
         public void onChanged(SoundscapeSession.State state) {
@@ -58,6 +71,15 @@ public class BackgroundAudioPlugin extends Plugin {
     public void load() {
         session = SoundscapeSession.get(getContext());
         session.setListener(sessionListener);
+        getActivity().getOnBackPressedDispatcher().addCallback(getActivity(), backCallback);
+    }
+
+    /** Whether the page takes the back gesture (`{ taken }`); see backCallback. */
+    @PluginMethod
+    public void takeBack(PluginCall call) {
+        boolean taken = Boolean.TRUE.equals(call.getBoolean("taken", false));
+        getActivity().runOnUiThread(() -> backCallback.setEnabled(taken));
+        call.resolve();
     }
 
     @Override
