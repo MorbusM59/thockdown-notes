@@ -1,0 +1,60 @@
+# Builds the mobile soundscape app as an Android App Bundle (.aab) for the
+# Google Play Store, signed with the Play UPLOAD key. Run by hand from the
+# Actions tab when a version is ready; download the artifact, unzip it, and
+# upload the .aab in the Play Console (mobile/README.md, "Google Play").
+#
+# The versionCode is this workflow's run number, so every run is higher than
+# the one before, which Play requires of every upload. The versionName is
+# what the run is given.
+name: Release Android App Bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: "Version name shown in the Play Store (e.g. 1.0.0)"
+        required: true
+        default: "1.0.0"
+
+jobs:
+  release-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build web app and sync it into the Android project
+        run: npm run mobile:build
+
+      - name: Build the release bundle, signed with the upload key
+        working-directory: mobile/android
+        env:
+          KEYSTORE_BASE64: ${{ secrets.PLAY_UPLOAD_KEYSTORE_BASE64 }}
+          PLAY_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.PLAY_UPLOAD_KEYSTORE_PASSWORD }}
+          SOUNDSCAPES_VERSION_CODE: ${{ github.run_number }}
+          SOUNDSCAPES_VERSION_NAME: ${{ inputs.version_name }}
+        run: |
+          # An unsigned bundle cannot be uploaded: fail rather than produce one.
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$PLAY_UPLOAD_KEYSTORE_PASSWORD" ]; then
+            echo "::error::PLAY_UPLOAD_KEYSTORE_BASE64 and PLAY_UPLOAD_KEYSTORE_PASSWORD secrets are required"
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.p12"
+          PLAY_UPLOAD_KEYSTORE="$RUNNER_TEMP/upload.p12" ./gradlew bundleRelease --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: thockdown-soundscapes-${{ inputs.version_name }}-${{ github.run_number }}-aab
+          path: mobile/android/app/build/outputs/bundle/release/app-release.aab

@@ -7,8 +7,11 @@ android {
         applicationId "com.thockdown.soundscapes"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // A Play upload must carry a higher versionCode than every upload
+        // before it: the release workflow (release-android.yml) passes its run
+        // number. Builds without it (debug, local) stay at 1.
+        versionCode((System.getenv("SOUNDSCAPES_VERSION_CODE") ?: "1").toInteger())
+        versionName(System.getenv("SOUNDSCAPES_VERSION_NAME") ?: "1.0")
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -31,12 +34,26 @@ android {
                 keyPassword System.getenv("SOUNDSCAPES_KEYSTORE_PASSWORD")
             }
         }
+        // The Play UPLOAD key (PLAY_UPLOAD_* repository secrets,
+        // release-android.yml): what Google checks an upload against before
+        // re-signing the app with its own key. Separate from the key above,
+        // which signs the sideloaded debug builds.
+        if (System.getenv("PLAY_UPLOAD_KEYSTORE")) {
+            upload {
+                storeFile file(System.getenv("PLAY_UPLOAD_KEYSTORE"))
+                storeType "pkcs12"
+                storePassword System.getenv("PLAY_UPLOAD_KEYSTORE_PASSWORD")
+                keyAlias "upload"
+                keyPassword System.getenv("PLAY_UPLOAD_KEYSTORE_PASSWORD")
+            }
+        }
     }
     buildTypes {
         debug {
             if (System.getenv("SOUNDSCAPES_KEYSTORE")) signingConfig signingConfigs.shared
         }
         release {
+            if (System.getenv("PLAY_UPLOAD_KEYSTORE")) signingConfig signingConfigs.upload
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

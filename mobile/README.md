@@ -201,6 +201,18 @@ one changes its volume (the desktop's wheel, in the same 5% steps), a long press
 soundscape for deletion, a long press on the save button resets the
 channels.
 
+## Google Play
+The store build is separate from the sideloaded one: an Android App Bundle
+signed with the Play UPLOAD key (repository secrets `PLAY_UPLOAD_KEYSTORE_BASE64`,
+a PKCS12 keystore with alias `upload`, and `PLAY_UPLOAD_KEYSTORE_PASSWORD`),
+which Google checks before re-signing the app with its own key. Run
+`.github/workflows/release-android.yml` by hand with the version name; its run
+number is the versionCode, so every upload is higher than the last. Download
+the artifact, unzip it, upload the `.aab`. The privacy policy the listing
+links to is `mobile/PRIVACY.md`. The app has no INTERNET permission: it loads
+its own files and renders on the device, and declaring none keeps the data
+safety answers true by construction.
+
 ## iOS
 iOS will need the session implemented with an AVAudioSession in the playback
 category and the renderer in JavaScriptCore, behind the same plugin
