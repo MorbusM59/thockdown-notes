@@ -4,9 +4,10 @@
  * the shared export and import (src/sidebar/soundscapeFileActions.ts) run
  * unchanged.
  *
- * - save: the file is written by the native side and offered through the
- *   share sheet, which is where a phone saves a file (to Files, Drive, a
- *   message): there is no save dialog to ask where.
+ * - save: the system's "Save as" dialog (the Storage Access Framework), so
+ *   the reader chooses the folder and the name, as the desktop's save dialog
+ *   lets them. Not the share sheet: it hands the file to another app, and
+ *   whether any of those can put it in storage depends on what is installed.
  * - open: the system file picker, through a file input. Any file can be
  *   chosen, because a .tds file has no registered type to filter on; one
  *   that is not a soundscape file imports nothing.
@@ -35,7 +36,7 @@ export function installSoundscapeFiles(): void {
   const native = nativeSoundscape
   if (!native) return
   const api: SoundscapeFileApi = {
-    save: (content, defaultName) => native.shareText({ content, name: defaultName }),
+    save: async (content, defaultName) => { await native.saveText({ content, name: defaultName }) },
     open: pickTextFile,
   }
   window.thockdownSoundscapeFiles = api

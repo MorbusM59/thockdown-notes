@@ -11,7 +11,7 @@
  *
  * In a plain browser (vite dev) there is no native side: `nativeSoundscape`
  * is null, the engine keeps its web playback, and there are no media
- * controls, clips or sharing.
+ * controls, clips or saving to files.
  */
 import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core'
 import type { ScheduleEvent } from './schedule'
@@ -58,17 +58,17 @@ export interface NativeSoundscapePlugin {
   /** `configuration` is a ConfigureMessage as JSON. */
   configure(options: { configuration: string }): Promise<void>
   setVolume(options: { volume: number; timeConstantSec: number }): Promise<void>
-  /** Render `seconds` of `configuration` to `<name>.m4a` and offer it through the share sheet. */
+  /** Ask where to save `<name>.m4a` (the system's "Save as" dialog), then render `seconds` of `configuration` into it. */
   renderClip(options: { configuration: string; seconds: number; name: string }): Promise<void>
   cancelClip(): Promise<void>
-  /** Write `content` to a file named `name` and offer it through the share sheet. */
-  shareText(options: { content: string; name: string }): Promise<void>
+  /** Save `content` as a file named `name`, where the reader chooses in the system's "Save as" dialog. */
+  saveText(options: { content: string; name: string }): Promise<{ saved: boolean }>
   /** A media control or the schedule changed what plays. */
   addListener(event: 'sessionChanged', listener: (state: SessionState) => void): Promise<PluginListenerHandle>
   addListener(event: 'rendererFailure', listener: (data: { message: string }) => void): Promise<PluginListenerHandle>
   addListener(event: 'clipProgress', listener: (data: { fraction: number }) => void): Promise<PluginListenerHandle>
-  /** The clip is done: `shared` is false when it failed or was cancelled. */
-  addListener(event: 'clipFinished', listener: (data: { shared: boolean }) => void): Promise<PluginListenerHandle>
+  /** The clip is done: `saved` is false when it failed or was cancelled (the dialog included). */
+  addListener(event: 'clipFinished', listener: (data: { saved: boolean }) => void): Promise<PluginListenerHandle>
 }
 
 /** The native session, or null in a plain browser. */

@@ -4,7 +4,8 @@ import android.Manifest;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
-import androidx.core.content.FileProvider;
+import androidx.activity.result.ActivityResult;
+import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -13,7 +14,9 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import java.io.File;
-import java.io.FileOutputStream;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -22,7 +25,7 @@ import org.json.JSONObject;
 /**
  * The Android side of mobile/src/backgroundAudioHost.ts: the web page's
  * interface to the soundscape session (SoundscapeSession), to rendering a
- * clip (ClipRenderer), and to sharing a file.
+ * clip (ClipRenderer), and to saving a file where the reader chooses.
  *
  * The session outlives this plugin (which goes with the activity), so the
  * plugin holds nothing of it: it forwards the page's calls, and passes the
@@ -182,18 +185,32 @@ public class BackgroundAudioPlugin extends Plugin {
     }
 
     /**
-     * Render `seconds` of `configuration` to an .m4a named `name`, then offer
-     * it through the share sheet. Progress arrives as "clipProgress" events,
-     * the end as "clipFinished" (`{ shared }`, false on failure or cancel).
+     * Ask where to save a clip (the system's "Save as" dialog, named `name`.m4a),
+     * then render `seconds` of `configuration` into a temporary file and copy
+     * it there. Asked FIRST, so the dialog does not interrupt the reader a
+     * minute later, and cancelling it cancels the clip. Progress arrives as
+     * "clipProgress" events, the end as "clipFinished" (`{ saved }`, false on
+     * failure or cancel).
      */
     @PluginMethod
     public void renderClip(PluginCall call) {
         if (clip != null) clip.cancel();
+        startActivityForResult(call, saveAs(call.getString("name", "Soundscape") + ".m4a", "audio/mp4"), "clipLocationChosen");
+    }
+
+    @ActivityCallback
+    private void clipLocationChosen(PluginCall call, ActivityResult result) {
+        Uri target = chosen(result);
+        if (target == null) {
+            notifyClipFinished(false);
+            call.resolve();
+            return;
+        }
         File directory = new File(getContext().getCacheDir(), "clips");
         directory.mkdirs();
-        File destination = new File(directory, call.getString("name", "Soundscape") + ".m4a");
+        File rendered = new File(directory, "clip.m4a");
         ClipRenderer[] self = new ClipRenderer[1];
-        self[0] = new ClipRenderer(getContext(), call.getString("configuration"), call.getDouble("seconds", 300.0), destination,
+        self[0] = new ClipRenderer(getContext(), call.getString("configuration"), call.getDouble("seconds", 300.0), rendered,
             new ClipRenderer.Listener() {
                 @Override
                 public void onProgress(double fraction) {
@@ -204,8 +221,15 @@ public class BackgroundAudioPlugin extends Plugin {
 
                 @Override
                 public void onFinished(File file) {
-                    finishClip(self[0], true);
-                    share(file, "audio/mp4");
+                    try {
+                        copyTo(file, target);
+                        finishClip(self[0], true);
+                    } catch (Exception error) {
+                        finishClip(self[0], false);
+                        sessionListener.onFailure("Clip could not be saved: " + error);
+                    } finally {
+                        file.delete();
+                    }
                 }
 
                 @Override
@@ -228,44 +252,69 @@ public class BackgroundAudioPlugin extends Plugin {
         call.resolve();
     }
 
-    private void finishClip(ClipRenderer finished, boolean shared) {
+    private void finishClip(ClipRenderer finished, boolean saved) {
         getBridge().executeOnMainThread(() -> {
             if (clip != finished) return;
             clip = null;
-            JSObject data = new JSObject();
-            data.put("shared", shared);
-            notifyListeners("clipFinished", data);
+            notifyClipFinished(saved);
         });
     }
 
-    /** Write `content` (text) to a file named `name` and offer it through the share sheet. */
+    private void notifyClipFinished(boolean saved) {
+        JSObject data = new JSObject();
+        data.put("saved", saved);
+        notifyListeners("clipFinished", data);
+    }
+
+    /**
+     * Save `content` (text) as a file named `name`, where the reader chooses
+     * in the system's "Save as" dialog. Resolves `{ saved }`, false if the
+     * dialog was cancelled.
+     */
     @PluginMethod
-    public void shareText(PluginCall call) {
-        try {
-            File directory = new File(getContext().getCacheDir(), "exports");
-            directory.mkdirs();
-            File file = new File(directory, call.getString("name", "soundscapes.tds"));
-            try (FileOutputStream out = new FileOutputStream(file)) {
-                out.write(call.getString("content", "").getBytes(StandardCharsets.UTF_8));
-            }
-            // text/plain rather than a type of its own: a .tds file is text,
-            // and the share targets that save files (Files, Drive, mail)
-            // accept text where they would refuse an unknown type.
-            share(file, "text/plain");
-            call.resolve();
+    public void saveText(PluginCall call) {
+        // A type of its own rather than text/plain: given text/plain, some
+        // document providers append .txt to the name the reader keeps.
+        startActivityForResult(call, saveAs(call.getString("name", "soundscapes.tds"), "application/octet-stream"), "textLocationChosen");
+    }
+
+    @ActivityCallback
+    private void textLocationChosen(PluginCall call, ActivityResult result) {
+        Uri target = chosen(result);
+        JSObject data = new JSObject();
+        if (target == null) {
+            data.put("saved", false);
+            call.resolve(data);
+            return;
+        }
+        try (OutputStream out = getContext().getContentResolver().openOutputStream(target, "wt")) {
+            out.write(call.getString("content", "").getBytes(StandardCharsets.UTF_8));
+            data.put("saved", true);
+            call.resolve(data);
         } catch (Exception error) {
-            call.reject("Could not share the file: " + error);
+            call.reject("Could not save the file: " + error);
         }
     }
 
-    private void share(File file, String mimeType) {
-        Uri uri = FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".fileprovider", file);
-        Intent send = new Intent(Intent.ACTION_SEND)
+    /** The system's "Save as" dialog (the Storage Access Framework): the reader picks the folder and may rename. */
+    private static Intent saveAs(String name, String mimeType) {
+        return new Intent(Intent.ACTION_CREATE_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
             .setType(mimeType)
-            .putExtra(Intent.EXTRA_STREAM, uri)
-            .putExtra(Intent.EXTRA_TITLE, file.getName())
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        Intent chooser = Intent.createChooser(send, file.getName()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        getContext().startActivity(chooser);
+            .putExtra(Intent.EXTRA_TITLE, name);
+    }
+
+    private static Uri chosen(ActivityResult result) {
+        if (result.getResultCode() != android.app.Activity.RESULT_OK || result.getData() == null) return null;
+        return result.getData().getData();
+    }
+
+    private void copyTo(File file, Uri target) throws Exception {
+        try (InputStream in = new FileInputStream(file);
+             OutputStream out = getContext().getContentResolver().openOutputStream(target, "wt")) {
+            byte[] buffer = new byte[65536];
+            int read;
+            while ((read = in.read(buffer)) > 0) out.write(buffer, 0, read);
+        }
     }
 }

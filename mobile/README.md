@@ -159,12 +159,16 @@ lead, so up to ten seconds after its minute.
   (`ClipRenderer.java`): the same renderer in its own isolate of the shared
   sandbox (`SharedSandbox.java`, because a process can connect only one),
   stepped as fast as it renders, encoded to AAC in an .m4a (Opus files need
-  Android 10; the app supports 8) and offered through the share sheet. At the
+  Android 10; the app supports 8) and saved where the reader chose in the
+  system's "Save as" dialog -- asked BEFORE rendering, so it does not
+  interrupt a minute later, and cancelling it cancels the clip. At the
   soundscape's own level: the listener's volume is not part of it.
 - EXPORT and IMPORT are the desktop's (`src/sidebar/soundscapeFileActions.ts`)
   through a phone implementation of `SoundscapeFileApi`
-  (`soundscapeFiles.ts`): a file is offered through the share sheet, which
-  is where a phone saves one, and picked with the system file picker.
+  (`soundscapeFiles.ts`): saved through the system's "Save as" dialog (the
+  Storage Access Framework, so the reader picks folder and name, as on the
+  desktop) and opened with the system file picker. Not the share sheet,
+  which only hands a file to another app.
 
 ## Touch
 The page does not scroll under a finger: its scrollbar (`PageScrollbar.tsx`,

@@ -10,7 +10,7 @@ import { soundscapeEngine } from '../../src/sound/SoundscapeEngine'
 import { nativeSoundscape } from './backgroundAudioHost'
 import { nativeSoundscapePlayback } from './nativeSoundscapePlayback'
 
-/** Whether the native session plays the soundscape: its media controls, clips and sharing exist only then. */
+/** Whether the native session plays the soundscape: its media controls, clips and saving to files exist only then. */
 export const nativePlayback: Promise<boolean> = (() => {
   const plugin = nativeSoundscape
   if (!plugin) return Promise.resolve(false)
