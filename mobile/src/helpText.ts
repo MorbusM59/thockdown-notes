@@ -6,16 +6,17 @@
  */
 const HELP: Record<string, string> = {
   Master:
-    'Power: tap to play or pause; hold to turn the daily schedule on or off (it shows a clock while on). '
-    + 'Files: tap to import soundscapes, hold to save yours to a file. '
-    + 'Clip: save a five-minute recording of the soundscape. '
+    'Play: tap to play or pause the soundscape you chose (it shows what it is doing); hold to stop it, '
+    + 'handing back to the schedule. Clock: turn the daily schedule on or off; it is outlined while what you hear is the schedule\'s. '
+    + 'Files: tap to import soundscapes, hold to save yours to a file. Clip: save a five-minute recording of the soundscape. '
     + 'Look: tap for dark or light mode, drag up or down for another look. The slider is the overall volume.',
   Schedule:
     'One slot per hour: 0 to 11 above, 12 to 23 below; the current hour is outlined. '
     + 'Hold a soundscape under Presets to pick it up, then tap slots to fill them; tap anywhere else to put it down. '
     + 'Tap a slot to turn it on or off; drag out of one that is off to clear it. Drag sideways out of a slot that is on to paint it across the hours. '
     + 'Drag up or down out of the first or last slot of a run to move its start or stop by five minutes. '
-    + 'With the schedule on, a run fades in and out over a minute and crossfades on the hour.',
+    + 'With the schedule on, a run fades in and out over a minute and crossfades on the hour, '
+    + 'unless you are playing or have paused a soundscape of your own.',
   Presets:
     'Tap to play a soundscape; hold to pick it up for the schedule. '
     + 'Plus saves the soundscape as you have it; hold plus to turn every channel off and back to its defaults. '

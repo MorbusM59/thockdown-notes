@@ -24,9 +24,11 @@ import android.os.PowerManager;
  *
  * It DRAWS the session and RELAYS its controls, and holds no state of its
  * own: the media session (the lock screen and the system's media controls)
- * and the notification show the session's title and whether it plays, and
- * their play, pause, next, previous and stop go to the session's control
- * methods. Every change redraws from the session (refresh).
+ * and the notification show the session's title and what is going on --
+ * "Playing", "Paused", or "Scheduled until 07:30" when what is heard is the
+ * schedule's -- and their play, pause, next, previous and stop go to the
+ * session's control methods. Every change redraws from the session
+ * (refresh). Closing the app (onTaskRemoved) is a stop.
  *
  * It stays in the foreground while paused, so the controls stay, and a
  * paused soundscape can be resumed from the lock screen: a foreground
@@ -104,11 +106,12 @@ public class SoundscapePlaybackService extends Service {
 
     private void refresh() {
         if (running != this || !soundscape.isActive()) return;
-        boolean playing = soundscape.isPlaying();
+        boolean playing = soundscape.isAudible();
         String title = soundscape.title();
+        String status = statusText(playing);
         session.setMetadata(new MediaMetadata.Builder()
             .putString(MediaMetadata.METADATA_KEY_TITLE, title)
-            .putString(MediaMetadata.METADATA_KEY_ARTIST, "Thockdown Soundscapes")
+            .putString(MediaMetadata.METADATA_KEY_ARTIST, status)
             .build());
         session.setPlaybackState(new PlaybackState.Builder()
             .setActions(PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE | PlaybackState.ACTION_PLAY_PAUSE
@@ -116,7 +119,7 @@ public class SoundscapePlaybackService extends Service {
             .setState(playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED,
                 PlaybackState.PLAYBACK_POSITION_UNKNOWN, playing ? 1f : 0f)
             .build());
-        Notification notification = buildNotification(title, playing);
+        Notification notification = buildNotification(title, status, playing);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
         } else {
@@ -147,7 +150,27 @@ public class SoundscapePlaybackService extends Service {
         return new Notification.Action.Builder(icon, title, intent).build();
     }
 
-    private Notification buildNotification(String title, boolean playing) {
+    /** What the notification says is going on: playing, paused, or the schedule's run and when it ends. */
+    private String statusText(boolean playing) {
+        if (soundscape.source() == SoundscapeSession.Source.SCHEDULE) {
+            Integer end = SoundscapeSchedule.load(this).nextStopMinute();
+            if (end == null) return "Scheduled";
+            java.util.Calendar at = java.util.Calendar.getInstance();
+            at.set(java.util.Calendar.HOUR_OF_DAY, end / 60);
+            at.set(java.util.Calendar.MINUTE, end % 60);
+            return "Scheduled until " + android.text.format.DateFormat.getTimeFormat(this).format(at.getTime());
+        }
+        return playing ? "Playing" : "Paused";
+    }
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        // Closing the app stops what the listener chose; the schedule carries on.
+        soundscape.controlStop();
+        super.onTaskRemoved(rootIntent);
+    }
+
+    private Notification buildNotification(String title, String status, boolean playing) {
         NotificationManager manager = getSystemService(NotificationManager.class);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && manager.getNotificationChannel(CHANNEL_ID) == null) {
             NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "Soundscape playback", NotificationManager.IMPORTANCE_LOW);
@@ -164,7 +187,7 @@ public class SoundscapePlaybackService extends Service {
         return builder
             .setSmallIcon(R.drawable.ic_stat_soundscape)
             .setContentTitle(title)
-            .setContentText(playing ? "Soundscape playing" : "Soundscape paused")
+            .setContentText(status)
             .setContentIntent(open)
             .setDeleteIntent(control(ACTION_STOP, 5))
             .setOngoing(playing)

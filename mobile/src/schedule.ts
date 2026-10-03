@@ -148,9 +148,3 @@ export function scheduleEvents(schedule: Schedule): ScheduleEvent[] {
   return events.sort((a, b) => a.minute - b.minute)
 }
 
-/** What the schedule plays at `minute` of the day, by its events: the latest at or before it, round the clock; null for nothing. */
-export function scheduledPresetAt(events: readonly ScheduleEvent[], minute: number): string | null {
-  const due = events.filter((event) => event.minute <= minute)
-  const last = due.length > 0 ? due[due.length - 1] : events[events.length - 1]
-  return last && last.kind !== 'stop' ? last.presetId : null
-}

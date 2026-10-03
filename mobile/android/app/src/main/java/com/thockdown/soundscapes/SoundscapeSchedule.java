@@ -99,18 +99,20 @@ final class SoundscapeSchedule {
         preferences(context).edit().putString(KEY, json.toString()).apply();
     }
 
-    /** Turn the stored schedule off, as a manual choice of soundscape does, and cancel its alarm. */
-    static void disable(Context context) {
-        String stored = preferences(context).getString(KEY, null);
-        if (stored == null) return;
-        try {
-            JSONObject json = new JSONObject(stored);
-            json.put("enabled", false);
-            save(context, json);
-        } catch (Exception ignored) {
-            // Unreadable: load() already reads it as off.
+    /** The minute of the day the run under way stops at: the next stop event from now, round the clock; null for none. */
+    Integer nextStopMinute() {
+        int now = minuteOfDay(Calendar.getInstance());
+        Integer best = null;
+        int bestDistance = Integer.MAX_VALUE;
+        for (Event event : events) {
+            if (!"stop".equals(event.kind)) continue;
+            int distance = Math.floorMod(event.minute - now, MINUTES_PER_DAY);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = event.minute;
+            }
         }
-        arm(context);
+        return best;
     }
 
     private static SharedPreferences preferences(Context context) {

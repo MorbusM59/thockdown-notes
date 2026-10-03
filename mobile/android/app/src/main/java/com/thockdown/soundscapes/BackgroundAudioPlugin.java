@@ -42,8 +42,8 @@ public class BackgroundAudioPlugin extends Plugin {
 
     private final SoundscapeSession.Listener sessionListener = new SoundscapeSession.Listener() {
         @Override
-        public void onChanged(boolean playing, String currentId, boolean scheduleEnabled) {
-            notifyListeners("sessionChanged", state(playing, currentId, scheduleEnabled));
+        public void onChanged(SoundscapeSession.State state) {
+            notifyListeners("sessionChanged", toJs(state));
         }
 
         @Override
@@ -66,11 +66,12 @@ public class BackgroundAudioPlugin extends Plugin {
         if (clip != null) clip.cancel();
     }
 
-    private static JSObject state(boolean playing, String currentId, boolean scheduleEnabled) {
+    private static JSObject toJs(SoundscapeSession.State state) {
         JSObject data = new JSObject();
-        data.put("playing", playing);
-        data.put("currentId", currentId);
-        data.put("scheduleEnabled", scheduleEnabled);
+        data.put("regular", state.regular.name().toLowerCase(java.util.Locale.ROOT));
+        data.put("source", state.source.name().toLowerCase(java.util.Locale.ROOT));
+        data.put("currentId", state.currentId);
+        data.put("scheduleEnabled", state.scheduleEnabled);
         return data;
     }
 
@@ -85,7 +86,7 @@ public class BackgroundAudioPlugin extends Plugin {
     /** What the session is doing: for the page to catch up with on coming back to the foreground. */
     @PluginMethod
     public void getState(PluginCall call) {
-        call.resolve(state(session.isPlaying(), session.currentId(), SoundscapeSchedule.load(getContext()).enabled));
+        call.resolve(toJs(session.state()));
     }
 
     /**
@@ -100,9 +101,7 @@ public class BackgroundAudioPlugin extends Plugin {
             SoundscapeSchedule.fromJson(json);
             boolean wasEnabled = SoundscapeSchedule.load(getContext()).enabled;
             SoundscapeSchedule.save(getContext(), json);
-            boolean enabled = json.getBoolean("enabled");
-            if (enabled && !wasEnabled) session.applyScheduleState();
-            if (!enabled && wasEnabled) session.scheduleDisabled();
+            if (json.getBoolean("enabled") != wasEnabled) session.applyScheduleState();
             SoundscapeSchedule.arm(getContext());
             call.resolve();
         } catch (Exception error) {
@@ -168,6 +167,12 @@ public class BackgroundAudioPlugin extends Plugin {
     public void pause(PluginCall call) {
         session.pause();
         call.resolve();
+    }
+
+    /** Regular mode stops and the schedule takes over: resolves the outcome, which the page did not cause and cannot work out. */
+    @PluginMethod
+    public void stop(PluginCall call) {
+        call.resolve(toJs(session.stop()));
     }
 
     /** New settings: `configuration` is a ConfigureMessage as JSON. */

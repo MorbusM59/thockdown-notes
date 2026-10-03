@@ -24,11 +24,18 @@ export interface SessionEntry {
   configuration: string
 }
 
+/** Regular mode: the soundscape the listener chose, which overrules the schedule while playing or paused. */
+export type RegularMode = 'stopped' | 'playing' | 'paused'
+
+/** What is heard: the listener's choice, the schedule's run, or nothing. */
+export type SoundSource = 'regular' | 'schedule' | 'none'
+
+/** The native session's state (SoundscapeSession.java, where the rules combining the two are written). */
 export interface SessionState {
-  playing: boolean
-  /** The soundscape playing (an entry's id), or null if none of the published or scheduled ones is. */
+  regular: RegularMode
+  source: SoundSource
+  /** The soundscape heard or paused on (an entry's id), or null. */
   currentId: string | null
-  /** Whether the schedule is on: a soundscape chosen by hand turns it off. */
   scheduleEnabled: boolean
 }
 
@@ -51,10 +58,12 @@ export interface NativeSoundscapePlugin {
   setSchedule(schedule: NativeSchedule): Promise<void>
   /** Whether exact alarms are allowed; if not, opens the system page that grants them. */
   ensureExactAlarms(): Promise<{ granted: boolean }>
-  /** Start playing, or carry on; idempotent. */
+  /** Regular mode PLAYING; idempotent. */
   play(): Promise<void>
-  /** Hold where it is, keeping the session and its controls up. */
+  /** Regular mode PAUSED, from PLAYING only (a stop that came first stands). */
   pause(): Promise<void>
+  /** Regular mode STOPPED: the schedule takes over, or the session ends. Resolves the outcome. */
+  stop(): Promise<SessionState>
   /** `configuration` is a ConfigureMessage as JSON. */
   configure(options: { configuration: string }): Promise<void>
   setVolume(options: { volume: number; timeConstantSec: number }): Promise<void>

@@ -6,10 +6,11 @@
  * WebView, whose JavaScript is paused in the background. This side only
  * forwards settings and the volume, and passes failures back.
  *
- * Closing PAUSES the session rather than ending it: the session, and the
- * notification and lock-screen controls with it, stay up so a soundscape
- * turned off can be turned on again from there. Only those controls'
- * stop ends it.
+ * Opening is regular mode PLAYING and closing is regular mode PAUSED: the
+ * engine plays exactly while regular mode does. A STOP is not the engine's
+ * to express, so the page makes it as its own call, first; the session then
+ * ignores the pause (and the fade-out to silence) the engine's closing sends
+ * after it, which would otherwise silence the schedule taking over.
  */
 import type { SoundscapePlaybackFactory } from '../../src/sound/SoundscapeEngine'
 import type { NativeSoundscapePlugin } from './backgroundAudioHost'

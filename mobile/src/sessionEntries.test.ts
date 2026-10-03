@@ -23,12 +23,12 @@ describe('media-control cycle', () => {
       .toEqual([...SOUNDSCAPE_FACTORY_PRESETS.map((preset) => preset.id), UNSAVED_ENTRY_ID])
 
     // A media control steps to another soundscape: the scratch survives it ...
-    const away = followSession(changed, scratch, { playing: true, currentId: SOUNDSCAPE_FACTORY_PRESETS[1].id })
+    const away = followSession(changed, scratch, { regular: 'playing', currentId: SOUNDSCAPE_FACTORY_PRESETS[1].id })
     const kept = nextScratch(away, scratch)
     expect(kept).toEqual(scratch)
     expect(currentEntryId(away, kept)).toBe(SOUNDSCAPE_FACTORY_PRESETS[1].id)
     // ... and stepping back restores exactly the changes.
-    const back = followSession(away, kept, { playing: true, currentId: UNSAVED_ENTRY_ID })
+    const back = followSession(away, kept, { regular: 'playing', currentId: UNSAVED_ENTRY_ID })
     expect(back.settings).toEqual(changed.settings)
     expect(currentEntryId(back, nextScratch(back, kept))).toBe(UNSAVED_ENTRY_ID)
   })
@@ -47,7 +47,7 @@ describe('media-control cycle', () => {
 
   it('follows play and pause without touching the settings', () => {
     const playing = onPreset(2)
-    const paused = followSession(playing, null, { playing: false, currentId: SOUNDSCAPE_FACTORY_PRESETS[2].id })
+    const paused = followSession(playing, null, { regular: 'paused', currentId: SOUNDSCAPE_FACTORY_PRESETS[2].id })
     expect(paused.enabled).toBe(false)
     expect(paused.settings).toBe(playing.settings)
   })
@@ -55,7 +55,7 @@ describe('media-control cycle', () => {
     const playing = onPreset(0)
     const soloed = { ...playing, settings: { ...playing.settings, channels: playing.settings.channels.map((channel, index) => ({ ...channel, solo: index === 0 })) } }
     const target = SOUNDSCAPE_FACTORY_PRESETS[1]
-    const followed = followSession(soloed, null, { playing: true, currentId: target.id })
+    const followed = followSession(soloed, null, { regular: 'playing', currentId: target.id })
     expect(followed.settings).toEqual(target.settings)
     expect(followed.settings.channels.some((channel) => channel.solo)).toBe(false)
   })

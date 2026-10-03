@@ -34,7 +34,7 @@ import { OptionsSliderRows } from '../../src/sidebar/OptionsSliderRows'
 import { OptionsSubsectionLabel } from '../../src/sidebar/OptionsSubsectionLabel'
 import { applyDocumentTheme, themeFrame } from '../../src/shared/loadoutTheme'
 import { ThemeBlendOverlays, ThemeGlazeLayers } from '../../src/components/ThemeLayers'
-import { nativeSoundscape, type SessionState } from './backgroundAudioHost'
+import { nativeSoundscape, type RegularMode, type SessionState, type SoundSource } from './backgroundAudioHost'
 import { nativePlayback } from './playbackMode'
 import {
   loadLook,
@@ -48,7 +48,7 @@ import {
   type MobileLook,
 } from './preferencesStore'
 import { currentEntryId, followSession, nextScratch, sessionEntries } from './sessionEntries'
-import { allPresets, sanitizeSchedule, scheduleEvents, scheduledPresetAt, type Schedule } from './schedule'
+import { allPresets, sanitizeSchedule, scheduleEvents, type Schedule } from './schedule'
 import { ScheduleGrid } from './ScheduleGrid'
 import { LookButton } from './LookButton'
 import { helpFor } from './helpText'
@@ -75,7 +75,12 @@ function clipName(preferences: SoundscapePreferences): string {
 }
 
 export function MobileSoundscapeApp() {
-  const [preferences, setPreferences] = useState<SoundscapePreferences>(loadPreferences)
+  // Regular mode starts STOPPED: closing the app stops it (the session's
+  // rule), so a stored `enabled` describes a session that no longer exists.
+  // A session that outlived this page says otherwise when asked (getState).
+  const [preferences, setPreferences] = useState<SoundscapePreferences>(() => ({ ...loadPreferences(), enabled: false }))
+  const [regular, setRegular] = useState<RegularMode>('stopped')
+  const [source, setSource] = useState<SoundSource>('none')
   // The look is one of the desktop's factory visual presets, drawn through
   // the same shared theme code the desktop uses (shared/loadoutTheme.ts).
   const [look, setLook] = useState<MobileLook>(loadLook)
@@ -181,17 +186,23 @@ export function MobileSoundscapeApp() {
     void nativeSoundscape!.publish({ entries, currentId, masterVolume: preferences.masterVolume })
   }, [native, entries, currentId, preferences.masterVolume])
 
-  // Follow the media controls: when they are pressed, and on coming back to
-  // the foreground, since a report made while this page was paused may not
-  // have reached it.
+  // Follow the session: when a media control, the schedule or the system
+  // changes it, on a stop's outcome, at startup, and on coming back to the
+  // foreground, since a report made while this page was paused may not have
+  // reached it.
   const scratchRef = useRef(scratch)
   scratchRef.current = scratch
+  const followRef = useRef<((state: SessionState) => void) | null>(null)
   useEffect(() => {
     if (!native) return undefined
     const follow = (state: SessionState) => {
+      setRegular(state.regular)
+      setSource(state.source)
       setPreferences((current) => followSession(current, scratchRef.current, state))
       setSchedule((current) => (current.enabled === state.scheduleEnabled ? current : { ...current, enabled: state.scheduleEnabled }))
     }
+    followRef.current = follow
+    void nativeSoundscape!.getState().then(follow)
     const handles = [
       nativeSoundscape!.addListener('sessionChanged', follow),
       nativeSoundscape!.addListener('clipProgress', ({ fraction }) => setClipProgress(fraction)),
@@ -234,21 +245,28 @@ export function MobileSoundscapeApp() {
     saveLook(look)
   }, [loadout, look])
 
-  // A soundscape chosen or changed by hand turns the schedule off and plays
-  // on for as long as it is left.
-  const preferencesRef = useRef(preferences)
-  preferencesRef.current = preferences
-  const handleChange = useCallback((next: SoundscapePreferences) => {
-    if (next.settings !== preferencesRef.current.settings) {
-      setSchedule((current) => (current.enabled ? { ...current, enabled: false } : current))
-    }
-    setPreferences(next)
+  // REGULAR MODE (see SoundscapeSession.java for how it and the schedule
+  // decide what is heard). Set here for what this page does; the session's
+  // own changes arrive through `follow`. PLAYING runs the engine; PAUSED and
+  // STOPPED close it, and the session tells a pause from a stop.
+  const setRegularMode = useCallback((mode: RegularMode) => {
+    setRegular(mode)
+    if (mode !== 'stopped') setSource('regular')
+    setPreferences((current) => (current.enabled === (mode === 'playing') ? current : { ...current, enabled: mode === 'playing' }))
   }, [])
 
-  // The power button: a tap pauses whatever plays, or plays; a long press
-  // turns the schedule on or off. Playing outside a scheduled run is a
-  // choice by hand, so it turns the schedule off; resuming a paused run is
-  // not. The click after a long press is swallowed.
+  // A soundscape chosen or changed in the panel is played: regular mode,
+  // overruling the schedule (which a long press on the power button hands
+  // back to).
+  const handleChange = useCallback((next: SoundscapePreferences) => {
+    setPreferences({ ...next, enabled: true })
+    setRegular('playing')
+    setSource('regular')
+  }, [])
+
+  // The power button: a tap plays or pauses regular mode; a long press stops
+  // it, handing back to the schedule. The click after a long press is
+  // swallowed.
   // The files button: a tap imports, a long press exports (with the same
   // swallowed click after it as the power button).
   const filesHoldRef = useRef<(() => void) | null>(null)
@@ -262,15 +280,14 @@ export function MobileSoundscapeApp() {
       swallowPowerClickRef.current = false
       return
     }
-    if (preferences.enabled) {
-      setPreferences((current) => ({ ...current, enabled: false }))
-      return
-    }
-    const now = new Date()
-    if (schedule.enabled && scheduledPresetAt(events, (now.getHours() * 60) + now.getMinutes()) === null) {
-      setSchedule((current) => ({ ...current, enabled: false }))
-    }
-    setPreferences((current) => ({ ...current, enabled: true }))
+    setRegularMode(regular === 'playing' ? 'paused' : 'playing')
+  }
+  const stopRegular = () => {
+    if (regular === 'stopped') return
+    setRegularMode('stopped')
+    // What takes over is the session's to work out (the schedule's run, or
+    // nothing); it answers with the outcome.
+    if (native) void nativeSoundscape!.stop().then((state) => followRef.current?.(state))
   }
   const toggleSchedule = async () => {
     if (schedule.enabled) {
@@ -299,10 +316,10 @@ export function MobileSoundscapeApp() {
                   <div className="options-loadout-grid" role="group" aria-label="Soundscape and display mode">
                     <button
                       type="button"
-                      className={`btn-icon options-color-swatch options-loadout-btn${preferences.enabled || schedule.enabled ? ' is-active' : ''}`}
-                      aria-pressed={preferences.enabled}
+                      className={`btn-icon options-color-swatch options-loadout-btn${regular !== 'stopped' ? ' is-active' : ''}`}
+                      aria-pressed={regular !== 'stopped'}
                       data-secondary-press="none"
-                      aria-label={`${preferences.enabled ? 'Pause' : 'Play'} soundscape; hold to turn the schedule ${schedule.enabled ? 'off' : 'on'}`}
+                      aria-label={`Soundscape ${regular}: tap to ${regular === 'playing' ? 'pause' : 'play'}${regular === 'stopped' ? '' : ', hold to stop'}`}
                       onClick={tapPower}
                       onPointerDown={() => {
                         swallowPowerClickRef.current = false
@@ -310,7 +327,7 @@ export function MobileSoundscapeApp() {
                         powerHoldRef.current = armHold(() => {
                           powerHoldRef.current = null
                           swallowPowerClickRef.current = true
-                          void toggleSchedule()
+                          stopRegular()
                         }, HOLD_CONFIRM_MS)
                       }}
                       onPointerUp={() => { powerHoldRef.current?.(); powerHoldRef.current = null }}
@@ -318,7 +335,17 @@ export function MobileSoundscapeApp() {
                       onPointerLeave={() => { powerHoldRef.current?.(); powerHoldRef.current = null }}
                       onContextMenu={(event) => event.preventDefault()}
                     >
-                      <span className={`fa-solid ${schedule.enabled ? 'fa-clock' : 'fa-power-off'}`} aria-hidden="true" />
+                      {/* The state it is in, not the one a press goes to. */}
+                      <span className={`fa-solid ${regular === 'playing' ? 'fa-play' : regular === 'paused' ? 'fa-pause' : 'fa-stop'}`} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn-icon options-color-swatch options-loadout-btn${schedule.enabled ? ' is-active' : ''}${source === 'schedule' ? ' is-heard' : ''}`}
+                      aria-pressed={schedule.enabled}
+                      aria-label={`Schedule ${schedule.enabled ? 'on' : 'off'}${source === 'schedule' ? ', playing now' : ''}`}
+                      onClick={() => { void toggleSchedule() }}
+                    >
+                      <span className="fa-solid fa-clock" aria-hidden="true" />
                     </button>
                     <button
                       type="button"

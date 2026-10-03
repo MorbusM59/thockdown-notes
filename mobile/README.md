@@ -88,73 +88,47 @@ six-column grid laid out for a phone held upright.
   generated from `assets/icon.png`.
 - `capacitor.config.ts` (repo root) — points Capacitor at both.
 
-## The session, and the media controls
+## The session, regular mode and the schedule
 On Android the soundscape belongs to a process-wide SESSION
 (`SoundscapeSession.java`), not to the web page: it owns the renderer and
 the output, outlives the page, the activity and the plugin, and is drawn by
 a mediaPlayback foreground service (`SoundscapePlaybackService.java`) as a
 notification and a lock-screen entry with previous, play/pause, next and
-stop. Its states are stopped, playing and paused; paused keeps the renderer
-and the queue (the output fades out and holds its playhead), so the service
-stays in the foreground while paused -- a foreground service may not be
-started again from the background, which is where those controls are
-pressed. Only stop ends it.
+close.
 
-The web page drives the session while it runs: the engine's playback
-(`nativeSoundscapePlayback.ts`) PLAYS it on opening and PAUSES it on
-closing, so turning the soundscape off in the app leaves the controls up.
-The page also PUBLISHES what next and previous step through
-(`sessionEntries.ts`): the desktop's own cycle (`soundscapeCycle`: the
-user's soundscapes if there are any, else the factory ones) plus one stop
-for unsaved changes, each with the configuration the engine would send for
-it, so the session can switch soundscapes with the page paused. The
-renderer skips a configuration identical to the one in force, so when the
-page follows (on the `sessionChanged` event, and on coming back to the
-foreground through `getState`) the engine's own send changes nothing. Only
-changes a media control made are reported back: echoing the page's own
-would race its next change.
+Two things decide what is heard, combined in the session and nowhere else:
+REGULAR MODE -- stopped, playing the soundscape the listener chose, or
+paused on it -- and THE SCHEDULE, on or off, with the soundscape of its run
+in progress. Regular mode playing or paused OVERRULES the schedule; stopped
+hands over to it (its run's soundscape, or nothing, which ends the session).
+Choosing a soundscape plays it in regular mode and never touches the
+schedule; the power button plays and pauses, and a long press on it stops
+regular mode; closing the app (the service's `onTaskRemoved`) stops it too;
+pause always silences -- pausing the schedule's run makes it regular mode,
+paused on that soundscape; a run's start ends a paused regular mode (a
+forgotten pause must not silence tomorrow's run) but never a playing one.
+The schedule's button toggles it and is outlined while what is heard is the
+schedule's; the notification says "Playing", "Paused" or "Scheduled until
+07:30".
+
+The page drives regular mode while it runs: the engine's playback
+(`nativeSoundscapePlayback.ts`) PLAYS the session on opening and PAUSES it on
+closing; a stop is its own call, made first, so the engine's closing pause
+that follows is ignored (and so is its fade-out to silence, which would
+otherwise silence the schedule taking over). The page also PUBLISHES what
+next and previous step through (`sessionEntries.ts`): the desktop's own
+cycle (`soundscapeCycle`) plus one stop for unsaved changes, each with the
+configuration the engine would send, so the session can switch with the
+page paused. Changes the session makes itself (media controls, the
+schedule, closing the app) are reported (`sessionChanged`), and the page asks
+for the state at startup and on returning to the foreground; a stop's
+outcome is returned to the call. The renderer skips a configuration
+identical to the one in force, so the page following the session changes
+nothing audible.
 
 Without the JavaScriptSandbox (a WebView older than about 110) the web
 playback is used instead: it plays only in the foreground and has no
-session, controls, clips or sharing.
-
-## The schedule
-Twenty-four hourly slots (`schedule.ts`, drawn by `ScheduleGrid.tsx` as one
-row of six cells, four half-size slots each: 0h-11h on top, 12h-23h below).
-A long press on a soundscape in the panel PICKS IT UP without playing it
-(the panel's `onPickPreset`, a host option the desktop does not take): every
-slot then shows its hour -- the slots already holding it show its icon --
-and every tap fills the tapped slot with it, until a press on anything else
-puts it down; one of the user's own, picked up, turns the save button into a
-delete button for it. With nothing picked up, a TAP turns a slot on or off;
-a DRAG out of an inactive slot clears that slot; a DRAG sideways out of an
-active slot paints its soundscape onto every hour it passes (an extended run
-keeps its start and stop minutes at its new edges), counted in hours round
-the clock so it carries past the end of a row into the other; a DRAG up or
-down out of a run's first or last slot moves the minute
-it starts or stops at (5 minutes per slot-height of travel, wrapping). Active
-slots form RUNS round the clock (23h and 0h are neighbours), and a run of one
-slot is its whole hour. A press
-becomes a drag only once the finger leaves the slot, by the edge that sets
-its direction; anything released inside the slot is a tap. Active slots form
-RUNS round the clock (23h and 0h are neighbours), and a run of one slot is
-its whole hour. A long press on the power
-button turns the schedule on (it then shows a clock); a tap pauses whatever
-plays. A soundscape chosen by hand turns the schedule off.
-
-`schedule.ts` is the ONLY place the slot rules are written: it turns the
-slots into EVENTS (start, switch, stop, each at a minute of the day), tested
-minute by minute against the slots, and the native side runs those
-(`SoundscapeSchedule.java`, stored in SharedPreferences so it acts with the
-app closed and after a reboot) by one exact alarm at a time
-(`ScheduleReceiver.java`, which also re-arms after a reboot, an update or a
-change of clock). Exact alarms need the listener's permission on Android 12
-and later; it is asked for when the schedule is turned on, and they are also
-what allow the session to start from the background. A start fades in over
-a minute, a stop fades out over a minute, and a change of soundscape within
-a run is a minute's TRANSITION: two voices rendered side by side and
-crossfaded (`RenderAhead.transition`), starting at the end of the rendered
-lead, so up to ten seconds after its minute.
+session, controls, clips or saving to files.
 
 ## Clips, export and import
 - A CLIP is five minutes of the current soundscape rendered OFFLINE

@@ -174,6 +174,10 @@ final class SoundscapeAudioOutput {
         setFade(to, seconds);
     }
 
+    synchronized boolean isPaused() {
+        return paused;
+    }
+
     /** Fade out and hold the playhead where it is, or fade back in from it. */
     synchronized void setPaused(boolean pause) {
         if (pause == paused) return;

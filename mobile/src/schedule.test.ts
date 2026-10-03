@@ -3,9 +3,9 @@ import {
   HOURS,
   emptySchedule,
   scheduleEvents,
-  scheduledPresetAt,
   slotRole,
   type Schedule,
+  type ScheduleEvent,
 } from './schedule'
 
 /** `spec` maps an hour to [presetId, minute]. */
@@ -15,6 +15,13 @@ function scheduleOf(spec: Record<number, [string, number?]>): Schedule {
     schedule.slots[Number(hour)] = { presetId, on: true, minute: minute ?? 0 }
   }
   return schedule
+}
+
+/** What plays at `minute` by the events: the latest at or before it, round the clock -- as the native side reads them (SoundscapeSchedule.current). */
+function scheduledPresetAt(events: readonly ScheduleEvent[], minute: number): string | null {
+  const due = events.filter((event) => event.minute <= minute)
+  const last = due.length > 0 ? due[due.length - 1] : events[events.length - 1]
+  return last && last.kind !== 'stop' ? last.presetId : null
 }
 
 /** What plays at `minute`, read straight off the slots: the oracle the events must agree with. */

@@ -21,7 +21,7 @@ import {
   type SoundscapePreferences,
   type SoundscapeSettings,
 } from '../../src/shared/soundscape'
-import type { SessionEntry } from './backgroundAudioHost'
+import type { SessionEntry, SessionState } from './backgroundAudioHost'
 
 export const UNSAVED_ENTRY_ID = 'unsaved'
 const UNSAVED_NAME = 'Unsaved soundscape'
@@ -70,16 +70,17 @@ export function matchingPresetId(preferences: SoundscapePreferences): string | n
 }
 
 /**
- * The preferences on entry `id`, playing or not: what the page does when a
- * media control or the schedule moved the session. Solo is not carried
- * across: it is a way of listening, and the session plays the soundscape
- * whole. The schedule may name a
- * soundscape outside the cycle, so any soundscape is looked up.
+ * The preferences following the session: its soundscape, and the engine
+ * playing exactly while regular mode is (what the schedule plays, the
+ * session plays itself, with the engine closed). The schedule may name a
+ * soundscape outside the cycle, so any soundscape is looked up. Solo is not
+ * carried across: it is a way of listening, and the session plays the
+ * soundscape whole.
  */
 export function followSession(
   preferences: SoundscapePreferences,
   scratch: SoundscapeSettings | null,
-  state: { playing: boolean; currentId: string | null },
+  state: Pick<SessionState, 'regular' | 'currentId'>,
 ): SoundscapePreferences {
   let next = preferences
   if (state.currentId !== null && state.currentId !== currentEntryId(preferences, scratch) && state.currentId !== matchingPresetId(preferences)) {
@@ -92,5 +93,6 @@ export function followSession(
     if (preset) next = { ...next, settings: cloneSettings(preset.settings), activePresetId: preset.id }
     else if (state.currentId === UNSAVED_ENTRY_ID && scratch) next = { ...next, settings: cloneSettings(scratch), activePresetId: null }
   }
-  return next.enabled === state.playing ? next : { ...next, enabled: state.playing }
+  const enabled = state.regular === 'playing'
+  return next.enabled === enabled ? next : { ...next, enabled }
 }
