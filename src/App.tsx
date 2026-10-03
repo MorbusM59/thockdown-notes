@@ -386,7 +386,7 @@ type ViewStyleKey =
   | 'modern'
   | 'narrow'
   | 'cute'
-  | 'xkcd'
+  | 'boogaloo'
   | 'print'
   | 'calibrilight'
   | 'opensans'

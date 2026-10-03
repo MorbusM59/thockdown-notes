@@ -417,8 +417,8 @@
   --preview-code-font: 'Syne Mono', 'Red Hat Mono', 'Menlo', 'Monaco', monospace;
 }
 
-.markdown-preview.style-xkcd {
-  font-family:         'xkcd', 'Comic Sans MS', 'Chalkboard SE', cursive;
+.markdown-preview.style-boogaloo {
+  font-family:         'Boogaloo', 'Comic Sans MS', 'Chalkboard SE', cursive;
   --preview-code-font: 'Syne Mono', 'Red Hat Mono', 'Menlo', 'Monaco', monospace;
   font-synthesis: style weight;
 }

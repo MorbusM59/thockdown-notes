@@ -599,7 +599,7 @@ export const FACTORY_SOUNDSCAPE_ICONS: Readonly<Record<string, string>> = {
   underwater: 'fa-fish-fins',
   campsite: 'fa-campground',
   storm: 'fa-cloud-bolt',
-  temple: 'fa-place-of-worship',
+  temple: 'fa-torii-gate',
 };
 
 /**

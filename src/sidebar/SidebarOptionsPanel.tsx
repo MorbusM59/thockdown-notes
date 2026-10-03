@@ -230,7 +230,7 @@ type ViewStyleKey =
   | 'modern'
   | 'narrow'
   | 'cute'
-  | 'xkcd'
+  | 'boogaloo'
   | 'print'
   | 'calibrilight'
   | 'opensans'
@@ -278,7 +278,7 @@ const VIEW_STYLE_OPTIONS: Array<{ key: ViewStyleKey; label: string; family: stri
   { key: 'modern', label: 'Quicksand', family: "'Quicksand', 'Segoe UI', sans-serif" },
   { key: 'narrow', label: 'Roboto Condensed', family: "'Roboto Condensed', 'Segoe UI', sans-serif" },
   { key: 'cute', label: 'Sour Gummy', family: "'Sour Gummy', 'Quicksand', 'Segoe UI', sans-serif" },
-  { key: 'xkcd', label: 'xkcd', family: "'xkcd', 'Comic Sans MS', 'Chalkboard SE', cursive" },
+  { key: 'boogaloo', label: 'Boogaloo', family: "'Boogaloo', 'Comic Sans MS', 'Chalkboard SE', cursive" },
   { key: 'print', label: 'Big Shoulders', family: "'Big Shoulders', 'Times New Roman', Georgia, serif" },
   { key: 'calibrilight', label: 'Calibri Light (Carlito)', family: "'Carlito', 'Calibri Light', 'Segoe UI', sans-serif" },
   { key: 'opensans', label: 'Open Sans', family: "'Open Sans', 'Segoe UI', sans-serif" },

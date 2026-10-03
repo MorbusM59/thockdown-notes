@@ -120,7 +120,15 @@ function sanitizeEditorStyle(input: unknown): (typeof VALID_EDITOR_STYLES)[numbe
 
 const VALID_UI_FONT_KEYS = [DEFAULT_UI_FONT_KEY, ...UI_FONT_OPTIONS.map((option) => option.key)] as const;
 
-function sanitizeUiFontStyle(input: unknown): UiFontKey {
+// The xkcd font was removed (its licence forbids commercial use) and
+// Boogaloo took its place in both pickers; a setting saved under the old key
+// keeps the same slot rather than falling back to the default.
+function renamedFontKey(input: unknown): unknown {
+  return input === 'xkcd' ? 'boogaloo' : input;
+}
+
+function sanitizeUiFontStyle(raw: unknown): UiFontKey {
+  const input = renamedFontKey(raw);
   if ((VALID_UI_FONT_KEYS as readonly unknown[]).includes(input)) {
     return input as UiFontKey;
   }
@@ -145,7 +153,7 @@ const VALID_VIEW_STYLES = [
   'modern',
   'narrow',
   'cute',
-  'xkcd',
+  'boogaloo',
   'print',
   'calibrilight',
   'opensans',
@@ -156,7 +164,8 @@ const VALID_VIEW_STYLES = [
   'bubblerone',
 ] as const;
 
-function sanitizeViewStyle(input: unknown): (typeof VALID_VIEW_STYLES)[number] {
+function sanitizeViewStyle(raw: unknown): (typeof VALID_VIEW_STYLES)[number] {
+  const input = renamedFontKey(raw);
   if ((VALID_VIEW_STYLES as readonly unknown[]).includes(input)) {
     return input as (typeof VALID_VIEW_STYLES)[number];
   }

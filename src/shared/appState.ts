@@ -34,7 +34,7 @@ export interface PersistedMenuState {
     | 'modern'
     | 'narrow'
     | 'cute'
-    | 'xkcd'
+    | 'boogaloo'
     | 'print'
     | 'calibrilight'
     | 'opensans'
@@ -74,7 +74,7 @@ export interface PersistedMenuState {
     | 'kellyslab'
     | 'novamono'
     | 'vt323'
-    | 'xkcd'
+    | 'boogaloo'
     | 'sourgummy';
   uiFontScale?: number;
   /** Double size mode's own font sizes (App.tsx fontSizesByMode). Absent in saves from before they existed, or when damaged: the app then seeds each from its regular counterpart above. */

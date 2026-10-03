@@ -97,6 +97,20 @@ describe('StateService app-state field round-trip', () => {
     expect(loaded.menu?.isDoubleSizeMode).toBe(false)
   })
 
+  it('reads a font setting saved under the removed xkcd key as Boogaloo, in both pickers', async () => {
+    await new StateService(dataRoot).saveAppState({
+      selectedNoteId: null,
+      menu: {
+        sidebarMode: 'date', selectedMonths: [], selectedYears: [], searchQuery: '',
+        viewStyle: 'xkcd', uiFontStyle: 'xkcd',
+      } as never,
+    })
+
+    const loaded = await new StateService(dataRoot).loadAppState()
+    expect(loaded.menu?.viewStyle).toBe('boogaloo')
+    expect(loaded.menu?.uiFontStyle).toBe('boogaloo')
+  })
+
   it('persists double size mode\'s own font sizes across a save -> fresh-instance load', async () => {
     const writer = new StateService(dataRoot)
     await writer.saveAppState({

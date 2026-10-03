@@ -2,7 +2,7 @@ export type ExportViewStyle =
   | 'modern'
   | 'narrow'
   | 'cute'
-  | 'xkcd'
+  | 'boogaloo'
   | 'print'
   | 'calibrilight'
   | 'opensans'
@@ -230,7 +230,7 @@ async function buildExportFontFaceCss(): Promise<string> {
     sourGummy700,
     alumniSans,
     bigShoulders,
-    xkcd,
+    boogaloo,
     shareTechMono,
     vt323,
     victorMono,
@@ -262,7 +262,7 @@ async function buildExportFontFaceCss(): Promise<string> {
     fetchFontAsDataUri(new URL('./fonts/SourGummy-Bold.woff2', import.meta.url).href, 'font/woff2'),
     fetchFontAsDataUri(new URL('./fonts/AlumniSans-Regular.woff2', import.meta.url).href, 'font/woff2'),
     fetchFontAsDataUri(new URL('./fonts/BigShoulders-ExtraLight.woff2', import.meta.url).href, 'font/woff2'),
-    fetchFontAsDataUri(new URL('./fonts/xkcd.otf', import.meta.url).href, 'font/otf'),
+    fetchFontAsDataUri(new URL('./fonts/Boogaloo-Regular.woff2', import.meta.url).href, 'font/woff2'),
     fetchFontAsDataUri(new URL('./fonts/ShareTechMono-Regular.woff2', import.meta.url).href, 'font/woff2'),
     fetchFontAsDataUri(new URL('./fonts/VT323-Regular.woff2', import.meta.url).href, 'font/woff2'),
     fetchFontAsDataUri(new URL('./fonts/VictorMono-Regular.woff2', import.meta.url).href, 'font/woff2'),
@@ -375,8 +375,8 @@ async function buildExportFontFaceCss(): Promise<string> {
 }
 
 @font-face {
-  font-family: 'xkcd';
-  src: url('${xkcd}') format('opentype');
+  font-family: 'Boogaloo';
+  src: url('${boogaloo}') format('woff2');
   font-weight: 400;
   font-style: normal;
 }

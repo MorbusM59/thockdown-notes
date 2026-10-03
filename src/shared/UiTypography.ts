@@ -14,7 +14,7 @@ export type UiFontKey =
   | 'kellyslab'
   | 'novamono'
   | 'vt323'
-  | 'xkcd'
+  | 'boogaloo'
   | 'sourgummy';
 
 export const DEFAULT_UI_FONT_KEY: UiFontKey = 'system';
@@ -39,7 +39,7 @@ export const UI_FONT_OPTIONS: Array<{ key: UiFontKey; label: string; family: str
   { key: 'kellyslab', label: 'Kelly Slab', family: "'Kelly Slab', system-ui, sans-serif" },
   { key: 'novamono', label: 'Nova Mono', family: "'Nova Mono', system-ui, sans-serif" },
   { key: 'vt323', label: 'VT323', family: "'VT323', system-ui, sans-serif" },
-  { key: 'xkcd', label: 'xkcd', family: "'xkcd', 'Comic Sans MS', system-ui, sans-serif" },
+  { key: 'boogaloo', label: 'Boogaloo', family: "'Boogaloo', system-ui, sans-serif" },
   { key: 'sourgummy', label: 'Sour Gummy', family: "'Sour Gummy', system-ui, sans-serif" },
 ];
 

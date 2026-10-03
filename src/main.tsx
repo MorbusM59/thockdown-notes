@@ -3,6 +3,7 @@ import App from './App'
 import { installBrowserMockBridges } from './dev/installBrowserMockBridges.ts'
 import { installPressTracking } from './shared/pressTracking.ts'
 import { installScrollTrackTokens } from './shared/scrollTrackGeometry.ts'
+import './fonts.css'
 import './index.css'
 import '@fortawesome/fontawesome-free/css/all.min.css'
 
