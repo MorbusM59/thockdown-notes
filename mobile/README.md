@@ -125,9 +125,10 @@ A long press on a soundscape in the panel PICKS IT UP without playing it
 slot then shows its hour and every tap fills the tapped slot with it, until
 a press on anything else puts it down; one of the user's own, picked up,
 turns the save button into a delete button for it. With nothing picked up,
-a TAP turns a slot on or off, a DRAG on an inactive slot clears it, and a
-DRAG up or down on a run's first or last slot moves the minute it starts or
-stops at (5 minutes per slot-height of travel, wrapping). Active slots form
+a TAP turns a slot on or off, a DRAG on an inactive slot clears it, a DRAG
+sideways from an active slot extends its soundscape over every slot it
+passes, and a DRAG up or down on a run's first or last slot moves the minute
+it starts or stops at (5 minutes per slot-height of travel, wrapping). Active slots form
 RUNS round the clock (23h and 0h are neighbours), and a run of one slot is
 its whole hour. A long press on the power
 button turns the schedule on (it then shows a clock); a tap pauses whatever

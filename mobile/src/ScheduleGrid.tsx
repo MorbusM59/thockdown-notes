@@ -19,12 +19,17 @@
  * - a TAP turns a slot holding a soundscape on or off; an off slot keeps its
  *   soundscape, dimmed;
  * - a DRAG, in any direction, on an INACTIVE slot (off, or empty) clears it;
- * - a DRAG up or down on a run's START or END slot moves its minute: up is
- *   later, down is earlier, 5 minutes per step, wrapping past :55 and :00.
- *   A step is the slot's own height, so the minute moves by a slot's worth
- *   of travel at a time and can be set exactly; it is measured from where
- *   the drag began, so moving back undoes it.
- * Dragging the inside of a run does nothing. The page does not scroll under
+ * - a drag on an ACTIVE slot goes by the axis it sets off along, decided
+ *   once, when it crosses the threshold:
+ *   - LEFT or RIGHT extends the slot's soundscape over every slot the finger
+ *     passes and turns them on (slots it skips between two moves within one
+ *     row are filled too, since a fast finger does not report every slot);
+ *   - UP or DOWN, on a run's START or END slot, moves its minute: up is
+ *     later, down is earlier, 5 minutes per step, wrapping past :55 and
+ *     :00. A step is the slot's own height, so the minute moves by a slot's
+ *     worth of travel at a time and can be set exactly; it is measured
+ *     from where the drag began, so moving back undoes it. Up or down on the
+ *     inside of a run does nothing. The page does not scroll under
  * a finger (PageScrollbar.tsx), so a drag here is always the slot's.
  */
 import { useEffect, useRef, useState } from 'react'
@@ -62,6 +67,11 @@ interface SlotPress {
   /** One 5-minute step of vertical travel, in px: the slot's own height. */
   stepPx: number
   dragging: boolean
+  /** Set when the drag starts on an active slot: extending sideways, or moving the minute. */
+  axis: 'horizontal' | 'vertical' | null
+  /** The soundscape being extended, and the last slot it reached. */
+  presetId: string | null
+  lastHour: number
 }
 
 function useCurrentHour(): number {
@@ -94,10 +104,23 @@ export function ScheduleGrid({ schedule, customPresets, pickedPresetId, onChange
     if (slot.presetId !== null) onChange(withSlot(hour, { on: !slot.on }))
   }
 
+  /** Fill the slots from `from` to `to` (one row, either way round) with `presetId`, turned on. */
+  const extend = (presetId: string, from: number, to: number) => {
+    const [low, high] = from <= to ? [from, to] : [to, from]
+    const changed = schedule.slots.some((slot, hour) => hour >= low && hour <= high && !(slot.on && slot.presetId === presetId))
+    if (!changed) return
+    onChange({
+      ...schedule,
+      slots: schedule.slots.map((slot, hour) => (hour >= low && hour <= high ? { ...slot, presetId, on: true } : slot)),
+    })
+  }
+
   /** The press has moved: start the drag once past the threshold, then apply it. */
   const drag = (press: SlotPress, x: number, y: number) => {
     if (!press.dragging) {
-      if (Math.hypot(x - press.x, y - press.y) < DRAG_THRESHOLD_PX) return
+      const dx = x - press.x
+      const dy = y - press.y
+      if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return
       press.dragging = true
       if (pickedPresetId !== null) return
       if (press.role === 'inactive') {
@@ -105,8 +128,20 @@ export function ScheduleGrid({ schedule, customPresets, pickedPresetId, onChange
         if (slot.presetId !== null || slot.on) onChange(withSlot(press.hour, { presetId: null, on: false, minute: 0 }))
         return
       }
+      press.axis = Math.abs(dx) > Math.abs(dy) ? 'horizontal' : 'vertical'
     }
-    if (pickedPresetId !== null || (press.role !== 'start' && press.role !== 'end')) return
+    if (pickedPresetId !== null || press.role === 'inactive') return
+    if (press.axis === 'horizontal') {
+      const under = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-schedule-hour]')
+      const hour = under ? Number(under.dataset.scheduleHour) : press.lastHour
+      if (hour === press.lastHour || press.presetId === null) return
+      // Within one row the slots between are filled too; across rows, the slot reached.
+      const sameRow = (hour < HOURS / 2) === (press.lastHour < HOURS / 2)
+      extend(press.presetId, sameRow ? press.lastHour : hour, hour)
+      press.lastHour = hour
+      return
+    }
+    if (press.role !== 'start' && press.role !== 'end') return
     // Up is later: screen y grows downwards.
     const steps = Math.round((press.y - y) / press.stepPx)
     const minute = (((press.minute + (steps * MINUTE_STEP)) % 60) + 60) % 60
@@ -142,6 +177,7 @@ export function ScheduleGrid({ schedule, customPresets, pickedPresetId, onChange
         aria-label={`${hour}h: ${name}${slot.presetId !== null && !slot.on ? ', off' : ''}${minuteText}`}
         data-secondary-press="none"
         data-pick-target=""
+        data-schedule-hour={hour}
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture(event.pointerId)
           pressRef.current = {
@@ -153,6 +189,9 @@ export function ScheduleGrid({ schedule, customPresets, pickedPresetId, onChange
             minute: slot.minute,
             stepPx: Math.max(1, event.currentTarget.offsetHeight),
             dragging: false,
+            axis: null,
+            presetId: slot.presetId,
+            lastHour: hour,
           }
         }}
         onPointerMove={(event) => {
