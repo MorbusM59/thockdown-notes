@@ -395,13 +395,20 @@ body {
   background-position: 0px 0px;
 }
 
-/* Dedicated editor scrollbar rail (lives in the --editor-scrollbar-slot-width zone). */
-.thockdown-custom-scrollbar {
+/* Dedicated editor scrollbar rail (lives in the --editor-scrollbar-slot-width zone).
+   A scroller with a custom scrollbar draws no native one. Scoped under
+   .app-shell so it OUTRANKS base.css's styling of every scrollbar in the
+   shell (`.app-shell *`), rather than tying with it and leaving the winner
+   to stylesheet load order: the desktop happened to load this file last, the
+   mobile app loads it first, and drew both bars. */
+.thockdown-custom-scrollbar,
+.app-shell .thockdown-custom-scrollbar {
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 
-.thockdown-custom-scrollbar::-webkit-scrollbar {
+.thockdown-custom-scrollbar::-webkit-scrollbar,
+.app-shell .thockdown-custom-scrollbar::-webkit-scrollbar {
   width: 0;
   height: 0;
 }
