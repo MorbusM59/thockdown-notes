@@ -1531,9 +1531,24 @@ async function createWindow() {
     // Immersive mode is renderer state, which a reload resets; a window left
     // full screen by it would outlive the mode that put it there.
     if (win?.isFullScreen()) win.setFullScreen(false)
-    if (currentDoubleSizeMode) {
-      win?.webContents.setZoomFactor(2)
-    }
+  })
+
+  // The page's zoom is a function of the saved double-size setting and of
+  // nothing else, so it is asserted in BOTH directions on every main-frame
+  // navigation. Chromium keeps a second, independent store for the same fact:
+  // it remembers a zoom level per origin in the session's Preferences
+  // (`per_host_zoom_levels`, written by every setZoomFactor call) and
+  // re-applies it at each navigation commit. Applying the zoom only when the
+  // setting was ON left Chromium's remembered value in charge whenever it was
+  // OFF -- so a saved `false` beside a remembered 2x (a toggle that reached
+  // the main process but whose save was lost, an app-state file reset while
+  // the Electron profile was kept) booted the page at 2x with the double-size
+  // button showing off and the regular window minimum. 'did-navigate' runs
+  // after Chromium's own per-origin zoom has been applied, so this overrides
+  // it, and the setZoomFactor call writes the value back into Chromium's store,
+  // which therefore cannot disagree with the setting again.
+  win.webContents.on('did-navigate', () => {
+    win?.webContents.setZoomFactor(currentDoubleSizeMode ? 2 : 1)
   })
 
   if (VITE_DEV_SERVER_URL) {
