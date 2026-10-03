@@ -747,7 +747,9 @@ export function SoundscapeControls({ preferences, onChange, pickedPresetId = nul
       <div className="utility-setting-slider-stack" aria-label="Soundscape controls">
         <OptionsSubsectionLabel>Presets</OptionsSubsectionLabel>
         {presetsHelp !== null ? <SubsectionHelp paragraphs={presetsHelp} /> : (<>
-        <div className="options-loadout-grid soundscape-preset-grid" role="group" aria-label="Factory soundscapes">
+        {/* One grid: the factory soundscapes, then the reader's own, then the
+            save button, flowing on from wherever the last of them ends. */}
+        <div className="options-loadout-grid soundscape-preset-grid" role="group" aria-label="Soundscapes">
           {SOUNDSCAPE_FACTORY_PRESETS.map((preset) => (
             <button
               key={preset.id}
@@ -770,9 +772,6 @@ export function SoundscapeControls({ preferences, onChange, pickedPresetId = nul
               <span className={`fa-solid ${FACTORY_SOUNDSCAPE_ICONS[preset.id]}`} aria-hidden="true" />
             </button>
           ))}
-        </div>
-
-        <div className="options-loadout-grid soundscape-custom-presets-grid" role="group" aria-label="Custom soundscapes">
           {preferences.customPresets.map((preset, index) => {
             const number = index + 1
             const isPrimed = pendingDeletePresetId === preset.id
