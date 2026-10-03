@@ -99,9 +99,10 @@ public class BackgroundAudioPlugin extends Plugin {
         try {
             JSObject json = call.getData();
             SoundscapeSchedule.fromJson(json);
-            boolean wasEnabled = SoundscapeSchedule.load(getContext()).enabled;
             SoundscapeSchedule.save(getContext(), json);
-            if (json.getBoolean("enabled") != wasEnabled) session.applyScheduleState();
+            // Turned on or off, or its slots changed under a run: either way
+            // what is heard may have changed.
+            session.applyScheduleState();
             SoundscapeSchedule.arm(getContext());
             call.resolve();
         } catch (Exception error) {

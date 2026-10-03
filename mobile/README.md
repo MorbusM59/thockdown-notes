@@ -107,8 +107,10 @@ regular mode; closing the app (the service's `onTaskRemoved`) stops it too;
 pause always silences -- pausing the schedule's run makes it regular mode,
 paused on that soundscape; a run's start ends a paused regular mode (a
 forgotten pause must not silence tomorrow's run) but never a playing one.
-The schedule's button toggles it and is outlined while what is heard is the
-schedule's; the notification says "Playing", "Paused" or "Scheduled until
+A stop hands over within ten seconds (the schedule's own changes take a
+minute). The schedule's button toggles it and carries the picked-up dashed
+frame while what is heard is the schedule's -- from the moment of the
+hand-over, while the old soundscape is still fading; the notification says "Playing", "Paused" or "Scheduled until
 07:30".
 
 The page drives regular mode while it runs: the engine's playback
@@ -122,8 +124,10 @@ configuration the engine would send, so the session can switch with the
 page paused. Changes the session makes itself (media controls, the
 schedule, closing the app) are reported (`sessionChanged`), and the page asks
 for the state at startup and on returning to the foreground; a stop's
-outcome is returned to the call. The renderer skips a configuration
-identical to the one in force, so the page following the session changes
+outcome is returned to the call. The session reads the schedule's current run from the stored
+schedule whenever it settles, never from a value carried between alarms,
+so a restarted process or slots edited under a run are followed. The
+renderer skips a configuration identical to the one in force, so the page following the session changes
 nothing audible.
 
 Without the JavaScriptSandbox (a WebView older than about 110) the web

@@ -77,9 +77,7 @@ body {
   opacity: 0.4;
 }
 
-/* The schedule button while what is heard is the schedule's, and the slot
-   of the current hour: the same outline, saying "now, on the schedule". */
-.mobile-app-shell .options-loadout-btn.is-heard,
+/* The slot of the current hour. */
 .mobile-schedule-slot.is-now {
   outline: 1px solid var(--color-text-60);
   outline-offset: 1px;

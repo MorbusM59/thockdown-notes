@@ -1034,15 +1034,19 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* A soundscape picked up (SoundscapeControls' onPickPreset): held, not
-   playing. Its own frame rather than an outline: a long press also FOCUSES
-   the button, and `.app-shell button:focus` clears the outline -- the mark
-   was invisible until focus moved elsewhere. */
-.options-loadout-btn.is-picked {
+/* A dashed inner frame marks a button: a soundscape picked up
+   (SoundscapeControls' onPickPreset; held, not playing), or the mobile
+   app's schedule button while what is heard is the schedule's. A frame
+   rather than an outline: a long press also FOCUSES the button, and
+   `.app-shell button:focus` clears the outline -- the mark was invisible
+   until focus moved elsewhere. */
+.options-loadout-btn.is-picked,
+.options-loadout-btn.is-heard {
   position: relative;
 }
 
-.options-loadout-btn.is-picked::after {
+.options-loadout-btn.is-picked::after,
+.options-loadout-btn.is-heard::after {
   content: '';
   position: absolute;
   inset: 3px;

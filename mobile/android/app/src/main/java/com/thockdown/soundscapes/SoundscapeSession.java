@@ -37,7 +37,8 @@ import java.util.List;
  *   must not silence tomorrow's run -- but never a PLAYING one.
  * The schedule's changes fade: a run starts by fading in and ends by fading
  * out over SCHEDULE_FADE_SEC, and a change of soundscape within a run is a
- * transition of that length.
+ * transition of that length. A STOP hands over faster, over
+ * HANDOVER_FADE_SEC: the listener asked for it.
  *
  * CLIENTS. The web page (BackgroundAudioPlugin) plays, pauses, stops,
  * configures and sets the volume, and publishes the soundscapes next and
@@ -92,6 +93,8 @@ final class SoundscapeSession {
     private static final double VOLUME_TIME_CONSTANT_SEC = 0.08;
     /** How long the schedule's fades and transitions take. */
     private static final double SCHEDULE_FADE_SEC = 60;
+    /** How long the hand-over takes when the listener stops regular mode: they asked for the change, so it comes promptly. */
+    private static final double HANDOVER_FADE_SEC = 10;
     /** A fade back from an ending that was interrupted. */
     private static final double RESTORE_FADE_SEC = 0.5;
     private static SoundscapeSession instance;
@@ -102,7 +105,12 @@ final class SoundscapeSession {
     /** Volatile: the output's writer thread reads it without the session's lock, which close() holds while joining that thread. */
     private volatile SoundscapeRenderer renderer;
     private Regular regular = Regular.STOPPED;
-    /** The schedule's current run's soundscape, or null: outside a run, or the schedule off. */
+    /**
+     * The schedule's current run's soundscape, or null: outside a run, or the
+     * schedule off. READ FROM THE STORED SCHEDULE by settle(), never carried
+     * from event to event: the process may have been restarted since the run
+     * began, and the slots may have been changed under it.
+     */
     private Entry scheduled = null;
     private List<Entry> entries = Collections.emptyList();
     /** The soundscape regular mode plays or is paused on. */
@@ -116,7 +124,9 @@ final class SoundscapeSession {
         this.context = context.getApplicationContext();
         // Until the web page publishes it: the schedule may start a session
         // with no web page at all.
-        masterVolume = SoundscapeSchedule.load(this.context).masterVolume;
+        SoundscapeSchedule schedule = SoundscapeSchedule.load(this.context);
+        masterVolume = schedule.masterVolume;
+        scheduled = scheduledNow(schedule);
     }
 
     static synchronized SoundscapeSession get(Context context) {
@@ -194,7 +204,7 @@ final class SoundscapeSession {
     /** Regular mode STOPPED: the schedule takes over, or the session ends. Returns the outcome. */
     synchronized State stop() {
         regular = Regular.STOPPED;
-        settle();
+        settle(HANDOVER_FADE_SEC);
         return state();
     }
 
@@ -251,63 +261,60 @@ final class SoundscapeSession {
     /** The notification's close control, or the app being closed: regular mode stops; the schedule carries on. */
     synchronized void controlStop() {
         regular = Regular.STOPPED;
-        settle();
+        settle(HANDOVER_FADE_SEC);
         report();
     }
 
     // --- From the schedule ---
 
-    /** The schedule turned on (with its state at this moment) or off; and after a reboot. */
+    /** The schedule changed (turned on or off, or its slots edited), or the device rebooted: apply its state at this moment. */
     synchronized void applyScheduleState() {
-        SoundscapeSchedule schedule = SoundscapeSchedule.load(context);
-        SoundscapeSchedule.Event current = schedule.enabled ? schedule.current() : null;
-        scheduled = current == null || "stop".equals(current.kind) ? null : schedule.entry(current.presetId);
-        settle();
-        // Reported even when the page turned the schedule on or off: what is
-        // heard, and from which source, is the session's to work out.
+        settle(SCHEDULE_FADE_SEC);
+        // Reported even when the page changed the schedule: what is heard,
+        // and from which source, is the session's to work out.
         report();
     }
 
-    synchronized void applyScheduleEvent(SoundscapeSchedule schedule, SoundscapeSchedule.Event event) {
-        if ("stop".equals(event.kind)) {
-            scheduled = null;
-        } else {
-            Entry entry = schedule.entry(event.presetId);
-            if (entry == null) return;
-            scheduled = entry;
-            // A run starting ends a pause, which would otherwise silence it.
-            if ("start".equals(event.kind) && regular == Regular.PAUSED) regular = Regular.STOPPED;
-        }
-        settle();
+    /** The schedule's alarm: its events are due. A run STARTING ends a pause, which would otherwise silence it. */
+    synchronized void applyScheduleEvents(boolean runStarted) {
+        if (runStarted && regular == Regular.PAUSED) regular = Regular.STOPPED;
+        settle(SCHEDULE_FADE_SEC);
         report();
+    }
+
+    /** The soundscape of the run the stored schedule is in at this moment, or null. */
+    private static Entry scheduledNow(SoundscapeSchedule schedule) {
+        SoundscapeSchedule.Event current = schedule.enabled ? schedule.current() : null;
+        return current == null || "stop".equals(current.kind) ? null : schedule.entry(current.presetId);
     }
 
     /**
      * Make what is heard follow regular mode and the schedule, after either
      * changed: with regular mode STOPPED, play the schedule's run -- fading
      * in from silence, or transitioning from whatever was heard -- or, with
-     * no run, fade out and end. Regular mode PLAYING or PAUSED is already
-     * what is heard, and the schedule changes nothing.
+     * no run, fade out and end, over `fadeSec`. Regular mode PLAYING or
+     * PAUSED is already what is heard, and the schedule changes nothing.
      */
-    private void settle() {
+    private void settle(double fadeSec) {
+        scheduled = scheduledNow(SoundscapeSchedule.load(context));
         if (regular != Regular.STOPPED) {
             refreshService();
             return;
         }
         if (scheduled == null) {
-            endSession();
+            endSession(fadeSec);
             return;
         }
         cancelPendingEnd();
         if (output == null) {
             open(scheduled);
-            output.fadeFrom(0f, 1f, SCHEDULE_FADE_SEC);
+            output.fadeFrom(0f, 1f, fadeSec);
         } else if (output.isPaused()) {
             renderer.configure(scheduled.configuration);
-            output.fadeFrom(0f, 1f, SCHEDULE_FADE_SEC);
+            output.fadeFrom(0f, 1f, fadeSec);
             output.setPaused(false);
         } else {
-            renderer.transition(scheduled.configuration, SCHEDULE_FADE_SEC);
+            renderer.transition(scheduled.configuration, fadeSec);
             output.setFade(1f, RESTORE_FADE_SEC);
         }
         output.setVolume(masterVolume, VOLUME_TIME_CONSTANT_SEC);
@@ -315,14 +322,14 @@ final class SoundscapeSession {
     }
 
     /** End the session: at once if nothing is heard, after a fade-out if something is. */
-    private void endSession() {
+    private void endSession(double fadeSec) {
         if (output == null) return;
         if (output.isPaused()) {
             close();
             return;
         }
         if (pendingEnd != null) return;
-        output.setFade(0f, SCHEDULE_FADE_SEC);
+        output.setFade(0f, fadeSec);
         pendingEnd = () -> {
             synchronized (SoundscapeSession.this) {
                 pendingEnd = null;
@@ -330,7 +337,7 @@ final class SoundscapeSession {
                 report();
             }
         };
-        main.postDelayed(pendingEnd, Math.round(SCHEDULE_FADE_SEC * 1000));
+        main.postDelayed(pendingEnd, Math.round(fadeSec * 1000));
         refreshService();
     }
 

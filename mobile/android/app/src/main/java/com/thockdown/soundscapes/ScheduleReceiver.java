@@ -4,6 +4,8 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 
+import java.util.List;
+
 /**
  * Where the schedule acts with the app closed (SoundscapeSchedule):
  * - its alarm: the events due since the minute it was armed for go to the
@@ -26,7 +28,10 @@ public class ScheduleReceiver extends BroadcastReceiver {
             if (schedule.enabled) {
                 int minute = intent.getIntExtra(SoundscapeSchedule.EXTRA_MINUTE, -1);
                 if (minute >= 0) {
-                    for (SoundscapeSchedule.Event event : schedule.dueSince(minute)) session.applyScheduleEvent(schedule, event);
+                    List<SoundscapeSchedule.Event> due = schedule.dueSince(minute);
+                    boolean runStarted = false;
+                    for (SoundscapeSchedule.Event event : due) runStarted |= "start".equals(event.kind);
+                    if (!due.isEmpty()) session.applyScheduleEvents(runStarted);
                 }
             }
         } else if (SoundscapeSchedule.ACTION_APPLY_STATE.equals(action)) {
