@@ -210,6 +210,11 @@ export function MobileSoundscapeApp() {
   // turns the schedule on or off. Playing outside a scheduled run is a
   // choice by hand, so it turns the schedule off; resuming a paused run is
   // not. The click after a long press is swallowed.
+  // The files button: a tap imports, a long press exports (with the same
+  // swallowed click after it as the power button).
+  const filesHoldRef = useRef<(() => void) | null>(null)
+  const swallowFilesClickRef = useRef(false)
+  useEffect(() => () => filesHoldRef.current?.(), [])
   const powerHoldRef = useRef<(() => void) | null>(null)
   const swallowPowerClickRef = useRef(false)
   useEffect(() => () => powerHoldRef.current?.(), [])
@@ -278,23 +283,30 @@ export function MobileSoundscapeApp() {
                     <button
                       type="button"
                       className="btn-icon options-color-swatch options-loadout-btn"
-                      aria-label="Export your soundscapes"
-                      aria-disabled={!native || preferences.customPresets.length === 0}
-                      onClick={() => {
-                        if (native && preferences.customPresets.length > 0) void exportSoundscapes(preferences.customPresets, 'my-soundscapes')
-                      }}
-                    >
-                      <span className="fa-solid fa-file-export" aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-icon options-color-swatch options-loadout-btn"
-                      aria-label="Import soundscapes"
+                      aria-label="Import soundscapes; hold to export yours"
                       aria-disabled={!native}
+                      data-secondary-press="none"
                       onClick={() => {
+                        if (swallowFilesClickRef.current) {
+                          swallowFilesClickRef.current = false
+                          return
+                        }
                         if (!native) return
                         void importSoundscapes(preferences).then((next) => { if (next) setPreferences(next) })
                       }}
+                      onPointerDown={() => {
+                        swallowFilesClickRef.current = false
+                        filesHoldRef.current?.()
+                        filesHoldRef.current = armHold(() => {
+                          filesHoldRef.current = null
+                          swallowFilesClickRef.current = true
+                          if (native && preferences.customPresets.length > 0) void exportSoundscapes(preferences.customPresets, 'my-soundscapes')
+                        }, HOLD_CONFIRM_MS)
+                      }}
+                      onPointerUp={() => { filesHoldRef.current?.(); filesHoldRef.current = null }}
+                      onPointerCancel={() => { filesHoldRef.current?.(); filesHoldRef.current = null }}
+                      onPointerLeave={() => { filesHoldRef.current?.(); filesHoldRef.current = null }}
+                      onContextMenu={(event) => event.preventDefault()}
                     >
                       <span className="fa-solid fa-file-import" aria-hidden="true" />
                     </button>
@@ -314,6 +326,7 @@ export function MobileSoundscapeApp() {
                     <button
                       type="button"
                       className="btn-icon options-color-swatch options-loadout-btn"
+                      style={{ gridColumn: 5 }}
                       aria-label={`Visual preset: ${PRESET_NAMES[look.mode][look.preset[look.mode]]}. Press for the next`}
                       onClick={() => setLook((current) => ({
                         ...current,
@@ -325,6 +338,7 @@ export function MobileSoundscapeApp() {
                     <button
                       type="button"
                       className={`btn-icon options-color-swatch options-loadout-btn${look.mode === 'dark' ? ' is-active' : ''}`}
+                      style={{ gridColumn: 6 }}
                       aria-pressed={look.mode === 'dark'}
                       aria-label="Dark mode"
                       onClick={() => setLook((current) => ({ ...current, mode: current.mode === 'dark' ? 'light' : 'dark' }))}

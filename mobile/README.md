@@ -164,7 +164,8 @@ lead, so up to ten seconds after its minute.
   system's "Save as" dialog -- asked BEFORE rendering, so it does not
   interrupt a minute later, and cancelling it cancels the clip. At the
   soundscape's own level: the listener's volume is not part of it.
-- EXPORT and IMPORT are the desktop's (`src/sidebar/soundscapeFileActions.ts`)
+- EXPORT and IMPORT share one button in the Master row (a tap imports, a
+  long press exports) and are the desktop's (`src/sidebar/soundscapeFileActions.ts`)
   through a phone implementation of `SoundscapeFileApi`
   (`soundscapeFiles.ts`): saved through the system's "Save as" dialog (the
   Storage Access Framework, so the reader picks folder and name, as on the
