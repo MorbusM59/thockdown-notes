@@ -599,6 +599,7 @@ export const FACTORY_SOUNDSCAPE_ICONS: Readonly<Record<string, string>> = {
   underwater: 'fa-fish-fins',
   campsite: 'fa-campground',
   storm: 'fa-cloud-bolt',
+  temple: 'fa-place-of-worship',
 };
 
 /**
@@ -697,6 +698,27 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
       'thunder-2': { character: 0.81, contrast: 0.28, distance: 0.29, lengthSec: 25, share: 0.865, volume: 0.92 },
       'thunder-3': { pan: 0.49, share: 0.705, spread: 0.92, weather: 0.76 },
     }, { foliage: 0.35, size: 0.51 }, { gustiness: 1, paceSec: 4.681 }, volumeDb(-10)),
+  },
+  {
+    id: 'temple',
+    name: 'Temple',
+    settings: soundscape({
+      'chimes-1': { activity: 0.9, distance: 0.95, hardness: 0.52, material: 0.13, pan: -0.5, pitchHz: chimeSemitoneHz(-5), ringSec: 13.829565, scale: 64, tubes: 8, unison: 1, volume: 0.7, weather: 1 },
+      'chimes-2': { activity: 1, distance: 0.55, hardness: 0.65, material: 0.04, pan: 0.26, pitchHz: chimeSemitoneHz(-3), ringSec: 15, scale: 64, unison: 0.62, weather: 1 },
+      'fire-2': { distance: 0.3, flicker: 0.66, flickerDynamics: 0.77, flickerPeriodSec: 0.426598, pan: -0.34, size: 0.44, sizzleLevel: 0, volume: 0.84, weather: 1, width: 0 },
+      'noise-1': { brightnessHz: 562.18, colour: 0.14, depth: 0.65, distance: 0.41, periodSec: 16.083, sway: 0.32, sweep: 0.3, variation: 0.6, volume: 0.81, weather: 0.82 },
+      'noise-2': { brightnessHz: 821.350394, colour: 0.45, curve: 0.4, depth: 0.54, distance: 0.9, periodSec: 30, sway: 0.26, sweep: 1, variation: 0.65, volume: 0.79, weather: 0.97 },
+      'noise-3': { brightnessHz: 1531.191323, colour: 0.42, focus: 0.12, sway: 0.28, sweep: 0.08, variation: 0.51, volume: 0.57, weather: 0.84 },
+      'noise-4': { brightnessHz: 992.784203, colour: 0.12, curve: 0.8, depth: 0.81, distance: 0.55, focus: 0.28, periodSec: 43.955, skew: 0.86, sway: 0.23, sweep: 0.86, variation: 1, volume: 0.94, weather: 0.9 },
+      'noise-5': { brightnessHz: 5930.28, colour: 0.23, curve: 0.32, depth: 0.74, distance: 0.38, enabled: false, periodSec: 43.955, skew: 0.16, sway: 0.47, sweep: 0.93, variation: 0.62, weather: 1 },
+      'rain-1': { distance: 0.95, dripLevel: 0.6, dripTone: 0.31, drips: 0.64, dropLevel: 0.63, dropTone: 0.2, intensity: 0.43, resonance: 0.39, splashLevel: 0.77, splashTone: 0.42, surface: 0.59, volume: 0.9, washDensity: 1, washLevel: 0.75, washTone: 0.14, weather: 1, wetness: 0.3 },
+      'rain-2': { distance: 0.48, dripLevel: 0.49, drips: 0.85, dropLevel: 0.34, dropTone: 0.32, intensity: 0.63, resonance: 0.74, splashLevel: 0.57, surface: 0.37, volume: 0.94, washDensity: 1, washLevel: 0.69, washTone: 0.31, weather: 0.74, wetness: 0.12 },
+      'rain-3': { distance: 0, dripLevel: 0.5, dripTone: 0.55, drips: 0.59, dropLevel: 0.63, dropTone: 0, enabled: false, intensity: 0.85, resonance: 0.54, splashLevel: 0.53, splashTone: 0.3, surface: 0.14, volume: 1, washDensity: 0.82, washLevel: 0.81, washTone: 0.09, weather: 0.94, wetness: 0.36 },
+      'thunder-1': { character: 1, contrast: 1, lengthSec: 26, pan: -0.2, randomness: 1, share: 0.715, spread: 0.89, volume: 0.91, weather: 0.72 },
+      'thunder-2': { character: 0.29, contrast: -0.2, distance: 1, lengthSec: 25, randomness: 1, share: 0.865, spread: 1, volume: 0.84, weather: 1 },
+      'thunder-3': { character: 1, contrast: 1, lengthSec: 23, pan: 0.2, randomness: 1, share: 0.95, spread: 1, volume: 1, weather: 0.79 },
+      'water-2': { bubbleLevel: 0.45, bubbles: 0.22, distance: 0.78, pan: -0.26, ring: 0.21, rise: 0, rushLevel: 0.54, rushTone: 0.29, size: 0.53, sizeSpread: 0.79, turbulence: 0.21, volume: 1, width: 0.2 },
+    }, { amount: 1, brilliance: 0.07, foliage: 0.17, size: 1 }, { gustiness: 1, paceSec: 4.681 }, 0.87),
   },
 ];
 
