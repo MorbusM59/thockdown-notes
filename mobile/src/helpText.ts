@@ -13,7 +13,7 @@ const HELP: Record<string, string> = {
   Schedule:
     'One slot per hour: 0 to 11 above, 12 to 23 below; the current hour is outlined. '
     + 'Hold a soundscape under Presets to pick it up, then tap slots to fill them; tap anywhere else to put it down. '
-    + 'Tap a slot to turn it on or off. Drag sideways out of a slot to paint it across the hours (an empty slot clears them). '
+    + 'Tap a slot to turn it on or off; drag out of one that is off to clear it. Drag sideways out of a slot that is on to paint it across the hours. '
     + 'Drag up or down out of the first or last slot of a run to move its start or stop by five minutes. '
     + 'With the schedule on, a run fades in and out over a minute and crossfades on the hour.',
   Presets:

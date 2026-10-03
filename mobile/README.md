@@ -127,11 +127,11 @@ slot then shows its hour -- the slots already holding it show its icon --
 and every tap fills the tapped slot with it, until a press on anything else
 puts it down; one of the user's own, picked up, turns the save button into a
 delete button for it. With nothing picked up, a TAP turns a slot on or off;
-a DRAG sideways paints the pressed slot onto every hour it passes (an active
-slot its soundscape, an inactive one emptiness; an extended run keeps its
-start and stop minutes at its new edges), counted in hours round the
-clock so it carries past the end of a row into the other; a DRAG up or down
-clears an inactive slot, and on a run's first or last slot moves the minute
+a DRAG out of an inactive slot clears that slot; a DRAG sideways out of an
+active slot paints its soundscape onto every hour it passes (an extended run
+keeps its start and stop minutes at its new edges), counted in hours round
+the clock so it carries past the end of a row into the other; a DRAG up or
+down out of a run's first or last slot moves the minute
 it starts or stops at (5 minutes per slot-height of travel, wrapping). Active
 slots form RUNS round the clock (23h and 0h are neighbours), and a run of one
 slot is its whole hour. A press

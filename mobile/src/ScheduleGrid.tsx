@@ -20,21 +20,20 @@
  * tap, and a drag never starts in a direction the reader did not mean:
  * - a TAP turns a slot holding a soundscape on or off; an off slot keeps its
  *   soundscape, dimmed;
- * - LEFT or RIGHT PAINTS the slot pressed onto every slot the finger passes:
- *   an active slot its soundscape, turned on; an inactive one (off, or
- *   empty) EMPTINESS, so an empty slot dragged over full ones clears them.
- *   Extending a run carries its EDGE MINUTES with it: the minute its first
+ * - a DRAG in any direction out of an INACTIVE slot (off, or empty) clears
+ *   that slot, and only that slot;
+ * - LEFT or RIGHT out of an ACTIVE slot PAINTS its soundscape, turned on,
+ *   onto every slot the finger passes. Extending a run carries its EDGE MINUTES with it: the minute its first
  *   slot starts at moves to the new first slot, the minute its last slot
  *   stops at to the new last slot -- when that new edge is one this drag
- *   painted (merging into another run leaves that run's edge its own);
- *   It goes by HOURS, not by what is under the finger: each slot's width of
+ *   painted (merging into another run leaves that run's edge its own). It
+ *   goes by HOURS, not by what is under the finger: each slot's width of
  *   travel is the next hour round the clock, so a drag carried past the end
  *   of a row continues at the matching end of the other one (past 11h into
  *   12h, past 23h into 0h, and the same leftwards), and a fast finger that
  *   jumps slots between two moves still fills every hour between;
- * - UP or DOWN on an inactive slot clears it; on a run's START or END slot
- *   it moves the minute: up is later, down is earlier, 5 minutes per step,
- *   wrapping past :55 and :00. A step is the slot's own height, measured
+ * - UP or DOWN out of a run's START or END slot moves the minute: up is
+ *   later, down is earlier, 5 minutes per step, wrapping past :55 and :00. A step is the slot's own height, measured
  *   from where the press began, so leaving the slot is the first step, each
  *   slot's worth of travel after it is another, and moving back undoes
  *   them. Up or down on the inside of a run does nothing.
@@ -167,7 +166,8 @@ export function ScheduleGrid({ schedule, customPresets, pickedPresetId, onChange
       press.axis = overX > overY ? 'horizontal' : 'vertical'
       if (press.role === 'inactive') paint(press, 0, 0)
     }
-    if (pickedPresetId !== null) return
+    // An inactive slot's drag cleared that slot when it began, and that is all it does.
+    if (pickedPresetId !== null || press.role === 'inactive') return
     if (press.axis === 'horizontal') {
       const offset = Math.round((x - press.x) / press.pitchPx)
       if (offset === press.reached) return
