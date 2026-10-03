@@ -1,6 +1,8 @@
 # Builds the mobile soundscape app (mobile/README.md) as a debug APK, so it
 # can be installed on a phone without Android Studio. Run by hand from the
-# Actions tab, or on any push that touches what goes into it.
+# Actions tab, or on a push to main that touches what goes into it. Only
+# main: its build is the one that replaces the installable APK, and a build
+# of a working branch is the same build again with nowhere to go.
 #
 # Every build uploads a workflow artifact. A build of main ALSO replaces the
 # APK on the `android-latest` prerelease, because an artifact always
@@ -13,6 +15,7 @@ name: Build Android APK
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     paths:
       - "mobile/**"
       - "src/shared/soundscape*.ts"
