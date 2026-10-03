@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   HOURS,
-  doubleTappedMinute,
   emptySchedule,
   scheduleEvents,
   scheduledPresetAt,
   slotRole,
-  tappedMinute,
   type Schedule,
 } from './schedule'
 
@@ -92,11 +90,4 @@ describe('schedule', () => {
     }
   })
 
-  it('a tap steps 5 minutes and a double tap goes to :00, or from :00 to :30', () => {
-    expect(tappedMinute(55)).toBe(0)
-    // A double tap's first tap has already stepped the minute.
-    expect(doubleTappedMinute(tappedMinute(0))).toBe(30)
-    expect(doubleTappedMinute(tappedMinute(30))).toBe(0)
-    expect(doubleTappedMinute(tappedMinute(45))).toBe(0)
-  })
 })

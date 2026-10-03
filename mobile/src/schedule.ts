@@ -90,22 +90,6 @@ export function slotRole(schedule: Schedule, hour: number): SlotRole {
   return before ? 'end' : 'start'
 }
 
-/** A single tap on a start or end slot: the next 5 minutes, wrapping. */
-export function tappedMinute(minute: number): number {
-  return (minute + 5) % 60
-}
-
-/**
- * A double tap: to :00, or from :00 to :30. Its first tap has already
- * stepped the minute on (tappedMinute), so it reads the minute from before
- * that tap: a double tap at :00 arrives at :05 and goes to :30, one at :30
- * arrives at :35 and goes to :00.
- */
-export function doubleTappedMinute(minuteAfterFirstTap: number): number {
-  const before = (minuteAfterFirstTap + 55) % 60
-  return before === 0 ? 30 : 0
-}
-
 /** The events the schedule comes to, in order of their minute of the day. */
 export function scheduleEvents(schedule: Schedule): ScheduleEvent[] {
   const events: ScheduleEvent[] = []

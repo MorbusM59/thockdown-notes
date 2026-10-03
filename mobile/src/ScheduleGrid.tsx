@@ -10,34 +10,37 @@
  * A soundscape PICKED UP in the panel below (a long press on it) is what a
  * slot is filled with: while one is picked up every slot shows its HOUR,
  * so the hours can be found, and every tap puts it into the tapped slot
- * and turns the slot on -- slot after slot, until it is put down. Without
- * one, a tap only ever edits a minute, which is why picking up is a state
- * of its own rather than "whatever is playing": something always is.
+ * and turns the slot on -- slot after slot, until it is put down. That is
+ * the only thing a slot does while one is picked up.
  *
- * Touch, the only input on a phone:
- * - a TAP, with nothing picked up, steps a start or end slot's minute by 5;
- * - a DOUBLE TAP on a start or end slot sets :00, or from :00 :30
- *   (doubleTappedMinute, which accounts for the first tap's step);
- * - a LONG PRESS turns a slot holding a soundscape on or off; an off slot
- *   keeps its soundscape.
- * The click after a long press is swallowed, as in the soundscape panel.
+ * With nothing picked up, a slot is worked by TAP and DRAG, told apart by
+ * how far the finger travels (DRAG_THRESHOLD_PX, the app's one threshold
+ * for a press becoming a drag):
+ * - a TAP turns a slot holding a soundscape on or off; an off slot keeps its
+ *   soundscape, dimmed;
+ * - a DRAG, in any direction, on an INACTIVE slot (off, or empty) clears it;
+ * - a DRAG up or down on a run's START or END slot moves its minute: up is
+ *   later, down is earlier, 5 minutes per step, wrapping past :55 and :00.
+ *   A step is the slot's own height, so the minute moves by a slot's worth
+ *   of travel at a time and can be set exactly; it is measured from where
+ *   the drag began, so moving back undoes it.
+ * Dragging the inside of a run does nothing. The page does not scroll under
+ * a finger (PageScrollbar.tsx), so a drag here is always the slot's.
  */
 import { useEffect, useRef, useState } from 'react'
-import { armHold, HOLD_CONFIRM_MS } from '../../src/shared/holdTiming'
+import { DRAG_THRESHOLD_PX } from '../../src/shared/pointerDrag'
 import { FACTORY_SOUNDSCAPE_ICONS, type SoundscapePreset } from '../../src/shared/soundscape'
 import {
   HOURS,
   allPresets,
-  doubleTappedMinute,
   slotRole,
-  tappedMinute,
   type Schedule,
   type ScheduleSlot,
+  type SlotRole,
 } from './schedule'
 
-/** Two taps on one slot this close together are a double tap (the soundscape panel's interval). */
-const DOUBLE_TAP_MS = 300
 const CELLS = 6
+const MINUTE_STEP = 5
 
 interface ScheduleGridProps {
   schedule: Schedule
@@ -45,6 +48,20 @@ interface ScheduleGridProps {
   /** The soundscape picked up, which a tap puts into a slot; null for none. */
   pickedPresetId: string | null
   onChange: (schedule: Schedule) => void
+}
+
+/** A press on a slot, until its release decides whether it was a tap. */
+interface SlotPress {
+  pointerId: number
+  hour: number
+  x: number
+  y: number
+  /** Decided when the press began: what a drag on this slot does. */
+  role: SlotRole
+  minute: number
+  /** One 5-minute step of vertical travel, in px: the slot's own height. */
+  stepPx: number
+  dragging: boolean
 }
 
 function useCurrentHour(): number {
@@ -61,29 +78,39 @@ function useCurrentHour(): number {
 
 export function ScheduleGrid({ schedule, customPresets, pickedPresetId, onChange }: ScheduleGridProps) {
   const currentHour = useCurrentHour()
-  const holdRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
-  const swallowClickRef = useRef(false)
-  const lastTapRef = useRef<{ hour: number; at: number } | null>(null)
-  useEffect(() => () => holdRef.current?.cancel(), [])
+  const pressRef = useRef<SlotPress | null>(null)
 
   const withSlot = (hour: number, change: Partial<ScheduleSlot>): Schedule => ({
     ...schedule,
     slots: schedule.slots.map((slot, index) => (index === hour ? { ...slot, ...change } : slot)),
   })
 
-  const tap = (hour: number, timeStamp: number) => {
+  const tap = (hour: number) => {
     const slot = schedule.slots[hour]
-    const role = slotRole(schedule, hour)
-    const last = lastTapRef.current
-    const isDouble = last !== null && last.hour === hour && timeStamp - last.at < DOUBLE_TAP_MS
-    lastTapRef.current = isDouble ? null : { hour, at: timeStamp }
     if (pickedPresetId !== null) {
       if (!(slot.on && slot.presetId === pickedPresetId)) onChange(withSlot(hour, { presetId: pickedPresetId, on: true }))
       return
     }
-    if (role === 'start' || role === 'end') {
-      onChange(withSlot(hour, { minute: isDouble ? doubleTappedMinute(slot.minute) : tappedMinute(slot.minute) }))
+    if (slot.presetId !== null) onChange(withSlot(hour, { on: !slot.on }))
+  }
+
+  /** The press has moved: start the drag once past the threshold, then apply it. */
+  const drag = (press: SlotPress, x: number, y: number) => {
+    if (!press.dragging) {
+      if (Math.hypot(x - press.x, y - press.y) < DRAG_THRESHOLD_PX) return
+      press.dragging = true
+      if (pickedPresetId !== null) return
+      if (press.role === 'inactive') {
+        const slot = schedule.slots[press.hour]
+        if (slot.presetId !== null || slot.on) onChange(withSlot(press.hour, { presetId: null, on: false, minute: 0 }))
+        return
+      }
     }
+    if (pickedPresetId !== null || (press.role !== 'start' && press.role !== 'end')) return
+    // Up is later: screen y grows downwards.
+    const steps = Math.round((press.y - y) / press.stepPx)
+    const minute = (((press.minute + (steps * MINUTE_STEP)) % 60) + 60) % 60
+    if (minute !== schedule.slots[press.hour].minute) onChange(withSlot(press.hour, { minute }))
   }
 
   const label = (slot: ScheduleSlot, hour: number) => {
@@ -115,27 +142,30 @@ export function ScheduleGrid({ schedule, customPresets, pickedPresetId, onChange
         aria-label={`${hour}h: ${name}${slot.presetId !== null && !slot.on ? ', off' : ''}${minuteText}`}
         data-secondary-press="none"
         data-pick-target=""
-        onClick={(event) => {
-          if (swallowClickRef.current) {
-            swallowClickRef.current = false
-            return
-          }
-          tap(hour, event.timeStamp)
-        }}
         onPointerDown={(event) => {
-          swallowClickRef.current = false
-          holdRef.current?.cancel()
-          if (slot.presetId === null) return
-          const cancel = armHold(() => {
-            holdRef.current = null
-            swallowClickRef.current = true
-            onChange(withSlot(hour, { on: !slot.on }))
-          }, HOLD_CONFIRM_MS)
-          holdRef.current = { pointerId: event.pointerId, cancel }
+          event.currentTarget.setPointerCapture(event.pointerId)
+          pressRef.current = {
+            pointerId: event.pointerId,
+            hour,
+            x: event.clientX,
+            y: event.clientY,
+            role,
+            minute: slot.minute,
+            stepPx: Math.max(1, event.currentTarget.offsetHeight),
+            dragging: false,
+          }
         }}
-        onPointerUp={() => { holdRef.current?.cancel(); holdRef.current = null }}
-        onPointerCancel={() => { holdRef.current?.cancel(); holdRef.current = null }}
-        onPointerLeave={() => { holdRef.current?.cancel(); holdRef.current = null }}
+        onPointerMove={(event) => {
+          const press = pressRef.current
+          if (press && press.pointerId === event.pointerId) drag(press, event.clientX, event.clientY)
+        }}
+        onPointerUp={(event) => {
+          const press = pressRef.current
+          if (!press || press.pointerId !== event.pointerId) return
+          pressRef.current = null
+          if (!press.dragging) tap(press.hour)
+        }}
+        onPointerCancel={() => { pressRef.current = null }}
         onContextMenu={(event) => event.preventDefault()}
       >
         {label(slot, hour)}
