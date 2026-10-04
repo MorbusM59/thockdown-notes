@@ -15,7 +15,7 @@ Any of the desktop's ten factory visual presets, chosen in the Master section
 and dark mode, each returning to the preset last used in it, and a drag up
 or down steps through the current mode's five, showing the preset's icon
 while it does and for two seconds after; Paper in light
-mode and Ancient in dark by default; kept in
+mode and Dark (Default) in dark, starting in dark mode; kept in
 localStorage by `preferencesStore.ts`). They are drawn by the same code the
 desktop uses (`packages/look/loadoutTheme.ts` for the variables, filter and
 overlays, `packages/look/ThemeLayers.tsx` for the glaze and blend layers;

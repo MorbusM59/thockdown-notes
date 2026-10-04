@@ -88,8 +88,8 @@ export interface MobileLook {
 
 const LOOK_STORAGE_KEY = 'thockdown:look'
 const PRESET_COUNT = 5
-/** Paper in light mode, Ancient in dark mode, starting light. */
-export const DEFAULT_LOOK: MobileLook = { mode: 'light', preset: { light: 3, dark: 1 } }
+/** Paper in light mode, Dark (Default) in dark mode, starting dark. */
+export const DEFAULT_LOOK: MobileLook = { mode: 'dark', preset: { light: 3, dark: 0 } }
 
 function presetIndex(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value < PRESET_COUNT ? value : fallback
