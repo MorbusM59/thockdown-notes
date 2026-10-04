@@ -1,4 +1,4 @@
-// The one definition of "green" (CLAUDE.md, "Verify before main"): what a
+// The one definition of "green" (CLAUDE.md, "Git workflow"): what a
 // session runs before a change reaches main, and what CI runs on every push
 // and pull request (.github/workflows/ci.yml). Every app is checked on every
 // change, because shared code reaches all of them: the desktop's and the

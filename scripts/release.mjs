@@ -7,7 +7,6 @@
 //   npm run release -- 0.7.2     -- an exact version
 //
 //   --dry-run     print every step, change nothing, push nothing
-//   --skip-tests  skip the local `npm test` gate (CI still runs it)
 //   --yes         don't pause for the release-notes edit
 //   --force-new   bump even when the current version's release is unfinished
 //
@@ -32,7 +31,6 @@ const notesDir = path.join(repoRoot, 'release-notes')
 const args = process.argv.slice(2)
 const flag = (name) => args.includes(name)
 const DRY_RUN = flag('--dry-run')
-const SKIP_TESTS = flag('--skip-tests')
 const ASSUME_YES = flag('--yes')
 const bumpArg = args.find((a) => !a.startsWith('--')) ?? 'patch'
 
@@ -238,17 +236,37 @@ const rawNotes = fs.existsSync(notesPath) ? fs.readFileSync(notesPath, 'utf8') :
 const notesBody = rawNotes.replace(/<!--[\s\S]*?-->/g, '').trim()
 if (!notesBody && !DRY_RUN) die('the release notes file is empty')
 
-// ------------------------------------------------------- 4. test gate
+// ------------------------------------------------------- 4. cross-platform gate
 
-phase('Test gate')
+phase('Cross-platform gate')
 
-if (SKIP_TESTS) {
-  warn('skipped by --skip-tests (CI still runs the suite on the mac build)')
-} else if (DRY_RUN) {
-  info(dim('[dry-run] would run npm test'))
+// The release ships main's tip (preflight requires the checkout to be it), so
+// the gate is a CI run for that exact commit (the push run, or a dispatched
+// one): verify (every app's types,
+// lint, tests and web builds) and then the Android build. A release is public
+// facing, so it never starts on less (CLAUDE.md, "Git workflow"). The run
+// already exists, because pushing to main started it; this only reads its
+// answer, waiting for it if it is still running.
+const gateSha = git('rev-parse', 'HEAD')
+if (DRY_RUN) {
+  info(dim(`[dry-run] would require CI to be green on ${gateSha.slice(0, 7)}`))
 } else {
-  run('npm', ['test'])
-  ok('test suite passed')
+  const res = ghQuiet('run', 'list', '--workflow', 'ci.yml', '--commit', gateSha,
+    '--limit', '1', '--json', 'databaseId,status,conclusion,url')
+  const ciRun = res.status === 0 && res.stdout ? JSON.parse(res.stdout)[0] : undefined
+  if (!ciRun) {
+    die(`no CI run for ${gateSha.slice(0, 7)}`,
+      'Every push to main starts one (.github/workflows/ci.yml). Start it with\n' +
+      '  gh workflow run ci.yml --ref main\nthen re-run this command.')
+  }
+  info(ciRun.url)
+  if (ciRun.status !== 'completed') {
+    info('CI is still running -- waiting for its answer...')
+    run('gh', ['run', 'watch', String(ciRun.databaseId), '--exit-status'], { allowFail: true })
+  }
+  const { conclusion } = JSON.parse(gh('run', 'view', String(ciRun.databaseId), '--json', 'conclusion'))
+  if (conclusion !== 'success') die(`CI concluded "${conclusion}" on ${gateSha.slice(0, 7)}`, 'Fix main first; nothing was tagged.')
+  ok('CI is green on this commit, Android build included')
 }
 
 // ------------------------------------------------------- 5. bump, tag, push
