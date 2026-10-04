@@ -1,1 +1,8 @@
-{"name":"@thockdown/interaction","private":true,"type":"module"}
+{
+  "name": "@thockdown/interaction",
+  "private": true,
+  "type": "module",
+  "peerDependencies": {
+    "react": "^18.2.0"
+  }
+}

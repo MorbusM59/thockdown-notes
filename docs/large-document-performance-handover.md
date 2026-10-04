@@ -34,7 +34,7 @@ was wrong by two orders of magnitude.** `readCanonicalRootText()` cost ~10–40m
 on a 12,000-line note — real, but not the dominant cost.
 
 The actual dominant cost was `splitMarkdownIntoPreviewBlocks()` in
-`src/editor/PreviewBlockSplit.ts`: a full remark structural parse of the **entire document**,
+`apps/notes/src/editor/PreviewBlockSplit.ts`: a full remark structural parse of the **entire document**,
 run on every single keystroke (not gated by `deferPreviewOnRapidInput` at the per-call level —
 that toggle only changes how *often per second* this fires, not its O(document length) cost
 per call). Measured on the 12,000-line note: **~1.6–4.6 seconds per call**. A 40-keystroke
@@ -114,14 +114,14 @@ length — genuinely O(document length) per call, and per this codebase's own
 framework offered a shortcut.
 
 Fixed with a new persistent, incrementally-maintained data structure —
-`src/editor/ParagraphOffsetIndex.ts` — a positional treap (randomized balanced BST) keyed by
+`apps/notes/src/editor/ParagraphOffsetIndex.ts` — a positional treap (randomized balanced BST) keyed by
 paragraph identity, augmented with subtree length sums, giving O(log n) prefix-offset
 queries and O(log n) insert/remove/update regardless of document size *or where the edit is*
 (unlike a flat prefix-sum array, which would still be O(n) for edits near the start of a huge
 document — this was written specifically against the "page 1 must feel identical to page
 1,000" bar in `docs/document-scale-performance-philosophy.md`, not just against the
 held-key-at-the-end benchmark this whole investigation started from). Kept in sync with a
-live Lexical editor by `src/editor/LexicalParagraphOffsetSync.ts`, via two listener types
+live Lexical editor by `apps/notes/src/editor/LexicalParagraphOffsetSync.ts`, via two listener types
 whose exact semantics were derived empirically (see that file's doc comment, and the
 throwaway jsdom spikes in this round's git history) rather than assumed from Lexical's types:
 `registerMutationListener(ParagraphNode)` filtered to `'created'`/`'destroyed'` only
@@ -200,7 +200,7 @@ unavoidable first full parse). Root-caused (in a since-deleted, now-folded-in ha
 > Everything from here to the end of this section is history, not description.
 
 Fixed by virtualizing the preview pane with `@tanstack/react-virtual` (`useVirtualizer` in
-`src/editorSection/usePreviewMarkdownRendering.tsx`): only blocks near the viewport (plus a
+`apps/notes/src/editorSection/usePreviewMarkdownRendering.tsx`): only blocks near the viewport (plus a
 small overscan buffer) ever mount real `ReactMarkdown` output now, with per-block height
 estimated then corrected via `measureElement`/`ResizeObserver` as each block actually renders.
 `usePreviewScrollbar.ts`'s thumb math needed no changes — the virtualizer's own total-size
@@ -211,7 +211,7 @@ updated:
 - `applyPreviewSourceAnchor` (`useEditorSectionMount.ts`, edit-mode/note-open scroll restore)
   and `scrollToAnchorInPreview` (`usePreviewMarkdownRendering.tsx`, `$anchor` link navigation)
   now resolve the target block's index (`resolvePreviewBlockIndexForSourceLine`, a new binary
-  search in `src/editor/PreviewBlockIndex.ts`, unit-tested) and call
+  search in `apps/notes/src/editor/PreviewBlockIndex.ts`, unit-tested) and call
   `virtualizer.scrollToIndex` to force the target to mount *before* the existing DOM-anchor
   query runs, retrying that query across a few animation frames rather than assuming one frame
   is enough.
@@ -238,7 +238,7 @@ freshly created then the page reloaded so the app boots straight into it: edit-m
 populated with the full document in **~1.6-2.1s wall-clock**, roughly an order of magnitude
 better than the old baseline despite the much bigger document. Caveat this needs to be
 carried forward: this was measured in `npm run dev:browser` (Vite serving the renderer as a
-plain web page, the mock IPC bridges in `src/dev/installBrowserMockBridges.ts` standing in for
+plain web page, the mock IPC bridges in `apps/notes/src/dev/installBrowserMockBridges.ts` standing in for
 Electron's real preload/IPC/SQLite path), not the packaged/real Electron app — a user report of
 an actual Ulysses-sized (~1.5M character) note taking **~8s** to switch to in the real app has
 not been reconciled with this ~2s browser-mode number. Next session should profile the real
@@ -304,7 +304,7 @@ Two rounds of fresh profiling this session, both confirming the same shape:
 
 **One hypothesis tested and refuted, worth recording so it isn't retried:** given the edit-mode
 Lexical editor is *not* virtualized (unlike the preview pane now) and has zero CSS
-`contain`/`content-visibility` anywhere (`src/styles/` — confirmed empty on both), the natural
+`contain`/`content-visibility` anywhere (`apps/notes/src/styles/` — confirmed empty on both), the natural
 guess is that every keystroke forces a layout recalculation across all ~9,000+ unvirtualized
 paragraph DOM nodes. **Tested directly, not just reasoned about**: injected
 `content-visibility: auto` (+ a rough `contain-intrinsic-size`) onto every direct child of
@@ -314,8 +314,8 @@ the category trace above independently confirms Layout itself was never the big 
 Don't retry CSS containment on the edit-mode editor as a fix for this without new evidence.
 
 **Concrete next step**: build incremental/cached versions of `normalizeInternalText`/
-`canonicalizeParagraphSegments` (`src/editor/TextPolicy.ts`) and `resolveMarkdownSelectionContext`
-(`src/editor/MarkdownContext.ts`), the same pattern already proven twice in this effort
+`canonicalizeParagraphSegments` (`apps/notes/src/editor/TextPolicy.ts`) and `resolveMarkdownSelectionContext`
+(`apps/notes/src/editor/MarkdownContext.ts`), the same pattern already proven twice in this effort
 (`ParagraphOffsetIndex`'s O(log n) treap for caret offsets, `PreviewBlockSplit`'s incremental
 reparse) — reuse prior work for whatever the edit didn't touch instead of a full-document pass
 every keystroke. Also worth a closer look: the Lexical-internal `getModernOffsetsFromPoints`/
@@ -363,8 +363,8 @@ original pair:
 
 1. **Move markdown parsing to a Web Worker.** Still not investigated. Strongest guarantee (a
    slow parse literally can't compete with keystroke handling on the main thread), but real
-   integration cost: `src/editorSection/usePreviewScrollbar.ts`'s custom-scrollbar sync, and
-   the source-anchor capture in `src/editorSection/useEditorSectionMount.ts`
+   integration cost: `apps/notes/src/editorSection/usePreviewScrollbar.ts`'s custom-scrollbar sync, and
+   the source-anchor capture in `apps/notes/src/editorSection/useEditorSectionMount.ts`
    (`resolvePreviewSourceAnchorFromContainer`), both assume *synchronous* DOM access to the
    already-rendered markdown (`querySelectorAll` for `[data-source-line]` elements happening in
    the same tick as the edit). Moving the parse off-thread turns rendering into an async round
@@ -383,8 +383,8 @@ for structural work to be prioritized first, but per the philosophy doc's soluti
 next-in-line item was this incremental-caching work, not pagination or windowing the edit-mode
 Lexical tree — confirmed with the user before starting rather than assumed.
 
-**A committed, reusable measurement harness now exists** — `scripts/perf/perfHarness.mjs` +
-`scripts/perf/measureInputLag.mjs`, run via `npm run perf:input-lag -- [flags]`. This replaces the
+**A committed, reusable measurement harness now exists** — `apps/notes/scripts/perf/perfHarness.mjs` +
+`apps/notes/scripts/perf/measureInputLag.mjs`, run via `npm run perf:input-lag -- [flags]`. This replaces the
 "reconstruct a throwaway Playwright script every session" workflow the Environment notes below
 used to describe. It automates: starting `dev:browser`, generating a synthetic markdown document
 of a requested character count, seeding it via the dev-mode mock IPC bridge and reloading,
@@ -522,7 +522,7 @@ in an earlier profile too, still not investigated.
 
 Following up on the previous round's "state what remains" list (`canonicalizeParagraphSegmentsIncremental`'s own memcmp-bound residual, the Lexical-internal floor, and the still-diffuse majority of per-keystroke cost), a user session asked specifically: what's the path to sub-2ms input response regardless of document length, and what O(n) calls are actually left? Investigating that question surfaced three more real per-keystroke O(document length) call sites this doc hadn't caught yet, all now fixed, plus — the more consequential outcome — the first real measurement of the actual packaged Electron app, which this doc has flagged as an open gap twice before and never closed until now.
 
-**`deriveNoteTitleFromText` (App.tsx → moved to `src/shared/noteTitle.ts`) — fixed.** Called on every keystroke via `updateActiveNoteTitlePreview` (every character/Enter/Tab/markdown-shortcut transform calls it with the new full text) to keep the note's displayed title live. Its own semantics are more expensive than they look: `.find()` for a `# heading`-shaped line searches the *whole document*, not just near the top, and for the common case of a plain-prose note with no heading, that search fails all the way to the end before falling back to the first content line — meaning this was already effectively O(document length) even for completely ordinary notes, not just a pathological case.
+**`deriveNoteTitleFromText` (App.tsx → moved to `apps/notes/src/shared/noteTitle.ts`) — fixed.** Called on every keystroke via `updateActiveNoteTitlePreview` (every character/Enter/Tab/markdown-shortcut transform calls it with the new full text) to keep the note's displayed title live. Its own semantics are more expensive than they look: `.find()` for a `# heading`-shaped line searches the *whole document*, not just near the top, and for the common case of a plain-prose note with no heading, that search fails all the way to the end before falling back to the first content line — meaning this was already effectively O(document length) even for completely ordinary notes, not just a pathological case.
 
 Fixed with `deriveNoteTitleIncremental`, keyed per-note (`Map<noteId, NoteTitleCache>` in App.tsx, since split-view sections editing different notes can call the same shared callback). The incremental scheme is a "first match anywhere" cache with a real asymmetry worth naming: the region *before* a known match is a reusable invariant (nothing there can match, or an earlier line would already be the answer), but the region *after* a known match was never actually scanned — `.find` stops at the first hit — so there's no cached information about it at all. That makes most edits O(1) (an edit anywhere after the title-determining line doesn't touch the cache), but editing away the line that currently determines the title falls back to an O(suffix length) rescan — always correct, just not fast for that one specific edit (which is rare). Verified: a fuzz test (`noteTitle.test.ts`, 3 seeds × 300 steps, specifically targeting "edit away the heading" as the hazard case) against `deriveNoteTitleFromText`'s full-scan ground truth; `tsc`/`lint`/full suite; and a live-browser check that specifically exercised the hazard case (removed a heading from a 5,000-line note) and confirmed the displayed title actually updated rather than staying stale — the highest-value thing to check live, since a stale-cache bug here would be silent and easy to miss in isolation.
 
@@ -530,13 +530,13 @@ Fixed with `deriveNoteTitleIncremental`, keyed per-note (`Map<noteId, NoteTitleC
 
 **`useNoteSnapshots.ts`'s `normalizeForComparison` — fixed, and this one actually was worse than plain O(document).** `snapshotIdsMatchingPresent` re-normalized *every saved snapshot's content* against the live text on every keystroke (`[liveText, snapshots]` deps, and `liveText` changes every edit) — O(document length × snapshot count), not just O(document length). Snapshot content is immutable once fetched, so there was no reason to ever re-normalize it more than once per fetch. Fixed by memoizing each snapshot's normalized content keyed on the `snapshots` array (a plain `useMemo`, no custom incremental logic needed — snapshots have no cross-record coupling to reason about), and hoisting the one unavoidable `normalizeForComparison(liveText)` call so it's shared between `snapshotIdsMatchingPresent` and `hasPendingManualChanges` instead of computed twice. Straightforward memoization restructuring, not a new caching algorithm with a hazard class to fuzz-test — verified via `tsc`/`lint`/full suite and a live-browser check of the present-state-circle UI element. That live check surfaced something worth recording precisely: the circle didn't visibly toggle after creating a manual snapshot in this test setup — confirmed via `git stash` (same technique this doc has used before) that the *identical* behavior reproduces against the unmodified pre-fix code, so this is a pre-existing characteristic of the test setup or app, not a regression from this change. Not investigated further — out of scope for this round.
 
-**A committed harness for the real packaged Electron app now exists** — `npm run perf:input-lag:electron -- [flags]` (`scripts/perf/measureInputLagElectron.mjs`, reusing most of `perfHarness.mjs`'s shared functions). This closes a real capability gap: every measurement in this doc before this round was `npm run dev:browser` (Vite serving the renderer as a plain web page with mock IPC bridges), never the actual Electron app a user runs. Getting this working in this environment required solving three problems, all worth keeping for the next session:
+**A committed harness for the real packaged Electron app now exists** — `npm run perf:input-lag:electron -- [flags]` (`apps/notes/scripts/perf/measureInputLagElectron.mjs`, reusing most of `perfHarness.mjs`'s shared functions). This closes a real capability gap: every measurement in this doc before this round was `npm run dev:browser` (Vite serving the renderer as a plain web page with mock IPC bridges), never the actual Electron app a user runs. Getting this working in this environment required solving three problems, all worth keeping for the next session:
 
 1. **Chromium's sandbox refuses to run as root** (`Running as root without --no-sandbox is not supported`) — this container runs as root, so both the harness and any manual Electron launch need `--no-sandbox`.
-2. **No real display** — this environment has none; `xvfb-run -a` (available, confirmed) provides a virtual one. The npm script wraps this automatically; a bare `node scripts/perf/measureInputLagElectron.mjs` will hang waiting for a window that never opens.
-3. **`better-sqlite3`'s prebuilt native binary is compiled against the host Node's ABI, not Electron's bundled Node's ABI** (`NODE_MODULE_VERSION` mismatch) — Electron's main process crashed on `new Database(...)` before ever opening a window, silently as far as Playwright's `_electron.launch()` is concerned (`firstWindow()` just times out with no indication why; the real error only appeared by launching Electron directly and capturing its own stdout/stderr). Fixed with `npx electron-rebuild -f -w better-sqlite3` — not committed as a dependency change, since it rebuilds a native binary in `node_modules` rather than touching anything tracked; re-run it (or `npx @electron/rebuild`, the current package name) whenever `npm install` has refreshed `node_modules` since the last Electron measurement.
+2. **No real display** — this environment has none; `xvfb-run -a` (available, confirmed) provides a virtual one. The npm script wraps this automatically; a bare `node apps/notes/scripts/perf/measureInputLagElectron.mjs` will hang waiting for a window that never opens.
+3. **`better-sqlite3`'s prebuilt native binary is compiled against the host Node's ABI, not Electron's bundled Node's ABI** (`NODE_MODULE_VERSION` mismatch) — Electron's main process crashed on `new Database(...)` before ever opening a window, silently as far as Playwright's `_electron.launch()` is concerned (`firstWindow()` just times out with no indication why; the real error only appeared by launching Electron directly and capturing its own stdout/stderr). Fixed with `npx electron-rebuild -f -w better-sqlite3` — not committed as a dependency change, since it rebuilds a native binary in `node_modules` rather than touching anything tracked; re-run it (or `npx @apps/notes/electron/rebuild`, the current package name) whenever `npm install` has refreshed `node_modules` since the last Electron measurement.
 
-The harness also discovered, by reading `electron/main.ts`'s `resolveDataRoot()` rather than assuming: this app's SQLite data root is `<repo>/data` whenever `app.isPackaged` is false (true for this unpackaged `electron dist-electron/main.js` launch style, not a real electron-builder package) — `--user-data-dir` does *not* redirect it, only Electron's own internal cache paths. The harness clears `<repo>/data`'s contents before and after each run for a fresh DB, deliberately preserving the git-tracked `data/.gitkeep` placeholder rather than removing the whole directory (an earlier version of this cleanup did exactly that and had to be caught and reverted via `git status`/`git checkout` mid-session — worth remembering as a reason to always diff-check after any script that does its own filesystem cleanup, not just after edits made through normal tools).
+The harness also discovered, by reading `apps/notes/electron/main.ts`'s `resolveDataRoot()` rather than assuming: this app's SQLite data root is `apps/notes/data` whenever `app.isPackaged` is false (true for this unpackaged `electron dist-electron/main.js` launch style, not a real electron-builder package) — `--user-data-dir` does *not* redirect it, only Electron's own internal cache paths. The harness clears `apps/notes/data`'s contents before and after each run for a fresh DB, deliberately preserving the git-tracked `apps/notes/data/.gitkeep` placeholder rather than removing the whole directory (an earlier version of this cleanup did exactly that and had to be caught and reverted via `git status`/`git checkout` mid-session — worth remembering as a reason to always diff-check after any script that does its own filesystem cleanup, not just after edits made through normal tools).
 
 **What the real measurement actually found — this reconciles part of the doc's long-standing open question, but opens a new one.** Same synthetic 1.5M-character note, same harness, both `dev:browser` and the real Electron app, all post-fix:
 
@@ -618,7 +618,7 @@ Picked up this doc's own #1 concrete next step (above): confirmed with the user 
 - Some consumers (`useNoteSaveQueue.ts`'s `queueSave`, sidebar note search, the 60-second snapshot-autosave interval) already only need a flattened string rarely or never per keystroke — good, low-risk first migration targets whenever Phase 2 happens.
 - `ParagraphOffsetIndex.ts`'s existing treap is genuine prior art for the identity-keyed, length-augmented half of a rope, but confirmed by direct read of `pull()`/`merge()`: it stores zero text and its split granularity is whole-paragraph-only (never sub-node) — it's a natural skeleton to reuse the *pattern* from, not something a content rope could be bolted onto directly.
 
-**Built `src/editor/LexicalRopeSync.ts`**, structurally mirroring `LexicalParagraphOffsetSync.ts` as closely as possible (same two-listener strategy — `registerMutationListener` filtered to `created`/`destroyed`, `registerUpdateListener`'s `dirtyElements` for in-place edits — same `insertRun`-style batching for multiple paragraphs landing in one tick). Keeps its own private `ParagraphOffsetIndex` purely as offset/length bookkeeping (not shared with whatever instance the live app's caret placement uses), updated in lockstep with the rope so every `rope.replace()` call gets a precise, correct range instead of re-diffing two full strings.
+**Built `apps/notes/src/editor/LexicalRopeSync.ts`**, structurally mirroring `LexicalParagraphOffsetSync.ts` as closely as possible (same two-listener strategy — `registerMutationListener` filtered to `created`/`destroyed`, `registerUpdateListener`'s `dirtyElements` for in-place edits — same `insertRun`-style batching for multiple paragraphs landing in one tick). Keeps its own private `ParagraphOffsetIndex` purely as offset/length bookkeeping (not shared with whatever instance the live app's caret placement uses), updated in lockstep with the rope so every `rope.replace()` call gets a precise, correct range instead of re-diffing two full strings.
 
 **Two real bugs, both caught by the fuzz suite before either could reach a consumer, worth recording precisely since they're the crux of why this is genuinely subtle:**
 1. Removing the document's *last* paragraph: the code initially only ever looked for a *trailing* separator to remove alongside it (matching the general "owned span" rule), but the last paragraph has none — the separator that needs removing is the one immediately *before* it (now-dangling, since nothing will follow the new last paragraph). Caught as a reproducible one-extra-blank-line mismatch across 4 of 5 fuzz seeds; root-caused with a minimal reproduction script, not by staring at the code.
@@ -669,13 +669,13 @@ Per the previous round's own next-step framing (the "bigger... migration... requ
 
 1. **Genuinely-every-keystroke consumers still pay a redundant re-derivation cost.** `splitMarkdownIntoPreviewBlocksIncremental` (preview render) and `resolveMarkdownSelectionContextIncremental` (toolbar active-state) both already do real incremental work internally, but both take a flat `text: string` and detect "what changed" by comparing two full strings (`text === previous.text`, an internal `.split('\n')`) rather than being handed precise edit ranges. A rope could hand them exact edit locations directly — this is the part that still needs `EditorContract.ts` extended (its `EditorTextChangeEvent.text`/`previousText`, `EditorSnapshot.text`, and all four `on*Transform` shapes are flat `string` today, confirmed by reading the file in full) and is genuinely the bigger, riskier, not-yet-started effort.
 2. **Several consumers are hot for no good reason** — they recompute every keystroke regardless of whether their output is visible or about to be used. Three found, all fixable with zero contract change:
-   - `documentFindHits` (`src/find/useDocumentFind.ts`) ran a full-document `normalizeInternalText` on *every* keystroke via its `useMemo`, even when the find bar is closed and the query is empty — `buildDocumentFindHits` (`src/editor/FindReplaceEngine.ts`) normalized `text` unconditionally, before checking whether the (already-normalized) query was empty.
+   - `documentFindHits` (`apps/notes/src/find/useDocumentFind.ts`) ran a full-document `normalizeInternalText` on *every* keystroke via its `useMemo`, even when the find bar is closed and the query is empty — `buildDocumentFindHits` (`apps/notes/src/editor/FindReplaceEngine.ts`) normalized `text` unconditionally, before checking whether the (already-normalized) query was empty.
    - The external-note "unsaved changes" hash effect (`App.tsx`) ran a full-document SHA-256 on every keystroke for file-backed notes, because it depends on the whole `activeSectionSnapshot` object and `App.tsx`'s `reportSectionHandle` does a shallow per-key diff across *all* of `SectionHandle`'s fields — since `activeNoteText`/`currentEditorText` are both fields on it, `activeSectionSnapshot` gets a new identity every keystroke, silently making everything keyed on the whole object hot. (Flagged, not fixed this round — see below.)
    - `activeNoteDocumentStats` (word/character count) — checked and left alone: it's displayed unconditionally whenever a note is open (`SectionEditorArea.tsx`, no visibility gate exists), so unlike the two above it's *correctly* hot, not accidentally hot. No incremental algorithm exists for word count; this is a genuine Phase-C "accept as floor" cost, not a Phase A target.
 
 **Two of the three Phase A fixes shipped this round, no contract change, no fuzz test needed (both are behavior-preserving reorders/timing changes, not new incremental algorithms — see below for why the doc's usual fuzz-testing bar doesn't apply here):**
 
-- **`buildDocumentFindHits`** (`src/editor/FindReplaceEngine.ts`): reordered to check the (short) query for emptiness *before* normalizing the full document, instead of after. Output is byte-identical for every input — the early-return path already existed, it just used to pay the expensive cost first. New `src/editor/FindReplaceEngine.test.ts` (this function had zero test coverage before) locks in the empty-query short-circuit plus basic case-sensitivity/CRLF-normalization behavior.
+- **`buildDocumentFindHits`** (`apps/notes/src/editor/FindReplaceEngine.ts`): reordered to check the (short) query for emptiness *before* normalizing the full document, instead of after. Output is byte-identical for every input — the early-return path already existed, it just used to pay the expensive cost first. New `apps/notes/src/editor/FindReplaceEngine.test.ts` (this function had zero test coverage before) locks in the empty-query short-circuit plus basic case-sensitivity/CRLF-normalization behavior.
 - **The external-note hash effect** (`App.tsx`, the `useEffect` around `currentExternalNoteHash`): wrapped the existing, byte-for-byte-unchanged `computeHash` async closure in a `window.setTimeout`/`clearTimeout` debounce on `SAVE_DEBOUNCE_MS` (imported from `useNoteSaveQueue.ts` — same cadence the save queue itself already uses), instead of running synchronously every time `activeSectionSnapshot` changes identity. Verified by reading (not guessing) what depends on `hasUnsavedChanges`/`currentExternalNoteHash`: `useNoteProtectionActions.ts`'s save/sync flows unconditionally set `hasUnsavedChanges: false` post-save rather than reading the debounced value, and — more importantly — `useEditorSectionMount.ts`'s `onTextChange` handler already has a *separate*, unmodified, synchronous `hasUnsavedChanges` update on every keystroke via a cheap string comparison (`canonicalText !== originalExternalText`), so the debounced SHA-256 path in `App.tsx` is a secondary reconciliation signal, not the only source of real-time feedback. This made the debounce safe to add without touching the more expensive-to-verify code path.
 
 **Verification:** `tsc --noEmit`, `npm run lint`, full suite (241/241, up from 235 — the 6 new `FindReplaceEngine.test.ts` tests). Live-browser check (Playwright, real Chromium, not the embedded pane) for the find-bar change specifically — case-insensitive/case-sensitive search, clearing the query back to the empty-state path this fix touches, a second query after clearing, and a live edit while the find bar was open, all producing correct hit counts with zero console errors. **The hash-debounce change was not live-verified** — stated explicitly rather than silently skipped: browser-mock mode (`installBrowserMockBridges.ts`) has no ready-made path to open a note as "external" (that flow requires `window.thockdownExternalFiles`, not mocked), and rigging one up was judged disproportionate to the risk given the change is a timing wrapper around unchanged logic, verified safe by reading every downstream consumer of the value it produces (above). If a future session touches this code path again, that live-verification gap is still open.
@@ -690,11 +690,11 @@ Per the previous round's own next-step framing (the "bigger... migration... requ
 
 Per this doc's own long-queued candidate ("a true `electron-builder`-packaged build under the perf harness — still never done, the most direct lever on the original, still-unreconciled user report of multi-second-per-keystroke lag"), built and measured one for the first time. Every prior Electron measurement in this doc launched `electron dist-electron/main.js` directly against the real `dist/` directory on disk — real IPC and real SQLite, but never through electron-builder's own asar-packing/native-module-rebuild pipeline, which is what an actual installed copy of this app runs.
 
-**Built successfully via `npx electron-builder --linux dir`** (the `dir` target: asar-packed `app.asar` + real `release/<version>/linux-unpacked/` file layout, but skipping AppImage's own compression step — not needed to answer the packaging question, and avoids depending on `appimagetool`/network access this container may not have). electron-builder rebuilds native deps (`better-sqlite3`) against the packaged Electron's own ABI as part of packaging itself — no separate `electron-rebuild` step needed first.
+**Built successfully via `npx electron-builder --linux dir`** (the `dir` target: asar-packed `app.asar` + real `apps/notes/release/<version>/linux-unpacked/` file layout, but skipping AppImage's own compression step — not needed to answer the packaging question, and avoids depending on `appimagetool`/network access this container may not have). electron-builder rebuilds native deps (`better-sqlite3`) against the packaged Electron's own ABI as part of packaging itself — no separate `electron-rebuild` step needed first.
 
-**New harness: `npm run perf:input-lag:electron:packaged -- [flags]`** (`scripts/perf/measureInputLagElectronPackaged.mjs`, same flags/modes as `measureInputLagElectron.mjs`, reusing `perfHarness.mjs`'s shared functions). Launches the real packaged executable directly via Playwright's `_electron.launch({ executablePath, ... })` rather than `electron <script>`. One new wrinkle found and handled: a packaged (non-portable) build's `resolveDataRoot()` uses `app.getPath('userData')/data`, not `<repo>/data` (confirmed by reading `electron/main.ts` again, not assumed) — the harness passes a fresh `--user-data-dir` (a temp directory, cleaned up after each run) instead of clearing a repo-tracked directory, giving the same "fresh DB every run" guarantee the existing harness gets a different way.
+**New harness: `npm run perf:input-lag:electron:packaged -- [flags]`** (`apps/notes/scripts/perf/measureInputLagElectronPackaged.mjs`, same flags/modes as `measureInputLagElectron.mjs`, reusing `perfHarness.mjs`'s shared functions). Launches the real packaged executable directly via Playwright's `_electron.launch({ executablePath, ... })` rather than `electron <script>`. One new wrinkle found and handled: a packaged (non-portable) build's `resolveDataRoot()` uses `app.getPath('userData')/data`, not `apps/notes/data` (confirmed by reading `apps/notes/electron/main.ts` again, not assumed) — the harness passes a fresh `--user-data-dir` (a temp directory, cleaned up after each run) instead of clearing a repo-tracked directory, giving the same "fresh DB every run" guarantee the existing harness gets a different way.
 
-**A real, useful gap in the existing source-map machinery surfaced and was fixed.** The first packaged `--mode=profile` run came back with only minified names (`WI @ index-DARAHYb0.js:555`, etc.) even though `build.sourcemap: true` is already on and the unpacked-launch harness resolves real names fine. Root cause, confirmed via `npx asar list app.asar` rather than guessed: a packaged build's script URL points *inside* `app.asar` (a single archive file, not a real directory), so `perfHarness.mjs`'s `loadTraceMapForUrl` — plain `fs.readFileSync`/`existsSync` from this script's own separate Node process, not Electron's asar-patched `fs` — silently failed to find `<script>.js.map` there even though the map genuinely is packed inside. Fixed by rewriting any `.../app.asar/<rest>` path to `REPO_ROOT/<rest>` before the file read: electron-builder's `files` config copies `dist/` into the asar root preserving its repo-relative structure, so the never-deleted, never-packed build-output copy at `<repo>/dist/...` is byte-identical to what's inside the archive — no need to touch the archive itself or add an `asar`-reading dependency. Verified: re-running `--mode=profile` on the packaged build now resolves this app's own functions the same way the unpacked harness always has (`App @ App.tsx:1564`, `EditorSection @ EditorSection.tsx:138`, `splitMarkdownIntoPreviewBlocksIncremental @ PreviewBlockSplit.ts:218`, etc.).
+**A real, useful gap in the existing source-map machinery surfaced and was fixed.** The first packaged `--mode=profile` run came back with only minified names (`WI @ index-DARAHYb0.js:555`, etc.) even though `build.sourcemap: true` is already on and the unpacked-launch harness resolves real names fine. Root cause, confirmed via `npx asar list app.asar` rather than guessed: a packaged build's script URL points *inside* `app.asar` (a single archive file, not a real directory), so `perfHarness.mjs`'s `loadTraceMapForUrl` — plain `fs.readFileSync`/`existsSync` from this script's own separate Node process, not Electron's asar-patched `fs` — silently failed to find `<script>.js.map` there even though the map genuinely is packed inside. Fixed by rewriting any `.../app.asar/<rest>` path to `APP_ROOT/<rest>` before the file read: electron-builder's `files` config copies `dist/` into the asar root preserving its repo-relative structure, so the never-deleted, never-packed build-output copy at `apps/notes/dist/...` is byte-identical to what's inside the archive — no need to touch the archive itself or add an `asar`-reading dependency. Verified: re-running `--mode=profile` on the packaged build now resolves this app's own functions the same way the unpacked harness always has (`App @ App.tsx:1564`, `EditorSection @ EditorSection.tsx:138`, `splitMarkdownIntoPreviewBlocksIncremental @ PreviewBlockSplit.ts:218`, etc.).
 
 **Measured, same session, same synthetic 1.5M-character note, packaged vs. the existing unpacked-launch harness, both at caret-end:**
 
@@ -711,7 +711,7 @@ Per this doc's own long-queued candidate ("a true `electron-builder`-packaged bu
 
 **What this does and doesn't resolve.** It rules out one of the two candidate explanations this doc had open for the still-unreconciled gap between this environment's worst-case measured numbers (~200ms/keystroke, any build style) and the user's reported multi-second-per-keystroke lag. The remaining, still-untested candidate is this environment's Xvfb + software-rendered (SwiftShader) GPU path versus real display/GPU hardware — nothing in this round's data speaks to that either way, since every measurement in this doc, packaged or not, has run under the same Xvfb/SwiftShader setup. That remains the next thing to test if real hardware ever becomes available to this effort, not something resolvable inside this container.
 
-Verified: `tsc --noEmit`, `npm run lint`, full suite (241/241, unchanged — this round only touched `scripts/perf/` tooling and `package.json`'s scripts block, no `src/` changes). No live-browser functional check needed beyond what the harness itself already does (drives real typing through a real window) — this round is pure measurement/tooling, not an app-behavior change.
+Verified: `tsc --noEmit`, `npm run lint`, full suite (241/241, unchanged — this round only touched `apps/notes/scripts/perf/` tooling and `package.json`'s scripts block, no `src/` changes). No live-browser functional check needed beyond what the harness itself already does (drives real typing through a real window) — this round is pure measurement/tooling, not an app-behavior change.
 
 ## This round: Phase B measured before being built — deprioritized, not attempted, based on real numbers
 
@@ -749,7 +749,7 @@ No code changes this round — measurement only, so no new verification needed b
   `javascript_tool`/`get_page_text` still work there for quick inspection, but for anything
   involving scrolling, timing, or virtualization behavior, use the setup below instead.
 - **A committed, reusable harness now exists for the common case — `npm run perf:input-lag --
-  [flags]` (see `scripts/perf/perfHarness.mjs`/`measureInputLag.mjs`).** It automates everything
+  [flags]` (see `apps/notes/scripts/perf/perfHarness.mjs`/`measureInputLag.mjs`).** It automates everything
   in the manual recipe below (start `dev:browser`, generate a synthetic document, seed + reload,
   place the caret, drive a keystroke burst, clean up) in one of three modes — `burst` (wall-clock),
   `profile` (CDP JS sampling), `trace` (CDP category trace). Reach for this first; only fall back
@@ -765,7 +765,7 @@ No code changes this round — measurement only, so no new verification needed b
   leave the dev server (and its port) running — spawn detached and kill the process group
   (negative PID) instead.
 - **A second harness measures the real packaged Electron app — `npm run
-  perf:input-lag:electron -- [flags]`** (`scripts/perf/measureInputLagElectron.mjs`, same flags
+  perf:input-lag:electron -- [flags]`** (`apps/notes/scripts/perf/measureInputLagElectron.mjs`, same flags
   as the browser harness). This is the ONLY way to get a number that isn't `dev:browser`'s mock-
   IPC/HMR-runtime environment, and per this round's own finding, the two do NOT agree, so don't
   treat `dev:browser` numbers as a stand-in for the real app without also spot-checking here.
@@ -774,7 +774,7 @@ No code changes this round — measurement only, so no new verification needed b
      script does this automatically, a bare `node .../measureInputLagElectron.mjs` will hang).
   2. `--no-sandbox` (Electron/Chromium refuse to run sandboxed as root, and this container runs
      as root) — the harness passes this itself when launching.
-  3. `npx electron-rebuild -f -w better-sqlite3` (or `npx @electron/rebuild`, current package
+  3. `npx electron-rebuild -f -w better-sqlite3` (or `npx @apps/notes/electron/rebuild`, current package
      name) run at least once per `node_modules` refresh — the prebuilt `better-sqlite3` binary
      `npm install` fetches targets the host Node's ABI, not Electron's bundled Node's ABI, and
      without this the main process crashes on its first `new Database(...)` call *before opening
@@ -800,23 +800,23 @@ No code changes this round — measurement only, so no new verification needed b
   (it was never name-based) and remains the more reliable mode for Layout/Paint/JS-category
   attribution either way.
 - **A third harness measures a true electron-builder-packaged build — `npm run
-  perf:input-lag:electron:packaged -- [flags]`** (`scripts/perf/measureInputLagElectronPackaged.mjs`,
+  perf:input-lag:electron:packaged -- [flags]`** (`apps/notes/scripts/perf/measureInputLagElectronPackaged.mjs`,
   same flags/modes). Despite the name above, `perf:input-lag:electron` launches `electron
   dist-electron/main.js` directly against the real `dist/` directory on disk — real IPC/SQLite, but
   never through electron-builder's own asar-packing + native-module-rebuild pipeline, which is what
   an actually-installed copy of this app runs. This harness runs `npx electron-builder --linux dir`
-  (the `dir` target — asar-packed, real `release/<version>/linux-unpacked/` layout, skips AppImage's
+  (the `dir` target — asar-packed, real `apps/notes/release/<version>/linux-unpacked/` layout, skips AppImage's
   own compression step, which needs tooling/network this container may not have) and launches that
   executable directly via `_electron.launch({ executablePath })`. Confirmed this round: the two
   measure the same, within a few percent, on every mode — see "This round" above. Two things unique
   to this harness: (1) a packaged (non-portable) build's data root is `app.getPath('userData')/data`,
-  not `<repo>/data` (`electron/main.ts`'s `resolveDataRoot`) — this harness passes a fresh
+  not `apps/notes/data` (`apps/notes/electron/main.ts`'s `resolveDataRoot`) — this harness passes a fresh
   `--user-data-dir` temp folder per run instead of clearing a repo directory; (2) source-map
   resolution for `--mode=profile` needed a fix in `perfHarness.mjs`'s `loadTraceMapForUrl` — a
   packaged build's script URL points inside `app.asar` (a single archive file, unreadable by this
   script's own plain, non-Electron-patched `fs`), so it now rewrites any `.../app.asar/<rest>` path
-  to `REPO_ROOT/<rest>` before reading, since electron-builder's `files` config copies `dist/` into
-  the asar root preserving repo-relative structure and the source copy at `<repo>/dist/` is never
+  to `APP_ROOT/<rest>` before reading, since electron-builder's `files` config copies `dist/` into
+  the asar root preserving repo-relative structure and the source copy at `apps/notes/dist/` is never
   deleted. `release/` is gitignored — this harness's build output is never meant to be committed.
 - **Manual recipe, for anything the harness doesn't cover (Windows; the previous version of this
   note described a Linux sandbox with paths like `/opt/node22` that don't apply here — that
@@ -832,7 +832,7 @@ No code changes this round — measurement only, so no new verification needed b
      fail to resolve it), run via plain `node script.cjs`.
   4. To seed a large note without fighting the UI: `window.thockdownNotes.createNote({
      initialText })` then `window.thockdownSections.setActiveNote(sectionId, noteId)` (browser
-     dev mode's mock IPC bridge, `src/dev/installBrowserMockBridges.ts`) — **then reload the
+     dev mode's mock IPC bridge, `apps/notes/src/dev/installBrowserMockBridges.ts`) — **then reload the
      page** (`page.goto` again, or `location.reload()`); this bridge call only updates
      *persisted* section state, it does not push a live update into the already-running React
      app. Confirmed working end-to-end across rounds for documents up to 1.5M characters.
@@ -899,9 +899,9 @@ No code changes this round — measurement only, so no new verification needed b
 
 ## CodeMirror 6 migration: performance audit (everything above this section is Lexical-era)
 
-Everything above this section predates the CM6 migration and is scoped to `src/components/
+Everything above this section predates the CM6 migration and is scoped to `apps/notes/src/components/
 Editor.tsx` (Lexical) — still the editor every real user gets today (see next paragraph).
-This section covers a first performance audit of `src/components/CM6Editor.tsx`, the CM6-backed
+This section covers a first performance audit of `apps/notes/src/components/CM6Editor.tsx`, the CM6-backed
 `EditorAdapter` implementation built alongside it (see `EditorContract.ts`'s "implementations
 may be partial while the rewrite is in flight" rule, and CM6Editor.tsx's own file-level doc
 comment for the full slice-by-slice port history).
@@ -918,15 +918,15 @@ first-restore flash gating), not something this audit round changed unilaterally
 
 ### Method
 
-A dedicated harness, `scripts/perf/measureCM6RealApp.mjs`, was added (reusing `perfHarness.mjs`'s
+A dedicated harness, `apps/notes/scripts/perf/measureCM6RealApp.mjs`, was added (reusing `perfHarness.mjs`'s
 primitives, matching `measureInputLag.mjs`'s CLI shape) — it forces the CM6 path on via
 `page.addInitScript` setting the localStorage flag before every navigation, then measures the
-*real app's* `CM6Editor.tsx`, not the standalone `scripts/perf/cm6-spike/` prototype the Phase-0
+*real app's* `CM6Editor.tsx`, not the standalone `apps/notes/scripts/perf/cm6-spike/` prototype the Phase-0
 spike measurement (`measureCM6Spike.mjs`) used. CM6's real scroll element
 (`.cm-scroller`) and contenteditable (`.cm-content`) differ from Lexical's
 (`.thockdown-custom-scrollbar` / `.editor-text`), so `placeCaretAt` needed a CM6-specific variant
 using CM6's own `Mod-Home`/`Mod-End` default keybindings instead of `perfHarness.mjs`'s
-scroll-then-click approach. A second script, `scripts/perf/verifyCM6PostFix.mjs`, does a
+scroll-then-click approach. A second script, `apps/notes/scripts/perf/verifyCM6PostFix.mjs`, does a
 live-browser functional pass (typing, Tab, Enter, Ctrl+B, paste via a synthetic `ClipboardEvent`,
 undo, and the caret-at-document-end-with-trailing-blank-lines case) with console-error
 monitoring, per this doc's own "live-browser functional check is mandatory" rule for anything
@@ -984,10 +984,10 @@ keystroke/transform/paste — all found by direct code reading (grepping for `.d
 
 `npx tsc --noEmit`, `npm run lint`, full unit suite (unchanged, 251/251 — no CM6Editor-specific
 tests existed to update; the fixes are exact-by-construction transformations, not caching
-schemes, per fix #2's own reasoning above), `scripts/perf/verifyCM6PostFix.mjs` (live-browser,
+schemes, per fix #2's own reasoning above), `apps/notes/scripts/perf/verifyCM6PostFix.mjs` (live-browser,
 all checks passed, zero console errors), and an A/B `git stash` comparison isolating fix #2's own
 effect in the most directly-affected case: a 20-keystroke `Enter`-key burst on a synthetic
-1.5M-character note, caret at document end (`node scripts/perf/measureCM6RealApp.mjs
+1.5M-character note, caret at document end (`node apps/notes/scripts/perf/measureCM6RealApp.mjs
 --mode=burst --keystrokes=20 --position=end --char=Enter`) — **81.6ms/keystroke mean before,
 73.5ms/keystroke after (~10%)**. A plain-character burst (`--char=x`, exercises fixes #1/#3 but
 not #2) showed no significant change (~45ms/keystroke mean, both before and after) — see "what's
@@ -1043,7 +1043,7 @@ hook-call argument spanning hundreds of lines that start can land far from the a
 Named-function entries (e.g. `normalizeForComparison`, `splitMarkdownIntoPreviewBlocksIncremental`)
 remain reliable. When an anonymous entry dominates a profile, don't guess from the line number —
 bracket candidates directly with `performance.mark`/`measure` (see
-`scripts/perf/measureEditorSectionHooks.mjs`, added this round and left in place as a reusable
+`apps/notes/scripts/perf/measureEditorSectionHooks.mjs`, added this round and left in place as a reusable
 diagnostic for the next time `EditorSection.tsx`'s hook fan-out needs auditing) and let real
 numbers settle it.
 
@@ -1099,7 +1099,7 @@ than trusted from the reasoning alone**: if any real mount/note-switch path ever
 `adapter.applySnapshot({ viewportLines })`, `hasViewportLines` would stay `false` forever and the
 editor would render permanently blank — no grid, no caret, nothing — exactly the kind of
 caret/selection-adjacent regression this doc's own process discipline treats as the highest-severity
-class of bug. Verified live, not assumed: a new `scripts/perf/verifyCM6ProductionGating.mjs`
+class of bug. Verified live, not assumed: a new `apps/notes/scripts/perf/verifyCM6ProductionGating.mjs`
 (committed as a regression check, not a one-off) confirms CM6 mounts by default with no
 localStorage flag set, the grid/caret render on first mount, switching to a second note through
 the *real* UI (clicking its sidebar entry, not the mock-bridge shortcut, which doesn't exercise the
@@ -1128,7 +1128,7 @@ on the synthetic 1.5M-character note, and most are already the incrementally-opt
 this doc's own history already built (`deriveNoteTitleIncremental`, `updateInlineStateLineCacheIncremental`,
 `splitMarkdownIntoPreviewBlocksIncremental`). The instrumentation was reverted after answering the
 question — this is a diagnostic technique to reach for again, not permanent code (see
-`scripts/perf/measureEditorSectionHooks.mjs` for the reusable harness half of it).
+`apps/notes/scripts/perf/measureEditorSectionHooks.mjs` for the reusable harness half of it).
 
 **`(program)` and `(garbage collector)` are now the two largest remaining CDP profile buckets**
 (~38% of total sampled time combined) — not attributable to a specific named function, and the
@@ -1531,7 +1531,7 @@ synthetic benchmark's shape and go get a live trace from the real report instead
 breakthrough was a real DevTools Performance-panel capture from the user's own machine, not
 another harness run.
 
-**Bug 1 — a real correctness/perf defect in `parseStructuralRanges` (`src/editor/PreviewBlockSplit.ts`),
+**Bug 1 — a real correctness/perf defect in `parseStructuralRanges` (`apps/notes/src/editor/PreviewBlockSplit.ts`),
 predating all of this doc's incremental-caching work.** `parseStructuralRanges` absorbs leading
 blank lines *before* a top-level node into that node's own range (`rangeStartLine1 =
 previousEndLine1 + 1`), but had no equivalent for trailing blank lines *after the very last node* —
@@ -1586,7 +1586,7 @@ content is immutable once taken.
 footer word-count display (`EditorSection.tsx`) had the same shape of latent per-keystroke
 O(document length) cost as everything above, previously mitigated only by deferring/debouncing it
 (tier 3 in this doc's own solution hierarchy), not by making the computation itself cheaper (tier
-1/2). Split into `src/editor/WordCount.ts`'s `countWords` (the full "establish" scan) and
+1/2). Split into `apps/notes/src/editor/WordCount.ts`'s `countWords` (the full "establish" scan) and
 `trackWordCount` (the incremental "track" delta) — genuinely simpler than this doc's markdown-
 parsing incrementals, since a word boundary only ever depends on whitespace immediately touching an
 edit, with no forward-unbounded hazard class the way an unclosed code fence has. Implementation
@@ -1613,7 +1613,7 @@ physical keydown through CM6's commit, through `onTextChange`'s full call chain
 (`useEditorSectionMount.ts`), to the next painted frame, straight to the console — for reproducing
 a lag report live in the actual app with the user typing themselves, rather than reconstructing a
 synthetic Playwright script and hoping it matches. This is what actually closed the gap this
-round; consider it a first-class tool alongside `scripts/perf/measureInputLag*.mjs`, not a
+round; consider it a first-class tool alongside `apps/notes/scripts/perf/measureInputLag*.mjs`, not a
 throwaway. Left in place deliberately (per explicit user decision this round) rather than stripped
 after use.
 
@@ -1634,13 +1634,13 @@ shape self-heals on the next launch instead of accumulating silently: (1) uncond
 `notes_fts` down to one row per note (keeping the highest rowid — always a syntactically complete,
 valid row, never a partial one, so this can only discard stale index duplicates, never real note
 content, which lives in the `notes` table and the `.md` files, not `notes_fts`); (2) conditionally
-`VACUUM`s, gated behind an actual bloat threshold (`electron/databaseSanitationPolicy.ts`'s
+`VACUUM`s, gated behind an actual bloat threshold (`apps/notes/electron/databaseSanitationPolicy.ts`'s
 `shouldVacuumForBloat` — both freelist *ratio* > 30% and reclaimable size > 20MB required, so a
 small or proportionally-tidy database never pays a VACUUM's real cost, which holds an exclusive
 lock and rewrites the whole file). The threshold logic is a pure function deliberately kept free of
 any `better-sqlite3` import (that native module is compiled against Electron's bundled Node ABI,
 confirmed live to fail under vitest's plain-Node ABI with a `NODE_MODULE_VERSION` mismatch), so it
-alone is unit-testable (`electron/databaseSanitationPolicy.test.ts`, 6 cases including exact
+alone is unit-testable (`apps/notes/electron/databaseSanitationPolicy.test.ts`, 6 cases including exact
 threshold-boundary behavior); the DB-touching dedupe/VACUUM statements themselves were verified
 manually against the real affected database this round (298MB → 80.5MB, 217MB reclaimed) rather
 than via an automated test, since better-sqlite3 can't run under this project's test runner at all.
@@ -1884,7 +1884,7 @@ Second half of the Kindle idea, on top of the height model below. The model
 made the pixel substrate honest to ~0.4%; this makes the thumb exact by
 construction, and immune to layout entirely.
 
-**What it is** (`src/editorSection/previewCharPosition.ts`): the block list,
+**What it is** (`apps/notes/src/editorSection/previewCharPosition.ts`): the block list,
 prefix-summed into character offsets, plus the two conversions the scrollbar
 needs — pixel position → character position and back — each interpolating
 *inside* the block it lands in, using that block's own on-screen geometry.
@@ -1918,7 +1918,7 @@ Note `virtualizer.getMeasurements()` is private in the published types;
 `measurementsCache` is the public array it writes into, and calling
 `getVirtualItems()` first (memoized) is what guarantees it is current.
 
-**Verified** (`scripts/perf/verifyPreviewCharScrollbar.mjs`, real thumb drags
+**Verified** (`apps/notes/scripts/perf/verifyPreviewCharScrollbar.mjs`, real thumb drags
 via mouse events, 400k-char document of 1,331 varied blocks):
 
 | property | result |
@@ -1962,7 +1962,7 @@ page numbers, where it shows them, are looked up from a map generated
 server-side, never computed on the device. The insight is that the progress
 metric was never a pixel quantity.
 
-**What shipped** (`src/editorSection/previewHeightModel.ts`): heights stay
+**What shipped** (`apps/notes/src/editorSection/previewHeightModel.ts`): heights stay
 pixels, so the thumb stays visually proportional, but they are *derived from
 the source text* by a model fitted from a ~160-block sample:
 
@@ -1990,7 +1990,7 @@ Trustworthy`), the model is discarded and the document is measured block by
 block exactly as before. A document of images fails this on purpose: its
 heights are not a function of its text.
 
-**Measured** (`scripts/perf/measurePreviewHeightModel.mjs`, real Chromium,
+**Measured** (`apps/notes/scripts/perf/measurePreviewHeightModel.mjs`, real Chromium,
 1.5M chars of varied prose = 18k blocks, against ground truth from walking
 every viewport):
 
@@ -2179,7 +2179,7 @@ round below is unchanged: −0.1% cold, 0px jump-to-bottom, biggest jump 1px.
 
 **The defect.** The preview virtualizes blocks with a flat 56px estimate
 (`PREVIEW_BLOCK_ESTIMATED_HEIGHT_PX`), so any block not yet scrolled past is a
-guess. Measured on a 300k-character note (`scripts/perf/measurePreviewMeasurementCache.mjs`):
+guess. Measured on a 300k-character note (`apps/notes/scripts/perf/measurePreviewMeasurementCache.mjs`):
 cold total size **14,216px against a true 49,439px — 71% short**. Consequences the
 user reported and this reproduces: jumping to the bottom of the scrollbar lands
 **3,715px short of the end**, and a long scroll churns — total size changed **37
@@ -2188,7 +2188,7 @@ times over 60 viewport hops, biggest single jump 1,091px**.
 **The fix.** A background sweep measures every block into the virtualizer's own
 cache (`virtualizer.resizeItem`) shortly after the note opens, in idle-time
 slices with an 8ms budget and an adaptive batch size. Scheduling logic is
-isolated and unit-tested in `src/editorSection/previewMeasurementPrewarm.ts`;
+isolated and unit-tested in `apps/notes/src/editorSection/previewMeasurementPrewarm.ts`;
 the DOM half lives in `usePreviewMarkdownRendering.tsx`.
 
 | | before | after |
@@ -2245,7 +2245,7 @@ ancestor-driven changes (double-size mode, a root font scale) that no observer
 on the scroller's own attributes would see. All four cases now land 0px from the
 end.
 
-**Guarding it.** `scripts/perf/verifyPreviewPrewarmSafety.mjs` asserts the host
+**Guarding it.** `apps/notes/scripts/perf/verifyPreviewPrewarmSafety.mjs` asserts the host
 never becomes visible, never extends the scrollable area, leaves no DOM behind,
 doesn't break the render↔edit round trip, and re-measures the document after
 each of the four typography changes above.
@@ -2257,7 +2257,7 @@ offset). A/B'd against unmodified code — 1,494px baseline vs 1,411px with the
 prewarm — so it is pre-existing, not a regression. The check therefore asserts
 that a *settled* position stays put (0px), which is the property that matters.
 
-**Also found (pre-existing, not fixed):** `scripts/perf/verifyScrollSync.mjs` and
+**Also found (pre-existing, not fixed):** `apps/notes/scripts/perf/verifyScrollSync.mjs` and
 `perfHarness.mjs`'s `seedLargeNoteAndReload` both wait for the edit-mode
 contenteditable to become *visible*, but a restored note comes back in render
 view, where the edit pane is legitimately hidden — so both time out on
@@ -2271,26 +2271,26 @@ live-browser scripts above at 300k and 1.2M characters.
 The first switch from edit to preview on a large note used to pay for a full `splitMarkdownIntoPreviewBlocks` remark parse inside `usePreviewMarkdownRendering`, because the incremental block cache started empty whenever that hook first rendered. Now `useEditorSectionMount` builds that cache in the background while the user remains in edit mode, then passes the same `previewBlockSplitCacheRef` into `usePreviewMarkdownRendering` so the first toggle warm-starts the incremental parser instead of parsing the whole document on demand.
 
 **Source changes:**
-- `src/editorSection/useEditorSectionMount.ts`: added `previewBlockSplitCacheRef`, populates it via a 500ms-debounced background task using `splitMarkdownIntoPreviewBlocksIncremental` (with a `requestIdleCallback` fallback), reuses the cached result for DB-persisted anchor-block resolution, and exports the ref in the hook result.
-- `src/editorSection/usePreviewMarkdownRendering.tsx`: accepts an optional `previewBlockSplitCacheRef`; uses it as the shared cache instead of its own private ref.
-- `src/editorSection/EditorSection.tsx`: destructures `previewBlockSplitCacheRef` from `useEditorSectionMount` and passes it to `usePreviewMarkdownRendering`, including through the `SectionHandle` it registers.
+- `apps/notes/src/editorSection/useEditorSectionMount.ts`: added `previewBlockSplitCacheRef`, populates it via a 500ms-debounced background task using `splitMarkdownIntoPreviewBlocksIncremental` (with a `requestIdleCallback` fallback), reuses the cached result for DB-persisted anchor-block resolution, and exports the ref in the hook result.
+- `apps/notes/src/editorSection/usePreviewMarkdownRendering.tsx`: accepts an optional `previewBlockSplitCacheRef`; uses it as the shared cache instead of its own private ref.
+- `apps/notes/src/editorSection/EditorSection.tsx`: destructures `previewBlockSplitCacheRef` from `useEditorSectionMount` and passes it to `usePreviewMarkdownRendering`, including through the `SectionHandle` it registers.
 
-**Verification:** `npx tsc --noEmit`, `npm run lint`, `npm test` (277/277). `scripts/perf/verifyScrollSync.mjs` stable across 20 toggles. Isolated benchmark on a 1.5M-character synthetic document (`scripts/perf/benchmarkPreviewBlockSplit.mjs`): cold full parse ~769ms, warm cached reuse ~0ms (~36,700x speedup). Live `dev:browser` toggle measurement on the same size: first toggle ~180ms, cached toggle ~40ms, confirming the cache is live and the previous multi-second parse cost on first toggle is gone.
+**Verification:** `npx tsc --noEmit`, `npm run lint`, `npm test` (277/277). `apps/notes/scripts/perf/verifyScrollSync.mjs` stable across 20 toggles. Isolated benchmark on a 1.5M-character synthetic document (`apps/notes/scripts/perf/benchmarkPreviewBlockSplit.mjs`): cold full parse ~769ms, warm cached reuse ~0ms (~36,700x speedup). Live `dev:browser` toggle measurement on the same size: first toggle ~180ms, cached toggle ~40ms, confirming the cache is live and the previous multi-second parse cost on first toggle is gone.
 
 ## This round: persisted preview-block cache survives app restart
 
 The background prewarm cache from the previous round only helped within a single app session. After restart, the first edit→preview toggle on a large note paid the cold parse cost again. Now the structural ranges from the last preview-block split are persisted with the note (piggybacked onto the debounced text save and the note-leave UI-state checkpoints) and restored when the note is reactivated, so the cache survives app restarts.
 
 **Source changes:**
-- `src/shared/noteLifecycle.ts`: added `PersistedPreviewBlockCache` type (`v`, `textHash`, `ranges`) and extended `SaveNoteInput`, `NoteUiStatePayload`, and `NoteUiState` to carry it.
-- `src/shared/hashText.ts`: new renderer-side `hashNormalizedText` (SHA-256) so the renderer can verify the persisted cache against the loaded note text.
-- `src/editor/PreviewBlockSplit.ts`: added `PREVIEW_BLOCK_CACHE_VERSION` and `restorePreviewBlockSplitCacheFromRanges(text, ranges)` to reconstruct a full `PreviewBlockSplitCache` from persisted ranges.
-- `electron/databaseService.ts`: added `previewBlockCache TEXT` to the `notes` table; `upsertNoteContent` and `saveNoteUiState` accept/COALESCE the JSON blob; `getNoteUiState` returns it.
-- `electron/noteLifecycleService.ts`: serializes the cache JSON for `saveNote`/`saveNoteUiState` and deserializes it for `getNoteUiState`.
-- `src/editorSection/useEditorSectionMount.ts`: added `buildPersistedPreviewBlockCache(text)`; includes the cache in `persistEditUiState` and `persistActiveNoteEditModeStateNow`; the `previewBlockSplitCacheRef` and `previewBlocksCacheRef` are now owned by `EditorSection.tsx` and passed in as options so `useNoteSaveQueue` can read them.
-- `src/editorSection/useNoteSaveQueue.ts`: accepts `previewBlockSplitCacheRef`; when flushing a debounced text save, it builds and hashes the persisted cache and passes it to `saveNote`.
-- `src/editorSection/EditorSection.tsx`: owns `previewBlockSplitCacheRef`/`previewBlocksCacheRef` and `activeNoteTextRef`; seeds the cache from `getNoteUiState` on note activation when the text hash matches; passes the refs into the save queue and mount hook.
-- `src/dev/installBrowserMockBridges.ts`: mirrors the main-process cache persistence/return semantics in the browser mock so `dev:browser` behavior matches Electron.
+- `apps/notes/src/shared/noteLifecycle.ts`: added `PersistedPreviewBlockCache` type (`v`, `textHash`, `ranges`) and extended `SaveNoteInput`, `NoteUiStatePayload`, and `NoteUiState` to carry it.
+- `apps/notes/src/shared/hashText.ts`: new renderer-side `hashNormalizedText` (SHA-256) so the renderer can verify the persisted cache against the loaded note text.
+- `apps/notes/src/editor/PreviewBlockSplit.ts`: added `PREVIEW_BLOCK_CACHE_VERSION` and `restorePreviewBlockSplitCacheFromRanges(text, ranges)` to reconstruct a full `PreviewBlockSplitCache` from persisted ranges.
+- `apps/notes/electron/databaseService.ts`: added `previewBlockCache TEXT` to the `notes` table; `upsertNoteContent` and `saveNoteUiState` accept/COALESCE the JSON blob; `getNoteUiState` returns it.
+- `apps/notes/electron/noteLifecycleService.ts`: serializes the cache JSON for `saveNote`/`saveNoteUiState` and deserializes it for `getNoteUiState`.
+- `apps/notes/src/editorSection/useEditorSectionMount.ts`: added `buildPersistedPreviewBlockCache(text)`; includes the cache in `persistEditUiState` and `persistActiveNoteEditModeStateNow`; the `previewBlockSplitCacheRef` and `previewBlocksCacheRef` are now owned by `EditorSection.tsx` and passed in as options so `useNoteSaveQueue` can read them.
+- `apps/notes/src/editorSection/useNoteSaveQueue.ts`: accepts `previewBlockSplitCacheRef`; when flushing a debounced text save, it builds and hashes the persisted cache and passes it to `saveNote`.
+- `apps/notes/src/editorSection/EditorSection.tsx`: owns `previewBlockSplitCacheRef`/`previewBlocksCacheRef` and `activeNoteTextRef`; seeds the cache from `getNoteUiState` on note activation when the text hash matches; passes the refs into the save queue and mount hook.
+- `apps/notes/src/dev/installBrowserMockBridges.ts`: mirrors the main-process cache persistence/return semantics in the browser mock so `dev:browser` behavior matches Electron.
 
 **Verification:** `npx tsc --noEmit`, `npm run lint`, `npm test` (277/277). Live `dev:browser` toggle measurement on a 500K-character synthetic document: first toggle ~160ms, cached toggle ~35ms. Browser-mock storage inspection confirmed `previewBlockCache` is written after the note-leave checkpoint and returned by `getNoteUiState`; `activateNote` logged successful hash-match restoration. A full close/reopen browser-mock restart measurement harness was attempted but proved flaky due to test-harness page-lifecycle timing; the persisted-cache restore path is validated by the hash-match log and the storage inspection.
 
@@ -2299,8 +2299,8 @@ The background prewarm cache from the previous round only helped within a single
 Switching to a large note (or loading it on startup) still took >2 seconds even though the persisted preview-block cache was being restored. Profiling `activateNote` in `EditorSection.tsx` showed `buildEditRestoreSnapshotFromUiState` was running a full `splitMarkdownIntoPreviewBlocks()` remark parse on the newly loaded text in order to resolve the persisted `anchorBlockIndex` to a source line. The persisted cache had already reconstructed the block array, but it was never passed into `buildEditRestoreSnapshotFromUiState`, so the resolver paid the full parse cost again on every note activation.
 
 **Source changes:**
-- `src/editor/EditRestoreMath.ts`: `resolveEditSourceAnchorLineFromUiState(text, uiState, blocks?)` and `buildEditRestoreSnapshotFromUiState({ ..., previewBlocks? })` now accept an optional already-computed preview block array and skip the expensive full remark parse when one is supplied.
-- `src/editorSection/EditorSection.tsx`: `activateNote` now passes the restored in-memory block cache (`previewBlocksCacheRef.current.blocks`, verified to match `hydratedText`) into `buildEditRestoreSnapshotFromUiState`. Added opt-in `[activate-note-timing]` logs around each major sub-step (outgoing UI-state persist, load note + UI state, cache restore, snapshot build, external-note setup, state updates) so future slowness can be pinpointed without code changes.
+- `apps/notes/src/editor/EditRestoreMath.ts`: `resolveEditSourceAnchorLineFromUiState(text, uiState, blocks?)` and `buildEditRestoreSnapshotFromUiState({ ..., previewBlocks? })` now accept an optional already-computed preview block array and skip the expensive full remark parse when one is supplied.
+- `apps/notes/src/editorSection/EditorSection.tsx`: `activateNote` now passes the restored in-memory block cache (`previewBlocksCacheRef.current.blocks`, verified to match `hydratedText`) into `buildEditRestoreSnapshotFromUiState`. Added opt-in `[activate-note-timing]` logs around each major sub-step (outgoing UI-state persist, load note + UI state, cache restore, snapshot build, external-note setup, state updates) so future slowness can be pinpointed without code changes.
 
 **Verification:** `npx tsc`, `npm run lint`, `npm test` (277/277). The cache-reuse path is verified by construction: the blocks come from `restorePreviewBlockSplitCacheFromRanges`, which materializes them from the same structural ranges that `splitMarkdownIntoPreviewBlocks` would have produced, and the hash match guarantees the text is identical. The timing logs are gated by `localStorage.getItem('thockdown:debug-input-lag') === '1'` to avoid console noise in production.
 
@@ -2310,12 +2310,12 @@ After wiring the preview-block cache through `activateNote`, mode-toggle scroll-
 1. Scrolling in render (preview) mode and switching back to edit did not update edit's scroll location.
 2. Scrolling in edit and switching to render only updated after two scroll events; the first appeared ignored.
 
-Root causes in `src/editorSection/useEditorSectionMount.ts`:
+Root causes in `apps/notes/src/editorSection/useEditorSectionMount.ts`:
 - `toggleRenderViewMode` rounded the edit viewport's source line up to the *next* preview block (`resolvePreviewBlockIndexForSourceLine(...) + 1`) instead of the containing block. This made preview land one block ahead of edit, so small intra-block scrolls produced no visible change.
 - The render->edit branch had an inner "already restored" fast path that short-circuited whenever `editRestoreCompletedForNoteIdRef` contained the current note. Because entering preview adds that key, returning to edit always hit the fast path and ignored any preview-side scrolls.
 
 **Source changes:**
-- `src/editorSection/useEditorSectionMount.ts`:
+- `apps/notes/src/editorSection/useEditorSectionMount.ts`:
   - `toggleRenderViewMode` now uses the containing block index (no `+1`) when round-tripping through the canonical BLOCK, so both modes land on the same top-level preview block.
   - Removed the stale "already restored" fast paths in both `toggleRenderViewMode` and the `isPreviewMode` transition effect. When `sectionRequiresScrollUpdateRef` is true on a render->edit transition, edit is now re-derived from the current preview anchor instead of assuming the hidden edit pane is still correct.
   - Added `[scroll-sync]` diagnostic logs around the toggle showing the raw source line, containing block index, chosen anchor index, and anchor start line.
@@ -2338,11 +2338,11 @@ is what let the duration ceiling go (see that section above).
 **The modules.**
 - `packages/interaction/scrollJourney.ts` — plans it. Returns `direct` or `bridged` plus
   the two ramps and the bridge distance. No DOM.
-- `src/editor/scrollBridge.ts` — the curtain itself. `registerScrollBridge`
+- `apps/notes/src/editor/scrollBridge.ts` — the curtain itself. `registerScrollBridge`
   once per pane; `begin` / `advance` / `isCovering` / `end` per journey.
-- `src/editor/scrollBridgeTexture.ts` — the tile, drawn to a canvas and cached
+- `apps/notes/src/editor/scrollBridgeTexture.ts` — the tile, drawn to a canvas and cached
   per host plus typography key.
-- `src/editor/scrollThumbRubberBand.ts` — the thumb's two edges.
+- `apps/notes/src/editor/scrollThumbRubberBand.ts` — the thumb's two edges.
 - Both engines (`NonQuantizedSmoothScroll`, `QuantizedSmoothScroll`) run the
   identical three-phase branch and return the journey's timing, so whatever
   drives the scrollbar can move in step with it.
@@ -2374,7 +2374,7 @@ is what let the duration ceiling go (see that section above).
    note), so its border box sits exactly half a row above the lattice, and
    reading it put the whole curtain half a line high.
 
-**What proves it.** `scripts/perf/verifyScrollBridge.mjs` runs one suite
+**What proves it.** `apps/notes/scripts/perf/verifyScrollBridge.mjs` runs one suite
 against both panes — no argument for both, or `preview` / `edit` for one. It
 samples every frame and asserts the cut lands inside the covered window, the
 clip is applied wherever the band overlaps and released at the end, the thumb
@@ -2415,7 +2415,7 @@ a bounded runway, not a total. That is the whole design.
 
 ### The measurements that sized it
 
-`scripts/perf/measurePreviewScrollRunway.mjs` (Playwright, real Chromium, CDP
+`apps/notes/scripts/perf/measurePreviewScrollRunway.mjs` (Playwright, real Chromium, CDP
 CPU throttling; prewarm off by default via `thockdown:disable-preview-prewarm`).
 
 | Run | fps | Drain | Refill (med / p95) | Runway |
@@ -2454,10 +2454,10 @@ path, the survey and the height model are all still there and untouched; the
 flag chooses which one the render view uses, so the two can be felt against each
 other on the same note without a rebuild.
 
-- `src/editorSection/previewWindow.ts` — pure window planning: how deep the
+- `apps/notes/src/editorSection/previewWindow.ts` — pure window planning: how deep the
   runway is, when to grow, when to trim, and the hysteresis between the two.
   16 unit tests.
-- `src/editorSection/usePreviewWindow.tsx` — the DOM half: renders the window in
+- `apps/notes/src/editorSection/usePreviewWindow.tsx` — the DOM half: renders the window in
   **ordinary flow** (each block in a `display: flow-root` wrapper, which is what
   reproduces the absolutely-positioned path's margin behaviour exactly),
   measures it, moves it, and answers position in character space.
@@ -2500,7 +2500,7 @@ other on the same note without a rebuild.
 
 ### Verification
 
-`scripts/perf/verifyPreviewWindow.mjs` opens the same document on both paths in
+`apps/notes/scripts/perf/verifyPreviewWindow.mjs` opens the same document on both paths in
 one browser and checks, in order: block gaps and heights match the virtualized
 path (the `flow-root` claim); the spacer stays bounded; a held PageDown carries
 the reader forward with **zero** reversals; the spacer is still bounded after a
@@ -2567,7 +2567,7 @@ nothing else — the same boundary `editor/documentPosition.ts` already drew:
 - **at or over it** — windowed. No survey, no model, no whole-document height.
 
 Deleted outright: `previewHeightModel.ts` and its test (379 lines + 18 tests),
-`scripts/perf/measurePreviewHeightModel.mjs`, `applyHeightModel`,
+`apps/notes/scripts/perf/measurePreviewHeightModel.mjs`, `applyHeightModel`,
 `remeasureMountedBlocks`, `predictedHeightsRef`, `heightModelRef`,
 `modelByGeometryRef`, `calibrationSamplesRef`, the fitted-model geometry cache,
 the sampled-target planning in `restartPrewarm`, the model tier of
@@ -2657,7 +2657,7 @@ finished, so it now runs only when `!prewarmDoneRef.current`. `measured beats
 estimated, always` is the rule; there is nothing for a re-ask to improve after
 the survey lands.
 
-**Guarded by** `scripts/perf/verifyPreviewBlockSpacing.mjs`, which asserts the
+**Guarded by** `apps/notes/scripts/perf/verifyPreviewBlockSpacing.mjs`, which asserts the
 invariant the bug broke: consecutive blocks must be placed exactly their own
 measured height apart. A/B against the fix -- worst drift 33.61px without it,
 0.25px with it.
@@ -2779,7 +2779,7 @@ POSITION is the readout.
 `resolveThumbLineRatio` stays and is still correct for the EDIT view, where lines
 are what the reader navigates.
 
-**Guarded by** `scripts/perf/verifyPreviewCharThumb.mjs`: that two documents of
+**Guarded by** `apps/notes/scripts/perf/verifyPreviewCharThumb.mjs`: that two documents of
 the same character count but very different shape (long prose against short list
 items) get the same thumb, that it bottoms out square, that it holds its size
 while the reader scrolls, and that it advances. It also prints the end-of-track
@@ -2816,7 +2816,7 @@ the window's container, whose height changes on every shift -- not otherwise.
 
 Reported from real use on a large note: the scrollbar "readjusts after landing"
 and "only travels to the top with repeated clicks -- the first few settle too
-far down". Reproduced in `scripts/perf/verifyPreviewTrackLanding.mjs`, which
+far down". Reproduced in `apps/notes/scripts/perf/verifyPreviewTrackLanding.mjs`, which
 clicks the track and records where the reader ended up, immediately and again
 700ms later. It was two faults stacked.
 
@@ -2893,7 +2893,7 @@ and flips between them -- not pixel vibration, a genuine bistable oscillation.
 That signature means two mechanisms each undoing the other's correction, which
 is the same family as the three journey faults above.
 
-`scripts/perf/verifyPreviewRestStability.mjs` parks the reader at several
+`apps/notes/scripts/perf/verifyPreviewRestStability.mjs` parks the reader at several
 depths and samples every frame for two seconds with no input at all, keyed on
 where the TEXT is rather than on `scrollTop` -- which is window-local and
 legitimately jumps when the window shifts, so it cannot tell a real wobble from
@@ -2937,7 +2937,7 @@ machine: **13.8ms/keystroke on a 3,000-character note and 16.0ms on a
 (before it), `ea636ac` (mid), and `HEAD` — all reported ~16ms, which reads as
 "no regression exists" and is in fact "this tool cannot see one".
 
-`scripts/perf/measureTypeLatency.mjs` was written for this and is the one to
+`apps/notes/scripts/perf/measureTypeLatency.mjs` was written for this and is the one to
 reach for first now. It measures inside the page, where there is no wire:
 
 * `handler` — keydown to the end of the synchronous task it ran on, via a
@@ -3017,7 +3017,7 @@ pre-rework baseline exactly); the latency table above; `npm test` (862/862);
 lint clean on the changed files; `verifyPreviewWindow`,
 `verifyPreviewTrackLanding`, `verifyPreviewRestStability` and
 `verifyPreviewCharThumb` all passing; and a new
-`scripts/perf/verifyPreviewWindowNoteSwitch.mjs` covering the direction this fix
+`apps/notes/scripts/perf/verifyPreviewWindowNoteSwitch.mjs` covering the direction this fix
 could have broken — that a genuinely new document still re-plans the window off
 the old one's block indices.
 
@@ -3061,7 +3061,7 @@ the reader the sound *is* the keystroke and everything after it is lag.
 
 ### Measuring it
 
-`scripts/perf/measureCaretLatency.mjs` times two things per keystroke, from
+`apps/notes/scripts/perf/measureCaretLatency.mjs` times two things per keystroke, from
 inside the page: `moved` (keydown to the style mutation that repositions
 `.thockdown-block-caret`) and `painted` (keydown to the frame after that
 mutation was committed — what the eye can see). It reports per document
@@ -3146,7 +3146,7 @@ the line below, sometimes makes that text jump UP a row with the caret at the
 start of it. A few hundred milliseconds later it usually drops back. Sometimes
 it stays, and the new empty line seems "consumed or lost".
 
-`scripts/perf/verifyEnterAtCageBottom.mjs` encodes the invariant and is worth
+`apps/notes/scripts/perf/verifyEnterAtCageBottom.mjs` encodes the invariant and is worth
 keeping regardless of this round's outcome. It finds the cage's bottom edge by
 *observation* — walking the caret down with ArrowDown until it stops moving on
 screen — rather than by recomputing the boundary, so it cannot agree with a bug
@@ -3233,7 +3233,7 @@ Being external is, to the renderer, purely the `external` tag
 those notes:
 
 1. **`loadNote` reads their text from the FILE**, not the database
-   (`electron/noteLifecycleService.ts` — `fs.readFile(record.externalPath)`).
+   (`apps/notes/electron/noteLifecycleService.ts` — `fs.readFile(record.externalPath)`).
    So any reload during editing returns content that lags the unsaved edits.
 2. **A `console.warn` fired on every keystroke** in the text-change path
    (`useEditorSectionMount.ts`'s `isExternal` block). Fixed this round — it is
@@ -3343,7 +3343,7 @@ and prop agree by construction; note activation sets
 `latestEditorTextRef.current = hydratedText` immediately before
 `setActiveNoteText(hydratedText)`.
 
-**What is NOT established, and must not be claimed.** `scripts/perf/
+**What is NOT established, and must not be claimed.** `apps/notes/scripts/perf/
 verifyNoHydrationOverwrite.mjs` was written to catch this and **does not
 reproduce it**. Tried, with the guard deliberately disabled to make the fixture
 fail first: 1.5M characters, 40 and 60 Enters, `page.keyboard.press` and raw
@@ -3527,7 +3527,7 @@ chase. Three full-document SHA-256 passes are gone from the external-note paths
 ### Verification
 
 `npm test` 870/870 (8 new, in
-`electron/databaseService.externalSnapshots.test.ts`: the baseline is found by
+`apps/notes/electron/databaseService.externalSnapshots.test.ts`: the baseline is found by
 its column and not by scanning past automatic snapshots, the newest from-disk
 row wins, an older file timestamp is preserved, from-disk rows are never
 deduplicated while ordinary ones still are, and -- the regression that matters
@@ -3583,7 +3583,7 @@ unproven change from a hot path the user reports getting worse is the right
 move. The always-on overwrite buffer stays: it is still the only instrument
 that has ever caught this class in the wild.
 
-`scripts/perf/verifyExternalNoteTypingParity.mjs` checks both halves from
+`apps/notes/scripts/perf/verifyExternalNoteTypingParity.mjs` checks both halves from
 outside: zero external-only IPC while typing (it was at least one call plus two
 `setNotes` before), and the note still showing as modified afterwards so Save
 remains available.
@@ -4257,7 +4257,7 @@ same shape.
 
 Reported as "the first import is smooth, reopening the same file gets sluggish
 and freezes the cursor". Measured by dragging a 2MB file in and closing it ten
-times, in each slot mode (`scripts/perf/verifyExternalReopenWindow.mjs`; the
+times, in each slot mode (`apps/notes/scripts/perf/verifyExternalReopenWindow.mjs`; the
 browser mock now imports external files as the real service does).
 
 - **The database was not it.** The real `DatabaseService`, running the exact
@@ -4291,7 +4291,7 @@ in this document: +267MB after 120 characters on a 2MB note, never released.
 Fixed by taking the note's text out of React state entirely -- the full
 mechanism, the rule and the gate are in `docs/editor-input-pipeline-plan.md`,
 "What a keystroke may retain", and the rule itself heads
-`src/editorSection/useDisplayedNoteText.ts`. Earlier sections of this
+`apps/notes/src/editorSection/useDisplayedNoteText.ts`. Earlier sections of this
 document name `activeNoteText`, `currentEditorText`, `renderedDisplayText`
 and an `initialText` prop: those are the pre-fix data flow. The text is now
 `readEditorText()` + `editorTextVersion`, what a slot displays is

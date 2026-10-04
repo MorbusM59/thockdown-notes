@@ -11,11 +11,11 @@
 import { spawnSync } from 'node:child_process'
 
 const steps = [
-  ['types: desktop', 'npx', ['tsc', '--noEmit', '-p', '.']],
+  ['types: desktop', 'npx', ['tsc', '--noEmit', '-p', 'apps/notes']],
   ['types: mobile', 'npx', ['tsc', '--noEmit', '-p', 'apps/soundscapes']],
   ['lint', 'npm', ['run', 'lint', '--silent']],
   ['tests', 'npx', ['vitest', 'run']],
-  ['build: desktop', 'npx', ['vite', 'build']],
+  ['build: desktop', 'npx', ['vite', 'build', '--config', 'apps/notes/vite.config.ts']],
   ['build: mobile web app', 'npx', ['vite', 'build', '--config', 'apps/soundscapes/vite.config.ts']],
   ['build: mobile sandbox renderer', 'npx', ['vite', 'build', '--config', 'apps/soundscapes/vite.renderer.config.ts']],
 ]

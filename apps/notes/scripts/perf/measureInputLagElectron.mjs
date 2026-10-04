@@ -22,7 +22,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, rmSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import {
-  REPO_ROOT,
+  APP_ROOT,
   generateSyntheticDocument,
   placeCaretAt,
   measureKeystrokeBurstMs,
@@ -50,7 +50,7 @@ function parseArgs(argv) {
 
 function buildElectronApp() {
   console.error('[perf] building renderer + electron main/preload (npx vite build)...')
-  const result = spawnSync('npx', ['vite', 'build'], { cwd: REPO_ROOT, stdio: 'inherit' })
+  const result = spawnSync('npx', ['vite', 'build'], { cwd: APP_ROOT, stdio: 'inherit' })
   if (result.status !== 0) {
     throw new Error(`vite build failed with exit code ${result.status}`)
   }
@@ -122,7 +122,7 @@ async function main() {
 
   if (!args.skipBuild) {
     buildElectronApp()
-  } else if (!existsSync(path.join(REPO_ROOT, 'dist-electron', 'main.js'))) {
+  } else if (!existsSync(path.join(APP_ROOT, 'dist-electron', 'main.js'))) {
     throw new Error('--skip-build was given but no existing build was found at dist-electron/main.js -- run once without --skip-build first.')
   }
 
@@ -136,13 +136,13 @@ async function main() {
   // this script's own previously-seeded huge note), which changes both the
   // seeding call's behavior (existing notes) and, at real scale, the
   // sidebar's own render cost -- not what this script means to measure.
-  const dataDir = path.join(REPO_ROOT, 'data')
+  const dataDir = path.join(APP_ROOT, 'data')
   clearNoteDatabase(dataDir)
 
   console.error('[perf] launching the packaged Electron app...')
   const app = await _electron.launch({
     args: ['--no-sandbox', 'dist-electron/main.js'],
-    cwd: REPO_ROOT,
+    cwd: APP_ROOT,
   })
 
   try {

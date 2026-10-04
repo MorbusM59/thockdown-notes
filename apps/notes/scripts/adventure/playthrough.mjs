@@ -34,10 +34,10 @@ import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
+const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
 function parseArgs(argv) {
-  const args = { turns: 40, shots: false, skipBuild: false, out: path.join(REPO_ROOT, 'tmp-adventure-shots') }
+  const args = { turns: 40, shots: false, skipBuild: false, out: path.join(APP_ROOT, 'tmp-adventure-shots') }
   for (const raw of argv) {
     const [key, value] = raw.replace(/^--/, '').split('=')
     if (key === 'turns') args.turns = Number(value)
@@ -50,7 +50,7 @@ function parseArgs(argv) {
 
 /** Everything databaseService.ts writes, without touching the tracked placeholder. */
 function clearNoteDatabase() {
-  const dataDir = path.join(REPO_ROOT, 'data')
+  const dataDir = path.join(APP_ROOT, 'data')
   if (!existsSync(dataDir)) return
   for (const entry of readdirSync(dataDir)) {
     if (entry === '.gitkeep') continue
@@ -91,13 +91,13 @@ async function main() {
     console.error('[adventure] WARNING: $DISPLAY is unset -- run this under `xvfb-run -a`.')
   }
   if (!args.skipBuild) {
-    const built = spawnSync('npx', ['vite', 'build'], { cwd: REPO_ROOT, stdio: 'inherit' })
+    const built = spawnSync('npx', ['vite', 'build'], { cwd: APP_ROOT, stdio: 'inherit' })
     if (built.status !== 0) throw new Error(`vite build failed with exit code ${built.status}`)
   }
   if (args.shots) mkdirSync(args.out, { recursive: true })
   clearNoteDatabase()
 
-  const app = await _electron.launch({ args: ['--no-sandbox', 'dist-electron/main.js'], cwd: REPO_ROOT })
+  const app = await _electron.launch({ args: ['--no-sandbox', 'dist-electron/main.js'], cwd: APP_ROOT })
   const page = await app.firstWindow()
   await page.waitForLoadState('domcontentloaded')
   // The main process seeds the database asynchronously and no readiness signal

@@ -48,14 +48,14 @@ waits for the cloud half, and verifies both landed intact.
    run if it is still going, and stops the release *before* the tag is
    pushed, which is the last moment stopping is free. There is no opt-out: a
    release is public facing (CLAUDE.md, "Git workflow").
-5. **Bump, tag, push.** Writes the version into `package.json` *and*
+5. **Bump, tag, push.** Writes the version into `apps/notes/package.json` *and*
    `package-lock.json`, commits `Release vX.Y.Z`, tags it, pushes both. Pushing
    the tag is what starts the macOS build.
 6. **Create the prerelease.** Creates the GitHub release as a **prerelease**,
    with your notes, titled `Alpha Release #N` — N read off the highest existing
    one, so nobody has to count.
 7. **Windows build.** `npm run build`, then finds the `.exe` and `.zip` in
-   `release/<version>/`.
+   `apps/notes/release/<version>/`.
 8. **Wait for macOS.** Watches the `build-mac` run for this tag and reports how
    it ended. If it failed, the release still ships with the Windows builds and
    you're told the DMG is missing.
@@ -104,7 +104,7 @@ duplicate, and a missing or failed mac build is re-dispatched. Nothing needs to
 be undone first.
 
 The subtle part is *which version* a re-run means. By the time anything can
-fail, the new version is already written into `package.json` — so a plain bump
+fail, the new version is already written into `apps/notes/package.json` — so a plain bump
 would step over the unfinished release and cut a second one. Instead, if the
 current version is tagged and its release is missing any of its three
 deliverables (a `.dmg`, an `.exe`, and `SHA256SUMS.txt`), the script says so and
@@ -117,7 +117,7 @@ To redo the notes for a release that already exists, edit
 
 `.github/workflows/release-windows.yml` is the second half of the protocol run
 on GitHub's runners, for a release cut from somewhere that cannot build
-Windows or has no `gh` (a cloud session). Bump `package.json` and
+Windows or has no `gh` (a cloud session). Bump `apps/notes/package.json` and
 `package-lock.json`, commit `Release vX.Y.Z` on `main` and push it, then
 dispatch the workflow from `main` with the tag, the commit to tag (`target`)
 and the release notes as inputs. It creates or updates the prerelease
@@ -140,7 +140,7 @@ starts until that is green.
 
 Not enforced by the script, because judgment can't be:
 
-- **Did a user-facing change ship?** Then `electron/help/helpGuideContent.ts`
+- **Did a user-facing change ship?** Then `apps/notes/electron/help/helpGuideContent.ts`
   needs to describe it. That file is the canonical user documentation
   (see `CLAUDE.md`), and a release is the deadline for it being true.
 - **Does `TODO.md` still describe reality?** Things fixed in this batch should

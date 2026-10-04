@@ -25,7 +25,7 @@ import { SECONDARY_PRESS_ATTRIBUTE } from '@thockdown/interaction/pressTracking'
 
 const SRC = fileURLToPath(new URL('..', import.meta.url))
 // The shared packages are renderer code too, and ship in every app that uses them.
-const PACKAGES = fileURLToPath(new URL('../../packages', import.meta.url))
+const PACKAGES = fileURLToPath(new URL('../../../../packages', import.meta.url))
 
 function tsxFiles(dir: string): string[] {
   const out: string[] = []

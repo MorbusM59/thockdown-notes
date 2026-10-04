@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest'
 import { readdirSync, readFileSync } from 'node:fs'
 
 import { THOCKQUEST } from './thockquest'
+import { createRequire } from 'node:module'
+import { fileURLToPath } from 'node:url'
 
 /**
  * Every Font Awesome class the adventure names has to exist in the FREE set
@@ -17,9 +19,11 @@ import { THOCKQUEST } from './thockquest'
  * Read off the shipped package rather than a list, so it cannot go stale.
  */
 const SOLID = path.join(
-  process.cwd(),
-  'node_modules/@fortawesome/fontawesome-free/svgs/solid',
+  path.dirname(createRequire(import.meta.url).resolve('@fortawesome/fontawesome-free/package.json')),
+  'svgs/solid',
 )
+// The app's own folder, whichever directory the tests are run from.
+const APP = fileURLToPath(new URL('../../..', import.meta.url))
 
 function nameOf(iconClass: string): string | null {
   const match = /fa-([a-z0-9-]+)\s*$/.exec(iconClass.trim())
@@ -80,7 +84,7 @@ describe('every icon the adventure names', () => {
     // module is walked now, so a glyph named in a file nobody thought of is
     // still checked.
     const missing: string[] = []
-    for (const file of sourcesUnder(path.join(process.cwd(), 'src/adventure'))) {
+    for (const file of sourcesUnder(path.join(APP, 'src/adventure'))) {
       const source = readFileSync(file, 'utf8')
       // Unquoted on purpose: an icon also appears inside a narration token
       // (`[fa-solid fa-burst|hit]`, see escapeMenu/narrationMarkup.ts), which
@@ -89,7 +93,7 @@ describe('every icon the adventure names', () => {
       // naming a real free icon, which costs nothing.
       for (const match of source.matchAll(/fa-(?:solid|regular|brands) (fa-[a-z0-9-]+)/g)) {
         const name = match[1].slice('fa-'.length)
-        if (!existsSync(path.join(SOLID, `${name}.svg`))) missing.push(`${path.relative(process.cwd(), file)}: ${match[0]}`)
+        if (!existsSync(path.join(SOLID, `${name}.svg`))) missing.push(`${path.relative(APP, file)}: ${match[0]}`)
       }
     }
     expect(missing).toEqual([])

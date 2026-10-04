@@ -79,7 +79,7 @@ const ALLOWED = new Set([
 
 const SRC = fileURLToPath(new URL('..', import.meta.url))
 // The shared packages are renderer code too.
-const PACKAGES = fileURLToPath(new URL('../../packages', import.meta.url))
+const PACKAGES = fileURLToPath(new URL('../../../../packages', import.meta.url))
 
 function sourceFiles(dir: string): string[] {
   const out: string[] = []

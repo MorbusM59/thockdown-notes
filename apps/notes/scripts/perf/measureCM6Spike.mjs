@@ -19,7 +19,7 @@ import { existsSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  REPO_ROOT,
+  APP_ROOT,
   generateSyntheticDocument,
   measureKeystrokeBurstMs,
   summarizeMs,
@@ -71,7 +71,7 @@ async function waitForServer(url, timeoutMs) {
 
 async function startSpikeServer(port) {
   const proc = spawn('npx', ['vite', '--config', path.join(SPIKE_DIR, 'vite.config.js'), '--port', String(port), '--strictPort'], {
-    cwd: REPO_ROOT,
+    cwd: APP_ROOT,
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,
   })

@@ -1,1 +1,9 @@
-{"name":"@thockdown/soundscape","private":true,"type":"module"}
+{
+  "name": "@thockdown/soundscape",
+  "private": true,
+  "type": "module",
+  "peerDependencies": {
+    "react": "^18.2.0",
+    "@fortawesome/fontawesome-free": "^7.2.0"
+  }
+}

@@ -4,9 +4,9 @@
 This contract isolates app features from editor engine internals. Features that depend on editor state must integrate through this boundary, not through direct plugin internals.
 
 ## Source of Truth
-- Contract types: `src/editor/EditorContract.ts`
-- Sole implementation: `src/components/CM6Editor.tsx` (production editor as of 0.5.4's CM6
-  migration). The prior Lexical-backed `src/components/Editor.tsx` and its
+- Contract types: `apps/notes/src/editor/EditorContract.ts`
+- Sole implementation: `apps/notes/src/components/CM6Editor.tsx` (production editor as of 0.5.4's CM6
+  migration). The prior Lexical-backed `apps/notes/src/components/Editor.tsx` and its
   `localStorage['thockdown:cm6-editor-spike'] = '0'` rollback path were removed once CM6 was
   confirmed production-ready — see `docs/document-scale-performance-philosophy.md` and
   `docs/cm6-parity-hardening-plan.md` for that history. There is no fallback implementation
@@ -34,7 +34,7 @@ This contract isolates app features from editor engine internals. Features that 
 - Exactly one thing is persisted per note, and independently per Timeline
   snapshot: `anchorBlockIndex` -- the canonical, mode-agnostic BLOCK, an
   index into the note's current top-level `PreviewMarkdownBlock[]` array
-  (`src/editor/PreviewBlockSplit.ts`), resolved via
+  (`apps/notes/src/editor/PreviewBlockSplit.ts`), resolved via
   `PreviewBlockIndex.ts`'s `resolvePreviewBlockIndexForSourceLine`/
   `resolveSourceLineForAnchorBlockIndex`. No raw pixel offsets, and no
   separate edit/preview values, are ever persisted.
@@ -97,7 +97,7 @@ This contract isolates app features from editor engine internals. Features that 
   - `onTableCellDropTransform` (the release of a drag that picked up a selected table cell; the drag itself, and its drop-target highlight, are the editor's)
   - `onCaretClickTransform` (a plain primary click, with `clickOffset` the box under the pointer; each policy decides which clicks it acts on). It returns an `EditorClickOutcome`: a `click`, applied on release, and optionally a `hold`, which makes the press a press-and-hold through `armHold` (the table divider: a click aligns, a hold deletes the column). Both are thunks, because applying is committing.
 - A result marked `isolated` is its own undo entry, never merged with the edits around it (CodeMirror otherwise joins adjacent changes made within half a second): every table restructure is one.
-- A result may carry a `prelude`: a step applied first and recorded as its own undo entry, so one undo takes back the result and keeps the prelude. Both are dispatched in ONE view update, so everything downstream sees one text change for the keypress. The table rules use it for the tidy that Enter performs (`src/editor/MarkdownTableTransforms.ts`, over the one table reading in `src/editor/MarkdownTable.ts`).
+- A result may carry a `prelude`: a step applied first and recorded as its own undo entry, so one undo takes back the result and keeps the prelude. Both are dispatched in ONE view update, so everything downstream sees one text change for the keypress. The table rules use it for the tidy that Enter performs (`apps/notes/src/editor/MarkdownTableTransforms.ts`, over the one table reading in `apps/notes/src/editor/MarkdownTable.ts`).
 - Current source mapping is conservative but deterministic:
   - `restore` updates map to `programmatic`.
   - `history-redo` tag maps to `history-redo`.

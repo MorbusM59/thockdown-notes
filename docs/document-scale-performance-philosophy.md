@@ -173,7 +173,7 @@ production CM6 editor.
 **A follow-on fix, not itself found via profiling but in the same spirit**: the footer
 word/character-count display previously used this document's tier-3 mitigation (defer/debounce
 the expensive work off the keystroke path) rather than tiers 1/2 (make the work itself cheap).
-Rebuilt as an actual "establish once, track the delta" incremental (`src/editor/WordCount.ts`),
+Rebuilt as an actual "establish once, track the delta" incremental (`apps/notes/src/editor/WordCount.ts`),
 per this document's own solution-hierarchy preference for algorithmic incrementality over
 deferral where incrementality is actually available — and for word count, unlike markdown
 parsing, it turned out to be a strictly simpler incremental problem (a word boundary only ever

@@ -26,7 +26,7 @@ import { existsSync, rmSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import {
-  REPO_ROOT,
+  APP_ROOT,
   generateSyntheticDocument,
   placeCaretAt,
   measureKeystrokeBurstMs,
@@ -36,7 +36,7 @@ import {
   ensureEditMode,
 } from './perfHarness.mjs'
 
-const pkg = JSON.parse(await (await import('node:fs/promises')).readFile(path.join(REPO_ROOT, 'package.json'), 'utf8'))
+const pkg = JSON.parse(await (await import('node:fs/promises')).readFile(path.join(APP_ROOT, 'package.json'), 'utf8'))
 
 function parseArgs(argv) {
   const args = { mode: 'burst', chars: 1_500_000, keystrokes: 30, position: 'end', json: false, skipBuild: false }
@@ -53,12 +53,12 @@ function parseArgs(argv) {
 }
 
 function resolvePackagedExecutablePath() {
-  return path.join(REPO_ROOT, 'release', pkg.version, 'linux-unpacked', pkg.name)
+  return path.join(APP_ROOT, 'release', pkg.version, 'linux-unpacked', pkg.name)
 }
 
 function buildPackagedApp() {
   console.error('[perf] building renderer + electron main/preload (npx vite build)...')
-  let result = spawnSync('npx', ['vite', 'build'], { cwd: REPO_ROOT, stdio: 'inherit' })
+  let result = spawnSync('npx', ['vite', 'build'], { cwd: APP_ROOT, stdio: 'inherit' })
   if (result.status !== 0) throw new Error(`vite build failed with exit code ${result.status}`)
 
   // electron-builder rebuilds native deps (better-sqlite3) against the
@@ -66,7 +66,7 @@ function buildPackagedApp() {
   // `electron-rebuild` step needed first, confirmed by reading its own
   // logged output ("rebuilding native dependencies... better-sqlite3").
   console.error('[perf] packaging via electron-builder (--linux dir -- asar-packed, unpacked-directory output, no AppImage compression)...')
-  result = spawnSync('npx', ['electron-builder', '--linux', 'dir'], { cwd: REPO_ROOT, stdio: 'inherit' })
+  result = spawnSync('npx', ['electron-builder', '--linux', 'dir'], { cwd: APP_ROOT, stdio: 'inherit' })
   if (result.status !== 0) throw new Error(`electron-builder failed with exit code ${result.status}`)
 }
 
@@ -131,7 +131,7 @@ async function main() {
   const app = await _electron.launch({
     executablePath,
     args: ['--no-sandbox', `--user-data-dir=${userDataDir}`],
-    cwd: REPO_ROOT,
+    cwd: APP_ROOT,
   })
 
   try {

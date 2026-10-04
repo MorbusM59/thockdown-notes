@@ -19,7 +19,5 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
-  },
-  "include": ["src", "electron", "packages"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  }
 }

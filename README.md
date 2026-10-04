@@ -42,7 +42,7 @@ Production build (all platforms):
 npm run build
 ```
 
-This runs `tsc`, `vite build`, then `electron-builder` twice — once against `electron-builder.json5` (installer targets) and once against `electron-builder.portable.json5` (portable/zip targets). Output lands in `release/<version>/`.
+This runs `tsc`, `vite build`, then `electron-builder` twice — once against `apps/notes/electron-builder.json5` (installer targets) and once against `apps/notes/electron-builder.portable.json5` (portable/zip targets). Output lands in `apps/notes/release/<version>/`.
 
 ### Windows
 Run `npm run build` directly on Windows. Produces the NSIS installer (`...Setup.exe`) and the portable zip (`...Portable.zip`).
@@ -55,7 +55,7 @@ Building a signed `.dmg` requires a macOS host (electron-builder's `mac` target 
 
 ## Releases directory layout
 
-`electron-builder` writes to `release/<version>/`. Per-platform artifacts:
+`electron-builder` writes to `apps/notes/release/<version>/`. Per-platform artifacts:
 
 | Platform | Installer | Portable |
 |---|---|---|

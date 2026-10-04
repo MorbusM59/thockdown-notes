@@ -2,16 +2,16 @@
 
 The game reached by right-clicking the User Guide window control. This
 document is the source of truth for HOW THE GAME IS BUILT;
-`src/escapeMenu/escapeMenuContract.ts` is the source of truth for how it
+`apps/notes/src/escapeMenu/escapeMenuContract.ts` is the source of truth for how it
 reaches the screen. Read both before changing either.
 
 Two things are deliberately separated here, and conflating them is what went
 wrong with the first attempt:
 
-- The **platform** (`src/adventure/`) is a director and a set of stages. It
+- The **platform** (`apps/notes/src/adventure/`) is a director and a set of stages. It
   knows about screens, choices, stacks, saves and effects. It contains no
   rules.
-- The **game** is Thockquest (`src/adventure/content/thockquest.ts`), which
+- The **game** is Thockquest (`apps/notes/src/adventure/content/thockquest.ts`), which
   is data. A second game would be a second content file, not a second
   engine.
 
@@ -178,7 +178,7 @@ buttons.
 State goes up and narration goes down, and that is a rule rather than a
 layout convenience: a reader's eye goes up for "how am I doing" and down for
 "what is going on", the same way it does for a note's tabs and its chapters.
-`src/escapeMenu/EscapeMenuStatus.tsx` renders each half into the bar it
+`apps/notes/src/escapeMenu/EscapeMenuStatus.tsx` renders each half into the bar it
 belongs to.
 
 ## Director and stages
@@ -303,7 +303,7 @@ the purity test.)
 
 ## The ring is the game, so it cannot outlive it
 
-A mode may declare `onDismiss` (`src/escapeMenu/escapeMenuContract.ts`). The
+A mode may declare `onDismiss` (`apps/notes/src/escapeMenu/escapeMenuContract.ts`). The
 adventure wires it to leaving, because lowering the ring — Escape, or a cell
 that does not keep the menu open — otherwise left the slot occupied by an
 empty editor with the window control still lit: a view whose effects the
@@ -326,7 +326,7 @@ and treating that as a switch would close the ring on the way in.
 
 Which slot is showing what is not the game's business at all. It is one
 record and one derivation, shared with the User Guide and undocked notes —
-see `src/shared/slotOverlay.ts`, whose invariant is that stored state may
+see `apps/notes/src/shared/slotOverlay.ts`, whose invariant is that stored state may
 never contradict the screen.
 
 ## Two stores
@@ -342,8 +342,8 @@ without breaking somebody's game.
 The save is shaped as **tables** — `profile` is a row, `games` are rows,
 `holdings` and `outcomes` are rows keyed by game id — even though it is
 currently written as one JSON document through the app-state path
-(`electron/stateService.ts`'s `sanitizeMenu`, per CLAUDE.md's two halves).
-Moving it into `electron/databaseService.ts` is then an insert loop per array
+(`apps/notes/electron/stateService.ts`'s `sanitizeMenu`, per CLAUDE.md's two halves).
+Moving it into `apps/notes/electron/databaseService.ts` is then an insert loop per array
 rather than a redesign. The one deliberate exception is the director's stack,
 which holds opaque stage state and is a blob wherever it lives.
 
@@ -1158,12 +1158,12 @@ placed at 5, 9 and 10 and the level advancing after ten.
     about a reordering would otherwise look like a change in behaviour.
 
 64. **TWO HARNESSES, and neither can answer the other's question.**
-    `npm run adventure:sim` (`scripts/adventure/simulate.ts`) plays thousands
+    `npm run adventure:sim` (`apps/notes/scripts/adventure/simulate.ts`) plays thousands
     of runs through the pure model in a second and answers everything
     statistical; `--rank` PINS each item and trait in turn and prints what
     each is worth, which is how a modifier that reaches the tab bar and not
     the fight shows itself as a row that does not move. `npm run
-    adventure:play` (`scripts/adventure/playthrough.mjs`) plays a run in the
+    adventure:play` (`apps/notes/scripts/adventure/playthrough.mjs`) plays a run in the
     REAL Electron app and reports what the chrome shows, which is the only way
     to see an empty box where a Pro icon was named. A browser in the loop
     cannot answer a balance question at a few hundred milliseconds per choice,
@@ -2072,7 +2072,7 @@ placed at 5, 9 and 10 and the level advancing after ten.
 96. **"--" IS GONE FROM EVERYTHING A READER SEES**, and
     `shared/userFacingText.contract.test.ts` keeps it that way. It asks
     whether a string is reader-facing from its POSITION — anything in
-    `src/adventure/`, anything in `electron/help/`, or a string landing in a
+    `apps/notes/src/adventure/`, anything in `apps/notes/electron/help/`, or a string landing in a
     `data-tooltip`/`aria-label`/`title`/`placeholder` — rather than from a
     list of files somebody has to keep joining, the same argument as
     `focusOwnership.ts`'s predicate replacing its allowlist. Parsed with the

@@ -25,7 +25,7 @@ no longer exists is still being carried.
 
 ## Where things stand (measured, `--shape=realistic`, 1.5M characters)
 
-`node scripts/perf/measureTypeLatency.mjs --chars=1500000 --shape=realistic
+`node apps/notes/scripts/perf/measureTypeLatency.mjs --chars=1500000 --shape=realistic
 --keystrokes=10 --position=middle --gap=500 --key=<key>`
 
 Sessions 3-4 rebuilt the typing path. Interleaved A/B against the
@@ -387,7 +387,7 @@ thread. Verified by reading, not assumed:
   re-serializes the entire note store to `localStorage`. No real counterpart.
 * `extractChecklistCheckedStates` (99ms) — reached only via
   `checklistStateChanged`, whose sole real caller is
-  `electron/noteLifecycleService.ts`, i.e. the **main process, on save**. In the
+  `apps/notes/electron/noteLifecycleService.ts`, i.e. the **main process, on save**. In the
   real app this is off the renderer's keystroke path entirely.
 
 **What is left is real renderer work, and most of it is not the Enter
@@ -565,7 +565,7 @@ measure; this one is about *what*.
 Typing kept **one full copy of the document alive per keystroke, for good**:
 +267MB after 120 characters on a 2MB note, linear, measured on a production
 build after forced GCs. Nothing here was slow; the app simply grew until the
-reader restarted it. `scripts/perf/measureTypingRetention.mjs` is the gate.
+reader restarted it. `apps/notes/scripts/perf/measureTypingRetention.mjs` is the gate.
 
 **The mechanism** is ordinary React and ordinary V8, and it is worth knowing
 because it is invisible in the code. V8 gives every closure created in one

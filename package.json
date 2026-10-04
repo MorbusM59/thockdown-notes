@@ -1,58 +1,36 @@
 {
-  "name": "thockdownnotes",
+  "name": "thockdown",
   "private": true,
-  "version": "0.7.1",
   "type": "module",
   "workspaces": [
-    "apps/*", "packages/*"
+    "apps/*",
+    "packages/*"
   ],
   "scripts": {
-    "predev": "node scripts/killStrayElectronDev.mjs && electron-rebuild -f -w better-sqlite3",
-    "dev": "vite",
-    "dev:browser": "vite --mode browser",
-    "build": "tsc && vite build && electron-builder && electron-builder --config electron-builder.portable.json5",
+    "dev": "npm run dev -w thockdown-notes",
+    "dev:browser": "npm run dev:browser -w thockdown-notes",
+    "build": "npm run build -w thockdown-notes",
     "release": "node scripts/release.mjs",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview",
-    "pretest": "node scripts/killStrayElectronDev.mjs && npm rebuild better-sqlite3",
+    "pretest": "node apps/notes/scripts/killStrayElectronDev.mjs && npm rebuild better-sqlite3",
     "test": "vitest run",
     "verify": "node scripts/verify.mjs",
     "land": "node scripts/land.mjs",
-    "adventure:sim": "vite-node scripts/adventure/simulate.ts --",
-    "adventure:play": "xvfb-run -a node scripts/adventure/playthrough.mjs",
-    "perf:input-lag": "node scripts/perf/measureInputLag.mjs",
-    "perf:input-lag:electron": "xvfb-run -a node scripts/perf/measureInputLagElectron.mjs",
-    "perf:input-lag:electron:packaged": "xvfb-run -a node scripts/perf/measureInputLagElectronPackaged.mjs",
-    "perf:first-open": "xvfb-run -a node scripts/perf/measureLargeNoteFirstOpen.mjs"
-  },
-  "dependencies": {
-    "@codemirror/commands": "^6.10.4",
-    "@codemirror/state": "6.7.1",
-    "@codemirror/view": "^6.43.7",
-    "@fortawesome/fontawesome-free": "^7.2.0",
-    "better-sqlite3": "^11.8.1",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-markdown": "^10.1.0",
-    "remark": "^15.0.1",
-    "remark-gfm": "^4.0.1",
-    "remark-parse": "^11.0.0",
-    "unified": "^11.0.5",
-    "zustand": "^5.0.13"
+    "adventure:sim": "npm run adventure:sim -w thockdown-notes --",
+    "adventure:play": "npm run adventure:play -w thockdown-notes --",
+    "perf:input-lag": "npm run perf:input-lag -w thockdown-notes --",
+    "perf:input-lag:electron": "npm run perf:input-lag:electron -w thockdown-notes --",
+    "perf:input-lag:electron:packaged": "npm run perf:input-lag:electron:packaged -w thockdown-notes --",
+    "perf:first-open": "npm run perf:first-open -w thockdown-notes --"
   },
   "devDependencies": {
-    "@electron/rebuild": "^4.2.0",
-    "@jridgewell/trace-mapping": "^0.3.31",
     "@tailwindcss/vite": "^4.1.17",
-    "@types/better-sqlite3": "^7.6.12",
     "@types/react": "^18.2.64",
     "@types/react-dom": "^18.2.21",
     "@typescript-eslint/eslint-plugin": "^7.1.1",
     "@typescript-eslint/parser": "^7.1.1",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.5.0",
-    "electron": "^30.0.1",
-    "electron-builder": "^24.13.3",
     "eslint": "^8.57.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
@@ -62,9 +40,6 @@
     "tailwindcss": "^4.3.0",
     "typescript": "^5.2.2",
     "vite": "^5.1.6",
-    "vite-plugin-electron": "^0.28.6",
-    "vite-plugin-electron-renderer": "^0.14.5",
     "vitest": "^2.1.9"
-  },
-  "main": "dist-electron/main.js"
+  }
 }
