@@ -241,7 +241,8 @@ if (!notesBody && !DRY_RUN) die('the release notes file is empty')
 phase('Cross-platform gate')
 
 // The release ships main's tip (preflight requires the checkout to be it), so
-// the gate is CI's push run for that exact commit: verify (every app's types,
+// the gate is a CI run for that exact commit (the push run, or a dispatched
+// one): verify (every app's types,
 // lint, tests and web builds) and then the Android build. A release is public
 // facing, so it never starts on less (CLAUDE.md, "Git workflow"). The run
 // already exists, because pushing to main started it; this only reads its
@@ -250,7 +251,7 @@ const gateSha = git('rev-parse', 'HEAD')
 if (DRY_RUN) {
   info(dim(`[dry-run] would require CI to be green on ${gateSha.slice(0, 7)}`))
 } else {
-  const res = ghQuiet('run', 'list', '--workflow', 'ci.yml', '--commit', gateSha, '--event', 'push',
+  const res = ghQuiet('run', 'list', '--workflow', 'ci.yml', '--commit', gateSha,
     '--limit', '1', '--json', 'databaseId,status,conclusion,url')
   const ciRun = res.status === 0 && res.stdout ? JSON.parse(res.stdout)[0] : undefined
   if (!ciRun) {

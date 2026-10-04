@@ -11,9 +11,10 @@
 //     JavaScriptSandbox runs), which no desktop build or test executes as
 //     shipped;
 //   - dependencies (a new or upgraded package changes every app's bundle);
-//   - the gate itself (CI workflows, verify, this list, the land script) and
-//     the build and type configuration, so a direct push cannot loosen the
-//     check that would have caught it.
+//   - the gate itself (CI workflows, verify, this list, the land and release
+//     scripts) and the build, packaging and type configuration
+//     (electron-builder included, which verify never runs), so a direct push
+//     cannot loosen the check that would have caught it.
 // Everything else is LOW IMPACT: `npm run verify` checks it for every app,
 // and it may be fast-forwarded onto main directly.
 //
@@ -29,7 +30,8 @@ export const HIGH_IMPACT = [
   /^src\/sound\/(soundscapeRenderAhead|soundscapeSandbox|soundscapeGeneratorHost|halfScalePcm)\.ts$/,
   /(^|\/)package(-lock)?\.json$/,
   /^\.github\/workflows\//,
-  /^scripts\/(verify|impact|land)\.mjs$/,
+  /^scripts\/(verify|impact|land|release)\.mjs$/,
+  /^electron-builder[^/]*\.json5$/,
   /(^|\/)vite(\.[a-z]+)?\.config\.ts$/,
   /(^|\/)tsconfig(\.[a-z]+)?\.json$/,
 ]
@@ -39,9 +41,13 @@ export function highImpactPaths(paths) {
   return paths.filter((p) => HIGH_IMPACT.some((rule) => rule.test(p)))
 }
 
-/** Every path changed between two commits (`git diff --name-only a b`). */
+/**
+ * Every path changed between two commits. Renames are reported as a deletion
+ * and an addition, so moving a high-impact file somewhere unlisted still names
+ * the path it left.
+ */
 export function changedPaths(from, to) {
-  const res = spawnSync('git', ['diff', '--name-only', from, to], { encoding: 'utf8' })
+  const res = spawnSync('git', ['diff', '--name-only', '--no-renames', from, to], { encoding: 'utf8' })
   if (res.status !== 0) throw new Error(`git diff ${from} ${to} failed: ${res.stderr.trim()}`)
   return res.stdout.split('\n').filter(Boolean)
 }
