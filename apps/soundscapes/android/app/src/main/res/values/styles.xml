@@ -2,11 +2,12 @@
 <resources>
 
     <!--
-      Launch order (see MainActivity): the system splash, the app icon on
-      launch_background, covers the whole screen, system bars included, until
-      the page reports that its first themed frame is on screen. Only then does
-      the splash fade, so the reader sees one uniform field and then the finished
-      page, never the window or a half-laid-out page in between.
+      Launch order (see MainActivity): the system splash, launch_background
+      alone, covers the screen while the process starts. The app's first frame
+      is the launch overlay, launch_image centred on the same colour, which
+      covers the whole screen, system bars included, until the page reports
+      that it shows the state it will keep. The overlay then fades, so the
+      reader sees one field, then the image on it, then the finished page.
     -->
 
     <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
@@ -26,10 +27,11 @@
         <item name="android:windowBackground">@color/launch_background</item>
     </style>
 
-    <!-- The launch theme (AndroidManifest.xml). The icon is named explicitly:
-         Theme.SplashScreen's default is the platform's generic icon. -->
+    <!-- The launch theme (AndroidManifest.xml). No icon: see
+         launch_icon_none.xml. Theme.SplashScreen's default would be the
+         platform's generic icon, so the empty one is named explicitly. -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/launch_icon_none</item>
         <item name="windowSplashScreenBackground">@color/launch_background</item>
         <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
     </style>

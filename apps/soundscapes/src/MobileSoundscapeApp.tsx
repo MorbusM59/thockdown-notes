@@ -104,7 +104,7 @@ export function MobileSoundscapeApp() {
   // settled and, where a native session exists, the page has followed it
   // once. Until then the controls would show stopped and local preferences,
   // and a session that outlived the page (a recreated activity) would repaint
-  // them moments later, so the splash is held until this is true.
+  // them moments later, so the launch overlay is held until this is true.
   const [hydrated, setHydrated] = useState(false)
   const [clipProgress, setClipProgress] = useState<number | null>(null)
   const [clipMinutes, setClipMinutes] = useState(loadClipMinutes)
@@ -254,7 +254,7 @@ export function MobileSoundscapeApp() {
 
   // A layout effect, so the theme is in place before the frame it belongs to
   // is painted: the first frame on screen is already the themed one, which is
-  // what the splash waits for (launchHandover.ts), together with `hydrated`.
+  // what the launch overlay waits for (launchHandover.ts), together with `hydrated`.
   useLayoutEffect(() => {
     applyDocumentTheme(document.documentElement, loadout)
     styleSystemBars(look.mode)
