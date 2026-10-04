@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join, relative } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 
 /**
@@ -23,7 +24,9 @@ import ts from 'typescript'
  * for), and a regex cannot tell a comment from an import.
  */
 
-const SRC = join(process.cwd(), 'src')
+// The app's src folder, whichever directory the tests are run from.
+const APP = fileURLToPath(new URL('../../..', import.meta.url))
+const SRC = join(APP, 'src')
 
 function sourcesUnder(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -66,7 +69,7 @@ describe('the test-only fixtures', () => {
       .filter((file) => !isTest(file))
       .filter((file) => !file.includes(join('adventure', 'testing')))
       .filter((file) => importSpecifiers(file).some(reachesTesting))
-      .map((file) => relative(process.cwd(), file))
+      .map((file) => relative(APP, file))
     expect(offenders).toEqual([])
   })
 

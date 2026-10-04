@@ -56,7 +56,7 @@ jobs:
 
       - name: Read version
         id: version
-        run: echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(node -p \"require('./apps/notes/package.json').version\")" >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies
         run: npm ci
@@ -72,6 +72,7 @@ jobs:
       # and fails the build demanding GH_TOKEN -- after the DMG is already
       # sitting on disk. Uploading is this workflow's job, not the builder's.
       - name: Build macOS DMG
+        working-directory: apps/notes
         run: |
           npx tsc
           npx vite build
@@ -80,7 +81,7 @@ jobs:
       - name: Checksum the DMG
         id: dmg
         run: |
-          DMG=$(find release -maxdepth 3 -name "*.dmg" | head -n 1)
+          DMG=$(find apps/notes/release -maxdepth 3 -name "*.dmg" | head -n 1)
           if [ -z "$DMG" ]; then echo "No DMG produced"; exit 1; fi
           HASH=$(shasum -a 256 "$DMG" | awk '{print $1}')
           printf '%s  %s\n' "$HASH" "$(basename "$DMG")" > "$DMG.sha256"
@@ -94,8 +95,8 @@ jobs:
         with:
           name: Thockdown-Notes-mac-${{ steps.version.outputs.version }}-dmg
           path: |
-            release/**/*.dmg
-            release/**/*.dmg.sha256
+            apps/notes/release/**/*.dmg
+            apps/notes/release/**/*.dmg.sha256
 
       # The release is normally created first by `npm run release` on the
       # maintainer's machine, with hand-written notes. Creating it here is the

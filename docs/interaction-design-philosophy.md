@@ -49,7 +49,7 @@ The goal is deterministic behavior with one source of truth per interaction phas
 ### 3c. The scrollbar describes the text, not the layout
 - A scrollbar asks one question of the document -- "where am I, as a fraction?"
   -- and gets it two different ways depending on size
-  (`src/editor/documentPosition.ts`). The scrollbar itself only ever deals in
+  (`apps/notes/src/editor/documentPosition.ts`). The scrollbar itself only ever deals in
   ratios and knows nothing about which answer it got.
 - **Under 50,000 characters**: ordinary pixel scrolling. The whole document is
   rendered, its height is genuinely known, and pretending otherwise would be
@@ -72,14 +72,14 @@ The goal is deterministic behavior with one source of truth per interaction phas
   work rather than by the reader doing something, it is the wrong trigger.
 - That rule is now enforced rather than merely intended: the size is COMMITTED
   against a signature of exactly those inputs and held until one of them moves
-  (`createCommittedThumbHeight`, `src/editor/scrollThumbMetrics.ts`). Deriving
+  (`createCommittedThumbHeight`, `apps/notes/src/editor/scrollThumbMetrics.ts`). Deriving
   the right answer on every sync is not the same thing as holding it -- any
   wobble in the reading became a thumb that resized under the reader, most
   visibly at the end of a long journey.
 - A provisional answer is never committed. "Not yet" is not an answer, and a
   document entitled to an exact scrollbar must not be pinned to whatever
   estimate happened to be current the first time it could say anything
-  (`isThumbRatioSettled`, `src/editor/documentPosition.ts`).
+  (`isThumbRatioSettled`, `apps/notes/src/editor/documentPosition.ts`).
 - Where a thumb is written directly to the DOM for an animation, handing it
   back has to write the DOM directly too. A restore that only sets React state
   is silently conditional on that state having changed -- and once the size is
@@ -246,7 +246,7 @@ The goal is deterministic behavior with one source of truth per interaction phas
 ### 3g. A wheel spin may outlive the hand, and one nudge takes it back
 - Three notches in the same direction, each inside the user's `auto scroll`
   threshold (10-50ms), are one gesture rather than three, and the view keeps
-  scrolling at the rate that gesture set (`src/editor/wheelSpin.ts`). Both
+  scrolling at the rate that gesture set (`apps/notes/src/editor/wheelSpin.ts`). Both
   sliders carry an OFF position as their leftmost step rather than a
   separate toggle -- one persisted number per control, and the off state
   living at the end of the axis it continues.
@@ -289,7 +289,7 @@ The goal is deterministic behavior with one source of truth per interaction phas
   -- ends it too. A page that keeps moving under a keypress is not a feature.
 
 ### 3h. A notch is worth so much reading, and the reader sets how much
-- **A wheel notch is measured in text, in both panes** (`src/editor/wheelStep.ts`).
+- **A wheel notch is measured in text, in both panes** (`apps/notes/src/editor/wheelStep.ts`).
   The edit view scrolls `step` whole rows per notch (1-10); the render view
   scrolls `step` line heights (0.5-5, fractional). Neither is a pixel figure,
   and that is the point: turn the text size or the line spacing up and the
@@ -315,7 +315,7 @@ The goal is deterministic behavior with one source of truth per interaction phas
   same wheel on the same desk makes a nudge in both at the same moment, and
   a trackpad's sub-notch stream makes one in neither.
 - **The render view's coast is continuous, not stepped**
-  (`src/editor/wheelSpinProfile.ts`). Same schedule, same decay, same cut
+  (`apps/notes/src/editor/wheelSpinProfile.ts`). Same schedule, same decay, same cut
   off, same distance travelled at every nudge time -- but the nudge distance
   is a unit of calculation only, never of animation. A row is small enough
   that a step reads as motion; a render view step is several lines tall, and
@@ -344,7 +344,7 @@ The goal is deterministic behavior with one source of truth per interaction phas
   gesture already in flight; it applies to the next one. The auto-scroll
   threshold's off position is the exception, and stops a running coast at
   once -- switching a feature off is a request to stop now.
-- **A single notch is travelled, not jumped** (`src/editor/wheelNotchTravel.ts`).
+- **A single notch is travelled, not jumped** (`apps/notes/src/editor/wheelNotchTravel.ts`).
   Owning the notch means nothing animates it any more, and an instantaneous
   write of several line heights is the one kind of motion the eye cannot
   follow at all. So a notch is played across time instead.
@@ -414,8 +414,8 @@ The goal is deterministic behavior with one source of truth per interaction phas
   journey covers all of them, including the ones added later.
 
 ### 3i. A held button ramps and coasts; it never races or crawls
-- **One routine owns press-and-hold value adjustment** (`src/shared/holdToAdjust.ts`
-  for the motion, `src/shared/useHoldToAdjust.ts` for the wiring). Any control
+- **One routine owns press-and-hold value adjustment** (`apps/notes/src/shared/holdToAdjust.ts`
+  for the motion, `apps/notes/src/shared/useHoldToAdjust.ts` for the wiring). Any control
   that lets the reader hold to change a number uses it. This is a toolkit
   piece, not a music-player detail: nothing in either file knows what the
   value means.
@@ -454,7 +454,7 @@ The goal is deterministic behavior with one source of truth per interaction phas
   thumb drag, a resize, a mid-flight animation frame. There is no moment,
   however brief, at which a line is allowed to sit half a row off its box.
 - This is a hard guard, not a convention: every engine that writes `scrollTop`
-  quantizes on the way out, and `src/editor/rowGridGuard.ts` is the net beneath
+  quantizes on the way out, and `apps/notes/src/editor/rowGridGuard.ts` is the net beneath
   them for the writes the app does not make (chiefly CodeMirror adjusting
   `scrollTop` as its own height estimates firm up). Two correctors never run on
   one scroller at once; the guard stands down while a drag-selection owns the
@@ -469,7 +469,7 @@ The goal is deterministic behavior with one source of truth per interaction phas
   own and which put every right-half click one box too far. A drag selects
   every box it covers, the box under the pointer included; double and triple
   clicks keep CodeMirror's word and line selection. One rule for every editor
-  click, in `src/editor/boxPointer.ts`: plain presses and drags, right-click
+  click, in `apps/notes/src/editor/boxPointer.ts`: plain presses and drags, right-click
   scope cycling and the checkbox caret-click all resolve their position there.
 - The drawn mouse cursor sits exactly on the pointer, everywhere. It used to
   be drawn 5px right of it to make editor clicks feel accurate, which made
@@ -495,7 +495,7 @@ The goal is deterministic behavior with one source of truth per interaction phas
   to a row, as every edit-view scroll is. The thumb is a whole number of rows
   (decided where its size is decided, not only where it is drawn), and its
   two edges are each rounded to their own nearest row boundary
-  (`src/editor/immersiveScrollColumn.ts`). That is what keeps it steady while
+  (`apps/notes/src/editor/immersiveScrollColumn.ts`). That is what keeps it steady while
   it moves, makes it always cover the box that was clicked (pinned against
   either end of the track included), and keeps a journey's stretch from ever
   colouring a box past where it lands -- rounding a size and a start
@@ -506,7 +506,7 @@ The goal is deterministic behavior with one source of truth per interaction phas
 - Travel time is a property of the interaction, not of the distance. A
   scrollbar click across a very large document takes about the same half second
   as one across a small one, because the journey's middle is removed rather
-  than played (`packages/interaction/scrollJourney.ts`, `src/editor/scrollBridge.ts`).
+  than played (`packages/interaction/scrollJourney.ts`, `apps/notes/src/editor/scrollBridge.ts`).
 - It is a cut, not a teleport, and the difference is the whole design: the
   motion ramps up on the real document, a curtain of spoof text sweeps in at
   the journey's own speed, the jump happens only while the pane is fully

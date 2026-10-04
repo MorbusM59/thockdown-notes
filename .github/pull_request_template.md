@@ -24,7 +24,7 @@
 - [ ] Verified the fix resolves it with a targeted live check (not just reasoning from code)
 
 ## Docs
-- [ ] Updated `electron/help/helpReferenceContent.ts` — required whenever this ships a user-facing functional change
+- [ ] Updated `apps/notes/electron/help/helpReferenceContent.ts` — required whenever this ships a user-facing functional change
 - [ ] Updated the relevant living doc, if this touches its area: `docs/document-scale-performance-philosophy.md` + `docs/large-document-performance-handover.md` (performance work), `docs/cm6-parity-hardening-plan.md` (CM6/editor-parity/caret-selection), `docs/editor-contract.md` (editor/app boundary), `TODO.md` (open items)
 - [ ] No new point-in-time planning/tracking doc added (fold anything non-obvious into a living doc or `TODO.md` instead — see CLAUDE.md's docs hygiene note)
 

@@ -31,11 +31,15 @@ import { fileURLToPath } from 'node:url';
 
 const projectRoot = path.dirname(fileURLToPath(new URL('.', import.meta.url)));
 
-async function betterSqlite3WorksForThisRuntime() {
+// Asked in a fresh Node process, not by importing here: a failed import is
+// cached for the life of this process, so after a rebuild an in-process
+// re-import would report the old binary's failure however the rebuild went.
+function betterSqlite3WorksForThisRuntime() {
   try {
-    const { default: Database } = await import('better-sqlite3');
-    const db = new Database(':memory:');
-    db.close();
+    execFileSync(process.execPath, ['-e', "new (require('better-sqlite3'))(':memory:').close()"], {
+      cwd: projectRoot,
+      stdio: 'ignore',
+    });
     return true;
   } catch {
     return false;
@@ -43,7 +47,7 @@ async function betterSqlite3WorksForThisRuntime() {
 }
 
 export default async function setup() {
-  if (await betterSqlite3WorksForThisRuntime()) return;
+  if (betterSqlite3WorksForThisRuntime()) return;
 
   console.warn(
     '[vitest globalSetup] better-sqlite3 is built for a different runtime ' +
@@ -61,7 +65,7 @@ export default async function setup() {
     shell: true,
   });
 
-  if (!(await betterSqlite3WorksForThisRuntime())) {
+  if (!betterSqlite3WorksForThisRuntime()) {
     throw new Error(
       'better-sqlite3 still fails to load under this Node runtime after an ' +
       'automatic rebuild -- see the rebuild output above for the actual ' +

@@ -14,6 +14,8 @@ export default defineConfig(({ mode }) => {
   const isBrowserOnlyDev = mode === 'browser'
 
   return {
+    // The app's own folder, whichever directory Vite or Vitest is run from.
+    root: __dirname,
     resolve: {
       alias: {
         // micromark's entity decoder ships TWO builds, and its `browser`
@@ -35,9 +37,10 @@ export default defineConfig(({ mode }) => {
         // rule once instead: THE MARKDOWN PARSER DOES NOT DEPEND ON THE DOM.
         // The pure build is a lookup table -- a few KB of entities against a
         // parser that can then run anywhere, deterministically.
+        // (Installed once at the workspace root, where npm hoists it.)
         'decode-named-character-reference': path.resolve(
           __dirname,
-          'node_modules/decode-named-character-reference/index.js',
+          '../../node_modules/decode-named-character-reference/index.js',
         ),
       },
     },

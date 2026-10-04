@@ -30,7 +30,8 @@ export const HIGH_IMPACT = [
   /(^|\/)package(-lock)?\.json$/,
   /^\.github\/workflows\//,
   /^scripts\/(verify|impact|land|release)\.mjs$/,
-  /^electron-builder[^/]*\.json5$/,
+  /(^|\/)electron-builder[^/]*\.json5$/,
+  /^vitest\.workspace\.ts$/,
   /(^|\/)vite(\.[a-z]+)?\.config\.ts$/,
   /(^|\/)tsconfig(\.[a-z]+)?\.json$/,
 ]

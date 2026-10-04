@@ -7,7 +7,7 @@ It is a *living* document and an *active* one: it accompanies incremental UI wor
 
 It sits below [guiding-vision.md](guiding-vision.md) (the tie-breaker for *why*) and beside [interaction-design-philosophy.md](interaction-design-philosophy.md) (the rules for *feel*). This one owns *structure*: the layers, what each layer is for, and what each layer deliberately cannot do.
 
-Audience: the AI agent and the maintainer. Not user-facing prose. The user-facing expression of everything here lives in `electron/help/helpGuideContent.ts` — see [Obligations](#5-obligations).
+Audience: the AI agent and the maintainer. Not user-facing prose. The user-facing expression of everything here lives in `apps/notes/electron/help/helpGuideContent.ts` — see [Obligations](#5-obligations).
 
 ---
 
@@ -95,7 +95,7 @@ So: **slot** wherever the container is meant, **section** in code and **collecti
   One renderer-side wrinkle worth knowing about, because it shipped a regression once: App.tsx's pin map (`fixedWidthPxBySectionId`) is keyed by *section id*, since that's what the width algorithms and the DOM work in, while pins are really slot geometry. That mismatch is invisible until a section changes slots, at which point the pin has to be re-derived from what the store reports (`syncFixedWidthsFromEntries`) — the store is the one that knows pins per slot. Hand-carrying pins from the outgoing section to the incoming one is the wrong fix and was the original bug; forgetting to re-derive at all makes the slot silently flexible, so it visibly resizes the moment another section is loaded into it.
 - `noteSlotInitialized` uses "slot" for a **third** thing entirely — whether the section's active-note memory has ever been set. Worst offender; nothing about a slot is involved.
 - `createSection(afterPosition)` creates a section *and* opens a slot in one call; `removeSection` destroys a section while `closeSlot` merely vacates one. The names don't reveal which does which.
-- Reads correctly today and shouldn't be "fixed": `computeSlotWidthsPx` (`src/shared/sectionWidths.ts`), the `.editor-section-slot` DOM class, and App.tsx's per-slot gutter-toggle comments, which explicitly reason about a property belonging to "this occupied slot" rather than to any section identity that outlives it.
+- Reads correctly today and shouldn't be "fixed": `computeSlotWidthsPx` (`apps/notes/src/shared/sectionWidths.ts`), the `.editor-section-slot` DOM class, and App.tsx's per-slot gutter-toggle comments, which explicitly reason about a property belonging to "this occupied slot" rather than to any section identity that outlives it.
 - The phrase "the sections actually occupying a slot right now, sorted left-to-right" recurs in `App.tsx` as an ad-hoc derivation. That's the *loaded* set — a real concept in this model, worth a name of its own if it's touched again.
 
 ### 1.5 Icon language (committed)
@@ -135,9 +135,9 @@ Feature buttons that are *not* one of the three layers take descriptive icons of
 
 Kept honest so the doctrine above never argues with a stale mental model. Re-verify when touching any of it.
 
-- **Chapters** — `src/chapters/`, `src/shared/chapters.ts`, surfaced in `ChapterBar.tsx`. A section's tab remembers the last chapter it showed (`NoteTabEntry.lastActiveChapterNoteId`, `src/shared/tabs.ts`), so returning to a tab resumes where you were rather than snapping to the note's top. That memory is per-*section*, which is correct: it's an attention fact, not a note fact.
-- **Sections** — `src/shared/sections.ts`, `src/editorSection/`, `src/tabBar/SectionTabBar.tsx`. Side-by-side panes, each with its own tab bar and its own `lastActiveNoteId`. `DEFAULT_EDITOR_SECTION_ID = 'default'` is where sidebar clicks always land. **Unnamed sections are disposable** (deleted when their slot closes); **named sections are kept forever** and can be recalled into any slot (`swapIntoSlot`). This naming-as-commitment gesture is the intended expression of §1.2's escape hatch, and it is currently the app's only signal of that distinction — a candidate for clearer UI.
-- **Tags** — `src/shared/tags.ts`. Freeform, normalized (lowercased, spaces → hyphens). `PROTECTED_TAGS` carry lifecycle meaning.
+- **Chapters** — `apps/notes/src/chapters/`, `apps/notes/src/shared/chapters.ts`, surfaced in `ChapterBar.tsx`. A section's tab remembers the last chapter it showed (`NoteTabEntry.lastActiveChapterNoteId`, `apps/notes/src/shared/tabs.ts`), so returning to a tab resumes where you were rather than snapping to the note's top. That memory is per-*section*, which is correct: it's an attention fact, not a note fact.
+- **Sections** — `apps/notes/src/shared/sections.ts`, `apps/notes/src/editorSection/`, `apps/notes/src/tabBar/SectionTabBar.tsx`. Side-by-side panes, each with its own tab bar and its own `lastActiveNoteId`. `DEFAULT_EDITOR_SECTION_ID = 'default'` is where sidebar clicks always land. **Unnamed sections are disposable** (deleted when their slot closes); **named sections are kept forever** and can be recalled into any slot (`swapIntoSlot`). This naming-as-commitment gesture is the intended expression of §1.2's escape hatch, and it is currently the app's only signal of that distinction — a candidate for clearer UI.
+- **Tags** — `apps/notes/src/shared/tags.ts`. Freeform, normalized (lowercased, spaces → hyphens). `PROTECTED_TAGS` carry lifecycle meaning.
 - **Category view** — `App.tsx`, `hierarchyFromTags` / `buildHierarchyGroups`. The sidebar's Category mode builds a **three-level tree from tag order**: a note's 1st non-protected tag is its primary group, 2nd its secondary (default `General`), 3rd its tertiary (default `Notes`); untagged notes fall into `Uncategorized`. **Tag order is therefore load-bearing and mostly invisible to the user** — the largest known gap between the model and its presentation (see §4).
 - **Sidebar modes** — `date`, `category`, `archive`, `trash`, `find`, `options` (`App.tsx`, `SIDEBAR_MODES`). Date and Category are the two retrieval lenses; Find is the escape hatch when neither lens helps.
 
@@ -179,4 +179,4 @@ For the agent, every session that touches organization UI:
 1. **Validate before building.** A proposed change gets checked against §1 (layers), §1.2 (sections vs. tags), §1.3 (restrictions), and the §1.1 sidebar-closed test. Say plainly when a proposal contradicts one of these, and why — that's the whole point of this document.
 2. **Update in the same session.** New restriction, changed boundary, resolved refinement → edit this file alongside the code. Don't let it drift.
 3. **Sanity-check §2 against real code** before leaning on it. It's a snapshot, and snapshots rot; the code is the truth.
-4. **Mirror user-facing changes into the User Guide.** `electron/help/helpGuideContent.ts` is the user-facing expression of this doctrine, and per `CLAUDE.md` it's updated whenever a user-facing functional change ships. A workflow change that doesn't reach the guide is only half shipped.
+4. **Mirror user-facing changes into the User Guide.** `apps/notes/electron/help/helpGuideContent.ts` is the user-facing expression of this doctrine, and per `CLAUDE.md` it's updated whenever a user-facing functional change ships. A workflow change that doesn't reach the guide is only half shipped.

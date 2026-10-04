@@ -143,3 +143,11 @@ export interface SoundscapeFileApi {
   /** Ask for a .tds file and resolve to its text, or null when cancelled. */
   open(): Promise<string | null>;
 }
+
+// Each app supplies the file dialogs (the desktop's main process, the phone's
+// Capacitor plugins) by setting this before the panel is used.
+declare global {
+  interface Window {
+    thockdownSoundscapeFiles?: SoundscapeFileApi;
+  }
+}

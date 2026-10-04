@@ -140,7 +140,9 @@ ok('gh is authenticated')
 
 phase('Version')
 
-const pkgPath = path.join(repoRoot, 'package.json')
+// The desktop app owns its version; the repository root is only the workspace.
+const appDir = path.join(repoRoot, 'apps', 'notes')
+const pkgPath = path.join(appDir, 'package.json')
 const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
 const currentVersion = pkg.version
 
@@ -276,7 +278,7 @@ phase('Bump, tag, push')
 if (tagExists) {
   ok(`${tag} already tagged -- skipping bump`)
 } else {
-  mutate(`set version to ${version} in package.json and package-lock.json`, () => {
+  mutate(`set version to ${version} in apps/notes/package.json and package-lock.json`, () => {
     pkg.version = version
     fs.writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`, 'utf8')
 
@@ -285,14 +287,13 @@ if (tagExists) {
     const lockPath = path.join(repoRoot, 'package-lock.json')
     if (fs.existsSync(lockPath)) {
       const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'))
-      lock.version = version
-      if (lock.packages?.['']) lock.packages[''].version = version
+      if (lock.packages?.['apps/notes']) lock.packages['apps/notes'].version = version
       fs.writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`, 'utf8')
     }
   })
 
   mutate(`commit and tag ${tag}`, () => {
-    run('git', ['add', 'package.json', 'package-lock.json'])
+    run('git', ['add', 'apps/notes/package.json', 'package-lock.json'])
     run('git', ['commit', '-m', `Release ${tag}`])
     run('git', ['tag', '-a', tag, '-m', `Thockdown Notes ${tag}`])
   })
@@ -337,7 +338,7 @@ if (releaseExists) {
 
 phase('Windows build (local)')
 
-const outDir = path.join(repoRoot, 'release', version)
+const outDir = path.join(appDir, 'release', version)
 const findWindowsArtifacts = () => {
   if (!fs.existsSync(outDir)) return []
   return fs
@@ -348,7 +349,7 @@ const findWindowsArtifacts = () => {
 
 let windowsArtifacts = findWindowsArtifacts()
 if (windowsArtifacts.length >= 2) {
-  ok(`reusing the existing build in release/${version}`)
+  ok(`reusing the existing build in apps/notes/release/${version}`)
 } else if (DRY_RUN) {
   info(dim('[dry-run] would run npm run build'))
 } else {
@@ -358,7 +359,7 @@ if (windowsArtifacts.length >= 2) {
 }
 
 if (!DRY_RUN) {
-  if (!windowsArtifacts.length) die(`no .exe/.zip artifacts found in release/${version}`)
+  if (!windowsArtifacts.length) die(`no .exe/.zip artifacts found in apps/notes/release/${version}`)
   for (const f of windowsArtifacts) {
     const mb = (fs.statSync(f).size / 1024 / 1024).toFixed(1)
     ok(`${path.basename(f)} ${dim(`(${mb} MB)`)}`)

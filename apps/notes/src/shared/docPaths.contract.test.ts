@@ -23,9 +23,9 @@ import { dirname, join, normalize } from 'node:path'
  * deleted files on purpose, as history, and need a superseded-marking pass of
  * their own before they can be held to this.
  */
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..')
 const DOCUMENTS = ['CLAUDE.md', 'apps/soundscapes/README.md']
-const TOP_LEVEL = ['src', 'electron', 'apps', 'scripts', 'docs', 'public', 'assets', 'layouts', 'data', '.github']
+const TOP_LEVEL = ['apps', 'packages', 'scripts', 'docs', '.github']
 
 /** Every path-like reference in `text`, as written. */
 function pathReferences(text: string): string[] {

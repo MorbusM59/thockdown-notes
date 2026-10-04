@@ -32,7 +32,7 @@ import ts from 'typescript'
  * the same characters -- is precisely the one a regex cannot draw.
  */
 
-const ROOT = fileURLToPath(new URL('../..', import.meta.url))
+const ROOT = fileURLToPath(new URL('../../../..', import.meta.url))
 
 /** Attributes whose value is read by a person rather than by a machine. */
 const READER_FACING_ATTRIBUTES = new Set([
@@ -89,9 +89,9 @@ function inReaderFacingAttribute(node: ts.Node): boolean {
 
 function offences(): string[] {
   const files = [
-    ...sourceFiles(join(ROOT, 'src', 'adventure')),
-    ...sourceFiles(join(ROOT, 'electron', 'help')),
-    ...sourceFiles(join(ROOT, 'src')).filter((file) => file.endsWith('.tsx')),
+    ...sourceFiles(join(ROOT, 'apps', 'notes', 'src', 'adventure')),
+    ...sourceFiles(join(ROOT, 'apps', 'notes', 'electron', 'help')),
+    ...sourceFiles(join(ROOT, 'apps', 'notes', 'src')).filter((file) => file.endsWith('.tsx')),
     ...sourceFiles(join(ROOT, 'packages')).filter((file) => file.endsWith('.tsx')),
   ]
   const found: string[] = []

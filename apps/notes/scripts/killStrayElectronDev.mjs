@@ -14,6 +14,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 
 if (process.platform !== 'win32') {
   // Non-Windows platforms propagate SIGINT/SIGTERM to child processes
@@ -22,7 +23,10 @@ if (process.platform !== 'win32') {
   process.exit(0);
 }
 
-const projectRoot = process.cwd();
+// Where this checkout's Electron binary lives (npm hoists it to the workspace
+// root), so only Electron processes started from this checkout are matched,
+// whichever directory this script is run from.
+const projectRoot = path.dirname(createRequire(import.meta.url).resolve('electron/package.json'));
 
 // Written out to a real .ps1 file and invoked with -File rather than
 // -Command: the project path can contain characters (spaces, quotes) that

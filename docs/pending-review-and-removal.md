@@ -403,7 +403,7 @@ effect that dominated it was fixed.
 
 ### `documentFactsClient`'s main-thread fallback may have no reachable trigger
 
-**What.** `ensureWorker()` in `src/editor/documentFactsClient.ts` catches a failed
+**What.** `ensureWorker()` in `apps/notes/src/editor/documentFactsClient.ts` catches a failed
 construction and installs an `onerror` handler; both routes resolve every
 pending request with `splitMarkdownIntoPreviewBlocksIncremental(text, null)` --
 a full remark parse, on the main thread, of the whole document.
@@ -465,7 +465,7 @@ edit mode.
 
 ### The under-construction stage has no route in
 
-**What.** `src/adventure/stages/underConstruction.ts` and
+**What.** `apps/notes/src/adventure/stages/underConstruction.ts` and
 `UNDER_CONSTRUCTION_STAGE_ID` in `stages/ids.ts`. The stage shows a wall that
 says, in the game, that a feature is not built yet. Its only caller was the
 hub's "Go Exploring" cell; tracking replaced both hub cells (commit
@@ -490,7 +490,7 @@ review.
 
 ### Playlist slot 1 has songs but no button
 
-**What.** `PLAYLIST_BUTTON_SLOTS` in `src/shared/audioPlayer.ts` omits slot 1
+**What.** `PLAYLIST_BUTTON_SLOTS` in `apps/notes/src/shared/audioPlayer.ts` omits slot 1
 (formerly "Vocal"), while `PLAYLIST_SLOTS`, the database CHECK constraint and
 the persisted-state sanitizer still accept it. Restoring the active slots
 filters slot 1 out (`isPlaylistButtonSlot` in `App.tsx`).

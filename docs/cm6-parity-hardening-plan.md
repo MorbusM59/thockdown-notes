@@ -49,7 +49,7 @@ do once Phase 1/2 have stopped changing the code out from under it.
 ## RESOLVED: editor rendered black at small border radii
 
 **Status: fixed.** `.edit-container` now carries `will-change: transform` (see
-its comment in `src/styles/components/markdown.css`, which is the durable
+its comment in `apps/notes/src/styles/components/markdown.css`, which is the durable
 record -- this section is the story of how it was found).
 
 ### The symptom
@@ -165,7 +165,7 @@ Playwright, not the Claude Code browser pane):
   `opacity: N%` keyframes (verified by an A/B pixel compare); same rhythm, same numbers.
 - `CM6Editor.tsx`: caret transform is `translate()`, not `translate3d()`.
 - `CM6Editor.tsx`: no `will-change: transform` on the caret element.
-- `scripts/perf/verifyCM6WrapBoundaryAssoc.mjs` parses `translate(` now, not `translate3d(`.
+- `apps/notes/scripts/perf/verifyCM6WrapBoundaryAssoc.mjs` parses `translate(` now, not `translate3d(`.
 
 **Trade accepted:** the blink repaints on the main thread instead of the compositor — a ~10x25
 invalidation per frame while the editor is focused. The low-power path
@@ -208,7 +208,7 @@ section of its own, sitting under Mouse Options and built on the same widgets.
 - **Persistence** rides `UiLayoutLoadout` (layout-scoped, next to
   `highlightColors.caret`). `normalizeUiLoadout`'s completeness is compiler-
   enforced, but `TDL_SCALAR_KEYS` in `databaseService.ts` is hand-maintained and
-  drops fields silently -- `electron/databaseService.caretLoadout.test.ts`
+  drops fields silently -- `apps/notes/electron/databaseService.caretLoadout.test.ts`
   guards it (and was A/B-checked: removing one key fails that test).
 
 **Follow-up defect (found by the user on a real build, fixed same session).** The
@@ -265,7 +265,7 @@ with outline and halo on to confirm neither re-promotes the caret, visual A/B at
 ## Previous Session Update (transition orchestration hardening)
 
 - Added a dedicated deterministic transition state machine at
-  `src/editor/ScrollTransitionController.ts` and integrated it into
+  `apps/notes/src/editor/ScrollTransitionController.ts` and integrated it into
   `CM6Editor.tsx` as the single authority for:
   - Programmatic-vs-user scroll provenance.
   - Temporary interaction blocking during restore/settle windows.
@@ -320,12 +320,12 @@ selection-only change (no `changes`) is picked up automatically by the existing 
 `updateListener`'s `update.selectionSet` branch, which already handles `onSelectionChange`
 emission and caret/highlight scheduling — no duplicate wiring needed there.
 
-Verified live (`scripts/perf/verifyCM6RightClickSelectionScope.mjs`, committed as a permanent
+Verified live (`apps/notes/scripts/perf/verifyCM6RightClickSelectionScope.mjs`, committed as a permanent
 regression check matching this project's other `verifyCM6*.mjs` scripts): repeated right-clicks
 on the same word correctly cycle word → sentence → line → block → (caps at block), an
 intervening left-click correctly resets the next right-click to word scope, zero console errors.
 `npx tsc --noEmit`, `npm run lint`, `npm test` (251/251) all clean; full existing
-`scripts/perf/verifyCM6*.mjs` suite re-run to confirm no regression elsewhere (see this doc's
+`apps/notes/scripts/perf/verifyCM6*.mjs` suite re-run to confirm no regression elsewhere (see this doc's
 session-handover section for the pass/fail count from that run).
 
 One thing worth flagging for whoever verifies this next: an early version of the live check
@@ -346,9 +346,9 @@ exist in this codebase; don't conflate them:
 
 - **Feature A, missing**: right-click *inside the editor text* cycles selection scope
   (word → sentence → line → block) on repeated right-clicks in the same spot. Lexical
-  implementation: `src/plugins/ContractBridgePlugin.tsx:286-397` (`handleContextMenu`, bound to
+  implementation: `apps/notes/src/plugins/ContractBridgePlugin.tsx:286-397` (`handleContextMenu`, bound to
   `contextmenu` on the root element, line 387), using `resolveScopeRange`/`SelectionScope` from
-  `src/editor/ContractBridgeRangeUtils.ts`, a `rightClickCycleRef` to track repeat-clicks-in-place
+  `apps/notes/src/editor/ContractBridgeRangeUtils.ts`, a `rightClickCycleRef` to track repeat-clicks-in-place
   (`resolveNextScope`, lines 279-284), and `applySelectionStateToDom` to commit the result.
   Companion `handleMouseDown`/`handleDoubleClick` (lines 368-385) suppress the browser's native
   double/triple-click expansion, since this mechanic is meant to be the only way mouse-driven
@@ -453,7 +453,7 @@ selection-through-changes mapping something meaningful to map an existing caret 
 (`lastHydratedNoteIdRef.current !== noteId`): only that path still does the full replace + cursor
 reset. The same-note path now dispatches a minimal, common-prefix/suffix-trimmed change (extracted
 to a pure, fuzz-tested function, `computeMinimalTextReplacement` in
-`src/editor/MinimalTextDiff.ts`) with **no explicit `selection` field**, letting CM6's own
+`apps/notes/src/editor/MinimalTextDiff.ts`) with **no explicit `selection` field**, letting CM6's own
 selection-through-changes mapping preserve the caret automatically — confirmed this actually works
 via a direct live check (dispatch a non-overlapping targeted change, confirm the existing caret
 maps to the correct shifted position, not 0).
@@ -471,7 +471,7 @@ with high confidence despite this gap — but if the exact trigger ever gets pin
 here rather than assuming this doc's hypotheses were it.
 
 Verified: `npx tsc --noEmit`, `npm run lint`, `npm test` (258/258, +7 new fuzz tests for
-`computeMinimalTextReplacement`), full `scripts/perf/verifyCM6*.mjs` suite (22/22), plus live
+`computeMinimalTextReplacement`), full `apps/notes/scripts/perf/verifyCM6*.mjs` suite (22/22), plus live
 checks for both branches — genuine note-switch (content fully replaces, no cross-contamination,
 caret focused) and the selection-mapping mechanism itself (a targeted non-overlapping edit
 correctly shifts rather than resets an existing caret).
@@ -558,7 +558,7 @@ checkpoint primitive:
   section in `sectionRegistryRef` so split-view panes other than the active one aren't silently
   dropped on quit.
 
-**Verified live** (`scripts/perf/verifyCM6CursorPersistenceCheckpoints.mjs`, committed as a
+**Verified live** (`apps/notes/scripts/perf/verifyCM6CursorPersistenceCheckpoints.mjs`, committed as a
 permanent regression check): (1) typing alone, no explicit `saveNoteUiState` call, and
 `getNoteUiState` reflects the typed-to cursor position after the debounce window — proves the
 piggyback path works end-to-end through the real save queue, not just at the SQL layer; (2) typing
@@ -568,7 +568,7 @@ what's responsible. A/B-verified: temporarily reverting just the `handleCloseSec
 line reproduces the loss (`getNoteUiState` reads back `cursorPos: 0`, `sourceAnchorText: null` —
 i.e. nothing was persisted at all) with the same test, confirming check (2) actually exercises the
 fix rather than passing by coincidence. Also: `npx tsc --noEmit` clean, `npm run lint` clean,
-`npm test` 258/258, full `scripts/perf/verifyCM6*.mjs` suite passing (see Session handover for the
+`npm test` 258/258, full `apps/notes/scripts/perf/verifyCM6*.mjs` suite passing (see Session handover for the
 exact count).
 
 **Deliberately not done, per this doc's standing no-blanket-fix principle**: no generic "recover a
@@ -595,7 +595,7 @@ specific symptom shouldn't reproduce in CM6, unlike the (already-resolved, unrel
   line between adjacent block-level `<p>` elements via margin-collapse) **structurally can't
   apply to CM6**: CM6 renders each line as a `<div class="cm-line">`, not a `<p>`, and its margin
   is explicitly zeroed twice over — `CM6Editor.tsx:1558` (`.cm-line { padding: 0 }` in the CM6
-  theme) and `src/index.css:440-443` (`.editor-text p, .editor-text div { margin: 0; padding: 0 }`,
+  theme) and `apps/notes/src/index.css:440-443` (`.editor-text p, .editor-text div { margin: 0; padding: 0 }`,
   which applies to `.cm-line` since CM6's real contentDOM carries the shared `editor-text` class).
 - **If a real visual double line break is actually reproducing** (as opposed to a stale
   `innerText`-style symptom being reported again by habit), it is a *different, not-yet-explained*
@@ -644,7 +644,7 @@ This also independently confirms the user's own proposed fix direction: `assoc: 
 vocabulary literally *means* "associated with the character after" (downstream/new-line) — the same
 "always downstream at a wrap boundary" policy `CaretRect.ts`'s `resolveCollapsedCaretRect` already
 applies to this app's own caret-overlay rendering (see its doc comment, `resolveCollapsedCaretRect`
-in `src/editor/CaretRect.ts`), just not previously applied to CM6's *real* native selection, which
+in `apps/notes/src/editor/CaretRect.ts`), just not previously applied to CM6's *real* native selection, which
 is what native browser auto-scroll-into-view behavior actually reacts to. Confirmed this app never
 intentionally needs horizontal scroll at all (`CM6Editor.tsx`'s own `EditorView.theme` comment on
 `.cm-scroller { scrollbarWidth: 'none', overflowX: 'hidden' }`: "this app draws its own scrollbar
@@ -673,7 +673,7 @@ see below.
   `git stash` to exist identically without this change), `npm test` (513/513, no regressions) all
   clean.
 - A live-browser regression script
-  (`scripts/perf/verifyCM6WrapBoundaryAssoc.mjs`) types real word-wrapped text up to the exact last
+  (`apps/notes/scripts/perf/verifyCM6WrapBoundaryAssoc.mjs`) types real word-wrapped text up to the exact last
   box of a wrapped row (mirroring the user's own repro), types the wrap-triggering character, and
   asserts the fix's dispatch counter incremented exactly once for that keystroke. A/B-verified
   (`git stash` on just `CM6Editor.tsx`): without the fix, the debug fields this test reads don't
@@ -707,9 +707,9 @@ see below.
   screen. If this symptom recurs, the next lead is trying the real packaged Electron app (a
   different Chromium build/config than the `dev:browser` mock) via `xvfb-run`, per this doc's own
   `docs/large-document-performance-handover.md`-established pattern
-  (`scripts/perf/measureInputLagElectron.mjs`), rather than re-attempting the same headless-Chromium
+  (`apps/notes/scripts/perf/measureInputLagElectron.mjs`), rather than re-attempting the same headless-Chromium
   angle.
-- The full existing `scripts/perf/verifyCM6*.mjs` suite (25 scripts) was also re-run to confirm no
+- The full existing `apps/notes/scripts/perf/verifyCM6*.mjs` suite (25 scripts) was also re-run to confirm no
   incidental regression elsewhere in the shared `updateListener` this fix touches: 19/25 passed;
   the 6 that didn't (`verifyCM6CaretSurvivesTagMutation`, `verifyCM6ColdBootCaretFocus`,
   `verifyCM6Phase2Slice11`, `verifyCM6Phase2Slice17`, `verifyCM6Phase2Slice20`,
@@ -728,8 +728,8 @@ Lexical-only plugin no longer exist in the working tree** — a later session fu
 Lexical fallback (see Phase 3's newest entry) once CM6 was confirmed production-ready. The
 side-by-side "diff `Editor.tsx`'s feature surface against `CM6Editor.tsx`'s" method this section
 originally proposed still works, just needs to read `Editor.tsx` from git history instead of the
-live tree (`git show <pre-removal-commit>:src/components/Editor.tsx`, or `git log --all --
-src/components/Editor.tsx` to find it) rather than assuming it's still sitting there to diff
+live tree (`git show <pre-removal-commit>:apps/notes/src/components/Editor.tsx`, or `git log --all --
+apps/notes/src/components/Editor.tsx` to find it) rather than assuming it's still sitting there to diff
 against directly. Bug 1 above (right-click scope-cycling) is the one confirmed gap found this way
 before the removal — a real Lexical feature with zero CM6 equivalent at the time, since fixed.
 Whether any *other* gaps like it still exist, silently, is genuinely unknown — this phase was
@@ -746,17 +746,17 @@ From the historical sweep (see the conversation this doc was written from, or re
 
 - **RESOLVED, later session: the Lexical fallback was fully retired, not just deprioritized.**
   This bullet used to ask "keep `LexicalRopeSync` as rollback-path insurance, or let it go?" —
-  the answer landed on "let it go," executed all the way through: `src/components/Editor.tsx`,
+  the answer landed on "let it go," executed all the way through: `apps/notes/src/components/Editor.tsx`,
   every Lexical-only plugin (`ContractBridgePlugin.tsx`, `NoteTextHydrationPlugin.tsx`,
   `CagedScrollPlugin.tsx`, `BlockCaretPlugin.tsx`, `SyntaxHighlightPlugin.tsx`,
   `BlockSelectionPlugin.tsx`, `PasteSanitizationPlugin.tsx`, `TextSanitizationPlugin.tsx`),
-  `src/nodes/ThockdownTokenNode.ts`, `LexicalRopeSync.ts`, and `LexicalParagraphOffsetSync.ts`
+  `apps/notes/src/nodes/ThockdownTokenNode.ts`, `LexicalRopeSync.ts`, and `LexicalParagraphOffsetSync.ts`
   (plus their tests) were all deleted, `SectionEditorArea.tsx`'s
   `localStorage['thockdown:cm6-editor-spike']` gate and its Lexical-fallback branch were removed
   (`CM6Editor` is now unconditional, no flag checked at all), and the `lexical`/`@lexical/react`
   npm packages were uninstalled. `ContractBridgeRangeUtils.ts` (the framework-agnostic
   scope-resolution logic both editors shared) and its test survived, relocated from
-  `src/plugins/` to `src/editor/` since `src/plugins/` no longer means anything now that there's
+  `apps/notes/src/plugins/` to `apps/notes/src/editor/` since `apps/notes/src/plugins/` no longer means anything now that there's
   no Lexical plugin architecture left. This makes the rest of Phase 3's original framing below
   moot rather than answered differently — there is no rollback path left to insure, measure, or
   decide about. Kept below anyway as the record of *why* this was a safe call to make (CM6
@@ -799,7 +799,7 @@ From the historical sweep (see the conversation this doc was written from, or re
   its fuzz test (`ParagraphOffsetIndex.test.ts`) are safe to delete outright, same as the other
   Lexical-only infrastructure already removed, unless a future CM6-side fast resolver is written
   to actually use it.
-- **New, confirmed this session: `src/editorSection/useEditorSectionMount.ts.bak` is checked into
+- **New, confirmed this session: `apps/notes/src/editorSection/useEditorSectionMount.ts.bak` is checked into
   the repo** (tracked, not gitignored — `git log` shows a real commit for it, last touched
   2026-08-01). A 100KB stray backup of the file it sits next to. Delete it; there is no reason a
   `.bak` file should be version-controlled, and its presence risks someone editing the wrong copy.
@@ -887,13 +887,13 @@ or streamlining gap could live, then verify live in the browser — not the reve
    this session, see Phase 3 above), the ~19 vestigial `thockdown:cm6-editor-spike`-setting perf
    scripts (`TODO.md`), and a fresh read of whether any other Lexical-era performance module
    quietly lost its only caller the same way `ParagraphOffsetIndex.ts` did — grep every module
-   under `src/editor/` for real (non-test) import sites before assuming any of them are still
+   under `apps/notes/src/editor/` for real (non-test) import sites before assuming any of them are still
    load-bearing.
 10. **Repo hygiene** — the checked-in `.bak` file (found this session, see Phase 3 above), and a
     scan for any other stray/generated files that shouldn't be tracked.
 
 **Process note**: this list is a starting map grounded in what's actually in the tree today, not
-a guess — but it is deliberately not exhaustive of every file under `src/editor/`/`src/editorSection/`.
+a guess — but it is deliberately not exhaustive of every file under `apps/notes/src/editor/`/`apps/notes/src/editorSection/`.
 Expect to find more as each item is worked; add newly-found areas to this list rather than chasing
 them ad hoc, so the list stays the actual record of what's been covered.
 
@@ -949,7 +949,7 @@ that scenario hasn't been tested at all yet. See Bug 2's section above for the f
 what's still needed.
 
 **Verification for both changes this session**: `npx tsc --noEmit` clean, `npm run lint` clean,
-`npm test` 251/251 (twice, once per change), and the full existing `scripts/perf/verifyCM6*.mjs`
+`npm test` 251/251 (twice, once per change), and the full existing `apps/notes/scripts/perf/verifyCM6*.mjs`
 regression suite run twice — 21/21 after Bug 1, 22/22 after Bug 2's fix (two new scripts added:
 `verifyCM6RightClickSelectionScope.mjs`, `verifyCM6ColdBootCaretFocus.mjs`) — plus fresh
 live-browser functional checks for each specific behavior. One A/B check done (Bug 2's fix
@@ -969,9 +969,9 @@ whole doc, not just this one bug.
 the actual "different beast" the user flagged, distinct from any restore-time issue) is fixed:
 CM6's same-note hydration path no longer force-resets the caret to 0, matching the Lexical
 reference implementation's `SKIP_SELECTION_FOCUS_TAG` discipline; the diffing logic was extracted
-to a pure, fuzz-tested function (`src/editor/MinimalTextDiff.ts`) rather than left inline and
+to a pure, fuzz-tested function (`apps/notes/src/editor/MinimalTextDiff.ts`) rather than left inline and
 only reachable via a live-browser hook. Verified: `npx tsc --noEmit`, `npm run lint`, `npm test`
-258/258 (+7 new), full `scripts/perf/verifyCM6*.mjs` suite 22/22, plus live checks of both the
+258/258 (+7 new), full `apps/notes/scripts/perf/verifyCM6*.mjs` suite 22/22, plus live checks of both the
 genuine-note-switch path (unaffected) and the selection-mapping mechanism the fix depends on
 (confirmed directly). **Honestly unresolved**: the exact end-to-end trigger for the original
 mismatch was never reproduced despite two targeted attempts — see Bug 3a's section for exactly
@@ -994,7 +994,7 @@ explicit checkpoints (`handleCloseSection`, `handleDeleteSection`, `handleSwapSe
 `handleClearSection`, and a fixed `beforeunload` that now flushes every open section instead of
 just the active one) cover every point an editor's content unloads/switches that the piggyback
 alone can't guarantee has already fired for. Verified: `npx tsc --noEmit` clean, `npm run lint`
-clean, `npm test` 258/258, full `scripts/perf/verifyCM6*.mjs` suite (23/23, one new script:
+clean, `npm test` 258/258, full `apps/notes/scripts/perf/verifyCM6*.mjs` suite (23/23, one new script:
 `verifyCM6CursorPersistenceCheckpoints.mjs`), live-browser checks of both the piggyback path and
 the close-section checkpoint, and an A/B check proving the close-section checkpoint fix is actually
 load-bearing (reverting it reproduces the loss under the same test).
@@ -1008,7 +1008,7 @@ so its own correction (`enforceCursorAssoc()`) never engaged for typing. Fixed w
 generation-guarded, microtask-deferred follow-up dispatch in `CM6Editor.tsx`'s existing
 `updateListener`. Verified: `npx tsc --noEmit`/`npm run lint` clean (one pre-existing unrelated lint
 failure confirmed via `git stash`), `npm test` 513/513, a new A/B-verified live-browser regression
-script (`scripts/perf/verifyCM6WrapBoundaryAssoc.mjs`) confirming the fix's own dispatch mechanism
+script (`apps/notes/scripts/perf/verifyCM6WrapBoundaryAssoc.mjs`) confirming the fix's own dispatch mechanism
 fires, and a 3-run-each per-keystroke perf A/B showing no regression. **Explicitly not achieved,
 stated honestly rather than glossed over**: a genuine pixel-level reproduction of the originally
 reported symptom itself — extensive attempts (real word-wrapped typing across dozens of wrap
@@ -1048,7 +1048,7 @@ never scrolls horizontally." `overflow-x: hidden` only blocks *user-driven* whee
 scrolling, though — it does nothing to stop the browser's own native "auto-scroll the drag point
 into view" behavior during a text-selection drag, which reached directly into that real 1px of
 range. Traced the 1px itself to `.editor-text`'s own glyph-centering `transform:
-translateX(calc(((var(--editor-cell-width) - var(--editor-glyph-width)) / 2)))` (`src/index.css`):
+translateX(calc(((var(--editor-cell-width) - var(--editor-glyph-width)) / 2)))` (`apps/notes/src/index.css`):
 a `transform` shifts an element's rendered/painted position without changing its layout width, and
 Chromium counts that shifted paint position toward `scrollWidth` — so `.cm-content`, transformed
 right by a sub-pixel amount, painted its right edge past `.cm-scroller`'s own right edge by exactly
@@ -1101,9 +1101,9 @@ implicit.
 as Bug 7, confirmed via `git stash`), `npm test` 513/513, a live screenshot sanity check (no visible
 glyph clipping/collision near the right edge from the new `max-width` constraint — grid alignment
 unaffected), a new A/B-verified permanent regression script
-(`scripts/perf/verifyCM6NoHorizontalScrollOverflow.mjs` — checks the geometry directly across 4
+(`apps/notes/scripts/perf/verifyCM6NoHorizontalScrollOverflow.mjs` — checks the geometry directly across 4
 widths and with the gutter on, plus a real simulated drag past both edges, matching the user's own
-exact repro), and the full existing `scripts/perf/verifyCM6*.mjs` suite re-run to confirm no
+exact repro), and the full existing `apps/notes/scripts/perf/verifyCM6*.mjs` suite re-run to confirm no
 incidental regression: 22/28 passed (26 pre-existing scripts + the 2 new ones from this session's
 two fixes); the same 6 pre-existing failures as Bug 7's own suite run above
 (`verifyCM6CaretSurvivesTagMutation`, `verifyCM6ColdBootCaretFocus`, `verifyCM6Phase2Slice11`,
@@ -1125,8 +1125,8 @@ real-user-vs-synthetic input-lag gap tracked in `docs/large-document-performance
 `docs/document-scale-performance-philosophy.md` — three bugs, all fixed. Relevant here specifically
 because two of the three live in shared infrastructure, not `CM6Editor.tsx`:** the
 `parseStructuralRanges`/`splitMarkdownIntoPreviewBlocksIncremental` trailing-blank-line defect
-(`src/editor/PreviewBlockSplit.ts`) and the footer word-count establish/track rebuild
-(`src/editor/WordCount.ts`) both feed `usePreviewMarkdownRendering.tsx`/`EditorSection.tsx`, which
+(`apps/notes/src/editor/PreviewBlockSplit.ts`) and the footer word-count establish/track rebuild
+(`apps/notes/src/editor/WordCount.ts`) both feed `usePreviewMarkdownRendering.tsx`/`EditorSection.tsx`, which
 per this doc's own Phase 3 notes are genuinely shared between the Lexical and CM6 paths (both
 editors route through `EditorSection.tsx` identically). So both fixes benefit the Lexical rollback
 path too, for free, not just CM6 — worth knowing before assuming the rollback path is stuck with
@@ -1147,21 +1147,21 @@ Per the user's own framing: the CM6 migration is now considered live and success
 codebase should fully commit to it rather than keep carrying a parallel implementation and a
 rollback flag nobody expects to actually use. Deleted, not just deprioritized:
 
-- `src/components/Editor.tsx` (the Lexical-backed editor component itself)
-- Every Lexical-only plugin: `src/plugins/ContractBridgePlugin.tsx`,
+- `apps/notes/src/components/Editor.tsx` (the Lexical-backed editor component itself)
+- Every Lexical-only plugin: `apps/notes/src/plugins/ContractBridgePlugin.tsx`,
   `NoteTextHydrationPlugin.tsx`, `CagedScrollPlugin.tsx`, `BlockCaretPlugin.tsx`,
   `SyntaxHighlightPlugin.tsx`, `BlockSelectionPlugin.tsx`, `PasteSanitizationPlugin.tsx`,
   `TextSanitizationPlugin.tsx`
-- `src/nodes/ThockdownTokenNode.ts` (Lexical node class), and the now-empty `src/nodes/`
+- `apps/notes/src/nodes/ThockdownTokenNode.ts` (Lexical node class), and the now-empty `apps/notes/src/nodes/`
   directory
-- `src/editor/LexicalRopeSync.ts` and `LexicalParagraphOffsetSync.ts`, plus their fuzz tests
+- `apps/notes/src/editor/LexicalRopeSync.ts` and `LexicalParagraphOffsetSync.ts`, plus their fuzz tests
 - The `lexical` and `@lexical/react` npm packages (34 transitive packages removed)
 
 Kept and relocated: `ContractBridgeRangeUtils.ts` (the framework-agnostic
 word/sentence/line/block scope-resolution logic, pure text+offset functions with no Lexical
 dependency, already confirmed shared and reused unchanged by `CM6Editor.tsx`'s own right-click
-handler — see Bug 1 above) and its test moved from `src/plugins/` to `src/editor/`, since
-`src/plugins/` no longer means anything once there's no Lexical plugin architecture housed there.
+handler — see Bug 1 above) and its test moved from `apps/notes/src/plugins/` to `apps/notes/src/editor/`, since
+`apps/notes/src/plugins/` no longer means anything once there's no Lexical plugin architecture housed there.
 The test was renamed `ContractBridgeRangeUtils.test.ts` to match what it actually tests (it was
 never really testing `ContractBridgePlugin.tsx` itself, just this shared module).
 
@@ -1171,9 +1171,9 @@ read at all. `EditorContract.ts`'s doc comment updated to state CM6Editor.tsx is
 implementation rather than "may be partial while the rewrite is in flight." `docs/editor-contract.md`
 updated to match (usage example now imports `CM6Editor`, the "Text Model" section's "not yet fully
 implemented in the Lexical bridge" caveat removed since there's no Lexical bridge left to be
-partial). `scripts/perf/verifyCM6Phase2Slice1.mjs` deleted (its entire purpose was verifying the
+partial). `apps/notes/scripts/perf/verifyCM6Phase2Slice1.mjs` deleted (its entire purpose was verifying the
 rollback flag still worked — explicitly marked "not a committed test, ad hoc" in its own header,
-so safe to delete outright rather than trim). `scripts/perf/verifyCM6ProductionGating.mjs` kept
+so safe to delete outright rather than trim). `apps/notes/scripts/perf/verifyCM6ProductionGating.mjs` kept
 (most of it verifies real, still-relevant CM6 mount/note-switch behavior) with just its
 rollback-specific assertion trimmed out. ~19 other `verifyCM6*`/`measureCM6*` scripts still set
 the now-inert `thockdown:cm6-editor-spike` flag before launching — harmless (the flag does
@@ -1187,7 +1187,7 @@ preload, not just type-checking — confirms nothing in the actual bundle graph 
 test file, including `ContractBridgeRangeUtils.test.ts` at its new path, still passes unchanged).
 No live-browser re-verification of editor behavior this round specifically — this was a pure
 deletion of already-unreachable code plus a mechanical import-path fix, not a behavior change to
-the surviving CM6 path, so the existing `scripts/perf/verifyCM6*.mjs` suite (already passing,
+the surviving CM6 path, so the existing `apps/notes/scripts/perf/verifyCM6*.mjs` suite (already passing,
 already covering CM6's own real behavior) stands as the relevant live coverage rather than being
 re-run from scratch for this change specifically.
 
@@ -1337,7 +1337,7 @@ inventory into the same activity. Two concrete, verified-by-grep findings surfac
 the plan and were filed under Phase 3 rather than Phase 4 since they're loose-ends, not audit
 targets: `ParagraphOffsetIndex.ts` is dead code (its only real caller, `LexicalParagraphOffsetSync.ts`,
 was deleted with the Lexical fallback; grepped whole-tree, confirmed only its own test still imports
-it), and `src/editorSection/useEditorSectionMount.ts.bak` is a 100KB backup file checked into git by
+it), and `apps/notes/src/editorSection/useEditorSectionMount.ts.bak` is a 100KB backup file checked into git by
 mistake. Neither fixed yet — recorded, not actioned, pending the user's go-ahead on where to start.
 
 **User-supplied leads, gathered before starting execution** (asked directly rather than guessed, since
@@ -1393,7 +1393,7 @@ Phase 4 checklist above for whatever these four don't cover.
 ## Lead 4 (arrow-up chunk-boundary scroll) — reproduced live, root cause substantially narrowed, no fix shipped yet
 
 A later session picked this up as the entry point per the above. **Confirmed real, not a
-misdiagnosis or test artifact**, via `scripts/perf/verifyCM6ArrowUpChunkBoundary.mjs` (already
+misdiagnosis or test artifact**, via `apps/notes/scripts/perf/verifyCM6ArrowUpChunkBoundary.mjs` (already
 committed at the point this doc was last touched, apparently never actually run before this
 session): on a 1.2M-char uniform-content note, holding ArrowUp produces a scroll jump of roughly
 5–11 rows (not the reported "5 down," but the same-shape anomaly — magnitude and direction both
@@ -1479,7 +1479,7 @@ first read of the code.
 before revert; no `npm test`/full regression suite run, since nothing shipped — not needed per this
 doc's own "don't run the full suite for changes that didn't land" logic, though this was a
 substantial-tier investigation regardless (scroll/caret-adjacent), not a small one. `npm ci` was run
-this session (repo had no installed `node_modules`); `scripts/perf/verifyCM6ArrowUpChunkBoundary.mjs`
+this session (repo had no installed `node_modules`); `apps/notes/scripts/perf/verifyCM6ArrowUpChunkBoundary.mjs`
 itself needed no changes to work as committed. Leads 1–3 were not started this session — lead 4 alone
 consumed the full session per the user's own "most concrete/novel, cheapest to falsify" prioritization,
 and the honest state is a well-grounded root-cause narrowing with two ruled-out fix shapes, not a
@@ -1615,7 +1615,7 @@ read-only debug accessor to `CM6Editor.tsx` (`window.__thockdownDebugCageState()
 `debug-input-lag`) exposing `{analyticalTop: view.lineBlockAt(head).top, scrollTop, ...}` on demand.
 `view.lineBlockAt(head).top` is a pure document-layout value, independent of scroll position --
 already established as trustworthy by Bug 5's fix above. Methodology, committed as
-`scripts/perf/measureCM6ArrowUpDrift.mjs`: start at document end, press ArrowUp continuously (never
+`apps/notes/scripts/perf/measureCM6ArrowUpDrift.mjs`: start at document end, press ArrowUp continuously (never
 reversing), which pins the caret against the cage's top edge within the first few dozen presses; from
 then on, a correctly-behaving system has `deltaScrollTop == deltaAnalyticalTop` on every single press,
 so any press where they disagree is a raw, single-step leak, and summing those over the whole session
@@ -1697,7 +1697,7 @@ one -- ArrowUp's `reconcileCagedScroll` -- covered by prior rounds):
    based on whatever scrollTop currently reads, no independent absolute reference, no forced-exact-
    final-step anywhere in the hold-or-release sequence. Live capture, sampling scrollTop every
    animation frame during a held PageUp on a 500K-char note
-   (`scripts/perf/measureCM6PageContinuousScroll.mjs`): a **+208px (8-row) reversal in the wrong
+   (`apps/notes/scripts/perf/measureCM6PageContinuousScroll.mjs`): a **+208px (8-row) reversal in the wrong
    direction**, landing exactly at the hold-release transition (t=4030.6ms of a 4000ms hold), followed
    by an overshoot-and-recover on the next two samples before settling. This is the same underlying
    raw-write-races-CM6's-anchor-compensation pattern as ArrowUp, just pre-existing in shipped code
@@ -1739,7 +1739,7 @@ kind of "test passed for the wrong reason" trap this project's docs warn about r
 
 **With that fixed, re-tested and found real, genuine viewport misplacement**: sampling
 `.markdown-preview`'s `scrollTop` every animation frame during a held PageDown on a 1.2M-char note
-(paragraph-separated, `scripts/perf/measureCM6PreviewPageContinuousScroll.mjs`) found **five
+(paragraph-separated, `apps/notes/scripts/perf/measureCM6PreviewPageContinuousScroll.mjs`) found **five
 wrong-direction reversals** (scrollTop decreasing during a monotonic downward hold: -13, -52, -78,
 -65, -78px), all clustered in the pre-release/transition window (t=4541-5095ms of a 5000ms hold) --
 the same general moment CM6's own single large reversal occurred, though smaller-magnitude and
@@ -1765,8 +1765,8 @@ click-to-position jumps, and wrap-point/box-width sensitivity (Q3 from the user'
 questions, still open -- every test in this investigation so far deliberately avoided line-wrapping).
 
 **Verification this round**: no production code changed -- purely measurement. Two new committed
-scripts (`scripts/perf/measureCM6PageContinuousScroll.mjs`,
-`scripts/perf/measureCM6PreviewPageContinuousScroll.mjs`), both following the same
+scripts (`apps/notes/scripts/perf/measureCM6PageContinuousScroll.mjs`,
+`apps/notes/scripts/perf/measureCM6PreviewPageContinuousScroll.mjs`), both following the same
 sample-and-detect-reversal methodology as `measureCM6ArrowUpDrift.mjs`. `npx tsc --noEmit` clean
 (no `.ts` changes this round, scripts are plain `.mjs`).
 
@@ -1848,7 +1848,7 @@ what triggers the imprecise compensation.
 All three attempts (4, 5/6 counted together as one code path evolving, and 7) were reverted in full
 after measurement -- working tree returned to the last committed state each time, nothing shipped
 partially-working. One real, low-risk infrastructure fix survives from this round and was kept:
-`scripts/perf/perfHarness.mjs`'s mount-wait timeout raised from 30s to 90s, after directly timing a
+`apps/notes/scripts/perf/perfHarness.mjs`'s mount-wait timeout raised from 30s to 90s, after directly timing a
 completely unmodified mount at 18.6s and another at 58.3s in this same session (this environment's
 dev-server/mount latency is genuinely variable session-to-session and run-to-run, confirmed by
 direct A/B timing, not assumed) -- 30s was intermittently insufficient even for correct, unmodified
@@ -1863,7 +1863,7 @@ the caret actually moves, the target region is already measured and no reactive,
 growth (the apparent trigger for the imprecision) is needed at all. Not yet designed or implemented.
 
 **Verification this round**: `npx tsc --noEmit` and `npm run lint` clean on every attempt before
-revert. No `npm test`/full regression suite run, since nothing shipped. `scripts/perf/perfHarness.mjs`'s
+revert. No `npm test`/full regression suite run, since nothing shipped. `apps/notes/scripts/perf/perfHarness.mjs`'s
 timeout change is the only surviving diff and was independently verified (unmodified code, direct
 timing) rather than assumed safe.
 
@@ -1892,7 +1892,7 @@ behavior at all.
 magnitudes, exact same signs as the unpatched baseline and as attempts 4 and 7**, none of which share
 this attempt's mechanism (immediate post-hoc dispatch; competing-scrollIntoView suppression;
 pre-emptive pre-dispatch widening are three structurally distinct interventions). Reverted in full
-(`git checkout -- src/components/CM6Editor.tsx`); working tree confirmed clean.
+(`git checkout -- apps/notes/src/components/CM6Editor.tsx`); working tree confirmed clean.
 
 **This is the most informative negative result of the investigation so far.** Four dispatch-layer
 interventions -- act after, suppress the competing intent, act before, and (attempts 5/6) act after
@@ -1935,7 +1935,7 @@ every dispatch-layer intervention (attempts 4-8) affect nothing?* Because the tr
 dispatch layer, or even in document size -- it's in **document content shape**, specifically long runs
 of successive, identically-rendering lines.
 
-**Method** (`scripts/perf/measureCM6WrapSensitivityDrift.mjs`, new): same continuous-ArrowUp-from-end
+**Method** (`apps/notes/scripts/perf/measureCM6WrapSensitivityDrift.mjs`, new): same continuous-ArrowUp-from-end
 methodology as `measureCM6ArrowUpDrift.mjs`, run across four ~100,000-char documents that separate
 wrapping and content diversity as independent variables:
 
@@ -2000,7 +2000,7 @@ targeted -- specifically the oracle's default per-line height estimate versus th
 zero-padding/26px-row CSS, rather than "somewhere in the measure loop." Neither designed or implemented
 yet -- this was a pure measurement round, no production code touched.
 
-**Verification this round**: new script only (`scripts/perf/measureCM6WrapSensitivityDrift.mjs`,
+**Verification this round**: new script only (`apps/notes/scripts/perf/measureCM6WrapSensitivityDrift.mjs`,
 committed); no `.ts`/`.tsx` changes, `npx tsc --noEmit` inapplicable/unaffected. `git status --short`
 confirmed clean after the script commit.
 
@@ -2040,7 +2040,7 @@ it's "extend whatever margin already makes the 3-row case invisible to also cove
 which is a smaller, more targeted question than either of the two candidate directions from the previous
 round was framed as. Concretely worth checking next: what specifically makes the existing reconcile
 absorb -78px but not -156px+ -- e.g. whether `scrollToQuantizedSmooth`'s immediate-write-vs-animated-
-curve threshold (see `src/editor/QuantizedSmoothScroll.ts`, `distanceRows <= 1` triggers an immediate
+curve threshold (see `apps/notes/src/editor/QuantizedSmoothScroll.ts`, `distanceRows <= 1` triggers an immediate
 write; this case is exactly the boundary CM6's jump can now blow past) or `resolveCagedScrollTarget`'s
 own boundary clamping is where the absorbed/leaked cases diverge.
 
@@ -2067,7 +2067,7 @@ naive expected `-lineHeightPx`, which conflates "scrollTop and the document's in
 churned by a lot, but canceled each other out on screen" with "the user actually saw something jump."
 They are not the same thing, and only the second one is the bug that was originally reported.
 
-New script, `scripts/perf/measureCM6ArrowUpVisualDrift.mjs` (committed), measures the real thing
+New script, `apps/notes/scripts/perf/measureCM6ArrowUpVisualDrift.mjs` (committed), measures the real thing
 instead: the caret's on-screen top should be exactly constant, press to press, while pinned at the
 cage's top boundary (the cage re-clamps to the same visual row every time) -- not "within half a row."
 A >3px deviation is flagged.
@@ -2142,8 +2142,8 @@ measurement (not code-reading) at both 100K and 1.2M chars across all four docum
 wrap-sensitivity round, an A/B (`git stash`) proving the corrected metric is sound by finding real
 baseline anomalies it would otherwise have missed, byte-exact cursor-movement verification, full
 `npm test` (277/277 passed), `npx tsc --noEmit` and `npm run lint` clean. Production change is isolated
-to `reconcileCagedScroll` in `src/components/CM6Editor.tsx`; `resolveCagedScrollTarget`
-(`src/editor/CageMath.ts`) and `scrollToQuantizedSmooth` (`src/editor/QuantizedSmoothScroll.ts`) are
+to `reconcileCagedScroll` in `apps/notes/src/components/CM6Editor.tsx`; `resolveCagedScrollTarget`
+(`apps/notes/src/editor/CageMath.ts`) and `scrollToQuantizedSmooth` (`apps/notes/src/editor/QuantizedSmoothScroll.ts`) are
 unchanged -- the fix reuses them as-is.
 
 ### What's next for lead #4
@@ -2235,7 +2235,7 @@ better now that the underlying cause is better understood, but a *differently* b
 row-counting for a capped number of consecutive presses, then a forced fresh-geometry re-anchor) has not
 been tried and is the leading candidate for the next attempt.
 
-**Reverted in full** -- `src/components/CM6Editor.tsx` and `src/editor/CageMath.ts` returned to the last
+**Reverted in full** -- `apps/notes/src/components/CM6Editor.tsx` and `apps/notes/src/editor/CageMath.ts` returned to the last
 committed state (the async-follow-up-only fix from the previous round, which stays shipped). Per this
 investigation's binary standard, an attempt that satisfies one ground-truth metric but not the other is
 not a 0-anomaly result and does not ship partially.
@@ -2556,7 +2556,7 @@ scroll-position bug** -- a genuinely different defect from lead #4 above, despit
 `range.getClientRects()`, and each `.cm-line` div's own bounding rect, read directly in-browser): after 2
 Enters, `range.getBoundingClientRect()` for the collapsed caret is degenerate (`{0,0,0,0}`) and
 `getClientRects()` is empty -- normal for a collapsed caret on a trailing blank line -- so
-`readSelectionRect` (`src/editor/CaretRect.ts`) falls all the way to its last-resort `'anchor-fallback'`
+`readSelectionRect` (`apps/notes/src/editor/CaretRect.ts`) falls all the way to its last-resort `'anchor-fallback'`
 path: the anchor node's own `getBoundingClientRect()`. Confirmed directly that this fallback rect is
 **already correct** -- CM6 renders every blank line, including trailing ones, as its own independently-
 positioned `.cm-line` div (no collapsing between consecutive empty lines the way the original Lexical
@@ -2622,7 +2622,7 @@ distinction, it just wasn't being fed correctly.
 same pre-existing 15 native-module-ABI failures on this machine, unrelated to this change and present
 identically before it). Root cause independently confirmed via a dedicated Explore-agent trace before
 implementing, with specific file/line evidence for every step of the chain. **Not verified live**: this
-machine's `scripts/perf/verifyCM6*.mjs` regression suite can't run here -- `spawn('npm', ...)` in those
+machine's `apps/notes/scripts/perf/verifyCM6*.mjs` regression suite can't run here -- `spawn('npm', ...)` in those
 scripts fails with `ENOENT` on Windows (missing `shell: true`/`.cmd` resolution, a pre-existing cross-platform
 gap in the scripts themselves, reproduced identically on unmodified `HEAD`), and there's no other live-browser
 path available in this environment. Worth an actual click-through (open a note, confirm it doesn't jump to
@@ -2642,7 +2642,7 @@ competing ones (this file's own long-standing fragility around exactly that clas
   `updateSelectionHighlight`'s existing resync cadence (scroll/doc/viewport/resize), so there's a single
   source of truth for "when do overlays need to resync," not a second parallel schedule.
 - Persistence: a new `review_flags` SQLite table (FK'd to `notes(id) ON DELETE CASCADE`), full IPC
-  round-trip (`src/shared/reviewFlags.ts`, `databaseService.ts`, `main.ts`/`preload.ts`, dev-mode browser
+  round-trip (`apps/notes/src/shared/reviewFlags.ts`, `databaseService.ts`, `main.ts`/`preload.ts`, dev-mode browser
   mock bridge). Flags are anchored to a live document *position*, remapped exactly via CM6's own
   `ChangeSet.mapPos` on every transaction (the same mechanism CM6 uses internally to reposition its own
   marks/decorations/selections across an edit) -- not a heuristic, and not hash-based; a lightweight
@@ -2739,7 +2739,7 @@ against `viewRef.current` whenever the prop changes. Placed right after the moun
 **not** fixed here -- out of scope for this change, left as a separate, pre-existing finding for
 whoever picks it up next rather than folded in speculatively.
 
-**Verification**: live Playwright check (`scripts/perf/` throwaway script, not committed) driving a
+**Verification**: live Playwright check (`apps/notes/scripts/perf/` throwaway script, not committed) driving a
 real note switch into and out of a read-only note, confirming `contenteditable` flips both directions;
 `tsc --noEmit` and `npm run lint` clean; full `npm test` suite (355/355) unaffected. Not run through
 this doc's own full CM6 regression-script suite -- this change doesn't touch caret/selection/scroll
@@ -2805,7 +2805,7 @@ before and after, plus four new unit tests in `useMarkdownFormattingToolbar.test
 chapter-level (`###`) TOC path specifically. A/B-verified twice that the fix's own tests actually
 fail without it: once via `git stash` on the four new unit tests against the pre-fix file (all four
 failed as expected), and once against a new permanent live-browser regression script
-(`scripts/perf/verifyChapterTocButtonFix.mjs`) that drives the real toolbar button end-to-end --
+(`apps/notes/scripts/perf/verifyChapterTocButtonFix.mjs`) that drives the real toolbar button end-to-end --
 create parent note + real chapter with headings, click insert (asserts `###`, not the colliding
 `##`), click again (asserts full removal, not a second orphaned insert), click a third time and
 reload the page (asserts the block and the button's active-state both survive reopening the note),
@@ -2830,7 +2830,7 @@ scroll until an async `getNoteUiState` round-trip resolves, several frames after
 already on screen -- and react-virtual then adds its own corrections as each block's real measured
 height replaces the 56px estimate.
 
-**The fix**: `src/editorSection/previewSettleGate.ts`, a framework-free controller that holds the
+**The fix**: `apps/notes/src/editorSection/previewSettleGate.ts`, a framework-free controller that holds the
 preview `visibility: hidden` (still laid out, so measurement and `scrollIntoView` behave normally)
 from the moment a note switch opens a *settle generation* until two conditions both hold: the
 restore has reported its scroll write applied for that same generation, and the container's

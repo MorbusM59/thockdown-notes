@@ -57,7 +57,7 @@ import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import {
-  REPO_ROOT,
+  APP_ROOT,
   startDevServer,
   waitForAppReady,
   startCdpJsProfile,
@@ -247,11 +247,11 @@ async function runBrowser(args) {
 
 function buildPackagedApp() {
   console.error('[perf] building renderer + electron main/preload (npx vite build)...')
-  let result = spawnSync('npx', ['vite', 'build'], { cwd: REPO_ROOT, stdio: 'inherit' })
+  let result = spawnSync('npx', ['vite', 'build'], { cwd: APP_ROOT, stdio: 'inherit' })
   if (result.status !== 0) throw new Error(`vite build failed with exit code ${result.status}`)
 
   console.error('[perf] packaging via electron-builder (--linux dir)...')
-  result = spawnSync('npx', ['electron-builder', '--linux', 'dir'], { cwd: REPO_ROOT, stdio: 'inherit' })
+  result = spawnSync('npx', ['electron-builder', '--linux', 'dir'], { cwd: APP_ROOT, stdio: 'inherit' })
   if (result.status !== 0) throw new Error(`electron-builder failed with exit code ${result.status}`)
 }
 
@@ -272,8 +272,8 @@ async function waitForDatabaseReady(page, timeoutMs) {
 }
 
 async function runElectron(args) {
-  const pkg = JSON.parse(await readFile(path.join(REPO_ROOT, 'package.json'), 'utf8'))
-  const executablePath = path.join(REPO_ROOT, 'release', pkg.version, 'linux-unpacked', pkg.name)
+  const pkg = JSON.parse(await readFile(path.join(APP_ROOT, 'package.json'), 'utf8'))
+  const executablePath = path.join(APP_ROOT, 'release', pkg.version, 'linux-unpacked', pkg.name)
 
   if (!args.skipBuild) buildPackagedApp()
   else if (!existsSync(executablePath)) {
@@ -293,7 +293,7 @@ async function runElectron(args) {
   const app = await _electron.launch({
     executablePath,
     args: ['--no-sandbox', `--user-data-dir=${userDataDir}`],
-    cwd: REPO_ROOT,
+    cwd: APP_ROOT,
   })
   try {
     const page = await app.firstWindow()

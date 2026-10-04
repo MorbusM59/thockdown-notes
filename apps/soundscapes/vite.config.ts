@@ -3,8 +3,8 @@
  * desktop config on purpose: no Electron plugin, and its own entry, so only
  * what the soundscape panel and engine import ends up in the bundle.
  *
- * `publicDir` is the desktop app's: the soundscape worklet
- * (public/soundscape-generator.js) is one file shared by both builds.
+ * No `publicDir`: the soundscape worklet is imported by URL from its
+ * package and bundled like any other asset.
  */
 import { defineConfig } from 'vite'
 import path from 'node:path'
@@ -14,7 +14,7 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   root: __dirname,
   base: './',
-  publicDir: path.resolve(__dirname, '../../public'),
+  publicDir: false,
   plugins: [tailwindcss(), react()],
   build: {
     outDir: path.resolve(__dirname, 'dist'),

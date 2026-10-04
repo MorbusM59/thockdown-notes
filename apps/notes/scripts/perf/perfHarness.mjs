@@ -18,9 +18,10 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readFileSync, existsSync } from 'node:fs'
 import { TraceMap, originalPositionFor } from '@jridgewell/trace-mapping'
+import { createRequire } from 'node:module'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-export const REPO_ROOT = path.resolve(__dirname, '..', '..')
+export const APP_ROOT = path.resolve(__dirname, '..', '..')
 
 /** Waits until a GET to `url` doesn't reject (dev server is up). */
 async function waitForServer(url, timeoutMs) {
@@ -76,11 +77,12 @@ function waitForOwnServer(proc, port, readOutput, exitedEarly) {
  * shell killed the shell and left npm and Vite running, holding the port for
  * the next script. With no wrappers, the process spawned IS the server.
  */
-const VITE_BIN = path.join(REPO_ROOT, 'node_modules', 'vite', 'bin', 'vite.js')
+// npm hoists vite to the workspace root; resolve it rather than assume where.
+const VITE_BIN = path.join(path.dirname(createRequire(import.meta.url).resolve('vite/package.json')), 'bin', 'vite.js')
 
 function spawnVite(args) {
   return spawn(process.execPath, [VITE_BIN, ...args], {
-    cwd: REPO_ROOT,
+    cwd: APP_ROOT,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 }
@@ -463,7 +465,7 @@ const traceMapCache = new Map()
  * `.../app.asar/dist/assets/index-X.js.map` is byte-identical to
  * `<repo>/dist/assets/index-X.js.map`, which is a real, never-deleted file
  * (the asar-packing step copies from there, it doesn't move it). Rewriting
- * any `.../app.asar/<rest>` path to `REPO_ROOT/<rest>` resolves it directly
+ * any `.../app.asar/<rest>` path to `APP_ROOT/<rest>` resolves it directly
  * without ever touching the archive itself.
  */
 function loadTraceMapForUrl(url) {
@@ -476,7 +478,7 @@ function loadTraceMapForUrl(url) {
       const asarMarker = `${path.sep}app.asar${path.sep}`
       const asarIndex = scriptPath.indexOf(asarMarker)
       if (asarIndex !== -1) {
-        scriptPath = path.join(REPO_ROOT, scriptPath.slice(asarIndex + asarMarker.length))
+        scriptPath = path.join(APP_ROOT, scriptPath.slice(asarIndex + asarMarker.length))
       }
       const mapPath = `${scriptPath}.map`
       if (existsSync(mapPath)) {

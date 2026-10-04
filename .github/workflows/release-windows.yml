@@ -136,6 +136,7 @@ jobs:
         # Spelled out rather than `npm run build`, because an argument appended
         # to that reaches only its last command, and `--publish never` has to
         # reach both builder runs (see build-mac.yml for why it matters).
+        working-directory: apps/notes
         run: |
           npx tsc
           npx vite build
@@ -147,8 +148,8 @@ jobs:
       - name: Hash and upload the Windows artifacts
         id: hash
         run: |
-          VERSION=$(node -p "require('./package.json').version")
-          mapfile -t FILES < <(find "release/$VERSION" -maxdepth 1 -type f \( -name '*.exe' -o -name '*.zip' \))
+          VERSION=$(node -p "require('./apps/notes/package.json').version")
+          mapfile -t FILES < <(find "apps/notes/release/$VERSION" -maxdepth 1 -type f \( -name '*.exe' -o -name '*.zip' \))
           if [ "${#FILES[@]}" -lt 2 ]; then echo "expected an .exe and a .zip, found: ${FILES[*]}"; exit 1; fi
           # GitHub rewrites spaces in asset names to dots; key on that form.
           HASHES=""
