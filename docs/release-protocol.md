@@ -42,9 +42,12 @@ waits for the cloud half, and verifies both landed intact.
    commit list is a *starting point*, not the deliverable — put two or three
    sentences at the top saying what changed for someone using the app, and
    delete or group the commits that only matter to the repo.
-4. **Test gate.** Runs `npm test`. A failing suite stops the release *before*
-   the tag is pushed, which is the last moment stopping is free. `--skip-tests`
-   opts out; CI still runs the suite on the mac side.
+4. **Cross-platform gate.** Requires CI's run for the commit being released
+   (`.github/workflows/ci.yml`, started by the push to `main`) to be green:
+   `npm run verify` for every app, then the Android build. It waits for that
+   run if it is still going, and stops the release *before* the tag is
+   pushed, which is the last moment stopping is free. There is no opt-out: a
+   release is public facing (CLAUDE.md, "Git workflow").
 5. **Bump, tag, push.** Writes the version into `package.json` *and*
    `package-lock.json`, commits `Release vX.Y.Z`, tags it, pushes both. Pushing
    the tag is what starts the macOS build.
@@ -129,7 +132,9 @@ every asset against the hash taken where it was built, and publishes
 
 It is dispatch-only on purpose: on a tag push it would race the local
 script's own Windows uploads with a second build of the same filenames.
-It skips the test suite, which the mac job runs on the same tag.
+Its first job runs the whole of `ci.yml` on the commit being released (the
+tag's, or `target`'s when the tag does not exist yet), and nothing else
+starts until that is green.
 
 ## Before you release
 

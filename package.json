@@ -16,6 +16,7 @@
     "pretest": "node scripts/killStrayElectronDev.mjs && npm rebuild better-sqlite3",
     "test": "vitest run",
     "verify": "node scripts/verify.mjs",
+    "land": "node scripts/land.mjs",
     "adventure:sim": "vite-node scripts/adventure/simulate.ts --",
     "adventure:play": "xvfb-run -a node scripts/adventure/playthrough.mjs",
     "perf:input-lag": "node scripts/perf/measureInputLag.mjs",

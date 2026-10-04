@@ -5,7 +5,15 @@
 # the mobile app shares much of src/ with the desktop, and a hand-kept list
 # of which paths reach it drifted once already.
 #
-# A build of main ALSO replaces the APK on the `android-latest` prerelease,
+# Releases call this workflow (workflow_call) on the exact commit they ship,
+# as a job their own jobs need, so nothing public-facing is built from a
+# commit whose full check did not pass in that same run.
+#
+# A push to main also checks HOW the change arrived: a high-impact change
+# (scripts/impact.mjs) must come through a pull request, and one pushed
+# directly turns the run red, so it is seen and reviewed after the fact.
+#
+# A push build of main ALSO replaces the APK on the `android-latest` prerelease,
 # only after verify passed, so a change that breaks a test never reaches the
 # installable APK. A workflow artifact always downloads as a zip, which a
 # phone cannot install from, so the release asset is the plain .apk at a fixed
@@ -16,6 +24,12 @@ name: CI
 
 on:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: "Commit to check (blank = the caller's commit)"
+        type: string
+        default: ""
   push:
     branches: [main]
   pull_request:
@@ -23,7 +37,7 @@ on:
 # A newer push to the same branch makes an older run's answer moot. Never
 # cancel main mid-publish, though: each main run finishes in order.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
@@ -34,6 +48,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - uses: actions/setup-node@v4
         with:
@@ -53,6 +69,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - uses: actions/setup-node@v4
         with:
@@ -93,7 +111,7 @@ jobs:
           path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
 
       - name: Publish to the android-latest prerelease
-        if: github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -108,3 +126,33 @@ jobs:
               --title "Android soundscapes (latest build)" \
               --notes "Debug build of the mobile soundscape app from the latest main. Replaced on every build; see mobile/README.md."
           fi
+
+  # A high-impact change must reach main through a pull request. This cannot
+  # stop a direct push (GitHub protects a branch for every change or none),
+  # so it reports one: the run goes red and names the paths.
+  landing:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: High-impact changes came through a pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          # A new branch or a force push has no usable "before": check the head commit alone.
+          if ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then BEFORE="$AFTER~1"; fi
+          if HITS=$(node scripts/impact.mjs "$BEFORE" "$AFTER"); then
+            echo "low impact"; exit 0
+          fi
+          PRS=$(gh api "repos/$GITHUB_REPOSITORY/commits/$AFTER/pulls" --jq 'map(select(.merged_at != null)) | length')
+          if [ "$PRS" -gt 0 ]; then
+            echo "high impact, merged through a pull request"; exit 0
+          fi
+          echo "::error::High-impact change pushed to main without a pull request (see CLAUDE.md, Git workflow):"
+          echo "$HITS"
+          exit 1

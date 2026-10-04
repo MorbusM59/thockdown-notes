@@ -13,7 +13,16 @@ on:
   workflow_dispatch:
 
 jobs:
+  # The full cross-platform check on this exact commit, in this run: a bundle
+  # is built only once it passed (CLAUDE.md, "Git workflow").
+  gate:
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+    permissions:
+      contents: write
+
   release-android:
+    needs: gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -207,7 +207,8 @@ The store build is separate from the sideloaded one: an Android App Bundle
 signed with the Play UPLOAD key (repository secrets `PLAY_UPLOAD_KEYSTORE_BASE64`,
 a PKCS12 keystore with alias `upload`, and `PLAY_UPLOAD_KEYSTORE_PASSWORD`),
 which Google checks before re-signing the app with its own key. Run
-`.github/workflows/release-android.yml` by hand. The version is
+`.github/workflows/release-android.yml` by hand; it builds nothing until
+`ci.yml`, run on that same commit as its first job, is green. The version is
 `mobile/package.json`'s and the versionCode is derived from it
 (major x 10000 + minor x 100 + patch, in `app/build.gradle`), so every build
 of a commit carries the same numbers and Play, which requires each upload to

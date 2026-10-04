@@ -37,7 +37,40 @@ jobs:
   # push tags) with its notes and title, then starts the macOS build of that
   # tag. A tag made with this workflow's token triggers nothing by itself,
   # so build-mac.yml is dispatched explicitly, which the token is allowed to do.
+  # The full cross-platform check on the commit being released, in this run:
+  # nothing below creates a release or builds an installer until it passed
+  # (CLAUDE.md, "Git workflow").
+  #
+  # Which commit that is: the tag's, when the tag already exists, otherwise
+  # the one `prepare` will create it at.
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.sha.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: sha
+        env:
+          TAG: ${{ inputs.tag }}
+          TARGET: ${{ inputs.target || github.sha }}
+        run: |
+          git fetch --tags --quiet
+          if SHA=$(git rev-parse -q --verify "refs/tags/$TAG^{commit}"); then :; else SHA=$(git rev-parse "$TARGET^{commit}"); fi
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+  gate:
+    needs: resolve
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+    permissions:
+      contents: write
+    with:
+      ref: ${{ needs.resolve.outputs.sha }}
+
   prepare:
+    needs: gate
     runs-on: ubuntu-latest
     outputs:
       dispatched_at: ${{ steps.mac.outputs.dispatched_at }}
