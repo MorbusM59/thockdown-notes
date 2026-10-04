@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- The field the app opens on: the launcher icon's own background,
-         extended to the whole screen, so the icon sits on it seamlessly. -->
-    <color name="launch_background">@color/ic_launcher_background</color>
+    <!-- The field the app opens on: the launcher icon's background, the system
+         splash, the window, and the
+         launch overlay that carries launch_image (MainActivity). The image's
+         own edges are this colour, so its square does not show. -->
+    <color name="launch_background">#04060F</color>
 </resources>

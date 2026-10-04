@@ -17,6 +17,10 @@ const config: CapacitorConfig = {
       // page has committed, and until then pads the WebView clear of the bars,
       // so the navigation bar's strip showed the window and filled in later.
       initialViewportFitValueHint: 'cover',
+      // Light icons from the start: the first thing on screen is the launch
+      // overlay's dark background (launch_background). The page sets the
+      // look's own style once the overlay is gone (launchHandover.ts).
+      style: 'DARK',
     },
   },
 };

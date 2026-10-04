@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The system splash's icon: nothing. Whether a launcher lets the system
+     splash show an icon at all is the launcher's choice, so the splash is
+     only launch_background on every launcher, and the image is drawn by the
+     app (MainActivity's launch overlay), where it looks the same everywhere. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@android:color/transparent" />
+</shape>
