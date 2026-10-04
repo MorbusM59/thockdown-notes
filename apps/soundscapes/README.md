@@ -92,6 +92,12 @@ full scale before the volume is not clipped early. The sandbox needs a
 WebView of about version 110; `soundscapeSandbox.test.ts` runs the shipped
 bundle in a context with no web APIs, as the sandbox has none.
 
+## Launch
+
+The app opens in one step: a uniform field, then the finished page. The system splash (the app icon on `launch_background`, which is the icon's own background colour) covers the whole screen, system bars included, and the window behind it is the same colour. The splash is held (`MainActivity`'s keep-on-screen condition) until the page reports, through `LaunchPlugin`, that its first THEMED frame has been presented: the theme and the bars' icon style are applied in a layout effect, so they are in place before that frame is painted, and `launchHandover.ts` reports it two animation frames after the first commit. The splash then fades over 200ms.
+
+The page draws under both system bars from its first layout: `capacitor.config.ts` gives Capacitor's SystemBars the `initialViewportFitValueHint` of `cover`, which `index.html` declares. Without the hint Capacitor padded the WebView clear of the bars until the page had committed and it had read the meta tag, so the navigation bar's strip showed the bare window and filled in afterwards. The bars' icons follow the look's mode rather than the phone's night mode, because they sit over the page.
+
 ## Layout
 Portrait only (`android:screenOrientation` in the manifest): the panel is one
 six-column grid laid out for a phone held upright.

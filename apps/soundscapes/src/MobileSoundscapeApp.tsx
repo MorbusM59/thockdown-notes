@@ -12,7 +12,7 @@
  * same preferences state on its return (followSession), so those controls
  * are more controls, not a second path to the engine.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { soundscapeConfiguration, soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
 import { resumedOutputContext } from '@thockdown/soundscape/audioOutputBus'
@@ -36,6 +36,7 @@ import { applyDocumentTheme, themeFrame } from '@thockdown/look/loadoutTheme'
 import { ThemeBlendOverlays, ThemeGlazeLayers } from '@thockdown/look/ThemeLayers'
 import { nativeSoundscape, type RegularMode, type SessionState, type SoundSource } from './backgroundAudioHost'
 import { nativePlayback } from './playbackMode'
+import { reportFirstFrame, styleSystemBars } from './launchHandover'
 import {
   CLIP_MINUTES,
   loadClipMinutes,
@@ -240,10 +241,16 @@ export function MobileSoundscapeApp() {
     return () => window.removeEventListener('pointerdown', unlock, { capture: true })
   }, [])
 
-  useEffect(() => {
+  // A layout effect, so the theme is in place before the frame it belongs to
+  // is painted: the first frame on screen is already the themed one, which is
+  // what the splash waits for (launchHandover.ts).
+  useLayoutEffect(() => {
     applyDocumentTheme(document.documentElement, loadout)
+    styleSystemBars(look.mode)
     saveLook(look)
   }, [loadout, look])
+
+  useEffect(() => { void reportFirstFrame() }, [])
 
   // REGULAR MODE (see SoundscapeSession.java for how it and the schedule
   // decide what is heard). Set here for what this page does; the session's

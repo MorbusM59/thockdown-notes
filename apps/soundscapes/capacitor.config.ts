@@ -10,6 +10,15 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   android: { path: 'android' },
   ios: { path: 'ios' },
+  plugins: {
+    SystemBars: {
+      // index.html declares viewport-fit=cover, so the page draws under the
+      // system bars. Without this hint Capacitor only learns that once the
+      // page has committed, and until then pads the WebView clear of the bars,
+      // so the navigation bar's strip showed the window and filled in later.
+      initialViewportFitValueHint: 'cover',
+    },
+  },
 };
 
 export default config;

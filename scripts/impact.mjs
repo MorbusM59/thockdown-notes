@@ -25,7 +25,7 @@ import { spawnSync } from 'node:child_process'
 export const HIGH_IMPACT = [
   /^apps\/soundscapes\/android\//,
   /(^|\/)capacitor\.config\.ts$/,
-  /^apps\/soundscapes\/src\/(backgroundAudioHost|nativeSoundscapePlayback)\.ts$/,
+  /^apps\/soundscapes\/src\/(backgroundAudioHost|nativeSoundscapePlayback|launchHandover)\.ts$/,
   /^packages\/soundscape\/(soundscapeRenderAhead|soundscapeSandbox|soundscapeGeneratorHost|halfScalePcm)\.ts$/,
   /(^|\/)package(-lock)?\.json$/,
   /^\.github\/workflows\//,
