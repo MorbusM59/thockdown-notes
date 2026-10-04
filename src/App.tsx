@@ -6,8 +6,8 @@ import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent,
 import ReactMarkdown from 'react-markdown'
 import { SidebarOptionsPanel } from './sidebar/SidebarOptionsPanel'
 import { AudioControls } from './components/AudioControls'
-import { soundscapeEngine } from './sound/SoundscapeEngine'
-import { RESTORE_FADE_IN_SEC } from './sound/audioOutputBus'
+import { soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
+import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
 import { isPlaylistButtonSlot } from './shared/audioPlayer'
 import { isTextEntryElement, keepFocusOnPress, mayHoldKeyboard } from '@thockdown/interaction/focusOwnership'
 import { focusEscapeHoldRing } from './editorSection/escapeHoldRingFocus'
@@ -28,7 +28,7 @@ import {
   typingSoundManager,
 } from './sound/TypingSoundManager'
 import type { PersistedMenuState, PersistedSidebarViewState } from './shared/appState'
-import { DEFAULT_SOUNDSCAPE_PREFERENCES, sanitizeSoundscapePreferences, type SoundscapePreferences } from './shared/soundscape'
+import { DEFAULT_SOUNDSCAPE_PREFERENCES, sanitizeSoundscapePreferences, type SoundscapePreferences } from '@thockdown/soundscape/soundscape'
 import { DARK_FACTORY_PRESETS, LIGHT_FACTORY_PRESETS } from '@thockdown/look/presets'
 import {
   DEFAULT_GLAZE_SETTINGS,

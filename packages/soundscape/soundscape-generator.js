@@ -2,17 +2,17 @@
  * Soundscape generator: synthesises every soundscape layer, sample by sample.
  *
  * An AudioWorkletProcessor, and it runs in two places unchanged: LIVE in an
- * AudioWorklet on the desktop (src/sound/soundscapeLivePlayback.ts), and
- * AHEAD of playback on Android, hosted by src/sound/soundscapeGeneratorHost.ts
+ * AudioWorklet on the desktop (packages/soundscape/soundscapeLivePlayback.ts), and
+ * AHEAD of playback on Android, hosted by packages/soundscape/soundscapeGeneratorHost.ts
  * inside the renderer (soundscapeRenderAhead.ts) -- that host supplies the
  * four names an AudioWorkletGlobalScope would (AudioWorkletProcessor,
  * registerProcessor, sampleRate, currentFrame). Tests host it the same way
- * (src/sound/soundscape-generator.harness.ts).
+ * (packages/soundscape/soundscape-generator.harness.ts).
  *
  * It is plain JavaScript because the host evaluates its text. The settings it
- * reads are defined in src/shared/soundscape.ts and resolved for it in
- * src/shared/soundscapeDsp.ts (toGeneratorConfiguration); the engine
- * (src/sound/SoundscapeEngine.ts) sends them through its playback, which
+ * reads are defined in packages/soundscape/soundscape.ts and resolved for it in
+ * packages/soundscape/soundscapeDsp.ts (toGeneratorConfiguration); the engine
+ * (packages/soundscape/SoundscapeEngine.ts) sends them through its playback, which
  * applies them here as a `configure` message. A `stop` message ends the
  * processor (process() returns false, which is how an AudioWorklet lets one
  * go; disconnecting the node alone leaves it running).
@@ -45,7 +45,7 @@
  * rest of the audio -- music included. A block that runs late is heard as a
  * tear, and it also delays the next `configure` message. Hence:
  * - work that repeats is done once. Noise is read from loops rendered on the
- *   main thread (src/shared/soundscapeNoiseLoops.ts); rain drops are played
+ *   main thread (packages/soundscape/soundscapeNoiseLoops.ts); rain drops are played
  *   back from a per-layer bank of recordings, a quarter of them recorded
  *   live as they play so the bank keeps changing (addVoice); the noise
  *   filter's loudness compensation is a table built on the main thread.
@@ -88,7 +88,7 @@
  * and everything else linearly.
  *
  * Every anchor must match SOUNDSCAPE_RAIN_SURFACE_ANCHORS in
- * src/shared/soundscape.ts, name and position; soundscape-generator.test.ts
+ * packages/soundscape/soundscape.ts, name and position; soundscape-generator.test.ts
  * checks that.
  */
 const GLASS_TREBLE = { count: [1, 3], hz: [2100, 9200], decaySec: [0.004, 0.035], amplitude: [0.018, 0.075] };
@@ -383,7 +383,7 @@ function stereoImage(pan, width) {
 
 /**
  * A part's level slider as a gain; mirrors soundscapePartGain in
- * src/shared/soundscape.ts, which soundscape-generator.test.ts holds it to:
+ * packages/soundscape/soundscape.ts, which soundscape-generator.test.ts holds it to:
  * silence at 0, as authored at PART_AUTHORED, PART_DB_PER_UNIT decibels per
  * unit of travel either side.
  */
@@ -417,7 +417,7 @@ const BED_SWELL_PERIOD_SEC = 2.5;
 
 /**
  * A fader position (0-1) as a gain; mirrors soundscapeFaderGain in
- * src/shared/soundscape.ts, which soundscape-generator.test.ts holds it to.
+ * packages/soundscape/soundscape.ts, which soundscape-generator.test.ts holds it to.
  * Thunder needs it here because randomness moves each peal's fader.
  */
 const FADER_RANGE_DB = 48;
@@ -778,7 +778,7 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
     const processorOptions = options?.processorOptions ?? {};
     this.rootStream = { seed: (processorOptions.seed ?? 1) >>> 0 };
     // One seamless loop per noise type, rendered on the main thread
-    // (src/shared/soundscapeNoiseLoops.ts), and the gain that brings each to
+    // (packages/soundscape/soundscapeNoiseLoops.ts), and the gain that brings each to
     // the same audible level (noiseLoopGains).
     this.noiseLoops = processorOptions.noiseLoops ?? {};
     this.noiseGains = processorOptions.noiseGains ?? {};
@@ -1166,7 +1166,7 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
 
   /**
    * The noise cycle's value (-1..1) at `phase` (0..1), interpolated from the
-   * table the engine built (src/shared/soundscapeDsp.ts's buildNoiseCycle).
+   * table the engine built (packages/soundscape/soundscapeDsp.ts's buildNoiseCycle).
    * A layer configured without one plays a plain sine.
    */
   cycleAt(channel, phase) {

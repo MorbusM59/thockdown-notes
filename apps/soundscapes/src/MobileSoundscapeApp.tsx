@@ -14,14 +14,14 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
-import { soundscapeConfiguration, soundscapeEngine } from '../../../src/sound/SoundscapeEngine'
-import { resumedOutputContext } from '../../../src/sound/audioOutputBus'
+import { soundscapeConfiguration, soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
+import { resumedOutputContext } from '@thockdown/soundscape/audioOutputBus'
 import {
   SOUNDSCAPE_FACTORY_PRESETS,
   type SoundscapePreferences,
   type SoundscapeSettings,
-} from '../../../src/shared/soundscape'
-import { exportSoundscapes, importSoundscapes } from '../../../src/sidebar/soundscapeFileActions'
+} from '@thockdown/soundscape/soundscape'
+import { exportSoundscapes, importSoundscapes } from '@thockdown/soundscape/soundscapeFileActions'
 import {
   DARK_FACTORY_PRESETS,
   DARK_PRESET_ICONS,
@@ -55,7 +55,7 @@ import { allPresets, sanitizeSchedule, scheduleEvents, type Schedule } from './s
 import { ScheduleGrid } from './ScheduleGrid'
 import { LookButton } from './LookButton'
 import { helpFor } from './helpText'
-import { SoundscapeControls, SubsectionHelp } from '../../../src/sidebar/SoundscapeOptions'
+import { SoundscapeControls, SubsectionHelp } from '@thockdown/soundscape/SoundscapeOptions'
 import { PageScrollbar } from './PageScrollbar'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { installSoundscapeFiles } from './soundscapeFiles'

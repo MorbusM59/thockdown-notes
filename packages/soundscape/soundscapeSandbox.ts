@@ -23,8 +23,8 @@
  *   interleaved stereo at half scale (the output applies the volume and
  *   doubles them back). An empty array means the lead is full.
  */
-import generatorSource from './soundscape-generator.js?raw';
-import { buildNoiseLoops, noiseLoopGains } from '../shared/soundscapeNoiseLoops';
+import generatorSource from './soundscape-generator?raw';
+import { buildNoiseLoops, noiseLoopGains } from './soundscapeNoiseLoops';
 import { encodeHalfScaleStereo } from './halfScalePcm';
 import { hostGenerator } from './soundscapeGeneratorHost';
 import { SoundscapeMix } from './soundscapeMix';

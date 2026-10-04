@@ -10,7 +10,7 @@ import {
   PLAYLIST_SLOT_THEMES,
   shouldStopCurrentSongOnSlotToggle,
 } from '../shared/audioPlayer'
-import { FACTORY_SOUNDSCAPE_ICONS, SOUNDSCAPE_FACTORY_PRESETS, applySoundscapePreset, nextSoundscapePreset, type SoundscapePreferences } from '../shared/soundscape'
+import { FACTORY_SOUNDSCAPE_ICONS, SOUNDSCAPE_FACTORY_PRESETS, applySoundscapePreset, nextSoundscapePreset, type SoundscapePreferences } from '@thockdown/soundscape/soundscape'
 import {
   fromDisplayLevel,
   nudgeLevel,
@@ -19,7 +19,7 @@ import {
   SOUND_LEVEL_MAX_DISPLAY,
   toDisplayLevel,
   volumeIcon,
-} from '../shared/musicSoundOptions'
+} from '@thockdown/soundscape/musicSoundOptions'
 import {
   emptyPlayHistory,
   forgetSong,
@@ -31,7 +31,7 @@ import { useNonPassiveWheel } from '@thockdown/interaction/useNonPassiveWheel'
 import { musicPlayerService, MissingFileError, resolveSeekPress } from '../sound/MusicPlayerService'
 // Playback resumed from the previous session (the initialWasPlaying restore
 // below) starts at silence and full reverb and ramps up over this span.
-import { RESTORE_FADE_IN_SEC } from '../sound/audioOutputBus'
+import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
 import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
 
 // Purging a song from the library and clearing a playlist slot are both

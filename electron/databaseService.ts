@@ -1,4 +1,4 @@
-import { buildObjectDiff, formatPresetLine, formatPresetScalar, parsePresetLines, stableStringify } from '../src/shared/presetFile';
+import { buildObjectDiff, formatPresetLine, formatPresetScalar, parsePresetLines, stableStringify } from '@thockdown/soundscape/presetFile';
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, promises as fs } from 'node:fs';
 import { createRequire } from 'node:module';

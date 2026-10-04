@@ -66,7 +66,7 @@
  * so its blend starts the same way, once that room is ready. The first
  * room is built at once: nothing is playing yet.
  */
-import type { SoundscapeSpaceSettings } from '../shared/soundscape';
+import type { SoundscapeSpaceSettings } from './soundscape';
 import { BLOCK_FRAMES, type HostedGenerator } from './soundscapeGeneratorHost';
 import { MIX_BLOCK } from './soundscapeMix';
 

@@ -6,11 +6,11 @@ import {
   rainDropsPerSecond,
   soundscapePartGain,
   type SoundscapeChannelSettings,
-} from '../shared/soundscape';
-import { chimeTubeFrequencies } from '../shared/soundscapeDsp';
-import { CHIME_SCALES, chimeScaleCents } from '../shared/soundscapeChimeScales';
-import { SOUNDSCAPE_CHIME_MATERIALS } from '../shared/soundscape';
-import { buildNoiseLoops, createNoiseSource } from '../shared/soundscapeNoiseLoops';
+} from './soundscape';
+import { chimeTubeFrequencies } from './soundscapeDsp';
+import { CHIME_SCALES, chimeScaleCents } from './soundscapeChimeScales';
+import { SOUNDSCAPE_CHIME_MATERIALS } from './soundscape';
+import { buildNoiseLoops, createNoiseSource } from './soundscapeNoiseLoops';
 import { createProcessor, layer, noiseAt, peak, rms, type Rendered } from './soundscape-generator.harness';
 
 // Tests here assert properties no tuning can falsify -- a level that holds,

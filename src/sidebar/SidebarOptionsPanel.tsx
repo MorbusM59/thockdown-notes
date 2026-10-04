@@ -3,11 +3,11 @@ import type * as React from 'react'
 import { useRef } from 'react'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
-import { SoundscapeOptions } from './SoundscapeOptions'
+import { SoundscapeOptions } from '@thockdown/soundscape/SoundscapeOptions'
 import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
-import { exportSoundscapes, importSoundscapes } from './soundscapeFileActions'
-import type { SoundscapePreferences } from '../shared/soundscape'
+import { exportSoundscapes, importSoundscapes } from '@thockdown/soundscape/soundscapeFileActions'
+import type { SoundscapePreferences } from '@thockdown/soundscape/soundscape'
 import {
   CONTINUOUS_DOCUMENT_MAX_THRESHOLD_BLOCKS,
   CONTINUOUS_DOCUMENT_MIN_THRESHOLD_BLOCKS,

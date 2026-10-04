@@ -34,15 +34,15 @@
  * SOUNDSCAPE (`transitionSec` > 0) builds a new voice and crossfades the two
  * voice gains, equal-power, over that time; the old voice is then stopped.
  */
-import { buildNoiseLoops, noiseLoopGains, type NoiseLoops } from '../shared/soundscapeNoiseLoops';
-import type { SoundscapeSpaceSettings } from '../shared/soundscape';
-import { buildSoundscapeImpulseResponse, soundscapeRoomKey } from '../shared/soundscapeSpace';
+import { buildNoiseLoops, noiseLoopGains, type NoiseLoops } from './soundscapeNoiseLoops';
+import type { SoundscapeSpaceSettings } from './soundscape';
+import { buildSoundscapeImpulseResponse, soundscapeRoomKey } from './soundscapeSpace';
 import type { SoundscapePlayback, SoundscapePlaybackHandlers } from './SoundscapeEngine';
 import { connectToOutput, resumedOutputContext } from './audioOutputBus';
 import { brillianceCurve, BRILLIANCE_BANDS } from './soundscapeBrilliance';
 import { BUS_COMPRESSOR, SOUNDSCAPE_MIX_GAIN, SOUNDSCAPE_SPACE_RETURN, SPACE_CROSSFADE_SEC } from './soundscapeMix';
 import type { ConfigureMessage } from './soundscapeRenderAhead';
-import generatorUrl from './soundscape-generator.js?url';
+import generatorUrl from './soundscape-generator?url';
 
 /** How long a room slider must rest before its room is built (a drag would otherwise build dozens). */
 const SPACE_REBUILD_DELAY_MS = 120;

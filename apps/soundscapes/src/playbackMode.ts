@@ -6,7 +6,7 @@
  * playback, which plays only while the app is in the foreground and has no
  * media controls.
  */
-import { soundscapeEngine } from '../../../src/sound/SoundscapeEngine'
+import { soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
 import { nativeSoundscape } from './backgroundAudioHost'
 import { nativeSoundscapePlayback } from './nativeSoundscapePlayback'
 

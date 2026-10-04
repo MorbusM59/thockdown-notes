@@ -8,7 +8,7 @@ import { THOCKQUEST } from '../src/adventure/content'
 import { choose, enterEntryScreen, type DirectorDeps } from '../src/adventure/core/director'
 import { emptySave } from '../src/adventure/model/gameState'
 import { ROOT_STAGE_ID, STAGES } from '../src/adventure/stages'
-import { SOUNDSCAPE_FACTORY_PRESETS, cloneSettings } from '../src/shared/soundscape'
+import { SOUNDSCAPE_FACTORY_PRESETS, cloneSettings } from '@thockdown/soundscape/soundscape'
 
 // Regression coverage for the exact bug class this file is prone to:
 // sanitizeMenu (private, routed through by both saveAppState and
