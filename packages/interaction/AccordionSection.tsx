@@ -10,7 +10,7 @@
 // All sections are closed by default.
 
 import { type MouseEvent, type ReactNode, createContext, useCallback, useContext, useEffect, useId, useRef, useState } from 'react'
-import { buildCurvePlan, buildScrollPlan, sampleScrollPlan } from '../editor/ScrollCurvePlan'
+import { buildCurvePlan, buildScrollPlan, sampleScrollPlan } from './ScrollCurvePlan'
 
 // Fixed accordion animation parameters — not user-configurable.
 const ACCORDION_DYNAMIC        = 4

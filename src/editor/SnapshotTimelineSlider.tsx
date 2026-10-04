@@ -4,7 +4,7 @@ import { clusterPlacements } from './SnapshotTimelineCurve'
 import { useHoldToBranch } from './useHoldToBranch'
 import type { NoteSnapshotRecord } from './useNoteSnapshots'
 import { countWords } from './WordCount'
-import { useNonPassiveWheel } from '../shared/useNonPassiveWheel'
+import { useNonPassiveWheel } from '@thockdown/interaction/useNonPassiveWheel'
 
 // Reuses the same rail visual language as CompactScrollbarSlider (the
 // filter/settings sliders) via the shared .utility-setting-scrollbar-*

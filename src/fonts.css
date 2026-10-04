@@ -1,6 +1,6 @@
 /*
  * Every bundled font family, declared once. Imported by the DESKTOP entry
- * (src/main.tsx) only: the mobile app (mobile/src/main.tsx) imports
+ * (src/main.tsx) only: the mobile app (apps/soundscapes/src/main.tsx) imports
  * index.css for the shared panel's look but renders in the system font, so
  * declaring these there made Vite copy every font file into the APK for
  * nothing. Licences: ./fonts/LICENSES.md.

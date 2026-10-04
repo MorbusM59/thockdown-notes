@@ -92,6 +92,7 @@ function offences(): string[] {
     ...sourceFiles(join(ROOT, 'src', 'adventure')),
     ...sourceFiles(join(ROOT, 'electron', 'help')),
     ...sourceFiles(join(ROOT, 'src')).filter((file) => file.endsWith('.tsx')),
+    ...sourceFiles(join(ROOT, 'packages')).filter((file) => file.endsWith('.tsx')),
   ]
   const found: string[] = []
   for (const file of new Set(files)) {

@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { useNonPassiveWheel } from '../shared/useNonPassiveWheel'
+import { useNonPassiveWheel } from './useNonPassiveWheel'
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))

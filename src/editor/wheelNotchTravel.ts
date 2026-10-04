@@ -63,7 +63,7 @@ import {
   sampleCdf,
   sampleContinuationPlan,
   type ContinuationPlan,
-} from './ScrollCurvePlan'
+} from '@thockdown/interaction/ScrollCurvePlan'
 
 /**
  * A notch takes this share of the journey curve's total time.

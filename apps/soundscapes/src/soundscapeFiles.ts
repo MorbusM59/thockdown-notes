@@ -12,7 +12,7 @@
  *   chosen, because a .tds file has no registered type to filter on; one
  *   that is not a soundscape file imports nothing.
  */
-import type { SoundscapeFileApi } from '../../src/shared/soundscapeFile'
+import type { SoundscapeFileApi } from '../../../src/shared/soundscapeFile'
 import { nativeSoundscape } from './backgroundAudioHost'
 
 function pickTextFile(): Promise<string | null> {

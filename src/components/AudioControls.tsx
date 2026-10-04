@@ -27,12 +27,12 @@ import {
   stepBack,
 } from '../shared/musicPlayHistory'
 import { useHoldToAdjust } from '../shared/useHoldToAdjust'
-import { useNonPassiveWheel } from '../shared/useNonPassiveWheel'
+import { useNonPassiveWheel } from '@thockdown/interaction/useNonPassiveWheel'
 import { musicPlayerService, MissingFileError, resolveSeekPress } from '../sound/MusicPlayerService'
 // Playback resumed from the previous session (the initialWasPlaying restore
 // below) starts at silence and full reverb and ramps up over this span.
 import { RESTORE_FADE_IN_SEC } from '../sound/audioOutputBus'
-import { armHold, HOLD_COMMIT_MS } from '../shared/holdTiming'
+import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
 
 // Purging a song from the library and clearing a playlist slot are both
 // "I know this is not undoable" -- the app's COMMIT threshold

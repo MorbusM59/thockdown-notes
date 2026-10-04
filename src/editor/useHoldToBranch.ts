@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
-import { beginCursorHold, endCursorHold } from '../shared/cursorHoldFeedback'
-import { HOLD_COMMIT_MS } from '../shared/holdTiming'
+import { beginCursorHold, endCursorHold } from '@thockdown/interaction/cursorHoldFeedback'
+import { HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
 
 // Right-click-and-hold gesture for "branch this snapshot into a new note".
 // A plain right-click still opens the context menu / does nothing special --

@@ -47,8 +47,8 @@ import {
   getRenderScrollResponsiveness,
   getRenderScrollSkew,
   getRenderScrollTotalTimeSec,
-} from '../editor/ScrollCurvePlan'
-import type { ScrollPlan } from '../editor/ScrollCurvePlan'
+} from '@thockdown/interaction/ScrollCurvePlan'
+import type { ScrollPlan } from '@thockdown/interaction/ScrollCurvePlan'
 import { computeEscapeHoldPointAtSlot } from './escapeHoldRingLayout'
 import type { EscapeHoldRingParams } from './escapeHoldRingLayout'
 

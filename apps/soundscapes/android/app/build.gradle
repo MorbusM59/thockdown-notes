@@ -4,7 +4,7 @@ def soundscapesVersion = new groovy.json.JsonSlurper()
         .parse(rootProject.file('../package.json')).version as String
 def soundscapesVersionParts = soundscapesVersion.tokenize('.')*.toInteger()
 if (soundscapesVersionParts.size() != 3 || soundscapesVersionParts[1] > 99 || soundscapesVersionParts[2] > 99) {
-    throw new GradleException("mobile/package.json version must be MAJOR.MINOR.PATCH with MINOR and PATCH below 100, got ${soundscapesVersion}")
+    throw new GradleException("apps/soundscapes/package.json version must be MAJOR.MINOR.PATCH with MINOR and PATCH below 100, got ${soundscapesVersion}")
 }
 def soundscapesVersionCode = soundscapesVersionParts[0] * 10000 + soundscapesVersionParts[1] * 100 + soundscapesVersionParts[2]
 
@@ -15,7 +15,7 @@ android {
         applicationId "com.thockdown.soundscapes"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        // The app's version is the one in mobile/package.json, for every
+        // The app's version is the one in apps/soundscapes/package.json, for every
         // build (debug, release, local). The versionCode is derived from it
         // (major x 10000 + minor x 100 + patch), so it is reproducible from the
         // commit and rises with every version: a Play upload must carry a

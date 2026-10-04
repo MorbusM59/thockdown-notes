@@ -2,7 +2,7 @@
 //
 // A journey across a large document ramps up to peak speed, jumps while a
 // curtain of spoof text covers the pane, and ramps down onto the target (see
-// src/editor/scrollJourney.ts and src/editor/scrollBridge.ts). The thing that
+// packages/interaction/scrollJourney.ts and src/editor/scrollBridge.ts). The thing that
 // makes it honest rather than a trick is that the jump happens ONLY while the
 // viewport is covered -- so this samples every frame and checks exactly that,
 // rather than checking that a curtain appeared at some point and hoping.

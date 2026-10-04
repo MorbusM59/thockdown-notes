@@ -15,7 +15,7 @@
 // drift apart in feel; only what "snap" and "travel" mean differs between
 // them, and that is the caller's business.
 
-import { armHold, HOLD_CONFIRM_MS } from '../shared/holdTiming'
+import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 
 /**
  * How long the button must be held before the click becomes a snap.

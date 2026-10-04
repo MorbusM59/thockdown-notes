@@ -17,8 +17,8 @@ let bundle = '';
 
 beforeAll(async () => {
   // The bundle as shipped, built by its own config.
-  await build({ configFile: path.join(root, 'mobile/vite.renderer.config.ts'), logLevel: 'silent' });
-  bundle = readFileSync(path.join(root, 'mobile/android/app/src/main/assets/soundscape-renderer.js'), 'utf8');
+  await build({ configFile: path.join(root, 'apps/soundscapes/vite.renderer.config.ts'), logLevel: 'silent' });
+  bundle = readFileSync(path.join(root, 'apps/soundscapes/android/app/src/main/assets/soundscape-renderer.js'), 'utf8');
 }, 60000);
 
 /** The bundle in a bare context: the language's built-ins and nothing a browser adds. */

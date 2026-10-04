@@ -16,7 +16,7 @@ import {
   sampleCursorHoldLevel,
   sampleCursorHoldReleaseLevel,
 } from '../editor/CursorClickCurve'
-import { subscribeCursorHoldFeedback } from '../shared/cursorHoldFeedback'
+import { subscribeCursorHoldFeedback } from '@thockdown/interaction/cursorHoldFeedback'
 import { readPageZoomFactor } from '../window/pageZoom'
 
 export interface MouseCursorOverlayProps {

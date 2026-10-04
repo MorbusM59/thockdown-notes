@@ -7,7 +7,7 @@ import {
   setRenderScrollDynamic,
   setRenderScrollSkew,
   setRenderScrollTotalTimeSec,
-} from './ScrollCurvePlan'
+} from '@thockdown/interaction/ScrollCurvePlan'
 import {
   remainingWheelNotchTravelPx,
   retargetWheelNotchTravel,

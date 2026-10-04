@@ -15,7 +15,7 @@
  * and the signal is delayed 6 ms so the gain reacts in time to a peak.
  *
  * Measured against the node it replaced, on the same generator output
- * through the old graph and through soundscapeMix (mobile/README.md): the
+ * through the old graph and through soundscapeMix (apps/soundscapes/README.md): the
  * difference is in the dynamics only, and the soundscapes are kept out of
  * the knee by their own volumes, so it is rarely engaged.
  */

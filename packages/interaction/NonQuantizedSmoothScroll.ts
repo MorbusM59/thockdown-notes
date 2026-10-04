@@ -20,7 +20,7 @@ import {
   sampleJourneyDisplacement,
   type ScrollJourneyTiming,
 } from './scrollJourney';
-import { resolveScrollBridge } from './scrollBridge';
+import { resolveScrollBridge } from './scrollBridgeRegistry';
 import { traceScroll } from './scrollTrace';
 
 import { borrowAutoScrollBehavior } from './scrollBehaviorLock';

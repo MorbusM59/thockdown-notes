@@ -1754,7 +1754,7 @@ That was a compromise forced by the worst case, and the bridge removed the
 worst case. A long journey no longer plays its whole distance: it ramps up,
 cuts its middle out under a curtain, and ramps down onto the target, in about
 half a second whether the distance is twelve thousand pixels or twelve hundred
-thousand (`src/editor/scrollJourney.ts`). With nothing left to bound, both
+thousand (`packages/interaction/scrollJourney.ts`). With nothing left to bound, both
 `SCROLL_DURATION_CAP_PX` and `compressScrollPlanToDuration` are gone and the
 slider means the one thing its name says.
 
@@ -2336,7 +2336,7 @@ whether the distance is twelve thousand pixels or twelve hundred thousand. This
 is what let the duration ceiling go (see that section above).
 
 **The modules.**
-- `src/editor/scrollJourney.ts` — plans it. Returns `direct` or `bridged` plus
+- `packages/interaction/scrollJourney.ts` — plans it. Returns `direct` or `bridged` plus
   the two ramps and the bridge distance. No DOM.
 - `src/editor/scrollBridge.ts` — the curtain itself. `registerScrollBridge`
   once per pane; `begin` / `advance` / `isCovering` / `end` per journey.

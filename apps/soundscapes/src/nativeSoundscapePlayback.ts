@@ -12,7 +12,7 @@
  * ignores the pause (and the fade-out to silence) the engine's closing sends
  * after it, which would otherwise silence the schedule taking over.
  */
-import type { SoundscapePlaybackFactory } from '../../src/sound/SoundscapeEngine'
+import type { SoundscapePlaybackFactory } from '../../../src/sound/SoundscapeEngine'
 import type { NativeSoundscapePlugin } from './backgroundAudioHost'
 
 export function nativeSoundscapePlayback(plugin: NativeSoundscapePlugin): SoundscapePlaybackFactory {

@@ -99,7 +99,7 @@ import {
   buildReleaseRampDownPlanFromCurrentParams,
   sampleReleaseRampDownPlan,
   type ReleaseRampDownPlan,
-} from './ScrollCurvePlan'
+} from '@thockdown/interaction/ScrollCurvePlan'
 import { resolveWheelSpinCutoffMs, resolveWheelSpinDecay } from './wheelSpin'
 
 export type WheelSpinProfileDirection = -1 | 1

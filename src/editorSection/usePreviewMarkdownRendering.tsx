@@ -28,8 +28,8 @@ import type { ParsedInternalNoteLink } from '../shared/internalNoteLinks'
 import { splitPreviewBlocksWithoutFullParse, type PreviewBlockSplitCache } from '../editor/PreviewBlockSplit'
 import { requestFullBlockSplit } from '../editor/documentFactsClient'
 import { resolvePreviewBlockIndexForSourceLine } from '../editor/PreviewBlockIndex'
-import { isNonQuantizedSmoothScrollActive, scrollToNonQuantizedSmooth } from '../editor/NonQuantizedSmoothScroll'
-import { traceScroll } from '../editor/scrollTrace'
+import { isNonQuantizedSmoothScrollActive, scrollToNonQuantizedSmooth } from '@thockdown/interaction/NonQuantizedSmoothScroll'
+import { traceScroll } from '@thockdown/interaction/scrollTrace'
 import {
   isContinuousDocument,
   resolveChunkedCharTarget,

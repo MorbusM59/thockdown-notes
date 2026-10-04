@@ -7,7 +7,7 @@ import { dirname, join, normalize } from 'node:path'
  * EVERY REPOSITORY PATH THE INDEX DOCUMENTS NAME EXISTS.
  *
  * CLAUDE.md is the document every session reads first, and it names files by
- * path hundreds of times; `mobile/README.md` does the same for the Android
+ * path hundreds of times; `apps/soundscapes/README.md` does the same for the Android
  * app. A path that no longer exists is a description that is believed and
  * wrong (engineering doctrine, rule 9), and a file move -- the Family
  * workspace migration moves most of the tree -- would otherwise leave every
@@ -24,8 +24,8 @@ import { dirname, join, normalize } from 'node:path'
  * their own before they can be held to this.
  */
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
-const DOCUMENTS = ['CLAUDE.md', 'mobile/README.md']
-const TOP_LEVEL = ['src', 'electron', 'mobile', 'scripts', 'docs', 'public', 'assets', 'layouts', 'data', '.github']
+const DOCUMENTS = ['CLAUDE.md', 'apps/soundscapes/README.md']
+const TOP_LEVEL = ['src', 'electron', 'apps', 'scripts', 'docs', 'public', 'assets', 'layouts', 'data', '.github']
 
 /** Every path-like reference in `text`, as written. */
 function pathReferences(text: string): string[] {

@@ -6,7 +6,7 @@ import { PROTECTED_TAGS, normalizeTagName, isProtectedTagName, isExternalTagName
 import { isAutoAssignedId } from '../shared/assignedIds'
 import { NOTE_DRAG_MIME_TYPE, serializeNoteDragPayload } from '../shared/noteDrag'
 import { useInlinePillEdit } from '../shared/useInlinePillEdit'
-import { armHold, HOLD_COMMIT_MS } from '../shared/holdTiming'
+import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
 
 /** How long the temp tab must be held down (left mouse button) before it's promoted to a permanent pinned tab. */
 // Pinning a temp tab, and arming a pinned one for unpin, are both "I know

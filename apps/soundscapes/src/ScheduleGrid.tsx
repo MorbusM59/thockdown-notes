@@ -43,7 +43,7 @@
  * here is always the slot's.
  */
 import { useEffect, useRef, useState } from 'react'
-import { FACTORY_SOUNDSCAPE_ICONS, type SoundscapePreset } from '../../src/shared/soundscape'
+import { FACTORY_SOUNDSCAPE_ICONS, type SoundscapePreset } from '../../../src/shared/soundscape'
 import {
   HOURS,
   allPresets,

@@ -14,11 +14,11 @@ import {
   buildScrollPlanFromCurrentParams,
   sampleCurveRampPlan,
   sampleScrollPlan,
-} from './ScrollCurvePlan';
-import { planScrollJourney, type ScrollJourneyTiming } from './scrollJourney';
-import { resolveScrollBridge } from './scrollBridge';
+} from '@thockdown/interaction/ScrollCurvePlan';
+import { planScrollJourney, type ScrollJourneyTiming } from '@thockdown/interaction/scrollJourney';
+import { resolveScrollBridge } from '@thockdown/interaction/scrollBridgeRegistry';
 
-import { borrowAutoScrollBehavior } from './scrollBehaviorLock';
+import { borrowAutoScrollBehavior } from '@thockdown/interaction/scrollBehaviorLock';
 /** See NonQuantizedSmoothScroll's own note: answered per call, not cached. */
 function prefersReducedMotion(): boolean {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;

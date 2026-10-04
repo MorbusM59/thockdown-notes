@@ -7,7 +7,7 @@ import {
   getRenderScrollTotalTimeSec,
   sampleContinuationPlan,
   sampleScrollPlan,
-} from '../editor/ScrollCurvePlan'
+} from '@thockdown/interaction/ScrollCurvePlan'
 import { buildEscapeHoldRotationPlan, pixelsPerSlotAt } from './escapeHoldRotationCurve'
 import { computeEscapeHoldPointAtSlot, escapeHoldRingHalfExtentPx } from './escapeHoldRingLayout'
 import { createWheelNotchState, resolveWheelEventUnits } from '../editor/wheelNotch'
@@ -17,7 +17,7 @@ import {
   burstGapMs, burstNoteVoice, cellActivationVoice, cellArrivalMs, dialStepVoice,
   hoverStepVoice, panForRingX, planScreenBurst,
 } from '../escapeMenu/menuSounds'
-import { useNonPassiveWheel } from '../shared/useNonPassiveWheel'
+import { useNonPassiveWheel } from '@thockdown/interaction/useNonPassiveWheel'
 import type { EscapeHoldRingParams } from './escapeHoldRingLayout'
 import type { EscapeMenuContribution } from '../escapeMenu/escapeMenuContract'
 import { directionFromKey } from './escapeHoldDirection'
@@ -286,7 +286,7 @@ interface PanelCell {
  * that was a private copy of an app-wide rule: focus never rests somewhere
  * that cannot hold it, and it returns to the ACTIVE SLOT's surface, which is
  * this ring when a mode owns the slot. App.tsx's reconciler owns it for
- * everybody (src/shared/focusOwnership.ts).
+ * everybody (packages/interaction/focusOwnership.ts).
  *
  * Two earlier designs closed on blur and both were racy in the same way:
  * native focus-shift on mousedown fires inside the very dispatch that also

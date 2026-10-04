@@ -1,4 +1,4 @@
-import { HOLD_CONFIRM_MS } from './holdTiming'
+import { HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 
 // Raising the quick-actions ring is a deliberate press rather than a stray
 // Escape -- the app's CONFIRM threshold (`shared/holdTiming.ts`), which it

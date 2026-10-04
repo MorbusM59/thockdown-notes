@@ -1,6 +1,6 @@
 /**
  * The web page's interface to the native soundscape session
- * (mobile/android/.../BackgroundAudioPlugin.java, SoundscapeSession.java).
+ * (apps/soundscapes/android/.../BackgroundAudioPlugin.java, SoundscapeSession.java).
  *
  * The session renders and plays the soundscape in the app's own process,
  * keeps the foreground service and its notification and lock-screen
