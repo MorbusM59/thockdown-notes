@@ -46,7 +46,8 @@ crossfade between two voices. HOW it reaches the speaker is not:
   Audio), keeping ten seconds of finished audio queued, in the app's native
   service, never in the WebView: the
   same renderer, built as one script (`src/sound/soundscapeSandbox.ts` ->
-  `assets/soundscape-renderer.js` by `mobile/vite.renderer.config.ts`), runs
+  `app/src/main/assets/soundscape-renderer.js` in the Android project, by
+  `mobile/vite.renderer.config.ts`), runs
   in a JavaScriptSandbox (`androidx.javascriptengine`, a V8 isolate the app
   owns) driven by `SoundscapeRenderer.java`, and `SoundscapeAudioOutput.java`
   plays it through the platform's AudioTrack from a queue in the app's
@@ -206,8 +207,11 @@ The store build is separate from the sideloaded one: an Android App Bundle
 signed with the Play UPLOAD key (repository secrets `PLAY_UPLOAD_KEYSTORE_BASE64`,
 a PKCS12 keystore with alias `upload`, and `PLAY_UPLOAD_KEYSTORE_PASSWORD`),
 which Google checks before re-signing the app with its own key. Run
-`.github/workflows/release-android.yml` by hand with the version name; its run
-number is the versionCode, so every upload is higher than the last. Download
+`.github/workflows/release-android.yml` by hand. The version is
+`mobile/package.json`'s and the versionCode is derived from it
+(major x 10000 + minor x 100 + patch, in `app/build.gradle`), so every build
+of a commit carries the same numbers and Play, which requires each upload to
+be higher than the last, needs a new version for a new upload. Download
 the artifact, unzip it, upload the `.aab`. The privacy policy the listing
 links to is `mobile/PRIVACY.md`. The app has no INTERNET permission: it loads
 its own files and renders on the device, and declaring none keeps the data
@@ -222,7 +226,8 @@ interface.
 - Browser, for the interface: `npm run mobile:dev`.
 - APK without Android Studio: on the phone, open
   `https://github.com/MorbusM59/thockdown-notes/releases/download/android-latest/thockdown-soundscapes.apk`
-  (rebuilt on every push to `main` that touches the app). Any other build's
+  (rebuilt by `.github/workflows/ci.yml` on every push to `main` that passes
+  `npm run verify`). Any other build's
   APK is the zipped `thockdown-soundscapes-debug-apk` artifact on its
   workflow run.
 - Every CI build is signed with the app's one key (repository secrets

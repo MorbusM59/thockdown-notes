@@ -1,40 +1,56 @@
-# Builds the mobile soundscape app (mobile/README.md) as a debug APK, so it
-# can be installed on a phone without Android Studio. Run by hand from the
-# Actions tab, or on a push to main that touches what goes into it. Only
-# main: its build is the one that replaces the installable APK, and a build
-# of a working branch is the same build again with nowhere to go.
+# Every push and pull request: `npm run verify` (scripts/verify.mjs, the one
+# definition of green: types, lint, tests and the web builds of every app),
+# then the Android debug APK, which needs the Android SDK and so cannot be
+# part of verify. Every app is built on every change, with no path filter:
+# the mobile app shares much of src/ with the desktop, and a hand-kept list
+# of which paths reach it drifted once already.
 #
-# Every build uploads a workflow artifact. A build of main ALSO replaces the
-# APK on the `android-latest` prerelease, because an artifact always
-# downloads as a zip and a phone cannot install from inside one: the release
-# asset is the plain .apk at a fixed address. The tag does not start with
-# `v`, so it does not trigger build-mac.yml, and its title does not match
-# "Alpha Release #N", so release-windows.yml's numbering ignores it.
-name: Build Android APK
+# A build of main ALSO replaces the APK on the `android-latest` prerelease,
+# only after verify passed, so a change that breaks a test never reaches the
+# installable APK. A workflow artifact always downloads as a zip, which a
+# phone cannot install from, so the release asset is the plain .apk at a fixed
+# address. The tag does not start with `v`, so it does not trigger
+# build-mac.yml, and its title does not match "Alpha Release #N", so
+# release-windows.yml's numbering ignores it.
+name: CI
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
-    # Whole folders, not a list of the files the app uses: the app shares
-    # most of src/ with the desktop (the panel, the engine and renderer, the
-    # press and focus rules), and a hand-kept list of those had drifted --
-    # it still named the generator at its old path in public/.
-    paths:
-      - "mobile/**"
-      - "src/**"
-      - "public/**"
-      - "capacitor.config.ts"
-      - "package.json"
-      - "package-lock.json"
-      - ".github/workflows/build-android.yml"
+  pull_request:
+
+# A newer push to the same branch makes an older run's answer moot. Never
+# cancel main mid-publish, though: each main run finishes in order.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  build-android:
+  verify:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify
+        run: npm run verify
+
+  android:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 

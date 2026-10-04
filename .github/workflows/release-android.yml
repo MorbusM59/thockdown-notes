@@ -3,18 +3,14 @@
 # Actions tab when a version is ready; download the artifact, unzip it, and
 # upload the .aab in the Play Console (mobile/README.md, "Google Play").
 #
-# The versionCode is this workflow's run number, so every run is higher than
-# the one before, which Play requires of every upload. The versionName is
-# what the run is given.
+# The version is mobile/package.json's, and the versionCode is derived from it
+# in mobile/android/app/build.gradle, so a bundle is reproducible from its
+# commit. Play requires every upload's versionCode to be higher than the last,
+# so bump that version before releasing again.
 name: Release Android App Bundle
 
 on:
   workflow_dispatch:
-    inputs:
-      version_name:
-        description: "Version name shown in the Play Store (e.g. 1.0.0)"
-        required: true
-        default: "1.0.0"
 
 jobs:
   release-android:
@@ -43,8 +39,6 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.PLAY_UPLOAD_KEYSTORE_BASE64 }}
           PLAY_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.PLAY_UPLOAD_KEYSTORE_PASSWORD }}
-          SOUNDSCAPES_VERSION_CODE: ${{ github.run_number }}
-          SOUNDSCAPES_VERSION_NAME: ${{ inputs.version_name }}
         run: |
           # An unsigned bundle cannot be uploaded: fail rather than produce one.
           if [ -z "$KEYSTORE_BASE64" ] || [ -z "$PLAY_UPLOAD_KEYSTORE_PASSWORD" ]; then
@@ -54,7 +48,11 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.p12"
           PLAY_UPLOAD_KEYSTORE="$RUNNER_TEMP/upload.p12" ./gradlew bundleRelease --no-daemon
 
+      - name: Read the version
+        id: version
+        run: echo "name=$(node -p "require('./mobile/package.json').version")" >> "$GITHUB_OUTPUT"
+
       - uses: actions/upload-artifact@v4
         with:
-          name: thockdown-soundscapes-${{ inputs.version_name }}-${{ github.run_number }}-aab
+          name: thockdown-soundscapes-${{ steps.version.outputs.name }}-aab
           path: mobile/android/app/build/outputs/bundle/release/app-release.aab

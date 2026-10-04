@@ -1,5 +1,13 @@
 apply plugin: 'com.android.application'
 
+def soundscapesVersion = new groovy.json.JsonSlurper()
+        .parse(rootProject.file('../package.json')).version as String
+def soundscapesVersionParts = soundscapesVersion.tokenize('.')*.toInteger()
+if (soundscapesVersionParts.size() != 3 || soundscapesVersionParts[1] > 99 || soundscapesVersionParts[2] > 99) {
+    throw new GradleException("mobile/package.json version must be MAJOR.MINOR.PATCH with MINOR and PATCH below 100, got ${soundscapesVersion}")
+}
+def soundscapesVersionCode = soundscapesVersionParts[0] * 10000 + soundscapesVersionParts[1] * 100 + soundscapesVersionParts[2]
+
 android {
     namespace = "com.thockdown.soundscapes"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,11 +15,14 @@ android {
         applicationId "com.thockdown.soundscapes"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        // A Play upload must carry a higher versionCode than every upload
-        // before it: the release workflow (release-android.yml) passes its run
-        // number. Builds without it (debug, local) stay at 1.
-        versionCode((System.getenv("SOUNDSCAPES_VERSION_CODE") ?: "1").toInteger())
-        versionName(System.getenv("SOUNDSCAPES_VERSION_NAME") ?: "1.0")
+        // The app's version is the one in mobile/package.json, for every
+        // build (debug, release, local). The versionCode is derived from it
+        // (major x 10000 + minor x 100 + patch), so it is reproducible from the
+        // commit and rises with every version: a Play upload must carry a
+        // higher versionCode than every upload before it, so a new upload
+        // needs a new version.
+        versionCode soundscapesVersionCode
+        versionName soundscapesVersion
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -20,7 +31,7 @@ android {
         }
     }
     // CI signs every build with ONE key (the ANDROID_KEYSTORE_* repository
-    // secrets, see build-android.yml): Android installs an update only when
+    // secrets, see .github/workflows/ci.yml): Android installs an update only when
     // its signature matches the installed app's, and the debug key a fresh
     // runner generates differs every time. A local build without the
     // variables keeps the machine's own debug key.
