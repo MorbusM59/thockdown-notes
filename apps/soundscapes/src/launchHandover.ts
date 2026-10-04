@@ -31,8 +31,9 @@ export function styleSystemBars(mode: 'light' | 'dark'): void {
  * Releases the splash once the first themed frame has been PRESENTED: a
  * requestAnimationFrame callback runs before its frame is painted, so the
  * callback of the frame after it is the first moment the earlier one is known
- * to be on screen. Called once, after the first commit, whose layout effects
- * have already applied the theme and the bar style.
+ * to be on screen. Called after the commit in which the page shows the state
+ * it will keep (MobileSoundscapeApp's `hydrated`); its layout effects have
+ * applied the theme and the bar style by then.
  */
 export async function reportFirstFrame(): Promise<void> {
   if (!launch) return
