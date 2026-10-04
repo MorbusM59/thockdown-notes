@@ -27,6 +27,17 @@ import { fileURLToPath } from 'node:url'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const notesDir = path.join(repoRoot, 'release-notes')
+const changelogPath = path.join(repoRoot, 'apps/notes/CHANGELOG.md')
+
+// Each app in the repository releases on its own, so a release tag names its
+// app: `notes-v0.8.0` here, `soundscapes-v1.0.0` for the Android app
+// (.github/workflows/release-android.yml). Releases up to 0.7.1 were tagged
+// with the bare `v` prefix from before the repository held a second app; they
+// are read as this app's history and never written again.
+const TAG_PREFIX = 'notes-v'
+const LEGACY_TAG_PREFIX = 'v'
+const tagFor = (v) => `${TAG_PREFIX}${v}`
+const isReleaseTag = (t) => t.startsWith(TAG_PREFIX) || /^v\d/.test(t)
 
 const args = process.argv.slice(2)
 const flag = (name) => args.includes(name)
@@ -171,7 +182,7 @@ function releaseIsComplete(t) {
 // finish the first -- which is precisely how v0.5.8 stalled without its DMG
 // and a re-run silently produced v0.5.9.  So: if the current version is
 // tagged and its release is incomplete, resume it.
-const currentTag = `v${currentVersion}`
+const currentTag = tagFor(currentVersion)
 const currentIsTagged = gitQuiet('rev-parse', '-q', '--verify', `refs/tags/${currentTag}`).status === 0
 const versionGivenExplicitly = /^\d+\.\d+\.\d+$/.test(bumpArg)
 
@@ -184,7 +195,7 @@ if (!versionGivenExplicitly && !flag('--force-new') && currentIsTagged && !relea
   version = nextVersion(currentVersion, bumpArg)
 }
 
-const tag = `v${version}`
+const tag = tagFor(version)
 const tagExists = gitQuiet('rev-parse', '-q', '--verify', `refs/tags/${tag}`).status === 0
 
 if (!tagExists && version === currentVersion) {
@@ -193,11 +204,21 @@ if (!tagExists && version === currentVersion) {
 info(`${currentVersion}  ->  ${bold(version)}   tag ${tag}`)
 if (tagExists) warn(`tag ${tag} already exists locally -- resuming an interrupted release`)
 
-// The previous release tag, for the change summary.
-const previousTag = git('tag', '--list', 'v*', '--sort=-v:refname')
+// The previous release tag, for the change summary: the newest of this app's
+// tags under either prefix, ordered by version rather than by name.
+const versionOf = (t) => (t.startsWith(TAG_PREFIX) ? t.slice(TAG_PREFIX.length) : t.slice(LEGACY_TAG_PREFIX.length))
+const compareVersions = (a, b) => {
+  const [x, y] = [a, b].map((v) => v.split('.').map(Number))
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]
+  return 0
+}
+// All tags, filtered here: `git` runs through a shell, which would expand a
+// bare `v*` against the files in the working directory before git saw it.
+const previousTag = git('tag', '--list')
   .split('\n')
   .map((t) => t.trim())
-  .filter((t) => t && t !== tag)[0]
+  .filter((t) => t && t !== tag && isReleaseTag(t))
+  .sort((a, b) => compareVersions(versionOf(b), versionOf(a)))[0]
 
 // ------------------------------------------------------- 3. release notes
 
@@ -292,8 +313,23 @@ if (tagExists) {
     }
   })
 
+  // The changelog is the release notes, kept: the notes file is a draft in an
+  // ignored folder, and this entry is what stays in the repository.
+  mutate(`add ${version} to apps/notes/CHANGELOG.md`, () => {
+    const date = new Date().toISOString().slice(0, 10)
+    const log = fs.readFileSync(changelogPath, 'utf8')
+    // A run that wrote the entry and then stopped before committing must not
+    // write it twice.
+    if (log.includes(`\n## ${version} (`)) return
+    const marker = log.indexOf('\n## ')
+    const head = marker === -1 ? `${log.trimEnd()}\n` : log.slice(0, marker + 1)
+    const rest = marker === -1 ? '' : log.slice(marker + 1)
+    const body = notesBody.replace(/^(#+) /gm, '##$1 ')
+    fs.writeFileSync(changelogPath, `${head}\n## ${version} (${date})\n\n${body}\n\n${rest}`.replace(/\n{3,}/g, '\n\n'), 'utf8')
+  })
+
   mutate(`commit and tag ${tag}`, () => {
-    run('git', ['add', 'apps/notes/package.json', 'package-lock.json'])
+    run('git', ['add', 'apps/notes/package.json', 'package-lock.json', 'apps/notes/CHANGELOG.md'])
     run('git', ['commit', '-m', `Release ${tag}`])
     run('git', ['tag', '-a', tag, '-m', `Thockdown Notes ${tag}`])
   })
@@ -317,11 +353,13 @@ if (releaseExists) {
   mutate('refresh its notes from the notes file', () =>
     run('gh', ['release', 'edit', tag, '--notes-file', notesPath, '--prerelease']))
 } else {
-  // Continue the "Alpha Release #N" numbering without anyone having to count.
-  const existingTitles = ghQuiet('release', 'list', '--limit', '100', '--json', 'name')
+  // Continue this app's "Alpha Release #N" numbering without anyone having to
+  // count; another app's releases are not part of the sequence.
+  const existingTitles = ghQuiet('release', 'list', '--limit', '100', '--json', 'name,tagName')
   let nextNumber = 1
   if (existingTitles.status === 0 && existingTitles.stdout) {
     const numbers = JSON.parse(existingTitles.stdout)
+      .filter((r) => isReleaseTag(r.tagName ?? ''))
       .map((r) => /Alpha Release #(\d+)/.exec(r.name ?? '')?.[1])
       .filter(Boolean)
       .map(Number)

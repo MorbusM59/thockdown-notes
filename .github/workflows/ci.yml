@@ -17,7 +17,7 @@
 # only after verify passed, so a change that breaks a test never reaches the
 # installable APK. A workflow artifact always downloads as a zip, which a
 # phone cannot install from, so the release asset is the plain .apk at a fixed
-# address. The tag does not start with `v`, so it does not trigger
+# address. The tag does not start with `notes-v`, so it does not trigger
 # build-mac.yml, and its title does not match "Alpha Release #N", so
 # release-windows.yml's numbering ignores it.
 name: CI
