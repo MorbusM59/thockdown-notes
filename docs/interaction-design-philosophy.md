@@ -119,7 +119,7 @@ The goal is deterministic behavior with one source of truth per interaction phas
 
 ### 3e3. A long journey is one displacement, shown two ways
 - **The curve is the whole-document curve.** `sampleJourneyDisplacement`
-  (`src/editor/scrollJourney.ts`) says where the document *would* be at any
+  (`packages/interaction/scrollJourney.ts`) says where the document *would* be at any
   moment if every block of it were mounted — ramp up, plateau, ramp down, as a
   single continuous position. A windowed pane does not get a different or
   shorter journey; it gets the same one, shown differently.
@@ -221,7 +221,7 @@ The goal is deterministic behavior with one source of truth per interaction phas
   click, because the glide's teardown fires precisely when it notices a journey
   has taken the scroller. It was invisible on long journeys — their ramps are
   under the curtain and the landing is set directly — and fatal on short ones.
-- So the property is owned by `src/editor/scrollBehaviorLock.ts` and callers
+- So the property is owned by `packages/interaction/scrollBehaviorLock.ts` and callers
   take a counted borrow. First borrow records the real inline value and sets
   `auto`; last release puts it back. Releases are idempotent, because teardown
   here is reached from a frame loop finishing, a cancel and an unmount, and any
@@ -506,7 +506,7 @@ The goal is deterministic behavior with one source of truth per interaction phas
 - Travel time is a property of the interaction, not of the distance. A
   scrollbar click across a very large document takes about the same half second
   as one across a small one, because the journey's middle is removed rather
-  than played (`src/editor/scrollJourney.ts`, `src/editor/scrollBridge.ts`).
+  than played (`packages/interaction/scrollJourney.ts`, `src/editor/scrollBridge.ts`).
 - It is a cut, not a teleport, and the difference is the whole design: the
   motion ramps up on the real document, a curtain of spoof text sweeps in at
   the journey's own speed, the jump happens only while the pane is fully

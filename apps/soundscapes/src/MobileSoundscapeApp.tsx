@@ -13,7 +13,7 @@
  * are more controls, not a second path to the engine.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { CompactScrollbarSlider } from '../../../src/components/CompactScrollbarSlider'
+import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { soundscapeConfiguration, soundscapeEngine } from '../../../src/sound/SoundscapeEngine'
 import { resumedOutputContext } from '../../../src/sound/audioOutputBus'
 import {
@@ -30,8 +30,8 @@ import {
   LIGHT_PRESET_ICONS,
   LIGHT_PRESET_THEMES,
 } from '../../../src/shared/presets'
-import { OptionsSliderRows } from '../../../src/sidebar/OptionsSliderRows'
-import { OptionsSubsectionLabel } from '../../../src/sidebar/OptionsSubsectionLabel'
+import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
+import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
 import { applyDocumentTheme, themeFrame } from '../../../src/shared/loadoutTheme'
 import { ThemeBlendOverlays, ThemeGlazeLayers } from '../../../src/components/ThemeLayers'
 import { nativeSoundscape, type RegularMode, type SessionState, type SoundSource } from './backgroundAudioHost'
@@ -57,7 +57,7 @@ import { LookButton } from './LookButton'
 import { helpFor } from './helpText'
 import { SoundscapeControls, SubsectionHelp } from '../../../src/sidebar/SoundscapeOptions'
 import { PageScrollbar } from './PageScrollbar'
-import { armHold, HOLD_CONFIRM_MS } from '../../../src/shared/holdTiming'
+import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { installSoundscapeFiles } from './soundscapeFiles'
 import { useStepDrag } from './useStepDrag'
 

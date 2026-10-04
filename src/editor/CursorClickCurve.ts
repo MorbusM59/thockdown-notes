@@ -26,7 +26,7 @@
 // evaluateCurve/warpForSkew primitives directly, sampled as a raw height
 // (not integrated into a position) since that height IS the deviation here.
 
-import { evaluateCurve, warpForSkew } from './ScrollCurvePlan';
+import { evaluateCurve, warpForSkew } from '@thockdown/interaction/ScrollCurvePlan';
 import {
   CURSOR_CLICK_SKEW_MIN,
   CURSOR_CLICK_SKEW_MAX,

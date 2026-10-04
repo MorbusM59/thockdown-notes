@@ -211,7 +211,7 @@ export interface DocumentPosition {
   travelToRatio: (ratio: number) => ScrollJourneyTiming | null
 }
 
-import type { ScrollJourneyTiming } from './scrollJourney'
+import type { ScrollJourneyTiming } from '@thockdown/interaction/scrollJourney'
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value))
 

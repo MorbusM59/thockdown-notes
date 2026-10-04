@@ -1,4 +1,4 @@
-import { SCROLL_TRACK_EDGE_GAP_PX } from '../shared/scrollTrackGeometry'
+import { SCROLL_TRACK_EDGE_GAP_PX } from '@thockdown/interaction/scrollTrackGeometry'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MouseEvent, MutableRefObject } from 'react'
 import type { PreviewDocumentPositionApi } from './usePreviewMarkdownRendering'
@@ -6,12 +6,12 @@ import { beginScrollTrackHold } from '../editor/scrollTrackHold'
 import { registerScrollBridge } from '../editor/scrollBridge'
 import { resolveThumbRubberBand } from '../editor/scrollThumbRubberBand'
 import { createCommittedThumbHeight } from '../editor/scrollThumbMetrics'
-import { sampleCurveRampProgress } from '../editor/ScrollCurvePlan'
-import type { ScrollJourneyTiming } from '../editor/scrollJourney'
+import { sampleCurveRampProgress } from '@thockdown/interaction/ScrollCurvePlan'
+import type { ScrollJourneyTiming } from '@thockdown/interaction/scrollJourney'
 import { measureAverageCharWidthPx } from '../editor/scrollBridgeTexture'
 import { createWheelNotchState, resolveWheelEventUnits } from '../editor/wheelNotch'
 import { getWheelStepLines } from '../editor/wheelStep'
-import { borrowAutoScrollBehavior } from '../editor/scrollBehaviorLock'
+import { borrowAutoScrollBehavior } from '@thockdown/interaction/scrollBehaviorLock'
 import { appendWheelTrace, isWheelTraceOn } from '../editor/wheelTrace'
 import {
   cancelWheelSpin,
@@ -47,7 +47,7 @@ import {
   sampleReleaseRampDownPlan,
   resolveRampCrossingTimeSecFromCurrentParams,
   scrollToNonQuantizedSmooth,
-} from '../editor/NonQuantizedSmoothScroll'
+} from '@thockdown/interaction/NonQuantizedSmoothScroll'
 
 type ViewStyleKey =
   | 'modern'

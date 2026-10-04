@@ -54,10 +54,10 @@ export const CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER = 1.5;
 export const RENDER_SCROLL_RAMP_MIN = 0.1;
 export const RENDER_SCROLL_RAMP_MAX = 5;
 
-import { buildCurvePlan, sampleCdf, type CurvePlan } from '../shared/smoothCurve';
+import { buildCurvePlan, sampleCdf, type CurvePlan } from './smoothCurve';
 
-export { buildCurvePlan, evaluateCurve, sampleCdf, warpForSkew } from '../shared/smoothCurve';
-export type { CurvePlan } from '../shared/smoothCurve';
+export { buildCurvePlan, evaluateCurve, sampleCdf, warpForSkew } from './smoothCurve';
+export type { CurvePlan } from './smoothCurve';
 
 // Piecewise scroll plan built from a curve plan plus distance + maxSpeed.
 //

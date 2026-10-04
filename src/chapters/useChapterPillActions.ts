@@ -3,7 +3,7 @@ import type { MouseEvent, MutableRefObject } from 'react'
 import type { ChapterEntry } from '../shared/chapters'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import { applyProtectedTagDestination } from '../shared/protectedTagActions'
-import { armHold, HOLD_CONFIRM_MS } from '../shared/holdTiming'
+import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 
 /** Matches the sidebar's own right-click-hold gesture (useNoteProtectionActions.ts's NOTE_RIGHT_CLICK_HOLD_MS) -- same duration, so the two gestures feel identical even though this one shows both options at once instead of escalating a single primed action. */
 // Splitting a pill is "I meant this one" -- the app's CONFIRM threshold

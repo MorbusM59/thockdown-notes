@@ -2,7 +2,7 @@
  * The shape of a noise layer's level over one cycle (its `curve` and `skew`),
  * as a table the generator plays on repeat. Depends only on smoothCurve.ts.
  */
-import { buildBellEnvelope, warpForSkew } from './smoothCurve';
+import { buildBellEnvelope, warpForSkew } from '@thockdown/interaction/smoothCurve';
 
 /**
  * The bell's own steepness range (smoothCurve.ts's buildBellEnvelope): the

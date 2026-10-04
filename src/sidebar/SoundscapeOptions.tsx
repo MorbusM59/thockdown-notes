@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AccordionSection } from '../components/AccordionSection'
-import { CompactScrollbarSlider } from '../components/CompactScrollbarSlider'
+import { AccordionSection } from '@thockdown/interaction/AccordionSection'
+import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import {
   SOUNDSCAPE_CHANNEL_ROSTER,
   SOUNDSCAPE_CHIME_MATERIALS,
@@ -50,13 +50,13 @@ import {
 } from '../shared/soundscape'
 import { spaceDecaySec } from '../shared/soundscapeSpace'
 import { CHIME_SCALE_COUNT, CHIME_SCALES } from '../shared/soundscapeChimeScales'
-import { armHold, HOLD_COMMIT_MS, HOLD_CONFIRM_MS } from '../shared/holdTiming'
+import { armHold, HOLD_COMMIT_MS, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { newSoundscapeId, neutralSoundscape } from '../shared/soundscapeFile'
 import { exportSoundscapes } from './soundscapeFileActions'
-import { useNonPassiveWheel } from '../shared/useNonPassiveWheel'
+import { useNonPassiveWheel } from '@thockdown/interaction/useNonPassiveWheel'
 import { toDisplayLevel } from '../shared/musicSoundOptions'
-import { OptionsSliderRows } from './OptionsSliderRows'
-import { OptionsSubsectionLabel } from './OptionsSubsectionLabel'
+import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
+import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
 
 /**
  * Two taps on the same channel this close together are a double tap, which

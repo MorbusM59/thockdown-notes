@@ -5,7 +5,7 @@ import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote } from
 import { withSavedNote } from '../shared/noteContentStore'
 import { applyProtectedTagDestination } from '../shared/protectedTagActions'
 import { normalizeInternalText } from '../editor/TextPolicy'
-import { armHold, HOLD_CONFIRM_MS } from '../shared/holdTiming'
+import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 
 // A right-press on a note, or on the trash-view button, that means "this
 // one" rather than the ordinary click -- the app's CONFIRM threshold

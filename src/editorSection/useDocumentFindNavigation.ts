@@ -9,7 +9,7 @@ import {
   type DocumentFindDirective,
   type DocumentFindHit,
 } from '../editor/FindReplaceEngine'
-import { isNonQuantizedSmoothScrollActive, scrollToNonQuantizedSmooth } from '../editor/NonQuantizedSmoothScroll'
+import { isNonQuantizedSmoothScrollActive, scrollToNonQuantizedSmooth } from '@thockdown/interaction/NonQuantizedSmoothScroll'
 import { resolvePreviewHitRange, resolveSourceLineForOffset } from './PreviewFindHitLocator'
 import { traceFindMarking } from './findMarkingTrace'
 import type { PreviewDocumentPositionApi, PreviewScrollToSourceLineFn } from './usePreviewMarkdownRendering'

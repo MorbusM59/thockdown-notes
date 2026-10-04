@@ -38,7 +38,7 @@ import {
   getRenderScrollTotalTimeSec,
   sampleCurveRampPlan,
   type CurveRampPlan,
-} from '../editor/ScrollCurvePlan';
+} from '@thockdown/interaction/ScrollCurvePlan';
 
 /**
  * A hold crosses the whole range in `0.5 + animationSpeed * 5` seconds.

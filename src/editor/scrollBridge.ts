@@ -27,7 +27,8 @@
 // same as one that is two thousand.
 
 import { drawBridgeTile, sampleDocumentLineRhythm } from './scrollBridgeTexture'
-import { traceScroll } from './scrollTrace'
+import { traceScroll } from '@thockdown/interaction/scrollTrace'
+import { provideScrollBridge, type ScrollBridge } from '@thockdown/interaction/scrollBridgeRegistry'
 
 export interface ScrollBridgeStyle {
   /** The document's own text, for its line rhythm. */
@@ -83,46 +84,15 @@ export interface ScrollBridgeSurface {
   readStyle: () => ScrollBridgeStyle | null
 }
 
-export interface ScrollBridge {
-  /**
-   * Opens the curtain for a journey.
-   *
-   * Returns the distance it will actually take to sweep through, which may be
-   * longer than asked: the band has to be at least a viewport tall to cover
-   * anything, and the sweep has to be at least a viewport longer than that.
-   * Returns null when no curtain can be drawn, which the caller must treat as
-   * "do not cut" rather than cutting without cover.
-   */
-  begin: (requestedDistancePx: number, direction: -1 | 1) => number | null
-  /** Moves the curtain to `travelledPx` into its sweep. */
-  advance: (travelledPx: number) => void
-  /**
-   * Re-sizes the sweep once its true length is known.
-   *
-   * The curtain has to stop covering exactly when real text becomes available
-   * again, and how far away that is depends on where the journey lands --
-   * which is not known until the cut, because the cut is what decides it. So
-   * the band opens at its longest and is trimmed here.
-   *
-   * Legal only while fully covering, which is when the cut happens: the band
-   * is trimmed from its trailing edge, and that edge is below the pane. A
-   * caller that resized at any other moment would be dragging a visible edge
-   * across the reader's view.
-   */
-  resizeSweep: (sweepPx: number) => number
-  /** Whether the viewport is fully covered, and so safe to jump underneath. */
-  isCovering: (travelledPx: number) => boolean
-  end: () => void
-}
-
-const surfaces = new WeakMap<HTMLElement, ScrollBridgeSurface>()
-
-/** Attaches a bridge surface to a scroller. Returns a function that detaches it. */
+/**
+ * Attaches a bridge surface to a scroller. Returns a function that detaches it.
+ *
+ * The smooth-scroll engines live in `@thockdown/interaction` and know only the
+ * `ScrollBridge` interface; this registers the text-texture implementation of
+ * it with that package's registry, so the engines never import editor code.
+ */
 export function registerScrollBridge(scroller: HTMLElement, surface: ScrollBridgeSurface): () => void {
-  surfaces.set(scroller, surface)
-  return () => {
-    if (surfaces.get(scroller) === surface) surfaces.delete(scroller)
-  }
+  return provideScrollBridge(scroller, () => openScrollBridge(surface))
 }
 
 interface TileCache {
@@ -142,10 +112,8 @@ const tiles = new WeakMap<HTMLElement, TileCache>()
  */
 const MINIMUM_SWEEP_VIEWPORTS = 3
 
-/** The bridge for a scroller, or null if nothing has registered one. */
-export function resolveScrollBridge(scroller: HTMLElement): ScrollBridge | null {
-  const surface = surfaces.get(scroller)
-  if (!surface) return null
+/** Opens a bridge over `surface`. */
+function openScrollBridge(surface: ScrollBridgeSurface): ScrollBridge | null {
 
   let root: HTMLElement | null = null
   let band: HTMLElement | null = null

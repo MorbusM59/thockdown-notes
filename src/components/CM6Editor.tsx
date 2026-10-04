@@ -1,4 +1,4 @@
-import { SCROLL_TRACK_EDGE_GAP_PX } from '../shared/scrollTrackGeometry';
+import { SCROLL_TRACK_EDGE_GAP_PX } from '@thockdown/interaction/scrollTrackGeometry';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Annotation, Compartment, EditorState, EditorSelection, Prec, RangeSetBuilder, type ChangeSet, type TransactionSpec } from '@codemirror/state';
@@ -10,7 +10,7 @@ import { suppressNextPlainTypingSoundOnce, typingSoundManager } from '../sound/T
 import { ARROW_KEY_VOICES, SHIFT_TAB_KEY_VOICE, TAB_KEY_VOICE } from '../sound/keyVoices';
 import { readSelectionRect, type SelectionRect } from '../editor/CaretRect';
 import { readSelectionLineRects } from '../editor/SelectionRects';
-import { armHold, HOLD_CONFIRM_MS } from '../shared/holdTiming';
+import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming';
 import { isOffsetInFencedCodeBlock } from '../editor/MarkdownContext';
 import { isTableCellDragStart, resolveTableCellDrop, resolveTableSelectionStep } from '../editor/MarkdownTableTransforms';
 import { hasTravelledDragThreshold } from '../shared/pointerDrag';
@@ -36,7 +36,7 @@ import {
   resolveApexSpeedPxPerSecFromCurrentParams,
   resolveRampCrossingTimeSecFromCurrentParams,
   sampleReleaseRampDownPlan,
-} from '../editor/NonQuantizedSmoothScroll';
+} from '@thockdown/interaction/NonQuantizedSmoothScroll';
 import { cancelQuantizedSmoothScroll, isQuantizedSmoothScrollActive, quantizeScrollTopToRow, scrollToQuantizedSmooth } from '../editor/QuantizedSmoothScroll';
 import { beginScrollTrackHold } from '../editor/scrollTrackHold';
 import { countWrappedLines, resolveThumbLineRatio } from '../editor/scrollThumbMetrics';
@@ -47,8 +47,8 @@ import { resolveThumbRubberBand } from '../editor/scrollThumbRubberBand';
 import { boxMouseSelection, resolveBoxAtCoords } from '../editor/boxPointer';
 import { computeRightEdgeReservePx, quantizeThumbHeightToRows, resolveScrollColumnLeftPx, snapThumbSpanToRows } from '../editor/immersiveScrollColumn';
 import { createCommittedThumbHeight } from '../editor/scrollThumbMetrics';
-import { sampleCurveRampProgress } from '../editor/ScrollCurvePlan';
-import type { ScrollJourneyTiming } from '../editor/scrollJourney';
+import { sampleCurveRampProgress } from '@thockdown/interaction/ScrollCurvePlan';
+import type { ScrollJourneyTiming } from '@thockdown/interaction/scrollJourney';
 import { sanitizeDocumentText, sanitizeDocumentTextExtended } from '../shared/textSanitization';
 import { gridCellGuard } from '../editor/gridCellGuard';
 import { resolveScopeRange, isSameRange, type SelectionScope } from '../editor/ContractBridgeRangeUtils';
@@ -422,7 +422,7 @@ function applyTransformResult(view: EditorView, oldText: string, next: EditorTra
  * release (the click), whichever comes first. The release is watched on the
  * window as a pointer event, because a press listener on anything narrower
  * misses a release outside it, and mouse events are suppressed after a
- * cancelled pointer event (see src/shared/pressTracking.ts). A pointercancel
+ * cancelled pointer event (see packages/interaction/pressTracking.ts). A pointercancel
  * resolves to nothing. Whatever resolves it is dropped if the note's text
  * changed during the press, since both outcomes index the text at the press.
  */

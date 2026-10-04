@@ -4,7 +4,7 @@
   "version": "0.7.1",
   "type": "module",
   "workspaces": [
-    "apps/*"
+    "apps/*", "packages/*"
   ],
   "scripts": {
     "predev": "node scripts/killStrayElectronDev.mjs && electron-rebuild -f -w better-sqlite3",

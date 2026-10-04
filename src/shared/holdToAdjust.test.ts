@@ -12,7 +12,7 @@ import {
   setRenderScrollDynamic,
   setRenderScrollSkew,
   setRenderScrollTotalTimeSec,
-} from '../editor/ScrollCurvePlan'
+} from '@thockdown/interaction/ScrollCurvePlan'
 
 const RANGE = 99
 

@@ -2,8 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { flushSync } from 'react-dom'
 import type { MutableRefObject, ReactNode } from 'react'
 import type { PreviewMarkdownBlock as PreviewBlock } from '../editor/PreviewBlockSplit'
-import { isNonQuantizedSmoothScrollActive } from '../editor/NonQuantizedSmoothScroll'
-import { traceScroll } from '../editor/scrollTrace'
+import { isNonQuantizedSmoothScrollActive } from '@thockdown/interaction/NonQuantizedSmoothScroll'
+import { traceScroll } from '@thockdown/interaction/scrollTrace'
 import {
   findBlockAtChar,
   findBlockAtPixel,

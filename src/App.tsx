@@ -1,5 +1,5 @@
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { scrollThumbFor, scrollTopForThumb } from './shared/scrollTrackGeometry'
+import { scrollThumbFor, scrollTopForThumb } from '@thockdown/interaction/scrollTrackGeometry'
 import { flushSync } from 'react-dom'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent, SetStateAction } from 'react'
@@ -9,7 +9,7 @@ import { AudioControls } from './components/AudioControls'
 import { soundscapeEngine } from './sound/SoundscapeEngine'
 import { RESTORE_FADE_IN_SEC } from './sound/audioOutputBus'
 import { isPlaylistButtonSlot } from './shared/audioPlayer'
-import { isTextEntryElement, keepFocusOnPress, mayHoldKeyboard } from './shared/focusOwnership'
+import { isTextEntryElement, keepFocusOnPress, mayHoldKeyboard } from '@thockdown/interaction/focusOwnership'
 import { focusEscapeHoldRing } from './editorSection/escapeHoldRingFocus'
 import {
   BTN_SQUARE_LARGE_SIZE_PX,
@@ -208,7 +208,7 @@ import {
   setRenderScrollMaxSpeedPxPerSec as applyRenderScrollMaxSpeedPxPerSec,
   setRenderScrollSkew as applyRenderScrollSkew,
   scrollToNonQuantizedSmooth,
-} from './editor/NonQuantizedSmoothScroll'
+} from '@thockdown/interaction/NonQuantizedSmoothScroll'
 import {
   getWheelStepLines,
   getWheelStepRows,
@@ -249,7 +249,7 @@ import {
   TEXTURE_VSTEPS_MAX,
 } from './textures/types'
 import { TEXTURE_ALGORITHM_VERSION, TEXTURE_REPEAT_TILE_SIZE, useTextureSurface } from './textures/useTextureSurface'
-import { armHold, HOLD_COMMIT_MS, HOLD_CONFIRM_MS } from './shared/holdTiming'
+import { armHold, HOLD_COMMIT_MS, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { noteRightPressAction } from './editorSection/useNoteProtectionActions'
 import { WorkIndicatorGlyph } from './components/WorkIndicatorGlyph'
 import { armPointerDrag } from './shared/pointerDrag'

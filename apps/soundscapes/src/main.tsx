@@ -1,9 +1,9 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { MobileSoundscapeApp } from './MobileSoundscapeApp'
-import { keepFocusOnPress } from '../../../src/shared/focusOwnership'
-import { installPressTracking } from '../../../src/shared/pressTracking'
-import { installScrollTrackTokens } from '../../../src/shared/scrollTrackGeometry'
+import { keepFocusOnPress } from '@thockdown/interaction/focusOwnership'
+import { installPressTracking } from '@thockdown/interaction/pressTracking'
+import { installScrollTrackTokens } from '@thockdown/interaction/scrollTrackGeometry'
 // The desktop app's stylesheet, whole: the soundscape panel is the desktop
 // panel unchanged, and its look is defined there rather than restated here.
 import '../../../src/index.css'

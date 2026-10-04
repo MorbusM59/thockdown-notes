@@ -1,11 +1,11 @@
 import type { MouseEvent, MutableRefObject, PointerEvent } from 'react'
 import type * as React from 'react'
 import { useRef } from 'react'
-import { AccordionGroup, AccordionSection } from '../components/AccordionSection'
-import { CompactScrollbarSlider } from '../components/CompactScrollbarSlider'
+import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
+import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { SoundscapeOptions } from './SoundscapeOptions'
-import { OptionsSliderRows } from './OptionsSliderRows'
-import { OptionsSubsectionLabel } from './OptionsSubsectionLabel'
+import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
+import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
 import { exportSoundscapes, importSoundscapes } from './soundscapeFileActions'
 import type { SoundscapePreferences } from '../shared/soundscape'
 import {
@@ -16,7 +16,7 @@ import {
   clampContinuousDocumentThreshold,
 } from '../editor/documentPosition'
 import { type RgbaColor, type HsvaColor, rgbaToCssColor, hsvaToRgba } from '../shared/colorMath'
-import { isTextEntryElement } from '../shared/focusOwnership'
+import { isTextEntryElement } from '@thockdown/interaction/focusOwnership'
 import type { HighlightColorKey, HighlightColors } from '../shared/highlightColors'
 import {
   BORDER_RADIUS_REGULAR_MIN_PX,
@@ -107,7 +107,7 @@ import {
   roundUiFontScale,
   type UiFontKey,
 } from '../shared/UiTypography'
-import { DEFAULT_RENDER_SCROLL_MAX_SPEED_PX_PER_SEC, RENDER_SCROLL_SKEW_MIN, RENDER_SCROLL_SKEW_MAX } from '../editor/NonQuantizedSmoothScroll'
+import { DEFAULT_RENDER_SCROLL_MAX_SPEED_PX_PER_SEC, RENDER_SCROLL_SKEW_MIN, RENDER_SCROLL_SKEW_MAX } from '@thockdown/interaction/NonQuantizedSmoothScroll'
 import {
   CURSOR_DOT_COUNT_MIN,
   CURSOR_DOT_COUNT_MAX,
@@ -215,7 +215,7 @@ import {
   AUTO_ADVANCE_LABELS, AUTO_ADVANCE_MAX_MS, AUTO_ADVANCE_MIN_MS, AUTO_ADVANCE_SCOPES, AUTO_ADVANCE_STEP_MS,
   DEFAULT_AUTO_ADVANCE_MS, DEFAULT_AUTO_ADVANCE_SCOPE, indexOfScope, scopeAtIndex,
 } from '../adventure/model/autoAdvance'
-import { armHold, HOLD_COMMIT_MS } from '../shared/holdTiming'
+import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))

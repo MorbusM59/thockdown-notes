@@ -78,13 +78,16 @@ const ALLOWED = new Set([
 ])
 
 const SRC = fileURLToPath(new URL('..', import.meta.url))
+// The shared packages are renderer code too.
+const PACKAGES = fileURLToPath(new URL('../../packages', import.meta.url))
 
 function sourceFiles(dir: string): string[] {
   const out: string[] = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name)
-    if (entry.isDirectory()) out.push(...sourceFiles(full))
-    else if (/\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name)) out.push(full)
+    if (entry.isDirectory()) {
+      if (entry.name !== 'node_modules') out.push(...sourceFiles(full))
+    } else if (/\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name)) out.push(full)
   }
   return out
 }
@@ -111,7 +114,7 @@ function wholeDocumentParseImports(file: string): string[] {
 describe('the whole-document parse contract', () => {
   it('keeps every whole-document parse off the main thread', () => {
     const offenders: string[] = []
-    for (const file of sourceFiles(SRC)) {
+    for (const file of [...sourceFiles(SRC), ...sourceFiles(PACKAGES)]) {
       const path = relative(SRC, file).split('\\').join('/')
       if (ALLOWED.has(path)) continue
       for (const imported of wholeDocumentParseImports(file)) {

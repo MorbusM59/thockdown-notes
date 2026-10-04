@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import ts from 'typescript'
-import { SECONDARY_PRESS_ATTRIBUTE } from './pressTracking'
+import { SECONDARY_PRESS_ATTRIBUTE } from '@thockdown/interaction/pressTracking'
 
 /**
  * A control that handles a right-click must SAY so, because nothing else can
@@ -24,12 +24,16 @@ import { SECONDARY_PRESS_ATTRIBUTE } from './pressTracking'
  */
 
 const SRC = fileURLToPath(new URL('..', import.meta.url))
+// The shared packages are renderer code too, and ship in every app that uses them.
+const PACKAGES = fileURLToPath(new URL('../../packages', import.meta.url))
 
 function tsxFiles(dir: string): string[] {
   const out: string[] = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name)
-    if (entry.isDirectory()) out.push(...tsxFiles(full))
+    if (entry.isDirectory()) {
+      if (entry.name !== 'node_modules') out.push(...tsxFiles(full))
+    }
     else if (entry.name.endsWith('.tsx') && !entry.name.endsWith('.test.tsx')) out.push(full)
   }
   return out
@@ -59,7 +63,7 @@ function undeclaredSites(file: string): string[] {
 
 describe('secondary-press declarations', () => {
   it('every onContextMenu site says what a right press on it means', () => {
-    const missing = tsxFiles(SRC).flatMap(undeclaredSites)
+    const missing = [...tsxFiles(SRC), ...tsxFiles(PACKAGES)].flatMap(undeclaredSites)
     expect(missing, `add ${SECONDARY_PRESS_ATTRIBUTE}="action" (it does something) or "none" (it does not) to:\n  ${missing.join('\n  ')}\n`).toEqual([])
   })
 
