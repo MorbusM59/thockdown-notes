@@ -67,7 +67,11 @@ public class MainActivity extends BridgeActivity {
             getResources().getDisplayMetrics().heightPixels
         );
         int width = Math.round(shorterSide * LAUNCH_IMAGE_WIDTH_FRACTION);
-        overlay.addView(image, new FrameLayout.LayoutParams(width, width, Gravity.CENTER));
+        // The width is fixed and the height follows the image's own aspect
+        // ratio (adjustViewBounds). The height is still bounded by the screen,
+        // so an image taller than the screen allows is scaled down to fit it
+        // (FIT_CENTER) and then draws narrower than this width.
+        overlay.addView(image, new FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
 
         // On the decor view, so it covers the system bars' area as well as the
         // content: the screen is one field until the overlay fades.
