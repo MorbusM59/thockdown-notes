@@ -19,7 +19,8 @@
 
 import { _electron } from 'playwright'
 import { spawnSync } from 'node:child_process'
-import { existsSync, rmSync, readdirSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 import {
   APP_ROOT,
@@ -90,24 +91,6 @@ async function seedLargeNoteAndReload(page, text) {
   await page.waitForTimeout(500)
 }
 
-/**
- * Clears everything databaseService.ts creates under the resolved data root
- * (the sqlite db file, the notes directory) WITHOUT touching `data/.gitkeep`
- * -- a full `rmSync(dataDir, {recursive: true})` would delete that
- * git-tracked placeholder too, which actually happened once while building
- * this script (caught by `git status` showing it as deleted; restored via
- * `git checkout -- data/.gitkeep`). Skip anything not obviously
- * databaseService's own output, so this only ever removes what this script
- * itself is responsible for cleaning up.
- */
-function clearNoteDatabase(dataDir) {
-  if (!existsSync(dataDir)) return
-  for (const entry of readdirSync(dataDir)) {
-    if (entry === '.gitkeep') continue
-    rmSync(path.join(dataDir, entry), { recursive: true, force: true })
-  }
-}
-
 async function main() {
   const args = parseArgs(process.argv.slice(2))
   if (!['start', 'middle', 'end'].includes(args.position)) {
@@ -126,23 +109,18 @@ async function main() {
     throw new Error('--skip-build was given but no existing build was found at dist-electron/main.js -- run once without --skip-build first.')
   }
 
-  // A fresh DB per run: resolveDataRoot() in electron/main.ts falls back to
-  // `<repo>/data` whenever app.isPackaged is false (true for this unpackaged
-  // dev-mode launch, `electron dist-electron/main.js` directly rather than
-  // through electron-builder) -- confirmed by reading that function, not
-  // assumed; --user-data-dir does NOT redirect it, only Electron's own
-  // internal userData path. A leftover SQLite DB from a previous
-  // measurement run would seed the note list with a real prior note (or
-  // this script's own previously-seeded huge note), which changes both the
-  // seeding call's behavior (existing notes) and, at real scale, the
-  // sidebar's own render cost -- not what this script means to measure.
-  const dataDir = path.join(APP_ROOT, 'data')
-  clearNoteDatabase(dataDir)
+  // A fresh, isolated database per run: electron/main.ts's resolveDataRoot
+  // takes THOCKDOWN_DATA_ROOT ahead of every other rule, so the run never sees
+  // (or clears) the notes of whoever runs it. A leftover database would seed
+  // the note list with a prior note and change the sidebar's render cost,
+  // which is not what this script means to measure.
+  const dataDir = mkdtempSync(path.join(tmpdir(), 'thockdown-input-lag-perf-'))
 
   console.error('[perf] launching the packaged Electron app...')
   const app = await _electron.launch({
     args: ['--no-sandbox', 'dist-electron/main.js'],
     cwd: APP_ROOT,
+    env: { ...process.env, THOCKDOWN_DATA_ROOT: dataDir },
   })
 
   try {
@@ -189,7 +167,7 @@ async function main() {
     }
   } finally {
     await app.close()
-    clearNoteDatabase(dataDir)
+    rmSync(dataDir, { recursive: true, force: true })
   }
 
   process.exit(0)

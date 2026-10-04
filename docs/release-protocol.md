@@ -45,7 +45,7 @@ waits for the cloud half, and verifies both landed intact.
    tag.
 2. **Version.** Computes the next version and the tag name. If the tag already
    exists it says so and skips ahead — see *Resuming*, below.
-3. **Release notes.** Writes `release-notes/notes-vX.Y.Z.md`, pre-filled with every
+3. **Release notes.** Writes `apps/notes/release-notes/notes-vX.Y.Z.md`, pre-filled with every
    commit subject since the previous tag, then **pauses** so you can edit it.
    This is the one place a human is required. What's in that file becomes the
    GitHub release body verbatim (HTML comments are stripped). The generated
@@ -124,7 +124,7 @@ deliverables (a `.dmg`, an `.exe`, and `SHA256SUMS.txt`), the script says so and
 resumes that version. `--force-new` bumps anyway.
 
 To redo the notes for a release that already exists, edit
-`release-notes/notes-vX.Y.Z.md` and re-run — step 6 pushes the file's contents back up.
+`apps/notes/release-notes/notes-vX.Y.Z.md` and re-run — step 6 pushes the file's contents back up.
 
 ## Releasing without a Windows machine
 
