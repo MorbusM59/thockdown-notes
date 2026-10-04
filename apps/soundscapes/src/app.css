@@ -1,0 +1,8 @@
+/* The phone app's stylesheet: Tailwind's base, then the shared packages'
+   styles in the order the desktop loads them, so the soundscape panel looks
+   the same in both apps without either restating the other's rules. */
+@import "tailwindcss";
+@import '@thockdown/look/tokens.css';
+@import '@thockdown/look/look.css';
+@import '@thockdown/interaction/interaction.css';
+@import '@thockdown/soundscape/soundscape.css';

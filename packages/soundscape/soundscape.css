@@ -1,0 +1,29 @@
+/* The soundscape panel's own controls.
+   Apps import this file; a rule that only one app needs stays in that app. */
+
+.soundscape-layer-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-regular);
+}
+
+.soundscape-channel-selector-btn.is-disabled {
+  opacity: 0.55;
+}
+
+.soundscape-channel-selector-btn.is-solo {
+  filter: var(--filter-highlight);
+}
+
+/* A group is a label and its rows of sliders in the layer's own column: the
+   group element contributes no box, so its label and rows are spaced like the
+   rest of the layer. */
+.soundscape-control-group {
+  display: contents;
+}
+
+/* A channel's volume while it is dragged on a touch screen, in place of its icon. */
+.soundscape-channel-volume {
+  font-size: 0.6em;
+  font-variant-numeric: tabular-nums;
+}

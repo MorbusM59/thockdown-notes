@@ -456,7 +456,7 @@ const tokenBaseValues = new WeakMap<HTMLElement, Map<string, string>>()
 /**
  * What a loadout sets on the document root (<html>) rather than on an app
  * element: geometry, and the border and shadow strength, which scale the
- * alpha of every border/shadow token in styles/tokens.css. Each token is
+ * alpha of every border/shadow token in tokens.css (this package). Each token is
  * scaled from the stylesheet's ORIGINAL value, captured the first time it is
  * read, so repeated changes never compound.
  */

@@ -1,6 +1,12 @@
-@import './styles/tokens.css';
+/* The shared packages' styles, each owning the rules for the components it
+   renders. The design tokens come first, as they always have; the controls
+   follow the page base and layout so the cascade is unchanged. */
+@import '@thockdown/look/tokens.css';
+@import '@thockdown/look/look.css';
 @import './styles/base.css';
 @import './styles/layout.css';
+@import '@thockdown/interaction/interaction.css';
+@import '@thockdown/soundscape/soundscape.css';
 
 /* Components */
 @import './styles/components/sidebar.css';
