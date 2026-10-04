@@ -14,10 +14,15 @@ body {
   height: 100%;
 }
 
-/* The page: the scroller and its scrollbar (PageScrollbar.tsx) side by side. */
+/* The page: the scroller and its scrollbar (PageScrollbar.tsx) side by side.
+   It is the desktop sidebar's panel (.sidebar-content), so it has that
+   panel's opaque surface: the app-sheen gradient beneath it is meant for the
+   gaps between panels. Without a surface the whole page showed the sheen,
+   which in an inverted (dark) look is a pale haze over everything. */
 .mobile-page {
   display: flex;
   height: 100%;
+  background-color: var(--palette-parchment-lightest);
 }
 
 .mobile-soundscape-shell {
