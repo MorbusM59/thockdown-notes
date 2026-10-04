@@ -212,7 +212,9 @@ const compareVersions = (a, b) => {
   for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]
   return 0
 }
-const previousTag = git('tag', '--list', `${TAG_PREFIX}*`, `${LEGACY_TAG_PREFIX}*`)
+// All tags, filtered here: `git` runs through a shell, which would expand a
+// bare `v*` against the files in the working directory before git saw it.
+const previousTag = git('tag', '--list')
   .split('\n')
   .map((t) => t.trim())
   .filter((t) => t && t !== tag && isReleaseTag(t))
