@@ -24,6 +24,8 @@ public class MainActivity extends BridgeActivity {
      * where it looks the same however the app was started.
      */
     private View launchOverlay;
+    /** The WebView's accessibility importance before the overlay hid it, restored when it goes. */
+    private int webViewAccessibility;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -46,8 +48,15 @@ public class MainActivity extends BridgeActivity {
     private void addLaunchOverlay() {
         FrameLayout overlay = new FrameLayout(this);
         overlay.setBackgroundColor(ContextCompat.getColor(this, R.color.launch_background));
-        // Swallows touches meant for the page underneath while it is covered.
+        // Swallows touches meant for the page underneath while it is covered,
+        // and hides that page from accessibility services the same way, so
+        // TalkBack cannot reach controls that are not yet in their final state.
+        // The overlay itself is decoration and is not announced either.
         overlay.setClickable(true);
+        overlay.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        View webView = getBridge().getWebView();
+        webViewAccessibility = webView.getImportantForAccessibility();
+        webView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
 
         ImageView image = new ImageView(this);
         image.setImageResource(R.drawable.launch_image);
@@ -75,6 +84,7 @@ public class MainActivity extends BridgeActivity {
             View overlay = launchOverlay;
             if (overlay == null) return;
             launchOverlay = null;
+            getBridge().getWebView().setImportantForAccessibility(webViewAccessibility);
             overlay.animate()
                 .alpha(0f)
                 .setDuration(LAUNCH_FADE_MS)
