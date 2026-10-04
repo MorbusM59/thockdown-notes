@@ -12,7 +12,7 @@
  * same preferences state on its return (followSession), so those controls
  * are more controls, not a second path to the engine.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { soundscapeConfiguration, soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
 import { resumedOutputContext } from '@thockdown/soundscape/audioOutputBus'
@@ -36,6 +36,7 @@ import { applyDocumentTheme, themeFrame } from '@thockdown/look/loadoutTheme'
 import { ThemeBlendOverlays, ThemeGlazeLayers } from '@thockdown/look/ThemeLayers'
 import { nativeSoundscape, type RegularMode, type SessionState, type SoundSource } from './backgroundAudioHost'
 import { nativePlayback } from './playbackMode'
+import { reportFirstFrame, styleSystemBars } from './launchHandover'
 import {
   CLIP_MINUTES,
   loadClipMinutes,
@@ -99,6 +100,12 @@ export function MobileSoundscapeApp() {
   // started before that is settled, or its first start would open the web
   // playback instead.
   const [native, setNative] = useState<boolean | null>(null)
+  // Whether this page shows the state it will keep: the playback mode is
+  // settled and, where a native session exists, the page has followed it
+  // once. Until then the controls would show stopped and local preferences,
+  // and a session that outlived the page (a recreated activity) would repaint
+  // them moments later, so the splash is held until this is true.
+  const [hydrated, setHydrated] = useState(false)
   const [clipProgress, setClipProgress] = useState<number | null>(null)
   const [clipMinutes, setClipMinutes] = useState(loadClipMinutes)
   // The soundscape picked up for filling schedule slots (ScheduleGrid); not persisted.
@@ -135,7 +142,12 @@ export function MobileSoundscapeApp() {
     return () => window.removeEventListener('pointerdown', putDown, { capture: true })
   }, [pickedPresetId])
 
-  useEffect(() => { void nativePlayback.then(setNative) }, [])
+  useEffect(() => {
+    void nativePlayback.then((supported) => {
+      setNative(supported)
+      if (!supported) setHydrated(true)
+    })
+  }, [])
 
   useEffect(() => {
     savePreferences(preferences)
@@ -189,7 +201,7 @@ export function MobileSoundscapeApp() {
       setSchedule((current) => (current.enabled === state.scheduleEnabled ? current : { ...current, enabled: state.scheduleEnabled }))
     }
     followRef.current = follow
-    void nativeSoundscape!.getState().then(follow)
+    void nativeSoundscape!.getState().then(follow).finally(() => setHydrated(true))
     const handles = [
       nativeSoundscape!.addListener('sessionChanged', follow),
       nativeSoundscape!.addListener('clipProgress', ({ fraction }) => setClipProgress(fraction)),
@@ -240,10 +252,16 @@ export function MobileSoundscapeApp() {
     return () => window.removeEventListener('pointerdown', unlock, { capture: true })
   }, [])
 
-  useEffect(() => {
+  // A layout effect, so the theme is in place before the frame it belongs to
+  // is painted: the first frame on screen is already the themed one, which is
+  // what the splash waits for (launchHandover.ts), together with `hydrated`.
+  useLayoutEffect(() => {
     applyDocumentTheme(document.documentElement, loadout)
+    styleSystemBars(look.mode)
     saveLook(look)
   }, [loadout, look])
+
+  useEffect(() => { if (hydrated) void reportFirstFrame() }, [hydrated])
 
   // REGULAR MODE (see SoundscapeSession.java for how it and the schedule
   // decide what is heard). Set here for what this page does; the session's

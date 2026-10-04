@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The field the app opens on: the launcher icon's own background,
+         extended to the whole screen, so the icon sits on it seamlessly. -->
+    <color name="launch_background">@color/ic_launcher_background</color>
+</resources>

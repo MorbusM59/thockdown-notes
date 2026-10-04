@@ -1,22 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <!-- Base application theme. -->
+    <!--
+      Launch order (see MainActivity): the system splash, the app icon on
+      launch_background, covers the whole screen, system bars included, until
+      the page reports that its first themed frame is on screen. Only then does
+      the splash fade, so the reader sees one uniform field and then the finished
+      page, never the window or a half-laid-out page in between.
+    -->
+
     <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
-        <!-- Customize your theme here. -->
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
         <item name="colorAccent">@color/colorAccent</item>
     </style>
 
+    <!-- The theme the activity runs in (BridgeActivity sets it by this name).
+         The window is the same field as the splash, so whatever shows through
+         before the WebView paints, or behind the system bars on a WebView
+         too old to draw under them, matches what came before it. -->
     <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <item name="android:windowBackground">@color/launch_background</item>
     </style>
 
-
+    <!-- The launch theme (AndroidManifest.xml). The icon is named explicitly:
+         Theme.SplashScreen's default is the platform's generic icon. -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
-        <item name="android:background">@drawable/splash</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="windowSplashScreenBackground">@color/launch_background</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
     </style>
 </resources>
