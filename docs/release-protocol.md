@@ -13,6 +13,16 @@ git, GitHub, or the build.
 Everything below is what that command does and why it does it that way. You
 shouldn't need to run any of it by hand.
 
+This is the desktop app's release. Each app in the repository releases on its
+own, with its own version, changelog and tags: Thockdown Notes is tagged
+`notes-v<version>` and records its releases in `apps/notes/CHANGELOG.md`;
+Thockdown Soundscapes is tagged `soundscapes-v<version>` and has its own
+release (`apps/soundscapes/README.md`, "Google Play"). Releases up to 0.7.1
+carry the bare `v<version>` tag from before the repository held a second app.
+The script reads those as this app's history (for the previous tag and the
+release numbering) and never writes one again, and `build-mac.yml` builds
+only on `notes-v*`.
+
 ## The shape of the problem
 
 Thockdown Notes ships for Windows and macOS. A Windows machine cannot build a
@@ -35,7 +45,7 @@ waits for the cloud half, and verifies both landed intact.
    tag.
 2. **Version.** Computes the next version and the tag name. If the tag already
    exists it says so and skips ahead — see *Resuming*, below.
-3. **Release notes.** Writes `release-notes/vX.Y.Z.md`, pre-filled with every
+3. **Release notes.** Writes `release-notes/notes-vX.Y.Z.md`, pre-filled with every
    commit subject since the previous tag, then **pauses** so you can edit it.
    This is the one place a human is required. What's in that file becomes the
    GitHub release body verbatim (HTML comments are stripped). The generated
@@ -49,11 +59,14 @@ waits for the cloud half, and verifies both landed intact.
    pushed, which is the last moment stopping is free. There is no opt-out: a
    release is public facing (CLAUDE.md, "Git workflow").
 5. **Bump, tag, push.** Writes the version into `apps/notes/package.json` *and*
-   `package-lock.json`, commits `Release vX.Y.Z`, tags it, pushes both. Pushing
+   `package-lock.json`, adds the notes to `apps/notes/CHANGELOG.md` as a
+   `## X.Y.Z (date)` entry (the notes file is an ignored draft; the changelog
+   is what stays in the repository), commits `Release notes-vX.Y.Z`, tags it,
+   pushes both. Pushing
    the tag is what starts the macOS build.
 6. **Create the prerelease.** Creates the GitHub release as a **prerelease**,
    with your notes, titled `Alpha Release #N` — N read off the highest existing
-   one, so nobody has to count.
+   one among this app's releases, so nobody has to count.
 7. **Windows build.** `npm run build`, then finds the `.exe` and `.zip` in
    `apps/notes/release/<version>/`.
 8. **Wait for macOS.** Watches the `build-mac` run for this tag and reports how
@@ -111,14 +124,15 @@ deliverables (a `.dmg`, an `.exe`, and `SHA256SUMS.txt`), the script says so and
 resumes that version. `--force-new` bumps anyway.
 
 To redo the notes for a release that already exists, edit
-`release-notes/vX.Y.Z.md` and re-run — step 6 pushes the file's contents back up.
+`release-notes/notes-vX.Y.Z.md` and re-run — step 6 pushes the file's contents back up.
 
 ## Releasing without a Windows machine
 
 `.github/workflows/release-windows.yml` is the second half of the protocol run
 on GitHub's runners, for a release cut from somewhere that cannot build
 Windows or has no `gh` (a cloud session). Bump `apps/notes/package.json` and
-`package-lock.json`, commit `Release vX.Y.Z` on `main` and push it, then
+`package-lock.json`, add a `## X.Y.Z (date)` entry to `apps/notes/CHANGELOG.md`
+with the release notes, commit `Release notes-vX.Y.Z` on `main` and push it, then
 dispatch the workflow from `main` with the tag, the commit to tag (`target`)
 and the release notes as inputs. It creates or updates the prerelease
 (notes, `Alpha Release #N` title) -- creating the tag with it, because a
@@ -132,9 +146,11 @@ every asset against the hash taken where it was built, and publishes
 
 It is dispatch-only on purpose: on a tag push it would race the local
 script's own Windows uploads with a second build of the same filenames.
-Its first job runs the whole of `ci.yml` on the commit being released (the
-tag's, or `target`'s when the tag does not exist yet), and nothing else
-starts until that is green.
+Its first job refuses a tag that is not `notes-v` plus that commit's version,
+or a version with no changelog entry, which `npm run release` keeps by
+construction and a hand-made bump commit might not. Then it runs the whole of
+`ci.yml` on the commit being released (the tag's, or `target`'s when the tag
+does not exist yet), and nothing else starts until that is green.
 
 ## Before you release
 

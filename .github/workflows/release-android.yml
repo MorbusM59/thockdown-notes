@@ -7,6 +7,12 @@
 # in apps/soundscapes/android/app/build.gradle, so a bundle is reproducible from its
 # commit. Play requires every upload's versionCode to be higher than the last,
 # so bump that version before releasing again.
+#
+# A release is also recorded in the repository: the version must have an
+# entry in apps/soundscapes/CHANGELOG.md before anything is built, and the
+# commit the bundle was built from is tagged `soundscapes-v<version>` once it
+# has been. A version already tagged on a different commit is refused, since a
+# second bundle under one version is one Play would reject anyway.
 name: Release Android App Bundle
 
 on:
@@ -24,8 +30,29 @@ jobs:
   release-android:
     needs: gate
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
+
+      - name: Check the version is recorded and not yet released elsewhere
+        id: version
+        run: |
+          VERSION=$(node -p "require('./apps/soundscapes/package.json').version")
+          TAG="soundscapes-v$VERSION"
+          if ! grep -qE "^## $(printf '%s' "$VERSION" | sed 's/\./\\./g')( |$)" apps/soundscapes/CHANGELOG.md; then
+            echo "::error::apps/soundscapes/CHANGELOG.md has no '## $VERSION' entry; write one in the commit that sets the version"
+            exit 1
+          fi
+          git fetch --quiet origin "refs/tags/$TAG:refs/tags/$TAG" 2>/dev/null || true
+          if TAGGED=$(git rev-parse -q --verify "refs/tags/$TAG^{commit}"); then
+            if [ "$TAGGED" != "$GITHUB_SHA" ]; then
+              echo "::error::$TAG already marks ${TAGGED:0:7}; bump the version in apps/soundscapes/package.json to release this commit"
+              exit 1
+            fi
+          fi
+          echo "name=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@v4
         with:
@@ -57,11 +84,17 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.p12"
           PLAY_UPLOAD_KEYSTORE="$RUNNER_TEMP/upload.p12" ./gradlew bundleRelease --no-daemon
 
-      - name: Read the version
-        id: version
-        run: echo "name=$(node -p "require('./apps/soundscapes/package.json').version")" >> "$GITHUB_OUTPUT"
-
       - uses: actions/upload-artifact@v4
         with:
           name: thockdown-soundscapes-${{ steps.version.outputs.name }}-aab
           path: apps/soundscapes/android/app/build/outputs/bundle/release/app-release.aab
+
+      - name: Tag the commit this bundle was built from
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Thockdown Soundscapes $TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$TAG"

@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag (e.g. v0.7.0); created at `target` if it does not exist yet"
+        description: "Release tag (e.g. notes-v0.8.0); created at `target` if it does not exist yet"
         required: true
       target:
         description: "Commit to tag when the tag does not exist yet (blank = the tip of the dispatched ref)"
@@ -58,6 +58,18 @@ jobs:
         run: |
           git fetch --tags --quiet
           if SHA=$(git rev-parse -q --verify "refs/tags/$TAG^{commit}"); then :; else SHA=$(git rev-parse "$TARGET^{commit}"); fi
+          # The same rule scripts/release.mjs keeps by construction: the tag
+          # names the version that commit carries, and that version has its
+          # changelog entry. Here the bump commit was written by hand, so check.
+          VERSION=$(git show "$SHA:apps/notes/package.json" | node -p "JSON.parse(require('fs').readFileSync(0)).version")
+          if [ "$TAG" != "notes-v$VERSION" ]; then
+            echo "::error::tag $TAG does not match apps/notes/package.json's version $VERSION at ${SHA:0:7}; expected notes-v$VERSION"
+            exit 1
+          fi
+          if ! git show "$SHA:apps/notes/CHANGELOG.md" | grep -qE "^## $(printf '%s' "$VERSION" | sed 's/\./\\./g')( |$)"; then
+            echo "::error::apps/notes/CHANGELOG.md at ${SHA:0:7} has no '## $VERSION' entry"
+            exit 1
+          fi
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
 
   gate:
@@ -87,7 +99,7 @@ jobs:
           # Continue the "Alpha Release #N" numbering, ignoring this tag's own
           # release (build-mac may already have created one titled by tag).
           NEXT=$(gh release list -R "$GITHUB_REPOSITORY" --limit 100 --json name,tagName \
-            --jq "[.[] | select(.tagName != \"$TAG\") | .name | capture(\"Alpha Release #(?<n>[0-9]+)\") | .n | tonumber] | (max // 0) + 1")
+            --jq "[.[] | select(.tagName != \"$TAG\" and (.tagName | test(\"^(notes-)?v[0-9]\"))) | .name | capture(\"Alpha Release #(?<n>[0-9]+)\") | .n | tonumber] | (max // 0) + 1")
           TITLE="Alpha Release #$NEXT"
           echo "title: $TITLE"
           if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then

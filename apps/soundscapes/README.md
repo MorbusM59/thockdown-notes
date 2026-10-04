@@ -213,7 +213,11 @@ which Google checks before re-signing the app with its own key. Run
 `apps/soundscapes/package.json`'s and the versionCode is derived from it
 (major x 10000 + minor x 100 + patch, in `app/build.gradle`), so every build
 of a commit carries the same numbers and Play, which requires each upload to
-be higher than the last, needs a new version for a new upload. Download
+be higher than the last, needs a new version for a new upload. The commit that
+sets the version also adds its `## <version>` entry to
+`apps/soundscapes/CHANGELOG.md`; the workflow refuses a version without one,
+refuses a version already tagged on another commit, and tags the commit it
+built as `soundscapes-v<version>` once the bundle exists. Download
 the artifact, unzip it, upload the `.aab`. The privacy policy the listing
 links to is `apps/soundscapes/PRIVACY.md`. The app has no INTERNET permission: it loads
 its own files and renders on the device, and declaring none keeps the data

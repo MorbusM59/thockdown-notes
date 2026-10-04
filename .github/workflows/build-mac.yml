@@ -11,7 +11,7 @@ on:
   # at the tagged commit, so a broken pipeline can't be re-run against its own
   # tag. Dispatching from main runs the *current* workflow, while `tag` selects
   # which source to check out and which release to attach to -- i.e. "rebuild
-  # the DMG for v0.5.8 with the fixed pipeline".
+  # the DMG for notes-v0.8.0 with the fixed pipeline".
   workflow_dispatch:
     inputs:
       tag:
@@ -19,8 +19,10 @@ on:
         required: false
         default: ""
   push:
+    # Only the desktop app's release tags (scripts/release.mjs). The bare `v*`
+    # tags before 0.8.0 are history and are never pushed again.
     tags:
-      - "v*"
+      - "notes-v*"
 
 # Without this the job's GITHUB_TOKEN is read-only (the repo default), and the
 # upload fails with "Resource not accessible by integration" *after* a
@@ -36,7 +38,7 @@ jobs:
     env:
       # The release this run belongs to: the pushed tag, or the dispatch input.
       # Empty means "build only, attach to nothing".
-      TARGET_TAG: ${{ inputs.tag || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || '' }}
+      TARGET_TAG: ${{ inputs.tag || (startsWith(github.ref, 'refs/tags/notes-v') && github.ref_name) || '' }}
 
     steps:
       - name: Check out repo
