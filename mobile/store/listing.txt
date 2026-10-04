@@ -1,0 +1,38 @@
+Title:
+Thockdown Soundscapes
+
+Short description (80 characters at most):
+Procedurally generated soundscapes for a peaceful night. No sneaky/shady stuff.
+
+Full description (4000 characters at most; plain text, Play renders no Markdown):
+Thockdown Soundscapes is a standalone ambient sound engine taken from Thockdown Notes, an immersive cross-platform typing app I have been working on. (It hasn't been released yet, sorry.)
+
+Full disclosure: development of this app has been heavily AI-assisted, but it is fully based on and meticulously directed by my own design vision. I simply wouldn't ever have had the time to execute on it on my own without AI. It is, after all, a pure hobby project.
+
+WHY THIS APP?
+With that out of the way, let's get into what makes it special: Thockdown Soundscapes doesn't rely on any pre-recorded sound samples. Instead, every sound layer is created live, from scratch, using noise generators and basic sound synthesis. This opens up endless ways to customize the scene: shape the sounds, their rhythm, the environment they are placed in and much more. The result feels anything but synthetic. With a bit of exploration, you can craft a highly organic, atmospherically dense, living and breathing cosmos: your very own dream sphere to spend the night in. Or you can just pick one of the handful I made for you. :)
+
+CRAFTING YOUR IMMERSIVE WORLD, ONE LAYER AT A TIME
+In total, you have eighteen layers of sound at your disposal to customize to your heart's content:
+• Six continuous noise layers that can be shaped into winds, ocean currents, waves washing ashore, you name it...
+• Three layers of rain and three layers of thunder to blend drizzle on a tent, soft forest rain, drops on a porch or drips into a puddle with rolling peals of thunder
+• Two highly adjustable layers each for rivers, fires and chimes that can be placed anywhere in the scene
+
+A SHARED REALITY FOR ALL SOUNDS
+Finally, all these layers live in a shared environment and are affected by its weather, its space and its composition. This lets you craft soundscapes as diverse as a raging storm on the ocean, a quiet and peaceful river campsite, a deep dive under the sea, a soft night wind blowing through the forest or the gentle patter of rain on the cobblestones of a small alley. Or a leaky roof in your own apartment, I guess. Be free.
+
+Size and foliage set where you are: a small bare room, a foam-lined studio, a mountain valley with clear echoes, or a dense forest that softens everything into a gentle wash. Brilliance moves the whole sound from warm and soft to crisp and sparkling. Every layer's loudness, tone, movement and position can be changed too.
+
+STORE AND SHARE YOUR OWN WORLDS
+If you decide to explore the possibilities and craft your own soundscapes, you can easily store them and even share them with other users as custom presets. You can also generate and export actual sound files of various lengths to play in any music player outside the app. I won't be upset. Promise!
+
+FALL ASLEEP TO ONE SOUNDSCAPE, WAKE UP TO ANOTHER
+Thockdown Soundscapes lets you schedule your soundscapes with a few taps. 24 hourly slots let you quickly assign soundscapes to play around the clock, gently fading in and blending into each other as the day or night goes on. Override your schedule at any time with the soundscape you want to hear right now, and return to it just as easily.
+
+PLAYS IN THE BACKGROUND
+Yes. Thockdown Soundscapes keep playing with the screen off, with play, skip and stop on the lock screen and in the notification. I mean, that's kind of the whole point.
+
+NO SHADY BUSINESS
+I am not interested in your data or your money. I am somewhat interested in your emotional wellbeing, though (more so if you are a nice person). That's why the app has no ads, doesn't ask you to sign up for anything, doesn't track you and doesn't even access the internet. It does, however, need your permission to show notifications so it can work as a background sound player. And if you want to use the schedule, you'll have to allow the app to set alarms.
+
+Enjoy!
