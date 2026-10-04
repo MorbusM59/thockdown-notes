@@ -4,7 +4,7 @@ import {
   SOUNDSCAPE_FACTORY_PRESETS,
   applySoundscapePreset,
   type SoundscapePreferences,
-} from '../../../src/shared/soundscape'
+} from '@thockdown/soundscape/soundscape'
 import { UNSAVED_ENTRY_ID, currentEntryId, followSession, nextScratch, sessionEntries } from './sessionEntries'
 
 const onPreset = (index: number): SoundscapePreferences => applySoundscapePreset(DEFAULT_SOUNDSCAPE_PREFERENCES, SOUNDSCAPE_FACTORY_PRESETS[index])

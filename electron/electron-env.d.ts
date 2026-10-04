@@ -29,7 +29,7 @@ interface Window {
   thockdownExternalFiles?: import('../src/shared/externalFiles').ExternalFilesApi
   thockdownTextures?: import('../src/shared/textures').TextureCacheApi
   thockdownAudioBounces?: import('../src/shared/audioBounceCache').AudioBounceCacheApi
-  thockdownLoadouts?: import('../src/shared/loadouts').UiLoadoutApi
+  thockdownLoadouts?: import('@thockdown/look/loadouts').UiLoadoutApi
   thockdownAudioPlayer?: import('../src/shared/audioPlayer').AudioPlayerApi
   thockdownTabs?: import('../src/shared/tabs').NoteTabsApi
   thockdownSections?: import('../src/shared/sections').EditorSectionsApi

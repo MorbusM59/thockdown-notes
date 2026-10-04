@@ -1,5 +1,5 @@
 /**
- * Builds the soundscape renderer (src/sound/soundscapeSandbox.ts) as one
+ * Builds the soundscape renderer (packages/soundscape/soundscapeSandbox.ts) as one
  * self-contained IIFE into the Android app's assets, where the native
  * service loads it into a JavaScriptSandbox (SoundscapeRenderer.java).
  * Generated; not committed (android/.gitignore).
@@ -14,7 +14,7 @@ export default defineConfig({
     outDir: path.resolve(__dirname, 'android/app/src/main/assets'),
     emptyOutDir: false,
     lib: {
-      entry: path.resolve(__dirname, '../../src/sound/soundscapeSandbox.ts'),
+      entry: path.resolve(__dirname, '../../packages/soundscape/soundscapeSandbox.ts'),
       formats: ['iife'],
       name: 'SoundscapeRenderer',
       fileName: () => 'soundscape-renderer.js',

@@ -3,11 +3,11 @@ import type * as React from 'react'
 import { useRef } from 'react'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
-import { SoundscapeOptions } from './SoundscapeOptions'
+import { SoundscapeOptions } from '@thockdown/soundscape/SoundscapeOptions'
 import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
-import { exportSoundscapes, importSoundscapes } from './soundscapeFileActions'
-import type { SoundscapePreferences } from '../shared/soundscape'
+import { exportSoundscapes, importSoundscapes } from '@thockdown/soundscape/soundscapeFileActions'
+import type { SoundscapePreferences } from '@thockdown/soundscape/soundscape'
 import {
   CONTINUOUS_DOCUMENT_MAX_THRESHOLD_BLOCKS,
   CONTINUOUS_DOCUMENT_MIN_THRESHOLD_BLOCKS,
@@ -15,7 +15,7 @@ import {
   DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS,
   clampContinuousDocumentThreshold,
 } from '../editor/documentPosition'
-import { type RgbaColor, type HsvaColor, rgbaToCssColor, hsvaToRgba } from '../shared/colorMath'
+import { type RgbaColor, type HsvaColor, rgbaToCssColor, hsvaToRgba } from '@thockdown/look/colorMath'
 import { isTextEntryElement } from '@thockdown/interaction/focusOwnership'
 import type { HighlightColorKey, HighlightColors } from '../shared/highlightColors'
 import {
@@ -64,7 +64,7 @@ import {
   CARET_ANIMATION_PRESETS,
   CARET_ANIMATION_PRESET_KEYS,
   type CaretAnimationPresetKey,
-} from '../shared/caretSettings'
+} from '@thockdown/look/caretSettings'
 import {
   TEXTURE_GRANULARITY_MIN,
   TEXTURE_GRANULARITY_MAX,
@@ -73,7 +73,7 @@ import {
   type TextureSurfaceKey,
   type TextureMaterialsBySurface,
   type TextureMaterialSettings,
-} from '../textures/types'
+} from '@thockdown/look/textureTypes'
 import {
   EDITOR_GLYPH_PADDING_MIN_PX,
   EDITOR_GLYPH_PADDING_MAX_PX,
@@ -169,7 +169,7 @@ import {
   CURSOR_CLICK_BALANCE_MAX,
   CURSOR_CLICK_BALANCE_STEP,
   CURSOR_CLICK_BALANCE_DEFAULT,
-} from '../shared/cursorSettings'
+} from '@thockdown/look/cursorSettings'
 import {
   GLAZE_GLOOM_OPACITY_MAX,
   GLAZE_LINEAR_OPACITY_MAX,
@@ -177,9 +177,9 @@ import {
   GLAZE_SHEEN_OPACITY_MAX,
   DEFAULT_GLAZE_SETTINGS,
   type GlazeSettings,
-} from '../shared/glaze'
-import { LOADOUT_FACTORY_PRESET_COUNT, type UiLoadoutEntry } from '../shared/loadouts'
-import { DARK_PRESET_ICONS, DARK_PRESET_THEMES, LIGHT_PRESET_ICONS, LIGHT_PRESET_THEMES } from '../shared/presets'
+} from '@thockdown/look/glaze'
+import { LOADOUT_FACTORY_PRESET_COUNT, type UiLoadoutEntry } from '@thockdown/look/loadouts'
+import { DARK_PRESET_ICONS, DARK_PRESET_THEMES, LIGHT_PRESET_ICONS, LIGHT_PRESET_THEMES } from '@thockdown/look/presets'
 import { typingSoundManager } from '../sound/TypingSoundManager'
 import {
   DEFAULT_WHEEL_SPIN_DAMPEN_DIVISOR,

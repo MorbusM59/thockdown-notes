@@ -1,4 +1,4 @@
-import type { TextureSurfaceKey } from '../textures/types';
+import type { TextureSurfaceKey } from '@thockdown/look/textureTypes';
 
 export const TEXTURE_CHANNELS = {
   getCached: 'texture:cache:get',

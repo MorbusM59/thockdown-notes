@@ -3,7 +3,7 @@
  * shared/loadoutTheme.ts's themeFrame. Shared by the desktop app and the
  * mobile soundscape app, so both stack them the same way.
  */
-import type { ThemeFrame, ThemeGlazeImages } from '../shared/loadoutTheme'
+import type { ThemeFrame, ThemeGlazeImages } from './loadoutTheme'
 
 /**
  * The glaze layers, for inside the filter wrapper. Their images come from

@@ -47,14 +47,14 @@ import {
   type SoundscapePreferences,
   type SoundscapePreset,
   type SoundscapeSettings,
-} from '../shared/soundscape'
-import { spaceDecaySec } from '../shared/soundscapeSpace'
-import { CHIME_SCALE_COUNT, CHIME_SCALES } from '../shared/soundscapeChimeScales'
+} from './soundscape'
+import { spaceDecaySec } from './soundscapeSpace'
+import { CHIME_SCALE_COUNT, CHIME_SCALES } from './soundscapeChimeScales'
 import { armHold, HOLD_COMMIT_MS, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
-import { newSoundscapeId, neutralSoundscape } from '../shared/soundscapeFile'
+import { newSoundscapeId, neutralSoundscape } from './soundscapeFile'
 import { exportSoundscapes } from './soundscapeFileActions'
 import { useNonPassiveWheel } from '@thockdown/interaction/useNonPassiveWheel'
-import { toDisplayLevel } from '../shared/musicSoundOptions'
+import { toDisplayLevel } from './musicSoundOptions'
 import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
 

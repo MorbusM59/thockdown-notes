@@ -1,16 +1,3 @@
-/* =============================================================================
-   Sidebar
-   ============================================================================= */
-
-.notes-sidebar {
-  min-width:      var(--sidebar-min-width);
-  display:        flex;
-  flex-direction: column;
-  height:         100%;
-  gap:            var(--spacing-regular);
-  padding: var(--spacing-regular) var(--sidebar-padding-right) var(--spacing-regular) 0;
-}
-
 .sidebar-scroll-frame {
   position:    relative;
   flex:        1 1 auto;

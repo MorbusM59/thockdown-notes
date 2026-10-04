@@ -2,10 +2,10 @@
 
 The desktop soundscape panel and engine, alone, as an Android app (iOS later).
 The whole interface is `SoundscapeControls` from
-`src/sidebar/SoundscapeOptions.tsx` plus an on/off switch and a master
+`packages/soundscape/SoundscapeOptions.tsx` plus an on/off switch and a master
 volume, which the desktop keeps on the audio bar instead. Nothing here is a
-copy: the panel, the engine (`src/sound/SoundscapeEngine.ts`), the worklet
-(`src/sound/soundscape-generator.js`) and the settings model
+copy: the panel, the engine (`packages/soundscape/SoundscapeEngine.ts`), the worklet
+(`packages/soundscape/soundscape-generator.js`) and the settings model
 (`src/shared/soundscape*.ts`) are the desktop's own files, so a change there
 reaches both.
 
@@ -17,15 +17,15 @@ or down steps through the current mode's five, showing the preset's icon
 while it does and for two seconds after; Paper in light
 mode and Ancient in dark by default; kept in
 localStorage by `preferencesStore.ts`). They are drawn by the same code the
-desktop uses (`src/shared/loadoutTheme.ts` for the variables, filter and
-overlays, `src/components/ThemeLayers.tsx` for the glaze and blend layers;
-icons and names from `src/shared/presets.ts`), inside the same frame
+desktop uses (`packages/look/loadoutTheme.ts` for the variables, filter and
+overlays, `packages/look/ThemeLayers.tsx` for the glaze and blend layers;
+icons and names from `packages/look/presets.ts`), inside the same frame
 elements, so a change to a preset reaches both. Textures are the one part of
 a preset the phone does not draw: they are rendered by a worker and cached by
 the desktop's main process. The desktop's custom layouts are not offered.
 
 ## Playback: what is shared, and what is Android's alone
-The SOUND is shared: the generator (`src/sound/soundscape-generator.js`),
+The SOUND is shared: the generator (`packages/soundscape/soundscape-generator.js`),
 the settings model, the mix's numbers (`soundscapeMix.ts`: mix gain, the
 space's return, the compressor's curve), the impulse response
 (`soundscapeSpace.ts`: size and foliage), brilliance's bands and loudness
@@ -40,12 +40,12 @@ crossfade between two voices. HOW it reaches the speaker is not:
   and re-rendered it, and a room change outlasted the splice margin and
   crackled. Nothing on the desktop needed rendering ahead.
 - **On Android** the soundscape is rendered AHEAD of playback by
-  `src/sound/soundscapeRenderAhead.ts` (the generator, then the mix in
+  `packages/soundscape/soundscapeRenderAhead.ts` (the generator, then the mix in
   JavaScript, `soundscapeMix.ts` -- the space as a partitioned convolution,
   the mix gain, the bus compressor -- because the sandbox has no Web
   Audio), keeping ten seconds of finished audio queued, in the app's native
   service, never in the WebView: the
-  same renderer, built as one script (`src/sound/soundscapeSandbox.ts` ->
+  same renderer, built as one script (`packages/soundscape/soundscapeSandbox.ts` ->
   `app/src/main/assets/soundscape-renderer.js` in the Android project, by
   `apps/soundscapes/vite.renderer.config.ts`), runs
   in a JavaScriptSandbox (`androidx.javascriptengine`, a V8 isolate the app
@@ -168,7 +168,7 @@ session, controls, clips or saving to files.
   interrupt a minute later, and cancelling it cancels the clip. At the
   soundscape's own level: the listener's volume is not part of it.
 - EXPORT and IMPORT share one button in the Master row (a tap imports, a
-  long press exports) and are the desktop's (`src/sidebar/soundscapeFileActions.ts`)
+  long press exports) and are the desktop's (`packages/soundscape/soundscapeFileActions.ts`)
   through a phone implementation of `SoundscapeFileApi`
   (`soundscapeFiles.ts`): saved through the system's "Save as" dialog (the
   Storage Access Framework, so the reader picks folder and name, as on the

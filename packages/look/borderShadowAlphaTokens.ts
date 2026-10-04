@@ -1,6 +1,6 @@
 // CSS custom property names whose values get their alpha channel scaled by
 // the "Border alpha" / "Box shadow alpha" sliders in Borders.
-// Every border-color and box-shadow token defined in styles/tokens.css
+// Every border-color and box-shadow token defined in tokens.css (this package)
 // (including their `-flip` counterparts, since `.shadow-flip` re-points the
 // base token at its flip variant rather than duplicating it) must be listed
 // here or it won't respond to the sliders.

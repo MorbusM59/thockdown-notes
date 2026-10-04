@@ -10,7 +10,7 @@ import org.json.JSONObject;
  * Renders the soundscape in the app's own process, ahead of playback, into
  * SoundscapeAudioOutput.
  *
- * The renderer is the web build's own code (src/sound/soundscapeSandbox.ts,
+ * The renderer is the web build's own code (packages/soundscape/soundscapeSandbox.ts,
  * built into assets/soundscape-renderer.js): the generator, the mix and the
  * render-ahead the desktop runs in a worker, run here in a
  * JavaScriptSandbox (androidx.javascriptengine), a V8 isolate the app owns

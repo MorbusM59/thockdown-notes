@@ -3,14 +3,14 @@
  * builds and reads the .tds text (soundscapeFile.ts); the main
  * process only asks where (window.thockdownSoundscapeFiles).
  */
-import type { SoundscapePreferences, SoundscapePreset } from '../shared/soundscape'
+import type { SoundscapePreferences, SoundscapePreset } from './soundscape'
 import {
   SOUNDSCAPE_FILE_EXTENSION,
   buildSoundscapeFile,
   mergeImportedSoundscapes,
   newSoundscapeId,
   parseSoundscapeFile,
-} from '../shared/soundscapeFile'
+} from './soundscapeFile'
 
 /** Save `presets` to a .tds file the reader picks; `defaultName` without extension. */
 export async function exportSoundscapes(presets: readonly SoundscapePreset[], defaultName: string): Promise<void> {

@@ -26,7 +26,7 @@ export const HIGH_IMPACT = [
   /^apps\/soundscapes\/android\//,
   /(^|\/)capacitor\.config\.ts$/,
   /^apps\/soundscapes\/src\/(backgroundAudioHost|nativeSoundscapePlayback)\.ts$/,
-  /^src\/sound\/(soundscapeRenderAhead|soundscapeSandbox|soundscapeGeneratorHost|halfScalePcm)\.ts$/,
+  /^packages\/soundscape\/(soundscapeRenderAhead|soundscapeSandbox|soundscapeGeneratorHost|halfScalePcm)\.ts$/,
   /(^|\/)package(-lock)?\.json$/,
   /^\.github\/workflows\//,
   /^scripts\/(verify|impact|land|release)\.mjs$/,

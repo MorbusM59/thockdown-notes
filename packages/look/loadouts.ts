@@ -1,4 +1,4 @@
-import type { TextureMaterialsBySurface } from '../textures/types';
+import type { TextureMaterialsBySurface } from './textureTypes';
 import type { GlazeSettings } from './glaze';
 import type { CaretAnimationPresetKey } from './caretSettings';
 

@@ -1,32 +1,5 @@
 @import "tailwindcss";
 
-* {
-  box-sizing: border-box;
-}
-
-:root {
-  font-family: inherit;
-  line-height: 1.5;
-  font-weight: 400;
-
-  color-scheme: light;
-  background-color: #f9f6f3;
-
-  /* Every bundled family in ./fonts ships upright-only (no italic .woff2),
-     so any italic text -- markdown emphasis, the italic UI labels in
-     tags.css -- renders slanted only if the browser is allowed to synthesize
-     an oblique. `none` here suppressed that app-wide and left those upright;
-     `style` turns synthetic italics back on for every font and every surface.
-     Weight synthesis stays off by default (faked bold is far uglier than a
-     skewed upright), so this is deliberately `style`, not `style weight` --
-     individual display faces opt into weight synthesis themselves in
-     markdown.css. */
-  font-synthesis: style;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
 :root {
   /* Core Editor Variables */
   --editor-font: 'Syne Mono', monospace;
@@ -58,20 +31,6 @@
   --markdown-code-color: rgba(255,0,127,1.0);
   --markdown-checked-color: rgba(0,255,0,1.0);
   --markdown-unchecked-color: rgba(255,0,0,1.0);
-}
-
-body {
-  margin: 0;
-  overflow: hidden;
-  width: 100vw;
-  height: 100vh;
-  /* UI chrome font (Options > UI Font) -- editor/render text sets its own
-     font-family explicitly further down, so it's unaffected by this. */
-  font-family: var(--ui-font-family);
-}
-#root {
-  width: 100%;
-  height: 100%;
 }
 
 /* 
@@ -110,73 +69,6 @@ body {
 
   /* FLUSH ALIGNMENT: Start exactly at 0px 0px so grid lines land perfectly on 24px row boundaries */
   background-position: 0px 0px;
-}
-
-/* Dedicated editor scrollbar rail (lives in the --editor-scrollbar-slot-width zone).
-   A scroller with a custom scrollbar draws no native one. Scoped under
-   .app-shell so it OUTRANKS base.css's styling of every scrollbar in the
-   shell (`.app-shell *`), rather than tying with it and leaving the winner
-   to stylesheet load order: the desktop happened to load this file last, the
-   mobile app loads it first, and drew both bars. */
-.thockdown-custom-scrollbar,
-.app-shell .thockdown-custom-scrollbar {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.thockdown-custom-scrollbar::-webkit-scrollbar,
-.app-shell .thockdown-custom-scrollbar::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-}
-
-.thockdown-scroll-rail {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  /* Left padding is the gap to the editor shell, driven by --spacing-regular
-   * so it grows/shrinks with the user's spacing setting. The slot itself
-   * (--editor-scrollbar-slot-width) grows by the same amount, so the track/
-   * thumb always keep their full --canonical-scroll-thickness width. */
-  padding: 0 0 0 var(--spacing-regular);
-  display: flex;
-  align-items: stretch;
-  justify-content: flex-end;
-  z-index: 14;
-}
-
-.thockdown-scroll-track {
-  position: relative;
-  width: var(--canonical-scroll-thickness);
-  height: 100%;
-  border: 1px solid var(--canonical-scroll-track-border);
-  border-radius: var(--border-radius-regular);
-  box-shadow: var(--box-shadow-inverted-light);
-  background: var(--canonical-scroll-track-bg);
-}
-
-.thockdown-scroll-thumb {
-  position: absolute;
-  /* Offsets are measured inside the 1px track border. gap - 2px leaves 2px of
-     space inside that border on either side, making the thumb
-     handle-thickness + 2px wide -- the same size the utility slider thumbs
-     declare (controls.css). The raw gap left it 6px wide, 4px short of that. */
-  left: calc(var(--canonical-scroll-handle-gap) - 2px);
-  right: calc(var(--canonical-scroll-handle-gap) - 2px);
-  border: 1px solid var(--canonical-handle-border);
-  border-radius: var(--border-radius-small);
-  background: var(--canonical-handle-bg);
-  box-shadow: var(--box-shadow-regular-light);
-  cursor: ns-resize;
-}
-
-.thockdown-scroll-thumb:hover.is-inactive,
-.thockdown-scroll-thumb.is-dragging.is-inactive,
-.thockdown-scroll-thumb.is-inactive {
-  border-color: rgba(81, 73, 66, 0.30);
-  background: var(--canonical-handle-bg);
-  cursor: default;
 }
 
 /* Caret Box Tricks */

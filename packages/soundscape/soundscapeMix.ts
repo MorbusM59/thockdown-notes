@@ -14,9 +14,9 @@
  * those are applied by the output, live, so they never wait on the audio
  * already rendered ahead.
  */
-import type { SoundscapeSpaceSettings } from '../shared/soundscape';
+import type { SoundscapeSpaceSettings } from './soundscape';
 import { biquadCoefficients, brillianceCurve, BRILLIANCE_BANDS, StereoBiquad } from './soundscapeBrilliance';
-import { buildSoundscapeImpulseResponse, soundscapeRoomKey, spacePreDelaySec, SPACE_MAX_LENGTH_SEC } from '../shared/soundscapeSpace';
+import { buildSoundscapeImpulseResponse, soundscapeRoomKey, spacePreDelaySec, SPACE_MAX_LENGTH_SEC } from './soundscapeSpace';
 import { DynamicsCompressor, type CompressorSettings } from './dynamicsCompressor';
 import { BLOCK, PartitionedConvolver } from './partitionedConvolver';
 

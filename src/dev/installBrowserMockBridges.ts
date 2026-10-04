@@ -1,5 +1,5 @@
 import type { AppState, AppStateApi, WindowState } from '../shared/appState'
-import type { UiLayoutLoadout, UiLoadoutApi, UiLoadoutEntry, UiLoadoutListResult, UiLoadoutMode } from '../shared/loadouts'
+import type { UiLayoutLoadout, UiLoadoutApi, UiLoadoutEntry, UiLoadoutListResult, UiLoadoutMode } from '@thockdown/look/loadouts'
 import {
   idKind,
   idMode,
@@ -7,13 +7,13 @@ import {
   LOADOUT_DEFAULT_CUSTOM_ID_ABS,
   LOADOUT_PENDING_ID_ABS,
   LOADOUT_FIRST_CUSTOM_ID_ABS,
-} from '../shared/loadouts'
+} from '@thockdown/look/loadouts'
 import {
   LIGHT_FACTORY_PRESETS,
   DARK_FACTORY_PRESETS,
   DEFAULT_CUSTOM_LIGHT,
   DEFAULT_CUSTOM_DARK,
-} from '../shared/presets'
+} from '@thockdown/look/presets'
 import type { TextureCacheApi, TextureCacheHit, TextureCachePurgeRequest, TextureCacheRequest } from '../shared/textures'
 import type { FileSyncApi } from '../shared/fileSync'
 import type {

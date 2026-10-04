@@ -1,5 +1,5 @@
 /**
- * Runs the soundscape generator (src/sound/soundscape-generator.js) outside an
+ * Runs the soundscape generator (packages/soundscape/soundscape-generator.js) outside an
  * AudioWorklet: in Android's render-ahead renderer (soundscapeSandbox.ts,
  * soundscapeRenderAhead.ts) and in the test harness
  * (soundscape-generator.harness.ts). The desktop runs it in a real

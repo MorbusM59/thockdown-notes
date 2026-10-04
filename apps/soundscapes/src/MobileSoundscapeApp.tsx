@@ -14,14 +14,14 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
-import { soundscapeConfiguration, soundscapeEngine } from '../../../src/sound/SoundscapeEngine'
-import { resumedOutputContext } from '../../../src/sound/audioOutputBus'
+import { soundscapeConfiguration, soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
+import { resumedOutputContext } from '@thockdown/soundscape/audioOutputBus'
 import {
   SOUNDSCAPE_FACTORY_PRESETS,
   type SoundscapePreferences,
   type SoundscapeSettings,
-} from '../../../src/shared/soundscape'
-import { exportSoundscapes, importSoundscapes } from '../../../src/sidebar/soundscapeFileActions'
+} from '@thockdown/soundscape/soundscape'
+import { exportSoundscapes, importSoundscapes } from '@thockdown/soundscape/soundscapeFileActions'
 import {
   DARK_FACTORY_PRESETS,
   DARK_PRESET_ICONS,
@@ -29,11 +29,11 @@ import {
   LIGHT_FACTORY_PRESETS,
   LIGHT_PRESET_ICONS,
   LIGHT_PRESET_THEMES,
-} from '../../../src/shared/presets'
+} from '@thockdown/look/presets'
 import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
-import { applyDocumentTheme, themeFrame } from '../../../src/shared/loadoutTheme'
-import { ThemeBlendOverlays, ThemeGlazeLayers } from '../../../src/components/ThemeLayers'
+import { applyDocumentTheme, themeFrame } from '@thockdown/look/loadoutTheme'
+import { ThemeBlendOverlays, ThemeGlazeLayers } from '@thockdown/look/ThemeLayers'
 import { nativeSoundscape, type RegularMode, type SessionState, type SoundSource } from './backgroundAudioHost'
 import { nativePlayback } from './playbackMode'
 import {
@@ -55,7 +55,7 @@ import { allPresets, sanitizeSchedule, scheduleEvents, type Schedule } from './s
 import { ScheduleGrid } from './ScheduleGrid'
 import { LookButton } from './LookButton'
 import { helpFor } from './helpText'
-import { SoundscapeControls, SubsectionHelp } from '../../../src/sidebar/SoundscapeOptions'
+import { SoundscapeControls, SubsectionHelp } from '@thockdown/soundscape/SoundscapeOptions'
 import { PageScrollbar } from './PageScrollbar'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { installSoundscapeFiles } from './soundscapeFiles'

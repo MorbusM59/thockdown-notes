@@ -10,9 +10,9 @@ import type {
 } from '../src/shared/appState';
 import { sanitizeGameSave } from '../src/adventure/save';
 import { isPlaylistSlot } from '../src/shared/audioPlayer';
-import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '../src/shared/glaze';
-import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureColorHsva, type TextureMaterialSettings, type TextureMaterialsBySurface, type TextureSurfaceKey } from '../src/textures/types';
-import { sanitizeSoundscapePreferences } from '../src/shared/soundscape';
+import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '@thockdown/look/glaze';
+import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureColorHsva, type TextureMaterialSettings, type TextureMaterialsBySurface, type TextureSurfaceKey } from '@thockdown/look/textureTypes';
+import { sanitizeSoundscapePreferences } from '@thockdown/soundscape/soundscape';
 import { DEFAULT_UI_FONT_KEY, DEFAULT_UI_FONT_SCALE, UI_FONT_OPTIONS, UI_FONT_SCALE_MIN, UI_FONT_SCALE_MAX, roundUiFontScale, type UiFontKey } from '../src/shared/UiTypography';
 
 const APP_STATE_FILE = 'app-state.json';

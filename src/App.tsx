@@ -6,8 +6,8 @@ import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent,
 import ReactMarkdown from 'react-markdown'
 import { SidebarOptionsPanel } from './sidebar/SidebarOptionsPanel'
 import { AudioControls } from './components/AudioControls'
-import { soundscapeEngine } from './sound/SoundscapeEngine'
-import { RESTORE_FADE_IN_SEC } from './sound/audioOutputBus'
+import { soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
+import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
 import { isPlaylistButtonSlot } from './shared/audioPlayer'
 import { isTextEntryElement, keepFocusOnPress, mayHoldKeyboard } from '@thockdown/interaction/focusOwnership'
 import { focusEscapeHoldRing } from './editorSection/escapeHoldRingFocus'
@@ -28,21 +28,21 @@ import {
   typingSoundManager,
 } from './sound/TypingSoundManager'
 import type { PersistedMenuState, PersistedSidebarViewState } from './shared/appState'
-import { DEFAULT_SOUNDSCAPE_PREFERENCES, sanitizeSoundscapePreferences, type SoundscapePreferences } from './shared/soundscape'
-import { DARK_FACTORY_PRESETS, LIGHT_FACTORY_PRESETS } from './shared/presets'
+import { DEFAULT_SOUNDSCAPE_PREFERENCES, sanitizeSoundscapePreferences, type SoundscapePreferences } from '@thockdown/soundscape/soundscape'
+import { DARK_FACTORY_PRESETS, LIGHT_FACTORY_PRESETS } from '@thockdown/look/presets'
 import {
   DEFAULT_GLAZE_SETTINGS,
   sanitizeGlazeSettings,
   type GlazeSettings,
-} from './shared/glaze'
-import type { UiLayoutLoadout, UiLoadoutEntry, UiLoadoutMode } from './shared/loadouts'
+} from '@thockdown/look/glaze'
+import type { UiLayoutLoadout, UiLoadoutEntry, UiLoadoutMode } from '@thockdown/look/loadouts'
 import {
   idKind,
   idMode,
   modeSign,
   LOADOUT_DEFAULT_CUSTOM_ID_ABS,
   LOADOUT_FACTORY_PRESET_COUNT,
-} from './shared/loadouts'
+} from '@thockdown/look/loadouts'
 import type { NoteSummary } from './shared/noteLifecycle'
 import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote, isSameNoteSummary } from './shared/noteLifecycle'
 import { adoptNoteSummaries, keepIfUnchanged, withSavedNote } from './shared/noteContentStore'
@@ -62,7 +62,7 @@ import {
   rgbaToHex,
   rgbaToHsva,
   hsvaToRgba,
-} from './shared/colorMath'
+} from '@thockdown/look/colorMath'
 import type { HighlightColorKey, HighlightColors } from './shared/highlightColors'
 import {
   type CustomCursorSettings,
@@ -101,7 +101,7 @@ import {
   CURSOR_CLICK_MIN_HOLD_MAX_MS,
   CURSOR_CLICK_BALANCE_MIN,
   CURSOR_CLICK_BALANCE_MAX,
-} from './shared/cursorSettings'
+} from '@thockdown/look/cursorSettings'
 import {
   DEFAULT_CARET_SETTINGS,
   buildCaretBlinkKeyframesCss,
@@ -114,7 +114,7 @@ import {
   CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS,
   CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT,
   type CaretAnimationPresetKey,
-} from './shared/caretSettings'
+} from '@thockdown/look/caretSettings'
 import {
   BORDER_RADIUS_REGULAR_MIN_PX,
   BORDER_RADIUS_REGULAR_MAX_PX,
@@ -125,8 +125,8 @@ import {
   BOX_SHADOW_ALPHA_PERCENT_MIN,
   BOX_SHADOW_ALPHA_PERCENT_MAX,
 } from './shared/uiBounds'
-import { applyDocumentTheme, themeFrame } from './shared/loadoutTheme'
-import { ThemeBlendOverlays, ThemeGlazeLayers } from './components/ThemeLayers'
+import { applyDocumentTheme, themeFrame } from '@thockdown/look/loadoutTheme'
+import { ThemeBlendOverlays, ThemeGlazeLayers } from '@thockdown/look/ThemeLayers'
 import { DEBUG_TAG_NAME, PROTECTED_TAGS, normalizeTagName } from './shared/tags'
 import { EditorSection } from './editorSection/EditorSection'
 import { EditorToolbar } from './toolbar/EditorToolbar'
@@ -247,7 +247,7 @@ import {
   TEXTURE_GRANULARITY_MAX,
   TEXTURE_VSTEPS_MIN,
   TEXTURE_VSTEPS_MAX,
-} from './textures/types'
+} from '@thockdown/look/textureTypes'
 import { TEXTURE_ALGORITHM_VERSION, TEXTURE_REPEAT_TILE_SIZE, useTextureSurface } from './textures/useTextureSurface'
 import { armHold, HOLD_COMMIT_MS, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { noteRightPressAction } from './editorSection/useNoteProtectionActions'

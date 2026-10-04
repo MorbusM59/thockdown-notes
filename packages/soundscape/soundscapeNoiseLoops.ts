@@ -1,8 +1,8 @@
 /**
  * The noise the soundscape's noise layers are made of, rendered once per
  * sample rate on the main thread and handed to the generator's render worker
- * when it is created (src/sound/SoundscapeEngine.ts,
- * src/sound/soundscape-generator.js).
+ * when it is created (packages/soundscape/SoundscapeEngine.ts,
+ * packages/soundscape/soundscape-generator.js).
  *
  * A noise layer reads one of these loops rather than generating noise per
  * sample: noise has no features for an ear to recognise, each layer reads

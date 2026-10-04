@@ -12,7 +12,7 @@
  * The page is current on an entry when its settings sound the same as it
  * (soundscapeSettingsSignature, which ignores solo).
  */
-import { soundscapeConfiguration } from '../../../src/sound/SoundscapeEngine'
+import { soundscapeConfiguration } from '@thockdown/soundscape/SoundscapeEngine'
 import {
   SOUNDSCAPE_FACTORY_PRESETS,
   cloneSettings,
@@ -20,7 +20,7 @@ import {
   soundscapeSettingsSignature,
   type SoundscapePreferences,
   type SoundscapeSettings,
-} from '../../../src/shared/soundscape'
+} from '@thockdown/soundscape/soundscape'
 import type { SessionEntry, SessionState } from './backgroundAudioHost'
 
 export const UNSAVED_ENTRY_ID = 'unsaved'

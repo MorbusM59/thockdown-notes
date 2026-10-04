@@ -13,7 +13,7 @@ release can be checked against what the listing promises.
 
 The listing makes claims the app has to keep true: no internet access (no
 INTERNET permission in the manifest), eighteen layers (`ROSTER_COUNTS` in
-`src/shared/soundscape.ts`), and the notification and alarm permissions it
+`packages/soundscape/soundscape.ts`), and the notification and alarm permissions it
 names. A change to any of those is a change to `listing.txt` as well.
 
 The privacy policy the listing links to is `../PRIVACY.md`.

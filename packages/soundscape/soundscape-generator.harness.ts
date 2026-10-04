@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { createSoundscapeChannel, SOUNDSCAPE_CHANNEL_ROSTER, DEFAULT_SOUNDSCAPE_WEATHER, type SoundscapeChannelSettings, type SoundscapeWeatherSettings } from '../shared/soundscape';
-import { toGeneratorChannel } from '../shared/soundscapeDsp';
-import { buildNoiseLoops, noiseLoopGains, type NoiseLoops } from '../shared/soundscapeNoiseLoops';
+import { createSoundscapeChannel, SOUNDSCAPE_CHANNEL_ROSTER, DEFAULT_SOUNDSCAPE_WEATHER, type SoundscapeChannelSettings, type SoundscapeWeatherSettings } from './soundscape';
+import { toGeneratorChannel } from './soundscapeDsp';
+import { buildNoiseLoops, noiseLoopGains, type NoiseLoops } from './soundscapeNoiseLoops';
 import { createGeneratorBlock, hostGenerator } from './soundscapeGeneratorHost';
 
 export const generatorSource = readFileSync(fileURLToPath(new URL('./soundscape-generator.js', import.meta.url)), 'utf8');

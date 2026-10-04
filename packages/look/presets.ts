@@ -9,7 +9,7 @@
 //   DEFAULT_CUSTOM_LIGHT         -> light id  +6
 //   DEFAULT_CUSTOM_DARK          -> dark id   -6
 
-import { DEFAULT_TEXTURE_MATERIALS, type TextureMaterialSettings, type TextureColorHsva } from '../textures/types';
+import { DEFAULT_TEXTURE_MATERIALS, type TextureMaterialSettings, type TextureColorHsva } from './textureTypes';
 import { DEFAULT_GLAZE_SETTINGS } from './glaze';
 import { DEFAULT_CUSTOM_CURSOR_SETTINGS } from './cursorSettings';
 import { DEFAULT_CARET_SETTINGS } from './caretSettings';

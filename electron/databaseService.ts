@@ -1,4 +1,4 @@
-import { buildObjectDiff, formatPresetLine, formatPresetScalar, parsePresetLines, stableStringify } from '../src/shared/presetFile';
+import { buildObjectDiff, formatPresetLine, formatPresetScalar, parsePresetLines, stableStringify } from '@thockdown/soundscape/presetFile';
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, promises as fs } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -15,7 +15,7 @@ import type {
   UiLoadoutEntry,
   UiLoadoutListResult,
   UiLoadoutMode,
-} from '../src/shared/loadouts';
+} from '@thockdown/look/loadouts';
 import {
   idKind,
   idMode,
@@ -24,15 +24,15 @@ import {
   LOADOUT_PENDING_ID_ABS,
   LOADOUT_FIRST_CUSTOM_ID_ABS,
   LOADOUT_MAX_CUSTOM_SLOTS,
-} from '../src/shared/loadouts';
+} from '@thockdown/look/loadouts';
 import {
   LIGHT_FACTORY_PRESETS,
   DARK_FACTORY_PRESETS,
   NEUTRAL_BASE,
   DEFAULT_CUSTOM_LIGHT,
   DEFAULT_CUSTOM_DARK,
-} from '../src/shared/presets';
-import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '../src/shared/glaze';
+} from '@thockdown/look/presets';
+import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '@thockdown/look/glaze';
 import {
   DEFAULT_CUSTOM_CURSOR_SETTINGS,
   CURSOR_DOT_COUNT_MIN, CURSOR_DOT_COUNT_MAX,
@@ -52,7 +52,7 @@ import {
   CURSOR_CLICK_MAX_SPEED_MIN, CURSOR_CLICK_MAX_SPEED_MAX,
   CURSOR_CLICK_MIN_HOLD_MIN_MS, CURSOR_CLICK_MIN_HOLD_MAX_MS,
   CURSOR_CLICK_BALANCE_MIN, CURSOR_CLICK_BALANCE_MAX,
-} from '../src/shared/cursorSettings';
+} from '@thockdown/look/cursorSettings';
 import {
   DEFAULT_CARET_SETTINGS,
   isCaretAnimationPresetKey,
@@ -63,8 +63,8 @@ import {
   CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS,
   CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS,
   CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT,
-} from '../src/shared/caretSettings';
-import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureMaterialSettings, type TextureMaterialsBySurface } from '../src/textures/types';
+} from '@thockdown/look/caretSettings';
+import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureMaterialSettings, type TextureMaterialsBySurface } from '@thockdown/look/textureTypes';
 import type { MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../src/shared/audioPlayer';
 import type { ReviewFlagEntry, ReviewFlagWrite, ReviewFlagRemap } from '../src/shared/reviewFlags';
 import { AUDIO_EXTENSIONS, emptyPlaylistCounts, isPlaylistSlot, MAX_PLAYLIST_SLOT } from '../src/shared/audioPlayer';
@@ -3030,7 +3030,7 @@ export class DatabaseService {
   }
 
   // -------------------------------------------------------------------------
-  // UI Loadouts — see src/shared/loadouts.ts for the id/mode/kind scheme.
+  // UI Loadouts — see packages/look/loadouts.ts for the id/mode/kind scheme.
   // -------------------------------------------------------------------------
 
   private ensureLoadoutsSeeded(): void {

@@ -3,9 +3,9 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { DatabaseService, normalizeUiLayoutLoadout } from './databaseService'
-import { LIGHT_FACTORY_PRESETS, NEUTRAL_BASE } from '../src/shared/presets'
-import { DEFAULT_CARET_SETTINGS } from '../src/shared/caretSettings'
-import type { UiLayoutLoadout } from '../src/shared/loadouts'
+import { LIGHT_FACTORY_PRESETS, NEUTRAL_BASE } from '@thockdown/look/presets'
+import { DEFAULT_CARET_SETTINGS } from '@thockdown/look/caretSettings'
+import type { UiLayoutLoadout } from '@thockdown/look/loadouts'
 
 /**
  * The caret's appearance (Options > Caret) is layout-scoped, so it rides the

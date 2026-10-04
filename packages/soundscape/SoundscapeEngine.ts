@@ -3,7 +3,7 @@
  * only opens and closes it, sends it new settings (with whether they are a
  * change of soundscape, to be crossfaded), and sets its volume. The sound
  * itself is shared by every playback: the generator
- * (src/sound/soundscape-generator.js) and the mix's settings
+ * (packages/soundscape/soundscape-generator.js) and the mix's settings
  * (soundscapeMix.ts, soundscapeSpace.ts). Where and how it is played is the
  * playback's business:
  * - on desktop, LIVE (soundscapeLivePlayback.ts, the default): the generator
@@ -30,8 +30,8 @@ import {
   isSoundscapeAudible,
   type SoundscapePreferences,
   type SoundscapeSettings,
-} from '../shared/soundscape';
-import { toGeneratorConfiguration } from '../shared/soundscapeDsp';
+} from './soundscape';
+import { toGeneratorConfiguration } from './soundscapeDsp';
 import type { ConfigureMessage } from './soundscapeRenderAhead';
 import { createLivePlayback } from './soundscapeLivePlayback';
 

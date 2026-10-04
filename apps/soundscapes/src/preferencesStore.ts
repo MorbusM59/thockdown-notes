@@ -11,7 +11,7 @@ import {
   type SoundscapePreferences,
   type SoundscapePreset,
   type SoundscapeSettings,
-} from '../../../src/shared/soundscape'
+} from '@thockdown/soundscape/soundscape'
 import { sanitizeSchedule, type Schedule } from './schedule'
 
 const STORAGE_KEY = 'thockdown:soundscape-preferences'

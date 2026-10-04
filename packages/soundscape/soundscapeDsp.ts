@@ -1,5 +1,5 @@
 /**
- * What the generator (src/sound/soundscape-generator.js) is told about each layer:
+ * What the generator (packages/soundscape/soundscape-generator.js) is told about each layer:
  * the stored settings plus everything cheaper to derive once on the main
  * thread than per block in the generator -- gains, the distance rule, the
  * noise cycle and filter-gain tables, the chimes' tuning.

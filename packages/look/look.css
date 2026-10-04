@@ -1,0 +1,223 @@
+/* The base look every app shares: the page reset, the app shell that
+   carries the theme's variables and glaze layers, and the plain button.
+   Apps import this file; a rule that only one app needs stays in that app. */
+
+/* =============================================================================
+   Global Reset & Base
+   ============================================================================= */
+
+.app-root {
+  height: 100%;
+  width: 100%;
+  background-color: var(--background-color-root);
+}.app-shell {
+  height: 100vh;
+  width: 100%;
+  display: grid;
+  overflow: hidden;
+  text-shadow:
+    0 -1px 0px var(--text-shadow-emboss-ui-secondary),
+    0 1px 0px var(--text-shadow-emboss-ui-main);
+}
+
+/* =============================================================================
+   Scrollbar System
+   ============================================================================= */
+
+/* Firefox */
+.app-shell,
+.app-shell * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--canonical-handle-border) var(--canonical-scroll-track-bg);
+}
+
+/* WebKit */
+.app-shell *::-webkit-scrollbar {
+  width:  var(--canonical-scroll-thickness);
+  height: var(--canonical-scroll-thickness);
+}
+
+.app-shell *::-webkit-scrollbar-track {
+  border:        1px solid var(--canonical-scroll-track-border);
+  border-radius: var(--border-radius-regular);
+  background:    var(--canonical-scroll-track-bg);
+  box-shadow:    var(--box-shadow-inverted);
+}
+
+.app-shell *::-webkit-scrollbar-thumb {
+  border:        1px solid var(--canonical-handle-border);
+  border-radius: var(--border-radius-small);
+  background:    var(--canonical-handle-bg);
+  box-shadow:    var(--box-shadow-regular);
+}
+
+.app-shell *::-webkit-scrollbar-thumb:hover {
+  border-color: rgba(81, 73, 66, 0.8);
+}
+
+/* =============================================================================
+   Base Button System
+   ============================================================================= */
+
+button,
+.ui-btn {
+  border:        1px solid var(--btn-border-default);
+  background:    var(--btn-bg-default);
+  color:         inherit;
+  border-radius: var(--border-radius-regular);
+  font-size:     calc(14px * var(--ui-font-scale));
+  transition:    all 0.2s;
+  cursor:        default;
+}
+
+.app-shell button:focus,
+.app-shell button:focus-visible,
+.app-shell select:focus,
+.app-shell select:focus-visible {
+  outline: none;
+}
+
+/* Only where something can hover. A touch screen emulates :hover on the
+   last element tapped and keeps it there until the next tap elsewhere, so a
+   button looked selected for no reason (an empty schedule slot, in the
+   mobile app). */
+@media (hover: hover) {
+  button:hover,
+  .ui-btn:hover {
+    background:   var(--btn-bg-hover);
+    border-color: var(--btn-border-hover);
+  }
+}
+
+button[data-pressed],
+.ui-btn[data-pressed] {
+  background: var(--btn-bg-pressed);
+  border-color: var(--btn-border-active);
+  box-shadow:   var(--box-shadow-inverted-harsh-active);
+}
+
+button.is-active,
+.ui-btn.is-active,
+.btn-icon.is-active {
+  border-color: var(--btn-border-active);
+  box-shadow:   var(--box-shadow-inverted-harsh-active);
+}
+.btn-icon {
+  min-width:       var(--btn-square-regular-size);
+  height:          var(--btn-square-regular-size);
+  padding:         0;
+  border-radius:   var(--border-radius-regular);
+  font-size:       var(--btn-icon-size);
+  color:           var(--color-text-80);
+  font-weight:     600;
+  display:         inline-flex;
+  align-items:     center;
+  justify-content: center;
+  aspect-ratio:    1 / 1;
+  text-shadow:      
+    0 -1px 0px var(--text-shadow-emboss-ui-secondary),
+    0 1px 0px var(--text-shadow-emboss-ui-main);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  font-family: inherit;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light;
+  background-color: #f9f6f3;
+
+  /* Every bundled family in ./fonts ships upright-only (no italic .woff2),
+     so any italic text -- markdown emphasis, the italic UI labels in
+     tags.css -- renders slanted only if the browser is allowed to synthesize
+     an oblique. `none` here suppressed that app-wide and left those upright;
+     `style` turns synthetic italics back on for every font and every surface.
+     Weight synthesis stays off by default (faked bold is far uglier than a
+     skewed upright), so this is deliberately `style`, not `style weight` --
+     individual display faces opt into weight synthesis themselves in
+     markdown.css. */
+  font-synthesis: style;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
+  /* UI chrome font (Options > UI Font) -- editor/render text sets its own
+     font-family explicitly further down, so it's unaffected by this. */
+  font-family: var(--ui-font-family);
+}
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+/* A position a mode has RESERVED: the button's exact shape and style (hence
+   `.ui-btn` on it -- see the note on .escape-menu-chrome-pill), with
+   `fa-ban` inside it. Keyed off `.btn-icon` alone rather than off one
+   button class: the two bars size their buttons differently and BOTH have a
+   reserved position, so the convention has to be the button's, not the
+   stats row's. The app-wide convention for "spoken for, not working
+   yet" -- an empty frame reads as a rendering fault and a plausible icon
+   reads as a broken control. Inert, and dimmed so it does not compete with
+   the controls that do work. See escapeMenuContract.ts. */
+.btn-icon.is-reserved {
+  display:         inline-flex;
+  align-items:     center;
+  justify-content: center;
+  cursor:          default;
+  pointer-events:  none;
+  opacity:         0.45;
+}
+
+.app-sheen
+{
+  position:absolute;
+  inset: 0;
+  background-image: var(--glaze-sheen-background-image, linear-gradient(180deg, rgba(255, 255, 255, 0.000) -100%, rgba(255, 255, 255, 0.6) 38.5%, rgba(255, 255, 255, 0.000) 200%));
+}
+
+/* Glaze overlay */
+.glaze-overlay-stack {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  /* Above the app-tooltip-layer's own z-index (see controls.css) -- glaze is
+     a color-grading effect meant to visually apply over the whole app,
+     tooltips included. */
+  z-index: 6000;
+}
+
+.glaze-overlay-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+}
+
+.glaze-overlay-layer-linear {
+  background-image: var(--glaze-linear-background-image, none);
+  mix-blend-mode: luminosity;
+  z-index: 2;
+}
+
+.glaze-overlay-layer-radial {
+  background-image: var(--glaze-radial-background-image, none);
+  mix-blend-mode: color-dodge;
+  z-index: 1;
+}
+
+.glaze-overlay-layer-gloom {
+  background-image: var(--glaze-gloom-background-image, none);
+  mix-blend-mode: difference;
+  z-index: 0;
+}

@@ -1,5 +1,5 @@
 ﻿import { buildSyntheticRoomImpulseResponse } from './impulseResponse';
-import { connectToOutput, outputContext } from './audioOutputBus';
+import { connectToOutput, outputContext } from '@thockdown/soundscape/audioOutputBus';
 
 /**
  * MusicPlayerService — Web Audio API based music playback.

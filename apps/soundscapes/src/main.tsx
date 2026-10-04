@@ -4,10 +4,9 @@ import { MobileSoundscapeApp } from './MobileSoundscapeApp'
 import { keepFocusOnPress } from '@thockdown/interaction/focusOwnership'
 import { installPressTracking } from '@thockdown/interaction/pressTracking'
 import { installScrollTrackTokens } from '@thockdown/interaction/scrollTrackGeometry'
-// The desktop app's stylesheet, whole: the soundscape panel is the desktop
-// panel unchanged, and its look is defined there rather than restated here.
-import '../../../src/index.css'
-import '../../../src/App.css'
+// The shared packages' styles: the soundscape panel is the desktop panel
+// unchanged, and each package carries the rules for what it renders.
+import './app.css'
 import '@fortawesome/fontawesome-free/css/all.min.css'
 import './mobile.css'
 

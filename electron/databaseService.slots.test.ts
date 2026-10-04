@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { DatabaseService } from './databaseService'
 import { DEFAULT_EDITOR_SECTION_ID } from '../src/shared/sections'
-import { DEFAULT_CUSTOM_LIGHT, DARK_FACTORY_PRESETS, LIGHT_FACTORY_PRESETS } from '../src/shared/presets'
+import { DEFAULT_CUSTOM_LIGHT, DARK_FACTORY_PRESETS, LIGHT_FACTORY_PRESETS } from '@thockdown/look/presets'
 
 /**
  * Slot geometry (docs/user-workflow-design.md §1.4): a slot is the

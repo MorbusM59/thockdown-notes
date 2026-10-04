@@ -1,0 +1,788 @@
+/* The shared controls: the options panel and its sections, slider rows,
+   swatch and loadout grids, and the custom scrollbars.
+   Apps import this file; a rule that only one app needs stays in that app. */
+
+/* Dedicated editor scrollbar rail (lives in the --editor-scrollbar-slot-width zone).
+   A scroller with a custom scrollbar draws no native one. Scoped under
+   .app-shell so it OUTRANKS base.css's styling of every scrollbar in the
+   shell (`.app-shell *`), rather than tying with it and leaving the winner
+   to stylesheet load order: the desktop happened to load this file last, the
+   mobile app loads it first, and drew both bars. */
+.thockdown-custom-scrollbar,
+.app-shell .thockdown-custom-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.thockdown-custom-scrollbar::-webkit-scrollbar,
+.app-shell .thockdown-custom-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.thockdown-scroll-rail {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* Left padding is the gap to the editor shell, driven by --spacing-regular
+   * so it grows/shrinks with the user's spacing setting. The slot itself
+   * (--editor-scrollbar-slot-width) grows by the same amount, so the track/
+   * thumb always keep their full --canonical-scroll-thickness width. */
+  padding: 0 0 0 var(--spacing-regular);
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-end;
+  z-index: 14;
+}
+
+.thockdown-scroll-track {
+  position: relative;
+  width: var(--canonical-scroll-thickness);
+  height: 100%;
+  border: 1px solid var(--canonical-scroll-track-border);
+  border-radius: var(--border-radius-regular);
+  box-shadow: var(--box-shadow-inverted-light);
+  background: var(--canonical-scroll-track-bg);
+}
+
+.thockdown-scroll-thumb {
+  position: absolute;
+  /* Offsets are measured inside the 1px track border. gap - 2px leaves 2px of
+     space inside that border on either side, making the thumb
+     handle-thickness + 2px wide -- the same size the utility slider thumbs
+     declare (controls.css). The raw gap left it 6px wide, 4px short of that. */
+  left: calc(var(--canonical-scroll-handle-gap) - 2px);
+  right: calc(var(--canonical-scroll-handle-gap) - 2px);
+  border: 1px solid var(--canonical-handle-border);
+  border-radius: var(--border-radius-small);
+  background: var(--canonical-handle-bg);
+  box-shadow: var(--box-shadow-regular-light);
+  cursor: ns-resize;
+}
+
+.thockdown-scroll-thumb:hover.is-inactive,
+.thockdown-scroll-thumb.is-dragging.is-inactive,
+.thockdown-scroll-thumb.is-inactive {
+  border-color: rgba(81, 73, 66, 0.30);
+  background: var(--canonical-handle-bg);
+  cursor: default;
+}
+
+.utility-setting-row {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--spacing-regular);
+}
+
+.utility-setting-row-range {
+  gap: var(--spacing-regular);
+}
+
+.utility-setting-row input {
+  width:         100%;
+  border:        1px solid #c6b9ab;
+  border-radius: var(--border-radius-regular);
+  background:    var(--color-input-backdrop);
+  color:         var(--color-text-base);
+  font-size:     calc(11px * var(--ui-font-scale));
+  padding:       var(--spacing-regular);
+}
+
+.utility-setting-stack {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--spacing-regular);
+}
+
+.utility-setting-button-row {
+  display:        flex;
+  flex-direction: row;
+  gap:            var(--spacing-regular);
+  align-items:    center;
+}
+
+.utility-setting-slider-stack {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--spacing-regular);
+}
+
+/* A ROW OF SLIDERS in an options section, as OptionsSliderRows breaks a group
+   into them: each slider an equal share of the width. */
+.options-slider-row {
+  display: flex;
+  gap:     var(--toolbar-options-gap);
+}
+
+.options-slider-row > * {
+  flex:      1 1 0;
+  min-width: 0;
+}
+
+/* AN OPTIONS SUB-SECTION LABEL, the one way a section names the groups inside
+   it. The label box carries the divider as its bottom border and closes it with
+   a right border, so the name sits in the corner the line turns. It spans the
+   full row in a grid container and the full width in a flex one, and it is the
+   seam between two groups: nothing else in a section separates them. */
+.options-subsection-label {
+  grid-column:    1 / -1;
+  box-sizing:     border-box;
+  width:          100%;
+  /* Every container a label sits in spaces its children by
+     --spacing-regular (see .sidebar-options-accordion-body), so the label
+     adds only what takes the space above it up to --spacing-large, and
+     nothing below it: the gap already is the space below. */
+  margin:         calc(var(--spacing-large) - var(--spacing-regular)) 0 0;
+  padding:       var(--spacing-small) var(--spacing-regular);
+  border:  1px solid var(--color-subsection-border);
+  border-radius:  var(--border-radius-small);
+  font-size:      calc(8px * var(--ui-font-scale));
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align:     right;
+  color:          var(--color-text-60);
+  user-select:    none;
+  background-color: var(--color-input-backdrop);
+}
+
+/* A label that opens its section has nothing above it to be set apart from.
+   Spelled out per depth because a label can open its section from inside the
+   section's own wrappers (the Soundscapes environment sits four deep). */
+.sidebar-options-accordion-body > .options-subsection-label:first-child,
+.sidebar-options-accordion-body > :first-child > .options-subsection-label:first-child,
+.sidebar-options-accordion-body > :first-child > :first-child > .options-subsection-label:first-child,
+.sidebar-options-accordion-body > :first-child > :first-child > :first-child > .options-subsection-label:first-child {
+  margin-top: 0;
+}
+
+/* Custom slider / scrollbar shell */
+.utility-setting-scrollbar-shell {
+  position:    relative;
+  width:       100%;
+  height:      var(--canonical-scroll-thickness);
+  display:     block;
+  touch-action: none;
+  cursor:      default;
+  user-select: none;
+}
+
+.utility-setting-scrollbar-shell:focus-visible {
+  outline:       1px solid #8f7f70;
+  border-radius: var(--border-radius-regular);
+}
+
+.utility-setting-scrollbar-rail {
+  position:      absolute;
+  inset:         0;
+  border:        1px solid var(--canonical-scroll-track-border);
+  border-radius: var(--border-radius-regular);
+  background:    var(--canonical-scroll-track-bg);
+  box-shadow:    var(--box-shadow-inverted-light);
+}
+
+.utility-setting-scrollbar-track-label {
+  position:        absolute;
+  inset:           0;
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  pointer-events:  none;
+  user-select:     none;
+  font-size:       calc(10px * var(--ui-font-scale));
+  letter-spacing:  0.03em;
+  text-transform:  lowercase;
+  color:           var(--color-text-40);
+}
+
+.utility-setting-scrollbar-thumb {
+  position:      absolute;
+  top:           calc(var(--canonical-scroll-handle-gap) - 2px);
+  width:         calc(var(--canonical-scroll-handle-thickness) + 2px);
+  height:        calc(var(--canonical-scroll-handle-thickness) + 2px);
+  border:        1px solid var(--canonical-handle-border);
+  border-radius: var(--border-radius-small);
+  background:    var(--canonical-handle-bg);
+  box-shadow:    var(--box-shadow-regular-light);
+  z-index:       1;
+}
+
+.utility-setting-scrollbar-shell.is-dragging .utility-setting-scrollbar-thumb {
+  border-color: rgba(81, 73, 66, 0.8);
+}
+
+/* A setting another control has taken out of play. It keeps showing its
+   value -- that is what it returns to when the other control lets go -- so
+   this reads as "not in effect", not as "empty". */
+.utility-setting-scrollbar-shell.is-disabled {
+  opacity: 0.4;
+  cursor:  default;
+}
+
+/* =============================================================================
+   Sidebar
+   ============================================================================= */
+
+.notes-sidebar {
+  min-width:      var(--sidebar-min-width);
+  display:        flex;
+  flex-direction: column;
+  height:         100%;
+  gap:            var(--spacing-regular);
+  padding: var(--spacing-regular) var(--sidebar-padding-right) var(--spacing-regular) 0;
+}
+
+/* Flyout content layout */
+.sidebar-options-content {
+  display:        flex;
+  align-items:    stretch;
+  gap:            var(--toolbar-options-gap);
+  overflow-x:     auto;
+  flex-direction: column;
+  overflow-x:     hidden;
+  overflow-y:     visible;
+  z-index:        1;
+  padding:        var(--spacing-large);
+}
+
+/* Flyout sections */
+.sidebar-options-section {
+  border:     none;
+  border-radius: 0;
+  background: transparent;
+  width:      100%;
+}
+
+.sidebar-options-accordion {
+  width: 100%;
+  border: 1px solid var(--btn-border-default);
+  padding: 0 var(--toolbar-options-gap);
+  background:#FFFFFF66;
+  box-shadow: var(--box-shadow-regular-light);
+  border-radius: var(--border-radius-small);
+}
+
+.sidebar-options-accordion > div:last-child {
+  padding-bottom: var(--toolbar-options-gap);
+}
+
+.sidebar-options-accordion > summary {
+  list-style: none;
+  user-select: none;
+}
+
+.sidebar-options-accordion > summary::-webkit-details-marker {
+  display: none;
+}
+
+/* THE ONE FLOW RULE of an options section: its blocks stand --spacing-regular
+   apart and carry no margins of their own, so two spacings never meet and
+   add up. A sub-section label is the only exception, and adds its own. */
+.sidebar-options-accordion-body {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--spacing-regular);
+}
+
+.sidebar-options-section-heading {
+  margin:    0;
+  padding:   0;
+  font-size: var(--text-info-size);
+  color:     var(--color-text-60);
+  display:   flex;
+  align-items: center;
+  gap:       var(--spacing-regular);
+}
+
+.sidebar-options-section-heading::after {
+  content:     '▾';
+  font-size:   calc(20px * var(--ui-font-scale));
+  margin-left: auto;
+  transition:  transform 0.15s ease;
+  padding-right: var(--spacing-regular);
+}
+
+.sidebar-options-accordion:not([open]) > .sidebar-options-section-heading::after {
+  transform: rotate(90deg);
+}
+
+.typography-sliders {
+  display: flex;
+  gap: var(--toolbar-options-gap);
+  width: 100%;
+  height: var(--canonical-scroll-thickness);
+}
+
+.options-section {
+  /* Horizontally auto-centered, same as .preset-section/.typography-section
+   * -- with a fixed side margin here instead, this section's own width
+   * formula (matching theirs exactly) would push it wider than the
+   * available flyout content width and misalign it from the rest. */
+  margin:         0 auto;
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--toolbar-options-gap);
+  width: var(--sidebar-options-content-width);
+}
+
+.options-section-scrolling,
+.options-section-layout {
+  width:     100px;
+  min-width: 100px;
+  max-width: 100px;
+}
+
+.sidebar-options-section-colors {
+  gap: var(--toolbar-options-gap);
+  --color-grid-gap:  var(--toolbar-options-gap);
+  --color-grid-cell: 32px;
+}
+
+.options-section-info {
+  flex:      1 1 220px;
+  min-width: 220px;
+  max-width: none;
+  align-self: stretch;
+}
+
+.options-info-empty {
+  margin:          0;
+  flex:            1 1 auto;
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  text-align:      center;
+  font-size:       calc(10px * var(--ui-font-scale));
+  line-height:     1.35;
+  color:           var(--color-text-80);
+}
+
+/* Color & texture picker system */
+.options-color-layout {
+  display:    flex;
+  align-items: stretch;
+  gap:        var(--toolbar-options-gap);
+  min-height: 0;
+  height:     auto;
+  overflow:   visible;
+  --color-grid-gap:  var(--toolbar-options-gap);
+  --color-grid-cell: 32px;
+}
+
+.options-color-grid {
+  display: grid;
+  gap:     var(--color-grid-gap);
+  flex:    0 0 auto;
+}
+
+.options-element-grid,
+.options-texture-grid {
+  grid-auto-columns: var(--color-grid-cell);
+  grid-auto-rows:    var(--color-grid-cell);
+  grid-auto-flow:    column;
+}
+
+.options-color-grid.options-row-grid {
+  grid-auto-flow: row;
+  grid-auto-columns: unset;
+  grid-auto-rows: var(--color-grid-cell);
+}
+
+.options-row-grid-top {
+  grid-template-columns: repeat(6, var(--color-grid-cell));
+}
+
+.options-row-grid-middle {
+  grid-template-columns: repeat(6, var(--color-grid-cell));
+}
+
+.options-row-grid-bottom {
+  grid-template-columns: repeat(5, var(--color-grid-cell));
+}
+
+.options-row-grid-edit-markdown {
+  grid-template-columns: repeat(6, var(--color-grid-cell));
+}
+
+.options-hsva-grid {
+  grid-template-columns: repeat(3, var(--color-grid-cell));
+  grid-template-rows:    repeat(2, var(--color-grid-cell));
+  grid-auto-flow:        column;
+}
+
+.options-color-separator {
+  width:       1px;
+  background:  #ccc;
+  align-self:  stretch;
+}
+
+/* Swatch base */
+.options-color-swatch {
+  width:      100%;
+  height:     100%;
+  font-size: 18px; /* icon glyph, fixed box -- see --ui-font-scale's scope note in tokens.css */
+  color:      var(--color-text-80);
+  transition: none;
+}
+
+.options-element-grid .options-color-swatch,
+.options-texture-grid .options-color-swatch {
+  position:   relative;
+  background: transparent;
+  overflow:   hidden;
+}
+
+.options-element-grid .options-color-swatch::before,
+.options-element-grid .options-color-swatch::after,
+.options-texture-grid .options-color-swatch::before,
+.options-texture-grid .options-color-swatch::after {
+  content:        '';
+  position:       absolute;
+  inset:          0;
+  border-radius:  inherit;
+  pointer-events: none;
+  z-index:        0;
+}
+
+.options-element-grid .options-color-swatch::before,
+.options-texture-grid .options-color-swatch::before {
+  background: var(--color-background-light);
+}
+
+.options-element-grid .options-color-swatch::after,
+.options-texture-grid .options-color-swatch::after {
+  background: var(--options-swatch-color, transparent);
+}
+
+/* The pressed/active box-shadow lives on the button itself, but the swatch
+   color layers above (::before/::after) paint on top of it and hide it.
+   Re-apply the shadow on ::after, the topmost of the two layers, so it
+   remains visible over the swatch color. */
+.options-element-grid .options-color-swatch.is-active::after,
+.options-element-grid .options-color-swatch[data-pressed]::after,
+.options-texture-grid .options-color-swatch.is-active::after,
+.options-texture-grid .options-color-swatch[data-pressed]::after {
+  box-shadow: var(--box-shadow-inverted-harsh-active);
+}
+
+.options-element-grid .options-color-swatch > *,
+.options-texture-grid .options-color-swatch > * {
+  position: relative;
+  z-index:  1;
+}
+
+.options-darkmode-grid {
+  grid-auto-columns: var(--color-grid-cell);
+  grid-auto-rows:    var(--color-grid-cell);
+  grid-auto-flow:    column;
+}
+
+.options-glaze-settings-grid,
+.options-mouse-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(6, var(--color-grid-cell));
+  grid-template-rows: 32px repeat(3, auto);
+  gap: var(--color-grid-gap);
+}
+
+/* Caret section (Options > Caret). Same 6-column swatch grid the glaze/mouse
+   sections use, so the colour swatches and H/S/V/A controls line up with
+   theirs; rows are auto-sized because this section has no centre block. */
+.options-caret-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(6, var(--color-grid-cell));
+  grid-auto-rows: auto;
+  gap: var(--color-grid-gap);
+}
+
+/* The six animation-shape buttons -- one full row of the grid above, split
+   evenly so each button keeps the same footprint as a colour swatch. */
+.options-caret-preset-row {
+  grid-column: span 6;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--color-grid-gap);
+}
+
+.options-caret-preset-btn {
+  width: 100%;
+}
+
+.options-mouse-center-grid {
+  align-content:center;
+  display: grid;
+  grid-column: span 2;
+  grid-row: span 2;
+  gap: var(--color-grid-gap);
+}
+
+.options-glaze-cell {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+}
+
+.options-glaze-cell-span-3 {
+  grid-column: span 3;
+}
+
+.options-glaze-cell-span-2 {
+  grid-column: span 2;
+}
+
+.options-glaze-top-left,
+.options-glaze-top-center,
+.options-glaze-top-right {
+  grid-row: 1;
+}
+
+.options-glaze-layer-order-btn {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  color: var(--color-text-80);
+}
+
+.options-glaze-cell .utility-setting-scrollbar-shell,
+ .options-seed-btn {
+  width: 100%;
+}
+
+/* HSVA controls */
+.options-hsva-control {
+  cursor:     ns-resize;
+  transition: none;
+}
+
+.options-hsva-alpha {
+  background: var(--color-background-light);
+  padding:    0;
+}
+
+.options-hsva-ghost { display: inline-block; }
+
+.options-hsva-glyph,
+.options-hsva-ghost {
+  line-height: 1;
+}
+
+.options-hsva-ghost::before,
+.options-hsva-glyph::before {
+  display: block;
+}
+
+/* Mouse options: cursor toggle + local HSVA staging row (row 1: toggle,
+   1-cell gap, H/S/V/A) over the 3 target swatches (row 2, each spanning 2 of
+   the same 6 columns) -- reuses the HSVA grid's 32px cell sizing. */
+.options-mouse-color-grid {
+  display: grid;
+  grid-template-columns: repeat(6, var(--color-grid-cell));
+  grid-auto-rows: var(--color-grid-cell);
+  gap: var(--color-grid-gap);
+}
+
+/* Mouse options slider rows: full-width sliders (not 32px swatch cells), so
+   columns are fractional -- .options-glaze-cell-span-2/-3 (grid-column: span
+   N) are reused as-is from the glaze grid below since spans are unit-agnostic. */
+.options-mouse-slider-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--toolbar-options-gap);
+}
+
+.options-active-color {
+  grid-row:     span 2;
+  aspect-ratio: auto;
+  justify-self: center;
+  align-self:   center;
+  transition:   none;
+}
+
+/* Texture picker */
+.options-texture-settings {
+  display:           grid;
+  grid-template-columns: repeat(3, var(--color-grid-cell));
+  grid-template-rows:    repeat(2, var(--color-grid-cell));
+  gap:               var(--color-grid-gap);
+  width:     calc((var(--color-grid-cell) * 3) + (var(--color-grid-gap) * 2));
+  min-width: calc((var(--color-grid-cell) * 3) + (var(--color-grid-gap) * 2));
+  max-width: calc((var(--color-grid-cell) * 3) + (var(--color-grid-gap) * 2));
+  flex:      0 0 auto;
+}
+
+.options-texture-seed-slot {
+  grid-column:    2 / span 2;
+  grid-row:       1;
+  height:         100%;
+  display:        block;
+}
+
+.options-seed-editor {
+  width:       100%;
+  height:         100%;
+  display:     flex;
+  align-items: center;
+}
+
+.options-seed-btn {
+  width:           100%;
+  height:          100%;
+  font-size:       var(--btn-icon-size);
+  color:           var(--color-text-60);
+  padding:         0 var(--spacing-regular);
+  border:          1px solid var(--btn-border-default);
+  border-radius:   var(--border-radius-regular);
+  background:      var(--btn-bg-default);
+  display:         inline-flex;
+  align-items:     center;
+  justify-content: center;
+}
+
+.options-seed-btn.is-editing {
+  box-shadow:      var(--box-shadow-inverted-light);
+}
+
+.options-texture-preview-row {
+  grid-row:        1 / span 2;
+  grid-column:     1;
+  min-width:       0;
+  min-height:      0;
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+}
+
+.options-texture-control-btn,
+.options-texture-preview-row .options-texture-preview {
+  width: 100%;
+}
+
+.options-texture-control-btn {
+  min-width:      0;
+  min-height:     0;
+  padding:        var(--spacing-small);
+  display:        inline-flex;
+  flex-direction: column;
+  align-items:    center;
+  justify-content: center;
+  gap:            var(--spacing-small);
+}
+
+.options-texture-control-btn-granularity {
+  grid-column: 2;
+  grid-row:    2;
+}
+
+.options-texture-control-btn-smoothness {
+  grid-column: 3;
+  grid-row:    2;
+}
+
+.options-texture-preview {
+  position:   relative;
+  overflow:   hidden;
+  border:     1px solid var(--btn-border-default);
+  background: none;
+}
+
+.options-texture-preview.is-active {
+  border-color: var(--btn-border-active);
+  box-shadow:   var(--box-shadow-inverted-harsh-active);
+}
+
+.options-texture-preview::before,
+.options-texture-preview::after {
+  content:        '';
+  position:       absolute;
+  inset:          0;
+  border-radius:  inherit;
+  pointer-events: none;
+}
+
+.options-texture-preview::before {
+  background-color: var(--texture-preview-color, transparent);
+  -webkit-mask-image:    var(--texture-preview-mask);
+  -webkit-mask-repeat:   repeat;
+  -webkit-mask-size:     var(--texture-tile-size) var(--texture-tile-size);
+  -webkit-mask-position: 0 0;
+  mask-image:    var(--texture-preview-mask);
+  mask-repeat:   repeat;
+  mask-size:     var(--texture-tile-size) var(--texture-tile-size);
+  mask-position: 0 0;
+}
+
+/* Loadout grid */
+.options-loadout-grid {
+  --loadout-cell-size: 32px;
+  --loadout-gap:       var(--toolbar-options-gap);
+  display:             grid;
+  grid-template-columns: repeat(6, var(--loadout-cell-size));
+  grid-auto-rows:      var(--loadout-cell-size);
+  column-gap:          var(--loadout-gap);
+  row-gap:             var(--loadout-gap);
+  padding:             0;
+  width:               fit-content;
+  align-content:       start;
+  justify-content:     start;
+  min-height:          0;
+}
+
+/* A subsection's explanation in help mode, in place of its controls
+   (SoundscapeControls' help option): one button-tile across the whole grid,
+   as tall as its text. */
+.options-subsection-help-grid {
+  width: 100%;
+}
+
+/* Three classes: it must outrank any host rule that sizes every grid cell
+   (the mobile app squares them), whatever order the stylesheets load in. */
+.options-loadout-grid > .options-loadout-btn.options-subsection-help {
+  grid-column: 1 / -1;
+  aspect-ratio: auto;
+  width: auto;
+  height: auto;
+  display: block;
+  padding: 8px 10px;
+  text-align: left;
+  font-weight: normal;
+  font-size: calc(13px * var(--ui-font-scale));
+  line-height: 1.45;
+  color: var(--color-text-80);
+}
+
+.options-subsection-help-paragraph {
+  margin: 0;
+}
+
+.options-subsection-help-paragraph + .options-subsection-help-paragraph {
+  margin-top: 0.75em;
+}
+
+.options-subsection-help-paragraph strong {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+/* A dashed inner frame marks a button: a soundscape picked up
+   (SoundscapeControls' onPickPreset; held, not playing), or the mobile
+   app's schedule button while what is heard is the schedule's. A frame
+   rather than an outline: a long press also FOCUSES the button, and
+   `.app-shell button:focus` clears the outline -- the mark was invisible
+   until focus moved elsewhere. */
+.options-loadout-btn.is-picked,
+.options-loadout-btn.is-heard {
+  position: relative;
+}
+
+.options-loadout-btn.is-picked::after,
+.options-loadout-btn.is-heard::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 2px dashed var(--color-text-80);
+  border-radius: inherit;
+  pointer-events: none;
+}

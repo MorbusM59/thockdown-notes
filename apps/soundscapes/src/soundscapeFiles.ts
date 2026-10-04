@@ -1,7 +1,7 @@
 /**
  * The phone's side of exporting and importing soundscapes: the same
  * SoundscapeFileApi the desktop's main process provides (preload.ts), so
- * the shared export and import (src/sidebar/soundscapeFileActions.ts) run
+ * the shared export and import (packages/soundscape/soundscapeFileActions.ts) run
  * unchanged.
  *
  * - save: the system's "Save as" dialog (the Storage Access Framework), so
@@ -12,7 +12,7 @@
  *   chosen, because a .tds file has no registered type to filter on; one
  *   that is not a soundscape file imports nothing.
  */
-import type { SoundscapeFileApi } from '../../../src/shared/soundscapeFile'
+import type { SoundscapeFileApi } from '@thockdown/soundscape/soundscapeFile'
 import { nativeSoundscape } from './backgroundAudioHost'
 
 function pickTextFile(): Promise<string | null> {

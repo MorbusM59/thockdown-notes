@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SOUNDSCAPE_SETTINGS } from '../shared/soundscape';
-import { toGeneratorConfiguration } from '../shared/soundscapeDsp';
+import { DEFAULT_SOUNDSCAPE_SETTINGS } from './soundscape';
+import { toGeneratorConfiguration } from './soundscapeDsp';
 import { generatorSource, noiseAt } from './soundscape-generator.harness';
 import { hostGenerator, type HostedGenerator } from './soundscapeGeneratorHost';
 import { SoundscapeMix } from './soundscapeMix';

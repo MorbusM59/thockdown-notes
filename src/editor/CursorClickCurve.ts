@@ -32,7 +32,7 @@ import {
   CURSOR_CLICK_SKEW_MAX,
   CURSOR_CLICK_WIDEN_MAX_MULTIPLIER,
   CURSOR_CLICK_TIGHTEN_MIN_MULTIPLIER,
-} from '../shared/cursorSettings';
+} from '@thockdown/look/cursorSettings';
 
 export function clampAxis(value: number): number {
   return Math.max(-1, Math.min(1, value));

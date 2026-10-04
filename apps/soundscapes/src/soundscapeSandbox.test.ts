@@ -4,12 +4,12 @@ import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import { build } from 'vite';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { DEFAULT_SOUNDSCAPE_SETTINGS, SOUNDSCAPE_FACTORY_PRESETS } from '../shared/soundscape';
-import { toGeneratorConfiguration } from '../shared/soundscapeDsp';
-import { HALF_SCALE_HEADROOM, toBase64 } from './halfScalePcm';
-import { RENDER_CHUNK_FRAMES, RENDER_LEAD_SEC } from './soundscapeRenderAhead';
+import { DEFAULT_SOUNDSCAPE_SETTINGS, SOUNDSCAPE_FACTORY_PRESETS } from '@thockdown/soundscape/soundscape';
+import { toGeneratorConfiguration } from '@thockdown/soundscape/soundscapeDsp';
+import { HALF_SCALE_HEADROOM, toBase64 } from '@thockdown/soundscape/halfScalePcm';
+import { RENDER_CHUNK_FRAMES, RENDER_LEAD_SEC } from '@thockdown/soundscape/soundscapeRenderAhead';
 
-const root = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '../..');
+const root = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '../../..');
 const SAMPLE_RATE = 8000;
 const MARGIN_SEC = 0.15;
 

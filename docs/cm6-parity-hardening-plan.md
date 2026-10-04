@@ -194,7 +194,7 @@ section of its own, sitting under Mouse Options and built on the same widgets.
   only z >= 10 avoided it, and z >= 10 is exactly what the design forbids).
   **If anything ever re-promotes the caret, the black pane comes back.** The
   three things that would are named in `.thockdown-block-caret`'s comment.
-- **New module** `src/shared/caretSettings.ts`: bounds/defaults (mirroring
+- **New module** `packages/look/caretSettings.ts`: bounds/defaults (mirroring
   `cursorSettings.ts`), the six blink shapes, and `buildCaretBlinkKeyframesCss`,
   which generates `@keyframes thockdown-blink` at runtime. index.css no longer
   defines that rule at all -- App.tsx mounts the generated one, so there is
