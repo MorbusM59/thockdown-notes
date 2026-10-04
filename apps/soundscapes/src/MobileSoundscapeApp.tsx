@@ -29,11 +29,11 @@ import {
   LIGHT_FACTORY_PRESETS,
   LIGHT_PRESET_ICONS,
   LIGHT_PRESET_THEMES,
-} from '../../../src/shared/presets'
+} from '@thockdown/look/presets'
 import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
-import { applyDocumentTheme, themeFrame } from '../../../src/shared/loadoutTheme'
-import { ThemeBlendOverlays, ThemeGlazeLayers } from '../../../src/components/ThemeLayers'
+import { applyDocumentTheme, themeFrame } from '@thockdown/look/loadoutTheme'
+import { ThemeBlendOverlays, ThemeGlazeLayers } from '@thockdown/look/ThemeLayers'
 import { nativeSoundscape, type RegularMode, type SessionState, type SoundSource } from './backgroundAudioHost'
 import { nativePlayback } from './playbackMode'
 import {

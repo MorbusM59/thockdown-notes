@@ -3,7 +3,7 @@
  * the inline style of <html>, .app-root, .app-saturate-wrapper and .app-shell,
  * the shell's classes, which glaze layers are mounted, and the blend overlays.
  *
- * For refactors of the theme pipeline (src/shared/loadoutTheme.ts): take a
+ * For refactors of the theme pipeline (packages/look/loadoutTheme.ts): take a
  * snapshot before, one after, and compare them parsed (property order in a
  * style attribute is not meaningful). Texture image URLs are blob URLs minted
  * per load and always differ; everything else must match.

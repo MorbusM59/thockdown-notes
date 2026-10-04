@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TextureCacheRequest } from '../shared/textures';
-import type { TextureMaterialSettings, TextureSurfaceKey, TextureWorkerRequest, TextureWorkerResponse } from './types';
+import type { TextureMaterialSettings, TextureSurfaceKey, TextureWorkerRequest, TextureWorkerResponse } from '@thockdown/look/textureTypes';
 import { clampMaterialSettings } from './generateTexture';
 import { beginBackgroundWork } from '../shared/backgroundWork';
 

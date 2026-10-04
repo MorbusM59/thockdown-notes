@@ -1,4 +1,4 @@
-import type { TextureColorHsva, TextureMaterialSettings } from './types';
+import type { TextureColorHsva, TextureMaterialSettings } from '@thockdown/look/textureTypes';
 
 type MaterialPersonality = {
   persistence: number;

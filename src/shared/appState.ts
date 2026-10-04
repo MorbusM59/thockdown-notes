@@ -1,7 +1,7 @@
 import type { GameSave } from '../adventure/model/gameState';
 import type { SlotOverlay } from './slotOverlay';
-import type { TextureMaterialsBySurface, TextureSurfaceKey } from '../textures/types';
-import type { GlazeSettings } from './glaze';
+import type { TextureMaterialsBySurface, TextureSurfaceKey } from '@thockdown/look/textureTypes';
+import type { GlazeSettings } from '@thockdown/look/glaze';
 import type { SoundscapePreferences } from './soundscape';
 
 export const APP_STATE_CHANNELS = {

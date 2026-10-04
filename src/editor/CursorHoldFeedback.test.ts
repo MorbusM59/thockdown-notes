@@ -13,7 +13,7 @@ import {
   CURSOR_CLICK_SKEW_DEFAULT,
   CURSOR_CLICK_SPEED_X_DEFAULT,
   CURSOR_CLICK_MAX_SPEED_DEFAULT,
-} from '../shared/cursorSettings'
+} from '@thockdown/look/cursorSettings'
 
 const RAMP = CURSOR_CLICK_RAMP_DEFAULT
 const SKEW = CURSOR_CLICK_SKEW_DEFAULT

@@ -17,9 +17,9 @@ or down steps through the current mode's five, showing the preset's icon
 while it does and for two seconds after; Paper in light
 mode and Ancient in dark by default; kept in
 localStorage by `preferencesStore.ts`). They are drawn by the same code the
-desktop uses (`src/shared/loadoutTheme.ts` for the variables, filter and
-overlays, `src/components/ThemeLayers.tsx` for the glaze and blend layers;
-icons and names from `src/shared/presets.ts`), inside the same frame
+desktop uses (`packages/look/loadoutTheme.ts` for the variables, filter and
+overlays, `packages/look/ThemeLayers.tsx` for the glaze and blend layers;
+icons and names from `packages/look/presets.ts`), inside the same frame
 elements, so a change to a preset reaches both. Textures are the one part of
 a preset the phone does not draw: they are rendered by a worker and cached by
 the desktop's main process. The desktop's custom layouts are not offered.

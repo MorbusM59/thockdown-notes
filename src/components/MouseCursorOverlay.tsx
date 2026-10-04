@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
-import { parseCssColorToRgba, type RgbaColor } from '../shared/colorMath'
-import type { CustomCursorSettings } from '../shared/cursorSettings'
+import { parseCssColorToRgba, type RgbaColor } from '@thockdown/look/colorMath'
+import type { CustomCursorSettings } from '@thockdown/look/cursorSettings'
 import {
   axisToRadiusMultiplier,
   axisToSpinMultiplier,
