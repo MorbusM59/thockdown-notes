@@ -30,7 +30,8 @@
 
 import { _electron } from 'playwright'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -46,16 +47,6 @@ function parseArgs(argv) {
     else if (key === 'out') args.out = value
   }
   return args
-}
-
-/** Everything databaseService.ts writes, without touching the tracked placeholder. */
-function clearNoteDatabase() {
-  const dataDir = path.join(APP_ROOT, 'data')
-  if (!existsSync(dataDir)) return
-  for (const entry of readdirSync(dataDir)) {
-    if (entry === '.gitkeep') continue
-    rmSync(path.join(dataDir, entry), { recursive: true, force: true })
-  }
 }
 
 /**
@@ -95,9 +86,15 @@ async function main() {
     if (built.status !== 0) throw new Error(`vite build failed with exit code ${built.status}`)
   }
   if (args.shots) mkdirSync(args.out, { recursive: true })
-  clearNoteDatabase()
+  // An isolated, empty database (electron/main.ts's resolveDataRoot takes
+  // THOCKDOWN_DATA_ROOT first), so a playthrough never touches real notes.
+  const dataDir = mkdtempSync(path.join(tmpdir(), 'thockdown-playthrough-'))
 
-  const app = await _electron.launch({ args: ['--no-sandbox', 'dist-electron/main.js'], cwd: APP_ROOT })
+  const app = await _electron.launch({
+    args: ['--no-sandbox', 'dist-electron/main.js'],
+    cwd: APP_ROOT,
+    env: { ...process.env, THOCKDOWN_DATA_ROOT: dataDir },
+  })
   const page = await app.firstWindow()
   await page.waitForLoadState('domcontentloaded')
   // The main process seeds the database asynchronously and no readiness signal
@@ -145,6 +142,7 @@ async function main() {
   }
 
   await app.close()
+  rmSync(dataDir, { recursive: true, force: true })
   if (complaints.length > 0) {
     console.error(`\n[adventure] ${complaints.length} complaint(s):`)
     for (const complaint of complaints) console.error(`  - ${complaint}`)

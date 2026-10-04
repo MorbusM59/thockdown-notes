@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, renameSync, rmdirSync, unlinkSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
 /**
@@ -16,14 +16,16 @@ import path from 'node:path'
  * - Nothing happens unless the old folder holds data and the new one holds
  *   none. Two databases are never merged; if both hold data the new one is
  *   used, the old one is left exactly as it was, and the result says so.
- * - Entries are RENAMED, not copied. Both folders are inside one checkout, so
- *   a rename is a single directory-entry change on one filesystem: the file
- *   is either at the old path or at the new one, never half-written, and no
- *   copy has to be verified against its source. The SQLite file and its
- *   `-wal`/`-shm` companions travel together, because this runs before the
- *   database is opened.
- * - The git placeholder `.gitkeep` is data in neither folder.
- * - The old folder is removed only once it is empty.
+ * - The old folder is RENAMED to the new path as a whole, in one call, after
+ *   the new folder (which holds at most the git placeholder) is removed.
+ *   Both are inside one checkout, so that is a single directory-entry change
+ *   on one filesystem: everything is at the old path or everything is at the
+ *   new one. Moving entry by entry would not have that property, and an
+ *   interruption between two renames could leave the SQLite file in one
+ *   folder and its `-wal` journal, holding the latest changes, in the other.
+ *   Nothing is copied, so nothing has to be verified against a source.
+ * - The git placeholder `.gitkeep` is data in neither folder, and is put back
+ *   after the rename if the old folder did not have one.
  *
  * It must run before anything opens a file under the data root.
  */
@@ -44,12 +46,12 @@ export function moveLegacyDevData(legacyDir: string, dataDir: string): LegacyDev
   if (legacy.length === 0) return { kind: 'nothing-to-move' }
   if (dataEntries(dataDir).length > 0) return { kind: 'both-hold-data', legacyDir }
 
-  mkdirSync(dataDir, { recursive: true })
-  for (const name of legacy) {
-    renameSync(path.join(legacyDir, name), path.join(dataDir, name))
-  }
-  const placeholder = path.join(legacyDir, PLACEHOLDER)
-  if (existsSync(placeholder)) unlinkSync(placeholder)
-  rmdirSync(legacyDir)
+  // The new folder holds no data (checked above), so removing it loses at
+  // most the placeholder, which is restored below.
+  rmSync(dataDir, { recursive: true, force: true })
+  mkdirSync(path.dirname(dataDir), { recursive: true })
+  renameSync(legacyDir, dataDir)
+  const placeholder = path.join(dataDir, PLACEHOLDER)
+  if (!existsSync(placeholder)) writeFileSync(placeholder, '')
   return { kind: 'moved', entries: legacy }
 }

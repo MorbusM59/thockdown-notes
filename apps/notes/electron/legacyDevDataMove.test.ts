@@ -37,6 +37,12 @@ describe('moveLegacyDevData', () => {
     expect(existsSync(path.join(dataDir, '.gitkeep'))).toBe(true)
   })
 
+  it('keeps the placeholder in the new folder when the old one had none', () => {
+    writeFileSync(path.join(legacyDir, 'notes.db'), 'db')
+    moveLegacyDevData(legacyDir, dataDir)
+    expect(readdirSync(dataDir).sort()).toEqual(['.gitkeep', 'notes.db'])
+  })
+
   it('never touches either folder when both hold data', () => {
     writeFileSync(path.join(legacyDir, 'notes.db'), 'old')
     writeFileSync(path.join(dataDir, 'notes.db'), 'new')

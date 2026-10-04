@@ -380,6 +380,12 @@ function flushPendingExternalPathsToRenderer(): void {
 }
 
 function resolveDataRoot(): string {
+  // A harness that launches the app for a measurement or a playthrough names
+  // a throwaway folder here, so it never reads, moves or deletes anybody's
+  // notes (apps/notes/scripts). It wins over every other rule, the move of
+  // legacy development data included.
+  const overridden = process.env.THOCKDOWN_DATA_ROOT
+  if (overridden) return overridden
   if (isPortableBuild) {
     return path.join(path.dirname(app.getPath('exe')), 'data', 'app');
   }
