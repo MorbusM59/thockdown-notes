@@ -7,7 +7,7 @@ One repository, an npm workspace. **Apps** are in `apps/`: `apps/notes` (the Ele
 - **A package is a feature or a foundation, never a platform.** Where platforms differ, the package declares a port and each app supplies it (`scrollBridgeRegistry`, `window.thockdownSoundscapeFiles`).
 - **A module moves into a package when a second app needs it**, not before. A package never imports from an app.
 - **A package owns the CSS for what it renders** (`<package>/<package>.css`); a rule only one app needs stays in that app.
-- **Each app owns its version, changelog and release.** Paths in this document are from the repository root.
+- **Each app owns its version, changelog and release**, and its local files: an unpackaged desktop run keeps its notes in `apps/notes/data` (moved there automatically from the repository root on the first run after the layout change, `apps/notes/electron/legacyDevDataMove.ts`), and its build output and release-note drafts stay under `apps/notes` too. Paths in this document are from the repository root.
 
 ## Git workflow — landing on main
 `main` is reached at one of three checkpoints, chosen by risk rather than by habit, so ordinary work stays fluid and the full cross-platform check is enforced where it matters:

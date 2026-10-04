@@ -26,7 +26,7 @@ import readline from 'node:readline'
 import { fileURLToPath } from 'node:url'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const notesDir = path.join(repoRoot, 'release-notes')
+const notesDir = path.join(repoRoot, 'apps/notes/release-notes')
 const changelogPath = path.join(repoRoot, 'apps/notes/CHANGELOG.md')
 
 // Each app in the repository releases on its own, so a release tag names its

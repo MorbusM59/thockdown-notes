@@ -4,6 +4,7 @@ import type { Session, PrintToPDFOptions } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { existsSync, promises as fsPromises } from 'node:fs'
+import { moveLegacyDevData } from './legacyDevDataMove'
 import { NoteLifecycleService } from './noteLifecycleService'
 import { FILE_SYNC_CHANNELS } from '../src/shared/fileSync'
 import { NOTE_LIFECYCLE_CHANNELS } from '../src/shared/noteLifecycle'
@@ -385,7 +386,26 @@ function resolveDataRoot(): string {
   if (app.isPackaged) {
     return path.join(app.getPath('userData'), 'data');
   }
-  return path.join(process.env.APP_ROOT, 'data');
+  return devDataRoot();
+}
+
+// An unpackaged run keeps its data in the app's own folder, `apps/notes/data`.
+// The first run after the app moved there brings the data along from the
+// repository root, where it was kept before (legacyDevDataMove.ts); resolved
+// once, because the move must happen before any service opens a file.
+let resolvedDevDataRoot: string | null = null
+function devDataRoot(): string {
+  if (resolvedDevDataRoot) return resolvedDevDataRoot
+  const dataDir = path.join(process.env.APP_ROOT, 'data')
+  const legacyDir = path.join(process.env.APP_ROOT, '..', '..', 'data')
+  const result = moveLegacyDevData(legacyDir, dataDir)
+  if (result.kind === 'moved') {
+    console.log(`[data] moved ${result.entries.length} entries from ${legacyDir} to ${dataDir}`)
+  } else if (result.kind === 'both-hold-data') {
+    console.warn(`[data] ${legacyDir} still holds data, but ${dataDir} is in use and was left as it is; nothing was moved or merged`)
+  }
+  resolvedDevDataRoot = dataDir
+  return dataDir
 }
 
 async function createHiddenExportWindow(htmlContent: string): Promise<BrowserWindow> {

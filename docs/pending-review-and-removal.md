@@ -535,3 +535,23 @@ note switches, mode toggles and snapshot browsing.
 **Noticed.** Moving the note's text out of React state (the per-keystroke
 retention fix), which had to decide, dependency by dependency, which effects
 mean "the text changed" and which merely inherited it.
+
+### The move of development data out of the repository root
+
+**What.** `apps/notes/electron/legacyDevDataMove.ts`, called once from
+`main.ts`'s `devDataRoot`. On an unpackaged run it moves `<repository>/data`
+into `apps/notes/data` when the old folder holds data and the new one holds
+none.
+
+**Why it is suspect.** It exists for one event: the first development run on
+each checkout that predates the desktop app moving into `apps/notes`. After
+that run it finds nothing to move, every time, for ever.
+
+**What would have to be true to remove it.** That no checkout still has data
+at `<repository>/data`: in practice, that the maintainer's own machine has run
+the app once since the move (its console says `[data] moved ...` on that run,
+and the old folder is gone). Then the module, its test and the call go, and
+`devDataRoot` becomes `path.join(process.env.APP_ROOT, 'data')` again.
+
+**Noticed.** Written with the move itself, as the one piece of it that is
+transitional by design.

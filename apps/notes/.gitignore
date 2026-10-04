@@ -1,0 +1,8 @@
+# An unpackaged run's notes, state and database (electron/main.ts's
+# resolveDataRoot). The folder itself is kept so the path always exists.
+/data/*
+!/data/.gitkeep
+
+# Release-note drafts: `npm run release` writes one here, and what stays in the
+# repository is its entry in CHANGELOG.md.
+/release-notes/
