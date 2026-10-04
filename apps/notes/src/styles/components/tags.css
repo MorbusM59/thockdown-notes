@@ -696,13 +696,13 @@
 }
 
 .chapter-pill-mini-archive::before {
-  -webkit-mask-image: url('/assets/buttons/archived.png');
-  mask-image: url('/assets/buttons/archived.png');
+  -webkit-mask-image: url('../../assets/buttons/archived.png');
+  mask-image: url('../../assets/buttons/archived.png');
 }
 
 .chapter-pill-mini-delete::before {
-  -webkit-mask-image: url('/assets/buttons/deleted.png');
-  mask-image: url('/assets/buttons/deleted.png');
+  -webkit-mask-image: url('../../assets/buttons/deleted.png');
+  mask-image: url('../../assets/buttons/deleted.png');
 }
 
 /* Square off the two mini pills' facing inner corners (archive's right

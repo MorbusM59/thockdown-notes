@@ -238,28 +238,28 @@
 }
 
 .notes-sidebar .view-toggle .icon-btn.btn-date::before {
-  -webkit-mask-image: url('/assets/buttons/latest.png');
-  mask-image: url('/assets/buttons/latest.png');
+  -webkit-mask-image: url('../../assets/buttons/latest.png');
+  mask-image: url('../../assets/buttons/latest.png');
 }
 
 .notes-sidebar .view-toggle .icon-btn.btn-category::before {
-  -webkit-mask-image: url('/assets/buttons/active.png');
-  mask-image: url('/assets/buttons/active.png');
+  -webkit-mask-image: url('../../assets/buttons/active.png');
+  mask-image: url('../../assets/buttons/active.png');
 }
 
 .notes-sidebar .view-toggle .icon-btn.btn-archived::before {
-  -webkit-mask-image: url('/assets/buttons/archived.png');
-  mask-image: url('/assets/buttons/archived.png');
+  -webkit-mask-image: url('../../assets/buttons/archived.png');
+  mask-image: url('../../assets/buttons/archived.png');
 }
 
 .notes-sidebar .view-toggle .icon-btn.btn-deleted::before {
-  -webkit-mask-image: url('/assets/buttons/deleted.png');
-  mask-image: url('/assets/buttons/deleted.png');
+  -webkit-mask-image: url('../../assets/buttons/deleted.png');
+  mask-image: url('../../assets/buttons/deleted.png');
 }
 
 .notes-sidebar .view-toggle .icon-btn.btn-find::before {
-  -webkit-mask-image: url('/assets/buttons/find.png');
-  mask-image: url('/assets/buttons/find.png');
+  -webkit-mask-image: url('../../assets/buttons/find.png');
+  mask-image: url('../../assets/buttons/find.png');
 }
 
 /* Unlike the other 5 (fixed-size ::before mask icons, inset a flat 6px from
@@ -738,13 +738,13 @@
 }
 
 .note-list-column.note-list-column-action .note-list-action-button.note-list-action-button-archive::before {
-  -webkit-mask-image: url('/assets/buttons/archived.png');
-  mask-image: url('/assets/buttons/archived.png');
+  -webkit-mask-image: url('../../assets/buttons/archived.png');
+  mask-image: url('../../assets/buttons/archived.png');
 }
 
 .note-list-column.note-list-column-action .note-list-action-button.note-list-action-button-trash::before {
-  -webkit-mask-image: url('/assets/buttons/deleted.png');
-  mask-image: url('/assets/buttons/deleted.png');
+  -webkit-mask-image: url('../../assets/buttons/deleted.png');
+  mask-image: url('../../assets/buttons/deleted.png');
 }
 
 /* Primed states */

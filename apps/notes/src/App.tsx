@@ -9295,7 +9295,7 @@ ${markdownHtml}
                       } : undefined}
                     >
                       {/* Unlike the other 5 modes, .btn-options has no
-                          /assets/buttons/*.png mask asset (see sidebar.css) --
+                          src/assets/buttons/*.png mask asset (see sidebar.css) --
                           it was already styled for an inline glyph instead
                           (color, not background-color), matching this. */}
                       {mode === 'options' ? (
