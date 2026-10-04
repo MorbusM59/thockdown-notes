@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#FFFFFF</color>
+    <!-- The adaptive icon's background layer: the app's launch field, so the
+         icon, the splash and the launch overlay are one colour, defined once. -->
+    <color name="ic_launcher_background">@color/launch_background</color>
 </resources>
