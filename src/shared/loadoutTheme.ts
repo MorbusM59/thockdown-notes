@@ -5,7 +5,7 @@
  * the caller puts them on its own elements.
  *
  * It exists so the desktop app (App.tsx) and the mobile soundscape app
- * (mobile/) draw a preset the same way. Before it, these derivations lived
+ * (apps/soundscapes/) draw a preset the same way. Before it, these derivations lived
  * inline in App.tsx, where nothing else could reach them.
  *
  * Deliberately NOT here: textures (rendered to images by a worker and cached

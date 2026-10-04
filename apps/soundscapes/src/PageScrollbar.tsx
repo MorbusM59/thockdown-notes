@@ -19,8 +19,8 @@
  * pixels to scroll.
  */
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
-import { scrollThumbFor, scrollTopForThumb } from '../../src/shared/scrollTrackGeometry'
-import { scrollToNonQuantizedSmooth } from '../../src/editor/NonQuantizedSmoothScroll'
+import { scrollThumbFor, scrollTopForThumb } from '../../../src/shared/scrollTrackGeometry'
+import { scrollToNonQuantizedSmooth } from '../../../src/editor/NonQuantizedSmoothScroll'
 
 export function PageScrollbar({ scrollerRef }: { scrollerRef: RefObject<HTMLElement | null> }) {
   const trackRef = useRef<HTMLDivElement | null>(null)

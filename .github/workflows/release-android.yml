@@ -1,10 +1,10 @@
 # Builds the mobile soundscape app as an Android App Bundle (.aab) for the
 # Google Play Store, signed with the Play UPLOAD key. Run by hand from the
 # Actions tab when a version is ready; download the artifact, unzip it, and
-# upload the .aab in the Play Console (mobile/README.md, "Google Play").
+# upload the .aab in the Play Console (apps/soundscapes/README.md, "Google Play").
 #
-# The version is mobile/package.json's, and the versionCode is derived from it
-# in mobile/android/app/build.gradle, so a bundle is reproducible from its
+# The version is apps/soundscapes/package.json's, and the versionCode is derived from it
+# in apps/soundscapes/android/app/build.gradle, so a bundle is reproducible from its
 # commit. Play requires every upload's versionCode to be higher than the last,
 # so bump that version before releasing again.
 name: Release Android App Bundle
@@ -41,10 +41,10 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Build web app and sync it into the Android project
-        run: npm run mobile:build
+        run: npm run build -w thockdown-soundscapes
 
       - name: Build the release bundle, signed with the upload key
-        working-directory: mobile/android
+        working-directory: apps/soundscapes/android
         env:
           KEYSTORE_BASE64: ${{ secrets.PLAY_UPLOAD_KEYSTORE_BASE64 }}
           PLAY_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.PLAY_UPLOAD_KEYSTORE_PASSWORD }}
@@ -59,9 +59,9 @@ jobs:
 
       - name: Read the version
         id: version
-        run: echo "name=$(node -p "require('./mobile/package.json').version")" >> "$GITHUB_OUTPUT"
+        run: echo "name=$(node -p "require('./apps/soundscapes/package.json').version")" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
         with:
           name: thockdown-soundscapes-${{ steps.version.outputs.name }}-aab
-          path: mobile/android/app/build/outputs/bundle/release/app-release.aab
+          path: apps/soundscapes/android/app/build/outputs/bundle/release/app-release.aab

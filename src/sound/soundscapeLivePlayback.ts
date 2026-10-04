@@ -11,7 +11,7 @@
  * SOUNDSCAPE_SPACE_RETURN), the impulse response (soundscapeSpace.ts) and
  * the compressor's settings (BUS_COMPRESSOR). soundscapeMix.ts's convolution
  * and compressor were measured equal to the ConvolverNode and
- * DynamicsCompressorNode used here (mobile/README.md). Android renders ahead
+ * DynamicsCompressorNode used here (apps/soundscapes/README.md). Android renders ahead
  * because its WebView's audio stalls on an app switch and its JavaScript is
  * paused in the background; the desktop has neither problem.
  *

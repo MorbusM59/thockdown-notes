@@ -17,7 +17,7 @@
  * EVENTS they come to (scheduleEvents) and plays those, so the rules are
  * not restated on the native side.
  */
-import { SOUNDSCAPE_FACTORY_PRESETS, type SoundscapePreset } from '../../src/shared/soundscape'
+import { SOUNDSCAPE_FACTORY_PRESETS, type SoundscapePreset } from '../../../src/shared/soundscape'
 
 export const HOURS = 24
 const MINUTES_PER_DAY = HOURS * 60

@@ -514,7 +514,7 @@ export function SoundscapeOptions(props: SoundscapeOptionsProps) {
 
 /**
  * Everything inside that section, without the accordion around it: the
- * mobile app (mobile/) shows these controls as its whole interface, where a
+ * mobile app (apps/soundscapes/) shows these controls as its whole interface, where a
  * collapsible section heading would have nothing to collapse against.
  */
 export function SoundscapeControls({ preferences, onChange, pickedPresetId = null, onPickPreset, help }: SoundscapeControlsProps) {

@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.7.1",
   "type": "module",
+  "workspaces": [
+    "apps/*"
+  ],
   "scripts": {
     "predev": "node scripts/killStrayElectronDev.mjs && electron-rebuild -f -w better-sqlite3",
     "dev": "vite",
@@ -11,8 +14,6 @@
     "release": "node scripts/release.mjs",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "mobile:dev": "vite --config mobile/vite.config.ts",
-    "mobile:build": "tsc -p mobile && vite build --config mobile/vite.config.ts && vite build --config mobile/vite.renderer.config.ts && cap sync android",
     "pretest": "node scripts/killStrayElectronDev.mjs && npm rebuild better-sqlite3",
     "test": "vitest run",
     "verify": "node scripts/verify.mjs",
@@ -40,9 +41,6 @@
     "zustand": "^5.0.13"
   },
   "devDependencies": {
-    "@capacitor/android": "^8.5.2",
-    "@capacitor/cli": "^8.5.2",
-    "@capacitor/core": "^8.5.2",
     "@electron/rebuild": "^4.2.0",
     "@jridgewell/trace-mapping": "^0.3.31",
     "@tailwindcss/vite": "^4.1.17",

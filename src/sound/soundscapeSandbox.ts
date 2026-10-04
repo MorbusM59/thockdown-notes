@@ -6,7 +6,7 @@
  * desktop's worker runs (soundscapeRenderAhead.ts: the generator, the mix,
  * splicing), only driven by calls instead of messages.
  *
- * Built by mobile/vite.renderer.config.ts into one IIFE in the Android
+ * Built by apps/soundscapes/vite.renderer.config.ts into one IIFE in the Android
  * app's assets. The engine it runs in has no DOM and no web APIs beyond the
  * language itself (no btoa, no MessageChannel), and its calls exchange
  * strings only, so audio is returned as base64.

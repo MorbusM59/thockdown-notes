@@ -47,7 +47,7 @@ crossfade between two voices. HOW it reaches the speaker is not:
   service, never in the WebView: the
   same renderer, built as one script (`src/sound/soundscapeSandbox.ts` ->
   `app/src/main/assets/soundscape-renderer.js` in the Android project, by
-  `mobile/vite.renderer.config.ts`), runs
+  `apps/soundscapes/vite.renderer.config.ts`), runs
   in a JavaScriptSandbox (`androidx.javascriptengine`, a V8 isolate the app
   owns) driven by `SoundscapeRenderer.java`, and `SoundscapeAudioOutput.java`
   plays it through the platform's AudioTrack from a queue in the app's
@@ -96,17 +96,18 @@ bundle in a context with no web APIs, as the sandbox has none.
 Portrait only (`android:screenOrientation` in the manifest): the panel is one
 six-column grid laid out for a phone held upright.
 
-- `mobile/src/` — the web app: `MobileSoundscapeApp.tsx` (the screen),
+- `apps/soundscapes/src/` — the web app: `MobileSoundscapeApp.tsx` (the screen),
   `preferencesStore.ts` (localStorage, through the desktop's sanitizer),
   `backgroundAudioHost.ts` (the interface to the native side),
   `sessionEntries.ts` (what the media controls step through),
   `soundscapeFiles.ts` (export and import).
-- `mobile/android/` — the Capacitor Android project. The hand-written
+- `apps/soundscapes/android/` — the Capacitor Android project. The hand-written
   native code is in `app/src/main/java/com/thockdown/soundscapes/`: the
   plugin, the session, the service, the renderer, the output, the clip
   renderer and the shared sandbox. The launcher and notification icons are
   generated from `assets/icon.png`.
-- `capacitor.config.ts` (repo root) — points Capacitor at both.
+- `capacitor.config.ts` (this folder) — points Capacitor at both; run
+  Capacitor commands from here.
 
 ## The session, regular mode and the schedule
 On Android the soundscape belongs to a process-wide SESSION
@@ -209,12 +210,12 @@ a PKCS12 keystore with alias `upload`, and `PLAY_UPLOAD_KEYSTORE_PASSWORD`),
 which Google checks before re-signing the app with its own key. Run
 `.github/workflows/release-android.yml` by hand; it builds nothing until
 `ci.yml`, run on that same commit as its first job, is green. The version is
-`mobile/package.json`'s and the versionCode is derived from it
+`apps/soundscapes/package.json`'s and the versionCode is derived from it
 (major x 10000 + minor x 100 + patch, in `app/build.gradle`), so every build
 of a commit carries the same numbers and Play, which requires each upload to
 be higher than the last, needs a new version for a new upload. Download
 the artifact, unzip it, upload the `.aab`. The privacy policy the listing
-links to is `mobile/PRIVACY.md`. The app has no INTERNET permission: it loads
+links to is `apps/soundscapes/PRIVACY.md`. The app has no INTERNET permission: it loads
 its own files and renders on the device, and declaring none keeps the data
 safety answers true by construction.
 
@@ -224,7 +225,7 @@ category and the renderer in JavaScriptCore, behind the same plugin
 interface.
 
 ## Build
-- Browser, for the interface: `npm run mobile:dev`.
+- Browser, for the interface: `npm run dev -w thockdown-soundscapes`.
 - APK without Android Studio: on the phone, open
   `https://github.com/MorbusM59/thockdown-notes/releases/download/android-latest/thockdown-soundscapes.apk`
   (rebuilt by `.github/workflows/ci.yml` on every push to `main` that passes
@@ -236,6 +237,6 @@ interface.
   and `ANDROID_KEYSTORE_PASSWORD`), so a new APK installs as an update.
   The build fails without them. Lose the key and the next install needs
   an uninstall first.
-- Locally, with the Android SDK: `npm run mobile:build`, then
-  `cd mobile/android && ./gradlew assembleDebug` (or open `mobile/android` in
+- Locally, with the Android SDK: `npm run build -w thockdown-soundscapes`, then
+  `cd apps/soundscapes/android && ./gradlew assembleDebug` (or open `apps/soundscapes/android` in
   Android Studio).

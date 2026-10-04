@@ -88,10 +88,10 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Build web app and sync it into the Android project
-        run: npm run mobile:build
+        run: npm run build -w thockdown-soundscapes
 
       - name: Build debug APK, signed with the app's one key
-        working-directory: mobile/android
+        working-directory: apps/soundscapes/android
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           SOUNDSCAPES_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -108,14 +108,14 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: thockdown-soundscapes-debug-apk
-          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          path: apps/soundscapes/android/app/build/outputs/apk/debug/app-debug.apk
 
       - name: Publish to the android-latest prerelease
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp mobile/android/app/build/outputs/apk/debug/app-debug.apk thockdown-soundscapes.apk
+          cp apps/soundscapes/android/app/build/outputs/apk/debug/app-debug.apk thockdown-soundscapes.apk
           # Move the tag to this commit, so the release says what it was built from.
           git tag -f android-latest
           git push -f origin refs/tags/android-latest
@@ -124,7 +124,7 @@ jobs:
           else
             gh release create android-latest thockdown-soundscapes.apk --prerelease \
               --title "Android soundscapes (latest build)" \
-              --notes "Debug build of the mobile soundscape app from the latest main. Replaced on every build; see mobile/README.md."
+              --notes "Debug build of the mobile soundscape app from the latest main. Replaced on every build; see apps/soundscapes/README.md."
           fi
 
   # A high-impact change must reach main through a pull request. This cannot

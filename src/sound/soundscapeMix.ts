@@ -5,7 +5,7 @@
  * compressor -- in JavaScript, because Android renders ahead in a sandbox
  * with no Web Audio (soundscapeRenderAhead.ts). The desktop builds the same
  * chain from the browser's own nodes (soundscapeLivePlayback.ts), from the
- * numbers exported here, and the two were measured equal (mobile/README.md).
+ * numbers exported here, and the two were measured equal (apps/soundscapes/README.md).
  *
  *   direct --------------------------------------+
  *   send -> space (convolution) x return gain ---+-> x MIX_GAIN -> compressor -> brilliance -> out

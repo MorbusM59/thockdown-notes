@@ -81,7 +81,7 @@ export function mayTakeFocusOnPress(target: Element | null | undefined): boolean
  * The rule for every surface that hosts these controls, installed once per
  * host at window level in the capture phase: the desktop app (App.tsx,
  * which then restores the keyboard where it belongs) and the mobile app
- * (mobile/src/main.tsx). A touch press arrives as a compatibility
+ * (apps/soundscapes/src/main.tsx). A touch press arrives as a compatibility
  * `mousedown` too, so it is covered without touching the touch events that
  * scroll the page.
  */

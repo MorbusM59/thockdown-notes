@@ -11,7 +11,7 @@
  *   is heard at the next audio block;
  * - on Android, rendered AHEAD in the app's native service: a
  *   JavaScriptSandbox runs the renderer (soundscapeRenderAhead.ts) and
- *   Android's own audio output plays it (mobile/src/nativeSoundscapePlayback.ts,
+ *   Android's own audio output plays it (apps/soundscapes/src/nativeSoundscapePlayback.ts,
  *   installed with usePlayback). A web page's JavaScript is paused in the
  *   background and its audio stalls on an app switch; that service's is not
  *   and does not.
