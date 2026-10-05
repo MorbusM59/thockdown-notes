@@ -25,6 +25,7 @@ import { REVIEW_FLAG_CHANNELS } from '../src/shared/reviewFlags'
 import type { ReviewFlagWrite, ReviewFlagRemap } from '../src/shared/reviewFlags'
 import { WINDOW_DRAG_CHANNELS } from '../src/shared/windowDrag'
 import { ensureHelpGuide } from './help/helpGuideNote'
+import { installedUserDataPath } from './installedUserData'
 
 // Defense in depth: if something throws outside of a path we've explicitly
 // wrapped (e.g. during startup, before a window exists to show an in-app
@@ -280,6 +281,11 @@ if (isPortableBuild) {
   app.setPath('userData', portableElectronDir);
   app.setPath('sessionData', portableElectronDir);
   app.setPath('cache', path.join(portableElectronDir, 'Cache'));
+}
+
+if (app.isPackaged && !isPortableBuild) {
+  // Pinned rather than derived from the package name (installedUserData.ts).
+  app.setPath('userData', installedUserDataPath(app.getPath('appData')));
 }
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
