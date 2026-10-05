@@ -36,7 +36,7 @@ import java.util.List;
  * - a scheduled run's START ends a PAUSED regular mode -- a forgotten pause
  *   must not silence tomorrow's run -- but never a PLAYING one;
  * - a scheduled run's END stops regular mode if regular mode began DURING
- *   that run (`regularInRun`): pausing and resuming the schedule's
+ *   that run (`regularRunStop`): pausing and resuming the schedule's
  *   soundscape, skipping, or choosing another while a run plays all stay
  *   inside the run's window, so the run still ends in silence. Regular mode
  *   that was already under way when the run started is the listener's own
@@ -120,8 +120,14 @@ final class SoundscapeSession {
     /** Volatile: the output's writer thread reads it without the session's lock, which close() holds while joining that thread. */
     private volatile SoundscapeRenderer renderer;
     private Regular regular = Regular.STOPPED;
-    /** Whether regular mode left STOPPED while a scheduled run was under way, so that run's end stops it. */
-    private boolean regularInRun = false;
+    /**
+     * The minute of the day the scheduled run regular mode began in stops
+     * at, or null: regular mode began outside a run (or is STOPPED). That
+     * run's stop event, and no other run's, stops regular mode. Read from the
+     * STORED schedule when regular mode begins (an alarm may be late), and
+     * reconciled whenever the schedule is changed (applyScheduleState).
+     */
+    private Integer regularRunStop = null;
     /**
      * The schedule's current run's soundscape, or null: outside a run, or the
      * schedule off. READ FROM THE STORED SCHEDULE by settle(), never carried
@@ -317,6 +323,10 @@ final class SoundscapeSession {
 
     /** The schedule changed (turned on or off, or its slots edited), or the device rebooted: apply its state at this moment. */
     synchronized void applyScheduleState() {
+        // The run regular mode began in may have been moved, cut short or
+        // turned off with the schedule: it now ends with the run under way,
+        // if there is one, and with none otherwise.
+        if (regularRunStop != null) regularRunStop = runStopNow();
         settle(SCHEDULE_FADE_SEC, SCHEDULE_FADE_SEC);
         // Reported even when the page changed the schedule: what is heard,
         // and from which source, is the session's to work out.
@@ -325,12 +335,13 @@ final class SoundscapeSession {
 
     /**
      * The schedule's alarm: its events are due. A run STARTING ends a pause,
-     * which would otherwise silence it; a run ENDING ends regular mode begun
-     * within it. Checked before the start, so a run ending as the next one
-     * starts (in one late alarm) is ended first.
+     * which would otherwise silence it; the END of the run regular mode began
+     * in (`stopMinutes`, the due stop events) ends regular mode. Checked
+     * before the start, so a run ending as the next one starts (in one late
+     * alarm) is ended first.
      */
-    synchronized void applyScheduleEvents(boolean runEnded, boolean runStarted) {
-        if (runEnded && regularInRun) setRegular(Regular.STOPPED);
+    synchronized void applyScheduleEvents(java.util.Set<Integer> stopMinutes, boolean runStarted) {
+        if (regularRunStop != null && stopMinutes.contains(regularRunStop)) setRegular(Regular.STOPPED);
         if (runStarted && regular == Regular.PAUSED) setRegular(Regular.STOPPED);
         settle(SCHEDULE_FADE_SEC, SCHEDULE_FADE_SEC);
         report();
@@ -411,10 +422,16 @@ final class SoundscapeSession {
 
     // --- Internals ---
 
+    /** The minute the stored schedule's run under way stops at, or null outside a run. */
+    private Integer runStopNow() {
+        SoundscapeSchedule schedule = SoundscapeSchedule.load(context);
+        return scheduledNow(schedule) == null ? null : schedule.nextStopMinute();
+    }
+
     /** Move regular mode, noting whether it began inside a scheduled run. */
     private void setRegular(Regular next) {
-        if (next == Regular.STOPPED) regularInRun = false;
-        else if (regular == Regular.STOPPED) regularInRun = scheduled != null;
+        if (next == Regular.STOPPED) regularRunStop = null;
+        else if (regular == Regular.STOPPED) regularRunStop = runStopNow();
         regular = next;
     }
 
