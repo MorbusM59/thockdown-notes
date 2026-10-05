@@ -19,7 +19,7 @@ const HELP: Record<string, string[]> = {
     'Turning slots on and off: Tap a filled slot to switch it on or off; a slot that is off keeps its soundscape, shown faded. To empty a slot, drag your finger out of it while it is off. To empty several, start on an empty slot and drag sideways across them.',
     'Making a run longer: Drag sideways out of a slot that is on, and the soundscape is copied into every hour you pass over.',
     'Exact start and stop times: The first and last slot of a run show the minute it starts and stops. Drag up or down out of one of them to move that time by 5 minutes.',
-    'What you hear: When the schedule is on, a run fades in at its start, fades out at its end, and blends into the next soundscape on the hour, each over a minute. If you are playing or have paused a soundscape yourself, that comes first: the schedule waits until you stop it.',
+    'What you hear: When the schedule is on, a run fades in at its start, fades out at its end, and blends into the next soundscape on the hour, each over a minute. If you are playing or have paused a soundscape yourself, that comes first: the schedule waits until you stop it. Anything you play or pause while a scheduled run is under way still ends with that run.',
   ],
   Presets: [
     'Soundscapes: Tap one to play it. Hold one to pick it up for the schedule.',

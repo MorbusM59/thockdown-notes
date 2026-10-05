@@ -34,7 +34,13 @@ import java.util.List;
  *   close control, closing the app) makes it STOPPED, handing back to the
  *   schedule;
  * - a scheduled run's START ends a PAUSED regular mode -- a forgotten pause
- *   must not silence tomorrow's run -- but never a PLAYING one.
+ *   must not silence tomorrow's run -- but never a PLAYING one;
+ * - a scheduled run's END stops regular mode if regular mode began DURING
+ *   that run (`regularRunStop`): pausing and resuming the schedule's
+ *   soundscape, skipping, or choosing another while a run plays all stay
+ *   inside the run's window, so the run still ends in silence. Regular mode
+ *   that was already under way when the run started is the listener's own
+ *   and carries on past it.
  * The schedule's changes fade: a run starts by fading in and ends by fading
  * out over SCHEDULE_FADE_SEC, and a change of soundscape within a run is a
  * transition of that length. A STOP hands over faster, over
@@ -114,6 +120,14 @@ final class SoundscapeSession {
     /** Volatile: the output's writer thread reads it without the session's lock, which close() holds while joining that thread. */
     private volatile SoundscapeRenderer renderer;
     private Regular regular = Regular.STOPPED;
+    /**
+     * The minute of the day the scheduled run regular mode began in stops
+     * at, or null: regular mode began outside a run (or is STOPPED). That
+     * run's stop event, and no other run's, stops regular mode. Read from the
+     * STORED schedule when regular mode begins (an alarm may be late), and
+     * reconciled whenever the schedule is changed (applyScheduleState).
+     */
+    private Integer regularRunStop = null;
     /**
      * The schedule's current run's soundscape, or null: outside a run, or the
      * schedule off. READ FROM THE STORED SCHEDULE by settle(), never carried
@@ -211,7 +225,7 @@ final class SoundscapeSession {
         if (regular != Regular.PLAYING) {
             nextConfigure = output != null && !output.isPaused() ? NextConfigure.CROSSFADE : NextConfigure.REPLACE;
         }
-        regular = Regular.PLAYING;
+        setRegular(Regular.PLAYING);
         if (output == null) {
             open(find(regularId));
             output.fadeFrom(0f, 1f, SWITCH_FADE_SEC);
@@ -224,14 +238,14 @@ final class SoundscapeSession {
     /** Regular mode PAUSED (the engine closed its playback); only from PLAYING -- a stop that came first stands. */
     synchronized void pause() {
         if (regular != Regular.PLAYING || output == null) return;
-        regular = Regular.PAUSED;
+        setRegular(Regular.PAUSED);
         output.setPaused(true);
         refreshService();
     }
 
     /** Regular mode STOPPED: the schedule takes over, or the session ends. Returns the outcome. */
     synchronized State stop() {
-        regular = Regular.STOPPED;
+        setRegular(Regular.STOPPED);
         settle(HANDOVER_FADE_SEC, SWITCH_FADE_SEC);
         return state();
     }
@@ -255,7 +269,7 @@ final class SoundscapeSession {
 
     synchronized void controlPlay() {
         if (output == null || regular != Regular.PAUSED) return;
-        regular = Regular.PLAYING;
+        setRegular(Regular.PLAYING);
         fadeIn(SWITCH_FADE_SEC);
         // The page may have faded the output to silence before it paused it.
         output.setVolume(masterVolume, VOLUME_TIME_CONSTANT_SEC);
@@ -268,7 +282,7 @@ final class SoundscapeSession {
         if (!isAudible()) return;
         if (regular == Regular.STOPPED) regularId = scheduled.id;
         cancelPendingEnd();
-        regular = Regular.PAUSED;
+        setRegular(Regular.PAUSED);
         output.setPaused(true);
         refreshService();
         report();
@@ -284,7 +298,7 @@ final class SoundscapeSession {
         Entry entry = entries.get(next);
         cancelPendingEnd();
         regularId = entry.id;
-        regular = Regular.PLAYING;
+        setRegular(Regular.PLAYING);
         // From a pause nothing is heard to crossfade from: the new soundscape
         // replaces what was queued and fades in alone.
         if (output.isPaused()) {
@@ -300,7 +314,7 @@ final class SoundscapeSession {
 
     /** The notification's close control, or the app being closed: regular mode stops; the schedule carries on. */
     synchronized void controlStop() {
-        regular = Regular.STOPPED;
+        setRegular(Regular.STOPPED);
         settle(HANDOVER_FADE_SEC, SWITCH_FADE_SEC);
         report();
     }
@@ -309,15 +323,26 @@ final class SoundscapeSession {
 
     /** The schedule changed (turned on or off, or its slots edited), or the device rebooted: apply its state at this moment. */
     synchronized void applyScheduleState() {
+        // The run regular mode began in may have been moved, cut short or
+        // turned off with the schedule: it now ends with the run under way,
+        // if there is one, and with none otherwise.
+        if (regularRunStop != null) regularRunStop = runStopNow();
         settle(SCHEDULE_FADE_SEC, SCHEDULE_FADE_SEC);
         // Reported even when the page changed the schedule: what is heard,
         // and from which source, is the session's to work out.
         report();
     }
 
-    /** The schedule's alarm: its events are due. A run STARTING ends a pause, which would otherwise silence it. */
-    synchronized void applyScheduleEvents(boolean runStarted) {
-        if (runStarted && regular == Regular.PAUSED) regular = Regular.STOPPED;
+    /**
+     * The schedule's alarm: its events are due. A run STARTING ends a pause,
+     * which would otherwise silence it; the END of the run regular mode began
+     * in (`stopMinutes`, the due stop events) ends regular mode. Checked
+     * before the start, so a run ending as the next one starts (in one late
+     * alarm) is ended first.
+     */
+    synchronized void applyScheduleEvents(java.util.Set<Integer> stopMinutes, boolean runStarted) {
+        if (regularRunStop != null && stopMinutes.contains(regularRunStop)) setRegular(Regular.STOPPED);
+        if (runStarted && regular == Regular.PAUSED) setRegular(Regular.STOPPED);
         settle(SCHEDULE_FADE_SEC, SCHEDULE_FADE_SEC);
         report();
     }
@@ -397,6 +422,19 @@ final class SoundscapeSession {
 
     // --- Internals ---
 
+    /** The minute the stored schedule's run under way stops at, or null outside a run. */
+    private Integer runStopNow() {
+        SoundscapeSchedule schedule = SoundscapeSchedule.load(context);
+        return scheduledNow(schedule) == null ? null : schedule.nextStopMinute();
+    }
+
+    /** Move regular mode, noting whether it began inside a scheduled run. */
+    private void setRegular(Regular next) {
+        if (next == Regular.STOPPED) regularRunStop = null;
+        else if (regular == Regular.STOPPED) regularRunStop = runStopNow();
+        regular = next;
+    }
+
     private void open(Entry entry) {
         // The renderer reads the output's playhead and the output wakes the
         // renderer as it plays: each needs the other, so the output's
@@ -412,7 +450,7 @@ final class SoundscapeSession {
     private void failed(String message) {
         Listener current;
         synchronized (this) {
-            regular = Regular.STOPPED;
+            setRegular(Regular.STOPPED);
             close();
             current = listener;
         }
@@ -451,7 +489,7 @@ final class SoundscapeSession {
         } catch (RuntimeException refused) {
             // Refused a start from the background: end rather than play with
             // no service to keep the process, or the listener, informed.
-            regular = Regular.STOPPED;
+            setRegular(Regular.STOPPED);
             close();
             Listener current = listener;
             if (current != null) current.onFailure("Soundscape could not start in the background: " + refused);
