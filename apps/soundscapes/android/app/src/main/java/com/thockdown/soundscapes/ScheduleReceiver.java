@@ -29,9 +29,13 @@ public class ScheduleReceiver extends BroadcastReceiver {
                 int minute = intent.getIntExtra(SoundscapeSchedule.EXTRA_MINUTE, -1);
                 if (minute >= 0) {
                     List<SoundscapeSchedule.Event> due = schedule.dueSince(minute);
+                    boolean runEnded = false;
                     boolean runStarted = false;
-                    for (SoundscapeSchedule.Event event : due) runStarted |= "start".equals(event.kind);
-                    if (!due.isEmpty()) session.applyScheduleEvents(runStarted);
+                    for (SoundscapeSchedule.Event event : due) {
+                        runEnded |= "stop".equals(event.kind);
+                        runStarted |= "start".equals(event.kind);
+                    }
+                    if (!due.isEmpty()) session.applyScheduleEvents(runEnded, runStarted);
                 }
             }
         } else if (SoundscapeSchedule.ACTION_APPLY_STATE.equals(action)) {
