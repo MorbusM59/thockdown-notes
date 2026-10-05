@@ -747,6 +747,22 @@
   mask-image: url('../../assets/buttons/deleted.png');
 }
 
+/* The archive button of a note whose file is missing asks for the file: its
+   glyph is the Font Awesome icon inside it, not the archive mask. */
+.note-list-column.note-list-column-action .note-list-action-button.note-list-action-button-archive.is-specify-file::before {
+  content: none;
+}
+
+/* A note whose file is missing is marked for deletion, flat row and tree
+   card alike, with the hatching a card primed for deletion shows. */
+.note-list-item.is-missing-file,
+.note-list-item.is-missing-file:hover,
+.note-list-item.is-missing-file.is-active,
+.note-list-item.is-missing-file.is-active:hover {
+  filter: var(--filter-primed-delete);
+  background-image: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.2) 0, rgba(0, 0, 0, 0.2) 1px, transparent 2px, transparent 3px);
+}
+
 /* Primed states */
 .note-list-item.is-primed-for-archiving.is-tree-card,
 .note-list-item.is-primed-for-archiving.is-tree-card:hover,

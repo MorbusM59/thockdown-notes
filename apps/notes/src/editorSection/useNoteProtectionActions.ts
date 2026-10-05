@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent, MutableRefObject } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
-import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote } from '../shared/noteLifecycle'
+import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isDeletionPermanent, isExternalNote } from '../shared/noteLifecycle'
 import { withSavedNote } from '../shared/noteContentStore'
 import { applyProtectedTagDestination } from '../shared/protectedTagActions'
 import { normalizeInternalText } from '../editor/TextPolicy'
@@ -428,7 +428,7 @@ export function useNoteProtectionActions({
     if (noteTransitionLockRef.current) return
 
     const summary = notes.find((note) => note.id === noteId)
-    const isCurrentlyDeleted = summary ? isDeletedNote(summary) : false
+    const isCurrentlyDeleted = summary ? isDeletionPermanent(summary) : false
 
     noteTransitionLockRef.current = true
     try {
@@ -633,6 +633,17 @@ export function useNoteProtectionActions({
     if (!window.thockdownNotes || !persistenceReady) return
     if (noteTransitionLockRef.current) return
 
+    // A note whose file is missing has nothing to archive yet: the button
+    // in archive's place asks for its file instead (NoteSummary.missingFile).
+    if (notes.find((note) => note.id === noteId)?.missingFile) {
+      try {
+        if (await window.thockdownNotes.specifyMissingNoteFile({ id: noteId })) await refreshNotes(activeNoteId ?? noteId)
+      } catch (error) {
+        console.error('Failed to specify the missing note file', error)
+      }
+      return
+    }
+
     noteTransitionLockRef.current = true
     try {
       await flushPendingSaveNow()
@@ -647,14 +658,14 @@ export function useNoteProtectionActions({
     } finally {
       noteTransitionLockRef.current = false
     }
-  }, [activeNoteId, applyProtectedNoteDestination, flushPendingSaveNow, persistenceReady, refreshNotes, noteTransitionLockRef, setActiveNoteId, commitEditorText])
+  }, [activeNoteId, applyProtectedNoteDestination, flushPendingSaveNow, notes, persistenceReady, refreshNotes, noteTransitionLockRef, setActiveNoteId, commitEditorText])
 
   const handleTrashClick = useCallback(async (noteId: string) => {
     if (!window.thockdownNotes || !persistenceReady) return
     if (noteTransitionLockRef.current) return
 
     const summary = notes.find((note) => note.id === noteId)
-    const isCurrentlyDeleted = summary ? isDeletedNote(summary) : false
+    const isCurrentlyDeleted = summary ? isDeletionPermanent(summary) : false
 
     noteTransitionLockRef.current = true
     try {

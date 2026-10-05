@@ -87,6 +87,8 @@ const noteLifecycleApi: NoteLifecycleApi = {
   branchNoteFromSnapshot: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.branchNoteFromSnapshot, input),
   setNoteAssignedId: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.setAssignedId, input),
   setNoteTimeless: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.setTimeless, input),
+  restoreMissingNoteFile: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.restoreMissingNoteFile, input),
+  specifyMissingNoteFile: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.specifyMissingNoteFile, input),
 }
 
 contextBridge.exposeInMainWorld('thockdownNotes', noteLifecycleApi)

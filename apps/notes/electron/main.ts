@@ -508,6 +508,19 @@ function registerIpcHandlers() {
   ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.getNoteIdByExternalPath, async (_event, input) => noteLifecycleService!.getNoteIdByExternalPath(input));
   ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.setAssignedId, async (_event, input) => noteLifecycleService!.setNoteAssignedId(input));
   ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.setTimeless, async (_event, input) => noteLifecycleService!.setNoteTimeless(input));
+  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.restoreMissingNoteFile, async (_event, input) => noteLifecycleService!.restoreMissingNoteFile(input));
+  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.specifyMissingNoteFile, async (event, input) => {
+    const winRef = BrowserWindow.fromWebContents(event.sender) ?? win
+    if (!winRef) return false
+    const result = await dialog.showOpenDialog(winRef, {
+      title: 'Specify the missing note file',
+      properties: ['openFile'],
+      filters: [{ name: 'Markdown and Text Files', extensions: ['md', 'txt'] }],
+    })
+    if (result.canceled || result.filePaths.length === 0) return false
+    await noteLifecycleService!.adoptFileForMissingNote(input, result.filePaths[0])
+    return true
+  });
 
   ipcMain.handle(APP_STATE_CHANNELS.loadAppState, async () => stateService!.loadAppState());
   ipcMain.handle(APP_STATE_CHANNELS.saveAppState, async (_event, payload) => stateService!.saveAppState(payload));

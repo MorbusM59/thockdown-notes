@@ -116,6 +116,14 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   onSetAsideUndockedNote: () => void
   /** Closes whatever overlay is up and restores what its slot was showing before. */
   onCloseSlotOverlay: () => void
+  /**
+   * Asked to show a note whose file is missing (NoteSummary.missingFile).
+   * The note is NOT opened -- there is no file to open -- and the slot keeps
+   * what it had; the app offers recovery instead. Every route into a note
+   * (a card, a tab, a chapter pill, a link, a restored session) ends in
+   * activateNote, which is why the check lives there and not at each route.
+   */
+  onMissingNoteFileActivated: (sectionId: string, noteId: string) => void
   markSectionActive: (sectionId: string) => void
   isSidebarVisible: boolean
   toggleSidebarVisible: () => void
@@ -204,6 +212,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
   slotOverlay,
   reportSlotOccupancy,
   onCloseSlotOverlay,
+  onMissingNoteFileActivated,
   onDockUndockedNote,
   onDockUndockedNoteIntoSection,
   onSetAsideUndockedNote,
@@ -595,6 +604,10 @@ export function EditorSection(rawProps: EditorSectionProps) {
    */
   const activateNote = useCallback(async (noteId: string, overrideCursorPos?: number, overrideSourceAnchorLine?: number) => {
     if (!window.thockdownNotes) return
+    if (notesRef.current.find((note) => note.id === noteId)?.missingFile) {
+      onMissingNoteFileActivated(sectionId, noteId)
+      return
+    }
 
     const debugTiming = window.localStorage.getItem('thockdown:debug-input-lag') === '1'
     const logStep = (label: string, start: number) => {
@@ -912,6 +925,8 @@ export function EditorSection(rawProps: EditorSectionProps) {
     readEditorText,
     setActiveNoteId,
     setIsForcedPreviewNote,
+    notesRef,
+    onMissingNoteFileActivated,
   ])
 
   // Unloads this section back to its brand-new-section empty state -- same

@@ -8,6 +8,7 @@ import type {
   DeleteNoteInput,
   DeleteNoteSnapshotInput,
   LoadNoteInput,
+  MissingNoteFile,
   NoteDocument,
   NoteSummary,
   NoteSummaryWithContent,
@@ -99,6 +100,20 @@ function isExternalTag(tagName: string): boolean {
   return tagName.trim().toLowerCase() === 'external';
 }
 
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch (error) {
+    if (isMissingFileError(error)) return false;
+    throw error;
+  }
+}
+
+function isMissingFileError(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException | null)?.code === 'ENOENT';
+}
+
 function idToFileName(id: string): string {
   const safe = id.replace(/[^A-Za-z0-9_-]/g, '_');
   return `${safe}.md`;
@@ -151,19 +166,41 @@ export class NoteLifecycleService {
     };
   }
 
+  /**
+   * What a note's text and timestamps are read from: the database for a temp
+   * note, its file for every other -- and, when that file is MISSING, the
+   * database's copy, marked so the reader is offered recovery rather than
+   * the note silently disappearing (see MissingNoteFile). Any other failure
+   * to read still hides the note, as before.
+   */
+  private async readSummarySource(record: NoteRecord): Promise<{
+    text: string;
+    stat: { birthtimeMs: number; mtimeMs: number; size: number };
+    missingFile?: MissingNoteFile;
+  }> {
+    const fromDatabase = (text: string) => ({
+      birthtimeMs: record.createdAtMs,
+      mtimeMs: record.updatedAtMs,
+      size: Buffer.byteLength(text, 'utf8'),
+    });
+    if (record.isTemp) {
+      const text = this.databaseService.readStoredNoteContent(record.id) ?? '';
+      return { text, stat: fromDatabase(text) };
+    }
+    try {
+      const [text, stat] = await Promise.all([fs.readFile(record.filePath, 'utf8'), fs.stat(record.filePath)]);
+      return { text, stat };
+    } catch (error) {
+      if (!isMissingFileError(error)) throw error;
+      const stored = this.databaseService.readStoredNoteContent(record.id);
+      const text = stored ?? '';
+      return { text, stat: fromDatabase(text), missingFile: { hasStoredCopy: stored !== null } };
+    }
+  }
+
   private async readSummary(record: NoteRecord): Promise<NoteSummaryWithContent | null> {
     try {
-      const text = record.isTemp
-        ? (this.databaseService.readStoredNoteContent(record.id) ?? '')
-        : await fs.readFile(record.filePath, 'utf8');
-
-      const stat = record.isTemp
-        ? {
-            birthtimeMs: record.createdAtMs,
-            mtimeMs: record.updatedAtMs,
-            size: Buffer.byteLength(text, 'utf8'),
-          }
-        : await fs.stat(record.filePath);
+      const { text, stat, missingFile } = await this.readSummarySource(record);
 
       const parsed = parseNoteMetadata(text, true);
       const fileName = path.basename(record.filePath);
@@ -191,6 +228,7 @@ export class NoteLifecycleService {
         chapterParentId: record.chapterParentId,
         chapterId: record.chapterId,
         detachedChapterParentId: record.detachedChapterParentId,
+        ...(missingFile ? { missingFile } : {}),
       };
     } catch {
       return null;
@@ -1121,8 +1159,59 @@ export class NoteLifecycleService {
     }
 
     const filePath = record?.filePath ?? path.join(this.notesDir, idToFileName(input.id));
-    await fs.unlink(filePath);
+    // A note whose file is already gone (MissingNoteFile) is deleted by
+    // removing its entry: the file being absent is the state deletion ends in.
+    await fs.unlink(filePath).catch((error: unknown) => {
+      if (!isMissingFileError(error)) throw error;
+    });
     this.databaseService.deleteNote(input.id);
+  }
+
+  /**
+   * Writes a missing note's file back from the database's copy of its text,
+   * and does the same for any of its chapters whose files are missing too --
+   * a chapter cannot be reached without its parent, so restoring one without
+   * the other would only move the prompt one click along. A note whose file
+   * is present is left alone.
+   */
+  async restoreMissingNoteFile(input: LoadNoteInput): Promise<void> {
+    const chapterNoteIds = this.databaseService.listChaptersForNote(input.id).map((chapter) => chapter.chapterNoteId);
+    for (const noteId of [input.id, ...chapterNoteIds]) {
+      const record = this.databaseService.getNoteRecord(noteId);
+      if (!record || record.isTemp || await fileExists(record.filePath)) continue;
+      const stored = this.databaseService.readStoredNoteContent(noteId);
+      if (stored === null) {
+        if (noteId === input.id) throw new Error(`No stored copy of note ${noteId} to restore its file from`);
+        continue;
+      }
+      await this.writeMissingNoteFile(record, stored);
+    }
+  }
+
+  /**
+   * COPIES `sourcePath` into the notes folder as a missing note's file, so the
+   * notes folder stays the one place the app's notes live and the reader's
+   * original is never moved or written to. The note keeps its id, tags,
+   * chapters and history; only its text comes from the file.
+   */
+  async adoptFileForMissingNote(input: LoadNoteInput, sourcePath: string): Promise<void> {
+    const record = this.databaseService.getNoteRecord(input.id);
+    if (!record || record.isTemp) throw new Error(`Note ${input.id} has no file to replace`);
+    if (await fileExists(record.filePath)) throw new Error(`Note ${input.id} is not missing its file`);
+    const text = normalizeText(await fs.readFile(sourcePath, 'utf8'));
+    await this.writeMissingNoteFile(record, text);
+  }
+
+  /**
+   * Writes a missing note's file at the note's canonical place in the notes
+   * folder, never over an existing file ('wx'), and points the entry there
+   * if it pointed anywhere else (a data folder that has moved since).
+   */
+  private async writeMissingNoteFile(record: NoteRecord, text: string): Promise<void> {
+    await this.ensureNotesDir();
+    const { filePath } = this.notePathFromId(record.id);
+    await fs.writeFile(filePath, text, { encoding: 'utf8', flag: 'wx' });
+    if (filePath !== record.filePath) this.databaseService.setNoteFilePath(record.id, filePath);
   }
 
   async saveNoteUiState(input: { id: string; payload: NoteUiStatePayload }): Promise<void> {

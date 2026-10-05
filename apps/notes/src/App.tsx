@@ -129,6 +129,8 @@ import { applyDocumentTheme, themeFrame } from '@thockdown/look/loadoutTheme'
 import { ThemeBlendOverlays, ThemeGlazeLayers } from '@thockdown/look/ThemeLayers'
 import { DEBUG_TAG_NAME, PROTECTED_TAGS, normalizeTagName } from './shared/tags'
 import { EditorSection } from './editorSection/EditorSection'
+import { missingNoteRecoveryMode, type MissingNoteRecovery } from './editorSection/missingNoteRecoveryMode'
+import { EMPTY_ESCAPE_MENU_CONTRIBUTION, type EscapeMenuContribution } from './escapeMenu/escapeMenuContract'
 import { EditorToolbar } from './toolbar/EditorToolbar'
 import { DEFAULT_EDITOR_SECTION_ID, type EditorSectionEntry } from './shared/sections'
 import { computeSlotWidthsForCloseFlexAware, computeSlotWidthsForNewSlotFlexAware, computeSlotWidthsPx, type SlotWidthPx } from './shared/slotWidths'
@@ -1199,14 +1201,23 @@ const NoteListItem = memo(function NoteListItem({
   // parent's Archive fold-out, so a chapter whose parent is gone or itself in
   // Trash has nowhere to land and would vanish from every view until the
   // parent came back. Purging it (the trash button) stays available.
-  const isArchiveButtonDisabled = !onArchiveClick || isArchived
+  // A note whose file is missing (NoteSummary.missingFile) is marked for
+  // deletion: its archive button asks for the missing file instead, and its
+  // delete button removes the entry for good (isDeletionPermanent) -- both
+  // always available, since recovering or deleting it is all it is good for.
+  const isMissingFile = Boolean(note.missingFile)
+  const isArchiveButtonDisabled = !onArchiveClick || (!isMissingFile && (isArchived
     || (!isTrashMode && (isDeleted || isChapter))
-    || (isChapter && isChapterParentUnavailable)
-  const isTrashButtonDisabled = !onTrashClick || (!isTrashMode && (isDeleted || isChapter))
+    || (isChapter && isChapterParentUnavailable)))
+  const isTrashButtonDisabled = !onTrashClick || (!isMissingFile && !isTrashMode && (isDeleted || isChapter))
+  const archiveButtonLabel = isArchiveButtonDisabled ? 'Archive disabled' : isMissingFile ? 'Specify missing file' : 'Archive note'
+  const trashButtonLabel = isTrashButtonDisabled
+    ? 'Trash disabled'
+    : isMissingFile ? 'Delete database entry' : isTrashMode && isDeleted ? 'Permanently delete note' : 'Trash note'
 
   return (
     <div
-      className={`note-list-item${isActive ? ' is-active' : ''}${isTreeVariant ? ' is-tree-card' : ''}${isModified ? ' is-modified' : ''}${isExternal ? ' is-external' : ''}${primedAction === 'archive' ? ' is-primed-for-archiving' : ''}${primedAction === 'deletion' ? ' is-primed-for-deletion' : ''}${isArchiveFoldOutChapter ? ' is-archive-fold-out-chapter' : ''}`}
+      className={`note-list-item${isActive ? ' is-active' : ''}${isTreeVariant ? ' is-tree-card' : ''}${isModified ? ' is-modified' : ''}${isExternal ? ' is-external' : ''}${primedAction === 'archive' ? ' is-primed-for-archiving' : ''}${primedAction === 'deletion' ? ' is-primed-for-deletion' : ''}${isArchiveFoldOutChapter ? ' is-archive-fold-out-chapter' : ''}${isMissingFile ? ' is-missing-file' : ''}`}
       data-note-id={note.id}
       role="option"
       aria-selected={isActive}
@@ -1277,15 +1288,18 @@ const NoteListItem = memo(function NoteListItem({
               <div className={`note-list-column note-list-column-action note-list-column-archive${isArchiveButtonDisabled ? ' is-disabled' : ''}`}>
                 <button
                   type="button"
-                  className="note-list-action-button note-list-action-button-archive"
+                  className={`note-list-action-button note-list-action-button-archive${isMissingFile ? ' is-specify-file' : ''}`}
                   disabled={isArchiveButtonDisabled}
-                  aria-label={isArchiveButtonDisabled ? 'Archive disabled' : 'Archive note'}
-                  data-tooltip={isArchiveButtonDisabled ? 'Archive disabled' : 'Archive note'}
+                  aria-label={archiveButtonLabel}
+                  data-tooltip={archiveButtonLabel}
                   onClick={handleArchiveClick}
                   onMouseDown={(event) => event.stopPropagation()}
                   onMouseUp={(event) => event.stopPropagation()}
                   data-secondary-press="none"
-                  onContextMenu={(event) => event.stopPropagation()}/>
+                  onContextMenu={(event) => event.stopPropagation()}
+                >
+                  {isMissingFile ? <span className="fa-solid fa-file-import" aria-hidden="true" /> : null}
+                </button>
               </div>
 
               <div className={`note-list-column note-list-column-action note-list-column-trash${isTrashButtonDisabled ? ' is-disabled' : ''}`}>
@@ -1293,8 +1307,8 @@ const NoteListItem = memo(function NoteListItem({
                   type="button"
                   className="note-list-action-button note-list-action-button-trash"
                   disabled={isTrashButtonDisabled}
-                  aria-label={isTrashButtonDisabled ? 'Trash disabled' : isTrashMode && isDeleted ? 'Permanently delete note' : 'Trash note'}
-                  data-tooltip={isTrashButtonDisabled ? 'Trash disabled' : isTrashMode && isDeleted ? 'Permanently delete note' : 'Trash note'}
+                  aria-label={trashButtonLabel}
+                  data-tooltip={trashButtonLabel}
                   onClick={handleTrashClick}
                   onMouseDown={(event) => event.stopPropagation()}
                   onMouseUp={(event) => event.stopPropagation()}
@@ -5560,10 +5574,84 @@ ${markdownHtml}
     onCommitSave: commitAdventureSave,
     onLeave: handleAdventureLeave,
   })
+  /**
+   * A note whose file is missing (NoteSummary.missingFile) is never opened:
+   * asking for it raises a recovery ring over the slot it was asked for in
+   * (editorSection/missingNoteRecoveryMode.ts), and the slot keeps what it
+   * had. The ring lives exactly as long as the note is still missing -- it is
+   * derived from the note's summary, so restoring the file by any route
+   * lowers it without anybody having to remember to.
+   */
+  const [missingNoteRecovery, setMissingNoteRecovery] = useState<MissingNoteRecovery | null>(null)
+  /**
+   * A note whose file was just put back, waiting to be opened in the slot it
+   * was asked for in. Opened once the refreshed list says its file is there
+   * -- not sooner, or the section would see it still missing and raise the
+   * ring again.
+   */
+  const [recoveredNote, setRecoveredNote] = useState<MissingNoteRecovery | null>(null)
+  const handleMissingNoteFileActivated = useCallback((sectionId: string, noteId: string) => {
+    setMissingNoteRecovery({ sectionId, noteId })
+  }, [])
+  const recoveringNote = missingNoteRecovery ? notes.find((note) => note.id === missingNoteRecovery.noteId) ?? null : null
+  const recoveryMode = useMemo(() => {
+    if (!missingNoteRecovery || !recoveringNote?.missingFile) return null
+    const { noteId, sectionId } = missingNoteRecovery
+    const recover = async (putFileBack: () => Promise<boolean>) => {
+      try {
+        if (!await putFileBack()) return
+        setMissingNoteRecovery(null)
+        setRecoveredNote({ noteId, sectionId })
+        await refreshNotes()
+      } catch (error) {
+        console.error('Failed to recover the missing note file', error)
+      }
+    }
+    return missingNoteRecoveryMode(recoveringNote, {
+      restore: () => recover(async () => {
+        await window.thockdownNotes?.restoreMissingNoteFile({ id: noteId })
+        return true
+      }),
+      specify: () => recover(async () => Boolean(await window.thockdownNotes?.specifyMissingNoteFile({ id: noteId }))),
+      remove: async () => {
+        setMissingNoteRecovery(null)
+        await sectionRegistryRef.current.get(sectionId)?.handleTrashClick(noteId)
+      },
+      dismiss: () => setMissingNoteRecovery(null),
+    })
+  }, [missingNoteRecovery, recoveringNote, refreshNotes])
+  const recoveryContribution = useMemo<EscapeMenuContribution>(
+    () => (recoveryMode ? { entryCells: [], activeMode: recoveryMode } : EMPTY_ESCAPE_MENU_CONTRIBUTION),
+    [recoveryMode],
+  )
+  const recoverySectionId = recoveryMode ? missingNoteRecovery?.sectionId ?? null : null
+  useEffect(() => {
+    if (!recoveredNote) return
+    const summary = notes.find((note) => note.id === recoveredNote.noteId)
+    if (summary?.missingFile) return
+    setRecoveredNote(null)
+    if (!summary) return
+    const handle = sectionRegistryRef.current.get(recoveredNote.sectionId)
+    if (!handle) return
+    void handle.flushPendingSaveNow()
+      .then(() => handle.activateNote(recoveredNote.noteId))
+      .catch((error) => console.error('Failed to open the recovered note', error))
+  }, [notes, recoveredNote])
+  /**
+   * The escape-menu contribution a slot draws: the recovery ring where one is
+   * up -- it answers the reader's latest request, so it is drawn over
+   * anything else there, the adventure included, and lowering it hands the
+   * slot back -- otherwise the adventure where it lives.
+   */
+  const escapeMenuForSection = (sectionId: string): EscapeMenuContribution | null => {
+    if (sectionId === recoverySectionId) return recoveryContribution
+    if (sectionId === adventureSectionId) return escapeMenuContribution
+    return null
+  }
   // Plain assignment every render, like persistMenuStateNowRef's -- a
   // conditional or effect-based one would let the handler above read a stale
   // mode for a frame, which for a dismissal is a frame that matters.
-  escapeMenuModeRef.current = escapeMenuContribution.activeMode
+  escapeMenuModeRef.current = (activeSectionId ? escapeMenuForSection(activeSectionId)?.activeMode : null) ?? null
 
   /**
    * WHETHER A RING IS UP IN THE SLOT THE READER IS IN.
@@ -5598,9 +5686,7 @@ ${markdownHtml}
    * the mode's onDismiss, which ends the mode): closing removes the mode in
    * the same action, and the mode's absence is what lets the ring stay down.
    */
-  const isModeOwningActiveSlot = escapeMenuContribution.activeMode !== null
-    && adventureSectionId !== null
-    && adventureSectionId === activeSectionId
+  const isModeOwningActiveSlot = escapeMenuModeRef.current !== null
   const isEscapeRingUp = isEscapeHoldPanelOpen || isModeOwningActiveSlot
   // Plain assignment every render, for the same reason as the mode ref's.
   isModeOwningActiveSlotRef.current = isModeOwningActiveSlot
@@ -10094,6 +10180,7 @@ ${markdownHtml}
                   slotOverlay={slotOverlay}
                   reportSlotOccupancy={reportSlotOccupancy}
                   onCloseSlotOverlay={() => void closeOverlay()}
+                  onMissingNoteFileActivated={handleMissingNoteFileActivated}
                   onDockUndockedNote={() => {
                     setSlotOverlay(null)
                     persistMenuStateNow({ slotOverlay: null })
@@ -10140,7 +10227,7 @@ ${markdownHtml}
                   onEscapeHoldExportPdf={handleExportPdf}
                   onEscapeHoldExportMd={handleExportMd}
                   onEscapeHoldOpenHelp={() => void handleHelpModeOpen()}
-                  escapeMenu={adventureSectionId === entry.id ? escapeMenuContribution : null}
+                  escapeMenu={escapeMenuForSection(entry.id)}
                   isExportingPdf={isExportingPdf}
                   isExportingMd={isExportingMd}
                   borderRadiusRegularPx={borderRadiusRegularPx}

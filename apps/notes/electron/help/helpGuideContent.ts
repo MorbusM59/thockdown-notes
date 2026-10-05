@@ -496,6 +496,17 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 *Permanently purges every note currently in Trash, in one action.*
 
 - Hold a right-click on the button to arm the purge; a normal left-click while armed confirms it.
+
+### [Notes Whose File Is Missing](#notes-whose-file-is-missing)
+
+> **Where?**
+> Any note row in the sidebar drawn hatched, as if marked for deletion.
+
+*Every note is a \`.md\` file in the notes folder. When that file is moved, renamed or deleted outside the app, the note is kept and marked like this instead of disappearing.*
+
+- Clicking it does not open it. The quick-actions ring comes up in its place, offering **Restore from saved copy** (the default: the app keeps a copy of every note's text and writes the file back from it, chapters included), **Specify missing file** (pick a file, which is copied into the notes folder; your original is left where it is), and **Delete database entry**.
+- On the row itself, the Archive button becomes **Specify missing file**, and the Trash button deletes the entry right away, since there is no file left to put in Trash.
+- Escape leaves the note marked and changes nothing.
 `,
   `## Time Machine
 

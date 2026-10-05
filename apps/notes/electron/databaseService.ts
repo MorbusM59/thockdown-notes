@@ -795,11 +795,8 @@ export class DatabaseService {
         contentChecksum = excluded.contentChecksum
     `);
 
-    const deleteMissingNotesStmt = db.prepare('DELETE FROM notes WHERE id = ? AND isTemp = 0');
     const deleteNoteTagsStmt = db.prepare('DELETE FROM note_tags WHERE noteId = ?');
     const insertNoteTagStmt = db.prepare('INSERT OR REPLACE INTO note_tags (noteId, tagId, position) VALUES (?, ?, ?)');
-    const selectAllNoteIdsStmt = db.prepare('SELECT id FROM notes');
-    const selectIsTempStmt = db.prepare('SELECT isTemp FROM notes WHERE id = ?');
 
     const findTagStmt = db.prepare('SELECT id FROM tags WHERE name = ?');
     const insertTagStmt = db.prepare('INSERT INTO tags (name) VALUES (?)');
@@ -817,8 +814,6 @@ export class DatabaseService {
       const created = insertTagStmt.run(tagName);
       return Number(created.lastInsertRowid);
     };
-
-    const seenIds = new Set<string>();
 
     const tx = db.transaction((rows: NoteSyncRow[]) => {
       for (const row of rows) {
@@ -840,24 +835,13 @@ export class DatabaseService {
           const tagId = getOrCreateTagId(tagName);
           insertNoteTagStmt.run(row.id, tagId, position);
         });
-
-        seenIds.add(row.id);
       }
 
-      const existingIds = selectAllNoteIdsStmt.all() as Array<{ id: string }>;
-      for (const { id } of existingIds) {
-        if (seenIds.has(id)) continue;
-
-        // Preserve temp/external note records across restarts. Only delete
-        // regular notes that no longer have a corresponding .md file.
-        const tempRow = selectIsTempStmt.get(id) as { isTemp: number } | undefined;
-        if (tempRow?.isTemp === 1) {
-          continue;
-        }
-
-        deleteMissingNotesStmt.run(id);
-        this.removeStoredContent(id);
-      }
+      // A note listed here whose file was not found is KEPT, with its stored
+      // copy: it used to be deleted on the spot, which turned any file that
+      // went missing -- or a data folder opened without its notes -- into
+      // notes lost for good. It is listed as missing its file instead, and
+      // only the reader deletes it (MissingNoteFile in shared/noteLifecycle.ts).
     });
 
     tx(syncedRows);
@@ -2163,6 +2147,15 @@ export class DatabaseService {
    * has no bearing on `detachedChapterParentId` at all (a plain column, not
    * a foreign key). One level only -- chapters can't have sub-chapters.
    */
+  /**
+   * Where a note's file is. Not guarded by assertNotTimeless: it records a
+   * fact about the disk, not an edit, and a frozen note's file can go missing
+   * like any other (NoteLifecycleService.writeMissingNoteFile).
+   */
+  setNoteFilePath(id: string, filePath: string): void {
+    this.requireDb().prepare('UPDATE notes SET filePath = ? WHERE id = ?').run(filePath, id);
+  }
+
   deleteNote(id: string): void {
     this.assertNotTimeless(id);
     const db = this.requireDb();
