@@ -32,10 +32,8 @@ import { damageShareOf, strikesOf } from './moves'
 import type { CombatMove } from './vectors'
 import { CRIT_CHANCE, DODGE_CHANCE, HIT_CHANCE, type DerivedStats, type StatBlock } from './stats'
 
-/** What the player may answer a monster's attack with. All four are always offered except Dodge. */
-export const DEFENCES = ['dodge', 'defend', 'flee', 'takeTheHit'] as const
-
-export type Defence = (typeof DEFENCES)[number]
+import type { Defence } from './defences'
+export { DEFENCES, defencesOffered, type Defence } from './defences'
 
 /**
  * A round in progress.
@@ -582,11 +580,6 @@ export function rollDodgeOffered(options: {
     successAdjust: options.successAdjust,
   }))
   return { offered: draw.value.passed, roll: draw.value, rng: draw.rng }
-}
-
-/** What the player may pick, this time. Dodge is the only one that has to be earned. */
-export function defencesOffered(dodgeOffered: boolean): Defence[] {
-  return DEFENCES.filter((defence) => defence !== 'dodge' || dodgeOffered)
 }
 
 /**

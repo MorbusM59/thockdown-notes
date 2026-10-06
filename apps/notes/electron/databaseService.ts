@@ -6,6 +6,7 @@ import path from 'node:path';
 import { sanitizeDocumentText, sanitizedFirstLine, truncateTitle } from '../src/shared/textSanitization';
 import { buildNextAutoAssignedId, buildNextAutoChapterId, isAutoAssignedChapterId, isAutoAssignedId, isValidUserAssignedId, normalizeAssignedIdInput } from '../src/shared/assignedIds';
 import { SEALED_ROOT_NOTE_IDS } from '../src/shared/helpGuide';
+import { DEFAULT_EDITOR_SECTION_ID, type EditorSectionEntry } from '../src/shared/sections';
 import { ensureHelpNote } from './help/helpNote';
 import { shouldVacuumForBloat } from './databaseSanitationPolicy';
 import type { TextureCacheHit, TextureCachePurgeRequest, TextureCacheRequest } from '../src/shared/textures';
@@ -264,31 +265,6 @@ export type ChapterEntry = {
   chapterNoteId: string;
   chapterId: string | null;
 };
-
-/**
- * One side-by-side editor pane. `widthFraction` is the pane's share of the
- * split-view width (null = "distribute evenly with its siblings", the
- * everyday case while there's only ever one section). `name` is null until
- * the user names it; a named section is kept forever and can be recalled
- * into any slot later, an unnamed one is disposable and deleted outright
- * when its slot is closed or replaced. `position` is null when the section
- * isn't currently occupying a slot. `lastActiveNoteId` is this section's own
- * "which note was I last showing" memory, independent of pinning.
- */
-export type EditorSectionEntry = {
-  id: string;
-  name: string | null;
-  position: number | null;
-  widthFraction: number | null;
-  /** User-pinned exact pixel width (null = flexible); see the renderer's fixed/flexible split-view sizing. */
-  fixedWidthPx: number | null;
-  lastActiveNoteId: string | null;
-  /** Whether `setEditorSectionActiveNote` has ever been called for this section -- distinguishes "never had a note assigned" (bootstrap should fall back to some note) from "user explicitly cleared it" (bootstrap should respect the empty state), since both look like `lastActiveNoteId: null` otherwise. */
-  noteSlotInitialized: boolean;
-};
-
-/** The sole section that exists on a fresh install — also where sidebar note clicks always land. */
-export const DEFAULT_EDITOR_SECTION_ID = 'default';
 
 export type ExternalSyncState = {
   isExternal: boolean;
