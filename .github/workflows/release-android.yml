@@ -24,8 +24,13 @@ jobs:
   gate:
     uses: ./.github/workflows/ci.yml
     secrets: inherit
+    # A called workflow's jobs may hold no permission its caller did not
+    # grant here, or GitHub refuses the whole run before any job starts
+    # (startup_failure). ci.yml's landing job asks for pull-requests: read;
+    # it is skipped outside a push to main, but is validated all the same.
     permissions:
       contents: write
+      pull-requests: read
 
   release-android:
     needs: gate
