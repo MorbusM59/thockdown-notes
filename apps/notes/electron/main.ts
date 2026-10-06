@@ -1737,7 +1737,6 @@ app.whenReady().then(async () => {
 
 let isQuitting = false;
 app.on('before-quit', (event) => {
-  databaseService?.close()
   if (!stateService || isQuitting) return
   // Prevent the default quit, flush state to disk, then re-quit.
   // This guarantees the last-known app state is written even if the
@@ -1745,4 +1744,13 @@ app.on('before-quit', (event) => {
   event.preventDefault()
   isQuitting = true
   stateService.flushAppStateOnClose().finally(() => app.quit())
+})
+
+// The database closes only once every window has gone. `before-quit` fires
+// BEFORE the windows close when the quit comes from the app menu (Cmd+Q on
+// macOS), and each window's `beforeunload` still writes every open note's
+// edit-mode state through IPC; closing here instead of there is what keeps
+// those writes from landing on a closed database.
+app.on('will-quit', () => {
+  databaseService?.close()
 })
