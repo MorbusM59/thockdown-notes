@@ -9,7 +9,7 @@
  * the browser's default, which is sized for sound that must answer a
  * keypress at once. A stall of the CPU shorter than the buffer is then
  * absorbed instead of being heard as a click where the output ran dry --
- * heard worst in a smooth soundscape such as Under water, which has no noise
+ * heard worst in a smooth soundscape such as Ocean Floor, which has no noise
  * to mask a gap. Nothing routed here needs immediacy: a soundscape and a
  * music track only start, stop, fade and seek, and each of those now takes
  * effect up to one buffer later. Typing sounds, which do need it, have their

@@ -602,11 +602,12 @@ function soundscape(
 export const FACTORY_SOUNDSCAPE_ICONS: Readonly<Record<string, string>> = {
   'stormy-night': 'fa-cloud-moon-rain',
   'wild-sea': 'fa-cloud-showers-water',
-  winds: 'fa-wind',
+  winds: 'fa-mountain',
   underwater: 'fa-fish-fins',
   campsite: 'fa-campground',
   storm: 'fa-cloud-bolt',
   temple: 'fa-torii-gate',
+  cloudburst: 'fa-cloud-showers-heavy',
 };
 
 /**
@@ -654,7 +655,7 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
   },
   {
     id: 'winds',
-    name: 'Strong winds',
+    name: 'Snowy Peaks',
     settings: soundscape({
       'noise-1': { brightnessHz: 113.76, colour: 0.88, focus: 0.75, periodSec: 38.074, skew: 0.25, sweep: 0.24, variation: 0.81, volume: 0.75 },
       'noise-2': { brightnessHz: 1167.94, colour: 0.26, focus: 0.42, skew: 0.34, sweep: 0.2, weather: 1 },
@@ -667,7 +668,7 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
   },
   {
     id: 'underwater',
-    name: 'Under water',
+    name: 'Ocean Floor',
     settings: soundscape({
       'noise-1': { brightnessHz: 200.89, colour: 0.02, periodSec: 14.615, sweep: 0.04, volume: 1 },
       'noise-2': { brightnessHz: 86.77, colour: 0, focus: 0.58, skew: 0.19, sway: 0.18, sweep: 0.12, volume: 0.88, width: 0.87 },
@@ -679,7 +680,7 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
   },
   {
     id: 'campsite',
-    name: 'Campsite',
+    name: 'River Camp',
     settings: soundscape({
       'chimes-1': { activity: 0.77, distance: 0, hardness: 0.34, material: 0.08, pan: 0.38, pitchHz: 440, ringSec: 13.644, scale: 30, tubes: 4, unison: 0.7, volume: 0.32 },
       'fire-1': { crackle: 0.77, flicker: 0.27, flickerDynamics: 0.82, flickerPeriodSec: 0.207, pan: 0.3, size: 0.81, sizzleLevel: 0.43, volume: 0.88, width: 0.15 },
@@ -708,7 +709,7 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
   },
   {
     id: 'temple',
-    name: 'Temple',
+    name: 'Temple Grounds',
     settings: soundscape({
       'chimes-1': { activity: 0.9, distance: 0.95, hardness: 0.52, material: 0.13, pan: -0.5, pitchHz: chimeSemitoneHz(-5), ringSec: 13.829565, scale: 64, tubes: 8, unison: 1, volume: 0.7, weather: 1 },
       'chimes-2': { activity: 1, distance: 0.55, hardness: 0.65, material: 0.04, pan: 0.26, pitchHz: chimeSemitoneHz(-3), ringSec: 15, scale: 64, unison: 0.62, weather: 1 },
@@ -726,6 +727,18 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
       'thunder-3': { character: 1, contrast: 1, lengthSec: 23, pan: 0.2, randomness: 1, share: 0.95, spread: 1, volume: 1, weather: 0.79 },
       'water-2': { bubbleLevel: 0.45, bubbles: 0.22, distance: 0.78, pan: -0.26, ring: 0.21, rise: 0, rushLevel: 0.54, rushTone: 0.29, size: 0.53, sizeSpread: 0.79, turbulence: 0.21, volume: 1, width: 0.2 },
     }, { amount: 1, brilliance: 0.07, foliage: 0.17, size: 1 }, { gustiness: 1, paceSec: 4.681 }, 0.87),
+  },
+  {
+    id: 'cloudburst',
+    name: 'Cloudburst',
+    settings: soundscape({
+      'noise-1': { brightnessHz: 1850.78, colour: 0.09, distance: 0.7, focus: 0.1, sweep: 0.28, volume: 0.51, weather: 0.95 },
+      'noise-2': { brightnessHz: 452.68, colour: 0.42, distance: 0.5, focus: 0.12, sweep: 0.52, volume: 0.84, weather: 1 },
+      'rain-1': { distance: 0.8, dripLevel: 0.41, dripTone: 0.16, drips: 0.57, dropTone: 0.16, intensity: 1, resonance: 0.15, splashLevel: 0.64, splashTone: 0.82, surface: 0.4, volume: 1, washDensity: 1, washLevel: 1, washTone: 0.26, weather: 0.33, wetness: 0.85 },
+      'rain-2': { distance: 0.51, dripTone: 0.43, dropTone: 0.2, intensity: 1, splashLevel: 0.48, splashTone: 0, volume: 0.96, washDensity: 1, washLevel: 1, washTone: 0.31, weather: 0.68 },
+      'rain-3': { distance: 0.21, dripLevel: 0.31, dripTone: 0.32, drips: 0.59, dropTone: 0.18, intensity: 1, resonance: 0.3, splashLevel: 0.56, splashTone: 0, surface: 0.27, volume: 0.92, washDensity: 0.34, washLevel: 1, washTone: 0.23, weather: 0.94, wetness: 0.78 },
+      'thunder-3': { character: 0.78, contrast: 0.08, distance: 0.19, lengthSec: 24, randomness: 0.19, share: 0.75, spread: 1, volume: 1, weather: 1 },
+    }, { amount: 1, brilliance: 0.8, foliage: 0.09, size: 1 }, { gustiness: 1, paceSec: 29.877 }, 0.75),
   },
 ];
 

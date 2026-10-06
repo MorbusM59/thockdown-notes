@@ -16,6 +16,9 @@ Chimes have a width: narrow, the tubes hang together; wide, each tube has
 its own place across the stereo field and from near to far, and keeps it.
 The chime sliders are rearranged, with the scale on a row of its own.
 
+A new soundscape, Cloudburst. Strong winds is now Snowy Peaks, Under water
+Ocean Floor, Campsite River Camp, and Temple Temple Grounds.
+
 ## 1.0.0
 
 First release: the desktop app's soundscapes on Android, playing on with the
