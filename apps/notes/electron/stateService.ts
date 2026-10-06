@@ -609,10 +609,27 @@ export class StateService {
   private readonly appStatePath: string;
   private readonly windowStatePath: string;
   private cachedAppState: AppState | null = null;
+  // Every write to a state file goes through `writeJson`, which runs them one
+  // at a time in the order they were asked for. `fs.writeFile` is not atomic:
+  // two overlapping writes to one path (a debounced save, an immediate one and
+  // the flush on close all reach `saveAppState`) can interleave and leave
+  // invalid JSON, which `loadAppState` then reads as "no state" and every
+  // setting reverts. Serialised, the last write asked for is the last one
+  // written, and each starts from an empty file.
+  private readonly writeQueues = new Map<string, Promise<void>>();
 
   constructor(dataRoot: string) {
     this.appStatePath = path.join(dataRoot, APP_STATE_FILE);
     this.windowStatePath = path.join(dataRoot, WINDOW_STATE_FILE);
+  }
+
+  private writeJson(filePath: string, payload: unknown): Promise<void> {
+    const text = JSON.stringify(payload, null, 2);
+    const previous = this.writeQueues.get(filePath) ?? Promise.resolve();
+    const write = previous.then(() => fs.writeFile(filePath, text, 'utf8'));
+    // A failed write is reported to its own caller and must not fail the next.
+    this.writeQueues.set(filePath, write.catch(() => undefined));
+    return write;
   }
 
   private async ensureDataRoot(): Promise<void> {
@@ -646,7 +663,7 @@ export class StateService {
       menu: sanitizeMenu(state.menu),
     };
     this.cachedAppState = payload;
-    await fs.writeFile(this.appStatePath, JSON.stringify(payload, null, 2), 'utf8');
+    await this.writeJson(this.appStatePath, payload);
   }
 
   async clearAppState(): Promise<void> {
@@ -657,7 +674,7 @@ export class StateService {
       menu: sanitizeMenu(DEFAULT_APP_STATE.menu),
     };
     this.cachedAppState = payload;
-    await fs.writeFile(this.appStatePath, JSON.stringify(payload, null, 2), 'utf8');
+    await this.writeJson(this.appStatePath, payload);
   }
 
   // Called synchronously from the main process on app close, to guarantee
@@ -666,11 +683,7 @@ export class StateService {
   async flushAppStateOnClose(): Promise<void> {
     if (!this.cachedAppState) return;
     try {
-      await fs.writeFile(
-        this.appStatePath,
-        JSON.stringify(this.cachedAppState, null, 2),
-        'utf8',
-      );
+      await this.writeJson(this.appStatePath, this.cachedAppState);
     } catch (error) {
       console.error('[stateService] flushAppStateOnClose failed:', error);
     }
@@ -706,6 +719,6 @@ export class StateService {
       height: Math.max(100, Math.round(state.height)),
       isMaximized: Boolean(state.isMaximized),
     };
-    await fs.writeFile(this.windowStatePath, JSON.stringify(payload, null, 2), 'utf8');
+    await this.writeJson(this.windowStatePath, payload);
   }
 }

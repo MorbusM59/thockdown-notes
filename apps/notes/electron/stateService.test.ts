@@ -473,3 +473,32 @@ describe('StateService app-state field round-trip', () => {
     expect(loaded.menu?.debuggingEnabled).toBe(false)
   })
 })
+
+describe('StateService concurrent writes', () => {
+  let dataRoot: string
+
+  beforeEach(() => {
+    dataRoot = mkdtempSync(path.join(tmpdir(), 'thockdown-state-race-'))
+  })
+
+  afterEach(() => {
+    rmSync(dataRoot, { recursive: true, force: true })
+  })
+
+  it('leaves the last of many overlapping saves on disk, readable by a fresh instance', async () => {
+    const writer = new StateService(dataRoot)
+    // Payloads of very different lengths: an interleaved write would leave a
+    // long one's tail behind a short one and the file would not parse.
+    const saves = Array.from({ length: 40 }, (_, i) =>
+      writer.saveAppState({
+        selectedNoteId: i % 2 === 0 ? 'x'.repeat(5000 + i) : `note-${i}`,
+        menu: { sidebarMode: 'date', selectedMonths: [], selectedYears: [], searchQuery: '' },
+      }),
+    )
+    saves.push(writer.flushAppStateOnClose())
+    await Promise.all(saves)
+
+    const restored = await new StateService(dataRoot).loadAppState()
+    expect(restored.selectedNoteId).toBe('note-39')
+  })
+})
