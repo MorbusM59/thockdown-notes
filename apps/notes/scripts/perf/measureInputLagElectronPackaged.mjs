@@ -61,10 +61,7 @@ function buildPackagedApp() {
   let result = spawnSync('npx', ['vite', 'build'], { cwd: APP_ROOT, stdio: 'inherit' })
   if (result.status !== 0) throw new Error(`vite build failed with exit code ${result.status}`)
 
-  // electron-builder rebuilds native deps (better-sqlite3) against the
-  // packaged Electron's own ABI as part of packaging -- no separate
-  // `electron-rebuild` step needed first, confirmed by reading its own
-  // logged output ("rebuilding native dependencies... better-sqlite3").
+  // better-sqlite3's Node-API prebuild loads in Electron as-is; nothing to rebuild.
   console.error('[perf] packaging via electron-builder (--linux dir -- asar-packed, unpacked-directory output, no AppImage compression)...')
   result = spawnSync('npx', ['electron-builder', '--linux', 'dir'], { cwd: APP_ROOT, stdio: 'inherit' })
   if (result.status !== 0) throw new Error(`electron-builder failed with exit code ${result.status}`)

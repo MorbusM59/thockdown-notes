@@ -534,7 +534,7 @@ Fixed with `deriveNoteTitleIncremental`, keyed per-note (`Map<noteId, NoteTitleC
 
 1. **Chromium's sandbox refuses to run as root** (`Running as root without --no-sandbox is not supported`) — this container runs as root, so both the harness and any manual Electron launch need `--no-sandbox`.
 2. **No real display** — this environment has none; `xvfb-run -a` (available, confirmed) provides a virtual one. The npm script wraps this automatically; a bare `node apps/notes/scripts/perf/measureInputLagElectron.mjs` will hang waiting for a window that never opens.
-3. **`better-sqlite3`'s prebuilt native binary is compiled against the host Node's ABI, not Electron's bundled Node's ABI** (`NODE_MODULE_VERSION` mismatch) — Electron's main process crashed on `new Database(...)` before ever opening a window, silently as far as Playwright's `_electron.launch()` is concerned (`firstWindow()` just times out with no indication why; the real error only appeared by launching Electron directly and capturing its own stdout/stderr). Fixed with `npx electron-rebuild -f -w better-sqlite3` — not committed as a dependency change, since it rebuilds a native binary in `node_modules` rather than touching anything tracked; re-run it (or `npx @apps/notes/electron/rebuild`, the current package name) whenever `npm install` has refreshed `node_modules` since the last Electron measurement.
+3. ~~**`better-sqlite3`'s ABI mismatch**~~ — superseded: version 13 ships Node-API prebuilds that load in Electron and Node alike.
 
 The harness originally cleared the unpackaged data root (`apps/notes/data`) before and after each run for a fresh DB, which also cleared the notes of whoever ran it. It now passes a fresh temp folder as `THOCKDOWN_DATA_ROOT`, which `apps/notes/electron/main.ts`'s `resolveDataRoot()` takes ahead of every other rule (`--user-data-dir` alone does *not* redirect an unpackaged run's data, only Electron's own internal cache paths).
 
@@ -774,15 +774,7 @@ No code changes this round — measurement only, so no new verification needed b
      script does this automatically, a bare `node .../measureInputLagElectron.mjs` will hang).
   2. `--no-sandbox` (Electron/Chromium refuse to run sandboxed as root, and this container runs
      as root) — the harness passes this itself when launching.
-  3. `npx electron-rebuild -f -w better-sqlite3` (or `npx @apps/notes/electron/rebuild`, current package
-     name) run at least once per `node_modules` refresh — the prebuilt `better-sqlite3` binary
-     `npm install` fetches targets the host Node's ABI, not Electron's bundled Node's ABI, and
-     without this the main process crashes on its first `new Database(...)` call *before opening
-     a window*, which Playwright's `_electron.launch()`/`firstWindow()` only reports as a bare
-     30-second timeout with no indication why. If this harness ever mysteriously times out on
-     `firstWindow()` again, launch Electron directly
-     (`xvfb-run -a node_modules/.bin/electron --no-sandbox dist-electron/main.js`, piping
-     stdout/stderr) before assuming anything else — that's how this specific failure was found.
+  3. ~~electron-rebuild~~ — no longer needed (better-sqlite3 13 ships Node-API prebuilds).
   4. A `vite build` first (the harness runs this itself unless `--skip-build` is passed) — this
      produces `dist/` (renderer) and `dist-electron/main.js`/`preload.mjs` in one invocation (the
      electron plugin runs three separate vite builds back to back). Don't run the full `npm run

@@ -64,13 +64,6 @@ export default defineConfig(({ mode }) => {
         ],
       },
     },
-    test: {
-      // Runs before any test file loads, no matter how vitest was invoked
-      // (`npm test`, a bare `npx vitest run <file>`, an IDE runner, ...) --
-      // unlike package.json's `pretest` hook, which npm only fires for `npm
-      // test` itself. See the script's own doc comment for the full story.
-      globalSetup: './scripts/ensureBetterSqlite3ForNode.mjs',
-    },
     plugins: [
       tailwindcss(),
       react(),

@@ -13,6 +13,12 @@ export type ExternalFilesApi = {
   writeFileContent(filePath: string, content: string): Promise<boolean>;
   getFileBasename(filePath: string): Promise<string>;
   /**
+   * The filesystem path of a `File` from a drag-and-drop, or '' when it has
+   * none. Electron 32 removed the non-standard `File.path`; the path is only
+   * readable through `webUtils`, which exists in the preload, not the page.
+   */
+  getPathForFile(file: File): string;
+  /**
    * The file's content AND its modified time, from one read.
    *
    * One call rather than two deliberately: the save-time reconciliation

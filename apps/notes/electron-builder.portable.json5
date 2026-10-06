@@ -28,6 +28,10 @@
   "asarUnpack": [
     "node_modules/better-sqlite3/**/*"
   ],
+  // better-sqlite3 ships Node-API prebuilds that load in Electron as-is.
+  // Rebuilding would compile it from source, needing a C++ toolchain and
+  // Electron headers on every build machine for no gain.
+  "npmRebuild": false,
   // Presence of this file (checked via process.resourcesPath in electron/main.ts)
   // is how the app tells a portable build apart from an installed one at runtime.
   "extraResources": [
