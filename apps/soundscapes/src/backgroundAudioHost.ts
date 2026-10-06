@@ -51,8 +51,12 @@ export interface NativeSchedule {
 
 export interface NativeSoundscapePlugin {
   isRendererSupported(): Promise<{ supported: boolean }>
-  /** The soundscapes the media controls step through, which one is current, and the listener's volume. */
-  publish(options: { entries: SessionEntry[]; currentId: string | null; masterVolume: number }): Promise<void>
+  /**
+   * The soundscapes the media controls step through, which one is current,
+   * the name of the soundscape being played (which may be outside those
+   * entries), and the listener's volume.
+   */
+  publish(options: { entries: SessionEntry[]; currentId: string | null; currentName: string | null; masterVolume: number }): Promise<void>
   getState(): Promise<SessionState>
   /** Store and arm the schedule; turning it on applies its state at this moment. */
   setSchedule(schedule: NativeSchedule): Promise<void>

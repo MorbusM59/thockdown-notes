@@ -61,6 +61,14 @@ export function currentEntryId(preferences: SoundscapePreferences, scratch: Soun
   return null
 }
 
+/** The name of the soundscape the settings sound the same as, the unsaved one's when the scratch is current, or null. */
+export function currentSoundscapeName(preferences: SoundscapePreferences, scratch: SoundscapeSettings | null): string | null {
+  const id = matchingPresetId(preferences)
+  if (id) return [...SOUNDSCAPE_FACTORY_PRESETS, ...preferences.customPresets].find((preset) => preset.id === id)?.name ?? null
+  if (scratch && soundscapeSettingsSignature(scratch) === soundscapeSettingsSignature(preferences.settings)) return UNSAVED_NAME
+  return null
+}
+
 /** The soundscape (factory or the user's) the settings sound the same as, preferring the active one; null for none. */
 export function matchingPresetId(preferences: SoundscapePreferences): string | null {
   const signature = soundscapeSettingsSignature(preferences.settings)

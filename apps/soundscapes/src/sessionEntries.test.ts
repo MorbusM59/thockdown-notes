@@ -5,7 +5,7 @@ import {
   applySoundscapePreset,
   type SoundscapePreferences,
 } from '@thockdown/soundscape/soundscape'
-import { UNSAVED_ENTRY_ID, currentEntryId, followSession, nextScratch, sessionEntries } from './sessionEntries'
+import { UNSAVED_ENTRY_ID, currentEntryId, currentSoundscapeName, followSession, nextScratch, sessionEntries } from './sessionEntries'
 
 const onPreset = (index: number): SoundscapePreferences => applySoundscapePreset(DEFAULT_SOUNDSCAPE_PREFERENCES, SOUNDSCAPE_FACTORY_PRESETS[index])
 
@@ -60,3 +60,19 @@ describe('media-control cycle', () => {
     expect(followed.settings.channels.some((channel) => channel.solo)).toBe(false)
   })
 });
+
+describe('the name the notification shows', () => {
+  it('names a factory soundscape even when the user has their own, which leaves it out of the cycle', () => {
+    const custom = { id: 'mine', name: 'Custom soundscape 1', settings: edited(onPreset(0)).settings }
+    const temple = { ...onPreset(SOUNDSCAPE_FACTORY_PRESETS.length - 1), customPresets: [custom] }
+    expect(currentEntryId(temple, null)).toBeNull()
+    expect(currentSoundscapeName(temple, null)).toBe(SOUNDSCAPE_FACTORY_PRESETS[SOUNDSCAPE_FACTORY_PRESETS.length - 1].name)
+    expect(currentSoundscapeName({ ...temple, activePresetId: 'mine', settings: custom.settings }, null)).toBe('Custom soundscape 1')
+  })
+
+  it('names unsaved changes, and nothing when the settings match nothing at all', () => {
+    const changed = edited(onPreset(0))
+    expect(currentSoundscapeName(changed, nextScratch(changed, null))).toBe('Unsaved soundscape')
+    expect(currentSoundscapeName(changed, null)).toBeNull()
+  })
+})

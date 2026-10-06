@@ -138,6 +138,13 @@ final class SoundscapeSession {
     private List<Entry> entries = Collections.emptyList();
     /** The soundscape regular mode plays or is paused on. */
     private String regularId = null;
+    /**
+     * The name of what regular mode plays, as the page published it. The
+     * entries are only what next and previous step through (the user's own
+     * soundscapes once there are any), so a factory soundscape played while
+     * custom ones exist is not among them and its name has to come from here.
+     */
+    private String regularName = null;
     private float masterVolume;
     /**
      * How the page's next configuration is applied, set when regular mode
@@ -201,17 +208,23 @@ final class SoundscapeSession {
         return regular == Regular.STOPPED && scheduled != null ? scheduled.id : regularId;
     }
 
+    /** "Soundscape: <name>" for whatever is heard, regular or scheduled; "Soundscape" when the name is unknown. */
     synchronized String title() {
-        Entry entry = find(currentId());
-        return entry != null ? entry.name : "Soundscape";
+        String id = currentId();
+        Entry entry = find(id);
+        String name = entry != null ? entry.name : (id == null || id.equals(regularId) ? regularName : null);
+        return name != null && !name.isEmpty() ? "Soundscape: " + name : "Soundscape";
     }
 
     // --- From the web page ---
 
     /** The soundscapes next and previous step through, the one the page is on, and the listener's volume. */
-    synchronized void publish(List<Entry> published, String current, float volume) {
+    synchronized void publish(List<Entry> published, String current, String currentName, float volume) {
         entries = new ArrayList<>(published);
-        if (regular != Regular.STOPPED || current != null) regularId = current;
+        if (regular != Regular.STOPPED || current != null || currentName != null) {
+            regularId = current;
+            regularName = currentName;
+        }
         masterVolume = volume;
         // What the schedule plays is not reached by the page's engine, which
         // is closed then: its volume is followed here.
@@ -280,7 +293,10 @@ final class SoundscapeSession {
     /** Pause always silences: what the schedule plays becomes regular mode, paused on it. */
     synchronized void controlPause() {
         if (!isAudible()) return;
-        if (regular == Regular.STOPPED) regularId = scheduled.id;
+        if (regular == Regular.STOPPED) {
+            regularId = scheduled.id;
+            regularName = scheduled.name;
+        }
         cancelPendingEnd();
         setRegular(Regular.PAUSED);
         output.setPaused(true);
@@ -298,6 +314,7 @@ final class SoundscapeSession {
         Entry entry = entries.get(next);
         cancelPendingEnd();
         regularId = entry.id;
+        regularName = entry.name;
         setRegular(Regular.PLAYING);
         // From a pause nothing is heard to crossfade from: the new soundscape
         // replaces what was queued and fades in alone.
