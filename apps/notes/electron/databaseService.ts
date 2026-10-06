@@ -7,6 +7,8 @@ import { sanitizeDocumentText, sanitizedFirstLine, truncateTitle } from '../src/
 import { buildNextAutoAssignedId, buildNextAutoChapterId, isAutoAssignedChapterId, isAutoAssignedId, isValidUserAssignedId, normalizeAssignedIdInput } from '../src/shared/assignedIds';
 import { SEALED_ROOT_NOTE_IDS } from '../src/shared/helpGuide';
 import { DEFAULT_EDITOR_SECTION_ID, type EditorSectionEntry } from '../src/shared/sections';
+import type { NoteTabEntry } from '../src/shared/tabs';
+import type { ChapterEntry } from '../src/shared/chapters';
 import { ensureHelpNote } from './help/helpNote';
 import { shouldVacuumForBloat } from './databaseSanitationPolicy';
 import type { TextureCacheHit, TextureCachePurgeRequest, TextureCacheRequest } from '../src/shared/textures';
@@ -248,22 +250,6 @@ export type NoteRecord = {
   chapterId: string | null;
   /** See detachChapter's own doc comment: where a detached chapter was detached FROM, while it's sitting outside the `chapters` table (Trash or an Archive fold-out). `chapterParentId` above is null for a detached chapter (it has no `chapters` row any more), so this is the only way to recover its parent while it's there. Null except during that detached window. */
   detachedChapterParentId: string | null;
-};
-
-/** One entry pinned to a section's tab bar (quick-access note shortcut). */
-export type NoteTabEntry = {
-  sectionId: string;
-  noteId: string;
-  position: number;
-  addedAtMs: number;
-};
-
-/** One chapter: `chapterNoteId` is itself a full note, ordered (gapless, 0-indexed) among `parentNoteId`'s other chapters. A chapter note belongs to exactly one parent, ever. `chapterId` is a user-assignable label (chapter bar right-click, or `$noteid§chapterid` links), unique per parentNoteId; null until first assigned. */
-export type ChapterEntry = {
-  parentNoteId: string;
-  position: number;
-  chapterNoteId: string;
-  chapterId: string | null;
 };
 
 export type ExternalSyncState = {

@@ -27,7 +27,8 @@ import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChang
 import { resolveIdentityLabel } from '../src/shared/tabLabels';
 import { isSealedNoteId } from '../src/shared/helpGuide';
 import { formatInternalNoteLink } from '../src/shared/internalNoteLinks';
-import type { ChapterEntry, DatabaseService, NoteRecord } from './databaseService';
+import type { DatabaseService, NoteRecord } from './databaseService';
+import type { ChapterEntry } from '../src/shared/chapters';
 
 const NOTES_DIR_NAME = 'notes';
 const META_PREFIX = '<!-- thockdown-meta:';
