@@ -7965,19 +7965,16 @@ ${markdownHtml}
     }
 
     let cancelled = false
-    let attempts = 0
 
     const apply = () => {
       if (cancelled) return
 
+      // No scroller yet: the restore stays pending, and this effect runs
+      // again when one mounts (the tree scroller is a callback-ref state that
+      // `getSidebarScrollerForMode` depends on; the list's arrives with the
+      // notes it lists).
       const scroller = getSidebarScrollerForMode(sidebarMode)
-      if (!scroller) {
-        if (attempts < 8) {
-          attempts += 1
-          requestAnimationFrame(apply)
-        }
-        return
-      }
+      if (!scroller) return
 
       scroller.scrollTop = pending.scrollTop
       pendingSidebarScrollRestoreRef.current = null
