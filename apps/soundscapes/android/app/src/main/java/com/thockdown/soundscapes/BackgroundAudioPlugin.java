@@ -150,7 +150,7 @@ public class BackgroundAudioPlugin extends Plugin {
         call.resolve(result);
     }
 
-    /** `entries`: `[{ id, name, configuration }]`; `currentId`; `masterVolume`. */
+    /** `entries`: `[{ id, name, configuration }]`; `currentId`; `currentName`; `masterVolume`. */
     @PluginMethod
     public void publish(PluginCall call) {
         try {
@@ -160,7 +160,7 @@ public class BackgroundAudioPlugin extends Plugin {
                 JSONObject entry = array.getJSONObject(index);
                 entries.add(new SoundscapeSession.Entry(entry.getString("id"), entry.getString("name"), entry.getString("configuration")));
             }
-            session.publish(entries, call.getString("currentId"), call.getFloat("masterVolume", 1f));
+            session.publish(entries, call.getString("currentId"), call.getString("currentName"), call.getFloat("masterVolume", 1f));
             call.resolve();
         } catch (Exception error) {
             call.reject("Invalid soundscape list: " + error);

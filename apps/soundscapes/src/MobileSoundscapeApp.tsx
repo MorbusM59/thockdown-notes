@@ -51,7 +51,7 @@ import {
   saveScratch,
   type MobileLook,
 } from './preferencesStore'
-import { currentEntryId, followSession, nextScratch, sessionEntries } from './sessionEntries'
+import { currentEntryId, currentSoundscapeName, followSession, nextScratch, sessionEntries } from './sessionEntries'
 import { allPresets, sanitizeSchedule, scheduleEvents, type Schedule } from './schedule'
 import { ScheduleGrid } from './ScheduleGrid'
 import { LookButton } from './LookButton'
@@ -180,10 +180,11 @@ export function MobileSoundscapeApp() {
   // What the media controls step through, published whenever it changes.
   const entries = useMemo(() => sessionEntries(customPresets, scratch), [customPresets, scratch])
   const currentId = currentEntryId(preferences, scratch)
+  const currentName = currentSoundscapeName(preferences, scratch)
   useEffect(() => {
     if (!native) return
-    void nativeSoundscape!.publish({ entries, currentId, masterVolume: preferences.masterVolume })
-  }, [native, entries, currentId, preferences.masterVolume])
+    void nativeSoundscape!.publish({ entries, currentId, currentName, masterVolume: preferences.masterVolume })
+  }, [native, entries, currentId, currentName, preferences.masterVolume])
 
   // Follow the session: when a media control, the schedule or the system
   // changes it, on a stop's outcome, at startup, and on coming back to the
