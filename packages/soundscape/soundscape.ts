@@ -550,7 +550,7 @@ export const SOUNDSCAPE_CHANNEL_DEFAULTS: KindDefaults = {
   },
   chimes: {
     kind: 'chimes', enabled: true, solo: false, volume: 0.6, distance: 0.35,
-    pitchHz: chimeSemitoneHz(3), tubes: 5, ringSec: 6, activity: 0.3, hardness: 0.6, unison: 0.3, material: 1 / 3, scale: 0, pan: 0, width: 0.5, weather: 0.8,
+    pitchHz: chimeSemitoneHz(3), tubes: 5, ringSec: 6, activity: 0.3, hardness: 0.6, unison: 0.3, material: 1 / 3, scale: 0, pan: 0, width: 0, weather: 0.8,
   },
 };
 
@@ -625,8 +625,8 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
     id: 'stormy-night',
     name: 'Stormy Night',
     settings: soundscape({
-      'chimes-1': { activity: 0.79, distance: 0.86, hardness: 1, material: 0.68, pan: -0.61, pitchHz: chimeSemitoneHz(-10), ringSec: 15, scale: 1, tubes: 8, unison: 0, volume: 0.66, width: 0 },
-      'chimes-2': { activity: 0.69, distance: 0.8, hardness: 0.22, material: 0.06, pan: 0.57, pitchHz: chimeSemitoneHz(2), ringSec: 15, scale: 1, unison: 0.84, volume: 0.57, weather: 1, width: 0 },
+      'chimes-1': { activity: 0.79, distance: 0.86, hardness: 1, material: 0.68, pan: -0.61, pitchHz: chimeSemitoneHz(-10), ringSec: 15, scale: 1, tubes: 8, unison: 0, volume: 0.66 },
+      'chimes-2': { activity: 0.69, distance: 0.8, hardness: 0.22, material: 0.06, pan: 0.57, pitchHz: chimeSemitoneHz(2), ringSec: 15, scale: 1, unison: 0.84, volume: 0.57, weather: 1 },
       'noise-1': { brightnessHz: 1232.94, colour: 0.8, curve: 0.58, depth: 0.35, distance: 0.6, focus: 0.28, periodSec: 10.706, sweep: 0.38, variation: 0.64, volume: 0.76, weather: 0.5, width: 0.98 },
       'noise-2': { brightnessHz: 661.36, volume: 0.79 },
       'noise-3': { brightnessHz: 120.09, colour: 0, focus: 0.35, volume: 0.75 },
@@ -681,7 +681,7 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
     id: 'campsite',
     name: 'Campsite',
     settings: soundscape({
-      'chimes-1': { activity: 0.77, distance: 0, hardness: 0.34, material: 0.08, pan: 0.38, pitchHz: 440, ringSec: 13.644, scale: 30, tubes: 4, unison: 0.7, volume: 0.32, width: 0 },
+      'chimes-1': { activity: 0.77, distance: 0, hardness: 0.34, material: 0.08, pan: 0.38, pitchHz: 440, ringSec: 13.644, scale: 30, tubes: 4, unison: 0.7, volume: 0.32 },
       'fire-1': { crackle: 0.77, flicker: 0.27, flickerDynamics: 0.82, flickerPeriodSec: 0.207, pan: 0.3, size: 0.81, sizzleLevel: 0.43, volume: 0.88, width: 0.15 },
       'noise-1': { brightnessHz: 4775.16, colour: 0.73, depth: 0.75, distance: 0.73, periodSec: 11.782, skew: 0.41, sweep: -0.08, variation: 0.65, volume: 0.61 },
       'noise-2': { brightnessHz: 153.23, colour: 0.22, depth: 0.42, focus: 0.84, skew: 0.28, sway: 0.19, variation: 0.98, volume: 0.64 },
@@ -710,8 +710,8 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
     id: 'temple',
     name: 'Temple',
     settings: soundscape({
-      'chimes-1': { activity: 0.9, distance: 0.95, hardness: 0.52, material: 0.13, pan: -0.5, pitchHz: chimeSemitoneHz(-5), ringSec: 13.829565, scale: 64, tubes: 8, unison: 1, volume: 0.7, weather: 1, width: 0 },
-      'chimes-2': { activity: 1, distance: 0.55, hardness: 0.65, material: 0.04, pan: 0.26, pitchHz: chimeSemitoneHz(-3), ringSec: 15, scale: 64, unison: 0.62, weather: 1, width: 0 },
+      'chimes-1': { activity: 0.9, distance: 0.95, hardness: 0.52, material: 0.13, pan: -0.5, pitchHz: chimeSemitoneHz(-5), ringSec: 13.829565, scale: 64, tubes: 8, unison: 1, volume: 0.7, weather: 1 },
+      'chimes-2': { activity: 1, distance: 0.55, hardness: 0.65, material: 0.04, pan: 0.26, pitchHz: chimeSemitoneHz(-3), ringSec: 15, scale: 64, unison: 0.62, weather: 1 },
       'fire-2': { distance: 0.3, flicker: 0.66, flickerDynamics: 0.77, flickerPeriodSec: 0.426598, pan: -0.34, size: 0.44, sizzleLevel: 0, volume: 0.84, weather: 1, width: 0 },
       'noise-1': { brightnessHz: 562.18, colour: 0.14, depth: 0.65, distance: 0.41, periodSec: 16.083, sway: 0.32, sweep: 0.3, variation: 0.6, volume: 0.81, weather: 0.82 },
       'noise-2': { brightnessHz: 821.350394, colour: 0.45, curve: 0.4, depth: 0.54, distance: 0.9, periodSec: 30, sway: 0.26, sweep: 1, variation: 0.65, volume: 0.79, weather: 0.97 },

@@ -3135,7 +3135,7 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
     const material = chimeMaterial(channel.material);
     channel.chimeMaterial = material;
     channel.attackRate = material.attackSec > 0.001 ? 1 - Math.exp(-1 / (material.attackSec * sampleRate)) : 0;
-    const width = channel.width ?? 0.5;
+    const width = channel.width ?? 0;
     const image = stereoImage(channel.pan, width);
     const depths = depthImage(channel.distance, width);
     const gain = channel.gain ?? 1;
