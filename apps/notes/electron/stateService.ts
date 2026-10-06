@@ -626,7 +626,12 @@ export class StateService {
   private writeJson(filePath: string, payload: unknown): Promise<void> {
     const text = JSON.stringify(payload, null, 2);
     const previous = this.writeQueues.get(filePath) ?? Promise.resolve();
-    const write = previous.then(() => fs.writeFile(filePath, text, 'utf8'));
+    // Enqueued synchronously, before any await, so the queue's order is the
+    // order of the calls; the directory is made inside the queued step.
+    const write = previous.then(async () => {
+      await fs.mkdir(path.dirname(filePath), { recursive: true });
+      await fs.writeFile(filePath, text, 'utf8');
+    });
     // A failed write is reported to its own caller and must not fail the next.
     this.writeQueues.set(filePath, write.catch(() => undefined));
     return write;
@@ -656,7 +661,6 @@ export class StateService {
   }
 
   async saveAppState(state: AppState): Promise<void> {
-    await this.ensureDataRoot();
     const payload: AppState = {
       selectedNoteId: typeof state.selectedNoteId === 'string' ? state.selectedNoteId : null,
       viewport: sanitizeViewport(state.viewport),
@@ -667,7 +671,6 @@ export class StateService {
   }
 
   async clearAppState(): Promise<void> {
-    await this.ensureDataRoot();
     const payload: AppState = {
       selectedNoteId: null,
       viewport: undefined,
@@ -711,7 +714,6 @@ export class StateService {
   }
 
   async saveWindowState(state: WindowState): Promise<void> {
-    await this.ensureDataRoot();
     const payload: WindowState = {
       x: typeof state.x === 'number' ? state.x : undefined,
       y: typeof state.y === 'number' ? state.y : undefined,
