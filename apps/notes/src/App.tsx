@@ -1014,16 +1014,6 @@ function ModifiedDateLabel({ timestampMs }: { timestampMs: number }) {
   )
 }
 
-async function waitForNotesBridge(shouldStop: () => boolean): Promise<boolean> {
-  while (!shouldStop()) {
-    if (window.thockdownNotes) {
-      return true
-    }
-    await new Promise((resolve) => window.setTimeout(resolve, 40))
-  }
-  return false
-}
-
 type NoteListItemProps = {
   note: NoteSummary
   isActive: boolean
@@ -6161,10 +6151,11 @@ ${markdownHtml}
     let disposed = false
 
     const bootstrap = async () => {
-      const hasBridge = await waitForNotesBridge(() => disposed)
-      if (!hasBridge) {
-        return
-      }
+      // The bridge is installed before any page script runs (the preload in
+      // Electron, `installBrowserMockBridges` before render in the browser),
+      // and main registers every IPC handler before it creates the window.
+      // So the bridge is either here now or never will be, and a call that
+      // fails is a real failure rather than a startup race worth retrying.
       const thockdownNotes = window.thockdownNotes
       if (!thockdownNotes) {
         return
@@ -6172,8 +6163,7 @@ ${markdownHtml}
 
       setPersistenceReady(false)
 
-      let attempt = 0
-      while (!disposed) {
+      {
         try {
           let listed = await thockdownNotes.listNotes()
           if (disposed) return
@@ -6545,18 +6535,10 @@ ${markdownHtml}
           setBootstrapError(null)
           return
         } catch (error) {
-          attempt += 1
-          const message = error instanceof Error ? error.message : String(error)
-          console.error(`Failed to initialize note lifecycle (attempt ${attempt})`, error)
-          // Keep retrying (transient startup races are real -- e.g. the IPC
-          // bridge not being ready yet) but stop suffering in silence after
-          // a few tries: tell the user something is actually wrong instead
-          // of leaving them looking at an app with no active note, no
-          // timeline, and no way to tell why.
-          if (attempt >= 3 && !disposed) {
-            setBootstrapError(message)
+          console.error('Failed to initialize note lifecycle', error)
+          if (!disposed) {
+            setBootstrapError(error instanceof Error ? error.message : String(error))
           }
-          await new Promise((resolve) => window.setTimeout(resolve, Math.min(1500, 200 * attempt)))
         }
       }
     }
@@ -9204,12 +9186,12 @@ ${markdownHtml}
           }}
         >
           <span>
-            Thockdown Notes couldn't load your notes ({bootstrapError}). It will keep retrying, but your notes
-            and the timeline may not appear until this is resolved.
+            Thockdown Notes couldn't load your notes ({bootstrapError}). Reload to try
+            again.
           </span>
           <button
             type="button"
-            onClick={() => setBootstrapError(null)}
+            onClick={() => window.location.reload()}
             style={{
               background: 'transparent',
               border: '1px solid #ffffff',
@@ -9219,7 +9201,7 @@ ${markdownHtml}
               flexShrink: 0,
             }}
           >
-            Dismiss
+            Reload
           </button>
         </div>
       ) : null}
