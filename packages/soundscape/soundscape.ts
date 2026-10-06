@@ -954,12 +954,12 @@ export function applySoundscapePreset(preferences: SoundscapePreferences, preset
 
 /**
  * The soundscapes stepping goes through, from the desktop player's
- * soundscape button and the mobile app's media controls alike: the user's
- * own if there are any, otherwise the factory ones, in the order the
- * settings panel shows them.
+ * soundscape button and the mobile app's media controls alike: every factory
+ * soundscape and then the user's own, in the order the settings panel shows
+ * them. Unsaved changes are not a stop: stepping away from them leaves them.
  */
 export function soundscapeCycle(preferences: Pick<SoundscapePreferences, 'customPresets'>): readonly SoundscapePreset[] {
-  return preferences.customPresets.length > 0 ? preferences.customPresets : SOUNDSCAPE_FACTORY_PRESETS;
+  return [...SOUNDSCAPE_FACTORY_PRESETS, ...preferences.customPresets];
 }
 
 /** The soundscape after the active one in soundscapeCycle, wrapping at the end. */

@@ -19,6 +19,9 @@ The chime sliders are rearranged, with the scale on a row of its own.
 A new soundscape, Cloudburst. Strong winds is now Snowy Peaks, Under water
 Ocean Floor, Campsite River Camp, and Temple Temple Grounds.
 
+Next and previous step through every factory soundscape and then your own,
+and no longer stop at unsaved changes.
+
 ## 1.0.0
 
 First release: the desktop app's soundscapes on Android, playing on with the

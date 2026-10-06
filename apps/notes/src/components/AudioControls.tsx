@@ -1154,8 +1154,8 @@ function SoundLevelButton({
  * The Soundscapes switch at the end of the playlist row, which is also the
  * Soundscapes master volume: a click turns soundscapes on or off, a wheel over
  * it nudges the level exactly like a music level readout (Shift: by 10), and
- * a right-click steps to the next soundscape -- the user's own, or the
- * factory ones if there are none (nextSoundscapePreset) -- turning soundscapes on. Wheeling turns soundscapes on if it was off -- the same "adjusting
+ * a right-click steps to the next soundscape -- every factory one, then the
+ * user's own (nextSoundscapePreset) -- turning soundscapes on. Wheeling turns soundscapes on if it was off -- the same "adjusting
  * turns it back on" rule the music volume follows with mute.
  *
  * Its own component for the reason SoundLevelButton is: it owns the ref its

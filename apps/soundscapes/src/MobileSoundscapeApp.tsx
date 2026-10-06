@@ -19,7 +19,6 @@ import { resumedOutputContext } from '@thockdown/soundscape/audioOutputBus'
 import {
   SOUNDSCAPE_FACTORY_PRESETS,
   type SoundscapePreferences,
-  type SoundscapeSettings,
 } from '@thockdown/soundscape/soundscape'
 import { exportSoundscapes, importSoundscapes } from '@thockdown/soundscape/soundscapeFileActions'
 import {
@@ -43,15 +42,13 @@ import {
   loadLook,
   loadPreferences,
   loadSchedule,
-  loadScratch,
   saveClipMinutes,
   saveLook,
   saveSchedule,
   savePreferences,
-  saveScratch,
   type MobileLook,
 } from './preferencesStore'
-import { currentEntryId, currentSoundscapeName, followSession, nextScratch, sessionEntries } from './sessionEntries'
+import { currentEntryId, currentSoundscapeName, followSession, sessionEntries } from './sessionEntries'
 import { allPresets, sanitizeSchedule, scheduleEvents, type Schedule } from './schedule'
 import { ScheduleGrid } from './ScheduleGrid'
 import { LookButton } from './LookButton'
@@ -94,7 +91,6 @@ export function MobileSoundscapeApp() {
   const loadout = PRESETS[look.mode][look.preset[look.mode]]
   const theme = useMemo(() => themeFrame(loadout, { reduceVisualEffects: false, isPreviewMode: false }), [loadout])
 
-  const [scratch, setScratch] = useState<SoundscapeSettings | null>(loadScratch)
   const customPresets = preferences.customPresets
   // Whether the native session plays (playbackMode.ts); the engine is not
   // started before that is settled, or its first start would open the web
@@ -151,11 +147,8 @@ export function MobileSoundscapeApp() {
 
   useEffect(() => {
     savePreferences(preferences)
-    setScratch((current) => nextScratch(preferences, current))
     if (native !== null) soundscapeEngine.apply(preferences)
   }, [preferences, native])
-
-  useEffect(() => saveScratch(scratch), [scratch])
 
   // The daily schedule (schedule.ts). Its events are worked out here and
   // handed to the native session, which runs them with or without this page.
@@ -178,9 +171,9 @@ export function MobileSoundscapeApp() {
   }, [native, schedule.enabled, events, customPresets, preferences.masterVolume])
 
   // What the media controls step through, published whenever it changes.
-  const entries = useMemo(() => sessionEntries(customPresets, scratch), [customPresets, scratch])
-  const currentId = currentEntryId(preferences, scratch)
-  const currentName = currentSoundscapeName(preferences, scratch)
+  const entries = useMemo(() => sessionEntries(customPresets), [customPresets])
+  const currentId = currentEntryId(preferences)
+  const currentName = currentSoundscapeName(preferences)
   useEffect(() => {
     if (!native) return
     void nativeSoundscape!.publish({ entries, currentId, currentName, masterVolume: preferences.masterVolume })
@@ -190,15 +183,13 @@ export function MobileSoundscapeApp() {
   // changes it, on a stop's outcome, at startup, and on coming back to the
   // foreground, since a report made while this page was paused may not have
   // reached it.
-  const scratchRef = useRef(scratch)
-  scratchRef.current = scratch
   const followRef = useRef<((state: SessionState) => void) | null>(null)
   useEffect(() => {
     if (!native) return undefined
     const follow = (state: SessionState) => {
       setRegular(state.regular)
       setSource(state.source)
-      setPreferences((current) => followSession(current, scratchRef.current, state))
+      setPreferences((current) => followSession(current, state))
       setSchedule((current) => (current.enabled === state.scheduleEnabled ? current : { ...current, enabled: state.scheduleEnabled }))
     }
     followRef.current = follow
