@@ -93,7 +93,18 @@ public class SoundscapePlaybackService extends Service {
             return START_NOT_STICKY;
         }
         if (!soundscape.isActive()) {
-            // Started for a session that has already ended.
+            // Started for a session that has already ended (it was stopped
+            // between startForegroundService and this call). Android 8+
+            // still requires startForeground from a service started that
+            // way, and on Android 12+ a stopSelf without it crashes the app
+            // (ForegroundServiceDidNotStartInTimeException), so enter the
+            // foreground for an instant and leave it again.
+            try {
+                startForegroundWith(buildNotification(getString(R.string.app_name), "", false));
+            } catch (RuntimeException ignored) {
+                // Not started with startForegroundService, and not allowed here: nothing was owed.
+            }
+            stopForeground(STOP_FOREGROUND_REMOVE);
             stopSelf();
             return START_NOT_STICKY;
         }
@@ -119,13 +130,16 @@ public class SoundscapePlaybackService extends Service {
             .setState(playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED,
                 PlaybackState.PLAYBACK_POSITION_UNKNOWN, playing ? 1f : 0f)
             .build());
-        Notification notification = buildNotification(title, status, playing);
+        startForegroundWith(buildNotification(title, status, playing));
+        holdWakeLock(playing);
+    }
+
+    private void startForegroundWith(Notification notification) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
         } else {
             startForeground(NOTIFICATION_ID, notification);
         }
-        holdWakeLock(playing);
     }
 
     private void holdWakeLock(boolean hold) {
