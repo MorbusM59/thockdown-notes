@@ -51,8 +51,10 @@ function holdGust(generator: ReturnType<typeof createProcessor>, gust: number) {
 }
 
 const KINDS = ['noise', 'rain', 'thunder', 'water', 'fire', 'chimes'] as const;
-/** A layer of each kind that sounds within a couple of seconds. */
-const busy = (kind: (typeof KINDS)[number]) => (kind === 'thunder' ? layer('thunder', { share: 1, randomness: 0 }) : layer(kind));
+/** A layer of each kind that sounds within a couple of seconds (chimes at their busiest, or their first strike may be many seconds off). */
+const busy = (kind: (typeof KINDS)[number]) => (
+  kind === 'thunder' ? layer('thunder', { share: 1, randomness: 0 }) : kind === 'chimes' ? layer('chimes', { activity: 1 }) : layer(kind)
+);
 
 describe('the soundscape worklet', () => {
   it('uses the same fader law as the settings', () => {
@@ -133,7 +135,8 @@ describe('the soundscape worklet', () => {
 
   it('moves every kind into the space and darkens it with distance, by one rule', () => {
     for (const kind of ['noise', 'rain', 'water', 'fire', 'chimes'] as const) {
-      const at = (distance: number) => createProcessor([layer(kind, { distance } as never)], { sampleRate: 16000 }).render(8);
+      // Chimes at width 0, every tube at the layer's distance (a wider layer spreads its tubes over near and far).
+      const at = (distance: number) => createProcessor([{ ...busy(kind), distance, ...(kind === 'chimes' ? { width: 0 } : {}) } as SoundscapeChannelSettings], { sampleRate: 16000 }).render(8);
       const near = at(0);
       const far = at(1);
       const sendShare = (out: Rendered) => rms(out.sendLeft) / rms(out.left);
@@ -1153,12 +1156,13 @@ describe('chimes', () => {
     generator.processor.strikeTube(channel, tube, 1);
     const left = new Float64Array(500);
     const right = new Float64Array(500);
-    generator.processor.renderTubes(channel, left, right, 0, 250);
+    const sends = [new Float64Array(500), new Float64Array(500)];
+    generator.processor.renderTubes(channel, left, right, ...sends, 0, 250);
     const before = tube.oscillators.map((oscillator: { sin: number; amplitude: number }) => oscillator.sin * oscillator.amplitude);
     generator.processor.strikeTube(channel, tube, 1);
     const after = tube.oscillators.map((oscillator: { sin: number; amplitude: number }) => oscillator.sin * oscillator.amplitude);
     after.forEach((value: number, index: number) => expect(value).toBeCloseTo(before[index], 12));
-    generator.processor.renderTubes(channel, left, right, 250, 500);
+    generator.processor.renderTubes(channel, left, right, ...sends, 250, 500);
     let jump = 0;
     for (let index = 1; index < 500; index += 1) jump = Math.max(jump, Math.abs(left[index] - left[index - 1]));
     expect(jump).toBeLessThan(peak(Array.from(left)) * 0.5);
@@ -1214,6 +1218,44 @@ describe('chimes', () => {
     generator.render(30);
     expect(ratios.length).toBeGreaterThan(20);
     for (const ratio of ratios) expect(ratio).toBeCloseTo(ratios[0], 9);
+  });
+
+  it('hangs its tubes together at width 0 and spreads them, each keeping its place, as it widens', () => {
+    const base = layer('chimes', { activity: 0, tubes: 6, pan: 0, distance: 0.4, width: 0 });
+    const generator = createProcessor([base], { sampleRate: 16000 });
+    const places = () => generator.processor.channels[0].tubeState.map((tube: { pan: number; distance: number }) => [tube.pan, tube.distance]);
+    for (const [pan, distance] of places()) {
+      expect(pan).toBeCloseTo(0, 12);
+      expect(distance).toBeCloseTo(0.4, 12);
+    }
+    generator.configure([{ ...base, width: 1 }]);
+    const wide = places();
+    const pans = wide.map(([pan]: number[]) => pan);
+    const distances = wide.map(([, distance]: number[]) => distance);
+    expect(Math.max(...pans) - Math.min(...pans)).toBeGreaterThan(1);
+    expect(Math.max(...distances) - Math.min(...distances)).toBeGreaterThan(0.3);
+    for (const distance of distances) {
+      expect(distance).toBeGreaterThanOrEqual(0);
+      expect(distance).toBeLessThanOrEqual(1);
+    }
+    // Narrowed and widened again, every tube is back where it was.
+    generator.configure([{ ...base, width: 0.3 }]);
+    generator.configure([{ ...base, width: 1 }]);
+    expect(places()).toEqual(wide);
+  });
+
+  it('darkens a tube\'s sines exactly as the distance filter would', () => {
+    const { constants } = createProcessor([layer('chimes', { activity: 0 })], { sampleRate: 48000 });
+    // lowPassMagnitude against the filter it stands in for, run on a steady sine.
+    for (const [hz, cutoffHz] of [[300, 4000], [2000, 1000], [6000, 700]]) {
+      const filter = constants.stateVariableFilter(cutoffHz, Math.SQRT1_2);
+      let peakOut = 0;
+      for (let frame = 0; frame < 48000; frame += 1) {
+        const out = constants.lowPassStep(filter, Math.sin((2 * Math.PI * hz * frame) / 48000));
+        if (frame > 24000) peakOut = Math.max(peakOut, Math.abs(out));
+      }
+      expect(constants.lowPassMagnitude(hz, cutoffHz)).toBeCloseTo(peakOut, 2);
+    }
   });
 
   it('keeps its tubes ringing through a retune', () => {

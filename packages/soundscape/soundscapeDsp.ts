@@ -182,7 +182,7 @@ export function chimeTubeFrequencies(pitchHz: number, tubes: number, scale = 0):
 export type SoundscapeWorkletChannel = SoundscapeChannelSettings & {
   /** The fader and the kind's level, as one gain. */
   gain: number;
-  /** The distance resolved; every kind but thunder, which resolves each peal's own. */
+  /** The distance resolved; every kind but thunder and chimes, which take `spaceTable`. */
   space?: SoundscapeSpace;
   cycle?: Float32Array;
   colourWeights?: [number, number, number];
@@ -238,12 +238,12 @@ export function toGeneratorChannel(channel: SoundscapeChannelSettings, foliage: 
     case 'rain':
       return { ...channel, gain, space: resolveSoundscapeSpace(channel.distance, foliage), dropsRange: RAIN_DROPS_RANGE };
     case 'thunder':
-      return { ...channel, gain, kindGain: SOUNDSCAPE_KIND_GAIN.thunder, spaceTable: thunderSpaceTable(foliage), lengthRangeSec: THUNDER_LENGTH_RANGE_SEC, jitter: SOUNDSCAPE_THUNDER_JITTER };
+      return { ...channel, gain, kindGain: SOUNDSCAPE_KIND_GAIN.thunder, spaceTable: distanceSpaceTable(foliage), lengthRangeSec: THUNDER_LENGTH_RANGE_SEC, jitter: SOUNDSCAPE_THUNDER_JITTER };
     case 'chimes':
       return {
         ...channel,
         gain,
-        space: resolveSoundscapeSpace(channel.distance, foliage),
+        spaceTable: distanceSpaceTable(foliage),
         tubeHz: chimeTubeFrequencies(channel.pitchHz, channel.tubes, channel.scale),
         strikeRange: CHIME_STRIKE_RANGE,
       };
@@ -256,10 +256,14 @@ const TONE_TABLE_RANGE_HZ = [NOISE_TONE_TABLE_MIN_HZ, NOISE_TONE_TABLE_MAX_HZ] a
 const RAIN_DROPS_RANGE = [SOUNDSCAPE_RAIN_DROPS_MIN_PER_SEC, SOUNDSCAPE_RAIN_DROPS_MAX_PER_SEC] as const;
 const CHIME_STRIKE_RANGE = [SOUNDSCAPE_CHIME_RATE_MIN_PER_SEC, SOUNDSCAPE_CHIME_RATE_MAX_PER_SEC] as const;
 
-/** Steps in a thunder layer's distance table: finer than the slider moves. */
-const THUNDER_SPACE_STEPS = 100;
-/** A peal's distance is drawn per peal, so thunder takes the whole distance rule as a table, for the space's foliage. */
-function thunderSpaceTable(foliage: number): readonly SoundscapeSpace[] {
-  return Array.from({ length: THUNDER_SPACE_STEPS + 1 }, (_, index) => resolveSoundscapeSpace(index / THUNDER_SPACE_STEPS, foliage));
+/** Steps in a distance table: finer than the slider moves. */
+const SPACE_TABLE_STEPS = 100;
+/**
+ * The whole distance rule as a table, for the space's foliage, for the kinds
+ * that place their sounds at more than one distance: thunder draws a distance
+ * per peal, and each chime tube keeps its own (its layer's width).
+ */
+function distanceSpaceTable(foliage: number): readonly SoundscapeSpace[] {
+  return Array.from({ length: SPACE_TABLE_STEPS + 1 }, (_, index) => resolveSoundscapeSpace(index / SPACE_TABLE_STEPS, foliage));
 }
 const THUNDER_LENGTH_RANGE_SEC = [SOUNDSCAPE_THUNDER_LENGTH_MIN_SEC, SOUNDSCAPE_THUNDER_LENGTH_MAX_SEC] as const;

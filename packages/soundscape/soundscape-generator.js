@@ -21,7 +21,8 @@
  * every layer SENDS to the space (the engine's reverb). Every layer, of every
  * kind, reaches them through one stage (placeLayer): its distance darkens it
  * and splits it between the two, by one rule (resolveSoundscapeSpace). Thunder
- * alone places itself, because a peal's distance is drawn per peal.
+ * and chimes place themselves (SELF_PLACING_KINDS), because a peal's distance
+ * is drawn per peal and each chime tube has its own.
  *
  * Levels are absolute: a layer's `gain` (its fader times its kind's level) is
  * all that scales it. Enabling another layer does not change any other
@@ -382,6 +383,21 @@ function stereoImage(pan, width) {
 }
 
 /**
+ * The distances a layer's sources are placed between, as stereoImage is
+ * the positions: `width` (0..1) takes up to the whole distance range, half
+ * of it either side of the layer's distance at most, slid inward rather
+ * than cut off where it would reach past near or far -- so at width 1 the
+ * sources are everywhere from beside the listener to the far end, wherever
+ * the layer's distance stands. Used by the chimes, whose tubes each keep a
+ * distance of their own within this.
+ */
+function depthImage(distance, width) {
+  const half = 0.5 * Math.max(0, Math.min(1, width));
+  const centre = Math.max(half, Math.min(1 - half, Math.max(0, Math.min(1, distance ?? 0))));
+  return { from: centre - half, to: centre + half };
+}
+
+/**
  * A part's level slider as a gain; mirrors soundscapePartGain in
  * packages/soundscape/soundscape.ts, which soundscape-generator.test.ts holds it to:
  * silence at 0, as authored at PART_AUTHORED, PART_DB_PER_UNIT decibels per
@@ -404,6 +420,14 @@ function panGains(position) {
   const angle = (position + 1) * Math.PI / 4;
   return { left: Math.SQRT2 * Math.cos(angle), right: Math.SQRT2 * Math.sin(angle) };
 }
+
+/**
+ * The kinds that place each of their sounds at its own distance, writing
+ * the direct and send outputs themselves rather than through placeLayer:
+ * thunder, a distance per peal, and chimes, a distance per tube. Both take
+ * the distance rule as a table (`spaceTable`, spaceAt).
+ */
+const SELF_PLACING_KINDS = new Set(['thunder', 'chimes']);
 
 /** The most rain voices one layer keeps ringing at once. */
 const MAX_RAIN_VOICES = 48;
@@ -752,6 +776,20 @@ function stateVariableFilter(centerHz, q) {
   return { a1, a2: g * a1, a3: g * g * a1, s1: 0, s2: 0 };
 }
 
+/**
+ * How much a stateVariableFilter at `cutoffHz` and Q 0.707, read at its
+ * low-pass output, passes a sine at `hz`: the bilinear Butterworth's
+ * magnitude, with the filter's own limits on the cutoff. A source that is a
+ * sum of steady sines (a chime tube) is darkened exactly by scaling each
+ * sine by this, with no filter running; the phase the filter would also
+ * shift is not heard.
+ */
+function lowPassMagnitude(hz, cutoffHz) {
+  const safeHz = Math.max(20, Math.min(cutoffHz, sampleRate * 0.45));
+  const ratio = Math.tan(Math.PI * Math.min(hz, sampleRate * 0.4999) / sampleRate) / Math.tan((Math.PI * safeHz) / sampleRate);
+  return 1 / Math.sqrt(1 + (ratio ** 4));
+}
+
 /** One sample through a stateVariableFilter; returns its low-pass output. */
 function lowPassStep(filter, input) {
   const v3 = input - filter.s2;
@@ -935,10 +973,11 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
    * reverb-send gains, and its darkening -- a two-pole low-pass at Q 0.707
    * per side. Distance arrives resolved (`space`, resolveSoundscapeSpace). At
    * distance 0 there is no darkening filter at all, so a near layer is
-   * untouched. Thunder places each peal itself and has none of this.
+   * untouched. Thunder and chimes place each of their sounds at its own
+   * distance (SELF_PLACING_KINDS) and have none of this.
    */
   configureSpace(channel) {
-    if (channel.kind === 'thunder') return;
+    if (SELF_PLACING_KINDS.has(channel.kind)) return;
     const space = channel.space ?? { cutoffHz: 18000, directGain: 1, reverbSend: 0 };
     channel.directGain = space.directGain;
     channel.reverbSend = space.reverbSend;
@@ -963,7 +1002,7 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
   /**
    * A layer's block, from `left`/`right` (which it darkens in place) into
    * the direct and send outputs, at its gain. The one way every layer but
-   * thunder reaches the outputs.
+   * the SELF_PLACING_KINDS reaches the outputs.
    */
   placeLayer(channel, left, right, length, direct, send) {
     const dark = channel.darkLeft;
@@ -2051,8 +2090,8 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
     };
   }
 
-  /** resolveSoundscapeSpace at `distance`, from the table the main thread built. */
-  thunderSpaceAt(channel, distance) {
+  /** resolveSoundscapeSpace at `distance`, from the table the main thread built (thunder, chimes). */
+  spaceAt(channel, distance) {
     const table = channel.spaceTable;
     if (!table || table.length === 0) return { directGain: 1, reverbSend: 0 };
     return table[Math.round(distance * (table.length - 1))];
@@ -2124,7 +2163,7 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
     const lengthSec = settings.lengthSec;
     const peakSec = lengthSec * this.between(THUNDER_PEAK_AT);
     const fadeTau = Math.max(0.1, (lengthSec - peakSec) / 5);
-    const space = this.thunderSpaceAt(channel, d);
+    const space = this.spaceAt(channel, d);
     const image = stereoImage(settings.pan, spread);
     const panAround = () => image.from + ((image.to - image.from) * this.random());
     const brown = this.noiseLoop('brown');
@@ -2497,10 +2536,10 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
    * its first sample.
    */
   spawnBurst(bursts, max, offset, spec, levelScale, pan) {
-    if (bursts.length >= max) return;
+    if (bursts.length >= max) return null;
     const q = this.between(spec.q);
     const gains = panGains(pan);
-    bursts.push({
+    const burst = {
       amplitude: this.between(spec.level) * levelScale,
       decay: Math.exp(-1 / (sampleRate * this.between(spec.decaySec))),
       filter: stateVariableFilter(spec.hz[0] * ((spec.hz[1] / spec.hz[0]) ** this.random()), q),
@@ -2514,11 +2553,21 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
       startOffset: Math.max(0, offset),
       gainLeft: gains.left,
       gainRight: gains.right,
-    });
+      // Gains into the send outputs, for a layer that places its own sounds
+      // (SELF_PLACING_KINDS), set by that layer on the burst returned.
+      sendGainLeft: 0,
+      sendGainRight: 0,
+    };
+    bursts.push(burst);
+    return burst;
   }
 
-  /** Every queued burst for this block, added into `left`/`right`; spent ones are dropped. */
-  renderBursts(bursts, left, right, length) {
+  /**
+   * Every queued burst for this block, added into `left`/`right`, and into
+   * `sendLeft`/`sendRight` at the burst's send gains where the layer passes
+   * them; spent ones are dropped.
+   */
+  renderBursts(bursts, left, right, length, sendLeft = null, sendRight = null) {
     for (let index = bursts.length - 1; index >= 0; index -= 1) {
       const burst = bursts[index];
       if (burst.startOffset >= length) {
@@ -2543,6 +2592,10 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
         const y = burst.lowpassState;
         left[frame] += y * burst.gainLeft;
         right[frame] += y * burst.gainRight;
+        if (sendLeft) {
+          sendLeft[frame] += y * burst.sendGainLeft;
+          sendRight[frame] += y * burst.sendGainRight;
+        }
       }
       burst.startOffset = 0;
       burst.amplitude = amplitude;
@@ -3062,8 +3115,18 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
    * Build or retune a chimes layer's tubes. A tube keeps its oscillators'
    * state (phase and ring) through a retune, so moving pitch or ring length
    * while tubes are sounding bends them rather than cutting them off. Each
-   * tube draws its detune and its modes' doublet splits once, when it is
-   * first made, so it is the same object for as long as the layer lives.
+   * tube draws its detune, its modes' doublet splits and its PLACE once,
+   * when it is first made, so it is the same object for as long as the
+   * layer lives.
+   *
+   * A tube's place is a share of the layer's stereo image (stereoImage, low
+   * tubes toward the left) and a share of its range of distances
+   * (depthImage), both of which `width` sets: at 0 every tube hangs at the
+   * layer's pan and distance, and as it widens each tube moves out to its
+   * own spot and stays there. Each tube is placed through the distance rule
+   * on its own (spaceAt): its direct and send gains, and its darkening
+   * applied to each oscillator as a gain (lowPassMagnitude), so the layer
+   * writes its own outputs (SELF_PLACING_KINDS).
    */
   configureChimes(channel, before) {
     const frequencies = channel.tubeHz ?? [];
@@ -3072,17 +3135,25 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
     const material = chimeMaterial(channel.material);
     channel.chimeMaterial = material;
     channel.attackRate = material.attackSec > 0.001 ? 1 - Math.exp(-1 / (material.attackSec * sampleRate)) : 0;
-    const image = stereoImage(channel.pan, 1);
+    const width = channel.width ?? 0.5;
+    const image = stereoImage(channel.pan, width);
+    const depths = depthImage(channel.distance, width);
+    const gain = channel.gain ?? 1;
     channel.tubeState = frequencies.map((hz, index) => {
       const tube = old[index] ?? {
         detune: 2 ** ((CHIME_DETUNE_CENTS * ((this.random() * 2) - 1)) / 1200),
         // Where in the material's doublet range each mode's split falls.
         splits: material.ratios.map(() => this.random()),
         placement: (index + 0.25 + (0.5 * this.random())) / Math.max(1, frequencies.length),
+        depth: this.random(),
         oscillators: material.ratios.flatMap(() => [0, 1].map(() => ({ sin: 0, cos: 1, rotationSin: 0, rotationCos: 1, amplitude: 0, feed: 0, decay: 1, audible: true }))),
         active: false,
       };
       const fundamental = hz * tube.detune;
+      tube.distance = depths.from + ((depths.to - depths.from) * tube.depth);
+      const space = this.spaceAt(channel, tube.distance);
+      // As placeLayer: a source at distance 0 is not darkened at all.
+      const darkens = tube.distance > 0;
       material.ratios.forEach((ratio, mode) => {
         const decay = Math.exp(-6.9078 / (ringSec * material.ringScale * (ratio ** -material.decayExponent) * sampleRate));
         const split = material.doubletHz[0] * ((material.doubletHz[1] / material.doubletHz[0]) ** tube.splits[mode]);
@@ -3094,6 +3165,7 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
           oscillator.rotationSin = Math.sin(angle);
           oscillator.rotationCos = Math.cos(angle);
           oscillator.decay = decay;
+          oscillator.dark = darkens ? lowPassMagnitude(frequency, space.cutoffHz) : 1;
           if (!oscillator.audible) {
             oscillator.amplitude = 0;
             oscillator.feed = 0;
@@ -3102,8 +3174,12 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
       });
       tube.pan = image.from + ((image.to - image.from) * tube.placement);
       const gains = panGains(tube.pan);
-      tube.gainLeft = gains.left;
-      tube.gainRight = gains.right;
+      tube.gainLeft = gain * space.directGain * gains.left;
+      tube.gainRight = gain * space.directGain * gains.right;
+      tube.sendLeft = gain * space.reverbSend * gains.left;
+      tube.sendRight = gain * space.reverbSend * gains.right;
+      // The striker's tick, darkened at the middle of its band.
+      tube.clickDark = darkens ? lowPassMagnitude(Math.sqrt(material.clickHz[0] * material.clickHz[1]), space.cutoffHz) : 1;
       return tube;
     });
     if (!channel.bursts) channel.bursts = [];
@@ -3157,64 +3233,68 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
     tube.active = true;
   }
 
-  /** The tubes, from frame `from` to `to` of the block, added into `left`/`right`. */
-  renderTubes(channel, left, right, from, to) {
+  /**
+   * The tubes, from frame `from` to `to` of the block, added into the
+   * direct (`left`/`right`) and send (`sendLeft`/`sendRight`) outputs, each
+   * oscillator at its tube's place and its own darkening (configureChimes).
+   */
+  renderTubes(channel, left, right, sendLeft, sendRight, from, to) {
+    const attackRate = channel.attackRate;
     for (const tube of channel.tubeState) {
       if (!tube.active) continue;
-      const oscillators = tube.oscillators;
       let loudest = 0;
-      const attackRate = channel.attackRate;
-      for (const oscillator of oscillators) {
-        if (oscillator.feed > VOICE_SILENCE) {
-          // Swelling in: the feed pours into the ringing amplitude, in phase,
-          // so the swell is continuous; the ring decays as it fills.
-          let sin = oscillator.sin;
-          let cos = oscillator.cos;
-          let amplitude = oscillator.amplitude;
-          let feed = oscillator.feed;
-          for (let frame = from; frame < to; frame += 1) {
-            const pour = feed * attackRate;
-            feed -= pour;
-            amplitude = (amplitude + pour) * oscillator.decay;
-            const sample = sin * amplitude;
-            left[frame] += sample * tube.gainLeft;
-            right[frame] += sample * tube.gainRight;
-            const nextSin = (sin * oscillator.rotationCos) + (cos * oscillator.rotationSin);
-            cos = (cos * oscillator.rotationCos) - (sin * oscillator.rotationSin);
-            sin = nextSin;
-          }
-          oscillator.sin = sin;
-          oscillator.cos = cos;
-          oscillator.amplitude = amplitude;
-          oscillator.feed = feed > VOICE_SILENCE ? feed : 0;
-          loudest = Math.max(loudest, amplitude + oscillator.feed);
-          continue;
-        }
-        if (oscillator.amplitude <= VOICE_SILENCE) {
+      for (const oscillator of tube.oscillators) {
+        const swelling = oscillator.feed > VOICE_SILENCE;
+        if (!swelling && oscillator.amplitude <= VOICE_SILENCE) {
           oscillator.amplitude = 0;
           continue;
         }
+        const dark = oscillator.dark ?? 1;
+        const directLeft = tube.gainLeft * dark;
+        const directRight = tube.gainRight * dark;
+        const reverbLeft = tube.sendLeft * dark;
+        const reverbRight = tube.sendRight * dark;
         let sin = oscillator.sin;
         let cos = oscillator.cos;
         let amplitude = oscillator.amplitude;
         const rotationSin = oscillator.rotationSin;
         const rotationCos = oscillator.rotationCos;
         const decay = oscillator.decay;
-        const gainLeft = tube.gainLeft;
-        const gainRight = tube.gainRight;
-        for (let frame = from; frame < to; frame += 1) {
-          const sample = sin * amplitude;
-          left[frame] += sample * gainLeft;
-          right[frame] += sample * gainRight;
-          const nextSin = (sin * rotationCos) + (cos * rotationSin);
-          cos = (cos * rotationCos) - (sin * rotationSin);
-          sin = nextSin;
-          amplitude *= decay;
+        if (swelling) {
+          // Swelling in: the feed pours into the ringing amplitude, in phase,
+          // so the swell is continuous; the ring decays as it fills.
+          let feed = oscillator.feed;
+          for (let frame = from; frame < to; frame += 1) {
+            const pour = feed * attackRate;
+            feed -= pour;
+            amplitude = (amplitude + pour) * decay;
+            const sample = sin * amplitude;
+            left[frame] += sample * directLeft;
+            right[frame] += sample * directRight;
+            sendLeft[frame] += sample * reverbLeft;
+            sendRight[frame] += sample * reverbRight;
+            const nextSin = (sin * rotationCos) + (cos * rotationSin);
+            cos = (cos * rotationCos) - (sin * rotationSin);
+            sin = nextSin;
+          }
+          oscillator.feed = feed > VOICE_SILENCE ? feed : 0;
+        } else {
+          for (let frame = from; frame < to; frame += 1) {
+            const sample = sin * amplitude;
+            left[frame] += sample * directLeft;
+            right[frame] += sample * directRight;
+            sendLeft[frame] += sample * reverbLeft;
+            sendRight[frame] += sample * reverbRight;
+            const nextSin = (sin * rotationCos) + (cos * rotationSin);
+            cos = (cos * rotationCos) - (sin * rotationSin);
+            sin = nextSin;
+            amplitude *= decay;
+          }
         }
         oscillator.sin = sin;
         oscillator.cos = cos;
         oscillator.amplitude = amplitude;
-        loudest = Math.max(loudest, amplitude);
+        loudest = Math.max(loudest, amplitude + oscillator.feed);
       }
       if (loudest <= VOICE_SILENCE) tube.active = false;
     }
@@ -3231,15 +3311,18 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
   }
 
   /**
-   * A chimes layer's block, written into `left`/`right` (overwritten). The
+   * A chimes layer's block, written into the direct (`left`/`right`) and
+   * send (`sendLeft`/`sendRight`) outputs (all overwritten). The
    * striker strikes at a rate `activity` sets and the weather moves; each
    * strike may rebound into another (the cascade, see CHIME_CASCADE_*). The
    * tubes are rendered in segments between strikes, so each strike lands on
    * its own frame and the sound does not depend on the block size.
    */
-  renderChimes(channel, left, right, blockStart, length) {
+  renderChimes(channel, left, right, sendLeft, sendRight, blockStart, length) {
     left.fill(0, 0, length);
     right.fill(0, 0, length);
+    sendLeft.fill(0, 0, length);
+    sendRight.fill(0, 0, length);
     const tubes = channel.tubeState;
     const blockEnd = blockStart + length;
     const rate = this.chimeStrikeRate(channel);
@@ -3257,7 +3340,7 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
       const at = isRebound ? channel.cascade.frame : channel.nextStrikeFrame;
       if (at >= blockEnd) break;
       const offset = at - blockStart;
-      this.renderTubes(channel, left, right, position, offset);
+      this.renderTubes(channel, left, right, sendLeft, sendRight, position, offset);
       position = offset;
       if (tubes.length > 0) {
         const index = isRebound ? channel.cascade.tube : Math.floor(this.random() * tubes.length);
@@ -3268,7 +3351,17 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
         this.strikeTube(channel, tubes[index], force);
         // The striker's tick, as bright as it is hard, as loud as the material makes it.
         // The tick rises with the square of the striker's speed (see CHIME_STRIKE_FORCE).
-        if (material.click > 0) this.spawnBurst(channel.bursts, 16, offset, click, force * force * (channel.hardness ?? 0.5) * material.click, tubes[index].pan);
+        const tube = tubes[index];
+        const burst = material.click > 0
+          ? this.spawnBurst(channel.bursts, 16, offset, click, force * force * (channel.hardness ?? 0.5) * material.click, tube.pan)
+          : null;
+        if (burst) {
+          // At the tube's place, as its ring is (configureChimes).
+          burst.gainLeft = tube.gainLeft * tube.clickDark;
+          burst.gainRight = tube.gainRight * tube.clickDark;
+          burst.sendGainLeft = tube.sendLeft * tube.clickDark;
+          burst.sendGainRight = tube.sendRight * tube.clickDark;
+        }
         const rebound = force * CHIME_CASCADE_DAMPING;
         if (tubes.length > 1 && rebound >= CHIME_CASCADE_MIN_FORCE && this.random() < cascadeChance) {
           const gap = Math.max(1, Math.round(cascadeSec * (0.6 + (0.8 * this.random())) * sampleRate));
@@ -3279,8 +3372,8 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
       }
       if (!isRebound) channel.nextStrikeFrame += this.eventDelayFrames(rate);
     }
-    this.renderTubes(channel, left, right, position, length);
-    this.renderBursts(channel.bursts, left, right, length);
+    this.renderTubes(channel, left, right, sendLeft, sendRight, position, length);
+    this.renderBursts(channel.bursts, left, right, length, sendLeft, sendRight);
   }
 
   /**
@@ -3332,11 +3425,11 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
         case 'fire':
           this.renderFire(channel, left, right, currentFrame, length);
           break;
-        case 'chimes':
-          this.renderChimes(channel, left, right, currentFrame, length);
-          break;
-        case 'thunder': {
-          this.renderThunder(channel, left, right, this.scratchSendLeft, this.scratchSendRight, length);
+        case 'thunder':
+        case 'chimes': {
+          // SELF_PLACING_KINDS: rendered straight into direct and send.
+          if (channel.kind === 'thunder') this.renderThunder(channel, left, right, this.scratchSendLeft, this.scratchSendRight, length);
+          else this.renderChimes(channel, left, right, this.scratchSendLeft, this.scratchSendRight, currentFrame, length);
           if (!audible) continue;
           const directLeft = direct[0];
           const directRight = direct[1] ?? directLeft;

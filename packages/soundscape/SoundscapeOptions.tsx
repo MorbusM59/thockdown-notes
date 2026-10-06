@@ -332,15 +332,19 @@ const CONTROLS: { [K in SoundscapeChannelKind]: ControlGroup[] } = {
   chimes: [
     {
       label: 'Sound',
+      // In rows of three, then the scale alone across the whole row: there are many of them, each
+      // its own, so its slider gets the most travel per step.
+      rows: [3, 3, 3, 1],
       controls: [
         VOLUME,
         { key: 'pitchHz', track: 'pitch', tooltip: 'The lowest tube, in semitones from A440; the rest climb the scale', min: SOUNDSCAPE_CHIME_PITCH_MIN_HZ, max: SOUNDSCAPE_CHIME_PITCH_MAX_HZ, semitones: true, format: formatPitch },
-        { key: 'tubes', track: 'tubes', tooltip: 'How many tubes', min: SOUNDSCAPE_CHIME_TUBES_MIN, max: SOUNDSCAPE_CHIME_TUBES_MAX, step: 1, format: (value) => `${Math.round(value)} tubes` },
+        unit('width', 'width', 'The tubes hanging together at the pan and distance, to each at its own place across the stereo image the pan allows and across near and far', (value) => formatAmount(value, 'Together', 'Everywhere')),
         { key: 'ringSec', track: 'ring', tooltip: 'How long a struck tube rings (for metal; wood knocks far shorter, glass a little shorter, the veil longer)', min: SOUNDSCAPE_CHIME_RING_MIN_SEC, max: SOUNDSCAPE_CHIME_RING_MAX_SEC, log: true, format: formatSeconds },
-        unit('activity', 'activity', 'How often the striker is set moving, before the wind has any say', (value) => `${chimeStrikesPerSecond(value).toFixed(chimeStrikesPerSecond(value) < 1 ? 2 : 1)} / s`),
+        unit('material', 'material', 'What the tubes are made of: wood (bamboo), metal, glass, and a veil of shimmering, swelling tones, and every blend between', (value) => formatScale(value, MATERIAL_POINTS)),
         unit('hardness', 'hardness', 'A soft striker, warm and round, to a hard one, bright with a tick', (value) => formatAmount(value, 'Soft', 'Hard')),
         unit('unison', 'unison', 'How much the chimes sound together: single notes, or the striker rebounding across the ring into a cascade', (value) => formatAmount(value, 'Single', 'Cascade')),
-        unit('material', 'material', 'What the tubes are made of: wood (bamboo), metal, glass, and a veil of shimmering, swelling tones, and every blend between', (value) => formatScale(value, MATERIAL_POINTS)),
+        unit('activity', 'activity', 'How often the striker is set moving, before the wind has any say', (value) => `${chimeStrikesPerSecond(value).toFixed(chimeStrikesPerSecond(value) < 1 ? 2 : 1)} / s`),
+        { key: 'tubes', track: 'tubes', tooltip: 'How many tubes', min: SOUNDSCAPE_CHIME_TUBES_MIN, max: SOUNDSCAPE_CHIME_TUBES_MAX, step: 1, format: (value) => `${Math.round(value)} tubes` },
         { key: 'scale', track: 'scale', tooltip: 'The scale the tubes are tuned to', min: 0, max: CHIME_SCALE_COUNT - 1, step: 1, format: (value) => CHIME_SCALES[Math.round(value)].name },
       ],
     },

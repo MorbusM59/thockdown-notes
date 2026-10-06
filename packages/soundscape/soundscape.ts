@@ -305,6 +305,13 @@ export interface SoundscapeChimesChannelSettings extends SoundscapeChannelBaseSe
   /** Which scale the tubes are tuned to, an index into CHIME_SCALES (0 the major pentatonic). */
   scale: number;
   pan: number;
+  /**
+   * How far the tubes are spread, 0-1: at 0 they hang together at the pan
+   * and distance; wider, each tube moves out to a place of its own, across
+   * the stereo image the pan leaves and across the range of distances, up
+   * to all of it at 1. A tube keeps its place.
+   */
+  width: number;
   /** Chimes are moved by the wind: gusts strike them more often and harder. */
   weather: number;
 }
@@ -543,7 +550,7 @@ export const SOUNDSCAPE_CHANNEL_DEFAULTS: KindDefaults = {
   },
   chimes: {
     kind: 'chimes', enabled: true, solo: false, volume: 0.6, distance: 0.35,
-    pitchHz: chimeSemitoneHz(3), tubes: 5, ringSec: 6, activity: 0.3, hardness: 0.6, unison: 0.3, material: 1 / 3, scale: 0, pan: 0, weather: 0.8,
+    pitchHz: chimeSemitoneHz(3), tubes: 5, ringSec: 6, activity: 0.3, hardness: 0.6, unison: 0.3, material: 1 / 3, scale: 0, pan: 0, width: 0.5, weather: 0.8,
   },
 };
 
@@ -813,7 +820,7 @@ export const SOUNDSCAPE_FIELD_BOUNDS: { [K in SoundscapeChannelKind]: FieldBound
     ...COMMON_BOUNDS, pitchHz: [SOUNDSCAPE_CHIME_PITCH_MIN_HZ, SOUNDSCAPE_CHIME_PITCH_MAX_HZ],
     tubes: [SOUNDSCAPE_CHIME_TUBES_MIN, SOUNDSCAPE_CHIME_TUBES_MAX, 'integer'],
     ringSec: [SOUNDSCAPE_CHIME_RING_MIN_SEC, SOUNDSCAPE_CHIME_RING_MAX_SEC], activity: UNIT, hardness: UNIT, unison: UNIT, material: UNIT,
-    scale: [0, CHIME_SCALE_COUNT - 1, 'integer'], pan: SIGNED, weather: UNIT,
+    scale: [0, CHIME_SCALE_COUNT - 1, 'integer'], pan: SIGNED, width: UNIT, weather: UNIT,
   },
 };
 

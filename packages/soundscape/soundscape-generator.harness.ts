@@ -7,7 +7,7 @@ import { createGeneratorBlock, hostGenerator } from './soundscapeGeneratorHost';
 
 export const generatorSource = readFileSync(fileURLToPath(new URL('./soundscape-generator.js', import.meta.url)), 'utf8');
 /** The generator's constants the tests compare against the app's own. */
-const GENERATOR_EXPORTS = '{ RAIN_SURFACE_ANCHORS, surfaceProfile, faderGain, WET_BUBBLE_CHANCE, RAIN_DRIPS_MAX_PER_SEC, CHIME_MATERIALS, chimeMaterial, FIRE_POP, partGain, waterRadiusBounds }';
+const GENERATOR_EXPORTS = '{ RAIN_SURFACE_ANCHORS, surfaceProfile, faderGain, WET_BUBBLE_CHANCE, RAIN_DRIPS_MAX_PER_SEC, CHIME_MATERIALS, chimeMaterial, FIRE_POP, partGain, waterRadiusBounds, stateVariableFilter, lowPassStep, lowPassMagnitude }';
 
 const loopsByRate = new Map<number, { loops: NoiseLoops; gains: Record<string, number> }>();
 export function noiseAt(sampleRate: number) {

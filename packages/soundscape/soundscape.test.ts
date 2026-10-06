@@ -276,7 +276,7 @@ describe('the configure message', () => {
     expect(configuration.weather).toEqual(DEFAULT_SOUNDSCAPE_SETTINGS.weather);
     for (const channel of configuration.channels) {
       expect(channel.gain).toBeGreaterThanOrEqual(0);
-      if (channel.kind !== 'thunder') expect(channel.space).toBeDefined();
+      if (channel.kind === 'thunder' || channel.kind === 'chimes') expect(channel.spaceTable).toBeDefined(); else expect(channel.space).toBeDefined();
     }
   });
 });
