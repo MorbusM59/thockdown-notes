@@ -16,7 +16,12 @@ import java.util.List;
  *   schedule's state then (a run in progress plays) -- from an alarm,
  *   because the boot broadcast may not start the playback service;
  * - a change of the clock or the time zone: the alarm is armed again for
- *   the new time.
+ *   the new time;
+ * - the listener granting exact alarms in the system settings (Android 12+)
+ *   while the app is closed: the alarm can be armed now.
+ *
+ * Not exported: the system delivers its own broadcasts to it regardless,
+ * and no other app may fire the schedule's alarm actions.
  */
 public class ScheduleReceiver extends BroadcastReceiver {
     @Override
