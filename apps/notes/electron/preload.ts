@@ -1,4 +1,4 @@
-import { ipcRenderer, contextBridge, webFrame } from 'electron'
+import { ipcRenderer, contextBridge, webFrame, webUtils } from 'electron'
 import type {
   AddTagInput,
   CreateNoteInput,
@@ -173,6 +173,7 @@ const externalFilesApi: ExternalFilesApi = {
   writeFileContent: (filePath: string, content: string) =>
     ipcRenderer.invoke(EXTERNAL_FILE_CHANNELS.writeContent, filePath, content),
   getFileBasename: (filePath: string) => ipcRenderer.invoke(EXTERNAL_FILE_CHANNELS.basename, filePath),
+  getPathForFile: (file: File) => webUtils.getPathForFile(file),
   readFileSnapshot: (filePath: string) => ipcRenderer.invoke(EXTERNAL_FILE_CHANNELS.readSnapshot, filePath),
   onOpenFile: (callback: (filePath: string) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, filePath: string) => {

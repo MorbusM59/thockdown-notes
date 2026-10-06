@@ -6020,7 +6020,8 @@ ${markdownHtml}
     event.stopPropagation()
 
     const file = event.dataTransfer.files?.[0]
-    if (!file || !file.path) {
+    const filePath = file ? window.thockdownExternalFiles?.getPathForFile(file) : undefined
+    if (!filePath) {
       return
     }
 
@@ -6031,7 +6032,7 @@ ${markdownHtml}
     const targetSlot = (event.target as HTMLElement | null)?.closest<HTMLElement>('.editor-section-slot[data-section-id]')
     const targetSectionId = targetSlot?.dataset.sectionId
 
-    enqueueExternalFileImport(file.path, targetSectionId)
+    enqueueExternalFileImport(filePath, targetSectionId)
   }, [enqueueExternalFileImport])
 
   /**

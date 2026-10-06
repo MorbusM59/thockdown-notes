@@ -1169,11 +1169,8 @@ placed at 5, 9 and 10 and the level advancing after ten.
     cannot answer a balance question at a few hundred milliseconds per choice,
     and the model cannot see the screen.
 
-    Note the native-module trap between them: `better-sqlite3` must be built
-    for ELECTRON to run the playthrough (`npx electron-rebuild -f -w
-    better-sqlite3`) and for NODE to run vitest (`npm rebuild better-sqlite3`,
-    which `npm run pretest` does). Getting it wrong does not say so: Electron
-    never opens a window, and vitest segfaults.
+    Both run on the same `better-sqlite3` binary: version 13 ships Node-API
+    prebuilds, so the old Electron-vs-Node rebuild dance is gone.
 
 65. **A modifier's effect has to REACH the thing it names**, and three classes
     of it did not (`model/modifierReach.test.ts` now holds each one):

@@ -15,18 +15,7 @@
 // `.tag-pill` is `inline-flex`), and none of them could have been seen from
 // the model.
 //
-// TWO NATIVE BUILDS, and they are not the same one. `better-sqlite3` has to
-// be compiled for ELECTRON's ABI to run this, and for NODE's to run vitest:
-//
-//   npx electron-rebuild -f -w better-sqlite3   # before this script
-//   npm rebuild better-sqlite3                  # before `npm test`
-//
-// Getting it wrong does not say so clearly -- Electron simply never opens a
-// window, and vitest segfaults. `npm run pretest` does the second for you.
-//
-// It clears `<repo>/data` first, the same way the perf harnesses do: a
-// leftover database means a leftover save, and the run would start somewhere
-// other than the beginning.
+// `better-sqlite3` 13 ships Node-API prebuilds, one binary for Node and Electron alike, so no rebuild step exists any more (it used to need one build per runtime).
 
 import { _electron } from 'playwright'
 import { spawnSync } from 'node:child_process'
