@@ -24,6 +24,22 @@ export default defineConfig([
     rules: {
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
+      // React Compiler's checks that this code already meets, kept so new code
+      // keeps meeting them. The rest of the plugin's recommended set (refs,
+      // immutability, set-state-in-effect, preserve-manual-memoization,
+      // purity) is not enabled: it describes what the compiler needs, and
+      // this app does not use the compiler and deliberately writes refs
+      // during render (persistMenuStateNowRef in App.tsx says why).
+      'react-hooks/static-components': 'error',
+      'react-hooks/use-memo': 'error',
+      'react-hooks/void-use-memo': 'error',
+      'react-hooks/globals': 'error',
+      'react-hooks/error-boundaries': 'error',
+      'react-hooks/set-state-in-render': 'error',
+      'react-hooks/config': 'error',
+      'react-hooks/gating': 'error',
+      'react-hooks/unsupported-syntax': 'error',
+      'react-hooks/incompatible-library': 'error',
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },
