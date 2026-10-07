@@ -19,6 +19,8 @@ import { planScrollJourney, type ScrollJourneyTiming } from '@thockdown/interact
 import { resolveScrollBridge } from '@thockdown/interaction/scrollBridgeRegistry';
 
 import { borrowAutoScrollBehavior } from '@thockdown/interaction/scrollBehaviorLock';
+import { activeSmoothScroll, cancelSmoothScroll, registerSmoothScroll, unregisterSmoothScroll } from '@thockdown/interaction/smoothScrollRegistry';
+import { clamp } from '@thockdown/interaction/clamp';
 /** See NonQuantizedSmoothScroll's own note: answered per call, not cached. */
 function prefersReducedMotion(): boolean {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
@@ -60,17 +62,6 @@ interface QuantizedSmoothScrollOptions {
  */
 const BRIDGE_MEASURE_FRAMES = 2;
 
-interface AnimationState {
-  rafId: number;
-  targetScrollTopPx: number;
-  releaseScrollBehavior: () => void;
-  /** Torn down however the animation ends -- see the render engine's own note. */
-  onCancel?: () => void;
-}
-
-const activeAnimations = new WeakMap<HTMLElement, AnimationState>();
-
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
 /**
  * Snaps a scroll position onto the row grid.
@@ -82,24 +73,6 @@ const clamp = (value: number, min: number, max: number) => Math.max(min, Math.mi
  */
 export const quantizeScrollTopToRow = (valuePx: number, lineHeightPx: number) =>
   Math.round(valuePx / lineHeightPx) * lineHeightPx;
-
-const cancelExistingAnimation = (scroller: HTMLElement): void => {
-  const current = activeAnimations.get(scroller);
-  if (!current) return;
-  cancelAnimationFrame(current.rafId);
-  current.onCancel?.();
-  current.releaseScrollBehavior();
-  activeAnimations.delete(scroller);
-};
-
-export function cancelQuantizedSmoothScroll(scroller: HTMLElement): void {
-  cancelExistingAnimation(scroller);
-}
-
-/** Whether a curve-driven scroll is in flight -- the render engine's twin. */
-export function isQuantizedSmoothScrollActive(scroller: HTMLElement): boolean {
-  return activeAnimations.has(scroller);
-}
 
 /**
  * Travels to `targetScrollTopPx`, on the row grid the whole way.
@@ -124,7 +97,7 @@ export function scrollToQuantizedSmooth(
   const quantizedStartPx = clamp(quantizeScrollTopToRow(scroller.scrollTop, lineHeightPx), 0, maxScrollTopPx);
   const quantizedTargetPx = clamp(quantizeScrollTopToRow(targetScrollTopPx, lineHeightPx), 0, maxScrollTopPx);
 
-  const existing = activeAnimations.get(scroller);
+  const existing = activeSmoothScroll(scroller);
   // Same destination already animating: keep current motion to avoid restart jitter.
   if (existing && existing.targetScrollTopPx === quantizedTargetPx) {
     return null;
@@ -133,7 +106,7 @@ export function scrollToQuantizedSmooth(
   if (Math.abs(quantizedTargetPx - quantizedStartPx) < 0.01) {
     scroller.scrollTop = quantizedTargetPx;
     onStep?.();
-    cancelExistingAnimation(scroller);
+    cancelSmoothScroll(scroller);
     return null;
   }
 
@@ -142,11 +115,11 @@ export function scrollToQuantizedSmooth(
     // Single-row jumps are snappier as an immediate write than as a curve.
     scroller.scrollTop = quantizedTargetPx;
     onStep?.();
-    cancelExistingAnimation(scroller);
+    cancelSmoothScroll(scroller);
     return null;
   }
 
-  cancelExistingAnimation(scroller);
+  cancelSmoothScroll(scroller);
 
   if (prefersReducedMotion()) {
     scroller.scrollTop = quantizedTargetPx;
@@ -177,12 +150,12 @@ export function scrollToQuantizedSmooth(
   const finish = () => {
     step(landingPx);
     releaseScrollBehavior();
-    activeAnimations.delete(scroller);
+    unregisterSmoothScroll(scroller);
   };
 
   let onCancel: (() => void) | undefined;
   const keepAnimating = (frame: FrameRequestCallback) => {
-    activeAnimations.set(scroller, {
+    registerSmoothScroll(scroller, {
       rafId: requestAnimationFrame(frame),
       targetScrollTopPx: landingPx,
       releaseScrollBehavior,

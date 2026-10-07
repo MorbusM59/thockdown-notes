@@ -2,6 +2,7 @@ import { readFenceTokenAt } from './textScanning'
 import type { EditorSelectionState, EditorTextEdit, EditorTransformResult } from './EditorContract'
 import { applyEditToDocumentLineIndex, buildDocumentLineIndex, lineIndexAtOffset, type DocumentLineIndex } from './DocumentLineIndex'
 import { buildTransformResult, collapsedSelectionAt } from './TransformResult'
+import { clamp } from '@thockdown/interaction/clamp'
 
 export type MarkdownListKind = 'ordered' | 'unordered' | null
 
@@ -40,9 +41,6 @@ export type IndentationTransformResult = EditorTransformResult
 
 export type EnterKeyTransformResult = EditorTransformResult
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value))
-}
 
 function countLeadingSpaces(line: string): number {
   let count = 0

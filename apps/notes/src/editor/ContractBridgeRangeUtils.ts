@@ -1,8 +1,8 @@
 import type { EditorSelectionState } from '../editor/EditorContract';
+import { clamp } from '@thockdown/interaction/clamp';
 
 const SENTENCE_ENDING_PUNCTUATION = new Set(['.', '!', '?', ':']);
 
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
 const isWhitespace = (char: string) => /\s/u.test(char);
 

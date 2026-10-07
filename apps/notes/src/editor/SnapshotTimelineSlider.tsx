@@ -354,7 +354,7 @@ function SnapshotMark({
     >
       {isHolding && (
         <svg viewBox="0 0 20 20" className="snapshot-timeline-hold-ring" aria-hidden="true">
-          <circle cx="10" cy="10" r="8" fill="none" strokeWidth="2" strokeDasharray={`${progress * 50.3} 50.3`} />
+          <circle cx="10" cy="10" r="8" pathLength={1} fill="none" strokeWidth="2" strokeDasharray={`${progress} 1`} />
         </svg>
       )}
     </div>

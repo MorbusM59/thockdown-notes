@@ -22,6 +22,7 @@
  */
 
 import { CHIME_SCALE_COUNT } from './soundscapeChimeScales';
+import { clamp } from '@thockdown/interaction/clamp';
 
 /**
  * What chimes can be made of, and where each sits on the material slider;
@@ -790,9 +791,6 @@ export function soundscapeSettingsSignature(settings: SoundscapeSettings): strin
 // ---------------------------------------------------------------------------
 // Sanitizing.
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
 
 function finiteRange(value: unknown, min: number, max: number, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? clamp(value, min, max) : fallback;

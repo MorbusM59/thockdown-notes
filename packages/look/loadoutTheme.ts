@@ -43,6 +43,7 @@ import {
 } from './glaze'
 import type { UiLayoutLoadout } from './loadouts'
 import { BORDER_ALPHA_TOKENS, BOX_SHADOW_ALPHA_TOKENS } from './borderShadowAlphaTokens'
+import { clamp } from '@thockdown/interaction/clamp'
 
 /** The part of a loadout that decides how the app looks. */
 export type ThemeLoadout = Pick<
@@ -96,9 +97,6 @@ export interface ThemeFrame {
   backgroundHex: string
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value))
-}
 
 const DEFAULT_BASE_PALETTE_COLOR = '#f9f6f4'
 const DEFAULT_PALETTE_LIGHT = '#f5f3f2'

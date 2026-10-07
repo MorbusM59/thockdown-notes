@@ -1,5 +1,6 @@
 import type { EditorSelectionState, EditorTransformResult } from './EditorContract'
 import { buildTransformResult, collapsedSelectionAt } from './TransformResult'
+import { clamp } from '@thockdown/interaction/clamp'
 
 export interface ChecklistTypingTransformEvent {
   char: string
@@ -7,9 +8,6 @@ export interface ChecklistTypingTransformEvent {
   selection: EditorSelectionState
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value))
-}
 
 export function resolveMarkdownChecklistTypeoverTransform(
   event: ChecklistTypingTransformEvent,

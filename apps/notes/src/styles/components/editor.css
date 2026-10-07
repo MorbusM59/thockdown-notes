@@ -417,12 +417,18 @@
   position:        relative;
 }
 
+/* Both rings are centred on their host (a timeline mark, the present-state
+   button) by percentages, so they stay centred whatever size the host is,
+   and rotated so the circle's path starts at 12 o'clock -- the progress
+   arithmetic in the components assumes that start. */
 .snapshot-timeline-hold-ring, .snapshot-merge-circle {
   position:       absolute;
-  inset:          -7px;
+  left:           50%;
+  top:            50%;
   width:          20px;
   height:         20px;
-  transform:      rotate(-90deg);
+  translate:      -50% -50%;
+  rotate:         -90deg;
   pointer-events: none;
 }
 
@@ -431,7 +437,6 @@
 }
 
 .snapshot-merge-circle {
-  transform: translate(4px, 4px);
   opacity: 1;
   transition: opacity 500ms linear;
 }

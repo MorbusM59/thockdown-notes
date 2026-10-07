@@ -37,7 +37,8 @@ import {
   resolveRampCrossingTimeSecFromCurrentParams,
   sampleReleaseRampDownPlan,
 } from '@thockdown/interaction/NonQuantizedSmoothScroll';
-import { cancelQuantizedSmoothScroll, isQuantizedSmoothScrollActive, quantizeScrollTopToRow, scrollToQuantizedSmooth } from '../editor/QuantizedSmoothScroll';
+import { quantizeScrollTopToRow, scrollToQuantizedSmooth } from '../editor/QuantizedSmoothScroll';
+import { cancelSmoothScroll, isSmoothScrollActive } from '@thockdown/interaction/smoothScrollRegistry';
 import { beginScrollTrackHold } from '../editor/scrollTrackHold';
 import { countWrappedLines, resolveThumbLineRatio } from '../editor/scrollThumbMetrics';
 import { resolveCagedScrollTarget } from '../editor/CageMath';
@@ -1470,7 +1471,7 @@ export function CM6Editor({
       // click, and all of those cancel the scroll without telling the
       // scrollbar. Asking the engine whether its journey is still running
       // covers every one of them at once.
-      if (elapsedSec >= totalSec || !scroller || !isQuantizedSmoothScrollActive(scroller)) {
+      if (elapsedSec >= totalSec || !scroller || !isSmoothScrollActive(scroller)) {
         thumbRubberBandRafRef.current = null;
         syncCustomScrollbar({ force: true });
         return;
@@ -2896,7 +2897,7 @@ export function CM6Editor({
     };
 
     const startPageContinuousScroll = (scroller: HTMLElement, direction: -1 | 1) => {
-      cancelQuantizedSmoothScroll(scroller);
+      cancelSmoothScroll(scroller);
       const previousDirection = pageContinuousDirection;
       pageContinuousDirection = direction;
       if (pageContinuousRafId === null || previousDirection !== direction) {
@@ -3062,7 +3063,7 @@ export function CM6Editor({
       // height-map revision (see EditorView's scrollAnchorPos/scrollAnchorHeight
       // loop), the case this whole reconcile exists to land correctly.
       if (Math.abs(targetScrollTopPx - scroller.scrollTop) > 0.01) {
-        cancelQuantizedSmoothScroll(scroller);
+        cancelSmoothScroll(scroller);
         const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
         const nextScrollTopPx = Math.max(0, Math.min(
           quantizeScrollTopToRow(targetScrollTopPx, lineHeightPxNow),
@@ -3346,7 +3347,7 @@ export function CM6Editor({
           // curve scroll recomputes scrollTop from its own captured start and
           // target on every frame, so a write landing mid-flight is erased on
           // the next one.
-          cancelQuantizedSmoothScroll(scroller);
+          cancelSmoothScroll(scroller);
           stopThumbRubberBandRef.current?.();
           const previousScrollBehavior = scroller.style.scrollBehavior;
           scroller.style.scrollBehavior = 'auto';
@@ -3410,7 +3411,7 @@ export function CM6Editor({
       let attemptsLeft = passesLeft;
       const confirmLanding = () => {
         if (selectionJumpReconcileGeneration !== myGeneration) return;
-        if (isQuantizedSmoothScrollActive(scroller)) {
+        if (isSmoothScrollActive(scroller)) {
           requestAnimationFrame(confirmLanding);
           return;
         }
@@ -5496,14 +5497,14 @@ export function CM6Editor({
     // journey rather than travelling alongside it.
     const scrollerNow = viewRef.current?.scrollDOM;
     const journeyInFlight = thumbRubberBandRafRef.current !== null
-      || (!!scrollerNow && isQuantizedSmoothScrollActive(scrollerNow));
+      || (!!scrollerNow && isSmoothScrollActive(scrollerNow));
 
     const goTo = (instant: boolean) => {
       const scrollDOM = viewRef.current?.scrollDOM;
       if (!scrollDOM) return;
       thumbLandingPinRef.current = { scrollTopPx: landingScrollTopPx, thumbTopPx: clampedTop };
       if (instant) {
-        cancelQuantizedSmoothScroll(scrollDOM);
+        cancelSmoothScroll(scrollDOM);
         // The band has to let go here, or it goes on stretching toward a
         // target nobody is travelling to -- and the forced sync below is what
         // puts the thumb back at its committed size on arrival.
@@ -5526,7 +5527,7 @@ export function CM6Editor({
         const waitForArrival = () => {
           const el = viewRef.current?.scrollDOM;
           if (!el) return;
-          if (isQuantizedSmoothScrollActive(el)) {
+          if (isSmoothScrollActive(el)) {
             requestAnimationFrame(waitForArrival);
             return;
           }
@@ -5577,7 +5578,7 @@ export function CM6Editor({
     event.stopPropagation();
     const scroller = viewRef.current?.scrollDOM;
     if (scroller) {
-      cancelQuantizedSmoothScroll(scroller);
+      cancelSmoothScroll(scroller);
     }
     // Grabbing the thumb mid-journey: the rubber band has to let go here and
     // now, and the drag has to start from where the thumb actually IS. State

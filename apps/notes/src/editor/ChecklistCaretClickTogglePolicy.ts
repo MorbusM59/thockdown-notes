@@ -1,5 +1,6 @@
 import type { EditorSelectionState, EditorTransformResult } from './EditorContract'
 import { buildTransformResult, collapsedSelectionAt } from './TransformResult'
+import { clamp } from '@thockdown/interaction/clamp'
 
 export interface ChecklistCaretClickToggleEvent {
   text: string
@@ -8,9 +9,6 @@ export interface ChecklistCaretClickToggleEvent {
   clickOffset: number
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value))
-}
 
 /**
  * Toggles a markdown checkbox (`- [ ]` / `- [x]`) when the caret is already

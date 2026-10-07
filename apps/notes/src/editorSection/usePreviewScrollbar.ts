@@ -38,16 +38,9 @@ import {
   wheelSpinProfileUndeliveredCarryPx,
   type WheelSpinProfile,
 } from '../editor/wheelSpinProfile'
-import {
-  buildReleaseRampDownPlanFromCurrentParams,
-  cancelNonQuantizedSmoothScroll,
-  CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER,
-  isNonQuantizedSmoothScrollActive,
-  resolveApexSpeedPxPerSecFromCurrentParams,
-  sampleReleaseRampDownPlan,
-  resolveRampCrossingTimeSecFromCurrentParams,
-  scrollToNonQuantizedSmooth,
-} from '@thockdown/interaction/NonQuantizedSmoothScroll'
+import { buildReleaseRampDownPlanFromCurrentParams, CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER, resolveApexSpeedPxPerSecFromCurrentParams, sampleReleaseRampDownPlan, resolveRampCrossingTimeSecFromCurrentParams, scrollToNonQuantizedSmooth } from '@thockdown/interaction/NonQuantizedSmoothScroll'
+import { cancelSmoothScroll, isSmoothScrollActive } from '@thockdown/interaction/smoothScrollRegistry'
+import { clamp } from '@thockdown/interaction/clamp'
 
 type ViewStyleKey =
   | 'modern'
@@ -64,9 +57,6 @@ type ViewStyleKey =
   | 'bubblerone'
 const PREVIEW_CONTINUOUS_SCROLL_APEX_MULTIPLIER = CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value))
-}
 
 const syncTextureToScroll = (scrollTop: number, maskEl: HTMLElement) => {
   maskEl.style.maskPosition = `0 ${-scrollTop}px`;
@@ -416,7 +406,7 @@ export function usePreviewScrollbar({
       // the band would go on stretching toward a target nobody is travelling
       // to any more, for the rest of its half second.
       const scrollerNow = previewScrollRef.current
-      if (elapsedSec >= totalSec || !scrollerNow || !isNonQuantizedSmoothScrollActive(scrollerNow)) {
+      if (elapsedSec >= totalSec || !scrollerNow || !isSmoothScrollActive(scrollerNow)) {
         rubberBandRafRef.current = null
         // Hand the thumb back to the ordinary sync, which now reads a settled
         // scroll position -- wherever the journey actually ended up.
@@ -484,8 +474,8 @@ export function usePreviewScrollbar({
     const position = previewDocumentPositionRef?.current
     if (!scroller || !position) return false
 
-    if (rubberBandRafRef.current !== null || isNonQuantizedSmoothScrollActive(scroller)) {
-      cancelNonQuantizedSmoothScroll(scroller)
+    if (rubberBandRafRef.current !== null || isSmoothScrollActive(scroller)) {
+      cancelSmoothScroll(scroller)
       stopThumbRubberBand()
       syncPreviewCustomScrollbar({ force: true })
     }
@@ -878,7 +868,7 @@ export function usePreviewScrollbar({
       const waitForArrival = () => {
         const el = previewScrollRef.current
         if (!el) return
-        if (isNonQuantizedSmoothScrollActive(el)) {
+        if (isSmoothScrollActive(el)) {
           requestAnimationFrame(waitForArrival)
           return
         }
@@ -895,7 +885,7 @@ export function usePreviewScrollbar({
     // than trying to travel alongside it.
     const scrollerNow = previewScrollRef.current
     const journeyInFlight = rubberBandRafRef.current !== null
-      || (!!scrollerNow && isNonQuantizedSmoothScrollActive(scrollerNow))
+      || (!!scrollerNow && isSmoothScrollActive(scrollerNow))
 
     const goTo = (instant: boolean) => {
       const element = previewScrollRef.current
@@ -906,7 +896,7 @@ export function usePreviewScrollbar({
           // Land, and hand the thumb back at its committed size. Without
           // stopping the band first it goes on stretching toward a target
           // nobody is travelling to.
-          cancelNonQuantizedSmoothScroll(element)
+          cancelSmoothScroll(element)
           stopThumbRubberBand()
           position.jumpToRatio(ratio)
           syncPreviewCustomScrollbar({ force: true })
@@ -923,7 +913,7 @@ export function usePreviewScrollbar({
       const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight)
       const targetScrollTop = ratio * maxScrollTop
       if (instant) {
-        cancelNonQuantizedSmoothScroll(element)
+        cancelSmoothScroll(element)
         const previousBehavior = element.style.scrollBehavior
         element.style.scrollBehavior = 'auto'
         element.scrollTop = targetScrollTop
@@ -1135,7 +1125,7 @@ export function usePreviewScrollbar({
     const scroller = previewScrollRef.current
     if (!scroller) return
 
-    cancelNonQuantizedSmoothScroll(scroller)
+    cancelSmoothScroll(scroller)
 
     if (previewContinuousPreviousScrollBehaviorRef.current === null) {
       previewContinuousPreviousScrollBehaviorRef.current = borrowAutoScrollBehavior(scroller)
@@ -1456,7 +1446,7 @@ export function usePreviewScrollbar({
       // Something with a destination of its own took the scroller over --
       // the same rule the coast follows, and the same one check for all of
       // them.
-      if (isNonQuantizedSmoothScrollActive(scroller)) {
+      if (isSmoothScrollActive(scroller)) {
         endNotchTravel()
         return
       }
@@ -1482,7 +1472,7 @@ export function usePreviewScrollbar({
      */
     const travelPreviewByNotch = (signedPixels: number, traceLabel: string | null) => {
       // Whatever else was travelling, the hand has just overruled it.
-      cancelNonQuantizedSmoothScroll(scroller)
+      cancelSmoothScroll(scroller)
       if (previewWheelSpinScrollBehaviorRef.current === null) {
         previewWheelSpinScrollBehaviorRef.current = borrowAutoScrollBehavior(scroller)
       }
@@ -1533,7 +1523,7 @@ export function usePreviewScrollbar({
       // A search jump, a scrollbar travel, a chapter change: something with
       // a destination of its own has taken the scroller over. One check
       // covers every one of them, and covers the ones added later.
-      if (isNonQuantizedSmoothScrollActive(scroller)) {
+      if (isSmoothScrollActive(scroller)) {
         stopPreviewWheelSpin('journey took over')
         return
       }
@@ -1592,7 +1582,7 @@ export function usePreviewScrollbar({
         previewWheelSpinRafRef.current = null
       }
       // Whatever else was travelling, the hand has just overruled it.
-      cancelNonQuantizedSmoothScroll(scroller)
+      cancelSmoothScroll(scroller)
       if (previewWheelSpinScrollBehaviorRef.current === null) {
         previewWheelSpinScrollBehaviorRef.current = borrowAutoScrollBehavior(scroller)
       }

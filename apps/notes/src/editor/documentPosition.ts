@@ -212,8 +212,8 @@ export interface DocumentPosition {
 }
 
 import type { ScrollJourneyTiming } from '@thockdown/interaction/scrollJourney'
+import { clamp } from '@thockdown/interaction/clamp'
 
-const clamp01 = (value: number) => Math.max(0, Math.min(1, value))
 
 export interface ContinuousRatios {
   scrollRatio: number
@@ -237,8 +237,8 @@ export function resolveContinuousRatios(options: {
 
   const maxScrollTopPx = scrollHeightPx - clientHeightPx
   return {
-    scrollRatio: maxScrollTopPx > 0 ? clamp01(scrollTopPx / maxScrollTopPx) : 0,
-    thumbRatio: clamp01(clientHeightPx / scrollHeightPx),
+    scrollRatio: maxScrollTopPx > 0 ? clamp(scrollTopPx / maxScrollTopPx, 0, 1) : 0,
+    thumbRatio: clamp(clientHeightPx / scrollHeightPx, 0, 1),
   }
 }
 
@@ -323,7 +323,7 @@ export function resolveChunkedScrollRatio(options: {
   // One screen holds the whole document: there is nowhere to scroll, and the
   // reader is at both ends of it at once. Zero is the honest reading.
   if (!(spanChars > 0)) return 0
-  return clamp01(startChar / spanChars)
+  return clamp(startChar / spanChars, 0, 1)
 }
 
 /**
@@ -352,7 +352,7 @@ export function resolveChunkedCharTarget(options: {
   // the middle of the track, wrong at the one place the reader's intent is not
   // in doubt, so the extreme is answered directly rather than through the
   // measurement. The scroller clamps the overshoot itself.
-  if (clamp01(ratio) >= 1) return totalChars
+  if (clamp(ratio, 0, 1) >= 1) return totalChars
   const spanChars = totalChars - Math.max(0, Math.min(totalChars, lastScreenChars))
-  return clamp01(ratio) * Math.max(0, spanChars)
+  return clamp(ratio, 0, 1) * Math.max(0, spanChars)
 }

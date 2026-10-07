@@ -255,6 +255,8 @@ import { armHold, HOLD_COMMIT_MS, HOLD_CONFIRM_MS } from '@thockdown/interaction
 import { noteRightPressAction } from './editorSection/useNoteProtectionActions'
 import { WorkIndicatorGlyph } from './components/WorkIndicatorGlyph'
 import { armPointerDrag } from './shared/pointerDrag'
+import { clamp } from '@thockdown/interaction/clamp'
+import { stableStringify } from './shared/stableStringify'
 
 const NEW_NOTE_TEMPLATE = '# '
 const FALLBACK_NEW_NOTE_TITLE = 'Untitled'
@@ -631,9 +633,6 @@ function mergeNoteSummaries(previous: NoteSummary[], next: NoteSummary[]): NoteS
   return changed ? merged : previous
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value))
-}
 
 /**
  * A saved font size, or `fallback` for anything that is not one. Only a finite
@@ -791,21 +790,6 @@ function roundForSignature(value: number, decimals = 4): number {
   if (!Number.isFinite(value)) return 0
   const factor = 10 ** decimals
   return Math.round(value * factor) / factor
-}
-
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== 'object') {
-    return JSON.stringify(value)
-  }
-
-  if (Array.isArray(value)) {
-    return `[${value.map((item) => stableStringify(item)).join(',')}]`
-  }
-
-  const entries = Object.entries(value as Record<string, unknown>)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, nested]) => `${JSON.stringify(key)}:${stableStringify(nested)}`)
-  return `{${entries.join(',')}}`
 }
 
 function normalizeTextureMaterialForLoadoutSignature(source: TextureMaterialSettings): TextureMaterialSettings {

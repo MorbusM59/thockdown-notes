@@ -28,7 +28,8 @@ import type { ParsedInternalNoteLink } from '../shared/internalNoteLinks'
 import { splitPreviewBlocksWithoutFullParse, type PreviewBlockSplitCache } from '../editor/PreviewBlockSplit'
 import { requestFullBlockSplit } from '../editor/documentFactsClient'
 import { resolvePreviewBlockIndexForSourceLine } from '../editor/PreviewBlockIndex'
-import { isNonQuantizedSmoothScrollActive, scrollToNonQuantizedSmooth } from '@thockdown/interaction/NonQuantizedSmoothScroll'
+import { scrollToNonQuantizedSmooth } from '@thockdown/interaction/NonQuantizedSmoothScroll'
+import { isSmoothScrollActive } from '@thockdown/interaction/smoothScrollRegistry'
 import { traceScroll } from '@thockdown/interaction/scrollTrace'
 import {
   isContinuousDocument,
@@ -1030,7 +1031,7 @@ export function usePreviewMarkdownRendering({
       // travel to settle is not a failed attempt, so it doesn't consume the
       // retry budget either; only a genuinely missing element does.
       const scroller = previewScrollRef.current
-      const isTravelling = scroller !== null && isNonQuantizedSmoothScrollActive(scroller)
+      const isTravelling = scroller !== null && isSmoothScrollActive(scroller)
 
       if (target && !isTravelling) {
         // Instant, not smooth -- the travel above already did

@@ -24,6 +24,8 @@ import { resolveScrollBridge } from './scrollBridgeRegistry';
 import { traceScroll } from './scrollTrace';
 
 import { borrowAutoScrollBehavior } from './scrollBehaviorLock';
+import { activeSmoothScroll, cancelSmoothScroll, registerSmoothScroll, unregisterSmoothScroll } from './smoothScrollRegistry';
+import { clamp } from './clamp';
 /**
  * Whether the reader has asked for less movement.
  *
@@ -90,53 +92,6 @@ interface NonQuantizedSmoothScrollOptions {
   onBridgeCut?: () => number | null;
 }
 
-interface AnimationState {
-  rafId: number;
-  targetScrollTopPx: number;
-  releaseScrollBehavior: () => void;
-  /**
-   * Torn down whether the animation finishes or is interrupted.
-   *
-   * A bridged journey puts a curtain in the DOM for the length of the cut, and
-   * the reader is allowed to interrupt a journey at any moment -- so the only
-   * safe place for that teardown is here, where every exit path already meets.
-   */
-  onCancel?: () => void;
-}
-
-const activeAnimations = new WeakMap<HTMLElement, AnimationState>();
-
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-
-const cancelExistingAnimation = (scroller: HTMLElement): void => {
-  const current = activeAnimations.get(scroller);
-  if (!current) return;
-  cancelAnimationFrame(current.rafId);
-  current.onCancel?.();
-  current.releaseScrollBehavior();
-  activeAnimations.delete(scroller);
-};
-
-export function cancelNonQuantizedSmoothScroll(scroller: HTMLElement): void {
-  cancelExistingAnimation(scroller);
-}
-
-/**
- * Whether a curve-driven scroll is currently in flight for `scroller`.
- *
- * Every frame of an in-flight animation recomputes `scrollTop` from the
- * start position and target captured when it was planned, so ANY scroll
- * write from elsewhere is silently discarded on the very next frame and the
- * animation still lands on its own original target. Anything that scrolls
- * this element for its own reasons while a travel animation may be running
- * -- the preview pane's anchor/find landings, which scroll the virtualizer
- * to a block and then correct onto the exact element inside it -- has to
- * wait for this to go false, or its correction is a no-op precisely when it
- * succeeds.
- */
-export function isNonQuantizedSmoothScrollActive(scroller: HTMLElement): boolean {
-  return activeAnimations.has(scroller);
-}
 
 /**
  * Travels to `targetScrollTopPx`.
@@ -157,12 +112,12 @@ export function scrollToNonQuantizedSmooth(
   const startPx = clamp(scroller.scrollTop, 0, maxScrollTopPx);
   let targetPx = clamp(targetScrollTopPx, 0, maxScrollTopPx);
 
-  const existing = activeAnimations.get(scroller);
+  const existing = activeSmoothScroll(scroller);
   if (existing && Math.abs(existing.targetScrollTopPx - targetPx) < 0.01) {
     return null;
   }
 
-  cancelExistingAnimation(scroller);
+  cancelSmoothScroll(scroller);
 
   // How far the reader asked to go, which on a windowed pane is not how far
   // this scroller can carry them -- see `journeyDistancePx`.
@@ -190,7 +145,7 @@ export function scrollToNonQuantizedSmooth(
     scroller.scrollTop = landed;
     options?.onStep?.();
     releaseScrollBehavior();
-    activeAnimations.delete(scroller);
+    unregisterSmoothScroll(scroller);
   };
 
   // How many frames in a row the engine has asked for a position the scroller
@@ -236,7 +191,7 @@ export function scrollToNonQuantizedSmooth(
 
   let onCancel: (() => void) | undefined;
   const keepAnimating = (frame: FrameRequestCallback) => {
-    activeAnimations.set(scroller, {
+    registerSmoothScroll(scroller, {
       rafId: requestAnimationFrame(frame),
       targetScrollTopPx: targetPx,
       releaseScrollBehavior,

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { flushSync } from 'react-dom'
 import type { MutableRefObject, ReactNode } from 'react'
 import type { PreviewMarkdownBlock as PreviewBlock } from '../editor/PreviewBlockSplit'
-import { isNonQuantizedSmoothScrollActive } from '@thockdown/interaction/NonQuantizedSmoothScroll'
+import { isSmoothScrollActive } from '@thockdown/interaction/smoothScrollRegistry'
 import { traceScroll } from '@thockdown/interaction/scrollTrace'
 import {
   findBlockAtChar,
@@ -663,7 +663,7 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
     // runway measured in screenfuls, and the pass is re-queued for the frame
     // after it ends. The one caller that must not be deferred is the cut's own
     // settle, which runs DURING the animation on purpose and is exempt.
-    if (!settlingRef.current && isNonQuantizedSmoothScrollActive(scroller)) {
+    if (!settlingRef.current && isSmoothScrollActive(scroller)) {
       // Silent until now, and the first thing to suspect when a travel across
       // a large note stalls: for the whole of a journey the window does not
       // move, so a reader carried past its edge is carried into unmounted

@@ -216,10 +216,8 @@ import {
   DEFAULT_AUTO_ADVANCE_MS, DEFAULT_AUTO_ADVANCE_SCOPE, indexOfScope, scopeAtIndex,
 } from '../adventure/model/autoAdvance'
 import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
+import { clamp } from '@thockdown/interaction/clamp'
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value))
-}
 
 // ── Locally-scoped types ───────────────────────────────────────────────────
 // Trivial unions/shapes duplicated here rather than imported back from

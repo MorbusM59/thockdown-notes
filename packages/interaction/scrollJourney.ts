@@ -46,6 +46,7 @@ import {
   sampleCurveRampPlan,
   type CurveRampPlan,
 } from './ScrollCurvePlan';
+import { clamp } from './clamp'
 
 /**
  * How long the bridge lasts, at its shortest and longest.
@@ -102,7 +103,6 @@ export interface ScrollJourneyTiming {
   bridgeDurationSec: number;
 }
 
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
 /**
  * The bridge's duration for a journey `distancePx` long, where `thresholdPx`

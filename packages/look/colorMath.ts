@@ -1,3 +1,4 @@
+import { clamp } from '@thockdown/interaction/clamp'
 export type RgbaColor = {
   r: number
   g: number
@@ -12,9 +13,6 @@ export type HsvaColor = {
   a: number
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value))
-}
 
 export function clampColorChannel(value: number): number {
   if (!Number.isFinite(value)) return 0

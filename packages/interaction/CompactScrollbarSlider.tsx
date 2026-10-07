@@ -1,9 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { useNonPassiveWheel } from './useNonPassiveWheel'
+import { clamp } from './clamp'
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value))
-}
 
 function formatCompactSettingNumber(value: number, step: number): string {
   const normalizedStep = String(step)

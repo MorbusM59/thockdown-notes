@@ -1,4 +1,5 @@
 import type { DocumentFindHit } from '../editor/FindReplaceEngine'
+import { clamp } from '@thockdown/interaction/clamp'
 
 /**
  * Mirrors PreviewVisibleText.ts's BLOCK_NODE_TYPES on the DOM side: walking
@@ -8,9 +9,6 @@ import type { DocumentFindHit } from '../editor/FindReplaceEngine'
  */
 const PREVIEW_BLOCK_LEVEL_SELECTOR = 'p,h1,h2,h3,h4,h5,h6,blockquote,pre,li,td,th,tr,table,hr,div'
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value))
-}
 
 interface PreviewTextSegment {
   node: Text

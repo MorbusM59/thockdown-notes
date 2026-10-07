@@ -91,38 +91,27 @@ export function PresentStateCircle({
     >
       <span className="manual-snapshot-circle-dot" aria-hidden="true" />
       {(isHolding || showComplete) && (() => {
-        const r = 5
-        const strokeWidth = 2
-        const circumference = 2 * Math.PI * r
-        const third = circumference / 3
-
-        const clamped = Math.max(0, Math.min(1, progress))
-        const arcLen = clamped * third
-
-        // rotate default start (3 o'clock) to 12 o'clock by offsetting 1/4 circumference
-        const topCorrection = circumference * 0.25
-
+        // Three arcs, each growing clockwise over a third of the ring from
+        // 12, 4 and 8 o'clock. pathLength="1" makes every dash length a
+        // fraction of the circle, so the radius can change without touching
+        // this arithmetic; the CSS rotation puts the path's start at 12.
+        const arcLength = Math.max(0, Math.min(1, progress)) / 3
         return (
           <svg viewBox="0 0 20 20" className={`snapshot-merge-circle${isFading ? ' is-fading' : ''}`} aria-hidden="true">
-            {[0, 1, 2].map((i) => {
-              const startOffset = (i / 3) * circumference
-              const dashArray = `${arcLen} ${Math.max(0, circumference - arcLen)}`
-              const dashOffset = `${startOffset - topCorrection}`
-
-              return (
-                <circle
-                  key={i}
-                  cx="10"
-                  cy="10"
-                  r={r}
-                  fill="none"
-                  strokeWidth={strokeWidth}
-                  strokeLinecap="round"
-                  strokeDasharray={dashArray}
-                  strokeDashoffset={dashOffset}
-                />
-              )
-            })}
+            {[0, 1, 2].map((i) => (
+              <circle
+                key={i}
+                cx="10"
+                cy="10"
+                r="5"
+                pathLength={1}
+                fill="none"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeDasharray={`${arcLength} ${1 - arcLength}`}
+                strokeDashoffset={-i / 3}
+              />
+            ))}
           </svg>
         )
       })()}

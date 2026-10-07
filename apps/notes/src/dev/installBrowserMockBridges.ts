@@ -49,6 +49,7 @@ import {
 } from '../shared/helpGuide'
 import { buildNextAutoAssignedId, normalizeAssignedIdInput } from '../shared/assignedIds'
 import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, findOpenItemSourceAtLine, parseOpenItemsGroups, toggleChecklistItemByText } from '../shared/openItemsText'
+import { stableStringify } from '../shared/stableStringify'
 
 const MOCK_STORAGE_KEY = 'thockdown-notes:browser-mock:v1'
 
@@ -222,21 +223,6 @@ function fromBase64(value: string): Uint8Array {
 
 function serializeTextureKey(request: TextureCacheRequest): string {
   return JSON.stringify(request)
-}
-
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== 'object') {
-    return JSON.stringify(value)
-  }
-
-  if (Array.isArray(value)) {
-    return `[${value.map((item) => stableStringify(item)).join(',')}]`
-  }
-
-  const entries = Object.entries(value as Record<string, unknown>)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, nested]) => `${JSON.stringify(key)}:${stableStringify(nested)}`)
-  return `{${entries.join(',')}}`
 }
 
 /**

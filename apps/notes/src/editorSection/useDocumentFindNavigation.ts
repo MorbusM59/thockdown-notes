@@ -9,10 +9,12 @@ import {
   type DocumentFindDirective,
   type DocumentFindHit,
 } from '../editor/FindReplaceEngine'
-import { isNonQuantizedSmoothScrollActive, scrollToNonQuantizedSmooth } from '@thockdown/interaction/NonQuantizedSmoothScroll'
+import { scrollToNonQuantizedSmooth } from '@thockdown/interaction/NonQuantizedSmoothScroll'
+import { isSmoothScrollActive } from '@thockdown/interaction/smoothScrollRegistry'
 import { resolvePreviewHitRange, resolveSourceLineForOffset } from './PreviewFindHitLocator'
 import { traceFindMarking } from './findMarkingTrace'
 import type { PreviewDocumentPositionApi, PreviewScrollToSourceLineFn } from './usePreviewMarkdownRendering'
+import { clamp } from '@thockdown/interaction/clamp'
 
 /**
  * How much of a screen is left above a hit on arrival.
@@ -33,9 +35,6 @@ const PREVIEW_HIT_MARK_CLASS = 'search-hit-picked'
  */
 const FIND_HIT_CORRECTION_DEADBAND_PX = 2
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value))
-}
 
 export interface UseDocumentFindNavigationOptions {
   previewScrollRef: MutableRefObject<HTMLDivElement | null>
@@ -520,9 +519,9 @@ export function useDocumentFindNavigation({
       // Never correct while the block-scroll animation is still travelling:
       // it recomputes scrollTop from its own captured start/target every
       // frame, so a correction landing mid-flight is erased on the next one
-      // (see isNonQuantizedSmoothScrollActive). Waiting isn't a failed
+      // (see isSmoothScrollActive). Waiting isn't a failed
       // attempt, so it doesn't consume the budget.
-      if (isNonQuantizedSmoothScrollActive(scroller)) {
+      if (isSmoothScrollActive(scroller)) {
         requestAnimationFrame(() => refine(attemptsLeft))
         return
       }
