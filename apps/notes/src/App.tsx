@@ -2363,7 +2363,7 @@ function App() {
             try {
               // prefer the remembered previous mode, fallback to 'date'
               runSidebarMenuTransition(lastSidebarModeBeforeOptions ?? 'date')
-            } catch (e) {
+            } catch {
               // ignore
             }
           }, 0)
@@ -2371,7 +2371,7 @@ function App() {
       // Notify main process so it can adjust native window constraints immediately
       try {
         window.windowControls?.setSidebarVisible?.(next)
-      } catch (e) {
+      } catch {
         // ignore
       }
 
@@ -2403,7 +2403,7 @@ function App() {
       // Notify main process so it can apply page zoom + the doubled window minimum immediately
       try {
         window.windowControls?.setDoubleSizeMode?.(next)
-      } catch (e) {
+      } catch {
         // ignore
       }
 
@@ -4646,7 +4646,7 @@ function App() {
       setIsSidebarVisible(true)
       try {
         window.windowControls?.setSidebarVisible?.(true)
-      } catch (e) {
+      } catch {
         // ignore
       }
     }

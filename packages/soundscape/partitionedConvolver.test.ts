@@ -65,7 +65,10 @@ describe('FFT', () => {
   });
 });
 
-describe('partitioned convolver', () => {
+// Whole-signal convolutions over responses tens of thousands of frames long:
+// several of these run for seconds by design, past Vitest's 5s default, which
+// Vitest enforces on synchronous tests since 3.x.
+describe('partitioned convolver', { timeout: 30_000 }, () => {
   // Responses shorter than one block, within the head, and reaching into
   // the tail by a fraction of a window and by several.
   for (const length of [100, BLOCK + 7, TAIL_BLOCK - 1, TAIL_BLOCK + 1, (3 * TAIL_BLOCK) + 1234]) {
