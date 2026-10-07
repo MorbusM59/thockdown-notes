@@ -2004,6 +2004,14 @@ function App() {
   // hold from a menu already up returns to that menu (`'menu'`). Both wait
   // the same confirm threshold as the menu itself, on the same timer.
   const [shortcutReferenceOrigin, setShortcutReferenceOrigin] = useState<'editor' | 'menu' | null>(null)
+  // Mirrored in a ref because the Escape keyup reads it: a release landing
+  // between the timer setting the state and the listener re-registering with
+  // the new value would otherwise see the old one and leave the reference up.
+  const shortcutReferenceOriginRef = useRef<'editor' | 'menu' | null>(null)
+  const setReferenceOrigin = useCallback((origin: 'editor' | 'menu' | null) => {
+    shortcutReferenceOriginRef.current = origin
+    setShortcutReferenceOrigin(origin)
+  }, [])
   // Set when an Escape keydown was spent on a field (defocusing it, or
   // handing focus back to the editor from find/replace/tags), so the same
   // press's keyup does not ALSO toggle the view -- the keyup listener runs on
@@ -2023,7 +2031,7 @@ function App() {
   useEffect(() => clearEscapeHoldTimer, [clearEscapeHoldTimer])
   const handleEscapeHoldPanelClose = useCallback(() => {
     setIsEscapeHoldPanelOpen(false)
-    setShortcutReferenceOrigin(null)
+    setReferenceOrigin(null)
     clearEscapeHoldTimer()
     escapeHoldTriggeredRef.current = false
     escapeFreshCycleWhilePanelOpenRef.current = false
@@ -2037,21 +2045,25 @@ function App() {
     // in a note beside it is not a dismissal of it -- and treating it as one
     // ended a game the reader was not even looking at.
     if (isModeOwningActiveSlotRef.current) escapeMenuModeRef.current?.onDismiss?.()
-  }, [clearEscapeHoldTimer])
-  // A reference that is up has a held Escape under it. Losing the window
-  // means its release will never be seen, so losing the window is the
-  // release.
+  }, [clearEscapeHoldTimer, setReferenceOrigin])
+  // A hold in progress has Escape down under it, and losing the window means
+  // its release will never be seen -- so losing the window IS the release:
+  // a pending stage is cancelled (otherwise it fires while away and leaves
+  // the reference up with no key held), and a reference that is up goes
+  // back to where its hold began.
   useEffect(() => {
-    if (shortcutReferenceOrigin === null) return
     const onBlur = () => {
-      setShortcutReferenceOrigin(null)
+      clearEscapeHoldTimer()
+      const origin = shortcutReferenceOriginRef.current
+      if (origin === null) return
+      setReferenceOrigin(null)
       escapeHoldTriggeredRef.current = false
       escapeFreshCycleWhilePanelOpenRef.current = false
-      if (shortcutReferenceOrigin === 'editor') handleEscapeHoldPanelClose()
+      if (origin === 'editor') handleEscapeHoldPanelClose()
     }
     window.addEventListener('blur', onBlur)
     return () => window.removeEventListener('blur', onBlur)
-  }, [shortcutReferenceOrigin, handleEscapeHoldPanelClose])
+  }, [clearEscapeHoldTimer, handleEscapeHoldPanelClose, setReferenceOrigin])
   // "Double size" mode: 2x page zoom paired with a doubled window minimum --
   // see the window-control:double-size-mode handler in electron/main.ts.
   const [isDoubleSizeMode, setIsDoubleSizeMode] = useState(false)
@@ -2192,7 +2204,13 @@ function App() {
     // Only an arriving NOTE, not an emptying: opening the adventure clears
     // the slot and raises the ring in the same gesture, and treating that
     // clear as a switch would close the ring on the way in.
-    if (arrival?.arrivedNoteId) setIsEscapeHoldPanelOpen(false)
+    // The hold's pending stage goes with it, or a reference would rise over
+    // the note that just arrived.
+    if (arrival?.arrivedNoteId) {
+      setIsEscapeHoldPanelOpen(false)
+      clearEscapeHoldTimer()
+      setReferenceOrigin(null)
+    }
 
     // A guide that ARRIVED without us opening it -- a restored session, one
     // of its own cross-references -- still owes the slot its note back. It is already
@@ -2218,7 +2236,7 @@ function App() {
       void persistMenuStateNowRef.current({ slotOverlay: overlay })
       return overlay
     })
-  }, [])
+  }, [clearEscapeHoldTimer, setReferenceOrigin])
 
   /**
    * What the slots THAT EXIST are showing. The only form of the aggregate
@@ -5509,8 +5527,10 @@ ${markdownHtml}
    */
   const closeAdventureView = useCallback(async (): Promise<void> => {
     setIsEscapeHoldPanelOpen(false)
+    clearEscapeHoldTimer()
+    setReferenceOrigin(null)
     await closeOverlay()
-  }, [closeOverlay])
+  }, [clearEscapeHoldTimer, closeOverlay, setReferenceOrigin])
 
   /**
    * The User Guide window control's other half. Left click is the guide
@@ -8723,7 +8743,7 @@ ${markdownHtml}
             clearEscapeHoldTimer()
             escapeHoldTimerRef.current = window.setTimeout(() => {
               escapeHoldTimerRef.current = null
-              setShortcutReferenceOrigin('menu')
+              setReferenceOrigin('menu')
             }, ESCAPE_HOLD_MS)
           }
           event.preventDefault()
@@ -8749,7 +8769,7 @@ ${markdownHtml}
           // Still held: the same timer, re-armed, is the reference's.
           escapeHoldTimerRef.current = window.setTimeout(() => {
             escapeHoldTimerRef.current = null
-            setShortcutReferenceOrigin('editor')
+            setReferenceOrigin('editor')
           }, ESCAPE_HOLD_MS)
         }, ESCAPE_HOLD_MS)
       }
@@ -8770,10 +8790,10 @@ ${markdownHtml}
 
       // Releasing the hold that raised the reference puts back whatever was
       // there before the hold began.
-      if (shortcutReferenceOrigin !== null) {
+      const origin = shortcutReferenceOriginRef.current
+      if (origin !== null) {
         event.preventDefault()
-        const origin = shortcutReferenceOrigin
-        setShortcutReferenceOrigin(null)
+        setReferenceOrigin(null)
         escapeHoldTriggeredRef.current = false
         escapeFreshCycleWhilePanelOpenRef.current = false
         if (origin === 'editor') handleEscapeHoldPanelClose()
@@ -8841,7 +8861,7 @@ ${markdownHtml}
     getActiveSection,
     handleEscapeHoldPanelClose,
     isEscapeRingUp,
-    shortcutReferenceOrigin,
+    setReferenceOrigin,
     isFindMode,
     isImmersiveMode,
     isReplaceMode,

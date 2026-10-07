@@ -42,5 +42,7 @@ describe('keyboard shortcut declarations', () => {
     expect(formatShortcut(SHORTCUTS.immersive)).toBe('F11 or Ctrl+Shift+Space')
     expect(formatShortcut(SHORTCUTS.switchSlot)).toBe('Alt+← / →')
     expect(formatShortcut(SHORTCUTS.quickActions)).toBe('Hold Esc')
+    expect(formatShortcut(SHORTCUTS.redo, true)).toBe('Cmd+Shift+Z')
+    expect(formatShortcut(SHORTCUTS.redo, false)).toBe('Ctrl+Y')
   })
 })

@@ -20,10 +20,12 @@
 // (`editorSection/EscapeHoldPanel.tsx`). Those carry `matchedBy`, so the
 // claim "this table is what the handlers read" stays checkable entry by entry.
 //
-// Ctrl, never Cmd, on every platform: the app has always bound Ctrl (see
-// CM6Editor's markdown keymap), and that is a product choice, not an
-// oversight. Smart paste is the one chord that also accepts Cmd, which is
-// what `ctrl: 'or-meta'` says.
+// Ctrl, never Cmd, on every platform for the app's own bindings: the app has
+// always bound Ctrl (see CM6Editor's markdown keymap), and that is a product
+// choice, not an oversight. Smart paste is the one chord that also accepts
+// Cmd, which is what `ctrl: 'or-meta'` says. CodeMirror's own keymaps DO
+// follow the platform, so those declarations say what a Mac reader presses
+// in `macChords`, and `meta` exists only to display them.
 
 /** One physical key combination. Absent modifiers must be UP. */
 export interface KeyChord {
@@ -32,6 +34,8 @@ export interface KeyChord {
   /** `KeyboardEvent.code`, for a key whose `key` changes with modifiers (Space). */
   code?: string
   ctrl?: true | 'or-meta'
+  /** Cmd. Display only -- see `macChords`. */
+  meta?: true
   /** `'any'` for a key that is only reachable WITH shift on some layouts (`#`). */
   shift?: true | 'any'
   alt?: true
@@ -56,6 +60,12 @@ export interface ShortcutDeclaration {
   /** What it does, short enough for the quick reference's one line. */
   label: string
   press?: ShortcutPress
+  /**
+   * What a Mac reader presses instead, for a key bound by CodeMirror's own
+   * keymaps, which use Cmd ("Mod") there -- display only, since CodeMirror
+   * does the matching. Absent: the same chords on every platform.
+   */
+  macChords?: readonly KeyChord[]
   /**
    * Set when no handler matches this declaration through `matchShortcut`,
    * naming what binds the key instead -- see the module comment.
@@ -108,10 +118,17 @@ export const SHORTCUTS = {
   link: { group: 'formatting', chords: [{ key: 'l', ctrl: true }], label: 'Link' },
   anchor: { group: 'formatting', chords: [{ key: 'l', ctrl: true, shift: true }], label: 'Anchor' },
 
-  undo: { group: 'editing', chords: [{ key: 'z', ctrl: true }], label: 'Undo', matchedBy: 'codemirror' },
-  redo: { group: 'editing', chords: [{ key: 'y', ctrl: true }], label: 'Redo', matchedBy: 'codemirror' },
+  undo: { group: 'editing', chords: [{ key: 'z', ctrl: true }], macChords: [{ key: 'z', meta: true }], label: 'Undo', matchedBy: 'codemirror' },
+  redo: { group: 'editing', chords: [{ key: 'y', ctrl: true }], macChords: [{ key: 'z', meta: true, shift: true }], label: 'Redo', matchedBy: 'codemirror' },
   smartPaste: { group: 'editing', chords: [{ key: 'v', ctrl: 'or-meta', shift: true }], label: 'Smart paste' },
-  deleteWord: { group: 'editing', chords: [{ key: 'Backspace', ctrl: true }], label: 'Delete previous word' },
+  // CodeMirror deletes the word; CM6Editor only offers this chord to a
+  // table first (at the start of a cell it takes the previous cell's word).
+  deleteWord: {
+    group: 'editing',
+    chords: [{ key: 'Backspace', ctrl: true }],
+    macChords: [{ key: 'Backspace', alt: true }],
+    label: 'Delete previous word',
+  },
 
   newChapter: { group: 'chapters', chords: [{ key: 'n', shift: true, alt: true }], label: 'New chapter' },
   chapterForward: { group: 'chapters', chords: [{ key: 'Delete', shift: true, alt: true }], label: 'Cut rest to new chapter / pull next in' },
@@ -194,6 +211,7 @@ function keyName(chord: KeyChord): string {
 function modifierNames(chord: KeyChord): string[] {
   const names: string[] = []
   if (chord.ctrl) names.push('Ctrl')
+  if (chord.meta) names.push('Cmd')
   if (chord.shift === true) names.push('Shift')
   if (chord.alt) names.push('Alt')
   return names
@@ -209,9 +227,17 @@ export interface ChordDisplay {
   keys: string[]
 }
 
-export function displayChords(declaration: ShortcutDeclaration): ChordDisplay[] {
+/** Whether this process draws for a Mac, in the renderer and the main process alike. */
+export function isMacPlatform(): boolean {
+  const nav = (globalThis as { navigator?: { platform?: string } }).navigator
+  if (nav?.platform) return nav.platform.toLowerCase().startsWith('mac')
+  const proc = (globalThis as { process?: { platform?: string } }).process
+  return proc?.platform === 'darwin'
+}
+
+export function displayChords(declaration: ShortcutDeclaration, mac: boolean = isMacPlatform()): ChordDisplay[] {
   const groups: ChordDisplay[] = []
-  for (const chord of declaration.chords) {
+  for (const chord of (mac && declaration.macChords) || declaration.chords) {
     const modifiers = modifierNames(chord)
     const name = keyName(chord)
     const existing = groups.find((group) => group.modifiers.join('+') === modifiers.join('+'))
@@ -227,8 +253,8 @@ export function displayChords(declaration: ShortcutDeclaration): ChordDisplay[] 
 const PRESS_PREFIX: Record<ShortcutPress, string> = { hold: 'Hold ', 'hold-again': 'Hold again ' }
 
 /** Plain text, for the User Guide's table: `Hold Esc`, `F11 or Ctrl+Shift+Space`. */
-export function formatShortcut(declaration: ShortcutDeclaration): string {
-  const text = displayChords(declaration)
+export function formatShortcut(declaration: ShortcutDeclaration, mac: boolean = isMacPlatform()): string {
+  const text = displayChords(declaration, mac)
     .map(({ modifiers, keys }) => [...modifiers, keys.join(' / ')].join('+'))
     .join(' or ')
   return declaration.press ? `${PRESS_PREFIX[declaration.press]}${text}` : text
