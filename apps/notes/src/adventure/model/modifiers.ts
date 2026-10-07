@@ -86,7 +86,6 @@ import {
   clampBaseStats,
   deriveStats,
   normalizeDerived,
-  STAT_LABELS,
   type DerivedKey,
   type DerivedStats,
   type StatBlock,
@@ -96,7 +95,8 @@ import {
   CHANCE_DERIVED_KEYS,
   CHANCE_SPECS,
   isChanceKey,
-  DERIVED_LABELS,
+  derivedTerm,
+  statTerm,
 } from './stats'
 
 export type ModifierKind = 'item' | 'trait'
@@ -484,8 +484,8 @@ export function descriptionStyleOf(settings: { verboseDescriptions: boolean }): 
  */
 export function describePercent(key: DerivedKey, percent: number, style: DescriptionStyle): string {
   const head = isChanceKey(key)
-    ? `${signedPercent(percent)} to ${DERIVED_LABELS[key]}`
-    : `${signedPercent(percent)} ${DERIVED_LABELS[key]}`
+    ? `${signedPercent(percent)} to ${derivedTerm(key, style)}`
+    : `${signedPercent(percent)} ${derivedTerm(key, style)}`
   if (style === 'concise' || !isChanceKey(key)) return head
   const complement = CHANCE_COMPLEMENTS[key]
   return `${head} (of ${percent >= 0 ? complement.failure : complement.success})`
@@ -515,7 +515,7 @@ export function describeEffect(effect: ModifierEffect, style: DescriptionStyle):
   const concise = style === 'concise'
   switch (effect.kind) {
     case 'statDelta':
-      return `${signed(effect.amount)} ${STAT_LABELS[effect.stat]}`
+      return `${signed(effect.amount)} ${statTerm(effect.stat, style)}`
     case 'derivedPercent':
       return describePercent(effect.derived, effect.percent, style)
     case 'derivedPercentPerHolding': {
@@ -558,8 +558,8 @@ export function describeEffect(effect: ModifierEffect, style: DescriptionStyle):
         // adjective sits on the quantity and not between the preposition and
         // its object: "+40% to Final Hit", never "+40% Final to Hit".
         return isChanceKey(effect.derived)
-          ? `${signedPercent(effect.percent)} to ${ROUND_POSITION_WORD[effect.position]} ${DERIVED_LABELS[effect.derived]}`
-          : `${signedPercent(effect.percent)} ${ROUND_POSITION_WORD[effect.position]} ${DERIVED_LABELS[effect.derived]}`
+          ? `${signedPercent(effect.percent)} to ${ROUND_POSITION_WORD[effect.position]} ${derivedTerm(effect.derived, style)}`
+          : `${signedPercent(effect.percent)} ${ROUND_POSITION_WORD[effect.position]} ${derivedTerm(effect.derived, style)}`
       }
       return `${describePercent(effect.derived, effect.percent, style)} on your ${effect.position} action of a round`
     }

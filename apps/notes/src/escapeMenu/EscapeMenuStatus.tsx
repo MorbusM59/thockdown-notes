@@ -40,7 +40,10 @@ function readoutLines(readout: EscapeMenuReadout): string[] {
 }
 
 function tooltipOf(label: string, detail?: string[]): string {
-  return detail && detail.length > 0 ? [label, ...detail].join('\n') : label
+  // Each detail line read as WORDS: a description may name a stat by its
+  // glyph in narration markup, and a tooltip is where the word is spelled
+  // out. A line with no markup comes back exactly as it was.
+  return detail && detail.length > 0 ? [label, ...detail.map(narrationOf)].join('\n') : label
 }
 
 /**

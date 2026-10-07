@@ -43,7 +43,7 @@ describe('stat resolution', () => {
     // What an offer IS cannot depend on what you happen to be carrying.
     for (const style of ['verbose', 'concise'] as const) {
       const line = describeEffect(effect, style)
-      expect(line).toBe('+10% Damage per item')
+      expect(line).toBe(style === 'concise' ? '+10% [fa-solid fa-gavel|Damage] per item' : '+10% Damage per item')
       expect(line).not.toContain('held')
     }
   })

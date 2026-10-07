@@ -130,7 +130,7 @@ const DEFENSIVE_MARK = 'fa-solid fa-shield'
 /**
  * A CLASS'S MOVES, one detail line per move:
  *
- *   <glyph> **Name** clause, clause  |  <glyph> **Name** clause, clause
+ *   <glyph> **Name** clause, clause | <glyph> **Name** clause, clause
  *
  * A class is the one vector whose worth is prose rather than a figure, so this
  * is the longest thing a choice screen asks anybody to read, and read as a

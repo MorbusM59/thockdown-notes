@@ -28,6 +28,7 @@ import { MOVE_TERMS, describeMove } from './moves'
 import { DERIVED_LABELS, STAT_LABELS } from './stats'
 import { TACTIC_LABELS } from './tactics'
 import { describeBuild } from './vectors'
+import { narrationText, parseNarration } from '../../escapeMenu/narrationMarkup'
 
 const STYLES: readonly DescriptionStyle[] = ['verbose', 'concise']
 /**
@@ -62,8 +63,16 @@ function complaintsFor(line: string, where: string): string[] {
   return out
 }
 
-/** Every description the game can write, in one style, with where it came from. */
+/**
+ * Every description the game can write, in one style, with where it came from
+ * -- as the READER sees it: concise style names a stat by its icon, which
+ * carries its own word, so the rules are checked against those words.
+ */
 function everyDescription(style: DescriptionStyle): { line: string; where: string }[] {
+  return everyMarkedDescription(style).map(({ line, where }) => ({ line: narrationText(parseNarration(line)), where }))
+}
+
+function everyMarkedDescription(style: DescriptionStyle): { line: string; where: string }[] {
   const catalog = catalogFor(THOCKQUEST, 1234)
   const lines: { line: string; where: string }[] = []
   for (const modifier of catalog.values()) {

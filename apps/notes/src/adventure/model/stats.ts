@@ -119,6 +119,41 @@ export const DERIVED_LABELS: Readonly<Record<DerivedKey, string>> = {
 }
 
 /**
+ * A glyph per derived value, the counterpart of STAT_ICONS -- and where a
+ * value already has a glyph on the bars or in the fight's log, it is that one
+ * (the heart for Health, the bolt for Actions, the gavel for a blow, the
+ * burst for a crit, the wind for a dodge), so this teaches no new alphabet.
+ */
+export const DERIVED_ICONS: Readonly<Record<DerivedKey, string>> = {
+  maxHitPoints: 'fa-solid fa-heart',
+  damageMultiplier: 'fa-solid fa-gavel',
+  dodgeChance: 'fa-solid fa-wind',
+  actionsPerRound: 'fa-solid fa-bolt',
+  encounterChoices: 'fa-solid fa-route',
+  hitChance: 'fa-solid fa-bullseye',
+  offerChoices: 'fa-solid fa-store',
+  critChance: 'fa-solid fa-burst',
+}
+
+/**
+ * HOW A DESCRIPTION NAMES A STAT OR A DERIVED VALUE, decided once.
+ *
+ * Verbose names it in words. Concise names it by its GLYPH, in narration
+ * markup that carries the word with it (`[fa-solid fa-eye|Perception]`), so
+ * the pill shows the glyph and its tooltip and accessible name still say
+ * "Perception" in full. A preview sits on a strip of about sixty characters
+ * at the tightest layout a reader plays at (escapeMenu/chapterBarWidth.ts),
+ * and "Encounter choices" alone was a third of a line.
+ */
+export function statTerm(key: StatKey, style: 'verbose' | 'concise'): string {
+  return style === 'concise' ? `[${STAT_ICONS[key]}|${STAT_LABELS[key]}]` : STAT_LABELS[key]
+}
+
+export function derivedTerm(key: DerivedKey, style: 'verbose' | 'concise'): string {
+  return style === 'concise' ? `[${DERIVED_ICONS[key]}|${DERIVED_LABELS[key]}]` : DERIVED_LABELS[key]
+}
+
+/**
  * SETTLED: Resilience was a leftover, and there is no seventh stat. Physical
  * attack and physical defence are ONE stat -- Might -- which is why the
  * design document's own hit-point formula was written under Might while

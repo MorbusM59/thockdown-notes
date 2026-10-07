@@ -55,14 +55,12 @@ const RESIDUAL: Readonly<Record<string, number>> = {
   // strip by themselves. Asked once per run.
   'characterCreation:class': 0.78,
   // Up to five effects, the species' whole identity. Asked once per run.
-  'characterCreation:species': 0.61,
-  // The trait and item asked for at creation: a modifier beside the lead-in.
-  'characterCreation:offer': 0.25,
+  'characterCreation:species': 0.21,
   // The omen's traits beside its line, and the pill saying what was taken.
-  encounterSelect: 0.25,
+  encounterSelect: 0.19,
   // Market and spoils: a modifier beside the pill saying what was just bought or taken.
-  market: 0.18,
-  loot: 0.11,
+  market: 0.03,
+  loot: 0.02,
   // A fully stacked Prepare names every term it buys; checked on its own,
   // since a fight's history may run off the edge by design.
   combat: 0.02,

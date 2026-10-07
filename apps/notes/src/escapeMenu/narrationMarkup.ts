@@ -40,7 +40,9 @@
 // so the two cases cannot be confused.
 
 /**
- * WHAT GOES BETWEEN TWO DESCRIPTIONS: two spaces, a bar, two spaces.
+ * WHAT GOES BETWEEN TWO DESCRIPTIONS: a space, a bar, a space. It was two
+ * spaces a side, which beside the pill's own gap cost about a character per
+ * line on a strip that holds about sixty (escapeMenu/chapterBarWidth.ts).
  *
  * One string, used by the rendered separator and by the accessible name
  * alike, so the two cannot describe the same row differently. It was a
@@ -52,7 +54,7 @@
  * separates two descriptions has to hold in both renderings or it is two
  * rules. `white-space: pre` on the span is what keeps them from collapsing.
  */
-export const DETAIL_SEPARATOR = '  |  '
+export const DETAIL_SEPARATOR = ' | '
 
 /** One run of the line: either styled text, or one glyph standing in for a word. */
 export type NarrationSpan =
