@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   actionsRemaining, BASE_DAMAGE, damageFrom, membersDown,
-  monsterDefence, MONSTER_TYPES, } from './monsters'
+  monsterDefence, MONSTER_TYPES, PACK_MEMBER_SHARE, } from './monsters'
 import { clampProgression, PROGRESSION_MAX, PROGRESSION_MIN, PROGRESSION_STEP, powerMultiplier } from './difficulty'
 import { chanceAtDelta, COUNTER_STATS, contestedStat, pressThumb, resolveChance } from './chance'
 import { createStatBlock, deriveStats, DODGE_CHANCE, STAT_KEYS } from './stats'
@@ -235,8 +235,9 @@ describe('a group is one hydra', () => {
   it('pools hit points and actions across its members', () => {
     const one = groupOf(1)
     const four = groupOf(4)
-    expect(four.maxHitPoints).toBe(one.maxHitPoints * 4)
-    expect(four.maxActions).toBe(one.maxActions * 4)
+    // Each member is the design's smaller Group creature (PACK_MEMBER_SHARE).
+    expect(four.maxHitPoints).toBe(Math.floor(one.maxHitPoints * PACK_MEMBER_SHARE) * 4)
+    expect(four.maxActions).toBe(Math.round(one.maxActions * PACK_MEMBER_SHARE * 4))
     // One blow is still one member's blow -- a group hits more OFTEN, not harder.
     expect(four.damage).toBeCloseTo(one.damage, 10)
   })

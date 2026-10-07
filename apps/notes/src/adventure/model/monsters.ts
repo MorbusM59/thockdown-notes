@@ -120,6 +120,22 @@ export function actionsRemaining(monster: Monster, damageTaken: number, actionsS
 /** Both sides multiply this by their damage multiplier. One parameter, expected to be tuned. */
 export const BASE_DAMAGE = 10
 
+/**
+ * WHAT ONE MEMBER OF A PACK IS WORTH, as a share of the same creature alone:
+ * its hit points and its actions. The design's "Group" rank ("reduced
+ * percentage modifier to health, damage, actions and loot, but multiple
+ * monsters"), which the per-offer head count had dropped -- a pack of N was N
+ * whole creatures, so a level-one runt pair was two copies of a starting
+ * character fought at once. A blow stays one member's blow (damage is not
+ * shared out): a pack still hits more OFTEN rather than harder, it is just
+ * made of smaller things. A lone creature is untouched.
+ */
+export const PACK_MEMBER_SHARE = 0.6
+
+export function packMemberShare(count: number): number {
+  return count > 1 ? PACK_MEMBER_SHARE : 1
+}
+
 export function damageFrom(damageMultiplier: number): number {
   return BASE_DAMAGE * damageMultiplier
 }
@@ -234,6 +250,7 @@ export function buildMonster(options: {
   }
   const power = powerMultiplier(options.level, options.progression)
   const count = Math.max(1, Math.floor(options.count ?? 1))
+  const share = packMemberShare(count)
   return {
     buildId: options.build?.id ?? '',
     speciesId: options.species?.id ?? '',
@@ -249,11 +266,11 @@ export function buildMonster(options: {
     derived,
     // Whole hit points: a monster with 63.4 of them is a rounding artefact
     // on screen, and the floor is the same rule every other count follows.
-    maxHitPoints: Math.floor(profile.derived.maxHitPoints * power) * count,
+    maxHitPoints: Math.floor(profile.derived.maxHitPoints * power * share) * count,
     // Per member. A pack of four does not hit four times harder for one
     // blow -- it hits four times as OFTEN, which is what the action pool is.
     damage: damageFrom(profile.derived.damageMultiplier) * power,
-    maxActions: profile.derived.actionsPerRound * count,
+    maxActions: Math.round(profile.derived.actionsPerRound * share * count),
     // Per MEMBER, not per pack: four wolves do not stack four hides on one
     // body.
     armor: profile.naturalArmor > 0 ? { ...NO_ARMOR, natural: profile.naturalArmor } : NO_ARMOR,
