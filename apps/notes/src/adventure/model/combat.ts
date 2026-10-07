@@ -32,7 +32,7 @@ import { damageShareOf, strikesOf } from './moves'
 import type { CombatMove } from './vectors'
 import { CRIT_CHANCE, DODGE_CHANCE, HIT_CHANCE, type DerivedStats, type StatBlock } from './stats'
 
-import type { Defence } from './defences'
+import { DEFENCE_COUNTER, type Defence } from './defences'
 export { DEFENCES, defencesOffered, type Defence } from './defences'
 
 /**
@@ -519,6 +519,31 @@ export function resolveExchange(input: ExchangeInput): { blow: Blow; armor: Armo
   // A move that IGNORES ARMOUR leaves here with the whole blow, by the same
   // route magic does: the pool comes back untouched rather than emptied,
   // because it is still on the defender and simply did not help.
+  // A GUARD WITHOUT DEFEND. A defensive move that stands in for Take the hit
+  // (a Sentinel's Brace, a Templar's Absolve) carries a guard of its own, and
+  // the branch below used to return the whole blow before reading it -- so
+  // those guards were authored, described on the cell, and did nothing.
+  // Take the hit still never consults the WORN pool; the guard is not worn,
+  // it is what the defender did this turn, so it stops what it stops and
+  // nothing wears and nothing rolls.
+  if (input.defence === 'takeTheHit' && !input.ignoreArmor && input.guard && input.guard > 0) {
+    const absorbed = Math.min(input.guard, raw)
+    return {
+      blow: {
+        hit: true,
+        crit: critRoll.value.passed,
+        dodged: false,
+        damage: raw - absorbed,
+        armorDecayed: false,
+        // Thorns answers an absorb, and the guard is the only thing standing.
+        recoil: absorbed > 0 ? thornsRecoil(input.defenderTactics ?? NO_TACTICS, { natural: input.guard, pieces: [] }) : 0,
+        math: { ...math, absorbed },
+      },
+      armor,
+      rng,
+    }
+  }
+
   if (input.defence !== 'defend' || input.ignoreArmor) {
     return {
       blow: { hit: true, crit: critRoll.value.passed, dodged: false, damage: raw, armorDecayed: false, recoil: 0, math },
@@ -866,7 +891,10 @@ export function resolveMonsterAttack(options: {
   //
   // A move needs no note that its share is momentary: a move IS the single
   // action the player just chose.
-  const counterShare = playerTactics.counter + (defenceMove?.counter ?? 0)
+  // The CELL's own share (Take the hit's, model/defences.ts) is one more
+  // source, and sources of Counter add -- the author's rule, which is also
+  // what keeps every move authored onto that cell an upgrade of it.
+  const counterShare = playerTactics.counter + DEFENCE_COUNTER[options.defence] + (defenceMove?.counter ?? 0)
   let counter: Blow | null = null
   if (counterShare > 0 && state.playerHitPoints > 0 && !state.playerFled) {
     let playerTally = state.tallies.player

@@ -1217,3 +1217,37 @@ settled the split's notation with it:
   > do math and is short and concise. It's an attack, so it's clear that it's
   > a 300% attack instead of a basic 100% attack. also split follows more
   > naturally: "Split (4x45)" becomes "180% Damage | Split (4)"
+
+### Choices that have to be weighed (2026-10-07)
+
+Taken under the author's brief to direct the game toward choices that are
+real trade-offs rather than defaults, measured with `npm run adventure:balance`'s
+lookahead player (`clever`), which plays the best choice for the hand it is
+dealt without seeing the dice.
+
+- **Take the hit swings back in full** (`DEFENCE_COUNTER`, Counter 100%). As
+  written it was Defend with the miss chance and the armour removed, and a
+  lookahead player took it 2% of the times it was offered. Every move authored
+  onto that cell (Backdraft, Brace, Absolve) is already a counter, so the plain
+  cell now says the same thing, and per the author's rule that sources of
+  Counter add, a move on it swings with both. It is worth pressing when armour
+  is spent, the attacker rarely misses anyway, or the counter finishes them.
+- **A guard on a Take-the-hit move works.** Brace and Absolve carry one and
+  the exchange returned the whole blow before reading it. The worn pool is
+  still not consulted; the guard is this turn's own.
+- **Plague stacks take a share of what is LEFT and are capped at a Singe per
+  stack** (`plagueDamage`): `1 - 0.8^stacks` of the pool, never more than the
+  caster's magical damage per stack, rounded down. `0.2 x stacks` killed
+  anything at five casts, and a share of any pool was the one damage source
+  that did not care how large a monster had grown.
+- **Meteor ends the round for both sides.** Ending only the monster's turned
+  a hand dealt every other action into a lock; ending both makes it a choice
+  -- cast it when they have more of the round left than you do.
+- **Ascendant costs two fame points**, like keeping, because a tier is never
+  lost at a level's end and so compounds the way a kept modifier does. At one
+  it was five stat points for the price of a carrying slot and was bought 62%
+  of the time it could be.
+- **Dirty Fighting's counter is 20%**, as `0.2`. It shipped as `20` -- a free
+  swing at 2000% on four defends in five -- and was the whole of why
+  Skirmisher cleared every run it was given. `validateContent` now refuses a
+  counter above 2.

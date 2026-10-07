@@ -188,19 +188,7 @@ export function describeMove(move: CombatMove, style: DescriptionStyle): string[
   // that tactic: a move's share adds to whatever the character carries.
   // "Vengeance" was this same rule under a private name, and a second name
   // for one mechanism is the thing a player cannot tell will compose.
-  if (move.counter) {
-    lines.push(concise
-      ? `${TACTIC_LABELS.counter} (${pct(move.counter)})`
-      // NOT the tactic's own explanation, which says "every time you answer a
-      // blow" -- true of a trait that is always on and false of a move, which
-      // is the one action just chosen. The verbose form spells the share out
-      // instead, and the reader learns the word itself from the tactic.
-      // "worth N% of an ordinary one", NOT "N% Damage": Counter's number is
-      // the whole size of the free attack, where a Damage percentage is a
-      // modifier on top of one. Same reason the share above became `+100%
-      // Damage` -- each quantity says what kind it is.
-      : `${TACTIC_LABELS.counter} (${pct(move.counter)}): a free attack at ${pct(move.counter)}% Damage`)
-  }
+  if (move.counter) lines.push(describeCounter(move.counter, style))
   if (move.guard) lines.push(concise ? `${move.guard} Block` : `${move.guard} Armor, this blow only`)
 
   // THE TRIGGER, and in concise an unconditional one says NOTHING: "every
@@ -240,4 +228,22 @@ function whenWords(move: CombatMove, style: DescriptionStyle): string {
       ? `vs ${move.when.band}`
       : `against ${bandWithArticle(move.when.band)} foe (${HEALTH_BAND_BOUNDS[move.when.band]})`
   }
+}
+
+/**
+ * A COUNTER SHARE, in the tactic's own notation (model/tactics.ts), because
+ * it IS that tactic. Shared by a move's description and by the plain Take
+ * the hit cell, which carries a share of its own (model/defences.ts).
+ *
+ * The verbose form is NOT the tactic's explanation ("every time you answer a
+ * blow"), which is true of a trait that is always on and false of a choice,
+ * which is the one action just taken. "a free attack at N% Damage" rather
+ * than "N% Damage" alone: Counter's number is the whole size of the free
+ * attack, where a bare Damage percentage is a modifier on top of one.
+ */
+export function describeCounter(share: number, style: DescriptionStyle): string {
+  const pct = (fraction: number) => Math.round(fraction * 100)
+  return style === 'concise'
+    ? `${TACTIC_LABELS.counter} (${pct(share)})`
+    : `${TACTIC_LABELS.counter} (${pct(share)}): a free attack at ${pct(share)}% Damage`
 }

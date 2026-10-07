@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  beginRound, roundFromJson, roundToJson, UNTOUCHED_FIGHT, type RoundState,
+  beginRound, monsterActionsLeft, playerActionsLeft, roundFromJson, roundToJson, UNTOUCHED_FIGHT, type RoundState,
 } from './combat'
 import {
   castSpell, endOfRoundTicks, igniteTick, IGNITE_SHARE, LIGHTNING_MAX_STRIKES, magicalDamage,
-  NO_SPELLS, PLAGUE_SHARE, rollSpellReach, spellAt, spellChance, SPELLS, spellsOffered,
+  NO_SPELLS, plagueDamage, rollSpellReach, spellAt, spellChance, SPELLS, spellsOffered,
   strongestOffered,
 } from './spells'
 import { type Monster, type MonsterType } from './monsters'
@@ -125,11 +125,19 @@ describe('a magical strike', () => {
     }
   })
 
-  it('spends one action, like everything else a round is made of', () => {
+  it('spends one action, like everything else a round is made of -- except Meteor, which ends the round', () => {
     for (const spell of SPELLS) {
+      if (spell.id === 'meteor') continue
       const result = cast(spell.id, freshRound(), monsterOf(), 7)
       expect(result.state.playerActionsSpent).toBe(1)
     }
+  })
+
+  it('Meteor ends the round for BOTH sides, so it is a trade and never a lock', () => {
+    const monster = monsterOf()
+    const result = cast('meteor', freshRound(), monster, 7)
+    expect(playerActionsLeft(result.state, DERIVED)).toBe(0)
+    expect(monsterActionsLeft(result.state, monster)).toBe(0)
   })
 
   it('rides along for free when something else already paid', () => {
@@ -200,9 +208,10 @@ describe('the table, spell by spell', () => {
       bites.push(ticked.ticks[0].damage)
       state = ticked.state
     }
-    expect(bites[0]).toBe(Math.round(monster.maxHitPoints * PLAGUE_SHARE))
+    expect(bites[0]).toBe(plagueDamage(monster.maxHitPoints, 1, magicalDamage(DERIVED)))
+    // Flat while the cap holds it, then fading: never rising.
     for (let index = 1; index < bites.length; index += 1) {
-      expect(bites[index]).toBeLessThan(bites[index - 1])
+      expect(bites[index]).toBeLessThanOrEqual(bites[index - 1])
     }
     expect(state.monsterDamageTaken).toBeLessThan(monster.maxHitPoints)
   })
@@ -215,7 +224,23 @@ describe('the table, spell by spell', () => {
     const bite = (state: RoundState) => endOfRoundTicks({
       state, monster, playerStats: PLAYER, playerDerived: DERIVED, rng: 9,
     }).ticks[0].damage
-    expect(bite(twice)).toBe(bite(once) * 2)
+    expect(bite(twice)).toBeGreaterThan(bite(once))
+  })
+
+  it('never takes the whole pool however many stacks, and never more than a Singe per stack', () => {
+    // A PROPERTY over the whole range rather than one case: `0.2 x stacks`
+    // reached the whole pool at five, and a share of any pool ignored how
+    // big the monster had grown.
+    for (const left of [1, 7, 40, 300, 5000]) {
+      for (let stacks = 1; stacks <= 12; stacks += 1) {
+        for (const magical of [2, 9, 40]) {
+          const bite = plagueDamage(left, stacks, magical)
+          expect(bite).toBeLessThanOrEqual(Math.round(magical * stacks))
+          expect(bite).toBeLessThan(left)
+          expect(bite).toBeGreaterThanOrEqual(0)
+        }
+      }
+    }
   })
 
   it('throws a second bolt for a second Storm, out of the same crit roll', () => {

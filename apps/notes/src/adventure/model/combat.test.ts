@@ -429,3 +429,47 @@ describe('Counter, from a trait and from a move at once', () => {
     expect(answered.state.tallies.player.strikes).toBe(1)
   })
 })
+
+describe('taking the hit', () => {
+  it('swings back with the cell’s own Counter, and no other plain defence does', () => {
+    // A PROPERTY over seeds: the blow always lands, and a counter follows it
+    // whenever the player is still standing to throw one.
+    let countered = 0
+    for (let seed = 1; seed <= 40; seed += 1) {
+      const taken = resolveMonsterAttack({
+        state: freshRound(), monster: monster(), playerStats: PLAYER, defence: 'takeTheHit',
+        playerDamage: 10, rng: seed,
+      })
+      expect(taken.blow?.hit).toBe(true)
+      if (taken.state.playerHitPoints > 0) {
+        expect(taken.counter).not.toBeNull()
+        countered += 1
+      }
+      for (const defence of ['defend', 'flee'] as const) {
+        const other = resolveMonsterAttack({
+          state: freshRound(), monster: monster(), playerStats: PLAYER, defence, playerDamage: 10, rng: seed,
+        })
+        expect(other.counter).toBeNull()
+      }
+    }
+    expect(countered).toBeGreaterThan(0)
+  })
+
+  it('lets a move standing in for it guard the blow, which it never did', () => {
+    // Brace and Absolve carry a guard and replace Take the hit; the exchange
+    // used to return the whole blow before reading it.
+    const guard = 1000
+    for (let seed = 1; seed <= 20; seed += 1) {
+      const result = resolveMonsterAttack({
+        state: freshRound(), monster: monster(), playerStats: PLAYER, defence: 'takeTheHit',
+        defenceMove: {
+          id: 'test:brace', name: 'Brace', icon: 'fa-solid fa-anchor', replaces: 'takeTheHit',
+          when: { kind: 'always' }, guard,
+        },
+        rng: seed,
+      })
+      expect(result.blow?.hit).toBe(true)
+      expect(result.blow?.damage).toBe(0)
+    }
+  })
+})

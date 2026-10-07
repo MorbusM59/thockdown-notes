@@ -239,7 +239,7 @@ export const COMBAT_CLASSES: readonly CombatClass[] = [
         replaces: 'defend',
         when: { kind: 'chance', chance: 0.8 },
         guard: 2,
-        counter: 20,
+        counter: 0.2,
         flavour: 'Using every advantage.',
       },
     ],

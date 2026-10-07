@@ -148,7 +148,14 @@ const random: Policy = ({ screen, random: draw }) => {
  *
  * Progress dominates (an encounter behind you is worth more than any amount
  * of health), staying alive is worth a few encounters, and health, motes and
- * gold break ties. A heuristic and stated as one: the lookahead is only as
+ * gold break ties.
+ *
+ * HEALTH IS COUNTED IN HIT POINTS, not as a fraction of the maximum. A
+ * fraction cannot see a maximum: a character at 70% of 140 and one at 70% of
+ * 80 scored the same, so every choice that trades maximum health for
+ * something else (Might, a species' -15%, an item's +25) was judged with
+ * the health half of the trade invisible. Two a point puts a fresh character
+ * (around a hundred) where the fraction used to. A heuristic and stated as one: the lookahead is only as
  * clever as this, and a balance finding that rests on it has to be read
  * against it.
  */
@@ -157,7 +164,7 @@ export function valueOf(save: GameSave): number {
   if (!game) return 0
   const alive = game.status !== 'over'
   return 100 * progressOf(game)
-    + (alive ? 400 + 200 * (healthOf(save, game) ?? 0) : 0)
+    + (alive ? 400 + 2 * game.hitPoints : 0)
     + game.experienceEarned
     + 0.5 * game.goldEarned
 }
@@ -192,24 +199,46 @@ export function clever({ samples }: CleverOptions): Policy {
     const candidates = realChoices(screen)
     if (candidates.length === 1) return candidates[0].id
     const game = activeGame(save)
-    const reach = screen.stageId === 'combat' ? 1 : 2
-    const target = game ? progressOf(game) + reach : 0
+    const target = game ? horizonOf(screen.stageId, game) : 0
     const seeds = Array.from({ length: samples }, () => toRngState(draw() * 2 ** 32))
-    let best = candidates[0].id
-    let bestValue = -Infinity
-    for (const candidate of candidates) {
+    const scored = candidates.map((candidate) => {
       let total = 0
       for (const seed of seeds) total += rollout(save, candidate.id, seed, target)
-      if (total > bestValue) {
-        bestValue = total
-        best = candidate.id
-      }
-    }
-    return best
+      return { id: candidate.id, total }
+    })
+    // TIES ARE SPLIT AT RANDOM, from the harness's stream. Taking the first
+    // of a tie is what made the first region 100% and every other 0%: the
+    // choice had no consequence inside the horizon, every candidate scored
+    // the same, and the report read the ring's ORDER as a verdict.
+    const bestValue = Math.max(...scored.map((entry) => entry.total))
+    const tied = scored.filter((entry) => entry.total >= bestValue - 1e-9)
+    return tied[Math.floor(draw() * tied.length)].id
   }
 }
 
-const ROLLOUT_STEPS = 600
+/**
+ * HOW FAR AHEAD A CHOICE HAS TO BE PLAYED OUT BEFORE ITS CONSEQUENCES ARRIVE,
+ * as the progress the rollout stops at.
+ *
+ * A fight's choice lands within the encounter. A shopping or loot choice
+ * within a couple. But a REGION decides nothing until its omens (before the
+ * mini bosses and the boss), a KEEP purchase pays only at the level's end,
+ * and a character is the whole run -- judged two encounters out, all of them
+ * tie or lose to whatever pays immediately, and the report then reads the
+ * instrument's myopia as the game's balance. Those are played to the end of
+ * the level they are taken in, plus one encounter so a level's last choice
+ * still sees the next level begin.
+ */
+const LONG_SIGHTED_STAGES = new Set(['characterCreation', 'regionSelect', 'fame', 'outpost'])
+
+function horizonOf(stageId: string, game: GameRecord): number {
+  const progress = progressOf(game)
+  if (stageId === 'combat') return progress + 1
+  if (LONG_SIGHTED_STAGES.has(stageId)) return Math.max(progress + 2, game.level * 10 + 1)
+  return progress + 2
+}
+
+const ROLLOUT_STEPS = 3000
 
 function rollout(from: GameSave, choiceId: string, seed: RngState, target: number): number {
   const reseeded: GameSave = { ...from, director: { ...from.director, rng: seed } }

@@ -81,7 +81,12 @@ export const FAME_PURCHASES: readonly FamePurchase[] = [
   // split (model/vectors.ts). One point each and five of them, so a fully
   // ascended run is a tier-30 character -- six times the stat budget it set
   // out with, which is the whole of what makes a late run feel different.
-  { id: 'ascendant', name: 'Ascendant', icon: 'fa-solid fa-arrow-up-right-dots', cost: 1, rule: 'tier', kind: null, step: TIER_PER_FAME_POINT },
+  // TWO, like keeping, and for the keeping reason: a tier is never lost at a
+  // level's end, so it compounds exactly as a kept modifier does. At one it
+  // was five stat points for the price of an extra carrying slot, a lookahead
+  // player bought it 62% of the times it could, and it was the late game's
+  // snowball -- five of them is twenty-five tier on top of everything else.
+  { id: 'ascendant', name: 'Ascendant', icon: 'fa-solid fa-arrow-up-right-dots', cost: 2, rule: 'tier', kind: null, step: TIER_PER_FAME_POINT },
 ]
 
 export function famePurchaseById(id: string): FamePurchase | undefined {

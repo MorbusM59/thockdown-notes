@@ -32,7 +32,7 @@ import { CRIT_CHANCE, type DerivedStats, type StatBlock } from './stats'
 import { DEFAULT_DELTA_FORCE, resolveChanceWith, type ChanceAdjustment, type StatChance } from './chance'
 import { damageFrom, type Monster } from './monsters'
 import { rollAttackDamage, type DamageRoll } from './damageRoll'
-import { monsterActionsLeft, resolveExchange, type Blow, type RoundState } from './combat'
+import { monsterActionsLeft, playerActionsLeft, resolveExchange, type Blow, type RoundState } from './combat'
 import { NO_SPELLS } from './spellReach'
 
 export const SPELL_IDS = ['singe', 'plague', 'ignite', 'lightningBolt', 'lightningStorm', 'meteor'] as const
@@ -83,7 +83,7 @@ export const SPELLS: readonly Spell[] = [
     level: 1,
     name: 'Plague',
     icon: 'fa-solid fa-disease',
-    lines: ['A fifth of what it has left, at the end of every round', 'Cast again and it takes twice as much'],
+    lines: ['A fifth of what it has left, at the end of every round, never more than a Singe', 'Cast again and it takes a fifth of the rest'],
   },
   {
     id: 'ignite',
@@ -113,7 +113,7 @@ export const SPELLS: readonly Spell[] = [
     level: 5,
     name: 'Meteor Strike',
     icon: 'fa-solid fa-meteor',
-    lines: ['Double damage, through armour', 'And it acts no more this round'],
+    lines: ['Double damage, through armour', 'And the round is over, for both of you'],
   },
 ]
 
@@ -298,7 +298,7 @@ export function castSpell(input: CastInput): CastResult {
         state: { ...spent, plagued: spent.plagued + 1 },
         blows: [],
         stunned: false,
-        detail: [`${spent.plagued + 1} stack(s): ${Math.round(PLAGUE_SHARE * 100 * (spent.plagued + 1))}% of what it has left, each round`],
+        detail: [`${spent.plagued + 1} stack(s): ${Math.round((1 - (1 - PLAGUE_SHARE) ** (spent.plagued + 1)) * 100)}% of what it has left each round, at most ${Math.round(magicalDamage(input.playerDerived) * (spent.plagued + 1))}`],
         rng: input.rng,
       }
 
@@ -341,6 +341,15 @@ export function castSpell(input: CastInput): CastResult {
           // round says "no more of yours": `monsterActionsLeft` reads the
           // difference, so nothing else has to learn a stun.
           monsterActionsSpent: spent.monsterActionsSpent + monsterActionsLeft(spent, input.monster),
+          // AND EVERY ONE OF THE CASTER'S. Meteor used to end only the
+          // monster's round, which made it a lock rather than a spell: the
+          // hand is dealt per action, so at the Intellect gear carries a
+          // player to it came up every other action, and every one of those
+          // took a whole round of the monster's turns for one of the
+          // player's. Ending the round for both keeps "and it acts no more
+          // this round" and makes it a choice -- cast it when they have more
+          // turns left in the round than you do -- which a lock never is.
+          playerActionsSpent: spent.playerActionsSpent + playerActionsLeft(spent, input.playerDerived),
         },
         blows: [struck.blow],
         stunned: true,
@@ -420,6 +429,31 @@ export const IGNITE_SHARE = 0.1
 export const PLAGUE_SHARE = 0.2
 
 /**
+ * WHAT PLAGUE TAKES AT THE END OF A ROUND, and the two bounds on it.
+ *
+ * STACKS TAKE A SHARE OF WHAT IS LEFT, the way every chance in the game
+ * composes (model/chance.ts): the second stack takes a fifth of what the
+ * first left behind, so `1 - 0.8^stacks` of the pool. It used to be
+ * `0.2 x stacks`, which reached 100% at five casts and killed anything
+ * outright -- the one thing the spell's own description says it cannot do.
+ *
+ * AND NEVER MORE THAN A SINGE PER STACK. A share of what is left is the same
+ * share of any pool, so against a monster a hundred times the player's size
+ * it took the same fifth -- the one source of damage in the game that did not
+ * care how big the monster had grown, which is why raising monster scaling
+ * did nothing to how late runs went. Capped at the caster's own magical
+ * damage per stack, it is still the best thing to cast at a big target and
+ * stops being a substitute for being strong enough to fight it.
+ */
+export function plagueDamage(left: number, stacks: number, magical: number): number {
+  if (stacks <= 0 || left <= 0) return 0
+  const share = left * (1 - (1 - PLAGUE_SHARE) ** stacks)
+  // DOWN, so a share of what is left is always less than what is left: a
+  // round to nearest let twelve stacks on seven hit points take all seven.
+  return Math.floor(Math.min(share, magical * stacks))
+}
+
+/**
  * THE END OF A ROUND, paid out in level order -- so the log, which is newest
  * first, reads with the bigger spell at its head.
  *
@@ -442,14 +476,13 @@ export function endOfRoundTicks(options: {
 
   if (state.plagued > 0) {
     const left = Math.max(0, options.monster.maxHitPoints - state.monsterDamageTaken)
-    // PER STACK: a second Plague takes twice the share of what is left.
-    const damage = Math.round(left * PLAGUE_SHARE * state.plagued)
+    const damage = plagueDamage(left, state.plagued, magicalDamage(options.playerDerived))
     if (damage > 0) {
       state = { ...state, monsterDamageTaken: state.monsterDamageTaken + damage }
       ticks.push({
         spell: spellAt(1)!,
         damage,
-        detail: [`Damage: ${damage} = ${left} left x ${Math.round(PLAGUE_SHARE * 100)}% x ${state.plagued} stack(s)`],
+        detail: [`Damage: ${damage} = ${left} left x ${Math.round((1 - (1 - PLAGUE_SHARE) ** state.plagued) * 100)}% for ${state.plagued} stack(s), at most ${Math.round(magicalDamage(options.playerDerived) * state.plagued)}`],
       })
     }
   }

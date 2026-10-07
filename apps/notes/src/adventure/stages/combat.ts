@@ -51,7 +51,8 @@ import type { Monster } from '../model/monsters'
 import { monsterFor, monsterName, offerFromJson, offerToJson } from './encounter'
 import type { MonsterMoment } from '../model/monsters'
 import type { ActionPosition } from '../model/modifiers'
-import { armMove, describeMove, moveById, type MoveSituation } from '../model/moves'
+import { armMove, describeCounter, describeMove, moveById, type MoveSituation } from '../model/moves'
+import { DEFENCE_COUNTER } from '../model/defences'
 import type { CombatClass } from '../model/vectors'
 import { COMBAT_STAGE_ID, ENCOUNTER_SELECT_STAGE_ID, LOOT_STAGE_ID, WELCOME_STAGE_ID } from './ids'
 
@@ -993,7 +994,18 @@ export const combatStage: StageModule = {
           id: `defence:${defence}`,
           label: move?.name ?? DEFENCE_LABELS[defence].label,
           icon: move?.icon ?? DEFENCE_LABELS[defence].icon,
-          detail: move ? { title: move.name, lines: describeMove(move, context.describe) } : undefined,
+          detail: move
+            // The cell's own Counter is a SOURCE beside the move's, and the
+            // two add, so both are listed (model/defences.ts).
+            ? { title: move.name, lines: [
+              ...(DEFENCE_COUNTER[defence] > 0 ? [describeCounter(DEFENCE_COUNTER[defence], context.describe)] : []),
+              ...describeMove(move, context.describe),
+            ] }
+            // A plain cell says what it does only where that is more than its
+            // name: Take the hit swings back (model/defences.ts).
+            : DEFENCE_COUNTER[defence] > 0
+              ? { title: DEFENCE_LABELS[defence].label, lines: [describeCounter(DEFENCE_COUNTER[defence], context.describe)] }
+              : undefined,
         })),
     }
   },

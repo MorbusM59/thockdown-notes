@@ -597,13 +597,11 @@ describe('renown', () => {
     // only one point is in hand.
     const oneReady = currentScreen(enterInterlude(withGold(10), 'fame', DEPS, NOW), DEPS)
     expect(oneReady?.stageId).toBe('fame')
-    // ASCENDANT is on this list and the two-point purchases are not: it costs
-    // one, and what it raises is the run's TIER -- the third rule the grid
-    // grew when the four vectors landed, and the first that is not per kind.
+    // ASCENDANT costs two, like keeping: a tier compounds across levels the
+    // way a kept modifier does (model/famePurchases.ts).
     expect(oneReady?.choices.map((choice) => choice.id)).toEqual([
       'fame:buy:strongBack',
       'fame:buy:experienced',
-      'fame:buy:ascendant',
       'fame:back',
     ])
 

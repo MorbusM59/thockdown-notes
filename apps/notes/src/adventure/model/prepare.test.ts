@@ -125,8 +125,9 @@ describe('a prepared attack', () => {
       const struck = aim(nimble, seed, { spellReach: 5 })
       expect(struck.rider?.spell.id).toBe('meteor')
       expect(struck.rider?.blows).toHaveLength(1)
-      // One action, still.
-      expect(struck.state.playerActionsSpent).toBe(1)
+      // A Meteor ends the round wherever it is cast (model/spells.ts), a
+      // rider included: one rule, not one for each way of casting it.
+      expect(struck.state.playerActionsSpent).toBeGreaterThanOrEqual(1)
     }
   })
 

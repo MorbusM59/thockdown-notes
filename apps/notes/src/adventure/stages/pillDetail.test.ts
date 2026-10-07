@@ -129,7 +129,7 @@ describe('what a pill says when you hover it', () => {
     }
     expect(applied).not.toBeNull()
     expect(bit).not.toBeNull()
-    expect(bit!.some((row) => /^Damage: \d+ = \d+ left x \d+% x \d+ stack\(s\)$/.test(row))).toBe(true)
+    expect(bit!.some((row) => /^Damage: \d+ = \d+ left x \d+% for \d+ stack\(s\), at most \d+$/.test(row))).toBe(true)
   })
 
   it('shows the charm check behind an effect that fired, and the chance on the round’s own pill', () => {

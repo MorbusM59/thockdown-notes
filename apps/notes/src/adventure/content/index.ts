@@ -234,6 +234,15 @@ export function validateContent(content: Content): string[] {
       }
       if ((move.strikes ?? 1) < 1) problems.push(`move "${move.id}" strikes fewer than once`)
       if ((move.damageShare ?? 1) < 0) problems.push(`move "${move.id}" has negative damage`)
+      // A COUNTER IS A FRACTION of an ordinary blow (model/tactics.ts), like
+      // every percentage in the vocabulary. The largest authored is 1.2; a
+      // share past two is a percentage typed as a whole number -- Dirty
+      // Fighting shipped with `counter: 20`, a free swing at 2000% on four
+      // defends in five, and it was the whole of why Skirmisher cleared
+      // every run a lookahead player gave it.
+      if ((move.counter ?? 0) > 2) {
+        problems.push(`move "${move.id}" counters at ${move.counter}, ${Math.round((move.counter ?? 0) * 100)}% of a blow: a share is a fraction`)
+      }
       // A defence that replaces `dodge` only ever appears when dodge was
       // offered, which is a roll -- so a class whose ONLY move is a dodge
       // swap does nothing on most turns. That is allowed; what is not is a
