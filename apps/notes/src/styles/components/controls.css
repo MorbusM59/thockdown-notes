@@ -241,6 +241,12 @@
   color:      var(--color-text-80);
   text-shadow:  var(--text-shadow-icon);
   line-height: 1;
+  margin:      0;
+  transform:   translateY(0);
+}
+
+.window-control-glyph::before {
+  display: block;
 }
 /* A channel button shows its group's icon, and its number within the group
    small in the corner -- the icon says which group, so the number only has

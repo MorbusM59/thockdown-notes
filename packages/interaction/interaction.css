@@ -237,7 +237,6 @@
   display:        flex;
   align-items:    stretch;
   gap:            var(--toolbar-options-gap);
-  overflow-x:     auto;
   flex-direction: column;
   overflow-x:     hidden;
   overflow-y:     visible;
@@ -334,8 +333,6 @@
 
 .sidebar-options-section-colors {
   gap: var(--toolbar-options-gap);
-  --color-grid-gap:  var(--toolbar-options-gap);
-  --color-grid-cell: 32px;
 }
 
 .options-section-info {
@@ -365,8 +362,6 @@
   min-height: 0;
   height:     auto;
   overflow:   visible;
-  --color-grid-gap:  var(--toolbar-options-gap);
-  --color-grid-cell: 32px;
 }
 
 .options-color-grid {
@@ -546,8 +541,7 @@
   color: var(--color-text-80);
 }
 
-.options-glaze-cell .utility-setting-scrollbar-shell,
- .options-seed-btn {
+.options-glaze-cell .utility-setting-scrollbar-shell {
   width: 100%;
 }
 

@@ -280,10 +280,6 @@
 .tag-pill.suggested[data-pressed]          { background: var(--btn-bg-pressed); }
 .tag-pill.suggested[aria-disabled='true'] { opacity: 0.5; cursor: default; }
 
-.tag-pill.suggested:hover           { background: var(--btn-bg-hover); }
-.tag-pill.suggested[data-pressed]          { background: var(--btn-bg-pressed); }
-.tag-pill.suggested[aria-disabled='true'] { opacity: 0.5; cursor: default; }
-
 .suggested-empty {
   font-size: calc(11px * var(--ui-font-scale));
   color:     var(--color-text-60);
@@ -457,7 +453,8 @@
    registered custom properties (see @property below) so they can transition
    smoothly between 0 (no hidden tabs off that edge) and full width (edge
    scrolled away from), driven by the .fade-left / .fade-right modifiers. */
-.tabbar-tabs-scroll-shell {
+.tabbar-tabs-scroll-shell,
+.chapter-bar-scroll-shell {
   position:  relative;
   overflow:  hidden;
   -webkit-mask-image: linear-gradient(
@@ -483,11 +480,13 @@
   transition: --tab-fade-left-w 0.15s ease, --tab-fade-right-w 0.15s ease;
 }
 
-.tabbar-tabs-scroll-shell.fade-left {
+.tabbar-tabs-scroll-shell.fade-left,
+.chapter-bar-scroll-shell.fade-left {
   --tab-fade-left-w: 14px;
 }
 
-.tabbar-tabs-scroll-shell.fade-right {
+.tabbar-tabs-scroll-shell.fade-right,
+.chapter-bar-scroll-shell.fade-right {
   --tab-fade-right-w: 14px;
 }
 

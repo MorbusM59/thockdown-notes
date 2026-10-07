@@ -218,33 +218,8 @@
 }
 
 
-/* 4d. Mini / chip buttons */
-.ui-btn--mini,
-.date-filter-chip {
-  border-radius: var(--border-radius-small);
-  font-size:     calc(10px * var(--ui-font-scale));
-  font-weight:   300;
-}
-
-/* Date filter */
-.date-filter-rail {
-  padding:        0 0 var(--spacing-regular) var(--spacing-large);
-  display:        flex;
-  flex-direction: column;
-  gap:            0;
-}
-
-.date-filter-line {
-  display:       flex;
-  width:         100%;
-  gap:           var(--spacing-regular);
-  margin-bottom: var(--spacing-regular);
-}
-
-.date-filter-line:last-child {
-  margin-bottom: 0;
-}
-
+/* Date filter chip (the rail and lines are in sidebar.css; the shared
+   mini-button type is in base.css) */
 .date-filter-chip {
   flex:            1;
   min-width:       0;

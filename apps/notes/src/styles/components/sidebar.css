@@ -446,15 +446,20 @@
 }
 
 .sidebar-page-btn {
-  width:         auto;
-  min-width:     20px;
-  height:        20px;
-  padding:       0 var(--spacing-regular);
-  border-radius: var(--border-radius-small);
-  font-size:     calc(10px * var(--ui-font-scale));
-  font-weight:   500;
-  aspect-ratio:  auto;
-  color:         var(--color-text-60);
+  width:           auto;
+  min-width:       20px;
+  height:          20px;
+  padding:         0 var(--spacing-regular);
+  border-radius:   var(--border-radius-small);
+  font-size:       calc(10px * var(--ui-font-scale));
+  font-weight:     500;
+  color:           var(--color-text-60);
+  display:         inline-flex;
+  align-items:     center;
+  justify-content: center;
+  text-shadow:
+    0 -1px 0px var(--text-shadow-emboss-ui-secondary),
+    0 1px 0px var(--text-shadow-emboss-ui-main);
 }
 
 .sidebar-page-btn:disabled {
@@ -785,7 +790,6 @@
 .note-list-item.is-tree-card {
   padding:          var(--spacing-small) var(--spacing-large);
   margin:           var(--spacing-small) var(--spacing-regular);
-  background-color: rgba(255, 255, 255, 0.3);
   background-color: transparent;
   border:           1px solid var(--color-border-dark-20);
   border-radius:    var(--border-radius-regular);
