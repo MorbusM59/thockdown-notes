@@ -33,7 +33,18 @@ import {
 } from '../model/combat'
 import type { EffectiveProfile } from '../model/modifiers'
 import type { DerivedStats } from '../model/stats'
-import { resolveRunProfile, runClass } from '../model/gameState'
+import { resolveRunProfile, runClass, runTuning } from '../model/gameState'
+
+/**
+ * The thumb every roll in this fight reads: `runTuning`'s answer, never the
+ * run record's own field. The record keeps what the run BEGAN with; free
+ * mode's live slider and the guardian floor (model/guardian.ts) both live in
+ * `runTuning`, and reading `game.successAdjust` here bypassed both -- every
+ * roll ignored the guardian and the options panel's Luckiness entirely.
+ */
+function successAdjustOf(context: StageContext): number | undefined {
+  return context.game ? runTuning(context.game, context.save.settings).successAdjust : undefined
+}
 import {
   castSpell, endOfRoundTicks, igniteTick, rollSpellReach, SPELLS, spellsOffered, strongestOffered,
   type Spell,
@@ -306,7 +317,7 @@ function armNextAction(
       state: round,
       monster,
       playerStats: context.profile.stats,
-      successAdjust: context.game?.successAdjust,
+      successAdjust: successAdjustOf(context),
       rng: picked.rng,
     })
     if (charmed.interception) {
@@ -333,7 +344,7 @@ function armNextAction(
       attackerStats: monster.stats,
       adjustment: defending.chances.dodgeChance,
       defender: 'player',
-      successAdjust: context.game?.successAdjust,
+      successAdjust: successAdjustOf(context),
       rng: charmed.rng,
     })
     // ONE MOVE PER DEFENCE THE PLAYER MAY PICK, armed together. All four are
@@ -515,7 +526,7 @@ function openedRound(
   const derived = context.profile?.derived
   const effects = charmsOf(round)
   const checkChance = context.profile
-    ? charmCheckChance(context.profile.stats, monster, context.game?.successAdjust)
+    ? charmCheckChance(context.profile.stats, monster, successAdjustOf(context))
     : 0
   return {
     round,
@@ -714,7 +725,7 @@ function stepFight(options: {
           playerStats: context.profile.stats,
           playerDerived: derived,
           playerChances: context.profile.chances,
-          successAdjust: context.game?.successAdjust,
+          successAdjust: successAdjustOf(context),
           rng,
         })
         rng = ticked.rng
@@ -1058,7 +1069,7 @@ export const combatStage: StageModule = {
         playerStats: acting.stats,
         playerDerived: acting.derived,
         playerChances: acting.chances,
-        successAdjust: context.game?.successAdjust,
+        successAdjust: successAdjustOf(context),
         rng,
       })
       const dealt = [...aimed.blows, ...(aimed.rider?.blows ?? [])]
@@ -1099,7 +1110,7 @@ export const combatStage: StageModule = {
         playerStats: acting.stats,
         playerDerived: acting.derived,
         playerChances: acting.chances,
-        successAdjust: context.game?.successAdjust,
+        successAdjust: successAdjustOf(context),
         move,
         rng,
       })
@@ -1132,7 +1143,7 @@ export const combatStage: StageModule = {
         playerStats: acting.stats,
         playerDerived: acting.derived,
         playerChances: acting.chances,
-        successAdjust: context.game?.successAdjust,
+        successAdjust: successAdjustOf(context),
         rng,
       })
       const dealt = cast.blows.reduce((sum, blow) => sum + blow.damage, 0)
@@ -1187,7 +1198,7 @@ export const combatStage: StageModule = {
         playerStats: context.profile.stats,
         defence,
         dodgeRoll: readRoll(state.dodgeRoll),
-        successAdjust: context.game?.successAdjust,
+        successAdjust: successAdjustOf(context),
         defenceMove,
         monsterMove: monsterArmed.move,
         // What the player's own blow is worth, so a riposte is a share of a

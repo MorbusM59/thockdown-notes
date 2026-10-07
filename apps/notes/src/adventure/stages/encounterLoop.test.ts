@@ -307,9 +307,9 @@ describe('game settings', () => {
     const started = choose(enterEntryScreen(emptySave(4242), DEPS, NOW), 'welcome:start', DEPS, NOW).save
     expect(activeGame(started)?.progression).toBe(PROGRESSION_MIN)
 
-    const moved = withTuning(started, { progression: 1.2, successAdjust: 0.4 })
+    const moved = withTuning(started, { progression: 1.2, successAdjust: 0.2 })
     // The PROGRESSION is the slider's. The thumb is not, on the first level:
-    // the guardian floor (model/guardian.ts) is higher than 0.4 there, and it
+    // the guardian floor (model/guardian.ts) is higher than 0.2 there, and it
     // supersedes the slider while it is. Asserted against the floor's own
     // function rather than against 0.6, so tuning the two constants does not
     // make this test lie.
@@ -636,8 +636,8 @@ describe('the thumb the run is played under', () => {
     // the run -- the record says what the run was SET UP as and `runTuning`
     // decides which of the two the fight reads.
     const started = choose(enterEntryScreen(emptySave(4242), DEPS, NOW), 'welcome:start', DEPS, NOW).save
-    const turned = withTuning(started, { successAdjust: 0.4 })
-    expect(turned.settings.successAdjust).toBe(0.4)
+    const turned = withTuning(started, { successAdjust: 0.2 })
+    expect(turned.settings.successAdjust).toBe(0.2)
     expect(activeGame(turned)?.successAdjust).toBe(0)
     // On the FIRST level the guardian floor is higher than the slider, so it
     // is what the fight reads (model/guardian.ts). Past the floor's last
@@ -645,12 +645,12 @@ describe('the thumb the run is played under', () => {
     // that the floor must not have broken.
     const game = activeGame(turned)!
     expect(runTuning(game, turned.settings).successAdjust).toBe(guardianLuckiness(1))
-    expect(runTuning({ ...game, level: 4 }, turned.settings).successAdjust).toBe(0.4)
+    expect(runTuning({ ...game, level: 4 }, turned.settings).successAdjust).toBe(0.2)
 
     // Clamped, and identical in identity when nothing moves -- the host
     // persists on every change, so a no-op must not look like one.
     expect(withTuning(turned, { successAdjust: 5 }).settings.successAdjust).toBe(1)
-    expect(withTuning(turned, { successAdjust: 0.4 })).toBe(turned)
+    expect(withTuning(turned, { successAdjust: 0.2 })).toBe(turned)
   })
 
   /** Plays a whole run at one thumb setting and reports the hit points left. */

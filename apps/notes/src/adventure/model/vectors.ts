@@ -186,10 +186,10 @@ export type MonsterType = (typeof MONSTER_TYPES)[number]
 /** What a monster of this rank starts at, before the level adds to it. */
 export const MONSTER_TYPE_TIER: Readonly<Record<MonsterType, number>> = {
   runt: 0,
-  regular: 5,
-  elite: 10,
-  miniBoss: 15,
-  boss: 20,
+  regular: 3,
+  elite: 6,
+  miniBoss: 9,
+  boss: 12,
 }
 
 /**

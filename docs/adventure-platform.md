@@ -415,8 +415,9 @@ a whole exchange per strike (its own dodge offer, hit roll, crit and damage
 draw), which is what makes a Juggler's two blows at 60% a different thing
 from one blow at 120% rather than a rounding difference.
 
-**Ranks are tiers and packs are rolled.** runt 0, regular 5, elite 10, mini
-boss 15, boss 20, plus one per level past the first — one and not five, so
+**Ranks are tiers and packs are rolled.** runt 0, regular 3, elite 6, mini
+boss 9, boss 12 (re-based from 0/5/10/15/20 for the tier-0 start, see the
+design doc's foot), plus one per level past the first — one and not five, so
 the rungs stay legible for a whole run. The "group" rank is gone: a runt
 always has a friend and usually two, an ordinary monster has one half the
 time, and anything elite or above travels alone
@@ -2241,8 +2242,8 @@ placed at 5, 9 and 10 and the level advancing after ten.
 
 105. **THE GUARDIAN ANGEL** (`model/guardian.ts`) is what makes entry 104
      survivable: a hidden FLOOR under the run's luckiness, `LUCKINESS_INITIAL`
-     60% on the first level, `LUCKINESS_INITIAL_DECAY` 20% less each level,
-     gone by the fourth.
+     30% on the first level, `LUCKINESS_INITIAL_DECAY` 15% less each level,
+     gone by the third (it was 60/20 while combat was not reading it at all).
 
      **A FLOOR, not an addend**: it supersedes the reader's Luckiness slider
      only while it is higher, so somebody who turned theirs up never meets it.

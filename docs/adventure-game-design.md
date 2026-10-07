@@ -1251,3 +1251,15 @@ dealt without seeing the dice.
   swing at 2000% on four defends in five -- and was the whole of why
   Skirmisher cleared every run it was given. `validateContent` now refuses a
   counter above 2.
+- **THE DIFFICULTY CURVE, re-based for the tier-0 start** (2026-10-07, decided
+  by the project's game-direction session while Joe had handed it game
+  direction; each is one constant and easy to revert). Measured with
+  `npm run adventure:balance`:
+  - The rank ladder is runt 0, regular 3, elite 6, mini boss 9, boss 12 (was
+    0/5/10/15/20, written when a player started at tier 5). Still +1 a level.
+  - A pack member is the design's smaller **Group** creature: 60% of a lone
+    one's health and actions (`PACK_MEMBER_SHARE`), a blow still one member's.
+  - The guardian is 30% falling 15 a level (was 60/20). Combat had been
+    reading the run record's thumb instead of `runTuning`, so the guardian
+    never reached a roll; with that fixed, 60% made the first three levels
+    unlosable for every non-random player.

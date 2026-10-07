@@ -10,8 +10,8 @@
 // So the first levels come with a thumb already on the scale, and it lifts
 // off by itself:
 //
-//   level 1   60%      level 3   20%
-//   level 2   40%      level 4+   0%
+//   level 1   30%      level 3    0%
+//   level 2   15%
 //
 // It is a FLOOR, not a setting and not an addend: it supersedes the reader's
 // own Luckiness slider only while it is higher, so a player who has turned
@@ -25,10 +25,10 @@
 // The two numbers are named so they can be tuned without reading this.
 
 /** What the floor is worth on the first level, as a percentage. */
-export const LUCKINESS_INITIAL = 60
+export const LUCKINESS_INITIAL = 30
 
 /** How much of it is given back at the end of each level, as a percentage. */
-export const LUCKINESS_INITIAL_DECAY = 20
+export const LUCKINESS_INITIAL_DECAY = 15
 
 /**
  * The floor for this level, as a FRACTION (0..1), which is the unit

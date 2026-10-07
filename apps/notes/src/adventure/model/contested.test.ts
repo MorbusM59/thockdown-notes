@@ -261,9 +261,9 @@ describe('a group is one hydra', () => {
     expect(actionsRemaining(group, 0, 0)).toBe(group.maxActions)
     // One member down costs a member's worth even though the group had spent
     // none -- the casualty is assumed to be the one that would have gone last.
-    expect(actionsRemaining(group, band, 0)).toBe(group.maxActions - perMember)
+    expect(actionsRemaining(group, band, 0)).toBe(Math.floor(group.maxActions - perMember))
     // Spending and dying both apply; a death does not refund what was spent.
-    expect(actionsRemaining(group, band, 2)).toBe(group.maxActions - perMember - 2)
+    expect(actionsRemaining(group, band, 2)).toBe(Math.floor(group.maxActions - perMember - 2))
   })
 
   it('floors at zero rather than going negative', () => {

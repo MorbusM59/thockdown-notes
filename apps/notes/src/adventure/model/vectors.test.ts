@@ -111,7 +111,7 @@ describe('the tier, split by the weights', () => {
 
 describe('the rank ladder', () => {
   it('is the design\'s own table, and rises by one per level', () => {
-    expect(MONSTER_TYPE_TIER).toEqual({ runt: 0, regular: 5, elite: 10, miniBoss: 15, boss: 20 })
+    expect(MONSTER_TYPE_TIER).toEqual({ runt: 0, regular: 3, elite: 6, miniBoss: 9, boss: 12 })
     for (const type of MONSTER_TYPES) {
       expect(monsterTier(type, 1)).toBe(MONSTER_TYPE_TIER[type])
       expect(monsterTier(type, 7)).toBe(MONSTER_TYPE_TIER[type] + 6)
@@ -134,11 +134,11 @@ describe('the rank ladder', () => {
 
   it('puts the player\'s ceiling where the fame purchases put it', () => {
     expect(MAX_FAME_TIER).toBe(BASE_PLAYER_TIER + TIER_PER_FAME_POINT * MAX_TIER_PURCHASES)
-    // ...and a fully ascended player is worth more than a first-level boss
-    // and less than a late one, which is the shape the ladder is meant to
-    // have: the top of a run meets the bosses somewhere in the middle of it.
+    // ...and fame alone outgrows a first-level boss but not a boss past the
+    // end of a twelve-level run: the ladder is based for a tier-0 start, and
+    // a run's EARNED tier (one per stat point awarded) comes on top of this.
     expect(MAX_FAME_TIER).toBeGreaterThan(monsterTier('boss', 1))
-    expect(MAX_FAME_TIER).toBeLessThan(monsterTier('boss', 12))
+    expect(MAX_FAME_TIER).toBeLessThan(monsterTier('boss', 15))
   })
 
   it('lets only the weak ranks travel', () => {
