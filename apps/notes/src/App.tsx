@@ -5166,12 +5166,7 @@ function App() {
   queueAppStateSaveRef.current = queueAppStateSave
 
   const chooseExportFolder = useCallback(async () => {
-    const exportApi = window.thockdownExport
-    const selectExportFolder = exportApi
-      ? exportApi.selectExportFolder
-      : () => window.ipcRenderer?.invoke<string | null>('select-export-folder')
-
-    const folderPath = await selectExportFolder()
+    const folderPath = await window.thockdownExport?.selectExportFolder()
     if (!folderPath) return null
 
     setExportFolder(folderPath)
@@ -7491,18 +7486,13 @@ ${markdownHtml}
     setIsExportingPdf(true)
 
     try {
-      const exportApi = window.thockdownExport
-      const exportPdf = exportApi
-        ? exportApi.exportPdf
-        : (folderPath: string, fileName: string, htmlContent?: string) => window.ipcRenderer?.invoke<{ ok: boolean; path?: string; error?: string }>('export-pdf', folderPath, fileName, htmlContent)
-
       const folderPath = exportFolder ?? await chooseExportFolder()
       if (!folderPath) return
 
       const exported = await buildExportMarkdown(scope)
       if (!exported) return
       const htmlContent = await buildExportHtmlContent(exported.text, exported.title)
-      const result = await exportPdf(folderPath, `${exported.title}.pdf`, htmlContent)
+      const result = await window.thockdownExport?.exportPdf(folderPath, `${exported.title}.pdf`, htmlContent)
 
       if (!result?.ok) {
         console.error('Export PDF failed', result?.error)
@@ -7525,7 +7515,7 @@ ${markdownHtml}
 
       const exported = await buildExportMarkdown(scope)
       if (!exported) return
-      const result = await window.ipcRenderer?.invoke<{ ok: boolean; error?: string }>('export-md', folderPath, `${exported.title}.md`, exported.text)
+      const result = await window.thockdownExport?.exportMarkdown(folderPath, `${exported.title}.md`, exported.text)
 
       if (!result?.ok) {
         console.error('Export MD failed', result?.error)

@@ -415,8 +415,8 @@ export function createPreviewMarkdownComponents(
       const handleExternalLinkClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
         event.preventDefault()
         if (!normalizedHref) return
-        if (window.ipcRenderer && typeof window.ipcRenderer.invoke === 'function') {
-          void window.ipcRenderer.invoke('open-external-url', normalizedHref)
+        if (window.thockdownExport) {
+          void window.thockdownExport.openExternalUrl(normalizedHref)
         } else {
           window.open(normalizedHref, '_blank', 'noopener,noreferrer')
         }
