@@ -1314,3 +1314,7 @@ dealt without seeing the dice.
   species can still be met anywhere. Every monster species is favoured by
   exactly one region, and the region's detail names its favourites.
   Reverting means emptying `favours`; the draw is then uniform as before.
+  The ember wastes favour the heaviest hitters (Drake, Manticore, Orc) and
+  the island and caves lighter ones, so a region is also a choice of risk;
+  whether that is wanted is the author's call. A run in progress keeps its
+  stored offers, but its next draws may name different species.

@@ -199,10 +199,13 @@ export function mostSelectedEncounterPool(
  * WHAT A MONSTER MAY BE DRAWN FROM, in one place.
  *
  * Every build and every class, and the species that are NOT one of the
- * peoples, with the current region's favourites weighted up. That last filter is the only asymmetry between the two sides of
+ * peoples. That last filter is the only asymmetry between the two sides of
  * the game and it lives here rather than at the two call sites (the hub and
  * the hunt), because a rule stated at two of them is a rule the third will
  * not know about.
+ *
+ * The current region's favourites are weighted up here too (`favoured`,
+ * drawn by `pickSpecies`), for the same reason: both callers get it.
  */
 export function monsterPools(content: {
   builds: readonly Build[]

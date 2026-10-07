@@ -749,8 +749,10 @@ These block a playable game and want answers rather than guesses.
    function. **The decision is which way to close the gap** — ten choices, or
    smaller cells, or a larger panel — and the third test in that file is what
    fails the day someone assumes it was settled.
-9. **Regions** carry a name, the omen traits and (a director's call, see the foot of the design doc) favoured monsters. Which encounters and
-    monsters each brings into scope is unspecified.
+9. **Regions** carry a name, the omen's traits, and favoured monsters
+   drawn three times as often (a revertible director's call, recorded at the
+   foot of the design doc). Which encounter kinds a region brings, and any
+   hard limit on what may appear there, is unspecified.
 10. **A second game slot.** The save is shaped for it (`games` is a list,
     `activeGameId` says which is live). Continuing now resumes the EXACT
     screen, because leaving no longer discards the stack — it is suspended

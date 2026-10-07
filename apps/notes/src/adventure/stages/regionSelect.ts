@@ -39,7 +39,7 @@ export const regionSelectStage: StageModule = {
         title: region.name,
         lines: [
           ...region.borders,
-          region.favours
+          'Common: ' + region.favours
             .map((id) => context.content.species.find((species) => species.id === id)?.name)
             .filter((name): name is string => !!name)
             .join(', '),

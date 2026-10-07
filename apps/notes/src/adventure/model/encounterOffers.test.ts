@@ -178,6 +178,15 @@ describe('what a region makes common', () => {
     expect([...favoured].sort()).toEqual([...monsters].sort())
   })
 
+  it('never favours a whole encounter pool, which would leave its draw uniform', () => {
+    for (const region of THOCKQUEST.regions) {
+      for (const pool of ENCOUNTER_POOL_IDS) {
+        const species = monsterPools(THOCKQUEST, pool).species
+        expect(species.every((candidate) => region.favours.includes(candidate.id))).toBe(false)
+      }
+    }
+  })
+
   it('draws a favoured species REGION_FAVOUR_WEIGHT times as often as the rest of its pool', () => {
     // The weighted draw is exact over the summed weights, so the share of a
     // favoured species converges on weight / total; 6000 draws keeps it
