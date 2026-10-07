@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import '@thockdown/look/reset.css';
 
 :root {
   /* Core Editor Variables */
@@ -256,15 +256,15 @@
   background-color: transparent;
 }
 
-.flex { display: flex; }
-.border { border-width: 1px; border-style: solid; }
+/* Single-property utility classes, used by CM6Editor.tsx's overlay markup. */
 .absolute { position: absolute; }
 .left-0 { left: 0; }
 .right-0 { right: 0; }
-.z-10 { z-index: 10; }
 .z-20 { z-index: 20; }
 .pointer-events-none { pointer-events: none; }
 .select-none { user-select: none; }
+.bg-transparent { background-color: transparent; }
+.cursor-ns-resize { cursor: ns-resize; }
 
 .editor-paragraph {
   margin: 0;
