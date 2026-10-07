@@ -1,21 +1,28 @@
-/* The keyboard shortcut reference (components/ShortcutReference.tsx): an
-   opaque overlay over the active slot's stage while Escape is held past the
-   quick-actions menu. Every length here is in em and every row is nowrap,
+/* The keyboard shortcut reference (components/ShortcutReference.tsx): the
+   whole window, blurred the way the quick-actions ring blurs its slot, with
+   the shortcut groups laid out over it as panels while F1 is held.
+
+   Every length that takes LAYOUT space is in em and every row is nowrap,
    which is what lets the component size the text by arithmetic -- a px
-   length or a wrapping line would break the proportionality it relies on. */
-.editor-stage .shortcut-reference {
-  position: absolute;
+   length or a wrapping line would break the proportionality it relies on.
+   Outlines are inset shadows rather than borders for the same reason: a
+   border takes layout width and rounds up to a whole pixel at small sizes.
+   Radii and shadows take no space, so they may stay in the app's own px
+   tokens and match the ring exactly. */
+.shortcut-reference {
+  position: fixed;
   inset: 0;
-  z-index: 20;
+  /* Over the app, under the tooltip layer (controls.css) and the theme's
+     own overlays, which are meant to tint everything. */
+  z-index: 4000;
   display: flex;
-  align-items: center;
-  justify-content: center;
   overflow: hidden;
-  background: linear-gradient(var(--color-input-backdrop), var(--color-input-backdrop)), var(--background-color-root);
+  background: color-mix(in srgb, var(--background-color-root) 35%, transparent);
+  backdrop-filter: blur(4px);
   color: var(--color-text-base);
   font-family: var(--ui-font-family);
-  /* Takes the clicks: the menu under it is out of sight, and a click must
-     not choose a cell the reader cannot see. */
+  /* Takes the clicks: what is under it is out of sight, and a click must
+     not land on a control the reader cannot see. */
   pointer-events: auto;
 }
 
@@ -29,42 +36,94 @@
   align-items: flex-start;
 }
 
+.shortcut-reference .shortcut-ref-measure > * {
+  width: max-content;
+}
+
 .shortcut-reference .shortcut-ref-layout {
+  flex: 1 1 auto;
   display: flex;
-  flex-direction: row;
-  align-items: flex-start;
+  flex-direction: column;
   gap: var(--shortcut-ref-gap);
   padding: var(--shortcut-ref-padding);
+  min-width: 0;
+}
+
+.shortcut-reference .shortcut-ref-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4em;
+  white-space: nowrap;
+  line-height: 1.5;
+}
+
+.shortcut-reference .shortcut-ref-title {
+  margin-right: auto;
+  padding-right: 1em;
+  font-size: 1.15em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--color-text-80);
+}
+
+.shortcut-reference .shortcut-ref-columns {
+  flex: 1 1 auto;
+  display: flex;
+  gap: var(--shortcut-ref-gap);
 }
 
 .shortcut-reference .shortcut-ref-column {
+  flex: 1 0 auto;
   display: flex;
   flex-direction: column;
   gap: var(--shortcut-ref-gap);
 }
 
+/* A panel is drawn like one of the ring's cells, grown into a card: the
+   same background, outline and radius, the pressed-in shadow the ring's
+   focused cell wears. */
 .shortcut-reference .shortcut-ref-section {
-  width: max-content;
+  flex: 1 0 auto;
+  padding: 0.8em 1.1em 0.9em;
   white-space: nowrap;
   line-height: 1.5;
+  background: var(--btn-bg-default);
+  border-radius: var(--border-radius-regular);
+  box-shadow: inset 0 0 0 1px var(--btn-border-default);
 }
 
 .shortcut-reference .shortcut-ref-section h3 {
-  margin: 0 0 0.35em;
-  padding-bottom: 0.2em;
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  margin: 0 0 0.6em;
   font-size: 0.8em;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--color-text-60);
-  border-bottom: 0.08em solid var(--color-text-20);
+}
+
+/* The group's icon in a square chip: a ring cell in miniature. */
+.shortcut-reference .shortcut-ref-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.2em;
+  height: 2.2em;
+  font-size: 1.15em;
+  letter-spacing: 0;
+  border-radius: var(--border-radius-regular);
+  background: var(--btn-bg-hover);
+  box-shadow: inset 0 0 0 1px var(--btn-border-active), var(--box-shadow-inverted-harsh-active);
+  color: var(--color-text-70);
 }
 
 .shortcut-reference .shortcut-ref-rows {
   display: grid;
-  grid-template-columns: max-content max-content;
+  grid-template-columns: max-content 1fr;
   column-gap: 1em;
-  row-gap: 0.25em;
+  row-gap: 0.3em;
 }
 
 .shortcut-reference .shortcut-ref-row {
@@ -88,9 +147,6 @@
   font-size: 0.8em;
   line-height: 1.3;
   padding: 0 0.45em;
-  /* Drawn as an inset shadow, not a border: a border rounds up to 1px at
-     small sizes and takes layout width, which breaks the proportionality
-     the sizing arithmetic depends on. A shadow takes no layout at all. */
   box-shadow: inset 0 0 0 0.08em var(--color-text-30), inset 0 -0.14em 0 var(--color-text-30);
   border-radius: 0.35em;
   background: var(--bg-menu-card);

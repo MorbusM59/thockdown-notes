@@ -16,7 +16,9 @@
 // A few declarations are DESCRIBED here but matched by something that cannot
 // read this table: CodeMirror's own default and history keymaps (undo, redo,
 // word delete, Shift+Enter), the escape hold (`shared/escapeHold.ts`, a
-// gesture over time rather than a chord), and the quick-actions ring's dial
+// gesture over time rather than a chord), the help key's hold
+// (`shared/useHelpKey.ts`, which matches the tap's own declaration and tells
+// a hold by its duration), and the quick-actions ring's dial
 // (`editorSection/EscapeHoldPanel.tsx`). Those carry `matchedBy`, so the
 // claim "this table is what the handlers read" stays checkable entry by entry.
 //
@@ -42,11 +44,11 @@ export interface KeyChord {
 }
 
 /** How the chord is pressed, for the reader; a plain press when absent. */
-export type ShortcutPress = 'hold' | 'hold-again'
+export type ShortcutPress = 'hold'
 
 export type ShortcutGroupId =
   | 'notes'
-  | 'escape'
+  | 'views'
   | 'find'
   | 'formatting'
   | 'editing'
@@ -70,18 +72,19 @@ export interface ShortcutDeclaration {
    * Set when no handler matches this declaration through `matchShortcut`,
    * naming what binds the key instead -- see the module comment.
    */
-  matchedBy?: 'codemirror' | 'escape-hold' | 'ring'
+  matchedBy?: 'codemirror' | 'escape-hold' | 'help-key' | 'ring'
 }
 
-export const SHORTCUT_GROUPS: ReadonlyArray<{ id: ShortcutGroupId; title: string }> = [
-  { id: 'notes', title: 'Notes & slots' },
-  { id: 'escape', title: 'Escape' },
-  { id: 'find', title: 'Find' },
-  { id: 'formatting', title: 'Formatting' },
-  { id: 'editing', title: 'Editing' },
-  { id: 'chapters', title: 'Chapters' },
-  { id: 'tables', title: 'In a table' },
-  { id: 'menu', title: 'Quick actions menu' },
+/** The reader-facing groups, in reading order, each with the Font Awesome icon its panel wears. */
+export const SHORTCUT_GROUPS: ReadonlyArray<{ id: ShortcutGroupId; title: string; icon: string }> = [
+  { id: 'views', title: 'Views & help', icon: 'fa-solid fa-eye' },
+  { id: 'notes', title: 'Notes & slots', icon: 'fa-solid fa-note-sticky' },
+  { id: 'find', title: 'Find', icon: 'fa-solid fa-magnifying-glass' },
+  { id: 'formatting', title: 'Formatting', icon: 'fa-solid fa-bold' },
+  { id: 'editing', title: 'Editing', icon: 'fa-solid fa-pen' },
+  { id: 'chapters', title: 'Chapters', icon: 'fa-solid fa-bookmark' },
+  { id: 'tables', title: 'In a table', icon: 'fa-solid fa-table' },
+  { id: 'menu', title: 'Quick actions menu', icon: 'fa-solid fa-circle-notch' },
 ]
 
 const ARROWS_LR: readonly KeyChord[] = [{ key: 'ArrowLeft' }, { key: 'ArrowRight' }]
@@ -101,9 +104,10 @@ export const SHORTCUTS = {
     label: 'Nearest flagged line, else start / end',
   },
 
-  toggleView: { group: 'escape', chords: [{ key: 'Escape' }], label: 'Edit / render view', matchedBy: 'escape-hold' },
-  quickActions: { group: 'escape', chords: [{ key: 'Escape' }], press: 'hold', label: 'Quick actions menu', matchedBy: 'escape-hold' },
-  shortcutReference: { group: 'escape', chords: [{ key: 'Escape' }], press: 'hold-again', label: 'This reference, while held', matchedBy: 'escape-hold' },
+  toggleView: { group: 'views', chords: [{ key: 'Escape' }], label: 'Edit / render view', matchedBy: 'escape-hold' },
+  quickActions: { group: 'views', chords: [{ key: 'Escape' }], press: 'hold', label: 'Quick actions menu', matchedBy: 'escape-hold' },
+  userGuide: { group: 'views', chords: [{ key: 'F1' }], label: 'Open / close the User Guide' },
+  shortcutReference: { group: 'views', chords: [{ key: 'F1' }], press: 'hold', label: 'These shortcuts, while held', matchedBy: 'help-key' },
 
   find: { group: 'find', chords: [{ key: 'f', ctrl: true }], label: 'Find in note' },
   findReplace: { group: 'find', chords: [{ key: 'h', ctrl: true }], label: 'Find & replace' },
@@ -199,6 +203,7 @@ const KEY_NAMES: Record<string, string> = {
   Delete: 'Delete',
   Enter: 'Enter',
   Tab: 'Tab',
+  F1: 'F1',
   F11: 'F11',
 }
 
@@ -250,7 +255,7 @@ export function displayChords(declaration: ShortcutDeclaration, mac: boolean = i
   return groups
 }
 
-const PRESS_PREFIX: Record<ShortcutPress, string> = { hold: 'Hold ', 'hold-again': 'Hold again ' }
+const PRESS_PREFIX: Record<ShortcutPress, string> = { hold: 'Hold ' }
 
 /** Plain text, for the User Guide's table: `Hold Esc`, `F11 or Ctrl+Shift+Space`. */
 export function formatShortcut(declaration: ShortcutDeclaration, mac: boolean = isMacPlatform()): string {

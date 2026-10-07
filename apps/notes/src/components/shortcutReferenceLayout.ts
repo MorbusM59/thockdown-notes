@@ -1,4 +1,4 @@
-// How the shortcut reference's sections are arranged and sized to a slot --
+// How the shortcut reference's panels are arranged and sized to the window --
 // see ShortcutReference.tsx's header for why this is arithmetic rather than a
 // search.
 
@@ -7,8 +7,8 @@ export const BASE_FONT_PX = 16
 export const GAP_EM = 1.25
 /** The panel's own inner margin, in em. */
 export const PADDING_EM = 1.5
-/** A large slot does not get poster-sized text. */
-const MAX_FONT_PX = 26
+/** A large window does not get poster-sized text. */
+const MAX_FONT_PX = 24
 /** What sub-pixel rounding can add back when the layout is drawn at the solved size. */
 const ROUNDING_HEADROOM = 0.98
 
@@ -56,20 +56,33 @@ function partition(heights: number[], count: number, gap: number): number[][] {
   return columns
 }
 
-export function arrangeSections(sizes: SectionSize[], availableWidth: number, availableHeight: number): Arrangement {
+/**
+ * The column count, and the font size, at which the panels can be drawn
+ * largest in `availableWidth` x `availableHeight`. `sizes` are the panels and
+ * `header` the title row above them, all measured at BASE_FONT_PX; every
+ * length scales with the font, so the arrangement drawn at `fontPx` occupies
+ * exactly `fontPx / BASE_FONT_PX` times what is computed here.
+ */
+export function arrangeSections(
+  sizes: SectionSize[],
+  header: SectionSize,
+  availableWidth: number,
+  availableHeight: number,
+): Arrangement {
   const gap = GAP_EM * BASE_FONT_PX
   const padding = PADDING_EM * BASE_FONT_PX * 2
   let bestArrangement: Arrangement = { columns: [sizes.map((_, index) => index)], fontPx: 0 }
   for (let count = 1; count <= sizes.length; count += 1) {
     const columns = partition(sizes.map((size) => size.height), count, gap)
-    const width = columns.reduce((sum, column) => sum + Math.max(...column.map((index) => sizes[index].width)), 0)
-      + gap * (count - 1) + padding
+    const columnsWidth = columns.reduce((sum, column) => sum + Math.max(...column.map((index) => sizes[index].width)), 0)
+      + gap * (count - 1)
+    const width = Math.max(columnsWidth, header.width) + padding
     const height = Math.max(...columns.map((column) =>
-      column.reduce((sum, index) => sum + sizes[index].height, 0) + gap * (column.length - 1))) + padding
-    const scale = Math.min(availableWidth / width, availableHeight / height)
+      column.reduce((sum, index) => sum + sizes[index].height, 0) + gap * (column.length - 1)))
+      + header.height + gap + padding
+    const scale = Math.max(0, Math.min(availableWidth / width, availableHeight / height))
     const fontPx = Math.min(MAX_FONT_PX, BASE_FONT_PX * scale * ROUNDING_HEADROOM)
     if (fontPx > bestArrangement.fontPx) bestArrangement = { columns, fontPx }
   }
   return bestArrangement
 }
-

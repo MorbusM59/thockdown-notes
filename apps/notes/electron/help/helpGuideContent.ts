@@ -63,6 +63,7 @@ You can
 - hit **Ctrl+N** to create a [**new note**](${guideLink('NOTES-EDITING', 'creating-notes')}),
 - [**toggle**](${guideLink('NOTES-EDITING', 'edit-and-preview-modes')}) between editor and renderer using the **Escape**-key,
 - **hold Escape** to bring up the [quick access note menu](${guideLink('NOTES-EDITING', 'quick-actions-menu')}),
+- **hold F1** to see every [keyboard shortcut](${guideLink('SHORTCUTS')}) at a glance for as long as you hold it, or tap **F1** to open and close this guide,
 - use the [**side bar**](${guideLink('SIDEBAR-SEARCH', 'sidebar-views')}) to find the notes you created again later and (**menu** button to the left of the bar above)
 - create additional editor [**slots**](${guideLink('SPLIT-VIEW-TABS', 'opening-a-slot')}) for side by side work (**plus** button to the right of the bar above).
 
@@ -725,7 +726,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 > **Where?**
 > Global — active anywhere the app has focus, except inside search/replace/tag fields (where \`Tab\` / \`Enter\` / \`Esc\` move focus back into the editor instead).
 
-*Every keyboard shortcut in the app, in one table. Keep holding Escape after the quick actions menu appears, or hold it again from the menu, to see the same list over your note for as long as you hold it.*
+*Every keyboard shortcut in the app, in one table. Hold \`F1\` to see the same list over the whole window for as long as you hold it; a quick press of \`F1\` opens or closes this guide.*
 
 ${shortcutTable()}
 
