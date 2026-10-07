@@ -76,6 +76,13 @@ export interface Region {
    * choice of what to face most, not of what can never be met.
    */
   favours: readonly string[]
+  /**
+   * Added to the starting chance of every reward check won here, loot and
+   * motes alike (model/rewards.ts's `rewardFor`), in the same units as a
+   * monster rank's bonus: 0.5 is what an elite adds. What makes a region
+   * whose favourites hit harder worth entering rather than a trap.
+   */
+  rewardBonus: number
 }
 
 export interface Content {
@@ -150,6 +157,16 @@ export function rolledPool(content: Content, runSeed: RngState, kind: 'item' | '
  * time, so a content error is a failing test on somebody's branch, never a
  * crash in somebody's evening.
  */
+/**
+ * The region a run is in, or undefined before one is chosen (or when its id
+ * names a region the content no longer has). The one lookup every stage
+ * uses, so the missing case is answered once: no region favours nothing and
+ * adds nothing to rewards.
+ */
+export function regionOf(content: Pick<Content, 'regions'>, regionId: string | null | undefined): Region | undefined {
+  return content.regions.find((region) => region.id === regionId)
+}
+
 export function validateContent(content: Content): string[] {
   const problems: string[] = []
   const seen = new Set<string>()
@@ -285,6 +302,7 @@ export function validateContent(content: Content): string[] {
 
   for (const region of content.regions) {
     check(region.id, `region "${region.name}"`)
+    if (!(region.rewardBonus >= 0)) problems.push(`region "${region.id}" has a negative or missing reward bonus`)
     for (const speciesId of region.favours) {
       const species = content.species.find((candidate) => candidate.id === speciesId)
       if (!species || species.playable) problems.push(`region "${region.id}" favours "${speciesId}", which is not a monster species`)

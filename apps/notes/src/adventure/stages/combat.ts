@@ -19,6 +19,7 @@
 // already succeeded is the platform's own rule -- picking Dodge cannot fail,
 // because Dodge being there IS the success.
 
+import { regionOf } from '../content'
 import type { JsonObject } from '../core/json'
 import type { StageModule, Transition } from '../core/stage'
 import type { RngState, Roll } from '../core/rng'
@@ -683,8 +684,9 @@ function stepFight(options: {
 
     if (status === 'monstersDefeated' || status === 'monsterFled') {
       const stats = context.profile?.stats
+      const regionBonus = regionOf(context.content, context.game?.regionId)?.rewardBonus ?? 0
       const reward = stats
-        ? rewardFor(stats, monster.type, rng)
+        ? rewardFor(stats, monster.type, regionBonus, rng)
         : { reward: { lootScreens: 1, motes: 1 }, rng }
       return {
         kind: 'replace',

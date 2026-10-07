@@ -53,9 +53,9 @@ const MAX_STEPS = 2_500
 const RESIDUAL: Readonly<Record<string, number>> = {
   // A class IS its moves, one line each, and three moves are wider than the
   // strip by themselves. Asked once per run.
-  'characterCreation:class': 0.78,
+  'characterCreation:class': 0.73,
   // Up to five effects, the species' whole identity. Asked once per run.
-  'characterCreation:species': 0.22,
+  'characterCreation:species': 0.23,
   // The omen's traits beside its line, and the pill saying what was taken.
   encounterSelect: 0.19,
   // Market and spoils: a modifier beside the pill saying what was just bought or taken.

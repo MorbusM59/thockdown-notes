@@ -13,7 +13,7 @@ const block = (over: Partial<StatBlock> = {}): StatBlock => ({ ...createStatBloc
 function guaranteedScreens(type: MonsterType, stats: StatBlock): number {
   let fewest = Number.POSITIVE_INFINITY
   for (let seed = 1; seed <= 400; seed += 1) {
-    fewest = Math.min(fewest, rewardFor(stats, type, seed).reward.lootScreens)
+    fewest = Math.min(fewest, rewardFor(stats, type, 0, seed).reward.lootScreens)
   }
   return fewest
 }
@@ -46,7 +46,7 @@ describe('the escalating reward check', () => {
     const lucky = block({ luck: 6 })
     let best = 0
     for (let seed = 1; seed <= 400; seed += 1) {
-      best = Math.max(best, rewardFor(lucky, 'regular', seed).reward.lootScreens)
+      best = Math.max(best, rewardFor(lucky, 'regular', 0, seed).reward.lootScreens)
     }
     expect(best).toBeGreaterThanOrEqual(3)
   })
@@ -54,7 +54,7 @@ describe('the escalating reward check', () => {
   it('always pays at least one screen and one mote', () => {
     for (const type of MONSTER_TYPES) {
       for (let seed = 1; seed <= 60; seed += 1) {
-        const { reward } = rewardFor(block(), type, seed)
+        const { reward } = rewardFor(block(), type, 0, seed)
         expect(reward.lootScreens).toBeGreaterThanOrEqual(1)
         expect(reward.motes).toBeGreaterThanOrEqual(BASE_MOTES_PER_ENCOUNTER)
       }
@@ -66,10 +66,20 @@ describe('the escalating reward check', () => {
     let screens = 0
     let motes = 0
     for (let seed = 1; seed <= 300; seed += 1) {
-      const { reward } = rewardFor(block({ luck: 6 }), 'regular', seed)
+      const { reward } = rewardFor(block({ luck: 6 }), 'regular', 0, seed)
       screens += reward.lootScreens
       motes += reward.motes
     }
     expect(screens / 300).toBeGreaterThan(motes / 300)
+  })
+})
+
+describe('a region pays in a rank\'s units', () => {
+  it('pays a regular in a region adding an elite\'s bonus exactly what an elite pays with none', () => {
+    const regionBonus = MONSTER_TYPE_REWARD_BONUS.elite - MONSTER_TYPE_REWARD_BONUS.regular
+    for (let seed = 1; seed <= 200; seed += 1) {
+      expect(rewardFor(block({ luck: 2 }), 'regular', regionBonus, seed))
+        .toEqual(rewardFor(block({ luck: 2 }), 'elite', 0, seed))
+    }
   })
 })

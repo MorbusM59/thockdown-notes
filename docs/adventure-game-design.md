@@ -1321,3 +1321,17 @@ dealt without seeing the dice.
 ### Pinned class and species matrix (2026-10-07)
 - Measured with 8 clever runs to level 8 for every class and player species, pinned. Brawler and Shieldbreaker died far more often than the field, and careful Bruiser runs got less far than careful runs in general.
 - Brawler: Grapple 100% instead of 80%. Shieldbreaker: Pry 100% instead of 90%, so ignoring armor is never paid for with damage. Bruiser: Haymaker −20% to Hit instead of −35%.
+- **A harder region pays more.** Forced into one region every level, a
+  careful player got about 74 encounters into a run in the caves or on the
+  island, 67 in the ruins and 56 in the ember wastes, so the wastes were a
+  trap. A region now adds `rewardBonus` to the starting chance of every
+  reward check won there, in a rank's units (0.5 is an elite's): the wastes
+  +0.2, the ruins +0.1, the rest 0. The fen measured as safe as the caves and
+  gets nothing. At +0.5 the wastes became the safest region outright, since
+  spoils compound. At +0.2 the careful player still does worse there (63
+  encounters), while the lookahead player dies no more often than in the
+  caves (21% against 33% over 24 runs) and earns the most gold of any region,
+  so a strong build is tempted and a weak one is wise to skip it. Weak
+  evidence on both sides: the careful player dies in 88-91% of runs anywhere,
+  and 24 lookahead runs per region is a small sample. The tooltip states the
+  bonus.

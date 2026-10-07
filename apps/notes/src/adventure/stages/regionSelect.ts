@@ -38,13 +38,15 @@ export const regionSelectStage: StageModule = {
       detail: {
         title: region.name,
         lines: [...region.borders],
-        // The monsters it makes common go in the tooltip: beside the border
+        // The monsters it makes common, and the richer spoils that pay for a
+        // harder place, go in the tooltip: beside the border
         // names they push the preview past the chapter bar's edge at the
         // reference layout (choiceWidth.contract.test.ts).
         more: [`Common: ${region.favours
           .map((id) => context.content.species.find((species) => species.id === id)?.name)
           .filter((name): name is string => !!name)
-          .join(', ')}`],
+          .join(', ')}`,
+          ...(region.rewardBonus > 0 ? [`+${Math.round(region.rewardBonus * 100)} to Loot and Motes checks`] : [])],
       },
     })),
   }),

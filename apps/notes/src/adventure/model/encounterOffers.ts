@@ -25,7 +25,7 @@
 // says so.)
 
 import { nextChance, nextInt, nextPick, type RngState } from '../core/rng'
-import type { Build, CombatClass, Region, Species } from '../content'
+import { regionOf, type Build, type CombatClass, type Region, type Species } from '../content'
 import { ENCOUNTER_POOL_IDS, MONSTER_BUDDY_CHANCES, type EncounterPoolId, type MonsterType } from './vectors'
 
 export const LEVEL_ENCOUNTER_COUNT = 10
@@ -217,7 +217,7 @@ export function monsterPools(content: {
     builds: content.builds,
     species: content.species.filter((species) => !species.playable && (!targetPool || species.encounterPool === targetPool)),
     classes: content.combatClasses,
-    favoured: content.regions.find((region) => region.id === regionId)?.favours ?? [],
+    favoured: regionOf(content, regionId)?.favours ?? [],
   }
 }
 

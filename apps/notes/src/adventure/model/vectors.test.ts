@@ -230,6 +230,11 @@ describe('what the content says about itself', () => {
     expect(validateContent(THOCKQUEST)).toEqual([])
   })
 
+  it('rejects a region with a negative reward bonus', () => {
+    const regions = THOCKQUEST.regions.map((region, index) => (index === 0 ? { ...region, rewardBonus: -0.1 } : region))
+    expect(validateContent({ ...THOCKQUEST, regions }).some((problem) => problem.includes('reward bonus'))).toBe(true)
+  })
+
   it('describes a build in the same words the stat table uses', () => {
     // `describeBuild` keeps a local copy of the stat labels to keep this
     // module's imports to the three it needs. This is the check that stops

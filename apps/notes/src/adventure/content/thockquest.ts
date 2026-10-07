@@ -39,13 +39,13 @@ import type { ModifierTemplate } from '../model/modifierSlots'
 // region, so no region is the only way to meet something often, and no
 // region favours a whole encounter pool, since weighting every species in a
 // pool equally leaves its draw exactly uniform.
-const REGION_RING: readonly { id: string; name: string; icon: string; favours: readonly string[] }[] = [
-  { id: 'caves', name: 'A sprawling cave system', icon: 'fa-solid fa-mountain-sun', favours: ['spider', 'kobold', 'troll', 'slime'] },
-  { id: 'foothills', name: 'The foothills of a snowy range', icon: 'fa-solid fa-snowflake', favours: ['wolf', 'bear', 'ogre', 'gargoyle', 'wraith'] },
-  { id: 'ruins', name: 'A city gone to ruin', icon: 'fa-solid fa-archway', favours: ['ghoul', 'lich', 'golem', 'goblin'] },
-  { id: 'fen', name: 'A fever-ridden fen', icon: 'fa-solid fa-frog', favours: ['serpent', 'swarm', 'wisp', 'basilisk'] },
-  { id: 'wastes', name: 'The ember wastes', icon: 'fa-solid fa-volcano', favours: ['drake', 'imp', 'manticore', 'orc'] },
-  { id: 'island', name: 'A remote island', icon: 'fa-solid fa-umbrella-beach', favours: ['harpy', 'boar', 'shade', 'minotaur'] },
+const REGION_RING: readonly { id: string; name: string; icon: string; favours: readonly string[]; rewardBonus: number }[] = [
+  { id: 'caves', name: 'A sprawling cave system', icon: 'fa-solid fa-mountain-sun', favours: ['spider', 'kobold', 'troll', 'slime'], rewardBonus: 0 },
+  { id: 'foothills', name: 'The foothills of a snowy range', icon: 'fa-solid fa-snowflake', favours: ['wolf', 'bear', 'ogre', 'gargoyle', 'wraith'], rewardBonus: 0 },
+  { id: 'ruins', name: 'A city gone to ruin', icon: 'fa-solid fa-archway', favours: ['ghoul', 'lich', 'golem', 'goblin'], rewardBonus: 0.1 },
+  { id: 'fen', name: 'A fever-ridden fen', icon: 'fa-solid fa-frog', favours: ['serpent', 'swarm', 'wisp', 'basilisk'], rewardBonus: 0 },
+  { id: 'wastes', name: 'The ember wastes', icon: 'fa-solid fa-volcano', favours: ['drake', 'imp', 'manticore', 'orc'], rewardBonus: 0.2 },
+  { id: 'island', name: 'A remote island', icon: 'fa-solid fa-umbrella-beach', favours: ['harpy', 'boar', 'shade', 'minotaur'], rewardBonus: 0 },
 ]
 
 /**

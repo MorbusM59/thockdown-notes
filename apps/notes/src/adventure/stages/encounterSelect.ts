@@ -25,6 +25,7 @@
 // here and not threaded in: this stage is re-entered once per encounter and
 // has no way to count its own re-entries.
 
+import { regionOf } from '../content'
 import type { JsonObject } from '../core/json'
 import type { StageModule } from '../core/stage'
 import { ENCOUNTER_TRACKS, monsterPools, buildEncounterOffers, fixedTypeAt, LEVEL_ENCOUNTER_COUNT, mostSelectedEncounterPool, trackChoicesFor } from '../model/encounterOffers'
@@ -93,7 +94,7 @@ export const encounterSelectStage: StageModule = {
     // one entry: the player answers the omen, the stage stays, and the boss
     // it already drew is underneath -- no re-entry, no second draw, and the
     // monster cannot change because you took a heal.
-    const region = context.content.regions.find((candidate) => candidate.id === context.game?.regionId)
+    const region = regionOf(context.content, context.game?.regionId)
     const pool = omenPool(region, context.traits, context.held)
     const omen = drawOmenTraits(
       pool,
