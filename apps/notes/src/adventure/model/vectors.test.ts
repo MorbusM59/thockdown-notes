@@ -4,7 +4,7 @@ import { THOCKQUEST } from '../content'
 import { validateContent } from '../content'
 import {
   BASE_PLAYER_TIER, MAX_FAME_TIER, MAX_TIER_PURCHASES, MONSTER_BUDDY_CHANCES, MONSTER_TYPES, MONSTER_TYPE_TIER,
-  TIER_PER_FAME_POINT, buildModifier, buildWeightInitials, describeBuild, monsterTier, MONSTER_TIER_PER_LEVEL, statsFromTier,
+  TIER_PER_FAME_POINT, buildModifier, buildWeightInitials, describeBuild, monsterTier, MONSTER_TIER_PER_LEVEL, MONSTER_TIER_LATE_EXTRA, MONSTER_TIER_RAMP_LEVEL, statsFromTier,
 } from './vectors'
 import { STAT_KEYS, STAT_LABELS } from './stats'
 import { armMove, describeMove, strikesOf } from './moves'
@@ -110,11 +110,11 @@ describe('the tier, split by the weights', () => {
 })
 
 describe('the rank ladder', () => {
-  it('is the design\'s own table, and rises by MONSTER_TIER_PER_LEVEL a level', () => {
+  it('is the design\'s own table, and rises along the level ramp', () => {
     expect(MONSTER_TYPE_TIER).toEqual({ runt: 0, regular: 3, elite: 6, miniBoss: 9, boss: 12 })
     for (const type of MONSTER_TYPES) {
       expect(monsterTier(type, 1)).toBe(MONSTER_TYPE_TIER[type])
-      expect(monsterTier(type, 7)).toBe(MONSTER_TYPE_TIER[type] + 6 * MONSTER_TIER_PER_LEVEL)
+      expect(monsterTier(type, 7)).toBe(MONSTER_TYPE_TIER[type] + 6 * MONSTER_TIER_PER_LEVEL + (7 - MONSTER_TIER_RAMP_LEVEL) * MONSTER_TIER_LATE_EXTRA)
       // A level below the first is not a thing, and reads as the first.
       expect(monsterTier(type, 0)).toBe(MONSTER_TYPE_TIER[type])
     }

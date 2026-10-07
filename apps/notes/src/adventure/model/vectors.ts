@@ -193,23 +193,33 @@ export const MONSTER_TYPE_TIER: Readonly<Record<MonsterType, number>> = {
 }
 
 /**
- * A monster's tier: its rank's, plus `MONSTER_TIER_PER_LEVEL` for every
- * level past the first. Kept below the rank gap so the rungs stay legible
+ * A monster's tier: its rank's, plus the level ramp above. Kept below the rank gap so the rungs stay legible
  * for a whole run: a level-12 regular is still plainly weaker than a
  * level-12 elite.
  */
 /**
- * What a level adds to every rank. TWO, not the design's one: a player earns
- * about one stat point a level and each is worth two points of build (one
- * tier, one placed), so at one a level the ladder fell behind and the late
- * levels stopped being a test (adventure:balance, careful player: 47% won
- * all twelve at one, 18% at two). The rank gap (three) still exceeds it, so
- * a rank is never overtaken by the rank below it on the same level.
+ * What a level adds to every rank: ONE a level, and from `MONSTER_TIER_RAMP_LEVEL`
+ * on, `MONSTER_TIER_LATE_EXTRA` more on top -- four a level in the late game.
+ *
+ * A late RAMP rather than one constant, because one constant could not serve
+ * both ends: two a level from the start killed a careful player in the first
+ * few levels while a strong run still outgrew everything after level seven
+ * (adventure:balance, 12 levels: clever won 91%). Gentle early lets a careful
+ * player reach the middle of the game; steep late makes the last levels test
+ * the runs that compounded an early lead. Measured at 1 + 3 from level 6:
+ * clever wins 57% with its losses spread over levels 3 to 12, careful wins 9%.
+ * Every rank gets the same addition at a level, so the ranks keep their
+ * order and their gaps on any one level whatever the ramp is.
  */
-export const MONSTER_TIER_PER_LEVEL = 2
+export const MONSTER_TIER_PER_LEVEL = 1
+export const MONSTER_TIER_RAMP_LEVEL = 6
+export const MONSTER_TIER_LATE_EXTRA = 3
 
 export function monsterTier(type: MonsterType, level: number): number {
-  return MONSTER_TYPE_TIER[type] + MONSTER_TIER_PER_LEVEL * Math.max(0, Math.floor(level) - 1)
+  const at = Math.floor(level)
+  return MONSTER_TYPE_TIER[type]
+    + MONSTER_TIER_PER_LEVEL * Math.max(0, at - 1)
+    + MONSTER_TIER_LATE_EXTRA * Math.max(0, at - MONSTER_TIER_RAMP_LEVEL)
 }
 
 /**

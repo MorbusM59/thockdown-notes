@@ -7,7 +7,7 @@ import { clampProgression, PROGRESSION_MAX, PROGRESSION_MIN, PROGRESSION_STEP, p
 import { chanceAtDelta, COUNTER_STATS, contestedStat, pressThumb, resolveChance } from './chance'
 import { createStatBlock, deriveStats, DODGE_CHANCE, STAT_KEYS } from './stats'
 import { testMonster } from '../testing/monster'
-import { monsterTier, MONSTER_TIER_PER_LEVEL, statsFromTier, type Species } from './vectors'
+import { monsterTier, MONSTER_TIER_PER_LEVEL, MONSTER_TIER_LATE_EXTRA, MONSTER_TIER_RAMP_LEVEL, statsFromTier, type Species } from './vectors'
 import { rollCount } from './encounterOffers'
 import { totalArmor } from './armor'
 
@@ -155,10 +155,12 @@ describe('monster ranks', () => {
     // THE PROPERTY, across the whole ladder, rather than one reading.
     for (const type of MONSTER_TYPES) {
       for (let level = 1; level <= 12; level += 1) {
-        expect(monsterTier(type, level)).toBe(monsterTier(type, 1) + MONSTER_TIER_PER_LEVEL * (level - 1))
+        const step = MONSTER_TIER_PER_LEVEL + (level > MONSTER_TIER_RAMP_LEVEL ? MONSTER_TIER_LATE_EXTRA : 0)
+        if (level > 1) expect(monsterTier(type, level) - monsterTier(type, level - 1)).toBe(step)
+        // The same addition for every rank at one level: the gaps never move.
+        expect(monsterTier(type, level) - monsterTier('runt', level)).toBe(monsterTier(type, 1) - monsterTier('runt', 1))
       }
     }
-    expect(MONSTER_TIER_PER_LEVEL).toBeLessThan(monsterTier('regular', 1) - monsterTier('runt', 1))
   })
 
   it('spends the whole tier and no more, whatever the build', () => {

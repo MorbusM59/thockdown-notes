@@ -1281,3 +1281,8 @@ dealt without seeing the dice.
 - **A stat point is judged across the level by the lookahead player.** Might's
   hit points arrive the moment it is placed; Agility's and Luck's pay across
   fights. Judged two encounters out, Might won by being early.
+- **Monster tier growth is a late ramp**: one a level, plus three more from
+  level 6 (`MONSTER_TIER_RAMP_LEVEL`), replacing the flat two above. After the
+  stat-point ladder change a flat two left clever winning 91% and careful
+  dying in the first few levels; the ramp gives clever 57% wins with losses
+  across levels 3 to 12, careful 9% wins (adventure:balance, 12 levels).
