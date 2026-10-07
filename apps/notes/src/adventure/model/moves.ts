@@ -206,6 +206,18 @@ export function describeMove(move: CombatMove, style: DescriptionStyle): string[
 }
 
 /**
+ * A move as ONE line, its terms joined by commas: the form every place that
+ * shows a whole move uses -- the class screen, the attack and defence cells,
+ * a monster offer's tooltip, the player's class nameplate -- so a move reads
+ * the same where it is chosen, where it is struck and where it is looked up.
+ * Commas rather than the detail pill's separator because that separator is
+ * the mark between STATEMENTS, and a move's terms are one statement.
+ */
+export function moveLine(move: CombatMove, style: DescriptionStyle): string {
+  return describeMove(move, style).join(', ')
+}
+
+/**
  * WHEN THE MOVE COMES UP, or an empty string where concise has nothing to say.
  *
  * The two round positions take the SAME adjectives an item's conditional

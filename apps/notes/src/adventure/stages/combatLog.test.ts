@@ -298,7 +298,7 @@ describe('the blow that ended it', () => {
     expect(glyphs(killPill(monsterOf('boss'), 9))[2]).toBe('fa-solid fa-dragon')
   })
 
-  it('lands on the SPOILS screen, behind its own line', () => {
+  it('lands on the SPOILS screen, in place of its opening line', () => {
     // The round's log is spent at the boundary; the one thing worth carrying
     // across it is how the thing died, and it belongs behind the screen the
     // reader is now looking at rather than in front of it.
@@ -313,7 +313,7 @@ describe('the blow that ended it', () => {
       context,
       7,
     )
-    expect(entered.narration).toEqual(['You go through what is left behind.', '[fa-solid fa-user-shield|you] x'])
+    expect(entered.narration).toBe('[fa-solid fa-user-shield|you] x')
   })
 
   it('is absent when nothing was killed', () => {
@@ -328,7 +328,7 @@ describe('the blow that ended it', () => {
       context,
       7,
     )
-    expect(fled.narration).toBe('It is gone, and it left little.')
+    expect(fled.narration).toBe('It fled, leaving little.')
   })
 })
 

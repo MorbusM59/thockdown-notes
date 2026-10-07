@@ -247,13 +247,54 @@ export function monsterAttackPill(
   escaped: boolean,
   /** The monster's roll to chase a fleeing player, where one was taken. */
   pursuit: Roll | null = null,
+  /**
+   * The monster's class move, where it struck with one. Named on the detail
+   * for the reason `playerAttackPill` gives -- and it is the only way a
+   * reader can tell a Frenzy from an ordinary blow that rolled high.
+   */
+  moveName?: string,
 ): string {
   const action = playerActionIcon(defence, blow, escaped)
   const damage = blow?.hit === true ? blow.damage : null
   return pill(monsterIcon(monster), 'it', action, damage, PLAYER, 'you', [
+    ...(moveName ? [moveName] : []),
     ...(rollLine('Pursuit', pursuit) ? [rollLine('Pursuit', pursuit)!] : []),
     ...blowDetail(blow),
   ])
+}
+
+/** Thorns' own mark: armour that stopped a blow throwing part of it back. */
+const THORNS = 'fa-solid fa-reply-all'
+
+/**
+ * THORNS STRUCK BACK. The pill runs from whoever's armour threw it to whoever
+ * swung into it, because that is the way the damage went -- the same rule
+ * every other pill follows. It used to come off silently, which left a
+ * player's health dropping on their own attack with nothing on the bar to
+ * say why.
+ */
+export function thornsPill(monster: Monster, damage: number, source: 'player' | 'monster'): string {
+  const detail = [`Damage: ${damage}, thrown back by the armour that stopped the blow`]
+  return source === 'player'
+    ? pill(PLAYER, 'you', { icon: THORNS, word: 'thorns' }, damage, monsterIcon(monster), 'it', detail)
+    : pill(monsterIcon(monster), 'it', { icon: THORNS, word: 'thorns' }, damage, PLAYER, 'you', detail)
+}
+
+/**
+ * A blow and the thorns it drew, NEWEST FIRST: each blow's own pill, then
+ * whatever its armour threw back above it, strikes in reverse order. One
+ * place for the order, so the three sites that narrate a swing cannot
+ * disagree about it. `thornsFrom` is whose armour answers.
+ */
+export function blowsWithThorns(
+  blows: readonly Blow[],
+  pillOf: (blow: Blow) => string,
+  monster: Monster,
+  thornsFrom: 'player' | 'monster',
+): string[] {
+  return blows
+    .flatMap((blow) => [pillOf(blow), ...(blow.recoil > 0 ? [thornsPill(monster, blow.recoil, thornsFrom)] : [])])
+    .reverse()
 }
 
 /**

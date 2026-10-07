@@ -21,7 +21,7 @@ export const regionSelectStage: StageModule = {
 
   enter: (_input, _context, rng) => ({
     state: {},
-    narration: 'Space and time dissolve in a chaotic vortex. As you come to, you look around. It looks like you have ended up...',
+    narration: 'The vortex lets you go...',
     rng,
   }),
 
@@ -52,7 +52,7 @@ export const regionSelectStage: StageModule = {
         { kind: 'setRegion', regionId: region.id },
         { kind: 'recordOutcome', outcome: 'region-entered', payload: { regionId: region.id } },
       ],
-      ...(canTrade ? {} : { narration: 'You take a moment to consider your options.' }),
+      ...(canTrade ? {} : { narration: 'You take stock.' }),
       rng,
     }
   },

@@ -137,10 +137,17 @@ describe('a prepared attack', () => {
 
   it('says what it would do, computed from the stats rather than written down', () => {
     const lines = prepareLines(block({ might: 3, agility: 2, perception: 1, luck: 4, charisma: 5 }), spellAt(2))
-    expect(lines[0]).toContain(`${Math.round(3 * PREPARE_PER_POINT * 100)}% damage`)
+    expect(lines[0]).toContain(`+${Math.round(3 * PREPARE_PER_POINT * 100)}% Damage`)
     expect(lines[1]).toContain('20% to strike twice')
     expect(lines[1]).toContain('50% to end its round')
     expect(lines[2]).toContain('Ignite')
-    expect(prepareLines(block(), null)[2]).toMatch(/No spell in reach/)
+  })
+
+  it('names only what the stats actually buy', () => {
+    // A zero term is a figure the eye stops on to learn nothing, and a
+    // missing rider is the absence of a line rather than a line saying so.
+    const lines = prepareLines(block({ might: 2 }), null)
+    expect(lines).toEqual(['+20% Damage'])
+    expect(prepareLines(block(), null)).toHaveLength(1)
   })
 })

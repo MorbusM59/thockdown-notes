@@ -56,19 +56,28 @@ export const PREPARE_ICON = 'fa-solid fa-crosshairs'
  * `banked` is how many preparations are already in hand, so the cell can
  * promise what pressing it is actually worth rather than what one of them is.
  * Zero is the Prepare cell itself: what you would have after taking it.
+ *
+ * In the game's own terms (`+30% to Crit`, as an item says it) and WITHOUT
+ * the terms worth nothing: a stat at zero adds nothing, and a line saying
+ * `+0%` is a figure the eye stops on to learn that. The preview shares a strip
+ * of about sixty characters with the fight's newest pill
+ * (escapeMenu/chapterBarWidth.ts), so every term it drops is room the others
+ * keep.
  */
 export function prepareLines(stats: StatBlock, rider: Spell | null, banked = 1): string[] {
   const stacks = Math.max(1, banked)
   const percent = (points: number) => Math.round(Math.min(1, points * PREPARE_PER_POINT * stacks) * 100)
-  const riderLine = rider
-    ? `${rider.name} rides along with it${stacks > 1 ? `, ${stacks} times` : ''}`
-    : 'No spell in reach to ride along'
-  return [
-    `+${Math.round(stats.might * PREPARE_PER_POINT * stacks * 100)}% damage, `
-      + `+${percent(stats.perception)}% to land, +${percent(stats.luck)}% to crit`,
-    `${percent(stats.agility)}% to strike twice, ${percent(stats.charisma)}% to end its round`,
-    riderLine,
-  ]
+  const damage = Math.round(stats.might * PREPARE_PER_POINT * stacks * 100)
+  const terms = (...pairs: readonly (readonly [number, string])[]) => pairs
+    .filter(([value]) => value > 0)
+    .map(([value, words]) => words.replace('#', String(value)))
+    .join(', ')
+  const lines = [
+    terms([damage, '+#% Damage'], [percent(stats.perception), '+#% to Hit'], [percent(stats.luck), '+#% to Crit']),
+    terms([percent(stats.agility), '#% to strike twice'], [percent(stats.charisma), '#% to end its round']),
+    rider ? `${rider.name} rides along${stacks > 1 ? ` ×${stacks}` : ''}` : '',
+  ].filter((line) => line.length > 0)
+  return lines.length > 0 ? lines : ['Nothing yet, at these stats']
 }
 
 interface PreparedInput {

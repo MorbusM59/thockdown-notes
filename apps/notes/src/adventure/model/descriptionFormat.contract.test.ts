@@ -119,8 +119,8 @@ describe('how a description is written', () => {
   it('never says "tier" in a description the PLAYER reads about themselves', () => {
     // A tier is how far the run has come and belongs on the bar; a build is
     // how it grows and belongs to the build. A monster's tier is a different
-    // matter and is deliberately still in `monsterDetailLines`, because that
-    // is how two offers on a screen are compared.
+    // matter and deliberately still leads an offer's label
+    // (`monsterCellLabel`), because that is how two offers are compared.
     for (const build of THOCKQUEST.builds) {
       for (const line of describeBuild(build)) expect(line.toLowerCase()).not.toContain('tier')
     }

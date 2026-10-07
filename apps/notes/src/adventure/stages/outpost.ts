@@ -54,7 +54,7 @@ export const outpostStage: StageModule = {
         itemOffers: items.value.map((modifier) => modifier.id),
         traitOffers: traits.value.map((modifier) => modifier.id),
       } satisfies JsonObject,
-      narration: 'A few lamps against the dark, and two doors worth knocking on.',
+      narration: 'Lamplight, and two doors.',
       rng: traits.rng,
     }
   },
@@ -97,7 +97,7 @@ export const outpostStage: StageModule = {
     return {
       kind: 'replace',
       stageId: ENCOUNTER_SELECT_STAGE_ID,
-      narration: 'You take a moment to consider your options.',
+      narration: 'You take stock.',
       rng,
     }
   },

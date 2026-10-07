@@ -84,8 +84,8 @@ export const statPointStage: StageModule = {
     return {
       state: {},
       narration: waiting > 0
-        ? `**${waiting}** stat point${waiting === 1 ? '' : 's'} to spend. *What has all this taught you?*`
-        : 'No stat points yet. *Motes earn them; the next one is further off each time.*',
+        ? `**${waiting}** stat point${waiting === 1 ? '' : 's'} to spend.`
+        : 'No stat points yet. *Motes earn them.*',
       rng,
     }
   },
@@ -121,9 +121,10 @@ export const statPointStage: StageModule = {
     }
   },
 
-  resolve: (_state, choiceId, _context, rng) => {
+  resolve: (_state, choiceId, context, rng) => {
     const stat = STAT_KEYS.find((candidate) => `statPoint:${candidate}` === choiceId)
     if (!stat) return { kind: 'pop', rng }
+    const before = context.game?.baseStats[stat] ?? 0
 
     return {
       kind: 'pop',
@@ -136,7 +137,9 @@ export const statPointStage: StageModule = {
         { kind: 'allocateStatPoint' },
         { kind: 'recordOutcome', outcome: 'stat-point-spent', payload: { stat } },
       ],
-      narration: `**${STAT_LABELS[stat]}.** *You are more than you were.*`,
+      // The figure, not a sentiment: a point is a number moving, and the
+      // number is what the reader goes looking for afterwards.
+      narration: `**${STAT_LABELS[stat]} ${before} → ${before + 1}.**`,
       rng,
     }
   },

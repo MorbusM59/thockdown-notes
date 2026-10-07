@@ -76,14 +76,14 @@ export const SPELLS: readonly Spell[] = [
     level: 0,
     name: 'Singe',
     icon: 'fa-solid fa-fire-flame-simple',
-    lines: ['An attack that cannot miss', 'Straight through armour'],
+    lines: ['Never misses', 'Through armour'],
   },
   {
     id: 'plague',
     level: 1,
     name: 'Plague',
     icon: 'fa-solid fa-disease',
-    lines: ['A fifth of what it has left, at the end of every round, never more than a Singe', 'Cast again and it takes a fifth of the rest'],
+    lines: ['A fifth of what it has left each round, at most a Singe', 'Stacks'],
   },
   {
     id: 'ignite',
@@ -92,28 +92,28 @@ export const SPELLS: readonly Spell[] = [
     // spell at a glance: the curved flame is the one that keeps burning.
     icon: 'fa-solid fa-fire-flame-curved',
     name: 'Ignite',
-    lines: ['It burns for every action it takes', 'Cast again and it burns twice as hot'],
+    lines: ['Burns it for every action it takes', 'Stacks'],
   },
   {
     id: 'lightningBolt',
     level: 3,
     name: 'Lightning Bolt',
     icon: 'fa-solid fa-bolt-lightning',
-    lines: ['An attack that cannot miss', 'And leaps again on a Luck check, until it does not'],
+    lines: ['Never misses', 'Leaps again while Luck checks pass'],
   },
   {
     id: 'lightningStorm',
     level: 4,
     name: 'Lightning Storm',
     icon: 'fa-solid fa-cloud-bolt',
-    lines: ['A bolt at the end of every round', 'Cast again and it throws twice as many'],
+    lines: ['A bolt at the end of every round', 'Stacks'],
   },
   {
     id: 'meteor',
     level: 5,
     name: 'Meteor Strike',
     icon: 'fa-solid fa-meteor',
-    lines: ['Double damage, through armour', 'And the round is over, for both of you'],
+    lines: ['Double damage, through armour', 'Ends the round for both of you'],
   },
 ]
 

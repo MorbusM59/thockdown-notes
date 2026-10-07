@@ -28,9 +28,9 @@
 import type { JsonObject } from '../core/json'
 import type { StageModule } from '../core/stage'
 import { ENCOUNTER_TRACKS, monsterPools, buildEncounterOffers, fixedTypeAt, LEVEL_ENCOUNTER_COUNT, mostSelectedEncounterPool, trackChoicesFor } from '../model/encounterOffers'
-import { ENCOUNTER_POOL_IDS } from '../model/vectors'
+import { ENCOUNTER_POOL_IDS, MONSTER_TYPE_WORD } from '../model/vectors'
 import {
-  iconFor, monsterCellLabel, monsterDetailLines, monsterFor, monsterName, offerFromJson, offerToJson,
+  iconFor, monsterCellLabel, monsterDetail, monsterFor, offerFromJson, offerToJson,
 } from './encounter'
 import {
   DROP_CANCEL, dropCancelledNarration, dropChoices, dropEffects, dropNarration, handsAreFull, readPendingId,
@@ -108,7 +108,7 @@ export const encounterSelectStage: StageModule = {
         trackIds: [],
       } satisfies JsonObject,
       narration: offer
-        ? `**${monsterName(offer, context.content)} is ahead.** *The road gives you something first.*`
+        ? `**${MONSTER_TYPE_WORD[offer.type] || 'Something'} ahead.** *The road gives first.*`
         : 'Something should be here, and the game cannot say what.',
       rng: omen.rng,
     }
@@ -178,10 +178,7 @@ export const encounterSelectStage: StageModule = {
           label: monsterCellLabel(fixed, context.content, monster),
           icon: iconFor(fixed, context),
           detail: monster
-            ? {
-                title: monsterCellLabel(fixed, context.content, monster),
-                lines: monsterDetailLines(monster, context.describe),
-              }
+            ? monsterDetail(monster, monsterCellLabel(fixed, context.content, monster), context.describe)
             : undefined,
         }],
       }
@@ -224,18 +221,25 @@ export const encounterSelectStage: StageModule = {
           kind: 'stay',
           state: answered,
           effects: swapped,
-          narration: `**${context.catalog.get(pending)?.name ?? 'It'}.** *Carried out of here.*`,
+          narration: `**${context.catalog.get(pending)?.name ?? 'It'}** taken.`,
           rng,
         }
       }
 
       if (choiceId === OMEN_HEAL_CHOICE) {
         const heal = omenHealAmount(context.profile?.stats.might ?? 0)
+        // What the rest actually gave back, which is less than it offered
+        // when there was less missing: `adjustHitPoints` stops at the
+        // maximum, and a pill promising the full amount would be a number
+        // the Health readout never shows.
+        const missing = context.game && context.profile
+          ? Math.max(0, context.profile.derived.maxHitPoints - context.game.hitPoints)
+          : heal
         return {
           kind: 'stay',
           state: answered,
           effects: [{ kind: 'adjustHitPoints', amount: heal }],
-          narration: `**You rest.** *${heal} hit points back, and then the road.*`,
+          narration: `**You rest:** +${Math.min(heal, missing)} Health.`,
           rng,
         }
       }
@@ -249,7 +253,7 @@ export const encounterSelectStage: StageModule = {
           return {
             kind: 'stay',
             state: { ...state, pendingId: trait.id },
-            narration: dropNarration('trait', trait.name),
+            narration: dropNarration(trait.name),
             rng,
           }
         }
@@ -257,7 +261,7 @@ export const encounterSelectStage: StageModule = {
           kind: 'stay',
           state: answered,
           effects: [{ kind: 'acquireModifier', modifierKind: 'trait', modifierId: trait.id }],
-          narration: `**${trait.name}.** *The place leaves its mark on you.*`,
+          narration: `**${trait.name}** taken.`,
           rng,
         }
       }

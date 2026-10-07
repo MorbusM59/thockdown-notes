@@ -20,6 +20,9 @@ import {
   DROP_CANCEL, dropCancelledNarration, dropChoices, dropEffects, dropNarration, handsAreFull, readPendingId,
 } from './carry'
 import { ENCOUNTER_SELECT_STAGE_ID, LOOT_STAGE_ID } from './ids'
+import { playerTierOf, type GameRecord } from '../model/gameState'
+import { famePointsAvailable } from '../model/gold'
+import { statPointsAvailable } from '../model/motes'
 
 
 const GOLD_CHOICE = 'loot:gold'
@@ -38,6 +41,26 @@ function readNumber(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? Math.floor(value) : fallback
 }
 
+/**
+ * WHAT CROSSING A LADDER BOUGHT, said where it was crossed. Gold and motes
+ * are only earned here, and each can tip over a fame point or a stat point --
+ * the second also raising the run's tier. The rail's gauges show it a moment
+ * later, but a gauge that fills with no word of why is a number changing on
+ * its own; this is the word. Read against the run as it was BEFORE this
+ * choice's effects, which is what `context.game` is.
+ */
+function crossedPills(game: GameRecord | null, gold: number, motes: number): string[] {
+  if (!game) return []
+  const fame = famePointsAvailable(game.goldEarned + gold, game.goldToNextFamePoint, game.famePointsSpent)
+    - famePointsAvailable(game.goldEarned, game.goldToNextFamePoint, game.famePointsSpent)
+  const stat = statPointsAvailable(game.experienceEarned + motes, game.experienceToNextStatPoint, game.statPointsSpent)
+    - statPointsAvailable(game.experienceEarned, game.experienceToNextStatPoint, game.statPointsSpent)
+  return [
+    ...(stat > 0 ? [`**Tier ${playerTierOf(game) + stat}.** *${stat === 1 ? 'A stat point' : `${stat} stat points`} to spend.*`] : []),
+    ...(fame > 0 ? [`**${fame === 1 ? 'A fame point' : `${fame} fame points`}** to spend.`] : []),
+  ]
+}
+
 export const lootStage: StageModule = {
   id: LOOT_STAGE_ID,
   title: 'Spoils',
@@ -45,11 +68,12 @@ export const lootStage: StageModule = {
   enter: (input, context, rng) => {
     const offersLoot = input.offersLoot !== false
     const rolled = offersLoot ? rollItemOffers(context, rng) : { offerIds: [] as string[], rng }
-    const opening = offersLoot ? 'You go through what is left behind.' : 'It is gone, and it left little.'
-    // THE KILL, BEHIND THE OPENING LINE. The round's log is spent when the
-    // fight ends, and the one thing worth carrying over is how the thing
-    // died -- so it arrives as this screen's older entry, in the same
-    // four-part shape every combat pill has (stages/combatLog.ts).
+    const opening = offersLoot ? 'You search the remains.' : 'It fled, leaving little.'
+    // THE KILL, IN PLACE OF THE OPENING LINE. The round's log is spent when
+    // the fight ends, and the one thing worth carrying over is how the thing
+    // died -- in the same four-part shape every combat pill has
+    // (stages/combatLog.ts). It says what this screen is by itself, and a
+    // line beside it saying so again was width the item previews needed.
     const kill = typeof input.killPill === 'string' ? input.killPill : null
     return {
       state: {
@@ -58,7 +82,7 @@ export const lootStage: StageModule = {
         offersLoot,
         offerIds: rolled.offerIds,
       } satisfies JsonObject,
-      narration: kill ? [opening, kill] : opening,
+      narration: kill ?? opening,
       rng: rolled.rng,
     }
   },
@@ -112,6 +136,7 @@ export const lootStage: StageModule = {
 
     const taken: Effect[] = []
     let label: string
+    let gold = 0
     if (pending) {
       const swapped = dropEffects('item', choiceId, pending)
       if (!swapped) return { kind: 'stay', state, rng }
@@ -119,6 +144,7 @@ export const lootStage: StageModule = {
       label = context.catalog.get(pending)?.name ?? 'It'
     } else if (choiceId === GOLD_CHOICE) {
       taken.push({ kind: 'grantGold', units: GOLD_PER_LOOT_SCREEN })
+      gold = GOLD_PER_LOOT_SCREEN
       label = `${GOLD_PER_LOOT_SCREEN} gold`
     } else if (choiceId.startsWith('loot:item:')) {
       const item = context.catalog.get(choiceId.replace('loot:item:', ''))
@@ -129,7 +155,7 @@ export const lootStage: StageModule = {
         return {
           kind: 'stay',
           state: { ...state, pendingId: item.id },
-          narration: dropNarration('item', item.name),
+          narration: dropNarration(item.name),
           rng,
         }
       }
@@ -149,7 +175,7 @@ export const lootStage: StageModule = {
         // next screen's item offers rolled against a Luck the player had
         // already earned but not yet been given.
         effects: taken,
-        narration: `**${label}:** *And there is more.*`,
+        narration: [...crossedPills(context.game, gold, 0), `**${label}**, and more to search.`],
         rng: rolled.rng,
       }
     }
@@ -164,7 +190,10 @@ export const lootStage: StageModule = {
       // the player now, so the count they are shown is the one they are
       // preparing for (stages/levelProgress.ts).
       effects: [...taken, { kind: 'grantExperience', units: motes }, { kind: 'advanceEncounter' }],
-      narration: `**${label}:** *You are **${motes}** mote${motes === 1 ? '' : 's'} the wiser.*`,
+      narration: [
+        ...crossedPills(context.game, gold, motes),
+        `**${label}**, and **${motes}** mote${motes === 1 ? '' : 's'}.`,
+      ],
       rng,
     }
   },

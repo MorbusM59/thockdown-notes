@@ -68,12 +68,10 @@ function ruleWords(purchase: FamePurchase): string {
 /** The same fact as prose, for the narration pill, where a readout's phrasing reads as broken English. */
 function gainWords(purchase: FamePurchase): string {
   if (purchase.rule === 'tier' || purchase.kind === null) {
-    return `${purchase.step} more points, split the way you are built.`
+    return `Tier +${purchase.step}, split the way you are built.`
   }
   const noun = purchase.kind === 'item' ? 'item' : 'trait'
-  return purchase.rule === 'carry'
-    ? `One more ${noun} in your hands.`
-    : `One more ${noun} survives the level.`
+  return purchase.rule === 'carry' ? `One more ${noun} carried.` : `One more ${noun} kept.`
 }
 
 /**
@@ -85,8 +83,7 @@ function purchaseLines(game: GameRecord, purchase: FamePurchase): string[] {
   const now = standingFor(game, purchase)
   return [
     `${ruleWords(purchase)} ${now} → ${now + purchase.step}`,
-    `Costs ${purchase.cost} fame point${purchase.cost === 1 ? '' : 's'}`,
-    `Up to ${FAME_PURCHASE_CEILING[purchase.rule]}`,
+    `${purchase.cost} fame, up to ${FAME_PURCHASE_CEILING[purchase.rule]}`,
   ]
 }
 
@@ -115,8 +112,8 @@ export const fameStage: StageModule = {
     return {
       state: {},
       narration: waiting > 0
-        ? `**${waiting}** fame point${waiting === 1 ? '' : 's'} in hand. *Word of you has travelled — spend it on what you can carry.*`
-        : 'No fame yet. *Gold earns it, and spending the gold does not cost it.*',
+        ? `**${waiting}** fame to spend.`
+        : 'No fame yet. *Gold earns it.*',
       rng,
     }
   },
@@ -126,19 +123,25 @@ export const fameStage: StageModule = {
     const waiting = game
       ? famePointsAvailable(game.goldEarned, game.goldToNextFamePoint, game.famePointsSpent)
       : 0
-    const lines = game
-      ? [
-          `${fameReached(game.goldEarned, game.goldToNextFamePoint, game.famePointsSpent)} fame reached`,
-          `${waiting} to spend, next point at ${game.goldToNextFamePoint} gold`,
-          ...ladderLines(game, waiting),
-        ]
-      : ['There is no run to be famous for']
+    // THE STANDING on the pill and THE LADDER in its tooltip: the ladder is
+    // five purchases, which is more than the strip holds beside anything,
+    // and each one a player can afford is a cell of its own with its own
+    // preview. What only this cell can say is where the run stands.
     const back = {
       id: BACK_CHOICE,
       label: 'Turn back',
       icon: 'fa-solid fa-rotate-left',
       isBack: true,
-      detail: { title: 'Renown', lines },
+      detail: game
+        ? {
+            title: 'Renown',
+            lines: [
+              `${fameReached(game.goldEarned, game.goldToNextFamePoint, game.famePointsSpent)} fame, ${waiting} to spend`,
+              `Next at ${game.goldToNextFamePoint} gold`,
+            ],
+            more: ladderLines(game, waiting),
+          }
+        : { title: 'Renown', lines: ['There is no run to be famous for'] },
     }
     if (!game) return { screenKey: 'fame:none', choices: [back] }
 

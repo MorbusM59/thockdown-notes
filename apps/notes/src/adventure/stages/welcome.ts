@@ -40,11 +40,18 @@ export const welcomeStage: StageModule = {
   id: WELCOME_STAGE_ID,
   title: 'Camp',
 
-  enter: (input, _context, rng) => ({
-    state: { hasSuspendedRun: input.hasSuspendedRun === true },
-    narration: 'What would you like to do?',
-    rng,
-  }),
+  // A run that has just ENDED arrives with the pills of the action that
+  // ended it (`fell`, from stages/combat.ts), and they stay on the bar behind
+  // the line saying so: the screen a death lands on is the one place left to
+  // read how it happened.
+  enter: (input, _context, rng) => {
+    const fell = Array.isArray(input.fell) ? input.fell.filter((entry): entry is string => typeof entry === 'string') : null
+    return {
+      state: { hasSuspendedRun: input.hasSuspendedRun === true },
+      narration: fell ? ['**You have fallen.**', ...fell] : 'What would you like to do?',
+      rng,
+    }
+  },
 
   present: (state, context) => {
     // Two different continuations, and the difference matters. A suspended

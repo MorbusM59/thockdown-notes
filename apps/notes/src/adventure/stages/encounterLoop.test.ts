@@ -606,10 +606,10 @@ describe('renown', () => {
     ])
 
     // With nothing earned there is nothing to offer, and the screen is the
-    // way back alone -- the standing still readable on its detail.
+    // way back alone -- the ladder still readable in its tooltip.
     const none = currentScreen(enterInterlude(withGold(0), 'fame', DEPS, NOW), DEPS)
     expect(none?.choices.map((choice) => choice.id)).toEqual(['fame:back'])
-    expect(none?.choices[0].detail?.lines.some((line) => line.startsWith('Large Coffers'))).toBe(true)
+    expect(none?.choices[0].detail?.more?.some((line) => line.startsWith('Large Coffers'))).toBe(true)
   })
 })
 

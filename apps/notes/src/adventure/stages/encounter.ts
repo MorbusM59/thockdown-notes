@@ -23,9 +23,10 @@
 import type { JsonObject } from '../core/json'
 import type { Content } from '../content'
 import type { StageContext } from '../core/stage'
+import type { ChoiceDetail } from '../core/screen'
 import type { EncounterOffer } from '../model/encounterOffers'
 import { totalArmor } from '../model/armor'
-import { describeMove } from '../model/moves'
+import { moveLine } from '../model/moves'
 import type { DescriptionStyle } from '../model/modifiers'
 import { buildMonster, type Monster, type MonsterMoment } from '../model/monsters'
 import { runTuning } from '../model/gameState'
@@ -143,44 +144,50 @@ export function iconFor(offer: EncounterOffer, context: StageContext): string {
 }
 
 /**
- * WHAT A MONSTER IS, in the lines an offer's detail pill shows -- written
- * once because the hub and the hunt both show it, and a creature that read
- * differently depending on which screen offered it would be two creatures.
+ * WHAT A MONSTER IS, as an offer's detail -- written once because the hub and
+ * the hunt both show it, and a creature that read differently depending on
+ * which screen offered it would be two creatures.
  *
- * The TIER leads, because it is the one number that says how much of a
- * creature this is and it is the same number on every offer -- which is what
- * makes two offers comparable at a glance in a way four derived quantities
- * never were.
+ * THE PILL CARRIES THE COMPARISON and the tooltip carries the rest. Two or
+ * three offers are weighed against each other on five numbers -- health,
+ * actions, damage, and its two chances against you -- so those are the pill,
+ * as one stat line in the glyphs the bars already use for them, and its two
+ * chances. The tier is not repeated here: it leads the cell's own label
+ * (`monsterCellLabel`), which the ring's centre shows beside this pill.
+ *
+ * The CLASS'S MOVES are in the tooltip, one per line and spelled out. They
+ * are the reason a class is worth naming, but three of them are two hundred
+ * characters and the strip holds about sixty at the tightest layout a reader
+ * plays at (escapeMenu/chapterBarWidth.ts). The class is named in the label,
+ * so the pill still says which fight this is; the tooltip says what it does.
  *
  * Armour is CONDITIONAL, and deliberately unlike the player's own armour
  * readout (which is shown at zero, because a status line that appears only
- * when interesting teaches that armour is something that happens to you).
- * This is not a status line: it is a description of one creature, and "0
- * armour" on every goblin is a line that says nothing on nine offers in ten.
- *
- * The CLASS'S MOVES are last and are the reason a class is worth naming: a
- * player who reads "Ambush: +150% Damage, on the first action of a fight"
- * knows what the first exchange is going to cost them, which is a decision
- * they can act on rather than a surprise.
+ * when interesting teaches that armour is something that happens to you):
+ * "0 armour" on every goblin says nothing on nine offers in ten.
  */
-export function monsterDetailLines(monster: Monster, style: DescriptionStyle, count = monster.count): string[] {
+export function monsterDetail(monster: Monster, title: string, style: DescriptionStyle): ChoiceDetail {
   const armor = totalArmor(monster.armor)
-  return [
-    // A MONSTER's tier, which is the one tier that still belongs in a
-    // description: it is how the two offers on a screen are compared. The
-    // PLAYER's tier is a standing quantity of the run and lives on the bar.
-    `Tier ${monster.tier}`,
-    ...(count > 1 ? [`${count} of them, fought as one`] : []),
-    `${monster.maxHitPoints} Health`,
-    `${monster.maxActions} Action${monster.maxActions === 1 ? '' : 's'} a round`,
-    `${Math.round(monster.damage)} Damage a blow`,
-    // Its contested chances against THIS player (`derived` is resolved
-    // against them), which is what makes two offers of one tier different
-    // fights. Without the run's Luckiness, as everywhere a creature is
-    // described (model/monsters.ts).
-    `${Math.round(monster.derived.hitChance * 100)}% to Hit you`,
-    `${Math.round(monster.derived.dodgeChance * 100)}% to Dodge you`,
-    ...(armor > 0 ? [`${armor} Armor, and magic goes through it`] : []),
-    ...(monster.combatClass?.moves ?? []).flatMap((move) => [`${move.name}: ${describeMove(move, style)[0] ?? ''}`]),
-  ]
+  const actions = monster.maxActions
+  return {
+    title,
+    lines: [
+      [
+        `[fa-solid fa-heart|Health] **${monster.maxHitPoints}**`,
+        `[fa-solid fa-bolt|Action${actions === 1 ? '' : 's'} a round] **${actions}**`,
+        `[fa-solid fa-gavel|Damage a blow] **${Math.round(monster.damage)}**`,
+        ...(armor > 0 ? [`[fa-solid fa-shield-halved|Armor, which magic goes through] **${armor}**`] : []),
+      ].join('  '),
+      // Its contested chances against THIS player (`derived` is resolved
+      // against them), which is what makes two offers of one tier different
+      // fights. Without the run's Luckiness, as everywhere a creature is
+      // described (model/monsters.ts).
+      `**${Math.round(monster.derived.hitChance * 100)}%** to Hit you, **${Math.round(monster.derived.dodgeChance * 100)}%** to Dodge`,
+    ],
+    more: [
+      ...(monster.count > 1 ? [`${monster.count} of them, fought as one`] : []),
+      ...(armor > 0 ? [`${armor} Armor, and magic goes through it`] : []),
+      ...(monster.combatClass?.moves ?? []).map((move) => `${move.name}: ${moveLine(move, style)}`),
+    ],
+  }
 }

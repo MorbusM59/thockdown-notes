@@ -829,6 +829,20 @@ The third was real, and is answered:
     which the counts reset. Monsters scale per LEVEL. The deleted plan's
     `10 · factor^round` said round and meant level.
 
+20. **Previews that still overflow the strip — OPEN.** At the reference layout
+    (1920px, double size, one slot, sidebar out) the chapter bar's strip is
+    492 CSS px, about sixty characters. Monster offers, combat cells, spells,
+    and every lead-in now fit; `adventure/choiceWidth.contract.test.ts` names
+    what does not, per screen, as a ceiling that may only come down. The
+    residual is structural rather than wording: a modifier preview is one
+    line per effect and three effects come to about 400px, so beside any pill
+    the screens that offer items and traits (market, spoils, the omen,
+    creation's trait and item) overflow some of the time, and a class's three
+    moves or a species' five effects overflow on their own. Closing it needs
+    a decision, not an edit: a shorter stat vocabulary ("Encounter choices"
+    alone is worth a few points), a narrower separator, scrolling the strip
+    to keep the preview in view, or accepting creation as the exception.
+
 ## Building the action economy
 
 Most of what was missing is now specified — monster stats by class and type,

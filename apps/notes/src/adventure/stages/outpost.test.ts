@@ -140,7 +140,7 @@ describe('hands full', () => {
     if (!buying) throw new Error('nothing on offer')
 
     const asking = choose(save, buying, DEPS, NOW).save
-    expect(screenOf(asking).narration.join(' ')).toMatch(/hands are full/i)
+    expect(screenOf(asking).narration.join(' ')).toMatch(/no room/i)
     // One cell per thing held, each NAMING THE ACT rather than the thing,
     // plus a way back out.
     expect(ids(asking).every((id) => id.startsWith('drop:'))).toBe(true)

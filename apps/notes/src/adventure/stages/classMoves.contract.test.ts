@@ -3,37 +3,35 @@
 // A class is the only vector whose worth is prose rather than a figure, so
 // this is the longest thing any choice screen asks a player to read. Read as a
 // flat run of clauses there was no way to see where one move stopped and the
-// next began, and the format that fixes it does the grouping with spacing and
-// enclosure rather than with punctuation anybody has to interpret. It is a
-// LAYOUT the eye depends on, so it is pinned here rather than left to drift.
+// next began: each move is its own detail line, so the pill's separator stands
+// between moves and only commas stand inside one. It is a LAYOUT the eye
+// depends on, so it is pinned here rather than left to drift.
 
 import { describe, expect, it } from 'vitest'
 
 import { THOCKQUEST } from '../content'
-import { movesLine } from './characterCreation'
-import { parseNarration, narrationText } from '../../escapeMenu/narrationMarkup'
+import { moveLines } from './characterCreation'
+import { DETAIL_SEPARATOR, narrationText, parseNarration } from '../../escapeMenu/narrationMarkup'
 
 const CLASSES = THOCKQUEST.combatClasses
 
 describe('a class\'s moves, on the screen that chooses one', () => {
-  it('encloses each move and separates them by more space than anything inside one', () => {
+  it('is one detail line per move, so the pill\'s separator is what divides them', () => {
     for (const combatClass of CLASSES) {
-      const line = movesLine(combatClass, 'concise')
-      // One bracketed group per move, and nothing outside them but the gaps.
-      const groups = line.split('   ')
-      expect(groups, combatClass.id).toHaveLength(combatClass.moves.length)
-      for (const group of groups) {
-        expect(group.startsWith('[ '), group).toBe(true)
-        expect(group.endsWith(' ]'), group).toBe(true)
-      }
+      const lines = moveLines(combatClass, 'concise')
+      expect(lines, combatClass.id).toHaveLength(combatClass.moves.length)
+      // Nothing inside a move may look like the line between two.
+      for (const line of lines) expect(narrationText(parseNarration(line))).not.toContain(DETAIL_SEPARATOR.trim())
     }
   })
 
-  it('shouts the move\'s NAME, so the eye finds where each one starts', () => {
+  it('sets the move\'s NAME in bold right after its glyph, so the eye finds where each one starts', () => {
     for (const combatClass of CLASSES) {
-      const words = narrationText(parseNarration(movesLine(combatClass, 'concise')))
-      for (const move of combatClass.moves) {
-        expect(words, `${combatClass.id}/${move.id}`).toContain(move.name.toUpperCase())
+      for (const [index, line] of moveLines(combatClass, 'concise').entries()) {
+        const [glyph, ...rest] = parseNarration(line)
+        const name = rest.find((span) => span.kind === 'icon' || span.text.trim().length > 0)
+        expect(glyph.kind, line).toBe('icon')
+        expect(name, line).toMatchObject({ kind: 'text', bold: true, text: combatClass.moves[index].name })
       }
     }
   })
@@ -43,25 +41,15 @@ describe('a class\'s moves, on the screen that chooses one', () => {
     // this at all: a move does not add a choice, it replaces one.
     const marks = new Set<string>()
     for (const combatClass of CLASSES) {
-      const line = movesLine(combatClass, 'concise')
-      for (const [index, move] of combatClass.moves.entries()) {
-        const group = line.split('   ')[index]
+      for (const [index, line] of moveLines(combatClass, 'concise').entries()) {
+        const move = combatClass.moves[index]
         const expected = move.replaces === 'attack' ? 'fa-solid fa-gavel' : 'fa-solid fa-shield'
-        expect(group, `${combatClass.id}/${move.id}`).toContain(`[${expected}|`)
+        expect(line, `${combatClass.id}/${move.id}`).toMatch(new RegExp(`^\\[${expected}\\|`))
         marks.add(expected)
       }
     }
     // A guard on the guard: one mark used everywhere would pass every
     // assertion above and tell a player nothing.
     expect(marks).toEqual(new Set(['fa-solid fa-gavel', 'fa-solid fa-shield']))
-  })
-
-  it('is one detail line, so the pill\'s own separator never lands between moves', () => {
-    // `DETAIL_SEPARATOR` is the app's rule for what goes between two detail
-    // lines; the spacing above is this screen's. Handing the pill a single
-    // line is what keeps the two from arguing.
-    for (const combatClass of CLASSES) {
-      expect(movesLine(combatClass, 'concise')).not.toContain('  |  ')
-    }
   })
 })

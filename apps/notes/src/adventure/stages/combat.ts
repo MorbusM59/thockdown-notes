@@ -55,14 +55,14 @@ import { poisonDamage } from '../model/tactics'
 import { damageFrom } from '../model/monsters'
 import { PREPARE_ICON, prepareLines, resolvePreparedAttack } from '../model/prepare'
 import {
-  blowDetail, charmPill, charmStatusPill, killPill, monsterAttackPill, playerAttackPill, poisonPill,
+  blowDetail, blowsWithThorns, charmPill, charmStatusPill, killPill, monsterAttackPill, playerAttackPill, poisonPill,
   counterPill, preparePill, spellPill, statusPill, stunPill,
 } from './combatLog'
 import type { Monster } from '../model/monsters'
 import { monsterFor, monsterName, offerFromJson, offerToJson } from './encounter'
 import type { MonsterMoment } from '../model/monsters'
 import type { ActionPosition } from '../model/modifiers'
-import { armMove, describeCounter, describeMove, moveById, type MoveSituation } from '../model/moves'
+import { armMove, describeCounter, moveById, moveLine, type MoveSituation } from '../model/moves'
 import { DEFENCE_COUNTER } from '../model/defences'
 import type { CombatClass } from '../model/vectors'
 import { COMBAT_STAGE_ID, ENCOUNTER_SELECT_STAGE_ID, LOOT_STAGE_ID, WELCOME_STAGE_ID } from './ids'
@@ -581,6 +581,18 @@ function stepFight(options: {
   let rng = options.rng
   let struck = options.struck ?? 0
   let log = [...options.entries, ...state.log]
+  /**
+   * What THIS step said, newest first -- the round's log without what the
+   * reader had already seen on an earlier screen. A fight that ends carries
+   * this across, and only this: the pills from the action that ended it are
+   * the ones nobody has read yet, and the rest of the round is history the
+   * next screen's choices should not have to sit behind.
+   */
+  let fresh = [...options.entries]
+  const say = (pills: readonly string[]) => {
+    log = [...pills, ...log]
+    fresh = [...pills, ...fresh]
+  }
 
   /**
    * THE FIRE BITES AFTER THE MONSTER MOVES, once per stack, and this is the
@@ -600,7 +612,7 @@ function stepFight(options: {
     const burned = igniteTick(round, derived)
     if (!burned.tick) return
     round = burned.state
-    log = [spellPill(burned.tick.spell, monster, burned.tick.damage, burned.tick.detail), ...log]
+    say([spellPill(burned.tick.spell, monster, burned.tick.damage, burned.tick.detail)])
     struck = burned.tick.damage
   }
 
@@ -646,7 +658,10 @@ function stepFight(options: {
       return {
         kind: 'reset',
         stageId: WELCOME_STAGE_ID,
-        narration: log,
+        // HOW IT ENDED goes to the camp screen as INPUT, because that screen
+        // narrates on entry and would otherwise replace the last blow with
+        // its own greeting -- a run ending with no word of what ended it.
+        input: { fell: fresh },
         effects: [...options.effects, { kind: 'endGame', reason: 'defeat' }],
         rng,
       }
@@ -658,7 +673,7 @@ function stepFight(options: {
       return {
         kind: 'replace',
         stageId: ENCOUNTER_SELECT_STAGE_ID,
-        narration: log,
+        narration: fresh,
         effects: [...options.effects, { kind: 'advanceEncounter' }],
         rng,
       }
@@ -708,7 +723,7 @@ function stepFight(options: {
       if (bitten.pills.length > 0) {
         round = bitten.round
         carried = [...bitten.pills, ...carried]
-        log = [...bitten.pills, ...log]
+        say(bitten.pills)
         struck = bitten.damage
         if (!derived || combatStatus(round, monster, derived) !== 'roundOver') continue
       }
@@ -738,7 +753,7 @@ function stepFight(options: {
             .map((tick) => spellPill(tick.spell, monster, tick.damage, tick.detail))
             .reverse()
           carried = [...pills, ...carried]
-          log = [...pills, ...log]
+          say(pills)
           struck = ticked.ticks[ticked.ticks.length - 1].damage
           continue
         }
@@ -773,7 +788,7 @@ function stepFight(options: {
     // ended; the fight simply moved, so the loop goes round again -- and the
     // action it lost is still an action it took, so the fire bites for it.
     round = armed.round
-    log = [armed.entry, ...log]
+    say([armed.entry])
     struck = armed.damage
     burn()
   }
@@ -938,8 +953,8 @@ export const combatStage: StageModule = {
       // something else on press.
       const move = moveById(context.game ? runClass(context.game, context.content) : null, state.playerMove)
       const aimed = round.prepared > 0 && stats
-        ? { title: move?.name ?? 'Attack', lines: [...(move ? describeMove(move, context.describe) : []), ...prepareLines(stats, rider, round.prepared)] }
-        : (move ? { title: move.name, lines: describeMove(move, context.describe) } : undefined)
+        ? { title: move?.name ?? 'Attack', lines: [...(move ? [moveLine(move, context.describe)] : []), ...prepareLines(stats, rider, round.prepared)] }
+        : (move ? { title: move.name, lines: [moveLine(move, context.describe)] } : undefined)
       return {
         // The offered set is part of the question, so it is part of the key:
         // the dial has to treat a round that dealt Meteor as a new screen --
@@ -1010,7 +1025,7 @@ export const combatStage: StageModule = {
             // two add, so both are listed (model/defences.ts).
             ? { title: move.name, lines: [
               ...(DEFENCE_COUNTER[defence] > 0 ? [describeCounter(DEFENCE_COUNTER[defence], context.describe)] : []),
-              ...describeMove(move, context.describe),
+              moveLine(move, context.describe),
             ] }
             // A plain cell says what it does only where that is more than its
             // name: Take the hit swings back (model/defences.ts), and Flee is a
@@ -1018,7 +1033,7 @@ export const combatStage: StageModule = {
             : defence === 'flee' && context.profile
               ? { title: DEFENCE_LABELS.flee.label, lines: [
                 `${Math.round((1 - pursuitChance(monster, context.profile.stats, successAdjustOf(context))) * 100)}% to escape`,
-                'Escaping ends the fight with no reward',
+                'No reward',
               ] }
             : DEFENCE_COUNTER[defence] > 0
               ? { title: DEFENCE_LABELS[defence].label, lines: [describeCounter(DEFENCE_COUNTER[defence], context.describe)] }
@@ -1097,7 +1112,7 @@ export const combatStage: StageModule = {
               )]
             : []),
           ...(aimed.stunned ? [stunPill(monster)] : []),
-          ...aimed.blows.map((blow) => playerAttackPill(monster, blow)).reverse(),
+          ...blowsWithThorns(aimed.blows, (blow) => playerAttackPill(monster, blow), monster, 'monster'),
         ],
         effects: [],
         rng: aimed.rng,
@@ -1132,7 +1147,7 @@ export const combatStage: StageModule = {
         // hide which of them missed.
         entries: [
           ...(move?.stealsActions ? [stunPill(monster)] : []),
-          ...attack.blows.map((blow) => playerAttackPill(monster, blow, move?.name)).reverse(),
+          ...blowsWithThorns(attack.blows, (blow) => playerAttackPill(monster, blow, move?.name), monster, 'monster'),
         ],
         effects: [],
         rng: attack.rng,
@@ -1219,11 +1234,11 @@ export const combatStage: StageModule = {
         context,
         // NEWEST FIRST: the counter answered the blow, so it goes above it.
         entries: [
-          ...(answer.counter ? [counterPill(monster, answer.counter, defenceMove?.name)] : []),
+          ...(answer.counter ? blowsWithThorns([answer.counter], (blow) => counterPill(monster, blow, defenceMove?.name), monster, 'monster') : []),
           ...(monsterArmed.move?.stealsActions ? [stunPill(monster)] : []),
           ...(answer.blows.length > 0
-            ? answer.blows.map((blow) => monsterAttackPill(monster, defence, blow, answer.escaped, answer.pursuit)).reverse()
-            : [monsterAttackPill(monster, defence, answer.blow, answer.escaped, answer.pursuit)]),
+            ? blowsWithThorns(answer.blows, (blow) => monsterAttackPill(monster, defence, blow, answer.escaped, answer.pursuit, monsterArmed.move?.name), monster, 'player')
+            : [monsterAttackPill(monster, defence, answer.blow, answer.escaped, answer.pursuit, monsterArmed.move?.name)]),
         ],
         effects: recordChanges(round, answer.state),
         rng: answer.rng,

@@ -50,13 +50,13 @@ interface Face {
 const FACES: Readonly<Record<ModifierKind, Face>> = {
   item: {
     title: 'The trader',
-    greeting: 'The trader lays out what they have.',
+    greeting: 'The trader\'s wares.',
     currency: 'gold',
     spend: 'spendGold',
   },
   trait: {
     title: 'The Oracle',
-    greeting: 'The Oracle considers you, and names what she can teach.',
+    greeting: 'The Oracle teaches.',
     currency: 'motes',
     spend: 'spendExperience',
   },
@@ -165,7 +165,7 @@ export const marketStage: StageModule = {
         kind: 'stay',
         state: { ...state, pendingId: null },
         effects: [...effects, { kind: FACES[kind].spend, units: MARKET_PRICE } as Effect],
-        narration: `**${modifier?.name ?? 'It'}.** *Yours, for ${MARKET_PRICE} ${FACES[kind].currency}.*`,
+        narration: `**${modifier?.name ?? 'It'}** for ${MARKET_PRICE} ${FACES[kind].currency}.`,
         rng,
       }
     }
@@ -188,7 +188,7 @@ export const marketStage: StageModule = {
       return {
         kind: 'stay',
         state: { ...state, pendingId: modifier.id },
-        narration: dropNarration(kind, modifier.name),
+        narration: dropNarration(modifier.name),
         rng,
       }
     }
@@ -200,7 +200,7 @@ export const marketStage: StageModule = {
         { kind: 'acquireModifier', modifierKind: kind, modifierId: modifier.id },
         { kind: FACES[kind].spend, units: MARKET_PRICE } as Effect,
       ],
-      narration: `**${modifier.name}.** *Yours, for ${MARKET_PRICE} ${FACES[kind].currency}.*`,
+      narration: `**${modifier.name}** for ${MARKET_PRICE} ${FACES[kind].currency}.`,
       rng,
     }
   },

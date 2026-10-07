@@ -11,7 +11,7 @@ import type { StageModule } from '../core/stage'
 import { ENCOUNTER_TRACKS, monsterPools, buildEncounterOffers } from '../model/encounterOffers'
 import type { EncounterPoolId } from '../model/vectors'
 import {
-  iconFor, monsterCellLabel, monsterDetailLines, monsterFor, offerFromJson, offerToJson,
+  iconFor, monsterCellLabel, monsterDetail, monsterFor, offerFromJson, offerToJson,
 } from './encounter'
 import { currentEncounter } from './levelProgress'
 import { COMBAT_STAGE_ID, HUNT_STAGE_ID } from './ids'
@@ -36,9 +36,7 @@ export const huntStage: StageModule = {
     })
     return {
       state: { offers: rolled.offers.map(offerToJson), track: track?.id ?? null } satisfies JsonObject,
-      narration: track
-        ? `You track ${track.label.toLowerCase()}. Something is out there.`
-        : 'You cast about for tracks. Something is out there.',
+      narration: track ? `**${track.label}** ahead.` : 'Something is out there.',
       rng: rolled.rng,
     }
   },
@@ -56,10 +54,7 @@ export const huntStage: StageModule = {
           label: monsterCellLabel(offer, context.content, monster),
           icon: iconFor(offer, context),
           detail: monster
-            ? {
-                title: monsterCellLabel(offer, context.content, monster),
-                lines: monsterDetailLines(monster, context.describe),
-              }
+            ? monsterDetail(monster, monsterCellLabel(offer, context.content, monster), context.describe)
             : undefined,
         }]
       }),

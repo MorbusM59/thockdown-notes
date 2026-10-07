@@ -72,10 +72,9 @@ export function dropChoices(context: StageContext, kind: ModifierKind, incomingI
         icon: modifier.icon,
         detail: {
           title: `${verb} ${modifier.name}`,
-          lines: [
-            ...describeModifier(modifier, context.describe),
-            ...(incoming ? [`Makes room for ${incoming.name}`] : []),
-          ],
+          // What is given up and nothing else: what it makes room FOR is
+          // the lead-in's own subject, a pill to the left.
+          lines: describeModifier(modifier, context.describe),
         },
       })),
     {
@@ -83,7 +82,7 @@ export function dropChoices(context: StageContext, kind: ModifierKind, incomingI
       label: incoming ? `Leave ${incoming.name}` : 'Leave it',
       icon: 'fa-solid fa-rotate-left',
       isBack: true,
-      detail: { title: 'Change your mind', lines: ['Nothing given up, nothing taken'] },
+      detail: { title: 'Change your mind', lines: ['Nothing given up or taken'] },
     },
   ]
 }
@@ -104,12 +103,11 @@ export function dropEffects(kind: ModifierKind, choiceId: string, incomingId: st
 }
 
 /** What the bar says while the question is up. */
-export function dropNarration(kind: ModifierKind, incomingName: string): string {
-  const noun = kind === 'item' ? 'carry' : 'hold'
-  return `**${incomingName}.** *Your hands are full. What do you ${noun} no longer?*`
+export function dropNarration(incomingName: string): string {
+  return `**${incomingName}.** *No room: give one up?*`
 }
 
 /** What the bar says when the question is waved away. */
 export function dropCancelledNarration(incomingName: string): string {
-  return `**${incomingName}.** *You leave it where it is.*`
+  return `**${incomingName}** left behind.`
 }

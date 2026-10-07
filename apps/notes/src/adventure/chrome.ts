@@ -34,7 +34,7 @@ import { itemArmor } from './model/armor'
 import type { Content } from './content'
 import { buildWeightInitials } from './model/vectors'
 import { describeModifier, descriptionStyleOf, type DescriptionStyle, type Modifier, type ModifierKind } from './model/modifiers'
-import { describeMove } from './model/moves'
+import { moveLine } from './model/moves'
 import { speciesModifier } from './model/monsters'
 import { STAT_ICONS, STAT_KEYS, STAT_LABELS } from './model/stats'
 
@@ -199,10 +199,9 @@ function vectorNameplates(game: GameRecord, content: Content, describe: Descript
       label: combatClass.name,
       // ONE LINE PER MOVE, named, because a class IS its moves and a bare
       // list of effects would not say which of them arrive together. The
-      // whole of each move rather than its first line only, which is what
-      // `monsterDetailLines` takes: that one is comparing two offers at a
-      // glance, and this one is the player looking their own class up.
-      detail: combatClass.moves.map((move) => `${move.name}: ${describeMove(move, describe).join(', ')}`),
+      // whole of each move, in the same form a monster offer's tooltip uses
+      // for its own (stages/encounter.ts's `monsterDetail`).
+      detail: combatClass.moves.map((move) => `${move.name}: ${moveLine(move, describe)}`),
     })
   }
   return plates

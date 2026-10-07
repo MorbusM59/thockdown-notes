@@ -39,6 +39,21 @@
 // forgetting to. A token with no pipe at all is not an icon and stays text,
 // so the two cases cannot be confused.
 
+/**
+ * WHAT GOES BETWEEN TWO DESCRIPTIONS: two spaces, a bar, two spaces.
+ *
+ * One string, used by the rendered separator and by the accessible name
+ * alike, so the two cannot describe the same row differently. It was a
+ * centre dot, which reads as an ornament between words; a bar reads as a
+ * division between statements, which is what these are.
+ *
+ * The spaces are IN the string rather than in the margin, because the
+ * accessible name is plain text and has no margins -- and a rule about what
+ * separates two descriptions has to hold in both renderings or it is two
+ * rules. `white-space: pre` on the span is what keeps them from collapsing.
+ */
+export const DETAIL_SEPARATOR = '  |  '
+
 /** One run of the line: either styled text, or one glyph standing in for a word. */
 export type NarrationSpan =
   | { kind: 'text'; text: string; bold: boolean; italic: boolean }

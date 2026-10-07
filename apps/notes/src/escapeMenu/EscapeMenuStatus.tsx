@@ -1,7 +1,7 @@
 import { usePillStripScroll } from '../shared/usePillStripScroll'
 import { typingSoundManager } from '../sound/TypingSoundManager'
 import { TAB_KEY_VOICE } from '../sound/keyVoices'
-import { narrationText, parseNarration, splitNarration } from './narrationMarkup'
+import { DETAIL_SEPARATOR, narrationText, parseNarration, splitNarration } from './narrationMarkup'
 import type { EscapeMenuCellDetail, EscapeMenuChromeMeter, EscapeMenuChromePill,
   EscapeMenuChromeToggle, EscapeMenuModeChrome, EscapeMenuReadout } from './escapeMenuContract'
 
@@ -28,20 +28,6 @@ import type { EscapeMenuCellDetail, EscapeMenuChromeMeter, EscapeMenuChromePill,
  */
 
 /** Tooltip text for a pill or a gauge: its label, then a line per detail. */
-/**
- * WHAT GOES BETWEEN TWO DESCRIPTIONS: two spaces, a bar, two spaces.
- *
- * One string, used by the rendered separator and by the accessible name
- * alike, so the two cannot describe the same row differently. It was a
- * centre dot, which reads as an ornament between words; a bar reads as a
- * division between statements, which is what these are.
- *
- * The spaces are IN the string rather than in the margin, because the
- * accessible name is plain text and has no margins -- and a rule about what
- * separates two descriptions has to hold in both renderings or it is two
- * rules. `white-space: pre` on the span is what keeps them from collapsing.
- */
-const DETAIL_SEPARATOR = '  |  '
 
 /** One markup line as the words a reader would say. */
 function narrationOf(line: string): string {
@@ -221,26 +207,31 @@ export function EscapeMenuChromeBarRow({ status, detail }: {
                   // the word it stands for (narrationMarkup.ts), so a tooltip
                   // built from the source string would read out its class
                   // names. Same treatment the narration pill beside it gets.
-                  data-tooltip={tooltipOf(detail?.title ?? '', detailLines.map(narrationOf))}
-                  aria-label={`${detail?.title ?? ''}: ${detailLines.map(narrationOf).join(DETAIL_SEPARATOR)}`}
+                  data-tooltip={tooltipOf(detail?.title ?? '', [...detailLines, ...(detail?.more ?? [])].map(narrationOf))}
+                  aria-label={`${detail?.title ?? ''}: ${[...detailLines, ...(detail?.more ?? [])].map(narrationOf).join(DETAIL_SEPARATOR)}`}
                 >
                   {detailLines.map((line, index) => (
                     <span key={line} className="escape-menu-choice-detail-line">
                       {index > 0 ? <span className="escape-menu-choice-detail-sep" aria-hidden="true">{DETAIL_SEPARATOR}</span> : null}
                       {/* A detail line is the same small vocabulary a
                           narration entry is, so it is rendered by the same
-                          parser: a line with no markup in it comes back as one
-                          plain run and reads exactly as it did. */}
-                      {parseNarration(line).map((span, at) => (span.kind === 'icon' ? (
-                        <span key={`${at}:${span.icon}`} className={`${span.icon} escape-menu-narration-icon`} aria-hidden="true" />
-                      ) : (
-                        <span
-                          key={`${at}:${span.text}`}
-                          className={`${span.bold ? 'escape-menu-narration-strong' : ''}${span.italic ? ' escape-menu-narration-em' : ''}`.trim() || undefined}
-                        >
-                          {span.text}
-                        </span>
-                      )))}
+                          parser -- and in ONE inline box, for the reason the
+                          narration pill gives: a span per run made every run
+                          a flex item of this inline-flex line, which trimmed
+                          each run's edge spaces and put the line's gap where
+                          a space was written. */}
+                      <span className="escape-menu-narration-text">
+                        {parseNarration(line).map((span, at) => (span.kind === 'icon' ? (
+                          <span key={`${at}:${span.icon}`} className={`${span.icon} escape-menu-narration-icon`} aria-hidden="true" />
+                        ) : (
+                          <span
+                            key={`${at}:${span.text}`}
+                            className={`${span.bold ? 'escape-menu-narration-strong' : ''}${span.italic ? ' escape-menu-narration-em' : ''}`.trim() || undefined}
+                          >
+                            {span.text}
+                          </span>
+                        )))}
+                      </span>
                     </span>
                   ))}
                 </span>

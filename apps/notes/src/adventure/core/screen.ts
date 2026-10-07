@@ -22,6 +22,14 @@ export interface ChoiceDetail {
   title: string
   /** One line per effect. Already rendered into words, already accurate. */
   lines: string[]
+  /**
+   * Lines for the TOOLTIP only: what explains a choice rather than what
+   * decides it. The pill sits on a strip that holds about sixty characters at
+   * the tightest layout a reader plays at (chapterBarWidth.ts), so a choice
+   * with more to say than that puts the comparison on the pill and the rest
+   * here, where hovering the pill reads all of it, pill lines first.
+   */
+  more?: string[]
 }
 
 export interface Choice {
