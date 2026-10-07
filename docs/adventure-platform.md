@@ -839,9 +839,11 @@ The third was real, and is answered:
     director. `adventure/choiceWidth.contract.test.ts` checks the CONTENT
     directly (every build, playable species and class, region, and every
     item/trait template rolled under fixed seeds) rather than played runs, so
-    a change to which monsters or rewards appear cannot move it. Class and
-    species overflow is accepted for those once-per-run screens and listed
-    by id; item and trait rolls carry ceilings that may only come down.
+    a change to which monsters or rewards appear cannot move it. No class
+    or species overflows: a class pill names its moves (glyph and name) with
+    the clauses in the tooltip, and a species pill shows three effects and
+    counts the rest, which are in the tooltip. Item and trait rolls carry
+    ceilings that may only come down.
     Monster offers, the first spoils screen (it opens with the kill) and
     combat previews (a fully stacked Prepare is the known wide one) are
     built from a fight's moment rather than one piece of content and are not

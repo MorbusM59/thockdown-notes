@@ -160,6 +160,34 @@ export function moveLines(combatClass: CombatClass, style: DescriptionStyle): st
   })
 }
 
+/**
+ * THE PILL'S HALF of a class preview: each move's glyph and name, with what
+ * the move does in the tooltip (`moveLines`). Three moves spelled out are
+ * wider than the chapter bar by themselves, and this is the first screen of
+ * every run -- so the pill says which moves arrive and which cell each
+ * replaces, and the hover says the rest.
+ */
+export function moveNameLines(combatClass: CombatClass): string[] {
+  return combatClass.moves.map((move) => {
+    const mark = move.replaces === 'attack' ? OFFENSIVE_MARK : DEFENSIVE_MARK
+    return `[${mark}|${move.replaces === 'attack' ? 'attack' : 'defence'}] **${move.name}**`
+  })
+}
+
+/**
+ * How many of a species' effects the pill shows before the rest go to the
+ * tooltip, with a line saying how many are there. Three effects beside the
+ * question fit the chapter bar at the reference layout; a fourth may not.
+ */
+export const SPECIES_PILL_EFFECTS = 3
+
+/** A species preview: its first effects on the pill, the remainder in the tooltip and counted. */
+export function speciesPreview(effectLines: readonly string[]): { lines: string[]; more: string[] } {
+  const shown = effectLines.slice(0, SPECIES_PILL_EFFECTS)
+  const rest = effectLines.slice(SPECIES_PILL_EFFECTS)
+  return { lines: rest.length > 0 ? [...shown, `+${rest.length} more`] : shown, more: rest }
+}
+
 export const characterCreationStage: StageModule = {
   id: CHARACTER_CREATION_STAGE_ID,
   title: 'Origins',
@@ -222,10 +250,10 @@ export const characterCreationStage: StageModule = {
               // Through the same describer an item's detail uses, which is
               // the whole point of a species carrying the modifier
               // vocabulary: "+25% hit points" needs no code here at all.
-              lines: describeModifier(
+              ...speciesPreview(describeModifier(
                 { id: species.id, kind: 'trait', name: species.name, icon: species.icon, effects: species.effects },
-              context.describe,
-            ),
+                context.describe,
+              )),
             },
           })),
       }
@@ -246,7 +274,8 @@ export const characterCreationStage: StageModule = {
               // Every move, named and spelled out. A class is the one vector
               // whose worth cannot be read off a number, so the detail is the
               // whole of what the player has to go on -- see `moveLines`.
-              lines: moveLines(combatClass, context.describe),
+              lines: moveNameLines(combatClass),
+              more: moveLines(combatClass, context.describe),
             },
           })),
       }

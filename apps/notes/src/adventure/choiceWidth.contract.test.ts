@@ -21,11 +21,10 @@
 // Here a result changes only when content or wording does.
 //
 // WHAT DOES NOT FIT is named, not tolerated:
-// - a class or species that overflows is listed by id below. Both are asked
-//   once per run, and a class is three moves, one line each, which is wider
-//   than the strip by itself -- accepted for those screens by the author's
-//   director. A listed id that has come to fit fails the test, so the lists
-//   only shrink.
+// - a class or species that overflows would be listed by id below; both lists
+//   are empty, and a listed id that has come to fit fails the test. A class
+//   pill names its moves and the tooltip spells them out; a species pill
+//   shows three effects and counts the rest, which are in the tooltip.
 // - an item or trait roll may overflow beside an in-run lead-in in at most
 //   `MODIFIER_RESIDUAL` of rolls, a ceiling that may only come down; alone,
 //   every roll must fit.
@@ -53,7 +52,7 @@ import { CHAPTER_BAR_METRICS, stripWidth } from '../escapeMenu/chapterBarWidth'
 import { THOCKQUEST, catalogFor } from './content'
 import { describeModifier } from './model/modifiers'
 import { describeBuild, MONSTER_TYPE_WORD } from './model/vectors'
-import { CREATION_NARRATION, moveLines } from './stages/characterCreation'
+import { CREATION_NARRATION, moveNameLines, speciesPreview } from './stages/characterCreation'
 import { REGION_SELECT_NARRATION } from './stages/regionSelect'
 import { omenLeadIn, restLines } from './stages/encounterSelect'
 import { moreToSearch } from './stages/loot'
@@ -65,28 +64,10 @@ const STRIP = CHAPTER_BAR_METRICS.stripPx
 /** Run seeds the item and trait templates are rolled under. Fixed, so the result is too. */
 const CATALOG_SEEDS = Array.from({ length: 24 }, (_, index) => index + 1)
 
-/** Classes whose moves overflow beside their screen's lead-in. Once per run; accepted. */
-const CLASSES_OVER: readonly string[] = [
-  'alchemist',
-  'assassin',
-  'bard',
-  'berserker',
-  'brawler',
-  'corsair',
-  'duelist',
-  'falconer',
-  'juggler',
-  'monk',
-  'pyromancer',
-  'revenantKnight',
-  'shieldbreaker',
-  'skirmisher',
-  'templar',
-  'trickster',
-  'warden',
-]
-/** Species whose effects overflow beside their screen's lead-in. Once per run; accepted. */
-const SPECIES_OVER: readonly string[] = ['brannoch', 'velkar']
+/** Classes whose preview overflows beside its screen's lead-in. None: a pill names the moves, the tooltip spells them out. */
+const CLASSES_OVER: readonly string[] = []
+/** Species whose preview overflows beside its screen's lead-in. None: past three effects the rest are counted and in the tooltip. */
+const SPECIES_OVER: readonly string[] = []
 /**
  * The share of item and trait rolls allowed past the edge: on their own,
  * beside the creation question, and beside the widest in-run lead-in. A roll
@@ -154,12 +135,12 @@ describe('choice previews fit the chapter bar at the reference layout', () => {
   })
 
   it('overflows only with the classes it names, and names none that fit', () => {
-    const over = playableClasses.filter((entry) => !fits(CREATION_NARRATION.class, moveLines(entry, STYLE))).map((entry) => entry.id)
+    const over = playableClasses.filter((entry) => !fits(CREATION_NARRATION.class, moveNameLines(entry))).map((entry) => entry.id)
     expect(over.sort()).toEqual([...CLASSES_OVER].sort())
   })
 
   it('overflows only with the species it names, and names none that fit', () => {
-    const over = playableSpecies.filter((entry) => !fits(CREATION_NARRATION.species, speciesLines(entry))).map((entry) => entry.id)
+    const over = playableSpecies.filter((entry) => !fits(CREATION_NARRATION.species, speciesPreview(speciesLines(entry)).lines)).map((entry) => entry.id)
     expect(over.sort()).toEqual([...SPECIES_OVER].sort())
   })
 
