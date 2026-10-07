@@ -833,7 +833,6 @@ export function EditorSection(rawProps: EditorSectionProps) {
     }
 
     const externalStart = performance.now()
-    let originalText: string | null = null
 
     if (isExternalNote(loaded)) {
       // The newest record of what the file held, fetched on its own. This
@@ -872,7 +871,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
       // Only if the file could not be read at all. The note still needs some
       // baseline to compare against, and its own hydrated text at least makes
       // the modified indicator quiet rather than permanently wrong.
-      originalText = baselineRow ? normalizeInternalText(baselineRow.content) : hydratedText
+      const originalText = baselineRow ? normalizeInternalText(baselineRow.content) : hydratedText
 
       externalNoteOriginalTextByIdRef.current.set(loaded.id, originalText)
       activeNoteExternalPathRef.current = loaded.externalPath ?? null

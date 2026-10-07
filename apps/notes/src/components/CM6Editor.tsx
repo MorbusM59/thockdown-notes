@@ -2534,7 +2534,7 @@ export function CM6Editor({
     const edgeLine = direction === 'up' ? edgeLines.topLine : edgeLines.bottomLine;
     const flaggedLines = flagsByLineRef.current;
 
-    let targetLine: number | null = null;
+    let targetLine: number | null;
     if (flaggedLines.has(edgeLine)) {
       targetLine = edgeLine;
     } else if (direction === 'up') {
