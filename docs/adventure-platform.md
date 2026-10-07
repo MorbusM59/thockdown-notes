@@ -842,8 +842,10 @@ The third was real, and is answered:
     a change to which monsters or rewards appear cannot move it. Class and
     species overflow is accepted for those once-per-run screens and listed
     by id; item and trait rolls carry ceilings that may only come down.
-    Monster offers and combat previews are built from a fight's moment rather
-    than one piece of content and are not checked there.
+    Monster offers, the first spoils screen (it opens with the kill) and
+    combat previews (a fully stacked Prepare is the known wide one) are
+    built from a fight's moment rather than one piece of content and are not
+    checked there.
 
 ## Building the action economy
 

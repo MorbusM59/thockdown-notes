@@ -74,6 +74,11 @@ function crossedPills(game: GameRecord | null, gold: number, motes: number): str
   ]
 }
 
+/** The line after taking one of several spoils; exported for choiceWidth.contract.test.ts. */
+export function moreToSearch(label: string): string {
+  return `**${label}**, and more to search.`
+}
+
 export const lootStage: StageModule = {
   id: LOOT_STAGE_ID,
   title: 'Spoils',
@@ -191,7 +196,7 @@ export const lootStage: StageModule = {
         // next screen's item offers rolled against a Luck the player had
         // already earned but not yet been given.
         effects: taken,
-        narration: [...crossedPills(context.game, gold, 0), `**${label}**, and more to search.`],
+        narration: [...crossedPills(context.game, gold, 0), moreToSearch(label)],
         rng: rolled.rng,
       }
     }

@@ -71,6 +71,11 @@ export function omenLeadIn(rankWord: string): string {
   return `**${rankWord || 'Something'} ahead.** *The road gives first.*`
 }
 
+/** What the omen's rest offers; exported for choiceWidth.contract.test.ts. */
+export function restLines(heal: number): string[] {
+  return [`Recover ${heal} Health`]
+}
+
 export const encounterSelectStage: StageModule = {
   id: ENCOUNTER_SELECT_STAGE_ID,
   title: 'Tracking',
@@ -168,7 +173,8 @@ export const encounterSelectStage: StageModule = {
               title: 'Rest a while',
               // The number, not the formula: a player deciding between this
               // and a trait needs to know what they are being handed.
-              lines: [`Recover ${heal} hit points`, 'Ten, and two for every point of Might'],
+              lines: restLines(heal),
+              more: ['Ten, and two for every point of Might'],
             },
           },
         ],

@@ -30,7 +30,11 @@
 //   `MODIFIER_RESIDUAL` of rolls, a ceiling that may only come down; alone,
 //   every roll must fit.
 //
-// NOT CHECKED HERE: a fight's previews and a monster's offer preview, which
+// Classes behind a permanent unlock (Berserker) are checked too: the stage
+// offers them once earned, and a once-earned class is still a preview.
+//
+// NOT CHECKED HERE: a fight's previews (a fully stacked Prepare is the known
+// wide one) and a monster's offer preview, which
 // are built from the moment of a fight rather than from one piece of content.
 // A fight's accumulating pills are exempt by design anyway (the newest is the
 // leftmost and the one that matters).
@@ -51,7 +55,9 @@ import { describeModifier } from './model/modifiers'
 import { describeBuild, MONSTER_TYPE_WORD } from './model/vectors'
 import { CREATION_NARRATION, moveLines } from './stages/characterCreation'
 import { REGION_SELECT_NARRATION } from './stages/regionSelect'
-import { omenLeadIn } from './stages/encounterSelect'
+import { omenLeadIn, restLines } from './stages/encounterSelect'
+import { moreToSearch } from './stages/loot'
+import { omenHealAmount } from './model/specialEvents'
 
 const STYLE = 'concise' as const
 const STRIP = CHAPTER_BAR_METRICS.stripPx
@@ -87,17 +93,25 @@ const SPECIES_OVER: readonly string[] = ['brannoch', 'velkar']
  * is one line per effect, and three effects with a condition each come to
  * about the whole strip.
  */
-const MODIFIER_RESIDUAL = { alone: 0, creation: 0.01, inRun: 0.29 } as const
+const MODIFIER_RESIDUAL = { alone: 0, creation: 0.01, inRun: 0.28 } as const
 
 /**
- * The widest line an in-run offer screen opens with: the omen's, at the rank
- * with the longest word, which is the busiest screen that offers a modifier.
- * Loot and the market open with a pill of comparable length (the kill, or
- * what was just bought), so this stands for all three.
+ * WHAT AN IN-RUN OFFER STANDS BESIDE, per kind, because the two kinds are
+ * offered on different screens. A TRAIT is offered by the omen, which opens
+ * with its rank's line -- the widest rank word is taken. An ITEM is offered
+ * by the spoils, which after the first pick says `moreToSearch(<that pick>)`;
+ * the item's own name stands in for the pick, which is the same length class
+ * and keeps the check a function of the content alone. The first spoils
+ * screen opens with the kill pill instead, which names a monster and is built
+ * from a fight, so it is not checked here.
  */
-const IN_RUN_LEAD_IN = Object.values(MONSTER_TYPE_WORD)
+const OMEN_LEAD_IN = Object.values(MONSTER_TYPE_WORD)
   .map((word) => omenLeadIn(word))
   .reduce((widest, line) => (stripWidth([line], []) > stripWidth([widest], []) ? line : widest))
+
+function inRunLeadIn(modifier: { kind: string; name: string }): string {
+  return modifier.kind === 'trait' ? OMEN_LEAD_IN : moreToSearch(modifier.name)
+}
 
 const playableClasses = THOCKQUEST.combatClasses.filter((entry) => entry.playable !== false)
 const playableSpecies = THOCKQUEST.species.filter((entry) => entry.playable === true)
@@ -106,17 +120,19 @@ function speciesLines(species: (typeof playableSpecies)[number]): string[] {
   return describeModifier({ id: species.id, kind: 'trait', name: species.name, icon: species.icon, effects: species.effects }, STYLE)
 }
 
+interface Preview { id: string; lines: string[]; inRun: string }
+
 function fits(narration: string | null, lines: readonly string[]): boolean {
   return stripWidth(narration === null ? [] : [narration], lines) <= STRIP
 }
 
 /** Every item and trait, rolled under every seed, deduplicated by what it says. */
-function modifierPreviews(): { id: string; lines: string[] }[] {
-  const seen = new Map<string, { id: string; lines: string[] }>()
+function modifierPreviews(): Preview[] {
+  const seen = new Map<string, Preview>()
   for (const seed of CATALOG_SEEDS) {
     for (const modifier of catalogFor(THOCKQUEST, seed).values()) {
       const lines = describeModifier(modifier, STYLE)
-      seen.set(`${modifier.id}|${lines.join('\n')}`, { id: modifier.id, lines })
+      seen.set(`${modifier.id}|${lines.join('\n')}`, { id: modifier.id, lines, inRun: inRunLeadIn(modifier) })
     }
   }
   return [...seen.values()]
@@ -126,6 +142,10 @@ describe('choice previews fit the chapter bar at the reference layout', () => {
   it('fits every build beside its question', () => {
     const over = THOCKQUEST.builds.filter((build) => !fits(CREATION_NARRATION.build, describeBuild(build))).map((build) => build.id)
     expect(over).toEqual([])
+  })
+
+  it('fits the omen\'s rest beside the omen\'s line, at any Might a run reaches', () => {
+    for (let might = 0; might <= 20; might += 1) expect(fits(OMEN_LEAD_IN, restLines(omenHealAmount(might))), `Might ${might}`).toBe(true)
   })
 
   it('fits every region beside the road\'s line', () => {
@@ -150,10 +170,10 @@ describe('choice previews fit the chapter bar at the reference layout', () => {
    * over it is a regression, and more than two points under it is slack a
    * regression could arrive in unnoticed.
    */
-  function checkResidual(leadIn: string | null, allowed: number): void {
-    const over = modifiers.filter(({ lines }) => !fits(leadIn, lines))
+  function checkResidual(leadIn: ((preview: Preview) => string) | null, allowed: number): void {
+    const over = modifiers.filter((preview) => !fits(leadIn ? leadIn(preview) : null, preview.lines))
     const share = over.length / modifiers.length
-    const widest = over.reduce<{ id: string; lines: string[] } | null>(
+    const widest = over.reduce<Preview | null>(
       (best, entry) => (!best || stripWidth([], entry.lines) > stripWidth([], best.lines) ? entry : best),
       null,
     )
@@ -174,10 +194,10 @@ describe('choice previews fit the chapter bar at the reference layout', () => {
     const widerQuestion = stripWidth([CREATION_NARRATION.item], []) > stripWidth([CREATION_NARRATION.trait], [])
       ? CREATION_NARRATION.item
       : CREATION_NARRATION.trait
-    checkResidual(widerQuestion, MODIFIER_RESIDUAL.creation)
+    checkResidual(() => widerQuestion, MODIFIER_RESIDUAL.creation)
   })
 
   it('pushes an item or trait past the edge in a run no more often than the residual', () => {
-    checkResidual(IN_RUN_LEAD_IN, MODIFIER_RESIDUAL.inRun)
+    checkResidual((preview) => preview.inRun, MODIFIER_RESIDUAL.inRun)
   })
 })
