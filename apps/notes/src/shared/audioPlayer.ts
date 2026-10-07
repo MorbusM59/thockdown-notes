@@ -1,3 +1,4 @@
+import type { InvokeChannels } from './ipcContract';
 // Shared types and IPC channel names for the music player feature.
 
 export const AUDIO_PLAYER_CHANNELS = {
@@ -16,7 +17,7 @@ export const AUDIO_PLAYER_CHANNELS = {
   purgeSong:            'audio-player:purge-song',
   getPlaylistCounts:    'audio-player:get-playlist-counts',
   getSongById:          'audio-player:get-song-by-id',
-} as const;
+} as const satisfies InvokeChannels<AudioPlayerApi>;
 
 /** One persisted playlist slot (1-indexed). */
 export type PlaylistSlot = 1 | 2 | 3 | 4 | 5 | 6;

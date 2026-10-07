@@ -1,9 +1,10 @@
+import type { InvokeChannels } from './ipcContract';
 export const REVIEW_FLAG_CHANNELS = {
-  list: 'reviewFlags:list',
-  set: 'reviewFlags:set',
-  clear: 'reviewFlags:clear',
-  sync: 'reviewFlags:sync',
-} as const;
+  listReviewFlags: 'reviewFlags:list',
+  setReviewFlag: 'reviewFlags:set',
+  clearReviewFlag: 'reviewFlags:clear',
+  syncReviewFlags: 'reviewFlags:sync',
+} as const satisfies InvokeChannels<ReviewFlagsApi>;
 
 export type ReviewFlagSeverity = 'review' | 'warning';
 
