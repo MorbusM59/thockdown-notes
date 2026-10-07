@@ -111,7 +111,7 @@ export const lootStage: StageModule = {
     }
 
     const taken: Effect[] = []
-    let label = ''
+    let label: string
     if (pending) {
       const swapped = dropEffects('item', choiceId, pending)
       if (!swapped) return { kind: 'stay', state, rng }

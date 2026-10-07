@@ -365,12 +365,11 @@ export function rollModifier(template: ModifierTemplate, runSeed: RngState): Mod
   // ARMOR FIRST, and unconditionally where the template carries it. It is one
   // of the two or three slots, so an armour thing spends a slot on being
   // armour and rolls one or two others.
-  let armorAmount = 0
   if (template.armor) {
     const range = template.kind === 'item' ? DECAYING_ARMOR_RANGE : NATURAL_ARMOR_RANGE
     const drawn = nextInt(rng, range[0], range[1])
     rng = drawn.rng
-    armorAmount = Math.max(1, drawn.value)
+    const armorAmount = Math.max(1, drawn.value)
     effects.push(template.kind === 'item'
       ? { kind: 'armorSlot', amount: armorAmount }
       : { kind: 'naturalArmor', amount: armorAmount })

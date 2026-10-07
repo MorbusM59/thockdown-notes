@@ -5845,7 +5845,7 @@ ${markdownHtml}
   }, [activeSectionId, getActiveSection, persistenceReady, persistMenuStateNow, refreshNotes])
 
   const createNoteFromClipboardTitle = useCallback(async () => {
-    let title = FALLBACK_NEW_NOTE_TITLE
+    let title: string
 
     try {
       const clipboardText = await navigator.clipboard.readText()
@@ -7130,11 +7130,11 @@ ${markdownHtml}
     // its note before the fresh blank section backfills it.
     void sectionRegistryRef.current.get(sectionId)?.persistActiveNoteEditModeStateNow()
 
-    let updated = await sectionsApi.closeSlot(sectionId)
+    await sectionsApi.closeSlot(sectionId)
     sectionRegistryRef.current.delete(sectionId)
     pruneReviewGutterVisibility(sectionId)
 
-    updated = await sectionsApi.createSection(null, (outgoingPosition ?? 1) - 1)
+    let updated = await sectionsApi.createSection(null, (outgoingPosition ?? 1) - 1)
     const created = updated.find((entry) => entry.position === outgoingPosition)
 
     // Unlike a swap (where the slot survives untouched and geometry needs no

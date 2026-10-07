@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   TypingSoundManager,
   resolveKeyboardPanForCode,
-  shouldBakeReverbIntoTransient,
   shouldSuppressPlainTypingSoundForInsertion,
   suppressNextPlainTypingSoundOnce,
 } from './TypingSoundManager'
@@ -40,11 +39,6 @@ describe('typing sounds', () => {
         selection: { start: 2 },
       })
     ).toBe(false)
-  })
-
-  it('keeps reverb live instead of baking it into each transient sample', () => {
-    expect(shouldBakeReverbIntoTransient(0.4)).toBe(false)
-    expect(shouldBakeReverbIntoTransient(0)).toBe(false)
   })
 
   it('uses the same explicit-pan intensity for +50 and -50', () => {

@@ -82,6 +82,7 @@ try {
     `Failed to load the better-sqlite3 native module: ${detail}. ` +
     `This usually means the packaged build is missing the native binary for this platform, ` +
     `or it was compiled against a different Electron/Node ABI than the one this app is running.`,
+    { cause: error },
   );
 }
 

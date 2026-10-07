@@ -51,8 +51,8 @@ const KEYBOARD_PAN_BY_CODE = buildKeyboardPanByCode()
 
 // Exported standalone (rather than kept private on the class) so it's
 // testable without an AudioContext, matching this file's existing pattern
-// for pure decision logic (shouldSuppressPlainTypingSoundForInsertion,
-// shouldBakeReverbIntoTransient). Purely a function of the physical key
+// for pure decision logic (shouldSuppressPlainTypingSoundForInsertion).
+// Purely a function of the physical key
 // code, so mode A needs no per-locale table -- non-character keys (Tab,
 // ArrowLeft, Backspace, ...) are simply absent from KEYBOARD_PAN_BY_CODE
 // and resolve to center, matching "non character keys are centered".
@@ -156,10 +156,6 @@ export function shouldSuppressPlainTypingSoundForInsertion(event: {
   if (delta !== 1) return false
   const insertedChar = event.text[event.selection.start - 1]
   return insertedChar === '\n' || insertedChar === '\r'
-}
-
-export function shouldBakeReverbIntoTransient(reverbStrength: number): boolean {
-  return false && reverbStrength > 0
 }
 
 export class TypingSoundManager {

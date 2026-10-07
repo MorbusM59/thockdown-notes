@@ -136,11 +136,10 @@ describe('buildWheelSpinProfile', () => {
     const profile = buildDefault()
     const at = profile.tailStartMs * 0.6
     const fine = sampleWheelSpinProfile(buildDefault(), at).travelledPx
-    let coarse = 0
-    for (let tMs = 0; tMs <= at; tMs += 97) {
-      coarse = sampleWheelSpinProfile(profile, Math.min(tMs, at)).travelledPx
-    }
-    coarse = sampleWheelSpinProfile(profile, at).travelledPx
+    // Sample the same profile at a coarse stride first, so a profile that
+    // carried state from one sample to the next would arrive somewhere else.
+    for (let tMs = 0; tMs <= at; tMs += 97) sampleWheelSpinProfile(profile, tMs)
+    const coarse = sampleWheelSpinProfile(profile, at).travelledPx
     expect(coarse).toBeCloseTo(fine, 6)
   })
 
