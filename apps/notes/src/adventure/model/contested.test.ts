@@ -7,7 +7,7 @@ import { clampProgression, PROGRESSION_MAX, PROGRESSION_MIN, PROGRESSION_STEP, p
 import { chanceAtDelta, COUNTER_STATS, contestedStat, pressThumb, resolveChance } from './chance'
 import { createStatBlock, deriveStats, DODGE_CHANCE, STAT_KEYS } from './stats'
 import { testMonster } from '../testing/monster'
-import { monsterTier, statsFromTier, type Species } from './vectors'
+import { monsterTier, MONSTER_TIER_PER_LEVEL, statsFromTier, type Species } from './vectors'
 import { rollCount } from './encounterOffers'
 import { totalArmor } from './armor'
 
@@ -142,7 +142,7 @@ describe('the power multiplier', () => {
 })
 
 describe('monster ranks', () => {
-  it('orders the ranks by TIER, and adds one for every level past the first', () => {
+  it('orders the ranks by TIER, and adds a fixed step for every level past the first', () => {
     // The rank ladder used to be a flat stat shift applied to a class's base
     // block. It is a TIER now (model/vectors.ts) -- a budget the build's
     // weights split -- so what a rank is worth is one number and the ordering
@@ -150,15 +150,15 @@ describe('monster ranks', () => {
     for (let index = 1; index < MONSTER_TYPES.length; index += 1) {
       expect(monsterTier(MONSTER_TYPES[index], 1)).toBeGreaterThan(monsterTier(MONSTER_TYPES[index - 1], 1))
     }
-    // ONE per level, not five: the rank gap has to stay legible for the whole
-    // run, so a level-12 regular is still plainly weaker than a level-12
-    // elite. THE PROPERTY, across the whole ladder, rather than one reading.
+    // A step below the rank gap: the rungs stay legible for the whole run,
+    // so a level-12 regular is still plainly weaker than a level-12 elite.
+    // THE PROPERTY, across the whole ladder, rather than one reading.
     for (const type of MONSTER_TYPES) {
       for (let level = 1; level <= 12; level += 1) {
-        expect(monsterTier(type, level)).toBe(monsterTier(type, 1) + level - 1)
+        expect(monsterTier(type, level)).toBe(monsterTier(type, 1) + MONSTER_TIER_PER_LEVEL * (level - 1))
       }
-      expect(monsterTier(type, 12)).toBeLessThan(monsterTier('boss', 1) + 12)
     }
+    expect(MONSTER_TIER_PER_LEVEL).toBeLessThan(monsterTier('regular', 1) - monsterTier('runt', 1))
   })
 
   it('spends the whole tier and no more, whatever the build', () => {

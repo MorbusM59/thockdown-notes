@@ -193,15 +193,23 @@ export const MONSTER_TYPE_TIER: Readonly<Record<MonsterType, number>> = {
 }
 
 /**
- * A monster's tier: its rank's, plus one for every level past the first.
- *
- * ONE per level rather than five, deliberately: the rank gap (five) is meant
- * to stay legible for the whole run, so a level-12 regular is still plainly
- * weaker than a level-12 elite. A per-level step as big as the rank step
- * would make the ladder's rungs meaningless by the third level.
+ * A monster's tier: its rank's, plus `MONSTER_TIER_PER_LEVEL` for every
+ * level past the first. Kept below the rank gap so the rungs stay legible
+ * for a whole run: a level-12 regular is still plainly weaker than a
+ * level-12 elite.
  */
+/**
+ * What a level adds to every rank. TWO, not the design's one: a player earns
+ * about one stat point a level and each is worth two points of build (one
+ * tier, one placed), so at one a level the ladder fell behind and the late
+ * levels stopped being a test (adventure:balance, careful player: 47% won
+ * all twelve at one, 18% at two). The rank gap (three) still exceeds it, so
+ * a rank is never overtaken by the rank below it on the same level.
+ */
+export const MONSTER_TIER_PER_LEVEL = 2
+
 export function monsterTier(type: MonsterType, level: number): number {
-  return MONSTER_TYPE_TIER[type] + Math.max(0, Math.floor(level) - 1)
+  return MONSTER_TYPE_TIER[type] + MONSTER_TIER_PER_LEVEL * Math.max(0, Math.floor(level) - 1)
 }
 
 /**

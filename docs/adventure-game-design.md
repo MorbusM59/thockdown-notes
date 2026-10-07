@@ -1263,3 +1263,9 @@ dealt without seeing the dice.
     reading the run record's thumb instead of `runTuning`, so the guardian
     never reached a roll; with that fixed, 60% made the first three levels
     unlosable for every non-random player.
+- **Monsters gain two tier a level, not one** (`MONSTER_TIER_PER_LEVEL`,
+  same session as the ladder re-base). With spells bounded, one a level let
+  the careful player win all twelve levels 47% of the time; at two it is 18%,
+  with deaths spread over levels 6 to 12. The lookahead player is barely
+  moved (26 of 40 reach level 11 at both two and three): its late strength
+  is not stat-gated, which is the open question for the next round.
