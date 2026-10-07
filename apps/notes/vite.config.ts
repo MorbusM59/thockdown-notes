@@ -1,13 +1,12 @@
 // `defineConfig` from 'vitest/config' instead of 'vite' -- it's a drop-in
 // superset that additionally type-checks a `test` field, so vitest picks up
 // this same file (no separate vitest.config.ts) without losing the plugins
-// below (tailwind/react/electron) that a second config file would otherwise
+// below (react/electron) that a second config file would otherwise
 // shadow instead of merging with.
 import { defineConfig } from 'vitest/config'
 import path from 'node:path'
 import electron from 'vite-plugin-electron/simple'
 import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -65,7 +64,6 @@ export default defineConfig(({ mode }) => {
       },
     },
     plugins: [
-      tailwindcss(),
       react(),
       ...(isBrowserOnlyDev
         ? []

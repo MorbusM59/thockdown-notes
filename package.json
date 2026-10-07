@@ -23,7 +23,6 @@
     "perf:first-open": "npm run perf:first-open -w thockdown-notes --"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.1.17",
     "@types/react": "^18.2.64",
     "@types/react-dom": "^18.2.21",
     "@typescript-eslint/eslint-plugin": "^8.71.1",
@@ -36,7 +35,6 @@
     "jsdom": "^29.1.1",
     "playwright": "^1.62.0",
     "postcss": "^8.5.14",
-    "tailwindcss": "^4.3.0",
     "typescript": "^5.2.2",
     "vite": "^8.3.3",
     "vitest": "^5.0.3"

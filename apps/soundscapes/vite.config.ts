@@ -9,13 +9,12 @@
 import { defineConfig } from 'vite'
 import path from 'node:path'
 import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   root: __dirname,
   base: './',
   publicDir: false,
-  plugins: [tailwindcss(), react()],
+  plugins: [react()],
   build: {
     outDir: path.resolve(__dirname, 'dist'),
     emptyOutDir: true,
