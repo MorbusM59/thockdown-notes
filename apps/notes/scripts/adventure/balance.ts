@@ -27,7 +27,7 @@ import { availableParallelism } from 'node:os'
 import { writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { PROGRESSION_MIN } from '../../src/adventure/model/difficulty'
-import { POLICIES, clever, playRun, type Policy, type PolicyName, type RunResult } from './runner'
+import { POLICIES, clever, playRun, type Policy, type PolicyName, type RunResult, type VectorPin } from './runner'
 
 interface Args {
   runs: number
@@ -42,13 +42,15 @@ interface Args {
   out: string
   json: boolean
   shard: [number, number] | null
+  /** `--pin=class:juggler`: every run is that vector, overriding what creation picked. */
+  pin: VectorPin | null
 }
 
 function parseArgs(argv: string[]): Args {
   const args: Args = {
     runs: 200, cleverRuns: 40, samples: 4, progression: PROGRESSION_MIN, successAdjust: 0, levels: 12,
     policies: ['first', 'random', 'careful', 'clever'], seed: 1, workers: availableParallelism(),
-    out: 'balance-report.md', json: false, shard: null,
+    out: 'balance-report.md', json: false, shard: null, pin: null,
   }
   for (const raw of argv) {
     const [key, value = ''] = raw.replace(/^--/, '').split('=')
@@ -63,7 +65,10 @@ function parseArgs(argv: string[]): Args {
     else if (key === 'workers') args.workers = Math.max(1, Number(value))
     else if (key === 'out') args.out = value
     else if (key === 'json') args.json = true
-    else if (key === 'shard') {
+    else if (key === 'pin') {
+      const [vector, id] = value.split(':')
+      args.pin = { vector: vector as VectorPin['vector'], id, name: id }
+    } else if (key === 'shard') {
       const [index, count] = value.split('/').map(Number)
       args.shard = [index, count]
     }
@@ -108,6 +113,7 @@ function runShard(args: Args, shard: [number, number]): ShardOutput {
       policy: policyOf(args, job.policy),
       levelCap: args.levels,
       recordDecisions: true,
+      vectors: args.pin ? [args.pin] : undefined,
     })
     const tally = (output.tallies[job.policy] ??= {})
     for (const decision of result.decisions) {
