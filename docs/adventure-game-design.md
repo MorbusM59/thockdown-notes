@@ -1286,3 +1286,9 @@ dealt without seeing the dice.
   stat-point ladder change a flat two left clever winning 91% and careful
   dying in the first few levels; the ramp gives clever 57% wins with losses
   across levels 3 to 12, careful 9% wins (adventure:balance, 12 levels).
+
+### Class moves brought up to par (2026-10-07)
+- Measured by pinning each class on every clever run (`npm run adventure:balance -- --pin=class:<id>`). Juggler, Mauler and Skirmisher died far more often than an unpinned run, since their moves came to a plain hit or less.
+- Juggler: Flurry 2 × 75% with +20% to Hit, Cascade 4 × 50% with +20% to Hit.
+- Skirmisher: Harry 2 × 60% with +30% to Hit.
+- Mauler: Stunning Blow 240% with +30% to Hit. The 25% chance is the author's and is unchanged.
