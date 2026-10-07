@@ -2243,8 +2243,8 @@ placed at 5, 9 and 10 and the level advancing after ten.
 
 105. **THE GUARDIAN ANGEL** (`model/guardian.ts`) is what makes entry 104
      survivable: a hidden FLOOR under the run's luckiness, `LUCKINESS_INITIAL`
-     30% on the first level, `LUCKINESS_INITIAL_DECAY` 15% less each level,
-     gone by the third (it was 60/20 while combat was not reading it at all).
+     40% on the first level, `LUCKINESS_INITIAL_DECAY` 10% less each level,
+     gone by the fifth (it was 60/20 while combat was not reading it at all).
 
      **A FLOOR, not an addend**: it supersedes the reader's Luckiness slider
      only while it is higher, so somebody who turned theirs up never meets it.

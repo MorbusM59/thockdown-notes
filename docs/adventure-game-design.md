@@ -1292,3 +1292,7 @@ dealt without seeing the dice.
 - Juggler: Flurry 2 × 75% with +20% to Hit, Cascade 4 × 50% with +20% to Hit.
 - Skirmisher: Harry 2 × 60% with +30% to Hit.
 - Mauler: Stunning Blow 240% with +30% to Hit. The 25% chance is the author's and is unchanged.
+- **The guardian is 40% falling 10 a level** (gone by level 5, was 30/15).
+  With the late ramp it carries a careful player into the mid-game (median
+  encounter 82, 15% win) while clever stays at 62% wins. A careful run is
+  bimodal: it either falls in levels 1 to 3 or reaches the late game.
