@@ -1318,3 +1318,6 @@ dealt without seeing the dice.
   the island and caves lighter ones, so a region is also a choice of risk;
   whether that is wanted is the author's call. A run in progress keeps its
   stored offers, but its next draws may name different species.
+### Pinned class and species matrix (2026-10-07)
+- Measured with 8 clever runs to level 8 for every class and player species, pinned. Brawler and Shieldbreaker died far more often than the field, and careful Bruiser runs got less far than careful runs in general.
+- Brawler: Grapple 100% instead of 80%. Shieldbreaker: Pry 100% instead of 90%, so ignoring armor is never paid for with damage. Bruiser: Haymaker −20% to Hit instead of −35%.
