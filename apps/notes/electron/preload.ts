@@ -37,6 +37,11 @@ import { CHAPTER_CHANNELS } from '../src/shared/chapters'
 import type { ReviewFlagsApi } from '../src/shared/reviewFlags'
 import { REVIEW_FLAG_CHANNELS } from '../src/shared/reviewFlags'
 import { WINDOW_DRAG_CHANNELS } from '../src/shared/windowDrag'
+import { invokeBridge } from '../src/shared/ipcContract'
+
+// Every request/reply bridge below is built from its channel map by
+// `invokeBridge` (see shared/ipcContract.ts).
+const invoke = (channel: string, ...args: unknown[]) => ipcRenderer.invoke(channel, ...args)
 
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('ipcRenderer', {
@@ -253,13 +258,7 @@ const audioPlayerApi: AudioPlayerApi = {
 
 contextBridge.exposeInMainWorld('thockdownAudioPlayer', audioPlayerApi)
 
-const noteTabsApi: NoteTabsApi = {
-  listTabs:    () => ipcRenderer.invoke(NOTE_TABS_CHANNELS.list),
-  addTab:      (sectionId, noteId) => ipcRenderer.invoke(NOTE_TABS_CHANNELS.add, sectionId, noteId),
-  removeTab:   (sectionId, noteId) => ipcRenderer.invoke(NOTE_TABS_CHANNELS.remove, sectionId, noteId),
-  reorderTabs: (sectionId, orderedNoteIds) => ipcRenderer.invoke(NOTE_TABS_CHANNELS.reorder, sectionId, orderedNoteIds),
-  setLastActiveChapter: (sectionId, noteId, chapterNoteId) => ipcRenderer.invoke(NOTE_TABS_CHANNELS.setLastActiveChapter, sectionId, noteId, chapterNoteId),
-}
+const noteTabsApi: NoteTabsApi = invokeBridge<NoteTabsApi>(NOTE_TABS_CHANNELS, invoke)
 
 contextBridge.exposeInMainWorld('thockdownTabs', noteTabsApi)
 

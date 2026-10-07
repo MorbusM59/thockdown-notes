@@ -1,6 +1,6 @@
 import { SOUNDSCAPE_FILE_CHANNELS, SOUNDSCAPE_FILE_EXTENSION } from '@thockdown/soundscape/soundscapeFile';
 import { app, BrowserWindow, Menu, ipcMain, dialog, protocol, shell } from 'electron'
-import type { Session, PrintToPDFOptions } from 'electron'
+import type { IpcMainInvokeEvent, Session, PrintToPDFOptions } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { existsSync, promises as fsPromises } from 'node:fs'
@@ -17,7 +17,8 @@ import { AUDIO_BOUNCE_CHANNELS } from '../src/shared/audioBounceCache'
 import { LOADOUT_CHANNELS } from '@thockdown/look/loadouts'
 import { AUDIO_PLAYER_CHANNELS, AUDIO_EXTENSIONS } from '../src/shared/audioPlayer'
 import type { PlaylistSlot } from '../src/shared/audioPlayer'
-import { NOTE_TABS_CHANNELS } from '../src/shared/tabs'
+import { NOTE_TABS_CHANNELS, type NoteTabsApi } from '../src/shared/tabs'
+import { registerInvokeHandlers } from '../src/shared/ipcContract'
 import { computeWindowControlsWidthPx, DEFAULT_SPACING_REGULAR_PX } from '../src/shared/windowChromeMetrics'
 import { EDITOR_SECTIONS_CHANNELS } from '../src/shared/sections'
 import { CHAPTER_CHANNELS } from '../src/shared/chapters'
@@ -1194,25 +1195,14 @@ function registerIpcHandlers() {
     return databaseService!.getMusicSongById(id);
   });
 
-  ipcMain.handle(NOTE_TABS_CHANNELS.list, async () => {
-    return databaseService!.listNoteTabs();
-  });
-
-  ipcMain.handle(NOTE_TABS_CHANNELS.add, async (_event, sectionId: string, noteId: string) => {
-    return databaseService!.addNoteTab(sectionId, noteId);
-  });
-
-  ipcMain.handle(NOTE_TABS_CHANNELS.remove, async (_event, sectionId: string, noteId: string) => {
-    return databaseService!.removeNoteTab(sectionId, noteId);
-  });
-
-  ipcMain.handle(NOTE_TABS_CHANNELS.reorder, async (_event, sectionId: string, orderedNoteIds: string[]) => {
-    return databaseService!.reorderNoteTabs(sectionId, orderedNoteIds);
-  });
-
-  ipcMain.handle(NOTE_TABS_CHANNELS.setLastActiveChapter, async (_event, sectionId: string, noteId: string, chapterNoteId: string | null) => {
-    return databaseService!.setNoteTabLastActiveChapter(sectionId, noteId, chapterNoteId);
-  });
+  registerInvokeHandlers<NoteTabsApi, IpcMainInvokeEvent>(NOTE_TABS_CHANNELS, {
+    listTabs: () => databaseService!.listNoteTabs(),
+    addTab: (_event, sectionId, noteId) => databaseService!.addNoteTab(sectionId, noteId),
+    removeTab: (_event, sectionId, noteId) => databaseService!.removeNoteTab(sectionId, noteId),
+    reorderTabs: (_event, sectionId, orderedNoteIds) => databaseService!.reorderNoteTabs(sectionId, orderedNoteIds),
+    setLastActiveChapter: (_event, sectionId, noteId, chapterNoteId) =>
+      databaseService!.setNoteTabLastActiveChapter(sectionId, noteId, chapterNoteId),
+  }, ipcMain.handle.bind(ipcMain));
 
   ipcMain.handle(EDITOR_SECTIONS_CHANNELS.list, async () => {
     return databaseService!.listEditorSections();

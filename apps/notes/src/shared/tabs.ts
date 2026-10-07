@@ -1,10 +1,12 @@
+import type { InvokeChannels } from './ipcContract';
+
 export const NOTE_TABS_CHANNELS = {
-  list: 'tabs:list',
-  add: 'tabs:add',
-  remove: 'tabs:remove',
-  reorder: 'tabs:reorder',
+  listTabs: 'tabs:list',
+  addTab: 'tabs:add',
+  removeTab: 'tabs:remove',
+  reorderTabs: 'tabs:reorder',
   setLastActiveChapter: 'tabs:set-last-active-chapter',
-} as const;
+} as const satisfies InvokeChannels<NoteTabsApi>;
 
 /** One entry pinned to a section's tab bar. Display label comes from the note's `assignedId`, looked up client-side. */
 export interface NoteTabEntry {
