@@ -831,7 +831,8 @@ The third was real, and is answered:
 
 20. **Previews that still overflow the strip — OPEN.** At the reference layout
     (1920px, double size, one slot, sidebar out) the chapter bar's strip is
-    492 CSS px, about sixty characters. Monster offers, combat cells, spells,
+    492 CSS px, about sixty characters. Checked in CONCISE style (verbose
+    explains every effect and is accepted to scroll). Monster offers, combat cells, spells,
     and every lead-in now fit; `adventure/choiceWidth.contract.test.ts` names
     what does not, per screen, as a ceiling that may only come down. The
     residual is structural rather than wording: a modifier preview is one

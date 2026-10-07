@@ -150,7 +150,8 @@ export function iconFor(offer: EncounterOffer, context: StageContext): string {
  *
  * THE PILL CARRIES THE COMPARISON and the tooltip carries the rest. Two or
  * three offers are weighed against each other on five numbers -- health,
- * actions, damage, and its two chances against you -- so those are the pill,
+ * actions, damage, and its two chances against you, plus its armor when it
+ * has any -- so those are the pill,
  * as one stat line in the glyphs the bars already use for them, and its two
  * chances. The tier is not repeated here: it leads the cell's own label
  * (`monsterCellLabel`), which the ring's centre shows beside this pill.

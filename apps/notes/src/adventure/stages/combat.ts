@@ -586,7 +586,9 @@ function stepFight(options: {
    * reader had already seen on an earlier screen. A fight that ends carries
    * this across, and only this: the pills from the action that ended it are
    * the ones nobody has read yet, and the rest of the round is history the
-   * next screen's choices should not have to sit behind.
+   * next screen's choices should not have to sit behind. A new round's own
+   * opening pills (`openedRound`) are round history, not this step's news,
+   * and stay out of it on purpose.
    */
   let fresh = [...options.entries]
   const say = (pills: readonly string[]) => {

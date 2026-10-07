@@ -274,7 +274,7 @@ const THORNS = 'fa-solid fa-reply-all'
  * say why.
  */
 export function thornsPill(monster: Monster, damage: number, source: 'player' | 'monster'): string {
-  const detail = [`Damage: ${damage}, thrown back by the armour that stopped the blow`]
+  const detail = [`Damage: ${damage}, thrown back by the Armor that stopped the blow`]
   return source === 'player'
     ? pill(PLAYER, 'you', { icon: THORNS, word: 'thorns' }, damage, monsterIcon(monster), 'it', detail)
     : pill(monsterIcon(monster), 'it', { icon: THORNS, word: 'thorns' }, damage, PLAYER, 'you', detail)
