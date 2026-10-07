@@ -78,7 +78,7 @@ export function EscapeMenuReadouts({ status }: { status: EscapeMenuModeChrome })
           // branching twice on whether there is a figure.
           data-tooltip={tooltipOf(readout.label, readoutLines(readout))}
           aria-label={readoutLines(readout).length > 0
-            ? `${readout.label}: ${readoutLines(readout).join(DETAIL_SEPARATOR)}`
+            ? `${readout.label}: ${readoutLines(readout).map(narrationOf).join(DETAIL_SEPARATOR)}`
             : readout.label}
         >
           <span className={readout.icon} aria-hidden="true" />
@@ -210,7 +210,7 @@ export function EscapeMenuChromeBarRow({ status, detail }: {
                   // the word it stands for (narrationMarkup.ts), so a tooltip
                   // built from the source string would read out its class
                   // names. Same treatment the narration pill beside it gets.
-                  data-tooltip={tooltipOf(detail?.title ?? '', [...detailLines, ...(detail?.more ?? [])].map(narrationOf))}
+                  data-tooltip={tooltipOf(detail?.title ?? '', [...detailLines, ...(detail?.more ?? [])])}
                   aria-label={`${detail?.title ?? ''}: ${[...detailLines, ...(detail?.more ?? [])].map(narrationOf).join(DETAIL_SEPARATOR)}`}
                 >
                   {detailLines.map((line, index) => (
