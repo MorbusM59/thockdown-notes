@@ -7,8 +7,9 @@
 // one of those borders, which is why travelling one way rather than the other
 // is a decision a player can actually make.
 //
-// Which encounters and which MONSTERS a region brings into scope is still
-// unspecified, and this stage still does not pretend otherwise.
+// A region also makes some MONSTERS common (`Region.favours`, weighted in
+// model/encounterOffers.ts), and the detail names them, so where to go is
+// also a choice of what to face.
 
 import type { StageModule } from '../core/stage'
 import { MARKET_PRICE, purse } from './market'
@@ -34,7 +35,16 @@ export const regionSelectStage: StageModule = {
       // names: the pace constraint says a choice cannot cost ten seconds of
       // reading, and the border names are the honest short form -- they are
       // literally the groups the traits come from.
-      detail: { title: region.name, lines: [...region.borders] },
+      detail: {
+        title: region.name,
+        lines: [
+          ...region.borders,
+          region.favours
+            .map((id) => context.content.species.find((species) => species.id === id)?.name)
+            .filter((name): name is string => !!name)
+            .join(', '),
+        ],
+      },
     })),
   }),
 

@@ -68,6 +68,14 @@ export interface Region {
    * renamed or dropped costs a name in a list rather than a broken region.
    */
   traits: readonly string[]
+  /**
+   * WHICH MONSTERS ARE COMMON HERE: species ids drawn `REGION_FAVOUR_WEIGHT`
+   * times as often as the rest of their encounter pool
+   * (model/encounterOffers.ts). A weight and not a list of what may appear,
+   * so every species stays possible everywhere and choosing a region is a
+   * choice of what to face most, not of what can never be met.
+   */
+  favours: readonly string[]
 }
 
 export interface Content {
@@ -275,7 +283,13 @@ export function validateContent(content: Content): string[] {
     }
   }
 
-  for (const region of content.regions) check(region.id, `region "${region.name}"`)
+  for (const region of content.regions) {
+    check(region.id, `region "${region.name}"`)
+    for (const speciesId of region.favours) {
+      const species = content.species.find((candidate) => candidate.id === speciesId)
+      if (!species || species.playable) problems.push(`region "${region.id}" favours "${speciesId}", which is not a monster species`)
+    }
+  }
 
   for (const template of [...content.items, ...content.traits]) {
     check(template.id, `${template.kind} "${template.name}"`)

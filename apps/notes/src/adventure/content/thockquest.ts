@@ -33,13 +33,17 @@ import { SPECIES } from './species'
 import { COMBAT_CLASSES } from './classes'
 import type { ModifierTemplate } from '../model/modifierSlots'
 
-const REGION_RING: readonly { id: string; name: string; icon: string }[] = [
-  { id: 'caves', name: 'A sprawling cave system', icon: 'fa-solid fa-mountain-sun' },
-  { id: 'foothills', name: 'The foothills of a snowy range', icon: 'fa-solid fa-snowflake' },
-  { id: 'ruins', name: 'A city gone to ruin', icon: 'fa-solid fa-archway' },
-  { id: 'fen', name: 'A fever-ridden fen', icon: 'fa-solid fa-frog' },
-  { id: 'wastes', name: 'The ember wastes', icon: 'fa-solid fa-volcano' },
-  { id: 'island', name: 'A remote island', icon: 'fa-solid fa-umbrella-beach' },
+// `favours` is a director's call against the design's open question 9
+// (which monsters a region brings into scope), taken to make the region a
+// choice of what to face. Every monster species is favoured by exactly one
+// region, so no region is the only way to meet something often.
+const REGION_RING: readonly { id: string; name: string; icon: string; favours: readonly string[] }[] = [
+  { id: 'caves', name: 'A sprawling cave system', icon: 'fa-solid fa-mountain-sun', favours: ['spider', 'kobold', 'troll', 'slime'] },
+  { id: 'foothills', name: 'The foothills of a snowy range', icon: 'fa-solid fa-snowflake', favours: ['wolf', 'bear', 'ogre', 'gargoyle'] },
+  { id: 'ruins', name: 'A city gone to ruin', icon: 'fa-solid fa-archway', favours: ['wraith', 'ghoul', 'shade', 'lich', 'golem'] },
+  { id: 'fen', name: 'A fever-ridden fen', icon: 'fa-solid fa-frog', favours: ['serpent', 'swarm', 'wisp', 'basilisk'] },
+  { id: 'wastes', name: 'The ember wastes', icon: 'fa-solid fa-volcano', favours: ['drake', 'imp', 'manticore', 'orc', 'minotaur'] },
+  { id: 'island', name: 'A remote island', icon: 'fa-solid fa-umbrella-beach', favours: ['harpy', 'boar', 'goblin'] },
 ]
 
 /**

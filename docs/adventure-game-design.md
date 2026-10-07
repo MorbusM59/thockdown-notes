@@ -1306,3 +1306,11 @@ dealt without seeing the dice.
   (open question 9), and the constructs and spirits pools hold two species
   each against eight beasts, so following either track meets the same two
   creatures. Both are content decisions and are left to the author.
+- **Director's call on open question 9, revertible: a region makes some
+  monsters common.** Each region favours three to five monster species
+  (`Region.favours`), drawn three times as often as the rest of their
+  encounter pool (`REGION_FAVOUR_WEIGHT`), at the hunt and at the placed
+  bosses alike. A weight rather than a list of what may appear, so every
+  species can still be met anywhere. Every monster species is favoured by
+  exactly one region, and the region's detail names its favourites.
+  Reverting means emptying `favours`; the draw is then uniform as before.

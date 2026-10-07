@@ -25,7 +25,7 @@
 // says so.)
 
 import { nextChance, nextInt, nextPick, type RngState } from '../core/rng'
-import type { Build, CombatClass, Species } from '../content'
+import type { Build, CombatClass, Region, Species } from '../content'
 import { ENCOUNTER_POOL_IDS, MONSTER_BUDDY_CHANCES, type EncounterPoolId, type MonsterType } from './vectors'
 
 export const LEVEL_ENCOUNTER_COUNT = 10
@@ -79,16 +79,36 @@ export function rollCount(type: MonsterType, rng: RngState): { count: number; rn
   return { count, rng: current }
 }
 
+/** How many times as often a species the region favours is drawn as one it does not. */
+export const REGION_FAVOUR_WEIGHT = 3
+
+/**
+ * One species, drawn with the region's favourites weighted up. One integer
+ * draw over the summed weights, the same single draw `nextPick` spends, so a
+ * region that favours nothing in the pool draws exactly as before.
+ */
+function pickSpecies(rng: RngState, species: readonly Species[], favoured: readonly string[]) {
+  const weightOf = (candidate: Species) => (favoured.includes(candidate.id) ? REGION_FAVOUR_WEIGHT : 1)
+  const total = species.reduce((sum, candidate) => sum + weightOf(candidate), 0)
+  if (total === 0) return { value: null, rng }
+  const draw = nextInt(rng, 0, total - 1)
+  let left = draw.value
+  for (const candidate of species) {
+    left -= weightOf(candidate)
+    if (left < 0) return { value: candidate, rng: draw.rng }
+  }
+  return { value: null, rng: draw.rng }
+}
+
 function drawOffer(
-  builds: readonly Build[],
-  species: readonly Species[],
-  classes: readonly CombatClass[],
+  pools: OfferPools,
   type: MonsterType,
   rng: RngState,
 ): { offer: EncounterOffer | null; rng: RngState } {
+  const { builds, species, classes, favoured } = pools
   const pickedBuild = nextPick(rng, builds)
   if (!pickedBuild.value) return { offer: null, rng: pickedBuild.rng }
-  const pickedSpecies = nextPick(pickedBuild.rng, species)
+  const pickedSpecies = pickSpecies(pickedBuild.rng, species, favoured)
   if (!pickedSpecies.value) return { offer: null, rng: pickedSpecies.rng }
   const pickedClass = nextPick(pickedSpecies.rng, classes)
   if (!pickedClass.value) return { offer: null, rng: pickedClass.rng }
@@ -179,7 +199,7 @@ export function mostSelectedEncounterPool(
  * WHAT A MONSTER MAY BE DRAWN FROM, in one place.
  *
  * Every build and every class, and the species that are NOT one of the
- * peoples. That last filter is the only asymmetry between the two sides of
+ * peoples, with the current region's favourites weighted up. That last filter is the only asymmetry between the two sides of
  * the game and it lives here rather than at the two call sites (the hub and
  * the hunt), because a rule stated at two of them is a rule the third will
  * not know about.
@@ -188,11 +208,13 @@ export function monsterPools(content: {
   builds: readonly Build[]
   species: readonly Species[]
   combatClasses: readonly CombatClass[]
-}, targetPool?: EncounterPoolId): OfferPools {
+  regions: readonly Region[]
+}, targetPool?: EncounterPoolId, regionId?: string | null): OfferPools {
   return {
     builds: content.builds,
     species: content.species.filter((species) => !species.playable && (!targetPool || species.encounterPool === targetPool)),
     classes: content.combatClasses,
+    favoured: content.regions.find((region) => region.id === regionId)?.favours ?? [],
   }
 }
 
@@ -201,6 +223,8 @@ export interface OfferPools {
   /** Already filtered to what a monster may be -- the caller owns that rule. */
   species: readonly Species[]
   classes: readonly CombatClass[]
+  /** Species ids the current region favours (`REGION_FAVOUR_WEIGHT`); empty where there is no region. */
+  favoured: readonly string[]
 }
 
 export function buildEncounterOffers(options: OfferPools & {
@@ -211,7 +235,7 @@ export function buildEncounterOffers(options: OfferPools & {
   const fixed = fixedTypeAt(options.encounter)
   if (fixed) {
     // No choice at a boss. One encounter, drawn from the whole pool.
-    const drawn = drawOffer(options.builds, options.species, options.classes, fixed, options.rng)
+    const drawn = drawOffer(options, fixed, options.rng)
     return { offers: drawn.offer ? [drawn.offer] : [], rng: drawn.rng }
   }
 
@@ -222,7 +246,7 @@ export function buildEncounterOffers(options: OfferPools & {
 
   // The opener is always a regular, so the dice can never present a level's
   // first decision as a choice between three packs.
-  const first = drawOffer(options.builds, options.species, options.classes, 'regular', rng)
+  const first = drawOffer(options, 'regular', rng)
   rng = first.rng
   if (first.offer) {
     offers.push(first.offer)
@@ -234,7 +258,7 @@ export function buildEncounterOffers(options: OfferPools & {
     for (let attempt = 0; attempt < DRAW_ATTEMPTS && !added; attempt += 1) {
       const type = nextInt(rng, 0, OFFERABLE_TYPES.length - 1)
       rng = type.rng
-      const drawn = drawOffer(options.builds, options.species, options.classes, OFFERABLE_TYPES[type.value], rng)
+      const drawn = drawOffer(options, OFFERABLE_TYPES[type.value], rng)
       rng = drawn.rng
       if (!drawn.offer || seen.has(identityOf(drawn.offer))) continue
       offers.push(drawn.offer)

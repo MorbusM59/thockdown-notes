@@ -31,7 +31,7 @@ export const huntStage: StageModule = {
     const rolled = buildEncounterOffers({
       encounter,
       choiceCount: context.profile?.derived.encounterChoices ?? 2,
-      ...monsterPools(context.content, targetPool),
+      ...monsterPools(context.content, targetPool, context.game?.regionId),
       rng,
     })
     return {
