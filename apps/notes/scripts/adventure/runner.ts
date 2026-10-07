@@ -229,7 +229,10 @@ export function clever({ samples }: CleverOptions): Policy {
  * the level they are taken in, plus one encounter so a level's last choice
  * still sees the next level begin.
  */
-const LONG_SIGHTED_STAGES = new Set(['characterCreation', 'regionSelect', 'fame', 'outpost'])
+// A STAT POINT too: Might's hit points arrive the instant it is placed (the
+// pool follows the maximum up), while Agility's actions and Luck's draws only
+// pay across fights -- two encounters out, Might won by being early.
+const LONG_SIGHTED_STAGES = new Set(['characterCreation', 'regionSelect', 'fame', 'outpost', 'statPoint'])
 
 function horizonOf(stageId: string, game: GameRecord): number {
   const progress = progressOf(game)

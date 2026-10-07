@@ -72,8 +72,8 @@ export const SPECIES: readonly Species[] = [
     playable: true,
     effects: [
       // Scholars of the long game: everything they own makes them sharper.
-      { kind: 'derivedPercentPerHolding', derived: 'critChance', percentPer: 0.06, holding: 'item' },
-      { kind: 'derivedPercentPerHolding', derived: 'hitChance', percentPer: 0.04, holding: 'trait' },
+      { kind: 'derivedPercentPerHolding', derived: 'critChance', percentPer: 0.15, holding: 'item' },
+      { kind: 'derivedPercentPerHolding', derived: 'hitChance', percentPer: 0.1, holding: 'trait' },
       { kind: 'derivedPercent', derived: 'damageMultiplier', percent: -0.1 },
     ],
   },
