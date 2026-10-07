@@ -53,7 +53,7 @@ const MAX_STEPS = 2_500
 const RESIDUAL: Readonly<Record<string, number>> = {
   // A class IS its moves, one line each, and three moves are wider than the
   // strip by themselves. Asked once per run.
-  'characterCreation:class': 0.76,
+  'characterCreation:class': 0.78,
   // Up to five effects, the species' whole identity. Asked once per run.
   'characterCreation:species': 0.61,
   // The trait and item asked for at creation: a modifier beside the lead-in.
