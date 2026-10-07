@@ -115,7 +115,8 @@ function dealt(state: JsonObject): string[] {
   return Array.isArray(state.offerIds) ? state.offerIds.filter((id): id is string => typeof id === 'string') : []
 }
 
-const NARRATION: Readonly<Record<Step, string>> = {
+/** The line each creation question opens with; exported for choiceWidth.contract.test.ts. */
+export const CREATION_NARRATION: Readonly<Record<Step, string>> = {
   build: 'Your build...',
   species: 'Your homeland...',
   class: 'Your life...',
@@ -168,7 +169,7 @@ export const characterCreationStage: StageModule = {
     const rolled = rollOffers(step, context, rng)
     return {
       state: { step, offerIds: rolled.offerIds } satisfies JsonObject,
-      narration: NARRATION[step],
+      narration: CREATION_NARRATION[step],
       rng: rolled.rng,
     }
   },

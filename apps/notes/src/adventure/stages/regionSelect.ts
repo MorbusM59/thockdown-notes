@@ -16,13 +16,16 @@ import { MARKET_PRICE, purse } from './market'
 import { ENCOUNTER_SELECT_STAGE_ID, OUTPOST_STAGE_ID, REGION_SELECT_STAGE_ID } from './ids'
 
 
+/** The line the road opens with; exported for choiceWidth.contract.test.ts. */
+export const REGION_SELECT_NARRATION = 'The vortex lets you go...'
+
 export const regionSelectStage: StageModule = {
   id: REGION_SELECT_STAGE_ID,
   title: 'The Road',
 
   enter: (_input, _context, rng) => ({
     state: {},
-    narration: 'The vortex lets you go...',
+    narration: REGION_SELECT_NARRATION,
     rng,
   }),
 

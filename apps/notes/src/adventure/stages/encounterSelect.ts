@@ -66,6 +66,11 @@ const OMEN_TRAIT_PREFIX = 'omen:trait:'
 // to the hunt, which draws only from it. The level's tracks are what decide
 // the pool its placed mini bosses and boss come from.
 
+/** The omen's opening line for a rank's word; exported for choiceWidth.contract.test.ts. */
+export function omenLeadIn(rankWord: string): string {
+  return `**${rankWord || 'Something'} ahead.** *The road gives first.*`
+}
+
 export const encounterSelectStage: StageModule = {
   id: ENCOUNTER_SELECT_STAGE_ID,
   title: 'Tracking',
@@ -109,7 +114,7 @@ export const encounterSelectStage: StageModule = {
         trackIds: [],
       } satisfies JsonObject,
       narration: offer
-        ? `**${MONSTER_TYPE_WORD[offer.type] || 'Something'} ahead.** *The road gives first.*`
+        ? omenLeadIn(MONSTER_TYPE_WORD[offer.type])
         : 'Something should be here, and the game cannot say what.',
       rng: omen.rng,
     }
