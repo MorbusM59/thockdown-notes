@@ -28,7 +28,7 @@ import type { Effect } from '../model/effects'
 import { NO_SPELLS } from '../model/spellReach'
 import {
   beginRound, combatStatus, DEFENCES, defencesOffered, monsterActionsLeft, playerActionsLeft, resolveMonsterAttack,
-  resolvePlayerAttack, rollActor, rollDodgeOffered, roundActionPosition, roundFromJson, roundToJson,
+  pursuitChance, resolvePlayerAttack, rollActor, rollDodgeOffered, roundActionPosition, roundFromJson, roundToJson,
   UNTOUCHED_FIGHT, type Defence, type RoundState,
 } from '../model/combat'
 import type { EffectiveProfile } from '../model/modifiers'
@@ -1013,7 +1013,13 @@ export const combatStage: StageModule = {
               ...describeMove(move, context.describe),
             ] }
             // A plain cell says what it does only where that is more than its
-            // name: Take the hit swings back (model/defences.ts).
+            // name: Take the hit swings back (model/defences.ts), and Flee is a
+            // gamble whose odds and price the player has to see to weigh it.
+            : defence === 'flee' && context.profile
+              ? { title: DEFENCE_LABELS.flee.label, lines: [
+                `${Math.round((1 - pursuitChance(monster, context.profile.stats, successAdjustOf(context))) * 100)}% to escape`,
+                'Escaping ends the fight with no reward',
+              ] }
             : DEFENCE_COUNTER[defence] > 0
               ? { title: DEFENCE_LABELS[defence].label, lines: [describeCounter(DEFENCE_COUNTER[defence], context.describe)] }
               : undefined,

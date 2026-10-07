@@ -747,6 +747,15 @@ function composeShare(adjustment: ChanceAdjustment, share: number): ChanceAdjust
 }
 
 /**
+ * The chance a monster catches a player who flees: its own Agility check
+ * against theirs. Exported so the Flee cell can show the same number the roll
+ * uses rather than a second copy of the formula.
+ */
+export function pursuitChance(monster: Monster, playerStats: StatBlock, successAdjust: number | undefined): number {
+  return resolveChanceWith(DODGE_CHANCE, monster.stats, playerStats, { side: 'monster', successAdjust })
+}
+
+/**
  * A monster attacks, and the player answers with the defence they picked.
  *
  * FLEE resolves before the blow: the enemy rolls a contested Agility check to
@@ -800,10 +809,7 @@ export function resolveMonsterAttack(options: {
     // that sharpens your own dodge does not make the thing chasing you
     // slower -- and the thumb presses it DOWN, since catching you is a
     // monster success.
-    const chase = nextRoll(rng, resolveChanceWith(DODGE_CHANCE, options.monster.stats, options.playerStats, {
-      side: 'monster',
-      successAdjust: options.successAdjust,
-    }))
+    const chase = nextRoll(rng, pursuitChance(options.monster, options.playerStats, options.successAdjust))
     rng = chase.rng
     pursuit = chase.value
     if (!chase.value.passed) {

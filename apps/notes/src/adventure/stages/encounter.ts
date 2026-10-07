@@ -174,6 +174,12 @@ export function monsterDetailLines(monster: Monster, style: DescriptionStyle, co
     `${monster.maxHitPoints} Health`,
     `${monster.maxActions} Action${monster.maxActions === 1 ? '' : 's'} a round`,
     `${Math.round(monster.damage)} Damage a blow`,
+    // Its contested chances against THIS player (`derived` is resolved
+    // against them), which is what makes two offers of one tier different
+    // fights. Without the run's Luckiness, as everywhere a creature is
+    // described (model/monsters.ts).
+    `${Math.round(monster.derived.hitChance * 100)}% to Hit you`,
+    `${Math.round(monster.derived.dodgeChance * 100)}% to Dodge you`,
     ...(armor > 0 ? [`${armor} Armor, and magic goes through it`] : []),
     ...(monster.combatClass?.moves ?? []).flatMap((move) => [`${move.name}: ${describeMove(move, style)[0] ?? ''}`]),
   ]
