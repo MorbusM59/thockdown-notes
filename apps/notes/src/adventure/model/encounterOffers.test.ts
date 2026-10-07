@@ -8,6 +8,7 @@ import {
   monsterPools,
   mostSelectedEncounterPool,
   OFFERABLE_TYPES,
+  REGION_FAVOUR_WEIGHT,
   rollCount,
 } from './encounterOffers'
 import { ENCOUNTER_POOL_IDS, MONSTER_BUDDY_CHANCES } from './vectors'
@@ -167,5 +168,43 @@ describe('what an ordinary encounter offers', () => {
     expect(offers.length).toBeGreaterThan(0)
     expect(offers.length).toBeLessThanOrEqual(reachable)
     expect(offers.length).toBeLessThan(asked)
+  })
+})
+
+describe('what a region makes common', () => {
+  it('favours every monster species in exactly one region', () => {
+    const monsters = THOCKQUEST.species.filter((species) => !species.playable).map((species) => species.id)
+    const favoured = THOCKQUEST.regions.flatMap((region) => region.favours)
+    expect([...favoured].sort()).toEqual([...monsters].sort())
+  })
+
+  it('never favours a whole encounter pool, which would leave its draw uniform', () => {
+    for (const region of THOCKQUEST.regions) {
+      for (const pool of ENCOUNTER_POOL_IDS) {
+        const species = monsterPools(THOCKQUEST, pool).species
+        expect(species.every((candidate) => region.favours.includes(candidate.id))).toBe(false)
+      }
+    }
+  })
+
+  it('draws a favoured species REGION_FAVOUR_WEIGHT times as often as the rest of its pool', () => {
+    // The weighted draw is exact over the summed weights, so the share of a
+    // favoured species converges on weight / total; 6000 draws keeps it
+    // within a few points.
+    const region = THOCKQUEST.regions[0]
+    for (const pool of ENCOUNTER_POOL_IDS) {
+      const pools = monsterPools(THOCKQUEST, pool, region.id)
+      const total = pools.species.reduce((sum, species) => sum + (region.favours.includes(species.id) ? REGION_FAVOUR_WEIGHT : 1), 0)
+      const counts = new Map<string, number>()
+      const draws = 6000
+      for (let rng = 1; rng <= draws; rng += 1) {
+        const offer = buildEncounterOffers({ encounter: BOSS_ENCOUNTER, choiceCount: 1, ...pools, rng: rng * 2654435761 }).offers[0]
+        counts.set(offer.speciesId, (counts.get(offer.speciesId) ?? 0) + 1)
+      }
+      for (const species of pools.species) {
+        const expected = (region.favours.includes(species.id) ? REGION_FAVOUR_WEIGHT : 1) / total
+        expect(Math.abs((counts.get(species.id) ?? 0) / draws - expected)).toBeLessThan(0.03)
+      }
+    }
   })
 })

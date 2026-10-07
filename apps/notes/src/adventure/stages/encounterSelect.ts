@@ -84,7 +84,7 @@ export const encounterSelectStage: StageModule = {
     const drawn = buildEncounterOffers({
       encounter,
       choiceCount: 1,
-      ...monsterPools(context.content, selected.pool),
+      ...monsterPools(context.content, selected.pool, context.game?.regionId),
       rng: selected.rng,
     })
     const offer = drawn.offers[0]
