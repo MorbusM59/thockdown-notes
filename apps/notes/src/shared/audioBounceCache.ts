@@ -1,7 +1,8 @@
+import type { InvokeChannels } from './ipcContract';
 export const AUDIO_BOUNCE_CHANNELS = {
-  getCached: 'audio-bounce:cache:get',
-  saveCached: 'audio-bounce:cache:save',
-} as const
+  getCachedBounce: 'audio-bounce:cache:get',
+  saveCachedBounce: 'audio-bounce:cache:save',
+} as const satisfies InvokeChannels<AudioBounceCacheApi>
 
 export type AudioBounceCacheRequest = {
   keyId: string

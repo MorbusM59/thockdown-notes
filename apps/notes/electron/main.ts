@@ -1,27 +1,29 @@
-import { SOUNDSCAPE_FILE_CHANNELS, SOUNDSCAPE_FILE_EXTENSION } from '@thockdown/soundscape/soundscapeFile';
+import { SOUNDSCAPE_FILE_CHANNELS, type SoundscapeFileApi, SOUNDSCAPE_FILE_EXTENSION } from '@thockdown/soundscape/soundscapeFile';
 import { app, BrowserWindow, Menu, ipcMain, dialog, protocol, shell } from 'electron'
-import type { Session, PrintToPDFOptions } from 'electron'
+import type { IpcMainInvokeEvent, Session, PrintToPDFOptions } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { existsSync, promises as fsPromises } from 'node:fs'
 import { moveLegacyDevData } from './legacyDevDataMove'
 import { NoteLifecycleService } from './noteLifecycleService'
-import { FILE_SYNC_CHANNELS } from '../src/shared/fileSync'
-import { NOTE_LIFECYCLE_CHANNELS } from '../src/shared/noteLifecycle'
-import { APP_STATE_CHANNELS, type WindowState } from '../src/shared/appState'
+import { FILE_SYNC_CHANNELS, type FileSyncApi } from '../src/shared/fileSync'
+import { NOTE_LIFECYCLE_CHANNELS, type NoteLifecycleApi } from '../src/shared/noteLifecycle'
+import { APP_STATE_CHANNELS, type AppStateApi, type WindowState } from '../src/shared/appState'
 import { StateService } from './stateService'
 import { DatabaseService } from './databaseService'
-import { EXTERNAL_FILE_CHANNELS } from '../src/shared/externalFiles'
-import { TEXTURE_CHANNELS } from '../src/shared/textures'
-import { AUDIO_BOUNCE_CHANNELS } from '../src/shared/audioBounceCache'
-import { LOADOUT_CHANNELS } from '@thockdown/look/loadouts'
-import { AUDIO_PLAYER_CHANNELS, AUDIO_EXTENSIONS } from '../src/shared/audioPlayer'
+import { EXTERNAL_FILE_CHANNELS, EXTERNAL_FILE_EVENTS, type ExternalFilesApi } from '../src/shared/externalFiles'
+import { TEXTURE_CHANNELS, type TextureCacheApi } from '../src/shared/textures'
+import { AUDIO_BOUNCE_CHANNELS, type AudioBounceCacheApi } from '../src/shared/audioBounceCache'
+import { LOADOUT_CHANNELS, type UiLoadoutApi } from '@thockdown/look/loadouts'
+import { AUDIO_PLAYER_CHANNELS, type AudioPlayerApi, AUDIO_EXTENSIONS } from '../src/shared/audioPlayer'
 import type { PlaylistSlot } from '../src/shared/audioPlayer'
-import { NOTE_TABS_CHANNELS } from '../src/shared/tabs'
+import { NOTE_TABS_CHANNELS, type NoteTabsApi } from '../src/shared/tabs'
+import { registerInvokeHandlers } from '../src/shared/ipcContract'
 import { computeWindowControlsWidthPx, DEFAULT_SPACING_REGULAR_PX } from '../src/shared/windowChromeMetrics'
-import { EDITOR_SECTIONS_CHANNELS } from '../src/shared/sections'
-import { CHAPTER_CHANNELS } from '../src/shared/chapters'
-import { REVIEW_FLAG_CHANNELS } from '../src/shared/reviewFlags'
+import { EDITOR_SECTIONS_CHANNELS, type EditorSectionsApi } from '../src/shared/sections'
+import { CHAPTER_CHANNELS, type ChaptersApi } from '../src/shared/chapters'
+import { REVIEW_FLAG_CHANNELS, type ReviewFlagsApi } from '../src/shared/reviewFlags'
+import { EXPORT_CHANNELS, type ExportApi } from '../src/shared/exportApi'
 import type { ReviewFlagWrite, ReviewFlagRemap } from '../src/shared/reviewFlags'
 import { WINDOW_DRAG_CHANNELS } from '../src/shared/windowDrag'
 import { ensureHelpGuide } from './help/helpGuideNote'
@@ -381,7 +383,7 @@ function flushPendingExternalPathsToRenderer(): void {
   const paths = [...pendingExternalFilePaths];
   pendingExternalFilePaths = [];
   for (const filePath of paths) {
-    win.webContents.send(EXTERNAL_FILE_CHANNELS.opened, filePath);
+    win.webContents.send(EXTERNAL_FILE_EVENTS.opened, filePath);
   }
 }
 
@@ -483,135 +485,127 @@ function registerIpcHandlers() {
     stateService = new StateService(resolveDataRoot());
   }
 
-  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.list, async () => noteLifecycleService!.listNotes());
-  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.load, async (_event, input) => noteLifecycleService!.loadNote(input));
-  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.create, async (_event, input) => noteLifecycleService!.createNote(input));
-  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.save, async (_event, input) => noteLifecycleService!.saveNote(input));
-  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.remove, async (_event, input) => noteLifecycleService!.deleteNote(input));
-  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.getNoteTags, async (_event, input) => noteLifecycleService!.getNoteTags(input));
-  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.addTag, async (_event, input) => noteLifecycleService!.addTagToNote(input));
-  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.removeTag, async (_event, input) => noteLifecycleService!.removeTagFromNote(input));
-  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.reorderTags, async (_event, input) => noteLifecycleService!.reorderNoteTags(input));
-  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.renameTag, async (_event, input) => noteLifecycleService!.renameTag(input));
-  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.listTags, async () => noteLifecycleService!.listTags());
-  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.saveNoteUiState, async (_event, input) => noteLifecycleService!.saveNoteUiState(input));
-  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.getNoteUiState, async (_event, input) => noteLifecycleService!.getNoteUiState(input));
-  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.updateExternalNoteState, async (_event, input) => noteLifecycleService!.updateExternalNoteState(input));
-  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.saveNoteSnapshot, async (_event, input) => noteLifecycleService!.saveNoteSnapshot(input));
-  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.getNoteSnapshots, async (_event, input) => noteLifecycleService!.getNoteSnapshots(input));
-  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.getFromDiskBaseline, async (_event, input) => noteLifecycleService!.getFromDiskBaseline(input));
-  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.deleteNoteSnapshot, async (_event, input) => noteLifecycleService!.deleteNoteSnapshot(input));
-  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.saveSnapshotAnchor, async (_event, input) => noteLifecycleService!.saveSnapshotAnchor(input));
-  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.getSnapshotAnchor, async (_event, input) => noteLifecycleService!.getSnapshotAnchor(input));
-  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.branchNoteFromSnapshot, async (_event, input) => noteLifecycleService!.branchNoteFromSnapshot(input));
-  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.syncExternalNoteToFile, async (_event, input) => noteLifecycleService!.syncExternalNoteToFile(input));
-  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.getNoteIdByExternalPath, async (_event, input) => noteLifecycleService!.getNoteIdByExternalPath(input));
-  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.setAssignedId, async (_event, input) => noteLifecycleService!.setNoteAssignedId(input));
-  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.setTimeless, async (_event, input) => noteLifecycleService!.setNoteTimeless(input));
-  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.restoreMissingNoteFile, async (_event, input) => noteLifecycleService!.restoreMissingNoteFile(input));
-  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.specifyMissingNoteFile, async (event, input) => {
-    const winRef = BrowserWindow.fromWebContents(event.sender) ?? win
-    if (!winRef) return false
-    const result = await dialog.showOpenDialog(winRef, {
-      title: 'Specify the missing note file',
-      properties: ['openFile'],
-      filters: [{ name: 'Markdown and Text Files', extensions: ['md', 'txt'] }],
-    })
-    if (result.canceled || result.filePaths.length === 0) return false
-    await noteLifecycleService!.adoptFileForMissingNote(input, result.filePaths[0])
-    return true
-  });
-
-  ipcMain.handle(APP_STATE_CHANNELS.loadAppState, async () => stateService!.loadAppState());
-  ipcMain.handle(APP_STATE_CHANNELS.saveAppState, async (_event, payload) => stateService!.saveAppState(payload));
-  ipcMain.handle(APP_STATE_CHANNELS.clearAppState, async () => {
-    databaseService?.resetToFactoryDefaults();
-    await stateService!.clearAppState();
-  });
-  ipcMain.handle(APP_STATE_CHANNELS.loadWindowState, async () => stateService!.loadWindowState());
-  ipcMain.handle(APP_STATE_CHANNELS.saveWindowState, async (_event, payload) => stateService!.saveWindowState(payload));
-
-  ipcMain.handle('open-external-url', async (_event, url: string) => {
-    if (typeof url !== 'string') return
-    try {
-      const parsed = new URL(url)
-      if (parsed.protocol === 'http:' || parsed.protocol === 'https:' || parsed.protocol === 'mailto:' || parsed.protocol === 'tel:') {
-        await shell.openExternal(url)
-      }
-    } catch {
-      // ignore invalid URLs
-    }
-  })
-
-  ipcMain.handle(FILE_SYNC_CHANNELS.syncExistingNotes, async () => {
-    if (!databaseService) {
-      return { createdNoteIds: [], updatedPaths: [], markedDeletedNoteIds: [] }
-    }
-
-    const beforeIds = new Set(databaseService.listNoteRecords().map((note) => note.id))
-    await databaseService.bootstrapFromFilesystem()
-    const afterNotes = databaseService.listNoteRecords()
-    const createdNoteIds = afterNotes.filter((note) => !beforeIds.has(note.id)).map((note) => note.id)
-
-    return {
-      createdNoteIds,
-      updatedPaths: [],
-      markedDeletedNoteIds: [],
-    }
-  })
-
-  ipcMain.handle(FILE_SYNC_CHANNELS.importNotes, async (event) => {
-    const winRef = BrowserWindow.fromWebContents(event.sender) ?? win
-    if (!winRef) {
-      return { imported: 0, createdNoteIds: [], errors: ['No active window available'] }
-    }
-
-    try {
+  registerInvokeHandlers<NoteLifecycleApi, IpcMainInvokeEvent>(NOTE_LIFECYCLE_CHANNELS, {
+    listNotes: async () => noteLifecycleService!.listNotes(),
+    loadNote: async (_event, input) => noteLifecycleService!.loadNote(input),
+    createNote: async (_event, input) => noteLifecycleService!.createNote(input),
+    saveNote: async (_event, input) => noteLifecycleService!.saveNote(input),
+    deleteNote: async (_event, input) => noteLifecycleService!.deleteNote(input),
+    getNoteTags: async (_event, input) => noteLifecycleService!.getNoteTags(input),
+    addTagToNote: async (_event, input) => noteLifecycleService!.addTagToNote(input),
+    removeTagFromNote: async (_event, input) => noteLifecycleService!.removeTagFromNote(input),
+    reorderNoteTags: async (_event, input) => noteLifecycleService!.reorderNoteTags(input),
+    renameTag: async (_event, input) => noteLifecycleService!.renameTag(input),
+    listTags: async () => noteLifecycleService!.listTags(),
+    saveNoteUiState: async (_event, input) => noteLifecycleService!.saveNoteUiState(input),
+    getNoteUiState: async (_event, input) => noteLifecycleService!.getNoteUiState(input),
+    updateExternalNoteState: async (_event, input) => noteLifecycleService!.updateExternalNoteState(input),
+    saveNoteSnapshot: async (_event, input) => noteLifecycleService!.saveNoteSnapshot(input),
+    getNoteSnapshots: async (_event, input) => noteLifecycleService!.getNoteSnapshots(input),
+    getFromDiskBaseline: async (_event, input) => noteLifecycleService!.getFromDiskBaseline(input),
+    deleteNoteSnapshot: async (_event, input) => noteLifecycleService!.deleteNoteSnapshot(input),
+    saveSnapshotAnchor: async (_event, input) => noteLifecycleService!.saveSnapshotAnchor(input),
+    getSnapshotAnchor: async (_event, input) => noteLifecycleService!.getSnapshotAnchor(input),
+    branchNoteFromSnapshot: async (_event, input) => noteLifecycleService!.branchNoteFromSnapshot(input),
+    syncExternalNoteToFile: async (_event, input) => noteLifecycleService!.syncExternalNoteToFile(input),
+    getNoteIdByExternalPath: async (_event, input) => noteLifecycleService!.getNoteIdByExternalPath(input),
+    setNoteAssignedId: async (_event, input) => noteLifecycleService!.setNoteAssignedId(input),
+    setNoteTimeless: async (_event, input) => noteLifecycleService!.setNoteTimeless(input),
+    restoreMissingNoteFile: async (_event, input) => noteLifecycleService!.restoreMissingNoteFile(input),
+    specifyMissingNoteFile: async (event, input) => {
+      const winRef = BrowserWindow.fromWebContents(event.sender) ?? win
+      if (!winRef) return false
       const result = await dialog.showOpenDialog(winRef, {
-        properties: ['openFile', 'multiSelections'],
-        filters: [
-          { name: 'Markdown and Text Files', extensions: ['md', 'txt'] },
-        ],
-        title: 'Select files to import',
+        title: 'Specify the missing note file',
+        properties: ['openFile'],
+        filters: [{ name: 'Markdown and Text Files', extensions: ['md', 'txt'] }],
       })
+      if (result.canceled || result.filePaths.length === 0) return false
+      await noteLifecycleService!.adoptFileForMissingNote(input, result.filePaths[0])
+      return true
+    },
+  }, ipcMain.handle.bind(ipcMain));
 
-      if (result.canceled || result.filePaths.length === 0) {
-        return { imported: 0, createdNoteIds: [] }
+  registerInvokeHandlers<AppStateApi, IpcMainInvokeEvent>(APP_STATE_CHANNELS, {
+    loadAppState: async () => stateService!.loadAppState(),
+    saveAppState: async (_event, payload) => stateService!.saveAppState(payload),
+    clearAppState: async () => {
+      databaseService?.resetToFactoryDefaults();
+      await stateService!.clearAppState();
+    },
+    loadWindowState: async () => stateService!.loadWindowState(),
+    saveWindowState: async (_event, payload) => stateService!.saveWindowState(payload),
+  }, ipcMain.handle.bind(ipcMain));
+
+  registerInvokeHandlers<FileSyncApi, IpcMainInvokeEvent>(FILE_SYNC_CHANNELS, {
+    syncExistingNotes: async () => {
+      if (!databaseService) {
+        return { createdNoteIds: [], updatedPaths: [], markedDeletedNoteIds: [] }
       }
 
-      let imported = 0
-      const createdNoteIds: string[] = []
-      const errors: string[] = []
+      const beforeIds = new Set(databaseService.listNoteRecords().map((note) => note.id))
+      await databaseService.bootstrapFromFilesystem()
+      const afterNotes = databaseService.listNoteRecords()
+      const createdNoteIds = afterNotes.filter((note) => !beforeIds.has(note.id)).map((note) => note.id)
 
-      for (const selectedPath of result.filePaths) {
-        try {
-          const stats = await fsPromises.stat(selectedPath)
-          if (stats.isDirectory()) {
-            const folderResult = await importNotesFromFolder(selectedPath)
-            imported += folderResult.imported
-            createdNoteIds.push(...folderResult.createdNoteIds)
-            if (folderResult.errors) errors.push(...folderResult.errors)
-          } else if (stats.isFile()) {
-            const fileResult = await importNotesFromPaths([selectedPath])
-            imported += fileResult.imported
-            createdNoteIds.push(...fileResult.createdNoteIds)
-            if (fileResult.errors) errors.push(...fileResult.errors)
-          }
-        } catch (error) {
-          errors.push(String(error instanceof Error ? error.message : error))
+      return {
+        createdNoteIds,
+        updatedPaths: [],
+        markedDeletedNoteIds: [],
+      }
+    },
+    importNotes: async (event) => {
+      const winRef = BrowserWindow.fromWebContents(event.sender) ?? win
+      if (!winRef) {
+        return { imported: 0, createdNoteIds: [], errors: ['No active window available'] }
+      }
+
+      try {
+        const result = await dialog.showOpenDialog(winRef, {
+          properties: ['openFile', 'multiSelections'],
+          filters: [
+            { name: 'Markdown and Text Files', extensions: ['md', 'txt'] },
+          ],
+          title: 'Select files to import',
+        })
+
+        if (result.canceled || result.filePaths.length === 0) {
+          return { imported: 0, createdNoteIds: [] }
         }
+
+        let imported = 0
+        const createdNoteIds: string[] = []
+        const errors: string[] = []
+
+        for (const selectedPath of result.filePaths) {
+          try {
+            const stats = await fsPromises.stat(selectedPath)
+            if (stats.isDirectory()) {
+              const folderResult = await importNotesFromFolder(selectedPath)
+              imported += folderResult.imported
+              createdNoteIds.push(...folderResult.createdNoteIds)
+              if (folderResult.errors) errors.push(...folderResult.errors)
+            } else if (stats.isFile()) {
+              const fileResult = await importNotesFromPaths([selectedPath])
+              imported += fileResult.imported
+              createdNoteIds.push(...fileResult.createdNoteIds)
+              if (fileResult.errors) errors.push(...fileResult.errors)
+            }
+          } catch (error) {
+            errors.push(String(error instanceof Error ? error.message : error))
+          }
+        }
+
+        return { imported, createdNoteIds, errors }
+      } catch (error) {
+        return { imported: 0, createdNoteIds: [], errors: [String(error instanceof Error ? error.message : error)] }
       }
-
-      return { imported, createdNoteIds, errors }
-    } catch (error) {
-      return { imported: 0, createdNoteIds: [], errors: [String(error instanceof Error ? error.message : error)] }
-    }
-  })
-
-  ipcMain.handle(FILE_SYNC_CHANNELS.openNotesFolder, async () => {
-    if (!databaseService) return
-    await shell.openPath(databaseService.getNotesDir())
-  })
+    },
+    openNotesFolder: async () => {
+      if (!databaseService) return
+      await shell.openPath(databaseService.getNotesDir())
+    },
+  }, ipcMain.handle.bind(ipcMain));
 
   ipcMain.on('window-control', (_event, action: string) => {
     if (!win || win.isDestroyed()) return
@@ -856,246 +850,251 @@ function registerIpcHandlers() {
     }
   })
 
-  ipcMain.handle(EXTERNAL_FILE_CHANNELS.getPendingPaths, async () => {
-    const paths = [...pendingExternalFilePaths];
-    pendingExternalFilePaths = [];
-    return paths;
-  });
-
-  ipcMain.handle(EXTERNAL_FILE_CHANNELS.readContent, async (_event, filePath: unknown) => {
-    if (typeof filePath !== 'string' || !isOpenableExternalFile(filePath)) return null;
-    const normalizedPath = normalizeExternalFilePath(filePath);
-    try {
-      return await fsPromises.readFile(normalizedPath, 'utf8');
-    } catch {
-      return null;
-    }
-  });
-
-  ipcMain.handle(EXTERNAL_FILE_CHANNELS.readSnapshot, async (_event, filePath: unknown) => {
-    if (typeof filePath !== 'string' || !isOpenableExternalFile(filePath)) return null;
-    const normalizedPath = normalizeExternalFilePath(filePath);
-    try {
-      // stat AFTER the read: if a write lands between the two, the mtime then
-      // describes a file at least as new as the bytes returned, so the
-      // mismatch is detectable. The other order can report an mtime older
-      // than the content, which reads as "unchanged" and is not.
-      const content = await fsPromises.readFile(normalizedPath, 'utf8');
-      const stat = await fsPromises.stat(normalizedPath);
-      return { content, modifiedAtMs: stat.mtimeMs };
-    } catch {
-      return null;
-    }
-  });
-
-  ipcMain.handle(EXTERNAL_FILE_CHANNELS.writeContent, async (_event, filePath: unknown, content: unknown) => {
-    if (typeof filePath !== 'string' || typeof content !== 'string') return false;
-    if (!isOpenableExternalFile(filePath)) return false;
-    const normalizedPath = normalizeExternalFilePath(filePath);
-    try {
-      await fsPromises.writeFile(normalizedPath, content, 'utf8');
-      return true;
-    } catch {
-      return false;
-    }
-  });
-
-  ipcMain.handle(EXTERNAL_FILE_CHANNELS.basename, async (_event, filePath: unknown) => {
-    if (typeof filePath !== 'string') return '';
-    try {
-      return path.basename(normalizeExternalFilePath(filePath));
-    } catch {
-      return '';
-    }
-  });
-
-  ipcMain.handle('select-export-folder', async (event) => {
-    try {
-      const winRef = BrowserWindow.fromWebContents(event.sender) ?? win
-      if (!winRef) return null
-      const result = await dialog.showOpenDialog(winRef, {
-        properties: ['openDirectory', 'createDirectory'],
-        title: 'Select export destination',
-      })
-      if (result.canceled || result.filePaths.length === 0) return null
-      return result.filePaths[0]
-    } catch (error) {
-      console.warn('[main] select-export-folder failed', error)
-      return null
-    }
-  })
-
-  ipcMain.handle('export-pdf', async (_event, folderPath: string, fileName: string, htmlContent?: string) => {
-    let exportWindow: BrowserWindow | null = null
-    try {
-      if (!folderPath || !fileName || typeof htmlContent !== 'string') {
-        return { ok: false, error: 'Invalid export arguments' }
+  registerInvokeHandlers<ExternalFilesApi, IpcMainInvokeEvent>(EXTERNAL_FILE_CHANNELS, {
+    getPendingFilePaths: async () => {
+      const paths = [...pendingExternalFilePaths];
+      pendingExternalFilePaths = [];
+      return paths;
+    },
+    readFileContent: async (_event, filePath: unknown) => {
+      if (typeof filePath !== 'string' || !isOpenableExternalFile(filePath)) return null;
+      const normalizedPath = normalizeExternalFilePath(filePath);
+      try {
+        return await fsPromises.readFile(normalizedPath, 'utf8');
+      } catch {
+        return null;
       }
-      await fsPromises.mkdir(folderPath, { recursive: true })
+    },
+    readFileSnapshot: async (_event, filePath: unknown) => {
+      if (typeof filePath !== 'string' || !isOpenableExternalFile(filePath)) return null;
+      const normalizedPath = normalizeExternalFilePath(filePath);
+      try {
+        // stat AFTER the read: if a write lands between the two, the mtime then
+        // describes a file at least as new as the bytes returned, so the
+        // mismatch is detectable. The other order can report an mtime older
+        // than the content, which reads as "unchanged" and is not.
+        const content = await fsPromises.readFile(normalizedPath, 'utf8');
+        const stat = await fsPromises.stat(normalizedPath);
+        return { content, modifiedAtMs: stat.mtimeMs };
+      } catch {
+        return null;
+      }
+    },
+    writeFileContent: async (_event, filePath: unknown, content: unknown) => {
+      if (typeof filePath !== 'string' || typeof content !== 'string') return false;
+      if (!isOpenableExternalFile(filePath)) return false;
+      const normalizedPath = normalizeExternalFilePath(filePath);
+      try {
+        await fsPromises.writeFile(normalizedPath, content, 'utf8');
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    getFileBasename: async (_event, filePath: unknown) => {
+      if (typeof filePath !== 'string') return '';
+      try {
+        return path.basename(normalizeExternalFilePath(filePath));
+      } catch {
+        return '';
+      }
+    },
+  }, ipcMain.handle.bind(ipcMain));
 
-      const base = sanitizeExportFileName(fileName)
-      let outPath = path.join(folderPath, base)
-      const exists = await fsPromises.stat(outPath).then(() => true).catch(() => false)
-      if (exists) {
-        const now = new Date()
-        const hh = String(now.getHours()).padStart(2, '0')
-        const mm = String(now.getMinutes()).padStart(2, '0')
-        const timeSuffix = ` (${hh}-${mm})`
-        const ext = path.extname(base)
-        const nameOnly = base.substring(0, base.length - ext.length)
-        let candidate = `${nameOnly}${timeSuffix}${ext}`
-        let candidatePath = path.join(folderPath, candidate)
-        let counter = 1
-        while (await fsPromises.stat(candidatePath).then(() => true).catch(() => false)) {
-          counter += 1
-          candidate = `${nameOnly}${timeSuffix} v${counter}${ext}`
-          candidatePath = path.join(folderPath, candidate)
+  registerInvokeHandlers<ExportApi, IpcMainInvokeEvent>(EXPORT_CHANNELS, {
+    openExternalUrl: async (_event, url: string) => {
+      if (typeof url !== 'string') return
+      try {
+        const parsed = new URL(url)
+        if (parsed.protocol === 'http:' || parsed.protocol === 'https:' || parsed.protocol === 'mailto:' || parsed.protocol === 'tel:') {
+          await shell.openExternal(url)
         }
-        outPath = candidatePath
+      } catch {
+        // ignore invalid URLs
       }
-
-      exportWindow = await createHiddenExportWindow(htmlContent)
-
-      const pdfOpts: PrintToPDFOptions = {
-        printBackground: true,
-        pageSize: 'A4',
+    },
+    selectExportFolder: async (event) => {
+      try {
+        const winRef = BrowserWindow.fromWebContents(event.sender) ?? win
+        if (!winRef) return null
+        const result = await dialog.showOpenDialog(winRef, {
+          properties: ['openDirectory', 'createDirectory'],
+          title: 'Select export destination',
+        })
+        if (result.canceled || result.filePaths.length === 0) return null
+        return result.filePaths[0]
+      } catch (error) {
+        console.warn('[main] select-export-folder failed', error)
+        return null
       }
+    },
+    exportPdf: async (_event, folderPath: string, fileName: string, htmlContent?: string) => {
+      let exportWindow: BrowserWindow | null = null
+      try {
+        if (!folderPath || !fileName || typeof htmlContent !== 'string') {
+          return { ok: false, error: 'Invalid export arguments' }
+        }
+        await fsPromises.mkdir(folderPath, { recursive: true })
 
-      const data = await exportWindow.webContents.printToPDF(pdfOpts)
-      await fsPromises.writeFile(outPath, data)
+        const base = sanitizeExportFileName(fileName)
+        let outPath = path.join(folderPath, base)
+        const exists = await fsPromises.stat(outPath).then(() => true).catch(() => false)
+        if (exists) {
+          const now = new Date()
+          const hh = String(now.getHours()).padStart(2, '0')
+          const mm = String(now.getMinutes()).padStart(2, '0')
+          const timeSuffix = ` (${hh}-${mm})`
+          const ext = path.extname(base)
+          const nameOnly = base.substring(0, base.length - ext.length)
+          let candidate = `${nameOnly}${timeSuffix}${ext}`
+          let candidatePath = path.join(folderPath, candidate)
+          let counter = 1
+          while (await fsPromises.stat(candidatePath).then(() => true).catch(() => false)) {
+            counter += 1
+            candidate = `${nameOnly}${timeSuffix} v${counter}${ext}`
+            candidatePath = path.join(folderPath, candidate)
+          }
+          outPath = candidatePath
+        }
 
-      return { ok: true, path: outPath }
-    } catch (error) {
-      console.warn('[main] export-pdf failed', error)
-      return { ok: false, error: error instanceof Error ? error.message : String(error) }
-    } finally {
-      if (exportWindow && !exportWindow.isDestroyed()) {
-        exportWindow.destroy()
+        exportWindow = await createHiddenExportWindow(htmlContent)
+
+        const pdfOpts: PrintToPDFOptions = {
+          printBackground: true,
+          pageSize: 'A4',
+        }
+
+        const data = await exportWindow.webContents.printToPDF(pdfOpts)
+        await fsPromises.writeFile(outPath, data)
+
+        return { ok: true, path: outPath }
+      } catch (error) {
+        console.warn('[main] export-pdf failed', error)
+        return { ok: false, error: error instanceof Error ? error.message : String(error) }
+      } finally {
+        if (exportWindow && !exportWindow.isDestroyed()) {
+          exportWindow.destroy()
+        }
       }
-    }
-  })
-
-  // Writes the markdown the renderer assembled rather than copying a note's
-  // file off disk: an "Export All" is the parent plus every chapter joined
-  // in order, which exists as no single file -- and the renderer is the one
-  // that holds the live, not-yet-autosaved text of whatever is open.
-  ipcMain.handle('export-md', async (_event, folderPath: string, fileName: string, markdownText: string) => {
-    try {
-      if (!folderPath || !fileName || typeof markdownText !== 'string') {
-        return { ok: false, error: 'Invalid export arguments' }
+    },
+    // Writes the markdown the renderer assembled rather than copying a note's
+    // file off disk: an "Export All" is the parent plus every chapter joined
+    // in order, which exists as no single file -- and the renderer is the one
+    // that holds the live, not-yet-autosaved text of whatever is open.
+    exportMarkdown: async (_event, folderPath: string, fileName: string, markdownText: string) => {
+      try {
+        if (!folderPath || !fileName || typeof markdownText !== 'string') {
+          return { ok: false, error: 'Invalid export arguments' }
+        }
+        await fsPromises.mkdir(folderPath, { recursive: true })
+        const outPath = path.join(folderPath, sanitizeExportFileName(fileName))
+        await fsPromises.writeFile(outPath, markdownText, 'utf8')
+        return { ok: true, path: outPath }
+      } catch (error) {
+        console.warn('[main] export-md failed', error)
+        return { ok: false, error: error instanceof Error ? error.message : String(error) }
       }
-      await fsPromises.mkdir(folderPath, { recursive: true })
-      const outPath = path.join(folderPath, sanitizeExportFileName(fileName))
-      await fsPromises.writeFile(outPath, markdownText, 'utf8')
-      return { ok: true, path: outPath }
-    } catch (error) {
-      console.warn('[main] export-md failed', error)
-      return { ok: false, error: error instanceof Error ? error.message : String(error) }
-    }
-  })
+    },
+  }, ipcMain.handle.bind(ipcMain));
 
-  ipcMain.handle(TEXTURE_CHANNELS.getCached, async (_event, request) => {
-    return databaseService!.getTextureCache(request);
-  });
+  registerInvokeHandlers<TextureCacheApi, IpcMainInvokeEvent>(TEXTURE_CHANNELS, {
+    getCachedTexture: async (_event, request) => {
+      return databaseService!.getTextureCache(request);
+    },
+    saveCachedTexture: async (_event, request, payload) => {
+      databaseService!.saveTextureCache(request, payload);
+    },
+    purgeCachedTextures: async (_event, request) => {
+      return databaseService!.purgeTextureCache(request);
+    },
+  }, ipcMain.handle.bind(ipcMain));
 
-  ipcMain.handle(TEXTURE_CHANNELS.saveCached, async (_event, request, payload) => {
-    databaseService!.saveTextureCache(request, payload);
-  });
+  registerInvokeHandlers<AudioBounceCacheApi, IpcMainInvokeEvent>(AUDIO_BOUNCE_CHANNELS, {
+    getCachedBounce: async (_event, request) => {
+      return databaseService!.getAudioBounceCache(request);
+    },
+    saveCachedBounce: async (_event, request, payload) => {
+      databaseService!.saveAudioBounceCache(request, payload);
+    },
+  }, ipcMain.handle.bind(ipcMain));
 
-  ipcMain.handle(TEXTURE_CHANNELS.purgeCached, async (_event, request) => {
-    return databaseService!.purgeTextureCache(request);
-  });
-
-  ipcMain.handle(AUDIO_BOUNCE_CHANNELS.getCached, async (_event, request) => {
-    return databaseService!.getAudioBounceCache(request);
-  });
-
-  ipcMain.handle(AUDIO_BOUNCE_CHANNELS.saveCached, async (_event, request, payload) => {
-    databaseService!.saveAudioBounceCache(request, payload);
-  });
-
-  ipcMain.handle(LOADOUT_CHANNELS.list, async () => {
-    return databaseService!.listUiLoadouts();
-  });
-
-  ipcMain.handle(LOADOUT_CHANNELS.setActive, async (_event, id) => {
-    return databaseService!.setActiveUiLoadout(id);
-  });
-
-  ipcMain.handle(LOADOUT_CHANNELS.updatePending, async (_event, mode, loadout) => {
-    return databaseService!.updatePendingUiLoadout(mode, loadout);
-  });
-
-  ipcMain.handle(LOADOUT_CHANNELS.saveCustom, async (_event, mode) => {
-    return databaseService!.saveCustomUiLoadout(mode);
-  });
-
-  ipcMain.handle(LOADOUT_CHANNELS.deleteCustom, async (_event, id) => {
-    return databaseService!.deleteCustomUiLoadout(id);
-  });
-
-  ipcMain.handle(LOADOUT_CHANNELS.resetCustom, async (_event, mode) => {
-    return databaseService!.resetCustomUiLoadout(mode);
-  });
-
-  ipcMain.handle(LOADOUT_CHANNELS.exportTdl, async () => {
-    const content = databaseService!.buildTdlContent();
-    const { filePath, canceled } = await dialog.showSaveDialog({
-      title: 'Export layouts',
-      defaultPath: 'my-layouts.tdl',
-      filters: [{ name: 'Thockdown Layout', extensions: ['tdl'] }],
-    });
-    if (canceled || !filePath) return;
-    await fsPromises.writeFile(filePath, content, 'utf-8');
-  });
-
-  ipcMain.handle(LOADOUT_CHANNELS.exportTdlEntry, async (_event, id: number) => {
-    const content = databaseService!.buildTdlContentForEntry(id);
-    const defaultName = `layout-${Math.abs(id)}.tdl`;
-    const { filePath, canceled } = await dialog.showSaveDialog({
-      title: 'Export layout',
-      defaultPath: defaultName,
-      filters: [{ name: 'Thockdown Layout', extensions: ['tdl'] }],
-    });
-    if (canceled || !filePath) return;
-    await fsPromises.writeFile(filePath, content, 'utf-8');
-  });
-
-  ipcMain.handle(LOADOUT_CHANNELS.importTdl, async () => {
-    const { filePaths, canceled } = await dialog.showOpenDialog({
-      title: 'Import layouts',
-      filters: [{ name: 'Thockdown Layout', extensions: ['tdl'] }],
-      properties: ['openFile'],
-    });
-    if (canceled || filePaths.length === 0) return databaseService!.listUiLoadouts();
-    const content = await fsPromises.readFile(filePaths[0], 'utf-8');
-    return databaseService!.importTdlLoadouts(content);
-  });
+  registerInvokeHandlers<UiLoadoutApi, IpcMainInvokeEvent>(LOADOUT_CHANNELS, {
+    list: async () => {
+      return databaseService!.listUiLoadouts();
+    },
+    setActive: async (_event, id) => {
+      return databaseService!.setActiveUiLoadout(id);
+    },
+    updatePending: async (_event, mode, loadout) => {
+      return databaseService!.updatePendingUiLoadout(mode, loadout);
+    },
+    saveCustom: async (_event, mode) => {
+      return databaseService!.saveCustomUiLoadout(mode);
+    },
+    deleteCustom: async (_event, id) => {
+      return databaseService!.deleteCustomUiLoadout(id);
+    },
+    resetCustom: async (_event, mode) => {
+      return databaseService!.resetCustomUiLoadout(mode);
+    },
+    exportTdl: async () => {
+      const content = databaseService!.buildTdlContent();
+      const { filePath, canceled } = await dialog.showSaveDialog({
+        title: 'Export layouts',
+        defaultPath: 'my-layouts.tdl',
+        filters: [{ name: 'Thockdown Layout', extensions: ['tdl'] }],
+      });
+      if (canceled || !filePath) return;
+      await fsPromises.writeFile(filePath, content, 'utf-8');
+    },
+    exportTdlEntry: async (_event, id: number) => {
+      const content = databaseService!.buildTdlContentForEntry(id);
+      const defaultName = `layout-${Math.abs(id)}.tdl`;
+      const { filePath, canceled } = await dialog.showSaveDialog({
+        title: 'Export layout',
+        defaultPath: defaultName,
+        filters: [{ name: 'Thockdown Layout', extensions: ['tdl'] }],
+      });
+      if (canceled || !filePath) return;
+      await fsPromises.writeFile(filePath, content, 'utf-8');
+    },
+    importTdl: async () => {
+      const { filePaths, canceled } = await dialog.showOpenDialog({
+        title: 'Import layouts',
+        filters: [{ name: 'Thockdown Layout', extensions: ['tdl'] }],
+        properties: ['openFile'],
+      });
+      if (canceled || filePaths.length === 0) return databaseService!.listUiLoadouts();
+      const content = await fsPromises.readFile(filePaths[0], 'utf-8');
+      return databaseService!.importTdlLoadouts(content);
+    },
+  }, ipcMain.handle.bind(ipcMain));
 
   // ---- Soundscape files ----------------------------------------------------
   // Only the dialogs and the file: soundscapes live in the renderer's state
   // (see packages/soundscape/soundscapeFile.ts).
 
-  ipcMain.handle(SOUNDSCAPE_FILE_CHANNELS.save, async (_event, content: unknown, defaultName: unknown) => {
-    if (typeof content !== 'string') return;
-    const { filePath, canceled } = await dialog.showSaveDialog({
-      title: 'Export soundscapes',
-      defaultPath: typeof defaultName === 'string' && defaultName ? defaultName : `my-soundscapes.${SOUNDSCAPE_FILE_EXTENSION}`,
-      filters: [{ name: 'Thockdown Soundscape', extensions: [SOUNDSCAPE_FILE_EXTENSION] }],
-    });
-    if (canceled || !filePath) return;
-    await fsPromises.writeFile(filePath, content, 'utf-8');
-  });
-
-  ipcMain.handle(SOUNDSCAPE_FILE_CHANNELS.open, async () => {
-    const { filePaths, canceled } = await dialog.showOpenDialog({
-      title: 'Import soundscapes',
-      filters: [{ name: 'Thockdown Soundscape', extensions: [SOUNDSCAPE_FILE_EXTENSION] }],
-      properties: ['openFile'],
-    });
-    if (canceled || filePaths.length === 0) return null;
-    return fsPromises.readFile(filePaths[0], 'utf-8');
-  });
+  registerInvokeHandlers<SoundscapeFileApi, IpcMainInvokeEvent>(SOUNDSCAPE_FILE_CHANNELS, {
+    save: async (_event, content: unknown, defaultName: unknown) => {
+      if (typeof content !== 'string') return;
+      const { filePath, canceled } = await dialog.showSaveDialog({
+        title: 'Export soundscapes',
+        defaultPath: typeof defaultName === 'string' && defaultName ? defaultName : `my-soundscapes.${SOUNDSCAPE_FILE_EXTENSION}`,
+        filters: [{ name: 'Thockdown Soundscape', extensions: [SOUNDSCAPE_FILE_EXTENSION] }],
+      });
+      if (canceled || !filePath) return;
+      await fsPromises.writeFile(filePath, content, 'utf-8');
+    },
+    open: async () => {
+      const { filePaths, canceled } = await dialog.showOpenDialog({
+        title: 'Import soundscapes',
+        filters: [{ name: 'Thockdown Soundscape', extensions: [SOUNDSCAPE_FILE_EXTENSION] }],
+        properties: ['openFile'],
+      });
+      if (canceled || filePaths.length === 0) return null;
+      return fsPromises.readFile(filePaths[0], 'utf-8');
+    },
+  }, ipcMain.handle.bind(ipcMain));
 
   // ---- Music player --------------------------------------------------------
 
@@ -1104,225 +1103,185 @@ function registerIpcHandlers() {
     extensions: [...AUDIO_EXTENSIONS].map((ext) => ext.slice(1)), // strip leading dot
   }];
 
-  ipcMain.handle(AUDIO_PLAYER_CHANNELS.pickFiles, async () => {
-    const { filePaths, canceled } = await dialog.showOpenDialog({
-      title: 'Add songs',
-      filters: AUDIO_FILTER,
-      properties: ['openFile', 'multiSelections'],
-    });
-    return canceled ? [] : filePaths;
-  });
-
-  ipcMain.handle(AUDIO_PLAYER_CHANNELS.pickFolder, async () => {
-    const { filePaths, canceled } = await dialog.showOpenDialog({
-      title: 'Add folder of songs',
-      properties: ['openDirectory'],
-    });
-    return canceled || filePaths.length === 0 ? null : filePaths[0];
-  });
-
-  ipcMain.handle(AUDIO_PLAYER_CHANNELS.scanFolderForAudio, async (_event, folderPath: string) => {
-    const results: string[] = [];
-    const scan = async (dir: string): Promise<void> => {
-      let entries;
-      try {
-        entries = await fsPromises.readdir(dir, { withFileTypes: true });
-      } catch {
-        return;
-      }
-      for (const entry of entries) {
-        const fullPath = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-          await scan(fullPath);
-        } else if (entry.isFile()) {
-          const ext = path.extname(entry.name).toLowerCase();
-          if (AUDIO_EXTENSIONS.has(ext)) {
-            results.push(fullPath);
+  registerInvokeHandlers<AudioPlayerApi, IpcMainInvokeEvent>(AUDIO_PLAYER_CHANNELS, {
+    pickFiles: async () => {
+      const { filePaths, canceled } = await dialog.showOpenDialog({
+        title: 'Add songs',
+        filters: AUDIO_FILTER,
+        properties: ['openFile', 'multiSelections'],
+      });
+      return canceled ? [] : filePaths;
+    },
+    pickFolder: async () => {
+      const { filePaths, canceled } = await dialog.showOpenDialog({
+        title: 'Add folder of songs',
+        properties: ['openDirectory'],
+      });
+      return canceled || filePaths.length === 0 ? null : filePaths[0];
+    },
+    scanFolderForAudio: async (_event, folderPath: string) => {
+      const results: string[] = [];
+      const scan = async (dir: string): Promise<void> => {
+        let entries;
+        try {
+          entries = await fsPromises.readdir(dir, { withFileTypes: true });
+        } catch {
+          return;
+        }
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            await scan(fullPath);
+          } else if (entry.isFile()) {
+            const ext = path.extname(entry.name).toLowerCase();
+            if (AUDIO_EXTENSIONS.has(ext)) {
+              results.push(fullPath);
+            }
           }
         }
-      }
-    };
-    await scan(folderPath);
-    return results;
-  });
+      };
+      await scan(folderPath);
+      return results;
+    },
+    getPlaylist: async (_event, slot: PlaylistSlot) => {
+      return databaseService!.getMusicPlaylist(slot);
+    },
+    addSongs: async (_event, slot: PlaylistSlot, filePaths: string[]) => {
+      return databaseService!.addMusicSongs(slot, filePaths);
+    },
+    clearPlaylist: async (_event, slot: PlaylistSlot) => {
+      databaseService!.clearMusicPlaylist(slot);
+    },
+    removeSong: async (_event, id: number) => {
+      databaseService!.removeMusicSong(id);
+    },
+    pickNextSong: async (_event, activeSlots: PlaylistSlot[]) => {
+      return databaseService!.pickNextMusicSong(activeSlots);
+    },
+    afterPlay: async (_event, id: number) => {
+      databaseService!.afterMusicPlay(id);
+    },
+    favoriteSong: async (_event, id: number) => {
+      return databaseService!.favoriteMusicSong(id);
+    },
+    unfavoriteSong: async (_event, id: number) => {
+      return databaseService!.unfavoriteMusicSong(id);
+    },
+    skipSong: async (_event, id: number) => {
+      databaseService!.skipMusicSong(id);
+    },
+    purgeSong: async (_event, id: number) => {
+      databaseService!.purgeMusicSong(id);
+    },
+    getPlaylistCounts: async () => {
+      return databaseService!.getMusicPlaylistCounts();
+    },
+    getSongById: async (_event, id: number) => {
+      return databaseService!.getMusicSongById(id);
+    },
+  }, ipcMain.handle.bind(ipcMain));
 
-  ipcMain.handle(AUDIO_PLAYER_CHANNELS.getPlaylist, async (_event, slot: PlaylistSlot) => {
-    return databaseService!.getMusicPlaylist(slot);
-  });
+  registerInvokeHandlers<NoteTabsApi, IpcMainInvokeEvent>(NOTE_TABS_CHANNELS, {
+    listTabs: () => databaseService!.listNoteTabs(),
+    addTab: (_event, sectionId, noteId) => databaseService!.addNoteTab(sectionId, noteId),
+    removeTab: (_event, sectionId, noteId) => databaseService!.removeNoteTab(sectionId, noteId),
+    reorderTabs: (_event, sectionId, orderedNoteIds) => databaseService!.reorderNoteTabs(sectionId, orderedNoteIds),
+    setLastActiveChapter: (_event, sectionId, noteId, chapterNoteId) =>
+      databaseService!.setNoteTabLastActiveChapter(sectionId, noteId, chapterNoteId),
+  }, ipcMain.handle.bind(ipcMain));
 
-  ipcMain.handle(AUDIO_PLAYER_CHANNELS.addSongs, async (_event, slot: PlaylistSlot, filePaths: string[]) => {
-    return databaseService!.addMusicSongs(slot, filePaths);
-  });
+  registerInvokeHandlers<EditorSectionsApi, IpcMainInvokeEvent>(EDITOR_SECTIONS_CHANNELS, {
+    listSections: async () => {
+      return databaseService!.listEditorSections();
+    },
+    createSection: async (_event, name?: string | null, afterPosition?: number) => {
+      return databaseService!.createEditorSection(name ?? null, afterPosition);
+    },
+    renameSection: async (_event, id: string, name: string | null) => {
+      return databaseService!.renameEditorSection(id, name);
+    },
+    removeSection: async (_event, id: string) => {
+      return databaseService!.removeEditorSection(id);
+    },
+    reorderSections: async (_event, orderedSectionIds: string[]) => {
+      return databaseService!.reorderEditorSections(orderedSectionIds);
+    },
+    updateSlotFixedWidths: async (_event, entries: Array<{ position: number; fixedWidthPx: number | null }>) => {
+      return databaseService!.updateEditorSlotFixedWidths(entries);
+    },
+    updateSlotWidths: async (_event, widths: Array<{ position: number; widthFraction: number | null }>) => {
+      return databaseService!.updateEditorSlotWidths(widths);
+    },
+    setActiveNote: async (_event, sectionId: string, noteId: string | null) => {
+      return databaseService!.setEditorSectionActiveNote(sectionId, noteId);
+    },
+    closeSlot: async (_event, sectionId: string) => {
+      return databaseService!.closeSectionSlot(sectionId);
+    },
+    swapIntoSlot: async (_event, outgoingSectionId: string, incomingSectionId: string) => {
+      return databaseService!.swapSectionIntoSlot(outgoingSectionId, incomingSectionId);
+    },
+  }, ipcMain.handle.bind(ipcMain));
 
-  ipcMain.handle(AUDIO_PLAYER_CHANNELS.clearPlaylist, async (_event, slot: PlaylistSlot) => {
-    databaseService!.clearMusicPlaylist(slot);
-  });
+  registerInvokeHandlers<ChaptersApi, IpcMainInvokeEvent>(CHAPTER_CHANNELS, {
+    listChapters: async (_event, parentNoteId: string) => {
+      return databaseService!.listChaptersForNote(parentNoteId);
+    },
+    createChapter: async (_event, parentNoteId: string) => {
+      const created = await noteLifecycleService!.createChapterNote(parentNoteId);
+      const chapters = databaseService!.listChaptersForNote(parentNoteId);
+      return { chapters, created };
+    },
+    cloneNoteAsChapter: async (_event, parentNoteId: string, sourceNoteId: string) => {
+      return noteLifecycleService!.cloneNoteAsChapter(parentNoteId, sourceNoteId);
+    },
+    reorderChapters: async (_event, parentNoteId: string, orderedChapterNoteIds: string[]) => {
+      return noteLifecycleService!.reorderChaptersAndSyncOpenItems(parentNoteId, orderedChapterNoteIds);
+    },
+    removeChapter: async (_event, parentNoteId: string, chapterNoteId: string) => {
+      return noteLifecycleService!.removeChapterAndSyncOpenItems(parentNoteId, chapterNoteId);
+    },
+    detachChapter: async (_event, parentNoteId: string, chapterNoteId: string) => {
+      return noteLifecycleService!.detachChapter(parentNoteId, chapterNoteId);
+    },
+    restoreDetachedChapter: async (_event, chapterNoteId: string) => {
+      return noteLifecycleService!.restoreDetachedChapter(chapterNoteId);
+    },
+    listChaptersIncludingArchived: async (_event, parentNoteId: string) => {
+      return databaseService!.listChaptersIncludingArchived(parentNoteId);
+    },
+    setChapterId: async (_event, parentNoteId: string, chapterNoteId: string, requestedId: string) => {
+      return databaseService!.setChapterId(parentNoteId, chapterNoteId, requestedId);
+    },
+    createAutoTocChapter: async (_event, parentNoteId: string) => {
+      return noteLifecycleService!.createAutoTocChapter(parentNoteId);
+    },
+    regenerateAutoTocChapter: async (_event, parentNoteId: string) => {
+      return noteLifecycleService!.regenerateAutoTocChapter(parentNoteId);
+    },
+    regenerateAllOpenItems: async (_event, parentNoteId: string) => {
+      return noteLifecycleService!.regenerateAllOpenItems(parentNoteId);
+    },
+    toggleOpenItem: async (_event, openItemsChapterNoteId: string, openItemsLineIndex: number) => {
+      return noteLifecycleService!.toggleOpenItemCheckedState(openItemsChapterNoteId, openItemsLineIndex);
+    },
+  }, ipcMain.handle.bind(ipcMain));
 
-  ipcMain.handle(AUDIO_PLAYER_CHANNELS.removeSong, async (_event, id: number) => {
-    databaseService!.removeMusicSong(id);
-  });
+  registerInvokeHandlers<ReviewFlagsApi, IpcMainInvokeEvent>(REVIEW_FLAG_CHANNELS, {
+    listReviewFlags: async (_event, noteId: string) => {
+      return databaseService!.listReviewFlags(noteId);
+    },
+    setReviewFlag: async (_event, noteId: string, flag: ReviewFlagWrite) => {
+      return databaseService!.setReviewFlag(noteId, flag);
+    },
+    clearReviewFlag: async (_event, noteId: string, lineNumber: number) => {
+      return databaseService!.clearReviewFlag(noteId, lineNumber);
+    },
+    syncReviewFlags: async (_event, noteId: string, remaps: ReviewFlagRemap[]) => {
+      return databaseService!.syncReviewFlags(noteId, remaps);
+    },
+  }, ipcMain.handle.bind(ipcMain));
 
-  ipcMain.handle(AUDIO_PLAYER_CHANNELS.pickNextSong, async (_event, activeSlots: PlaylistSlot[]) => {
-    return databaseService!.pickNextMusicSong(activeSlots);
-  });
-
-  ipcMain.handle(AUDIO_PLAYER_CHANNELS.afterPlay, async (_event, id: number) => {
-    databaseService!.afterMusicPlay(id);
-  });
-
-  ipcMain.handle(AUDIO_PLAYER_CHANNELS.favoriteSong, async (_event, id: number) => {
-    return databaseService!.favoriteMusicSong(id);
-  });
-
-  ipcMain.handle(AUDIO_PLAYER_CHANNELS.unfavoriteSong, async (_event, id: number) => {
-    return databaseService!.unfavoriteMusicSong(id);
-  });
-
-  ipcMain.handle(AUDIO_PLAYER_CHANNELS.skipSong, async (_event, id: number) => {
-    databaseService!.skipMusicSong(id);
-  });
-
-  ipcMain.handle(AUDIO_PLAYER_CHANNELS.purgeSong, async (_event, id: number) => {
-    databaseService!.purgeMusicSong(id);
-  });
-
-  ipcMain.handle(AUDIO_PLAYER_CHANNELS.getPlaylistCounts, async () => {
-    return databaseService!.getMusicPlaylistCounts();
-  });
-
-  ipcMain.handle(AUDIO_PLAYER_CHANNELS.getSongById, async (_event, id: number) => {
-    return databaseService!.getMusicSongById(id);
-  });
-
-  ipcMain.handle(NOTE_TABS_CHANNELS.list, async () => {
-    return databaseService!.listNoteTabs();
-  });
-
-  ipcMain.handle(NOTE_TABS_CHANNELS.add, async (_event, sectionId: string, noteId: string) => {
-    return databaseService!.addNoteTab(sectionId, noteId);
-  });
-
-  ipcMain.handle(NOTE_TABS_CHANNELS.remove, async (_event, sectionId: string, noteId: string) => {
-    return databaseService!.removeNoteTab(sectionId, noteId);
-  });
-
-  ipcMain.handle(NOTE_TABS_CHANNELS.reorder, async (_event, sectionId: string, orderedNoteIds: string[]) => {
-    return databaseService!.reorderNoteTabs(sectionId, orderedNoteIds);
-  });
-
-  ipcMain.handle(NOTE_TABS_CHANNELS.setLastActiveChapter, async (_event, sectionId: string, noteId: string, chapterNoteId: string | null) => {
-    return databaseService!.setNoteTabLastActiveChapter(sectionId, noteId, chapterNoteId);
-  });
-
-  ipcMain.handle(EDITOR_SECTIONS_CHANNELS.list, async () => {
-    return databaseService!.listEditorSections();
-  });
-
-  ipcMain.handle(EDITOR_SECTIONS_CHANNELS.create, async (_event, name?: string | null, afterPosition?: number) => {
-    return databaseService!.createEditorSection(name ?? null, afterPosition);
-  });
-
-  ipcMain.handle(EDITOR_SECTIONS_CHANNELS.rename, async (_event, id: string, name: string | null) => {
-    return databaseService!.renameEditorSection(id, name);
-  });
-
-  ipcMain.handle(EDITOR_SECTIONS_CHANNELS.remove, async (_event, id: string) => {
-    return databaseService!.removeEditorSection(id);
-  });
-
-  ipcMain.handle(EDITOR_SECTIONS_CHANNELS.reorder, async (_event, orderedSectionIds: string[]) => {
-    return databaseService!.reorderEditorSections(orderedSectionIds);
-  });
-
-  ipcMain.handle(EDITOR_SECTIONS_CHANNELS.updateSlotFixedWidths, async (_event, entries: Array<{ position: number; fixedWidthPx: number | null }>) => {
-    return databaseService!.updateEditorSlotFixedWidths(entries);
-  });
-
-  ipcMain.handle(EDITOR_SECTIONS_CHANNELS.updateSlotWidths, async (_event, widths: Array<{ position: number; widthFraction: number | null }>) => {
-    return databaseService!.updateEditorSlotWidths(widths);
-  });
-
-  ipcMain.handle(EDITOR_SECTIONS_CHANNELS.setActiveNote, async (_event, sectionId: string, noteId: string | null) => {
-    return databaseService!.setEditorSectionActiveNote(sectionId, noteId);
-  });
-
-  ipcMain.handle(EDITOR_SECTIONS_CHANNELS.closeSlot, async (_event, sectionId: string) => {
-    return databaseService!.closeSectionSlot(sectionId);
-  });
-
-  ipcMain.handle(EDITOR_SECTIONS_CHANNELS.swapIntoSlot, async (_event, outgoingSectionId: string, incomingSectionId: string) => {
-    return databaseService!.swapSectionIntoSlot(outgoingSectionId, incomingSectionId);
-  });
-
-  ipcMain.handle(CHAPTER_CHANNELS.list, async (_event, parentNoteId: string) => {
-    return databaseService!.listChaptersForNote(parentNoteId);
-  });
-
-  ipcMain.handle(CHAPTER_CHANNELS.create, async (_event, parentNoteId: string) => {
-    const created = await noteLifecycleService!.createChapterNote(parentNoteId);
-    const chapters = databaseService!.listChaptersForNote(parentNoteId);
-    return { chapters, created };
-  });
-
-  ipcMain.handle(CHAPTER_CHANNELS.cloneFromNote, async (_event, parentNoteId: string, sourceNoteId: string) => {
-    return noteLifecycleService!.cloneNoteAsChapter(parentNoteId, sourceNoteId);
-  });
-
-  ipcMain.handle(CHAPTER_CHANNELS.reorder, async (_event, parentNoteId: string, orderedChapterNoteIds: string[]) => {
-    return noteLifecycleService!.reorderChaptersAndSyncOpenItems(parentNoteId, orderedChapterNoteIds);
-  });
-
-  ipcMain.handle(CHAPTER_CHANNELS.remove, async (_event, parentNoteId: string, chapterNoteId: string) => {
-    return noteLifecycleService!.removeChapterAndSyncOpenItems(parentNoteId, chapterNoteId);
-  });
-
-  ipcMain.handle(CHAPTER_CHANNELS.detach, async (_event, parentNoteId: string, chapterNoteId: string) => {
-    return noteLifecycleService!.detachChapter(parentNoteId, chapterNoteId);
-  });
-
-  ipcMain.handle(CHAPTER_CHANNELS.restoreDetached, async (_event, chapterNoteId: string) => {
-    return noteLifecycleService!.restoreDetachedChapter(chapterNoteId);
-  });
-
-  ipcMain.handle(CHAPTER_CHANNELS.listIncludingArchived, async (_event, parentNoteId: string) => {
-    return databaseService!.listChaptersIncludingArchived(parentNoteId);
-  });
-
-  ipcMain.handle(CHAPTER_CHANNELS.setChapterId, async (_event, parentNoteId: string, chapterNoteId: string, requestedId: string) => {
-    return databaseService!.setChapterId(parentNoteId, chapterNoteId, requestedId);
-  });
-
-  ipcMain.handle(CHAPTER_CHANNELS.createAutoToc, async (_event, parentNoteId: string) => {
-    return noteLifecycleService!.createAutoTocChapter(parentNoteId);
-  });
-
-  ipcMain.handle(CHAPTER_CHANNELS.regenerateAutoToc, async (_event, parentNoteId: string) => {
-    return noteLifecycleService!.regenerateAutoTocChapter(parentNoteId);
-  });
-
-  ipcMain.handle(CHAPTER_CHANNELS.regenerateAutoOpenItems, async (_event, parentNoteId: string) => {
-    return noteLifecycleService!.regenerateAllOpenItems(parentNoteId);
-  });
-
-  ipcMain.handle(CHAPTER_CHANNELS.toggleOpenItem, async (_event, openItemsChapterNoteId: string, openItemsLineIndex: number) => {
-    return noteLifecycleService!.toggleOpenItemCheckedState(openItemsChapterNoteId, openItemsLineIndex);
-  });
-
-  ipcMain.handle(REVIEW_FLAG_CHANNELS.list, async (_event, noteId: string) => {
-    return databaseService!.listReviewFlags(noteId);
-  });
-
-  ipcMain.handle(REVIEW_FLAG_CHANNELS.set, async (_event, noteId: string, flag: ReviewFlagWrite) => {
-    return databaseService!.setReviewFlag(noteId, flag);
-  });
-
-  ipcMain.handle(REVIEW_FLAG_CHANNELS.clear, async (_event, noteId: string, lineNumber: number) => {
-    return databaseService!.clearReviewFlag(noteId, lineNumber);
-  });
-
-  ipcMain.handle(REVIEW_FLAG_CHANNELS.sync, async (_event, noteId: string, remaps: ReviewFlagRemap[]) => {
-    return databaseService!.syncReviewFlags(noteId, remaps);
-  });
 }
 
 function readCurrentWindowState(windowRef: BrowserWindow): WindowState {

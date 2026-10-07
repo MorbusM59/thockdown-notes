@@ -9,13 +9,7 @@ interface Window {
 	thockdownLoadouts?: import('@thockdown/look/loadouts').UiLoadoutApi;
 	thockdownFileSync?: import('./shared/fileSync').FileSyncApi;
 	thockdownSections?: import('./shared/sections').EditorSectionsApi;
-	thockdownExport?: {
-		selectExportFolder: () => Promise<string | null>;
-		exportPdf: (folderPath: string, fileName: string, htmlContent?: string) => Promise<{ ok: boolean; path?: string; error?: string }>;
-	};
-	ipcRenderer?: {
-		invoke: <T = unknown>(channel: string, ...args: unknown[]) => Promise<T>;
-	};
+	thockdownExport?: import('./shared/exportApi').ExportApi;
 	windowControls?: {
 		minimize: () => void;
 		toggleMaximize: () => void;

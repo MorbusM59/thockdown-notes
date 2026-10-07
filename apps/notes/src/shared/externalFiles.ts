@@ -1,11 +1,16 @@
-export const EXTERNAL_FILE_CHANNELS = {
-  getPendingPaths: 'external-files:get-pending-paths',
-  readContent: 'external-files:read-content',
-  writeContent: 'external-files:write-content',
-  basename: 'external-files:basename',
-  readSnapshot: 'external-files:read-snapshot',
+import type { InvokeChannels } from './ipcContract';
+/** Messages the main process sends unprompted (not requests). */
+export const EXTERNAL_FILE_EVENTS = {
   opened: 'external-files:opened',
 } as const;
+
+export const EXTERNAL_FILE_CHANNELS = {
+  getPendingFilePaths: 'external-files:get-pending-paths',
+  readFileContent: 'external-files:read-content',
+  writeFileContent: 'external-files:write-content',
+  getFileBasename: 'external-files:basename',
+  readFileSnapshot: 'external-files:read-snapshot',
+} as const satisfies InvokeChannels<ExternalFilesApi>;
 
 export type ExternalFilesApi = {
   getPendingFilePaths(): Promise<string[]>;

@@ -1,20 +1,21 @@
+import type { InvokeChannels } from './ipcContract';
 import type { NoteDocument, NoteSummary } from './noteLifecycle'
 
 export const CHAPTER_CHANNELS = {
-  list: 'chapters:list',
-  create: 'chapters:create',
-  cloneFromNote: 'chapters:clone-from-note',
-  reorder: 'chapters:reorder',
-  remove: 'chapters:remove',
-  detach: 'chapters:detach',
-  restoreDetached: 'chapters:restore-detached',
-  listIncludingArchived: 'chapters:list-including-archived',
+  listChapters: 'chapters:list',
+  createChapter: 'chapters:create',
+  cloneNoteAsChapter: 'chapters:clone-from-note',
+  reorderChapters: 'chapters:reorder',
+  removeChapter: 'chapters:remove',
+  detachChapter: 'chapters:detach',
+  restoreDetachedChapter: 'chapters:restore-detached',
+  listChaptersIncludingArchived: 'chapters:list-including-archived',
   setChapterId: 'chapters:set-chapter-id',
-  createAutoToc: 'chapters:create-auto-toc',
-  regenerateAutoToc: 'chapters:regenerate-auto-toc',
-  regenerateAutoOpenItems: 'chapters:regenerate-auto-open-items',
+  createAutoTocChapter: 'chapters:create-auto-toc',
+  regenerateAutoTocChapter: 'chapters:regenerate-auto-toc',
+  regenerateAllOpenItems: 'chapters:regenerate-auto-open-items',
   toggleOpenItem: 'chapters:toggle-open-item',
-} as const;
+} as const satisfies InvokeChannels<ChaptersApi>;
 
 /** One chapter: `chapterNoteId` is itself a full note, ordered (gapless, 0-indexed) among `parentNoteId`'s other chapters. A chapter note belongs to exactly one parent, ever. `chapterId` is a user-assignable label (chapter bar right-click, or `$noteid§chapterid` links), unique per parentNoteId; null until first assigned. */
 export interface ChapterEntry {

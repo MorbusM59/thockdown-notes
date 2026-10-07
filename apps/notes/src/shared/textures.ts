@@ -1,10 +1,11 @@
+import type { InvokeChannels } from './ipcContract';
 import type { TextureSurfaceKey } from '@thockdown/look/textureTypes';
 
 export const TEXTURE_CHANNELS = {
-  getCached: 'texture:cache:get',
-  saveCached: 'texture:cache:save',
-  purgeCached: 'texture:cache:purge',
-} as const;
+  getCachedTexture: 'texture:cache:get',
+  saveCachedTexture: 'texture:cache:save',
+  purgeCachedTextures: 'texture:cache:purge',
+} as const satisfies InvokeChannels<TextureCacheApi>;
 
 export type TextureCacheRequest = {
   surface: TextureSurfaceKey;

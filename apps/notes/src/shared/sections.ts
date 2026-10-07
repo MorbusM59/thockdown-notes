@@ -1,15 +1,16 @@
+import type { InvokeChannels } from './ipcContract';
 export const EDITOR_SECTIONS_CHANNELS = {
-  list: 'sections:list',
-  create: 'sections:create',
-  rename: 'sections:rename',
-  remove: 'sections:remove',
-  reorder: 'sections:reorder',
+  listSections: 'sections:list',
+  createSection: 'sections:create',
+  renameSection: 'sections:rename',
+  removeSection: 'sections:remove',
+  reorderSections: 'sections:reorder',
   updateSlotWidths: 'sections:update-slot-widths',
   updateSlotFixedWidths: 'sections:update-slot-fixed-widths',
   setActiveNote: 'sections:set-active-note',
   closeSlot: 'sections:close-slot',
   swapIntoSlot: 'sections:swap-into-slot',
-} as const;
+} as const satisfies InvokeChannels<EditorSectionsApi>;
 
 /** The sole section on a fresh install, and always where sidebar note clicks land. */
 export const DEFAULT_EDITOR_SECTION_ID = 'default';

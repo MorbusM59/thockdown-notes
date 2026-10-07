@@ -1,15 +1,16 @@
+import type { InvokeChannels } from './ipcContract';
 import { isExternalTagName } from './tags'
 
 export const NOTE_LIFECYCLE_CHANNELS = {
-  list: 'notes:list',
-  load: 'notes:load',
-  create: 'notes:create',
-  save: 'notes:save',
-  remove: 'notes:remove',
+  listNotes: 'notes:list',
+  loadNote: 'notes:load',
+  createNote: 'notes:create',
+  saveNote: 'notes:save',
+  deleteNote: 'notes:remove',
   getNoteTags: 'tags:get-note-tags',
-  addTag: 'tags:add',
-  removeTag: 'tags:remove',
-  reorderTags: 'tags:reorder',
+  addTagToNote: 'tags:add',
+  removeTagFromNote: 'tags:remove',
+  reorderNoteTags: 'tags:reorder',
   renameTag: 'tags:rename',
   listTags: 'tags:list',
   saveNoteUiState: 'notes:save-note-ui-state',
@@ -24,11 +25,11 @@ export const NOTE_LIFECYCLE_CHANNELS = {
   saveSnapshotAnchor: 'notes:save-snapshot-anchor',
   getSnapshotAnchor: 'notes:get-snapshot-anchor',
   branchNoteFromSnapshot: 'notes:branch-from-snapshot',
-  setAssignedId: 'notes:set-internal-id',
-  setTimeless: 'notes:set-timeless',
+  setNoteAssignedId: 'notes:set-internal-id',
+  setNoteTimeless: 'notes:set-timeless',
   restoreMissingNoteFile: 'notes:restore-missing-file',
   specifyMissingNoteFile: 'notes:specify-missing-file',
-} as const;
+} as const satisfies InvokeChannels<NoteLifecycleApi>;
 
 /**
  * A note whose database entry outlived its `.md` file -- the file was moved,

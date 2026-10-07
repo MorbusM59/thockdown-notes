@@ -1,21 +1,10 @@
 import { ipcRenderer, contextBridge, webFrame, webUtils } from 'electron'
-import type {
-  AddTagInput,
-  CreateNoteInput,
-  DeleteNoteInput,
-  LoadNoteInput,
-  NoteTagsInput,
-  NoteLifecycleApi,
-  RemoveTagInput,
-  RenameTagInput,
-  ReorderTagsInput,
-  SaveNoteInput,
-} from '../src/shared/noteLifecycle'
+import type { NoteLifecycleApi } from '../src/shared/noteLifecycle'
 import { NOTE_LIFECYCLE_CHANNELS } from '../src/shared/noteLifecycle'
 import type { AppStateApi } from '../src/shared/appState'
 import { APP_STATE_CHANNELS } from '../src/shared/appState'
 import type { ExternalFilesApi } from '../src/shared/externalFiles'
-import { EXTERNAL_FILE_CHANNELS } from '../src/shared/externalFiles'
+import { EXTERNAL_FILE_CHANNELS, EXTERNAL_FILE_EVENTS } from '../src/shared/externalFiles'
 import type { TextureCacheApi } from '../src/shared/textures'
 import { TEXTURE_CHANNELS } from '../src/shared/textures'
 import type { AudioBounceCacheApi } from '../src/shared/audioBounceCache'
@@ -37,69 +26,19 @@ import { CHAPTER_CHANNELS } from '../src/shared/chapters'
 import type { ReviewFlagsApi } from '../src/shared/reviewFlags'
 import { REVIEW_FLAG_CHANNELS } from '../src/shared/reviewFlags'
 import { WINDOW_DRAG_CHANNELS } from '../src/shared/windowDrag'
+import { invokeBridge } from '../src/shared/ipcContract'
+import { EXPORT_CHANNELS, type ExportApi } from '../src/shared/exportApi'
+
+// Every request/reply bridge below is built from its channel map by
+// `invokeBridge` (see shared/ipcContract.ts).
+const invoke = (channel: string, ...args: unknown[]) => ipcRenderer.invoke(channel, ...args)
 
 // --------- Expose some API to the Renderer process ---------
-contextBridge.exposeInMainWorld('ipcRenderer', {
-  on(...args: Parameters<typeof ipcRenderer.on>) {
-    const [channel, listener] = args
-    return ipcRenderer.on(channel, (event, ...args) => listener(event, ...args))
-  },
-  off(...args: Parameters<typeof ipcRenderer.off>) {
-    const [channel, ...omit] = args
-    return ipcRenderer.off(channel, ...omit)
-  },
-  send(...args: Parameters<typeof ipcRenderer.send>) {
-    const [channel, ...omit] = args
-    return ipcRenderer.send(channel, ...omit)
-  },
-  invoke(...args: Parameters<typeof ipcRenderer.invoke>) {
-    const [channel, ...omit] = args
-    return ipcRenderer.invoke(channel, ...omit)
-  },
-
-  // You can expose other APTs you need here.
-  // ...
-})
-
-const noteLifecycleApi: NoteLifecycleApi = {
-  listNotes: () => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.list),
-  loadNote: (input: LoadNoteInput) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.load, input),
-  createNote: (input?: CreateNoteInput) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.create, input),
-  saveNote: (input: SaveNoteInput) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.save, input),
-  deleteNote: (input: DeleteNoteInput) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.remove, input),
-  getNoteTags: (input: NoteTagsInput) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.getNoteTags, input),
-  addTagToNote: (input: AddTagInput) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.addTag, input),
-  removeTagFromNote: (input: RemoveTagInput) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.removeTag, input),
-  reorderNoteTags: (input: ReorderTagsInput) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.reorderTags, input),
-  renameTag: (input: RenameTagInput) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.renameTag, input),
-  listTags: () => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.listTags),
-  saveNoteUiState: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.saveNoteUiState, input),
-  getNoteUiState: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.getNoteUiState, input),
-  updateExternalNoteState: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.updateExternalNoteState, input),
-  syncExternalNoteToFile: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.syncExternalNoteToFile, input),
-  getNoteIdByExternalPath: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.getNoteIdByExternalPath, input),
-  saveNoteSnapshot: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.saveNoteSnapshot, input),
-  getNoteSnapshots: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.getNoteSnapshots, input),
-  getFromDiskBaseline: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.getFromDiskBaseline, input),
-  deleteNoteSnapshot: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.deleteNoteSnapshot, input),
-  saveSnapshotAnchor: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.saveSnapshotAnchor, input),
-  getSnapshotAnchor: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.getSnapshotAnchor, input),
-  branchNoteFromSnapshot: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.branchNoteFromSnapshot, input),
-  setNoteAssignedId: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.setAssignedId, input),
-  setNoteTimeless: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.setTimeless, input),
-  restoreMissingNoteFile: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.restoreMissingNoteFile, input),
-  specifyMissingNoteFile: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.specifyMissingNoteFile, input),
-}
+const noteLifecycleApi: NoteLifecycleApi = invokeBridge<NoteLifecycleApi>(NOTE_LIFECYCLE_CHANNELS, invoke)
 
 contextBridge.exposeInMainWorld('thockdownNotes', noteLifecycleApi)
 
-const appStateApi: AppStateApi = {
-  loadAppState: () => ipcRenderer.invoke(APP_STATE_CHANNELS.loadAppState),
-  saveAppState: (state) => ipcRenderer.invoke(APP_STATE_CHANNELS.saveAppState, state),
-  clearAppState: () => ipcRenderer.invoke(APP_STATE_CHANNELS.clearAppState),
-  loadWindowState: () => ipcRenderer.invoke(APP_STATE_CHANNELS.loadWindowState),
-  saveWindowState: (state) => ipcRenderer.invoke(APP_STATE_CHANNELS.saveWindowState, state),
-}
+const appStateApi: AppStateApi = invokeBridge<AppStateApi>(APP_STATE_CHANNELS, invoke)
 
 contextBridge.exposeInMainWorld('thockdownState', appStateApi)
 
@@ -158,30 +97,21 @@ const windowControls = {
   },
 }
 
-const exportApi = {
-  selectExportFolder: () => ipcRenderer.invoke('select-export-folder'),
-  exportPdf: (folderPath: string, fileName: string, htmlContent?: string) =>
-    ipcRenderer.invoke('export-pdf', folderPath, fileName, htmlContent),
-}
+const exportApi: ExportApi = invokeBridge<ExportApi>(EXPORT_CHANNELS, invoke)
 
 contextBridge.exposeInMainWorld('windowControls', windowControls)
 contextBridge.exposeInMainWorld('thockdownExport', exportApi)
 
 const externalFilesApi: ExternalFilesApi = {
-  getPendingFilePaths: () => ipcRenderer.invoke(EXTERNAL_FILE_CHANNELS.getPendingPaths),
-  readFileContent: (filePath: string) => ipcRenderer.invoke(EXTERNAL_FILE_CHANNELS.readContent, filePath),
-  writeFileContent: (filePath: string, content: string) =>
-    ipcRenderer.invoke(EXTERNAL_FILE_CHANNELS.writeContent, filePath, content),
-  getFileBasename: (filePath: string) => ipcRenderer.invoke(EXTERNAL_FILE_CHANNELS.basename, filePath),
+  ...invokeBridge<ExternalFilesApi>(EXTERNAL_FILE_CHANNELS, invoke),
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
-  readFileSnapshot: (filePath: string) => ipcRenderer.invoke(EXTERNAL_FILE_CHANNELS.readSnapshot, filePath),
   onOpenFile: (callback: (filePath: string) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, filePath: string) => {
       callback(filePath)
     }
-    ipcRenderer.on(EXTERNAL_FILE_CHANNELS.opened, listener)
+    ipcRenderer.on(EXTERNAL_FILE_EVENTS.opened, listener)
     return () => {
-      ipcRenderer.off(EXTERNAL_FILE_CHANNELS.opened, listener)
+      ipcRenderer.off(EXTERNAL_FILE_EVENTS.opened, listener)
     }
   },
 }
@@ -189,118 +119,42 @@ const externalFilesApi: ExternalFilesApi = {
 contextBridge.exposeInMainWorld('thockdownExternalFiles', externalFilesApi)
 
 
-const textureCacheApi: TextureCacheApi = {
-  getCachedTexture: (request) => ipcRenderer.invoke(TEXTURE_CHANNELS.getCached, request),
-  saveCachedTexture: (request, payload) => ipcRenderer.invoke(TEXTURE_CHANNELS.saveCached, request, payload),
-  purgeCachedTextures: (request) => ipcRenderer.invoke(TEXTURE_CHANNELS.purgeCached, request),
-}
+const textureCacheApi: TextureCacheApi = invokeBridge<TextureCacheApi>(TEXTURE_CHANNELS, invoke)
 
 contextBridge.exposeInMainWorld('thockdownTextures', textureCacheApi)
 
-const audioBounceCacheApi: AudioBounceCacheApi = {
-  getCachedBounce: (request) => ipcRenderer.invoke(AUDIO_BOUNCE_CHANNELS.getCached, request),
-  saveCachedBounce: (request, payload) => ipcRenderer.invoke(AUDIO_BOUNCE_CHANNELS.saveCached, request, payload),
-}
+const audioBounceCacheApi: AudioBounceCacheApi = invokeBridge<AudioBounceCacheApi>(AUDIO_BOUNCE_CHANNELS, invoke)
 
 contextBridge.exposeInMainWorld('thockdownAudioBounces', audioBounceCacheApi)
 
-const uiLoadoutApi: UiLoadoutApi = {
-  list: () => ipcRenderer.invoke(LOADOUT_CHANNELS.list),
-  setActive: (id) => ipcRenderer.invoke(LOADOUT_CHANNELS.setActive, id),
-  updatePending: (mode, loadout) => ipcRenderer.invoke(LOADOUT_CHANNELS.updatePending, mode, loadout),
-  saveCustom: (mode) => ipcRenderer.invoke(LOADOUT_CHANNELS.saveCustom, mode),
-  deleteCustom: (id) => ipcRenderer.invoke(LOADOUT_CHANNELS.deleteCustom, id),
-  resetCustom: (mode) => ipcRenderer.invoke(LOADOUT_CHANNELS.resetCustom, mode),
-  exportTdl: () => ipcRenderer.invoke(LOADOUT_CHANNELS.exportTdl),
-  exportTdlEntry: (id: number) => ipcRenderer.invoke(LOADOUT_CHANNELS.exportTdlEntry, id),
-  importTdl: () => ipcRenderer.invoke(LOADOUT_CHANNELS.importTdl),
-}
+const uiLoadoutApi: UiLoadoutApi = invokeBridge<UiLoadoutApi>(LOADOUT_CHANNELS, invoke)
 
 contextBridge.exposeInMainWorld('thockdownLoadouts', uiLoadoutApi)
 
-const soundscapeFileApi: SoundscapeFileApi = {
-  save: (content, defaultName) => ipcRenderer.invoke(SOUNDSCAPE_FILE_CHANNELS.save, content, defaultName),
-  open: () => ipcRenderer.invoke(SOUNDSCAPE_FILE_CHANNELS.open),
-}
+const soundscapeFileApi: SoundscapeFileApi = invokeBridge<SoundscapeFileApi>(SOUNDSCAPE_FILE_CHANNELS, invoke)
 
 contextBridge.exposeInMainWorld('thockdownSoundscapeFiles', soundscapeFileApi)
 
-const fileSyncApi: FileSyncApi = {
-  syncExistingNotes: () => ipcRenderer.invoke(FILE_SYNC_CHANNELS.syncExistingNotes),
-  importNotes: () => ipcRenderer.invoke(FILE_SYNC_CHANNELS.importNotes),
-  openNotesFolder: () => ipcRenderer.invoke(FILE_SYNC_CHANNELS.openNotesFolder),
-}
+const fileSyncApi: FileSyncApi = invokeBridge<FileSyncApi>(FILE_SYNC_CHANNELS, invoke)
 
 contextBridge.exposeInMainWorld('thockdownFileSync', fileSyncApi)
 
-const audioPlayerApi: AudioPlayerApi = {
-  pickFiles:          () => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.pickFiles),
-  pickFolder:         () => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.pickFolder),
-  scanFolderForAudio: (folderPath) => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.scanFolderForAudio, folderPath),
-  getPlaylist:        (slot) => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.getPlaylist, slot),
-  addSongs:           (slot, filePaths) => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.addSongs, slot, filePaths),
-  clearPlaylist:      (slot) => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.clearPlaylist, slot),
-  removeSong:         (id) => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.removeSong, id),
-  pickNextSong:       (activeSlots) => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.pickNextSong, activeSlots),
-  afterPlay:          (id) => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.afterPlay, id),
-  favoriteSong:       (id) => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.favoriteSong, id),
-  unfavoriteSong:     (id) => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.unfavoriteSong, id),
-  skipSong:           (id) => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.skipSong, id),
-  purgeSong:          (id) => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.purgeSong, id),
-  getPlaylistCounts:  () => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.getPlaylistCounts),
-  getSongById:        (id) => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.getSongById, id),
-}
+const audioPlayerApi: AudioPlayerApi = invokeBridge<AudioPlayerApi>(AUDIO_PLAYER_CHANNELS, invoke)
 
 contextBridge.exposeInMainWorld('thockdownAudioPlayer', audioPlayerApi)
 
-const noteTabsApi: NoteTabsApi = {
-  listTabs:    () => ipcRenderer.invoke(NOTE_TABS_CHANNELS.list),
-  addTab:      (sectionId, noteId) => ipcRenderer.invoke(NOTE_TABS_CHANNELS.add, sectionId, noteId),
-  removeTab:   (sectionId, noteId) => ipcRenderer.invoke(NOTE_TABS_CHANNELS.remove, sectionId, noteId),
-  reorderTabs: (sectionId, orderedNoteIds) => ipcRenderer.invoke(NOTE_TABS_CHANNELS.reorder, sectionId, orderedNoteIds),
-  setLastActiveChapter: (sectionId, noteId, chapterNoteId) => ipcRenderer.invoke(NOTE_TABS_CHANNELS.setLastActiveChapter, sectionId, noteId, chapterNoteId),
-}
+const noteTabsApi: NoteTabsApi = invokeBridge<NoteTabsApi>(NOTE_TABS_CHANNELS, invoke)
 
 contextBridge.exposeInMainWorld('thockdownTabs', noteTabsApi)
 
-const editorSectionsApi: EditorSectionsApi = {
-  listSections:        () => ipcRenderer.invoke(EDITOR_SECTIONS_CHANNELS.list),
-  createSection:       (name, afterPosition) => ipcRenderer.invoke(EDITOR_SECTIONS_CHANNELS.create, name, afterPosition),
-  renameSection:       (id, name) => ipcRenderer.invoke(EDITOR_SECTIONS_CHANNELS.rename, id, name),
-  removeSection:       (id) => ipcRenderer.invoke(EDITOR_SECTIONS_CHANNELS.remove, id),
-  reorderSections:     (orderedSectionIds) => ipcRenderer.invoke(EDITOR_SECTIONS_CHANNELS.reorder, orderedSectionIds),
-  updateSlotWidths:    (widths) => ipcRenderer.invoke(EDITOR_SECTIONS_CHANNELS.updateSlotWidths, widths),
-  updateSlotFixedWidths: (entries) => ipcRenderer.invoke(EDITOR_SECTIONS_CHANNELS.updateSlotFixedWidths, entries),
-  setActiveNote:       (sectionId, noteId) => ipcRenderer.invoke(EDITOR_SECTIONS_CHANNELS.setActiveNote, sectionId, noteId),
-  closeSlot:           (sectionId) => ipcRenderer.invoke(EDITOR_SECTIONS_CHANNELS.closeSlot, sectionId),
-  swapIntoSlot:        (outgoingSectionId, incomingSectionId) => ipcRenderer.invoke(EDITOR_SECTIONS_CHANNELS.swapIntoSlot, outgoingSectionId, incomingSectionId),
-}
+const editorSectionsApi: EditorSectionsApi = invokeBridge<EditorSectionsApi>(EDITOR_SECTIONS_CHANNELS, invoke)
 
 contextBridge.exposeInMainWorld('thockdownSections', editorSectionsApi)
 
-const chaptersApi: ChaptersApi = {
-  listChapters:      (parentNoteId) => ipcRenderer.invoke(CHAPTER_CHANNELS.list, parentNoteId),
-  createChapter:     (parentNoteId) => ipcRenderer.invoke(CHAPTER_CHANNELS.create, parentNoteId),
-  cloneNoteAsChapter: (parentNoteId, sourceNoteId) => ipcRenderer.invoke(CHAPTER_CHANNELS.cloneFromNote, parentNoteId, sourceNoteId),
-  reorderChapters:   (parentNoteId, orderedChapterNoteIds) => ipcRenderer.invoke(CHAPTER_CHANNELS.reorder, parentNoteId, orderedChapterNoteIds),
-  removeChapter:     (parentNoteId, chapterNoteId) => ipcRenderer.invoke(CHAPTER_CHANNELS.remove, parentNoteId, chapterNoteId),
-  detachChapter: (parentNoteId, chapterNoteId) => ipcRenderer.invoke(CHAPTER_CHANNELS.detach, parentNoteId, chapterNoteId),
-  restoreDetachedChapter: (chapterNoteId) => ipcRenderer.invoke(CHAPTER_CHANNELS.restoreDetached, chapterNoteId),
-  listChaptersIncludingArchived: (parentNoteId) => ipcRenderer.invoke(CHAPTER_CHANNELS.listIncludingArchived, parentNoteId),
-  setChapterId:      (parentNoteId, chapterNoteId, requestedId) => ipcRenderer.invoke(CHAPTER_CHANNELS.setChapterId, parentNoteId, chapterNoteId, requestedId),
-  createAutoTocChapter: (parentNoteId) => ipcRenderer.invoke(CHAPTER_CHANNELS.createAutoToc, parentNoteId),
-  regenerateAutoTocChapter: (parentNoteId) => ipcRenderer.invoke(CHAPTER_CHANNELS.regenerateAutoToc, parentNoteId),
-  regenerateAllOpenItems: (parentNoteId) => ipcRenderer.invoke(CHAPTER_CHANNELS.regenerateAutoOpenItems, parentNoteId),
-  toggleOpenItem: (openItemsChapterNoteId, openItemsLineIndex) => ipcRenderer.invoke(CHAPTER_CHANNELS.toggleOpenItem, openItemsChapterNoteId, openItemsLineIndex),
-}
+const chaptersApi: ChaptersApi = invokeBridge<ChaptersApi>(CHAPTER_CHANNELS, invoke)
 
 contextBridge.exposeInMainWorld('thockdownChapters', chaptersApi)
 
-const reviewFlagsApi: ReviewFlagsApi = {
-  listReviewFlags: (noteId) => ipcRenderer.invoke(REVIEW_FLAG_CHANNELS.list, noteId),
-  setReviewFlag:   (noteId, flag) => ipcRenderer.invoke(REVIEW_FLAG_CHANNELS.set, noteId, flag),
-  clearReviewFlag: (noteId, lineNumber) => ipcRenderer.invoke(REVIEW_FLAG_CHANNELS.clear, noteId, lineNumber),
-  syncReviewFlags: (noteId, remaps) => ipcRenderer.invoke(REVIEW_FLAG_CHANNELS.sync, noteId, remaps),
-}
+const reviewFlagsApi: ReviewFlagsApi = invokeBridge<ReviewFlagsApi>(REVIEW_FLAG_CHANNELS, invoke)
 
 contextBridge.exposeInMainWorld('thockdownReviewFlags', reviewFlagsApi)

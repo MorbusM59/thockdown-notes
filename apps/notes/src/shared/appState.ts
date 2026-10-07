@@ -1,3 +1,4 @@
+import type { InvokeChannels } from './ipcContract';
 import type { GameSave } from '../adventure/model/gameState';
 import type { SlotOverlay } from './slotOverlay';
 import type { TextureMaterialsBySurface, TextureSurfaceKey } from '@thockdown/look/textureTypes';
@@ -10,7 +11,7 @@ export const APP_STATE_CHANNELS = {
   clearAppState: 'state:app:clear',
   loadWindowState: 'state:window:load',
   saveWindowState: 'state:window:save',
-} as const;
+} as const satisfies InvokeChannels<AppStateApi>;
 
 export type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'find' | 'options';
 
