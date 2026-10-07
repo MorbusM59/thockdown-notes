@@ -464,7 +464,10 @@ describe('splitMarkdownIntoPreviewBlocksIncremental', () => {
     }
   }
 
-  it.each([7, 99])('matches a full parse after every step of a long randomized edit sequence on a dense many-short-blocks corpus (seed %i)', (seed) => {
+  // 350 steps, each checked against a full parse of a 150-250 block corpus:
+  // seconds of work by design, past Vitest's 5s default, which Vitest
+  // enforces on synchronous tests since 3.x.
+  it.each([7, 99])('matches a full parse after every step of a long randomized edit sequence on a dense many-short-blocks corpus (seed %i)', { timeout: 30_000 }, (seed) => {
     runDenseFuzzSequence(seed, 350)
   })
 })
