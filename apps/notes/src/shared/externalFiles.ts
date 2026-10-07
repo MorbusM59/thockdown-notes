@@ -1,8 +1,13 @@
-import type { InvokeChannels } from './ipcContract';
-/** Messages the main process sends unprompted (not requests). */
+import type { EventChannels, InvokeChannels } from './ipcContract';
+
+/** What the main process tells the window unprompted: a file the OS asked the app to open. */
+export interface ExternalFileEvents {
+  opened: string;
+}
+
 export const EXTERNAL_FILE_EVENTS = {
   opened: 'external-files:opened',
-} as const;
+} as const satisfies EventChannels<ExternalFileEvents>;
 
 export const EXTERNAL_FILE_CHANNELS = {
   getPendingFilePaths: 'external-files:get-pending-paths',

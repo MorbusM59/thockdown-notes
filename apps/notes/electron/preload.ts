@@ -3,7 +3,7 @@ import type { NoteLifecycleApi } from '../src/shared/noteLifecycle'
 import { NOTE_LIFECYCLE_CHANNELS } from '../src/shared/noteLifecycle'
 import type { AppStateApi } from '../src/shared/appState'
 import { APP_STATE_CHANNELS } from '../src/shared/appState'
-import type { ExternalFilesApi } from '../src/shared/externalFiles'
+import type { ExternalFileEvents, ExternalFilesApi } from '../src/shared/externalFiles'
 import { EXTERNAL_FILE_CHANNELS, EXTERNAL_FILE_EVENTS } from '../src/shared/externalFiles'
 import type { TextureCacheApi } from '../src/shared/textures'
 import { TEXTURE_CHANNELS } from '../src/shared/textures'
@@ -25,13 +25,15 @@ import type { ChaptersApi } from '../src/shared/chapters'
 import { CHAPTER_CHANNELS } from '../src/shared/chapters'
 import type { ReviewFlagsApi } from '../src/shared/reviewFlags'
 import { REVIEW_FLAG_CHANNELS } from '../src/shared/reviewFlags'
-import { WINDOW_DRAG_CHANNELS } from '../src/shared/windowDrag'
-import { invokeBridge } from '../src/shared/ipcContract'
+import { eventSubscriber, invokeBridge, sendBridge } from '../src/shared/ipcContract'
+import { WINDOW_CONTROL_INVOKE_CHANNELS, WINDOW_CONTROL_SEND_CHANNELS, WINDOW_EVENT_CHANNELS, type WindowControlsApi, type WindowEvents } from '../src/shared/windowControls'
 import { EXPORT_CHANNELS, type ExportApi } from '../src/shared/exportApi'
 
-// Every request/reply bridge below is built from its channel map by
-// `invokeBridge` (see shared/ipcContract.ts).
+// Every bridge below is built from its channel maps (see shared/ipcContract.ts).
 const invoke = (channel: string, ...args: unknown[]) => ipcRenderer.invoke(channel, ...args)
+const send = (channel: string, ...args: unknown[]) => ipcRenderer.send(channel, ...args)
+const on = ipcRenderer.on.bind(ipcRenderer)
+const off = ipcRenderer.off.bind(ipcRenderer)
 
 // --------- Expose some API to the Renderer process ---------
 const noteLifecycleApi: NoteLifecycleApi = invokeBridge<NoteLifecycleApi>(NOTE_LIFECYCLE_CHANNELS, invoke)
@@ -42,59 +44,18 @@ const appStateApi: AppStateApi = invokeBridge<AppStateApi>(APP_STATE_CHANNELS, i
 
 contextBridge.exposeInMainWorld('thockdownState', appStateApi)
 
-const windowControls = {
-  minimize: () => ipcRenderer.send('window-control', 'minimize'),
-  toggleMaximize: () => ipcRenderer.send('window-control', 'toggle-maximize'),
-  close: () => ipcRenderer.send('window-control', 'close'),
-  toggleDevTools: () => ipcRenderer.send('window-control', 'toggle-devtools'),
-  toggleUtilityCollapse: (size: { width: number; height: number }) =>
-    ipcRenderer.invoke('window-control:toggle-utility-collapse', size),
-  reportBackgroundColor: (hex: string) =>
-    ipcRenderer.send('window-control:report-background-color', hex),
-  setSidebarVisible: (visible: boolean) => ipcRenderer.send('window-control:sidebar-visibility', visible),
-  setSectionCount: (count: number) => ipcRenderer.send('window-control:section-count', count),
-  setChromeMinSize: (size: { width: number; widthWithoutSidebar: number; height: number }) =>
-    ipcRenderer.send('window-control:chrome-min-size', size),
-  setDoubleSizeMode: (enabled: boolean) => ipcRenderer.send('window-control:double-size-mode', enabled),
-  setFullScreen: (enabled: boolean) => ipcRenderer.send('window-control:full-screen', enabled),
+const onWindowEvent = eventSubscriber<WindowEvents, Electron.IpcRendererEvent>(WINDOW_EVENT_CHANNELS, on, off)
+
+const windowControls: WindowControlsApi = {
+  ...sendBridge<WindowControlsApi>(WINDOW_CONTROL_SEND_CHANNELS, send),
+  ...invokeBridge<WindowControlsApi>(WINDOW_CONTROL_INVOKE_CHANNELS, invoke),
   // The page's own zoom (double size mode sets it from the main process via
   // webContents.setZoomFactor). Read synchronously by the custom cursor,
   // which has to convert its stored pointer position when the zoom changes.
   getPageZoomFactor: () => webFrame.getZoomFactor(),
-  startWindowDrag: (screenX: number, screenY: number) =>
-    ipcRenderer.send(WINDOW_DRAG_CHANNELS.start, { screenX, screenY }),
-  moveWindowDrag: (screenX: number, screenY: number) =>
-    ipcRenderer.send(WINDOW_DRAG_CHANNELS.move, { screenX, screenY }),
-  endWindowDrag: () => ipcRenderer.send(WINDOW_DRAG_CHANNELS.end),
-  restoreMaximizedWindow: (originX: number, originY: number, releaseX: number, releaseY: number) =>
-    ipcRenderer.send(WINDOW_DRAG_CHANNELS.restoreMaximized, { originX, originY, releaseX, releaseY }),
-  onMaximizeStateChange: (callback: (isMaximized: boolean) => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, value: boolean) => {
-      callback(value)
-    }
-    ipcRenderer.on('window-maximize-state', listener)
-    return () => {
-      ipcRenderer.off('window-maximize-state', listener)
-    }
-  },
-  onCollapsedStateChange: (callback: (isCollapsed: boolean) => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, value: boolean) => {
-      callback(value)
-    }
-    ipcRenderer.on('window-collapsed-state', listener)
-    return () => {
-      ipcRenderer.off('window-collapsed-state', listener)
-    }
-  },
-  onFullScreenStateChange: (callback: (isFullScreen: boolean) => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, value: boolean) => {
-      callback(value)
-    }
-    ipcRenderer.on('window-fullscreen-state', listener)
-    return () => {
-      ipcRenderer.off('window-fullscreen-state', listener)
-    }
-  },
+  onMaximizeStateChange: (callback) => onWindowEvent('maximizeState', callback),
+  onCollapsedStateChange: (callback) => onWindowEvent('collapsedState', callback),
+  onFullScreenStateChange: (callback) => onWindowEvent('fullScreenState', callback),
 }
 
 const exportApi: ExportApi = invokeBridge<ExportApi>(EXPORT_CHANNELS, invoke)
@@ -105,15 +66,8 @@ contextBridge.exposeInMainWorld('thockdownExport', exportApi)
 const externalFilesApi: ExternalFilesApi = {
   ...invokeBridge<ExternalFilesApi>(EXTERNAL_FILE_CHANNELS, invoke),
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
-  onOpenFile: (callback: (filePath: string) => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, filePath: string) => {
-      callback(filePath)
-    }
-    ipcRenderer.on(EXTERNAL_FILE_EVENTS.opened, listener)
-    return () => {
-      ipcRenderer.off(EXTERNAL_FILE_EVENTS.opened, listener)
-    }
-  },
+  onOpenFile: (callback) =>
+    eventSubscriber<ExternalFileEvents, Electron.IpcRendererEvent>(EXTERNAL_FILE_EVENTS, on, off)('opened', callback),
 }
 
 contextBridge.exposeInMainWorld('thockdownExternalFiles', externalFilesApi)

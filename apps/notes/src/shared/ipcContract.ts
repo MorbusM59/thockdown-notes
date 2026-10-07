@@ -12,15 +12,15 @@
 // main handler and the interface were four declarations of one call, checked
 // separately, and the main side's return types were never checked at all.
 //
-// Only request/reply calls (`ipcRenderer.invoke` / `ipcMain.handle`) go
-// through here. A method that does not return a promise -- a synchronous
-// read such as `getPathForFile`, or an `on...` subscription to an event the
-// main process sends -- is not a request, is excluded from the map by type,
-// and stays written out by hand in the preload.
+// Three kinds of traffic cross the boundary and each has its section below:
+// requests that wait for a reply, fire-and-forget messages, and events the
+// main process sends unprompted. A method that is none of these -- a
+// synchronous read in the preload such as `getPathForFile` -- is excluded
+// from every map by type and stays written out by hand.
 //
 // This module imports nothing from Electron, so the renderer, the preload
 // and the main process can all use it; the two Electron entry points pass
-// in `ipcRenderer.invoke` and `ipcMain.handle`.
+// in `ipcRenderer` / `ipcMain` / `webContents` methods.
 
 /** The method names of `Api` that are request/reply calls (they return a promise). */
 export type InvokeMethodName<Api> = {
@@ -64,5 +64,91 @@ export function registerInvokeHandlers<Api, Event>(
   const byMethod = handlers as unknown as Record<string, (event: Event, ...args: unknown[]) => unknown>
   for (const [method, channel] of Object.entries(channels) as Array<[string, string]>) {
     handle(channel, (event, ...args) => byMethod[method](event, ...args))
+  }
+}
+
+// ---- Fire-and-forget messages (`ipcRenderer.send` / `ipcMain.on`) ----
+//
+// The same arrangement for calls that expect no reply: a method returning
+// `void` on the API interface, one channel per method, the bridge and the
+// handlers both built from the map.
+
+/** The method names of `Api` that are fire-and-forget messages (they return `void`). */
+export type SendMethodName<Api> = {
+  [K in keyof Api]: Api[K] extends (...args: never[]) => infer Result
+    ? [Result] extends [void] ? K : never
+    : never
+}[keyof Api]
+
+/** The channel map for `Api`'s fire-and-forget messages: exactly one channel per such method. */
+export type SendChannels<Api> = { readonly [K in SendMethodName<Api>]: string }
+
+/** The main-process handlers for `Api`'s fire-and-forget messages: the IPC event, then the method's arguments. */
+export type SendHandlers<Api, Event> = {
+  [K in SendMethodName<Api>]: Api[K] extends (...args: infer Args) => void
+    ? (event: Event, ...args: Args) => void
+    : never
+}
+
+/** Builds the renderer-side fire-and-forget methods of `Api` from its channel map. */
+export function sendBridge<Api>(
+  channels: SendChannels<Api>,
+  send: (channel: string, ...args: unknown[]) => void,
+): Pick<Api, SendMethodName<Api>> {
+  const bridge: Record<string, (...args: unknown[]) => void> = {}
+  for (const [method, channel] of Object.entries(channels) as Array<[string, string]>) {
+    bridge[method] = (...args) => send(channel, ...args)
+  }
+  return bridge as unknown as Pick<Api, SendMethodName<Api>>
+}
+
+/** Registers one main-process listener per channel in `Api`'s fire-and-forget map. */
+export function registerSendHandlers<Api, Event>(
+  channels: SendChannels<Api>,
+  handlers: SendHandlers<Api, Event>,
+  on: (channel: string, listener: (event: Event, ...args: unknown[]) => void) => void,
+): void {
+  const byMethod = handlers as unknown as Record<string, (event: Event, ...args: unknown[]) => void>
+  for (const [method, channel] of Object.entries(channels) as Array<[string, string]>) {
+    on(channel, (event, ...args) => byMethod[method](event, ...args))
+  }
+}
+
+// ---- Events the main process sends unprompted (`webContents.send` / `ipcRenderer.on`) ----
+//
+// An event map names each event and its one payload (`{ maximizeState:
+// boolean }`); its channel map gives each a channel. The main process emits
+// through an `eventEmitter` and the preload subscribes through an
+// `eventSubscriber`, so the payload's type is the map's on both sides.
+
+/** The channel map for an event map: one channel per event. */
+export type EventChannels<Events> = { readonly [K in keyof Events]: string }
+
+/**
+ * The main process's sender for an event map: `emit(target, name, payload)`
+ * with the payload typed by the map. The map is named once, here, so a call
+ * site cannot widen it by inference from the payload it happens to pass.
+ */
+export function eventEmitter<Events>(channels: EventChannels<Events>) {
+  return <K extends keyof Events>(
+    target: { send(channel: string, ...args: unknown[]): void },
+    name: K,
+    payload: Events[K],
+  ): void => {
+    target.send(channels[name], payload)
+  }
+}
+
+/** The preload's subscriber for an event map: `subscribe(name, callback)` returns the unsubscribe. */
+export function eventSubscriber<Events, Event>(
+  channels: EventChannels<Events>,
+  on: (channel: string, listener: (event: Event, ...args: unknown[]) => void) => void,
+  off: (channel: string, listener: (event: Event, ...args: unknown[]) => void) => void,
+) {
+  return <K extends keyof Events>(name: K, callback: (payload: Events[K]) => void): (() => void) => {
+    // The payload's type is the map's because `eventEmitter` sent it typed by the same map.
+    const listener = (_event: Event, ...args: unknown[]) => callback(args[0] as Events[K])
+    on(channels[name], listener)
+    return () => off(channels[name], listener)
   }
 }

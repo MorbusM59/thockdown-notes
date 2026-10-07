@@ -1,6 +1,6 @@
 import { SOUNDSCAPE_FILE_CHANNELS, type SoundscapeFileApi, SOUNDSCAPE_FILE_EXTENSION } from '@thockdown/soundscape/soundscapeFile';
 import { app, BrowserWindow, Menu, ipcMain, dialog, protocol, shell } from 'electron'
-import type { IpcMainInvokeEvent, Session, PrintToPDFOptions } from 'electron'
+import type { IpcMainEvent, IpcMainInvokeEvent, Session, PrintToPDFOptions } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { existsSync, promises as fsPromises } from 'node:fs'
@@ -11,23 +11,27 @@ import { NOTE_LIFECYCLE_CHANNELS, type NoteLifecycleApi } from '../src/shared/no
 import { APP_STATE_CHANNELS, type AppStateApi, type WindowState } from '../src/shared/appState'
 import { StateService } from './stateService'
 import { DatabaseService } from './databaseService'
-import { EXTERNAL_FILE_CHANNELS, EXTERNAL_FILE_EVENTS, type ExternalFilesApi } from '../src/shared/externalFiles'
+import { EXTERNAL_FILE_CHANNELS, EXTERNAL_FILE_EVENTS, type ExternalFileEvents, type ExternalFilesApi } from '../src/shared/externalFiles'
 import { TEXTURE_CHANNELS, type TextureCacheApi } from '../src/shared/textures'
 import { AUDIO_BOUNCE_CHANNELS, type AudioBounceCacheApi } from '../src/shared/audioBounceCache'
 import { LOADOUT_CHANNELS, type UiLoadoutApi } from '@thockdown/look/loadouts'
 import { AUDIO_PLAYER_CHANNELS, type AudioPlayerApi, AUDIO_EXTENSIONS } from '../src/shared/audioPlayer'
 import type { PlaylistSlot } from '../src/shared/audioPlayer'
 import { NOTE_TABS_CHANNELS, type NoteTabsApi } from '../src/shared/tabs'
-import { registerInvokeHandlers } from '../src/shared/ipcContract'
+import { eventEmitter, registerInvokeHandlers, registerSendHandlers } from '../src/shared/ipcContract'
+import { WINDOW_CONTROL_INVOKE_CHANNELS, WINDOW_CONTROL_SEND_CHANNELS, WINDOW_EVENT_CHANNELS, type WindowControlsApi, type WindowEvents } from '../src/shared/windowControls'
 import { computeWindowControlsWidthPx, DEFAULT_SPACING_REGULAR_PX } from '../src/shared/windowChromeMetrics'
 import { EDITOR_SECTIONS_CHANNELS, type EditorSectionsApi } from '../src/shared/sections'
 import { CHAPTER_CHANNELS, type ChaptersApi } from '../src/shared/chapters'
 import { REVIEW_FLAG_CHANNELS, type ReviewFlagsApi } from '../src/shared/reviewFlags'
 import { EXPORT_CHANNELS, type ExportApi } from '../src/shared/exportApi'
 import type { ReviewFlagWrite, ReviewFlagRemap } from '../src/shared/reviewFlags'
-import { WINDOW_DRAG_CHANNELS } from '../src/shared/windowDrag'
 import { ensureHelpGuide } from './help/helpGuideNote'
 import { installedUserDataPath } from './installedUserData'
+
+// Typed senders for the events the main process pushes to the window.
+const emitWindowEvent = eventEmitter<WindowEvents>(WINDOW_EVENT_CHANNELS)
+const emitExternalFileEvent = eventEmitter<ExternalFileEvents>(EXTERNAL_FILE_EVENTS)
 
 // Defense in depth: if something throws outside of a path we've explicitly
 // wrapped (e.g. during startup, before a window exists to show an in-app
@@ -383,7 +387,7 @@ function flushPendingExternalPathsToRenderer(): void {
   const paths = [...pendingExternalFilePaths];
   pendingExternalFilePaths = [];
   for (const filePath of paths) {
-    win.webContents.send(EXTERNAL_FILE_EVENTS.opened, filePath);
+    emitExternalFileEvent(win.webContents, 'opened', filePath);
   }
 }
 
@@ -607,248 +611,248 @@ function registerIpcHandlers() {
     },
   }, ipcMain.handle.bind(ipcMain));
 
-  ipcMain.on('window-control', (_event, action: string) => {
-    if (!win || win.isDestroyed()) return
-
-    switch (action) {
-      case 'minimize':
-        win.minimize()
-        break
-      case 'toggle-maximize':
-        if (windowIsUtilityCollapsed) {
-          restoreWindowFromUtilityCollapse()
-        }
-        if (win.isMaximized()) {
-          win.unmaximize()
-        } else {
-          win.maximize()
-        }
-        break
-      case 'close':
-        win.close()
-        break
-      case 'toggle-devtools':
-        if (win.webContents.isDevToolsOpened()) {
-          win.webContents.closeDevTools()
-        } else {
-          win.webContents.openDevTools({ mode: 'detach' })
-        }
-        break
-      default:
-        break
-    }
-  })
-
-  // Custom (JS-driven) window dragging -- replaces `-webkit-app-region: drag`
-  // so pointer tracking in the renderer (the custom cursor overlay) never
-  // gets swallowed by a native Chromium drag region. See src/shared/windowDrag.ts
-  // and src/window/useWindowDragRegion.ts for the renderer side.
-  //
-  // A maximized window is never moved through this path -- Windows won't
-  // apply setBounds()/unmaximize() while the mouse button is still held
-  // down, so there's no way to make it live-follow the cursor. Restoring a
-  // maximized window via drag is instead handled by the restoreMaximized
-  // channel below, fired once on the actual mouseup. See
-  // useWindowDragRegion.ts's doc comment for the full story.
-  ipcMain.on(WINDOW_DRAG_CHANNELS.start, (_event, payload: { screenX: number; screenY: number }) => {
-    if (!win || win.isDestroyed() || win.isMaximized()) {
-      windowDragState = null
-      return
-    }
-
-    const bounds = win.getBounds()
-    windowDragState = {
-      startCursorX: payload.screenX,
-      startCursorY: payload.screenY,
-      startWinX: bounds.x,
-      startWinY: bounds.y,
-    }
-  })
-
-  ipcMain.on(WINDOW_DRAG_CHANNELS.move, (_event, payload: { screenX: number; screenY: number }) => {
-    if (!win || win.isDestroyed() || !windowDragState) return
-    const dx = payload.screenX - windowDragState.startCursorX
-    const dy = payload.screenY - windowDragState.startCursorY
-    win.setPosition(
-      Math.round(windowDragState.startWinX + dx),
-      Math.round(windowDragState.startWinY + dy),
-    )
-  })
-
-  ipcMain.on(WINDOW_DRAG_CHANNELS.end, () => {
-    windowDragState = null
-  })
-
-  // Fired on genuine mouseup after a drag started on a maximized window's
-  // title-bar chrome (see useWindowDragRegion.ts). Restores the window and
-  // places it as if the drag had been live-followed the whole time: the
-  // point under the cursor at mousedown (originX/Y, while still maximized)
-  // stays under the cursor at release (releaseX/Y, after restoring).
-  // getNormalBounds() (not getBounds()) is used for the restored size --
-  // see readCurrentWindowState()'s comment on why getBounds() can't be
-  // trusted while maximized.
-  ipcMain.on(WINDOW_DRAG_CHANNELS.restoreMaximized, (_event, payload: { originX: number; originY: number; releaseX: number; releaseY: number }) => {
-    if (!win || win.isDestroyed() || !win.isMaximized()) return
-
-    const maximizedBounds = win.getBounds()
-    const normalBounds = win.getNormalBounds()
-    const relativeX = maximizedBounds.width > 0
-      ? (payload.originX - maximizedBounds.x) / maximizedBounds.width
-      : 0.5
-    const targetX = Math.round(payload.releaseX - relativeX * normalBounds.width)
-    const targetY = Math.max(0, Math.round(payload.releaseY - 10))
-    const winRef = win
-    winRef.once('unmaximize', () => {
-      if (winRef.isDestroyed()) return
-      winRef.setBounds({ x: targetX, y: targetY, width: normalBounds.width, height: normalBounds.height })
-    })
-    winRef.unmaximize()
-  })
-
-  ipcMain.handle('window-control:toggle-utility-collapse', (_event, payload: unknown) => {
-    if (!win || win.isDestroyed()) return false
-
-    if (windowIsUtilityCollapsed) {
-      const restored = restoreWindowFromUtilityCollapse()
-      // Leaving mini mode maximizes, matching the glyph on the button that
-      // does it (the expand-to-corners arrows, not a restore-down box). Mini
-      // mode is the app at its smallest, so the way out of it is the app at
-      // its largest -- and the previous windowed size is not lost, because
-      // restore ran first: it is what unmaximize will hand back.
-      //
-      // Deliberately here rather than inside restoreWindowFromUtilityCollapse,
-      // which the 'toggle-maximize' action also calls on its way to deciding
-      // maximize-vs-unmaximize itself; maximizing in there would fight it.
-      if (restored && !win.isMaximized()) {
+  registerSendHandlers<WindowControlsApi, IpcMainEvent>(WINDOW_CONTROL_SEND_CHANNELS, {
+    minimize: () => {
+      if (!win || win.isDestroyed()) return
+      win.minimize()
+    },
+    toggleMaximize: () => {
+      if (!win || win.isDestroyed()) return
+      if (windowIsUtilityCollapsed) {
+        restoreWindowFromUtilityCollapse()
+      }
+      if (win.isMaximized()) {
+        win.unmaximize()
+      } else {
         win.maximize()
       }
-      return restored
-    }
-
-    const targetSize = resolveUtilityCollapseSize(payload)
-    return collapseWindowToUtilityGrid(targetSize)
-  })
-
-  // The renderer reports the active theme's resolved root background color
-  // (opaque #RRGGBB) whenever it changes, so the native window's own paint
-  // fallback stays in sync with the current preset. This closes the white-
-  // flash gap during native bounds changes (see restoreWindowFromUtilityCollapse)
-  // where Chromium has to fill screen area the renderer hasn't painted yet.
-  ipcMain.on('window-control:report-background-color', (_event, hex: unknown) => {
-    if (typeof hex !== 'string' || !HEX_COLOR_PATTERN.test(hex)) return
-    currentRootBackgroundColorHex = hex
-    if (win && !win.isDestroyed()) {
-      win.setBackgroundColor(hex)
-    }
-  })
-
-  // Adjust minimum size / bounds when the renderer reports the sidebar visibility
-  ipcMain.on('window-control:sidebar-visibility', (_event, visible: unknown) => {
-    try {
+    },
+    close: () => {
       if (!win || win.isDestroyed()) return
-      currentSidebarVisible = Boolean(visible)
-      const { width: minWidth, height: minHeight } = computeEffectiveMinSize()
-      win.setMinimumSize(minWidth, minHeight)
-
-      // If enabling the sidebar and the current width is smaller than the new minimum,
-      // expand the window so the toolbar and other content meet the min width.
-      if (currentSidebarVisible) {
-        growWindowToMinimumSizeIfNeeded(win, minWidth, minHeight)
+      win.close()
+    },
+    toggleDevTools: () => {
+      if (!win || win.isDestroyed()) return
+      if (win.webContents.isDevToolsOpened()) {
+        win.webContents.closeDevTools()
+      } else {
+        win.webContents.openDevTools({ mode: 'detach' })
       }
-    } catch (error) {
-      console.warn('Failed to apply sidebar-visibility window constraints', error)
-    }
-  })
+    },
 
-  // Adjust minimum size / bounds when the renderer reports how many editor
-  // sections are currently open -- the minimum width tracks whatever the
-  // open sections need to all sit at their own minimum (or the chrome floor
-  // if that's larger), so a section can never be squeezed narrower than its
-  // own minimum just by resizing the window.
-  ipcMain.on('window-control:section-count', (_event, sectionCount: unknown) => {
-    try {
-      if (!win || win.isDestroyed()) return
-      const parsedCount = Number(sectionCount)
-      currentSectionCount = Number.isFinite(parsedCount) ? Math.max(1, Math.round(parsedCount)) : 1
-      const { width: minWidth, height: minHeight } = computeEffectiveMinSize()
-      win.setMinimumSize(minWidth, minHeight)
-      growWindowToMinimumSizeIfNeeded(win, minWidth, minHeight)
-    } catch (error) {
-      console.warn('Failed to apply section-count window constraints', error)
-    }
-  })
-
-  // The renderer's own computed chrome minimum, sent whenever it changes --
-  // which in practice means whenever the user moves the spacing slider, since
-  // every term in it scales with that setting (see src/App.tsx's
-  // appShellMinWidthPx / appShellMinHeightPx). Until the first of these
-  // arrives, the constants above stand in at default spacing.
-  //
-  // Deliberately never grows the window: unlike enabling the sidebar or double
-  // size, nudging the spacing slider isn't a request to resize anything, and a
-  // window that crept larger on every tick of the slider would be obnoxious.
-  // The new minimum still applies from the next manual resize on.
-  ipcMain.on('window-control:chrome-min-size', (_event, size: unknown) => {
-    try {
-      if (!win || win.isDestroyed()) return
-      const candidate = size as { width?: unknown; widthWithoutSidebar?: unknown; height?: unknown } | null
-      const width = Number(candidate?.width)
-      const widthWithoutSidebar = Number(candidate?.widthWithoutSidebar)
-      const height = Number(candidate?.height)
-      if (![width, widthWithoutSidebar, height].every((value) => Number.isFinite(value) && value > 0)) return
-      reportedChromeMinSize = {
-        width: Math.ceil(width),
-        widthWithoutSidebar: Math.ceil(widthWithoutSidebar),
-        height: Math.ceil(height),
-      }
-      const { width: minWidth, height: minHeight } = computeEffectiveMinSize()
-      win.setMinimumSize(minWidth, minHeight)
-    } catch (error) {
-      console.warn('Failed to apply reported chrome minimum size', error)
-    }
-  })
-
-  // Toggles "double size" mode: 2x Chromium page zoom paired with a doubled
-  // window minimum (see computeEffectiveMinSize), so 2x content gets 2x room
-  // instead of being squeezed the way plain browser zoom would squeeze it.
-  // Disabling relaxes the minimum back down but -- consistent with the
-  // sidebar/section-count handlers above -- never shrinks the window itself.
-  ipcMain.on('window-control:double-size-mode', (_event, enabled: unknown) => {
-    try {
-      if (!win || win.isDestroyed()) return
-      currentDoubleSizeMode = Boolean(enabled)
-      win.webContents.setZoomFactor(currentDoubleSizeMode ? 2 : 1)
-      const { width: minWidth, height: minHeight } = computeEffectiveMinSize()
-      win.setMinimumSize(minWidth, minHeight)
-      if (currentDoubleSizeMode) {
-        growWindowToMinimumSizeIfNeeded(win, minWidth, minHeight)
-      }
-    } catch (error) {
-      console.warn('Failed to apply double-size-mode window constraints', error)
-    }
-  })
-
-  // Immersive mode (the renderer's isImmersiveMode) takes the window full
-  // screen and back. The ordinary window's state is kept aside first, so what
-  // is saved while full screen is that, not the screen -- see
-  // readPersistableWindowState. A request the window will not honour (mini
-  // mode) is answered with the state it actually has, so the renderer never
-  // believes the window is full screen when it is not.
-  ipcMain.on('window-control:full-screen', (_event, enabled: unknown) => {
-    try {
-      if (!win || win.isDestroyed()) return
-      const next = Boolean(enabled)
-      if (next === win.isFullScreen()) return
-      if (next && windowIsUtilityCollapsed) {
-        win.webContents.send('window-fullscreen-state', false)
+    // Custom (JS-driven) window dragging -- replaces `-webkit-app-region: drag`
+    // so pointer tracking in the renderer (the custom cursor overlay) never
+    // gets swallowed by a native Chromium drag region. See src/shared/windowDrag.ts
+    // and src/window/useWindowDragRegion.ts for the renderer side.
+    //
+    // A maximized window is never moved through this path -- Windows won't
+    // apply setBounds()/unmaximize() while the mouse button is still held
+    // down, so there's no way to make it live-follow the cursor. Restoring a
+    // maximized window via drag is instead handled by the restoreMaximized
+    // channel below, fired once on the actual mouseup. See
+    // useWindowDragRegion.ts's doc comment for the full story.
+    startWindowDrag: (_event, screenX, screenY) => {
+      if (!win || win.isDestroyed() || win.isMaximized()) {
+        windowDragState = null
         return
       }
-      if (next) preFullScreenWindowState = readCurrentWindowState(win)
-      win.setFullScreen(next)
-    } catch (error) {
-      console.warn('Failed to toggle full screen', error)
-    }
-  })
+
+      const bounds = win.getBounds()
+      windowDragState = {
+        startCursorX: screenX,
+        startCursorY: screenY,
+        startWinX: bounds.x,
+        startWinY: bounds.y,
+      }
+    },
+
+    moveWindowDrag: (_event, screenX, screenY) => {
+      if (!win || win.isDestroyed() || !windowDragState) return
+      const dx = screenX - windowDragState.startCursorX
+      const dy = screenY - windowDragState.startCursorY
+      win.setPosition(
+        Math.round(windowDragState.startWinX + dx),
+        Math.round(windowDragState.startWinY + dy),
+      )
+    },
+
+    endWindowDrag: () => {
+      windowDragState = null
+    },
+
+    // Fired on genuine mouseup after a drag started on a maximized window's
+    // title-bar chrome (see useWindowDragRegion.ts). Restores the window and
+    // places it as if the drag had been live-followed the whole time: the
+    // point under the cursor at mousedown (originX/Y, while still maximized)
+    // stays under the cursor at release (releaseX/Y, after restoring).
+    // getNormalBounds() (not getBounds()) is used for the restored size --
+    // see readCurrentWindowState()'s comment on why getBounds() can't be
+    // trusted while maximized.
+    restoreMaximizedWindow: (_event, originX, _originY, releaseX, releaseY) => {
+      if (!win || win.isDestroyed() || !win.isMaximized()) return
+
+      const maximizedBounds = win.getBounds()
+      const normalBounds = win.getNormalBounds()
+      const relativeX = maximizedBounds.width > 0
+        ? (originX - maximizedBounds.x) / maximizedBounds.width
+        : 0.5
+      const targetX = Math.round(releaseX - relativeX * normalBounds.width)
+      const targetY = Math.max(0, Math.round(releaseY - 10))
+      const winRef = win
+      winRef.once('unmaximize', () => {
+        if (winRef.isDestroyed()) return
+        winRef.setBounds({ x: targetX, y: targetY, width: normalBounds.width, height: normalBounds.height })
+      })
+      winRef.unmaximize()
+    },
+
+    // The renderer reports the active theme's resolved root background color
+    // (opaque #RRGGBB) whenever it changes, so the native window's own paint
+    // fallback stays in sync with the current preset. This closes the white-
+    // flash gap during native bounds changes (see restoreWindowFromUtilityCollapse)
+    // where Chromium has to fill screen area the renderer hasn't painted yet.
+    reportBackgroundColor: (_event, hex: unknown) => {
+      if (typeof hex !== 'string' || !HEX_COLOR_PATTERN.test(hex)) return
+      currentRootBackgroundColorHex = hex
+      if (win && !win.isDestroyed()) {
+        win.setBackgroundColor(hex)
+      }
+    },
+
+    // Adjust minimum size / bounds when the renderer reports the sidebar visibility
+    setSidebarVisible: (_event, visible: unknown) => {
+      try {
+        if (!win || win.isDestroyed()) return
+        currentSidebarVisible = Boolean(visible)
+        const { width: minWidth, height: minHeight } = computeEffectiveMinSize()
+        win.setMinimumSize(minWidth, minHeight)
+
+        // If enabling the sidebar and the current width is smaller than the new minimum,
+        // expand the window so the toolbar and other content meet the min width.
+        if (currentSidebarVisible) {
+          growWindowToMinimumSizeIfNeeded(win, minWidth, minHeight)
+        }
+      } catch (error) {
+        console.warn('Failed to apply sidebar-visibility window constraints', error)
+      }
+    },
+
+    // Adjust minimum size / bounds when the renderer reports how many editor
+    // sections are currently open -- the minimum width tracks whatever the
+    // open sections need to all sit at their own minimum (or the chrome floor
+    // if that's larger), so a section can never be squeezed narrower than its
+    // own minimum just by resizing the window.
+    setSectionCount: (_event, sectionCount: unknown) => {
+      try {
+        if (!win || win.isDestroyed()) return
+        const parsedCount = Number(sectionCount)
+        currentSectionCount = Number.isFinite(parsedCount) ? Math.max(1, Math.round(parsedCount)) : 1
+        const { width: minWidth, height: minHeight } = computeEffectiveMinSize()
+        win.setMinimumSize(minWidth, minHeight)
+        growWindowToMinimumSizeIfNeeded(win, minWidth, minHeight)
+      } catch (error) {
+        console.warn('Failed to apply section-count window constraints', error)
+      }
+    },
+
+    // The renderer's own computed chrome minimum, sent whenever it changes --
+    // which in practice means whenever the user moves the spacing slider, since
+    // every term in it scales with that setting (see src/App.tsx's
+    // appShellMinWidthPx / appShellMinHeightPx). Until the first of these
+    // arrives, the constants above stand in at default spacing.
+    //
+    // Deliberately never grows the window: unlike enabling the sidebar or double
+    // size, nudging the spacing slider isn't a request to resize anything, and a
+    // window that crept larger on every tick of the slider would be obnoxious.
+    // The new minimum still applies from the next manual resize on.
+    setChromeMinSize: (_event, size: unknown) => {
+      try {
+        if (!win || win.isDestroyed()) return
+        const candidate = size as { width?: unknown; widthWithoutSidebar?: unknown; height?: unknown } | null
+        const width = Number(candidate?.width)
+        const widthWithoutSidebar = Number(candidate?.widthWithoutSidebar)
+        const height = Number(candidate?.height)
+        if (![width, widthWithoutSidebar, height].every((value) => Number.isFinite(value) && value > 0)) return
+        reportedChromeMinSize = {
+          width: Math.ceil(width),
+          widthWithoutSidebar: Math.ceil(widthWithoutSidebar),
+          height: Math.ceil(height),
+        }
+        const { width: minWidth, height: minHeight } = computeEffectiveMinSize()
+        win.setMinimumSize(minWidth, minHeight)
+      } catch (error) {
+        console.warn('Failed to apply reported chrome minimum size', error)
+      }
+    },
+
+    // Toggles "double size" mode: 2x Chromium page zoom paired with a doubled
+    // window minimum (see computeEffectiveMinSize), so 2x content gets 2x room
+    // instead of being squeezed the way plain browser zoom would squeeze it.
+    // Disabling relaxes the minimum back down but -- consistent with the
+    // sidebar/section-count handlers above -- never shrinks the window itself.
+    setDoubleSizeMode: (_event, enabled: unknown) => {
+      try {
+        if (!win || win.isDestroyed()) return
+        currentDoubleSizeMode = Boolean(enabled)
+        win.webContents.setZoomFactor(currentDoubleSizeMode ? 2 : 1)
+        const { width: minWidth, height: minHeight } = computeEffectiveMinSize()
+        win.setMinimumSize(minWidth, minHeight)
+        if (currentDoubleSizeMode) {
+          growWindowToMinimumSizeIfNeeded(win, minWidth, minHeight)
+        }
+      } catch (error) {
+        console.warn('Failed to apply double-size-mode window constraints', error)
+      }
+    },
+
+    // Immersive mode (the renderer's isImmersiveMode) takes the window full
+    // screen and back. The ordinary window's state is kept aside first, so what
+    // is saved while full screen is that, not the screen -- see
+    // readPersistableWindowState. A request the window will not honour (mini
+    // mode) is answered with the state it actually has, so the renderer never
+    // believes the window is full screen when it is not.
+    setFullScreen: (_event, enabled: unknown) => {
+      try {
+        if (!win || win.isDestroyed()) return
+        const next = Boolean(enabled)
+        if (next === win.isFullScreen()) return
+        if (next && windowIsUtilityCollapsed) {
+          emitWindowEvent(win.webContents, 'fullScreenState', false)
+          return
+        }
+        if (next) preFullScreenWindowState = readCurrentWindowState(win)
+        win.setFullScreen(next)
+      } catch (error) {
+        console.warn('Failed to toggle full screen', error)
+      }
+    },
+  }, ipcMain.on.bind(ipcMain))
+
+  registerInvokeHandlers<WindowControlsApi, IpcMainInvokeEvent>(WINDOW_CONTROL_INVOKE_CHANNELS, {
+    toggleUtilityCollapse: (_event, payload: unknown) => {
+      if (!win || win.isDestroyed()) return false
+
+      if (windowIsUtilityCollapsed) {
+        const restored = restoreWindowFromUtilityCollapse()
+        // Leaving mini mode maximizes, matching the glyph on the button that
+        // does it (the expand-to-corners arrows, not a restore-down box). Mini
+        // mode is the app at its smallest, so the way out of it is the app at
+        // its largest -- and the previous windowed size is not lost, because
+        // restore ran first: it is what unmaximize will hand back.
+        //
+        // Deliberately here rather than inside restoreWindowFromUtilityCollapse,
+        // which `toggleMaximize` also calls on its way to deciding
+        // maximize-vs-unmaximize itself; maximizing in there would fight it.
+        if (restored && !win.isMaximized()) {
+          win.maximize()
+        }
+        return restored
+      }
+
+      const targetSize = resolveUtilityCollapseSize(payload)
+      return collapseWindowToUtilityGrid(targetSize)
+    },
+  }, ipcMain.handle.bind(ipcMain))
 
   registerInvokeHandlers<ExternalFilesApi, IpcMainInvokeEvent>(EXTERNAL_FILE_CHANNELS, {
     getPendingFilePaths: async () => {
@@ -1315,7 +1319,7 @@ function readPersistableWindowState(windowRef: BrowserWindow): WindowState {
 
 function emitWindowCollapsedState(): void {
   if (!win || win.isDestroyed()) return;
-  win.webContents.send('window-collapsed-state', windowIsUtilityCollapsed);
+  emitWindowEvent(win.webContents, 'collapsedState', windowIsUtilityCollapsed);
 }
 
 function resolveUtilityCollapseSize(input: unknown): { width: number; height: number } {
@@ -1503,18 +1507,18 @@ async function createWindow() {
   win.on('maximize', () => {
     persistWindowState()
     if (win && !win.isDestroyed()) {
-      win.webContents.send('window-maximize-state', true)
+      emitWindowEvent(win.webContents, 'maximizeState', true)
     }
   });
   win.on('unmaximize', () => {
     persistWindowState()
     if (win && !win.isDestroyed()) {
-      win.webContents.send('window-maximize-state', false)
+      emitWindowEvent(win.webContents, 'maximizeState', false)
     }
   });
   win.on('enter-full-screen', () => {
     if (win && !win.isDestroyed()) {
-      win.webContents.send('window-fullscreen-state', true)
+      emitWindowEvent(win.webContents, 'fullScreenState', true)
     }
   });
   win.on('leave-full-screen', () => {
@@ -1522,16 +1526,14 @@ async function createWindow() {
     preFullScreenWindowState = null
     persistWindowState()
     if (win && !win.isDestroyed()) {
-      win.webContents.send('window-fullscreen-state', false)
+      emitWindowEvent(win.webContents, 'fullScreenState', false)
     }
   });
   win.on('close', persistWindowState);
 
-  // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
-    win?.webContents.send('main-process-message', (new Date).toLocaleString())
-    win?.webContents.send('window-maximize-state', win.isMaximized())
-    win?.webContents.send('window-collapsed-state', windowIsUtilityCollapsed)
+    if (win) emitWindowEvent(win.webContents, 'maximizeState', win.isMaximized())
+    if (win) emitWindowEvent(win.webContents, 'collapsedState', windowIsUtilityCollapsed)
     // Immersive mode is renderer state, which a reload resets; a window left
     // full screen by it would outlive the mode that put it there.
     if (win?.isFullScreen()) win.setFullScreen(false)
