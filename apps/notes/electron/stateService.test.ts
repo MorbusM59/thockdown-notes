@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { StateService } from './stateService'
@@ -500,5 +500,7 @@ describe('StateService concurrent writes', () => {
 
     const restored = await new StateService(dataRoot).loadAppState()
     expect(restored.selectedNoteId).toBe('note-39')
+    // Each write lands through a temp file renamed over the target.
+    expect(readdirSync(dataRoot).filter((name) => name.endsWith('.tmp'))).toEqual([])
   })
 })
