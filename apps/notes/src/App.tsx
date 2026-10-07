@@ -2333,53 +2333,29 @@ function App() {
       setImmersiveMode(false)
       if (isSidebarVisible) return
     }
-    setIsSidebarVisible((previous) => {
-      const next = !previous
-      // If we're hiding the sidebar while the options panel is selected,
-      // restore the last non-options sidebar mode so the gear icon isn't
-      // left highlighted when the sidebar is not visible.
-        if (!next && sidebarMode === 'options') {
-          // Defer restoring the previous menu so we don't reference
-          // `runSidebarMenuTransition` during module initialization
-          // (avoids TDZ errors). The function will exist by the time
-          // this callback runs.
-          setTimeout(() => {
-            try {
-              // prefer the remembered previous mode, fallback to 'date'
-              runSidebarMenuTransition(lastSidebarModeBeforeOptions ?? 'date')
-            } catch {
-              // ignore
-            }
-          }, 0)
-        }
-      // Notify main process so it can adjust native window constraints immediately
-      try {
-        window.windowControls?.setSidebarVisible?.(next)
-      } catch {
-        // ignore
-      }
+    const next = !isSidebarVisible
+    setIsSidebarVisible(next)
 
-      // Persist app state menu snapshot with updated sidebar visibility --
-      // always through persistMenuStateNow (via its ref proxy, since this
-      // handler is declared before persistMenuStateNow -- see
-      // persistMenuStateNowRef's own doc comment for why a plain call
-      // wouldn't stay fresh here). Never a hand-rolled build+save: see
-      // persistMenuStateNow's own doc comment for why that's caused this
-      // exact bug multiple times before.
+    // Notify main process so it can adjust native window constraints immediately
+    try {
+      window.windowControls?.setSidebarVisible?.(next)
+    } catch {
+      // ignore
+    }
+
+    // Persisted once, always through persistMenuStateNow (via a ref proxy:
+    // see persistMenuStateNowRef's doc comment). Hiding the sidebar while the
+    // options panel is selected also restores the last non-options mode, so
+    // the gear icon is not left highlighted on a hidden sidebar; that
+    // transition persists the new visibility with the mode in one write
+    // (persistMenuStateOnce's extraOverrides), because two immediate persists
+    // from one handler are what reverted settings on restart before.
+    if (!next && sidebarMode === 'options') {
+      runSidebarMenuTransitionRef.current(lastSidebarModeBeforeOptions ?? 'date', { isSidebarVisible: next })
+    } else {
       persistMenuStateNowRef.current({ isSidebarVisible: next })
-
-      return next
-    })
-    // buildMenuStateSnapshot, persistMenuStateNow, and runSidebarMenuTransition
-    // are declared later in this component (all via useCallback further
-    // down), so listing them here would throw a TDZ ReferenceError the
-    // moment this dependency array is evaluated during render --
-    // referencing them inside the callback *body* is fine (that only runs
-    // on click/timeout, well after the component has finished its render
-    // pass and both are initialized), but the array itself is evaluated
-    // eagerly, before those consts exist.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [getActiveSection, persistenceReady, sidebarMode, lastSidebarModeBeforeOptions, isImmersiveMode, isSidebarVisible, setImmersiveMode])
+    }
+  }, [sidebarMode, lastSidebarModeBeforeOptions, isImmersiveMode, isSidebarVisible, setImmersiveMode])
 
   const handleToggleDoubleSizeMode = useCallback(() => {
     setIsDoubleSizeMode((previous) => {
@@ -4097,6 +4073,13 @@ function App() {
   // what TDZ forbids here -- a ref sidesteps the whole problem instead of
   // fighting it.
   const persistMenuStateNowRef = useRef<(overrides?: Parameters<typeof buildMenuStateSnapshot>[0]) => Promise<void> | undefined>(() => undefined)
+  // The same proxy for runSidebarMenuTransition, which toggleSidebarVisible
+  // also calls from above its declaration. Calling it straight from that
+  // callback's body reached whichever runSidebarMenuTransition existed when
+  // toggleSidebarVisible was last re-created, and the two re-create on
+  // different dependencies (sidebarViewStateByMode is the transition's, not
+  // the toggle's), so a toggle could restore a mode from stale view state.
+  const runSidebarMenuTransitionRef = useRef<(nextMode: SidebarMode, extraOverrides?: Parameters<typeof buildMenuStateSnapshot>[0]) => void>(() => undefined)
   /**
    * The escape ring's current mode, for handleEscapeHoldPanelClose -- which
    * is declared far above the contribution it needs to consult. Same
@@ -4602,6 +4585,8 @@ function App() {
     persistMenuStateOnce,
     focusActiveNoteInSidebarMode,
   ])
+  // Plain assignment every render, like persistMenuStateNowRef's.
+  runSidebarMenuTransitionRef.current = runSidebarMenuTransition
 
   /**
    * Shows the sidebar (if hidden) on `mode` -- the one way a feature asks for
