@@ -29,8 +29,41 @@
 /** What the first point on any ladder costs, before any have been spent. */
 export const FIRST_MILESTONE_THRESHOLD = 10
 
-/** How much further away each spent point pushes the next, per point spent. */
+/** How much further away each spent point pushes the next, per point spent, on the fame ladder. */
 export const MILESTONE_STEP = 5
+
+/**
+ * THE SHAPE OF ONE LADDER: how wide the span after `pointsSpent` points is.
+ * Both start at `FIRST_MILESTONE_THRESHOLD`; they differ in how fast the
+ * spans grow, and every function below takes the ladder it is reading
+ * rather than assuming one, so the two cannot be mixed up by a default.
+ */
+export interface Ladder {
+  /** The span from the threshold just passed to the next, given points spent (>= 1). */
+  spanAfter: (pointsSpent: number) => number
+}
+
+/** FAME: 10, 15, 25, 40, 60, 85 ... -- each span 5 wider than the last. */
+export const FAME_LADDER: Ladder = { spanAfter: (spent) => MILESTONE_STEP * spent }
+
+/** How much wider each span on the stat ladder is than the one before. */
+export const STAT_LADDER_GROWTH = 1.4
+
+/**
+ * STATS: spans 10, 14, 20, 27, 38, 54 ... -- each 40% wider than the last,
+ * rounded, so the thresholds are 10, 24, 44, 71, 109, 163, 237, 342.
+ *
+ * GEOMETRIC, NOT LINEAR, because a stat point is worth TWO stat points (one
+ * tier the build apportions, one the player places) and so compounds: a run
+ * that earns well early fights better and earns better still. A linear
+ * ladder gives points in proportion to the square root of what was earned;
+ * this one gives them in proportion to its logarithm, so a fast start still
+ * buys a lead but a smaller one, and the late game stops running away. The
+ * first few points cost what they did, so the early game is unchanged.
+ */
+export const STAT_LADDER: Ladder = {
+  spanAfter: (spent) => Math.round(FIRST_MILESTONE_THRESHOLD * STAT_LADDER_GROWTH ** spent),
+}
 
 /**
  * The earnings between the PREVIOUS point and the next one -- the span the
@@ -41,9 +74,9 @@ export const MILESTONE_STEP = 5
  * first threshold itself: nought to ten. Handled here, once, so no caller
  * has to know the sequence starts differently.
  */
-export function milestoneSpan(pointsSpent: number): number {
+export function milestoneSpan(ladder: Ladder, pointsSpent: number): number {
   const spent = Math.max(0, Math.floor(pointsSpent))
-  return spent === 0 ? FIRST_MILESTONE_THRESHOLD : MILESTONE_STEP * spent
+  return spent === 0 ? FIRST_MILESTONE_THRESHOLD : ladder.spanAfter(spent)
 }
 
 /** Whether the run has earned enough in total to take another point. */
@@ -55,8 +88,8 @@ export function canTakeMilestone(earned: number, threshold: number): boolean {
  * How far past the previous point this run is, as a fraction of the span to
  * the next. 0..1, and 1 means a point is waiting to be taken.
  */
-export function milestoneProgress(earned: number, threshold: number, pointsSpent: number): number {
-  const span = milestoneSpan(pointsSpent)
+export function milestoneProgress(ladder: Ladder, earned: number, threshold: number, pointsSpent: number): number {
+  const span = milestoneSpan(ladder, pointsSpent)
   if (span <= 0) return 0
   const previousThreshold = threshold - span
   return Math.max(0, Math.min(1, (earned - previousThreshold) / span))
@@ -68,8 +101,8 @@ export function milestoneProgress(earned: number, threshold: number, pointsSpent
  * length. Derived from the same three inputs as the progress, so the words
  * and the bar cannot disagree.
  */
-export function milestoneStanding(earned: number, threshold: number, pointsSpent: number): { into: number; span: number } {
-  const span = milestoneSpan(pointsSpent)
+export function milestoneStanding(ladder: Ladder, earned: number, threshold: number, pointsSpent: number): { into: number; span: number } {
+  const span = milestoneSpan(ladder, pointsSpent)
   return { into: Math.max(0, earned - (threshold - span)), span }
 }
 
@@ -79,9 +112,9 @@ export function milestoneStanding(earned: number, threshold: number, pointsSpent
  * increment, which is what makes the spans 10, 5, 10, 15, 20 ... rather than
  * 10, 0, 5, 10.
  */
-export function takeMilestone(threshold: number, pointsSpent: number): { threshold: number; pointsSpent: number } {
+export function takeMilestone(ladder: Ladder, threshold: number, pointsSpent: number): { threshold: number; pointsSpent: number } {
   const spent = Math.max(0, Math.floor(pointsSpent)) + 1
-  return { threshold: threshold + MILESTONE_STEP * spent, pointsSpent: spent }
+  return { threshold: threshold + ladder.spanAfter(spent), pointsSpent: spent }
 }
 
 /**
@@ -97,14 +130,13 @@ export function takeMilestone(threshold: number, pointsSpent: number): { thresho
  * representations of "a point is waiting" is one too many, and the ladder is
  * the one the documentation describes.
  */
-export function milestonesAvailable(earned: number, threshold: number, pointsSpent: number): number {
+export function milestonesAvailable(ladder: Ladder, earned: number, threshold: number, pointsSpent: number): number {
   let available = 0
   let next = threshold
   let spent = pointsSpent
-  // Bounded by the ladder itself: each step is at least MILESTONE_STEP wider
-  // than the last, so this cannot run away even on an absurd total.
+  // Bounded by the ladder itself: every span is positive and grows, so this cannot run away even on an absurd total.
   while (canTakeMilestone(earned, next) && available < 1000) {
-    const taken = takeMilestone(next, spent)
+    const taken = takeMilestone(ladder, next, spent)
     next = taken.threshold
     spent = taken.pointsSpent
     available += 1

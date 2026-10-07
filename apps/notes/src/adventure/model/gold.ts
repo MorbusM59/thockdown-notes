@@ -14,7 +14,7 @@
 // the score is a function of everything the run ever earned, and what you do
 // with the gold in hand is a separate decision that cannot cheat it.
 
-import { canTakeMilestone, milestoneProgress, milestoneStanding, milestonesAvailable } from './milestones'
+import { canTakeMilestone, milestoneProgress, milestoneStanding, milestonesAvailable, FAME_LADDER } from './milestones'
 
 /** Gold in hand, for buying items. Nothing about fame points enters this. */
 export function goldBalance(goldEarned: number, goldSpentOnItems: number): number {
@@ -38,7 +38,7 @@ export function famePointsAvailable(
   goldToNextFamePoint: number,
   famePointsSpent: number,
 ): number {
-  return milestonesAvailable(goldEarned, goldToNextFamePoint, famePointsSpent)
+  return milestonesAvailable(FAME_LADDER, goldEarned, goldToNextFamePoint, famePointsSpent)
 }
 
 /** Whether the run has earned enough total gold to take another fame point. */
@@ -63,10 +63,10 @@ export function fameReached(
 
 /** How far past the previous fame point this run is, 0..1. */
 export function famePointProgress(goldEarned: number, goldToNextFamePoint: number, famePointsSpent: number): number {
-  return milestoneProgress(goldEarned, goldToNextFamePoint, famePointsSpent)
+  return milestoneProgress(FAME_LADDER, goldEarned, goldToNextFamePoint, famePointsSpent)
 }
 
 /** The current span and how much of it is earned, for the gauge's tooltip. */
 export function famePointStanding(goldEarned: number, goldToNextFamePoint: number, famePointsSpent: number) {
-  return milestoneStanding(goldEarned, goldToNextFamePoint, famePointsSpent)
+  return milestoneStanding(FAME_LADDER, goldEarned, goldToNextFamePoint, famePointsSpent)
 }

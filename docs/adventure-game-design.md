@@ -1269,3 +1269,15 @@ dealt without seeing the dice.
   with deaths spread over levels 6 to 12. The lookahead player is barely
   moved (26 of 40 reach level 11 at both two and three): its late strength
   is not stat-gated, which is the open question for the next round.
+- **Stat points climb a steeper ladder than fame points** (`STAT_LADDER`):
+  each span 40% wider than the last, so 10, 24, 44, 71, 109, 163 ... where
+  fame keeps 10, 15, 25, 40 .... They were one ladder by design. They part
+  because a stat point is worth two (a tier and a placed point) and so
+  compounds: runs that started well entered level four with three times the
+  motes and three times the points, and the gap only grew. A geometric
+  ladder hands out points in proportion to the logarithm of what was earned
+  rather than its square root, so a fast start buys a smaller lead. The first
+  two points cost what they did.
+- **A stat point is judged across the level by the lookahead player.** Might's
+  hit points arrive the moment it is placed; Agility's and Luck's pay across
+  fights. Judged two encounters out, Might won by being early.

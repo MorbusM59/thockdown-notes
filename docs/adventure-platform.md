@@ -690,8 +690,9 @@ These block a playable game and want answers rather than guesses.
    `experienceEarned` (monotonic) and `experienceSpentOnTraits`. The spendable
    balance is `earned − spentOnTraits` and has nothing to do with stats. Stat
    points read `earned` alone: available when `earned ≥ experienceToNextStatPoint`,
-   which starts at 10 and grows by `5 × pointsSpent` on each allocation
-   (10, 15, 25, 40, 60, 85 …). The gauge shows
+   which starts at 10 and grows on each allocation by a span 40% wider than
+   the last (`STAT_LADDER`: 10, 24, 44, 71, 109, 163 …; it was the fame
+   ladder's `5 × pointsSpent` until 2026-10-07, see the design doc's foot). The gauge shows
    `(earned − (next − 5 × pointsSpent)) / (5 × pointsSpent)` — with the
    first span read as 10 rather than `5 × 0`, or it divides by zero before the
    first point. The ladder itself moved to `model/milestones.ts` once fame
@@ -764,8 +765,8 @@ These block a playable game and want answers rather than guesses.
 
     | stream | currency spent on | milestone | ladder |
     | --- | --- | --- | --- |
-    | `experienceEarned` | traits (`experienceSpentOnTraits`) | stat points | 10, 15, 25, 40, 60, 85 … |
-    | `goldEarned` | items (`goldSpentOnItems`) | **fame points** | the same |
+    | `experienceEarned` | traits (`experienceSpentOnTraits`) | stat points | 10, 24, 44, 71, 109, 163 … (geometric) |
+    | `goldEarned` | items (`goldSpentOnItems`) | **fame points** | 10, 15, 25, 40, 60, 85 … |
 
     Fame is therefore the milestone, not a running total: what is WAITING is
     derived from the ladder (`famePointsAvailable`), `famePointsSpent` is

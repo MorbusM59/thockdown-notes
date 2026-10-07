@@ -468,7 +468,7 @@ describe('spending a stat point', () => {
     expect(after?.baseStats.might).toBe((before?.baseStats.might ?? 0) + 1)
     expect(after?.statPointsSpent).toBe((before?.statPointsSpent ?? 0) + 1)
     // 10 -> 15: the next point is five further off for each one spent.
-    expect(after?.experienceToNextStatPoint).toBe(15)
+    expect(after?.experienceToNextStatPoint).toBe(24)
   })
 
   it('grants the hit points the point is worth, rather than only the room for them', () => {

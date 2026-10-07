@@ -29,7 +29,7 @@ import { resolveProfile, type EffectiveProfile, type HoldingCounts, type Modifie
 import { catalogFor, type Content } from '../content'
 import { clampBaseStats, createStatBlock, deriveStats, type StatBlock } from './stats'
 import type { Effect } from './effects'
-import { FIRST_MILESTONE_THRESHOLD, milestonesAvailable, takeMilestone } from './milestones'
+import { FAME_LADDER, FIRST_MILESTONE_THRESHOLD, STAT_LADDER, milestonesAvailable, takeMilestone } from './milestones'
 import { guardianLuckiness } from './guardian'
 import { canAllocateStatPoint } from './motes'
 import { canAllocateFamePoint, famePointsAvailable, fameReached } from './gold'
@@ -664,7 +664,7 @@ export function playerTierOf(game: GameRecord): number {
  */
 export function statPointsEarned(game: GameRecord): number {
   return game.statPointsSpent
-    + milestonesAvailable(game.experienceEarned, game.experienceToNextStatPoint, game.statPointsSpent)
+    + milestonesAvailable(STAT_LADDER, game.experienceEarned, game.experienceToNextStatPoint, game.statPointsSpent)
 }
 
 /**
@@ -897,7 +897,7 @@ export function applyEffect(
       // waiting" there is now. It used to be gated on a stored counter that
       // nothing incremented, so this effect could never do anything at all.
       if (!canAllocateStatPoint(game.experienceEarned, game.experienceToNextStatPoint)) return save
-      const taken = takeMilestone(game.experienceToNextStatPoint, game.statPointsSpent)
+      const taken = takeMilestone(STAT_LADDER, game.experienceToNextStatPoint, game.statPointsSpent)
       return replace({
         statPointsSpent: taken.pointsSpent,
         experienceToNextStatPoint: taken.threshold,
@@ -918,7 +918,7 @@ export function applyEffect(
       // is waiting" there is. What a fame point BUYS is not written yet --
       // this only moves the ladder, which is the half that is settled.
       if (!canAllocateFamePoint(game.goldEarned, game.goldToNextFamePoint)) return save
-      const taken = takeMilestone(game.goldToNextFamePoint, game.famePointsSpent)
+      const taken = takeMilestone(FAME_LADDER, game.goldToNextFamePoint, game.famePointsSpent)
       return replace({
         famePointsSpent: taken.pointsSpent,
         goldToNextFamePoint: taken.threshold,
@@ -947,7 +947,7 @@ export function applyEffect(
       let threshold = game.goldToNextFamePoint
       let spent = game.famePointsSpent
       for (let point = 0; point < purchase.cost; point += 1) {
-        const taken = takeMilestone(threshold, spent)
+        const taken = takeMilestone(FAME_LADDER, threshold, spent)
         threshold = taken.threshold
         spent = taken.pointsSpent
       }

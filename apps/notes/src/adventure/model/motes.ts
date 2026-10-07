@@ -22,7 +22,7 @@
 // once in model/milestones.ts and this module is only the experience half of
 // it.
 
-import { milestoneProgress, milestoneSpan, milestoneStanding, milestonesAvailable, takeMilestone, canTakeMilestone } from './milestones'
+import { milestoneProgress, milestoneSpan, milestoneStanding, milestonesAvailable, takeMilestone, canTakeMilestone, STAT_LADDER } from './milestones'
 
 /** Motes in hand, for buying traits. Nothing about stat points enters this. */
 export function moteBalance(experienceEarned: number, experienceSpentOnTraits: number): number {
@@ -35,7 +35,7 @@ export function statPointsAvailable(
   experienceToNextStatPoint: number,
   statPointsSpent: number,
 ): number {
-  return milestonesAvailable(experienceEarned, experienceToNextStatPoint, statPointsSpent)
+  return milestonesAvailable(STAT_LADDER, experienceEarned, experienceToNextStatPoint, statPointsSpent)
 }
 
 /** Whether the run has earned enough total experience to take another point. */
@@ -49,7 +49,7 @@ export function statPointProgress(
   experienceToNextStatPoint: number,
   statPointsSpent: number,
 ): number {
-  return milestoneProgress(experienceEarned, experienceToNextStatPoint, statPointsSpent)
+  return milestoneProgress(STAT_LADDER, experienceEarned, experienceToNextStatPoint, statPointsSpent)
 }
 
 /** The current span and how much of it is earned, for the gauge's tooltip. */
@@ -58,12 +58,12 @@ export function statPointStanding(
   experienceToNextStatPoint: number,
   statPointsSpent: number,
 ) {
-  return milestoneStanding(experienceEarned, experienceToNextStatPoint, statPointsSpent)
+  return milestoneStanding(STAT_LADDER, experienceEarned, experienceToNextStatPoint, statPointsSpent)
 }
 
 /** The span to the next stat point, for callers that only need its width. */
 export function statPointSpan(statPointsSpent: number): number {
-  return milestoneSpan(statPointsSpent)
+  return milestoneSpan(STAT_LADDER, statPointsSpent)
 }
 
 /**
@@ -74,6 +74,6 @@ export function allocateStatPoint(
   experienceToNextStatPoint: number,
   statPointsSpent: number,
 ): { experienceToNextStatPoint: number; statPointsSpent: number } {
-  const taken = takeMilestone(experienceToNextStatPoint, statPointsSpent)
+  const taken = takeMilestone(STAT_LADDER, experienceToNextStatPoint, statPointsSpent)
   return { experienceToNextStatPoint: taken.threshold, statPointsSpent: taken.pointsSpent }
 }

@@ -22,9 +22,9 @@ describe('experience motes', () => {
     // Before any point: nought to ten, four of them earned.
     expect(statPointStanding(4, 10, 0)).toEqual({ into: 4, span: 10 })
     expect(statPointProgress(4, 10, 0)).toBeCloseTo(0.4, 10)
-    // After two: fifteen to twenty-five, five of them earned.
-    expect(statPointStanding(20, 25, 2)).toEqual({ into: 5, span: 10 })
-    expect(statPointProgress(20, 25, 2)).toBeCloseTo(0.5, 10)
+    // After two: twenty-four to forty-four, ten of them earned.
+    expect(statPointStanding(34, 44, 2)).toEqual({ into: 10, span: 20 })
+    expect(statPointProgress(34, 44, 2)).toBeCloseTo(0.5, 10)
   })
 })
 
