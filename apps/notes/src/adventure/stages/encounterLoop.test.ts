@@ -132,6 +132,30 @@ describe('the loot stage', () => {
     return { context, entered }
   }
 
+  it('fills a follow-up screen with items no earlier screen of the same spoils showed', () => {
+    // A property of the rule, not a tuned value: with thirty items and a
+    // handful per screen there are always enough unseen ones, so no screen
+    // may repeat one already shown, whichever way each screen was answered.
+    for (let seed = 1; seed <= 40; seed += 1) {
+      const { context, entered } = lootRun(4, 1, seed)
+      let state = entered.state
+      let rng = entered.rng
+      const shown = new Set<string>(state.offerIds as string[])
+      for (let screen = 0; screen < 3; screen += 1) {
+        const ids = state.offerIds as string[]
+        const answer = seed % 2 === 0 ? 'loot:gold' : `loot:item:${ids[0]}`
+        const next = lootStage.resolve(state, answer, context, rng)
+        if (next.kind !== 'stay') throw new Error('expected another screen')
+        const offered = next.state.offerIds as string[]
+        expect(offered.length).toBeGreaterThan(0)
+        for (const id of offered) expect(shown.has(id)).toBe(false)
+        offered.forEach((id) => shown.add(id))
+        state = next.state
+        rng = next.rng
+      }
+    }
+  })
+
   it('offers gold beside the items, on every screen', () => {
     const { context, entered } = lootRun(2, 3, 99)
     const shown = lootStage.present(entered.state, context)

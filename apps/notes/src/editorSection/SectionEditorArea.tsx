@@ -15,6 +15,7 @@ import { ChapterBar } from '../chapters/ChapterBar'
 import { isSealedNoteId } from '../shared/helpGuide'
 import type { ChapterPillSplitArm } from '../chapters/useChapterPillActions'
 import { EscapeHoldPanel, type ExportScope } from './EscapeHoldPanel'
+import { ShortcutReference } from '../components/ShortcutReference'
 import { focusEscapeHoldRing } from './escapeHoldRingFocus'
 import { splitChapterFamily } from '../shared/chapters'
 import type { EscapeMenuContribution } from '../escapeMenu/escapeMenuContract'
@@ -43,6 +44,8 @@ export interface SectionEditorAreaProps {
   isPreviewingSnapshot: boolean
   isCaretSuspended: boolean
   isEscapeHoldPanelOpen: boolean
+  /** The keyboard shortcut reference, raised by holding Escape past the menu (App.tsx); drawn in the active slot only. */
+  isShortcutReferenceOpen: boolean
   onEscapeHoldPanelClose: () => void
   onEscapeHoldCreateNote: () => void | Promise<void>
   onEscapeHoldCreateChapter: () => void | Promise<void>
@@ -181,6 +184,7 @@ export function SectionEditorArea({
   isPreviewingSnapshot,
   isCaretSuspended,
   isEscapeHoldPanelOpen,
+  isShortcutReferenceOpen,
   onEscapeHoldPanelClose,
   onEscapeHoldCreateNote,
   onEscapeHoldCreateChapter,
@@ -373,6 +377,7 @@ export function SectionEditorArea({
       <main className={`editor-shell${isChapterPanelOpen ? ' chapter-panel-is-open' : ''}`}>
         <div className="editor-background">
           <div ref={setStageEl} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}${!activeNoteId ? ' is-empty' : ''}`}>
+            {isShortcutReferenceOpen && isSectionActive ? <ShortcutReference /> : null}
             {isEscapeHoldActive ? (
               // Pure dim+blur backdrop: its backdrop-filter blurs whatever's
               // behind it (the real note content in edit/render-container

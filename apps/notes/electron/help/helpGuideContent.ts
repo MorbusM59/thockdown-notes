@@ -16,6 +16,16 @@
 // would resolve to nothing; the `@noteId` scheme needs none.
 import { HELP_GUIDE_CHAPTER_IDS, helpGuideChapterNoteId, type HelpGuideChapterKey } from '../../src/shared/helpGuide'
 import { formatInternalNoteLink } from '../../src/shared/internalNoteLinks'
+import { SHORTCUT_GROUPS, formatShortcut, shortcutsInGroup } from '../../src/shared/keyboardShortcuts'
+
+// The table is the shortcut declarations themselves (src/shared/
+// keyboardShortcuts.ts), the same list the in-app quick reference draws, so
+// the guide cannot describe a binding the app does not have.
+function shortcutTable(): string {
+  const rows = SHORTCUT_GROUPS.flatMap((group) => shortcutsInGroup(group.id).map((entry) =>
+    `| \`${formatShortcut(entry)}\` | ${group.title}: ${entry.label} |`))
+  return ['| Shortcut | Action |', '| --- | --- |', ...rows].join('\n')
+}
 
 export { HELP_GUIDE_ROOT_ID, HELP_GUIDE_AUTO_TOC_ID } from '../../src/shared/helpGuide'
 
@@ -715,38 +725,9 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 > **Where?**
 > Global — active anywhere the app has focus, except inside search/replace/tag fields (where \`Tab\` / \`Enter\` / \`Esc\` move focus back into the editor instead).
 
-*Every keyboard shortcut in the app, in one table.*
+*Every keyboard shortcut in the app, in one table. Keep holding Escape after the quick actions menu appears, or hold it again from the menu, to see the same list over your note for as long as you hold it.*
 
-| Shortcut | Action |
-| --- | --- |
-| \`Ctrl+N\` | New blank note |
-| \`Ctrl+Shift+N\` | New note titled from clipboard |
-| \`Ctrl+Space\` | Show / hide the sidebar |
-| \`F11\` or \`Ctrl+Shift+Space\` | Immersive mode: full screen, just the editor you're in — press again to leave |
-| \`Esc\` | Toggle edit / preview (or blur a focused field) |
-| Hold \`Esc\` | Open the quick actions menu |
-| \`Ctrl+F\` | Find in note — opens the sidebar if it's closed; press again from the find field to close it |
-| \`Ctrl+H\` | Find & replace in note — opens the sidebar if it's closed; press again from the find field to close it |
-| \`Ctrl+Enter\` (in find mode) | Replace all matches |
-| \`Alt+Left\` / \`Alt+Right\` | Previous / next slot |
-| \`Ctrl+Up\` / \`Ctrl+Down\` | Jump caret to start / end of document |
-| \`Shift+Alt+N\` | New chapter |
-| \`Shift+Alt+Delete\` / \`Shift+Alt+Backspace\` | Cut to a new chapter, or pull in the next / previous one (see [Chapters](${guideLink('SPLIT-VIEW-TABS', 'chapters')})) |
-| \`Ctrl+L\` | Insert a link |
-| \`Shift+Ctrl+L\` | Set an anchor |
-| \`Ctrl+B\` | Bold |
-| \`Ctrl+I\` | Italic |
-| \`Ctrl+J\` | Strikethrough |
-| \`Ctrl+T\` | Toggle current line's heading level |
-| \`Ctrl+-\` | Toggle bulleted list |
-| \`Ctrl+#\` (or \`Ctrl+Shift+3\`) | Toggle numbered list |
-| \`Tab\` / \`Shift+Tab\` (in a table) | Next / previous cell (see [Tables](${guideLink('TOOLBAR-FORMATTING', 'tables')})) |
-| \`Shift+Backspace\` (in a table) | Empty the cell |
-| \`Ctrl+Shift+Backspace\` (in a table) | Delete the column |
-| \`Ctrl+Shift+Arrow\` (in a table) | Move the column (←/→) or row (↑/↓) |
-| \`Ctrl+Z\` / \`Ctrl+Y\` | Undo / redo |
-| \`Ctrl+V\` | Paste the text as-is |
-| \`Ctrl+Shift+V\` | Smart paste: rejoins lines broken mid-paragraph and tidies list markers |
+${shortcutTable()}
 
 - Shortcuts that touch the editor apply to whichever slot is currently active.
 `,

@@ -5,6 +5,7 @@ import { Annotation, Compartment, EditorState, EditorSelection, Prec, RangeSetBu
 import type { Extension } from '@codemirror/state';
 import { EditorView, Decoration, ViewPlugin, keymap, type DecorationSet } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, isolateHistory } from '@codemirror/commands';
+import { matchShortcut, type ShortcutId } from '../shared/keyboardShortcuts';
 import { buildTokenPresentation } from '../editor/MarkdownLineClassification';
 import { suppressNextPlainTypingSoundOnce, typingSoundManager } from '../sound/TypingSoundManager';
 import { ARROW_KEY_VOICES, SHIFT_TAB_KEY_VOICE, TAB_KEY_VOICE } from '../sound/keyVoices';
@@ -549,6 +550,21 @@ const EDITOR_PAGE_CONTINUOUS_SCROLL_APEX_MULTIPLIER = CONTINUOUS_SCROLL_APEX_SPE
  * an accepted trade: a rarely-reached-for command editor feature, not
  * something this markdown app leans on.
  */
+/**
+ * The markdown shortcuts this keymap claims, by their declaration in
+ * shared/keyboardShortcuts.ts and the transform each one asks the bindings
+ * for. Link and anchor are not here: those are App.tsx's (they open a
+ * prompt rather than transform the text).
+ */
+const MARKDOWN_SHORTCUTS: ReadonlyArray<readonly [ShortcutId, 'bold' | 'italic' | 'strikethrough' | 'heading-toggle' | 'unordered-list' | 'ordered-list']> = [
+  ['bold', 'bold'],
+  ['italic', 'italic'],
+  ['strikethrough', 'strikethrough'],
+  ['heading', 'heading-toggle'],
+  ['bulletedList', 'unordered-list'],
+  ['numberedList', 'ordered-list'],
+];
+
 const CM6_DEFAULT_KEYMAP_WITHOUT_ALT_ARROW = defaultKeymap
   .filter((binding) => binding.key !== 'Alt-ArrowLeft' && binding.key !== 'Alt-ArrowRight')
   .map((binding) => (
@@ -3620,7 +3636,7 @@ export function CM6Editor({
       // convention, since that's a deliberate product choice, not a bug.
       Prec.highest(keymap.of([{
         any: (view, event) => {
-          if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'v') {
+          if (matchShortcut(event, 'smartPaste')) {
             smartPasteRequested = true;
           }
 
@@ -3628,7 +3644,7 @@ export function CM6Editor({
             pendingCageIntent = true;
           }
 
-          if (event.key.startsWith('Arrow') && event.ctrlKey && event.shiftKey && !event.metaKey && !event.altKey) {
+          if (matchShortcut(event, 'tableMove')) {
             // Ctrl+Shift+Arrow is offered to the bindings first (in a table
             // it moves the caret's row or column); null leaves it to the
             // default keymap's selection extension.
@@ -3646,7 +3662,7 @@ export function CM6Editor({
             }
           }
 
-          if ((event.key === 'ArrowUp' || event.key === 'ArrowDown') && event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
+          if (matchShortcut(event, 'jumpVertical')) {
             // Ctrl+Up/Down jumps to the nearest flagged line off the top/
             // bottom of the currently rendered gutter range -- the keyboard
             // equivalent of clicking the gutter's own up/down-arrow flag
@@ -3717,7 +3733,11 @@ export function CM6Editor({
             return true;
           }
 
-          if (event.key === 'Backspace' && (event.shiftKey || event.ctrlKey) && !event.altKey && !event.metaKey) {
+          const backspaceModifier = matchShortcut(event, 'tableDeleteColumn') ? 'ctrl-shift'
+            : matchShortcut(event, 'tableEmptyCell') ? 'shift'
+            : matchShortcut(event, 'deleteWord') ? 'ctrl'
+            : null;
+          if (backspaceModifier) {
             // Shift+Backspace, Ctrl+Backspace and Ctrl+Shift+Backspace,
             // offered to the bindings first; null leaves the key to the
             // default keymap (plain character delete for Shift, previous-word
@@ -3726,8 +3746,7 @@ export function CM6Editor({
             if (callback) {
               const text = previousTextRef.current;
               const selection = toSelectionState(view.state.selection.main);
-              const modifier = event.shiftKey && event.ctrlKey ? 'ctrl-shift' : event.shiftKey ? 'shift' : 'ctrl';
-              const next = callback({ modifier, text, selection });
+              const next = callback({ modifier: backspaceModifier, text, selection });
               if (next) {
                 event.preventDefault();
                 applyTransformResult(view, text, next);
@@ -3758,15 +3777,8 @@ export function CM6Editor({
           }
 
           const shortcutCallback = bindingsRef.current?.onMarkdownShortcutTransform;
-          if (shortcutCallback && event.ctrlKey && !event.metaKey && !event.altKey) {
-            let shortcut: 'bold' | 'italic' | 'strikethrough' | 'heading-toggle' | 'unordered-list' | 'ordered-list' | null = null;
-            const key = event.key.toLowerCase();
-            if (!event.shiftKey && key === 'b') shortcut = 'bold';
-            else if (!event.shiftKey && key === 'i') shortcut = 'italic';
-            else if (!event.shiftKey && key === 'j') shortcut = 'strikethrough';
-            else if (!event.shiftKey && key === 't') shortcut = 'heading-toggle';
-            else if (!event.shiftKey && event.key === '-') shortcut = 'unordered-list';
-            else if ((event.shiftKey && event.key === '3') || event.key === '#') shortcut = 'ordered-list';
+          if (shortcutCallback) {
+            const shortcut = MARKDOWN_SHORTCUTS.find(([id]) => matchShortcut(event, id))?.[1] ?? null;
 
             if (shortcut) {
               // See the Tab handler above for why previousTextRef.current is

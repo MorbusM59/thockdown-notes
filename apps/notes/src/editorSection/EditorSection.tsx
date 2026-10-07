@@ -265,6 +265,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
   onToggleReviewGutter,
   onToggleReviewFlags,
   isEscapeHoldPanelOpen,
+  isShortcutReferenceOpen,
   onEscapeHoldPanelClose,
   onEscapeHoldCreateNote,
   onEscapeHoldCreateChapter,
@@ -2253,6 +2254,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
         isPreviewingSnapshot={isPreviewingSnapshot}
         isCaretSuspended={isCaretSuspended}
         isEscapeHoldPanelOpen={isEscapeHoldPanelOpen}
+        isShortcutReferenceOpen={isShortcutReferenceOpen}
         onEscapeHoldPanelClose={onEscapeHoldPanelClose}
         onEscapeHoldCreateNote={onEscapeHoldCreateNote}
         onEscapeHoldCreateChapter={onEscapeHoldCreateChapter}

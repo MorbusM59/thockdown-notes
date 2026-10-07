@@ -27,14 +27,27 @@ import { statPointsAvailable } from '../model/motes'
 
 const GOLD_CHOICE = 'loot:gold'
 
-function rollItemOffers(context: StageContext, rng: number) {
+function rollItemOffers(context: StageContext, rng: number, alreadyShown: readonly string[] = []) {
   // Not what is already held: a duplicate is not a second item, it is the
   // same one applying twice (model/gameState.ts's `acquireModifier`), and
   // offering it would be offering nothing.
-  const pool = context.items.filter((item) => !context.held.some((row) => row.id === item.id))
-  if (pool.length === 0) return { offerIds: [] as string[], rng }
-  const sample = nextSample(rng, pool, context.profile?.derived.offerChoices ?? 2)
-  return { offerIds: sample.value.map((item) => item.id), rng: sample.rng }
+  const unheld = context.items.filter((item) => !context.held.some((row) => row.id === item.id))
+  const wanted = context.profile?.derived.offerChoices ?? 2
+  // Unseen first. When one fight pays several screens, an item an earlier
+  // screen of the same spoils already showed is the same choice asked again,
+  // so every screen is filled from items not yet shown, and only the
+  // shortfall -- when too few unseen items are left unheld -- is filled from
+  // the shown ones. One rule at every pool size, so there is no threshold
+  // at which the exclusion switches off.
+  const unseen = unheld.filter((item) => !alreadyShown.includes(item.id))
+  const seen = unheld.filter((item) => alreadyShown.includes(item.id))
+  const first = nextSample(rng, unseen, wanted)
+  const rest = nextSample(first.rng, seen, wanted - first.value.length)
+  return { offerIds: [...first.value, ...rest.value].map((item) => item.id), rng: rest.rng }
+}
+
+function readIds(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []
 }
 
 function readNumber(value: unknown, fallback: number): number {
@@ -81,6 +94,7 @@ export const lootStage: StageModule = {
         motes: Math.max(0, readNumber(input.motes, 1)),
         offersLoot,
         offerIds: rolled.offerIds,
+        shownIds: rolled.offerIds,
       } satisfies JsonObject,
       narration: kill ?? opening,
       rng: rolled.rng,
@@ -166,10 +180,12 @@ export const lootStage: StageModule = {
     }
 
     if (screensLeft > 1) {
-      const rolled = state.offersLoot !== false ? rollItemOffers(context, rng) : { offerIds: [] as string[], rng }
+      // A save from before `shownIds` existed still knows the screen on view.
+      const shown = [...readIds(state.shownIds), ...readIds(state.offerIds)]
+      const rolled = state.offersLoot !== false ? rollItemOffers(context, rng, shown) : { offerIds: [] as string[], rng }
       return {
         kind: 'stay',
-        state: { ...state, screensLeft: screensLeft - 1, offerIds: rolled.offerIds, pendingId: null },
+        state: { ...state, screensLeft: screensLeft - 1, offerIds: rolled.offerIds, shownIds: [...shown, ...rolled.offerIds], pendingId: null },
         // The pick is applied HERE, not held until the last screen. Holding
         // them would lose every intermediate one, and would also mean the
         // next screen's item offers rolled against a Luck the player had

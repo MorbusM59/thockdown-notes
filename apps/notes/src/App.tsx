@@ -187,6 +187,7 @@ import { activeGame, emptySave, withTrueMode, withTuning, type GameSave } from '
 import { createSeed } from './adventure/core/rng'
 import { DEFAULT_SETTINGS } from './adventure/model/gameState'
 import { ESCAPE_HOLD_MS } from './shared/escapeHold'
+import { matchShortcut, type ShortcutId } from './shared/keyboardShortcuts'
 import {
   liveOccupancy,
   planOverlayClose,
@@ -1995,6 +1996,22 @@ function App() {
   const escapeHoldTimerRef = useRef<number | null>(null)
   const escapeHoldTriggeredRef = useRef(false)
   const escapeFreshCycleWhilePanelOpenRef = useRef(false)
+  // The keyboard shortcut reference (components/ShortcutReference.tsx) is
+  // the escape hold's second stage: up only while Escape stays down, and
+  // what its release goes back to depends on where the hold started. A hold
+  // that began in the editor and carried on through the menu's threshold
+  // returns to the editor (`'editor'`: the menu goes down with it); a fresh
+  // hold from a menu already up returns to that menu (`'menu'`). Both wait
+  // the same confirm threshold as the menu itself, on the same timer.
+  const [shortcutReferenceOrigin, setShortcutReferenceOrigin] = useState<'editor' | 'menu' | null>(null)
+  // Mirrored in a ref because the Escape keyup reads it: a release landing
+  // between the timer setting the state and the listener re-registering with
+  // the new value would otherwise see the old one and leave the reference up.
+  const shortcutReferenceOriginRef = useRef<'editor' | 'menu' | null>(null)
+  const setReferenceOrigin = useCallback((origin: 'editor' | 'menu' | null) => {
+    shortcutReferenceOriginRef.current = origin
+    setShortcutReferenceOrigin(origin)
+  }, [])
   // Set when an Escape keydown was spent on a field (defocusing it, or
   // handing focus back to the editor from find/replace/tags), so the same
   // press's keyup does not ALSO toggle the view -- the keyup listener runs on
@@ -2011,8 +2028,10 @@ function App() {
       escapeHoldTimerRef.current = null
     }
   }, [])
+  useEffect(() => clearEscapeHoldTimer, [clearEscapeHoldTimer])
   const handleEscapeHoldPanelClose = useCallback(() => {
     setIsEscapeHoldPanelOpen(false)
+    setReferenceOrigin(null)
     clearEscapeHoldTimer()
     escapeHoldTriggeredRef.current = false
     escapeFreshCycleWhilePanelOpenRef.current = false
@@ -2026,7 +2045,26 @@ function App() {
     // in a note beside it is not a dismissal of it -- and treating it as one
     // ended a game the reader was not even looking at.
     if (isModeOwningActiveSlotRef.current) escapeMenuModeRef.current?.onDismiss?.()
-  }, [clearEscapeHoldTimer])
+  }, [clearEscapeHoldTimer, setReferenceOrigin])
+  // A hold in progress has Escape down under it, and losing the window means
+  // its release will never be seen -- so losing the window IS the release:
+  // a pending stage is cancelled (otherwise it fires while away and leaves
+  // the reference up with no key held), and a reference that is up goes
+  // back to where its hold began.
+  useEffect(() => {
+    const onBlur = () => {
+      clearEscapeHoldTimer()
+      // The press these describe is over, so the next Escape is a fresh one.
+      escapeHoldTriggeredRef.current = false
+      escapeFreshCycleWhilePanelOpenRef.current = false
+      const origin = shortcutReferenceOriginRef.current
+      if (origin === null) return
+      setReferenceOrigin(null)
+      if (origin === 'editor') handleEscapeHoldPanelClose()
+    }
+    window.addEventListener('blur', onBlur)
+    return () => window.removeEventListener('blur', onBlur)
+  }, [clearEscapeHoldTimer, handleEscapeHoldPanelClose, setReferenceOrigin])
   // "Double size" mode: 2x page zoom paired with a doubled window minimum --
   // see the window-control:double-size-mode handler in electron/main.ts.
   const [isDoubleSizeMode, setIsDoubleSizeMode] = useState(false)
@@ -2167,7 +2205,13 @@ function App() {
     // Only an arriving NOTE, not an emptying: opening the adventure clears
     // the slot and raises the ring in the same gesture, and treating that
     // clear as a switch would close the ring on the way in.
-    if (arrival?.arrivedNoteId) setIsEscapeHoldPanelOpen(false)
+    // The hold's pending stage goes with it, or a reference would rise over
+    // the note that just arrived.
+    if (arrival?.arrivedNoteId) {
+      setIsEscapeHoldPanelOpen(false)
+      clearEscapeHoldTimer()
+      setReferenceOrigin(null)
+    }
 
     // A guide that ARRIVED without us opening it -- a restored session, one
     // of its own cross-references -- still owes the slot its note back. It is already
@@ -2193,7 +2237,7 @@ function App() {
       void persistMenuStateNowRef.current({ slotOverlay: overlay })
       return overlay
     })
-  }, [])
+  }, [clearEscapeHoldTimer, setReferenceOrigin])
 
   /**
    * What the slots THAT EXIST are showing. The only form of the aggregate
@@ -5484,8 +5528,10 @@ ${markdownHtml}
    */
   const closeAdventureView = useCallback(async (): Promise<void> => {
     setIsEscapeHoldPanelOpen(false)
+    clearEscapeHoldTimer()
+    setReferenceOrigin(null)
     await closeOverlay()
-  }, [closeOverlay])
+  }, [clearEscapeHoldTimer, closeOverlay, setReferenceOrigin])
 
   /**
    * The User Guide window control's other half. Left click is the guide
@@ -8522,7 +8568,7 @@ ${markdownHtml}
         return
       }
 
-      if (isFindMode && event.ctrlKey && !event.shiftKey && event.key === 'Enter') {
+      if (isFindMode && matchShortcut(event, 'replaceAll')) {
         event.preventDefault()
         activeSection?.replaceAllDocumentFindHits()
         return
@@ -8530,9 +8576,7 @@ ${markdownHtml}
 
       // Immersive mode, from anywhere: F11 or Ctrl+Shift+Space, and the same
       // key to leave. A held key toggles once, not per repeat.
-      const isImmersiveShortcut = (event.key === 'F11' && !event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey)
-        || (event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey && event.code === 'Space')
-      if (isImmersiveShortcut) {
+      if (matchShortcut(event, 'immersive')) {
         event.preventDefault()
         if (event.repeat) return
         setImmersiveMode(!isImmersiveMode)
@@ -8545,8 +8589,8 @@ ${markdownHtml}
       // they close it and hand focus back to the editor. Only from inside the
       // sidebar: from the editor, the shortcut always means "take me to the
       // find field", even when the panel is already open.
-      const findShortcut = event.ctrlKey && !event.shiftKey
-        ? (event.key.toLowerCase() === 'f' ? 'find' : event.key.toLowerCase() === 'h' ? 'replace' : null)
+      const findShortcut = matchShortcut(event, 'find') ? 'find'
+        : matchShortcut(event, 'findReplace') ? 'replace'
         : null
       if (findShortcut) {
         event.preventDefault()
@@ -8570,7 +8614,7 @@ ${markdownHtml}
       // editor included. Closing it with focus inside hands focus back to the
       // editor, as Ctrl+F's close does; otherwise focus would fall to <body>
       // along with the sidebar's DOM. A held key toggles once, not per repeat.
-      if (event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey && event.code === 'Space') {
+      if (matchShortcut(event, 'toggleSidebar')) {
         event.preventDefault()
         if (event.repeat) return
         const wasSidebarFocused = Boolean(target?.closest('.notes-sidebar'))
@@ -8581,13 +8625,13 @@ ${markdownHtml}
         return
       }
 
-      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'n') {
+      if (matchShortcut(event, 'newNoteFromClipboard')) {
         event.preventDefault()
         void createNoteFromClipboardTitle()
         return
       }
 
-      if (event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 'n') {
+      if (matchShortcut(event, 'newNote')) {
         event.preventDefault()
         void createNote()
         return
@@ -8600,8 +8644,7 @@ ${markdownHtml}
       // longer cycles sections at all (it's an ordinary in-editor
       // indent/focus key elsewhere in the app, and stealing it globally was
       // one interference too many); Left/Right are the only way to switch.
-      if (event.altKey && !event.shiftKey && !event.ctrlKey && !event.metaKey && !isEditorControlField
-        && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+      if (!isEditorControlField && matchShortcut(event, 'switchSlot')) {
         const activeIndex = editorSections.findIndex((entry) => entry.id === activeSectionId)
         if (activeIndex !== -1) {
           const sectionCount = editorSections.length
@@ -8628,9 +8671,8 @@ ${markdownHtml}
         }
       }
 
-      if (event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey && !isEditorControlField
-        && !activeSection?.isPreviewMode && activeSection?.activeNoteId
-        && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+      if (!isEditorControlField && !activeSection?.isPreviewMode && activeSection?.activeNoteId
+        && matchShortcut(event, 'jumpVertical')) {
         event.preventDefault()
         const adapter = activeSection.adapterRef.current
         const targetOffset = event.key === 'ArrowUp' ? 0 : activeSection.readEditorText().length
@@ -8647,73 +8689,24 @@ ${markdownHtml}
         return
       }
 
-      if (isEditorTarget && activeSection?.activeNoteId && event.ctrlKey && !event.altKey && !event.metaKey) {
-        const key = event.key.toLowerCase()
-
-        if (!event.shiftKey && key === 'b') {
+      if (isEditorTarget && activeSection?.activeNoteId) {
+        const editorShortcuts: Array<[ShortcutId, () => void]> = [
+          ['bold', () => activeSection.applyTextDecoration('bold')],
+          ['italic', () => activeSection.applyTextDecoration('italic')],
+          ['strikethrough', () => activeSection.applyTextDecoration('strikethrough')],
+          ['heading', () => activeSection.toggleCurrentLineHeading()],
+          ['link', () => activeSection.applyLink()],
+          ['anchor', () => activeSection.applyAnchor()],
+          ['numberedList', () => activeSection.toggleNumberedList()],
+          ['bulletedList', () => activeSection.toggleBulletedList()],
+          ['chapterForward', () => void activeSection.handleChapterForwardSplitOrMerge()],
+          ['chapterBackward', () => void activeSection.handleChapterBackwardSplitOrMerge()],
+          ['newChapter', () => void activeSection.handleCreateChapter()],
+        ]
+        const hit = editorShortcuts.find(([id]) => matchShortcut(event, id))
+        if (hit) {
           event.preventDefault()
-          activeSection.applyTextDecoration('bold')
-          return
-        }
-
-        if (!event.shiftKey && key === 'i') {
-          event.preventDefault()
-          activeSection.applyTextDecoration('italic')
-          return
-        }
-
-        if (!event.shiftKey && key === 'j') {
-          event.preventDefault()
-          activeSection.applyTextDecoration('strikethrough')
-          return
-        }
-
-        if (!event.shiftKey && key === 't') {
-          event.preventDefault()
-          activeSection.toggleCurrentLineHeading()
-          return
-        }
-
-        if (key === 'l') {
-          event.preventDefault()
-          if (event.shiftKey) {
-            activeSection.applyAnchor()
-          } else {
-            activeSection.applyLink()
-          }
-          return
-        }
-
-        const isOrderedListShortcut = event.key === '#' || (event.shiftKey && event.key === '3')
-        if (isOrderedListShortcut) {
-          event.preventDefault()
-          activeSection.toggleNumberedList()
-          return
-        }
-
-        if (!event.shiftKey && event.key === '-') {
-          event.preventDefault()
-          activeSection.toggleBulletedList()
-          return
-        }
-      }
-
-      if (isEditorTarget && activeSection?.activeNoteId && event.shiftKey && event.altKey && !event.ctrlKey && !event.metaKey) {
-        if (event.key === 'Delete') {
-          event.preventDefault()
-          void activeSection.handleChapterForwardSplitOrMerge()
-          return
-        }
-
-        if (event.key === 'Backspace') {
-          event.preventDefault()
-          void activeSection.handleChapterBackwardSplitOrMerge()
-          return
-        }
-
-        if (event.key.toLowerCase() === 'n') {
-          event.preventDefault()
-          void activeSection.handleCreateChapter()
+          hit[1]()
           return
         }
       }
@@ -8748,6 +8741,11 @@ ${markdownHtml}
         if (isEscapeRingUp) {
           if (!event.repeat) {
             escapeFreshCycleWhilePanelOpenRef.current = true
+            clearEscapeHoldTimer()
+            escapeHoldTimerRef.current = window.setTimeout(() => {
+              escapeHoldTimerRef.current = null
+              setReferenceOrigin('menu')
+            }, ESCAPE_HOLD_MS)
           }
           event.preventDefault()
           return
@@ -8769,6 +8767,11 @@ ${markdownHtml}
         escapeHoldTimerRef.current = window.setTimeout(() => {
           escapeHoldTriggeredRef.current = true
           setIsEscapeHoldPanelOpen(true)
+          // Still held: the same timer, re-armed, is the reference's.
+          escapeHoldTimerRef.current = window.setTimeout(() => {
+            escapeHoldTimerRef.current = null
+            setReferenceOrigin('editor')
+          }, ESCAPE_HOLD_MS)
         }, ESCAPE_HOLD_MS)
       }
     }
@@ -8783,6 +8786,18 @@ ${markdownHtml}
       if (escapeConsumedByFieldRef.current) {
         escapeConsumedByFieldRef.current = false
         event.preventDefault()
+        return
+      }
+
+      // Releasing the hold that raised the reference puts back whatever was
+      // there before the hold began.
+      const origin = shortcutReferenceOriginRef.current
+      if (origin !== null) {
+        event.preventDefault()
+        setReferenceOrigin(null)
+        escapeHoldTriggeredRef.current = false
+        escapeFreshCycleWhilePanelOpenRef.current = false
+        if (origin === 'editor') handleEscapeHoldPanelClose()
         return
       }
 
@@ -8827,10 +8842,15 @@ ${markdownHtml}
 
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
+    // The hold timer is NOT cleared here. This effect re-registers whenever
+    // one of its many dependencies changes -- and the hold's own first stage
+    // changes one (raising the menu flips isEscapeRingUp), so clearing on
+    // re-registration killed the second stage it had just armed. The timer
+    // callbacks touch only setters and refs, so they outlive a re-render
+    // safely; unmount clears it below.
     return () => {
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
-      clearEscapeHoldTimer()
     }
   }, [
     activeSection,
@@ -8842,6 +8862,7 @@ ${markdownHtml}
     getActiveSection,
     handleEscapeHoldPanelClose,
     isEscapeRingUp,
+    setReferenceOrigin,
     isFindMode,
     isImmersiveMode,
     isReplaceMode,
@@ -10160,6 +10181,7 @@ ${markdownHtml}
                   spellCheckRenderEnabled={spellCheckEnabled}
                   highlightSearchColor={highlightColors.search}
                   isEscapeHoldPanelOpen={isEscapeRingUp}
+                  isShortcutReferenceOpen={shortcutReferenceOrigin !== null}
                   onEscapeHoldPanelClose={handleEscapeHoldPanelClose}
                   onEscapeHoldCreateNote={createNote}
                   onEscapeHoldCreateChapter={activeSection?.handleCreateChapter ?? noopAsync}
