@@ -2416,7 +2416,7 @@ export function CM6Editor({
     }
     window.thockdownReviewFlags?.syncReviewFlags(noteId, Array.from(winners.values(), (w) => w.remap))
       .then(setReviewFlags)
-      .catch(() => {});
+      .catch((error) => console.error('[review-flags] syncing flags after an edit failed', error));
   }, []);
 
   const scheduleReviewFlagSync = useCallback(() => {
@@ -2473,7 +2473,7 @@ export function CM6Editor({
       // "arming" but was actually just a missed repaint. Forcing the same
       // recompute pass right here closes that gap.
       scheduleSelectionHighlightUpdate();
-    }).catch(() => {});
+    }).catch((error) => console.error('[review-flags] setting a flag failed', error));
   }, [scheduleSelectionHighlightUpdate]);
 
   /** The sole, deliberate clear-a-flag action -- distinct from the click-cycle above. */
@@ -2497,7 +2497,7 @@ export function CM6Editor({
       setReviewFlags(flags);
       // Same reasoning as handleGutterFlagClick above.
       scheduleSelectionHighlightUpdate();
-    }).catch(() => {});
+    }).catch((error) => console.error('[review-flags] clearing a flag failed', error));
   }, [scheduleSelectionHighlightUpdate]);
 
   /**
@@ -5186,7 +5186,7 @@ export function CM6Editor({
       }
       flagPositionsRef.current = positions;
       setReviewFlags(flags);
-    }).catch(() => {});
+    }).catch((error) => console.error('[review-flags] loading flags failed', error));
 
     return () => { cancelled = true; };
   }, [noteId]);
