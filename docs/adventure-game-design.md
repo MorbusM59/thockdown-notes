@@ -1296,3 +1296,13 @@ dealt without seeing the dice.
   With the late ramp it carries a careful player into the mid-game (median
   encounter 82, 15% win) while clever stays at 62% wins. A careful run is
   bimodal: it either falls in levels 1 to 3 or reaches the late game.
+
+### Run variety (2026-10-07)
+- **A fight's spoils never offer an item twice.** When one fight pays several
+  loot screens, each is filled from items no earlier screen of that spoils
+  showed, and only a shortfall is filled from the shown ones. Before, 29% of
+  follow-up screens repeated an item the player had just passed over.
+- **Open for the author:** regions still do not change which monsters appear
+  (open question 9), and the constructs and spirits pools hold two species
+  each against eight beasts, so following either track meets the same two
+  creatures. Both are content decisions and are left to the author.
