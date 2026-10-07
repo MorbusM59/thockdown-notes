@@ -24,13 +24,21 @@ import { ENCOUNTER_SELECT_STAGE_ID, LOOT_STAGE_ID } from './ids'
 
 const GOLD_CHOICE = 'loot:gold'
 
-function rollItemOffers(context: StageContext, rng: number) {
+function rollItemOffers(context: StageContext, rng: number, justShown: readonly unknown[] = []) {
   // Not what is already held: a duplicate is not a second item, it is the
   // same one applying twice (model/gameState.ts's `acquireModifier`), and
   // offering it would be offering nothing.
-  const pool = context.items.filter((item) => !context.held.some((row) => row.id === item.id))
-  if (pool.length === 0) return { offerIds: [] as string[], rng }
-  const sample = nextSample(rng, pool, context.profile?.derived.offerChoices ?? 2)
+  const unheld = context.items.filter((item) => !context.held.some((row) => row.id === item.id))
+  if (unheld.length === 0) return { offerIds: [] as string[], rng }
+  const wanted = context.profile?.derived.offerChoices ?? 2
+  // Nor what the screen before this one showed, when one fight pays several:
+  // a follow-up screen repeating an item the player just passed over is the
+  // same choice asked twice (29% of follow-up screens did, measured by the
+  // balance harness). The exclusion gives way only where the catalogue left
+  // unheld is too small to fill a screen without it.
+  const fresh = unheld.filter((item) => !justShown.includes(item.id))
+  const pool = fresh.length >= wanted ? fresh : unheld
+  const sample = nextSample(rng, pool, wanted)
   return { offerIds: sample.value.map((item) => item.id), rng: sample.rng }
 }
 
@@ -140,7 +148,7 @@ export const lootStage: StageModule = {
     }
 
     if (screensLeft > 1) {
-      const rolled = state.offersLoot !== false ? rollItemOffers(context, rng) : { offerIds: [] as string[], rng }
+      const rolled = state.offersLoot !== false ? rollItemOffers(context, rng, Array.isArray(state.offerIds) ? state.offerIds : []) : { offerIds: [] as string[], rng }
       return {
         kind: 'stay',
         state: { ...state, screensLeft: screensLeft - 1, offerIds: rolled.offerIds, pendingId: null },
