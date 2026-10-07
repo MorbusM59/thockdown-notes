@@ -2054,11 +2054,12 @@ function App() {
   useEffect(() => {
     const onBlur = () => {
       clearEscapeHoldTimer()
+      // The press these describe is over, so the next Escape is a fresh one.
+      escapeHoldTriggeredRef.current = false
+      escapeFreshCycleWhilePanelOpenRef.current = false
       const origin = shortcutReferenceOriginRef.current
       if (origin === null) return
       setReferenceOrigin(null)
-      escapeHoldTriggeredRef.current = false
-      escapeFreshCycleWhilePanelOpenRef.current = false
       if (origin === 'editor') handleEscapeHoldPanelClose()
     }
     window.addEventListener('blur', onBlur)
