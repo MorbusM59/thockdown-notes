@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SOUNDSCAPE_SETTINGS } from './soundscape';
+import { DEFAULT_SOUNDSCAPE_SETTINGS, SOUNDSCAPE_FACTORY_PRESETS } from './soundscape';
 import { toGeneratorConfiguration } from './soundscapeDsp';
 import { generatorSource, noiseAt } from './soundscape-generator.harness';
 import { hostGenerator, type HostedGenerator } from './soundscapeGeneratorHost';
@@ -162,6 +162,25 @@ describe('render ahead', () => {
     const peak = Math.max(...Array.from(out, Math.abs));
     expect(peak).toBeGreaterThan(1e-3);
     expect(peak).toBeLessThan(4);
+  });
+
+  it('renders every factory soundscape finite, bounded and audible through the real mix', () => {
+    const noise = noiseAt(SAMPLE_RATE);
+    for (const preset of SOUNDSCAPE_FACTORY_PRESETS) {
+      const generator = hostGenerator(generatorSource, SAMPLE_RATE, { seed: 7, noiseLoops: noise.loops, noiseGains: noise.gains });
+      const { renderer, sent, drain } = setup(generator, new SoundscapeMix(SAMPLE_RATE));
+      renderer.configure({
+        type: 'configure',
+        generator: { type: 'configure', ...toGeneratorConfiguration(preset.settings) },
+        space: preset.settings.space,
+      });
+      drain();
+      const out = heard(sent);
+      expect(out.every(Number.isFinite), preset.id).toBe(true);
+      const peak = Math.max(...Array.from(out, Math.abs));
+      expect(peak, preset.id).toBeGreaterThan(1e-3);
+      expect(peak, preset.id).toBeLessThan(4);
+    }
   });
 
   it('transitions to a new voice by an equal-power crossfade spliced a margin past the playhead, then plays the new voice alone', () => {
