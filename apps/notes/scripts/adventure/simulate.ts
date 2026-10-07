@@ -15,7 +15,8 @@
 //   npx vite-node scripts/adventure/simulate.ts -- --sweep-adjust
 //
 // Flags: --runs, --progression (a number in 1.01..1.25, or `all`), --seed, --policy
-//        (`careful` | `reckless` | `first`), --levels (stop after N),
+//        (`careful` | `patient` | `reckless` | `first` | `random` |
+//        `clever` -- see runner.ts), --levels (stop after N),
 //        --prefer=id,id (take these offers when they appear), --pin=id,id
 //        (hand them over outright), --rank-vectors (one pass per build,
 //        species and class), --rank (one pass per item and trait, each
@@ -24,6 +25,11 @@
 //        model/chance.ts), --sweep-adjust[=0,0.1,0.2] (one pass per thumb
 //        setting), --json.
 //
+// For comparing whole STRATEGIES (a default walk, a random one, a
+// lookahead player) with per-level curves and pick rates, `npm run
+// adventure:balance` (balance.ts) is the report; this is the instrument for
+// pinning one thing and asking what it is worth.
+//
 // A run is autoplayed by a POLICY -- a small, stated way of choosing -- and
 // the numbers mean nothing without knowing which one produced them, so every
 // report names it. `careful` is the closest to how a person plays; `first`
@@ -31,174 +37,18 @@
 // that finds stalls.
 
 import { THOCKQUEST } from '../../src/adventure/content'
-import { choose, currentScreen, enterEntryScreen, enterInterlude, type DirectorDeps } from '../../src/adventure/core/director'
-import type { Screen } from '../../src/adventure/core/screen'
-import { activeGame, applyEffects, emptySave, profileOf, type GameSave } from '../../src/adventure/model/gameState'
-import type { ModifierKind } from '../../src/adventure/model/modifiers'
 import { PROGRESSION_MAX, PROGRESSION_MIN, clampProgression } from '../../src/adventure/model/difficulty'
+import { POLICIES, playRun, type PinRef, type Policy, type PolicyName, type RunResult, type VectorPin } from './runner'
 
 /**
- * THE HARNESS'S OWN SAMPLING of the progression range, not content's.
- *
- * Difficulty used to be four named presets and the report had a row per
- * preset, which read well. It is a continuous slider now, so `--progression=all`
- * samples the range at four points instead -- the two ends and two between --
- * and the rows are labelled by the number, because the number is the thing.
+ * THE HARNESS'S OWN SAMPLING of the progression range, not content's: the
+ * two ends and two between, labelled by the number, because the number is
+ * the thing.
  */
 const PROGRESSION_SAMPLES: readonly number[] = [PROGRESSION_MIN, 1.05, 1.12, PROGRESSION_MAX]
 
 const progressionLabel = (value: number) => `x${value.toFixed(2)}`
-import { ROOT_STAGE_ID, STAGES } from '../../src/adventure/stages'
-import { STAT_POINT_STAGE_ID } from '../../src/adventure/stages/ids'
-import { statPointsAvailable } from '../../src/adventure/model/motes'
 
-const DEPS: DirectorDeps = {
-  stages: STAGES,
-  content: THOCKQUEST,
-  rootStageId: ROOT_STAGE_ID,
-}
-
-/**
- * WHAT THIS HARNESS PINS: a name and an id, never a resolved modifier.
- *
- * Everything is rolled per run now (model/modifierSlots.ts), so there is no such
- * object as "the Spyglass" outside of one run -- a pin holding a `Modifier`
- * would be holding whatever some other run's seed made. Pinning by id means a
- * ranking row measures what a Spyglass is worth ON AVERAGE ACROSS RUNS, which
- * is the question worth asking about a rolled item and a strictly better
- * question than the one this used to answer about a hand-tuned one.
- */
-interface PinRef {
-  kind: ModifierKind
-  id: string
-  name: string
-}
-
-/**
- * A VECTOR TO PIN, for the vector ranking (`--rank-vectors`).
- *
- * The same question `--rank` asks of items and traits, asked of the three
- * content vectors (model/vectors.ts): what is a Hulking build worth, what is
- * a Golem worth, what is a Bruiser worth. It is a different measurement from
- * the modifier one and not a widening of it -- a modifier is something a run
- * MIGHT acquire, so its row is "what does taking this whenever offered do",
- * while a vector is something the run IS from its first screen, so its row is
- * "what is a run shaped like this worth". Pinning a vector into the modifier
- * ranking would have silently mixed the two.
- */
-interface VectorPin {
-  vector: 'build' | 'species' | 'class'
-  id: string
-  name: string
-}
-
-const NOW = 1_700_000_000_000
-/** A run that has not died or reached the level cap by here is not going to. */
-const MAX_CHOICES = 20_000
-
-type PolicyName = 'careful' | 'patient' | 'reckless' | 'first'
-
-interface Situation {
-  screen: Screen
-  save: GameSave
-  /** 0..1, or null before there is a run. */
-  health: number | null
-  /** Modifier ids this run is trying to acquire, in order of preference. */
-  prefer: readonly string[]
-}
-
-type Policy = (situation: Situation) => string
-
-/**
- * Takes a preferred modifier whenever one is on the screen. Offers name the
- * modifier in their choice id (`offer:spyglass`, `loot:item:whetstone`), so
- * this needs no knowledge of which stage it is standing in.
- */
-function preferred(screen: Screen, prefer: readonly string[]): string | null {
-  for (const id of prefer) {
-    const choice = screen.choices.find((candidate) => candidate.id.endsWith(`:${id}`))
-    if (choice) return choice.id
-  }
-  return null
-}
-
-const pick = (screen: Screen, ...ids: string[]): string | null =>
-  ids.find((id) => screen.choices.some((choice) => choice.id === id)) ?? null
-
-const firstReal = (screen: Screen): string =>
-  (screen.choices.find((choice) => choice.id !== 'welcome:leave') ?? screen.choices[0]).id
-
-/**
- * Plays a fight the way a person would: never take a blow you can avoid, and
- * run when the next one would kill you.
- */
-const careful: Policy = ({ screen, health, prefer }) => {
-  const wanted = preferred(screen, prefer)
-  if (wanted) return wanted
-  // THE FIRST CELL IS THE RECOMMENDATION. On the player's action the ring is
-  // sorted strongest-spell-first and then Attack (stages/combat.ts), so a
-  // simulated player who takes the leading offensive cell is playing the way
-  // the ring is built to be played -- and is the only way the magic Intellect
-  // buys reaches these numbers at all.
-  const offensive = screen.choices.find((choice) => choice.id.startsWith('spell:'))
-  if (offensive) return offensive.id
-  if (health !== null && health < 0.25) {
-    const flee = pick(screen, 'defence:flee')
-    if (flee) return flee
-  }
-  return pick(screen, 'defence:dodge', 'defence:defend', 'combat:attack') ?? firstReal(screen)
-}
-
-/**
- * Always takes aim first: Prepare whenever it is on offer, then swing.
- *
- * Here to MEASURE Prepare, which `careful` never touches -- it presses the
- * leading offensive cell, and Prepare is deliberately the last one. The two
- * policies together answer the question the action exists to raise: is a
- * round spent aiming worth more than a round spent swinging?
- */
-const patient: Policy = (input) => {
-  const prepare = pick(input.screen, 'combat:prepare')
-  if (prepare) return prepare
-  return careful(input)
-}
-
-/** Never gives ground: no dodging, no fleeing, and takes every hit. */
-const reckless: Policy = ({ screen, prefer }) =>
-  pick(screen, 'combat:attack', 'defence:takeTheHit', 'defence:defend')
-  ?? preferred(screen, prefer)
-  ?? firstReal(screen)
-
-const POLICIES: Readonly<Record<PolicyName, Policy>> = {
-  careful, patient, reckless, first: ({ screen }) => firstReal(screen),
-}
-
-interface RunResult {
-  died: boolean
-  /** Levels fully cleared. */
-  level: number
-  encounters: number
-  fights: number
-  rounds: number
-  choices: number
-  damageTaken: number
-  gold: number
-  motes: number
-  itemsHeld: number
-  traitsHeld: number
-}
-
-/**
- * PINNING beats preferring, for measuring what one thing is worth.
- *
- * A preference only fires when the thing happens to be offered -- a trait is
- * drawn two-from-ten at character creation, so eight runs in ten came back
- * byte-identical to the baseline and the average moved by a fifth of whatever
- * the trait actually did. Pinning hands it to the character outright, the
- * moment there is a character to hand it to, and the column then means "what
- * is this worth" rather than "what is this worth, times how often you see
- * it".
- */
 function playOne(
   seed: number,
   progression: number,
@@ -209,107 +59,7 @@ function playOne(
   successAdjust = 0,
   vectors: readonly VectorPin[] = [],
 ): RunResult {
-  let save: GameSave = { ...emptySave(seed), settings: { ...emptySave(seed).settings, progression, successAdjust } }
-  save = enterEntryScreen(save, DEPS, NOW)
-
-  const result: RunResult = {
-    died: false, level: 1, encounters: 0, fights: 0, rounds: 0, choices: 0,
-    damageTaken: 0, gold: 0, motes: 0, itemsHeld: 0, traitsHeld: 0,
-  }
-  let lastStage = ''
-  let pinned = false
-  let lastHitPoints: number | null = null
-  let lastNarration = 0
-
-  for (let step = 0; step < MAX_CHOICES; step += 1) {
-    const screen = currentScreen(save, DEPS)
-    if (!screen) break
-    let game = activeGame(save)
-    // AFTER CREATION HAS FINISHED, not at the first moment a game exists.
-    // The three vector screens WRITE the record, so a pin applied while they
-    // are still to come is overwritten by whatever the run then picks --
-    // which showed up as every row of the ranking being identical, the exact
-    // symptom this table exists to detect, on the table itself.
-    const creating = screen.stageId === 'characterCreation'
-    if ((pin.length > 0 || vectors.length > 0) && game && !pinned && !creating) {
-      save = applyEffects(
-        save,
-        [
-          ...pin.map((ref) => ({ kind: 'acquireModifier' as const, modifierKind: ref.kind, modifierId: ref.id })),
-          // WRITTEN OVER WHAT THE DEAL CHOSE, at the same moment the modifier
-          // pin lands. Creation samples its vectors, so a run cannot be asked
-          // to pick a particular build -- it may simply not be on the ring.
-          // Setting the record is the only way to ask "what is THIS build
-          // worth" rather than "what is this build worth on the seeds that
-          // happened to offer it", which is a different and much less useful
-          // question.
-          ...vectors.map((ref) => ({ kind: 'setVector' as const, vector: ref.vector, id: ref.id })),
-        ],
-        DEPS.content,
-        NOW,
-      )
-      game = activeGame(save)
-      pinned = true
-    }
-
-    if (game) {
-      if (lastHitPoints !== null && game.hitPoints < lastHitPoints) result.damageTaken += lastHitPoints - game.hitPoints
-      lastHitPoints = game.hitPoints
-      result.level = game.level
-      if (game.status === 'over') {
-        result.died = game.endedReason === 'defeat'
-        break
-      }
-      if (game.level > levelCap) break
-    }
-
-    // A POINT IN HAND IS WORTH NOTHING, so the simulated player spends one
-    // the moment it lands -- taking the same route a real one does, which is
-    // pressing the rail's star gauge rather than a cell on the hub (the cell
-    // is gone; see docs/adventure-platform.md, entry 75). Done HERE rather
-    // than in a policy because it is not a choice between screens: it is the
-    // chrome being pressed, which no policy can express.
-    if (game && screen.stageId !== 'statPoint'
-      && statPointsAvailable(game.experienceEarned, game.experienceToNextStatPoint, game.statPointsSpent) > 0) {
-      save = enterInterlude(save, STAT_POINT_STAGE_ID, DEPS, NOW)
-      continue
-    }
-
-    if (screen.stageId === 'combat' && lastStage !== 'combat') result.fights += 1
-    if (screen.stageId === 'loot' && lastStage !== 'loot') result.encounters += 1
-    // A round turns over exactly when the strip is cut back to one pill.
-    if (screen.stageId === 'combat' && screen.narration.length === 1 && lastNarration > 1) result.rounds += 1
-    lastNarration = screen.stageId === 'combat' ? screen.narration.length : 0
-    lastStage = screen.stageId
-
-    // THE REAL CEILING, not a restatement of it. This read
-    // `50 + 15 * baseStats.might` -- the hit-point formula, copied -- and the
-    // copy went wrong the moment origins stopped being written into the base
-    // block: the denominator lost the origin's Might, health read too high,
-    // and the "careful" policy stopped being careful. The sim reported that
-    // as the game getting harder. The formula has one home (`deriveStats`),
-    // reached here the way every other caller reaches it.
-    const health = game
-      ? Math.min(1, game.hitPoints / Math.max(1, profileOf(save, game, DEPS.content).derived.maxHitPoints))
-      : null
-    const choiceId = policy({ screen, save, health, prefer })
-    const next = choose(save, choiceId, DEPS, NOW).save
-    result.choices += 1
-    // A choice the stage declined: the walk would spin here forever.
-    if (next === save) break
-    save = next
-  }
-
-  const game = activeGame(save)
-  if (game) {
-    result.gold = game.goldEarned
-    result.motes = game.experienceEarned
-    result.level = game.level
-    if (game.status === 'over' && game.endedReason === 'defeat') result.died = true
-  }
-  result.itemsHeld = save.holdings.filter((row) => row.kind === 'item').length
-  result.traitsHeld = save.holdings.filter((row) => row.kind === 'trait').length
-  return result
+  return playRun({ runSeed: seed, progression, policy, levelCap, prefer, pin, successAdjust, vectors })
 }
 
 function quantile(values: number[], fraction: number): number {
@@ -323,12 +73,12 @@ function mean(values: number[]): number {
 }
 
 function summarize(runs: RunResult[]) {
-  const encounters = runs.map((run) => run.encounters)
+  const encounters = runs.map((run) => run.progress)
   return {
     runs: runs.length,
     deathRate: mean(runs.map((run) => (run.died ? 1 : 0))),
     encountersWon: { median: quantile(encounters, 0.5), p10: quantile(encounters, 0.1), p90: quantile(encounters, 0.9), mean: mean(encounters) },
-    roundsPerFight: mean(runs.map((run) => (run.fights === 0 ? 0 : run.rounds / run.fights))),
+    actionsPerFight: mean(runs.map((run) => (run.fights === 0 ? 0 : run.actions / run.fights))),
     damagePerFight: mean(runs.map((run) => (run.fights === 0 ? 0 : run.damageTaken / run.fights))),
     levelReached: mean(runs.map((run) => run.level)),
     gold: mean(runs.map((run) => run.gold)),
@@ -494,7 +244,7 @@ const pinned = args.pin.map((id) => {
 if (args.sweepAdjust) {
   const thumbs = args.sweepAdjust
   console.log(`\n${args.runs} runs per cell, policy "${args.policy}", stopping after level ${args.levels}\n`)
-  console.log('progress.  luck    died   encounters won (p10/med/p90)   rounds/fight  damage/fight  level')
+  console.log('progress.  luck    died   encounters won (p10/med/p90)   actions/fight  damage/fight  level')
   for (const progression of presets) {
     for (const thumb of thumbs) {
       const row = sweep(progression, args.prefer, pinned, thumb)
@@ -502,7 +252,7 @@ if (args.sweepAdjust) {
         `${progressionLabel(progression).padEnd(9)} ${`${Math.round(thumb * 100)}%`.padStart(5)}`
         + `${`${(row.deathRate * 100).toFixed(0)}%`.padStart(7)}   `
         + `${String(row.encountersWon.p10).padStart(3)} /${String(row.encountersWon.median).padStart(4)} /${String(row.encountersWon.p90).padStart(4)}`
-        + `${row.roundsPerFight.toFixed(1).padStart(18)}${row.damagePerFight.toFixed(1).padStart(14)}`
+        + `${row.actionsPerFight.toFixed(1).padStart(18)}${row.damagePerFight.toFixed(1).padStart(14)}`
         + `${row.levelReached.toFixed(1).padStart(7)}`,
       )
     }
@@ -521,13 +271,13 @@ if (args.json) {
 } else {
   const percent = (value: number) => `${(value * 100).toFixed(0)}%`
   console.log(`\n${args.runs} runs per progression, policy "${args.policy}", stopping after level ${args.levels}\n`)
-  console.log('progress. died   encounters won (p10/med/p90)   rounds/fight  damage/fight  level  gold  motes')
+  console.log('progress. died   encounters won (p10/med/p90)   actions/fight  damage/fight  level  gold  motes')
   for (const progression of presets) {
     const row = report[progressionLabel(progression)]
     console.log(
       `${progressionLabel(progression).padEnd(9)} ${percent(row.deathRate).padStart(4)}   `
       + `${String(row.encountersWon.p10).padStart(3)} /${String(row.encountersWon.median).padStart(4)} /${String(row.encountersWon.p90).padStart(4)}`
-      + `${row.roundsPerFight.toFixed(1).padStart(18)}${row.damagePerFight.toFixed(1).padStart(14)}`
+      + `${row.actionsPerFight.toFixed(1).padStart(18)}${row.damagePerFight.toFixed(1).padStart(14)}`
       + `${row.levelReached.toFixed(1).padStart(7)}${row.gold.toFixed(1).padStart(6)}${row.motes.toFixed(1).padStart(7)}`,
     )
   }

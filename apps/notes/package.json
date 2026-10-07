@@ -10,6 +10,7 @@
     "build": "tsc && vite build && electron-builder && electron-builder --config electron-builder.portable.json5",
     "preview": "vite preview",
     "adventure:sim": "vite-node scripts/adventure/simulate.ts --",
+    "adventure:balance": "vite-node scripts/adventure/balance.ts --",
     "adventure:play": "xvfb-run -a node scripts/adventure/playthrough.mjs",
     "perf:input-lag": "node scripts/perf/measureInputLag.mjs",
     "perf:input-lag:electron": "xvfb-run -a node scripts/perf/measureInputLagElectron.mjs",

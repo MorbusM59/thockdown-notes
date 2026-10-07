@@ -108,7 +108,7 @@ These `localStorage` flags turn on traces built for defects that only reproduce 
 
 The question is never "did this fail after I changed content". It is **could a legitimate tuning change make this assertion false without anything being broken?** Only then is it balance. **Never loosen a correctness test to fit new content** — widening a bound until the numbers fit turns a property test into a test of nothing and leaves no mark that it happened; suspending is visible and reversible, loosening is neither.
 
-`npm run adventure:sim` is the real balance instrument and is **not a gate** while this is on, nor evidence that a change is balanced. It is separately saturated (94–98% death at every difficulty whatever changes) and could not answer a balance question today regardless.
+`npm run adventure:balance` (`apps/notes/scripts/adventure/balance.ts`) plays the same seeds with four players -- the default cell, random, a rule of thumb, and a lookahead that takes the best choice for the hand it is dealt without seeing the dice (`runner.ts`'s `clever`) -- and writes survival curves, reward curves per level, deaths by stage and pick rates to a markdown report; it is the one command for "how does the game play". Both harnesses share one run loop (`runner.ts`), which gives every run its own game seed: before it, every simulated run started from the same clock and so rolled the same catalogue. `npm run adventure:sim` is the real balance instrument and is **not a gate** while this is on, nor evidence that a change is balanced. It is separately saturated (94–98% death at every difficulty whatever changes) and could not answer a balance question today regardless.
 
 ## Verification rigor: match the size of the change
 Two tiers, chosen by judgment, not by rote:
