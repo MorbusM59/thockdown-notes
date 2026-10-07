@@ -1312,7 +1312,7 @@ dealt without seeing the dice.
   encounter pool (`REGION_FAVOUR_WEIGHT`), at the hunt and at the placed
   bosses alike. A weight rather than a list of what may appear, so every
   species can still be met anywhere. Every monster species is favoured by
-  exactly one region, and the region's detail names its favourites.
+  exactly one region, and the region's tooltip names its favourites (the preview itself has no room beside the border names).
   Reverting means emptying `favours`; the draw is then uniform as before.
   The ember wastes favour the heaviest hitters (Drake, Manticore, Orc) and
   the island and caves lighter ones, so a region is also a choice of risk;

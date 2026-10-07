@@ -37,13 +37,14 @@ export const regionSelectStage: StageModule = {
       // literally the groups the traits come from.
       detail: {
         title: region.name,
-        lines: [
-          ...region.borders,
-          'Common: ' + region.favours
-            .map((id) => context.content.species.find((species) => species.id === id)?.name)
-            .filter((name): name is string => !!name)
-            .join(', '),
-        ],
+        lines: [...region.borders],
+        // The monsters it makes common go in the tooltip: beside the border
+        // names they push the preview past the chapter bar's edge at the
+        // reference layout (choiceWidth.contract.test.ts).
+        more: [`Common: ${region.favours
+          .map((id) => context.content.species.find((species) => species.id === id)?.name)
+          .filter((name): name is string => !!name)
+          .join(', ')}`],
       },
     })),
   }),
