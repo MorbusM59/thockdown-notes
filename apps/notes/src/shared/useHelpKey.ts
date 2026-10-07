@@ -16,7 +16,9 @@ import { matchShortcut } from './keyboardShortcuts'
  *
  * Window-level and capture phase, because F1 means this everywhere: in the
  * editor, in a field, over the ring. Its keydown is always cancelled, which is
- * what keeps Chromium's own F1 behaviour out of it.
+ * what keeps Chromium's own F1 behaviour out of it, and while the reference
+ * is up every other keydown is cancelled too: the app under it is out of
+ * sight, so nothing typed may reach it.
  *
  * Losing the window ends the press: the release would never be seen, so the
  * pending hold is cancelled and a reference that is up comes down.
@@ -42,10 +44,26 @@ export function useHelpKey(onTap: () => void): boolean {
       setIsReferenceOpen(false)
     }
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!matchShortcut(event, 'userGuide')) return
+      // While the reference is up the app under it is out of sight, so no key
+      // may act on it -- the same rule that has the overlay take the clicks.
+      if (held) {
+        event.preventDefault()
+        event.stopPropagation()
+        return
+      }
+      // A press in progress owns every F1 keydown, by key alone: a modifier
+      // pressed mid-hold must not let its auto-repeats through to the app.
+      if (pressed && event.key === 'F1') {
+        event.preventDefault()
+        event.stopPropagation()
+        return
+      }
+      // A press starts only on a real keydown. An auto-repeat that matches
+      // after a modifier is let go belongs to a press that began as another
+      // chord, and starting one there would read its release as a tap.
+      if (event.repeat || !matchShortcut(event, 'userGuide')) return
       event.preventDefault()
       event.stopPropagation()
-      if (pressed) return
       pressed = true
       timer = window.setTimeout(() => {
         timer = null
@@ -56,7 +74,15 @@ export function useHelpKey(onTap: () => void): boolean {
     const onKeyUp = (event: KeyboardEvent) => {
       // By key alone: modifiers pressed or released during the hold do not
       // make it a different key's release.
-      if (event.key !== 'F1' || !pressed) return
+      if (event.key !== 'F1' || !pressed) {
+        // Several of the app's keys act on RELEASE (Escape's view toggle), so
+        // a release under the reference is swallowed like a press would be.
+        if (held) {
+          event.preventDefault()
+          event.stopPropagation()
+        }
+        return
+      }
       event.preventDefault()
       event.stopPropagation()
       const wasHold = held

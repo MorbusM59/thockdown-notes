@@ -5701,9 +5701,18 @@ ${markdownHtml}
   // brings it into the active slot -- and a hold shows the shortcut
   // reference while held (shared/useHelpKey.ts). Unlike the window control
   // this is not the adventure's toggle too: the key says "help", so it never
-  // ends a game that happens to light the same button.
+  // ends a game that happens to light the same button. Nor does it open the
+  // guide OVER the game: a slot has one overlay record, so the guide would
+  // overwrite the game's and closing it would leave the slot empty. With the
+  // game in the active slot and no guide showing, the tap does nothing; the
+  // hold still shows the reference, which touches no slot.
   const isShortcutReferenceOpen = useHelpKey(() => {
-    void (guideSectionId ? closeOverlay() : openGuideViewHere())
+    if (guideSectionId) {
+      void closeOverlay()
+      return
+    }
+    if (adventureSectionId === activeSectionId) return
+    void openGuideViewHere()
   })
 
   const handleHelpModeOpen = useCallback(async () => {

@@ -12,9 +12,11 @@
 .shortcut-reference {
   position: fixed;
   inset: 0;
-  /* Over the app, under the tooltip layer (controls.css) and the theme's
-     own overlays, which are meant to tint everything. */
-  z-index: 4000;
+  /* Over the app and its tooltip layer (5000, controls.css) -- a tooltip
+     left open when the hold lands would otherwise float over the reference
+     -- and under the theme's glaze and colorize layers (6000 and up), which
+     are meant to tint everything. */
+  z-index: 5500;
   display: flex;
   overflow: hidden;
   background: color-mix(in srgb, var(--background-color-root) 35%, transparent);
