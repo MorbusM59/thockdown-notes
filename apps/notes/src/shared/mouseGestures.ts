@@ -26,22 +26,23 @@ export interface MouseGesture {
 export const MOUSE_GESTURES: readonly MouseGesture[] = [
   { group: 'views', action: 'click', button: 'left', label: 'on the scrollbar to travel there' },
   { group: 'views', action: 'click', button: 'right', label: 'on the scrollbar to page up / down' },
+  { group: 'views', action: 'hold', button: 'left', label: 'on the scrollbar to snap there' },
   { group: 'views', action: 'click', button: 'left', label: 'on the gutter for line numbers & flags' },
   { group: 'views', action: 'click', button: 'right', label: 'on the gutter for flags only' },
 
   { group: 'notes', action: 'click', button: 'right', label: 'on a tab to edit its $id' },
-  { group: 'notes', action: 'hold', button: 'right', label: 'on a tab to unpin / close it' },
+  { group: 'notes', action: 'hold', button: 'right', label: 'on a tab, then click, to unpin / close it' },
   { group: 'notes', action: 'drag', button: 'left', label: 'a tab to reorder, a note into a tab bar to open it' },
-  { group: 'notes', action: 'hold', button: 'right', label: 'on a sidebar note to archive / delete it' },
+  { group: 'notes', action: 'hold', button: 'right', label: 'on a note in the tree to arm archive / delete' },
   { group: 'notes', action: 'click', button: 'right', label: 'on the identity tab to name the collection' },
 
   { group: 'find', action: 'click', button: 'right', label: "on the sidebar's Find icon to replace all" },
 
   { group: 'chapters', action: 'drag', button: 'left', label: 'a chapter pill to reorder it' },
   { group: 'chapters', action: 'click', button: 'right', label: 'on a chapter tab to give it an id' },
-  { group: 'chapters', action: 'hold', button: 'right', label: 'on a chapter pill to archive / delete it' },
+  { group: 'chapters', action: 'hold', button: 'right', label: 'on a chapter pill for archive / delete buttons' },
 
-  { group: 'tables', action: 'click', button: 'right', label: 'to select word, then cell, row, table' },
+  { group: 'tables', action: 'click', button: 'right', label: 'in a table to select word, cell, row, table' },
   { group: 'tables', action: 'drag', button: 'left', label: 'a selected cell to move its row / column' },
   { group: 'tables', action: 'hold', button: 'left', label: 'on the divider to delete that column' },
 
