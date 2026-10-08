@@ -74,7 +74,7 @@ const SPECIES_OVER: readonly string[] = []
  * is one line per effect, and three effects with a condition each come to
  * about the whole strip.
  */
-const MODIFIER_RESIDUAL = { alone: 0, creation: 0.01, inRun: 0.28 } as const
+const MODIFIER_RESIDUAL = { alone: 0, creation: 0.01, inRun: 0.26 } as const
 
 /**
  * WHAT AN IN-RUN OFFER STANDS BESIDE, per kind, because the two kinds are

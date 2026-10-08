@@ -749,9 +749,11 @@ These block a playable game and want answers rather than guesses.
    function. **The decision is which way to close the gap** — ten choices, or
    smaller cells, or a larger panel — and the third test in that file is what
    fails the day someone assumes it was settled.
-9. **Regions** carry a name, the omen's traits, and favoured monsters
-   drawn three times as often (a revertible director's call, recorded at the
-   foot of the design doc). Which encounter kinds a region brings, and any
+9. **Regions** carry a name, the traits and items found there (two
+   borders, each one mechanic: loot, the outpost and the omen stock from
+   them through `foundIn`), favoured monsters drawn three times as often,
+   and a hazard every monster there carries (both director's calls,
+   recorded at the foot of the design doc). Which encounter kinds a region brings, and any
    hard limit on what may appear there, is unspecified.
 10. **A second game slot.** The save is shaped for it (`games` is a list,
     `activeGameId` says which is live). Continuing now resumes the EXACT
@@ -1772,6 +1774,9 @@ placed at 5, 9 and 10 and the level advancing after ten.
 88. **REGIONS DECIDE WHAT CAN BE FOUND, AND THE OMEN IS WHERE THEY SAY SO.**
     Regions recorded a choice and did nothing with it. They now own the trait
     pool of the special event that stands before every mini boss and boss.
+    (Since "Regions steer a build" in the design doc they own the ITEM pool
+    on the same borders too, each border is one mechanic, and their
+    monsters carry a hazard; the arithmetic below holds for items as well.)
 
     **THE HEXAGON.** Six regions, thirty traits, each trait in two regions,
     ten per region: those four numbers are `30 x 2 = 60 = 6 x 10`, which is a

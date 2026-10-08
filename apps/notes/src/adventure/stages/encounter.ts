@@ -21,7 +21,7 @@
 // because there is nothing to keep in step.
 
 import type { JsonObject } from '../core/json'
-import type { Content } from '../content'
+import { regionOf, type Content } from '../content'
 import type { StageContext } from '../core/stage'
 import type { ChoiceDetail } from '../core/screen'
 import type { EncounterOffer } from '../model/encounterOffers'
@@ -132,6 +132,7 @@ export function monsterFor(
     progression: runTuning(context.game, context.save.settings).progression,
     against: context.profile.stats,
     count: offer.count,
+    hazard: regionOf(context.content, context.game.regionId)?.hazard,
   })
 }
 

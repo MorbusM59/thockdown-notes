@@ -19,7 +19,6 @@
 // already succeeded is the platform's own rule -- picking Dodge cannot fail,
 // because Dodge being there IS the success.
 
-import { regionOf } from '../content'
 import type { JsonObject } from '../core/json'
 import type { StageModule, Transition } from '../core/stage'
 import type { RngState, Roll } from '../core/rng'
@@ -60,7 +59,9 @@ import {
   counterPill, preparePill, spellPill, statusPill, stunPill,
 } from './combatLog'
 import type { Monster } from '../model/monsters'
-import { monsterFor, monsterName, offerFromJson, offerToJson } from './encounter'
+import { monsterFor, monsterName, offerFromJson, offerToJson, vectorsOf } from './encounter'
+import { regionOf } from '../content'
+import type { EncounterOffer } from '../model/encounterOffers'
 import type { MonsterMoment } from '../model/monsters'
 import type { ActionPosition } from '../model/modifiers'
 import { armMove, describeCounter, moveById, moveLine, type MoveSituation } from '../model/moves'
@@ -684,9 +685,8 @@ function stepFight(options: {
 
     if (status === 'monstersDefeated' || status === 'monsterFled') {
       const stats = context.profile?.stats
-      const regionBonus = regionOf(context.content, context.game?.regionId)?.rewardBonus ?? 0
       const reward = stats
-        ? rewardFor(stats, monster.type, regionBonus, rng)
+        ? rewardFor(stats, monster.type, rng)
         : { reward: { lootScreens: 1, motes: 1 }, rng }
       return {
         kind: 'replace',
@@ -865,6 +865,27 @@ function monsterMoment(
   }
 }
 
+/**
+ * THE MONSTER AT THIS POINT OF THE ROUND, which is the only way its
+ * first/last-action effects can be in force (a species' or a region hazard's
+ * `derivedPercentOnAction`). TWO BUILDS, because where in the round an action
+ * falls is counted from both sides' action pools and the monster's pool is
+ * the monster's: the first build answers how many actions it has, the second
+ * is the creature at that position. Its action count cannot move between the
+ * two, since a round-position effect may not touch actions
+ * (model/modifierSlots.ts's `IN_A_ROUND`). Before this, no caller passed a
+ * position at all and every such effect on a monster was dead.
+ */
+function monsterInRound(offer: EncounterOffer, context: StageContext, round: RoundState): Monster | null {
+  const moment = monsterMoment(context, round.playerHitPoints, round.monsterDamageTaken)
+  const plain = monsterFor(offer, context, moment)
+  if (!plain || !context.profile) return plain
+  // Nothing on the creature reads the position: the first build already is it.
+  const layers = [vectorsOf(offer, context.content).species?.effects ?? [], regionOf(context.content, context.game?.regionId)?.hazard.effects ?? []]
+  if (!layers.some((effects) => effects.some((effect) => effect.kind === 'derivedPercentOnAction'))) return plain
+  return monsterFor(offer, context, { ...moment, actionPosition: roundActionPosition(round, context.profile.derived, plain) })
+}
+
 export const combatStage: StageModule = {
   id: COMBAT_STAGE_ID,
   title: 'Combat',
@@ -935,7 +956,7 @@ export const combatStage: StageModule = {
     const offer = offerFromJson(state.offer)
     const round = roundFromJson(state.round)
     const monster = offer
-      ? monsterFor(offer, context, monsterMoment(context, round.playerHitPoints, round.monsterDamageTaken))
+      ? monsterInRound(offer, context, round)
       : null
 
     // No monster, or nobody to roll an action for: the fight cannot proceed
@@ -1062,7 +1083,7 @@ export const combatStage: StageModule = {
     const offer = offerFromJson(state.offer)
     const round = roundFromJson(state.round)
     const monster = offer
-      ? monsterFor(offer, context, monsterMoment(context, round.playerHitPoints, round.monsterDamageTaken))
+      ? monsterInRound(offer, context, round)
       : null
 
     if (monster && choiceId === SETTLE_CHOICE) {

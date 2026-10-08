@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { THOCKQUEST } from '../content'
 import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from '../core/director'
-import { activeGame, applyEffects, emptySave, type GameSave } from '../model/gameState'
+import { activeGame, applyEffects, emptySave, profileOf, type GameSave } from '../model/gameState'
 import { ROOT_STAGE_ID, STAGES } from '../stages'
 import { parseNarration } from '../../escapeMenu/narrationMarkup'
 import { CHARM_ICON } from '../model/charm'
@@ -76,7 +76,13 @@ describe('charm, as the bar tells it', () => {
   })
 
   it('says nothing at all for a character with no tongue for it', () => {
-    const screen = currentScreen(inAFight(4242, 0), DEPS)!
+    // NO TONGUE AT ALL, resolved: an item dealt at creation can carry
+    // Charisma, so the first seed whose character holds none is the one
+    // asked about, rather than one seed that happens to.
+    const save = [4242, 31337, 7, 99, 1234, 555].map((seed) => inAFight(seed, 0))
+      .find((candidate) => profileOf(candidate, activeGame(candidate)!, DEPS.content).stats.charisma === 0)!
+    expect(save).toBeDefined()
+    const screen = currentScreen(save, DEPS)!
     expect(screen.narration.some((entry) => glyphs(entry).includes(CHARM_ICON))).toBe(false)
   })
 

@@ -17,6 +17,7 @@
 // the platform's own rule: choices are PRE-RESOLVED, so a cell in the ring is
 // a thing that will happen rather than one that might be refused.
 
+import { foundIn, regionOf } from '../content'
 import { nextSample } from '../core/rng'
 import type { JsonObject } from '../core/json'
 import type { StageContext, StageModule } from '../core/stage'
@@ -25,9 +26,10 @@ import { MARKET_OFFER_COUNT, MARKET_PRICE, purse, tableOf } from './market'
 import { ENCOUNTER_SELECT_STAGE_ID, MARKET_STAGE_ID, OUTPOST_STAGE_ID } from './ids'
 
 
-/** What a face could possibly sell: whatever is not already held. */
+/** What a face could possibly sell: whatever this region carries that is not already held. */
 function poolFor(context: StageContext, kind: ModifierKind): readonly Modifier[] {
-  const pool = kind === 'item' ? context.items : context.traits
+  const region = regionOf(context.content, context.game?.regionId)
+  const pool = foundIn(region, kind === 'item' ? context.items : context.traits, kind)
   return pool.filter((modifier) => !context.held.some((row) => row.id === modifier.id))
 }
 

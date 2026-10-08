@@ -1352,3 +1352,62 @@ dealt without seeing the dice.
   edge. Nothing measured keeps a careful run winning while the lookahead
   player sits in the band: the careful player's late-game death comes from
   levels the lookahead player needs to find hard.
+
+### Regions steer a build (2026-10-08)
+Taken under the author's brief: regions are equally hard, but each one's
+pools push a run toward different mechanics, so where you go shapes what you
+can build around.
+
+- **Every border is a mechanic, not a mood.** The six borders of the ring
+  each carry a SIGNATURE: one fight-shape tactic, one or two of the
+  conditional or scaling rules, and the stats and odds that feed them. Every
+  item and trait template is authored to its border's signature, so the
+  border name tells a player what the ten things found there are for.
+
+  | border | between | tactic | rules | stats | odds |
+  |---|---|---|---|---|---|
+  | Stone and cold | caves, foothills | Thorns | armour, ward, repair | Might | Health |
+  | The long march | foothills, ruins | Mark | finisher, studied | Perception, Intellect | Hit, Crit, Encounters |
+  | Scavengers | ruins, fen | Poison | collector | Intellect, Luck | Offers, Damage |
+  | Desperation | fen, wastes | Combo | desperate | Might, Agility | Damage, Actions |
+  | Fortune | wastes, island | Setup | hale | Luck, Charisma | Crit, Offers |
+  | In the dark | island, caves | Counter | opener | Agility, Perception | Dodge, Actions |
+
+- **Items are regional now, like traits: five per border, so every item is
+  found in exactly two regions.** Loot and the outpost's trader and Oracle
+  stock only from the region the level is played in. Character creation
+  still deals from everything, since no region has been chosen yet. A kept
+  item or trait still travels, so a run can carry one region's engine into
+  the next: that is the build-around.
+- **A region is two neighbouring signatures**, which gives six engines:
+  caves (Counter and Thorns: punish whatever attacks you), foothills (Thorns
+  and Mark: armour and precision), ruins (Mark and Poison: patient
+  attrition), fen (Poison and Combo: festering frenzy), wastes (Combo and
+  Setup: all in), island (Setup and Counter: the duelist). Opposite regions
+  share nothing.
+- **Each region's monsters share a HAZARD**, a modifier every monster met
+  there carries on top of its species, named in the region's preview:
+  caves Ambush (their first action of a round hits harder), foothills Hardy
+  (more Health), ruins Vigilant (more to Hit), fen Fever (Poison), wastes
+  Searing (more Damage), island Elusive (more to Dodge). The hazard is the
+  region's challenge and the dial that keeps regions equally hard: its size
+  is tuned by the per-region harness report, not by hand.
+- **The reward bonus is deleted**, superseding "A harder region pays more"
+  above. It paid for the wastes being harder; with
+  every region tuned to the same difficulty there is nothing to pay for.
+- **Measured with `npm run adventure:balance -- --by-region`**, which plays
+  every seed once per region, forced, and reports survival (should be about
+  equal) and the mechanics held at the end (should differ).
+- **Measured after tuning** (`--by-region`, Difficulty 1.01, 12 levels):
+  the careful player reaches 54-56 encounters on average in every region
+  (200 runs each); the lookahead player 108-113 in every region (12 runs
+  each, so survival rates of 42-92% are within noise of each other). What
+  each region's builds end up carrying differs as designed: caves armour
+  and Counter, foothills armour and Mark, ruins collector and Poison, fen
+  collector and Combo, wastes Combo and desperate, island Counter and the
+  opener. The lookahead player survives about three runs in four overall,
+  above the 55-70% target: focused pools let a build come together, and
+  the difficulty curve is the place to answer that, not the regions.
+- **Monster first/last-action effects fire now.** No caller passed a
+  monster its place in the round, so every `derivedPercentOnAction` on a
+  species was dead; `stages/combat.ts`'s `monsterInRound` resolves it.

@@ -230,9 +230,11 @@ describe('what the content says about itself', () => {
     expect(validateContent(THOCKQUEST)).toEqual([])
   })
 
-  it('rejects a region with a negative reward bonus', () => {
-    const regions = THOCKQUEST.regions.map((region, index) => (index === 0 ? { ...region, rewardBonus: -0.1 } : region))
-    expect(validateContent({ ...THOCKQUEST, regions }).some((problem) => problem.includes('reward bonus'))).toBe(true)
+  it('rejects a region whose hazard hands out stat points', () => {
+    const regions = THOCKQUEST.regions.map((region, index) => (index === 0
+      ? { ...region, hazard: { name: 'Mighty', effects: [{ kind: 'statDelta' as const, stat: 'might' as const, amount: 2 }] } }
+      : region))
+    expect(validateContent({ ...THOCKQUEST, regions }).some((problem) => problem.includes('hazard carries statDelta'))).toBe(true)
   })
 
   it('describes a build in the same words the stat table uses', () => {

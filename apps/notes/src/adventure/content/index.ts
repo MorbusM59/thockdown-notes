@@ -16,7 +16,7 @@
 // the tab bar, to the player, rather than as a plausible number nobody
 // chose. See docs/adventure-platform.md.
 
-import type { Modifier } from '../model/modifiers'
+import type { Modifier, ModifierEffect } from '../model/modifiers'
 import { ENCOUNTER_POOL_IDS, type Build, type CombatClass, type Species } from '../model/vectors'
 import { STAT_KEYS } from '../model/stats'
 import { rollModifier, validateTemplate, type ModifierTemplate } from '../model/modifierSlots'
@@ -37,12 +37,10 @@ export { ENCOUNTER_POOL_IDS, type EncounterPoolId } from '../model/vectors'
 export type { Build, CombatClass, CombatMove, MonsterType, Species } from '../model/vectors'
 
 /**
- * Where a level is played. A region is meant to determine which encounters
- * and which monsters are in scope for that level; those pools are NOT
- * specified yet, so a region is currently a name and nothing more. The
- * fields for the pools are not written until there is something to put in
- * them -- an empty array is a promise, and this document does not make ones
- * it cannot keep.
+ * Where a level is played, and what that steers: the traits and items found
+ * there (two borders' worth, each border one mechanic), which monsters are
+ * common, and the hazard they all carry. Equally hard by design; different by
+ * what it lets a build become.
  */
 export interface Region {
   id: string
@@ -77,12 +75,25 @@ export interface Region {
    */
   favours: readonly string[]
   /**
-   * Added to the starting chance of every reward check won here, loot and
-   * motes alike (model/rewards.ts's `rewardFor`), in the same units as a
-   * monster rank's bonus: 0.5 is what an elite adds. What makes a region
-   * whose favourites hit harder worth entering rather than a trap.
+   * WHICH ITEMS ARE FOUND HERE -- the ten loot and the outpost's trader may
+   * offer. Authored on the same borders as the traits, five per border, so
+   * every item is found in exactly two regions and a region's two border
+   * names say what both kinds of thing found there are for.
    */
-  rewardBonus: number
+  items: readonly string[]
+  /**
+   * WHAT EVERY MONSTER HERE CARRIES on top of its species (model/monsters.ts's
+   * `regionHazardModifier`): the region's own challenge, and the dial that
+   * keeps the regions equally hard. The modifier vocabulary, under the same
+   * prohibitions as a species -- no stat points, no decaying armour.
+   */
+  hazard: RegionHazard
+}
+
+export interface RegionHazard {
+  /** The word the region's preview and a monster's tooltip use for it. */
+  name: string
+  effects: readonly ModifierEffect[]
 }
 
 export interface Content {
@@ -160,11 +171,24 @@ export function rolledPool(content: Content, runSeed: RngState, kind: 'item' | '
 /**
  * The region a run is in, or undefined before one is chosen (or when its id
  * names a region the content no longer has). The one lookup every stage
- * uses, so the missing case is answered once: no region favours nothing and
- * adds nothing to rewards.
+ * uses, so the missing case is answered once: no region favours nothing,
+ * stocks everything and adds no hazard.
  */
 export function regionOf(content: Pick<Content, 'regions'>, regionId: string | null | undefined): Region | undefined {
   return content.regions.find((region) => region.id === regionId)
+}
+
+/**
+ * WHAT CAN BE FOUND IN A REGION, of one kind: the part of the run's rolled
+ * pool its two borders carry (`Region.items` / `Region.traits`). The one
+ * filter every screen that stocks from the region uses -- loot, the trader,
+ * the Oracle -- so the rule is stated once. With no region (before one is
+ * chosen) the whole pool, which is what character creation deals from.
+ */
+export function foundIn(region: Region | undefined, pool: readonly Modifier[], kind: 'item' | 'trait'): readonly Modifier[] {
+  if (!region) return pool
+  const here = new Set(kind === 'item' ? region.items : region.traits)
+  return pool.filter((modifier) => here.has(modifier.id))
 }
 
 export function validateContent(content: Content): string[] {
@@ -302,7 +326,17 @@ export function validateContent(content: Content): string[] {
 
   for (const region of content.regions) {
     check(region.id, `region "${region.name}"`)
-    if (!(region.rewardBonus >= 0)) problems.push(`region "${region.id}" has a negative or missing reward bonus`)
+    for (const effect of region.hazard.effects) {
+      if (effect.kind === 'statDelta' || effect.kind === 'armorSlot') {
+        problems.push(`region "${region.id}"'s hazard carries ${effect.kind}: stats are the build's, and a monster has no decaying pool`)
+      }
+    }
+    for (const itemId of region.items) {
+      if (!content.items.some((template) => template.id === itemId)) problems.push(`region "${region.id}" stocks "${itemId}", which is not an item`)
+    }
+    for (const traitId of region.traits) {
+      if (!content.traits.some((template) => template.id === traitId)) problems.push(`region "${region.id}" breeds "${traitId}", which is not a trait`)
+    }
     for (const speciesId of region.favours) {
       const species = content.species.find((candidate) => candidate.id === speciesId)
       if (!species || species.playable) problems.push(`region "${region.id}" favours "${speciesId}", which is not a monster species`)

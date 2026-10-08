@@ -8,8 +8,7 @@
 // so it is one function taking a declared chance (model/chance.ts).
 //
 // The monster's TYPE raises the starting chance, and raises it PAST CERTAINTY
-// on purpose. The REGION adds its `rewardBonus` on top, in the same units
-// (content/index.ts); the table below is for a region that adds nothing. At a stat of zero, the run of chances per type is:
+// on purpose. At a stat of zero, the run of chances per type is:
 //
 //   regular   50%
 //   elite    100%,  50%
@@ -113,20 +112,12 @@ export interface EncounterReward {
   motes: number
 }
 
-/**
- * `regionBonus` is the region's `rewardBonus` (content/index.ts), added to
- * the starting chance exactly as the monster's type is: a dangerous place
- * pays the way a dangerous rank does. Required rather than defaulted, so a
- * caller has to say what it pays; with no region (`regionOf` answers
- * undefined) that is 0.
- */
 export function rewardFor(
   stats: StatBlock,
   type: MonsterType,
-  regionBonus: number,
   rng: RngState,
 ): { reward: EncounterReward; rng: RngState } {
-  const bonus = MONSTER_TYPE_REWARD_BONUS[type] + regionBonus
+  const bonus = MONSTER_TYPE_REWARD_BONUS[type]
   const loot = countRepeatedAwards(EXTRA_LOOT_CHANCE, stats, bonus, rng)
   const motes = countRepeatedAwards(EXTRA_MOTE_CHANCE, stats, bonus, loot.rng)
   return {

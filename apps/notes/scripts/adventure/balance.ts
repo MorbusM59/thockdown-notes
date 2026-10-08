@@ -17,7 +17,11 @@
 //        the lookahead costs ~1000x a step), --samples (futures per clever
 //        candidate, default 4), --progression (default the minimum),
 //        --success-adjust, --levels (cap, default 12), --policies=a,b,
-//        --seed, --workers (default: CPU count), --out, --json.
+//        --seed, --workers (default: CPU count), --out, --json,
+//        --by-region (every run is played once per region, that region
+//        chosen at every level, and the report adds a per-region table:
+//        how often each kind of player survives there, and which
+//        mechanics the builds it produced were carrying).
 //
 // Every run is seeded by its index, so policy A's run 7 and policy B's run 7
 // begin from the same game: rows differ by the player, not by the deal.
@@ -27,6 +31,7 @@ import { availableParallelism } from 'node:os'
 import { writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { PROGRESSION_MIN } from '../../src/adventure/model/difficulty'
+import { THOCKQUEST } from '../../src/adventure/content'
 import { POLICIES, clever, playRun, type Policy, type PolicyName, type RunResult, type VectorPin } from './runner'
 
 interface Args {
@@ -44,13 +49,14 @@ interface Args {
   shard: [number, number] | null
   /** `--pin=class:juggler`: every run is that vector, overriding what creation picked. */
   pin: VectorPin | null
+  byRegion: boolean
 }
 
 function parseArgs(argv: string[]): Args {
   const args: Args = {
     runs: 200, cleverRuns: 40, samples: 4, progression: PROGRESSION_MIN, successAdjust: 0, levels: 12,
     policies: ['first', 'random', 'careful', 'clever'], seed: 1, workers: availableParallelism(),
-    out: 'balance-report.md', json: false, shard: null, pin: null,
+    out: 'balance-report.md', json: false, shard: null, pin: null, byRegion: false,
   }
   for (const raw of argv) {
     const [key, value = ''] = raw.replace(/^--/, '').split('=')
@@ -65,6 +71,7 @@ function parseArgs(argv: string[]): Args {
     else if (key === 'workers') args.workers = Math.max(1, Number(value))
     else if (key === 'out') args.out = value
     else if (key === 'json') args.json = true
+    else if (key === 'by-region') args.byRegion = true
     else if (key === 'pin') {
       const [vector, id] = value.split(':')
       args.pin = { vector: vector as VectorPin['vector'], id, name: id }
@@ -79,13 +86,21 @@ function parseArgs(argv: string[]): Args {
   return args
 }
 
-/** Every (policy, run) pair, in a fixed order, so a shard is a stable slice of it. */
-function jobsOf(args: Args): { policy: PolicyName; index: number }[] {
+/**
+ * Every (policy, run[, region]) job, in a fixed order, so a shard is a stable
+ * slice of it. With `--by-region` each run index is played once per region on
+ * the SAME seed, so two regions' rows differ by the region and not the deal.
+ */
+function jobsOf(args: Args): { policy: PolicyName; index: number; region: string | null }[] {
+  const regions = args.byRegion ? THOCKQUEST.regions.map((region) => region.id) : [null]
   return args.policies.flatMap((policy) => {
     const count = policy === 'clever' ? args.cleverRuns : args.runs
-    return Array.from({ length: count }, (_, index) => ({ policy, index }))
+    return regions.flatMap((region) => Array.from({ length: count }, (_, index) => ({ policy, index, region })))
   })
 }
+
+/** Runs are grouped by policy, or by policy AND forced region (`careful@fen`). */
+const groupOf = (policy: string, region: string | null) => (region ? `${policy}@${region}` : policy)
 
 const policyOf = (args: Args, name: PolicyName): Policy => (
   name === 'clever' ? clever({ samples: args.samples }) : POLICIES[name]
@@ -114,8 +129,11 @@ function runShard(args: Args, shard: [number, number]): ShardOutput {
       levelCap: args.levels,
       recordDecisions: true,
       vectors: args.pin ? [args.pin] : undefined,
+      // A preference wins every screen it matches, so the region is chosen
+      // at every level's road (`region:<id>`) whatever the policy would do.
+      prefer: job.region ? [job.region] : undefined,
     })
-    const tally = (output.tallies[job.policy] ??= {})
+    const tally = (output.tallies[groupOf(job.policy, job.region)] ??= {})
     for (const decision of result.decisions) {
       for (const offered of decision.offered) {
         const key = tallyKey(decision.stageId, offered)
@@ -125,7 +143,7 @@ function runShard(args: Args, shard: [number, number]): ShardOutput {
       }
     }
     const { decisions: _decisions, ...rest } = result
-    ;(output.runs[job.policy] ??= []).push(rest)
+    ;(output.runs[groupOf(job.policy, job.region)] ??= []).push(rest)
   })
   return output
 }
@@ -183,7 +201,45 @@ type Run = Omit<RunResult, 'decisions'>
 /** Encounter milestones the survival curve is read at. */
 const PROGRESS_MARKS = [1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 80, 110]
 
+/**
+ * THE REGIONS, side by side: one row per (policy, region). Survival should be
+ * about EQUAL across a policy's rows -- a region is a direction, not a
+ * difficulty -- and the mechanic mix should DIFFER, because which mechanics a
+ * region's pools carry is the whole of what choosing it means. The mix is the
+ * share of each mechanic among the mechanic-bearing effects held entering the last level reached
+ * (runner.ts's `mechanicOf`), its top five.
+ */
+function regionReport(args: Args, data: ShardOutput): string[] {
+  const lines: string[] = ['## By region (forced at every level)', '']
+  const rows: (string | number)[][] = []
+  for (const policy of args.policies) {
+    for (const region of THOCKQUEST.regions) {
+      const runs = data.runs[groupOf(policy, region.id)]
+      if (!runs) continue
+      const progress = runs.map((run) => run.progress)
+      const totals: Record<string, number> = {}
+      for (const run of runs) for (const [mechanic, count] of Object.entries(run.mechanics)) totals[mechanic] = (totals[mechanic] ?? 0) + count
+      const sum = Object.values(totals).reduce((total, count) => total + count, 0)
+      const mix = Object.entries(totals).sort((a, b) => b[1] - a[1]).slice(0, 5)
+        .map(([mechanic, count]) => `${mechanic} ${pct(count / Math.max(1, sum))}`).join(', ')
+      rows.push([
+        policy, region.id, runs.length, pct(mean(runs.map((run) => (run.died ? 0 : 1)))), fixed(mean(progress)),
+        `${quantile(progress, 0.1)} / ${quantile(progress, 0.5)} / ${quantile(progress, 0.9)}`, mix || '-',
+      ])
+    }
+  }
+  lines.push(table(['policy', 'region', 'runs', 'survived', 'mean progress', 'progress p10/med/p90', 'mechanics held entering the last level'], rows))
+  lines.push('')
+  return lines
+}
+
 function report(args: Args, data: ShardOutput): string {
+  if (args.byRegion) {
+    return ['# ThockQuest balance report, by region', '',
+      `Progression x${args.progression.toFixed(2)}, level cap ${args.levels}, ${args.runs} runs per policy and region`
+      + ` (clever: ${args.cleverRuns}). Regenerate with \`npm run adventure:balance -- --by-region\`.`, '',
+      ...regionReport(args, data)].join('\n')
+  }
   const names = args.policies.filter((name) => data.runs[name])
   const lines: string[] = []
   lines.push('# ThockQuest balance report')

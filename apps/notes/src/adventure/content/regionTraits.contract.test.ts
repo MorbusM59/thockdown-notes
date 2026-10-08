@@ -52,4 +52,21 @@ describe('the regions and the traits they breed', () => {
       expect(row).toEqual([5, 5, 0, 0, 0])
     }
   })
+
+  it('stocks items on the same ring: ten per region, every item in exactly two, neighbours sharing five', () => {
+    const itemIds = THOCKQUEST.items.map((item) => item.id)
+    const appearances = new Map<string, number>()
+    for (const region of regions) {
+      expect(new Set(region.items).size).toBe(10)
+      for (const id of region.items) appearances.set(id, (appearances.get(id) ?? 0) + 1)
+    }
+    expect([...appearances.keys()].sort()).toEqual([...itemIds].sort())
+    for (const [id, count] of appearances) expect(`${id}:${count}`).toBe(`${id}:2`)
+    for (const region of regions) {
+      const row = regions.filter((other) => other.id !== region.id)
+        .map((other) => region.items.filter((id) => other.items.includes(id)).length)
+        .sort((left, right) => right - left)
+      expect(row).toEqual([5, 5, 0, 0, 0])
+    }
+  })
 })

@@ -12,13 +12,13 @@
 // this, every simulated run shared one game seed -- one rolled catalogue,
 // one set of items -- and differed only in what the director dealt after.
 
-import { THOCKQUEST } from '../../src/adventure/content'
+import { THOCKQUEST, catalogFor } from '../../src/adventure/content'
 import { choose, currentScreen, enterEntryScreen, enterInterlude, type DirectorDeps } from '../../src/adventure/core/director'
 import type { Screen } from '../../src/adventure/core/screen'
 import { nextFloat, toRngState, type RngState } from '../../src/adventure/core/rng'
 import { activeGame, applyEffects, emptySave, profileOf, type GameRecord, type GameSave } from '../../src/adventure/model/gameState'
 import { famePointsAvailable } from '../../src/adventure/model/gold'
-import type { ModifierKind } from '../../src/adventure/model/modifiers'
+import type { ModifierEffect, ModifierKind } from '../../src/adventure/model/modifiers'
 import { statPointsAvailable } from '../../src/adventure/model/motes'
 import { ROOT_STAGE_ID, STAGES } from '../../src/adventure/stages'
 import { FAME_STAGE_ID, STAT_POINT_STAGE_ID } from '../../src/adventure/stages/ids'
@@ -138,7 +138,11 @@ const first: Policy = ({ screen }) => firstReal(screen)
  * A uniformly random press. A way BACK is taken too -- a person does -- and
  * the gauges' re-entry guard in `step` is what keeps that from looping.
  */
-const random: Policy = ({ screen, random: draw }) => {
+const random: Policy = ({ screen, prefer, random: draw }) => {
+  // A preference binds even the random player: it is how a harness forces a
+  // region (balance.ts's --by-region), not a taste.
+  const wanted = preferred(screen, prefer)
+  if (wanted) return wanted
   const real = realChoices(screen)
   return real[Math.floor(draw() * real.length)].id
 }
@@ -386,6 +390,16 @@ export interface RunResult {
   traitsHeld: number
   /** The build, species and class the run played. */
   vectors: { build: string; species: string; class: string } | null
+  /**
+   * WHAT THE RUN WAS BUILT AROUND: how many effects of each mechanic its
+   * held items and traits carried entering the last level it reached
+   * (`mechanicOf`). The
+   * per-region report reads this to show what a region steers a build
+   * towards, which is the half of a region a win rate cannot see.
+   */
+  mechanics: Record<string, number>
+  /** The region of each level played, in order. */
+  regions: string[]
   levels: LevelSnapshot[]
   decisions: Decision[]
 }
@@ -428,6 +442,7 @@ export function playRun(options: RunOptions): RunResult {
   const result: RunResult = {
     died: false, level: 1, progress: 0, diedIn: null, fights: 0, actions: 0, choices: 0,
     damageTaken: 0, gold: 0, motes: 0, itemsHeld: 0, traitsHeld: 0, vectors: null, levels: [], decisions: [],
+    mechanics: {}, regions: [],
   }
   let lastStage = ''
   let pinned = false
@@ -464,6 +479,7 @@ export function playRun(options: RunOptions): RunResult {
         break
       }
       if (game.level > levelCap) break
+      if (game.regionId && result.regions.length < game.level) result.regions.push(game.regionId)
       if (!creating && result.levels.at(-1)?.level !== game.level) {
         result.levels.push({
           level: game.level,
@@ -475,6 +491,7 @@ export function playRun(options: RunOptions): RunResult {
           items: save.holdings.filter((row) => row.gameId === game!.id && row.kind === 'item').length,
           traits: save.holdings.filter((row) => row.gameId === game!.id && row.kind === 'trait').length,
         })
+        result.mechanics = mechanicsHeld(save, game)
       }
     }
 
@@ -511,4 +528,35 @@ export function playRun(options: RunOptions): RunResult {
     result.traitsHeld = save.holdings.filter((row) => row.gameId === game.id && row.kind === 'trait').length
   }
   return result
+}
+
+/** The kit's mechanics now. Read at each level's start: a run's holdings are gone once it is over. */
+function mechanicsHeld(save: GameSave, game: GameRecord): Record<string, number> {
+  const tally: Record<string, number> = {}
+  const catalog = catalogFor(DEPS.content, game.seed)
+  for (const row of save.holdings.filter((candidate) => candidate.gameId === game.id)) {
+    for (const effect of catalog.get(row.modifierId)?.effects ?? []) {
+      const mechanic = mechanicOf(effect)
+      if (mechanic) tally[mechanic] = (tally[mechanic] ?? 0) + 1
+    }
+  }
+  return tally
+}
+
+/**
+ * The MECHANIC an effect belongs to, by the verbose slot that rolls it
+ * (model/modifierSlots.ts's `VerboseId`) -- the six tactics, the four
+ * conditionals, the two per-holding scalers -- plus armor in all its forms.
+ * Plain stat points and plain percentages are null: every build carries
+ * them, so counting them would bury the difference the report is for.
+ */
+export function mechanicOf(effect: ModifierEffect): string | null {
+  switch (effect.kind) {
+    case 'tactic': return effect.tactic
+    case 'derivedPercentWhileHealth': return effect.band === 'healthy' ? 'hale' : 'desperate'
+    case 'derivedPercentOnAction': return effect.position === 'first' ? 'opener' : 'finisher'
+    case 'derivedPercentPerHolding': return effect.holding === 'item' ? 'collector' : 'studied'
+    case 'armorSlot': case 'naturalArmor': case 'armorRepairAfterCombat': return 'armor'
+    default: return null
+  }
 }

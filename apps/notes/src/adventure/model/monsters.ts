@@ -21,6 +21,7 @@ import { NO_ARMOR, type Armor } from './armor'
 import { powerMultiplier } from './difficulty'
 import { resolveProfile, type ActionPosition, type Modifier, type Situation } from './modifiers'
 import type { Tactics } from './tactics'
+import type { RegionHazard } from '../content'
 
 import { buildModifier, type Build, type CombatClass, type MonsterType, type Species } from './vectors'
 import { resolveChanceWith, type ChanceAdjustment } from './chance'
@@ -155,6 +156,17 @@ export function speciesModifier(species: Species | null): Modifier | null {
 }
 
 /**
+ * THE REGION'S HAZARD, as one more layer: what every monster met in a region
+ * carries on top of its species (content/index.ts's `Region.hazard`). A layer
+ * rather than a rule in the fight, so it resolves, stacks and describes
+ * exactly like the species beside it.
+ */
+export function regionHazardModifier(hazard: RegionHazard | null | undefined): Modifier | null {
+  if (!hazard) return null
+  return { id: `hazard:${hazard.name}`, kind: 'trait', name: hazard.name, icon: 'fa-solid fa-triangle-exclamation', effects: hazard.effects }
+}
+
+/**
  * WHAT IS TRUE OF THE INSTANT a monster is being asked about.
  *
  * `Situation`'s own fields, except that the fight tracks a monster's wear as
@@ -223,12 +235,14 @@ export function buildMonster(options: {
    * with identical damage and hit points.
    */
   moment?: MonsterMoment
+  /** The region's hazard, where the fight is in one (`regionHazardModifier`). */
+  hazard?: RegionHazard | null
 }): Monster {
   // BOTH VECTORS AS MODIFIERS, resolved in the one pass: the build's tier
   // points (which must sit above the base-stat clamp -- see `buildModifier`)
   // and the species' effects. A monster has no base stats of its own at all;
   // everything it is arrives through this list.
-  const layers = [buildModifier(options.build, options.tier), speciesModifier(options.species)]
+  const layers = [buildModifier(options.build, options.tier), speciesModifier(options.species), regionHazardModifier(options.hazard)]
     .filter((layer): layer is Modifier => layer !== null)
   const profile = resolveProfile(createStatBlock(0), layers, { items: 0, traits: 0 }, situationFor(options.moment, layers))
   // The three CONTESTED chances, resolved against the player with this
