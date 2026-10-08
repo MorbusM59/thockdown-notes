@@ -717,9 +717,10 @@ function stepFight(options: {
       //
       // PAID IN ONE PASS AND NEVER RE-ENTERED. It is applied here and the
       // branch falls THROUGH to the turnover below rather than `continue`-ing
-      // like the spell ticks do -- a poison pool is not spent by paying out,
-      // so a second pass over this branch would bite again for the same
-      // round, and again, for as long as the fight lasted. The one case that
+      // -- a poison pool is not spent by paying out, so a second pass over
+      // this branch would bite again for the same round, and again, for as
+      // long as the fight lasted. The lingering spells below follow the same
+      // rule for the same reason. The one case that
       // does go back round the loop is a bite that ENDED the fight, where
       // going back is what reports the kill instead of opening a round nobody
       // will play.
@@ -759,7 +760,12 @@ function stepFight(options: {
           carried = [...pills, ...carried]
           say(pills)
           struck = ticked.ticks[ticked.ticks.length - 1].damage
-          continue
+          // PAID ONCE, like the poison above: going back round the loop with
+          // the round still over re-entered this branch and paid every tick
+          // again, and again, until one came to nothing or the monster died.
+          // Only a tick that ENDED the fight goes back, so the loop reports
+          // the kill instead of opening a round nobody will play.
+          if (combatStatus(round, monster, derived) !== 'roundOver') continue
         }
       }
 
@@ -772,8 +778,12 @@ function stepFight(options: {
       // The action that actually closed the round is kept behind the new head
       // pill so the bar still reads what ended the previous round, not just the
       // start of the next one.
+      // A tick or a bite paid above is already the newest entry in `log` AND
+      // in `carried`, so the closing action is only added when it is not one
+      // of those -- otherwise the same pill appears twice.
       const closingAction = log[0] ?? null
-      const opened = openedRound(round, monster, context, rng, closingAction ? [closingAction, ...carried] : carried)
+      const kept = closingAction && !carried.includes(closingAction) ? [closingAction, ...carried] : carried
+      const opened = openedRound(round, monster, context, rng, kept)
       round = opened.round
       log = opened.log
       rng = opened.rng
