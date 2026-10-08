@@ -27,8 +27,10 @@ export const MOUSE_GESTURES: readonly MouseGesture[] = [
   { group: 'views', action: 'click', button: 'left', label: 'on the scrollbar to travel there' },
   { group: 'views', action: 'click', button: 'right', label: 'on the scrollbar to page up / down' },
   { group: 'views', action: 'hold', button: 'left', label: 'on the scrollbar to snap there' },
-  { group: 'views', action: 'click', button: 'left', label: 'on the gutter for line numbers & flags' },
-  { group: 'views', action: 'click', button: 'right', label: 'on the gutter for flags only' },
+  { group: 'views', action: 'click', button: 'left', label: 'on the gutter toggle for line numbers & flags' },
+  { group: 'views', action: 'click', button: 'right', label: 'on the gutter toggle for flags only' },
+  { group: 'views', action: 'click', button: 'left', label: 'on a line\'s flag box to mark it ?, again for !' },
+  { group: 'views', action: 'click', button: 'right', label: 'on a line\'s flag box to clear its mark' },
 
   { group: 'notes', action: 'click', button: 'right', label: 'on a tab to edit its $id' },
   { group: 'notes', action: 'hold', button: 'right', label: 'on a tab, then click, to unpin / close it' },
