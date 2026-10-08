@@ -82,9 +82,14 @@ describe('an encounter, end to end', () => {
       if (!screen) break
       const choice = screen.choices.find((candidate) => candidate.id !== GAME_EXIT_CHOICE)
       if (!choice) break
+      // A drop in the RECORD's hit points from one press to the next, rather
+      // than a comparison with a restated maximum: the maximum is the
+      // profile's (build, species, tier), and a formula copied here goes
+      // stale the first time any of those moves.
+      const before = activeGame(save)?.hitPoints
       save = choose(save, choice.id, DEPS, NOW).save
       const game = activeGame(save)
-      if (game && game.hitPoints < 50 + 15 * game.baseStats.might) sawDamage = true
+      if (game && before !== undefined && game.id === activeGame(save)?.id && game.hitPoints < before) sawDamage = true
     }
     expect(sawDamage).toBe(true)
   })

@@ -1225,7 +1225,7 @@ real trade-offs rather than defaults, measured with `npm run adventure:balance`'
 lookahead player (`clever`), which plays the best choice for the hand it is
 dealt without seeing the dice.
 
-- **Take the hit swings back in full** (`DEFENCE_COUNTER`, Counter 100%). As
+- *(Superseded 2026-10-08 by Trade Blows, below.)* **Take the hit swings back in full** (`DEFENCE_COUNTER`, Counter 100%). As
   written it was Defend with the miss chance and the armour removed, and a
   lookahead player took it 2% of the times it was offered. Every move authored
   onto that cell (Backdraft, Brace, Absolve) is already a counter, so the plain
@@ -1411,3 +1411,7 @@ can build around.
 - **Monster first/last-action effects fire now.** No caller passed a
   monster its place in the round, so every `derivedPercentOnAction` on a
   species was dead; `stages/combat.ts`'s `monsterInRound` resolves it.
+
+### Trade Blows replaces Take the Hit (2026-10-08, the author's rule)
+- "Take the hit as 'trade blows' which allows you a regular attack at 50% damage, modified by might delta by 20% per point of difference (so 60% at +1, 40% at -1), but you always get hit. Armor counts though." Built as `model/defences.ts`'s `defenceCounter`: `max(0, 0.5 x (1 + 0.2 x (your Might - its Might)))`, nothing at -5 or below. The blow always lands and goes through the same armour as Defend, guard included. The swing back is an ordinary attack (hit roll, crit, damage band) and adds to every other source of Counter, so a class move on this cell still adds its own.
+- The eight defensive moves added the same day were then given distinct triggers instead of one shared shape (Joe: distinct and entertaining over flat): Bruiser Shrug It Off (guard 6 and counter 0.4 while healthy), Reaver Blood Guard (once injured), Assassin Fade (counter 1.2 once injured), Shieldbreaker Shield Bash (against a healthy target), Falconer Screen (counter 1.2 on each opening blow of a round, before the player has acted in it), Juggler Deflect (half the time), Mauler Roll With It (35%, full counter), Brawler Clinch (pure counter 0.8). Screened on the new rules (12 clever runs to level 8 per class, Difficulty 1.08): every class 8-58% dead against 42% unpinned, inside the screen's noise, so nothing was tuned further.

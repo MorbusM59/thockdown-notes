@@ -104,7 +104,7 @@ function playerActionIcon(action: 'attack' | Defence, blow: Blow | null, escaped
       return landed ? { icon: DEFENDED, word: 'got through' } : { icon: DEFENDED, word: 'missed' }
     case 'dodge':
       return { icon: NOTHING, word: 'was dodged by' }
-    case 'takeTheHit':
+    case 'tradeBlows':
       return { icon: landedIcon(blow), word: 'hit' }
     case 'flee':
       if (escaped) return { icon: FLED, word: 'lost' }

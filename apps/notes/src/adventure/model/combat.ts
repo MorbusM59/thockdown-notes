@@ -32,7 +32,7 @@ import { damageShareOf, strikesOf } from './moves'
 import type { CombatMove } from './vectors'
 import { CRIT_CHANCE, DODGE_CHANCE, HIT_CHANCE, type DerivedStats, type StatBlock } from './stats'
 
-import { DEFENCE_COUNTER, type Defence } from './defences'
+import { defenceCounter, type Defence } from './defences'
 export { DEFENCES, defencesOffered, type Defence } from './defences'
 
 /**
@@ -343,7 +343,7 @@ export function rollActor(
  * Every field is what the roll or the sum ACTUALLY was, not a restatement --
  * a tooltip computed from the stats a second time is a tooltip that can
  * disagree with the fight, which is the one thing it must not do. Absent
- * where nothing was rolled: magic takes no hit roll, Take the hit takes no
+ * where nothing was rolled: magic takes no hit roll, Trade Blows takes no
  * hit roll, a blow that missed takes no crit roll.
  */
 export interface BlowMath {
@@ -408,7 +408,7 @@ interface ExchangeInput {
   /** The run's thumb on the scale (model/chance.ts). 0 leaves every roll exactly as the stats made it. */
   successAdjust?: number
   /**
-   * Dodge negates entirely; Take the hit makes the attack land by definition;
+   * Dodge negates entirely; Trade Blows makes the attack land by definition;
    * MAGIC is neither a choice nor a defence but the absence of one -- it
    * cannot be missed with and armour does not see it (model/spells.ts).
    */
@@ -439,9 +439,10 @@ interface ExchangeInput {
  * first, then the roll to hit, then the crit, then armor.
  *
  * Dodge short-circuits before the hit roll because the plan says the attack
- * does not land at all -- not that it is likelier to miss. Take the hit is
- * the mirror: the attacker's chance to miss drops to zero, and armor is not
- * consulted, which is what makes it a real choice rather than a worse Defend.
+ * does not land at all -- not that it is likelier to miss. Trade Blows is
+ * the mirror: the attacker's chance to miss drops to zero, armour still
+ * counts as it does for Defend, and what the defender gets for standing
+ * there is a swing back (model/defences.ts).
  */
 export function resolveExchange(input: ExchangeInput): { blow: Blow; armor: Armor; rng: RngState } {
   const armor = input.armor
@@ -459,10 +460,10 @@ export function resolveExchange(input: ExchangeInput): { blow: Blow; armor: Armo
 
   let rng = input.rng
   let landed = true
-  // Magic joins Take the hit here: both mean the blow arrives, so there is
+  // Magic joins Trade Blows here: both mean the blow arrives, so there is
   // nothing to roll. The dodge branch above is never reached for magic --
   // the caster does not offer the dodge in the first place.
-  if (input.defence !== 'takeTheHit' && input.defence !== 'magic') {
+  if (input.defence !== 'tradeBlows' && input.defence !== 'magic') {
     const roll = nextRoll(rng, resolveChanceWith(HIT_CHANCE, input.attackerStats, input.defenderStats, {
       adjustment: input.attackerChances?.hitChance,
       side: input.attacker,
@@ -511,7 +512,7 @@ export function resolveExchange(input: ExchangeInput): { blow: Blow; armor: Armo
   // be made to agree.
   const raw = Math.round(drawn.damage * math.critMultiplier)
 
-  // Armor is Defend's alone. Flee, Take the hit and magic all say so
+  // Armor is read by Defend and Trade Blows only. Flee and magic forgo it
   // explicitly, and Dodge never reaches here. The pool comes back UNTOUCHED
   // rather than emptied -- it is still on the defender, it simply did not
   // help. For magic that is the rule rather than a consequence: a plated
@@ -519,32 +520,10 @@ export function resolveExchange(input: ExchangeInput): { blow: Blow; armor: Armo
   // A move that IGNORES ARMOUR leaves here with the whole blow, by the same
   // route magic does: the pool comes back untouched rather than emptied,
   // because it is still on the defender and simply did not help.
-  // A GUARD WITHOUT DEFEND. A defensive move that stands in for Take the hit
-  // (a Sentinel's Brace, a Templar's Absolve) carries a guard of its own, and
-  // the branch below used to return the whole blow before reading it -- so
-  // those guards were authored, described on the cell, and did nothing.
-  // Take the hit still never consults the WORN pool; the guard is not worn,
-  // it is what the defender did this turn, so it stops what it stops and
-  // nothing wears and nothing rolls.
-  if (input.defence === 'takeTheHit' && !input.ignoreArmor && input.guard && input.guard > 0) {
-    const absorbed = Math.min(input.guard, raw)
-    return {
-      blow: {
-        hit: true,
-        crit: critRoll.value.passed,
-        dodged: false,
-        damage: raw - absorbed,
-        armorDecayed: false,
-        // Thorns answers an absorb, and the guard is the only thing standing.
-        recoil: absorbed > 0 ? thornsRecoil(input.defenderTactics ?? NO_TACTICS, { natural: input.guard, pieces: [] }) : 0,
-        math: { ...math, absorbed },
-      },
-      armor,
-      rng,
-    }
-  }
-
-  if (input.defence !== 'defend' || input.ignoreArmor) {
+  // TRADE BLOWS reads armour exactly as Defend does (the author's rule): the
+  // blow always lands, but what is worn and any guard a move adds still stop
+  // what they stop.
+  if ((input.defence !== 'defend' && input.defence !== 'tradeBlows') || input.ignoreArmor) {
     return {
       blow: { hit: true, crit: critRoll.value.passed, dodged: false, damage: raw, armorDecayed: false, recoil: 0, math },
       armor,
@@ -897,10 +876,12 @@ export function resolveMonsterAttack(options: {
   //
   // A move needs no note that its share is momentary: a move IS the single
   // action the player just chose.
-  // The CELL's own share (Take the hit's, model/defences.ts) is one more
+  // The CELL's own share (Trade Blows's, model/defences.ts) is one more
   // source, and sources of Counter add -- the author's rule, which is also
   // what keeps every move authored onto that cell an upgrade of it.
-  const counterShare = playerTactics.counter + DEFENCE_COUNTER[options.defence] + (defenceMove?.counter ?? 0)
+  const counterShare = playerTactics.counter
+    + defenceCounter(options.defence, options.playerStats.might, options.monster.stats.might)
+    + (defenceMove?.counter ?? 0)
   let counter: Blow | null = null
   if (counterShare > 0 && state.playerHitPoints > 0 && !state.playerFled) {
     let playerTally = state.tallies.player

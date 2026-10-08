@@ -127,7 +127,7 @@ const patient: Policy = (input) => pick(input.screen, 'combat:prepare') ?? caref
 
 /** Never gives ground: no dodging, no fleeing, and takes every hit. */
 const reckless: Policy = ({ screen, prefer }) =>
-  pick(screen, 'combat:attack', 'defence:takeTheHit', 'defence:defend')
+  pick(screen, 'combat:attack', 'defence:tradeBlows', 'defence:defend')
   ?? preferred(screen, prefer)
   ?? firstReal(screen)
 

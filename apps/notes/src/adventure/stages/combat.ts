@@ -65,7 +65,7 @@ import type { EncounterOffer } from '../model/encounterOffers'
 import type { MonsterMoment } from '../model/monsters'
 import type { ActionPosition } from '../model/modifiers'
 import { armMove, describeCounter, moveById, moveLine, type MoveSituation } from '../model/moves'
-import { DEFENCE_COUNTER } from '../model/defences'
+import { defenceCounter } from '../model/defences'
 import type { CombatClass } from '../model/vectors'
 import { COMBAT_STAGE_ID, ENCOUNTER_SELECT_STAGE_ID, LOOT_STAGE_ID, WELCOME_STAGE_ID } from './ids'
 
@@ -81,7 +81,7 @@ const DEFENCE_LABELS: Readonly<Record<Defence, { label: string; icon: string }>>
   dodge: { label: 'Dodge', icon: 'fa-solid fa-wind' },
   defend: { label: 'Defend', icon: 'fa-solid fa-shield' },
   flee: { label: 'Flee', icon: 'fa-solid fa-person-running' },
-  takeTheHit: { label: 'Take the hit', icon: 'fa-solid fa-user' },
+  tradeBlows: { label: 'Trade Blows', icon: 'fa-solid fa-people-arrows' },
 }
 
 /**
@@ -1028,6 +1028,9 @@ export const combatStage: StageModule = {
       }
     }
 
+    // Trade Blows' swing back depends on the Might difference, so the cell
+    // states the share this fight actually gives (model/defences.ts).
+    const traded = (defence: Defence): number => defenceCounter(defence, context.profile?.stats.might ?? 0, monster.stats.might)
     return {
       screenKey: `combat:theirs:${round.playerActionsSpent}:${round.monsterActionsSpent}`,
       // ORDER IS THE DEFAULT. The ring opens on its first cell, so the answer
@@ -1060,19 +1063,19 @@ export const combatStage: StageModule = {
             // The cell's own Counter is a SOURCE beside the move's, and the
             // two add, so both are listed (model/defences.ts).
             ? { title: move.name, lines: [
-              ...(DEFENCE_COUNTER[defence] > 0 ? [describeCounter(DEFENCE_COUNTER[defence], context.describe)] : []),
+              ...(traded(defence) > 0 ? [describeCounter(traded(defence), context.describe)] : []),
               moveLine(move, context.describe),
             ] }
             // A plain cell says what it does only where that is more than its
-            // name: Take the hit swings back (model/defences.ts), and Flee is a
+            // name: Trade Blows swings back (model/defences.ts), and Flee is a
             // gamble whose odds and price the player has to see to weigh it.
             : defence === 'flee' && context.profile
               ? { title: DEFENCE_LABELS.flee.label, lines: [
                 `${Math.round((1 - pursuitChance(monster, context.profile.stats, successAdjustOf(context))) * 100)}% to escape`,
                 'No reward',
               ] }
-            : DEFENCE_COUNTER[defence] > 0
-              ? { title: DEFENCE_LABELS[defence].label, lines: [describeCounter(DEFENCE_COUNTER[defence], context.describe)] }
+            : defence === 'tradeBlows'
+              ? { title: DEFENCE_LABELS[defence].label, lines: [describeCounter(traded(defence), context.describe)] }
               : undefined,
         })),
     }

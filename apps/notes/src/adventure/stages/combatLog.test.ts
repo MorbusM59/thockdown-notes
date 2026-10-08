@@ -339,10 +339,10 @@ describe('what the ring opens on when a blow is coming', () => {
     // outranks the generic Defend it stands in for.
     const move = { id: 'someMove' }
     const ranked = defencesOffered(true)
-      .map((defence) => ({ defence, move: defence === 'takeTheHit' ? move : null }))
+      .map((defence) => ({ defence, move: defence === 'tradeBlows' ? move : null }))
       .sort((left, right) => defenceRank(left.defence, left.move) - defenceRank(right.defence, right.move))
       .map(({ defence }) => defence)
-    expect(ranked).toEqual(['dodge', 'takeTheHit', 'defend', 'flee'])
+    expect(ranked).toEqual(['dodge', 'tradeBlows', 'defend', 'flee'])
   })
 
   it('leaves the plain order alone when the class offers nothing', () => {
@@ -350,6 +350,6 @@ describe('what the ring opens on when a blow is coming', () => {
       .map((defence) => ({ defence, move: null }))
       .sort((left, right) => defenceRank(left.defence, left.move) - defenceRank(right.defence, right.move))
       .map(({ defence }) => defence)
-    expect(ranked).toEqual(['dodge', 'defend', 'flee', 'takeTheHit'])
+    expect(ranked).toEqual(['dodge', 'defend', 'flee', 'tradeBlows'])
   })
 })

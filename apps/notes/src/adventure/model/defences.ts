@@ -5,7 +5,7 @@
 // these living in combat.ts the two would import each other. A list of four
 // strings has no dependencies at all, which makes it the natural leaf.
 
-export const DEFENCES = ['dodge', 'defend', 'flee', 'takeTheHit'] as const
+export const DEFENCES = ['dodge', 'defend', 'flee', 'tradeBlows'] as const
 
 export type Defence = (typeof DEFENCES)[number]
 
@@ -15,23 +15,20 @@ export function defencesOffered(dodgeOffered: boolean): Defence[] {
 }
 
 /**
- * WHAT EACH DEFENCE SWINGS BACK WITH, as a share of an ordinary attack --
- * the same Counter every other source adds into (model/tactics.ts).
+ * TRADE BLOWS: the attack lands for certain, armour counts as it does for
+ * Defend, and the defender swings back with an ordinary attack at half
+ * strength -- plus a fifth of that half for every point of Might they have
+ * over the attacker, minus the same for every point under (60% at +1, 40% at
+ * -1, nothing at -5 or below). The author's rule, adventure-game-design.md.
  *
- * TAKE THE HIT IS THE ONLY ONE WITH ANY, and that is what makes it a choice.
- * As written it was Defend with the miss chance and the armour removed: the
- * attack lands for certain and in full, and nothing came back for it, so a
- * player who could see the numbers never pressed it (2% of the times a
- * lookahead player was offered it). Planting your feet and answering is the
- * reading the classes already had -- every move authored onto this cell
- * (Backdraft, Brace, Absolve) is a counter -- so the plain cell now says the
- * same thing plainly. Sources of Counter add (the author's rule, adventure-game-
- * design.md), so a move on this cell swings back with this AND its own. It pays when armour is spent, the attacker rarely misses
- * anyway, and the race is closer than the damage.
+ * It is the same Counter every other source adds into (model/tactics.ts), so
+ * a class move on this cell swings back with this share AND its own.
  */
-export const DEFENCE_COUNTER: Readonly<Record<Defence, number>> = {
-  dodge: 0,
-  defend: 0,
-  flee: 0,
-  takeTheHit: 1,
+export const TRADE_BLOWS_SHARE = 0.5
+export const TRADE_BLOWS_MIGHT_STEP = 0.2
+
+/** What a defence swings back with, as a share of an ordinary attack. Only Trade Blows has any. */
+export function defenceCounter(defence: Defence, defenderMight: number, attackerMight: number): number {
+  if (defence !== 'tradeBlows') return 0
+  return Math.max(0, TRADE_BLOWS_SHARE * (1 + TRADE_BLOWS_MIGHT_STEP * (defenderMight - attackerMight)))
 }

@@ -1045,7 +1045,7 @@ special attacks; and the charisma failure chance as a type base plus
     the plan's own monster actions.
 
 43. **What is "the best outcome" for a defending enemy?** Dodge always beats
-    the rest when it is offered, and Defend beats Take the hit — but whether
+    the rest when it is offered, and Defend beats Trade Blows — but whether
     an enemy ever chooses Flee, and on what condition, is an AI policy the
     phrase does not settle. Enemies that never flee make Terrify meaningless.
 
@@ -2344,7 +2344,7 @@ placed at 5, 9 and 10 and the level advancing after ten.
      player holding Space presses through. It was `DEFENCES`' order with a
      move merely renaming whichever cell it replaced, which meant the plain
      Defend beat the thing the class was chosen FOR whenever the move landed
-     on Flee or Take the hit. The rank is now Dodge, then any cell carrying
+     on Flee or Trade Blows. The rank is now Dodge, then any cell carrying
      an armed move, then the plain answers (`stages/combat.ts`'s
      `defenceRank`; ties keep `DEFENCES`' order, a sort being stable).
      PRESENTATION ONLY — `armDefenceMoves` still rolls in `defencesOffered`'s
