@@ -124,7 +124,7 @@ export const SHORTCUTS = {
   strikethrough: { group: 'formatting', chords: [{ key: 'x', ctrl: true, shift: true }], label: 'Strikethrough' },
   heading: { group: 'formatting', chords: [{ key: 't', ctrl: true }], label: 'Cycle heading level' },
   bulletedList: { group: 'formatting', chords: [{ key: '-', ctrl: true }], label: 'Bulleted list' },
-  numberedList: { group: 'formatting', chords: [{ key: '#', ctrl: true, shift: 'any' }, { key: '3', ctrl: true, shift: true }], label: 'Numbered list' },
+  numberedList: { group: 'formatting', chords: [{ key: '#', ctrl: true, shift: 'any' }], label: 'Numbered list' },
   link: { group: 'formatting', chords: [{ key: 'l', ctrl: true }], label: 'Link' },
   anchor: { group: 'formatting', chords: [{ key: 'l', ctrl: true, shift: true }], label: 'Anchor' },
 
