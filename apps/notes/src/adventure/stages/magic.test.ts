@@ -206,7 +206,8 @@ describe('magic, as the ring offers it', () => {
       ).length
       worst = Math.max(worst, ticks)
     }
-    expect(worst).toBeLessThanOrEqual(1)
+    // Not vacuous: a tick has to have been seen at all.
+    expect(worst).toBe(1)
   })
 })
 

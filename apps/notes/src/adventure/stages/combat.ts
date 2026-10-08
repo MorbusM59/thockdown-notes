@@ -778,11 +778,12 @@ function stepFight(options: {
       // The action that actually closed the round is kept behind the new head
       // pill so the bar still reads what ended the previous round, not just the
       // start of the next one.
-      // A tick or a bite paid above is already the newest entry in `log` AND
-      // in `carried`, so the closing action is only added when it is not one
-      // of those -- otherwise the same pill appears twice.
-      const closingAction = log[0] ?? null
-      const kept = closingAction && !carried.includes(closingAction) ? [closingAction, ...carried] : carried
+      // A tick or a bite paid above is the newest entry in `log` AND already
+      // in `carried`, so the action that closed the round is the newest entry
+      // that is NOT one of those -- reading `log[0]` showed the tick twice
+      // and dropped the attack that actually ended the round.
+      const closingAction = log.find((entry) => !carried.includes(entry)) ?? null
+      const kept = closingAction ? [closingAction, ...carried] : carried
       const opened = openedRound(round, monster, context, rng, kept)
       round = opened.round
       log = opened.log
