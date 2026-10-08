@@ -38,8 +38,7 @@ export interface KeyChord {
   ctrl?: true | 'or-meta'
   /** Cmd. Display only -- see `macChords`. */
   meta?: true
-  /** `'any'` for a key that is only reachable WITH shift on some layouts (`#`). */
-  shift?: true | 'any'
+  shift?: true
   alt?: true
 }
 
@@ -123,8 +122,8 @@ export const SHORTCUTS = {
   italic: { group: 'formatting', chords: [{ key: 'i', ctrl: true }], label: 'Italic' },
   strikethrough: { group: 'formatting', chords: [{ key: 'x', ctrl: true, shift: true }], label: 'Strikethrough' },
   heading: { group: 'formatting', chords: [{ key: 't', ctrl: true }], label: 'Cycle heading level' },
-  bulletedList: { group: 'formatting', chords: [{ key: '-', ctrl: true }], label: 'Bulleted list' },
-  numberedList: { group: 'formatting', chords: [{ key: '#', ctrl: true, shift: 'any' }], label: 'Numbered list' },
+  bulletedList: { group: 'formatting', chords: [{ key: 'u', ctrl: true }], label: 'Bulleted list' },
+  numberedList: { group: 'formatting', chords: [{ key: 'o', ctrl: true }], label: 'Numbered list' },
   link: { group: 'formatting', chords: [{ key: 'l', ctrl: true }], label: 'Link' },
   anchor: { group: 'formatting', chords: [{ key: 'l', ctrl: true, shift: true }], label: 'Anchor' },
 
@@ -180,7 +179,7 @@ function chordMatches(chord: KeyChord, event: KeyEventLike): boolean {
     ? (event.ctrlKey || event.metaKey)
     : event.ctrlKey === Boolean(chord.ctrl) && !event.metaKey
   if (!ctrlOk) return false
-  if (chord.shift !== 'any' && event.shiftKey !== Boolean(chord.shift)) return false
+  if (event.shiftKey !== Boolean(chord.shift)) return false
   return event.altKey === Boolean(chord.alt)
 }
 
