@@ -417,7 +417,7 @@ from one blow at 120% rather than a rounding difference.
 
 **Ranks are tiers and packs are rolled.** runt 0, regular 3, elite 6, mini
 boss 9, boss 12 (re-based from 0/5/10/15/20 for the tier-0 start, see the
-design doc's foot), plus one per level past the first and three more from level 6
+design doc's foot), plus one per level past the first and five more for each level past the sixth
 (`MONSTER_TIER_PER_LEVEL`, `MONSTER_TIER_LATE_EXTRA`), the same for every rank. The "group" rank is gone: a runt
 always has a friend and usually two, an ordinary monster has one half the
 time, and anything elite or above travels alone
