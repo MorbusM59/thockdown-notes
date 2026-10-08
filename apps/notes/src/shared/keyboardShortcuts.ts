@@ -121,7 +121,7 @@ export const SHORTCUTS = {
 
   bold: { group: 'formatting', chords: [{ key: 'b', ctrl: true }], label: 'Bold' },
   italic: { group: 'formatting', chords: [{ key: 'i', ctrl: true }], label: 'Italic' },
-  strikethrough: { group: 'formatting', chords: [{ key: 'j', ctrl: true }], label: 'Strikethrough' },
+  strikethrough: { group: 'formatting', chords: [{ key: 'x', ctrl: true, shift: true }], label: 'Strikethrough' },
   heading: { group: 'formatting', chords: [{ key: 't', ctrl: true }], label: 'Cycle heading level' },
   bulletedList: { group: 'formatting', chords: [{ key: '-', ctrl: true }], label: 'Bulleted list' },
   numberedList: { group: 'formatting', chords: [{ key: '#', ctrl: true, shift: 'any' }, { key: '3', ctrl: true, shift: true }], label: 'Numbered list' },
