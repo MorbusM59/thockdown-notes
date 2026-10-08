@@ -1335,3 +1335,6 @@ dealt without seeing the dice.
   evidence on both sides: the careful player dies in 88-91% of runs anywhere,
   and 24 lookahead runs per region is a small sample. The tooltip states the
   bonus.
+
+### Every class has a defensive move (2026-10-08)
+- At Difficulty 1.08 the eight classes whose moves all replaced Attack died 38% of the time against 13% for the fourteen with a move on Defend, Dodge or Take the Hit; tuning their attacks moved nothing. Each now has one defensive move in its own style: Bruiser Shrug It Off and Mauler Roll With It (Take the Hit), Brawler Clinch, Reaver Blood Guard and Shieldbreaker Shield Bash (Defend), Assassin Fade, Juggler Deflect and Falconer Screen (Dodge). Sized like Endure and Brace (guard 2–3, counter 0.3–0.5). After: 15% against 22%, within noise (12 clever runs to level 8 per class).

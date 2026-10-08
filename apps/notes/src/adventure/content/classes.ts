@@ -440,7 +440,7 @@ export const COMBAT_CLASSES: readonly CombatClass[] = [
         replaces: 'takeTheHit',
         when: { kind: 'always' },
         guard: 2,
-        counter: 0.5,
+        counter: 0.4,
         flavour: 'Down, and back up angrier.',
       },
     ],
@@ -566,7 +566,7 @@ export const COMBAT_CLASSES: readonly CombatClass[] = [
       {
         id: 'shieldbreaker:bash',
         name: 'Shield Bash',
-        icon: 'fa-solid fa-shield',
+        icon: 'fa-solid fa-circle-dot',
         replaces: 'defend',
         when: { kind: 'always' },
         guard: 2,
