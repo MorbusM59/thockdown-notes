@@ -4,8 +4,10 @@ import {
   displayChords,
   pressPrefix,
   shortcutsInGroup,
+  type ChordDisplay,
   type ShortcutDeclaration,
 } from '../shared/keyboardShortcuts'
+import { mouseGesturesInGroup, type MouseGesture } from '../shared/mouseGestures'
 import { BASE_FONT_PX, GAP_EM, PADDING_EM, arrangeSections, type Arrangement } from './shortcutReferenceLayout'
 
 // The keyboard shortcut reference: every declaration in
@@ -27,33 +29,70 @@ import { BASE_FONT_PX, GAP_EM, PADDING_EM, arrangeSections, type Arrangement } f
 // short as it can be -- and the count whose arrangement can be drawn largest
 // wins (shortcutReferenceLayout.ts). A wide window gets several columns, a
 // tall narrow one gets them stacked, and both get the largest text that fits.
-// What room is left over is then shared out by flex growth -- columns widen
-// and panels lengthen to fill the window edge to edge -- which can only add
-// space, so it cannot undo the fit.
+// Panels are as tall as their rows and sit at the top of their column; what
+// room the fit leaves over stays below them rather than inside them.
+//
+// EVERY PANEL'S KEY COLUMN IS ONE WIDTH, the widest key cell anywhere, so the
+// descriptions line up across the window. A row holds one combination
+// (at most two modifiers and a key, by how the declarations are written);
+// a declaration's other combinations go on rows of their own beneath it,
+// marked as alternatives, rather than widening every panel to fit a chain.
+// The width is measured in the hidden copy, where each key cell keeps its
+// own size (`justify-self: end`), and set in em on the overlay, so both
+// copies agree and it scales with the text like everything else.
 //
 // The hidden copy is watched by a ResizeObserver along with the window, so a
 // change of UI font (or the font finishing loading) re-measures by the same
 // path as a resize; nothing has to know which happened.
 
 const GROUPS = SHORTCUT_GROUPS
-  .map((group) => ({ ...group, entries: shortcutsInGroup(group.id) }))
-  .filter((group) => group.entries.length > 0)
+  .map((group) => ({ ...group, entries: shortcutsInGroup(group.id), gestures: mouseGesturesInGroup(group.id) }))
+  .filter((group) => group.entries.length + group.gestures.length > 0)
 
-function Keys({ declaration }: { declaration: ShortcutDeclaration }) {
+const MOUSE_VERB: Record<MouseGesture['action'], string> = { click: 'Click', hold: 'Hold', drag: 'Drag', wheel: 'Roll' }
+const MOUSE_BUTTON: Record<NonNullable<MouseGesture['button']>, string> = { left: 'Left', right: 'Right' }
+
+/** One combination: `Hold`, the modifiers, and its keys as alternatives (`← / →`). */
+function Combination({ prefix, chord }: { prefix: string | null; chord: ChordDisplay }) {
   const parts: ReactNode[] = []
-  const prefix = pressPrefix(declaration)
   if (prefix) parts.push(<span key="press" className="shortcut-ref-word">{prefix}</span>)
-  displayChords(declaration).forEach(({ modifiers, keys }, groupIndex) => {
-    if (groupIndex > 0) parts.push(<span key={`or-${groupIndex}`} className="shortcut-ref-word">or</span>)
-    modifiers.forEach((modifier) => {
-      parts.push(<kbd key={`${groupIndex}-${modifier}`}>{modifier}</kbd>)
-    })
-    keys.forEach((name, keyIndex) => {
-      if (keyIndex > 0) parts.push(<span key={`${groupIndex}-sep-${keyIndex}`} className="shortcut-ref-word">/</span>)
-      parts.push(<kbd key={`${groupIndex}-key-${keyIndex}`}>{name}</kbd>)
-    })
+  chord.modifiers.forEach((modifier) => parts.push(<kbd key={`mod-${modifier}`}>{modifier}</kbd>))
+  chord.keys.forEach((name, index) => {
+    if (index > 0) parts.push(<span key={`sep-${index}`} className="shortcut-ref-word">/</span>)
+    parts.push(<kbd key={`key-${index}`}>{name}</kbd>)
   })
   return <span className="shortcut-ref-keys">{parts}</span>
+}
+
+function ShortcutRows({ declaration }: { declaration: ShortcutDeclaration }) {
+  const prefix = pressPrefix(declaration)
+  return (
+    <>
+      {displayChords(declaration).map((chord, index) => (
+        <div key={index} className="shortcut-ref-row">
+          <Combination prefix={prefix} chord={chord} />
+          {index === 0
+            ? <span className="shortcut-ref-label">{declaration.label}</span>
+            : <span className="shortcut-ref-label shortcut-ref-alternative">alternative shortcut</span>}
+        </div>
+      ))}
+    </>
+  )
+}
+
+function GestureRow({ gesture }: { gesture: MouseGesture }) {
+  return (
+    <div className="shortcut-ref-row">
+      <span className="shortcut-ref-keys">
+        <span className="shortcut-ref-word">{MOUSE_VERB[gesture.action]}</span>
+        <kbd className="shortcut-ref-mouse">
+          <i className="fa-solid fa-computer-mouse" aria-hidden="true" />
+          {gesture.button ? MOUSE_BUTTON[gesture.button] : 'Wheel'}
+        </kbd>
+      </span>
+      <span className="shortcut-ref-label">{gesture.label}</span>
+    </div>
+  )
 }
 
 function Header() {
@@ -76,12 +115,9 @@ function Section({ index }: { index: number }) {
         {group.title}
       </h3>
       <div className="shortcut-ref-rows">
-        {group.entries.map((entry) => (
-          <div key={entry.label} className="shortcut-ref-row">
-            <Keys declaration={entry} />
-            <span className="shortcut-ref-label">{entry.label}</span>
-          </div>
-        ))}
+        {group.entries.map((entry) => <ShortcutRows key={entry.label} declaration={entry} />)}
+        {group.gestures.length > 0 && group.entries.length > 0 ? <div className="shortcut-ref-divider" /> : null}
+        {group.gestures.map((gesture) => <GestureRow key={`${gesture.action}-${gesture.label}`} gesture={gesture} />)}
       </div>
     </section>
   )
@@ -97,6 +133,12 @@ export function ShortcutReference() {
     const measure = measureRef.current
     if (!host || !measure) return
     const solve = () => {
+      // The key column first: every key cell keeps its own width in the
+      // hidden copy, so the widest is read before the panels are measured
+      // at the width it gives them.
+      const widest = Math.max(...Array.from(measure.querySelectorAll('.shortcut-ref-keys'), (keys) =>
+        keys.getBoundingClientRect().width))
+      host.style.setProperty('--shortcut-ref-keys-width', `${widest / BASE_FONT_PX}em`)
       const [header, ...sections] = Array.from(measure.children, (child) => {
         const rect = child.getBoundingClientRect()
         return { width: rect.width, height: rect.height }

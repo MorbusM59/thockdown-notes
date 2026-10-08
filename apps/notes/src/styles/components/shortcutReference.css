@@ -71,13 +71,17 @@
 .shortcut-reference .shortcut-ref-columns {
   flex: 1 1 auto;
   display: flex;
+  justify-content: center;
+  align-items: flex-start;
   gap: var(--shortcut-ref-gap);
 }
 
+/* Panels as tall as their rows, at the top: the room left over stays below. */
 .shortcut-reference .shortcut-ref-column {
-  flex: 1 0 auto;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: var(--shortcut-ref-gap);
 }
 
@@ -85,7 +89,7 @@
    same background, outline and radius, the pressed-in shadow the ring's
    focused cell wears. */
 .shortcut-reference .shortcut-ref-section {
-  flex: 1 0 auto;
+  flex: 0 0 auto;
   padding: 0.8em 1.1em 0.9em;
   white-space: nowrap;
   line-height: 1.5;
@@ -123,7 +127,8 @@
 
 .shortcut-reference .shortcut-ref-rows {
   display: grid;
-  grid-template-columns: max-content 1fr;
+  /* One width in every panel, measured by the component. */
+  grid-template-columns: var(--shortcut-ref-keys-width, max-content) 1fr;
   column-gap: 1em;
   row-gap: 0.3em;
 }
@@ -136,7 +141,28 @@
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
+  justify-self: end;
   gap: 0.25em;
+}
+
+.shortcut-reference .shortcut-ref-alternative {
+  font-size: 0.8em;
+  font-style: italic;
+  color: var(--color-text-50);
+  align-self: center;
+}
+
+/* Between a panel's keys and its mouse gestures. */
+.shortcut-reference .shortcut-ref-divider {
+  grid-column: 1 / -1;
+  height: 0.08em;
+  margin: 0.25em 0;
+  background: var(--color-text-20);
+}
+
+.shortcut-reference .shortcut-ref-mouse i {
+  margin-right: 0.35em;
+  font-size: 0.85em;
 }
 
 .shortcut-reference .shortcut-ref-word {

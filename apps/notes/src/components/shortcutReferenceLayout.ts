@@ -7,8 +7,6 @@ export const BASE_FONT_PX = 16
 export const GAP_EM = 1.25
 /** The panel's own inner margin, in em. */
 export const PADDING_EM = 1.5
-/** A large window does not get poster-sized text. */
-const MAX_FONT_PX = 24
 /** What sub-pixel rounding can add back when the layout is drawn at the solved size. */
 const ROUNDING_HEADROOM = 0.98
 
@@ -81,7 +79,7 @@ export function arrangeSections(
       column.reduce((sum, index) => sum + sizes[index].height, 0) + gap * (column.length - 1)))
       + header.height + gap + padding
     const scale = Math.max(0, Math.min(availableWidth / width, availableHeight / height))
-    const fontPx = Math.min(MAX_FONT_PX, BASE_FONT_PX * scale * ROUNDING_HEADROOM)
+    const fontPx = BASE_FONT_PX * scale * ROUNDING_HEADROOM
     if (fontPx > bestArrangement.fontPx) bestArrangement = { columns, fontPx }
   }
   return bestArrangement
