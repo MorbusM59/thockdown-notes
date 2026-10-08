@@ -58,6 +58,12 @@ export type ShortcutGroupId =
 
 export interface ShortcutDeclaration {
   group: ShortcutGroupId
+  /**
+   * Every chord does the same thing: the quick reference shows any beyond the
+   * first combination as an "alternative shortcut". Two directions of one
+   * motion (Tab, Shift+Tab) are two declarations; alternative KEYS of one
+   * combination (`Alt+← / →`) share a row.
+   */
   chords: readonly KeyChord[]
   /** What it does, short enough for the quick reference's one line. */
   label: string
@@ -138,22 +144,19 @@ export const SHORTCUTS = {
   chapterForward: { group: 'chapters', chords: [{ key: 'Delete', shift: true, alt: true }], label: 'Cut rest to new chapter / pull next in' },
   chapterBackward: { group: 'chapters', chords: [{ key: 'Backspace', shift: true, alt: true }], label: 'Cut start to new chapter / pull previous in' },
 
-  tableCell: { group: 'tables', chords: [{ key: 'Tab' }, { key: 'Tab', shift: true }], label: 'Next / previous cell', matchedBy: 'codemirror' },
+  // One direction per declaration: a declaration's further chords are
+  // ALTERNATIVES for the same action, and Shift+Tab is not another Tab.
+  tableNextCell: { group: 'tables', chords: [{ key: 'Tab' }], label: 'Next cell', matchedBy: 'codemirror' },
+  tablePreviousCell: { group: 'tables', chords: [{ key: 'Tab', shift: true }], label: 'Previous cell', matchedBy: 'codemirror' },
   tableEmptyCell: { group: 'tables', chords: [{ key: 'Backspace', shift: true }], label: 'Empty the cell' },
   tableDeleteColumn: { group: 'tables', chords: [{ key: 'Backspace', ctrl: true, shift: true }], label: 'Delete the column' },
-  tableMove: {
-    group: 'tables',
-    chords: withMods([...ARROWS_LR, ...ARROWS_UD], { ctrl: true, shift: true }),
-    label: 'Move column / row',
-  },
+  tableMoveColumn: { group: 'tables', chords: withMods(ARROWS_LR, { ctrl: true, shift: true }), label: 'Move the column' },
+  tableMoveRow: { group: 'tables', chords: withMods(ARROWS_UD, { ctrl: true, shift: true }), label: 'Move the row' },
   tableLineBreak: { group: 'tables', chords: [{ key: 'Enter', shift: true }], label: 'Line break inside a row', matchedBy: 'codemirror' },
 
-  ringTurn: {
-    group: 'menu',
-    chords: [...ARROWS_LR, { key: 'Tab' }, { key: 'Tab', shift: true }],
-    label: 'Turn the dial (or W A S D, or the wheel)',
-    matchedBy: 'ring',
-  },
+  ringTurn: { group: 'menu', chords: ARROWS_LR, label: 'Turn the dial (or W A S D)', matchedBy: 'ring' },
+  ringNext: { group: 'menu', chords: [{ key: 'Tab' }], label: 'Next choice', matchedBy: 'ring' },
+  ringPrevious: { group: 'menu', chords: [{ key: 'Tab', shift: true }], label: 'Previous choice', matchedBy: 'ring' },
   ringTake: { group: 'menu', chords: [{ key: 'Enter' }, { code: 'Space' }], label: 'Take the highlighted choice', matchedBy: 'ring' },
   ringClose: { group: 'menu', chords: [{ key: 'Escape' }], label: 'Close the menu', matchedBy: 'escape-hold' },
 } as const satisfies Record<string, ShortcutDeclaration>
