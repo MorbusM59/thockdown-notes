@@ -172,7 +172,7 @@ before the page has run since the process started, the session STORES the
 published list and the last choice (`saveLibrary`/`loadLibrary`). Before
 anything has been published (a fresh install), it reads the factory
 soundscapes from `factory-soundscapes.json`, written into the assets at build
-time by `scripts/writeFactoryLibrary.ts` from the same `sessionEntries` the
+time by `apps/soundscapes/scripts/writeFactoryLibrary.ts` from the same `sessionEntries` the
 page publishes with. Bound with
 no session, the service stays out of the foreground and reports STOPPED; a
 session starting while bound still starts the service, so it outlives the
