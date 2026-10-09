@@ -4,17 +4,21 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
-import android.app.Service;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
+import android.media.MediaDescription;
 import android.media.MediaMetadata;
+import android.media.browse.MediaBrowser;
 import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Handler;
-import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.service.media.MediaBrowserService;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Foreground service of type mediaPlayback, running whenever a soundscape
@@ -39,8 +43,23 @@ import android.os.PowerManager;
  * The partial wake lock is held while playing only. Whether it is needed at
  * all (an active audio output may already keep the CPU awake) is still to
  * be settled on a device; if playback survives without it, delete it.
+ *
+ * It is also the app's MediaBrowserService, which is how Android Auto (and
+ * any other media browser) reaches it: a browser BINDS it, with or without a
+ * session, sees the session's soundscapes as one browsable list
+ * (SoundscapeSession.entries, stored, so it is there before the app has
+ * run), and plays one by id. Bound without a session it is NOT in the
+ * foreground and shows no notification; the media session then reports
+ * STOPPED. The foreground follows the session, not the binding: a session
+ * that starts while bound still STARTS the service (startForegroundService,
+ * through SoundscapeSession.refreshService), so it outlives the browser
+ * unbinding, and a session that ends leaves the foreground while a browser
+ * may keep the service alive (sessionEnded).
  */
-public class SoundscapePlaybackService extends Service {
+public class SoundscapePlaybackService extends MediaBrowserService {
+    private static final String ROOT_ID = "root";
+    private static final String SOUNDSCAPES_ID = "soundscapes";
+
     private static final String ACTION_PLAY = "com.thockdown.soundscapes.PLAY";
     private static final String ACTION_PAUSE = "com.thockdown.soundscapes.PAUSE";
     private static final String ACTION_NEXT = "com.thockdown.soundscapes.NEXT";
@@ -56,13 +75,35 @@ public class SoundscapePlaybackService extends Service {
     private SoundscapeSession soundscape;
     private MediaSession session;
     private PowerManager.WakeLock wakeLock;
+    /**
+     * Whether the service was STARTED for the session (onStartCommand with
+     * one active), rather than only bound by a browser. Only a started
+     * service may be redrawn into the foreground: a merely bound one has to
+     * be started first, or it would end with the browser's binding.
+     * Volatile: the session sets it from its own thread when it ends.
+     */
+    private volatile boolean started;
 
-    /** Redraw the running service from the session; false when it is not running. */
+    /** Redraw the started service from the session; false when it is not started. */
     static boolean refreshIfRunning() {
         SoundscapePlaybackService service = running;
-        if (service == null) return false;
+        if (service == null || !service.started) return false;
         MAIN.post(service::refresh);
         return true;
+    }
+
+    /** The session ended: the service is no longer started (stopService), and leaves the foreground if a browser keeps it alive. */
+    static void sessionEnded() {
+        SoundscapePlaybackService service = running;
+        if (service == null) return;
+        service.started = false;
+        MAIN.post(service::refresh);
+    }
+
+    /** The published soundscapes changed: browsers re-read the list. */
+    static void libraryChanged() {
+        SoundscapePlaybackService service = running;
+        if (service != null) MAIN.post(() -> service.notifyChildrenChanged(SOUNDSCAPES_ID));
     }
 
     @Override
@@ -77,8 +118,40 @@ public class SoundscapePlaybackService extends Service {
             @Override public void onSkipToNext() { soundscape.controlSkip(1); }
             @Override public void onSkipToPrevious() { soundscape.controlSkip(-1); }
             @Override public void onStop() { soundscape.controlStop(); }
+            @Override public void onPlayFromMediaId(String mediaId, Bundle extras) { soundscape.controlPlayFrom(mediaId); }
         });
         session.setActive(true);
+        setSessionToken(session.getSessionToken());
+        refresh();
+    }
+
+    // --- Browsing (Android Auto) ---
+
+    @Override
+    public BrowserRoot onGetRoot(String clientPackageName, int clientUid, Bundle rootHints) {
+        // Every browser may see the list: it names soundscapes, nothing more.
+        return new BrowserRoot(ROOT_ID, null);
+    }
+
+    @Override
+    public void onLoadChildren(String parentId, Result<List<MediaBrowser.MediaItem>> result) {
+        List<MediaBrowser.MediaItem> items = new ArrayList<>();
+        if (ROOT_ID.equals(parentId)) {
+            // One browsable node rather than playable items at the root: Android
+            // Auto shows a root's browsable children as its tabs.
+            items.add(new MediaBrowser.MediaItem(new MediaDescription.Builder()
+                .setMediaId(SOUNDSCAPES_ID)
+                .setTitle("Soundscapes")
+                .build(), MediaBrowser.MediaItem.FLAG_BROWSABLE));
+        } else if (SOUNDSCAPES_ID.equals(parentId)) {
+            for (SoundscapeSession.Entry entry : soundscape.entries()) {
+                items.add(new MediaBrowser.MediaItem(new MediaDescription.Builder()
+                    .setMediaId(entry.id)
+                    .setTitle(entry.name)
+                    .build(), MediaBrowser.MediaItem.FLAG_PLAYABLE));
+            }
+        }
+        result.sendResult(items);
     }
 
     @Override
@@ -93,6 +166,7 @@ public class SoundscapePlaybackService extends Service {
             return START_NOT_STICKY;
         }
         if (!soundscape.isActive()) {
+            started = false;
             // Started for a session that has already ended (it was stopped
             // between startForegroundService and this call). Android 8+
             // still requires startForeground from a service started that
@@ -108,6 +182,7 @@ public class SoundscapePlaybackService extends Service {
             stopSelf();
             return START_NOT_STICKY;
         }
+        started = true;
         refresh();
         // Not sticky: if the system kills the process, the session is gone
         // with it, and a restarted service would announce a soundscape that
@@ -116,7 +191,20 @@ public class SoundscapePlaybackService extends Service {
     }
 
     private void refresh() {
-        if (running != this || !soundscape.isActive()) return;
+        if (running != this) return;
+        if (!started || !soundscape.isActive()) {
+            // Bound by a browser with no session: nothing plays, and the
+            // controls a browser offers are choosing a soundscape and play.
+            session.setMetadata(null);
+            session.setPlaybackState(new PlaybackState.Builder()
+                .setActions(PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PLAY_PAUSE | PlaybackState.ACTION_PLAY_FROM_MEDIA_ID
+                    | PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS)
+                .setState(PlaybackState.STATE_STOPPED, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 0f)
+                .build());
+            stopForeground(STOP_FOREGROUND_REMOVE);
+            holdWakeLock(false);
+            return;
+        }
         boolean playing = soundscape.isAudible();
         String title = soundscape.title();
         String status = statusText(playing);
@@ -126,7 +214,8 @@ public class SoundscapePlaybackService extends Service {
             .build());
         session.setPlaybackState(new PlaybackState.Builder()
             .setActions(PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE | PlaybackState.ACTION_PLAY_PAUSE
-                | PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS | PlaybackState.ACTION_STOP)
+                | PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS | PlaybackState.ACTION_STOP
+                | PlaybackState.ACTION_PLAY_FROM_MEDIA_ID)
             .setState(playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED,
                 PlaybackState.PLAYBACK_POSITION_UNKNOWN, playing ? 1f : 0f)
             .build());
@@ -226,10 +315,5 @@ public class SoundscapePlaybackService extends Service {
         session.release();
         holdWakeLock(false);
         super.onDestroy();
-    }
-
-    @Override
-    public IBinder onBind(Intent intent) {
-        return null;
     }
 }

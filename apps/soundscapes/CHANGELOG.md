@@ -6,6 +6,12 @@ workflow (.github/workflows/release-android.yml) refuses to build a version
 that has no entry here, and tags the commit it built as
 `soundscapes-v<version>`.
 
+## 1.0.3
+
+Android Auto: the soundscapes appear in the car as a list to play from, and
+play, pause, next and previous work from the car's controls, even when the
+app has not been opened since the phone started.
+
 ## 1.0.2
 
 Fixes from an audit of the Android side:
