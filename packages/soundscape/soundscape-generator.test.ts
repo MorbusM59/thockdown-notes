@@ -1347,22 +1347,47 @@ describe('chimes: unison, material and scale', () => {
     expect(windows.indexOf(Math.max(...windows))).toBeGreaterThanOrEqual(4);
   });
 
-  it('offers over fifty distinct scales, the domestic major pentatonic first', () => {
-    expect(CHIME_SCALES.length).toBeGreaterThanOrEqual(50);
+  it('offers distinct scales, the domestic major pentatonic first, each by a permanent id', () => {
     expect(CHIME_SCALES[0].name).toBe('Major pentatonic');
+    expect(CHIME_SCALES[0].id).toBe(0);
+    expect(new Set(CHIME_SCALES.map((scale) => scale.id)).size).toBe(CHIME_SCALES.length);
     const signatures = new Set(CHIME_SCALES.map((scale) => `${scale.cents.map((value) => value.toFixed(2)).join(',')}/${scale.period}`));
     expect(signatures.size).toBe(CHIME_SCALES.length);
-    for (let index = 0; index < CHIME_SCALES.length; index += 1) {
+    for (const scale of CHIME_SCALES) {
       // Every scale's tubes climb, strictly, however many there are.
-      const climb = chimeScaleCents(index, 8);
+      const climb = chimeScaleCents(scale.id, 8);
       expect(climb[0]).toBe(0);
-      for (let tube = 1; tube < climb.length; tube += 1) expect(climb[tube], CHIME_SCALES[index].name).toBeGreaterThan(climb[tube - 1]);
+      for (let tube = 1; tube < climb.length; tube += 1) expect(climb[tube], scale.name).toBeGreaterThan(climb[tube - 1]);
     }
     expect(chimeTubeFrequencies(400, 7, 0).map((hz) => Math.round(12 * Math.log2(hz / 400)))).toEqual([0, 2, 4, 7, 9, 12, 14]);
     // Bohlen-Pierce repeats at the tritave (3:1), not the octave.
-    const bohlenPierce = CHIME_SCALES.findIndex((scale) => scale.name.startsWith('Bohlen'));
-    expect(chimeTubeFrequencies(100, 8, bohlenPierce).length).toBe(8);
-    expect(CHIME_SCALES[bohlenPierce].period).toBeCloseTo(1200 * Math.log2(3), 2);
+    const bohlenPierce = CHIME_SCALES.find((scale) => scale.name.startsWith('Bohlen'))!;
+    expect(chimeTubeFrequencies(100, 8, bohlenPierce.id).length).toBe(8);
+    expect(bohlenPierce.period).toBeCloseTo(1200 * Math.log2(3), 2);
+  });
+
+  // A retired scale is read as a mode of one still offered, and must play
+  // exactly the tubes it played when it was offered: these are the old
+  // definitions, by id, in semitones.
+  it('plays a soundscape saved on a retired scale exactly as before', () => {
+    const retired: Record<number, number[]> = {
+      1: [0, 3, 5, 7, 10], 2: [0, 2, 5, 7, 10], 3: [0, 2, 5, 7, 9], 4: [0, 3, 5, 8, 10],
+      6: [0, 1, 5, 7, 8], 7: [0, 1, 5, 6, 10], 9: [0, 1, 5, 7, 10], 28: [0, 1, 4, 6, 9, 11],
+      31: [0, 2, 3, 5, 7, 9, 10], 32: [0, 1, 3, 5, 7, 8, 10], 33: [0, 2, 4, 6, 7, 9, 11], 34: [0, 2, 4, 5, 7, 9, 10],
+      35: [0, 2, 3, 5, 7, 8, 10], 36: [0, 1, 3, 5, 6, 8, 10], 39: [0, 1, 4, 5, 7, 8, 10], 40: [0, 2, 4, 6, 7, 9, 10],
+      41: [0, 1, 3, 4, 6, 8, 10], 42: [0, 2, 3, 6, 7, 8, 11],
+      // Whole tone and quartal kept their ids as equal-step scales.
+      22: [0, 2, 4, 6, 8, 10], 64: [0, 5],
+    };
+    for (const [id, semitones] of Object.entries(retired)) {
+      const tubes = 8;
+      const expected = Array.from({ length: tubes }, (_, index) => (
+        (semitones[index % semitones.length] + (12 * Math.floor(index / semitones.length))) * 100
+      ));
+      const step = Number(id) === 64 ? 500 : null;
+      const want = step === null ? expected : Array.from({ length: tubes }, (_, index) => index * step);
+      expect(chimeScaleCents(Number(id), tubes).map((value) => Math.round(value)), id).toEqual(want);
+    }
   });
 });
 

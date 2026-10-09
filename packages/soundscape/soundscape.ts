@@ -21,7 +21,7 @@
  * that every surface named here has a profile there.
  */
 
-import { CHIME_SCALE_COUNT } from './soundscapeChimeScales';
+import { CHIME_SCALE_MAX_ID } from './soundscapeChimeScales';
 import { clamp } from '@thockdown/interaction/clamp';
 
 /**
@@ -303,7 +303,7 @@ export interface SoundscapeChimesChannelSettings extends SoundscapeChannelBaseSe
    * bright, shorter tinkle) and veil (an ethereal shimmer that swells in).
    */
   material: number;
-  /** Which scale the tubes are tuned to, an index into CHIME_SCALES (0 the major pentatonic). */
+  /** Which scale the tubes are tuned to: a ChimeScale's permanent id (0 the major pentatonic). */
   scale: number;
   pan: number;
   /**
@@ -831,7 +831,7 @@ export const SOUNDSCAPE_FIELD_BOUNDS: { [K in SoundscapeChannelKind]: FieldBound
     ...COMMON_BOUNDS, pitchHz: [SOUNDSCAPE_CHIME_PITCH_MIN_HZ, SOUNDSCAPE_CHIME_PITCH_MAX_HZ],
     tubes: [SOUNDSCAPE_CHIME_TUBES_MIN, SOUNDSCAPE_CHIME_TUBES_MAX, 'integer'],
     ringSec: [SOUNDSCAPE_CHIME_RING_MIN_SEC, SOUNDSCAPE_CHIME_RING_MAX_SEC], activity: UNIT, hardness: UNIT, unison: UNIT, material: UNIT,
-    scale: [0, CHIME_SCALE_COUNT - 1, 'integer'], pan: SIGNED, width: UNIT, weather: UNIT,
+    scale: [0, CHIME_SCALE_MAX_ID, 'integer'], pan: SIGNED, width: UNIT, weather: UNIT,
   },
 };
 

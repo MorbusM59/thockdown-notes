@@ -13,6 +13,13 @@ play, pause, next and previous work from the car's controls, even when the
 app has not been opened since the phone started, or at all since it was
 installed.
 
+Chime scales: one interval stacked is a scale of its own, from semitones
+through minor and major thirds, fourths and tritones to fifths. Scales that
+were the same notes from another starting point (the church modes, and the
+rotations of the pentatonics) are now one scale each, since chimes struck at
+random have no home note; a soundscape saved on one still plays exactly as
+it did.
+
 ## 1.0.2
 
 Fixes from an audit of the Android side:
