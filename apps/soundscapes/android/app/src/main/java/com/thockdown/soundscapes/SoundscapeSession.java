@@ -2,10 +2,13 @@ package com.thockdown.soundscapes;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import androidx.core.content.ContextCompat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 /**
  * The soundscape that is heard, for the whole process: one per process,
@@ -55,6 +58,15 @@ import java.util.List;
  * it instead (state()) -- and echoing the page's own changes back would race
  * its next one. The page also asks for the state when it comes back to the
  * foreground.
+ *
+ * THE LIST IS STORED (LIBRARY_PREFERENCES), with the soundscape the page was
+ * last on, because a client other than the page may ask for it before the
+ * page has run since the process started: Android Auto browses the list and
+ * plays from it through the service (SoundscapePlaybackService, a
+ * MediaBrowserService) with the app never opened. Choosing from that list
+ * (controlPlayFrom), play with nothing heard (controlPlay) and next/previous
+ * therefore all OPEN a session when there is none, playing the soundscape
+ * chosen, the one last heard, or the first.
  */
 final class SoundscapeSession {
     enum Regular { STOPPED, PLAYING, PAUSED }
@@ -112,6 +124,8 @@ final class SoundscapeSession {
     private static final double HANDOVER_FADE_SEC = 10;
     /** A fade back from an ending that was interrupted. */
     private static final double RESTORE_FADE_SEC = 0.5;
+    private static final String LIBRARY_PREFERENCES = "soundscape-library";
+    private static final String LIBRARY_KEY = "library";
     private static SoundscapeSession instance;
 
     private final Context context;
@@ -139,10 +153,9 @@ final class SoundscapeSession {
     /** The soundscape regular mode plays or is paused on. */
     private String regularId = null;
     /**
-     * The name of what regular mode plays, as the page published it. The
-     * entries are only what next and previous step through (the user's own
-     * soundscapes once there are any), so a factory soundscape played while
-     * custom ones exist is not among them and its name has to come from here.
+     * The name of what regular mode plays, as the page published it: the
+     * page may be playing unsaved settings, which are no entry, so its name
+     * has to come from here.
      */
     private String regularName = null;
     private float masterVolume;
@@ -169,6 +182,7 @@ final class SoundscapeSession {
         SoundscapeSchedule schedule = SoundscapeSchedule.load(this.context);
         masterVolume = schedule.masterVolume;
         scheduled = scheduledNow(schedule);
+        loadLibrary();
     }
 
     static synchronized SoundscapeSession get(Context context) {
@@ -216,6 +230,11 @@ final class SoundscapeSession {
         return name != null && !name.isEmpty() ? "Soundscape: " + name : "Soundscape";
     }
 
+    /** The soundscapes next and previous step through: what Android Auto browses. */
+    synchronized List<Entry> entries() {
+        return entries;
+    }
+
     // --- From the web page ---
 
     /** The soundscapes next and previous step through, the one the page is on, and the listener's volume. */
@@ -226,6 +245,8 @@ final class SoundscapeSession {
             regularName = currentName;
         }
         masterVolume = volume;
+        saveLibrary();
+        SoundscapePlaybackService.libraryChanged();
         // What the schedule plays is not reached by the page's engine, which
         // is closed then: its volume is followed here.
         if (source() == Source.SCHEDULE) output.setVolume(masterVolume, VOLUME_TIME_CONSTANT_SEC);
@@ -281,7 +302,14 @@ final class SoundscapeSession {
     // --- From the media controls and the system ---
 
     synchronized void controlPlay() {
-        if (output == null || regular != Regular.PAUSED) return;
+        if (output == null) {
+            // Nothing is heard and there is no session: play what was heard last, or the first soundscape.
+            Entry entry = find(regularId);
+            if (entry == null && !entries.isEmpty()) entry = entries.get(0);
+            if (entry != null) choose(entry);
+            return;
+        }
+        if (regular != Regular.PAUSED) return;
         setRegular(Regular.PLAYING);
         fadeIn(SWITCH_FADE_SEC);
         // The page may have faded the output to silence before it paused it.
@@ -306,25 +334,39 @@ final class SoundscapeSession {
 
     /** Step `direction` (+1 or -1) through the published soundscapes, wrapping: choosing one plays it. */
     synchronized void controlSkip(int direction) {
-        if (output == null || entries.isEmpty()) return;
+        if (entries.isEmpty()) return;
         int index = indexOf(currentId());
         int next = index < 0
             ? (direction > 0 ? 0 : entries.size() - 1)
             : Math.floorMod(index + direction, entries.size());
-        Entry entry = entries.get(next);
+        choose(entries.get(next));
+    }
+
+    /** A soundscape chosen by id (Android Auto's list): play it. */
+    synchronized void controlPlayFrom(String id) {
+        Entry entry = find(id);
+        if (entry != null) choose(entry);
+    }
+
+    /** Regular mode PLAYING `entry`, opening a session if there is none. */
+    private void choose(Entry entry) {
         cancelPendingEnd();
         regularId = entry.id;
         regularName = entry.name;
         setRegular(Regular.PLAYING);
-        // From a pause nothing is heard to crossfade from: the new soundscape
-        // replaces what was queued and fades in alone.
-        if (output.isPaused()) {
+        if (output == null) {
+            open(entry);
+            output.fadeFrom(0f, 1f, SWITCH_FADE_SEC);
+        } else if (output.isPaused()) {
+            // From a pause nothing is heard to crossfade from: the new
+            // soundscape replaces what was queued and fades in alone.
             renderer.configure(entry.configuration);
             fadeIn(SWITCH_FADE_SEC);
         } else {
             renderer.transition(entry.configuration, SWITCH_FADE_SEC);
         }
         output.setVolume(masterVolume, VOLUME_TIME_CONSTANT_SEC);
+        saveLibrary();
         refreshService();
         report();
     }
@@ -485,6 +527,48 @@ final class SoundscapeSession {
             output = null;
         }
         context.stopService(new Intent(context, SoundscapePlaybackService.class));
+        // Android Auto may keep the service bound past the stop: it leaves the foreground instead.
+        SoundscapePlaybackService.sessionEnded();
+    }
+
+    /** Store the list and the soundscape last chosen, for a client that asks before the page has run. */
+    private void saveLibrary() {
+        try {
+            JSONArray array = new JSONArray();
+            for (Entry entry : entries) {
+                array.put(new JSONObject().put("id", entry.id).put("name", entry.name).put("configuration", entry.configuration));
+            }
+            JSONObject json = new JSONObject().put("entries", array).put("masterVolume", (double) masterVolume);
+            if (regularId != null) json.put("currentId", regularId);
+            if (regularName != null) json.put("currentName", regularName);
+            preferences().edit().putString(LIBRARY_KEY, json.toString()).apply();
+        } catch (Exception ignored) {
+            // JSONObject.put throws only for a non-finite number, which a volume is not.
+        }
+    }
+
+    private void loadLibrary() {
+        String stored = preferences().getString(LIBRARY_KEY, null);
+        if (stored == null) return;
+        try {
+            JSONObject json = new JSONObject(stored);
+            JSONArray array = json.getJSONArray("entries");
+            List<Entry> loaded = new ArrayList<>();
+            for (int index = 0; index < array.length(); index += 1) {
+                JSONObject entry = array.getJSONObject(index);
+                loaded.add(new Entry(entry.getString("id"), entry.getString("name"), entry.getString("configuration")));
+            }
+            entries = loaded;
+            regularId = json.optString("currentId", null);
+            regularName = json.optString("currentName", null);
+            masterVolume = (float) json.optDouble("masterVolume", masterVolume);
+        } catch (Exception corrupt) {
+            // Unreadable: as if never stored; the page's next publish replaces it.
+        }
+    }
+
+    private SharedPreferences preferences() {
+        return context.getSharedPreferences(LIBRARY_PREFERENCES, Context.MODE_PRIVATE);
     }
 
     private void report() {

@@ -161,6 +161,21 @@ Without the JavaScriptSandbox (a WebView older than about 110) the web
 playback is used instead: it plays only in the foreground and has no
 session, controls, clips or saving to files.
 
+### Android Auto (and other media browsers)
+
+`SoundscapePlaybackService` is also a platform `MediaBrowserService`: a
+browser binds it and sees one browsable node, "Soundscapes", holding the
+session's entries (the same list next and previous step through) as
+playable items. Choosing one is `controlPlayFrom`; play with no session
+plays the soundscape last chosen, or the first. Because the car may connect
+before the page has run since the process started, the session STORES the
+published list and the last choice (`saveLibrary`/`loadLibrary`). Bound with
+no session, the service stays out of the foreground and reports STOPPED; a
+session starting while bound still starts the service, so it outlives the
+binding (`started`). Media3 was not used: its session wants a `Player`, and
+ours is the renderer; the platform classes are what the service already
+used for its session and notification. Test with Google's Desktop Head Unit.
+
 ## Clips, export and import
 - A CLIP is the current soundscape rendered OFFLINE, two minutes to an hour
   long (a drag up or down on the clip button steps through 2, 5, 15, 30 and

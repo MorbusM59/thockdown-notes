@@ -25,11 +25,22 @@
 
         </activity>
 
-        <!-- Held while a soundscape is audible; see SoundscapePlaybackService. -->
+        <!-- Held while a soundscape is audible, and the media browser
+             Android Auto binds; see SoundscapePlaybackService. Exported for
+             the browser binding, as every media browser service is. -->
         <service
             android:name=".SoundscapePlaybackService"
-            android:exported="false"
-            android:foregroundServiceType="mediaPlayback" />
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
+
+        <!-- Declares the app to Android Auto as a media app. -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
 
         <!-- The schedule's alarms, and re-arming them after a reboot, an
              update or a change of clock; see ScheduleReceiver. -->
