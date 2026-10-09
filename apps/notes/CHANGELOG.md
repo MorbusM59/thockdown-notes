@@ -5,6 +5,21 @@ same commit that sets the version (docs/release-protocol.md). Entries up to 0.7.
 were collected from the GitHub releases of the time, tagged `v<version>`; later
 releases are tagged `notes-v<version>`.
 
+## 0.7.2 (2026-10-09)
+
+A polish release: a **keyboard shortcut reference** on F1, simpler list and strikethrough shortcuts, more **chime scales**, and a lot of internal tidying. The game behind the User Guide button has grown up considerably too.
+
+#### New
+
+- **Hold F1** for a full-window reference of every keyboard shortcut and mouse gesture; tap F1 to open the User Guide.
+- **Shortcuts:** Ctrl+U starts a bulleted list, Ctrl+O a numbered one, and Ctrl+Shift+X is strikethrough.
+- **Chime scales:** one interval stacked is now a scale of its own (semitones, thirds, fourths, tritones, fifths). Scales that were the same notes from another starting point are merged into one each, and a soundscape saved on one still plays exactly as before.
+
+#### Fixes
+
+- The review gutter draws a flag change at once.
+- The sidebar toggle restores its mode reliably.
+
 ## 0.7.1 (2026-09-30)
 
 **Tables** come to the edit view: insert one from the toolbar, move between cells with Tab and Enter, and let rows tidy themselves as you leave them. Rows and columns can be moved and deleted from a right-click ladder, and a selected cell can be dragged onto another. Alongside that, a round of fixes to clicking, scrolling and sound.
