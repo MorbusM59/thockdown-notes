@@ -10,7 +10,8 @@ that has no entry here, and tags the commit it built as
 
 Android Auto: the soundscapes appear in the car as a list to play from, and
 play, pause, next and previous work from the car's controls, even when the
-app has not been opened since the phone started.
+app has not been opened since the phone started, or at all since it was
+installed.
 
 ## 1.0.2
 

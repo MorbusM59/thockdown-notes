@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -p . && vite build && vite build --config vite.renderer.config.ts && cap sync android"
+    "build": "tsc -p . && vite build && vite build --config vite.renderer.config.ts && vite-node scripts/writeFactoryLibrary.ts && cap sync android"
   },
   "dependencies": {
     "@capacitor/core": "^8.5.2",

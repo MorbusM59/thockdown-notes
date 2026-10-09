@@ -169,7 +169,11 @@ session's entries (the same list next and previous step through) as
 playable items. Choosing one is `controlPlayFrom`; play with no session
 plays the soundscape last chosen, or the first. Because the car may connect
 before the page has run since the process started, the session STORES the
-published list and the last choice (`saveLibrary`/`loadLibrary`). Bound with
+published list and the last choice (`saveLibrary`/`loadLibrary`). Before
+anything has been published (a fresh install), it reads the factory
+soundscapes from `factory-soundscapes.json`, written into the assets at build
+time by `apps/soundscapes/scripts/writeFactoryLibrary.ts` from the same `sessionEntries` the
+page publishes with. Bound with
 no session, the service stays out of the foreground and reports STOPPED; a
 session starting while bound still starts the service, so it outlives the
 binding (`started`). Media3 was not used: its session wants a `Player`, and
