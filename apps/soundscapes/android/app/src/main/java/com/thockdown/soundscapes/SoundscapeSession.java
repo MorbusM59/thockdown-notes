@@ -549,9 +549,11 @@ final class SoundscapeSession {
 
     private void loadLibrary() {
         String stored = preferences().getString(LIBRARY_KEY, null);
-        if (stored == null) return;
         try {
-            JSONObject json = new JSONObject(stored);
+            // Nothing published yet (a fresh install, or opened from Android
+            // Auto before the app has run): the factory soundscapes, written
+            // into the assets at build time by scripts/writeFactoryLibrary.ts.
+            JSONObject json = new JSONObject(stored != null ? stored : factoryLibrary());
             JSONArray array = json.getJSONArray("entries");
             List<Entry> loaded = new ArrayList<>();
             for (int index = 0; index < array.length(); index += 1) {
@@ -564,6 +566,15 @@ final class SoundscapeSession {
             masterVolume = (float) json.optDouble("masterVolume", masterVolume);
         } catch (Exception corrupt) {
             // Unreadable: as if never stored; the page's next publish replaces it.
+        }
+    }
+
+    private String factoryLibrary() throws java.io.IOException {
+        try (java.io.InputStream in = context.getAssets().open("factory-soundscapes.json")) {
+            java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            for (int read; (read = in.read(buffer)) > 0; ) bytes.write(buffer, 0, read);
+            return bytes.toString("UTF-8");
         }
     }
 
