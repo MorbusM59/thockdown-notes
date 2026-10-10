@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.4",
-    "@codemirror/state": "6.7.1",
+    "@codemirror/state": "6.7.6",
     "@codemirror/view": "^6.43.7",
     "@fortawesome/fontawesome-free": "^7.2.0",
     "better-sqlite3": "13.0.3",
@@ -36,7 +36,7 @@
   "devDependencies": {
     "@jridgewell/trace-mapping": "^0.3.31",
     "@types/better-sqlite3": "^7.6.12",
-    "electron": "44.5.1",
+    "electron": "44.7.0",
     "electron-builder": "^26.15.3",
     "vite-plugin-electron": "^1.1.2",
     "vite-plugin-electron-renderer": "^1.0.0"
