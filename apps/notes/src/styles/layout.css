@@ -56,6 +56,10 @@
   margin: var(--spacing-regular) 0 var(--spacing-large) 0;
 }
 
+.editor-section-column:focus {
+  outline: none;
+}
+
 .editor-section-column {
   display:        flex;
   flex-direction: column;

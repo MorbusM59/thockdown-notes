@@ -8876,7 +8876,19 @@ ${markdownHtml}
       focusEscapeHoldRing(slot)
       return
     }
-    getActiveSection()?.scheduleFocusEditorInEditMode()
+    const section = getActiveSection()
+    // A SLOT WITH NO NOTE STILL HOLDS THE KEYBOARD. There is no editor to put
+    // a caret in, so the slot's own column takes it (it declares
+    // `tabIndex={-1}` for exactly this, EditorSection.tsx). Leaving the
+    // keyboard where it was meant leaving it in the PREVIOUS slot's editor,
+    // whose first keystroke marked that slot active again through its
+    // `onKeyDownCapture` -- so Ctrl+N in a fresh slot created the note in
+    // the old one, and the old note kept a blinking caret it no longer owned.
+    if (section && !section.activeNoteId) {
+      document.querySelector<HTMLElement>(`.editor-section-column[data-section-id="${CSS.escape(activeSectionId)}"]`)?.focus({ preventScroll: true })
+      return
+    }
+    section?.scheduleFocusEditorInEditMode()
   }, [activeSectionId, getActiveSection, isEscapeRingUp])
 
   /**
@@ -8983,23 +8995,42 @@ ${markdownHtml}
    * and is the thing the doctrine's third rule is about.
    */
   useEffect(() => {
-    const reconcile = () => {
+    const reconcile = (onActivation = false) => {
       const holder = document.activeElement
-      if (holder && holder !== document.body && mayHoldKeyboard(holder)) return
+      if (holder && holder !== document.body && mayHoldKeyboard(holder)) {
+        // A holder inside ANOTHER slot is legitimate only until the active
+        // slot changes: once it has, the keyboard belongs to the new slot,
+        // with or without a note in it. Asked only on activation, never on
+        // a focus event -- a focusin into another slot's editor is how that
+        // slot BECOMES active (its column's onFocusCapture), and this
+        // closure still names the previous one at that moment.
+        //
+        // The column itself is a FALLBACK holder, for a slot with nothing
+        // else to hold it: once a note arrives there, the editor takes over.
+        const holderSlot = holder.closest<HTMLElement>('.editor-section-column[data-section-id]')
+        const isStandInForNote = holder === holderSlot && Boolean(activeSection?.activeNoteId)
+        if (!isStandInForNote && (!onActivation || !holderSlot || holderSlot.dataset.sectionId === activeSectionId)) return
+      }
       returnKeyboardToActiveSurface()
     }
-    reconcile()
+    // A tick later, so a mouse-driven activation is judged AFTER the click
+    // has placed focus: the column's onMouseDownCapture makes the slot active
+    // before the browser focuses the field that was pressed, and judging then
+    // would pull the keyboard out of the find or tag field just clicked.
+    const activationCheck = window.setTimeout(() => reconcile(true), 0)
     // focusout fires BEFORE the new holder has focus, so its answer is read
     // a tick later -- otherwise every ordinary move between two legitimate
     // surfaces would read as focus having gone nowhere.
-    const onFocusOut = () => { window.setTimeout(reconcile, 0) }
-    window.addEventListener('focusin', reconcile)
+    const onFocusIn = () => reconcile()
+    const onFocusOut = () => { window.setTimeout(onFocusIn, 0) }
+    window.addEventListener('focusin', onFocusIn)
     window.addEventListener('focusout', onFocusOut)
     return () => {
-      window.removeEventListener('focusin', reconcile)
+      window.clearTimeout(activationCheck)
+      window.removeEventListener('focusin', onFocusIn)
       window.removeEventListener('focusout', onFocusOut)
     }
-  }, [returnKeyboardToActiveSurface, activeSection?.activeNoteId, activeSection?.isPreviewMode])
+  }, [returnKeyboardToActiveSurface, activeSectionId, activeSection?.activeNoteId, activeSection?.isPreviewMode])
 
   /**
    * A PRESS DOES NOT MOVE THE KEYBOARD.
