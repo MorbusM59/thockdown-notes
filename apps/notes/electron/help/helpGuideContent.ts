@@ -16,14 +16,15 @@
 // would resolve to nothing; the `@noteId` scheme needs none.
 import { HELP_GUIDE_CHAPTER_IDS, helpGuideChapterNoteId, type HelpGuideChapterKey } from '../../src/shared/helpGuide'
 import { formatInternalNoteLink } from '../../src/shared/internalNoteLinks'
-import { SHORTCUT_GROUPS, formatShortcut, shortcutsInGroup } from '../../src/shared/keyboardShortcuts'
+import { SHORTCUT_PANELS, formatShortcut, shortcutsInSection } from '../../src/shared/keyboardShortcuts'
 
 // The table is the shortcut declarations themselves (src/shared/
 // keyboardShortcuts.ts), the same list the in-app quick reference draws, so
 // the guide cannot describe a binding the app does not have.
 function shortcutTable(): string {
-  const rows = SHORTCUT_GROUPS.flatMap((group) => shortcutsInGroup(group.id).map((entry) =>
-    `| \`${formatShortcut(entry)}\` | ${group.title}: ${entry.label} |`))
+  const rows = SHORTCUT_PANELS.flatMap((panel) => panel.sections.flatMap((section) =>
+    shortcutsInSection(section.id).map((entry) =>
+      `| \`${formatShortcut(entry)}\` | ${[panel.title, section.title, entry.label].filter(Boolean).join(': ')} |`)))
   return ['| Shortcut | Action |', '| --- | --- |', ...rows].join('\n')
 }
 
@@ -725,7 +726,7 @@ ${shortcutTable()}
 
 - **Music player** — see [Music Player](${guideLink('MUSIC-PLAYER')}).
 - **Mini mode** — collapses the window into a compact strip; the music player stays fully usable, sound options included. The button that got you there expands back out, maximized — see [Music Player](${guideLink('MUSIC-PLAYER')}).
-- **Immersive mode** (\`F11\` or \`Ctrl+Shift+Space\`) — the window goes full screen with just the editor you're working in, edge to edge: no sidebar, toolbar, tabs or other slots. Press either shortcut again to come back exactly as you were. Opening the sidebar any way you normally would (\`Ctrl+Space\`, \`Ctrl+F\`, \`Ctrl+H\`) also brings you back, with the sidebar showing. Not available from mini mode.
+- **Immersive mode** (\`Ctrl+Shift+Space\`) — the window goes full screen with just the editor you're working in, edge to edge: no sidebar, toolbar, tabs or other slots. Press it again to come back exactly as you were. Opening the sidebar any way you normally would (\`Ctrl+Space\`, \`Ctrl+F\`, \`Ctrl+H\`) also brings you back, with the sidebar showing. Not available from mini mode.
   - In edit view the scrollbar lives in the grid itself: the rightmost column of boxes is the track, and the darker boxes show where you are. Click anywhere else on it to travel there; hold to jump straight there. Its colour is **Immersive Scroll Thumb** in the colour settings.
 - **Minimize / Maximize–Restore / Close** — standard window controls.
 - **User Guide (graduation cap)** — the upper half of the split maximize button. Opens this guide, exactly like the Quick Actions Menu's own Help cell, see [The User Guide](${guideLink('NOTES-EDITING', 'the-user-guide')}).

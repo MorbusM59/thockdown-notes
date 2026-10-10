@@ -40,7 +40,7 @@ describe('keyboard shortcut declarations', () => {
   })
 
   it('formats chords for the reader', () => {
-    expect(formatShortcut(SHORTCUTS.immersive)).toBe('F11 or Ctrl+Shift+Space')
+    expect(formatShortcut(SHORTCUTS.immersive)).toBe('Ctrl+Shift+Space')
     expect(formatShortcut(SHORTCUTS.switchSlot)).toBe('Alt+← / →')
     expect(formatShortcut(SHORTCUTS.quickActions)).toBe('Hold Esc')
     expect(formatShortcut(SHORTCUTS.redo, true)).toBe('Cmd+Shift+Z')

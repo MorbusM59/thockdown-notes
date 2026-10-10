@@ -45,18 +45,31 @@ export interface KeyChord {
 /** How the chord is pressed, for the reader; a plain press when absent. */
 export type ShortcutPress = 'hold'
 
-export type ShortcutGroupId =
-  | 'notes'
-  | 'views'
-  | 'find'
-  | 'formatting'
-  | 'editing'
-  | 'chapters'
+/**
+ * Where a binding is listed: a SECTION of a PANEL. Panels name a region of
+ * the app the reader works in, and a section names one part of that region
+ * (the tab bar, the scrollbar, tables), so a binding is found where the
+ * reader is when they want it. A section lists its keys first, then its
+ * mouse gestures (`mouseGestures.ts`).
+ */
+export type ShortcutSectionId =
+  | 'layout'
+  | 'content'
+  | 'zoom'
+  | 'scrollbar'
+  | 'tabBar'
+  | 'chapterBar'
+  | 'timeline'
+  | 'native'
+  | 'markdown'
   | 'tables'
+  | 'gutter'
+  | 'find'
+  | 'uncategorized'
   | 'menu'
 
 export interface ShortcutDeclaration {
-  group: ShortcutGroupId
+  section: ShortcutSectionId
   /**
    * Every chord does the same thing: the quick reference shows any beyond the
    * first combination as an "alternative shortcut". Two directions of one
@@ -80,22 +93,51 @@ export interface ShortcutDeclaration {
   matchedBy?: 'codemirror' | 'escape-hold' | 'help-key' | 'ring'
 }
 
-/**
- * The reader-facing groups, in reading order, each with the Font Awesome icon
- * its panel wears. `inReference: false` keeps a group out of the F1 quick
- * reference while the User Guide still lists it, for controls a reader
- * finds without a reference (the quick-actions ring turns and takes like
- * any dial).
- */
-export const SHORTCUT_GROUPS: ReadonlyArray<{ id: ShortcutGroupId; title: string; icon: string; inReference?: false }> = [
-  { id: 'views', title: 'Views & help', icon: 'fa-solid fa-eye' },
-  { id: 'notes', title: 'Notes & slots', icon: 'fa-solid fa-note-sticky' },
-  { id: 'find', title: 'Find', icon: 'fa-solid fa-magnifying-glass' },
-  { id: 'formatting', title: 'Formatting', icon: 'fa-solid fa-bold' },
-  { id: 'editing', title: 'Editing', icon: 'fa-solid fa-pen' },
-  { id: 'chapters', title: 'Chapters', icon: 'fa-solid fa-bookmark' },
-  { id: 'tables', title: 'In a table', icon: 'fa-solid fa-table' },
-  { id: 'menu', title: 'Quick actions menu', icon: 'fa-solid fa-circle-notch', inReference: false },
+export interface ShortcutSection {
+  id: ShortcutSectionId
+  /** Absent for a panel's only section, which needs no label of its own. */
+  title?: string
+}
+
+export interface ShortcutPanel {
+  title: string
+  /** The Font Awesome icon the panel wears. */
+  icon: string
+  sections: readonly ShortcutSection[]
+  /**
+   * `false` keeps a panel out of the F1 quick reference while the User Guide
+   * still lists it, for controls a reader finds without a reference (the
+   * quick-actions ring turns and takes like any dial).
+   */
+  inReference?: false
+}
+
+/** The reader-facing panels, in reading order. Every section belongs to exactly one. */
+export const SHORTCUT_PANELS: readonly ShortcutPanel[] = [
+  { title: 'Window layout', icon: 'fa-solid fa-table-columns', sections: [{ id: 'layout' }] },
+  {
+    title: 'Editor',
+    icon: 'fa-solid fa-file-lines',
+    sections: [{ id: 'content', title: 'Content' }, { id: 'zoom', title: 'Zoom' }, { id: 'scrollbar', title: 'Scrollbar' }],
+  },
+  {
+    title: 'Note management',
+    icon: 'fa-solid fa-note-sticky',
+    sections: [{ id: 'tabBar', title: 'Tab bar' }, { id: 'chapterBar', title: 'Chapter bar' }, { id: 'timeline', title: 'Timeline' }],
+  },
+  {
+    title: 'Edit mode',
+    icon: 'fa-solid fa-pen',
+    sections: [
+      { id: 'native', title: 'Editing' },
+      { id: 'markdown', title: 'Markdown' },
+      { id: 'tables', title: 'Tables' },
+      { id: 'gutter', title: 'Gutter' },
+    ],
+  },
+  { title: 'Find', icon: 'fa-solid fa-magnifying-glass', sections: [{ id: 'find' }] },
+  { title: 'Uncategorized', icon: 'fa-solid fa-ellipsis', sections: [{ id: 'uncategorized' }] },
+  { title: 'Quick actions menu', icon: 'fa-solid fa-circle-notch', sections: [{ id: 'menu' }], inReference: false },
 ]
 
 const ARROWS_LR: readonly KeyChord[] = [{ key: 'ArrowLeft' }, { key: 'ArrowRight' }]
@@ -104,65 +146,64 @@ const withMods = (chords: readonly KeyChord[], mods: Omit<KeyChord, 'key' | 'cod
   chords.map((chord) => ({ ...chord, ...mods }))
 
 export const SHORTCUTS = {
-  newNote: { group: 'notes', chords: [{ key: 'n', ctrl: true }], label: 'New note' },
-  newNoteFromClipboard: { group: 'notes', chords: [{ key: 'n', ctrl: true, shift: true }], label: 'New note titled from clipboard' },
-  toggleSidebar: { group: 'notes', chords: [{ code: 'Space', ctrl: true }], label: 'Show / hide sidebar' },
-  immersive: { group: 'notes', chords: [{ key: 'F11' }, { code: 'Space', ctrl: true, shift: true }], label: 'Immersive mode' },
-  switchSlot: { group: 'notes', chords: withMods(ARROWS_LR, { alt: true }), label: 'Previous / next slot' },
+  toggleView: { section: 'content', chords: [{ key: 'Escape' }], label: 'Edit / render view', matchedBy: 'escape-hold' },
+  quickActions: { section: 'content', chords: [{ key: 'Escape' }], press: 'hold', label: 'Quick actions menu', matchedBy: 'escape-hold' },
+  userGuide: { section: 'content', chords: [{ key: 'F1' }], label: 'Open / close the User Guide' },
+  shortcutReference: { section: 'content', chords: [{ key: 'F1' }], press: 'hold', label: 'These shortcuts, while held', matchedBy: 'help-key' },
+  newNote: { section: 'content', chords: [{ key: 'n', ctrl: true }], label: 'New note' },
+  newNoteFromClipboard: { section: 'content', chords: [{ key: 'n', ctrl: true, shift: true }], label: 'New note titled from clipboard' },
+  toggleSidebar: { section: 'layout', chords: [{ code: 'Space', ctrl: true }], label: 'Show / hide sidebar' },
+  immersive: { section: 'layout', chords: [{ code: 'Space', ctrl: true, shift: true }], label: 'Immersive mode' },
+  switchSlot: { section: 'layout', chords: withMods(ARROWS_LR, { alt: true }), label: 'Previous / next slot' },
   jumpVertical: {
-    group: 'notes',
+    section: 'uncategorized',
     chords: withMods(ARROWS_UD, { ctrl: true }),
     label: 'Nearest flagged line, else start / end',
   },
 
-  toggleView: { group: 'views', chords: [{ key: 'Escape' }], label: 'Edit / render view', matchedBy: 'escape-hold' },
-  quickActions: { group: 'views', chords: [{ key: 'Escape' }], press: 'hold', label: 'Quick actions menu', matchedBy: 'escape-hold' },
-  userGuide: { group: 'views', chords: [{ key: 'F1' }], label: 'Open / close the User Guide' },
-  shortcutReference: { group: 'views', chords: [{ key: 'F1' }], press: 'hold', label: 'These shortcuts, while held', matchedBy: 'help-key' },
+  find: { section: 'find', chords: [{ key: 'f', ctrl: true }], label: 'Find in note' },
+  findReplace: { section: 'find', chords: [{ key: 'h', ctrl: true }], label: 'Find & replace' },
+  replaceAll: { section: 'find', chords: [{ key: 'Enter', ctrl: true }], label: 'Replace all (while finding)' },
 
-  find: { group: 'find', chords: [{ key: 'f', ctrl: true }], label: 'Find in note' },
-  findReplace: { group: 'find', chords: [{ key: 'h', ctrl: true }], label: 'Find & replace' },
-  replaceAll: { group: 'find', chords: [{ key: 'Enter', ctrl: true }], label: 'Replace all (while finding)' },
+  bold: { section: 'markdown', chords: [{ key: 'b', ctrl: true }], label: 'Bold' },
+  italic: { section: 'markdown', chords: [{ key: 'i', ctrl: true }], label: 'Italic' },
+  strikethrough: { section: 'markdown', chords: [{ key: 'x', ctrl: true, shift: true }], label: 'Strikethrough' },
+  heading: { section: 'markdown', chords: [{ key: 't', ctrl: true }], label: 'Cycle heading level' },
+  bulletedList: { section: 'markdown', chords: [{ key: 'u', ctrl: true }], label: 'Bulleted list' },
+  numberedList: { section: 'markdown', chords: [{ key: 'o', ctrl: true }], label: 'Numbered list' },
+  link: { section: 'markdown', chords: [{ key: 'l', ctrl: true }], label: 'Link' },
+  anchor: { section: 'markdown', chords: [{ key: 'l', ctrl: true, shift: true }], label: 'Anchor' },
 
-  bold: { group: 'formatting', chords: [{ key: 'b', ctrl: true }], label: 'Bold' },
-  italic: { group: 'formatting', chords: [{ key: 'i', ctrl: true }], label: 'Italic' },
-  strikethrough: { group: 'formatting', chords: [{ key: 'x', ctrl: true, shift: true }], label: 'Strikethrough' },
-  heading: { group: 'formatting', chords: [{ key: 't', ctrl: true }], label: 'Cycle heading level' },
-  bulletedList: { group: 'formatting', chords: [{ key: 'u', ctrl: true }], label: 'Bulleted list' },
-  numberedList: { group: 'formatting', chords: [{ key: 'o', ctrl: true }], label: 'Numbered list' },
-  link: { group: 'formatting', chords: [{ key: 'l', ctrl: true }], label: 'Link' },
-  anchor: { group: 'formatting', chords: [{ key: 'l', ctrl: true, shift: true }], label: 'Anchor' },
-
-  undo: { group: 'editing', chords: [{ key: 'z', ctrl: true }], macChords: [{ key: 'z', meta: true }], label: 'Undo', matchedBy: 'codemirror' },
-  redo: { group: 'editing', chords: [{ key: 'y', ctrl: true }], macChords: [{ key: 'z', meta: true, shift: true }], label: 'Redo', matchedBy: 'codemirror' },
-  smartPaste: { group: 'editing', chords: [{ key: 'v', ctrl: 'or-meta', shift: true }], label: 'Smart paste' },
+  undo: { section: 'native', chords: [{ key: 'z', ctrl: true }], macChords: [{ key: 'z', meta: true }], label: 'Undo', matchedBy: 'codemirror' },
+  redo: { section: 'native', chords: [{ key: 'y', ctrl: true }], macChords: [{ key: 'z', meta: true, shift: true }], label: 'Redo', matchedBy: 'codemirror' },
+  smartPaste: { section: 'native', chords: [{ key: 'v', ctrl: 'or-meta', shift: true }], label: 'Smart paste' },
   // CodeMirror deletes the word; CM6Editor only offers this chord to a
   // table first (at the start of a cell it takes the previous cell's word).
   deleteWord: {
-    group: 'editing',
+    section: 'native',
     chords: [{ key: 'Backspace', ctrl: true }],
     macChords: [{ key: 'Backspace', alt: true }],
     label: 'Delete previous word',
   },
 
-  newChapter: { group: 'chapters', chords: [{ key: 'n', shift: true, alt: true }], label: 'New chapter' },
-  chapterForward: { group: 'chapters', chords: [{ key: 'Delete', shift: true, alt: true }], label: 'Cut rest to new chapter / pull next in' },
-  chapterBackward: { group: 'chapters', chords: [{ key: 'Backspace', shift: true, alt: true }], label: 'Cut start to new chapter / pull previous in' },
+  newChapter: { section: 'chapterBar', chords: [{ key: 'n', shift: true, alt: true }], label: 'New chapter' },
+  chapterForward: { section: 'chapterBar', chords: [{ key: 'Delete', shift: true, alt: true }], label: 'Cut rest to new chapter / pull next in' },
+  chapterBackward: { section: 'chapterBar', chords: [{ key: 'Backspace', shift: true, alt: true }], label: 'Cut start to new chapter / pull previous in' },
 
   // One direction per declaration: a declaration's further chords are
   // ALTERNATIVES for the same action, and Shift+Tab is not another Tab.
-  tableNextCell: { group: 'tables', chords: [{ key: 'Tab' }], label: 'Next cell', matchedBy: 'codemirror' },
-  tablePreviousCell: { group: 'tables', chords: [{ key: 'Tab', shift: true }], label: 'Previous cell', matchedBy: 'codemirror' },
-  tableEmptyCell: { group: 'tables', chords: [{ key: 'Backspace', shift: true }], label: 'Empty the cell' },
-  tableDeleteColumn: { group: 'tables', chords: [{ key: 'Backspace', ctrl: true, shift: true }], label: 'Delete the column' },
-  tableMove: { group: 'tables', chords: withMods([...ARROWS_LR, ...ARROWS_UD], { ctrl: true, shift: true }), label: 'Move row / column' },
-  tableLineBreak: { group: 'tables', chords: [{ key: 'Enter', shift: true }], label: 'Line break inside a row', matchedBy: 'codemirror' },
+  tableNextCell: { section: 'tables', chords: [{ key: 'Tab' }], label: 'Next cell', matchedBy: 'codemirror' },
+  tablePreviousCell: { section: 'tables', chords: [{ key: 'Tab', shift: true }], label: 'Previous cell', matchedBy: 'codemirror' },
+  tableEmptyCell: { section: 'tables', chords: [{ key: 'Backspace', shift: true }], label: 'Empty the cell' },
+  tableDeleteColumn: { section: 'tables', chords: [{ key: 'Backspace', ctrl: true, shift: true }], label: 'Delete the column' },
+  tableMove: { section: 'tables', chords: withMods([...ARROWS_LR, ...ARROWS_UD], { ctrl: true, shift: true }), label: 'Move row / column' },
+  tableLineBreak: { section: 'tables', chords: [{ key: 'Enter', shift: true }], label: 'Line break inside a row', matchedBy: 'codemirror' },
 
-  ringTurn: { group: 'menu', chords: ARROWS_LR, label: 'Turn the dial (or W A S D)', matchedBy: 'ring' },
-  ringNext: { group: 'menu', chords: [{ key: 'Tab' }], label: 'Next choice', matchedBy: 'ring' },
-  ringPrevious: { group: 'menu', chords: [{ key: 'Tab', shift: true }], label: 'Previous choice', matchedBy: 'ring' },
-  ringTake: { group: 'menu', chords: [{ key: 'Enter' }, { code: 'Space' }], label: 'Take the highlighted choice', matchedBy: 'ring' },
-  ringClose: { group: 'menu', chords: [{ key: 'Escape' }], label: 'Close the menu', matchedBy: 'escape-hold' },
+  ringTurn: { section: 'menu', chords: ARROWS_LR, label: 'Turn the dial (or W A S D)', matchedBy: 'ring' },
+  ringNext: { section: 'menu', chords: [{ key: 'Tab' }], label: 'Next choice', matchedBy: 'ring' },
+  ringPrevious: { section: 'menu', chords: [{ key: 'Tab', shift: true }], label: 'Previous choice', matchedBy: 'ring' },
+  ringTake: { section: 'menu', chords: [{ key: 'Enter' }, { code: 'Space' }], label: 'Take the highlighted choice', matchedBy: 'ring' },
+  ringClose: { section: 'menu', chords: [{ key: 'Escape' }], label: 'Close the menu', matchedBy: 'escape-hold' },
 } as const satisfies Record<string, ShortcutDeclaration>
 
 export type ShortcutId = keyof typeof SHORTCUTS
@@ -211,7 +252,6 @@ const KEY_NAMES: Record<string, string> = {
   Enter: 'Enter',
   Tab: 'Tab',
   F1: 'F1',
-  F11: 'F11',
 }
 
 function keyName(chord: KeyChord): string {
@@ -264,7 +304,7 @@ export function displayChords(declaration: ShortcutDeclaration, mac: boolean = i
 
 const PRESS_PREFIX: Record<ShortcutPress, string> = { hold: 'Hold ' }
 
-/** Plain text, for the User Guide's table: `Hold Esc`, `F11 or Ctrl+Shift+Space`. */
+/** Plain text, for the User Guide's table: `Hold Esc`, `Alt+← / →`. */
 export function formatShortcut(declaration: ShortcutDeclaration, mac: boolean = isMacPlatform()): string {
   const text = displayChords(declaration, mac)
     .map(({ modifiers, keys }) => [...modifiers, keys.join(' / ')].join('+'))
@@ -276,6 +316,6 @@ export function pressPrefix(declaration: ShortcutDeclaration): string | null {
   return declaration.press ? PRESS_PREFIX[declaration.press].trim() : null
 }
 
-export function shortcutsInGroup(group: ShortcutGroupId): ShortcutDeclaration[] {
-  return (Object.values(SHORTCUTS) as ShortcutDeclaration[]).filter((entry) => entry.group === group)
+export function shortcutsInSection(section: ShortcutSectionId): ShortcutDeclaration[] {
+  return (Object.values(SHORTCUTS) as ShortcutDeclaration[]).filter((entry) => entry.section === section)
 }

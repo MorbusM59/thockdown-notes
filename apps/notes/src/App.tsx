@@ -8580,8 +8580,8 @@ ${markdownHtml}
         return
       }
 
-      // Immersive mode, from anywhere: F11 or Ctrl+Shift+Space, and the same
-      // key to leave. A held key toggles once, not per repeat.
+      // Immersive mode, from anywhere: Ctrl+Shift+Space, and the same key to
+      // leave. A held key toggles once, not per repeat.
       if (matchShortcut(event, 'immersive')) {
         event.preventDefault()
         if (event.repeat) return

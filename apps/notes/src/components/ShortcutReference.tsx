@@ -1,13 +1,13 @@
 import { Fragment, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import {
-  SHORTCUT_GROUPS,
+  SHORTCUT_PANELS,
   displayChords,
   pressPrefix,
-  shortcutsInGroup,
+  shortcutsInSection,
   type ChordDisplay,
   type ShortcutDeclaration,
 } from '../shared/keyboardShortcuts'
-import { mouseGesturesInGroup, type MouseGesture } from '../shared/mouseGestures'
+import { mouseGesturesInSection, type MouseGesture } from '../shared/mouseGestures'
 import { HOLD_CAP, capForKey, capsForGesture, legendOf, type KeyCap } from './keyCaps'
 import { GAP_PX, PADDING_PX, arrangeSections, linearSize, type Arrangement } from './shortcutReferenceLayout'
 
@@ -20,7 +20,9 @@ import { GAP_PX, PADDING_PX, arrangeSections, linearSize, type Arrangement } fro
 // sidebar's own classes -- the section's card, its heading, its body's flow
 // rule and its sub-section labels (packages/interaction/interaction.css) --
 // so it looks like the sidebar because it is drawn by the same rules, not by
-// a copy of them. Only the fold arrow is taken off: nothing here folds.
+// a copy of them. Only the fold arrow is taken off: nothing here folds. Its
+// sub-section labels name the parts of the app a panel covers (the tab bar,
+// the timeline), each listing its keys and then its mouse gestures.
 //
 // EVERY KEY IS ONE SQUARE CAP (keyCaps.ts), an icon or a short text, so a
 // combination's width is its number of keys. The legend for the caps that do
@@ -73,12 +75,18 @@ interface Row {
   alternative: boolean
 }
 
-interface Panel {
+interface Section {
   id: string
+  /** Absent for a panel's only section, which draws no label. */
+  title?: string
+  /** Its keys, then its mouse gestures. */
+  rows: Row[]
+}
+
+interface Panel {
   title: string
   icon: string
-  shortcuts: Row[]
-  gestures: Row[]
+  sections: Section[]
 }
 
 function shortcutRows(declaration: ShortcutDeclaration): Row[] {
@@ -101,18 +109,22 @@ function gestureRow(gesture: MouseGesture): Row {
   return { caps: [capsForGesture(gesture)], label: gesture.label, alternative: false }
 }
 
-const PANELS: Panel[] = SHORTCUT_GROUPS
-  .filter((group) => group.inReference !== false)
-  .map((group) => ({
-    id: group.id,
-    title: group.title,
-    icon: group.icon,
-    shortcuts: shortcutsInGroup(group.id).flatMap(shortcutRows),
-    gestures: mouseGesturesInGroup(group.id).map(gestureRow),
+const PANELS: Panel[] = SHORTCUT_PANELS
+  .filter((panel) => panel.inReference !== false)
+  .map((panel) => ({
+    title: panel.title,
+    icon: panel.icon,
+    sections: panel.sections
+      .map((section) => ({
+        id: section.id,
+        title: section.title,
+        rows: [...shortcutsInSection(section.id).flatMap(shortcutRows), ...mouseGesturesInSection(section.id).map(gestureRow)],
+      }))
+      .filter((section) => section.rows.length > 0),
   }))
-  .filter((panel) => panel.shortcuts.length + panel.gestures.length > 0)
+  .filter((panel) => panel.sections.length > 0)
 
-const LEGEND_ROWS: Row[] = legendOf(PANELS.flatMap((panel) => [...panel.shortcuts, ...panel.gestures])
+const LEGEND_ROWS: Row[] = legendOf(PANELS.flatMap((panel) => panel.sections.flatMap((section) => section.rows))
     .flatMap((row) => row.caps.flat()))
   .map((entry) => ({ caps: [entry.caps], label: entry.legend, alternative: false }))
 
@@ -153,18 +165,12 @@ function PanelView({ panel }: { panel: Panel }) {
           {panel.title}
         </h3>
         <div className="sidebar-options-accordion-body">
-          {panel.shortcuts.length > 0 ? (
-            <>
-              <div className="options-subsection-label">Shortcuts</div>
-              <Rows rows={panel.shortcuts} />
-            </>
-          ) : null}
-          {panel.gestures.length > 0 ? (
-            <>
-              <div className="options-subsection-label">Mouse</div>
-              <Rows rows={panel.gestures} />
-            </>
-          ) : null}
+          {panel.sections.map((section) => (
+            <Fragment key={section.id}>
+              {section.title ? <div className="options-subsection-label">{section.title}</div> : null}
+              <Rows rows={section.rows} />
+            </Fragment>
+          ))}
         </div>
       </div>
     </section>
@@ -250,7 +256,7 @@ export function ShortcutReference({ surfaceVariables }: ShortcutReferenceProps) 
             className="shortcut-ref-measure"
             style={{ '--shortcut-ref-label-width': `${width}px`, '--shortcut-ref-text-scale': scale } as CSSProperties}
           >
-            {PANELS.map((panel) => <PanelView key={panel.id} panel={panel} />)}
+            {PANELS.map((panel) => <PanelView key={panel.title} panel={panel} />)}
           </div>
         )))}
       </div>
@@ -275,7 +281,7 @@ export function ShortcutReference({ surfaceVariables }: ShortcutReferenceProps) 
           <div className="shortcut-ref-columns">
             {solution.columns.map((column) => (
               <div key={column.join('-')} className="shortcut-ref-column">
-                {column.map((index) => <PanelView key={PANELS[index].id} panel={PANELS[index]} />)}
+                {column.map((index) => <PanelView key={PANELS[index].title} panel={PANELS[index]} />)}
               </div>
             ))}
           </div>
