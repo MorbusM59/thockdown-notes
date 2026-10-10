@@ -23,8 +23,9 @@ import { GAP_PX, PADDING_PX, arrangeSections, type Arrangement } from './shortcu
 // a copy of them. Only the fold arrow is taken off: nothing here folds.
 //
 // EVERY KEY IS ONE SQUARE CAP (keyCaps.ts), an icon or a short text, so a
-// combination's width is its number of keys. The first panel is the legend
-// for the caps that do not name themselves. Every panel's key column is one
+// combination's width is its number of keys. The legend for the caps that do
+// not name themselves is not a panel: it is its own column down the left of
+// the window, and the panels are arranged in the right half. Every panel's key column is one
 // width, the widest key cell anywhere, so the descriptions line up across
 // the window; descriptions wrap at a fixed width rather than widening a row.
 //
@@ -93,17 +94,9 @@ const PANELS: Panel[] = SHORTCUT_GROUPS
   }))
   .filter((panel) => panel.shortcuts.length + panel.gestures.length > 0)
 
-const LEGEND_PANEL: Panel = {
-  id: 'legend',
-  title: 'Keys',
-  icon: 'fa-solid fa-keyboard',
-  shortcuts: legendOf(PANELS.flatMap((panel) => [...panel.shortcuts, ...panel.gestures])
+const LEGEND_ROWS: Row[] = legendOf(PANELS.flatMap((panel) => [...panel.shortcuts, ...panel.gestures])
     .flatMap((row) => row.caps.flat()))
-    .map((entry) => ({ caps: [entry.caps], label: entry.legend, alternative: false })),
-  gestures: [],
-}
-
-const ALL_PANELS = [LEGEND_PANEL, ...PANELS]
+  .map((entry) => ({ caps: [entry.caps], label: entry.legend, alternative: false }))
 
 function Cap({ cap }: { cap: KeyCap }) {
   return (
@@ -113,9 +106,9 @@ function Cap({ cap }: { cap: KeyCap }) {
   )
 }
 
-function Rows({ rows, compact }: { rows: Row[]; compact?: boolean }) {
+function Rows({ rows }: { rows: Row[] }) {
   return (
-    <div className={`shortcut-ref-rows${compact ? ' shortcut-ref-rows-compact' : ''}`}>
+    <div className="shortcut-ref-rows">
       {rows.map((row, rowIndex) => (
         <Fragment key={rowIndex}>
           <span className="shortcut-ref-keys">
@@ -134,7 +127,6 @@ function Rows({ rows, compact }: { rows: Row[]; compact?: boolean }) {
 }
 
 function PanelView({ panel }: { panel: Panel }) {
-  const isLegend = panel === LEGEND_PANEL
   return (
     <section className="options-section sidebar-options-section shortcut-ref-section">
       <div className="sidebar-options-accordion">
@@ -145,8 +137,8 @@ function PanelView({ panel }: { panel: Panel }) {
         <div className="sidebar-options-accordion-body">
           {panel.shortcuts.length > 0 ? (
             <>
-              {isLegend ? null : <div className="options-subsection-label">Shortcuts</div>}
-              <Rows rows={panel.shortcuts} compact={isLegend} />
+              <div className="options-subsection-label">Shortcuts</div>
+              <Rows rows={panel.shortcuts} />
             </>
           ) : null}
           {panel.gestures.length > 0 ? (
@@ -158,17 +150,6 @@ function PanelView({ panel }: { panel: Panel }) {
         </div>
       </div>
     </section>
-  )
-}
-
-function Header() {
-  return (
-    <header className="shortcut-ref-header">
-      <span className="shortcut-ref-title">Keyboard shortcuts</span>
-      <span>Release</span>
-      <Cap cap={{ text: 'F1' }} />
-      <span>to close</span>
-    </header>
   )
 }
 
@@ -197,13 +178,15 @@ export function ShortcutReference() {
       host.style.setProperty('--shortcut-ref-keys-width', `${widest}px`)
       let best: Solution | null = null
       Array.from(measures.children).forEach((copy, index) => {
-        const [header, ...sections] = Array.from(copy.children, (child) => {
+        const sections = Array.from(copy.children, (child) => {
           const rect = child.getBoundingClientRect()
           return { width: rect.width, height: rect.height }
         })
-        const arrangement = arrangeSections(sections, header, host.clientWidth, host.clientHeight)
+        // The panels have the right half; the legend column has the left.
+        const widthPx = host.clientWidth / 2
+        const arrangement = arrangeSections(sections, widthPx, host.clientHeight)
         if (!best || arrangement.scale > best.scale) {
-          best = { ...arrangement, labelWidthPx: LABEL_WIDTHS_PX[index], widthPx: host.clientWidth, heightPx: host.clientHeight }
+          best = { ...arrangement, labelWidthPx: LABEL_WIDTHS_PX[index], widthPx, heightPx: host.clientHeight }
         }
       })
       setSolution(best)
@@ -226,11 +209,18 @@ export function ShortcutReference() {
       <div ref={measuresRef} className="shortcut-ref-measures" aria-hidden="true">
         {LABEL_WIDTHS_PX.map((width) => (
           <div key={width} className="shortcut-ref-measure" style={{ '--shortcut-ref-label-width': `${width}px` } as CSSProperties}>
-            <Header />
-            {ALL_PANELS.map((panel) => <PanelView key={panel.id} panel={panel} />)}
+            {PANELS.map((panel) => <PanelView key={panel.id} panel={panel} />)}
           </div>
         ))}
       </div>
+      <aside className="shortcut-ref-legend" aria-label="Key legend">
+        {LEGEND_ROWS.map((row) => (
+          <div key={row.label} className="shortcut-ref-legend-entry">
+            <span className="shortcut-ref-legend-caps">{row.caps[0].map((cap, index) => <Cap key={index} cap={cap} />)}</span>
+            <span className="shortcut-ref-legend-name">{row.label}</span>
+          </div>
+        ))}
+      </aside>
       {solution ? (
         <div
           className="shortcut-ref-layout"
@@ -241,11 +231,10 @@ export function ShortcutReference() {
             '--shortcut-ref-label-width': `${solution.labelWidthPx}px`,
           } as CSSProperties}
         >
-          <Header />
           <div className="shortcut-ref-columns">
             {solution.columns.map((column) => (
               <div key={column.join('-')} className="shortcut-ref-column">
-                {column.map((index) => <PanelView key={ALL_PANELS[index].id} panel={ALL_PANELS[index]} />)}
+                {column.map((index) => <PanelView key={PANELS[index].id} panel={PANELS[index]} />)}
               </div>
             ))}
           </div>

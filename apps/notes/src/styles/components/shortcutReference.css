@@ -51,30 +51,12 @@
 .shortcut-reference .shortcut-ref-layout {
   position: absolute;
   top: 0;
-  left: 0;
+  left: 50%;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: var(--shortcut-ref-gap);
   padding: var(--shortcut-ref-padding);
-}
-
-.shortcut-reference .shortcut-ref-header {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-regular);
-  white-space: nowrap;
-  font-size: var(--text-info-size);
-  color: var(--color-text-60);
-}
-
-.shortcut-reference .shortcut-ref-title {
-  margin-right: auto;
-  padding-right: var(--spacing-large);
-  font-size: calc(var(--text-info-size) * 1.25);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--color-text-80);
 }
 
 .shortcut-reference .shortcut-ref-columns {
@@ -123,12 +105,6 @@
   row-gap: var(--spacing-regular);
   align-items: start;
   font-size: var(--text-info-size);
-}
-
-/* The legend names one key per row: its caps need only their own width,
-   and its names do not wrap. */
-.shortcut-reference .shortcut-ref-rows-compact {
-  grid-template-columns: max-content max-content;
 }
 
 .shortcut-reference .shortcut-ref-keys {
@@ -182,4 +158,33 @@
 .shortcut-reference .shortcut-ref-alternative {
   font-style: italic;
   color: var(--color-text-50);
+}
+
+/* The key legend: its own column down the left half, outside the panels.
+   Deliberately unstyled beyond its place -- its look is still to be designed. */
+.shortcut-reference .shortcut-ref-legend {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 50%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--spacing-regular);
+  padding: var(--shortcut-ref-padding);
+  overflow: hidden;
+  font-size: var(--text-info-size);
+}
+
+.shortcut-reference .shortcut-ref-legend-entry {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-large);
+}
+
+.shortcut-reference .shortcut-ref-legend-caps {
+  display: inline-flex;
+  gap: var(--spacing-small);
 }

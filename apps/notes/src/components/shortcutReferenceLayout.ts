@@ -1,5 +1,5 @@
 // How the shortcut reference's panels are arranged and sized to the window --
-// see ShortcutReference.tsx's header for why this is arithmetic rather than a
+// see ShortcutReference.tsx's opening comment for why this is arithmetic rather than a
 // search.
 
 /** Gap between columns, and between panels in a column, in CSS px before scaling. */
@@ -56,13 +56,12 @@ function partition(heights: number[], count: number, gap: number): number[][] {
 
 /**
  * The column count, and the zoom, at which the panels can be drawn largest in
- * `availableWidth` x `availableHeight`. `sizes` are the panels and `header`
- * the title row above them, all measured unzoomed; the arrangement drawn at
+ * `availableWidth` x `availableHeight`. `sizes` are the panels, measured
+ * unzoomed; the arrangement drawn at
  * zoom `scale` occupies exactly `scale` times what is computed here.
  */
 export function arrangeSections(
   sizes: SectionSize[],
-  header: SectionSize,
   availableWidth: number,
   availableHeight: number,
 ): Arrangement {
@@ -73,10 +72,10 @@ export function arrangeSections(
     const columns = partition(sizes.map((size) => size.height), count, gap)
     const columnsWidth = columns.reduce((sum, column) => sum + Math.max(...column.map((index) => sizes[index].width)), 0)
       + gap * (count - 1)
-    const width = Math.max(columnsWidth, header.width) + padding
+    const width = columnsWidth + padding
     const height = Math.max(...columns.map((column) =>
       column.reduce((sum, index) => sum + sizes[index].height, 0) + gap * (column.length - 1)))
-      + header.height + gap + padding
+      + padding
     const scale = Math.max(0, Math.min(availableWidth / width, availableHeight / height))
     const drawn = scale * ROUNDING_HEADROOM
     if (drawn > bestArrangement.scale) bestArrangement = { columns, scale: drawn }
