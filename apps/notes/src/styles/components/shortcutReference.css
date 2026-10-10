@@ -5,9 +5,10 @@
    The panels are the options sidebar's sections, drawn by the sidebar's own
    rules (packages/interaction/interaction.css). What is here is only what a
    reference needs and a sidebar does not: the overlay, the arrangement into
-   columns, the key caps and the rows. The component zooms the arrangement to
-   the window with CSS `zoom`, so lengths here are ordinary px: zoom scales
-   layout exactly, borders included. */
+   columns, the key caps and the rows. The component fits the panels to the
+   window by scaling their TEXT (--shortcut-ref-text-scale, below); spacing,
+   borders and corners keep the app's own sizes, so the panels go through
+   double size mode like everything else. */
 .shortcut-reference {
   position: fixed;
   inset: 0;
@@ -37,6 +38,22 @@
   overflow: hidden;
 }
 
+/* The text scale. The panels' type all derives from --ui-font-scale and
+   --text-info-size (both computed once on the root), so both are restated
+   here as the window's own value times the solved scale; the window's
+   values are read on the host, outside the restatement, so it can refer to
+   them without referring to itself. The description width is scaled with
+   the text, so it wraps at the same words at every scale. */
+.shortcut-reference {
+  --shortcut-ref-window-ui-font-scale: var(--ui-font-scale);
+  --shortcut-ref-window-text-info-size: var(--text-info-size);
+}
+
+.shortcut-reference :is(.shortcut-ref-measure, .shortcut-ref-layout) {
+  --ui-font-scale: calc(var(--shortcut-ref-window-ui-font-scale) * var(--shortcut-ref-text-scale));
+  --text-info-size: calc(var(--shortcut-ref-window-text-info-size) * var(--shortcut-ref-text-scale));
+}
+
 .shortcut-reference .shortcut-ref-measures {
   position: absolute;
   top: 0;
@@ -44,8 +61,8 @@
   visibility: hidden;
 }
 
-/* One hidden copy per candidate description width, each panel at its own
-   natural size. */
+/* One hidden copy per candidate description width and measuring scale, each
+   panel at its own natural size. */
 .shortcut-reference .shortcut-ref-measure {
   position: absolute;
   top: 0;
@@ -61,8 +78,7 @@
 
 .shortcut-reference .shortcut-ref-layout {
   position: absolute;
-  top: 0;
-  left: 0;
+  inset: 0;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -107,9 +123,7 @@
 }
 
 /* The sidebar's texture layer (sidebar.css's .sidebar-content-texture), under
-   the card. The layout is drawn at a CSS zoom, which would scale the tile
-   with it, so the tile is divided by that zoom to stay the sidebar's size
-   (the legend is not zoomed, and reads the default of 1). */
+   the card. */
 .shortcut-reference .shortcut-ref-section::before,
 .shortcut-reference .shortcut-ref-legend::before {
   content: '';
@@ -121,10 +135,10 @@
   background-color: var(--texture-sidebar-content-tint);
   -webkit-mask-image: var(--texture-sidebar-content);
   -webkit-mask-repeat: repeat;
-  -webkit-mask-size: calc(var(--texture-tile-size) / var(--shortcut-ref-zoom, 1)) calc(var(--texture-tile-size) / var(--shortcut-ref-zoom, 1));
+  -webkit-mask-size: var(--texture-tile-size) var(--texture-tile-size);
   mask-image: var(--texture-sidebar-content);
   mask-repeat: repeat;
-  mask-size: calc(var(--texture-tile-size) / var(--shortcut-ref-zoom, 1)) calc(var(--texture-tile-size) / var(--shortcut-ref-zoom, 1));
+  mask-size: var(--texture-tile-size) var(--texture-tile-size);
 }
 
 /* Unfolded, and nothing here folds: the heading drops the fold arrow and
@@ -147,7 +161,7 @@
    component chooses for the window's shape. */
 .shortcut-reference .shortcut-ref-rows {
   display: grid;
-  grid-template-columns: var(--shortcut-ref-keys-width, max-content) var(--shortcut-ref-label-width);
+  grid-template-columns: var(--shortcut-ref-keys-width, max-content) calc(var(--shortcut-ref-label-width) * var(--shortcut-ref-text-scale));
   column-gap: var(--spacing-large);
   row-gap: var(--spacing-regular);
   align-items: start;

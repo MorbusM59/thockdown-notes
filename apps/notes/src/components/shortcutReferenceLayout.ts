@@ -1,23 +1,51 @@
-// How the shortcut reference's panels are arranged and sized to the window --
-// see ShortcutReference.tsx's opening comment for why this is arithmetic rather than a
-// search.
+// How the shortcut reference's panels are arranged and how large their text
+// is drawn -- see ShortcutReference.tsx's opening comment for the whole
+// argument.
 
-/** Gap between columns, and between panels in a column, in CSS px before scaling. */
+/** Gap between columns, and between panels in a column, in CSS px. */
 export const GAP_PX = 10
-/** The overlay's own inner margin, in CSS px before scaling. */
+/** The overlay's own inner margin, in CSS px. */
 export const PADDING_PX = 16
 /** What sub-pixel rounding can add back when the layout is drawn at the solved size. */
 const ROUNDING_HEADROOM = 0.98
+/** Bisection steps: the scale is exact to 2^-40 of its range, far below a pixel. */
+const BISECTION_STEPS = 40
 
-interface SectionSize {
+export interface SectionSize {
   width: number
   height: number
+}
+
+/**
+ * A panel's size as a function of its text scale `k`: every length inside a
+ * panel either follows the text (glyphs, caps, line boxes, the description
+ * width) or stays fixed (spacing, borders), so each dimension is
+ * `base + slope * k` -- exactly a straight line, read off two measurements.
+ */
+export interface LinearSize {
+  width: { base: number; slope: number }
+  height: { base: number; slope: number }
+}
+
+/** The line through a panel's sizes measured at text scales 1 and 2. */
+export function linearSize(atOne: SectionSize, atTwo: SectionSize): LinearSize {
+  return {
+    width: { base: 2 * atOne.width - atTwo.width, slope: atTwo.width - atOne.width },
+    height: { base: 2 * atOne.height - atTwo.height, slope: atTwo.height - atOne.height },
+  }
+}
+
+export function sizeAt(size: LinearSize, scale: number): SectionSize {
+  return {
+    width: size.width.base + size.width.slope * scale,
+    height: size.height.base + size.height.slope * scale,
+  }
 }
 
 export interface Arrangement {
   /** Section indices per column, in reading order. */
   columns: number[][]
-  /** The zoom the arrangement is drawn at. */
+  /** The text scale the arrangement is drawn at. */
   scale: number
 }
 
@@ -54,31 +82,51 @@ function partition(heights: number[], count: number, gap: number): number[][] {
   return columns
 }
 
+/** The space `columns` takes with every panel at `sizes`, padding included. */
+export function arrangementSize(sizes: SectionSize[], columns: number[][]): SectionSize {
+  const width = columns.reduce((sum, column) => sum + Math.max(...column.map((index) => sizes[index].width)), 0)
+    + GAP_PX * (columns.length - 1) + PADDING_PX * 2
+  const height = Math.max(...columns.map((column) =>
+    column.reduce((sum, index) => sum + sizes[index].height, 0) + GAP_PX * (column.length - 1)))
+    + PADDING_PX * 2
+  return { width, height }
+}
+
 /**
- * The column count, and the zoom, at which the panels can be drawn largest in
- * `availableWidth` x `availableHeight`. `sizes` are the panels, measured
- * unzoomed; the arrangement drawn at
- * zoom `scale` occupies exactly `scale` times what is computed here.
+ * The column count, and the text scale, at which the panels can be drawn
+ * largest in `availableWidth` x `availableHeight`.
+ *
+ * For a given count, whether the panels fit at scale `k` is a pure function
+ * of the measured lines: lay them out at `k` (contiguous columns, the tallest
+ * as short as it can be) and compare. Every panel grows with `k`, so fitting
+ * is monotone in it, and the largest scale that fits is found by bisection on
+ * that function -- arithmetic on numbers already measured, nothing redrawn.
  */
-export function arrangeSections(
-  sizes: SectionSize[],
-  availableWidth: number,
-  availableHeight: number,
-): Arrangement {
-  const gap = GAP_PX
-  const padding = PADDING_PX * 2
+export function arrangeSections(sizes: LinearSize[], availableWidth: number, availableHeight: number): Arrangement {
   let bestArrangement: Arrangement = { columns: [sizes.map((_, index) => index)], scale: 0 }
+  const layoutAt = (scale: number, count: number) => {
+    const scaled = sizes.map((size) => sizeAt(size, scale))
+    const columns = partition(scaled.map((size) => size.height), count, GAP_PX)
+    const { width, height } = arrangementSize(scaled, columns)
+    return { columns, fits: width <= availableWidth * ROUNDING_HEADROOM && height <= availableHeight * ROUNDING_HEADROOM }
+  }
+  // No panel can be drawn larger than the scale at which it alone fills the space.
+  let ceiling = Infinity
+  for (const size of sizes) {
+    if (size.width.slope > 0) ceiling = Math.min(ceiling, (availableWidth - PADDING_PX * 2 - size.width.base) / size.width.slope)
+    if (size.height.slope > 0) ceiling = Math.min(ceiling, (availableHeight - PADDING_PX * 2 - size.height.base) / size.height.slope)
+  }
+  if (!(ceiling > 0)) return bestArrangement
   for (let count = 1; count <= sizes.length; count += 1) {
-    const columns = partition(sizes.map((size) => size.height), count, gap)
-    const columnsWidth = columns.reduce((sum, column) => sum + Math.max(...column.map((index) => sizes[index].width)), 0)
-      + gap * (count - 1)
-    const width = columnsWidth + padding
-    const height = Math.max(...columns.map((column) =>
-      column.reduce((sum, index) => sum + sizes[index].height, 0) + gap * (column.length - 1)))
-      + padding
-    const scale = Math.max(0, Math.min(availableWidth / width, availableHeight / height))
-    const drawn = scale * ROUNDING_HEADROOM
-    if (drawn > bestArrangement.scale) bestArrangement = { columns, scale: drawn }
+    if (!layoutAt(bestArrangement.scale, count).fits) continue
+    let low = bestArrangement.scale
+    let high = ceiling
+    for (let step = 0; step < BISECTION_STEPS; step += 1) {
+      const middle = (low + high) / 2
+      if (layoutAt(middle, count).fits) low = middle
+      else high = middle
+    }
+    if (low > bestArrangement.scale) bestArrangement = { columns: layoutAt(low, count).columns, scale: low }
   }
   return bestArrangement
 }

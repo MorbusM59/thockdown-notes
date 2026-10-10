@@ -9,7 +9,7 @@ import {
 } from '../shared/keyboardShortcuts'
 import { mouseGesturesInGroup, type MouseGesture } from '../shared/mouseGestures'
 import { HOLD_CAP, capForKey, capsForGesture, legendOf, type KeyCap } from './keyCaps'
-import { GAP_PX, PADDING_PX, arrangeSections, type Arrangement } from './shortcutReferenceLayout'
+import { GAP_PX, PADDING_PX, arrangeSections, linearSize, type Arrangement } from './shortcutReferenceLayout'
 
 // The keyboard shortcut reference: every declaration in
 // shared/keyboardShortcuts.ts and every gesture in shared/mouseGestures.ts,
@@ -30,27 +30,41 @@ import { GAP_PX, PADDING_PX, arrangeSections, type Arrangement } from './shortcu
 // width, the widest key cell anywhere, so the descriptions line up across
 // the window; descriptions wrap at a fixed width rather than widening a row.
 //
-// IT NEVER SCROLLS, so the whole layout is zoomed to the window, and that is
-// solved rather than searched for. The panels are measured once, unzoomed, in
-// a hidden copy; CSS `zoom` scales layout exactly, so the arrangement drawn
-// at zoom `s` is `s` times what was measured. For each column count the
-// arrangement is computed on paper -- panels kept in reading order, split into
-// contiguous columns so the tallest column is as short as it can be -- and
-// the count that can be drawn largest wins (shortcutReferenceLayout.ts).
+// IT NEVER SCROLLS, so the text is sized to the window, and that is solved
+// from measurements rather than tried on screen. Only the TEXT is scaled --
+// glyphs, key caps, line boxes and the description width, which all follow
+// the UI text size -- while spacing, borders and corners keep the sizes the
+// rest of the app has. That is what lets the panels go through double size
+// mode exactly like the legend beside them and everything else: the mode
+// halves the window the layout sees and supplies its own UI text size, and
+// the page zoom doubles the result. A CSS `zoom` on the panels did the
+// fitting once, and scaled their borders and corners along with the text, so
+// they no longer matched anything around them.
+//
+// Every length in a panel is therefore fixed or proportional to the text
+// scale `k`, so each panel's width and height is a straight line in `k`
+// (shortcutReferenceLayout.ts's `LinearSize`). Two hidden copies, at k = 1
+// and k = 2, give each line exactly; the lines then answer, without drawing
+// anything, how large the text can be for each way of splitting the panels
+// into contiguous columns, and the split that allows the largest wins. The
+// description width wraps at the same words at every `k` (it is scaled with
+// the text), which is what keeps the lines straight.
 //
 // The description width is a second free choice: narrow descriptions make
 // panels tall and thin, wide ones short and wide, and which fits a window
-// best depends on its shape. So the hidden copy is drawn once per candidate
+// best depends on its shape. So the copies are drawn once per candidate
 // width (LABEL_WIDTHS_PX), each candidate is solved the same way, and the
-// largest zoom wins -- a finite choice evaluated in one pass, not a search.
+// largest text wins -- a finite choice evaluated in one pass.
 //
 // The hidden copies are watched by a ResizeObserver along with the window, so
 // a change of UI font (or the font finishing loading) re-measures by the same
 // path as a resize.
 
-/** Candidate description widths, unzoomed. */
-const LABEL_WIDTHS_PX = [150, 190, 240, 300]
+/** Candidate description widths, at text scale 1. */
 
+const LABEL_WIDTHS_PX = [150, 190, 240, 300]
+/** The two text scales each candidate is measured at; two points fix a line. */
+const MEASURE_SCALES = [1, 2] as const
 interface Row {
   caps: KeyCap[][]
   label: string
@@ -156,9 +170,8 @@ function PanelView({ panel }: { panel: Panel }) {
 
 interface Solution extends Arrangement {
   labelWidthPx: number
-  /** The window's size, unzoomed, so the zoomed layout fills it exactly. */
-  widthPx: number
-  heightPx: number
+  /** The key column's width at the solved scale. */
+  keysWidthPx: number
 }
 
 interface ShortcutReferenceProps {
@@ -173,34 +186,42 @@ interface ShortcutReferenceProps {
 }
 
 export function ShortcutReference({ surfaceVariables }: ShortcutReferenceProps) {
-  const hostRef = useRef<HTMLDivElement | null>(null)
   const stageRef = useRef<HTMLDivElement | null>(null)
   const measuresRef = useRef<HTMLDivElement | null>(null)
   const [solution, setSolution] = useState<Solution | null>(null)
 
   useLayoutEffect(() => {
-    const host = hostRef.current
     const stage = stageRef.current
     const measures = measuresRef.current
-    if (!host || !stage || !measures) return
+    if (!stage || !measures) return
     const solve = () => {
-      // The key column first: every key cell keeps its own width in the
-      // hidden copies, so the widest is read before the panels are measured
-      // at the width it gives them.
-      const widest = Math.max(0, ...Array.from(measures.querySelectorAll('.shortcut-ref-keys'), (keys) =>
-        keys.getBoundingClientRect().width))
-      host.style.setProperty('--shortcut-ref-keys-width', `${widest}px`)
+      const copies = Array.from(measures.children) as HTMLElement[]
+      const copyAt = (labelIndex: number, scaleIndex: number) => copies[labelIndex * MEASURE_SCALES.length + scaleIndex]
+      // The key column first. A key cell keeps its own width in the hidden
+      // copies (it does not depend on the description width), so each row's
+      // width is a line in the scale, read from the first candidate's two
+      // copies; the column is the widest row at whatever scale is drawn.
+      const keyWidths = (copy: HTMLElement) =>
+        Array.from(copy.querySelectorAll('.shortcut-ref-keys'), (keys) => keys.getBoundingClientRect().width)
+      const atOne = keyWidths(copyAt(0, 0))
+      const atTwo = keyWidths(copyAt(0, 1))
+      const keysWidthAt = (scale: number) => Math.max(0, ...atOne.map((one, row) =>
+        (2 * one - atTwo[row]) + (atTwo[row] - one) * scale))
+      copies.forEach((copy, index) => {
+        copy.style.setProperty('--shortcut-ref-keys-width', `${keysWidthAt(MEASURE_SCALES[index % MEASURE_SCALES.length])}px`)
+      })
+      const sizesOf = (copy: HTMLElement) => Array.from(copy.children, (child) => {
+        const rect = child.getBoundingClientRect()
+        return { width: rect.width, height: rect.height }
+      })
       let best: Solution | null = null
-      Array.from(measures.children).forEach((copy, index) => {
-        const sections = Array.from(copy.children, (child) => {
-          const rect = child.getBoundingClientRect()
-          return { width: rect.width, height: rect.height }
-        })
+      LABEL_WIDTHS_PX.forEach((labelWidthPx, labelIndex) => {
+        const one = sizesOf(copyAt(labelIndex, 0))
+        const two = sizesOf(copyAt(labelIndex, 1))
         // The panels have the stage: whatever the legend column leaves.
-        const widthPx = stage.clientWidth
-        const arrangement = arrangeSections(sections, widthPx, stage.clientHeight)
+        const arrangement = arrangeSections(one.map((size, index) => linearSize(size, two[index])), stage.clientWidth, stage.clientHeight)
         if (!best || arrangement.scale > best.scale) {
-          best = { ...arrangement, labelWidthPx: LABEL_WIDTHS_PX[index], widthPx, heightPx: stage.clientHeight }
+          best = { ...arrangement, labelWidthPx, keysWidthPx: keysWidthAt(arrangement.scale) }
         }
       })
       setSolution(best)
@@ -214,18 +235,21 @@ export function ShortcutReference({ surfaceVariables }: ShortcutReferenceProps) 
 
   return (
     <div
-      ref={hostRef}
       className="shortcut-reference"
       role="dialog"
       aria-label="Keyboard shortcuts"
       style={{ ...surfaceVariables, '--shortcut-ref-gap': `${GAP_PX}px`, '--shortcut-ref-padding': `${PADDING_PX}px` } as CSSProperties}
     >
       <div ref={measuresRef} className="shortcut-ref-measures" aria-hidden="true">
-        {LABEL_WIDTHS_PX.map((width) => (
-          <div key={width} className="shortcut-ref-measure" style={{ '--shortcut-ref-label-width': `${width}px` } as CSSProperties}>
+        {LABEL_WIDTHS_PX.flatMap((width) => MEASURE_SCALES.map((scale) => (
+          <div
+            key={`${width}-${scale}`}
+            className="shortcut-ref-measure"
+            style={{ '--shortcut-ref-label-width': `${width}px`, '--shortcut-ref-text-scale': scale } as CSSProperties}
+          >
             {PANELS.map((panel) => <PanelView key={panel.id} panel={panel} />)}
           </div>
-        ))}
+        )))}
       </div>
       <aside className="shortcut-ref-legend" aria-label="Key legend">
         {LEGEND_ROWS.map((row) => (
@@ -240,11 +264,9 @@ export function ShortcutReference({ surfaceVariables }: ShortcutReferenceProps) 
         <div
           className="shortcut-ref-layout"
           style={{
-            zoom: solution.scale,
-            '--shortcut-ref-zoom': solution.scale,
-            width: solution.widthPx / solution.scale,
-            height: solution.heightPx / solution.scale,
+            '--shortcut-ref-text-scale': solution.scale,
             '--shortcut-ref-label-width': `${solution.labelWidthPx}px`,
+            '--shortcut-ref-keys-width': `${solution.keysWidthPx}px`,
           } as CSSProperties}
         >
           <div className="shortcut-ref-columns">
