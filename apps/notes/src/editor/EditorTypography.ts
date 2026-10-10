@@ -74,7 +74,7 @@ export function roundEditorGlyphPaddingPx(value: number): number {
 
 // View/preview mode only -- plain CSS letter-spacing, no box-grid concept
 // involved (unlike the editor's x-box padding).
-export const VIEW_LETTER_SPACING_MIN_EM = 0;
+export const VIEW_LETTER_SPACING_MIN_EM = -0.25;
 export const VIEW_LETTER_SPACING_MAX_EM = 0.5;
 export const VIEW_LETTER_SPACING_STEP_EM = 0.01;
 export const DEFAULT_VIEW_LETTER_SPACING_EM = 0;

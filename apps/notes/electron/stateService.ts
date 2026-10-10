@@ -9,6 +9,7 @@ import type {
   WindowState,
 } from '../src/shared/appState';
 import { sanitizeGameSave } from '../src/adventure/save';
+import { VIEW_LETTER_SPACING_MAX_EM, VIEW_LETTER_SPACING_MIN_EM, roundViewLetterSpacingEm } from '../src/editor/EditorTypography';
 import { isPlaylistSlot } from '../src/shared/audioPlayer';
 import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '@thockdown/look/glaze';
 import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureColorHsva, type TextureMaterialSettings, type TextureMaterialsBySurface, type TextureSurfaceKey } from '@thockdown/look/textureTypes';
@@ -210,12 +211,9 @@ function sanitizeLineHeightMultiplier(input: unknown): number {
   return DEFAULT_APP_STATE.menu!.editorSpacing ?? 1.6;
 }
 
-const VIEW_LETTER_SPACING_MIN_EM = 0;
-const VIEW_LETTER_SPACING_MAX_EM = 0.5;
-
 function sanitizeViewLetterSpacingEm(input: unknown): number {
   if (typeof input === 'number' && Number.isFinite(input)) {
-    return Math.max(VIEW_LETTER_SPACING_MIN_EM, Math.min(VIEW_LETTER_SPACING_MAX_EM, Math.round(input * 100) / 100));
+    return Math.max(VIEW_LETTER_SPACING_MIN_EM, Math.min(VIEW_LETTER_SPACING_MAX_EM, roundViewLetterSpacingEm(input)));
   }
   return DEFAULT_APP_STATE.menu!.viewLetterSpacingEm ?? 0;
 }
