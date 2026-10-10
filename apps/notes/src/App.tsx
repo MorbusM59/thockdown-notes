@@ -10189,7 +10189,15 @@ ${markdownHtml}
             </div>
           </div>
         </div>
-        {isShortcutReferenceOpen ? <ShortcutReference surfaceVariables={theme.shellVariables} /> : null}
+        {isShortcutReferenceOpen ? (
+          <ShortcutReference
+            surfaceVariables={{
+              ...theme.shellVariables,
+              '--texture-sidebar-content': sidebarTextureCss,
+              '--texture-sidebar-content-tint': sidebarTextureTintCss,
+            }}
+          />
+        ) : null}
         <ThemeBlendOverlays theme={theme} />
       </div>
       {/* Mounted once, app-wide -- not scoped to the editor. See that

@@ -163,11 +163,11 @@ interface Solution extends Arrangement {
 
 interface ShortcutReferenceProps {
   /**
-   * The theme's surface colours (`loadoutTheme.ts`'s `shellVariables`). The
-   * overlay sits outside `.app-shell`, which is where the theme sets them, so
-   * without these its panels would draw input fields and buttons in the
-   * stylesheet's defaults rather than in the colours the options sidebar it
-   * copies is drawn in.
+   * The theme's surface colours (`loadoutTheme.ts`'s `shellVariables`) and
+   * the sidebar's texture. The overlay sits outside `.app-shell`, which is
+   * where the theme sets them, so without these its panels would draw input
+   * fields and buttons in the stylesheet's defaults, and stand on the blurred
+   * window rather than on the surface the options sidebar they copy stands on.
    */
   surfaceVariables: Record<string, string>
 }
@@ -241,6 +241,7 @@ export function ShortcutReference({ surfaceVariables }: ShortcutReferenceProps) 
           className="shortcut-ref-layout"
           style={{
             zoom: solution.scale,
+            '--shortcut-ref-zoom': solution.scale,
             width: solution.widthPx / solution.scale,
             height: solution.heightPx / solution.scale,
             '--shortcut-ref-label-width': `${solution.labelWidthPx}px`,

@@ -85,10 +85,39 @@
 }
 
 /* The sidebar centres a section in its flyout with an auto margin and a
-   width of its own; here the column decides both. */
+   width of its own; here the column decides both.
+
+   A section's card is translucent, so what it looks like depends on what is
+   under it. In the sidebar that is the sidebar's surface (sidebar.css's
+   .sidebar-content: the light parchment, then its texture layer); here each
+   section carries that surface itself, shaped like the card, so it reads the
+   same over the blurred window as it does in the sidebar. */
 .shortcut-reference .shortcut-ref-section {
   margin: 0;
   width: auto;
+  position: relative;
+  isolation: isolate;
+  border-radius: var(--border-radius-small);
+  background-color: var(--palette-parchment-lightest);
+}
+
+/* The sidebar's texture layer (sidebar.css's .sidebar-content-texture), under
+   the card. The layout is drawn at a CSS zoom, which would scale the tile
+   with it, so the tile is divided by that zoom to stay the sidebar's size. */
+.shortcut-reference .shortcut-ref-section::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background-color: var(--texture-sidebar-content-tint);
+  -webkit-mask-image: var(--texture-sidebar-content);
+  -webkit-mask-repeat: repeat;
+  -webkit-mask-size: calc(var(--texture-tile-size) / var(--shortcut-ref-zoom, 1)) calc(var(--texture-tile-size) / var(--shortcut-ref-zoom, 1));
+  mask-image: var(--texture-sidebar-content);
+  mask-repeat: repeat;
+  mask-size: calc(var(--texture-tile-size) / var(--shortcut-ref-zoom, 1)) calc(var(--texture-tile-size) / var(--shortcut-ref-zoom, 1));
 }
 
 /* Unfolded, and nothing here folds: the heading drops the fold arrow and
