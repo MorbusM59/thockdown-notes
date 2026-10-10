@@ -19,6 +19,8 @@ export interface MouseGesture {
   action: MouseAction
   /** Absent for the wheel, which has no side. */
   button?: MouseButton
+  /** Keys held with it, as `keyboardShortcuts.ts` names them for display. */
+  modifiers?: readonly ('Ctrl' | 'Shift' | 'Alt')[]
   /** Where, and what it does: `on a tab to edit its $id`. */
   label: string
 }
@@ -31,6 +33,11 @@ export const MOUSE_GESTURES: readonly MouseGesture[] = [
   { group: 'views', action: 'click', button: 'right', label: 'on the gutter toggle for flags only' },
   { group: 'views', action: 'click', button: 'left', label: 'on a line\'s flag box to mark it ?, again for !' },
   { group: 'views', action: 'click', button: 'right', label: 'on a line\'s flag box to clear its mark' },
+
+  // editorSection/typographyWheel.ts: one slider step per notch, for the pane under the pointer.
+  { group: 'views', action: 'wheel', modifiers: ['Ctrl'], label: 'over the text for text size' },
+  { group: 'views', action: 'wheel', modifiers: ['Ctrl', 'Alt'], label: 'over the text for horizontal spacing' },
+  { group: 'views', action: 'wheel', modifiers: ['Ctrl', 'Shift'], label: 'over the text for line height' },
 
   { group: 'notes', action: 'click', button: 'right', label: 'on a tab to edit its $id' },
   { group: 'notes', action: 'hold', button: 'right', label: 'on a tab, then click, to unpin / close it' },

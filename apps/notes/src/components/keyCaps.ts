@@ -48,7 +48,7 @@ export function capForKey(name: string): KeyCap {
 
 /** A gesture's caps, in reading order: how it is pressed, then with what. */
 export function capsForGesture(gesture: MouseGesture): KeyCap[] {
-  const caps: KeyCap[] = []
+  const caps: KeyCap[] = (gesture.modifiers ?? []).map(capForKey)
   if (gesture.action === 'hold') caps.push(HOLD_CAP)
   if (gesture.action === 'drag') caps.push({ icon: 'fa-solid fa-hand-back-fist', legend: 'Drag' })
   if (gesture.action === 'wheel') caps.push({ icon: 'fa-solid fa-arrows-spin', legend: 'Mouse wheel' })
