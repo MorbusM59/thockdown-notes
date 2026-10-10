@@ -24,6 +24,17 @@
   /* Takes the clicks: what is under it is out of sight, and a click must
      not land on a control the reader cannot see. */
   pointer-events: auto;
+  /* The legend as wide as its content, the panels in whatever is left. */
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+}
+
+/* The panels' share of the window: the component sizes them to this box. */
+.shortcut-reference .shortcut-ref-stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .shortcut-reference .shortcut-ref-measures {
@@ -51,7 +62,7 @@
 .shortcut-reference .shortcut-ref-layout {
   position: absolute;
   top: 0;
-  left: 50%;
+  left: 0;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -160,14 +171,9 @@
   color: var(--color-text-50);
 }
 
-/* The key legend: its own column down the left half, outside the panels.
-   Deliberately unstyled beyond its place -- its look is still to be designed. */
+/* The key legend: its own column down the left, outside the panels, as wide
+   as its content (the host's first grid column). */
 .shortcut-reference .shortcut-ref-legend {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 50%;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;

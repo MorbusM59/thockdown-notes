@@ -25,7 +25,8 @@ import { GAP_PX, PADDING_PX, arrangeSections, type Arrangement } from './shortcu
 // EVERY KEY IS ONE SQUARE CAP (keyCaps.ts), an icon or a short text, so a
 // combination's width is its number of keys. The legend for the caps that do
 // not name themselves is not a panel: it is its own column down the left of
-// the window, and the panels are arranged in the right half. Every panel's key column is one
+// the window, as wide as its content, and the panels are arranged in what
+// is left. Every panel's key column is one
 // width, the widest key cell anywhere, so the descriptions line up across
 // the window; descriptions wrap at a fixed width rather than widening a row.
 //
@@ -162,13 +163,15 @@ interface Solution extends Arrangement {
 
 export function ShortcutReference() {
   const hostRef = useRef<HTMLDivElement | null>(null)
+  const stageRef = useRef<HTMLDivElement | null>(null)
   const measuresRef = useRef<HTMLDivElement | null>(null)
   const [solution, setSolution] = useState<Solution | null>(null)
 
   useLayoutEffect(() => {
     const host = hostRef.current
+    const stage = stageRef.current
     const measures = measuresRef.current
-    if (!host || !measures) return
+    if (!host || !stage || !measures) return
     const solve = () => {
       // The key column first: every key cell keeps its own width in the
       // hidden copies, so the widest is read before the panels are measured
@@ -182,18 +185,18 @@ export function ShortcutReference() {
           const rect = child.getBoundingClientRect()
           return { width: rect.width, height: rect.height }
         })
-        // The panels have the right half; the legend column has the left.
-        const widthPx = host.clientWidth / 2
-        const arrangement = arrangeSections(sections, widthPx, host.clientHeight)
+        // The panels have the stage: whatever the legend column leaves.
+        const widthPx = stage.clientWidth
+        const arrangement = arrangeSections(sections, widthPx, stage.clientHeight)
         if (!best || arrangement.scale > best.scale) {
-          best = { ...arrangement, labelWidthPx: LABEL_WIDTHS_PX[index], widthPx, heightPx: host.clientHeight }
+          best = { ...arrangement, labelWidthPx: LABEL_WIDTHS_PX[index], widthPx, heightPx: stage.clientHeight }
         }
       })
       setSolution(best)
     }
     solve()
     const observer = new ResizeObserver(solve)
-    observer.observe(host)
+    observer.observe(stage)
     Array.from(measures.children).forEach((copy) => observer.observe(copy))
     return () => observer.disconnect()
   }, [])
@@ -221,6 +224,7 @@ export function ShortcutReference() {
           </div>
         ))}
       </aside>
+      <div ref={stageRef} className="shortcut-ref-stage">
       {solution ? (
         <div
           className="shortcut-ref-layout"
@@ -240,6 +244,7 @@ export function ShortcutReference() {
           </div>
         </div>
       ) : null}
+      </div>
     </div>
   )
 }
