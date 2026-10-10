@@ -68,7 +68,8 @@ function shortcutRows(declaration: ShortcutDeclaration): Row[] {
   return displayChords(declaration).map((chord: ChordDisplay, index) => {
     // A combination's alternative keys (`← / →`) are groups of one cap; the
     // press manner and the modifiers lead the first of them.
-    const caps = chord.keys.map((key) => [capForKey(key)])
+    // Alternatives drawn by the same cap (every arrow key) are drawn once.
+    const caps = [...new Set(chord.keys.map(capForKey))].map((cap) => [cap])
     caps[0] = [...hold, ...chord.modifiers.map(capForKey), ...caps[0]]
     return {
       caps,

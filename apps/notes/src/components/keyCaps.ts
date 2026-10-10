@@ -21,6 +21,8 @@ export interface KeyCap {
   legend?: string
 }
 
+const ARROWS_CAP: KeyCap = { icon: 'fa-solid fa-up-down-left-right', legend: 'Arrow keys' }
+
 const NAMED_CAPS: Record<string, KeyCap> = {
   Ctrl: { icon: 'fa-solid fa-angle-up', legend: 'Ctrl' },
   Cmd: { text: '⌘', legend: 'Cmd' },
@@ -32,12 +34,11 @@ const NAMED_CAPS: Record<string, KeyCap> = {
   Delete: { icon: 'fa-solid fa-delete-left fa-flip-horizontal', legend: 'Delete' },
   Tab: { icon: 'fa-solid fa-arrow-right-to-bracket', legend: 'Tab' },
   Space: { icon: 'fa-solid fa-window-minimize', legend: 'Space' },
-  // One triangle turned four ways: Font Awesome's caret-up/down glyphs sit
-  // off the centre their left/right siblings sit on.
-  '←': { icon: 'fa-solid fa-play fa-flip-horizontal', legend: 'Arrow keys' },
-  '→': { icon: 'fa-solid fa-play', legend: 'Arrow keys' },
-  '↑': { icon: 'fa-solid fa-play fa-rotate-270', legend: 'Arrow keys' },
-  '↓': { icon: 'fa-solid fa-play fa-rotate-90', legend: 'Arrow keys' },
+  // One cap for every arrow key: which way is the description's business.
+  '←': ARROWS_CAP,
+  '→': ARROWS_CAP,
+  '↑': ARROWS_CAP,
+  '↓': ARROWS_CAP,
 }
 
 /** The cap for a key's display name; a name with no picture is its own text. */
@@ -49,7 +50,7 @@ export function capForKey(name: string): KeyCap {
 export function capsForGesture(gesture: MouseGesture): KeyCap[] {
   const caps: KeyCap[] = []
   if (gesture.action === 'hold') caps.push(HOLD_CAP)
-  if (gesture.action === 'drag') caps.push({ icon: 'fa-solid fa-up-down-left-right', legend: 'Drag' })
+  if (gesture.action === 'drag') caps.push({ icon: 'fa-solid fa-hand-back-fist', legend: 'Drag' })
   if (gesture.action === 'wheel') caps.push({ icon: 'fa-solid fa-arrows-spin', legend: 'Mouse wheel' })
   if (gesture.button === 'left') caps.push({ text: 'LMB', legend: 'Left mouse button' })
   if (gesture.button === 'right') caps.push({ text: 'RMB', legend: 'Right mouse button' })

@@ -149,8 +149,7 @@ export const SHORTCUTS = {
   tablePreviousCell: { group: 'tables', chords: [{ key: 'Tab', shift: true }], label: 'Previous cell', matchedBy: 'codemirror' },
   tableEmptyCell: { group: 'tables', chords: [{ key: 'Backspace', shift: true }], label: 'Empty the cell' },
   tableDeleteColumn: { group: 'tables', chords: [{ key: 'Backspace', ctrl: true, shift: true }], label: 'Delete the column' },
-  tableMoveColumn: { group: 'tables', chords: withMods(ARROWS_LR, { ctrl: true, shift: true }), label: 'Move the column' },
-  tableMoveRow: { group: 'tables', chords: withMods(ARROWS_UD, { ctrl: true, shift: true }), label: 'Move the row' },
+  tableMove: { group: 'tables', chords: withMods([...ARROWS_LR, ...ARROWS_UD], { ctrl: true, shift: true }), label: 'Move row / column' },
   tableLineBreak: { group: 'tables', chords: [{ key: 'Enter', shift: true }], label: 'Line break inside a row', matchedBy: 'codemirror' },
 
   ringTurn: { group: 'menu', chords: ARROWS_LR, label: 'Turn the dial (or W A S D)', matchedBy: 'ring' },

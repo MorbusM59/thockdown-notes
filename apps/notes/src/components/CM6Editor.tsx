@@ -3640,7 +3640,7 @@ export function CM6Editor({
             pendingCageIntent = true;
           }
 
-          if (matchShortcut(event, 'tableMoveColumn') || matchShortcut(event, 'tableMoveRow')) {
+          if (matchShortcut(event, 'tableMove')) {
             // Ctrl+Shift+Arrow is offered to the bindings first (in a table
             // it moves the caret's row or column); null leaves it to the
             // default keymap's selection extension.
