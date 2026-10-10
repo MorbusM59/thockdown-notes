@@ -192,6 +192,7 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-large);
+  color: var(--color-text-80);
 }
 
 .shortcut-reference .shortcut-ref-legend-caps {
