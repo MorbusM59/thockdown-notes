@@ -300,12 +300,19 @@ if (!gotSingleInstanceLock) {
 }
 
 // Register the thockdown-music:// protocol BEFORE app.ready so Electron treats it
-// as a privileged scheme.  The handler (registered after ready) proxies the
-// request through net.fetch() to a file:// URL, which works from the main
-// process regardless of whether the renderer loaded from http://localhost (dev)
-// or file:// (production).
+// as a privileged scheme.  The handler (registered after ready) reads the file
+// from the main process, which works regardless of whether the renderer loaded
+// from http://localhost (dev) or file:// (production).
+//
+// The scheme is a different origin from the page in both cases, and the music
+// player routes the <audio> element through Web Audio (createMediaElementSource).
+// Chromium silences cross-origin media in that graph unless it was fetched with
+// CORS, and since Electron 44 that applies to this scheme too: the song plays
+// (its time advances) but reaches the output as zeros. So the scheme is
+// CORS-enabled, every response carries Access-Control-Allow-Origin, and the
+// element asks for the file in CORS mode (MusicPlayerService's crossOrigin).
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'thockdown-music', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true } },
+  { scheme: 'thockdown-music', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true, corsEnabled: true } },
 ]);
 
 function normalizeExternalFilePath(value: string): string {
@@ -1630,6 +1637,8 @@ app.whenReady().then(async () => {
     flac: 'audio/flac', m4a: 'audio/mp4', aac: 'audio/aac',
     opus: 'audio/opus', webm: 'audio/webm', weba: 'audio/webm',
   };
+  // The renderer's origin is not this scheme's; see registerSchemesAsPrivileged above.
+  const CORS_HEADERS = { 'Access-Control-Allow-Origin': '*' };
   protocol.handle('thockdown-music', async (request) => {
     try {
       const url = new URL(request.url);
@@ -1637,10 +1646,14 @@ app.whenReady().then(async () => {
       const rawPath = decodeURIComponent(url.pathname);
       const nativePath = rawPath.replace(/^\/([A-Za-z]:)/, '$1').replace(/\//g, path.sep);
 
+      // Audio files only: the scheme answers any origin (CORS_HEADERS), so it
+      // must not be a way to read an arbitrary file from disk.
+      const ext = nativePath.split('.').pop()?.toLowerCase() ?? '';
+      const mime = AUDIO_MIME[ext];
+      if (!mime) return new Response(null, { status: 403, headers: CORS_HEADERS });
+
       const stat = await fsPromises.stat(nativePath);
       const totalSize = stat.size;
-      const ext = nativePath.split('.').pop()?.toLowerCase() ?? '';
-      const mime = AUDIO_MIME[ext] ?? 'application/octet-stream';
 
       const rangeHeader = request.headers.get('Range');
       if (rangeHeader) {
@@ -1648,7 +1661,7 @@ app.whenReady().then(async () => {
         const match = rangeHeader.match(/bytes=(\d*)-(\d*)/);
         if (match) {
           const start = match[1] ? parseInt(match[1], 10) : 0;
-          const end   = match[2] ? parseInt(match[2], 10) : totalSize - 1;
+          const end   = Math.min(match[2] ? parseInt(match[2], 10) : totalSize - 1, totalSize - 1);
           const chunkSize = end - start + 1;
           const buffer = Buffer.allocUnsafe(chunkSize);
           const fd = await fsPromises.open(nativePath, 'r');
@@ -1664,6 +1677,7 @@ app.whenReady().then(async () => {
               'Content-Range': `bytes ${start}-${end}/${totalSize}`,
               'Content-Length': String(chunkSize),
               'Accept-Ranges': 'bytes',
+              ...CORS_HEADERS,
             },
           });
         }
@@ -1676,11 +1690,12 @@ app.whenReady().then(async () => {
           'Content-Type': mime,
           'Content-Length': String(totalSize),
           'Accept-Ranges': 'bytes',
+          ...CORS_HEADERS,
         },
       });
     } catch (err) {
       console.error('[thockdown-music protocol] failed to serve', request.url, err);
-      return new Response(null, { status: 404 });
+      return new Response(null, { status: 404, headers: CORS_HEADERS });
     }
   });
 

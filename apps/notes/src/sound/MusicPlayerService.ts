@@ -319,6 +319,10 @@ export class MusicPlayerService {
     if (!this.element) {
       const el = document.createElement('audio');
       el.preload = 'none';
+      // CORS mode, so the Web Audio graph below hears the song: cross-origin
+      // media fetched without CORS reaches a MediaElementSource as silence
+      // (see the thockdown-music scheme's registration in electron/main.ts).
+      el.crossOrigin = 'anonymous';
       el.src = toMusicUrl(filePath);
 
       el.addEventListener('ended', () => {
