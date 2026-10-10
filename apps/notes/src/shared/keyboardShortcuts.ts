@@ -186,9 +186,6 @@ export const SHORTCUTS = {
     label: 'Delete previous word',
   },
 
-  newChapter: { section: 'chapterBar', chords: [{ key: 'n', shift: true, alt: true }], label: 'New chapter' },
-  chapterForward: { section: 'chapterBar', chords: [{ key: 'Delete', shift: true, alt: true }], label: 'Cut rest to new chapter / pull next in' },
-  chapterBackward: { section: 'chapterBar', chords: [{ key: 'Backspace', shift: true, alt: true }], label: 'Cut start to new chapter / pull previous in' },
 
   // One direction per declaration: a declaration's further chords are
   // ALTERNATIVES for the same action, and Shift+Tab is not another Tab.

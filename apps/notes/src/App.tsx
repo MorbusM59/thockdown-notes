@@ -8705,9 +8705,6 @@ ${markdownHtml}
           ['anchor', () => activeSection.applyAnchor()],
           ['numberedList', () => activeSection.toggleNumberedList()],
           ['bulletedList', () => activeSection.toggleBulletedList()],
-          ['chapterForward', () => void activeSection.handleChapterForwardSplitOrMerge()],
-          ['chapterBackward', () => void activeSection.handleChapterBackwardSplitOrMerge()],
-          ['newChapter', () => void activeSection.handleCreateChapter()],
         ]
         const hit = editorShortcuts.find(([id]) => matchShortcut(event, id))
         if (hit) {
