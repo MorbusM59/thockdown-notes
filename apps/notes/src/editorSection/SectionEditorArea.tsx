@@ -442,6 +442,7 @@ export function SectionEditorArea({
               <div
                 ref={previewScrollRef}
                 onScroll={handlePreviewScroll}
+                data-typography-surface="render"
                 className={`markdown-preview thockdown-custom-scrollbar style-${viewStyle}`}
                 style={{
                   '--search-hit-color': highlightSearchColor,

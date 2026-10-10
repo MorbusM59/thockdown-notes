@@ -4569,6 +4569,8 @@ export function CM6Editor({
       );
       if (action.startsCoast) scheduleWheelSpinNudge();
     };
+    // Ctrl+wheel over this scroller adjusts edit-view typography (editorSection/typographyWheel.ts).
+    view.scrollDOM.setAttribute('data-typography-surface', 'edit');
     view.scrollDOM.addEventListener('wheel', handleWheel, { passive: false });
 
     // Anything else that scrolls, or that means the reader is now doing

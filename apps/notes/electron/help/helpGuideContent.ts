@@ -769,6 +769,7 @@ ${shortcutTable()}
 *Font family, size, spacing, and padding for the editor and the rendered preview.*
 
 - Separate controls for the editor (font family, size, line height, glyph padding) and the preview (font family, size, letter spacing, line height).
+- You can also change these from the text itself: hold \`Ctrl\` and roll the wheel over the text of a note to change its size by one step per notch, \`Ctrl+Alt\` for the horizontal spacing (letter spacing in render view, glyph padding in edit mode), \`Ctrl+Shift\` for the line height. It changes the settings of whichever view the pointer is over, not the slot you are typing in, so with an edit slot and a render slot side by side you adjust each by pointing at it.
 
 ### [Presets](#presets)
 

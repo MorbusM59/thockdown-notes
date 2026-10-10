@@ -1,4 +1,5 @@
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useTypographyWheel } from './editorSection/typographyWheel'
 import { scrollThumbFor, scrollTopForThumb } from '@thockdown/interaction/scrollTrackGeometry'
 import { flushSync } from 'react-dom'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -2093,6 +2094,16 @@ function App() {
   const setEditorFontSize = useCallback((px: number) => setActiveModeFontSize('editorFontSize', px), [setActiveModeFontSize])
   const setViewFontSize = useCallback((px: number) => setActiveModeFontSize('viewFontSize', px), [setActiveModeFontSize])
   const setUiFontScale = useCallback((scale: number) => setActiveModeFontSize('uiFontScale', scale), [setActiveModeFontSize])
+  useTypographyWheel(
+    {
+      edit: { size: editorFontSize, spacing: editorGlyphPaddingPx, height: editorSpacing },
+      render: { size: viewFontSize, spacing: viewLetterSpacingEm, height: viewSpacing },
+    },
+    {
+      edit: { size: setEditorFontSize, spacing: setEditorGlyphPaddingPx, height: setEditorSpacing },
+      render: { size: setViewFontSize, spacing: setViewLetterSpacingEm, height: setViewSpacing },
+    },
+  )
   // Line-number gutter visibility, keyed per editor slot (sectionId) -- not
   // per note/chapter, so switching which note a slot shows leaves the toggle
   // alone. Absent key = off (a freshly created slot starts with the gutter
