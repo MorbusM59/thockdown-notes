@@ -773,6 +773,44 @@ export const AudioControls = memo(function AudioControls({
     }
   }, [handleSlotShiftRightClick, handleSlotRightClick])
 
+  // ---------------------------------------------------------------- system media controls
+  // The OS shows its own player for whatever this window is playing (the
+  // Windows media flyout, media keys, the lock screen). Without Media Session
+  // data it names the window and nothing else, and its previous/next buttons
+  // do nothing. It gets the same song and the same three actions as the
+  // transport here: play/pause, previous (walk back) and next (a fresh song).
+  const mediaActionsRef = useRef({ handlePlayToggle, jumpSong, isPlaying })
+  mediaActionsRef.current = { handlePlayToggle, jumpSong, isPlaying }
+
+  useEffect(() => {
+    const session = navigator.mediaSession
+    if (!session) return
+    const actions: [MediaSessionAction, MediaSessionActionHandler][] = [
+      ['play', () => { if (!mediaActionsRef.current.isPlaying) void mediaActionsRef.current.handlePlayToggle() }],
+      ['pause', () => { if (mediaActionsRef.current.isPlaying) void mediaActionsRef.current.handlePlayToggle() }],
+      ['previoustrack', () => { void mediaActionsRef.current.jumpSong(-1) }],
+      ['nexttrack', () => { void mediaActionsRef.current.jumpSong(1) }],
+    ]
+    for (const [action, handler] of actions) session.setActionHandler(action, handler)
+    return () => {
+      for (const [action] of actions) session.setActionHandler(action, null)
+    }
+  }, [])
+
+  useEffect(() => {
+    const session = navigator.mediaSession
+    if (!session) return
+    session.metadata = currentSong
+      ? new MediaMetadata({ title: currentSong.title || '?', artist: currentSong.artist, album: 'Thockdown Notes' })
+      : null
+  }, [currentSong])
+
+  useEffect(() => {
+    const session = navigator.mediaSession
+    if (!session) return
+    session.playbackState = currentSong ? (isPlaying ? 'playing' : 'paused') : 'none'
+  }, [currentSong, isPlaying])
+
   // ---------------------------------------------------------------- song label
 
   const songLabel = currentSong
