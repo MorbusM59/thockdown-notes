@@ -58,7 +58,9 @@
    and are drawn at exactly the sidebar's size: they take the window's values
    back, so only the rows follow the fit. They then add a fixed amount to a
    panel's size, which the straight-line measurement already allows for. */
-.shortcut-reference :is(.shortcut-ref-measure, .shortcut-ref-layout) :is(.sidebar-options-section-heading, .options-subsection-label) {
+/* So are the key caps: one size with the legend's, whatever the fit does
+   to the descriptions beside them. */
+.shortcut-reference :is(.shortcut-ref-measure, .shortcut-ref-layout) :is(.sidebar-options-section-heading, .options-subsection-label, .shortcut-ref-cap) {
   --ui-font-scale: var(--shortcut-ref-window-ui-font-scale);
   --text-info-size: var(--shortcut-ref-window-text-info-size);
 }
@@ -219,9 +221,10 @@
 
 .shortcut-reference .shortcut-ref-label {
   /* A wrapped description keeps ordinary line spacing; the padding puts its
-     first line on the cap's centre (1.75 cap height, 1.35 line). */
+     first line on the cap's centre. The cap is drawn at the window's text
+     size (1.75 of it) and the line at the fitted one (1.35 of it). */
   line-height: 1.35;
-  padding-top: calc(var(--text-info-size) * 0.2);
+  padding-top: max(0px, calc((var(--shortcut-ref-window-text-info-size) * 1.75 - 1.35em) / 2));
   color: var(--color-text-80);
 }
 
