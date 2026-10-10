@@ -227,13 +227,13 @@
   font-size: var(--btn-large-icon-size);
 }
 
-.window-control-btn:hover {
+.window-control-btn[data-hovered] {
   background:   var(--btn-bg-hover);
   border-color: var(--btn-border-hover);
 }
 
 .window-control-close       { color: var(--color-danger); }
-.window-control-close:hover { background: var(--color-danger-bg); }
+.window-control-close[data-hovered] { background: var(--color-danger-bg); }
 
 .window-control-glyph {
   display:     block;

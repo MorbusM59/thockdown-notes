@@ -82,8 +82,8 @@ button,
    button looked selected for no reason (an empty schedule slot, in the
    mobile app). */
 @media (hover: hover) {
-  button:hover,
-  .ui-btn:hover {
+  button[data-hovered],
+  .ui-btn[data-hovered] {
     background:   var(--btn-bg-hover);
     border-color: var(--btn-border-hover);
   }

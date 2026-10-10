@@ -365,7 +365,7 @@
   cursor: default;
 }
 
-.markdown-preview li.task-list-item > .markdown-task-checkbox-icon.markdown-task-checkbox-interactive:hover {
+.markdown-preview li.task-list-item > .markdown-task-checkbox-icon.markdown-task-checkbox-interactive[data-hovered] {
   opacity: 0.75;
 }
 

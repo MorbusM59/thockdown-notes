@@ -61,7 +61,7 @@
   cursor: ns-resize;
 }
 
-.thockdown-scroll-thumb:hover.is-inactive,
+.thockdown-scroll-thumb[data-hovered].is-inactive,
 .thockdown-scroll-thumb.is-dragging.is-inactive,
 .thockdown-scroll-thumb.is-inactive {
   border-color: rgba(81, 73, 66, 0.30);

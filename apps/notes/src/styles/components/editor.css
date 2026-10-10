@@ -1132,12 +1132,12 @@ button.escape-menu-chrome-gauge {
   cursor:     pointer;
 }
 
-button.escape-menu-chrome-gauge:hover {
+button.escape-menu-chrome-gauge[data-hovered] {
   background: none;
 }
 
-button.escape-menu-chrome-gauge:hover .escape-menu-chrome-gauge-icon,
-button.escape-menu-chrome-gauge:hover .escape-menu-chrome-gauge-count {
+button.escape-menu-chrome-gauge[data-hovered] .escape-menu-chrome-gauge-icon,
+button.escape-menu-chrome-gauge[data-hovered] .escape-menu-chrome-gauge-count {
   color: var(--color-text);
 }
 

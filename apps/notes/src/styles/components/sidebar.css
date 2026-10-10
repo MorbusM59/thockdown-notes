@@ -283,9 +283,9 @@
 
 
 .icon-btn.btn-deleted.is-primed-for-deletion,
-.icon-btn.btn-deleted.is-primed-for-deletion:hover,
+.icon-btn.btn-deleted.is-primed-for-deletion[data-hovered],
 .icon-btn.btn-deleted.is-primed-for-deletion.is-active,
-.icon-btn.btn-deleted.is-primed-for-deletion.is-active:hover {
+.icon-btn.btn-deleted.is-primed-for-deletion.is-active[data-hovered] {
   filter: var(--filter-primed-delete);
   transition: all 300ms;
 }
@@ -415,7 +415,7 @@
 .find-hit-item.is-in-view {
   filter: var(--filter-highlight);
 }
-.find-hit-item:hover,
+.find-hit-item[data-hovered],
 .find-hit-item.active {
   border: 1px solid var(--color-border-light-90);
   background: var(--bg-menu-card-active);
@@ -571,7 +571,7 @@
   transition:   background 0.2s, box-shadow 0.2s;
 }
 
-.notes-mini-action:hover    { background: var(--color-toggle-hover); }
+.notes-mini-action[data-hovered]    { background: var(--color-toggle-hover); }
 .notes-mini-action:disabled { opacity: 0.45;}
 
 /* Notes mode button */
@@ -629,8 +629,8 @@
   padding: 0;
 }
 
-.note-list-column:hover,
-.note-list-column.is-active:hover {
+.note-list-column[data-hovered],
+.note-list-column.is-active[data-hovered] {
   border: 1px solid var(--color-border-light-90);
   background: var(--bg-menu-card-active);
 }
@@ -652,7 +652,7 @@
   display: none;
 }
 
-.note-list-columns:hover .note-list-meta-right {
+.note-list-columns[data-hovered] .note-list-meta-right {
   /* visibility, not display: none -- this row's title+meta stack is
    * vertically centered as one block (.note-list-column's
    * align-items: center), so removing this element from flow on hover
@@ -662,7 +662,7 @@
   visibility: hidden;
 }
 
-.note-list-columns:hover .note-list-column-action,
+.note-list-columns[data-hovered] .note-list-column-action,
 .note-list-item.is-external.is-modified .note-list-column-save,
 .note-list-item.is-external .note-list-column-close {
   display: flex;
@@ -761,27 +761,27 @@
 /* A note whose file is missing is marked for deletion, flat row and tree
    card alike, with the hatching a card primed for deletion shows. */
 .note-list-item.is-missing-file,
-.note-list-item.is-missing-file:hover,
+.note-list-item.is-missing-file[data-hovered],
 .note-list-item.is-missing-file.is-active,
-.note-list-item.is-missing-file.is-active:hover {
+.note-list-item.is-missing-file.is-active[data-hovered] {
   filter: var(--filter-primed-delete);
   background-image: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.2) 0, rgba(0, 0, 0, 0.2) 1px, transparent 2px, transparent 3px);
 }
 
 /* Primed states */
 .note-list-item.is-primed-for-archiving.is-tree-card,
-.note-list-item.is-primed-for-archiving.is-tree-card:hover,
+.note-list-item.is-primed-for-archiving.is-tree-card[data-hovered],
 .note-list-item.is-primed-for-archiving.is-tree-card.is-active,
-.note-list-item.is-primed-for-archiving.is-tree-card.is-active:hover {
+.note-list-item.is-primed-for-archiving.is-tree-card.is-active[data-hovered] {
   filter: var(--filter-primed-archive);
   background-image: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.2) 0, rgba(0, 0, 0, 0.2) 1px, transparent 2px, transparent 3px);
   transition: none;
 }
 
 .note-list-item.is-primed-for-deletion.is-tree-card,
-.note-list-item.is-primed-for-deletion.is-tree-card:hover,
+.note-list-item.is-primed-for-deletion.is-tree-card[data-hovered],
 .note-list-item.is-primed-for-deletion.is-tree-card.is-active,
-.note-list-item.is-primed-for-deletion.is-tree-card.is-active:hover {
+.note-list-item.is-primed-for-deletion.is-tree-card.is-active[data-hovered] {
   filter: var(--filter-primed-delete);
   background-image: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.2) 0, rgba(0, 0, 0, 0.2) 1px, transparent 2px, transparent 3px);
   transition: none;
@@ -815,7 +815,7 @@
   background: rgba(255, 255, 255, 0.2);
 }
 
-.note-list-item.is-tree-card:hover {
+.note-list-item.is-tree-card[data-hovered] {
   border: 1px solid var(--color-border-dark-40);
   outline: 2px solid #ffffff88;
   background: rgba(255, 255, 255, 0.4);

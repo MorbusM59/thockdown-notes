@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { MobileSoundscapeApp } from './MobileSoundscapeApp'
 import { keepFocusOnPress } from '@thockdown/interaction/focusOwnership'
+import { installHoverTracking } from '@thockdown/interaction/hoverTracking'
 import { installPressTracking } from '@thockdown/interaction/pressTracking'
 import { installScrollTrackTokens } from '@thockdown/interaction/scrollTrackGeometry'
 // The shared packages' styles: the soundscape panel is the desktop panel
@@ -15,6 +16,7 @@ import './mobile.css'
 // stylesheet uses :active), and a press does not move focus
 // (focusOwnership.ts) -- without it every tapped button kept focus.
 installPressTracking()
+installHoverTracking()
 installScrollTrackTokens()
 window.addEventListener('mousedown', keepFocusOnPress, { capture: true })
 

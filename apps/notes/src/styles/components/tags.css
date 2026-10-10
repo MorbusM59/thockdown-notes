@@ -276,7 +276,7 @@
   cursor: default;
 }
 
-.tag-pill.suggested:hover           { background: var(--btn-bg-hover); }
+.tag-pill.suggested[data-hovered]           { background: var(--btn-bg-hover); }
 .tag-pill.suggested[data-pressed]          { background: var(--btn-bg-pressed); }
 .tag-pill.suggested[aria-disabled='true'] { opacity: 0.5; cursor: default; }
 
@@ -509,7 +509,7 @@
   overflow: hidden;
 }
 
-.note-tab-pill:hover  { background: var(--btn-bg-hover); }
+.note-tab-pill[data-hovered]  { background: var(--btn-bg-hover); }
 .note-tab-pill[data-pressed] { background: var(--btn-bg-pressed); }
 
 .note-tab-pill.is-active {
@@ -663,7 +663,7 @@
    binds in the never-hit narrow-pill case). No hover/active/cursor rules
    of its own: this is a plain <button>, so it already gets the exact same
    hover/active background swap as every other button in the app (base.css)
-   -- deliberately not the pill-specific `.note-tab-pill:hover`/cursor:
+   -- deliberately not the pill-specific `.note-tab-pill[data-hovered]`/cursor:
    default treatment, since unlike a display-only pill this genuinely is a
    clickable control. */
 .tag-pill.chapter-pill-mini {

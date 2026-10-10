@@ -73,7 +73,7 @@
   opacity: 0.45;
 }
 
-.audio-ctrl-btn:hover {
+.audio-ctrl-btn[data-hovered] {
   background:   var(--btn-bg-hover);
   border-color: var(--btn-border-hover);
 }
