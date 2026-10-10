@@ -161,7 +161,7 @@ export const SHORTCUTS = {
   immersive: { section: 'layout', chords: [{ code: 'Space', ctrl: true, shift: true }], label: 'Immersive mode' },
   switchSlot: { section: 'layout', chords: withMods(ARROWS_LR, { alt: true }), label: 'Previous / next slot' },
   jumpVertical: {
-    section: 'uncategorized',
+    section: 'gutter',
     chords: withMods(ARROWS_UD, { ctrl: true }),
     label: 'Nearest flagged line, else start / end',
   },
