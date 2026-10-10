@@ -175,7 +175,9 @@
   grid-template-columns: var(--shortcut-ref-keys-width, max-content) calc(var(--shortcut-ref-label-width) * var(--shortcut-ref-text-scale));
   column-gap: var(--spacing-large);
   row-gap: var(--spacing-regular);
-  align-items: start;
+  /* A description, however many lines it wraps to, is centred on its keys
+     as one block. */
+  align-items: center;
   font-size: var(--text-info-size);
 }
 
@@ -192,8 +194,7 @@
 }
 
 /* A square cap per key: an icon or up to three letters, one size for all,
-   so a combination is as wide as its number of keys. Its first line of
-   description sits on the cap's centre line. */
+   so a combination is as wide as its number of keys. */
 .shortcut-reference .shortcut-ref-cap {
   --cap-size: calc(var(--text-info-size) * 1.75);
   box-sizing: border-box;
@@ -220,11 +221,7 @@
 }
 
 .shortcut-reference .shortcut-ref-label {
-  /* A wrapped description keeps ordinary line spacing; the padding puts its
-     first line on the cap's centre. The cap is drawn at the window's text
-     size (1.75 of it) and the line at the fitted one (1.35 of it). */
   line-height: 1.35;
-  padding-top: max(0px, calc((var(--shortcut-ref-window-text-info-size) * 1.75 - 1.35em) / 2));
   color: var(--color-text-80);
 }
 
