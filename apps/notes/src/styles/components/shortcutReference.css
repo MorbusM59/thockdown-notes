@@ -1,14 +1,9 @@
 /* The keyboard shortcut reference (components/ShortcutReference.tsx): the
    whole window, blurred the way the quick-actions ring blurs its slot, with
-   the shortcut groups laid out over it as options sections while F1 is held.
-
-   The panels are the options sidebar's sections, drawn by the sidebar's own
-   rules (packages/interaction/interaction.css). What is here is only what a
-   reference needs and a sidebar does not: the overlay, the arrangement into
-   columns, the key caps and the rows. The component fits the panels to the
-   window by scaling their TEXT (--shortcut-ref-text-scale, below); spacing,
-   borders and corners keep the app's own sizes, so the panels go through
-   double size mode like everything else. */
+   every shortcut over it as one run of items poured into equal columns while
+   F1 is held. Headings are the options sidebar's own
+   (packages/interaction/interaction.css), at the sidebar's sizes: nothing
+   here is scaled. */
 .shortcut-reference {
   position: fixed;
   inset: 0;
@@ -25,137 +20,22 @@
   /* Takes the clicks: what is under it is out of sight, and a click must
      not land on a control the reader cannot see. */
   pointer-events: auto;
-  /* The legend as wide as its content, the panels in whatever is left. */
+  /* The legend as wide as its content, the items in whatever is left. */
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
 }
 
-/* The panels' share of the window: the component sizes them to this box. */
-.shortcut-reference .shortcut-ref-stage {
-  position: relative;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-
-/* The text scale. The panels' type all derives from --ui-font-scale and
-   --text-info-size (both computed once on the root), so both are restated
-   here as the window's own value times the solved scale; the window's
-   values are read on the host, outside the restatement, so it can refer to
-   them without referring to itself. The description width is scaled with
-   the text, so it wraps at the same words at every scale. */
-.shortcut-reference {
-  --shortcut-ref-window-ui-font-scale: var(--ui-font-scale);
-  --shortcut-ref-window-text-info-size: var(--text-info-size);
-}
-
-.shortcut-reference :is(.shortcut-ref-measure, .shortcut-ref-layout) {
-  --ui-font-scale: calc(var(--shortcut-ref-window-ui-font-scale) * var(--shortcut-ref-text-scale));
-  --text-info-size: calc(var(--shortcut-ref-window-text-info-size) * var(--shortcut-ref-text-scale));
-}
-
-/* A panel's heading is the options sidebar's,
-   and is drawn at exactly the sidebar's size: it takes the window's values
-   back, so only the rows follow the fit. It then adds a fixed amount to a
-   panel's size, which the straight-line measurement already allows for. */
-/* So are the key caps: one size with the legend's, whatever the fit does
-   to the descriptions beside them. */
-.shortcut-reference :is(.shortcut-ref-measure, .shortcut-ref-layout) :is(.sidebar-options-section-heading, .shortcut-ref-cap) {
-  --ui-font-scale: var(--shortcut-ref-window-ui-font-scale);
-  --text-info-size: var(--shortcut-ref-window-text-info-size);
-}
-
-.shortcut-reference .shortcut-ref-measures {
-  position: absolute;
-  top: 0;
-  left: 0;
-  visibility: hidden;
-}
-
-/* One hidden copy per candidate description width and measuring scale, each
-   panel at its own natural size. */
-.shortcut-reference .shortcut-ref-measure {
-  position: absolute;
-  top: 0;
-  left: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  /* Cards a panel apart: the component reads this gap as the resolved value
-     of --spacing-large. */
-  row-gap: var(--spacing-large);
-}
-
-.shortcut-reference .shortcut-ref-measure > * {
-  width: max-content;
-}
-
-.shortcut-reference .shortcut-ref-layout {
-  position: absolute;
-  inset: 0;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  padding: var(--shortcut-ref-padding);
-}
-
-.shortcut-reference .shortcut-ref-columns {
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  gap: var(--spacing-large);
-}
-
-/* Cards as tall as their rows, at the top: the room left over stays below. A
-   card sits a small gap under the card before it, and a large one when it
-   opens a new panel; the first card in a column has nothing above it. */
-.shortcut-reference .shortcut-ref-column {
-  display: flex;
-  flex-direction: column;
-}
-
-.shortcut-reference .shortcut-ref-column > .shortcut-ref-card + .shortcut-ref-card {
-  margin-top: var(--spacing-small);
-}
-
-.shortcut-reference .shortcut-ref-column > .shortcut-ref-card + .shortcut-ref-opens-panel {
-  margin-top: var(--spacing-large);
-}
-
-/* A panel's heading and its first sub-section travel together, a small gap
-   apart. The component reads this gap as the resolved value of
-   --spacing-small. */
-.shortcut-reference .shortcut-ref-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-small);
-}
-
-/* The sidebar centres a section in its flyout with an auto margin and a
-   width of its own; here the column decides both.
-
-   A section's card is translucent, so what it looks like depends on what is
-   under it. In the sidebar that is the sidebar's surface (sidebar.css's
-   .sidebar-content: the light parchment, then its texture layer); here each
-   section carries that surface itself, shaped like the card, so it reads the
-   same over the blurred window as it does in the sidebar. */
-.shortcut-reference .shortcut-ref-section {
-  margin: 0;
-  width: auto;
-  border-radius: var(--border-radius-small);
-}
-
-/* The legend column stands on the same surface. */
-.shortcut-reference .shortcut-ref-section,
+/* Legend and items stand on the options sidebar's surface (sidebar.css's
+   .sidebar-content: the light parchment, then its texture layer). */
+.shortcut-reference .shortcut-ref-items,
 .shortcut-reference .shortcut-ref-legend {
   position: relative;
   isolation: isolate;
   background-color: var(--palette-parchment-lightest);
 }
 
-/* The sidebar's texture layer (sidebar.css's .sidebar-content-texture), under
-   the card. */
-.shortcut-reference .shortcut-ref-section::before,
+/* The sidebar's texture layer (sidebar.css's .sidebar-content-texture). */
+.shortcut-reference .shortcut-ref-items::before,
 .shortcut-reference .shortcut-ref-legend::before {
   content: '';
   position: absolute;
@@ -172,34 +52,68 @@
   mask-size: var(--texture-tile-size) var(--texture-tile-size);
 }
 
-/* Unfolded, and nothing here folds: the heading drops the fold arrow and
-   keeps the summary's height. */
+/* The items: one column after another, each the same width, filled top to
+   bottom (column-fill: auto against the fixed height) and then on into the
+   next. More than fits runs off the right edge rather than shrinking. */
+.shortcut-reference .shortcut-ref-items {
+  box-sizing: border-box;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  padding: var(--spacing-large);
+  column-width: calc(var(--shortcut-ref-keys-width) + var(--spacing-large) + 180px * var(--ui-font-scale));
+  column-gap: calc(var(--spacing-large) * 2);
+  column-fill: auto;
+  font-size: var(--text-info-size);
+}
+
+/* Every item stands alone, a heading with the item under it. */
+.shortcut-reference .shortcut-ref-items > * {
+  break-inside: avoid;
+}
+
+.shortcut-reference .shortcut-ref-heading {
+  break-after: avoid;
+}
+
+/* Unfolded, and nothing here folds: the heading drops the fold arrow. A
+   panel's heading opens a large gap below whatever came before it; the
+   first in a column has nothing above it. */
 .shortcut-reference .sidebar-options-section-heading {
   min-height: calc(20px * var(--ui-font-scale));
   padding: var(--spacing-regular) 0;
+  margin-top: var(--spacing-large);
+}
+
+.shortcut-reference .sidebar-options-section-heading:first-child {
+  margin-top: 0;
 }
 
 .shortcut-reference .sidebar-options-section-heading::after {
   content: none;
 }
 
-.shortcut-reference .sidebar-options-accordion-body {
-  padding-bottom: var(--toolbar-options-gap);
-  padding-top: var(--toolbar-options-gap);
+.shortcut-reference .options-subsection-label {
+  margin: var(--spacing-regular) 0 0;
 }
 
-/* Keys, then what they do. The key column is one width in every panel,
-   measured by the component; the description wraps at a width the
-   component chooses for the window's shape. */
-.shortcut-reference .shortcut-ref-rows {
+/* Keys, then what they do; the key column is as wide as the longest
+   combination (--shortcut-ref-key-slots caps), so descriptions line up. */
+.shortcut-reference {
+  --shortcut-ref-keys-width: calc(
+    var(--shortcut-ref-key-slots) * var(--text-info-size) * 1.75
+    + (var(--shortcut-ref-key-slots) - 1) * var(--spacing-small)
+  );
+}
+
+.shortcut-reference .shortcut-ref-row {
   display: grid;
-  grid-template-columns: var(--shortcut-ref-keys-width, max-content) calc(var(--shortcut-ref-label-width) * var(--shortcut-ref-text-scale));
+  grid-template-columns: var(--shortcut-ref-keys-width) minmax(0, 1fr);
   column-gap: var(--spacing-large);
-  row-gap: var(--spacing-regular);
   /* A description, however many lines it wraps to, is centred on its keys
      as one block. */
   align-items: center;
-  font-size: var(--text-info-size);
+  padding: calc(var(--spacing-regular) / 2) 0;
 }
 
 .shortcut-reference .shortcut-ref-keys {
