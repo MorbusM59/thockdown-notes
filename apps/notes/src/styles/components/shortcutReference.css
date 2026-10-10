@@ -73,6 +73,10 @@
 
 .shortcut-reference .shortcut-ref-heading {
   break-after: avoid;
+  /* Rows sit a regular gap apart (half of it padded on each row), so a
+     heading adds the other half below itself: the first row under it is
+     as far from it as from the row that follows. */
+  margin-bottom: calc(var(--spacing-regular) / 2);
 }
 
 /* Unfolded, and nothing here folds: the heading drops the fold arrow. A
@@ -97,7 +101,7 @@
 }
 
 .shortcut-reference .options-subsection-label {
-  margin: var(--spacing-regular) 0 0;
+  margin-top: var(--spacing-regular);
   border: 1px solid var(--color-panel-border);
   box-shadow: var(--box-shadow-regular-light);
   border-radius: var(--border-radius-small);
