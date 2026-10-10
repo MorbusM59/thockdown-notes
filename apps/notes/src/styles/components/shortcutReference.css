@@ -25,9 +25,8 @@
   grid-template-columns: max-content minmax(0, 1fr);
 }
 
-/* Legend and items stand on the options sidebar's surface (sidebar.css's
+/* The legend stands on the options sidebar's surface (sidebar.css's
    .sidebar-content: the light parchment, then its texture layer). */
-.shortcut-reference .shortcut-ref-items,
 .shortcut-reference .shortcut-ref-legend {
   position: relative;
   isolation: isolate;
@@ -35,7 +34,6 @@
 }
 
 /* The sidebar's texture layer (sidebar.css's .sidebar-content-texture). */
-.shortcut-reference .shortcut-ref-items::before,
 .shortcut-reference .shortcut-ref-legend::before {
   content: '';
   position: absolute;
