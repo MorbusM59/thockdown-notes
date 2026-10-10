@@ -161,7 +161,18 @@ interface Solution extends Arrangement {
   heightPx: number
 }
 
-export function ShortcutReference() {
+interface ShortcutReferenceProps {
+  /**
+   * The theme's surface colours (`loadoutTheme.ts`'s `shellVariables`). The
+   * overlay sits outside `.app-shell`, which is where the theme sets them, so
+   * without these its panels would draw input fields and buttons in the
+   * stylesheet's defaults rather than in the colours the options sidebar it
+   * copies is drawn in.
+   */
+  surfaceVariables: Record<string, string>
+}
+
+export function ShortcutReference({ surfaceVariables }: ShortcutReferenceProps) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const stageRef = useRef<HTMLDivElement | null>(null)
   const measuresRef = useRef<HTMLDivElement | null>(null)
@@ -207,7 +218,7 @@ export function ShortcutReference() {
       className="shortcut-reference"
       role="dialog"
       aria-label="Keyboard shortcuts"
-      style={{ '--shortcut-ref-gap': `${GAP_PX}px`, '--shortcut-ref-padding': `${PADDING_PX}px` } as CSSProperties}
+      style={{ ...surfaceVariables, '--shortcut-ref-gap': `${GAP_PX}px`, '--shortcut-ref-padding': `${PADDING_PX}px` } as CSSProperties}
     >
       <div ref={measuresRef} className="shortcut-ref-measures" aria-hidden="true">
         {LABEL_WIDTHS_PX.map((width) => (

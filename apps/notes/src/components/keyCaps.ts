@@ -2,8 +2,8 @@
 // combination's width is its number of keys and every row of keys lines up.
 //
 // A cap holds either a Font Awesome icon or a short text (a letter, `F1`,
-// `RMB`). Anything that is not its own name -- an icon, or an abbreviation --
-// carries a `legend`, and the reference's first panel lists exactly those
+// `RM`). Anything that is not its own name -- an icon, or an abbreviation --
+// carries a `legend`, and the reference's legend column lists exactly those
 // legends for the caps it actually draws, so a cap is never left to guess.
 //
 // Keys are looked up by the display names `keyboardShortcuts.ts` produces

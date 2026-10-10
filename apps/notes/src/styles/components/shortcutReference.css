@@ -151,7 +151,7 @@
   color: var(--color-text-80);
 }
 
-/* Three letters (RMB, F11) in a square need a smaller face. */
+/* Two or three letters (RM, F11) in a square need a smaller face. */
 .shortcut-reference .shortcut-ref-cap > span {
   font-size: 0.75em;
   font-weight: 600;
