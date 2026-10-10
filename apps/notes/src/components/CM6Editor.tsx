@@ -1,10 +1,11 @@
 import { SCROLL_TRACK_EDGE_GAP_PX } from '@thockdown/interaction/scrollTrackGeometry';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Annotation, Compartment, EditorState, EditorSelection, Prec, RangeSetBuilder, type ChangeSet, type TransactionSpec } from '@codemirror/state';
+import { Annotation, Compartment, EditorState, EditorSelection, Prec, RangeSetBuilder, Transaction, type ChangeSet, type TransactionSpec } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
 import { EditorView, Decoration, ViewPlugin, keymap, type DecorationSet } from '@codemirror/view';
-import { defaultKeymap, history, historyKeymap, isolateHistory } from '@codemirror/commands';
+import { defaultKeymap, historyKeymap, isolateHistory } from '@codemirror/commands';
+import { attachUndoHistory, createUndoHistoryScope, detachUndoHistory, readOnlyExtension, undoHistoryExtension } from '../editor/UndoHistoryScope';
 import { matchShortcut, type ShortcutId } from '../shared/keyboardShortcuts';
 import { buildTokenPresentation } from '../editor/MarkdownLineClassification';
 import { suppressNextPlainTypingSoundOnce, typingSoundManager } from '../sound/TypingSoundManager';
@@ -285,6 +286,13 @@ export interface CM6EditorProps {
    */
   isEditPaneVisible?: boolean;
   noteId?: string | null;
+  /**
+   * Which document the undo history belongs to; defaults to `noteId`. A
+   * section passes a different key while it shows a Time Machine snapshot,
+   * because the snapshot is a different document from the live note even
+   * though the note id is the same. See `editor/UndoHistoryScope.ts`.
+   */
+  historyKey?: string | null;
   /**
    * The text this editor should hold, read when it is needed, and a key that
    * changes exactly when that text may have. Not a string prop: every closure
@@ -815,6 +823,7 @@ export function CM6Editor({
   isSectionActive = true,
   isEditPaneVisible = true,
   noteId,
+  historyKey,
   readText = readNoText,
   textKey = '',
   scrollbarHost = null,
@@ -840,6 +849,12 @@ export function CM6Editor({
   // not per-render) so reconfigure() calls target the same slot the mount
   // effect originally installed via `readOnlyCompartmentRef.current.of(...)`.
   const readOnlyCompartmentRef = useRef(new Compartment());
+  // Holds `history()` for the document currently shown. Swapped (removed,
+  // then re-added with that document's own history) whenever the document
+  // changes, so an undo can only ever revert edits made to the document on
+  // screen. See the hydration effect.
+  const undoHistoryScopeRef = useRef(createUndoHistoryScope());
+  const activeHistoryKeyRef = useRef<string | null>(null);
   const spellCheckCompartmentRef = useRef(new Compartment());
   // The grid-cell guard judges characters against the current font, so it
   // is reconfigured whenever the font, its size or its loaded state changes.
@@ -3527,11 +3542,11 @@ export function CM6Editor({
 
     const extensions: Extension[] = [
       createCanonicalTextFilter(ProgrammaticHydrationAnnotation),
-      history(),
+      undoHistoryExtension(undoHistoryScopeRef.current),
       keymap.of([...CM6_DEFAULT_KEYMAP_WITHOUT_ALT_ARROW, ...historyKeymap]),
       lineTokenPlugin,
       EditorView.lineWrapping,
-      readOnlyCompartmentRef.current.of(EditorView.editable.of(!editorReadOnly)),
+      readOnlyCompartmentRef.current.of(readOnlyExtension(editorReadOnly)),
       spellCheckCompartmentRef.current.of(EditorView.contentAttributes.of({ class: 'editor-text', spellcheck: String(spellCheckEnabled) })),
       gridCellGuardCompartmentRef.current.of(gridCellGuard({ family: fontFamily, sizePx: fontSizePx, ready: fontReady })),
       // CM6's own drawSelection() extension is deliberately NOT included --
@@ -4250,6 +4265,7 @@ export function CM6Editor({
     });
     viewRef.current = view;
     lastHydratedNoteIdRef.current = noteId ?? null;
+    activeHistoryKeyRef.current = historyKey ?? noteId ?? null;
     setViewMountGeneration((generation) => generation + 1);
 
     if (debugCageStateEnabled) {
@@ -5016,7 +5032,7 @@ export function CM6Editor({
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
-    view.dispatch({ effects: readOnlyCompartmentRef.current.reconfigure(EditorView.editable.of(!editorReadOnly)) });
+    view.dispatch({ effects: readOnlyCompartmentRef.current.reconfigure(readOnlyExtension(editorReadOnly)) });
   }, [editorReadOnly]);
 
   useEffect(() => {
@@ -5086,9 +5102,31 @@ export function CM6Editor({
     const initialText = readText();
     const currentText = previousTextRef.current;
     const isNoteSwitch = lastHydratedNoteIdRef.current !== (noteId ?? null);
-    if (!isNoteSwitch && currentText === initialText) return;
+    const nextHistoryKey = historyKey ?? noteId ?? null;
+    const previousHistoryKey = activeHistoryKeyRef.current;
+    const isHistorySwitch = previousHistoryKey !== nextHistoryKey;
+    if (!isNoteSwitch && !isHistorySwitch && currentText === initialText) return;
 
     lastHydratedNoteIdRef.current = noteId ?? null;
+    activeHistoryKeyRef.current = nextHistoryKey;
+
+    // Hydration is never an edit the reader made in this editor, so it is
+    // never undoable. Two different reasons depending on the case:
+    //
+    // - A switch of document (another note, or into/out of a snapshot):
+    //   the history describes the OLD document. It is set aside under the
+    //   old key and the field is removed for the replace itself, so the
+    //   replace cannot become an undo step. Recording it is what put the
+    //   User Guide's text into a note: guide -> note was a recorded
+    //   full-document replace, and undoing past the reader's own typing
+    //   reverted it, writing the guide into the note, which then saved.
+    // - A same-document catch-up (the section's text store moved, e.g. the
+    //   same note edited in another slot): `addToHistory: false` keeps the
+    //   history and maps its positions through the change, so an undo here
+    //   reverts this editor's own edits and not another slot's.
+    const historyDetach = isHistorySwitch
+      ? detachUndoHistory(undoHistoryScopeRef.current, view.state, previousHistoryKey)
+      : undefined;
 
     const debugSwitchStartedAt = debugInputLagEnabled && isNoteSwitch ? performance.now() : null;
 
@@ -5096,7 +5134,8 @@ export function CM6Editor({
       view.dispatch({
         changes: { from: 0, to: view.state.doc.length, insert: initialText },
         selection: EditorSelection.cursor(0),
-        annotations: ProgrammaticHydrationAnnotation.of(true),
+        effects: historyDetach,
+        annotations: [ProgrammaticHydrationAnnotation.of(true), Transaction.addToHistory.of(false)],
       });
     } else {
       const change = computeMinimalTextReplacement(currentText, initialText);
@@ -5140,10 +5179,15 @@ export function CM6Editor({
       }
       view.dispatch({
         changes: change,
-        annotations: ProgrammaticHydrationAnnotation.of(true),
+        effects: historyDetach,
+        annotations: [ProgrammaticHydrationAnnotation.of(true), Transaction.addToHistory.of(false)],
       });
     }
     previousTextRef.current = initialText;
+
+    if (isHistorySwitch) {
+      view.dispatch({ effects: attachUndoHistory(undoHistoryScopeRef.current, view.state, nextHistoryKey) });
+    }
 
     if (debugSwitchStartedAt !== null) {
       requestAnimationFrame(() => {
@@ -5152,7 +5196,7 @@ export function CM6Editor({
       });
     }
     // textKey is not read: it is the signal that readText's answer changed.
-  }, [noteId, textKey, readText, debugInputLagEnabled]);
+  }, [noteId, historyKey, textKey, readText, debugInputLagEnabled]);
 
   // Review-flag load on note switch. Declared textually AFTER the hydration
   // effect above so React runs it after: it needs view.state.doc to already

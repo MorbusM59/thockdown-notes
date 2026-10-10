@@ -418,6 +418,7 @@ export function SectionEditorArea({
                   isSectionActive={isSectionActive}
                   isEditPaneVisible={!isPreviewMode}
                   noteId={activeNoteId}
+                  historyKey={previewedSnapshotId === null ? activeNoteId : `${activeNoteId}@snapshot:${previewedSnapshotId}`}
                   readText={readDisplayedText}
                   textKey={displayedTextKey}
                   scrollbarHost={scrollbarHostEl}
