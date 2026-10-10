@@ -62,7 +62,6 @@ export const MOUSE_GESTURES: readonly MouseGesture[] = [
   { section: 'category', action: 'click', button: 'right', label: 'prime for archiving' },
   { section: 'category', action: 'hold', button: 'right', label: 'prime for deletion' },
 
-
   { section: 'menu', action: 'wheel', label: 'turn dial' },
   { section: 'menu', action: 'click', button: 'left', label: 'select choice' },
 ]

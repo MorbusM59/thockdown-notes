@@ -37,8 +37,11 @@
 // mutation would put a hit test on the keydown path for nothing. A mutation
 // matters only if it could have changed what is under the pointer: the hit
 // element itself was removed, or something changed inside an ancestor of it
-// (a sibling inserted or removed above it reflows it). Anything else -- the
-// common case, a mutation elsewhere in the document -- is two cheap checks.
+// (a sibling inserted or removed above it reflows it). Anything else, a
+// mutation elsewhere in the document, is two cheap checks. Typing with the
+// pointer resting over the editor's own text does count (the edited line's
+// parent is an ancestor of the hit), and costs one hit test per frame at
+// most, never one per mutation.
 //
 // Not covered: content that moves under the pointer with no node added or
 // removed and no scroll -- by transform, animation, or a class, style or text

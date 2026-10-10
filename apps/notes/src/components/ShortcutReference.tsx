@@ -8,7 +8,7 @@ import {
   type ShortcutDeclaration,
 } from '../shared/keyboardShortcuts'
 import { mouseGesturesInSection, type MouseGesture } from '../shared/mouseGestures'
-import { HOLD_CAP, capForKey, capsForGesture, legendOf, type KeyCap } from './keyCaps'
+import { HOLD_CAP, capForKey, capsForGesture, legendOf, type KeyCap, type LegendEntry } from './keyCaps'
 
 // The keyboard shortcut reference: every declaration in
 // shared/keyboardShortcuts.ts and every gesture in shared/mouseGestures.ts,
@@ -82,8 +82,7 @@ const ROWS = ITEMS.flatMap((item) => (item.kind === 'row' ? [item.row] : []))
 /** The longest combination, in caps plus `/` separators. */
 const KEY_SLOTS = Math.max(...ROWS.map((row) => row.caps.flat().length + row.caps.length - 1))
 
-const LEGEND_ROWS: Row[] = legendOf(ROWS.flatMap((row) => row.caps.flat()))
-  .map((entry) => ({ caps: [entry.caps], label: entry.legend, alternative: false }))
+const LEGEND: LegendEntry[] = legendOf(ROWS.flatMap((row) => row.caps.flat()))
 
 function Cap({ cap }: { cap: KeyCap }) {
   return (
@@ -141,10 +140,10 @@ export function ShortcutReference({ surfaceVariables }: ShortcutReferenceProps) 
       style={{ ...surfaceVariables, '--shortcut-ref-key-slots': KEY_SLOTS } as CSSProperties}
     >
       <aside className="shortcut-ref-legend" aria-label="Key legend">
-        {LEGEND_ROWS.map((row) => (
-          <div key={row.label} className="shortcut-ref-legend-entry">
-            <span className="shortcut-ref-legend-caps">{row.caps[0].map((cap, index) => <Cap key={index} cap={cap} />)}</span>
-            <span className="shortcut-ref-legend-name">{row.label}</span>
+        {LEGEND.map((entry) => (
+          <div key={entry.legend} className="shortcut-ref-legend-entry">
+            <span className="shortcut-ref-legend-caps">{entry.caps.map((cap, index) => <Cap key={index} cap={cap} />)}</span>
+            <span className="shortcut-ref-legend-name">{entry.legend}</span>
           </div>
         ))}
       </aside>

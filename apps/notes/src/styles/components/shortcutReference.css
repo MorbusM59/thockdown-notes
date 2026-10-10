@@ -24,14 +24,33 @@
   /* The legend as wide as its content, the items in whatever is left. */
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
+  /* The key column is as wide as the longest combination
+     (--shortcut-ref-key-slots caps, set by the component), so descriptions
+     line up across every column. */
+  --shortcut-ref-keys-width: calc(
+    var(--shortcut-ref-key-slots) * var(--text-info-size) * 1.75
+    + (var(--shortcut-ref-key-slots) - 1) * var(--spacing-small)
+  );
 }
 
-/* The legend stands on the options sidebar's surface (sidebar.css's
-   .sidebar-content: the light parchment, then its texture layer). */
+/* The key legend: its own column down the left, as wide as its content (the
+   host's first grid column), standing on the options sidebar's surface
+   (sidebar.css's .sidebar-content: the light parchment, then its texture
+   layer) with the edge and shadow of a sidebar card. */
 .shortcut-reference .shortcut-ref-legend {
   position: relative;
   isolation: isolate;
   background-color: var(--palette-parchment-lightest);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--spacing-regular);
+  overflow: hidden;
+  font-size: var(--text-info-size);
+  border-right: 1px solid var(--color-panel-border);
+  box-shadow: var(--box-shadow-regular);
+  padding: var(--spacing-large);
 }
 
 /* The sidebar's texture layer (sidebar.css's .sidebar-content-texture). */
@@ -108,15 +127,7 @@
   background-color: var(--color-background-dark);
 }
 
-/* Keys, then what they do; the key column is as wide as the longest
-   combination (--shortcut-ref-key-slots caps), so descriptions line up. */
-.shortcut-reference {
-  --shortcut-ref-keys-width: calc(
-    var(--shortcut-ref-key-slots) * var(--text-info-size) * 1.75
-    + (var(--shortcut-ref-key-slots) - 1) * var(--spacing-small)
-  );
-}
-
+/* Keys, then what they do. */
 .shortcut-reference .shortcut-ref-row {
   display: grid;
   grid-template-columns: var(--shortcut-ref-keys-width) minmax(0, 1fr);
@@ -159,7 +170,7 @@
   color: var(--color-text-80);
 }
 
-/* Two or three letters (RM, F11) in a square need a smaller face. */
+/* Two or three letters (RM, Ctr, Esc) in a square need a smaller face. */
 .shortcut-reference .shortcut-ref-cap > span {
   font-size: 0.75em;
   font-weight: 600;
@@ -174,22 +185,6 @@
 .shortcut-reference .shortcut-ref-alternative {
   font-style: italic;
   color: var(--color-text-50);
-}
-
-/* The key legend: its own column down the left, outside the panels, as wide
-   as its content (the host's first grid column). */
-.shortcut-reference .shortcut-ref-legend {
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: var(--spacing-regular);
-  overflow: hidden;
-  font-size: var(--text-info-size);
-  /* The panels' card edge (interaction.css's .sidebar-options-accordion). */
-  border-right: 1px solid var(--color-panel-border);
-  box-shadow: var(--box-shadow-regular);
-  padding: var(--spacing-large);
 }
 
 .shortcut-reference .shortcut-ref-legend-entry {

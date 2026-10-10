@@ -66,7 +66,6 @@ export type ShortcutSectionId =
   | 'gutter'
   | 'find'
   | 'category'
-  | 'uncategorized'
   | 'menu'
 
 export interface ShortcutDeclaration {
@@ -141,7 +140,6 @@ export const SHORTCUT_PANELS: readonly ShortcutPanel[] = [
     icon: 'fa-solid fa-bars',
     sections: [{ id: 'find', title: 'Find' }, { id: 'category', title: 'Category view' }],
   },
-  { title: 'Uncategorized', icon: 'fa-solid fa-ellipsis', sections: [{ id: 'uncategorized' }] },
   { title: 'Quick actions menu', icon: 'fa-solid fa-circle-notch', sections: [{ id: 'menu' }], inReference: false },
 ]
 
@@ -190,7 +188,6 @@ export const SHORTCUTS = {
     macChords: [{ key: 'Backspace', alt: true }],
     label: 'Delete previous word',
   },
-
 
   // One direction per declaration: a declaration's further chords are
   // ALTERNATIVES for the same action, and Shift+Tab is not another Tab.
