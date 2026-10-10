@@ -1,9 +1,7 @@
-// How the shortcut reference's panels are arranged and how large their text
-// is drawn -- see ShortcutReference.tsx's opening comment for the whole
-// argument.
+// How the shortcut reference's cards (a panel's heading, and one card per
+// sub-section) are arranged into columns and how large their text is drawn --
+// see ShortcutReference.tsx's opening comment for the whole argument.
 
-/** Gap between columns, and between panels in a column, in CSS px. */
-export const GAP_PX = 10
 /** The overlay's own inner margin, in CSS px. */
 export const PADDING_PX = 16
 /** What sub-pixel rounding can add back when the layout is drawn at the solved size. */
@@ -19,8 +17,8 @@ export interface SectionSize {
 }
 
 /**
- * A panel's size as a function of its text scale `k`: every length inside a
- * panel either follows the text (glyphs, caps, line boxes, the description
+ * A card's size as a function of its text scale `k`: every length inside a
+ * card either follows the text (glyphs, caps, line boxes, the description
  * width) or stays fixed (spacing, borders), so each dimension is
  * `base + slope * k` -- exactly a straight line, read off two measurements.
  */
@@ -29,7 +27,7 @@ export interface LinearSize {
   height: { base: number; slope: number }
 }
 
-/** The line through a panel's sizes measured at text scales 1 and 2. */
+/** The line through a card's sizes measured at text scales 1 and 2. */
 export function linearSize(atOne: SectionSize, atTwo: SectionSize): LinearSize {
   return {
     width: { base: 2 * atOne.width - atTwo.width, slope: atTwo.width - atOne.width },
@@ -51,13 +49,25 @@ export interface Arrangement {
   scale: number
 }
 
+/**
+ * The gaps the cards are drawn with. A card's gap BEFORE it applies only
+ * when it shares a column with the card before it: a card that opens a
+ * column starts at the column's top.
+ */
+export interface Gaps {
+  /** Per card, the gap above it when the card before it is in its column. */
+  before: readonly number[]
+  /** Between two columns. */
+  column: number
+}
+
 /** Splits `heights` (in order) into `count` contiguous runs, minimising the tallest run. */
-function partition(heights: number[], count: number, gap: number): number[][] {
+function partition(heights: number[], count: number, gapsBefore: readonly number[]): number[][] {
   const n = heights.length
   const runHeight = (from: number, to: number): number => {
     let sum = 0
-    for (let i = from; i < to; i += 1) sum += heights[i]
-    return sum + gap * Math.max(0, to - from - 1)
+    for (let i = from; i < to; i += 1) sum += heights[i] + (i > from ? gapsBefore[i] : 0)
+    return sum
   }
   // best[k][i]: the tallest column when the first i sections fill k columns.
   const best: number[][] = Array.from({ length: count + 1 }, () => new Array<number>(n + 1).fill(Infinity))
@@ -84,37 +94,37 @@ function partition(heights: number[], count: number, gap: number): number[][] {
   return columns
 }
 
-/** The space `columns` takes with every panel at `sizes`, padding included. */
-export function arrangementSize(sizes: SectionSize[], columns: number[][]): SectionSize {
+/** The space `columns` takes with every card at `sizes`, padding included. */
+export function arrangementSize(sizes: SectionSize[], columns: number[][], gaps: Gaps): SectionSize {
   const width = columns.reduce((sum, column) => sum + Math.max(...column.map((index) => sizes[index].width)), 0)
-    + GAP_PX * (columns.length - 1) + PADDING_PX * 2
+    + gaps.column * (columns.length - 1) + PADDING_PX * 2
   const height = Math.max(...columns.map((column) =>
-    column.reduce((sum, index) => sum + sizes[index].height, 0) + GAP_PX * (column.length - 1)))
+    column.reduce((sum, index, position) => sum + sizes[index].height + (position > 0 ? gaps.before[index] : 0), 0)))
     + PADDING_PX * 2
   return { width, height }
 }
 
 /**
- * The column count, and the text scale, at which the panels can be drawn
+ * The column count, and the text scale, at which the cards can be drawn
  * largest in `availableWidth` x `availableHeight`, never above `MAX_SCALE`.
  *
- * For a given count, whether the panels fit at scale `k` is a pure function
+ * For a given count, whether the cards fit at scale `k` is a pure function
  * of the measured lines: lay them out at `k` (contiguous columns, the tallest
- * as short as it can be) and compare. Every panel grows with `k`, so fitting
+ * as short as it can be) and compare. Every card grows with `k`, so fitting
  * is monotone in it, and the largest scale that fits is found by bisection on
  * that function -- arithmetic on numbers already measured, nothing redrawn.
  */
-export function arrangeSections(sizes: LinearSize[], availableWidth: number, availableHeight: number): Arrangement {
+export function arrangeSections(sizes: LinearSize[], gaps: Gaps, availableWidth: number, availableHeight: number): Arrangement {
   let bestArrangement: Arrangement = { columns: [sizes.map((_, index) => index)], scale: 0 }
   const layoutAt = (scale: number, count: number) => {
     const scaled = sizes.map((size) => sizeAt(size, scale))
-    const columns = partition(scaled.map((size) => size.height), count, GAP_PX)
-    const { width, height } = arrangementSize(scaled, columns)
+    const columns = partition(scaled.map((size) => size.height), count, gaps.before)
+    const { width, height } = arrangementSize(scaled, columns, gaps)
     return { columns, fits: width <= availableWidth * ROUNDING_HEADROOM && height <= availableHeight * ROUNDING_HEADROOM }
   }
   // Never larger than the options sidebar draws the same text (scale 1): the
   // fit only shrinks, for a window that cannot hold everything at that size.
-  // Nor larger than the scale at which any one panel alone fills the space.
+  // Nor larger than the scale at which any one card alone fills the space.
   let ceiling = MAX_SCALE
   for (const size of sizes) {
     if (size.width.slope > 0) ceiling = Math.min(ceiling, (availableWidth - PADDING_PX * 2 - size.width.base) / size.width.slope)
@@ -124,7 +134,7 @@ export function arrangeSections(sizes: LinearSize[], availableWidth: number, ava
   // Where several counts reach the cap, the one that fills the space most
   // evenly wins: its larger share of the width or the height is smallest.
   const fill = (scale: number, columns: number[][]) => {
-    const { width, height } = arrangementSize(sizes.map((size) => sizeAt(size, scale)), columns)
+    const { width, height } = arrangementSize(sizes.map((size) => sizeAt(size, scale)), columns, gaps)
     return Math.max(width / availableWidth, height / availableHeight)
   }
   for (let count = 1; count <= sizes.length; count += 1) {

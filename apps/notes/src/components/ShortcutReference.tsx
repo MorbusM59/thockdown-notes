@@ -1,4 +1,4 @@
-import { Fragment, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { Fragment, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import {
   SHORTCUT_PANELS,
   displayChords,
@@ -9,7 +9,7 @@ import {
 } from '../shared/keyboardShortcuts'
 import { mouseGesturesInSection, type MouseGesture } from '../shared/mouseGestures'
 import { HOLD_CAP, capForKey, capsForGesture, legendOf, type KeyCap } from './keyCaps'
-import { GAP_PX, PADDING_PX, arrangeSections, linearSize, type Arrangement } from './shortcutReferenceLayout'
+import { PADDING_PX, arrangeSections, linearSize, type Arrangement } from './shortcutReferenceLayout'
 
 // The keyboard shortcut reference: every declaration in
 // shared/keyboardShortcuts.ts and every gesture in shared/mouseGestures.ts,
@@ -156,24 +156,52 @@ function Rows({ rows }: { rows: Row[] }) {
   )
 }
 
-function PanelView({ panel }: { panel: Panel }) {
+/**
+ * One card of the layout: a sub-section, led by its panel's heading when it
+ * is the panel's first. The heading travels with the first sub-section so a
+ * column never ends on a heading with nothing under it; every later
+ * sub-section is a card of its own and may open the next column.
+ */
+interface Card {
+  key: string
+  /** The panel, on its first card only. */
+  panel?: Panel
+  section: Section
+}
+
+const CARDS: Card[] = PANELS.flatMap((panel) => panel.sections.map((section, index) => ({
+  key: `${panel.title}/${section.id}`,
+  panel: index === 0 ? panel : undefined,
+  section,
+})))
+
+/** The options section's card, around whatever it holds. */
+function SectionCard({ children }: { children: ReactNode }) {
   return (
     <section className="options-section sidebar-options-section shortcut-ref-section">
-      <div className="sidebar-options-accordion">
-        <h3 className="sidebar-options-section-heading">
-          <span className={panel.icon} aria-hidden="true" />
-          {panel.title}
-        </h3>
-        <div className="sidebar-options-accordion-body">
-          {panel.sections.map((section) => (
-            <Fragment key={section.id}>
-              {section.title ? <div className="options-subsection-label">{section.title}</div> : null}
-              <Rows rows={section.rows} />
-            </Fragment>
-          ))}
-        </div>
-      </div>
+      <div className="sidebar-options-accordion">{children}</div>
     </section>
+  )
+}
+
+function CardView({ card }: { card: Card }) {
+  return (
+    <div className={`shortcut-ref-card${card.panel ? ' shortcut-ref-opens-panel' : ''}`}>
+      {card.panel ? (
+        <SectionCard>
+          <h3 className="sidebar-options-section-heading">
+            <span className={card.panel.icon} aria-hidden="true" />
+            {card.panel.title}
+          </h3>
+        </SectionCard>
+      ) : null}
+      <SectionCard>
+        <div className="sidebar-options-accordion-body">
+          {card.section.title ? <div className="options-subsection-label">{card.section.title}</div> : null}
+          <Rows rows={card.section.rows} />
+        </div>
+      </SectionCard>
+    </div>
   )
 }
 
@@ -223,12 +251,21 @@ export function ShortcutReference({ surfaceVariables }: ShortcutReferenceProps) 
         const rect = child.getBoundingClientRect()
         return { width: rect.width, height: rect.height }
       })
+      // The gaps are the app's spacing tokens, read rather than restated: a
+      // sub-section's card sits a small gap under the card before it, a new
+      // panel a large one, and columns are a large gap apart. The tokens are
+      // calc() expressions, so they are read as the computed gaps of
+      // elements drawn with them (a card's own, and a hidden copy's, which
+      // stacks its cards a panel apart) -- resolved to pixels by the browser.
+      const small = parseFloat(getComputedStyle(copies[0].children[0]).rowGap)
+      const large = parseFloat(getComputedStyle(copies[0]).rowGap)
+      const gaps = { before: CARDS.map((card) => (card.panel ? large : small)), column: large }
       let best: Solution | null = null
       LABEL_WIDTHS_PX.forEach((labelWidthPx, labelIndex) => {
         const one = sizesOf(copyAt(labelIndex, 0))
         const two = sizesOf(copyAt(labelIndex, 1))
-        // The panels have the stage: whatever the legend column leaves.
-        const arrangement = arrangeSections(one.map((size, index) => linearSize(size, two[index])), stage.clientWidth, stage.clientHeight)
+        // The cards have the stage: whatever the legend column leaves.
+        const arrangement = arrangeSections(one.map((size, index) => linearSize(size, two[index])), gaps, stage.clientWidth, stage.clientHeight)
         if (!best || arrangement.scale > best.scale) {
           best = { ...arrangement, labelWidthPx, keysWidthPx: keysWidthAt(arrangement.scale) }
         }
@@ -247,7 +284,7 @@ export function ShortcutReference({ surfaceVariables }: ShortcutReferenceProps) 
       className="shortcut-reference"
       role="dialog"
       aria-label="Keyboard shortcuts"
-      style={{ ...surfaceVariables, '--shortcut-ref-gap': `${GAP_PX}px`, '--shortcut-ref-padding': `${PADDING_PX}px` } as CSSProperties}
+      style={{ ...surfaceVariables, '--shortcut-ref-padding': `${PADDING_PX}px` } as CSSProperties}
     >
       <div ref={measuresRef} className="shortcut-ref-measures" aria-hidden="true">
         {LABEL_WIDTHS_PX.flatMap((width) => MEASURE_SCALES.map((scale) => (
@@ -256,7 +293,7 @@ export function ShortcutReference({ surfaceVariables }: ShortcutReferenceProps) 
             className="shortcut-ref-measure"
             style={{ '--shortcut-ref-label-width': `${width}px`, '--shortcut-ref-text-scale': scale } as CSSProperties}
           >
-            {PANELS.map((panel) => <PanelView key={panel.title} panel={panel} />)}
+            {CARDS.map((card) => <CardView key={card.key} card={card} />)}
           </div>
         )))}
       </div>
@@ -281,7 +318,7 @@ export function ShortcutReference({ surfaceVariables }: ShortcutReferenceProps) 
           <div className="shortcut-ref-columns">
             {solution.columns.map((column) => (
               <div key={column.join('-')} className="shortcut-ref-column">
-                {column.map((index) => <PanelView key={PANELS[index].title} panel={PANELS[index]} />)}
+                {column.map((index) => <CardView key={CARDS[index].key} card={CARDS[index]} />)}
               </div>
             ))}
           </div>

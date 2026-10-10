@@ -81,6 +81,9 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  /* Cards a panel apart: the component reads this gap as the resolved value
+     of --spacing-large. */
+  row-gap: var(--spacing-large);
 }
 
 .shortcut-reference .shortcut-ref-measure > * {
@@ -93,7 +96,6 @@
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: var(--shortcut-ref-gap);
   padding: var(--shortcut-ref-padding);
 }
 
@@ -101,14 +103,32 @@
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  gap: var(--shortcut-ref-gap);
+  gap: var(--spacing-large);
 }
 
-/* Panels as tall as their rows, at the top: the room left over stays below. */
+/* Cards as tall as their rows, at the top: the room left over stays below. A
+   card sits a small gap under the card before it, and a large one when it
+   opens a new panel; the first card in a column has nothing above it. */
 .shortcut-reference .shortcut-ref-column {
   display: flex;
   flex-direction: column;
-  gap: var(--shortcut-ref-gap);
+}
+
+.shortcut-reference .shortcut-ref-column > .shortcut-ref-card + .shortcut-ref-card {
+  margin-top: var(--spacing-small);
+}
+
+.shortcut-reference .shortcut-ref-column > .shortcut-ref-card + .shortcut-ref-opens-panel {
+  margin-top: var(--spacing-large);
+}
+
+/* A panel's heading and its first sub-section travel together, a small gap
+   apart. The component reads this gap as the resolved value of
+   --spacing-small. */
+.shortcut-reference .shortcut-ref-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-small);
 }
 
 /* The sidebar centres a section in its flyout with an auto margin and a
