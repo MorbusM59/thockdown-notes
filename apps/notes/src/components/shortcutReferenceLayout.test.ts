@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { arrangeSections } from './shortcutReferenceLayout'
+import { GAP_PX, PADDING_PX, arrangeSections } from './shortcutReferenceLayout'
 
 const header = { width: 300, height: 40 }
 const sizes = [
@@ -23,10 +23,9 @@ describe('arrangeSections', () => {
 
   it('never solves a size that overflows the slot', () => {
     for (const [w, h] of [[300, 1200], [1600, 300], [800, 600], [120, 90], [0, 0]]) {
-      const { columns, fontPx } = arrangeSections(sizes, header, w, h)
-      const scale = fontPx / 16
-      const pad = 1.5 * 16 * 2
-      const gap = 1.25 * 16
+      const { columns, scale } = arrangeSections(sizes, header, w, h)
+      const pad = PADDING_PX * 2
+      const gap = GAP_PX
       const width = Math.max(columns.reduce((sum, c) => sum + Math.max(...c.map((i) => sizes[i].width)), 0) + gap * (columns.length - 1), header.width) + pad
       const height = Math.max(...columns.map((c) => c.reduce((sum, i) => sum + sizes[i].height, 0) + gap * (c.length - 1))) + header.height + gap + pad
       expect(width * scale).toBeLessThanOrEqual(w)
