@@ -10,6 +10,7 @@
 // beaten, it just was not searched.
 
 
+import { foundIn, regionOf } from '../content'
 import { nextSample } from '../core/rng'
 import type { JsonObject } from '../core/json'
 import type { StageContext, StageModule } from '../core/stage'
@@ -31,7 +32,7 @@ function rollItemOffers(context: StageContext, rng: number, alreadyShown: readon
   // Not what is already held: a duplicate is not a second item, it is the
   // same one applying twice (model/gameState.ts's `acquireModifier`), and
   // offering it would be offering nothing.
-  const unheld = context.items.filter((item) => !context.held.some((row) => row.id === item.id))
+  const unheld = foundIn(regionOf(context.content, context.game?.regionId), context.items, 'item').filter((item) => !context.held.some((row) => row.id === item.id))
   const wanted = context.profile?.derived.offerChoices ?? 2
   // Unseen first. When one fight pays several screens, an item an earlier
   // screen of the same spoils already showed is the same choice asked again,
@@ -72,6 +73,11 @@ function crossedPills(game: GameRecord | null, gold: number, motes: number): str
     ...(stat > 0 ? [`**Tier ${playerTierOf(game) + stat}.** *${stat === 1 ? 'A stat point' : `${stat} stat points`} to spend.*`] : []),
     ...(fame > 0 ? [`**${fame === 1 ? 'A fame point' : `${fame} fame points`}** to spend.`] : []),
   ]
+}
+
+/** The line after taking one of several spoils; exported for choiceWidth.contract.test.ts. */
+export function moreToSearch(label: string): string {
+  return `**${label}**, and more to search.`
 }
 
 export const lootStage: StageModule = {
@@ -191,7 +197,7 @@ export const lootStage: StageModule = {
         // next screen's item offers rolled against a Luck the player had
         // already earned but not yet been given.
         effects: taken,
-        narration: [...crossedPills(context.game, gold, 0), `**${label}**, and more to search.`],
+        narration: [...crossedPills(context.game, gold, 0), moreToSearch(label)],
         rng: rolled.rng,
       }
     }

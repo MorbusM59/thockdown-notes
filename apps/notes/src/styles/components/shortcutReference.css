@@ -1,102 +1,185 @@
-/* The keyboard shortcut reference (components/ShortcutReference.tsx): an
-   opaque overlay over the active slot's stage while Escape is held past the
-   quick-actions menu. Every length here is in em and every row is nowrap,
-   which is what lets the component size the text by arithmetic -- a px
-   length or a wrapping line would break the proportionality it relies on. */
-.editor-stage .shortcut-reference {
-  position: absolute;
+/* The keyboard shortcut reference (components/ShortcutReference.tsx): the
+   whole window, blurred the way the quick-actions ring blurs its slot, with
+   the shortcut groups laid out over it as options sections while F1 is held.
+
+   The panels are the options sidebar's sections, drawn by the sidebar's own
+   rules (packages/interaction/interaction.css). What is here is only what a
+   reference needs and a sidebar does not: the overlay, the arrangement into
+   columns, the key caps and the rows. The component zooms the arrangement to
+   the window with CSS `zoom`, so lengths here are ordinary px: zoom scales
+   layout exactly, borders included. */
+.shortcut-reference {
+  position: fixed;
   inset: 0;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  /* Over the app and its tooltip layer (5000, controls.css) -- a tooltip
+     left open when the hold lands would otherwise float over the reference
+     -- and under the theme's glaze and colorize layers (6000 and up), which
+     are meant to tint everything. */
+  z-index: 5500;
   overflow: hidden;
-  background: linear-gradient(var(--color-input-backdrop), var(--color-input-backdrop)), var(--background-color-root);
+  background: color-mix(in srgb, var(--background-color-root) 35%, transparent);
+  backdrop-filter: blur(4px);
   color: var(--color-text-base);
   font-family: var(--ui-font-family);
-  /* Takes the clicks: the menu under it is out of sight, and a click must
-     not choose a cell the reader cannot see. */
+  /* Takes the clicks: what is under it is out of sight, and a click must
+     not land on a control the reader cannot see. */
   pointer-events: auto;
 }
 
-.shortcut-reference .shortcut-ref-measure {
+.shortcut-reference .shortcut-ref-measures {
   position: absolute;
   top: 0;
   left: 0;
   visibility: hidden;
+}
+
+/* One hidden copy per candidate description width, each panel at its own
+   natural size. */
+.shortcut-reference .shortcut-ref-measure {
+  position: absolute;
+  top: 0;
+  left: 0;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
 }
 
+.shortcut-reference .shortcut-ref-measure > * {
+  width: max-content;
+}
+
 .shortcut-reference .shortcut-ref-layout {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
   display: flex;
-  flex-direction: row;
-  align-items: flex-start;
+  flex-direction: column;
   gap: var(--shortcut-ref-gap);
   padding: var(--shortcut-ref-padding);
 }
 
+.shortcut-reference .shortcut-ref-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-regular);
+  white-space: nowrap;
+  font-size: var(--text-info-size);
+  color: var(--color-text-60);
+}
+
+.shortcut-reference .shortcut-ref-title {
+  margin-right: auto;
+  padding-right: var(--spacing-large);
+  font-size: calc(var(--text-info-size) * 1.25);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--color-text-80);
+}
+
+.shortcut-reference .shortcut-ref-columns {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: var(--shortcut-ref-gap);
+}
+
+/* Panels as tall as their rows, at the top: the room left over stays below. */
 .shortcut-reference .shortcut-ref-column {
   display: flex;
   flex-direction: column;
   gap: var(--shortcut-ref-gap);
 }
 
+/* The sidebar centres a section in its flyout with an auto margin and a
+   width of its own; here the column decides both. */
 .shortcut-reference .shortcut-ref-section {
-  width: max-content;
-  white-space: nowrap;
-  line-height: 1.5;
+  margin: 0;
+  width: auto;
 }
 
-.shortcut-reference .shortcut-ref-section h3 {
-  margin: 0 0 0.35em;
-  padding-bottom: 0.2em;
-  font-size: 0.8em;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-text-60);
-  border-bottom: 0.08em solid var(--color-text-20);
+/* Unfolded, and nothing here folds: the heading drops the fold arrow and
+   keeps the summary's height. */
+.shortcut-reference .sidebar-options-section-heading {
+  min-height: calc(20px * var(--ui-font-scale));
+  padding: var(--spacing-regular) 0;
 }
 
+.shortcut-reference .sidebar-options-section-heading::after {
+  content: none;
+}
+
+.shortcut-reference .sidebar-options-accordion-body {
+  padding-bottom: var(--toolbar-options-gap);
+}
+
+/* Keys, then what they do. The key column is one width in every panel,
+   measured by the component; the description wraps at a width the
+   component chooses for the window's shape. */
 .shortcut-reference .shortcut-ref-rows {
   display: grid;
-  grid-template-columns: max-content max-content;
-  column-gap: 1em;
-  row-gap: 0.25em;
+  grid-template-columns: var(--shortcut-ref-keys-width, max-content) var(--shortcut-ref-label-width);
+  column-gap: var(--spacing-large);
+  row-gap: var(--spacing-regular);
+  align-items: start;
+  font-size: var(--text-info-size);
 }
 
-.shortcut-reference .shortcut-ref-row {
-  display: contents;
+/* The legend names one key per row: its caps need only their own width,
+   and its names do not wrap. */
+.shortcut-reference .shortcut-ref-rows-compact {
+  grid-template-columns: max-content max-content;
 }
 
 .shortcut-reference .shortcut-ref-keys {
   display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 0.25em;
+  justify-self: end;
+  gap: var(--spacing-small);
+  white-space: nowrap;
 }
 
-.shortcut-reference .shortcut-ref-word {
-  font-size: 0.8em;
-  color: var(--color-text-50);
+.shortcut-reference .shortcut-ref-or {
+  color: var(--color-text-40);
 }
 
-.shortcut-reference kbd {
+/* A square cap per key: an icon or up to three letters, one size for all,
+   so a combination is as wide as its number of keys. Its first line of
+   description sits on the cap's centre line. */
+.shortcut-reference .shortcut-ref-cap {
+  --cap-size: calc(var(--text-info-size) * 1.75);
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--cap-size);
+  height: var(--cap-size);
+  flex: none;
   font-family: inherit;
-  font-size: 0.8em;
-  line-height: 1.3;
-  padding: 0 0.45em;
-  /* Drawn as an inset shadow, not a border: a border rounds up to 1px at
-     small sizes and takes layout width, which breaks the proportionality
-     the sizing arithmetic depends on. A shadow takes no layout at all. */
-  box-shadow: inset 0 0 0 0.08em var(--color-text-30), inset 0 -0.14em 0 var(--color-text-30);
-  border-radius: 0.35em;
-  background: var(--bg-menu-card);
-  color: var(--color-text-90);
+  font-size: var(--text-info-size);
+  border-radius: var(--border-radius-small);
+  background: var(--btn-bg-default);
+  border: 1px solid var(--btn-border-default);
+  box-shadow: var(--box-shadow-regular-light);
+  color: var(--color-text-80);
+}
+
+/* Three letters (RMB, F11) in a square need a smaller face. */
+.shortcut-reference .shortcut-ref-cap > span {
+  font-size: 0.75em;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 .shortcut-reference .shortcut-ref-label {
+  /* A wrapped description keeps ordinary line spacing; the padding puts its
+     first line on the cap's centre (1.75 cap height, 1.35 line). */
+  line-height: 1.35;
+  padding-top: calc(var(--text-info-size) * 0.2);
   color: var(--color-text-80);
+}
+
+.shortcut-reference .shortcut-ref-alternative {
+  font-style: italic;
+  color: var(--color-text-50);
 }

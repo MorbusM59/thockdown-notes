@@ -188,6 +188,8 @@ import { createSeed } from './adventure/core/rng'
 import { DEFAULT_SETTINGS } from './adventure/model/gameState'
 import { ESCAPE_HOLD_MS } from './shared/escapeHold'
 import { matchShortcut, type ShortcutId } from './shared/keyboardShortcuts'
+import { useHelpKey } from './shared/useHelpKey'
+import { ShortcutReference } from './components/ShortcutReference'
 import {
   liveOccupancy,
   planOverlayClose,
@@ -1996,22 +1998,6 @@ function App() {
   const escapeHoldTimerRef = useRef<number | null>(null)
   const escapeHoldTriggeredRef = useRef(false)
   const escapeFreshCycleWhilePanelOpenRef = useRef(false)
-  // The keyboard shortcut reference (components/ShortcutReference.tsx) is
-  // the escape hold's second stage: up only while Escape stays down, and
-  // what its release goes back to depends on where the hold started. A hold
-  // that began in the editor and carried on through the menu's threshold
-  // returns to the editor (`'editor'`: the menu goes down with it); a fresh
-  // hold from a menu already up returns to that menu (`'menu'`). Both wait
-  // the same confirm threshold as the menu itself, on the same timer.
-  const [shortcutReferenceOrigin, setShortcutReferenceOrigin] = useState<'editor' | 'menu' | null>(null)
-  // Mirrored in a ref because the Escape keyup reads it: a release landing
-  // between the timer setting the state and the listener re-registering with
-  // the new value would otherwise see the old one and leave the reference up.
-  const shortcutReferenceOriginRef = useRef<'editor' | 'menu' | null>(null)
-  const setReferenceOrigin = useCallback((origin: 'editor' | 'menu' | null) => {
-    shortcutReferenceOriginRef.current = origin
-    setShortcutReferenceOrigin(origin)
-  }, [])
   // Set when an Escape keydown was spent on a field (defocusing it, or
   // handing focus back to the editor from find/replace/tags), so the same
   // press's keyup does not ALSO toggle the view -- the keyup listener runs on
@@ -2031,7 +2017,6 @@ function App() {
   useEffect(() => clearEscapeHoldTimer, [clearEscapeHoldTimer])
   const handleEscapeHoldPanelClose = useCallback(() => {
     setIsEscapeHoldPanelOpen(false)
-    setReferenceOrigin(null)
     clearEscapeHoldTimer()
     escapeHoldTriggeredRef.current = false
     escapeFreshCycleWhilePanelOpenRef.current = false
@@ -2045,26 +2030,20 @@ function App() {
     // in a note beside it is not a dismissal of it -- and treating it as one
     // ended a game the reader was not even looking at.
     if (isModeOwningActiveSlotRef.current) escapeMenuModeRef.current?.onDismiss?.()
-  }, [clearEscapeHoldTimer, setReferenceOrigin])
-  // A hold in progress has Escape down under it, and losing the window means
-  // its release will never be seen -- so losing the window IS the release:
-  // a pending stage is cancelled (otherwise it fires while away and leaves
-  // the reference up with no key held), and a reference that is up goes
-  // back to where its hold began.
+  }, [clearEscapeHoldTimer])
+  // An Escape hold in progress has the key down under it, and losing the
+  // window means its release will never be seen -- so losing the window ends
+  // the press: the pending stage is cancelled (otherwise it fires while away)
+  // and the next Escape is read as a fresh one.
   useEffect(() => {
     const onBlur = () => {
       clearEscapeHoldTimer()
-      // The press these describe is over, so the next Escape is a fresh one.
       escapeHoldTriggeredRef.current = false
       escapeFreshCycleWhilePanelOpenRef.current = false
-      const origin = shortcutReferenceOriginRef.current
-      if (origin === null) return
-      setReferenceOrigin(null)
-      if (origin === 'editor') handleEscapeHoldPanelClose()
     }
     window.addEventListener('blur', onBlur)
     return () => window.removeEventListener('blur', onBlur)
-  }, [clearEscapeHoldTimer, handleEscapeHoldPanelClose, setReferenceOrigin])
+  }, [clearEscapeHoldTimer])
   // "Double size" mode: 2x page zoom paired with a doubled window minimum --
   // see the window-control:double-size-mode handler in electron/main.ts.
   const [isDoubleSizeMode, setIsDoubleSizeMode] = useState(false)
@@ -2205,12 +2184,11 @@ function App() {
     // Only an arriving NOTE, not an emptying: opening the adventure clears
     // the slot and raises the ring in the same gesture, and treating that
     // clear as a switch would close the ring on the way in.
-    // The hold's pending stage goes with it, or a reference would rise over
+    // A hold still pending goes with it, or the menu would rise again over
     // the note that just arrived.
     if (arrival?.arrivedNoteId) {
       setIsEscapeHoldPanelOpen(false)
       clearEscapeHoldTimer()
-      setReferenceOrigin(null)
     }
 
     // A guide that ARRIVED without us opening it -- a restored session, one
@@ -2237,7 +2215,7 @@ function App() {
       void persistMenuStateNowRef.current({ slotOverlay: overlay })
       return overlay
     })
-  }, [clearEscapeHoldTimer, setReferenceOrigin])
+  }, [clearEscapeHoldTimer])
 
   /**
    * What the slots THAT EXIST are showing. The only form of the aggregate
@@ -5529,9 +5507,8 @@ ${markdownHtml}
   const closeAdventureView = useCallback(async (): Promise<void> => {
     setIsEscapeHoldPanelOpen(false)
     clearEscapeHoldTimer()
-    setReferenceOrigin(null)
     await closeOverlay()
-  }, [clearEscapeHoldTimer, closeOverlay, setReferenceOrigin])
+  }, [clearEscapeHoldTimer, closeOverlay])
 
   /**
    * The User Guide window control's other half. Left click is the guide
@@ -5720,6 +5697,24 @@ ${markdownHtml}
    * it is invoked from inside a particular slot. So it brings the guide HERE,
    * closing it wherever it was -- there is only ever one.
    */
+  // F1: a tap toggles the guide -- closes it wherever it is showing, or
+  // brings it into the active slot -- and a hold shows the shortcut
+  // reference while held (shared/useHelpKey.ts). Unlike the window control
+  // this is not the adventure's toggle too: the key says "help", so it never
+  // ends a game that happens to light the same button. Nor does it open the
+  // guide OVER the game: a slot has one overlay record, so the guide would
+  // overwrite the game's and closing it would leave the slot empty. With the
+  // game in the active slot and no guide showing, the tap does nothing; the
+  // hold still shows the reference, which touches no slot.
+  const isShortcutReferenceOpen = useHelpKey(() => {
+    if (guideSectionId) {
+      void closeOverlay()
+      return
+    }
+    if (adventureSectionId === activeSectionId) return
+    void openGuideViewHere()
+  })
+
   const handleHelpModeOpen = useCallback(async () => {
     if (guideSectionId === activeSectionId) return
     // openOverlayHere hands the other slot its note back on its own, so the
@@ -8741,11 +8736,6 @@ ${markdownHtml}
         if (isEscapeRingUp) {
           if (!event.repeat) {
             escapeFreshCycleWhilePanelOpenRef.current = true
-            clearEscapeHoldTimer()
-            escapeHoldTimerRef.current = window.setTimeout(() => {
-              escapeHoldTimerRef.current = null
-              setReferenceOrigin('menu')
-            }, ESCAPE_HOLD_MS)
           }
           event.preventDefault()
           return
@@ -8766,12 +8756,8 @@ ${markdownHtml}
         escapeFreshCycleWhilePanelOpenRef.current = false
         escapeHoldTimerRef.current = window.setTimeout(() => {
           escapeHoldTriggeredRef.current = true
+          escapeHoldTimerRef.current = null
           setIsEscapeHoldPanelOpen(true)
-          // Still held: the same timer, re-armed, is the reference's.
-          escapeHoldTimerRef.current = window.setTimeout(() => {
-            escapeHoldTimerRef.current = null
-            setReferenceOrigin('editor')
-          }, ESCAPE_HOLD_MS)
         }, ESCAPE_HOLD_MS)
       }
     }
@@ -8786,18 +8772,6 @@ ${markdownHtml}
       if (escapeConsumedByFieldRef.current) {
         escapeConsumedByFieldRef.current = false
         event.preventDefault()
-        return
-      }
-
-      // Releasing the hold that raised the reference puts back whatever was
-      // there before the hold began.
-      const origin = shortcutReferenceOriginRef.current
-      if (origin !== null) {
-        event.preventDefault()
-        setReferenceOrigin(null)
-        escapeHoldTriggeredRef.current = false
-        escapeFreshCycleWhilePanelOpenRef.current = false
-        if (origin === 'editor') handleEscapeHoldPanelClose()
         return
       }
 
@@ -8843,11 +8817,10 @@ ${markdownHtml}
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
     // The hold timer is NOT cleared here. This effect re-registers whenever
-    // one of its many dependencies changes -- and the hold's own first stage
-    // changes one (raising the menu flips isEscapeRingUp), so clearing on
-    // re-registration killed the second stage it had just armed. The timer
-    // callbacks touch only setters and refs, so they outlive a re-render
-    // safely; unmount clears it below.
+    // one of its many dependencies changes, none of which ends the press, so
+    // clearing on re-registration would cancel a hold for an unrelated
+    // re-render. The timer callback touches only setters and refs, so it
+    // outlives a re-render safely; unmount clears it.
     return () => {
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
@@ -8862,7 +8835,6 @@ ${markdownHtml}
     getActiveSection,
     handleEscapeHoldPanelClose,
     isEscapeRingUp,
-    setReferenceOrigin,
     isFindMode,
     isImmersiveMode,
     isReplaceMode,
@@ -10181,7 +10153,6 @@ ${markdownHtml}
                   spellCheckRenderEnabled={spellCheckEnabled}
                   highlightSearchColor={highlightColors.search}
                   isEscapeHoldPanelOpen={isEscapeRingUp}
-                  isShortcutReferenceOpen={shortcutReferenceOrigin !== null}
                   onEscapeHoldPanelClose={handleEscapeHoldPanelClose}
                   onEscapeHoldCreateNote={createNote}
                   onEscapeHoldCreateChapter={activeSection?.handleCreateChapter ?? noopAsync}
@@ -10207,6 +10178,7 @@ ${markdownHtml}
             </div>
           </div>
         </div>
+        {isShortcutReferenceOpen ? <ShortcutReference /> : null}
         <ThemeBlendOverlays theme={theme} />
       </div>
       {/* Mounted once, app-wide -- not scoped to the editor. See that

@@ -1225,7 +1225,7 @@ real trade-offs rather than defaults, measured with `npm run adventure:balance`'
 lookahead player (`clever`), which plays the best choice for the hand it is
 dealt without seeing the dice.
 
-- **Take the hit swings back in full** (`DEFENCE_COUNTER`, Counter 100%). As
+- *(Superseded 2026-10-08 by Trade Blows, below.)* **Take the hit swings back in full** (`DEFENCE_COUNTER`, Counter 100%). As
   written it was Defend with the miss chance and the armour removed, and a
   lookahead player took it 2% of the times it was offered. Every move authored
   onto that cell (Backdraft, Brace, Absolve) is already a counter, so the plain
@@ -1318,3 +1318,100 @@ dealt without seeing the dice.
   the island and caves lighter ones, so a region is also a choice of risk;
   whether that is wanted is the author's call. A run in progress keeps its
   stored offers, but its next draws may name different species.
+### Pinned class and species matrix (2026-10-07)
+- Measured with 8 clever runs to level 8 for every class and player species, pinned. Brawler and Shieldbreaker died far more often than the field, and careful Bruiser runs got less far than careful runs in general.
+- Brawler: Grapple 100% instead of 80%. Shieldbreaker: Pry 100% instead of 90%, so ignoring armor is never paid for with damage. Bruiser: Haymaker −20% to Hit instead of −35%.
+- **A harder region pays more.** Forced into one region every level, a
+  careful player got about 74 encounters into a run in the caves or on the
+  island, 67 in the ruins and 56 in the ember wastes, so the wastes were a
+  trap. A region now adds `rewardBonus` to the starting chance of every
+  reward check won there, in a rank's units (0.5 is an elite's): the wastes
+  +0.2, the ruins +0.1, the rest 0. The fen measured as safe as the caves and
+  gets nothing. At +0.5 the wastes became the safest region outright, since
+  spoils compound. At +0.2 the careful player still does worse there (63
+  encounters), while the lookahead player dies no more often than in the
+  caves (21% against 33% over 24 runs) and earns the most gold of any region,
+  so a strong build is tempted and a weak one is wise to skip it. Weak
+  evidence on both sides: the careful player dies in 88-91% of runs anywhere,
+  and 24 lookahead runs per region is a small sample. The tooltip states the
+  bonus.
+
+### Every class has a defensive move (2026-10-08)
+- At Difficulty 1.08 the eight classes whose moves all replaced Attack died 38% of the time against 13% for the fourteen with a move on Defend, Dodge or Take the Hit; tuning their attacks moved nothing. Each now has one defensive move in its own style: Bruiser Shrug It Off and Mauler Roll With It (Take the Hit), Brawler Clinch, Reaver Blood Guard and Shieldbreaker Shield Bash (Defend), Assassin Fade, Juggler Deflect and Falconer Screen (Dodge). Sized like Endure and Brace (guard 2–3, counter 0.3–0.5). After: 15% against 22%, within noise (12 clever runs to level 8 per class).
+
+### Pacing after the defensive moves (2026-10-08)
+- **The late ramp is five a level, not three** (`MONSTER_TIER_LATE_EXTRA`),
+  still past level 6, so the first extra arrives at level 7. With every class
+  holding a defensive move and lingering spells paying once a round, the
+  lookahead player won 80% of 12-level runs and the careful player 10%
+  (200 runs each). At five the lookahead player wins 61% and the careful
+  player 1%, its median falling from 89 encounters to 76 (level 8). Six
+  went to 47%. Starting the ramp at level 5 instead (three a level) reached
+  70%, the band's edge, with the careful player at 3% and a median of 78:
+  five a level trades about two points of careful wins for staying off the
+  edge. Nothing measured keeps a careful run winning while the lookahead
+  player sits in the band: the careful player's late-game death comes from
+  levels the lookahead player needs to find hard.
+
+### Regions steer a build (2026-10-08)
+Taken under the author's brief: regions are equally hard, but each one's
+pools push a run toward different mechanics, so where you go shapes what you
+can build around.
+
+- **Every border is a mechanic, not a mood.** The six borders of the ring
+  each carry a SIGNATURE: one fight-shape tactic, one or two of the
+  conditional or scaling rules, and the stats and odds that feed them. Every
+  item and trait template is authored to its border's signature, so the
+  border name tells a player what the ten things found there are for.
+
+  | border | between | tactic | rules | stats | odds |
+  |---|---|---|---|---|---|
+  | Stone and cold | caves, foothills | Thorns | armour, ward, repair | Might | Health |
+  | The long march | foothills, ruins | Mark | finisher, studied | Perception, Intellect | Hit, Crit, Encounters |
+  | Scavengers | ruins, fen | Poison | collector | Intellect, Luck | Offers, Damage |
+  | Desperation | fen, wastes | Combo | desperate | Might, Agility | Damage, Actions |
+  | Fortune | wastes, island | Setup | hale | Luck, Charisma | Crit, Offers |
+  | In the dark | island, caves | Counter | opener | Agility, Perception | Dodge, Actions |
+
+- **Items are regional now, like traits: five per border, so every item is
+  found in exactly two regions.** Loot and the outpost's trader and Oracle
+  stock only from the region the level is played in. Character creation
+  still deals from everything, since no region has been chosen yet. A kept
+  item or trait still travels, so a run can carry one region's engine into
+  the next: that is the build-around.
+- **A region is two neighbouring signatures**, which gives six engines:
+  caves (Counter and Thorns: punish whatever attacks you), foothills (Thorns
+  and Mark: armour and precision), ruins (Mark and Poison: patient
+  attrition), fen (Poison and Combo: festering frenzy), wastes (Combo and
+  Setup: all in), island (Setup and Counter: the duelist). Opposite regions
+  share nothing.
+- **Each region's monsters share a HAZARD**, a modifier every monster met
+  there carries on top of its species, named in the region's preview:
+  caves Ambush (their first action of a round hits harder), foothills Hardy
+  (more Health), ruins Vigilant (more to Hit), fen Fever (Poison), wastes
+  Searing (more Damage), island Elusive (more to Dodge). The hazard is the
+  region's challenge and the dial that keeps regions equally hard: its size
+  is tuned by the per-region harness report, not by hand.
+- **The reward bonus is deleted**, superseding "A harder region pays more"
+  above. It paid for the wastes being harder; with
+  every region tuned to the same difficulty there is nothing to pay for.
+- **Measured with `npm run adventure:balance -- --by-region`**, which plays
+  every seed once per region, forced, and reports survival (should be about
+  equal) and the mechanics held at the end (should differ).
+- **Measured after tuning** (`--by-region`, Difficulty 1.01, 12 levels):
+  the careful player reaches 54-56 encounters on average in every region
+  (200 runs each); the lookahead player 108-113 in every region (12 runs
+  each, so survival rates of 42-92% are within noise of each other). What
+  each region's builds end up carrying differs as designed: caves armour
+  and Counter, foothills armour and Mark, ruins collector and Poison, fen
+  collector and Combo, wastes Combo and desperate, island Counter and the
+  opener. The lookahead player survives about three runs in four overall,
+  above the 55-70% target: focused pools let a build come together, and
+  the difficulty curve is the place to answer that, not the regions.
+- **Monster first/last-action effects fire now.** No caller passed a
+  monster its place in the round, so every `derivedPercentOnAction` on a
+  species was dead; `stages/combat.ts`'s `monsterInRound` resolves it.
+
+### Trade Blows replaces Take the Hit (2026-10-08, the author's rule)
+- "Take the hit as 'trade blows' which allows you a regular attack at 50% damage, modified by might delta by 20% per point of difference (so 60% at +1, 40% at -1), but you always get hit. Armor counts though." Built as `model/defences.ts`'s `defenceCounter`: `max(0, 0.5 x (1 + 0.2 x (your Might - its Might)))`, nothing at -5 or below. The blow always lands and goes through the same armour as Defend, guard included. The swing back is an ordinary attack (hit roll, crit, damage band) and adds to every other source of Counter, so a class move on this cell still adds its own.
+- The eight defensive moves added the same day were then given distinct triggers instead of one shared shape (Joe: distinct and entertaining over flat): Bruiser Shrug It Off (guard 6 and counter 0.4 while healthy), Reaver Blood Guard (once injured), Assassin Fade (counter 1.2 once injured), Shieldbreaker Shield Bash (against a healthy target), Falconer Screen (counter 1.2 on each opening blow of a round, before the player has acted in it), Juggler Deflect (half the time), Mauler Roll With It (35%, full counter), Brawler Clinch (pure counter 0.8). Screened on the new rules (12 clever runs to level 8 per class, Difficulty 1.08): every class 8-58% dead against 42% unpinned, inside the screen's noise, so nothing was tuned further.

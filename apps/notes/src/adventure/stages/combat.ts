@@ -59,11 +59,13 @@ import {
   counterPill, preparePill, spellPill, statusPill, stunPill,
 } from './combatLog'
 import type { Monster } from '../model/monsters'
-import { monsterFor, monsterName, offerFromJson, offerToJson } from './encounter'
+import { monsterFor, monsterName, offerFromJson, offerToJson, vectorsOf } from './encounter'
+import { regionOf } from '../content'
+import type { EncounterOffer } from '../model/encounterOffers'
 import type { MonsterMoment } from '../model/monsters'
 import type { ActionPosition } from '../model/modifiers'
 import { armMove, describeCounter, moveById, moveLine, type MoveSituation } from '../model/moves'
-import { DEFENCE_COUNTER } from '../model/defences'
+import { defenceCounter } from '../model/defences'
 import type { CombatClass } from '../model/vectors'
 import { COMBAT_STAGE_ID, ENCOUNTER_SELECT_STAGE_ID, LOOT_STAGE_ID, WELCOME_STAGE_ID } from './ids'
 
@@ -79,7 +81,7 @@ const DEFENCE_LABELS: Readonly<Record<Defence, { label: string; icon: string }>>
   dodge: { label: 'Dodge', icon: 'fa-solid fa-wind' },
   defend: { label: 'Defend', icon: 'fa-solid fa-shield' },
   flee: { label: 'Flee', icon: 'fa-solid fa-person-running' },
-  takeTheHit: { label: 'Take the hit', icon: 'fa-solid fa-user' },
+  tradeBlows: { label: 'Trade Blows', icon: 'fa-solid fa-people-arrows' },
 }
 
 /**
@@ -715,9 +717,10 @@ function stepFight(options: {
       //
       // PAID IN ONE PASS AND NEVER RE-ENTERED. It is applied here and the
       // branch falls THROUGH to the turnover below rather than `continue`-ing
-      // like the spell ticks do -- a poison pool is not spent by paying out,
-      // so a second pass over this branch would bite again for the same
-      // round, and again, for as long as the fight lasted. The one case that
+      // -- a poison pool is not spent by paying out, so a second pass over
+      // this branch would bite again for the same round, and again, for as
+      // long as the fight lasted. The lingering spells below follow the same
+      // rule for the same reason. The one case that
       // does go back round the loop is a bite that ENDED the fight, where
       // going back is what reports the kill instead of opening a round nobody
       // will play.
@@ -757,7 +760,12 @@ function stepFight(options: {
           carried = [...pills, ...carried]
           say(pills)
           struck = ticked.ticks[ticked.ticks.length - 1].damage
-          continue
+          // PAID ONCE, like the poison above: going back round the loop with
+          // the round still over re-entered this branch and paid every tick
+          // again, and again, until one came to nothing or the monster died.
+          // Only a tick that ENDED the fight goes back, so the loop reports
+          // the kill instead of opening a round nobody will play.
+          if (combatStatus(round, monster, derived) !== 'roundOver') continue
         }
       }
 
@@ -770,8 +778,13 @@ function stepFight(options: {
       // The action that actually closed the round is kept behind the new head
       // pill so the bar still reads what ended the previous round, not just the
       // start of the next one.
-      const closingAction = log[0] ?? null
-      const opened = openedRound(round, monster, context, rng, closingAction ? [closingAction, ...carried] : carried)
+      // A tick or a bite paid above is the newest entry in `log` AND already
+      // in `carried`, so the action that closed the round is the newest entry
+      // that is NOT one of those -- reading `log[0]` showed the tick twice
+      // and dropped the attack that actually ended the round.
+      const closingAction = log.find((entry) => !carried.includes(entry)) ?? null
+      const kept = closingAction ? [closingAction, ...carried] : carried
+      const opened = openedRound(round, monster, context, rng, kept)
       round = opened.round
       log = opened.log
       rng = opened.rng
@@ -852,6 +865,27 @@ function monsterMoment(
   }
 }
 
+/**
+ * THE MONSTER AT THIS POINT OF THE ROUND, which is the only way its
+ * first/last-action effects can be in force (a species' or a region hazard's
+ * `derivedPercentOnAction`). TWO BUILDS, because where in the round an action
+ * falls is counted from both sides' action pools and the monster's pool is
+ * the monster's: the first build answers how many actions it has, the second
+ * is the creature at that position. Its action count cannot move between the
+ * two, since a round-position effect may not touch actions
+ * (model/modifierSlots.ts's `IN_A_ROUND`). Before this, no caller passed a
+ * position at all and every such effect on a monster was dead.
+ */
+function monsterInRound(offer: EncounterOffer, context: StageContext, round: RoundState): Monster | null {
+  const moment = monsterMoment(context, round.playerHitPoints, round.monsterDamageTaken)
+  const plain = monsterFor(offer, context, moment)
+  if (!plain || !context.profile) return plain
+  // Nothing on the creature reads the position: the first build already is it.
+  const layers = [vectorsOf(offer, context.content).species?.effects ?? [], regionOf(context.content, context.game?.regionId)?.hazard.effects ?? []]
+  if (!layers.some((effects) => effects.some((effect) => effect.kind === 'derivedPercentOnAction'))) return plain
+  return monsterFor(offer, context, { ...moment, actionPosition: roundActionPosition(round, context.profile.derived, plain) })
+}
+
 export const combatStage: StageModule = {
   id: COMBAT_STAGE_ID,
   title: 'Combat',
@@ -922,7 +956,7 @@ export const combatStage: StageModule = {
     const offer = offerFromJson(state.offer)
     const round = roundFromJson(state.round)
     const monster = offer
-      ? monsterFor(offer, context, monsterMoment(context, round.playerHitPoints, round.monsterDamageTaken))
+      ? monsterInRound(offer, context, round)
       : null
 
     // No monster, or nobody to roll an action for: the fight cannot proceed
@@ -994,6 +1028,9 @@ export const combatStage: StageModule = {
       }
     }
 
+    // Trade Blows' swing back depends on the Might difference, so the cell
+    // states the share this fight actually gives (model/defences.ts).
+    const traded = (defence: Defence): number => defenceCounter(defence, context.profile?.stats.might ?? 0, monster.stats.might)
     return {
       screenKey: `combat:theirs:${round.playerActionsSpent}:${round.monsterActionsSpent}`,
       // ORDER IS THE DEFAULT. The ring opens on its first cell, so the answer
@@ -1026,19 +1063,19 @@ export const combatStage: StageModule = {
             // The cell's own Counter is a SOURCE beside the move's, and the
             // two add, so both are listed (model/defences.ts).
             ? { title: move.name, lines: [
-              ...(DEFENCE_COUNTER[defence] > 0 ? [describeCounter(DEFENCE_COUNTER[defence], context.describe)] : []),
+              ...(traded(defence) > 0 ? [describeCounter(traded(defence), context.describe)] : []),
               moveLine(move, context.describe),
             ] }
             // A plain cell says what it does only where that is more than its
-            // name: Take the hit swings back (model/defences.ts), and Flee is a
+            // name: Trade Blows swings back (model/defences.ts), and Flee is a
             // gamble whose odds and price the player has to see to weigh it.
             : defence === 'flee' && context.profile
               ? { title: DEFENCE_LABELS.flee.label, lines: [
                 `${Math.round((1 - pursuitChance(monster, context.profile.stats, successAdjustOf(context))) * 100)}% to escape`,
                 'No reward',
               ] }
-            : DEFENCE_COUNTER[defence] > 0
-              ? { title: DEFENCE_LABELS[defence].label, lines: [describeCounter(DEFENCE_COUNTER[defence], context.describe)] }
+            : defence === 'tradeBlows'
+              ? { title: DEFENCE_LABELS[defence].label, lines: [describeCounter(traded(defence), context.describe)] }
               : undefined,
         })),
     }
@@ -1049,7 +1086,7 @@ export const combatStage: StageModule = {
     const offer = offerFromJson(state.offer)
     const round = roundFromJson(state.round)
     const monster = offer
-      ? monsterFor(offer, context, monsterMoment(context, round.playerHitPoints, round.monsterDamageTaken))
+      ? monsterInRound(offer, context, round)
       : null
 
     if (monster && choiceId === SETTLE_CHOICE) {

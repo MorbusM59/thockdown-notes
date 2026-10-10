@@ -26,7 +26,7 @@
 
 import { nextSample, type RngState } from '../core/rng'
 import type { Modifier } from './modifiers'
-import type { Region } from '../content'
+import { foundIn, type Region } from '../content'
 
 /**
  * WHAT A REST IS WORTH: ten, and two more for every point of Might.
@@ -64,8 +64,7 @@ export function omenPool(
 ): Modifier[] {
   if (!region) return []
   const heldIds = new Set(held.map((modifier) => modifier.id))
-  const inRegion = new Set(region.traits)
-  return traits.filter((trait) => inRegion.has(trait.id) && !heldIds.has(trait.id))
+  return foundIn(region, traits, 'trait').filter((trait) => !heldIds.has(trait.id))
 }
 
 /**

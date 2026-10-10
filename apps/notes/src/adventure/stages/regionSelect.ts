@@ -7,14 +7,20 @@
 // one of those borders, which is why travelling one way rather than the other
 // is a decision a player can actually make.
 //
-// A region also makes some MONSTERS common (`Region.favours`, weighted in
-// model/encounterOffers.ts), and the detail names them, so where to go is
+// A region also decides the ITEMS loot and the trader offer (`Region.items`,
+// on the same borders as the traits), makes some MONSTERS common
+// (`Region.favours`, weighted in model/encounterOffers.ts), and gives every
+// monster there its HAZARD; the detail names the last two, so where to go is
 // also a choice of what to face.
 
 import type { StageModule } from '../core/stage'
+import { describeEffect } from '../model/modifiers'
 import { MARKET_PRICE, purse } from './market'
 import { ENCOUNTER_SELECT_STAGE_ID, OUTPOST_STAGE_ID, REGION_SELECT_STAGE_ID } from './ids'
 
+
+/** The line the road opens with; exported for choiceWidth.contract.test.ts. */
+export const REGION_SELECT_NARRATION = 'The vortex lets you go...'
 
 export const regionSelectStage: StageModule = {
   id: REGION_SELECT_STAGE_ID,
@@ -22,7 +28,7 @@ export const regionSelectStage: StageModule = {
 
   enter: (_input, _context, rng) => ({
     state: {},
-    narration: 'The vortex lets you go...',
+    narration: REGION_SELECT_NARRATION,
     rng,
   }),
 
@@ -38,13 +44,15 @@ export const regionSelectStage: StageModule = {
       detail: {
         title: region.name,
         lines: [...region.borders],
-        // The monsters it makes common go in the tooltip: beside the border
-        // names they push the preview past the chapter bar's edge at the
-        // reference layout (choiceWidth.contract.test.ts).
+        // The monsters it makes common and the hazard they all carry go in
+        // the tooltip: beside the border names they push the preview past
+        // the chapter bar's edge at the reference layout
+        // (choiceWidth.contract.test.ts).
         more: [`Common: ${region.favours
           .map((id) => context.content.species.find((species) => species.id === id)?.name)
           .filter((name): name is string => !!name)
-          .join(', ')}`],
+          .join(', ')}`,
+          `Monsters here are ${region.hazard.name}: ${region.hazard.effects.map((effect) => describeEffect(effect, context.describe)).join(', ')}`],
       },
     })),
   }),

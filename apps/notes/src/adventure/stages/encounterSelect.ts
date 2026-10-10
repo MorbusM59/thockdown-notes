@@ -25,6 +25,7 @@
 // here and not threaded in: this stage is re-entered once per encounter and
 // has no way to count its own re-entries.
 
+import { regionOf } from '../content'
 import type { JsonObject } from '../core/json'
 import type { StageModule } from '../core/stage'
 import { ENCOUNTER_TRACKS, monsterPools, buildEncounterOffers, fixedTypeAt, LEVEL_ENCOUNTER_COUNT, mostSelectedEncounterPool, trackChoicesFor } from '../model/encounterOffers'
@@ -65,6 +66,16 @@ const OMEN_TRAIT_PREFIX = 'omen:trait:'
 // to the hunt, which draws only from it. The level's tracks are what decide
 // the pool its placed mini bosses and boss come from.
 
+/** The omen's opening line for a rank's word; exported for choiceWidth.contract.test.ts. */
+export function omenLeadIn(rankWord: string): string {
+  return `**${rankWord || 'Something'} ahead.** *The road gives first.*`
+}
+
+/** What the omen's rest offers; exported for choiceWidth.contract.test.ts. */
+export function restLines(heal: number): string[] {
+  return [`Recover ${heal} Health`]
+}
+
 export const encounterSelectStage: StageModule = {
   id: ENCOUNTER_SELECT_STAGE_ID,
   title: 'Tracking',
@@ -93,7 +104,7 @@ export const encounterSelectStage: StageModule = {
     // one entry: the player answers the omen, the stage stays, and the boss
     // it already drew is underneath -- no re-entry, no second draw, and the
     // monster cannot change because you took a heal.
-    const region = context.content.regions.find((candidate) => candidate.id === context.game?.regionId)
+    const region = regionOf(context.content, context.game?.regionId)
     const pool = omenPool(region, context.traits, context.held)
     const omen = drawOmenTraits(
       pool,
@@ -108,7 +119,7 @@ export const encounterSelectStage: StageModule = {
         trackIds: [],
       } satisfies JsonObject,
       narration: offer
-        ? `**${MONSTER_TYPE_WORD[offer.type] || 'Something'} ahead.** *The road gives first.*`
+        ? omenLeadIn(MONSTER_TYPE_WORD[offer.type])
         : 'Something should be here, and the game cannot say what.',
       rng: omen.rng,
     }
@@ -162,7 +173,8 @@ export const encounterSelectStage: StageModule = {
               title: 'Rest a while',
               // The number, not the formula: a player deciding between this
               // and a trait needs to know what they are being handed.
-              lines: [`Recover ${heal} hit points`, 'Ten, and two for every point of Might'],
+              lines: restLines(heal),
+              more: ['Ten, and two for every point of Might'],
             },
           },
         ],

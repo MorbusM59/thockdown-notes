@@ -49,7 +49,7 @@ import {
   type SoundscapeSettings,
 } from './soundscape'
 import { spaceDecaySec } from './soundscapeSpace'
-import { CHIME_SCALE_COUNT, CHIME_SCALES } from './soundscapeChimeScales'
+import { CHIME_SCALES, chimeScaleOf } from './soundscapeChimeScales'
 import { armHold, HOLD_COMMIT_MS, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { newSoundscapeId, neutralSoundscape } from './soundscapeFile'
 import { exportSoundscapes } from './soundscapeFileActions'
@@ -173,6 +173,12 @@ interface ControlSpec {
   log?: boolean
   /** A pitch in Hz stepped in equal-tempered semitones from A440: the slider moves one semitone per step. */
   semitones?: boolean
+  /**
+   * The values the slider steps through, in its order, where they are codes
+   * rather than amounts (a scale's id): the slider moves one entry per step.
+   * `positionOf` places a stored value that is not itself an entry.
+   */
+  steps?: { values: readonly number[]; positionOf: (value: number) => number }
   format: (value: number) => string
 }
 
@@ -181,6 +187,11 @@ interface ControlGroup {
   controls: ControlSpec[]
   /** Row sizes, where the default rule (OptionsSliderRows) would split sliders that belong together. */
   rows?: number[]
+}
+
+const CHIME_SCALE_STEPS = {
+  values: CHIME_SCALES.map((scale) => scale.id),
+  positionOf: (value: number) => CHIME_SCALES.indexOf(chimeScaleOf(value)),
 }
 
 const unit = (key: string, track: string, tooltip: string, format: (value: number) => string): ControlSpec => (
@@ -345,7 +356,7 @@ const CONTROLS: { [K in SoundscapeChannelKind]: ControlGroup[] } = {
         unit('unison', 'unison', 'How much the chimes sound together: single notes, or the striker rebounding across the ring into a cascade', (value) => formatAmount(value, 'Single', 'Cascade')),
         unit('activity', 'activity', 'How often the striker is set moving, before the wind has any say', (value) => `${chimeStrikesPerSecond(value).toFixed(chimeStrikesPerSecond(value) < 1 ? 2 : 1)} / s`),
         { key: 'tubes', track: 'tubes', tooltip: 'How many tubes', min: SOUNDSCAPE_CHIME_TUBES_MIN, max: SOUNDSCAPE_CHIME_TUBES_MAX, step: 1, format: (value) => `${Math.round(value)} tubes` },
-        { key: 'scale', track: 'scale', tooltip: 'The scale the tubes are tuned to', min: 0, max: CHIME_SCALE_COUNT - 1, step: 1, format: (value) => CHIME_SCALES[Math.round(value)].name },
+        { key: 'scale', track: 'scale', tooltip: 'The scale the tubes are tuned to', min: 0, max: CHIME_SCALES.length - 1, step: 1, steps: CHIME_SCALE_STEPS, format: (value) => chimeScaleOf(value).name },
       ],
     },
     { label: 'Place', controls: [DISTANCE, PAN, { ...WEATHER, tooltip: 'How much gusts set the striker moving, harder and into more of the ring' }] },
@@ -446,11 +457,13 @@ function withSettings(preferences: SoundscapePreferences, settings: SoundscapeSe
 }
 
 function toPosition(spec: ControlSpec, value: number): number {
+  if (spec.steps) return spec.steps.positionOf(value)
   if (spec.semitones) return chimeSemitoneOf(value)
   return spec.log ? Math.log(value / spec.min) / Math.log(spec.max / spec.min) : value
 }
 
 function fromPosition(spec: ControlSpec, position: number): number {
+  if (spec.steps) return spec.steps.values[Math.round(position)]
   if (spec.semitones) return chimeSemitoneHz(Math.round(position))
   const value = spec.log ? spec.min * ((spec.max / spec.min) ** position) : position
   return spec.step === 1 ? Math.round(value) : value

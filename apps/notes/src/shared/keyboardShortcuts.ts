@@ -16,7 +16,9 @@
 // A few declarations are DESCRIBED here but matched by something that cannot
 // read this table: CodeMirror's own default and history keymaps (undo, redo,
 // word delete, Shift+Enter), the escape hold (`shared/escapeHold.ts`, a
-// gesture over time rather than a chord), and the quick-actions ring's dial
+// gesture over time rather than a chord), the help key's hold
+// (`shared/useHelpKey.ts`, which matches the tap's own declaration and tells
+// a hold by its duration), and the quick-actions ring's dial
 // (`editorSection/EscapeHoldPanel.tsx`). Those carry `matchedBy`, so the
 // claim "this table is what the handlers read" stays checkable entry by entry.
 //
@@ -36,17 +38,16 @@ export interface KeyChord {
   ctrl?: true | 'or-meta'
   /** Cmd. Display only -- see `macChords`. */
   meta?: true
-  /** `'any'` for a key that is only reachable WITH shift on some layouts (`#`). */
-  shift?: true | 'any'
+  shift?: true
   alt?: true
 }
 
 /** How the chord is pressed, for the reader; a plain press when absent. */
-export type ShortcutPress = 'hold' | 'hold-again'
+export type ShortcutPress = 'hold'
 
 export type ShortcutGroupId =
   | 'notes'
-  | 'escape'
+  | 'views'
   | 'find'
   | 'formatting'
   | 'editing'
@@ -56,6 +57,12 @@ export type ShortcutGroupId =
 
 export interface ShortcutDeclaration {
   group: ShortcutGroupId
+  /**
+   * Every chord does the same thing: the quick reference shows any beyond the
+   * first combination as an "alternative shortcut". Two directions of one
+   * motion (Tab, Shift+Tab) are two declarations; alternative KEYS of one
+   * combination (`Alt+← / →`) share a row.
+   */
   chords: readonly KeyChord[]
   /** What it does, short enough for the quick reference's one line. */
   label: string
@@ -70,18 +77,19 @@ export interface ShortcutDeclaration {
    * Set when no handler matches this declaration through `matchShortcut`,
    * naming what binds the key instead -- see the module comment.
    */
-  matchedBy?: 'codemirror' | 'escape-hold' | 'ring'
+  matchedBy?: 'codemirror' | 'escape-hold' | 'help-key' | 'ring'
 }
 
-export const SHORTCUT_GROUPS: ReadonlyArray<{ id: ShortcutGroupId; title: string }> = [
-  { id: 'notes', title: 'Notes & slots' },
-  { id: 'escape', title: 'Escape' },
-  { id: 'find', title: 'Find' },
-  { id: 'formatting', title: 'Formatting' },
-  { id: 'editing', title: 'Editing' },
-  { id: 'chapters', title: 'Chapters' },
-  { id: 'tables', title: 'In a table' },
-  { id: 'menu', title: 'Quick actions menu' },
+/** The reader-facing groups, in reading order, each with the Font Awesome icon its panel wears. */
+export const SHORTCUT_GROUPS: ReadonlyArray<{ id: ShortcutGroupId; title: string; icon: string }> = [
+  { id: 'views', title: 'Views & help', icon: 'fa-solid fa-eye' },
+  { id: 'notes', title: 'Notes & slots', icon: 'fa-solid fa-note-sticky' },
+  { id: 'find', title: 'Find', icon: 'fa-solid fa-magnifying-glass' },
+  { id: 'formatting', title: 'Formatting', icon: 'fa-solid fa-bold' },
+  { id: 'editing', title: 'Editing', icon: 'fa-solid fa-pen' },
+  { id: 'chapters', title: 'Chapters', icon: 'fa-solid fa-bookmark' },
+  { id: 'tables', title: 'In a table', icon: 'fa-solid fa-table' },
+  { id: 'menu', title: 'Quick actions menu', icon: 'fa-solid fa-circle-notch' },
 ]
 
 const ARROWS_LR: readonly KeyChord[] = [{ key: 'ArrowLeft' }, { key: 'ArrowRight' }]
@@ -101,9 +109,10 @@ export const SHORTCUTS = {
     label: 'Nearest flagged line, else start / end',
   },
 
-  toggleView: { group: 'escape', chords: [{ key: 'Escape' }], label: 'Edit / render view', matchedBy: 'escape-hold' },
-  quickActions: { group: 'escape', chords: [{ key: 'Escape' }], press: 'hold', label: 'Quick actions menu', matchedBy: 'escape-hold' },
-  shortcutReference: { group: 'escape', chords: [{ key: 'Escape' }], press: 'hold-again', label: 'This reference, while held', matchedBy: 'escape-hold' },
+  toggleView: { group: 'views', chords: [{ key: 'Escape' }], label: 'Edit / render view', matchedBy: 'escape-hold' },
+  quickActions: { group: 'views', chords: [{ key: 'Escape' }], press: 'hold', label: 'Quick actions menu', matchedBy: 'escape-hold' },
+  userGuide: { group: 'views', chords: [{ key: 'F1' }], label: 'Open / close the User Guide' },
+  shortcutReference: { group: 'views', chords: [{ key: 'F1' }], press: 'hold', label: 'These shortcuts, while held', matchedBy: 'help-key' },
 
   find: { group: 'find', chords: [{ key: 'f', ctrl: true }], label: 'Find in note' },
   findReplace: { group: 'find', chords: [{ key: 'h', ctrl: true }], label: 'Find & replace' },
@@ -111,10 +120,10 @@ export const SHORTCUTS = {
 
   bold: { group: 'formatting', chords: [{ key: 'b', ctrl: true }], label: 'Bold' },
   italic: { group: 'formatting', chords: [{ key: 'i', ctrl: true }], label: 'Italic' },
-  strikethrough: { group: 'formatting', chords: [{ key: 'j', ctrl: true }], label: 'Strikethrough' },
+  strikethrough: { group: 'formatting', chords: [{ key: 'x', ctrl: true, shift: true }], label: 'Strikethrough' },
   heading: { group: 'formatting', chords: [{ key: 't', ctrl: true }], label: 'Cycle heading level' },
-  bulletedList: { group: 'formatting', chords: [{ key: '-', ctrl: true }], label: 'Bulleted list' },
-  numberedList: { group: 'formatting', chords: [{ key: '#', ctrl: true, shift: 'any' }, { key: '3', ctrl: true, shift: true }], label: 'Numbered list' },
+  bulletedList: { group: 'formatting', chords: [{ key: 'u', ctrl: true }], label: 'Bulleted list' },
+  numberedList: { group: 'formatting', chords: [{ key: 'o', ctrl: true }], label: 'Numbered list' },
   link: { group: 'formatting', chords: [{ key: 'l', ctrl: true }], label: 'Link' },
   anchor: { group: 'formatting', chords: [{ key: 'l', ctrl: true, shift: true }], label: 'Anchor' },
 
@@ -134,22 +143,19 @@ export const SHORTCUTS = {
   chapterForward: { group: 'chapters', chords: [{ key: 'Delete', shift: true, alt: true }], label: 'Cut rest to new chapter / pull next in' },
   chapterBackward: { group: 'chapters', chords: [{ key: 'Backspace', shift: true, alt: true }], label: 'Cut start to new chapter / pull previous in' },
 
-  tableCell: { group: 'tables', chords: [{ key: 'Tab' }, { key: 'Tab', shift: true }], label: 'Next / previous cell', matchedBy: 'codemirror' },
+  // One direction per declaration: a declaration's further chords are
+  // ALTERNATIVES for the same action, and Shift+Tab is not another Tab.
+  tableNextCell: { group: 'tables', chords: [{ key: 'Tab' }], label: 'Next cell', matchedBy: 'codemirror' },
+  tablePreviousCell: { group: 'tables', chords: [{ key: 'Tab', shift: true }], label: 'Previous cell', matchedBy: 'codemirror' },
   tableEmptyCell: { group: 'tables', chords: [{ key: 'Backspace', shift: true }], label: 'Empty the cell' },
   tableDeleteColumn: { group: 'tables', chords: [{ key: 'Backspace', ctrl: true, shift: true }], label: 'Delete the column' },
-  tableMove: {
-    group: 'tables',
-    chords: withMods([...ARROWS_LR, ...ARROWS_UD], { ctrl: true, shift: true }),
-    label: 'Move column / row',
-  },
+  tableMoveColumn: { group: 'tables', chords: withMods(ARROWS_LR, { ctrl: true, shift: true }), label: 'Move the column' },
+  tableMoveRow: { group: 'tables', chords: withMods(ARROWS_UD, { ctrl: true, shift: true }), label: 'Move the row' },
   tableLineBreak: { group: 'tables', chords: [{ key: 'Enter', shift: true }], label: 'Line break inside a row', matchedBy: 'codemirror' },
 
-  ringTurn: {
-    group: 'menu',
-    chords: [...ARROWS_LR, { key: 'Tab' }, { key: 'Tab', shift: true }],
-    label: 'Turn the dial (or W A S D, or the wheel)',
-    matchedBy: 'ring',
-  },
+  ringTurn: { group: 'menu', chords: ARROWS_LR, label: 'Turn the dial (or W A S D)', matchedBy: 'ring' },
+  ringNext: { group: 'menu', chords: [{ key: 'Tab' }], label: 'Next choice', matchedBy: 'ring' },
+  ringPrevious: { group: 'menu', chords: [{ key: 'Tab', shift: true }], label: 'Previous choice', matchedBy: 'ring' },
   ringTake: { group: 'menu', chords: [{ key: 'Enter' }, { code: 'Space' }], label: 'Take the highlighted choice', matchedBy: 'ring' },
   ringClose: { group: 'menu', chords: [{ key: 'Escape' }], label: 'Close the menu', matchedBy: 'escape-hold' },
 } as const satisfies Record<string, ShortcutDeclaration>
@@ -173,7 +179,7 @@ function chordMatches(chord: KeyChord, event: KeyEventLike): boolean {
     ? (event.ctrlKey || event.metaKey)
     : event.ctrlKey === Boolean(chord.ctrl) && !event.metaKey
   if (!ctrlOk) return false
-  if (chord.shift !== 'any' && event.shiftKey !== Boolean(chord.shift)) return false
+  if (event.shiftKey !== Boolean(chord.shift)) return false
   return event.altKey === Boolean(chord.alt)
 }
 
@@ -199,6 +205,7 @@ const KEY_NAMES: Record<string, string> = {
   Delete: 'Delete',
   Enter: 'Enter',
   Tab: 'Tab',
+  F1: 'F1',
   F11: 'F11',
 }
 
@@ -250,7 +257,7 @@ export function displayChords(declaration: ShortcutDeclaration, mac: boolean = i
   return groups
 }
 
-const PRESS_PREFIX: Record<ShortcutPress, string> = { hold: 'Hold ', 'hold-again': 'Hold again ' }
+const PRESS_PREFIX: Record<ShortcutPress, string> = { hold: 'Hold ' }
 
 /** Plain text, for the User Guide's table: `Hold Esc`, `F11 or Ctrl+Shift+Space`. */
 export function formatShortcut(declaration: ShortcutDeclaration, mac: boolean = isMacPlatform()): string {

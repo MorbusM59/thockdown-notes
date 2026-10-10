@@ -198,22 +198,25 @@ export const MONSTER_TYPE_TIER: Readonly<Record<MonsterType, number>> = {
  * level-12 elite.
  */
 /**
- * What a level adds to every rank: ONE a level, and from `MONSTER_TIER_RAMP_LEVEL`
- * on, `MONSTER_TIER_LATE_EXTRA` more on top -- four a level in the late game.
+ * What a level adds to every rank: ONE a level, and for each level past
+ * `MONSTER_TIER_RAMP_LEVEL`, `MONSTER_TIER_LATE_EXTRA` more on top -- six a
+ * level from level 7.
  *
  * A late RAMP rather than one constant, because one constant could not serve
  * both ends: two a level from the start killed a careful player in the first
  * few levels while a strong run still outgrew everything after level seven
  * (adventure:balance, 12 levels: clever won 91%). Gentle early lets a careful
  * player reach the middle of the game; steep late makes the last levels test
- * the runs that compounded an early lead. Measured at 1 + 3 from level 6:
- * clever wins 57% with its losses spread over levels 3 to 12, careful wins 9%.
+ * the runs that compounded an early lead. Measured at 1 + 5 past level 6,
+ * with every class's defensive move and once-per-round lingering spells:
+ * clever wins 61% and careful 1% (200 runs each, careful median 76
+ * encounters). At 1 + 3 that game let clever win 80%.
  * Every rank gets the same addition at a level, so the ranks keep their
  * order and their gaps on any one level whatever the ramp is.
  */
 export const MONSTER_TIER_PER_LEVEL = 1
 export const MONSTER_TIER_RAMP_LEVEL = 6
-export const MONSTER_TIER_LATE_EXTRA = 3
+export const MONSTER_TIER_LATE_EXTRA = 5
 
 export function monsterTier(type: MonsterType, level: number): number {
   const at = Math.floor(level)

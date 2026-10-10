@@ -1,3 +1,4 @@
+import { defenceCounter } from './defences'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -130,33 +131,47 @@ describe('one exchange', () => {
     for (let seed = 1; seed <= 40; seed += 1) {
       const result = resolveExchange({
         attacker: 'player', attackerStats: hopeless, attackerDamage: 10, defenderStats: defender,
-        armor: NO_ARMOR, defence: 'takeTheHit', dodgeOffered: false, rng: seed,
+        armor: NO_ARMOR, defence: 'tradeBlows', dodgeOffered: false, rng: seed,
       })
       expect(result.blow.hit).toBe(true)
     }
   })
 
-  it('puts armor between the blow and its target on Defend, and only there', () => {
+  it('puts armor between the blow and its target on Defend and Trade Blows, and only there', () => {
     const armor: Armor = { natural: 2, pieces: [{ itemId: 'plate', points: 4, max: 4 }] }
     const shared = {
       attacker: 'player' as const, attackerStats: attacker, attackerDamage: 10, defenderStats: defender, dodgeOffered: false, rng: 3,
     }
-    const defended = resolveExchange({ ...shared, armor, defence: 'defend' })
-    const bare = resolveExchange({ ...shared, armor, defence: 'takeTheHit' })
-    expect(defended.blow.damage).toBeLessThan(bare.blow.damage)
-    // ...and a defence that does not consult armor hands it back untouched,
-    // rather than handing back an empty pool for the caller to store.
-    expect(bare.armor).toEqual(armor)
-    // Flee explicitly forgoes it too.
+    // Trade Blows always lands, so the same exchange with and without armour
+    // differs only by what the armour stopped (the author's rule).
+    const armoured = resolveExchange({ ...shared, armor, defence: 'tradeBlows' })
+    const unarmoured = resolveExchange({ ...shared, armor: { natural: 0, pieces: [] }, defence: 'tradeBlows' })
+    expect(armoured.blow.hit).toBe(true)
+    expect(armoured.blow.damage).toBeLessThan(unarmoured.blow.damage)
+    // Flee forgoes armour, and a defence that does not consult it hands the
+    // pool back untouched rather than an empty one for the caller to store.
     const fleeing = resolveExchange({ ...shared, armor, defence: 'flee' })
-    expect(fleeing.blow.damage).toBeGreaterThan(defended.blow.damage)
+    expect(fleeing.armor).toEqual(armor)
+    const fleeingBare = resolveExchange({ ...shared, armor: { natural: 0, pieces: [] }, defence: 'flee' })
+    expect(fleeing.blow.damage).toBe(fleeingBare.blow.damage)
+  })
+})
+
+describe('trading blows', () => {
+  it('swings back at half strength, a fifth of that per point of Might either way, never below nothing', () => {
+    expect(defenceCounter('tradeBlows', 3, 3)).toBeCloseTo(0.5)
+    expect(defenceCounter('tradeBlows', 4, 3)).toBeCloseTo(0.6)
+    expect(defenceCounter('tradeBlows', 2, 3)).toBeCloseTo(0.4)
+    expect(defenceCounter('tradeBlows', 0, 5)).toBe(0)
+    expect(defenceCounter('tradeBlows', 0, 9)).toBe(0)
+    for (const other of ['dodge', 'defend', 'flee'] as const) expect(defenceCounter(other, 9, 0)).toBe(0)
   })
 })
 
 describe('the defences on offer', () => {
   it('earns Dodge and gives the rest', () => {
-    expect(defencesOffered(false)).toEqual(['defend', 'flee', 'takeTheHit'])
-    expect(defencesOffered(true)).toEqual(['dodge', 'defend', 'flee', 'takeTheHit'])
+    expect(defencesOffered(false)).toEqual(['defend', 'flee', 'tradeBlows'])
+    expect(defencesOffered(true)).toEqual(['dodge', 'defend', 'flee', 'tradeBlows'])
   })
 })
 
@@ -437,7 +452,7 @@ describe('taking the hit', () => {
     let countered = 0
     for (let seed = 1; seed <= 40; seed += 1) {
       const taken = resolveMonsterAttack({
-        state: freshRound(), monster: monster(), playerStats: PLAYER, defence: 'takeTheHit',
+        state: freshRound(), monster: monster(), playerStats: PLAYER, defence: 'tradeBlows',
         playerDamage: 10, rng: seed,
       })
       expect(taken.blow?.hit).toBe(true)
@@ -456,14 +471,14 @@ describe('taking the hit', () => {
   })
 
   it('lets a move standing in for it guard the blow, which it never did', () => {
-    // Brace and Absolve carry a guard and replace Take the hit; the exchange
+    // Brace and Absolve carry a guard and replace Trade Blows; the exchange
     // used to return the whole blow before reading it.
     const guard = 1000
     for (let seed = 1; seed <= 20; seed += 1) {
       const result = resolveMonsterAttack({
-        state: freshRound(), monster: monster(), playerStats: PLAYER, defence: 'takeTheHit',
+        state: freshRound(), monster: monster(), playerStats: PLAYER, defence: 'tradeBlows',
         defenceMove: {
-          id: 'test:brace', name: 'Brace', icon: 'fa-solid fa-anchor', replaces: 'takeTheHit',
+          id: 'test:brace', name: 'Brace', icon: 'fa-solid fa-anchor', replaces: 'tradeBlows',
           when: { kind: 'always' }, guard,
         },
         rng: seed,

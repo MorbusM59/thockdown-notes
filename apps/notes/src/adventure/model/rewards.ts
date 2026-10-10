@@ -79,10 +79,10 @@ export const BASE_MOTES_PER_ENCOUNTER = 1
 export function countRepeatedAwards(
   chance: LinearChance,
   stats: StatBlock,
-  typeBonus: number,
+  startBonus: number,
   rng: RngState,
 ): { count: number; rng: RngState } {
-  const start = chance.base + chance.perPoint * stats[chance.stat] + typeBonus
+  const start = chance.base + chance.perPoint * stats[chance.stat] + startBonus
   let count = 0
   let state = rng
   for (;;) {

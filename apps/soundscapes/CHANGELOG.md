@@ -6,6 +6,30 @@ workflow (.github/workflows/release-android.yml) refuses to build a version
 that has no entry here, and tags the commit it built as
 `soundscapes-v<version>`.
 
+## 1.0.3
+
+Android Auto: the soundscapes appear in the car as a list to play from, and
+play, pause, next and previous work from the car's controls, even when the
+app has not been opened since the phone started, or at all since it was
+installed.
+
+Chime scales: one interval stacked is a scale of its own, from semitones
+through minor and major thirds, fourths and tritones to fifths. Scales that
+were the same notes from another starting point (the church modes, and the
+rotations of the pentatonics) are now one scale each, since chimes struck at
+random have no home note; a soundscape saved on one still plays exactly as
+it did.
+
+## 1.0.2
+
+Fixes from an audit of the Android side:
+- Stopping playback just as it starts no longer crashes the app.
+- Granting the exact-alarm permission while the app is closed now arms the
+  schedule straight away.
+- On phones without a settings page for exact alarms, asking for that
+  permission no longer crashes the app; the schedule stays off instead.
+- The schedule's alarms can no longer be fired by other apps.
+
 ## 1.0.1
 
 The notification and lock screen name what is playing as "Soundscape: <name>",

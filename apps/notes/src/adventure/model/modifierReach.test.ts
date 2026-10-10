@@ -80,7 +80,7 @@ describe('a chance a modifier changes', () => {
         defenderStats: createStatBlock(0),
         armor: NO_ARMOR,
         attackerChances: chances,
-        defence: 'takeTheHit',
+        defence: 'tradeBlows',
         dodgeOffered: false,
         rng,
       })

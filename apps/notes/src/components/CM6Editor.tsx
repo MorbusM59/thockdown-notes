@@ -975,18 +975,21 @@ export function CM6Editor({
   const [dropTargetRects, setDropTargetRects] = useState<HighlightRect[]>([]);
   const highlightAnimationFrameRef = useRef<number | null>(null);
 
-  // Review/warning-flag gutter state. reviewFlagsRef mirrors reviewFlags (the
-  // id/severity truth, from the DB) for read access inside the updateListener
-  // closure below without becoming a dependency that would force it to
-  // re-register on every flag change. flagPositionsRef is the live,
+  // Review/warning-flag gutter state. reviewFlagsRef holds the flags (the
+  // id/severity truth, from the DB). It is a ref and not React state because
+  // nothing renders from it directly: the gutter renders from flagsByLineRef,
+  // which updateLineLayout derives from it in an imperative pass. Every write
+  // goes through commitReviewFlags, which updates the ref and schedules that
+  // pass together. (It used to be state mirrored into the ref by an effect;
+  // the pass, scheduled on requestAnimationFrame, could run before the
+  // effect did and draw the old flags, so a gutter click showed nothing
+  // until the next scroll re-ran the pass.) flagPositionsRef is the live,
   // per-keystroke-remapped document POSITION (not line number) for each
   // flag id -- exact via ChangeSet.mapPos (see the updateListener's
   // docChanged branch) -- line numbers are only ever derived FROM these
   // positions, never tracked independently, so there is exactly one source
   // of truth for "where is this flag now" while a note is open.
-  const [reviewFlags, setReviewFlags] = useState<ReviewFlagEntry[]>([]);
   const reviewFlagsRef = useRef<ReviewFlagEntry[]>([]);
-  useEffect(() => { reviewFlagsRef.current = reviewFlags; }, [reviewFlags]);
   const flagPositionsRef = useRef<Map<number, number>>(new Map());
   const [lineLayoutRows, setLineLayoutRows] = useState<LineLayoutRow[]>([]);
   // The review gutter's static top/bottom "jump arrow" box positions and the
@@ -2337,6 +2340,33 @@ export function CM6Editor({
   }, [updateSelectionHighlight]);
 
   /**
+   * The one way flags change while a note is open: stores them (and, when the
+   * caller resolved them, their document positions) and schedules the gutter's
+   * layout pass, which is what turns them into tints and glyphs. Positions are
+   * optional because a sync only rewrites line numbers and hashes for flag
+   * ids whose live positions are already tracked.
+   */
+  const commitReviewFlags = useCallback((flags: ReviewFlagEntry[], positions?: Map<number, number>) => {
+    reviewFlagsRef.current = flags;
+    if (positions) flagPositionsRef.current = positions;
+    scheduleSelectionHighlightUpdate();
+  }, [scheduleSelectionHighlightUpdate]);
+
+  /** Each flag's position: the start of its stored line, in the current document. */
+  const reviewFlagPositions = useCallback((flags: ReviewFlagEntry[]): Map<number, number> => {
+    const positions = new Map<number, number>();
+    const view = viewRef.current;
+    if (!view) return positions;
+    const doc = view.state.doc;
+    for (const flag of flags) {
+      if (flag.lineNumber >= 1 && flag.lineNumber <= doc.lines) {
+        positions.set(flag.id, doc.line(flag.lineNumber).from);
+      }
+    }
+    return positions;
+  }, []);
+
+  /**
    * One drag of a selected table cell, from its press to its release: the
    * press itself was claimed by the mousedown handler. The drop target is
    * recomputed from the box under the pointer on every move and drawn in the
@@ -2431,9 +2461,9 @@ export function CM6Editor({
       }
     }
     window.thockdownReviewFlags?.syncReviewFlags(noteId, Array.from(winners.values(), (w) => w.remap))
-      .then(setReviewFlags)
+      .then((flags) => commitReviewFlags(flags))
       .catch((error) => console.error('[review-flags] syncing flags after an edit failed', error));
-  }, []);
+  }, [commitReviewFlags]);
 
   const scheduleReviewFlagSync = useCallback(() => {
     if (reviewFlagSyncTimeoutRef.current !== null) {
@@ -2467,30 +2497,9 @@ export function CM6Editor({
       lineHash: hashLineText(lineObj.text),
     }).then((flags) => {
       if (noteIdRef.current !== noteId) return;
-      const currentView = viewRef.current;
-      const positions = new Map<number, number>();
-      if (currentView) {
-        const doc = currentView.state.doc;
-        for (const flag of flags) {
-          if (flag.lineNumber >= 1 && flag.lineNumber <= doc.lines) {
-            positions.set(flag.id, doc.line(flag.lineNumber).from);
-          }
-        }
-      }
-      flagPositionsRef.current = positions;
-      setReviewFlags(flags);
-      // setReviewFlags alone only triggers a React re-render -- it does NOT
-      // re-run updateLineLayout (an imperative recompute, not tied to the
-      // render cycle), so flagsByLineRef -- what the tint/glyph JSX actually
-      // reads -- stayed stale until some UNRELATED trigger (clicking into
-      // the text, which fires selectionchange) happened to run it next.
-      // Found live: a clicked flag didn't visually appear until the user
-      // then clicked into the note text, which looked like the click needed
-      // "arming" but was actually just a missed repaint. Forcing the same
-      // recompute pass right here closes that gap.
-      scheduleSelectionHighlightUpdate();
+      commitReviewFlags(flags, reviewFlagPositions(flags));
     }).catch((error) => console.error('[review-flags] setting a flag failed', error));
-  }, [scheduleSelectionHighlightUpdate]);
+  }, [commitReviewFlags, reviewFlagPositions]);
 
   /** The sole, deliberate clear-a-flag action -- distinct from the click-cycle above. */
   const handleGutterFlagContextMenu = useCallback((line: number, event: React.MouseEvent<HTMLDivElement>) => {
@@ -2499,22 +2508,9 @@ export function CM6Editor({
     if (!noteId) return;
     window.thockdownReviewFlags?.clearReviewFlag(noteId, line).then((flags) => {
       if (noteIdRef.current !== noteId) return;
-      const currentView = viewRef.current;
-      const positions = new Map<number, number>();
-      if (currentView) {
-        const doc = currentView.state.doc;
-        for (const flag of flags) {
-          if (flag.lineNumber >= 1 && flag.lineNumber <= doc.lines) {
-            positions.set(flag.id, doc.line(flag.lineNumber).from);
-          }
-        }
-      }
-      flagPositionsRef.current = positions;
-      setReviewFlags(flags);
-      // Same reasoning as handleGutterFlagClick above.
-      scheduleSelectionHighlightUpdate();
+      commitReviewFlags(flags, reviewFlagPositions(flags));
     }).catch((error) => console.error('[review-flags] clearing a flag failed', error));
-  }, [scheduleSelectionHighlightUpdate]);
+  }, [commitReviewFlags, reviewFlagPositions]);
 
   /**
    * Jumps to the nearest flagged line above ('up') or below ('down') the
@@ -3644,7 +3640,7 @@ export function CM6Editor({
             pendingCageIntent = true;
           }
 
-          if (matchShortcut(event, 'tableMove')) {
+          if (matchShortcut(event, 'tableMoveColumn') || matchShortcut(event, 'tableMoveRow')) {
             // Ctrl+Shift+Arrow is offered to the bindings first (in a table
             // it moves the caret's row or column); null leaves it to the
             // default keymap's selection extension.
@@ -5171,8 +5167,7 @@ export function CM6Editor({
       reviewFlagSyncTimeoutRef.current = null;
     }
     noteIdRef.current = noteId ?? null;
-    flagPositionsRef.current = new Map();
-    setReviewFlags([]);
+    commitReviewFlags([], new Map());
     if (!noteId) return;
 
     let cancelled = false;
@@ -5196,12 +5191,11 @@ export function CM6Editor({
           positions.set(flag.id, lineObj.from);
         }
       }
-      flagPositionsRef.current = positions;
-      setReviewFlags(flags);
+      commitReviewFlags(flags, positions);
     }).catch((error) => console.error('[review-flags] loading flags failed', error));
 
     return () => { cancelled = true; };
-  }, [noteId]);
+  }, [noteId, commitReviewFlags]);
 
   // Boundary drag-handle global listeners -- ported from Editor.tsx's own
   // "Global Mouse listeners for Dragging" effect. Deliberately re-binds only

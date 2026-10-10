@@ -417,7 +417,7 @@ from one blow at 120% rather than a rounding difference.
 
 **Ranks are tiers and packs are rolled.** runt 0, regular 3, elite 6, mini
 boss 9, boss 12 (re-based from 0/5/10/15/20 for the tier-0 start, see the
-design doc's foot), plus one per level past the first and three more from level 6
+design doc's foot), plus one per level past the first and five more for each level past the sixth
 (`MONSTER_TIER_PER_LEVEL`, `MONSTER_TIER_LATE_EXTRA`), the same for every rank. The "group" rank is gone: a runt
 always has a friend and usually two, an ordinary monster has one half the
 time, and anything elite or above travels alone
@@ -749,9 +749,11 @@ These block a playable game and want answers rather than guesses.
    function. **The decision is which way to close the gap** — ten choices, or
    smaller cells, or a larger panel — and the third test in that file is what
    fails the day someone assumes it was settled.
-9. **Regions** carry a name, the omen's traits, and favoured monsters
-   drawn three times as often (a revertible director's call, recorded at the
-   foot of the design doc). Which encounter kinds a region brings, and any
+9. **Regions** carry a name, the traits and items found there (two
+   borders, each one mechanic: loot, the outpost and the omen stock from
+   them through `foundIn`), favoured monsters drawn three times as often,
+   and a hazard every monster there carries (both director's calls,
+   recorded at the foot of the design doc). Which encounter kinds a region brings, and any
    hard limit on what may appear there, is unspecified.
 10. **A second game slot.** The save is shaped for it (`games` is a list,
     `activeGameId` says which is live). Continuing now resumes the EXACT
@@ -831,20 +833,23 @@ The third was real, and is answered:
     which the counts reset. Monsters scale per LEVEL. The deleted plan's
     `10 · factor^round` said round and meant level.
 
-20. **Previews that still overflow the strip — OPEN.** At the reference layout
-    (1920px, double size, one slot, sidebar out) the chapter bar's strip is
-    492 CSS px, about sixty characters. Checked in CONCISE style (verbose
-    explains every effect and is accepted to scroll). Monster offers, combat cells, spells,
-    and every lead-in now fit; `adventure/choiceWidth.contract.test.ts` names
-    what does not, per screen, as a ceiling that may only come down. The
-    residual is structural rather than wording: a modifier preview is one
-    line per effect and three effects come to about 400px, so beside any pill
-    the screens that offer items and traits (market, spoils, the omen,
-    creation's trait and item) overflow some of the time, and a class's three
-    moves or a species' five effects overflow on their own. Closing it needs
-    a decision, not an edit: a shorter stat vocabulary ("Encounter choices"
-    alone is worth a few points), a narrower separator, scrolling the strip
-    to keep the preview in view, or accepting creation as the exception.
+20. **Previews that still overflow the strip — DECIDED.** At the reference
+    layout (1920px, double size, one slot, sidebar out) the chapter bar's
+    strip is 492 CSS px, about sixty characters. Checked in CONCISE style
+    (verbose explains every effect and is accepted to scroll). Stats are
+    named by icon in concise style and the detail separator is narrow, per the
+    director. `adventure/choiceWidth.contract.test.ts` checks the CONTENT
+    directly (every build, playable species and class, region, and every
+    item/trait template rolled under fixed seeds) rather than played runs, so
+    a change to which monsters or rewards appear cannot move it. No class
+    or species overflows: a class pill names its moves (glyph and name) with
+    the clauses in the tooltip, and a species pill shows three effects and
+    counts the rest, which are in the tooltip. Item and trait rolls carry
+    ceilings that may only come down.
+    Monster offers, the first spoils screen (it opens with the kill) and
+    combat previews (a fully stacked Prepare is the known wide one) are
+    built from a fight's moment rather than one piece of content and are not
+    checked there.
 
 ## Building the action economy
 
@@ -1040,7 +1045,7 @@ special attacks; and the charisma failure chance as a type base plus
     the plan's own monster actions.
 
 43. **What is "the best outcome" for a defending enemy?** Dodge always beats
-    the rest when it is offered, and Defend beats Take the hit — but whether
+    the rest when it is offered, and Defend beats Trade Blows — but whether
     an enemy ever chooses Flee, and on what condition, is an AI policy the
     phrase does not settle. Enemies that never flee make Terrify meaningless.
 
@@ -1769,6 +1774,9 @@ placed at 5, 9 and 10 and the level advancing after ten.
 88. **REGIONS DECIDE WHAT CAN BE FOUND, AND THE OMEN IS WHERE THEY SAY SO.**
     Regions recorded a choice and did nothing with it. They now own the trait
     pool of the special event that stands before every mini boss and boss.
+    (Since "Regions steer a build" in the design doc they own the ITEM pool
+    on the same borders too, each border is one mechanic, and their
+    monsters carry a hazard; the arithmetic below holds for items as well.)
 
     **THE HEXAGON.** Six regions, thirty traits, each trait in two regions,
     ten per region: those four numbers are `30 x 2 = 60 = 6 x 10`, which is a
@@ -2336,7 +2344,7 @@ placed at 5, 9 and 10 and the level advancing after ten.
      player holding Space presses through. It was `DEFENCES`' order with a
      move merely renaming whichever cell it replaced, which meant the plain
      Defend beat the thing the class was chosen FOR whenever the move landed
-     on Flee or Take the hit. The rank is now Dodge, then any cell carrying
+     on Flee or Trade Blows. The rank is now Dodge, then any cell carrying
      an armed move, then the plain answers (`stages/combat.ts`'s
      `defenceRank`; ties keep `DEFENCES`' order, a sort being stable).
      PRESENTATION ONLY — `armDefenceMoves` still rolls in `defencesOffered`'s

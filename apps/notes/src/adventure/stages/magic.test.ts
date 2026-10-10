@@ -182,6 +182,33 @@ describe('magic, as the ring offers it', () => {
     }
     expect(sawTick).toBe(true)
   })
+
+  it('pays a lingering spell once per round, however many stacks it has', () => {
+    // The end of a round is ONE event. Paying the ticks and then going back
+    // round the loop with the round still over paid them again, and again,
+    // until a tick came to nothing or the monster died -- a bar full of
+    // Plague pills for a single round's turnover.
+    let save = inAFightWithMagic(31337, 20)
+    let worst = 0
+    for (let action = 0; action < 200; action += 1) {
+      const screen = currentScreen(save, DEPS)
+      if (!screen || screen.stageId !== 'combat') {
+        save = inAFightWithMagic(31337 + action, 20)
+        continue
+      }
+      const plague = screen.choices.find((choice) => choice.id === 'spell:plague')
+      const plain = screen.choices.find((choice) => !choice.id.startsWith('spell:')) ?? screen.choices[0]
+      save = choose(save, (plague ?? plain).id, DEPS, NOW).save
+      const after = currentScreen(save, DEPS)
+      if (!after) break
+      const ticks = after.narration.filter(
+        (entry) => glyphs(entry).includes('fa-solid fa-disease') && /\*\*\d+\*\*/.test(entry.split('\n')[0]),
+      ).length
+      worst = Math.max(worst, ticks)
+    }
+    // Not vacuous: a tick has to have been seen at all.
+    expect(worst).toBe(1)
+  })
 })
 
 describe('the fire answers the monster, not the round', () => {
