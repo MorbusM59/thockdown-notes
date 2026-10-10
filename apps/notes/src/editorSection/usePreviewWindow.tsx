@@ -261,6 +261,12 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
   const measurementsRef = useRef<PreviewBlockMeasurement[]>([])
   const contentHeightRef = useRef(0)
   const averageBlockHeightRef = useRef(0)
+  /**
+   * The container's box when `measurementsRef` was taken, as `WxH`. The
+   * measurements describe that box and no other, so the adjustment pass compares it
+   * before reading them against a live `scrollTop`.
+   */
+  const measuredBoxRef = useRef('')
 
   // The tail probe: a hidden, bounded render of the document's last blocks,
   // just to learn how many characters its final screen holds. Nothing like the
@@ -313,6 +319,7 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
     // Shared with the continuous pane, correction and all -- see
     // measurePreviewBlockGeometry.
     const { measurements: next, totalHeightPx: total } = measurePreviewBlockGeometry(container)
+    measuredBoxRef.current = `${container.offsetWidth}x${container.offsetHeight}`
     measurementsRef.current = next
     // The scroller's own number, not the container's: it is what `scrollTop`
     // is bounded by, padding included, and the runway is a statement about
@@ -681,6 +688,20 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
       traceScroll(() => `win wait    no window mounted, win=${rangeRef.current.startIndex}..${rangeRef.current.endIndex}`)
       return
     }
+    // The measurements must describe the layout scrollTop is read from. A
+    // typography change re-lays every block out, and the browser's scroll
+    // anchoring moves scrollTop in the same layout, firing a scroll event
+    // (and so this pass) BEFORE the ResizeObserver below has re-measured.
+    // Read against the old geometry, that live scrollTop decided window moves
+    // and captured carry anchors at block offsets that no longer existed:
+    // one font step at a time usually produced no move and so went unnoticed,
+    // several in quick succession moved the window and threw the reader
+    // dozens of blocks. Comparing the container's box is free here (the
+    // layout is already clean when a scroll event is dispatched) and makes
+    // the pass re-measure exactly when the box it measured has changed.
+    if (measuredBoxRef.current !== `${containerRef.current.offsetWidth}x${containerRef.current.offsetHeight}`) {
+      rebuildMeasurements()
+    }
     traceScroll(() => `win adjust  top=${Math.round(scroller.scrollTop)} h=${Math.round(contentHeightRef.current)} win=${rangeRef.current.startIndex}..${rangeRef.current.endIndex} avg=${Math.round(averageBlockHeightRef.current)}`)
     const blockCount = previewBlocksRef.current.length
     const next = resolvePreviewWindowAdjustment(rangeRef.current, blockCount, {
@@ -706,7 +727,7 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
         + ` headroom=${Math.round(maxTop - scroller.scrollTop)}/${Math.round(maxTop)}`
         + ` win=${rangeRef.current.startIndex}..${rangeRef.current.endIndex}/${blockCount}`
     })
-  }, [enabled, previewScrollRef, moveWindow, readMeasuredBlockHeight])
+  }, [enabled, previewScrollRef, moveWindow, readMeasuredBlockHeight, rebuildMeasurements])
 
   const adjustRef = useRef(adjust)
   adjustRef.current = adjust
