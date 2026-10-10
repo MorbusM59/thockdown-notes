@@ -59,28 +59,6 @@
   width: max-content;
 }
 
-/* THE FIT ZOOM SCALES THE CONTENT, NOT THE CHROME. The layout is drawn at a
-   CSS zoom chosen to fit the window (ShortcutReference.tsx), which would also
-   thicken or thin every border and corner by that factor -- so the panels'
-   edges would not match the rest of the app, or the legend column beside
-   them, which is drawn at the window's own scale (double size included).
-   Borders and radii are therefore divided by the zoom again, which puts them
-   back at the window's scale; the radius tokens are read here, outside the
-   zoom, so the layout can restate them without referring to itself. */
-.shortcut-reference {
-  --shortcut-ref-radius-small: var(--border-radius-small);
-  --shortcut-ref-radius-regular: var(--border-radius-regular);
-}
-
-.shortcut-reference .shortcut-ref-layout {
-  --border-radius-small: calc(var(--shortcut-ref-radius-small) / var(--shortcut-ref-zoom));
-  --border-radius-regular: calc(var(--shortcut-ref-radius-regular) / var(--shortcut-ref-zoom));
-}
-
-.shortcut-reference .shortcut-ref-layout :is(.sidebar-options-accordion, .options-subsection-label, .shortcut-ref-cap) {
-  border-width: calc(1px / var(--shortcut-ref-zoom));
-}
-
 .shortcut-reference .shortcut-ref-layout {
   position: absolute;
   top: 0;
