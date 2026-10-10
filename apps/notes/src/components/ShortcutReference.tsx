@@ -30,7 +30,9 @@ import { GAP_PX, PADDING_PX, arrangeSections, linearSize, type Arrangement } fro
 // width, the widest key cell anywhere, so the descriptions line up across
 // the window; descriptions wrap at a fixed width rather than widening a row.
 //
-// IT NEVER SCROLLS, so the text is sized to the window, and that is solved
+// IT NEVER SCROLLS, so the text is sized to the window -- at most the size
+// the options sidebar draws it at, smaller only when the window cannot hold
+// everything at that size -- and that is solved
 // from measurements rather than tried on screen. Only the TEXT is scaled --
 // glyphs, key caps, line boxes and the description width, which all follow
 // the UI text size -- while spacing, borders and corners keep the sizes the

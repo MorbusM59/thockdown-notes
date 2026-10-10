@@ -10,6 +10,8 @@ export const PADDING_PX = 16
 const ROUNDING_HEADROOM = 0.98
 /** Bisection steps: the scale is exact to 2^-40 of its range, far below a pixel. */
 const BISECTION_STEPS = 40
+/** The window's own text size: the panels are never drawn larger than the options sidebar. */
+export const MAX_SCALE = 1
 
 export interface SectionSize {
   width: number
@@ -94,7 +96,7 @@ export function arrangementSize(sizes: SectionSize[], columns: number[][]): Sect
 
 /**
  * The column count, and the text scale, at which the panels can be drawn
- * largest in `availableWidth` x `availableHeight`.
+ * largest in `availableWidth` x `availableHeight`, never above `MAX_SCALE`.
  *
  * For a given count, whether the panels fit at scale `k` is a pure function
  * of the measured lines: lay them out at `k` (contiguous columns, the tallest
@@ -110,23 +112,36 @@ export function arrangeSections(sizes: LinearSize[], availableWidth: number, ava
     const { width, height } = arrangementSize(scaled, columns)
     return { columns, fits: width <= availableWidth * ROUNDING_HEADROOM && height <= availableHeight * ROUNDING_HEADROOM }
   }
-  // No panel can be drawn larger than the scale at which it alone fills the space.
-  let ceiling = Infinity
+  // Never larger than the options sidebar draws the same text (scale 1): the
+  // fit only shrinks, for a window that cannot hold everything at that size.
+  // Nor larger than the scale at which any one panel alone fills the space.
+  let ceiling = MAX_SCALE
   for (const size of sizes) {
     if (size.width.slope > 0) ceiling = Math.min(ceiling, (availableWidth - PADDING_PX * 2 - size.width.base) / size.width.slope)
     if (size.height.slope > 0) ceiling = Math.min(ceiling, (availableHeight - PADDING_PX * 2 - size.height.base) / size.height.slope)
   }
   if (!(ceiling > 0)) return bestArrangement
+  // Where several counts reach the cap, the one that fills the space most
+  // evenly wins: its larger share of the width or the height is smallest.
+  const fill = (scale: number, columns: number[][]) => {
+    const { width, height } = arrangementSize(sizes.map((size) => sizeAt(size, scale)), columns)
+    return Math.max(width / availableWidth, height / availableHeight)
+  }
   for (let count = 1; count <= sizes.length; count += 1) {
     if (!layoutAt(bestArrangement.scale, count).fits) continue
     let low = bestArrangement.scale
     let high = ceiling
+    if (layoutAt(ceiling, count).fits) low = ceiling
     for (let step = 0; step < BISECTION_STEPS; step += 1) {
       const middle = (low + high) / 2
       if (layoutAt(middle, count).fits) low = middle
       else high = middle
     }
-    if (low > bestArrangement.scale) bestArrangement = { columns: layoutAt(low, count).columns, scale: low }
+    const columns = layoutAt(low, count).columns
+    if (low > bestArrangement.scale) bestArrangement = { columns, scale: low }
+    else if (low === bestArrangement.scale && low === ceiling && fill(low, columns) < fill(low, bestArrangement.columns)) {
+      bestArrangement = { columns, scale: low }
+    }
   }
   return bestArrangement
 }
