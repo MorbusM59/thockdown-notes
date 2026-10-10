@@ -17,12 +17,13 @@ import { PADDING_PX, arrangeSections, linearSize, type Arrangement } from './sho
 // (shared/useHelpKey.ts).
 //
 // A PANEL IS AN OPTIONS SECTION, unfolded. It is built from the options
-// sidebar's own classes -- the section's card, its heading, its body's flow
-// rule and its sub-section labels (packages/interaction/interaction.css) --
+// sidebar's own classes -- the section's card, its heading and its body's
+// flow rule (packages/interaction/interaction.css) --
 // so it looks like the sidebar because it is drawn by the same rules, not by
-// a copy of them. Only the fold arrow is taken off: nothing here folds. Its
-// sub-section labels name the parts of the app a panel covers (the tab bar,
-// the timeline), each listing its keys and then its mouse gestures.
+// a copy of them. Only the fold arrow is taken off: nothing here folds. Each
+// sub-section is one part of the app a panel covers (the tab bar, the
+// timeline) and lists its keys and then its mouse gestures. It carries no
+// label: its card already separates it, and the keys say which part it is.
 //
 // EVERY KEY IS ONE SQUARE CAP (keyCaps.ts), an icon or a short text, so a
 // combination's width is its number of keys. The legend for the caps that do
@@ -77,8 +78,6 @@ interface Row {
 
 interface Section {
   id: string
-  /** Absent for a panel's only section, which draws no label. */
-  title?: string
   /** Its keys, then its mouse gestures. */
   rows: Row[]
 }
@@ -117,7 +116,6 @@ const PANELS: Panel[] = SHORTCUT_PANELS
     sections: panel.sections
       .map((section) => ({
         id: section.id,
-        title: section.title,
         rows: [...shortcutsInSection(section.id).flatMap(shortcutRows), ...mouseGesturesInSection(section.id).map(gestureRow)],
       }))
       .filter((section) => section.rows.length > 0),
@@ -197,7 +195,6 @@ function CardView({ card }: { card: Card }) {
       ) : null}
       <SectionCard>
         <div className="sidebar-options-accordion-body">
-          {card.section.title ? <div className="options-subsection-label">{card.section.title}</div> : null}
           <Rows rows={card.section.rows} />
         </div>
       </SectionCard>
