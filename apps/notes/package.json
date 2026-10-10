@@ -1,7 +1,7 @@
 {
   "name": "thockdown-notes",
   "private": true,
-  "version": "0.7.2",
+  "version": "0.7.3",
   "repository": "github:MorbusM59/thockdown-notes",
   "type": "module",
   "main": "dist-electron/main.js",

@@ -5,6 +5,30 @@ same commit that sets the version (docs/release-protocol.md). Entries up to 0.7.
 were collected from the GitHub releases of the time, tagged `v<version>`; later
 releases are tagged `notes-v<version>`.
 
+## 0.7.3 (2026-10-11)
+
+A fix-and-polish release: **music plays again**, the music player answers your **media keys**, **Ctrl+wheel** changes a note's typography right where you read it, and the **F1 shortcut reference** is redrawn. Supersedes 0.7.2, whose music player stayed silent.
+
+#### New
+
+- **Ctrl+wheel over a note's text** adjusts that pane's typography one step per notch: Ctrl the size, Ctrl+Alt the horizontal spacing, Ctrl+Shift the line height. Edit and render view each keep their own.
+- **Media keys and the system media controls** show the current song and drive play, pause, next and previous.
+- **Render view letter spacing** can go negative, down to -0.25em.
+- **The F1 shortcut reference** is reorganised by region of the app, with one square cap per key and a key legend down the left, and lists the mouse gestures nothing on screen explains.
+
+#### Fixes
+
+- **Music plays again.** Songs played silently since 0.7.2.
+- **Undo stays within the note you are editing.** Undoing far enough could write the previously shown document (such as the User Guide) into the current note. The User Guide is now fully read-only, Ctrl+Z included.
+- **Hover follows the content.** A row that slides under a still pointer (after archiving or trashing the one above) lights up and shows its buttons without moving the mouse.
+- **An empty slot takes the keyboard.** Ctrl+N in a freshly opened slot creates the note there instead of in the previous slot.
+- **Render view keeps your place** through several quick typography changes.
+
+#### Removed
+
+- The chapter shortcuts (Shift+Alt+N, Shift+Alt+Delete, Shift+Alt+Backspace). New chapter, cut and merge stay on the chapter bar's buttons and in the quick actions menu.
+- F11 no longer toggles immersive mode; Ctrl+Shift+Space does.
+
 ## 0.7.2 (2026-10-09)
 
 A polish release: a **keyboard shortcut reference** on F1, simpler list and strikethrough shortcuts, more **chime scales**, and a lot of internal tidying. The game behind the User Guide button has grown up considerably too.
