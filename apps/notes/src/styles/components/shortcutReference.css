@@ -185,6 +185,7 @@
 
 .shortcut-reference .sidebar-options-accordion-body {
   padding-bottom: var(--toolbar-options-gap);
+  padding-top: var(--toolbar-options-gap);
 }
 
 /* Keys, then what they do. The key column is one width in every panel,

@@ -151,7 +151,7 @@ export const SHORTCUTS = {
   userGuide: { section: 'content', chords: [{ key: 'F1' }], label: 'Open / close the User Guide' },
   shortcutReference: { section: 'content', chords: [{ key: 'F1' }], press: 'hold', label: 'These shortcuts, while held', matchedBy: 'help-key' },
   newNote: { section: 'content', chords: [{ key: 'n', ctrl: true }], label: 'New note' },
-  newNoteFromClipboard: { section: 'content', chords: [{ key: 'n', ctrl: true, shift: true }], label: 'New note titled from clipboard' },
+  newNoteFromClipboard: { section: 'content', chords: [{ key: 'n', ctrl: true, shift: true }], label: 'with pasted title' },
   toggleSidebar: { section: 'layout', chords: [{ code: 'Space', ctrl: true }], label: 'Show / hide sidebar' },
   immersive: { section: 'layout', chords: [{ code: 'Space', ctrl: true, shift: true }], label: 'Immersive mode' },
   switchSlot: { section: 'layout', chords: withMods(ARROWS_LR, { alt: true }), label: 'Previous / next slot' },

@@ -32,15 +32,15 @@ export interface MouseGesture {
 
 export const MOUSE_GESTURES: readonly MouseGesture[] = [
   // editorSection/typographyWheel.ts: one slider step per notch, for the pane under the pointer.
-  { section: 'zoom', action: 'wheel', modifiers: ['Ctrl'], label: 'over the text for text size' },
-  { section: 'zoom', action: 'wheel', modifiers: ['Ctrl', 'Alt'], label: 'over the text for horizontal spacing' },
-  { section: 'zoom', action: 'wheel', modifiers: ['Ctrl', 'Shift'], label: 'over the text for line height' },
+  { section: 'zoom', action: 'wheel', modifiers: ['Ctrl'], label: 'adjust text size' },
+  { section: 'zoom', action: 'wheel', modifiers: ['Ctrl', 'Alt'], label: 'adjust letter spacing' },
+  { section: 'zoom', action: 'wheel', modifiers: ['Ctrl', 'Shift'], label: 'adjust line height' },
 
-  { section: 'scrollbar', action: 'click', button: 'left', label: 'to travel there' },
-  { section: 'scrollbar', action: 'click', button: 'right', label: 'to page up / down' },
-  { section: 'scrollbar', action: 'hold', button: 'left', label: 'to snap there' },
+  { section: 'scrollbar', action: 'click', button: 'left', label: 'smooth scroll' },
+  { section: 'scrollbar', action: 'click', button: 'right', label: 'page scroll' },
+  { section: 'scrollbar', action: 'hold', button: 'left', label: 'instant scroll' },
 
-  { section: 'tabBar', action: 'drag', button: 'left', label: 'a tab to reorder, a note into a tab bar to open it' },
+  { section: 'tabBar', action: 'drag', button: 'left', label: 'reorder tabs' },
 
   { section: 'chapterBar', action: 'drag', button: 'left', label: 'a chapter pill to reorder it' },
   { section: 'chapterBar', action: 'click', button: 'right', label: 'on a chapter tab to give it an id' },
