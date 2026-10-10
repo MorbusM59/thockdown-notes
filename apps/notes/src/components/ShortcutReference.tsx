@@ -102,6 +102,7 @@ function gestureRow(gesture: MouseGesture): Row {
 }
 
 const PANELS: Panel[] = SHORTCUT_GROUPS
+  .filter((group) => group.inReference !== false)
   .map((group) => ({
     id: group.id,
     title: group.title,

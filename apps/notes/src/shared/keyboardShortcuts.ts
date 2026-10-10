@@ -80,8 +80,14 @@ export interface ShortcutDeclaration {
   matchedBy?: 'codemirror' | 'escape-hold' | 'help-key' | 'ring'
 }
 
-/** The reader-facing groups, in reading order, each with the Font Awesome icon its panel wears. */
-export const SHORTCUT_GROUPS: ReadonlyArray<{ id: ShortcutGroupId; title: string; icon: string }> = [
+/**
+ * The reader-facing groups, in reading order, each with the Font Awesome icon
+ * its panel wears. `inReference: false` keeps a group out of the F1 quick
+ * reference while the User Guide still lists it, for controls a reader
+ * finds without a reference (the quick-actions ring turns and takes like
+ * any dial).
+ */
+export const SHORTCUT_GROUPS: ReadonlyArray<{ id: ShortcutGroupId; title: string; icon: string; inReference?: false }> = [
   { id: 'views', title: 'Views & help', icon: 'fa-solid fa-eye' },
   { id: 'notes', title: 'Notes & slots', icon: 'fa-solid fa-note-sticky' },
   { id: 'find', title: 'Find', icon: 'fa-solid fa-magnifying-glass' },
@@ -89,7 +95,7 @@ export const SHORTCUT_GROUPS: ReadonlyArray<{ id: ShortcutGroupId; title: string
   { id: 'editing', title: 'Editing', icon: 'fa-solid fa-pen' },
   { id: 'chapters', title: 'Chapters', icon: 'fa-solid fa-bookmark' },
   { id: 'tables', title: 'In a table', icon: 'fa-solid fa-table' },
-  { id: 'menu', title: 'Quick actions menu', icon: 'fa-solid fa-circle-notch' },
+  { id: 'menu', title: 'Quick actions menu', icon: 'fa-solid fa-circle-notch', inReference: false },
 ]
 
 const ARROWS_LR: readonly KeyChord[] = [{ key: 'ArrowLeft' }, { key: 'ArrowRight' }]

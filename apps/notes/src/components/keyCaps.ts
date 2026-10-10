@@ -21,18 +21,18 @@ export interface KeyCap {
   legend?: string
 }
 
-const ARROWS_CAP: KeyCap = { icon: 'fa-solid fa-up-down-left-right', legend: 'Arrow keys' }
+const ARROWS_CAP: KeyCap = { icon: 'fa-solid fa-caret-up', legend: 'Arrow keys' }
 
 const NAMED_CAPS: Record<string, KeyCap> = {
-  Ctrl: { icon: 'fa-solid fa-angle-up', legend: 'Ctrl' },
+  Ctrl: { text: 'Ctr', legend: 'Control' },
   Cmd: { text: '⌘', legend: 'Cmd' },
-  Shift: { icon: 'fa-solid fa-up-long', legend: 'Shift' },
-  Alt: { icon: 'fa-solid fa-code-fork', legend: 'Alt' },
-  Esc: { icon: 'fa-solid fa-xmark', legend: 'Esc' },
+  Shift: { text: 'Shf', legend: 'Shift' },
+  Alt: { text: 'Alt' },
+  Esc: { text: 'Esc', legend: 'Escape' },
   Enter: { icon: 'fa-solid fa-turn-down fa-rotate-90', legend: 'Enter' },
   Backspace: { icon: 'fa-solid fa-delete-left', legend: 'Backspace' },
   Delete: { icon: 'fa-solid fa-delete-left fa-flip-horizontal', legend: 'Delete' },
-  Tab: { icon: 'fa-solid fa-arrow-right-to-bracket', legend: 'Tab' },
+  Tab: { text: 'Tab' },
   Space: { icon: 'fa-solid fa-window-minimize', legend: 'Space' },
   // One cap for every arrow key: which way is the description's business.
   '←': ARROWS_CAP,
@@ -50,15 +50,15 @@ export function capForKey(name: string): KeyCap {
 export function capsForGesture(gesture: MouseGesture): KeyCap[] {
   const caps: KeyCap[] = (gesture.modifiers ?? []).map(capForKey)
   if (gesture.action === 'hold') caps.push(HOLD_CAP)
-  if (gesture.action === 'drag') caps.push({ icon: 'fa-solid fa-hand-back-fist', legend: 'Drag' })
-  if (gesture.action === 'wheel') caps.push({ icon: 'fa-solid fa-arrows-spin', legend: 'Mouse: Scroll' })
+  if (gesture.action === 'drag') caps.push({ icon: 'fa-solid fa-grip', legend: 'Drag' })
+  if (gesture.action === 'wheel') caps.push({ icon: 'fa-solid fa-arrows-up-down', legend: 'Mouse: Scroll' })
   if (gesture.button === 'left') caps.push({ text: 'LM', legend: 'Mouse: Left' })
   if (gesture.button === 'right') caps.push({ text: 'RM', legend: 'Mouse: Right' })
   return caps
 }
 
 /** A held key or button, in front of what is held. */
-export const HOLD_CAP: KeyCap = { icon: 'fa-solid fa-hourglass-half', legend: 'Hold' }
+export const HOLD_CAP: KeyCap = { icon: 'fa-solid fa-circle-down', legend: 'Hold' }
 
 export interface LegendEntry {
   legend: string
@@ -68,8 +68,8 @@ export interface LegendEntry {
 
 /** The legend's reading order: modifiers, keys, then the mouse. */
 const LEGEND_ORDER = [
-  'Ctrl', 'Cmd', 'Shift', 'Alt',
-  'Esc', 'Enter', 'Tab', 'Space', 'Backspace', 'Delete', 'Arrow keys',
+  'Control', 'Cmd', 'Shift',
+  'Escape', 'Enter', 'Space', 'Backspace', 'Delete', 'Arrow keys',
   'Mouse: Left', 'Mouse: Right', 'Mouse: Scroll', 'Drag', 'Hold',
 ]
 
