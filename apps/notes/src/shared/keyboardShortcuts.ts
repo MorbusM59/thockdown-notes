@@ -65,6 +65,7 @@ export type ShortcutSectionId =
   | 'tables'
   | 'gutter'
   | 'find'
+  | 'category'
   | 'uncategorized'
   | 'menu'
 
@@ -135,7 +136,11 @@ export const SHORTCUT_PANELS: readonly ShortcutPanel[] = [
       { id: 'gutter', title: 'Gutter' },
     ],
   },
-  { title: 'Find', icon: 'fa-solid fa-magnifying-glass', sections: [{ id: 'find' }] },
+  {
+    title: 'Sidebar',
+    icon: 'fa-solid fa-bars',
+    sections: [{ id: 'find', title: 'Find' }, { id: 'category', title: 'Category view' }],
+  },
   { title: 'Uncategorized', icon: 'fa-solid fa-ellipsis', sections: [{ id: 'uncategorized' }] },
   { title: 'Quick actions menu', icon: 'fa-solid fa-circle-notch', sections: [{ id: 'menu' }], inReference: false },
 ]

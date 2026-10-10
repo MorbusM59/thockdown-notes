@@ -58,7 +58,10 @@ export const MOUSE_GESTURES: readonly MouseGesture[] = [
 
   { section: 'find', action: 'click', button: 'right', label: "on Find icon: replace all" },
 
-  { section: 'uncategorized', action: 'hold', button: 'right', label: 'tree entry: prime for delete' },
+  // editorSection/useNoteProtectionActions.ts: a press arms archiving, a hold arms deletion.
+  { section: 'category', action: 'click', button: 'right', label: 'prime for archiving' },
+  { section: 'category', action: 'hold', button: 'right', label: 'prime for deletion' },
+
 
   { section: 'menu', action: 'wheel', label: 'turn dial' },
   { section: 'menu', action: 'click', button: 'left', label: 'select choice' },

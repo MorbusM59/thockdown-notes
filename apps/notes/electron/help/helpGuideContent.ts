@@ -465,7 +465,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 *How to archive or delete a note in the tree views, where the cards have no room for buttons.*
 
 - **Only in the tree views.** The flat lists — Date, Find, Trash — put an Archive and a Trash button on every row, and those are the way to do it there. A hidden gesture doing the same thing beside a visible button is a way to file a note away by accident and then wonder where it went, so it isn't offered.
-- Holding past a short threshold arms the card (it highlights) for its next action: archive for a normal note, straight to permanent deletion for one that's already archived.
+- A right-click arms the card (it highlights) for archiving; holding past a short threshold arms it for deletion instead (permanent deletion for a note that's already archived).
 - A left-click on the armed card confirms the action; moving the pointer away cancels it.
 - The halo of the [animated cursor](${guideLink('APPEARANCE-SETTINGS', 'mouse-options')}), if you have it on, fills as you hold and is full at the moment the gesture arms.
 - A quick tap (released fast) on an already-archived or already-deleted note restores it instead, and that one works **everywhere**, tree or list — see [Restoring from Archive or Trash]($#restoring-from-archive-or-trash). No view has a restore button, so it is the only way back.
