@@ -46,7 +46,7 @@ export const MOUSE_GESTURES: readonly MouseGesture[] = [
   { section: 'chapterBar', action: 'click', button: 'right', label: 'assign id' },
   { section: 'chapterBar', action: 'hold', button: 'right', label: 'archive/delete' },
 
-  { section: 'timeline', action: 'hold', button: 'left', label: 'on present: merge snapshots' },
+  { section: 'timeline', action: 'hold', button: 'right', label: 'on present: merge snapshots' },
   { section: 'timeline', action: 'hold', button: 'right', label: 'on mark: new note from mark' },
 
   { section: 'tables', action: 'click', button: 'right', label: 'select word, cell, row, table' },

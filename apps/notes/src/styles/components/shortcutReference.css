@@ -17,6 +17,7 @@
   backdrop-filter: blur(4px);
   color: var(--color-text-base);
   font-family: var(--ui-font-family);
+  letter-spacing: -0.05em;
   /* Takes the clicks: what is under it is out of sight, and a click must
      not land on a control the reader cannot see. */
   pointer-events: auto;
@@ -59,7 +60,7 @@
   height: 100%;
   overflow: hidden;
   padding: var(--spacing-large);
-  column-width: calc(var(--shortcut-ref-keys-width) + var(--spacing-large) + 180px * var(--ui-font-scale));
+  column-width: calc(var(--shortcut-ref-keys-width) + var(--spacing-large) + 90px * var(--ui-font-scale));
   column-gap: calc(var(--spacing-large) * 2);
   column-fill: auto;
   font-size: var(--text-info-size);
@@ -79,8 +80,12 @@
    first in a column has nothing above it. */
 .shortcut-reference .sidebar-options-section-heading {
   min-height: calc(20px * var(--ui-font-scale));
-  padding: var(--spacing-regular) 0;
+  padding: var(--spacing-regular);
   margin-top: var(--spacing-large);
+  border: 1px solid var(--color-panel-border);
+  box-shadow: var(--box-shadow-regular);
+  border-radius: var(--border-radius-small);
+  background-color: var(--color-background-light);
 }
 
 .shortcut-reference .sidebar-options-section-heading:first-child {
@@ -93,6 +98,10 @@
 
 .shortcut-reference .options-subsection-label {
   margin: var(--spacing-regular) 0 0;
+  border: 1px solid var(--color-panel-border);
+  box-shadow: var(--box-shadow-regular-light);
+  border-radius: var(--border-radius-small);
+  background-color: var(--color-background-dark);
 }
 
 /* Keys, then what they do; the key column is as wide as the longest
@@ -154,7 +163,7 @@
 }
 
 .shortcut-reference .shortcut-ref-label {
-  line-height: 1.35;
+  line-height: 0.8;
   color: var(--color-text-80);
 }
 
