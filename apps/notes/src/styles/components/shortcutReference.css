@@ -95,16 +95,23 @@
 .shortcut-reference .shortcut-ref-section {
   margin: 0;
   width: auto;
+  border-radius: var(--border-radius-small);
+}
+
+/* The legend column stands on the same surface. */
+.shortcut-reference .shortcut-ref-section,
+.shortcut-reference .shortcut-ref-legend {
   position: relative;
   isolation: isolate;
-  border-radius: var(--border-radius-small);
   background-color: var(--palette-parchment-lightest);
 }
 
 /* The sidebar's texture layer (sidebar.css's .sidebar-content-texture), under
    the card. The layout is drawn at a CSS zoom, which would scale the tile
-   with it, so the tile is divided by that zoom to stay the sidebar's size. */
-.shortcut-reference .shortcut-ref-section::before {
+   with it, so the tile is divided by that zoom to stay the sidebar's size
+   (the legend is not zoomed, and reads the default of 1). */
+.shortcut-reference .shortcut-ref-section::before,
+.shortcut-reference .shortcut-ref-legend::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -212,7 +219,6 @@
   font-size: var(--text-info-size);
   border-right: 1px solid var(--color-panel-border);
   box-shadow: var(--box-shadow-regular);
-  background-color: var(--color-background-light);
   padding: var(--spacing-large);
 }
 
