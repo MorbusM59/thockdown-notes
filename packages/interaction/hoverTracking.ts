@@ -40,8 +40,9 @@
 // (a sibling inserted or removed above it reflows it). Anything else -- the
 // common case, a mutation elsewhere in the document -- is two cheap checks.
 //
-// Not covered: content that moves under the pointer by transform or
-// animation alone, with no DOM change and no scroll. The escape ring is the
+// Not covered: content that moves under the pointer with no node added or
+// removed and no scroll -- by transform, animation, or a class, style or text
+// change reflowing it. The escape ring is the
 // one such surface and keeps its own re-resolve for exactly that.
 
 /** The attribute every hover rule selects on, in place of `:hover`. */
@@ -132,6 +133,12 @@ export function installHoverTracking(): void {
   new MutationObserver((records) => {
     if (position && mutationAffectsHit(records)) scheduleRefresh()
   }).observe(document.documentElement, { childList: true, subtree: true })
+
+  // A captured pointer reports the capturing element as its target wherever
+  // the pointer is, so releasing a drag (a scrollbar thumb, a hold-to-adjust
+  // control) off that element would leave it lit. Ask the document instead.
+  window.addEventListener('pointerup', scheduleRefresh, { capture: true, passive: true })
+  window.addEventListener('lostpointercapture', scheduleRefresh, { capture: true, passive: true })
 
   window.addEventListener('scroll', scheduleRefresh, { capture: true, passive: true })
   window.addEventListener('resize', scheduleRefresh, { passive: true })
