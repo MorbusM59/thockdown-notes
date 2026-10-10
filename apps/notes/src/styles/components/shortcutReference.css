@@ -54,6 +54,15 @@
   --text-info-size: calc(var(--shortcut-ref-window-text-info-size) * var(--shortcut-ref-text-scale));
 }
 
+/* A panel's heading and its sub-section labels are the options sidebar's,
+   and are drawn at exactly the sidebar's size: they take the window's values
+   back, so only the rows follow the fit. They then add a fixed amount to a
+   panel's size, which the straight-line measurement already allows for. */
+.shortcut-reference :is(.shortcut-ref-measure, .shortcut-ref-layout) :is(.sidebar-options-section-heading, .options-subsection-label) {
+  --ui-font-scale: var(--shortcut-ref-window-ui-font-scale);
+  --text-info-size: var(--shortcut-ref-window-text-info-size);
+}
+
 .shortcut-reference .shortcut-ref-measures {
   position: absolute;
   top: 0;
