@@ -60,7 +60,7 @@
   height: 100%;
   overflow: hidden;
   padding: var(--spacing-large);
-  column-width: calc(var(--shortcut-ref-keys-width) + var(--spacing-large) + 90px * var(--ui-font-scale));
+  column-width: calc(var(--shortcut-ref-keys-width) + var(--spacing-large) + 80px * var(--ui-font-scale));
   column-gap: calc(var(--spacing-large) * 2);
   column-fill: auto;
   font-size: var(--text-info-size);
