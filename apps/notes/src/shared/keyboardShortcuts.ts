@@ -148,8 +148,8 @@ const withMods = (chords: readonly KeyChord[], mods: Omit<KeyChord, 'key' | 'cod
 export const SHORTCUTS = {
   toggleView: { section: 'content', chords: [{ key: 'Escape' }], label: 'Edit / render view', matchedBy: 'escape-hold' },
   quickActions: { section: 'content', chords: [{ key: 'Escape' }], press: 'hold', label: 'Quick actions menu', matchedBy: 'escape-hold' },
-  userGuide: { section: 'content', chords: [{ key: 'F1' }], label: 'Open / close the User Guide' },
-  shortcutReference: { section: 'content', chords: [{ key: 'F1' }], press: 'hold', label: 'These shortcuts, while held', matchedBy: 'help-key' },
+  userGuide: { section: 'content', chords: [{ key: 'F1' }], label: 'Toggle User Guide' },
+  shortcutReference: { section: 'content', chords: [{ key: 'F1' }], press: 'hold', label: 'Quick Reference', matchedBy: 'help-key' },
   newNote: { section: 'content', chords: [{ key: 'n', ctrl: true }], label: 'New note' },
   newNoteFromClipboard: { section: 'content', chords: [{ key: 'n', ctrl: true, shift: true }], label: 'with pasted title' },
   toggleSidebar: { section: 'layout', chords: [{ code: 'Space', ctrl: true }], label: 'Show / hide sidebar' },
@@ -163,7 +163,7 @@ export const SHORTCUTS = {
 
   find: { section: 'find', chords: [{ key: 'f', ctrl: true }], label: 'Find in note' },
   findReplace: { section: 'find', chords: [{ key: 'h', ctrl: true }], label: 'Find & replace' },
-  replaceAll: { section: 'find', chords: [{ key: 'Enter', ctrl: true }], label: 'Replace all (while finding)' },
+  replaceAll: { section: 'find', chords: [{ key: 'Enter', ctrl: true }], label: 'Replace all results' },
 
   bold: { section: 'markdown', chords: [{ key: 'b', ctrl: true }], label: 'Bold' },
   italic: { section: 'markdown', chords: [{ key: 'i', ctrl: true }], label: 'Italic' },

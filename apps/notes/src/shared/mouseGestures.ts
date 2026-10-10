@@ -42,26 +42,26 @@ export const MOUSE_GESTURES: readonly MouseGesture[] = [
 
   { section: 'tabBar', action: 'drag', button: 'left', label: 'reorder tabs' },
 
-  { section: 'chapterBar', action: 'drag', button: 'left', label: 'a chapter pill to reorder it' },
-  { section: 'chapterBar', action: 'click', button: 'right', label: 'on a chapter tab to give it an id' },
-  { section: 'chapterBar', action: 'hold', button: 'right', label: 'on a chapter pill for archive / delete buttons' },
+  { section: 'chapterBar', action: 'drag', button: 'left', label: 'reorder chapters' },
+  { section: 'chapterBar', action: 'click', button: 'right', label: 'assign id' },
+  { section: 'chapterBar', action: 'hold', button: 'right', label: 'archive/delete' },
 
-  { section: 'timeline', action: 'hold', button: 'left', label: 'on the present-state circle to merge snapshots' },
-  { section: 'timeline', action: 'hold', button: 'right', label: 'on a history mark to branch a new note from it' },
+  { section: 'timeline', action: 'hold', button: 'left', label: 'on present: merge snapshots' },
+  { section: 'timeline', action: 'hold', button: 'right', label: 'on mark: new note from mark' },
 
-  { section: 'tables', action: 'click', button: 'right', label: 'in a table to select word, cell, row, table' },
-  { section: 'tables', action: 'drag', button: 'left', label: 'a selected cell to move its row / column' },
-  { section: 'tables', action: 'hold', button: 'left', label: 'on the divider to delete that column' },
+  { section: 'tables', action: 'click', button: 'right', label: 'select word, cell, row, table' },
+  { section: 'tables', action: 'drag', button: 'left', label: 'move selected cell' },
+  { section: 'tables', action: 'hold', button: 'left', label: 'on divider: delete column' },
 
-  { section: 'gutter', action: 'click', button: 'left', label: 'on a line\'s flag box to mark it ?, again for !' },
-  { section: 'gutter', action: 'click', button: 'right', label: 'on a line\'s flag box to clear its mark' },
+  { section: 'gutter', action: 'click', button: 'left', label: 'mark ? / !' },
+  { section: 'gutter', action: 'click', button: 'right', label: 'clear mark' },
 
-  { section: 'find', action: 'click', button: 'right', label: "on the sidebar's Find icon to replace all" },
+  { section: 'find', action: 'click', button: 'right', label: "on Find icon: replace all" },
 
-  { section: 'uncategorized', action: 'hold', button: 'right', label: 'on a note in the tree to arm archive / delete' },
+  { section: 'uncategorized', action: 'hold', button: 'right', label: 'tree entry: prime for delete' },
 
-  { section: 'menu', action: 'wheel', label: 'over the menu to turn the dial' },
-  { section: 'menu', action: 'click', button: 'left', label: 'on a choice to take it' },
+  { section: 'menu', action: 'wheel', label: 'turn dial' },
+  { section: 'menu', action: 'click', button: 'left', label: 'select choice' },
 ]
 
 export function mouseGesturesInSection(section: ShortcutSectionId): MouseGesture[] {
