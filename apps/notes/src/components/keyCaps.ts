@@ -51,9 +51,9 @@ export function capsForGesture(gesture: MouseGesture): KeyCap[] {
   const caps: KeyCap[] = (gesture.modifiers ?? []).map(capForKey)
   if (gesture.action === 'hold') caps.push(HOLD_CAP)
   if (gesture.action === 'drag') caps.push({ icon: 'fa-solid fa-hand-back-fist', legend: 'Drag' })
-  if (gesture.action === 'wheel') caps.push({ icon: 'fa-solid fa-arrows-spin', legend: 'Mouse wheel' })
-  if (gesture.button === 'left') caps.push({ text: 'LMB', legend: 'Left mouse button' })
-  if (gesture.button === 'right') caps.push({ text: 'RMB', legend: 'Right mouse button' })
+  if (gesture.action === 'wheel') caps.push({ icon: 'fa-solid fa-arrows-spin', legend: 'Mouse: Scroll' })
+  if (gesture.button === 'left') caps.push({ text: 'LM', legend: 'Mouse: Left' })
+  if (gesture.button === 'right') caps.push({ text: 'RM', legend: 'Mouse: Right' })
   return caps
 }
 
@@ -70,7 +70,7 @@ export interface LegendEntry {
 const LEGEND_ORDER = [
   'Ctrl', 'Cmd', 'Shift', 'Alt',
   'Esc', 'Enter', 'Tab', 'Space', 'Backspace', 'Delete', 'Arrow keys',
-  'Left mouse button', 'Right mouse button', 'Mouse wheel', 'Drag', 'Hold',
+  'Mouse: Left', 'Mouse: Right', 'Mouse: Scroll', 'Drag', 'Hold',
 ]
 
 /** One entry per distinct legend among `caps`, in LEGEND_ORDER (an unlisted legend last). */
