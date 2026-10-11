@@ -49,4 +49,14 @@ describe('review fixes', () => {
     const text = '![a [b] c](https://e.com/x.png) ![r](rel/img.png)'
     expect(shapeableImages(text, documentImagesIn(text, splitPreviewBlockRangesProgressively))).toEqual([])
   })
+
+  it('stores and restores an address holding parentheses', () => {
+    const text = '![w](https://e.org/Foo_(bar).png "12em")'
+    const images = shapeableImages(text, documentImagesIn(text, splitPreviewBlockRangesProgressively))
+    expect(images.length).toBe(1)
+    const stored = apply(text, rewriteToStored(text, images, { 'https://e.org/Foo_(bar).png': { ok: true, id: '&W' } }))
+    expect(stored).toBe('![w](&W "12em")')
+    expect(apply(stored, rewriteToOrigins(stored, documentImagesIn(stored, splitPreviewBlockRangesProgressively), { '&W': 'https://e.org/Foo_(bar).png' })))
+      .toBe('![w](<https://e.org/Foo_(bar).png> "&W 12em")')
+  })
 })

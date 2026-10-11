@@ -8,6 +8,7 @@ import {
   type ImageLayout,
   type ImageLength,
 } from '../shared/imageLayout'
+import { imagesInLine } from '../shared/imageSyntax'
 
 /**
  * The edit view's image keys: shaping an image the way the table keys shape a
@@ -39,40 +40,25 @@ export interface MarkdownImageSpan {
   title: string | null
 }
 
-// One image on one line. The alt text may not contain brackets and the title
-// is double- or single-quoted, which covers what this app writes and what
-// people type; anything more exotic is simply not shaped by these keys.
-const IMAGE_PATTERN = /!\[([^\]\n]*)\]\(([ \t]*)(<[^>\n]*>|[^\s()]+)(?:([ \t]+)(?:"([^"\n]*)"|'([^'\n]*)'))?[ \t]*\)/g
-
-/** Every image on the line holding `offset`. */
+/** Every image on the line holding `offset` (shared/imageSyntax.ts reads them); an empty `![]()` is not one to these keys. */
 export function imagesOnLine(text: string, offset: number): MarkdownImageSpan[] {
   const lineFrom = text.lastIndexOf('\n', offset - 1) + 1
   const lineEndIndex = text.indexOf('\n', offset)
-  const lineTo = lineEndIndex === -1 ? text.length : lineEndIndex
-  const line = text.slice(lineFrom, lineTo)
-  const spans: MarkdownImageSpan[] = []
-  IMAGE_PATTERN.lastIndex = 0
-  for (let match = IMAGE_PATTERN.exec(line); match; match = IMAGE_PATTERN.exec(line)) {
-    const [whole, alt, leading, destination, separator, doubleQuoted, singleQuoted] = match
-    const from = lineFrom + match.index
-    const altFrom = from + 2
-    const destinationFrom = altFrom + alt.length + 2 + leading.length
-    const destinationTo = destinationFrom + destination.length
-    const title = doubleQuoted ?? singleQuoted ?? null
-    const titleFrom = title === null ? null : destinationTo + separator.length + 1
-    spans.push({
-      from,
-      to: from + whole.length,
-      altFrom,
-      altTo: altFrom + alt.length,
-      destinationFrom,
-      destinationTo,
-      titleFrom,
-      titleTo: titleFrom === null || title === null ? null : titleFrom + title.length,
-      title,
-    })
-  }
-  return spans
+  const line = text.slice(lineFrom, lineEndIndex === -1 ? text.length : lineEndIndex)
+  return imagesInLine(line).flatMap((span) => {
+    if (span.destinationTo === span.destinationFrom) return []
+    return [{
+      from: lineFrom + span.from,
+      to: lineFrom + span.to,
+      altFrom: lineFrom + span.altFrom,
+      altTo: lineFrom + span.altTo,
+      destinationFrom: lineFrom + span.destinationFrom,
+      destinationTo: lineFrom + span.destinationTo,
+      titleFrom: span.titleFrom === null ? null : lineFrom + span.titleFrom,
+      titleTo: span.titleTo === null ? null : lineFrom + span.titleTo,
+      title: span.titleFrom === null ? null : line.slice(span.titleFrom, span.titleTo!),
+    }]
+  })
 }
 
 /** The image the caret at `offset` is strictly inside (after its `!`, before its `)`), or null. */

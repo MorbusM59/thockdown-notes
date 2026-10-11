@@ -1,5 +1,6 @@
 import { imagesOnLine } from './MarkdownImageTransforms'
 import { imageMarkdown } from '../shared/images'
+import { imagesInLine, type ImageSyntaxSpan } from '../shared/imageSyntax'
 import { formatImageLayout, parseImageTitle, type ImageAlignment, type ImageLayout } from '../shared/imageLayout'
 
 // WHERE AN IMAGE IN THE RENDER VIEW IS IN THE TEXT, and the two edits the
@@ -182,22 +183,20 @@ export function placeImageAt(
   return { text: next, caret: image.to + next.length - text.length }
 }
 
-// An image, or the toolbar's empty `![]()`, whose destination may be empty --
-// which the image keys' pattern (MarkdownImageTransforms) does not accept.
-const IMAGE_OR_PLACEHOLDER = /!\[([^\]\n]*)\]\(([ \t]*)(<[^>\n]*>|[^\s()]*)(?:[ \t]+(?:"[^"\n]*"|'[^'\n]*'))?[ \t]*\)/g
-
-function imageOrPlaceholderAt(text: string, offset: number): { from: number; to: number; altFrom: number; altTo: number; destinationFrom: number; destinationTo: number } | null {
+// An image, or the toolbar's empty `![]()`, which the image keys do not count.
+function imageOrPlaceholderAt(text: string, offset: number): ImageSyntaxSpan | null {
   const lineFrom = text.lastIndexOf('\n', offset - 1) + 1
   const lineEnd = text.indexOf('\n', offset)
   const line = text.slice(lineFrom, lineEnd === -1 ? text.length : lineEnd)
-  IMAGE_OR_PLACEHOLDER.lastIndex = 0
-  for (let match = IMAGE_OR_PLACEHOLDER.exec(line); match; match = IMAGE_OR_PLACEHOLDER.exec(line)) {
-    const from = lineFrom + match.index
-    const to = from + match[0].length
-    if (offset <= from || offset > to) continue
-    const altFrom = from + 2
-    const destinationFrom = altFrom + match[1].length + 2 + match[2].length
-    return { from, to, altFrom, altTo: altFrom + match[1].length, destinationFrom, destinationTo: destinationFrom + match[3].length }
+  const span = imagesInLine(line).find((each) => offset > lineFrom + each.from && offset <= lineFrom + each.to)
+  if (!span) return null
+  return {
+    ...span,
+    from: lineFrom + span.from,
+    to: lineFrom + span.to,
+    altFrom: lineFrom + span.altFrom,
+    altTo: lineFrom + span.altTo,
+    destinationFrom: lineFrom + span.destinationFrom,
+    destinationTo: lineFrom + span.destinationTo,
   }
-  return null
 }
