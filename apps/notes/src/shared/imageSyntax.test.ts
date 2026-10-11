@@ -15,6 +15,9 @@ describe('imagesInLine', () => {
       ["![s](<C:/my pics/a.png> 'q')", '<C:/my pics/a.png>', 'q'],
       ['![]()', '', null],
     ])
+    expect(parts('![a](b<c.png)')).toEqual([
+      ['![a](b<c.png)', 'b<c.png', null],
+    ])
   })
   it('rejects what is not an image', () => {
     expect(parts('![a](b(c) ![a] (b) ![a](b "t) ![a[b]](c)')).toEqual([])

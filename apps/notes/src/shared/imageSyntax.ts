@@ -49,7 +49,7 @@ function imageAt(line: string, start: number): ImageSyntaxSpan | null {
     let depth = 0
     while (at < line.length) {
       const char = line[at]
-      if (char === '\n' || isBlank(char) || char === '<') break
+      if (char === '\n' || isBlank(char)) break
       if (char === '(') depth += 1
       else if (char === ')') {
         if (depth === 0) break
