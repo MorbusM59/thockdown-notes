@@ -4,8 +4,8 @@ import { GENERAL_SECONDARY_NAME, type TagPrimaryGroup } from '../shared/tagHiera
 
 // WHAT EACH SIDEBAR VIEW SHOWS IN IMAGE MODE, as pure functions.
 //
-//   date      "Images in Order": every use of an image in the current note,
-//             in the order the note uses them, a card per use
+//   date      "Images in Order": every image in the current note, stored or
+//             external, in the order the note uses them, a card per use
 //   category  "Images by Section": the same uses, grouped by the `##` and
 //             `###` headings they fall under, in the note's order
 //   archive   "Image Archive": every image not in the trash, grouped by its
@@ -17,10 +17,10 @@ import { GENERAL_SECONDARY_NAME, type TagPrimaryGroup } from '../shared/tagHiera
 
 export type ImageLibraryView = 'date' | 'category' | 'archive' | 'trash'
 
-/** A use of a library image in the current note, with the image it names. */
+/** An image in the current note, with the stored image it names (null for an external one). */
 export interface ImageUseCard {
   use: NoteImageUse
-  image: StoredImageSummary
+  image: StoredImageSummary | null
   /** Stable while the note is typed: the image's id and which of its uses this is. */
   key: string
 }
@@ -38,15 +38,23 @@ export function imagesInView(images: readonly StoredImageSummary[], view: 'archi
   return shown
 }
 
-/** The uses whose image is in the library and matches the search, in the note's order. */
+/**
+ * The uses whose image is external or in the library, and that match the
+ * search, in the note's order. A stored id with nothing behind it is left
+ * out: the render view already says it is missing.
+ */
 export function imageUseCards(uses: readonly NoteImageUse[], images: readonly StoredImageSummary[], query: string, caseSensitive: boolean): ImageUseCard[] {
   const byId = new Map(images.map((image) => [image.id, image]))
   const seen = new Map<string, number>()
-  return uses.flatMap((use) => {
-    const ordinal = seen.get(use.id) ?? 0
-    seen.set(use.id, ordinal + 1)
+  return uses.flatMap<ImageUseCard>((use) => {
+    const ordinal = seen.get(use.src) ?? 0
+    seen.set(use.src, ordinal + 1)
+    const key = `${use.src}#${ordinal}`
+    if (use.id === null) {
+      return matchesNoteSearchQuery({ title: use.alt, fileName: use.src, tags: [] }, query, caseSensitive) ? [{ use, image: null, key }] : []
+    }
     const image = byId.get(use.id)
-    return image && matchesImageSearch(image, query, caseSensitive, use.alt) ? [{ use, image, key: `${use.id}#${ordinal}` }] : []
+    return image && matchesImageSearch(image, query, caseSensitive, use.alt) ? [{ use, image, key }] : []
   })
 }
 

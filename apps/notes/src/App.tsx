@@ -176,6 +176,10 @@ import {
 } from './editor/PreviewMarkdown'
 import { setRemoteImagesAllowed, useRemoteImagesAllowed } from './shared/remoteImages'
 import { imageUsesIn, isImageFile, type NoteImageUse } from './shared/images'
+import { storeImageSources } from './shared/storedImages'
+import { imageSourcesToStore, rewriteToStored } from './editor/ImageStorageRewrite'
+import { parseImageMarkdown } from './editor/MarkdownImageTransforms'
+import { resolveSourceLineForOffset } from './editorSection/PreviewFindHitLocator'
 import { normalizeInternalText } from './editor/TextPolicy'
 import { readPageZoomFactor } from './window/pageZoom'
 import { splitChapterFamily } from './shared/chapters'
@@ -7732,6 +7736,64 @@ ${markdownHtml}
   const caretUseFrom = useMemo(() => (
     caretOffset === null ? null : imageUses.find((use) => caretOffset > use.from && caretOffset <= use.to)?.from ?? null
   ), [caretOffset, imageUses])
+  // The note views' cards act on the note in the active slot, and only on
+  // the text they were listed from: a use whose `![` is no longer where it
+  // was belongs to a list one keystroke stale, and is left alone.
+  const liveImageUseText = useCallback((use: NoteImageUse) => {
+    const section = getActiveSection()
+    if (!section?.activeNoteId || section.activeNoteId !== imageViewsNoteId || section.previewedSnapshotId !== null) return null
+    const text = section.readEditorText()
+    return text.startsWith('![', use.from) ? { section, text } : null
+  }, [getActiveSection, imageViewsNoteId])
+  // Goes to an image's block: the caret into it in the edit view, the block
+  // to the top in the render view.
+  const revealImageUse = useCallback((use: NoteImageUse) => {
+    const live = liveImageUseText(use)
+    if (!live) return
+    const { section, text } = live
+    const line = resolveSourceLineForOffset(text, use.from)
+    if (section.isPreviewMode) {
+      section.previewScrollToSourceLineRef.current?.(line, { behavior: 'smooth' })
+      return
+    }
+    const adapter = section.adapterRef.current
+    if (!adapter) return
+    const visible = adapter.readVisibleSourceLineRange()
+    const caret = use.from + 2
+    adapter.applySnapshot({
+      selection: { anchor: caret, focus: caret, start: caret, end: caret, isCollapsed: true },
+      selectionScrollBehavior: visible && line >= visible.fromLine && line <= visible.toLine ? 'preserve-scroll' : 'center-caged',
+    })
+  }, [liveImageUseText])
+  // Takes an image out of the note, with its line when it stood alone on one.
+  const removeImageUse = useCallback((use: NoteImageUse) => {
+    const live = liveImageUseText(use)
+    const adapter = live?.section.adapterRef.current
+    if (!live || !adapter) return
+    const { text } = live
+    const lineFrom = text.lastIndexOf('\n', use.from - 1) + 1
+    const lineEnd = text.indexOf('\n', use.to)
+    const lineTo = lineEnd === -1 ? text.length : lineEnd
+    const alone = text.slice(lineFrom, use.from).trim() === '' && text.slice(use.to, lineTo).trim() === ''
+    const range = !alone ? { from: use.from, to: use.to }
+      : lineEnd !== -1 ? { from: lineFrom, to: lineEnd + 1 }
+      : { from: Math.max(0, lineFrom - 1), to: lineTo }
+    adapter.applyEdit([{ ...range, insert: '' }], text)
+  }, [liveImageUseText])
+  // Stores an external image and points this use at it (the image button's
+  // rewrite, editor/ImageStorageRewrite.ts, for one image).
+  const storeImageUse = useCallback(async (use: NoteImageUse) => {
+    const live = liveImageUseText(use)
+    if (!live || use.id !== null) return
+    const parsed = parseImageMarkdown(live.text.slice(use.from, use.to))
+    if (!parsed) return
+    const image = { from: use.from, to: use.to, url: use.src, title: parsed.title }
+    const results = await storeImageSources(imageSourcesToStore([image]))
+    const edit = rewriteToStored(live.text, [image], results)
+    const adapter = live.section.adapterRef.current
+    if (!edit || !adapter || live.section.readEditorText() !== live.text) return
+    adapter.applyEdit([edit], live.text)
+  }, [liveImageUseText])
   // A card puts its image at the caret, which needs a note in edit mode.
   const placeLibraryImage = useCallback((id: string, alt: string) => {
     const section = getActiveSection()
@@ -8968,7 +9030,14 @@ ${markdownHtml}
             style={appShellStyle}
           >
             {isSidebarShown ? (
-            <aside className="notes-sidebar" style={{ gridArea: 'sidebar' }}>
+            <aside
+              className="notes-sidebar"
+              style={{ gridArea: 'sidebar' }}
+              // An image shown from the sidebar is a glance: any click back
+              // in the sidebar gives the slot its note again. The click still
+              // reaches its target.
+              onClickCapture={shownImageId ? () => getActiveSection()?.exitSlotOverlay?.() : undefined}
+            >
               <div className="search-box" aria-label="Search panel">
                 <div className={`search-input-shell${isReplaceMode ? ' search-replace-row' : ''}`}>
                 {isReplaceMode ? (
@@ -9154,6 +9223,9 @@ ${markdownHtml}
                           shownImageId={shownImageId}
                           caretUseFrom={caretUseFrom}
                           onPlace={placeLibraryImage}
+                          onReveal={revealImageUse}
+                          onRemove={removeImageUse}
+                          onStore={storeImageUse}
                           onOpen={openImageViewHere}
                         />
                       </div>

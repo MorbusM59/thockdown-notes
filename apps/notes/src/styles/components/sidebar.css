@@ -1009,9 +1009,10 @@
   opacity: 0;
 }
 
-/* A tree card's trash button takes the size's place while it is hovered. */
-.image-tree-card-trash {
-  display: none;
+/* A tree card's button (trash in the archive, remove in the note's views)
+ * takes the size's place while the card is hovered. */
+.image-card-trash,
+.image-card-remove {
   border: none;
   background: transparent;
   color: inherit;
@@ -1019,10 +1020,22 @@
   font-size: 0.85em;
 }
 
-.image-list-item.is-tree-card[data-hovered] .image-tree-card-trash {
+.image-list-item.is-tree-card .image-card-trash,
+.image-list-item.is-tree-card .image-card-remove {
+  display: none;
+}
+
+.image-list-item.is-tree-card[data-hovered] .image-card-trash,
+.image-list-item.is-tree-card[data-hovered] .image-card-remove {
   display: inline-block;
 }
 
 .image-list-item.is-tree-card[data-hovered] .image-tree-card-row .note-list-meta-right {
   display: none;
+}
+
+/* Images in Order's remove button fills the action column a note card's trash button uses. */
+.note-list-column-action .image-card-remove {
+  width: 100%;
+  height: 100%;
 }

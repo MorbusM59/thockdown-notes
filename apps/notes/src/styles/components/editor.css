@@ -1223,7 +1223,16 @@ button.escape-menu-chrome-gauge[data-pressed] .escape-menu-chrome-gauge-fill {
   box-sizing: border-box;
 }
 
-.image-slot-view-image {
+/* The frame is a flex box so the image inside can be held to the slot's
+ * height as well as its width. */
+.image-slot-view .image-slot-view-frame {
+  display: flex;
+  max-height: 100%;
+}
+
+.image-slot-view .image-slot-view-image {
+  min-width: 0;
+  min-height: 0;
   max-width: 100%;
   max-height: 100%;
   width: auto;

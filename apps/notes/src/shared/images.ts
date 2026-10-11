@@ -263,9 +263,12 @@ export function isImageFile(file: { type: string; name: string }): boolean {
   return file.type.startsWith('image/') || IMAGE_EXTENSION.test(file.name)
 }
 
-/** One use of a stored image in a note, in the order the note uses them. */
+/** One image in a note, in the order the note uses them. */
 export interface NoteImageUse {
-  id: string
+  /** The stored image's id, or null for an external image (a URL or a file path). */
+  id: string | null
+  /** The destination as written, without angle brackets: the id itself for a stored image. */
+  src: string
   /** The alt text as written at this use. */
   alt: string
   /** Offset of the reference's `!` in the note's text, and past its `)` (the end of its line when unclosed). */
@@ -277,12 +280,12 @@ export interface NoteImageUse {
   subsection: string | null
 }
 
-const IMAGE_USE = /!\[([^\]\n]*)\]\([ \t]*<?(&[^\s;()"'&<>]+)/g
+const IMAGE_USE = /!\[([^\]\n]*)\]\([ \t]*(?:<([^>\n]+)>|([^\s()<>]+))/g
 const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})/
 const SECTION_HEADING = /^ {0,3}(#{2,3})[ \t]+(.*?)[ \t#]*$/
 
 /**
- * Every use of a stored image in `rawText`, in order, with the `##` and `###`
+ * Every image in `rawText`, stored or external, in order, with the `##` and `###`
  * headings it falls under: the image sidebar's "Images in Order" and "Images
  * by Section" lists. A line scan rather than a parse, like imageReferencesIn,
  * so it is cheap enough to run as the note is typed; it skips fenced blocks
@@ -319,12 +322,14 @@ export function imageUsesIn(rawText: string): NoteImageUse[] {
       }
       IMAGE_USE.lastIndex = 0
       for (let match = IMAGE_USE.exec(line); match; match = IMAGE_USE.exec(line)) {
-        const id = normalizeImageId(match[2])
-        if (!id) continue
+        const destination = match[2] ?? match[3]
+        const id = destination.startsWith('&') ? normalizeImageId(destination) : null
+        if (destination.startsWith('&') && !id) continue
         const from = lineFrom + match.index
         const close = line.indexOf(')', match.index + match[0].length)
         uses.push({
           id,
+          src: detachString(destination),
           alt: detachString(rawText.slice(from + 2, from + 2 + match[1].length)),
           from,
           to: close === -1 ? lineTo : lineFrom + close + 1,

@@ -7,7 +7,7 @@ const image = (id: string, extra: Partial<StoredImageSummary> = {}): StoredImage
   id, src: '', width: 1, height: 1, mime: 'image/png', byteLength: 1, origin: null,
   createdAt: '2026-10-11T00:00:00Z', tags: [], useCount: 1, trashedAt: null, ...extra,
 })
-const use = (id: string, alt: string, section: string | null, subsection: string | null, from: number): NoteImageUse => ({ id, alt, from, to: from + 1, section, subsection })
+const use = (id: string, alt: string, section: string | null, subsection: string | null, from: number): NoteImageUse => ({ id, src: id, alt, from, to: from + 1, section, subsection })
 
 describe('image library views', () => {
   const all = [
@@ -23,8 +23,8 @@ describe('image library views', () => {
     expect(imagesInView(all, 'archive', '#dog', false).map((i) => i.id)).toEqual(['&2'])
   })
   it('lists a card per use, in order, searchable by alt text', () => {
-    const uses = [use('&2', 'lead', null, null, 0), use('&9', 'gone', 'A', null, 5), use('&2', 'again', 'A', 'B', 9)]
-    expect(imageUseCards(uses, all, '', false).map((card) => card.use.alt)).toEqual(['lead', 'again'])
+    const uses = [use('&2', 'lead', null, null, 0), use('&9', 'gone', 'A', null, 5), use('&2', 'again', 'A', 'B', 9), { ...use('x', 'web', 'A', 'B', 20), id: null, src: 'https://e.com/a.png' }]
+    expect(imageUseCards(uses, all, '', false).map((card) => card.use.alt)).toEqual(['lead', 'again', 'web'])
     expect(imageUseCards(uses, all, 'again', false).map((card) => card.use.alt)).toEqual(['again'])
     expect(groupCardsBySection(imageUseCards(uses, all, '', false)).map((group) => [group.name, group.secondary.map((s) => s.name)]))
       .toEqual([[BEFORE_FIRST_SECTION, [GENERAL_SECONDARY_NAME]], ['A', ['B']]])

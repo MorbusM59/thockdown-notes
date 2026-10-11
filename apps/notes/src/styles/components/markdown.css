@@ -401,7 +401,8 @@
    whole element it is on, border and shadow included: the image's correction
    must not reach the frame, which is part of the theme like everything
    else. */
-.markdown-preview .markdown-image-frame {
+.markdown-preview .markdown-image-frame,
+.image-slot-view .markdown-image-frame {
   display:       inline-block;
   max-width:     100%;
   line-height:   0;
@@ -428,7 +429,8 @@
   margin:  0 auto;
 }
 
-.markdown-preview img {
+.markdown-preview img,
+.image-slot-view img {
   display:   block;
   max-width: 100%;
   height:    auto;

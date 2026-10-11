@@ -10,14 +10,17 @@ export function ImageSlotView({ imageId }: { imageId: string }) {
   return (
     <div className="image-slot-view" aria-label={`Image ${imageId}`}>
       {image ? (
-        <img
-          className="image-slot-view-image"
-          src={image.src}
-          alt={image.id}
-          width={image.width || undefined}
-          height={image.height || undefined}
-          draggable={false}
-        />
+        // Framed as the render view frames an image (markdown.css).
+        <span className="markdown-image-frame image-slot-view-frame">
+          <img
+            className="image-slot-view-image"
+            src={image.src}
+            alt={image.id}
+            width={image.width || undefined}
+            height={image.height || undefined}
+            draggable={false}
+          />
+        </span>
       ) : loaded ? (
         <div className="image-slot-view-missing">{imageId} is no longer stored.</div>
       ) : null}
