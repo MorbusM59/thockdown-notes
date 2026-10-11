@@ -194,7 +194,7 @@ function imageOrPlaceholderAt(text: string, offset: number): { from: number; to:
   for (let match = IMAGE_OR_PLACEHOLDER.exec(line); match; match = IMAGE_OR_PLACEHOLDER.exec(line)) {
     const from = lineFrom + match.index
     const to = from + match[0].length
-    if (offset <= from || offset >= to) continue
+    if (offset <= from || offset > to) continue
     const altFrom = from + 2
     const destinationFrom = altFrom + match[1].length + 2 + match[2].length
     return { from, to, altFrom, altTo: altFrom + match[1].length, destinationFrom, destinationTo: destinationFrom + match[3].length }

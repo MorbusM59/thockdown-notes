@@ -72,6 +72,9 @@ function useRightPress(onTap: (() => void) | null, onHold: () => void) {
   }
 }
 
+// A card's own buttons do nothing with the right button, so it must not reach the card's.
+const stopRightPress = (event: MouseEvent) => { if (event.button === 2) event.stopPropagation() }
+
 function dragImage(id: string) {
   return {
     // Dragged into a note, it is referenced there (CM6Editor's and the
@@ -144,6 +147,7 @@ const ImageCard = memo(function ImageCard({ image, alt, isActive, isTrashView, p
               data-tooltip="Take out of the trash"
               onClick={(event) => { event.stopPropagation(); void setImageTrashed(image.id, false) }}
               data-secondary-press="none"
+              onMouseDown={stopRightPress}
             >
               <span className="fa-solid fa-rotate-left" aria-hidden="true" />
             </button>
@@ -168,6 +172,7 @@ const ImageCard = memo(function ImageCard({ image, alt, isActive, isTrashView, p
               }
             }}
             data-secondary-press="none"
+            onMouseDown={stopRightPress}
           />
         </div>
       </div>
@@ -206,6 +211,7 @@ const ImageTreeCard = memo(function ImageTreeCard({ image, alt, isActive, onPlac
             data-tooltip="Put in the trash"
             onClick={(event) => { event.stopPropagation(); void setImageTrashed(image.id, true) }}
             data-secondary-press="none"
+            onMouseDown={stopRightPress}
           />
         </div>
       </div>
@@ -216,7 +222,7 @@ const ImageTreeCard = memo(function ImageTreeCard({ image, alt, isActive, onPlac
 export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQuery, caseSensitive, uses, shownImageId, caretUseFrom, onPlace, onOpen }: ImageLibraryListProps) {
   const { images, loaded } = useImageLibrary()
   const [primedId, setPrimedId] = useState<string | null>(null)
-  const [expandedFrom, setExpandedFrom] = useState<number | null>(null)
+  const [expandedKey, setExpandedKey] = useState<string | null>(null)
   const isNoteView = view === 'date' || view === 'category'
   const cards = useMemo(() => (isNoteView ? imageUseCards(uses, images, searchQuery, caseSensitive) : []), [isNoteView, uses, images, searchQuery, caseSensitive])
   const libraryImages = useMemo(() => (isNoteView ? [] : imagesInView(images, view, searchQuery, caseSensitive)), [isNoteView, images, view, searchQuery, caseSensitive])
@@ -233,7 +239,7 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
   const onCollapseChange = useCallback((next: CategoryTreeCollapse) => setCollapseByView((previous) => ({ ...previous, [view]: next })), [view])
   const renderUseTreeCard = useCallback((card: ImageUseCard) => (
     <ImageTreeCard
-      key={card.use.from}
+      key={card.key}
       image={card.image}
       alt={card.use.alt}
       isActive={caretUseFrom !== null ? card.use.from === caretUseFrom : card.image.id === shownImageId}
@@ -258,17 +264,17 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
       <>
         {cards.map((card) => (
           <ImageCard
-            key={card.use.from}
+            key={card.key}
             image={card.image}
             alt={card.use.alt}
             isActive={isActiveUse(card)}
             isTrashView={false}
             primed={false}
-            expanded={expandedFrom === card.use.from}
+            expanded={expandedKey === card.key}
             onPlace={onPlace}
             onOpen={onOpen}
             onPrime={setPrimedId}
-            onToggleExpanded={() => setExpandedFrom((previous) => (previous === card.use.from ? null : card.use.from))}
+            onToggleExpanded={() => setExpandedKey((previous) => (previous === card.key ? null : card.key))}
           />
         ))}
       </>

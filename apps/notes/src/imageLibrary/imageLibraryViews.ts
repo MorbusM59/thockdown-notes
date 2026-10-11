@@ -21,6 +21,8 @@ export type ImageLibraryView = 'date' | 'category' | 'archive' | 'trash'
 export interface ImageUseCard {
   use: NoteImageUse
   image: StoredImageSummary
+  /** Stable while the note is typed: the image's id and which of its uses this is. */
+  key: string
 }
 
 /** The group of the uses before a note's first `##` heading. */
@@ -39,9 +41,12 @@ export function imagesInView(images: readonly StoredImageSummary[], view: 'archi
 /** The uses whose image is in the library and matches the search, in the note's order. */
 export function imageUseCards(uses: readonly NoteImageUse[], images: readonly StoredImageSummary[], query: string, caseSensitive: boolean): ImageUseCard[] {
   const byId = new Map(images.map((image) => [image.id, image]))
+  const seen = new Map<string, number>()
   return uses.flatMap((use) => {
+    const ordinal = seen.get(use.id) ?? 0
+    seen.set(use.id, ordinal + 1)
     const image = byId.get(use.id)
-    return image && matchesImageSearch(image, query, caseSensitive, use.alt) ? [{ use, image }] : []
+    return image && matchesImageSearch(image, query, caseSensitive, use.alt) ? [{ use, image, key: `${use.id}#${ordinal}` }] : []
   })
 }
 
