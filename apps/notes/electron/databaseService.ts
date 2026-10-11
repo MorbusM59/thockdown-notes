@@ -4313,7 +4313,9 @@ export class DatabaseService {
     const db = this.requireDb();
     db.transaction(() => {
       db.prepare('DELETE FROM image_refs').run();
-      for (const row of db.prepare('SELECT noteId, content FROM note_content').iterate() as Iterable<{ noteId: string; content: string }>) {
+      // Read in full first: better-sqlite3 refuses a write on a connection
+      // while one of its statements is still iterating.
+      for (const row of db.prepare('SELECT noteId, content FROM note_content').all() as Array<{ noteId: string; content: string }>) {
         this.indexImageReferences(row.noteId, row.content);
       }
       this.setAppMeta(IMAGE_REFS_SCANNER_KEY, version);

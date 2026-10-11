@@ -43,6 +43,14 @@ describe('stored images', () => {
     expect(db.importImage({ bytes: new TextEncoder().encode('# a note'), origin: null })).toEqual({ ok: false, reason: 'not-an-image' })
   })
 
+  it('rebuilds the index at startup for notes saved before it existed', async () => {
+    const note = await lifecycle.createNote({ initialText: '![x](&7)' })
+    db.setAppMeta('imageRefsScannerVersion', '0')
+    db.close()
+    await launch()
+    expect(db.listImageReferences(note.id)).toEqual(['&7'])
+  })
+
   it('indexes which images a note uses on every save, and survives a restart', async () => {
     const note = await lifecycle.createNote({ initialText: '# A\n\n![x](&1) ![y](&logo "12em") ![z](https://e.com/z.png)' })
     expect(db.listImageReferences(note.id)).toEqual(['&1', '&LOGO'])
