@@ -400,6 +400,9 @@
   max-width:     100%;
   height:        auto;
   border-radius: var(--border-radius-small);
+  /* Undoes the theme's invert and hue-rotate so a photo reads correctly
+     through the scene filter (packages/look/imageCorrection.ts). */
+  filter:        var(--image-correction, none);
 }
 
 /* 11c. Style variants */

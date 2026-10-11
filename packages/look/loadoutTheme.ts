@@ -24,6 +24,7 @@
  * plus applyDocumentTheme on <html>.
  */
 import type { CSSProperties } from 'react'
+import { IMAGE_CORRECTION_FILTER_ID, imageCorrectionMatrix, type SceneEffect } from './imageCorrection'
 import {
   type HsvaColor,
   hsvaToRgba,
@@ -95,6 +96,25 @@ export interface ThemeFrame {
   shadowFlip: boolean
   /** The opaque base background, as #rrggbb. */
   backgroundHex: string
+  /**
+   * The feColorMatrix values that let an image read correctly through the
+   * scene (imageCorrection.ts), or null when nothing needs undoing. Rendered
+   * by ThemeLayers.tsx's `ImageCorrectionFilter`; an image opts in through the
+   * shell's `--image-correction` variable.
+   */
+  imageCorrection: string | null
+}
+
+function sceneEffectCss(effect: SceneEffect): string {
+  switch (effect.kind) {
+    case 'hue-rotate':
+      return `hue-rotate(${effect.deg}deg)`
+    case 'saturate':
+      // Four places, as the filter string has always written it.
+      return `saturate(${effect.amount.toFixed(4)})`
+    default:
+      return `${effect.kind}(${effect.amount})`
+  }
 }
 
 
@@ -416,21 +436,34 @@ export function themeFrame(loadout: ThemeLoadout, options: ThemeOptions): ThemeF
     '--markdown-unchecked-color': colors.markdownUnchecked,
   }
 
-  const decorative: string[] = []
+  // The scene's effects as DATA, in the order they apply, so the filter
+  // string and the image correction (imageCorrection.ts) are read off one
+  // list and cannot disagree about what the scene does.
+  const decorative: SceneEffect[] = []
   if (!reduce) {
-    if (loadout.filterSepia > 0) decorative.push(`sepia(${loadout.filterSepia})`)
-    if (loadout.filterHueRotate !== 0) decorative.push(`hue-rotate(${loadout.filterHueRotate}deg)`)
-    if (loadout.filterBrightness !== 1) decorative.push(`brightness(${loadout.filterBrightness})`)
-    if (loadout.filterContrast !== 1) decorative.push(`contrast(${loadout.filterContrast})`)
+    if (loadout.filterSepia > 0) decorative.push({ kind: 'sepia', amount: loadout.filterSepia })
+    if (loadout.filterHueRotate !== 0) decorative.push({ kind: 'hue-rotate', deg: loadout.filterHueRotate })
+    if (loadout.filterBrightness !== 1) decorative.push({ kind: 'brightness', amount: loadout.filterBrightness })
+    if (loadout.filterContrast !== 1) decorative.push({ kind: 'contrast', amount: loadout.filterContrast })
     const saturate = saturatePosToValue(loadout.filterSaturate)
-    if (Math.abs(saturate - 1) > 0.001) decorative.push(`saturate(${saturate.toFixed(4)})`)
+    if (Math.abs(saturate - 1) > 0.001) decorative.push({ kind: 'saturate', amount: saturate })
   }
   const invertViaBlendMode = inverted && decorative.length === 0
-  const filterParts = invertViaBlendMode
+  const filterEffects: SceneEffect[] = invertViaBlendMode
     ? decorative
-    : (loadout.filterInvert > 0 ? [`invert(${loadout.filterInvert})`, ...decorative] : decorative)
+    : (loadout.filterInvert > 0 ? [{ kind: 'invert', amount: loadout.filterInvert }, ...decorative] : decorative)
   const wrapperStyle: CSSProperties = { backgroundColor: 'var(--palette-parchment-lightest)' }
-  if (filterParts.length > 0) wrapperStyle.filter = filterParts.join(' ')
+  if (filterEffects.length > 0) wrapperStyle.filter = filterEffects.map(sceneEffectCss).join(' ')
+  // What an image is actually seen through: the filter, plus the blend
+  // overlay's exact full invert when invert is drawn that way. (The colorize
+  // overlay is a tint, part of the room like sepia, and is not undone.)
+  const imageCorrection = imageCorrectionMatrix(
+    invertViaBlendMode ? [{ kind: 'invert', amount: 1 }] : filterEffects,
+  )
+  // An image opts in with `filter: var(--image-correction)`. On the shell, so
+  // a document without the shell (the PDF export) gets no correction -- it is
+  // not seen through the scene either.
+  shellVariables['--image-correction'] = imageCorrection ? `url(#${IMAGE_CORRECTION_FILTER_ID})` : 'none'
 
   const baseRgba = parseCssColorToRgba(palette.parchmentLightest) ?? { r: 249, g: 246, b: 244, a: 1 }
 
@@ -444,6 +477,7 @@ export function themeFrame(loadout: ThemeLoadout, options: ThemeOptions): ThemeF
       ? { hueDeg: loadout.filterHueRotate, opacity: loadout.filterColorize }
       : null,
     shadowFlip: inverted,
+    imageCorrection,
     backgroundHex: rgbaToHex({ ...baseRgba, a: 1 }).slice(0, 7),
   }
 }

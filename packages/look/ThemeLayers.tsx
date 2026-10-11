@@ -3,6 +3,7 @@
  * shared/loadoutTheme.ts's themeFrame. Shared by the desktop app and the
  * mobile soundscape app, so both stack them the same way.
  */
+import { IMAGE_CORRECTION_FILTER_ID } from './imageCorrection'
 import type { ThemeFrame, ThemeGlazeImages } from './loadoutTheme'
 
 /**
@@ -65,5 +66,23 @@ export function ThemeBlendOverlays({ theme }: { theme: Pick<ThemeFrame, 'invertV
         />
       )}
     </>
+  )
+}
+
+/**
+ * The SVG filter the shell's `--image-correction` variable points at
+ * (imageCorrection.ts says what it undoes and why it is a matrix).
+ * `color-interpolation-filters="sRGB"` because the CSS shorthands the matrix
+ * inverts operate in sRGB; SVG's default is linearRGB, which would invert a
+ * different map.
+ */
+export function ImageCorrectionFilter({ theme }: { theme: Pick<ThemeFrame, 'imageCorrection'> }) {
+  if (!theme.imageCorrection) return null
+  return (
+    <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true" focusable="false">
+      <filter id={IMAGE_CORRECTION_FILTER_ID} colorInterpolationFilters="sRGB">
+        <feColorMatrix type="matrix" values={theme.imageCorrection} />
+      </filter>
+    </svg>
   )
 }

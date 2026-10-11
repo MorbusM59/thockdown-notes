@@ -127,7 +127,7 @@ import {
   BOX_SHADOW_ALPHA_PERCENT_MAX,
 } from './shared/uiBounds'
 import { applyDocumentTheme, themeFrame } from '@thockdown/look/loadoutTheme'
-import { ThemeBlendOverlays, ThemeGlazeLayers } from '@thockdown/look/ThemeLayers'
+import { ImageCorrectionFilter, ThemeBlendOverlays, ThemeGlazeLayers } from '@thockdown/look/ThemeLayers'
 import { DEBUG_TAG_NAME, PROTECTED_TAGS, normalizeTagName } from './shared/tags'
 import { EditorSection } from './editorSection/EditorSection'
 import { missingNoteRecoveryMode, type MissingNoteRecovery } from './editorSection/missingNoteRecoveryMode'
@@ -10254,6 +10254,7 @@ ${markdownHtml}
           />
         ) : null}
         <ThemeBlendOverlays theme={theme} />
+        <ImageCorrectionFilter theme={theme} />
       </div>
       {/* Mounted once, app-wide -- not scoped to the editor. See that
           component's own doc comment for why it's a sibling of
