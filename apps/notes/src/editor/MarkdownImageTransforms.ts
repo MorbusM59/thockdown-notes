@@ -158,7 +158,7 @@ export function resolveImageClearLayoutTransform(
 ): EditorTransformResult | null {
   const found = caretImage(event.text, event.selection, isInFencedCodeBlock)
   if (!found) return null
-  return rewriteLayout(event.text, event.selection, found.image, { ...EMPTY_IMAGE_LAYOUT, id: found.layout.id })
+  return rewriteLayout(event.text, event.selection, found.image, { ...EMPTY_IMAGE_LAYOUT, id: found.layout.id, inset: found.layout.inset })
 }
 
 /**

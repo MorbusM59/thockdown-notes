@@ -84,20 +84,25 @@ function FramedImage({ src, alt, title, width, height, sourceLine }: { src: stri
   const parsed = parseImageTitle(title)
   const layout = parsed.kind === 'layout' ? parsed.layout : EMPTY_IMAGE_LAYOUT
   const styles = imageLayoutStyles(layout)
+  const keptWidth = layout.inset ? (100 - layout.inset.left - layout.inset.right) / 100 : 1
+  const keptHeight = layout.inset ? (100 - layout.inset.top - layout.inset.bottom) / 100 : 1
   return (
     <span
       className={`markdown-image-frame${layout.align ? ` is-aligned-${layout.align}` : ''}`}
       style={styles.frame}
       data-image-line={sourceLine}
+      // Ctrl + right-click takes a crop off (useImagePreviewGestures.ts).
+      data-secondary-press={layout.inset ? 'action' : 'none'}
     >
       <img
         src={src}
         alt={alt ?? ''}
         title={parsed.kind === 'layout' ? undefined : parsed.text}
         // The intrinsic size, when known, gives the image its aspect ratio
-        // before it loads (CSS keeps it no wider than its frame).
-        width={width || undefined}
-        height={height || undefined}
+        // before it loads (CSS keeps it no wider than its frame); a crop's
+        // size is the part of it that is kept.
+        width={(width && Math.round(width * keptWidth)) || undefined}
+        height={(height && Math.round(height * keptHeight)) || undefined}
         style={styles.image}
         referrerPolicy="no-referrer"
       />

@@ -1,7 +1,7 @@
 import { useEffect, useRef, type MutableRefObject, type RefObject } from 'react'
 import type { EditorAdapter } from '../editor/EditorContract'
 import { insertAtBlockStart, locateImage, moveImage, reshapeImage, sameAlt, type ImageEdit } from '../editor/ImagePlacement'
-import type { ImageAlignment, ImageLength, ImageLayout } from '../shared/imageLayout'
+import { cssInset, type ImageAlignment, type ImageInset, type ImageLayout, type ImageLength } from '../shared/imageLayout'
 import { IMAGE_DRAG_MIME_TYPE, imageMarkdown, isImageFile } from '../shared/images'
 import { importImageFilesAsMarkdown } from '../shared/storedImages'
 
@@ -16,6 +16,13 @@ import { importImageFilesAsMarkdown } from '../shared/storedImages'
 //                        grows: rightward for left (and unaligned), leftward
 //                        for right, outward from the middle for centre)
 //   Ctrl + Shift + drag  resize width and height separately
+//   Ctrl + drag on the   crop: within 1em of an edge, that edge moves in
+//     image's border     or out; within 1em of a corner, both of its edges
+//                        (the title's `inset(...)`, shared/imageLayout.ts)
+//   Ctrl + right-click   take the crop off
+//
+// A crop changes the image's own proportions, so a Shift resize after it
+// keeps the cropped ones.
 //
 // and dropping image files (or an image card from the library) onto a block
 // stores them and puts them at its start. Without a modifier the pointer does what it always does there.
@@ -27,6 +34,38 @@ import { importImageFilesAsMarkdown } from '../shared/storedImages'
 // get; nothing is written until the button is released.
 
 const DRAG_START_PX = 3
+/** The most of either dimension a crop may take away, so an image never vanishes into its own border. */
+const MAX_CROP_PERCENT = 95
+
+/** Which edges of `rect` a point within `band` px of them grabs: none in the middle. */
+function cropEdgesAt(rect: DOMRect, x: number, y: number, band: number): { top: boolean; right: boolean; bottom: boolean; left: boolean } {
+  // A small image keeps a middle to move it by: the band is at most a third of each side.
+  const across = Math.min(band, rect.width / 3)
+  const down = Math.min(band, rect.height / 3)
+  return {
+    top: y - rect.top < down,
+    bottom: rect.bottom - y < down,
+    left: x - rect.left < across,
+    right: rect.right - x < across,
+  }
+}
+
+/** `start` with the grabbed edges moved by the pointer's travel; `perPixel` is the percent of the whole image one displayed pixel stands for. */
+function draggedInset(
+  start: ImageInset,
+  edges: ReturnType<typeof cropEdgesAt>,
+  dx: number,
+  dy: number,
+  perPixel: { x: number; y: number },
+): ImageInset {
+  const clamp = (value: number, opposite: number) => Math.max(0, Math.min(Math.max(0, MAX_CROP_PERCENT - opposite), value))
+  const next = { ...start }
+  if (edges.left) next.left = clamp(start.left + dx * perPixel.x, start.right)
+  if (edges.right) next.right = clamp(start.right - dx * perPixel.x, start.left)
+  if (edges.top) next.top = clamp(start.top + dy * perPixel.y, start.bottom)
+  if (edges.bottom) next.bottom = clamp(start.bottom - dy * perPixel.y, start.top)
+  return next
+}
 
 interface Context {
   activeNoteId: string | null
@@ -97,7 +136,8 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
     }
 
     const handlePointerDown = (event: PointerEvent) => {
-      if (event.button !== 0 || !(event.ctrlKey || event.shiftKey)) return
+      const resetsCrop = event.button === 2 && event.ctrlKey && !event.shiftKey
+      if (!resetsCrop && (event.button !== 0 || !(event.ctrlKey || event.shiftKey))) return
       const frame = event.target instanceof Element ? event.target.closest<HTMLElement>('.markdown-image-frame[data-image-line]') : null
       if (!frame || !scroller.contains(frame)) return
       const address = addressOf(scroller, frame)
@@ -108,14 +148,36 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
       if (img && !sameAlt(image.alt, img.alt)) return
       event.preventDefault()
       event.stopPropagation()
+      if (resetsCrop) {
+        if (image.layout.inset) apply(text, reshapeImage(text, image, { ...image.layout, inset: null }))
+        return
+      }
 
-      const mode: 'move' | 'resize-locked' | 'resize-free' = !event.shiftKey ? 'move' : event.ctrlKey ? 'resize-free' : 'resize-locked'
-      const start = { x: event.clientX, y: event.clientY }
       const startRect = (img ?? frame).getBoundingClientRect()
+      const band = parseFloat(getComputedStyle(frame).fontSize) || 16
+      const edges = cropEdgesAt(startRect, event.clientX, event.clientY, band)
+      const crops = img !== null && event.ctrlKey && !event.shiftKey && (edges.top || edges.right || edges.bottom || edges.left)
+      const mode: 'move' | 'crop' | 'resize-locked' | 'resize-free' = crops ? 'crop'
+        : !event.shiftKey ? 'move' : event.ctrlKey ? 'resize-free' : 'resize-locked'
+      const start = { x: event.clientX, y: event.clientY }
+      const startInset: ImageInset = image.layout.inset ?? { top: 0, right: 0, bottom: 0, left: 0 }
+      // One displayed pixel is this many percent of the whole image: the
+      // displayed part is what the crop keeps.
+      const perPixel = {
+        x: (100 - startInset.left - startInset.right) / Math.max(1, startRect.width),
+        y: (100 - startInset.top - startInset.bottom) / Math.max(1, startRect.height),
+      }
+      let inset = startInset
       const ratio = startRect.height > 0 ? startRect.width / startRect.height : 1
       let moved = false
       let size = { width: startRect.width, height: startRect.height }
-      const restore = { frameWidth: frame.style.width, imgWidth: img?.style.width ?? '', imgHeight: img?.style.height ?? '', opacity: frame.style.opacity }
+      const restore = {
+        frameWidth: frame.style.width,
+        imgWidth: img?.style.width ?? '',
+        imgHeight: img?.style.height ?? '',
+        imgViewBox: img?.style.getPropertyValue('object-view-box') ?? '',
+        opacity: frame.style.opacity,
+      }
       frame.setPointerCapture(event.pointerId)
 
       const handleMove = (move: PointerEvent) => {
@@ -123,6 +185,11 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
         if (!moved && Math.hypot(move.clientX - start.x, dy) < DRAG_START_PX) return
         const dx = widthGrowth(image.layout.align, start.x, move.clientX, startRect.left + startRect.width / 2)
         moved = true
+        if (mode === 'crop') {
+          inset = draggedInset(startInset, edges, move.clientX - start.x, dy, perPixel)
+          img?.style.setProperty('object-view-box', cssInset(inset))
+          return
+        }
         if (mode === 'move') {
           frame.style.opacity = '0.5'
           return
@@ -157,12 +224,17 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
         if (img) {
           img.style.width = restore.imgWidth
           img.style.height = restore.imgHeight
+          img.style.setProperty('object-view-box', restore.imgViewBox)
         }
         if (!commit || !moved || readEditorText() !== text) return
         if (mode === 'move') {
           const target = blockLineAt(scroller, up.clientX, up.clientY)
           if (target === null) return
           apply(text, moveImage(text, image, target, alignmentAt(scroller, up.clientX)))
+          return
+        }
+        if (mode === 'crop') {
+          apply(text, reshapeImage(text, image, { ...image.layout, inset }))
           return
         }
         const layout: ImageLayout = mode === 'resize-locked'
@@ -180,6 +252,10 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
       frame.addEventListener('pointerup', handleUp)
       frame.addEventListener('pointercancel', handleCancel)
       frame.addEventListener('lostpointercapture', handleCancel)
+    }
+    // Ctrl + right-click on an image is a gesture, never a menu.
+    const handleContextMenu = (event: MouseEvent) => {
+      if (event.ctrlKey && event.target instanceof Element && event.target.closest('.markdown-image-frame[data-image-line]')) event.preventDefault()
     }
     const swallowClick = (click: MouseEvent) => {
       click.preventDefault()
@@ -222,9 +298,11 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
     }
 
     scroller.addEventListener('pointerdown', handlePointerDown, { capture: true })
+    scroller.addEventListener('contextmenu', handleContextMenu)
     scroller.addEventListener('dragover', handleDragOver)
     scroller.addEventListener('drop', handleDrop)
     return () => {
+      scroller.removeEventListener('contextmenu', handleContextMenu)
       scroller.removeEventListener('pointerdown', handlePointerDown, { capture: true })
       scroller.removeEventListener('dragover', handleDragOver)
       scroller.removeEventListener('drop', handleDrop)

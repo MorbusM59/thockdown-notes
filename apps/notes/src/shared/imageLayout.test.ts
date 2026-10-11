@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { formatImageLayout, imageLayoutStyles, parseImageTitle } from './imageLayout'
+import { formatImageInset, formatImageLayout, imageLayoutStyles, parseImageTitle } from './imageLayout'
 
 describe('the image title grammar', () => {
   it('reads every token kind, in any order', () => {
     expect(parseImageTitle('right 12em &LOGO')).toEqual({
       kind: 'layout',
-      layout: { id: 'LOGO', width: { value: 12, unit: 'em' }, height: null, align: 'right' },
+      layout: { id: 'LOGO', width: { value: 12, unit: 'em' }, height: null, align: 'right', inset: null },
     })
     expect(parseImageTitle('x200px')).toMatchObject({ kind: 'layout', layout: { width: null, height: { value: 200, unit: 'px' } } })
     expect(parseImageTitle('50%x8em center')).toMatchObject({ kind: 'layout', layout: { width: { value: 50, unit: '%' }, height: { value: 8, unit: 'em' }, align: 'center' } })
@@ -45,5 +45,21 @@ describe('tooltips that only resemble layout', () => {
     // A unit-less number stays malformed: a missing unit is the likeliest typo.
     expect(parseImageTitle('320 left').kind).toBe('malformed')
     expect(parseImageTitle('12emm right').kind).toBe('malformed')
+  })
+})
+
+describe('the crop inset', () => {
+  it('reads CSS shorthand after the alignment and formats it back shortest-first', () => {
+    const parsed = parseImageTitle('12em right inset(10% 0 5%)')
+    expect(parsed).toMatchObject({ kind: 'layout', layout: { inset: { top: 10, right: 0, bottom: 5, left: 0 } } })
+    if (parsed.kind !== 'layout') throw new Error('expected a layout')
+    expect(formatImageLayout(parsed.layout)).toBe('12em right inset(10% 0 5%)')
+    expect(formatImageInset({ top: 5, right: 5, bottom: 5, left: 5 })).toBe('inset(5%)')
+    expect(formatImageInset({ top: 0, right: 0, bottom: 0, left: 0 })).toBe('')
+  })
+
+  it('calls an inset that crops everything, or is not a percentage, malformed', () => {
+    expect(parseImageTitle('right inset(60% 0 40%)').kind).toBe('malformed')
+    expect(parseImageTitle('right inset(10px)').kind).toBe('malformed')
   })
 })
