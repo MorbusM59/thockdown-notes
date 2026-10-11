@@ -2,7 +2,7 @@ import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { memo, useCallback, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type ReactNode } from 'react'
 import { CategoryTree, type CategoryTreeCollapse } from '../components/CategoryTree'
 import { IMAGE_DRAG_MIME_TYPE, type NoteImageUse, type StoredImageSummary } from '../shared/images'
-import { parseImageTitle } from '../shared/imageLayout'
+import { cssInset, parseImageTitle, type ImageInset } from '../shared/imageLayout'
 import { armPointerDrag } from '../shared/pointerDrag'
 import { isRemoteImageSrc, useRemoteImagesAllowed } from '../shared/remoteImages'
 import { buildTagHierarchy } from '../shared/tagHierarchy'
@@ -51,15 +51,32 @@ function originLabel(image: StoredImageSummary): string {
   return name ?? image.origin
 }
 
-/** The image's size in pixels; at a use in a note, the part of it the use's crop keeps. */
-function sizeLabel(image: StoredImageSummary | null, use: NoteImageUse | null = null): string {
-  if (!image || image.width <= 0) return ''
+/**
+ * What a use shows of its image: its crop (the title's `inset(...)`), and
+ * the size in pixels of the part it keeps. These views are an inventory of
+ * what the note shows, so a use is seen cropped; the archive (no use) shows
+ * the whole image.
+ */
+function shownPart(image: StoredImageSummary | null, use: NoteImageUse | null): { inset: ImageInset | null; width: number; height: number } {
   const parsed = use ? parseImageTitle(use.title) : null
   const inset = parsed?.kind === 'layout' ? parsed.layout.inset : null
-  if (!inset) return `${image.width}×${image.height}`
-  const width = Math.round(image.width * (100 - inset.left - inset.right) / 100)
-  const height = Math.round(image.height * (100 - inset.top - inset.bottom) / 100)
-  return `${width}×${height}`
+  const width = image?.width ?? 0
+  const height = image?.height ?? 0
+  if (!inset) return { inset, width, height }
+  return {
+    inset,
+    width: Math.round(width * (100 - inset.left - inset.right) / 100),
+    height: Math.round(height * (100 - inset.top - inset.bottom) / 100),
+  }
+}
+
+function sizeLabel(part: { width: number; height: number }): string {
+  return part.width > 0 ? `${part.width}×${part.height}` : ''
+}
+
+/** The image drawn in a card, cropped as the use crops it. */
+function CardImage({ src, inset, className }: { src: string; inset: ImageInset | null; className: string }) {
+  return <img className={className} src={src} alt="" aria-hidden="true" draggable={false} style={inset ? { objectViewBox: cssInset(inset) } as CSSProperties : undefined} />
 }
 
 /** A card's name: the stored image's id, or a globe and EXTERNAL. */
@@ -159,10 +176,11 @@ const ImageCard = memo(function ImageCard({ image, use, isActive, primed, expand
   const handlers = useCardPress(press)
   const remoteAllowed = useRemoteImagesAllowed()
   const src = image ? image.src : use && remoteAllowed && isRemoteImageSrc(use.src) ? use.src : null
-  const style = image && image.width > 0 ? { '--image-ratio': image.height / image.width } as CSSProperties : undefined
+  const part = shownPart(image, use)
+  const style = part.width > 0 ? { '--image-ratio': part.height / part.width } as CSSProperties : undefined
   const tooltip = !use ? 'Hold right-click to show it'
     : !image ? `${use.src}. Click to go to it, hold to store it in the app`
-    : `Click to go to it. ${press.onRightTap ? 'Right-click to see it whole, hold' : 'Hold right-click'} to show it`
+    : `Click to go to it. ${press.onRightTap ? 'Right-click to see it, hold' : 'Hold right-click'} to show it`
   return (
     <div
       className={`note-list-item image-list-item${isActive ? ' is-active' : ''}${primed ? ' is-primed-for-deletion' : ''}${expanded ? ' is-expanded' : ''}`}
@@ -180,14 +198,14 @@ const ImageCard = memo(function ImageCard({ image, use, isActive, primed, expand
     >
       <div className="note-list-columns">
         <div className="note-list-column note-list-column-primary">
-          {src ? <div className="image-list-thumbnail" style={{ backgroundImage: `url("${src}")` }} aria-hidden="true" /> : null}
+          {src ? <CardImage className="image-list-thumbnail" src={src} inset={part.inset} /> : null}
           <div className="note-list-content">
             <div className="note-list-title"><CardTitle image={image} /></div>
             <div className="note-list-meta-row">
               {use
                 ? <span className="note-list-meta-left">{use.alt}</span>
                 : image ? <span className="note-list-meta-left" data-tooltip={image.origin ?? 'Pasted from the clipboard'}>{originLabel(image)}</span> : null}
-              <span className="note-list-meta-right">{sizeLabel(image, use)}</span>
+              <span className="note-list-meta-right">{sizeLabel(part)}</span>
             </div>
           </div>
         </div>
@@ -211,10 +229,11 @@ const ImageTreeCard = memo(function ImageTreeCard({ image, use, isActive, expand
   const handlers = useCardPress(press)
   const remoteAllowed = useRemoteImagesAllowed()
   const src = image ? image.src : use && remoteAllowed && isRemoteImageSrc(use.src) ? use.src : null
-  const seeWhole = src ? 'right-click to see it whole, ' : ''
+  const part = shownPart(image, use)
+  const seeIt = src ? 'right-click to see it, ' : ''
   const tooltip = use
-    ? `${use.alt ? `${use.alt}. ` : ''}${image ? `Click to go to it, ${seeWhole}hold right-click to show it` : `${use.src}. Click to go to it, ${seeWhole}hold to store it in the app`}`
-    : `Click to put it at the caret, ${seeWhole}hold right-click to show it`
+    ? `${use.alt ? `${use.alt}. ` : ''}${image ? `Click to go to it, ${seeIt}hold right-click to show it` : `${use.src}. Click to go to it, ${seeIt}hold to store it in the app`}`
+    : `Click to put it at the caret, ${seeIt}hold right-click to show it`
   return (
     <div
       className={`note-list-item is-tree-card image-list-item${isActive ? ' is-active' : ''}${expanded && src ? ' is-previewing' : ''}`}
@@ -228,15 +247,11 @@ const ImageTreeCard = memo(function ImageTreeCard({ image, use, isActive, expand
       <div className="note-list-content">
         <div className="note-list-meta-row image-tree-card-row">
           <span className="note-list-title"><CardTitle image={image} /></span>
-          <span className="note-list-meta-right">{sizeLabel(image, use)}</span>
+          <span className="note-list-meta-right">{sizeLabel(part)}</span>
           {expanded && src ? null : action}
         </div>
         {expanded && src ? (
-          <div
-            className="image-tree-card-preview"
-            style={{ backgroundImage: `url("${src}")`, aspectRatio: image && image.width > 0 ? `${image.width} / ${image.height}` : undefined }}
-            aria-hidden="true"
-          />
+          <CardImage className="image-tree-card-preview" src={src} inset={part.inset} />
         ) : null}
       </div>
     </div>

@@ -970,8 +970,8 @@
   bottom: 0;
   left: 0;
   width: 100cqw;
-  background-size: cover;
-  background-position: center;
+  height: 100%;
+  object-fit: cover;
   opacity: 0.35;
   pointer-events: none;
 }
@@ -1009,14 +1009,14 @@
   opacity: 0;
 }
 
-/* A tree card shows its image whole beneath the row on a right-click. */
+/* A tree card shows its image beneath the row on a right-click, at the
+ * proportions of what it shows (the crop's, when it has one). */
 .image-tree-card-preview {
+  display: block;
   width: 100%;
+  height: auto;
   margin-top: var(--spacing-small);
-  aspect-ratio: 2 / 1;
   border-radius: var(--border-radius-small);
-  background-size: cover;
-  background-position: center;
 }
 
 /* A tree card's button (trash in the archive, remove in the note's views)
