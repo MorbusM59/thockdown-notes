@@ -1040,7 +1040,8 @@
   display: inline-block;
 }
 
-.image-list-item.is-tree-card[data-hovered] .image-tree-card-row .note-list-meta-right {
+/* While the image is previewed beneath the row there is no button to make room for. */
+.image-list-item.is-tree-card[data-hovered]:not(.is-previewing) .image-tree-card-row .note-list-meta-right {
   display: none;
 }
 

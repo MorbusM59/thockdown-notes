@@ -7,7 +7,7 @@ const image = (id: string, extra: Partial<StoredImageSummary> = {}): StoredImage
   id, src: '', width: 1, height: 1, mime: 'image/png', byteLength: 1, origin: null,
   createdAt: '2026-10-11T00:00:00Z', tags: [], useCount: 1, trashedAt: null, ...extra,
 })
-const use = (id: string, alt: string, section: string | null, subsection: string | null, from: number): NoteImageUse => ({ id, src: id, alt, from, to: from + 1, section, subsection })
+const use = (id: string, alt: string, section: string | null, subsection: string | null, from: number): NoteImageUse => ({ id, src: id, alt, from, to: from + 1, title: null, section, subsection })
 
 describe('image library views', () => {
   const all = [

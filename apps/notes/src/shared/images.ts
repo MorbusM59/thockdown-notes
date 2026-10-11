@@ -275,6 +275,8 @@ export interface NoteImageUse {
   /** Offset of the image's `!` in the note's text, and one past its `)`. */
   from: number
   to: number
+  /** The title as written, inside its quotes (the image's layout, shared/imageLayout.ts), or null. */
+  title: string | null
   /** The `##` heading the use falls under, or null before the first. */
   section: string | null
   /** The `###` heading under that section, or null. */
@@ -332,6 +334,7 @@ export function imageUsesIn(rawText: string): NoteImageUse[] {
           alt: detachString(rawText.slice(lineFrom + span.altFrom, lineFrom + span.altTo)),
           from: lineFrom + span.from,
           to: lineFrom + span.to,
+          title: span.titleFrom === null || span.titleTo === null ? null : detachString(rawText.slice(lineFrom + span.titleFrom, lineFrom + span.titleTo)),
           section,
           subsection,
         })

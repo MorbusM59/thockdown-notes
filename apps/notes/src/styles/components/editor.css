@@ -1212,32 +1212,27 @@ button.escape-menu-chrome-gauge[data-pressed] .escape-menu-chrome-gauge-fill {
 }
 
 /* A library image shown in a slot (imageLibrary/ImageSlotView.tsx): the
- * whole picture, centred, as large as the slot allows and never upscaled. */
+ * whole picture, never upscaled and never wider than the slot. A tall one
+ * scrolls down the slot; one that fits is centred (the frame's auto margins,
+ * which, unlike centring the flex items, never push its top out of reach). */
 .image-slot-view {
   position: absolute;
   inset: 0;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: var(--spacing-regular, 12px);
   box-sizing: border-box;
 }
 
-/* The frame is a flex box so the image inside can be held to the slot's
- * height as well as its width. */
 .image-slot-view .image-slot-view-frame {
-  display: flex;
-  max-height: 100%;
+  margin: auto;
 }
 
 .image-slot-view .image-slot-view-image {
-  min-width: 0;
-  min-height: 0;
   max-width: 100%;
-  max-height: 100%;
   width: auto;
   height: auto;
-  object-fit: contain;
 }
 
 .image-slot-view-missing {

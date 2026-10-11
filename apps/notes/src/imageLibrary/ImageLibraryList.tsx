@@ -2,6 +2,7 @@ import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { memo, useCallback, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type ReactNode } from 'react'
 import { CategoryTree, type CategoryTreeCollapse } from '../components/CategoryTree'
 import { IMAGE_DRAG_MIME_TYPE, type NoteImageUse, type StoredImageSummary } from '../shared/images'
+import { parseImageTitle } from '../shared/imageLayout'
 import { armPointerDrag } from '../shared/pointerDrag'
 import { isRemoteImageSrc, useRemoteImagesAllowed } from '../shared/remoteImages'
 import { buildTagHierarchy } from '../shared/tagHierarchy'
@@ -50,8 +51,15 @@ function originLabel(image: StoredImageSummary): string {
   return name ?? image.origin
 }
 
-function sizeLabel(image: StoredImageSummary | null): string {
-  return image && image.width > 0 ? `${image.width}×${image.height}` : ''
+/** The image's size in pixels; at a use in a note, the part of it the use's crop keeps. */
+function sizeLabel(image: StoredImageSummary | null, use: NoteImageUse | null = null): string {
+  if (!image || image.width <= 0) return ''
+  const parsed = use ? parseImageTitle(use.title) : null
+  const inset = parsed?.kind === 'layout' ? parsed.layout.inset : null
+  if (!inset) return `${image.width}×${image.height}`
+  const width = Math.round(image.width * (100 - inset.left - inset.right) / 100)
+  const height = Math.round(image.height * (100 - inset.top - inset.bottom) / 100)
+  return `${width}×${height}`
 }
 
 /** A card's name: the stored image's id, or a globe and EXTERNAL. */
@@ -120,11 +128,12 @@ function dragImage(id: string) {
   }
 }
 
-function RemoveButton({ use, onRemove }: { use: NoteImageUse; onRemove: (use: NoteImageUse) => void }) {
+/** `inColumn`: in a card's action column, styled as a note card's buttons there are; otherwise a bare icon in a tree row. */
+function RemoveButton({ use, onRemove, inColumn = false }: { use: NoteImageUse; onRemove: (use: NoteImageUse) => void; inColumn?: boolean }) {
   return (
     <button
       type="button"
-      className="image-card-remove fa-solid fa-xmark"
+      className={`image-card-remove fa-solid fa-xmark${inColumn ? ' btn-icon note-list-action-button' : ''}`}
       aria-label="Take it out of the note"
       data-tooltip="Take it out of the note"
       onClick={(event) => { event.stopPropagation(); onRemove(use) }}
@@ -178,7 +187,7 @@ const ImageCard = memo(function ImageCard({ image, use, isActive, primed, expand
               {use
                 ? <span className="note-list-meta-left">{use.alt}</span>
                 : image ? <span className="note-list-meta-left" data-tooltip={image.origin ?? 'Pasted from the clipboard'}>{originLabel(image)}</span> : null}
-              <span className="note-list-meta-right">{sizeLabel(image)}</span>
+              <span className="note-list-meta-right">{sizeLabel(image, use)}</span>
             </div>
           </div>
         </div>
@@ -219,7 +228,7 @@ const ImageTreeCard = memo(function ImageTreeCard({ image, use, isActive, expand
       <div className="note-list-content">
         <div className="note-list-meta-row image-tree-card-row">
           <span className="note-list-title"><CardTitle image={image} /></span>
-          <span className="note-list-meta-right">{sizeLabel(image)}</span>
+          <span className="note-list-meta-right">{sizeLabel(image, use)}</span>
           {expanded && src ? null : action}
         </div>
         {expanded && src ? (
@@ -317,7 +326,7 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
             press={pressFor(card, () => toggleExpanded(card.key))}
             actions={(
               <div className="note-list-column note-list-column-action note-list-column-trash">
-                <RemoveButton use={card.use} onRemove={onRemove} />
+                <RemoveButton use={card.use} onRemove={onRemove} inColumn />
               </div>
             )}
             onPrimeEnd={noop}
