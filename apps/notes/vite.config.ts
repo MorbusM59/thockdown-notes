@@ -7,6 +7,7 @@ import { defineConfig } from 'vitest/config'
 import path from 'node:path'
 import electron from 'vite-plugin-electron/simple'
 import react from '@vitejs/plugin-react'
+import { CONTENT_SECURITY_POLICY } from './contentSecurityPolicy'
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -65,6 +66,14 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       react(),
+      {
+        // See contentSecurityPolicy.ts for what it allows and why.
+        name: 'thockdown-content-security-policy',
+        apply: 'build',
+        transformIndexHtml: () => [
+          { tag: 'meta', attrs: { 'http-equiv': 'Content-Security-Policy', content: CONTENT_SECURITY_POLICY }, injectTo: 'head' },
+        ],
+      },
       ...(isBrowserOnlyDev
         ? []
         : [

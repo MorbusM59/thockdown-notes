@@ -1,7 +1,7 @@
 import { SOUNDSCAPE_FILE_CHANNELS, type SoundscapeFileApi, SOUNDSCAPE_FILE_EXTENSION } from '@thockdown/soundscape/soundscapeFile';
 import { app, BrowserWindow, Menu, ipcMain, dialog, protocol, shell } from 'electron'
 import type { IpcMainEvent, IpcMainInvokeEvent, Session, PrintToPDFOptions } from 'electron'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
 import { existsSync, promises as fsPromises } from 'node:fs'
 import { moveLegacyDevData } from './legacyDevDataMove'
@@ -88,6 +88,17 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 
 // match each against the dictionaries Chromium actually ships.
 function configureSpellChecker(session: Session) {
   try {
+    // Windows and macOS spell-check through the operating system. Elsewhere
+    // Chromium uses Hunspell dictionaries, which by default it DOWNLOADS from
+    // Google on first use -- a network request made by the browser process,
+    // not by a page. Pointing it at a local folder keeps the app offline;
+    // no dictionaries are bundled yet, so on Linux spell-checking is off
+    // until they are (drop `<lang>.bdic` files into resources/dictionaries).
+    if (process.platform !== 'win32' && process.platform !== 'darwin') {
+      session.setSpellCheckerDictionaryDownloadURL(
+        pathToFileURL(path.join(app.isPackaged ? process.resourcesPath : process.env.APP_ROOT, 'dictionaries') + path.sep).toString(),
+      )
+    }
     const available = session.availableSpellCheckerLanguages
     if (!available || available.length === 0) return
 
