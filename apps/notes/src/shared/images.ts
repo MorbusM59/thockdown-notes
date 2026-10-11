@@ -280,9 +280,47 @@ export interface NoteImageUse {
   subsection: string | null
 }
 
-const IMAGE_USE = /!\[([^\]\n]*)\]\([ \t]*(?:<([^>\n]+)>|([^\s()<>]+))/g
+const IMAGE_USE = /!\[([^\]\n]*)\]\([ \t]*(?:<([^>\n]+)>|([^\s<>]+))/g
 const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})/
 const SECTION_HEADING = /^ {0,3}(#{2,3})[ \t]+(.*?)[ \t#]*$/
+
+/**
+ * Where the `)` closing an image is on `line`, scanning from just after its
+ * `(`: parentheses balance, as CommonMark lets a bare destination hold them
+ * (`Foo_(bar).png`), and nothing inside a quoted title counts. -1 when the
+ * line ends first.
+ */
+function imageCloseIn(line: string, from: number): number {
+  let depth = 1
+  let quote: string | null = null
+  for (let at = from; at < line.length; at += 1) {
+    const char = line[at]
+    if (quote) {
+      if (char === quote) quote = null
+    } else if ((char === '"' || char === "'") && /[ \t]/.test(line[at - 1] ?? '')) {
+      quote = char
+    } else if (char === '(') {
+      depth += 1
+    } else if (char === ')') {
+      depth -= 1
+      if (depth === 0) return at
+    }
+  }
+  return -1
+}
+
+/** A bare destination up to its balanced end: `Foo_(bar).png)` gives `Foo_(bar).png`. */
+function bareDestination(raw: string): string {
+  let depth = 0
+  for (let at = 0; at < raw.length; at += 1) {
+    if (raw[at] === '(') depth += 1
+    else if (raw[at] === ')') {
+      if (depth === 0) return raw.slice(0, at)
+      depth -= 1
+    }
+  }
+  return raw
+}
 
 /**
  * Every image in `rawText`, stored or external, in order, with the `##` and `###`
@@ -322,11 +360,15 @@ export function imageUsesIn(rawText: string): NoteImageUse[] {
       }
       IMAGE_USE.lastIndex = 0
       for (let match = IMAGE_USE.exec(line); match; match = IMAGE_USE.exec(line)) {
-        const destination = match[2] ?? match[3]
+        const closeAt = imageCloseIn(line, match.index + match[1].length + 4)
+        // The bare pattern runs past the image's `)`; carry on from there.
+        if (closeAt !== -1) IMAGE_USE.lastIndex = closeAt + 1
+        const destination = match[2] ?? bareDestination(match[3])
+        if (!destination) continue
         const id = destination.startsWith('&') ? normalizeImageId(destination) : null
         if (destination.startsWith('&') && !id) continue
         const from = lineFrom + match.index
-        const close = line.indexOf(')', match.index + match[0].length)
+        const close = closeAt
         uses.push({
           id,
           src: detachString(destination),

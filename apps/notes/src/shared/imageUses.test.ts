@@ -25,4 +25,12 @@ describe('imageUsesIn', () => {
     ])
     expect(text.slice(imageUsesIn(text)[1].from).startsWith('![tom]')).toBe(true)
   })
+  it('finds the real end of a destination with parentheses or a title holding one', () => {
+    const text = 'a ![w](https://e.org/Foo_(bar).png)![t](&1 "x)y") c'
+    const uses = imageUsesIn(text)
+    expect(uses.map((use) => [use.src, text.slice(use.from, use.to)])).toEqual([
+      ['https://e.org/Foo_(bar).png', '![w](https://e.org/Foo_(bar).png)'],
+      ['&1', '![t](&1 "x)y")'],
+    ])
+  })
 })
