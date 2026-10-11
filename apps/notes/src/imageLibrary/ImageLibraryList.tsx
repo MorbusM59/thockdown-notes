@@ -153,28 +153,31 @@ const ImageCard = memo(function ImageCard({ image, alt, isActive, isTrashView, p
             </button>
           </div>
         ) : null}
-        <div className="note-list-column note-list-column-action note-list-column-trash">
-          <button
-            type="button"
-            disabled={isTrashView && isUsed}
-            className="note-list-action-button note-list-action-button-trash"
-            aria-label={isTrashView ? (primed ? `Click again: ${inTrashLabel.toLowerCase()}` : inTrashLabel) : 'Put in the trash'}
-            data-tooltip={isTrashView ? (primed ? `Click again: ${inTrashLabel.toLowerCase()}` : inTrashLabel) : 'Put in the trash'}
-            onClick={(event) => {
-              event.stopPropagation()
-              if (!isTrashView) {
-                void setImageTrashed(image.id, true)
-              } else if (!primed) {
-                onPrime(image.id)
-              } else {
-                onPrime(null)
-                void purgeImage(image.id)
-              }
-            }}
-            data-secondary-press="none"
-            onMouseDown={stopRightPress}
-          />
-        </div>
+        {/* An expanded card is for looking at: no trash button, so the image keeps the card's full width. */}
+        {expanded ? null : (
+          <div className="note-list-column note-list-column-action note-list-column-trash">
+            <button
+              type="button"
+              disabled={isTrashView && isUsed}
+              className="note-list-action-button note-list-action-button-trash"
+              aria-label={isTrashView ? (primed ? `Click again: ${inTrashLabel.toLowerCase()}` : inTrashLabel) : 'Put in the trash'}
+              data-tooltip={isTrashView ? (primed ? `Click again: ${inTrashLabel.toLowerCase()}` : inTrashLabel) : 'Put in the trash'}
+              onClick={(event) => {
+                event.stopPropagation()
+                if (!isTrashView) {
+                  void setImageTrashed(image.id, true)
+                } else if (!primed) {
+                  onPrime(image.id)
+                } else {
+                  onPrime(null)
+                  void purgeImage(image.id)
+                }
+              }}
+              data-secondary-press="none"
+              onMouseDown={stopRightPress}
+            />
+          </div>
+        )}
       </div>
     </div>
   )
