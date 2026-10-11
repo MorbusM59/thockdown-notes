@@ -73,7 +73,9 @@ function useFormattingToolbarCompact(toolbarRef: RefObject<HTMLDivElement | null
   return isCompact
 }
 
-export interface EditorToolbarProps extends UseMarkdownFormattingToolbarResult {
+export interface EditorToolbarProps extends Omit<UseMarkdownFormattingToolbarResult, 'placeLibraryImage'> {
+  /** The image button also turns the sidebar to the image library, to pick what goes in the empty image. */
+  showImageLibrary: () => void
   isPreviewMode: boolean
   /** True while the active note is an auto-TOC/auto-Open-Items chapter, which is always shown in render view and can't be switched to edit mode. The formatting buttons stay visible but disabled, since their preview-mode behavior (switch to edit mode) is impossible there. */
   isForcedPreview: boolean
@@ -127,6 +129,8 @@ export function EditorToolbar({
   toggleChecklistList,
   toggleBlockquote,
   applyLink,
+  insertImagePlaceholder,
+  showImageLibrary,
   applyAnchor,
   applyInlineCode,
   applyCodeBlock,
@@ -274,6 +278,16 @@ export function EditorToolbar({
               disabled={formattingDisabled}
             >
               <span className="fa-solid fa-table" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="btn-icon"
+              data-tooltip="Image: then click one in the sidebar"
+              aria-label="Image"
+              onClick={() => { showImageLibrary(); inEditMode(insertImagePlaceholder)() }}
+              disabled={formattingDisabled}
+            >
+              <span className="fa-solid fa-image" aria-hidden="true" />
             </button>
             <button type="button" className="btn-icon" data-tooltip="Link (Ctrl+L)" onClick={inEditMode(applyLink)} disabled={formattingDisabled}><span className="fa-solid fa-link" aria-hidden="true" /></button>
             <button type="button" className="btn-icon" data-tooltip="Set anchor (Shift+Ctrl+L)" onClick={inEditMode(applyAnchor)} disabled={formattingDisabled}><span className="fa-solid fa-anchor" aria-hidden="true" /></button>

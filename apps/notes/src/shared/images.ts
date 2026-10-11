@@ -1,4 +1,5 @@
 import type { InvokeChannels } from './ipcContract'
+import { detachString } from './detachString'
 
 // STORED IMAGES: the bytes of an image kept in the database, and the `&ID`
 // a note uses to name one (`![Logo](&LOGO)`). The tables, the scheme that
@@ -260,4 +261,80 @@ const IMAGE_EXTENSION = /\.(png|jpe?g|gif|webp|avif|svg)$/i
  */
 export function isImageFile(file: { type: string; name: string }): boolean {
   return file.type.startsWith('image/') || IMAGE_EXTENSION.test(file.name)
+}
+
+/** One use of a stored image in a note, in the order the note uses them. */
+export interface NoteImageUse {
+  id: string
+  /** The alt text as written at this use. */
+  alt: string
+  /** Offset of the reference's `!` in the note's text, and past its `)` (the end of its line when unclosed). */
+  from: number
+  to: number
+  /** The `##` heading the use falls under, or null before the first. */
+  section: string | null
+  /** The `###` heading under that section, or null. */
+  subsection: string | null
+}
+
+const IMAGE_USE = /!\[([^\]\n]*)\]\([ \t]*<?(&[^\s;()"'&<>]+)/g
+const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})/
+const SECTION_HEADING = /^ {0,3}(#{2,3})[ \t]+(.*?)[ \t#]*$/
+
+/**
+ * Every use of a stored image in `rawText`, in order, with the `##` and `###`
+ * headings it falls under: the image sidebar's "Images in Order" and "Images
+ * by Section" lists. A line scan rather than a parse, like imageReferencesIn,
+ * so it is cheap enough to run as the note is typed; it skips fenced blocks
+ * and inline code, so an example reference is not listed. Every string it
+ * returns is detached from `rawText` (shared/detachString.ts), so a kept list
+ * does not keep the note alive.
+ */
+export function imageUsesIn(rawText: string): NoteImageUse[] {
+  const uses: NoteImageUse[] = []
+  if (!rawText.includes('](')) return uses
+  const text = withoutCodeSpans(rawText)
+  let section: string | null = null
+  let subsection: string | null = null
+  let fence: string | null = null
+  let lineFrom = 0
+  while (lineFrom <= text.length) {
+    const end = text.indexOf('\n', lineFrom)
+    const lineTo = end === -1 ? text.length : end
+    const line = text.slice(lineFrom, lineTo)
+    const fenceMatch = FENCE_LINE.exec(line)
+    if (fence !== null) {
+      if (fenceMatch && fenceMatch[1][0] === fence[0] && fenceMatch[1].length >= fence.length) fence = null
+    } else if (fenceMatch) {
+      fence = fenceMatch[1]
+    } else {
+      const heading = SECTION_HEADING.exec(line)
+      if (heading) {
+        if (heading[1].length === 2) {
+          section = heading[2] ? detachString(heading[2]) : null
+          subsection = null
+        } else {
+          subsection = heading[2] ? detachString(heading[2]) : null
+        }
+      }
+      IMAGE_USE.lastIndex = 0
+      for (let match = IMAGE_USE.exec(line); match; match = IMAGE_USE.exec(line)) {
+        const id = normalizeImageId(match[2])
+        if (!id) continue
+        const from = lineFrom + match.index
+        const close = line.indexOf(')', match.index + match[0].length)
+        uses.push({
+          id,
+          alt: detachString(rawText.slice(from + 2, from + 2 + match[1].length)),
+          from,
+          to: close === -1 ? lineTo : lineFrom + close + 1,
+          section,
+          subsection,
+        })
+      }
+    }
+    if (end === -1) break
+    lineFrom = end + 1
+  }
+  return uses
 }

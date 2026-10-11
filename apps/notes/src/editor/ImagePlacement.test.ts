@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { insertAtBlockStart, locateImage, moveImage, reshapeImage } from './ImagePlacement'
+import { insertAtBlockStart, locateImage, moveImage, placeImageAt, reshapeImage } from './ImagePlacement'
 
 type Change = { from: number; to: number; insert: string }
 // Changes are in the coordinates of the original text: apply from the end.
@@ -41,5 +41,20 @@ describe('image placement', () => {
     const image = locateImage(text, 2, 0, 2)!
     const edit = moveImage(text, image, 6, 'left')!
     expect(edit.every((change) => change.insert === '' || change.insert.startsWith('![a]'))).toBe(true)
+  })
+})
+
+describe('placeImageAt', () => {
+  const noFence = () => false
+  it('fills the empty placeholder the image button leaves', () => {
+    expect(placeImageAt('a ![]() b', { start: 6, end: 6 }, '&CAT', 'Tom', noFence)).toEqual({ text: 'a ![Tom](&CAT) b', caret: 14 })
+  })
+  it('swaps the image and alt but keeps the layout title', () => {
+    const text = '![old](&1 "right 12em")'
+    expect(placeImageAt(text, { start: 8, end: 8 }, '&2', 'new', noFence).text).toBe('![new](&2 "right 12em")')
+    expect(placeImageAt(text, { start: 8, end: 8 }, '&2', '', noFence).text).toBe('![old](&2 "right 12em")')
+  })
+  it('inserts a new reference elsewhere', () => {
+    expect(placeImageAt('ab', { start: 1, end: 1 }, '&2', '', noFence)).toEqual({ text: 'a![](&2)b', caret: 8 })
   })
 })

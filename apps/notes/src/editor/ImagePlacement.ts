@@ -1,4 +1,5 @@
 import { imagesOnLine } from './MarkdownImageTransforms'
+import { imageMarkdown } from '../shared/images'
 import { formatImageLayout, parseImageTitle, type ImageAlignment, type ImageLayout } from '../shared/imageLayout'
 
 // WHERE AN IMAGE IN THE RENDER VIEW IS IN THE TEXT, and the two edits the
@@ -153,4 +154,50 @@ export function insertAtBlockStart(text: string, targetLine0: number, markdown: 
 export function sameAlt(written: string, drawn: string): boolean {
   const plain = (value: string) => value.replace(/[\\*_`~]/g, '').replace(/\s+/g, ' ').trim()
   return plain(written) === plain(drawn)
+}
+
+/**
+ * A library image put at the caret (a card clicked in the image sidebar).
+ * With the caret inside an image -- typically the empty `![]()` the toolbar's
+ * image button leaves -- that image's destination becomes `id` and its alt
+ * text `alt` (kept as written when `alt` is empty), and its title, which holds
+ * the size and alignment, is untouched. Anywhere else a new reference replaces
+ * the selection. The caret ends after the image.
+ */
+export function placeImageAt(
+  text: string,
+  selection: { start: number; end: number },
+  id: string,
+  alt: string,
+  isInFencedCodeBlock: (offset: number) => boolean,
+): { text: string; caret: number } {
+  const image = selection.start === selection.end ? imageOrPlaceholderAt(text, selection.start) : null
+  if (!image || isInFencedCodeBlock(image.from)) {
+    const markdown = imageMarkdown(alt, id)
+    return { text: text.slice(0, selection.start) + markdown + text.slice(selection.end), caret: selection.start + markdown.length }
+  }
+  const cleanAlt = alt.replace(/[[\]\n]/g, ' ').trim()
+  const newAlt = cleanAlt || text.slice(image.altFrom, image.altTo)
+  const next = text.slice(0, image.altFrom) + newAlt + text.slice(image.altTo, image.destinationFrom) + id + text.slice(image.destinationTo)
+  return { text: next, caret: image.to + next.length - text.length }
+}
+
+// An image, or the toolbar's empty `![]()`, whose destination may be empty --
+// which the image keys' pattern (MarkdownImageTransforms) does not accept.
+const IMAGE_OR_PLACEHOLDER = /!\[([^\]\n]*)\]\(([ \t]*)(<[^>\n]*>|[^\s()]*)(?:[ \t]+(?:"[^"\n]*"|'[^'\n]*'))?[ \t]*\)/g
+
+function imageOrPlaceholderAt(text: string, offset: number): { from: number; to: number; altFrom: number; altTo: number; destinationFrom: number; destinationTo: number } | null {
+  const lineFrom = text.lastIndexOf('\n', offset - 1) + 1
+  const lineEnd = text.indexOf('\n', offset)
+  const line = text.slice(lineFrom, lineEnd === -1 ? text.length : lineEnd)
+  IMAGE_OR_PLACEHOLDER.lastIndex = 0
+  for (let match = IMAGE_OR_PLACEHOLDER.exec(line); match; match = IMAGE_OR_PLACEHOLDER.exec(line)) {
+    const from = lineFrom + match.index
+    const to = from + match[0].length
+    if (offset <= from || offset >= to) continue
+    const altFrom = from + 2
+    const destinationFrom = altFrom + match[1].length + 2 + match[2].length
+    return { from, to, altFrom, altTo: altFrom + match[1].length, destinationFrom, destinationTo: destinationFrom + match[3].length }
+  }
+  return null
 }

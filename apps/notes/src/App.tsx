@@ -175,7 +175,7 @@ import {
   previewUrlTransform,
 } from './editor/PreviewMarkdown'
 import { setRemoteImagesAllowed, useRemoteImagesAllowed } from './shared/remoteImages'
-import { isImageFile } from './shared/images'
+import { imageUsesIn, isImageFile, type NoteImageUse } from './shared/images'
 import { normalizeInternalText } from './editor/TextPolicy'
 import { readPageZoomFactor } from './window/pageZoom'
 import { splitChapterFamily } from './shared/chapters'
@@ -482,6 +482,15 @@ type SidebarViewState = {
 }
 
 type SidebarViewStateByMode = Record<SidebarMode, SidebarViewState>
+
+/** What the list views are called while they list images (image mode); trash keeps its name. */
+const NO_IMAGE_USES: NoteImageUse[] = []
+
+const IMAGE_VIEW_LABELS: Partial<Record<SidebarMode, string>> = {
+  date: 'Images in Order',
+  category: 'Images by Section',
+  archive: 'Image Archive',
+}
 
 const SIDEBAR_MODES: Array<{ mode: SidebarMode; label: string }> = [
   { mode: 'date', label: 'Date' },
@@ -7702,26 +7711,55 @@ ${markdownHtml}
 
   const activeSection = activeSectionSnapshot
 
-  // A right-click on the date, category or archive selector switches the
-  // sidebar between notes and images, landing on that view. The trash's and
-  // find's right-clicks already act (purge, replace all); the trash follows
-  // whichever the others show.
-  const handleImageLibraryToggle = useCallback((event: MouseEvent<HTMLButtonElement>, mode: SidebarMode) => {
-    event.preventDefault()
-    event.stopPropagation()
-    // On the view already shown: flip. On another view: go there, showing images.
-    const next = mode === sidebarMode ? !sidebarShowsImages : true
+  // The note the image views follow: the active slot's, or -- while that
+  // slot shows an image rather than a note -- the last note it showed, so
+  // opening an image from Images in Order does not empty the list.
+  const [imageViewsNoteId, setImageViewsNoteId] = useState<string | null>(null)
+  const activeSectionNoteId = activeSection?.activeNoteId ?? null
+  useEffect(() => {
+    if (activeSectionNoteId) setImageViewsNoteId(activeSectionNoteId)
+  }, [activeSectionNoteId])
+  const imageViewsFollowLiveText = activeSectionNoteId !== null && activeSectionNoteId === imageViewsNoteId
+  const activeSectionTextVersion = activeSection?.editorTextVersion
+  const readActiveSectionText = activeSection?.readEditorText
+  const imageUses = useMemo(() => {
+    if (!isImageLibraryShown) return NO_IMAGE_USES
+    if (imageViewsFollowLiveText && readActiveSectionText) return imageUsesIn(readActiveSectionText())
+    return imageViewsNoteId ? imageUsesIn(readNoteContent(imageViewsNoteId)) : NO_IMAGE_USES
+    // activeSectionTextVersion is not read: it is what says the text changed.
+  }, [isImageLibraryShown, imageViewsFollowLiveText, readActiveSectionText, activeSectionTextVersion, imageViewsNoteId, readNoteContent]) // eslint-disable-line react-hooks/exhaustive-deps
+  const caretOffset = imageViewsFollowLiveText ? (activeSection?.editorSelection.start ?? null) : null
+  const caretUseFrom = useMemo(() => (
+    caretOffset === null ? null : imageUses.find((use) => caretOffset > use.from && caretOffset <= use.to)?.from ?? null
+  ), [caretOffset, imageUses])
+  // A card puts its image at the caret, which needs a note in edit mode.
+  const placeLibraryImage = useCallback((id: string, alt: string) => {
+    const section = getActiveSection()
+    if (!section?.activeNoteId || section.isPreviewMode || section.previewedSnapshotId !== null) return
+    section.placeLibraryImage(id, alt)
+  }, [getActiveSection])
+
+  // IMAGE MODE: the date, category, archive and trash views list images
+  // instead of notes (imageLibrary/ImageLibraryList.tsx). Right-clicking the
+  // options button switches it; the toolbar's image button turns it on. Turned
+  // on from options or find, it lands on Images in Order.
+  const setImageMode = useCallback((next: boolean) => {
+    const listsImages = sidebarMode === 'date' || sidebarMode === 'category' || sidebarMode === 'archive' || sidebarMode === 'trash'
+    if (next === sidebarShowsImages && (!next || listsImages)) return
     setSidebarShowsImages(next)
-    if (mode === sidebarMode) {
+    if (!next || listsImages) {
       persistMenuStateNowRef.current({ sidebarShowsImages: next })
       return
     }
-    const section = getActiveSection()
-    section?.setIsTrashViewDeletePrimed(false)
-    section?.clearTrashButtonArmTimer()
     // One persist for both changes (see persistMenuStateOnce).
-    runSidebarMenuTransition(mode, { sidebarShowsImages: next })
-  }, [getActiveSection, runSidebarMenuTransition, sidebarMode, sidebarShowsImages])
+    runSidebarMenuTransition('date', { sidebarShowsImages: next })
+  }, [runSidebarMenuTransition, sidebarMode, sidebarShowsImages])
+  const showImageLibrary = useCallback(() => setImageMode(true), [setImageMode])
+  const handleOptionsButtonContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setImageMode(!sidebarShowsImages)
+  }, [setImageMode, sidebarShowsImages])
 
   const handleFindViewButtonContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault()
@@ -9036,6 +9074,7 @@ ${markdownHtml}
               <div className="view-toggle" role="tablist" aria-label="Note view modes">
                 {SIDEBAR_MODES.map(({ mode, label }) => {
                   const isActive = sidebarMode === mode
+                  const viewLabel = (sidebarShowsImages ? IMAGE_VIEW_LABELS[mode] : undefined) ?? label
                   const iconClassByMode: Record<SidebarMode, string> = {
                     date: 'btn-date',
                     category: 'btn-category',
@@ -9047,24 +9086,24 @@ ${markdownHtml}
                   return (
                     <button
                       key={mode}
-                      className={`toggle-btn notes-mode-button icon-btn ${iconClassByMode[mode]}${isActive ? ' is-active' : ''}${isImageLibraryShown && mode !== 'find' && mode !== 'options' ? ' is-showing-images' : ''}${mode === 'trash' && activeSection?.isTrashViewDeletePrimed ? ' is-primed-for-deletion' : ''}`}
+                      className={`toggle-btn notes-mode-button icon-btn ${iconClassByMode[mode]}${isActive ? ' is-active' : ''}${mode === 'trash' && activeSection?.isTrashViewDeletePrimed ? ' is-primed-for-deletion' : ''}`}
                       type="button"
                       role="tab"
                       aria-selected={isActive}
-                      data-tooltip={mode === 'date' || mode === 'category' || mode === 'archive'
-                        ? `${isImageLibraryShown ? `${label} (images)` : label}. Right-click: ${isImageLibraryShown && isActive ? 'notes' : 'images'}`
-                        : label}
-                      aria-label={label}
+                      data-tooltip={mode === 'options'
+                        ? `${label}. Right-click: ${sidebarShowsImages ? 'notes' : 'images'}`
+                        : viewLabel}
+                      aria-label={viewLabel}
                       onClick={mode === 'options' ? toggleSidebarOptionsMenu : () => handleViewModeButtonClick(mode)}
-                      data-secondary-press={mode === 'options' ? 'none' : 'action'}
+                      data-secondary-press={mode === 'trash' || mode === 'find' || mode === 'options' ? 'action' : 'none'}
                       onContextMenu={
                         mode === 'trash'
                           ? activeSection?.handleTrashViewButtonContextMenu
                           : mode === 'find'
                             ? handleFindViewButtonContextMenu
                             : mode === 'options'
-                              ? undefined
-                              : (event) => handleImageLibraryToggle(event, mode)
+                              ? handleOptionsButtonContextMenu
+                              : undefined
                       }
                       onMouseDown={mode === 'trash' ? activeSection?.handleTrashViewButtonMouseDown : undefined}
                       onMouseUp={mode === 'trash' ? activeSection?.handleTrashViewButtonMouseUp : undefined}
@@ -9077,14 +9116,16 @@ ${markdownHtml}
                           src/assets/buttons/*.png mask asset (see sidebar.css) --
                           it was already styled for an inline glyph instead
                           (color, not background-color), matching this. */}
-                      {mode === 'options' ? (
+                      {mode === 'options' && sidebarShowsImages ? (
+                        <span className="fa-solid fa-image" aria-hidden="true" />
+                      ) : mode === 'options' ? (
                         <WorkIndicatorGlyph
                           speedX={customCursorClickSpeedX}
                           ramp={customCursorClickRamp}
                           skew={customCursorClickSkew}
                         />
                       ) : null}
-                      <span className="sr-only-mode-label">{label}</span>
+                      <span className="sr-only-mode-label">{viewLabel}</span>
                     </button>
                   )
                 })}
@@ -9109,7 +9150,10 @@ ${markdownHtml}
                           view={sidebarMode as ImageLibraryView}
                           searchQuery={searchQuery}
                           caseSensitive={isSearchQueryCaseSensitive}
-                          activeImageId={shownImageId}
+                          uses={imageUses}
+                          shownImageId={shownImageId}
+                          caretUseFrom={caretUseFrom}
+                          onPlace={placeLibraryImage}
                           onOpen={openImageViewHere}
                         />
                       </div>
@@ -9826,6 +9870,8 @@ ${markdownHtml}
               toggleChecklistList={activeSection?.toggleChecklistList ?? noop}
               toggleBlockquote={activeSection?.toggleBlockquote ?? noop}
               applyLink={activeSection?.applyLink ?? noop}
+              insertImagePlaceholder={activeSection?.insertImagePlaceholder ?? noop}
+              showImageLibrary={showImageLibrary}
               applyAnchor={activeSection?.applyAnchor ?? noop}
               applyInlineCode={activeSection?.applyInlineCode ?? noop}
               applyCodeBlock={activeSection?.applyCodeBlock ?? noop}

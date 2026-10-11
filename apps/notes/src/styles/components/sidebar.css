@@ -985,8 +985,44 @@
   position: relative;
 }
 
-/* A view selector whose view lists images rather than notes (a right-click
- * on it switches): marked so the sidebar says which it is showing. */
-.notes-mode-button.is-showing-images {
-  box-shadow: inset 0 -3px 0 var(--color-text-60, currentColor);
+/* Images in Order: a right-click expands a card to the image's own
+ * proportions (`--image-ratio`, height over width, set by the card) and
+ * fades out the text over it, so the image is seen whole. */
+.image-list-item:not(.is-tree-card) .note-list-column-primary {
+  transition: height 0.2s ease-out;
+}
+
+.image-list-item.is-expanded .note-list-column-primary {
+  height: calc(100cqw * var(--image-ratio, 0.5));
+}
+
+.image-list-item .image-list-thumbnail,
+.image-list-item .note-list-content {
+  transition: opacity 0.2s ease-out;
+}
+
+.image-list-item.is-expanded .image-list-thumbnail {
+  opacity: 1;
+}
+
+.image-list-item.is-expanded .note-list-content {
+  opacity: 0;
+}
+
+/* A tree card's trash button takes the size's place while it is hovered. */
+.image-tree-card-trash {
+  display: none;
+  border: none;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  font-size: 0.85em;
+}
+
+.image-list-item.is-tree-card[data-hovered] .image-tree-card-trash {
+  display: inline-block;
+}
+
+.image-list-item.is-tree-card[data-hovered] .image-tree-card-row .note-list-meta-right {
+  display: none;
 }

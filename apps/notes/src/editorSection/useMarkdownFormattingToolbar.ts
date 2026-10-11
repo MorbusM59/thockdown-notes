@@ -3,6 +3,7 @@ import type { MutableRefObject } from 'react'
 import { isOffsetInFencedCodeBlock, resolveMarkdownSelectionContext, resolveMarkdownSelectionContextIncremental, type InlineStateLineCache } from '../editor/MarkdownContext'
 import { isTableLine } from '../editor/MarkdownTable'
 import { resolveTableToolbarTransform } from '../editor/MarkdownTableTransforms'
+import { placeImageAt } from '../editor/ImagePlacement'
 import { normalizeInternalText } from '../editor/TextPolicy'
 import type { EditorSelectionState, EditorTextEdit, EditorTransformResult } from '../editor/EditorContract'
 import { buildTransformResult, collapsedSelectionAt } from '../editor/TransformResult'
@@ -328,6 +329,10 @@ export interface UseMarkdownFormattingToolbarResult {
   toggleChecklistList: () => void
   toggleBlockquote: () => void
   applyLink: () => void
+  /** Leaves an empty image, `![]()`, with the caret between the parentheses (a selection becomes its alt text). */
+  insertImagePlaceholder: () => void
+  /** Puts a library image at the caret (ImagePlacement.ts's placeImageAt). */
+  placeLibraryImage: (id: string, alt: string) => void
   applyAnchor: () => void
   applyInlineCode: () => void
   applyCodeBlock: () => void
@@ -1071,6 +1076,24 @@ export function useMarkdownFormattingToolbar({
     applyWrappedMarker('[', `](${target})`, 'link')
   }, [applyWrappedMarker, getLinkTargetPrefill])
 
+  const insertImagePlaceholder = useCallback(() => {
+    if (!activeNoteId) return
+    const sourceText = readEditorText()
+    const { start, end } = resolveSelectionBounds(sourceText)
+    const alt = sourceText.slice(start, end).replace(/[[\]\n]/g, ' ')
+    const caret = start + alt.length + 4
+    applyProgrammaticEditorText(`${sourceText.slice(0, start)}![${alt}]()${sourceText.slice(end)}`, caret, caret)
+  }, [activeNoteId, applyProgrammaticEditorText, readEditorText, resolveSelectionBounds])
+
+  const placeLibraryImage = useCallback((id: string, alt: string) => {
+    if (!activeNoteId) return
+    const sourceText = readEditorText()
+    const { start, end } = resolveSelectionBounds(sourceText)
+    const placed = placeImageAt(sourceText, { start, end }, id, alt,
+      (offset) => isOffsetInFencedCodeBlock(sourceText, offset, markdownInlineCacheRef.current))
+    applyProgrammaticEditorText(placed.text, placed.caret, placed.caret)
+  }, [activeNoteId, applyProgrammaticEditorText, markdownInlineCacheRef, readEditorText, resolveSelectionBounds])
+
   const applyAnchor = useCallback(() => {
     if (!activeNoteId) return
     // Nothing selected to derive a label/anchor id from -- unlike applyLink,
@@ -1247,6 +1270,8 @@ export function useMarkdownFormattingToolbar({
     toggleChecklistList,
     toggleBlockquote,
     applyLink,
+    insertImagePlaceholder,
+    placeLibraryImage,
     applyAnchor,
     applyInlineCode,
     applyCodeBlock,
