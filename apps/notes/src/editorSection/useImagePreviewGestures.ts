@@ -11,7 +11,10 @@ import { importImageFilesAsMarkdown } from '../shared/storedImages'
 //                        aligned by where across the page it lands (left
 //                        third, middle, right third)
 //   Shift + drag         resize, keeping its proportions (the longer of the
-//                        two movements decides; right and down grow)
+//                        two movements decides; down grows, and across, a
+//                        drag away from the side the image is aligned to
+//                        grows: rightward for left (and unaligned), leftward
+//                        for right, outward from the middle for centre)
 //   Ctrl + Shift + drag  resize width and height separately
 //
 // and dropping image files onto a block stores them and puts them at its
@@ -50,6 +53,17 @@ function blockLineAt(scroller: HTMLElement, x: number, y: number): number | null
   if (!block || !scroller.contains(block)) return null
   const line = Number(block.dataset.sourceLineStart)
   return Number.isFinite(line) ? line : null
+}
+
+/**
+ * How much wider a drag from `startX` to `x` makes an image aligned `align`
+ * whose box centre is at `centerX`: the free edge follows the pointer, and a
+ * centred image grows on both sides at once, so twice the outward movement.
+ */
+function widthGrowth(align: ImageAlignment | null, startX: number, x: number, centerX: number): number {
+  if (align === 'right') return startX - x
+  if (align === 'center') return 2 * (Math.abs(x - centerX) - Math.abs(startX - centerX))
+  return x - startX
 }
 
 function alignmentAt(scroller: HTMLElement, x: number): ImageAlignment {
@@ -105,16 +119,16 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
       frame.setPointerCapture(event.pointerId)
 
       const handleMove = (move: PointerEvent) => {
-        const dx = move.clientX - start.x
         const dy = move.clientY - start.y
-        if (!moved && Math.hypot(dx, dy) < DRAG_START_PX) return
+        if (!moved && Math.hypot(move.clientX - start.x, dy) < DRAG_START_PX) return
+        const dx = widthGrowth(image.layout.align, start.x, move.clientX, startRect.left + startRect.width / 2)
         moved = true
         if (mode === 'move') {
           frame.style.opacity = '0.5'
           return
         }
         if (mode === 'resize-locked') {
-          // Right and down both grow; the longer movement decides.
+          // The longer movement decides; dx is already signed as growth.
           const delta = Math.abs(dx) >= Math.abs(dy) ? dx : dy * ratio
           const width = Math.max(16, startRect.width + delta)
           size = { width, height: width / ratio }
