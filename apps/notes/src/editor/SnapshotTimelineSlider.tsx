@@ -175,25 +175,26 @@ export function SnapshotTimelineSlider({
     }
 
     const usableWidth = Math.max(0, railWidthPx - MARK_INSET_PX * 2)
-    const targetCenters = marks.map((mark) => MARK_INSET_PX + mark.ratio * usableWidth)
-    const renderedCenters: number[] = []
+    const outerHalves = marks.map((mark) => (mark.isManual ? 5 : 4))
+    const minGapBetween = (i: number) => outerHalves[i] + outerHalves[i + 1] + 2
+    const renderedCenters = marks.map((mark) => MARK_INSET_PX + mark.ratio * usableWidth)
 
-    let nextCenter = railWidthPx - MARK_INSET_PX
-    let nextOuterHalf = 0
-
-    for (let i = marks.length - 1; i >= 0; i -= 1) {
-      const mark = marks[i]
-      const outerHalf = mark.isManual ? 5 : 4
-      const targetCenter = targetCenters[i]
-      if (i === marks.length - 1) {
-        renderedCenters[i] = Math.max(MARK_INSET_PX, Math.min(targetCenter, nextCenter))
-      } else {
-        const minGap = outerHalf + nextOuterHalf + 2
-        const center = Math.min(targetCenter, nextCenter - minGap)
-        renderedCenters[i] = Math.max(MARK_INSET_PX, center)
-      }
-      nextCenter = renderedCenters[i]
-      nextOuterHalf = outerHalf
+    // Two passes keep every pair of neighbours at least minGapBetween apart.
+    // Right to left: a mark crowded by its right neighbour yields leftwards,
+    // and the last mark never passes the right edge. Left to right: marks
+    // that the first pass pushed past the left edge -- typically several
+    // snapshots older than the cut-off, which all have ratio 0 -- are pushed
+    // back rightwards, so they stack at the far end at the minimum spacing
+    // instead of collapsing onto one point. Only when the marks cannot fit
+    // on the rail at all do they overrun the right edge.
+    const last = marks.length - 1
+    renderedCenters[last] = Math.min(renderedCenters[last], railWidthPx - MARK_INSET_PX)
+    for (let i = last - 1; i >= 0; i -= 1) {
+      renderedCenters[i] = Math.min(renderedCenters[i], renderedCenters[i + 1] - minGapBetween(i))
+    }
+    renderedCenters[0] = Math.max(renderedCenters[0], MARK_INSET_PX)
+    for (let i = 1; i <= last; i += 1) {
+      renderedCenters[i] = Math.max(renderedCenters[i], renderedCenters[i - 1] + minGapBetween(i - 1))
     }
 
     return renderedCenters.map((center) => `${center}px`)
