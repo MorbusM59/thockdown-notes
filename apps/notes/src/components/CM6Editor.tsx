@@ -6023,12 +6023,12 @@ export function CM6Editor({
         const columnWithinRow = columnFromLineStart % columnsPerRow;
         return Math.max(0, Math.min(1, columnWithinRow / columnsPerRow));
       },
-      applyEdit(edit, expectedText) {
+      applyEdit(changes, expectedText) {
         const view = viewRef.current;
         if (!view || view.state.readOnly) return false;
         if (view.state.doc.length !== expectedText.length || view.state.doc.toString() !== expectedText) return false;
         view.dispatch({
-          changes: edit,
+          changes: [...changes],
           userEvent: 'input.rewrite',
           annotations: isolateHistory.of('full'),
         });

@@ -1302,7 +1302,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
   })
 
   const canRewriteImages = !isViewingTimelessNote && !isPreviewingSnapshot && !isViewingEphemeralAutoChapter && !isSealedNoteId(activeNoteId)
-  useImagePreviewGestures({ activeNoteId, scrollerRef: previewScrollRef, adapterRef, readEditorText, canEdit: canRewriteImages && isPreviewMode })
+  useImagePreviewGestures({ activeNoteId, scrollerRef: previewScrollRef, adapterRef, readEditorText, canEdit: canRewriteImages && isPreviewMode, activeNoteHasDebugTagRef })
   const imageStorage = useImageStorageButton({
     activeNoteId,
     readEditorText,

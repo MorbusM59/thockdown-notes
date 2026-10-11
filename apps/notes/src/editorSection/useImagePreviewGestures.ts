@@ -1,6 +1,6 @@
 import { useEffect, useRef, type MutableRefObject, type RefObject } from 'react'
 import type { EditorAdapter } from '../editor/EditorContract'
-import { insertAtBlockStart, locateImage, moveImage, reshapeImage, type ImageEdit } from '../editor/ImagePlacement'
+import { insertAtBlockStart, locateImage, moveImage, reshapeImage, sameAlt, type ImageEdit } from '../editor/ImagePlacement'
 import type { ImageAlignment, ImageLength, ImageLayout } from '../shared/imageLayout'
 import { isImageFile } from '../shared/images'
 import { importImageFilesAsMarkdown } from '../shared/storedImages'
@@ -31,6 +31,8 @@ interface Context {
   adapterRef: MutableRefObject<EditorAdapter | null>
   readEditorText: () => string
   canEdit: boolean
+  /** Debug-tagged notes refuse edits made from outside the text, as dropping into the editor does. */
+  activeNoteHasDebugTagRef: MutableRefObject<boolean>
 }
 
 /** The image's line, its index among the images drawn from that line, and how many there are. */
@@ -67,15 +69,17 @@ function lengthIn(px: number, unit: ImageLength['unit'] | undefined, frame: HTML
   return { value: Math.max(0.5, Math.round((px / fontSizePx) * 2) / 2), unit: 'em' }
 }
 
-export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef, readEditorText, canEdit }: Context): void {
+export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef, readEditorText, canEdit, activeNoteHasDebugTagRef }: Context): void {
   const noteRef = useRef(activeNoteId)
   noteRef.current = activeNoteId
+  const canEditRef = useRef(canEdit)
+  canEditRef.current = canEdit
   useEffect(() => {
     const scroller = scrollerRef.current
     if (!scroller || !canEdit) return
 
-    const apply = (text: string, edit: ImageEdit | null) => {
-      if (edit) adapterRef.current?.applyEdit(edit, text)
+    const apply = (text: string, edit: ImageEdit | ImageEdit[] | null) => {
+      if (edit && !activeNoteHasDebugTagRef.current) adapterRef.current?.applyEdit(Array.isArray(edit) ? edit : [edit], text)
     }
 
     const handlePointerDown = (event: PointerEvent) => {
@@ -86,17 +90,18 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
       const text = readEditorText()
       const image = address && locateImage(text, address.line0, address.ordinal, address.drawn)
       if (!image) return
+      const img = frame.querySelector('img')
+      if (img && !sameAlt(image.alt, img.alt)) return
       event.preventDefault()
       event.stopPropagation()
 
       const mode: 'move' | 'resize-locked' | 'resize-free' = !event.shiftKey ? 'move' : event.ctrlKey ? 'resize-free' : 'resize-locked'
-      const img = frame.querySelector('img')
       const start = { x: event.clientX, y: event.clientY }
       const startRect = (img ?? frame).getBoundingClientRect()
       const ratio = startRect.height > 0 ? startRect.width / startRect.height : 1
       let moved = false
       let size = { width: startRect.width, height: startRect.height }
-      const restore = { frameWidth: frame.style.width, imgWidth: img?.style.width ?? '', imgHeight: img?.style.height ?? '', opacity: frame.style.opacity }
+      const restore = { frameWidth: frame.style.width, imgWidth: img?.style.width ?? '', imgHeight: img?.style.height ?? '', opacity: frame.style.opacity, objectFit: img?.style.objectFit ?? '' }
       frame.setPointerCapture(event.pointerId)
 
       const handleMove = (move: PointerEvent) => {
@@ -128,11 +133,18 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
         frame.removeEventListener('pointermove', handleMove)
         frame.removeEventListener('pointerup', handleUp)
         frame.removeEventListener('pointercancel', handleCancel)
+        frame.removeEventListener('lostpointercapture', handleCancel)
+        if (moved) {
+          // A drag is not a click: an image inside a link must not follow it.
+          window.addEventListener('click', swallowClick, { capture: true, once: true })
+          window.setTimeout(() => window.removeEventListener('click', swallowClick, { capture: true }), 0)
+        }
         frame.style.width = restore.frameWidth
         frame.style.opacity = restore.opacity
         if (img) {
           img.style.width = restore.imgWidth
           img.style.height = restore.imgHeight
+          img.style.objectFit = restore.objectFit
         }
         if (!commit || !moved || readEditorText() !== text) return
         if (mode === 'move') {
@@ -155,6 +167,11 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
       frame.addEventListener('pointermove', handleMove)
       frame.addEventListener('pointerup', handleUp)
       frame.addEventListener('pointercancel', handleCancel)
+      frame.addEventListener('lostpointercapture', handleCancel)
+    }
+    const swallowClick = (click: MouseEvent) => {
+      click.preventDefault()
+      click.stopPropagation()
     }
 
     const isImageDrag = (event: DragEvent) => Array.from(event.dataTransfer?.items ?? []).some((item) => item.kind === 'file')
@@ -171,11 +188,12 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
       const line = blockLineAt(scroller, event.clientX, event.clientY)
       if (line === null) return
       const droppedOn = noteRef.current
+      const textAtDrop = readEditorText()
       void importImageFilesAsMarkdown(files).then((markdown) => {
-        // Stored either way; inserted only into the note it was dropped on.
-        if (noteRef.current !== droppedOn) return
-        const text = readEditorText()
-        if (markdown) apply(text, insertAtBlockStart(text, line, markdown))
+        // Stored either way; inserted only where it was dropped: the same
+        // note, still editable, its text unchanged (the line may have moved).
+        if (!markdown || noteRef.current !== droppedOn || !canEditRef.current || readEditorText() !== textAtDrop) return
+        apply(textAtDrop, insertAtBlockStart(textAtDrop, line, markdown))
       })
     }
 
@@ -187,5 +205,5 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
       scroller.removeEventListener('dragover', handleDragOver)
       scroller.removeEventListener('drop', handleDrop)
     }
-  }, [adapterRef, canEdit, readEditorText, scrollerRef, activeNoteId])
+  }, [activeNoteHasDebugTagRef, adapterRef, canEdit, readEditorText, scrollerRef, activeNoteId])
 }

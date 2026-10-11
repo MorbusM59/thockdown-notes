@@ -11,7 +11,10 @@ import { formatImageLayout, parseImageTitle, type ImageAlignment, type ImageLayo
 // the text by counting the images the line holds in the plain shape the keys
 // understand (imagesOnLine); when the two counts disagree -- a line holding an
 // image written some other way -- the image is not addressable and the
-// gesture does nothing, rather than reshaping a neighbour.
+// gesture does nothing, rather than reshaping a neighbour. Two miscounts can
+// cancel out (an image in a code span the renderer did not draw, beside a
+// reference image the count did not see), so the caller also compares the
+// alt text with the drawn image's (sameAlt).
 
 export interface ImageEdit {
   from: number
@@ -28,6 +31,8 @@ export interface LocatedImage {
   titleFrom: number | null
   titleTo: number | null
   destinationTo: number
+  /** The alt text as written, to check against the drawn image. */
+  alt: string
   layout: ImageLayout
 }
 
@@ -63,6 +68,7 @@ export function locateImage(text: string, line0: number, ordinal: number, drawnO
     titleFrom: image.titleFrom,
     titleTo: image.titleTo,
     destinationTo: image.destinationTo,
+    alt: text.slice(image.altFrom, image.altTo),
     layout: parsed.layout,
   }
 }
@@ -84,16 +90,37 @@ export function reshapeImage(text: string, image: LocatedImage, layout: ImageLay
 // rather than breaking its syntax.
 const BLOCK_PREFIX = /^[ \t]*(?:>[ \t]?)*(?:(?:[-*+]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?)?(?:#{1,6}[ \t]+)?/
 
-/**
- * Moves the image to the start of the block whose first line is `targetLine0`,
- * aligned `align`, as one edit. Where it left behind only whitespace, that
- * line goes too. Moving within its own line only changes the alignment.
- */
-export function moveImage(text: string, image: LocatedImage, targetLine0: number, align: ImageAlignment): ImageEdit | null {
+// Blocks whose first line an image cannot open without ending the block: a
+// table row (the extra cell breaks the header), a code fence, a thematic
+// break, an HTML block. Such a target is refused rather than broken.
+const CLOSED_BLOCK = /^(?:\||`{3}|~{3}|<|(?:[-*_][ \t]*){3,}$)/
+
+/** Where an image goes in the block whose first line is `targetLine0`, or null where it cannot go. */
+function blockInsertPoint(text: string, targetLine0: number): number | null {
   const target = lineBounds(text, targetLine0)
   if (!target) return null
+  const line = text.slice(target.from, target.to)
+  const prefix = BLOCK_PREFIX.exec(line)?.[0].length ?? 0
+  if (CLOSED_BLOCK.test(line.slice(prefix).replace(/\r$/, ''))) return null
+  return target.from + prefix
+}
+
+/**
+ * Moves the image to the start of the block whose first line is `targetLine0`,
+ * aligned `align`, as two changes (a removal and an insertion, so nothing in
+ * between is rewritten). Where it left behind only whitespace, that line goes
+ * too. Moving within its own line only changes the alignment.
+ */
+export function moveImage(text: string, image: LocatedImage, targetLine0: number, align: ImageAlignment): ImageEdit[] | null {
+  const target = lineBounds(text, targetLine0)
+  if (!target) return null
+  if (target.from === image.lineFrom) {
+    const edit = reshapeImage(text, image, { ...image.layout, align })
+    return edit && [edit]
+  }
+  const insertAt = blockInsertPoint(text, targetLine0)
+  if (insertAt === null) return null
   const moved = imageWithLayout(text, image, { ...image.layout, align })
-  if (target.from === image.lineFrom) return reshapeImage(text, image, { ...image.layout, align })
 
   // What removing the image does to its own line.
   const before = text.slice(image.lineFrom, image.from)
@@ -110,18 +137,20 @@ export function moveImage(text: string, image: LocatedImage, targetLine0: number
     removeFrom -= 1
   }
 
-  const insertAt = target.from + (BLOCK_PREFIX.exec(text.slice(target.from, target.to))?.[0].length ?? 0)
-  const insert = `${moved} `
-  if (insertAt <= removeFrom) {
-    return { from: insertAt, to: removeTo, insert: insert + text.slice(insertAt, removeFrom) }
-  }
-  return { from: removeFrom, to: insertAt, insert: text.slice(removeTo, insertAt) + insert }
+  const insertion = { from: insertAt, to: insertAt, insert: `${moved} ` }
+  const removal = { from: removeFrom, to: removeTo, insert: '' }
+  return insertAt <= removeFrom ? [insertion, removal] : [removal, insertion]
 }
 
-/** Inserts `markdown` (one or more images) at the start of the block whose first line is `targetLine0`. */
+/** Inserts `markdown` (one or more images) at the start of the block whose first line is `targetLine0`; null where an image cannot open that block. */
 export function insertAtBlockStart(text: string, targetLine0: number, markdown: string): ImageEdit | null {
-  const target = lineBounds(text, targetLine0)
-  if (!target) return null
-  const at = target.from + (BLOCK_PREFIX.exec(text.slice(target.from, target.to))?.[0].length ?? 0)
+  const at = blockInsertPoint(text, targetLine0)
+  if (at === null) return null
   return { from: at, to: at, insert: `${markdown.replace(/\n/g, ' ')} ` }
+}
+
+/** Whether alt text as written and as drawn are the same, ignoring the inline markup the renderer resolves. */
+export function sameAlt(written: string, drawn: string): boolean {
+  const plain = (value: string) => value.replace(/[\\*_`~]/g, '').replace(/\s+/g, ' ').trim()
+  return plain(written) === plain(drawn)
 }

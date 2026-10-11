@@ -279,13 +279,14 @@ export interface EditorAdapter {
   // two are deliberately the same shape so a caller can ask either one.
   readVisibleSourceLineRange(): { fromLine: number; toLine: number } | null;
   /**
-   * Replaces `from`..`to` of the current text with `insert`, as one undo
-   * step of its own, the way an edit made in the editor would be (it is
+   * Applies `changes` (each `from`..`to` replaced by `insert`, all in the
+   * coordinates of the current text, none overlapping) as one undo step of
+   * its own, the way an edit made in the editor would be (it is
    * saved and reported like typing). For a change the reader asked for
    * outside the text -- the image button's rewrite. False when there is no
    * editor to apply it to, or `expectedText` is no longer what it holds.
    */
-  applyEdit(edit: { from: number; to: number; insert: string }, expectedText: string): boolean;
+  applyEdit(changes: readonly { from: number; to: number; insert: string }[], expectedText: string): boolean;
   // Calls `listener` whenever the visible range may have moved -- today, on
   // every scroll. Returns its own unsubscribe.
   //

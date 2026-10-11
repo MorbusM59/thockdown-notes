@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { locateImage, moveImage, reshapeImage } from './ImagePlacement'
+import { insertAtBlockStart, locateImage, moveImage, reshapeImage } from './ImagePlacement'
 
-const apply = (text: string, edit: { from: number; to: number; insert: string } | null) =>
-  edit ? text.slice(0, edit.from) + edit.insert + text.slice(edit.to) : text
+type Change = { from: number; to: number; insert: string }
+// Changes are in the coordinates of the original text: apply from the end.
+const apply = (text: string, edit: Change | Change[] | null) =>
+  (edit ? [edit].flat() : []).sort((a, b) => b.from - a.from).reduce((acc, c) => acc.slice(0, c.from) + c.insert + acc.slice(c.to), text)
 
 describe('image placement', () => {
   const text = '# T\n\nFirst ![a](a.png "10em") and ![b](b.png).\n\n- item one\n\nLast.'
@@ -25,5 +27,19 @@ describe('image placement', () => {
     const own = '# T\n\nPara.\n\n![a](a.png)\n\nEnd.'
     const image = locateImage(own, 4, 0, 1)!
     expect(apply(own, moveImage(own, image, 2, 'left'))).toBe('# T\n\n![a](a.png "left") Para.\n\n\nEnd.')
+  })
+  it('refuses blocks an image cannot open', () => {
+    const doc = '![a](a.png)\n\n| h |\n| - |\n\n```js\nx\n```\n\n---\n\n> - Quote.'
+    const image = locateImage(doc, 0, 0, 1)!
+    for (const line of [2, 5, 9]) {
+      expect(moveImage(doc, image, line, 'left')).toBeNull()
+      expect(insertAtBlockStart(doc, line, '![b](b.png)')).toBeNull()
+    }
+    expect(apply(doc, moveImage(doc, image, 11, 'left'))).toBe('\n| h |\n| - |\n\n```js\nx\n```\n\n---\n\n> - ![a](a.png "left") Quote.')
+  })
+  it('moves as a removal and an insertion, leaving the text between untouched', () => {
+    const image = locateImage(text, 2, 0, 2)!
+    const edit = moveImage(text, image, 6, 'left')!
+    expect(edit.every((change) => change.insert === '' || change.insert.startsWith('![a]'))).toBe(true)
   })
 })

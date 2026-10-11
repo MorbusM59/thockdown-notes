@@ -114,7 +114,7 @@ export function useImageStorageButton({
       setFailures(notStored)
       if (!edit || readEditorText() !== text) return
       await createSnapshot()
-      adapterRef.current?.applyEdit(edit, text)
+      adapterRef.current?.applyEdit([edit], text)
     } finally {
       busyRef.current = false
       setBusy(false)
