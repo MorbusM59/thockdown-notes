@@ -38,6 +38,8 @@
 export type BackgroundWorkKind =
   | 'document-split'
   | 'document-find'
+  | 'document-images'
+  | 'image-store'
   | 'texture'
 
 export interface BackgroundWorkState {

@@ -14,6 +14,7 @@ import type { InvokeChannels } from './ipcContract'
 export const IMAGE_CHANNELS = {
   importImage: 'images:import',
   resolveImages: 'images:resolve',
+  storeImageSources: 'images:store-sources',
 } as const satisfies InvokeChannels<ImagesApi>
 
 /** The scheme stored images are served under (electron/main.ts). */
@@ -26,17 +27,46 @@ export interface ImageImportRequest {
   bytes: Uint8Array
   /** The file path or URL the bytes came from; null for a clipboard image. What a restore writes back. */
   origin: string | null
+  /**
+   * The id the reader chose (`&NAME` in the image's title), or null for the
+   * next automatic one. Taken as asked when it is free or already names
+   * these bytes; otherwise the image gets `&NAME-2` (then -3, ...), never
+   * another picture's name.
+   */
+  requestedId?: string | null
 }
+
+export interface ImageSourceRequest {
+  /** What the note points at: an http(s) URL, a file: URL or an absolute path. */
+  source: string
+  requestedId: string | null
+}
+
+export type ImageSourceResult =
+  | ImageImportResult
+  | { ok: false; reason: 'unreachable' | 'unsupported' }
 
 export type ImageImportResult =
   | { ok: true; id: string }
   | { ok: false; reason: 'too-large' | 'not-an-image' }
+
+/** Why an image could not be stored, in words for a tooltip. */
+export function describeImageFailure(reason: 'too-large' | 'not-an-image' | 'unreachable' | 'unsupported'): string {
+  switch (reason) {
+    case 'too-large': return 'larger than 20 MB'
+    case 'not-an-image': return 'not an image the app can show'
+    case 'unreachable': return 'could not be fetched'
+    case 'unsupported': return 'not a web address or a full file path'
+  }
+}
 
 export interface ResolvedImage {
   src: string
   /** Intrinsic size in pixels; 0 when the format did not say. */
   width: number
   height: number
+  /** The URL or file path it was stored from; null for a clipboard image. */
+  origin: string | null
 }
 
 export interface ImagesApi {
@@ -48,6 +78,12 @@ export interface ImagesApi {
   importImage(request: ImageImportRequest): Promise<ImageImportResult>
   /** What each id shows; an id with no stored image maps to null. */
   resolveImages(ids: string[]): Promise<Record<string, ResolvedImage | null>>
+  /**
+   * Fetches what each source points at (a download or a file read) and
+   * stores it, answering per source. Called only from the image button's
+   * hold, which is the reader's consent to reach the web for these.
+   */
+  storeImageSources(requests: ImageSourceRequest[]): Promise<Record<string, ImageSourceResult>>
 }
 
 // An id is `&` and at least one character that is not whitespace, `;`

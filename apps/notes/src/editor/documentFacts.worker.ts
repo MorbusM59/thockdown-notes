@@ -20,6 +20,7 @@
 
 import { splitPreviewBlockRangesProgressively } from './PreviewBlockSplit'
 import { buildPreviewVisibleDocumentFindHits } from './FindReplaceEngine'
+import { collectDocumentImages, documentImagesIn, type DocumentImage } from './DocumentImages'
 import {
   appendProjectionNodes,
   buildPreviewVisibleTextProjection,
@@ -71,12 +72,15 @@ function handleSplit(id: number, text: string): void {
     ? null
     : createPreviewVisibleTextAccumulator()
 
+  const images: DocumentImage[] = []
   for (const chunk of splitPreviewBlockRangesProgressively(text)) {
     if (projection) appendProjectionNodes(projection, chunk.nodes, chunk.sourceOffset)
+    collectDocumentImages(chunk.nodes, chunk.sourceOffset, images)
     const partial: DocumentFactsResponse = { kind: 'split', id, ranges: chunk.ranges, done: false }
     workerScope.postMessage(partial)
   }
 
+  rememberedImages = { text, images }
   rememberPreviewVisibleTextProjection(
     text,
     projection ? finishPreviewVisibleTextProjection(projection) : buildPreviewVisibleTextProjection(text),
@@ -99,10 +103,24 @@ function handleFind(id: number, text: string, query: string, caseSensitive: bool
   workerScope.postMessage(response)
 }
 
+// The images the last split found, so asking about the note that was just
+// opened costs nothing. One entry, like the projection's memo.
+let rememberedImages: { text: string; images: DocumentImage[] } | null = null
+
+function handleImages(id: number, text: string): void {
+  if (rememberedImages?.text !== text) rememberedImages = { text, images: documentImagesIn(text, splitPreviewBlockRangesProgressively) }
+  const response: DocumentFactsResponse = { kind: 'images', id, images: rememberedImages.images }
+  workerScope.postMessage(response)
+}
+
 workerScope.onmessage = (event: MessageEvent<DocumentFactsRequest>) => {
   const request = event.data
   if (request.kind === 'split') {
     handleSplit(request.id, request.text)
+    return
+  }
+  if (request.kind === 'images') {
+    handleImages(request.id, request.text)
     return
   }
   handleFind(request.id, request.text, request.query, request.caseSensitive)

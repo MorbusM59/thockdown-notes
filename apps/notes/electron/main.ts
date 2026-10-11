@@ -24,7 +24,8 @@ import { computeWindowControlsWidthPx, DEFAULT_SPACING_REGULAR_PX } from '../src
 import { EDITOR_SECTIONS_CHANNELS, type EditorSectionsApi } from '../src/shared/sections'
 import { CHAPTER_CHANNELS, type ChaptersApi } from '../src/shared/chapters'
 import { REVIEW_FLAG_CHANNELS, type ReviewFlagsApi } from '../src/shared/reviewFlags'
-import { IMAGE_CHANNELS, IMAGE_SCHEME, type ImageImportRequest, type ImagesApi, type ResolvedImage } from '../src/shared/images'
+import { IMAGE_CHANNELS, IMAGE_SCHEME, type ImageImportRequest, type ImageSourceRequest, type ImageSourceResult, type ImagesApi, type ResolvedImage } from '../src/shared/images'
+import { fetchImageSource } from './imageFetch'
 import { EXPORT_CHANNELS, type ExportApi } from '../src/shared/exportApi'
 import type { ReviewFlagWrite, ReviewFlagRemap } from '../src/shared/reviewFlags'
 import { ensureHelpGuide } from './help/helpGuideNote'
@@ -1276,9 +1277,20 @@ function registerIpcHandlers() {
     resolveImages: async (_event, ids: string[]) => {
       const resolved: Record<string, ResolvedImage | null> = {};
       for (const [id, image] of Object.entries(databaseService!.resolveImages(ids))) {
-        resolved[id] = image && { src: `${IMAGE_SCHEME}://stored/${image.hash}`, width: image.width, height: image.height };
+        resolved[id] = image && { src: `${IMAGE_SCHEME}://stored/${image.hash}`, width: image.width, height: image.height, origin: image.origin };
       }
       return resolved;
+    },
+    storeImageSources: async (_event, requests: ImageSourceRequest[]) => {
+      const results: Record<string, ImageSourceResult> = {};
+      for (const { source, requestedId } of requests) {
+        if (results[source]) continue;
+        const fetched = await fetchImageSource(source);
+        results[source] = fetched.ok
+          ? databaseService!.importImage({ bytes: fetched.bytes, origin: source, requestedId })
+          : fetched;
+      }
+      return results;
     },
   }, ipcMain.handle.bind(ipcMain));
 

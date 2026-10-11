@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
-import { normalizeImageId, type ImageImportRequest, type ImageImportResult, type ResolvedImage } from './images'
+import { beginBackgroundWork } from './backgroundWork'
+import { normalizeImageId, type ImageImportRequest, type ImageImportResult, type ImageSourceRequest, type ImageSourceResult, type ResolvedImage } from './images'
 
 // What each stored image id shows, as the renderer knows it: one module store
 // (like remoteImages.ts) because the preview's `img` component sits at the
@@ -63,14 +64,37 @@ export function useStoredImage(src: string): ResolvedImage | null | undefined {
   return value
 }
 
+function forget(id: string): void {
+  resolved.delete(id)
+  requested.delete(id)
+}
+
+/** What a set of ids shows, asked directly (the image button needs origins, not a render). */
+export async function resolveStoredImages(ids: string[]): Promise<Record<string, ResolvedImage | null>> {
+  const api = window.thockdownImages
+  if (!api || ids.length === 0) return {}
+  return api.resolveImages(ids)
+}
+
+/** Fetches and stores what notes point at, so the next lookup of each new id sees it. */
+export async function storeImageSources(requests: ImageSourceRequest[]): Promise<Record<string, ImageSourceResult>> {
+  const api = window.thockdownImages
+  if (!api || requests.length === 0) return {}
+  // Downloads can take a while; the work indicator says the app is on it.
+  const work = beginBackgroundWork('image-store')
+  const results = await api.storeImageSources(requests).finally(() => work.done())
+  for (const result of Object.values(results)) if (result.ok) forget(result.id)
+  notify()
+  return results
+}
+
 /** Stores an image through the main process, so the next lookup of its id sees it. */
 export async function importStoredImage(importRequest: ImageImportRequest): Promise<ImageImportResult> {
   const api = window.thockdownImages
   if (!api) return { ok: false, reason: 'not-an-image' }
   const result = await api.importImage(importRequest)
   if (result.ok) {
-    resolved.delete(result.id)
-    requested.delete(result.id)
+    forget(result.id)
     notify()
   }
   return result

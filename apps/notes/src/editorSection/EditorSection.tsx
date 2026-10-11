@@ -1,3 +1,5 @@
+import { isSealedNoteId } from '../shared/helpGuide'
+import { useImageStorageButton } from './useImageStorageButton'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Dispatch, DragEvent, MouseEvent, MutableRefObject, SetStateAction } from 'react'
 import type { NoteSummary, NoteUiStatePayload } from '../shared/noteLifecycle'
@@ -73,7 +75,7 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   | 'onCollapseChapterIntoPrevious' | 'onExtractSelectionToChapter' | 'isViewingAutoTocChapter' | 'isViewingAutoOpenItemsChapter'
   | 'isViewingTimelessNote' | 'onToggleTimeless' | 'isForcedPreviewNote' | 'onToggleRenderViewMode'
   | 'splitArmedChapter' | 'onChapterPillMouseDown' | 'onChapterPillMouseUp' | 'onChapterPillMouseLeave' | 'onChapterPillContextMenu'
-  | 'onArchiveChapterClick' | 'onDeleteChapterClick'
+  | 'onArchiveChapterClick' | 'onDeleteChapterClick' | 'imageStorage'
   | 'isTagBarMode' | 'toggleTagBarMode' | 'tagBar'> {
   sectionId: string
   /**
@@ -1298,6 +1300,15 @@ export function EditorSection(rawProps: EditorSectionProps) {
     isViewingTimelessNote,
   })
 
+  const imageStorage = useImageStorageButton({
+    activeNoteId,
+    readEditorText,
+    editorTextVersion,
+    adapterRef,
+    canRewrite: !isViewingTimelessNote && !isPreviewingSnapshot && !isViewingEphemeralAutoChapter && !isSealedNoteId(activeNoteId),
+    createSnapshot: handleCreateManualSnapshot,
+  })
+
   // Plain render-time mutation, not an effect (same idiom as
   // activeNoteHasDebugTagRef.current's own assignment below) -- lets
   // handleManualSaveOrRefresh's own async closure below check, once its
@@ -2258,6 +2269,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
         setTimelineCurveConstant={setTimelineCurveConstant}
         setTimelineTrackLengthPx={setTimelineTrackLengthPx}
         handleCreateManualSnapshot={handleManualSaveOrRefresh}
+        imageStorage={imageStorage}
         handleReturnToPresent={handleReturnToPresent}
         handleMergeAdjacentSnapshots={handleMergeAdjacentSnapshots}
         notes={notes}

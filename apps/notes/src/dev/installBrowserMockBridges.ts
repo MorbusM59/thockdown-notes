@@ -2128,10 +2128,12 @@ function buildImagesBridge(): ImagesApi {
       const { width, height } = bitmap
       bitmap.close()
       const id = buildNextAutoImageId(images.keys())
-      images.set(id, { src: URL.createObjectURL(blob), width, height })
+      images.set(id, { src: URL.createObjectURL(blob), width, height, origin: null })
       return { ok: true, id }
     },
     resolveImages: async (ids) => Object.fromEntries(ids.map((id) => [id, images.get(id) ?? null])),
+    // The mock has no main process to download through.
+    storeImageSources: async (requests) => Object.fromEntries(requests.map(({ source }) => [source, { ok: false, reason: 'unsupported' }])),
   }
 }
 

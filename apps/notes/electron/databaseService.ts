@@ -69,7 +69,7 @@ import {
 } from '@thockdown/look/caretSettings';
 import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureMaterialSettings, type TextureMaterialsBySurface } from '@thockdown/look/textureTypes';
 import type { MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../src/shared/audioPlayer';
-import { buildNextAutoImageId, IMAGE_REFERENCE_SCANNER_VERSION, imageReferencesIn, MAX_STORED_IMAGE_BYTES, type ImageImportRequest, type ImageImportResult } from '../src/shared/images';
+import { buildNextAutoImageId, IMAGE_REFERENCE_SCANNER_VERSION, normalizeImageId, imageReferencesIn, MAX_STORED_IMAGE_BYTES, type ImageImportRequest, type ImageImportResult } from '../src/shared/images';
 import { sniffImage } from './imageSniff';
 import type { ReviewFlagEntry, ReviewFlagWrite, ReviewFlagRemap } from '../src/shared/reviewFlags';
 import { AUDIO_EXTENSIONS, emptyPlaylistCounts, isPlaylistSlot, MAX_PLAYLIST_SLOT } from '../src/shared/audioPlayer';
@@ -4333,14 +4333,30 @@ export class DatabaseService {
     const hash = createHash('sha256').update(bytes).digest('hex');
     const db = this.requireDb();
     return db.transaction((): ImageImportResult => {
-      const existing = db.prepare('SELECT id FROM images WHERE blobHash = ? AND origin IS ? ORDER BY createdAt LIMIT 1')
-        .get(hash, request.origin) as { id: string } | undefined;
-      if (existing) return { ok: true, id: existing.id };
+      const requested = request.requestedId ? normalizeImageId(request.requestedId) : null;
+      const blobOf = (id: string) => (db.prepare('SELECT blobHash FROM images WHERE id = ?').get(id) as { blobHash: string } | undefined)?.blobHash;
+      if (requested) {
+        // The name already means these bytes: nothing to store.
+        if (blobOf(requested) === hash) return { ok: true, id: requested };
+      } else {
+        const existing = db.prepare('SELECT id FROM images WHERE blobHash = ? AND origin IS ? ORDER BY createdAt LIMIT 1')
+          .get(hash, request.origin) as { id: string } | undefined;
+        if (existing) return { ok: true, id: existing.id };
+      }
       db.prepare(`
         INSERT OR IGNORE INTO image_blobs (hash, mime, width, height, byteLength, data) VALUES (?, ?, ?, ?, ?, ?)
       `).run(hash, sniffed.mime, sniffed.width, sniffed.height, bytes.byteLength, Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength));
-      const ids = (db.prepare('SELECT id FROM images').all() as Array<{ id: string }>).map((row) => row.id);
-      const id = buildNextAutoImageId(ids);
+      let id: string;
+      if (requested) {
+        // Taken by other bytes: the next free -n, which may itself already
+        // name these bytes from an earlier store.
+        id = requested;
+        for (let n = 2; blobOf(id) !== undefined && blobOf(id) !== hash; n += 1) id = `${requested}-${n}`;
+        if (blobOf(id) === hash) return { ok: true, id };
+      } else {
+        const ids = (db.prepare('SELECT id FROM images').all() as Array<{ id: string }>).map((row) => row.id);
+        id = buildNextAutoImageId(ids);
+      }
       db.prepare('INSERT INTO images (id, blobHash, origin, createdAt) VALUES (?, ?, ?, ?)')
         .run(id, hash, request.origin, new Date().toISOString());
       return { ok: true, id };
@@ -4348,13 +4364,16 @@ export class DatabaseService {
   }
 
   /** The stored image each id names: the hash its bytes are served under, and its size. */
-  resolveImages(ids: string[]): Record<string, { hash: string; width: number; height: number } | null> {
+  resolveImages(ids: string[]): Record<string, { hash: string; width: number; height: number; origin: string | null } | null> {
     const lookup = this.requireDb().prepare(`
-      SELECT images.blobHash AS hash, image_blobs.width AS width, image_blobs.height AS height
+      SELECT images.blobHash AS hash, image_blobs.width AS width, image_blobs.height AS height, images.origin AS origin
       FROM images JOIN image_blobs ON image_blobs.hash = images.blobHash WHERE images.id = ?
     `);
-    const resolved: Record<string, { hash: string; width: number; height: number } | null> = {};
-    for (const id of ids) resolved[id] = (lookup.get(id) as { hash: string; width: number; height: number } | undefined) ?? null;
+    const resolved: Record<string, { hash: string; width: number; height: number; origin: string | null } | null> = {};
+    for (const id of ids) {
+      const canonical = normalizeImageId(id);
+      resolved[id] = (canonical ? lookup.get(canonical) as { hash: string; width: number; height: number; origin: string | null } | undefined : undefined) ?? null;
+    }
     return resolved;
   }
 

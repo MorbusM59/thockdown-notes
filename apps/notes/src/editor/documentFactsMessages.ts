@@ -21,6 +21,7 @@
 
 import type { PersistedPreviewBlockCache } from '../shared/noteLifecycle'
 import type { DocumentFindHit } from './FindReplaceEngine'
+import type { DocumentImage } from './DocumentImages'
 
 /** Correlates a reply with its request; a stale reply is dropped, not applied. */
 interface RequestEnvelope {
@@ -46,7 +47,12 @@ export interface PreviewFindRequest extends RequestEnvelope {
   caseSensitive: boolean
 }
 
-export type DocumentFactsRequest = SplitRequest | PreviewFindRequest
+/** The images the document holds (DocumentImages.ts), for the store/restore toggle. */
+export interface ImagesRequest extends RequestEnvelope {
+  kind: 'images'
+}
+
+export type DocumentFactsRequest = SplitRequest | PreviewFindRequest | ImagesRequest
 
 export interface SplitRangesMessage {
   kind: 'split'
@@ -72,4 +78,10 @@ export interface PreviewFindHitsMessage {
   hits: DocumentFindHit[]
 }
 
-export type DocumentFactsResponse = SplitRangesMessage | PreviewFindHitsMessage
+export interface ImagesMessage {
+  kind: 'images'
+  id: number
+  images: DocumentImage[]
+}
+
+export type DocumentFactsResponse = SplitRangesMessage | PreviewFindHitsMessage | ImagesMessage

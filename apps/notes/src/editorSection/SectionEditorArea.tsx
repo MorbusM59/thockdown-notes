@@ -13,6 +13,8 @@ import type { ChapterEntry } from '../shared/chapters'
 import { resolveSpellCheckSurfaceState } from '../shared/spellCheckPolicy'
 import { ChapterBar } from '../chapters/ChapterBar'
 import { isSealedNoteId } from '../shared/helpGuide'
+import type { ImageStorageButton } from './useImageStorageButton'
+import { ImageStorageToggle } from './ImageStorageToggle'
 import type { ChapterPillSplitArm } from '../chapters/useChapterPillActions'
 import { EscapeHoldPanel, type ExportScope } from './EscapeHoldPanel'
 import { focusEscapeHoldRing } from './escapeHoldRingFocus'
@@ -89,6 +91,8 @@ export interface SectionEditorAreaProps {
   setTimelineTrackLengthPx: (value: number) => void
   /** The manual-save button's click handler -- creates a Time Machine save point for a real note, or (while isViewingAutoTocChapter/isViewingAutoOpenItemsChapter) regenerates that auto-chapter from live state instead. See EditorSection.tsx's handleManualSaveOrRefresh. */
   handleCreateManualSnapshot: () => void | Promise<void>
+  /** The image button between the word count and the timeline (useImageStorageButton). */
+  imageStorage: ImageStorageButton
   handleReturnToPresent: () => void
   handleMergeAdjacentSnapshots: () => void
   notes: NoteSummary[]
@@ -222,6 +226,7 @@ export function SectionEditorArea({
   setTimelineCurveConstant,
   setTimelineTrackLengthPx,
   handleCreateManualSnapshot,
+  imageStorage,
   handleReturnToPresent,
   handleMergeAdjacentSnapshots,
   notes,
@@ -647,6 +652,11 @@ export function SectionEditorArea({
             <span><b>{activeNoteDocumentStats.wordCount.toLocaleString()}</b> ({activeNoteDocumentStats.characterCount.toLocaleString()})</span>
           ) : null}
         </div>
+        {imageStorage.state !== 'none' ? (
+          <div className="chapter-toggle-panel">
+            <ImageStorageToggle button={imageStorage} />
+          </div>
+        ) : null}
         <div className="timeline-panel">
         {activeNoteId && !isViewingAutoTocChapter && !isViewingAutoOpenItemsChapter && !isViewingTimelessNote ? (
           <SnapshotTimelineSlider

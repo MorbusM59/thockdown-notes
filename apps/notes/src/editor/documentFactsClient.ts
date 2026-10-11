@@ -25,7 +25,7 @@
 // behaviour, so the fallback is a slow path rather than a broken one, and it
 // is what keeps this testable without a worker harness.
 
-import { splitMarkdownIntoPreviewBlocksIncremental, restorePreviewBlockSplitCacheFromRanges, type PreviewBlockSplitCache } from './PreviewBlockSplit'
+import { splitMarkdownIntoPreviewBlocksIncremental, splitPreviewBlockRangesProgressively, restorePreviewBlockSplitCacheFromRanges, type PreviewBlockSplitCache } from './PreviewBlockSplit'
 import type {
   DocumentFactsRequest,
   DocumentFactsResponse,
@@ -34,6 +34,7 @@ import type {
 } from './documentFactsMessages'
 import { buildPreviewVisibleDocumentFindHits, type DocumentFindHit } from './FindReplaceEngine'
 import type { PersistedPreviewBlockCache } from '../shared/noteLifecycle'
+import { documentImagesIn, type DocumentImage } from './DocumentImages'
 import { beginBackgroundWork, type BackgroundWorkHandle } from '../shared/backgroundWork'
 
 type PartialListener = (cache: PreviewBlockSplitCache) => void
@@ -73,6 +74,7 @@ let worker: Worker | null | undefined
 let nextRequestId = 1
 const pending = new Map<number, Pending>()
 const pendingFinds = new Map<number, PendingFind>()
+const pendingImages = new Map<number, { resolve: (images: DocumentImage[]) => void; text: string; work: BackgroundWorkHandle }>()
 // One parse per TEXT, not per asker. Two independent callers now want the
 // same map for the same note -- the background prewarm and the preview pane
 // itself -- and parsing a 2MB document twice because two of them asked is
@@ -86,6 +88,15 @@ function ensureWorker(): Worker | null {
   try {
     const created = new Worker(new URL('./documentFacts.worker.ts', import.meta.url), { type: 'module' })
     created.onmessage = (event: MessageEvent<DocumentFactsResponse>) => {
+      if (event.data.kind === 'images') {
+        const { id, images } = event.data
+        const waiting = pendingImages.get(id)
+        if (!waiting) return
+        pendingImages.delete(id)
+        waiting.work.done()
+        waiting.resolve(images)
+        return
+      }
       if (event.data.kind === 'find') {
         const { id, hits } = event.data as PreviewFindHitsMessage
         const waiting = pendingFinds.get(id)
@@ -135,6 +146,12 @@ function ensureWorker(): Worker | null {
       pendingByText.clear()
       inFlightByText.clear()
       pendingFinds.clear()
+      const orphanedImages = [...pendingImages.values()]
+      pendingImages.clear()
+      for (const waiting of orphanedImages) {
+        waiting.work.done()
+        waiting.resolve(documentImagesIn(waiting.text, splitPreviewBlockRangesProgressively))
+      }
       for (const waiting of orphanedFinds) {
         waiting.work.done()
         waiting.resolve([])
@@ -234,6 +251,23 @@ export function requestPreviewFindHits(
   return new Promise<DocumentFindHit[]>((resolve) => {
     pendingFinds.set(id, { resolve, work: beginBackgroundWork('document-find') })
     const request: DocumentFactsRequest = { kind: 'find', id, text, query, caseSensitive }
+    active.postMessage(request)
+  })
+}
+
+/**
+ * The images `text` holds (DocumentImages.ts), computed off the main thread;
+ * free for the note the last split was for, which the worker remembers.
+ */
+export function requestDocumentImages(text: string): Promise<DocumentImage[]> {
+  if (!text.includes('![')) return Promise.resolve([])
+  const active = ensureWorker()
+  if (!active) return Promise.resolve(documentImagesIn(text, splitPreviewBlockRangesProgressively))
+  const id = nextRequestId
+  nextRequestId += 1
+  return new Promise<DocumentImage[]>((resolve) => {
+    pendingImages.set(id, { resolve, text, work: beginBackgroundWork('document-images') })
+    const request: DocumentFactsRequest = { kind: 'images', id, text }
     active.postMessage(request)
   })
 }
