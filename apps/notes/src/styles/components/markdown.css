@@ -408,9 +408,7 @@
   overflow:      hidden;
   vertical-align: top;
   border-radius: var(--border-radius-small);
-  background:    var(--btn-bg-default);
   border:        1px solid var(--btn-border-default);
-  box-shadow:    var(--box-shadow-regular-light);
 }
 
 .markdown-preview img {
