@@ -69,6 +69,22 @@ function forget(id: string): void {
   requested.delete(id)
 }
 
+/** Forgets what an id showed, so it is asked again (the library changed it: trashed, restored, purged, renamed). */
+export function invalidateStoredImage(id: string): void {
+  const canonical = normalizeImageId(id)
+  if (!canonical) return
+  forget(canonical)
+  notify()
+}
+
+// Set by the library store, which imports this module: a stored image is a
+// change to the library's list too, and this way neither module imports the
+// other in a circle.
+let invalidateLibrary: (() => void) | null = null
+export function onStoredImagesChanged(listener: () => void): void {
+  invalidateLibrary = listener
+}
+
 /** What a set of ids shows, asked directly (the image button needs origins, not a render). */
 export async function resolveStoredImages(ids: string[]): Promise<Record<string, ResolvedImage | null>> {
   const api = window.thockdownImages
@@ -85,6 +101,7 @@ export async function storeImageSources(requests: ImageSourceRequest[]): Promise
   const results = await api.storeImageSources(requests).finally(() => work.done())
   for (const result of Object.values(results)) if (result.ok) forget(result.id)
   notify()
+  invalidateLibrary?.()
   return results
 }
 
@@ -96,6 +113,7 @@ export async function importStoredImage(importRequest: ImageImportRequest): Prom
   if (result.ok) {
     forget(result.id)
     notify()
+    invalidateLibrary?.()
   }
   return result
 }

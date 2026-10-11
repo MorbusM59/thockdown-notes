@@ -107,7 +107,7 @@ describe('planOverlayOpen', () => {
   })
 
   it('carries the note an undocked overlay is showing', () => {
-    const plan = planOverlayOpen('undocked', 'left', 'note-a', null, 'note-x')
+    const plan = planOverlayOpen('undocked', 'left', 'note-a', null, { noteId: 'note-x' })
     expect(plan.overlay.noteId).toBe('note-x')
   })
 })

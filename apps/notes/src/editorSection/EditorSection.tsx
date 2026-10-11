@@ -1663,6 +1663,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
   )
   const isShowingGuide = occupancy.kind === 'guide'
   const isShowingUndockedNote = occupancy.kind === 'undocked'
+  const shownImageId = occupancy.kind === 'image' ? occupancy.imageId : null
 
   /**
    * What the slot's render-mode control means right now -- non-null when
@@ -1680,9 +1681,9 @@ export function EditorSection(rawProps: EditorSectionProps) {
    */
   const exitSlotOverlay = useMemo<(() => void) | null>(() => {
     if (escapeMenu?.activeMode) return onEscapeHoldPanelClose
-    if (isShowingGuide) return onCloseSlotOverlay
+    if (isShowingGuide || shownImageId) return onCloseSlotOverlay
     return null
-  }, [escapeMenu?.activeMode, onEscapeHoldPanelClose, isShowingGuide, onCloseSlotOverlay])
+  }, [escapeMenu?.activeMode, onEscapeHoldPanelClose, isShowingGuide, shownImageId, onCloseSlotOverlay])
 
   const currentSectionHandle: SectionHandle = {
     ...editorSectionMountRest,
@@ -2155,6 +2156,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
         tabs={sectionTabsBundle}
         isShowingUndockedNote={isShowingUndockedNote}
         isShowingGuide={isShowingGuide}
+        shownImageId={shownImageId}
         onDockUndockedNoteHere={() => void handleDockUndockedNoteHere()}
         isSidebarVisible={isSidebarVisible}
         toggleSidebarVisible={toggleSidebarVisible}
@@ -2216,6 +2218,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
         onEscapeHoldExportMd={onEscapeHoldExportMd}
         onEscapeHoldOpenHelp={onEscapeHoldOpenHelp}
         escapeMenu={escapeMenu}
+        shownImageId={shownImageId}
         isExportingPdf={isExportingPdf}
         isExportingMd={isExportingMd}
         borderRadiusRegularPx={borderRadiusRegularPx}

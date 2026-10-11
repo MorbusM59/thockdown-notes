@@ -2,7 +2,7 @@ import { useEffect, useRef, type MutableRefObject, type RefObject } from 'react'
 import type { EditorAdapter } from '../editor/EditorContract'
 import { insertAtBlockStart, locateImage, moveImage, reshapeImage, sameAlt, type ImageEdit } from '../editor/ImagePlacement'
 import type { ImageAlignment, ImageLength, ImageLayout } from '../shared/imageLayout'
-import { isImageFile } from '../shared/images'
+import { IMAGE_DRAG_MIME_TYPE, imageMarkdown, isImageFile } from '../shared/images'
 import { importImageFilesAsMarkdown } from '../shared/storedImages'
 
 // SHAPING AN IMAGE IN THE RENDER VIEW, with the pointer:
@@ -17,8 +17,8 @@ import { importImageFilesAsMarkdown } from '../shared/storedImages'
 //                        for right, outward from the middle for centre)
 //   Ctrl + Shift + drag  resize width and height separately
 //
-// and dropping image files onto a block stores them and puts them at its
-// start. Without a modifier the pointer does what it always does there.
+// and dropping image files (or an image card from the library) onto a block
+// stores them and puts them at its start. Without a modifier the pointer does what it always does there.
 //
 // Each gesture ends in one edit of the note's text (ImagePlacement.ts),
 // applied through the editor so it is one undo step and is saved like
@@ -187,12 +187,24 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
     }
 
     const isImageDrag = (event: DragEvent) => Array.from(event.dataTransfer?.items ?? []).some((item) => item.kind === 'file')
+      || Boolean(event.dataTransfer?.types.includes(IMAGE_DRAG_MIME_TYPE))
     const handleDragOver = (event: DragEvent) => {
       if (!isImageDrag(event)) return
       event.preventDefault()
       if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
     }
     const handleDrop = (event: DragEvent) => {
+      // An image card from the library: already stored, so only referenced.
+      const libraryImageId = event.dataTransfer?.getData(IMAGE_DRAG_MIME_TYPE)
+      if (libraryImageId) {
+        event.preventDefault()
+        event.stopPropagation()
+        const line = blockLineAt(scroller, event.clientX, event.clientY)
+        if (line === null) return
+        const text = readEditorText()
+        apply(text, insertAtBlockStart(text, line, imageMarkdown('', libraryImageId)))
+        return
+      }
       const files = Array.from(event.dataTransfer?.files ?? []).filter(isImageFile)
       if (files.length === 0) return
       event.preventDefault()

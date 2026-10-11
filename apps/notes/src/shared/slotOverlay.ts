@@ -56,7 +56,7 @@
 
 import { HELP_GUIDE_NOTE_IDS } from './helpGuide'
 
-export type SlotOverlayKind = 'guide' | 'adventure' | 'undocked'
+export type SlotOverlayKind = 'guide' | 'adventure' | 'undocked' | 'image'
 
 /**
  * The one record. At most one overlay exists across the whole app: opening
@@ -70,6 +70,8 @@ export interface SlotOverlay {
   previousNoteId: string | null
   /** Only meaningful for 'undocked': which note is being shown out of place. */
   noteId?: string | null
+  /** Only meaningful for 'image': which stored image the slot shows (the image library, imageLibrary/). */
+  imageId?: string | null
 }
 
 /** What a given slot is actually showing, derived. */
@@ -78,6 +80,7 @@ export type SlotOccupancy =
   | { kind: 'guide' }
   | { kind: 'adventure' }
   | { kind: 'undocked'; noteId: string }
+  | { kind: 'image'; imageId: string }
 
 export const PLAIN_NOTE_OCCUPANCY: SlotOccupancy = { kind: 'note' }
 
@@ -102,6 +105,9 @@ export function occupancyOf(
     // Corroborated, always: the record alone is never enough to claim a
     // slot is showing something.
     if (overlay.kind === 'adventure' && activeNoteId === null) return { kind: 'adventure' }
+    // Like the adventure, an image empties the slot it is shown in, so a
+    // note arriving there is the reader leaving it.
+    if (overlay.kind === 'image' && overlay.imageId && activeNoteId === null) return { kind: 'image', imageId: overlay.imageId }
     if (overlay.kind === 'undocked' && overlay.noteId && activeNoteId === overlay.noteId) {
       return { kind: 'undocked', noteId: overlay.noteId }
     }
@@ -204,7 +210,7 @@ export function planOverlayOpen(
   sectionId: string,
   currentNoteId: string | null,
   current: SlotOverlay | null,
-  noteId?: string | null,
+  detail: { noteId?: string | null; imageId?: string | null } = {},
 ): SlotOverlayOpenPlan {
   const heldHere = current?.sectionId === sectionId ? current : null
   const previousNoteId = heldHere ? heldHere.previousNoteId : currentNoteId
@@ -215,7 +221,13 @@ export function planOverlayOpen(
       : null
 
   return {
-    overlay: { kind, sectionId, previousNoteId, ...(noteId === undefined ? {} : { noteId }) },
+    overlay: {
+      kind,
+      sectionId,
+      previousNoteId,
+      ...(detail.noteId === undefined ? {} : { noteId: detail.noteId }),
+      ...(detail.imageId === undefined ? {} : { imageId: detail.imageId }),
+    },
     handback,
   }
 }

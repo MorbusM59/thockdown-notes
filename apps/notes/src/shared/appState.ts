@@ -165,6 +165,8 @@ export interface PersistedMenuState {
   pitchJitterAmount?: number;
   audioSpatial?: number;
   reduceVisualEffects?: boolean;
+  /** The sidebar's date/category/archive/trash views list stored images instead of notes (imageLibrary/). */
+  sidebarShowsImages?: boolean;
   /** Remote (http/https) images in notes load. Off unless the reader held the toggle on; see src/shared/remoteImages.ts. */
   allowRemoteImages?: boolean;
   reducedCaretAnimation?: boolean;

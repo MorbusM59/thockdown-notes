@@ -21,6 +21,8 @@ import { focusEscapeHoldRing } from './escapeHoldRingFocus'
 import { splitChapterFamily } from '../shared/chapters'
 import type { EscapeMenuContribution } from '../escapeMenu/escapeMenuContract'
 import { EscapeMenuChromeBarRow, EscapeMenuChromeGauges, EscapeMenuChromeStatsRow } from '../escapeMenu/EscapeMenuStatus'
+import { ImageSlotView } from '../imageLibrary/ImageSlotView'
+import { ImageTagBar } from '../imageLibrary/ImageTagBar'
 
 export interface SectionEditorAreaProps {
   sectionId: string
@@ -53,6 +55,8 @@ export interface SectionEditorAreaProps {
   onEscapeHoldOpenHelp: () => void | Promise<void>
   /** Passed straight through to EscapeHoldPanel -- see its own `escapeMenu` prop and escapeMenuContract.ts. */
   escapeMenu?: EscapeMenuContribution | null
+  /** The library image this slot shows instead of a note (the 'image' slot overlay); null when it shows none. */
+  shownImageId?: string | null
   isExportingPdf: boolean
   isExportingMd: boolean
   /** Live user-configurable corner-radius/spacing base units (options menu sliders) -- threaded through so the escape-hold ring (escapeHoldRingLayout.ts) recomputes to match .editor-empty-state's actual on-screen shape instead of drifting from a stale hardcoded mirror. */
@@ -192,6 +196,7 @@ export function SectionEditorArea({
   onEscapeHoldExportMd,
   onEscapeHoldOpenHelp,
   escapeMenu,
+  shownImageId = null,
   isExportingPdf,
   isExportingMd,
   borderRadiusRegularPx,
@@ -320,7 +325,7 @@ export function SectionEditorArea({
   const [activeRingCellId, setActiveRingCellId] = useState<string | null>(null)
   const activeRingCellDetail = escapeMenu?.activeMode?.cells
     .find((cell) => cell.id === activeRingCellId)?.detail ?? null
-  const isEmptyStateVisible = !activeNoteId || isEscapeHoldActive
+  const isEmptyStateVisible = (!activeNoteId && !shownImageId) || isEscapeHoldActive
 
   // The reroll easter egg is disabled while the quick-actions panel is up --
   // otherwise every click on the grid's own padding/gaps (anything that
@@ -355,7 +360,7 @@ export function SectionEditorArea({
   // NARRATION here. Its state goes to the tab bar above instead -- see
   // EscapeMenuStatus.tsx for why the two are split that way round.
   const modeStatus = escapeMenu?.activeMode?.status ?? null
-  const isChapterPanelOpen = Boolean(activeNoteId) || Boolean(modeStatus)
+  const isChapterPanelOpen = Boolean(activeNoteId) || Boolean(modeStatus) || Boolean(shownImageId)
 
   // isViewingAutoTocChapter/isViewingAutoOpenItemsChapter (props -- see
   // their own doc comment) each make the editor read-only below, for
@@ -482,6 +487,7 @@ export function SectionEditorArea({
                 `isOpen` prop -- so EscapeHoldPanel's focus-management (also
                 keyed off `isOpen`, not mount) keeps working across repeated
                 opens. */}
+            {shownImageId && !isEscapeHoldActive ? <ImageSlotView imageId={shownImageId} /> : null}
             <div className={`editor-empty-state-plate${isEmptyStateVisible ? ' is-visible' : ''}`}/>
             <div
               className={`editor-empty-state${isEmptyStateVisible ? ' is-visible' : ''}`}
@@ -552,6 +558,8 @@ export function SectionEditorArea({
       <div className={`chapter-panel${isChapterPanelOpen ? ' is-open' : ''}`} aria-hidden={!isChapterPanelOpen}>
         {modeStatus ? (
           <EscapeMenuChromeBarRow status={modeStatus} detail={activeRingCellDetail} />
+        ) : shownImageId ? (
+          <ImageTagBar imageId={shownImageId} />
         ) : activeNoteId && menuIdentityNoteId ? (
           <ChapterBar
             parentNoteId={menuIdentityNoteId}

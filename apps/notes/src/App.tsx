@@ -260,6 +260,9 @@ import { TEXTURE_ALGORITHM_VERSION, TEXTURE_REPEAT_TILE_SIZE, useTextureSurface 
 import { armHold, HOLD_COMMIT_MS, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { noteRightPressAction } from './editorSection/useNoteProtectionActions'
 import { WorkIndicatorGlyph } from './components/WorkIndicatorGlyph'
+import { ImageLibraryList } from './imageLibrary/ImageLibraryList'
+import { registerImageLibraryHost } from './imageLibrary/imageLibraryStore'
+import type { ImageLibraryView } from './imageLibrary/imageLibraryViews'
 import { armPointerDrag } from './shared/pointerDrag'
 import { clamp } from '@thockdown/interaction/clamp'
 import { stableStringify } from './shared/stableStringify'
@@ -1938,6 +1941,11 @@ function App() {
   }, [measuredMinHeightPx, sidebarWidthPx, spacingRegularPx])
   const [editorFontLoadVersion, setEditorFontLoadVersion] = useState(0)
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('date')
+  // Whether the date/category/archive/trash views list stored images
+  // (imageLibrary/) rather than notes: a right-click on one of those view
+  // selectors switches, which is why it is one flag across the four views
+  // rather than four more modes.
+  const [sidebarShowsImages, setSidebarShowsImages] = useState(false)
   const [lastSidebarModeBeforeOptions, setLastSidebarModeBeforeOptions] = useState<Exclude<SidebarMode, 'options'>>('date')
   const [sidebarViewStateByMode, setSidebarViewStateByMode] = useState<SidebarViewStateByMode>(() => createDefaultSidebarViewStateByMode())
   const [selectedMonths, setSelectedMonths] = useState<Set<number>>(new Set())
@@ -2144,6 +2152,9 @@ function App() {
    * therefore be wrong about the screen, because nothing asks it.
    */
   const [slotOverlay, setSlotOverlay] = useState<SlotOverlay | null>(null)
+  // Read by callbacks registered once (registerImageLibraryHost); plain assignment every render.
+  const slotOverlayRef = useRef(slotOverlay)
+  slotOverlayRef.current = slotOverlay
   /**
    * What each slot reports it is actually showing (shared/slotOverlay.ts's
    * `occupancyOf`, evaluated by the section itself, which is the only thing
@@ -4144,6 +4155,7 @@ function App() {
     reviewFlagsVisibleBySection?: Record<string, boolean>
     adventure?: GameSave | null
     allowRemoteImages?: boolean
+    sidebarShowsImages?: boolean
   }): PersistedMenuState => {
     const effectiveViewStateByMode = overrides?.sidebarViewStateByMode ?? sidebarViewStateByMode
 
@@ -4283,6 +4295,7 @@ function App() {
       // rather than being reset to whatever each layout last had stored.
       reduceVisualEffects,
       allowRemoteImages: overrides?.allowRemoteImages ?? allowRemoteImages,
+      sidebarShowsImages: overrides?.sidebarShowsImages ?? sidebarShowsImages,
       reducedCaretAnimation,
       deferPreviewOnRapidInput,
       noteSizeThresholdBlocks,
@@ -4299,6 +4312,7 @@ function App() {
     spellCheckEnabled,
     reduceVisualEffects,
     allowRemoteImages,
+    sidebarShowsImages,
     reducedCaretAnimation,
     deferPreviewOnRapidInput,
     noteSizeThresholdBlocks,
@@ -5372,11 +5386,11 @@ ${markdownHtml}
    * here: two openers agreeing about a rule that fiddly by copying each
    * other is what produced the original defect that module documents.
    */
-  const openOverlayHere = useCallback((kind: SlotOverlayKind, noteId?: string | null): { sectionId: string } | null => {
+  const openOverlayHere = useCallback((kind: SlotOverlayKind, detail?: { noteId?: string | null; imageId?: string | null }): { sectionId: string } | null => {
     const targetSectionId = activeSectionId
     if (!targetSectionId) return null
 
-    const plan = planOverlayOpen(kind, targetSectionId, getActiveSection()?.activeNoteId ?? null, slotOverlay, noteId)
+    const plan = planOverlayOpen(kind, targetSectionId, getActiveSection()?.activeNoteId ?? null, slotOverlay, detail)
     setSlotOverlay(plan.overlay)
     persistMenuStateNow({ slotOverlay: plan.overlay })
 
@@ -5505,6 +5519,37 @@ ${markdownHtml}
    * copy of that rule -- and the copy is what let a reload restore the
    * overlay without it.
    */
+  /**
+   * An image from the library, shown in the active slot (the overlay empties
+   * it, as the adventure does). Escape, or a note arriving there, gives the
+   * slot back; opening another image keeps the same return.
+   */
+  const openImageViewHere = useCallback(async (imageId: string) => {
+    const handle = getActiveSection()
+    if (!openOverlayHere('image', { imageId })) return
+    await handle?.clearActiveNote().catch(() => undefined)
+  }, [getActiveSection, openOverlayHere])
+
+  // A rename from the image tag bar edits the notes open here and moves the
+  // overlay record to the new name (imageLibraryStore.ts's renameImage).
+  useEffect(() => {
+    registerImageLibraryHost({
+      openNoteEditors: () => [...sectionRegistryRef.current.values()].flatMap((handle) => {
+        if (!handle.activeNoteId || handle.previewedSnapshotId !== null) return []
+        const adapter = handle.adapterRef.current
+        if (!adapter) return []
+        return [{ noteId: handle.activeNoteId, readText: handle.readEditorText, applyEdit: (changes, text) => adapter.applyEdit(changes, text) }]
+      }),
+      onImageRenamed: (fromId, toId) => {
+        const current = slotOverlayRef.current
+        if (current?.kind !== 'image' || current.imageId !== fromId) return
+        const next = { ...current, imageId: toId }
+        setSlotOverlay(next)
+        persistMenuStateNowRef.current({ slotOverlay: next })
+      },
+    })
+  }, [])
+
   const openAdventureViewHere = useCallback(async () => {
     const handle = getActiveSection()
     if (!openOverlayHere('adventure')) return
@@ -6295,6 +6340,7 @@ ${markdownHtml}
             setAudioSpatial(appState.menu.audioSpatial ?? 0)
             setReduceVisualEffects(appState.menu.reduceVisualEffects ?? false)
             setRemoteImagesAllowed(appState.menu.allowRemoteImages === true)
+            setSidebarShowsImages(appState.menu.sidebarShowsImages === true)
             setReducedCaretAnimation(appState.menu.reducedCaretAnimation ?? false)
             setDeferPreviewOnRapidInput(appState.menu.deferPreviewOnRapidInput ?? false)
             // Clamped on the way in as well as on the way out: a stored value
@@ -7867,8 +7913,14 @@ ${markdownHtml}
 
   const totalPages = Math.max(1, Math.ceil(totalPagedNotes / Math.max(1, itemsPerPage)))
   const effectiveCurrentPage = Math.min(Math.max(1, currentPage), totalPages)
+  // The image library takes over the date/category/archive/trash views; it
+  // scrolls like the tree views, never pages.
+  // The image the active slot shows, so its card reads as selected.
+  const activeOccupancy = activeSectionId ? liveOccupancyBySectionId[activeSectionId] : undefined
+  const shownImageId = activeOccupancy?.kind === 'image' ? activeOccupancy.imageId : null
+  const isImageLibraryShown = sidebarShowsImages && (sidebarMode === 'date' || sidebarMode === 'category' || sidebarMode === 'archive' || sidebarMode === 'trash')
   const isSidebarTreeMode = sidebarMode === 'category' || sidebarMode === 'archive'
-  const isSidebarCustomScrollbarMode = isSidebarTreeMode || isFindMode
+  const isSidebarCustomScrollbarMode = isSidebarTreeMode || isFindMode || isImageLibraryShown
   const isSidebarScrollbarMode = isSidebarCustomScrollbarMode || sidebarMode === 'options'
 
   // Direct-DOM helpers: per-frame scroll events would otherwise trigger React
@@ -7960,6 +8012,27 @@ ${markdownHtml}
   ])
 
   const activeSection = activeSectionSnapshot
+
+  // A right-click on the date, category or archive selector switches the
+  // sidebar between notes and images, landing on that view. The trash's and
+  // find's right-clicks already act (purge, replace all); the trash follows
+  // whichever the others show.
+  const handleImageLibraryToggle = useCallback((event: MouseEvent<HTMLButtonElement>, mode: SidebarMode) => {
+    event.preventDefault()
+    event.stopPropagation()
+    // On the view already shown: flip. On another view: go there, showing images.
+    const next = mode === sidebarMode ? !sidebarShowsImages : true
+    setSidebarShowsImages(next)
+    if (mode === sidebarMode) {
+      persistMenuStateNowRef.current({ sidebarShowsImages: next })
+      return
+    }
+    const section = getActiveSection()
+    section?.setIsTrashViewDeletePrimed(false)
+    section?.clearTrashButtonArmTimer()
+    // One persist for both changes (see persistMenuStateOnce).
+    runSidebarMenuTransition(mode, { sidebarShowsImages: next })
+  }, [getActiveSection, runSidebarMenuTransition, sidebarMode, sidebarShowsImages])
 
   const handleFindViewButtonContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault()
@@ -9282,20 +9355,24 @@ ${markdownHtml}
                   return (
                     <button
                       key={mode}
-                      className={`toggle-btn notes-mode-button icon-btn ${iconClassByMode[mode]}${isActive ? ' is-active' : ''}${mode === 'trash' && activeSection?.isTrashViewDeletePrimed ? ' is-primed-for-deletion' : ''}`}
+                      className={`toggle-btn notes-mode-button icon-btn ${iconClassByMode[mode]}${isActive ? ' is-active' : ''}${isImageLibraryShown && mode !== 'find' && mode !== 'options' ? ' is-showing-images' : ''}${mode === 'trash' && activeSection?.isTrashViewDeletePrimed ? ' is-primed-for-deletion' : ''}`}
                       type="button"
                       role="tab"
                       aria-selected={isActive}
-                      data-tooltip={label}
+                      data-tooltip={mode === 'date' || mode === 'category' || mode === 'archive'
+                        ? `${isImageLibraryShown ? `${label} (images)` : label}. Right-click: ${isImageLibraryShown && isActive ? 'notes' : 'images'}`
+                        : label}
                       aria-label={label}
                       onClick={mode === 'options' ? toggleSidebarOptionsMenu : () => handleViewModeButtonClick(mode)}
-                      data-secondary-press={mode === 'trash' || mode === 'find' ? 'action' : 'none'}
+                      data-secondary-press={mode === 'options' ? 'none' : 'action'}
                       onContextMenu={
                         mode === 'trash'
                           ? activeSection?.handleTrashViewButtonContextMenu
                           : mode === 'find'
                             ? handleFindViewButtonContextMenu
-                            : undefined
+                            : mode === 'options'
+                              ? undefined
+                              : (event) => handleImageLibraryToggle(event, mode)
                       }
                       onMouseDown={mode === 'trash' ? activeSection?.handleTrashViewButtonMouseDown : undefined}
                       onMouseUp={mode === 'trash' ? activeSection?.handleTrashViewButtonMouseUp : undefined}
@@ -9324,12 +9401,27 @@ ${markdownHtml}
               <div className={`sidebar-scroll-frame${isSidebarCustomScrollbarMode ? ' is-tree-mode' : ''}`}>
                 <div className="sidebar-wrapper">
                   <div
-                    className={`sidebar-content${(sidebarMode === 'date' || sidebarMode === 'trash') ? ' is-paged-mode' : ''}${isSidebarCustomScrollbarMode ? ' is-tree-mode' : ''}${isSidebarScrollbarMode && !isSidebarCustomScrollbarMode ? ' is-scrollbar-mode' : ''}`}
+                    className={`sidebar-content${(sidebarMode === 'date' || sidebarMode === 'trash') && !isImageLibraryShown ? ' is-paged-mode' : ''}${isSidebarCustomScrollbarMode ? ' is-tree-mode' : ''}${isSidebarScrollbarMode && !isSidebarCustomScrollbarMode ? ' is-scrollbar-mode' : ''}`}
                     ref={sidebarContentRef}
                     onScroll={handleSidebarScroll}
                   >
                     <div ref={sidebarTextureRef} className="sidebar-content-texture" />
-                    {(sidebarMode === 'date' || sidebarMode === 'trash') ? (
+                    {isImageLibraryShown ? (
+                      <div
+                        className="notes-list tree-view image-library-view thockdown-custom-scrollbar"
+                        ref={setSidebarTreeScrollerEl}
+                        role="listbox"
+                        aria-label="Image library"
+                      >
+                        <ImageLibraryList
+                          view={sidebarMode as ImageLibraryView}
+                          searchQuery={searchQuery}
+                          caseSensitive={isSearchQueryCaseSensitive}
+                          activeImageId={shownImageId}
+                          onOpen={openImageViewHere}
+                        />
+                      </div>
+                    ) : (sidebarMode === 'date' || sidebarMode === 'trash') ? (
                       <div
                         className={`notes-list date-view${hasDateFilter ? ' is-filtered' : ''}`}
                         role="listbox"
@@ -9771,7 +9863,7 @@ ${markdownHtml}
                 ) : null}
               </div>
 
-              {showPagination ? (
+              {showPagination && !isImageLibraryShown ? (
                 <div className="sidebar-pagination" aria-label="Sidebar pagination">
                   <button
                     type="button"
@@ -9839,11 +9931,11 @@ ${markdownHtml}
                 </div>
               ) : null}
 
-              {(sidebarMode === 'options' || isFindMode) ? (
+              {(sidebarMode === 'options' || isFindMode || isImageLibraryShown) ? (
                 <div className="date-filter-rail date-filter-rail-placeholder" aria-hidden="true" />
               ) : null}
 
-              {(sidebarMode === 'date' || sidebarMode === 'trash' || isSidebarTreeMode) ? (
+              {(sidebarMode === 'date' || sidebarMode === 'trash' || isSidebarTreeMode) && !isImageLibraryShown ? (
                 <div className="date-filter-rail" aria-label="Date filters">
                   <div
                     className="date-filter-line"

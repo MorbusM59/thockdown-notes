@@ -1277,10 +1277,15 @@ function registerIpcHandlers() {
     resolveImages: async (_event, ids: string[]) => {
       const resolved: Record<string, ResolvedImage | null> = {};
       for (const [id, image] of Object.entries(databaseService!.resolveImages(ids))) {
-        resolved[id] = image && { src: `${IMAGE_SCHEME}://stored/${image.hash}`, width: image.width, height: image.height, origin: image.origin };
+        resolved[id] = image && { src: `${IMAGE_SCHEME}://stored/${image.hash}`, width: image.width, height: image.height, origin: image.origin, trashed: image.trashed === 1 };
       }
       return resolved;
     },
+    listImages: async () => databaseService!.listImages().map(({ hash, ...image }) => ({ ...image, src: `${IMAGE_SCHEME}://stored/${hash}` })),
+    setImageTags: async (_event, id: string, tags: string[]) => databaseService!.setImageTags(id, tags),
+    setImageTrashed: async (_event, id: string, trashed: boolean) => databaseService!.setImageTrashed(id, trashed),
+    purgeImage: async (_event, id: string) => databaseService!.purgeImage(id),
+    renameImage: async (_event, request: { id: string; newId: string; openNoteIds: string[] }) => databaseService!.renameImage(request),
     storeImageSources: async (_event, requests: ImageSourceRequest[]) => {
       const results: Record<string, ImageSourceResult> = {};
       for (const { source, requestedId } of requests) {

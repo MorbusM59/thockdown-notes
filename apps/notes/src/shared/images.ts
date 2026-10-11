@@ -15,6 +15,11 @@ export const IMAGE_CHANNELS = {
   importImage: 'images:import',
   resolveImages: 'images:resolve',
   storeImageSources: 'images:store-sources',
+  listImages: 'images:list',
+  setImageTags: 'images:set-tags',
+  setImageTrashed: 'images:set-trashed',
+  purgeImage: 'images:purge',
+  renameImage: 'images:rename',
 } as const satisfies InvokeChannels<ImagesApi>
 
 /** The scheme stored images are served under (electron/main.ts). */
@@ -67,6 +72,32 @@ export interface ResolvedImage {
   height: number
   /** The URL or file path it was stored from; null for a clipboard image. */
   origin: string | null
+  /** In the library's trash: a note still using it shows that instead of the picture. */
+  trashed: boolean
+}
+
+/**
+ * One stored image as the library lists it. Whether it is ARCHIVED is not
+ * stored anywhere: an image no note's current text uses is archived
+ * (`useCount === 0`), so the library can never disagree with the notes.
+ * Trash is the one deliberate state, and an image in it is in no other view.
+ */
+export interface StoredImageSummary {
+  id: string
+  src: string
+  width: number
+  height: number
+  mime: string
+  byteLength: number
+  origin: string | null
+  /** ISO time it was first stored. */
+  createdAt: string
+  /** The image's own tags, in order (an image's tags are not its notes'). */
+  tags: string[]
+  /** How many notes' current text uses it. */
+  useCount: number
+  /** ISO time it was put in the trash; null when it is not there. */
+  trashedAt: string | null
 }
 
 export interface ImagesApi {
@@ -84,7 +115,30 @@ export interface ImagesApi {
    * hold, which is the reader's consent to reach the web for these.
    */
   storeImageSources(requests: ImageSourceRequest[]): Promise<Record<string, ImageSourceResult>>
+  /** Every stored image, newest first. */
+  listImages(): Promise<StoredImageSummary[]>
+  /** Replaces an image's tags (normalized like a note's, duplicates dropped); answers what was kept. */
+  setImageTags(id: string, tags: string[]): Promise<string[]>
+  /** Puts an image in the trash or takes it out. */
+  setImageTrashed(id: string, trashed: boolean): Promise<void>
+  /**
+   * Removes an image that is in the trash for good: its name, tags and, when
+   * no other name uses them, its bytes. False when it is not in the trash.
+   */
+  purgeImage(id: string): Promise<boolean>
+  /**
+   * Renames an image and rewrites every note whose current text uses it,
+   * except those in `openNoteIds`: an open note gets the change as an editor
+   * edit instead (so neither its undo history nor an unsaved edit is written
+   * over), which the caller applies with renameImageReferences. Frozen notes
+   * and snapshots keep the old name, which goes on resolving through an alias.
+   */
+  renameImage(request: { id: string; newId: string; openNoteIds: string[] }): Promise<ImageRenameResult>
 }
+
+export type ImageRenameResult =
+  | { ok: true; id: string; rewrittenNoteIds: string[] }
+  | { ok: false; reason: 'invalid' | 'taken' | 'missing' }
 
 // An id is `&` and at least one character that is not whitespace, `;`
 // (CommonMark would read `&NAME;` as a character entity), a bracket, a quote
@@ -115,6 +169,8 @@ export function buildNextAutoImageId(existingIds: Iterable<string>): string {
 
 // An image whose destination is a stored id: `![alt](&ID` or `![alt](<&ID>`.
 const IMAGE_REFERENCE = /!\[[^\]\n]*\]\([ \t]*<?(&[^\s;()"'&<>]+)/g
+// The same, with everything before the id captured, for rewriting it.
+const IMAGE_REFERENCE_WITH_PREFIX = /(!\[[^\]\n]*\]\([ \t]*<?)(&[^\s;()"'&<>]+)/g
 
 /**
  * Bump when imageReferencesIn changes what it finds: the reference index is
@@ -138,6 +194,41 @@ export function imageReferencesIn(text: string): string[] {
   }
   return [...ids]
 }
+
+/**
+ * The edits that point every image reference to `fromId` in `text` at `toId`
+ * instead (empty when it has none), in the text's own coordinates. Matches
+ * the way imageReferencesIn finds them, so a rename reaches exactly what the
+ * reference index counted.
+ */
+export function imageReferenceRenameEdits(text: string, fromId: string, toId: string): Array<{ from: number; to: number; insert: string }> {
+  const from = normalizeImageId(fromId)
+  if (!from) return []
+  const edits: Array<{ from: number; to: number; insert: string }> = []
+  IMAGE_REFERENCE_WITH_PREFIX.lastIndex = 0
+  for (let match = IMAGE_REFERENCE_WITH_PREFIX.exec(text); match; match = IMAGE_REFERENCE_WITH_PREFIX.exec(text)) {
+    if (normalizeImageId(match[2]) !== from) continue
+    const at = match.index + match[1].length
+    edits.push({ from: at, to: at + match[2].length, insert: toId })
+  }
+  return edits
+}
+
+/** `text` with imageReferenceRenameEdits applied, or null when there was nothing to rename. */
+export function renameImageReferences(text: string, fromId: string, toId: string): string | null {
+  const edits = imageReferenceRenameEdits(text, fromId, toId)
+  if (edits.length === 0) return null
+  let next = ''
+  let at = 0
+  for (const edit of edits) {
+    next += text.slice(at, edit.from) + edit.insert
+    at = edit.to
+  }
+  return next + text.slice(at)
+}
+
+/** The drag payload of an image card from the library (imageLibrary/): the image's id. */
+export const IMAGE_DRAG_MIME_TYPE = 'application/x-thockdown-image'
 
 /** The Markdown a newly stored image is inserted as. */
 export function imageMarkdown(alt: string, id: string): string {

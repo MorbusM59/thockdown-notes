@@ -1,3 +1,4 @@
+import { ImageOriginPill } from '../imageLibrary/ImageOriginPill'
 import type { CSSProperties, MouseEvent, RefObject } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import { isArchivedNote, isDeletedNote } from '../shared/noteLifecycle'
@@ -69,6 +70,8 @@ export interface SectionTabBarProps {
    * a manual with no way out is the wrong kind of surprise.
    */
   isShowingGuide: boolean
+  /** The library image this slot shows (the 'image' slot overlay): the identity reads "Image" and the strip says where it came from. */
+  shownImageId?: string | null
   /**
    * Set while a mode owns this slot (escapeMenuContract.ts) -- there is no
    * note, so the identity pill says what the slot IS holding instead of a
@@ -130,6 +133,7 @@ export function SectionTabBar({
   onCancelSectionRename,
   isShowingUndockedNote,
   isShowingGuide,
+  shownImageId = null,
   modeStatus,
   onDockUndockedNoteHere,
   onIdentityClick,
@@ -225,18 +229,18 @@ export function SectionTabBar({
             <button
               type="button"
               className={`tag-pill section-identity-tab${isSectionPickerOpen ? ' is-active' : ''}`}
-              onClick={modeStatus || isShowingGuide ? undefined : onIdentityClick}
-              data-secondary-press={modeStatus || isShowingGuide ? 'none' : 'action'}
-              onContextMenu={modeStatus || isShowingGuide ? undefined : onIdentityContextMenu}
+              onClick={modeStatus || isShowingGuide || shownImageId ? undefined : onIdentityClick}
+              data-secondary-press={modeStatus || isShowingGuide || shownImageId ? 'none' : 'action'}
+              onContextMenu={modeStatus || isShowingGuide || shownImageId ? undefined : onIdentityContextMenu}
               data-tooltip={
-                modeStatus || isShowingGuide
+                modeStatus || isShowingGuide || shownImageId
                   ? undefined
                   : isShowingUndockedNote
                   ? `Left click: Pick a collection for this note.\nRight click: Return to ${sectionName ?? '···'}.`
                   : 'Left click: Pick a collection for this slot.\nRight click: Rename this collection.'
               }
             >
-              <span className="tag-pill-label">{modeStatus ? modeStatus.title : isShowingGuide ? 'User Guide' : (isShowingUndockedNote ? '' : (sectionName ?? '···'))}</span>
+              <span className="tag-pill-label">{modeStatus ? modeStatus.title : isShowingGuide ? 'User Guide' : shownImageId ? 'Image' : (isShowingUndockedNote ? '' : (sectionName ?? '···'))}</span>
             </button>
           )}
       </div>
@@ -260,6 +264,8 @@ export function SectionTabBar({
                   state goes here and narration goes to the bar below. */}
               {modeStatus ? (
                 <EscapeMenuReadouts status={modeStatus} />
+              ) : shownImageId ? (
+                <ImageOriginPill imageId={shownImageId} />
               ) : isShowingGuide ? null : isShowingUndockedNote && !isSectionPickerOpen ? null : isSectionPickerOpen ? (
                 <div className="tabbar-section-picker" aria-live="polite">
                   {activeNoteId || sectionName !== null || pinnedTabs.length > 0 ? (

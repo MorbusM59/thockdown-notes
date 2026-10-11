@@ -15,7 +15,7 @@ import { readSelectionLineRects } from '../editor/SelectionRects';
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming';
 import { isOffsetInFencedCodeBlock } from '../editor/MarkdownContext';
 import { isTableCellDragStart, resolveTableCellDrop, resolveTableSelectionStep } from '../editor/MarkdownTableTransforms';
-import { isImageFile } from '../shared/images';
+import { IMAGE_DRAG_MIME_TYPE, imageMarkdown, isImageFile } from '../shared/images';
 import { malformedImageTitlesOnLine, resolveImageSelectionStep } from '../editor/MarkdownImageTransforms';
 import { hasTravelledDragThreshold } from '../shared/pointerDrag';
 import { createWheelNotchState, resolveWheelEventUnits } from '../editor/wheelNotch';
@@ -911,14 +911,19 @@ function insertImageFiles(
   void importImageFiles(files).then((markdown) => {
     set.delete(pending);
     if (!markdown || !view.dom.isConnected || documentKey() !== startedOn || view.state.readOnly) return;
-    const doc = view.state.doc;
-    const at = Math.min(pending.pos, doc.length);
-    const line = doc.lineAt(at);
-    const before = at > line.from ? '\n' : '';
-    const after = at < line.to ? '\n' : '';
-    const insert = `${before}${markdown}${after}`;
-    view.dispatch({ changes: { from: at, insert }, selection: { anchor: at + before.length + markdown.length }, userEvent: 'input.drop' });
+    insertImageMarkdown(view, pending.pos, markdown);
   }, () => { set.delete(pending); });
+}
+
+/** Inserts image Markdown at `pos` on a line (or lines) of its own, as a drop. */
+function insertImageMarkdown(view: EditorView, pos: number, markdown: string): void {
+  const doc = view.state.doc;
+  const at = Math.min(pos, doc.length);
+  const line = doc.lineAt(at);
+  const before = at > line.from ? '\n' : '';
+  const after = at < line.to ? '\n' : '';
+  const insert = `${before}${markdown}${after}`;
+  view.dispatch({ changes: { from: at, insert }, selection: { anchor: at + before.length + markdown.length }, userEvent: 'input.drop' });
 }
 
 function readNoText(): string {
@@ -4171,6 +4176,16 @@ export function CM6Editor({
         // drop point (App.tsx's window drop handler leaves image files to the
         // editor). Anything else dropped keeps CM6's handling.
         drop: (event, view) => {
+          // An image card from the library: already stored, so only referenced.
+          const libraryImageId = event.dataTransfer?.getData(IMAGE_DRAG_MIME_TYPE);
+          if (libraryImageId) {
+            event.preventDefault();
+            if (view.state.readOnly) return true;
+            const pos = view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.head;
+            insertImageMarkdown(view, pos, imageMarkdown('', libraryImageId));
+            view.focus();
+            return true;
+          }
           const files = imageFilesOf(event.dataTransfer);
           const importImageFiles = bindingsRef.current?.importImageFiles;
           if (files.length === 0 || !importImageFiles) return false;

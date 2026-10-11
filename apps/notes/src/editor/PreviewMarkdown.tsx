@@ -73,6 +73,7 @@ function StoredPreviewImage({ id, alt, title, sourceLine }: PreviewImageProps & 
   // count the images drawn from a line the same way the text counts them.
   if (image === undefined) return <span data-image-line={sourceLine}>{alt ?? ''}</span>
   if (image === null) return <span data-image-line={sourceLine}>{alt ? `[Image not found: ${id}]: ${alt}` : `[Image not found: ${id}]`}</span>
+  if (image.trashed) return <span data-image-line={sourceLine}>{alt ? `[Image in the trash: ${id}]: ${alt}` : `[Image in the trash: ${id}]`}</span>
   return <FramedImage src={image.src} alt={alt} title={title} width={image.width} height={image.height} sourceLine={sourceLine} />
 }
 

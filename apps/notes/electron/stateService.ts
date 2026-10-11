@@ -396,18 +396,21 @@ function sanitizeReviewGutterVisibleBySection(input: unknown): Record<string, bo
  */
 function sanitizeSlotOverlay(input: unknown): PersistedMenuState['slotOverlay'] {
   if (!input || typeof input !== 'object') return undefined;
-  const candidate = input as Partial<{ kind: unknown; sectionId: unknown; previousNoteId: unknown; noteId: unknown }>;
-  if (candidate.kind !== 'guide' && candidate.kind !== 'adventure' && candidate.kind !== 'undocked') return undefined;
+  const candidate = input as Partial<{ kind: unknown; sectionId: unknown; previousNoteId: unknown; noteId: unknown; imageId: unknown }>;
+  if (candidate.kind !== 'guide' && candidate.kind !== 'adventure' && candidate.kind !== 'undocked' && candidate.kind !== 'image') return undefined;
   if (typeof candidate.sectionId !== 'string' || candidate.sectionId.length === 0) return undefined;
   // An undocked overlay without its note is not an undocked overlay.
   if (candidate.kind === 'undocked' && (typeof candidate.noteId !== 'string' || candidate.noteId.length === 0)) {
     return undefined;
   }
+  // Nor an image overlay without its image.
+  if (candidate.kind === 'image' && (typeof candidate.imageId !== 'string' || candidate.imageId.length === 0)) return undefined;
   return {
     kind: candidate.kind,
     sectionId: candidate.sectionId,
     previousNoteId: typeof candidate.previousNoteId === 'string' ? candidate.previousNoteId : null,
     ...(typeof candidate.noteId === 'string' ? { noteId: candidate.noteId } : {}),
+    ...(typeof candidate.imageId === 'string' ? { imageId: candidate.imageId } : {}),
   };
 }
 
@@ -545,6 +548,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     reduceVisualEffects: Boolean(input?.reduceVisualEffects),
     // Strictly true: anything else, absence included, keeps the app local.
     allowRemoteImages: input?.allowRemoteImages === true,
+    sidebarShowsImages: input?.sidebarShowsImages === true,
     reducedCaretAnimation: Boolean(input?.reducedCaretAnimation),
     deferPreviewOnRapidInput: Boolean(input?.deferPreviewOnRapidInput),
     noteSizeThresholdBlocks: sanitizeOptionalNumber(input?.noteSizeThresholdBlocks),

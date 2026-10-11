@@ -949,3 +949,29 @@
 .category-tertiary-heading {
   display: none;
 }
+
+/* The image library (imageLibrary/ImageLibraryList.tsx): a note card with
+ * its image behind the id, dimmed so the text stays readable. */
+.image-list-item .note-list-column-primary {
+  position: relative;
+  overflow: hidden;
+}
+
+.image-list-thumbnail {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.image-list-item .note-list-content {
+  position: relative;
+}
+
+/* A view selector whose view lists images rather than notes (a right-click
+ * on it switches): marked so the sidebar says which it is showing. */
+.notes-mode-button.is-showing-images {
+  box-shadow: inset 0 -3px 0 var(--color-text-60, currentColor);
+}
