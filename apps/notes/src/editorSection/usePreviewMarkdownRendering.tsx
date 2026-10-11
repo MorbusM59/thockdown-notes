@@ -19,6 +19,7 @@ import {
   createPreviewSearchHighlightRehypePlugin,
   createPreviewSourceAnchorRehypePlugin,
   PREVIEW_MARKDOWN_REMARK_PLUGINS,
+  previewUrlTransform,
 } from '../editor/PreviewMarkdown'
 import { resolveMarkdownChecklistLineToggleTransform } from '../editor/ChecklistCaretClickTogglePolicy'
 import { normalizeInternalText } from '../editor/TextPolicy'
@@ -355,6 +356,7 @@ const PreviewMarkdownBlock = memo(function PreviewMarkdownBlock({
       remarkPlugins={PREVIEW_MARKDOWN_REMARK_PLUGINS}
       rehypePlugins={rehypePlugins}
       components={components}
+      urlTransform={previewUrlTransform}
     >
       {text}
     </ReactMarkdown>

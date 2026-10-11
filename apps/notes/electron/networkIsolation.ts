@@ -1,4 +1,5 @@
 import { app, session, shell } from 'electron'
+import { fileURLToPath } from 'node:url'
 
 // The desktop app makes no network requests of its own: every note, sound,
 // texture and font it shows is on the local disk. This module enforces that
@@ -19,7 +20,13 @@ import { app, session, shell } from 'electron'
 const EXTERNAL_SCHEMES = new Set(['http:', 'https:', 'mailto:', 'tel:'])
 const NETWORK_SCHEMES = new Set(['http:', 'https:', 'ws:', 'wss:', 'ftp:'])
 
-/** Opens `url` in the system's default handler if its scheme is one a reader may follow out of the app. */
+/**
+ * Follows a link out of the app. Web, mail and phone links go to the system's
+ * default handler. A `file:` link only REVEALS the file in Explorer/Finder:
+ * the system's "open" (`shell.openPath`) runs executables, so a note linking
+ * to a .exe, .bat or .ps1 would launch it in one click. Anything else is
+ * ignored.
+ */
 export async function openExternalIfAllowed(url: unknown): Promise<void> {
   if (typeof url !== 'string') return
   let parsed: URL
@@ -30,6 +37,15 @@ export async function openExternalIfAllowed(url: unknown): Promise<void> {
   }
   if (EXTERNAL_SCHEMES.has(parsed.protocol)) {
     await shell.openExternal(url)
+  } else if (parsed.protocol === 'file:') {
+    let filePath: string
+    try {
+      filePath = fileURLToPath(parsed)
+    } catch {
+      // A file URL naming a remote host, or one this platform cannot map.
+      return
+    }
+    shell.showItemInFolder(filePath)
   }
 }
 

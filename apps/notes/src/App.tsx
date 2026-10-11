@@ -173,6 +173,7 @@ import {
   createPreviewMarkdownComponents,
   PREVIEW_MARKDOWN_REMARK_PLUGINS,
   PREVIEW_MARKDOWN_NOOP_NAVIGATE,
+  previewUrlTransform,
 } from './editor/PreviewMarkdown'
 import { normalizeInternalText } from './editor/TextPolicy'
 import { readPageZoomFactor } from './window/pageZoom'
@@ -5223,6 +5224,7 @@ function App() {
           <ReactMarkdown
             remarkPlugins={PREVIEW_MARKDOWN_REMARK_PLUGINS}
             components={createPreviewMarkdownComponents(PREVIEW_MARKDOWN_NOOP_NAVIGATE, PREVIEW_MARKDOWN_NOOP_NAVIGATE)}
+            urlTransform={previewUrlTransform}
           >
             {markdownText}
           </ReactMarkdown>

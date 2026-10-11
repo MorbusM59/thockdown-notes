@@ -7,6 +7,7 @@ import { useCallback, useState, useSyncExternalStore, type ReactNode } from 'rea
 import type { Root } from 'hast'
 import { visit } from 'unist-util-visit'
 import remarkGfm from 'remark-gfm'
+import { defaultUrlTransform } from 'react-markdown'
 import { parseInternalNoteLink, type ParsedInternalNoteLink } from '../shared/internalNoteLinks'
 import { GROUP_MARKER_PREFIX, GROUP_MARKER_SUFFIX } from '../shared/openItemsText'
 
@@ -27,20 +28,28 @@ function isSafePreviewHref(href: string | undefined): boolean {
   if (!href) return false
   try {
     const parsed = new URL(href)
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:' || parsed.protocol === 'mailto:' || parsed.protocol === 'tel:'
+    return PREVIEW_LINK_PROTOCOLS.has(parsed.protocol)
   } catch {
     return false
   }
 }
 
-function isSafePreviewImageSrc(src: string | undefined): boolean {
-  if (!src) return false
-  if (src.startsWith('data:')) return true
-  // Remote images are deliberately not rendered: the app makes no network
-  // requests (the main process cancels any that are attempted, see
-  // electron/networkIsolation.ts), and images are a future, local-only
-  // feature. A remote image shows its alt text instead.
-  return src.startsWith('file:')
+// What a link in a note may point at. Web, mail and phone links are handed to
+// the system's default handler; a `file:` link reveals the file in Explorer or
+// Finder and never opens it, since opening would run an executable
+// (electron/networkIsolation.ts, `openExternalIfAllowed`).
+const PREVIEW_LINK_PROTOCOLS = new Set(['http:', 'https:', 'mailto:', 'tel:', 'file:'])
+
+/**
+ * react-markdown's `urlTransform`. Its default strips every scheme outside a
+ * short list that omits `file:` and `tel:`, so those links reached the
+ * components above as empty hrefs. This keeps exactly the link schemes the
+ * preview accepts and defers to the default for everything else -- image
+ * sources, which the `img` component does not load at all.
+ */
+export function previewUrlTransform(url: string, key: string): string {
+  if (key === 'href' && isSafePreviewHref(url)) return url
+  return defaultUrlTransform(url)
 }
 
 // ── Internal note/anchor links ────────────────────────────────────────────
@@ -447,13 +456,11 @@ export function createPreviewMarkdownComponents(
 
       return <span>{children}</span>
     },
-    img: ({ src, alt }: { src?: string; alt?: string }) => {
-      const normalizedSrc = typeof src === 'string' ? src : undefined
-      if (isSafePreviewImageSrc(normalizedSrc)) {
-        return <img src={normalizedSrc} alt={alt ?? ''} />
-      }
-      return <span>{alt ?? 'Image'}</span>
-    },
+    // Images are a future, local-only feature and the path is closed until it
+    // is designed: an image shows its alt text and loads nothing. (A remote
+    // source would be a network request, which the main process cancels
+    // anyway -- electron/networkIsolation.ts.)
+    img: ({ alt }: { alt?: string }) => <span>{alt ?? 'Image'}</span>,
     input: ({ checked, type, className }: { checked?: boolean; type?: string; className?: string }) => {
       if (type !== 'checkbox') {
         return null
