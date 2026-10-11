@@ -1,8 +1,10 @@
 import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
-import { memo, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useMemo, useRef, useState } from 'react'
+import { CategoryTree, type CategoryTreeCollapse } from '../components/CategoryTree'
+import { buildTagHierarchy } from '../shared/tagHierarchy'
 import { IMAGE_DRAG_MIME_TYPE, type StoredImageSummary } from '../shared/images'
 import { armPointerDrag } from '../shared/pointerDrag'
-import { groupImagesByTag, imagesInView, type ImageLibraryView } from './imageLibraryViews'
+import { imagesInView, type ImageLibraryView } from './imageLibraryViews'
 import { purgeImage, setImageTrashed, useImageLibrary } from './imageLibraryStore'
 
 // THE SIDEBAR'S IMAGE LIBRARY: what a view shows once a right-click on its
@@ -170,7 +172,16 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
   const { images, loaded } = useImageLibrary()
   const [primedId, setPrimedId] = useState<string | null>(null)
   const shown = useMemo(() => imagesInView(images, view, searchQuery, caseSensitive), [images, view, searchQuery, caseSensitive])
-  const groups = useMemo(() => (view === 'category' || view === 'archive' ? groupImagesByTag(shown) : null), [shown, view])
+  // The same tree as the notes': an image sits in one place, by the order of its tags.
+  const groups = useMemo(() => (view === 'category' || view === 'archive' ? buildTagHierarchy(shown, (image) => image.tags, 'Images') : null), [shown, view])
+  // What is folded is remembered per view for as long as the sidebar shows
+  // images, and not across restarts: the image trees are new and small.
+  const [collapseByView, setCollapseByView] = useState<Partial<Record<ImageLibraryView, CategoryTreeCollapse>>>({})
+  const collapse = collapseByView[view] ?? NOTHING_COLLAPSED
+  const onCollapseChange = useCallback((next: CategoryTreeCollapse) => setCollapseByView((previous) => ({ ...previous, [view]: next })), [view])
+  const renderTreeCard = useCallback((image: StoredImageSummary) => (
+    <ImageTreeCard key={image.id} image={image} isActive={image.id === activeImageId} onOpen={onOpen} />
+  ), [activeImageId, onOpen])
 
   const card = (image: StoredImageSummary, key: string) => (
     <ImageCard
@@ -195,15 +206,22 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
   }
   if (!groups) return <>{shown.map((image) => card(image, image.id))}</>
   return (
-    <div className="category-tree-root" aria-label="Images by tag">
-      {groups.map((group) => (
-        <details key={group.tag} className="category-primary" open>
-          <summary className="category-primary-summary">{group.tag}</summary>
-          {group.images.map((image) => (
-            <ImageTreeCard key={`${group.tag}:${image.id}`} image={image} isActive={image.id === activeImageId} onOpen={onOpen} />
-          ))}
-        </details>
-      ))}
-    </div>
+    <CategoryTree
+      groups={groups}
+      itemId={imageIdOf}
+      itemSelector={imageTreeCardSelector}
+      renderItem={renderTreeCard}
+      activeItemId={activeImageId}
+      persistedCollapsedPrimary={collapse.collapsedPrimary}
+      persistedCollapsedSecondary={collapse.collapsedSecondary}
+      focusRequestKey={0}
+      onCollapseChange={onCollapseChange}
+      emptyLabel=""
+      ariaLabel="Images by tag"
+    />
   )
 })
+
+const NOTHING_COLLAPSED: CategoryTreeCollapse = { collapsedPrimary: [], collapsedSecondary: [] }
+const imageIdOf = (image: StoredImageSummary) => image.id
+const imageTreeCardSelector = (id: string) => `.image-list-item.is-tree-card[data-image-id="${CSS.escape(id)}"]`

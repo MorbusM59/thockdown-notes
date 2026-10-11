@@ -128,7 +128,7 @@ import {
 } from './shared/uiBounds'
 import { applyDocumentTheme, themeFrame } from '@thockdown/look/loadoutTheme'
 import { ImageCorrectionFilter, ThemeBlendOverlays, ThemeGlazeLayers } from '@thockdown/look/ThemeLayers'
-import { DEBUG_TAG_NAME, PROTECTED_TAGS, normalizeTagName } from './shared/tags'
+import { DEBUG_TAG_NAME, normalizeTagName } from './shared/tags'
 import { EditorSection } from './editorSection/EditorSection'
 import type { EscapeMenuContribution } from './escapeMenu/escapeMenuContract'
 import { EditorToolbar } from './toolbar/EditorToolbar'
@@ -261,6 +261,9 @@ import { armHold, HOLD_COMMIT_MS, HOLD_CONFIRM_MS } from '@thockdown/interaction
 import { noteRightPressAction } from './editorSection/useNoteProtectionActions'
 import { WorkIndicatorGlyph } from './components/WorkIndicatorGlyph'
 import { ImageLibraryList } from './imageLibrary/ImageLibraryList'
+import { CategoryTree } from './components/CategoryTree'
+import { areStringArraysEqual } from './shared/stringArrays'
+import { buildTagHierarchy, tagHierarchyContains, type TagPrimaryGroup } from './shared/tagHierarchy'
 import { registerImageLibraryHost } from './imageLibrary/imageLibraryStore'
 import type { ImageLibraryView } from './imageLibrary/imageLibraryViews'
 import { armPointerDrag } from './shared/pointerDrag'
@@ -494,13 +497,6 @@ function sanitizeCollapsedList(input: unknown): string[] {
   return Array.from(new Set(input.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)))
 }
 
-function areStringArraysEqual(left: string[], right: string[]): boolean {
-  if (left.length !== right.length) return false
-  for (let index = 0; index < left.length; index += 1) {
-    if (left[index] !== right[index]) return false
-  }
-  return true
-}
 
 function sanitizeSidebarViewState(value: PersistedSidebarViewState | undefined): SidebarViewState {
   return {
@@ -528,72 +524,11 @@ function createDefaultSidebarViewStateByMode(): SidebarViewStateByMode {
   }
 }
 
-type TertiaryGroup = {
-  name: string
-  notes: NoteSummary[]
-}
-
-type SecondaryGroup = {
-  name: string
-  tertiary: TertiaryGroup[]
-}
-
-type PrimaryGroup = {
-  name: string
-  secondary: SecondaryGroup[]
-}
-
-const GENERAL_SECONDARY_NAME = 'General'
-
-function hierarchyFromTags(tags: string[]): { primary: string; secondary: string; tertiary: string } {
-  const nonProtected = tags.filter((tag) => !PROTECTED_TAGS.has(tag))
-  return {
-    primary: nonProtected[0] ?? 'Uncategorized',
-    secondary: nonProtected[1] ?? GENERAL_SECONDARY_NAME,
-    tertiary: nonProtected[2] ?? 'Notes',
-  }
-}
+type PrimaryGroup = TagPrimaryGroup<NoteSummary>
 
 function buildHierarchyGroups(notes: NoteSummary[]): PrimaryGroup[] {
-  const primaryMap = new Map<string, Map<string, Map<string, NoteSummary[]>>>()
-
-  for (const note of notes) {
-    const { primary, secondary, tertiary } = hierarchyFromTags(note.tags)
-
-    if (!primaryMap.has(primary)) {
-      primaryMap.set(primary, new Map())
-    }
-    const secondaryMap = primaryMap.get(primary)!
-
-    if (!secondaryMap.has(secondary)) {
-      secondaryMap.set(secondary, new Map())
-    }
-    const tertiaryMap = secondaryMap.get(secondary)!
-
-    if (!tertiaryMap.has(tertiary)) {
-      tertiaryMap.set(tertiary, [])
-    }
-    tertiaryMap.get(tertiary)!.push(note)
-  }
-
-  const compareLabel = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' })
-
-  return [...primaryMap.entries()]
-    .sort(([a], [b]) => compareLabel(a, b))
-    .map(([primaryName, secondaryMap]) => ({
-      name: primaryName,
-      secondary: [...secondaryMap.entries()]
-        .sort(([a], [b]) => compareLabel(a, b))
-        .map(([secondaryName, tertiaryMap]) => ({
-          name: secondaryName,
-          tertiary: [...tertiaryMap.entries()]
-            .sort(([a], [b]) => compareLabel(a, b))
-            .map(([tertiaryName, groupedNotes]) => ({
-              name: tertiaryName,
-              notes: [...groupedNotes].sort((a, b) => compareLabel(a.title, b.title)),
-            })),
-        })),
-    }))
+  const byTitle = [...notes].sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }))
+  return buildTagHierarchy(byTitle, (note) => note.tags, 'Notes')
 }
 
 function sanitizeClipboardTitle(raw: string): string {
@@ -1345,7 +1280,7 @@ const CategoryTreeView = memo(function CategoryTreeView({
 }: CategoryTreeViewProps) {
   // Which non-self-archived parent rows currently have their own archived
   // chapters folded open -- purely transient UI state (see the "pure
-  // fold-out" rule in the doc comment on the tertiary.notes.map below),
+  // fold-out" rule in the doc comment on the renderItem below),
   // deliberately not persisted app state: it resets to fully collapsed on
   // every fresh visit to the Archive tree, same as it would if this were
   // simply never remembered.
@@ -1362,269 +1297,7 @@ const CategoryTreeView = memo(function CategoryTreeView({
     })
   }, [])
 
-  const collapsedPrimary = useMemo(() => new Set(persistedCollapsedPrimary), [persistedCollapsedPrimary])
-  const collapsedSecondary = useMemo(() => new Set(persistedCollapsedSecondary), [persistedCollapsedSecondary])
-  const lastHandledFocusRequestKeyRef = useRef(focusNoteRequestKey)
-
-  const unfoldPathForActiveNote = useCallback(() => {
-    if (!activeNoteId || groups.length === 0) {
-      return false
-    }
-
-    let targetPrimaryName: string | null = null
-    let targetSecondaryName: string | null = null
-
-    for (const primary of groups) {
-      for (const secondary of primary.secondary) {
-        for (const tertiary of secondary.tertiary) {
-          if (tertiary.notes.some((note) => note.id === activeNoteId)) {
-            targetPrimaryName = primary.name
-            targetSecondaryName = secondary.name
-            break
-          }
-        }
-
-        if (targetPrimaryName) {
-          break
-        }
-      }
-
-      if (targetPrimaryName) {
-        break
-      }
-    }
-
-    if (!targetPrimaryName || !targetSecondaryName) {
-      return false
-    }
-
-    const nextCollapsedPrimary = new Set(
-      groups
-        .map((primary) => primary.name)
-        .filter((primaryName) => primaryName !== targetPrimaryName),
-    )
-
-    const nextCollapsedSecondary = new Set<string>()
-    for (const primary of groups) {
-      for (const secondary of primary.secondary) {
-        const secondaryKey = `${primary.name}:${secondary.name}`
-        const keepOpen = primary.name === targetPrimaryName && secondary.name === targetSecondaryName
-        if (!keepOpen) {
-          nextCollapsedSecondary.add(secondaryKey)
-        }
-      }
-    }
-
-    const nextCollapsedPrimaryList = [...nextCollapsedPrimary]
-    const nextCollapsedSecondaryList = [...nextCollapsedSecondary]
-
-    if (
-      areStringArraysEqual(nextCollapsedPrimaryList, persistedCollapsedPrimary)
-      && areStringArraysEqual(nextCollapsedSecondaryList, persistedCollapsedSecondary)
-    ) {
-      return false
-    }
-
-    onCollapseChange({
-      collapsedPrimary: nextCollapsedPrimaryList,
-      collapsedSecondary: nextCollapsedSecondaryList,
-    })
-    return true
-  }, [activeNoteId, groups, onCollapseChange, persistedCollapsedPrimary, persistedCollapsedSecondary])
-
-  const ensureActiveNoteVisible = useCallback(() => {
-    if (!activeNoteId) {
-      return
-    }
-
-    const selector = `.note-list-item.is-tree-card[data-note-id="${escapeAttributeSelectorValue(activeNoteId)}"]`
-    const activeNoteElement = document.querySelector<HTMLElement>(selector)
-    if (!activeNoteElement) {
-      return
-    }
-
-    const scrollContainer =
-      activeNoteElement.closest<HTMLElement>('.notes-list.tree-view')
-      ?? activeNoteElement.closest<HTMLElement>('.sidebar-content')
-
-    if (!scrollContainer) {
-      return
-    }
-
-    const containerRect = scrollContainer.getBoundingClientRect()
-    const noteRect = activeNoteElement.getBoundingClientRect()
-    const visibilityPaddingPx = 8
-    const visibleTop = containerRect.top + visibilityPaddingPx
-    const visibleBottom = containerRect.bottom - visibilityPaddingPx
-
-    if (noteRect.top < visibleTop) {
-      scrollContainer.scrollTop -= (visibleTop - noteRect.top)
-      return
-    }
-
-    if (noteRect.bottom > visibleBottom) {
-      scrollContainer.scrollTop += (noteRect.bottom - visibleBottom)
-    }
-  }, [activeNoteId])
-
-  useEffect(() => {
-    if (focusNoteRequestKey <= 0) {
-      return
-    }
-
-    if (focusNoteRequestKey === lastHandledFocusRequestKeyRef.current) {
-      return
-    }
-
-    lastHandledFocusRequestKeyRef.current = focusNoteRequestKey
-
-    unfoldPathForActiveNote()
-
-    let cancelled = false
-    const firstFrame = requestAnimationFrame(() => {
-      const secondFrame = requestAnimationFrame(() => {
-        if (cancelled) {
-          return
-        }
-        ensureActiveNoteVisible()
-      })
-
-      if (cancelled) {
-        cancelAnimationFrame(secondFrame)
-      }
-    })
-
-    return () => {
-      cancelled = true
-      cancelAnimationFrame(firstFrame)
-    }
-  }, [ensureActiveNoteVisible, focusNoteRequestKey, unfoldPathForActiveNote])
-
-  const togglePrimaryCategory = useCallback((categoryName: string) => {
-    const allPrimary = groups.map((group) => group.name)
-    const selectedPrimary = groups.find((group) => group.name === categoryName)
-    const secondaryKeys = (selectedPrimary?.secondary ?? []).map((secondary) => `${categoryName}:${secondary.name}`)
-    const generalSecondaryKey = `${categoryName}:${GENERAL_SECONDARY_NAME}`
-
-    const nextCollapsedPrimary = new Set<string>()
-    const nextCollapsedSecondary = new Set(collapsedSecondary)
-
-    if (collapsedPrimary.has(categoryName)) {
-      allPrimary
-        .filter((primaryName) => primaryName !== categoryName)
-        .forEach((primaryName) => nextCollapsedPrimary.add(primaryName))
-
-      // Keep the fallback/general bucket visible whenever a primary is expanded.
-      nextCollapsedSecondary.delete(generalSecondaryKey)
-
-      secondaryKeys.forEach((secondaryKey) => {
-        if (secondaryKey !== generalSecondaryKey) {
-          nextCollapsedSecondary.add(secondaryKey)
-        }
-      })
-    } else {
-      allPrimary
-        .filter((primaryName) => primaryName !== categoryName)
-        .forEach((primaryName) => nextCollapsedPrimary.add(primaryName))
-
-      if (secondaryKeys.length > 0) {
-        const allExpanded = secondaryKeys.every((secondaryKey) => !collapsedSecondary.has(secondaryKey))
-        if (allExpanded) {
-          secondaryKeys.forEach((secondaryKey) => nextCollapsedSecondary.add(secondaryKey))
-        } else {
-          secondaryKeys.forEach((secondaryKey) => nextCollapsedSecondary.delete(secondaryKey))
-        }
-
-        nextCollapsedSecondary.delete(generalSecondaryKey)
-      }
-    }
-
-    const nextCollapsedPrimaryList = [...nextCollapsedPrimary]
-    const nextCollapsedSecondaryList = [...nextCollapsedSecondary]
-    if (
-      areStringArraysEqual(nextCollapsedPrimaryList, persistedCollapsedPrimary)
-      && areStringArraysEqual(nextCollapsedSecondaryList, persistedCollapsedSecondary)
-    ) {
-      return
-    }
-
-    onCollapseChange({
-      collapsedPrimary: nextCollapsedPrimaryList,
-      collapsedSecondary: nextCollapsedSecondaryList,
-    })
-  }, [collapsedPrimary, collapsedSecondary, groups, onCollapseChange, persistedCollapsedPrimary, persistedCollapsedSecondary])
-
-  const toggleSecondaryCategory = useCallback((primaryName: string, secondaryName: string) => {
-    const key = `${primaryName}:${secondaryName}`
-    const allPrimary = groups.map((group) => group.name)
-    const selectedPrimary = groups.find((group) => group.name === primaryName)
-    const secondaryKeys = (selectedPrimary?.secondary ?? []).map((secondary) => `${primaryName}:${secondary.name}`)
-    const nextCollapsedPrimary = new Set(allPrimary.filter((primary) => primary !== primaryName))
-    const nextCollapsedSecondary = new Set(collapsedSecondary)
-
-    if (nextCollapsedSecondary.has(key)) {
-      secondaryKeys.forEach((secondaryKey) => {
-        if (secondaryKey !== key) {
-          nextCollapsedSecondary.add(secondaryKey)
-        }
-      })
-      nextCollapsedSecondary.delete(key)
-    } else {
-      nextCollapsedSecondary.add(key)
-    }
-
-    const nextCollapsedPrimaryList = [...nextCollapsedPrimary]
-    const nextCollapsedSecondaryList = [...nextCollapsedSecondary]
-    if (
-      areStringArraysEqual(nextCollapsedPrimaryList, persistedCollapsedPrimary)
-      && areStringArraysEqual(nextCollapsedSecondaryList, persistedCollapsedSecondary)
-    ) {
-      return
-    }
-
-    onCollapseChange({
-      collapsedPrimary: nextCollapsedPrimaryList,
-      collapsedSecondary: nextCollapsedSecondaryList,
-    })
-  }, [collapsedSecondary, groups, onCollapseChange, persistedCollapsedPrimary, persistedCollapsedSecondary])
-
-  if (groups.length === 0) {
-    return <div className="notes-empty-state">No notes available for this category view.</div>
-  }
-
-  return (
-    <div className="category-tree-root" aria-label="Category tree">
-      {groups.map((primary) => (
-        <details key={primary.name} className="category-primary" open={!collapsedPrimary.has(primary.name)}>
-          <summary
-            className="category-primary-summary"
-            onClick={(event) => {
-              event.preventDefault()
-              togglePrimaryCategory(primary.name)
-            }}
-          >
-            {primary.name}
-          </summary>
-          {primary.secondary.map((secondary) => (
-            <details
-              key={`${primary.name}:${secondary.name}`}
-              className="category-secondary"
-              open={!collapsedSecondary.has(`${primary.name}:${secondary.name}`)}
-            >
-              <summary
-                className={`category-secondary-summary${secondary.name === GENERAL_SECONDARY_NAME ? ' is-general-secondary' : ''}`}
-                aria-label={secondary.name === GENERAL_SECONDARY_NAME ? 'General' : undefined}
-                onClick={(event) => {
-                  event.preventDefault()
-                  toggleSecondaryCategory(primary.name, secondary.name)
-                }}
-              >
-                {secondary.name === GENERAL_SECONDARY_NAME ? <span className="sr-only-mode-label">General</span> : secondary.name}
-              </summary>
-              {secondary.tertiary.map((tertiary) => (
-                <div key={`${primary.name}:${secondary.name}:${tertiary.name}`} className="category-tertiary-block">
-                  <div className="category-tertiary-heading">{tertiary.name}</div>
-                  {tertiary.notes.map((note) => {
+  const renderItem = useCallback((note: NoteSummary) => {
                     // A parent that's here purely because of its own
                     // archived chapters (not itself archived) is a pure
                     // fold-out toggle -- clicking it never opens the
@@ -1668,16 +1341,27 @@ const CategoryTreeView = memo(function CategoryTreeView({
                         )) : null}
                       </Fragment>
                     )
-                  })}
-                </div>
-              ))}
-            </details>
-          ))}
-        </details>
-      ))}
-    </div>
+  }, [activeNoteId, archivedChaptersByParentId, expandedArchiveParentIds, onNoteMouseLeave, onNoteRightPressEnd, onNoteRightPressStart, onPrimedLeftClick, onSelect, primedNoteActionById, toggleArchivedChaptersFold])
+
+  return (
+    <CategoryTree
+      groups={groups}
+      itemId={noteIdOf}
+      itemSelector={noteTreeCardSelector}
+      renderItem={renderItem}
+      activeItemId={activeNoteId}
+      persistedCollapsedPrimary={persistedCollapsedPrimary}
+      persistedCollapsedSecondary={persistedCollapsedSecondary}
+      focusRequestKey={focusNoteRequestKey}
+      onCollapseChange={onCollapseChange}
+      emptyLabel="No notes available for this category view."
+      ariaLabel="Category tree"
+    />
   )
 })
+
+const noteIdOf = (note: NoteSummary) => note.id
+const noteTreeCardSelector = (id: string) => `.note-list-item.is-tree-card[data-note-id="${escapeAttributeSelectorValue(id)}"]`
 
 function compareExternalNotesFirst(a: NoteSummary, b: NoteSummary): number {
   const aIsExternal = isExternalNote(a)
@@ -4590,7 +4274,7 @@ function App() {
     if (mode === 'category' || mode === 'archive') {
       const source = mode === 'category' ? categoryTreeRef.current : archiveTreeRef.current
       const noteExists = source.some((primary) =>
-        primary.secondary.some((secondary) => secondary.tertiary.some((tertiary) => tertiary.notes.some((note) => note.id === activeNoteId))),
+        tagHierarchyContains([primary], (note) => note.id === activeNoteId),
       )
 
       if (!noteExists) {

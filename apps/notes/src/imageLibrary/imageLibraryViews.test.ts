@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { StoredImageSummary } from '../shared/images'
-import { groupImagesByTag, imagesInView, UNTAGGED } from './imageLibraryViews'
+import { imagesInView } from './imageLibraryViews'
 
 const image = (id: string, extra: Partial<StoredImageSummary> = {}): StoredImageSummary => ({
   id, src: '', width: 1, height: 1, mime: 'image/png', byteLength: 1, origin: null,
@@ -24,9 +24,5 @@ describe('image library views', () => {
     expect(imagesInView(all, 'date', 'logo', false).map((i) => i.id)).toEqual(['&LOGO'])
     expect(imagesInView(all, 'date', 'tom', false).map((i) => i.id)).toEqual(['&1'])
     expect(imagesInView(all, 'date', '#dog', false).map((i) => i.id)).toEqual(['&2'])
-  })
-  it('groups by tag with untagged last, an image under each of its tags', () => {
-    expect(groupImagesByTag(all.slice(0, 2).concat(all[3])).map((g) => [g.tag, g.images.map((i) => i.id)]))
-      .toEqual([['cats', ['&1', '&2']], ['dogs', ['&2']], [UNTAGGED, ['&LOGO']]])
   })
 })

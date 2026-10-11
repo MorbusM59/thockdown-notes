@@ -1,10 +1,13 @@
-import { useEffect, useState, type KeyboardEvent } from 'react'
+import { useEffect, useState, type DragEvent, type KeyboardEvent } from 'react'
+import { armPointerDrag } from '../shared/pointerDrag'
 import { normalizeTagName } from '../shared/tags'
 import { renameImage, setImageTags, useLibraryImage } from './imageLibraryStore'
 
 // THE CHAPTER BAR WHILE A SLOT SHOWS AN IMAGE: the image's id, then its own
 // tags, in the shape the note tag bar uses (TagBar.tsx) -- type a tag and
-// press Enter to add it, click a tag twice to remove it. An image's tags are
+// press Enter to add it, click a tag twice to remove it, drag one before
+// another to reorder (the first tag is the image's category, the second its
+// sub-category, as for notes). An image's tags are
 // the library's categories; they are not the tags of the notes that use it.
 
 export function ImageTagBar({ imageId }: { imageId: string }) {
@@ -25,6 +28,19 @@ export function ImageTagBar({ imageId }: { imageId: string }) {
       : result.reason === 'invalid' ? `${wanted} cannot be an image name` : null)
   }
   const tags = image?.tags ?? []
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
+  // Dropped on a pill it takes that pill's place; dropped past the last, it goes last.
+  const dropTag = (event: DragEvent<HTMLElement>, targetIndex: number | null) => {
+    if (draggedIndex === null) return
+    event.preventDefault()
+    event.stopPropagation()
+    const reordered = [...tags]
+    const [moved] = reordered.splice(draggedIndex, 1)
+    setDraggedIndex(null)
+    if (!moved || !image || draggedIndex === targetIndex) return
+    reordered.splice(targetIndex ?? reordered.length, 0, moved)
+    void setImageTags(image.id, reordered)
+  }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== 'Enter') return
@@ -93,14 +109,19 @@ export function ImageTagBar({ imageId }: { imageId: string }) {
           />
         </div>
         <div className="tabbar-tabs-scroll-shell">
-          <div className="tabbar-tags-display" aria-live="polite">
-            {tags.map((tag) => (
+          <div className="tabbar-tags-display" aria-live="polite" onDrop={(event) => dropTag(event, null)}>
+            {tags.map((tag, index) => (
               <button
                 key={tag}
                 type="button"
                 className={`tag-pill is-active${primedTag === tag ? ' primed' : ''}`}
                 data-secondary-press="none"
-                data-tooltip={primedTag === tag ? `Click again to remove ${tag}` : `Click twice to remove ${tag}`}
+                data-drag-source=""
+                onPointerDown={armPointerDrag}
+                onDragStart={(event) => { event.dataTransfer.setData('text/plain', tag); setDraggedIndex(index) }}
+                onDragEnd={() => setDraggedIndex(null)}
+                onDrop={(event) => dropTag(event, index)}
+                data-tooltip={primedTag === tag ? `Click again to remove ${tag}` : `Click twice to remove ${tag}, drag to reorder`}
                 onMouseLeave={() => { if (primedTag === tag) setPrimedTag(null) }}
                 onClick={() => {
                   if (primedTag !== tag) {
