@@ -137,9 +137,9 @@ function cssLength(length: ImageLength): string {
 
 /**
  * The inline styles that draw `layout`: the frame takes the width, the image
- * the height. With both, the image fills the frame's width and keeps its
- * aspect ratio inside the box (`object-fit: contain`), so it is never
- * stretched. Alignment is a class, not a style (see markdown.css).
+ * the height. With both, the image is drawn at exactly that size, stretched
+ * if the two do not match its own proportions: giving both is how a reader
+ * asks for that (Ctrl+Shift-drag in the render view). Alignment is a class, not a style (see markdown.css).
  */
 export function imageLayoutStyles(layout: ImageLayout): {
   frame: Record<string, string>
@@ -154,7 +154,6 @@ export function imageLayoutStyles(layout: ImageLayout): {
   if (layout.height) {
     image.height = cssLength(layout.height)
     if (!layout.width) image.width = 'auto'
-    else image.objectFit = 'contain'
   }
   return { frame, image }
 }

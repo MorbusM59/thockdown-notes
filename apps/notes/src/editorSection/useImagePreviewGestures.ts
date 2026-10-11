@@ -115,7 +115,7 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
       const ratio = startRect.height > 0 ? startRect.width / startRect.height : 1
       let moved = false
       let size = { width: startRect.width, height: startRect.height }
-      const restore = { frameWidth: frame.style.width, imgWidth: img?.style.width ?? '', imgHeight: img?.style.height ?? '', opacity: frame.style.opacity, objectFit: img?.style.objectFit ?? '' }
+      const restore = { frameWidth: frame.style.width, imgWidth: img?.style.width ?? '', imgHeight: img?.style.height ?? '', opacity: frame.style.opacity }
       frame.setPointerCapture(event.pointerId)
 
       const handleMove = (move: PointerEvent) => {
@@ -139,7 +139,6 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
         if (img) {
           img.style.width = '100%'
           img.style.height = mode === 'resize-free' ? `${size.height}px` : ''
-          if (mode === 'resize-free') img.style.objectFit = 'contain'
         }
       }
 
@@ -158,7 +157,6 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
         if (img) {
           img.style.width = restore.imgWidth
           img.style.height = restore.imgHeight
-          img.style.objectFit = restore.objectFit
         }
         if (!commit || !moved || readEditorText() !== text) return
         if (mode === 'move') {

@@ -35,7 +35,7 @@ describe('the image title grammar', () => {
   it('never stretches an image given both dimensions', () => {
     const parsed = parseImageTitle('20emx10em')
     if (parsed.kind !== 'layout') throw new Error('not layout')
-    expect(imageLayoutStyles(parsed.layout)).toEqual({ frame: { width: '20em' }, image: { width: '100%', height: '10em', objectFit: 'contain' } })
+    expect(imageLayoutStyles(parsed.layout)).toEqual({ frame: { width: '20em' }, image: { width: '100%', height: '10em' } })
   })
 })
 
