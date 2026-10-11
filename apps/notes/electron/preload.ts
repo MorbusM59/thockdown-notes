@@ -25,6 +25,7 @@ import type { ChaptersApi } from '../src/shared/chapters'
 import { CHAPTER_CHANNELS } from '../src/shared/chapters'
 import type { ReviewFlagsApi } from '../src/shared/reviewFlags'
 import { REVIEW_FLAG_CHANNELS } from '../src/shared/reviewFlags'
+import { IMAGE_CHANNELS, type ImagesApi } from '../src/shared/images'
 import { eventSubscriber, invokeBridge, sendBridge } from '../src/shared/ipcContract'
 import { WINDOW_CONTROL_INVOKE_CHANNELS, WINDOW_CONTROL_SEND_CHANNELS, WINDOW_EVENT_CHANNELS, type WindowControlsApi, type WindowEvents } from '../src/shared/windowControls'
 import { EXPORT_CHANNELS, type ExportApi } from '../src/shared/exportApi'
@@ -112,3 +113,7 @@ contextBridge.exposeInMainWorld('thockdownChapters', chaptersApi)
 const reviewFlagsApi: ReviewFlagsApi = invokeBridge<ReviewFlagsApi>(REVIEW_FLAG_CHANNELS, invoke)
 
 contextBridge.exposeInMainWorld('thockdownReviewFlags', reviewFlagsApi)
+
+const imagesApi: ImagesApi = invokeBridge<ImagesApi>(IMAGE_CHANNELS, invoke)
+
+contextBridge.exposeInMainWorld('thockdownImages', imagesApi)

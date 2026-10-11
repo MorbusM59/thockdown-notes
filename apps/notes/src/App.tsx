@@ -5961,6 +5961,17 @@ ${markdownHtml}
       return
     }
 
+    // Image files dropped onto a note's text are the editor's: it stores
+    // them and references them where they landed (CM6Editor's drop handler).
+    // Dropped anywhere else they do nothing, rather than opening as a note.
+    const files = Array.from(event.dataTransfer.files ?? [])
+    if (files.length > 0 && files.every((file) => file.type.startsWith('image/'))) {
+      if ((event.target as HTMLElement | null)?.closest('.cm-editor')) return
+      event.preventDefault()
+      event.stopPropagation()
+      return
+    }
+
     event.preventDefault()
     event.stopPropagation()
 

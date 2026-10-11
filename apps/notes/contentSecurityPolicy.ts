@@ -18,6 +18,9 @@
 //   one may load is decided by the main process's request filter
 //   (electron/networkIsolation.ts), which reads that setting; a policy baked
 //   into the built page cannot. Images cannot execute code.
+// - img-src thockdown-image:   images stored in the database, served by
+//   electron/main.ts. That scheme is registered without bypassCSP, so this
+//   line is what lets them load.
 // - font-src data:     the export path inlines fonts as data URIs.
 // - media-src / connect-src thockdown-music:   local music files are served
 //   through that protocol (electron/main.ts), and sounds are fetched as
@@ -30,7 +33,7 @@ export const CONTENT_SECURITY_POLICY = [
   "script-src 'self'",
   "worker-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: http: https:",
+  "img-src 'self' data: blob: http: https: thockdown-image:",
   "font-src 'self' data:",
   "media-src 'self' data: blob: thockdown-music:",
   "connect-src 'self' data: blob: thockdown-music:",

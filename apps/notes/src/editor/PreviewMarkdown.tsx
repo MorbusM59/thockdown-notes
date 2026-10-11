@@ -10,6 +10,7 @@ import { visit } from 'unist-util-visit'
 import remarkGfm from 'remark-gfm'
 import { defaultUrlTransform } from 'react-markdown'
 import { isRemoteImageSrc, useRemoteImagesAllowed } from '../shared/remoteImages'
+import { useStoredImage } from '../shared/storedImages'
 import { parseInternalNoteLink, type ParsedInternalNoteLink } from '../shared/internalNoteLinks'
 import { GROUP_MARKER_PREFIX, GROUP_MARKER_SUFFIX } from '../shared/openItemsText'
 
@@ -44,31 +45,52 @@ function isSafePreviewHref(href: string | undefined): boolean {
  * silently does not appear reads as a broken note.
  */
 function PreviewImage({ src, alt, title }: { src?: string; alt?: string; title?: string }) {
+  if (src?.startsWith('&')) return <StoredPreviewImage id={src} alt={alt} title={title} />
+  return <RemotePreviewImage src={src} alt={alt} title={title} />
+}
+
+function RemotePreviewImage({ src, alt, title }: { src?: string; alt?: string; title?: string }) {
   const remoteImagesAllowed = useRemoteImagesAllowed()
   if (!isRemoteImageSrc(src)) return <span>{alt ?? 'Image'}</span>
-  if (remoteImagesAllowed) {
-    // The title carries the image's size and alignment (shared/imageLayout.ts);
-    // a title that is not layout is shown the way any renderer shows it, as
-    // the image's tooltip.
-    const parsed = parseImageTitle(title)
-    const layout = parsed.kind === 'layout' ? parsed.layout : EMPTY_IMAGE_LAYOUT
-    const styles = imageLayoutStyles(layout)
-    return (
-      <span
-        className={`markdown-image-frame${layout.align ? ` is-aligned-${layout.align}` : ''}`}
-        style={styles.frame}
-      >
-        <img
-          src={src}
-          alt={alt ?? ''}
-          title={parsed.kind === 'layout' ? undefined : parsed.text}
-          style={styles.image}
-          referrerPolicy="no-referrer"
-        />
-      </span>
-    )
-  }
+  if (remoteImagesAllowed) return <FramedImage src={src!} alt={alt} title={title} width={0} height={0} />
   return <span>{alt ? `[Remote images disabled in options]: ${alt}` : '[Remote images disabled in options]'}</span>
+}
+
+// An image stored in the database (shared/images.ts). It is local, so the
+// remote-images setting does not apply. Its intrinsic size arrives with its
+// address, so the frame is the right size before the bytes load.
+function StoredPreviewImage({ id, alt, title }: { id: string; alt?: string; title?: string }) {
+  const image = useStoredImage(id)
+  if (image === undefined) return <span>{alt ?? ''}</span>
+  if (image === null) return <span>{alt ? `[Image not found: ${id}]: ${alt}` : `[Image not found: ${id}]`}</span>
+  return <FramedImage src={image.src} alt={alt} title={title} width={image.width} height={image.height} />
+}
+
+function FramedImage({ src, alt, title, width, height }: { src: string; alt?: string; title?: string; width: number; height: number }) {
+  // The title carries the image's size and alignment (shared/imageLayout.ts);
+  // a title that is not layout is shown the way any renderer shows it, as
+  // the image's tooltip.
+  const parsed = parseImageTitle(title)
+  const layout = parsed.kind === 'layout' ? parsed.layout : EMPTY_IMAGE_LAYOUT
+  const styles = imageLayoutStyles(layout)
+  return (
+    <span
+      className={`markdown-image-frame${layout.align ? ` is-aligned-${layout.align}` : ''}`}
+      style={styles.frame}
+    >
+      <img
+        src={src}
+        alt={alt ?? ''}
+        title={parsed.kind === 'layout' ? undefined : parsed.text}
+        // The intrinsic size, when known, gives the image its aspect ratio
+        // before it loads (CSS keeps it no wider than its frame).
+        width={width || undefined}
+        height={height || undefined}
+        style={styles.image}
+        referrerPolicy="no-referrer"
+      />
+    </span>
+  )
 }
 
 // What a link in a note may point at. Web, mail and phone links are handed to

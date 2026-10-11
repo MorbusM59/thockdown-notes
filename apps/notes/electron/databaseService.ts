@@ -69,6 +69,8 @@ import {
 } from '@thockdown/look/caretSettings';
 import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureMaterialSettings, type TextureMaterialsBySurface } from '@thockdown/look/textureTypes';
 import type { MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../src/shared/audioPlayer';
+import { buildNextAutoImageId, IMAGE_REFERENCE_SCANNER_VERSION, imageReferencesIn, MAX_STORED_IMAGE_BYTES, type ImageImportRequest, type ImageImportResult } from '../src/shared/images';
+import { sniffImage } from './imageSniff';
 import type { ReviewFlagEntry, ReviewFlagWrite, ReviewFlagRemap } from '../src/shared/reviewFlags';
 import { AUDIO_EXTENSIONS, emptyPlaylistCounts, isPlaylistSlot, MAX_PLAYLIST_SLOT } from '../src/shared/audioPlayer';
 
@@ -90,6 +92,7 @@ const DB_FILE_NAME = 'thockdown-notes.db';
 // The folder every note was also written to as a `.md` file, until
 // retireNotesFolder; it is read once more, then never again.
 const LEGACY_NOTES_DIR_NAME = 'notes';
+const IMAGE_REFS_SCANNER_KEY = 'imageRefsScannerVersion';
 const NOTES_FOLDER_RETIRED_KEY = 'notesFolderRetiredAt';
 const BACKUPS_DIR_NAME = 'backups';
 const LAUNCH_BACKUP_COUNT = 3;
@@ -672,6 +675,7 @@ export class DatabaseService {
 
     this.db = db;
     this.ensureSchema();
+    this.ensureImageReferenceIndex();
     this.ensureProtectedTags();
     await ensureHelpNote(this);
     this.ensureLoadoutsSeeded();
@@ -3931,6 +3935,40 @@ export class DatabaseService {
       );
 
       CREATE INDEX IF NOT EXISTS idx_review_flags_note ON review_flags(noteId);
+
+      -- Stored images (src/shared/images.ts). The bytes are kept once per
+      -- distinct image, addressed by their SHA-256; an id is a name a note
+      -- uses for them, so two ids may share bytes. mime, width and height
+      -- are read from the bytes (imageSniff.ts). origin is the file path or
+      -- URL the image came from, which a restore writes back; NULL for a
+      -- clipboard image.
+      CREATE TABLE IF NOT EXISTS image_blobs (
+        hash       TEXT    PRIMARY KEY,
+        mime       TEXT    NOT NULL,
+        width      INTEGER NOT NULL,
+        height     INTEGER NOT NULL,
+        byteLength INTEGER NOT NULL,
+        data       BLOB    NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS images (
+        id        TEXT PRIMARY KEY,
+        blobHash  TEXT NOT NULL REFERENCES image_blobs(hash),
+        origin    TEXT,
+        createdAt TEXT NOT NULL
+      );
+
+      -- Which stored images each note's current text uses: a cache of the
+      -- text, rewritten by writeStoredContent from imageReferencesIn and
+      -- rebuilt for every note whenever that scanner's version changes
+      -- (ensureImageReferenceIndex). Snapshots are history and not indexed.
+      CREATE TABLE IF NOT EXISTS image_refs (
+        noteId  TEXT NOT NULL,
+        imageId TEXT NOT NULL,
+        PRIMARY KEY (noteId, imageId)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_image_refs_image ON image_refs(imageId);
     `);
 
     // A fresh install always starts with exactly one (default, unnamed)
@@ -4243,14 +4281,92 @@ export class DatabaseService {
    * notes folder was then re-read into every note's row at startup.
    */
   private writeStoredContent(noteId: string, title: string, content: string): void {
-    this.requireDb().prepare(`
-      INSERT INTO note_content (noteId, title, content) VALUES (?, ?, ?)
-      ON CONFLICT(noteId) DO UPDATE SET title = excluded.title, content = excluded.content
-    `).run(noteId, title, content);
+    const db = this.requireDb();
+    db.transaction(() => {
+      db.prepare(`
+        INSERT INTO note_content (noteId, title, content) VALUES (?, ?, ?)
+        ON CONFLICT(noteId) DO UPDATE SET title = excluded.title, content = excluded.content
+      `).run(noteId, title, content);
+      this.indexImageReferences(noteId, content);
+    })();
   }
 
   private removeStoredContent(noteId: string): void {
-    this.requireDb().prepare('DELETE FROM note_content WHERE noteId = ?').run(noteId);
+    const db = this.requireDb();
+    db.prepare('DELETE FROM note_content WHERE noteId = ?').run(noteId);
+    db.prepare('DELETE FROM image_refs WHERE noteId = ?').run(noteId);
+  }
+
+  // Stored images (src/shared/images.ts) ----------------------------------
+
+  private indexImageReferences(noteId: string, content: string): void {
+    const db = this.requireDb();
+    db.prepare('DELETE FROM image_refs WHERE noteId = ?').run(noteId);
+    const insert = db.prepare('INSERT OR IGNORE INTO image_refs (noteId, imageId) VALUES (?, ?)');
+    for (const imageId of imageReferencesIn(content)) insert.run(noteId, imageId);
+  }
+
+  /** Rebuilds image_refs for every note when the scanner that fills it has changed since it was last built. */
+  private ensureImageReferenceIndex(): void {
+    const version = String(IMAGE_REFERENCE_SCANNER_VERSION);
+    if (this.getAppMeta(IMAGE_REFS_SCANNER_KEY) === version) return;
+    const db = this.requireDb();
+    db.transaction(() => {
+      db.prepare('DELETE FROM image_refs').run();
+      for (const row of db.prepare('SELECT noteId, content FROM note_content').iterate() as Iterable<{ noteId: string; content: string }>) {
+        this.indexImageReferences(row.noteId, row.content);
+      }
+      this.setAppMeta(IMAGE_REFS_SCANNER_KEY, version);
+    })();
+  }
+
+  /**
+   * Stores an image and names it. The same bytes from the same origin keep
+   * the id they already have, so dropping one file twice makes one image;
+   * anything else is a new id, `&n` (bytes already stored are shared).
+   */
+  importImage(request: ImageImportRequest): ImageImportResult {
+    const bytes = request.bytes;
+    if (bytes.byteLength > MAX_STORED_IMAGE_BYTES) return { ok: false, reason: 'too-large' };
+    const sniffed = sniffImage(bytes);
+    if (!sniffed) return { ok: false, reason: 'not-an-image' };
+    const hash = createHash('sha256').update(bytes).digest('hex');
+    const db = this.requireDb();
+    return db.transaction((): ImageImportResult => {
+      const existing = db.prepare('SELECT id FROM images WHERE blobHash = ? AND origin IS ? ORDER BY createdAt LIMIT 1')
+        .get(hash, request.origin) as { id: string } | undefined;
+      if (existing) return { ok: true, id: existing.id };
+      db.prepare(`
+        INSERT OR IGNORE INTO image_blobs (hash, mime, width, height, byteLength, data) VALUES (?, ?, ?, ?, ?, ?)
+      `).run(hash, sniffed.mime, sniffed.width, sniffed.height, bytes.byteLength, Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength));
+      const ids = (db.prepare('SELECT id FROM images').all() as Array<{ id: string }>).map((row) => row.id);
+      const id = buildNextAutoImageId(ids);
+      db.prepare('INSERT INTO images (id, blobHash, origin, createdAt) VALUES (?, ?, ?, ?)')
+        .run(id, hash, request.origin, new Date().toISOString());
+      return { ok: true, id };
+    })();
+  }
+
+  /** The stored image each id names: the hash its bytes are served under, and its size. */
+  resolveImages(ids: string[]): Record<string, { hash: string; width: number; height: number } | null> {
+    const lookup = this.requireDb().prepare(`
+      SELECT images.blobHash AS hash, image_blobs.width AS width, image_blobs.height AS height
+      FROM images JOIN image_blobs ON image_blobs.hash = images.blobHash WHERE images.id = ?
+    `);
+    const resolved: Record<string, { hash: string; width: number; height: number } | null> = {};
+    for (const id of ids) resolved[id] = (lookup.get(id) as { hash: string; width: number; height: number } | undefined) ?? null;
+    return resolved;
+  }
+
+  /** An image's bytes and type by the hash it is served under; null when nothing is stored there. */
+  readImageBlob(hash: string): { mime: string; data: Buffer } | null {
+    return (this.requireDb().prepare('SELECT mime, data FROM image_blobs WHERE hash = ?').get(hash) as { mime: string; data: Buffer } | undefined) ?? null;
+  }
+
+  /** The ids of stored images a note's current text uses (the reference index). */
+  listImageReferences(noteId: string): string[] {
+    return (this.requireDb().prepare('SELECT imageId FROM image_refs WHERE noteId = ? ORDER BY imageId').all(noteId) as Array<{ imageId: string }>)
+      .map((row) => row.imageId);
   }
 
   /**

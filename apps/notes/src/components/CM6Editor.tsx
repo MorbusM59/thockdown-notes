@@ -869,6 +869,45 @@ const malformedImageTitlePlugin = ViewPlugin.fromClass(class {
   decorations: (pluginValue) => pluginValue.decorations,
 });
 
+// Where an image import that is still being stored will be inserted, kept
+// current through every edit made while it is stored (typing goes on).
+const pendingImageInsertions = new WeakMap<EditorView, Set<{ pos: number }>>();
+const pendingImageInsertionTracker = ViewPlugin.fromClass(class {
+  constructor(readonly view: EditorView) {}
+  update(update: ViewUpdate) {
+    if (!update.docChanged) return;
+    for (const pending of pendingImageInsertions.get(update.view) ?? []) pending.pos = update.changes.mapPos(pending.pos, 1);
+  }
+});
+
+/** The image files among a drop's or a paste's files. */
+function imageFilesOf(transfer: DataTransfer | null): File[] {
+  return Array.from(transfer?.files ?? []).filter((file) => file.type.startsWith('image/'));
+}
+
+/**
+ * Stores `files` through the bindings and inserts the Markdown that
+ * references them at `pos` -- the position as it stands once they are
+ * stored -- each image on a line of its own.
+ */
+function insertImageFiles(view: EditorView, files: File[], pos: number, importImageFiles: (files: File[]) => Promise<string | null>): void {
+  const pending = { pos };
+  const set = pendingImageInsertions.get(view) ?? new Set();
+  pendingImageInsertions.set(view, set);
+  set.add(pending);
+  void importImageFiles(files).then((markdown) => {
+    set.delete(pending);
+    if (!markdown || !view.dom.isConnected) return;
+    const doc = view.state.doc;
+    const at = Math.min(pending.pos, doc.length);
+    const line = doc.lineAt(at);
+    const before = at > line.from ? '\n' : '';
+    const after = at < line.to ? '\n' : '';
+    const insert = `${before}${markdown}${after}`;
+    view.dispatch({ changes: { from: at, insert }, selection: { anchor: at + before.length + markdown.length }, userEvent: 'input.drop' });
+  }, () => { set.delete(pending); });
+}
+
 function readNoText(): string {
   return '';
 }
@@ -3603,6 +3642,7 @@ export function CM6Editor({
       keymap.of([...CM6_DEFAULT_KEYMAP_WITHOUT_ALT_ARROW, ...historyKeymap]),
       lineTokenPlugin,
       malformedImageTitlePlugin,
+      pendingImageInsertionTracker,
       EditorView.lineWrapping,
       readOnlyCompartmentRef.current.of(readOnlyExtension(editorReadOnly)),
       spellCheckCompartmentRef.current.of(EditorView.contentAttributes.of({ class: 'editor-text', spellcheck: String(spellCheckEnabled) })),
@@ -4107,7 +4147,30 @@ export function CM6Editor({
           }
           return false;
         },
+        // An image file dropped onto the text is stored and referenced at the
+        // drop point (App.tsx's window drop handler leaves image files to the
+        // editor). Anything else dropped keeps CM6's handling.
+        drop: (event, view) => {
+          const files = imageFilesOf(event.dataTransfer);
+          const importImageFiles = bindingsRef.current?.importImageFiles;
+          if (files.length === 0 || !importImageFiles) return false;
+          event.preventDefault();
+          if (view.state.readOnly) return true;
+          const pos = view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.head;
+          insertImageFiles(view, files, pos, importImageFiles);
+          return true;
+        },
         paste: (event, view) => {
+          const pastedImages = imageFilesOf(event.clipboardData);
+          const importPastedImages = bindingsRef.current?.importImageFiles;
+          if (pastedImages.length > 0 && importPastedImages && !view.state.readOnly) {
+            event.preventDefault();
+            smartPasteRequested = false;
+            const { from, to } = view.state.selection.main;
+            if (to > from) view.dispatch({ changes: { from, to }, userEvent: 'delete.cut' });
+            insertImageFiles(view, pastedImages, from, importPastedImages);
+            return true;
+          }
           if (!event.clipboardData) {
             smartPasteRequested = false;
             return false;

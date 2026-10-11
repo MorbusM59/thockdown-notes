@@ -20,6 +20,8 @@
 // right") is MALFORMED: the preview treats it as a tooltip, and the edit view
 // marks it, so a typo shows rather than silently doing nothing.
 
+import { normalizeImageId } from './images'
+
 export type ImageLengthUnit = 'em' | 'px' | '%'
 
 export interface ImageLength {
@@ -49,9 +51,6 @@ const WIDTH_TOKEN = new RegExp(`^${NUMBER}(em|px|%)$`, 'i')
 const HEIGHT_TOKEN = new RegExp(`^x${NUMBER}(em|px)$`, 'i')
 const BOX_TOKEN = new RegExp(`^${NUMBER}(em|px|%)x${NUMBER}(em|px)$`, 'i')
 const ALIGN_TOKEN = /^(left|right|center)$/i
-// `;` is excluded because CommonMark decodes `&NAME;` as a character entity
-// wherever the id later appears in a link destination.
-const ID_TOKEN = /^&([^\s;()"'&]+)$/
 // What a token that was MEANT as layout starts with. Used only to tell a
 // malformed layout title from an ordinary tooltip.
 const LAYOUT_SHAPED = /^(&|x?\d)|^(left|right|center)$/i
@@ -83,10 +82,12 @@ export function parseImageTitle(title: string | null | undefined): ImageTitle {
 
 /** Adds one token to `layout`; false when it does not parse or its kind is already set. */
 function applyToken(layout: ImageLayout, token: string): boolean {
-  const id = ID_TOKEN.exec(token)
+  // The id's rule is shared/images.ts's, so a name given here is one the
+  // store accepts; it is kept normalized (`&logo` reads as `&LOGO`).
+  const id = token.startsWith('&') ? normalizeImageId(token) : null
   if (id) {
     if (layout.id !== null) return false
-    layout.id = id[1]
+    layout.id = id.slice(1)
     return true
   }
   const align = ALIGN_TOKEN.exec(token)
