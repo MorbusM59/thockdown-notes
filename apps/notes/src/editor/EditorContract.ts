@@ -363,4 +363,11 @@ export interface EditorBindings {
     text: string;
     selection: EditorSelectionState;
   }) => EditorTransformResult | null;
+  /**
+   * Image files dropped or pasted into the note: stores them and answers
+   * with the Markdown that references them (one image per line), or null
+   * when none could be stored. The editor inserts the answer where the drop
+   * or paste happened, wherever that has moved to by the time it arrives.
+   */
+  importImageFiles?: (files: File[]) => Promise<string | null>;
 }

@@ -1,3 +1,4 @@
+import { buildNextAutoImageId, MAX_STORED_IMAGE_BYTES, type ImagesApi, type ResolvedImage } from '../shared/images'
 import type { AppState, AppStateApi, WindowState } from '../shared/appState'
 import type { UiLayoutLoadout, UiLoadoutApi, UiLoadoutEntry, UiLoadoutListResult, UiLoadoutMode } from '@thockdown/look/loadouts'
 import {
@@ -2112,6 +2113,28 @@ function buildSectionsBridge(storeRef: { current: BrowserMockStore }): EditorSec
   }
 }
 
+// Stored images, in memory only: a page reload forgets them. The store is
+// serialized to localStorage on every write, which cannot hold image bytes.
+// Served as blob: URLs, which the real app's scheme stands in for; neither
+// the size cap nor the format check is the real one (electron/imageSniff.ts).
+function buildImagesBridge(): ImagesApi {
+  const images = new Map<string, ResolvedImage>()
+  return {
+    importImage: async ({ bytes }) => {
+      if (bytes.byteLength > MAX_STORED_IMAGE_BYTES) return { ok: false, reason: 'too-large' }
+      const blob = new Blob([bytes.slice()])
+      const bitmap = await createImageBitmap(blob).catch(() => null)
+      if (!bitmap) return { ok: false, reason: 'not-an-image' }
+      const { width, height } = bitmap
+      bitmap.close()
+      const id = buildNextAutoImageId(images.keys())
+      images.set(id, { src: URL.createObjectURL(blob), width, height })
+      return { ok: true, id }
+    },
+    resolveImages: async (ids) => Object.fromEntries(ids.map((id) => [id, images.get(id) ?? null])),
+  }
+}
+
 export function installBrowserMockBridges(): void {
   // Dev, or an explicit `--mode browser` build.
   //
@@ -2175,6 +2198,9 @@ export function installBrowserMockBridges(): void {
   }
   if (!window.thockdownReviewFlags) {
     window.thockdownReviewFlags = buildReviewFlagsBridge(storeRef)
+  }
+  if (!window.thockdownImages) {
+    window.thockdownImages = buildImagesBridge()
   }
 
   scopedWindow.__thockdownBrowserMockInstalled = true

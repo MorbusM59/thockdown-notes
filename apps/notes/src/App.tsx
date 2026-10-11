@@ -175,6 +175,7 @@ import {
   previewUrlTransform,
 } from './editor/PreviewMarkdown'
 import { setRemoteImagesAllowed, useRemoteImagesAllowed } from './shared/remoteImages'
+import { isImageFile } from './shared/images'
 import { normalizeInternalText } from './editor/TextPolicy'
 import { readPageZoomFactor } from './window/pageZoom'
 import { splitChapterFamily } from './shared/chapters'
@@ -5958,6 +5959,17 @@ ${markdownHtml}
     const types = Array.from(event.dataTransfer?.types ?? [])
     const isFileDrop = types.includes('Files')
     if (!isFileDrop) {
+      return
+    }
+
+    // Image files dropped onto a note's text are the editor's: it stores
+    // them and references them where they landed (CM6Editor's drop handler).
+    // Dropped anywhere else they do nothing, rather than opening as a note.
+    const files = Array.from(event.dataTransfer.files ?? [])
+    if (files.length > 0 && files.every(isImageFile)) {
+      if ((event.target as HTMLElement | null)?.closest('.cm-editor')) return
+      event.preventDefault()
+      event.stopPropagation()
       return
     }
 

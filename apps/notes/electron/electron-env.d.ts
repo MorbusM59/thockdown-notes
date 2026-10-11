@@ -35,4 +35,5 @@ interface Window {
   thockdownSections?: import('../src/shared/sections').EditorSectionsApi
   thockdownChapters?: import('../src/shared/chapters').ChaptersApi
   thockdownReviewFlags?: import('../src/shared/reviewFlags').ReviewFlagsApi
+  thockdownImages?: import('../src/shared/images').ImagesApi
 }

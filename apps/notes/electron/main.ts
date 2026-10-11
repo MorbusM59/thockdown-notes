@@ -24,6 +24,7 @@ import { computeWindowControlsWidthPx, DEFAULT_SPACING_REGULAR_PX } from '../src
 import { EDITOR_SECTIONS_CHANNELS, type EditorSectionsApi } from '../src/shared/sections'
 import { CHAPTER_CHANNELS, type ChaptersApi } from '../src/shared/chapters'
 import { REVIEW_FLAG_CHANNELS, type ReviewFlagsApi } from '../src/shared/reviewFlags'
+import { IMAGE_CHANNELS, IMAGE_SCHEME, type ImageImportRequest, type ImagesApi, type ResolvedImage } from '../src/shared/images'
 import { EXPORT_CHANNELS, type ExportApi } from '../src/shared/exportApi'
 import type { ReviewFlagWrite, ReviewFlagRemap } from '../src/shared/reviewFlags'
 import { ensureHelpGuide } from './help/helpGuideNote'
@@ -323,7 +324,14 @@ if (!gotSingleInstanceLock) {
 // (its time advances) but reaches the output as zeros. So the scheme is
 // CORS-enabled, every response carries Access-Control-Allow-Origin, and the
 // element asks for the file in CORS mode (MusicPlayerService's crossOrigin).
+//
+// thockdown-image:// serves stored images from the database by the SHA-256
+// of their bytes (`thockdown-image://stored/<hash>`; src/shared/images.ts).
+// Unlike the music scheme it does NOT bypass the page's CSP: the policy's
+// img-src names it (contentSecurityPolicy.ts), so the policy stays the gate.
+// The bytes behind a hash never change, so a response may be cached forever.
 protocol.registerSchemesAsPrivileged([
+  { scheme: IMAGE_SCHEME, privileges: { standard: true, secure: true } },
   { scheme: 'thockdown-music', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true, corsEnabled: true } },
 ]);
 
@@ -1261,6 +1269,19 @@ function registerIpcHandlers() {
     },
   }, ipcMain.handle.bind(ipcMain));
 
+  registerInvokeHandlers<ImagesApi, IpcMainInvokeEvent>(IMAGE_CHANNELS, {
+    importImage: async (_event, request: ImageImportRequest) => {
+      return databaseService!.importImage(request);
+    },
+    resolveImages: async (_event, ids: string[]) => {
+      const resolved: Record<string, ResolvedImage | null> = {};
+      for (const [id, image] of Object.entries(databaseService!.resolveImages(ids))) {
+        resolved[id] = image && { src: `${IMAGE_SCHEME}://stored/${image.hash}`, width: image.width, height: image.height };
+      }
+      return resolved;
+    },
+  }, ipcMain.handle.bind(ipcMain));
+
   registerInvokeHandlers<ReviewFlagsApi, IpcMainInvokeEvent>(REVIEW_FLAG_CHANNELS, {
     listReviewFlags: async (_event, noteId: string) => {
       return databaseService!.listReviewFlags(noteId);
@@ -1682,6 +1703,15 @@ app.whenReady().then(async () => {
       console.error('[thockdown-music protocol] failed to serve', request.url, err);
       return new Response(null, { status: 404, headers: CORS_HEADERS });
     }
+  });
+
+  protocol.handle(IMAGE_SCHEME, (request) => {
+    const match = /^\/([0-9a-f]{64})$/.exec(new URL(request.url).pathname);
+    const blob = match ? databaseService!.readImageBlob(match[1]) : null;
+    if (!blob) return new Response(null, { status: 404 });
+    return new Response(new Uint8Array(blob.data), {
+      headers: { 'Content-Type': blob.mime, 'Cache-Control': 'public, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' },
+    });
   });
 
   Menu.setApplicationMenu(null)

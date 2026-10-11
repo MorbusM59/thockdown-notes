@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url'
 //   itself is served from), and except IMAGES while the reader has turned
 //   remote images on (`setRemoteImagesAllowed`, from the persisted
 //   `allowRemoteImages`). Local schemes (file:, data:, blob:, devtools:, and
-//   the app's own thockdown-music:) are untouched.
+//   the app's own thockdown-music: and thockdown-image:) are untouched.
 // - NAVIGATION: a page may not navigate away from the document it loaded
 //   (a link dropped onto the window would otherwise replace the app with a
 //   remote site that still has the preload bridge attached).
