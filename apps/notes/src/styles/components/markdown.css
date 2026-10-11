@@ -396,13 +396,30 @@
   text-align: left;
 }
 
-.markdown-preview img {
+/* An image sits in a frame drawn like any other surface of the app. The
+   frame and the image are two elements because a CSS filter applies to the
+   whole element it is on, border and shadow included: the image's correction
+   must not reach the frame, which is part of the theme like everything
+   else. */
+.markdown-preview .markdown-image-frame {
+  display:       inline-block;
   max-width:     100%;
-  height:        auto;
+  line-height:   0;
+  overflow:      hidden;
+  vertical-align: top;
   border-radius: var(--border-radius-small);
+  background:    var(--btn-bg-default);
+  border:        1px solid var(--btn-border-default);
+  box-shadow:    var(--box-shadow-regular-light);
+}
+
+.markdown-preview img {
+  display:   block;
+  max-width: 100%;
+  height:    auto;
   /* Undoes the theme's invert and hue-rotate so a photo reads correctly
      through the scene filter (packages/look/imageCorrection.ts). */
-  filter:        var(--image-correction, none);
+  filter:    var(--image-correction, none);
 }
 
 /* 11c. Style variants */

@@ -45,7 +45,13 @@ function isSafePreviewHref(href: string | undefined): boolean {
 function PreviewImage({ src, alt }: { src?: string; alt?: string }) {
   const remoteImagesAllowed = useRemoteImagesAllowed()
   if (!isRemoteImageSrc(src)) return <span>{alt ?? 'Image'}</span>
-  if (remoteImagesAllowed) return <img src={src} alt={alt ?? ''} referrerPolicy="no-referrer" />
+  if (remoteImagesAllowed) {
+    return (
+      <span className="markdown-image-frame">
+        <img src={src} alt={alt ?? ''} referrerPolicy="no-referrer" />
+      </span>
+    )
+  }
   return <span>{alt ? `[Remote images disabled in options]: ${alt}` : '[Remote images disabled in options]'}</span>
 }
 
