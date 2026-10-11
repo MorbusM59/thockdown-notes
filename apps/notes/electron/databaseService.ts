@@ -697,6 +697,9 @@ export class DatabaseService {
       });
     };
     for (let n = LAUNCH_BACKUP_COUNT - 1; n >= 1; n -= 1) {
+      // A log belongs to the copy it was taken with: one left beside the
+      // older copy being replaced would be replayed into the wrong database.
+      await fs.rm(`${launchBackup(n + 1)}-wal`, { force: true });
       await moveIfPresent(launchBackup(n), launchBackup(n + 1));
       await moveIfPresent(`${launchBackup(n)}-wal`, `${launchBackup(n + 1)}-wal`);
     }
