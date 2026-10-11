@@ -18,9 +18,10 @@ import { purgeImage, setImageTrashed, useImageLibrary } from './imageLibraryStor
 // collection: a left click puts the image at the caret (into the empty
 // `![]()` the toolbar's image button leaves, or as a new reference), and its
 // cards have the trash button. In every view, HOLDING THE RIGHT BUTTON shows
-// a stored image in the slot; in Images in Order a right TAP expands the card
-// to the image's own proportions instead, and a second tap, or expanding
-// another, folds it again.
+// a stored image in the slot; a right TAP shows the image whole instead (in
+// Images in Order the card grows to the image's proportions, in a tree the
+// image opens beneath the row), and a second tap, or expanding another, folds
+// it again.
 
 interface ImageLibraryListProps {
   view: ImageLibraryView
@@ -188,21 +189,26 @@ const ImageCard = memo(function ImageCard({ image, use, isActive, primed, expand
 })
 
 /** A card in the two trees: the note tree's own card, the name on the left and the size on the right. */
-const ImageTreeCard = memo(function ImageTreeCard({ image, use, isActive, press, action }: {
+const ImageTreeCard = memo(function ImageTreeCard({ image, use, isActive, expanded, press, action }: {
   image: StoredImageSummary | null
   use: NoteImageUse | null
   isActive: boolean
+  /** Showing the image whole beneath the row (a right tap). */
+  expanded: boolean
   press: CardPress
   /** The button that takes the size's place on hover. */
   action: ReactNode
 }) {
   const handlers = useCardPress(press)
+  const remoteAllowed = useRemoteImagesAllowed()
+  const src = image ? image.src : use && remoteAllowed && isRemoteImageSrc(use.src) ? use.src : null
+  const seeWhole = src ? 'right-click to see it whole, ' : ''
   const tooltip = use
-    ? `${use.alt ? `${use.alt}. ` : ''}${image ? 'Click to go to it, hold right-click to show it' : `${use.src}. Click to go to it, hold to store it in the app`}`
-    : 'Click to put it at the caret, hold right-click to show it'
+    ? `${use.alt ? `${use.alt}. ` : ''}${image ? `Click to go to it, ${seeWhole}hold right-click to show it` : `${use.src}. Click to go to it, ${seeWhole}hold to store it in the app`}`
+    : `Click to put it at the caret, ${seeWhole}hold right-click to show it`
   return (
     <div
-      className={`note-list-item is-tree-card image-list-item${isActive ? ' is-active' : ''}`}
+      className={`note-list-item is-tree-card image-list-item${isActive ? ' is-active' : ''}${expanded && src ? ' is-previewing' : ''}`}
       role="option"
       aria-selected={isActive}
       data-image-id={image?.id}
@@ -214,8 +220,15 @@ const ImageTreeCard = memo(function ImageTreeCard({ image, use, isActive, press,
         <div className="note-list-meta-row image-tree-card-row">
           <span className="note-list-title"><CardTitle image={image} /></span>
           <span className="note-list-meta-right">{sizeLabel(image)}</span>
-          {action}
+          {expanded && src ? null : action}
         </div>
+        {expanded && src ? (
+          <div
+            className="image-tree-card-preview"
+            style={{ backgroundImage: `url("${src}")`, aspectRatio: image && image.width > 0 ? `${image.width} / ${image.height}` : undefined }}
+            aria-hidden="true"
+          />
+        ) : null}
       </div>
     </div>
   )
@@ -224,7 +237,9 @@ const ImageTreeCard = memo(function ImageTreeCard({ image, use, isActive, press,
 export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQuery, caseSensitive, uses, shownImageId, caretUseFrom, onPlace, onReveal, onRemove, onStore, onOpen }: ImageLibraryListProps) {
   const { images, loaded } = useImageLibrary()
   const [primedId, setPrimedId] = useState<string | null>(null)
+  // One card at a time is expanded, in whichever view: expanding another folds it.
   const [expandedKey, setExpandedKey] = useState<string | null>(null)
+  const toggleExpanded = useCallback((key: string) => setExpandedKey((previous) => (previous === key ? null : key)), [])
   const isNoteView = view === 'date' || view === 'category'
   const cards = useMemo(() => (isNoteView ? imageUseCards(uses, images, searchQuery, caseSensitive) : []), [isNoteView, uses, images, searchQuery, caseSensitive])
   const libraryImages = useMemo(() => (isNoteView ? [] : imagesInView(images, view, searchQuery, caseSensitive)), [isNoteView, images, view, searchQuery, caseSensitive])
@@ -253,17 +268,19 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
       image={card.image}
       use={card.use}
       isActive={isActiveUse(card)}
-      press={pressFor(card, null)}
+      expanded={expandedKey === card.key}
+      press={pressFor(card, () => toggleExpanded(card.key))}
       action={<RemoveButton use={card.use} onRemove={onRemove} />}
     />
-  ), [isActiveUse, onRemove, pressFor])
+  ), [expandedKey, isActiveUse, onRemove, pressFor, toggleExpanded])
   const renderImageTreeCard = useCallback((image: StoredImageSummary) => (
     <ImageTreeCard
       key={image.id}
       image={image}
       use={null}
       isActive={image.id === shownImageId}
-      press={{ onClick: () => onPlace(image.id, ''), onLeftHold: null, onRightTap: null, onRightHold: () => onOpen(image.id) }}
+      expanded={expandedKey === image.id}
+      press={{ onClick: () => onPlace(image.id, ''), onLeftHold: null, onRightTap: () => toggleExpanded(image.id), onRightHold: () => onOpen(image.id) }}
       action={(
         <button
           type="button"
@@ -276,7 +293,7 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
         />
       )}
     />
-  ), [onOpen, onPlace, shownImageId])
+  ), [expandedKey, onOpen, onPlace, shownImageId, toggleExpanded])
 
   if (!loaded) return null
   if ((isNoteView ? cards.length : libraryImages.length) === 0) {
@@ -297,7 +314,7 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
             isActive={isActiveUse(card)}
             primed={false}
             expanded={expandedKey === card.key}
-            press={pressFor(card, () => setExpandedKey((previous) => (previous === card.key ? null : card.key)))}
+            press={pressFor(card, () => toggleExpanded(card.key))}
             actions={(
               <div className="note-list-column note-list-column-action note-list-column-trash">
                 <RemoveButton use={card.use} onRemove={onRemove} />

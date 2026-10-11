@@ -1009,6 +1009,16 @@
   opacity: 0;
 }
 
+/* A tree card shows its image whole beneath the row on a right-click. */
+.image-tree-card-preview {
+  width: 100%;
+  margin-top: var(--spacing-small);
+  aspect-ratio: 2 / 1;
+  border-radius: var(--border-radius-small);
+  background-size: cover;
+  background-position: center;
+}
+
 /* A tree card's button (trash in the archive, remove in the note's views)
  * takes the size's place while the card is hovered. */
 .image-card-trash,
