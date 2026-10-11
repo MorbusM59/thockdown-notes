@@ -344,10 +344,6 @@ export interface EditorBindings {
     selection: EditorSelectionState;
   }) => EditorTransformResult | null;
   /**
-   * Ctrl+Shift+Arrow, before the editor's own handling (which extends the
-   * selection by a word or a line). Returning null leaves it to that.
-   */
-  /**
    * The release of a drag that picked up a selected table cell, over the box
    * at `targetOffset`. Returning null leaves the text as it is.
    */
@@ -356,7 +352,13 @@ export interface EditorBindings {
     selection: EditorSelectionState;
     targetOffset: number;
   }) => EditorTransformResult | null;
-  onTableMoveTransform?: (event: {
+  /**
+   * Ctrl+Shift+Arrow, before the editor's own handling (which extends the
+   * selection by a word or a line): in an image it aligns and resizes it, in
+   * a table it moves the caret's row or column. Returning null leaves it to
+   * the editor.
+   */
+  onModifiedArrowTransform?: (event: {
     direction: 'left' | 'right' | 'up' | 'down';
     text: string;
     selection: EditorSelectionState;

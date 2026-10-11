@@ -411,6 +411,23 @@
   border:        1px solid var(--btn-border-default);
 }
 
+.markdown-preview .markdown-image-frame.is-aligned-left {
+  float:  left;
+  margin: 0 var(--spacing-large) var(--spacing-regular) 0;
+}
+
+.markdown-preview .markdown-image-frame.is-aligned-right {
+  float:  right;
+  margin: 0 0 var(--spacing-regular) var(--spacing-large);
+}
+
+/* A block of its own: `display: table` shrinks the frame to the image and
+   lets auto margins centre it. */
+.markdown-preview .markdown-image-frame.is-aligned-center {
+  display: table;
+  margin:  0 auto;
+}
+
 .markdown-preview img {
   display:   block;
   max-width: 100%;

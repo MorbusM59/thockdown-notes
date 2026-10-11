@@ -15,6 +15,7 @@ import { readSelectionLineRects } from '../editor/SelectionRects';
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming';
 import { isOffsetInFencedCodeBlock } from '../editor/MarkdownContext';
 import { isTableCellDragStart, resolveTableCellDrop, resolveTableSelectionStep } from '../editor/MarkdownTableTransforms';
+import { malformedImageTitlesOnLine, resolveImageSelectionStep } from '../editor/MarkdownImageTransforms';
 import { hasTravelledDragThreshold } from '../shared/pointerDrag';
 import { createWheelNotchState, resolveWheelEventUnits } from '../editor/wheelNotch';
 import { getWheelStepRows } from '../editor/wheelStep';
@@ -802,6 +803,44 @@ const lineTokenPlugin = ViewPlugin.fromClass(class {
         });
         if (presentation) {
           builder.add(line.from, line.from, Decoration.line({ class: presentation.classes.join(' ') }));
+        }
+        pos = line.to + 1;
+      }
+    }
+    return builder.finish();
+  }
+}, {
+  decorations: (pluginValue) => pluginValue.decorations,
+});
+
+// Marks an image title that looks like layout but does not parse ("12emm
+// right"), so the typo shows instead of the image silently ignoring it. Only
+// visible lines are scanned; the fence check (O(document) without a cache) is
+// paid only for a line that actually holds a malformed title, which is rare.
+const malformedImageTitleMark = Decoration.mark({ class: 'thockdown-md-image-title--malformed' });
+const malformedImageTitlePlugin = ViewPlugin.fromClass(class {
+  decorations: DecorationSet;
+  constructor(view: EditorView) {
+    this.decorations = this.buildDecorations(view);
+  }
+  update(update: { docChanged: boolean; viewportChanged: boolean; view: EditorView }) {
+    if (update.docChanged || update.viewportChanged) {
+      this.decorations = this.buildDecorations(update.view);
+    }
+  }
+  buildDecorations(view: EditorView): DecorationSet {
+    const builder = new RangeSetBuilder<Decoration>();
+    let text: string | null = null;
+    for (const { from, to } of view.visibleRanges) {
+      let pos = from;
+      while (pos <= to) {
+        const line = view.state.doc.lineAt(pos);
+        const ranges = malformedImageTitlesOnLine(line.text);
+        if (ranges.length > 0) {
+          text ??= view.state.doc.toString();
+          if (!isOffsetInFencedCodeBlock(text, line.from, null)) {
+            for (const range of ranges) builder.add(line.from + range.from, line.from + range.to, malformedImageTitleMark);
+          }
         }
         pos = line.to + 1;
       }
@@ -3545,6 +3584,7 @@ export function CM6Editor({
       undoHistoryExtension(undoHistoryScopeRef.current),
       keymap.of([...CM6_DEFAULT_KEYMAP_WITHOUT_ALT_ARROW, ...historyKeymap]),
       lineTokenPlugin,
+      malformedImageTitlePlugin,
       EditorView.lineWrapping,
       readOnlyCompartmentRef.current.of(readOnlyExtension(editorReadOnly)),
       spellCheckCompartmentRef.current.of(EditorView.contentAttributes.of({ class: 'editor-text', spellcheck: String(spellCheckEnabled) })),
@@ -3656,10 +3696,11 @@ export function CM6Editor({
           }
 
           if (matchShortcut(event, 'tableMove')) {
-            // Ctrl+Shift+Arrow is offered to the bindings first (in a table
-            // it moves the caret's row or column); null leaves it to the
-            // default keymap's selection extension.
-            const callback = bindingsRef.current?.onTableMoveTransform;
+            // Ctrl+Shift+Arrow is offered to the bindings first (in an image
+            // it aligns or resizes it, in a table it moves the caret's row or
+            // column); null leaves it to the default keymap's selection
+            // extension.
+            const callback = bindingsRef.current?.onModifiedArrowTransform;
             if (callback) {
               const direction = event.key.slice('Arrow'.length).toLowerCase() as 'left' | 'right' | 'up' | 'down';
               const text = previousTextRef.current;
@@ -3924,6 +3965,18 @@ export function CM6Editor({
           // (resolveTableSelectionStep); the prose ladder's steps run
           // across the pipes. It keeps no cycle state of its own, so the
           // prose cycle is reset: leaving the table starts it fresh.
+          // In an image the ladder is alt text, id, whole image
+          // (resolveImageSelectionStep), and an image inside a table cell
+          // is the image's before it is the cell's.
+          const imageStep = resolveImageSelectionStep(
+            { text, clickOffset, selection: currentSelection },
+            (offset) => isOffsetInFencedCodeBlock(text, offset, null),
+          );
+          if (imageStep) {
+            view.dispatch({ selection: EditorSelection.single(imageStep.start, imageStep.end) });
+            rightClickCycleRef.current = null;
+            return true;
+          }
           const tableStep = resolveTableSelectionStep(
             { text, clickOffset, selection: currentSelection },
             (offset) => isOffsetInFencedCodeBlock(text, offset, null),

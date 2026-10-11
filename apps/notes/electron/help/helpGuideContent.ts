@@ -592,6 +592,14 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - **Deleting**: \`Backspace\` and \`Delete\` work exactly as everywhere else, pipes included. **\`Shift+Backspace\`** empties the whole cell (and from an empty cell moves to the previous one). **\`Ctrl+Backspace\`** still deletes a word, but at the start of a cell it deletes the last word of the *previous* cell rather than the pipe between them.
 - **\`Shift+Enter\`** is a plain line break, for the rare time you want one in the middle of a table.
 - Tables you type or paste by hand get the same keys, and any \`|\` you add yourself counts: the next tidy makes room for it.
+
+### [Images](#images)
+
+*An image is ordinary Markdown, \`![alt](address)\`. Its size and placement are written in its title, so the note still reads correctly in any other Markdown editor.*
+
+- **\`Ctrl+Shift+←\`/\`→\`** with the caret in an image moves it left, to the centre, or right; text flows round a left or right image. **\`Ctrl+Shift+↑\`/\`↓\`** makes it bigger or smaller. **\`Shift+Backspace\`** puts it back to its natural size and place.
+- The keys write the title for you, e.g. \`"20em right"\`. Typed by hand: a width (\`12em\`, \`320px\`, \`50%\`), a height (\`x8em\`), both (\`12emx8em\`), and \`left\`, \`center\` or \`right\`. A title that looks like this but has a mistake in it is underlined with a wavy line, and the image ignores it.
+- **Right-click** in an image selects its alt text, then the whole image.
 `,
   `## Find & Replace
 

@@ -249,6 +249,8 @@
 /* Task state placeholders */
 .thockdown-md-task--unchecked {text-shadow: 0 0 4px var(--markdown-unchecked-color), 0 0 8px var(--markdown-unchecked-color),  0 0 12px var(--markdown-unchecked-color)}
 .thockdown-md-task--checked {text-shadow: 0 0 4px var(--markdown-checked-color), 0 0 8px var(--markdown-checked-color),  0 0 12px var(--markdown-checked-color)}
+/* An image title that looks like layout but does not parse (MarkdownImageTransforms.ts). Decoration only: no change to text metrics. */
+.thockdown-md-image-title--malformed {text-decoration: underline wavy currentColor; text-decoration-skip-ink: none; text-underline-offset: 3px}
 
 
 /* We will apply this to all standard text nodes */

@@ -53,6 +53,8 @@ export const MOUSE_GESTURES: readonly MouseGesture[] = [
   { section: 'tables', action: 'drag', button: 'left', label: 'move selected cell' },
   { section: 'tables', action: 'hold', button: 'left', label: 'on divider: delete column' },
 
+  { section: 'images', action: 'click', button: 'right', label: 'select alt text, id, image' },
+
   { section: 'gutter', action: 'click', button: 'left', label: 'mark ? / !' },
   { section: 'gutter', action: 'click', button: 'right', label: 'clear mark' },
 

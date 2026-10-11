@@ -63,6 +63,7 @@ export type ShortcutSectionId =
   | 'native'
   | 'markdown'
   | 'tables'
+  | 'images'
   | 'gutter'
   | 'find'
   | 'category'
@@ -89,8 +90,11 @@ export interface ShortcutDeclaration {
   /**
    * Set when no handler matches this declaration through `matchShortcut`,
    * naming what binds the key instead -- see the module comment.
+   * `'table-keys'`: the image keys, which arrive through the table entries
+   * with the same chords (`tableMove`, `tableEmptyCell`); the caret is in
+   * an image or a table, never both, and the bindings try the image first.
    */
-  matchedBy?: 'codemirror' | 'escape-hold' | 'help-key' | 'ring'
+  matchedBy?: 'codemirror' | 'escape-hold' | 'help-key' | 'ring' | 'table-keys'
 }
 
 export interface ShortcutSection {
@@ -132,6 +136,7 @@ export const SHORTCUT_PANELS: readonly ShortcutPanel[] = [
       { id: 'native', title: 'Editing' },
       { id: 'markdown', title: 'Markdown' },
       { id: 'tables', title: 'Tables' },
+      { id: 'images', title: 'Images' },
       { id: 'gutter', title: 'Gutter' },
     ],
   },
@@ -197,6 +202,9 @@ export const SHORTCUTS = {
   tableDeleteColumn: { section: 'tables', chords: [{ key: 'Backspace', ctrl: true, shift: true }], label: 'Delete the column' },
   tableMove: { section: 'tables', chords: withMods([...ARROWS_LR, ...ARROWS_UD], { ctrl: true, shift: true }), label: 'Move row / column' },
   tableLineBreak: { section: 'tables', chords: [{ key: 'Enter', shift: true }], label: 'Line break inside a row', matchedBy: 'codemirror' },
+  imageAlign: { section: 'images', chords: withMods(ARROWS_LR, { ctrl: true, shift: true }), label: 'Align left / center / right', matchedBy: 'table-keys' },
+  imageResize: { section: 'images', chords: withMods(ARROWS_UD, { ctrl: true, shift: true }), label: 'Grow / shrink', matchedBy: 'table-keys' },
+  imageClearLayout: { section: 'images', chords: [{ key: 'Backspace', shift: true }], label: 'Clear size and alignment', matchedBy: 'table-keys' },
 
   ringTurn: { section: 'menu', chords: ARROWS_LR, label: 'Turn the dial (or W A S D)', matchedBy: 'ring' },
   ringNext: { section: 'menu', chords: [{ key: 'Tab' }], label: 'Next choice', matchedBy: 'ring' },

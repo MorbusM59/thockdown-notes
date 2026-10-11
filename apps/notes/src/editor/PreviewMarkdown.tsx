@@ -3,6 +3,7 @@
    ReactMarkdown component-renderer factory) shared with the PDF/MD export
    path; none of the top-level exports is itself a component, so there's
    nothing here for Fast Refresh to preserve state across. */
+import { EMPTY_IMAGE_LAYOUT, imageLayoutStyles, parseImageTitle } from '../shared/imageLayout'
 import { useCallback, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { Root } from 'hast'
 import { visit } from 'unist-util-visit'
@@ -42,13 +43,28 @@ function isSafePreviewHref(href: string | undefined): boolean {
  * otherwise the alt text says why the image is missing, since an image that
  * silently does not appear reads as a broken note.
  */
-function PreviewImage({ src, alt }: { src?: string; alt?: string }) {
+function PreviewImage({ src, alt, title }: { src?: string; alt?: string; title?: string }) {
   const remoteImagesAllowed = useRemoteImagesAllowed()
   if (!isRemoteImageSrc(src)) return <span>{alt ?? 'Image'}</span>
   if (remoteImagesAllowed) {
+    // The title carries the image's size and alignment (shared/imageLayout.ts);
+    // a title that is not layout is shown the way any renderer shows it, as
+    // the image's tooltip.
+    const parsed = parseImageTitle(title)
+    const layout = parsed.kind === 'layout' ? parsed.layout : EMPTY_IMAGE_LAYOUT
+    const styles = imageLayoutStyles(layout)
     return (
-      <span className="markdown-image-frame">
-        <img src={src} alt={alt ?? ''} referrerPolicy="no-referrer" />
+      <span
+        className={`markdown-image-frame${layout.align ? ` is-aligned-${layout.align}` : ''}`}
+        style={styles.frame}
+      >
+        <img
+          src={src}
+          alt={alt ?? ''}
+          title={parsed.kind === 'layout' ? undefined : parsed.text}
+          style={styles.image}
+          referrerPolicy="no-referrer"
+        />
       </span>
     )
   }
@@ -477,7 +493,7 @@ export function createPreviewMarkdownComponents(
 
       return <span>{children}</span>
     },
-    img: ({ src, alt }: { src?: string; alt?: string }) => <PreviewImage src={src} alt={alt} />,
+    img: ({ src, alt, title }: { src?: string; alt?: string; title?: string }) => <PreviewImage src={src} alt={alt} title={title} />,
     input: ({ checked, type, className }: { checked?: boolean; type?: string; className?: string }) => {
       if (type !== 'checkbox') {
         return null

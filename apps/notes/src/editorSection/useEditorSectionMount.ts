@@ -54,6 +54,7 @@ import {
   resolveTableMoveTransform,
   resolveTableTabTransform,
 } from '../editor/MarkdownTableTransforms'
+import { resolveImageArrowTransform, resolveImageClearLayoutTransform } from '../editor/MarkdownImageTransforms'
 import {
   shouldSuppressPlainTypingSoundForInsertion,
   suppressNextPlainTypingSoundOnce,
@@ -1842,7 +1843,8 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
       const next = modifier === 'ctrl-shift'
         ? resolveTableDeleteColumnTransform({ text, selection }, isInFence(text))
-        : resolveTableDeleteTransform({ modifier, text, selection }, isInFence(text))
+        : (modifier === 'shift' ? resolveImageClearLayoutTransform({ text, selection }, isInFence(text)) : null)
+          ?? resolveTableDeleteTransform({ modifier, text, selection }, isInFence(text))
       return next ? commitTransformResult(next) : null
     },
     onTableCellDropTransform: ({ text, selection, targetOffset }) => {
@@ -1853,12 +1855,13 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       const drop = resolveTableCellDrop({ text, selection, targetOffset }, isInFence(text))
       return drop ? commitTransformResult(drop.result) : null
     },
-    onTableMoveTransform: ({ direction, text, selection }) => {
+    onModifiedArrowTransform: ({ direction, text, selection }) => {
       if (previewedSnapshotId !== null) {
         return null
       }
       if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
-      const next = resolveTableMoveTransform({ direction, text, selection }, isInFence(text))
+      const next = resolveImageArrowTransform({ direction, text, selection }, isInFence(text))
+        ?? resolveTableMoveTransform({ direction, text, selection }, isInFence(text))
       return next ? commitTransformResult(next) : null
     },
     onViewportChange: (event: EditorViewportChangeEvent) => {
