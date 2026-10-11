@@ -11,7 +11,6 @@ function seedNote(db: DatabaseService, id: string): void {
   db.upsertNoteContent({
     id,
     title: id,
-    filePath: `/tmp/${id}.md`,
     text: `# ${id}`,
     createdAtMs: now,
     updatedAtMs: now,

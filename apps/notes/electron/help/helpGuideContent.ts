@@ -488,17 +488,6 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 *Permanently purges every note currently in Trash, in one action.*
 
 - Hold a right-click on the button to arm the purge; a normal left-click while armed confirms it.
-
-### [Notes Whose File Is Missing](#notes-whose-file-is-missing)
-
-> **Where?**
-> Any note row in the sidebar drawn hatched, as if marked for deletion.
-
-*Every note is a \`.md\` file in the notes folder. When that file is moved, renamed or deleted outside the app, the note is kept and marked like this instead of disappearing.*
-
-- Clicking it does not open it. The quick-actions ring comes up in its place, offering **Restore from saved copy** (the default: the app keeps a copy of every note's text and writes the file back from it, chapters included), **Specify missing file** (pick a file, which is copied into the notes folder; your original is left where it is), and **Delete database entry**.
-- On the row itself, the Archive button becomes **Specify missing file**, and the Trash button deletes the entry right away, since there is no file left to put in Trash.
-- Escape leaves the note marked and changes nothing.
 `,
   `## Time Machine
 
@@ -627,7 +616,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 > **Where?**
 > Your OS file explorer, a file association, or drag-and-drop onto the editor area.
 
-*Edits a file that lives outside Thockdown's own notes folder, in place.*
+*Edits a Markdown file from anywhere on your computer, in place.*
 
 - Becomes a temporary note tagged \`external\`, appearing only in the Date view (not Category, Archive, or Trash).
 - Your edits autosave into the app's own database as you type, but never touch the original file until you explicitly save.
@@ -649,19 +638,10 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 *Adopts an external file into Thockdown permanently, as a normal internal note.*
 
-- Writes the note's current content into a new internal file; the original external file is left untouched.
+- The note's current content becomes an ordinary note; the original external file is left untouched.
 - External notes can't carry your own tags while the \`external\` tag is present, but still keep their own [Time Machine Timeline](${guideLink('TIME-MACHINE', 'time-machine-timeline')}) like any other note.
 `,
-  `## Sync & Import
-
-### [Sync](#sync)
-
-> **Where?**
-> Settings → Data → the sync icon.
-
-*Rescans the app's own notes folder for files that exist on disk but aren't yet registered.*
-
-- Any newly-found file is added to the database as a regular note.
+  `## Import & Backup
 
 ### [Import](#import)
 
@@ -671,13 +651,17 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 *Brings Markdown files from anywhere on your computer into Thockdown as regular notes.*
 
 - Opens a file/folder picker; you choose exactly what gets imported.
+- The files are copied in. Thockdown keeps every note in its own database, not as files on disk, so later changes to those files are not picked up.
 
-### [Open Notes Folder](#open-notes-folder)
+### [Back Up All Notes](#back-up-all-notes)
 
 > **Where?**
-> Settings → Data → the folder icon.
+> Settings → Data → the database icon.
 
-*Opens the app's own notes folder (where your \`.md\` files live on disk) in your system file explorer.*
+*Saves a copy of the database, which holds every note, its chapters, tags and history, and shows it in your file explorer.*
+
+- A copy is also kept automatically each time the app starts, for the last three starts, in the same \`backups\` folder.
+- To get notes out as files other programs can read, use [Export to Markdown](#export-to-markdown).
 `,
   `## Export
 
@@ -909,9 +893,9 @@ ${shortcutTable()}
 > **Where?**
 > Settings panel → Data.
 
-*Note sync/import, and exporting or importing your whole appearance setup.*
+*Note import and backup, and exporting or importing your whole appearance setup.*
 
-- [Sync](${guideLink('SYNC-IMPORT', 'sync')}), [Import](${guideLink('SYNC-IMPORT', 'import')}), and [Open Notes Folder](${guideLink('SYNC-IMPORT', 'open-notes-folder')}) buttons for notes.
+- [Import](${guideLink('IMPORT-BACKUP', 'import')}) notes and [Back Up All Notes](${guideLink('IMPORT-BACKUP', 'back-up-all-notes')}).
 - Export or import your custom appearance presets as a \`.tdl\` file, so you can carry your look between machines.
 - Export or import your custom soundscapes as a \`.tds\` file the same way. Importing adds them after your own, skipping any you already have, up to twelve.
 

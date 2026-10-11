@@ -21,7 +21,7 @@ describe('sealed documents', () => {
     dataRoot = mkdtempSync(path.join(tmpdir(), 'thockdown-sealed-test-'))
     db = new DatabaseService(dataRoot)
     await db.initialize()
-    lifecycle = new NoteLifecycleService(dataRoot, db)
+    lifecycle = new NoteLifecycleService(db)
     // The guide is seeded by main.ts at startup, not by DatabaseService
     // itself -- a bare temp database has no guide to seal.
     await ensureHelpGuide(db, lifecycle)

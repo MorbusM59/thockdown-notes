@@ -34,7 +34,7 @@ describe('DatabaseService assigned ids', () => {
     dataRoot = mkdtempSync(path.join(tmpdir(), 'thockdown-ids-test-'))
     db = new DatabaseService(dataRoot)
     await db.initialize()
-    lifecycle = new NoteLifecycleService(dataRoot, db)
+    lifecycle = new NoteLifecycleService(db)
   })
 
   afterEach(() => {

@@ -15,7 +15,7 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
     dataRoot = mkdtempSync(path.join(tmpdir(), 'thockdown-openitems-test-'))
     db = new DatabaseService(dataRoot)
     await db.initialize()
-    lifecycle = new NoteLifecycleService(dataRoot, db)
+    lifecycle = new NoteLifecycleService(db)
   })
 
   afterEach(() => {

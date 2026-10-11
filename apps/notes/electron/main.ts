@@ -502,7 +502,7 @@ function registerIpcHandlers() {
     databaseService = new DatabaseService(resolveDataRoot())
   }
   if (!noteLifecycleService) {
-    noteLifecycleService = new NoteLifecycleService(resolveDataRoot(), databaseService);
+    noteLifecycleService = new NoteLifecycleService(databaseService);
   }
   if (!stateService) {
     stateService = new StateService(resolveDataRoot());
@@ -534,19 +534,6 @@ function registerIpcHandlers() {
     getNoteIdByExternalPath: async (_event, input) => noteLifecycleService!.getNoteIdByExternalPath(input),
     setNoteAssignedId: async (_event, input) => noteLifecycleService!.setNoteAssignedId(input),
     setNoteTimeless: async (_event, input) => noteLifecycleService!.setNoteTimeless(input),
-    restoreMissingNoteFile: async (_event, input) => noteLifecycleService!.restoreMissingNoteFile(input),
-    specifyMissingNoteFile: async (event, input) => {
-      const winRef = BrowserWindow.fromWebContents(event.sender) ?? win
-      if (!winRef) return false
-      const result = await dialog.showOpenDialog(winRef, {
-        title: 'Specify the missing note file',
-        properties: ['openFile'],
-        filters: [{ name: 'Markdown and Text Files', extensions: ['md', 'txt'] }],
-      })
-      if (result.canceled || result.filePaths.length === 0) return false
-      await noteLifecycleService!.adoptFileForMissingNote(input, result.filePaths[0])
-      return true
-    },
   }, ipcMain.handle.bind(ipcMain));
 
   registerInvokeHandlers<AppStateApi, IpcMainInvokeEvent>(APP_STATE_CHANNELS, {
@@ -568,22 +555,6 @@ function registerIpcHandlers() {
   }, ipcMain.handle.bind(ipcMain));
 
   registerInvokeHandlers<FileSyncApi, IpcMainInvokeEvent>(FILE_SYNC_CHANNELS, {
-    syncExistingNotes: async () => {
-      if (!databaseService) {
-        return { createdNoteIds: [], updatedPaths: [], markedDeletedNoteIds: [] }
-      }
-
-      const beforeIds = new Set(databaseService.listNoteRecords().map((note) => note.id))
-      await databaseService.bootstrapFromFilesystem()
-      const afterNotes = databaseService.listNoteRecords()
-      const createdNoteIds = afterNotes.filter((note) => !beforeIds.has(note.id)).map((note) => note.id)
-
-      return {
-        createdNoteIds,
-        updatedPaths: [],
-        markedDeletedNoteIds: [],
-      }
-    },
     importNotes: async (event) => {
       const winRef = BrowserWindow.fromWebContents(event.sender) ?? win
       if (!winRef) {
@@ -631,9 +602,10 @@ function registerIpcHandlers() {
         return { imported: 0, createdNoteIds: [], errors: [String(error instanceof Error ? error.message : error)] }
       }
     },
-    openNotesFolder: async () => {
-      if (!databaseService) return
-      await shell.openPath(databaseService.getNotesDir())
+    backupDatabase: async () => {
+      const backupPath = await databaseService!.backupNow()
+      shell.showItemInFolder(backupPath)
+      return backupPath
     },
   }, ipcMain.handle.bind(ipcMain));
 
@@ -1629,13 +1601,13 @@ app.whenReady().then(async () => {
     databaseService = new DatabaseService(resolveDataRoot())
   }
   await databaseService.initialize()
-  await databaseService.bootstrapFromFilesystem()
+  await databaseService.retireNotesFolder()
   const sanitation = databaseService.sanitizeDatabase()
   if (sanitation.orphanedContentRows > 0 || sanitation.vacuumed) {
     console.log('[db] startup sanitation', sanitation)
   }
   const sanity = databaseService.runSanityChecks()
-  if (sanity.missingNoteFiles.length > 0 || sanity.orphanedTagRows > 0) {
+  if (sanity.orphanedTagRows > 0) {
     console.warn('[db] startup sanity issues', sanity)
   }
   registerIpcHandlers()

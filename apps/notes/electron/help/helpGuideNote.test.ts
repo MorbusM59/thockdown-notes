@@ -18,7 +18,7 @@ describe('ensureHelpGuide', () => {
     dataRoot = mkdtempSync(path.join(tmpdir(), 'thockdown-helpguide-test-'))
     db = new DatabaseService(dataRoot)
     await db.initialize()
-    lifecycle = new NoteLifecycleService(dataRoot, db)
+    lifecycle = new NoteLifecycleService(db)
   })
 
   afterEach(() => {
@@ -80,7 +80,6 @@ describe('ensureHelpGuide', () => {
     expect(() => db.upsertNoteContent({
       id: HELP_GUIDE_ROOT_ID,
       title: 'tampered',
-      filePath: '/tmp/tampered.md',
       text: 'tampered',
       createdAtMs: Date.now(),
       updatedAtMs: Date.now(),

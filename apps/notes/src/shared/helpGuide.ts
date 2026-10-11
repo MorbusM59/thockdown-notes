@@ -41,7 +41,7 @@ export const HELP_GUIDE_CHAPTER_IDS = [
   { noteId: '26-07-04_00-00_HELPCH008', chapterId: 'TOOLBAR-FORMATTING' },
   { noteId: '26-07-04_00-00_HELPCH009', chapterId: 'FIND-REPLACE' },
   { noteId: '26-07-04_00-00_HELPCH010', chapterId: 'EXTERNAL-FILES' },
-  { noteId: '26-07-04_00-00_HELPCH011', chapterId: 'SYNC-IMPORT' },
+  { noteId: '26-07-04_00-00_HELPCH011', chapterId: 'IMPORT-BACKUP' },
   { noteId: '26-07-04_00-00_HELPCH012', chapterId: 'EXPORT' },
   { noteId: '26-07-04_00-00_HELPCH013', chapterId: 'SHORTCUTS' },
   { noteId: '26-07-04_00-00_HELPCH014', chapterId: 'WINDOW-CONTROLS' },

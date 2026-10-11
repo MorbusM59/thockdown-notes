@@ -27,21 +27,7 @@ export const NOTE_LIFECYCLE_CHANNELS = {
   branchNoteFromSnapshot: 'notes:branch-from-snapshot',
   setNoteAssignedId: 'notes:set-internal-id',
   setNoteTimeless: 'notes:set-timeless',
-  restoreMissingNoteFile: 'notes:restore-missing-file',
-  specifyMissingNoteFile: 'notes:specify-missing-file',
 } as const satisfies InvokeChannels<NoteLifecycleApi>;
-
-/**
- * A note whose database entry outlived its `.md` file -- the file was moved,
- * renamed or deleted outside the app, or the app opened a data folder it did
- * not write. Such a note is KEPT, never purged on its own: the database holds
- * a copy of its text (`note_content`), so the file going missing is usually
- * recoverable, and deleting the entry is a decision only the reader can take.
- */
-export interface MissingNoteFile {
-  /** Whether the database holds a copy of the text to write the file back from. */
-  hasStoredCopy: boolean;
-}
 
 export interface NoteSummary {
   id: string;
@@ -84,8 +70,6 @@ export interface NoteSummary {
   detachedChapterParentId: string | null;
   /** This chapter's own user-assignable id (the `chapters.chapterId` column) -- distinct from `assignedId` above, which is a different, note-level `$id` field a chapterOnly note's own tag bar never exposes a way to set. Null when unset, or when this note isn't a chapter. See tabLabels.ts's resolveIdentityLabel for how this resolves to a display label alongside a derived-from-content fallback -- the same rule the chapter bar's own pill uses, reused for a chapter's sidebar-list row (trash/archive) so the two read identically. */
   chapterId: string | null;
-  /** Set while the note's `.md` file is missing; absent while it is where it belongs. See MissingNoteFile. */
-  missingFile?: MissingNoteFile;
 }
 
 /** A summary as the main process sends it: with the note's content, which the renderer keeps out of React state (see NoteSummary.leadLine). */
@@ -240,10 +224,6 @@ export interface NoteLifecycleApi {
   setNoteAssignedId(input: { id: string; requestedId: string }): Promise<NoteSummaryWithContent | null>;
   /** Freezes/unfreezes the whole chapter family `id` belongs to -- see databaseService.ts's freezeNoteFamily/unfreezeNoteFamily. */
   setNoteTimeless(input: { id: string; value: boolean }): Promise<NoteSummaryWithContent | null>;
-  /** Writes a missing note's file back from the database's copy of its text, together with any of its chapters' that are missing too. */
-  restoreMissingNoteFile(input: LoadNoteInput): Promise<void>;
-  /** Asks the reader for a file and COPIES it into the notes folder as the missing note's file. False when the reader cancelled. */
-  specifyMissingNoteFile(input: LoadNoteInput): Promise<boolean>;
 }
 
 export function isArchivedNote(note: NoteSummary): boolean {
@@ -252,15 +232,6 @@ export function isArchivedNote(note: NoteSummary): boolean {
 
 export function isDeletedNote(note: NoteSummary): boolean {
   return note.tags.includes('deleted')
-}
-
-/**
- * Whether deleting this note removes it for good rather than moving it to
- * the trash: a note already in the trash, or one whose file is missing --
- * which is as gone as the trash would make it, with only the entry left.
- */
-export function isDeletionPermanent(note: NoteSummary): boolean {
-  return isDeletedNote(note) || Boolean(note.missingFile)
 }
 
 export function isExternalNote(note: NoteSummary): boolean {
@@ -294,7 +265,6 @@ export function isSameNoteSummary(a: NoteSummary, b: NoteSummary): boolean {
     a.isTimeless === b.isTimeless &&
     a.chapterParentId === b.chapterParentId &&
     (a.detachedChapterParentId ?? null) === (b.detachedChapterParentId ?? null) &&
-    (a.chapterId ?? null) === (b.chapterId ?? null) &&
-    (a.missingFile?.hasStoredCopy ?? null) === (b.missingFile?.hasStoredCopy ?? null)
+    (a.chapterId ?? null) === (b.chapterId ?? null)
   )
 }

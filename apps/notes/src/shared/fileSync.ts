@@ -1,15 +1,8 @@
 import type { InvokeChannels } from './ipcContract';
 export const FILE_SYNC_CHANNELS = {
-  syncExistingNotes: 'file-sync:sync-existing-notes',
   importNotes: 'file-sync:import-notes',
-  openNotesFolder: 'file-sync:open-notes-folder',
+  backupDatabase: 'file-sync:backup-database',
 } as const satisfies InvokeChannels<FileSyncApi>;
-
-export type SyncResult = {
-  createdNoteIds: string[];
-  updatedPaths: Array<{ noteId: string; oldPath: string; newPath: string }>;
-  markedDeletedNoteIds: string[];
-};
 
 export type ImportResult = {
   imported: number;
@@ -18,7 +11,12 @@ export type ImportResult = {
 };
 
 export type FileSyncApi = {
-  syncExistingNotes(): Promise<SyncResult>;
   importNotes(): Promise<ImportResult>;
-  openNotesFolder(): Promise<void>;
+  /**
+   * Writes a consistent copy of the whole database into the data folder's
+   * `backups` folder and shows it in the file explorer. Resolves to the
+   * copy's path. The database is the only store of every note, so this is
+   * the backup.
+   */
+  backupDatabase(): Promise<string>;
 };

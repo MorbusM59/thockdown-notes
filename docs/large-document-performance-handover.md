@@ -1620,6 +1620,7 @@ duplicated every note's content into the index again, forever. Fixed at the sour
 delete-then-insert, matching the pattern the regular per-keystroke save path already used
 correctly). Also added a permanent, automatic startup self-healing pass —
 `DatabaseService.sanitizeDatabase()`, called once per launch right after `bootstrapFromFilesystem()`
+(since replaced by the one-time `retireNotesFolder()`: the database is now the only store of a note)
 — so any installation upgrading from a version with the old bug gets its existing duplicates
 cleaned up automatically (not just prevented going forward), and any future regression of the same
 shape self-heals on the next launch instead of accumulating silently: (1) unconditionally dedupes

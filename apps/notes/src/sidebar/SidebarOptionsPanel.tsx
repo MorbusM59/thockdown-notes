@@ -551,9 +551,8 @@ export interface SidebarOptionsPanelProps {
   editorGlyphPaddingPx: number
   setEditorGlyphPaddingPx: (value: number) => void
 
-  syncExistingNotes: () => void
   importNotes: () => void
-  openNotesFolder: () => void
+  backupDatabase: () => void
   exportLayoutsTdl: () => Promise<void>
   importLayoutsTdl: () => Promise<void>
 
@@ -851,9 +850,8 @@ export function SidebarOptionsPanel({
   setBoxShadowAlphaPercent,
   editorGlyphPaddingPx,
   setEditorGlyphPaddingPx,
-  syncExistingNotes,
   importNotes,
-  openNotesFolder,
+  backupDatabase,
   exportLayoutsTdl,
   importLayoutsTdl,
   adventureSettings,
@@ -3250,16 +3248,7 @@ export function SidebarOptionsPanel({
         heading="Data"
       >
         <OptionsSubsectionLabel>Notes</OptionsSubsectionLabel>
-<div className="options-loadout-grid" role="group" aria-label="Note sync and import actions">
-          <button
-            type="button"
-            className="btn-icon options-color-swatch options-loadout-btn"
-            onClick={syncExistingNotes}
-            data-tooltip="Sync stored note files"
-            aria-label="Sync stored note files"
-          >
-            <span className="fa-solid fa-rotate" aria-hidden="true" />
-          </button>
+<div className="options-loadout-grid" role="group" aria-label="Note import and backup">
           <button
             type="button"
             className="btn-icon options-color-swatch options-loadout-btn"
@@ -3272,11 +3261,11 @@ export function SidebarOptionsPanel({
           <button
             type="button"
             className="btn-icon options-color-swatch options-loadout-btn"
-            onClick={openNotesFolder}
-            data-tooltip="Open notes folder in file explorer"
-            aria-label="Open notes folder in file explorer"
+            onClick={backupDatabase}
+            data-tooltip="Back up all notes: saves a copy of the database and shows it in the file explorer"
+            aria-label="Back up all notes"
           >
-            <span className="fa-solid fa-folder" aria-hidden="true" />
+            <span className="fa-solid fa-database" aria-hidden="true" />
           </button>
         </div>
         <OptionsSubsectionLabel>Layouts</OptionsSubsectionLabel>

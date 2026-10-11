@@ -9,7 +9,6 @@ function seedNote(db: DatabaseService, id: string): void {
   db.upsertNoteContent({
     id,
     title: id,
-    filePath: `/tmp/${id}.md`,
     text: `# ${id}`,
     createdAtMs: now,
     updatedAtMs: now,
@@ -74,7 +73,6 @@ describe('DatabaseService timeless notes', () => {
     expect(() => db.upsertNoteContent({
       id: 'root',
       title: 'root',
-      filePath: '/tmp/root.md',
       text: '# edited',
       createdAtMs: Date.now(),
       updatedAtMs: Date.now(),

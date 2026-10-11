@@ -26,7 +26,7 @@ describe('NoteLifecycleService chapter-creation cleanup on a missing parent', ()
     dataRoot = mkdtempSync(path.join(tmpdir(), 'thockdown-chaptercreate-test-'))
     db = new DatabaseService(dataRoot)
     await db.initialize()
-    lifecycle = new NoteLifecycleService(dataRoot, db)
+    lifecycle = new NoteLifecycleService(db)
   })
 
   afterEach(() => {

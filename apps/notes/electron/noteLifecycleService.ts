@@ -8,7 +8,6 @@ import type {
   DeleteNoteInput,
   DeleteNoteSnapshotInput,
   LoadNoteInput,
-  MissingNoteFile,
   NoteDocument,
   NoteSummary,
   NoteSummaryWithContent,
@@ -30,7 +29,6 @@ import { formatInternalNoteLink } from '../src/shared/internalNoteLinks';
 import type { DatabaseService, NoteRecord } from './databaseService';
 import type { ChapterEntry } from '../src/shared/chapters';
 
-const NOTES_DIR_NAME = 'notes';
 const META_PREFIX = '<!-- thockdown-meta:';
 const META_SUFFIX = '-->';
 const EXTERNAL_TAG = 'EXTERNAL';
@@ -101,20 +99,6 @@ function isExternalTag(tagName: string): boolean {
   return tagName.trim().toLowerCase() === 'external';
 }
 
-async function fileExists(filePath: string): Promise<boolean> {
-  try {
-    await fs.access(filePath);
-    return true;
-  } catch (error) {
-    if (isMissingFileError(error)) return false;
-    throw error;
-  }
-}
-
-function isMissingFileError(error: unknown): boolean {
-  return (error as NodeJS.ErrnoException | null)?.code === 'ENOENT';
-}
-
 function idToFileName(id: string): string {
   const safe = id.replace(/[^A-Za-z0-9_-]/g, '_');
   return `${safe}.md`;
@@ -148,77 +132,40 @@ function stripExistingBranchSuffix(title: string): string {
 }
 
 export class NoteLifecycleService {
-  private readonly notesDir: string;
   private readonly databaseService: DatabaseService;
-  constructor(dataRoot: string, databaseService: DatabaseService) {
-    this.notesDir = path.join(dataRoot, NOTES_DIR_NAME);
+  constructor(databaseService: DatabaseService) {
     this.databaseService = databaseService;
   }
 
-  private async ensureNotesDir(): Promise<void> {
-    await fs.mkdir(this.notesDir, { recursive: true });
-  }
-
-  private notePathFromId(id: string): { fileName: string; filePath: string } {
-    const fileName = idToFileName(id);
-    return {
-      fileName,
-      filePath: path.join(this.notesDir, fileName),
-    };
-  }
-
   /**
-   * What a note's text and timestamps are read from: the database for a temp
-   * note, its file for every other -- and, when that file is MISSING, the
-   * database's copy, marked so the reader is offered recovery rather than
-   * the note silently disappearing (see MissingNoteFile). Any other failure
-   * to read still hides the note, as before.
+   * The name a note is listed and searched under: the outside file's own
+   * name for a note opened from a file, and `<id>.md` for every other --
+   * the name its Markdown export is given.
    */
-  private async readSummarySource(record: NoteRecord): Promise<{
-    text: string;
-    stat: { birthtimeMs: number; mtimeMs: number; size: number };
-    missingFile?: MissingNoteFile;
-  }> {
-    const fromDatabase = (text: string) => ({
-      birthtimeMs: record.createdAtMs,
-      mtimeMs: record.updatedAtMs,
-      size: Buffer.byteLength(text, 'utf8'),
-    });
-    if (record.isTemp) {
-      const text = this.databaseService.readStoredNoteContent(record.id) ?? '';
-      return { text, stat: fromDatabase(text) };
-    }
-    try {
-      const [text, stat] = await Promise.all([fs.readFile(record.filePath, 'utf8'), fs.stat(record.filePath)]);
-      return { text, stat };
-    } catch (error) {
-      if (!isMissingFileError(error)) throw error;
-      const stored = this.databaseService.readStoredNoteContent(record.id);
-      const text = stored ?? '';
-      return { text, stat: fromDatabase(text), missingFile: { hasStoredCopy: stored !== null } };
-    }
+  private fileNameOf(record: Pick<NoteRecord, 'id' | 'externalPath'>): string {
+    return record.externalPath ? path.basename(record.externalPath) : idToFileName(record.id);
   }
 
   private async readSummary(record: NoteRecord): Promise<NoteSummaryWithContent | null> {
     try {
-      const { text, stat, missingFile } = await this.readSummarySource(record);
-
+      // The database is the only store of a note's text (see
+      // DatabaseService.retireNotesFolder for where the files went).
+      const text = this.databaseService.readStoredNoteContent(record.id) ?? '';
       const parsed = parseNoteMetadata(text, true);
-      const fileName = path.basename(record.filePath);
 
       const tags = this.databaseService.getNoteTags(record.id);
       return {
         id: record.id,
-        fileName,
+        fileName: this.fileNameOf(record),
         title: titleFromText(parsed.bodyText),
         leadLine: leadLineOf(parsed.bodyText),
         tags,
         contentText: parsed.bodyText,
-        createdAtMs: stat.birthtimeMs || record.createdAtMs,
-        updatedAtMs: stat.mtimeMs,
-        sizeBytes: stat.size,
+        createdAtMs: record.createdAtMs,
+        updatedAtMs: record.updatedAtMs,
+        sizeBytes: Buffer.byteLength(text, 'utf8'),
         isExternal: tags.includes(EXTERNAL_TAG),
-        externalPath: record.externalPath ?? (record.isTemp ? record.filePath : null) ?? null,
+        externalPath: record.externalPath,
         hasUnsavedChanges: record.hasUnsavedChanges,
         isInSync: Boolean(record.syncMode && !record.hasUnsavedChanges),
         assignedId: record.assignedId,
@@ -229,7 +176,6 @@ export class NoteLifecycleService {
         chapterParentId: record.chapterParentId,
         chapterId: record.chapterId,
         detachedChapterParentId: record.detachedChapterParentId,
-        ...(missingFile ? { missingFile } : {}),
       };
     } catch {
       return null;
@@ -247,38 +193,26 @@ export class NoteLifecycleService {
 
   async loadNote(input: LoadNoteInput): Promise<NoteDocument> {
     const record = this.databaseService.getNoteRecord(input.id);
-    const filePath = record?.filePath ?? path.join(this.notesDir, idToFileName(input.id));
-    const fileName = path.basename(filePath);
-    let rawText: string
-    if (record?.isTemp) {
-      const storedText = this.databaseService.readStoredNoteContent(input.id)
-      if (storedText !== null) {
-        rawText = storedText
-      } else if (record.externalPath) {
-        rawText = await fs.readFile(record.externalPath, 'utf8')
-      } else {
-        rawText = ''
-      }
-    } else {
-      rawText = await fs.readFile(filePath, 'utf8')
+    if (!record) throw new Error(`Note ${input.id} does not exist`);
+    const fileName = this.fileNameOf(record);
+    let rawText = this.databaseService.readStoredNoteContent(input.id);
+    // A note opened from a file whose stored copy was never written: the
+    // file is the only place its text is.
+    if (rawText === null && record.isTemp && record.externalPath) {
+      rawText = await fs.readFile(record.externalPath, 'utf8');
     }
-
-    const stat = record?.isTemp
-      ? {
-          birthtimeMs: record.createdAtMs,
-          mtimeMs: record.updatedAtMs,
-          size: Buffer.byteLength(rawText, 'utf8'),
-        }
-      : await fs.stat(filePath);
+    rawText ??= '';
 
     let text = rawText;
     let shouldSanitize = true;
 
     // External/temp notes are always full-pass sanitized.
-    if (!record?.isTemp) {
-      const storedChecksum = record?.contentChecksum;
+    if (!record.isTemp) {
+      const storedChecksum = record.contentChecksum;
       const currentChecksum = checksumText(rawText);
-      // Trusted fast path for internal notes: unchanged content bypasses sanitizer.
+      // Trusted fast path for internal notes: text stored through
+      // upsertNoteContent was sanitized on the way in and carries that
+      // checksum, so it is not sanitized again.
       shouldSanitize = !(storedChecksum && storedChecksum === currentChecksum);
     }
 
@@ -286,7 +220,7 @@ export class NoteLifecycleService {
       const sanitizedText = normalizeText(rawText);
       text = sanitizedText;
 
-      if (record?.isTemp) {
+      if (record.isTemp) {
         const sanitizedTitle = titleFromText(sanitizedText);
         const shouldUpdateTempNote =
           sanitizedText !== rawText ||
@@ -302,7 +236,7 @@ export class NoteLifecycleService {
           this.databaseService.upsertNoteContent({
             id: input.id,
             title: sanitizedTitle,
-            filePath,
+            externalPath: record.externalPath,
             text: sanitizedText,
             createdAtMs: record.createdAtMs,
             updatedAtMs: Date.now(),
@@ -311,18 +245,16 @@ export class NoteLifecycleService {
             syncMode: record.syncMode,
           });
         }
-      } else if (!record?.isTimeless) {
-        if (sanitizedText !== rawText) {
-          await fs.writeFile(filePath, sanitizedText, 'utf8');
-        }
-
+      } else if (!record.isTimeless) {
+        // Also refreshes a stale checksum, so the next load takes the fast path.
         this.databaseService.upsertNoteContent({
           id: input.id,
           title: titleFromText(sanitizedText),
-          filePath,
           text: sanitizedText,
-          createdAtMs: stat.birthtimeMs || record?.createdAtMs || stat.mtimeMs,
-          updatedAtMs: stat.mtimeMs,
+          createdAtMs: record.createdAtMs,
+          updatedAtMs: record.updatedAtMs,
+          hasUnsavedChanges: record.hasUnsavedChanges,
+          syncMode: record.syncMode,
         });
       }
     }
@@ -338,21 +270,21 @@ export class NoteLifecycleService {
       leadLine: leadLineOf(parsed.bodyText),
       tags,
       contentText: parsed.bodyText,
-      createdAtMs: stat.birthtimeMs || record?.createdAtMs || stat.mtimeMs,
-      updatedAtMs: stat.mtimeMs,
+      createdAtMs: record.createdAtMs,
+      updatedAtMs: record.updatedAtMs,
       sizeBytes: Buffer.byteLength(text, 'utf8'),
       text: parsed.bodyText,
       isExternal: tags.includes(EXTERNAL_TAG),
-      externalPath: record?.externalPath ?? (record?.isTemp ? record.filePath : null) ?? null,
-      hasUnsavedChanges: record?.hasUnsavedChanges ?? false,
-      isInSync: Boolean(record?.syncMode && !record?.hasUnsavedChanges),
-      chapterOnly: record?.chapterOnly ?? false,
-      isAutoToc: record?.isAutoToc ?? false,
-      isAutoOpenItems: record?.isAutoOpenItems ?? false,
-      isTimeless: record?.isTimeless ?? false,
-      chapterParentId: record?.chapterParentId ?? null,
-      chapterId: record?.chapterId ?? null,
-      detachedChapterParentId: record?.detachedChapterParentId ?? null,
+      externalPath: record.externalPath,
+      hasUnsavedChanges: record.hasUnsavedChanges,
+      isInSync: Boolean(record.syncMode && !record.hasUnsavedChanges),
+      chapterOnly: record.chapterOnly,
+      isAutoToc: record.isAutoToc,
+      isAutoOpenItems: record.isAutoOpenItems,
+      isTimeless: record.isTimeless,
+      chapterParentId: record.chapterParentId,
+      chapterId: record.chapterId,
+      detachedChapterParentId: record.detachedChapterParentId,
     };
   }
 
@@ -384,11 +316,9 @@ export class NoteLifecycleService {
 
     if (input?.externalPath) {
       const externalPath = input.externalPath;
-      const filePath = externalPath;
       this.databaseService.upsertNoteContent({
         id,
         title,
-        filePath,
         externalPath,
         text,
         createdAtMs,
@@ -406,19 +336,12 @@ export class NoteLifecycleService {
       return this.loadNote({ id });
     }
 
-    await this.ensureNotesDir();
-    const fileName = idToFileName(id);
-    const filePath = path.join(this.notesDir, fileName);
-
-    await fs.writeFile(filePath, text, 'utf8');
-    const stat = await fs.stat(filePath);
     this.databaseService.upsertNoteContent({
       id,
       title,
-      filePath,
       text,
-      createdAtMs: stat.birthtimeMs || stat.mtimeMs,
-      updatedAtMs: stat.mtimeMs,
+      createdAtMs,
+      updatedAtMs,
     });
     if (input?.initialTags?.length) {
       for (const tag of input.initialTags) {
@@ -442,7 +365,7 @@ export class NoteLifecycleService {
   }
 
   // Every chapter-creation path shares the same shape: createNote() (which
-  // awaits at least once internally -- ensureNotesDir/fs.writeFile/fs.stat)
+  // awaits at least once internally -- the auto-TOC chapter and loadNote)
   // followed by a synchronous link into parentNoteId's chapter list. That
   // await gives a concurrent deletion of the same parent (e.g. the user
   // deletes the whole chapter family from another section while this one's
@@ -450,8 +373,7 @@ export class NoteLifecycleService {
   // to land first -- without this guard, the synchronous link step below
   // would throw a raw SQLite FOREIGN KEY constraint error, and worse, leave
   // the just-created note behind as a permanent, invisible orphan (a `notes`
-  // row and, for a non-external note, a file on disk nothing will ever
-  // reference or clean up again). Re-checks the parent still exists right
+  // row nothing will ever reference or clean up again). Re-checks the parent still exists right
   // before linking (nothing async happens between that check and `link()`,
   // so no further interleaving is possible), and if it doesn't -- or `link`
   // itself still throws for any other reason -- deletes `chapterNoteId`
@@ -472,7 +394,7 @@ export class NoteLifecycleService {
 
   // Creates a fresh empty note marked chapterOnly and appends it as
   // parentNoteId's last chapter -- the chapter bar's "+" button. Chapters
-  // are otherwise full, independent notes (own tags, own file, own
+  // are otherwise full, independent notes (own tags, own text, own
   // snapshots); chapterOnly only controls menu-view visibility.
   async createChapterNote(parentNoteId: string): Promise<NoteDocument> {
     const created = await this.createNote({ initialText: '## ' }, { skipAutoToc: true, skipProvisionalId: true });
@@ -983,7 +905,6 @@ export class NoteLifecycleService {
   // recursion risk here to guard against on that side either.
   async saveNote(input: SaveNoteInput, options?: { skipAutoChapterHooks?: boolean }): Promise<NoteSummary> {
     const record = this.databaseService.getNoteRecord(input.id);
-    const filePath = record?.filePath ?? path.join(this.notesDir, idToFileName(input.id));
     const text = normalizeText(input.text);
 
     if (record?.isTemp) {
@@ -1003,7 +924,6 @@ export class NoteLifecycleService {
       this.databaseService.upsertNoteContent({
         id: input.id,
         title: titleFromText(text),
-        filePath,
         externalPath: record.externalPath,
         text,
         createdAtMs: record.createdAtMs,
@@ -1018,7 +938,6 @@ export class NoteLifecycleService {
       const summary = await this.readSummary(this.databaseService.getNoteRecord(input.id) ?? {
         id: input.id,
         title: titleFromText(text),
-        filePath,
         createdAtMs: record.createdAtMs,
         updatedAtMs: nowMs,
         contentChecksum: null,
@@ -1045,7 +964,7 @@ export class NoteLifecycleService {
     }
 
     // Cheap "is this note part of a chapter family" check up front (a
-    // handful of DB reads, no I/O) so the file read below -- needed only to
+    // handful of DB reads) so the stored-text read below -- needed only to
     // diff checklist/heading state against the pre-save text -- is skipped
     // entirely for the vast majority of saves, which touch a note with no
     // chapters at all. Auto-generated chapters (TOC, Open Items) are
@@ -1062,22 +981,16 @@ export class NoteLifecycleService {
       : (this.databaseService.getChapterParent(input.id) ?? (this.databaseService.listChaptersForNote(input.id).length > 0 ? input.id : null));
     let oldTextForChapterFamilyDiff: string | null = null;
     if (chapterFamilyParentId && !options?.skipAutoChapterHooks) {
-      try {
-        oldTextForChapterFamilyDiff = await fs.readFile(filePath, 'utf8');
-      } catch {
-        oldTextForChapterFamilyDiff = null;
-      }
+      oldTextForChapterFamilyDiff = this.databaseService.readStoredNoteContent(input.id);
     }
 
-    await fs.writeFile(filePath, text, 'utf8');
-    const stat = await fs.stat(filePath);
+    const nowMs = Date.now();
     this.databaseService.upsertNoteContent({
       id: input.id,
       title: titleFromText(text),
-      filePath,
       text,
-      createdAtMs: stat.birthtimeMs || record?.createdAtMs || stat.mtimeMs,
-      updatedAtMs: stat.mtimeMs,
+      createdAtMs: record?.createdAtMs ?? nowMs,
+      updatedAtMs: nowMs,
       externalPath: record?.externalPath ?? null,
       hasUnsavedChanges: record?.hasUnsavedChanges ?? false,
       syncMode: record?.syncMode ?? false,
@@ -1087,9 +1000,8 @@ export class NoteLifecycleService {
     const summary = await this.readSummary(this.databaseService.getNoteRecord(input.id) ?? {
       id: input.id,
       title: titleFromText(text),
-      filePath,
-      createdAtMs: stat.birthtimeMs || stat.mtimeMs,
-      updatedAtMs: stat.mtimeMs,
+      createdAtMs: record?.createdAtMs ?? nowMs,
+      updatedAtMs: nowMs,
       contentChecksum: null,
       isTemp: false,
       externalPath: null,
@@ -1142,10 +1054,9 @@ export class NoteLifecycleService {
   }
 
   // Chapters have no life outside their parent -- deleting a parent note
-  // must delete its chapters' files too, not just their DB rows (which
-  // databaseService.deleteNote already cascades). Recurses one level (chapters
-  // can't have sub-chapters, so listChaptersForNote on a chapter is always
-  // empty) before deleting the note's own file/row.
+  // deletes its chapters too. Recurses one level (chapters can't have
+  // sub-chapters, so listChaptersForNote on a chapter is always empty) before
+  // deleting the note's own row.
   async deleteNote(input: DeleteNoteInput): Promise<void> {
     const chapterEntries = this.databaseService.listChaptersForNote(input.id);
     for (const chapter of chapterEntries) {
@@ -1159,60 +1070,7 @@ export class NoteLifecycleService {
       return;
     }
 
-    const filePath = record?.filePath ?? path.join(this.notesDir, idToFileName(input.id));
-    // A note whose file is already gone (MissingNoteFile) is deleted by
-    // removing its entry: the file being absent is the state deletion ends in.
-    await fs.unlink(filePath).catch((error: unknown) => {
-      if (!isMissingFileError(error)) throw error;
-    });
     this.databaseService.deleteNote(input.id);
-  }
-
-  /**
-   * Writes a missing note's file back from the database's copy of its text,
-   * and does the same for any of its chapters whose files are missing too --
-   * a chapter cannot be reached without its parent, so restoring one without
-   * the other would only move the prompt one click along. A note whose file
-   * is present is left alone.
-   */
-  async restoreMissingNoteFile(input: LoadNoteInput): Promise<void> {
-    const chapterNoteIds = this.databaseService.listChaptersForNote(input.id).map((chapter) => chapter.chapterNoteId);
-    for (const noteId of [input.id, ...chapterNoteIds]) {
-      const record = this.databaseService.getNoteRecord(noteId);
-      if (!record || record.isTemp || await fileExists(record.filePath)) continue;
-      const stored = this.databaseService.readStoredNoteContent(noteId);
-      if (stored === null) {
-        if (noteId === input.id) throw new Error(`No stored copy of note ${noteId} to restore its file from`);
-        continue;
-      }
-      await this.writeMissingNoteFile(record, stored);
-    }
-  }
-
-  /**
-   * COPIES `sourcePath` into the notes folder as a missing note's file, so the
-   * notes folder stays the one place the app's notes live and the reader's
-   * original is never moved or written to. The note keeps its id, tags,
-   * chapters and history; only its text comes from the file.
-   */
-  async adoptFileForMissingNote(input: LoadNoteInput, sourcePath: string): Promise<void> {
-    const record = this.databaseService.getNoteRecord(input.id);
-    if (!record || record.isTemp) throw new Error(`Note ${input.id} has no file to replace`);
-    if (await fileExists(record.filePath)) throw new Error(`Note ${input.id} is not missing its file`);
-    const text = normalizeText(await fs.readFile(sourcePath, 'utf8'));
-    await this.writeMissingNoteFile(record, text);
-  }
-
-  /**
-   * Writes a missing note's file at the note's canonical place in the notes
-   * folder, never over an existing file ('wx'), and points the entry there
-   * if it pointed anywhere else (a data folder that has moved since).
-   */
-  private async writeMissingNoteFile(record: NoteRecord, text: string): Promise<void> {
-    await this.ensureNotesDir();
-    const { filePath } = this.notePathFromId(record.id);
-    await fs.writeFile(filePath, text, { encoding: 'utf8', flag: 'wx' });
-    if (filePath !== record.filePath) this.databaseService.setNoteFilePath(record.id, filePath);
   }
 
   async saveNoteUiState(input: { id: string; payload: NoteUiStatePayload }): Promise<void> {
@@ -1325,20 +1183,14 @@ export class NoteLifecycleService {
     const removingExternalTag = isExternalTag(input.tagName);
 
     if (record?.isTemp && removingExternalTag) {
-      await this.ensureNotesDir();
-      const { filePath } = this.notePathFromId(input.id);
       const snapshot = this.databaseService.readStoredNoteContent(input.id) ?? '';
-      await fs.writeFile(filePath, snapshot, 'utf8');
-      const stat = await fs.stat(filePath);
-
-      this.databaseService.convertTempNoteToRegular(input.id, filePath);
+      this.databaseService.convertTempNoteToRegular(input.id);
       this.databaseService.upsertNoteContent({
         id: input.id,
         title: titleFromText(snapshot),
-        filePath,
         text: snapshot,
         createdAtMs: record.createdAtMs,
-        updatedAtMs: stat.mtimeMs,
+        updatedAtMs: Date.now(),
       });
 
       return this.databaseService.removeTagFromNote(input.id, EXTERNAL_TAG);

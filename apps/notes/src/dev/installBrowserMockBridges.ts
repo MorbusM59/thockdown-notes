@@ -764,12 +764,6 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
       })
     },
 
-    // The mock keeps no files, so no note of its can be missing one.
-    async restoreMissingNoteFile(_input: LoadNoteInput): Promise<void> {},
-    async specifyMissingNoteFile(_input: LoadNoteInput): Promise<boolean> {
-      return false
-    },
-
     async deleteNote(input: DeleteNoteInput): Promise<void> {
       mutate((store) => {
         // Chapters have no life outside their parent -- deleting a parent
@@ -1155,13 +1149,12 @@ function buildLoadoutBridge(storeRef: { current: BrowserMockStore }): UiLoadoutA
 
 function buildFileSyncBridge(): FileSyncApi {
   return {
-    async syncExistingNotes() {
-      return { createdNoteIds: [], updatedPaths: [], markedDeletedNoteIds: [] }
-    },
     async importNotes() {
       return { imported: 0, createdNoteIds: [], errors: ['File sync is not available in browser dev.'] }
     },
-    async openNotesFolder() {},
+    async backupDatabase() {
+      throw new Error('There is no database to back up in browser dev.')
+    },
   }
 }
 

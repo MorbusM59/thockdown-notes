@@ -10,7 +10,7 @@ const count = (db: DatabaseService, sql: string) => (rawOf(db).prepare(sql).get(
 
 function upsert(db: DatabaseService, id: string, text: string): void {
   const now = Date.now()
-  db.upsertNoteContent({ id, title: id, filePath: `/tmp/${id}.md`, text, createdAtMs: now, updatedAtMs: now })
+  db.upsertNoteContent({ id, title: id, text, createdAtMs: now, updatedAtMs: now })
 }
 
 describe("a note's stored content", () => {

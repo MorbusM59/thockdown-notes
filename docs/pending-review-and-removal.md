@@ -110,8 +110,11 @@ where the data lives; line numbers are approximate, as of that date.
   ~4420).
 
 *Note content:*
-- `parseLegacyMetadata` (~361, used ~899): reads a legacy metadata header (tags)
-  out of `.md` files.
+- `DatabaseService.retireNotesFolder` and `parseLegacyMetadata`: the one-time
+  last read of the old notes folder (every note used to be a `.md` file there
+  too), and the legacy tag header it understands. Removable once every install
+  that predates the retirement has launched once since; the `notesFolderRetiredAt`
+  key in `app_meta` says whether one has.
 - `readStoredNoteContent` (~2270): falls back to snapshots for a note last
   written before content was stored.
 - `EditorSection.tsx` (~832–852): backfills the from-disk baseline for an

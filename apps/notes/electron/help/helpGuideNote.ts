@@ -1,5 +1,3 @@
-import path from 'node:path';
-import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { sanitizeDocumentText } from '../../src/shared/textSanitization';
 import type { DatabaseService } from '../databaseService';
@@ -44,15 +42,6 @@ function computeHelpGuideContentHash(): string {
 // the user (the guide never appears in Date/Category/Archive/Trash/Find --
 // see the exclusion in App.tsx's searchedNotes).
 const HELP_GUIDE_TIME_MS = new Date(2026, 6, 4, 0, 1, 0, 0).getTime();
-
-async function writeNoteFile(db: DatabaseService, id: string, text: string): Promise<{ filePath: string; sanitized: string }> {
-  const notesDir = db.getNotesDir();
-  await fs.mkdir(notesDir, { recursive: true });
-  const filePath = path.join(notesDir, `${id}.md`);
-  const sanitized = sanitizeDocumentText(text);
-  await fs.writeFile(filePath, sanitized, 'utf8');
-  return { filePath, sanitized };
-}
 
 function deriveTitle(text: string): string {
   const firstLine = text.split('\n')[0] ?? '';
@@ -112,12 +101,10 @@ export async function ensureHelpGuide(db: DatabaseService, noteLifecycle: NoteLi
 
   db.unfreezeNoteFamily(HELP_GUIDE_ROOT_ID);
 
-  const root = await writeNoteFile(db, HELP_GUIDE_ROOT_ID, HELP_GUIDE_INTRO_CONTENT);
   db.upsertNoteContent({
     id: HELP_GUIDE_ROOT_ID,
     title: deriveTitle(HELP_GUIDE_INTRO_CONTENT),
-    filePath: root.filePath,
-    text: root.sanitized,
+    text: sanitizeDocumentText(HELP_GUIDE_INTRO_CONTENT),
     createdAtMs: now,
     updatedAtMs: now,
   });
@@ -135,12 +122,10 @@ export async function ensureHelpGuide(db: DatabaseService, noteLifecycle: NoteLi
   const existingChapterNoteIds = new Set(db.listChaptersForNote(HELP_GUIDE_ROOT_ID).map((chapter) => chapter.chapterNoteId));
 
   for (const chapter of HELP_GUIDE_CHAPTERS) {
-    const written = await writeNoteFile(db, chapter.noteId, chapter.content);
     db.upsertNoteContent({
       id: chapter.noteId,
       title: deriveTitle(chapter.content),
-      filePath: written.filePath,
-      text: written.sanitized,
+      text: sanitizeDocumentText(chapter.content),
       createdAtMs: now,
       updatedAtMs: now,
     });
@@ -157,12 +142,10 @@ export async function ensureHelpGuide(db: DatabaseService, noteLifecycle: NoteLi
   // hand-written content of its own.
   if (!db.getAutoTocChapterNoteId(HELP_GUIDE_ROOT_ID)) {
     const placeholder = '# Table of Contents\n';
-    const written = await writeNoteFile(db, HELP_GUIDE_AUTO_TOC_ID, placeholder);
     db.upsertNoteContent({
       id: HELP_GUIDE_AUTO_TOC_ID,
       title: 'Table of Contents',
-      filePath: written.filePath,
-      text: written.sanitized,
+      text: placeholder,
       createdAtMs: now,
       updatedAtMs: now,
     });
@@ -188,7 +171,6 @@ export async function ensureHelpGuide(db: DatabaseService, noteLifecycle: NoteLi
   db.upsertNoteContent({
     id: HELP_GUIDE_AUTO_TOC_ID,
     title: tocDoc.title,
-    filePath: path.join(db.getNotesDir(), tocDoc.fileName),
     text: tocDoc.text,
     createdAtMs: now,
     updatedAtMs: now,

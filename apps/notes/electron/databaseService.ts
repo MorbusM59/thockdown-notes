@@ -1,6 +1,6 @@
 import { buildObjectDiff, formatPresetLine, formatPresetScalar, parsePresetLines, stableStringify } from '@thockdown/soundscape/presetFile';
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, promises as fs } from 'node:fs';
+import { promises as fs } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { sanitizeDocumentText, sanitizedFirstLine, truncateTitle } from '../src/shared/textSanitization';
@@ -87,6 +87,12 @@ try {
 }
 
 const DB_FILE_NAME = 'thockdown-notes.db';
+// The folder every note was also written to as a `.md` file, until
+// retireNotesFolder; it is read once more, then never again.
+const LEGACY_NOTES_DIR_NAME = 'notes';
+const NOTES_FOLDER_RETIRED_KEY = 'notesFolderRetiredAt';
+const BACKUPS_DIR_NAME = 'backups';
+const LAUNCH_BACKUP_COUNT = 3;
 const EXTERNAL_TAG = 'EXTERNAL';
 const PROTECTED_TAGS = ['deleted', 'archived', EXTERNAL_TAG] as const;
 const META_PREFIX = '<!-- thockdown-meta:';
@@ -196,7 +202,6 @@ type SqliteDatabase = import('better-sqlite3').Database;
 type NoteSyncRow = {
   id: string;
   title: string;
-  filePath: string;
   text: string;
   tags: string[];
   createdAtMs: number;
@@ -206,7 +211,6 @@ type NoteSyncRow = {
 type NoteRecordRow = {
   id: string;
   title: string;
-  filePath: string;
   createdAt: string;
   updatedAt: string;
   contentChecksum: string | null;
@@ -228,7 +232,6 @@ type NoteRecordRow = {
 export type NoteRecord = {
   id: string;
   title: string;
-  filePath: string;
   createdAtMs: number;
   updatedAtMs: number;
   contentChecksum: string | null;
@@ -637,19 +640,12 @@ function buildNeutralBaseDiff(payload: Record<string, unknown>): string[] {
 
 export class DatabaseService {
   private readonly dataRoot: string;
-  private readonly notesDir: string;
   private readonly dbPath: string;
   private db: SqliteDatabase | null = null;
 
   constructor(dataRoot: string) {
     this.dataRoot = dataRoot;
-    this.notesDir = path.join(dataRoot, 'notes');
     this.dbPath = path.join(dataRoot, DB_FILE_NAME);
-  }
-
-  /** The on-disk directory note content files live in (see upsertNoteContent). */
-  getNotesDir(): string {
-    return this.notesDir;
   }
 
   /** Generic app-level key/value read -- see app_meta's own schema comment. Null when the key has never been set. */
@@ -667,6 +663,7 @@ export class DatabaseService {
 
   async initialize(): Promise<void> {
     await fs.mkdir(this.dataRoot, { recursive: true });
+    await this.keepLaunchBackup();
 
     const db = new BetterSqlite3(this.dbPath);
     db.pragma('journal_mode = WAL');
@@ -680,6 +677,51 @@ export class DatabaseService {
     this.ensureLoadoutsSeeded();
   }
 
+  /**
+   * The database is the only store of every note, so it is the thing backed
+   * up. Before it is opened on each launch -- and so before any migration
+   * that launch runs -- the file is copied into `backups/`, keeping the last
+   * LAUNCH_BACKUP_COUNT launches (`launch-1.db` the newest). Copying the
+   * closed file is consistent: the last close checkpointed the write-ahead
+   * log, and a log left by a crash is copied beside it, which is how SQLite
+   * itself recovers one.
+   */
+  private async keepLaunchBackup(): Promise<void> {
+    if (!(await fs.stat(this.dbPath).then(() => true, () => false))) return;
+    const backupsDir = path.join(this.dataRoot, BACKUPS_DIR_NAME);
+    await fs.mkdir(backupsDir, { recursive: true });
+    const launchBackup = (n: number) => path.join(backupsDir, `launch-${n}.db`);
+    const moveIfPresent = async (from: string, to: string) => {
+      await fs.rename(from, to).catch((error: unknown) => {
+        if ((error as NodeJS.ErrnoException | null)?.code !== 'ENOENT') throw error;
+      });
+    };
+    for (let n = LAUNCH_BACKUP_COUNT - 1; n >= 1; n -= 1) {
+      await moveIfPresent(launchBackup(n), launchBackup(n + 1));
+      await moveIfPresent(`${launchBackup(n)}-wal`, `${launchBackup(n + 1)}-wal`);
+    }
+    await fs.rm(`${launchBackup(1)}-wal`, { force: true });
+    await fs.copyFile(this.dbPath, launchBackup(1));
+    const wal = `${this.dbPath}-wal`;
+    if (await fs.stat(wal).then((stat) => stat.size > 0, () => false)) {
+      await fs.copyFile(wal, `${launchBackup(1)}-wal`);
+    }
+  }
+
+  /**
+   * A copy of the open database, taken now through SQLite's online backup
+   * (consistent while the app keeps writing), into `backups/` under the
+   * current time. Resolves to the copy's path.
+   */
+  async backupNow(): Promise<string> {
+    const backupsDir = path.join(this.dataRoot, BACKUPS_DIR_NAME);
+    await fs.mkdir(backupsDir, { recursive: true });
+    const stamp = new Date().toISOString().slice(0, 19).replace('T', ' ').replace(/:/g, '-');
+    const backupPath = path.join(backupsDir, `thockdown-notes ${stamp}.db`);
+    await this.requireDb().backup(backupPath);
+    return backupPath;
+  }
+
   close(): void {
     if (!this.db) return;
     this.db.close();
@@ -690,135 +732,101 @@ export class DatabaseService {
     return this.dbPath;
   }
 
-  async bootstrapFromFilesystem(): Promise<void> {
-    await fs.mkdir(this.notesDir, { recursive: true });
-    const db = this.requireDb();
-
-    const entries = await fs.readdir(this.notesDir, { withFileTypes: true });
+  /**
+   * Retires the notes folder (`<dataRoot>/notes`), once.
+   *
+   * Every note used to be a `.md` file in that folder as well as its row and
+   * stored copy here, and every launch re-read the folder as the truth: a
+   * file edited outside the app replaced the note's text, and a file with no
+   * row became a note. The database is now the only store, so the folder is
+   * read one last time, by the same rules, and never again:
+   * - a file whose stored copy says the same is done with;
+   * - a file whose text differs replaces the stored text, the stored text
+   *   being kept first as a manual snapshot so the change can be undone from
+   *   the timeline;
+   * - a file with no row becomes a note, taking its tags from a legacy
+   *   metadata header when it has one;
+   * - a file whose note is frozen is skipped, since a frozen note cannot change.
+   * The folder is left where it is, unread and unwritten, for the reader to
+   * delete. `app_meta`'s NOTES_FOLDER_RETIRED_KEY records that this ran.
+   */
+  async retireNotesFolder(): Promise<void> {
+    if (this.getAppMeta(NOTES_FOLDER_RETIRED_KEY) !== null) return;
+    const notesDir = path.join(this.dataRoot, LEGACY_NOTES_DIR_NAME);
+    const entries = await fs.readdir(notesDir, { withFileTypes: true }).catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') return [];
+      throw error;
+    });
     const fileNames = entries
       .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.md'))
       .map((entry) => entry.name);
 
-    const syncedRows: NoteSyncRow[] = [];
-    const existingRows = db.prepare(`
-      SELECT nt.noteId AS noteId, t.name AS tagName
-      FROM note_tags nt
-      JOIN tags t ON nt.tagId = t.id
-      ORDER BY nt.noteId ASC, nt.position ASC
-    `).all() as Array<{ noteId: string; tagName: string }>;
-    const existingTagsByNoteId = new Map<string, string[]>();
-    for (const row of existingRows) {
-      if (!existingTagsByNoteId.has(row.noteId)) {
-        existingTagsByNoteId.set(row.noteId, []);
-      }
-      existingTagsByNoteId.get(row.noteId)!.push(row.tagName);
-    }
+    const newRows: NoteSyncRow[] = [];
+    const changedRows: Array<{ record: NoteRecord; text: string; updatedAtMs: number }> = [];
 
     for (const fileName of fileNames) {
-      const filePath = path.join(this.notesDir, fileName);
+      const filePath = path.join(notesDir, fileName);
       const [stat, rawText] = await Promise.all([
         fs.stat(filePath),
         fs.readFile(filePath, 'utf8'),
       ]);
       const parsed = parseLegacyMetadata(rawText);
       const id = fileName.replace(/\.md$/i, '');
-      syncedRows.push({
-        id,
-        title: titleFromText(parsed.bodyText),
-        filePath,
-        text: parsed.bodyText,
-        tags: parsed.hasLegacyHeader
-          ? withProtectedTagsFirst(parsed.tags)
-          : withProtectedTagsFirst(existingTagsByNoteId.get(id) ?? []),
-        createdAtMs: stat.birthtimeMs || stat.mtimeMs,
-        updatedAtMs: stat.mtimeMs,
-      });
+      const record = this.getNoteRecord(id);
+      if (!record) {
+        newRows.push({
+          id,
+          title: titleFromText(parsed.bodyText),
+          text: parsed.bodyText,
+          tags: withProtectedTagsFirst(parsed.hasLegacyHeader ? parsed.tags : []),
+          createdAtMs: stat.birthtimeMs || stat.mtimeMs,
+          updatedAtMs: stat.mtimeMs,
+        });
+        continue;
+      }
+      if (record.isTemp || record.isTimeless) continue;
+      if (this.readStoredNoteContent(id) === parsed.bodyText) continue;
+      changedRows.push({ record, text: parsed.bodyText, updatedAtMs: stat.mtimeMs });
     }
 
-    const upsertNoteStmt = db.prepare(`
-      INSERT INTO notes (
-        id,
-        title,
-        filePath,
-        createdAt,
-        updatedAt,
-        lastEdited,
-        contentChecksum,
-        isTemp,
-        hasUnsavedChanges,
-        syncMode
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0)
-      ON CONFLICT(id) DO UPDATE SET
-        title = excluded.title,
-        filePath = excluded.filePath,
-        createdAt = excluded.createdAt,
-        updatedAt = excluded.updatedAt,
-        lastEdited = excluded.lastEdited,
-        contentChecksum = excluded.contentChecksum
-    `);
-
-    const deleteNoteTagsStmt = db.prepare('DELETE FROM note_tags WHERE noteId = ?');
+    const db = this.requireDb();
     const insertNoteTagStmt = db.prepare('INSERT OR REPLACE INTO note_tags (noteId, tagId, position) VALUES (?, ?, ?)');
-
-    const findTagStmt = db.prepare('SELECT id FROM tags WHERE name = ?');
-    const insertTagStmt = db.prepare('INSERT INTO tags (name) VALUES (?)');
-
-
-    const toIso = (timestampMs: number): string => new Date(timestampMs).toISOString();
-
-    const getOrCreateTagId = (tagNameRaw: string): number => {
-      const tagName = normalizeTagName(tagNameRaw);
-      if (!tagName) {
-        throw new Error('Cannot create empty tag');
-      }
-      const existing = findTagStmt.get(tagName) as { id: number } | undefined;
-      if (existing) return existing.id;
-      const created = insertTagStmt.run(tagName);
-      return Number(created.lastInsertRowid);
-    };
-
-    const tx = db.transaction((rows: NoteSyncRow[]) => {
-      for (const row of rows) {
-        const createdAtIso = toIso(row.createdAtMs);
-        const updatedAtIso = toIso(row.updatedAtMs);
-
-        upsertNoteStmt.run(
-          row.id,
-          row.title,
-          row.filePath,
-          createdAtIso,
-          updatedAtIso,
-          updatedAtIso,
-          checksumText(row.text),
-        );
-
-        deleteNoteTagsStmt.run(row.id);
+    db.transaction(() => {
+      for (const row of newRows) {
+        this.upsertNoteContent({
+          id: row.id,
+          title: row.title,
+          text: row.text,
+          createdAtMs: row.createdAtMs,
+          updatedAtMs: row.updatedAtMs,
+        });
         row.tags.forEach((tagName, position) => {
-          const tagId = getOrCreateTagId(tagName);
-          insertNoteTagStmt.run(row.id, tagId, position);
+          insertNoteTagStmt.run(row.id, this.getOrCreateTagId(tagName), position);
         });
       }
-
-      // A note listed here whose file was not found is KEPT, with its stored
-      // copy: it used to be deleted on the spot, which turned any file that
-      // went missing -- or a data folder opened without its notes -- into
-      // notes lost for good. It is listed as missing its file instead, and
-      // only the reader deletes it (MissingNoteFile in shared/noteLifecycle.ts).
-    });
-
-    tx(syncedRows);
-
-    db.transaction(() => {
-      for (const row of syncedRows) this.writeStoredContent(row.id, row.title, row.text);
+      for (const { record, text, updatedAtMs } of changedRows) {
+        const stored = this.readStoredNoteContent(record.id);
+        if (stored !== null) this.saveNoteSnapshot(record.id, stored, true);
+        this.upsertNoteContent({
+          id: record.id,
+          title: titleFromText(text),
+          text,
+          createdAtMs: record.createdAtMs,
+          updatedAtMs,
+        });
+      }
+      this.setAppMeta(NOTES_FOLDER_RETIRED_KEY, new Date().toISOString());
     })();
 
-    this.normalizeAllTagPositions();
+    if (newRows.length > 0) this.normalizeAllTagPositions();
+    if (newRows.length > 0 || changedRows.length > 0) {
+      console.log('[db] retired the notes folder', { adopted: newRows.length, replaced: changedRows.length });
+    }
   }
 
   /**
    * Startup self-healing pass, run once per launch after
-   * bootstrapFromFilesystem() (see main.ts). Two independent fixes, each
+   * retireNotesFolder() (see main.ts). Two independent fixes, each
    * safe by construction and unable to lose real user data:
    *
    * 1. Drop stored content whose note no longer exists. Every deletion
@@ -1025,12 +1033,9 @@ export class DatabaseService {
 
   runSanityChecks(): {
     normalizedTagOrderCount: number;
-    missingNoteFiles: string[];
     orphanedTagRows: number;
   } {
     const db = this.requireDb();
-
-    const missingNoteFiles: string[] = [];
 
     const orphanedTagRows = Number((db.prepare(`
       SELECT COUNT(*) AS c
@@ -1042,22 +1047,8 @@ export class DatabaseService {
 
     const normalizedTagOrderCount = this.normalizeAllTagPositions();
 
-    const fsRows = db.prepare('SELECT id, filePath FROM notes').all() as Array<{ id: string; filePath: string }>;
-    for (const row of fsRows) {
-      try {
-        // Synchronous exists-check keeps startup cheap and deterministic.
-        const exists = existsSync(row.filePath);
-        if (!exists) {
-          missingNoteFiles.push(row.id);
-        }
-      } catch {
-        missingNoteFiles.push(row.id);
-      }
-    }
-
     return {
       normalizedTagOrderCount,
-      missingNoteFiles,
       orphanedTagRows,
     };
   }
@@ -1082,7 +1073,6 @@ export class DatabaseService {
   upsertNoteContent(input: {
     id: string;
     title: string;
-    filePath: string;
     text: string;
     createdAtMs: number;
     updatedAtMs: number;
@@ -1123,7 +1113,6 @@ export class DatabaseService {
       INSERT INTO notes (
         id,
         title,
-        filePath,
         createdAt,
         updatedAt,
         lastEdited,
@@ -1135,10 +1124,9 @@ export class DatabaseService {
         cursorPos,
         previewBlockCache
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         title = excluded.title,
-        filePath = excluded.filePath,
         createdAt = excluded.createdAt,
         updatedAt = excluded.updatedAt,
         lastEdited = excluded.lastEdited,
@@ -1152,7 +1140,6 @@ export class DatabaseService {
     `).run(
       input.id,
       input.title,
-      input.filePath,
       createdAtIso,
       updatedAtIso,
       updatedAtIso,
@@ -1171,7 +1158,7 @@ export class DatabaseService {
   listNoteRecords(): NoteRecord[] {
     const db = this.requireDb();
     const rows = db.prepare(`
-      SELECT n.id, n.title, n.filePath, n.createdAt, n.updatedAt, n.contentChecksum, n.isTemp, n.externalPath, n.hasUnsavedChanges, n.syncMode, n.assignedId, n.previewBlockCache, n.chapterOnly, n.isAutoToc, n.isAutoOpenItems, n.isTimeless, c.parentNoteId AS chapterParentId, c.chapterId AS chapterId, n.detachedChapterParentId AS detachedChapterParentId
+      SELECT n.id, n.title, n.createdAt, n.updatedAt, n.contentChecksum, n.isTemp, n.externalPath, n.hasUnsavedChanges, n.syncMode, n.assignedId, n.previewBlockCache, n.chapterOnly, n.isAutoToc, n.isAutoOpenItems, n.isTimeless, c.parentNoteId AS chapterParentId, c.chapterId AS chapterId, n.detachedChapterParentId AS detachedChapterParentId
       FROM notes n
       LEFT JOIN chapters c ON c.chapterNoteId = n.id
       ORDER BY datetime(n.updatedAt) DESC
@@ -1180,7 +1167,6 @@ export class DatabaseService {
     return rows.map((row) => ({
       id: row.id,
       title: row.title,
-      filePath: row.filePath,
       createdAtMs: parseIsoToMs(row.createdAt),
       updatedAtMs: parseIsoToMs(row.updatedAt),
       contentChecksum: row.contentChecksum,
@@ -1203,7 +1189,7 @@ export class DatabaseService {
   getNoteRecord(noteId: string): NoteRecord | null {
     const db = this.requireDb();
     const row = db.prepare(`
-      SELECT n.id, n.title, n.filePath, n.createdAt, n.updatedAt, n.contentChecksum, n.isTemp, n.externalPath, n.hasUnsavedChanges, n.syncMode, n.assignedId, n.previewBlockCache, n.chapterOnly, n.isAutoToc, n.isAutoOpenItems, n.isTimeless, c.parentNoteId AS chapterParentId, c.chapterId AS chapterId, n.detachedChapterParentId AS detachedChapterParentId
+      SELECT n.id, n.title, n.createdAt, n.updatedAt, n.contentChecksum, n.isTemp, n.externalPath, n.hasUnsavedChanges, n.syncMode, n.assignedId, n.previewBlockCache, n.chapterOnly, n.isAutoToc, n.isAutoOpenItems, n.isTimeless, c.parentNoteId AS chapterParentId, c.chapterId AS chapterId, n.detachedChapterParentId AS detachedChapterParentId
       FROM notes n
       LEFT JOIN chapters c ON c.chapterNoteId = n.id
       WHERE n.id = ?
@@ -1217,7 +1203,6 @@ export class DatabaseService {
     return {
       id: row.id,
       title: row.title,
-      filePath: row.filePath,
       createdAtMs: parseIsoToMs(row.createdAt),
       updatedAtMs: parseIsoToMs(row.updatedAt),
       contentChecksum: row.contentChecksum,
@@ -2110,15 +2095,6 @@ export class DatabaseService {
    * has no bearing on `detachedChapterParentId` at all (a plain column, not
    * a foreign key). One level only -- chapters can't have sub-chapters.
    */
-  /**
-   * Where a note's file is. Not guarded by assertNotTimeless: it records a
-   * fact about the disk, not an edit, and a frozen note's file can go missing
-   * like any other (NoteLifecycleService.writeMissingNoteFile).
-   */
-  setNoteFilePath(id: string, filePath: string): void {
-    this.requireDb().prepare('UPDATE notes SET filePath = ? WHERE id = ?').run(filePath, id);
-  }
-
   deleteNote(id: string): void {
     this.assertNotTimeless(id);
     const db = this.requireDb();
@@ -2655,7 +2631,6 @@ export class DatabaseService {
       INSERT INTO notes (
         id,
         title,
-        filePath,
         createdAt,
         updatedAt,
         lastEdited,
@@ -2666,11 +2641,10 @@ export class DatabaseService {
         syncMode,
         originalEncoding
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, 0, 0, ?)
+      VALUES (?, ?, ?, ?, ?, ?, 1, ?, 0, 0, ?)
     `).run(
       id,
       input.title,
-      input.externalPath,
       now,
       now,
       now,
@@ -2694,20 +2668,19 @@ export class DatabaseService {
     `).run(hasUnsavedChanges ? 1 : 0, syncMode ? 1 : 0, new Date().toISOString(), noteId);
   }
 
-  convertTempNoteToRegular(noteId: string, newFilePath: string): void {
+  convertTempNoteToRegular(noteId: string): void {
     const db = this.requireDb();
     db.prepare(`
       UPDATE notes
       SET
         isTemp = 0,
-        filePath = ?,
         externalPath = NULL,
         hasUnsavedChanges = 0,
         syncMode = 0,
         originalEncoding = NULL,
         updatedAt = ?
       WHERE id = ? AND isTemp = 1
-    `).run(newFilePath, new Date().toISOString(), noteId);
+    `).run(new Date().toISOString(), noteId);
 
     const tempTagId = this.findTagIdByName(EXTERNAL_TAG);
     if (tempTagId !== null) {
@@ -3736,7 +3709,6 @@ export class DatabaseService {
       CREATE TABLE IF NOT EXISTS notes (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
-        filePath TEXT NOT NULL,
         createdAt TEXT NOT NULL,
         updatedAt TEXT NOT NULL,
         lastEdited TEXT,
@@ -4092,6 +4064,18 @@ export class DatabaseService {
     this.requireDb().exec(`
       CREATE INDEX IF NOT EXISTS idx_notes_internal_id ON notes(assignedId);
     `);
+
+    // Where a note's `.md` file was. The database became the only store of
+    // a note's text (retireNotesFolder), and nothing reads the column, so it
+    // is removed rather than left for code to start believing again.
+    this.dropNotesColumn('filePath');
+  }
+
+  private dropNotesColumn(columnName: string): void {
+    const db = this.requireDb();
+    const columns = db.prepare('PRAGMA table_info(notes)').all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === columnName)) return;
+    db.exec(`ALTER TABLE notes DROP COLUMN ${columnName}`);
   }
 
   private ensureNotesColumn(columnName: string, columnDefinition: string): void {
@@ -4252,8 +4236,8 @@ export class DatabaseService {
    * lookup read every stored document), and whose every write tokenised the
    * whole text for a search index nothing queries -- measured on a 2MB
    * external note as ~200ms synchronous on import and ~90ms on each save,
-   * plus a per-note scan of the whole index on every launch, since
-   * bootstrapFromFilesystem rewrites every note's row.
+   * plus a per-note scan of the whole index on every launch, since the
+   * notes folder was then re-read into every note's row at startup.
    */
   private writeStoredContent(noteId: string, title: string, content: string): void {
     this.requireDb().prepare(`

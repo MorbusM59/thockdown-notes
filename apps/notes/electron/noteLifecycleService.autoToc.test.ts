@@ -16,7 +16,7 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
     dataRoot = mkdtempSync(path.join(tmpdir(), 'thockdown-autotoc-test-'))
     db = new DatabaseService(dataRoot)
     await db.initialize()
-    lifecycle = new NoteLifecycleService(dataRoot, db)
+    lifecycle = new NoteLifecycleService(db)
   })
 
   afterEach(() => {
