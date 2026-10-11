@@ -91,8 +91,8 @@ export interface ShortcutDeclaration {
    * Set when no handler matches this declaration through `matchShortcut`,
    * naming what binds the key instead -- see the module comment.
    * `'table-keys'`: the image keys, which arrive through the table entries
-   * with the same chords (`tableMove`, `tableEmptyCell`); the caret is in
-   * an image or a table, never both, and the bindings try the image first.
+   * with the same chords (`tableMove`, `tableEmptyCell`); the bindings try
+   * the table first, so in a table cell they stay the table's.
    */
   matchedBy?: 'codemirror' | 'escape-hold' | 'help-key' | 'ring' | 'table-keys'
 }

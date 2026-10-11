@@ -75,9 +75,9 @@ function imagesOnLine(text: string, offset: number): MarkdownImageSpan[] {
   return spans
 }
 
-/** The image the caret at `offset` is inside (its `!` through its `)`), or null. */
+/** The image the caret at `offset` is strictly inside (after its `!`, before its `)`), or null. */
 export function findImageAt(text: string, offset: number, isInFencedCodeBlock: FenceCheck): MarkdownImageSpan | null {
-  const image = imagesOnLine(text, offset).find((span) => offset >= span.from && offset <= span.to) ?? null
+  const image = imagesOnLine(text, offset).find((span) => offset > span.from && offset < span.to) ?? null
   if (!image || isInFencedCodeBlock(image.from)) return null
   return image
 }
@@ -126,9 +126,13 @@ const STEP_BY_UNIT: Record<ImageLength['unit'], number> = { em: 1, px: 10, '%': 
 
 function stepLength(length: ImageLength, direction: 'up' | 'down'): ImageLength {
   const step = STEP_BY_UNIT[length.unit]
-  const stepped = direction === 'up' ? length.value + step : length.value - step
   const ceiling = length.unit === '%' ? 100 : Infinity
-  return { value: Math.min(ceiling, Math.max(step, stepped)), unit: length.unit }
+  // The floor and ceiling only stop a step; they never turn a shrink into a
+  // grow (3% down stays 3%) or a grow into a shrink (120% up stays 120%).
+  const value = direction === 'up'
+    ? Math.max(length.value, Math.min(ceiling, length.value + step))
+    : Math.min(length.value, Math.max(step, length.value - step))
+  return { value, unit: length.unit }
 }
 
 /**
@@ -183,7 +187,7 @@ export function resolveImageSelectionStep(
 ): { start: number; end: number } | null {
   const { text, clickOffset, selection } = event
   const image = findImageAt(text, clickOffset, isInFencedCodeBlock)
-  if (!image || clickOffset >= image.to) return null
+  if (!image) return null
 
   const steps: Array<{ start: number; end: number }> = []
   if (image.altTo > image.altFrom) steps.push({ start: image.altFrom, end: image.altTo })

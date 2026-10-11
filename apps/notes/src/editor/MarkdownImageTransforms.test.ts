@@ -59,3 +59,19 @@ describe('malformedImageTitlesOnLine', () => {
     expect(ranges.map((r) => line.slice(r.from, r.to))).toEqual(['12emm right'])
   })
 })
+
+describe('review fixes', () => {
+  const sel = (o: number) => collapsedSelectionAt(o)
+  it('does nothing with the caret just outside the image', () => {
+    const text = '![a](x.png "20em") tail'
+    expect(resolveImageClearLayoutTransform({ text, selection: sel(18) }, noFence)).toBeNull()
+    expect(resolveImageClearLayoutTransform({ text, selection: sel(0) }, noFence)).toBeNull()
+  })
+  it('never shrinks into a grow or grows into a shrink', () => {
+    const run = (title: string, direction: 'up' | 'down') =>
+      resolveImageArrowTransform({ direction, text: `![a](x.png "${title}")`, selection: sel(3) }, noFence)
+    expect(run('3%', 'down')).toBeNull()
+    expect(run('120%', 'up')).toBeNull()
+    expect(run('7px', 'down')).toBeNull()
+  })
+})

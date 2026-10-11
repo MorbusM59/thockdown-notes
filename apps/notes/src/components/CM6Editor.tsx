@@ -3,7 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { createPortal } from 'react-dom';
 import { Annotation, Compartment, EditorState, EditorSelection, Prec, RangeSetBuilder, Transaction, type ChangeSet, type TransactionSpec } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
-import { EditorView, Decoration, ViewPlugin, keymap, type DecorationSet } from '@codemirror/view';
+import { EditorView, Decoration, ViewPlugin, keymap, type DecorationSet, type ViewUpdate } from '@codemirror/view';
 import { defaultKeymap, historyKeymap, isolateHistory } from '@codemirror/commands';
 import { attachUndoHistory, createUndoHistoryScope, detachUndoHistory, readOnlyExtension, undoHistoryExtension } from '../editor/UndoHistoryScope';
 import { matchShortcut, type ShortcutId } from '../shared/keyboardShortcuts';
@@ -815,32 +815,50 @@ const lineTokenPlugin = ViewPlugin.fromClass(class {
 
 // Marks an image title that looks like layout but does not parse ("12emm
 // right"), so the typo shows instead of the image silently ignoring it. Only
-// visible lines are scanned; the fence check (O(document) without a cache) is
-// paid only for a line that actually holds a malformed title, which is rare.
+// visible lines are scanned. Whether such a line is in a fenced code block
+// depends on everything above it, so the answer is cached per line and kept
+// across edits that start after that line (typing on or below it); only an
+// edit above it pays the O(document) fence check again. A line with no
+// malformed title, which is nearly every line, never asks.
 const malformedImageTitleMark = Decoration.mark({ class: 'thockdown-md-image-title--malformed' });
 const malformedImageTitlePlugin = ViewPlugin.fromClass(class {
   decorations: DecorationSet;
+  // Line start -> whether that line is in a fenced code block.
+  fenceByLineFrom = new Map<number, boolean>();
   constructor(view: EditorView) {
     this.decorations = this.buildDecorations(view);
   }
-  update(update: { docChanged: boolean; viewportChanged: boolean; view: EditorView }) {
+  update(update: ViewUpdate) {
+    if (update.docChanged) {
+      let firstChange = Infinity;
+      update.changes.iterChangedRanges((fromA) => { firstChange = Math.min(firstChange, fromA); });
+      const kept = new Map<number, boolean>();
+      for (const [lineFrom, inFence] of this.fenceByLineFrom) {
+        if (lineFrom < firstChange) kept.set(lineFrom, inFence);
+      }
+      this.fenceByLineFrom = kept;
+    }
     if (update.docChanged || update.viewportChanged) {
       this.decorations = this.buildDecorations(update.view);
     }
   }
+  isLineInFence(view: EditorView, lineFrom: number, lineTo: number): boolean {
+    let inFence = this.fenceByLineFrom.get(lineFrom);
+    if (inFence === undefined) {
+      inFence = isOffsetInFencedCodeBlock(view.state.doc.sliceString(0, lineTo), lineFrom, null);
+      this.fenceByLineFrom.set(lineFrom, inFence);
+    }
+    return inFence;
+  }
   buildDecorations(view: EditorView): DecorationSet {
     const builder = new RangeSetBuilder<Decoration>();
-    let text: string | null = null;
     for (const { from, to } of view.visibleRanges) {
       let pos = from;
       while (pos <= to) {
         const line = view.state.doc.lineAt(pos);
         const ranges = malformedImageTitlesOnLine(line.text);
-        if (ranges.length > 0) {
-          text ??= view.state.doc.toString();
-          if (!isOffsetInFencedCodeBlock(text, line.from, null)) {
-            for (const range of ranges) builder.add(line.from + range.from, line.from + range.to, malformedImageTitleMark);
-          }
+        if (ranges.length > 0 && !this.isLineInFence(view, line.from, line.to)) {
+          for (const range of ranges) builder.add(line.from + range.from, line.from + range.to, malformedImageTitleMark);
         }
         pos = line.to + 1;
       }
@@ -3965,24 +3983,24 @@ export function CM6Editor({
           // (resolveTableSelectionStep); the prose ladder's steps run
           // across the pipes. It keeps no cycle state of its own, so the
           // prose cycle is reset: leaving the table starts it fresh.
-          // In an image the ladder is alt text, id, whole image
-          // (resolveImageSelectionStep), and an image inside a table cell
-          // is the image's before it is the cell's.
-          const imageStep = resolveImageSelectionStep(
-            { text, clickOffset, selection: currentSelection },
-            (offset) => isOffsetInFencedCodeBlock(text, offset, null),
-          );
-          if (imageStep) {
-            view.dispatch({ selection: EditorSelection.single(imageStep.start, imageStep.end) });
-            rightClickCycleRef.current = null;
-            return true;
-          }
           const tableStep = resolveTableSelectionStep(
             { text, clickOffset, selection: currentSelection },
             (offset) => isOffsetInFencedCodeBlock(text, offset, null),
           );
           if (tableStep) {
             view.dispatch({ selection: EditorSelection.single(tableStep.start, tableStep.end) });
+            rightClickCycleRef.current = null;
+            return true;
+          }
+          // In an image the ladder is alt text, id, whole image
+          // (resolveImageSelectionStep); inside a table the table's ladder
+          // wins, as the table's keys do.
+          const imageStep = resolveImageSelectionStep(
+            { text, clickOffset, selection: currentSelection },
+            (offset) => isOffsetInFencedCodeBlock(text, offset, null),
+          );
+          if (imageStep) {
+            view.dispatch({ selection: EditorSelection.single(imageStep.start, imageStep.end) });
             rightClickCycleRef.current = null;
             return true;
           }

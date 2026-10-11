@@ -38,3 +38,12 @@ describe('the image title grammar', () => {
     expect(imageLayoutStyles(parsed.layout)).toEqual({ frame: { width: '20em' }, image: { width: '100%', height: '10em', objectFit: 'contain' } })
   })
 })
+
+describe('tooltips that only resemble layout', () => {
+  it('are tooltips, not malformed', () => {
+    expect(parseImageTitle('left-handed').kind).toBe('tooltip')
+    // A unit-less number stays malformed: a missing unit is the likeliest typo.
+    expect(parseImageTitle('320 left').kind).toBe('malformed')
+    expect(parseImageTitle('12emm right').kind).toBe('malformed')
+  })
+})

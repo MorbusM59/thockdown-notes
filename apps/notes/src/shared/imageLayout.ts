@@ -54,7 +54,7 @@ const ALIGN_TOKEN = /^(left|right|center)$/i
 const ID_TOKEN = /^&([^\s;()"'&]+)$/
 // What a token that was MEANT as layout starts with. Used only to tell a
 // malformed layout title from an ordinary tooltip.
-const LAYOUT_SHAPED = /^(&|x?\d)|^(left|right|center)\b/i
+const LAYOUT_SHAPED = /^(&|x?\d)|^(left|right|center)$/i
 
 function lengthOf(value: string, unit: string): ImageLength | null {
   const number = Number(value)

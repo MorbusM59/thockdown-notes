@@ -1843,8 +1843,8 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
       const next = modifier === 'ctrl-shift'
         ? resolveTableDeleteColumnTransform({ text, selection }, isInFence(text))
-        : (modifier === 'shift' ? resolveImageClearLayoutTransform({ text, selection }, isInFence(text)) : null)
-          ?? resolveTableDeleteTransform({ modifier, text, selection }, isInFence(text))
+        : resolveTableDeleteTransform({ modifier, text, selection }, isInFence(text))
+          ?? (modifier === 'shift' ? resolveImageClearLayoutTransform({ text, selection }, isInFence(text)) : null)
       return next ? commitTransformResult(next) : null
     },
     onTableCellDropTransform: ({ text, selection, targetOffset }) => {
@@ -1860,8 +1860,10 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         return null
       }
       if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
-      const next = resolveImageArrowTransform({ direction, text, selection }, isInFence(text))
-        ?? resolveTableMoveTransform({ direction, text, selection }, isInFence(text))
+      // A table's keys win over an image's: an image inside a table cell is
+      // shaped in the preview, and its row and column still move here.
+      const next = resolveTableMoveTransform({ direction, text, selection }, isInFence(text))
+        ?? resolveImageArrowTransform({ direction, text, selection }, isInFence(text))
       return next ? commitTransformResult(next) : null
     },
     onViewportChange: (event: EditorViewportChangeEvent) => {

@@ -599,7 +599,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 - **\`Ctrl+Shift+←\`/\`→\`** with the caret in an image moves it left, to the centre, or right; text flows round a left or right image. **\`Ctrl+Shift+↑\`/\`↓\`** makes it bigger or smaller. **\`Shift+Backspace\`** puts it back to its natural size and place.
 - The keys write the title for you, e.g. \`"20em right"\`. Typed by hand: a width (\`12em\`, \`320px\`, \`50%\`), a height (\`x8em\`), both (\`12emx8em\`), and \`left\`, \`center\` or \`right\`. A title that looks like this but has a mistake in it is underlined with a wavy line, and the image ignores it.
-- **Right-click** in an image selects its alt text, then the whole image.
+- **Right-click** in an image selects its alt text, then its id (when it has one), then the whole image. Inside a table, the table's keys and right-click take precedence.
 `,
   `## Find & Replace
 
