@@ -232,10 +232,11 @@ export function malformedImageTitlesOnLine(line: string): Array<{ from: number; 
  * `source` is exactly that (the shape the keys and the store/restore rewrite
  * understand); null for anything more exotic, which is then left alone.
  */
-export function parseImageMarkdown(source: string): { alt: string; destination: string; title: string | null } | null {
+export function parseImageMarkdown(source: string): { alt: string; destination: string; title: string | null; quote: '"' | "'" } | null {
   const [image] = imagesOnLine(source, 0)
   if (!image || image.from !== 0 || image.to !== source.length) return null
   const rawDestination = source.slice(image.destinationFrom, image.destinationTo)
   const destination = rawDestination.startsWith('<') ? rawDestination.slice(1, -1) : rawDestination
-  return { alt: source.slice(image.altFrom, image.altTo), destination, title: image.title }
+  const quote = image.titleFrom !== null && source[image.titleFrom - 1] === "'" ? "'" : '"'
+  return { alt: source.slice(image.altFrom, image.altTo), destination, title: image.title, quote }
 }

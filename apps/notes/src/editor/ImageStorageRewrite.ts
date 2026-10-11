@@ -24,6 +24,26 @@ function isStoredDestination(url: string): boolean {
   return url.startsWith('&')
 }
 
+/** Whether the store can fetch `url`: a web address, a file: URL or a full file path. */
+export function isFetchableSource(url: string): boolean {
+  if (/^(https?|file):/i.test(url)) return true
+  return url.startsWith('/') || /^[A-Za-z]:[\\/]/.test(url)
+}
+
+/**
+ * The images the button can act on: written in the plain shape the rewrite
+ * understands (parseImageMarkdown), and either stored or fetchable. The
+ * button's state is derived from these alone, so an image it could never
+ * change (a relative path, brackets in the alt text) cannot leave it a
+ * globe that no hold will ever turn into the database.
+ */
+export function shapeableImages(text: string, images: DocumentImage[]): DocumentImage[] {
+  return images.filter((image) => (
+    parseImageMarkdown(text.slice(image.from, image.to)) !== null
+    && (isStoredDestination(image.url) || isFetchableSource(image.url))
+  ))
+}
+
 /** What the button shows: nothing, a globe (something points elsewhere), or the database (all stored). */
 export function imageStorageState(images: DocumentImage[]): ImageStorageState {
   if (images.length === 0) return 'none'
@@ -59,8 +79,10 @@ function destinationText(destination: string): string {
   return /[\s()<>]/.test(destination) ? `<${destination}>` : destination
 }
 
-function titleText(title: string): string {
-  return title ? ` "${title}"` : ''
+// The title keeps the quote it was written with: a single-quoted title may
+// hold a double quote, and requoting it would end the title early.
+function titleText(title: string, quote: '"' | "'"): string {
+  return title ? ` ${quote}${title}${quote}` : ''
 }
 
 /**
@@ -93,7 +115,7 @@ export function rewriteToStored(text: string, images: DocumentImage[], results: 
     if (isStoredDestination(image.url) || !result?.ok) return null
     const title = parseImageTitle(parsed.title)
     const keptTitle = title.kind === 'layout' ? formatImageLayout({ ...title.layout, id: null }) : (parsed.title ?? '')
-    return `![${parsed.alt}](${result.id}${titleText(keptTitle)})`
+    return `![${parsed.alt}](${result.id}${titleText(keptTitle, parsed.quote)})`
   })
 }
 
@@ -106,6 +128,6 @@ export function rewriteToOrigins(text: string, images: DocumentImage[], origins:
     const keptTitle = title.kind === 'layout'
       ? formatImageLayout({ ...title.layout, id: image.url.slice(1).toUpperCase() })
       : (parsed.title ?? '')
-    return `![${parsed.alt}](${destinationText(origin)}${titleText(keptTitle)})`
+    return `![${parsed.alt}](${destinationText(origin)}${titleText(keptTitle, parsed.quote)})`
   })
 }

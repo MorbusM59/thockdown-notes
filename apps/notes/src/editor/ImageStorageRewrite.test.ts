@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { splitPreviewBlockRangesProgressively } from './PreviewBlockSplit'
 import { documentImagesIn } from './DocumentImages'
-import { imageSourcesToStore, imageStorageState, rewriteToOrigins, rewriteToStored } from './ImageStorageRewrite'
+import { imageSourcesToStore, imageStorageState, rewriteToOrigins, rewriteToStored, shapeableImages } from './ImageStorageRewrite'
 
 const apply = (text: string, edit: { from: number; to: number; insert: string } | null) =>
   edit ? text.slice(0, edit.from) + edit.insert + text.slice(edit.to) : text
@@ -36,5 +36,17 @@ describe('the image button rewrites', () => {
     const text = '![a](&1) ![b](&2)'
     expect(apply(text, rewriteToOrigins(text, documentImagesIn(text, splitPreviewBlockRangesProgressively), { '&1': null, '&2': 'C:/My Pictures/b.png' })))
       .toBe('![a](&1) ![b](<C:/My Pictures/b.png> "&2")')
+  })
+})
+
+describe('review fixes', () => {
+  it('keeps a single-quoted title single-quoted', () => {
+    const text = `![x](https://e.com/a.png 'say "hi"')`
+    const edit = rewriteToStored(text, documentImagesIn(text, splitPreviewBlockRangesProgressively), { 'https://e.com/a.png': { ok: true, id: '&1' } })
+    expect(apply(text, edit)).toBe(`![x](&1 'say "hi"')`)
+  })
+  it('ignores images the rewrite cannot change', () => {
+    const text = '![a [b] c](https://e.com/x.png) ![r](rel/img.png)'
+    expect(shapeableImages(text, documentImagesIn(text, splitPreviewBlockRangesProgressively))).toEqual([])
   })
 })

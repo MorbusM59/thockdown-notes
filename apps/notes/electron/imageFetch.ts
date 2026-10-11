@@ -13,10 +13,9 @@ import { MAX_STORED_IMAGE_BYTES } from '../src/shared/images'
 // in-memory session (no cookies, cache or referrer shared with the window),
 // and this code enforces its own limits rather than leaning on a request
 // filter, which would not see a main-process request's redirects: only
-// http(s), every redirect re-checked, at most MAX_REDIRECTS of them, the
-// size cap counted while the body streams, and a timeout for the whole of it.
+// http(s) at the start and at the end of any redirects, the size cap counted
+// while the body streams, and a timeout for the whole of it.
 
-const MAX_REDIRECTS = 5
 const FETCH_TIMEOUT_MS = 30_000
 
 export type FetchedImage =
@@ -58,26 +57,23 @@ async function readFile(filePath: string): Promise<FetchedImage> {
   }
 }
 
-async function download(start: URL): Promise<FetchedImage> {
+async function download(url: URL): Promise<FetchedImage> {
   const abort = new AbortController()
   const timer = setTimeout(() => abort.abort(), FETCH_TIMEOUT_MS)
   try {
-    let url = start
-    for (let hop = 0; ; hop += 1) {
+    {
+      // Redirects are followed by Chromium's network stack, which refuses to
+      // leave http(s) for any other scheme on its own (a redirect to file:
+      // fails the request). `redirect: 'manual'` cannot be used to check each
+      // hop here: it answers with an opaque response that carries no
+      // Location. Where the request ENDED is checked below as well.
       const response = await imageFetchSession().fetch(url.href, {
-        redirect: 'manual',
+        redirect: 'follow',
         signal: abort.signal,
         credentials: 'omit',
         referrerPolicy: 'no-referrer',
       })
-      if (response.status >= 300 && response.status < 400) {
-        const location = response.headers.get('location')
-        if (!location || hop >= MAX_REDIRECTS) return { ok: false, reason: 'unreachable' }
-        const next = new URL(location, url)
-        if (next.protocol !== 'http:' && next.protocol !== 'https:') return { ok: false, reason: 'unsupported' }
-        url = next
-        continue
-      }
+      if (!/^https?:/.test(response.url || url.href)) return { ok: false, reason: 'unsupported' }
       if (!response.ok || !response.body) return { ok: false, reason: 'unreachable' }
       const declared = Number(response.headers.get('content-length'))
       if (Number.isFinite(declared) && declared > MAX_STORED_IMAGE_BYTES) {

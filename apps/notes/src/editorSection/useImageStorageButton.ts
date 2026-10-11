@@ -7,6 +7,7 @@ import {
   imageStorageState,
   rewriteToOrigins,
   rewriteToStored,
+  shapeableImages,
   storedImageIds,
   type ImageStorageState,
 } from '../editor/ImageStorageRewrite'
@@ -56,6 +57,9 @@ export function useImageStorageButton({
 }): ImageStorageButton {
   const [facts, setFacts] = useState<{ noteId: string | null; images: DocumentImage[] }>({ noteId: null, images: [] })
   const [busy, setBusy] = useState(false)
+  // Claimed synchronously, before anything is awaited, so a left and a right
+  // hold in quick succession cannot both start.
+  const busyRef = useRef(false)
   const [failures, setFailures] = useState<string[]>([])
   const askedForRef = useRef(0)
 
@@ -68,7 +72,7 @@ export function useImageStorageButton({
     }
     const answer = () => {
       void requestDocumentImages(text).then((images) => {
-        if (askedForRef.current === asking) setFacts({ noteId: activeNoteId, images })
+        if (askedForRef.current === asking) setFacts({ noteId: activeNoteId, images: shapeableImages(text, images) })
       })
     }
     // A note just opened is answered at once (and free: the split that
@@ -88,11 +92,12 @@ export function useImageStorageButton({
   const images = facts.noteId === activeNoteId ? facts.images : []
 
   const run = useCallback(async (direction: 'store' | 'restore') => {
-    if (!canRewrite || busy || !activeNoteId) return
-    const text = readEditorText()
-    const current = await requestDocumentImages(text)
+    if (!canRewrite || busyRef.current || !activeNoteId) return
+    busyRef.current = true
     setBusy(true)
     try {
+      const text = readEditorText()
+      const current = shapeableImages(text, await requestDocumentImages(text))
       let edit
       let notStored: string[] = []
       if (direction === 'store') {
@@ -111,12 +116,16 @@ export function useImageStorageButton({
       await createSnapshot()
       adapterRef.current?.applyEdit(edit, text)
     } finally {
+      busyRef.current = false
       setBusy(false)
     }
-  }, [activeNoteId, adapterRef, busy, canRewrite, createSnapshot, readEditorText])
+  }, [activeNoteId, adapterRef, canRewrite, createSnapshot, readEditorText])
 
   return {
-    state: imageStorageState(images),
+    // Absent wherever it could not act (a frozen or sealed note, a snapshot
+    // being browsed, a generated chapter), rather than a button that ignores
+    // its own tooltip.
+    state: canRewrite ? imageStorageState(images) : 'none',
     busy,
     failures,
     store: useCallback(() => { void run('store') }, [run]),
