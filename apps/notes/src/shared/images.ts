@@ -177,16 +177,28 @@ const IMAGE_REFERENCE_WITH_PREFIX = /(!\[[^\]\n]*\]\([ \t]*<?)(&[^\s;()"'&<>]+)/
  * Bump when imageReferencesIn changes what it finds: the reference index is
  * rebuilt for every note on the next launch (DatabaseService).
  */
-export const IMAGE_REFERENCE_SCANNER_VERSION = 1
+export const IMAGE_REFERENCE_SCANNER_VERSION = 2
+
+// An inline code span: a run of backticks, then anything up to the same run,
+// never across a blank line (CommonMark ends a paragraph there) -- which also
+// bounds how far an unclosed run is searched.
+const CODE_SPAN = /(`+)(?:[^`\n]|\n(?!\n)|`(?!\1))*?\1(?!`)/g
 
 /**
- * Every stored image a note's text uses, normalized and de-duplicated. A
- * reference inside a code block is counted too: the scan is per line and
- * cannot see fences, and counting one there only keeps an image out of the
- * archive, which is the harmless direction.
+ * `text` with its inline code spans blanked out, the same length, so a
+ * reference written as an example -- `![name](&1)` in prose about images --
+ * is not taken for one. Fenced blocks are not recognised and still count:
+ * that only keeps an image out of the archive, the harmless direction.
  */
-export function imageReferencesIn(text: string): string[] {
-  if (!text.includes('](&') && !text.includes('](<&') && !/\]\([ \t]+<?&/.test(text)) return []
+function withoutCodeSpans(text: string): string {
+  if (!text.includes('`')) return text
+  return text.replace(CODE_SPAN, (span) => ' '.repeat(span.length))
+}
+
+/** Every stored image a note's text uses, normalized and de-duplicated. */
+export function imageReferencesIn(rawText: string): string[] {
+  if (!rawText.includes('](&') && !rawText.includes('](<&') && !/\]\([ \t]+<?&/.test(rawText)) return []
+  const text = withoutCodeSpans(rawText)
   const ids = new Set<string>()
   IMAGE_REFERENCE.lastIndex = 0
   for (let match = IMAGE_REFERENCE.exec(text); match; match = IMAGE_REFERENCE.exec(text)) {
@@ -206,8 +218,10 @@ export function imageReferenceRenameEdits(text: string, fromId: string, toId: st
   const from = normalizeImageId(fromId)
   if (!from) return []
   const edits: Array<{ from: number; to: number; insert: string }> = []
+  // Positions are the same in both: the spans are blanked, not removed.
+  const scanned = withoutCodeSpans(text)
   IMAGE_REFERENCE_WITH_PREFIX.lastIndex = 0
-  for (let match = IMAGE_REFERENCE_WITH_PREFIX.exec(text); match; match = IMAGE_REFERENCE_WITH_PREFIX.exec(text)) {
+  for (let match = IMAGE_REFERENCE_WITH_PREFIX.exec(scanned); match; match = IMAGE_REFERENCE_WITH_PREFIX.exec(scanned)) {
     if (normalizeImageId(match[2]) !== from) continue
     const at = match.index + match[1].length
     edits.push({ from: at, to: at + match[2].length, insert: toId })

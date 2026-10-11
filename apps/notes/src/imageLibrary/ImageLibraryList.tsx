@@ -1,4 +1,5 @@
-import { memo, useMemo, useState } from 'react'
+import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
+import { memo, useMemo, useRef, useState } from 'react'
 import { IMAGE_DRAG_MIME_TYPE, type StoredImageSummary } from '../shared/images'
 import { armPointerDrag } from '../shared/pointerDrag'
 import { groupImagesByTag, imagesInView, type ImageLibraryView } from './imageLibraryViews'
@@ -112,6 +113,59 @@ const ImageCard = memo(function ImageCard({ image, isActive, isTrashView, primed
   )
 })
 
+/**
+ * A card in the category and archive trees: the note tree's own card, the
+ * image's id on the left and its size on the right. As a note there, it has
+ * no buttons; holding the right button puts it in the trash.
+ */
+const ImageTreeCard = memo(function ImageTreeCard({ image, isActive, onOpen }: {
+  image: StoredImageSummary
+  isActive: boolean
+  onOpen: (id: string) => void
+}) {
+  const cancelHoldRef = useRef<(() => void) | null>(null)
+  const endHold = () => {
+    cancelHoldRef.current?.()
+    cancelHoldRef.current = null
+  }
+  return (
+    <div
+      className={`note-list-item is-tree-card image-list-item${isActive ? ' is-active' : ''}`}
+      role="option"
+      aria-selected={isActive}
+      data-image-id={image.id}
+      tabIndex={0}
+      onClick={() => onOpen(image.id)}
+      data-drag-source=""
+      onPointerDown={armPointerDrag}
+      onDragStart={(event) => {
+        event.dataTransfer.setData(IMAGE_DRAG_MIME_TYPE, image.id)
+        event.dataTransfer.effectAllowed = 'copy'
+      }}
+      onMouseDown={(event) => {
+        if (event.button !== 2) return
+        endHold()
+        cancelHoldRef.current = armHold(() => {
+          cancelHoldRef.current = null
+          void setImageTrashed(image.id, true)
+        }, HOLD_COMMIT_MS)
+      }}
+      onMouseUp={endHold}
+      onMouseLeave={endHold}
+      data-secondary-press="action"
+      onContextMenu={(event) => event.preventDefault()}
+      data-tooltip="Hold right-click to put it in the trash"
+    >
+      <div className="note-list-content">
+        <div className="note-list-meta-row image-tree-card-row">
+          <span className="note-list-title">{image.id}</span>
+          <span className="note-list-meta-right">{sizeLabel(image)}</span>
+        </div>
+      </div>
+    </div>
+  )
+})
+
 export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQuery, caseSensitive, activeImageId, onOpen }: ImageLibraryListProps) {
   const { images, loaded } = useImageLibrary()
   const [primedId, setPrimedId] = useState<string | null>(null)
@@ -145,7 +199,9 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
       {groups.map((group) => (
         <details key={group.tag} className="category-primary" open>
           <summary className="category-primary-summary">{group.tag}</summary>
-          {group.images.map((image) => card(image, `${group.tag}:${image.id}`))}
+          {group.images.map((image) => (
+            <ImageTreeCard key={`${group.tag}:${image.id}`} image={image} isActive={image.id === activeImageId} onOpen={onOpen} />
+          ))}
         </details>
       ))}
     </div>

@@ -950,8 +950,15 @@
   display: none;
 }
 
-/* The image library (imageLibrary/ImageLibraryList.tsx): a note card with
- * its image behind the id, dimmed so the text stays readable. */
+/* The image library (imageLibrary/ImageLibraryList.tsx). In the date and
+ * trash lists a card shows its image behind the id, dimmed so the text stays
+ * readable. The image is sized to the whole CARD (a container query unit),
+ * not to the column that holds it: the column narrows when the card's
+ * buttons appear on hover, and the image must not rescale with it. */
+.image-list-item:not(.is-tree-card) {
+  container-type: inline-size;
+}
+
 .image-list-item .note-list-column-primary {
   position: relative;
   overflow: hidden;
@@ -959,11 +966,19 @@
 
 .image-list-thumbnail {
   position: absolute;
-  inset: 0;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 100cqw;
   background-size: cover;
   background-position: center;
   opacity: 0.35;
   pointer-events: none;
+}
+
+/* A tree card: the id and the size on one line. */
+.image-tree-card-row {
+  align-items: baseline;
 }
 
 .image-list-item .note-list-content {
