@@ -109,4 +109,16 @@ describe('stored images', () => {
     expect(db.renameImage({ id: '&LOGO', newId: '&1', openNoteIds: [] })).toEqual({ ok: false, reason: 'taken' })
     expect(db.renameImage({ id: '&LOGO', newId: 'nope', openNoteIds: [] })).toEqual({ ok: false, reason: 'invalid' })
   })
+
+  it('counts uses through old names, and will not purge an image a note uses', async () => {
+    db.importImage({ bytes: GIF, origin: null })
+    await lifecycle.createNote({ initialText: '![a](&1)' })
+    // Kept open, so the stored text still says &1.
+    const open = await lifecycle.createNote({ initialText: '![b](&1)' })
+    db.renameImage({ id: '&1', newId: '&CAT', openNoteIds: [open.id] })
+    expect(db.listImages()[0]).toMatchObject({ id: '&CAT', useCount: 2 })
+    db.setImageTrashed('&CAT', true)
+    expect(db.purgeImage('&CAT')).toBe(false)
+    expect(db.listImages()).toHaveLength(1)
+  })
 })

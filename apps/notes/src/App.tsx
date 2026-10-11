@@ -5284,6 +5284,7 @@ ${markdownHtml}
     })
   }, [buildMenuStateSnapshot, getActiveSection])
 
+  const refreshNotesRef = useRef<() => Promise<unknown>>(async () => null)
   const refreshNotes = useCallback(async (preferredId?: string | null) => {
     if (!window.thockdownNotes) return null
 
@@ -5313,6 +5314,7 @@ ${markdownHtml}
     const selectable = listed.filter((note) => !HELP_GUIDE_NOTE_IDS.has(note.id))
     return selectable[0]?.id ?? null
   }, [setNotes])
+  refreshNotesRef.current = refreshNotes
 
   const [, setFileSyncStatus] = useState<string | null>(null)
 
@@ -5540,7 +5542,10 @@ ${markdownHtml}
         if (!adapter) return []
         return [{ noteId: handle.activeNoteId, readText: handle.readEditorText, applyEdit: (changes, text) => adapter.applyEdit(changes, text) }]
       }),
-      onImageRenamed: (fromId, toId) => {
+      onImageRenamed: (fromId, toId, rewrittenNoteIds) => {
+        // The renderer's copy of each note main rewrote is stale (search,
+        // chapters and previews read it): fetch the list again.
+        if (rewrittenNoteIds.length > 0) void refreshNotesRef.current()
         const current = slotOverlayRef.current
         if (current?.kind !== 'image' || current.imageId !== fromId) return
         const next = { ...current, imageId: toId }
@@ -8110,7 +8115,7 @@ ${markdownHtml}
     // in Options or Find, `.sidebar-content` is holding something else
     // entirely and would measure nonsense. Elsewhere the last good
     // measurement stands (or the arithmetic, if there hasn't been one yet).
-    if (sidebarMode !== 'date' && sidebarMode !== 'trash') return
+    if ((sidebarMode !== 'date' && sidebarMode !== 'trash') || isImageLibraryShown) return
     const contentEl = sidebarContentRef.current
     const sidebarEl = contentEl?.closest('.notes-sidebar') as HTMLElement | null
     if (!contentEl || !sidebarEl) return
@@ -8186,9 +8191,12 @@ ${markdownHtml}
     // box changes, and filling an already-sized list isn't one.
   // isSidebarShown, not isSidebarVisible: this measures the sidebar's DOM,
   // which immersive mode unmounts and restores without the setting changing.
-  }, [isSidebarShown, sidebarMode, spacingRegularPx, totalPagedNotes, itemsPerPage])
+  }, [isImageLibraryShown, isSidebarShown, sidebarMode, spacingRegularPx, totalPagedNotes, itemsPerPage])
 
   useLayoutEffect(() => {
+    // The image library's cards are not the notes being paged: measuring
+    // them would page the note list by the wrong row height.
+    if (isImageLibraryShown) return
     const compute = () => {
       const container = sidebarContentRef.current
       if (!container) return
@@ -8234,7 +8242,7 @@ ${markdownHtml}
       resizeObserver.disconnect()
       window.removeEventListener('resize', compute)
     }
-  }, [currentPage, itemsPerPage, sidebarMode, totalPagedNotes])
+  }, [currentPage, isImageLibraryShown, itemsPerPage, sidebarMode, totalPagedNotes])
 
   useEffect(() => {
     if (!isSidebarScrollbarMode) return

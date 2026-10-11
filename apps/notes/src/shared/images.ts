@@ -94,7 +94,7 @@ export interface StoredImageSummary {
   createdAt: string
   /** The image's own tags, in order (an image's tags are not its notes'). */
   tags: string[]
-  /** How many notes' current text uses it. */
+  /** How many notes' current text uses it, by its name or one it used to have. */
   useCount: number
   /** ISO time it was put in the trash; null when it is not there. */
   trashedAt: string | null
@@ -123,7 +123,8 @@ export interface ImagesApi {
   setImageTrashed(id: string, trashed: boolean): Promise<void>
   /**
    * Removes an image that is in the trash for good: its name, tags and, when
-   * no other name uses them, its bytes. False when it is not in the trash.
+   * no other name uses them, its bytes. False when it is not in the trash or
+   * a note still uses it.
    */
   purgeImage(id: string): Promise<boolean>
   /**

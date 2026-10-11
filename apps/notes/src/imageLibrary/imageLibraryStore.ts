@@ -87,7 +87,7 @@ export interface OpenNoteEditor {
 /** What a rename needs from App: which notes editors hold, and where else the old id is held (the slot overlay). */
 export interface ImageLibraryHost {
   openNoteEditors: () => OpenNoteEditor[]
-  onImageRenamed: (fromId: string, toId: string) => void
+  onImageRenamed: (fromId: string, toId: string, rewrittenNoteIds: string[]) => void
 }
 
 // Both are App's to know (its section registry, its overlay record); it
@@ -116,7 +116,7 @@ export async function renameImage(id: string, rawNewId: string): Promise<ImageRe
     const edits = imageReferenceRenameEdits(text, id, result.id)
     if (edits.length > 0) editor.applyEdit(edits, text)
   }
-  host.onImageRenamed(id, result.id)
+  host.onImageRenamed(id, result.id, result.rewrittenNoteIds)
   invalidateStoredImage(id)
   invalidateStoredImage(result.id)
   invalidateImageLibrary()

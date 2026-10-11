@@ -37,7 +37,11 @@ const ImageCard = memo(function ImageCard({ image, isActive, isTrashView, primed
   onOpen: (id: string) => void
   onPrime: (id: string | null) => void
 }) {
-  const inTrashLabel = image.useCount > 0 ? `Delete for good (used by ${image.useCount} note${image.useCount === 1 ? '' : 's'})` : 'Delete for good'
+  // A trashed image a note still uses cannot be deleted: that note would break.
+  const isUsed = image.useCount > 0
+  const inTrashLabel = isUsed
+    ? `Used by ${image.useCount} note${image.useCount === 1 ? '' : 's'}: remove it there before deleting it`
+    : 'Delete for good'
   return (
     <div
       className={`note-list-item image-list-item${isActive ? ' is-active' : ''}${primed ? ' is-primed-for-deletion' : ''}`}
@@ -85,6 +89,7 @@ const ImageCard = memo(function ImageCard({ image, isActive, isTrashView, primed
         <div className="note-list-column note-list-column-action note-list-column-trash">
           <button
             type="button"
+            disabled={isTrashView && isUsed}
             className="note-list-action-button note-list-action-button-trash"
             aria-label={isTrashView ? (primed ? `Click again: ${inTrashLabel.toLowerCase()}` : inTrashLabel) : 'Put in the trash'}
             data-tooltip={isTrashView ? (primed ? `Click again: ${inTrashLabel.toLowerCase()}` : inTrashLabel) : 'Put in the trash'}

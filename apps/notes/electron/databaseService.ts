@@ -93,6 +93,16 @@ const DB_FILE_NAME = 'thockdown-notes.db';
 // retireNotesFolder; it is read once more, then never again.
 const LEGACY_NOTES_DIR_NAME = 'notes';
 const IMAGE_REFS_SCANNER_KEY = 'imageRefsScannerVersion';
+
+// How many notes use the image in the enclosing query's `images` row, by its
+// name or by any name it used to have: a frozen note keeps an old name for
+// good, and an open note a rename could not reach until it is next edited.
+// Both still show the image (through its alias), so both still use it.
+const IMAGE_USE_COUNT = `
+  SELECT COUNT(DISTINCT image_refs.noteId) FROM image_refs
+  WHERE image_refs.imageId = images.id
+     OR image_refs.imageId IN (SELECT oldId FROM image_aliases WHERE image_aliases.imageId = images.id)
+`;
 const NOTES_FOLDER_RETIRED_KEY = 'notesFolderRetiredAt';
 const BACKUPS_DIR_NAME = 'backups';
 const LAUNCH_BACKUP_COUNT = 3;
@@ -4422,7 +4432,7 @@ export class DatabaseService {
       SELECT images.id AS id, images.blobHash AS hash, image_blobs.width AS width, image_blobs.height AS height,
              image_blobs.mime AS mime, image_blobs.byteLength AS byteLength, images.origin AS origin,
              images.createdAt AS createdAt, image_trash.trashedAt AS trashedAt,
-             (SELECT COUNT(*) FROM image_refs WHERE image_refs.imageId = images.id) AS useCount
+             (${IMAGE_USE_COUNT}) AS useCount
       FROM images
       JOIN image_blobs ON image_blobs.hash = images.blobHash
       LEFT JOIN image_trash ON image_trash.imageId = images.id
@@ -4471,13 +4481,16 @@ export class DatabaseService {
     }
   }
 
-  /** Removes a trashed image for good; its bytes go too when no other name uses them. */
+  /** Removes a trashed image no note uses for good; its bytes go too when no other name uses them. */
   purgeImage(id: string): boolean {
     const imageId = normalizeImageId(id);
     if (!imageId) return false;
     const db = this.requireDb();
     return db.transaction(() => {
       if (!db.prepare('SELECT 1 FROM image_trash WHERE imageId = ?').get(imageId)) return false;
+      // A note still uses it: deleting it would break that note, so it waits
+      // until the reader has taken it out of them.
+      if ((db.prepare(`SELECT (${IMAGE_USE_COUNT}) AS uses FROM images WHERE id = ?`).get(imageId) as { uses: number }).uses > 0) return false;
       const hash = (db.prepare('SELECT blobHash FROM images WHERE id = ?').get(imageId) as { blobHash: string } | undefined)?.blobHash;
       db.prepare('DELETE FROM images WHERE id = ?').run(imageId);
       if (hash && !db.prepare('SELECT 1 FROM images WHERE blobHash = ?').get(hash)) {
