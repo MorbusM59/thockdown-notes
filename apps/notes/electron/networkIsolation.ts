@@ -8,8 +8,10 @@ import { fileURLToPath } from 'node:url'
 // Three doors are closed, for every web contents the app ever creates:
 // - REQUESTS: any http(s)/ws(s)/ftp request from a page is cancelled, except
 //   to the Vite dev server in an unpackaged run (that is where the renderer
-//   itself is served from). Local schemes (file:, data:, blob:, devtools:,
-//   and the app's own thockdown-music:) are untouched.
+//   itself is served from), and except IMAGES while the reader has turned
+//   remote images on (`setRemoteImagesAllowed`, from the persisted
+//   `allowRemoteImages`). Local schemes (file:, data:, blob:, devtools:, and
+//   the app's own thockdown-music:) are untouched.
 // - NAVIGATION: a page may not navigate away from the document it loaded
 //   (a link dropped onto the window would otherwise replace the app with a
 //   remote site that still has the preload bridge attached).
@@ -49,6 +51,18 @@ export async function openExternalIfAllowed(url: unknown): Promise<void> {
   }
 }
 
+let remoteImagesAllowed = false
+
+/**
+ * Follows the persisted `allowRemoteImages` setting. Called with the stored
+ * value before the window loads and again on every save of the app state, so
+ * the request filter reads the same setting the preview draws from -- the
+ * renderer cannot widen it by any other route.
+ */
+export function setRemoteImagesAllowed(allowed: boolean): void {
+  remoteImagesAllowed = allowed
+}
+
 function originOf(url: string): string | null {
   try {
     return new URL(url).origin
@@ -60,7 +74,7 @@ function originOf(url: string): string | null {
 export function installNetworkIsolation(devServerUrl: string | undefined): void {
   const devOrigin = devServerUrl ? originOf(devServerUrl) : null
 
-  const isAllowedRequest = (url: string): boolean => {
+  const isAllowedRequest = (url: string, resourceType: string): boolean => {
     let parsed: URL
     try {
       parsed = new URL(url)
@@ -68,6 +82,7 @@ export function installNetworkIsolation(devServerUrl: string | undefined): void 
       return false
     }
     if (!NETWORK_SCHEMES.has(parsed.protocol)) return true
+    if (remoteImagesAllowed && resourceType === 'image' && (parsed.protocol === 'http:' || parsed.protocol === 'https:')) return true
     if (devOrigin === null) return false
     // The dev server's hot-reload socket is ws: on the same host and port.
     const asHttp = parsed.protocol === 'ws:' ? `http://${parsed.host}` : parsed.protocol === 'wss:' ? `https://${parsed.host}` : parsed.origin
@@ -75,7 +90,7 @@ export function installNetworkIsolation(devServerUrl: string | undefined): void 
   }
 
   session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
-    callback({ cancel: !isAllowedRequest(details.url) })
+    callback({ cancel: !isAllowedRequest(details.url, details.resourceType) })
   })
 
   app.on('web-contents-created', (_event, contents) => {

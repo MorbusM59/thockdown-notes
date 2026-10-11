@@ -165,6 +165,8 @@ export interface PersistedMenuState {
   pitchJitterAmount?: number;
   audioSpatial?: number;
   reduceVisualEffects?: boolean;
+  /** Remote (http/https) images in notes load. Off unless the reader held the toggle on; see src/shared/remoteImages.ts. */
+  allowRemoteImages?: boolean;
   reducedCaretAnimation?: boolean;
   deferPreviewOnRapidInput?: boolean;
   /**

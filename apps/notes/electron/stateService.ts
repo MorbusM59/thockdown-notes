@@ -543,6 +543,8 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     pitchJitterAmount: sanitizeOptionalNumber(input?.pitchJitterAmount),
     audioSpatial: sanitizeOptionalNumber(input?.audioSpatial),
     reduceVisualEffects: Boolean(input?.reduceVisualEffects),
+    // Strictly true: anything else, absence included, keeps the app local.
+    allowRemoteImages: input?.allowRemoteImages === true,
     reducedCaretAnimation: Boolean(input?.reducedCaretAnimation),
     deferPreviewOnRapidInput: Boolean(input?.deferPreviewOnRapidInput),
     noteSizeThresholdBlocks: sanitizeOptionalNumber(input?.noteSizeThresholdBlocks),

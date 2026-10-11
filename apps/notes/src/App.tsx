@@ -175,6 +175,7 @@ import {
   PREVIEW_MARKDOWN_NOOP_NAVIGATE,
   previewUrlTransform,
 } from './editor/PreviewMarkdown'
+import { setRemoteImagesAllowed, useRemoteImagesAllowed } from './shared/remoteImages'
 import { normalizeInternalText } from './editor/TextPolicy'
 import { readPageZoomFactor } from './window/pageZoom'
 import { splitChapterFamily } from './shared/chapters'
@@ -2468,6 +2469,9 @@ function App() {
   const [pitchJitterAmount, setPitchJitterAmount] = useState(0)
   const [audioSpatial, setAudioSpatial] = useState(0)
   const [reduceVisualEffects, setReduceVisualEffects] = useState(false)
+  // The setting lives in a module store (the preview's img component and the
+  // export read it there); App subscribes so the persisted snapshot follows it.
+  const allowRemoteImages = useRemoteImagesAllowed()
   const [reducedCaretAnimation, setReducedCaretAnimation] = useState(false)
   const [deferPreviewOnRapidInput, setDeferPreviewOnRapidInput] = useState(false)
   const [noteSizeThresholdBlocks, setNoteSizeThresholdBlocks] = useState(DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS)
@@ -4146,6 +4150,7 @@ function App() {
     reviewGutterVisibleBySection?: Record<string, boolean>
     reviewFlagsVisibleBySection?: Record<string, boolean>
     adventure?: GameSave | null
+    allowRemoteImages?: boolean
   }): PersistedMenuState => {
     const effectiveViewStateByMode = overrides?.sidebarViewStateByMode ?? sidebarViewStateByMode
 
@@ -4284,6 +4289,7 @@ function App() {
       // UiLayoutLoadout -- these must survive switching between layouts
       // rather than being reset to whatever each layout last had stored.
       reduceVisualEffects,
+      allowRemoteImages: overrides?.allowRemoteImages ?? allowRemoteImages,
       reducedCaretAnimation,
       deferPreviewOnRapidInput,
       noteSizeThresholdBlocks,
@@ -4299,6 +4305,7 @@ function App() {
     debuggingEnabled,
     spellCheckEnabled,
     reduceVisualEffects,
+    allowRemoteImages,
     reducedCaretAnimation,
     deferPreviewOnRapidInput,
     noteSizeThresholdBlocks,
@@ -4408,6 +4415,21 @@ function App() {
   // own doc comment above for why this (not a dependency array) is what
   // keeps handleToggleDoubleSizeMode/toggleSidebarVisible's calls fresh.
   persistMenuStateNowRef.current = persistMenuStateNow
+
+  // Persisted immediately: the main process's request filter follows the
+  // SAVED setting, so a debounced save would leave images blocked (or, turned
+  // off, still loading) until the debounce fired. Turning it OFF draws no
+  // image from that moment, whatever the save does. Turning it ON draws only
+  // once the save has landed -- the filter allows images from then on -- and
+  // not at all if the save never ran or failed, so the preview never draws an
+  // image the filter is still cancelling.
+  const handleAllowRemoteImagesChange = useCallback((next: boolean) => {
+    if (!next) setRemoteImagesAllowed(false)
+    const saved = persistMenuStateNowRef.current({ allowRemoteImages: next })
+    if (next && saved) {
+      void saved.then(() => setRemoteImagesAllowed(true), () => {})
+    }
+  }, [])
 
   const getSidebarScrollerForMode = useCallback((mode: SidebarMode): HTMLDivElement | null => {
     if (mode === 'category' || mode === 'archive' || mode === 'find') {
@@ -6344,6 +6366,7 @@ ${markdownHtml}
             setPitchJitterAmount(appState.menu.pitchJitterAmount ?? 0)
             setAudioSpatial(appState.menu.audioSpatial ?? 0)
             setReduceVisualEffects(appState.menu.reduceVisualEffects ?? false)
+            setRemoteImagesAllowed(appState.menu.allowRemoteImages === true)
             setReducedCaretAnimation(appState.menu.reducedCaretAnimation ?? false)
             setDeferPreviewOnRapidInput(appState.menu.deferPreviewOnRapidInput ?? false)
             // Clamped on the way in as well as on the way out: a stored value
@@ -9658,6 +9681,8 @@ ${markdownHtml}
                         setAudioSpatial={setAudioSpatial}
                         reduceVisualEffects={reduceVisualEffects}
                         setReduceVisualEffects={setReduceVisualEffects}
+                        allowRemoteImages={allowRemoteImages}
+                        onAllowRemoteImagesChange={handleAllowRemoteImagesChange}
                         spellCheckEnabled={spellCheckEnabled}
                         setSpellCheckEnabled={setSpellCheckEnabled}
                         reducedCaretAnimation={reducedCaretAnimation}

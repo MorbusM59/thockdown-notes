@@ -527,6 +527,8 @@ export interface SidebarOptionsPanelProps {
   setAudioSpatial: (value: number) => void
   reduceVisualEffects: boolean
   setReduceVisualEffects: (value: boolean) => void
+  allowRemoteImages: boolean
+  onAllowRemoteImagesChange: (value: boolean) => void
   spellCheckEnabled: boolean
   setSpellCheckEnabled: (updater: (previous: boolean) => boolean) => void
   reducedCaretAnimation: boolean
@@ -827,6 +829,8 @@ export function SidebarOptionsPanel({
   setAudioSpatial,
   reduceVisualEffects,
   setReduceVisualEffects,
+  allowRemoteImages,
+  onAllowRemoteImagesChange,
   spellCheckEnabled,
   setSpellCheckEnabled,
   reducedCaretAnimation,
@@ -978,6 +982,14 @@ export function SidebarOptionsPanel({
      * releasing, which is the one way a press produces no click at all.
      */
     const trueModeGuardedPressRef = useRef(false)
+
+    /**
+     * The remote-images toggle's hold, and whether the current press was a
+     * hold (turning it ON) so the click that trails it is not read as a second
+     * decision -- the same two refs, for the same reasons, as true mode above.
+     */
+    const remoteImagesHoldRef = useRef<(() => void) | null>(null)
+    const remoteImagesHoldPressRef = useRef(false)
     const topRowHighlightKeys: HighlightColorKey[] = ['base', 'inputFields', 'appButtons']
     const middleRowHighlightKeys: HighlightColorKey[] = [
       isPreviewMode ? 'textEmbossRender' : 'textEmbossEdit',
@@ -3312,6 +3324,58 @@ export function SidebarOptionsPanel({
             aria-label="Import soundscapes from a .tds file"
           >
             <span className="fa-solid fa-music" aria-hidden="true" />
+          </button>
+        </div>
+        <OptionsSubsectionLabel>Network</OptionsSubsectionLabel>
+        {/* REMOTE IMAGES. The one setting that lets the app reach the web, so
+            turning it ON is a HOLD (`HOLD_COMMIT_MS`, "I know what this
+            does") and turning it off is a click: leaving local-only should
+            take deliberation, returning to it should not. */}
+        <div className="options-loadout-grid" role="group" aria-label="Network">
+          <button
+            type="button"
+            className={`btn-icon options-color-swatch options-loadout-btn${allowRemoteImages ? ' is-active' : ''}`}
+            onPointerDown={(event) => {
+              if (event.button !== 0) return
+              remoteImagesHoldPressRef.current = !allowRemoteImages
+              if (allowRemoteImages) return
+              event.preventDefault()
+              remoteImagesHoldRef.current = armHold(() => { onAllowRemoteImagesChange(true) }, HOLD_COMMIT_MS)
+            }}
+            onPointerUp={() => {
+              remoteImagesHoldRef.current?.()
+              remoteImagesHoldRef.current = null
+            }}
+            onPointerCancel={() => {
+              // A press the browser takes over (a touch turning into a
+              // scroll) ends without pointerup or pointerleave, and must not
+              // complete the hold on its own.
+              remoteImagesHoldRef.current?.()
+              remoteImagesHoldRef.current = null
+              remoteImagesHoldPressRef.current = false
+            }}
+            onPointerLeave={() => {
+              remoteImagesHoldRef.current?.()
+              remoteImagesHoldRef.current = null
+              remoteImagesHoldPressRef.current = false
+            }}
+            onClick={() => {
+              if (remoteImagesHoldPressRef.current) {
+                remoteImagesHoldPressRef.current = false
+                return
+              }
+              if (allowRemoteImages) onAllowRemoteImagesChange(false)
+            }}
+            data-secondary-press="none"
+            data-tooltip={
+              allowRemoteImages
+                ? 'Remote images: on. The app is no longer local only: image servers see each note you open. Click to turn off'
+                : 'Hold to load remote images. This makes the app non-local: image servers see each note you open'
+            }
+            aria-label="Load remote images"
+            aria-pressed={allowRemoteImages}
+          >
+            <span className="fa-solid fa-image" aria-hidden="true" />
           </button>
         </div>
       </AccordionSection>

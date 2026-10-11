@@ -8,6 +8,7 @@ import type { Root } from 'hast'
 import { visit } from 'unist-util-visit'
 import remarkGfm from 'remark-gfm'
 import { defaultUrlTransform } from 'react-markdown'
+import { isRemoteImageSrc, useRemoteImagesAllowed } from '../shared/remoteImages'
 import { parseInternalNoteLink, type ParsedInternalNoteLink } from '../shared/internalNoteLinks'
 import { GROUP_MARKER_PREFIX, GROUP_MARKER_SUFFIX } from '../shared/openItemsText'
 
@@ -34,6 +35,20 @@ function isSafePreviewHref(href: string | undefined): boolean {
   }
 }
 
+/**
+ * An image in a note. Local images are a future feature and that path is
+ * closed until it is designed, so they show their alt text. Remote images
+ * load only while the reader has turned them on (src/shared/remoteImages.ts);
+ * otherwise the alt text says why the image is missing, since an image that
+ * silently does not appear reads as a broken note.
+ */
+function PreviewImage({ src, alt }: { src?: string; alt?: string }) {
+  const remoteImagesAllowed = useRemoteImagesAllowed()
+  if (!isRemoteImageSrc(src)) return <span>{alt ?? 'Image'}</span>
+  if (remoteImagesAllowed) return <img src={src} alt={alt ?? ''} referrerPolicy="no-referrer" />
+  return <span>{alt ? `[Remote images disabled in options]: ${alt}` : '[Remote images disabled in options]'}</span>
+}
+
 // What a link in a note may point at. Web, mail and phone links are handed to
 // the system's default handler; a `file:` link reveals the file in Explorer or
 // Finder and never opens it, since opening would run an executable
@@ -44,8 +59,8 @@ const PREVIEW_LINK_PROTOCOLS = new Set(['http:', 'https:', 'mailto:', 'tel:', 'f
  * react-markdown's `urlTransform`. Its default strips every scheme outside a
  * short list that omits `file:` and `tel:`, so those links reached the
  * components above as empty hrefs. This keeps exactly the link schemes the
- * preview accepts and defers to the default for everything else -- image
- * sources, which the `img` component does not load at all.
+ * preview accepts and defers to the default for everything else, image
+ * sources included (`PreviewImage` decides what an image may load).
  */
 export function previewUrlTransform(url: string, key: string): string {
   if (key === 'href' && isSafePreviewHref(url)) return url
@@ -456,11 +471,7 @@ export function createPreviewMarkdownComponents(
 
       return <span>{children}</span>
     },
-    // Images are a future, local-only feature and the path is closed until it
-    // is designed: an image shows its alt text and loads nothing. (A remote
-    // source would be a network request, which the main process cancels
-    // anyway -- electron/networkIsolation.ts.)
-    img: ({ alt }: { alt?: string }) => <span>{alt ?? 'Image'}</span>,
+    img: ({ src, alt }: { src?: string; alt?: string }) => <PreviewImage src={src} alt={alt} />,
     input: ({ checked, type, className }: { checked?: boolean; type?: string; className?: string }) => {
       if (type !== 'checkbox') {
         return null

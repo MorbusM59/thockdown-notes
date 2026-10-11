@@ -375,6 +375,20 @@ describe('StateService app-state field round-trip', () => {
       .toEqual({ kind: 'adventure', sectionId: 'default', previousNoteId: 'note-1' })
   })
 
+  it('persists allowRemoteImages across a save -> fresh-instance load, and reads anything but true as off', async () => {
+    const menu = { sidebarMode: 'date' as const, selectedMonths: [], selectedYears: [], searchQuery: '' }
+    const writer = new StateService(dataRoot)
+    await writer.saveAppState({ selectedNoteId: null, menu: { ...menu, allowRemoteImages: true } })
+    expect((await new StateService(dataRoot).loadAppState()).menu?.allowRemoteImages).toBe(true)
+
+    // The app is local-only unless the reader turned this on: absence, and
+    // a damaged value, must both read back as off.
+    await writer.saveAppState({ selectedNoteId: null, menu })
+    expect((await new StateService(dataRoot).loadAppState()).menu?.allowRemoteImages).toBe(false)
+    await writer.saveAppState({ selectedNoteId: null, menu: { ...menu, allowRemoteImages: 'yes' as unknown as boolean } })
+    expect((await new StateService(dataRoot).loadAppState()).menu?.allowRemoteImages).toBe(false)
+  })
+
   it('persists the unified global spellcheck toggle across a save -> fresh-instance load', async () => {
     const writer = new StateService(dataRoot)
     await writer.saveAppState({

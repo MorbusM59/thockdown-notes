@@ -28,7 +28,7 @@ import { EXPORT_CHANNELS, type ExportApi } from '../src/shared/exportApi'
 import type { ReviewFlagWrite, ReviewFlagRemap } from '../src/shared/reviewFlags'
 import { ensureHelpGuide } from './help/helpGuideNote'
 import { installedUserDataPath } from './installedUserData'
-import { installNetworkIsolation, openExternalIfAllowed } from './networkIsolation'
+import { installNetworkIsolation, openExternalIfAllowed, setRemoteImagesAllowed } from './networkIsolation'
 
 // Typed senders for the events the main process pushes to the window.
 const emitWindowEvent = eventEmitter<WindowEvents>(WINDOW_EVENT_CHANNELS)
@@ -551,10 +551,17 @@ function registerIpcHandlers() {
 
   registerInvokeHandlers<AppStateApi, IpcMainInvokeEvent>(APP_STATE_CHANNELS, {
     loadAppState: async () => stateService!.loadAppState(),
-    saveAppState: async (_event, payload) => stateService!.saveAppState(payload),
+    saveAppState: async (_event, payload) => {
+      await stateService!.saveAppState(payload)
+      // The request filter follows the setting as SAVED, read back through
+      // the same sanitizer the next launch will read it through.
+      const saved = await stateService!.loadAppState().catch(() => null)
+      setRemoteImagesAllowed(saved?.menu?.allowRemoteImages === true)
+    },
     clearAppState: async () => {
       databaseService?.resetToFactoryDefaults();
       await stateService!.clearAppState();
+      setRemoteImagesAllowed(false);
     },
     loadWindowState: async () => stateService!.loadWindowState(),
     saveWindowState: async (_event, payload) => stateService!.saveWindowState(payload),
@@ -1444,6 +1451,7 @@ async function createWindow() {
   const savedWindowState = await stateService.loadWindowState();
   // Load persisted app state so we can set an appropriate initial minimum width
   const savedAppState = await stateService.loadAppState().catch(() => null);
+  setRemoteImagesAllowed(savedAppState?.menu?.allowRemoteImages === true);
   const initialSidebarVisible = savedAppState?.menu?.isSidebarVisible ?? true;
   // Section count isn't known yet at this point -- the DB hasn't loaded in the
   // renderer -- so this starts at the default of 1 and the renderer corrects
