@@ -107,3 +107,15 @@ export function imageReferencesIn(text: string): string[] {
 export function imageMarkdown(alt: string, id: string): string {
   return `![${alt.replace(/[[\]\n]/g, ' ').trim()}](${id})`
 }
+
+const IMAGE_EXTENSION = /\.(png|jpe?g|gif|webp|avif|svg)$/i
+
+/**
+ * Whether a dropped or pasted file should be offered to the image store.
+ * The type the browser reports can be empty for a format it does not know
+ * (AVIF on some systems), so the name counts too; the store decides from
+ * the bytes either way (electron/imageSniff.ts).
+ */
+export function isImageFile(file: { type: string; name: string }): boolean {
+  return file.type.startsWith('image/') || IMAGE_EXTENSION.test(file.name)
+}

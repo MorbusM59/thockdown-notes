@@ -40,8 +40,11 @@ function request(id: string): void {
       for (const each of ids) resolved.set(each, answers[each] ?? null)
       notify()
     }, () => {
-      // Not cached as missing: asking again on the next render is right.
-      for (const each of ids) requested.delete(each)
+      // The main process could not answer; shown as not found rather than
+      // re-asked on a timer. Importing under one of these ids, or a reload,
+      // asks again.
+      for (const each of ids) resolved.set(each, null)
+      notify()
     })
   })
 }
