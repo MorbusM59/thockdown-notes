@@ -62,3 +62,11 @@ Building a signed `.dmg` requires a macOS host (electron-builder's `mac` target 
 | Windows | `Thockdown Notes-Windows-<version>-Setup.exe` | `Thockdown Notes-Windows-<version>-Portable.zip` |
 | macOS | `Thockdown Notes-Mac-<version>-Installer.dmg` | — |
 | Linux | `Thockdown Notes-Linux-<version>.AppImage` | `Thockdown Notes-Linux-<version>-Portable.AppImage` |
+
+## License
+
+Thockdown is free software under the [GNU General Public License v3.0](LICENSE): you may use, study, modify and share it, and anything you distribute that is built on it must be released under the same license with its source.
+
+- The bundled fonts are under the SIL Open Font License 1.1 ([`apps/notes/src/fonts/LICENSES.md`](apps/notes/src/fonts/LICENSES.md)); the icons are Font Awesome Free.
+- The sounds in `apps/notes/src/assets/sounds/` are original work by the author and are covered by this repository's license.
+- The license covers the code, not the name: "Thockdown" may not be used for modified versions.
