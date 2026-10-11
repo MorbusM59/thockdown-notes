@@ -44,29 +44,39 @@ function isSafePreviewHref(href: string | undefined): boolean {
  * otherwise the alt text says why the image is missing, since an image that
  * silently does not appear reads as a broken note.
  */
-function PreviewImage({ src, alt, title }: { src?: string; alt?: string; title?: string }) {
-  if (src?.startsWith('&')) return <StoredPreviewImage id={src} alt={alt} title={title} />
-  return <RemotePreviewImage src={src} alt={alt} title={title} />
+interface PreviewImageProps {
+  src?: string
+  alt?: string
+  title?: string
+  /** The source line the image was parsed from, for the render view's image gestures. */
+  sourceLine?: string
 }
 
-function RemotePreviewImage({ src, alt, title }: { src?: string; alt?: string; title?: string }) {
+function PreviewImage(props: PreviewImageProps) {
+  if (props.src?.startsWith('&')) return <StoredPreviewImage {...props} id={props.src} />
+  return <RemotePreviewImage {...props} />
+}
+
+function RemotePreviewImage({ src, alt, title, sourceLine }: PreviewImageProps) {
   const remoteImagesAllowed = useRemoteImagesAllowed()
-  if (!isRemoteImageSrc(src)) return <span>{alt ?? 'Image'}</span>
-  if (remoteImagesAllowed) return <FramedImage src={src!} alt={alt} title={title} width={0} height={0} />
-  return <span>{alt ? `[Remote images disabled in options]: ${alt}` : '[Remote images disabled in options]'}</span>
+  if (!isRemoteImageSrc(src)) return <span data-image-line={sourceLine}>{alt ?? 'Image'}</span>
+  if (remoteImagesAllowed) return <FramedImage src={src!} alt={alt} title={title} width={0} height={0} sourceLine={sourceLine} />
+  return <span data-image-line={sourceLine}>{alt ? `[Remote images disabled in options]: ${alt}` : '[Remote images disabled in options]'}</span>
 }
 
 // An image stored in the database (shared/images.ts). It is local, so the
 // remote-images setting does not apply. Its intrinsic size arrives with its
 // address, so the frame is the right size before the bytes load.
-function StoredPreviewImage({ id, alt, title }: { id: string; alt?: string; title?: string }) {
+function StoredPreviewImage({ id, alt, title, sourceLine }: PreviewImageProps & { id: string }) {
   const image = useStoredImage(id)
-  if (image === undefined) return <span>{alt ?? ''}</span>
-  if (image === null) return <span>{alt ? `[Image not found: ${id}]: ${alt}` : `[Image not found: ${id}]`}</span>
-  return <FramedImage src={image.src} alt={alt} title={title} width={image.width} height={image.height} />
+  // Every outcome carries the source line, so the render view's gestures
+  // count the images drawn from a line the same way the text counts them.
+  if (image === undefined) return <span data-image-line={sourceLine}>{alt ?? ''}</span>
+  if (image === null) return <span data-image-line={sourceLine}>{alt ? `[Image not found: ${id}]: ${alt}` : `[Image not found: ${id}]`}</span>
+  return <FramedImage src={image.src} alt={alt} title={title} width={image.width} height={image.height} sourceLine={sourceLine} />
 }
 
-function FramedImage({ src, alt, title, width, height }: { src: string; alt?: string; title?: string; width: number; height: number }) {
+function FramedImage({ src, alt, title, width, height, sourceLine }: { src: string; alt?: string; title?: string; width: number; height: number; sourceLine?: string }) {
   // The title carries the image's size and alignment (shared/imageLayout.ts);
   // a title that is not layout is shown the way any renderer shows it, as
   // the image's tooltip.
@@ -77,6 +87,7 @@ function FramedImage({ src, alt, title, width, height }: { src: string; alt?: st
     <span
       className={`markdown-image-frame${layout.align ? ` is-aligned-${layout.align}` : ''}`}
       style={styles.frame}
+      data-image-line={sourceLine}
     >
       <img
         src={src}
@@ -515,7 +526,9 @@ export function createPreviewMarkdownComponents(
 
       return <span>{children}</span>
     },
-    img: ({ src, alt, title }: { src?: string; alt?: string; title?: string }) => <PreviewImage src={src} alt={alt} title={title} />,
+    img: ({ src, alt, title, ...rest }: { src?: string; alt?: string; title?: string; 'data-image-line'?: string }) => (
+      <PreviewImage src={src} alt={alt} title={title} sourceLine={rest['data-image-line']} />
+    ),
     input: ({ checked, type, className }: { checked?: boolean; type?: string; className?: string }) => {
       if (type !== 'checkbox') {
         return null
@@ -632,6 +645,17 @@ export function createPreviewSourceAnchorRehypePlugin(lineOffset: number = 0) {
 
       visit(tree, 'element', (node) => {
         if (typeof node.tagName !== 'string') return
+        // An image is addressed by its own line (ImagePlacement.ts), under
+        // an attribute of its own so nothing that looks for block anchors
+        // ever finds an image.
+        if (node.tagName === 'img') {
+          const imageLine = node.position?.start?.line
+          if (typeof imageLine === 'number') {
+            node.properties = node.properties ?? {}
+            node.properties['data-image-line'] = String(Math.max(0, imageLine - 1 + lineOffset))
+          }
+          return
+        }
         if (!sourceAnchorTags.has(node.tagName)) return
         const startLine = node.position?.start?.line
         const endLine = node.position?.end?.line

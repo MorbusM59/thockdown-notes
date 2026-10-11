@@ -5963,11 +5963,12 @@ ${markdownHtml}
     }
 
     // Image files dropped onto a note's text are the editor's: it stores
-    // them and references them where they landed (CM6Editor's drop handler).
+    // them and references them where they landed (CM6Editor's drop handler,
+    // and in the render view useImagePreviewGestures).
     // Dropped anywhere else they do nothing, rather than opening as a note.
     const files = Array.from(event.dataTransfer.files ?? [])
     if (files.length > 0 && files.every(isImageFile)) {
-      if ((event.target as HTMLElement | null)?.closest('.cm-editor')) return
+      if ((event.target as HTMLElement | null)?.closest('.cm-editor, .markdown-preview')) return
       event.preventDefault()
       event.stopPropagation()
       return

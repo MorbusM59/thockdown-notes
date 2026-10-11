@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { beginBackgroundWork } from './backgroundWork'
-import { normalizeImageId, type ImageImportRequest, type ImageImportResult, type ImageSourceRequest, type ImageSourceResult, type ResolvedImage } from './images'
+import { describeImageFailure, imageMarkdown, normalizeImageId, type ImageImportRequest, type ImageImportResult, type ImageSourceRequest, type ImageSourceResult, type ResolvedImage } from './images'
 
 // What each stored image id shows, as the renderer knows it: one module store
 // (like remoteImages.ts) because the preview's `img` component sits at the
@@ -98,4 +98,23 @@ export async function importStoredImage(importRequest: ImageImportRequest): Prom
     notify()
   }
   return result
+}
+
+/**
+ * Stores dropped or pasted image files and answers with the Markdown for
+ * them, one line each: the image, or -- there being no other surface to
+ * report on -- a plain line saying why it was not stored, which the reader
+ * deletes like any other text. Null when there were no files.
+ */
+export async function importImageFilesAsMarkdown(files: File[]): Promise<string | null> {
+  const lines: string[] = []
+  for (const file of files) {
+    const origin = window.thockdownExternalFiles?.getPathForFile(file) || null
+    const result = await importStoredImage({ bytes: new Uint8Array(await file.arrayBuffer()), origin })
+    const name = file.name || 'image'
+    lines.push(result.ok
+      ? imageMarkdown(name.replace(/\.[^.]+$/, ''), result.id)
+      : `(${name} was not stored: ${describeImageFailure(result.reason)})`)
+  }
+  return lines.length > 0 ? lines.join('\n') : null
 }

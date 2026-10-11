@@ -55,8 +55,7 @@ import {
   resolveTableTabTransform,
 } from '../editor/MarkdownTableTransforms'
 import { resolveImageArrowTransform, resolveImageClearLayoutTransform } from '../editor/MarkdownImageTransforms'
-import { imageMarkdown } from '../shared/images'
-import { importStoredImage } from '../shared/storedImages'
+import { importImageFilesAsMarkdown } from '../shared/storedImages'
 import {
   shouldSuppressPlainTypingSoundForInsertion,
   suppressNextPlainTypingSoundOnce,
@@ -1871,19 +1870,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     importImageFiles: async (files) => {
       if (previewedSnapshotId !== null) return null
       if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
-      // Each file becomes a line: its image, or -- there being no other
-      // surface to report on -- a plain line saying why it was not stored,
-      // which the reader deletes like any other text.
-      const lines: string[] = []
-      for (const file of files) {
-        const origin = window.thockdownExternalFiles?.getPathForFile(file) || null
-        const result = await importStoredImage({ bytes: new Uint8Array(await file.arrayBuffer()), origin })
-        const name = file.name || 'image'
-        lines.push(result.ok
-          ? imageMarkdown(name.replace(/\.[^.]+$/, ''), result.id)
-          : `(${name} was not stored: ${result.reason === 'too-large' ? 'larger than 20 MB' : 'not an image the app can show'})`)
-      }
-      return lines.length > 0 ? lines.join('\n') : null
+      return importImageFilesAsMarkdown(files)
     },
     onViewportChange: (event: EditorViewportChangeEvent) => {
       if (ignoreNextUserViewportChangeRef.current && event.source === 'user-input') {

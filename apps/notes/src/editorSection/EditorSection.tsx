@@ -1,3 +1,4 @@
+import { useImagePreviewGestures } from './useImagePreviewGestures'
 import { isSealedNoteId } from '../shared/helpGuide'
 import { useImageStorageButton } from './useImageStorageButton'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -1300,12 +1301,14 @@ export function EditorSection(rawProps: EditorSectionProps) {
     isViewingTimelessNote,
   })
 
+  const canRewriteImages = !isViewingTimelessNote && !isPreviewingSnapshot && !isViewingEphemeralAutoChapter && !isSealedNoteId(activeNoteId)
+  useImagePreviewGestures({ activeNoteId, scrollerRef: previewScrollRef, adapterRef, readEditorText, canEdit: canRewriteImages && isPreviewMode })
   const imageStorage = useImageStorageButton({
     activeNoteId,
     readEditorText,
     editorTextVersion,
     adapterRef,
-    canRewrite: !isViewingTimelessNote && !isPreviewingSnapshot && !isViewingEphemeralAutoChapter && !isSealedNoteId(activeNoteId),
+    canRewrite: canRewriteImages,
     createSnapshot: handleCreateManualSnapshot,
   })
 

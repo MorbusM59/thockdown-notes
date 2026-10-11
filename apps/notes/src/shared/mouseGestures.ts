@@ -54,6 +54,9 @@ export const MOUSE_GESTURES: readonly MouseGesture[] = [
   { section: 'tables', action: 'hold', button: 'left', label: 'on divider: delete column' },
 
   { section: 'images', action: 'click', button: 'right', label: 'select alt text, id, image' },
+  { section: 'images', action: 'drag', button: 'left', modifiers: ['Ctrl'], label: 'render view: move to a block, align by drop side' },
+  { section: 'images', action: 'drag', button: 'left', modifiers: ['Shift'], label: 'render view: resize, keep proportions' },
+  { section: 'images', action: 'drag', button: 'left', modifiers: ['Ctrl', 'Shift'], label: 'render view: resize width and height' },
 
   { section: 'gutter', action: 'click', button: 'left', label: 'mark ? / !' },
   { section: 'gutter', action: 'click', button: 'right', label: 'clear mark' },

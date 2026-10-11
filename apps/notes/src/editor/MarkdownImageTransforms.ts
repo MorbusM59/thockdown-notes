@@ -45,7 +45,7 @@ export interface MarkdownImageSpan {
 const IMAGE_PATTERN = /!\[([^\]\n]*)\]\(([ \t]*)(<[^>\n]*>|[^\s()]+)(?:([ \t]+)(?:"([^"\n]*)"|'([^'\n]*)'))?[ \t]*\)/g
 
 /** Every image on the line holding `offset`. */
-function imagesOnLine(text: string, offset: number): MarkdownImageSpan[] {
+export function imagesOnLine(text: string, offset: number): MarkdownImageSpan[] {
   const lineFrom = text.lastIndexOf('\n', offset - 1) + 1
   const lineEndIndex = text.indexOf('\n', offset)
   const lineTo = lineEndIndex === -1 ? text.length : lineEndIndex
