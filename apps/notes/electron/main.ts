@@ -28,6 +28,7 @@ import { EXPORT_CHANNELS, type ExportApi } from '../src/shared/exportApi'
 import type { ReviewFlagWrite, ReviewFlagRemap } from '../src/shared/reviewFlags'
 import { ensureHelpGuide } from './help/helpGuideNote'
 import { installedUserDataPath } from './installedUserData'
+import { installNetworkIsolation, openExternalIfAllowed } from './networkIsolation'
 
 // Typed senders for the events the main process pushes to the window.
 const emitWindowEvent = eventEmitter<WindowEvents>(WINDOW_EVENT_CHANNELS)
@@ -438,7 +439,7 @@ async function createHiddenExportWindow(htmlContent: string): Promise<BrowserWin
     show: false,
     autoHideMenuBar: true,
     webPreferences: {
-      sandbox: false,
+      sandbox: true,
       webSecurity: true,
       backgroundThrottling: false,
     },
@@ -914,15 +915,7 @@ function registerIpcHandlers() {
 
   registerInvokeHandlers<ExportApi, IpcMainInvokeEvent>(EXPORT_CHANNELS, {
     openExternalUrl: async (_event, url: string) => {
-      if (typeof url !== 'string') return
-      try {
-        const parsed = new URL(url)
-        if (parsed.protocol === 'http:' || parsed.protocol === 'https:' || parsed.protocol === 'mailto:' || parsed.protocol === 'tel:') {
-          await shell.openExternal(url)
-        }
-      } catch {
-        // ignore invalid URLs
-      }
+      await openExternalIfAllowed(url)
     },
     selectExportFolder: async (event) => {
       try {
@@ -1611,6 +1604,7 @@ app.on('activate', () => {
 })
 
 app.whenReady().then(async () => {
+  installNetworkIsolation(VITE_DEV_SERVER_URL)
   enqueueExternalFilePaths(extractOpenablePaths(process.argv));
   if (!databaseService) {
     databaseService = new DatabaseService(resolveDataRoot())

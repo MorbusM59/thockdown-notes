@@ -36,13 +36,11 @@ function isSafePreviewHref(href: string | undefined): boolean {
 function isSafePreviewImageSrc(src: string | undefined): boolean {
   if (!src) return false
   if (src.startsWith('data:')) return true
-  if (src.startsWith('file:')) return true
-  try {
-    const parsed = new URL(src)
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
-  } catch {
-    return false
-  }
+  // Remote images are deliberately not rendered: the app makes no network
+  // requests (the main process cancels any that are attempted, see
+  // electron/networkIsolation.ts), and images are a future, local-only
+  // feature. A remote image shows its alt text instead.
+  return src.startsWith('file:')
 }
 
 // ── Internal note/anchor links ────────────────────────────────────────────
