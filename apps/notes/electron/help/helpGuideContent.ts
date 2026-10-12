@@ -67,6 +67,7 @@ You can
 - **hold F1** to see every [keyboard shortcut](${guideLink('SHORTCUTS')}) at a glance for as long as you hold it, or tap **F1** to open and close this guide,
 - use the [**side bar**](${guideLink('SIDEBAR-SEARCH', 'sidebar-views')}) to find the notes you created again later and (**menu** button to the left of the bar above)
 - create additional editor [**slots**](${guideLink('SPLIT-VIEW-TABS', 'opening-a-slot')}) for side by side work (**plus** button to the right of the bar above).
+- on a **touch screen**, use your fingers as you would the mouse: a **second finger** tapping or holding alongside the first is the **right button**, and a finger **resting** on the glass holds **Ctrl** for another finger (two resting fingers hold **Shift**).
 
 *If you want to, you can leave it at that and explore on your own. If you are a structural learner, however, it might be a good idea to spend a moment to familiarize yourself with a few core concepts.*
 

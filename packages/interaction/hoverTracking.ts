@@ -110,19 +110,29 @@ function mutationAffectsHit(records: MutationRecord[]): boolean {
  * Installs the tracking. Idempotent, and never removed: like the pressed
  * look, hover is a property of the document for the app's whole life.
  *
- * Touch is ignored: a finger has no hover, and the browser's emulation of it
- * (the last element tapped stays `:hover` until the next tap elsewhere) is the
- * thing `look.css` already had to fence off.
+ * A finger has no hover of its own, so a touch stands in for one: the
+ * element a finger lands on, and its ancestor chain, are marked hovered and
+ * stay marked after the finger lifts, until the next touch lands somewhere
+ * else (or a mouse moves). A control whose buttons appear on hover therefore
+ * shows them on the first tap, and a second tap can press one. Only the
+ * landing and the finger's travel count; a finger LEAVING the window (every
+ * lift fires `pointerout` with no related target) is not the pointer going
+ * away, so it does not clear. `look.css` keeps button hover colours behind
+ * `(hover: hover)`, so on a touch-only device this reveals controls without
+ * leaving a tapped button looking highlighted.
  */
 let installed = false
 export function installHoverTracking(): void {
   if (installed) return
   installed = true
 
-  window.addEventListener('pointermove', (event) => {
-    if (event.pointerType === 'touch') return
+  const track = (event: PointerEvent) => {
     position = { x: event.clientX, y: event.clientY }
     setHit(event.target instanceof Element ? event.target : null)
+  }
+  window.addEventListener('pointermove', track, { capture: true, passive: true })
+  window.addEventListener('pointerdown', (event) => {
+    if (event.pointerType === 'touch') track(event)
   }, { capture: true, passive: true })
 
   // Leaving the window: `relatedTarget` is null exactly when the pointer went

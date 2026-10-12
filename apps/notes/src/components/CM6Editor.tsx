@@ -46,6 +46,7 @@ import { cancelSmoothScroll, isSmoothScrollActive } from '@thockdown/interaction
 import { beginScrollTrackHold } from '../editor/scrollTrackHold';
 import { countWrappedLines, resolveThumbLineRatio } from '../editor/scrollThumbMetrics';
 import { resolveCagedScrollTarget } from '../editor/CageMath';
+import { subscribeTouchModifiers, touchModifiers } from '@thockdown/interaction/touchInput';
 import { attachRowGridGuard, resolveRowGridCorrection, resolveRowGridDirection, type RowGridGuard } from '../editor/rowGridGuard';
 import { registerScrollBridge } from '../editor/scrollBridge';
 import { resolveThumbRubberBand } from '../editor/scrollThumbRubberBand';
@@ -1728,18 +1729,27 @@ export function CM6Editor({
   }, [topBoundaryPxDisplay, bottomBoundaryPxDisplay]);
 
   useEffect(() => {
+    // Ctrl is held when the keyboard holds it OR a resting finger does
+    // (touchInput.ts): the two sources are tracked apart so that releasing
+    // one does not clear the other.
+    let keyboardCtrl = false;
+    const publish = () => setIsCtrlHeldForBoundaryDrag(keyboardCtrl || touchModifiers().ctrlKey);
     const syncCtrlState = (event: KeyboardEvent) => {
-      setIsCtrlHeldForBoundaryDrag(event.ctrlKey);
+      keyboardCtrl = event.ctrlKey;
+      publish();
     };
     const clearCtrlState = () => {
-      setIsCtrlHeldForBoundaryDrag(false);
+      keyboardCtrl = false;
+      publish();
     };
 
     window.addEventListener('keydown', syncCtrlState);
     window.addEventListener('keyup', syncCtrlState);
     window.addEventListener('blur', clearCtrlState);
+    const unsubscribeTouch = subscribeTouchModifiers(publish);
 
     return () => {
+      unsubscribeTouch();
       window.removeEventListener('keydown', syncCtrlState);
       window.removeEventListener('keyup', syncCtrlState);
       window.removeEventListener('blur', clearCtrlState);

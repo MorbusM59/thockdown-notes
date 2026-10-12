@@ -308,6 +308,13 @@ if (app.isPackaged && !isPortableBuild) {
   app.setPath('userData', installedUserDataPath(app.getPath('appData')));
 }
 
+// On Linux, let Chromium pick its display backend: native Wayland under a
+// Wayland session, X11 otherwise. Without it Electron runs under XWayland on
+// Wayland, where a touch screen reaches the app as an emulated mouse and
+// multi-finger touches never arrive (packages/interaction/touchInput.ts needs
+// them). Must be set before the app is ready; other platforms ignore it.
+app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
+
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   app.quit();

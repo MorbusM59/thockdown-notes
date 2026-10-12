@@ -37,10 +37,25 @@
 //   - The click that follows a completed drag's release is swallowed, since
 //     the press was a drag and not a click.
 //
+// A FINGER STARTS A DRAG BY HOLDING, not by travelling. On a touch screen a
+// finger moving across a list is a request to scroll it, and the browser
+// claims the touch for panning on its first movement, so a drag that waited
+// for 5px of travel would either never start (the list scrolls) or start on
+// every swipe. A touch press therefore becomes a drag once it has been held
+// still for `HOLD_CONFIRM_MS` (through `armHold`, like every hold), and a
+// finger that travels the threshold before then is left to scroll. From the
+// moment the drag begins the touch is kept from panning
+// (`holdTouchPanning`), because a drag source is not `touch-action: none` --
+// that property is read when the finger lands, before anyone knows whether
+// it will hold or swipe, and setting it there would stop swipes from
+// scrolling every list made of drag sources.
+//
 // Files dropped IN from the operating system are not drags this module
 // starts and are untouched: they remain the browser's own drag events.
 
 import type { PointerEvent as ReactPointerEvent } from 'react'
+import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
+import { holdTouchPanning } from '@thockdown/interaction/touchInput'
 
 /**
  * How far a press must travel, in screen pixels, before it is a drag rather
@@ -75,8 +90,9 @@ let activeDragCancel: (() => void) | null = null
  * Arms a drag from a pointer press on `event.currentTarget`. Call it from the
  * element's `onPointerDown`; the element must carry `DRAG_SOURCE_ATTRIBUTE`.
  *
- * Nothing happens until the pointer has travelled `DRAG_THRESHOLD_PX`; a
- * release before that is left entirely to the ordinary click. Past it, a
+ * Nothing happens until the pointer has travelled `DRAG_THRESHOLD_PX` (for a
+ * finger: until it has been held still for `HOLD_CONFIRM_MS`); a release
+ * before that is left entirely to the ordinary click. Past it, a
  * `dragstart` is dispatched on the source and its handler fills the
  * `DataTransfer` exactly as it would for the browser's drag; cancelling that
  * `dragstart` abandons the drag.
@@ -94,6 +110,10 @@ export function armPointerDrag(event: ReactPointerEvent<HTMLElement>): void {
   // A second press while a drag is live (another finger, a pen) ends the
   // first rather than running two.
   activeDragCancel?.()
+
+  const isTouch = event.pointerType === 'touch'
+  let cancelTouchHold: (() => void) | null = null
+  let releasePanning: (() => void) | null = null
 
   let dataTransfer: DataTransfer | null = null
   let ghost: HTMLElement | null = null
@@ -167,6 +187,11 @@ export function armPointerDrag(event: ReactPointerEvent<HTMLElement>): void {
     lastClientY = moveEvent.clientY
     if (!dataTransfer) {
       if (!hasTravelledDragThreshold(startScreenX, startScreenY, moveEvent.screenX, moveEvent.screenY)) return
+      // A finger that travels before its hold completes is scrolling.
+      if (isTouch) {
+        finish(false)
+        return
+      }
       begin()
       if (!dataTransfer) return
     }
@@ -206,6 +231,8 @@ export function armPointerDrag(event: ReactPointerEvent<HTMLElement>): void {
     window.removeEventListener('pointercancel', onPointerCancel, true)
     window.removeEventListener('keydown', onKeyDown, true)
     if (activeDragCancel === cancel) activeDragCancel = null
+    cancelTouchHold?.()
+    releasePanning?.()
     if (!dataTransfer) return
 
     ghost?.remove()
@@ -226,6 +253,14 @@ export function armPointerDrag(event: ReactPointerEvent<HTMLElement>): void {
   window.addEventListener('pointerup', onPointerUp, true)
   window.addEventListener('pointercancel', onPointerCancel, true)
   window.addEventListener('keydown', onKeyDown, true)
+
+  if (isTouch) {
+    cancelTouchHold = armHold(() => {
+      cancelTouchHold = null
+      releasePanning = holdTouchPanning()
+      begin()
+    }, HOLD_CONFIRM_MS)
+  }
 }
 
 /**

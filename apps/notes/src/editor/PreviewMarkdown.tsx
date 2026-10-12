@@ -93,6 +93,9 @@ function FramedImage({ src, alt, title, width, height, sourceLine }: { src: stri
       data-image-line={sourceLine}
       // Ctrl + right-click takes a crop off (useImagePreviewGestures.ts).
       data-secondary-press={layout.inset ? 'action' : 'none'}
+      // Two fingers spreading or closing on it resize it, as Shift + drag
+      // does (TOUCH_PINCH_ATTRIBUTE, packages/interaction/touchInput.ts).
+      data-touch-pinch={sourceLine === undefined ? undefined : ''}
     >
       <img
         src={src}

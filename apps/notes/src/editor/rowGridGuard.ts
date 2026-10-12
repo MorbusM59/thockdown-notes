@@ -170,8 +170,20 @@ export function attachRowGridGuard(
   const { getLineHeightPx, isSuspended } = options
   let corrections = 0
 
-  const onScroll = () => {
-    if (isSuspended?.()) return
+  // A FINGER PANNING THE SCROLLER is a gesture driving the position too, and
+  // the strongest case of one: the browser moves the content under the
+  // finger (and then flings it) by its own sub-pixel amounts, and snapping
+  // each of those to a row makes the text step and judder against the
+  // finger. So the guard stands down from the moment a touch lands on the
+  // scroller until the gesture is over -- every finger lifted and, if it
+  // scrolled, the browser's `scrollend`, which fires only once any fling
+  // has come to rest -- and then corrects once. A touch that never scrolled
+  // (a tap) produces no `scrollend`, so it ends at the last finger's lift.
+  let touchesDown = 0
+  let touchScrolled = false
+  let touchPanning = false
+
+  const correct = () => {
     const correction = resolveRowGridCorrection({
       scrollTopPx: scroller.scrollTop,
       lineHeightPx: getLineHeightPx(),
@@ -182,10 +194,45 @@ export function attachRowGridGuard(
     scroller.scrollTop = correction
   }
 
+  const onTouchStart = (event: TouchEvent) => {
+    touchesDown = event.touches.length
+    if (!touchPanning) touchScrolled = false
+    touchPanning = true
+  }
+  const onTouchEnd = (event: TouchEvent) => {
+    touchesDown = event.touches.length
+    if (touchesDown > 0 || touchScrolled) return
+    touchPanning = false
+  }
+  const onScrollEnd = () => {
+    if (!touchPanning || touchesDown > 0) return
+    touchPanning = false
+    if (!isSuspended?.()) correct()
+  }
+
+  const onScroll = () => {
+    if (touchPanning) {
+      touchScrolled = true
+      return
+    }
+    if (isSuspended?.()) return
+    correct()
+  }
+
   scroller.addEventListener('scroll', onScroll, { passive: true })
+  scroller.addEventListener('scrollend', onScrollEnd, { passive: true })
+  scroller.addEventListener('touchstart', onTouchStart, { passive: true })
+  scroller.addEventListener('touchend', onTouchEnd, { passive: true })
+  scroller.addEventListener('touchcancel', onTouchEnd, { passive: true })
 
   return {
-    dispose: () => scroller.removeEventListener('scroll', onScroll),
+    dispose: () => {
+      scroller.removeEventListener('scroll', onScroll)
+      scroller.removeEventListener('scrollend', onScrollEnd)
+      scroller.removeEventListener('touchstart', onTouchStart)
+      scroller.removeEventListener('touchend', onTouchEnd)
+      scroller.removeEventListener('touchcancel', onTouchEnd)
+    },
     correctionCount: () => corrections,
   }
 }
