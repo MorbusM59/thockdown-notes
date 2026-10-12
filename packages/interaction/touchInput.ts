@@ -104,6 +104,7 @@ let lastResting = 0
 const modifierListeners = new Set<(modifiers: TouchModifiers) => void>()
 
 interface PinchSession {
+  pointerId: number
   target: Element
   x: number
   y: number
@@ -196,6 +197,19 @@ function elementAt(x: number, y: number): Element {
 }
 
 /**
+ * Where to deliver the END of a press. Normally the element the press went
+ * to; if that element has since left the document (a control that
+ * re-rendered under the finger), the document instead, so that the
+ * window-level listeners that track presses (`pointerDrag.ts`,
+ * `pressTracking.ts`, the hold timers) still see the press end.
+ */
+function releaseTarget(pressed: Element | undefined): EventTarget {
+  return pressed?.isConnected ? pressed : document
+}
+
+const SHIFT: TouchModifiers = { ctrlKey: false, shiftKey: true }
+
+/**
  * Performs one reducer action. `nativeTarget` is the target of the native
  * event being handled, which for the acting finger is where its copy goes:
  * the browser has already applied pointer capture to it.
@@ -203,9 +217,11 @@ function elementAt(x: number, y: number): Element {
 function perform(action: TouchAction, nativeTarget: Element | null): void {
   switch (action.kind) {
     case 'cancelPlain':
-    case 'actingCancel': {
-      const target = pressTargets.get(action.id)
-      if (target) dispatchPointer('pointercancel', target, { pointerId: action.id, x: 0, y: 0, button: -1, buttons: 0 })
+    case 'actingCancel':
+    case 'secondaryCancel': {
+      const pressed = pressTargets.get(action.id)
+      if (action.kind !== 'cancelPlain') pressTargets.delete(action.id)
+      if (pressed) dispatchPointer('pointercancel', releaseTarget(pressed), { pointerId: action.id, x: 0, y: 0, button: -1, buttons: 0 })
       return
     }
     case 'secondaryDown': {
@@ -220,7 +236,7 @@ function perform(action: TouchAction, nativeTarget: Element | null): void {
       return
     }
     case 'secondaryUp': {
-      const target = pressTargets.get(action.id) ?? elementAt(action.x, action.y)
+      const target = releaseTarget(pressTargets.get(action.id))
       pressTargets.delete(action.id)
       const init = { pointerId: action.id, x: action.x, y: action.y, button: 2, buttons: 0 }
       dispatchPointer('pointerup', target, init)
@@ -243,24 +259,29 @@ function perform(action: TouchAction, nativeTarget: Element | null): void {
       return
     }
     case 'actingUp': {
-      const target = nativeTarget ?? elementAt(action.x, action.y)
       const pressed = pressTargets.get(action.id)
       pressTargets.delete(action.id)
+      const target = nativeTarget?.isConnected ? nativeTarget : releaseTarget(pressed)
       const init = { pointerId: action.id, x: action.x, y: action.y, button: 0, buttons: 0, modifiers: action.modifiers }
       dispatchPointer('pointerup', target, init)
       dispatchMouse('mouseup', target, init)
       // A click goes to where the press and the release agree, as the
-      // browser's does; a finger that wandered off produces none.
-      if (action.tap && pressed && (pressed === target || pressed.contains(target) || target.contains(pressed))) {
+      // browser's does; a finger that wandered off, or a press whose
+      // element has gone, produces none.
+      if (action.tap && pressed?.isConnected && target instanceof Element && (pressed.contains(target) || target.contains(pressed))) {
         dispatchMouse('click', pressed.contains(target) ? target : pressed, init)
       }
       return
     }
     case 'pinchStart': {
-      const target = elementAt(action.x, action.y)
-      const declared = target.closest(`[${TOUCH_PINCH_ATTRIBUTE}]`) ?? target
-      pinch = { target, x: action.x, y: action.y, heightPx: declared.getBoundingClientRect().height, lastY: action.y }
-      dispatchPointer('pointerdown', target, { pointerId: action.id, x: action.x, y: action.y, button: 0, buttons: 1, modifiers: { ctrlKey: false, shiftKey: true } })
+      const hit = elementAt(action.x, action.y)
+      // The declared element is the one being resized, so the press goes to
+      // it rather than to whatever child the finger happened to land on.
+      const target = hit.closest(`[${TOUCH_PINCH_ATTRIBUTE}]`) ?? hit
+      pinch = { pointerId: action.id, target, x: action.x, y: action.y, heightPx: target.getBoundingClientRect().height, lastY: action.y }
+      const init = { pointerId: action.id, x: action.x, y: action.y, button: 0, buttons: 1, modifiers: SHIFT }
+      dispatchPointer('pointerdown', target, init)
+      dispatchMouse('mousedown', target, init)
       return
     }
     case 'pinchMove': {
@@ -269,28 +290,63 @@ function perform(action: TouchAction, nativeTarget: Element | null): void {
       // in scale grows its height (and, the ratio being kept, its width) by
       // exactly that factor.
       pinch.lastY = pinch.y + pinch.heightPx * (action.scale - 1)
-      dispatchPointer('pointermove', pinch.target, { pointerId: action.id, x: pinch.x, y: pinch.lastY, button: -1, buttons: 1, modifiers: { ctrlKey: false, shiftKey: true } })
+      const init = { pointerId: action.id, x: pinch.x, y: pinch.lastY, button: -1, buttons: 1, modifiers: SHIFT }
+      dispatchPointer('pointermove', pinch.target, init)
+      dispatchMouse('mousemove', pinch.target, init)
       return
     }
-    case 'pinchEnd': {
+    case 'pinchEnd':
+    case 'pinchCancel': {
       if (!pinch) return
-      dispatchPointer('pointerup', pinch.target, { pointerId: action.id, x: pinch.x, y: pinch.lastY, button: 0, buttons: 0, modifiers: { ctrlKey: false, shiftKey: true } })
+      const target = releaseTarget(pinch.target)
+      const init = { pointerId: action.id, x: pinch.x, y: pinch.lastY, button: 0, buttons: 0, modifiers: SHIFT }
+      if (action.kind === 'pinchCancel') {
+        dispatchPointer('pointercancel', target, init)
+      } else {
+        dispatchPointer('pointerup', target, init)
+        dispatchMouse('mouseup', target, init)
+      }
       pinch = null
       return
     }
   }
 }
 
+function publishModifiers(): void {
+  const resting = restingCount(state)
+  if (resting === lastResting) return
+  lastResting = resting
+  const modifiers = modifiersForRestingCount(resting)
+  for (const listener of modifierListeners) listener(modifiers)
+}
+
+/**
+ * Forgets every finger. For when the browser stops telling us about the
+ * fingers we know of -- the window lost focus or was hidden mid-gesture, or
+ * a new touch arrived that the browser calls the first one on the glass --
+ * so that a release we never saw cannot leave a finger, and the panning
+ * block and modifiers it implies, in place for ever. Any press this module
+ * delivered is cancelled at its control first, so nothing stays held.
+ */
+function resetGestures(): void {
+  for (const [id, pressed] of pressTargets) {
+    const role = roleOf(state, id)
+    if (role !== null && role !== 'plain') dispatchPointer('pointercancel', releaseTarget(pressed), { pointerId: id, x: 0, y: 0, button: -1, buttons: 0 })
+  }
+  if (pinch) dispatchPointer('pointercancel', releaseTarget(pinch.target), { pointerId: pinch.pointerId, x: pinch.x, y: pinch.lastY, button: -1, buttons: 0 })
+  pinch = null
+  pressTargets.clear()
+  for (const timer of restTimers.values()) window.clearTimeout(timer)
+  restTimers.clear()
+  state = EMPTY_TOUCH_STATE
+  publishModifiers()
+}
+
 function feed(sample: TouchSample, nativeTarget: Element | null): void {
   const result = reduceTouch(state, sample)
   state = result.state
   for (const action of result.actions) perform(action, nativeTarget)
-  const resting = restingCount(state)
-  if (resting !== lastResting) {
-    lastResting = resting
-    const modifiers = modifiersForRestingCount(resting)
-    for (const listener of modifierListeners) listener(modifiers)
-  }
+  publishModifiers()
 }
 
 function isTouch(event: PointerEvent): boolean {
@@ -309,6 +365,9 @@ export function installTouchInput(): void {
 
   window.addEventListener('pointerdown', (event) => {
     if (!isTouch(event)) return
+    // The browser marks the first finger on the glass primary. If we still
+    // hold fingers at that moment, their releases were never seen.
+    if (event.isPrimary && state.fingers.size > 0) resetGestures()
     const target = event.target instanceof Element ? event.target : null
     if (target) pressTargets.set(event.pointerId, target)
     feed({
@@ -359,12 +418,25 @@ export function installTouchInput(): void {
   // A second finger on the glass is ours whatever it turns out to be: left
   // to the browser, two touches start its own two-finger gestures.
   window.addEventListener('touchstart', (event) => {
+    // Pointer events for these touches have already been fed; fewer touches
+    // on the glass than fingers we hold means some lifted unseen.
+    if (event.touches.length < state.fingers.size) resetGestures()
     if (event.cancelable && event.touches.length >= 2) event.preventDefault()
   }, { capture: true, passive: false })
+  window.addEventListener('blur', resetGestures)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') resetGestures()
+  })
 
   window.addEventListener('contextmenu', (event) => {
     if (synthesized.has(event)) return
-    const fromTouch = (event as PointerEvent).pointerType === 'touch' || state.fingers.size > 0
+    // Judged from the event alone, never from which fingers we think are
+    // down: a mouse right-click must reach the app whatever the touch
+    // state. Chromium sends the menu event as a PointerEvent naming the
+    // pointer type, and marks events produced by touch on their
+    // `sourceCapabilities`.
+    const capabilities = (event as MouseEvent & { sourceCapabilities?: { firesTouchEvents?: boolean } | null }).sourceCapabilities
+    const fromTouch = (event as PointerEvent).pointerType === 'touch' || capabilities?.firesTouchEvents === true
     if (!fromTouch) return
     event.preventDefault()
     event.stopImmediatePropagation()

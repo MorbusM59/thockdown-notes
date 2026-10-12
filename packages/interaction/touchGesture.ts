@@ -103,6 +103,8 @@ export type TouchAction =
   | { kind: 'cancelPlain'; id: number }
   | { kind: 'secondaryDown'; id: number; x: number; y: number }
   | { kind: 'secondaryUp'; id: number; x: number; y: number }
+  /** The delivered secondary press ends without completing (the browser cancelled a finger). */
+  | { kind: 'secondaryCancel'; id: number }
   | { kind: 'actingDown'; id: number; x: number; y: number; modifiers: TouchModifiers }
   | { kind: 'actingMove'; id: number; x: number; y: number; modifiers: TouchModifiers }
   /** `tap` when the finger never left the slop: the press also clicks. */
@@ -111,6 +113,7 @@ export type TouchAction =
   | { kind: 'pinchStart'; id: number; x: number; y: number }
   | { kind: 'pinchMove'; id: number; scale: number }
   | { kind: 'pinchEnd'; id: number }
+  | { kind: 'pinchCancel'; id: number }
 
 export const EMPTY_TOUCH_STATE: TouchState = { fingers: new Map(), secondary: null, now: 0 }
 
@@ -127,12 +130,13 @@ function canRest(finger: Finger, now: number): boolean {
 
 /**
  * How many fingers are resting right now, which is the modifier state other
- * code can query (`touchInput.ts`'s `touchModifiers`). Counts a lone finger
- * held still too, so Ctrl reads as held before the acting finger lands --
- * which is what lets a control that only appears while Ctrl is held appear
- * in time to be touched.
+ * code can query (`touchInput.ts`'s `touchModifiers`). Zero while only one
+ * finger is down, so a one-finger long press never reads as Ctrl.
  */
 export function restingCount(state: TouchState): number {
+  // A lone finger is a primary hold, never a modifier: Ctrl exists only
+  // while another finger is on the glass beside it.
+  if (state.fingers.size < 2) return 0
   let count = 0
   for (const finger of state.fingers.values()) {
     // The acting finger is the one pressing, not one holding a modifier.
@@ -249,8 +253,13 @@ export function reduceTouch(state: TouchState, sample: TouchSample): { state: To
     actions.push({ kind: 'actingUp', id: finger.id, x: finger.x, y: finger.y, modifiers: modifiersForRestingCount(restingNow()), tap: isStill(finger) })
   } else if (finger.role === 'secondary' && secondary) {
     const first = finger.id === secondary.firstId ? finger : fingers.get(secondary.firstId) ?? finger
+    const cancelled = sample.type === 'cancel'
     if (secondary.pinching) {
-      actions.push({ kind: 'pinchEnd', id: secondary.firstId })
+      actions.push({ kind: cancelled ? 'pinchCancel' : 'pinchEnd', id: secondary.firstId })
+    } else if (cancelled) {
+      // A cancel never completes a press: a delivered one is cancelled, a
+      // deferred one was never pressed and so produces nothing.
+      if (secondary.delivered) actions.push({ kind: 'secondaryCancel', id: secondary.firstId })
     } else if (secondary.delivered) {
       actions.push({ kind: 'secondaryUp', id: secondary.firstId, x: first.x, y: first.y })
     } else {

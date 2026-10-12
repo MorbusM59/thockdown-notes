@@ -39,8 +39,17 @@ describe('modifier counting', () => {
   it('counts a still finger as resting only once it has been held long enough', () => {
     const early = run([{ type: 'down', id: 1, x: 0, y: 0, t: 0 }, { type: 'time', t: HOLD_CONFIRM_MS - 1 }])
     expect(restingCount(early.state)).toBe(0)
-    const late = run([{ type: 'down', id: 1, x: 0, y: 0, t: 0 }, { type: 'time', t: HOLD_CONFIRM_MS }])
+    const late = run([
+      { type: 'down', id: 1, x: 0, y: 0, t: 0 },
+      { type: 'down', id: 2, x: 300, y: 0, t: HOLD_CONFIRM_MS },
+      { type: 'time', t: HOLD_CONFIRM_MS },
+    ])
     expect(restingCount(late.state)).toBe(1)
+  })
+
+  it('never counts a lone finger, however long it is held', () => {
+    const { state } = run([{ type: 'down', id: 1, x: 0, y: 0, t: 0 }, { type: 'time', t: 10 * HOLD_CONFIRM_MS }])
+    expect(restingCount(state)).toBe(0)
   })
 
   it('does not count a finger that has moved beyond the slop', () => {
@@ -122,6 +131,26 @@ describe('two fingers landing together', () => {
       { type: 'up', id: 1, x: 100, y: 100, t: 90 },
     ])
     expect(kinds(actions)).toEqual(['cancelPlain', 'secondaryDown', 'secondaryUp'])
+  })
+})
+
+describe('a cancelled two-finger press', () => {
+  it('cancels a delivered press rather than completing it', () => {
+    const { actions } = run([
+      { type: 'down', id: 1, x: 10, y: 20, t: 0 },
+      { type: 'down', id: 2, x: 60, y: 20, t: 40 },
+      { type: 'cancel', id: 1, x: 10, y: 20, t: 120 },
+    ])
+    expect(kinds(actions)).toEqual(['cancelPlain', 'secondaryDown', 'secondaryCancel'])
+  })
+
+  it('produces nothing when the press was still deferred', () => {
+    const { actions } = run([
+      { type: 'down', id: 1, x: 10, y: 20, t: 0, pinchable: true },
+      { type: 'down', id: 2, x: 60, y: 20, t: 40 },
+      { type: 'cancel', id: 2, x: 60, y: 20, t: 120 },
+    ])
+    expect(kinds(actions)).toEqual(['cancelPlain'])
   })
 })
 

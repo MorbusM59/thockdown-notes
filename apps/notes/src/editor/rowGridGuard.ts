@@ -130,6 +130,63 @@ export function resolveRowGridCorrection(input: RowGridCorrectionInput): number 
   return targetPx
 }
 
+// A FINGER PANNING THE SCROLLER is a gesture driving the position too, and
+// the strongest case of one: the browser moves the content under the finger,
+// and then flings it, by its own sub-pixel amounts, and snapping each of
+// those to a row makes the text step and judder against the finger. So the
+// guard stands down while a touch that landed on the scroller is down, and
+// through the fling after it, and corrects once when that is over.
+//
+// The phases, and what ends each one (so that none can be stranded):
+//
+//   idle      ordinary guarding: every scroll is corrected.
+//   touching  a finger landed on the scroller. Ends when the window reports
+//             no fingers down: into `flinging` if the content moved since the
+//             last time it came to rest, otherwise straight to `idle`. A
+//             scroll seen while the window reports no fingers down means the
+//             lift was missed, and is treated as an ordinary scroll.
+//   flinging  the fingers are up and the browser is carrying the motion on.
+//             Ends at the browser's `scrollend` (which fires once a fling has
+//             come to rest), or at any other input (a wheel, a key, a mouse
+//             press), whichever comes first; either way it corrects once.
+
+export type RowGridTouchPhase =
+  | { kind: 'idle' }
+  | { kind: 'touching'; scrolled: boolean }
+  | { kind: 'flinging' }
+
+export type RowGridTouchEvent =
+  | { kind: 'touchstart'; touchesDown: number }
+  | { kind: 'touchend'; touchesDown: number }
+  | { kind: 'scroll'; touchesDown: number }
+  | { kind: 'scrollend' }
+  | { kind: 'otherInput' }
+
+/** One step of the touch phase, and whether the guard corrects now. Pure, for the tests. */
+export function stepRowGridTouchPhase(phase: RowGridTouchPhase, event: RowGridTouchEvent): { phase: RowGridTouchPhase; correct: boolean } {
+  switch (event.kind) {
+    case 'touchstart':
+      return { phase: { kind: 'touching', scrolled: phase.kind === 'touching' && phase.scrolled }, correct: false }
+    case 'touchend':
+      if (phase.kind !== 'touching' || event.touchesDown > 0) return { phase, correct: false }
+      return phase.scrolled ? { phase: { kind: 'flinging' }, correct: false } : { phase: { kind: 'idle' }, correct: true }
+    case 'scroll':
+      if (phase.kind === 'idle') return { phase, correct: true }
+      if (phase.kind === 'touching' && event.touchesDown === 0) return { phase: { kind: 'idle' }, correct: true }
+      if (phase.kind === 'touching') return { phase: { kind: 'touching', scrolled: true }, correct: false }
+      return { phase, correct: false }
+    case 'scrollend':
+      // Under a finger the content came to rest; a lift with no further
+      // motion then has no fling to wait for.
+      if (phase.kind === 'touching') return { phase: { kind: 'touching', scrolled: false }, correct: false }
+      if (phase.kind === 'flinging') return { phase: { kind: 'idle' }, correct: true }
+      return { phase, correct: false }
+    case 'otherInput':
+      if (phase.kind === 'flinging') return { phase: { kind: 'idle' }, correct: true }
+      return { phase, correct: false }
+  }
+}
+
 export interface RowGridGuard {
   /** Stops watching. */
   dispose: () => void
@@ -170,18 +227,8 @@ export function attachRowGridGuard(
   const { getLineHeightPx, isSuspended } = options
   let corrections = 0
 
-  // A FINGER PANNING THE SCROLLER is a gesture driving the position too, and
-  // the strongest case of one: the browser moves the content under the
-  // finger (and then flings it) by its own sub-pixel amounts, and snapping
-  // each of those to a row makes the text step and judder against the
-  // finger. So the guard stands down from the moment a touch lands on the
-  // scroller until the gesture is over -- every finger lifted and, if it
-  // scrolled, the browser's `scrollend`, which fires only once any fling
-  // has come to rest -- and then corrects once. A touch that never scrolled
-  // (a tap) produces no `scrollend`, so it ends at the last finger's lift.
+  let phase: RowGridTouchPhase = { kind: 'idle' }
   let touchesDown = 0
-  let touchScrolled = false
-  let touchPanning = false
 
   const correct = () => {
     const correction = resolveRowGridCorrection({
@@ -194,44 +241,41 @@ export function attachRowGridGuard(
     scroller.scrollTop = correction
   }
 
-  const onTouchStart = (event: TouchEvent) => {
-    touchesDown = event.touches.length
-    if (!touchPanning) touchScrolled = false
-    touchPanning = true
-  }
-  const onTouchEnd = (event: TouchEvent) => {
-    touchesDown = event.touches.length
-    if (touchesDown > 0 || touchScrolled) return
-    touchPanning = false
-  }
-  const onScrollEnd = () => {
-    if (!touchPanning || touchesDown > 0) return
-    touchPanning = false
-    if (!isSuspended?.()) correct()
+  const step = (event: RowGridTouchEvent) => {
+    const result = stepRowGridTouchPhase(phase, event)
+    phase = result.phase
+    if (result.correct && !isSuspended?.()) correct()
   }
 
-  const onScroll = () => {
-    if (touchPanning) {
-      touchScrolled = true
-      return
-    }
-    if (isSuspended?.()) return
-    correct()
+  // The finger count is the WINDOW's: a finger that lands on the scroller can
+  // lift anywhere, and a lift seen only by the scroller could be missed.
+  const onWindowTouch = (event: TouchEvent) => {
+    touchesDown = event.touches.length
+    if (event.type !== 'touchstart') step({ kind: 'touchend', touchesDown })
   }
+  const onScrollerTouchStart = (event: TouchEvent) => step({ kind: 'touchstart', touchesDown: event.touches.length })
+  const onScrollEnd = () => step({ kind: 'scrollend' })
+  const onOtherInput = (event: Event) => {
+    if (event instanceof PointerEvent && event.pointerType === 'touch') return
+    step({ kind: 'otherInput' })
+  }
+  const onScroll = () => step({ kind: 'scroll', touchesDown })
 
+  const windowTouchEvents = ['touchstart', 'touchend', 'touchcancel'] as const
+  const otherInputEvents = ['wheel', 'keydown', 'pointerdown'] as const
   scroller.addEventListener('scroll', onScroll, { passive: true })
   scroller.addEventListener('scrollend', onScrollEnd, { passive: true })
-  scroller.addEventListener('touchstart', onTouchStart, { passive: true })
-  scroller.addEventListener('touchend', onTouchEnd, { passive: true })
-  scroller.addEventListener('touchcancel', onTouchEnd, { passive: true })
+  scroller.addEventListener('touchstart', onScrollerTouchStart, { passive: true })
+  for (const type of windowTouchEvents) window.addEventListener(type, onWindowTouch, { capture: true, passive: true })
+  for (const type of otherInputEvents) window.addEventListener(type, onOtherInput, { capture: true, passive: true })
 
   return {
     dispose: () => {
       scroller.removeEventListener('scroll', onScroll)
       scroller.removeEventListener('scrollend', onScrollEnd)
-      scroller.removeEventListener('touchstart', onTouchStart)
-      scroller.removeEventListener('touchend', onTouchEnd)
-      scroller.removeEventListener('touchcancel', onTouchEnd)
+      scroller.removeEventListener('touchstart', onScrollerTouchStart)
+      for (const type of windowTouchEvents) window.removeEventListener(type, onWindowTouch, { capture: true })
+      for (const type of otherInputEvents) window.removeEventListener(type, onOtherInput, { capture: true })
     },
     correctionCount: () => corrections,
   }
