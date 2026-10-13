@@ -959,6 +959,14 @@
   container-type: inline-size;
 }
 
+/* A card is as tall as a note card in the date list (that rule is scoped to
+ * .date-view, which the image list is not), so the action column that
+ * appears on hover fits inside it instead of setting its height. An
+ * expanded card takes the image's own proportions instead. */
+.image-list-item:not(.is-tree-card):not(.is-expanded) {
+  height: calc(var(--note-list-row-content-height) + var(--spacing-large) * 2);
+}
+
 .image-list-item .note-list-column-primary {
   position: relative;
   overflow: hidden;
