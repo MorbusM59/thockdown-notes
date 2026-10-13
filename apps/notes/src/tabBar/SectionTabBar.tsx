@@ -163,9 +163,9 @@ export function SectionTabBar({
     handleTabContextMenu,
     handleTabMouseLeave,
     handleTabClick,
-    handleTabMouseDown,
-    handleTabMouseUp,
-    handleTempTabMouseDown,
+    handleTabPointerDown,
+    handleTabPointerUp,
+    handleTempTabPointerDown,
     clearTempTabHoldTimer,
     updateTabsScrollEdges,
     handleTabsWheel,
@@ -350,13 +350,16 @@ export function SectionTabBar({
                           onClick={() => handleTabClick(tempTabNoteId)}
                           data-secondary-press="action"
                           onContextMenu={handleTabContextMenu}
-                          onMouseDown={(event) => {
-                            handleTempTabMouseDown(event, tempTabNoteId)
-                            handleTabMouseDown(event, tempTabNoteId)
+                          onPointerDown={(event) => {
+                            handleTempTabPointerDown(event, tempTabNoteId)
+                            handleTabPointerDown(event, tempTabNoteId)
                           }}
-                          onMouseUp={(event) => {
+                          // A finger that pans the tab bar is cancelled by the
+                          // browser rather than lifted; the hold ends either way.
+                          onPointerCancel={clearTempTabHoldTimer}
+                          onPointerUp={(event) => {
                             clearTempTabHoldTimer()
-                            handleTabMouseUp(event, tempTabNoteId)
+                            handleTabPointerUp(event, tempTabNoteId)
                           }}
                           onMouseLeave={() => {
                             handleTabMouseLeave(tempTabNoteId)
@@ -395,15 +398,17 @@ export function SectionTabBar({
                         <div
                           className={`tag-pill note-tab-pill${isActive ? ' is-active' : ''}${isGhost ? ' ghost' : ''}${isPrimed ? ' unpin-primed' : ''}${isUnpinArming ? ' unpin-arming' : ''}`}
                           data-drag-source=""
-                          onPointerDown={armPointerDrag}
+                          onPointerDown={(event) => {
+                            armPointerDrag(event)
+                            handleTabPointerDown(event, tab.noteId)
+                          }}
                           onDragStart={(event) => handleTabDragStart(event, index)}
                           onDragEnd={handleTabDragEnd}
                           onDrop={(event) => handleTabDrop(event, index)}
                           onClick={() => handleTabClick(tab.noteId)}
                           data-secondary-press="action"
                           onContextMenu={handleTabContextMenu}
-                          onMouseDown={(event) => handleTabMouseDown(event, tab.noteId)}
-                          onMouseUp={(event) => handleTabMouseUp(event, tab.noteId)}
+                          onPointerUp={(event) => handleTabPointerUp(event, tab.noteId)}
                           onMouseLeave={() => handleTabMouseLeave(tab.noteId)}
                           data-tooltip={
                             isPrimed

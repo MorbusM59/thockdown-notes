@@ -75,7 +75,7 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   | 'editingChapterNoteId' | 'chapterIdDraft' | 'setChapterIdDraft' | 'onCommitChapterIdEdit' | 'onCancelChapterIdEdit'
   | 'onCollapseChapterIntoPrevious' | 'onExtractSelectionToChapter' | 'isViewingAutoTocChapter' | 'isViewingAutoOpenItemsChapter'
   | 'isViewingTimelessNote' | 'onToggleTimeless' | 'isForcedPreviewNote' | 'onToggleRenderViewMode'
-  | 'splitArmedChapter' | 'onChapterPillMouseDown' | 'onChapterPillMouseUp' | 'onChapterPillMouseLeave' | 'onChapterPillContextMenu'
+  | 'splitArmedChapter' | 'onChapterPillPointerDown' | 'onChapterPillPointerUp' | 'onChapterPillMouseLeave' | 'onChapterPillContextMenu'
   | 'onArchiveChapterClick' | 'onDeleteChapterClick' | 'imageStorage'
   | 'isTagBarMode' | 'toggleTagBarMode' | 'tagBar'> {
   sectionId: string
@@ -346,15 +346,15 @@ export function EditorSection(rawProps: EditorSectionProps) {
   // identity button already is.
   useEffect(() => {
     if (!isSectionPickerOpen) return
-    const handleWindowMouseDown = (event: globalThis.MouseEvent) => {
+    const handleWindowPress = (event: globalThis.PointerEvent) => {
       const target = event.target
       if (target instanceof HTMLElement && target.closest('.tabbar-section-picker, .section-identity-tab')) {
         return
       }
       setIsSectionPickerOpen(false)
     }
-    window.addEventListener('mousedown', handleWindowMouseDown)
-    return () => window.removeEventListener('mousedown', handleWindowMouseDown)
+    window.addEventListener('pointerdown', handleWindowPress)
+    return () => window.removeEventListener('pointerdown', handleWindowPress)
   }, [isSectionPickerOpen])
   const { isPreviewMode: persistedIsPreviewMode, setIsPreviewMode } = useDisplayedNoteRenderMode(sectionId)
   // TOC/Open Items are synthetic, link-only notes -- raw markdown bracket
@@ -1005,10 +1005,10 @@ export function EditorSection(rawProps: EditorSectionProps) {
     handleTabContextMenu,
     handleTabMouseLeave,
     handleTabClick,
-    handleTabMouseDown,
-    handleTabMouseUp,
+    handleTabPointerDown,
+    handleTabPointerUp,
     clearTabHoldTimer,
-    handleTempTabMouseDown,
+    handleTempTabPointerDown,
     clearTempTabHoldTimer,
     updateTabsScrollEdges,
     handleTabsWheel,
@@ -1095,8 +1095,8 @@ export function EditorSection(rawProps: EditorSectionProps) {
 
   const {
     splitArmedChapter,
-    handleChapterPillMouseDown,
-    handleChapterPillMouseUp,
+    handleChapterPillPointerDown,
+    handleChapterPillPointerUp,
     handleChapterPillMouseLeave,
     handleChapterPillContextMenu,
     handleArchiveChapterClick,
@@ -1171,15 +1171,15 @@ export function EditorSection(rawProps: EditorSectionProps) {
   // writing -- returns the bar to rest.
   useEffect(() => {
     if (chapterBarMode === restingChapterBarMode) return
-    const handleWindowMouseDown = (event: globalThis.MouseEvent) => {
+    const handleWindowPress = (event: globalThis.PointerEvent) => {
       const target = event.target
       if (!(target instanceof Node)) return
       if (target instanceof HTMLElement && target.closest('.editor-stage')) {
         setChapterBarMode(restingChapterBarMode)
       }
     }
-    window.addEventListener('mousedown', handleWindowMouseDown)
-    return () => window.removeEventListener('mousedown', handleWindowMouseDown)
+    window.addEventListener('pointerdown', handleWindowPress)
+    return () => window.removeEventListener('pointerdown', handleWindowPress)
   }, [chapterBarMode, restingChapterBarMode, setChapterBarMode])
 
   /**
@@ -1212,8 +1212,8 @@ export function EditorSection(rawProps: EditorSectionProps) {
     handleArchiveClick,
     handleTrashClick,
     purgeDeletedNotesPermanently,
-    handleTrashViewButtonMouseDown,
-    handleTrashViewButtonMouseUp,
+    handleTrashViewButtonPointerDown,
+    handleTrashViewButtonPointerUp,
     handleTrashViewButtonContextMenu,
   } = useNoteProtectionActions({
     notes,
@@ -1756,10 +1756,10 @@ export function EditorSection(rawProps: EditorSectionProps) {
     handleTabContextMenu,
     handleTabMouseLeave,
     handleTabClick,
-    handleTabMouseDown,
-    handleTabMouseUp,
+    handleTabPointerDown,
+    handleTabPointerUp,
     clearTabHoldTimer,
-    handleTempTabMouseDown,
+    handleTempTabPointerDown,
     clearTempTabHoldTimer,
     updateTabsScrollEdges,
     handleTabsWheel,
@@ -1860,8 +1860,8 @@ export function EditorSection(rawProps: EditorSectionProps) {
     handleArchiveClick,
     handleTrashClick,
     purgeDeletedNotesPermanently,
-    handleTrashViewButtonMouseDown,
-    handleTrashViewButtonMouseUp,
+    handleTrashViewButtonPointerDown,
+    handleTrashViewButtonPointerUp,
     handleTrashViewButtonContextMenu,
     documentFindQuery,
     setDocumentFindQuery,
@@ -2125,10 +2125,10 @@ export function EditorSection(rawProps: EditorSectionProps) {
           handleTabContextMenu,
           handleTabMouseLeave,
           handleTabClick,
-          handleTabMouseDown,
-          handleTabMouseUp,
+          handleTabPointerDown,
+          handleTabPointerUp,
           clearTabHoldTimer,
-          handleTempTabMouseDown,
+          handleTempTabPointerDown,
           clearTempTabHoldTimer,
           updateTabsScrollEdges,
           handleTabsWheel,
@@ -2151,7 +2151,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
       tabIndex={-1}
       onDropCapture={handleSectionDropCapture}
       onFocusCapture={() => markSectionActive(sectionId)}
-      onMouseDownCapture={() => markSectionActive(sectionId)}
+      onPointerDownCapture={() => markSectionActive(sectionId)}
       onKeyDownCapture={() => markSectionActive(sectionId)}
     >
       <SectionTabBar
@@ -2300,8 +2300,8 @@ export function EditorSection(rawProps: EditorSectionProps) {
         onCollapseChapterIntoPrevious={handleCollapseChapterIntoPrevious}
         onExtractSelectionToChapter={handleExtractSelectionToChapter}
         splitArmedChapter={splitArmedChapter}
-        onChapterPillMouseDown={handleChapterPillMouseDown}
-        onChapterPillMouseUp={handleChapterPillMouseUp}
+        onChapterPillPointerDown={handleChapterPillPointerDown}
+        onChapterPillPointerUp={handleChapterPillPointerUp}
         onChapterPillMouseLeave={handleChapterPillMouseLeave}
         onChapterPillContextMenu={handleChapterPillContextMenu}
         onArchiveChapterClick={handleArchiveChapterClick}

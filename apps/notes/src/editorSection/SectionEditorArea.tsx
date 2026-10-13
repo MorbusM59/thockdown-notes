@@ -120,8 +120,8 @@ export interface SectionEditorAreaProps {
   onExtractSelectionToChapter: () => void
   /** Which chapter pill (if any) is currently showing the split archive/delete mini pills -- see useChapterPillActions.ts. */
   splitArmedChapter: ChapterPillSplitArm | null
-  onChapterPillMouseDown: (event: MouseEvent<HTMLDivElement>, chapterNoteId: string) => void
-  onChapterPillMouseUp: (event: MouseEvent<HTMLDivElement>, chapterNoteId: string) => void
+  onChapterPillPointerDown: (event: MouseEvent<HTMLDivElement>, chapterNoteId: string) => void
+  onChapterPillPointerUp: (event: MouseEvent<HTMLDivElement>, chapterNoteId: string) => void
   onChapterPillMouseLeave: (chapterNoteId: string) => void
   onChapterPillContextMenu: (event: MouseEvent<HTMLDivElement>) => void
   onArchiveChapterClick: (chapterNoteId: string) => void
@@ -252,8 +252,8 @@ export function SectionEditorArea({
   onCollapseChapterIntoPrevious,
   onExtractSelectionToChapter,
   splitArmedChapter,
-  onChapterPillMouseDown,
-  onChapterPillMouseUp,
+  onChapterPillPointerDown,
+  onChapterPillPointerUp,
   onChapterPillMouseLeave,
   onChapterPillContextMenu,
   onArchiveChapterClick,
@@ -412,6 +412,7 @@ export function SectionEditorArea({
                 //
                 // preventDefault stays, and for the same reason as before: it
                 // is what stops the browser clearing focus after this runs.
+                /* mouse-default: focus semantics, read by focusOwnership on mousedown */
                 onMouseDown={(event) => {
                   event.preventDefault()
                   focusEscapeHoldRing(sectionContainerRef.current)
@@ -582,8 +583,8 @@ export function SectionEditorArea({
             onCollapseChapterIntoPrevious={onCollapseChapterIntoPrevious}
             onExtractSelectionToChapter={onExtractSelectionToChapter}
             splitArmedChapter={splitArmedChapter}
-            onChapterPillMouseDown={onChapterPillMouseDown}
-            onChapterPillMouseUp={onChapterPillMouseUp}
+            onChapterPillPointerDown={onChapterPillPointerDown}
+            onChapterPillPointerUp={onChapterPillPointerUp}
             onChapterPillMouseLeave={onChapterPillMouseLeave}
             onChapterPillContextMenu={onChapterPillContextMenu}
             onArchiveChapterClick={onArchiveChapterClick}

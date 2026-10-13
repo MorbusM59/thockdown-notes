@@ -18,6 +18,7 @@ import './mobile.css'
 installPressTracking()
 installHoverTracking()
 installScrollTrackTokens()
+// mouse-default: focus suppression, which only the mousedown default controls
 window.addEventListener('mousedown', keepFocusOnPress, { capture: true })
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

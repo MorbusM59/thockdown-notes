@@ -50,6 +50,8 @@
   width:     8px;
   min-width: 8px;
   cursor:    col-resize;
+  /* A finger on the divider resizes; left to the browser it would pan. */
+  touch-action: none;
   border: 1px solid var(--color-border-light-30);
   border-radius: var(--border-radius-small);
   box-shadow: var(--box-shadow-inverted);

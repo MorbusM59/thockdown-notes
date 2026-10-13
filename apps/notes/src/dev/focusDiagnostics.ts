@@ -74,6 +74,7 @@ export function installFocusDiagnostics(): void {
 
   // Capture phase: this runs before any application handler has had the
   // chance to redirect, preventDefault, or re-render anything.
+  // mouse-default: traces the mousedown that focus handling reads
   window.addEventListener('mousedown', (event) => {
     log('mousedown', `on ${describe(event.target)} | activeElement=${describe(document.activeElement)} | activeSection=${activeColumnLabel()} | defaultPrevented=${event.defaultPrevented}`)
     // One frame later is where a click's focus has normally landed, and where

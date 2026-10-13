@@ -423,7 +423,7 @@ export interface SidebarOptionsPanelProps {
   applyActiveColorToEditorText: (key: EditorTextColorTargetKey) => void
   updateEditorTextColor: (key: EditorTextColorTargetKey, color: RgbaColor) => void
   applyHsvaValueToEditorText: (sourceKey: HsvaControlKey, targetKey: EditorTextColorTargetKey) => void
-  startElementPreviewCopyHold: (source: ElementPreviewCopySource, event: MouseEvent<HTMLButtonElement>) => void
+  startElementPreviewCopyHold: (source: ElementPreviewCopySource, event: PointerEvent<HTMLButtonElement>) => void
   clearColorArmTimer: () => void
   hsvaDragState: HsvaDragState | null
   hsvaDisplayColors: { hColor: string; sColor: string; vColor: string; aGhostColor: string }
@@ -433,7 +433,7 @@ export interface SidebarOptionsPanelProps {
   startHsvaDrag: (control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => void
   handleHsvaDragMove: (control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => void
   stopHsvaDrag: (control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => void
-  startColorArmHold: (source: ColorArmSource, event: MouseEvent<HTMLButtonElement>) => void
+  startColorArmHold: (source: ColorArmSource, event: PointerEvent<HTMLButtonElement>) => void
   wheelAdjustHsvaControl: (control: HsvaControlKey, event: React.WheelEvent<HTMLButtonElement>) => void
 
   applyActiveColorToTexture: (surface: TextureSurfaceKey) => void
@@ -632,7 +632,7 @@ export interface SidebarOptionsPanelProps {
   stopCursorHsvaDrag: (control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => void
   wheelAdjustCursorHsvaControl: (control: HsvaControlKey, event: React.WheelEvent<HTMLButtonElement>) => void
   applyCursorColorToTarget: (target: CursorColorTargetKey) => void
-  startCursorColorCopyHold: (target: CursorColorTargetKey, event: MouseEvent<HTMLButtonElement>) => void
+  startCursorColorCopyHold: (target: CursorColorTargetKey, event: PointerEvent<HTMLButtonElement>) => void
   clearCursorColorArmTimer: () => void
   caretSizeDeviationPx: number
   setCaretSizeDeviationPx: (value: number) => void
@@ -670,7 +670,7 @@ export interface SidebarOptionsPanelProps {
   stopCaretHsvaDrag: (control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => void
   wheelAdjustCaretHsvaControl: (control: HsvaControlKey, event: React.WheelEvent<HTMLButtonElement>) => void
   applyCaretColorToTarget: (target: CaretColorTargetKey) => void
-  startCaretColorCopyHold: (target: CaretColorTargetKey, event: MouseEvent<HTMLButtonElement>) => void
+  startCaretColorCopyHold: (target: CaretColorTargetKey, event: PointerEvent<HTMLButtonElement>) => void
   clearCaretColorArmTimer: () => void
 }
 
@@ -1024,8 +1024,8 @@ export function SidebarOptionsPanel({
               applyHsvaValueToElement(primedColorSource.key, resolvedKey)
             }
           }}
-          onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'element', key: resolvedKey }, event)}
-          onMouseUp={(event) => {
+          onPointerDown={(event) => startElementPreviewCopyHold({ kind: 'element', key: resolvedKey }, event)}
+          onPointerUp={(event) => {
             if (event.button !== 2) return
             clearColorArmTimer()
           }}
@@ -1065,8 +1065,8 @@ export function SidebarOptionsPanel({
             applyHsvaValueToTexture(primedColorSource.key, surface)
           }
         }}
-        onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'texture', key: surface }, event)}
-        onMouseUp={(event) => {
+        onPointerDown={(event) => startElementPreviewCopyHold({ kind: 'texture', key: surface }, event)}
+        onPointerUp={(event) => {
           if (event.button !== 2) return
           clearColorArmTimer()
         }}
@@ -1389,26 +1389,20 @@ export function SidebarOptionsPanel({
               data-live-tooltip={`Hue: ${Math.round(activeColorHsva.h)}\n${activeColorHex}`}
               onPointerDown={(event) => {
                 startHsvaDrag('h', event)
+                if (event.button === 2) startColorArmHold({ kind: 'hsva', key: 'h' }, event)
               }}
               onPointerMove={(event) => {
                 handleHsvaDragMove('h', event)
               }}
               onPointerUp={(event) => {
                 stopHsvaDrag('h', event)
+                if (event.button === 2) clearColorArmTimer()
               }}
               onPointerCancel={(event) => {
                 stopHsvaDrag('h', event)
               }}
               onLostPointerCapture={(event) => {
                 stopHsvaDrag('h', event)
-              }}
-              onMouseDown={(event) => {
-                if (event.button !== 2) return
-                startColorArmHold({ kind: 'hsva', key: 'h' }, event)
-              }}
-              onMouseUp={(event) => {
-                if (event.button !== 2) return
-                clearColorArmTimer()
               }}
               onMouseLeave={clearColorArmTimer}
               data-secondary-press="action"
@@ -1427,26 +1421,20 @@ export function SidebarOptionsPanel({
               data-live-tooltip={`Saturation: ${Math.round(activeColorHsva.s * 255)}\n${activeColorHex}`}
               onPointerDown={(event) => {
                 startHsvaDrag('s', event)
+                if (event.button === 2) startColorArmHold({ kind: 'hsva', key: 's' }, event)
               }}
               onPointerMove={(event) => {
                 handleHsvaDragMove('s', event)
               }}
               onPointerUp={(event) => {
                 stopHsvaDrag('s', event)
+                if (event.button === 2) clearColorArmTimer()
               }}
               onPointerCancel={(event) => {
                 stopHsvaDrag('s', event)
               }}
               onLostPointerCapture={(event) => {
                 stopHsvaDrag('s', event)
-              }}
-              onMouseDown={(event) => {
-                if (event.button !== 2) return
-                startColorArmHold({ kind: 'hsva', key: 's' }, event)
-              }}
-              onMouseUp={(event) => {
-                if (event.button !== 2) return
-                clearColorArmTimer()
               }}
               onMouseLeave={clearColorArmTimer}
               data-secondary-press="action"
@@ -1465,26 +1453,20 @@ export function SidebarOptionsPanel({
               data-live-tooltip={`Value: ${Math.round(activeColorHsva.v * 255)}\n${activeColorHex}`}
               onPointerDown={(event) => {
                 startHsvaDrag('v', event)
+                if (event.button === 2) startColorArmHold({ kind: 'hsva', key: 'v' }, event)
               }}
               onPointerMove={(event) => {
                 handleHsvaDragMove('v', event)
               }}
               onPointerUp={(event) => {
                 stopHsvaDrag('v', event)
+                if (event.button === 2) clearColorArmTimer()
               }}
               onPointerCancel={(event) => {
                 stopHsvaDrag('v', event)
               }}
               onLostPointerCapture={(event) => {
                 stopHsvaDrag('v', event)
-              }}
-              onMouseDown={(event) => {
-                if (event.button !== 2) return
-                startColorArmHold({ kind: 'hsva', key: 'v' }, event)
-              }}
-              onMouseUp={(event) => {
-                if (event.button !== 2) return
-                clearColorArmTimer()
               }}
               onMouseLeave={clearColorArmTimer}
               data-secondary-press="action"
@@ -1512,26 +1494,20 @@ export function SidebarOptionsPanel({
               data-live-tooltip={`Alpha: ${Math.round(activeColorHsva.a * 255)}\n${activeColorHex}`}
               onPointerDown={(event) => {
                 startHsvaDrag('a', event)
+                if (event.button === 2) startColorArmHold({ kind: 'hsva', key: 'a' }, event)
               }}
               onPointerMove={(event) => {
                 handleHsvaDragMove('a', event)
               }}
               onPointerUp={(event) => {
                 stopHsvaDrag('a', event)
+                if (event.button === 2) clearColorArmTimer()
               }}
               onPointerCancel={(event) => {
                 stopHsvaDrag('a', event)
               }}
               onLostPointerCapture={(event) => {
                 stopHsvaDrag('a', event)
-              }}
-              onMouseDown={(event) => {
-                if (event.button !== 2) return
-                startColorArmHold({ kind: 'hsva', key: 'a' }, event)
-              }}
-              onMouseUp={(event) => {
-                if (event.button !== 2) return
-                clearColorArmTimer()
               }}
               onMouseLeave={clearColorArmTimer}
               data-secondary-press="action"
@@ -1548,11 +1524,11 @@ export function SidebarOptionsPanel({
               className={`btn-icon options-color-swatch options-active-color${primedColorSource.kind === 'active-color' ? ' is-active' : ''}`}
               data-tooltip={`Active color:\n${activeColorHex}`}
               style={{ background: `linear-gradient(${activeColorCss}, ${activeColorCss}), var(--color-background-light)` }}
-              onMouseDown={(event) => {
+              onPointerDown={(event) => {
                 if (event.button !== 2) return
                 startColorArmHold({ kind: 'active-color' }, event)
               }}
-              onMouseUp={(event) => {
+              onPointerUp={(event) => {
                 if (event.button !== 2) return
                 clearColorArmTimer()
               }}
@@ -1575,11 +1551,11 @@ export function SidebarOptionsPanel({
                   '--texture-preview-color': texturePreviewTintCss,
                   '--texture-preview-mask': texturePreviewCss,
                 } as React.CSSProperties}
-                onMouseDown={(event) => {
+                onPointerDown={(event) => {
                   if (event.button !== 2) return
                   startColorArmHold({ kind: 'texture-preview' }, event)
                 }}
-                onMouseUp={(event) => {
+                onPointerUp={(event) => {
                   if (event.button !== 2) return
                   clearColorArmTimer()
                 }}
@@ -1776,8 +1752,8 @@ export function SidebarOptionsPanel({
                 applyHsvaValueToEditorText(primedColorSource.key, target)
               }
             }}
-            onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'text', key: isPreviewMode ? 'editorRenderText' : 'editorEditText' }, event)}
-            onMouseUp={(event) => {
+            onPointerDown={(event) => startElementPreviewCopyHold({ kind: 'text', key: isPreviewMode ? 'editorRenderText' : 'editorEditText' }, event)}
+            onPointerUp={(event) => {
               if (event.button !== 2) return
               clearColorArmTimer()
             }}
@@ -2263,8 +2239,8 @@ export function SidebarOptionsPanel({
             style={{ background: customCursorCenterColor }}
             data-tooltip="Center dot color — click to apply, hold right-click to copy"
             onClick={() => applyCursorColorToTarget('center')}
-            onMouseDown={(event) => startCursorColorCopyHold('center', event)}
-            onMouseUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
+            onPointerDown={(event) => startCursorColorCopyHold('center', event)}
+            onPointerUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
             onMouseLeave={clearCursorColorArmTimer}
             data-secondary-press="action"
             onContextMenu={(event) => { event.preventDefault(); clearCursorColorArmTimer() }}
@@ -2275,8 +2251,8 @@ export function SidebarOptionsPanel({
             style={{ background: customCursorHaloColor }}
             data-tooltip="Halo color — click to apply, hold right-click to copy"
             onClick={() => applyCursorColorToTarget('halo')}
-            onMouseDown={(event) => startCursorColorCopyHold('halo', event)}
-            onMouseUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
+            onPointerDown={(event) => startCursorColorCopyHold('halo', event)}
+            onPointerUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
             onMouseLeave={clearCursorColorArmTimer}
             data-secondary-press="action"
             onContextMenu={(event) => { event.preventDefault(); clearCursorColorArmTimer() }}
@@ -2356,8 +2332,8 @@ export function SidebarOptionsPanel({
             style={{ background: customCursorDotColor }}
             data-tooltip="Circling dots color — click to apply, hold right-click to copy"
             onClick={() => applyCursorColorToTarget('dot')}
-            onMouseDown={(event) => startCursorColorCopyHold('dot', event)}
-            onMouseUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
+            onPointerDown={(event) => startCursorColorCopyHold('dot', event)}
+            onPointerUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
             onMouseLeave={clearCursorColorArmTimer}
             data-secondary-press="action"
             onContextMenu={(event) => { event.preventDefault(); clearCursorColorArmTimer() }}
@@ -2368,8 +2344,8 @@ export function SidebarOptionsPanel({
             style={{ background: customCursorTrailColor }}
             data-tooltip="Trail color — click to apply, hold right-click to copy"
             onClick={() => applyCursorColorToTarget('trail')}
-            onMouseDown={(event) => startCursorColorCopyHold('trail', event)}
-            onMouseUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
+            onPointerDown={(event) => startCursorColorCopyHold('trail', event)}
+            onPointerUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
             onMouseLeave={clearCursorColorArmTimer}
             data-secondary-press="action"
             onContextMenu={(event) => { event.preventDefault(); clearCursorColorArmTimer() }}
@@ -2610,8 +2586,8 @@ export function SidebarOptionsPanel({
             style={{ background: caretOutlineColor }}
             data-tooltip="Caret outline color — click to apply, hold right-click to copy"
             onClick={() => applyCaretColorToTarget('outline')}
-            onMouseDown={(event) => startCaretColorCopyHold('outline', event)}
-            onMouseUp={(event) => { if (event.button !== 2) return; clearCaretColorArmTimer() }}
+            onPointerDown={(event) => startCaretColorCopyHold('outline', event)}
+            onPointerUp={(event) => { if (event.button !== 2) return; clearCaretColorArmTimer() }}
             onMouseLeave={clearCaretColorArmTimer}
             data-secondary-press="action"
             onContextMenu={(event) => { event.preventDefault(); clearCaretColorArmTimer() }}
@@ -2622,8 +2598,8 @@ export function SidebarOptionsPanel({
             style={{ background: caretHaloColor }}
             data-tooltip="Caret halo color — click to apply, hold right-click to copy"
             onClick={() => applyCaretColorToTarget('halo')}
-            onMouseDown={(event) => startCaretColorCopyHold('halo', event)}
-            onMouseUp={(event) => { if (event.button !== 2) return; clearCaretColorArmTimer() }}
+            onPointerDown={(event) => startCaretColorCopyHold('halo', event)}
+            onPointerUp={(event) => { if (event.button !== 2) return; clearCaretColorArmTimer() }}
             onMouseLeave={clearCaretColorArmTimer}
             data-secondary-press="action"
             onContextMenu={(event) => { event.preventDefault(); clearCaretColorArmTimer() }}

@@ -647,26 +647,26 @@ export function usePreviewScrollbar({
   useEffect(() => {
     if (!isDraggingPreviewScrollThumb) return
 
-    const onMouseMove = (event: globalThis.PointerEvent) => {
+    const onPointerMove = (event: globalThis.PointerEvent) => {
       const origin = previewScrollbarDragOriginRef.current
       if (!origin) return
       const deltaY = event.clientY - origin.pointerY
       previewScrollFromThumbTop(origin.thumbTopPx + deltaY)
     }
 
-    const onMouseUp = () => {
+    const onPointerUp = () => {
       setIsDraggingPreviewScrollThumb(false)
       previewScrollbarDragOriginRef.current = null
       requestAnimationFrame(() => syncPreviewCustomScrollbar({ force: true }))
     }
 
-    window.addEventListener('pointermove', onMouseMove)
-    window.addEventListener('pointerup', onMouseUp)
-    window.addEventListener('pointercancel', onMouseUp)
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+    window.addEventListener('pointercancel', onPointerUp)
     return () => {
-      window.removeEventListener('pointermove', onMouseMove)
-      window.removeEventListener('pointerup', onMouseUp)
-      window.removeEventListener('pointercancel', onMouseUp)
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointercancel', onPointerUp)
     }
   }, [isDraggingPreviewScrollThumb, previewScrollFromThumbTop, syncPreviewCustomScrollbar])
 
@@ -1796,12 +1796,12 @@ export function usePreviewScrollbar({
     }
 
     scroller.addEventListener('wheel', handleWheel, { passive: false })
-    scroller.addEventListener('mousedown', cancelOnOtherInput, { capture: true })
+    scroller.addEventListener('pointerdown', cancelOnOtherInput, { capture: true })
     window.addEventListener('keydown', cancelOnWindowKeyDown, { capture: true })
 
     return () => {
       scroller.removeEventListener('wheel', handleWheel)
-      scroller.removeEventListener('mousedown', cancelOnOtherInput, { capture: true })
+      scroller.removeEventListener('pointerdown', cancelOnOtherInput, { capture: true })
       window.removeEventListener('keydown', cancelOnWindowKeyDown, { capture: true })
       stopPreviewWheelSpin('unmount')
     }

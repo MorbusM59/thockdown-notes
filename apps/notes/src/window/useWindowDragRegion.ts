@@ -120,6 +120,7 @@ export function useWindowDragRegion() {
       controls!.toggleMaximize?.()
     }
 
+    // mouse-default: window move; moving the window by finger is an open design question
     window.addEventListener('mousedown', handleMouseDown, { capture: true })
     window.addEventListener('mousemove', handleMouseMove, { capture: true })
     window.addEventListener('mouseup', endGesture, { capture: true })

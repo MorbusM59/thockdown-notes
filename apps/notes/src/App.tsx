@@ -966,8 +966,8 @@ type NoteListItemProps = {
   onArchiveClick?: (noteId: string) => void
   onTrashClick?: (noteId: string) => void
   primedAction?: NotePrimedAction | null
-  onRightPressStart: (noteId: string, event: MouseEvent<HTMLDivElement>, hasOwnActionButtons: boolean) => void
-  onRightPressEnd: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
+  onRightPressStart: (noteId: string, hasOwnActionButtons: boolean) => void
+  onRightPressEnd: (noteId: string) => void
   onMouseLeave?: (noteId: string) => void
   isTrashMode?: boolean
   variant?: 'default' | 'tree'
@@ -1079,29 +1079,36 @@ const NoteListItem = memo(function NoteListItem({
   const hasActionColumns = !isTreeVariant
   const rightPressAction = noteRightPressAction(note, hasActionColumns)
 
-  const handleMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
+  // One pointerdown for the row's two uses of a press: a left press arms a
+  // drag (shared/pointerDrag.ts), a right press starts the hold.
+  const handlePointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    armPointerDrag(event)
     if (event.button !== 2) return
 
-    event.preventDefault()
     event.stopPropagation()
     if (isExternal) return
 
-    onRightPressStart(note.id, event, hasActionColumns)
+    onRightPressStart(note.id, hasActionColumns)
   }, [note.id, onRightPressStart, isExternal, hasActionColumns])
 
-  const handleMouseUp = useCallback((event: MouseEvent<HTMLDivElement>) => {
+  const handlePointerUp = useCallback((event: PointerEvent<HTMLDivElement>) => {
     if (event.button !== 2) return
 
-    event.preventDefault()
     event.stopPropagation()
     if (isExternal) return
 
-    onRightPressEnd(note.id, event)
+    onRightPressEnd(note.id)
   }, [note.id, onRightPressEnd, isExternal])
 
   const handleContextMenu = useCallback((event: MouseEvent<HTMLDivElement>) => {
     event.preventDefault()
     event.stopPropagation()
+  }, [])
+
+  // The row's own buttons swallow a right press, which means nothing on them;
+  // a left press still reaches the row, so a row can be dragged by any part.
+  const stopRowRightPress = useCallback((event: PointerEvent<HTMLButtonElement>) => {
+    if (event.button === 2) event.stopPropagation()
   }, [])
 
   const handleMouseLeave = useCallback(() => {
@@ -1148,12 +1155,11 @@ const NoteListItem = memo(function NoteListItem({
       role="option"
       aria-selected={isActive}
       data-drag-source=""
-      onPointerDown={armPointerDrag}
+      onPointerDown={handlePointerDown}
       onDragStart={handleDragStart}
       onClick={handleSelect}
       onKeyDown={handleKeyDown}
-      onMouseDown={handleMouseDown}
-      onMouseUp={handleMouseUp}
+      onPointerUp={handlePointerUp}
       onMouseLeave={handleMouseLeave}
       data-secondary-press={rightPressAction ? 'action' : 'none'}
       onContextMenu={handleContextMenu}
@@ -1183,8 +1189,8 @@ const NoteListItem = memo(function NoteListItem({
                   aria-label={isModified ? 'Save external note' : 'Save disabled'}
                   data-tooltip={isModified ? 'Save external note' : 'Save disabled'}
                   onClick={handleSaveClick}
-                  onMouseDown={(event) => event.stopPropagation()}
-                  onMouseUp={(event) => event.stopPropagation()}
+                  onPointerDown={stopRowRightPress}
+                  onPointerUp={stopRowRightPress}
                   data-secondary-press="none"
                   onContextMenu={(event) => event.stopPropagation()}
                 >
@@ -1200,8 +1206,8 @@ const NoteListItem = memo(function NoteListItem({
                   aria-label="Close external note"
                   data-tooltip="Close external note"
                   onClick={handleCloseClick}
-                  onMouseDown={(event) => event.stopPropagation()}
-                  onMouseUp={(event) => event.stopPropagation()}
+                  onPointerDown={stopRowRightPress}
+                  onPointerUp={stopRowRightPress}
                   data-secondary-press="none"
                   onContextMenu={(event) => event.stopPropagation()}
                 >
@@ -1219,8 +1225,8 @@ const NoteListItem = memo(function NoteListItem({
                   aria-label={archiveButtonLabel}
                   data-tooltip={archiveButtonLabel}
                   onClick={handleArchiveClick}
-                  onMouseDown={(event) => event.stopPropagation()}
-                  onMouseUp={(event) => event.stopPropagation()}
+                  onPointerDown={stopRowRightPress}
+                  onPointerUp={stopRowRightPress}
                   data-secondary-press="none"
                   onContextMenu={(event) => event.stopPropagation()}
                 />
@@ -1234,8 +1240,8 @@ const NoteListItem = memo(function NoteListItem({
                   aria-label={trashButtonLabel}
                   data-tooltip={trashButtonLabel}
                   onClick={handleTrashClick}
-                  onMouseDown={(event) => event.stopPropagation()}
-                  onMouseUp={(event) => event.stopPropagation()}
+                  onPointerDown={stopRowRightPress}
+                  onPointerUp={stopRowRightPress}
                   data-secondary-press="none"
                   onContextMenu={(event) => event.stopPropagation()}/>
               </div>
@@ -1269,8 +1275,8 @@ type CategoryTreeViewProps = {
   onSelect: (noteId: string) => void
   onPrimedLeftClick: (noteId: string) => void
   primedNoteActionById: Map<string, NotePrimedAction>
-  onNoteRightPressStart: (noteId: string, event: MouseEvent<HTMLDivElement>, hasOwnActionButtons: boolean) => void
-  onNoteRightPressEnd: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
+  onNoteRightPressStart: (noteId: string, hasOwnActionButtons: boolean) => void
+  onNoteRightPressEnd: (noteId: string) => void
   onNoteMouseLeave?: (noteId: string) => void
   /** Archive mode only: a non-self-archived parent's own archived chapters, keyed by parent note id -- see App.tsx's own doc comment on the memo that builds this. Undefined in Category mode, where chapters never appear at all. */
   archivedChaptersByParentId?: Map<string, NoteSummary[]>
@@ -3237,9 +3243,8 @@ function App() {
     }))
   }, [editorTextColors, highlightColors, resolveEditorTextColor, resolveHighlightColor, textureMaterials])
 
-  const startColorArmHold = useCallback((source: ColorArmSource, event: MouseEvent<HTMLButtonElement>) => {
+  const startColorArmHold = useCallback((source: ColorArmSource, event: PointerEvent<HTMLButtonElement>) => {
     if (event.button !== 2) return
-    event.preventDefault()
     event.stopPropagation()
     clearColorArmTimer()
 
@@ -3249,9 +3254,8 @@ function App() {
     }, COLOR_BUTTON_ARM_HOLD_MS)
   }, [clearColorArmTimer])
 
-  const startElementPreviewCopyHold = useCallback((source: ElementPreviewCopySource, event: MouseEvent<HTMLButtonElement>) => {
+  const startElementPreviewCopyHold = useCallback((source: ElementPreviewCopySource, event: PointerEvent<HTMLButtonElement>) => {
     if (event.button !== 2) return
-    event.preventDefault()
     event.stopPropagation()
     clearColorArmTimer()
 
@@ -3373,9 +3377,8 @@ function App() {
     setCursorColorHsva(rgbaToHsva(rgba))
   }, [customCursorDotColor, customCursorCenterColor, customCursorHaloColor, customCursorTrailColor])
 
-  const startCursorColorCopyHold = useCallback((target: CursorColorTargetKey, event: MouseEvent<HTMLButtonElement>) => {
+  const startCursorColorCopyHold = useCallback((target: CursorColorTargetKey, event: PointerEvent<HTMLButtonElement>) => {
     if (event.button !== 2) return
-    event.preventDefault()
     event.stopPropagation()
     clearCursorColorArmTimer()
 
@@ -3480,9 +3483,8 @@ function App() {
     setCaretColorHsva(rgbaToHsva(rgba))
   }, [caretOutlineColor, caretHaloColor])
 
-  const startCaretColorCopyHold = useCallback((target: CaretColorTargetKey, event: MouseEvent<HTMLButtonElement>) => {
+  const startCaretColorCopyHold = useCallback((target: CaretColorTargetKey, event: PointerEvent<HTMLButtonElement>) => {
     if (event.button !== 2) return
-    event.preventDefault()
     event.stopPropagation()
     clearCaretColorArmTimer()
 
@@ -3738,14 +3740,14 @@ function App() {
   }, [persistenceReady])
 
   useEffect(() => {
-    const handleGlobalMouseDown = (event: globalThis.MouseEvent) => {
+    const handleGlobalSecondaryPress = (event: globalThis.PointerEvent) => {
       if (event.button !== 2) return
       clearColorArmTimer()
     }
 
-    window.addEventListener('mousedown', handleGlobalMouseDown, true)
+    window.addEventListener('pointerdown', handleGlobalSecondaryPress, true)
     return () => {
-      window.removeEventListener('mousedown', handleGlobalMouseDown, true)
+      window.removeEventListener('pointerdown', handleGlobalSecondaryPress, true)
     }
   }, [clearColorArmTimer])
 
@@ -6965,10 +6967,10 @@ ${markdownHtml}
   // reproduces them exactly) and persisted as fractions. Releasing also
   // updates the fixed/flexible model: the shrunken side pins at its dragged
   // width, the grown side (re)joins the flexible pool.
-  const handleDividerMouseDown = useCallback((leftSectionId: string, rightSectionId: string) => (
-    event: MouseEvent<HTMLDivElement>,
+  const handleDividerPointerDown = useCallback((leftSectionId: string, rightSectionId: string) => (
+    event: PointerEvent<HTMLDivElement>,
   ) => {
-    event.preventDefault()
+    if (event.button !== 0) return
     const leftEl = sectionSlotElByIdRef.current.get(leftSectionId)
     const rightEl = sectionSlotElByIdRef.current.get(rightSectionId)
     if (!leftEl || !rightEl) return
@@ -6990,7 +6992,7 @@ ${markdownHtml}
     const combinedWidthPx = startLeftWidthPx + startRightWidthPx
     const startClientX = event.clientX
 
-    const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
+    const handleMouseMove = (moveEvent: globalThis.PointerEvent) => {
       const deltaX = moveEvent.clientX - startClientX
       const nextLeftWidthPx = clamp(startLeftWidthPx + deltaX, SLOT_MIN_WIDTH_PX, combinedWidthPx - SLOT_MIN_WIDTH_PX)
       const nextRightWidthPx = combinedWidthPx - nextLeftWidthPx
@@ -6999,8 +7001,9 @@ ${markdownHtml}
     }
 
     const handleMouseUp = () => {
-      window.removeEventListener('mousemove', handleMouseMove)
-      window.removeEventListener('mouseup', handleMouseUp)
+      window.removeEventListener('pointermove', handleMouseMove)
+      window.removeEventListener('pointerup', handleMouseUp)
+      window.removeEventListener('pointercancel', handleMouseUp)
 
       const finalWidthsPx = pinnedWidthsPx.map(({ entry, el }) => ({
         id: entry.id,
@@ -7048,13 +7051,14 @@ ${markdownHtml}
       })
     }
 
-    window.addEventListener('mousemove', handleMouseMove)
-    window.addEventListener('mouseup', handleMouseUp)
+    window.addEventListener('pointermove', handleMouseMove)
+    window.addEventListener('pointerup', handleMouseUp)
+    window.addEventListener('pointercancel', handleMouseUp)
   }, [applyResolvedSections, editorSections, toSlotWidthUpdates])
 
   // Right-click a divider to instantly equalize its two flanking sections'
   // widths, rather than dragging to eyeball it. Shares its commit shape with
-  // handleDividerMouseDown's mouseup (final width -> widthFraction, then
+  // handleDividerPointerDown's release (final width -> widthFraction, then
   // classify each side fixed/flexible by comparing against its start width)
   // so an equalizing click behaves exactly like a drag dropped dead center.
   const handleDividerContextMenu = useCallback((leftSectionId: string, rightSectionId: string) => (
@@ -8109,7 +8113,7 @@ ${markdownHtml}
   useEffect(() => {
     if (!isDraggingSidebarScrollThumb) return
 
-    const onMouseMove = (event: globalThis.MouseEvent) => {
+    const onPointerMove = (event: globalThis.PointerEvent) => {
       const origin = sidebarScrollbarDragOriginRef.current
       if (!origin) return
       const deltaY = event.clientY - origin.pointerY
@@ -8117,20 +8121,22 @@ ${markdownHtml}
       syncSidebarCustomScrollbar()
     }
 
-    const onMouseUp = () => {
+    const onPointerUp = () => {
       setIsDraggingSidebarScrollThumb(false)
       sidebarScrollbarDragOriginRef.current = null
     }
 
-    window.addEventListener('mousemove', onMouseMove)
-    window.addEventListener('mouseup', onMouseUp)
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+    window.addEventListener('pointercancel', onPointerUp)
     return () => {
-      window.removeEventListener('mousemove', onMouseMove)
-      window.removeEventListener('mouseup', onMouseUp)
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointercancel', onPointerUp)
     }
   }, [isDraggingSidebarScrollThumb, sidebarScrollFromThumbTop, syncSidebarCustomScrollbar])
 
-  const handleSidebarTrackMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
+  const handleSidebarTrackPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
     const track = sidebarScrollbarTrackRef.current
     if (!track) return
 
@@ -8146,8 +8152,7 @@ ${markdownHtml}
     scrollToNonQuantizedSmooth(scroller, targetScrollTop)
   }, [sidebarTreeScrollerEl])
 
-  const handleSidebarThumbMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
-    event.preventDefault()
+  const handleSidebarThumbPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
     event.stopPropagation()
     setIsDraggingSidebarScrollThumb(true)
     sidebarScrollbarDragOriginRef.current = {
@@ -8829,7 +8834,7 @@ ${markdownHtml}
       returnKeyboardToActiveSurface()
     }
     // A tick later, so a mouse-driven activation is judged AFTER the click
-    // has placed focus: the column's onMouseDownCapture makes the slot active
+    // has placed focus: the column's onPointerDownCapture makes the slot active
     // before the browser focuses the field that was pressed, and judging then
     // would pull the keyboard out of the find or tag field just clicked.
     const activationCheck = window.setTimeout(() => reconcile(true), 0)
@@ -8870,19 +8875,19 @@ ${markdownHtml}
    * another slot, or nowhere at all.
    */
   useEffect(() => {
-    const onMouseDownCapture = (event: globalThis.MouseEvent) => {
+    const refocusOnPress = (event: globalThis.MouseEvent) => {
       const target = event.target
       if (!(target instanceof HTMLElement)) return
       if (!keepFocusOnPress(event)) return
 
       // Resolve which section to refocus from the click's own DOM position
       // (via .editor-section-column's data-section-id), NOT from
-      // activeSection/activeSectionId React state. This listener is attached
-      // on `window` -- an ANCESTOR of every .editor-section-column -- so its
-      // capture phase fires BEFORE that column's own onMouseDownCapture
-      // (EditorSection.tsx), which is what actually marks a still-inactive
-      // section active. A click on a still-inactive section's own chrome
-      // (e.g. its flag-jump arrow) therefore reaches this handler first,
+      // activeSection/activeSectionId React state. The column marks a
+      // still-inactive section active from its onPointerDownCapture
+      // (EditorSection.tsx), which runs before this mousedown, but only
+      // DISPATCHES that state change: React has not committed it yet, so a
+      // click on a still-inactive section's own chrome (e.g. its flag-jump
+      // arrow) reaches this handler
       // while activeSection/activeSectionId still reflect whichever section
       // was PREVIOUSLY active -- refocusing that stale section instead of
       // the one actually clicked. Found live as an instant, wrongly-targeted
@@ -8916,8 +8921,9 @@ ${markdownHtml}
       targetSection.scheduleFocusEditorInEditMode()
     }
 
-    window.addEventListener('mousedown', onMouseDownCapture, true)
-    return () => window.removeEventListener('mousedown', onMouseDownCapture, true)
+    // mouse-default: focus semantics, read by focusOwnership on mousedown
+    window.addEventListener('mousedown', refocusOnPress, true)
+    return () => window.removeEventListener('mousedown', refocusOnPress, true)
   }, [getActiveSection, isEscapeRingUp])
 
   useEffect(() => {
@@ -9113,6 +9119,7 @@ ${markdownHtml}
                       className={`btn-icon search-input-case-toggle${activeSection?.isDocumentFindCaseSensitive ? ' is-active' : ''}`}
                       aria-pressed={activeSection?.isDocumentFindCaseSensitive}
                       data-tooltip="Keep case"
+                      /* mouse-default: focus semantics, read by focusOwnership on mousedown */
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => getActiveSection()?.setIsDocumentFindCaseSensitive((previous: boolean) => !previous)}
                     >
@@ -9125,6 +9132,7 @@ ${markdownHtml}
                     className={`btn-icon search-input-case-toggle${(isFindMode ? activeSection?.isDocumentFindCaseSensitive : isSearchQueryCaseSensitive) ? ' is-active' : ''}`}
                     aria-pressed={isFindMode ? activeSection?.isDocumentFindCaseSensitive : isSearchQueryCaseSensitive}
                     data-tooltip="Match letter case"
+                    /* mouse-default: focus semantics, read by focusOwnership on mousedown */
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={() => {
                       if (isFindMode) {
@@ -9174,8 +9182,8 @@ ${markdownHtml}
                               ? handleOptionsButtonContextMenu
                               : undefined
                       }
-                      onMouseDown={mode === 'trash' ? activeSection?.handleTrashViewButtonMouseDown : undefined}
-                      onMouseUp={mode === 'trash' ? activeSection?.handleTrashViewButtonMouseUp : undefined}
+                      onPointerDown={mode === 'trash' ? activeSection?.handleTrashViewButtonPointerDown : undefined}
+                      onPointerUp={mode === 'trash' ? activeSection?.handleTrashViewButtonPointerUp : undefined}
                       onMouseLeave={mode === 'trash' ? () => {
                         activeSection?.clearTrashButtonArmTimer()
                         activeSection?.setIsTrashViewDeletePrimed(false)
@@ -9281,8 +9289,8 @@ ${markdownHtml}
                               onTrashClick={activeSection?.handleTrashClick}
                               isTrashMode={sidebarMode === 'trash'}
                               primedAction={activeSection?.primedNoteActionById.get(note.id) ?? null}
-                              onRightPressStart={(noteId, event, hasOwnActionButtons) => getActiveSection()?.handleNoteRightPressStart(noteId, event, hasOwnActionButtons)}
-                              onRightPressEnd={(noteId, event) => getActiveSection()?.handleNoteRightPressEnd(noteId, event)}
+                              onRightPressStart={(noteId, hasOwnActionButtons) => getActiveSection()?.handleNoteRightPressStart(noteId, hasOwnActionButtons)}
+                              onRightPressEnd={(noteId) => getActiveSection()?.handleNoteRightPressEnd(noteId)}
                               onMouseLeave={activeSection?.handleNoteMouseLeave}
                             />
                           )
@@ -9640,8 +9648,8 @@ ${markdownHtml}
                           onSelect={handleSelectNote}
                           onPrimedLeftClick={(noteId) => getActiveSection()?.handlePrimedNoteLeftClick(noteId)}
                           primedNoteActionById={activeSection?.primedNoteActionById ?? EMPTY_MAP}
-                          onNoteRightPressStart={(noteId, event, hasOwnActionButtons) => getActiveSection()?.handleNoteRightPressStart(noteId, event, hasOwnActionButtons)}
-                          onNoteRightPressEnd={(noteId, event) => getActiveSection()?.handleNoteRightPressEnd(noteId, event)}
+                          onNoteRightPressStart={(noteId, hasOwnActionButtons) => getActiveSection()?.handleNoteRightPressStart(noteId, hasOwnActionButtons)}
+                          onNoteRightPressEnd={(noteId) => getActiveSection()?.handleNoteRightPressEnd(noteId)}
                           onNoteMouseLeave={activeSection?.handleNoteMouseLeave}
                           archivedChaptersByParentId={sidebarMode === 'archive' ? archivedChaptersByParentId : undefined}
                         />
@@ -9657,12 +9665,12 @@ ${markdownHtml}
                         <div
                           ref={sidebarScrollbarTrackRef}
                           className="thockdown-scroll-track"
-                          onMouseDown={handleSidebarTrackMouseDown}
+                          onPointerDown={handleSidebarTrackPointerDown}
                         >
                           <div
                             ref={sidebarScrollbarThumbRef}
                             className={`thockdown-scroll-thumb${isDraggingSidebarScrollThumb ? ' is-dragging' : ''}${isSidebarScrollThumbActive ? '' : ' is-inactive'}`}
-                            onMouseDown={handleSidebarThumbMouseDown}
+                            onPointerDown={handleSidebarThumbPointerDown}
                           />
                         </div>
                       </div>
@@ -9959,7 +9967,7 @@ ${markdownHtml}
                 {index > 0 ? (
                   <div
                     className="editor-section-divider"
-                    onMouseDown={handleDividerMouseDown(editorSections[index - 1].id, entry.id)}
+                    onPointerDown={handleDividerPointerDown(editorSections[index - 1].id, entry.id)}
                     data-secondary-press="action"
                     onContextMenu={handleDividerContextMenu(editorSections[index - 1].id, entry.id)}
                     data-tooltip="Drag to resize — right-click to split evenly"

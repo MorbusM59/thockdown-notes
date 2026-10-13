@@ -40,8 +40,8 @@ export interface ChapterBarProps {
   onExtractSelectionToChapter: () => void
   /** Which chapter pill (if any) is showing the split archive/delete mini pills right now -- see useChapterPillActions.ts. */
   splitArmedChapter: ChapterPillSplitArm | null
-  onChapterPillMouseDown: (event: MouseEvent<HTMLDivElement>, chapterNoteId: string) => void
-  onChapterPillMouseUp: (event: MouseEvent<HTMLDivElement>, chapterNoteId: string) => void
+  onChapterPillPointerDown: (event: MouseEvent<HTMLDivElement>, chapterNoteId: string) => void
+  onChapterPillPointerUp: (event: MouseEvent<HTMLDivElement>, chapterNoteId: string) => void
   onChapterPillMouseLeave: (chapterNoteId: string) => void
   onChapterPillContextMenu: (event: MouseEvent<HTMLDivElement>) => void
   onArchiveChapterClick: (chapterNoteId: string) => void
@@ -114,7 +114,7 @@ export interface ChapterBarProps {
  * A quick right-click on a chapter pill still starts the in-place chapterId
  * rename, same as before -- that decision (release before the hold
  * threshold vs. held long enough to split) now lives entirely in
- * useChapterPillActions.ts's onChapterPillMouseDown/onChapterPillMouseUp, so
+ * useChapterPillActions.ts's onChapterPillPointerDown/onChapterPillPointerUp, so
  * this component no longer calls a rename-starting prop directly itself.
  * Holding the right mouse button down instead replaces the pill with
  * `.chapter-pill-split`, a fixed-width wrapper (pinned to the real pill's
@@ -163,8 +163,8 @@ export function ChapterBar({
   onCollapseChapterIntoPrevious,
   onExtractSelectionToChapter,
   splitArmedChapter,
-  onChapterPillMouseDown,
-  onChapterPillMouseUp,
+  onChapterPillPointerDown,
+  onChapterPillPointerUp,
   onChapterPillMouseLeave,
   onChapterPillContextMenu,
   onArchiveChapterClick,
@@ -366,13 +366,15 @@ export function ChapterBar({
                       className={`tag-pill note-tab-pill chapter-pill${isActive ? ' is-active' : ''}${isGhost ? ' is-archived-ghost' : ''}`}
                       data-chapter-note-id={chapter.chapterNoteId}
                       data-drag-source={isInteractionDisabled ? undefined : ''}
-                      onPointerDown={isInteractionDisabled ? undefined : armPointerDrag}
+                      onPointerDown={isInteractionDisabled ? undefined : (event) => {
+                        armPointerDrag(event)
+                        onChapterPillPointerDown(event, chapter.chapterNoteId)
+                      }}
                       onDragStart={isInteractionDisabled ? undefined : (event) => onChapterDragStart(event, liveIndex)}
                       onDragEnd={isInteractionDisabled ? undefined : onChapterDragEnd}
                       onDrop={isInteractionDisabled ? undefined : (event) => onChapterDrop(event, liveIndex)}
                       onClick={() => onChapterClick(chapter.chapterNoteId)}
-                      onMouseDown={isInteractionDisabled ? undefined : (event) => onChapterPillMouseDown(event, chapter.chapterNoteId)}
-                      onMouseUp={isInteractionDisabled ? undefined : (event) => onChapterPillMouseUp(event, chapter.chapterNoteId)}
+                      onPointerUp={isInteractionDisabled ? undefined : (event) => onChapterPillPointerUp(event, chapter.chapterNoteId)}
                       onMouseLeave={isInteractionDisabled ? undefined : () => onChapterPillMouseLeave(chapter.chapterNoteId)}
                       data-secondary-press={isInteractionDisabled ? 'none' : 'action'}
                       onContextMenu={isInteractionDisabled ? undefined : onChapterPillContextMenu}

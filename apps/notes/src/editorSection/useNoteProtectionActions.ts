@@ -525,11 +525,8 @@ export function useNoteProtectionActions({
 
   const handleNoteRightPressStart = useCallback((
     noteId: string,
-    event: MouseEvent<HTMLDivElement>,
     hasOwnActionButtons: boolean,
   ) => {
-    event.preventDefault()
-
     const summary = notes.find((note) => note.id === noteId)
     const action = noteRightPressAction(summary, hasOwnActionButtons)
     if (!action) return
@@ -578,9 +575,7 @@ export function useNoteProtectionActions({
   }, [clearNoteArmTimer, notes, sidebarMode])
 
 
-  const handleNoteRightPressEnd = useCallback((noteId: string, event: MouseEvent<HTMLDivElement>) => {
-    event.preventDefault()
-
+  const handleNoteRightPressEnd = useCallback((noteId: string) => {
     const pendingArm = noteArmTimerRef.current
     if (!pendingArm || pendingArm.noteId !== noteId) {
       return
@@ -715,9 +710,8 @@ export function useNoteProtectionActions({
     }
   }, [activeNoteId, flushPendingSaveNow, notes, persistenceReady, refreshNotes, noteTransitionLockRef, setActiveNoteId, commitEditorText, onNotePermanentlyDeleted])
 
-  const handleTrashViewButtonMouseDown = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+  const handleTrashViewButtonPointerDown = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     if (event.button !== 2) return
-    event.preventDefault()
     event.stopPropagation()
     clearTrashButtonArmTimer()
     setIsTrashViewDeletePrimed(false)
@@ -728,7 +722,7 @@ export function useNoteProtectionActions({
     }, NOTE_RIGHT_CLICK_HOLD_MS)
   }, [clearTrashButtonArmTimer])
 
-  const handleTrashViewButtonMouseUp = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+  const handleTrashViewButtonPointerUp = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     if (event.button !== 2) return
     event.preventDefault()
     event.stopPropagation()
@@ -781,8 +775,8 @@ export function useNoteProtectionActions({
     handleArchiveClick,
     handleTrashClick,
     purgeDeletedNotesPermanently,
-    handleTrashViewButtonMouseDown,
-    handleTrashViewButtonMouseUp,
+    handleTrashViewButtonPointerDown,
+    handleTrashViewButtonPointerUp,
     handleTrashViewButtonContextMenu,
   }
 }

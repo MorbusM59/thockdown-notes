@@ -1,5 +1,5 @@
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
-import { memo, useCallback, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type ReactNode } from 'react'
+import { memo, useCallback, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
 import { CategoryTree, type CategoryTreeCollapse } from '../components/CategoryTree'
 import { IMAGE_DRAG_MIME_TYPE, type NoteImageUse, type StoredImageSummary } from '../shared/images'
 import { cssInset, parseImageTitle, type ImageInset } from '../shared/imageLayout'
@@ -97,7 +97,7 @@ interface CardPress {
  * a right tap, or a right hold instead. A hold that completed leaves its
  * release, and the click that follows a left one, doing nothing more.
  */
-function useCardPress({ onClick, onLeftHold, onRightTap, onRightHold }: CardPress) {
+function useCardPress({ onClick, onLeftHold, onRightTap, onRightHold }: CardPress, draggable: boolean) {
   const cancelRef = useRef<(() => void) | null>(null)
   const heldRef = useRef(false)
   const end = (button: number | null) => {
@@ -107,7 +107,11 @@ function useCardPress({ onClick, onLeftHold, onRightTap, onRightHold }: CardPres
     if (button === 2 && !heldRef.current) onRightTap?.()
   }
   return {
-    onMouseDown: (event: MouseEvent) => {
+    // One pointerdown for the card's two uses of a press: arming a drag of the
+    // image (shared/pointerDrag.ts) and timing a hold. Two props by one name
+    // spread onto one element would silently keep only the second.
+    onPointerDown: (event: PointerEvent<HTMLElement>) => {
+      if (draggable) armPointerDrag(event)
       const onHold = event.button === 0 ? onLeftHold : event.button === 2 ? onRightHold : null
       if (event.button === 0) heldRef.current = false
       if (!onHold && !(event.button === 2 && onRightTap)) return
@@ -118,7 +122,10 @@ function useCardPress({ onClick, onLeftHold, onRightTap, onRightHold }: CardPres
         onHold?.()
       }, HOLD_CONFIRM_MS)
     },
-    onMouseUp: (event: MouseEvent) => end(event.button),
+    onPointerUp: (event: PointerEvent) => end(event.button),
+    onPointerCancel: () => end(null),
+    // Leaving is the hover vocabulary, not the press one: a finger lifting
+    // fires pointerleave, which would end every prime the moment it was set.
     onMouseLeave: () => end(null),
     onClick: () => {
       if (heldRef.current) return
@@ -130,14 +137,13 @@ function useCardPress({ onClick, onLeftHold, onRightTap, onRightHold }: CardPres
 }
 
 // A card's own buttons do nothing with a hold, so a press on one must not reach the card's.
-const stopCardPress = (event: MouseEvent) => event.stopPropagation()
+const stopCardPress = (event: PointerEvent) => event.stopPropagation()
 
 function dragImage(id: string) {
   return {
     // Dragged into a note, it is referenced there (CM6Editor's and the
     // render view's drop handlers); nothing is stored again.
     'data-drag-source': '',
-    onPointerDown: armPointerDrag,
     onDragStart: (event: DragEvent) => {
       event.dataTransfer.setData(IMAGE_DRAG_MIME_TYPE, id)
       event.dataTransfer.effectAllowed = 'copy'
@@ -154,7 +160,7 @@ function RemoveButton({ use, onRemove, inColumn = false }: { use: NoteImageUse; 
       aria-label="Take it out of the note"
       data-tooltip="Take it out of the note"
       onClick={(event) => { event.stopPropagation(); onRemove(use) }}
-      onMouseDown={stopCardPress}
+      onPointerDown={stopCardPress}
       data-secondary-press="none"
     />
   )
@@ -173,7 +179,7 @@ const ImageCard = memo(function ImageCard({ image, use, isActive, primed, expand
   actions: ReactNode
   onPrimeEnd: () => void
 }) {
-  const handlers = useCardPress(press)
+  const handlers = useCardPress(press, image !== null)
   const remoteAllowed = useRemoteImagesAllowed()
   const src = image ? image.src : use && remoteAllowed && isRemoteImageSrc(use.src) ? use.src : null
   const part = shownPart(image, use)
@@ -226,7 +232,7 @@ const ImageTreeCard = memo(function ImageTreeCard({ image, use, isActive, expand
   /** The button that takes the size's place on hover. */
   action: ReactNode
 }) {
-  const handlers = useCardPress(press)
+  const handlers = useCardPress(press, image !== null)
   const remoteAllowed = useRemoteImagesAllowed()
   const src = image ? image.src : use && remoteAllowed && isRemoteImageSrc(use.src) ? use.src : null
   const part = shownPart(image, use)
@@ -312,7 +318,7 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
           aria-label="Put in the trash"
           data-tooltip="Put in the trash"
           onClick={(event) => { event.stopPropagation(); void setImageTrashed(image.id, true) }}
-          onMouseDown={stopCardPress}
+          onPointerDown={stopCardPress}
           data-secondary-press="none"
         />
       )}
@@ -379,7 +385,7 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
                       aria-label="Take out of the trash"
                       data-tooltip="Take out of the trash"
                       onClick={(event) => { event.stopPropagation(); void setImageTrashed(image.id, false) }}
-                      onMouseDown={stopCardPress}
+                      onPointerDown={stopCardPress}
                       data-secondary-press="none"
                     >
                       <span className="fa-solid fa-rotate-left" aria-hidden="true" />
@@ -401,7 +407,7 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
                         setPrimedId(null)
                         void purgeImage(image.id)
                       }}
-                      onMouseDown={stopCardPress}
+                      onPointerDown={stopCardPress}
                       data-secondary-press="none"
                     />
                   </div>

@@ -35,8 +35,8 @@ export interface UseChapterPillActionsOptions {
 export interface UseChapterPillActionsResult {
   /** Which chapter pill (if any) is currently showing the split archive/delete mini pills, and the width to pin the split wrapper to. */
   splitArmedChapter: ChapterPillSplitArm | null
-  handleChapterPillMouseDown: (event: MouseEvent<HTMLDivElement>, chapterNoteId: string) => void
-  handleChapterPillMouseUp: (event: MouseEvent<HTMLDivElement>, chapterNoteId: string) => void
+  handleChapterPillPointerDown: (event: MouseEvent<HTMLDivElement>, chapterNoteId: string) => void
+  handleChapterPillPointerUp: (event: MouseEvent<HTMLDivElement>, chapterNoteId: string) => void
   handleChapterPillMouseLeave: (chapterNoteId: string) => void
   handleChapterPillContextMenu: (event: MouseEvent<HTMLDivElement>) => void
   handleArchiveChapterClick: (chapterNoteId: string) => void
@@ -101,7 +101,7 @@ export function useChapterPillActions({
     }
   }, [chapters, splitArmedChapter])
 
-  const handleChapterPillMouseDown = useCallback((event: MouseEvent<HTMLDivElement>, chapterNoteId: string) => {
+  const handleChapterPillPointerDown = useCallback((event: MouseEvent<HTMLDivElement>, chapterNoteId: string) => {
     if (event.button !== 2) return
     clearHoldTimer()
     const widthPx = event.currentTarget.getBoundingClientRect().width
@@ -112,7 +112,7 @@ export function useChapterPillActions({
     holdTimerRef.current = { chapterNoteId, cancelHold }
   }, [clearHoldTimer])
 
-  const handleChapterPillMouseUp = useCallback((event: MouseEvent<HTMLDivElement>, chapterNoteId: string) => {
+  const handleChapterPillPointerUp = useCallback((event: MouseEvent<HTMLDivElement>, chapterNoteId: string) => {
     if (event.button !== 2) return
     const wasQuickRelease = holdTimerRef.current?.chapterNoteId === chapterNoteId
     clearHoldTimer()
@@ -204,8 +204,8 @@ export function useChapterPillActions({
 
   return {
     splitArmedChapter,
-    handleChapterPillMouseDown,
-    handleChapterPillMouseUp,
+    handleChapterPillPointerDown,
+    handleChapterPillPointerUp,
     handleChapterPillMouseLeave,
     handleChapterPillContextMenu,
     handleArchiveChapterClick,

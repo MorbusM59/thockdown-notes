@@ -651,11 +651,11 @@ export function EscapeHoldPanel({
   // whole change exists to support. The position has to be known BEFORE the
   // ring appears, so the listener outlives it. It stores two numbers.
   useEffect(() => {
-    const onMove = (event: MouseEvent) => {
+    const onMove = (event: PointerEvent) => {
       pointerPositionRef.current = { x: event.clientX, y: event.clientY }
     }
-    window.addEventListener('mousemove', onMove)
-    return () => { window.removeEventListener('mousemove', onMove) }
+    window.addEventListener('pointermove', onMove)
+    return () => { window.removeEventListener('pointermove', onMove) }
   }, [])
   const refreshHoverFromPointer = () => {
     const position = pointerPositionRef.current

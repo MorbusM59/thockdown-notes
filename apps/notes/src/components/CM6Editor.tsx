@@ -2741,9 +2741,9 @@ export function CM6Editor({
   /**
    * Click entry point for the flag-jump arrows -- NOT navigateToFlaggedLine
    * directly. A click on a still-inactive section's jump arrow fires from
-   * the same mousedown that also activates the section (see
-   * .editor-section-column's onMouseDownCapture in EditorSection.tsx):
-   * mousedown always precedes click, so markSectionActive has already been
+   * the same press that also activates the section (see
+   * .editor-section-column's onPointerDownCapture in EditorSection.tsx):
+   * pointerdown always precedes click, so markSectionActive has already been
    * dispatched by the time this runs, but React hasn't committed that state
    * update yet -- isSectionActiveRef here still reflects the PRE-activation
    * render. Jumping immediately against that risks measuring/acting on this
@@ -4904,11 +4904,6 @@ export function CM6Editor({
       isPrimaryPointerDown = true;
       lastDragScrollTopPx = view.scrollDOM.scrollTop;
     };
-    const handleMouseDown = (event: MouseEvent) => {
-      if (event.button !== 0) return;
-      isPrimaryPointerDown = true;
-      lastDragScrollTopPx = view.scrollDOM.scrollTop;
-    };
     const handlePointerUp = () => endPointerDragSelection();
     const handlePointerCancel = () => endPointerDragSelection();
 
@@ -5055,10 +5050,8 @@ export function CM6Editor({
     rowGridGuardRef.current = rowGridGuard;
 
     document.addEventListener('pointerdown', handlePointerDown, { capture: true, passive: true });
-    document.addEventListener('mousedown', handleMouseDown, { capture: true, passive: true });
     view.scrollDOM.addEventListener('scroll', handleSelectionDragScrollQuantization, { passive: true });
     window.addEventListener('pointerup', handlePointerUp, { passive: true });
-    window.addEventListener('mouseup', handlePointerUp, { passive: true });
     window.addEventListener('pointercancel', handlePointerCancel, { passive: true });
 
     const handleWindowBlur = () => {
@@ -5222,10 +5215,8 @@ export function CM6Editor({
       window.removeEventListener('keydown', handlePageKeyDownAnywhere);
       window.removeEventListener('keyup', handlePageKeyUp);
       document.removeEventListener('pointerdown', handlePointerDown, true);
-      document.removeEventListener('mousedown', handleMouseDown, true);
       view.scrollDOM.removeEventListener('scroll', handleSelectionDragScrollQuantization);
       window.removeEventListener('pointerup', handlePointerUp);
-      window.removeEventListener('mouseup', handlePointerUp);
       window.removeEventListener('pointercancel', handlePointerCancel);
       window.removeEventListener('blur', handleWindowBlur);
       document.removeEventListener('visibilitychange', handleVisibilityChange);

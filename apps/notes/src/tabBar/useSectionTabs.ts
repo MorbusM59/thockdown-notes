@@ -120,10 +120,10 @@ export interface UseSectionTabsResult {
   startEditingTabId: (noteId: string) => void
   handleTabMouseLeave: (noteId: string) => void
   handleTabClick: (noteId: string) => void
-  handleTabMouseDown: (event: MouseEvent<HTMLDivElement>, noteId: string) => void
-  handleTabMouseUp: (event: MouseEvent<HTMLDivElement>, noteId: string) => void
+  handleTabPointerDown: (event: MouseEvent<HTMLDivElement>, noteId: string) => void
+  handleTabPointerUp: (event: MouseEvent<HTMLDivElement>, noteId: string) => void
   clearTabHoldTimer: () => void
-  handleTempTabMouseDown: (event: MouseEvent<HTMLDivElement>, noteId: string) => void
+  handleTempTabPointerDown: (event: MouseEvent<HTMLDivElement>, noteId: string) => void
   clearTempTabHoldTimer: () => void
   updateTabsScrollEdges: () => void
   handleTabsWheel: (event: ReactWheelEvent<HTMLDivElement>) => void
@@ -695,7 +695,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
   // The currently open note gets a temporary, unsaved "preview" tab at the
   // leftmost position whenever it isn't already pinned. It tracks whichever
   // unpinned note is active — it isn't a real entry in note_tabs until the
-  // user holds it long enough to promote it (see handleTempTabMouseDown).
+  // user holds it long enough to promote it (see handleTempTabPointerDown).
   const activeNoteIsPinned = tabIdentityNoteId ? pinnedTabs.some((tab) => tab.noteId === tabIdentityNoteId) : false
   const tempTabNoteId = tabIdentityNoteId && !activeNoteIsPinned ? tabIdentityNoteId : null
 
@@ -806,7 +806,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
   // A quick right-click starts an in-place id edit (chapter-pill style); a
   // held right-click instead primes the tab for unpinning -- the tab-bar
   // equivalent of closing it (same end result as Ctrl+T on an already-
-  // pinned note). See handleTabMouseDown/handleTabMouseUp below for the
+  // pinned note). See handleTabPointerDown/handleTabPointerUp below for the
   // hold-vs-quick-click split. A left-click while primed confirms the
   // close; anything else (mouse leaving, clicking a different tab) cancels
   // the priming. Works the same way for the temp tab, which just has
@@ -906,7 +906,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     setPinArmingTabNoteId(null)
   }, [])
 
-  const handleTempTabMouseDown = useCallback((event: MouseEvent<HTMLDivElement>, noteId: string) => {
+  const handleTempTabPointerDown = useCallback((event: MouseEvent<HTMLDivElement>, noteId: string) => {
     if (event.button !== 0) return
     clearTempTabHoldTimer()
     setPinArmingTabNoteId(noteId)
@@ -921,7 +921,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
 
   // Held-right-click state/timer (see the block above handleTabContextMenu
   // for tabHoldTimerRef/unpinArmingTabNoteId/clearTabHoldTimer themselves).
-  const handleTabMouseDown = useCallback((event: MouseEvent<HTMLDivElement>, noteId: string) => {
+  const handleTabPointerDown = useCallback((event: MouseEvent<HTMLDivElement>, noteId: string) => {
     if (event.button !== 2) return
     clearTabHoldTimer()
     setUnpinArmingTabNoteId(noteId)
@@ -932,7 +932,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     }, TEMP_TAB_PIN_HOLD_MS)
   }, [clearTabHoldTimer])
 
-  const handleTabMouseUp = useCallback((event: MouseEvent<HTMLDivElement>, noteId: string) => {
+  const handleTabPointerUp = useCallback((event: MouseEvent<HTMLDivElement>, noteId: string) => {
     if (event.button !== 2) return
     const wasQuickClick = tabHoldTimerRef.current !== null
     clearTabHoldTimer()
@@ -1103,10 +1103,10 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     handleTabContextMenu,
     handleTabMouseLeave,
     handleTabClick,
-    handleTabMouseDown,
-    handleTabMouseUp,
+    handleTabPointerDown,
+    handleTabPointerUp,
     clearTabHoldTimer,
-    handleTempTabMouseDown,
+    handleTempTabPointerDown,
     clearTempTabHoldTimer,
     updateTabsScrollEdges,
     handleTabsWheel,
