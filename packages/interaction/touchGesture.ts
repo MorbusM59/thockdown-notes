@@ -24,7 +24,8 @@
 // - On an element that declares a pinch (`pinchable` on the down sample), the
 //   secondary press is not delivered on landing: if the fingers then spread
 //   or close beyond `TOUCH_SLOP_PX` the pair is a PINCH, reported as a scale
-//   factor; if they lift without moving it is a secondary tap. Deferring is
+//   factor; if they lift without either moving it is a secondary tap, and
+//   if they travelled together without spreading it is nothing. Deferring is
 //   what keeps a pinch from also pressing the right button.
 // - Any other finger (a third during a secondary press, a second landing on a
 //   moving first finger) is `ignored`: its events are swallowed.
@@ -154,6 +155,13 @@ export function roleOf(state: TouchState, id: number): FingerRole | null {
   return state.fingers.get(id)?.role ?? null
 }
 
+function pairStill(pair: SecondaryPair, lifted: Finger, fingers: ReadonlyMap<number, Finger>): boolean {
+  return [pair.firstId, pair.secondId].every((id) => {
+    const finger = id === lifted.id ? lifted : fingers.get(id)
+    return finger === undefined || isStill(finger)
+  })
+}
+
 export function reduceTouch(state: TouchState, sample: TouchSample): { state: TouchState; actions: TouchAction[] } {
   const fingers = new Map(state.fingers)
   let secondary = state.secondary
@@ -262,7 +270,9 @@ export function reduceTouch(state: TouchState, sample: TouchSample): { state: To
       if (secondary.delivered) actions.push({ kind: 'secondaryCancel', id: secondary.firstId })
     } else if (secondary.delivered) {
       actions.push({ kind: 'secondaryUp', id: secondary.firstId, x: first.x, y: first.y })
-    } else {
+    } else if (pairStill(secondary, finger, fingers)) {
+      // Deferred: a press only if neither finger travelled. Two fingers that
+      // moved together without spreading were a swipe, not a right click.
       actions.push({ kind: 'secondaryDown', id: secondary.firstId, x: first.x, y: first.y })
       actions.push({ kind: 'secondaryUp', id: secondary.firstId, x: first.x, y: first.y })
     }

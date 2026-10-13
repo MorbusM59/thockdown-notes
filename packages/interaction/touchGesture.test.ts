@@ -134,6 +134,22 @@ describe('two fingers landing together', () => {
   })
 })
 
+describe('two fingers travelling together on a pinchable element', () => {
+  it('is neither a pinch nor a secondary tap', () => {
+    const { actions } = run([
+      { type: 'down', id: 1, x: 100, y: 100, t: 0, pinchable: true },
+      { type: 'down', id: 2, x: 200, y: 100, t: 30 },
+      // Interleaved in small steps, as a real swipe arrives.
+      ...[8, 16, 24, 32, 40, 48, 56, 60].flatMap((dy, i): TouchSample[] => [
+        { type: 'move', id: 1, x: 100, y: 100 + dy, t: 40 + i * 4 },
+        { type: 'move', id: 2, x: 200, y: 100 + dy, t: 41 + i * 4 },
+      ]),
+      { type: 'up', id: 1, x: 100, y: 160, t: 90 },
+    ])
+    expect(kinds(actions)).toEqual(['cancelPlain'])
+  })
+})
+
 describe('a cancelled two-finger press', () => {
   it('cancels a delivered press rather than completing it', () => {
     const { actions } = run([

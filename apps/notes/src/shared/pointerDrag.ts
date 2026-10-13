@@ -56,6 +56,7 @@
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { holdTouchPanning } from '@thockdown/interaction/touchInput'
+import { TOUCH_SLOP_PX } from '@thockdown/interaction/touchGesture'
 
 /**
  * How far a press must travel, in screen pixels, before it is a drag rather
@@ -106,6 +107,8 @@ export function armPointerDrag(event: ReactPointerEvent<HTMLElement>): void {
   const pointerId = event.pointerId
   const startScreenX = event.screenX
   const startScreenY = event.screenY
+  const startClientX = event.clientX
+  const startClientY = event.clientY
 
   // A second press while a drag is live (another finger, a pen) ends the
   // first rather than running two.
@@ -186,12 +189,16 @@ export function armPointerDrag(event: ReactPointerEvent<HTMLElement>): void {
     lastClientX = moveEvent.clientX
     lastClientY = moveEvent.clientY
     if (!dataTransfer) {
-      if (!hasTravelledDragThreshold(startScreenX, startScreenY, moveEvent.screenX, moveEvent.screenY)) return
-      // A finger that travels before its hold completes is scrolling.
+      // A finger that travels before its hold completes is scrolling. It is
+      // judged by the touch layer's own stillness (`TOUCH_SLOP_PX`): a
+      // fingertip's reported centre drifts by more than a mouse's threshold
+      // while it rests, and that drift must not abort the hold.
       if (isTouch) {
+        if (Math.hypot(moveEvent.clientX - startClientX, moveEvent.clientY - startClientY) <= TOUCH_SLOP_PX) return
         finish(false)
         return
       }
+      if (!hasTravelledDragThreshold(startScreenX, startScreenY, moveEvent.screenX, moveEvent.screenY)) return
       begin()
       if (!dataTransfer) return
     }
