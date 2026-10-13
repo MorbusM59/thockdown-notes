@@ -54,7 +54,7 @@ export function flowLookTarget(base: ThemeLoadout, strength: number): ThemeLoado
   return {
     ...base,
     // The saturate control is a POSITION (0.5 = neutral), not a factor; see loadoutTheme's saturatePosToValue.
-    filterSaturate: Math.min(0.95, base.filterSaturate + 0.12 * s),
+    filterSaturate: Math.max(base.filterSaturate, Math.min(0.95, base.filterSaturate + 0.12 * s)),
     filterContrast: base.filterContrast * (1 + 0.15 * s),
     filterBrightness: base.filterBrightness * (1 + 0.03 * s),
     glaze: {

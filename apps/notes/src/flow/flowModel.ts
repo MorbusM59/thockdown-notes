@@ -144,7 +144,9 @@ const BREAK_KEYS = new Set([
  */
 export function classifyFlowKey(event: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'metaKey' | 'altKey' | 'repeat'>): FlowKeyKind {
   if (BREAK_KEYS.has(event.key)) return 'break'
-  if (event.ctrlKey || event.metaKey) {
+  // AltGr arrives as Ctrl+Alt on Windows and types a character (@, {, ł),
+  // so Ctrl with Alt is typing, not a shortcut.
+  if ((event.ctrlKey && !event.altKey) || event.metaKey) {
     return event.key.length === 1 ? 'break' : 'ignore'
   }
   if (event.repeat) return 'ignore'

@@ -98,6 +98,7 @@ describe('flow keys', () => {
 
   it('counts characters, Space and Enter as hits', () => {
     expect(key('a')).toBe('hit')
+    expect(key('@', { ctrlKey: true, altKey: true })).toBe('hit')
     expect(key(' ')).toBe('hit')
     expect(key('Enter')).toBe('hit')
   })
