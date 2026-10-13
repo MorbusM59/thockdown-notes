@@ -1722,8 +1722,29 @@ app.whenReady().then(async () => {
     }
   });
 
+  // An image file a note names by its path (src/shared/localImages.ts):
+  // `thockdown-image://file/<the whole path, URI-encoded>`. Image types only,
+  // so the scheme cannot be used to read any other file from disk.
+  const LOCAL_IMAGE_MIME: Record<string, string> = {
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
+    webp: 'image/webp', avif: 'image/avif', bmp: 'image/bmp', ico: 'image/x-icon',
+  };
+  const serveLocalImage = async (url: URL): Promise<Response> => {
+    const filePath = decodeURIComponent(url.pathname.slice(1));
+    const mime = LOCAL_IMAGE_MIME[path.extname(filePath).slice(1).toLowerCase()];
+    if (!mime || !path.isAbsolute(filePath)) return new Response(null, { status: 403 });
+    try {
+      const data = await fsPromises.readFile(filePath);
+      return new Response(new Uint8Array(data), { headers: { 'Content-Type': mime, 'X-Content-Type-Options': 'nosniff' } });
+    } catch {
+      return new Response(null, { status: 404 });
+    }
+  };
+
   protocol.handle(IMAGE_SCHEME, (request) => {
-    const match = /^\/([0-9a-f]{64})$/.exec(new URL(request.url).pathname);
+    const url = new URL(request.url);
+    if (url.host === 'file') return serveLocalImage(url);
+    const match = /^\/([0-9a-f]{64})$/.exec(url.pathname);
     const blob = match ? databaseService!.readImageBlob(match[1]) : null;
     if (!blob) return new Response(null, { status: 404 });
     return new Response(new Uint8Array(blob.data), {

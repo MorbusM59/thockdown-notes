@@ -9,6 +9,7 @@ import type { Root } from 'hast'
 import { visit } from 'unist-util-visit'
 import remarkGfm from 'remark-gfm'
 import { defaultUrlTransform } from 'react-markdown'
+import { localImagePath, localImageSrc } from '../shared/localImages'
 import { isRemoteImageSrc, useRemoteImagesAllowed } from '../shared/remoteImages'
 import { useStoredImage } from '../shared/storedImages'
 import { parseInternalNoteLink, type ParsedInternalNoteLink } from '../shared/internalNoteLinks'
@@ -54,6 +55,9 @@ interface PreviewImageProps {
 
 function PreviewImage(props: PreviewImageProps) {
   if (props.src?.startsWith('&')) return <StoredPreviewImage {...props} id={props.src} />
+  const local = localImageSrc(props.src)
+  // A file on this computer: not a network request, so always shown.
+  if (local) return <FramedImage src={local} alt={props.alt} title={props.title} width={0} height={0} sourceLine={props.sourceLine} />
   return <RemotePreviewImage {...props} />
 }
 
@@ -128,6 +132,9 @@ const PREVIEW_LINK_PROTOCOLS = new Set(['http:', 'https:', 'mailto:', 'tel:', 'f
  */
 export function previewUrlTransform(url: string, key: string): string {
   if (key === 'href' && isSafePreviewHref(url)) return url
+  // A local image path (`C:\...` reads as an unknown `c:` scheme) reaches
+  // `PreviewImage` as written; it is served by the app, never fetched.
+  if (key === 'src' && localImagePath(url) !== null) return url
   return defaultUrlTransform(url)
 }
 

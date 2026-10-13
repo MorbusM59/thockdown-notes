@@ -4,6 +4,7 @@ import { CategoryTree, type CategoryTreeCollapse } from '../components/CategoryT
 import { IMAGE_DRAG_MIME_TYPE, type NoteImageUse, type StoredImageSummary } from '../shared/images'
 import { cssInset, parseImageTitle, type ImageInset } from '../shared/imageLayout'
 import { armPointerDrag } from '../shared/pointerDrag'
+import { localImageSrc } from '../shared/localImages'
 import { isRemoteImageSrc, useRemoteImagesAllowed } from '../shared/remoteImages'
 import { buildTagHierarchy } from '../shared/tagHierarchy'
 import { groupCardsBySection, imagesInView, imageUseCards, type ImageLibraryView, type ImageUseCard } from './imageLibraryViews'
@@ -77,6 +78,11 @@ function sizeLabel(part: { width: number; height: number }): string {
 /** The image drawn in a card, cropped as the use crops it. */
 function CardImage({ src, inset, className }: { src: string; inset: ImageInset | null; className: string }) {
   return <img className={className} src={src} alt="" aria-hidden="true" draggable={false} style={inset ? { objectViewBox: cssInset(inset) } as CSSProperties : undefined} />
+}
+
+/** What a card for an external image shows: a file on disk always, a web image only when remote images are allowed. */
+function externalCardSrc(src: string, remoteAllowed: boolean): string | null {
+  return localImageSrc(src) ?? (remoteAllowed && isRemoteImageSrc(src) ? src : null)
 }
 
 /** A card's name: the stored image's id, or a globe and EXTERNAL. */
@@ -181,7 +187,7 @@ const ImageCard = memo(function ImageCard({ image, use, isActive, primed, expand
 }) {
   const handlers = useCardPress(press, image !== null)
   const remoteAllowed = useRemoteImagesAllowed()
-  const src = image ? image.src : use && remoteAllowed && isRemoteImageSrc(use.src) ? use.src : null
+  const src = image ? image.src : use ? externalCardSrc(use.src, remoteAllowed) : null
   const part = shownPart(image, use)
   const style = part.width > 0 ? { '--image-ratio': part.height / part.width } as CSSProperties : undefined
   const tooltip = !use ? 'Hold right-click to show it'
@@ -234,7 +240,7 @@ const ImageTreeCard = memo(function ImageTreeCard({ image, use, isActive, expand
 }) {
   const handlers = useCardPress(press, image !== null)
   const remoteAllowed = useRemoteImagesAllowed()
-  const src = image ? image.src : use && remoteAllowed && isRemoteImageSrc(use.src) ? use.src : null
+  const src = image ? image.src : use ? externalCardSrc(use.src, remoteAllowed) : null
   const part = shownPart(image, use)
   const seeIt = src ? 'right-click to see it, ' : ''
   const tooltip = use
