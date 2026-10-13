@@ -1965,9 +1965,15 @@ export function CM6Editor({
   // the top/bottom zones -- applied directly to view.contentDOM (CM6's own
   // `.cm-content`) since that DOM node is owned by CM6, not React, matching
   // Editor.tsx's own ContentEditable paddingTop/paddingBottom.
-  useEffect(() => {
-    const view = viewRef.current;
-    if (!view) return;
+  // Written each render and applied both here and the moment the EditorView
+  // is created (below), so a freshly mounted editor never paints a frame
+  // without its padding: the view is created in a passive effect, and a
+  // padding effect that only ran on the re-render that creation triggers
+  // let the browser paint the text flush against the top-left edge first,
+  // then snap half a cell down and right (seen returning from the image
+  // view, which unmounts the editor).
+  const applyContentPaddingRef = useRef<(view: EditorView) => void>(() => {});
+  applyContentPaddingRef.current = (view: EditorView) => {
     // paddingLeft/the extra half-line of paddingTop are the "infinity grid"
     // edge-breathing-room shift: the whole grid + text moves half a cell in
     // the positive x/y direction so content doesn't start flush against the
@@ -1997,6 +2003,11 @@ export function CM6Editor({
     // isn't a flex-basis input -- it's a hard clamp the grown size can't
     // exceed, so it actually holds.
     view.contentDOM.style.maxWidth = `calc(100% - ${glyphCenteringShiftPx}px)`;
+  };
+  useLayoutEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    applyContentPaddingRef.current(view);
     // Same reasoning as the lineHeightPx/cellWidthPx metrics-change effect
     // further down: an external padding mutation grows/shrinks scrollHeight
     // outside CM6's own dispatch/transaction system, so its scrollTop
@@ -4449,6 +4460,7 @@ export function CM6Editor({
       parent: containerRef.current,
     });
     viewRef.current = view;
+    applyContentPaddingRef.current(view);
     lastHydratedNoteIdRef.current = noteId ?? null;
     activeHistoryKeyRef.current = historyKey ?? noteId ?? null;
     setViewMountGeneration((generation) => generation + 1);
