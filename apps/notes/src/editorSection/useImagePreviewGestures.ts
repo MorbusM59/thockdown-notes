@@ -112,6 +112,45 @@ function alignmentAt(scroller: HTMLElement, x: number): ImageAlignment {
 }
 
 /** `px` in the unit the image already uses for that side (em when it has none). */
+/**
+ * The dragged inset moved to the size the title will be written at (lengthIn
+ * rounds a stated length to its unit's step), so the edge shows during the
+ * drag where the crop will settle. Only a stated width or height is rounded;
+ * an unsized image keeps the inset as dragged.
+ */
+function snappedInset(
+  inset: ImageInset,
+  startInset: ImageInset,
+  edges: { top: boolean; right: boolean; bottom: boolean; left: boolean },
+  layout: ImageLayout,
+  frame: HTMLElement,
+  img: HTMLImageElement | null,
+): ImageInset {
+  if (!img) return inset
+  const snapped = { ...inset }
+  const axis = (side: 'width' | 'height') => {
+    const length = layout[side]
+    if (!length) return
+    const [lead, trail] = side === 'width' ? (['left', 'right'] as const) : (['top', 'bottom'] as const)
+    if (!edges[lead] && !edges[trail]) return
+    const shown = side === 'width' ? img.offsetWidth : img.offsetHeight
+    const full = shown / ((100 - startInset[lead] - startInset[trail]) / 100)
+    // A width is the frame's, border included; a height is the image's.
+    const border = side === 'width' ? frame.offsetWidth - img.offsetWidth : 0
+    const kept = full * (100 - inset[lead] - inset[trail]) / 100
+    const written = lengthIn(kept + border, length.unit, frame, side)
+    const writtenPx = written.unit === 'px' ? written.value
+      : written.unit === '%' ? written.value / 100 * (frame.parentElement?.getBoundingClientRect().width ?? 0)
+      : written.value * (parseFloat(getComputedStyle(frame).fontSize) || 16)
+    const deltaPercent = ((writtenPx - border) - kept) / full * 100
+    const moving = edges[lead] ? lead : trail
+    snapped[moving] = Math.max(0, snapped[moving] - deltaPercent)
+  }
+  axis('width')
+  axis('height')
+  return snapped
+}
+
 function lengthIn(px: number, unit: ImageLength['unit'] | undefined, frame: HTMLElement, side: 'width' | 'height'): ImageLength {
   const fontSizePx = parseFloat(getComputedStyle(frame).fontSize) || 16
   if (unit === 'px') return { value: Math.max(1, Math.round(px)), unit: 'px' }
@@ -186,7 +225,7 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
         const dx = widthGrowth(image.layout.align, start.x, move.clientX, startRect.left + startRect.width / 2)
         moved = true
         if (mode === 'crop') {
-          inset = draggedInset(startInset, edges, move.clientX - start.x, dy, perPixel)
+          inset = snappedInset(draggedInset(startInset, edges, move.clientX - start.x, dy, perPixel), startInset, edges, image.layout, frame, img)
           if (cropGhost) cropGhost.show(inset)
           return
         }
@@ -378,12 +417,16 @@ function createCropGhost(frame: HTMLElement, img: HTMLImageElement, startInset: 
   const show = (inset: ImageInset) => {
     const left = fullLeft + fullWidth * inset.left / 100
     const top = fullTop + fullHeight * inset.top / 100
-    box.style.left = `${left - borderLeft}px`
-    box.style.top = `${top - borderTop}px`
-    box.style.width = `${fullWidth * (100 - inset.left - inset.right) / 100}px`
-    box.style.height = `${fullHeight * (100 - inset.top - inset.bottom) / 100}px`
-    copy.style.left = `${fullLeft - left}px`
-    copy.style.top = `${fullTop - top}px`
+    // Whole pixels throughout: a copy drawn at a fractional offset is
+    // resampled, which blurs fine detail such as text in a screenshot.
+    const boxLeft = Math.round(left)
+    const boxTop = Math.round(top)
+    box.style.left = `${boxLeft - borderLeft}px`
+    box.style.top = `${boxTop - borderTop}px`
+    box.style.width = `${Math.round(fullWidth * (100 - inset.left - inset.right) / 100)}px`
+    box.style.height = `${Math.round(fullHeight * (100 - inset.top - inset.bottom) / 100)}px`
+    copy.style.left = `${Math.round(fullLeft) - boxLeft}px`
+    copy.style.top = `${Math.round(fullTop) - boxTop}px`
   }
   show(startInset)
   return {
