@@ -238,11 +238,14 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
           // with the part that is kept; an unsized image follows on its own.
           const scaleX = (100 - inset.left - inset.right) / (100 - startInset.left - startInset.right)
           const scaleY = (100 - inset.top - inset.bottom) / (100 - startInset.top - startInset.bottom)
+          // A stated width is the FRAME's, border included, and only the
+          // picture inside the border is cropped.
+          const border = frame.offsetWidth - (img?.offsetWidth ?? frame.offsetWidth)
           const imgBox = img ?? frame
           apply(text, reshapeImage(text, image, {
             ...image.layout,
             inset,
-            width: image.layout.width ? lengthIn(imgBox.offsetWidth * scaleX, image.layout.width.unit, frame, 'width') : null,
+            width: image.layout.width ? lengthIn(imgBox.offsetWidth * scaleX + border, image.layout.width.unit, frame, 'width') : null,
             height: image.layout.height ? lengthIn(imgBox.offsetHeight * scaleY, image.layout.height.unit, frame, 'height') : null,
           }))
           return
