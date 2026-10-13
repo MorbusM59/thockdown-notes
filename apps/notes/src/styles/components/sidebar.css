@@ -972,6 +972,14 @@
   overflow: hidden;
 }
 
+/* A card shows the note's own picture, seen through the same scene filter
+   as the render view, so it takes the same correction (markdown.css,
+   packages/look/imageCorrection.ts). */
+.image-list-thumbnail,
+.image-tree-card-preview {
+  filter: var(--image-correction, none);
+}
+
 .image-list-thumbnail {
   position: absolute;
   top: 0;
