@@ -129,7 +129,9 @@ function snappedInset(
   if (!img) return inset
   const snapped = { ...inset }
   const axis = (side: 'width' | 'height') => {
-    const length = layout[side]
+    // An unstated height still settles where the drag leaves it (the
+    // picture keeps its scale), so it steps in half ems like a stated one.
+    const length = layout[side] ?? (side === 'height' ? { value: 0, unit: 'em' as const } : null)
     if (!length) return
     const [lead, trail] = side === 'width' ? (['left', 'right'] as const) : (['top', 'bottom'] as const)
     if (!edges[lead] && !edges[trail]) return
