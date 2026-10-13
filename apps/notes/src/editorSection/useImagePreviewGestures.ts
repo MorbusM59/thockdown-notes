@@ -1,7 +1,7 @@
 import { useEffect, useRef, type MutableRefObject, type RefObject } from 'react'
 import type { EditorAdapter } from '../editor/EditorContract'
 import { insertAtBlockStart, locateImage, moveImage, reshapeImage, sameAlt, type ImageEdit } from '../editor/ImagePlacement'
-import { cssInset, type ImageAlignment, type ImageInset, type ImageLayout, type ImageLength } from '../shared/imageLayout'
+import { type ImageAlignment, type ImageInset, type ImageLayout, type ImageLength } from '../shared/imageLayout'
 import { IMAGE_DRAG_MIME_TYPE, imageMarkdown, isImageFile } from '../shared/images'
 import { importImageFilesAsMarkdown } from '../shared/storedImages'
 
@@ -175,13 +175,9 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
         frameWidth: frame.style.width,
         imgWidth: img?.style.width ?? '',
         imgHeight: img?.style.height ?? '',
-        imgViewBox: img?.style.getPropertyValue('object-view-box') ?? '',
-        imgTransform: img?.style.transform ?? '',
-        imgTransformOrigin: img?.style.transformOrigin ?? '',
-        imgClipPath: img?.style.clipPath ?? '',
         opacity: frame.style.opacity,
-        overflow: frame.style.overflow,
       }
+      const cropGhost = mode === 'crop' && img ? createCropGhost(frame, img, startInset) : null
       frame.setPointerCapture(event.pointerId)
 
       const handleMove = (move: PointerEvent) => {
@@ -191,22 +187,7 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
         moved = true
         if (mode === 'crop') {
           inset = draggedInset(startInset, edges, move.clientX - start.x, dy, perPixel)
-          // A real crop: the picture stays where it is at the scale it is
-          // drawn, and only the edges move. The box keeps its layout size
-          // (transform and clip-path do not reflow the text); the whole image
-          // is drawn over it at the displayed scale, shifted so the kept part
-          // stays put, and clipped to the new inset. Release commits the
-          // inset, and the image then takes its new size.
-          if (img) {
-            const keptX = (100 - startInset.left - startInset.right) / 100
-            const keptY = (100 - startInset.top - startInset.bottom) / 100
-            img.style.setProperty('object-view-box', 'none')
-            img.style.transformOrigin = '0 0'
-            img.style.transform = `translate(${-startInset.left / keptX}%, ${-startInset.top / keptY}%) scale(${1 / keptX}, ${1 / keptY})`
-            img.style.clipPath = cssInset(inset)
-            // An edge dragged back out (undoing a crop) moves past the box.
-            frame.style.overflow = 'visible'
-          }
+          if (cropGhost) cropGhost.show(inset)
           return
         }
         if (mode === 'move') {
@@ -240,14 +221,10 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
         }
         frame.style.width = restore.frameWidth
         frame.style.opacity = restore.opacity
-        frame.style.overflow = restore.overflow
+        cropGhost?.remove()
         if (img) {
           img.style.width = restore.imgWidth
           img.style.height = restore.imgHeight
-          img.style.setProperty('object-view-box', restore.imgViewBox)
-          img.style.transform = restore.imgTransform
-          img.style.transformOrigin = restore.imgTransformOrigin
-          img.style.clipPath = restore.imgClipPath
         }
         if (!commit || !moved || readEditorText() !== text) return
         if (mode === 'move') {
@@ -331,4 +308,78 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
       scroller.removeEventListener('drop', handleDrop)
     }
   }, [activeNoteHasDebugTagRef, adapterRef, canEdit, readEditorText, scrollerRef, activeNoteId])
+}
+
+/**
+ * What a crop drag shows: the image keeps its place in the layout, hidden, so
+ * the text does not move, and a copy laid over it -- out of the flow, at the
+ * displayed scale -- is cut to the inset being dragged, border and all. The
+ * edges move and the picture does not. Release removes the copy and the real
+ * image is drawn at the committed inset.
+ *
+ * The copy is a child of the frame, so it sits in the same stacking context
+ * and under the same scene filter as the image; `visibility: visible` on it
+ * overrides the frame's `hidden`.
+ */
+function createCropGhost(frame: HTMLElement, img: HTMLImageElement, startInset: ImageInset) {
+  const frameStyle = getComputedStyle(frame)
+  const restore = { position: frame.style.position, overflow: frame.style.overflow, visibility: frame.style.visibility }
+  // Positioned first, so the image's offsets below are measured from the frame.
+  if (frameStyle.position === 'static') frame.style.position = 'relative'
+  const keptX = (100 - startInset.left - startInset.right) / 100
+  const keptY = (100 - startInset.top - startInset.bottom) / 100
+  // The whole image at the displayed scale, in the frame's coordinates.
+  const fullWidth = img.offsetWidth / keptX
+  const fullHeight = img.offsetHeight / keptY
+  const fullLeft = img.offsetLeft - fullWidth * startInset.left / 100
+  const fullTop = img.offsetTop - fullHeight * startInset.top / 100
+  const box = document.createElement('div')
+  Object.assign(box.style, {
+    position: 'absolute',
+    overflow: 'hidden',
+    visibility: 'visible',
+    boxSizing: 'content-box',
+    border: frameStyle.border,
+    borderRadius: frameStyle.borderRadius,
+    pointerEvents: 'none',
+  })
+  const copy = document.createElement('img')
+  copy.src = img.currentSrc || img.src
+  copy.alt = ''
+  Object.assign(copy.style, {
+    position: 'absolute',
+    display: 'block',
+    maxWidth: 'none',
+    width: `${fullWidth}px`,
+    height: `${fullHeight}px`,
+    filter: getComputedStyle(img).filter,
+  })
+  box.appendChild(copy)
+  frame.style.overflow = 'visible'
+  frame.style.visibility = 'hidden'
+  frame.appendChild(box)
+  // Offsets inside the frame are measured from its padding box; the copy's
+  // border sits outside its own box, so it is drawn where the frame's was.
+  const borderLeft = parseFloat(frameStyle.borderLeftWidth) || 0
+  const borderTop = parseFloat(frameStyle.borderTopWidth) || 0
+  const show = (inset: ImageInset) => {
+    const left = fullLeft + fullWidth * inset.left / 100
+    const top = fullTop + fullHeight * inset.top / 100
+    box.style.left = `${left - borderLeft}px`
+    box.style.top = `${top - borderTop}px`
+    box.style.width = `${fullWidth * (100 - inset.left - inset.right) / 100}px`
+    box.style.height = `${fullHeight * (100 - inset.top - inset.bottom) / 100}px`
+    copy.style.left = `${fullLeft - left}px`
+    copy.style.top = `${fullTop - top}px`
+  }
+  show(startInset)
+  return {
+    show,
+    remove: () => {
+      box.remove()
+      frame.style.position = restore.position
+      frame.style.overflow = restore.overflow
+      frame.style.visibility = restore.visibility
+    },
+  }
 }
