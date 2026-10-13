@@ -131,7 +131,19 @@
   outline: var(--caret-outline-width, 0px) solid var(--caret-outline-color, transparent);
   outline-offset: 0;
   box-shadow: 0 0 var(--caret-halo-blur, 0px) var(--caret-halo-spread, 0px) var(--caret-halo-color, transparent);
+  /* The typing flow's glow (flow/useFlowFeedback.ts): drop shadows rather
+     than another box-shadow layer, for two reasons. The blink keyframes own
+     box-shadow and must stay free of var() (caretSettings.test.ts says why),
+     and a drop shadow is cast by the caret's own pixels, so it blinks with
+     the fill without being animated at all. Only while flow is building, so
+     at rest the caret has no filter at all. */
   animation: thockdown-blink var(--caret-animation-duration, 1200ms) infinite cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html[data-flow-glow] .thockdown-block-caret {
+  filter:
+    drop-shadow(0 0 var(--flow-caret-near) color-mix(in srgb, var(--color-caret) var(--flow-caret-alpha), transparent))
+    drop-shadow(0 0 var(--flow-caret-far) color-mix(in srgb, var(--color-caret) var(--flow-caret-alpha), transparent));
 }
 
 /* Low-power toggle: the blink otherwise repaints the caret indefinitely while

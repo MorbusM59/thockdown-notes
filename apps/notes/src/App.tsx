@@ -126,8 +126,11 @@ import {
   BOX_SHADOW_ALPHA_PERCENT_MIN,
   BOX_SHADOW_ALPHA_PERCENT_MAX,
 } from './shared/uiBounds'
-import { applyDocumentTheme, themeFrame } from '@thockdown/look/loadoutTheme'
-import { ImageCorrectionFilter, ThemeBlendOverlays, ThemeGlazeLayers } from '@thockdown/look/ThemeLayers'
+import { applyDocumentTheme, themeFrame, type ThemeLoadout, type ThemeOptions } from '@thockdown/look/loadoutTheme'
+import { ImageCorrectionFilter, ThemeBlendOverlays } from '@thockdown/look/ThemeLayers'
+import { FlowScene } from './flow/FlowScene'
+import { useFlowFeedback } from './flow/useFlowFeedback'
+import { DEFAULT_FLOW_SETTINGS, sanitizeFlowSettings, type FlowSettings } from './shared/flowSettings'
 import { DEBUG_TAG_NAME, normalizeTagName } from './shared/tags'
 import { EditorSection } from './editorSection/EditorSection'
 import type { EscapeMenuContribution } from './escapeMenu/escapeMenuContract'
@@ -1446,6 +1449,14 @@ function App() {
   const [exportFolder, setExportFolder] = useState<string | null>(null)
   const [debuggingEnabled, setDebuggingEnabled] = useState(false)
   const [spellCheckEnabled, setSpellCheckEnabled] = useState(false)
+  const [flowSettings, setFlowSettings] = useState<FlowSettings>(DEFAULT_FLOW_SETTINGS)
+  useFlowFeedback(flowSettings)
+  // Every change is persisted at once, through the one sanctioned path (see
+  // persistMenuStateNowRef). An effect rather than a call in the setter, so
+  // the snapshot is built from the render that already holds the new value.
+  useEffect(() => {
+    void persistMenuStateNowRef.current()
+  }, [flowSettings])
   const [customCursorEnabled, setCustomCursorEnabled] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.enabled)
   const [customCursorDotColor, setCustomCursorDotColor] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.dotColor)
   const [customCursorCenterColor, setCustomCursorCenterColor] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.centerColor)
@@ -2305,7 +2316,7 @@ function App() {
   const texturePreviewTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(texturePreviewMaterial.color)), [texturePreviewMaterial.color])
   // Everything the visual loadout decides about the look, in one place
   // (shared/loadoutTheme.ts), which the mobile app uses as well.
-  const theme = useMemo(() => themeFrame({
+  const themeLoadout = useMemo((): ThemeLoadout => ({
     borderRadiusRegularPx,
     spacingRegularPx,
     borderAlphaPercent,
@@ -2320,9 +2331,6 @@ function App() {
     filterContrast,
     filterSaturate,
     filterColorize,
-  }, {
-    reduceVisualEffects,
-    isPreviewMode: activeSectionSnapshot?.isPreviewMode ?? false,
   }), [
     borderRadiusRegularPx,
     spacingRegularPx,
@@ -2338,9 +2346,13 @@ function App() {
     filterContrast,
     filterSaturate,
     filterColorize,
-    reduceVisualEffects,
-    activeSectionSnapshot?.isPreviewMode,
   ])
+  const isActivePreviewMode = activeSectionSnapshot?.isPreviewMode ?? false
+  const themeOptions = useMemo((): ThemeOptions => ({
+    reduceVisualEffects,
+    isPreviewMode: isActivePreviewMode,
+  }), [reduceVisualEffects, isActivePreviewMode])
+  const theme = useMemo(() => themeFrame(themeLoadout, themeOptions), [themeLoadout, themeOptions])
 
   useEffect(() => {
     const textureApi = window.thockdownTextures
@@ -3971,6 +3983,7 @@ function App() {
       },
       debuggingEnabled,
       spellCheckEnabled,
+      flow: flowSettings,
       chapterBarMode: chapterBarModeRef.current,
       isSidebarVisible: overrides?.isSidebarVisible ?? isSidebarVisible,
       // These three are presence-checked (`'x' in overrides`) rather than
@@ -4009,6 +4022,7 @@ function App() {
     categoryCollapsedSecondary,
     debuggingEnabled,
     spellCheckEnabled,
+    flowSettings,
     reduceVisualEffects,
     allowRemoteImages,
     sidebarShowsImages,
@@ -6132,6 +6146,7 @@ ${markdownHtml}
             setTextureMaterials(cloneTextureMaterials(appState.menu.textureMaterials ?? DEFAULT_TEXTURE_MATERIALS))
             setDebuggingEnabled(appState.menu.debuggingEnabled ?? false)
             setSpellCheckEnabled(appState.menu.spellCheckEnabled ?? false)
+            setFlowSettings(sanitizeFlowSettings(appState.menu.flow))
             setRestoredTabBarMode(appState.menu.chapterBarMode ?? 'tabs')
 
             // Restore persisted sidebar visibility
@@ -9018,8 +9033,13 @@ ${markdownHtml}
         </div>
       ) : null}
       <style>{caretBlinkKeyframesCss}</style>
-      <div className="app-saturate-wrapper" style={{ ...theme.wrapperStyle, position: 'fixed', inset: 0 }}>
-        <ThemeGlazeLayers glaze={theme.glaze} radialAboveLinear={glazeSettings.radialAboveLinear} />
+      <FlowScene
+        loadout={themeLoadout}
+        options={themeOptions}
+        baseFrame={theme}
+        lookStrength={flowSettings.enabled ? flowSettings.look : 0}
+        radialAboveLinear={glazeSettings.radialAboveLinear}
+      >
         {/* Mounted here (inside .app-saturate-wrapper, not as a sibling of
             it like MouseCursorOverlay) deliberately -- unlike the cursor
             overlay, tooltips should still pick up this wrapper's own
@@ -9521,6 +9541,8 @@ ${markdownHtml}
                         onAllowRemoteImagesChange={handleAllowRemoteImagesChange}
                         spellCheckEnabled={spellCheckEnabled}
                         setSpellCheckEnabled={setSpellCheckEnabled}
+                        flowSettings={flowSettings}
+                        setFlowSettings={setFlowSettings}
                         reducedCaretAnimation={reducedCaretAnimation}
                         setReducedCaretAnimation={setReducedCaretAnimation}
                         deferPreviewOnRapidInput={deferPreviewOnRapidInput}
@@ -10091,7 +10113,7 @@ ${markdownHtml}
         ) : null}
         <ThemeBlendOverlays theme={theme} />
         <ImageCorrectionFilter theme={theme} />
-      </div>
+      </FlowScene>
       {/* Mounted once, app-wide -- not scoped to the editor. See that
           component's own doc comment for why it's a sibling of
           .app-saturate-wrapper (not nested inside it) and how it tracks the

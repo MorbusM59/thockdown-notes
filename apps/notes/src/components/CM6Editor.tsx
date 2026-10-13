@@ -9,6 +9,7 @@ import { attachUndoHistory, createUndoHistoryScope, detachUndoHistory, readOnlyE
 import { matchShortcut, type ShortcutId } from '../shared/keyboardShortcuts';
 import { buildTokenPresentation } from '../editor/MarkdownLineClassification';
 import { suppressNextPlainTypingSoundOnce, typingSoundManager } from '../sound/TypingSoundManager';
+import { flowMeter } from '../flow/flowMeter';
 import { ARROW_KEY_VOICES, SHIFT_TAB_KEY_VOICE, TAB_KEY_VOICE } from '../sound/keyVoices';
 import { readSelectionRect, type SelectionRect } from '../editor/CaretRect';
 import { readSelectionLineRects } from '../editor/SelectionRects';
@@ -3967,8 +3968,12 @@ export function CM6Editor({
       // delta detection, onEnterTransform's own unconditional click), which
       // CM6Editor already calls -- so they work automatically.
       EditorView.domEventObservers({
-        keydown: (event) => {
+        keydown: (event, view) => {
           lastPhysicalKeyCodeRef.current = event.code;
+          // The typing flow meter (flow/flowMeter.ts) hears every key typed
+          // into an editable note; a read-only one (the User Guide) types
+          // nothing, and an IME composition is not keystrokes.
+          if (!view.state.readOnly && !event.isComposing) flowMeter.reportKey(event);
           if (debugInputLagEnabled) {
             debugLastKeydownAtRef.current = performance.now();
             debugLastKeyRef.current = event.key;

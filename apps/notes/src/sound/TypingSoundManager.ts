@@ -158,6 +158,14 @@ export function shouldSuppressPlainTypingSoundForInsertion(event: {
   return insertedChar === '\n' || insertedChar === '\r'
 }
 
+// The flow reverb's room: longer and darker than the reader's, so it reads as
+// the space opening up rather than as the reverb slider moving.
+const FLOW_REVERB_SEND_GAIN = 0.55
+const FLOW_REVERB_DURATION_SEC = 2.8
+const FLOW_REVERB_DECAY = 2.5
+const FLOW_REVERB_SPACE = 0.7
+const FLOW_REVERB_LOWPASS_HZ = 6500
+
 export class TypingSoundManager {
   private audioContext: AudioContext | null = null
   private masterGain: GainNode | null = null
@@ -167,6 +175,12 @@ export class TypingSoundManager {
   private reverbWetGain: GainNode | null = null
   private reverbStrength = 0
   private reverbSpace = 0
+  // The typing flow's reverb (flow/flowMeter.ts): a second, larger room on a
+  // send of its own, so it adds to the reader's reverb rather than retuning
+  // it. Built on first use; a sound is routed into it only while the amount
+  // is above zero, so with flow off it is never in the graph at all.
+  private flowReverbSend: GainNode | null = null
+  private flowReverbAmount = 0
   private bufferGroups: Record<string, AudioBuffer[]> = {
     bass: [],
     treble: [],
@@ -605,6 +619,49 @@ export class TypingSoundManager {
     }
   }
 
+  /** The typing flow's reverb, 0..1 of its full send. Smoothed, so a caller may set it every frame. */
+  setFlowReverb(amount: number): void {
+    const next = Math.max(0, Math.min(1, amount))
+    if (next === this.flowReverbAmount) return
+    this.flowReverbAmount = next
+    if (next > 0) this.ensureFlowReverb()
+    if (this.flowReverbSend && this.audioContext) {
+      this.flowReverbSend.gain.setTargetAtTime(next * FLOW_REVERB_SEND_GAIN, this.audioContext.currentTime, 0.05)
+    }
+  }
+
+  private ensureFlowReverb(): void {
+    if (this.flowReverbSend || !this.audioContext || !this.masterGain) return
+    const context = this.audioContext
+    const send = context.createGain()
+    send.gain.value = this.flowReverbAmount * FLOW_REVERB_SEND_GAIN
+    const room = context.createConvolver()
+    room.buffer = this.createReverbImpulseResponse(context, FLOW_REVERB_DURATION_SEC, FLOW_REVERB_DECAY, FLOW_REVERB_SPACE)
+    const tone = context.createBiquadFilter()
+    tone.type = 'lowpass'
+    tone.frequency.value = FLOW_REVERB_LOWPASS_HZ
+    send.connect(room).connect(tone).connect(this.masterGain)
+    this.flowReverbSend = send
+  }
+
+  // The one place a voice reaches the speakers: the reader's reverb (dry and
+  // wet) or the bare master before the graph is built, plus the flow send
+  // while flow has any reverb to add.
+  private connectToOutput(node: AudioNode): void {
+    if (this.reverbDryGain && this.reverbNode) {
+      node.connect(this.reverbDryGain)
+      node.connect(this.reverbNode)
+    } else if (this.masterGain) {
+      node.connect(this.masterGain)
+    }
+    if (this.flowReverbAmount > 0) {
+      // Built here as well as in setFlowReverb, which can run before the
+      // audio graph exists.
+      this.ensureFlowReverb()
+      if (this.flowReverbSend) node.connect(this.flowReverbSend)
+    }
+  }
+
   private getRandomLayerDetune(): number {
     return Math.floor(Math.random() * 601) - 300
   }
@@ -703,12 +760,7 @@ export class TypingSoundManager {
     source.connect(gainNode)
     const panNode = this.panIfNeeded(gainNode, pan)
 
-    if (this.reverbDryGain && this.reverbNode) {
-      panNode.connect(this.reverbDryGain)
-      panNode.connect(this.reverbNode)
-    } else if (this.masterGain) {
-      panNode.connect(this.masterGain)
-    }
+    this.connectToOutput(panNode)
 
     source.onended = () => {
       this.safeDisconnect(source)
@@ -733,14 +785,8 @@ export class TypingSoundManager {
         const echoGainNode = this.audioContext.createGain()
         echoGainNode.gain.value = effectiveGain * Math.pow(decay, i)
         const echoPanNode = this.panIfNeeded(echoGainNode, pan)
-        if (this.reverbDryGain && this.reverbNode) {
-          echoSource.connect(echoGainNode)
-          echoPanNode.connect(this.reverbDryGain)
-          echoPanNode.connect(this.reverbNode)
-        } else {
-          echoSource.connect(echoGainNode)
-          echoPanNode.connect(this.masterGain)
-        }
+        echoSource.connect(echoGainNode)
+        this.connectToOutput(echoPanNode)
         echoSource.onended = () => {
           this.safeDisconnect(echoSource)
           this.safeDisconnect(echoGainNode)
@@ -852,12 +898,7 @@ export class TypingSoundManager {
     // live-synthesis path in playLayer.
     const panNode = this.panIfNeeded(gainNode, this.resolveEffectivePan(options?.physicalKeyCode, options?.pan))
 
-    if (this.reverbDryGain && this.reverbNode) {
-      panNode.connect(this.reverbDryGain)
-      panNode.connect(this.reverbNode)
-    } else {
-      panNode.connect(this.masterGain)
-    }
+    this.connectToOutput(panNode)
 
     source.onended = () => {
       this.safeDisconnect(source)

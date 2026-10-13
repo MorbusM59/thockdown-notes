@@ -6,6 +6,13 @@ import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarS
 import { SoundscapeOptions } from '@thockdown/soundscape/SoundscapeOptions'
 import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
+import {
+  DEFAULT_FLOW_SETTINGS,
+  FLOW_BUILD_KEYS_MAX, FLOW_BUILD_KEYS_MIN,
+  FLOW_FADE_SEC_MAX, FLOW_FADE_SEC_MIN,
+  FLOW_THRESHOLD_WPM_MAX, FLOW_THRESHOLD_WPM_MIN,
+  type FlowSettings,
+} from '../shared/flowSettings'
 import { exportSoundscapes, importSoundscapes } from '@thockdown/soundscape/soundscapeFileActions'
 import type { SoundscapePreferences } from '@thockdown/soundscape/soundscape'
 import {
@@ -531,6 +538,8 @@ export interface SidebarOptionsPanelProps {
   onAllowRemoteImagesChange: (value: boolean) => void
   spellCheckEnabled: boolean
   setSpellCheckEnabled: (updater: (previous: boolean) => boolean) => void
+  flowSettings: FlowSettings
+  setFlowSettings: (updater: (previous: FlowSettings) => FlowSettings) => void
   reducedCaretAnimation: boolean
   setReducedCaretAnimation: (value: boolean) => void
   deferPreviewOnRapidInput: boolean
@@ -832,6 +841,8 @@ export function SidebarOptionsPanel({
   onAllowRemoteImagesChange,
   spellCheckEnabled,
   setSpellCheckEnabled,
+  flowSettings,
+  setFlowSettings,
   reducedCaretAnimation,
   setReducedCaretAnimation,
   deferPreviewOnRapidInput,
@@ -2957,7 +2968,111 @@ export function SidebarOptionsPanel({
           >
             <span className="fa-solid fa-spell-check" aria-hidden="true" />
           </button>
+          <button
+            type="button"
+            className={`btn-icon${flowSettings.enabled ? ' is-active' : ''}`}
+            onClick={() => setFlowSettings((prev) => ({ ...prev, enabled: !prev.enabled }))}
+            aria-pressed={flowSettings.enabled}
+            data-tooltip={flowSettings.enabled ? 'Disable typing flow' : 'Enable typing flow: steady, fast typing builds a flow that the look, the reverb and the caret answer'}
+          >
+            <span className="fa-solid fa-water" aria-hidden="true" />
+          </button>
         </div>
+        {flowSettings.enabled ? (
+          <div className="utility-setting-slider-stack" aria-label="Typing flow settings">
+            {/* What counts (pace, rhythm), how it moves (build, fade), how it answers (look, reverb, caret). */}
+            <OptionsSliderRows rows={[2, 2, 3]}>
+              <CompactScrollbarSlider
+                id="flow-threshold"
+                min={FLOW_THRESHOLD_WPM_MIN}
+                max={FLOW_THRESHOLD_WPM_MAX}
+                step={1}
+                value={flowSettings.thresholdWpm}
+                trackLabel="pace"
+                tooltipLabel="Flow pace (words per minute)"
+                ariaLabel="Typing speed at which flow kicks in, in words per minute"
+                defaultValue={DEFAULT_FLOW_SETTINGS.thresholdWpm}
+                formatValue={(value) => `${Math.round(value)} wpm`}
+                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, thresholdWpm: value }))}
+              />
+              <CompactScrollbarSlider
+                id="flow-rhythm"
+                min={0}
+                max={1}
+                step={0.01}
+                value={flowSettings.rhythm}
+                trackLabel="rhythm"
+                tooltipLabel="How much an uneven rhythm costs"
+                ariaLabel="How much an uneven typing rhythm costs flow"
+                defaultValue={DEFAULT_FLOW_SETTINGS.rhythm}
+                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, rhythm: value }))}
+              />
+              <CompactScrollbarSlider
+                id="flow-build"
+                min={FLOW_BUILD_KEYS_MIN}
+                max={FLOW_BUILD_KEYS_MAX}
+                step={5}
+                value={flowSettings.buildKeys}
+                reverseScale
+                trackLabel="build"
+                tooltipLabel="Keystrokes to build flow"
+                ariaLabel="How quickly flow builds, in keystrokes to fill"
+                defaultValue={DEFAULT_FLOW_SETTINGS.buildKeys}
+                formatValue={(value) => `${Math.round(value)} keys`}
+                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, buildKeys: value }))}
+              />
+              <CompactScrollbarSlider
+                id="flow-fade"
+                min={FLOW_FADE_SEC_MIN}
+                max={FLOW_FADE_SEC_MAX}
+                step={0.1}
+                value={flowSettings.fadeSec}
+                trackLabel="fade"
+                tooltipLabel="Seconds of pause to lose half your flow"
+                ariaLabel="How slowly flow fades after typing stops, in seconds to half"
+                defaultValue={DEFAULT_FLOW_SETTINGS.fadeSec}
+                formatValue={(value) => `${value.toFixed(1)} s`}
+                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, fadeSec: value }))}
+              />
+              <CompactScrollbarSlider
+                id="flow-look"
+                min={0}
+                max={1}
+                step={0.01}
+                value={flowSettings.look}
+                trackLabel="look"
+                tooltipLabel="Flow look: colour, contrast and glaze"
+                ariaLabel="Strength of the flow's effect on the look"
+                defaultValue={DEFAULT_FLOW_SETTINGS.look}
+                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, look: value }))}
+              />
+              <CompactScrollbarSlider
+                id="flow-reverb"
+                min={0}
+                max={1}
+                step={0.01}
+                value={flowSettings.reverb}
+                trackLabel="reverb"
+                tooltipLabel="Flow reverb"
+                ariaLabel="Strength of the flow's reverb"
+                defaultValue={DEFAULT_FLOW_SETTINGS.reverb}
+                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, reverb: value }))}
+              />
+              <CompactScrollbarSlider
+                id="flow-caret"
+                min={0}
+                max={1}
+                step={0.01}
+                value={flowSettings.caret}
+                trackLabel="caret"
+                tooltipLabel="Flow caret glow"
+                ariaLabel="Strength of the flow's caret glow"
+                defaultValue={DEFAULT_FLOW_SETTINGS.caret}
+                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, caret: value }))}
+              />
+            </OptionsSliderRows>
+          </div>
+        ) : null}
       </AccordionSection>
 
       <AccordionSection

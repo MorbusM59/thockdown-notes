@@ -246,6 +246,17 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 *Underlines misspelled words using your OS's native spell checker.*
 
 - One switch for the whole app; it underlines in the editor you are typing in.
+
+### [Typing Flow](#typing-flow)
+
+> **Where?**
+> Settings panel → Tools.
+
+*Steady, fast typing builds a flow that the colours, the reverb and the caret answer.*
+
+- Flow builds when your pace is even and at or above the **pace** you set; **rhythm** sets how much an uneven pace costs.
+- Arrow keys, Backspace, Delete and undo end the streak, and a pause lets it fade.
+- **build** and **fade** set how quickly flow comes and goes; **look**, **reverb** and **caret** set how strongly each answers.
 `,
   `## Internal Linking
 
