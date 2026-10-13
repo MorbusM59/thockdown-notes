@@ -176,7 +176,11 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
         imgWidth: img?.style.width ?? '',
         imgHeight: img?.style.height ?? '',
         imgViewBox: img?.style.getPropertyValue('object-view-box') ?? '',
+        imgTransform: img?.style.transform ?? '',
+        imgTransformOrigin: img?.style.transformOrigin ?? '',
+        imgClipPath: img?.style.clipPath ?? '',
         opacity: frame.style.opacity,
+        overflow: frame.style.overflow,
       }
       frame.setPointerCapture(event.pointerId)
 
@@ -187,7 +191,22 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
         moved = true
         if (mode === 'crop') {
           inset = draggedInset(startInset, edges, move.clientX - start.x, dy, perPixel)
-          img?.style.setProperty('object-view-box', cssInset(inset))
+          // A real crop: the picture stays where it is at the scale it is
+          // drawn, and only the edges move. The box keeps its layout size
+          // (transform and clip-path do not reflow the text); the whole image
+          // is drawn over it at the displayed scale, shifted so the kept part
+          // stays put, and clipped to the new inset. Release commits the
+          // inset, and the image then takes its new size.
+          if (img) {
+            const keptX = (100 - startInset.left - startInset.right) / 100
+            const keptY = (100 - startInset.top - startInset.bottom) / 100
+            img.style.setProperty('object-view-box', 'none')
+            img.style.transformOrigin = '0 0'
+            img.style.transform = `translate(${-startInset.left / keptX}%, ${-startInset.top / keptY}%) scale(${1 / keptX}, ${1 / keptY})`
+            img.style.clipPath = cssInset(inset)
+            // An edge dragged back out (undoing a crop) moves past the box.
+            frame.style.overflow = 'visible'
+          }
           return
         }
         if (mode === 'move') {
@@ -221,10 +240,14 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
         }
         frame.style.width = restore.frameWidth
         frame.style.opacity = restore.opacity
+        frame.style.overflow = restore.overflow
         if (img) {
           img.style.width = restore.imgWidth
           img.style.height = restore.imgHeight
           img.style.setProperty('object-view-box', restore.imgViewBox)
+          img.style.transform = restore.imgTransform
+          img.style.transformOrigin = restore.imgTransformOrigin
+          img.style.clipPath = restore.imgClipPath
         }
         if (!commit || !moved || readEditorText() !== text) return
         if (mode === 'move') {
