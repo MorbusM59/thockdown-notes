@@ -66,8 +66,8 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   | 'onEditorSurfaceReady'
   | 'readDisplayedText' | 'displayedTextKey' | 'activeNoteHasDebugTag' | 'isPreviewingSnapshot' | 'isCaretSuspended' | 'previewTextureRef' | 'previewBridgeHostRef'
   | 'previewScrollRef' | 'handlePreviewScroll' | 'blockPreviewEditMutation' | 'previewMarkdownElement'
-  | 'previewScrollbarTrackRef' | 'handlePreviewTrackMouseDown' | 'handlePreviewTrackContextMenu' | 'previewScrollbarThumbRef' | 'isDraggingPreviewScrollThumb'
-  | 'isPreviewScrollThumbActive' | 'handlePreviewThumbMouseDown' | 'activeNoteDocumentStats' | 'noteSnapshots'
+  | 'previewScrollbarTrackRef' | 'handlePreviewTrackPointerDown' | 'handlePreviewTrackContextMenu' | 'previewScrollbarThumbRef' | 'isDraggingPreviewScrollThumb'
+  | 'isPreviewScrollThumbActive' | 'handlePreviewThumbPointerDown' | 'activeNoteDocumentStats' | 'noteSnapshots'
   | 'handleNavigateSnapshot' | 'handleBranchOpened' | 'handleBranchError' | 'timelineCurveConstant' | 'setTimelineCurveConstant'
   | 'setTimelineTrackLengthPx' | 'handleCreateManualSnapshot' | 'handleReturnToPresent' | 'handleMergeAdjacentSnapshots'
   | 'scrollbarHostEl' | 'setScrollbarHostEl' | 'notes' | 'menuIdentityNoteId' | 'chapters' | 'archivedMergedChapterIds' | 'onParentTabClick' | 'onCreateChapter' | 'onChapterClick'
@@ -1527,9 +1527,9 @@ export function EditorSection(rawProps: EditorSectionProps) {
     isPreviewScrollThumbActive,
     isDraggingPreviewScrollThumb,
     syncPreviewCustomScrollbar,
-    handlePreviewTrackMouseDown,
+    handlePreviewTrackPointerDown,
     handlePreviewTrackContextMenu,
-    handlePreviewThumbMouseDown,
+    handlePreviewThumbPointerDown,
     handlePreviewScroll,
     blockPreviewEditMutation,
     travelPreviewToRatio,
@@ -2264,12 +2264,12 @@ export function EditorSection(rawProps: EditorSectionProps) {
         blockPreviewEditMutation={blockPreviewEditMutation}
         previewMarkdownElement={previewMarkdownElement}
         previewScrollbarTrackRef={previewScrollbarTrackRef}
-        handlePreviewTrackMouseDown={handlePreviewTrackMouseDown}
+        handlePreviewTrackPointerDown={handlePreviewTrackPointerDown}
         handlePreviewTrackContextMenu={handlePreviewTrackContextMenu}
         previewScrollbarThumbRef={previewScrollbarThumbRef}
         isDraggingPreviewScrollThumb={isDraggingPreviewScrollThumb}
         isPreviewScrollThumbActive={isPreviewScrollThumbActive}
-        handlePreviewThumbMouseDown={handlePreviewThumbMouseDown}
+        handlePreviewThumbPointerDown={handlePreviewThumbPointerDown}
         activeNoteDocumentStats={activeNoteDocumentStats}
         noteSnapshots={noteSnapshots}
         handleNavigateSnapshot={handleNavigateSnapshot}

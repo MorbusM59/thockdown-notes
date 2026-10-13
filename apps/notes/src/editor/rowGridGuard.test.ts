@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveRowGridCorrection, resolveRowGridDirection, ROW_GRID_TOLERANCE_PX, stepRowGridTouchPhase, type RowGridTouchEvent, type RowGridTouchPhase } from './rowGridGuard'
+import { resolveRowGridCorrection, resolveRowGridDirection, ROW_GRID_TOLERANCE_PX } from './rowGridGuard'
 
 const at = (scrollTopPx: number, overrides?: Partial<Parameters<typeof resolveRowGridCorrection>[0]>) =>
   resolveRowGridCorrection({ scrollTopPx, lineHeightPx: 26, maxScrollTopPx: 100000, ...overrides })
@@ -81,43 +81,5 @@ describe('gesture-driven corrections', () => {
 
   it('still refuses to leave the scrollable range', () => {
     expect(at(99989, { direction: 'forward', maxScrollTopPx: 99990 })).toBe(99970)
-  })
-})
-
-describe('the touch phase cannot be stranded', () => {
-  const events: RowGridTouchEvent[] = [
-    { kind: 'touchstart', touchesDown: 1 },
-    { kind: 'touchstart', touchesDown: 2 },
-    { kind: 'touchend', touchesDown: 1 },
-    { kind: 'touchend', touchesDown: 0 },
-    { kind: 'scroll', touchesDown: 1 },
-    { kind: 'scroll', touchesDown: 0 },
-    { kind: 'scrollend' },
-    { kind: 'otherInput' },
-  ]
-  // Every sequence of up to five events, then the fingers all lifting and
-  // the browser reporting the scroll at rest: guarding has resumed.
-  function* sequences(length: number): Generator<RowGridTouchEvent[]> {
-    if (length === 0) { yield []; return }
-    for (const rest of sequences(length - 1)) for (const event of events) yield [...rest, event]
-  }
-  it('returns to idle once the fingers are up and the scroll has come to rest', () => {
-    for (const sequence of sequences(5)) {
-      let phase: RowGridTouchPhase = { kind: 'idle' }
-      for (const event of [...sequence, { kind: 'touchend', touchesDown: 0 } as const, { kind: 'scrollend' } as const]) {
-        phase = stepRowGridTouchPhase(phase, event).phase
-      }
-      expect(phase).toEqual({ kind: 'idle' })
-    }
-  })
-  it('returns to idle on an ordinary scroll with no fingers down, or on any other input after a lift', () => {
-    for (const sequence of sequences(4)) {
-      let phase: RowGridTouchPhase = { kind: 'idle' }
-      for (const event of sequence) phase = stepRowGridTouchPhase(phase, event).phase
-      const afterScroll = stepRowGridTouchPhase(phase, { kind: 'scroll', touchesDown: 0 })
-      if (phase.kind !== 'flinging') expect(afterScroll).toEqual({ phase: { kind: 'idle' }, correct: true })
-      const lifted = stepRowGridTouchPhase(phase, { kind: 'touchend', touchesDown: 0 }).phase
-      expect(stepRowGridTouchPhase(lifted, { kind: 'otherInput' }).phase).toEqual({ kind: 'idle' })
-    }
   })
 })

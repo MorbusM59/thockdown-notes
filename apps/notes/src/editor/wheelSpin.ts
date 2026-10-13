@@ -279,6 +279,29 @@ export function registerWheelSpinNudge(state: WheelSpinState, input: WheelSpinIn
 }
 
 /**
+ * Starts a coast from a rate measured elsewhere, rather than from three wheel
+ * nudges: a finger lifted mid-swipe (`fingerPan.ts`), whose row crossings
+ * are the nudges and whose last gaps are the rate. Any coast already running
+ * is replaced. There is no grace window, because a lifted finger has no tail:
+ * nothing more is arriving from the gesture that started this.
+ */
+export function startWheelSpinCoast(
+  state: WheelSpinState,
+  coast: { nowMs: number; direction: WheelSpinDirection; averageGapMs: number; rowsPerNudge: number },
+): void {
+  state.coast = {
+    direction: coast.direction,
+    rowsPerNudge: coast.rowsPerNudge,
+    averageGapMs: coast.averageGapMs,
+    firedCount: 0,
+    ignoreUntilMs: coast.nowMs,
+  }
+  state.gapsMs = []
+  state.lastNudgeMs = coast.nowMs
+  state.lastDirection = coast.direction
+}
+
+/**
  * Adopt a `respin`: the coast now runs at the rate that gesture was turned at.
  *
  * Called only by a caller that has decided the new rate is the faster one.

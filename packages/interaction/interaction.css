@@ -38,6 +38,8 @@
 
 .thockdown-scroll-track {
   position: relative;
+  /* A finger on the scrollbar drags it; left to the browser it would pan. */
+  touch-action: none;
   width: var(--canonical-scroll-thickness);
   height: 100%;
   border: 1px solid var(--canonical-scroll-track-border);

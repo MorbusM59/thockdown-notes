@@ -79,12 +79,12 @@ export interface SectionEditorAreaProps {
   blockPreviewEditMutation: (event: { preventDefault: () => void }) => void
   previewMarkdownElement: ReactNode
   previewScrollbarTrackRef: RefObject<HTMLDivElement>
-  handlePreviewTrackMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void
+  handlePreviewTrackPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void
   handlePreviewTrackContextMenu: (event: React.MouseEvent<HTMLDivElement>) => void
   previewScrollbarThumbRef: RefObject<HTMLDivElement>
   isDraggingPreviewScrollThumb: boolean
   isPreviewScrollThumbActive: boolean
-  handlePreviewThumbMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void
+  handlePreviewThumbPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void
   activeNoteDocumentStats: { wordCount: number; characterCount: number }
   noteSnapshots: UseNoteSnapshotsResult
   handleNavigateSnapshot: (snapshotId: number | null) => void
@@ -216,12 +216,12 @@ export function SectionEditorArea({
   blockPreviewEditMutation,
   previewMarkdownElement,
   previewScrollbarTrackRef,
-  handlePreviewTrackMouseDown,
+  handlePreviewTrackPointerDown,
   handlePreviewTrackContextMenu,
   previewScrollbarThumbRef,
   isDraggingPreviewScrollThumb,
   isPreviewScrollThumbActive,
-  handlePreviewThumbMouseDown,
+  handlePreviewThumbPointerDown,
   activeNoteDocumentStats,
   noteSnapshots,
   handleNavigateSnapshot,
@@ -541,14 +541,14 @@ export function SectionEditorArea({
               <div
                 ref={previewScrollbarTrackRef}
                 className="thockdown-scroll-track"
-                onMouseDown={handlePreviewTrackMouseDown}
+                onPointerDown={handlePreviewTrackPointerDown}
                 data-secondary-press="action"
                 onContextMenu={handlePreviewTrackContextMenu}
               >
                 <div
                   ref={previewScrollbarThumbRef}
                   className={`thockdown-scroll-thumb${isDraggingPreviewScrollThumb ? ' is-dragging' : ''}${isPreviewScrollThumbActive ? '' : ' is-inactive'}`}
-                  onMouseDown={handlePreviewThumbMouseDown}
+                  onPointerDown={handlePreviewThumbPointerDown}
                 />
               </div>
             </div>

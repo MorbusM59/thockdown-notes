@@ -31,9 +31,12 @@ import {
   nextWheelSpinDelayMs,
   refreshWheelSpinCoast,
   registerWheelSpinNudge,
+  startWheelSpinCoast,
   takeWheelSpinNudge,
   type WheelSpinDirection,
 } from '../editor/wheelSpin';
+import { beginFingerPan, moveFingerPan, releaseFingerPan, type FingerPan } from '../editor/fingerPan';
+import { TOUCH_SLOP_PX } from '@thockdown/interaction/touchGesture';
 import {
   buildReleaseRampDownPlanFromCurrentParams,
   CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER,
@@ -4774,9 +4777,47 @@ export function CM6Editor({
     // Anything else that scrolls, or that means the reader is now doing
     // something other than reading, ends a coast. A page that keeps moving
     // under a keystroke or a drag is not a feature.
+    // A press of any kind -- mouse, pen or finger -- is a pointerdown; a
+    // finger produces no mousedown until it lifts, so listening for that let
+    // a coast run on under a finger laid on the text to stop it.
     const cancelWheelSpinOnOtherInput = () => stopWheelSpin('other input');
-    view.scrollDOM.addEventListener('mousedown', cancelWheelSpinOnOtherInput, { capture: true });
+    view.scrollDOM.addEventListener('pointerdown', cancelWheelSpinOnOtherInput, { capture: true });
     view.scrollDOM.addEventListener('keydown', cancelWheelSpinOnOtherInput, { capture: true });
+
+    // A finger dragging the text moves it a row at a time, as a wheel does,
+    // and a swipe still moving when the finger lifts hands its rate to the
+    // wheel's coast (editor/fingerPan.ts). The browser's own pan would slide
+    // the text off the row grid, so the scroller declines it.
+    // Only a PLAIN finger reaches here: a finger the touch layer has given
+    // another role (part of a two-finger press, a resting Ctrl) has its
+    // events stopped before they arrive, and a finger that is reassigned
+    // mid-drag is ended with a pointercancel.
+    view.scrollDOM.style.touchAction = 'none';
+    let fingerPan: FingerPan | null = null;
+    const handleFingerPanDown = (event: PointerEvent) => {
+      if (event.pointerType !== 'touch' || !event.isPrimary) return;
+      fingerPan = beginFingerPan(event.pointerId, event.clientY, event.timeStamp);
+    };
+    const handleFingerPanMove = (event: PointerEvent) => {
+      if (!fingerPan || event.pointerId !== fingerPan.pointerId) return;
+      if (isEditScrollInteractionBlocked()) return;
+      const rows = moveFingerPan(fingerPan, event.clientY, event.timeStamp, lineHeightPxRef.current, TOUCH_SLOP_PX);
+      if (rows !== 0) scrollRows(rows, `finger dy=${event.clientY - fingerPan.startY}`);
+    };
+    const handleFingerPanEnd = (event: PointerEvent) => {
+      if (!fingerPan || event.pointerId !== fingerPan.pointerId) return;
+      const pan = fingerPan;
+      fingerPan = null;
+      if (event.type !== 'pointerup' || isEditScrollInteractionBlocked()) return;
+      const coast = releaseFingerPan(pan, event.timeStamp, wheelSpinThresholdMs());
+      if (!coast) return;
+      startWheelSpinCoast(wheelSpinState, { nowMs: performance.now(), direction: coast.direction, averageGapMs: coast.averageGapMs, rowsPerNudge: 1 });
+      scheduleWheelSpinNudge();
+    };
+    view.scrollDOM.addEventListener('pointerdown', handleFingerPanDown);
+    window.addEventListener('pointermove', handleFingerPanMove);
+    window.addEventListener('pointerup', handleFingerPanEnd);
+    window.addEventListener('pointercancel', handleFingerPanEnd);
 
     // PageUp/PageDown release-ramp: keyup on the scroller (not a keymap
     // entry -- CM6's keymap system only sees keydown) starts the
@@ -5170,7 +5211,12 @@ export function CM6Editor({
       detachScrollBridge?.();
       view.scrollDOM.removeEventListener('scroll', handleScroll);
       view.scrollDOM.removeEventListener('wheel', handleWheel);
-      view.scrollDOM.removeEventListener('mousedown', cancelWheelSpinOnOtherInput, { capture: true });
+      view.scrollDOM.removeEventListener('pointerdown', cancelWheelSpinOnOtherInput, { capture: true });
+      view.scrollDOM.removeEventListener('pointerdown', handleFingerPanDown);
+      window.removeEventListener('pointermove', handleFingerPanMove);
+      window.removeEventListener('pointerup', handleFingerPanEnd);
+      window.removeEventListener('pointercancel', handleFingerPanEnd);
+      view.scrollDOM.style.touchAction = '';
       view.scrollDOM.removeEventListener('keydown', cancelWheelSpinOnOtherInput, { capture: true });
       stopWheelSpin('unmount');
       window.removeEventListener('keydown', handlePageKeyDownAnywhere);
@@ -5489,11 +5535,13 @@ export function CM6Editor({
       setIsDraggingBottom(false);
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('pointermove', handleMouseMove);
+    window.addEventListener('pointerup', handleMouseUp);
+    window.addEventListener('pointercancel', handleMouseUp);
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('pointermove', handleMouseMove);
+      window.removeEventListener('pointerup', handleMouseUp);
+      window.removeEventListener('pointercancel', handleMouseUp);
     };
     // topBoundaryLines/bottomBoundaryLines/emitUserViewportChange are read
     // fresh at the start of each drag gesture (accurate for the whole
@@ -5547,11 +5595,13 @@ export function CM6Editor({
       requestAnimationFrame(() => syncCustomScrollbar({ force: true }));
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('pointermove', handleMouseMove);
+    window.addEventListener('pointerup', handleMouseUp);
+    window.addEventListener('pointercancel', handleMouseUp);
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('pointermove', handleMouseMove);
+      window.removeEventListener('pointerup', handleMouseUp);
+      window.removeEventListener('pointercancel', handleMouseUp);
     };
   }, [isDraggingScrollThumb, scrollFromThumbTop, syncCustomScrollbar]);
 
@@ -5582,26 +5632,28 @@ export function CM6Editor({
   }, []);
 
   useEffect(() => {
-    const handleWindowMouseUp = (event: MouseEvent) => {
-      if (event.button === 2) stopScrollbarRightHold();
+    const handleWindowMouseUp = (event: PointerEvent) => {
+      if (event.button === 2 || event.type === 'pointercancel') stopScrollbarRightHold();
     };
-    const handleWindowMouseMove = (event: MouseEvent) => {
+    const handleWindowMouseMove = (event: PointerEvent) => {
       const hold = scrollbarRightHoldRef.current;
       const track = scrollbarTrackRef.current;
       if (!hold || !track) return;
       hold.cursorYPx = event.clientY - track.getBoundingClientRect().top;
     };
-    window.addEventListener('mouseup', handleWindowMouseUp);
-    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('pointerup', handleWindowMouseUp);
+    window.addEventListener('pointercancel', handleWindowMouseUp);
+    window.addEventListener('pointermove', handleWindowMouseMove);
     return () => {
-      window.removeEventListener('mouseup', handleWindowMouseUp);
-      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('pointerup', handleWindowMouseUp);
+      window.removeEventListener('pointercancel', handleWindowMouseUp);
+      window.removeEventListener('pointermove', handleWindowMouseMove);
     };
   }, [stopScrollbarRightHold]);
 
   useEffect(() => stopScrollbarRightHold, [stopScrollbarRightHold]);
 
-  const handleTrackRightMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+  const handleTrackRightPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (isEditScrollInteractionBlocked()) return;
 
     const track = scrollbarTrackRef.current;
@@ -5647,11 +5699,11 @@ export function CM6Editor({
     scrollbarRightHoldRef.current.rafId = requestAnimationFrame(watchThumbReachesCursor);
   };
 
-  const handleTrackMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+  const handleTrackPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (isEditScrollInteractionBlocked()) return;
 
     if (event.button === 2) {
-      handleTrackRightMouseDown(event);
+      handleTrackRightPointerDown(event);
       return;
     }
     if (event.button !== 0) return;
@@ -5786,7 +5838,7 @@ export function CM6Editor({
   // no drag to start. Anywhere else is an ordinary track press, read at its
   // exact pixel: the upper and the lower part of one box land differently, and
   // either way that box ends up coloured (see snapThumbSpanToRows).
-  const handleGridTrackMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+  const handleGridTrackPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     const paint = gridScrollPaintRef.current;
     if (paint) {
       const offsetYPx = event.clientY - paint.getBoundingClientRect().top;
@@ -5797,18 +5849,19 @@ export function CM6Editor({
         return;
       }
     }
-    handleTrackMouseDown(event);
+    handleTrackPointerDown(event);
   };
 
   const handleTrackContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
   };
 
-  const handleThumbMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+  const handleThumbPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (isEditScrollInteractionBlocked()) return;
 
     if (event.button !== 0) return;
-    event.preventDefault();
+    // No preventDefault: cancelling a pointerdown suppresses the mousedown
+    // that focusOwnership.ts reads to keep the keyboard where it is.
     event.stopPropagation();
     const scroller = viewRef.current?.scrollDOM;
     if (scroller) {
@@ -6139,7 +6192,7 @@ export function CM6Editor({
       <div
         ref={scrollbarTrackRef}
         className="thockdown-scroll-track"
-        onMouseDown={handleTrackMouseDown}
+        onPointerDown={handleTrackPointerDown}
         data-secondary-press="action"
         onContextMenu={handleTrackContextMenu}
       >
@@ -6150,7 +6203,7 @@ export function CM6Editor({
             top: `${scrollThumbTopPx}px`,
             height: `${Math.max(0, scrollThumbHeightPx)}px`,
           }}
-          onMouseDown={handleThumbMouseDown}
+          onPointerDown={handleThumbPointerDown}
         />
       </div>
     </div>
@@ -6285,15 +6338,15 @@ export function CM6Editor({
           />
           <div
             className="absolute left-0 right-0 z-20 bg-transparent cursor-ns-resize"
-            style={{ top: topHandleTopPx, height: topHandleHeightPx, pointerEvents: boundaryDragHandlesEnabled ? 'auto' : 'none' }}
+            style={{ top: topHandleTopPx, height: topHandleHeightPx, touchAction: 'none', pointerEvents: boundaryDragHandlesEnabled ? 'auto' : 'none' }}
             onWheel={forwardHandleWheelToScroller}
-            onMouseDown={(e) => { e.preventDefault(); setIsDraggingTop(true); }}
+            onPointerDown={(e) => { if (e.button === 0) setIsDraggingTop(true); }}
           />
           <div
             className="absolute left-0 right-0 z-20 bg-transparent cursor-ns-resize"
-            style={{ top: bottomHandleTopPx, height: bottomHandleHeightPx, pointerEvents: boundaryDragHandlesEnabled ? 'auto' : 'none' }}
+            style={{ top: bottomHandleTopPx, height: bottomHandleHeightPx, touchAction: 'none', pointerEvents: boundaryDragHandlesEnabled ? 'auto' : 'none' }}
             onWheel={forwardHandleWheelToScroller}
-            onMouseDown={(e) => { e.preventDefault(); setIsDraggingBottom(true); }}
+            onPointerDown={(e) => { if (e.button === 0) setIsDraggingBottom(true); }}
           />
         </>
       )}
@@ -6313,8 +6366,8 @@ export function CM6Editor({
           <div
             ref={scrollbarTrackRef}
             className="absolute"
-            style={{ top: halfLineHeightPx, left: immersiveScrollColumnLeftPx, width: cellWidthPx, height: immersiveTrackRows * lineHeightPx, zIndex: 11 }}
-            onMouseDown={handleGridTrackMouseDown}
+            style={{ top: halfLineHeightPx, left: immersiveScrollColumnLeftPx, width: cellWidthPx, height: immersiveTrackRows * lineHeightPx, zIndex: 11, touchAction: 'none' }}
+            onPointerDown={handleGridTrackPointerDown}
             data-secondary-press="action"
             onContextMenu={handleTrackContextMenu}
           />

@@ -48,7 +48,8 @@ export function beginScrollTrackHold(handlers: ScrollTrackHoldHandlers): () => v
 
   const cleanUp = () => {
     cancelHold()
-    window.removeEventListener('mouseup', onRelease)
+    window.removeEventListener('pointerup', onRelease)
+    window.removeEventListener('pointercancel', onAbandon)
     window.removeEventListener('blur', onAbandon)
   }
 
@@ -60,7 +61,7 @@ export function beginScrollTrackHold(handlers: ScrollTrackHoldHandlers): () => v
   }
 
   // The window losing focus mid-hold (an OS-level drag away, a shortcut that
-  // opens something else) never delivers the mouseup, which would otherwise
+  // opens something else) never delivers the release, which would otherwise
   // leave the gesture armed and fire a snap the reader never asked for.
   const onAbandon = () => {
     if (resolved) return
@@ -75,7 +76,8 @@ export function beginScrollTrackHold(handlers: ScrollTrackHoldHandlers): () => v
     handlers.onSnap()
   }, SCROLL_TRACK_SNAP_HOLD_MS)
 
-  window.addEventListener('mouseup', onRelease)
+  window.addEventListener('pointerup', onRelease)
+  window.addEventListener('pointercancel', onAbandon)
   window.addEventListener('blur', onAbandon)
 
   return onAbandon

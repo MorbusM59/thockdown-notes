@@ -12,7 +12,7 @@ describe('beginScrollTrackHold', () => {
     const handlers = spies()
     beginScrollTrackHold(handlers)
     vi.advanceTimersByTime(SCROLL_TRACK_SNAP_HOLD_MS - 50)
-    window.dispatchEvent(new MouseEvent('mouseup'))
+    window.dispatchEvent(new Event('pointerup'))
 
     expect(handlers.onTravel).toHaveBeenCalledTimes(1)
     expect(handlers.onSnap).not.toHaveBeenCalled()
@@ -33,7 +33,7 @@ describe('beginScrollTrackHold', () => {
     const handlers = spies()
     beginScrollTrackHold(handlers)
     vi.advanceTimersByTime(SCROLL_TRACK_SNAP_HOLD_MS + 500)
-    window.dispatchEvent(new MouseEvent('mouseup'))
+    window.dispatchEvent(new Event('pointerup'))
 
     expect(handlers.onSnap).toHaveBeenCalledTimes(1)
     expect(handlers.onTravel).not.toHaveBeenCalled()
@@ -45,14 +45,14 @@ describe('beginScrollTrackHold', () => {
     const abandon = beginScrollTrackHold(handlers)
     abandon()
     vi.advanceTimersByTime(SCROLL_TRACK_SNAP_HOLD_MS + 500)
-    window.dispatchEvent(new MouseEvent('mouseup'))
+    window.dispatchEvent(new Event('pointerup'))
 
     expect(handlers.onSnap).not.toHaveBeenCalled()
     expect(handlers.onTravel).not.toHaveBeenCalled()
   })
 
   it('abandons rather than snapping when the window loses focus mid-hold', () => {
-    // No mouseup is ever delivered in that case, so an armed gesture would
+    // No release is ever delivered in that case, so an armed gesture would
     // otherwise fire a snap the reader never asked for.
     const handlers = spies()
     beginScrollTrackHold(handlers)

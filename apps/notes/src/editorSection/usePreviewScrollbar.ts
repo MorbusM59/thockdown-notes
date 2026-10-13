@@ -1,6 +1,6 @@
 import { SCROLL_TRACK_EDGE_GAP_PX } from '@thockdown/interaction/scrollTrackGeometry'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { MouseEvent, MutableRefObject } from 'react'
+import type { MouseEvent, MutableRefObject, PointerEvent } from 'react'
 import type { PreviewDocumentPositionApi } from './usePreviewMarkdownRendering'
 import { beginScrollTrackHold } from '../editor/scrollTrackHold'
 import { registerScrollBridge } from '../editor/scrollBridge'
@@ -647,7 +647,7 @@ export function usePreviewScrollbar({
   useEffect(() => {
     if (!isDraggingPreviewScrollThumb) return
 
-    const onMouseMove = (event: globalThis.MouseEvent) => {
+    const onMouseMove = (event: globalThis.PointerEvent) => {
       const origin = previewScrollbarDragOriginRef.current
       if (!origin) return
       const deltaY = event.clientY - origin.pointerY
@@ -660,11 +660,13 @@ export function usePreviewScrollbar({
       requestAnimationFrame(() => syncPreviewCustomScrollbar({ force: true }))
     }
 
-    window.addEventListener('mousemove', onMouseMove)
-    window.addEventListener('mouseup', onMouseUp)
+    window.addEventListener('pointermove', onMouseMove)
+    window.addEventListener('pointerup', onMouseUp)
+    window.addEventListener('pointercancel', onMouseUp)
     return () => {
-      window.removeEventListener('mousemove', onMouseMove)
-      window.removeEventListener('mouseup', onMouseUp)
+      window.removeEventListener('pointermove', onMouseMove)
+      window.removeEventListener('pointerup', onMouseUp)
+      window.removeEventListener('pointercancel', onMouseUp)
     }
   }, [isDraggingPreviewScrollThumb, previewScrollFromThumbTop, syncPreviewCustomScrollbar])
 
@@ -698,26 +700,28 @@ export function usePreviewScrollbar({
   }, [])
 
   useEffect(() => {
-    const handleWindowMouseUp = (event: globalThis.MouseEvent) => {
-      if (event.button === 2) stopPreviewScrollbarRightHold()
+    const handleWindowMouseUp = (event: globalThis.PointerEvent) => {
+      if (event.button === 2 || event.type === 'pointercancel') stopPreviewScrollbarRightHold()
     }
-    const handleWindowMouseMove = (event: globalThis.MouseEvent) => {
+    const handleWindowMouseMove = (event: globalThis.PointerEvent) => {
       const hold = previewScrollbarRightHoldRef.current
       const track = previewScrollbarTrackRef.current
       if (!hold || !track) return
       hold.cursorYPx = event.clientY - track.getBoundingClientRect().top
     }
-    window.addEventListener('mouseup', handleWindowMouseUp)
-    window.addEventListener('mousemove', handleWindowMouseMove)
+    window.addEventListener('pointerup', handleWindowMouseUp)
+    window.addEventListener('pointercancel', handleWindowMouseUp)
+    window.addEventListener('pointermove', handleWindowMouseMove)
     return () => {
-      window.removeEventListener('mouseup', handleWindowMouseUp)
-      window.removeEventListener('mousemove', handleWindowMouseMove)
+      window.removeEventListener('pointerup', handleWindowMouseUp)
+      window.removeEventListener('pointercancel', handleWindowMouseUp)
+      window.removeEventListener('pointermove', handleWindowMouseMove)
     }
   }, [stopPreviewScrollbarRightHold])
 
   useEffect(() => stopPreviewScrollbarRightHold, [stopPreviewScrollbarRightHold])
 
-  const handlePreviewTrackRightMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
+  const handlePreviewTrackRightPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
     if (shouldBlockPreviewInteraction()) return
     const track = previewScrollbarTrackRef.current
     if (!track) return
@@ -767,14 +771,14 @@ export function usePreviewScrollbar({
     event.preventDefault()
   }, [])
 
-  const handlePreviewTrackMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
+  const handlePreviewTrackPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
     if (shouldBlockPreviewInteraction()) return
     // The scrollbar is not inside the scroller, so the coast's own
     // mousedown listener never sees a click here -- and a reader reaching
     // for the thumb has plainly stopped being carried along.
     stopPreviewWheelSpin('scrollbar')
     if (event.button === 2) {
-      handlePreviewTrackRightMouseDown(event)
+      handlePreviewTrackRightPointerDown(event)
       return
     }
     if (event.button !== 0) return
@@ -934,20 +938,21 @@ export function usePreviewScrollbar({
         goTo(false)
       },
     })
-  }, [previewScrollRef, shouldBlockPreviewInteraction, stopPreviewWheelSpin, handlePreviewTrackRightMouseDown, previewDocumentPositionRef, startThumbRubberBand, stopThumbRubberBand, syncPreviewCustomScrollbar])
+  }, [previewScrollRef, shouldBlockPreviewInteraction, stopPreviewWheelSpin, handlePreviewTrackRightPointerDown, previewDocumentPositionRef, startThumbRubberBand, stopThumbRubberBand, syncPreviewCustomScrollbar])
 
   // A gesture in flight when this unmounts would otherwise fire its snap into
   // a torn-down pane.
   useEffect(() => () => { trackHoldCancelRef.current?.() }, [])
 
-  const handlePreviewThumbMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
+  const handlePreviewThumbPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
     if (shouldBlockPreviewInteraction()) return
     stopPreviewWheelSpin('scrollbar')
     if (event.button !== 0) return
-    event.preventDefault()
+    // No preventDefault: cancelling a pointerdown suppresses the mousedown
+    // that focusOwnership.ts reads to keep the keyboard where it is.
     event.stopPropagation()
     // The borrow belongs to the drag effect above, which runs before any
-    // mousemove can be delivered.
+    // pointermove can be delivered.
     setIsDraggingPreviewScrollThumb(true)
     previewScrollbarDragOriginRef.current = {
       pointerY: event.clientY,
@@ -1841,9 +1846,9 @@ export function usePreviewScrollbar({
     isPreviewScrollThumbActive,
     isDraggingPreviewScrollThumb,
     syncPreviewCustomScrollbar,
-    handlePreviewTrackMouseDown,
+    handlePreviewTrackPointerDown,
     handlePreviewTrackContextMenu,
-    handlePreviewThumbMouseDown,
+    handlePreviewThumbPointerDown,
     handlePreviewScroll,
     blockPreviewEditMutation,
     travelPreviewToRatio,
