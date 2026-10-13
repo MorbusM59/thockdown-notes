@@ -970,6 +970,9 @@
   bottom: 0;
   left: 0;
   width: 100cqw;
+  /* The reset caps every img at its containing block, which here is the
+   * column that narrows on hover; the image must keep the card's width. */
+  max-width: none;
   height: 100%;
   object-fit: cover;
   opacity: 0.35;
