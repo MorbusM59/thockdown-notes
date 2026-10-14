@@ -84,7 +84,7 @@ describe('buildCaretBlinkKeyframesCss', () => {
     // The 65% apex scales every surface's own alpha by 0.9.
     expect(css).toContain('background-color: rgba(0, 0, 0, 0.27)')
     expect(css).toContain('outline-color: rgba(10, 20, 30, 0.72)')
-    expect(css).toContain('box-shadow: 0 0 0px 6px rgba(200, 100, 50, 0.45)')
+    expect(css).toContain('box-shadow: 0 0 calc(0px + var(--flow-halo-blur, 0px)) calc(6px + var(--flow-halo-spread, 0px)) rgba(200, 100, 50, 0.45)')
   })
 
   it('leaves the animation unquantized at frame durations shorter than a display frame', () => {
@@ -169,9 +169,9 @@ describe('buildCaretBlinkKeyframesCss', () => {
   it('carries blur and spread independently into the halo shadow', () => {
     // Blur without spread is a legitimate look (it feathers the caret's own
     // edge outward), so neither value may be folded into the other.
-    expect(build({ haloBlurPx: 4 })).toContain('box-shadow: 0 0 4px 6px rgba(200, 100, 50,')
-    expect(build({ haloSpreadPx: 0, haloBlurPx: 9 })).toContain('box-shadow: 0 0 9px 0px rgba(200, 100, 50,')
-    expect(build({ haloBlurPx: -3 })).toContain('box-shadow: 0 0 0px 6px rgba(200, 100, 50,')
+    expect(build({ haloBlurPx: 4 })).toContain('box-shadow: 0 0 calc(4px + var(--flow-halo-blur, 0px)) calc(6px + var(--flow-halo-spread, 0px)) rgba(200, 100, 50,')
+    expect(build({ haloSpreadPx: 0, haloBlurPx: 9 })).toContain('box-shadow: 0 0 calc(9px + var(--flow-halo-blur, 0px)) calc(0px + var(--flow-halo-spread, 0px)) rgba(200, 100, 50,')
+    expect(build({ haloBlurPx: -3 })).toContain('box-shadow: 0 0 calc(0px + var(--flow-halo-blur, 0px)) calc(6px + var(--flow-halo-spread, 0px)) rgba(200, 100, 50,')
   })
 
   it('blends the shape toward a static caret as effect strength drops', () => {
@@ -190,7 +190,7 @@ describe('buildCaretBlinkKeyframesCss', () => {
     // Each surface lands on its own colour's own alpha, untouched.
     expect(css).toContain('background-color: rgba(0, 0, 0, 0.3)')
     expect(css).toContain('outline-color: rgba(10, 20, 30, 0.8)')
-    expect(css).toContain('box-shadow: 0 0 0px 6px rgba(200, 100, 50, 0.5)')
+    expect(css).toContain('box-shadow: 0 0 calc(0px + var(--flow-halo-blur, 0px)) calc(6px + var(--flow-halo-spread, 0px)) rgba(200, 100, 50, 0.5)')
   })
 
   it('leaves a zero-strength blink with nothing to repaint', () => {
