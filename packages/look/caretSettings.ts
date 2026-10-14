@@ -318,23 +318,26 @@ function formatNumber(value: number, decimals = 3): string {
  * keyframes DISCRETELY, flipping between stop values instead of ramping
  * between them, which silently reduced the whole blink to four hard steps and
  * made the frame setting invisible. Newer Chromium interpolates them fine,
- * which is exactly why it survived review. Plain rgba() interpolates
- * everywhere -- do not reintroduce color-mix() or var() into these stops.
+ * which is exactly why the flow's alpha adjustments are the only deliberate
+ * `var()` exception here. Keep them limited to alpha math; do not add
+ * `color-mix()` or unrelated variables to the animated stops.
  */
 /**
- * As scaledRgba, with the typing flow's alpha boost on top: the alpha moves a
- * share of the way to opaque, `a + (1 - a) * --flow-caret-alpha` (set on
- * <html> by flow/useFlowFeedback.ts; absent, it is 0 and this is the plain
- * stop). A share of what is left, so it never passes 1.
+ * The flow blends the animated alpha toward the colour's own alpha, which is
+ * the static caret at zero effect strength. The outline and halo also keep
+ * their existing flow opacity boost, moving a share of the way to opaque.
  */
-function flowBoostedRgba(color: RgbaColor, alphaScale: number): string {
-  const alpha = formatNumber(clampAlphaChannel(color.a * Math.max(0, Math.min(1, alphaScale))), 4)
-  return `rgba(${clampColorChannel(color.r)}, ${clampColorChannel(color.g)}, ${clampColorChannel(color.b)}, calc(${alpha} + (1 - ${alpha}) * var(--flow-caret-alpha, 0)))`
-}
-
-function scaledRgba(color: RgbaColor, alphaScale: number): string {
-  const alpha = clampAlphaChannel(color.a * Math.max(0, Math.min(1, alphaScale)))
-  return `rgba(${clampColorChannel(color.r)}, ${clampColorChannel(color.g)}, ${clampColorChannel(color.b)}, ${formatNumber(alpha, 4)})`
+function flowAdjustedRgba(color: RgbaColor, alphaScale: number, boostOpacity: boolean): string {
+  const baseAlpha = formatNumber(clampAlphaChannel(color.a), 4)
+  const animatedAlpha = formatNumber(
+    clampAlphaChannel(color.a * Math.max(0, Math.min(1, alphaScale))),
+    4,
+  )
+  const effectAlpha = `${animatedAlpha} + (${baseAlpha} - ${animatedAlpha}) * var(--flow-caret-effect, 0)`
+  const alpha = boostOpacity
+    ? `calc(${effectAlpha} + (1 - (${effectAlpha})) * var(--flow-caret-alpha, 0))`
+    : `calc(${effectAlpha})`
+  return `rgba(${clampColorChannel(color.r)}, ${clampColorChannel(color.g)}, ${clampColorChannel(color.b)}, ${alpha})`
 }
 
 /**
@@ -465,13 +468,11 @@ export function buildCaretBlinkKeyframesCss(options: CaretBlinkKeyframeOptions):
     // one object rather than a ring around a blinking centre.
     const alpha = resolveEffectiveAlpha(stop.alpha, effectStrengthPercent)
     const declarations = [
-      `background-color: ${scaledRgba(fill, alpha)};`,
-      `outline-color: ${flowBoostedRgba(outline, alpha)};`,
-      // The typing flow grows the halo by adding to its two lengths
-      // (flow/useFlowFeedback.ts sets the variables on <html>; absent, they
-      // add nothing). The fill stays plain rgba; the outline and halo
-      // colours carry the flow's alpha boost (flowBoostedRgba).
-      `box-shadow: 0 0 calc(${blur}px + var(--flow-halo-blur, 0px)) calc(${spread}px + var(--flow-halo-spread, 0px)) ${flowBoostedRgba(halo, alpha)};`,
+      `background-color: ${flowAdjustedRgba(fill, alpha, false)};`,
+      `outline-color: ${flowAdjustedRgba(outline, alpha, true)};`,
+      // Flow grows the halo's lengths and blends the blink toward the static
+      // caret; only the outline and halo also receive the opacity boost.
+      `box-shadow: 0 0 calc(${blur}px + var(--flow-halo-blur, 0px)) calc(${spread}px + var(--flow-halo-spread, 0px)) ${flowAdjustedRgba(halo, alpha, true)};`,
     ]
     return `  ${formatNumber(stop.atPercent, 4)}% { ${declarations.join(' ')} }`
   })

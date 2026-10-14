@@ -258,6 +258,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - Arrow keys, Backspace, Delete and undo end the streak, and a pause lets it fade.
 - In flow, each character you type leaves a faint box that fades behind the caret; its colour is under Colors, in Boxes.
 - **build** and **fade** set how quickly flow comes and goes; **look**, **reverb** and **caret** set how strongly each answers.
+- The flow's **caret** strength also eases the blink's **Effect** (under Caret) toward 0; at full flow and full strength, the caret holds steady at its own colours.
 `,
   `## Internal Linking
 

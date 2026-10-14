@@ -34,8 +34,11 @@ const stopsOf = (css: string) => css.trim().split('\n').slice(1, -1)
 const percentsOf = (css: string) =>
   stopsOf(css).map((line) => Number(line.trim().match(/^([\d.]+)%/)![1]))
 
+const fillAlphaExpressionsOf = (css: string) =>
+  [...css.matchAll(/background-color: rgba\([^,]+,\s*[^,]+,\s*[^,]+,\s*(.*?)\);/g)].map((match) => match[1])
+
 const fillAlphasOf = (css: string) =>
-  [...css.matchAll(/background-color: rgba\([^)]*?,\s*([\d.]+)\)/g)].map((match) => Number(match[1]))
+  fillAlphaExpressionsOf(css).map((alpha) => Number(alpha.match(/^calc\(([\d.]+)/)?.[1]))
 
 describe('resolveCaretSegmentStepCount', () => {
   it('honours the keyframe when a frame is longer than the segment', () => {
@@ -73,8 +76,8 @@ describe('buildCaretBlinkKeyframesCss', () => {
       for (const frameDurationMs of [CARET_FRAME_DURATION_MIN_MS, 100, CARET_FRAME_DURATION_MAX_MS]) {
         const css = build({ presetKey, frameDurationMs })
         expect(css).not.toContain('color-mix')
-        // The flow's halo growth and alpha boost are the only var()s.
-        expect(css.replace(/var\(--flow-(halo-blur|halo-spread|caret-alpha), 0p?x?\)/g, '')).not.toContain('var(')
+        // Flow's halo growth, effect blend and alpha boost are the only var()s.
+        expect(css.replace(/var\(--flow-(halo-blur|halo-spread|caret-alpha|caret-effect), 0p?x?\)/g, '')).not.toContain('var(')
       }
     }
   })
@@ -82,9 +85,9 @@ describe('buildCaretBlinkKeyframesCss', () => {
   it('resolves each surface off its own colour, scaling only alpha', () => {
     const css = build({ presetKey: 'bigBeat' })
     // The 65% apex scales every surface's own alpha by 0.9.
-    expect(css).toContain('background-color: rgba(0, 0, 0, 0.27)')
-    expect(css).toContain('outline-color: rgba(10, 20, 30, calc(0.72 + (1 - 0.72) * var(--flow-caret-alpha, 0)))')
-    expect(css).toContain('box-shadow: 0 0 calc(0px + var(--flow-halo-blur, 0px)) calc(6px + var(--flow-halo-spread, 0px)) rgba(200, 100, 50, calc(0.45 + (1 - 0.45) * var(--flow-caret-alpha, 0)))')
+    expect(css).toContain('background-color: rgba(0, 0, 0, calc(0.27 + (0.3 - 0.27) * var(--flow-caret-effect, 0)))')
+    expect(css).toContain('outline-color: rgba(10, 20, 30, calc(0.72 + (0.8 - 0.72) * var(--flow-caret-effect, 0) + (1 - (0.72 + (0.8 - 0.72) * var(--flow-caret-effect, 0))) * var(--flow-caret-alpha, 0)))')
+    expect(css).toContain('box-shadow: 0 0 calc(0px + var(--flow-halo-blur, 0px)) calc(6px + var(--flow-halo-spread, 0px)) rgba(200, 100, 50, calc(0.45 + (0.5 - 0.45) * var(--flow-caret-effect, 0) + (1 - (0.45 + (0.5 - 0.45) * var(--flow-caret-effect, 0))) * var(--flow-caret-alpha, 0)))')
   })
 
   it('leaves the animation unquantized at frame durations shorter than a display frame', () => {
@@ -188,9 +191,22 @@ describe('buildCaretBlinkKeyframesCss', () => {
   it('blends every surface by the same amount', () => {
     const css = build({ presetKey: 'bigBeat', effectStrengthPercent: 0 })
     // Each surface lands on its own colour's own alpha, untouched.
-    expect(css).toContain('background-color: rgba(0, 0, 0, 0.3)')
-    expect(css).toContain('outline-color: rgba(10, 20, 30, calc(0.8 + (1 - 0.8) * var(--flow-caret-alpha, 0)))')
-    expect(css).toContain('box-shadow: 0 0 calc(0px + var(--flow-halo-blur, 0px)) calc(6px + var(--flow-halo-spread, 0px)) rgba(200, 100, 50, calc(0.5 + (1 - 0.5) * var(--flow-caret-alpha, 0)))')
+    expect(css).toContain('background-color: rgba(0, 0, 0, calc(0.3 + (0.3 - 0.3) * var(--flow-caret-effect, 0)))')
+    expect(css).toContain('outline-color: rgba(10, 20, 30, calc(0.8 + (0.8 - 0.8) * var(--flow-caret-effect, 0) + (1 - (0.8 + (0.8 - 0.8) * var(--flow-caret-effect, 0))) * var(--flow-caret-alpha, 0)))')
+    expect(css).toContain('box-shadow: 0 0 calc(0px + var(--flow-halo-blur, 0px)) calc(6px + var(--flow-halo-spread, 0px)) rgba(200, 100, 50, calc(0.5 + (0.5 - 0.5) * var(--flow-caret-effect, 0) + (1 - (0.5 + (0.5 - 0.5) * var(--flow-caret-effect, 0))) * var(--flow-caret-alpha, 0)))')
+  })
+
+  it('blends the effect to zero at full flow without changing the saved strength', () => {
+    const css = build()
+    expect(fillAlphaExpressionsOf(css)).toEqual([
+      'calc(0.18 + (0.3 - 0.18) * var(--flow-caret-effect, 0))',
+      'calc(0.03 + (0.3 - 0.03) * var(--flow-caret-effect, 0))',
+      'calc(0.27 + (0.3 - 0.27) * var(--flow-caret-effect, 0))',
+      'calc(0.09 + (0.3 - 0.09) * var(--flow-caret-effect, 0))',
+      'calc(0.18 + (0.3 - 0.18) * var(--flow-caret-effect, 0))',
+    ])
+    expect(css).toContain('outline-color: rgba(10, 20, 30, calc(0.48 + (0.8 - 0.48) * var(--flow-caret-effect, 0)')
+    expect(css).toContain('rgba(200, 100, 50, calc(0.3 + (0.5 - 0.3) * var(--flow-caret-effect, 0)')
   })
 
   it('leaves a zero-strength blink with nothing to repaint', () => {
