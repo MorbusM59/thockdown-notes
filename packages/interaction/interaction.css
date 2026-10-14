@@ -394,7 +394,8 @@
 }
 
 .options-row-grid-bottom {
-  grid-template-columns: repeat(5, var(--color-grid-cell));
+  /* Six then five: the first row ends with the typing flow trail colour. */
+  grid-template-columns: repeat(6, var(--color-grid-cell));
 }
 
 .options-row-grid-edit-markdown {

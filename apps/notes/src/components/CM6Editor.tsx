@@ -1112,12 +1112,10 @@ export function CM6Editor({
    * coordinates stays on its cell however the view scrolls. Both are written
    * imperatively by updateCaret, and boxes are plain DOM appended per
    * keystroke and removed by their own animationend: no React state per
-   * character. `caretCellRef` is the caret's cell from the last update, in
-   * scroll coordinates -- at keydown that is the cell the character lands in.
+   * character.
    */
   const flowTrailClipRef = useRef<HTMLDivElement | null>(null);
   const flowTrailLayerRef = useRef<HTMLDivElement | null>(null);
-  const caretCellRef = useRef<{ left: number; top: number; width: number; height: number } | null>(null);
   const [highlightRects, setHighlightRects] = useState<HighlightRect[]>([]);
   // A dragged table cell's drop target: the range of the note it covers,
   // while a drag is over one, drawn in the selection's own highlight
@@ -2173,6 +2171,32 @@ export function CM6Editor({
     setCaretStyle(style);
   }, []);
 
+  /**
+   * The caret's cell in SCROLL coordinates, read from the live DOM selection:
+   * the same arithmetic updateCaret uses, without its visibility checks, so a
+   * keydown can place a flow trail box on the cell it is about to type into.
+   */
+  const readCaretCellInScroll = useCallback((view: EditorView) => {
+    const domSelection = window.getSelection();
+    if (!domSelection || domSelection.rangeCount === 0) return null;
+    const caretRect = readSelectionRect(domSelection, lineHeightPxRef.current, view.contentDOM);
+    if (!caretRect) return null;
+    const scroller = view.scrollDOM;
+    const scrollerRect = scrollerRectRef.current ?? scroller.getBoundingClientRect();
+    const lineHeightPxNow = lineHeightPxRef.current;
+    const cellWidthPx = Math.max(1, cellWidthPxRef.current);
+    const top = quantizeToPhase(resolveCM6CaretTopInScroll(caretRect, scrollerRect.top, scroller.scrollTop), lineHeightPxNow, Math.round(lineHeightPxNow / 2));
+    const left = quantizeToPhase(caretRect.left - scrollerRect.left, cellWidthPx, Math.round(cellWidthPx / 2));
+    const deviation = caretSizeDeviationRef.current;
+    const inset = CARET_INSET_PX - deviation;
+    return {
+      left: left + inset,
+      top: top + inset,
+      width: Math.max(1, cellWidthPx - CARET_INSET_PX + deviation * 2),
+      height: Math.max(1, lineHeightPxNow - CARET_INSET_PX + deviation * 2),
+    };
+  }, []);
+
   const updateCaret = useCallback(() => {
     const view = viewRef.current;
     const layerEl = layerRef.current;
@@ -2255,12 +2279,6 @@ export function CM6Editor({
     const caretWidthPx = Math.max(1, runtimeCellWidthPx - CARET_INSET_PX + (caretSizeDeviation * 2));
     const caretHeightPx = Math.max(1, lineHeightPxNow - CARET_INSET_PX + (caretSizeDeviation * 2));
 
-    caretCellRef.current = {
-      left: absoluteLeft + caretOriginInsetPx,
-      top: quantizedRowTopInScroll + caretOriginInsetPx,
-      width: caretWidthPx,
-      height: caretHeightPx,
-    };
 
     applyCaretStyle({
       // translate(), not translate3d(): a 3D transform is a compositing
@@ -4004,7 +4022,11 @@ export function CM6Editor({
           // nothing, and an IME composition is not keystrokes.
           if (!view.state.readOnly && !event.isComposing) {
             const box = flowMeter.trailBox(event);
-            const cell = caretCellRef.current;
+            // Read the caret's cell NOW rather than from the last caret
+            // update: that update runs on the next frame, so two keys typed
+            // within one frame would otherwise both land on the same cell
+            // and every other character would leave no box of its own.
+            const cell = box ? readCaretCellInScroll(view) : null;
             const trailLayer = flowTrailLayerRef.current;
             if (box && cell && trailLayer) {
               const el = document.createElement('div');

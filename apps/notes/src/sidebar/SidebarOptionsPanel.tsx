@@ -296,7 +296,7 @@ const VIEW_STYLE_OPTIONS: Array<{ key: ViewStyleKey; label: string; family: stri
   { key: 'bubblerone', label: 'Bubbler One', family: "'Bubbler One', 'Segoe UI', sans-serif" },
 ]
 
-const BOX_HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['background', 'grid', 'gridOutline', 'topBackground', 'bottomBackground', 'gutterBackground', 'immersiveScrollThumb', 'reviewLine', 'warningLine', 'lineNumber']
+const BOX_HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['background', 'grid', 'gridOutline', 'topBackground', 'bottomBackground', 'flowTrail', 'gutterBackground', 'immersiveScrollThumb', 'reviewLine', 'warningLine', 'lineNumber']
 const MARKDOWN_HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = [
   'markdownHeadline',
   'markdownList',
@@ -1007,7 +1007,6 @@ export function SidebarOptionsPanel({
     const middleRowHighlightKeys: HighlightColorKey[] = [
       isPreviewMode ? 'textEmbossRender' : 'textEmbossEdit',
       'caret',
-      'flowTrail',
       isPreviewMode ? 'selectionRender' : 'selectionEdit',
       'textBase',
       'textEmbossUi',
@@ -3082,7 +3081,7 @@ export function SidebarOptionsPanel({
                 step={0.01}
                 value={flowSettings.trail}
                 trackLabel="trail"
-                tooltipLabel="Flow caret trail (its colour is in Colors, after the caret)"
+                tooltipLabel="Flow caret trail (its colour is in Colors, Boxes)"
                 ariaLabel="Strength of the flow's caret trail"
                 defaultValue={DEFAULT_FLOW_SETTINGS.trail}
                 onCommit={(value) => setFlowSettings((prev) => ({ ...prev, trail: value }))}
