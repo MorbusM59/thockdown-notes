@@ -256,6 +256,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 - Flow builds when your pace is even and at or above the **pace** you set; **rhythm** sets how much an uneven pace costs.
 - Arrow keys, Backspace, Delete and undo end the streak, and a pause lets it fade.
+- In flow, each character you type leaves a faint box that fades behind the caret; its colour sits after the caret colour under Colors.
 - **build** and **fade** set how quickly flow comes and goes; **look**, **reverb** and **caret** set how strongly each answers.
 `,
   `## Internal Linking

@@ -19,6 +19,10 @@ export interface FlowSettings {
   look: number
   reverb: number
   caret: number
+  /** Strength of the caret trail at a full meter, 0..1. Its colour is the `flowTrail` highlight colour. */
+  trail: number
+  /** Seconds a trail box takes to fade out. */
+  trailFadeSec: number
 }
 
 export const FLOW_THRESHOLD_WPM_MIN = 10
@@ -27,6 +31,8 @@ export const FLOW_BUILD_KEYS_MIN = 20
 export const FLOW_BUILD_KEYS_MAX = 600
 export const FLOW_FADE_SEC_MIN = 0.5
 export const FLOW_FADE_SEC_MAX = 10
+export const FLOW_TRAIL_FADE_SEC_MIN = 0.2
+export const FLOW_TRAIL_FADE_SEC_MAX = 5
 
 export const DEFAULT_FLOW_SETTINGS: FlowSettings = {
   enabled: false,
@@ -37,6 +43,8 @@ export const DEFAULT_FLOW_SETTINGS: FlowSettings = {
   look: 0.5,
   reverb: 0.5,
   caret: 0.5,
+  trail: 0.5,
+  trailFadeSec: 1,
 }
 
 function bounded(value: unknown, min: number, max: number, fallback: number): number {
@@ -55,5 +63,7 @@ export function sanitizeFlowSettings(input: unknown): FlowSettings {
     look: bounded(source.look, 0, 1, d.look),
     reverb: bounded(source.reverb, 0, 1, d.reverb),
     caret: bounded(source.caret, 0, 1, d.caret),
+    trail: bounded(source.trail, 0, 1, d.trail),
+    trailFadeSec: bounded(source.trailFadeSec, FLOW_TRAIL_FADE_SEC_MIN, FLOW_TRAIL_FADE_SEC_MAX, d.trailFadeSec),
   }
 }

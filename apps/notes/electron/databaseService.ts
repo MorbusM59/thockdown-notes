@@ -532,6 +532,7 @@ export function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null
       grid: sanitizeString(highlights.grid, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.grid),
       gutterBackground: sanitizeString(highlights.gutterBackground, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.gutterBackground),
       immersiveScrollThumb: sanitizeString(highlights.immersiveScrollThumb, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.immersiveScrollThumb),
+      ...(typeof highlights.flowTrail === 'string' ? { flowTrail: highlights.flowTrail } : {}),
       reviewLine: sanitizeString(highlights.reviewLine, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.reviewLine),
       warningLine: sanitizeString(highlights.warningLine, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.warningLine),
       lineNumber: sanitizeString(highlights.lineNumber, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.lineNumber),

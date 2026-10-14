@@ -1106,6 +1106,18 @@ export function CM6Editor({
   // The caret's own DOM node, so its new position can be written in the SAME
   // frame that computed it. See applyCaretStyle below for why that matters.
   const caretElRef = useRef<HTMLDivElement | null>(null);
+  /**
+   * The typing flow trail (flowMeter.trailBox): a clip box over the scroller
+   * and, inside it, a layer moved by -scrollTop, so a box placed in SCROLL
+   * coordinates stays on its cell however the view scrolls. Both are written
+   * imperatively by updateCaret, and boxes are plain DOM appended per
+   * keystroke and removed by their own animationend: no React state per
+   * character. `caretCellRef` is the caret's cell from the last update, in
+   * scroll coordinates -- at keydown that is the cell the character lands in.
+   */
+  const flowTrailClipRef = useRef<HTMLDivElement | null>(null);
+  const flowTrailLayerRef = useRef<HTMLDivElement | null>(null);
+  const caretCellRef = useRef<{ left: number; top: number; width: number; height: number } | null>(null);
   const [highlightRects, setHighlightRects] = useState<HighlightRect[]>([]);
   // A dragged table cell's drop target: the range of the note it covers,
   // while a drag is over one, drawn in the selection's own highlight
@@ -2199,6 +2211,16 @@ export function CM6Editor({
     const scrollerRect = scrollerRectRef.current;
     const caretLayerRect = caretLayerRectRef.current;
 
+    // The trail follows the scroll even while the caret is off-screen.
+    const trailClip = flowTrailClipRef.current;
+    const trailLayer = flowTrailLayerRef.current;
+    if (trailClip && trailLayer) {
+      trailClip.style.transform = `translate(${scrollerRect.left - caretLayerRect.left}px, ${scrollerRect.top - caretLayerRect.top}px)`;
+      trailClip.style.width = `${scroller.clientWidth}px`;
+      trailClip.style.height = `${scroller.clientHeight}px`;
+      trailLayer.style.transform = `translate(${-scroller.scrollLeft}px, ${-scroller.scrollTop}px)`;
+    }
+
     const caretTopInScroll = resolveCM6CaretTopInScroll(
       caretRect,
       scrollerRect.top,
@@ -2232,6 +2254,13 @@ export function CM6Editor({
     const caretOriginInsetPx = CARET_INSET_PX - caretSizeDeviation;
     const caretWidthPx = Math.max(1, runtimeCellWidthPx - CARET_INSET_PX + (caretSizeDeviation * 2));
     const caretHeightPx = Math.max(1, lineHeightPxNow - CARET_INSET_PX + (caretSizeDeviation * 2));
+
+    caretCellRef.current = {
+      left: absoluteLeft + caretOriginInsetPx,
+      top: quantizedRowTopInScroll + caretOriginInsetPx,
+      width: caretWidthPx,
+      height: caretHeightPx,
+    };
 
     applyCaretStyle({
       // translate(), not translate3d(): a 3D transform is a compositing
@@ -3973,7 +4002,23 @@ export function CM6Editor({
           // The typing flow meter (flow/flowMeter.ts) hears every key typed
           // into an editable note; a read-only one (the User Guide) types
           // nothing, and an IME composition is not keystrokes.
-          if (!view.state.readOnly && !event.isComposing) flowMeter.reportKey(event);
+          if (!view.state.readOnly && !event.isComposing) {
+            const box = flowMeter.trailBox(event);
+            const cell = caretCellRef.current;
+            const trailLayer = flowTrailLayerRef.current;
+            if (box && cell && trailLayer) {
+              const el = document.createElement('div');
+              el.className = 'flow-trail-box';
+              el.style.transform = `translate(${cell.left}px, ${cell.top}px)`;
+              el.style.width = `${cell.width}px`;
+              el.style.height = `${cell.height}px`;
+              el.style.setProperty('--flow-trail-opacity', box.opacity.toFixed(3));
+              el.style.animationDuration = `${box.fadeSec}s`;
+              el.addEventListener('animationend', () => el.remove(), { once: true });
+              trailLayer.appendChild(el);
+            }
+            flowMeter.reportKey(event);
+          }
           if (debugInputLagEnabled) {
             debugLastKeydownAtRef.current = performance.now();
             debugLastKeyRef.current = event.key;
@@ -6585,6 +6630,14 @@ export function CM6Editor({
           }}
         />
       ))}
+      {/* Always mounted, so a fading trail outlives the caret hiding. Below
+          the caret (8) and the text (10). */}
+      <div
+        ref={flowTrailClipRef}
+        style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 7 }}
+      >
+        <div ref={flowTrailLayerRef} style={{ position: 'absolute', top: 0, left: 0 }} />
+      </div>
       {hasViewportLines && fontReady && !caretHidden && caretStyle && (
         <div
           ref={caretElRef}

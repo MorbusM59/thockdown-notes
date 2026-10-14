@@ -31,6 +31,8 @@ let presented = 0
 let lastFrameSec: number | null = null
 let frameHandle: number | null = null
 const listeners = new Set<Listener>()
+let trailStrength = DEFAULT_FLOW_SETTINGS.trail
+let trailFadeSec = DEFAULT_FLOW_SETTINGS.trailFadeSec
 
 const nowSec = (): number => performance.now() / 1000
 
@@ -85,6 +87,25 @@ export const flowMeter = {
     if (kind === 'ignore') return
     state = kind === 'hit' ? flowHit(state, nowSec(), tuning) : EMPTY_FLOW_STATE
     ensureRunning()
+  },
+
+  /** The caret trail's settings; the editor reads them per keystroke (`trailBox`). */
+  configureTrail(strength: number, fadeSec: number): void {
+    trailStrength = strength
+    trailFadeSec = fadeSec
+  },
+
+  /**
+   * What a box left by this keydown should look like, or null when it should
+   * leave none. Only a CHARACTER or Space leaves one: Enter is a hit for the
+   * meter but types no cell, and a break leaves the existing boxes to fade
+   * out on their own rather than wiping them. Its opacity is the presented
+   * level at the moment of the key, so the trail is as strong as the flow.
+   */
+  trailBox(event: KeyboardEvent): { opacity: number; fadeSec: number } | null {
+    if (!enabled || trailStrength <= 0 || presented <= 0) return null
+    if (event.key.length !== 1 || classifyFlowKey(event) !== 'hit') return null
+    return { opacity: presented * trailStrength, fadeSec: trailFadeSec }
   },
 
   subscribe(listener: Listener): () => void {

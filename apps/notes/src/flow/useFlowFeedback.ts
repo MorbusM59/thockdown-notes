@@ -42,11 +42,15 @@ function setCaretGlow(glow: number): void {
 }
 
 export function useFlowFeedback(settings: FlowSettings): void {
-  const { enabled, thresholdWpm, buildKeys, fadeSec, rhythm, caret, reverb } = settings
+  const { enabled, thresholdWpm, buildKeys, fadeSec, rhythm, caret, reverb, trail, trailFadeSec } = settings
 
   useEffect(() => {
     flowMeter.configure({ enabled, thresholdWpm, buildKeys, fadeSec, rhythm })
   }, [enabled, thresholdWpm, buildKeys, fadeSec, rhythm])
+
+  useEffect(() => {
+    flowMeter.configureTrail(trail, trailFadeSec)
+  }, [trail, trailFadeSec])
 
   useEffect(() => {
     const unsubscribe = flowMeter.subscribe((level) => {

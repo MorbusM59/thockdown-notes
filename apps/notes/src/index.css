@@ -140,6 +140,24 @@
    and a drop shadow is cast by the caret's own pixels, so it blinks with
    the fill without being animated at all. Only while flow is building, so
    at rest the caret has no filter at all. */
+/* The typing flow trail: one box per character typed in flow, in the reader's
+   flowTrail colour, fading out over the trail fade setting (set inline as the
+   animation's duration) from the flow level at the keystroke. */
+.flow-trail-box {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background-color: var(--color-flow-trail);
+  animation-name: flow-trail-fade;
+  animation-timing-function: ease-in;
+  animation-fill-mode: forwards;
+}
+
+@keyframes flow-trail-fade {
+  from { opacity: var(--flow-trail-opacity); }
+  to { opacity: 0; }
+}
+
 html[data-flow-glow] .thockdown-block-caret {
   filter:
     drop-shadow(0 0 var(--flow-caret-near) color-mix(in srgb, var(--color-caret) var(--flow-caret-alpha), transparent))

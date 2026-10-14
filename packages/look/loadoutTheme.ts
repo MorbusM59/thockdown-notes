@@ -414,6 +414,7 @@ export function themeFrame(loadout: ThemeLoadout, options: ThemeOptions): ThemeF
     '--color-grid-bg': colors.grid,
     '--color-gutter-bg': colors.gutterBackground,
     '--color-immersive-scroll-thumb': colors.immersiveScrollThumb,
+    '--color-flow-trail': colors.flowTrail ?? 'transparent',
     '--color-review-line': colors.reviewLine,
     '--color-warning-line': colors.warningLine,
     // Opaque, with the chosen alpha applied as opacity on the whole number:

@@ -11,6 +11,8 @@ import {
   FLOW_BUILD_KEYS_MAX, FLOW_BUILD_KEYS_MIN,
   FLOW_FADE_SEC_MAX, FLOW_FADE_SEC_MIN,
   FLOW_THRESHOLD_WPM_MAX, FLOW_THRESHOLD_WPM_MIN,
+  FLOW_TRAIL_FADE_SEC_MIN,
+  FLOW_TRAIL_FADE_SEC_MAX,
   type FlowSettings,
 } from '../shared/flowSettings'
 import { exportSoundscapes, importSoundscapes } from '@thockdown/soundscape/soundscapeFileActions'
@@ -320,6 +322,7 @@ const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
   grid: 'Box Grid',
   gutterBackground: 'Gutter Background',
   immersiveScrollThumb: 'Immersive Scroll Thumb',
+  flowTrail: 'Typing flow trail color',
   reviewLine: 'Review Flag Color',
   warningLine: 'Warning Flag Color',
   lineNumber: 'Line Number Color',
@@ -350,6 +353,7 @@ const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
   grid: 'fa-solid fa-border-all',
   gutterBackground: 'fa-solid fa-list-ol',
   immersiveScrollThumb: 'fa-solid fa-grip-vertical',
+  flowTrail: 'fa-solid fa-water',
   reviewLine: 'fa-solid fa-question',
   warningLine: 'fa-solid fa-triangle-exclamation',
   lineNumber: 'fa-solid fa-hashtag',
@@ -1003,6 +1007,7 @@ export function SidebarOptionsPanel({
     const middleRowHighlightKeys: HighlightColorKey[] = [
       isPreviewMode ? 'textEmbossRender' : 'textEmbossEdit',
       'caret',
+      'flowTrail',
       isPreviewMode ? 'selectionRender' : 'selectionEdit',
       'textBase',
       'textEmbossUi',
@@ -2980,8 +2985,8 @@ export function SidebarOptionsPanel({
         </div>
         {flowSettings.enabled ? (
           <div className="utility-setting-slider-stack" aria-label="Typing flow settings">
-            {/* What counts (pace, rhythm), how it moves (build, fade), how it answers (look, reverb, caret). */}
-            <OptionsSliderRows rows={[2, 2, 3]}>
+            {/* What counts (pace, rhythm), how it moves (build, fade), how it answers (look, reverb, caret), and the trail. */}
+            <OptionsSliderRows rows={[2, 2, 3, 2]}>
               <CompactScrollbarSlider
                 id="flow-threshold"
                 min={FLOW_THRESHOLD_WPM_MIN}
@@ -3069,6 +3074,30 @@ export function SidebarOptionsPanel({
                 ariaLabel="Strength of the flow's caret glow"
                 defaultValue={DEFAULT_FLOW_SETTINGS.caret}
                 onCommit={(value) => setFlowSettings((prev) => ({ ...prev, caret: value }))}
+              />
+              <CompactScrollbarSlider
+                id="flow-trail"
+                min={0}
+                max={1}
+                step={0.01}
+                value={flowSettings.trail}
+                trackLabel="trail"
+                tooltipLabel="Flow caret trail (its colour is in Colors, after the caret)"
+                ariaLabel="Strength of the flow's caret trail"
+                defaultValue={DEFAULT_FLOW_SETTINGS.trail}
+                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, trail: value }))}
+              />
+              <CompactScrollbarSlider
+                id="flow-trail-fade"
+                min={FLOW_TRAIL_FADE_SEC_MIN}
+                max={FLOW_TRAIL_FADE_SEC_MAX}
+                step={0.1}
+                value={flowSettings.trailFadeSec}
+                trackLabel="trail fade"
+                tooltipLabel="Flow trail fade, in seconds"
+                ariaLabel="Seconds a trail box takes to fade"
+                defaultValue={DEFAULT_FLOW_SETTINGS.trailFadeSec}
+                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, trailFadeSec: value }))}
               />
             </OptionsSliderRows>
           </div>

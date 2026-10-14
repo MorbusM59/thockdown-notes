@@ -508,6 +508,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     highlightGridColor: sanitizeOptionalString(input?.highlightGridColor),
     highlightGutterBackgroundColor: sanitizeOptionalString(input?.highlightGutterBackgroundColor),
     highlightImmersiveScrollThumbColor: sanitizeOptionalString(input?.highlightImmersiveScrollThumbColor),
+    highlightFlowTrailColor: sanitizeOptionalString(input?.highlightFlowTrailColor),
     highlightReviewColor: sanitizeOptionalString(input?.highlightReviewColor),
     highlightWarningColor: sanitizeOptionalString(input?.highlightWarningColor),
     highlightLineNumberColor: sanitizeOptionalString(input?.highlightLineNumberColor),

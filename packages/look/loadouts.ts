@@ -59,6 +59,8 @@ export type UiLayoutLoadout = {
     grid: string;
     gutterBackground: string;
     immersiveScrollThumb: string;
+    /** Optional: loadouts saved before the flow trail existed lack it. */
+    flowTrail?: string;
     reviewLine: string;
     warningLine: string;
     lineNumber: string;

@@ -140,6 +140,7 @@ export interface PersistedMenuState {
   highlightGridColor?: string;
   highlightGutterBackgroundColor?: string;
   highlightImmersiveScrollThumbColor?: string;
+  highlightFlowTrailColor?: string;
   highlightReviewColor?: string;
   highlightWarningColor?: string;
   highlightLineNumberColor?: string;
