@@ -318,3 +318,16 @@ html[data-flow-glow] .thockdown-block-caret {
   right:             0;
   background-repeat: repeat-y;
 }
+
+/* The typing flow's look (flow/FlowOverlays.tsx): blend layers above the
+   filtered scene whose opacity alone follows the flow meter. */
+.flow-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  will-change: opacity;
+}
+.flow-overlay-saturation { background: hsl(0 100% 50%); mix-blend-mode: saturation; }
+.flow-overlay-warmth { background: hsl(30 100% 55%); mix-blend-mode: soft-light; }
+.flow-overlay-glow { background: #ffffff; mix-blend-mode: screen; }

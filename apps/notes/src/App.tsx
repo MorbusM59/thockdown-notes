@@ -126,9 +126,9 @@ import {
   BOX_SHADOW_ALPHA_PERCENT_MIN,
   BOX_SHADOW_ALPHA_PERCENT_MAX,
 } from './shared/uiBounds'
-import { applyDocumentTheme, themeFrame, type ThemeLoadout, type ThemeOptions } from '@thockdown/look/loadoutTheme'
-import { ImageCorrectionFilter, ThemeBlendOverlays } from '@thockdown/look/ThemeLayers'
-import { FlowScene } from './flow/FlowScene'
+import { applyDocumentTheme, themeFrame } from '@thockdown/look/loadoutTheme'
+import { ImageCorrectionFilter, ThemeBlendOverlays, ThemeGlazeLayers } from '@thockdown/look/ThemeLayers'
+import { FlowOverlays } from './flow/FlowOverlays'
 import { useFlowFeedback } from './flow/useFlowFeedback'
 import { DEFAULT_FLOW_SETTINGS, sanitizeFlowSettings, type FlowSettings } from './shared/flowSettings'
 import { DEBUG_TAG_NAME, normalizeTagName } from './shared/tags'
@@ -2316,7 +2316,7 @@ function App() {
   const texturePreviewTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(texturePreviewMaterial.color)), [texturePreviewMaterial.color])
   // Everything the visual loadout decides about the look, in one place
   // (shared/loadoutTheme.ts), which the mobile app uses as well.
-  const themeLoadout = useMemo((): ThemeLoadout => ({
+  const theme = useMemo(() => themeFrame({
     borderRadiusRegularPx,
     spacingRegularPx,
     borderAlphaPercent,
@@ -2331,6 +2331,9 @@ function App() {
     filterContrast,
     filterSaturate,
     filterColorize,
+  }, {
+    reduceVisualEffects,
+    isPreviewMode: activeSectionSnapshot?.isPreviewMode ?? false,
   }), [
     borderRadiusRegularPx,
     spacingRegularPx,
@@ -2346,13 +2349,9 @@ function App() {
     filterContrast,
     filterSaturate,
     filterColorize,
-  ])
-  const isActivePreviewMode = activeSectionSnapshot?.isPreviewMode ?? false
-  const themeOptions = useMemo((): ThemeOptions => ({
     reduceVisualEffects,
-    isPreviewMode: isActivePreviewMode,
-  }), [reduceVisualEffects, isActivePreviewMode])
-  const theme = useMemo(() => themeFrame(themeLoadout, themeOptions), [themeLoadout, themeOptions])
+    activeSectionSnapshot?.isPreviewMode,
+  ])
 
   useEffect(() => {
     const textureApi = window.thockdownTextures
@@ -9033,13 +9032,8 @@ ${markdownHtml}
         </div>
       ) : null}
       <style>{caretBlinkKeyframesCss}</style>
-      <FlowScene
-        loadout={themeLoadout}
-        options={themeOptions}
-        baseFrame={theme}
-        lookStrength={flowSettings.enabled ? flowSettings.look : 0}
-        radialAboveLinear={glazeSettings.radialAboveLinear}
-      >
+      <div className="app-saturate-wrapper" style={{ ...theme.wrapperStyle, position: 'fixed', inset: 0 }}>
+        <ThemeGlazeLayers glaze={theme.glaze} radialAboveLinear={glazeSettings.radialAboveLinear} />
         {/* Mounted here (inside .app-saturate-wrapper, not as a sibling of
             it like MouseCursorOverlay) deliberately -- unlike the cursor
             overlay, tooltips should still pick up this wrapper's own
@@ -10113,7 +10107,9 @@ ${markdownHtml}
         ) : null}
         <ThemeBlendOverlays theme={theme} />
         <ImageCorrectionFilter theme={theme} />
-      </FlowScene>
+      </div>
+      {/* After the filter wrapper, not inside it: see FlowOverlays. */}
+      <FlowOverlays strength={flowSettings.enabled && !reduceVisualEffects ? flowSettings.look : 0} />
       {/* Mounted once, app-wide -- not scoped to the editor. See that
           component's own doc comment for why it's a sibling of
           .app-saturate-wrapper (not nested inside it) and how it tracks the

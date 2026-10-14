@@ -1,7 +1,7 @@
 /**
  * Hands the reader's flow settings to the meter, and the meter's level to the
  * two channels that need no React: the caret's glow (see setCaretGlow) and
- * the reverb send. The look is the third channel and lives in `FlowScene`,
+ * the reverb send. The look is the third channel and lives in `FlowOverlays`,
  * because it has to go through the theme.
  */
 
