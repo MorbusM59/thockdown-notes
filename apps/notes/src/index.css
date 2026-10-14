@@ -134,12 +134,6 @@
   animation: thockdown-blink var(--caret-animation-duration, 1200ms) infinite cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* The typing flow's glow (flow/useFlowFeedback.ts): drop shadows rather
-   than another box-shadow layer, for two reasons. The blink keyframes own
-   box-shadow and must stay free of var() (caretSettings.test.ts says why),
-   and a drop shadow is cast by the caret's own pixels, so it blinks with
-   the fill without being animated at all. Only while flow is building, so
-   at rest the caret has no filter at all. */
 /* The typing flow trail: one box per character typed in flow, in the reader's
    flowTrail colour, fading out over the trail fade setting (set inline as the
    animation's duration) from the flow level at the keystroke. */
@@ -158,11 +152,6 @@
   to { opacity: 0; }
 }
 
-html[data-flow-glow] .thockdown-block-caret {
-  filter:
-    drop-shadow(0 0 var(--flow-caret-near) color-mix(in srgb, var(--color-caret) var(--flow-caret-alpha), transparent))
-    drop-shadow(0 0 var(--flow-caret-far) color-mix(in srgb, var(--color-caret) var(--flow-caret-alpha), transparent));
-}
 
 /* Low-power toggle: the blink otherwise repaints the caret indefinitely while
    idle, not just while typing. */

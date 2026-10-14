@@ -1,6 +1,6 @@
 /**
  * Hands the reader's flow settings to the meter, and the meter's level to the
- * two channels that need no React: the caret's glow (see setCaretGlow) and
+ * two channels that need no React: the caret's glow (see setHaloGrowth) and
  * the reverb send. The look is the third channel and lives in `FlowOverlays`,
  * because it has to go through the theme.
  */
@@ -11,34 +11,24 @@ import { flowMeter } from './flowMeter'
 import { typingSoundManager } from '../sound/TypingSoundManager'
 
 /**
- * The caret glow at full flow and full strength: a tight shadow that reads as
- * the caret thickening and a wide one that reads as light around it, both in
- * the caret's own colour.
+ * At full flow and full strength the caret's own halo (Options > Caret) grows
+ * by this much blur and spread, in its own colour. The blink keyframes add
+ * these variables to the halo's lengths (`buildCaretBlinkKeyframesCss`), so
+ * the flow draws nothing of its own: a halo of zero size still grows, and one
+ * whose colour is transparent stays invisible.
  */
-const CARET_GLOW_NEAR_PX = 2.5
-const CARET_GLOW_FAR_PX = 12
-const CARET_GLOW_ALPHA_PERCENT = 85
+const HALO_GROW_BLUR_PX = 12
+const HALO_GROW_SPREAD_PX = 2.5
 
-const CARET_GLOW_VARIABLES = ['--flow-caret-near', '--flow-caret-far', '--flow-caret-alpha'] as const
-
-/**
- * The glow is drawn by a rule in index.css that applies only while the
- * document carries `data-flow-glow`, so at rest the caret has no filter at
- * all. Its sizes are plain values here, and its colour is mixed in the rule
- * itself, because `--color-caret` belongs to the app root rather than to the
- * document, and a variable resolves where it is declared.
- */
-function setCaretGlow(glow: number): void {
+function setHaloGrowth(grow: number): void {
   const root = document.documentElement
-  if (glow <= 0) {
-    root.removeAttribute('data-flow-glow')
-    for (const name of CARET_GLOW_VARIABLES) root.style.removeProperty(name)
+  if (grow <= 0) {
+    root.style.removeProperty('--flow-halo-blur')
+    root.style.removeProperty('--flow-halo-spread')
     return
   }
-  root.style.setProperty('--flow-caret-near', `${(glow * CARET_GLOW_NEAR_PX).toFixed(2)}px`)
-  root.style.setProperty('--flow-caret-far', `${(glow * CARET_GLOW_FAR_PX).toFixed(2)}px`)
-  root.style.setProperty('--flow-caret-alpha', `${(glow * CARET_GLOW_ALPHA_PERCENT).toFixed(1)}%`)
-  root.setAttribute('data-flow-glow', '')
+  root.style.setProperty('--flow-halo-blur', `${(grow * HALO_GROW_BLUR_PX).toFixed(2)}px`)
+  root.style.setProperty('--flow-halo-spread', `${(grow * HALO_GROW_SPREAD_PX).toFixed(2)}px`)
 }
 
 export function useFlowFeedback(settings: FlowSettings): void {
@@ -54,12 +44,12 @@ export function useFlowFeedback(settings: FlowSettings): void {
 
   useEffect(() => {
     const unsubscribe = flowMeter.subscribe((level) => {
-      setCaretGlow(level * caret)
+      setHaloGrowth(level * caret)
       typingSoundManager.setFlowReverb(level * reverb)
     })
     return () => {
       unsubscribe()
-      setCaretGlow(0)
+      setHaloGrowth(0)
       typingSoundManager.setFlowReverb(0)
     }
   }, [caret, reverb])

@@ -68,12 +68,13 @@ describe('buildCaretBlinkKeyframesCss', () => {
    * of the heartbeat. Newer Chromium interpolates them, so only a real build
    * showed it.
    */
-  it('emits plain rgba stops, never color-mix() or var()', () => {
+  it('emits plain rgba colour stops, never color-mix() or var() in a colour', () => {
     for (const presetKey of CARET_ANIMATION_PRESET_KEYS) {
       for (const frameDurationMs of [CARET_FRAME_DURATION_MIN_MS, 100, CARET_FRAME_DURATION_MAX_MS]) {
         const css = build({ presetKey, frameDurationMs })
         expect(css).not.toContain('color-mix')
-        expect(css).not.toContain('var(')
+        // The flow's halo growth is the one var(), and it is in the lengths only.
+        expect(css.replace(/var\(--flow-halo-(blur|spread), 0px\)/g, '')).not.toContain('var(')
       }
     }
   })

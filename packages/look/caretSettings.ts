@@ -456,7 +456,11 @@ export function buildCaretBlinkKeyframesCss(options: CaretBlinkKeyframeOptions):
     const declarations = [
       `background-color: ${scaledRgba(fill, alpha)};`,
       `outline-color: ${scaledRgba(outline, alpha)};`,
-      `box-shadow: 0 0 ${blur}px ${spread}px ${scaledRgba(halo, alpha)};`,
+      // The typing flow grows the halo by adding to its two lengths
+      // (flow/useFlowFeedback.ts sets the variables on <html>; absent, they
+      // add nothing). Lengths only: a var() in a COLOUR is what animated
+      // discretely in Chromium 124 (see caretSettings.test.ts).
+      `box-shadow: 0 0 calc(${blur}px + var(--flow-halo-blur, 0px)) calc(${spread}px + var(--flow-halo-spread, 0px)) ${scaledRgba(halo, alpha)};`,
     ]
     return `  ${formatNumber(stop.atPercent, 4)}% { ${declarations.join(' ')} }`
   })
