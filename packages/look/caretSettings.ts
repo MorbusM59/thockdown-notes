@@ -321,6 +321,17 @@ function formatNumber(value: number, decimals = 3): string {
  * which is exactly why it survived review. Plain rgba() interpolates
  * everywhere -- do not reintroduce color-mix() or var() into these stops.
  */
+/**
+ * As scaledRgba, with the typing flow's alpha boost on top: the alpha moves a
+ * share of the way to opaque, `a + (1 - a) * --flow-caret-alpha` (set on
+ * <html> by flow/useFlowFeedback.ts; absent, it is 0 and this is the plain
+ * stop). A share of what is left, so it never passes 1.
+ */
+function flowBoostedRgba(color: RgbaColor, alphaScale: number): string {
+  const alpha = formatNumber(clampAlphaChannel(color.a * Math.max(0, Math.min(1, alphaScale))), 4)
+  return `rgba(${clampColorChannel(color.r)}, ${clampColorChannel(color.g)}, ${clampColorChannel(color.b)}, calc(${alpha} + (1 - ${alpha}) * var(--flow-caret-alpha, 0)))`
+}
+
 function scaledRgba(color: RgbaColor, alphaScale: number): string {
   const alpha = clampAlphaChannel(color.a * Math.max(0, Math.min(1, alphaScale)))
   return `rgba(${clampColorChannel(color.r)}, ${clampColorChannel(color.g)}, ${clampColorChannel(color.b)}, ${formatNumber(alpha, 4)})`
@@ -455,12 +466,12 @@ export function buildCaretBlinkKeyframesCss(options: CaretBlinkKeyframeOptions):
     const alpha = resolveEffectiveAlpha(stop.alpha, effectStrengthPercent)
     const declarations = [
       `background-color: ${scaledRgba(fill, alpha)};`,
-      `outline-color: ${scaledRgba(outline, alpha)};`,
+      `outline-color: ${flowBoostedRgba(outline, alpha)};`,
       // The typing flow grows the halo by adding to its two lengths
       // (flow/useFlowFeedback.ts sets the variables on <html>; absent, they
-      // add nothing). Lengths only: a var() in a COLOUR is what animated
-      // discretely in Chromium 124 (see caretSettings.test.ts).
-      `box-shadow: 0 0 calc(${blur}px + var(--flow-halo-blur, 0px)) calc(${spread}px + var(--flow-halo-spread, 0px)) ${scaledRgba(halo, alpha)};`,
+      // add nothing). The fill stays plain rgba; the outline and halo
+      // colours carry the flow's alpha boost (flowBoostedRgba).
+      `box-shadow: 0 0 calc(${blur}px + var(--flow-halo-blur, 0px)) calc(${spread}px + var(--flow-halo-spread, 0px)) ${flowBoostedRgba(halo, alpha)};`,
     ]
     return `  ${formatNumber(stop.atPercent, 4)}% { ${declarations.join(' ')} }`
   })

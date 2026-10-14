@@ -73,8 +73,8 @@ describe('buildCaretBlinkKeyframesCss', () => {
       for (const frameDurationMs of [CARET_FRAME_DURATION_MIN_MS, 100, CARET_FRAME_DURATION_MAX_MS]) {
         const css = build({ presetKey, frameDurationMs })
         expect(css).not.toContain('color-mix')
-        // The flow's halo growth is the one var(), and it is in the lengths only.
-        expect(css.replace(/var\(--flow-halo-(blur|spread), 0px\)/g, '')).not.toContain('var(')
+        // The flow's halo growth and alpha boost are the only var()s.
+        expect(css.replace(/var\(--flow-(halo-blur|halo-spread|caret-alpha), 0p?x?\)/g, '')).not.toContain('var(')
       }
     }
   })
@@ -83,8 +83,8 @@ describe('buildCaretBlinkKeyframesCss', () => {
     const css = build({ presetKey: 'bigBeat' })
     // The 65% apex scales every surface's own alpha by 0.9.
     expect(css).toContain('background-color: rgba(0, 0, 0, 0.27)')
-    expect(css).toContain('outline-color: rgba(10, 20, 30, 0.72)')
-    expect(css).toContain('box-shadow: 0 0 calc(0px + var(--flow-halo-blur, 0px)) calc(6px + var(--flow-halo-spread, 0px)) rgba(200, 100, 50, 0.45)')
+    expect(css).toContain('outline-color: rgba(10, 20, 30, calc(0.72 + (1 - 0.72) * var(--flow-caret-alpha, 0)))')
+    expect(css).toContain('box-shadow: 0 0 calc(0px + var(--flow-halo-blur, 0px)) calc(6px + var(--flow-halo-spread, 0px)) rgba(200, 100, 50, calc(0.45 + (1 - 0.45) * var(--flow-caret-alpha, 0)))')
   })
 
   it('leaves the animation unquantized at frame durations shorter than a display frame', () => {
@@ -189,8 +189,8 @@ describe('buildCaretBlinkKeyframesCss', () => {
     const css = build({ presetKey: 'bigBeat', effectStrengthPercent: 0 })
     // Each surface lands on its own colour's own alpha, untouched.
     expect(css).toContain('background-color: rgba(0, 0, 0, 0.3)')
-    expect(css).toContain('outline-color: rgba(10, 20, 30, 0.8)')
-    expect(css).toContain('box-shadow: 0 0 calc(0px + var(--flow-halo-blur, 0px)) calc(6px + var(--flow-halo-spread, 0px)) rgba(200, 100, 50, 0.5)')
+    expect(css).toContain('outline-color: rgba(10, 20, 30, calc(0.8 + (1 - 0.8) * var(--flow-caret-alpha, 0)))')
+    expect(css).toContain('box-shadow: 0 0 calc(0px + var(--flow-halo-blur, 0px)) calc(6px + var(--flow-halo-spread, 0px)) rgba(200, 100, 50, calc(0.5 + (1 - 0.5) * var(--flow-caret-alpha, 0)))')
   })
 
   it('leaves a zero-strength blink with nothing to repaint', () => {
