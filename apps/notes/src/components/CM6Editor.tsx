@@ -2211,6 +2211,7 @@ export function CM6Editor({
     const selectionRange = view.state.selection.main;
     if (!selectionRange.empty) {
       setCaretStyle(null);
+      if (flowTrailHeadRef.current) flowTrailHeadRef.current.style.display = 'none';
       return;
     }
 
@@ -2284,6 +2285,18 @@ export function CM6Editor({
     const caretOriginInsetPx = CARET_INSET_PX - caretSizeDeviation;
     const caretWidthPx = Math.max(1, runtimeCellWidthPx - CARET_INSET_PX + (caretSizeDeviation * 2));
     const caretHeightPx = Math.max(1, lineHeightPxNow - CARET_INSET_PX + (caretSizeDeviation * 2));
+
+    // The flow trail's leading edge: the caret's grid cell traced on its
+    // top, bottom and right grid lines, in scroll coordinates like the trail
+    // boxes, so the trail reads as a rectangle closed at the caret. Its
+    // opacity is the live flow (--flow-trail-head), with no decay of its own.
+    const trailHead = flowTrailHeadRef.current;
+    if (trailHead) {
+      trailHead.style.display = '';
+      trailHead.style.transform = `translate(${absoluteLeft}px, ${quantizedRowTopInScroll}px)`;
+      trailHead.style.width = `${runtimeCellWidthPx + 1}px`;
+      trailHead.style.height = `${lineHeightPxNow + 1}px`;
+    }
 
 
     applyCaretStyle({
@@ -4036,25 +4049,18 @@ export function CM6Editor({
             const trailLayer = flowTrailLayerRef.current;
             if (box && cell && trailLayer) {
               // The trail traces the 1px grid lines above and below each
-              // cell (the grid cell, not the caret's inset box), segments
-              // abutting so the lines run continuously; nothing is drawn
-              // inside the cell, so it never sits behind a glyph. It reaches
-              // up to and including the caret's cell: the cell the character
-              // lands in gets a segment, and so does the cell after it, where
-              // the caret now is; that one is replaced by the next key's own.
-              flowTrailHeadRef.current?.remove();
-              const place = (left: number): HTMLDivElement => {
-                const el = document.createElement('div');
-                el.className = 'flow-trail-box';
-                el.style.transform = `translate(${left}px, ${cell.grid.top}px)`;
-                el.style.width = `${cell.grid.width}px`;
-                el.style.height = `${cell.grid.height + 1}px`;
-                trailLayer.appendChild(el);
-                flowTrailFade(el, box.opacity, box.decayPercent);
-                return el;
-              };
-              place(cell.grid.left);
-              flowTrailHeadRef.current = place(cell.grid.left + cell.grid.width);
+              // cell the character lands in (the grid cell, not the caret's
+              // inset box), segments abutting so the lines run continuously;
+              // nothing is drawn inside the cell, so it never sits behind a
+              // glyph. Its closed right end is the leading edge, which rides
+              // with the caret (updateCaret) rather than being left behind.
+              const el = document.createElement('div');
+              el.className = 'flow-trail-box';
+              el.style.transform = `translate(${cell.grid.left}px, ${cell.grid.top}px)`;
+              el.style.width = `${cell.grid.width}px`;
+              el.style.height = `${cell.grid.height + 1}px`;
+              trailLayer.appendChild(el);
+              flowTrailFade(el, box.opacity, box.decayPercent);
             }
             flowMeter.reportKey(event);
           }
@@ -6675,7 +6681,9 @@ export function CM6Editor({
         ref={flowTrailClipRef}
         style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 7 }}
       >
-        <div ref={flowTrailLayerRef} style={{ position: 'absolute', top: 0, left: 0 }} />
+        <div ref={flowTrailLayerRef} style={{ position: 'absolute', top: 0, left: 0 }}>
+          <div ref={flowTrailHeadRef} className="flow-trail-head" />
+        </div>
       </div>
       {hasViewportLines && fontReady && !caretHidden && caretStyle && (
         <div

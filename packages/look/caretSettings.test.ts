@@ -77,7 +77,7 @@ describe('buildCaretBlinkKeyframesCss', () => {
         const css = build({ presetKey, frameDurationMs })
         expect(css).not.toContain('color-mix')
         // Flow's halo growth, effect blend and alpha boost are the only var()s.
-        expect(css.replace(/var\(--flow-(halo-blur|halo-spread|caret-alpha|caret-effect), 0p?x?\)/g, '')).not.toContain('var(')
+        expect(css.replace(/var\(--flow-(halo-blur|halo-spread|caret-alpha|caret-effect|caret-fade), 0p?x?\)/g, '')).not.toContain('var(')
       }
     }
   })
@@ -85,8 +85,8 @@ describe('buildCaretBlinkKeyframesCss', () => {
   it('resolves each surface off its own colour, scaling only alpha', () => {
     const css = build({ presetKey: 'bigBeat' })
     // The 65% apex scales every surface's own alpha by 0.9.
-    expect(css).toContain('background-color: rgba(0, 0, 0, calc(0.27 + (0.3 - 0.27) * var(--flow-caret-effect, 0)))')
-    expect(css).toContain('outline-color: rgba(10, 20, 30, calc(0.72 + (0.8 - 0.72) * var(--flow-caret-effect, 0) + (1 - (0.72 + (0.8 - 0.72) * var(--flow-caret-effect, 0))) * var(--flow-caret-alpha, 0)))')
+    expect(css).toContain('background-color: rgba(0, 0, 0, calc((0.27 + (0.3 - 0.27) * var(--flow-caret-effect, 0)) * (1 - var(--flow-caret-fade, 0))))')
+    expect(css).toContain('outline-color: rgba(10, 20, 30, calc((0.72 + (0.8 - 0.72) * var(--flow-caret-effect, 0)) * (1 - var(--flow-caret-fade, 0))))')
     expect(css).toContain('box-shadow: 0 0 calc(0px + var(--flow-halo-blur, 0px)) calc(6px + var(--flow-halo-spread, 0px)) rgba(200, 100, 50, calc(0.45 + (0.5 - 0.45) * var(--flow-caret-effect, 0) + (1 - (0.45 + (0.5 - 0.45) * var(--flow-caret-effect, 0))) * var(--flow-caret-alpha, 0)))')
   })
 
@@ -191,8 +191,8 @@ describe('buildCaretBlinkKeyframesCss', () => {
   it('blends every surface by the same amount', () => {
     const css = build({ presetKey: 'bigBeat', effectStrengthPercent: 0 })
     // Each surface lands on its own colour's own alpha, untouched.
-    expect(css).toContain('background-color: rgba(0, 0, 0, calc(0.3 + (0.3 - 0.3) * var(--flow-caret-effect, 0)))')
-    expect(css).toContain('outline-color: rgba(10, 20, 30, calc(0.8 + (0.8 - 0.8) * var(--flow-caret-effect, 0) + (1 - (0.8 + (0.8 - 0.8) * var(--flow-caret-effect, 0))) * var(--flow-caret-alpha, 0)))')
+    expect(css).toContain('background-color: rgba(0, 0, 0, calc((0.3 + (0.3 - 0.3) * var(--flow-caret-effect, 0)) * (1 - var(--flow-caret-fade, 0))))')
+    expect(css).toContain('outline-color: rgba(10, 20, 30, calc((0.8 + (0.8 - 0.8) * var(--flow-caret-effect, 0)) * (1 - var(--flow-caret-fade, 0))))')
     expect(css).toContain('box-shadow: 0 0 calc(0px + var(--flow-halo-blur, 0px)) calc(6px + var(--flow-halo-spread, 0px)) rgba(200, 100, 50, calc(0.5 + (0.5 - 0.5) * var(--flow-caret-effect, 0) + (1 - (0.5 + (0.5 - 0.5) * var(--flow-caret-effect, 0))) * var(--flow-caret-alpha, 0)))')
   })
 

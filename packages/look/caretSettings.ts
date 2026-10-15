@@ -324,19 +324,20 @@ function formatNumber(value: number, decimals = 3): string {
  */
 /**
  * The flow blends the animated alpha toward the colour's own alpha, which is
- * the static caret at zero effect strength. The outline and halo also keep
- * their existing flow opacity boost, moving a share of the way to opaque.
+ * the static caret at zero effect strength. Then, by surface: the HALO moves a
+ * share of the way to opaque (`--flow-caret-alpha`), and the FILL and OUTLINE
+ * fade out (`--flow-caret-fade`), so at full flow the caret is its halo alone.
  */
-function flowAdjustedRgba(color: RgbaColor, alphaScale: number, boostOpacity: boolean): string {
+function flowAdjustedRgba(color: RgbaColor, alphaScale: number, flow: 'fade' | 'boost'): string {
   const baseAlpha = formatNumber(clampAlphaChannel(color.a), 4)
   const animatedAlpha = formatNumber(
     clampAlphaChannel(color.a * Math.max(0, Math.min(1, alphaScale))),
     4,
   )
   const effectAlpha = `${animatedAlpha} + (${baseAlpha} - ${animatedAlpha}) * var(--flow-caret-effect, 0)`
-  const alpha = boostOpacity
+  const alpha = flow === 'boost'
     ? `calc(${effectAlpha} + (1 - (${effectAlpha})) * var(--flow-caret-alpha, 0))`
-    : `calc(${effectAlpha})`
+    : `calc((${effectAlpha}) * (1 - var(--flow-caret-fade, 0)))`
   return `rgba(${clampColorChannel(color.r)}, ${clampColorChannel(color.g)}, ${clampColorChannel(color.b)}, ${alpha})`
 }
 
@@ -468,11 +469,11 @@ export function buildCaretBlinkKeyframesCss(options: CaretBlinkKeyframeOptions):
     // one object rather than a ring around a blinking centre.
     const alpha = resolveEffectiveAlpha(stop.alpha, effectStrengthPercent)
     const declarations = [
-      `background-color: ${flowAdjustedRgba(fill, alpha, false)};`,
-      `outline-color: ${flowAdjustedRgba(outline, alpha, true)};`,
+      `background-color: ${flowAdjustedRgba(fill, alpha, 'fade')};`,
+      `outline-color: ${flowAdjustedRgba(outline, alpha, 'fade')};`,
       // Flow grows the halo's lengths and blends the blink toward the static
-      // caret; only the outline and halo also receive the opacity boost.
-      `box-shadow: 0 0 calc(${blur}px + var(--flow-halo-blur, 0px)) calc(${spread}px + var(--flow-halo-spread, 0px)) ${flowAdjustedRgba(halo, alpha, true)};`,
+      // caret; the halo is boosted toward opaque while the fill and outline fade.
+      `box-shadow: 0 0 calc(${blur}px + var(--flow-halo-blur, 0px)) calc(${spread}px + var(--flow-halo-spread, 0px)) ${flowAdjustedRgba(halo, alpha, 'boost')};`,
     ]
     return `  ${formatNumber(stop.atPercent, 4)}% { ${declarations.join(' ')} }`
   })
