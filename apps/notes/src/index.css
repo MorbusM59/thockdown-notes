@@ -145,8 +145,9 @@
   top: 0;
   left: 0;
   box-sizing: border-box;
-  border-top: 1px solid var(--color-flow-trail);
-  border-bottom: 1px solid var(--color-flow-trail);
+  border-top: 1px solid var(--color-flow-trail-now);
+  border-bottom: 1px solid var(--color-flow-trail-now);
+  transition: border-color 400ms ease-in-out;
 }
 
 /* The trail's leading edge: the caret's cell traced on its top, bottom and
@@ -159,14 +160,45 @@
   top: 0;
   left: 0;
   box-sizing: border-box;
-  border: 1px solid var(--color-flow-trail);
+  border: 1px solid var(--color-flow-trail-now);
   border-left: none;
+  transition: border-color 400ms ease-in-out;
   /* Rounded where it is closed, square where it opens into the trail. */
   border-radius: 0 var(--border-radius-small) var(--border-radius-small) 0;
   /* Inside, the flow colour fades from the leading edge back toward the
      trail, so the edge reads as a front moving right. */
   background-image: linear-gradient(to left, var(--color-flow-trail), transparent);
   opacity: var(--flow-trail-head, 0);
+}
+/* The charged fill, cross-faded over the ordinary one while in full flow
+   (a gradient cannot transition, its layer's opacity can). */
+.flow-trail-head::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: linear-gradient(to left, var(--color-flow-trail-charged), transparent);
+  opacity: 0;
+  transition: opacity 800ms ease-in-out;
+}
+:root[data-flow-full] .flow-trail-head::after {
+  opacity: 1;
+  transition-duration: 400ms;
+}
+
+/* The trail's colour now: the reader's flow colour, or while in FULL FLOW
+   (flowMeter's state, marked data-flow-full by flow/useFlowFeedback.ts) the
+   same colour run white-hot, so the state reads as a change of kind.
+   Derived on the trail's own elements, because the theme may set the flow
+   colour below :root. */
+.flow-trail-box,
+.flow-trail-head {
+  --color-flow-trail-charged: color-mix(in oklab, var(--color-flow-trail), white 55%);
+  --color-flow-trail-now: var(--color-flow-trail);
+}
+:root[data-flow-full] .flow-trail-box,
+:root[data-flow-full] .flow-trail-head {
+  --color-flow-trail-now: var(--color-flow-trail-charged);
 }
 
 
@@ -356,3 +388,11 @@
 .flow-overlay-saturation { background: hsl(0 100% 50%); mix-blend-mode: saturation; }
 .flow-overlay-warmth { background: hsl(30 100% 55%); mix-blend-mode: soft-light; }
 .flow-overlay-glow { background: #ffffff; mix-blend-mode: screen; }
+/* Full flow's edge glow: clear over the middle of the window (where the
+   text is), warm only toward the edges. will-change covers the arrival's
+   scale as well as the opacity. */
+.flow-overlay-edge {
+  background: radial-gradient(ellipse at center, transparent 55%, hsl(32 100% 60% / 0.55) 85%, hsl(28 100% 55%) 115%);
+  mix-blend-mode: screen;
+  will-change: opacity, transform;
+}

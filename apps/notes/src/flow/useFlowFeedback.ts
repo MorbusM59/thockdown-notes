@@ -67,10 +67,22 @@ export function useFlowFeedback(settings: FlowSettings): void {
       typingSoundManager.setFlowReverb(level * reverb)
       soundscapeEngine.setWeatherFloor(level * WEATHER_FLOOR_AT_FULL_FLOW)
     })
-    const unsubscribeKick = flowMeter.subscribeKick(() => typingSoundManager.kickFlowReverb(reverb))
+    const unsubscribeKick = flowMeter.subscribeKick(() => {
+      typingSoundManager.kickFlowReverb(reverb)
+      // The soundscape drops out with the reverb's dip and comes back with its swell.
+      if (reverb > 0) soundscapeEngine.dip(1 - (0.5 * reverb), 0.06, 0.08, 0.4)
+    })
+    // Full flow as a state on the root, for what shows only while it lasts
+    // (the trail's charged colour, index.css); the caret channel owns it.
+    const unsubscribeFull = flowMeter.subscribeFull((full) => {
+      if (full && caret > 0) document.documentElement.setAttribute('data-flow-full', '')
+      else document.documentElement.removeAttribute('data-flow-full')
+    })
     return () => {
       unsubscribe()
       unsubscribeKick()
+      unsubscribeFull()
+      document.documentElement.removeAttribute('data-flow-full')
       setCaretFlow(0)
       typingSoundManager.setFlowReverb(0)
       soundscapeEngine.setWeatherFloor(0)

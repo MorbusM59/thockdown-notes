@@ -166,9 +166,15 @@ const FLOW_REVERB_DECAY = 2.5
 const FLOW_REVERB_SPACE = 0.7
 const FLOW_REVERB_LOWPASS_HZ = 6500
 // The flow kick's swell (kickFlowReverb): how far the send rises, how fast, and how it settles.
+// It opens with a DIP: the reverb's tail pulled down to FLOW_KICK_DIP of
+// itself and held, then released into the swell -- the drop-then-lift that
+// reads as arriving, where a swell alone reads as only more reverb.
+const FLOW_KICK_DIP = 0.5
+const FLOW_KICK_DIP_SEC = 0.06
+const FLOW_KICK_DIP_HOLD_SEC = 0.08
 const FLOW_KICK_SWELL = 1.5
-const FLOW_KICK_ATTACK_SEC = 0.06
-const FLOW_KICK_RELEASE_TAU_SEC = 0.35
+const FLOW_KICK_ATTACK_SEC = 0.4
+const FLOW_KICK_RELEASE_TAU_SEC = 0.8
 
 export class TypingSoundManager {
   private audioContext: AudioContext | null = null
@@ -639,9 +645,11 @@ export class TypingSoundManager {
   }
 
   /**
-   * The flow kick's swell: the flow reverb's send rises to `1 + FLOW_KICK_SWELL * strength`
-   * times itself and settles back, so the keys typed in the moment flow is
-   * achieved ring out in a larger space. Scaled by the reverb channel, so a
+   * The flow kick: the flow reverb's tail dips (`FLOW_KICK_DIP`), then
+   * swells to `1 + FLOW_KICK_SWELL * strength` times itself and settles
+   * back, so the keys typed in the moment flow is achieved drop out and then
+   * ring out in a larger space. The gain sits AFTER the room, so the dip cuts
+   * the tail already ringing rather than only what enters it. Scaled by the reverb channel, so a
    * reader who turned flow reverb off hears nothing.
    */
   kickFlowReverb(strength: number): void {
@@ -652,8 +660,13 @@ export class TypingSoundManager {
     const t = this.audioContext.currentTime
     kick.gain.cancelScheduledValues(t)
     kick.gain.setValueAtTime(kick.gain.value, t)
-    kick.gain.linearRampToValueAtTime(1 + FLOW_KICK_SWELL * strength, t + FLOW_KICK_ATTACK_SEC)
-    kick.gain.setTargetAtTime(1, t + FLOW_KICK_ATTACK_SEC, FLOW_KICK_RELEASE_TAU_SEC)
+    const dipEnd = t + FLOW_KICK_DIP_SEC
+    const lift = dipEnd + FLOW_KICK_DIP_HOLD_SEC
+    const peak = lift + FLOW_KICK_ATTACK_SEC
+    kick.gain.linearRampToValueAtTime(1 - (1 - FLOW_KICK_DIP) * strength, dipEnd)
+    kick.gain.setValueAtTime(1 - (1 - FLOW_KICK_DIP) * strength, lift)
+    kick.gain.exponentialRampToValueAtTime(1 + FLOW_KICK_SWELL * strength, peak)
+    kick.gain.setTargetAtTime(1, peak, FLOW_KICK_RELEASE_TAU_SEC)
   }
 
   private ensureFlowReverb(): void {
@@ -668,7 +681,7 @@ export class TypingSoundManager {
     tone.frequency.value = FLOW_REVERB_LOWPASS_HZ
     const kick = context.createGain()
     kick.gain.value = 1
-    send.connect(kick).connect(room).connect(tone).connect(this.masterGain)
+    send.connect(room).connect(kick).connect(tone).connect(this.masterGain)
     this.flowReverbSend = send
     this.flowReverbKick = kick
   }

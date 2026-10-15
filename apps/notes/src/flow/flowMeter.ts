@@ -24,15 +24,23 @@ const PRESENT_FLOOR = 0.002
 
 type Listener = (level: number) => void
 type KickListener = () => void
+type FullListener = (full: boolean) => void
 
 /**
- * The KICK is a one-off event fired when the meter reaches full from below:
- * the moment flow is achieved, marked as an event rather than as a value
- * arriving. It re-arms only once the presented level has fallen below
- * `KICK_REARM_LEVEL`, so a reader typing right at the sustaining pace, whose
- * meter dips under full and back, is not kicked over and over.
+ * FULL FLOW is a STATE, not only a level: it begins when the meter reaches
+ * full from below and ends only once the presented level falls below
+ * `FULL_EXIT_LEVEL`, so a reader typing right at the sustaining pace, whose
+ * meter dips under full and back, stays in it rather than flickering in and
+ * out. Consumers that show something only at full (the edge glow, the
+ * charged trail colour) subscribe to it with `subscribeFull`.
+ *
+ * The KICK is the one-off event marking the state's start: the moment flow
+ * is achieved, landed as an event rather than as a value arriving. It also
+ * waits `KICK_MIN_INTERVAL_SEC` since the last one, so dropping out and
+ * straight back in enters the state again without a second fanfare.
  */
-const KICK_REARM_LEVEL = 0.9
+const FULL_EXIT_LEVEL = 0.8
+const KICK_MIN_INTERVAL_SEC = 3
 
 let enabled = false
 let tuning: FlowTuning = DEFAULT_FLOW_SETTINGS
@@ -42,15 +50,22 @@ let lastFrameSec: number | null = null
 let frameHandle: number | null = null
 const listeners = new Set<Listener>()
 const kickListeners = new Set<KickListener>()
-let kickArmed = true
+const fullListeners = new Set<FullListener>()
+let isFull = false
+let lastKickSec = -Infinity
 let trailStrength = DEFAULT_FLOW_SETTINGS.caret
 
 const nowSec = (): number => performance.now() / 1000
 
 function publish(level: number): void {
   presented = level
-  if (level < KICK_REARM_LEVEL) kickArmed = true
+  if (isFull && level < FULL_EXIT_LEVEL) setFull(false)
   for (const listener of listeners) listener(level)
+}
+
+function setFull(next: boolean): void {
+  isFull = next
+  for (const listener of fullListeners) listener(next)
 }
 
 function frame(): void {
@@ -103,9 +118,12 @@ export const flowMeter = {
     // the one moment that should land as an event, not as a value arriving.
     if (before < 1 && state.levelAtHit > 1) {
       publish(1)
-      if (kickArmed) {
-        kickArmed = false
-        for (const listener of kickListeners) listener()
+      if (!isFull) {
+        setFull(true)
+        if (now - lastKickSec >= KICK_MIN_INTERVAL_SEC) {
+          lastKickSec = now
+          for (const listener of kickListeners) listener()
+        }
       }
     }
     ensureRunning()
@@ -134,6 +152,19 @@ export const flowMeter = {
     kickListeners.add(listener)
     return () => {
       kickListeners.delete(listener)
+    }
+  },
+
+  /**
+   * Called with true when full flow begins and false when it ends (see FULL
+   * FLOW, above), and at once with true when subscribing during it, so a
+   * consumer re-subscribing after a settings change does not lose the state.
+   */
+  subscribeFull(listener: FullListener): () => void {
+    fullListeners.add(listener)
+    if (isFull) listener(true)
+    return () => {
+      fullListeners.delete(listener)
     }
   },
 
