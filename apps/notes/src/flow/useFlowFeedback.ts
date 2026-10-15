@@ -1,7 +1,7 @@
 /**
  * Hands the reader's flow settings to the meter, and the meter's level to the
  * two channels that need no React: the caret's glow and effect strength, and
- * the reverb send. The look is the third channel and lives in `FlowOverlays`,
+ * the reverb send (and its swell on the kick). The look is the third channel and lives in `FlowOverlays`,
  * because it has to go through the theme.
  */
 
@@ -55,8 +55,10 @@ export function useFlowFeedback(settings: FlowSettings): void {
       setCaretFlow(level * caret)
       typingSoundManager.setFlowReverb(level * reverb)
     })
+    const unsubscribeKick = flowMeter.subscribeKick(() => typingSoundManager.kickFlowReverb(reverb))
     return () => {
       unsubscribe()
+      unsubscribeKick()
       setCaretFlow(0)
       typingSoundManager.setFlowReverb(0)
     }

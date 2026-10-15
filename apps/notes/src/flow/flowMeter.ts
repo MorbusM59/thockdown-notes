@@ -23,6 +23,16 @@ const PRESENT_TAU_SEC = 0.2
 const PRESENT_FLOOR = 0.002
 
 type Listener = (level: number) => void
+type KickListener = () => void
+
+/**
+ * The KICK is a one-off event fired when the meter reaches full from below:
+ * the moment flow is achieved, marked as an event rather than as a value
+ * arriving. It re-arms only once the presented level has fallen below
+ * `KICK_REARM_LEVEL`, so a reader typing right at the sustaining pace, whose
+ * meter dips under full and back, is not kicked over and over.
+ */
+const KICK_REARM_LEVEL = 0.9
 
 let enabled = false
 let tuning: FlowTuning = DEFAULT_FLOW_SETTINGS
@@ -31,12 +41,15 @@ let presented = 0
 let lastFrameSec: number | null = null
 let frameHandle: number | null = null
 const listeners = new Set<Listener>()
+const kickListeners = new Set<KickListener>()
+let kickArmed = true
 let trailStrength = DEFAULT_FLOW_SETTINGS.caret
 
 const nowSec = (): number => performance.now() / 1000
 
 function publish(level: number): void {
   presented = level
+  if (level < KICK_REARM_LEVEL) kickArmed = true
   for (const listener of listeners) listener(level)
 }
 
@@ -88,7 +101,13 @@ export const flowMeter = {
     state = flowHit(state, now, tuning)
     // The unlock is presented at once rather than ramped: reaching full is
     // the one moment that should land as an event, not as a value arriving.
-    if (before < 1 && state.levelAtHit > 1) publish(1)
+    if (before < 1 && state.levelAtHit > 1) {
+      publish(1)
+      if (kickArmed) {
+        kickArmed = false
+        for (const listener of kickListeners) listener()
+      }
+    }
     ensureRunning()
   },
 
@@ -108,6 +127,14 @@ export const flowMeter = {
     if (!enabled || trailStrength <= 0 || presented <= 0) return null
     if (event.key.length !== 1 || !isFlowHit(event)) return null
     return { opacity: presented * trailStrength, decayPercent: tuning.decayPercent }
+  },
+
+  /** Called once each time flow is achieved (see the kick, above). */
+  subscribeKick(listener: KickListener): () => void {
+    kickListeners.add(listener)
+    return () => {
+      kickListeners.delete(listener)
+    }
   },
 
   subscribe(listener: Listener): () => void {

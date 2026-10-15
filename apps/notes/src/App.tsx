@@ -383,7 +383,7 @@ const DEFAULT_HIGHLIGHT_COLORS: HighlightColors = {
   grid: '#f9f6f3',
   gutterBackground: 'rgba(196, 187, 182, 0.49)',
   immersiveScrollThumb: 'rgba(0, 0, 0, 0.333)',
-  flowTrail: 'rgba(255, 190, 90, 0.45)',
+  flowTrail: 'rgba(255, 170, 60, 0.9)',
   reviewLine: 'rgba(255, 230, 0, 0.6)',
   warningLine: 'rgba(255, 50, 0, 0.2)',
   lineNumber: 'rgba(0, 0, 0, 0.6)',

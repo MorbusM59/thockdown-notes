@@ -165,6 +165,10 @@ const FLOW_REVERB_DURATION_SEC = 2.8
 const FLOW_REVERB_DECAY = 2.5
 const FLOW_REVERB_SPACE = 0.7
 const FLOW_REVERB_LOWPASS_HZ = 6500
+// The flow kick's swell (kickFlowReverb): how far the send rises, how fast, and how it settles.
+const FLOW_KICK_SWELL = 1.5
+const FLOW_KICK_ATTACK_SEC = 0.06
+const FLOW_KICK_RELEASE_TAU_SEC = 0.35
 
 export class TypingSoundManager {
   private audioContext: AudioContext | null = null
@@ -180,6 +184,10 @@ export class TypingSoundManager {
   // it. Built on first use; a sound is routed into it only while the amount
   // is above zero, so with flow off it is never in the graph at all.
   private flowReverbSend: GainNode | null = null
+  // A multiplier after the send, owned by the kick alone, so its swell never
+  // fights the send's own per-frame ramp (two automations on one AudioParam
+  // would cancel each other).
+  private flowReverbKick: GainNode | null = null
   private flowReverbAmount = 0
   private bufferGroups: Record<string, AudioBuffer[]> = {
     bass: [],
@@ -630,6 +638,24 @@ export class TypingSoundManager {
     }
   }
 
+  /**
+   * The flow kick's swell: the flow reverb's send rises to `1 + FLOW_KICK_SWELL * strength`
+   * times itself and settles back, so the keys typed in the moment flow is
+   * achieved ring out in a larger space. Scaled by the reverb channel, so a
+   * reader who turned flow reverb off hears nothing.
+   */
+  kickFlowReverb(strength: number): void {
+    if (strength <= 0) return
+    this.ensureFlowReverb()
+    const kick = this.flowReverbKick
+    if (!kick || !this.audioContext) return
+    const t = this.audioContext.currentTime
+    kick.gain.cancelScheduledValues(t)
+    kick.gain.setValueAtTime(kick.gain.value, t)
+    kick.gain.linearRampToValueAtTime(1 + FLOW_KICK_SWELL * strength, t + FLOW_KICK_ATTACK_SEC)
+    kick.gain.setTargetAtTime(1, t + FLOW_KICK_ATTACK_SEC, FLOW_KICK_RELEASE_TAU_SEC)
+  }
+
   private ensureFlowReverb(): void {
     if (this.flowReverbSend || !this.audioContext || !this.masterGain) return
     const context = this.audioContext
@@ -640,8 +666,11 @@ export class TypingSoundManager {
     const tone = context.createBiquadFilter()
     tone.type = 'lowpass'
     tone.frequency.value = FLOW_REVERB_LOWPASS_HZ
-    send.connect(room).connect(tone).connect(this.masterGain)
+    const kick = context.createGain()
+    kick.gain.value = 1
+    send.connect(kick).connect(room).connect(tone).connect(this.masterGain)
     this.flowReverbSend = send
+    this.flowReverbKick = kick
   }
 
   // The one place a voice reaches the speakers: the reader's reverb (dry and

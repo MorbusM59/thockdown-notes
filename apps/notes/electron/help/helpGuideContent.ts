@@ -256,7 +256,8 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 - Every character you type adds flow (**build**), and flow drains steadily all the time (**decay**). Type fast enough and the meter fills and holds; the sliders' tooltips say what speed that takes. Keeping an even rhythm adds up to half again per key, so a steady, slightly slower pace flows as well as a rushed one.
 - Corrections and arrow keys never cost flow; only stopping does.
-- In flow, each character you type leaves a faint box behind the caret that drains the way flow does; its colour is under Colors, in Boxes.
+- Reaching full flow is marked once with a brief swell of light and reverb; it comes again only after flow has dropped a little.
+- In flow, each character you type leaves a faint line under it that drains the way flow does; its colour is under Colors, in Boxes.
 - **look**, **reverb** and **caret** set how strongly each answers; **caret** covers the glow and the trail.
 - The flow's **caret** strength also eases the blink's **Effect** (under Caret) toward 0; at full flow and full strength, the caret holds steady at its own colours.
 `,

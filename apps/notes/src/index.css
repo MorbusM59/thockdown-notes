@@ -134,16 +134,16 @@
   animation: thockdown-blink var(--caret-animation-duration, 1200ms) infinite cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* The typing flow trail: one box per character typed in flow, in the reader's
-   flowTrail colour at the top and bottom edges and a lighter core at the
-   middle (the same colour mixed halfway to opaque white). Its opacity and its
-   fade are animated from script (flow/flowTrailFade.ts), on the meter's own
-   decay curve. */
+/* The typing flow trail: one thin band per character typed in flow, along
+   the foot of its cell in the reader's flowTrail colour (the editor sets its
+   size and place). It stays out of the glyph's body so it never lowers the
+   contrast of the words just typed. Its opacity and its fade are animated
+   from script (flow/flowTrailFade.ts), on the meter's own decay curve. */
 .flow-trail-box {
   position: absolute;
   top: 0;
   left: 0;
-  background-image: linear-gradient(to bottom, var(--color-flow-trail), color-mix(in srgb, var(--color-flow-trail), white 50%), var(--color-flow-trail));
+  background-color: var(--color-flow-trail);
 }
 
 
