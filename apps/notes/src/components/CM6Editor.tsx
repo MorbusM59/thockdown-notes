@@ -2197,6 +2197,9 @@ export function CM6Editor({
       top: top + inset,
       width: Math.max(1, cellWidthPx - CARET_INSET_PX + deviation * 2),
       height: Math.max(1, lineHeightPxNow - CARET_INSET_PX + deviation * 2),
+      // The grid cell itself, before the caret's inset: its top and left
+      // edges are where thockdown-grid-lines draws its 1px lines (same phase).
+      grid: { left, top, width: cellWidthPx, height: lineHeightPxNow },
     };
   }, []);
 
@@ -4032,27 +4035,26 @@ export function CM6Editor({
             const cell = box ? readCaretCellInScroll(view) : null;
             const trailLayer = flowTrailLayerRef.current;
             if (box && cell && trailLayer) {
-              // The trail traces the grid lines above and below each cell
-              // (1px edges, nothing inside; the grid's lines straddle the cell
-              // boundary, so the box reaches 1px past it each way), so it never
-              // sits behind a glyph,
-              // and it reaches up to and including
-              // the caret's cell: the cell the character lands in gets a
-              // segment, and so does the cell after it, where the caret now
-              // is. That caret segment is replaced by the next key's own.
+              // The trail traces the 1px grid lines above and below each
+              // cell (the grid cell, not the caret's inset box), segments
+              // abutting so the lines run continuously; nothing is drawn
+              // inside the cell, so it never sits behind a glyph. It reaches
+              // up to and including the caret's cell: the cell the character
+              // lands in gets a segment, and so does the cell after it, where
+              // the caret now is; that one is replaced by the next key's own.
               flowTrailHeadRef.current?.remove();
               const place = (left: number): HTMLDivElement => {
                 const el = document.createElement('div');
                 el.className = 'flow-trail-box';
-                el.style.transform = `translate(${left}px, ${cell.top - 1}px)`;
-                el.style.width = `${cell.width}px`;
-                el.style.height = `${cell.height + 2}px`;
+                el.style.transform = `translate(${left}px, ${cell.grid.top}px)`;
+                el.style.width = `${cell.grid.width}px`;
+                el.style.height = `${cell.grid.height + 1}px`;
                 trailLayer.appendChild(el);
                 flowTrailFade(el, box.opacity, box.decayPercent);
                 return el;
               };
-              place(cell.left);
-              flowTrailHeadRef.current = place(cell.left + cell.width);
+              place(cell.grid.left);
+              flowTrailHeadRef.current = place(cell.grid.left + cell.grid.width);
             }
             flowMeter.reportKey(event);
           }
