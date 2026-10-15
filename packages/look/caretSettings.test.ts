@@ -205,7 +205,7 @@ describe('buildCaretBlinkKeyframesCss', () => {
       'calc((0.09 + (0.3 - 0.09) * var(--flow-caret-effect, 0)) * (1 - var(--flow-caret-fade, 0)))',
       'calc((0.18 + (0.3 - 0.18) * var(--flow-caret-effect, 0)) * (1 - var(--flow-caret-fade, 0)))',
     ])
-    expect(css).toContain('outline-color: rgba(10, 20, 30, calc(0.48 + (0.8 - 0.48) * var(--flow-caret-effect, 0)')
+    expect(css).toContain('outline-color: rgba(10, 20, 30, calc((0.48 + (0.8 - 0.48) * var(--flow-caret-effect, 0)) * (1 - var(--flow-caret-fade, 0))')
     expect(css).toContain('rgba(200, 100, 50, calc(0.3 + (0.5 - 0.3) * var(--flow-caret-effect, 0)')
   })
 
