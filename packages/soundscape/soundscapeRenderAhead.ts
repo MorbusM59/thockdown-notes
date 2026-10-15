@@ -24,16 +24,34 @@
  * SETTINGS CHANGES. Audio rendered ahead was rendered with the old
  * settings. A `configure` therefore picks a frame F a margin past what the
  * output has played (the margin is the output's: how far ahead of its
- * report it may already be committed), rewinds to F, and renders from there
- * with the new settings, crossfading equal-power from the old audio over
- * CROSSFADE_SEC. The old audio for that is the renderer's own: it keeps a
- * history of what it sent. The crossfade is done here, once, so every
- * output stays a queue with nothing to compute.
+ * report it may already be committed), rounded up to the SPLICE GRID, rewinds to F,
+ * and renders from there with the new settings, crossfading linearly from
+ * the old audio over CROSSFADE_SEC. The old audio for that is the
+ * renderer's own: it keeps a history of what it sent. The crossfade is done
+ * here, once, so every output stays a queue with nothing to compute.
  *
- * The generator and the mix are not rewound: they continue from the state
- * they reached rendering ahead. For sounds made of noise and random events
- * that is a different continuation of the same soundscape, and the
- * crossfade hides the seam.
+ * THE REWIND is exact: the generator and the mix go back to the state they
+ * were in at F (a CHECKPOINT of both is taken before every chunk is
+ * rendered), so from F on the soundscape is what it would have been had the
+ * change been made live at F. Everything the change does not touch carries
+ * on sample for sample -- turning one channel off removes that channel and
+ * nothing else. They used to carry on from the state they had reached
+ * rendering ahead instead, a whole lead (ten seconds) later: every slow
+ * thing in the soundscape -- the weather's gusts, a noise layer's swell, a
+ * thunder peal, the chimes' pattern -- jumped ten seconds at every change,
+ * which turned removing one channel into a different soundscape. Since old
+ * and new are the same audio wherever the change does not reach, the fade
+ * is linear: equal-power would swell everything else by 3 dB halfway.
+ *
+ * Splices land on a grid of SPLICE_GRID_FRAMES, and a voice keeps a
+ * checkpoint at every point of it it renders past: any frame a splice can
+ * choose. The grid is coarser than a chunk because a checkpoint is not free
+ * -- it copies the generator's running state, some thousand small objects,
+ * and the lead holds a checkpoint per grid point -- and the cost of the
+ * coarser grid is only that a change is heard up to one grid point later. A rewind
+ * never goes back past where the output can still be reached (the margin
+ * only moves forward), so a checkpoint behind it is dropped as the output
+ * plays, and a checkpoint past a rewind's frame is dropped by the rewind.
  *
  * TRANSITIONS. A `transition` is a change from one soundscape to another
  * heard as one: an equal-power crossfade of any length (the mobile app's
@@ -41,14 +59,13 @@
  * was playing to a NEW VOICE -- a fresh generator and mix built for the new
  * settings. It is spliced at the same frame a `configure` would be, so it is
  * heard as soon as a settings change is. The old side of the fade is what
- * the output already holds from that frame on, taken from the history (a
- * snapshot, since the history is overwritten as rendering continues), and
- * past the end of it the old voice CARRYING ON from where it had rendered
- * to -- it cannot be rewound, and need not be: its continuation is the
- * same sound. When the fade is over the old side is dropped. A transition
- * during a transition fades from the blend being heard, so nothing jumps.
- * A `configure` during a transition goes to the new voice, as the settings
- * now in force.
+ * was playing, rewound to that frame, so it is exactly what the output
+ * already holds up to the end of the queue and carries on from there. When
+ * the fade is over, and no rewind can reach back into it any more, the old
+ * side is dropped. A transition during a transition fades from the blend
+ * being heard, so nothing jumps. A `configure` during a transition goes to
+ * the new voice, as the settings now in force; one waiting to start (its
+ * room not built yet) takes it with no splice, being not yet heard.
  *
  * THE ROOM is the one expensive part of a change: a new space (its size,
  * damping or echoes) means building an impulse response and transforming
@@ -58,7 +75,9 @@
  * past the margin. So the mix only RECORDS a new room (MixStage.roomPending)
  * and this renderer builds it when it can afford to: once at least
  * ROOM_BUILD_LEAD_SEC is queued again, which is more than the build takes.
- * Then it splices from as near the playhead as the output allows, so the
+ * Then it rewinds to as near the playhead as the output allows (the request
+ * is part of the mix's checkpoints, so the rewind keeps it) and builds the
+ * room there, so the
  * room is heard within a few tenths of a second of being asked for, never
  * at the end of the lead. A newer room asked for before then replaces the
  * pending one, so a slider dragged across builds only the rooms it can
@@ -67,7 +86,7 @@
  * room is built at once: nothing is playing yet.
  */
 import type { SoundscapeSpaceSettings } from './soundscape';
-import { BLOCK_FRAMES, type HostedGenerator } from './soundscapeGeneratorHost';
+import { BLOCK_FRAMES, type GeneratorSnapshot, type HostedGenerator } from './soundscapeGeneratorHost';
 import { MIX_BLOCK } from './soundscapeMix';
 
 /** How much finished audio to keep queued ahead of playback. */
@@ -76,6 +95,11 @@ export const RENDER_LEAD_SEC = 10;
 export const RENDER_CHUNK_FRAMES = MIX_BLOCK;
 /** The crossfade from old audio to new on a settings change. */
 export const CROSSFADE_SEC = 0.05;
+/**
+ * Where a splice may land (see THE REWIND above): every second chunk, about
+ * 85 ms at 48 kHz. A voice's checkpoints are taken there.
+ */
+export const SPLICE_GRID_FRAMES = 2 * RENDER_CHUNK_FRAMES;
 /** How much must be queued before a new room is built (see THE ROOM above): more than a build takes. */
 export const ROOM_BUILD_LEAD_SEC = 0.5;
 
@@ -103,6 +127,10 @@ export interface MixStage {
   buildRoom(): void;
   /** One RENDER_CHUNK_FRAMES block of generator output into `out` (overwritten). */
   process(direct: [Float32Array, Float32Array], send: [Float32Array, Float32Array], out: [Float32Array, Float32Array]): void;
+  /** The whole state at this block, room requests included (see THE REWIND above). */
+  snapshot(): unknown;
+  /** Return to a `snapshot`, which stays usable. */
+  restore(snapshot: unknown): void;
 }
 
 /** A generator and the mix after it: one soundscape being rendered. */
@@ -113,56 +141,59 @@ export interface RenderVoice {
 
 type Stereo = [Float32Array<ArrayBuffer>, Float32Array<ArrayBuffer>];
 
-/** Audio by absolute frame: fills `left`/`right` with the frames from `start` on. */
+/**
+ * Audio by absolute frame, read a chunk at a time, in order, on the grid of
+ * RENDER_CHUNK_FRAMES -- except after a `rewind`, which a read then starts from.
+ */
 interface AudioSource {
+  /** The chunk from absolute frame `start` into `left`/`right`. */
   read(start: number, left: Float32Array, right: Float32Array): void;
+  /** Go back to `frame` (on the grid): render from there as from there the first time, forgetting what came after. */
+  rewind(frame: number): void;
+  /** Nothing will be rewound to before `frame`. */
+  forget(before: number): void;
 }
 
-/**
- * A voice as a stream: it renders in whole chunks, carries on from where it
- * got to whatever frame is asked for (the generator is never rewound), and
- * keeps what a partial read left over.
- */
+/** A voice's state before one chunk at a point of the splice grid (see THE REWIND above). */
+interface Checkpoint {
+  generator: GeneratorSnapshot;
+  mix: unknown;
+}
+
+/** A voice as a stream, with a checkpoint at every point of the splice grid it renders past, so it can be rewound there. */
 class VoiceSource implements AudioSource {
-  private spareLeft = new Float32Array(0);
-  private spareRight = new Float32Array(0);
-  private spareAt = 0;
+  /** The frame the voice renders next; null until its first read. */
+  private next: number | null = null;
+  private readonly checkpoints = new Map<number, Checkpoint>();
 
   constructor(readonly voice: RenderVoice) {}
 
-  read(_start: number, left: Float32Array, right: Float32Array): void {
-    let filled = 0;
-    while (filled < left.length) {
-      if (this.spareAt >= this.spareLeft.length) {
-        [this.spareLeft, this.spareRight] = renderVoice(this.voice);
-        this.spareAt = 0;
-      }
-      const take = Math.min(left.length - filled, this.spareLeft.length - this.spareAt);
-      left.set(this.spareLeft.subarray(this.spareAt, this.spareAt + take), filled);
-      right.set(this.spareRight.subarray(this.spareAt, this.spareAt + take), filled);
-      this.spareAt += take;
-      filled += take;
-    }
-  }
-}
-
-/** What the output already holds from `from` to `end`, then `rest` carrying on. */
-class HeldSource implements AudioSource {
-  constructor(
-    private readonly left: Float32Array,
-    private readonly right: Float32Array,
-    private readonly from: number,
-    private readonly rest: AudioSource,
-  ) {}
-
   read(start: number, left: Float32Array, right: Float32Array): void {
-    const end = this.from + this.left.length;
-    const held = Math.max(0, Math.min(left.length, end - start));
-    for (let index = 0; index < held; index += 1) {
-      left[index] = this.left[start + index - this.from];
-      right[index] = this.right[start + index - this.from];
+    if (this.next !== null && start !== this.next) {
+      throw new Error(`A voice at frame ${this.next} was asked for frame ${start}`);
     }
-    if (held < left.length) this.rest.read(start + held, left.subarray(held), right.subarray(held));
+    if (start % SPLICE_GRID_FRAMES === 0) {
+      this.checkpoints.set(start, { generator: this.voice.generator.snapshot(), mix: this.voice.mix.snapshot() });
+    }
+    const [chunkLeft, chunkRight] = renderVoice(this.voice);
+    left.set(chunkLeft);
+    right.set(chunkRight);
+    this.next = start + RENDER_CHUNK_FRAMES;
+  }
+
+  rewind(frame: number): void {
+    // Not started, or not got that far: nothing to go back on.
+    if (this.next === null || frame >= this.next) return;
+    const checkpoint = this.checkpoints.get(frame);
+    if (!checkpoint) throw new Error(`A voice has no checkpoint at frame ${frame}`);
+    this.voice.generator.restore(checkpoint.generator);
+    this.voice.mix.restore(checkpoint.mix);
+    for (const at of this.checkpoints.keys()) if (at > frame) this.checkpoints.delete(at);
+    this.next = frame;
+  }
+
+  forget(before: number): void {
+    for (const at of this.checkpoints.keys()) if (at < before) this.checkpoints.delete(at);
   }
 }
 
@@ -193,6 +224,16 @@ class BlendSource implements AudioSource {
       left[index] = (left[index] * into) + (oldLeft[index] * out);
       right[index] = (right[index] * into) + (oldRight[index] * out);
     }
+  }
+
+  rewind(frame: number): void {
+    this.from.rewind(frame);
+    this.to.rewind(frame);
+  }
+
+  forget(before: number): void {
+    this.from.forget(before);
+    this.to.forget(before);
   }
 }
 
@@ -264,19 +305,27 @@ export class RenderAhead {
 
   /** Apply new settings from a frame as near to now as the output allows. */
   configure(message: ConfigureMessage): void {
+    // Back to that frame first: the checkpoint restored there predates the change.
+    // A transition's voice still waiting to start is not heard yet: it takes the change as it is.
+    if (this.configured && this.pendingBlend === null) this.splice();
     this.voice.voice.generator.configure(message.generator);
     this.voice.voice.mix.setSpace(message.space);
     // Nothing plays yet: the first room is built now.
     if (!this.configured) this.voice.voice.mix.buildRoom();
-    if (this.configured) this.splice();
     this.configured = true;
     this.pump();
   }
 
-  /** Re-render from as near the playhead as the output allows, crossfading from what it holds. */
+  /** The first point of the splice grid a margin past the playhead: where a change can be heard from. */
+  private spliceFrame(): number {
+    return Math.ceil((this.playedFrame + this.marginFrames) / SPLICE_GRID_FRAMES) * SPLICE_GRID_FRAMES;
+  }
+
+  /** Rewind to as near the playhead as the output allows, crossfading from what it holds (see THE REWIND above). */
   private splice(): void {
-    const spliceAt = this.playedFrame + this.marginFrames;
+    const spliceAt = this.spliceFrame();
     if (spliceAt < this.writeFrame) {
+      this.source.rewind(spliceAt);
       this.writeFrame = spliceAt;
       this.fade = { from: spliceAt, frames: this.crossfadeFrames };
     }
@@ -303,26 +352,15 @@ export class RenderAhead {
 
   /** Blend into the pending transition's voice from as near the playhead as the output allows. */
   private startBlend(voice: VoiceSource, frames: number): void {
-    const spliceAt = this.playedFrame + this.marginFrames;
-    let from = this.source;
+    const spliceAt = this.spliceFrame();
     if (spliceAt < this.writeFrame) {
-      // What the output holds from the splice on, copied: the history is
-      // overwritten as rendering continues.
-      const size = this.historyLeft.length;
-      const heldLeft = new Float32Array(this.writeFrame - spliceAt);
-      const heldRight = new Float32Array(heldLeft.length);
-      for (let index = 0; index < heldLeft.length; index += 1) {
-        const slot = (spliceAt + index) % size;
-        heldLeft[index] = this.historyLeft[slot];
-        heldRight[index] = this.historyRight[slot];
-      }
-      from = new HeldSource(heldLeft, heldRight, spliceAt, this.source);
+      // The old side from the splice on is what the output holds, rendered again.
+      this.source.rewind(spliceAt);
       this.writeFrame = spliceAt;
-      // The blend replaces a settings change's splice still under way.
+      // The blend replaces a settings change's crossfade the rewind undid.
       this.fade = null;
     }
-    const start = Math.max(spliceAt, this.writeFrame);
-    this.source = new BlendSource(from, voice, start, frames);
+    this.source = new BlendSource(this.source, voice, this.writeFrame, frames);
   }
 
   /** Room work waiting (see THE ROOM above). */
@@ -332,16 +370,25 @@ export class RenderAhead {
 
   /** Build what is pending, then splice it in: the current voice's new room, or a transition's voice. */
   private doRoomWork(): void {
-    this.voice.voice.mix.buildRoom();
     const blend = this.pendingBlend;
     this.pendingBlend = null;
-    if (blend) this.startBlend(blend.voice, blend.frames);
-    else this.splice();
+    if (blend) {
+      blend.voice.voice.mix.buildRoom();
+      this.startBlend(blend.voice, blend.frames);
+      return;
+    }
+    // Rewound first, so the room is built into the mix as it was at the splice.
+    this.splice();
+    this.voice.voice.mix.buildRoom();
   }
 
   /** The output has played up to `frame`. */
   played(frame: number): void {
     this.playedFrame = Math.max(this.playedFrame, frame);
+    const reachable = this.spliceFrame();
+    // A blend no rewind can reach back into any more is its new voice alone.
+    while (this.source instanceof BlendSource && this.source.done(reachable)) this.source = this.source.to;
+    this.source.forget(reachable);
     this.pump();
   }
 
@@ -368,8 +415,6 @@ export class RenderAhead {
     const left = new Float32Array(RENDER_CHUNK_FRAMES);
     const right = new Float32Array(RENDER_CHUNK_FRAMES);
     this.source.read(start, left, right);
-    // A blend that is over is the new voice alone; the old side is dropped.
-    if (this.source instanceof BlendSource && this.source.done(start + RENDER_CHUNK_FRAMES)) this.source = this.source.to;
 
     const size = this.historyLeft.length;
     for (let index = 0; index < RENDER_CHUNK_FRAMES; index += 1) {
@@ -377,12 +422,10 @@ export class RenderAhead {
       const slot = frame % size;
       const fade = this.fade;
       if (fade && frame < fade.from + fade.frames) {
-        // Equal-power: old and new are uncorrelated, so their powers add.
-        const t = (frame - fade.from + 1) / fade.frames;
-        const into = Math.sin(t * Math.PI * 0.5);
-        const out = Math.cos(t * Math.PI * 0.5);
-        left[index] = (left[index] * into) + (this.historyLeft[slot] * out);
-        right[index] = (right[index] * into) + (this.historyRight[slot] * out);
+        // Linear: old and new are the same audio wherever the change does not reach (see THE REWIND above).
+        const into = (frame - fade.from + 1) / fade.frames;
+        left[index] = (left[index] * into) + (this.historyLeft[slot] * (1 - into));
+        right[index] = (right[index] * into) + (this.historyRight[slot] * (1 - into));
       }
       this.historyLeft[slot] = left[index];
       this.historyRight[slot] = right[index];

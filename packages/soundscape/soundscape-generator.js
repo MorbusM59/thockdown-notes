@@ -54,7 +54,15 @@
  *   filter are computed every CONTROL_FRAMES samples and ramped between;
  *   the weather once a block.
  * - nothing large is allocated while playing: the garbage collector pauses
- *   this thread, so recording buffers are recycled (takeSpareRecording).
+ *   this thread, so recording buffers are recycled (takeSpareRecording) --
+ *   except in a REWINDABLE generator (processorOptions.rewindable, set by
+ *   soundscapeGeneratorHost.ts for Android's render-ahead), whose state is
+ *   copied at every chunk so a settings change can be applied from the past
+ *   (soundscapeRenderAhead.ts). There a recording is written once, while it
+ *   is recorded, and never again, so every copy of the state can share it
+ *   (recordedBuffers) instead of copying it; recycling one would rewrite a
+ *   buffer that an earlier copy still holds. A render-ahead has seconds of
+ *   audio queued, so a collector pause there is not heard.
  * - no trigonometry per sample (oscillators are rotated sin/cos pairs), no
  *   work for a component that has gone silent, one tight loop per voice.
  */
@@ -820,6 +828,13 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
     // the same audible level (noiseLoopGains).
     this.noiseLoops = processorOptions.noiseLoops ?? {};
     this.noiseGains = processorOptions.noiseGains ?? {};
+    // A rewindable generator's recordings, which copies of its state share
+    // (see the header). Null where recordings are recycled instead. A
+    // recording still being made is shared too: a restored copy rewrites it
+    // from its own position before anything reads it, and a copy older than
+    // that is never restored, because the render-ahead only rewinds forward
+    // of every rewind before it.
+    this.recordedBuffers = processorOptions.rewindable ? new WeakSet() : null;
     // The stream `random()` draws from: the channel being configured or
     // rendered, else the root. Set by withStream.
     this.stream = this.rootStream;
@@ -1824,7 +1839,9 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
         return buffer;
       }
     }
-    return new Float32Array(length);
+    const buffer = new Float32Array(length);
+    this.recordedBuffers?.add(buffer.buffer);
+    return buffer;
   }
 
   evictRecording(channel, entry) {
@@ -1840,7 +1857,8 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
   releaseRecordingIfUnused(channel, entry) {
     if (entry.inBank || entry.users > 0 || !entry.buffer) return;
     // At most a bank's worth of spares; beyond that the buffer is let go.
-    if (channel.spareRecordings.length < DROP_BANK_SIZE + DRIP_BANK_SIZE) channel.spareRecordings.push(entry.buffer);
+    // A rewindable generator never takes one back (see the header).
+    if (!this.recordedBuffers && channel.spareRecordings.length < DROP_BANK_SIZE + DRIP_BANK_SIZE) channel.spareRecordings.push(entry.buffer);
     entry.buffer = null;
   }
 

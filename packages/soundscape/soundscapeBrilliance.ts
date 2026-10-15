@@ -129,6 +129,11 @@ export function brillianceCurve(brilliance: number, sampleRate: number): Brillia
   return { gainsDb, makeup: 1 / Math.sqrt(sum / weights) };
 }
 
+export interface StereoBiquadSnapshot {
+  readonly c: BiquadCoefficients;
+  readonly state: readonly [Float64Array, Float64Array];
+}
+
 /** One stereo biquad (direct form I), for the Android mix. */
 export class StereoBiquad {
   private c: BiquadCoefficients = { b0: 1, b1: 0, b2: 0, a1: 0, a2: 0 };
@@ -136,6 +141,18 @@ export class StereoBiquad {
 
   set(coefficients: BiquadCoefficients): void {
     this.c = coefficients;
+  }
+
+  /** Coefficients and both sides' memory, to `restore` later. */
+  snapshot(): StereoBiquadSnapshot {
+    return { c: this.c, state: [this.state[0].slice(), this.state[1].slice()] };
+  }
+
+  /** Return to a `snapshot`. */
+  restore(snapshot: StereoBiquadSnapshot): void {
+    this.c = snapshot.c;
+    this.state[0].set(snapshot.state[0]);
+    this.state[1].set(snapshot.state[1]);
   }
 
   process(channel: 0 | 1, data: Float32Array): void {

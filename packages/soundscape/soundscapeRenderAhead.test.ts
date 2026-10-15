@@ -10,6 +10,7 @@ import {
   RENDER_LEAD_SEC,
   ROOM_BUILD_LEAD_SEC,
   RenderAhead,
+  SPLICE_GRID_FRAMES,
   type ConfigureMessage,
   type MixStage,
   type RenderedChunk,
@@ -36,6 +37,8 @@ function countingGenerator(): HostedGenerator {
       frame += block.direct[0].length;
     },
     get frame() { return frame; },
+    snapshot: () => ({ frame, state: {} }),
+    restore: (snapshot) => { frame = snapshot.frame; },
   };
 }
 
@@ -45,7 +48,12 @@ const identityMix: MixStage = {
   roomPending: false,
   buildRoom: () => {},
   process: (direct, _send, out) => { out[0].set(direct[0]); out[1].set(direct[1]); },
+  snapshot: () => null,
+  restore: () => {},
 };
+
+/** The first point of the splice grid a margin past `played`: where a change is heard from. */
+const spliceAt = (played: number) => Math.ceil((played + MARGIN_FRAMES) / SPLICE_GRID_FRAMES) * SPLICE_GRID_FRAMES;
 
 function setup(generator: HostedGenerator = countingGenerator(), mix: MixStage = identityMix) {
   const sent: RenderedChunk[] = [];
@@ -108,31 +116,93 @@ describe('render ahead', () => {
     });
   });
 
-  it('splices a settings change in a margin past the playhead, crossfading equal-power from what was queued', () => {
+  it('splices a settings change at the first chunk a margin past the playhead, rewinding the generator to that frame', () => {
     const { renderer, sent, drain } = setup();
     renderer.configure(CONFIGURE);
     drain();
     const played = 3 * RENDER_CHUNK_FRAMES + 100;
     renderer.played(played);
     drain();
-    const aheadOf = sent.at(-1)!.startFrame + RENDER_CHUNK_FRAMES;
     const before = sent.length;
     renderer.configure(CONFIGURE);
     drain();
     const splice = sent[before];
-    const at = played + MARGIN_FRAMES;
+    const at = spliceAt(played);
     expect(splice.startFrame).toBe(at);
-    // The generator went on from where it had got to rendering ahead; the
-    // old audio at the same frames is the frame count itself.
-    for (let index = 0; index < FADE_FRAMES; index += 1) {
-      const t = (index + 1) / FADE_FRAMES;
-      const expected = ((aheadOf + index) * Math.sin(t * Math.PI / 2)) + ((at + index) * Math.cos(t * Math.PI / 2));
-      expect(splice.left[index]).toBeCloseTo(expected, 0);
-    }
-    for (let index = FADE_FRAMES; index < RENDER_CHUNK_FRAMES; index += 1) expect(splice.left[index]).toBe(aheadOf + index);
-    // And the output heard everything before the splice point untouched.
+    // The generator went back to the splice frame, so the change carries on
+    // the frame count rather than jumping to where rendering ahead had got:
+    // what the output hears is one unbroken count, crossfade included.
     const out = heard(sent);
-    for (let frame = 0; frame < at; frame += 1) expect(out[frame]).toBe(frame);
+    expect(out.length).toBeGreaterThan(at + FADE_FRAMES);
+    for (let frame = 0; frame < out.length; frame += 1) expect(out[frame]).toBeCloseTo(frame, 1);
+  });
+
+  it('turning one channel off changes nothing else: from the splice on, the rest plays exactly as if the change had been made live there', () => {
+    // A soundscape with slow structure in every layer -- gusts, swells, a
+    // thunder peal, chimes, rain -- where carrying on from the wrong moment is heard.
+    const preset = SOUNDSCAPE_FACTORY_PRESETS.find((candidate) => candidate.id === 'stormy-night')!;
+    const removed = 'rain-1';
+    const without = { ...preset.settings, channels: preset.settings.channels.map((channel) => (channel.id === removed ? { ...channel, enabled: false } : channel)) };
+    expect(preset.settings.channels.find((channel) => channel.id === removed)?.enabled).toBe(true);
+    const message = (settings: typeof preset.settings): ConfigureMessage => ({
+      type: 'configure', generator: { type: 'configure', ...toGeneratorConfiguration(settings) }, space: settings.space,
+    });
+    const noise = noiseAt(SAMPLE_RATE);
+    const voice = () => ({
+      generator: hostGenerator(generatorSource, SAMPLE_RATE, { seed: 7, noiseLoops: noise.loops, noiseGains: noise.gains }),
+      mix: new SoundscapeMix(SAMPLE_RATE),
+    });
+
+    // Rendered ahead, the change arriving with a whole lead queued.
+    const played = 3 * SAMPLE_RATE;
+    const { generator, mix } = voice();
+    const { renderer, sent, drain } = setup(generator, mix);
+    renderer.configure(message(preset.settings));
+    drain();
+    for (let at = RENDER_CHUNK_FRAMES; at <= played; at += RENDER_CHUNK_FRAMES) { renderer.played(at); drain(); }
+    renderer.played(played);
+    drain();
+    renderer.configure(message(without));
+    for (let at = played; at <= played + LEAD_FRAMES; at += RENDER_CHUNK_FRAMES) { renderer.played(at); drain(); }
+    const out = heard(sent);
+    const at = spliceAt(played);
+
+    // The same voice, the change made live at that frame.
+    const start = () => {
+      const started = voice();
+      started.generator.configure(message(preset.settings).generator);
+      started.mix.setSpace(preset.settings.space);
+      started.mix.buildRoom();
+      return started;
+    };
+    const render = (live: ReturnType<typeof voice>, frames: number, settings: typeof preset.settings | null) => {
+      if (settings) { live.generator.configure(message(settings).generator); live.mix.setSpace(settings.space); }
+      const result: number[] = [];
+      for (let done = 0; done < frames; done += RENDER_CHUNK_FRAMES) {
+        const block = { direct: [new Float32Array(RENDER_CHUNK_FRAMES), new Float32Array(RENDER_CHUNK_FRAMES)] as [Float32Array, Float32Array], send: [new Float32Array(RENDER_CHUNK_FRAMES), new Float32Array(RENDER_CHUNK_FRAMES)] as [Float32Array, Float32Array] };
+        for (let offset = 0; offset < RENDER_CHUNK_FRAMES; offset += 128) {
+          const view = (channel: Float32Array) => channel.subarray(offset, offset + 128);
+          live.generator.renderBlock({ direct: [view(block.direct[0]), view(block.direct[1])], send: [view(block.send[0]), view(block.send[1])] });
+        }
+        const chunk: [Float32Array, Float32Array] = [new Float32Array(RENDER_CHUNK_FRAMES), new Float32Array(RENDER_CHUNK_FRAMES)];
+        live.mix.process(block.direct, block.send, chunk);
+        result.push(...chunk[0]);
+      }
+      return result;
+    };
+    const live = start();
+    const before = render(live, at, null);
+    const after = render(live, out.length - at, without);
+
+    for (let frame = 0; frame < at; frame += 1) expect(out[frame]).toBe(before[frame]);
+    for (let frame = at + FADE_FRAMES; frame < out.length; frame += 1) {
+      if (out[frame] !== after[frame - at]) expect.fail(`frame ${frame}: ${out[frame]} rendered ahead, ${after[frame - at]} live`);
+    }
+    // And the channel was audible, so there was something to remove.
+    expect(out.length - at).toBeGreaterThan(5 * SAMPLE_RATE);
+    const kept = render(start(), out.length, null).slice(at);
+    const difference = after.reduce((sum, value, index) => sum + ((value - kept[index]) ** 2), 0);
+    expect(Math.sqrt(difference / after.length)).toBeGreaterThan(1e-3);
   });
 
   it('applies a change with no splice when nothing is queued past the margin', () => {
@@ -191,6 +261,8 @@ describe('render ahead', () => {
       configure: () => {},
       renderBlock: (block) => { for (const channel of [...block.direct, ...block.send]) channel.fill(value); },
       frame: 0,
+      snapshot: () => ({ frame: 0, state: {} }),
+      restore: () => {},
     });
     const sent: RenderedChunk[] = [];
     const tasks: Array<() => void> = [];
@@ -201,7 +273,7 @@ describe('render ahead', () => {
     const drain = () => { while (tasks.length > 0) tasks.shift()!(); };
     renderer.configure(CONFIGURE);
     drain();
-    const from = MARGIN_FRAMES;
+    const from = spliceAt(0);
     const fadeFrames = 3 * RENDER_CHUNK_FRAMES;
     renderer.transition(CONFIGURE, fadeFrames / SAMPLE_RATE);
     // Play through the fade and a little past it.
@@ -228,6 +300,8 @@ describe('render ahead', () => {
       configure: () => {},
       renderBlock: (block) => { for (const channel of [...block.direct, ...block.send]) channel.fill(value); },
       frame: 0,
+      snapshot: () => ({ frame: 0, state: {} }),
+      restore: () => {},
     });
     const values = [-1, 0.5];
     const sent: RenderedChunk[] = [];
@@ -259,9 +333,11 @@ describe('render ahead', () => {
   });
 
   it('builds a new room only with enough queued to cover the build, then splices it in at the playhead', () => {
-    /** A mix whose room is its space's size, recording how much was queued at each build. */
+    /** A mix whose room is its space's size, recording how much the output held at each build. */
     const builtAtQueued: number[] = [];
     let renderer: RenderAhead | null = null;
+    let playedNow = 0;
+    const roomAt = new Map<number, number | null>();
     let built: number | null = null;
     let pending: number | null = null;
     const roomMix: MixStage = {
@@ -269,22 +345,32 @@ describe('render ahead', () => {
       get roomPending() { return pending !== null; },
       buildRoom: () => {
         if (pending === null) return;
-        if (renderer) builtAtQueued.push(renderer.queued);
+        // What the output still holds: everything sent, a splice's chunk not having replaced any of it yet.
+        if (renderer) builtAtQueued.push(Math.max(0, ...sent.map((chunk) => chunk.startFrame + chunk.left.length)) - playedNow);
         built = pending;
         pending = null;
       },
-      process: identityMix.process,
+      process: (direct, send, out) => {
+        // The counting generator's first sample is the chunk's frame: which room each frame was last rendered in.
+        roomAt.set(direct[0][0], built);
+        identityMix.process(direct, send, out);
+      },
+      snapshot: () => ({ built, pending }),
+      restore: (snapshot) => ({ built, pending } = snapshot as { built: number | null; pending: number | null }),
     };
-    const { renderer: created, sent, tasks } = setup(countingGenerator(), roomMix);
+    const sent: RenderedChunk[] = [];
+    const tasks: Array<() => void> = [];
+    const created = new RenderAhead(countingGenerator(), roomMix, SAMPLE_RATE, MARGIN_SEC, (chunk) => sent.push(chunk), (work) => tasks.push(work));
     renderer = created;
     const drain = () => { while (tasks.length > 0) tasks.shift()!(); };
     renderer.configure(CONFIGURE);
     drain();
     expect(builtAtQueued).toEqual([0]);
     const playedAt = 4 * RENDER_CHUNK_FRAMES;
+    playedNow = playedAt;
     renderer.played(playedAt);
     drain();
-    sent.length = 0;
+    const firstAfter = sent.length;
     // A room change: nothing is built on the spot, with only the margin queued.
     renderer.configure({ ...CONFIGURE, space: { ...CONFIGURE.space, size: CONFIGURE.space.size + 0.1 } });
     expect(builtAtQueued).toHaveLength(1);
@@ -292,7 +378,11 @@ describe('render ahead', () => {
     expect(builtAtQueued).toHaveLength(2);
     expect(builtAtQueued[1]).toBeGreaterThanOrEqual(Math.round(ROOM_BUILD_LEAD_SEC * SAMPLE_RATE));
     // Once built it is heard from the playhead's margin, not after the refilled lead.
-    const spliceStarts = sent.map((chunk) => chunk.startFrame).filter((start, index, all) => index > 0 && start <= all[index - 1]);
-    expect(spliceStarts).toEqual([playedAt + MARGIN_FRAMES]);
+    const newRoom = CONFIGURE.space.size + 0.1;
+    const end = Math.max(...sent.map((chunk) => chunk.startFrame));
+    for (let frame = 0; frame <= end; frame += RENDER_CHUNK_FRAMES) {
+      expect(roomAt.get(frame), `frame ${frame}`).toBe(frame < spliceAt(playedAt) ? CONFIGURE.space.size : newRoom);
+    }
+    expect(sent.length).toBeGreaterThan(firstAfter);
   });
 });
