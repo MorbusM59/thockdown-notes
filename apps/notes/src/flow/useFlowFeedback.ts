@@ -9,6 +9,10 @@ import { useEffect } from 'react'
 import type { FlowSettings } from '../shared/flowSettings'
 import { flowMeter } from './flowMeter'
 import { typingSoundManager } from '../sound/TypingSoundManager'
+import { soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
+
+/** At full flow the soundscape's weather swings between this share of a full gust and a full gust, rather than from a full lull. */
+const WEATHER_FLOOR_AT_FULL_FLOW = 0.8
 
 /**
  * At full flow and full strength the caret's own halo (Options > Caret) grows
@@ -61,6 +65,7 @@ export function useFlowFeedback(settings: FlowSettings): void {
     const unsubscribe = flowMeter.subscribe((level) => {
       setCaretFlow(level * caret)
       typingSoundManager.setFlowReverb(level * reverb)
+      soundscapeEngine.setWeatherFloor(level * WEATHER_FLOOR_AT_FULL_FLOW)
     })
     const unsubscribeKick = flowMeter.subscribeKick(() => typingSoundManager.kickFlowReverb(reverb))
     return () => {
@@ -68,6 +73,7 @@ export function useFlowFeedback(settings: FlowSettings): void {
       unsubscribeKick()
       setCaretFlow(0)
       typingSoundManager.setFlowReverb(0)
+      soundscapeEngine.setWeatherFloor(0)
     }
   }, [caret, reverb])
 }

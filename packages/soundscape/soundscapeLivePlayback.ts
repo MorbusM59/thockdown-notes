@@ -122,6 +122,10 @@ class Voice {
     });
   }
 
+  setWeatherFloor(floor: number): void {
+    this.generator.port.postMessage({ type: 'weatherFloor', value: floor });
+  }
+
   configure(message: ConfigureMessage): void {
     this.generator.port.postMessage(message.generator);
     const space = message.space;
@@ -257,6 +261,7 @@ export async function createLivePlayback(handlers: SoundscapePlaybackHandlers): 
   let voice = new Voice(context, mixGain, fail);
   /** Voices fading out after a change of soundscape, each with its timer. */
   const leaving = new Map<Voice, number>();
+  let weatherFloor = 0;
 
   return {
     configure(configuration, transitionSec) {
@@ -268,12 +273,18 @@ export async function createLivePlayback(handlers: SoundscapePlaybackHandlers): 
       const old = voice;
       voice = new Voice(context, mixGain, fail);
       voice.configure(configuration);
+      if (weatherFloor > 0) voice.setWeatherFloor(weatherFloor);
       voice.fade(true, transitionSec);
       old.fade(false, transitionSec);
       leaving.set(old, window.setTimeout(() => {
         leaving.delete(old);
         old.close();
       }, (transitionSec * 1000) + 100));
+    },
+    setWeatherFloor(floor) {
+      weatherFloor = floor;
+      voice.setWeatherFloor(floor);
+      for (const old of leaving.keys()) old.setWeatherFloor(floor);
     },
     setVolume(target, timeConstantSec) {
       const now = context.currentTime;

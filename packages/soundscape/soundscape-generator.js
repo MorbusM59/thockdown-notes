@@ -846,9 +846,15 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
     };
     // The scene's gust this block, -1..1: the weather signal x gustiness.
     this.gust = 0;
+    // The least share of a full gust the weather may fall to, 0..1 (see
+    // advanceWeather). Sent on its own by the desktop's live playback, so a
+    // change of it never re-renders anything; the render-ahead path never
+    // sends it and keeps 0, the weather's whole swing.
+    this.weatherFloor = 0;
     this.stopped = false;
     this.port.onmessage = (event) => {
       if (event.data?.type === 'stop') this.stopped = true;
+      if (event.data?.type === 'weatherFloor') this.weatherFloor = Math.max(0, Math.min(1, event.data.value ?? 0));
       if (event.data?.type !== 'configure') return;
       this.configure(event.data.channels ?? [], event.data.weather ?? null, event.data.level ?? 1);
     };
@@ -1079,7 +1085,13 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
     const glide = 1 - Math.exp(-length / (0.5 * WEATHER_GLIDE_SHARE * weather.paceSec * sampleRate));
     weather.leading += (weather.target - weather.leading) * glide;
     weather.value += (weather.leading - weather.value) * glide;
-    this.gust = weather.gustiness * weather.value;
+    // The floor lifts the bottom of the swing and keeps its top: read as an
+    // effect of 0 (a full lull, -1) to 1 (a full gust, 1), the signal is
+    // mapped onto floor..1, so with a floor of 0.8 the weather swings
+    // between 80% and 100% of a full gust instead of across the whole range.
+    const floor = this.weatherFloor;
+    const lifted = floor > 0 ? (2 * (floor + ((1 - floor) * (weather.value + 1) / 2))) - 1 : weather.value;
+    this.gust = weather.gustiness * lifted;
   }
 
   /** How far the weather moves this layer now, -1..1: its `weather` amount x the scene's gust. */

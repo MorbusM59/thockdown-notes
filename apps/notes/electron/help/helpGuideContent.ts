@@ -252,7 +252,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 > **Where?**
 > Settings panel → Tools.
 
-*Steady, fast typing builds a flow that the colours, the reverb and the caret answer.*
+*Steady, fast typing builds a flow that the colours, the reverb and the caret answer, and a playing soundscape's weather picks up with it.*
 
 - Every character you type adds flow (**build**), and flow drains steadily all the time (**decay**). Type fast enough and the meter fills and holds; the sliders' tooltips say what speed that takes. Keeping an even rhythm adds up to half again per key, so a steady, slightly slower pace flows as well as a rushed one.
 - Corrections and arrow keys never cost flow; only stopping does.

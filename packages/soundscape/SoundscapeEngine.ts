@@ -48,6 +48,12 @@ export interface SoundscapePlayback {
   configure(configuration: ConfigureMessage, transitionSec: number): void;
   /** The listener's volume (0..1); the output glides to it over about `timeConstantSec`. */
   setVolume(volume: number, timeConstantSec: number): void;
+  /**
+   * The least share of a full gust the weather may fall to (0..1; 0 is the
+   * weather's whole swing). Optional: a playback rendered ahead would have to
+   * re-render to hear it, so the Android one does not take it.
+   */
+  setWeatherFloor?(floor: number): void;
   close(): void;
 }
 
@@ -100,6 +106,7 @@ export class SoundscapeEngine {
   private preferences: SoundscapePreferences | null = null;
   private starting: Promise<void> | null = null;
   private disconnectTimer: number | null = null;
+  private weatherFloor = 0;
 
   /** Play through `factory`'s playbacks from the next start on (the mobile app's native one). */
   usePlayback(factory: SoundscapePlaybackFactory): void {
@@ -114,6 +121,18 @@ export class SoundscapeEngine {
    */
   fadeInNextStart(seconds: number): void {
     this.startFadeSec = seconds;
+  }
+
+  /**
+   * Hold the weather above `floor` of a full gust (0..1): the typing flow
+   * meter lifts it as flow builds. Kept across playbacks, so a soundscape
+   * started mid-flow hears it too. Not a configuration, so it never re-renders.
+   */
+  setWeatherFloor(floor: number): void {
+    const value = Math.max(0, Math.min(1, floor));
+    if (Math.abs(value - this.weatherFloor) < 0.005 && (value > 0 || this.weatherFloor === 0)) return;
+    this.weatherFloor = value;
+    this.playback?.setWeatherFloor?.(value);
   }
 
   apply(preferences: SoundscapePreferences): void {
@@ -158,6 +177,7 @@ export class SoundscapeEngine {
       this.sentConfiguration = null;
       this.volumeTarget = -1;
       this.update(preferences);
+      if (this.weatherFloor > 0) playback.setWeatherFloor?.(this.weatherFloor);
     } catch (error) {
       playback?.close();
       console.error(`Unable to start soundscape audio: ${String(error)}`);
