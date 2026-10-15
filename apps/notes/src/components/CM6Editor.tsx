@@ -12,8 +12,6 @@ import { suppressNextPlainTypingSoundOnce, typingSoundManager } from '../sound/T
 import { flowMeter } from '../flow/flowMeter';
 import { flowTrailFade } from '../flow/flowTrailFade';
 
-/** The flow trail's band height as a share of the line cell (at least 2px). */
-const FLOW_TRAIL_BAND_SHARE = 0.1;
 import { ARROW_KEY_VOICES, SHIFT_TAB_KEY_VOICE, TAB_KEY_VOICE } from '../sound/keyVoices';
 import { readSelectionRect, type SelectionRect } from '../editor/CaretRect';
 import { readSelectionLineRects } from '../editor/SelectionRects';
@@ -1120,6 +1118,7 @@ export function CM6Editor({
    */
   const flowTrailClipRef = useRef<HTMLDivElement | null>(null);
   const flowTrailLayerRef = useRef<HTMLDivElement | null>(null);
+  const flowTrailHeadRef = useRef<HTMLDivElement | null>(null);
   const [highlightRects, setHighlightRects] = useState<HighlightRect[]>([]);
   // A dragged table cell's drop target: the range of the note it covers,
   // while a drag is over one, drawn in the selection's own highlight
@@ -4033,17 +4032,24 @@ export function CM6Editor({
             const cell = box ? readCaretCellInScroll(view) : null;
             const trailLayer = flowTrailLayerRef.current;
             if (box && cell && trailLayer) {
-              const el = document.createElement('div');
-              el.className = 'flow-trail-box';
-              // A thin band along the foot of the cell, never under the
-              // glyph's body: the trail runs beneath the words just typed,
-              // where the writer rereads, so it must not lower their contrast.
-              const band = Math.max(2, Math.round(cell.height * FLOW_TRAIL_BAND_SHARE));
-              el.style.transform = `translate(${cell.left}px, ${cell.top + cell.height - band}px)`;
-              el.style.width = `${cell.width}px`;
-              el.style.height = `${band}px`;
-              trailLayer.appendChild(el);
-              flowTrailFade(el, box.opacity, box.decayPercent);
+              // The trail runs ON the grid line under the row (the grid
+              // outline's own band, at the top of the next row's tile), so it
+              // never sits behind a glyph, and it reaches up to and including
+              // the caret's cell: the cell the character lands in gets a
+              // segment, and so does the cell after it, where the caret now
+              // is. That caret segment is replaced by the next key's own.
+              flowTrailHeadRef.current?.remove();
+              const place = (left: number): HTMLDivElement => {
+                const el = document.createElement('div');
+                el.className = 'flow-trail-box';
+                el.style.transform = `translate(${left}px, ${cell.top + cell.height}px)`;
+                el.style.width = `${cell.width}px`;
+                trailLayer.appendChild(el);
+                flowTrailFade(el, box.opacity, box.decayPercent);
+                return el;
+              };
+              place(cell.left);
+              flowTrailHeadRef.current = place(cell.left + cell.width);
             }
             flowMeter.reportKey(event);
           }
