@@ -54,7 +54,15 @@
  *   filter are computed every CONTROL_FRAMES samples and ramped between;
  *   the weather once a block.
  * - nothing large is allocated while playing: the garbage collector pauses
- *   this thread, so recording buffers are recycled (takeSpareRecording).
+ *   this thread, so recording buffers are recycled (takeSpareRecording) --
+ *   except in a REWINDABLE generator (processorOptions.rewindable, set by
+ *   soundscapeGeneratorHost.ts for Android's render-ahead), whose state is
+ *   copied at every chunk so a settings change can be applied from the past
+ *   (soundscapeRenderAhead.ts). There a recording is written once, while it
+ *   is recorded, and never again, so every copy of the state can share it
+ *   (recordedBuffers) instead of copying it; recycling one would rewrite a
+ *   buffer that an earlier copy still holds. A render-ahead has seconds of
+ *   audio queued, so a collector pause there is not heard.
  * - no trigonometry per sample (oscillators are rotated sin/cos pairs), no
  *   work for a component that has gone silent, one tight loop per voice.
  */
@@ -431,6 +439,14 @@ const SELF_PLACING_KINDS = new Set(['thunder', 'chimes']);
 
 /** The most rain voices one layer keeps ringing at once. */
 const MAX_RAIN_VOICES = 48;
+/**
+ * How long a channel turned on or off takes to fade in or out. Turned off,
+ * it keeps playing (its own stream, its own state) until it is silent, so
+ * removing it is heard as that channel fading and nothing else -- never as
+ * a cut, which clicks. Turned back on before then, it fades back in from
+ * where it got to.
+ */
+const CHANNEL_FADE_SEC = 0.03;
 
 /** Large drops per second at `drips` = 1; mirrors SOUNDSCAPE_RAIN_DRIPS_MAX_PER_SEC. */
 const RAIN_DRIPS_MAX_PER_SEC = 3;
@@ -820,11 +836,20 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
     // the same audible level (noiseLoopGains).
     this.noiseLoops = processorOptions.noiseLoops ?? {};
     this.noiseGains = processorOptions.noiseGains ?? {};
+    // A rewindable generator's recordings, which copies of its state share
+    // (see the header). Null where recordings are recycled instead. A
+    // recording still being made is shared too: a restored copy rewrites it
+    // from its own position before anything reads it, and a copy older than
+    // that is never restored, because the render-ahead only rewinds forward
+    // of every rewind before it.
+    this.recordedBuffers = processorOptions.rewindable ? new WeakSet() : null;
     // The stream `random()` draws from: the channel being configured or
     // rendered, else the root. Set by withStream.
     this.stream = this.rootStream;
     this.channels = [];
     this.soloChannelId = null;
+    // Whether a configure has been applied: channels after the first fade in.
+    this.configured = false;
     // The soundscape's own volume (SoundscapeSettings.volume, as a gain),
     // applied to both outputs. It lives here rather than on the engine's
     // mixGain because it belongs to the channels: a `configure` that swaps
@@ -902,6 +927,9 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
       darkRight: null,
       directGain: 1,
       reverbSend: 0,
+      // The on/off fade (applyChannelFade): where it is, and where it is going.
+      fade: 1,
+      fadeTarget: 1,
     };
     switch (channel.kind) {
       case 'noise':
@@ -950,9 +978,19 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
     this.soloChannelId = settings.find((channel) => channel.solo)?.id ?? null;
     const activeSettings = settings.filter((channel) => channel.enabled !== false);
     const previousById = new Map(this.channels.map((channel) => [channel.id, channel]));
+    const activeIds = new Set(activeSettings.map((channel) => channel.id));
+    // Channels turned off fade out first (CHANNEL_FADE_SEC), kept as they were.
+    const leaving = this.channels.filter((channel) => !activeIds.has(channel.id));
+    for (const channel of leaving) channel.fadeTarget = 0;
     this.channels = activeSettings.map((next) => {
       const previous = previousById.get(next.id);
-      if (!previous || previous.kind !== next.kind) return this.makeChannel(next);
+      if (!previous || previous.kind !== next.kind) {
+        const made = this.makeChannel(next);
+        // Turned on while playing, it fades in; the soundscape's first channels start whole.
+        if (this.configured) made.fade = 0;
+        return made;
+      }
+      previous.fadeTarget = 1;
       return this.withStream(previous.stream, () => {
         const before = { ...previous };
         Object.assign(previous, next);
@@ -971,7 +1009,25 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
         this.configureSpace(previous);
         return previous;
       });
-    });
+    }).concat(leaving);
+    this.configured = true;
+  }
+
+  /**
+   * Move `channel`'s on/off fade over this block and apply it to the
+   * buffers given (CHANNEL_FADE_SEC). A channel that is fully on is left
+   * untouched, so the fade costs nothing in the steady state.
+   */
+  applyChannelFade(channel, buffers, length) {
+    const from = channel.fade;
+    const target = channel.fadeTarget;
+    if (from === target && target === 1) return;
+    const step = 1 / Math.max(1, CHANNEL_FADE_SEC * sampleRate);
+    for (let index = 0; index < length; index += 1) {
+      const gain = target > from ? Math.min(target, from + (step * (index + 1))) : Math.max(target, from - (step * (index + 1)));
+      for (const buffer of buffers) buffer[index] *= gain;
+    }
+    channel.fade = target > from ? Math.min(target, from + (step * length)) : Math.max(target, from - (step * length));
   }
 
   /**
@@ -1824,7 +1880,9 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
         return buffer;
       }
     }
-    return new Float32Array(length);
+    const buffer = new Float32Array(length);
+    this.recordedBuffers?.add(buffer.buffer);
+    return buffer;
   }
 
   evictRecording(channel, entry) {
@@ -1840,7 +1898,8 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
   releaseRecordingIfUnused(channel, entry) {
     if (entry.inBank || entry.users > 0 || !entry.buffer) return;
     // At most a bank's worth of spares; beyond that the buffer is let go.
-    if (channel.spareRecordings.length < DROP_BANK_SIZE + DRIP_BANK_SIZE) channel.spareRecordings.push(entry.buffer);
+    // A rewindable generator never takes one back (see the header).
+    if (!this.recordedBuffers && channel.spareRecordings.length < DROP_BANK_SIZE + DRIP_BANK_SIZE) channel.spareRecordings.push(entry.buffer);
     entry.buffer = null;
   }
 
@@ -3421,7 +3480,11 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
     this.advanceWeather(length);
 
     for (const channel of this.channels) {
-      if (!(channel.gain > 0)) continue;
+      if (!(channel.gain > 0)) {
+        // Silent anyway: nothing to fade.
+        channel.fade = channel.fadeTarget;
+        continue;
+      }
       const audible = this.soloChannelId === null || channel.id === this.soloChannelId;
       this.stream = channel.stream;
       switch (channel.kind) {
@@ -3442,6 +3505,7 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
           // SELF_PLACING_KINDS: rendered straight into direct and send.
           if (channel.kind === 'thunder') this.renderThunder(channel, left, right, this.scratchSendLeft, this.scratchSendRight, length);
           else this.renderChimes(channel, left, right, this.scratchSendLeft, this.scratchSendRight, currentFrame, length);
+          this.applyChannelFade(channel, [left, right, this.scratchSendLeft, this.scratchSendRight], length);
           if (!audible) continue;
           const directLeft = direct[0];
           const directRight = direct[1] ?? directLeft;
@@ -3462,7 +3526,12 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
         default:
           continue;
       }
+      this.applyChannelFade(channel, [left, right], length);
       if (audible) this.placeLayer(channel, left, right, length, direct, send);
+    }
+    // A channel turned off is gone once it has faded out.
+    if (this.channels.some((channel) => channel.fadeTarget === 0 && channel.fade === 0)) {
+      this.channels = this.channels.filter((channel) => !(channel.fadeTarget === 0 && channel.fade === 0));
     }
     this.stream = this.rootStream;
     this.applyLevel(outputs, length);

@@ -7,7 +7,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { DEFAULT_SOUNDSCAPE_SETTINGS, SOUNDSCAPE_FACTORY_PRESETS } from '@thockdown/soundscape/soundscape';
 import { toGeneratorConfiguration } from '@thockdown/soundscape/soundscapeDsp';
 import { HALF_SCALE_HEADROOM, toBase64 } from '@thockdown/soundscape/halfScalePcm';
-import { RENDER_CHUNK_FRAMES, RENDER_LEAD_SEC } from '@thockdown/soundscape/soundscapeRenderAhead';
+import { RENDER_CHUNK_FRAMES, RENDER_LEAD_SEC, SPLICE_GRID_FRAMES } from '@thockdown/soundscape/soundscapeRenderAhead';
 
 const root = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '../../..');
 const SAMPLE_RATE = 8000;
@@ -84,7 +84,8 @@ describe('soundscape renderer bundle', () => {
     renderer.soundscapeStep(played, 64);
     renderer.soundscapeConfigure(configure(SOUNDSCAPE_FACTORY_PRESETS[3].settings));
     const [first] = JSON.parse(renderer.soundscapeStep(played, 1)) as Array<{ s: number; d: string }>;
-    expect(first.s).toBe(played + Math.round(MARGIN_SEC * SAMPLE_RATE));
+    // The first point of the splice grid past the margin.
+    expect(first.s).toBe(Math.ceil((played + Math.round(MARGIN_SEC * SAMPLE_RATE)) / SPLICE_GRID_FRAMES) * SPLICE_GRID_FRAMES);
     const samples = decode(first.d);
     expect(samples.every(Number.isFinite)).toBe(true);
     expect(Math.max(...Array.from(samples, Math.abs))).toBeGreaterThan(1e-3);

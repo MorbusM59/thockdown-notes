@@ -30,6 +30,13 @@ export interface CompressorSettings {
 
 const LOOKAHEAD_SEC = 0.006;
 
+export interface CompressorSnapshot {
+  readonly delayLeft: Float32Array;
+  readonly delayRight: Float32Array;
+  readonly delayIndex: number;
+  readonly reductionDb: number;
+}
+
 export class DynamicsCompressor {
   private readonly attackCoefficient: number;
   private readonly releaseCoefficient: number;
@@ -90,6 +97,19 @@ export class DynamicsCompressor {
       k = Math.sqrt(low * high);
     }
     return k;
+  }
+
+  /** The running state (the look-ahead delay and the smoothed reduction), to `restore` later. */
+  snapshot(): CompressorSnapshot {
+    return { delayLeft: this.delayLeft.slice(), delayRight: this.delayRight.slice(), delayIndex: this.delayIndex, reductionDb: this.reductionDb };
+  }
+
+  /** Return to a `snapshot`. */
+  restore(snapshot: CompressorSnapshot): void {
+    this.delayLeft.set(snapshot.delayLeft);
+    this.delayRight.set(snapshot.delayRight);
+    this.delayIndex = snapshot.delayIndex;
+    this.reductionDb = snapshot.reductionDb;
   }
 
   /** Compress `left`/`right` in place. */

@@ -17,8 +17,9 @@
 import type { SoundscapeSpaceSettings } from './soundscape';
 import { biquadCoefficients, brillianceCurve, BRILLIANCE_BANDS, StereoBiquad } from './soundscapeBrilliance';
 import { buildSoundscapeImpulseResponse, soundscapeRoomKey, spacePreDelaySec, SPACE_MAX_LENGTH_SEC } from './soundscapeSpace';
-import { DynamicsCompressor, type CompressorSettings } from './dynamicsCompressor';
-import { BLOCK, PartitionedConvolver } from './partitionedConvolver';
+import { DynamicsCompressor, type CompressorSettings, type CompressorSnapshot } from './dynamicsCompressor';
+import { BLOCK, PartitionedConvolver, type ConvolverSnapshot } from './partitionedConvolver';
+import type { StereoBiquadSnapshot } from './soundscapeBrilliance';
 
 /** The block the mix processes: the convolver's. */
 export const MIX_BLOCK = BLOCK;
@@ -56,6 +57,20 @@ export const BUS_COMPRESSOR: CompressorSettings = {
   releaseSec: 0.8,
 };
 
+
+/** The mix's state at one block; opaque outside this module. */
+export interface MixSnapshot {
+  readonly convolvers: readonly [ConvolverSnapshot, ConvolverSnapshot];
+  readonly compressor: CompressorSnapshot;
+  readonly toneFilters: readonly StereoBiquadSnapshot[];
+  readonly spaceKey: string | null;
+  readonly pendingRoom: SoundscapeSpaceSettings | null;
+  readonly returnGain: number;
+  readonly returnTarget: number;
+  readonly brilliance: number | null;
+  readonly makeup: number;
+  readonly makeupTarget: number;
+}
 
 export class SoundscapeMix {
   private readonly convolvers: [PartitionedConvolver, PartitionedConvolver];
@@ -98,6 +113,37 @@ export class SoundscapeMix {
     }
     const key = soundscapeRoomKey(space);
     this.pendingRoom = key === this.spaceKey ? null : { ...space };
+  }
+
+  /** The whole state at this block, room requests included, to `restore` later (the render-ahead's rewind). */
+  snapshot(): MixSnapshot {
+    return {
+      convolvers: [this.convolvers[0].snapshot(), this.convolvers[1].snapshot()],
+      compressor: this.compressor.snapshot(),
+      toneFilters: this.toneFilters.map((filter) => filter.snapshot()),
+      spaceKey: this.spaceKey,
+      pendingRoom: this.pendingRoom,
+      returnGain: this.returnGain,
+      returnTarget: this.returnTarget,
+      brilliance: this.brilliance,
+      makeup: this.makeup,
+      makeupTarget: this.makeupTarget,
+    };
+  }
+
+  /** Return to a `snapshot`: process on from its block exactly as the mix did from there. */
+  restore(snapshot: MixSnapshot): void {
+    this.convolvers[0].restore(snapshot.convolvers[0]);
+    this.convolvers[1].restore(snapshot.convolvers[1]);
+    this.compressor.restore(snapshot.compressor);
+    snapshot.toneFilters.forEach((filter, index) => this.toneFilters[index].restore(filter));
+    this.spaceKey = snapshot.spaceKey;
+    this.pendingRoom = snapshot.pendingRoom;
+    this.returnGain = snapshot.returnGain;
+    this.returnTarget = snapshot.returnTarget;
+    this.brilliance = snapshot.brilliance;
+    this.makeup = snapshot.makeup;
+    this.makeupTarget = snapshot.makeupTarget;
   }
 
   get roomPending(): boolean {

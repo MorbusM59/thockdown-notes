@@ -67,7 +67,13 @@ How it got here, because each step was measured on a device:
 
 Outputs are plain queues at absolute frame positions. A settings change is
 spliced a margin past the playhead and crossfaded by the RENDERER from its
-history of what it sent (50 ms). A new room (size, foliage) is the
+history of what it sent (50 ms). The generator and the mix are REWOUND to
+that frame first, from a checkpoint the renderer keeps at every point of
+its splice grid (about 85 ms), so everything the change does not touch
+carries on sample for sample: turning one channel off removes that channel
+and nothing else. Without the rewind they carried on from where rendering
+ahead had got to, ten seconds later, and every gust, swell, peal and chime
+pattern jumped at each change. A new room (size, foliage) is the
 one expensive change -- about a tenth of a second to build, longer than a
 splice's margin -- so it is built only once half a second is queued again,
 then spliced in at the playhead (`soundscapeRenderAhead.ts`, THE ROOM). A change of SOUNDSCAPE is spliced at the
