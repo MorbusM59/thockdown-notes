@@ -38,7 +38,7 @@ const fillAlphaExpressionsOf = (css: string) =>
   [...css.matchAll(/background-color: rgba\([^,]+,\s*[^,]+,\s*[^,]+,\s*(.*?)\);/g)].map((match) => match[1])
 
 const fillAlphasOf = (css: string) =>
-  fillAlphaExpressionsOf(css).map((alpha) => Number(alpha.match(/^calc\(([\d.]+)/)?.[1]))
+  fillAlphaExpressionsOf(css).map((alpha) => Number(alpha.match(/^calc\(\(([\d.]+)/)?.[1]))
 
 describe('resolveCaretSegmentStepCount', () => {
   it('honours the keyframe when a frame is longer than the segment', () => {
@@ -199,11 +199,11 @@ describe('buildCaretBlinkKeyframesCss', () => {
   it('blends the effect to zero at full flow without changing the saved strength', () => {
     const css = build()
     expect(fillAlphaExpressionsOf(css)).toEqual([
-      'calc(0.18 + (0.3 - 0.18) * var(--flow-caret-effect, 0))',
-      'calc(0.03 + (0.3 - 0.03) * var(--flow-caret-effect, 0))',
-      'calc(0.27 + (0.3 - 0.27) * var(--flow-caret-effect, 0))',
-      'calc(0.09 + (0.3 - 0.09) * var(--flow-caret-effect, 0))',
-      'calc(0.18 + (0.3 - 0.18) * var(--flow-caret-effect, 0))',
+      'calc((0.18 + (0.3 - 0.18) * var(--flow-caret-effect, 0)) * (1 - var(--flow-caret-fade, 0)))',
+      'calc((0.03 + (0.3 - 0.03) * var(--flow-caret-effect, 0)) * (1 - var(--flow-caret-fade, 0)))',
+      'calc((0.27 + (0.3 - 0.27) * var(--flow-caret-effect, 0)) * (1 - var(--flow-caret-fade, 0)))',
+      'calc((0.09 + (0.3 - 0.09) * var(--flow-caret-effect, 0)) * (1 - var(--flow-caret-fade, 0)))',
+      'calc((0.18 + (0.3 - 0.18) * var(--flow-caret-effect, 0)) * (1 - var(--flow-caret-fade, 0)))',
     ])
     expect(css).toContain('outline-color: rgba(10, 20, 30, calc(0.48 + (0.8 - 0.48) * var(--flow-caret-effect, 0)')
     expect(css).toContain('rgba(200, 100, 50, calc(0.3 + (0.5 - 0.3) * var(--flow-caret-effect, 0)')
