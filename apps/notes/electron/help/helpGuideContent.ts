@@ -254,10 +254,10 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 *Steady, fast typing builds a flow that the colours, the reverb and the caret answer.*
 
-- Flow builds when your pace is even and at or above the **pace** you set; **rhythm** sets how much an uneven pace costs.
-- Arrow keys, Backspace, Delete and undo end the streak, and a pause lets it fade.
-- In flow, each character you type leaves a faint box that fades behind the caret; its colour is under Colors, in Boxes.
-- **build** and **fade** set how quickly flow comes and goes; **look**, **reverb** and **caret** set how strongly each answers.
+- Every character you type adds a little flow (**build**), the full amount at or above your **pace**. Keeping an even rhythm adds up to half again, so a steady, slightly slower pace flows as well as a rushed one.
+- Corrections and arrow keys never cost flow; only stopping does, emptying it over **fade** seconds.
+- In flow, each character you type leaves a faint box behind the caret that fades as flow does; its colour is under Colors, in Boxes.
+- **look**, **reverb** and **caret** set how strongly each answers; **caret** covers the glow and the trail.
 - The flow's **caret** strength also eases the blink's **Effect** (under Caret) toward 0; at full flow and full strength, the caret holds steady at its own colours.
 `,
   `## Internal Linking

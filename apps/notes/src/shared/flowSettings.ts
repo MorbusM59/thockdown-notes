@@ -7,44 +7,33 @@
 
 export interface FlowSettings {
   enabled: boolean
-  /** Typing speed, in words per minute (5 characters a word), at which a hit counts for half. */
+  /** Typing speed, in words per minute (5 characters a word), at and above which a hit is worth its full gain. */
   thresholdWpm: number
-  /** Keystrokes of steady typing at the threshold's speed or better that take an empty meter to 90%. */
-  buildKeys: number
-  /** Seconds after the last keystroke at which a full meter has fallen to half. */
+  /** The share of a full meter, in percent, that one hit at the threshold pace adds (`flowModel.ts`). */
+  gainPercent: number
+  /** Seconds after the last keystroke at which a full meter has decayed, quadratically, to empty. Also how long a trail box takes to fade. */
   fadeSec: number
-  /** How much an uneven rhythm costs, 0 (not at all) to 1 (strict). */
-  rhythm: number
-  /** Strength of each feedback channel at a full meter, 0..1. */
+  /** Strength of each feedback channel at a full meter, 0..1. `caret` drives the halo, the steadying blink and the trail (whose colour is the `flowTrail` highlight colour). */
   look: number
   reverb: number
   caret: number
-  /** Strength of the caret trail at a full meter, 0..1. Its colour is the `flowTrail` highlight colour. */
-  trail: number
-  /** Seconds a trail box takes to fade out. */
-  trailFadeSec: number
 }
 
 export const FLOW_THRESHOLD_WPM_MIN = 10
 export const FLOW_THRESHOLD_WPM_MAX = 160
-export const FLOW_BUILD_KEYS_MIN = 20
-export const FLOW_BUILD_KEYS_MAX = 600
-export const FLOW_FADE_SEC_MIN = 0.5
-export const FLOW_FADE_SEC_MAX = 10
-export const FLOW_TRAIL_FADE_SEC_MIN = 0.2
-export const FLOW_TRAIL_FADE_SEC_MAX = 5
+export const FLOW_GAIN_PERCENT_MIN = 1
+export const FLOW_GAIN_PERCENT_MAX = 10
+export const FLOW_FADE_SEC_MIN = 0.1
+export const FLOW_FADE_SEC_MAX = 5
 
 export const DEFAULT_FLOW_SETTINGS: FlowSettings = {
   enabled: false,
   thresholdWpm: 45,
-  buildKeys: 150,
-  fadeSec: 2.5,
-  rhythm: 0.5,
+  gainPercent: 3,
+  fadeSec: 2,
   look: 0.5,
   reverb: 0.5,
   caret: 0.5,
-  trail: 0.5,
-  trailFadeSec: 1,
 }
 
 function bounded(value: unknown, min: number, max: number, fallback: number): number {
@@ -57,13 +46,10 @@ export function sanitizeFlowSettings(input: unknown): FlowSettings {
   return {
     enabled: typeof source.enabled === 'boolean' ? source.enabled : d.enabled,
     thresholdWpm: bounded(source.thresholdWpm, FLOW_THRESHOLD_WPM_MIN, FLOW_THRESHOLD_WPM_MAX, d.thresholdWpm),
-    buildKeys: bounded(source.buildKeys, FLOW_BUILD_KEYS_MIN, FLOW_BUILD_KEYS_MAX, d.buildKeys),
+    gainPercent: bounded(source.gainPercent, FLOW_GAIN_PERCENT_MIN, FLOW_GAIN_PERCENT_MAX, d.gainPercent),
     fadeSec: bounded(source.fadeSec, FLOW_FADE_SEC_MIN, FLOW_FADE_SEC_MAX, d.fadeSec),
-    rhythm: bounded(source.rhythm, 0, 1, d.rhythm),
     look: bounded(source.look, 0, 1, d.look),
     reverb: bounded(source.reverb, 0, 1, d.reverb),
     caret: bounded(source.caret, 0, 1, d.caret),
-    trail: bounded(source.trail, 0, 1, d.trail),
-    trailFadeSec: bounded(source.trailFadeSec, FLOW_TRAIL_FADE_SEC_MIN, FLOW_TRAIL_FADE_SEC_MAX, d.trailFadeSec),
   }
 }

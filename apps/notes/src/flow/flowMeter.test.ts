@@ -3,8 +3,8 @@ import { DEFAULT_FLOW_SETTINGS } from '../shared/flowSettings'
 
 /**
  * The live meter, driven by a fake clock and frame loop: the property is that
- * steady typing through the real plumbing raises what listeners see, and a
- * break brings it back down.
+ * steady typing through the real plumbing raises what listeners see, and
+ * stopping brings it back down.
  */
 describe('flow meter', () => {
   let now = 0
@@ -32,7 +32,7 @@ describe('flow meter', () => {
 
   const key = (k: string) => ({ key: k, ctrlKey: false, metaKey: false, altKey: false, repeat: false }) as KeyboardEvent
 
-  it('rises under steady typing and falls on a break', async () => {
+  it('rises under steady typing and falls once it stops', async () => {
     const { flowMeter } = await import('./flowMeter')
     flowMeter.configure({ ...DEFAULT_FLOW_SETTINGS, enabled: true })
     let level = 0
@@ -45,7 +45,7 @@ describe('flow meter', () => {
     expect(level).toBeGreaterThan(0.4)
 
     flowMeter.reportKey(key('Backspace'))
-    advance(2000)
+    advance(DEFAULT_FLOW_SETTINGS.fadeSec * 1000 + 1000)
     expect(level).toBe(0)
   })
 

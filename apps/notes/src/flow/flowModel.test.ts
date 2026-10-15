@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
-  classifyFlowKey,
   EMPTY_FLOW_STATE,
   flowHit,
   flowLevelAt,
-  hitGain,
+  hitWorth,
+  isFlowHit,
+  RHYTHM_BONUS,
   type FlowState,
   type FlowTuning,
 } from './flowModel'
 
-const TUNING: FlowTuning = { thresholdWpm: 45, buildKeys: 150, fadeSec: 2.5, rhythm: 0.5 }
+const TUNING: FlowTuning = { thresholdWpm: 45, gainPercent: 3, fadeSec: 2 }
 
 /** Types `count` keys at the given intervals (cycled), returning the state and the time of the last key. */
 function type(intervals: number[], count: number, tuning = TUNING, start: FlowState = EMPTY_FLOW_STATE, t0 = 0) {
@@ -22,96 +23,59 @@ function type(intervals: number[], count: number, tuning = TUNING, start: FlowSt
   return { state, t }
 }
 
-/** The level a steady pattern settles at: typed until two passes agree. */
-function settledLevel(intervals: number[], tuning = TUNING): number {
-  const { state, t } = type(intervals, 4000, tuning)
-  const again = type(intervals, intervals.length * 50, tuning, state, t)
-  expect(Math.abs(again.state.levelAtHit - state.levelAtHit)).toBeLessThan(0.02)
-  return again.state.levelAtHit
-}
-
 const atWpm = (wpm: number) => 12 / wpm
 
 describe('flow model', () => {
+  it('adds the build gain from the very first key', () => {
+    const state = flowHit(EMPTY_FLOW_STATE, 0, TUNING)
+    expect(state.levelAtHit).toBeCloseTo(0.03)
+  })
+
   it('stays inside 0..1 however long and fast the typing', () => {
-    const { state } = type([0.03], 20000)
-    expect(state.levelAtHit).toBeGreaterThan(0.9)
-    expect(state.levelAtHit).toBeLessThanOrEqual(1)
+    const { state } = type([0.03], 5000)
+    expect(state.levelAtHit).toBe(1)
   })
 
-  it('settles at a fixed point that rises with speed', () => {
-    const slow = settledLevel([atWpm(30)])
-    const threshold = settledLevel([atWpm(45)])
-    const fast = settledLevel([atWpm(90)])
-    expect(slow).toBeLessThan(threshold)
-    expect(threshold).toBeLessThan(fast)
-    expect(slow).toBeLessThan(0.3)
-    expect(fast).toBeGreaterThan(0.6)
+  it('a steady rhythm at the threshold earns the full bonus on top of full speed', () => {
+    const interval = atWpm(45)
+    expect(hitWorth([interval, interval, interval], interval, 45)).toBeCloseTo(1 + RHYTHM_BONUS)
   })
 
-  it('pays an even rhythm more than an uneven one at the same average speed', () => {
-    const mean = atWpm(70)
-    const even = settledLevel([mean])
-    const uneven = settledLevel([mean * 0.5, mean * 1.5])
-    expect(uneven).toBeLessThan(even)
+  it('the rhythm bonus falls to nothing at a 20% deviation and never goes negative', () => {
+    const avg = atWpm(90)
+    expect(hitWorth([avg, avg], avg * 1.2, 45) - hitWorth([avg, avg], avg * 1.5, 45)).toBe(0)
+    expect(hitWorth([avg, avg], avg * 1.1, 45)).toBeCloseTo(1 + RHYTHM_BONUS / 2)
   })
 
-  it('makes an uneven rhythm cost more the stricter the rhythm setting', () => {
-    // Same geometric mean, so the same speed reading. Some cost remains at
-    // zero strictness: the longer gaps decay more, which is the pause rule
-    // and not the rhythm rule.
-    const mean = atWpm(70)
-    const cost = (rhythm: number) => {
-      const tuning = { ...TUNING, rhythm }
-      return settledLevel([mean], tuning) - settledLevel([mean / 1.5, mean * 1.5], tuning)
-    }
-    expect(cost(0)).toBeLessThan(cost(0.5))
-    expect(cost(0.5)).toBeLessThan(cost(1))
+  it('a steady rhythm below the threshold can out-earn an uneven one at it', () => {
+    const steady = type([atWpm(40)], 60)
+    const uneven = type([atWpm(45) * 0.6, atWpm(45) * 1.4], 60)
+    expect(steady.state.levelAtHit).toBeGreaterThan(uneven.state.levelAtHit)
   })
 
-  it('reaches about 90% in buildKeys perfect, decay-free hits', () => {
-    const g = hitGain(TUNING.buildKeys)
-    expect(Math.pow(1 - g, TUNING.buildKeys)).toBeCloseTo(0.1, 10)
+  it('decays quadratically, empty exactly fadeSec after the last key', () => {
+    const state: FlowState = { levelAtHit: 1, lastHitSec: 0, intervals: [] }
+    expect(flowLevelAt(state, TUNING.fadeSec / Math.SQRT2, TUNING)).toBeCloseTo(0.5)
+    expect(flowLevelAt(state, TUNING.fadeSec, TUNING)).toBe(0)
+    expect(flowLevelAt(state, TUNING.fadeSec * 3, TUNING)).toBe(0)
   })
 
-  it('fades to exactly half at fadeSec after the last hit, and the fade accelerates', () => {
-    const state: FlowState = { ...EMPTY_FLOW_STATE, levelAtHit: 1, lastHitSec: 0 }
-    expect(flowLevelAt(state, TUNING.fadeSec, TUNING)).toBeCloseTo(0.5, 10)
-    const lossInFirstSecond = 1 - flowLevelAt(state, 1, TUNING)
-    const lossInSecondSecond = flowLevelAt(state, 1, TUNING) - flowLevelAt(state, 2, TUNING)
-    expect(lossInSecondSecond).toBeGreaterThan(lossInFirstSecond)
+  it('a pause restarts the interval history', () => {
+    const { state, t } = type([atWpm(60)], 20)
+    expect(state.intervals.length).toBe(10)
+    expect(flowHit(state, t + 3, TUNING).intervals).toEqual([])
   })
 
-  it('gives nothing until the rhythm has been heard, and restarts the estimate after a pause', () => {
-    const first = type([atWpm(80)], 3)
-    expect(first.state.levelAtHit).toBe(0)
-    const flowing = type([atWpm(80)], 200)
-    const afterPause = flowHit(flowing.state, flowing.t + 3, TUNING)
-    expect(afterPause.intervals).toBe(0)
-    expect(afterPause.levelAtHit).toBeLessThan(flowing.state.levelAtHit)
-  })
-})
-
-describe('flow keys', () => {
-  const key = (k: string, extra: Partial<KeyboardEvent> = {}) =>
-    classifyFlowKey({ key: k, ctrlKey: false, metaKey: false, altKey: false, repeat: false, ...extra })
-
-  it('counts characters, Space and Enter as hits', () => {
-    expect(key('a')).toBe('hit')
-    expect(key('@', { ctrlKey: true, altKey: true })).toBe('hit')
-    expect(key(' ')).toBe('hit')
-    expect(key('Enter')).toBe('hit')
-  })
-
-  it('breaks on corrections, caret moves and shortcuts', () => {
-    for (const k of ['Backspace', 'Delete', 'ArrowLeft', 'ArrowUp', 'Home', 'PageDown']) expect(key(k)).toBe('break')
-    expect(key('z', { ctrlKey: true })).toBe('break')
-    expect(key('Backspace', { repeat: true })).toBe('break')
-  })
-
-  it('ignores modifiers, Tab and auto-repeat', () => {
-    expect(key('Shift')).toBe('ignore')
-    expect(key('Tab')).toBe('ignore')
-    expect(key('a', { repeat: true })).toBe('ignore')
+  it('counts characters, Space and Enter as hits and nothing else', () => {
+    const k = (key: string, extra: Partial<KeyboardEvent> = {}) =>
+      isFlowHit({ key, ctrlKey: false, metaKey: false, altKey: false, repeat: false, ...extra })
+    expect(k('a')).toBe(true)
+    expect(k(' ')).toBe(true)
+    expect(k('Enter')).toBe(true)
+    expect(k('Backspace')).toBe(false)
+    expect(k('ArrowLeft')).toBe(false)
+    expect(k('z', { ctrlKey: true })).toBe(false)
+    expect(k('@', { ctrlKey: true, altKey: true })).toBe(true)
+    expect(k('a', { repeat: true })).toBe(false)
   })
 })

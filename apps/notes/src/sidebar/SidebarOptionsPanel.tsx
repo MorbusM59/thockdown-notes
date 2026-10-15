@@ -8,11 +8,9 @@ import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
 import {
   DEFAULT_FLOW_SETTINGS,
-  FLOW_BUILD_KEYS_MAX, FLOW_BUILD_KEYS_MIN,
   FLOW_FADE_SEC_MAX, FLOW_FADE_SEC_MIN,
+  FLOW_GAIN_PERCENT_MAX, FLOW_GAIN_PERCENT_MIN,
   FLOW_THRESHOLD_WPM_MAX, FLOW_THRESHOLD_WPM_MIN,
-  FLOW_TRAIL_FADE_SEC_MIN,
-  FLOW_TRAIL_FADE_SEC_MAX,
   type FlowSettings,
 } from '../shared/flowSettings'
 import { exportSoundscapes, importSoundscapes } from '@thockdown/soundscape/soundscapeFileActions'
@@ -296,7 +294,7 @@ const VIEW_STYLE_OPTIONS: Array<{ key: ViewStyleKey; label: string; family: stri
   { key: 'bubblerone', label: 'Bubbler One', family: "'Bubbler One', 'Segoe UI', sans-serif" },
 ]
 
-const BOX_HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['background', 'grid', 'gridOutline', 'topBackground', 'bottomBackground', 'flowTrail', 'gutterBackground', 'immersiveScrollThumb', 'reviewLine', 'warningLine', 'lineNumber', 'flowTrailCenter']
+const BOX_HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['background', 'grid', 'gridOutline', 'topBackground', 'bottomBackground', 'flowTrail', 'gutterBackground', 'immersiveScrollThumb', 'reviewLine', 'warningLine', 'lineNumber']
 const MARKDOWN_HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = [
   'markdownHeadline',
   'markdownList',
@@ -323,7 +321,6 @@ const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
   gutterBackground: 'Gutter Background',
   immersiveScrollThumb: 'Immersive Scroll Thumb',
   flowTrail: 'Typing flow trail color',
-  flowTrailCenter: 'Typing flow trail center color',
   reviewLine: 'Review Flag Color',
   warningLine: 'Warning Flag Color',
   lineNumber: 'Line Number Color',
@@ -355,7 +352,6 @@ const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
   gutterBackground: 'fa-solid fa-list-ol',
   immersiveScrollThumb: 'fa-solid fa-grip-vertical',
   flowTrail: 'fa-solid fa-water',
-  flowTrailCenter: 'fa-solid fa-droplet',
   reviewLine: 'fa-solid fa-question',
   warningLine: 'fa-solid fa-triangle-exclamation',
   lineNumber: 'fa-solid fa-hashtag',
@@ -2986,8 +2982,8 @@ export function SidebarOptionsPanel({
         </div>
         {flowSettings.enabled ? (
           <div className="utility-setting-slider-stack" aria-label="Typing flow settings">
-            {/* What counts (pace, rhythm), how it moves (build, fade), how it answers (look, reverb, caret), and the trail. */}
-            <OptionsSliderRows rows={[2, 2, 3, 2]}>
+            {/* What counts (pace), how it moves (build, fade), and how it answers (look, reverb, caret). */}
+            <OptionsSliderRows rows={[3, 3]}>
               <CompactScrollbarSlider
                 id="flow-threshold"
                 min={FLOW_THRESHOLD_WPM_MIN}
@@ -3002,30 +2998,17 @@ export function SidebarOptionsPanel({
                 onCommit={(value) => setFlowSettings((prev) => ({ ...prev, thresholdWpm: value }))}
               />
               <CompactScrollbarSlider
-                id="flow-rhythm"
-                min={0}
-                max={1}
-                step={0.01}
-                value={flowSettings.rhythm}
-                trackLabel="rhythm"
-                tooltipLabel="How much an uneven rhythm costs"
-                ariaLabel="How much an uneven typing rhythm costs flow"
-                defaultValue={DEFAULT_FLOW_SETTINGS.rhythm}
-                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, rhythm: value }))}
-              />
-              <CompactScrollbarSlider
-                id="flow-build"
-                min={FLOW_BUILD_KEYS_MIN}
-                max={FLOW_BUILD_KEYS_MAX}
-                step={5}
-                value={flowSettings.buildKeys}
-                reverseScale
+                id="flow-gain"
+                min={FLOW_GAIN_PERCENT_MIN}
+                max={FLOW_GAIN_PERCENT_MAX}
+                step={0.1}
+                value={flowSettings.gainPercent}
                 trackLabel="build"
-                tooltipLabel="Keystrokes to build flow"
-                ariaLabel="How quickly flow builds, in keystrokes to fill"
-                defaultValue={DEFAULT_FLOW_SETTINGS.buildKeys}
-                formatValue={(value) => `${Math.round(value)} keys`}
-                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, buildKeys: value }))}
+                tooltipLabel="Flow each keystroke adds, in percent of full"
+                ariaLabel="How much flow each keystroke adds, in percent of a full meter"
+                defaultValue={DEFAULT_FLOW_SETTINGS.gainPercent}
+                formatValue={(value) => `${value.toFixed(1)}%`}
+                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, gainPercent: value }))}
               />
               <CompactScrollbarSlider
                 id="flow-fade"
@@ -3034,8 +3017,8 @@ export function SidebarOptionsPanel({
                 step={0.1}
                 value={flowSettings.fadeSec}
                 trackLabel="fade"
-                tooltipLabel="Seconds of pause to lose half your flow"
-                ariaLabel="How slowly flow fades after typing stops, in seconds to half"
+                tooltipLabel="Seconds of pause to lose all your flow (the trail fades as fast)"
+                ariaLabel="How slowly flow fades after typing stops, in seconds to empty"
                 defaultValue={DEFAULT_FLOW_SETTINGS.fadeSec}
                 formatValue={(value) => `${value.toFixed(1)} s`}
                 onCommit={(value) => setFlowSettings((prev) => ({ ...prev, fadeSec: value }))}
@@ -3071,34 +3054,10 @@ export function SidebarOptionsPanel({
                 step={0.01}
                 value={flowSettings.caret}
                 trackLabel="caret"
-                tooltipLabel="Flow caret glow"
-                ariaLabel="Strength of the flow's caret glow"
+                tooltipLabel="Flow caret: glow, steady blink and trail (trail colour is in Colors, Boxes)"
+                ariaLabel="Strength of the flow's caret glow and trail"
                 defaultValue={DEFAULT_FLOW_SETTINGS.caret}
                 onCommit={(value) => setFlowSettings((prev) => ({ ...prev, caret: value }))}
-              />
-              <CompactScrollbarSlider
-                id="flow-trail"
-                min={0}
-                max={1}
-                step={0.01}
-                value={flowSettings.trail}
-                trackLabel="trail"
-                tooltipLabel="Flow caret trail (its colour is in Colors, Boxes)"
-                ariaLabel="Strength of the flow's caret trail"
-                defaultValue={DEFAULT_FLOW_SETTINGS.trail}
-                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, trail: value }))}
-              />
-              <CompactScrollbarSlider
-                id="flow-trail-fade"
-                min={FLOW_TRAIL_FADE_SEC_MIN}
-                max={FLOW_TRAIL_FADE_SEC_MAX}
-                step={0.1}
-                value={flowSettings.trailFadeSec}
-                trackLabel="trail fade"
-                tooltipLabel="Flow trail fade, in seconds"
-                ariaLabel="Seconds a trail box takes to fade"
-                defaultValue={DEFAULT_FLOW_SETTINGS.trailFadeSec}
-                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, trailFadeSec: value }))}
               />
             </OptionsSliderRows>
           </div>

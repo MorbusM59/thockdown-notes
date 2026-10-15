@@ -6,16 +6,15 @@
  * What a listener receives is the PRESENTED level: the model's level passed
  * through an exponential follower with time constant `PRESENT_TAU_SEC`. A hit
  * is a step in the model, and a step in a filter, a reverb send or a halo
- * reads as a flicker; the follower turns the steps into a ramp and turns a
- * break into a quick fall instead of a cut. It is exact for any frame length
+ * reads as a flicker; the follower turns the steps into a ramp. It is exact for any frame length
  * (`1 - exp(-dt / tau)`), so the frame rate never changes what is shown.
  *
- * The frame loop runs only while something is moving: it starts on a hit or
- * a break and stops once both the model and the presented level are at zero.
+ * The frame loop runs only while something is moving: it starts on a hit and
+ * stops once both the model and the presented level are at zero.
  * A meter that is switched off costs one boolean check per keydown.
  */
 
-import { classifyFlowKey, EMPTY_FLOW_STATE, flowHit, flowLevelAt, type FlowState, type FlowTuning } from './flowModel'
+import { EMPTY_FLOW_STATE, flowHit, flowLevelAt, isFlowHit, type FlowState, type FlowTuning } from './flowModel'
 import { DEFAULT_FLOW_SETTINGS } from '../shared/flowSettings'
 
 const PRESENT_TAU_SEC = 0.2
@@ -31,8 +30,7 @@ let presented = 0
 let lastFrameSec: number | null = null
 let frameHandle: number | null = null
 const listeners = new Set<Listener>()
-let trailStrength = DEFAULT_FLOW_SETTINGS.trail
-let trailFadeSec = DEFAULT_FLOW_SETTINGS.trailFadeSec
+let trailStrength = DEFAULT_FLOW_SETTINGS.caret
 
 const nowSec = (): number => performance.now() / 1000
 
@@ -50,7 +48,7 @@ function frame(): void {
   let next = presented + (target - presented) * (1 - Math.exp(-dt / PRESENT_TAU_SEC))
   if (target < PRESENT_FLOOR && next < PRESENT_FLOOR) {
     // Only the presentation stops. The model's state is left alone: its level
-    // is already nothing, and its rhythm estimate is what the next hits build
+    // is already nothing, and its interval history is what the next hits build
     // on -- clearing it here wiped the estimate after every early keystroke,
     // so it never warmed up. A stale estimate is restarted by the pause rule.
     publish(0)
@@ -68,7 +66,7 @@ function ensureRunning(): void {
 
 export const flowMeter = {
   configure(next: { enabled: boolean } & FlowTuning): void {
-    tuning = { thresholdWpm: next.thresholdWpm, buildKeys: next.buildKeys, fadeSec: next.fadeSec, rhythm: next.rhythm }
+    tuning = { thresholdWpm: next.thresholdWpm, gainPercent: next.gainPercent, fadeSec: next.fadeSec }
     if (enabled === next.enabled) return
     enabled = next.enabled
     if (!enabled) {
@@ -83,29 +81,27 @@ export const flowMeter = {
   /** Called for every keydown the editor sees while it is editable. */
   reportKey(event: KeyboardEvent): void {
     if (!enabled) return
-    const kind = classifyFlowKey(event)
-    if (kind === 'ignore') return
-    state = kind === 'hit' ? flowHit(state, nowSec(), tuning) : EMPTY_FLOW_STATE
+    if (!isFlowHit(event)) return
+    state = flowHit(state, nowSec(), tuning)
     ensureRunning()
   },
 
-  /** The caret trail's settings; the editor reads them per keystroke (`trailBox`). */
-  configureTrail(strength: number, fadeSec: number): void {
+  /** The caret trail's strength (the caret channel); the editor reads it per keystroke (`trailBox`). Its fade is the meter's own `fadeSec`. */
+  configureTrail(strength: number): void {
     trailStrength = strength
-    trailFadeSec = fadeSec
   },
 
   /**
    * What a box left by this keydown should look like, or null when it should
    * leave none. Only a CHARACTER or Space leaves one: Enter is a hit for the
-   * meter but types no cell, and a break leaves the existing boxes to fade
-   * out on their own rather than wiping them. Its opacity is the presented
+   * meter but types no cell. A box fades over the meter's own fade time, so
+   * the trail and the flow leave on one clock. Its opacity is the presented
    * level at the moment of the key, so the trail is as strong as the flow.
    */
   trailBox(event: KeyboardEvent): { opacity: number; fadeSec: number } | null {
     if (!enabled || trailStrength <= 0 || presented <= 0) return null
-    if (event.key.length !== 1 || classifyFlowKey(event) !== 'hit') return null
-    return { opacity: presented * trailStrength, fadeSec: trailFadeSec }
+    if (event.key.length !== 1 || !isFlowHit(event)) return null
+    return { opacity: presented * trailStrength, fadeSec: tuning.fadeSec }
   },
 
   subscribe(listener: Listener): () => void {

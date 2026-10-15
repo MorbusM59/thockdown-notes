@@ -61,7 +61,6 @@ export type UiLayoutLoadout = {
     immersiveScrollThumb: string;
     /** Optional: loadouts saved before the flow trail existed lack it. */
     flowTrail?: string;
-    flowTrailCenter?: string;
     reviewLine: string;
     warningLine: string;
     lineNumber: string;
