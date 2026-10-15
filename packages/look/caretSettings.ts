@@ -341,6 +341,16 @@ function flowAdjustedRgba(color: RgbaColor, alphaScale: number, flow: 'fade' | '
   return `rgba(${clampColorChannel(color.r)}, ${clampColorChannel(color.g)}, ${clampColorChannel(color.b)}, ${alpha})`
 }
 
+/** Enough inset spread to cover any caret box completely. */
+const HALO_FILL_SPREAD_PX = 9999
+
+/** The halo's colour, boosted as the halo is, times `edgeShare` and the flow's fade of the fill. */
+function haloFillRgba(color: RgbaColor, alphaScale: number, edgeShare: number): string {
+  const boosted = flowAdjustedRgba(color, alphaScale, 'boost')
+  const alpha = boosted.slice(boosted.indexOf('calc('), -1)
+  return `rgba(${clampColorChannel(color.r)}, ${clampColorChannel(color.g)}, ${clampColorChannel(color.b)}, calc(${alpha} * ${edgeShare} * var(--flow-caret-fade, 0)))`
+}
+
 /**
  * Blends a stop's alpha multiplier toward 1 -- a caret sitting at its own
  * colours, i.e. no effect at all -- by the effect-strength slider.
@@ -473,7 +483,13 @@ export function buildCaretBlinkKeyframesCss(options: CaretBlinkKeyframeOptions):
       `outline-color: ${flowAdjustedRgba(outline, alpha, 'fade')};`,
       // Flow grows the halo's lengths and blends the blink toward the static
       // caret; the halo is boosted toward opaque while the fill and outline fade.
-      `box-shadow: 0 0 calc(${blur}px + var(--flow-halo-blur, 0px)) calc(${spread}px + var(--flow-halo-spread, 0px)) ${flowAdjustedRgba(halo, alpha, 'boost')};`,
+      // As the fill and outline fade, the halo FILLS the cell by the same
+      // amount (an inset shadow covering the whole box): an outer shadow is
+      // never painted inside its own box, so without this a faded caret is a
+      // see-through hole in its own glow and reads as blacked out. The fill
+      // matches the glow's strength at the box edge: the full colour for a
+      // hard halo, half of it for a blurred one (a blurred edge sits at half).
+      `box-shadow: 0 0 calc(${blur}px + var(--flow-halo-blur, 0px)) calc(${spread}px + var(--flow-halo-spread, 0px)) ${flowAdjustedRgba(halo, alpha, 'boost')}, inset 0 0 0 ${HALO_FILL_SPREAD_PX}px ${haloFillRgba(halo, alpha, Number(blur) > 0 ? 0.5 : 1)};`,
     ]
     return `  ${formatNumber(stop.atPercent, 4)}% { ${declarations.join(' ')} }`
   })
