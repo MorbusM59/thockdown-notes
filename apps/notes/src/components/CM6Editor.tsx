@@ -4032,9 +4032,11 @@ export function CM6Editor({
             const cell = box ? readCaretCellInScroll(view) : null;
             const trailLayer = flowTrailLayerRef.current;
             if (box && cell && trailLayer) {
-              // The trail runs ON the grid line under the row (the grid
-              // outline's own band, at the top of the next row's tile), so it
-              // never sits behind a glyph, and it reaches up to and including
+              // The trail traces the grid lines above and below each cell
+              // (1px edges, nothing inside; the grid's lines straddle the cell
+              // boundary, so the box reaches 1px past it each way), so it never
+              // sits behind a glyph,
+              // and it reaches up to and including
               // the caret's cell: the cell the character lands in gets a
               // segment, and so does the cell after it, where the caret now
               // is. That caret segment is replaced by the next key's own.
@@ -4042,8 +4044,9 @@ export function CM6Editor({
               const place = (left: number): HTMLDivElement => {
                 const el = document.createElement('div');
                 el.className = 'flow-trail-box';
-                el.style.transform = `translate(${left}px, ${cell.top + cell.height}px)`;
+                el.style.transform = `translate(${left}px, ${cell.top - 1}px)`;
                 el.style.width = `${cell.width}px`;
+                el.style.height = `${cell.height + 2}px`;
                 trailLayer.appendChild(el);
                 flowTrailFade(el, box.opacity, box.decayPercent);
                 return el;

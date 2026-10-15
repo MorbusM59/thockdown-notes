@@ -134,18 +134,19 @@
   animation: thockdown-blink var(--caret-animation-duration, 1200ms) infinite cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* The typing flow trail: one segment per character typed in flow, laid on
-   the grid line under its row (the editor sets its place and width) and as
-   thick as that line (thockdown-grid-outline-lines's 3px), in the reader's
-   flowTrail colour. On the line, never under a glyph, so it does not lower
-   the contrast of the words just typed. Its opacity and its fade are
-   animated from script (flow/flowTrailFade.ts), on the meter's own decay. */
+/* The typing flow trail: one segment per character typed in flow, tracing
+   the grid lines above and below its cell as 1px edges in the reader's
+   flowTrail colour, with nothing inside the cell, so it never lowers the
+   contrast of the words just typed. The editor sets place and size; opacity
+   and fade are animated from script (flow/flowTrailFade.ts), on the meter's
+   own decay. */
 .flow-trail-box {
   position: absolute;
   top: 0;
   left: 0;
-  height: 3px;
-  background-color: var(--color-flow-trail);
+  box-sizing: border-box;
+  border-top: 1px solid var(--color-flow-trail);
+  border-bottom: 1px solid var(--color-flow-trail);
 }
 
 
