@@ -8,11 +8,11 @@ import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
 import {
   DEFAULT_FLOW_SETTINGS,
-  FLOW_FADE_SEC_MAX, FLOW_FADE_SEC_MIN,
+  FLOW_DECAY_PERCENT_MAX, FLOW_DECAY_PERCENT_MIN,
   FLOW_GAIN_PERCENT_MAX, FLOW_GAIN_PERCENT_MIN,
-  FLOW_THRESHOLD_WPM_MAX, FLOW_THRESHOLD_WPM_MIN,
   type FlowSettings,
 } from '../shared/flowSettings'
+import { RHYTHM_BONUS, sustainWpm } from '../flow/flowModel'
 import { exportSoundscapes, importSoundscapes } from '@thockdown/soundscape/soundscapeFileActions'
 import type { SoundscapePreferences } from '@thockdown/soundscape/soundscape'
 import {
@@ -2982,21 +2982,8 @@ export function SidebarOptionsPanel({
         </div>
         {flowSettings.enabled ? (
           <div className="utility-setting-slider-stack" aria-label="Typing flow settings">
-            {/* What counts (pace), how it moves (build, fade), and how it answers (look, reverb, caret). */}
-            <OptionsSliderRows rows={[3, 3]}>
-              <CompactScrollbarSlider
-                id="flow-threshold"
-                min={FLOW_THRESHOLD_WPM_MIN}
-                max={FLOW_THRESHOLD_WPM_MAX}
-                step={1}
-                value={flowSettings.thresholdWpm}
-                trackLabel="pace"
-                tooltipLabel="Flow pace (words per minute)"
-                ariaLabel="Typing speed at which flow kicks in, in words per minute"
-                defaultValue={DEFAULT_FLOW_SETTINGS.thresholdWpm}
-                formatValue={(value) => `${Math.round(value)} wpm`}
-                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, thresholdWpm: value }))}
-              />
+            {/* How it moves (build, decay) and how it answers (look, reverb, caret). */}
+            <OptionsSliderRows rows={[2, 3]}>
               <CompactScrollbarSlider
                 id="flow-gain"
                 min={FLOW_GAIN_PERCENT_MIN}
@@ -3004,24 +2991,24 @@ export function SidebarOptionsPanel({
                 step={0.1}
                 value={flowSettings.gainPercent}
                 trackLabel="build"
-                tooltipLabel="Flow each keystroke adds, in percent of full"
+                tooltipLabel={`Flow each keystroke adds, in percent of full. Holding full takes ${Math.round(sustainWpm(flowSettings))} wpm, ${Math.round(sustainWpm(flowSettings, 1 + RHYTHM_BONUS))} with a steady rhythm`}
                 ariaLabel="How much flow each keystroke adds, in percent of a full meter"
                 defaultValue={DEFAULT_FLOW_SETTINGS.gainPercent}
                 formatValue={(value) => `${value.toFixed(1)}%`}
                 onCommit={(value) => setFlowSettings((prev) => ({ ...prev, gainPercent: value }))}
               />
               <CompactScrollbarSlider
-                id="flow-fade"
-                min={FLOW_FADE_SEC_MIN}
-                max={FLOW_FADE_SEC_MAX}
+                id="flow-decay"
+                min={FLOW_DECAY_PERCENT_MIN}
+                max={FLOW_DECAY_PERCENT_MAX}
                 step={0.1}
-                value={flowSettings.fadeSec}
-                trackLabel="fade"
-                tooltipLabel="Seconds of pause to lose all your flow (the trail fades as fast)"
-                ariaLabel="How slowly flow fades after typing stops, in seconds to empty"
-                defaultValue={DEFAULT_FLOW_SETTINGS.fadeSec}
-                formatValue={(value) => `${value.toFixed(1)} s`}
-                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, fadeSec: value }))}
+                value={flowSettings.decayPercent}
+                trackLabel="decay"
+                tooltipLabel={`Flow lost every 50ms: this percent of itself and of a full meter. Holding full takes ${Math.round(sustainWpm(flowSettings))} wpm, ${Math.round(sustainWpm(flowSettings, 1 + RHYTHM_BONUS))} with a steady rhythm`}
+                ariaLabel="How quickly flow decays, in percent per 50 milliseconds"
+                defaultValue={DEFAULT_FLOW_SETTINGS.decayPercent}
+                formatValue={(value) => `${value.toFixed(1)}%`}
+                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, decayPercent: value }))}
               />
               <CompactScrollbarSlider
                 id="flow-look"

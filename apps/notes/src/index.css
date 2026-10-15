@@ -136,22 +136,16 @@
 
 /* The typing flow trail: one box per character typed in flow, in the reader's
    flowTrail colour at the top and bottom edges and a lighter core at the
-   middle (the same colour mixed halfway to opaque white), fading out over the trail fade setting (set inline as the
-   animation's duration) from the flow level at the keystroke. */
+   middle (the same colour mixed halfway to opaque white). Its opacity and its
+   fade are animated from script (flow/flowTrailFade.ts), on the meter's own
+   decay curve. */
 .flow-trail-box {
   position: absolute;
   top: 0;
   left: 0;
   background-image: linear-gradient(to bottom, var(--color-flow-trail), color-mix(in srgb, var(--color-flow-trail), white 50%), var(--color-flow-trail));
-  animation-name: flow-trail-fade;
-  animation-timing-function: ease-in;
-  animation-fill-mode: forwards;
 }
 
-@keyframes flow-trail-fade {
-  from { opacity: var(--flow-trail-opacity); }
-  to { opacity: 0; }
-}
 
 
 /* Low-power toggle: the blink otherwise repaints the caret indefinitely while

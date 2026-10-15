@@ -7,30 +7,25 @@
 
 export interface FlowSettings {
   enabled: boolean
-  /** Typing speed, in words per minute (5 characters a word), at and above which a hit is worth its full gain. */
-  thresholdWpm: number
-  /** The share of a full meter, in percent, that one hit at the threshold pace adds (`flowModel.ts`). */
+  /** The share of a full meter, in percent, that one hit adds before its rhythm bonus (`flowModel.ts`). */
   gainPercent: number
-  /** Seconds after the last keystroke at which a full meter has decayed, quadratically, to empty. Also how long a trail box takes to fade. */
-  fadeSec: number
+  /** Per 50ms tick, the meter loses this percent of itself AND this percent of a full meter. Trail boxes decay the same way. */
+  decayPercent: number
   /** Strength of each feedback channel at a full meter, 0..1. `caret` drives the halo, the steadying blink and the trail (whose colour is the `flowTrail` highlight colour). */
   look: number
   reverb: number
   caret: number
 }
 
-export const FLOW_THRESHOLD_WPM_MIN = 10
-export const FLOW_THRESHOLD_WPM_MAX = 160
 export const FLOW_GAIN_PERCENT_MIN = 1
 export const FLOW_GAIN_PERCENT_MAX = 10
-export const FLOW_FADE_SEC_MIN = 0.1
-export const FLOW_FADE_SEC_MAX = 5
+export const FLOW_DECAY_PERCENT_MIN = 0.2
+export const FLOW_DECAY_PERCENT_MAX = 5
 
 export const DEFAULT_FLOW_SETTINGS: FlowSettings = {
   enabled: false,
-  thresholdWpm: 45,
-  gainPercent: 3,
-  fadeSec: 2,
+  gainPercent: 5,
+  decayPercent: 1,
   look: 0.5,
   reverb: 0.5,
   caret: 0.5,
@@ -45,9 +40,8 @@ export function sanitizeFlowSettings(input: unknown): FlowSettings {
   const d = DEFAULT_FLOW_SETTINGS
   return {
     enabled: typeof source.enabled === 'boolean' ? source.enabled : d.enabled,
-    thresholdWpm: bounded(source.thresholdWpm, FLOW_THRESHOLD_WPM_MIN, FLOW_THRESHOLD_WPM_MAX, d.thresholdWpm),
     gainPercent: bounded(source.gainPercent, FLOW_GAIN_PERCENT_MIN, FLOW_GAIN_PERCENT_MAX, d.gainPercent),
-    fadeSec: bounded(source.fadeSec, FLOW_FADE_SEC_MIN, FLOW_FADE_SEC_MAX, d.fadeSec),
+    decayPercent: bounded(source.decayPercent, FLOW_DECAY_PERCENT_MIN, FLOW_DECAY_PERCENT_MAX, d.decayPercent),
     look: bounded(source.look, 0, 1, d.look),
     reverb: bounded(source.reverb, 0, 1, d.reverb),
     caret: bounded(source.caret, 0, 1, d.caret),

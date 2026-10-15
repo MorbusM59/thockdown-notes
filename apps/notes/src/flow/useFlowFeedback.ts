@@ -40,11 +40,11 @@ function setCaretFlow(grow: number): void {
 }
 
 export function useFlowFeedback(settings: FlowSettings): void {
-  const { enabled, thresholdWpm, gainPercent, fadeSec, caret, reverb } = settings
+  const { enabled, gainPercent, decayPercent, caret, reverb } = settings
 
   useEffect(() => {
-    flowMeter.configure({ enabled, thresholdWpm, gainPercent, fadeSec })
-  }, [enabled, thresholdWpm, gainPercent, fadeSec])
+    flowMeter.configure({ enabled, gainPercent, decayPercent })
+  }, [enabled, gainPercent, decayPercent])
 
   useEffect(() => {
     flowMeter.configureTrail(caret)

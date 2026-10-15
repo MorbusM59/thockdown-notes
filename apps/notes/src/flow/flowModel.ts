@@ -4,50 +4,54 @@
  * passes times in seconds -- so it is tested by iterating it
  * (`flowModel.test.ts`) and the live store (`flowMeter.ts`) is only plumbing.
  *
- * THE LEVEL IS PUSHED BY HITS AND DECAYS BETWEEN THEM.
+ * THE LEVEL IS A PERCENTAGE PUSHED UP BY HITS AND DECAYED PER TICK.
  *
- * A hit ADDS to the level, from the very first key: `L += gain * worth`,
- * capped at 1. `gain` is the reader's build setting, the share of a full
- * meter (1% to 10%) that one hit at the pace threshold with no rhythm bonus
- * adds. `worth` is
- *   - SPEED: `min(1, (wpm / threshold)^2)`, the pace of the running average
- *     interval against the reader's threshold. Full at the threshold and
- *     above, falling off below it. A first key, with no interval yet, counts
- *     as full speed, so flow starts from the first press.
- *   - plus a RHYTHM BONUS of up to `RHYTHM_BONUS` (half a hit): how closely
- *     this interval matches the average of the last `RHYTHM_MEMORY_KEYS`
- *     intervals. No deviation pays the whole bonus, falling linearly to
- *     nothing at a deviation of `RHYTHM_TOLERANCE` (20%) of that average.
- *     A bonus and never a penalty: a reader who eases off into a steady
- *     rhythm earns back what the slower pace cost, which is the habit it is
- *     there to reward.
+ * A hit ADDS `gain * worth`, from the very first key. `gain` is the reader's
+ * build setting (a share of a full meter); `worth` is 1 plus a RHYTHM BONUS
+ * of up to `RHYTHM_BONUS` for an interval matching the average of the last
+ * `RHYTHM_MEMORY_KEYS` intervals (all of it at no deviation, none at a
+ * deviation of `RHYTHM_TOLERANCE` of that average). A bonus and never a
+ * penalty, so a steady rhythm can stand in for some speed.
  *
- * Between hits the level decays QUADRATICALLY from the last hit:
- * `L(t) = L_hit * max(0, 1 - (gap / fadeSec)^2)`. The loss starts at zero and
- * steepens with the gap, so the ordinary space between two keystrokes costs
- * almost nothing and a hesitation costs more the longer it lasts; a full
- * meter is empty exactly `fadeSec` after the last key. Evaluated in closed
- * form from the last hit, never integrated per frame, so the level at a
+ * Every TICK (`TICK_SEC`, 50ms) the level loses `decay` of itself AND a flat
+ * `decay` of a full meter: `L' = L * (1 - d) - d`. The multiplicative part
+ * makes a fuller meter decay faster; the flat part makes it reach zero in
+ * finite time instead of approaching it. That recurrence has the closed form
+ * `L(n) = (L0 + 1) * (1 - d)^n - 1` (a geometric approach to -1, clamped at
+ * 0), evaluated with a fractional `n` from the last hit, so the level at a
  * moment does not depend on how often anybody looked at it.
  *
+ * There is no pace setting: the pace a full meter needs FOLLOWS from the two
+ * settings. Holding at 1 costs `2d` a tick, so it takes
+ * `2d / (gain * worth)` keys per tick, i.e. `480 * d / (gain * worth)` wpm
+ * (`sustainWpm`): 96 wpm at the defaults with an uneven rhythm, 64 with a
+ * perfectly steady one.
+ *
+ * Above a full meter is a BUFFER of `FLOW_BUFFER` that hits can fill, so a
+ * reader typing at or just under the sustaining pace holds a steady full
+ * meter instead of one flickering around it. Reaching full from below
+ * UNLOCKS: the buffer is filled at once, a felt moment rather than a value
+ * crossing a line. What is presented is the level clamped to 1
+ * (`presentedFlow`); the buffer is invisible headroom.
+ *
  * An interval longer than `PAUSE_SEC` is a pause, not a beat of the rhythm:
- * it restarts the interval history rather than being averaged into it (the
- * decay has already charged for the pause itself). Nothing BREAKS a streak:
- * corrections and caret moves are ignored rather than punished, so the only
- * way flow is lost is by stopping.
+ * it restarts the interval history. Nothing BREAKS a streak: corrections
+ * and caret moves are ignored, so the only way flow is lost is by stopping.
  */
 
 import type { FlowSettings } from '../shared/flowSettings'
 
+export const TICK_SEC = 0.05
+export const FLOW_BUFFER = 0.2
 export const RHYTHM_MEMORY_KEYS = 10
 export const RHYTHM_BONUS = 0.5
 export const RHYTHM_TOLERANCE = 0.2
 export const PAUSE_SEC = 1.5
 
-export type FlowTuning = Pick<FlowSettings, 'thresholdWpm' | 'gainPercent' | 'fadeSec'>
+export type FlowTuning = Pick<FlowSettings, 'gainPercent' | 'decayPercent'>
 
 export interface FlowState {
-  /** The level immediately after the last hit. */
+  /** The level immediately after the last hit, 0..1 + FLOW_BUFFER. */
   levelAtHit: number
   /** Time of the last hit, in seconds; null before the first. */
   lastHitSec: number | null
@@ -61,30 +65,52 @@ export const EMPTY_FLOW_STATE: FlowState = {
   intervals: [],
 }
 
-/** The level at `nowSec`, decayed from the last hit. */
-export function flowLevelAt(state: FlowState, nowSec: number, tuning: Pick<FlowTuning, 'fadeSec'>): number {
-  if (state.lastHitSec === null || state.levelAtHit <= 0) return 0
-  const ratio = Math.max(0, nowSec - state.lastHitSec) / tuning.fadeSec
-  return state.levelAtHit * Math.max(0, 1 - ratio * ratio)
+/**
+ * Any quantity on the meter's scale (the level, or a trail box's opacity)
+ * decayed for `elapsedSec` by the per-tick rule: `(v + 1) * (1 - d)^n - 1`,
+ * floored at 0.
+ */
+export function decayed(value: number, elapsedSec: number, decayPercent: number): number {
+  if (value <= 0) return 0
+  const n = Math.max(0, elapsedSec) / TICK_SEC
+  return Math.max(0, (value + 1) * Math.pow(1 - decayPercent / 100, n) - 1)
+}
+
+/** Seconds until `value` has decayed to exactly zero. */
+export function secondsToEmpty(value: number, decayPercent: number): number {
+  if (value <= 0) return 0
+  return (TICK_SEC * Math.log(1 / (value + 1))) / Math.log(1 - decayPercent / 100)
+}
+
+/** The model's level at `nowSec`, buffer included. */
+export function flowLevelAt(state: FlowState, nowSec: number, tuning: Pick<FlowTuning, 'decayPercent'>): number {
+  if (state.lastHitSec === null) return 0
+  return decayed(state.levelAtHit, nowSec - state.lastHitSec, tuning.decayPercent)
+}
+
+/** What the reader sees of a level: the buffer above full is headroom, not more flow. */
+export function presentedFlow(level: number): number {
+  return Math.min(1, level)
+}
+
+/** The typing speed, in words per minute, at which a full meter holds steady. */
+export function sustainWpm(tuning: FlowTuning, worth = 1): number {
+  const keysPerTick = (2 * tuning.decayPercent) / (tuning.gainPercent * worth)
+  return (keysPerTick / TICK_SEC) * 12
 }
 
 const mean = (values: readonly number[]): number => values.reduce((sum, v) => sum + v, 0) / values.length
 
 /**
- * What one hit is worth in units of the build gain: speed (0..1) plus the
- * rhythm bonus (0..`RHYTHM_BONUS`). `previous` is the interval history BEFORE
- * this hit, `interval` the gap to it (null for a first key or after a pause).
+ * What one hit is worth in units of the build gain: 1 plus the rhythm bonus.
+ * `previous` is the interval history BEFORE this hit, `interval` the gap to
+ * it (null for a first key or after a pause).
  */
-export function hitWorth(previous: readonly number[], interval: number | null, thresholdWpm: number): number {
-  if (interval === null) return 1
-  const history = [...previous, interval]
-  const wpm = 12 / mean(history)
-  const speed = Math.min(1, Math.pow(wpm / thresholdWpm, 2))
-  if (previous.length === 0) return speed
+export function hitWorth(previous: readonly number[], interval: number | null): number {
+  if (interval === null || previous.length === 0) return 1
   const average = mean(previous)
   const deviation = Math.abs(interval - average) / average
-  const rhythm = Math.max(0, 1 - deviation / RHYTHM_TOLERANCE)
-  return speed + RHYTHM_BONUS * rhythm
+  return 1 + RHYTHM_BONUS * Math.max(0, 1 - deviation / RHYTHM_TOLERANCE)
 }
 
 export function flowHit(state: FlowState, nowSec: number, tuning: FlowTuning): FlowState {
@@ -95,12 +121,13 @@ export function flowHit(state: FlowState, nowSec: number, tuning: FlowTuning): F
   const pause = raw !== null && raw > PAUSE_SEC
   const previous = pause ? [] : state.intervals
   const interval = raw === null || pause || raw <= 0 ? null : raw
-  const worth = hitWorth(previous, interval, tuning.thresholdWpm)
-  const intervals = interval === null ? previous : [...previous, interval].slice(-RHYTHM_MEMORY_KEYS)
+  const raised = level + (tuning.gainPercent / 100) * hitWorth(previous, interval)
+  // Reaching full from below unlocks the buffer whole.
+  const next = level < 1 && raised >= 1 ? 1 + FLOW_BUFFER : Math.min(1 + FLOW_BUFFER, raised)
   return {
-    levelAtHit: Math.min(1, level + (tuning.gainPercent / 100) * worth),
+    levelAtHit: next,
     lastHitSec: nowSec,
-    intervals,
+    intervals: interval === null ? previous : [...previous, interval].slice(-RHYTHM_MEMORY_KEYS),
   }
 }
 

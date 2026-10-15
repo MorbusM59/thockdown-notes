@@ -40,12 +40,12 @@ describe('flow meter', () => {
 
     for (let i = 0; i < 300; i += 1) {
       flowMeter.reportKey(key('a'))
-      advance(160) // 75 wpm, well above the default pace
+      advance(100) // 120 wpm, above the default sustaining pace
     }
     expect(level).toBeGreaterThan(0.4)
 
     flowMeter.reportKey(key('Backspace'))
-    advance(DEFAULT_FLOW_SETTINGS.fadeSec * 1000 + 1000)
+    advance(5000) // a full meter plus its buffer is empty after about 3.9 s at the default decay
     expect(level).toBe(0)
   })
 

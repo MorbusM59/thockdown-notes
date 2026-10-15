@@ -6,7 +6,8 @@
  * What a listener receives is the PRESENTED level: the model's level passed
  * through an exponential follower with time constant `PRESENT_TAU_SEC`. A hit
  * is a step in the model, and a step in a filter, a reverb send or a halo
- * reads as a flicker; the follower turns the steps into a ramp. It is exact for any frame length
+ * reads as a flicker; the follower turns the steps into a ramp. The one step
+ * that is NOT ramped is the unlock (reaching a full meter), shown at once. It is exact for any frame length
  * (`1 - exp(-dt / tau)`), so the frame rate never changes what is shown.
  *
  * The frame loop runs only while something is moving: it starts on a hit and
@@ -14,7 +15,7 @@
  * A meter that is switched off costs one boolean check per keydown.
  */
 
-import { EMPTY_FLOW_STATE, flowHit, flowLevelAt, isFlowHit, type FlowState, type FlowTuning } from './flowModel'
+import { EMPTY_FLOW_STATE, flowHit, flowLevelAt, isFlowHit, presentedFlow, type FlowState, type FlowTuning } from './flowModel'
 import { DEFAULT_FLOW_SETTINGS } from '../shared/flowSettings'
 
 const PRESENT_TAU_SEC = 0.2
@@ -44,7 +45,7 @@ function frame(): void {
   const now = nowSec()
   const dt = lastFrameSec === null ? 0 : now - lastFrameSec
   lastFrameSec = now
-  const target = flowLevelAt(state, now, tuning)
+  const target = presentedFlow(flowLevelAt(state, now, tuning))
   let next = presented + (target - presented) * (1 - Math.exp(-dt / PRESENT_TAU_SEC))
   if (target < PRESENT_FLOOR && next < PRESENT_FLOOR) {
     // Only the presentation stops. The model's state is left alone: its level
@@ -66,7 +67,7 @@ function ensureRunning(): void {
 
 export const flowMeter = {
   configure(next: { enabled: boolean } & FlowTuning): void {
-    tuning = { thresholdWpm: next.thresholdWpm, gainPercent: next.gainPercent, fadeSec: next.fadeSec }
+    tuning = { gainPercent: next.gainPercent, decayPercent: next.decayPercent }
     if (enabled === next.enabled) return
     enabled = next.enabled
     if (!enabled) {
@@ -82,11 +83,16 @@ export const flowMeter = {
   reportKey(event: KeyboardEvent): void {
     if (!enabled) return
     if (!isFlowHit(event)) return
-    state = flowHit(state, nowSec(), tuning)
+    const now = nowSec()
+    const before = flowLevelAt(state, now, tuning)
+    state = flowHit(state, now, tuning)
+    // The unlock is presented at once rather than ramped: reaching full is
+    // the one moment that should land as an event, not as a value arriving.
+    if (before < 1 && state.levelAtHit > 1) publish(1)
     ensureRunning()
   },
 
-  /** The caret trail's strength (the caret channel); the editor reads it per keystroke (`trailBox`). Its fade is the meter's own `fadeSec`. */
+  /** The caret trail's strength (the caret channel); the editor reads it per keystroke (`trailBox`). It fades by the meter's own decay. */
   configureTrail(strength: number): void {
     trailStrength = strength
   },
@@ -94,14 +100,14 @@ export const flowMeter = {
   /**
    * What a box left by this keydown should look like, or null when it should
    * leave none. Only a CHARACTER or Space leaves one: Enter is a hit for the
-   * meter but types no cell. A box fades over the meter's own fade time, so
-   * the trail and the flow leave on one clock. Its opacity is the presented
+   * meter but types no cell. A box decays by the meter's own per-tick rule
+   * (`decayed`), so the trail and the flow leave on one curve. Its opacity is the presented
    * level at the moment of the key, so the trail is as strong as the flow.
    */
-  trailBox(event: KeyboardEvent): { opacity: number; fadeSec: number } | null {
+  trailBox(event: KeyboardEvent): { opacity: number; decayPercent: number } | null {
     if (!enabled || trailStrength <= 0 || presented <= 0) return null
     if (event.key.length !== 1 || !isFlowHit(event)) return null
-    return { opacity: presented * trailStrength, fadeSec: tuning.fadeSec }
+    return { opacity: presented * trailStrength, decayPercent: tuning.decayPercent }
   },
 
   subscribe(listener: Listener): () => void {
