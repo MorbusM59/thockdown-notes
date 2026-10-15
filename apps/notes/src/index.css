@@ -135,13 +135,14 @@
 }
 
 /* The typing flow trail: one box per character typed in flow, in the reader's
-   flowTrail colour, fading out over the trail fade setting (set inline as the
+   flowTrail colour at the top and bottom edges and the flowTrailCenter colour
+   at the middle (a vertical gradient), fading out over the trail fade setting (set inline as the
    animation's duration) from the flow level at the keystroke. */
 .flow-trail-box {
   position: absolute;
   top: 0;
   left: 0;
-  background-color: var(--color-flow-trail);
+  background-image: linear-gradient(to bottom, var(--color-flow-trail), var(--color-flow-trail-center), var(--color-flow-trail));
   animation-name: flow-trail-fade;
   animation-timing-function: ease-in;
   animation-fill-mode: forwards;

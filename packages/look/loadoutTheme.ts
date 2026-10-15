@@ -416,6 +416,7 @@ export function themeFrame(loadout: ThemeLoadout, options: ThemeOptions): ThemeF
     '--color-immersive-scroll-thumb': colors.immersiveScrollThumb,
     // A loadout saved before the trail existed has no colour for it: the default faint amber.
     '--color-flow-trail': colors.flowTrail ?? 'rgba(255, 190, 90, 0.45)',
+    '--color-flow-trail-center': colors.flowTrailCenter ?? 'rgba(255, 236, 190, 0.7)',
     '--color-review-line': colors.reviewLine,
     '--color-warning-line': colors.warningLine,
     // Opaque, with the chosen alpha applied as opacity on the whole number:
