@@ -1420,3 +1420,44 @@ describe('the soundscape level', () => {
     expect(peak(b.left.slice(0, blockSize))).toBeLessThanOrEqual(peak(a.left.slice(0, blockSize)));
   });
 });
+
+describe('turning a channel off or on', () => {
+  const SAMPLE_RATE = 16000;
+  const fadeFrames = Math.round(0.03 * SAMPLE_RATE);
+  const noise = layer('noise', { distance: 0 });
+  const rain = layer('rain', { intensity: 0.8 });
+
+  it('fades only that channel out, leaving the others sample for sample as they were', () => {
+    const scape = createProcessor([noise, rain], { sampleRate: SAMPLE_RATE });
+    scape.render(2);
+    // The reference: the same moment with the rain silenced and so never rendered.
+    const off = [noise, { ...rain, enabled: false }];
+    const reference = createProcessor([noise, rain], { sampleRate: SAMPLE_RATE });
+    reference.render(2);
+    reference.configure([noise, { ...rain, volume: 0 }]);
+    scape.configure(off);
+    const heard = scape.render(1);
+    const expected = reference.render(1);
+    // After the fade (and the few samples of the rain's distance filter
+    // ringing out), exactly the noise alone, its own state never disturbed.
+    const settled = 2 * fadeFrames;
+    const firstDiff = heard.left.findIndex((value, index) => index >= settled && value !== expected.left[index]);
+    expect(firstDiff).toBe(-1);
+    const leftOver = heard.left.slice(0, fadeFrames).map((value, index) => Math.abs(value - expected.left[index]));
+    // During it, the rain is still there and leaves gradually rather than being cut.
+    expect(rms(leftOver.slice(0, fadeFrames / 4))).toBeGreaterThan(1e-3);
+    expect(rms(leftOver.slice((3 * fadeFrames) / 4))).toBeLessThan(rms(leftOver.slice(0, fadeFrames / 4)));
+    // And the channel is gone afterwards, not merely silent.
+    expect(scape.processor.channels.map((channel: { id: string }) => channel.id)).toEqual([noise.id]);
+  });
+
+  it('fades a channel turned on in from silence rather than starting at full level', () => {
+    const scape = createProcessor([noise], { sampleRate: SAMPLE_RATE });
+    scape.render(1);
+    scape.configure([noise, rain]);
+    const fadingIn = scape.processor.channels.find((channel: { id: string }) => channel.id === rain.id);
+    expect(fadingIn.fade).toBe(0);
+    scape.render(0.1);
+    expect(fadingIn.fade).toBe(1);
+  });
+});
