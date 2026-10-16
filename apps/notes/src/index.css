@@ -147,7 +147,6 @@
   box-sizing: border-box;
   border-top: 1px solid var(--color-flow-trail-now);
   border-bottom: 1px solid var(--color-flow-trail-now);
-  transition: border-color 400ms ease-in-out;
 }
 
 /* The trail's leading edge: the caret's cell traced on its top, bottom and
@@ -164,7 +163,6 @@
   border: var(--flow-trail-head-edge) solid var(--color-flow-trail-now);
   border-right-width: 0;
   border-left: none;
-  transition: border-color 400ms ease-in-out;
   /* Rounded where it is closed, square where it opens into the trail. The
      cap's border is wider than the edges, and a border's INNER corner radius
      is the outer one minus the border width: at the plain small radius that
@@ -204,14 +202,32 @@
    theme. */
 .flow-trail-box,
 .flow-trail-head {
-  --color-flow-trail-now: var(--color-flow-trail);
+  --color-flow-trail-now: color-mix(
+    in oklab,
+    var(--color-flow-trail),
+    rgb(from var(--color-flow-trail-charged) r g b / calc(0.7 + 0.3 * var(--flow-trail-flash)))
+    calc(var(--flow-trail-charge) * 100%)
+  );
 }
-:root[data-flow-full] .flow-trail-box,
-:root[data-flow-full] .flow-trail-head {
-  /* Charged trails sit at FLOW_TRAIL_FULL_ALPHA; the arrival flash lifts
-     them to opaque and lets them fall back. Alpha, not brightness: the
-     whole trail on screen is boosted at once, the old marks with the new. */
-  --color-flow-trail-now: rgb(from var(--color-flow-trail-charged) r g b / calc(0.7 + 0.3 * var(--flow-trail-flash)));
+
+/* How charged the trail is, 0..1, moved ON THE ROOT and inherited by every
+   mark. A per-element transition on border-color did this first and only
+   reached new marks: the flash changes the colour every frame, each change
+   restarted every existing mark's 400ms transition, so old marks trailed
+   far behind while a mark created mid-change started at the current value.
+   One number transitioned in one place changes every mark in step. The
+   charged colour sits at 70% alpha; the arrival flash lifts it to opaque. */
+@property --flow-trail-charge {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+:root {
+  transition: --flow-trail-charge 800ms ease-in-out;
+}
+:root[data-flow-full] {
+  --flow-trail-charge: 1;
+  transition-duration: 400ms;
 }
 
 /* The arrival FLASH: at the kick (reaching full flow) useFlowFeedback.ts
