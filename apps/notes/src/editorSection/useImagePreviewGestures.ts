@@ -1,7 +1,7 @@
 import { useEffect, useRef, type MutableRefObject, type RefObject } from 'react'
 import type { EditorAdapter } from '../editor/EditorContract'
 import { insertAtBlockStart, locateImage, moveImage, reshapeImage, sameAlt, type ImageEdit } from '../editor/ImagePlacement'
-import { type ImageAlignment, type ImageInset, type ImageLayout, type ImageLength } from '../shared/imageLayout'
+import { cssInset, type ImageAlignment, type ImageInset, type ImageLayout, type ImageLength } from '../shared/imageLayout'
 import { IMAGE_DRAG_MIME_TYPE, imageMarkdown, isImageFile } from '../shared/images'
 import { importImageFilesAsMarkdown } from '../shared/storedImages'
 
@@ -383,8 +383,11 @@ function createCropGhost(frame: HTMLElement, img: HTMLImageElement, startInset: 
   const keptX = (100 - startInset.left - startInset.right) / 100
   const keptY = (100 - startInset.top - startInset.bottom) / 100
   // The whole image at the displayed scale, in the frame's coordinates.
-  const fullWidth = img.offsetWidth / keptX
-  const fullHeight = img.offsetHeight / keptY
+  // Exact sizes rather than the rounded offsetWidth, so the copy's scale is
+  // the image's own.
+  const shown = img.getBoundingClientRect()
+  const fullWidth = shown.width / keptX
+  const fullHeight = shown.height / keptY
   const fullLeft = img.offsetLeft - fullWidth * startInset.left / 100
   const fullTop = img.offsetTop - fullHeight * startInset.top / 100
   const box = document.createElement('div')
@@ -401,11 +404,10 @@ function createCropGhost(frame: HTMLElement, img: HTMLImageElement, startInset: 
   copy.src = img.currentSrc || img.src
   copy.alt = ''
   Object.assign(copy.style, {
-    position: 'absolute',
     display: 'block',
     maxWidth: 'none',
-    width: `${fullWidth}px`,
-    height: `${fullHeight}px`,
+    width: '100%',
+    height: '100%',
     filter: getComputedStyle(img).filter,
   })
   box.appendChild(copy)
@@ -416,19 +418,17 @@ function createCropGhost(frame: HTMLElement, img: HTMLImageElement, startInset: 
   // border sits outside its own box, so it is drawn where the frame's was.
   const borderLeft = parseFloat(frameStyle.borderLeftWidth) || 0
   const borderTop = parseFloat(frameStyle.borderTopWidth) || 0
+  // The copy draws its part the way the image itself does, through
+  // object-view-box into a box exactly the size that part takes at the
+  // displayed scale. Drawing the whole image at that scale and clipping it
+  // instead resampled it along a different path, which dimmed and softened
+  // thin bright detail such as light text on a dark screenshot.
   const show = (inset: ImageInset) => {
-    const left = fullLeft + fullWidth * inset.left / 100
-    const top = fullTop + fullHeight * inset.top / 100
-    // Whole pixels throughout: a copy drawn at a fractional offset is
-    // resampled, which blurs fine detail such as text in a screenshot.
-    const boxLeft = Math.round(left)
-    const boxTop = Math.round(top)
-    box.style.left = `${boxLeft - borderLeft}px`
-    box.style.top = `${boxTop - borderTop}px`
-    box.style.width = `${Math.round(fullWidth * (100 - inset.left - inset.right) / 100)}px`
-    box.style.height = `${Math.round(fullHeight * (100 - inset.top - inset.bottom) / 100)}px`
-    copy.style.left = `${Math.round(fullLeft) - boxLeft}px`
-    copy.style.top = `${Math.round(fullTop) - boxTop}px`
+    box.style.left = `${fullLeft + fullWidth * inset.left / 100 - borderLeft}px`
+    box.style.top = `${fullTop + fullHeight * inset.top / 100 - borderTop}px`
+    box.style.width = `${fullWidth * (100 - inset.left - inset.right) / 100}px`
+    box.style.height = `${fullHeight * (100 - inset.top - inset.bottom) / 100}px`
+    copy.style.setProperty('object-view-box', cssInset(inset))
   }
   show(startInset)
   return {
