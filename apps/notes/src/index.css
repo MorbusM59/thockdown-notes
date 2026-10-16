@@ -166,8 +166,12 @@
   border-right-width: var(--flow-trail-head-cap);
   border-left: none;
   transition: border-color 400ms ease-in-out;
-  /* Rounded where it is closed, square where it opens into the trail. */
-  border-radius: 0 var(--border-radius-small) var(--border-radius-small) 0;
+  /* Rounded where it is closed, square where it opens into the trail. The
+     cap's border is wider than the edges, and a border's INNER corner radius
+     is the outer one minus the border width: at the plain small radius that
+     reached zero and the cap's inner edge was a straight line inside the
+     curve. Adding the cap width keeps the inner corner at the small radius. */
+  border-radius: 0 calc(var(--border-radius-small) + var(--flow-trail-head-cap)) calc(var(--border-radius-small) + var(--flow-trail-head-cap)) 0;
   /* Inside, the flow colour fades from the leading edge back toward the
      trail, so the edge reads as a front moving right. */
   background-image: linear-gradient(to left, var(--color-flow-trail), transparent);
