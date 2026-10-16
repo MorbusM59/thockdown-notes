@@ -308,16 +308,6 @@ if (app.isPackaged && !isPortableBuild) {
   app.setPath('userData', installedUserDataPath(app.getPath('appData')));
 }
 
-// On Linux, run under X11 (XWayland on a Wayland session), never as a
-// native Wayland client. Since Electron 38 Chromium picks native Wayland by
-// default whenever the session offers it, and a Wayland client may not place
-// its own window: setPosition/setBounds are ignored, which disables the app's
-// own window moving (useWindowDragRegion.ts, the window-drag:* handlers) and
-// snapping. Under XWayland those work, and a touch screen still arrives as
-// real multi-touch through XInput2, which packages/interaction/touchInput.ts
-// needs. Must be set before the app is ready; other platforms ignore it.
-if (process.platform === 'linux') app.commandLine.appendSwitch('ozone-platform', 'x11');
-
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   app.quit();
