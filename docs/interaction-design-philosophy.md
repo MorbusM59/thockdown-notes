@@ -558,6 +558,16 @@ The goal is deterministic behavior with one source of truth per interaction phas
 - A blanket update is acceptable only when the entire scope genuinely did change -- never as a shortcut that saves having to figure out what did.
 - This is the default impulse for every state-touching change, not a special-case optimization reached for only when profiling flags it. Unnecessary re-renders and flicker are a broken-feeling product, not a cosmetic detail: nothing undermines a premium, physical-object feel like parts of the UI visibly redrawing themselves for no reason. We're building something that feels like a rock, not a mirage.
 
+### 11. A readout is its figures, never its labels
+- A number on screen stands alone: no unit, no label, no brackets or other
+  static text around it. What it counts is said in its tooltip and in the
+  User Guide. Static text costs space on every frame and tells a reader
+  something only once.
+- The one exception is a single glyph that IS the label (`#`, `&`, `$`, `§`).
+- A figure is set two points above the text of the panel it sits in: digits
+  have no ascenders or descenders, so at the same size they read smaller than
+  the words around them (`.readout-figure`).
+
 ## Input Phase Contract
 
 ### Key press phase

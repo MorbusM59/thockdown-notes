@@ -660,7 +660,10 @@ export function SectionEditorArea({
         <div className="wordcount-panel" aria-live="polite">
           {activeNoteId ? (
             <TypingRateOrWordCount active={isSectionActive}>
-              <span><b>{activeNoteDocumentStats.wordCount.toLocaleString()}</b> ({activeNoteDocumentStats.characterCount.toLocaleString()})</span>
+              <span data-tooltip="Words, then characters, in this note">
+                <b className="readout-figure">{activeNoteDocumentStats.wordCount.toLocaleString()}</b>
+                <span className="readout-figure">{activeNoteDocumentStats.characterCount.toLocaleString()}</span>
+              </span>
             </TypingRateOrWordCount>
           ) : null}
         </div>

@@ -316,10 +316,21 @@
   font-size:      calc(9px * var(--ui-font-scale));
   letter-spacing: 0.02em;
   text-shadow:    none;
-  pointer-events: none;
   user-select:    none;
   text-align:     center;
   align-content:  center;
+}
+
+/* A readout is its figures alone (what they count is in the tooltip and the
+   User Guide), and a figure is set two points above the panel's text: digits
+   have no ascenders or descenders, so at the same size they read smaller
+   than the words around them. */
+.wordcount-panel .readout-figure {
+  font-size:   calc(11px * var(--ui-font-scale));
+  line-height: 1;
+}
+.wordcount-panel .readout-figure + .readout-figure {
+  margin-left: 0.5em;
 }
 
 .timeline-panel {

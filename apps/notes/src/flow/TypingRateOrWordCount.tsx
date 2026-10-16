@@ -1,7 +1,8 @@
 /**
  * The word count panel's two faces: the word count, and while the reader is
  * typing (with the flow meter on) their typing rate in characters per second
- * (`flowMeter.subscribeRate`), one decimal. A figure for the reader's own
+ * (`flowMeter.subscribeRate`), one decimal, as a bare figure: the unit is in
+ * the tooltip and the User Guide, never on screen. A figure for the reader's own
  * reference rather than words per minute, which assumes a word length and a
  * controlled text and invites comparison with others.
  *
@@ -44,7 +45,7 @@ export function TypingRateOrWordCount({ active, children }: { active: boolean; c
   return (
     <>
       <span ref={countRef}>{children}</span>
-      <span ref={rateRef} hidden><b ref={figureRef} /> letters/s</span>
+      <span ref={rateRef} hidden data-tooltip="Letters per second, over your last ten"><b ref={figureRef} className="readout-figure" /></span>
     </>
   )
 }
