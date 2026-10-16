@@ -14,6 +14,8 @@ import { DEFAULT_GLAZE_SETTINGS } from './glaze';
 import { DEFAULT_CUSTOM_CURSOR_SETTINGS } from './cursorSettings';
 import { DEFAULT_CARET_SETTINGS } from './caretSettings';
 import type { UiLayoutLoadout } from './loadouts';
+import { deriveFlowTrail } from './flowColor';
+import { sceneOf } from './scene';
 
 type PartialTextureMaterialSettings = Omit<Partial<TextureMaterialSettings>, 'color'> & {
   color?: Partial<TextureColorHsva>;
@@ -51,8 +53,18 @@ function mergeTextureMaterialSettings(
   };
 }
 
+// A preset that names no flow colour gets one fitted to it: a brighter,
+// glowier version of its box colour as seen through its own scene
+// (flowColor.ts). Stored on the preset, so the colour picker shows and edits
+// what the preset actually uses.
+function withFlowTrail(loadout: UiLayoutLoadout): UiLayoutLoadout {
+  if (loadout.highlightColors.flowTrail) return loadout;
+  const flowTrail = deriveFlowTrail(loadout.highlightColors.grid, sceneOf(loadout, false));
+  return { ...loadout, highlightColors: { ...loadout.highlightColors, flowTrail } };
+}
+
 function buildPreset(overrides: UiLayoutLoadoutOverrides): UiLayoutLoadout {
-  return {
+  return withFlowTrail({
     ...NEUTRAL_BASE,
     ...overrides,
     glaze: {
@@ -73,7 +85,7 @@ function buildPreset(overrides: UiLayoutLoadoutOverrides): UiLayoutLoadout {
       editorEditText: mergeTextureMaterialSettings(DEFAULT_TEXTURE_MATERIALS.editorEditText, overrides.textureMaterials?.editorEditText),
       editorRenderText: mergeTextureMaterialSettings(DEFAULT_TEXTURE_MATERIALS.editorRenderText, overrides.textureMaterials?.editorRenderText),
     },
-  };
+  });
 }
 
 // A neutral, untextured, unfiltered baseline shared by both default-custom
@@ -170,14 +182,14 @@ export const NEUTRAL_BASE: UiLayoutLoadout = {
   caretEffectStrengthPercent: DEFAULT_CARET_SETTINGS.effectStrengthPercent,
 };
 
-export const DEFAULT_CUSTOM_LIGHT: UiLayoutLoadout = {
+export const DEFAULT_CUSTOM_LIGHT: UiLayoutLoadout = withFlowTrail({
   ...NEUTRAL_BASE,
-};
+});
 
-export const DEFAULT_CUSTOM_DARK: UiLayoutLoadout = {
+export const DEFAULT_CUSTOM_DARK: UiLayoutLoadout = withFlowTrail({
   ...NEUTRAL_BASE,
   filterInvert: 1,
-};
+});
 
 // How each factory preset is shown on its button: an icon and a name, in the
 // same order as LIGHT_FACTORY_PRESETS / DARK_FACTORY_PRESETS below. Shared by

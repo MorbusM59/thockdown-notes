@@ -386,13 +386,13 @@
   will-change: opacity;
 }
 .flow-overlay-saturation { background: hsl(0 100% 50%); mix-blend-mode: saturation; }
-.flow-overlay-warmth { background: hsl(30 100% 55%); mix-blend-mode: soft-light; }
+.flow-overlay-warmth { background: rgb(var(--color-flow-glow)); mix-blend-mode: soft-light; }
 .flow-overlay-glow { background: #ffffff; mix-blend-mode: screen; }
 /* Full flow's edge glow: clear over the middle of the window (where the
    text is), warm only toward the edges. will-change covers the arrival's
    scale as well as the opacity. */
 .flow-overlay-edge {
-  background: radial-gradient(ellipse at center, transparent 55%, hsl(32 100% 60% / 0.55) 85%, hsl(28 100% 55%) 115%);
+  background: radial-gradient(ellipse at center, transparent 55%, rgb(var(--color-flow-glow) / 0.55) 85%, rgb(var(--color-flow-glow)) 115%);
   mix-blend-mode: screen;
   will-change: opacity, transform;
 }

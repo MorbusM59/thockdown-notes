@@ -35,6 +35,8 @@ import {
   rgbaToHsva,
   scaleAlphaInCssValue,
 } from './colorMath'
+import { sceneOf } from './scene'
+import { FALLBACK_FLOW_TRAIL, flowGlowOf } from './flowColor'
 import {
   GLAZE_GLOOM_OPACITY_MAX,
   GLAZE_LINEAR_OPACITY_MAX,
@@ -128,20 +130,6 @@ const DEFAULT_PALETTE_SHADOW_MID = '#fcf9f6bb'
 const DEFAULT_PALETTE_SHADOW_HI = '#fcf9f6ee'
 
 const GLAZE_RADIAL_CORNERS = ['top left', 'top right', 'bottom right', 'bottom left'] as const
-
-// Saturate slider: position x in [0,1] maps to CSS saturate value via
-// s(x) = x / (1 - 4^(x-1)), capped at SATURATE_MAX.
-// At x=0: s=0 (greyscale), x=0.5: s=1 (neutral), x->1: s->infinity (capped).
-const SATURATE_MAX = 64
-
-function saturatePosToValue(x: number): number {
-  const xClamped = Math.max(0, Math.min(0.9999, x))
-  if (xClamped <= 0) return 0
-  const denom = 1 - Math.pow(4, xClamped - 1)
-  if (Math.abs(denom) < 1e-9) return SATURATE_MAX
-  const s = xClamped / denom
-  return Math.max(0, Math.min(SATURATE_MAX, s))
-}
 
 type DerivedPaletteColors = {
   parchmentLightest: string
@@ -415,7 +403,7 @@ export function themeFrame(loadout: ThemeLoadout, options: ThemeOptions): ThemeF
     '--color-gutter-bg': colors.gutterBackground,
     '--color-immersive-scroll-thumb': colors.immersiveScrollThumb,
     // A loadout saved before the trail existed has no colour for it: the default faint amber.
-    '--color-flow-trail': colors.flowTrail ?? 'rgba(255, 170, 60, 0.9)',
+    '--color-flow-trail': colors.flowTrail ?? FALLBACK_FLOW_TRAIL,
     '--color-review-line': colors.reviewLine,
     '--color-warning-line': colors.warningLine,
     // Opaque, with the chosen alpha applied as opacity on the whole number:
@@ -438,22 +426,14 @@ export function themeFrame(loadout: ThemeLoadout, options: ThemeOptions): ThemeF
     '--markdown-unchecked-color': colors.markdownUnchecked,
   }
 
-  // The scene's effects as DATA, in the order they apply, so the filter
-  // string and the image correction (imageCorrection.ts) are read off one
-  // list and cannot disagree about what the scene does.
-  const decorative: SceneEffect[] = []
-  if (!reduce) {
-    if (loadout.filterSepia > 0) decorative.push({ kind: 'sepia', amount: loadout.filterSepia })
-    if (loadout.filterHueRotate !== 0) decorative.push({ kind: 'hue-rotate', deg: loadout.filterHueRotate })
-    if (loadout.filterBrightness !== 1) decorative.push({ kind: 'brightness', amount: loadout.filterBrightness })
-    if (loadout.filterContrast !== 1) decorative.push({ kind: 'contrast', amount: loadout.filterContrast })
-    const saturate = saturatePosToValue(loadout.filterSaturate)
-    if (Math.abs(saturate - 1) > 0.001) decorative.push({ kind: 'saturate', amount: saturate })
-  }
-  const invertViaBlendMode = inverted && decorative.length === 0
-  const filterEffects: SceneEffect[] = invertViaBlendMode
-    ? decorative
-    : (loadout.filterInvert > 0 ? [{ kind: 'invert', amount: loadout.filterInvert }, ...decorative] : decorative)
+  // The scene's effects as DATA (scene.ts), so the filter string, the
+  // image correction and the flow colour's on-screen value are read off one
+  // description and cannot disagree about what the scene does.
+  const scene = sceneOf(loadout, reduce)
+  const { filterEffects, invertViaBlendMode, colorize } = scene
+  // The flow overlays sit outside the scene, so they take the trail's
+  // on-screen colour rather than its stored one (flowColor.ts).
+  rootVariables['--color-flow-glow'] = flowGlowOf(colors.flowTrail ?? FALLBACK_FLOW_TRAIL, scene)
   const wrapperStyle: CSSProperties = { backgroundColor: 'var(--palette-parchment-lightest)' }
   if (filterEffects.length > 0) wrapperStyle.filter = filterEffects.map(sceneEffectCss).join(' ')
   // What an image is actually seen through: the filter, plus the blend
@@ -475,9 +455,7 @@ export function themeFrame(loadout: ThemeLoadout, options: ThemeOptions): ThemeF
     wrapperStyle,
     invertViaBlendMode,
     glaze,
-    colorize: loadout.filterColorize > 0 && !reduce
-      ? { hueDeg: loadout.filterHueRotate, opacity: loadout.filterColorize }
-      : null,
+    colorize,
     shadowFlip: inverted,
     imageCorrection,
     backgroundHex: rgbaToHex({ ...baseRgba, a: 1 }).slice(0, 7),
