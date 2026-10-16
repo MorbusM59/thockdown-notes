@@ -3677,8 +3677,9 @@ function App() {
   }, [textureControlDragState])
 
   useEffect(() => {
-    // On Linux the native cursor stays visible throughout (shared/platform.ts).
-    if (IS_LINUX_DESKTOP || (!hsvaDragState && !textureControlDragState)) {
+    // Hidden during a value drag only when the custom cursor stands in for
+    // it; the native cursor stays visible throughout.
+    if (!customCursorSettings.enabled || (!hsvaDragState && !textureControlDragState)) {
       document.body.classList.remove('hsva-dragging')
       return
     }
@@ -3687,7 +3688,7 @@ function App() {
     return () => {
       document.body.classList.remove('hsva-dragging')
     }
-  }, [hsvaDragState, textureControlDragState])
+  }, [customCursorSettings.enabled, hsvaDragState, textureControlDragState])
 
   useEffect(() => {
     if (sidebarMode !== 'options') return
@@ -8995,7 +8996,7 @@ ${markdownHtml}
 
   return (
     <div
-      className={`app-root${customCursorSettings.enabled ? ' hide-native-cursor' : ''}`}
+      className={`app-root${customCursorSettings.enabled ? ' hide-native-cursor' : ' default-native-cursor'}`}
       style={appRootStyle}
       onDragOver={handleAppDragOver}
       onDropCapture={handleAppDrop}

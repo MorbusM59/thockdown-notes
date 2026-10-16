@@ -903,6 +903,14 @@
   cursor: none !important;
 }
 
+/* Without the custom cursor the native one is the plain arrow on every
+   surface: no I-beam over text, no hand, no resize or grab shapes. One
+   cursor everywhere, whichever cursor it is. */
+.default-native-cursor,
+.default-native-cursor * {
+  cursor: default !important;
+}
+
 /* MouseCursorOverlay.tsx's own canvas: mounted once as the last child of
    .app-root (see App.tsx and that component's own doc comment), fixed to
    the true window viewport (not a document.body portal -- .app-root has no
