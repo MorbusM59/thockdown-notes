@@ -172,6 +172,18 @@ export const flowMeter = {
   },
 
   /**
+   * What EVERY box already on screen restarts at when full flow is reached:
+   * the full trail strength, on the meter's decay. Lifting only the boxes
+   * typed from then on left a hard edge between bright new marks and the
+   * dimmer ones behind them; restarting all of them lifts the whole trail at
+   * once, and it then fades as one. Null when there is no trail.
+   */
+  trailRelift(): { opacity: number; decayPercent: number } | null {
+    if (!enabled || trailStrength <= 0) return null
+    return { opacity: trailStrength, decayPercent: tuning.decayPercent }
+  },
+
+  /**
    * What a box left by this keydown should look like, or null when it should
    * leave none. Only a CHARACTER or Space leaves one: Enter is a hit for the
    * meter but types no cell. A box decays by the meter's own per-tick rule

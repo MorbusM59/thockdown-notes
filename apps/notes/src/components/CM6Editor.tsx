@@ -1118,6 +1118,16 @@ export function CM6Editor({
    */
   const flowTrailClipRef = useRef<HTMLDivElement | null>(null);
   const flowTrailLayerRef = useRef<HTMLDivElement | null>(null);
+  // Reaching full flow lifts the WHOLE trail, not just the marks typed from
+  // then on: every box on screen restarts its fade at full trail strength.
+  useEffect(() => flowMeter.subscribeKick(() => {
+    const relift = flowMeter.trailRelift();
+    const layer = flowTrailLayerRef.current;
+    if (!relift || !layer) return;
+    for (const box of Array.from(layer.querySelectorAll<HTMLElement>('.flow-trail-box'))) {
+      flowTrailFade(box, relift.opacity, relift.decayPercent);
+    }
+  }), []);
   const flowTrailHeadRef = useRef<HTMLDivElement | null>(null);
   const [highlightRects, setHighlightRects] = useState<HighlightRect[]>([]);
   // A dragged table cell's drop target: the range of the note it covers,

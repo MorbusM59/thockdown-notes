@@ -18,6 +18,12 @@ export function flowTrailFade(el: HTMLElement, opacity: number, decayPercent: nu
     const t = (durationSec * i) / SAMPLES
     keyframes.push({ opacity: decayed(opacity, t, decayPercent), offset: i / SAMPLES })
   }
+  // A box may be restarted (flowMeter.trailRelift): its previous fade must
+  // not finish under the new one and remove it early.
+  for (const previous of el.getAnimations()) {
+    previous.onfinish = null
+    previous.cancel()
+  }
   const animation = el.animate(keyframes, { duration: durationSec * 1000, fill: 'forwards' })
   animation.onfinish = () => el.remove()
 }
