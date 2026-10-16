@@ -72,9 +72,7 @@ const toByte = (x: number) => Math.round(Math.max(0, Math.min(1, x)) * 255)
  * content and a hue rotation moves what the reader calls the box's hue: the
  * box's on-screen hue is taken, the target is that hue at full saturation
  * and above-mid lightness, and the content colour whose on-screen value lands
- * nearest the target is chosen. Searched rather than solved, because the
- * scene is not always invertible (saturate at zero, colorize near one), and
- * a search lands on the best reachable colour where an inverse has none.
+ * nearest the target is chosen (`contentColorReaching`).
  */
 export function deriveFlowTrail(boxCss: string, scene: SceneDescription): string {
   const box = rgbOf(boxCss)
@@ -87,11 +85,22 @@ export function deriveFlowTrail(boxCss: string, scene: SceneDescription): string
       ? tintHue
       : hueOf(screenColorOf(withoutInvert(scene), rgbOf(FALLBACK_FLOW_TRAIL)!))
   const target = hslToRgb(hueDeg, TARGET_SATURATION, TARGET_LIGHTNESS)
-  let best = box
+  const best = contentColorReaching(target, scene)
+  return `rgba(${best.map(toByte).join(', ')}, ${TRAIL_ALPHA})`
+}
+
+/**
+ * The content colour whose on-screen value lands nearest `target`. Searched
+ * rather than solved, because the scene is not always invertible (saturate
+ * at zero, colorize near one), and a search lands on the best reachable
+ * colour where an inverse has none.
+ */
+function contentColorReaching(target: readonly number[], scene: SceneDescription): number[] {
+  let best = [1, 1, 1]
   let bestDistance = Infinity
   for (let h = 0; h < 360; h += 5) {
     for (const s of [0.6, 0.8, 1]) {
-      for (const l of [0.2, 0.35, 0.5, 0.6, 0.7, 0.8, 0.9]) {
+      for (const l of [0.05, 0.1, 0.2, 0.35, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]) {
         const candidate = hslToRgb(h, s, l)
         const seen = screenColorOf(scene, candidate)
         const distance = seen.reduce((sum, v, i) => sum + (v - target[i]) ** 2, 0)
@@ -102,7 +111,23 @@ export function deriveFlowTrail(boxCss: string, scene: SceneDescription): string
       }
     }
   }
-  return `rgba(${best.map(toByte).join(', ')}, ${TRAIL_ALPHA})`
+  return best
+}
+
+/** How far full flow's CHARGED trail is run toward white, on screen. */
+const CHARGED_WHITE_SHARE = 0.55
+
+/**
+ * Full flow's charged trail colour: the trail run white-hot ON SCREEN, as a
+ * content colour. Mixing toward white in content space would be mixing
+ * toward BLACK in an inverted theme, so full flow dimmed the trail there and
+ * leaving it read as a flash.
+ */
+export function chargedFlowTrailOf(trailCss: string, scene: SceneDescription): string {
+  const trail = parseCssColorToRgba(trailCss) ?? parseCssColorToRgba(FALLBACK_FLOW_TRAIL)!
+  const seen = screenColorOf(scene, [trail.r / 255, trail.g / 255, trail.b / 255])
+  const target = seen.map((v) => v + (1 - v) * CHARGED_WHITE_SHARE)
+  return `rgba(${contentColorReaching(target, scene).map(toByte).join(', ')}, ${trail.a})`
 }
 
 /**

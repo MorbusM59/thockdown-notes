@@ -160,7 +160,10 @@
   top: 0;
   left: 0;
   box-sizing: border-box;
-  border: 1px solid var(--color-flow-trail-now);
+  --flow-trail-head-edge: 1px;
+  --flow-trail-head-cap: 3px;
+  border: var(--flow-trail-head-edge) solid var(--color-flow-trail-now);
+  border-right-width: var(--flow-trail-head-cap);
   border-left: none;
   transition: border-color 400ms ease-in-out;
   /* Rounded where it is closed, square where it opens into the trail. */
@@ -175,7 +178,11 @@
 .flow-trail-head::after {
   content: '';
   position: absolute;
-  inset: 0;
+  /* Out over the border box (the border widths, negated), so its rounded end
+     is the same curve as the border's outer edge. At inset 0 it filled the
+     padding box with the OUTER radius, which left a flat end inside the cap
+     as soon as the right border was wider than the corner's inner radius. */
+  inset: calc(-1 * var(--flow-trail-head-edge)) calc(-1 * var(--flow-trail-head-cap)) calc(-1 * var(--flow-trail-head-edge)) 0;
   border-radius: inherit;
   background-image: linear-gradient(to left, var(--color-flow-trail-charged), transparent);
   opacity: 0;
@@ -188,12 +195,12 @@
 
 /* The trail's colour now: the reader's flow colour, or while in FULL FLOW
    (flowMeter's state, marked data-flow-full by flow/useFlowFeedback.ts) the
-   same colour run white-hot, so the state reads as a change of kind.
-   Derived on the trail's own elements, because the theme may set the flow
-   colour below :root. */
+   same colour run white-hot ON SCREEN, so the state reads as a change of
+   kind. --color-flow-trail-charged comes from the theme (packages/look/
+   flowColor.ts), because "whiter" in content space is darker in an inverted
+   theme. */
 .flow-trail-box,
 .flow-trail-head {
-  --color-flow-trail-charged: color-mix(in oklab, var(--color-flow-trail), white 55%);
   --color-flow-trail-now: var(--color-flow-trail);
 }
 :root[data-flow-full] .flow-trail-box,
