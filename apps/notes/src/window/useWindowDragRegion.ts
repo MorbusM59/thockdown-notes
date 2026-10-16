@@ -5,6 +5,26 @@ import {
   WINDOW_TITLEBAR_SELECTOR,
 } from '../shared/windowDrag'
 import { hasTravelledDragThreshold } from '../shared/pointerDrag'
+import { IS_LINUX_DESKTOP } from '../shared/platform'
+
+/**
+ * Linux: the compositor moves the window, never the app (shared/platform.ts
+ * says why), and it does so only for a press starting on an `app-region:
+ * drag` area. So every surface the JavaScript path below would let move the
+ * window is declared such an area instead, carved out by the same exclusion
+ * selector, plus anything carrying a `tabindex` (the render pane, the ring's
+ * cells, the snapshot timeline), which is content the reader works in rather
+ * than background. The compositor then also owns double-click to maximize
+ * and dragging a maximized window out of maximize. Inside a drag area the
+ * page receives no pointer events at all, which is why the custom cursor is
+ * off on Linux.
+ */
+function installNativeDragRegions(): () => void {
+  const style = document.createElement('style')
+  style.textContent = `body { -webkit-app-region: drag; }\n:is(${WINDOW_DRAG_EXCLUDED_SELECTOR}, [tabindex]) { -webkit-app-region: no-drag; }`
+  document.head.appendChild(style)
+  return () => style.remove()
+}
 
 /**
  * Global, mount-once replacement for `-webkit-app-region: drag`. Listens for
@@ -44,6 +64,7 @@ import { hasTravelledDragThreshold } from '../shared/pointerDrag'
  */
 export function useWindowDragRegion() {
   useEffect(() => {
+    if (IS_LINUX_DESKTOP) return installNativeDragRegions()
     const controls = window.windowControls
     if (!controls?.startWindowDrag || !controls.moveWindowDrag || !controls.endWindowDrag) return
 

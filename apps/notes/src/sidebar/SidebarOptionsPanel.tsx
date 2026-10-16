@@ -1,4 +1,5 @@
 import type { MouseEvent, MutableRefObject, PointerEvent } from 'react'
+import { IS_LINUX_DESKTOP } from '../shared/platform'
 import type * as React from 'react'
 import { useRef } from 'react'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
@@ -2238,6 +2239,8 @@ export function SidebarOptionsPanel({
         </div>
       </AccordionSection>
 
+      {/* The custom cursor does not exist on Linux (shared/platform.ts). */}
+      {!IS_LINUX_DESKTOP ? (
       <AccordionSection
         className="sidebar-options-section-mouse"
         ariaLabel="Cursor"
@@ -2580,6 +2583,7 @@ export function SidebarOptionsPanel({
           </div>
         </div>
       </AccordionSection>
+      ) : null}
 
       <AccordionSection
         className="sidebar-options-section-caret"
@@ -3228,15 +3232,17 @@ export function SidebarOptionsPanel({
           >
             <span className="fa-solid fa-spray-can-sparkles" aria-hidden="true" />
           </button>
-          <button
-            type="button"
-            className={`btn-icon${!customCursorEnabled ? ' is-active' : ''}`}
-            onClick={() => setCustomCursorEnabled(!customCursorEnabled)}
-            aria-pressed={!customCursorEnabled}
-            data-tooltip="Disable custom mouse cursor"
-          >
-            <span className="fa-solid fa-computer-mouse" aria-hidden="true" />
-          </button>
+          {!IS_LINUX_DESKTOP ? (
+            <button
+              type="button"
+              className={`btn-icon${!customCursorEnabled ? ' is-active' : ''}`}
+              onClick={() => setCustomCursorEnabled(!customCursorEnabled)}
+              aria-pressed={!customCursorEnabled}
+              data-tooltip="Disable custom mouse cursor"
+            >
+              <span className="fa-solid fa-computer-mouse" aria-hidden="true" />
+            </button>
+          ) : null}
           <button
             type="button"
             className={`btn-icon${deferPreviewOnRapidInput ? ' is-active' : ''}`}

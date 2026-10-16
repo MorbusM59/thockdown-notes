@@ -1,4 +1,5 @@
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { IS_LINUX_DESKTOP } from './shared/platform'
 import { useTypographyWheel } from './editorSection/typographyWheel'
 import { scrollThumbFor, scrollTopForThumb } from '@thockdown/interaction/scrollTrackGeometry'
 import { flushSync } from 'react-dom'
@@ -2428,7 +2429,8 @@ function App() {
   }, [caretColorHsva])
 
   const customCursorSettings: CustomCursorSettings = useMemo(() => ({
-    enabled: customCursorEnabled,
+    // Never on Linux, whatever the setting says (shared/platform.ts).
+    enabled: customCursorEnabled && !IS_LINUX_DESKTOP,
     dotColor: customCursorDotColor,
     centerColor: customCursorCenterColor,
     trailColor: customCursorTrailColor,
@@ -3675,7 +3677,8 @@ function App() {
   }, [textureControlDragState])
 
   useEffect(() => {
-    if (!hsvaDragState && !textureControlDragState) {
+    // On Linux the native cursor stays visible throughout (shared/platform.ts).
+    if (IS_LINUX_DESKTOP || (!hsvaDragState && !textureControlDragState)) {
       document.body.classList.remove('hsva-dragging')
       return
     }
