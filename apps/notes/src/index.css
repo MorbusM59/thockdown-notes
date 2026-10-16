@@ -187,7 +187,7 @@
      as soon as the right border was wider than the corner's inner radius. */
   inset: 0;
   border-radius: inherit;
-  background-image: linear-gradient(to left, var(--color-flow-trail-charged), transparent);
+  background-image: linear-gradient(to left, var(--color-flow-trail-now), transparent);
   opacity: 0;
   transition: opacity 800ms ease-in-out;
 }
@@ -208,7 +208,17 @@
 }
 :root[data-flow-full] .flow-trail-box,
 :root[data-flow-full] .flow-trail-head {
-  --color-flow-trail-now: var(--color-flow-trail-charged);
+  --color-flow-trail-now: color-mix(in oklab, var(--color-flow-trail-charged), var(--color-flow-trail-flash) calc(var(--flow-trail-flash) * 100%));
+}
+
+/* The arrival FLASH: at the kick (reaching full flow) useFlowFeedback.ts
+   animates this from the caret strength to 0 on the root, so the whole trail
+   and the leading edge ping toward white on screen and fade back to the
+   charged colour. Registered so it can be animated as a number. */
+@property --flow-trail-flash {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
 }
 
 

@@ -50,6 +50,9 @@ function setCaretFlow(grow: number): void {
   root.style.setProperty('--flow-trail-head', grow.toFixed(3))
 }
 
+/** How long the trail's arrival flash takes to fade back to the charged colour. */
+const TRAIL_FLASH_MS = 2500
+
 export function useFlowFeedback(settings: FlowSettings): void {
   const { enabled, gainPercent, decayPercent, caret, reverb } = settings
 
@@ -71,6 +74,14 @@ export function useFlowFeedback(settings: FlowSettings): void {
       typingSoundManager.kickFlowReverb(reverb)
       // The soundscape drops out with the reverb's dip and comes back with its swell.
       if (reverb > 0) soundscapeEngine.dip(1 - (0.5 * reverb), 0.06, 0.08, 0.4)
+      // The trail pings toward white and fades back to its charged colour
+      // (index.css's --flow-trail-flash), scaled by the caret channel.
+      if (caret > 0) {
+        document.documentElement.animate(
+          [{ '--flow-trail-flash': caret }, { '--flow-trail-flash': 0 }],
+          { duration: TRAIL_FLASH_MS, easing: 'cubic-bezier(0.2, 0.6, 0.3, 1)' },
+        )
+      }
     })
     // Full flow as a state on the root, for what shows only while it lasts
     // (the trail's charged colour, index.css); the caret channel owns it.

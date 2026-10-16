@@ -124,10 +124,26 @@ const CHARGED_WHITE_SHARE = 0.55
  * leaving it read as a flash.
  */
 export function chargedFlowTrailOf(trailCss: string, scene: SceneDescription): string {
+  return whitenedOnScreen(trailCss, scene, CHARGED_WHITE_SHARE, null)
+}
+
+/** How far the arrival FLASH is run toward white, on screen: nearly all the way. */
+const FLASH_WHITE_SHARE = 0.9
+
+/**
+ * The colour the trail flashes to at the moment full flow is reached (the
+ * kick), before fading back to the charged colour. Opaque, so the flash is
+ * the brightest the trail ever is.
+ */
+export function flashFlowTrailOf(trailCss: string, scene: SceneDescription): string {
+  return whitenedOnScreen(trailCss, scene, FLASH_WHITE_SHARE, 1)
+}
+
+function whitenedOnScreen(trailCss: string, scene: SceneDescription, share: number, alpha: number | null): string {
   const trail = parseCssColorToRgba(trailCss) ?? parseCssColorToRgba(FALLBACK_FLOW_TRAIL)!
   const seen = screenColorOf(scene, [trail.r / 255, trail.g / 255, trail.b / 255])
-  const target = seen.map((v) => v + (1 - v) * CHARGED_WHITE_SHARE)
-  return `rgba(${contentColorReaching(target, scene).map(toByte).join(', ')}, ${trail.a})`
+  const target = seen.map((v) => v + (1 - v) * share)
+  return `rgba(${contentColorReaching(target, scene).map(toByte).join(', ')}, ${alpha ?? trail.a})`
 }
 
 /**
