@@ -208,13 +208,16 @@
 }
 :root[data-flow-full] .flow-trail-box,
 :root[data-flow-full] .flow-trail-head {
-  --color-flow-trail-now: color-mix(in oklab, var(--color-flow-trail-charged), var(--color-flow-trail-flash) calc(var(--flow-trail-flash) * 100%));
+  /* Charged trails sit at FLOW_TRAIL_FULL_ALPHA; the arrival flash lifts
+     them to opaque and lets them fall back. Alpha, not brightness: the
+     whole trail on screen is boosted at once, the old marks with the new. */
+  --color-flow-trail-now: rgb(from var(--color-flow-trail-charged) r g b / calc(0.7 + 0.3 * var(--flow-trail-flash)));
 }
 
 /* The arrival FLASH: at the kick (reaching full flow) useFlowFeedback.ts
-   animates this from the caret strength to 0 on the root, so the whole trail
-   and the leading edge ping toward white on screen and fade back to the
-   charged colour. Registered so it can be animated as a number. */
+   animates this from the caret strength to 0 on the root, so every trail
+   mark and the leading edge go from 70% to full alpha and fall back.
+   Registered so it can be animated as a number. */
 @property --flow-trail-flash {
   syntax: '<number>';
   inherits: true;

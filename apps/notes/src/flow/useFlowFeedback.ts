@@ -74,7 +74,7 @@ export function useFlowFeedback(settings: FlowSettings): void {
       typingSoundManager.kickFlowReverb(reverb)
       // The soundscape drops out with the reverb's dip and comes back with its swell.
       if (reverb > 0) soundscapeEngine.dip(1 - (0.5 * reverb), 0.06, 0.08, 0.4)
-      // The trail pings toward white and fades back to its charged colour
+      // Every trail mark flashes to full alpha and falls back to its charged 70%
       // (index.css's --flow-trail-flash), scaled by the caret channel.
       if (caret > 0) {
         document.documentElement.animate(
