@@ -1,5 +1,5 @@
 import { SOUNDSCAPE_FILE_CHANNELS, type SoundscapeFileApi, SOUNDSCAPE_FILE_EXTENSION } from '@thockdown/soundscape/soundscapeFile';
-import { app, BrowserWindow, Menu, ipcMain, dialog, protocol, shell } from 'electron'
+import { app, BrowserWindow, Menu, ipcMain, dialog, protocol, shell, screen } from 'electron'
 import type { IpcMainEvent, IpcMainInvokeEvent, Session, PrintToPDFOptions } from 'electron'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
@@ -1464,11 +1464,42 @@ function restoreWindowFromUtilityCollapse(): boolean {
   return true;
 }
 
+// The saved geometry is only a request: the displays it was saved on may be
+// gone (an unplugged monitor), and a position recorded under one windowing
+// system means nothing under another -- a native Wayland client cannot read
+// its own position, so a session saved there and reopened under X11 can land
+// wholly off screen, where the window exists (taskbar entry, sound) but is
+// never seen. A position is kept only if a usable part of the window's title
+// strip lies on some display's work area; otherwise it is dropped and the
+// window manager places it. The size is limited to the work area of the
+// display it will open on.
+function placeOnVisibleDisplay(state: WindowState): WindowState {
+  const MIN_VISIBLE_PX = 80;
+  const displays = screen.getAllDisplays();
+  const hasPosition = typeof state.x === 'number' && typeof state.y === 'number'
+    && Number.isFinite(state.x) && Number.isFinite(state.y);
+  const titleStripReachable = hasPosition && displays.some(({ workArea }) => {
+    const overlapX = Math.min(state.x! + state.width, workArea.x + workArea.width) - Math.max(state.x!, workArea.x);
+    const topInside = state.y! >= workArea.y && state.y! < workArea.y + workArea.height - MIN_VISIBLE_PX;
+    return overlapX >= MIN_VISIBLE_PX && topInside;
+  });
+  const target = titleStripReachable
+    ? screen.getDisplayMatching({ x: state.x!, y: state.y!, width: state.width, height: state.height })
+    : screen.getPrimaryDisplay();
+  return {
+    ...state,
+    x: titleStripReachable ? state.x : undefined,
+    y: titleStripReachable ? state.y : undefined,
+    width: Math.min(state.width, target.workArea.width),
+    height: Math.min(state.height, target.workArea.height),
+  };
+}
+
 async function createWindow() {
   if (!stateService) {
     stateService = new StateService(resolveDataRoot());
   }
-  const savedWindowState = await stateService.loadWindowState();
+  const savedWindowState = placeOnVisibleDisplay(await stateService.loadWindowState());
   // Load persisted app state so we can set an appropriate initial minimum width
   const savedAppState = await stateService.loadAppState().catch(() => null);
   setRemoteImagesAllowed(savedAppState?.menu?.allowRemoteImages === true);
