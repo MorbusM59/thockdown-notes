@@ -161,9 +161,8 @@
   left: 0;
   box-sizing: border-box;
   --flow-trail-head-edge: 1px;
-  --flow-trail-head-cap: 3px;
   border: var(--flow-trail-head-edge) solid var(--color-flow-trail-now);
-  border-right-width: var(--flow-trail-head-cap);
+  border-right-width: 0;
   border-left: none;
   transition: border-color 400ms ease-in-out;
   /* Rounded where it is closed, square where it opens into the trail. The
@@ -171,7 +170,7 @@
      is the outer one minus the border width: at the plain small radius that
      reached zero and the cap's inner edge was a straight line inside the
      curve. Adding the cap width keeps the inner corner at the small radius. */
-  border-radius: 0 calc(var(--border-radius-small) + var(--flow-trail-head-cap)) calc(var(--border-radius-small) + var(--flow-trail-head-cap)) 0;
+  border-radius: 0 var(--border-radius-regular) var(--border-radius-regular) 0;
   /* Inside, the flow colour fades from the leading edge back toward the
      trail, so the edge reads as a front moving right. */
   background-image: linear-gradient(to left, var(--color-flow-trail), transparent);
@@ -186,7 +185,7 @@
      is the same curve as the border's outer edge. At inset 0 it filled the
      padding box with the OUTER radius, which left a flat end inside the cap
      as soon as the right border was wider than the corner's inner radius. */
-  inset: calc(-1 * var(--flow-trail-head-edge)) calc(-1 * var(--flow-trail-head-cap)) calc(-1 * var(--flow-trail-head-edge)) 0;
+  inset: 0;
   border-radius: inherit;
   background-image: linear-gradient(to left, var(--color-flow-trail-charged), transparent);
   opacity: 0;
