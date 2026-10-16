@@ -662,6 +662,7 @@ export function SectionEditorArea({
             <TypingRateOrWordCount active={isSectionActive}>
               <span data-tooltip="Words, then characters, in this note">
                 <b className="readout-figure">{activeNoteDocumentStats.wordCount.toLocaleString()}</b>
+                <span className="readout-separator">{'  |  '}</span>
                 <span className="readout-figure">{activeNoteDocumentStats.characterCount.toLocaleString()}</span>
               </span>
             </TypingRateOrWordCount>

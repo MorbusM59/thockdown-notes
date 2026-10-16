@@ -329,8 +329,8 @@
   font-size:   calc(11px * var(--ui-font-scale));
   line-height: 1;
 }
-.wordcount-panel .readout-figure + .readout-figure {
-  margin-left: 0.5em;
+.wordcount-panel .readout-separator {
+  white-space: pre;
 }
 
 .timeline-panel {

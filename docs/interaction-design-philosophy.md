@@ -563,7 +563,8 @@ The goal is deterministic behavior with one source of truth per interaction phas
   static text around it. What it counts is said in its tooltip and in the
   User Guide. Static text costs space on every frame and tells a reader
   something only once.
-- The one exception is a single glyph that IS the label (`#`, `&`, `$`, `§`).
+- The exceptions are a single glyph that IS the label (`#`, `&`, `$`, `§`)
+  and the separator `|` between two figures in one readout (the word count).
 - A figure is set two points above the text of the panel it sits in: digits
   have no ascenders or descenders, so at the same size they read smaller than
   the words around them (`.readout-figure`).
