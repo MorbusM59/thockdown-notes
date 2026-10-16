@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import { TypingRateOrWordCount } from '../flow/TypingRateOrWordCount'
 import type { CSSProperties, DragEvent, MouseEvent, MutableRefObject, ReactNode, RefObject } from 'react'
 import { CM6Editor } from '../components/CM6Editor'
 import { SnapshotTimelineSlider } from '../editor/SnapshotTimelineSlider'
@@ -658,7 +659,9 @@ export function SectionEditorArea({
         </div>
         <div className="wordcount-panel" aria-live="polite">
           {activeNoteId ? (
-            <span><b>{activeNoteDocumentStats.wordCount.toLocaleString()}</b> ({activeNoteDocumentStats.characterCount.toLocaleString()})</span>
+            <TypingRateOrWordCount active={isSectionActive}>
+              <span><b>{activeNoteDocumentStats.wordCount.toLocaleString()}</b> ({activeNoteDocumentStats.characterCount.toLocaleString()})</span>
+            </TypingRateOrWordCount>
           ) : null}
         </div>
         {imageStorage.state !== 'none' ? (

@@ -15,7 +15,7 @@
  * A meter that is switched off costs one boolean check per keydown.
  */
 
-import { EMPTY_FLOW_STATE, flowHit, flowLevelAt, isFlowHit, presentedFlow, type FlowState, type FlowTuning } from './flowModel'
+import { EMPTY_FLOW_STATE, PAUSE_SEC, flowHit, flowLevelAt, isFlowHit, presentedFlow, type FlowState, type FlowTuning } from './flowModel'
 import { DEFAULT_FLOW_SETTINGS } from '../shared/flowSettings'
 
 const PRESENT_TAU_SEC = 0.2
@@ -28,18 +28,17 @@ type FullListener = (full: boolean) => void
 
 /**
  * FULL FLOW is a STATE, not only a level: it begins when the meter reaches
- * full from below and ends only once the presented level falls below
- * `FULL_EXIT_LEVEL`, so a reader typing right at the sustaining pace, whose
- * meter dips under full and back, stays in it rather than flickering in and
- * out. Consumers that show something only at full (the edge glow, the
- * charged trail colour) subscribe to it with `subscribeFull`.
+ * full from below. Consumers that show something only at full (the edge glow, the
+ * charged trail colour) subscribe to it with `subscribeFull`. It ends when
+ * the presented level drops below full: the model's hidden buffer above full
+ * already carries a reader at the sustaining pace, so no second margin is
+ * needed and full flow means the meter at 100%.
  *
  * The KICK is the one-off event marking the state's start: the moment flow
  * is achieved, landed as an event rather than as a value arriving. It also
  * waits `KICK_MIN_INTERVAL_SEC` since the last one, so dropping out and
  * straight back in enters the state again without a second fanfare.
  */
-const FULL_EXIT_LEVEL = 0.8
 const KICK_MIN_INTERVAL_SEC = 3
 
 let enabled = false
@@ -55,11 +54,44 @@ let isFull = false
 let lastKickSec = -Infinity
 let trailStrength = DEFAULT_FLOW_SETTINGS.caret
 
+/**
+ * The TYPING RATE: characters per second over the last `RATE_MEMORY_KEYS`
+ * characters typed, for the reader's own reference (the word count panel
+ * shows it while they type). A personal figure rather than words per minute,
+ * which assumes a word length and a controlled text. A gap longer than the
+ * model's `PAUSE_SEC` restarts it, and that long after the last character it
+ * is withdrawn (null), so the panel goes back to the word count.
+ */
+const RATE_MEMORY_KEYS = 10
+type RateListener = (charactersPerSecond: number | null) => void
+const rateListeners = new Set<RateListener>()
+let rateStamps: number[] = []
+let rateTimer: ReturnType<typeof setTimeout> | null = null
+
+function publishRate(rate: number | null): void {
+  for (const listener of rateListeners) listener(rate)
+}
+
+function reportCharacter(now: number): void {
+  const last = rateStamps[rateStamps.length - 1]
+  if (last !== undefined && now - last > PAUSE_SEC) rateStamps = []
+  rateStamps = [...rateStamps, now].slice(-RATE_MEMORY_KEYS)
+  if (rateTimer !== null) clearTimeout(rateTimer)
+  rateTimer = setTimeout(() => {
+    rateTimer = null
+    rateStamps = []
+    publishRate(null)
+  }, PAUSE_SEC * 1000)
+  if (rateStamps.length < 2) return
+  const span = rateStamps[rateStamps.length - 1] - rateStamps[0]
+  if (span > 0) publishRate((rateStamps.length - 1) / span)
+}
+
 const nowSec = (): number => performance.now() / 1000
 
 function publish(level: number): void {
   presented = level
-  if (isFull && level < FULL_EXIT_LEVEL) setFull(false)
+  if (isFull && level < 1) setFull(false)
   for (const listener of listeners) listener(level)
 }
 
@@ -104,6 +136,10 @@ export const flowMeter = {
       state = EMPTY_FLOW_STATE
       lastFrameSec = null
       if (presented !== 0) publish(0)
+      if (rateTimer !== null) clearTimeout(rateTimer)
+      rateTimer = null
+      rateStamps = []
+      publishRate(null)
     }
   },
 
@@ -112,6 +148,7 @@ export const flowMeter = {
     if (!enabled) return
     if (!isFlowHit(event)) return
     const now = nowSec()
+    if (event.key.length === 1) reportCharacter(now)
     const before = flowLevelAt(state, now, tuning)
     state = flowHit(state, now, tuning)
     // The unlock is presented at once rather than ramped: reaching full is
@@ -152,6 +189,14 @@ export const flowMeter = {
     kickListeners.add(listener)
     return () => {
       kickListeners.delete(listener)
+    }
+  },
+
+  /** Called with the typing rate (see TYPING RATE, above) on every character, and with null once typing pauses. */
+  subscribeRate(listener: RateListener): () => void {
+    rateListeners.add(listener)
+    return () => {
+      rateListeners.delete(listener)
     }
   },
 
