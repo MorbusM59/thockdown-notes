@@ -209,14 +209,14 @@ describe('stepping through soundscapes', () => {
     expect(nextSoundscapePreset(current).id).toBe(SOUNDSCAPE_FACTORY_PRESETS[0].id);
   });
 
-  it('turns soundscape on and keeps the soloed channel', () => {
+  it('turns soundscape on and unsoloes every channel', () => {
     const soloed = {
       ...preferences,
       settings: { ...preferences.settings, channels: preferences.settings.channels.map((channel) => ({ ...channel, solo: channel.id === 'rain-2' })) },
     };
     const next = applySoundscapePreset(soloed, SOUNDSCAPE_FACTORY_PRESETS[3]);
     expect(next.enabled).toBe(true);
-    expect(next.settings.channels.filter((channel) => channel.solo).map((channel) => channel.id)).toEqual(['rain-2']);
+    expect(next.settings.channels.filter((channel) => channel.solo).map((channel) => channel.id)).toEqual([]);
   });
 });
 

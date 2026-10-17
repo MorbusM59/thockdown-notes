@@ -935,17 +935,17 @@ export function sanitizeSoundscapePreferences(input: unknown): SoundscapePrefere
 
 /**
  * Switch to a soundscape: its settings, soundscapes turned on, and the
- * preset marked active. Solo is a listening aid rather than part of the
- * sound, so whichever channel was soloed stays soloed. The one way a preset
- * is applied, whether from the settings panel or the player's switch.
+ * preset marked active. No channel is soloed afterwards: a solo is a
+ * listening aid for the soundscape it was set in, and the preset's own
+ * channels are what is chosen. The one way a preset is applied, whether
+ * from the settings panel or the player's switch.
  */
 export function applySoundscapePreset(preferences: SoundscapePreferences, preset: SoundscapePreset): SoundscapePreferences {
-  const soloId = preferences.settings.channels.find((channel) => channel.solo)?.id ?? null;
   const settings = cloneSettings(preset.settings);
   return {
     ...preferences,
     enabled: true,
-    settings: { ...settings, channels: settings.channels.map((channel) => ({ ...channel, solo: channel.id === soloId })) },
+    settings: { ...settings, channels: settings.channels.map((channel) => ({ ...channel, solo: false })) },
     activePresetId: preset.id,
   };
 }
