@@ -10,7 +10,7 @@ import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsection
 import {
   DEFAULT_FLOW_SETTINGS,
   FLOW_DECAY_PERCENT_MAX, FLOW_DECAY_PERCENT_MIN,
-  FLOW_FADE_MAX_TIME_MAX, FLOW_FADE_MAX_TIME_MIN, FLOW_FADE_SHAPE_MAX, FLOW_FADE_SHAPE_MIN,
+  FLOW_FADE_MAX_TIME_MAX, FLOW_FADE_MAX_TIME_MIN, FLOW_FADE_SHAPE_MAX, FLOW_FADE_SHAPE_MIN, FLOW_LINE_RAMP_MAX, FLOW_LINE_RAMP_MIN,
   FLOW_GAIN_PERCENT_MAX, FLOW_GAIN_PERCENT_MIN,
   type FlowSettings,
 } from '../shared/flowSettings'
@@ -2987,8 +2987,8 @@ export function SidebarOptionsPanel({
         </div>
         {flowSettings.enabled ? (
           <div className="utility-setting-slider-stack" aria-label="Typing flow settings">
-            {/* How it moves (build, decay), how the trail fades (fade, shape) and how it answers (look, reverb, caret). */}
-            <OptionsSliderRows rows={[2, 2, 3]}>
+            {/* How it moves (build, decay), how the trail fades (fade, shape, wrap) and how it answers (look, reverb, caret). */}
+            <OptionsSliderRows rows={[2, 3, 3]}>
               <CompactScrollbarSlider
                 id="flow-gain"
                 min={FLOW_GAIN_PERCENT_MIN}
@@ -3040,6 +3040,19 @@ export function SidebarOptionsPanel({
                 defaultValue={DEFAULT_FLOW_SETTINGS.fadeShape}
                 formatValue={(value) => value.toFixed(1)}
                 onCommit={(value) => setFlowSettings((prev) => ({ ...prev, fadeShape: value }))}
+              />
+              <CompactScrollbarSlider
+                id="flow-line-ramp"
+                min={FLOW_LINE_RAMP_MIN}
+                max={FLOW_LINE_RAMP_MAX}
+                step={1}
+                value={flowSettings.lineRamp}
+                trackLabel="wrap"
+                tooltipLabel="Letters into a new line before the trail is at full strength; 1 carries straight on"
+                ariaLabel="How many letters into a new line the flow trail takes to reach full strength"
+                defaultValue={DEFAULT_FLOW_SETTINGS.lineRamp}
+                formatValue={(value) => value.toFixed(0)}
+                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, lineRamp: Math.round(value) }))}
               />
               <CompactScrollbarSlider
                 id="flow-look"

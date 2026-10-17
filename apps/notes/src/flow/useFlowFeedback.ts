@@ -18,9 +18,9 @@ const WEATHER_FLOOR_AT_FULL_FLOW = 0.8
  * At full flow and full strength the caret's own halo (Options > Caret) grows
  * by this much blur and spread, and its colour grows more
  * opaque (`--flow-caret-alpha`). The effect slider also blends to zero through
- * `--flow-caret-effect`, and the fill and outline fade out by the same amount
- * (`--flow-caret-fade`), so at full flow and full strength the caret is its
- * halo alone. `--flow-trail-head` is the trail's leading edge. The blink
+ * `--flow-caret-effect`, and the fill and outline fade out by the flow level
+ * itself (`--flow-caret-fade`, not scaled by the strength), so at full flow
+ * the caret is its halo alone. `--flow-trail-head` is the trail's leading edge. The blink
  * keyframes consume these variables (`buildCaretBlinkKeyframesCss`), so the
  * flow draws nothing of its own: a halo of zero size still grows, and one
  * whose colour is transparent stays invisible.
@@ -30,9 +30,9 @@ const HALO_GROW_SPREAD_PX = 2.5
 /** The share of the way to opaque that the halo colour moves at full flow and full strength. */
 const CARET_ALPHA_BOOST = 0.6
 
-function setCaretFlow(grow: number): void {
+function setCaretFlow(grow: number, level: number): void {
   const root = document.documentElement
-  if (grow <= 0) {
+  if (level <= 0) {
     root.style.removeProperty('--flow-halo-blur')
     root.style.removeProperty('--flow-halo-spread')
     root.style.removeProperty('--flow-caret-alpha')
@@ -45,25 +45,27 @@ function setCaretFlow(grow: number): void {
   root.style.setProperty('--flow-halo-spread', `${(grow * HALO_GROW_SPREAD_PX).toFixed(2)}px`)
   root.style.setProperty('--flow-caret-alpha', (grow * CARET_ALPHA_BOOST).toFixed(3))
   root.style.setProperty('--flow-caret-effect', grow.toFixed(3))
-  root.style.setProperty('--flow-caret-fade', grow.toFixed(3))
+  // The fill and outline fade by the level ALONE, not scaled by the caret
+  // slider, so at full flow the caret's body is gone whatever the strength.
+  root.style.setProperty('--flow-caret-fade', Math.min(1, level).toFixed(3))
   // The trail's leading edge (CM6Editor) glows at the live level, no decay.
   root.style.setProperty('--flow-trail-head', grow.toFixed(3))
 }
 
 export function useFlowFeedback(settings: FlowSettings): void {
-  const { enabled, gainPercent, decayPercent, fadeMaxTime, fadeShape, caret, reverb } = settings
+  const { enabled, gainPercent, decayPercent, fadeMaxTime, fadeShape, lineRamp, caret, reverb } = settings
 
   useEffect(() => {
     flowMeter.configure({ enabled, gainPercent, decayPercent })
   }, [enabled, gainPercent, decayPercent])
 
   useEffect(() => {
-    flowMeter.configureTrail({ fadeMaxTime, fadeShape })
-  }, [fadeMaxTime, fadeShape])
+    flowMeter.configureTrail({ fadeMaxTime, fadeShape, lineRamp })
+  }, [fadeMaxTime, fadeShape, lineRamp])
 
   useEffect(() => {
     const unsubscribe = flowMeter.subscribe((level) => {
-      setCaretFlow(level * caret)
+      setCaretFlow(level * caret, level)
       typingSoundManager.setFlowReverb(level * reverb)
       soundscapeEngine.setWeatherFloor(level * WEATHER_FLOOR_AT_FULL_FLOW)
     })
@@ -75,7 +77,7 @@ export function useFlowFeedback(settings: FlowSettings): void {
     return () => {
       unsubscribe()
       unsubscribeKick()
-      setCaretFlow(0)
+      setCaretFlow(0, 0)
       typingSoundManager.setFlowReverb(0)
       soundscapeEngine.setWeatherFloor(0)
     }

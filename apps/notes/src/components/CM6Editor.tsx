@@ -10,7 +10,7 @@ import { matchShortcut, type ShortcutId } from '../shared/keyboardShortcuts';
 import { buildTokenPresentation } from '../editor/MarkdownLineClassification';
 import { suppressNextPlainTypingSoundOnce, typingSoundManager } from '../sound/TypingSoundManager';
 import { flowMeter } from '../flow/flowMeter';
-import { TRAIL_ALPHA_AT_FULL_FLOW, fadeTrailBox, flashTrailLayer } from '../flow/flowTrail';
+import { TRAIL_ALPHA_AT_FULL_FLOW, fadeTrailBox, flashTrailLayer, lineRampShare } from '../flow/flowTrail';
 
 import { ARROW_KEY_VOICES, SHIFT_TAB_KEY_VOICE, TAB_KEY_VOICE } from '../sound/keyVoices';
 import { readSelectionRect, type SelectionRect } from '../editor/CaretRect';
@@ -1122,6 +1122,9 @@ export function CM6Editor({
   // trail's shared alpha factors (flow/flowTrail.ts), so reaching full flow
   // flashes every box on screen at once.
   const flowTrailBoxesRef = useRef<HTMLDivElement | null>(null);
+  // Which visual row the last box was drawn on and how many boxes it has had,
+  // for the trail's new-row ramp (flow/flowTrail.ts's lineRampShare).
+  const flowTrailRowRef = useRef<{ top: number; count: number }>({ top: Number.NaN, count: 0 });
   useEffect(() => flowMeter.subscribeKick(() => {
     if (flowTrailBoxesRef.current) flashTrailLayer(flowTrailBoxesRef.current);
   }), []);
@@ -4067,7 +4070,10 @@ export function CM6Editor({
               el.style.width = `${cell.grid.width}px`;
               el.style.height = `${cell.grid.height + 1}px`;
               trailLayer.appendChild(el);
-              fadeTrailBox(el, box.level, box.fadeMaxTime, box.fadeShape);
+              const row = flowTrailRowRef.current;
+              if (row.top === cell.grid.top) row.count += 1;
+              else { row.top = cell.grid.top; row.count = 1; }
+              fadeTrailBox(el, box.level * lineRampShare(row.count, box.lineRamp), box.fadeMaxTime, box.fadeShape);
             }
             flowMeter.reportKey(event);
           }

@@ -52,7 +52,7 @@ const kickListeners = new Set<KickListener>()
 const fullListeners = new Set<FullListener>()
 let isFull = false
 let lastKickSec = -Infinity
-let trailFade = { fadeMaxTime: DEFAULT_FLOW_SETTINGS.fadeMaxTime, fadeShape: DEFAULT_FLOW_SETTINGS.fadeShape }
+let trailFade = { fadeMaxTime: DEFAULT_FLOW_SETTINGS.fadeMaxTime, fadeShape: DEFAULT_FLOW_SETTINGS.fadeShape, lineRamp: DEFAULT_FLOW_SETTINGS.lineRamp }
 
 /**
  * The TYPING RATE: characters per second over the last `RATE_MEMORY_KEYS`
@@ -166,9 +166,9 @@ export const flowMeter = {
     ensureRunning()
   },
 
-  /** The trail's fade (`flow/flowTrail.ts`); the editor reads it per keystroke (`trailBox`). */
-  configureTrail(fade: { fadeMaxTime: number; fadeShape: number }): void {
-    trailFade = { fadeMaxTime: fade.fadeMaxTime, fadeShape: fade.fadeShape }
+  /** The trail's fade and new-row ramp (`flow/flowTrail.ts`); the editor reads them per keystroke (`trailBox`). */
+  configureTrail(fade: { fadeMaxTime: number; fadeShape: number; lineRamp: number }): void {
+    trailFade = { fadeMaxTime: fade.fadeMaxTime, fadeShape: fade.fadeShape, lineRamp: fade.lineRamp }
   },
 
   /**
@@ -177,7 +177,7 @@ export const flowMeter = {
    * meter but types no cell. `level` is the presented flow at the moment of
    * the key, 0..1; `flow/flowTrail.ts` turns it and the fade into alpha.
    */
-  trailBox(event: KeyboardEvent): { level: number; fadeMaxTime: number; fadeShape: number } | null {
+  trailBox(event: KeyboardEvent): { level: number; fadeMaxTime: number; fadeShape: number; lineRamp: number } | null {
     if (!enabled || presented <= 0) return null
     if (event.key.length !== 1 || !isFlowHit(event)) return null
     return { level: Math.min(1, presented), ...trailFade }

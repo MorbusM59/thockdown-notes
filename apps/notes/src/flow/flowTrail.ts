@@ -5,7 +5,8 @@
  * 1. The flow colour's own alpha (the `flowTrail` highlight colour, the
  *    reader's flowBaseColor), which the box's border is drawn in.
  * 2. The flow level f at the box's creation, scaled to 0 at no flow and
- *    `TRAIL_ALPHA_AT_FULL_FLOW` at full flow.
+ *    `TRAIL_ALPHA_AT_FULL_FLOW` at full flow, and on a new row by
+ *    `lineRampShare` so the trail fades back in after a wrap.
  * 3. The fade since creation, `fadeCurve(t, fadeMaxTime, fadeShape)`.
  * 4. The flash after reaching full flow, from `FLASH_PEAK` back to 1 on the
  *    same curve over `FLASH_MAX_TIME_SEC` with shape `FLASH_SHAPE`.
@@ -25,6 +26,11 @@ const FLASH_SHAPE = 2
 
 /** Samples per curve: the curve is not one CSS can name, so it becomes a linear keyframe list. */
 const SAMPLES = 32
+
+/** The k-th box of a row (1-based) draws at this share of its alpha: k / lineRamp, up to 1. */
+export function lineRampShare(boxInRow: number, lineRamp: number): number {
+  return Math.min(1, boxInRow / Math.max(1, lineRamp))
+}
 
 /** `((maxTime - t) / maxTime) ^ (2 ^ shape)`: 1 at t = 0, 0 at t = maxTime. */
 export function fadeCurve(t: number, maxTime: number, shape: number): number {
