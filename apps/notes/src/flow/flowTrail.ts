@@ -23,15 +23,16 @@
  * the flow colour's HSL saturation (`--flow-trail-saturation`, index.css):
  * `TRAIL_SATURATION_BEFORE_FULL` until full flow, 1 in full flow, and at the
  * peak it drops to `1 - peak` and returns to 1 on the peak curve. At the same
- * time its HSV value (the strongest RGB channel) is multiplied by up to
- * `TRAIL_PEAK_VALUE` (`--flow-trail-value`, clamped at full brightness), so the
- * grey the drained colour passes through is bright rather than dull.
+ * time its HSV value (the strongest RGB channel) is multiplied by down to
+ * `TRAIL_PEAK_VALUE` (`--flow-trail-value`). The trail is drawn inside the
+ * scene, which a dark theme inverts, so darkening it here reads as a darker
+ * grey in a light theme and a brighter one in a dark theme.
  */
 
 export const TRAIL_ALPHA_AT_FULL_FLOW = 0.7
 const TRAIL_PEAK_ALPHA = 2
 export const TRAIL_SATURATION_BEFORE_FULL = 0.5
-const TRAIL_PEAK_VALUE = 2
+const TRAIL_PEAK_VALUE = 0.5
 
 /** Samples per curve: the curve is not one CSS can name, so it becomes a linear keyframe list. */
 const SAMPLES = 32
