@@ -1,6 +1,6 @@
 import { useEffect, useRef, type MutableRefObject, type RefObject } from 'react'
 import type { EditorAdapter } from '../editor/EditorContract'
-import { insertAtBlockStart, locateImage, moveImage, reshapeImage, sameAlt, type ImageEdit } from '../editor/ImagePlacement'
+import { insertAtBlockStart, locateImage, insertBeside, moveImage, moveImageBeside, reshapeImage, sameAlt, type ImageEdit } from '../editor/ImagePlacement'
 import { cssInset, type ImageAlignment, type ImageInset, type ImageLayout, type ImageLength } from '../shared/imageLayout'
 import { IMAGE_DRAG_MIME_TYPE, imageMarkdown, isImageFile } from '../shared/images'
 import { importImageFilesAsMarkdown } from '../shared/storedImages'
@@ -269,11 +269,18 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
         }
         if (!commit || !moved || readEditorText() !== text) return
         if (mode === 'move') {
-          const sibling = siblingFrameAt(frame, up.clientX, up.clientY)
-          if (sibling) {
-            const at = addressOf(scroller, sibling)
-            const other = at && locateImage(text, at.line0, at.ordinal, at.drawn)
-            if (other && other.layout.align === image.layout.align) apply(text, reorderImage(text, image, other))
+          const onto = imageFrameAt(frame, up.clientX, up.clientY)
+          const at = onto && addressOf(scroller, onto.frame)
+          const other = at && locateImage(text, at.line0, at.ordinal, at.drawn)
+          if (onto && other) {
+            // Within its own aligned group the image takes the target's place,
+            // the target landing on the side it came from. From anywhere else
+            // it joins the target's group with its alignment, before the
+            // target, or second when the target leads the group.
+            const side = onto.sameGroup
+              ? (image.from < other.from ? 'after' : 'before')
+              : (onto.leadsGroup ? 'after' : 'before')
+            apply(text, moveImageBeside(text, image, other, side, other.layout.align))
             return
           }
           const target = blockLineAt(scroller, up.clientX, up.clientY)
@@ -330,31 +337,38 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
       event.preventDefault()
       if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
     }
+    // An image dropped onto an image joins its aligned group, before it, or
+    // second when it leads the group (the same rule a moved image follows).
+    const insertAt = (text: string, x: number, y: number, markdown: string): ImageEdit | null => {
+      const onto = imageFrameAt(null, x, y)
+      const at = onto && addressOf(scroller, onto.frame)
+      const other = at && locateImage(text, at.line0, at.ordinal, at.drawn)
+      if (onto && other) return insertBeside(other, markdown, onto.leadsGroup ? 'after' : 'before')
+      const line = blockLineAt(scroller, x, y)
+      return line === null ? null : insertAtBlockStart(text, line, markdown)
+    }
     const handleDrop = (event: DragEvent) => {
       // An image card from the library: already stored, so only referenced.
       const libraryImageId = event.dataTransfer?.getData(IMAGE_DRAG_MIME_TYPE)
       if (libraryImageId) {
         event.preventDefault()
         event.stopPropagation()
-        const line = blockLineAt(scroller, event.clientX, event.clientY)
-        if (line === null) return
         const text = readEditorText()
-        apply(text, insertAtBlockStart(text, line, imageMarkdown('', libraryImageId)))
+        apply(text, insertAt(text, event.clientX, event.clientY, imageMarkdown('', libraryImageId)))
         return
       }
       const files = Array.from(event.dataTransfer?.files ?? []).filter(isImageFile)
       if (files.length === 0) return
       event.preventDefault()
       event.stopPropagation()
-      const line = blockLineAt(scroller, event.clientX, event.clientY)
-      if (line === null) return
+      const point = { x: event.clientX, y: event.clientY }
       const droppedOn = noteRef.current
       const textAtDrop = readEditorText()
       void importImageFilesAsMarkdown(files).then((markdown) => {
         // Stored either way; inserted only where it was dropped: the same
         // note, still editable, its text unchanged (the line may have moved).
         if (!markdown || noteRef.current !== droppedOn || !canEditRef.current || readEditorText() !== textAtDrop) return
-        apply(textAtDrop, insertAtBlockStart(textAtDrop, line, markdown))
+        apply(textAtDrop, insertAt(textAtDrop, point.x, point.y, markdown))
       })
     }
 
@@ -450,35 +464,23 @@ function createCropGhost(frame: HTMLElement, img: HTMLImageElement, startInset: 
 }
 
 /**
- * The other image frame under the pointer in the same paragraph with the same
- * alignment, if any: dropping a moved image there reorders the paragraph's
- * images instead of moving the image to another block.
+ * The other image frame under the pointer, if any, and how it relates to the
+ * dragged one: in the same paragraph with the same alignment (one group), and
+ * whether it is the first image of its own aligned group.
  */
-function siblingFrameAt(frame: HTMLElement, x: number, y: number): HTMLElement | null {
-  const paragraph = frame.parentElement
-  const alignment = [...frame.classList].find((name) => name.startsWith('is-aligned-')) ?? null
+function imageFrameAt(frame: HTMLElement | null, x: number, y: number): { frame: HTMLElement; sameGroup: boolean; leadsGroup: boolean } | null {
+  const alignmentOf = (element: HTMLElement) => [...element.classList].find((name) => name.startsWith('is-aligned-')) ?? null
   for (const element of document.elementsFromPoint(x, y)) {
     const other = element.closest<HTMLElement>('.markdown-image-frame[data-image-line]')
     if (!other || other === frame) continue
-    if (other.parentElement !== paragraph) return null
-    const otherAlignment = [...other.classList].find((name) => name.startsWith('is-aligned-')) ?? null
-    return otherAlignment === alignment ? other : null
+    const alignment = alignmentOf(other)
+    const group = [...(other.parentElement?.querySelectorAll<HTMLElement>(':scope > .markdown-image-frame') ?? [])]
+      .filter((each) => each !== frame && alignmentOf(each) === alignment)
+    return {
+      frame: other,
+      sameGroup: frame !== null && other.parentElement === frame.parentElement && alignmentOf(frame) === alignment,
+      leadsGroup: group[0] === other,
+    }
   }
   return null
-}
-
-/**
- * Moves `image` to `target`'s place: the target ends up just before it when
- * the image came from its left, just after it when it came from its right.
- * One space separates the moved image from the target, and the space the
- * image leaves behind goes with it.
- */
-function reorderImage(text: string, image: { from: number; to: number }, target: { from: number; to: number }): ImageEdit[] {
-  const markdown = text.slice(image.from, image.to)
-  const removeFrom = text[image.to] === ' ' || image.from === 0 || text[image.from - 1] !== ' ' ? image.from : image.from - 1
-  const removeTo = removeFrom === image.from && text[image.to] === ' ' ? image.to + 1 : image.to
-  const insert = image.from < target.from
-    ? { from: target.to, to: target.to, insert: ` ${markdown}` }
-    : { from: target.from, to: target.from, insert: `${markdown} ` }
-  return [{ from: removeFrom, to: removeTo, insert: '' }, insert]
 }

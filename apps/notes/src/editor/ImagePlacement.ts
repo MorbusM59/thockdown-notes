@@ -1,7 +1,7 @@
 import { imagesOnLine } from './MarkdownImageTransforms'
 import { imageMarkdown } from '../shared/images'
 import { imagesInLine, type ImageSyntaxSpan } from '../shared/imageSyntax'
-import { formatImageLayout, parseImageTitle, type ImageAlignment, type ImageLayout } from '../shared/imageLayout'
+import { EMPTY_IMAGE_LAYOUT, formatImageLayout, parseImageTitle, type ImageAlignment, type ImageLayout } from '../shared/imageLayout'
 
 // WHERE AN IMAGE IN THE RENDER VIEW IS IN THE TEXT, and the two edits the
 // render view's image gestures make (useImagePreviewGestures): reshaping an
@@ -124,13 +124,47 @@ export function moveImage(text: string, image: LocatedImage, targetLine0: number
   if (insertAt === null) return null
   const moved = imageWithLayout(text, image, { ...image.layout, align })
 
-  // What removing the image does to its own line.
+  const removal = removalOf(text, image)
+  const insertion = { from: insertAt, to: insertAt, insert: `${moved} ` }
+  return insertAt <= removal.from ? [insertion, removal] : [removal, insertion]
+}
+
+/**
+ * Moves the image next to `target`, `side` of it, one space between them,
+ * aligned `align`. Removing it from where it was follows the same rule as
+ * `moveImage`.
+ */
+export function moveImageBeside(text: string, image: LocatedImage, target: LocatedImage, side: 'before' | 'after', align: ImageAlignment | null): ImageEdit[] | null {
+  if (target.from === image.from) return null
+  const moved = imageWithLayout(text, image, { ...image.layout, align })
+  const removal = removalOf(text, image)
+  const insertion = side === 'after'
+    ? { from: target.to, to: target.to, insert: ` ${moved}` }
+    : { from: target.from, to: target.from, insert: `${moved} ` }
+  return insertion.from <= removal.from ? [insertion, removal] : [removal, insertion]
+}
+
+/**
+ * Inserts `markdown` (one or more images, one per line) next to `target`,
+ * `side` of it, on its line and with its alignment: each image is given the
+ * target's alignment as its title, and they are separated by spaces.
+ */
+export function insertBeside(target: LocatedImage, markdown: string, side: 'before' | 'after'): ImageEdit {
+  const title = target.layout.align ? ` "${formatImageLayout({ ...EMPTY_IMAGE_LAYOUT, align: target.layout.align })}"` : ''
+  const inline = markdown.split('\n').map((line) => line.replace(/^(!\[[^\]]*\]\([^)\s]+)\)$/, `$1${title})`)).join(' ')
+  return side === 'after'
+    ? { from: target.to, to: target.to, insert: ` ${inline}` }
+    : { from: target.from, to: target.from, insert: `${inline} ` }
+}
+
+// What removing the image does to its own line: a line that held only the
+// image goes with its newline, otherwise one neighbouring space goes with it.
+function removalOf(text: string, image: LocatedImage): ImageEdit {
   const before = text.slice(image.lineFrom, image.from)
   const after = text.slice(image.to, image.lineTo)
   let removeFrom = image.from
   let removeTo = image.to
   if ((before + after).trim().length === 0) {
-    // The line held only the image: take the line and its newline.
     removeFrom = image.lineFrom
     removeTo = Math.min(text.length, image.lineTo + 1)
   } else if (after.startsWith(' ')) {
@@ -138,10 +172,7 @@ export function moveImage(text: string, image: LocatedImage, targetLine0: number
   } else if (before.endsWith(' ')) {
     removeFrom -= 1
   }
-
-  const insertion = { from: insertAt, to: insertAt, insert: `${moved} ` }
-  const removal = { from: removeFrom, to: removeTo, insert: '' }
-  return insertAt <= removeFrom ? [insertion, removal] : [removal, insertion]
+  return { from: removeFrom, to: removeTo, insert: '' }
 }
 
 /** Inserts `markdown` (one or more images) at the start of the block whose first line is `targetLine0`; null where an image cannot open that block. */
