@@ -62,13 +62,13 @@ export function outputContext(): AudioContext {
 }
 
 /**
- * The cutoff of a high-pass every source routed here passes through, in front
- * of the limiter, for an app-wide sweep (the typing flow's peak). It rests at
- * `OUTPUT_HIGHPASS_REST_HZ`.
+ * A high-pass every source routed here passes through, in front of the
+ * limiter, for an app-wide sweep (the typing flow's peak: its cutoff and its
+ * resonance). Its cutoff rests at `OUTPUT_HIGHPASS_REST_HZ`.
  */
-export function outputHighpassFrequency(): AudioParam {
+export function outputHighpass(): BiquadFilterNode {
   outputContext();
-  return highpass!.frequency;
+  return highpass!;
 }
 
 /** The shared context, resumed; what a source awaits before it starts making sound. */

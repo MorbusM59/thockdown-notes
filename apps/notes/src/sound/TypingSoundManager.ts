@@ -638,10 +638,9 @@ export class TypingSoundManager {
     }
   }
 
-  /** The output high-pass's cutoff and this context's clock, or null before the audio graph exists. The cutoff rests below hearing. */
-  outputHighpass(): { frequency: AudioParam; currentTime: number } | null {
-    if (!this.outputHighpassNode || !this.audioContext) return null
-    return { frequency: this.outputHighpassNode.frequency, currentTime: this.audioContext.currentTime }
+  /** The high-pass after the master, or null before the audio graph exists. Its cutoff rests below hearing. */
+  outputHighpass(): BiquadFilterNode | null {
+    return this.outputHighpassNode
   }
 
   private ensureFlowReverb(): void {
