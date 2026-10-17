@@ -18,19 +18,19 @@ import { connectToOutput, outputContext, outputHighpass, OUTPUT_HIGHPASS_REST_HZ
 import { typingSoundManager } from '../sound/TypingSoundManager'
 import { fadeCurve } from './flowTrail'
 
-export const PEAK_DURATION_SEC = 1.2
-export const PEAK_SHAPE = -1.5
+export const PEAK_DURATION_SEC = 2
+export const PEAK_SHAPE = -0.2
 /** The high-pass cutoff at the top of a full-strength peak. */
-const PEAK_HIGHPASS_HZ = 4000
+const PEAK_HIGHPASS_HZ = 20000
 /** The high-pass's resonance (Q, in dB for a Web Audio high-pass) at the top of a full-strength peak. */
-const PEAK_RESONANCE_Q = 12
+const PEAK_RESONANCE_Q = 6
 /** The high-pass's resonance at rest: the BiquadFilterNode default. */
 const REST_RESONANCE_Q = 1
 /** The whoosh's band-pass centre as a multiple of the high-pass cutoff, so the noise sits above the cut. */
-const WHOOSH_CENTRE_RATIO = 2
+const WHOOSH_CENTRE_RATIO = 1.5
 const WHOOSH_BANDPASS_Q = 1.5
 /** The whoosh's gain at the top of a full-strength peak. */
-const WHOOSH_GAIN = 0.35
+const WHOOSH_GAIN = 0.15
 const CURVE_SAMPLES = 512
 
 /** The peak curve sampled over `PEAK_DURATION_SEC`, mapped through `map`, ready for `setValueCurveAtTime`. */
