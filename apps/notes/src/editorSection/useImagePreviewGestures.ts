@@ -269,6 +269,13 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
         }
         if (!commit || !moved || readEditorText() !== text) return
         if (mode === 'move') {
+          const sibling = siblingFrameAt(frame, up.clientX, up.clientY)
+          if (sibling) {
+            const at = addressOf(scroller, sibling)
+            const other = at && locateImage(text, at.line0, at.ordinal, at.drawn)
+            if (other && other.layout.align === image.layout.align) apply(text, reorderImage(text, image, other))
+            return
+          }
           const target = blockLineAt(scroller, up.clientX, up.clientY)
           if (target === null) return
           apply(text, moveImage(text, image, target, alignmentAt(scroller, up.clientX)))
@@ -440,4 +447,38 @@ function createCropGhost(frame: HTMLElement, img: HTMLImageElement, startInset: 
       frame.style.visibility = restore.visibility
     },
   }
+}
+
+/**
+ * The other image frame under the pointer in the same paragraph with the same
+ * alignment, if any: dropping a moved image there reorders the paragraph's
+ * images instead of moving the image to another block.
+ */
+function siblingFrameAt(frame: HTMLElement, x: number, y: number): HTMLElement | null {
+  const paragraph = frame.parentElement
+  const alignment = [...frame.classList].find((name) => name.startsWith('is-aligned-')) ?? null
+  for (const element of document.elementsFromPoint(x, y)) {
+    const other = element.closest<HTMLElement>('.markdown-image-frame[data-image-line]')
+    if (!other || other === frame) continue
+    if (other.parentElement !== paragraph) return null
+    const otherAlignment = [...other.classList].find((name) => name.startsWith('is-aligned-')) ?? null
+    return otherAlignment === alignment ? other : null
+  }
+  return null
+}
+
+/**
+ * Moves `image` to `target`'s place: the target ends up just before it when
+ * the image came from its left, just after it when it came from its right.
+ * One space separates the moved image from the target, and the space the
+ * image leaves behind goes with it.
+ */
+function reorderImage(text: string, image: { from: number; to: number }, target: { from: number; to: number }): ImageEdit[] {
+  const markdown = text.slice(image.from, image.to)
+  const removeFrom = text[image.to] === ' ' || image.from === 0 || text[image.from - 1] !== ' ' ? image.from : image.from - 1
+  const removeTo = removeFrom === image.from && text[image.to] === ' ' ? image.to + 1 : image.to
+  const insert = image.from < target.from
+    ? { from: target.to, to: target.to, insert: ` ${markdown}` }
+    : { from: target.from, to: target.from, insert: `${markdown} ` }
+  return [{ from: removeFrom, to: removeTo, insert: '' }, insert]
 }
