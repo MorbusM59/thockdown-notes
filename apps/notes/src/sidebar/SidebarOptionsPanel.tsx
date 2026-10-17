@@ -10,6 +10,7 @@ import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsection
 import {
   DEFAULT_FLOW_SETTINGS,
   FLOW_DECAY_PERCENT_MAX, FLOW_DECAY_PERCENT_MIN,
+  FLOW_FADE_MAX_TIME_MAX, FLOW_FADE_MAX_TIME_MIN, FLOW_FADE_SHAPE_MAX, FLOW_FADE_SHAPE_MIN,
   FLOW_GAIN_PERCENT_MAX, FLOW_GAIN_PERCENT_MIN,
   type FlowSettings,
 } from '../shared/flowSettings'
@@ -2986,8 +2987,8 @@ export function SidebarOptionsPanel({
         </div>
         {flowSettings.enabled ? (
           <div className="utility-setting-slider-stack" aria-label="Typing flow settings">
-            {/* How it moves (build, decay) and how it answers (look, reverb, caret). */}
-            <OptionsSliderRows rows={[2, 3]}>
+            {/* How it moves (build, decay), how the trail fades (fade, shape) and how it answers (look, reverb, caret). */}
+            <OptionsSliderRows rows={[2, 2, 3]}>
               <CompactScrollbarSlider
                 id="flow-gain"
                 min={FLOW_GAIN_PERCENT_MIN}
@@ -3013,6 +3014,32 @@ export function SidebarOptionsPanel({
                 defaultValue={DEFAULT_FLOW_SETTINGS.decayPercent}
                 formatValue={(value) => `${value.toFixed(1)}%`}
                 onCommit={(value) => setFlowSettings((prev) => ({ ...prev, decayPercent: value }))}
+              />
+              <CompactScrollbarSlider
+                id="flow-fade-time"
+                min={FLOW_FADE_MAX_TIME_MIN}
+                max={FLOW_FADE_MAX_TIME_MAX}
+                step={0.1}
+                value={flowSettings.fadeMaxTime}
+                trackLabel="fade"
+                tooltipLabel="Seconds a trail mark takes to fade out"
+                ariaLabel="How long a flow trail mark takes to fade out, in seconds"
+                defaultValue={DEFAULT_FLOW_SETTINGS.fadeMaxTime}
+                formatValue={(value) => value.toFixed(1)}
+                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, fadeMaxTime: value }))}
+              />
+              <CompactScrollbarSlider
+                id="flow-fade-shape"
+                min={FLOW_FADE_SHAPE_MIN}
+                max={FLOW_FADE_SHAPE_MAX}
+                step={0.1}
+                value={flowSettings.fadeShape}
+                trackLabel="shape"
+                tooltipLabel="Trail fade shape: 0 fades evenly, higher drops early, lower holds and drops late"
+                ariaLabel="Shape of the flow trail's fade"
+                defaultValue={DEFAULT_FLOW_SETTINGS.fadeShape}
+                formatValue={(value) => value.toFixed(1)}
+                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, fadeShape: value }))}
               />
               <CompactScrollbarSlider
                 id="flow-look"
@@ -3045,8 +3072,8 @@ export function SidebarOptionsPanel({
                 step={0.01}
                 value={flowSettings.caret}
                 trackLabel="caret"
-                tooltipLabel="Flow caret: glow, steady blink and trail (trail colour is in Colors, Boxes)"
-                ariaLabel="Strength of the flow's caret glow and trail"
+                tooltipLabel="Flow caret: glow and steady blink (the trail follows its colour's alpha, in Colors, Boxes)"
+                ariaLabel="Strength of the flow's caret glow"
                 defaultValue={DEFAULT_FLOW_SETTINGS.caret}
                 onCommit={(value) => setFlowSettings((prev) => ({ ...prev, caret: value }))}
               />

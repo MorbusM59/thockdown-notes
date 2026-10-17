@@ -36,7 +36,7 @@ import {
   scaleAlphaInCssValue,
 } from './colorMath'
 import { sceneOf } from './scene'
-import { FALLBACK_FLOW_TRAIL, chargedFlowTrailOf, flowGlowOf } from './flowColor'
+import { FALLBACK_FLOW_TRAIL, flowGlowOf } from './flowColor'
 import {
   GLAZE_GLOOM_OPACITY_MAX,
   GLAZE_LINEAR_OPACITY_MAX,
@@ -434,7 +434,6 @@ export function themeFrame(loadout: ThemeLoadout, options: ThemeOptions): ThemeF
   // The flow overlays sit outside the scene, so they take the trail's
   // on-screen colour rather than its stored one (flowColor.ts).
   rootVariables['--color-flow-glow'] = flowGlowOf(colors.flowTrail ?? FALLBACK_FLOW_TRAIL, scene)
-  shellVariables['--color-flow-trail-charged'] = chargedFlowTrailOf(colors.flowTrail ?? FALLBACK_FLOW_TRAIL, scene)
   const wrapperStyle: CSSProperties = { backgroundColor: 'var(--palette-parchment-lightest)' }
   if (filterEffects.length > 0) wrapperStyle.filter = filterEffects.map(sceneEffectCss).join(' ')
   // What an image is actually seen through: the filter, plus the blend

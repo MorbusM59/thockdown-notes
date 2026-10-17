@@ -137,16 +137,16 @@
 /* The typing flow trail: one segment per character typed in flow, tracing
    the grid lines above and below its cell as 1px edges in the reader's
    flowTrail colour, with nothing inside the cell, so it never lowers the
-   contrast of the words just typed. The editor sets place and size; opacity
-   and fade are animated from script (flow/flowTrailFade.ts), on the meter's
-   own decay. */
+   contrast of the words just typed. The editor sets place and size; the
+   alpha on top of the colour's own is animated from script
+   (flow/flowTrail.ts). */
 .flow-trail-box {
   position: absolute;
   top: 0;
   left: 0;
   box-sizing: border-box;
-  border-top: 1px solid var(--color-flow-trail-now);
-  border-bottom: 1px solid var(--color-flow-trail-now);
+  border-top: 1px solid var(--color-flow-trail);
+  border-bottom: 1px solid var(--color-flow-trail);
 }
 
 /* The trail's leading edge: the caret's cell traced on its top, bottom and
@@ -160,7 +160,7 @@
   left: 0;
   box-sizing: border-box;
   --flow-trail-head-edge: 1px;
-  border: var(--flow-trail-head-edge) solid var(--color-flow-trail-now);
+  border: var(--flow-trail-head-edge) solid var(--color-flow-trail);
   border-right-width: 0;
   border-left: none;
   /* Rounded where it is closed, square where it opens into the trail. The
@@ -174,73 +174,6 @@
   background-image: linear-gradient(to left, var(--color-flow-trail), transparent);
   opacity: var(--flow-trail-head, 0);
 }
-/* The charged fill, cross-faded over the ordinary one while in full flow
-   (a gradient cannot transition, its layer's opacity can). */
-.flow-trail-head::after {
-  content: '';
-  position: absolute;
-  /* Out over the border box (the border widths, negated), so its rounded end
-     is the same curve as the border's outer edge. At inset 0 it filled the
-     padding box with the OUTER radius, which left a flat end inside the cap
-     as soon as the right border was wider than the corner's inner radius. */
-  inset: 0;
-  border-radius: inherit;
-  background-image: linear-gradient(to left, var(--color-flow-trail-now), transparent);
-  opacity: 0;
-  transition: opacity 800ms ease-in-out;
-}
-:root[data-flow-full] .flow-trail-head::after {
-  opacity: 1;
-  transition-duration: 400ms;
-}
-
-/* The trail's colour now: the reader's flow colour, or while in FULL FLOW
-   (flowMeter's state, marked data-flow-full by flow/useFlowFeedback.ts) the
-   same colour run white-hot ON SCREEN, so the state reads as a change of
-   kind. --color-flow-trail-charged comes from the theme (packages/look/
-   flowColor.ts), because "whiter" in content space is darker in an inverted
-   theme. */
-.flow-trail-box,
-.flow-trail-head {
-  --color-flow-trail-now: color-mix(
-    in oklab,
-    var(--color-flow-trail),
-    rgb(from var(--color-flow-trail-charged) r g b / calc(0.7 + 0.3 * var(--flow-trail-flash)))
-    calc(var(--flow-trail-charge) * 100%)
-  );
-}
-
-/* How charged the trail is, 0..1, moved ON THE ROOT and inherited by every
-   mark. A per-element transition on border-color did this first and only
-   reached new marks: the flash changes the colour every frame, each change
-   restarted every existing mark's 400ms transition, so old marks trailed
-   far behind while a mark created mid-change started at the current value.
-   One number transitioned in one place changes every mark in step. The
-   charged colour sits at 70% alpha; the arrival flash lifts it to opaque. */
-@property --flow-trail-charge {
-  syntax: '<number>';
-  inherits: true;
-  initial-value: 0;
-}
-:root {
-  transition: --flow-trail-charge 800ms ease-in-out;
-}
-:root[data-flow-full] {
-  --flow-trail-charge: 1;
-  transition-duration: 400ms;
-}
-
-/* The arrival FLASH: at the kick (reaching full flow) useFlowFeedback.ts
-   animates this from the caret strength to 0 on the root, so every trail
-   mark and the leading edge go from 70% to full alpha and fall back.
-   Registered so it can be animated as a number. */
-@property --flow-trail-flash {
-  syntax: '<number>';
-  inherits: true;
-  initial-value: 0;
-}
-
-
 
 /* Low-power toggle: the blink otherwise repaints the caret indefinitely while
    idle, not just while typing. */

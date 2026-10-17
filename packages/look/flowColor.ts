@@ -114,26 +114,6 @@ function contentColorReaching(target: readonly number[], scene: SceneDescription
   return best
 }
 
-/** How far full flow's CHARGED trail is run toward white, on screen. */
-const CHARGED_WHITE_SHARE = 0.55
-
-/**
- * Full flow's charged trail colour: the trail run white-hot ON SCREEN, as a
- * content colour. Mixing toward white in content space would be mixing
- * toward BLACK in an inverted theme, so full flow dimmed the trail there and
- * leaving it read as a flash.
- */
-export function chargedFlowTrailOf(trailCss: string, scene: SceneDescription): string {
-  return whitenedOnScreen(trailCss, scene, CHARGED_WHITE_SHARE, null)
-}
-
-function whitenedOnScreen(trailCss: string, scene: SceneDescription, share: number, alpha: number | null): string {
-  const trail = parseCssColorToRgba(trailCss) ?? parseCssColorToRgba(FALLBACK_FLOW_TRAIL)!
-  const seen = screenColorOf(scene, [trail.r / 255, trail.g / 255, trail.b / 255])
-  const target = seen.map((v) => v + (1 - v) * share)
-  return `rgba(${contentColorReaching(target, scene).map(toByte).join(', ')}, ${alpha ?? trail.a})`
-}
-
 /**
  * The colour the flow overlays glow in: the trail's on-screen colour, raised
  * to full brightness (its strongest channel at 1) so a `screen` or

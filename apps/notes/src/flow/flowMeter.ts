@@ -28,8 +28,8 @@ type FullListener = (full: boolean) => void
 
 /**
  * FULL FLOW is a STATE, not only a level: it begins when the meter reaches
- * full from below. Consumers that show something only at full (the edge glow, the
- * charged trail colour) subscribe to it with `subscribeFull`. It ends when
+ * full from below. Consumers that show something only at full (the edge glow)
+ * subscribe to it with `subscribeFull`. It ends when
  * the presented level drops below full: the model's hidden buffer above full
  * already carries a reader at the sustaining pace, so no second margin is
  * needed and full flow means the meter at 100%.
@@ -52,7 +52,7 @@ const kickListeners = new Set<KickListener>()
 const fullListeners = new Set<FullListener>()
 let isFull = false
 let lastKickSec = -Infinity
-let trailStrength = DEFAULT_FLOW_SETTINGS.caret
+let trailFade = { fadeMaxTime: DEFAULT_FLOW_SETTINGS.fadeMaxTime, fadeShape: DEFAULT_FLOW_SETTINGS.fadeShape }
 
 /**
  * The TYPING RATE: characters per second over the last `RATE_MEMORY_KEYS`
@@ -166,34 +166,21 @@ export const flowMeter = {
     ensureRunning()
   },
 
-  /** The caret trail's strength (the caret channel); the editor reads it per keystroke (`trailBox`). It fades by the meter's own decay. */
-  configureTrail(strength: number): void {
-    trailStrength = strength
-  },
-
-  /**
-   * What EVERY box already on screen restarts at when full flow is reached:
-   * the full trail strength, on the meter's decay. Lifting only the boxes
-   * typed from then on left a hard edge between bright new marks and the
-   * dimmer ones behind them; restarting all of them lifts the whole trail at
-   * once, and it then fades as one. Null when there is no trail.
-   */
-  trailRelift(): { opacity: number; decayPercent: number } | null {
-    if (!enabled || trailStrength <= 0) return null
-    return { opacity: trailStrength, decayPercent: tuning.decayPercent }
+  /** The trail's fade (`flow/flowTrail.ts`); the editor reads it per keystroke (`trailBox`). */
+  configureTrail(fade: { fadeMaxTime: number; fadeShape: number }): void {
+    trailFade = { fadeMaxTime: fade.fadeMaxTime, fadeShape: fade.fadeShape }
   },
 
   /**
    * What a box left by this keydown should look like, or null when it should
    * leave none. Only a CHARACTER or Space leaves one: Enter is a hit for the
-   * meter but types no cell. A box decays by the meter's own per-tick rule
-   * (`decayed`), so the trail and the flow leave on one curve. Its opacity is the presented
-   * level at the moment of the key, so the trail is as strong as the flow.
+   * meter but types no cell. `level` is the presented flow at the moment of
+   * the key, 0..1; `flow/flowTrail.ts` turns it and the fade into alpha.
    */
-  trailBox(event: KeyboardEvent): { opacity: number; decayPercent: number } | null {
-    if (!enabled || trailStrength <= 0 || presented <= 0) return null
+  trailBox(event: KeyboardEvent): { level: number; fadeMaxTime: number; fadeShape: number } | null {
+    if (!enabled || presented <= 0) return null
     if (event.key.length !== 1 || !isFlowHit(event)) return null
-    return { opacity: presented * trailStrength, decayPercent: tuning.decayPercent }
+    return { level: Math.min(1, presented), ...trailFade }
   },
 
   /** Called once each time flow is achieved (see the kick, above). */

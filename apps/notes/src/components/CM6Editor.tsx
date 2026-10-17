@@ -10,7 +10,7 @@ import { matchShortcut, type ShortcutId } from '../shared/keyboardShortcuts';
 import { buildTokenPresentation } from '../editor/MarkdownLineClassification';
 import { suppressNextPlainTypingSoundOnce, typingSoundManager } from '../sound/TypingSoundManager';
 import { flowMeter } from '../flow/flowMeter';
-import { flowTrailFade } from '../flow/flowTrailFade';
+import { TRAIL_ALPHA_AT_FULL_FLOW, fadeTrailBox, flashTrailLayer } from '../flow/flowTrail';
 
 import { ARROW_KEY_VOICES, SHIFT_TAB_KEY_VOICE, TAB_KEY_VOICE } from '../sound/keyVoices';
 import { readSelectionRect, type SelectionRect } from '../editor/CaretRect';
@@ -1118,15 +1118,12 @@ export function CM6Editor({
    */
   const flowTrailClipRef = useRef<HTMLDivElement | null>(null);
   const flowTrailLayerRef = useRef<HTMLDivElement | null>(null);
-  // Reaching full flow lifts the WHOLE trail, not just the marks typed from
-  // then on: every box on screen restarts its fade at full trail strength.
+  // The boxes' own layer, apart from the leading edge: its opacity is the
+  // trail's shared alpha factors (flow/flowTrail.ts), so reaching full flow
+  // flashes every box on screen at once.
+  const flowTrailBoxesRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => flowMeter.subscribeKick(() => {
-    const relift = flowMeter.trailRelift();
-    const layer = flowTrailLayerRef.current;
-    if (!relift || !layer) return;
-    for (const box of Array.from(layer.querySelectorAll<HTMLElement>('.flow-trail-box'))) {
-      flowTrailFade(box, relift.opacity, relift.decayPercent);
-    }
+    if (flowTrailBoxesRef.current) flashTrailLayer(flowTrailBoxesRef.current);
   }), []);
   const flowTrailHeadRef = useRef<HTMLDivElement | null>(null);
   const [highlightRects, setHighlightRects] = useState<HighlightRect[]>([]);
@@ -4056,7 +4053,7 @@ export function CM6Editor({
             // within one frame would otherwise both land on the same cell
             // and every other character would leave no box of its own.
             const cell = box ? readCaretCellInScroll(view) : null;
-            const trailLayer = flowTrailLayerRef.current;
+            const trailLayer = flowTrailBoxesRef.current;
             if (box && cell && trailLayer) {
               // The trail traces the 1px grid lines above and below each
               // cell the character lands in (the grid cell, not the caret's
@@ -4070,7 +4067,7 @@ export function CM6Editor({
               el.style.width = `${cell.grid.width}px`;
               el.style.height = `${cell.grid.height + 1}px`;
               trailLayer.appendChild(el);
-              flowTrailFade(el, box.opacity, box.decayPercent);
+              fadeTrailBox(el, box.level, box.fadeMaxTime, box.fadeShape);
             }
             flowMeter.reportKey(event);
           }
@@ -6692,6 +6689,7 @@ export function CM6Editor({
         style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 7 }}
       >
         <div ref={flowTrailLayerRef} style={{ position: 'absolute', top: 0, left: 0 }}>
+          <div ref={flowTrailBoxesRef} style={{ position: 'absolute', top: 0, left: 0, opacity: TRAIL_ALPHA_AT_FULL_FLOW }} />
           <div ref={flowTrailHeadRef} className="flow-trail-head" />
         </div>
       </div>
