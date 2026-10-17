@@ -1,7 +1,7 @@
 /**
  * Hands the reader's flow settings to the meter, and the meter's level to the
  * channels that need no React: the caret's glow and effect strength, the
- * reverb send, and the peak's sound on the kick (`flowPeak.ts`). The look is the third channel and lives in `FlowOverlays`,
+ * reverb send, the music's EQ, and the peak's sound on the kick (`flowPeak.ts`). The look is the third channel and lives in `FlowOverlays`,
  * because it has to go through the theme.
  */
 
@@ -11,6 +11,7 @@ import { flowMeter } from './flowMeter'
 import { typingSoundManager } from '../sound/TypingSoundManager'
 import { soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
 import { peakSound } from './flowPeak'
+import { musicPlayerService } from '../sound/MusicPlayerService'
 
 /** At full flow the soundscape's weather swings between this share of a full gust and a full gust, rather than from a full lull. */
 const WEATHER_FLOOR_AT_FULL_FLOW = 0.8
@@ -51,6 +52,15 @@ function setCaretFlow(grow: number): void {
   root.style.setProperty('--flow-trail-head', grow.toFixed(3))
 }
 
+/**
+ * The music's flow EQ (`MusicPlayerService.setFlowEq`): proportional to the
+ * level below full flow, reaching half the curve, and the whole curve in full
+ * flow, so arriving doubles it.
+ */
+function musicEqAmount(level: number, full: boolean): number {
+  return full ? 1 : 0.5 * Math.max(0, Math.min(1, level))
+}
+
 export function useFlowFeedback(settings: FlowSettings): void {
   const { enabled, gainPercent, decayPercent, fadeMaxTime, fadeShape, lineRamp, trail, peak, reverb } = settings
 
@@ -63,14 +73,24 @@ export function useFlowFeedback(settings: FlowSettings): void {
   }, [trail, peak, fadeMaxTime, fadeShape, lineRamp])
 
   useEffect(() => {
+    let lastLevel = 0
+    let full = false
     const unsubscribe = flowMeter.subscribe((level) => {
+      lastLevel = level
+      musicPlayerService.setFlowEq(musicEqAmount(level, full))
       setCaretFlow(level * trail)
       typingSoundManager.setFlowReverb(level * reverb)
       soundscapeEngine.setWeatherFloor(level * WEATHER_FLOOR_AT_FULL_FLOW)
     })
     const unsubscribeKick = flowMeter.subscribeKick(() => peakSound(peak))
+    const unsubscribeFull = flowMeter.subscribeFull((isFull) => {
+      full = isFull
+      musicPlayerService.setFlowEq(musicEqAmount(lastLevel, full))
+    })
     return () => {
       unsubscribe()
+      unsubscribeFull()
+      musicPlayerService.setFlowEq(0)
       unsubscribeKick()
       setCaretFlow(0)
       typingSoundManager.setFlowReverb(0)

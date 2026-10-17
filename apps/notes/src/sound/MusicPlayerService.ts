@@ -172,6 +172,19 @@ export function resolveSeekPress(
   return { kind: 'within', timeSec: currentTimeSec };
 }
 
+/**
+ * The flow EQ: a "punchy rock" curve (a bass shelf, a scooped low-mid, a
+ * presence lift and an air shelf) applied to the music in proportion to the
+ * typing flow meter. Gains are the curve at full effect.
+ */
+const FLOW_EQ_BANDS: ReadonlyArray<{ type: BiquadFilterType; frequencyHz: number; q: number; gainDb: number }> = [
+  { type: 'lowshelf', frequencyHz: 100, q: 0.7, gainDb: 6 },
+  { type: 'peaking', frequencyHz: 500, q: 0.9, gainDb: -3 },
+  { type: 'peaking', frequencyHz: 3000, q: 1, gainDb: 3 },
+  { type: 'highshelf', frequencyHz: 10000, q: 0.7, gainDb: 5 },
+];
+const FLOW_EQ_SMOOTHING_SEC = 0.05;
+
 type PlaybackEndHandler = () => void;
 
 export class MusicPlayerService {
@@ -182,6 +195,8 @@ export class MusicPlayerService {
   private dryGain: GainNode | null = null;
   private wetGain: GainNode | null = null;
   private convolver: ConvolverNode | null = null;
+  private eqBands: BiquadFilterNode[] = [];
+  private eqAmount = 0;
   private config: MusicPlayerConfig = { volume: 0.8, reverbAmount: 0, reverbRoom: 0.3 };
   private onEndedHandler: PlaybackEndHandler | null = null;
   private currentFilePath: string | null = null;
@@ -235,6 +250,19 @@ export class MusicPlayerService {
       this.convolver = context.createConvolver();
       this.convolver.buffer = buildSyntheticRoomImpulseResponse(context, this.config.reverbRoom);
 
+      // The flow EQ sits between the source and the volume: element →
+      // each FLOW_EQ_BANDS filter in turn → gainNode.
+      this.eqBands = FLOW_EQ_BANDS.map((band) => {
+        const filter = context.createBiquadFilter();
+        filter.type = band.type;
+        filter.frequency.value = band.frequencyHz;
+        filter.Q.value = band.q;
+        filter.gain.value = band.gainDb * this.eqAmount;
+        return filter;
+      });
+      for (let i = 1; i < this.eqBands.length; i++) this.eqBands[i - 1].connect(this.eqBands[i]);
+      this.eqBands[this.eqBands.length - 1].connect(this.gainNode);
+
       // gainNode → dryGain → limiter, and gainNode → convolver → wetGain → limiter
       this.gainNode.connect(this.dryGain);
       connectToOutput(this.dryGain);
@@ -243,6 +271,20 @@ export class MusicPlayerService {
       connectToOutput(this.wetGain);
     }
     return context;
+  }
+
+  /**
+   * How much of the flow EQ is applied, 0..1: each band's gain is its
+   * `gainDb` times this. Moved with a short time constant so the meter's
+   * per-frame updates do not step the filters audibly.
+   */
+  setFlowEq(amount: number): void {
+    this.eqAmount = amount;
+    const context = this.audioCtx;
+    if (!context) return;
+    this.eqBands.forEach((filter, i) => {
+      filter.gain.setTargetAtTime(FLOW_EQ_BANDS[i].gainDb * amount, context.currentTime, FLOW_EQ_SMOOTHING_SEC);
+    });
   }
 
   // ── Config ─────────────────────────────────────────────────────────────────
@@ -335,7 +377,7 @@ export class MusicPlayerService {
 
       // Wire element into the Web Audio graph.
       this.sourceNode = ctx.createMediaElementSource(el);
-      this.sourceNode.connect(this.gainNode!);
+      this.sourceNode.connect(this.eqBands[0]);
 
       this.element = el;
       this.currentFilePath = filePath;
