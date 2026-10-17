@@ -32,7 +32,7 @@
 export const TRAIL_ALPHA_AT_FULL_FLOW = 0.7
 const TRAIL_PEAK_ALPHA = 2
 export const TRAIL_SATURATION_BEFORE_FULL = 0.5
-const TRAIL_PEAK_VALUE = 0.5
+const TRAIL_PEAK_VALUE = 0.8
 
 /** Samples per curve: the curve is not one CSS can name, so it becomes a linear keyframe list. */
 const SAMPLES = 32

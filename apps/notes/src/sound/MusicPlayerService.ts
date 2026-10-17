@@ -178,10 +178,10 @@ export function resolveSeekPress(
  * typing flow meter. Gains are the curve at full effect.
  */
 const FLOW_EQ_BANDS: ReadonlyArray<{ type: BiquadFilterType; frequencyHz: number; q: number; gainDb: number }> = [
-  { type: 'lowshelf', frequencyHz: 100, q: 0.7, gainDb: 6 },
-  { type: 'peaking', frequencyHz: 500, q: 0.9, gainDb: -3 },
-  { type: 'peaking', frequencyHz: 3000, q: 1, gainDb: 3 },
-  { type: 'highshelf', frequencyHz: 10000, q: 0.7, gainDb: 5 },
+  { type: 'lowshelf', frequencyHz: 100, q: 0.7, gainDb: 16 },
+  { type: 'peaking', frequencyHz: 500, q: 0.9, gainDb: -8 },
+  { type: 'peaking', frequencyHz: 3000, q: 1, gainDb: 8 },
+  { type: 'highshelf', frequencyHz: 10000, q: 0.7, gainDb: 16 },
 ];
 const FLOW_EQ_SMOOTHING_SEC = 0.05;
 

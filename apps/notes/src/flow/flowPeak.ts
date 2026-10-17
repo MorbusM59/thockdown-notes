@@ -13,11 +13,11 @@ import { outputContext, outputHighpassFrequency, OUTPUT_HIGHPASS_REST_HZ } from 
 import { typingSoundManager } from '../sound/TypingSoundManager'
 import { fadeCurve } from './flowTrail'
 
-export const PEAK_DURATION_SEC = 5
-export const PEAK_SHAPE = -2
+export const PEAK_DURATION_SEC = 1.2
+export const PEAK_SHAPE = -1.5
 /** The high-pass cutoff at the top of a full-strength peak. */
-const PEAK_HIGHPASS_HZ = 1000
-const HIGHPASS_SAMPLES = 64
+const PEAK_HIGHPASS_HZ = 4000
+const HIGHPASS_SAMPLES = 512
 
 /**
  * Sweeps a cutoff from its peak back to rest on the peak curve, starting at
