@@ -17,10 +17,12 @@ export interface FlowSettings {
   fadeShape: number
   /** Boxes into a new row before the trail is at full alpha: the k-th box of a row draws at min(1, k / lineRamp) of its alpha, so 1 carries straight on. */
   lineRamp: number
-  /** Strength of each feedback channel at a full meter, 0..1. `caret` drives the halo and the steadying blink; the trail is driven by its colour's own alpha (the `flowTrail` highlight colour). */
+  /** Strength of each feedback channel at a full meter, 0..1. `trail` drives the caret (its halo, steadying blink and fade) and the trail together; at 0 neither answers flow. */
   look: number
   reverb: number
-  caret: number
+  trail: number
+  /** Strength of the peak on reaching full flow, 0..1 (`flow/flowPeak.ts`): the high-pass sweep and the trail's lift and colour drain. */
+  peak: number
 }
 
 export const FLOW_GAIN_PERCENT_MIN = 1
@@ -43,7 +45,8 @@ export const DEFAULT_FLOW_SETTINGS: FlowSettings = {
   lineRamp: 4,
   look: 0.5,
   reverb: 0.5,
-  caret: 0.5,
+  trail: 0.5,
+  peak: 1,
 }
 
 function bounded(value: unknown, min: number, max: number, fallback: number): number {
@@ -62,6 +65,8 @@ export function sanitizeFlowSettings(input: unknown): FlowSettings {
     lineRamp: Math.round(bounded(source.lineRamp, FLOW_LINE_RAMP_MIN, FLOW_LINE_RAMP_MAX, d.lineRamp)),
     look: bounded(source.look, 0, 1, d.look),
     reverb: bounded(source.reverb, 0, 1, d.reverb),
-    caret: bounded(source.caret, 0, 1, d.caret),
+    // `caret` is the trail slider's name before it drove the trail too.
+    trail: bounded(source.trail ?? (source as { caret?: unknown }).caret, 0, 1, d.trail),
+    peak: bounded(source.peak, 0, 1, d.peak),
   }
 }

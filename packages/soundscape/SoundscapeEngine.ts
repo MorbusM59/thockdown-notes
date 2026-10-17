@@ -135,23 +135,6 @@ export class SoundscapeEngine {
     this.playback?.setWeatherFloor?.(value);
   }
 
-  /**
-   * Dip the soundscape briefly and bring it back: to `depth` of its volume
-   * over `downSec`, held `holdSec`, then home on a `releaseSec` glide. For a
-   * moment the reader should hear as an arrival (the typing flow's kick).
-   * Volume only, so it never re-renders; a volume change meanwhile wins.
-   */
-  dip(depth: number, downSec: number, holdSec: number, releaseSec: number): void {
-    const playback = this.playback
-    const target = this.volumeTarget
-    if (!playback || target <= 0) return
-    playback.setVolume(target * depth, downSec / 3)
-    window.setTimeout(() => {
-      if (this.playback !== playback || this.volumeTarget !== target) return
-      playback.setVolume(target, releaseSec / 4)
-    }, (downSec + holdSec) * 1000)
-  }
-
   apply(preferences: SoundscapePreferences): void {
     this.preferences = preferences;
     if (!isSoundscapeAudible(preferences)) {

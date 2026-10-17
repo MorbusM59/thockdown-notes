@@ -1,4 +1,5 @@
 import { BASS_TYPING_SOUND_ASSET, DEFAULT_TYPING_SOUND_SET, TREBLE_TYPING_SOUND_ASSET, TYPING_SOUND_ASSETS, TYPING_SOUND_SET_IDS, TypingSoundSetId } from './typingSounds'
+import { OUTPUT_HIGHPASS_REST_HZ } from '@thockdown/soundscape/audioOutputBus'
 import type { AudioBounceCacheHit } from '../shared/audioBounceCache'
 
 // The plain-typing character set reachable via deriveTypingSoundKeyId
@@ -165,16 +166,6 @@ const FLOW_REVERB_DURATION_SEC = 2.8
 const FLOW_REVERB_DECAY = 2.5
 const FLOW_REVERB_SPACE = 0.7
 const FLOW_REVERB_LOWPASS_HZ = 6500
-// The flow kick's swell (kickFlowReverb): how far the send rises, how fast, and how it settles.
-// It opens with a DIP: the reverb's tail pulled down to FLOW_KICK_DIP of
-// itself and held, then released into the swell -- the drop-then-lift that
-// reads as arriving, where a swell alone reads as only more reverb.
-const FLOW_KICK_DIP = 0.5
-const FLOW_KICK_DIP_SEC = 0.06
-const FLOW_KICK_DIP_HOLD_SEC = 0.08
-const FLOW_KICK_SWELL = 1.5
-const FLOW_KICK_ATTACK_SEC = 0.4
-const FLOW_KICK_RELEASE_TAU_SEC = 0.8
 
 export class TypingSoundManager {
   private audioContext: AudioContext | null = null
@@ -190,10 +181,9 @@ export class TypingSoundManager {
   // it. Built on first use; a sound is routed into it only while the amount
   // is above zero, so with flow off it is never in the graph at all.
   private flowReverbSend: GainNode | null = null
-  // A multiplier after the send, owned by the kick alone, so its swell never
-  // fights the send's own per-frame ramp (two automations on one AudioParam
-  // would cancel each other).
-  private flowReverbKick: GainNode | null = null
+  // A high-pass between the master and the speakers, for an app-wide sweep
+  // (the typing flow's peak, flow/flowPeak.ts).
+  private outputHighpassNode: BiquadFilterNode | null = null
   private flowReverbAmount = 0
   private bufferGroups: Record<string, AudioBuffer[]> = {
     bass: [],
@@ -279,7 +269,11 @@ export class TypingSoundManager {
 
       dryGain.connect(masterGain)
       reverb.connect(reverbFilter).connect(wetGain).connect(masterGain)
-      masterGain.connect(context.destination)
+      const outputHighpass = context.createBiquadFilter()
+      outputHighpass.type = 'highpass'
+      outputHighpass.frequency.value = OUTPUT_HIGHPASS_REST_HZ
+      masterGain.connect(outputHighpass).connect(context.destination)
+      this.outputHighpassNode = outputHighpass
 
       this.audioContext = context
       this.masterGain = masterGain
@@ -644,29 +638,10 @@ export class TypingSoundManager {
     }
   }
 
-  /**
-   * The flow kick: the flow reverb's tail dips (`FLOW_KICK_DIP`), then
-   * swells to `1 + FLOW_KICK_SWELL * strength` times itself and settles
-   * back, so the keys typed in the moment flow is achieved drop out and then
-   * ring out in a larger space. The gain sits AFTER the room, so the dip cuts
-   * the tail already ringing rather than only what enters it. Scaled by the reverb channel, so a
-   * reader who turned flow reverb off hears nothing.
-   */
-  kickFlowReverb(strength: number): void {
-    if (strength <= 0) return
-    this.ensureFlowReverb()
-    const kick = this.flowReverbKick
-    if (!kick || !this.audioContext) return
-    const t = this.audioContext.currentTime
-    kick.gain.cancelScheduledValues(t)
-    kick.gain.setValueAtTime(kick.gain.value, t)
-    const dipEnd = t + FLOW_KICK_DIP_SEC
-    const lift = dipEnd + FLOW_KICK_DIP_HOLD_SEC
-    const peak = lift + FLOW_KICK_ATTACK_SEC
-    kick.gain.linearRampToValueAtTime(1 - (1 - FLOW_KICK_DIP) * strength, dipEnd)
-    kick.gain.setValueAtTime(1 - (1 - FLOW_KICK_DIP) * strength, lift)
-    kick.gain.exponentialRampToValueAtTime(1 + FLOW_KICK_SWELL * strength, peak)
-    kick.gain.setTargetAtTime(1, peak, FLOW_KICK_RELEASE_TAU_SEC)
+  /** The output high-pass's cutoff and this context's clock, or null before the audio graph exists. The cutoff rests below hearing. */
+  outputHighpass(): { frequency: AudioParam; currentTime: number } | null {
+    if (!this.outputHighpassNode || !this.audioContext) return null
+    return { frequency: this.outputHighpassNode.frequency, currentTime: this.audioContext.currentTime }
   }
 
   private ensureFlowReverb(): void {
@@ -679,11 +654,8 @@ export class TypingSoundManager {
     const tone = context.createBiquadFilter()
     tone.type = 'lowpass'
     tone.frequency.value = FLOW_REVERB_LOWPASS_HZ
-    const kick = context.createGain()
-    kick.gain.value = 1
-    send.connect(room).connect(kick).connect(tone).connect(this.masterGain)
+    send.connect(room).connect(tone).connect(this.masterGain)
     this.flowReverbSend = send
-    this.flowReverbKick = kick
   }
 
   // The one place a voice reaches the speakers: the reader's reverb (dry and

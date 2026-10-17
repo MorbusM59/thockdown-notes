@@ -1,28 +1,33 @@
 /**
- * The typing flow trail's alpha. A box's alpha is the product of four
- * factors, applied in this order:
+ * The typing flow trail's alpha and saturation.
+ *
+ * A box's alpha is the product of four factors, applied in this order:
  *
  * 1. The flow colour's own alpha (the `flowTrail` highlight colour, the
  *    reader's flowBaseColor), which the box's border is drawn in.
- * 2. The flow level f at the box's creation, scaled to 0 at no flow and
+ * 2. The flow level f at the box's creation times the trail strength (the
+ *    flow options' trail slider), scaled to 0 at no flow and
  *    `TRAIL_ALPHA_AT_FULL_FLOW` at full flow, and on a new row by
  *    `lineRampShare` so the trail fades back in after a wrap.
  * 3. The fade since creation, `fadeCurve(t, fadeMaxTime, fadeShape)`.
- * 4. The flash after reaching full flow, from `FLASH_PEAK` back to 1 on the
- *    same curve over `FLASH_MAX_TIME_SEC` with shape `FLASH_SHAPE`.
+ * 4. The PEAK on reaching full flow (`flowPeak.ts`): from
+ *    `1 + (TRAIL_PEAK_ALPHA - 1) x peak` back to 1 on the peak curve.
  *
  * Factors 2 and 3 belong to each box (its own opacity, set once and
- * animated); the 0.8 of factor 2 and the whole of factor 4 apply to every box
- * at once, so they sit on the layer holding the boxes (`TRAIL_ALPHA_AT_FULL_FLOW`
- * is its resting opacity). That split is what lets the flash lift every box
- * on screen, old and new alike, without touching any of them: 0.8 x 1.25 is
- * exactly 1, so the layer's opacity never has to exceed one.
+ * animated); `TRAIL_ALPHA_AT_FULL_FLOW` and factor 4 apply to every box at
+ * once, so they are the opacity of the layer holding the boxes. That split is
+ * what lets the peak lift every box on screen, old and new alike, without
+ * touching any of them.
+ *
+ * Saturation applies to the whole trail, leading edge included, as a share of
+ * the flow colour's HSL saturation (`--flow-trail-saturation`, index.css):
+ * `TRAIL_SATURATION_BEFORE_FULL` until full flow, 1 in full flow, and at the
+ * peak it drops to `1 - peak` and returns to 1 on the peak curve.
  */
 
 export const TRAIL_ALPHA_AT_FULL_FLOW = 0.7
-const FLASH_PEAK = 2
-const FLASH_MAX_TIME_SEC = 5
-const FLASH_SHAPE = -2
+const TRAIL_PEAK_ALPHA = 2
+export const TRAIL_SATURATION_BEFORE_FULL = 0.5
 
 /** Samples per curve: the curve is not one CSS can name, so it becomes a linear keyframe list. */
 const SAMPLES = 32
@@ -38,10 +43,11 @@ export function fadeCurve(t: number, maxTime: number, shape: number): number {
   return left ** (2 ** shape)
 }
 
-function curveKeyframes(maxTime: number, shape: number, map: (fade: number) => number): Keyframe[] {
+/** The curve sampled into a linear keyframe list; `map` turns each sample (1 falling to 0) into a keyframe's properties. */
+export function curveKeyframes(maxTime: number, shape: number, map: (fade: number) => Keyframe): Keyframe[] {
   const keyframes: Keyframe[] = []
   for (let i = 0; i <= SAMPLES; i += 1) {
-    keyframes.push({ opacity: map(fadeCurve((maxTime * i) / SAMPLES, maxTime, shape)), offset: i / SAMPLES })
+    keyframes.push({ ...map(fadeCurve((maxTime * i) / SAMPLES, maxTime, shape)), offset: i / SAMPLES })
   }
   return keyframes
 }
@@ -49,16 +55,30 @@ function curveKeyframes(maxTime: number, shape: number, map: (fade: number) => n
 /** Fades a box from the flow level it was created at (0..1) to nothing, then removes it. */
 export function fadeTrailBox(el: HTMLElement, level: number, fadeMaxTime: number, fadeShape: number): void {
   const animation = el.animate(
-    curveKeyframes(fadeMaxTime, fadeShape, (fade) => level * fade),
+    curveKeyframes(fadeMaxTime, fadeShape, (fade) => ({ opacity: level * fade })),
     { duration: fadeMaxTime * 1000, fill: 'forwards' },
   )
   animation.onfinish = () => el.remove()
 }
 
-/** The full-flow flash, on the layer holding every box. */
-export function flashTrailLayer(layer: HTMLElement): void {
-  layer.animate(
-    curveKeyframes(FLASH_MAX_TIME_SEC, FLASH_SHAPE, (fade) => TRAIL_ALPHA_AT_FULL_FLOW * (1 + (FLASH_PEAK - 1) * fade)),
-    { duration: FLASH_MAX_TIME_SEC * 1000 },
+/** In or out of full flow: the trail's resting saturation, on the layer holding the whole trail. */
+export function setTrailFull(trail: HTMLElement, full: boolean): void {
+  trail.style.setProperty('--flow-trail-saturation', String(full ? 1 : TRAIL_SATURATION_BEFORE_FULL))
+}
+
+/**
+ * The peak on the trail, at `peak` strength 0..1: the boxes' layer lifts its
+ * alpha and the whole trail drains of colour, both returning on the peak
+ * curve. Neither animation fills, so each ends on the resting value.
+ */
+export function peakTrail(boxes: HTMLElement, trail: HTMLElement, peak: number, durationSec: number, shape: number): void {
+  if (peak <= 0) return
+  boxes.animate(
+    curveKeyframes(durationSec, shape, (fade) => ({ opacity: TRAIL_ALPHA_AT_FULL_FLOW * (1 + (TRAIL_PEAK_ALPHA - 1) * peak * fade) })),
+    { duration: durationSec * 1000 },
+  )
+  trail.animate(
+    curveKeyframes(durationSec, shape, (fade) => ({ '--flow-trail-saturation': 1 - peak * fade })),
+    { duration: durationSec * 1000 },
   )
 }

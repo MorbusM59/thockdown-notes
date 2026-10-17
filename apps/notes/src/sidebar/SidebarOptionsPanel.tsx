@@ -2980,15 +2980,15 @@ export function SidebarOptionsPanel({
             className={`btn-icon${flowSettings.enabled ? ' is-active' : ''}`}
             onClick={() => setFlowSettings((prev) => ({ ...prev, enabled: !prev.enabled }))}
             aria-pressed={flowSettings.enabled}
-            data-tooltip={flowSettings.enabled ? 'Disable typing flow' : 'Enable typing flow: steady, fast typing builds a flow that the look, the reverb and the caret answer'}
+            data-tooltip={flowSettings.enabled ? 'Disable typing flow' : 'Enable typing flow: steady, fast typing builds a flow that the look, the reverb, the caret and its trail answer'}
           >
             <span className="fa-solid fa-water" aria-hidden="true" />
           </button>
         </div>
         {flowSettings.enabled ? (
           <div className="utility-setting-slider-stack" aria-label="Typing flow settings">
-            {/* How it moves (build, decay), how the trail fades (fade, shape, wrap) and how it answers (look, reverb, caret). */}
-            <OptionsSliderRows rows={[2, 3, 3]}>
+            {/* How it moves (build, decay), how the trail fades (fade, shape, wrap) and how it answers (look, reverb, trail, peak). */}
+            <OptionsSliderRows rows={[2, 3, 2, 2]}>
               <CompactScrollbarSlider
                 id="flow-gain"
                 min={FLOW_GAIN_PERCENT_MIN}
@@ -3079,16 +3079,28 @@ export function SidebarOptionsPanel({
                 onCommit={(value) => setFlowSettings((prev) => ({ ...prev, reverb: value }))}
               />
               <CompactScrollbarSlider
-                id="flow-caret"
+                id="flow-trail"
                 min={0}
                 max={1}
                 step={0.01}
-                value={flowSettings.caret}
-                trackLabel="caret"
-                tooltipLabel="Flow caret: glow and steady blink (the trail follows its colour's alpha, in Colors, Boxes)"
-                ariaLabel="Strength of the flow's caret glow"
-                defaultValue={DEFAULT_FLOW_SETTINGS.caret}
-                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, caret: value }))}
+                value={flowSettings.trail}
+                trackLabel="trail"
+                tooltipLabel="Flow trail and caret: the trail, and the caret's glow and fade as flow grows (the trail's colour is in Colors, Boxes)"
+                ariaLabel="Strength of the flow's trail and caret"
+                defaultValue={DEFAULT_FLOW_SETTINGS.trail}
+                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, trail: value }))}
+              />
+              <CompactScrollbarSlider
+                id="flow-peak"
+                min={0}
+                max={1}
+                step={0.01}
+                value={flowSettings.peak}
+                trackLabel="peak"
+                tooltipLabel="Peak on reaching full flow: a sweep through all sound, and the trail flaring and filling with colour"
+                ariaLabel="Strength of the peak on reaching full flow"
+                defaultValue={DEFAULT_FLOW_SETTINGS.peak}
+                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, peak: value }))}
               />
             </OptionsSliderRows>
           </div>

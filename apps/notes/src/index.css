@@ -145,8 +145,8 @@
   top: 0;
   left: 0;
   box-sizing: border-box;
-  border-top: 1px solid var(--color-flow-trail);
-  border-bottom: 1px solid var(--color-flow-trail);
+  border-top: 1px solid var(--color-flow-trail-now);
+  border-bottom: 1px solid var(--color-flow-trail-now);
 }
 
 /* The trail's leading edge: the caret's cell traced on its top, bottom and
@@ -160,7 +160,7 @@
   left: 0;
   box-sizing: border-box;
   --flow-trail-head-edge: 1px;
-  border: var(--flow-trail-head-edge) solid var(--color-flow-trail);
+  border: var(--flow-trail-head-edge) solid var(--color-flow-trail-now);
   border-right-width: 0;
   border-left: none;
   /* Rounded where it is closed, square where it opens into the trail. The
@@ -171,8 +171,22 @@
   border-radius: 0 var(--border-radius-regular) var(--border-radius-regular) 0;
   /* Inside, the flow colour fades from the leading edge back toward the
      trail, so the edge reads as a front moving right. */
-  background-image: linear-gradient(to left, var(--color-flow-trail), transparent);
+  background-image: linear-gradient(to left, var(--color-flow-trail-now), transparent);
   opacity: var(--flow-trail-head, 0);
+}
+
+/* The trail's colour now: the flow colour at a share of its own HSL
+   saturation, --flow-trail-saturation, set and animated on the layer holding
+   the whole trail (flow/flowTrail.ts). Registered so it can be animated as a
+   number and inherited by every mark at once. */
+@property --flow-trail-saturation {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 1;
+}
+.flow-trail-box,
+.flow-trail-head {
+  --color-flow-trail-now: hsl(from var(--color-flow-trail) h calc(s * var(--flow-trail-saturation)) l / alpha);
 }
 
 /* Low-power toggle: the blink otherwise repaints the caret indefinitely while

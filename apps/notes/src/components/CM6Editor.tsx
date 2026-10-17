@@ -10,7 +10,8 @@ import { matchShortcut, type ShortcutId } from '../shared/keyboardShortcuts';
 import { buildTokenPresentation } from '../editor/MarkdownLineClassification';
 import { suppressNextPlainTypingSoundOnce, typingSoundManager } from '../sound/TypingSoundManager';
 import { flowMeter } from '../flow/flowMeter';
-import { TRAIL_ALPHA_AT_FULL_FLOW, fadeTrailBox, flashTrailLayer, lineRampShare } from '../flow/flowTrail';
+import { TRAIL_ALPHA_AT_FULL_FLOW, fadeTrailBox, lineRampShare, peakTrail, setTrailFull } from '../flow/flowTrail';
+import { PEAK_DURATION_SEC, PEAK_SHAPE } from '../flow/flowPeak';
 
 import { ARROW_KEY_VOICES, SHIFT_TAB_KEY_VOICE, TAB_KEY_VOICE } from '../sound/keyVoices';
 import { readSelectionRect, type SelectionRect } from '../editor/CaretRect';
@@ -1119,15 +1120,25 @@ export function CM6Editor({
   const flowTrailClipRef = useRef<HTMLDivElement | null>(null);
   const flowTrailLayerRef = useRef<HTMLDivElement | null>(null);
   // The boxes' own layer, apart from the leading edge: its opacity is the
-  // trail's shared alpha factors (flow/flowTrail.ts), so reaching full flow
-  // flashes every box on screen at once.
+  // trail's shared alpha factors (flow/flowTrail.ts), so the peak on reaching
+  // full flow lifts every box on screen at once. The saturation is the whole
+  // trail's, so it sits on the outer layer, which also holds the leading edge.
   const flowTrailBoxesRef = useRef<HTMLDivElement | null>(null);
   // Which visual row the last box was drawn on and how many boxes it has had,
   // for the trail's new-row ramp (flow/flowTrail.ts's lineRampShare).
   const flowTrailRowRef = useRef<{ top: number; count: number }>({ top: Number.NaN, count: 0 });
-  useEffect(() => flowMeter.subscribeKick(() => {
-    if (flowTrailBoxesRef.current) flashTrailLayer(flowTrailBoxesRef.current);
-  }), []);
+  useEffect(() => {
+    if (flowTrailLayerRef.current) setTrailFull(flowTrailLayerRef.current, false);
+    const unsubscribeFull = flowMeter.subscribeFull((full) => {
+      if (flowTrailLayerRef.current) setTrailFull(flowTrailLayerRef.current, full);
+    });
+    const unsubscribeKick = flowMeter.subscribeKick(() => {
+      const boxes = flowTrailBoxesRef.current;
+      const trail = flowTrailLayerRef.current;
+      if (boxes && trail) peakTrail(boxes, trail, flowMeter.peakStrength(), PEAK_DURATION_SEC, PEAK_SHAPE);
+    });
+    return () => { unsubscribeFull(); unsubscribeKick(); };
+  }, []);
   const flowTrailHeadRef = useRef<HTMLDivElement | null>(null);
   const [highlightRects, setHighlightRects] = useState<HighlightRect[]>([]);
   // A dragged table cell's drop target: the range of the note it covers,

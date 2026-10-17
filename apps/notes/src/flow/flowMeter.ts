@@ -53,6 +53,8 @@ const fullListeners = new Set<FullListener>()
 let isFull = false
 let lastKickSec = -Infinity
 let trailFade = { fadeMaxTime: DEFAULT_FLOW_SETTINGS.fadeMaxTime, fadeShape: DEFAULT_FLOW_SETTINGS.fadeShape, lineRamp: DEFAULT_FLOW_SETTINGS.lineRamp }
+let trailStrength = DEFAULT_FLOW_SETTINGS.trail
+let peakStrength = DEFAULT_FLOW_SETTINGS.peak
 
 /**
  * The TYPING RATE: characters per second over the last `RATE_MEMORY_KEYS`
@@ -166,21 +168,28 @@ export const flowMeter = {
     ensureRunning()
   },
 
-  /** The trail's fade and new-row ramp (`flow/flowTrail.ts`); the editor reads them per keystroke (`trailBox`). */
-  configureTrail(fade: { fadeMaxTime: number; fadeShape: number; lineRamp: number }): void {
-    trailFade = { fadeMaxTime: fade.fadeMaxTime, fadeShape: fade.fadeShape, lineRamp: fade.lineRamp }
+  /** The trail's strength, fade, new-row ramp and peak (`flow/flowTrail.ts`); the editor reads them per keystroke (`trailBox`) and per kick (`peakStrength`). */
+  configureTrail(trail: { strength: number; peak: number; fadeMaxTime: number; fadeShape: number; lineRamp: number }): void {
+    trailFade = { fadeMaxTime: trail.fadeMaxTime, fadeShape: trail.fadeShape, lineRamp: trail.lineRamp }
+    trailStrength = trail.strength
+    peakStrength = trail.peak
+  },
+
+  /** The reader's peak strength, 0..1. */
+  peakStrength(): number {
+    return peakStrength
   },
 
   /**
    * What a box left by this keydown should look like, or null when it should
    * leave none. Only a CHARACTER or Space leaves one: Enter is a hit for the
    * meter but types no cell. `level` is the presented flow at the moment of
-   * the key, 0..1; `flow/flowTrail.ts` turns it and the fade into alpha.
+   * the key times the trail strength, 0..1; `flow/flowTrail.ts` turns it and the fade into alpha.
    */
   trailBox(event: KeyboardEvent): { level: number; fadeMaxTime: number; fadeShape: number; lineRamp: number } | null {
-    if (!enabled || presented <= 0) return null
+    if (!enabled || presented <= 0 || trailStrength <= 0) return null
     if (event.key.length !== 1 || !isFlowHit(event)) return null
-    return { level: Math.min(1, presented), ...trailFade }
+    return { level: Math.min(1, presented) * trailStrength, ...trailFade }
   },
 
   /** Called once each time flow is achieved (see the kick, above). */
