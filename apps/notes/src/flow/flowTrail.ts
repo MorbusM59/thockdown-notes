@@ -19,10 +19,10 @@
  * exactly 1, so the layer's opacity never has to exceed one.
  */
 
-export const TRAIL_ALPHA_AT_FULL_FLOW = 0.8
-const FLASH_PEAK = 1.25
-const FLASH_MAX_TIME_SEC = 2.5
-const FLASH_SHAPE = 2
+export const TRAIL_ALPHA_AT_FULL_FLOW = 0.7
+const FLASH_PEAK = 2
+const FLASH_MAX_TIME_SEC = 5
+const FLASH_SHAPE = -2
 
 /** Samples per curve: the curve is not one CSS can name, so it becomes a linear keyframe list. */
 const SAMPLES = 32
