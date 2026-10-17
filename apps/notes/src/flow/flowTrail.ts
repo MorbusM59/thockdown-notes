@@ -22,12 +22,16 @@
  * Saturation applies to the whole trail, leading edge included, as a share of
  * the flow colour's HSL saturation (`--flow-trail-saturation`, index.css):
  * `TRAIL_SATURATION_BEFORE_FULL` until full flow, 1 in full flow, and at the
- * peak it drops to `1 - peak` and returns to 1 on the peak curve.
+ * peak it drops to `1 - peak` and returns to 1 on the peak curve. At the same
+ * time its HSV value (the strongest RGB channel) is multiplied by up to
+ * `TRAIL_PEAK_VALUE` (`--flow-trail-value`, clamped at full brightness), so the
+ * grey the drained colour passes through is bright rather than dull.
  */
 
 export const TRAIL_ALPHA_AT_FULL_FLOW = 0.7
 const TRAIL_PEAK_ALPHA = 2
 export const TRAIL_SATURATION_BEFORE_FULL = 0.5
+const TRAIL_PEAK_VALUE = 2
 
 /** Samples per curve: the curve is not one CSS can name, so it becomes a linear keyframe list. */
 const SAMPLES = 32
@@ -78,7 +82,10 @@ export function peakTrail(boxes: HTMLElement, trail: HTMLElement, peak: number, 
     { duration: durationSec * 1000 },
   )
   trail.animate(
-    curveKeyframes(durationSec, shape, (fade) => ({ '--flow-trail-saturation': 1 - peak * fade })),
+    curveKeyframes(durationSec, shape, (fade) => ({
+      '--flow-trail-saturation': 1 - peak * fade,
+      '--flow-trail-value': 1 + (TRAIL_PEAK_VALUE - 1) * peak * fade,
+    })),
     { duration: durationSec * 1000 },
   )
 }

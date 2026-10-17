@@ -184,9 +184,17 @@
   inherits: true;
   initial-value: 1;
 }
+/* The HSV value multiplier at the peak: every RGB channel scaled together
+   (clamped at full), so hue and saturation hold while the colour brightens. */
+@property --flow-trail-value {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 1;
+}
 .flow-trail-box,
 .flow-trail-head {
-  --color-flow-trail-now: hsl(from var(--color-flow-trail) h calc(s * var(--flow-trail-saturation)) l / alpha);
+  --color-flow-trail-saturated: hsl(from var(--color-flow-trail) h calc(s * var(--flow-trail-saturation)) l / alpha);
+  --color-flow-trail-now: rgb(from var(--color-flow-trail-saturated) calc(r * var(--flow-trail-value)) calc(g * var(--flow-trail-value)) calc(b * var(--flow-trail-value)) / alpha);
 }
 
 /* Low-power toggle: the blink otherwise repaints the caret indefinitely while
