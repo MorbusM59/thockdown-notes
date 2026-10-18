@@ -11,6 +11,12 @@ export interface FlowSettings {
   gainPercent: number
   /** Per 50ms tick, the meter loses this percent of itself AND this percent of a full meter. */
   decayPercent: number
+  /** Milliseconds after the last hit before the IDLE decay sets in (`flowModel.ts`'s `idleFactor`). */
+  idleGraceMs: number
+  /** The idle decay's shape, the same curve as the trail fade's (`fadeShape`). */
+  idleShape: number
+  /** Seconds the idle decay takes, once it has set in, to bring the meter to zero. */
+  idleDuration: number
   /** Seconds a trail box takes to fade from its creation alpha to nothing (`flow/flowTrail.ts`). */
   fadeMaxTime: number
   /** The trail fade's shape `s`: alpha at time t is `((fadeMaxTime - t) / fadeMaxTime) ^ (2 ^ s)`, so 0 is linear, positive drops early and negative holds late. */
@@ -38,11 +44,17 @@ export const FLOW_FADE_SHAPE_MAX = 5
 export const FLOW_LINE_RAMP_MIN = 1
 export const FLOW_LINE_RAMP_MAX = 20
 export const FLOW_AMP_MAX = 2
+export const FLOW_IDLE_GRACE_MAX_MS = 3000
+export const FLOW_IDLE_DURATION_MIN = 0.2
+export const FLOW_IDLE_DURATION_MAX = 10
 
 export const DEFAULT_FLOW_SETTINGS: FlowSettings = {
   enabled: false,
   gainPercent: 4,
   decayPercent: 0.5,
+  idleGraceMs: 500,
+  idleShape: -0.5,
+  idleDuration: 1.5,
   fadeMaxTime: 3,
   fadeShape: 0,
   lineRamp: 4,
@@ -64,6 +76,9 @@ export function sanitizeFlowSettings(input: unknown): FlowSettings {
     enabled: typeof source.enabled === 'boolean' ? source.enabled : d.enabled,
     gainPercent: bounded(source.gainPercent, FLOW_GAIN_PERCENT_MIN, FLOW_GAIN_PERCENT_MAX, d.gainPercent),
     decayPercent: bounded(source.decayPercent, FLOW_DECAY_PERCENT_MIN, FLOW_DECAY_PERCENT_MAX, d.decayPercent),
+    idleGraceMs: Math.round(bounded(source.idleGraceMs, 0, FLOW_IDLE_GRACE_MAX_MS, d.idleGraceMs)),
+    idleShape: bounded(source.idleShape, FLOW_FADE_SHAPE_MIN, FLOW_FADE_SHAPE_MAX, d.idleShape),
+    idleDuration: bounded(source.idleDuration, FLOW_IDLE_DURATION_MIN, FLOW_IDLE_DURATION_MAX, d.idleDuration),
     fadeMaxTime: bounded(source.fadeMaxTime, FLOW_FADE_MAX_TIME_MIN, FLOW_FADE_MAX_TIME_MAX, d.fadeMaxTime),
     fadeShape: bounded(source.fadeShape, FLOW_FADE_SHAPE_MIN, FLOW_FADE_SHAPE_MAX, d.fadeShape),
     lineRamp: Math.round(bounded(source.lineRamp, FLOW_LINE_RAMP_MIN, FLOW_LINE_RAMP_MAX, d.lineRamp)),

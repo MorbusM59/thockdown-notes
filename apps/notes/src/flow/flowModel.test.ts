@@ -16,7 +16,8 @@ import {
   type FlowTuning,
 } from './flowModel'
 
-const TUNING: FlowTuning = { gainPercent: 5, decayPercent: 1 }
+// The idle decay is held off so these tests see the per-tick decay alone.
+const TUNING: FlowTuning = { gainPercent: 5, decayPercent: 1, idleGraceMs: 1e9, idleShape: 0, idleDuration: 1 }
 
 /** Types `count` keys at the given intervals (cycled), returning the state and the time of the last key. */
 function type(intervals: number[], count: number, tuning = TUNING, start: FlowState = EMPTY_FLOW_STATE, t0 = 0) {
@@ -97,5 +98,17 @@ describe('flow model', () => {
     expect(k('z', { ctrlKey: true })).toBe(false)
     expect(k('@', { ctrlKey: true, altKey: true })).toBe(true)
     expect(k('a', { repeat: true })).toBe(false)
+  })
+})
+
+describe('idle decay', () => {
+  const idle: FlowTuning = { gainPercent: 5, decayPercent: 0.5, idleGraceMs: 500, idleShape: -0.5, idleDuration: 1.5 }
+  const full: FlowState = { levelAtHit: 1.2, lastHitSec: 0, intervals: [] }
+  it('leaves the level alone through the grace period', () => {
+    expect(flowLevelAt(full, 0.5, idle)).toBe(decayed(1.2, 0.5, 0.5))
+  })
+  it('empties a full meter exactly at grace + duration', () => {
+    expect(flowLevelAt(full, 1.99, idle)).toBeGreaterThan(0)
+    expect(flowLevelAt(full, 2, idle)).toBe(0)
   })
 })

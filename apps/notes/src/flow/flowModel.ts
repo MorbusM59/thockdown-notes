@@ -34,12 +34,20 @@
  * crossing a line. What is presented is the level clamped to 1
  * (`presentedFlow`); the buffer is invisible headroom.
  *
+ * IDLE DECAY. Once `idleGraceMs` has passed since the last hit, the decayed
+ * level is also MULTIPLIED by `fadeCurve(t, idleDuration, idleShape)`, t
+ * counted from the end of the grace period -- the curve the trail boxes and
+ * the peak fade on. It reaches 0 at `idleDuration`, so stopping empties the
+ * meter in at most grace + duration whatever the level, and the caret, hidden
+ * while flow is above zero, comes back then.
+ *
  * An interval longer than `PAUSE_SEC` is a pause, not a beat of the rhythm:
  * it restarts the interval history. Nothing BREAKS a streak: corrections
  * and caret moves are ignored, so the only way flow is lost is by stopping.
  */
 
 import type { FlowSettings } from '../shared/flowSettings'
+import { fadeCurve } from './flowTrail'
 
 export const TICK_SEC = 0.05
 export const FLOW_BUFFER = 0.2
@@ -48,7 +56,8 @@ export const RHYTHM_BONUS = 0.5
 export const RHYTHM_TOLERANCE = 0.2
 export const PAUSE_SEC = 1.5
 
-export type FlowTuning = Pick<FlowSettings, 'gainPercent' | 'decayPercent'>
+export type FlowTuning = Pick<FlowSettings, 'gainPercent' | 'decayPercent' | 'idleGraceMs' | 'idleShape' | 'idleDuration'>
+export type FlowDecayTuning = Omit<FlowTuning, 'gainPercent'>
 
 export interface FlowState {
   /** The level immediately after the last hit, 0..1 + FLOW_BUFFER. */
@@ -83,9 +92,16 @@ export function secondsToEmpty(value: number, decayPercent: number): number {
 }
 
 /** The model's level at `nowSec`, buffer included. */
-export function flowLevelAt(state: FlowState, nowSec: number, tuning: Pick<FlowTuning, 'decayPercent'>): number {
+export function flowLevelAt(state: FlowState, nowSec: number, tuning: FlowDecayTuning): number {
   if (state.lastHitSec === null) return 0
-  return decayed(state.levelAtHit, nowSec - state.lastHitSec, tuning.decayPercent)
+  const idleSec = nowSec - state.lastHitSec
+  return decayed(state.levelAtHit, idleSec, tuning.decayPercent) * idleFactor(idleSec, tuning)
+}
+
+/** The idle decay's multiplier `idleSec` after the last hit: 1 through the grace period, then the fade curve down to 0. */
+export function idleFactor(idleSec: number, tuning: Pick<FlowTuning, 'idleGraceMs' | 'idleShape' | 'idleDuration'>): number {
+  const t = idleSec - tuning.idleGraceMs / 1000
+  return t <= 0 ? 1 : fadeCurve(t, tuning.idleDuration, tuning.idleShape)
 }
 
 /** What the reader sees of a level: the buffer above full is headroom, not more flow. */

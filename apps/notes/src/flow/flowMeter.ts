@@ -131,7 +131,8 @@ function ensureRunning(): void {
 
 export const flowMeter = {
   configure(next: { enabled: boolean } & FlowTuning): void {
-    tuning = { gainPercent: next.gainPercent, decayPercent: next.decayPercent }
+    const { enabled: _enabled, ...rest } = next
+    tuning = rest
     if (enabled === next.enabled) return
     enabled = next.enabled
     if (!enabled) {

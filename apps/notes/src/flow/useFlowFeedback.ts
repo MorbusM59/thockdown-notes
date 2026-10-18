@@ -63,11 +63,11 @@ function musicEqAmount(level: number, full: boolean): number {
 }
 
 export function useFlowFeedback(settings: FlowSettings): void {
-  const { enabled, gainPercent, decayPercent, fadeMaxTime, fadeShape, lineRamp, trail, peak, reverb, amp } = settings
+  const { enabled, gainPercent, decayPercent, idleGraceMs, idleShape, idleDuration, fadeMaxTime, fadeShape, lineRamp, trail, peak, reverb, amp } = settings
 
   useEffect(() => {
-    flowMeter.configure({ enabled, gainPercent, decayPercent })
-  }, [enabled, gainPercent, decayPercent])
+    flowMeter.configure({ enabled, gainPercent, decayPercent, idleGraceMs, idleShape, idleDuration })
+  }, [enabled, gainPercent, decayPercent, idleGraceMs, idleShape, idleDuration])
 
   useEffect(() => {
     flowMeter.configureTrail({ strength: trail, peak, fadeMaxTime, fadeShape, lineRamp })
