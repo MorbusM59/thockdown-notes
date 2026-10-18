@@ -67,6 +67,27 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       {
+        // EVERY CODE EDIT RELOADS THE PAGE; only a stylesheet is swapped in
+        // place. React Fast Refresh keeps component state across an edit by
+        // re-running the edited components' effects -- it assumes an effect
+        // can be torn down and set up again at any moment with nothing lost.
+        // This renderer is built on the opposite assumption: its effects are
+        // mount-once owners of imperative state (CM6Editor's EditorView, the
+        // section's note load), and a mount is always a note load, whose
+        // restore puts the caret and scroll back. A refresh broke that
+        // pairing: the editor was rebuilt for the SAME note, reported its
+        // fresh caret at 0 as the note's selection, and no restore followed.
+        // A full reload goes through beforeunload's flush and the real
+        // restore path, which is the one a reader's restart takes too.
+        name: 'thockdown-full-reload-on-code-edit',
+        apply: 'serve',
+        handleHotUpdate({ modules, server }) {
+          if (modules.length > 0 && modules.every((module) => module.type === 'css')) return undefined
+          server.ws.send({ type: 'full-reload' })
+          return []
+        },
+      },
+      {
         // See contentSecurityPolicy.ts for what it allows and why.
         name: 'thockdown-content-security-policy',
         apply: 'build',
