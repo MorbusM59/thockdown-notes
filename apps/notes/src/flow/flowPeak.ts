@@ -6,31 +6,41 @@
  * - a high-pass over ALL of the app's sound (typing and the shared output that
  *   carries the soundscape and the music), its cutoff swept geometrically from
  *   `PEAK_HIGHPASS_HZ` down to where it rests below hearing, and its resonance
- *   raised to `PEAK_RESONANCE_Q` on the same curve, so the moving cutoff is
- *   heard as a tone sliding down rather than only as missing bass;
- * - a WHOOSH: white noise through a band-pass whose centre rides
- *   `WHOOSH_CENTRE_RATIO` above the cutoff, at a level on the same curve, so
- *   there is something audible moving with the sweep even in silence;
+ *   raised to `PEAK_RESONANCE_Q` on the same curve. Nothing new is played:
+ *   the sweep only filters what is already sounding;
+ * - an ACCENT on the keystroke that reached full flow, armed here and played
+ *   by `TypingSoundManager` (louder, higher, into the flow room);
  * - the trail's alpha lift and colour drain (`flowTrail.ts`'s `peakTrail`).
  */
 
-import { connectToOutput, outputContext, outputHighpass, OUTPUT_HIGHPASS_REST_HZ } from '@thockdown/soundscape/audioOutputBus'
+import { outputHighpass, OUTPUT_HIGHPASS_REST_HZ } from '@thockdown/soundscape/audioOutputBus'
 import { typingSoundManager } from '../sound/TypingSoundManager'
 import { fadeCurve } from './flowTrail'
 
 export const PEAK_DURATION_SEC = 2
 export const PEAK_SHAPE = -0.2
-/** The high-pass cutoff at the top of a full-strength peak. */
+/**
+ * Where the high-pass cutoff starts, in Hz, at a full-strength peak. A
+ * high-pass removes everything BELOW its cutoff, so at the start of the peak
+ * only what is above this frequency is heard; the cutoff then falls along the
+ * peak curve to `OUTPUT_HIGHPASS_REST_HZ` (below hearing), letting first the
+ * mids and finally the bass back in. The sweep is geometric, so each octave
+ * of the way down takes the same share of the curve. Lower values make the
+ * cut milder (only the bass drops out); 20000 starts with almost nothing.
+ */
 const PEAK_HIGHPASS_HZ = 20000
-/** The high-pass's resonance (Q, in dB for a Web Audio high-pass) at the top of a full-strength peak. */
+/**
+ * How much the high-pass rings at its cutoff at the start of a full-strength
+ * peak. For a Web Audio high-pass, Q is the height of a resonant bump just
+ * above the cutoff, in dB: 0 is a flat cut, and each extra dB boosts the
+ * frequencies right at the cutoff, so a moving cutoff is heard as a tone
+ * sliding down with it (the classic synth filter sweep). It returns to
+ * `REST_RESONANCE_Q` on the same curve as the cutoff. Above about 12 the
+ * ring gets loud and whistly.
+ */
 const PEAK_RESONANCE_Q = 6
-/** The high-pass's resonance at rest: the BiquadFilterNode default. */
+/** The resonance at rest: the BiquadFilterNode default, a gentle 1 dB bump, inaudible at a 10 Hz cutoff. */
 const REST_RESONANCE_Q = 1
-/** The whoosh's band-pass centre as a multiple of the high-pass cutoff, so the noise sits above the cut. */
-const WHOOSH_CENTRE_RATIO = 1.5
-const WHOOSH_BANDPASS_Q = 1.5
-/** The whoosh's gain at the top of a full-strength peak. */
-const WHOOSH_GAIN = 0.15
 const CURVE_SAMPLES = 512
 
 /** The peak curve sampled over `PEAK_DURATION_SEC`, mapped through `map`, ready for `setValueCurveAtTime`. */
@@ -64,47 +74,12 @@ function sweep(filter: BiquadFilterNode, peak: number): void {
   play(filter.Q, peakCurve((fade) => REST_RESONANCE_Q + (PEAK_RESONANCE_Q - REST_RESONANCE_Q) * peak * fade), start)
 }
 
-let noiseBuffer: AudioBuffer | null = null
 
-/** One peak's length of white noise on `context`, made once and reused. */
-function noiseFor(context: BaseAudioContext): AudioBuffer {
-  if (noiseBuffer && noiseBuffer.sampleRate === context.sampleRate) return noiseBuffer
-  const length = Math.ceil(PEAK_DURATION_SEC * context.sampleRate)
-  noiseBuffer = context.createBuffer(1, length, context.sampleRate)
-  const samples = noiseBuffer.getChannelData(0)
-  for (let i = 0; i < length; i += 1) samples[i] = Math.random() * 2 - 1
-  return noiseBuffer
-}
-
-/** The whoosh, on the shared output so it passes the same high-pass and limiter as everything else. */
-function whoosh(peak: number): void {
-  const context = outputContext()
-  const start = context.currentTime
-  const source = context.createBufferSource()
-  source.buffer = noiseFor(context)
-  const band = context.createBiquadFilter()
-  band.type = 'bandpass'
-  band.Q.value = WHOOSH_BANDPASS_Q
-  const nyquistGuard = context.sampleRate * 0.45
-  band.frequency.setValueCurveAtTime(
-    peakCurve((fade) => Math.min(nyquistGuard, cutoffAt(fade, peak) * WHOOSH_CENTRE_RATIO)),
-    start,
-    PEAK_DURATION_SEC,
-  )
-  const level = context.createGain()
-  level.gain.setValueCurveAtTime(peakCurve((fade) => WHOOSH_GAIN * peak * fade), start, PEAK_DURATION_SEC)
-  source.connect(band).connect(level)
-  connectToOutput(level)
-  source.start(start)
-  source.stop(start + PEAK_DURATION_SEC)
-  source.onended = () => level.disconnect()
-}
-
-/** The peak's sound: the high-pass sweep on the shared output and on the typing sounds' own context, and the whoosh. */
+/** The peak's sound: the high-pass sweep on the shared output and on the typing sounds' own context, and the accent on the key that got there. */
 export function peakSound(peak: number): void {
   if (peak <= 0) return
   sweep(outputHighpass(), peak)
   const typing = typingSoundManager.outputHighpass()
   if (typing) sweep(typing, peak)
-  whoosh(peak)
+  typingSoundManager.armFlowAccent(peak)
 }

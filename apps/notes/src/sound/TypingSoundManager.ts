@@ -114,6 +114,11 @@ export interface TypingSoundPlayOptions {
   // triggers) just get centered mode-A panning for that press, same as any
   // other non-character key.
   physicalKeyCode?: string
+  // The flow kick's ACCENT, 0..1: the press is played louder
+  // (FLOW_ACCENT_GAIN), higher (FLOW_ACCENT_DETUNE_CENTS) and sent into the
+  // flow room (FLOW_ACCENT_REVERB_SEND), each scaled by this. Normally not
+  // passed by a caller but taken from `armFlowAccent` (see there).
+  accent?: number
 }
 
 interface TypingSoundHistoryEntry {
@@ -167,6 +172,18 @@ const FLOW_REVERB_DECAY = 2.5
 const FLOW_REVERB_SPACE = 0.7
 const FLOW_REVERB_LOWPASS_HZ = 6500
 
+// The flow kick's accent on the keystroke that reached full flow, at full
+// strength: this much louder (a gain multiplier), this much higher (cents;
+// 1200 is an octave), and sent into the flow room at this level whatever the
+// reverb slider says.
+const FLOW_ACCENT_GAIN = 2.5
+const FLOW_ACCENT_DETUNE_CENTS = 500
+const FLOW_ACCENT_REVERB_SEND = 1.2
+// How long an armed accent waits for its press. The meter hears the key on
+// keydown and the click is played when the edit lands, a moment later; a
+// key that turns out to make no sound must not leave the accent for the next.
+const FLOW_ACCENT_WINDOW_MS = 150
+
 export class TypingSoundManager {
   private audioContext: AudioContext | null = null
   private masterGain: GainNode | null = null
@@ -181,6 +198,8 @@ export class TypingSoundManager {
   // it. Built on first use; a sound is routed into it only while the amount
   // is above zero, so with flow off it is never in the graph at all.
   private flowReverbSend: GainNode | null = null
+  private flowRoom: ConvolverNode | null = null
+  private armedAccent: { strength: number; atMs: number } | null = null
   // A high-pass between the master and the speakers, for an app-wide sweep
   // (the typing flow's peak, flow/flowPeak.ts).
   private outputHighpassNode: BiquadFilterNode | null = null
@@ -497,12 +516,26 @@ export class TypingSoundManager {
     // nothing here worth doing on the keystroke's own call stack.
     if (!this.isAnyLayerAudible()) return
 
+    const accent = options?.accent ?? this.takeArmedAccent()
+    if (accent > 0) options = { ...options, accent }
+
     const keyId = options?.keyId
-    if (keyId && (await this.tryPlayBoundBuffer(keyId, options))) {
+    // A bounced buffer has its pitch baked in, so an accented press is
+    // always synthesised live.
+    if (keyId && accent <= 0 && (await this.tryPlayBoundBuffer(keyId, options))) {
       return
     }
 
-    const soundAttributes = this.getSoundAttributes(options)
+    // A copy: a new key's attributes object is also the one kept in its
+    // history, and the accent belongs to this press alone.
+    const soundAttributes = { ...this.getSoundAttributes(options) }
+    if (accent > 0) {
+      const lift = accent * FLOW_ACCENT_DETUNE_CENTS
+      soundAttributes.detune += lift
+      soundAttributes.bassDetune += lift
+      soundAttributes.trebleDetune += lift
+      soundAttributes.gain *= 1 + (FLOW_ACCENT_GAIN - 1) * accent
+    }
 
     await this.playLayer('click', {
       ...options,
@@ -638,6 +671,22 @@ export class TypingSoundManager {
     }
   }
 
+  /**
+   * Accents the next press played within FLOW_ACCENT_WINDOW_MS (see
+   * `TypingSoundPlayOptions.accent`). Armed by the flow kick, which fires on
+   * the keydown that reached full flow, before that key's click is played.
+   */
+  armFlowAccent(strength: number): void {
+    this.armedAccent = strength > 0 ? { strength: Math.min(1, strength), atMs: performance.now() } : null
+  }
+
+  private takeArmedAccent(): number {
+    const armed = this.armedAccent
+    this.armedAccent = null
+    if (!armed || performance.now() - armed.atMs > FLOW_ACCENT_WINDOW_MS) return 0
+    return armed.strength
+  }
+
   /** The high-pass after the master, or null before the audio graph exists. Its cutoff rests below hearing. */
   outputHighpass(): BiquadFilterNode | null {
     return this.outputHighpassNode
@@ -655,12 +704,13 @@ export class TypingSoundManager {
     tone.frequency.value = FLOW_REVERB_LOWPASS_HZ
     send.connect(room).connect(tone).connect(this.masterGain)
     this.flowReverbSend = send
+    this.flowRoom = room
   }
 
   // The one place a voice reaches the speakers: the reader's reverb (dry and
   // wet) or the bare master before the graph is built, plus the flow send
   // while flow has any reverb to add.
-  private connectToOutput(node: AudioNode): void {
+  private connectToOutput(node: AudioNode, accent = 0): void {
     if (this.reverbDryGain && this.reverbNode) {
       node.connect(this.reverbDryGain)
       node.connect(this.reverbNode)
@@ -672,6 +722,14 @@ export class TypingSoundManager {
       // audio graph exists.
       this.ensureFlowReverb()
       if (this.flowReverbSend) node.connect(this.flowReverbSend)
+    }
+    if (accent > 0 && this.audioContext) {
+      this.ensureFlowReverb()
+      if (this.flowRoom) {
+        const accentSend = this.audioContext.createGain()
+        accentSend.gain.value = accent * FLOW_ACCENT_REVERB_SEND
+        node.connect(accentSend).connect(this.flowRoom)
+      }
     }
   }
 
@@ -773,7 +831,7 @@ export class TypingSoundManager {
     source.connect(gainNode)
     const panNode = this.panIfNeeded(gainNode, pan)
 
-    this.connectToOutput(panNode)
+    this.connectToOutput(panNode, options?.accent)
 
     source.onended = () => {
       this.safeDisconnect(source)
@@ -799,7 +857,7 @@ export class TypingSoundManager {
         echoGainNode.gain.value = effectiveGain * Math.pow(decay, i)
         const echoPanNode = this.panIfNeeded(echoGainNode, pan)
         echoSource.connect(echoGainNode)
-        this.connectToOutput(echoPanNode)
+        this.connectToOutput(echoPanNode, options?.accent)
         echoSource.onended = () => {
           this.safeDisconnect(echoSource)
           this.safeDisconnect(echoGainNode)
@@ -911,7 +969,7 @@ export class TypingSoundManager {
     // live-synthesis path in playLayer.
     const panNode = this.panIfNeeded(gainNode, this.resolveEffectivePan(options?.physicalKeyCode, options?.pan))
 
-    this.connectToOutput(panNode)
+    this.connectToOutput(panNode, options?.accent)
 
     source.onended = () => {
       this.safeDisconnect(source)
