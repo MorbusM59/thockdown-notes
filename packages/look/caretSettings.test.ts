@@ -87,7 +87,7 @@ describe('buildCaretBlinkKeyframesCss', () => {
     // The 65% apex scales every surface's own alpha by 0.9.
     expect(css).toContain('background-color: rgba(0, 0, 0, calc((0.27 + (0.3 - 0.27) * var(--flow-caret-effect, 0)) * (1 - var(--flow-caret-fade, 0))))')
     expect(css).toContain('outline-color: rgba(10, 20, 30, calc((0.72 + (0.8 - 0.72) * var(--flow-caret-effect, 0)) * (1 - var(--flow-caret-fade, 0))))')
-    expect(css).toContain('box-shadow: 0 0 calc(0px + var(--flow-halo-blur, 0px)) calc(6px + var(--flow-halo-spread, 0px)) rgba(200, 100, 50, calc(0.45 + (0.5 - 0.45) * var(--flow-caret-effect, 0) + (1 - (0.45 + (0.5 - 0.45) * var(--flow-caret-effect, 0))) * var(--flow-caret-alpha, 0)))')
+    expect(css).toContain('box-shadow: 0 0 calc(0px + var(--flow-halo-blur, 0px)) calc(6px + var(--flow-halo-spread, 0px)) rgba(200, 100, 50, calc((0.45 + (0.5 - 0.45) * var(--flow-caret-effect, 0) + (1 - (0.45 + (0.5 - 0.45) * var(--flow-caret-effect, 0))) * var(--flow-caret-alpha, 0)) * (1 - var(--flow-caret-fade, 0))))')
   })
 
   it('leaves the animation unquantized at frame durations shorter than a display frame', () => {
@@ -193,7 +193,7 @@ describe('buildCaretBlinkKeyframesCss', () => {
     // Each surface lands on its own colour's own alpha, untouched.
     expect(css).toContain('background-color: rgba(0, 0, 0, calc((0.3 + (0.3 - 0.3) * var(--flow-caret-effect, 0)) * (1 - var(--flow-caret-fade, 0))))')
     expect(css).toContain('outline-color: rgba(10, 20, 30, calc((0.8 + (0.8 - 0.8) * var(--flow-caret-effect, 0)) * (1 - var(--flow-caret-fade, 0))))')
-    expect(css).toContain('box-shadow: 0 0 calc(0px + var(--flow-halo-blur, 0px)) calc(6px + var(--flow-halo-spread, 0px)) rgba(200, 100, 50, calc(0.5 + (0.5 - 0.5) * var(--flow-caret-effect, 0) + (1 - (0.5 + (0.5 - 0.5) * var(--flow-caret-effect, 0))) * var(--flow-caret-alpha, 0)))')
+    expect(css).toContain('box-shadow: 0 0 calc(0px + var(--flow-halo-blur, 0px)) calc(6px + var(--flow-halo-spread, 0px)) rgba(200, 100, 50, calc((0.5 + (0.5 - 0.5) * var(--flow-caret-effect, 0) + (1 - (0.5 + (0.5 - 0.5) * var(--flow-caret-effect, 0))) * var(--flow-caret-alpha, 0)) * (1 - var(--flow-caret-fade, 0))))')
   })
 
   it('blends the effect to zero at full flow without changing the saved strength', () => {
@@ -206,7 +206,7 @@ describe('buildCaretBlinkKeyframesCss', () => {
       'calc((0.18 + (0.3 - 0.18) * var(--flow-caret-effect, 0)) * (1 - var(--flow-caret-fade, 0)))',
     ])
     expect(css).toContain('outline-color: rgba(10, 20, 30, calc((0.48 + (0.8 - 0.48) * var(--flow-caret-effect, 0)) * (1 - var(--flow-caret-fade, 0))')
-    expect(css).toContain('rgba(200, 100, 50, calc(0.3 + (0.5 - 0.3) * var(--flow-caret-effect, 0)')
+    expect(css).toContain('rgba(200, 100, 50, calc((0.3 + (0.5 - 0.3) * var(--flow-caret-effect, 0)')
   })
 
   it('leaves a zero-strength blink with nothing to repaint', () => {
