@@ -20,10 +20,10 @@ const WEATHER_FLOOR_AT_FULL_FLOW = 0.8
  * At full flow and full strength the caret's own halo (Options > Caret) grows
  * by this much blur and spread, and its colour grows more
  * opaque (`--flow-caret-alpha`). The effect slider also blends to zero through
- * `--flow-caret-effect`. The whole caret, halo included, fades out with the
- * LEVEL (`--flow-caret-fade`) whenever the trail is on at all, because the
- * trail's leading edge takes over the caret's cell: at full flow only that
- * edge marks it. At zero trail strength flow leaves the caret as it is. `--flow-trail-head` is the trail's leading edge. The blink
+ * `--flow-caret-effect`. The whole caret, halo included, is hidden
+ * (`--flow-caret-fade` at 1) as soon as there is any flow and the trail is on
+ * at all, because the trail's leading edge takes over the caret's cell from
+ * the first keystroke; it returns when the meter has drained to zero. At zero trail strength flow leaves the caret as it is. `--flow-trail-head` is the trail's leading edge. The blink
  * keyframes consume these variables (`buildCaretBlinkKeyframesCss`), so the
  * flow draws nothing of its own: a halo of zero size still grows, and one
  * whose colour is transparent stays invisible.
@@ -79,7 +79,7 @@ export function useFlowFeedback(settings: FlowSettings): void {
     const unsubscribe = flowMeter.subscribe((level) => {
       lastLevel = level
       musicPlayerService.setFlowEq(amp * musicEqAmount(level, full))
-      setCaretFlow(level * trail, trail > 0 ? level : 0)
+      setCaretFlow(level * trail, trail > 0 && level > 0 ? 1 : 0)
       typingSoundManager.setFlowReverb(level * reverb)
       soundscapeEngine.setWeatherFloor(level * WEATHER_FLOOR_AT_FULL_FLOW)
     })
