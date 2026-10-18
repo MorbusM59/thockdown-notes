@@ -2989,7 +2989,7 @@ export function SidebarOptionsPanel({
         {flowSettings.enabled ? (
           <div className="utility-setting-slider-stack" aria-label="Typing flow settings">
             {/* How it moves (build, decay), how the trail fades (fade, shape, wrap) and how it answers (look, reverb, trail, peak, amp). */}
-            <OptionsSliderRows rows={[2, 3, 2, 2]}>
+            <OptionsSliderRows rows={[2, 3, 2, 3]}>
               <CompactScrollbarSlider
                 id="flow-gain"
                 min={FLOW_GAIN_PERCENT_MIN}
