@@ -41,8 +41,8 @@ export const FLOW_AMP_MAX = 2
 
 export const DEFAULT_FLOW_SETTINGS: FlowSettings = {
   enabled: false,
-  gainPercent: 2.5,
-  decayPercent: 0.25,
+  gainPercent: 4,
+  decayPercent: 0.5,
   fadeMaxTime: 3,
   fadeShape: 0,
   lineRamp: 4,

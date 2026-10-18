@@ -45,7 +45,7 @@ describe('flow meter', () => {
     expect(level).toBeGreaterThan(0.4)
 
     flowMeter.reportKey(key('Backspace'))
-    advance(20000) // a full meter plus its buffer is empty after about 15.8 s at the default decay
+    advance(20000) // a full meter plus its buffer is empty after about 7.9 s at the default decay
     expect(level).toBe(0)
   })
 
