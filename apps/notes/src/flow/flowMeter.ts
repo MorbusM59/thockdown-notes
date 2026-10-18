@@ -35,11 +35,12 @@ type FullListener = (full: boolean) => void
  * needed and full flow means the meter at 100%.
  *
  * The KICK is the one-off event marking the state's start: the moment flow
- * is achieved, landed as an event rather than as a value arriving. It also
- * waits `KICK_MIN_INTERVAL_SEC` since the last one, so dropping out and
- * straight back in enters the state again without a second fanfare.
+ * is achieved, landed as an event rather than as a value arriving. It fires
+ * only while ARMED, and is re-armed once the presented level falls below
+ * `KICK_REARM_LEVEL`: dropping from full to 80% and back re-enters full flow
+ * (its edge glow and full music EQ return) without a second kick.
  */
-const KICK_MIN_INTERVAL_SEC = 3
+const KICK_REARM_LEVEL = 0.5
 
 let enabled = false
 let tuning: FlowTuning = DEFAULT_FLOW_SETTINGS
@@ -51,7 +52,7 @@ const listeners = new Set<Listener>()
 const kickListeners = new Set<KickListener>()
 const fullListeners = new Set<FullListener>()
 let isFull = false
-let lastKickSec = -Infinity
+let kickArmed = true
 let trailFade = { fadeMaxTime: DEFAULT_FLOW_SETTINGS.fadeMaxTime, fadeShape: DEFAULT_FLOW_SETTINGS.fadeShape, lineRamp: DEFAULT_FLOW_SETTINGS.lineRamp }
 let trailStrength = DEFAULT_FLOW_SETTINGS.trail
 let peakStrength = DEFAULT_FLOW_SETTINGS.peak
@@ -93,6 +94,7 @@ const nowSec = (): number => performance.now() / 1000
 
 function publish(level: number): void {
   presented = level
+  if (level < KICK_REARM_LEVEL) kickArmed = true
   if (isFull && level < 1) setFull(false)
   for (const listener of listeners) listener(level)
 }
@@ -159,8 +161,8 @@ export const flowMeter = {
       publish(1)
       if (!isFull) {
         setFull(true)
-        if (now - lastKickSec >= KICK_MIN_INTERVAL_SEC) {
-          lastKickSec = now
+        if (kickArmed) {
+          kickArmed = false
           for (const listener of kickListeners) listener()
         }
       }

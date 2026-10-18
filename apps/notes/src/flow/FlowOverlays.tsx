@@ -27,7 +27,7 @@
  * `screen`. It is the one layer that is on only at full rather than
  * proportionally, which is what makes arriving read as a change of state
  * rather than as the other layers going one step further. On the kick
- * (the state's start, once per `KICK_MIN_INTERVAL_SEC`) it blooms in and the
+ * (the state's start, re-armed only below half flow) it blooms in and the
  * frame visibly opens: opacity rises to `EDGE_ARRIVAL_PEAK` while the layer
  * scales from `EDGE_ARRIVAL_SCALE` to 1, then settles to `EDGE_SUSTAIN`. While
  * the state lasts it breathes by `EDGE_BREATH` on a `EDGE_BREATH_PERIOD_MS`
