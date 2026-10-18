@@ -1,7 +1,7 @@
 import { SCROLL_TRACK_EDGE_GAP_PX } from '@thockdown/interaction/scrollTrackGeometry';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Annotation, Compartment, EditorState, EditorSelection, Prec, RangeSetBuilder, Transaction, type ChangeSet, type TransactionSpec } from '@codemirror/state';
+import { Annotation, Compartment, EditorState, EditorSelection, MapMode, Prec, RangeSetBuilder, Transaction, type ChangeSet, type TransactionSpec } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
 import { EditorView, Decoration, ViewPlugin, keymap, type DecorationSet, type ViewUpdate } from '@codemirror/view';
 import { defaultKeymap, historyKeymap, isolateHistory } from '@codemirror/commands';
@@ -1149,6 +1149,17 @@ export function CM6Editor({
   // (flow/flowTrail.ts's closeTrailBox). A wrap leaves it open, because the
   // wrapped row's trail already runs on to the end of the row.
   const flowTrailLastRef = useRef<HTMLElement | null>(null);
+  // Every box still on screen, anchored to the DOCUMENT position of the
+  // character it was typed for, so text moving under the trail (a Tab or a
+  // character inserted before it, a line added above) carries the box with
+  // it: each edit maps the positions through its ChangeSet and re-places the
+  // boxes whose position moved (relayoutFlowTrail). `fresh` marks a box
+  // whose own character has not been inserted yet: that first edit is mapped
+  // with assoc -1 so the box stays at the character's start, every later one
+  // with assoc 1 so text inserted exactly there pushes it along. A box whose
+  // character is deleted stops being tracked and stays where it was. `inset`
+  // offsets a mark placed inside its cell (the caret left at a line break).
+  const flowTrailAnchorsRef = useRef<Array<{ el: HTMLElement; pos: number; fresh: boolean; inset?: { x: number; y: number } }>>([]);
   useEffect(() => {
     const unsubscribeIdle = flowMeter.subscribeIdle((factor) => {
       if (flowTrailBoxesRef.current) setTrailIdle(flowTrailBoxesRef.current, factor);
@@ -2244,6 +2255,43 @@ export function CM6Editor({
       // edges are where thockdown-grid-lines draws its 1px lines (same phase).
       grid: { left, top, width: cellWidthPx, height: lineHeightPxNow },
     };
+  }, []);
+
+  /** The flow trail's anchors mapped through an edit, and the boxes whose character moved re-placed on its cell (see flowTrailAnchorsRef). */
+  const relayoutFlowTrail = useCallback((view: EditorView, changes: ChangeSet) => {
+    const moved: Array<{ el: HTMLElement; pos: number; inset?: { x: number; y: number } }> = [];
+    const kept: typeof flowTrailAnchorsRef.current = [];
+    for (const anchor of flowTrailAnchorsRef.current) {
+      if (!anchor.el.isConnected) continue;
+      const pos = changes.mapPos(anchor.pos, anchor.fresh ? -1 : 1, MapMode.TrackDel);
+      if (pos === null) continue;
+      kept.push({ ...anchor, pos, fresh: false });
+      if (pos !== anchor.pos) moved.push({ el: anchor.el, pos, inset: anchor.inset });
+    }
+    flowTrailAnchorsRef.current = kept;
+    if (moved.length === 0) return;
+    // Read the new cells in CM6's measure phase, after the edit is laid out,
+    // with the same quantization the caret and the keydown use.
+    view.requestMeasure({
+      read: () => {
+        const scroller = view.scrollDOM;
+        const scrollerRect = scroller.getBoundingClientRect();
+        const lineHeightPxNow = lineHeightPxRef.current;
+        const cellWidthPx = Math.max(1, cellWidthPxRef.current);
+        return moved.map(({ el, pos, inset }) => {
+          const coords = view.coordsAtPos(pos, 1);
+          if (!coords) return null;
+          return {
+            el,
+            left: quantizeToPhase(coords.left - scrollerRect.left, cellWidthPx, Math.round(cellWidthPx / 2)) + (inset?.x ?? 0),
+            top: quantizeToPhase(coords.top - scrollerRect.top + scroller.scrollTop, lineHeightPxNow, Math.round(lineHeightPxNow / 2)) + (inset?.y ?? 0),
+          };
+        });
+      },
+      write: (cells) => {
+        for (const cell of cells) if (cell) cell.el.style.transform = `translate(${cell.left}px, ${cell.top}px)`;
+      },
+    });
   }, []);
 
   const updateCaret = useCallback(() => {
@@ -4098,6 +4146,7 @@ export function CM6Editor({
               el.style.setProperty('--flow-trail-saturation', box.saturation.toFixed(3));
               trailGroup(trailLayer).appendChild(el);
               flowTrailLastRef.current = el;
+              flowTrailAnchorsRef.current.push({ el, pos: view.state.selection.main.head, fresh: true });
               const row = flowTrailRowRef.current;
               if (row.top === cell.grid.top) row.count += 1;
               else { row.top = cell.grid.top; row.count = 1; }
@@ -4106,6 +4155,31 @@ export function CM6Editor({
             if (event.key === 'Enter' && flowTrailLastRef.current) {
               closeTrailBox(flowTrailLastRef.current);
               flowTrailLastRef.current = null;
+              // The caret left behind: a copy of the caret, in its colour as
+              // it stands now (held at the blink's peak while typing), on the
+              // cell where the line was broken, fading on the trail's curve
+              // and anchored like the boxes. Placed by the caret's own inset
+              // box, so the anchor carries that inset.
+              const caretEl = caretElRef.current;
+              const caretCell = caretEl ? readCaretCellInScroll(view) : null;
+              const ghostLayer = flowTrailBoxesRef.current;
+              if (caretEl && caretCell && ghostLayer) {
+                const caretLook = getComputedStyle(caretEl);
+                const ghost = document.createElement('div');
+                ghost.className = 'flow-trail-ghost';
+                const inset = { x: caretCell.left - caretCell.grid.left, y: caretCell.top - caretCell.grid.top };
+                ghost.style.transform = `translate(${caretCell.left}px, ${caretCell.top}px)`;
+                ghost.style.width = `${caretCell.width}px`;
+                ghost.style.height = `${caretCell.height}px`;
+                ghost.style.backgroundColor = caretLook.backgroundColor;
+                ghost.style.borderRadius = caretLook.borderRadius;
+                trailGroup(ghostLayer).appendChild(ghost);
+                const fade = flowMeter.trailFade();
+                // Starts at full strength, under the layer's full-flow alpha
+                // like every box, and with the idle decay like them.
+                fadeTrailBox(ghost, 1, fade.fadeMaxTime, fade.fadeShape);
+                flowTrailAnchorsRef.current.push({ el: ghost, pos: view.state.selection.main.head, fresh: true, inset });
+              }
             }
             flowMeter.reportKey(event);
           }
@@ -4464,6 +4538,7 @@ export function CM6Editor({
             });
           }
         }
+        if (update.docChanged && flowTrailAnchorsRef.current.length > 0) relayoutFlowTrail(update.view, update.changes);
         if (update.docChanged) {
           // Exact position remap via CM6's own ChangeSet.mapPos -- the same
           // mechanism CM6 uses internally to reposition marks/decorations/

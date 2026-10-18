@@ -178,6 +178,11 @@ export const flowMeter = {
     return { level: saturation * trailStrength, saturation, ...trailFade }
   },
 
+  /** The trail's fade (`fadeMaxTime`, `fadeShape`), for marks left by a key that leaves no box of its own (the caret left behind at a line break). */
+  trailFade(): { fadeMaxTime: number; fadeShape: number } {
+    return { fadeMaxTime: trailFade.fadeMaxTime, fadeShape: trailFade.fadeShape }
+  },
+
   /** Called with the idle decay's factor whenever it changes: 1 while typing, falling to 0 once typing stops. */
   subscribeIdle(listener: IdleListener): () => void {
     idleListeners.add(listener)
