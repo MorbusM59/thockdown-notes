@@ -132,6 +132,10 @@ export interface EditorTextChangeEvent {
   // change actually inserted, which depends on the active OS keyboard
   // layout (e.g. QWERTY vs QWERTZ).
   physicalKeyCode?: string;
+  // The flow kick's accent (0..1) when the keydown that produced this edit
+  // reached full flow (`flowMeter.reportKey`); undefined otherwise. Played on
+  // this edit's own click (`TypingSoundPlayOptions.accent`).
+  flowAccent?: number;
   /**
    * The single contiguous edit that produced `text` from `previousText`, in
    * `previousText` coordinates -- or null when this change was not a single

@@ -1037,6 +1037,8 @@ export function CM6Editor({
   // no immediately-preceding keydown (undo/redo, programmatic edits) never
   // inherits a stale code from an unrelated earlier keystroke.
   const lastPhysicalKeyCodeRef = useRef<string | null>(null);
+  // The flow accent of the last keydown, carried onto the edit it produces like the physical key code.
+  const lastFlowAccentRef = useRef(0);
   // TEMP, read-only diagnostic for the Phase-4 arrow-up chunk-boundary drift
   // investigation (docs/cm6-parity-hardening-plan.md lead #4) -- opt-in via
   // localStorage.setItem('thockdown:debug-cage-state', '1'). Exposes a pure
@@ -4073,6 +4075,7 @@ export function CM6Editor({
       EditorView.domEventObservers({
         keydown: (event, view) => {
           lastPhysicalKeyCodeRef.current = event.code;
+          lastFlowAccentRef.current = 0;
           // The typing flow meter (flow/flowMeter.ts) hears every key typed
           // into an editable note; a read-only one (the User Guide) types
           // nothing, and an IME composition is not keystrokes.
@@ -4102,7 +4105,7 @@ export function CM6Editor({
               else { row.top = cell.grid.top; row.count = 1; }
               fadeTrailBox(el, box.level * lineRampShare(row.count, box.lineRamp), box.fadeMaxTime, box.fadeShape);
             }
-            flowMeter.reportKey(event);
+            lastFlowAccentRef.current = flowMeter.reportKey(event);
           }
           if (debugInputLagEnabled) {
             debugLastKeydownAtRef.current = performance.now();
@@ -4510,6 +4513,8 @@ export function CM6Editor({
 
           const physicalKeyCode = lastPhysicalKeyCodeRef.current ?? undefined;
           lastPhysicalKeyCodeRef.current = null;
+          const flowAccent = lastFlowAccentRef.current || undefined;
+          lastFlowAccentRef.current = 0;
 
           const event: EditorTextChangeEvent = {
             source: isProgrammaticHydration ? 'initial-load' : 'user-input',
@@ -4517,6 +4522,7 @@ export function CM6Editor({
             previousText,
             selection: nextSelection,
             physicalKeyCode,
+            flowAccent,
             edit: readSingleRangeEdit(update.changes),
           };
           debugCheckpoint('before bindings.onTextChange');

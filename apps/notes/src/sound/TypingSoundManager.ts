@@ -116,8 +116,9 @@ export interface TypingSoundPlayOptions {
   physicalKeyCode?: string
   // The flow kick's ACCENT, 0..1: the press is played louder
   // (FLOW_ACCENT_GAIN), higher (FLOW_ACCENT_DETUNE_CENTS) and sent into the
-  // flow room (FLOW_ACCENT_REVERB_SEND), each scaled by this. Normally not
-  // passed by a caller but taken from `armFlowAccent` (see there).
+  // flow room (FLOW_ACCENT_REVERB_SEND), each scaled by this. Passed for the
+  // click of the keystroke that reached full flow, which the editor carries
+  // on that key's edit (`EditorTextChangeEvent.flowAccent`).
   accent?: number
 }
 
@@ -179,10 +180,6 @@ const FLOW_REVERB_LOWPASS_HZ = 6500
 const FLOW_ACCENT_GAIN = 2.5
 const FLOW_ACCENT_DETUNE_CENTS = 500
 const FLOW_ACCENT_REVERB_SEND = 1.2
-// How long an armed accent waits for its press. The meter hears the key on
-// keydown and the click is played when the edit lands, a moment later; a
-// key that turns out to make no sound must not leave the accent for the next.
-const FLOW_ACCENT_WINDOW_MS = 150
 
 export class TypingSoundManager {
   private audioContext: AudioContext | null = null
@@ -199,7 +196,6 @@ export class TypingSoundManager {
   // is above zero, so with flow off it is never in the graph at all.
   private flowReverbSend: GainNode | null = null
   private flowRoom: ConvolverNode | null = null
-  private armedAccent: { strength: number; atMs: number } | null = null
   // A high-pass between the master and the speakers, for an app-wide sweep
   // (the typing flow's peak, flow/flowPeak.ts).
   private outputHighpassNode: BiquadFilterNode | null = null
@@ -522,8 +518,7 @@ export class TypingSoundManager {
     // nothing here worth doing on the keystroke's own call stack.
     if (!this.isAnyLayerAudible()) return
 
-    const accent = options?.accent ?? this.takeArmedAccent()
-    if (accent > 0) options = { ...options, accent }
+    const accent = options?.accent ?? 0
 
     const keyId = options?.keyId
     // A bounced buffer has its pitch baked in, so an accented press is
@@ -675,22 +670,6 @@ export class TypingSoundManager {
     if (this.flowReverbSend && this.audioContext) {
       this.flowReverbSend.gain.setTargetAtTime(next * FLOW_REVERB_SEND_GAIN, this.audioContext.currentTime, 0.05)
     }
-  }
-
-  /**
-   * Accents the next press played within FLOW_ACCENT_WINDOW_MS (see
-   * `TypingSoundPlayOptions.accent`). Armed by the flow kick, which fires on
-   * the keydown that reached full flow, before that key's click is played.
-   */
-  armFlowAccent(strength: number): void {
-    this.armedAccent = strength > 0 ? { strength: Math.min(1, strength), atMs: performance.now() } : null
-  }
-
-  private takeArmedAccent(): number {
-    const armed = this.armedAccent
-    this.armedAccent = null
-    if (!armed || performance.now() - armed.atMs > FLOW_ACCENT_WINDOW_MS) return 0
-    return armed.strength
   }
 
   /** The high-pass after the master, or null before the audio graph exists. Its cutoff rests below hearing. */

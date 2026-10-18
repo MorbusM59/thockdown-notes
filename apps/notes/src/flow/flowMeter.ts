@@ -161,10 +161,16 @@ export const flowMeter = {
     }
   },
 
-  /** Called for every keydown the editor sees while it is editable. */
-  reportKey(event: KeyboardEvent): void {
-    if (!enabled) return
-    if (!isFlowHit(event)) return
+  /**
+   * Called for every keydown the editor sees while it is editable. Returns
+   * the ACCENT for this key's own click: the peak strength when this key fired
+   * the kick, otherwise 0. The editor carries it on the edit the key produces
+   * (`EditorTextChangeEvent.flowAccent`), so it reaches exactly that key's sound.
+   */
+  reportKey(event: KeyboardEvent): number {
+    if (!enabled) return 0
+    if (!isFlowHit(event)) return 0
+    let accent = 0
     const now = nowSec()
     if (event.key.length === 1) reportCharacter(now)
     const before = flowLevelAt(state, now, tuning)
@@ -177,11 +183,13 @@ export const flowMeter = {
         setFull(true)
         if (kickArmed) {
           kickArmed = false
+          accent = peakStrength
           for (const listener of kickListeners) listener()
         }
       }
     }
     ensureRunning()
+    return accent
   },
 
   /** The trail's strength, fade, new-row ramp and peak (`flow/flowTrail.ts`); the editor reads them per keystroke (`trailBox`) and per kick (`peakStrength`). */

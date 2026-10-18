@@ -8,8 +8,9 @@
  *   `PEAK_HIGHPASS_HZ` down to where it rests below hearing, and its resonance
  *   raised to `PEAK_RESONANCE_Q` on the same curve. Nothing new is played:
  *   the sweep only filters what is already sounding;
- * - an ACCENT on the keystroke that reached full flow, armed here and played
- *   by `TypingSoundManager` (louder, higher, into the flow room);
+ * - an ACCENT on the keystroke that reached full flow, played by
+ *   `TypingSoundManager` (louder, higher, into the flow room); the editor
+ *   carries it on that key's own edit (`flowMeter.reportKey`'s return);
  * - the trail's alpha lift and colour drain (`flowTrail.ts`'s `peakTrail`).
  */
 
@@ -75,11 +76,10 @@ function sweep(filter: BiquadFilterNode, peak: number): void {
 }
 
 
-/** The peak's sound: the high-pass sweep on the shared output and on the typing sounds' own context, and the accent on the key that got there. */
+/** The peak's sound: the high-pass sweep on the shared output and on the typing sounds' own context. */
 export function peakSound(peak: number): void {
   if (peak <= 0) return
   sweep(outputHighpass(), peak)
   const typing = typingSoundManager.outputHighpass()
   if (typing) sweep(typing, peak)
-  typingSoundManager.armFlowAccent(peak)
 }
