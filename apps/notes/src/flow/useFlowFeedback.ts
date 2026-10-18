@@ -62,7 +62,7 @@ function musicEqAmount(level: number, full: boolean): number {
 }
 
 export function useFlowFeedback(settings: FlowSettings): void {
-  const { enabled, gainPercent, decayPercent, fadeMaxTime, fadeShape, lineRamp, trail, peak, reverb } = settings
+  const { enabled, gainPercent, decayPercent, fadeMaxTime, fadeShape, lineRamp, trail, peak, reverb, amp } = settings
 
   useEffect(() => {
     flowMeter.configure({ enabled, gainPercent, decayPercent })
@@ -77,7 +77,7 @@ export function useFlowFeedback(settings: FlowSettings): void {
     let full = false
     const unsubscribe = flowMeter.subscribe((level) => {
       lastLevel = level
-      musicPlayerService.setFlowEq(musicEqAmount(level, full))
+      musicPlayerService.setFlowEq(amp * musicEqAmount(level, full))
       setCaretFlow(level * trail)
       typingSoundManager.setFlowReverb(level * reverb)
       soundscapeEngine.setWeatherFloor(level * WEATHER_FLOOR_AT_FULL_FLOW)
@@ -85,7 +85,7 @@ export function useFlowFeedback(settings: FlowSettings): void {
     const unsubscribeKick = flowMeter.subscribeKick(() => peakSound(peak))
     const unsubscribeFull = flowMeter.subscribeFull((isFull) => {
       full = isFull
-      musicPlayerService.setFlowEq(musicEqAmount(lastLevel, full))
+      musicPlayerService.setFlowEq(amp * musicEqAmount(lastLevel, full))
     })
     return () => {
       unsubscribe()
@@ -96,5 +96,5 @@ export function useFlowFeedback(settings: FlowSettings): void {
       typingSoundManager.setFlowReverb(0)
       soundscapeEngine.setWeatherFloor(0)
     }
-  }, [trail, peak, reverb])
+  }, [trail, peak, reverb, amp])
 }

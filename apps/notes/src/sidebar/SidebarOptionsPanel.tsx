@@ -9,6 +9,7 @@ import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
 import {
   DEFAULT_FLOW_SETTINGS,
+  FLOW_AMP_MAX,
   FLOW_DECAY_PERCENT_MAX, FLOW_DECAY_PERCENT_MIN,
   FLOW_FADE_MAX_TIME_MAX, FLOW_FADE_MAX_TIME_MIN, FLOW_FADE_SHAPE_MAX, FLOW_FADE_SHAPE_MIN, FLOW_LINE_RAMP_MAX, FLOW_LINE_RAMP_MIN,
   FLOW_GAIN_PERCENT_MAX, FLOW_GAIN_PERCENT_MIN,
@@ -2987,7 +2988,7 @@ export function SidebarOptionsPanel({
         </div>
         {flowSettings.enabled ? (
           <div className="utility-setting-slider-stack" aria-label="Typing flow settings">
-            {/* How it moves (build, decay), how the trail fades (fade, shape, wrap) and how it answers (look, reverb, trail, peak). */}
+            {/* How it moves (build, decay), how the trail fades (fade, shape, wrap) and how it answers (look, reverb, trail, peak, amp). */}
             <OptionsSliderRows rows={[2, 3, 2, 2]}>
               <CompactScrollbarSlider
                 id="flow-gain"
@@ -3101,6 +3102,18 @@ export function SidebarOptionsPanel({
                 ariaLabel="Strength of the peak on reaching full flow"
                 defaultValue={DEFAULT_FLOW_SETTINGS.peak}
                 onCommit={(value) => setFlowSettings((prev) => ({ ...prev, peak: value }))}
+              />
+              <CompactScrollbarSlider
+                id="flow-amp"
+                min={0}
+                max={FLOW_AMP_MAX}
+                step={0.01}
+                value={flowSettings.amp}
+                trackLabel="amp"
+                tooltipLabel="Amp boost: how strongly playing music's EQ answers flow (half at the right edge of the meter, all of it in full flow)"
+                ariaLabel="Strength of the music's flow EQ"
+                defaultValue={DEFAULT_FLOW_SETTINGS.amp}
+                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, amp: value }))}
               />
             </OptionsSliderRows>
           </div>

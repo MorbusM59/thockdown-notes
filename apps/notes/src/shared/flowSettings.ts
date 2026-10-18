@@ -23,6 +23,8 @@ export interface FlowSettings {
   trail: number
   /** Strength of the peak on reaching full flow, 0..1 (`flow/flowPeak.ts`): the high-pass sweep and the trail's lift and colour drain. */
   peak: number
+  /** Strength of the music's flow EQ (`MusicPlayerService.setFlowEq`), 0..2: scales the whole curve, so 1 is the preset and 2 doubles every band's boost and cut. */
+  amp: number
 }
 
 export const FLOW_GAIN_PERCENT_MIN = 1
@@ -35,11 +37,12 @@ export const FLOW_FADE_SHAPE_MIN = -5
 export const FLOW_FADE_SHAPE_MAX = 5
 export const FLOW_LINE_RAMP_MIN = 1
 export const FLOW_LINE_RAMP_MAX = 20
+export const FLOW_AMP_MAX = 2
 
 export const DEFAULT_FLOW_SETTINGS: FlowSettings = {
   enabled: false,
-  gainPercent: 5,
-  decayPercent: 1,
+  gainPercent: 2.5,
+  decayPercent: 0.25,
   fadeMaxTime: 3,
   fadeShape: 0,
   lineRamp: 4,
@@ -47,6 +50,7 @@ export const DEFAULT_FLOW_SETTINGS: FlowSettings = {
   reverb: 0.5,
   trail: 0.5,
   peak: 1,
+  amp: 1,
 }
 
 function bounded(value: unknown, min: number, max: number, fallback: number): number {
@@ -68,5 +72,6 @@ export function sanitizeFlowSettings(input: unknown): FlowSettings {
     // `caret` is the trail slider's name before it drove the trail too.
     trail: bounded(source.trail ?? (source as { caret?: unknown }).caret, 0, 1, d.trail),
     peak: bounded(source.peak, 0, 1, d.peak),
+    amp: bounded(source.amp, 0, FLOW_AMP_MAX, d.amp),
   }
 }

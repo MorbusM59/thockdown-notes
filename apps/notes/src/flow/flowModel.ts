@@ -24,7 +24,7 @@
  * There is no pace setting: the pace a full meter needs FOLLOWS from the two
  * settings. Holding at 1 costs `2d` a tick, so it takes
  * `2d / (gain * worth)` keys per tick, i.e. `480 * d / (gain * worth)` wpm
- * (`sustainWpm`): 96 wpm at the defaults with an uneven rhythm, 64 with a
+ * (`sustainWpm`): 48 wpm at the defaults with an uneven rhythm, 32 with a
  * perfectly steady one.
  *
  * Above a full meter is a BUFFER of `FLOW_BUFFER` that hits can fill, so a
