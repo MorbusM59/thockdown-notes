@@ -1626,7 +1626,13 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
 
       latestEditorTextRef.current = canonicalText
       latestEditorSelectionRef.current = event.selection
-      recordLiveSelectionInSnapshotCache(event.selection)
+      // Only an edit moves the note's caret. A hydration (a note switch's
+      // whole-document replace, reported as 'initial-load' with the caret at
+      // 0) is the editor being handed a document, and recording it would
+      // overwrite the very entry the activation restore is about to read.
+      if (event.source === 'user-input' || event.source === 'history-undo' || event.source === 'history-redo') {
+        recordLiveSelectionInSnapshotCache(event.selection)
+      }
 
       const isDeferredPreviewTick = deferPreviewOnRapidInput && event.source === 'user-input'
       documentCommit.text(isDeferredPreviewTick)
