@@ -313,6 +313,14 @@ export interface CM6EditorProps {
    */
   readText?: () => string;
   textKey?: string;
+  /**
+   * The selection the note already has, read once when the editor is
+   * created; null (or omitted) when it has none yet. Whatever an editor
+   * starts with it reports as the note's selection (`initial-load`), so
+   * starting a rebuilt editor at 0 for a note whose caret was elsewhere
+   * replaced that caret, and the next save persisted the 0.
+   */
+  readInitialSelection?: () => EditorSelectionState | null;
   scrollbarHost?: HTMLElement | null;
   fontFamily: string;
   fontSizePx: number;
@@ -934,6 +942,10 @@ function insertImageMarkdown(view: EditorView, pos: number, markdown: string): v
   view.dispatch({ changes: { from: at, insert }, selection: { anchor: at + before.length + markdown.length }, userEvent: 'input.drop' });
 }
 
+function readNoSelection(): EditorSelectionState | null {
+  return null;
+}
+
 function readNoText(): string {
   return '';
 }
@@ -948,6 +960,7 @@ export function CM6Editor({
   historyKey,
   readText = readNoText,
   textKey = '',
+  readInitialSelection = readNoSelection,
   scrollbarHost = null,
   fontFamily,
   fontSizePx,
@@ -4574,8 +4587,16 @@ export function CM6Editor({
     ];
 
     const initialText = readText();
+    const establishedSelection = readInitialSelection();
+    const clampToDoc = (offset: number) => Math.max(0, Math.min(offset, initialText.length));
     const view = new EditorView({
-      state: EditorState.create({ doc: initialText, extensions }),
+      state: EditorState.create({
+        doc: initialText,
+        selection: establishedSelection
+          ? EditorSelection.single(clampToDoc(establishedSelection.anchor), clampToDoc(establishedSelection.focus))
+          : undefined,
+        extensions,
+      }),
       parent: containerRef.current,
     });
     viewRef.current = view;

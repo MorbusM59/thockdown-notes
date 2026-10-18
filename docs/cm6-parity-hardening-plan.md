@@ -719,6 +719,24 @@ see below.
   of the failures' own error messages already flag as "test setup is wrong, not a product bug," and
   a cold-boot caret-focus race unrelated to this fix's scope), not a regression from this change.
 
+**3. "No caret" is a state, and a restore runs only when its event happens (2026-10-18).**
+- The store keeps an absent caret as `null` (`getNoteUiState`; `NoteUiState.cursorPos` is
+  `number | null`), and the launch migration no longer rewrites NULL to 0. A note with no caret
+  opens at its END (`buildEditRestoreSnapshotFromUiState`'s fallback, unreachable until then).
+  Rows the old migration already zeroed keep 0.
+- The Time Machine restore effect in `useEditorSectionMount.ts` acts only on a change of
+  `previewedSnapshotId`. It used to act on every run, and its callbacks change identity with
+  `lineHeightPx` (and on any dev hot update), so a line-height change re-applied the note's cached
+  position over the live caret and the next save stored it.
+- The per-note cache (`editModeSnapshotByNoteIdRef`) follows the live caret on typing as well as
+  on selection changes (`recordLiveSelectionInSnapshotCache`); it is what a rebuilt editor is
+  restored from.
+- A rebuilt editor starts from the section's established caret (`readEstablishedSelection` ->
+  `CM6Editor`'s `readInitialSelection`) instead of 0, because whatever it starts with it reports
+  as the note's selection.
+- Gate: `apps/notes/scripts/perf/verifyCaretSurvivesRestoreReruns.mjs`, and
+  `electron/databaseService.caretPosition.test.ts`.
+
 ---
 
 ## Phase 2 — restore full parity with pre-refactor (Lexical) functionality

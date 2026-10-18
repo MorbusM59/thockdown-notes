@@ -365,7 +365,7 @@ function loadStore(): BrowserMockStore {
           Object.entries(parsed.noteUiStates as Record<string, NoteUiState>)
             .map(([key, value]) => [key, {
               anchorBlockIndex: value?.anchorBlockIndex ?? 0,
-              cursorPos: value?.cursorPos ?? 0,
+              cursorPos: value?.cursorPos ?? null,
               previewBlockCache: value?.previewBlockCache ?? null,
             }]),
         )
@@ -625,7 +625,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
         if (input.cursorPos != null || input.previewBlockCache != null) {
           const previousState = store.noteUiStates[input.id] ?? {
             anchorBlockIndex: 0,
-            cursorPos: 0,
+            cursorPos: null,
             previewBlockCache: null,
           }
           store.noteUiStates[input.id] = {
@@ -646,14 +646,14 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
       return mutate((store) => {
         const previousState = store.noteUiStates[input.id] ?? {
           anchorBlockIndex: 0,
-          cursorPos: 0,
+          cursorPos: null,
           previewBlockCache: null,
         }
 
         const nextState: NoteUiState = {
           ...previousState,
           anchorBlockIndex: Object.prototype.hasOwnProperty.call(input.payload, 'anchorBlockIndex') ? input.payload.anchorBlockIndex ?? 0 : previousState.anchorBlockIndex,
-          cursorPos: Object.prototype.hasOwnProperty.call(input.payload, 'cursorPos') ? input.payload.cursorPos ?? 0 : previousState.cursorPos,
+          cursorPos: Object.prototype.hasOwnProperty.call(input.payload, 'cursorPos') ? input.payload.cursorPos ?? null : previousState.cursorPos,
           previewBlockCache: Object.prototype.hasOwnProperty.call(input.payload, 'previewBlockCache') ? input.payload.previewBlockCache ?? null : previousState.previewBlockCache,
         }
 
@@ -664,7 +664,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
     async getNoteUiState(input: LoadNoteInput): Promise<NoteUiState> {
       return storeRef.current.noteUiStates[input.id] ?? {
         anchorBlockIndex: 0,
-        cursorPos: 0,
+        cursorPos: null,
         previewBlockCache: null,
       }
     },

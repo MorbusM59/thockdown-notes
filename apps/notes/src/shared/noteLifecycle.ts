@@ -184,7 +184,8 @@ export type NoteUiStatePayload = {
 
 export type NoteUiState = {
   anchorBlockIndex: number;
-  cursorPos: number;
+  /** Where the caret was left, or null when the note has never recorded one (it then opens at its end). */
+  cursorPos: number | null;
   previewBlockCache: PersistedPreviewBlockCache | null;
 };
 

@@ -5,7 +5,7 @@ import { CM6Editor } from '../components/CM6Editor'
 import { SnapshotTimelineSlider } from '../editor/SnapshotTimelineSlider'
 import { PresentStateCircle } from '../editor/PresentStateCircle'
 import { getEmptyStateSceneMaskUrl } from '../editor/EmptyStateScene'
-import type { EditorAdapter, EditorBindings } from '../editor/EditorContract'
+import type { EditorAdapter, EditorBindings, EditorSelectionState } from '../editor/EditorContract'
 import type { EditorRuntimeMetrics } from '../editor/EditorTypography'
 import type { UseNoteSnapshotsResult } from '../editor/useNoteSnapshots'
 import { resolvePreviewEdgePaddingPx } from '../exportStyles'
@@ -35,6 +35,8 @@ export interface SectionEditorAreaProps {
   adapterRef: MutableRefObject<EditorAdapter | null>
   /** Passed to the editor as `onSurfaceReady` -- see useEditorSectionMount's handleEditorSurfaceReady. */
   onEditorSurfaceReady: () => void
+  /** Passed to the editor as `readInitialSelection` -- see useEditorSectionMount's readEstablishedSelection. */
+  readEstablishedSelection: () => EditorSelectionState | null
   activeNoteId: string | null
   /** What the editor shows (the live text, or a Time Machine snapshot) and the key that changes with it -- see useNoteSnapshotTimeline. */
   readDisplayedText: () => string
@@ -178,6 +180,7 @@ export function SectionEditorArea({
   bindings,
   adapterRef,
   onEditorSurfaceReady,
+  readEstablishedSelection,
   activeNoteId,
   readDisplayedText,
   displayedTextKey,
@@ -432,6 +435,7 @@ export function SectionEditorArea({
                   noteId={activeNoteId}
                   historyKey={previewedSnapshotId === null ? activeNoteId : `${activeNoteId}@snapshot:${previewedSnapshotId}`}
                   readText={readDisplayedText}
+                  readInitialSelection={readEstablishedSelection}
                   textKey={displayedTextKey}
                   scrollbarHost={scrollbarHostEl}
                   fontFamily={editorFontFamily}
