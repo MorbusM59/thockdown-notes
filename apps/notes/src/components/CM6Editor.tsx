@@ -10,7 +10,7 @@ import { matchShortcut, type ShortcutId } from '../shared/keyboardShortcuts';
 import { buildTokenPresentation } from '../editor/MarkdownLineClassification';
 import { suppressNextPlainTypingSoundOnce, typingSoundManager } from '../sound/TypingSoundManager';
 import { flowMeter } from '../flow/flowMeter';
-import { TRAIL_ALPHA_AT_FULL_FLOW, fadeTrailBox, lineRampShare, setTrailIdle, trailGroup } from '../flow/flowTrail';
+import { TRAIL_ALPHA_AT_FULL_FLOW, fadeTrailBox, lineRampShare, setTrailBoxClosed, setTrailIdle, trailGroup } from '../flow/flowTrail';
 
 import { ARROW_KEY_VOICES, SHIFT_TAB_KEY_VOICE, TAB_KEY_VOICE } from '../sound/keyVoices';
 import { readSelectionRect, type SelectionRect } from '../editor/CaretRect';
@@ -1145,6 +1145,11 @@ export function CM6Editor({
   // Which visual row the last box was drawn on and how many boxes it has had,
   // for the trail's new-row ramp (flow/flowTrail.ts's lineRampShare).
   const flowTrailRowRef = useRef<{ top: number; count: number }>({ top: Number.NaN, count: 0 });
+  // The most recent box and its grid cell (scroll coordinates). It is the only
+  // box whose right end can still be open: updateCaret closes it whenever the
+  // caret is not on the cell right after it, and a new box settles the
+  // previous one for good (flow/flowTrail.ts's setTrailBoxClosed).
+  const flowTrailLastRef = useRef<{ el: HTMLElement; left: number; top: number; width: number } | null>(null);
   useEffect(() => {
     const unsubscribeIdle = flowMeter.subscribeIdle((factor) => {
       if (flowTrailBoxesRef.current) setTrailIdle(flowTrailBoxesRef.current, factor);
@@ -2313,6 +2318,17 @@ export function CM6Editor({
     const scrollerTopInLayer = scrollerRect.top - caretLayerRect.top;
     let absoluteLeft = caretRect.left - scrollerRect.left;
     absoluteLeft = quantizeToPhase(absoluteLeft, runtimeCellWidthPx, Math.round(runtimeCellWidthPx / 2));
+
+    // The trail's last box stays open only while the caret is on the cell
+    // right after it.
+    const lastTrailBox = flowTrailLastRef.current;
+    if (lastTrailBox) {
+      if (!lastTrailBox.el.isConnected) flowTrailLastRef.current = null;
+      else {
+        const followed = lastTrailBox.top === quantizedRowTopInScroll && lastTrailBox.left + lastTrailBox.width === absoluteLeft;
+        setTrailBoxClosed(lastTrailBox.el, lastTrailBox.width, !followed);
+      }
+    }
 
     // Options > Caret "size": a per-side deviation from the default box. The
     // default (0) starts one pixel in from the cell's leading grid line and
@@ -4092,6 +4108,12 @@ export function CM6Editor({
               el.style.height = `${cell.grid.height + 1}px`;
               el.style.setProperty('--flow-trail-saturation', box.saturation.toFixed(3));
               trailGroup(trailLayer).appendChild(el);
+              const last = flowTrailLastRef.current;
+              if (last && last.el.isConnected) {
+                const followed = last.top === cell.grid.top && last.left + last.width === cell.grid.left;
+                setTrailBoxClosed(last.el, last.width, !followed);
+              }
+              flowTrailLastRef.current = { el, left: cell.grid.left, top: cell.grid.top, width: cell.grid.width };
               const row = flowTrailRowRef.current;
               if (row.top === cell.grid.top) row.count += 1;
               else { row.top = cell.grid.top; row.count = 1; }
