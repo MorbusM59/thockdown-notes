@@ -497,11 +497,32 @@ function transformStepSpec(oldText: string, next: EditorTransformResult, isolate
 
   if (from === to && insert.length === 0) return { selection };
 
+  // A transform reports the range it rebuilt (a Tab rewrites its whole line),
+  // which is not what changed: the text both sides share at either end is
+  // trimmed off, so the edit CM6 applies is the minimal one and everything
+  // mapped through it -- marks, the flow trail's anchors -- moves with the
+  // text it belongs to instead of being treated as deleted and re-inserted.
+  let start = Math.max(0, Math.min(oldText.length, from));
+  let end = Math.max(start, Math.min(oldText.length, to));
+  let insertStart = 0;
+  let insertEnd = insert.length;
+  while (start < end && insertStart < insertEnd && oldText.charCodeAt(start) === insert.charCodeAt(insertStart)) {
+    start += 1;
+    insertStart += 1;
+  }
+  while (end > start && insertEnd > insertStart && oldText.charCodeAt(end - 1) === insert.charCodeAt(insertEnd - 1)) {
+    end -= 1;
+    insertEnd -= 1;
+  }
+  if (start === end && insertStart === insertEnd) {
+    return { selection, annotations: isolate || next.isolated ? isolateHistory.of('full') : undefined };
+  }
+
   return {
     changes: {
-      from: Math.max(0, Math.min(oldText.length, from)),
-      to: Math.max(0, Math.min(oldText.length, to)),
-      insert,
+      from: start,
+      to: end,
+      insert: insert.slice(insertStart, insertEnd),
     },
     selection,
     annotations: isolate || next.isolated ? isolateHistory.of('full') : undefined,
@@ -1157,9 +1178,8 @@ export function CM6Editor({
   // whose own character has not been inserted yet: that first edit is mapped
   // with assoc -1 so the box stays at the character's start, every later one
   // with assoc 1 so text inserted exactly there pushes it along. A box whose
-  // character is deleted stops being tracked and stays where it was. `inset`
-  // offsets a mark placed inside its cell (the caret left at a line break).
-  const flowTrailAnchorsRef = useRef<Array<{ el: HTMLElement; pos: number; fresh: boolean; inset?: { x: number; y: number } }>>([]);
+  // character is deleted stops being tracked and stays where it was.
+  const flowTrailAnchorsRef = useRef<Array<{ el: HTMLElement; pos: number; fresh: boolean }>>([]);
   useEffect(() => {
     const unsubscribeIdle = flowMeter.subscribeIdle((factor) => {
       if (flowTrailBoxesRef.current) setTrailIdle(flowTrailBoxesRef.current, factor);
@@ -2259,14 +2279,14 @@ export function CM6Editor({
 
   /** The flow trail's anchors mapped through an edit, and the boxes whose character moved re-placed on its cell (see flowTrailAnchorsRef). */
   const relayoutFlowTrail = useCallback((view: EditorView, changes: ChangeSet) => {
-    const moved: Array<{ el: HTMLElement; pos: number; inset?: { x: number; y: number } }> = [];
+    const moved: Array<{ el: HTMLElement; pos: number }> = [];
     const kept: typeof flowTrailAnchorsRef.current = [];
     for (const anchor of flowTrailAnchorsRef.current) {
       if (!anchor.el.isConnected) continue;
       const pos = changes.mapPos(anchor.pos, anchor.fresh ? -1 : 1, MapMode.TrackDel);
       if (pos === null) continue;
       kept.push({ ...anchor, pos, fresh: false });
-      if (pos !== anchor.pos) moved.push({ el: anchor.el, pos, inset: anchor.inset });
+      if (pos !== anchor.pos) moved.push({ el: anchor.el, pos });
     }
     flowTrailAnchorsRef.current = kept;
     if (moved.length === 0) return;
@@ -2278,13 +2298,13 @@ export function CM6Editor({
         const scrollerRect = scroller.getBoundingClientRect();
         const lineHeightPxNow = lineHeightPxRef.current;
         const cellWidthPx = Math.max(1, cellWidthPxRef.current);
-        return moved.map(({ el, pos, inset }) => {
+        return moved.map(({ el, pos }) => {
           const coords = view.coordsAtPos(pos, 1);
           if (!coords) return null;
           return {
             el,
-            left: quantizeToPhase(coords.left - scrollerRect.left, cellWidthPx, Math.round(cellWidthPx / 2)) + (inset?.x ?? 0),
-            top: quantizeToPhase(coords.top - scrollerRect.top + scroller.scrollTop, lineHeightPxNow, Math.round(lineHeightPxNow / 2)) + (inset?.y ?? 0),
+            left: quantizeToPhase(coords.left - scrollerRect.left, cellWidthPx, Math.round(cellWidthPx / 2)),
+            top: quantizeToPhase(coords.top - scrollerRect.top + scroller.scrollTop, lineHeightPxNow, Math.round(lineHeightPxNow / 2)),
           };
         });
       },
@@ -4155,11 +4175,11 @@ export function CM6Editor({
             if (event.key === 'Enter' && flowTrailLastRef.current) {
               closeTrailBox(flowTrailLastRef.current);
               flowTrailLastRef.current = null;
-              // The caret left behind: a copy of the caret, in its colour as
-              // it stands now (held at the blink's peak while typing), on the
-              // cell where the line was broken, fading on the trail's curve
-              // and anchored like the boxes. Placed by the caret's own inset
-              // box, so the anchor carries that inset.
+              // The caret left behind: the caret's grid cell framed in the
+              // trail's colour at the flow of the moment (like the trail's
+              // source), with a copy of the caret inside it in its colour as
+              // it stands now, on the cell where the line was broken, fading
+              // on the trail's curve and anchored like the boxes.
               const caretEl = caretElRef.current;
               const caretCell = caretEl ? readCaretCellInScroll(view) : null;
               const ghostLayer = flowTrailBoxesRef.current;
@@ -4167,18 +4187,25 @@ export function CM6Editor({
                 const caretLook = getComputedStyle(caretEl);
                 const ghost = document.createElement('div');
                 ghost.className = 'flow-trail-ghost';
-                const inset = { x: caretCell.left - caretCell.grid.left, y: caretCell.top - caretCell.grid.top };
-                ghost.style.transform = `translate(${caretCell.left}px, ${caretCell.top}px)`;
-                ghost.style.width = `${caretCell.width}px`;
-                ghost.style.height = `${caretCell.height}px`;
-                ghost.style.backgroundColor = caretLook.backgroundColor;
-                ghost.style.borderRadius = caretLook.borderRadius;
+                ghost.style.transform = `translate(${caretCell.grid.left}px, ${caretCell.grid.top}px)`;
+                ghost.style.width = `${caretCell.grid.width + 1}px`;
+                ghost.style.height = `${caretCell.grid.height + 1}px`;
+                ghost.style.setProperty('--flow-trail-saturation', document.documentElement.style.getPropertyValue('--flow-trail-source-saturation') || '0');
+                const fill = document.createElement('div');
+                fill.className = 'flow-trail-ghost-caret';
+                fill.style.left = `${caretCell.left - caretCell.grid.left}px`;
+                fill.style.top = `${caretCell.top - caretCell.grid.top}px`;
+                fill.style.width = `${caretCell.width}px`;
+                fill.style.height = `${caretCell.height}px`;
+                fill.style.backgroundColor = caretLook.backgroundColor;
+                fill.style.borderRadius = caretLook.borderRadius;
+                ghost.appendChild(fill);
                 trailGroup(ghostLayer).appendChild(ghost);
                 const fade = flowMeter.trailFade();
                 // Starts at full strength, under the layer's full-flow alpha
                 // like every box, and with the idle decay like them.
                 fadeTrailBox(ghost, 1, fade.fadeMaxTime, fade.fadeShape);
-                flowTrailAnchorsRef.current.push({ el: ghost, pos: view.state.selection.main.head, fresh: true, inset });
+                flowTrailAnchorsRef.current.push({ el: ghost, pos: view.state.selection.main.head, fresh: true });
               }
             }
             flowMeter.reportKey(event);

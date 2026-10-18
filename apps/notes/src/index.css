@@ -150,11 +150,18 @@
 }
 
 /* The caret left behind at a manual line break (CM6Editor's keydown): its
-   colour is copied from the caret, its fade is the trail's. */
+   cell framed like the trail's source, the caret's colour copied inside. */
 .flow-trail-ghost {
   position: absolute;
   top: 0;
   left: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--color-flow-trail-now);
+}
+.flow-trail-ghost-caret {
+  position: absolute;
+  /* Positioned against the cell's outer edge, not inside its border. */
+  margin: -1px 0 0 -1px;
 }
 
 /* The last box before a manual line break (flow/flowTrail.ts's
@@ -177,7 +184,8 @@
    saturation, --flow-trail-saturation, the flow level the box was typed at
    (set on each box by the editor; flow/flowTrail.ts). */
 .flow-trail-box,
-.flow-trail-source {
+.flow-trail-source,
+.flow-trail-ghost {
   --color-flow-trail-now: hsl(from var(--color-flow-trail) h calc(s * var(--flow-trail-saturation, 1)) l / alpha);
 }
 
