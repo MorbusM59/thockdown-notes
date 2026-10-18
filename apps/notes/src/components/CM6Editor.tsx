@@ -1110,6 +1110,13 @@ export function CM6Editor({
   // Immersive mode's painted scroll column -- see paintScrollThumb.
   const gridScrollPaintRef = useRef<HTMLDivElement | null>(null);
   const [caretStyle, setCaretStyle] = useState<React.CSSProperties | null>(null);
+  // The flow trail's SOURCE: the caret's grid cell traced on all four grid
+  // lines in the trail's colour, at the live flow (--flow-trail-source, set by
+  // flow/useFlowFeedback.ts), drawn above the caret. Shown and placed with the
+  // caret, so it is state beside caretStyle and also written straight to the
+  // element like the caret's own transform.
+  const [flowSourceStyle, setFlowSourceStyle] = useState<React.CSSProperties | null>(null);
+  const flowSourceElRef = useRef<HTMLDivElement | null>(null);
   const caretAnimationFrameRef = useRef<number | null>(null);
   // scrollerRect/layerRect don't change on a plain text keystroke -- only
   // the selection Range rect does. Cached across updateCaret calls and only
@@ -2187,7 +2194,14 @@ export function CM6Editor({
    * Only the move case takes this path. Hiding the caret (`null`) unmounts
    * the element, which nothing here can do sooner than React can.
    */
-  const applyCaretStyle = useCallback((style: { transform: string; width: number; height: number }) => {
+  const applyCaretStyle = useCallback((style: { transform: string; width: number; height: number }, source: { transform: string; width: number; height: number }) => {
+    const sourceEl = flowSourceElRef.current;
+    if (sourceEl) {
+      sourceEl.style.transform = source.transform;
+      sourceEl.style.width = `${source.width}px`;
+      sourceEl.style.height = `${source.height}px`;
+    }
+    setFlowSourceStyle(source);
     const caretEl = caretElRef.current;
     if (caretEl) {
       caretEl.style.transform = style.transform;
@@ -2318,6 +2332,12 @@ export function CM6Editor({
       transform: `translate(${scrollerLeftInLayer + absoluteLeft + caretOriginInsetPx}px, ${scrollerTopInLayer + topInViewport + caretOriginInsetPx}px)`,
       width: caretWidthPx,
       height: caretHeightPx,
+    }, {
+      // The grid cell itself: its four 1px grid lines, as a trail box draws
+      // its top and bottom ones (one pixel over, to cover the far lines).
+      transform: `translate(${scrollerLeftInLayer + absoluteLeft}px, ${scrollerTopInLayer + topInViewport}px)`,
+      width: runtimeCellWidthPx + 1,
+      height: lineHeightPxNow + 1,
     });
   }, [applyCaretStyle]);
 
@@ -6732,6 +6752,14 @@ export function CM6Editor({
             // background-color; see index.css's .thockdown-block-caret.
             ...caretStyle,
           }}
+        />
+      )}
+      {hasViewportLines && fontReady && !caretHidden && caretStyle && flowSourceStyle && (
+        <div
+          ref={flowSourceElRef}
+          className="flow-trail-source"
+          // Above the caret (8), below the text (10).
+          style={{ position: 'absolute', pointerEvents: 'none', zIndex: 9, top: 0, left: 0, ...flowSourceStyle }}
         />
       )}
     </div>

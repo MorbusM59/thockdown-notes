@@ -149,10 +149,21 @@
   border-bottom: 1px solid var(--color-flow-trail-now);
 }
 
+/* The trail's source: the caret's grid cell, all four lines, at the live
+   flow (--flow-trail-source for alpha, --flow-trail-source-saturation for
+   colour; flow/useFlowFeedback.ts), placed with the caret by CM6Editor. */
+.flow-trail-source {
+  box-sizing: border-box;
+  border: 1px solid var(--color-flow-trail-now);
+  --flow-trail-saturation: var(--flow-trail-source-saturation, 0);
+  opacity: var(--flow-trail-source, 0);
+}
+
 /* The trail's colour now: the flow colour at a share of its own HSL
    saturation, --flow-trail-saturation, the flow level the box was typed at
    (set on each box by the editor; flow/flowTrail.ts). */
-.flow-trail-box {
+.flow-trail-box,
+.flow-trail-source {
   --color-flow-trail-now: hsl(from var(--color-flow-trail) h calc(s * var(--flow-trail-saturation, 1)) l / alpha);
 }
 

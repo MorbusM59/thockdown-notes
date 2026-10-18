@@ -1,6 +1,7 @@
 /**
  * Hands the reader's flow settings to the meter, and the meter's level to the
- * channels that need no React: the caret's hold, the reverb send, the
+ * channels that need no React: the caret's hold, the trail's source at
+ * the caret, the reverb send, the
  * soundscape's weather and the music's EQ. The look is the other channel and
  * lives in `FlowOverlays`, because it has to go through the theme.
  */
@@ -11,6 +12,7 @@ import { flowMeter } from './flowMeter'
 import { typingSoundManager } from '../sound/TypingSoundManager'
 import { soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
 import { musicPlayerService } from '../sound/MusicPlayerService'
+import { TRAIL_ALPHA_AT_FULL_FLOW } from './flowTrail'
 
 /** At full flow the soundscape's weather swings between this share of a full gust and a full gust, rather than from a full lull. */
 const WEATHER_FLOOR_AT_FULL_FLOW = 0.8
@@ -44,7 +46,12 @@ export function useFlowFeedback(settings: FlowSettings): void {
   useEffect(() => () => setCaretHold(0), [])
 
   useEffect(() => {
+    const root = document.documentElement
     const unsubscribe = flowMeter.subscribe((level) => {
+      // The trail's source at the caret (CM6Editor's .flow-trail-source): the
+      // alpha a box typed now would start at, and its saturation.
+      root.style.setProperty('--flow-trail-source', (Math.min(1, level) * trail * TRAIL_ALPHA_AT_FULL_FLOW).toFixed(4))
+      root.style.setProperty('--flow-trail-source-saturation', Math.min(1, level).toFixed(4))
       // The music's flow EQ (`MusicPlayerService.setFlowEq`) in proportion to
       // the level, the whole curve at full flow, scaled by the amp slider.
       musicPlayerService.setFlowEq(amp * level)
@@ -53,9 +60,11 @@ export function useFlowFeedback(settings: FlowSettings): void {
     })
     return () => {
       unsubscribe()
+      root.style.removeProperty('--flow-trail-source')
+      root.style.removeProperty('--flow-trail-source-saturation')
       musicPlayerService.setFlowEq(0)
       typingSoundManager.setFlowReverb(0)
       soundscapeEngine.setWeatherFloor(0)
     }
-  }, [reverb, amp])
+  }, [trail, reverb, amp])
 }
