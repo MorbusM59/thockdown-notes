@@ -91,16 +91,13 @@ export function setTrailIdle(boxes: HTMLElement, factor: number): void {
 }
 
 /**
- * Closes a box's right end, or opens it again: a box that is the last of its
- * row and is not followed by the caret (a wrap, a line break, the caret moved
- * away) draws the grid line on its right too, so the trail reads as a closed
- * rectangle rather than running off into nothing. The box is widened by the
- * 1px of that line, as its height already covers the bottom one. The border
- * is part of the box, so it fades with it.
+ * Closes a box's right end with the grid line on its right, for the last box
+ * before a manual line break, so the trail ends as a closed rectangle. The
+ * box is widened by the 1px of that line (its height already covers the
+ * bottom one). The border is part of the box, so it fades with it.
  */
-export function setTrailBoxClosed(el: HTMLElement, cellWidth: number, closed: boolean): void {
-  if ((el.dataset.closed !== undefined) === closed) return
-  if (closed) el.dataset.closed = ''
-  else delete el.dataset.closed
-  el.style.width = `${closed ? cellWidth + 1 : cellWidth}px`
+export function closeTrailBox(el: HTMLElement): void {
+  if (el.dataset.closed !== undefined) return
+  el.dataset.closed = ''
+  el.style.width = `${parseFloat(el.style.width) + 1}px`
 }
