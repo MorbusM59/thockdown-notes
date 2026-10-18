@@ -63,7 +63,7 @@ type ViewStyleKey =
   | 'bubblerone'
 export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   'sectionId' | 'isSectionActive' | 'activeNoteId' | 'isPreviewMode' | 'previewedSnapshotId' | 'bindings' | 'adapterRef' | 'sectionContainerRef'
-  | 'onEditorSurfaceReady'
+  | 'onEditorSurfaceReady' | 'readEstablishedSelection'
   | 'readDisplayedText' | 'displayedTextKey' | 'activeNoteHasDebugTag' | 'isPreviewingSnapshot' | 'isCaretSuspended' | 'previewTextureRef' | 'previewBridgeHostRef'
   | 'previewScrollRef' | 'handlePreviewScroll' | 'blockPreviewEditMutation' | 'previewMarkdownElement'
   | 'previewScrollbarTrackRef' | 'handlePreviewTrackPointerDown' | 'handlePreviewTrackContextMenu' | 'previewScrollbarThumbRef' | 'isDraggingPreviewScrollThumb'
@@ -460,6 +460,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
     captureCurrentAnchorBlockIndex,
     scheduleFocusEditorInEditMode,
     handleEditorSurfaceReady,
+    readEstablishedSelection,
     applyEditRestoreSnapshot,
     bindings,
     toggleRenderViewMode,
@@ -1692,9 +1693,10 @@ export function EditorSection(rawProps: EditorSectionProps) {
     // Destructured out of editorSectionMountRest above (activateNote writes
     // it), so the spread no longer carries it -- put it back by hand.
     pendingRenderViewSourceAnchorRef,
-    // Same: destructured out above to hand to the editor as its ready
-    // signal, so the spread no longer carries it.
+    // Same: destructured out above to hand to the editor (its ready signal
+    // and its starting selection), so the spread no longer carries them.
     handleEditorSurfaceReady,
+    readEstablishedSelection,
     queueSave,
     flushPendingSaveNow,
     cancelPendingSave,
@@ -2203,6 +2205,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
         bindings={bindings}
         adapterRef={adapterRef}
         onEditorSurfaceReady={handleEditorSurfaceReady}
+        readEstablishedSelection={readEstablishedSelection}
         activeNoteId={activeNoteId}
         readDisplayedText={readDisplayedText}
         displayedTextKey={displayedTextKey}

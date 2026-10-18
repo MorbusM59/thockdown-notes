@@ -2348,7 +2348,7 @@ export class DatabaseService {
 
   getNoteUiState(noteId: string): {
     anchorBlockIndex: number;
-    cursorPos: number;
+    cursorPos: number | null;
     previewBlockCache: string | null;
   } {
     const db = this.requireDb();
@@ -2366,12 +2366,15 @@ export class DatabaseService {
     // A note row can sit with these columns at SQL NULL from creation until
     // the first UI-state save fires (see saveNoteUiState) -- if the app
     // closes or the note is switched away from before that, NULL persists
-    // indefinitely. Every caller expects real numbers, so this is the one
-    // place that turns "never saved yet" into the same default (start of
-    // document, no scroll) a fresh note should have.
+    // indefinitely. A missing scroll anchor means the top of the note, so it
+    // reads as 0. A missing CARET is not a position at all and stays null:
+    // the restore path (EditRestoreMath's buildEditRestoreSnapshotFromUiState)
+    // places a note that has none at its END, and reading null as 0 here
+    // made that rule unreachable -- every never-edited note opened with the
+    // caret in front of its first character.
     return {
       anchorBlockIndex: row?.anchorBlockIndex ?? 0,
-      cursorPos: row?.cursorPos ?? 0,
+      cursorPos: row?.cursorPos ?? null,
       previewBlockCache: row?.previewBlockCache ?? null,
     };
   }
@@ -4123,13 +4126,12 @@ export class DatabaseService {
 
     // Notes are inserted (both on creation and on filesystem-sync upsert)
     // without ever setting cursorPos/anchorBlockIndex/progress*, so they
-    // start at SQL NULL until the first UI-state save. getNoteUiState now
-    // defaults NULL to 0 on read, but backfill any rows already sitting on a
-    // stale NULL so direct SQL access elsewhere sees the same default.
+    // start at SQL NULL until the first UI-state save. The scroll columns
+    // are backfilled to their default; cursorPos is NOT, because NULL there
+    // means "no caret recorded" and getNoteUiState passes it on as such.
     db.exec(`
       UPDATE notes SET progressPreview = 0 WHERE progressPreview IS NULL;
       UPDATE notes SET progressEdit = 0 WHERE progressEdit IS NULL;
-      UPDATE notes SET cursorPos = 0 WHERE cursorPos IS NULL;
       UPDATE notes SET anchorBlockIndex = 0 WHERE anchorBlockIndex IS NULL;
     `);
     this.ensureEditorSectionsColumn('lastActiveNoteId', 'TEXT REFERENCES notes(id) ON DELETE SET NULL');

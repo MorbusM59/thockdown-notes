@@ -259,6 +259,8 @@ export interface UseEditorSectionMountResult {
   scheduleFocusEditorInEditMode: (options?: { restoreSelection?: boolean }) => void
   /** Hand to the editor as `onSurfaceReady`: releases a focus request that arrived before the editor was usable. */
   handleEditorSurfaceReady: () => void
+  /** Passed to the editor as `readInitialSelection` -- see readEstablishedSelection. */
+  readEstablishedSelection: () => EditorSelectionState | null
   persistEditUiState: (noteId: string, options?: { immediate?: boolean }) => void
   /** Cancels a debounced persistEditUiState write without flushing it -- mirrors useNoteSaveQueue's cancelPendingSave, for unmount cleanup. */
   cancelPendingEditUiStatePersist: () => void
@@ -833,6 +835,23 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
    * where the surface never appears at all. The information it was waiting for
    * has an owner and a moment; now it waits for them.
    */
+  // The caret this section has already established for the note on screen,
+  // or null when it has none yet. Established means the note's position has
+  // been restored (its entry in editModeSnapshotByNoteIdRef exists), after
+  // which latestEditorSelectionRef is the live caret -- typing and moving
+  // both write it, where the cached entry is only refreshed at a transition.
+  // Null is the honest answer for an editor created as part of a note load:
+  // the restore that follows hands it the caret. An editor created for a
+  // note whose caret IS established (rebuilt in place, as a dev hot update
+  // does) starts from this rather than from the start of the document,
+  // because whatever an editor starts with it reports as the note's
+  // selection and the next save writes it.
+  const readEstablishedSelection = useCallback((): EditorSelectionState | null => {
+    const noteId = activeNoteIdRef.current
+    if (!noteId || !editModeSnapshotByNoteIdRef.current.has(noteId)) return null
+    return latestEditorSelectionRef.current
+  }, [latestEditorSelectionRef])
+
   const handleEditorSurfaceReady = useCallback(() => {
     const pending = pendingEditorFocusRef.current
     if (!pending) return
@@ -1517,6 +1536,30 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     isOffsetInFencedCodeBlock(text, offset, markdownInlineCacheRef.current)
   ), [markdownInlineCacheRef])
 
+  // The note's cached position follows its live caret, whatever moved it.
+  // The cache is what an editor rebuilt for the open note is restored from
+  // (onLifecycle's 'ready' branch below) and what returning from a Time
+  // Machine snapshot lands on, so it has to say where the caret IS. Only a
+  // selection-only change used to refresh it; typing moved the caret and
+  // left the cache at wherever the last click had put it, so a rebuild sent
+  // the caret back there and the next save stored that.
+  const recordLiveSelectionInSnapshotCache = useCallback((selection: EditorSelectionState) => {
+    if (isPreviewMode || !activeNoteId) return
+    const cached = editModeSnapshotByNoteIdRef.current.get(activeNoteId)
+    if (!cached) return
+    updateEditModeSnapshotCache({
+      ...cached,
+      collapsedSelection: {
+        anchor: selection.end,
+        focus: selection.end,
+        start: selection.end,
+        end: selection.end,
+        isCollapsed: true,
+      },
+      fullSelection: selection,
+    })
+  }, [isPreviewMode, activeNoteId, updateEditModeSnapshotCache])
+
   const bindings = useMemo<EditorBindings>(() => ({
     onLifecycle: (event) => {
       if (event.phase !== 'ready') return
@@ -1583,6 +1626,13 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
 
       latestEditorTextRef.current = canonicalText
       latestEditorSelectionRef.current = event.selection
+      // Only an edit moves the note's caret. A hydration (a note switch's
+      // whole-document replace, reported as 'initial-load' with the caret at
+      // 0) is the editor being handed a document, and recording it would
+      // overwrite the very entry the activation restore is about to read.
+      if (event.source === 'user-input' || event.source === 'history-undo' || event.source === 'history-redo') {
+        recordLiveSelectionInSnapshotCache(event.selection)
+      }
 
       const isDeferredPreviewTick = deferPreviewOnRapidInput && event.source === 'user-input'
       documentCommit.text(isDeferredPreviewTick)
@@ -1643,23 +1693,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
 
       latestEditorSelectionRef.current = event.selection
       documentCommit.selection()
-
-      if (!isPreviewMode && activeNoteId) {
-        const cached = editModeSnapshotByNoteIdRef.current.get(activeNoteId)
-        if (cached) {
-          updateEditModeSnapshotCache({
-            ...cached,
-            collapsedSelection: {
-              anchor: event.selection.end,
-              focus: event.selection.end,
-              start: event.selection.end,
-              end: event.selection.end,
-              isCollapsed: true,
-            },
-            fullSelection: event.selection,
-          })
-        }
-      }
+      recordLiveSelectionInSnapshotCache(event.selection)
     },
     onTabIndentTransform: ({ shiftKey, text, selection }) => {
       if (previewedSnapshotId !== null) {
@@ -1960,6 +1994,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       queueAppStateSave(activeNoteId)
     },
   }), [
+    recordLiveSelectionInSnapshotCache,
     activeNoteId,
     advanceMarkdownInlineCache,
     commitTransformResult,
@@ -2904,16 +2939,29 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       }
     }
   }, [activeNoteId, isPreviewMode, resolvePreviewSourceAnchorFromContainer])
-  // The Editor only makes its content visible once something calls
-  // adapter.applySnapshot({ viewportLines: ... }) on it (see Editor.tsx's
-  // hasViewportLines gate). Normally that happens via the note-activation
-  // restore effect, keyed on activeNoteId -- but activeNoteId never changes
-  // when toggling snapshot preview (only the synthetic `key` on <Editor>
-  // does), so that effect never re-fires for a preview remount and the
-  // freshly-mounted editor is left permanently hidden. This effect is the
-  // preview-specific equivalent: it fires on every preview transition and
-  // explicitly restores visibility for whichever content just got mounted.
+  // Places the editor when the section moves into or out of a Time Machine
+  // snapshot: into one, at the snapshot's own anchor; back to the present,
+  // at the note's last live position. The note-activation effect cannot do
+  // this, because entering or leaving a snapshot does not change the note.
+  //
+  // IT ACTS ON THE TRANSITION ONLY -- a change of previewedSnapshotId --
+  // and not on every run. It is an effect because the transition arrives as
+  // state, but its dependencies are callbacks whose identity changes for
+  // reasons that are not a transition (applyEditRestoreSnapshot follows
+  // lineHeightPx; a dev hot update replaces them all) and activeNoteId,
+  // whose change belongs to the note-activation effect. Acting on every run
+  // re-applied the cached position over the live caret each time, or the
+  // start of the document when there was none, and the next save wrote it.
+  // For the same reason the pending snapshot lookup is cancelled by the next
+  // transition or the unmount, not by an unrelated re-run.
+  const lastPreviewedSnapshotIdRef = useRef(previewedSnapshotId)
+  const cancelPendingSnapshotRestoreRef = useRef<(() => void) | null>(null)
+  useEffect(() => () => cancelPendingSnapshotRestoreRef.current?.(), [])
   useEffect(() => {
+    if (lastPreviewedSnapshotIdRef.current === previewedSnapshotId) return
+    lastPreviewedSnapshotIdRef.current = previewedSnapshotId
+    cancelPendingSnapshotRestoreRef.current?.()
+    cancelPendingSnapshotRestoreRef.current = null
     if (!activeNoteId) return
 
     // Derived from previewedSnapshotId directly rather than threaded in as
@@ -2979,9 +3027,10 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       }
 
       void restoreSnapshotPosition()
-      return () => {
+      cancelPendingSnapshotRestoreRef.current = () => {
         cancelled = true
       }
+      return
     }
 
     // Returning to present: prefer the note's last-known live edit position
@@ -3064,6 +3113,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     focusEditorInEditMode,
     scheduleFocusEditorInEditMode,
     handleEditorSurfaceReady,
+    readEstablishedSelection,
     persistEditUiState,
     cancelPendingEditUiStatePersist,
     persistActiveNoteEditModeStateNow,
