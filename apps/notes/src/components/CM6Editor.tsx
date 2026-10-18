@@ -10,8 +10,7 @@ import { matchShortcut, type ShortcutId } from '../shared/keyboardShortcuts';
 import { buildTokenPresentation } from '../editor/MarkdownLineClassification';
 import { suppressNextPlainTypingSoundOnce, typingSoundManager } from '../sound/TypingSoundManager';
 import { flowMeter } from '../flow/flowMeter';
-import { TRAIL_ALPHA_AT_FULL_FLOW, fadeTrailBox, lineRampShare, peakTrail, setTrailFull, setTrailIdle, trailGroup } from '../flow/flowTrail';
-import { PEAK_DURATION_SEC, PEAK_SHAPE } from '../flow/flowPeak';
+import { TRAIL_ALPHA_AT_FULL_FLOW, fadeTrailBox, lineRampShare, setTrailIdle, trailGroup } from '../flow/flowTrail';
 
 import { ARROW_KEY_VOICES, SHIFT_TAB_KEY_VOICE, TAB_KEY_VOICE } from '../sound/keyVoices';
 import { readSelectionRect, type SelectionRect } from '../editor/CaretRect';
@@ -1037,8 +1036,6 @@ export function CM6Editor({
   // no immediately-preceding keydown (undo/redo, programmatic edits) never
   // inherits a stale code from an unrelated earlier keystroke.
   const lastPhysicalKeyCodeRef = useRef<string | null>(null);
-  // The flow accent of the last keydown, carried onto the edit it produces like the physical key code.
-  const lastFlowAccentRef = useRef(0);
   // TEMP, read-only diagnostic for the Phase-4 arrow-up chunk-boundary drift
   // investigation (docs/cm6-parity-hardening-plan.md lead #4) -- opt-in via
   // localStorage.setItem('thockdown:debug-cage-state', '1'). Exposes a pure
@@ -1134,30 +1131,19 @@ export function CM6Editor({
    */
   const flowTrailClipRef = useRef<HTMLDivElement | null>(null);
   const flowTrailLayerRef = useRef<HTMLDivElement | null>(null);
-  // The boxes' own layer, apart from the leading edge: its opacity is the
-  // trail's shared alpha factors (flow/flowTrail.ts), so the peak on reaching
-  // full flow lifts every box on screen at once. The saturation is the whole
-  // trail's, so it sits on the outer layer, which also holds the leading edge.
+  // The boxes' own layer: its opacity is the trail's shared alpha factor
+  // (flow/flowTrail.ts's TRAIL_ALPHA_AT_FULL_FLOW), and its children are the
+  // idle-decay groups (trailGroup).
   const flowTrailBoxesRef = useRef<HTMLDivElement | null>(null);
   // Which visual row the last box was drawn on and how many boxes it has had,
   // for the trail's new-row ramp (flow/flowTrail.ts's lineRampShare).
   const flowTrailRowRef = useRef<{ top: number; count: number }>({ top: Number.NaN, count: 0 });
   useEffect(() => {
-    if (flowTrailLayerRef.current) setTrailFull(flowTrailLayerRef.current, false);
-    const unsubscribeFull = flowMeter.subscribeFull((full) => {
-      if (flowTrailLayerRef.current) setTrailFull(flowTrailLayerRef.current, full);
-    });
-    const unsubscribeKick = flowMeter.subscribeKick(() => {
-      const boxes = flowTrailBoxesRef.current;
-      const trail = flowTrailLayerRef.current;
-      if (boxes && trail) peakTrail(boxes, trail, flowMeter.peakStrength(), PEAK_DURATION_SEC, PEAK_SHAPE);
-    });
     const unsubscribeIdle = flowMeter.subscribeIdle((factor) => {
       if (flowTrailBoxesRef.current) setTrailIdle(flowTrailBoxesRef.current, factor);
     });
-    return () => { unsubscribeFull(); unsubscribeKick(); unsubscribeIdle(); };
+    return unsubscribeIdle;
   }, []);
-  const flowTrailHeadRef = useRef<HTMLDivElement | null>(null);
   const [highlightRects, setHighlightRects] = useState<HighlightRect[]>([]);
   // A dragged table cell's drop target: the range of the note it covers,
   // while a drag is over one, drawn in the selection's own highlight
@@ -2250,7 +2236,6 @@ export function CM6Editor({
     const selectionRange = view.state.selection.main;
     if (!selectionRange.empty) {
       setCaretStyle(null);
-      if (flowTrailHeadRef.current) flowTrailHeadRef.current.style.display = 'none';
       return;
     }
 
@@ -2324,19 +2309,6 @@ export function CM6Editor({
     const caretOriginInsetPx = CARET_INSET_PX - caretSizeDeviation;
     const caretWidthPx = Math.max(1, runtimeCellWidthPx - CARET_INSET_PX + (caretSizeDeviation * 2));
     const caretHeightPx = Math.max(1, lineHeightPxNow - CARET_INSET_PX + (caretSizeDeviation * 2));
-
-    // The flow trail's leading edge: the caret's grid cell traced on its
-    // top, bottom and right grid lines, in scroll coordinates like the trail
-    // boxes, so the trail reads as a rectangle closed at the caret. Its
-    // opacity is the live flow (--flow-trail-head), with no decay of its own.
-    const trailHead = flowTrailHeadRef.current;
-    if (trailHead) {
-      trailHead.style.display = '';
-      trailHead.style.transform = `translate(${absoluteLeft}px, ${quantizedRowTopInScroll}px)`;
-      trailHead.style.width = `${runtimeCellWidthPx + 1}px`;
-      trailHead.style.height = `${lineHeightPxNow + 1}px`;
-    }
-
 
     applyCaretStyle({
       // translate(), not translate3d(): a 3D transform is a compositing
@@ -4075,7 +4047,6 @@ export function CM6Editor({
       EditorView.domEventObservers({
         keydown: (event, view) => {
           lastPhysicalKeyCodeRef.current = event.code;
-          lastFlowAccentRef.current = 0;
           // The typing flow meter (flow/flowMeter.ts) hears every key typed
           // into an editable note; a read-only one (the User Guide) types
           // nothing, and an IME composition is not keystrokes.
@@ -4092,20 +4063,21 @@ export function CM6Editor({
               // cell the character lands in (the grid cell, not the caret's
               // inset box), segments abutting so the lines run continuously;
               // nothing is drawn inside the cell, so it never sits behind a
-              // glyph. Its closed right end is the leading edge, which rides
-              // with the caret (updateCaret) rather than being left behind.
+              // glyph. Its saturation is the flow it was typed at
+              // (flow/flowTrail.ts), kept as it fades.
               const el = document.createElement('div');
               el.className = 'flow-trail-box';
               el.style.transform = `translate(${cell.grid.left}px, ${cell.grid.top}px)`;
               el.style.width = `${cell.grid.width}px`;
               el.style.height = `${cell.grid.height + 1}px`;
+              el.style.setProperty('--flow-trail-saturation', box.saturation.toFixed(3));
               trailGroup(trailLayer).appendChild(el);
               const row = flowTrailRowRef.current;
               if (row.top === cell.grid.top) row.count += 1;
               else { row.top = cell.grid.top; row.count = 1; }
               fadeTrailBox(el, box.level * lineRampShare(row.count, box.lineRamp), box.fadeMaxTime, box.fadeShape);
             }
-            lastFlowAccentRef.current = flowMeter.reportKey(event);
+            flowMeter.reportKey(event);
           }
           if (debugInputLagEnabled) {
             debugLastKeydownAtRef.current = performance.now();
@@ -4513,8 +4485,6 @@ export function CM6Editor({
 
           const physicalKeyCode = lastPhysicalKeyCodeRef.current ?? undefined;
           lastPhysicalKeyCodeRef.current = null;
-          const flowAccent = lastFlowAccentRef.current || undefined;
-          lastFlowAccentRef.current = 0;
 
           const event: EditorTextChangeEvent = {
             source: isProgrammaticHydration ? 'initial-load' : 'user-input',
@@ -4522,7 +4492,6 @@ export function CM6Editor({
             previousText,
             selection: nextSelection,
             physicalKeyCode,
-            flowAccent,
             edit: readSingleRangeEdit(update.changes),
           };
           debugCheckpoint('before bindings.onTextChange');
@@ -6737,7 +6706,6 @@ export function CM6Editor({
       >
         <div ref={flowTrailLayerRef} style={{ position: 'absolute', top: 0, left: 0 }}>
           <div ref={flowTrailBoxesRef} style={{ position: 'absolute', top: 0, left: 0, opacity: TRAIL_ALPHA_AT_FULL_FLOW }} />
-          <div ref={flowTrailHeadRef} className="flow-trail-head" />
         </div>
       </div>
       {hasViewportLines && fontReady && !caretHidden && caretStyle && (

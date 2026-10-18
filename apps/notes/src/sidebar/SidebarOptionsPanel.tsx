@@ -2991,8 +2991,8 @@ export function SidebarOptionsPanel({
         </div>
         {flowSettings.enabled ? (
           <div className="utility-setting-slider-stack" aria-label="Typing flow settings">
-            {/* How it moves (build, decay), how it empties when typing stops (grace, shape, drop), how the trail fades (fade, shape, wrap) and how it answers (look, reverb, trail, peak, amp). */}
-            <OptionsSliderRows rows={[2, 3, 3, 2, 3]}>
+            {/* How it moves (build, decay), how it empties when typing stops (grace, shape, drop), how the trail fades (fade, shape, wrap) and how it answers (look, reverb, trail, amp). */}
+            <OptionsSliderRows rows={[2, 3, 3, 2, 2]}>
               <CompactScrollbarSlider
                 id="flow-gain"
                 min={FLOW_GAIN_PERCENT_MIN}
@@ -3128,22 +3128,10 @@ export function SidebarOptionsPanel({
                 step={0.01}
                 value={flowSettings.trail}
                 trackLabel="trail"
-                tooltipLabel="Flow trail and caret: the trail, and the caret's glow and fade as flow grows (the trail's colour is in Colors, Boxes)"
-                ariaLabel="Strength of the flow's trail and caret"
+                tooltipLabel="Flow trail: the lines left along what you type, stronger and more colourful as flow grows (the trail's colour is in Colors, Boxes)"
+                ariaLabel="Strength of the flow's trail"
                 defaultValue={DEFAULT_FLOW_SETTINGS.trail}
                 onCommit={(value) => setFlowSettings((prev) => ({ ...prev, trail: value }))}
-              />
-              <CompactScrollbarSlider
-                id="flow-peak"
-                min={0}
-                max={1}
-                step={0.01}
-                value={flowSettings.peak}
-                trackLabel="peak"
-                tooltipLabel="Peak on reaching full flow: a sweep through all sound, and the trail flaring and filling with colour"
-                ariaLabel="Strength of the peak on reaching full flow"
-                defaultValue={DEFAULT_FLOW_SETTINGS.peak}
-                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, peak: value }))}
               />
               <CompactScrollbarSlider
                 id="flow-amp"
@@ -3152,7 +3140,7 @@ export function SidebarOptionsPanel({
                 step={0.01}
                 value={flowSettings.amp}
                 trackLabel="amp"
-                tooltipLabel="Amp boost: how strongly playing music's EQ answers flow (half at the right edge of the meter, all of it in full flow)"
+                tooltipLabel="Amp boost: how strongly playing music's EQ answers flow, all of it at full flow"
                 ariaLabel="Strength of the music's flow EQ"
                 defaultValue={DEFAULT_FLOW_SETTINGS.amp}
                 onCommit={(value) => setFlowSettings((prev) => ({ ...prev, amp: value }))}

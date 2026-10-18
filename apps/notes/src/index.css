@@ -149,52 +149,11 @@
   border-bottom: 1px solid var(--color-flow-trail-now);
 }
 
-/* The trail's leading edge: the caret's cell traced on its top, bottom and
-   right grid lines and filled with a flow-colour gradient, closing the trail
-   at the caret. Placed by CM6Editor's
-   updateCaret; its opacity is the live flow, written as --flow-trail-head by
-   flow/useFlowFeedback.ts (0, and so invisible, while flow is off). */
-.flow-trail-head {
-  position: absolute;
-  top: 0;
-  left: 0;
-  box-sizing: border-box;
-  --flow-trail-head-edge: 1px;
-  border: var(--flow-trail-head-edge) solid var(--color-flow-trail-now);
-  border-right-width: 0;
-  border-left: none;
-  /* Rounded where it is closed, square where it opens into the trail. The
-     cap's border is wider than the edges, and a border's INNER corner radius
-     is the outer one minus the border width: at the plain small radius that
-     reached zero and the cap's inner edge was a straight line inside the
-     curve. Adding the cap width keeps the inner corner at the small radius. */
-  border-radius: 0 var(--border-radius-regular) var(--border-radius-regular) 0;
-  /* Inside, the flow colour fades from the leading edge back toward the
-     trail, so the edge reads as a front moving right. */
-  background-image: linear-gradient(to left, var(--color-flow-trail-now), transparent);
-  opacity: var(--flow-trail-head, 0);
-}
-
 /* The trail's colour now: the flow colour at a share of its own HSL
-   saturation, --flow-trail-saturation, set and animated on the layer holding
-   the whole trail (flow/flowTrail.ts). Registered so it can be animated as a
-   number and inherited by every mark at once. */
-@property --flow-trail-saturation {
-  syntax: '<number>';
-  inherits: true;
-  initial-value: 1;
-}
-/* The HSV value multiplier at the peak: every RGB channel scaled together
-   (clamped at full), so hue and saturation hold while the colour brightens. */
-@property --flow-trail-value {
-  syntax: '<number>';
-  inherits: true;
-  initial-value: 1;
-}
-.flow-trail-box,
-.flow-trail-head {
-  --color-flow-trail-saturated: hsl(from var(--color-flow-trail) h calc(s * var(--flow-trail-saturation)) l / alpha);
-  --color-flow-trail-now: rgb(from var(--color-flow-trail-saturated) calc(r * var(--flow-trail-value)) calc(g * var(--flow-trail-value)) calc(b * var(--flow-trail-value)) / alpha);
+   saturation, --flow-trail-saturation, the flow level the box was typed at
+   (set on each box by the editor; flow/flowTrail.ts). */
+.flow-trail-box {
+  --color-flow-trail-now: hsl(from var(--color-flow-trail) h calc(s * var(--flow-trail-saturation, 1)) l / alpha);
 }
 
 /* Low-power toggle: the blink otherwise repaints the caret indefinitely while
@@ -382,11 +341,3 @@
 .flow-overlay-saturation { background: hsl(0 100% 50%); mix-blend-mode: saturation; }
 .flow-overlay-warmth { background: rgb(var(--color-flow-glow)); mix-blend-mode: soft-light; }
 .flow-overlay-glow { background: #ffffff; mix-blend-mode: screen; }
-/* Full flow's edge glow: clear over the middle of the window (where the
-   text is), warm only toward the edges. will-change covers the arrival's
-   scale as well as the opacity. */
-.flow-overlay-edge {
-  background: radial-gradient(ellipse at center, transparent 55%, rgb(var(--color-flow-glow) / 0.55) 85%, rgb(var(--color-flow-glow)) 115%);
-  mix-blend-mode: screen;
-  will-change: opacity, transform;
-}

@@ -1604,7 +1604,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       const keyId = deriveTypingSoundKeyId(event)
       debugLogCheckpoint('after deriveTypingSoundKeyId')
       if (shouldPlayTypingSound(event)) {
-        void typingSoundManager.playRandomClick({ keyId, physicalKeyCode: event.physicalKeyCode, pan: resolveTypingSoundSpatialPan(), accent: event.flowAccent })
+        void typingSoundManager.playRandomClick({ keyId, physicalKeyCode: event.physicalKeyCode, pan: resolveTypingSoundSpatialPan() })
       } else if (shouldPlayReverseTypingSound(event)) {
         void typingSoundManager.playRandomClick({ keyId, physicalKeyCode: event.physicalKeyCode, reverse: true, detune: 600, pan: resolveTypingSoundSpatialPan() })
       }

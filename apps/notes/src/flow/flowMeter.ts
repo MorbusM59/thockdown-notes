@@ -7,11 +7,13 @@
  * through an exponential follower with time constant `PRESENT_TAU_SEC`. A hit
  * is a step in the model, and a step in a filter, a reverb send or a halo
  * reads as a flicker; the follower turns the steps into a ramp. The one step
- * that is NOT ramped is the unlock (reaching a full meter), shown at once. It is exact for any frame length
+ * that is NOT ramped is the unlock (reaching a full meter from below, which
+ * also fills the model's buffer above full), shown at once. It is exact for any frame length
  * (`1 - exp(-dt / tau)`), so the frame rate never changes what is shown.
  *
  * The frame loop runs only while something is moving: it starts on a hit and
- * stops once both the model and the presented level are at zero.
+ * stops once the model, the presented level and the idle factor are all at
+ * zero.
  * A meter that is switched off costs one boolean check per keydown.
  */
 
@@ -23,25 +25,6 @@ const PRESENT_TAU_SEC = 0.2
 const PRESENT_FLOOR = 0.002
 
 type Listener = (level: number) => void
-type KickListener = () => void
-type FullListener = (full: boolean) => void
-
-/**
- * FULL FLOW is a STATE, not only a level: it begins when the meter reaches
- * full from below. Consumers that show something only at full (the edge glow)
- * subscribe to it with `subscribeFull`. It ends when
- * the presented level drops below full: the model's hidden buffer above full
- * already carries a reader at the sustaining pace, so no second margin is
- * needed and full flow means the meter at 100%.
- *
- * The KICK is the one-off event marking the state's start: the moment flow
- * is achieved, landed as an event rather than as a value arriving. It fires
- * only while ARMED, and is re-armed once the presented level falls below
- * `KICK_REARM_LEVEL`: dropping from full to 80% and back re-enters full flow
- * (its edge glow and full music EQ return) without a second kick.
- */
-const KICK_REARM_LEVEL = 0.5
-
 let enabled = false
 let tuning: FlowTuning = DEFAULT_FLOW_SETTINGS
 let state: FlowState = EMPTY_FLOW_STATE
@@ -49,15 +32,14 @@ let presented = 0
 let lastFrameSec: number | null = null
 let frameHandle: number | null = null
 const listeners = new Set<Listener>()
-const kickListeners = new Set<KickListener>()
-const fullListeners = new Set<FullListener>()
-let isFull = false
-let kickArmed = true
 let trailFade = { fadeMaxTime: DEFAULT_FLOW_SETTINGS.fadeMaxTime, fadeShape: DEFAULT_FLOW_SETTINGS.fadeShape, lineRamp: DEFAULT_FLOW_SETTINGS.lineRamp }
 let trailStrength = DEFAULT_FLOW_SETTINGS.trail
-let peakStrength = DEFAULT_FLOW_SETTINGS.peak
 
-/** The idle decay's factor (`flowModel.ts`'s `idleFactor`), published each frame for the trail boxes already on screen. */
+/**
+ * The idle decay's factor (`flowModel.ts`'s `idleFactor`), published each
+ * frame: 1 while typing, falling to 0 once typing stops. The trail boxes
+ * already on screen fade with it, and the caret holds its blink's peak by it.
+ */
 type IdleListener = (factor: number) => void
 const idleListeners = new Set<IdleListener>()
 let idle = 1
@@ -105,14 +87,7 @@ const nowSec = (): number => performance.now() / 1000
 
 function publish(level: number): void {
   presented = level
-  if (level < KICK_REARM_LEVEL) kickArmed = true
-  if (isFull && level < 1) setFull(false)
   for (const listener of listeners) listener(level)
-}
-
-function setFull(next: boolean): void {
-  isFull = next
-  for (const listener of fullListeners) listener(next)
 }
 
 function frame(): void {
@@ -120,10 +95,14 @@ function frame(): void {
   const now = nowSec()
   const dt = lastFrameSec === null ? 0 : now - lastFrameSec
   lastFrameSec = now
-  if (state.lastHitSec !== null) publishIdle(idleFactor(now - state.lastHitSec, tuning))
+  const idleNow = state.lastHitSec === null ? 0 : idleFactor(now - state.lastHitSec, tuning)
+  publishIdle(idleNow)
   const target = presentedFlow(flowLevelAt(state, now, tuning))
   let next = presented + (target - presented) * (1 - Math.exp(-dt / PRESENT_TAU_SEC))
-  if (target < PRESENT_FLOOR && next < PRESENT_FLOOR) {
+  // The idle factor keeps the loop alive on its own: a low level reaches the
+  // floor before the idle decay has finished, and the caret's hold follows
+  // the idle factor rather than the level.
+  if (target < PRESENT_FLOOR && next < PRESENT_FLOOR && idleNow <= 0) {
     // Only the presentation stops. The model's state is left alone: its level
     // is already nothing, and its interval history is what the next hits build
     // on -- clearing it here wiped the estimate after every early keystroke,
@@ -154,6 +133,7 @@ export const flowMeter = {
       state = EMPTY_FLOW_STATE
       lastFrameSec = null
       if (presented !== 0) publish(0)
+      publishIdle(0)
       if (rateTimer !== null) clearTimeout(rateTimer)
       rateTimer = null
       rateStamps = []
@@ -161,47 +141,26 @@ export const flowMeter = {
     }
   },
 
-  /**
-   * Called for every keydown the editor sees while it is editable. Returns
-   * the ACCENT for this key's own click: the peak strength when this key fired
-   * the kick, otherwise 0. The editor carries it on the edit the key produces
-   * (`EditorTextChangeEvent.flowAccent`), so it reaches exactly that key's sound.
-   */
-  reportKey(event: KeyboardEvent): number {
-    if (!enabled) return 0
-    if (!isFlowHit(event)) return 0
-    let accent = 0
+  /** Called for every keydown the editor sees while it is editable. */
+  reportKey(event: KeyboardEvent): void {
+    if (!enabled) return
+    if (!isFlowHit(event)) return
     const now = nowSec()
     if (event.key.length === 1) reportCharacter(now)
     const before = flowLevelAt(state, now, tuning)
     state = flowHit(state, now, tuning)
-    // The unlock is presented at once rather than ramped: reaching full is
-    // the one moment that should land as an event, not as a value arriving.
-    if (before < 1 && state.levelAtHit > 1) {
-      publish(1)
-      if (!isFull) {
-        setFull(true)
-        if (kickArmed) {
-          kickArmed = false
-          accent = peakStrength
-          for (const listener of kickListeners) listener()
-        }
-      }
-    }
+    // Reaching full from below is presented at once rather than ramped, and
+    // the model has filled its buffer above full (`flowHit`), so a reader at
+    // the sustaining pace holds a steady full meter rather than flickering at it.
+    if (before < 1 && state.levelAtHit > 1) publish(1)
+    publishIdle(1)
     ensureRunning()
-    return accent
   },
 
-  /** The trail's strength, fade, new-row ramp and peak (`flow/flowTrail.ts`); the editor reads them per keystroke (`trailBox`) and per kick (`peakStrength`). */
-  configureTrail(trail: { strength: number; peak: number; fadeMaxTime: number; fadeShape: number; lineRamp: number }): void {
+  /** The trail's strength, fade and new-row ramp (`flow/flowTrail.ts`); the editor reads them per keystroke (`trailBox`). */
+  configureTrail(trail: { strength: number; fadeMaxTime: number; fadeShape: number; lineRamp: number }): void {
     trailFade = { fadeMaxTime: trail.fadeMaxTime, fadeShape: trail.fadeShape, lineRamp: trail.lineRamp }
     trailStrength = trail.strength
-    peakStrength = trail.peak
-  },
-
-  /** The reader's peak strength, 0..1. */
-  peakStrength(): number {
-    return peakStrength
   },
 
   /**
@@ -209,11 +168,14 @@ export const flowMeter = {
    * leave none. Only a CHARACTER or Space leaves one: Enter is a hit for the
    * meter but types no cell. `level` is the presented flow at the moment of
    * the key times the trail strength, 0..1; `flow/flowTrail.ts` turns it and the fade into alpha.
+   * `saturation` is the presented flow alone, 0..1: the share of the flow
+   * colour's saturation the box is drawn at.
    */
-  trailBox(event: KeyboardEvent): { level: number; fadeMaxTime: number; fadeShape: number; lineRamp: number } | null {
+  trailBox(event: KeyboardEvent): { level: number; saturation: number; fadeMaxTime: number; fadeShape: number; lineRamp: number } | null {
     if (!enabled || presented <= 0 || trailStrength <= 0) return null
     if (event.key.length !== 1 || !isFlowHit(event)) return null
-    return { level: Math.min(1, presented) * trailStrength, ...trailFade }
+    const saturation = Math.min(1, presented)
+    return { level: saturation * trailStrength, saturation, ...trailFade }
   },
 
   /** Called with the idle decay's factor whenever it changes: 1 while typing, falling to 0 once typing stops. */
@@ -224,32 +186,11 @@ export const flowMeter = {
     }
   },
 
-  /** Called once each time flow is achieved (see the kick, above). */
-  subscribeKick(listener: KickListener): () => void {
-    kickListeners.add(listener)
-    return () => {
-      kickListeners.delete(listener)
-    }
-  },
-
   /** Called with the typing rate (see TYPING RATE, above) on every character, and with null once typing pauses. */
   subscribeRate(listener: RateListener): () => void {
     rateListeners.add(listener)
     return () => {
       rateListeners.delete(listener)
-    }
-  },
-
-  /**
-   * Called with true when full flow begins and false when it ends (see FULL
-   * FLOW, above), and at once with true when subscribing during it, so a
-   * consumer re-subscribing after a settings change does not lose the state.
-   */
-  subscribeFull(listener: FullListener): () => void {
-    fullListeners.add(listener)
-    if (isFull) listener(true)
-    return () => {
-      fullListeners.delete(listener)
     }
   },
 

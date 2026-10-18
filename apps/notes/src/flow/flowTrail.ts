@@ -1,7 +1,7 @@
 /**
  * The typing flow trail's alpha and saturation.
  *
- * A box's alpha is the product of four factors, applied in this order:
+ * A box's alpha is the product of three factors, applied in this order:
  *
  * 1. The flow colour's own alpha (the `flowTrail` highlight colour, the
  *    reader's flowBaseColor), which the box's border is drawn in.
@@ -10,16 +10,12 @@
  *    `TRAIL_ALPHA_AT_FULL_FLOW` at full flow, and on a new row by
  *    `lineRampShare` so the trail fades back in after a wrap.
  * 3. The fade since creation, `fadeCurve(t, fadeMaxTime, fadeShape)`.
- * 4. The PEAK on reaching full flow (`flowPeak.ts`): from
- *    `1 + (TRAIL_PEAK_ALPHA - 1) x peak` back to 1 on the peak curve.
  *
  * Factors 2 and 3 belong to each box (its own opacity, set once and
- * animated); `TRAIL_ALPHA_AT_FULL_FLOW` and factor 4 apply to every box at
- * once, so they are the opacity of the layer holding the boxes. That split is
- * what lets the peak lift every box on screen, old and new alike, without
- * touching any of them.
+ * animated); `TRAIL_ALPHA_AT_FULL_FLOW` applies to every box at once, so it
+ * is the opacity of the layer holding the boxes.
  *
- * A fifth factor, the IDLE decay (`flowModel.ts`'s `idleFactor`), applies
+ * A fourth factor, the IDLE decay (`flowModel.ts`'s `idleFactor`), applies
  * to every box on screen once typing has stopped for the grace period. Boxes
  * sit in GROUPS inside the layer (`trailGroup`): the current group's opacity
  * follows the idle factor (`setTrailIdle`), and a keystroke that arrives
@@ -27,20 +23,13 @@
  * reached and starts a new one. Without the freeze, resuming typing would
  * restore every half-faded box to full strength.
  *
- * Saturation applies to the whole trail, leading edge included, as a share of
- * the flow colour's HSL saturation (`--flow-trail-saturation`, index.css):
- * `TRAIL_SATURATION_BEFORE_FULL` until full flow, 1 in full flow, and at the
- * peak it drops to `1 - peak` and returns to 1 on the peak curve. At the same
- * time its HSV value (the strongest RGB channel) is multiplied by down to
- * `TRAIL_PEAK_VALUE` (`--flow-trail-value`). The trail is drawn inside the
- * scene, which a dark theme inverts, so darkening it here reads as a darker
- * grey in a light theme and a brighter one in a dark theme.
+ * A box's saturation is the flow level at its creation (0..1, without the
+ * trail strength), as a share of the flow colour's HSL saturation
+ * (`--flow-trail-saturation`, set on the box, index.css): grey at no flow,
+ * the full colour at full flow, and kept as the box fades.
  */
 
 export const TRAIL_ALPHA_AT_FULL_FLOW = 0.7
-const TRAIL_PEAK_ALPHA = 2
-export const TRAIL_SATURATION_BEFORE_FULL = 0.5
-const TRAIL_PEAK_VALUE = 0.8
 
 /** Samples per curve: the curve is not one CSS can name, so it becomes a linear keyframe list. */
 const SAMPLES = 32
@@ -99,29 +88,4 @@ export function setTrailIdle(boxes: HTMLElement, factor: number): void {
   }
   const current = boxes.lastElementChild as HTMLElement | null
   if (current && current.dataset[CURRENT_GROUP] !== undefined) current.style.opacity = factor >= 1 ? '' : factor.toFixed(4)
-}
-
-/** In or out of full flow: the trail's resting saturation, on the layer holding the whole trail. */
-export function setTrailFull(trail: HTMLElement, full: boolean): void {
-  trail.style.setProperty('--flow-trail-saturation', String(full ? 1 : TRAIL_SATURATION_BEFORE_FULL))
-}
-
-/**
- * The peak on the trail, at `peak` strength 0..1: the boxes' layer lifts its
- * alpha and the whole trail drains of colour, both returning on the peak
- * curve. Neither animation fills, so each ends on the resting value.
- */
-export function peakTrail(boxes: HTMLElement, trail: HTMLElement, peak: number, durationSec: number, shape: number): void {
-  if (peak <= 0) return
-  boxes.animate(
-    curveKeyframes(durationSec, shape, (fade) => ({ opacity: TRAIL_ALPHA_AT_FULL_FLOW * (1 + (TRAIL_PEAK_ALPHA - 1) * peak * fade) })),
-    { duration: durationSec * 1000 },
-  )
-  trail.animate(
-    curveKeyframes(durationSec, shape, (fade) => ({
-      '--flow-trail-saturation': 1 - peak * fade,
-      '--flow-trail-value': 1 + (TRAIL_PEAK_VALUE - 1) * peak * fade,
-    })),
-    { duration: durationSec * 1000 },
-  )
 }

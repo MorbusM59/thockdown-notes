@@ -1,5 +1,4 @@
 import { BASS_TYPING_SOUND_ASSET, DEFAULT_TYPING_SOUND_SET, TREBLE_TYPING_SOUND_ASSET, TYPING_SOUND_ASSETS, TYPING_SOUND_SET_IDS, TypingSoundSetId } from './typingSounds'
-import { OUTPUT_HIGHPASS_REST_HZ } from '@thockdown/soundscape/audioOutputBus'
 import type { AudioBounceCacheHit } from '../shared/audioBounceCache'
 
 // The plain-typing character set reachable via deriveTypingSoundKeyId
@@ -114,12 +113,6 @@ export interface TypingSoundPlayOptions {
   // triggers) just get centered mode-A panning for that press, same as any
   // other non-character key.
   physicalKeyCode?: string
-  // The flow kick's ACCENT, 0..1: the press is played louder
-  // (FLOW_ACCENT_GAIN), higher (FLOW_ACCENT_DETUNE_CENTS) and sent into the
-  // flow room (FLOW_ACCENT_REVERB_SEND), each scaled by this. Passed for the
-  // click of the keystroke that reached full flow, which the editor carries
-  // on that key's edit (`EditorTextChangeEvent.flowAccent`).
-  accent?: number
 }
 
 interface TypingSoundHistoryEntry {
@@ -173,14 +166,6 @@ const FLOW_REVERB_DECAY = 2.5
 const FLOW_REVERB_SPACE = 0.7
 const FLOW_REVERB_LOWPASS_HZ = 6500
 
-// The flow kick's accent on the keystroke that reached full flow, at full
-// strength: this much louder (a gain multiplier), this much higher (cents;
-// 1200 is an octave), and sent into the flow room at this level whatever the
-// reverb slider says.
-const FLOW_ACCENT_GAIN = 2.5
-const FLOW_ACCENT_DETUNE_CENTS = 500
-const FLOW_ACCENT_REVERB_SEND = 1.2
-
 export class TypingSoundManager {
   private audioContext: AudioContext | null = null
   private masterGain: GainNode | null = null
@@ -195,16 +180,6 @@ export class TypingSoundManager {
   // it. Built on first use; a sound is routed into it only while the amount
   // is above zero, so with flow off it is never in the graph at all.
   private flowReverbSend: GainNode | null = null
-  private flowRoom: ConvolverNode | null = null
-  // A high-pass between the master and the speakers, for an app-wide sweep
-  // (the typing flow's peak, flow/flowPeak.ts).
-  private outputHighpassNode: BiquadFilterNode | null = null
-  // The accented keystroke's own route to the speakers, built on first use:
-  // a dry gain and a copy of the flow room, both reaching the destination
-  // without passing the output high-pass, so the keystroke that tips the
-  // meter into full flow sounds whole while everything else is swept.
-  private accentBus: GainNode | null = null
-  private accentRoom: ConvolverNode | null = null
   private flowReverbAmount = 0
   private bufferGroups: Record<string, AudioBuffer[]> = {
     bass: [],
@@ -290,11 +265,7 @@ export class TypingSoundManager {
 
       dryGain.connect(masterGain)
       reverb.connect(reverbFilter).connect(wetGain).connect(masterGain)
-      const outputHighpass = context.createBiquadFilter()
-      outputHighpass.type = 'highpass'
-      outputHighpass.frequency.value = OUTPUT_HIGHPASS_REST_HZ
-      masterGain.connect(outputHighpass).connect(context.destination)
-      this.outputHighpassNode = outputHighpass
+      masterGain.connect(context.destination)
 
       this.audioContext = context
       this.masterGain = masterGain
@@ -518,25 +489,12 @@ export class TypingSoundManager {
     // nothing here worth doing on the keystroke's own call stack.
     if (!this.isAnyLayerAudible()) return
 
-    const accent = options?.accent ?? 0
-
     const keyId = options?.keyId
-    // A bounced buffer has its pitch baked in, so an accented press is
-    // always synthesised live.
-    if (keyId && accent <= 0 && (await this.tryPlayBoundBuffer(keyId, options))) {
+    if (keyId && (await this.tryPlayBoundBuffer(keyId, options))) {
       return
     }
 
-    // A copy: a new key's attributes object is also the one kept in its
-    // history, and the accent belongs to this press alone.
-    const soundAttributes = { ...this.getSoundAttributes(options) }
-    if (accent > 0) {
-      const lift = accent * FLOW_ACCENT_DETUNE_CENTS
-      soundAttributes.detune += lift
-      soundAttributes.bassDetune += lift
-      soundAttributes.trebleDetune += lift
-      soundAttributes.gain *= 1 + (FLOW_ACCENT_GAIN - 1) * accent
-    }
+    const soundAttributes = this.getSoundAttributes(options)
 
     await this.playLayer('click', {
       ...options,
@@ -672,11 +630,6 @@ export class TypingSoundManager {
     }
   }
 
-  /** The high-pass after the master, or null before the audio graph exists. Its cutoff rests below hearing. */
-  outputHighpass(): BiquadFilterNode | null {
-    return this.outputHighpassNode
-  }
-
   private ensureFlowReverb(): void {
     if (this.flowReverbSend || !this.audioContext || !this.masterGain) return
     const context = this.audioContext
@@ -689,14 +642,12 @@ export class TypingSoundManager {
     tone.frequency.value = FLOW_REVERB_LOWPASS_HZ
     send.connect(room).connect(tone).connect(this.masterGain)
     this.flowReverbSend = send
-    this.flowRoom = room
   }
 
   // The one place a voice reaches the speakers: the reader's reverb (dry and
   // wet) or the bare master before the graph is built, plus the flow send
   // while flow has any reverb to add.
-  private connectToOutput(node: AudioNode, accent = 0): void {
-    if (accent > 0 && this.connectAccented(node, accent)) return
+  private connectToOutput(node: AudioNode): void {
     if (this.reverbDryGain && this.reverbNode) {
       node.connect(this.reverbDryGain)
       node.connect(this.reverbNode)
@@ -709,34 +660,6 @@ export class TypingSoundManager {
       this.ensureFlowReverb()
       if (this.flowReverbSend) node.connect(this.flowReverbSend)
     }
-  }
-
-  // An accented voice skips the master chain entirely: dry into the accent
-  // bus, and a send into the accent bus's copy of the flow room. The master
-  // gain is fixed at 1, so the bus at 1 keeps the voice at its usual level;
-  // the reader's own reverb is not applied to it, the flow room replacing it.
-  private connectAccented(node: AudioNode, accent: number): boolean {
-    const context = this.audioContext
-    if (!context) return false
-    this.ensureFlowReverb()
-    if (!this.accentBus) {
-      const bus = context.createGain()
-      bus.gain.value = 1
-      bus.connect(context.destination)
-      const room = context.createConvolver()
-      room.buffer = this.flowRoom?.buffer ?? this.createReverbImpulseResponse(context, FLOW_REVERB_DURATION_SEC, FLOW_REVERB_DECAY, FLOW_REVERB_SPACE)
-      const tone = context.createBiquadFilter()
-      tone.type = 'lowpass'
-      tone.frequency.value = FLOW_REVERB_LOWPASS_HZ
-      room.connect(tone).connect(bus)
-      this.accentBus = bus
-      this.accentRoom = room
-    }
-    node.connect(this.accentBus)
-    const send = context.createGain()
-    send.gain.value = accent * FLOW_ACCENT_REVERB_SEND
-    node.connect(send).connect(this.accentRoom!)
-    return true
   }
 
   private getRandomLayerDetune(): number {
@@ -837,7 +760,7 @@ export class TypingSoundManager {
     source.connect(gainNode)
     const panNode = this.panIfNeeded(gainNode, pan)
 
-    this.connectToOutput(panNode, options?.accent)
+    this.connectToOutput(panNode)
 
     source.onended = () => {
       this.safeDisconnect(source)
@@ -863,7 +786,7 @@ export class TypingSoundManager {
         echoGainNode.gain.value = effectiveGain * Math.pow(decay, i)
         const echoPanNode = this.panIfNeeded(echoGainNode, pan)
         echoSource.connect(echoGainNode)
-        this.connectToOutput(echoPanNode, options?.accent)
+        this.connectToOutput(echoPanNode)
         echoSource.onended = () => {
           this.safeDisconnect(echoSource)
           this.safeDisconnect(echoGainNode)
@@ -975,7 +898,7 @@ export class TypingSoundManager {
     // live-synthesis path in playLayer.
     const panNode = this.panIfNeeded(gainNode, this.resolveEffectivePan(options?.physicalKeyCode, options?.pan))
 
-    this.connectToOutput(panNode, options?.accent)
+    this.connectToOutput(panNode)
 
     source.onended = () => {
       this.safeDisconnect(source)

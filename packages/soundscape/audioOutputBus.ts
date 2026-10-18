@@ -37,10 +37,6 @@ const OUTPUT_BUFFER_SEC = 0.2;
 
 let context: AudioContext | null = null;
 let limiter: DynamicsCompressorNode | null = null;
-let highpass: BiquadFilterNode | null = null;
-
-/** The high-pass's resting cutoff: below hearing, so at rest it changes nothing. */
-export const OUTPUT_HIGHPASS_REST_HZ = 10;
 
 /** The shared context, built on first use and rebuilt if it was closed. */
 export function outputContext(): AudioContext {
@@ -53,22 +49,8 @@ export function outputContext(): AudioContext {
     limiter.attack.value = 0.003;
     limiter.release.value = 0.08;
     limiter.connect(context.destination);
-    highpass = context.createBiquadFilter();
-    highpass.type = 'highpass';
-    highpass.frequency.value = OUTPUT_HIGHPASS_REST_HZ;
-    highpass.connect(limiter);
   }
   return context;
-}
-
-/**
- * A high-pass every source routed here passes through, in front of the
- * limiter, for an app-wide sweep (the typing flow's peak: its cutoff and its
- * resonance). Its cutoff rests at `OUTPUT_HIGHPASS_REST_HZ`.
- */
-export function outputHighpass(): BiquadFilterNode {
-  outputContext();
-  return highpass!;
 }
 
 /** The shared context, resumed; what a source awaits before it starts making sound. */
@@ -78,11 +60,11 @@ export async function resumedOutputContext(): Promise<AudioContext> {
   return ctx;
 }
 
-/** Route `source` into the shared high-pass and limiter. `source` must belong to `outputContext()`. */
+/** Route `source` into the shared limiter. `source` must belong to `outputContext()`. */
 export function connectToOutput(source: AudioNode): void {
   const ctx = outputContext();
-  if (source.context !== ctx || !highpass) {
+  if (source.context !== ctx || !limiter) {
     throw new Error('Audio output input must use the shared output audio context.');
   }
-  source.connect(highpass);
+  source.connect(limiter);
 }

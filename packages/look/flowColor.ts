@@ -7,7 +7,7 @@ import { hslToRgb, screenColorOf, type SceneDescription } from './scene'
  * The flow trail is drawn INSIDE the scene (the filter wrapper), so its
  * stored colour is a content colour that the theme's invert, sepia,
  * hue-rotate, saturate and colorize then transform. The flow overlays (the
- * warmth, the edge glow) are drawn AFTER the wrapper, unfiltered, so they need
+ * warmth) are drawn AFTER the wrapper, unfiltered, so they need
  * the colour the trail actually ends up as on screen. Both are answered here
  * from `scene.ts`'s one description of the scene, so they cannot disagree.
  */

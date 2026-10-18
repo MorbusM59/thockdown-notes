@@ -323,22 +323,18 @@ function formatNumber(value: number, decimals = 3): string {
  * `color-mix()` or unrelated variables to the animated stops.
  */
 /**
- * The flow blends the animated alpha toward the colour's own alpha, which is
- * the static caret at zero effect strength. Then, by surface: the HALO moves a
- * share of the way to opaque (`--flow-caret-alpha`) as flow builds; then every
- * surface, halo included, fades out by `--flow-caret-fade`, so at full flow
- * the caret is gone and the trail's leading edge alone marks its cell.
+ * The flow's HOLD (`--flow-caret-effect`, 0..1) blends the animated alpha
+ * toward the colour's own alpha, the peak of the blink: at 1, while the
+ * reader types, the caret stands still at its peak, and as the hold falls
+ * once typing stops, the blink takes over again.
  */
-function flowAdjustedRgba(color: RgbaColor, alphaScale: number, flow: 'fade' | 'boost'): string {
+function flowAdjustedRgba(color: RgbaColor, alphaScale: number): string {
   const baseAlpha = formatNumber(clampAlphaChannel(color.a), 4)
   const animatedAlpha = formatNumber(
     clampAlphaChannel(color.a * Math.max(0, Math.min(1, alphaScale))),
     4,
   )
-  const effectAlpha = `${animatedAlpha} + (${baseAlpha} - ${animatedAlpha}) * var(--flow-caret-effect, 0)`
-  const alpha = flow === 'boost'
-    ? `calc((${effectAlpha} + (1 - (${effectAlpha})) * var(--flow-caret-alpha, 0)) * (1 - var(--flow-caret-fade, 0)))`
-    : `calc((${effectAlpha}) * (1 - var(--flow-caret-fade, 0)))`
+  const alpha = `calc(${animatedAlpha} + (${baseAlpha} - ${animatedAlpha}) * var(--flow-caret-effect, 0))`
   return `rgba(${clampColorChannel(color.r)}, ${clampColorChannel(color.g)}, ${clampColorChannel(color.b)}, ${alpha})`
 }
 
@@ -470,12 +466,9 @@ export function buildCaretBlinkKeyframesCss(options: CaretBlinkKeyframeOptions):
     // one object rather than a ring around a blinking centre.
     const alpha = resolveEffectiveAlpha(stop.alpha, effectStrengthPercent)
     const declarations = [
-      `background-color: ${flowAdjustedRgba(fill, alpha, 'fade')};`,
-      `outline-color: ${flowAdjustedRgba(outline, alpha, 'fade')};`,
-      // Flow grows the halo's lengths and blends the blink toward the static
-      // caret; the halo is boosted toward opaque, and all three surfaces fade
-      // out together as the trail's leading edge takes over the cell.
-      `box-shadow: 0 0 calc(${blur}px + var(--flow-halo-blur, 0px)) calc(${spread}px + var(--flow-halo-spread, 0px)) ${flowAdjustedRgba(halo, alpha, 'boost')};`,
+      `background-color: ${flowAdjustedRgba(fill, alpha)};`,
+      `outline-color: ${flowAdjustedRgba(outline, alpha)};`,
+      `box-shadow: 0 0 ${blur}px ${spread}px ${flowAdjustedRgba(halo, alpha)};`,
     ]
     return `  ${formatNumber(stop.atPercent, 4)}% { ${declarations.join(' ')} }`
   })
