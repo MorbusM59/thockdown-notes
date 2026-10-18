@@ -17,8 +17,8 @@ import { outputHighpass, OUTPUT_HIGHPASS_REST_HZ } from '@thockdown/soundscape/a
 import { typingSoundManager } from '../sound/TypingSoundManager'
 import { fadeCurve } from './flowTrail'
 
-export const PEAK_DURATION_SEC = 2
-export const PEAK_SHAPE = -0.2
+export const PEAK_DURATION_SEC = 1.5
+export const PEAK_SHAPE = -0.3
 /**
  * Where the high-pass cutoff starts, in Hz, at a full-strength peak. A
  * high-pass removes everything BELOW its cutoff, so at the start of the peak
