@@ -203,6 +203,12 @@ export class TypingSoundManager {
   // A high-pass between the master and the speakers, for an app-wide sweep
   // (the typing flow's peak, flow/flowPeak.ts).
   private outputHighpassNode: BiquadFilterNode | null = null
+  // The accented keystroke's own route to the speakers, built on first use:
+  // a dry gain and a copy of the flow room, both reaching the destination
+  // without passing the output high-pass, so the keystroke that tips the
+  // meter into full flow sounds whole while everything else is swept.
+  private accentBus: GainNode | null = null
+  private accentRoom: ConvolverNode | null = null
   private flowReverbAmount = 0
   private bufferGroups: Record<string, AudioBuffer[]> = {
     bass: [],
@@ -711,6 +717,7 @@ export class TypingSoundManager {
   // wet) or the bare master before the graph is built, plus the flow send
   // while flow has any reverb to add.
   private connectToOutput(node: AudioNode, accent = 0): void {
+    if (accent > 0 && this.connectAccented(node, accent)) return
     if (this.reverbDryGain && this.reverbNode) {
       node.connect(this.reverbDryGain)
       node.connect(this.reverbNode)
@@ -723,14 +730,34 @@ export class TypingSoundManager {
       this.ensureFlowReverb()
       if (this.flowReverbSend) node.connect(this.flowReverbSend)
     }
-    if (accent > 0 && this.audioContext) {
-      this.ensureFlowReverb()
-      if (this.flowRoom) {
-        const accentSend = this.audioContext.createGain()
-        accentSend.gain.value = accent * FLOW_ACCENT_REVERB_SEND
-        node.connect(accentSend).connect(this.flowRoom)
-      }
+  }
+
+  // An accented voice skips the master chain entirely: dry into the accent
+  // bus, and a send into the accent bus's copy of the flow room. The master
+  // gain is fixed at 1, so the bus at 1 keeps the voice at its usual level;
+  // the reader's own reverb is not applied to it, the flow room replacing it.
+  private connectAccented(node: AudioNode, accent: number): boolean {
+    const context = this.audioContext
+    if (!context) return false
+    this.ensureFlowReverb()
+    if (!this.accentBus) {
+      const bus = context.createGain()
+      bus.gain.value = 1
+      bus.connect(context.destination)
+      const room = context.createConvolver()
+      room.buffer = this.flowRoom?.buffer ?? this.createReverbImpulseResponse(context, FLOW_REVERB_DURATION_SEC, FLOW_REVERB_DECAY, FLOW_REVERB_SPACE)
+      const tone = context.createBiquadFilter()
+      tone.type = 'lowpass'
+      tone.frequency.value = FLOW_REVERB_LOWPASS_HZ
+      room.connect(tone).connect(bus)
+      this.accentBus = bus
+      this.accentRoom = room
     }
+    node.connect(this.accentBus)
+    const send = context.createGain()
+    send.gain.value = accent * FLOW_ACCENT_REVERB_SEND
+    node.connect(send).connect(this.accentRoom!)
+    return true
   }
 
   private getRandomLayerDetune(): number {
