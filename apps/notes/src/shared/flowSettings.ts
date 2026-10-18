@@ -27,7 +27,7 @@ export interface FlowSettings {
   look: number
   reverb: number
   trail: number
-  /** Strength of the music's flow EQ (`MusicPlayerService.setFlowEq`), 0..2: scales the whole curve, so 1 is the preset and 2 doubles every band's boost and cut. */
+  /** Strength of the music's flow EQ (`MusicPlayerService.setFlowEq`), 0..1: scales the whole curve, so 1 is the preset (more distorted the sound). */
   amp: number
 }
 
@@ -41,7 +41,7 @@ export const FLOW_FADE_SHAPE_MIN = -5
 export const FLOW_FADE_SHAPE_MAX = 5
 export const FLOW_LINE_RAMP_MIN = 1
 export const FLOW_LINE_RAMP_MAX = 20
-export const FLOW_AMP_MAX = 2
+export const FLOW_AMP_MAX = 1
 export const FLOW_IDLE_GRACE_MAX_MS = 3000
 export const FLOW_IDLE_DURATION_MIN = 0.2
 export const FLOW_IDLE_DURATION_MAX = 10
@@ -58,8 +58,8 @@ export const DEFAULT_FLOW_SETTINGS: FlowSettings = {
   lineRamp: 8,
   look: 0.5,
   reverb: 0.5,
-  trail: 0.5,
-  amp: 1,
+  trail: 0.8,
+  amp: 0.8,
 }
 
 function bounded(value: unknown, min: number, max: number, fallback: number): number {

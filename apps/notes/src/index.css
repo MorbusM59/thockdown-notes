@@ -164,12 +164,6 @@
   margin: -1px 0 0 -1px;
 }
 
-/* The last box before a manual line break (flow/flowTrail.ts's
-   closeTrailBox): its right grid line closes the trail. */
-.flow-trail-box[data-closed] {
-  border-right: 1px solid var(--color-flow-trail-now);
-}
-
 /* The trail's source: the caret's grid cell, all four lines, at the live
    flow (--flow-trail-source for alpha, --flow-trail-source-saturation for
    colour; flow/useFlowFeedback.ts), placed with the caret by CM6Editor. */

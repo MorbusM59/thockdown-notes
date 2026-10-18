@@ -10,7 +10,7 @@ import { matchShortcut, type ShortcutId } from '../shared/keyboardShortcuts';
 import { buildTokenPresentation } from '../editor/MarkdownLineClassification';
 import { suppressNextPlainTypingSoundOnce, typingSoundManager } from '../sound/TypingSoundManager';
 import { flowMeter } from '../flow/flowMeter';
-import { TRAIL_ALPHA_AT_FULL_FLOW, fadeTrailBox, lineRampShare, closeTrailBox, setTrailIdle, trailGroup } from '../flow/flowTrail';
+import { TRAIL_ALPHA_AT_FULL_FLOW, fadeTrailBox, lineRampShare, setTrailIdle, trailGroup } from '../flow/flowTrail';
 
 import { ARROW_KEY_VOICES, SHIFT_TAB_KEY_VOICE, TAB_KEY_VOICE } from '../sound/keyVoices';
 import { readSelectionRect, type SelectionRect } from '../editor/CaretRect';
@@ -1166,9 +1166,8 @@ export function CM6Editor({
   // Which visual row the last box was drawn on and how many boxes it has had,
   // for the trail's new-row ramp (flow/flowTrail.ts's lineRampShare).
   const flowTrailRowRef = useRef<{ top: number; count: number }>({ top: Number.NaN, count: 0 });
-  // The most recent box: a manual line break (Enter) closes its right end
-  // (flow/flowTrail.ts's closeTrailBox). A wrap leaves it open, because the
-  // wrapped row's trail already runs on to the end of the row.
+  // The most recent box: a manual line break (Enter) right after it leaves a
+  // fading copy of the caret behind in the cell where the line was broken.
   const flowTrailLastRef = useRef<HTMLElement | null>(null);
   // Every box still on screen, anchored to the DOCUMENT position of the
   // character it was typed for, so text moving under the trail (a Tab or a
@@ -4173,7 +4172,6 @@ export function CM6Editor({
               fadeTrailBox(el, box.level * lineRampShare(row.count, box.lineRamp), box.fadeMaxTime, box.fadeShape);
             }
             if (event.key === 'Enter' && flowTrailLastRef.current) {
-              closeTrailBox(flowTrailLastRef.current);
               flowTrailLastRef.current = null;
               // The caret left behind: the caret's grid cell framed in the
               // trail's colour at the flow of the moment (like the trail's

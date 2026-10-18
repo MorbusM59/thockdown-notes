@@ -89,6 +89,37 @@ export function deriveFlowTrail(boxCss: string, scene: SceneDescription): string
   return `rgba(${best.map(toByte).join(', ')}, ${TRAIL_ALPHA})`
 }
 
+/** How far a light theme's flow colour turns toward amber, and how dark it is. */
+const LIGHT_WARM_HUE_DEG = 30
+const LIGHT_WARM_SHIFT = 0.25
+const LIGHT_SATURATION_ADD = 0.12
+const LIGHT_VALUE_SCALE = 0.55
+const LIGHT_ALPHA = 0.8
+
+/**
+ * A light theme's flow colour: its box colour (`grid`) a little warmer and a
+ * good deal darker, as a content colour. Taken in content space rather than
+ * on screen because a light theme does not invert, so darker in content is
+ * darker on screen; warmer is a turn of the hue toward amber plus a little
+ * saturation (a near-grey box has no hue of its own and takes amber's).
+ */
+export function deriveLightFlowTrail(boxCss: string): string {
+  const box = rgbOf(boxCss)
+  if (!box) return FALLBACK_FLOW_TRAIL
+  const max = Math.max(...box)
+  const min = Math.min(...box)
+  const { hueDeg, chroma } = hueOf(box)
+  const baseHue = chroma > 0 ? hueDeg : LIGHT_WARM_HUE_DEG
+  const delta = ((LIGHT_WARM_HUE_DEG - baseHue + 540) % 360) - 180
+  const h = (baseHue + delta * LIGHT_WARM_SHIFT + 360) % 360
+  const s = Math.min(1, (max > 0 ? (max - min) / max : 0) + LIGHT_SATURATION_ADD)
+  const v = max * LIGHT_VALUE_SCALE
+  const c = v * s
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1))
+  const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x]
+  return `rgba(${[r, g, b].map((ch) => toByte(ch + v - c)).join(', ')}, ${LIGHT_ALPHA})`
+}
+
 /**
  * The content colour whose on-screen value lands nearest `target`. Searched
  * rather than solved, because the scene is not always invertible (saturate

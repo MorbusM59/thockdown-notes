@@ -90,14 +90,3 @@ export function setTrailIdle(boxes: HTMLElement, factor: number): void {
   if (current && current.dataset[CURRENT_GROUP] !== undefined) current.style.opacity = factor >= 1 ? '' : factor.toFixed(4)
 }
 
-/**
- * Closes a box's right end with the grid line on its right, for the last box
- * before a manual line break, so the trail ends as a closed rectangle. The
- * box is widened by the 1px of that line (its height already covers the
- * bottom one). The border is part of the box, so it fades with it.
- */
-export function closeTrailBox(el: HTMLElement): void {
-  if (el.dataset.closed !== undefined) return
-  el.dataset.closed = ''
-  el.style.width = `${parseFloat(el.style.width) + 1}px`
-}
