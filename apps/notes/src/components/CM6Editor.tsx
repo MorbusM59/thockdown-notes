@@ -10,7 +10,7 @@ import { matchShortcut, type ShortcutId } from '../shared/keyboardShortcuts';
 import { buildTokenPresentation } from '../editor/MarkdownLineClassification';
 import { suppressNextPlainTypingSoundOnce, typingSoundManager } from '../sound/TypingSoundManager';
 import { flowMeter } from '../flow/flowMeter';
-import { TRAIL_ALPHA_AT_FULL_FLOW, fadeTrailBox, lineRampShare, peakTrail, setTrailFull } from '../flow/flowTrail';
+import { TRAIL_ALPHA_AT_FULL_FLOW, fadeTrailBox, lineRampShare, peakTrail, setTrailFull, setTrailIdle, trailGroup } from '../flow/flowTrail';
 import { PEAK_DURATION_SEC, PEAK_SHAPE } from '../flow/flowPeak';
 
 import { ARROW_KEY_VOICES, SHIFT_TAB_KEY_VOICE, TAB_KEY_VOICE } from '../sound/keyVoices';
@@ -1150,7 +1150,10 @@ export function CM6Editor({
       const trail = flowTrailLayerRef.current;
       if (boxes && trail) peakTrail(boxes, trail, flowMeter.peakStrength(), PEAK_DURATION_SEC, PEAK_SHAPE);
     });
-    return () => { unsubscribeFull(); unsubscribeKick(); };
+    const unsubscribeIdle = flowMeter.subscribeIdle((factor) => {
+      if (flowTrailBoxesRef.current) setTrailIdle(flowTrailBoxesRef.current, factor);
+    });
+    return () => { unsubscribeFull(); unsubscribeKick(); unsubscribeIdle(); };
   }, []);
   const flowTrailHeadRef = useRef<HTMLDivElement | null>(null);
   const [highlightRects, setHighlightRects] = useState<HighlightRect[]>([]);
@@ -4093,7 +4096,7 @@ export function CM6Editor({
               el.style.transform = `translate(${cell.grid.left}px, ${cell.grid.top}px)`;
               el.style.width = `${cell.grid.width}px`;
               el.style.height = `${cell.grid.height + 1}px`;
-              trailLayer.appendChild(el);
+              trailGroup(trailLayer).appendChild(el);
               const row = flowTrailRowRef.current;
               if (row.top === cell.grid.top) row.count += 1;
               else { row.top = cell.grid.top; row.count = 1; }

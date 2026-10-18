@@ -15,7 +15,7 @@
  * A meter that is switched off costs one boolean check per keydown.
  */
 
-import { EMPTY_FLOW_STATE, PAUSE_SEC, flowHit, flowLevelAt, isFlowHit, presentedFlow, type FlowState, type FlowTuning } from './flowModel'
+import { EMPTY_FLOW_STATE, PAUSE_SEC, flowHit, flowLevelAt, idleFactor, isFlowHit, presentedFlow, type FlowState, type FlowTuning } from './flowModel'
 import { DEFAULT_FLOW_SETTINGS } from '../shared/flowSettings'
 
 const PRESENT_TAU_SEC = 0.2
@@ -56,6 +56,17 @@ let kickArmed = true
 let trailFade = { fadeMaxTime: DEFAULT_FLOW_SETTINGS.fadeMaxTime, fadeShape: DEFAULT_FLOW_SETTINGS.fadeShape, lineRamp: DEFAULT_FLOW_SETTINGS.lineRamp }
 let trailStrength = DEFAULT_FLOW_SETTINGS.trail
 let peakStrength = DEFAULT_FLOW_SETTINGS.peak
+
+/** The idle decay's factor (`flowModel.ts`'s `idleFactor`), published each frame for the trail boxes already on screen. */
+type IdleListener = (factor: number) => void
+const idleListeners = new Set<IdleListener>()
+let idle = 1
+
+function publishIdle(next: number): void {
+  if (next === idle) return
+  idle = next
+  for (const listener of idleListeners) listener(next)
+}
 
 /**
  * The TYPING RATE: characters per second over the last `RATE_MEMORY_KEYS`
@@ -109,6 +120,7 @@ function frame(): void {
   const now = nowSec()
   const dt = lastFrameSec === null ? 0 : now - lastFrameSec
   lastFrameSec = now
+  if (state.lastHitSec !== null) publishIdle(idleFactor(now - state.lastHitSec, tuning))
   const target = presentedFlow(flowLevelAt(state, now, tuning))
   let next = presented + (target - presented) * (1 - Math.exp(-dt / PRESENT_TAU_SEC))
   if (target < PRESENT_FLOOR && next < PRESENT_FLOOR) {
@@ -117,6 +129,7 @@ function frame(): void {
     // on -- clearing it here wiped the estimate after every early keystroke,
     // so it never warmed up. A stale estimate is restarted by the pause rule.
     publish(0)
+    publishIdle(0)
     lastFrameSec = null
     return
   }
@@ -193,6 +206,14 @@ export const flowMeter = {
     if (!enabled || presented <= 0 || trailStrength <= 0) return null
     if (event.key.length !== 1 || !isFlowHit(event)) return null
     return { level: Math.min(1, presented) * trailStrength, ...trailFade }
+  },
+
+  /** Called with the idle decay's factor whenever it changes: 1 while typing, falling to 0 once typing stops. */
+  subscribeIdle(listener: IdleListener): () => void {
+    idleListeners.add(listener)
+    return () => {
+      idleListeners.delete(listener)
+    }
   },
 
   /** Called once each time flow is achieved (see the kick, above). */

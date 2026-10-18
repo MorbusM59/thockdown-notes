@@ -19,6 +19,14 @@
  * what lets the peak lift every box on screen, old and new alike, without
  * touching any of them.
  *
+ * A fifth factor, the IDLE decay (`flowModel.ts`'s `idleFactor`), applies
+ * to every box on screen once typing has stopped for the grace period. Boxes
+ * sit in GROUPS inside the layer (`trailGroup`): the current group's opacity
+ * follows the idle factor (`setTrailIdle`), and a keystroke that arrives
+ * while that factor is below 1 leaves the group frozen at the value it had
+ * reached and starts a new one. Without the freeze, resuming typing would
+ * restore every half-faded box to full strength.
+ *
  * Saturation applies to the whole trail, leading edge included, as a share of
  * the flow colour's HSL saturation (`--flow-trail-saturation`, index.css):
  * `TRAIL_SATURATION_BEFORE_FULL` until full flow, 1 in full flow, and at the
@@ -64,6 +72,33 @@ export function fadeTrailBox(el: HTMLElement, level: number, fadeMaxTime: number
     { duration: fadeMaxTime * 1000, fill: 'forwards' },
   )
   animation.onfinish = () => el.remove()
+}
+
+const CURRENT_GROUP = 'flowTrailCurrent'
+
+/** The group a new box goes into: the current one, or a new one if the current one is part-way through the idle decay. */
+export function trailGroup(boxes: HTMLElement): HTMLElement {
+  const current = boxes.lastElementChild as HTMLElement | null
+  if (current && current.dataset[CURRENT_GROUP] !== undefined) {
+    if (current.style.opacity === '' || Number(current.style.opacity) >= 1) return current
+    delete current.dataset[CURRENT_GROUP]
+  }
+  // Frozen groups whose boxes have all faded and removed themselves.
+  for (const child of Array.from(boxes.children)) if (child.childElementCount === 0) child.remove()
+  const group = document.createElement('div')
+  group.dataset[CURRENT_GROUP] = ''
+  boxes.appendChild(group)
+  return group
+}
+
+/** The idle factor on every box on screen: the current group follows it, and at 0 every group is cleared. */
+export function setTrailIdle(boxes: HTMLElement, factor: number): void {
+  if (factor <= 0) {
+    boxes.replaceChildren()
+    return
+  }
+  const current = boxes.lastElementChild as HTMLElement | null
+  if (current && current.dataset[CURRENT_GROUP] !== undefined) current.style.opacity = factor >= 1 ? '' : factor.toFixed(4)
 }
 
 /** In or out of full flow: the trail's resting saturation, on the layer holding the whole trail. */
