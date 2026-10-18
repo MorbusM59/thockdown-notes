@@ -48,14 +48,14 @@ export const FLOW_IDLE_DURATION_MAX = 10
 
 export const DEFAULT_FLOW_SETTINGS: FlowSettings = {
   enabled: false,
-  gainPercent: 4,
-  decayPercent: 0.5,
+  gainPercent: 5,
+  decayPercent: 0.25,
   idleGraceMs: 500,
-  idleShape: -0.5,
+  idleShape: 2.5,
   idleDuration: 1.5,
   fadeMaxTime: 3,
   fadeShape: 0,
-  lineRamp: 4,
+  lineRamp: 8,
   look: 0.5,
   reverb: 0.5,
   trail: 0.5,
@@ -71,14 +71,18 @@ export function sanitizeFlowSettings(input: unknown): FlowSettings {
   const d = DEFAULT_FLOW_SETTINGS
   return {
     enabled: typeof source.enabled === 'boolean' ? source.enabled : d.enabled,
-    gainPercent: bounded(source.gainPercent, FLOW_GAIN_PERCENT_MIN, FLOW_GAIN_PERCENT_MAX, d.gainPercent),
-    decayPercent: bounded(source.decayPercent, FLOW_DECAY_PERCENT_MIN, FLOW_DECAY_PERCENT_MAX, d.decayPercent),
-    idleGraceMs: Math.round(bounded(source.idleGraceMs, 0, FLOW_IDLE_GRACE_MAX_MS, d.idleGraceMs)),
-    idleShape: bounded(source.idleShape, FLOW_FADE_SHAPE_MIN, FLOW_FADE_SHAPE_MAX, d.idleShape),
-    idleDuration: bounded(source.idleDuration, FLOW_IDLE_DURATION_MIN, FLOW_IDLE_DURATION_MAX, d.idleDuration),
+    // Fixed at their defaults: not offered in the options panel (a reader
+    // tuning their own meter is the competitive element the panel avoids),
+    // so a value saved while they were is not read back. The fields and
+    // their wiring stay, so offering them again is a slider and these lines.
+    gainPercent: d.gainPercent,
+    decayPercent: d.decayPercent,
+    idleGraceMs: d.idleGraceMs,
+    idleShape: d.idleShape,
+    idleDuration: d.idleDuration,
     fadeMaxTime: bounded(source.fadeMaxTime, FLOW_FADE_MAX_TIME_MIN, FLOW_FADE_MAX_TIME_MAX, d.fadeMaxTime),
     fadeShape: bounded(source.fadeShape, FLOW_FADE_SHAPE_MIN, FLOW_FADE_SHAPE_MAX, d.fadeShape),
-    lineRamp: Math.round(bounded(source.lineRamp, FLOW_LINE_RAMP_MIN, FLOW_LINE_RAMP_MAX, d.lineRamp)),
+    lineRamp: d.lineRamp,
     look: bounded(source.look, 0, 1, d.look),
     reverb: bounded(source.reverb, 0, 1, d.reverb),
     // `caret` is the trail slider's name before it drove the trail too.

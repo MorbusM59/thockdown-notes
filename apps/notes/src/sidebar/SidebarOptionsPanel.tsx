@@ -10,15 +10,9 @@ import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsection
 import {
   DEFAULT_FLOW_SETTINGS,
   FLOW_AMP_MAX,
-  FLOW_IDLE_DURATION_MAX,
-  FLOW_IDLE_DURATION_MIN,
-  FLOW_IDLE_GRACE_MAX_MS,
-  FLOW_DECAY_PERCENT_MAX, FLOW_DECAY_PERCENT_MIN,
-  FLOW_FADE_MAX_TIME_MAX, FLOW_FADE_MAX_TIME_MIN, FLOW_FADE_SHAPE_MAX, FLOW_FADE_SHAPE_MIN, FLOW_LINE_RAMP_MAX, FLOW_LINE_RAMP_MIN,
-  FLOW_GAIN_PERCENT_MAX, FLOW_GAIN_PERCENT_MIN,
+  FLOW_FADE_MAX_TIME_MAX, FLOW_FADE_MAX_TIME_MIN, FLOW_FADE_SHAPE_MAX, FLOW_FADE_SHAPE_MIN,
   type FlowSettings,
 } from '../shared/flowSettings'
-import { RHYTHM_BONUS, sustainWpm } from '../flow/flowModel'
 import { exportSoundscapes, importSoundscapes } from '@thockdown/soundscape/soundscapeFileActions'
 import type { SoundscapePreferences } from '@thockdown/soundscape/soundscape'
 import {
@@ -2991,73 +2985,8 @@ export function SidebarOptionsPanel({
         </div>
         {flowSettings.enabled ? (
           <div className="utility-setting-slider-stack" aria-label="Typing flow settings">
-            {/* How it moves (build, decay), how it empties when typing stops (grace, shape, drop), how the trail fades (fade, shape, wrap) and how it answers (look, reverb, trail, amp). */}
-            <OptionsSliderRows rows={[2, 3, 3, 2, 2]}>
-              <CompactScrollbarSlider
-                id="flow-gain"
-                min={FLOW_GAIN_PERCENT_MIN}
-                max={FLOW_GAIN_PERCENT_MAX}
-                step={0.1}
-                value={flowSettings.gainPercent}
-                trackLabel="build"
-                tooltipLabel={`Flow each keystroke adds, in percent of full. Holding full takes ${Math.round(sustainWpm(flowSettings))} wpm, ${Math.round(sustainWpm(flowSettings, 1 + RHYTHM_BONUS))} with a steady rhythm`}
-                ariaLabel="How much flow each keystroke adds, in percent of a full meter"
-                defaultValue={DEFAULT_FLOW_SETTINGS.gainPercent}
-                formatValue={(value) => `${value.toFixed(1)}%`}
-                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, gainPercent: value }))}
-              />
-              <CompactScrollbarSlider
-                id="flow-decay"
-                min={FLOW_DECAY_PERCENT_MIN}
-                max={FLOW_DECAY_PERCENT_MAX}
-                step={0.1}
-                value={flowSettings.decayPercent}
-                trackLabel="decay"
-                tooltipLabel={`Flow lost every 50ms: this percent of itself and of a full meter. Holding full takes ${Math.round(sustainWpm(flowSettings))} wpm, ${Math.round(sustainWpm(flowSettings, 1 + RHYTHM_BONUS))} with a steady rhythm`}
-                ariaLabel="How quickly flow decays, in percent per 50 milliseconds"
-                defaultValue={DEFAULT_FLOW_SETTINGS.decayPercent}
-                formatValue={(value) => `${value.toFixed(1)}%`}
-                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, decayPercent: value }))}
-              />
-              <CompactScrollbarSlider
-                id="flow-idle-grace"
-                min={0}
-                max={FLOW_IDLE_GRACE_MAX_MS}
-                step={10}
-                value={flowSettings.idleGraceMs}
-                trackLabel="grace"
-                tooltipLabel="Milliseconds after you stop typing before flow starts to drop away"
-                ariaLabel="How long after typing stops before flow drops away, in milliseconds"
-                defaultValue={DEFAULT_FLOW_SETTINGS.idleGraceMs}
-                formatValue={(value) => value.toFixed(0)}
-                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, idleGraceMs: Math.round(value) }))}
-              />
-              <CompactScrollbarSlider
-                id="flow-idle-shape"
-                min={FLOW_FADE_SHAPE_MIN}
-                max={FLOW_FADE_SHAPE_MAX}
-                step={0.1}
-                value={flowSettings.idleShape}
-                trackLabel="shape"
-                tooltipLabel="Shape of the drop after the grace period: 0 even, higher drops early, lower holds and drops late"
-                ariaLabel="Shape of flow's drop after typing stops"
-                defaultValue={DEFAULT_FLOW_SETTINGS.idleShape}
-                formatValue={(value) => value.toFixed(1)}
-                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, idleShape: value }))}
-              />
-              <CompactScrollbarSlider
-                id="flow-idle-duration"
-                min={FLOW_IDLE_DURATION_MIN}
-                max={FLOW_IDLE_DURATION_MAX}
-                step={0.1}
-                value={flowSettings.idleDuration}
-                trackLabel="drop"
-                tooltipLabel="Seconds the drop takes to empty the meter once the grace period is over"
-                ariaLabel="How long flow takes to empty after the grace period, in seconds"
-                defaultValue={DEFAULT_FLOW_SETTINGS.idleDuration}
-                formatValue={(value) => value.toFixed(1)}
-                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, idleDuration: value }))}
-              />
+            {/* How the trail fades (fade, shape) and how flow is answered (look, reverb, trail, amp). How the meter itself moves is fixed (shared/flowSettings.ts). */}
+            <OptionsSliderRows rows={[2, 2, 2]}>
               <CompactScrollbarSlider
                 id="flow-fade-time"
                 min={FLOW_FADE_MAX_TIME_MIN}
@@ -3083,19 +3012,6 @@ export function SidebarOptionsPanel({
                 defaultValue={DEFAULT_FLOW_SETTINGS.fadeShape}
                 formatValue={(value) => value.toFixed(1)}
                 onCommit={(value) => setFlowSettings((prev) => ({ ...prev, fadeShape: value }))}
-              />
-              <CompactScrollbarSlider
-                id="flow-line-ramp"
-                min={FLOW_LINE_RAMP_MIN}
-                max={FLOW_LINE_RAMP_MAX}
-                step={1}
-                value={flowSettings.lineRamp}
-                trackLabel="wrap"
-                tooltipLabel="Letters into a new line before the trail is at full strength; 1 carries straight on"
-                ariaLabel="How many letters into a new line the flow trail takes to reach full strength"
-                defaultValue={DEFAULT_FLOW_SETTINGS.lineRamp}
-                formatValue={(value) => value.toFixed(0)}
-                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, lineRamp: Math.round(value) }))}
               />
               <CompactScrollbarSlider
                 id="flow-look"
