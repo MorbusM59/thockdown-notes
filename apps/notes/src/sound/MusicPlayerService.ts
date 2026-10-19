@@ -188,23 +188,6 @@ const FLOW_EQ_BANDS: ReadonlyArray<{ type: BiquadFilterType; frequencyHz: number
 ];
 const FLOW_EQ_SMOOTHING_SEC = 0.05;
 
-/** The bounds of a band tap's analyser window, in samples. */
-const MIN_TAP_SIZE = 256;
-const MAX_TAP_SIZE = 8192;
-
-/** A bandpass's Q for a bell `octaves` wide between its half-power points. */
-function bandQ(octaves: number): number {
-  const ratio = 2 ** Math.max(0.05, octaves);
-  return Math.sqrt(ratio) / (ratio - 1);
-}
-
-export interface MusicBandTap {
-  analyser: AnalyserNode;
-  /** The context it was built in: a tap from a replaced context reads silence and is rebuilt. */
-  context: AudioContext;
-  dispose: () => void;
-}
-
 type PlaybackEndHandler = () => void;
 
 export class MusicPlayerService {
@@ -223,8 +206,6 @@ export class MusicPlayerService {
   private currentDuration = 0;
   private _isPlaying = false;
   private playingListeners = new Set<(playing: boolean) => void>();
-  /** The fixed head of the graph each track's source connects to, so a band tap outlives a change of track. */
-  private inputNode: GainNode | null = null;
 
   get isPlaying(): boolean { return this._isPlaying; }
 
@@ -240,37 +221,8 @@ export class MusicPlayerService {
     return () => { this.playingListeners.delete(listener); };
   }
 
-  /**
-   * A listening tap on one band of the music, for the beat pulse
-   * (`sound/musicBeat.ts`): a bandpass (a bell around `frequencyHz`, as wide
-   * as `octaves`) and an analyser, fed from `inputNode`, ahead of the flow EQ
-   * and the volume, so neither moves what the pulse hears. Its output goes
-   * nowhere. Built on demand and gone after `dispose`, so a reader without
-   * the pulse pays nothing.
-   */
-  createBandTap(frequencyHz: number, octaves: number): MusicBandTap {
-    const context = this.ensureAudioContext();
-    const input = this.inputNode!;
-    const filter = context.createBiquadFilter();
-    filter.type = 'bandpass';
-    filter.frequency.value = frequencyHz;
-    filter.Q.value = bandQ(octaves);
-    const analyser = context.createAnalyser();
-    // About three periods of the band's centre, so a low band is not read
-    // from a window shorter than one of its own cycles.
-    const wanted = (3 * context.sampleRate) / Math.max(20, frequencyHz);
-    analyser.fftSize = Math.min(MAX_TAP_SIZE, Math.max(MIN_TAP_SIZE, 2 ** Math.ceil(Math.log2(wanted))));
-    input.connect(filter);
-    filter.connect(analyser);
-    return {
-      analyser,
-      context,
-      dispose: () => {
-        try { input.disconnect(filter); } catch { /* context already replaced */ }
-        filter.disconnect();
-      },
-    };
-  }
+  /** The URL the playing track is loaded from, for the beat pulse's look-ahead copy (`sound/musicBeat.ts`). */
+  get trackUrl(): string | null { return this.currentFilePath ? toMusicUrl(this.currentFilePath) : null; }
   get filePath(): string | null { return this.currentFilePath; }
   get duration(): number { return this.currentDuration; }
   get currentTime(): number { return this.element?.currentTime ?? 0; }
@@ -328,8 +280,7 @@ export class MusicPlayerService {
         return filter;
       });
       for (let i = 1; i < this.eqBands.length; i++) this.eqBands[i - 1].connect(this.eqBands[i]);
-      this.inputNode = context.createGain();
-      this.inputNode.connect(this.eqBands[0]);
+
       this.eqBands[this.eqBands.length - 1].connect(this.gainNode);
 
       // gainNode → dryGain → limiter, and gainNode → convolver → wetGain → limiter
@@ -450,7 +401,7 @@ export class MusicPlayerService {
 
       // Wire element into the Web Audio graph.
       this.sourceNode = ctx.createMediaElementSource(el);
-      this.sourceNode.connect(this.inputNode!);
+      this.sourceNode.connect(this.eqBands[0]);
 
       this.element = el;
       this.currentFilePath = filePath;

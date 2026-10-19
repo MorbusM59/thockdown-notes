@@ -6,24 +6,21 @@
  * `sanitizeMenu` can use it too.
  */
 
-/** How one element follows the music. Every element has the same five. */
+/** How one element follows the music. Every element has the same four. */
 export interface BeatChannel {
   /** The share of the element's effect a full response reaches, 0..1. */
   amount: number
-  /**
-   * 0 is mode A, 1 mode B, between a mix of the two. A: how far the band
-   * stands ABOVE ITS OWN RECENT AVERAGE (a hit against the surrounding
-   * music). B: the band's own level, followed directly.
-   */
-  blend: number
   /** The centre of the band, in Hz. */
   frequencyHz: number
   /** The band's width, in octaves, between its half-power points. */
   octaves: number
-  /** The dB that make a full response: above the band's recent average in A, above `floorDb` in B. */
-  rangeDb: number
-  /** Mode B's zero, in dBFS: a band at or below it is no response, and `rangeDb` above it is a full one. */
-  floorDb: number
+  /**
+   * Where the response starts, as a share of the surrounding ten seconds of
+   * the band (`sound/musicBeat.ts`'s stretch): 0.5 means the band responds
+   * only while louder than it is half the time. Higher keeps only the biggest
+   * hits, lower lets more of the bass line through.
+   */
+  contrast: number
 }
 
 export interface BeatSettings {
@@ -38,18 +35,13 @@ export const BEAT_FREQUENCY_MIN_HZ = 20
 export const BEAT_FREQUENCY_MAX_HZ = 500
 export const BEAT_OCTAVES_MIN = 0.1
 export const BEAT_OCTAVES_MAX = 4
-export const BEAT_RANGE_MIN_DB = 3
-export const BEAT_RANGE_MAX_DB = 48
-export const BEAT_FLOOR_MIN_DB = -90
-export const BEAT_FLOOR_MAX_DB = 0
+export const BEAT_CONTRAST_MAX = 0.95
 
 export const DEFAULT_BEAT_CHANNEL: BeatChannel = {
   amount: 0.6,
-  blend: 0,
   frequencyHz: 70,
   octaves: 1,
-  rangeDb: 12,
-  floorDb: -50,
+  contrast: 0.5,
 }
 
 export const DEFAULT_BEAT_SETTINGS: BeatSettings = {
@@ -69,11 +61,9 @@ function sanitizeChannel(input: unknown): BeatChannel {
   const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<keyof BeatChannel, unknown>>
   return {
     amount: bounded(source.amount, 0, 1, d.amount),
-    blend: bounded(source.blend, 0, 1, d.blend),
     frequencyHz: bounded(source.frequencyHz, BEAT_FREQUENCY_MIN_HZ, BEAT_FREQUENCY_MAX_HZ, d.frequencyHz),
     octaves: bounded(source.octaves, BEAT_OCTAVES_MIN, BEAT_OCTAVES_MAX, d.octaves),
-    rangeDb: bounded(source.rangeDb, BEAT_RANGE_MIN_DB, BEAT_RANGE_MAX_DB, d.rangeDb),
-    floorDb: bounded(source.floorDb, BEAT_FLOOR_MIN_DB, BEAT_FLOOR_MAX_DB, d.floorDb),
+    contrast: bounded(source.contrast, 0, BEAT_CONTRAST_MAX, d.contrast),
   }
 }
 

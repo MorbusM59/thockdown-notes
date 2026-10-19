@@ -21,13 +21,13 @@ import { subscribeMusicBand } from '../sound/musicBeat'
 import { setFlowStyle } from './flowStyle'
 
 function useBeatChannel(name: 'caret' | 'shade', channel: BeatChannel, on: boolean): void {
-  const { amount, blend, frequencyHz, octaves, rangeDb, floorDb } = channel
+  const { amount, frequencyHz, octaves, contrast } = channel
   useEffect(() => {
     if (!on || amount <= 0) return
     const variable = `--beat-${name}`
     const root = document.documentElement
     root.setAttribute(`data-beat-${name}`, '')
-    const unsubscribe = subscribeMusicBand({ amount, blend, frequencyHz, octaves, rangeDb, floorDb }, (response) => {
+    const unsubscribe = subscribeMusicBand({ amount, frequencyHz, octaves, contrast }, (response) => {
       setFlowStyle(variable, response <= 0 ? null : (response * amount).toFixed(3))
     })
     return () => {
@@ -35,7 +35,7 @@ function useBeatChannel(name: 'caret' | 'shade', channel: BeatChannel, on: boole
       setFlowStyle(variable, null)
       root.removeAttribute(`data-beat-${name}`)
     }
-  }, [name, on, amount, blend, frequencyHz, octaves, rangeDb, floorDb])
+  }, [name, on, amount, frequencyHz, octaves, contrast])
 }
 
 export function useBeatFeedback(settings: BeatSettings, disabled: boolean): void {

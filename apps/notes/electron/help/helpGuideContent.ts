@@ -269,7 +269,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 *The caret and the active editor's inner shade follow the bass of the music you are playing.*
 
 - While the caret follows the music it stops blinking and holds steady, and the music dips it; the shade deepens with it.
-- Each has its own **amount**; its **freq** and **width**, the band of the music it listens to; **range**, the dB that make a full response; **floor**, where following the level starts; and **blend**, between answering hits that stand out from the surrounding music and following the band's level as it is.
+- Each has its own **amount**; its **freq** and **width**, the band of the music it listens to; and **contrast**, how far the band must rise above the music around it before it responds. It adjusts itself to each track and to your volume, and starts a few seconds into a track or after a jump.
 - It switches itself off while nothing is playing, and with Reduce visual effects.
 `,
   `## Internal Linking
