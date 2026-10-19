@@ -1,35 +1,45 @@
 /**
- * Hands the music's beat (`sound/musicBeat.ts`) to its two channels, each a
- * CSS variable on the one element that reads it (`flowStyle.ts`, never
- * `<html>`): `--beat-caret` on the caret, whose `::after` pulse takes it as
- * its opacity, and `--beat-shade` on the active editor's beat shade
- * (`.editor-beat-shade`). Both already carry their strength, so CSS only
- * reads them. Nothing is subscribed while the pulse is off, so the frame loop
- * and the bass analyser do not exist.
+ * Hands the music's bands (`sound/musicBeat.ts`) to the elements that follow
+ * them, each a CSS variable on the one element that reads it (`flowStyle.ts`,
+ * never `<html>`), already scaled by the element's amount so CSS only reads
+ * it:
+ *
+ * - `--beat-caret`, the caret's DIP: while the caret follows the music its
+ *   own blink is suspended and it holds at its peak (`html[data-beat-caret]`),
+ *   and a response takes that share off its opacity.
+ * - `--beat-shade`, the opacity of the active editor's beat shade
+ *   (`.editor-beat-shade`, shown and promoted under `html[data-beat-shade]`).
+ *
+ * An element with no amount subscribes nothing and keeps its ordinary look;
+ * the two `<html>` attributes change once when the pulse is switched, never
+ * per frame.
  */
 
 import { useEffect } from 'react'
-import type { BeatSettings } from '../shared/beatSettings'
-import { subscribeMusicBeat } from '../sound/musicBeat'
+import type { BeatChannel, BeatSettings } from '../shared/beatSettings'
+import { subscribeMusicBand } from '../sound/musicBeat'
 import { setFlowStyle } from './flowStyle'
 
-export function useBeatFeedback(settings: BeatSettings, disabled: boolean): void {
-  const { enabled, caret, shade } = settings
+function useBeatChannel(name: 'caret' | 'shade', channel: BeatChannel, on: boolean): void {
+  const { amount, blend, frequencyHz, octaves, rangeDb } = channel
   useEffect(() => {
-    if (!enabled || disabled || (caret <= 0 && shade <= 0)) return
-    // Shows (and promotes) the shade layer only while the pulse can drive it:
-    // one document-wide style pass when the pulse is turned on or off, never
-    // per frame.
-    document.documentElement.dataset.beatPulse = ''
-    const unsubscribe = subscribeMusicBeat((pulse) => {
-      setFlowStyle('--beat-caret', pulse <= 0 ? null : (pulse * caret).toFixed(3))
-      setFlowStyle('--beat-shade', pulse <= 0 ? null : (pulse * shade).toFixed(3))
+    if (!on || amount <= 0) return
+    const variable = `--beat-${name}`
+    const root = document.documentElement
+    root.setAttribute(`data-beat-${name}`, '')
+    const unsubscribe = subscribeMusicBand({ amount, blend, frequencyHz, octaves, rangeDb }, (response) => {
+      setFlowStyle(variable, response <= 0 ? null : (response * amount).toFixed(3))
     })
     return () => {
       unsubscribe()
-      delete document.documentElement.dataset.beatPulse
-      setFlowStyle('--beat-caret', null)
-      setFlowStyle('--beat-shade', null)
+      setFlowStyle(variable, null)
+      root.removeAttribute(`data-beat-${name}`)
     }
-  }, [enabled, disabled, caret, shade])
+  }, [name, on, amount, blend, frequencyHz, octaves, rangeDb])
+}
+
+export function useBeatFeedback(settings: BeatSettings, disabled: boolean): void {
+  const on = settings.enabled && !disabled
+  useBeatChannel('caret', settings.caret, on)
+  useBeatChannel('shade', settings.shade, on)
 }

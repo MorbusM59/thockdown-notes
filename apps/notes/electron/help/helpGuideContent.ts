@@ -266,9 +266,10 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 > **Where?**
 > Settings panel → Tools.
 
-*The caret and the active editor's inner shade pulse with the bass of the music you are playing.*
+*The caret and the active editor's inner shade follow the bass of the music you are playing.*
 
-- **caret** and **shade** set how strongly each pulses. It follows the kicks rather than the volume, so a quiet track pulses as clearly as a loud one.
+- While the caret follows the music it stops blinking and holds steady, and the music dips it; the shade deepens with it.
+- Each has its own **amount**; its **freq** and **width**, the band of the music it listens to; **range**, the dB that make a full response; and **blend**, between answering hits that stand out from the surrounding music and following the band's level as it is.
 - It switches itself off while nothing is playing, and with Reduce visual effects.
 `,
   `## Internal Linking

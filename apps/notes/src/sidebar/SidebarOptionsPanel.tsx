@@ -13,7 +13,17 @@ import {
   FLOW_FADE_MAX_TIME_MAX, FLOW_FADE_MAX_TIME_MIN, FLOW_FADE_SHAPE_MAX, FLOW_FADE_SHAPE_MIN,
   type FlowSettings,
 } from '../shared/flowSettings'
-import { DEFAULT_BEAT_SETTINGS, type BeatSettings } from '../shared/beatSettings'
+import {
+  BEAT_FREQUENCY_MAX_HZ,
+  BEAT_FREQUENCY_MIN_HZ,
+  BEAT_OCTAVES_MAX,
+  BEAT_OCTAVES_MIN,
+  BEAT_RANGE_MAX_DB,
+  BEAT_RANGE_MIN_DB,
+  DEFAULT_BEAT_CHANNEL,
+  type BeatChannel,
+  type BeatSettings,
+} from '../shared/beatSettings'
 import { exportSoundscapes, importSoundscapes } from '@thockdown/soundscape/soundscapeFileActions'
 import type { SoundscapePreferences } from '@thockdown/soundscape/soundscape'
 import {
@@ -972,6 +982,41 @@ export function SidebarOptionsPanel({
   startCaretColorCopyHold,
   clearCaretColorArmTimer,
 }: SidebarOptionsPanelProps) {
+    // One element's five beat sliders: the same five for every element that follows the music.
+    const renderBeatChannel = (key: 'caret' | 'shade', label: string, effect: string) => {
+      const channel = beatSettings[key]
+      const set = (patch: Partial<BeatChannel>) => setBeatSettings((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }))
+      const slider = (field: keyof BeatChannel, trackLabel: string, min: number, max: number, step: number, tooltipLabel: string, ariaName: string, digits?: number) => (
+        <CompactScrollbarSlider
+          id={`beat-${key}-${field}`}
+          min={min}
+          max={max}
+          step={step}
+          value={channel[field]}
+          trackLabel={trackLabel}
+          tooltipLabel={tooltipLabel}
+          ariaLabel={`${label}: ${ariaName}`}
+          defaultValue={DEFAULT_BEAT_CHANNEL[field]}
+          formatValue={digits === undefined ? undefined : (value) => value.toFixed(digits)}
+          onCommit={(value) => set({ [field]: value })}
+        />
+      )
+      return (
+        <>
+          <OptionsSubsectionLabel>{label}</OptionsSubsectionLabel>
+          <div className="utility-setting-slider-stack" aria-label={`${label} settings`}>
+            <OptionsSliderRows rows={[2, 2, 1]}>
+              {slider('amount', 'amount', 0, 1, 0.01, `How far ${effect} at a full response; 0 leaves it as it is`, 'amount')}
+              {slider('blend', 'blend', 0, 1, 0.01, "0 answers hits that stand out from the surrounding music, 1 follows the band's level directly, between mixes the two", 'blend between hits and level')}
+              {slider('frequencyHz', 'freq', BEAT_FREQUENCY_MIN_HZ, BEAT_FREQUENCY_MAX_HZ, 1, 'Hz: the centre of the band it listens to', 'frequency in Hz', 0)}
+              {slider('octaves', 'width', BEAT_OCTAVES_MIN, BEAT_OCTAVES_MAX, 0.1, 'Octaves: how wide the bell around the frequency is', 'band width in octaves', 1)}
+              {slider('rangeDb', 'range', BEAT_RANGE_MIN_DB, BEAT_RANGE_MAX_DB, 1, 'dB for a full response: above the surrounding music for hits, below full scale for level', 'dB for a full response', 0)}
+            </OptionsSliderRows>
+          </div>
+        </>
+      )
+    }
+
     /**
      * The true-mode hold's canceller, so a release or a pointer leaving the
      * button aborts it. `armHold` pairs begin and end exactly once itself, so
@@ -3080,35 +3125,8 @@ export function SidebarOptionsPanel({
           </div>
         </>) : null}
         {beatSettings.enabled ? (<>
-          <OptionsSubsectionLabel>Beat</OptionsSubsectionLabel>
-          <div className="utility-setting-slider-stack" aria-label="Beat pulse settings">
-            <OptionsSliderRows rows={[2]}>
-              <CompactScrollbarSlider
-                id="beat-caret"
-                min={0}
-                max={1}
-                step={0.01}
-                value={beatSettings.caret}
-                trackLabel="caret"
-                tooltipLabel="Beat pulse on the caret"
-                ariaLabel="Strength of the caret's beat pulse"
-                defaultValue={DEFAULT_BEAT_SETTINGS.caret}
-                onCommit={(value) => setBeatSettings((prev) => ({ ...prev, caret: value }))}
-              />
-              <CompactScrollbarSlider
-                id="beat-shade"
-                min={0}
-                max={1}
-                step={0.01}
-                value={beatSettings.shade}
-                trackLabel="shade"
-                tooltipLabel="Beat pulse on the active editor's inner shade"
-                ariaLabel="Strength of the inner shade's beat pulse"
-                defaultValue={DEFAULT_BEAT_SETTINGS.shade}
-                onCommit={(value) => setBeatSettings((prev) => ({ ...prev, shade: value }))}
-              />
-            </OptionsSliderRows>
-          </div>
+          {renderBeatChannel('caret', 'Caret beat', 'the caret dips from its peak')}
+          {renderBeatChannel('shade', 'Shade beat', 'the active editor\'s inner shade deepens')}
         </>) : null}
       </AccordionSection>
 
