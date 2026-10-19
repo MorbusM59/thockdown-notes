@@ -6,7 +6,7 @@
  * `sanitizeMenu` can use it too.
  */
 
-/** How one element follows the music. Every element has the same four. */
+/** How one element follows the music. Every element has the same six. */
 export interface BeatChannel {
   /** The share of the element's effect a full response reaches, 0..1. */
   amount: number
@@ -21,6 +21,10 @@ export interface BeatChannel {
    * hits, lower lets more of the bass line through.
    */
   contrast: number
+  /** Seconds a peak takes to fall to nothing; a hit lifts the response at once. */
+  fallSec: number
+  /** The fall's shape, flow's fade curve (`flowTrail.ts`'s `fadeCurve`): 0 falls evenly, higher drops early, lower holds and drops late. */
+  fallShape: number
 }
 
 export interface BeatSettings {
@@ -36,12 +40,18 @@ export const BEAT_FREQUENCY_MAX_HZ = 500
 export const BEAT_OCTAVES_MIN = 0.1
 export const BEAT_OCTAVES_MAX = 4
 export const BEAT_CONTRAST_MAX = 0.95
+export const BEAT_FALL_MIN_SEC = 0.02
+export const BEAT_FALL_MAX_SEC = 2
+export const BEAT_FALL_SHAPE_MIN = -5
+export const BEAT_FALL_SHAPE_MAX = 5
 
 export const DEFAULT_BEAT_CHANNEL: BeatChannel = {
   amount: 0.6,
   frequencyHz: 70,
   octaves: 1,
   contrast: 0.5,
+  fallSec: 0.25,
+  fallShape: 0,
 }
 
 export const DEFAULT_BEAT_SETTINGS: BeatSettings = {
@@ -64,6 +74,8 @@ function sanitizeChannel(input: unknown): BeatChannel {
     frequencyHz: bounded(source.frequencyHz, BEAT_FREQUENCY_MIN_HZ, BEAT_FREQUENCY_MAX_HZ, d.frequencyHz),
     octaves: bounded(source.octaves, BEAT_OCTAVES_MIN, BEAT_OCTAVES_MAX, d.octaves),
     contrast: bounded(source.contrast, 0, BEAT_CONTRAST_MAX, d.contrast),
+    fallSec: bounded(source.fallSec, BEAT_FALL_MIN_SEC, BEAT_FALL_MAX_SEC, d.fallSec),
+    fallShape: bounded(source.fallShape, BEAT_FALL_SHAPE_MIN, BEAT_FALL_SHAPE_MAX, d.fallShape),
   }
 }
 

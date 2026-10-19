@@ -15,27 +15,39 @@
  * per frame.
  */
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import type { BeatChannel, BeatSettings } from '../shared/beatSettings'
-import { subscribeMusicBand } from '../sound/musicBeat'
+import { subscribeMusicBand, type MusicBandSubscription } from '../sound/musicBeat'
 import { setFlowStyle } from './flowStyle'
 
 function useBeatChannel(name: 'caret' | 'shade', channel: BeatChannel, on: boolean): void {
-  const { amount, frequencyHz, octaves, contrast } = channel
+  const active = on && channel.amount > 0
+  // The latest channel, read by the subscription without re-creating it: a
+  // slider moving retunes the band in place and keeps its measurements.
+  const channelRef = useRef(channel)
+  channelRef.current = channel
+  const subscriptionRef = useRef<MusicBandSubscription | null>(null)
+
   useEffect(() => {
-    if (!on || amount <= 0) return
+    if (!active) return
     const variable = `--beat-${name}`
     const root = document.documentElement
     root.setAttribute(`data-beat-${name}`, '')
-    const unsubscribe = subscribeMusicBand({ amount, frequencyHz, octaves, contrast }, (response) => {
-      setFlowStyle(variable, response <= 0 ? null : (response * amount).toFixed(3))
+    const subscription = subscribeMusicBand(channelRef.current, (response) => {
+      setFlowStyle(variable, response <= 0 ? null : (response * channelRef.current.amount).toFixed(3))
     })
+    subscriptionRef.current = subscription
     return () => {
-      unsubscribe()
+      subscriptionRef.current = null
+      subscription.unsubscribe()
       setFlowStyle(variable, null)
       root.removeAttribute(`data-beat-${name}`)
     }
-  }, [name, on, amount, frequencyHz, octaves, contrast])
+  }, [name, active])
+
+  useEffect(() => {
+    subscriptionRef.current?.update(channel)
+  }, [channel])
 }
 
 export function useBeatFeedback(settings: BeatSettings, disabled: boolean): void {

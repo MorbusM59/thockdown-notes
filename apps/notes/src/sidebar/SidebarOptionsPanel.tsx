@@ -19,6 +19,10 @@ import {
   BEAT_OCTAVES_MAX,
   BEAT_OCTAVES_MIN,
   BEAT_CONTRAST_MAX,
+  BEAT_FALL_MAX_SEC,
+  BEAT_FALL_MIN_SEC,
+  BEAT_FALL_SHAPE_MAX,
+  BEAT_FALL_SHAPE_MIN,
   DEFAULT_BEAT_CHANNEL,
   type BeatChannel,
   type BeatSettings,
@@ -1004,11 +1008,13 @@ export function SidebarOptionsPanel({
         <>
           <OptionsSubsectionLabel>{label}</OptionsSubsectionLabel>
           <div className="utility-setting-slider-stack" aria-label={`${label} settings`}>
-            <OptionsSliderRows rows={[2, 2]}>
+            <OptionsSliderRows rows={[2, 2, 2]}>
               {slider('amount', 'amount', 0, 1, 0.01, `How far ${effect} at a full response; 0 leaves it as it is`, 'amount')}
               {slider('frequencyHz', 'freq', BEAT_FREQUENCY_MIN_HZ, BEAT_FREQUENCY_MAX_HZ, 1, 'Hz: the centre of the band it listens to', 'frequency in Hz', 0)}
               {slider('octaves', 'width', BEAT_OCTAVES_MIN, BEAT_OCTAVES_MAX, 0.1, 'Octaves: how wide the bell around the frequency is', 'band width in octaves', 1)}
               {slider('contrast', 'contrast', 0, BEAT_CONTRAST_MAX, 0.01, 'How loud the band must be, against the ten seconds around it, before it responds: higher keeps only the biggest hits', 'contrast')}
+              {slider('fallSec', 'fall', BEAT_FALL_MIN_SEC, BEAT_FALL_MAX_SEC, 0.01, 'Seconds a peak takes to fall to nothing; a hit lifts it at once', 'fall time in seconds', 2)}
+              {slider('fallShape', 'shape', BEAT_FALL_SHAPE_MIN, BEAT_FALL_SHAPE_MAX, 0.1, 'Fall shape: 0 falls evenly, higher drops early, lower holds and drops late', 'fall shape', 1)}
             </OptionsSliderRows>
           </div>
         </>

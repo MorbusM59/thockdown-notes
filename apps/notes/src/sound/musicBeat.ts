@@ -34,6 +34,7 @@
 
 import { outputContext } from '@thockdown/soundscape/audioOutputBus'
 import type { BeatChannel } from '../shared/beatSettings'
+import { fadeCurve } from '../flow/flowTrail'
 import { musicPlayerService } from './MusicPlayerService'
 
 /** How far ahead of the listener the scout plays, in seconds: half the window. */
@@ -44,8 +45,6 @@ const RESYNC_SEC = 0.75
 const TOP_SHARE = 0.02
 /** The narrowest span the stretch may use, so a near-constant band is not blown up into noise. */
 const MIN_SPAN_DB = 3
-/** How fast the envelope falls back after a hit, in seconds of the scout's media time. */
-const RELEASE_SEC = 0.12
 /** A level this far below full scale counts as silence (the floor of the dB readings). */
 const FLOOR_DB = -100
 /** Histogram resolution, in dB. */
@@ -67,7 +66,9 @@ interface Band {
   filter: BiquadFilterNode | null
   analyser: AnalyserNode | null
   samples: Float32Array<ArrayBuffer> | null
-  envelope: number
+  /** The last peak of the response and the listener time it was reached at, for the fall (`fallSec`, `fallShape`). */
+  peak: number
+  peakTime: number
   /** Ring of readings: scout media time and level in dB, oldest at `head`. */
   times: Float64Array
   levels: Float32Array
@@ -100,7 +101,7 @@ function clearWindow(band: Band): void {
   band.head = 0
   band.count = 0
   band.bins.fill(0)
-  band.envelope = 0
+  band.peak = 0
 }
 
 function attachBand(band: Band): void {
@@ -108,18 +109,25 @@ function attachBand(band: Band): void {
   const context = scoutSource.context
   const filter = context.createBiquadFilter()
   filter.type = 'bandpass'
-  filter.frequency.value = band.channel.frequencyHz
-  filter.Q.value = bandQ(band.channel.octaves)
   const analyser = context.createAnalyser()
-  // About three periods of the band's centre, so a low band is not read
-  // from a window shorter than one of its own cycles.
-  const wanted = (3 * context.sampleRate) / band.channel.frequencyHz
-  analyser.fftSize = Math.min(MAX_TAP_SIZE, Math.max(MIN_TAP_SIZE, 2 ** Math.ceil(Math.log2(wanted))))
   scoutSource.connect(filter)
   filter.connect(analyser)
   band.filter = filter
   band.analyser = analyser
-  band.samples = new Float32Array(analyser.fftSize)
+  tuneBand(band)
+}
+
+/** Points a band's filter and analyser at its channel's frequency and width. */
+function tuneBand(band: Band): void {
+  const { filter, analyser } = band
+  if (!filter || !analyser) return
+  filter.frequency.value = band.channel.frequencyHz
+  filter.Q.value = bandQ(band.channel.octaves)
+  // About three periods of the band's centre, so a low band is not read
+  // from a window shorter than one of its own cycles.
+  const wanted = (3 * analyser.context.sampleRate) / band.channel.frequencyHz
+  analyser.fftSize = Math.min(MAX_TAP_SIZE, Math.max(MIN_TAP_SIZE, 2 ** Math.ceil(Math.log2(wanted))))
+  if (band.samples?.length !== analyser.fftSize) band.samples = new Float32Array(analyser.fftSize)
 }
 
 function detachBand(band: Band): void {
@@ -183,15 +191,14 @@ function keepScoutAhead(listenerTime: number): boolean {
 }
 
 /** Takes one reading from the scout into each band's window. */
-function sample(scoutTime: number, dt: number): void {
+function sample(scoutTime: number): void {
   for (const band of bands) {
     if (!band.analyser || !band.samples) continue
     band.analyser.getFloatTimeDomainData(band.samples)
     let sum = 0
     for (let i = 0; i < band.samples.length; i++) sum += band.samples[i] * band.samples[i]
     const rms = Math.sqrt(sum / band.samples.length)
-    band.envelope = rms > band.envelope ? rms : band.envelope + (rms - band.envelope) * (1 - Math.exp(-dt / RELEASE_SEC))
-    const db = band.envelope > 0 ? Math.max(FLOOR_DB, 20 * Math.log10(band.envelope)) : FLOOR_DB
+    const db = rms > 0 ? Math.max(FLOOR_DB, 20 * Math.log10(rms)) : FLOOR_DB
     if (band.count === CAPACITY) dropOldest(band)
     const at = (band.head + band.count) % CAPACITY
     band.times[at] = scoutTime
@@ -232,7 +239,16 @@ function respond(band: Band, listenerTime: number): number {
   }
   const floor = percentile(band, band.channel.contrast)
   const top = Math.max(floor + MIN_SPAN_DB, percentile(band, 1 - TOP_SHARE))
-  return Math.max(0, Math.min(1, (level - floor) / (top - floor)))
+  const raw = Math.max(0, Math.min(1, (level - floor) / (top - floor)))
+  // The fall: a response never drops faster than its last peak fades, on
+  // flow's fade curve (fallSec long, fallShape). A rise is taken at once.
+  const held = band.peak * fadeCurve(listenerTime - band.peakTime, band.channel.fallSec, band.channel.fallShape)
+  if (raw >= held) {
+    band.peak = raw
+    band.peakTime = listenerTime
+    return raw
+  }
+  return held
 }
 
 function publish(band: Band, response: number): void {
@@ -251,11 +267,10 @@ function tick(): void {
   keepScoutAhead(listenerTime)
   const scoutTime = scout?.currentTime ?? 0
   if (scoutTime !== lastScoutTime) {
-    // The scout's own clock times the envelope, so it falls at the music's
-    // pace however the frames land.
-    const dt = lastScoutTime < 0 ? 0 : Math.max(0, Math.min(0.1, scoutTime - lastScoutTime))
+    // One reading per scout position: a frame that lands before the scout's
+    // clock moves would only repeat the last one.
     lastScoutTime = scoutTime
-    sample(scoutTime, dt)
+    sample(scoutTime)
   }
   for (const band of bands) publish(band, respond(band, listenerTime))
   frame = requestAnimationFrame(tick)
@@ -278,15 +293,25 @@ function onVisibility(): void {
   else start()
 }
 
-/** Follows one band of the music; `listener` gets the response whenever it moves. Returns the unsubscribe. */
-export function subscribeMusicBand(channel: BeatChannel, listener: BeatListener): () => void {
-  const band: Band = {
+export interface MusicBandSubscription {
+  /**
+   * Retunes the band in place. The window of readings is kept: a new
+   * frequency or width fills it with readings of the new band as they
+   * arrive, rather than starting the measurement over.
+   */
+  update: (channel: BeatChannel) => void
+  unsubscribe: () => void
+}
+
+/** Follows one band of the music; `listener` gets the response whenever it moves. */
+export function subscribeMusicBand(channel: BeatChannel, listener: BeatListener): MusicBandSubscription {  const band: Band = {
     channel,
     listener,
     filter: null,
     analyser: null,
     samples: null,
-    envelope: 0,
+    peak: 0,
+    peakTime: 0,
     times: new Float64Array(CAPACITY),
     levels: new Float32Array(CAPACITY),
     head: 0,
@@ -301,7 +326,12 @@ export function subscribeMusicBand(channel: BeatChannel, listener: BeatListener)
     document.addEventListener('visibilitychange', onVisibility)
   }
   start()
-  return () => {
+  const update = (next: BeatChannel) => {
+    const retune = next.frequencyHz !== band.channel.frequencyHz || next.octaves !== band.channel.octaves
+    band.channel = next
+    if (retune) tuneBand(band)
+  }
+  const unsubscribe = () => {
     bands.delete(band)
     detachBand(band)
     if (bands.size > 0) return
@@ -311,4 +341,5 @@ export function subscribeMusicBand(channel: BeatChannel, listener: BeatListener)
     unsubscribePlaying = null
     document.removeEventListener('visibilitychange', onVisibility)
   }
+  return { update, unsubscribe }
 }
