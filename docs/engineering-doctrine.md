@@ -252,6 +252,23 @@ Longer, and far easier to read, because nothing in it has to be decoded.
 
 ---
 
+## 11. Spend nothing that has not earned its place.
+
+Every cost — a frame, an allocation, a listener, a worker round-trip, a byte
+held — must answer "is that needed?" with a good answer, or it goes. Be
+minimally invasive: the smallest change at the right place, never a shotgun
+spread of guards and caches in the hope that one of them helps.
+
+Every change likely to affect performance gets a code-review-level performance
+check before its work is called done: read the diff for obvious smoking guns
+(work per keystroke or per frame, unbounded growth, a timer or loop nobody
+stops, something retained that should not be). This is a review, not a test
+battery. During active iteration it can be looser to keep momentum; as a
+feature nears completion, accept nothing short of the optimally performant
+solution.
+
+---
+
 ## The order of work
 
 The rules above say what good looks like. This says what to do first, and it
