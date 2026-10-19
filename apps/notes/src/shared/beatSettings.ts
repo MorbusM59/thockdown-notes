@@ -36,7 +36,7 @@ export interface BeatSettings {
 }
 
 export const BEAT_FREQUENCY_MIN_HZ = 20
-export const BEAT_FREQUENCY_MAX_HZ = 500
+export const BEAT_FREQUENCY_MAX_HZ = 20000
 export const BEAT_OCTAVES_MIN = 0.1
 export const BEAT_OCTAVES_MAX = 4
 export const BEAT_CONTRAST_MAX = 0.95
