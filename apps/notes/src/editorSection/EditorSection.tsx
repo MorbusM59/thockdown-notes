@@ -1,4 +1,5 @@
 import { useImagePreviewGestures } from './useImagePreviewGestures'
+import { useSpeedReading } from '../speedReading/useSpeedReading'
 import { isSealedNoteId } from '../shared/helpGuide'
 import { useImageStorageButton } from './useImageStorageButton'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -1682,6 +1683,16 @@ export function EditorSection(rawProps: EditorSectionProps) {
    * already ends the mode through `onDismiss`, so a second path to the same
    * place would be a second thing to keep correct.
    */
+  const { startSpeedReading } = useSpeedReading({
+    isPreviewMode,
+    isSectionActive: sectionId === activeSectionId,
+    activeNoteId,
+    readDisplayedText,
+    latestEditorSelectionRef,
+    adapterRef,
+    previewScrollRef,
+  })
+
   const exitSlotOverlay = useMemo<(() => void) | null>(() => {
     if (escapeMenu?.activeMode) return onEscapeHoldPanelClose
     if (isShowingGuide || shownImageId) return onCloseSlotOverlay
@@ -1806,6 +1817,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
     bindings,
     toggleRenderViewMode,
     exitSlotOverlay,
+    startSpeedReading,
     applyProgrammaticEditorText,
     sectionId,
     activeNoteId,

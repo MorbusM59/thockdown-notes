@@ -82,6 +82,7 @@ import type {
   EditorViewportState,
 } from '../editor/EditorContract';
 import { resolveGlyphWidthPx } from '../editor/EditorTypography';
+import { SpeedReadingEditOverlay } from '../speedReading/SpeedReadingEditOverlay';
 
 /**
  * Phase 2, slice 1 of the CM6 migration spike (see
@@ -6471,6 +6472,7 @@ export function CM6Editor({
     // non-scrolling parent, not inside the scrolling element itself.
     <div
       ref={layerRef}
+      className="cm6-editor-layer"
       style={{
         position: 'absolute',
         inset: 0,
@@ -6561,6 +6563,15 @@ export function CM6Editor({
             style={{ inset: '0 0 -1px 0', zIndex: 7, backgroundPosition: `${halfCellWidthPx}px ${halfLineHeightPx}px` }}
           />
         </>
+      )}
+      {hasViewportLines && fontReady && (
+        <SpeedReadingEditOverlay
+          isSectionActive={isSectionActive && isEditPaneVisible}
+          cellWidthPx={cellWidthPx}
+          lineHeightPx={lineHeightPx}
+          halfCellWidthPx={halfCellWidthPx}
+          halfLineHeightPx={halfLineHeightPx}
+        />
       )}
       {/* Fixed-focus caging boundary zones -- ported from Editor.tsx's own
           background-zone divs. Adjacent, not overlapping, in the well-behaved

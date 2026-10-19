@@ -132,6 +132,8 @@ import { ImageCorrectionFilter, ThemeBlendOverlays, ThemeGlazeLayers } from '@th
 import { FlowOverlays } from './flow/FlowOverlays'
 import { useFlowFeedback } from './flow/useFlowFeedback'
 import { DEFAULT_FLOW_SETTINGS, sanitizeFlowSettings, type FlowSettings } from './shared/flowSettings'
+import { DEFAULT_SPEED_READING_SETTINGS, sanitizeSpeedReadingSettings, type SpeedReadingSettings } from './speedReading/speedReadingSettings'
+import { getSpeedReadingDisplay, onSpeedReadingSettingsCommit, setSpeedReadingSettings as applySpeedReadingSettings } from './speedReading/speedReadingStore'
 import { useBeatFeedback } from './flow/useBeatFeedback'
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings, type BeatSettings } from './shared/beatSettings'
 import { DEBUG_TAG_NAME, normalizeTagName } from './shared/tags'
@@ -1460,9 +1462,17 @@ function App() {
   // persistMenuStateNowRef). An effect rather than a call in the setter, so
   // the snapshot is built from the render that already holds the new value.
   const [beatSettings, setBeatSettings] = useState<BeatSettings>(DEFAULT_BEAT_SETTINGS)
+  // Speed reading's settings: pushed to the session's store on every change,
+  // and a session's own change (its words per minute, from the arrow keys)
+  // handed back once when it ends.
+  const [speedReadingSettings, setSpeedReadingSettings] = useState<SpeedReadingSettings>(DEFAULT_SPEED_READING_SETTINGS)
+  useEffect(() => {
+    applySpeedReadingSettings(speedReadingSettings)
+  }, [speedReadingSettings])
+  useEffect(() => onSpeedReadingSettingsCommit(setSpeedReadingSettings), [])
   useEffect(() => {
     void persistMenuStateNowRef.current()
-  }, [flowSettings, beatSettings])
+  }, [flowSettings, beatSettings, speedReadingSettings])
   const [customCursorEnabled, setCustomCursorEnabled] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.enabled)
   const [customCursorDotColor, setCustomCursorDotColor] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.dotColor)
   const [customCursorCenterColor, setCustomCursorCenterColor] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.centerColor)
@@ -3998,6 +4008,7 @@ function App() {
       spellCheckEnabled,
       flow: flowSettings,
       beat: beatSettings,
+      speedReading: speedReadingSettings,
       chapterBarMode: chapterBarModeRef.current,
       isSidebarVisible: overrides?.isSidebarVisible ?? isSidebarVisible,
       // These three are presence-checked (`'x' in overrides`) rather than
@@ -4038,6 +4049,7 @@ function App() {
     spellCheckEnabled,
     flowSettings,
     beatSettings,
+    speedReadingSettings,
     reduceVisualEffects,
     allowRemoteImages,
     sidebarShowsImages,
@@ -6163,6 +6175,7 @@ ${markdownHtml}
             setDebuggingEnabled(appState.menu.debuggingEnabled ?? false)
             setSpellCheckEnabled(appState.menu.spellCheckEnabled ?? false)
             setFlowSettings(sanitizeFlowSettings(appState.menu.flow))
+            setSpeedReadingSettings(sanitizeSpeedReadingSettings(appState.menu.speedReading))
             setBeatSettings(sanitizeBeatSettings(appState.menu.beat))
             setRestoredTabBarMode(appState.menu.chapterBarMode ?? 'tabs')
 
@@ -8550,6 +8563,18 @@ ${markdownHtml}
         return
       }
 
+      // Alt+< starts speed reading in the active slot, from the caret in the
+      // edit view and from what is on screen in the render view. A session
+      // holds the keyboard while it runs and ends on any key it does not use,
+      // Alt+< included, so this only ever starts one. Not while the ring is
+      // up: the keyboard is the ring's, and a mode's slot has no note on show.
+      if (!isEditorControlField && !isEscapeRingUp && activeSection?.activeNoteId
+        && matchShortcut(event, 'speedReading')) {
+        event.preventDefault()
+        if (!event.repeat) activeSection.startSpeedReading()
+        return
+      }
+
       if (isEditorTarget && activeSection?.activeNoteId) {
         const editorShortcuts: Array<[ShortcutId, () => void]> = [
           ['bold', () => activeSection.applyTextDecoration('bold')],
@@ -8791,6 +8816,8 @@ ${markdownHtml}
   useEffect(() => {
     const onTab = (event: globalThis.KeyboardEvent) => {
       if (event.key !== 'Tab') return
+      // A speed reading session holds the keyboard; Tab only ends it.
+      if (getSpeedReadingDisplay()) return
       if (mayHoldKeyboard(document.activeElement)) return
       event.preventDefault()
       returnKeyboardToActiveSurface()
@@ -9555,6 +9582,8 @@ ${markdownHtml}
                         setSpellCheckEnabled={setSpellCheckEnabled}
                         flowSettings={flowSettings}
                         setFlowSettings={setFlowSettings}
+                        speedReadingSettings={speedReadingSettings}
+                        setSpeedReadingSettings={setSpeedReadingSettings}
                         beatSettings={beatSettings}
                         setBeatSettings={setBeatSettings}
                         reducedCaretAnimation={reducedCaretAnimation}

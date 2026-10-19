@@ -271,6 +271,18 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - While the caret follows the music it stops blinking and holds steady, and the music dips it; the shade deepens with it.
 - Each has its own **amount**; its **freq** and **width**, the band of the music it listens to; and **contrast**, how far the band must rise above the music around it before it responds; and **fall** and **shape**, how a peak falls away after a hit. It adjusts itself to each track and to your volume, and starts a few seconds into a track or after a jump.
 - It switches itself off while nothing is playing, and with Reduce visual effects.
+
+### [Speed Reading](#speed-reading)
+
+> **Where?**
+> \`Alt+<\` in either view. Settings panel → Speed reading.
+
+*Reads a note to you at a pace you set, from where you are.*
+
+- **Render view** scrolls the page on its own from what is on screen, at your words per minute, measured from the text as it is laid out. Hold \`Space\` or \`↓\` to ease to a pause; let go to ease back up.
+- **Edit view** greys out the grid and shows the note a few words at a time in one row, starting at the caret. \`Space\` or \`↓\` shows the next words; hold it to read on at your pace. \`↑\` goes back. When you stop, the caret is where you were reading.
+- \`←\` and \`→\` make it slower or faster in steps of 5; hold to sweep. The word count shows the pace while you read.
+- Any other key, or a click, stops.
 `,
   `## Internal Linking
 
@@ -848,6 +860,16 @@ ${shortcutTable()}
 - Controls for ramp, speed, maximum speed, and overall curve shape. Response is auto-derived from ramp.
 - **Maximum speed** does two jobs at once. It caps how fast a scroll animation travels, and it also caps how *long* one may take: the longest any scroll can run is the time it would take to cover 200,000 pixels at the speed you've set — 2 seconds at the top of the slider, 2.5 at the default. Wind the speed up and long journeys get shorter as well as quicker; wind it down and a trip across a very large note becomes a proper voyage. A journey that can't fit under both limits keeps the time one and exceeds the speed one, so you're never left waiting.
 - These settings aren't part of a layout — they stay as you left them across layout switches and app restarts, the same way the custom cursor toggle does.
+
+### [Speed Reading Settings](#speed-reading-settings)
+
+> **Where?**
+> Settings panel → Speed reading.
+
+*The pace of [Speed Reading]($#speed-reading) and how it eases.*
+
+- **render** and **edit** are each view's words per minute; **row** is the edit view's reading row, in boxes.
+- **ramp**, **shape** and **speed** shape the ease into a held \`Space\` and out of and back from a pause, like the same three in [Animations]($#animations), with their own values.
 
 ### [Scrolling](#scrolling)
 

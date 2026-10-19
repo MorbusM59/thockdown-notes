@@ -1288,3 +1288,40 @@ button.escape-menu-chrome-gauge[data-pressed] .escape-menu-chrome-gauge-fill {
   top: var(--spacing-regular, 12px);
   right: var(--spacing-regular, 12px);
 }
+
+/* Speed reading's edit-view row (speedReading/SpeedReadingEditOverlay.tsx).
+   While the overlay is in the editor layer, everything else the layer draws
+   is faded out -- the note's text, the caret, the zones, the flow trail --
+   except the grid lines, which draw over the overlay's boxes as they do over
+   the zones'. Faded rather than hidden: a hidden element cannot keep focus,
+   and the editor keeps the keyboard throughout. */
+.cm6-editor-layer:has(> .speed-reading-overlay) > :not(.speed-reading-overlay, .thockdown-grid-lines, .thockdown-grid-outline-lines) {
+  opacity: 0;
+}
+
+.speed-reading-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.speed-reading-cover {
+  position: absolute;
+  inset: 0;
+  background-color: var(--color-bg-leading);
+  z-index: 2;
+}
+
+.speed-reading-row {
+  position: absolute;
+  background-color: var(--color-bg-regular);
+  z-index: 3;
+}
+
+.speed-reading-text {
+  position: absolute;
+  z-index: 10;
+  width: max-content;
+  white-space: pre !important;
+  color: var(--color-editor-edit-text);
+}

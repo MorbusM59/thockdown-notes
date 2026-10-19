@@ -238,6 +238,20 @@ import {
 } from '../adventure/model/autoAdvance'
 import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
 import { clamp } from '@thockdown/interaction/clamp'
+import {
+  DEFAULT_SPEED_READING_SETTINGS,
+  SPEED_READING_CURVE_RAMP_MAX,
+  SPEED_READING_CURVE_RAMP_MIN,
+  SPEED_READING_CURVE_SHAPE_MAX,
+  SPEED_READING_CURVE_SHAPE_MIN,
+  SPEED_READING_CURVE_SPEED_MAX_SEC,
+  SPEED_READING_ROW_WIDTH_MAX,
+  SPEED_READING_ROW_WIDTH_MIN,
+  SPEED_READING_WPM_MAX,
+  SPEED_READING_WPM_MIN,
+  SPEED_READING_WPM_STEP,
+  type SpeedReadingSettings,
+} from '../speedReading/speedReadingSettings'
 
 
 // ── Locally-scoped types ───────────────────────────────────────────────────
@@ -556,6 +570,8 @@ export interface SidebarOptionsPanelProps {
   setSpellCheckEnabled: (updater: (previous: boolean) => boolean) => void
   flowSettings: FlowSettings
   setFlowSettings: (updater: (previous: FlowSettings) => FlowSettings) => void
+  speedReadingSettings: SpeedReadingSettings
+  setSpeedReadingSettings: (updater: (previous: SpeedReadingSettings) => SpeedReadingSettings) => void
   beatSettings: BeatSettings
   setBeatSettings: (updater: (previous: BeatSettings) => BeatSettings) => void
   reducedCaretAnimation: boolean
@@ -861,6 +877,8 @@ export function SidebarOptionsPanel({
   setSpellCheckEnabled,
   flowSettings,
   setFlowSettings,
+  speedReadingSettings,
+  setSpeedReadingSettings,
   beatSettings,
   setBeatSettings,
   reducedCaretAnimation,
@@ -3200,6 +3218,99 @@ export function SidebarOptionsPanel({
               ariaLabel="Maximum scroll speed in pixels per second"
               defaultValue={DEFAULT_RENDER_SCROLL_MAX_SPEED_PX_PER_SEC}
               onCommit={(value) => setRenderScrollMaxSpeedPxPerSec(clamp(value, 1000, 100000))}
+            />
+          </OptionsSliderRows>
+        </div>
+      </AccordionSection>
+
+      {/* Speed reading (Alt+<): the two views' paces, the edit view's row,
+          and the one curve both views ease with -- the same three numbers as
+          Animations above, kept apart from them because a reading pace's ease
+          is seconds long where a page key's journey is a fraction of one
+          (speedReading/speedReadingSettings.ts). Pace first, then the row,
+          then the curve, which is the order a reader tunes them in. */}
+      <AccordionSection
+        className="sidebar-options-section-speed-reading"
+        ariaLabel="Speed reading"
+        heading="Speed reading"
+      >
+<div className="utility-setting-slider-stack" aria-label="Speed reading settings">
+          <OptionsSliderRows rows={[3, 3]}>
+            <CompactScrollbarSlider
+              id="speed-reading-render-wpm"
+              min={SPEED_READING_WPM_MIN}
+              max={SPEED_READING_WPM_MAX}
+              step={SPEED_READING_WPM_STEP}
+              value={speedReadingSettings.renderWpm}
+              trackLabel="render"
+              tooltipLabel="Render view: words per minute the page scrolls at (Left / Right while reading)"
+              ariaLabel="Render view speed reading pace in words per minute"
+              defaultValue={DEFAULT_SPEED_READING_SETTINGS.renderWpm}
+              formatValue={(value) => String(Math.round(value))}
+              onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, renderWpm: Math.round(value) }))}
+            />
+            <CompactScrollbarSlider
+              id="speed-reading-edit-wpm"
+              min={SPEED_READING_WPM_MIN}
+              max={SPEED_READING_WPM_MAX}
+              step={SPEED_READING_WPM_STEP}
+              value={speedReadingSettings.editWpm}
+              trackLabel="edit"
+              tooltipLabel="Edit view: words per minute a held Space reads on at (Left / Right while reading)"
+              ariaLabel="Edit view speed reading pace in words per minute"
+              defaultValue={DEFAULT_SPEED_READING_SETTINGS.editWpm}
+              formatValue={(value) => String(Math.round(value))}
+              onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, editWpm: Math.round(value) }))}
+            />
+            <CompactScrollbarSlider
+              id="speed-reading-row-width"
+              min={SPEED_READING_ROW_WIDTH_MIN}
+              max={SPEED_READING_ROW_WIDTH_MAX}
+              step={1}
+              value={speedReadingSettings.rowWidth}
+              trackLabel="row"
+              tooltipLabel="Edit view: the reading row's width in boxes; each chunk is as many words as fit"
+              ariaLabel="Width of the edit view's reading row in boxes"
+              defaultValue={DEFAULT_SPEED_READING_SETTINGS.rowWidth}
+              formatValue={(value) => String(Math.round(value))}
+              onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, rowWidth: Math.round(value) }))}
+            />
+            <CompactScrollbarSlider
+              id="speed-reading-curve-ramp"
+              min={SPEED_READING_CURVE_RAMP_MIN}
+              max={SPEED_READING_CURVE_RAMP_MAX}
+              step={0.05}
+              value={speedReadingSettings.curveRamp}
+              trackLabel="ramp"
+              tooltipLabel="Speed curve ramp, as in Animations: how a held Space eases into the pace (edit) or a pause eases out of it and back (render)"
+              ariaLabel="Speed reading curve dynamic"
+              defaultValue={DEFAULT_SPEED_READING_SETTINGS.curveRamp}
+              onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, curveRamp: value }))}
+            />
+            <CompactScrollbarSlider
+              id="speed-reading-curve-shape"
+              min={SPEED_READING_CURVE_SHAPE_MIN}
+              max={SPEED_READING_CURVE_SHAPE_MAX}
+              step={0.01}
+              value={speedReadingSettings.curveShape}
+              trackLabel="shape"
+              tooltipLabel="Speed curve shape, as in Animations: the share of the curve spent speeding up, the rest slowing down"
+              ariaLabel="Speed reading curve skew"
+              defaultValue={DEFAULT_SPEED_READING_SETTINGS.curveShape}
+              onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, curveShape: value }))}
+            />
+            <CompactScrollbarSlider
+              id="speed-reading-curve-speed"
+              min={0}
+              max={SPEED_READING_CURVE_SPEED_MAX_SEC}
+              step={0.05}
+              value={speedReadingSettings.curveSpeedSec}
+              trackLabel="speed"
+              tooltipLabel="Speed curve time in seconds, as in Animations: speeding up and slowing down together"
+              ariaLabel="Speed reading curve total time in seconds"
+              reverseScale
+              defaultValue={DEFAULT_SPEED_READING_SETTINGS.curveSpeedSec}
+              onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, curveSpeedSec: value }))}
             />
           </OptionsSliderRows>
         </div>

@@ -57,6 +57,7 @@ export type ShortcutSectionId =
   | 'content'
   | 'zoom'
   | 'scrollbar'
+  | 'speedReading'
   | 'tabBar'
   | 'chapterBar'
   | 'timeline'
@@ -93,8 +94,11 @@ export interface ShortcutDeclaration {
    * `'table-keys'`: the image keys, which arrive through the table entries
    * with the same chords (`tableMove`, `tableEmptyCell`); the bindings try
    * the table first, so in a table cell they stay the table's.
+   * `'speed-reading'`: the keys a speed reading session takes while it runs
+   * (`speedReading/speedReadingSession.ts`), which holds the whole keyboard
+   * and so has no other binding to be told apart from.
    */
-  matchedBy?: 'codemirror' | 'escape-hold' | 'help-key' | 'ring' | 'table-keys'
+  matchedBy?: 'codemirror' | 'escape-hold' | 'help-key' | 'ring' | 'table-keys' | 'speed-reading'
 }
 
 export interface ShortcutSection {
@@ -122,7 +126,12 @@ export const SHORTCUT_PANELS: readonly ShortcutPanel[] = [
   {
     title: 'Editor',
     icon: 'fa-solid fa-file-lines',
-    sections: [{ id: 'content', title: 'Content' }, { id: 'zoom', title: 'Zoom' }, { id: 'scrollbar', title: 'Scrollbar' }],
+    sections: [
+      { id: 'content', title: 'Content' },
+      { id: 'zoom', title: 'Zoom' },
+      { id: 'scrollbar', title: 'Scrollbar' },
+      { id: 'speedReading', title: 'Speed reading' },
+    ],
   },
   {
     title: 'Note management',
@@ -205,6 +214,23 @@ export const SHORTCUTS = {
   imageAlign: { section: 'images', chords: withMods(ARROWS_LR, { ctrl: true, shift: true }), label: 'Align left / center / right', matchedBy: 'table-keys' },
   imageResize: { section: 'images', chords: withMods(ARROWS_UD, { ctrl: true, shift: true }), label: 'Grow / shrink', matchedBy: 'table-keys' },
   imageClearLayout: { section: 'images', chords: [{ key: 'Backspace', shift: true }], label: 'Clear size and alignment', matchedBy: 'table-keys' },
+
+  // Alt+< wherever < is a key of its own (the ISO key beside left Shift), and
+  // Alt+Shift+, where it is not (US layouts), which reports `<` the same way.
+  speedReading: {
+    section: 'speedReading',
+    chords: [{ key: '<', alt: true }, { key: '<', alt: true, shift: true }],
+    label: 'Speed reading on / off',
+  },
+  speedReadingAdvance: {
+    section: 'speedReading',
+    chords: [{ code: 'Space' }, { key: 'ArrowDown' }],
+    label: 'Next words, hold to read on (edit); hold to pause (render)',
+    matchedBy: 'speed-reading',
+  },
+  speedReadingBack: { section: 'speedReading', chords: [{ key: 'ArrowUp' }], label: 'Previous words (edit)', matchedBy: 'speed-reading' },
+  speedReadingPace: { section: 'speedReading', chords: ARROWS_LR, label: 'Slower / faster, hold to sweep', matchedBy: 'speed-reading' },
+  speedReadingEnd: { section: 'speedReading', chords: [{ key: 'Escape' }], label: 'Stop: any other key or a click', matchedBy: 'speed-reading' },
 
   ringTurn: { section: 'menu', chords: ARROWS_LR, label: 'Turn the dial (or W A S D)', matchedBy: 'ring' },
   ringNext: { section: 'menu', chords: [{ key: 'Tab' }], label: 'Next choice', matchedBy: 'ring' },
