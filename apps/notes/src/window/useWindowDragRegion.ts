@@ -10,18 +10,27 @@ import { IS_LINUX_DESKTOP } from '../shared/platform'
 /**
  * Linux: the compositor moves the window, never the app (shared/platform.ts
  * says why), and it does so only for a press starting on an `app-region:
- * drag` area. So every surface the JavaScript path below would let move the
- * window is declared such an area instead, carved out by the same exclusion
- * selector, plus anything carrying a `tabindex` (the render pane, the ring's
- * cells, the snapshot timeline), which is content the reader works in rather
- * than background. The compositor then also owns double-click to maximize
- * and dragging a maximized window out of maximize. Inside a drag area the
- * page receives no pointer events at all, which is why the custom cursor is
- * off on Linux.
+ * drag` area. Inside such an area the page receives no pointer events at
+ * all, which is why the custom cursor is off on Linux.
+ *
+ * The area is OPT-IN: only the title-bar chrome (WINDOW_TITLEBAR_SELECTOR)
+ * is declared draggable, with the usual exclusions (plus anything carrying a
+ * `tabindex`) carved back out of it. The first version declared the whole
+ * `<body>` a drag area and relied on the exclusion list to give clicks back,
+ * which fails the wrong way: any clickable element the list does not name
+ * silently swallows its clicks, and on a KDE Wayland session with trackpad
+ * and touch input the whole window behaved as a title bar. Opt-in fails the
+ * safe way, a forgotten surface is merely not draggable, and content (the
+ * editor, the sidebar, the ring) is never inside a drag area at all.
+ * `app-region` is not inherited, so a child of the chrome that is neither
+ * excluded nor itself declared lies inside the chrome's drag rectangle; the
+ * chrome holds only buttons and the exclusion list covers them. The
+ * compositor also owns double-click to maximize and dragging a maximized
+ * window out of maximize.
  */
 function installNativeDragRegions(): () => void {
   const style = document.createElement('style')
-  style.textContent = `body { -webkit-app-region: drag; }\n:is(${WINDOW_DRAG_EXCLUDED_SELECTOR}, [tabindex]) { -webkit-app-region: no-drag; }`
+  style.textContent = `:is(${WINDOW_TITLEBAR_SELECTOR}) { -webkit-app-region: drag; }\n:is(${WINDOW_DRAG_EXCLUDED_SELECTOR}, [tabindex]) { -webkit-app-region: no-drag; }`
   document.head.appendChild(style)
   return () => style.remove()
 }
