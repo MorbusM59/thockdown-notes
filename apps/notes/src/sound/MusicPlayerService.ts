@@ -177,6 +177,9 @@ export function resolveSeekPress(
  * presence lift and an air shelf) applied to the music in proportion to the
  * typing flow meter. Gains are the curve at full effect.
  */
+/** The smallest change of the flow EQ's amount `setFlowEq` applies. */
+const FLOW_EQ_MIN_STEP = 0.002;
+
 const FLOW_EQ_BANDS: ReadonlyArray<{ type: BiquadFilterType; frequencyHz: number; q: number; gainDb: number }> = [
   { type: 'lowshelf', frequencyHz: 100, q: 0.7, gainDb: 16 },
   { type: 'peaking', frequencyHz: 500, q: 0.9, gainDb: -8 },
@@ -279,6 +282,10 @@ export class MusicPlayerService {
    * per-frame updates do not step the filters audibly.
    */
   setFlowEq(amount: number): void {
+    // Called every frame the flow meter moves. Each call adds an automation
+    // event per band, so a change too small to hear (under 0.04 dB at
+    // the curve's largest band) is skipped; reaching zero always applies.
+    if (Math.abs(amount - this.eqAmount) < FLOW_EQ_MIN_STEP && (amount > 0 || this.eqAmount === 0)) return;
     this.eqAmount = amount;
     const context = this.audioCtx;
     if (!context) return;

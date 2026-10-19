@@ -10,6 +10,7 @@ import { matchShortcut, type ShortcutId } from '../shared/keyboardShortcuts';
 import { buildTokenPresentation } from '../editor/MarkdownLineClassification';
 import { suppressNextPlainTypingSoundOnce, typingSoundManager } from '../sound/TypingSoundManager';
 import { flowMeter } from '../flow/flowMeter';
+import { flowStyleTarget, readFlowStyle } from '../flow/flowStyle';
 import { TRAIL_ALPHA_AT_FULL_FLOW, fadeTrailBox, lineRampShare, setTrailIdle, trailGroup } from '../flow/flowTrail';
 
 import { ARROW_KEY_VOICES, SHIFT_TAB_KEY_VOICE, TAB_KEY_VOICE } from '../sound/keyVoices';
@@ -1138,6 +1139,7 @@ export function CM6Editor({
   // element like the caret's own transform.
   const [flowSourceStyle, setFlowSourceStyle] = useState<React.CSSProperties | null>(null);
   const flowSourceElRef = useRef<HTMLDivElement | null>(null);
+  const [flowSourceElFlowRef] = useState(() => flowStyleTarget(flowSourceElRef));
   const caretAnimationFrameRef = useRef<number | null>(null);
   // scrollerRect/layerRect don't change on a plain text keystroke -- only
   // the selection Range rect does. Cached across updateCaret calls and only
@@ -1149,6 +1151,8 @@ export function CM6Editor({
   // The caret's own DOM node, so its new position can be written in the SAME
   // frame that computed it. See applyCaretStyle below for why that matters.
   const caretElRef = useRef<HTMLDivElement | null>(null);
+  // The caret reads --flow-caret-effect, set on it rather than on <html> (flow/flowStyle.ts).
+  const [caretElFlowRef] = useState(() => flowStyleTarget(caretElRef));
   /**
    * The typing flow trail (flowMeter.trailBox): a clip box over the scroller
    * and, inside it, a layer moved by -scrollTop, so a box placed in SCROLL
@@ -4188,7 +4192,7 @@ export function CM6Editor({
                 ghost.style.transform = `translate(${caretCell.grid.left}px, ${caretCell.grid.top}px)`;
                 ghost.style.width = `${caretCell.grid.width + 1}px`;
                 ghost.style.height = `${caretCell.grid.height + 1}px`;
-                ghost.style.setProperty('--flow-trail-saturation', document.documentElement.style.getPropertyValue('--flow-trail-source-saturation') || '0');
+                ghost.style.setProperty('--flow-trail-saturation', readFlowStyle('--flow-trail-source-saturation') ?? '0');
                 const fill = document.createElement('div');
                 fill.className = 'flow-trail-ghost-caret';
                 fill.style.left = `${caretCell.left - caretCell.grid.left}px`;
@@ -6840,7 +6844,7 @@ export function CM6Editor({
       </div>
       {hasViewportLines && fontReady && !caretHidden && caretStyle && (
         <div
-          ref={caretElRef}
+          ref={caretElFlowRef}
           className="thockdown-block-caret"
           style={{
             position: 'absolute',
@@ -6866,7 +6870,7 @@ export function CM6Editor({
       )}
       {hasViewportLines && fontReady && !caretHidden && caretStyle && flowSourceStyle && (
         <div
-          ref={flowSourceElRef}
+          ref={flowSourceElFlowRef}
           className="flow-trail-source"
           // Above the caret (8), below the text (10).
           style={{ position: 'absolute', pointerEvents: 'none', zIndex: 9, top: 0, left: 0, ...flowSourceStyle }}

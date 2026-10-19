@@ -13,6 +13,7 @@ import { typingSoundManager } from '../sound/TypingSoundManager'
 import { soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
 import { musicPlayerService } from '../sound/MusicPlayerService'
 import { TRAIL_ALPHA_AT_FULL_FLOW } from './flowTrail'
+import { setFlowStyle } from './flowStyle'
 
 /** At full flow the soundscape's weather swings between this share of a full gust and a full gust, rather than from a full lull. */
 const WEATHER_FLOOR_AT_FULL_FLOW = 0.8
@@ -26,9 +27,7 @@ const WEATHER_FLOOR_AT_FULL_FLOW = 0.8
  * It does not depend on the level: the caret is the same at any flow.
  */
 function setCaretHold(hold: number): void {
-  const root = document.documentElement
-  if (hold <= 0) root.style.removeProperty('--flow-caret-effect')
-  else root.style.setProperty('--flow-caret-effect', hold.toFixed(3))
+  setFlowStyle('--flow-caret-effect', hold <= 0 ? null : hold.toFixed(3))
 }
 
 export function useFlowFeedback(settings: FlowSettings): void {
@@ -46,12 +45,12 @@ export function useFlowFeedback(settings: FlowSettings): void {
   useEffect(() => () => setCaretHold(0), [])
 
   useEffect(() => {
-    const root = document.documentElement
     const unsubscribe = flowMeter.subscribe((level) => {
       // The trail's source at the caret (CM6Editor's .flow-trail-source): the
       // alpha a box typed now would start at, and its saturation.
-      root.style.setProperty('--flow-trail-source', (Math.min(1, level) * trail * TRAIL_ALPHA_AT_FULL_FLOW).toFixed(4))
-      root.style.setProperty('--flow-trail-source-saturation', Math.min(1, level).toFixed(4))
+      // Set on the elements that read them (flowStyle.ts), never on <html>.
+      setFlowStyle('--flow-trail-source', (Math.min(1, level) * trail * TRAIL_ALPHA_AT_FULL_FLOW).toFixed(4))
+      setFlowStyle('--flow-trail-source-saturation', Math.min(1, level).toFixed(4))
       // The music's flow EQ (`MusicPlayerService.setFlowEq`) in proportion to
       // the level, the whole curve at full flow, scaled by the amp slider.
       musicPlayerService.setFlowEq(amp * level)
@@ -60,8 +59,8 @@ export function useFlowFeedback(settings: FlowSettings): void {
     })
     return () => {
       unsubscribe()
-      root.style.removeProperty('--flow-trail-source')
-      root.style.removeProperty('--flow-trail-source-saturation')
+      setFlowStyle('--flow-trail-source', null)
+      setFlowStyle('--flow-trail-source-saturation', null)
       musicPlayerService.setFlowEq(0)
       typingSoundManager.setFlowReverb(0)
       soundscapeEngine.setWeatherFloor(0)
