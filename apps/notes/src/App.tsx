@@ -132,6 +132,8 @@ import { ImageCorrectionFilter, ThemeBlendOverlays, ThemeGlazeLayers } from '@th
 import { FlowOverlays } from './flow/FlowOverlays'
 import { useFlowFeedback } from './flow/useFlowFeedback'
 import { DEFAULT_FLOW_SETTINGS, sanitizeFlowSettings, type FlowSettings } from './shared/flowSettings'
+import { useBeatFeedback } from './flow/useBeatFeedback'
+import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings, type BeatSettings } from './shared/beatSettings'
 import { DEBUG_TAG_NAME, normalizeTagName } from './shared/tags'
 import { EditorSection } from './editorSection/EditorSection'
 import type { EscapeMenuContribution } from './escapeMenu/escapeMenuContract'
@@ -1457,9 +1459,10 @@ function App() {
   // Every change is persisted at once, through the one sanctioned path (see
   // persistMenuStateNowRef). An effect rather than a call in the setter, so
   // the snapshot is built from the render that already holds the new value.
+  const [beatSettings, setBeatSettings] = useState<BeatSettings>(DEFAULT_BEAT_SETTINGS)
   useEffect(() => {
     void persistMenuStateNowRef.current()
-  }, [flowSettings])
+  }, [flowSettings, beatSettings])
   const [customCursorEnabled, setCustomCursorEnabled] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.enabled)
   const [customCursorDotColor, setCustomCursorDotColor] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.dotColor)
   const [customCursorCenterColor, setCustomCursorCenterColor] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.centerColor)
@@ -2190,6 +2193,8 @@ function App() {
   const [pitchJitterAmount, setPitchJitterAmount] = useState(0)
   const [audioSpatial, setAudioSpatial] = useState(0)
   const [reduceVisualEffects, setReduceVisualEffects] = useState(false)
+  // A pulse is exactly the kind of visual effect that flag turns off.
+  useBeatFeedback(beatSettings, reduceVisualEffects)
   // The setting lives in a module store (the preview's img component and the
   // export read it there); App subscribes so the persisted snapshot follows it.
   const allowRemoteImages = useRemoteImagesAllowed()
@@ -3992,6 +3997,7 @@ function App() {
       debuggingEnabled,
       spellCheckEnabled,
       flow: flowSettings,
+      beat: beatSettings,
       chapterBarMode: chapterBarModeRef.current,
       isSidebarVisible: overrides?.isSidebarVisible ?? isSidebarVisible,
       // These three are presence-checked (`'x' in overrides`) rather than
@@ -4031,6 +4037,7 @@ function App() {
     debuggingEnabled,
     spellCheckEnabled,
     flowSettings,
+    beatSettings,
     reduceVisualEffects,
     allowRemoteImages,
     sidebarShowsImages,
@@ -6156,6 +6163,7 @@ ${markdownHtml}
             setDebuggingEnabled(appState.menu.debuggingEnabled ?? false)
             setSpellCheckEnabled(appState.menu.spellCheckEnabled ?? false)
             setFlowSettings(sanitizeFlowSettings(appState.menu.flow))
+            setBeatSettings(sanitizeBeatSettings(appState.menu.beat))
             setRestoredTabBarMode(appState.menu.chapterBarMode ?? 'tabs')
 
             // Restore persisted sidebar visibility
@@ -9547,6 +9555,8 @@ ${markdownHtml}
                         setSpellCheckEnabled={setSpellCheckEnabled}
                         flowSettings={flowSettings}
                         setFlowSettings={setFlowSettings}
+                        beatSettings={beatSettings}
+                        setBeatSettings={setBeatSettings}
                         reducedCaretAnimation={reducedCaretAnimation}
                         setReducedCaretAnimation={setReducedCaretAnimation}
                         deferPreviewOnRapidInput={deferPreviewOnRapidInput}

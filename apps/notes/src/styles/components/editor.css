@@ -518,6 +518,31 @@
   box-shadow: var(--box-shadow-active-editor);
 }
 
+/* The beat pulse's shade (Options > Tools; flow/useBeatFeedback.ts): a
+   stronger inner shade over the active editor's, whose opacity is the
+   music's bass (--beat-shade, set on this element alone). Present only on the
+   active editor and only while the pulse is on (`html[data-beat-pulse]`), and
+   only then promoted (will-change), so the per-frame change is a compositor
+   opacity rather than a repaint of the whole editor's area. It sits at the
+   shell level, outside the edit pane's texture mask, which is what keeps the
+   promotion from pulling the pane into a squashed overlap layer (the trap
+   .thockdown-block-caret's note describes). */
+.editor-beat-shade {
+  display:        none;
+  position:       absolute;
+  inset:          0;
+  border-radius:  inherit;
+  pointer-events: none;
+  z-index:        4;
+  box-shadow:     var(--box-shadow-beat-shade);
+  opacity:        var(--beat-shade, 0);
+}
+
+html[data-beat-pulse] .editor-section-column.is-active .editor-beat-shade {
+  display:     block;
+  will-change: opacity;
+}
+
 .editor-scrollbar-slot {
   flex:      0 0 var(--editor-scrollbar-slot-width);
   width:     var(--editor-scrollbar-slot-width);

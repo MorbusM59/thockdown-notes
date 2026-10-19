@@ -185,6 +185,20 @@
 
 /* Low-power toggle: the blink otherwise repaints the caret indefinitely while
    idle, not just while typing. */
+/* The beat pulse on the caret (Options > Tools; flow/useBeatFeedback.ts): the
+   caret's colour and a glow of it, laid over whatever the blink is showing,
+   at the music's bass (--beat-caret, set on the caret alone). An opacity on a
+   pseudo-element of a leaf, never promoted, so a frame's change repaints the
+   caret's own few pixels. */
+.thockdown-block-caret::after {
+  content:          '';
+  position:         absolute;
+  inset:            0;
+  background-color: var(--color-caret);
+  box-shadow:       0 0 6px 1px var(--color-caret);
+  opacity:          var(--beat-caret, 0);
+}
+
 .thockdown-reduced-caret-animation .thockdown-block-caret {
   animation: none;
   opacity: 0.8;

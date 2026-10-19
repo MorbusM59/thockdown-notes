@@ -188,6 +188,11 @@ const FLOW_EQ_BANDS: ReadonlyArray<{ type: BiquadFilterType; frequencyHz: number
 ];
 const FLOW_EQ_SMOOTHING_SEC = 0.05;
 
+/** Where the beat pulse's bass ends. */
+const BASS_CUTOFF_HZ = 150;
+/** Samples the analyser holds: about 21ms at 48kHz, three periods of the cutoff. */
+const BASS_ANALYSER_SIZE = 1024;
+
 type PlaybackEndHandler = () => void;
 
 export class MusicPlayerService {
@@ -205,8 +210,68 @@ export class MusicPlayerService {
   private currentFilePath: string | null = null;
   private currentDuration = 0;
   private _isPlaying = false;
+  private playingListeners = new Set<(playing: boolean) => void>();
+  private bassFilter: BiquadFilterNode | null = null;
+  private bassAnalyserNode: AnalyserNode | null = null;
+  private bassUsers = 0;
 
   get isPlaying(): boolean { return this._isPlaying; }
+
+  private setPlaying(playing: boolean): void {
+    if (this._isPlaying === playing) return;
+    this._isPlaying = playing;
+    for (const listener of this.playingListeners) listener(playing);
+  }
+
+  /** Calls `listener` whenever playback starts or stops; returns the unsubscribe. */
+  subscribePlaying(listener: (playing: boolean) => void): () => void {
+    this.playingListeners.add(listener);
+    return () => { this.playingListeners.delete(listener); };
+  }
+
+  /**
+   * The music's bass, for the beat pulse (`sound/musicBeat.ts`): a lowpass
+   * at `BASS_CUTOFF_HZ` and an analyser, tapped off the volume stage so a
+   * paused or faded track reads as quiet. Built and connected only while
+   * somebody holds it (`acquireBassAnalyser`/`releaseBassAnalyser`), so a
+   * reader without the beat pulse pays nothing for it. The tap only listens:
+   * its output goes nowhere.
+   */
+  acquireBassAnalyser(): void {
+    this.bassUsers++;
+  }
+
+  /**
+   * The bass analyser while somebody holds it, built on first ask and rebuilt
+   * when the shared output context was replaced; null when nobody holds it.
+   */
+  currentBassAnalyser(): AnalyserNode | null {
+    return this.bassUsers > 0 ? this.ensureBassAnalyser() : null;
+  }
+
+  releaseBassAnalyser(): void {
+    this.bassUsers = Math.max(0, this.bassUsers - 1);
+    if (this.bassUsers > 0) return;
+    this.bassFilter?.disconnect();
+    this.bassAnalyserNode?.disconnect();
+    this.bassFilter = null;
+    this.bassAnalyserNode = null;
+  }
+
+  private ensureBassAnalyser(): AnalyserNode {
+    const context = this.ensureAudioContext();
+    if (this.bassAnalyserNode && this.bassAnalyserNode.context === context) return this.bassAnalyserNode;
+    const filter = context.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = BASS_CUTOFF_HZ;
+    const analyser = context.createAnalyser();
+    analyser.fftSize = BASS_ANALYSER_SIZE;
+    this.gainNode!.connect(filter);
+    filter.connect(analyser);
+    this.bassFilter = filter;
+    this.bassAnalyserNode = analyser;
+    return analyser;
+  }
   get filePath(): string | null { return this.currentFilePath; }
   get duration(): number { return this.currentDuration; }
   get currentTime(): number { return this.element?.currentTime ?? 0; }
@@ -375,7 +440,7 @@ export class MusicPlayerService {
       el.src = toMusicUrl(filePath);
 
       el.addEventListener('ended', () => {
-        this._isPlaying = false;
+        this.setPlaying(false);
         this.onEndedHandler?.();
       });
       el.addEventListener('loadedmetadata', () => {
@@ -428,12 +493,12 @@ export class MusicPlayerService {
         });
     });
 
-    this._isPlaying = true;
+    this.setPlaying(true);
   }
 
   pause(): void {
     if (!this.element) return;
-    this._isPlaying = false;
+    this.setPlaying(false);
     const el = this.element;
     if (this.gainNode && this.audioCtx) {
       const now = this.audioCtx.currentTime;
@@ -448,7 +513,7 @@ export class MusicPlayerService {
 
   stop(): void {
     if (!this.element) return;
-    this._isPlaying = false;
+    this.setPlaying(false);
     const el = this.element;
     if (this.gainNode && this.audioCtx) {
       const now = this.audioCtx.currentTime;
@@ -466,7 +531,7 @@ export class MusicPlayerService {
   fadeOut(): Promise<void> {
     return new Promise((resolve) => {
       if (!this.element) { resolve(); return; }
-      this._isPlaying = false;
+      this.setPlaying(false);
       const el = this.element;
       if (this.gainNode && this.audioCtx) {
         const now = this.audioCtx.currentTime;
@@ -575,7 +640,7 @@ export class MusicPlayerService {
     }
     this.currentFilePath = null;
     this.currentDuration = 0;
-    this._isPlaying = false;
+    this.setPlaying(false);
   }
 }
 

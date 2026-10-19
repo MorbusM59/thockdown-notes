@@ -260,6 +260,16 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - In flow, each character you type lights the grid lines above and below it, paler at low flow and in its full colour at full flow, and the caret's cell is framed in the same lines as its source; it fades over the time and shape set in the flow options, and its colour and its alpha are under Colors, in Boxes.
 - **look**, **reverb** and **trail** set how strongly each answers, and **amp** how strongly playing music's EQ does.
 - While you type, the caret stops blinking and holds steady; when you stop, it eases back into its blink.
+
+### [Beat Pulse](#beat-pulse)
+
+> **Where?**
+> Settings panel → Tools.
+
+*The caret and the active editor's inner shade pulse with the bass of the music you are playing.*
+
+- **caret** and **shade** set how strongly each pulses. It follows the kicks rather than the volume, so a quiet track pulses as clearly as a loud one.
+- It switches itself off while nothing is playing, and with Reduce visual effects.
 `,
   `## Internal Linking
 

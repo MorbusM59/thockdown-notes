@@ -13,6 +13,7 @@ import {
   FLOW_FADE_MAX_TIME_MAX, FLOW_FADE_MAX_TIME_MIN, FLOW_FADE_SHAPE_MAX, FLOW_FADE_SHAPE_MIN,
   type FlowSettings,
 } from '../shared/flowSettings'
+import { DEFAULT_BEAT_SETTINGS, type BeatSettings } from '../shared/beatSettings'
 import { exportSoundscapes, importSoundscapes } from '@thockdown/soundscape/soundscapeFileActions'
 import type { SoundscapePreferences } from '@thockdown/soundscape/soundscape'
 import {
@@ -542,6 +543,8 @@ export interface SidebarOptionsPanelProps {
   setSpellCheckEnabled: (updater: (previous: boolean) => boolean) => void
   flowSettings: FlowSettings
   setFlowSettings: (updater: (previous: FlowSettings) => FlowSettings) => void
+  beatSettings: BeatSettings
+  setBeatSettings: (updater: (previous: BeatSettings) => BeatSettings) => void
   reducedCaretAnimation: boolean
   setReducedCaretAnimation: (value: boolean) => void
   deferPreviewOnRapidInput: boolean
@@ -845,6 +848,8 @@ export function SidebarOptionsPanel({
   setSpellCheckEnabled,
   flowSettings,
   setFlowSettings,
+  beatSettings,
+  setBeatSettings,
   reducedCaretAnimation,
   setReducedCaretAnimation,
   deferPreviewOnRapidInput,
@@ -2982,8 +2987,18 @@ export function SidebarOptionsPanel({
           >
             <span className="fa-solid fa-water" aria-hidden="true" />
           </button>
+          <button
+            type="button"
+            className={`btn-icon${beatSettings.enabled ? ' is-active' : ''}`}
+            onClick={() => setBeatSettings((prev) => ({ ...prev, enabled: !prev.enabled }))}
+            aria-pressed={beatSettings.enabled}
+            data-tooltip={beatSettings.enabled ? 'Disable beat pulse' : 'Enable beat pulse: the caret and the active editor\'s inner shade pulse with the bass of the playing music'}
+          >
+            <span className="fa-solid fa-drum" aria-hidden="true" />
+          </button>
         </div>
-        {flowSettings.enabled ? (
+        {flowSettings.enabled ? (<>
+          <OptionsSubsectionLabel>Flow</OptionsSubsectionLabel>
           <div className="utility-setting-slider-stack" aria-label="Typing flow settings">
             {/* How the trail fades (fade, shape) and how flow is answered (look, reverb, trail, amp). How the meter itself moves is fixed (shared/flowSettings.ts). */}
             <OptionsSliderRows rows={[2, 2, 2]}>
@@ -3063,7 +3078,38 @@ export function SidebarOptionsPanel({
               />
             </OptionsSliderRows>
           </div>
-        ) : null}
+        </>) : null}
+        {beatSettings.enabled ? (<>
+          <OptionsSubsectionLabel>Beat</OptionsSubsectionLabel>
+          <div className="utility-setting-slider-stack" aria-label="Beat pulse settings">
+            <OptionsSliderRows rows={[2]}>
+              <CompactScrollbarSlider
+                id="beat-caret"
+                min={0}
+                max={1}
+                step={0.01}
+                value={beatSettings.caret}
+                trackLabel="caret"
+                tooltipLabel="Beat pulse on the caret"
+                ariaLabel="Strength of the caret's beat pulse"
+                defaultValue={DEFAULT_BEAT_SETTINGS.caret}
+                onCommit={(value) => setBeatSettings((prev) => ({ ...prev, caret: value }))}
+              />
+              <CompactScrollbarSlider
+                id="beat-shade"
+                min={0}
+                max={1}
+                step={0.01}
+                value={beatSettings.shade}
+                trackLabel="shade"
+                tooltipLabel="Beat pulse on the active editor's inner shade"
+                ariaLabel="Strength of the inner shade's beat pulse"
+                defaultValue={DEFAULT_BEAT_SETTINGS.shade}
+                onCommit={(value) => setBeatSettings((prev) => ({ ...prev, shade: value }))}
+              />
+            </OptionsSliderRows>
+          </div>
+        </>) : null}
       </AccordionSection>
 
       <AccordionSection

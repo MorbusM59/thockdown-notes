@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { TypingRateOrWordCount } from '../flow/TypingRateOrWordCount'
+import { flowStyleTarget } from '../flow/flowStyle'
 import type { CSSProperties, DragEvent, MouseEvent, MutableRefObject, ReactNode, RefObject } from 'react'
 import { CM6Editor } from '../components/CM6Editor'
 import { SnapshotTimelineSlider } from '../editor/SnapshotTimelineSlider'
@@ -281,6 +282,8 @@ export function SectionEditorArea({
   // chapter of the guide is sealed too, not just its root.
   const isSealedNote = isSealedNoteId(menuIdentityNoteId) || isSealedNoteId(activeNoteId)
 
+  // The beat pulse's shade reads --beat-shade, set on it alone (flow/flowStyle.ts).
+  const [beatShadeRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }))
   const setStageEl = useCallback((el: HTMLDivElement | null) => {
     sectionContainerRef.current = el
   }, [sectionContainerRef])
@@ -527,6 +530,7 @@ export function SectionEditorArea({
             </div>
           </div>
         </div>
+        <div ref={beatShadeRef} className="editor-beat-shade" aria-hidden="true" />
       </main>
       <aside className={`editor-scrollbar-slot${isChapterPanelOpen ? ' chapter-panel-is-open' : ''}${isPreviewMode ? ' is-preview-mode' : ''}`}>
         <div className="editor-scrollbar-slot-inner" aria-hidden={modeStatus ? undefined : true}>

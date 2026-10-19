@@ -1,4 +1,5 @@
 import type { FlowSettings } from './flowSettings';
+import type { BeatSettings } from './beatSettings';
 import type { InvokeChannels } from './ipcContract';
 import type { GameSave } from '../adventure/model/gameState';
 import type { SlotOverlay } from './slotOverlay';
@@ -225,6 +226,8 @@ export interface PersistedMenuState {
   spellCheckEnabled?: boolean;
   /** Typing flow (Options > Tools); see flow/flowModel.ts. */
   flow?: FlowSettings;
+  /** Beat pulse (Options > Tools); see sound/musicBeat.ts. */
+  beat?: BeatSettings;
   /** Whether the tab bar shows tag management or pinned quick-access note tabs. */
   chapterBarMode?: 'tags' | 'tabs';
   /** Whether the sidebar is visible (not part of layout widths). */
