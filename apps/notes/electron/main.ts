@@ -289,6 +289,12 @@ const OPENABLE_EXTENSIONS = new Set(['.md', '.txt']);
 // they're otherwise identical app bundles.
 const isPortableBuild = app.isPackaged && existsSync(path.join(process.resourcesPath, 'portable.flag'));
 
+// The folder a portable build keeps its "data" folder in: the one holding
+// what the reader launched. On Linux that is the AppImage file, whose path
+// the AppImage runtime publishes as APPIMAGE; the executable itself runs
+// from a read-only mount under /tmp that disappears when the app exits.
+const portableDataDir = path.join(path.dirname(process.env.APPIMAGE || app.getPath('exe')), 'data');
+
 if (isPortableBuild) {
   // Redirect every persistent Electron path (settings, cookies, local
   // storage, GPU/disk cache, etc.) into the folder next to the executable
@@ -296,7 +302,6 @@ if (isPortableBuild) {
   // we get a chance to move it. Everything lives under a single top-level
   // "data" folder so the whole unpacked directory can be zipped or deleted
   // with no trace left on the host system.
-  const portableDataDir = path.join(path.dirname(app.getPath('exe')), 'data');
   const portableElectronDir = path.join(portableDataDir, 'electron');
   app.setPath('userData', portableElectronDir);
   app.setPath('sessionData', portableElectronDir);
@@ -427,7 +432,7 @@ function resolveDataRoot(): string {
   const overridden = process.env.THOCKDOWN_DATA_ROOT
   if (overridden) return overridden
   if (isPortableBuild) {
-    return path.join(path.dirname(app.getPath('exe')), 'data', 'app');
+    return path.join(portableDataDir, 'app');
   }
   if (app.isPackaged) {
     return path.join(app.getPath('userData'), 'data');
