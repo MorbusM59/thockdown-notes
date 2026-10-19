@@ -20,8 +20,10 @@ export interface BeatChannel {
   frequencyHz: number
   /** The band's width, in octaves, between its half-power points. */
   octaves: number
-  /** The dB that make a full response: above the average in A, below full scale in B. */
+  /** The dB that make a full response: above the band's recent average in A, above `floorDb` in B. */
   rangeDb: number
+  /** Mode B's zero, in dBFS: a band at or below it is no response, and `rangeDb` above it is a full one. */
+  floorDb: number
 }
 
 export interface BeatSettings {
@@ -38,6 +40,8 @@ export const BEAT_OCTAVES_MIN = 0.1
 export const BEAT_OCTAVES_MAX = 4
 export const BEAT_RANGE_MIN_DB = 3
 export const BEAT_RANGE_MAX_DB = 48
+export const BEAT_FLOOR_MIN_DB = -90
+export const BEAT_FLOOR_MAX_DB = 0
 
 export const DEFAULT_BEAT_CHANNEL: BeatChannel = {
   amount: 0.6,
@@ -45,6 +49,7 @@ export const DEFAULT_BEAT_CHANNEL: BeatChannel = {
   frequencyHz: 70,
   octaves: 1,
   rangeDb: 12,
+  floorDb: -50,
 }
 
 export const DEFAULT_BEAT_SETTINGS: BeatSettings = {
@@ -68,6 +73,7 @@ function sanitizeChannel(input: unknown): BeatChannel {
     frequencyHz: bounded(source.frequencyHz, BEAT_FREQUENCY_MIN_HZ, BEAT_FREQUENCY_MAX_HZ, d.frequencyHz),
     octaves: bounded(source.octaves, BEAT_OCTAVES_MIN, BEAT_OCTAVES_MAX, d.octaves),
     rangeDb: bounded(source.rangeDb, BEAT_RANGE_MIN_DB, BEAT_RANGE_MAX_DB, d.rangeDb),
+    floorDb: bounded(source.floorDb, BEAT_FLOOR_MIN_DB, BEAT_FLOOR_MAX_DB, d.floorDb),
   }
 }
 

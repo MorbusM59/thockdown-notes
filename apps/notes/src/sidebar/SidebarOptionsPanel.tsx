@@ -20,6 +20,8 @@ import {
   BEAT_OCTAVES_MIN,
   BEAT_RANGE_MAX_DB,
   BEAT_RANGE_MIN_DB,
+  BEAT_FLOOR_MAX_DB,
+  BEAT_FLOOR_MIN_DB,
   DEFAULT_BEAT_CHANNEL,
   type BeatChannel,
   type BeatSettings,
@@ -1005,12 +1007,13 @@ export function SidebarOptionsPanel({
         <>
           <OptionsSubsectionLabel>{label}</OptionsSubsectionLabel>
           <div className="utility-setting-slider-stack" aria-label={`${label} settings`}>
-            <OptionsSliderRows rows={[2, 2, 1]}>
+            <OptionsSliderRows rows={[2, 2, 2]}>
               {slider('amount', 'amount', 0, 1, 0.01, `How far ${effect} at a full response; 0 leaves it as it is`, 'amount')}
               {slider('blend', 'blend', 0, 1, 0.01, "0 answers hits that stand out from the surrounding music, 1 follows the band's level directly, between mixes the two", 'blend between hits and level')}
               {slider('frequencyHz', 'freq', BEAT_FREQUENCY_MIN_HZ, BEAT_FREQUENCY_MAX_HZ, 1, 'Hz: the centre of the band it listens to', 'frequency in Hz', 0)}
               {slider('octaves', 'width', BEAT_OCTAVES_MIN, BEAT_OCTAVES_MAX, 0.1, 'Octaves: how wide the bell around the frequency is', 'band width in octaves', 1)}
-              {slider('rangeDb', 'range', BEAT_RANGE_MIN_DB, BEAT_RANGE_MAX_DB, 1, 'dB for a full response: above the surrounding music for hits, below full scale for level', 'dB for a full response', 0)}
+              {slider('rangeDb', 'range', BEAT_RANGE_MIN_DB, BEAT_RANGE_MAX_DB, 1, 'dB for a full response: above the surrounding music for hits, above the floor for level', 'dB for a full response', 0)}
+              {slider('floorDb', 'floor', BEAT_FLOOR_MIN_DB, BEAT_FLOOR_MAX_DB, 1, 'dBFS where level starts to respond (blend towards 1); 0 is the loudest the audio can carry', 'level floor in dBFS', 0)}
             </OptionsSliderRows>
           </div>
         </>

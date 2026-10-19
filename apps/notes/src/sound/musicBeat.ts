@@ -6,9 +6,9 @@
  * - A, relative: the band's level in dB minus its own average over the last
  *   `MEAN_SEC` or so, over `rangeDb`. A hit against the surrounding music
  *   reads high and a steady level reads as nothing, however loud.
- * - B, direct: the band's level in dB against full scale, over `rangeDb`, so
- *   the response is 0 at `-rangeDb` dBFS and 1 at full scale. It follows the
- *   level as it is.
+ * - B, direct: the band's level in dB above `floorDb`, over `rangeDb`, so
+ *   the response is 0 at the floor and 1 at `floorDb + rangeDb` dBFS. It
+ *   follows the level as it is.
  *
  * Both start from one envelope (an instant rise and a `RELEASE_SEC` fall, on
  * the band's RMS), so a blend never mixes two different timings.
@@ -79,9 +79,9 @@ function read(band: Band, dt: number): number {
   const levelDb = toDb(band.envelope)
   band.meanDb = band.meanDb === FLOOR_DB ? levelDb : band.meanDb + (levelDb - band.meanDb) * (1 - Math.exp(-dt / MEAN_SEC))
 
-  const { blend, rangeDb } = band.channel
+  const { blend, rangeDb, floorDb } = band.channel
   const relative = Math.max(0, Math.min(1, (levelDb - band.meanDb) / rangeDb))
-  const direct = Math.max(0, Math.min(1, (levelDb + rangeDb) / rangeDb))
+  const direct = Math.max(0, Math.min(1, (levelDb - floorDb) / rangeDb))
   return relative + (direct - relative) * blend
 }
 
