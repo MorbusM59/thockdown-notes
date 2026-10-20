@@ -159,6 +159,25 @@ export function startSpeedReadingSession(
   const releaseScrollBehavior = scroller ? borrowAutoScrollBehavior(scroller) : null
   let position = scroller?.scrollTop ?? 0
   let written = position
+  // scrollTop lands on whole device pixels, so a slow page would move in
+  // visible one-pixel steps. The whole pixels go to scrollTop and the fraction
+  // is drawn as a `translate` on the pane's content and its texture (the
+  // texture is a sibling that follows scrollTop through its mask), composited
+  // for the session's length so the shift costs no repaint. `translate`, not
+  // `transform`, so whatever transform those elements carry is left alone.
+  const shifted: HTMLElement[] = scroller
+    ? [...scroller.children, scroller.previousElementSibling].filter(
+      (el): el is HTMLElement => el instanceof HTMLElement && (el.parentElement === scroller || el.classList.contains('markdown-preview-texture')),
+    )
+    : []
+  for (const el of shifted) el.style.willChange = 'translate'
+  let shownFraction = 0
+  const showFraction = (fraction: number) => {
+    if (fraction === shownFraction) return
+    shownFraction = fraction
+    const value = fraction === 0 ? '' : `0 ${-fraction}px`
+    for (const el of shifted) el.style.translate = value
+  }
   const minimumDensity = scroller ? plainTextDensity(scroller) / MAX_PACE_OVER_TEXT : 0
   let densityTarget = scroller ? Math.max(minimumDensity, measuredDensity(scroller) ?? plainTextDensity(scroller)) : 0
   let density = densityTarget
@@ -237,7 +256,10 @@ export function startSpeedReadingSession(
       // Anything else that moved the page -- the wheel, the preview window
       // re-anchoring above the reader -- is where reading now is.
       const actual = scroller.scrollTop
-      if (Math.abs(actual - written) > 2) position = actual
+      if (Math.abs(actual - written) > 2) {
+        position = actual
+        showFraction(0)
+      }
       const viewport = scroller.clientHeight
       if (Math.abs(position - densitySampledAt) >= viewport * DENSITY_SAMPLE_SPAN) {
         densitySampledAt = position
@@ -248,8 +270,9 @@ export function startSpeedReadingSession(
       const pxPerSec = (wpm / 60) / Math.max(minimumDensity, density)
       const max = Math.max(0, scroller.scrollHeight - viewport)
       position = Math.min(max, position + pxPerSec * step.fullPaceSec)
-      scroller.scrollTop = position
+      scroller.scrollTop = Math.floor(position)
       written = scroller.scrollTop
+      showFraction(Math.max(0, Math.min(0.999, position - written)))
       // At the end of the page it simply stops moving and waits for a key: a
       // page still being laid out, or one shorter than the pane, would
       // otherwise end the session before it had begun.
@@ -346,6 +369,8 @@ export function startSpeedReadingSession(
     for (const [type, listener] of listeners) window.removeEventListener(type, listener, true)
     if (rafId !== null) cancelAnimationFrame(rafId)
     rafId = null
+    showFraction(0)
+    for (const el of shifted) el.style.willChange = ''
     releaseScrollBehavior?.()
     setSpeedReadingDisplay(null)
     if (wpm !== startSettings[wpmKey]) commitSpeedReadingSettings({ ...getSpeedReadingSettings(), [wpmKey]: wpm })
