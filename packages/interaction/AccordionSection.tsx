@@ -247,13 +247,17 @@ export function AccordionSection({
   const open = useCallback(() => {
     const details = detailsRef.current
     const content = contentRef.current
-    if (!details || !content || isOpen) return
+    // A close still animating counts as closed: reverse it from where it got
+    // to, or a search that opens a section mid-fold would leave it folded.
+    const closing = animRef.current?.toPx === 0
+    if (!details || !content || (isOpen && !closing)) return
+    const fromPx = closing ? content.getBoundingClientRect().height : 0
     details.open = true
     setIsOpen(true)
     const naturalHeight = content.scrollHeight
-    content.style.height = '0px'
+    content.style.height = `${fromPx}px`
     content.style.overflow = 'hidden'
-    animateTo(0, naturalHeight, () => {
+    animateTo(fromPx, naturalHeight, () => {
       content.style.height = ''
       content.style.overflow = ''
     })
