@@ -398,7 +398,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Search](#search)
 
 > **Where?**
-> The search field at the top of the sidebar, in the Date, Category, Archive and Trash views. (In the Find view the same field searches inside the open note instead.)
+> The search field at the top of the sidebar, in the Date, Category, Archive and Trash views. (In the Find view the same field searches inside the open note instead, and in the options it filters the settings down to the ones that mention your term; its X clears it.)
 
 *Filters your notes by title, content, filename, or tag as you type.*
 

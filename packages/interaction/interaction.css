@@ -783,3 +783,14 @@
   border-radius: inherit;
   pointer-events: none;
 }
+
+/* OPTIONS SEARCH (optionsSearch.ts): what a search term filters out is not
+   drawn, and the first sub-section left standing in a section whose lead
+   group was filtered out sits flush like a section's first label. */
+[data-options-search-hidden] {
+  display: none !important;
+}
+
+.options-subsection-label[data-options-search-lead] {
+  margin-top: 0;
+}

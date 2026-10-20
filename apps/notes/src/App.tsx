@@ -1444,6 +1444,9 @@ function App() {
     notesRef.current = notes
   }, [notes])
   const [searchQuery, setSearchQuery] = useState('')
+  // The options panel's own search term, kept apart from the note search so
+  // that leaving the options for a note list (and coming back) costs neither.
+  const [optionsSearchQuery, setOptionsSearchQuery] = useState('')
   const [isSearchQueryCaseSensitive, setIsSearchQueryCaseSensitive] = useState(false)
   // Mirrors useDocumentFind's isDocumentFindCaseSensitive so
   // buildMenuStateSnapshot (defined earlier than the hook call can be) can
@@ -3897,6 +3900,7 @@ function App() {
       selectedMonths: [...selectedMonths],
       selectedYears: [...selectedYears],
       searchQuery,
+      optionsSearchQuery,
       searchQueryCaseSensitive: isSearchQueryCaseSensitive,
       documentFindCaseSensitive: documentFindCaseSensitiveRef.current,
       isPreviewMode: getActiveSection()?.isPreviewMode,
@@ -4108,6 +4112,7 @@ function App() {
     editorTextColors,
     isSearchQueryCaseSensitive,
     searchQuery,
+    optionsSearchQuery,
     selectedMonths,
     selectedYears,
     sidebarMode,
@@ -5968,6 +5973,7 @@ ${markdownHtml}
             setSelectedMonths(new Set(appState.menu.selectedMonths))
             setSelectedYears(new Set(appState.menu.selectedYears))
             setSearchQuery(appState.menu.searchQuery)
+            setOptionsSearchQuery(appState.menu.optionsSearchQuery ?? '')
             setIsSearchQueryCaseSensitive(appState.menu.searchQueryCaseSensitive ?? false)
             setRestoredDocumentFindCaseSensitive(appState.menu.documentFindCaseSensitive ?? false)
             getActiveSection()?.setIsPreviewMode(appState.menu.isPreviewMode ?? false)
@@ -7381,6 +7387,7 @@ ${markdownHtml}
   }, [isSearchQueryCaseSensitive, readNoteContent, searchQuery, sortedNotes])
 
   const isFindMode = sidebarMode === 'find'
+  const isOptionsSearchMode = sidebarMode === 'options'
   const isReplaceMode = isFindMode && Boolean(activeSectionSnapshot?.isDocumentReplaceMode)
   const hasMonthFilter = selectedMonths.size > 0
   const hasYearFilter = selectedYears.size > 0
@@ -9134,12 +9141,14 @@ ${markdownHtml}
                   spellCheck={false}
                   autoCorrect="off"
                   autoCapitalize="off"
-                  placeholder={isFindMode ? 'Find in current note...' : 'Search for content or #tag...'}
-                  value={isFindMode ? (activeSection?.documentFindQuery ?? '') : searchQuery}
+                  placeholder={isFindMode ? 'Find in current note...' : isOptionsSearchMode ? 'Search options...' : 'Search for content or #tag...'}
+                  value={isFindMode ? (activeSection?.documentFindQuery ?? '') : isOptionsSearchMode ? optionsSearchQuery : searchQuery}
                   onChange={(event) => {
                     const value = event.target.value
                     if (isFindMode) {
                       getActiveSection()?.setDocumentFindQuery(value)
+                    } else if (isOptionsSearchMode) {
+                      setOptionsSearchQuery(value)
                     } else {
                       setSearchQuery(value)
                     }
@@ -9185,6 +9194,22 @@ ${markdownHtml}
                       Aa
                     </button>
                   </div>
+                ) : isOptionsSearchMode ? (
+                  // The options search is never case sensitive, so the
+                  // toggle's place goes to clearing the term: back to the
+                  // whole panel without reaching for the keyboard.
+                  <button
+                    type="button"
+                    className="btn-icon search-input-case-toggle"
+                    data-tooltip="Clear search"
+                    aria-label="Clear search"
+                    disabled={optionsSearchQuery === ''}
+                    /* mouse-default: focus semantics, read by focusOwnership on mousedown */
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => setOptionsSearchQuery('')}
+                  >
+                    <span className="fa-solid fa-xmark" aria-hidden="true" />
+                  </button>
                 ) : (
                   <button
                     type="button"
@@ -9419,6 +9444,7 @@ ${markdownHtml}
                       </div>
                     ) : sidebarMode === 'options' ? (
                       <SidebarOptionsPanel
+                        searchQuery={optionsSearchQuery}
                         isPreviewMode={activeSection?.isPreviewMode ?? false}
                         uiMode={uiMode}
                         optionsContentRef={optionsContentRef}

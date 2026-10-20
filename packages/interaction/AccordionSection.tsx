@@ -8,9 +8,17 @@
 // Left-click: opens this section, closes all siblings.
 // Right-click: opens this section without closing siblings.
 // All sections are closed by default.
+//
+// A group given a `filter` shows only what the term appears in (optionsSearch.ts):
+// whole sections whose heading holds it, otherwise only the sub-sections that
+// do. When the hits fall in one section it is opened; when they span several,
+// every section is folded. That is decided only when the set of hits CHANGES,
+// so a keystroke that leaves the same options standing leaves whatever the
+// reader opened or closed since as it is.
 
-import { type MouseEvent, type ReactNode, createContext, useCallback, useContext, useEffect, useId, useRef, useState } from 'react'
+import { type MouseEvent, type ReactNode, createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { buildCurvePlan, buildScrollPlan, sampleScrollPlan } from './ScrollCurvePlan'
+import { type OptionsSearchSection, applyOptionsSelection, indexOptionsSection, selectOptions } from './optionsSearch'
 
 // Fixed accordion animation parameters — not user-configurable.
 const ACCORDION_DYNAMIC        = 4
@@ -30,38 +38,108 @@ const buildAccordionPlan = (signedDistance: number) => {
 }
 
 // ── Accordion group context ────────────────────────────────────────────────
-// Siblings share a registry of close callbacks so left-click can collapse all
-// others before expanding the clicked one.
+// Siblings register a handle so left-click can collapse all others before
+// expanding the clicked one, and so a search can find, fold and open them.
 
-type CloseCallback = () => void
+interface SectionHandle {
+  open: () => void
+  close: () => void
+  section: HTMLElement
+  heading: HTMLElement
+  body: HTMLElement
+}
 
 interface AccordionGroupCtx {
-  register:   (id: string, close: CloseCallback) => void
+  register:   (id: string, handle: SectionHandle) => void
   unregister: (id: string) => void
   closeOthers: (exceptId: string) => void
 }
 
 const AccordionGroupContext = createContext<AccordionGroupCtx | null>(null)
 
-export function AccordionGroup({ children }: { children: ReactNode }) {
-  const registry = useRef<Map<string, CloseCallback>>(new Map())
+interface SearchState {
+  /** The term the DOM currently reflects; '' when no search is in force. */
+  term: string
+  /** Null when the sections' DOM changed since it was built. */
+  index: OptionsSearchSection[] | null
+  /** The last selection the fold state was decided for. */
+  selectionKey: string | null
+  observer: MutationObserver | null
+}
 
-  const register = useCallback((id: string, close: CloseCallback) => {
-    registry.current.set(id, close)
+export function AccordionGroup({ children, filter = '' }: { children: ReactNode, filter?: string }) {
+  const registry = useRef<Map<string, SectionHandle>>(new Map())
+  const search = useRef<SearchState>({ term: '', index: null, selectionKey: null, observer: null })
+
+  const refresh = useCallback(() => {
+    const state = search.current
+    if (!state.term) {
+      if (state.index) applyOptionsSelection(state.index, null)
+      state.observer?.disconnect()
+      state.observer = null
+      state.index = null
+      state.selectionKey = null
+      return
+    }
+    const handles = [...registry.current.values()].sort((a, b) =>
+      a.section.compareDocumentPosition(b.section) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1)
+    if (!state.index) {
+      state.index = handles.map((h) => indexOptionsSection(h.section, h.heading, h.body))
+      if (!state.observer) {
+        state.observer = new MutationObserver(() => {
+          search.current.index = null
+          refresh()
+        })
+      }
+      state.observer.disconnect()
+      for (const h of handles) state.observer.observe(h.body, { childList: true, subtree: true })
+    }
+    const selection = selectOptions(state.index, state.term)
+    applyOptionsSelection(state.index, selection)
+    const key = JSON.stringify(selection)
+    if (key === state.selectionKey) return
+    state.selectionKey = key
+    const hit = selection.flatMap((kept, i) => (kept.length > 0 ? [i] : []))
+    handles.forEach((h, i) => {
+      if (hit.length === 1 && hit[0] === i) h.open()
+      else h.close()
+    })
+  }, [])
+
+  const register = useCallback((id: string, handle: SectionHandle) => {
+    registry.current.set(id, handle)
+    search.current.index = null
   }, [])
 
   const unregister = useCallback((id: string) => {
     registry.current.delete(id)
+    search.current.index = null
   }, [])
 
   const closeOthers = useCallback((exceptId: string) => {
-    registry.current.forEach((close: CloseCallback, id: string) => {
-      if (id !== exceptId) close()
+    registry.current.forEach((handle, id) => {
+      if (id !== exceptId) handle.close()
     })
   }, [])
 
+  // No dependency list: a section mounting or unmounting re-renders this group
+  // (its children changed) and marks the index stale, and this is where the
+  // filter is brought up to date with both. Anything else costs one compare.
+  useLayoutEffect(() => {
+    const term = filter.trim()
+    const state = search.current
+    if (term === state.term && (state.index || !term)) return
+    state.term = term
+    refresh()
+  })
+
+  useEffect(() => () => search.current.observer?.disconnect(), [])
+
+  // Stable, so a section registers once rather than on every render.
+  const context = useMemo(() => ({ register, unregister, closeOthers }), [register, unregister, closeOthers])
+
   return (
-    <AccordionGroupContext.Provider value={{ register, unregister, closeOthers }}>
+    <AccordionGroupContext.Provider value={context}>
       {children}
     </AccordionGroupContext.Provider>
   )
@@ -103,7 +181,9 @@ export function AccordionSection({
   const id = useId()
   const group = useContext(AccordionGroupContext)
   const [isOpen, setIsOpen] = useState(false)
+  const sectionRef = useRef<HTMLElement>(null)
   const detailsRef = useRef<HTMLDetailsElement>(null)
+  const summaryRef = useRef<HTMLElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const animRef = useRef<AnimState | null>(null)
 
@@ -179,11 +259,20 @@ export function AccordionSection({
     })
   }, [isOpen, animateTo])
 
-  // Register close callback with the group.
-  useEffect(() => {
-    group?.register(id, close)
-    return () => group?.unregister(id)
-  }, [group, id, close])
+  // Register with the group once; the handle reads the latest open/close.
+  const openCloseRef = useRef({ open, close })
+  openCloseRef.current = { open, close }
+  useLayoutEffect(() => {
+    if (!group || !sectionRef.current || !summaryRef.current || !contentRef.current) return
+    group.register(id, {
+      open: () => openCloseRef.current.open(),
+      close: () => openCloseRef.current.close(),
+      section: sectionRef.current,
+      heading: summaryRef.current,
+      body: contentRef.current,
+    })
+    return () => group.unregister(id)
+  }, [group, id])
 
   useEffect(() => () => cancelAnim(), [cancelAnim])
 
@@ -205,11 +294,13 @@ export function AccordionSection({
 
   return (
     <section
+      ref={sectionRef}
       className={`options-section sidebar-options-section${className ? ` ${className}` : ''}`}
       aria-label={ariaLabel}
     >
       <details ref={detailsRef} className="sidebar-options-accordion">
         <summary
+          ref={summaryRef}
           className={`sidebar-options-section-heading${headingClassName ? ` ${headingClassName}` : ''}`}
           onClick={handleClick}
           data-secondary-press="action"

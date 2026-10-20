@@ -412,6 +412,8 @@ export interface SidebarOptionsPanelProps {
   isPreviewMode: boolean
   uiMode: 'light' | 'dark'
   optionsContentRef: MutableRefObject<HTMLDivElement | null>
+  /** The options search term; while it is non-empty only what it appears in is shown (AccordionGroup's `filter`). */
+  searchQuery: string
 
   viewStyle: ViewStyleKey
   setViewStyle: (key: ViewStyleKey) => void
@@ -727,6 +729,7 @@ export function SidebarOptionsPanel({
   isPreviewMode,
   uiMode,
   optionsContentRef,
+  searchQuery,
   viewStyle,
   setViewStyle,
   viewFontSize,
@@ -1189,7 +1192,7 @@ export function SidebarOptionsPanel({
       className={`options-content sidebar-options-content ${isPreviewMode ? 'mode-view' : 'mode-edit'}`}
       aria-label="Settings panel"
     >
-      <div className="preset-section">
+      <div className="preset-section" data-options-search-hidden={searchQuery.trim() !== '' ? '' : undefined}>
         <div className="options-loadout-grid" role="group" aria-label="UI mode presets">
           {factoryPresetEntriesForCurrentMode.map((entry) => {
             const presetIcons = uiMode === 'dark' ? DARK_PRESET_ICONS : LIGHT_PRESET_ICONS
@@ -1220,7 +1223,7 @@ export function SidebarOptionsPanel({
           </button>
         </div>
       </div>
-      <AccordionGroup>
+      <AccordionGroup filter={searchQuery}>
       <AccordionSection
         className="sidebar-options-section-editor-font"
         ariaLabel="Editor Font"

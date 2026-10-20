@@ -31,6 +31,8 @@ export interface PersistedMenuState {
   selectedMonths: number[];
   selectedYears: Array<number | 'older'>;
   searchQuery: string;
+  /** The options panel's search term, separate from the note search's. */
+  optionsSearchQuery?: string;
   searchQueryCaseSensitive?: boolean;
   documentFindCaseSensitive?: boolean;
   isPreviewMode?: boolean;
