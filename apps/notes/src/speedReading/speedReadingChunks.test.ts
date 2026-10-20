@@ -55,12 +55,16 @@ describe('wordStartAt', () => {
   })
 })
 
-describe('chunkClockWords', () => {
-  it('is a chunk\'s own words at 1 and a full row\'s at 0', async () => {
-    const { chunkClockWords } = await import('./speedReadingSettings')
-    expect(chunkClockWords(2, 24, 1)).toBe(2)
-    expect(chunkClockWords(2, 24, 0)).toBe(4)
-    expect(chunkClockWords(6, 24, 0)).toBe(4)
-    expect(chunkClockWords(2, 24, 0.5)).toBe(3)
+describe('chunkDurationSec', () => {
+  it('pays a fixation per chunk, letters at the solved rate, and pauses at punctuation', async () => {
+    const { chunkDurationSec } = await import('./speedReadingSettings')
+    // 24 boxes = 4 words = 1s at 240 wpm; 0.2s fixation leaves 0.8s for 20 letters.
+    const full = 'abcde abcde abcde abcde'
+    expect(chunkDurationSec(full, 240, 24, 200)).toBeCloseTo(1)
+    expect(chunkDurationSec('ab', 240, 24, 200)).toBeCloseTo(0.28)
+    expect(chunkDurationSec('ab.', 240, 24, 200)).toBeCloseTo(0.2 + 0.12 + 0.2)
+    expect(chunkDurationSec('ab,', 240, 24, 200)).toBeCloseTo(0.2 + 0.12 + 0.1)
+    // Past the floor the fixation alone remains.
+    expect(chunkDurationSec(full, 1500, 24, 200)).toBeCloseTo(0.2)
   })
 })

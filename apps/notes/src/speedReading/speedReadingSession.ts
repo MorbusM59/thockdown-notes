@@ -34,7 +34,7 @@ import { cancelSmoothScroll } from '@thockdown/interaction/smoothScrollRegistry'
 import { RESTING, stepSpeedEnvelope, type SpeedCurve, type SpeedEnvelopeState } from './speedEnvelope'
 import { nextChunk, wordStartAt, type SpeedReadingChunk } from './speedReadingChunks'
 import {
-  chunkClockWords,
+  chunkDurationSec,
   clampWpm,
   SPEED_READING_LETTERS_PER_WORD,
   SPEED_READING_WPM_MAX,
@@ -142,7 +142,7 @@ export function startSpeedReadingSession(
   // Edit view: the chunk on show, and where each earlier one began.
   let chunk: SpeedReadingChunk | null = null
   const history: number[] = []
-  let wordCredit = 0
+  let timeCredit = 0
   if (target.view === 'edit') {
     chunk = nextChunk(target.text, wordStartAt(target.text, target.from), widthBoxes)
       ?? nextChunk(target.text, 0, widthBoxes)
@@ -218,12 +218,14 @@ export function startSpeedReadingSession(
     if (target.view === 'edit' && heldAdvance.size > 0) {
       const step = stepSpeedEnvelope(curve(), envelope, 1, dtSec)
       envelope = step.state
-      wordCredit += (wpm / 60) * step.fullPaceSec
-      const timing = getSpeedReadingSettings().chunkTiming
-      while (chunk && wordCredit >= chunkClockWords(chunk.words, widthBoxes, timing)) {
-        wordCredit -= chunkClockWords(chunk.words, widthBoxes, timing)
+      timeCredit += step.fullPaceSec
+      const { fixationMs } = getSpeedReadingSettings()
+      while (chunk) {
+        const duration = chunkDurationSec(chunk.text, wpm, widthBoxes, fixationMs)
+        if (timeCredit < duration) break
+        timeCredit -= duration
         if (!advance()) {
-          wordCredit = 0
+          timeCredit = 0
           break
         }
       }
@@ -276,7 +278,7 @@ export function startSpeedReadingSession(
       heldAdvance.add(event.code)
       if (target.view === 'edit' && !wasHeld) {
         envelope = RESTING
-        wordCredit = 0
+        timeCredit = 0
         advance()
       }
       ensureFrames()
@@ -310,7 +312,7 @@ export function startSpeedReadingSession(
   const onKeyUp = (event: KeyboardEvent) => {
     if (heldAdvance.delete(event.code)) {
       swallow(event)
-      if (target.view === 'edit' && heldAdvance.size === 0) wordCredit = 0
+      if (target.view === 'edit' && heldAdvance.size === 0) timeCredit = 0
       return
     }
     if (wpmHold && event.key === wpmHold.key) {
@@ -324,7 +326,7 @@ export function startSpeedReadingSession(
   const releaseAll = () => {
     heldAdvance.clear()
     wpmHold = null
-    wordCredit = 0
+    timeCredit = 0
     if (target.view === 'edit') envelope = RESTING
   }
 

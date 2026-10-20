@@ -249,6 +249,7 @@ import {
   SPEED_READING_ROW_WIDTH_MIN,
   SPEED_READING_WPM_MAX,
   SPEED_READING_WPM_MIN,
+  SPEED_READING_FIXATION_MAX_MS,
   SPEED_READING_WPM_STEP,
   type SpeedReadingSettings,
 } from '../speedReading/speedReadingSettings'
@@ -3268,16 +3269,17 @@ export function SidebarOptionsPanel({
               onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, rowWidth: Math.round(value) }))}
             />
             <CompactScrollbarSlider
-              id="speed-reading-chunk-timing"
+              id="speed-reading-fixation"
               min={0}
-              max={1}
-              step={0.01}
-              value={speedReadingSettings.chunkTiming}
-              trackLabel="timing"
-              tooltipLabel="Edit view: how long each chunk stays. Left, every chunk equally long; right, each for its own words at your pace"
-              ariaLabel="Edit view chunk timing, from equal time per chunk to time per word"
-              defaultValue={DEFAULT_SPEED_READING_SETTINGS.chunkTiming}
-              onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, chunkTiming: value }))}
+              max={SPEED_READING_FIXATION_MAX_MS}
+              step={10}
+              value={speedReadingSettings.fixationMs}
+              trackLabel="fixation"
+              tooltipLabel="Edit view: milliseconds every chunk stays before its letters count, and the shortest a chunk can be; a sentence's end adds one fixation, a comma half of one"
+              ariaLabel="Edit view fixation time per chunk in milliseconds"
+              defaultValue={DEFAULT_SPEED_READING_SETTINGS.fixationMs}
+              formatValue={(value) => String(Math.round(value))}
+              onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, fixationMs: Math.round(value) }))}
             />
           </OptionsSliderRows>
         </div>
