@@ -868,8 +868,9 @@ ${shortcutTable()}
 
 *The pace of [Speed Reading]($#speed-reading) and how it eases.*
 
-- **render** and **edit** are each view's words per minute; **row** is the edit view's reading row, in boxes.
-- **ramp**, **shape** and **speed** shape the ease into a held \`Space\` and out of and back from a pause, like the same three in [Animations]($#animations), with their own values.
+- **Edit**: the edit view's words per minute; **row**, its reading row in boxes; and **timing**, how long each chunk stays: on the right each stays for its own words, so a chunk of several short words stays longer than one long word; on the left every chunk stays equally long, at the same average pace.
+- **Render**: the render view's words per minute.
+- **Curve**: **ramp**, **shape** and **speed** shape the ease into a held \`Space\` and out of and back from a pause, like the same three in [Animations]($#animations), with their own values.
 
 ### [Scrolling](#scrolling)
 

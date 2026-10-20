@@ -66,15 +66,23 @@ function SpeedReadingRowLayer({
   const firstColumn = Math.floor((columns - boxes) / 2)
   const textColumn = firstColumn + Math.max(0, Math.floor((boxes - text.length) / 2))
   const top = halfLineHeightPx + row * lineHeightPx
+  const rowLeft = halfCellWidthPx + firstColumn * cellWidthPx
+  const rowRight = rowLeft + boxes * cellWidthPx
+  // The cover leaves a hole where the row is, so the row's boxes show the
+  // regular box colour alone: both colours may be translucent, and a row
+  // laid over the cover would show the two mixed.
+  const coverClip = size
+    ? `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${rowLeft}px ${top}px, ${rowRight}px ${top}px, ${rowRight}px ${top + lineHeightPx}px, ${rowLeft}px ${top + lineHeightPx}px, ${rowLeft}px ${top}px)`
+    : undefined
 
   return (
     <div ref={rootRef} className="speed-reading-overlay" aria-live="polite">
-      <div className="speed-reading-cover" />
+      <div className="speed-reading-cover" style={{ clipPath: coverClip }} />
       {size ? (
         <>
           <div
             className="speed-reading-row"
-            style={{ top, left: halfCellWidthPx + firstColumn * cellWidthPx, width: boxes * cellWidthPx, height: lineHeightPx }}
+            style={{ top, left: rowLeft, width: rowRight - rowLeft, height: lineHeightPx }}
           />
           <div className="editor-text speed-reading-text" style={{ top, left: halfCellWidthPx + textColumn * cellWidthPx, height: lineHeightPx }}>
             {text}

@@ -3230,28 +3230,17 @@ export function SidebarOptionsPanel({
           and the one curve both views ease with -- the same three numbers as
           Animations above, kept apart from them because a reading pace's ease
           is seconds long where a page key's journey is a fraction of one
-          (speedReading/speedReadingSettings.ts). Pace first, then the row,
-          then the curve, which is the order a reader tunes them in. */}
+          (speedReading/speedReadingSettings.ts). Grouped by where
+          each applies: the edit view's, the render view's, and the curve both
+          share. */}
       <AccordionSection
         className="sidebar-options-section-speed-reading"
         ariaLabel="Speed reading"
         heading="Speed reading"
       >
-<div className="utility-setting-slider-stack" aria-label="Speed reading settings">
-          <OptionsSliderRows rows={[3, 3]}>
-            <CompactScrollbarSlider
-              id="speed-reading-render-wpm"
-              min={SPEED_READING_WPM_MIN}
-              max={SPEED_READING_WPM_MAX}
-              step={SPEED_READING_WPM_STEP}
-              value={speedReadingSettings.renderWpm}
-              trackLabel="render"
-              tooltipLabel="Render view: words per minute the page scrolls at (Left / Right while reading)"
-              ariaLabel="Render view speed reading pace in words per minute"
-              defaultValue={DEFAULT_SPEED_READING_SETTINGS.renderWpm}
-              formatValue={(value) => String(Math.round(value))}
-              onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, renderWpm: Math.round(value) }))}
-            />
+        <OptionsSubsectionLabel>Edit</OptionsSubsectionLabel>
+        <div className="utility-setting-slider-stack" aria-label="Speed reading, edit">
+          <OptionsSliderRows rows={[3]}>
             <CompactScrollbarSlider
               id="speed-reading-edit-wpm"
               min={SPEED_READING_WPM_MIN}
@@ -3278,6 +3267,41 @@ export function SidebarOptionsPanel({
               formatValue={(value) => String(Math.round(value))}
               onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, rowWidth: Math.round(value) }))}
             />
+            <CompactScrollbarSlider
+              id="speed-reading-chunk-timing"
+              min={0}
+              max={1}
+              step={0.01}
+              value={speedReadingSettings.chunkTiming}
+              trackLabel="timing"
+              tooltipLabel="Edit view: how long each chunk stays. Left, every chunk equally long; right, each for its own words at your pace"
+              ariaLabel="Edit view chunk timing, from equal time per chunk to time per word"
+              defaultValue={DEFAULT_SPEED_READING_SETTINGS.chunkTiming}
+              onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, chunkTiming: value }))}
+            />
+          </OptionsSliderRows>
+        </div>
+        <OptionsSubsectionLabel>Render</OptionsSubsectionLabel>
+        <div className="utility-setting-slider-stack" aria-label="Speed reading, render">
+          <OptionsSliderRows rows={[1]}>
+            <CompactScrollbarSlider
+              id="speed-reading-render-wpm"
+              min={SPEED_READING_WPM_MIN}
+              max={SPEED_READING_WPM_MAX}
+              step={SPEED_READING_WPM_STEP}
+              value={speedReadingSettings.renderWpm}
+              trackLabel="render"
+              tooltipLabel="Render view: words per minute the page scrolls at (Left / Right while reading)"
+              ariaLabel="Render view speed reading pace in words per minute"
+              defaultValue={DEFAULT_SPEED_READING_SETTINGS.renderWpm}
+              formatValue={(value) => String(Math.round(value))}
+              onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, renderWpm: Math.round(value) }))}
+            />
+          </OptionsSliderRows>
+        </div>
+        <OptionsSubsectionLabel>Curve</OptionsSubsectionLabel>
+        <div className="utility-setting-slider-stack" aria-label="Speed reading, curve">
+          <OptionsSliderRows rows={[3]}>
             <CompactScrollbarSlider
               id="speed-reading-curve-ramp"
               min={SPEED_READING_CURVE_RAMP_MIN}

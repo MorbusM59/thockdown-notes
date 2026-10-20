@@ -34,7 +34,9 @@ import { cancelSmoothScroll } from '@thockdown/interaction/smoothScrollRegistry'
 import { RESTING, stepSpeedEnvelope, type SpeedCurve, type SpeedEnvelopeState } from './speedEnvelope'
 import { nextChunk, wordStartAt, type SpeedReadingChunk } from './speedReadingChunks'
 import {
+  chunkClockWords,
   clampWpm,
+  SPEED_READING_LETTERS_PER_WORD,
   SPEED_READING_WPM_MAX,
   SPEED_READING_WPM_MIN,
   SPEED_READING_WPM_STEP,
@@ -79,8 +81,6 @@ const DENSITY_PROBES = 7
  * this many times the pace of plain text, so it is seen rather than skipped.
  */
 const MAX_PACE_OVER_TEXT = 4
-/** Average letters to a word, with its space, for the plain-text estimate. */
-const LETTERS_PER_WORD = 6
 /** An average letter's width, as a share of the font size. */
 const LETTER_WIDTH_EM = 0.5
 
@@ -104,7 +104,7 @@ function plainTextDensity(scroller: HTMLElement): number {
   const lineHeight = parseFloat(style.lineHeight) || fontSize * 1.5
   const letterSpacing = parseFloat(style.letterSpacing) || 0
   const letter = fontSize * LETTER_WIDTH_EM + letterSpacing
-  const wordsPerLine = Math.max(1, scroller.clientWidth / (letter * LETTERS_PER_WORD))
+  const wordsPerLine = Math.max(1, scroller.clientWidth / (letter * SPEED_READING_LETTERS_PER_WORD))
   return wordsPerLine / lineHeight
 }
 
@@ -219,8 +219,9 @@ export function startSpeedReadingSession(
       const step = stepSpeedEnvelope(curve(), envelope, 1, dtSec)
       envelope = step.state
       wordCredit += (wpm / 60) * step.fullPaceSec
-      while (chunk && wordCredit >= chunk.words) {
-        wordCredit -= chunk.words
+      const timing = getSpeedReadingSettings().chunkTiming
+      while (chunk && wordCredit >= chunkClockWords(chunk.words, widthBoxes, timing)) {
+        wordCredit -= chunkClockWords(chunk.words, widthBoxes, timing)
         if (!advance()) {
           wordCredit = 0
           break

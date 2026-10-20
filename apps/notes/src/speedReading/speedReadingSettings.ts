@@ -25,6 +25,14 @@ export interface SpeedReadingSettings {
   editWpm: number
   /** The edit view's reading row, in boxes. A chunk holds as many words as fit. */
   rowWidth: number
+  /**
+   * How a chunk's time on screen is decided, 0..1. At 1 a chunk stays for its
+   * own words at the edit view's pace, so a chunk of four short words stays
+   * twice as long as one of two long ones. At 0 every chunk stays equally
+   * long: the time a FULL row would take, at the same pace, so the average
+   * pace is unchanged. Between, a straight blend of the two.
+   */
+  chunkTiming: number
   /** The bell's dynamic `a`, as the Animations section's `ramp`. */
   curveRamp: number
   /** Where the bell's apex sits, 0..1, as the Animations section's `shape`. */
@@ -38,6 +46,15 @@ export const SPEED_READING_WPM_MAX = 1500
 export const SPEED_READING_WPM_STEP = 5
 export const SPEED_READING_ROW_WIDTH_MIN = 6
 export const SPEED_READING_ROW_WIDTH_MAX = 60
+/** Average letters to a word, with its space: how many words a full row holds. */
+export const SPEED_READING_LETTERS_PER_WORD = 6
+
+/** The words a chunk is worth on the clock, by the `chunkTiming` blend. */
+export function chunkClockWords(words: number, rowWidth: number, chunkTiming: number): number {
+  const fullRow = Math.max(1, rowWidth / SPEED_READING_LETTERS_PER_WORD)
+  return fullRow + (words - fullRow) * Math.max(0, Math.min(1, chunkTiming))
+}
+
 export const SPEED_READING_CURVE_RAMP_MIN = 0.1
 export const SPEED_READING_CURVE_RAMP_MAX = 5
 export const SPEED_READING_CURVE_SHAPE_MIN = 0.1
@@ -48,6 +65,7 @@ export const DEFAULT_SPEED_READING_SETTINGS: SpeedReadingSettings = {
   renderWpm: 250,
   editWpm: 300,
   rowWidth: 24,
+  chunkTiming: 1,
   curveRamp: 5 / 3,
   curveShape: 0.5,
   curveSpeedSec: 1.5,
@@ -70,6 +88,7 @@ export function sanitizeSpeedReadingSettings(input: unknown): SpeedReadingSettin
     renderWpm: typeof record.renderWpm === 'number' && Number.isFinite(record.renderWpm) ? clampWpm(record.renderWpm) : d.renderWpm,
     editWpm: typeof record.editWpm === 'number' && Number.isFinite(record.editWpm) ? clampWpm(record.editWpm) : d.editWpm,
     rowWidth: Math.round(numberIn(record.rowWidth, SPEED_READING_ROW_WIDTH_MIN, SPEED_READING_ROW_WIDTH_MAX, d.rowWidth)),
+    chunkTiming: numberIn(record.chunkTiming, 0, 1, d.chunkTiming),
     curveRamp: numberIn(record.curveRamp, SPEED_READING_CURVE_RAMP_MIN, SPEED_READING_CURVE_RAMP_MAX, d.curveRamp),
     curveShape: numberIn(record.curveShape, SPEED_READING_CURVE_SHAPE_MIN, SPEED_READING_CURVE_SHAPE_MAX, d.curveShape),
     curveSpeedSec: numberIn(record.curveSpeedSec, 0, SPEED_READING_CURVE_SPEED_MAX_SEC, d.curveSpeedSec),

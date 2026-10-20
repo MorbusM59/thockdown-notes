@@ -54,3 +54,13 @@ describe('wordStartAt', () => {
     expect(wordStartAt('hello world', 0)).toBe(0)
   })
 })
+
+describe('chunkClockWords', () => {
+  it('is a chunk\'s own words at 1 and a full row\'s at 0', async () => {
+    const { chunkClockWords } = await import('./speedReadingSettings')
+    expect(chunkClockWords(2, 24, 1)).toBe(2)
+    expect(chunkClockWords(2, 24, 0)).toBe(4)
+    expect(chunkClockWords(6, 24, 0)).toBe(4)
+    expect(chunkClockWords(2, 24, 0.5)).toBe(3)
+  })
+})
