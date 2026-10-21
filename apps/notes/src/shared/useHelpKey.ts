@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { getSpeedReadingDisplay } from '../speedReading/speedReadingStore'
 import { HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { matchShortcut } from './keyboardShortcuts'
 
@@ -63,8 +62,6 @@ export function useHelpKey(onTap: () => void): boolean {
       // after a modifier is let go belongs to a press that began as another
       // chord, and starting one there would read its release as a tap.
       if (event.repeat || !matchShortcut(event, 'userGuide')) return
-      // A speed reading session holds the keyboard; F1 only ends it.
-      if (getSpeedReadingDisplay()) return
       event.preventDefault()
       event.stopPropagation()
       pressed = true

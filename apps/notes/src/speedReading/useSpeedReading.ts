@@ -1,24 +1,31 @@
-import { useCallback, useEffect, useRef, type MutableRefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react'
 import type { EditorAdapter, EditorSelectionState } from '../editor/EditorContract'
-import { startSpeedReadingSession, type SpeedReadingSession, type SpeedReadingSessionResult } from './speedReadingSession'
+import { startSpeedReadingSession, type SpeedReadingSession } from './speedReadingSession'
 
 /**
- * A slot's way into speed reading (`speedReadingSession.ts`), published on its
- * section handle so App's Alt+< can start it in whichever slot is active.
+ * A slot's speed reading MODE (`speedReadingSession.ts`), published on its
+ * section handle so App's F2, the slot's toggle button and the escape menu
+ * can switch it in whichever slot they speak for.
  *
- * The session belongs to the note and the view it started in: a different
- * note arriving, the view switching, the slot losing the keyboard or going
- * away all end it. Most of those are already impossible while it runs -- it
- * takes every key, and a click ends it -- so these are the guarantee rather
- * than the expected path.
+ * The mode belongs to the slot, not to a view: switching views keeps it and
+ * reads on in the other one, and so does a different note arriving. A
+ * SESSION is the mode running in one view over one note, so the session is
+ * derived -- one runs exactly while the mode is on, the slot holds the
+ * keyboard and the escape ring is not up over it, and it is replaced
+ * whenever the view or the note changes.
  *
- * Ending in the edit view leaves the caret at the start of the chunk that was
- * on show, so a reader who stops to edit finds themselves where they were
- * reading, with that line brought into view.
+ * Wherever the edit view stops reading -- the mode switched off, or Escape
+ * leaving for the render view -- the caret is left at the end of the last
+ * chunk shown, on the last line of the editor's middle section, with no
+ * animation: the reader is already looking at that place, and what was read
+ * stays above it. Placing it before the render view opens is also what lets
+ * the view switch carry the reading position across.
  */
 export interface UseSpeedReadingOptions {
   isPreviewMode: boolean
   isSectionActive: boolean
+  /** The escape ring, or a mode on it, is up over this slot. */
+  isEscapeRingUp: boolean
   activeNoteId: string | null
   readDisplayedText: () => string
   latestEditorSelectionRef: MutableRefObject<EditorSelectionState>
@@ -29,42 +36,56 @@ export interface UseSpeedReadingOptions {
 export function useSpeedReading({
   isPreviewMode,
   isSectionActive,
+  isEscapeRingUp,
   activeNoteId,
   readDisplayedText,
   latestEditorSelectionRef,
   adapterRef,
   previewScrollRef,
-}: UseSpeedReadingOptions): { startSpeedReading: () => void } {
+}: UseSpeedReadingOptions): { isSpeedReading: boolean; toggleSpeedReading: () => void } {
+  const [isSpeedReading, setIsSpeedReading] = useState(false)
   const sessionRef = useRef<SpeedReadingSession | null>(null)
+  const readTextRef = useRef(readDisplayedText)
+  readTextRef.current = readDisplayedText
 
-  useEffect(() => () => {
-    sessionRef.current?.end()
-  }, [isPreviewMode, isSectionActive, activeNoteId])
+  const placeCaret = useCallback((offset: number) => {
+    adapterRef.current?.applySnapshot({
+      selection: { anchor: offset, focus: offset, start: offset, end: offset, isCollapsed: true },
+      selectionScrollBehavior: 'bottom-caged-instant',
+    })
+  }, [adapterRef])
 
-  const startSpeedReading = useCallback(() => {
-    if (sessionRef.current || !activeNoteId || !isSectionActive) return
-    // Only the reader's own ending moves the caret: an ending from outside
-    // means the note or the view has already changed, and the offset belongs
-    // to what was there before.
-    const onEnd = ({ readOffset, byReader }: SpeedReadingSessionResult, view: 'edit' | 'render') => {
-      sessionRef.current = null
-      if (!byReader || view !== 'edit' || readOffset === null) return
-      adapterRef.current?.applySnapshot({
-        selection: { anchor: readOffset, focus: readOffset, start: readOffset, end: readOffset, isCollapsed: true },
-        selectionScrollBehavior: 'center-caged',
-      })
-    }
+  const shouldRun = isSpeedReading && isSectionActive && !isEscapeRingUp && activeNoteId !== null
+
+  useEffect(() => {
+    if (!shouldRun) return
     if (isPreviewMode) {
       const scroller = previewScrollRef.current
       if (!scroller) return
-      sessionRef.current = startSpeedReadingSession({ view: 'render', scroller }, (result) => onEnd(result, 'render'))
-      return
+      sessionRef.current = startSpeedReadingSession({ view: 'render', scroller }, { onLeave: () => {} })
+    } else {
+      sessionRef.current = startSpeedReadingSession(
+        { view: 'edit', text: readTextRef.current(), from: latestEditorSelectionRef.current.start },
+        { onLeave: placeCaret },
+      )
     }
-    sessionRef.current = startSpeedReadingSession(
-      { view: 'edit', text: readDisplayedText(), from: latestEditorSelectionRef.current.start },
-      (result) => onEnd(result, 'edit'),
-    )
-  }, [activeNoteId, isSectionActive, isPreviewMode, previewScrollRef, readDisplayedText, latestEditorSelectionRef, adapterRef])
+    return () => {
+      sessionRef.current?.end()
+      sessionRef.current = null
+    }
+  }, [shouldRun, isPreviewMode, activeNoteId, previewScrollRef, latestEditorSelectionRef, placeCaret])
 
-  return { startSpeedReading }
+  const toggleSpeedReading = useCallback(() => {
+    if (!activeNoteId) return
+    if (isSpeedReading) {
+      // The session hands its position over before it goes, so the caret
+      // is placed while the overlay is still the thing on screen.
+      sessionRef.current?.leave()
+      sessionRef.current?.end()
+      sessionRef.current = null
+    }
+    setIsSpeedReading((on) => !on)
+  }, [activeNoteId, isSpeedReading])
+
+  return { isSpeedReading, toggleSpeedReading }
 }

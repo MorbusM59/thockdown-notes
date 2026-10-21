@@ -78,8 +78,8 @@ export interface SectionHandle extends
    * ring rather than by a route of its own.
    */
   exitSlotOverlay: (() => void) | null
-  /** Starts speed reading in this slot's current view (`speedReading/useSpeedReading.ts`); Alt+< is App's. */
-  startSpeedReading: () => void
+  /** Switches this slot's speed reading mode (`speedReading/useSpeedReading.ts`); F2 is App's. */
+  toggleSpeedReading: () => void
   setIsPreviewMode: Dispatch<SetStateAction<boolean>>
   setActiveNoteId: Dispatch<SetStateAction<string | null>>
   /** Switches which note this section shows -- the section's own, not a shared/parameterized one (see the handover doc's design decision). */

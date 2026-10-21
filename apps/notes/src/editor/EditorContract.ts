@@ -196,8 +196,12 @@ export interface EditorSnapshot {
  * prose: a heading opens the section under it, so the section is what should
  * be on screen. Centring a heading spends the upper half of the viewport on
  * the section being left.
+ *
+ * 'bottom-caged-instant' lands the selection's line on the LAST line of the
+ * caged area, with no animation: for a position the reader reached by reading
+ * forward (speed reading's end), so what was read stays on screen above it.
  */
-export type EditorSelectionScrollBehavior = 'center-caged' | 'center-caged-instant' | 'top-caged-instant' | 'preserve-scroll';
+export type EditorSelectionScrollBehavior = 'center-caged' | 'center-caged-instant' | 'top-caged-instant' | 'bottom-caged-instant' | 'preserve-scroll';
 
 export interface EditorSnapshotApplyRequest extends Partial<EditorSnapshot> {
   selectionScrollBehavior?: EditorSelectionScrollBehavior;

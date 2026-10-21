@@ -31,6 +31,9 @@ export interface SectionTabBarProps {
   isForcedPreviewNote: boolean
   /** Flips this slot between edit and render view. */
   onToggleRenderViewMode: () => void
+  /** This slot's speed reading mode (`speedReading/useSpeedReading.ts`). */
+  isSpeedReading: boolean
+  onToggleSpeedReading: () => void
   /**
    * Non-null when this slot is showing something a view toggle makes no
    * sense for -- the User Guide, or a mode that has taken the slot over.
@@ -121,6 +124,8 @@ export function SectionTabBar({
   isPreviewMode,
   isForcedPreviewNote,
   onToggleRenderViewMode,
+  isSpeedReading,
+  onToggleSpeedReading,
   exitSlotOverlay,
   onCreateSlot,
   onCloseSlot,
@@ -442,6 +447,21 @@ export function SectionTabBar({
           on. Sitting immediately left of the add-slot "+" also lets the two
           read together as slot-level actions: this is the writing window, and
           that makes another one. */}
+      {/* Speed reading belongs to the slot like its view does, so it sits
+          beside the view toggle; it has nothing to read in the guide's
+          place-holders or a mode, where the exit stands alone. */}
+      {!exitSlotOverlay && activeNoteId ? (
+        <button
+          type="button"
+          className={`btn-icon section-render-mode-toggle${isSpeedReading ? ' is-active' : ''}`}
+          data-tooltip={isSpeedReading ? 'Stop speed reading (F2)' : 'Speed reading (F2)'}
+          aria-label={isSpeedReading ? 'Stop speed reading' : 'Speed reading'}
+          aria-pressed={isSpeedReading}
+          onClick={onToggleSpeedReading}
+        >
+          <span className="fa-solid fa-book-open-reader" aria-hidden="true" />
+        </button>
+      ) : null}
       {exitSlotOverlay ? (
         <button
           type="button"

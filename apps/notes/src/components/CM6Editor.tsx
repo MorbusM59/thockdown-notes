@@ -1021,7 +1021,7 @@ export function CM6Editor({
   // applySnapshot, which needs to center a newly-applied selection (search
   // hits, go-to-start/end) in the viewport -- see its use in applySnapshot's
   // `snapshot.selection` handling.
-  const reconcileSelectionJumpScrollRef = useRef<((view: EditorView, instant?: boolean, align?: 'center' | 'top', passesLeft?: number) => void) | null>(null);
+  const reconcileSelectionJumpScrollRef = useRef<((view: EditorView, instant?: boolean, align?: 'center' | 'top' | 'bottom', passesLeft?: number) => void) | null>(null);
   // Read by the Ctrl+ArrowUp/Down keymap handler below (registered once at
   // view-construction time), same "stable ref to a closure that's recreated
   // every render" pattern as bindingsRef -- see navigateToFlaggedLine's own
@@ -3612,7 +3612,7 @@ export function CM6Editor({
      * selection moves the selection. Every part of this has to be recomputed
      * for that second answer, which is why it is a function and not a value.
      */
-    const resolveSelectionJumpTargetPx = (view: EditorView, align: 'center' | 'top'): number | null => {
+    const resolveSelectionJumpTargetPx = (view: EditorView, align: 'center' | 'top' | 'bottom'): number | null => {
       const scroller = view.scrollDOM;
       const lineHeightPxNow = lineHeightPxRef.current;
       const scrollerRect = scroller.getBoundingClientRect();
@@ -3665,7 +3665,9 @@ export function CM6Editor({
       const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
       const rawTargetScrollTopPx = align === 'top'
         ? selectionTopInScroll - middleTopPx - lineHeightPxNow
-        : selectionCenterInScroll - middleCenterPx;
+        : align === 'bottom'
+          ? selectionTopInScroll + lineHeightPxNow - middleBottomPx
+          : selectionCenterInScroll - middleCenterPx;
       const targetScrollTopPx = Math.max(
         0,
         Math.min(maxScrollTopPx, Math.round(rawTargetScrollTopPx / lineHeightPxNow) * lineHeightPxNow),
@@ -3679,7 +3681,7 @@ export function CM6Editor({
      * caged area ('top'), one line below the boundary. 'top' is for jumps whose
      * target is a heading -- see EditorSelectionScrollBehavior.
      */
-    const reconcileSelectionJumpScroll = (view: EditorView, instant = false, align: 'center' | 'top' = 'center', passesLeft = 2) => {
+    const reconcileSelectionJumpScroll = (view: EditorView, instant = false, align: 'center' | 'top' | 'bottom' = 'center', passesLeft = 2) => {
       selectionJumpReconcileGeneration += 1;
       const myGeneration = selectionJumpReconcileGeneration;
       const scroller = view.scrollDOM;
@@ -6277,8 +6279,9 @@ export function CM6Editor({
           if (snapshot.selectionScrollBehavior !== 'preserve-scroll' && !snapshot.viewport && !snapshot.viewportLines) {
             reconcileSelectionJumpScrollRef.current?.(
               view,
-              snapshot.selectionScrollBehavior === 'center-caged-instant' || snapshot.selectionScrollBehavior === 'top-caged-instant',
-              snapshot.selectionScrollBehavior === 'top-caged-instant' ? 'top' : 'center',
+              snapshot.selectionScrollBehavior !== 'center-caged',
+              snapshot.selectionScrollBehavior === 'top-caged-instant' ? 'top'
+                : snapshot.selectionScrollBehavior === 'bottom-caged-instant' ? 'bottom' : 'center',
             );
           }
         }

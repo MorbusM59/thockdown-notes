@@ -69,9 +69,14 @@ function pastLinePrefix(text: string, pos: number): number {
   return Math.max(pos, lineStart + (match ? match[0].length : 0))
 }
 
-/** The start of the word `pos` is inside, or `pos` itself between words. */
+/**
+ * The start of the word `pos` is inside, or `pos` itself between words and at
+ * a word's end -- where reading left the caret, so reading on from there does
+ * not show that word again.
+ */
 export function wordStartAt(text: string, pos: number): number {
   let start = Math.max(0, Math.min(text.length, pos))
+  if (start >= text.length || isSpace(text[start])) return start
   while (start > 0 && !isSpace(text[start - 1])) start -= 1
   return start
 }

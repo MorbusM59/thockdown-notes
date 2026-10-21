@@ -94,6 +94,9 @@ export interface EscapeHoldPanelProps {
   onExportPdf: (scope: ExportScope) => void | Promise<void>
   onExportMd: (scope: ExportScope) => void | Promise<void>
   onOpenHelp: () => void | Promise<void>
+  /** This slot's speed reading mode, which the ring can switch like F2 does. */
+  isSpeedReading: boolean
+  onToggleSpeedReading: () => void
   /**
    * Reports which cell is currently in the selection spot -- hovered if the
    * pointer is over one, focused otherwise, which is exactly what the ring's
@@ -323,6 +326,8 @@ export function EscapeHoldPanel({
   onExportPdf,
   onExportMd,
   onOpenHelp,
+  isSpeedReading,
+  onToggleSpeedReading,
   onActiveCellChange,
   onClose,
   escapeMenu,
@@ -359,13 +364,14 @@ export function EscapeHoldPanel({
       { id: 'new-chapter', label: 'New Chapter', icon: 'fa-solid fa-bookmark', onSelect: onCreateChapter, disabled: !hasActiveNote || isActiveNoteTimeless },
       { id: 'export', label: 'Export', icon: 'fa-solid fa-chevron-up', onSelect: () => onExport('note'), disabled: !hasActiveNote || isExporting },
       { id: 'export-all', label: 'Export All', icon: 'fa-solid fa-angles-up', onSelect: () => onExport('all'), disabled: !hasActiveNote || isExporting || !hasChapters },
+      { id: 'speed-reading', label: isSpeedReading ? 'Stop Speed Reading' : 'Speed Reading', icon: 'fa-solid fa-book-open-reader', onSelect: onToggleSpeedReading, disabled: !hasActiveNote },
       { id: 'user-guide', label: 'User Guide', icon: 'fa-solid fa-graduation-cap', onSelect: onOpenHelp, disabled: false },
     ]
     // Contributed entry cells are appended, not interleaved: the built-in
     // note actions keep their familiar order and position regardless of
     // what else is currently reachable from here.
     return [...candidates.filter((candidate) => !candidate.disabled), ...(escapeMenu?.entryCells ?? [])]
-  }, [activeMode, escapeMenu, hasActiveNote, isActiveNoteTimeless, hasChapters, isPreviewMode, isExportingPdf, isExportingMd, onCreateNote, onCreateChapter, onExportPdf, onExportMd, onOpenHelp])
+  }, [activeMode, escapeMenu, hasActiveNote, isActiveNoteTimeless, hasChapters, isPreviewMode, isExportingPdf, isExportingMd, onCreateNote, onCreateChapter, onExportPdf, onExportMd, onOpenHelp, isSpeedReading, onToggleSpeedReading])
 
   const [topIndex, setTopIndex] = useState(0)
   // Which cell is focused/tabbable -- deliberately separate state from

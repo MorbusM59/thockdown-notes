@@ -275,14 +275,14 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Speed Reading](#speed-reading)
 
 > **Where?**
-> \`Alt+<\` in either view. Settings panel → Speed reading.
+> \`F2\`, the book button beside a slot's view button, or the \`Esc\` menu. Settings panel → Speed reading.
 
 *Reads a note to you at a pace you set, from where you are.*
 
 - **Render view** scrolls the page on its own from what is on screen, at your words per minute, measured from the text as it is laid out. Hold \`Space\` or \`↓\` to ease to a pause; let go to ease back up.
-- **Edit view** greys out the grid and shows the note a few words at a time in one row, starting at the caret. \`Space\` or \`↓\` shows the next words; hold it to read on at your pace. \`↑\` goes back. When you stop, the caret is where you were reading.
+- **Edit view** greys out the grid and shows the note a few words at a time in one row, starting at the caret. \`Space\` or \`↓\` shows the next words; hold it to read on at your pace. \`↑\` goes back. When you stop, the caret is at the end of the last words shown.
 - \`←\` and \`→\` make it slower or faster in steps of 5; hold to sweep. The word count shows the pace while you read.
-- Any other key, or a click, stops.
+- \`Esc\` switches views and keeps reading. \`F2\` stops.
 `,
   `## Internal Linking
 

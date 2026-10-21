@@ -57,6 +57,8 @@ export interface SectionEditorAreaProps {
   onEscapeHoldExportPdf: (scope: ExportScope) => void | Promise<void>
   onEscapeHoldExportMd: (scope: ExportScope) => void | Promise<void>
   onEscapeHoldOpenHelp: () => void | Promise<void>
+  isSpeedReading: boolean
+  onToggleSpeedReading: () => void
   /** Passed straight through to EscapeHoldPanel -- see its own `escapeMenu` prop and escapeMenuContract.ts. */
   escapeMenu?: EscapeMenuContribution | null
   /** The library image this slot shows instead of a note (the 'image' slot overlay); null when it shows none. */
@@ -200,6 +202,8 @@ export function SectionEditorArea({
   onEscapeHoldExportPdf,
   onEscapeHoldExportMd,
   onEscapeHoldOpenHelp,
+  isSpeedReading,
+  onToggleSpeedReading,
   escapeMenu,
   shownImageId = null,
   isExportingPdf,
@@ -523,6 +527,8 @@ export function SectionEditorArea({
                 onExportPdf={onEscapeHoldExportPdf}
                 onExportMd={onEscapeHoldExportMd}
                 onOpenHelp={onEscapeHoldOpenHelp}
+                isSpeedReading={isSpeedReading}
+                onToggleSpeedReading={onToggleSpeedReading}
                 onActiveCellChange={setActiveRingCellId}
                 escapeMenu={escapeMenu}
                 onClose={onEscapeHoldPanelClose}

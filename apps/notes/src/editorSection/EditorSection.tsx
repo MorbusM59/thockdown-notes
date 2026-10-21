@@ -78,7 +78,7 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   | 'isViewingTimelessNote' | 'onToggleTimeless' | 'isForcedPreviewNote' | 'onToggleRenderViewMode'
   | 'splitArmedChapter' | 'onChapterPillPointerDown' | 'onChapterPillPointerUp' | 'onChapterPillMouseLeave' | 'onChapterPillContextMenu'
   | 'onArchiveChapterClick' | 'onDeleteChapterClick' | 'imageStorage'
-  | 'isTagBarMode' | 'toggleTagBarMode' | 'tagBar'> {
+  | 'isTagBarMode' | 'toggleTagBarMode' | 'tagBar' | 'isSpeedReading' | 'onToggleSpeedReading'> {
   sectionId: string
   /**
    * Set when THIS slot is showing a note created undocked -- born from the
@@ -1683,9 +1683,10 @@ export function EditorSection(rawProps: EditorSectionProps) {
    * already ends the mode through `onDismiss`, so a second path to the same
    * place would be a second thing to keep correct.
    */
-  const { startSpeedReading } = useSpeedReading({
+  const { isSpeedReading, toggleSpeedReading } = useSpeedReading({
     isPreviewMode,
     isSectionActive: sectionId === activeSectionId,
+    isEscapeRingUp: Boolean(escapeMenu?.activeMode) || (isEscapeHoldPanelOpen && sectionId === activeSectionId),
     activeNoteId,
     readDisplayedText,
     latestEditorSelectionRef,
@@ -1817,7 +1818,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
     bindings,
     toggleRenderViewMode,
     exitSlotOverlay,
-    startSpeedReading,
+    toggleSpeedReading,
     applyProgrammaticEditorText,
     sectionId,
     activeNoteId,
@@ -2187,6 +2188,8 @@ export function EditorSection(rawProps: EditorSectionProps) {
         isPreviewMode={isPreviewMode}
         isForcedPreviewNote={isForcedPreviewNote}
         onToggleRenderViewMode={toggleRenderViewMode}
+        isSpeedReading={isSpeedReading}
+        onToggleSpeedReading={toggleSpeedReading}
         onCreateSlot={onCreateSlot}
         onCloseSlot={onCloseSlot}
         onCreateNote={handleCreateNoteInSection}
@@ -2230,6 +2233,8 @@ export function EditorSection(rawProps: EditorSectionProps) {
         isPreviewingSnapshot={isPreviewingSnapshot}
         isCaretSuspended={isCaretSuspended}
         isEscapeHoldPanelOpen={isEscapeHoldPanelOpen}
+        isSpeedReading={isSpeedReading}
+        onToggleSpeedReading={toggleSpeedReading}
         onEscapeHoldPanelClose={onEscapeHoldPanelClose}
         onEscapeHoldCreateNote={onEscapeHoldCreateNote}
         onEscapeHoldCreateChapter={onEscapeHoldCreateChapter}

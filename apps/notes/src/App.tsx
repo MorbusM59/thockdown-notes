@@ -133,7 +133,7 @@ import { FlowOverlays } from './flow/FlowOverlays'
 import { useFlowFeedback } from './flow/useFlowFeedback'
 import { DEFAULT_FLOW_SETTINGS, sanitizeFlowSettings, type FlowSettings } from './shared/flowSettings'
 import { DEFAULT_SPEED_READING_SETTINGS, sanitizeSpeedReadingSettings, type SpeedReadingSettings } from './speedReading/speedReadingSettings'
-import { getSpeedReadingDisplay, onSpeedReadingSettingsCommit, setSpeedReadingSettings as applySpeedReadingSettings } from './speedReading/speedReadingStore'
+import { onSpeedReadingSettingsCommit, setSpeedReadingSettings as applySpeedReadingSettings } from './speedReading/speedReadingStore'
 import { useBeatFeedback } from './flow/useBeatFeedback'
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings, type BeatSettings } from './shared/beatSettings'
 import { DEBUG_TAG_NAME, normalizeTagName } from './shared/tags'
@@ -8570,15 +8570,13 @@ ${markdownHtml}
         return
       }
 
-      // Alt+< starts speed reading in the active slot, from the caret in the
-      // edit view and from what is on screen in the render view. A session
-      // holds the keyboard while it runs and ends on any key it does not use,
-      // Alt+< included, so this only ever starts one. Not while the ring is
-      // up: the keyboard is the ring's, and a mode's slot has no note on show.
-      if (!isEditorControlField && !isEscapeRingUp && activeSection?.activeNoteId
+      // F2 switches the active slot's speed reading mode on and off: on, it
+      // reads from the caret in the edit view and from what is on screen in
+      // the render view (speedReading/useSpeedReading.ts).
+      if (!isEditorControlField && activeSection?.activeNoteId
         && matchShortcut(event, 'speedReading')) {
         event.preventDefault()
-        if (!event.repeat) activeSection.startSpeedReading()
+        if (!event.repeat) activeSection.toggleSpeedReading()
         return
       }
 
@@ -8823,8 +8821,6 @@ ${markdownHtml}
   useEffect(() => {
     const onTab = (event: globalThis.KeyboardEvent) => {
       if (event.key !== 'Tab') return
-      // A speed reading session holds the keyboard; Tab only ends it.
-      if (getSpeedReadingDisplay()) return
       if (mayHoldKeyboard(document.activeElement)) return
       event.preventDefault()
       returnKeyboardToActiveSurface()

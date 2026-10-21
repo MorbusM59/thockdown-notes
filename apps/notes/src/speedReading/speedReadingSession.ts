@@ -1,5 +1,8 @@
 /**
- * One speed reading session: from Alt+< until any other key or a click.
+ * One speed reading session: the speed reading mode (F2, `useSpeedReading.ts`)
+ * running in one view over one note. The mode switching off, the view or the
+ * note changing, or the escape ring coming up ends the session; nothing the
+ * reader presses inside it does.
  *
  * ## Two views, one gesture vocabulary
  * - **Render view** scrolls the page by itself at the reader's words per
@@ -14,15 +17,20 @@
  *   a tap is one step, a hold accelerates on the same press-and-hold curve the
  *   music player's volume uses (`shared/holdToAdjust.ts`).
  *
- * ## The session holds the keyboard
- * Every key is taken in the window's CAPTURE phase, before the editor or the
- * app's own shortcuts see it, and none of them passes through: Space would
- * otherwise type into the note, the arrows move the caret, and the key that
- * ends the session would go on to do what it does elsewhere. The key that
- * ends it is swallowed on the way up too, because Escape acts on its RELEASE
- * (App.tsx switches views on Escape's keyup). Modifier keys alone neither act
- * nor end it, or Alt+< could never be pressed to end it. A click ends it and
- * goes on to be the click it was.
+ * ## Which keys the session takes
+ * Its own keys are taken in the window's CAPTURE phase, before the editor or
+ * the app's shortcuts see them: Space would otherwise type into the note and
+ * the arrows move the caret. In the edit view every other key that would
+ * EDIT the note -- a character, Enter, Tab, Backspace, Delete, unmodified --
+ * is swallowed too, because the note under the reading row is hidden and an
+ * edit there would be made blind. Everything else passes through and does
+ * what it does anywhere: Escape switches views (and the mode reads on in the
+ * other one), F2 switches the mode off, a shortcut with a modifier is that
+ * shortcut, and a click is a click.
+ *
+ * Escape's press is also the edit view's moment to hand its position over
+ * (`onLeave`): App switches views on Escape's RELEASE, and the caret has to
+ * be where reading got to before then for the switch to carry it across.
  *
  * One `requestAnimationFrame` loop drives everything that moves, and it runs
  * only while something does: always in the render view, and in the edit view
@@ -48,15 +56,24 @@ export type SpeedReadingSessionTarget =
   | { view: 'render'; scroller: HTMLElement }
 
 export interface SpeedReadingSession {
-  /** Ends from outside: the note, the view or the slot changed under it. */
+  /** Stops the session; the mode, the view or the note changed. */
   end: () => void
+  /** Hands the edit view's position over through `onLeave`, as Escape's press does. */
+  leave: () => void
 }
 
-/** What the session leaves behind: in the edit view, where reading had got to. */
-export interface SpeedReadingSessionResult {
-  readOffset: number | null
-  /** True when the reader ended it (a key or a click), false when it was ended from outside. */
-  byReader: boolean
+export interface SpeedReadingSessionHandlers {
+  /**
+   * Where the edit view's reading has got to, as a source offset: the end of
+   * the chunk on show, or the start of a line break's empty one.
+   */
+  onLeave: (readOffset: number) => void
+}
+
+/** A key that edits the note when pressed without a modifier. */
+function editsText(event: KeyboardEvent): boolean {
+  return event.key.length === 1 || event.key === 'Enter' || event.key === 'Tab'
+    || event.key === 'Backspace' || event.key === 'Delete'
 }
 
 const ADVANCE_CODES = new Set(['Space', 'ArrowDown'])
@@ -128,7 +145,7 @@ function measuredDensity(scroller: HTMLElement): number | null {
 
 export function startSpeedReadingSession(
   target: SpeedReadingSessionTarget,
-  onEnd: (result: SpeedReadingSessionResult) => void,
+  handlers: SpeedReadingSessionHandlers,
 ): SpeedReadingSession | null {
   const startSettings = getSpeedReadingSettings()
   const wpmKey = target.view === 'edit' ? 'editWpm' : 'renderWpm'
@@ -291,11 +308,24 @@ export function startSpeedReadingSession(
     event.stopImmediatePropagation()
   }
 
+  const leave = () => {
+    if (target.view === 'edit' && chunk) handlers.onLeave(chunk.words > 0 ? chunk.end : chunk.start)
+  }
+
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.isComposing || MODIFIER_KEYS.has(event.key)) return
-    swallow(event)
     const plain = !event.ctrlKey && !event.altKey && !event.metaKey
-    if (plain && ADVANCE_CODES.has(event.code)) {
+    if (event.key === 'Escape') {
+      if (!event.repeat) leave()
+      return
+    }
+    const ownKey = plain && (ADVANCE_CODES.has(event.code) || event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'ArrowUp')
+    if (!ownKey) {
+      if (target.view === 'edit' && plain && editsText(event)) swallow(event)
+      return
+    }
+    swallow(event)
+    if (ADVANCE_CODES.has(event.code)) {
       if (event.repeat || heldAdvance.has(event.code)) return
       const wasHeld = heldAdvance.size > 0
       heldAdvance.add(event.code)
@@ -307,7 +337,7 @@ export function startSpeedReadingSession(
       ensureFrames()
       return
     }
-    if (plain && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
       if (event.repeat) return
       const direction = event.key === 'ArrowRight' ? 1 : -1
       const range = SPEED_READING_WPM_MAX - SPEED_READING_WPM_MIN
@@ -323,13 +353,7 @@ export function startSpeedReadingSession(
       ensureFrames()
       return
     }
-    if (plain && event.key === 'ArrowUp') {
-      if (!event.repeat) back()
-      return
-    }
-    if (event.repeat) return
-    swallowRelease(event.code)
-    end(true)
+    if (!event.repeat) back()
   }
 
   const onKeyUp = (event: KeyboardEvent) => {
@@ -343,7 +367,6 @@ export function startSpeedReadingSession(
       wpmHold = null
       return
     }
-    if (!MODIFIER_KEYS.has(event.key)) swallow(event)
   }
 
   const releaseAll = () => {
@@ -353,17 +376,14 @@ export function startSpeedReadingSession(
     if (target.view === 'edit') envelope = RESTING
   }
 
-  const onPointerDown = () => end(true)
-
   const listeners: Array<[string, EventListener]> = [
     ['keydown', onKeyDown as EventListener],
     ['keyup', onKeyUp as EventListener],
-    ['pointerdown', onPointerDown],
     ['blur', releaseAll],
   ]
   for (const [type, listener] of listeners) window.addEventListener(type, listener, true)
 
-  function end(byReader = false) {
+  function end() {
     if (ended) return
     ended = true
     for (const [type, listener] of listeners) window.removeEventListener(type, listener, true)
@@ -374,30 +394,9 @@ export function startSpeedReadingSession(
     releaseScrollBehavior?.()
     setSpeedReadingDisplay(null)
     if (wpm !== startSettings[wpmKey]) commitSpeedReadingSettings({ ...getSpeedReadingSettings(), [wpmKey]: wpm })
-    onEnd({ readOffset: chunk ? chunk.start : null, byReader })
   }
 
   publish()
   ensureFrames()
-  return { end: () => end(false) }
-}
-
-/**
- * Swallows the release of the key that ended a session, which arrives after
- * the session's own listeners are gone. Escape acts on its release; without
- * this, ending a session with Escape would also switch views.
- */
-function swallowRelease(code: string) {
-  const onKeyUp = (event: KeyboardEvent) => {
-    if (event.code !== code) return
-    event.preventDefault()
-    event.stopImmediatePropagation()
-    done()
-  }
-  const done = () => {
-    window.removeEventListener('keyup', onKeyUp, true)
-    window.removeEventListener('blur', done, true)
-  }
-  window.addEventListener('keyup', onKeyUp, true)
-  window.addEventListener('blur', done, true)
+  return { end, leave }
 }

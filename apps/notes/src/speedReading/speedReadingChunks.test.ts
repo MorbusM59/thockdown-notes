@@ -58,6 +58,7 @@ describe('wordStartAt', () => {
     expect(wordStartAt('hello world', 8)).toBe(6)
     expect(wordStartAt('hello world', 6)).toBe(6)
     expect(wordStartAt('hello world', 0)).toBe(0)
+    expect(wordStartAt('hello world', 5)).toBe(5)
   })
 })
 
