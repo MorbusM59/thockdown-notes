@@ -7,7 +7,7 @@ import { existsSync, promises as fsPromises } from 'node:fs'
 import { moveLegacyDevData } from './legacyDevDataMove'
 import { NoteLifecycleService } from './noteLifecycleService'
 import { FILE_SYNC_CHANNELS, type FileSyncApi } from '../src/shared/fileSync'
-import { NOTE_LIFECYCLE_CHANNELS, type NoteLifecycleApi } from '../src/shared/noteLifecycle'
+import { NOTE_LIFECYCLE_CHANNELS, NOTE_LIFECYCLE_EVENTS, type NoteLifecycleApi, type NoteLifecycleEvents } from '../src/shared/noteLifecycle'
 import { APP_STATE_CHANNELS, type AppStateApi, type WindowState } from '../src/shared/appState'
 import { StateService } from './stateService'
 import { DatabaseService } from './databaseService'
@@ -35,6 +35,7 @@ import { installNetworkIsolation, openExternalIfAllowed, setRemoteImagesAllowed 
 // Typed senders for the events the main process pushes to the window.
 const emitWindowEvent = eventEmitter<WindowEvents>(WINDOW_EVENT_CHANNELS)
 const emitExternalFileEvent = eventEmitter<ExternalFileEvents>(EXTERNAL_FILE_EVENTS)
+const emitNoteEvent = eventEmitter<NoteLifecycleEvents>(NOTE_LIFECYCLE_EVENTS)
 
 // Defense in depth: if something throws outside of a path we've explicitly
 // wrapped (e.g. during startup, before a window exists to show an in-app
@@ -516,7 +517,11 @@ function registerIpcHandlers() {
     databaseService = new DatabaseService(resolveDataRoot())
   }
   if (!noteLifecycleService) {
-    noteLifecycleService = new NoteLifecycleService(databaseService);
+    noteLifecycleService = new NoteLifecycleService(databaseService, {
+      onNoteDeleted: (id) => {
+        if (win && !win.isDestroyed()) emitNoteEvent(win.webContents, 'deleted', { id })
+      },
+    });
   }
   if (!stateService) {
     stateService = new StateService(resolveDataRoot());

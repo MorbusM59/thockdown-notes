@@ -29,7 +29,7 @@ import { usePreviewedSnapshot } from './usePreviewedSnapshot'
 import { useDisplayedNoteSelection } from './useDisplayedNoteSelection'
 import { useNoteSaveQueue } from './useNoteSaveQueue'
 import { useEditorSectionMount } from './useEditorSectionMount'
-import { useSnapshotFreeze } from './useSnapshotFreeze'
+import type { NoteDocumentEvent, NoteDocumentListener, NoteDocumentStore } from './noteDocumentStore'
 import { useSectionTabs } from '../tabBar/useSectionTabs'
 import { useNoteChapters } from '../chapters/useNoteChapters'
 import { useChapterPillActions } from '../chapters/useChapterPillActions'
@@ -184,8 +184,25 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
 
   /** Unpins a note's tab from a *different* section -- called when this section claims a tab dragged in from elsewhere. */
   unpinNoteFromSection: (sectionId: string, noteId: string) => void
-  /** Whether some *other* section currently has the given note open -- see useSnapshotFreeze. */
-  isNoteOpenInOtherSection: (sectionId: string, noteId: string) => boolean
+  /**
+   * The open notes' documents, shared by every section: this section is a
+   * view of its note's document, which holds the text and writes it
+   * (noteDocumentStore.ts). Stable for the app's lifetime.
+   */
+  noteDocuments: NoteDocumentStore
+}
+
+/**
+ * The listener a slot binds to a note's document. Built here, from the note
+ * id and the handler ref alone, because the store keeps it for as long as
+ * the slot shows the note: a closure made inside `activateNote` would keep
+ * that call's whole scope alive with it, the loaded note's text included.
+ */
+function documentListener(
+  handlerRef: { readonly current: (noteId: string, event: NoteDocumentEvent) => void },
+  noteId: string,
+): NoteDocumentListener {
+  return (event) => handlerRef.current(noteId, event)
 }
 
 /**
@@ -283,7 +300,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
   onSwapSection,
   onDeleteSection,
   unpinNoteFromSection,
-  isNoteOpenInOtherSection,
+  noteDocuments,
 } = useStableCallbacks(rawProps)
   // Local, not a prop: the scrollbar-slot DOM node lives entirely within
   // this section's own SectionEditorArea render, so each section needs its
@@ -374,7 +391,16 @@ export function EditorSection(rawProps: EditorSectionProps) {
    */
   const isPreviewModeRef = useRef(isPreviewMode)
   isPreviewModeRef.current = isPreviewMode
-  const { activeNoteId, setActiveNoteId } = useActiveNoteId(sectionId)
+  const { activeNoteId, setActiveNoteId: setActiveNoteIdState } = useActiveNoteId(sectionId)
+  // Leaving a note and ceasing to be a view of it are one step, so a section
+  // that has let go of its note is never handed that note's next change.
+  // Only activateNote sets a note, and it binds first; everything else
+  // clears it, through here.
+  const setActiveNoteId = useCallback<Dispatch<SetStateAction<string | null>>>((next) => {
+    if (next === null) noteDocuments.unbind(sectionId)
+    setActiveNoteIdState(next)
+  }, [noteDocuments, sectionId, setActiveNoteIdState])
+  useEffect(() => () => noteDocuments.unbind(sectionId), [noteDocuments, sectionId])
   const {
     readEditorText,
     editorTextVersion,
@@ -382,8 +408,6 @@ export function EditorSection(rawProps: EditorSectionProps) {
     latestEditorTextRef,
   } = useDisplayedNoteText(sectionId)
   const { previewedSnapshotId, setPreviewedSnapshotId } = usePreviewedSnapshot(sectionId)
-  /** See useEditorSectionMount's doc comment on this ref: distinguishes a hibernated live section from a genuine Time Machine browse, both of which drive previewedSnapshotId. */
-  const isFrozenSectionPreviewRef = useRef(false)
   const { editorSelection, setEditorSelection, latestEditorSelectionRef } = useDisplayedNoteSelection(sectionId)
   const [isCaretSuspended, setIsCaretSuspended] = useState(false)
   // Owned here so useNoteSaveQueue (which must be declared earlier) and
@@ -413,6 +437,8 @@ export function EditorSection(rawProps: EditorSectionProps) {
     void refreshChaptersRef.current()
   }, [])
   const { queueSave, flushPendingSaveNow, cancelPendingSave } = useNoteSaveQueue({
+    sectionId,
+    noteDocuments,
     activeNoteId,
     persistenceReady,
     notesRef,
@@ -446,6 +472,10 @@ export function EditorSection(rawProps: EditorSectionProps) {
   const tabbarGridRef = useRef<HTMLElement | null>(null)
   /** See useEditorSectionMount's UseEditorSectionMountOptions doc comment -- written below, once useNoteSnapshotTimeline resolves the previewed snapshot's content. */
   const previewedSnapshotContentRef = useRef<string | null>(null)
+
+  const publishText = useCallback((text: string, from?: { previousText: string; edit: EditorTextEdit | null }) => {
+    noteDocuments.publish(sectionId, text, from)
+  }, [noteDocuments, sectionId])
 
   const {
     adapterRef,
@@ -486,6 +516,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
     activeNoteHasDebugTagRef,
     setIsCaretSuspended,
     queueSave,
+    publishText,
     queueAppStateSave: queueAppStateSaveStable,
     updateActiveNoteTitlePreview: updateActiveNoteTitlePreviewStable,
     writeDebugEntry: writeDebugEntryStable,
@@ -494,7 +525,6 @@ export function EditorSection(rawProps: EditorSectionProps) {
     buildToggleBulletedListTransformRef,
     buildToggleNumberedListTransformRef,
     sectionContainerRef,
-    isFrozenSectionPreviewRef,
     previewedSnapshotContentRef,
     previewBlockSplitCacheRef,
     previewBlocksCacheRef,
@@ -514,38 +544,13 @@ export function EditorSection(rawProps: EditorSectionProps) {
     externalNoteOriginalTextByIdRef.current.delete(noteId)
   }, [editModeSnapshotByNoteIdRef, externalNoteOriginalTextByIdRef])
 
-  // Local, not activeNoteSummary (computed further below, after this hook
-  // call): the auto-TOC/auto-Open-Items chapter has no Time Machine history
-  // of its own, so hibernating a section showing one must never snapshot it
-  // -- see useSnapshotFreeze's own skipFreeze doc comment. A frozen
-  // (isTimeless) note is the same story for a different reason: its history
-  // was already permanently deleted the moment it was frozen
-  // (databaseService.ts's freezeNoteFamily), and the save would be rejected
-  // at the database layer anyway (assertNotTimeless) -- found live as a
-  // steady stream of uncaught "is timeless and cannot be altered" errors
-  // from a frozen note's section losing focus.
-  const isHibernatingNoteEphemeralAutoChapter = useMemo(() => {
-    const note = notes.find((candidate) => candidate.id === activeNoteId)
-    return Boolean(note?.isAutoToc || note?.isAutoOpenItems)
-  }, [notes, activeNoteId])
-  const isHibernatingNoteTimeless = useMemo(() => {
-    const note = notes.find((candidate) => candidate.id === activeNoteId)
-    return Boolean(note?.isTimeless)
-  }, [notes, activeNoteId])
 
-  useSnapshotFreeze({
-    sectionId,
-    activeSectionId,
-    noteId: activeNoteId,
-    previewedSnapshotId,
-    setPreviewedSnapshotId,
-    getLiveText: readEditorText,
-    flushPendingSaveNow,
-    isNoteOpenInOtherSection,
-    captureEditModeSnapshotFromEditor: (id) => { captureEditModeSnapshotFromEditor(id) },
-    isFrozenSectionPreviewRef,
-    skipFreeze: isHibernatingNoteEphemeralAutoChapter || isHibernatingNoteTimeless,
-  })
+  /**
+   * What this section does with an event from its note's document (set
+   * below, once everything it calls is declared). Read through a ref so the
+   * listener handed to the store at bind time never goes stale.
+   */
+  const documentEventHandlerRef = useRef<(noteId: string, event: NoteDocumentEvent) => void>(() => {})
 
   /**
    * `overrideSourceAnchorLine` opens the note *at* that line instead of
@@ -591,15 +596,10 @@ export function EditorSection(rawProps: EditorSectionProps) {
     // is cut short, which is the trade the fade is allowed to make -- it may
     // cover a wait, it may not create one.
     //
-    // Only when a SETTLE will follow to end it. A fade is undone by the
-    // settle the same switch opens, and the settle-gate effect declines to
-    // open one for a frozen section (useSnapshotFreeze -- the same note, the
-    // same position, swapped between its live text and a snapshot of it). A
-    // fade started there had nothing to end it, so the pane sat hidden until
-    // the five-second abandon valve fired: measured as a note that took
-    // "a very very long time to settle", which is exactly what it was.
+    // Only when a SETTLE will follow to end it: a fade is undone by the
+    // settle the same switch opens, and a fade with nothing to end it leaves
+    // the pane hidden until the five-second abandon valve fires.
     const willOpenSettle = isPreviewModeRef.current
-      && !isFrozenSectionPreviewRef.current
       && previousNoteId !== null
       && previousNoteId !== noteId
     if (willOpenSettle) {
@@ -635,6 +635,12 @@ export function EditorSection(rawProps: EditorSectionProps) {
     }
     logStep('persist outgoing UI state', persistOutStart)
 
+    // Begun immediately before the request, so the store's clock orders this
+    // load against the note's writes the way the main process will
+    // (noteDocumentStore.ts, rule 3), and held until the bind below so the
+    // note's document cannot be dropped in between (rule 4).
+    const documentLoad = noteDocuments.beginLoad(noteId)
+    try {
     const loadStart = performance.now()
     const [loadedInitial, nextUiState] = await Promise.all([
       window.thockdownNotes.loadNote({ id: noteId }),
@@ -695,7 +701,10 @@ export function EditorSection(rawProps: EditorSectionProps) {
     }
 
     const cacheRestoreStart = performance.now()
-    const hydratedText = normalizeInternalText(loaded.text)
+    // The note's live text when it is already open in another slot -- the
+    // database is behind it by whatever is still debouncing -- and what was
+    // loaded otherwise (noteDocumentStore.ts's `bind`).
+    const hydratedText = noteDocuments.textToShow(documentLoad, normalizeInternalText(loaded.text))
     const restored = await restorePersistedBlockMap(nextUiState?.previewBlockCache, hydratedText)
     if (restored.cache) {
       previewBlockSplitCacheRef.current = restored.cache
@@ -828,7 +837,16 @@ export function EditorSection(rawProps: EditorSectionProps) {
     logStep('external note setup', externalStart)
 
     const stateUpdateStart = performance.now()
-    commitEditorText(hydratedText)
+    // Binding and showing the text happen in one synchronous step, so no
+    // change from another view can fall between them. The text can differ
+    // from `hydratedText` only if the note changed during the awaits above;
+    // the restore snapshot then lands on a position in the older text, which
+    // the restore clamps, rather than the newer text being dropped.
+    const shownText = noteDocuments.bind(sectionId, documentLoad, hydratedText, documentListener(documentEventHandlerRef, loaded.id))
+    // Deleted while it was loading: what was read is a note that no longer
+    // exists, and the slot keeps what it had.
+    if (shownText === null) return
+    commitEditorText(shownText)
     pendingEditRestoreSnapshotRef.current = preloadedSnapshot
     setActiveNoteId(loaded.id)
     await saveSelectedNoteState(loaded.id)
@@ -853,7 +871,11 @@ export function EditorSection(rawProps: EditorSectionProps) {
     void window.thockdownTabs?.setLastActiveChapter(sectionId, chapterTabNoteId, chapterNoteIdForTab).then((updatedTabs) => {
       applyPinnedTabsUpdateRef.current(updatedTabs)
     })
+    } finally {
+      documentLoad.release()
+    }
   }, [
+    noteDocuments,
     activeNoteId,
     captureCurrentAnchorBlockIndex,
     editorSectionMountRest.previewSettleGateRef,
@@ -1092,6 +1114,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
     editorSelection,
     applyProgrammaticEditorText,
     flushPendingSaveNow,
+    noteDocuments,
     onNotePermanentlyDeleted: evictPermanentlyDeletedNoteCaches,
   })
 
@@ -1233,6 +1256,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
     sidebarMode,
     activeNoteExternalPathRef,
     externalNoteOriginalTextByIdRef,
+    noteDocuments,
     onNotePermanentlyDeleted: evictPermanentlyDeletedNoteCaches,
     menuIdentityNoteId,
     refreshChapters,
@@ -1298,7 +1322,6 @@ export function EditorSection(rawProps: EditorSectionProps) {
     editModeSnapshotByNoteIdRef,
     refreshNotes,
     activateNote,
-    isFrozenSectionPreviewRef,
     isViewingEphemeralAutoChapter,
     isViewingTimelessNote,
   })
@@ -1322,6 +1345,27 @@ export function EditorSection(rawProps: EditorSectionProps) {
   // fresh.
   const activeNoteIdRef = useRef(activeNoteId)
   activeNoteIdRef.current = activeNoteId
+
+  documentEventHandlerRef.current = (noteId, event) => {
+    if (event.kind === 'change') {
+      editorSectionMountRest.receiveExternalChange(noteId, event.change)
+    } else if (event.kind === 'saved') {
+      // Another slot's save of this note may have changed its chapter family
+      // (the Open Items chapter follows checklists) -- the same reason this
+      // section's own saves refresh it.
+      void refreshChaptersRef.current()
+    } else {
+      // The note was deleted (the store has already let go of this view).
+      // There is nothing to flush or position: show the empty slot.
+      evictPermanentlyDeletedNoteCaches(noteId)
+      if (activeNoteIdRef.current !== noteId) return
+      commitEditorText('')
+      pendingEditRestoreSnapshotRef.current = null
+      setActiveNoteIdState(null)
+      void saveSelectedNoteState(null)
+      void window.thockdownSections?.setActiveNote(sectionId, null)
+    }
+  }
 
   // The manual-save button's actual click handler: for a real note, this is
   // just handleCreateManualSnapshot (a Time Machine save point). For the
@@ -1348,14 +1392,23 @@ export function EditorSection(rawProps: EditorSectionProps) {
     }
 
     if (!noteIdAtClick || !window.thockdownNotes) return
-    const refreshed = await window.thockdownNotes.loadNote({ id: noteIdAtClick })
-    // The section may have switched to a different note while the two
-    // awaits above were in flight -- only commit the regenerated text if
-    // it's still the note actually on screen, otherwise this would
-    // silently overwrite whatever the user has since navigated to.
-    if (activeNoteIdRef.current !== noteIdAtClick) return
-    commitEditorText(normalizeInternalText(refreshed.text))
-  }, [activeNoteSummary, activeNoteId, isViewingAutoTocChapter, isViewingAutoOpenItemsChapter, handleCreateManualSnapshot, commitEditorText])
+    // Through the note's document, like any load: every slot showing this
+    // chapter takes the regenerated text, not only this one.
+    const documentLoad = noteDocuments.beginLoad(noteIdAtClick)
+    try {
+      const refreshed = await window.thockdownNotes.loadNote({ id: noteIdAtClick })
+      // The section may have switched to a different note while the two
+      // awaits above were in flight -- only commit the regenerated text if
+      // it's still the note actually on screen, otherwise this would
+      // silently overwrite whatever the user has since navigated to.
+      if (activeNoteIdRef.current !== noteIdAtClick) return
+      const shownText = noteDocuments.bind(sectionId, documentLoad, normalizeInternalText(refreshed.text), documentListener(documentEventHandlerRef, noteIdAtClick))
+      // Null: deleted meanwhile, and its removal has already cleared the slot.
+      if (shownText !== null) commitEditorText(shownText)
+    } finally {
+      documentLoad.release()
+    }
+  }, [activeNoteSummary, activeNoteId, isViewingAutoTocChapter, isViewingAutoOpenItemsChapter, handleCreateManualSnapshot, commitEditorText, noteDocuments, sectionId])
 
   // The repurposed line-numbers/review-flags button's preview-mode
   // behavior (SectionEditorArea.tsx) -- freezes/unfreezes the active

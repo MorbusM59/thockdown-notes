@@ -133,8 +133,17 @@ function stripExistingBranchSuffix(title: string): string {
 
 export class NoteLifecycleService {
   private readonly databaseService: DatabaseService;
-  constructor(databaseService: DatabaseService) {
+  /**
+   * Told the id of every note this service deletes, chapters deleted with
+   * their parent and auto-generated chapters removed by a save included, so
+   * the window can let go of a deleted note wherever it is open
+   * (editorSection/noteDocumentStore.ts's `remove`).
+   */
+  private readonly onNoteDeleted: (id: string) => void;
+
+  constructor(databaseService: DatabaseService, options: { onNoteDeleted?: (id: string) => void } = {}) {
     this.databaseService = databaseService;
+    this.onNoteDeleted = options.onNoteDeleted ?? (() => {});
   }
 
   /**
@@ -905,6 +914,12 @@ export class NoteLifecycleService {
   // recursion risk here to guard against on that side either.
   async saveNote(input: SaveNoteInput, options?: { skipAutoChapterHooks?: boolean }): Promise<NoteSummary> {
     const record = this.databaseService.getNoteRecord(input.id);
+    // A note is created by createNote and by nothing else. A save of an id
+    // with no note is a write that outlived the note (a slot still showing
+    // it, a debounced write in flight when it was deleted), and storing it
+    // would bring the deleted note back as a row with no tags, chapters or
+    // history.
+    if (!record) throw new Error(`Note ${input.id} does not exist`);
     const text = normalizeText(input.text);
 
     if (record?.isTemp) {
@@ -975,7 +990,7 @@ export class NoteLifecycleService {
     // problem. Shared between the checklist-diff (Open Items) and
     // heading-diff (TOC) hooks below -- both need the same "which parent,
     // what did it look like before this save" facts.
-    const isAutoChapter = Boolean(record?.isAutoToc || record?.isAutoOpenItems);
+    const isAutoChapter = Boolean(record.isAutoToc || record.isAutoOpenItems);
     const chapterFamilyParentId = isAutoChapter
       ? null
       : (this.databaseService.getChapterParent(input.id) ?? (this.databaseService.listChaptersForNote(input.id).length > 0 ? input.id : null));
@@ -989,33 +1004,33 @@ export class NoteLifecycleService {
       id: input.id,
       title: titleFromText(text),
       text,
-      createdAtMs: record?.createdAtMs ?? nowMs,
+      createdAtMs: record.createdAtMs ?? nowMs,
       updatedAtMs: nowMs,
-      externalPath: record?.externalPath ?? null,
-      hasUnsavedChanges: record?.hasUnsavedChanges ?? false,
-      syncMode: record?.syncMode ?? false,
+      externalPath: record.externalPath ?? null,
+      hasUnsavedChanges: record.hasUnsavedChanges ?? false,
+      syncMode: record.syncMode ?? false,
       cursorPos: input.cursorPos,
       previewBlockCache: input.previewBlockCache ? JSON.stringify(input.previewBlockCache) : null,
     });
     const summary = await this.readSummary(this.databaseService.getNoteRecord(input.id) ?? {
       id: input.id,
       title: titleFromText(text),
-      createdAtMs: record?.createdAtMs ?? nowMs,
+      createdAtMs: record.createdAtMs ?? nowMs,
       updatedAtMs: nowMs,
       contentChecksum: null,
       isTemp: false,
       externalPath: null,
       hasUnsavedChanges: false,
       syncMode: false,
-      assignedId: record?.assignedId ?? null,
+      assignedId: record.assignedId ?? null,
       previewBlockCache: null,
-      chapterOnly: record?.chapterOnly ?? false,
-      isAutoToc: record?.isAutoToc ?? false,
-      isAutoOpenItems: record?.isAutoOpenItems ?? false,
-      isTimeless: record?.isTimeless ?? false,
-      chapterParentId: record?.chapterParentId ?? null,
-      chapterId: record?.chapterId ?? null,
-      detachedChapterParentId: record?.detachedChapterParentId ?? null,
+      chapterOnly: record.chapterOnly ?? false,
+      isAutoToc: record.isAutoToc ?? false,
+      isAutoOpenItems: record.isAutoOpenItems ?? false,
+      isTimeless: record.isTimeless ?? false,
+      chapterParentId: record.chapterParentId ?? null,
+      chapterId: record.chapterId ?? null,
+      detachedChapterParentId: record.detachedChapterParentId ?? null,
     });
 
     if (!summary) {
@@ -1067,10 +1082,17 @@ export class NoteLifecycleService {
 
     if (record?.isTemp) {
       this.databaseService.deleteTempNote(input.id);
-      return;
+    } else {
+      this.databaseService.deleteNote(input.id);
     }
-
-    this.databaseService.deleteNote(input.id);
+    if (!record) return;
+    // The row is already gone: a listener failing must not make the deletion
+    // itself look failed to the caller.
+    try {
+      this.onNoteDeleted(input.id);
+    } catch (error) {
+      console.error('[notes] failed to announce a deleted note', { id: input.id, error });
+    }
   }
 
   async saveNoteUiState(input: { id: string; payload: NoteUiStatePayload }): Promise<void> {

@@ -96,8 +96,6 @@ export interface UseNoteSnapshotTimelineOptions {
   editModeSnapshotByNoteIdRef: MutableRefObject<Map<string, EditRestoreSnapshot>>
   refreshNotes: (preferredId?: string | null) => Promise<string | null>
   activateNote: (noteId: string, overrideCursorPos?: number) => Promise<void>
-  /** See useEditorSectionMount's doc comment -- cleared here since this is a genuine user-driven history browse, not useSnapshotFreeze hibernating the section. */
-  isFrozenSectionPreviewRef: MutableRefObject<boolean>
   /** True while viewing the auto-TOC or auto-Open-Items chapter -- their content is a materialized view regenerated from live state (EditorSection.tsx's handleManualSaveOrRefresh), not something a person edits, so a snapshot history for it is meaningless. Suppresses the periodic automatic-snapshot capture and both auto-compaction passes below; the manual-save button stays live but is rewired by the caller to trigger a regeneration instead of a snapshot. */
   isViewingEphemeralAutoChapter: boolean
   /** True while viewing a frozen (isTimeless) note -- its entire snapshot history was already permanently deleted the moment it was frozen (databaseService.ts's freezeNoteFamily), and every write to `note_snapshots` for it is rejected at the database layer (assertNotTimeless) until it's unfrozen. Suppresses the periodic automatic-snapshot capture below the same way isViewingEphemeralAutoChapter does, so the interval doesn't keep retrying a write that can only ever fail -- found live as a steady stream of uncaught "is timeless and cannot be altered" errors from notes left open and frozen. */
@@ -122,7 +120,6 @@ export function useNoteSnapshotTimeline({
   editModeSnapshotByNoteIdRef,
   refreshNotes,
   activateNote,
-  isFrozenSectionPreviewRef,
   isViewingEphemeralAutoChapter,
   isViewingTimelessNote,
 }: UseNoteSnapshotTimelineOptions) {
@@ -186,10 +183,9 @@ export function useNoteSnapshotTimeline({
     // under the user -- scrubbing history should never silently drop an
     // unsaved edit to the live document.
     void flushPendingSaveNow().then(() => {
-      isFrozenSectionPreviewRef.current = false
       setPreviewedSnapshotId(snapshotId)
     })
-  }, [flushPendingSaveNow, previewedSnapshotId, activeNoteId, captureCurrentAnchorBlockIndex, captureEditModeSnapshotFromEditor, setPreviewedSnapshotId, isFrozenSectionPreviewRef])
+  }, [flushPendingSaveNow, previewedSnapshotId, activeNoteId, captureCurrentAnchorBlockIndex, captureEditModeSnapshotFromEditor, setPreviewedSnapshotId])
 
   const compactAutomaticSnapshots = useCallback(async () => {
     if (!activeNoteId || timelineTrackLengthPx <= 0 || noteSnapshots.placements.length < 2 || !window.thockdownNotes) return

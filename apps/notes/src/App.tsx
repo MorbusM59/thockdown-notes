@@ -48,6 +48,7 @@ import {
 import type { NoteSummary } from './shared/noteLifecycle'
 import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote, isSameNoteSummary } from './shared/noteLifecycle'
 import { adoptNoteSummaries, keepIfUnchanged, withSavedNote } from './shared/noteContentStore'
+import { applyNonOverlappingChanges, createNoteDocumentStore } from './editorSection/noteDocumentStore'
 import { getNoteListMetaKind } from './shared/noteListMeta'
 import {
   DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS,
@@ -1438,6 +1439,23 @@ function App() {
     ), previous))
   }, [])
   const readNoteContent = useCallback((noteId: string) => noteContentByIdRef.current.get(noteId) ?? '', [])
+  /**
+   * Every open note's document, shared by all slots: the text of a note while
+   * any slot shows it, and the one place it is written from
+   * (editorSection/noteDocumentStore.ts). `persist` writes a change no slot
+   * made -- a chapter merged into a note, an image renamed in it.
+   */
+  const [noteDocuments] = useState(() => createNoteDocumentStore({
+    persist: async (noteId, text) => {
+      if (!window.thockdownNotes) return
+      const saved = await window.thockdownNotes.saveNote({ id: noteId, text })
+      setNotes((previous) => withSavedNote(previous, saved, text))
+    },
+  }))
+  // A deleted note is let go of wherever it is open, however it was deleted
+  // (a purge, a chapter merged away, a parent taking its chapters with it, an
+  // empty Open Items chapter removed by a save).
+  useEffect(() => window.thockdownNotes?.onNoteDeleted((payload) => noteDocuments.remove(payload.id)), [noteDocuments])
   const notesRef = useRef<NoteSummary[]>([])
 
   useEffect(() => {
@@ -2049,17 +2067,6 @@ function App() {
   // layer directly.
   const unpinNoteFromSection = useCallback((sectionId: string, noteId: string) => {
     void sectionRegistryRef.current.get(sectionId)?.unpinNoteTab(noteId)
-  }, [])
-
-  // Whether some section *other* than `sectionId` currently has `noteId`
-  // open -- used by useSnapshotFreeze to skip freezing an inactive section
-  // when nothing could actually change its note out from under it.
-  const isNoteOpenInOtherSection = useCallback((sectionId: string, noteId: string): boolean => {
-    for (const [otherSectionId, handle] of sectionRegistryRef.current) {
-      if (otherSectionId === sectionId) continue
-      if (handle.activeNoteId === noteId) return true
-    }
-    return false
   }, [])
 
   // Reactive counterpart to the plain registry above: each <EditorSection>
@@ -4831,17 +4838,23 @@ function App() {
     const section = `\n## ${timeStr} / ${functionName}\n${lines.map(l => `- ${l}`).join('\n')}`
 
     try {
-      const loaded = await window.thockdownNotes.loadNote({ id: noteId })
-      const savedText = `${loaded.text}${section}`
-      const updated = await window.thockdownNotes.saveNote({ id: noteId, text: savedText })
-      setNotes((previous) => withSavedNote(previous, updated, savedText))
+      // Through the note's document when a slot has it open, so the slot
+      // shows the entry and no later write of its older text drops it.
+      if (noteDocuments.change(noteId, (text) => `${text}${section}`)) {
+        await noteDocuments.flushSave(noteId)
+      } else {
+        const loaded = await window.thockdownNotes.loadNote({ id: noteId })
+        const savedText = `${loaded.text}${section}`
+        const updated = await window.thockdownNotes.saveNote({ id: noteId, text: savedText })
+        setNotes((previous) => withSavedNote(previous, updated, savedText))
+      }
     } catch (error) {
       const originalError = originalConsoleMethodsRef.current.error ?? console.error
       originalError.call(console, 'Failed to write debug entry', error)
     } finally {
       isWritingDebugEntryRef.current = false
     }
-  }, [debuggingEnabled, ensureDebugNoteExists, setNotes])
+  }, [debuggingEnabled, ensureDebugNoteExists, setNotes, noteDocuments])
   writeDebugEntryRef.current = writeDebugEntry
 
   useEffect(() => {
@@ -5281,11 +5294,27 @@ ${markdownHtml}
   // overlay record to the new name (imageLibraryStore.ts's renameImage).
   useEffect(() => {
     registerImageLibraryHost({
-      openNoteEditors: () => [...sectionRegistryRef.current.values()].flatMap((handle) => {
-        if (!handle.activeNoteId || handle.previewedSnapshotId !== null) return []
-        const adapter = handle.adapterRef.current
-        if (!adapter) return []
-        return [{ noteId: handle.activeNoteId, readText: handle.readEditorText, applyEdit: (changes, text) => adapter.applyEdit(changes, text) }]
+      // One per OPEN note, not per slot: a note in two slots is one document,
+      // and an edit applied in one slot reaches the other through it. Applied
+      // in an editor showing the note where there is one (one undo step there);
+      // otherwise -- the note open only in a Time Machine view, read-only, or
+      // still being written after its slot moved on -- to the document itself.
+      // Every open note is listed, because the main process rewrites only the
+      // notes nobody holds, and a document written later from an older text
+      // would undo its rewrite.
+      openNoteEditors: () => noteDocuments.openNoteIds().map((noteId) => {
+        const applyToDocument = (changes: Array<{ from: number; to: number; insert: string }>, expectedText: string) => (
+          noteDocuments.change(noteId, (text) => text === expectedText ? applyNonOverlappingChanges(text, changes) : text)
+        )
+        const handle = [...sectionRegistryRef.current.values()].find((candidate) => (
+          candidate.activeNoteId === noteId && candidate.previewedSnapshotId === null && candidate.adapterRef.current
+        ))
+        const adapter = handle?.adapterRef.current
+        return {
+          noteId,
+          readText: () => noteDocuments.read(noteId) ?? '',
+          applyEdit: (changes, expectedText) => Boolean(adapter?.applyEdit(changes, expectedText)) || applyToDocument(changes, expectedText),
+        }
       }),
       onImageRenamed: (fromId, toId, rewrittenNoteIds) => {
         // The renderer's copy of each note main rewrote is stale (search,
@@ -5298,7 +5327,7 @@ ${markdownHtml}
         persistMenuStateNowRef.current({ slotOverlay: next })
       },
     })
-  }, [])
+  }, [noteDocuments])
 
   const openAdventureViewHere = useCallback(async () => {
     const handle = getActiveSection()
@@ -9011,12 +9040,14 @@ ${markdownHtml}
       for (const section of sectionRegistryRef.current.values()) {
         void section.persistActiveNoteEditModeStateNow()
       }
+      // And every note's text still debouncing, or whose last write failed.
+      noteDocuments.flushAll()
       persistMenuStateOnUnload()
     }
 
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-  }, [activeSection, buildMenuStateSnapshot, persistMenuStateOnUnload])
+  }, [activeSection, buildMenuStateSnapshot, persistMenuStateOnUnload, noteDocuments])
 
   const syncSidebarTexture = useCallback(() => {
     const scroller = sidebarTreeScrollerEl || sidebarContentRef.current
@@ -10085,7 +10116,7 @@ ${markdownHtml}
                   onSwapSection={(incomingSectionId) => void handleSwapSection(entry.id, incomingSectionId)}
                   onDeleteSection={(id) => void handleDeleteSection(id)}
                   unpinNoteFromSection={unpinNoteFromSection}
-                  isNoteOpenInOtherSection={isNoteOpenInOtherSection}
+                  noteDocuments={noteDocuments}
                   markSectionActive={markSectionActive}
                   isSidebarVisible={isSidebarShown}
                   toggleSidebarVisible={toggleSidebarVisible}

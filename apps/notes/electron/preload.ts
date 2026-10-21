@@ -1,6 +1,6 @@
 import { ipcRenderer, contextBridge, webFrame, webUtils } from 'electron'
-import type { NoteLifecycleApi } from '../src/shared/noteLifecycle'
-import { NOTE_LIFECYCLE_CHANNELS } from '../src/shared/noteLifecycle'
+import type { NoteLifecycleApi, NoteLifecycleEvents } from '../src/shared/noteLifecycle'
+import { NOTE_LIFECYCLE_CHANNELS, NOTE_LIFECYCLE_EVENTS } from '../src/shared/noteLifecycle'
 import type { AppStateApi } from '../src/shared/appState'
 import { APP_STATE_CHANNELS } from '../src/shared/appState'
 import type { ExternalFileEvents, ExternalFilesApi } from '../src/shared/externalFiles'
@@ -37,7 +37,11 @@ const on = ipcRenderer.on.bind(ipcRenderer)
 const off = ipcRenderer.off.bind(ipcRenderer)
 
 // --------- Expose some API to the Renderer process ---------
-const noteLifecycleApi: NoteLifecycleApi = invokeBridge<NoteLifecycleApi>(NOTE_LIFECYCLE_CHANNELS, invoke)
+const noteLifecycleApi: NoteLifecycleApi = {
+  ...invokeBridge<NoteLifecycleApi>(NOTE_LIFECYCLE_CHANNELS, invoke),
+  onNoteDeleted: (callback) =>
+    eventSubscriber<NoteLifecycleEvents, Electron.IpcRendererEvent>(NOTE_LIFECYCLE_EVENTS, on, off)('deleted', callback),
+}
 
 contextBridge.exposeInMainWorld('thockdownNotes', noteLifecycleApi)
 
