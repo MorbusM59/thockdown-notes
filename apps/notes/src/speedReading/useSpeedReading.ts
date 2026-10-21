@@ -42,7 +42,7 @@ export function useSpeedReading({
   latestEditorSelectionRef,
   adapterRef,
   previewScrollRef,
-}: UseSpeedReadingOptions): { isSpeedReading: boolean; toggleSpeedReading: () => void } {
+}: UseSpeedReadingOptions): { isSpeedReading: boolean; isReadingEditView: boolean; toggleSpeedReading: () => void } {
   const [isSpeedReading, setIsSpeedReading] = useState(false)
   const sessionRef = useRef<SpeedReadingSession | null>(null)
   const readTextRef = useRef(readDisplayedText)
@@ -87,5 +87,9 @@ export function useSpeedReading({
     setIsSpeedReading((on) => !on)
   }, [activeNoteId, isSpeedReading])
 
-  return { isSpeedReading, toggleSpeedReading }
+  // While the edit view reads, the note under the reading row is hidden, so
+  // the editor is made read-only rather than having the session guess which
+  // keys could edit it: a paste, a cut or a list shortcut carries a modifier
+  // and passes the session by.
+  return { isSpeedReading, isReadingEditView: shouldRun && !isPreviewMode, toggleSpeedReading }
 }

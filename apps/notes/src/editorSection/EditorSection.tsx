@@ -78,7 +78,7 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   | 'isViewingTimelessNote' | 'onToggleTimeless' | 'isForcedPreviewNote' | 'onToggleRenderViewMode'
   | 'splitArmedChapter' | 'onChapterPillPointerDown' | 'onChapterPillPointerUp' | 'onChapterPillMouseLeave' | 'onChapterPillContextMenu'
   | 'onArchiveChapterClick' | 'onDeleteChapterClick' | 'imageStorage'
-  | 'isTagBarMode' | 'toggleTagBarMode' | 'tagBar' | 'isSpeedReading' | 'onToggleSpeedReading'> {
+  | 'isTagBarMode' | 'toggleTagBarMode' | 'tagBar' | 'isSpeedReading' | 'onToggleSpeedReading' | 'isReadingEditView'> {
   sectionId: string
   /**
    * Set when THIS slot is showing a note created undocked -- born from the
@@ -1683,7 +1683,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
    * already ends the mode through `onDismiss`, so a second path to the same
    * place would be a second thing to keep correct.
    */
-  const { isSpeedReading, toggleSpeedReading } = useSpeedReading({
+  const { isSpeedReading, isReadingEditView, toggleSpeedReading } = useSpeedReading({
     isPreviewMode,
     isSectionActive: sectionId === activeSectionId,
     isEscapeRingUp: Boolean(escapeMenu?.activeMode) || (isEscapeHoldPanelOpen && sectionId === activeSectionId),
@@ -2233,6 +2233,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
         isPreviewingSnapshot={isPreviewingSnapshot}
         isCaretSuspended={isCaretSuspended}
         isEscapeHoldPanelOpen={isEscapeHoldPanelOpen}
+        isReadingEditView={isReadingEditView}
         isSpeedReading={isSpeedReading}
         onToggleSpeedReading={toggleSpeedReading}
         onEscapeHoldPanelClose={onEscapeHoldPanelClose}

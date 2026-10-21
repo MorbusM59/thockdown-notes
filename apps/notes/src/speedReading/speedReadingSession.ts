@@ -20,10 +20,10 @@
  * ## Which keys the session takes
  * Its own keys are taken in the window's CAPTURE phase, before the editor or
  * the app's shortcuts see them: Space would otherwise type into the note and
- * the arrows move the caret. In the edit view every other key that would
- * EDIT the note -- a character, Enter, Tab, Backspace, Delete, unmodified --
- * is swallowed too, because the note under the reading row is hidden and an
- * edit there would be made blind. Everything else passes through and does
+ * the arrows move the caret. In the edit view the editor is read-only while
+ * the session runs (`useSpeedReading.ts`), because the note under the reading
+ * row is hidden and an edit there would be made blind; plain typing keys are
+ * swallowed besides, so they do not move the hidden caret. Everything else passes through and does
  * what it does anywhere: Escape switches views (and the mode reads on in the
  * other one), F2 switches the mode off, a shortcut with a modifier is that
  * shortcut, and a click is a click.

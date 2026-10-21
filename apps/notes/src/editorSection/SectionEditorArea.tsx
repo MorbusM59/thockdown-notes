@@ -58,6 +58,8 @@ export interface SectionEditorAreaProps {
   onEscapeHoldExportMd: (scope: ExportScope) => void | Promise<void>
   onEscapeHoldOpenHelp: () => void | Promise<void>
   isSpeedReading: boolean
+  /** Speed reading is showing its row over this slot's editor, which is then read-only. */
+  isReadingEditView: boolean
   onToggleSpeedReading: () => void
   /** Passed straight through to EscapeHoldPanel -- see its own `escapeMenu` prop and escapeMenuContract.ts. */
   escapeMenu?: EscapeMenuContribution | null
@@ -203,6 +205,7 @@ export function SectionEditorArea({
   onEscapeHoldExportMd,
   onEscapeHoldOpenHelp,
   isSpeedReading,
+  isReadingEditView,
   onToggleSpeedReading,
   escapeMenu,
   shownImageId = null,
@@ -450,7 +453,7 @@ export function SectionEditorArea({
                   lineHeightPx={editorRuntimeMetrics.lineHeightPx}
                   glyphWidthPx={editorRuntimeMetrics.glyphWidthPx}
                   cellWidthPx={editorRuntimeMetrics.cellWidthPx}
-                  editorReadOnly={activeNoteHasDebugTag || isPreviewingSnapshot || isViewingAutoTocChapter || isViewingAutoOpenItemsChapter || isViewingTimelessNote}
+                  editorReadOnly={isReadingEditView || activeNoteHasDebugTag || isPreviewingSnapshot || isViewingAutoTocChapter || isViewingAutoOpenItemsChapter || isViewingTimelessNote}
                   spellCheckEnabled={editorSpellCheckEnabled}
                   fontReady={editorFontLoadVersion > 0}
                   caretSuspended={isCaretSuspended}
