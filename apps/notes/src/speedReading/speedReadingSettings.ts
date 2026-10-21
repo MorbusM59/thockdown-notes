@@ -48,12 +48,17 @@ export const SPEED_READING_ROW_WIDTH_MAX = 60
 export const SPEED_READING_LETTERS_PER_WORD = 6
 
 export const SPEED_READING_FIXATION_MAX_MS = 600
+/** Marks that end a sentence, in any script this app's reader is likely to type. */
+const SENTENCE_END = '.!?…‽⁇⁈⁉。！？'
+/** Marks that end a clause. */
+const CLAUSE_END = ',;:、，；：،'
+
 
 /**
  * Seconds a chunk stays on screen at full pace, as rapid serial visual
  * presentation times it: a fixed FIXATION every chunk pays, plus a time per
  * letter, plus a pause after a sentence's end (one fixation) or a clause's
- * (half of one). The per-letter time is solved from the words per minute so
+ * (half of one); a line break's empty chunk is the fixation alone. The per-letter time is solved from the words per minute so
  * that a full row of average text -- `rowWidth / LETTERS_PER_WORD` words, each
  * of `LETTERS_PER_WORD - 1` letters -- takes exactly what the pace says it
  * should; when the fixation alone already exceeds that, the per-letter time is
@@ -67,8 +72,8 @@ export function chunkDurationSec(text: string, wpm: number, rowWidth: number, fi
   const fullRowLetters = fullRowWords * (SPEED_READING_LETTERS_PER_WORD - 1)
   const perLetter = Math.max(0, fullRowSec - fixation) / fullRowLetters
   const letters = text.replace(/\s/g, '').length
-  const last = text.replace(/[\s"')\]*_-]+$/, '').slice(-1)
-  const pause = '.!?'.includes(last) && last !== '' ? fixation : ',;:'.includes(last) && last !== '' ? fixation / 2 : 0
+  const last = text.replace(/[\s"'«»‹›“”„‘’‚「」『』)\]}*_-]+$/u, '').slice(-1)
+  const pause = last === '' ? 0 : SENTENCE_END.includes(last) ? fixation : CLAUSE_END.includes(last) ? fixation / 2 : 0
   return fixation + perLetter * letters + pause
 }
 

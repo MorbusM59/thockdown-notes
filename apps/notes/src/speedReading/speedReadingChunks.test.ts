@@ -26,9 +26,15 @@ describe('nextChunk', () => {
     }
   })
 
-  it('stops at a line break and leaves block markup out', () => {
+  it('gives a line break an empty chunk and leaves block markup out', () => {
     expect(readAll('# Title here\n\n- [ ] **bold** item\n> quoted [link](http://x.y) end', 40))
-      .toEqual(['Title here', 'bold item', 'quoted link end'])
+      .toEqual(['Title here', '', 'bold item', '', 'quoted link end'])
+  })
+
+  it('ends a chunk at punctuation and around quotations', () => {
+    expect(readAll('Well, he said "go now" and left. Then?', 40))
+      .toEqual(['Well,', 'he said', '"go now"', 'and left.', 'Then?'])
+    expect(readAll('Sie rief »komm her« laut', 40)).toEqual(['Sie rief', '»komm her«', 'laut'])
   })
 
   it('cuts a word longer than the row and carries on inside it', () => {
@@ -39,7 +45,7 @@ describe('nextChunk', () => {
     expect(displayWord('![alt](img.png)')).toBe('')
     expect(displayWord('|')).toBe('')
     expect(displayWord('`code`')).toBe('code')
-    expect(readAll('| a | b |\n![x](y)\nlast', 20)).toEqual(['a b', 'last'])
+    expect(readAll('| a | b |\n![x](y)\nlast', 20)).toEqual(['a b', '', 'last'])
   })
 
   it('returns null past the last word', () => {
@@ -64,6 +70,8 @@ describe('chunkDurationSec', () => {
     expect(chunkDurationSec('ab', 240, 24, 200)).toBeCloseTo(0.28)
     expect(chunkDurationSec('ab.', 240, 24, 200)).toBeCloseTo(0.2 + 0.12 + 0.2)
     expect(chunkDurationSec('ab,', 240, 24, 200)).toBeCloseTo(0.2 + 0.12 + 0.1)
+    expect(chunkDurationSec('ab…”', 240, 24, 200)).toBeCloseTo(0.2 + 0.16 + 0.2)
+    expect(chunkDurationSec('', 240, 24, 200)).toBeCloseTo(0.2)
     // Past the floor the fixation alone remains.
     expect(chunkDurationSec(full, 1500, 24, 200)).toBeCloseTo(0.2)
   })
