@@ -599,6 +599,37 @@ describe('noteDocumentStore', () => {
     expect(b.events.some((event) => event.kind === 'saved')).toBe(true)
   })
 
+  it('flushAll resolves only once a write queued behind one in flight has returned', async () => {
+    const answers: Array<() => void> = []
+    const written: string[] = []
+    const store = createNoteDocumentStore({
+      setTimer: () => 0,
+      clearTimer: () => {},
+      persist: (_noteId, text) => new Promise<void>((resolve) => {
+        answers.push(() => { written.push(text); resolve() })
+      }),
+    })
+    const a = newView('a')
+    bound(store, 'a', store.beginLoad('n'), 'one', attachView(a))
+    const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
+    // A write under way, its answer not yet back...
+    store.change('n', () => 'one two')
+    await tick()
+    expect(answers.length).toBe(1)
+    // ...and the text typed since, flushed for the quit behind it.
+    store.publish('a', 'n', 'one two three')
+    let settled = false
+    void store.flushAll().then(() => { settled = true })
+    answers.shift()!()
+    await tick()
+    expect(settled).toBe(false)
+    expect(answers.length).toBe(1)
+    answers.shift()!()
+    await tick()
+    expect(written).toEqual(['one two', 'one two three'])
+    expect(settled).toBe(true)
+  })
+
   it('a departed view\'s queued write goes through the store\'s own writer', async () => {
     const viewWrites: string[] = []
     const storeWrites: string[] = []

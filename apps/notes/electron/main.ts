@@ -1,5 +1,5 @@
 import { SOUNDSCAPE_FILE_CHANNELS, type SoundscapeFileApi, SOUNDSCAPE_FILE_EXTENSION } from '@thockdown/soundscape/soundscapeFile';
-import { app, BrowserWindow, Menu, ipcMain, dialog, protocol, shell, screen } from 'electron'
+import { app, BrowserWindow, Menu, ipcMain, dialog, powerMonitor, protocol, shell, screen } from 'electron'
 import type { IpcMainEvent, IpcMainInvokeEvent, Session, PrintToPDFOptions } from 'electron'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
@@ -7,6 +7,7 @@ import { existsSync, promises as fsPromises } from 'node:fs'
 import { moveLegacyDevData } from './legacyDevDataMove'
 import { NoteLifecycleService } from './noteLifecycleService'
 import { ExternalFileWatcher } from './externalFileWatcher'
+import { createQuitRoutine, createRequestTracker, within } from './quitRoutine'
 import { FILE_SYNC_CHANNELS, type FileSyncApi } from '../src/shared/fileSync'
 import { NOTE_LIFECYCLE_CHANNELS, NOTE_LIFECYCLE_EVENTS, type NoteLifecycleApi, type NoteLifecycleEvents } from '../src/shared/noteLifecycle'
 import { APP_STATE_CHANNELS, type AppStateApi, type WindowState } from '../src/shared/appState'
@@ -45,11 +46,19 @@ const emitNoteEvent = eventEmitter<NoteLifecycleEvents>(NOTE_LIFECYCLE_EVENTS)
 // console.error nobody will ever read.
 process.on('uncaughtException', (error) => {
   console.error('[main] uncaught exception', error)
+  // Once the window is up, an error here belongs to one request or one
+  // event, and the app carries on: stopping would lose more than it saves,
+  // and a dialog is not how this app talks to its reader.
+  if (win && !win.isDestroyed()) return
   dialog.showErrorBox(
     'Thockdown Notes failed to start',
     `An unexpected error occurred:\n\n${error?.stack ?? String(error)}`,
   )
   app.quit()
+})
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[main] unhandled rejection', reason)
 })
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -141,6 +150,50 @@ let win: BrowserWindow | null
 let noteLifecycleService: NoteLifecycleService | null = null;
 let stateService: StateService | null = null;
 let databaseService: DatabaseService | null = null;
+// Every request the window makes is counted while it is handled, so the quit
+// routine can wait for them to finish before the database closes. Every
+// invoke handler is registered through this.
+const requestTracker = createRequestTracker()
+const handleTracked = (channel: string, listener: (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown) => {
+  ipcMain.handle(channel, requestTracker.track(listener))
+}
+
+/** How long the window may take to write what it holds before the app quits without it. */
+const WINDOW_SETTLE_TIMEOUT_MS = 3000
+/** How long requests still being handled may take before the database closes under them. */
+const REQUEST_DRAIN_TIMEOUT_MS = 2000
+
+let nextQuitToken = 0
+const quitAnswers = new Map<number, () => void>()
+
+/**
+ * Asks the window to write everything it holds and waits for its answer
+ * (src/shared/quitParticipants.ts), bounded by WINDOW_SETTLE_TIMEOUT_MS.
+ */
+function settleWindow(): Promise<void> {
+  if (!win || win.isDestroyed() || win.webContents.isCrashed()) return Promise.resolve()
+  const token = ++nextQuitToken
+  const answered = new Promise<void>((resolve) => { quitAnswers.set(token, resolve) })
+  emitWindowEvent(win.webContents, 'prepareToQuit', token)
+  return within(answered, WINDOW_SETTLE_TIMEOUT_MS, 'the window').finally(() => quitAnswers.delete(token))
+}
+
+const quitRoutine = createQuitRoutine({
+  settleWindow,
+  drainRequests: () => within(requestTracker.whenIdle(), REQUEST_DRAIN_TIMEOUT_MS, 'requests in flight'),
+  shutdown: async () => {
+    externalFileWatcher.dispose()
+    if (win && !win.isDestroyed() && stateService) {
+      await stateService.saveWindowState(readPersistableWindowState(win))
+    }
+    // Closing checkpoints the write-ahead log into the database file.
+    databaseService?.close()
+  },
+  // Not app.quit(): that would raise before-quit again, and every window is
+  // already settled.
+  exit: () => app.exit(0),
+})
+
 const externalFileWatcher = new ExternalFileWatcher((noteId) => {
   if (win && !win.isDestroyed()) emitExternalFileEvent(win.webContents, 'noteFileChanged', noteId);
 });
@@ -571,7 +624,7 @@ function registerIpcHandlers() {
     getNoteIdByExternalPath: async (_event, input) => noteLifecycleService!.getNoteIdByExternalPath(input),
     setNoteAssignedId: async (_event, input) => noteLifecycleService!.setNoteAssignedId(input),
     setNoteTimeless: async (_event, input) => noteLifecycleService!.setNoteTimeless(input),
-  }, ipcMain.handle.bind(ipcMain));
+  }, handleTracked);
 
   registerInvokeHandlers<AppStateApi, IpcMainInvokeEvent>(APP_STATE_CHANNELS, {
     loadAppState: async () => stateService!.loadAppState(),
@@ -589,7 +642,7 @@ function registerIpcHandlers() {
     },
     loadWindowState: async () => stateService!.loadWindowState(),
     saveWindowState: async (_event, payload) => stateService!.saveWindowState(payload),
-  }, ipcMain.handle.bind(ipcMain));
+  }, handleTracked);
 
   registerInvokeHandlers<FileSyncApi, IpcMainInvokeEvent>(FILE_SYNC_CHANNELS, {
     importNotes: async (event) => {
@@ -644,7 +697,7 @@ function registerIpcHandlers() {
       shell.showItemInFolder(backupPath)
       return backupPath
     },
-  }, ipcMain.handle.bind(ipcMain));
+  }, handleTracked);
 
   registerSendHandlers<WindowControlsApi, IpcMainEvent>(WINDOW_CONTROL_SEND_CHANNELS, {
     minimize: () => {
@@ -665,6 +718,9 @@ function registerIpcHandlers() {
     close: () => {
       if (!win || win.isDestroyed()) return
       win.close()
+    },
+    quitPrepared: (_event, token) => {
+      quitAnswers.get(token)?.()
     },
     toggleDevTools: () => {
       if (!win || win.isDestroyed()) return
@@ -887,7 +943,7 @@ function registerIpcHandlers() {
       const targetSize = resolveUtilityCollapseSize(payload)
       return collapseWindowToUtilityGrid(targetSize)
     },
-  }, ipcMain.handle.bind(ipcMain))
+  }, handleTracked)
 
   registerInvokeHandlers<ExternalFilesApi, IpcMainInvokeEvent>(EXTERNAL_FILE_CHANNELS, {
     getPendingFilePaths: async () => {
@@ -944,7 +1000,7 @@ function registerIpcHandlers() {
         return '';
       }
     },
-  }, ipcMain.handle.bind(ipcMain));
+  }, handleTracked);
 
   registerInvokeHandlers<ExportApi, IpcMainInvokeEvent>(EXPORT_CHANNELS, {
     openExternalUrl: async (_event, url: string) => {
@@ -1032,7 +1088,7 @@ function registerIpcHandlers() {
         return { ok: false, error: error instanceof Error ? error.message : String(error) }
       }
     },
-  }, ipcMain.handle.bind(ipcMain));
+  }, handleTracked);
 
   registerInvokeHandlers<TextureCacheApi, IpcMainInvokeEvent>(TEXTURE_CHANNELS, {
     getCachedTexture: async (_event, request) => {
@@ -1044,7 +1100,7 @@ function registerIpcHandlers() {
     purgeCachedTextures: async (_event, request) => {
       return databaseService!.purgeTextureCache(request);
     },
-  }, ipcMain.handle.bind(ipcMain));
+  }, handleTracked);
 
   registerInvokeHandlers<AudioBounceCacheApi, IpcMainInvokeEvent>(AUDIO_BOUNCE_CHANNELS, {
     getCachedBounce: async (_event, request) => {
@@ -1053,7 +1109,7 @@ function registerIpcHandlers() {
     saveCachedBounce: async (_event, request, payload) => {
       databaseService!.saveAudioBounceCache(request, payload);
     },
-  }, ipcMain.handle.bind(ipcMain));
+  }, handleTracked);
 
   registerInvokeHandlers<UiLoadoutApi, IpcMainInvokeEvent>(LOADOUT_CHANNELS, {
     list: async () => {
@@ -1105,7 +1161,7 @@ function registerIpcHandlers() {
       const content = await fsPromises.readFile(filePaths[0], 'utf-8');
       return databaseService!.importTdlLoadouts(content);
     },
-  }, ipcMain.handle.bind(ipcMain));
+  }, handleTracked);
 
   // ---- Soundscape files ----------------------------------------------------
   // Only the dialogs and the file: soundscapes live in the renderer's state
@@ -1131,7 +1187,7 @@ function registerIpcHandlers() {
       if (canceled || filePaths.length === 0) return null;
       return fsPromises.readFile(filePaths[0], 'utf-8');
     },
-  }, ipcMain.handle.bind(ipcMain));
+  }, handleTracked);
 
   // ---- Music player --------------------------------------------------------
 
@@ -1216,7 +1272,7 @@ function registerIpcHandlers() {
     getSongById: async (_event, id: number) => {
       return databaseService!.getMusicSongById(id);
     },
-  }, ipcMain.handle.bind(ipcMain));
+  }, handleTracked);
 
   registerInvokeHandlers<NoteTabsApi, IpcMainInvokeEvent>(NOTE_TABS_CHANNELS, {
     listTabs: () => databaseService!.listNoteTabs(),
@@ -1225,7 +1281,7 @@ function registerIpcHandlers() {
     reorderTabs: (_event, sectionId, orderedNoteIds) => databaseService!.reorderNoteTabs(sectionId, orderedNoteIds),
     setLastActiveChapter: (_event, sectionId, noteId, chapterNoteId) =>
       databaseService!.setNoteTabLastActiveChapter(sectionId, noteId, chapterNoteId),
-  }, ipcMain.handle.bind(ipcMain));
+  }, handleTracked);
 
   registerInvokeHandlers<EditorSectionsApi, IpcMainInvokeEvent>(EDITOR_SECTIONS_CHANNELS, {
     listSections: async () => {
@@ -1258,7 +1314,7 @@ function registerIpcHandlers() {
     swapIntoSlot: async (_event, outgoingSectionId: string, incomingSectionId: string) => {
       return databaseService!.swapSectionIntoSlot(outgoingSectionId, incomingSectionId);
     },
-  }, ipcMain.handle.bind(ipcMain));
+  }, handleTracked);
 
   registerInvokeHandlers<ChaptersApi, IpcMainInvokeEvent>(CHAPTER_CHANNELS, {
     listChapters: async (_event, parentNoteId: string) => {
@@ -1302,7 +1358,7 @@ function registerIpcHandlers() {
     toggleOpenItem: async (_event, openItemsChapterNoteId: string, openItemsLineIndex: number) => {
       return noteLifecycleService!.toggleOpenItemCheckedState(openItemsChapterNoteId, openItemsLineIndex);
     },
-  }, ipcMain.handle.bind(ipcMain));
+  }, handleTracked);
 
   registerInvokeHandlers<ImagesApi, IpcMainInvokeEvent>(IMAGE_CHANNELS, {
     importImage: async (_event, request: ImageImportRequest) => {
@@ -1331,7 +1387,7 @@ function registerIpcHandlers() {
       }
       return results;
     },
-  }, ipcMain.handle.bind(ipcMain));
+  }, handleTracked);
 
   registerInvokeHandlers<ReviewFlagsApi, IpcMainInvokeEvent>(REVIEW_FLAG_CHANNELS, {
     listReviewFlags: async (_event, noteId: string) => {
@@ -1346,7 +1402,7 @@ function registerIpcHandlers() {
     syncReviewFlags: async (_event, noteId: string, remaps: ReviewFlagRemap[]) => {
       return databaseService!.syncReviewFlags(noteId, remaps);
     },
-  }, ipcMain.handle.bind(ipcMain));
+  }, handleTracked);
 
 }
 
@@ -1623,7 +1679,43 @@ async function createWindow() {
       emitWindowEvent(win.webContents, 'fullScreenState', false)
     }
   });
-  win.on('close', persistWindowState);
+  // Closing the window is a way out like any other, so it goes through the
+  // quit routine rather than letting the page unload under unfinished
+  // writes. On macOS closing the window leaves the app running, so there it
+  // only settles the window and then lets it close.
+  let closeSettled = false
+  const closingWindow = win
+  win.on('close', (event) => {
+    if (closeSettled) return
+    event.preventDefault()
+    if (process.platform !== 'darwin') {
+      void quitRoutine.quit('the window was closed')
+      return
+    }
+    if (quitRoutine.isQuitting()) return
+    void settleWindow().then(async () => {
+      if (closingWindow.isDestroyed()) return
+      await stateService?.saveWindowState(readPersistableWindowState(closingWindow))
+      closeSettled = true
+      closingWindow.close()
+    })
+  });
+
+  // The page crashed: nothing in it can be settled any more, and what it had
+  // written is on disk. Loaded again, it picks up where those writes left
+  // off. Not twice in quick succession, which would be a page that cannot
+  // start rather than one that crashed.
+  let lastCrashAt = 0
+  win.webContents.on('render-process-gone', (_event, details) => {
+    console.error('[main] the window\'s page stopped', details)
+    if (details.reason === 'clean-exit' || quitRoutine.isQuitting()) return
+    const now = Date.now()
+    const crashedRecently = now - lastCrashAt < 10_000
+    lastCrashAt = now
+    if (!crashedRecently && !closingWindow.isDestroyed()) closingWindow.webContents.reload()
+  })
+  // Windows: the session is ending (shutdown or log off).
+  win.on('session-end', () => { void quitRoutine.quit('the session is ending') })
 
   win.webContents.on('did-finish-load', () => {
     if (win) emitWindowEvent(win.webContents, 'maximizeState', win.isMaximized())
@@ -1829,22 +1921,19 @@ app.whenReady().then(async () => {
   app.quit()
 })
 
-let isQuitting = false;
+// Every other way out goes through the same routine (quitRoutine.ts).
 app.on('before-quit', (event) => {
-  if (!stateService || isQuitting) return
-  // Prevent the default quit, flush state to disk, then re-quit.
-  // This guarantees the last-known app state is written even if the
-  // renderer's async IPC call didn't complete before close.
   event.preventDefault()
-  isQuitting = true
-  stateService.flushAppStateOnClose().finally(() => app.quit())
+  void quitRoutine.quit('quit requested')
 })
 
-// The database closes only once every window has gone. `before-quit` fires
-// BEFORE the windows close when the quit comes from the app menu (Cmd+Q on
-// macOS), and each window's `beforeunload` still writes every open note's
-// edit-mode state through IPC; closing here instead of there is what keeps
-// those writes from landing on a closed database.
-app.on('will-quit', () => {
-  databaseService?.close()
+app.whenReady().then(() => {
+  // Linux and macOS: the system is shutting down.
+  powerMonitor.on('shutdown', () => {
+    void quitRoutine.quit('the system is shutting down')
+  })
 })
+
+for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+  process.on(signal, () => { void quitRoutine.quit(signal) })
+}

@@ -42,7 +42,7 @@ describe('StateService app-state field round-trip', () => {
 
     // A fresh instance (no in-memory cache carried over) reading from disk
     // is what a real app restart does -- not reusing the same StateService
-    // object, which would trivially pass via its own cachedAppState.
+    // object, which could trivially pass from memory.
     const reader = new StateService(dataRoot)
     const loaded = await reader.loadAppState()
     expect(loaded.menu?.isDoubleSizeMode).toBe(true)
@@ -244,19 +244,6 @@ describe('StateService app-state field round-trip', () => {
     const offLoaded = await offReader.loadAppState()
     expect(offLoaded.menu?.noteSizeThresholdBlocks).toBe(10)
     expect(offLoaded.menu?.forceCharacterScrollbarThumb).toBe(false)
-  })
-
-  it('flushAppStateOnClose (the before-quit safety net) also preserves isDoubleSizeMode', async () => {
-    const writer = new StateService(dataRoot)
-    await writer.saveAppState({
-      selectedNoteId: null,
-      menu: { sidebarMode: 'date', selectedMonths: [], selectedYears: [], searchQuery: '', isDoubleSizeMode: true },
-    })
-    await writer.flushAppStateOnClose()
-
-    const reader = new StateService(dataRoot)
-    const loaded = await reader.loadAppState()
-    expect(loaded.menu?.isDoubleSizeMode).toBe(true)
   })
 
   it('round-trips every other boolean menu toggle touched by the same persistMenuStateNow consolidation (App.tsx/CLAUDE.md)', async () => {
@@ -509,7 +496,6 @@ describe('StateService concurrent writes', () => {
         menu: { sidebarMode: 'date', selectedMonths: [], selectedYears: [], searchQuery: '' },
       }),
     )
-    saves.push(writer.flushAppStateOnClose())
     await Promise.all(saves)
 
     const restored = await new StateService(dataRoot).loadAppState()

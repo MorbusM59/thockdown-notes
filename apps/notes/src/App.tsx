@@ -49,6 +49,7 @@ import type { NoteSummary } from './shared/noteLifecycle'
 import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote, isSameNoteSummary } from './shared/noteLifecycle'
 import { adoptNoteSummaries, keepIfUnchanged, withSavedNote } from './shared/noteContentStore'
 import { applyNonOverlappingChanges, createNoteDocumentStore } from './editorSection/noteDocumentStore'
+import { registerQuitParticipant, settleForQuit } from './shared/quitParticipants'
 import { installExternalFileSync } from './editorSection/externalFileSync'
 import { getNoteListMetaKind } from './shared/noteListMeta'
 import {
@@ -4329,14 +4330,14 @@ function App() {
     })
   }, [persistMenuStateNow])
 
-  const persistMenuStateOnUnload = useCallback(() => {
+  const persistMenuStateForQuit = useCallback(() => {
     const currentModeSnapshot = captureSidebarModeState(sidebarMode)
     const nextSidebarViewStateByMode: SidebarViewStateByMode = {
       ...sidebarViewStateByMode,
       [sidebarMode]: currentModeSnapshot,
     }
 
-    persistMenuStateNow({
+    return persistMenuStateNow({
       sidebarMode,
       sidebarViewStateByMode: nextSidebarViewStateByMode,
     })
@@ -9069,40 +9070,41 @@ ${markdownHtml}
     return () => window.removeEventListener('mousedown', refocusOnPress, true)
   }, [getActiveSection, isEscapeRingUp])
 
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      // Flush any pending debounced app-state save immediately so the main
-      // process receives the latest viewport/menu state before the renderer
-      // is torn down. The main process will also re-save its cached copy on
-      // before-quit as a belt-and-suspenders guarantee.
-      if (appStateSaveTimerRef.current !== null) {
-        window.clearTimeout(appStateSaveTimerRef.current)
-        appStateSaveTimerRef.current = null
-        const viewport = activeSection?.latestViewportRef.current
-        void window.thockdownState?.saveAppState({
-          selectedNoteId: activeSection?.activeNoteId ?? null,
-          viewport: viewport ?? undefined,
-          menu: persistedMenuStateRef.current ?? buildMenuStateSnapshot(),
-        })
-      }
-
-      // Flush every open section, not just the active one -- each has its
-      // own note with its own cursor/scroll position that would otherwise
-      // be lost on quit.
-      for (const section of sectionRegistryRef.current.values()) {
-        void section.persistActiveNoteEditModeStateNow()
-      }
-      // And every note's text still debouncing, or whose last write failed.
-      // Best effort: a write queued behind one still waiting for the main
-      // process is only sent when that one answers, which may be after the
-      // page is gone (TODO.md, "Quit with a save in flight").
-      noteDocuments.flushAll()
-      persistMenuStateOnUnload()
+  // What App holds and saves later, settled when the app quits
+  // (src/shared/quitParticipants.ts).
+  useEffect(() => registerQuitParticipant('note text', () => noteDocuments.flushAll()), [noteDocuments])
+  useEffect(() => registerQuitParticipant('slots', () => Promise.all(
+    // Every open slot, not just the active one: each has its own note's
+    // caret and scroll position.
+    [...sectionRegistryRef.current.values()].map((section) => section.persistActiveNoteEditModeStateNow()),
+  )), [])
+  useEffect(() => registerQuitParticipant('app state', () => {
+    // The debounced save is superseded by this one, which carries the same
+    // snapshot as of now.
+    if (appStateSaveTimerRef.current !== null) {
+      window.clearTimeout(appStateSaveTimerRef.current)
+      appStateSaveTimerRef.current = null
     }
+    return persistMenuStateForQuit()
+  }), [persistMenuStateForQuit])
 
+  useEffect(() => {
+    let quitting = false
+    const unsubscribe = window.windowControls?.onPrepareToQuit?.((token) => {
+      quitting = true
+      void settleForQuit().then(() => window.windowControls?.quitPrepared(token))
+    })
+    // A reload unloads the page without quitting: the same writes, sent
+    // before the page goes, which is all that can be done there.
+    const handleBeforeUnload = () => {
+      if (!quitting) void settleForQuit()
+    }
     window.addEventListener('beforeunload', handleBeforeUnload)
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-  }, [activeSection, buildMenuStateSnapshot, persistMenuStateOnUnload, noteDocuments])
+    return () => {
+      unsubscribe?.()
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+    }
+  }, [])
 
   const syncSidebarTexture = useCallback(() => {
     const scroller = sidebarTreeScrollerEl || sidebarContentRef.current

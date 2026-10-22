@@ -1008,17 +1008,17 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       payloadBase.cursorPos = cursorPos
     }
 
-    void (async () => {
-      // Same rule as the checkpoint above: absent, never null.
-      const previewBlockMap = await buildPersistedBlockMap(previewBlockSplitCacheRef.current, text)
-      if (previewBlockMap) payloadBase.previewBlockCache = previewBlockMap
-      debugLogPreviewBlockCache('persisting leave-note cache', {
-        noteId: activeNoteId,
-        hasCache: !!previewBlockMap,
-        ranges: previewBlockMap?.ranges.length,
-      })
-      await notesApi.saveNoteUiState({ id: activeNoteId, payload: payloadBase })
-    })()
+    // Same rule as the checkpoint above: absent, never null.
+    const previewBlockMap = await buildPersistedBlockMap(previewBlockSplitCacheRef.current, text)
+    if (previewBlockMap) payloadBase.previewBlockCache = previewBlockMap
+    debugLogPreviewBlockCache('persisting leave-note cache', {
+      noteId: activeNoteId,
+      hasCache: !!previewBlockMap,
+      ranges: previewBlockMap?.ranges.length,
+    })
+    // Awaited, so the quit routine's wait on this covers the write itself
+    // (src/shared/quitParticipants.ts).
+    await notesApi.saveNoteUiState({ id: activeNoteId, payload: payloadBase })
   }, [
     activeNoteId,
     readEditorText,

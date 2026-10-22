@@ -61,6 +61,7 @@ const windowControls: WindowControlsApi = {
   onMaximizeStateChange: (callback) => onWindowEvent('maximizeState', callback),
   onCollapsedStateChange: (callback) => onWindowEvent('collapsedState', callback),
   onFullScreenStateChange: (callback) => onWindowEvent('fullScreenState', callback),
+  onPrepareToQuit: (callback) => onWindowEvent('prepareToQuit', callback),
 }
 
 const exportApi: ExportApi = invokeBridge<ExportApi>(EXPORT_CHANNELS, invoke)

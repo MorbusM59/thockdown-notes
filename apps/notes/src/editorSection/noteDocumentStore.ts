@@ -161,8 +161,12 @@ export interface NoteDocumentStore {
    * it judges the note clean). Null when the note is not open.
    */
   resave: (noteId: string) => Promise<void> | null
-  /** Starts every pending or failed write now (the window is closing). */
-  flushAll: () => void
+  /**
+   * Starts every pending or failed write now (the app is quitting), and
+   * resolves once every note's writes -- the ones already under way, which
+   * a write started now is queued behind, included -- have returned.
+   */
+  flushAll: () => Promise<void>
   /** The note was deleted (rule 5). */
   remove: (noteId: string) => void
 }
@@ -483,6 +487,9 @@ export function createNoteDocumentStore(options: NoteDocumentStoreOptions = {}):
         }
         startWrite(entry)
       }
+      // A failed write has already been reported and keeps its entry; what
+      // the caller waits for is that nothing is still under way.
+      return Promise.all([...documents.values()].map((entry) => entry.writes.then(() => {}, () => {}))).then(() => {})
     },
 
     remove(noteId) {

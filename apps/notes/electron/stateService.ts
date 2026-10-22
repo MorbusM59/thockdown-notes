@@ -641,7 +641,6 @@ async function writeFileReplacing(filePath: string, text: string): Promise<void>
 export class StateService {
   private readonly appStatePath: string;
   private readonly windowStatePath: string;
-  private cachedAppState: AppState | null = null;
   // Every write to a state file goes through `writeJson`, which runs them one
   // at a time in the order they were asked for. `fs.writeFile` is not atomic:
   // two overlapping writes to one path (a debounced save, an immediate one and
@@ -699,7 +698,6 @@ export class StateService {
       viewport: sanitizeViewport(state.viewport),
       menu: sanitizeMenu(state.menu),
     };
-    this.cachedAppState = payload;
     await this.writeJson(this.appStatePath, payload);
   }
 
@@ -709,20 +707,7 @@ export class StateService {
       viewport: undefined,
       menu: sanitizeMenu(DEFAULT_APP_STATE.menu),
     };
-    this.cachedAppState = payload;
     await this.writeJson(this.appStatePath, payload);
-  }
-
-  // Called synchronously from the main process on app close, to guarantee
-  // the last-known state is written even if the renderer's async IPC call
-  // didn't complete before the window was destroyed.
-  async flushAppStateOnClose(): Promise<void> {
-    if (!this.cachedAppState) return;
-    try {
-      await this.writeJson(this.appStatePath, this.cachedAppState);
-    } catch (error) {
-      console.error('[stateService] flushAppStateOnClose failed:', error);
-    }
   }
 
   async loadWindowState(): Promise<WindowState> {
