@@ -8830,6 +8830,33 @@ ${markdownHtml}
   }, [returnKeyboardToActiveSurface])
 
   /**
+   * CTRL+A SELECTS THE ACTIVE SLOT'S NOTE, wherever the keyboard is.
+   *
+   * The browser's select-all selects what is MOUNTED under the holder: from
+   * a holder that is not a text surface (the render view, a control, the
+   * page) that is the whole page, sidebar included; from inside the render
+   * pane it is the window of blocks the pane happens to have mounted. Neither
+   * is the note. So the chord is the slot's, like Tab is the surface's: a
+   * text field keeps it (its own select-all is the right one), and so does
+   * an editable editor, whose own keymap selects its whole document; a
+   * read-only editor is not a text field and comes here, to the same result. Everything else
+   * hands it to the active slot (`selectWholeNote`), which selects in the
+   * view that is on screen. With the ring up there is no note to select.
+   */
+  useEffect(() => {
+    const onSelectAll = (event: globalThis.KeyboardEvent) => {
+      if (!matchShortcut(event, 'selectAll')) return
+      const holder = document.activeElement
+      if (isTextEntryElement(holder) && !holder?.closest('.markdown-preview')) return
+      event.preventDefault()
+      if (isEscapeRingUp) return
+      getActiveSection()?.selectWholeNote()
+    }
+    window.addEventListener('keydown', onSelectAll, true)
+    return () => window.removeEventListener('keydown', onSelectAll, true)
+  }, [getActiveSection, isEscapeRingUp])
+
+  /**
    * FOCUS NEVER RESTS SOMEWHERE THAT CANNOT HOLD IT.
    *
    * The two rules above stop the keyboard being TAKEN -- by a press, by a

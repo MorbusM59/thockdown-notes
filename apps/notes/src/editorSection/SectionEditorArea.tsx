@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { TypingRateOrWordCount } from '../flow/TypingRateOrWordCount'
 import { flowStyleTarget } from '../flow/flowStyle'
-import type { CSSProperties, DragEvent, MouseEvent, MutableRefObject, ReactNode, RefObject } from 'react'
+import type { ClipboardEvent, CSSProperties, DragEvent, MouseEvent, MutableRefObject, ReactNode, RefObject } from 'react'
 import { CM6Editor } from '../components/CM6Editor'
 import { SnapshotTimelineSlider } from '../editor/SnapshotTimelineSlider'
 import { PresentStateCircle } from '../editor/PresentStateCircle'
@@ -20,6 +20,7 @@ import { ImageStorageToggle } from './ImageStorageToggle'
 import type { ChapterPillSplitArm } from '../chapters/useChapterPillActions'
 import { EscapeHoldPanel, type ExportScope } from './EscapeHoldPanel'
 import { focusEscapeHoldRing } from './escapeHoldRingFocus'
+import { isWholePaneSelection } from './wholePaneSelection'
 import { splitChapterFamily } from '../shared/chapters'
 import type { EscapeMenuContribution } from '../escapeMenu/escapeMenuContract'
 import { EscapeMenuChromeBarRow, EscapeMenuChromeGauges, EscapeMenuChromeStatsRow } from '../escapeMenu/EscapeMenuStatus'
@@ -341,6 +342,16 @@ export function SectionEditorArea({
     .find((cell) => cell.id === activeRingCellId)?.detail ?? null
   const isEmptyStateVisible = (!activeNoteId && !shownImageId) || isEscapeHoldActive
 
+  // A select-all in the render view copies the WHOLE note: the pane mounts
+  // only a window of it, so the browser's own copy would take that window
+  // (wholePaneSelection.ts). The note's source, because that is the one form
+  // of all of it there is; a selection the reader drags copies as rendered.
+  const handlePreviewCopy = useCallback((event: ClipboardEvent<HTMLDivElement>) => {
+    if (!isWholePaneSelection(event.currentTarget)) return
+    event.preventDefault()
+    event.clipboardData.setData('text/plain', readDisplayedText())
+  }, [readDisplayedText])
+
   // The reroll easter egg is disabled while the quick-actions panel is up --
   // otherwise every click on the grid's own padding/gaps (anything that
   // isn't a button) would reroll the animation out from under the buttons.
@@ -469,6 +480,7 @@ export function SectionEditorArea({
               <div
                 ref={previewScrollRef}
                 onScroll={handlePreviewScroll}
+                onCopy={handlePreviewCopy}
                 data-typography-surface="render"
                 className={`markdown-preview thockdown-custom-scrollbar style-${viewStyle}`}
                 style={{

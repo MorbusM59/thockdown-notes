@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { Annotation, Compartment, EditorState, EditorSelection, MapMode, Prec, RangeSetBuilder, Transaction, type ChangeSet, type TransactionSpec } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
 import { EditorView, Decoration, ViewPlugin, keymap, type DecorationSet, type ViewUpdate } from '@codemirror/view';
-import { defaultKeymap, historyKeymap, isolateHistory } from '@codemirror/commands';
+import { defaultKeymap, historyKeymap, isolateHistory, selectAll as selectWholeDocument } from '@codemirror/commands';
 import { attachUndoHistory, createUndoHistoryScope, detachUndoHistory, readOnlyExtension, undoHistoryExtension } from '../editor/UndoHistoryScope';
 import { matchShortcut, type ShortcutId } from '../shared/keyboardShortcuts';
 import { buildTokenPresentation } from '../editor/MarkdownLineClassification';
@@ -6174,6 +6174,10 @@ export function CM6Editor({
           viewport: buildViewport(view),
           viewportLines,
         };
+      },
+      selectAll() {
+        const view = viewRef.current;
+        if (view) selectWholeDocument(view);
       },
       applySnapshot(snapshot: EditorSnapshotApplyRequest) {
         const view = viewRef.current;

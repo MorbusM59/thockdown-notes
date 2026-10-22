@@ -193,6 +193,9 @@ export const SHORTCUTS = {
 
   undo: { section: 'native', chords: [{ key: 'z', ctrl: true }], macChords: [{ key: 'z', meta: true }], label: 'Undo', matchedBy: 'codemirror' },
   redo: { section: 'native', chords: [{ key: 'y', ctrl: true }], macChords: [{ key: 'z', meta: true, shift: true }], label: 'Redo', matchedBy: 'codemirror' },
+  // CodeMirror selects inside the editor; App.tsx takes the chord everywhere
+  // else that is not a text field, for the active slot's note.
+  selectAll: { section: 'native', chords: [{ key: 'a', ctrl: 'or-meta' }], label: 'Select the whole note' },
   smartPaste: { section: 'native', chords: [{ key: 'v', ctrl: 'or-meta', shift: true }], label: 'Smart paste' },
   // CodeMirror deletes the word; CM6Editor only offers this chord to a
   // table first (at the start of a cell it takes the previous cell's word).
