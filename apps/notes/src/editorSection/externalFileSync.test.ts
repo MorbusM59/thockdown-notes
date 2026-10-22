@@ -29,6 +29,7 @@ function createWorld() {
 
   const summaries: Array<{ id: string; text: string }> = []
   const baselines = new Map<string, string>()
+  const conflicts = new Set<string>()
   const stop = installExternalFileSync({
     noteDocuments,
     externalFiles: {
@@ -56,6 +57,7 @@ function createWorld() {
     },
     onBaseline: (noteId, text) => baselines.set(noteId, text),
     onSummary: (summary, text) => summaries.push({ id: summary.id, text }),
+    onConflict: (noteId, conflicted) => { if (conflicted) conflicts.add(noteId); else conflicts.delete(noteId) },
   })
 
   const events: NoteDocumentEvent[] = []
@@ -81,7 +83,7 @@ function createWorld() {
   }
 
   return {
-    noteDocuments, files, db, watched, baselines, summaries, events, stop,
+    noteDocuments, files, db, watched, baselines, conflicts, summaries, events, stop,
     open, settle, fileChanged, external, type,
     holdSnapshot: (callback: (() => void) | null) => { beforeSnapshotLands = callback },
   }
@@ -112,6 +114,11 @@ describe('installExternalFileSync', () => {
     expect(world.noteDocuments.read('n')).toBe('from file + mine')
     expect(world.db.get('n')).toMatchObject({ text: 'from file + mine', unsaved: true })
     expect(world.db.get('n')!.fromDisk.at(-1)).toBe('edited elsewhere')
+    expect(world.conflicts.has('n')).toBe(true)
+    // The file catching up with the note ends the conflict.
+    world.fileChanged('n', 'from file + mine')
+    await world.settle()
+    expect(world.conflicts.has('n')).toBe(false)
   })
 
   it('treats typing that lands while the file is being recorded as an edit, never overwriting it', async () => {

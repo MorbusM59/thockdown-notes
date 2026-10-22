@@ -12,6 +12,8 @@ export interface ExternalFileSyncOptions {
   onBaseline: (noteId: string, text: string) => void
   /** The note's summary changed without its text changing (it became clean). */
   onSummary: (summary: NoteSummaryWithContent, text: string) => void
+  /** The note's edits now stand against a newer file (true), or the note was brought into step with its file (false). */
+  onConflict: (noteId: string, conflicted: boolean) => void
 }
 
 /**
@@ -25,7 +27,7 @@ export interface ExternalFileSyncOptions {
  * Returns the function that stops it.
  */
 export function installExternalFileSync(options: ExternalFileSyncOptions): () => void {
-  const { noteDocuments, externalFiles, notes, onBaseline, onSummary } = options
+  const { noteDocuments, externalFiles, notes, onBaseline, onSummary, onConflict } = options
   let stopped = false
   let open = new Set<string>()
   // One reconciliation per note at a time: two reports of one change would
@@ -82,13 +84,16 @@ export function installExternalFileSync(options: ExternalFileSyncOptions): () =>
       // Through the document, so every slot showing the note follows and
       // the write is the store's (it lands clean against the new baseline).
       noteDocuments.change(noteId, () => disk)
+      onConflict(noteId, false)
     } else if (outcome === 'inSync') {
       const summary = await notes.updateExternalNoteState({ id: noteId, hasUnsavedChanges: false, syncMode: true })
       onSummary(summary, disk)
+      onConflict(noteId, false)
     } else if (outcome === 'conflict') {
       // The note keeps its text; written again so it is judged against the
       // file's new version, which marks it unsaved.
       await noteDocuments.resave(noteId)
+      onConflict(noteId, true)
     }
   }
 

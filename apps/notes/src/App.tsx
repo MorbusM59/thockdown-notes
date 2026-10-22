@@ -971,6 +971,8 @@ type NoteListItemProps = {
   note: NoteSummary
   isActive: boolean
   isModified?: boolean
+  /** The note's file changed on disk while it held edits of its own (src/shared/externalFileReconcile.ts's `conflict`): a save overwrites that version, which is on the Timeline. */
+  isFileConflict?: boolean
   onSelect: (noteId: string) => void
   onPrimedLeftClick: (noteId: string) => void
   onSaveClick?: (noteId: string) => void
@@ -995,6 +997,7 @@ const NoteListItem = memo(function NoteListItem({
   note,
   isActive,
   isModified = false,
+  isFileConflict = false,
   onSelect,
   onPrimedLeftClick,
   onSaveClick,
@@ -1131,6 +1134,12 @@ const NoteListItem = memo(function NoteListItem({
     event.dataTransfer.setData(NOTE_DRAG_MIME_TYPE, serializeNoteDragPayload({ noteId: note.id, sourceSectionId: null }))
   }, [note.id])
 
+  const saveTooltip = !isModified
+    ? 'Save disabled'
+    : isFileConflict
+      ? 'The file changed on disk while you were editing. Saving overwrites it; its version is on the Timeline'
+      : 'Save external note'
+
   const isArchived = isArchivedNote(note)
   const isDeleted = isDeletedNote(note)
   // A chapter can now carry its own 'archived'/'deleted' protected tag (see
@@ -1198,8 +1207,8 @@ const NoteListItem = memo(function NoteListItem({
                   type="button"
                   className="note-list-action-button note-list-action-button-save"
                   disabled={!isModified}
-                  aria-label={isModified ? 'Save external note' : 'Save disabled'}
-                  data-tooltip={isModified ? 'Save external note' : 'Save disabled'}
+                  aria-label={saveTooltip}
+                  data-tooltip={saveTooltip}
                   onClick={handleSaveClick}
                   onPointerDown={stopRowRightPress}
                   onPointerUp={stopRowRightPress}
@@ -2276,6 +2285,7 @@ function App() {
   const isWritingDebugEntryRef = useRef(false)
   const debugNoteCreationPromiseRef = useRef<Promise<string | null> | null>(null)
   const externalNoteOriginalTextByIdRef = useRef<Map<string, string>>(new Map())
+  const [externalFileConflictIds, setExternalFileConflictIds] = useState<ReadonlySet<string>>(() => new Set())
   // An open external note follows its file: taken over when the reader has
   // not edited the note, kept and marked unsaved when both changed
   // (externalFileSync.ts).
@@ -2289,8 +2299,26 @@ function App() {
       notes: notesApi,
       onBaseline: (noteId, text) => externalNoteOriginalTextByIdRef.current.set(noteId, text),
       onSummary: (summary, text) => setNotes((previous) => withSavedNote(previous, summary, text)),
+      onConflict: (noteId, conflicted) => setExternalFileConflictIds((previous) => {
+        if (previous.has(noteId) === conflicted) return previous
+        const next = new Set(previous)
+        if (conflicted) next.add(noteId)
+        else next.delete(noteId)
+        return next
+      }),
     })
   }, [noteDocuments, setNotes])
+  // A conflict lasts while the note is unsaved: every way it becomes clean
+  // (a save from any route, an adoption, the file catching up) ends it, so
+  // it is ended here, from the one fact they share, rather than at each.
+  useEffect(() => {
+    setExternalFileConflictIds((previous) => {
+      if (previous.size === 0) return previous
+      const unsaved = new Set(notes.filter((note) => note.hasUnsavedChanges).map((note) => note.id))
+      const next = new Set([...previous].filter((noteId) => unsaved.has(noteId)))
+      return next.size === previous.size ? previous : next
+    })
+  }, [notes])
   const pendingSidebarScrollRestoreRef = useRef<{ mode: SidebarMode; scrollTop: number } | null>(null)
   // Stay here rather than move into useEditorSectionMount: activateNote and
   // queueAppStateSave (both still in App.tsx) also read/write these, and
@@ -9406,6 +9434,7 @@ ${markdownHtml}
                               note={note}
                               isActive={isActive}
                               isModified={isModified}
+                              isFileConflict={isModified && externalFileConflictIds.has(note.id)}
                               chapterParentTitle={chapterParentTitle}
                               isChapterParentUnavailable={isChapterParentUnavailable}
                               onSelect={handleSelectNote}
