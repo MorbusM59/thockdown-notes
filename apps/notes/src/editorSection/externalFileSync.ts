@@ -4,6 +4,23 @@ import type { ExternalFilesApi } from '../shared/externalFiles'
 import type { NoteLifecycleApi, NoteSummaryWithContent } from '../shared/noteLifecycle'
 import type { NoteDocumentStore } from './noteDocumentStore'
 
+const turns = new Map<string, Promise<unknown>>()
+
+/**
+ * Runs `work` once everything else touching this note's file has finished:
+ * a reconciliation and an explicit save each read the file and the
+ * from-disk baseline and then write one of them, so two at once would act
+ * on what the other is in the middle of changing. One window, so one queue.
+ */
+export function withExternalFileTurn<T>(noteId: string, work: () => Promise<T>): Promise<T> {
+  const previous = turns.get(noteId) ?? Promise.resolve()
+  const next = previous.catch(() => {}).then(work)
+  turns.set(noteId, next)
+  const settled = () => { if (turns.get(noteId) === next) turns.delete(noteId) }
+  next.then(settled, settled)
+  return next
+}
+
 export interface ExternalFileSyncOptions {
   noteDocuments: NoteDocumentStore
   externalFiles: Pick<ExternalFilesApi, 'watchNoteFiles' | 'readNoteFile' | 'onNoteFileChanged'>
@@ -30,19 +47,9 @@ export function installExternalFileSync(options: ExternalFileSyncOptions): () =>
   const { noteDocuments, externalFiles, notes, onBaseline, onSummary, onConflict } = options
   let stopped = false
   let open = new Set<string>()
-  // One reconciliation per note at a time: two reports of one change would
-  // otherwise both read the old baseline and both act on it.
-  const running = new Map<string, Promise<void>>()
-
-  const reconcile = (noteId: string): Promise<void> => {
-    const previous = running.get(noteId) ?? Promise.resolve()
-    const next = previous.then(() => reconcileNow(noteId)).catch((error) => {
-      console.error('[external-files] failed to reconcile a note with its file', { noteId, error })
-    })
-    running.set(noteId, next)
-    void next.finally(() => { if (running.get(noteId) === next) running.delete(noteId) })
-    return next
-  }
+  const reconcile = (noteId: string): Promise<void> => withExternalFileTurn(noteId, () => reconcileNow(noteId)).catch((error) => {
+    console.error('[external-files] failed to reconcile a note with its file', { noteId, error })
+  })
 
   const reconcileNow = async (noteId: string) => {
     if (stopped) return

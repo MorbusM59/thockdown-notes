@@ -122,7 +122,7 @@ function type(world: ReturnType<typeof createWorld>, view: View, insert: string,
   const edit = { from: position, to: position, insert }
   const previousText = view.text
   view.text = applyEdit(previousText, edit)
-  world.store.publish(view.id, view.text, { previousText, edit })
+  world.store.publish(view.id, view.noteId!, view.text, { previousText, edit })
   world.store.scheduleSave(view.id, world.write(view.noteId!))
 }
 
@@ -174,7 +174,7 @@ describe('noteDocumentStore', () => {
     a.text = bound(world.store, 'a', world.store.beginLoad('n'), 'one', attachView(a))
     b.text = bound(world.store, 'b', world.store.beginLoad('n'), 'one', attachView(b))
     // A view that claims to have edited a text nobody else holds.
-    world.store.publish('a', 'two!', { previousText: 'two', edit: { from: 3, to: 3, insert: '!' } })
+    world.store.publish('a', 'n', 'two!', { previousText: 'two', edit: { from: 3, to: 3, insert: '!' } })
     expect(b.events.at(-1)).toEqual({ kind: 'change', change: { previousText: 'one', text: 'two!', edit: null } })
     expect(b.text).toBe('two!')
   })
@@ -342,6 +342,21 @@ describe('noteDocumentStore', () => {
     expect(world.dbHistory).toEqual(['first'])
   })
 
+  it('drops an edit made to the note a view showed before it was bound to another', () => {
+    // A slot is bound to its next note before its editor is re-rendered onto
+    // it; a keystroke in between edits the OLD note's text.
+    const world = createWorld()
+    const a = newView('a')
+    const b = newView('b')
+    a.text = bound(world.store, 'a', world.store.beginLoad('n'), 'alpha', attachView(a))
+    b.text = bound(world.store, 'b', world.store.beginLoad('m'), 'beta', attachView(b))
+    bound(world.store, 'a', world.store.beginLoad('m'), 'beta', attachView(a))
+    b.events.length = 0
+    world.store.publish('a', 'n', 'alphaX', { previousText: 'alpha', edit: { from: 5, to: 5, insert: 'X' } })
+    expect(world.store.read('m')).toBe('beta')
+    expect(b.events).toEqual([])
+  })
+
   it('a view bound to a second note is no longer a view of the first', () => {
     const world = createWorld()
     const a = newView('a')
@@ -350,7 +365,7 @@ describe('noteDocumentStore', () => {
     b.text = bound(world.store, 'b', world.store.beginLoad('n'), 'n', attachView(b))
     bound(world.store, 'b', world.store.beginLoad('m'), 'm', attachView(b))
     b.events.length = 0
-    world.store.publish('a', 'n!')
+    world.store.publish('a', 'n', 'n!')
     expect(b.events).toEqual([])
     expect(world.store.boundNoteOf('b')).toBe('m')
   })
@@ -547,7 +562,7 @@ describe('noteDocumentStore', () => {
     a.text = bound(store, 'a', store.beginLoad('n'), 'base', attachView(a))
     a.noteId = 'n'
     a.text = 'base+typed'
-    store.publish('a', a.text)
+    store.publish('a', 'n', a.text)
     store.scheduleSave('a', async () => { if (failing) throw new Error('disk full') })
     const consoleError = console.error
     console.error = () => {}
@@ -595,7 +610,7 @@ describe('noteDocumentStore', () => {
     })
     const a = newView('a')
     bound(store, 'a', store.beginLoad('n'), 'one', attachView(a))
-    store.publish('a', 'one two')
+    store.publish('a', 'n', 'one two')
     store.scheduleSave('a', async (text) => { viewWrites.push(text) })
     store.unbind('a')
     timers.shift()!()

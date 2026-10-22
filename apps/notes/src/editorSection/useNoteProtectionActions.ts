@@ -1,3 +1,4 @@
+import { withExternalFileTurn } from './externalFileSync'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent, MutableRefObject } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
@@ -166,7 +167,10 @@ export function useNoteProtectionActions({
     }
   }, [notes, menuIdentityNoteId, refreshChapters])
 
-  const saveExternalNoteToFile = useCallback(async (noteId: string) => {
+  // In the note's turn with the file (externalFileSync.ts): the watcher
+  // reports this save's own write, and reconciling it before the save has
+  // recorded the new baseline would take the reader's save for a conflict.
+  const saveExternalNoteToFile = useCallback((noteId: string) => withExternalFileTurn(noteId, async () => {
     if (!window.thockdownNotes || !window.thockdownExternalFiles) return
 
     const summary = notes.find((note) => note.id === noteId)
@@ -426,7 +430,7 @@ export function useNoteProtectionActions({
       console.error('[external-note] failed to persist external note snapshots', { noteId, error })
     }
     await persistSavedText()
-  }, [
+  }), [
     noteDocuments,
     activeNoteId,
     notes,

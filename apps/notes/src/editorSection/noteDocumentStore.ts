@@ -130,10 +130,16 @@ export interface NoteDocumentStore {
   /** Called whenever a document opens or is dropped, so `openNoteIds` changed. */
   subscribeOpenNotes: (listener: () => void) => () => void
   /**
-   * The view changed its note's text to `text`. `from` is what the view
+   * The view changed note `noteId`'s text to `text`. `from` is what the view
    * changed it from and the edit that did it, when it knows them.
+   *
+   * `noteId` is the note the view was SHOWING when the change was made, and
+   * a change is dropped when the view is bound to another note by then: a
+   * slot is bound to its next note before its editor is re-rendered onto it,
+   * so in between, an edit to the old note's text would otherwise be taken
+   * as the new note's whole text and handed to every view of it.
    */
-  publish: (viewId: string, text: string, from?: { previousText: string; edit: EditorTextEdit | null }) => void
+  publish: (viewId: string, noteId: string, text: string, from?: { previousText: string; edit: EditorTextEdit | null }) => void
   /** Debounces a write of the view's note, made by `writer` when it fires (rule 2). */
   scheduleSave: (viewId: string, writer: NoteDocumentWriter) => void
   /** Starts any debounced write of the note now, and resolves once every write of it so far has finished. */
@@ -402,7 +408,8 @@ export function createNoteDocumentStore(options: NoteDocumentStoreOptions = {}):
       return () => { openNotesListeners.delete(listener) }
     },
 
-    publish(viewId, text, from) {
+    publish(viewId, noteId, text, from) {
+      if (boundNoteByView.get(viewId) !== noteId) return
       const entry = entryOfView(viewId)
       if (!entry || entry.text === text) return
       const previousText = entry.text

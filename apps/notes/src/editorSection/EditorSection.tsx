@@ -474,8 +474,8 @@ export function EditorSection(rawProps: EditorSectionProps) {
   /** See useEditorSectionMount's UseEditorSectionMountOptions doc comment -- written below, once useNoteSnapshotTimeline resolves the previewed snapshot's content. */
   const previewedSnapshotContentRef = useRef<string | null>(null)
 
-  const publishText = useCallback((text: string, from?: { previousText: string; edit: EditorTextEdit | null }) => {
-    noteDocuments.publish(sectionId, text, from)
+  const publishText = useCallback((noteId: string, text: string, from?: { previousText: string; edit: EditorTextEdit | null }) => {
+    noteDocuments.publish(sectionId, noteId, text, from)
   }, [noteDocuments, sectionId])
 
   const {

@@ -5347,9 +5347,17 @@ ${markdownHtml}
       // notes nobody holds, and a document written later from an older text
       // would undo its rewrite.
       openNoteEditors: () => noteDocuments.openNoteIds().map((noteId) => {
-        const applyToDocument = (changes: Array<{ from: number; to: number; insert: string }>, expectedText: string) => (
-          noteDocuments.change(noteId, (text) => text === expectedText ? applyNonOverlappingChanges(text, changes) : text)
-        )
+        // True only when the edit was made: `change` answers whether the note
+        // is open, and the edit is skipped when the text moved on meanwhile.
+        const applyToDocument = (changes: Array<{ from: number; to: number; insert: string }>, expectedText: string) => {
+          let applied = false
+          noteDocuments.change(noteId, (text) => {
+            if (text !== expectedText) return text
+            applied = true
+            return applyNonOverlappingChanges(text, changes)
+          })
+          return applied
+        }
         const handle = [...sectionRegistryRef.current.values()].find((candidate) => (
           candidate.activeNoteId === noteId && candidate.previewedSnapshotId === null && candidate.adapterRef.current
         ))
@@ -9085,6 +9093,9 @@ ${markdownHtml}
         void section.persistActiveNoteEditModeStateNow()
       }
       // And every note's text still debouncing, or whose last write failed.
+      // Best effort: a write queued behind one still waiting for the main
+      // process is only sent when that one answers, which may be after the
+      // page is gone (TODO.md, "Quit with a save in flight").
       noteDocuments.flushAll()
       persistMenuStateOnUnload()
     }

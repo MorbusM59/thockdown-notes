@@ -78,7 +78,7 @@ function createWorld() {
     db.set(noteId, { text, fromDisk: [text], unsaved: false })
   }
   const type = (noteId: string, viewId: string, text: string) => {
-    noteDocuments.publish(viewId, text)
+    noteDocuments.publish(viewId, noteId, text)
     save(noteId, text)
   }
 

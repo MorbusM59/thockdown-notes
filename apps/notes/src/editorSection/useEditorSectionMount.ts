@@ -153,7 +153,8 @@ export interface UseEditorSectionMountOptions {
    * for no change that arrived from elsewhere -- the one rule that keeps every
    * view of a note on the same text.
    */
-  publishText: (text: string, from?: { previousText: string; edit: EditorTextEdit | null }) => void
+  /** `noteId` is the note the editor is showing (see NoteDocumentStore's `publish`). */
+  publishText: (noteId: string, text: string, from?: { previousText: string; edit: EditorTextEdit | null }) => void
   queueAppStateSave: (selectedNoteId: string | null) => void
   updateActiveNoteTitlePreview: (nextText: string) => void
   /** Only ever referenced in bindings' own dependency array (matching the original code), never actually called here. */
@@ -1663,7 +1664,10 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       // it. Everything else -- typing, undo, a transform, an image rewrite --
       // is this section changing the note, and every other view must follow.
       if (event.source !== 'initial-load') {
-        publishText(canonicalText, { previousText: event.previousText, edit: event.edit })
+        // The note on screen, which the editor's change was made to: the
+        // ref follows the committed render, not the slot's binding.
+        const shownNoteId = activeNoteIdRef.current
+        if (shownNoteId) publishText(shownNoteId, canonicalText, { previousText: event.previousText, edit: event.edit })
       }
 
       const isDeferredPreviewTick = deferPreviewOnRapidInput && event.source === 'user-input'
@@ -3059,7 +3063,8 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
 
     const canonicalText = normalizeInternalText(nextText)
     commitEditorText(canonicalText)
-    publishText(canonicalText)
+    const shownNoteId = activeNoteIdRef.current
+    if (shownNoteId) publishText(shownNoteId, canonicalText)
     updateActiveNoteTitlePreview(canonicalText)
 
     if (typeof selectionStart === 'number' && typeof selectionEnd === 'number') {
