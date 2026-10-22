@@ -68,6 +68,16 @@ describe('createRequestTracker', () => {
     expect(tracker.inFlight()).toBe(0)
   })
 
+  it('refuses calls once told to, without counting them', async () => {
+    const tracker = createRequestTracker()
+    let ran = false
+    const call = tracker.track(() => { ran = true })
+    tracker.refuseNew()
+    await expect(call() as Promise<unknown>).rejects.toThrow('quitting')
+    expect(ran).toBe(false)
+    expect(tracker.inFlight()).toBe(0)
+  })
+
   it('counts a call that throws synchronously as finished', () => {
     const tracker = createRequestTracker()
     const throwing = tracker.track(() => { throw new Error('bad') })

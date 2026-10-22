@@ -80,6 +80,7 @@ export function within(promise: Promise<unknown>, ms: number, label: string): Pr
  */
 export function createRequestTracker() {
   let inFlight = 0
+  let refusing = false
   let idleWaiters: Array<() => void> = []
   const settle = () => {
     inFlight -= 1
@@ -92,6 +93,7 @@ export function createRequestTracker() {
     /** Wraps `listener` so each call is counted until its result settles. */
     track<Args extends unknown[]>(listener: (...args: Args) => unknown) {
       return (...args: Args): unknown => {
+        if (refusing) return Promise.reject(new Error('The app is quitting'))
         inFlight += 1
         let result: unknown
         try {
@@ -103,6 +105,10 @@ export function createRequestTracker() {
         Promise.resolve(result).then(settle, settle)
         return result
       }
+    },
+    /** From now on, a call is refused (its promise rejects) instead of handled. */
+    refuseNew(): void {
+      refusing = true
     },
     /** Resolves once nothing is in flight (at once, if nothing is). */
     whenIdle(): Promise<void> {

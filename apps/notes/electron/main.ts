@@ -49,13 +49,16 @@ process.on('uncaughtException', (error) => {
   // Once the window is up, an error here belongs to one request or one
   // event, and the app carries on: stopping would lose more than it saves,
   // and a dialog is not how this app talks to its reader.
-  if (win && !win.isDestroyed()) return
+  if (startupComplete) return
   dialog.showErrorBox(
     'Thockdown Notes failed to start',
     `An unexpected error occurred:\n\n${error?.stack ?? String(error)}`,
   )
   app.quit()
 })
+
+/** The window has been created: from here on the app is running, not starting. */
+let startupComplete = false
 
 process.on('unhandledRejection', (reason) => {
   console.error('[main] unhandled rejection', reason)
@@ -171,7 +174,9 @@ const quitAnswers = new Map<number, () => void>()
  * (src/shared/quitParticipants.ts), bounded by WINDOW_SETTLE_TIMEOUT_MS.
  */
 function settleWindow(): Promise<void> {
-  if (!win || win.isDestroyed() || win.webContents.isCrashed()) return Promise.resolve()
+  // Before start-up completed, the page may not be listening yet, and would
+  // only cost the whole timeout.
+  if (!startupComplete || !win || win.isDestroyed() || win.webContents.isCrashed()) return Promise.resolve()
   const token = ++nextQuitToken
   const answered = new Promise<void>((resolve) => { quitAnswers.set(token, resolve) })
   emitWindowEvent(win.webContents, 'prepareToQuit', token)
@@ -180,14 +185,21 @@ function settleWindow(): Promise<void> {
 
 const quitRoutine = createQuitRoutine({
   settleWindow,
-  drainRequests: () => within(requestTracker.whenIdle(), REQUEST_DRAIN_TIMEOUT_MS, 'requests in flight'),
+  drainRequests: () => {
+    // The window has settled; anything it sends from now on (a late timer)
+    // is refused rather than let in behind the drain to find the database
+    // closing under it.
+    requestTracker.refuseNew()
+    return within(requestTracker.whenIdle(), REQUEST_DRAIN_TIMEOUT_MS, 'requests in flight')
+  },
   shutdown: async () => {
+    // First, straight after the drain, with nothing awaited in between.
+    // Closing checkpoints the write-ahead log into the database file.
+    databaseService?.close()
     externalFileWatcher.dispose()
     if (win && !win.isDestroyed() && stateService) {
       await stateService.saveWindowState(readPersistableWindowState(win))
     }
-    // Closing checkpoints the write-ahead log into the database file.
-    databaseService?.close()
   },
   // Not app.quit(): that would raise before-quit again, and every window is
   // already settled.
@@ -1703,16 +1715,16 @@ async function createWindow() {
 
   // The page crashed: nothing in it can be settled any more, and what it had
   // written is on disk. Loaded again, it picks up where those writes left
-  // off. Not twice in quick succession, which would be a page that cannot
-  // start rather than one that crashed.
-  let lastCrashAt = 0
+  // off. Not a third time within a minute, which is a page that cannot run
+  // rather than one that crashed.
+  const crashTimes: number[] = []
   win.webContents.on('render-process-gone', (_event, details) => {
     console.error('[main] the window\'s page stopped', details)
     if (details.reason === 'clean-exit' || quitRoutine.isQuitting()) return
     const now = Date.now()
-    const crashedRecently = now - lastCrashAt < 10_000
-    lastCrashAt = now
-    if (!crashedRecently && !closingWindow.isDestroyed()) closingWindow.webContents.reload()
+    while (crashTimes.length > 0 && now - crashTimes[0] > 60_000) crashTimes.shift()
+    crashTimes.push(now)
+    if (crashTimes.length < 3 && !closingWindow.isDestroyed()) closingWindow.webContents.reload()
   })
   // Windows: the session is ending (shutdown or log off).
   win.on('session-end', () => { void quitRoutine.quit('the session is ending') })
@@ -1911,6 +1923,7 @@ app.whenReady().then(async () => {
 
   Menu.setApplicationMenu(null)
   await createWindow()
+  startupComplete = true
 }).catch((error) => {
   console.error('[main] fatal startup failure', error)
   dialog.showErrorBox(
@@ -1934,6 +1947,10 @@ app.whenReady().then(() => {
   })
 })
 
+// A second signal while quitting means "now": no waiting on the routine.
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
-  process.on(signal, () => { void quitRoutine.quit(signal) })
+  process.on(signal, () => {
+    if (quitRoutine.isQuitting()) app.exit(1)
+    else void quitRoutine.quit(signal)
+  })
 }
