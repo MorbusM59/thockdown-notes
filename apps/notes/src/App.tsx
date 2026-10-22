@@ -49,6 +49,7 @@ import type { NoteSummary } from './shared/noteLifecycle'
 import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote, isSameNoteSummary } from './shared/noteLifecycle'
 import { adoptNoteSummaries, keepIfUnchanged, withSavedNote } from './shared/noteContentStore'
 import { applyNonOverlappingChanges, createNoteDocumentStore } from './editorSection/noteDocumentStore'
+import { installExternalFileSync } from './editorSection/externalFileSync'
 import { getNoteListMetaKind } from './shared/noteListMeta'
 import {
   DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS,
@@ -194,7 +195,7 @@ import { readPageZoomFactor } from './window/pageZoom'
 import { splitChapterFamily } from './shared/chapters'
 import { trimBlankLines } from './chapters/chapterExtraction'
 import type { ExportScope } from './editorSection/EscapeHoldPanel'
-import { truncateTitle } from './shared/textSanitization'
+import { sanitizeDocumentText, truncateTitle } from './shared/textSanitization'
 import { deriveNoteTitleFromText } from './shared/noteTitle'
 import { isNoteSearchQueryActive, matchesNoteSearchQuery } from './shared/noteSearch'
 import { useAdventureEscapeMenu } from './adventure/useAdventureEscapeMenu'
@@ -2275,6 +2276,21 @@ function App() {
   const isWritingDebugEntryRef = useRef(false)
   const debugNoteCreationPromiseRef = useRef<Promise<string | null> | null>(null)
   const externalNoteOriginalTextByIdRef = useRef<Map<string, string>>(new Map())
+  // An open external note follows its file: taken over when the reader has
+  // not edited the note, kept and marked unsaved when both changed
+  // (externalFileSync.ts).
+  useEffect(() => {
+    const notesApi = window.thockdownNotes
+    const externalFiles = window.thockdownExternalFiles
+    if (!notesApi || !externalFiles) return
+    return installExternalFileSync({
+      noteDocuments,
+      externalFiles,
+      notes: notesApi,
+      onBaseline: (noteId, text) => externalNoteOriginalTextByIdRef.current.set(noteId, text),
+      onSummary: (summary, text) => setNotes((previous) => withSavedNote(previous, summary, text)),
+    })
+  }, [noteDocuments, setNotes])
   const pendingSidebarScrollRestoreRef = useRef<{ mode: SidebarMode; scrollTop: number } | null>(null)
   // Stay here rather than move into useEditorSectionMount: activateNote and
   // queueAppStateSave (both still in App.tsx) also read/write these, and
@@ -5710,7 +5726,7 @@ ${markdownHtml}
       // same main-process normalisation saveNote would apply, and set the
       // note clean and in sync; a second call wrote the whole file again
       // (and re-indexed it) for nothing.
-      const normalizedContent = normalizeInternalText(content)
+      const normalizedContent = sanitizeDocumentText(content)
       // The note's baseline: what the FILE held, stamped with the file's own
       // modified time rather than the moment of import. Marked isFromDisk so
       // it is identifiable outright -- everything that later asks "has this

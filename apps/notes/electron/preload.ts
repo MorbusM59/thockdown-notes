@@ -73,6 +73,8 @@ const externalFilesApi: ExternalFilesApi = {
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
   onOpenFile: (callback) =>
     eventSubscriber<ExternalFileEvents, Electron.IpcRendererEvent>(EXTERNAL_FILE_EVENTS, on, off)('opened', callback),
+  onNoteFileChanged: (callback) =>
+    eventSubscriber<ExternalFileEvents, Electron.IpcRendererEvent>(EXTERNAL_FILE_EVENTS, on, off)('noteFileChanged', callback),
 }
 
 contextBridge.exposeInMainWorld('thockdownExternalFiles', externalFilesApi)

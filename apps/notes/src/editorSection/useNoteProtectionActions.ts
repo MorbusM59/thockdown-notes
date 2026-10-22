@@ -4,7 +4,7 @@ import type { NoteSummary } from '../shared/noteLifecycle'
 import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote } from '../shared/noteLifecycle'
 import { withSavedNote } from '../shared/noteContentStore'
 import { applyProtectedTagDestination } from '../shared/protectedTagActions'
-import { normalizeInternalText } from '../editor/TextPolicy'
+import { sanitizeDocumentText } from '../shared/textSanitization'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import type { NoteDocumentStore } from './noteDocumentStore'
 
@@ -249,7 +249,7 @@ export function useNoteProtectionActions({
     try {
       const diskBefore = await window.thockdownExternalFiles.readFileSnapshot(externalPath)
       if (diskBefore) {
-        const diskBeforeNormalized = normalizeInternalText(diskBefore.content)
+        const diskBeforeNormalized = sanitizeDocumentText(diskBefore.content)
         if (baselineText !== undefined && diskBeforeNormalized !== baselineText) {
           await window.thockdownNotes.saveNoteSnapshot({
             id: noteId,
@@ -375,7 +375,7 @@ export function useNoteProtectionActions({
       return
     }
 
-    const diskSanityNormalized = normalizeInternalText(diskSanityText)
+    const diskSanityNormalized = sanitizeDocumentText(diskSanityText)
     const isDiskEqual = currentText === diskSanityNormalized
 
     try {

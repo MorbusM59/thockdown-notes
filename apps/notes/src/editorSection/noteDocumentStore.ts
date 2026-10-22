@@ -127,6 +127,8 @@ export interface NoteDocumentStore {
   read: (noteId: string) => string | null
   /** Every note with an open document -- shown in a slot, or still being written. */
   openNoteIds: () => string[]
+  /** Called whenever a document opens or is dropped, so `openNoteIds` changed. */
+  subscribeOpenNotes: (listener: () => void) => () => void
   /**
    * The view changed its note's text to `text`. `from` is what the view
    * changed it from and the edit that did it, when it knows them.
@@ -209,6 +211,16 @@ export function createNoteDocumentStore(options: NoteDocumentStoreOptions = {}):
    */
   const removedDuringLoad = new Set<string>()
   let clock = 0
+  const openNotesListeners = new Set<() => void>()
+  const openNotesChanged = () => {
+    for (const listener of [...openNotesListeners]) {
+      try {
+        listener()
+      } catch (error) {
+        console.error('[note-documents] an open-notes listener failed', { error })
+      }
+    }
+  }
 
   const notify = (entry: DocumentEntry, event: NoteDocumentEvent, exceptViewId: string | null) => {
     // A copy: a listener may unbind (a removed note) while this runs.
@@ -231,6 +243,7 @@ export function createNoteDocumentStore(options: NoteDocumentStoreOptions = {}):
     // `flushAll` carries it.
     if (!entry.removed && entry.text !== entry.sentText) return
     documents.delete(entry.noteId)
+    openNotesChanged()
   }
 
   /**
@@ -348,6 +361,7 @@ export function createNoteDocumentStore(options: NoteDocumentStoreOptions = {}):
           removed: false,
         }
         documents.set(noteId, entry)
+        openNotesChanged()
       } else {
         if (loadSupersedes(entry, load, loadedText)) {
           const previousText = entry.text
@@ -381,6 +395,11 @@ export function createNoteDocumentStore(options: NoteDocumentStoreOptions = {}):
 
     openNoteIds() {
       return [...documents.keys()]
+    },
+
+    subscribeOpenNotes(listener) {
+      openNotesListeners.add(listener)
+      return () => { openNotesListeners.delete(listener) }
     },
 
     publish(viewId, text, from) {
@@ -471,6 +490,7 @@ export function createNoteDocumentStore(options: NoteDocumentStoreOptions = {}):
       entry.views.clear()
       for (const [viewId] of views) boundNoteByView.delete(viewId)
       documents.delete(noteId)
+      openNotesChanged()
       for (const [viewId, listener] of views) {
         try {
           listener({ kind: 'removed' })

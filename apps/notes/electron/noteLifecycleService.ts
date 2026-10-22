@@ -1141,7 +1141,12 @@ export class NoteLifecycleService {
     /** ISO timestamp to record instead of "now"; for a from-disk snapshot, the file's own modified time. */
     timestamp?: string;
   }): Promise<number> {
-    return this.databaseService.saveNoteSnapshot(input.id, input.content, Boolean(input.isManual), {
+    // A from-disk snapshot is what saveNote judges a note clean against, so
+    // it is stored in the form a note's own text is stored in: a file
+    // holding anything the note text cannot (an HTML tag, a tab) otherwise
+    // never equals the note it was loaded into, and reads as edited forever.
+    const content = input.isFromDisk ? normalizeText(input.content) : input.content;
+    return this.databaseService.saveNoteSnapshot(input.id, content, Boolean(input.isManual), {
       isFromDisk: input.isFromDisk,
       timestamp: input.timestamp,
     });

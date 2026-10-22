@@ -98,6 +98,12 @@ note's live text; a slot owns only what is about how it is looking at it.
 - **The remembered position** (where a note reopens) is written with each
   save from the slot that queued it, so with two slots typing in one note
   it is the caret of whichever slot saved last.
+- **An external note's file** is reconciled with the live document when the
+  note opens and whenever the file changes on disk while it is open
+  (`apps/notes/src/editorSection/externalFileSync.ts`): the file's text is
+  taken over when the note has no edits since the file was last seen, and
+  otherwise kept on the Timeline as a from-disk snapshot while the reader's
+  text stays. It reaches the views as an outside `change`, like any other.
 - **Deleted elsewhere**: the main process announces a deletion
   (`notes:deleted`), every view of the note lets go of it, and a save that
   arrives afterwards is refused rather than writing the note back.

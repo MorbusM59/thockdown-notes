@@ -45,6 +45,7 @@ import type { PreviewMarkdownBlock, PreviewBlockSplitCache } from '../editor/Pre
 import type { SectionHandle } from './sectionRegistry'
 import { buildPersistedBlockMap, restorePersistedBlockMap } from '../editor/persistedBlockMap'
 import { requestFullBlockSplit } from '../editor/documentFactsClient'
+import { sanitizeDocumentText } from '../shared/textSanitization'
 
 /** Same seed text as App.tsx's own NEW_NOTE_TEMPLATE (createNote) -- kept as its own local copy rather than a shared import to avoid a circular dependency (App.tsx is what mounts EditorSection). */
 const NEW_NOTE_TEMPLATE = '# '
@@ -829,7 +830,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
       // Only if the file could not be read at all. The note still needs some
       // baseline to compare against, and its own hydrated text at least makes
       // the modified indicator quiet rather than permanently wrong.
-      const originalText = baselineRow ? normalizeInternalText(baselineRow.content) : hydratedText
+      const originalText = baselineRow ? sanitizeDocumentText(baselineRow.content) : hydratedText
 
       externalNoteOriginalTextByIdRef.current.set(loaded.id, originalText)
       activeNoteExternalPathRef.current = loaded.externalPath ?? null

@@ -6,6 +6,7 @@ import path from 'node:path'
 import { existsSync, promises as fsPromises } from 'node:fs'
 import { moveLegacyDevData } from './legacyDevDataMove'
 import { NoteLifecycleService } from './noteLifecycleService'
+import { ExternalFileWatcher } from './externalFileWatcher'
 import { FILE_SYNC_CHANNELS, type FileSyncApi } from '../src/shared/fileSync'
 import { NOTE_LIFECYCLE_CHANNELS, NOTE_LIFECYCLE_EVENTS, type NoteLifecycleApi, type NoteLifecycleEvents } from '../src/shared/noteLifecycle'
 import { APP_STATE_CHANNELS, type AppStateApi, type WindowState } from '../src/shared/appState'
@@ -140,6 +141,9 @@ let win: BrowserWindow | null
 let noteLifecycleService: NoteLifecycleService | null = null;
 let stateService: StateService | null = null;
 let databaseService: DatabaseService | null = null;
+const externalFileWatcher = new ExternalFileWatcher((noteId) => {
+  if (win && !win.isDestroyed()) emitExternalFileEvent(win.webContents, 'noteFileChanged', noteId);
+});
 let pendingExternalFilePaths: string[] = [];
 let windowIsUtilityCollapsed = false;
 let utilityCollapseRestoreState: WindowState | null = null;
@@ -349,6 +353,20 @@ function normalizeExternalFilePath(value: string): string {
     return normalized;
   }
   return path.resolve(process.cwd(), normalized);
+}
+
+async function readExternalFileSnapshot(normalizedPath: string): Promise<{ content: string; modifiedAtMs: number } | null> {
+  try {
+    // stat AFTER the read: if a write lands between the two, the mtime then
+    // describes a file at least as new as the bytes returned, so the
+    // mismatch is detectable. The other order can report an mtime older
+    // than the content, which reads as "unchanged" and is not.
+    const content = await fsPromises.readFile(normalizedPath, 'utf8');
+    const stat = await fsPromises.stat(normalizedPath);
+    return { content, modifiedAtMs: stat.mtimeMs };
+  } catch {
+    return null;
+  }
 }
 
 function isOpenableExternalFile(filePath: string): boolean {
@@ -888,18 +906,13 @@ function registerIpcHandlers() {
     },
     readFileSnapshot: async (_event, filePath: unknown) => {
       if (typeof filePath !== 'string' || !isOpenableExternalFile(filePath)) return null;
-      const normalizedPath = normalizeExternalFilePath(filePath);
-      try {
-        // stat AFTER the read: if a write lands between the two, the mtime then
-        // describes a file at least as new as the bytes returned, so the
-        // mismatch is detectable. The other order can report an mtime older
-        // than the content, which reads as "unchanged" and is not.
-        const content = await fsPromises.readFile(normalizedPath, 'utf8');
-        const stat = await fsPromises.stat(normalizedPath);
-        return { content, modifiedAtMs: stat.mtimeMs };
-      } catch {
-        return null;
-      }
+      return readExternalFileSnapshot(normalizeExternalFilePath(filePath));
+    },
+    readNoteFile: async (_event, noteId: unknown) => {
+      if (typeof noteId !== 'string' || !databaseService) return null;
+      const record = databaseService.getNoteRecord(noteId);
+      if (!record?.isTemp || !record.externalPath || !isOpenableExternalFile(record.externalPath)) return null;
+      return readExternalFileSnapshot(normalizeExternalFilePath(record.externalPath));
     },
     writeFileContent: async (_event, filePath: unknown, content: unknown) => {
       if (typeof filePath !== 'string' || typeof content !== 'string') return false;
@@ -911,6 +924,17 @@ function registerIpcHandlers() {
       } catch {
         return false;
       }
+    },
+    watchNoteFiles: async (_event, noteIds: unknown) => {
+      if (!Array.isArray(noteIds) || !databaseService) return;
+      const entries: Array<{ noteId: string; filePath: string }> = [];
+      for (const noteId of noteIds) {
+        if (typeof noteId !== 'string') continue;
+        const record = databaseService.getNoteRecord(noteId);
+        if (!record?.isTemp || !record.externalPath || !isOpenableExternalFile(record.externalPath)) continue;
+        entries.push({ noteId, filePath: normalizeExternalFilePath(record.externalPath) });
+      }
+      externalFileWatcher.setWatched(entries);
     },
     getFileBasename: async (_event, filePath: unknown) => {
       if (typeof filePath !== 'string') return '';
