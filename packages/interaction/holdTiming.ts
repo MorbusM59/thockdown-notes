@@ -141,7 +141,7 @@ export function armHold(onComplete: () => void, holdMs: number = HOLD_CONFIRM_MS
   const timerId = window.setTimeout(() => {
     if (settled) return
     settled = true
-    window.removeEventListener('pointermove', onMove, true)
+    if (press) window.removeEventListener('pointermove', onMove, true)
     // Picking a drag up is not a hold that claims the press: it is the drag's
     // own way of starting on a touch screen, and must not stop itself.
     if (press && !options.isDragPickup) press.holdCompleted = true
@@ -153,7 +153,7 @@ export function armHold(onComplete: () => void, holdMs: number = HOLD_CONFIRM_MS
     if (settled) return
     settled = true
     window.clearTimeout(timerId)
-    window.removeEventListener('pointermove', onMove, true)
+    if (press) window.removeEventListener('pointermove', onMove, true)
     endCursorHold(false)
   }
   return abandon
