@@ -278,6 +278,12 @@ export interface CM6EditorProps {
    * purpose -- the ref and "the ref is worth reading" are one fact.
    */
   onSurfaceReady?: () => void;
+  /**
+   * Receives the box-outline grid layer while it is mounted, so something
+   * drawn outside the edit pane can line up with it (the beat pulse's
+   * outline, `flow/useBeatGridMirror.ts`) without reaching into the pane.
+   */
+  gridOutlineRef?: (el: HTMLDivElement | null) => void;
   // Whether this editor's own split-view section is the currently active
   // one -- see navigateToFlaggedLine's own doc comment for why the
   // flag-jump controls need this (a click on a still-inactive section's
@@ -976,6 +982,7 @@ export function CM6Editor({
   bindings,
   adapterRef,
   onSurfaceReady,
+  gridOutlineRef,
   isSectionActive = true,
   isEditPaneVisible = true,
   noteId,
@@ -6568,6 +6575,7 @@ export function CM6Editor({
       {hasViewportLines && fontReady && (
         <>
           <div
+            ref={gridOutlineRef}
             className="absolute pointer-events-none thockdown-grid-outline-lines"
             style={{ inset: '0 0 -1px 0', zIndex: 6, backgroundPosition: `${halfCellWidthPx - 1}px ${halfLineHeightPx - 1}px` }}
           />

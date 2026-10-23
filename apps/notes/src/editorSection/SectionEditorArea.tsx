@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { TypingRateOrWordCount } from '../flow/TypingRateOrWordCount'
+import { useBeatGridMirror } from '../flow/useBeatGridMirror'
 import { flowStyleTarget } from '../flow/flowStyle'
 import type { ClipboardEvent, CSSProperties, DragEvent, MouseEvent, MutableRefObject, ReactNode, RefObject } from 'react'
 import { CM6Editor } from '../components/CM6Editor'
@@ -292,6 +293,8 @@ export function SectionEditorArea({
 
   // The beat pulse's shade reads --beat-shade, set on it alone (flow/flowStyle.ts).
   const [beatShadeRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }))
+  // The box outlines pulse with the shade, as a copy inside its layer.
+  const beatGrid = useBeatGridMirror()
   const setStageEl = useCallback((el: HTMLDivElement | null) => {
     sectionContainerRef.current = el
   }, [sectionContainerRef])
@@ -451,6 +454,7 @@ export function SectionEditorArea({
                   bindings={bindings}
                   adapterRef={adapterRef}
                   onSurfaceReady={onEditorSurfaceReady}
+                  gridOutlineRef={beatGrid.gridRef}
                   isSectionActive={isSectionActive}
                   isEditPaneVisible={!isPreviewMode}
                   noteId={activeNoteId}
@@ -551,7 +555,9 @@ export function SectionEditorArea({
             </div>
           </div>
         </div>
-        <div ref={beatShadeRef} className="editor-beat-shade" aria-hidden="true" />
+        <div ref={beatShadeRef} className="editor-beat-shade" aria-hidden="true">
+          <div ref={beatGrid.mirrorRef} className="editor-beat-outline" />
+        </div>
       </main>
       <aside className={`editor-scrollbar-slot${isChapterPanelOpen ? ' chapter-panel-is-open' : ''}${isPreviewMode ? ' is-preview-mode' : ''}`}>
         <div className="editor-scrollbar-slot-inner" aria-hidden={modeStatus ? undefined : true}>

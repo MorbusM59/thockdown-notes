@@ -192,6 +192,9 @@
   --box-shadow-beat-shade:
     inset 0 0 4px rgba(0, 0, 0, 0.9),
     inset 0 0 32px rgba(0, 0, 0, 0.4);
+  /* The box outlines at a full beat, drawn over the grid's own in the same
+     layer as the shade (.editor-beat-outline). */
+  --color-beat-outline: rgba(0, 0, 0, 0.35);
 
   /* Active-state variants: same lineup as above, isolated so active elements
      (.is-active, [data-pressed]) can be tuned separately from resting-state shadows
@@ -288,6 +291,7 @@
   --box-shadow-beat-shade-flip:
     inset 0 0 16px rgba(255, 255, 255, 0.7),
     inset 0 0 48px rgba(255, 255, 255, 0.3);
+  --color-beat-outline-flip: rgba(255, 255, 255, 0.35);
 
   /* Active element styling is truly inverted but with weaker effect. */
 
@@ -623,6 +627,7 @@
 
   --box-shadow-active-editor: var(--box-shadow-active-editor-flip);
   --box-shadow-beat-shade: var(--box-shadow-beat-shade-flip);
+  --color-beat-outline: var(--color-beat-outline-flip);
 
   --color-border-dark-10:  var(--color-border-dark-10-flip);
   --color-border-dark-20:  var(--color-border-dark-20-flip);

@@ -536,6 +536,26 @@
   z-index:        4;
   box-shadow:     var(--box-shadow-beat-shade);
   opacity:        var(--beat-shade, 0);
+  /* Clips the outline copy to the editor's rounded shape. */
+  overflow:       hidden;
+}
+
+/* The box outlines, pulsing WITH the shade: a copy of the grid's outline
+   pattern inside the shade's layer, so it costs no layer of its own and no
+   repaint per frame. useBeatGridMirror keeps its box, tile and phase equal to
+   the real grid's (which sits in the edit pane, where a layer of its own
+   would pull the text into an overlap layer). Its own opacity is
+   --beat-outline, unset and so 1 today. To pulse it on its own: move it out
+   of the shade into a promoted sibling of its own (the shade's rules, minus
+   the box-shadow), and add an 'outline' channel to useBeatFeedback, which
+   writes --beat-outline exactly as the shade's writes --beat-shade. */
+.editor-beat-outline {
+  position:       absolute;
+  pointer-events: none;
+  opacity:        var(--beat-outline, 1);
+  background-image:
+    repeating-linear-gradient(to right, var(--color-beat-outline) 0, var(--color-beat-outline) 3px, transparent 3px, transparent var(--editor-cell-width)),
+    repeating-linear-gradient(to bottom, var(--color-beat-outline) 0, var(--color-beat-outline) 3px, transparent 3px, transparent var(--editor-line-height));
 }
 
 html[data-beat-shade] .editor-section-column.is-active .editor-beat-shade {
