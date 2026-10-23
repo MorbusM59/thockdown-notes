@@ -73,6 +73,77 @@ function house(seconds: number, bpm: number, breakFrom = Infinity, breakTo = Inf
   return { samples: out, kicks }
 }
 
+
+/** One kick: a sine falling from 150Hz to 50Hz over a quarter second, and the beater's click. */
+function addKick(out: Float32Array, t0: number, gain: number, rand: () => number): void {
+  let phase = 0
+  for (let i = 0; i < 0.3 * RATE; i++) {
+    const at = Math.round(t0 * RATE) + i
+    if (at >= out.length) break
+    const t = i / RATE
+    phase += (2 * Math.PI * (50 + 100 * Math.exp(-t / 0.03))) / RATE
+    out[at] += gain * 0.9 * Math.sin(phase) * Math.exp(-t / 0.12)
+    out[at] += gain * 0.25 * rand() * Math.exp(-t / 0.003)
+  }
+}
+
+/** A burst of noise: a snare or clap (`decay` 0.04s) or a hat (0.02s). */
+function addNoise(out: Float32Array, t0: number, gain: number, decay: number, rand: () => number): void {
+  for (let i = 0; i < 4 * decay * RATE; i++) {
+    const at = Math.round(t0 * RATE) + i
+    if (at < out.length) out[at] += gain * rand() * Math.exp(-i / RATE / decay)
+  }
+}
+
+interface Groove {
+  /** Kicks in one bar, as [sixteenth 0-15, gain]; a gain of 0 is a kick dropped. */
+  kicks: (bar: number) => Array<[number, number]>
+  /** Sixteenths carrying a snare. */
+  snares: number[]
+  /** How late the off-beat sixteenths fall, as a share of a sixteenth (1/3 is triplet swing). */
+  swing?: number
+}
+
+/**
+ * A drum pattern over a bass line: kicks and snares where `groove` puts them,
+ * closed hats on every eighth, and a bass note on every beat's second
+ * eighth, so the low band is never only kick. Returns the kick times played.
+ */
+function drums(seconds: number, bpm: number, groove: Groove): Track {
+  const out = new Float32Array(Math.round(seconds * RATE))
+  const rand = noise(5)
+  const sixteenth = 60 / bpm / 4
+  const at = (bar: number, s: number) => (bar * 16 + s + (s % 2 === 1 ? groove.swing ?? 0 : 0)) * sixteenth
+  const kicks: number[] = []
+  for (let bar = 0; at(bar, 0) < seconds; bar++) {
+    for (const [s, gain] of groove.kicks(bar)) {
+      if (gain <= 0) continue
+      addKick(out, at(bar, s), gain, rand)
+      if (gain >= 0.5) kicks.push(at(bar, s))
+    }
+    for (const s of groove.snares) addNoise(out, at(bar, s), 0.35, 0.04, rand)
+    for (let s = 0; s < 16; s += 2) addNoise(out, at(bar, s), 0.08, 0.02, rand)
+    for (let beat = 0; beat < 4; beat++) {
+      const t0 = at(bar, beat * 4 + 2)
+      for (let i = 0; i < 2 * sixteenth * RATE; i++) {
+        const k = Math.round(t0 * RATE) + i
+        if (k >= out.length) break
+        const t = i / RATE
+        out[k] += 0.35 * Math.min(1, t / 0.04) * Math.sin(2 * Math.PI * 49 * t)
+      }
+    }
+  }
+  return { samples: out, kicks: kicks.filter((k) => k < seconds) }
+}
+
+/** The share of `kicks` between `from` and `to` that drew a hit above `floor`, and the hits above `floor` that matched no kick. */
+function score(track: Track, hits: Array<{ at: number; response: number }>, from: number, to: number, floor: number) {
+  const kicks = track.kicks.filter((k) => k > from && k < to)
+  const found = kicks.filter((k) => (hitFor(k, hits)?.response ?? 0) > floor).length / kicks.length
+  const strays = hits.filter((h) => h.at > from && h.at < to && h.response > floor && !track.kicks.some((k) => h.at >= k - EARLY_SEC && h.at <= k + LATE_SEC))
+  return { found, strays }
+}
+
 interface PlayOptions {
   /** How far the hit asked for trails the feed, in seconds. */
   lagSec?: number
@@ -116,8 +187,12 @@ function play(track: Track, contrast: number, options: PlayOptions = {}): { hits
   return { hits, tracker }
 }
 
-/** The hit reported for a kick: the first frame at or after it, so up to a (long) frame late. */
-const LATE_SEC = 0.06
+/**
+ * The hit reported for a kick: the first frame at or after its onset peak,
+ * which trails the kick's first sample by up to 20ms (more where a bass note
+ * overlaps it), so up to that plus a long (50ms) frame late.
+ */
+const LATE_SEC = 0.075
 /** How early a hit may be reported: the hop clock's resolution and the envelope's centre. */
 const EARLY_SEC = 0.02
 
@@ -199,5 +274,50 @@ describe('KickTracker', () => {
     expect(found.length).toBeGreaterThanOrEqual(Math.floor(kicks.length * 0.8))
     const between = hits.filter((h) => h.at > 10 && h.at < 24 && !kicks.some((k) => h.at >= k - EARLY_SEC && h.at <= k + LATE_SEC))
     expect(between).toEqual([])
+  })
+})
+
+describe('KickTracker on grooves other than four on the floor', () => {
+  it.each([
+    ['a jungle break at 172', 172, { kicks: () => [[0, 1], [2, 1], [10, 1], [11, 1]], snares: [4, 12] } as Groove],
+    ['a hip-hop break at 92', 92, { kicks: () => [[0, 1], [7, 1], [10, 1]], snares: [4, 12] } as Groove],
+    ['a swung groove at 118', 118, { kicks: () => [[0, 1], [4, 1], [8, 1], [11, 1], [12, 1]], snares: [4, 12], swing: 1 / 3 } as Groove],
+    ['a 3-3-2 pattern at 125', 125, { kicks: () => [[0, 1], [6, 1], [12, 1]], snares: [4, 12] } as Groove],
+    ['four on the floor with ghost kicks', 126, { kicks: () => [[0, 1], [4, 1], [7, 0.25], [8, 1], [12, 1], [15, 0.25]], snares: [4, 12] } as Groove],
+  ])('fires on every kick of %s and nowhere else', (_name, bpm, groove) => {
+    const track = drums(40, bpm, groove)
+    const { hits } = play(track, 0.5)
+    // 0.3, not the 0.75 of the house tests: these kicks overlap an unducked
+    // bass at the kick's own pitch, and the energy they add over it is
+    // honestly less than a kick alone (the jungle downbeat reads 0.46 every bar).
+    const { found, strays } = score(track, hits, 10, 34, 0.3)
+    expect(found).toBeGreaterThan(0.95)
+    expect(strays).toEqual([])
+  })
+
+  it('locks to the beat of a 3-3-2 pattern rather than to its kicks', () => {
+    const { tracker } = play(drums(30, 125, { kicks: () => [[0, 1], [6, 1], [12, 1]], snares: [4, 12] }), 0.5)
+    expect(tracker.tempoBpm).toBeGreaterThan(124)
+    expect(tracker.tempoBpm).toBeLessThan(126)
+  })
+
+  it('fires on the kicks that are played when one in five is dropped at random', () => {
+    const drop = noise(17)
+    const track = drums(40, 126, { kicks: () => [0, 4, 8, 12].map((s) => [s, drop() > -0.6 ? 1 : 0] as [number, number]), snares: [4, 12] })
+    const { hits } = play(track, 0.5)
+    const { found, strays } = score(track, hits, 10, 34, 0.3)
+    expect(found).toBeGreaterThan(0.95)
+    expect(strays).toEqual([])
+  })
+
+  it('shows nothing but kicks on a hip-hop break while frames are lost', () => {
+    // The hardest case for the lock: a break's comb confidence is a quarter
+    // of a four-on-the-floor track's, and before it locks every onset peak
+    // (hats, snares, bass) used to flash at full strength.
+    const track = drums(40, 92, { kicks: () => [[0, 1], [7, 1], [10, 1]], snares: [4, 12] })
+    const { hits } = play(track, 0.5, { loseEvery: 41 })
+    const { found, strays } = score(track, hits, 10, 34, 0.3)
+    expect(found).toBeGreaterThan(0.8)
+    expect(strays).toEqual([])
   })
 })

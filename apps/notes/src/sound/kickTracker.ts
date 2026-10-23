@@ -25,24 +25,40 @@
  *    them rather than the largest: against the largest, one kick louder than
  *    the rest became the yardstick and the ordinary kicks after it read as
  *    faint for seconds. The fade is what keeps a breakdown faint: the bass
- *    line is measured against kicks that are fading, not forgotten. The onset is the weighted GEOMETRIC MEAN of the three:
- *    large only when all three climb together.
+ *    line is measured against kicks that are fading, not forgotten. The
+ *    onset is the weighted GEOMETRIC MEAN of the three: large only when all
+ *    three climb together.
  *
  * 2. TEMPO AND PHASE, from the whole window (`musicBeat.ts` keeps the scout
  *    seconds ahead, so the window reaches past the listener as well as
- *    behind). The onset strength's autocorrelation over 70..180 BPM, weighted
- *    towards 120 so a half or double tempo does not win on a tie, gives the
- *    beat period; a comb over the window gives the phase. Recomputed every
- *    `GRID_EVERY_HOPS`, not per frame.
+ *    behind). Read from the PULSE, the bands' arithmetic mean, not the
+ *    onset: a snare or hat lifts it too, and those are what tell a break's
+ *    meter from the syncopation of its kicks. A candidate period over
+ *    70..180 BPM is scored by its COMB (the autocorrelation at one to
+ *    `COMB_BEATS` periods), weighted towards 120 so a half or double tempo
+ *    does not win on a tie; a beat and a half (a dotted pattern) repeats at
+ *    two of the four and loses. The comb's mean against the pulse's energy
+ *    is the CONFIDENCE, and an estimate below `MIN_CONFIDENCE` does not
+ *    replace the grid: it holds for `GRID_HOLD_SEC` through a breakdown or a
+ *    busy passage. Recomputed every `GRID_EVERY_HOPS`, not per frame.
  *
- * 3. HITS. When the grid is confident (its autocorrelation peak against the
- *    signal's own energy, `MIN_CONFIDENCE`), a hit is a grid beat and its
- *    strength is the strongest onset within `SNAP_HOPS` of it, so an
- *    off-beat bass note or a stray onset between kicks never fires, and a
- *    breakdown with no kick gives beats of no strength. When it is not, a
- *    hit is any local maximum of the onset strength (picked over `PEAK_HOPS`
- *    either side), which still follows a kick pattern that is not on a
- *    regular grid.
+ * 3. PATTERN. The onset is folded onto one bar of the grid
+ *    (`PATTERN_BINS`, twelve to a beat, so sixteenths and triplet swing
+ *    each have their own positions); the positions it collects at are the
+ *    bar's SLOTS, and each remembers how strong its kicks are
+ *    (`PATTERN_MEMORY_SEC`, rising at once and falling slowly). So a break
+ *    learns its syncopated kicks, a swung groove its late eighth, a ghost
+ *    kick a faint slot, and the bar is EXPECTATION: a slot with no kick on
+ *    it this time gives nothing.
+ *
+ * 4. HITS, only while the grid is locked (before it, nothing tells a kick
+ *    from what surrounds it). A hit is an onset peak (the largest within
+ *    `PEAK_SEC` either side) on a slot, with the low-band strength the slot
+ *    usually carries (`PRESENCE_SHARE`) and an onset shaped like the
+ *    track's kick (`SHAPE_SHARE`), so a breakdown's bass or clap landing on
+ *    a kick slot does not pass. It reports its slot's remembered strength
+ *    when it is within `STEADY_DB` of it, so identical kicks pulse
+ *    identically, and otherwise the lesser of the two.
  *
  * A hit's response is its strength in dB against the window's strong hits
  * (`TOP_SHARE` of them), over a floor `contrast` sets: contrast 0 shows
@@ -81,12 +97,58 @@ const MAX_BPM = 180
 /** The tempo the weighting prefers, and how wide its preference is, in octaves. */
 const PREFERRED_BPM = 120
 const PREFERENCE_OCTAVES = 1
-const GRID_EVERY_HOPS = 48
-const MIN_CONFIDENCE = 0.25
+const GRID_EVERY_HOPS = 96
+/**
+ * The comb confidence (its mean autocorrelation against the pulse's energy)
+ * a tempo estimate needs to replace the grid. Chance alone, over a window of
+ * some 2,800 hops, reaches about 0.02; a four-on-the-floor track reads 0.8
+ * and up, a break with its kicks off the beat about a quarter.
+ */
+const MIN_CONFIDENCE = 0.1
+/** Periods a tempo's comb spans. */
+const COMB_BEATS = 4
+/** How long a grid is held without a confident estimate before the tracker drops to unlocked. */
+const GRID_HOLD_SEC = 20
 /** Hops the grid needs before it is trusted: four seconds at 48kHz. */
 const MIN_GRID_HOPS = 750
 const SNAP_HOPS = 6
-const PEAK_HOPS = 12
+/** Beats in the bar the pattern is learned over. */
+const BEATS_PER_BAR = 4
+/**
+ * Positions in a bar the pattern is learned at: twelve a beat, so straight
+ * sixteenths (every third) and triplets and swung eighths (every fourth) all
+ * fall on a bin of their own.
+ */
+const PATTERN_BINS = BEATS_PER_BAR * 12
+/** A pattern position counts as a place kicks land when it holds this share of the strongest. */
+const SLOT_SHARE = 0.2
+/** An onset at a slot is a kick when its strength is this share of the slot's remembered strength. */
+const PRESENCE_SHARE = 0.35
+/**
+ * A hit within this many dB of its slot's remembered strength is reported AT
+ * that strength, so identical kicks pulse identically despite the measurement
+ * noise of a few dB; one further off (a ghost note, a breakdown's bass or
+ * clap landing on a kick slot) is reported at the lesser of the two.
+ */
+const STEADY_DB = 2
+/**
+ * The share of the track's kick onset (its strongest remembered slot's) an
+ * onset needs to count as a kick at all. Tighter than PRESENCE_SHARE: a
+ * track's kick is one sample played again and again, so its onset shape
+ * varies far less than its loudness, while a bass note's slow attack reaches
+ * about a third of it once a breakdown has lowered the references.
+ */
+const SHAPE_SHARE = 0.5
+/** How long the pattern remembers a position's strength, as a half-life. */
+const PATTERN_MEMORY_SEC = 30
+/**
+ * How far either side an onset must be the largest to be a kick's peak, in
+ * seconds: half a sixteenth at MAX_BPM. Wider, and two kicks a sixteenth
+ * apart (a break's doubled kick) merge into one; narrower, and the click's
+ * early maximum is a peak of its own ahead of the low bands'. Fixed in time
+ * rather than read off the tempo, which can lock at half or double.
+ */
+const PEAK_SEC = 60 / MAX_BPM / 4 / 2
 const TOP_SHARE = 0.25
 /** The span of strengths, in dB below the strong hits, that contrast 0 lets through; contrast 1 lets through only the strong hits. */
 const CONTRAST_RANGE_DB = 20
@@ -170,6 +232,11 @@ class OnsetBand {
   }
 
   /** Closes hop number `index` (from 0 since the last reset): the band's rise, as a share of its strong rises. */
+  /** This hop's rise in the band's energy, as closeHop last measured it. */
+  get rise(): number {
+    return this.lastRise
+  }
+
   closeHop(index: number): number {
     this.recentEnergy[index % ENVELOPE_HOPS] = this.hopEnergy / HOP
     this.hopEnergy = 0
@@ -231,6 +298,8 @@ export class KickTracker {
   lastRestart: KickRestart | null = null
 
   private readonly hopSec: number
+  /** PEAK_SEC in hops. */
+  private readonly peakHops: number
   private readonly bands: OnsetBand[]
   private readonly weights: number[]
   private hopFill = 0
@@ -244,8 +313,14 @@ export class KickTracker {
    * landing on every other kick would make the pulse alternate.
    */
   private readonly strength = new Float32Array(CAPACITY)
-  /** The last grid beat reported, in absolute hops, so a grid nudged between two calls cannot report it twice. */
-  private lastBeat = NaN
+  /**
+   * Per hop, the weighted ARITHMETIC mean of every band's normalised rise:
+   * the broadband pulse the tempo is read from. Unlike the onset (a geometric
+   * mean, which only a kick lifts in all three bands at once) a snare or hat
+   * lifts it too, and those are what tell a break's meter from the
+   * syncopation of its kicks alone.
+   */
+  private readonly pulse = new Float32Array(CAPACITY)
   private head = 0
   private count = 0
   /** Absolute index of the oldest kept hop, and the media time at absolute index 0. */
@@ -260,6 +335,36 @@ export class KickTracker {
   private period = NaN
   private phase = NaN
   private confidence = 0
+  /** The absolute hop the grid was last confidently estimated at. */
+  private confidentAt = -Infinity
+  /**
+   * The learned bar, per PATTERN_BINS position: whether kicks land there
+   * (`slotOnset` above 0), the onset a kick there typically shows, and the
+   * strength it typically has. A slot's hits are reported at its TYPICAL
+   * strength, so identical kicks pulse identically whatever the bass line
+   * under one of them did to its measurement.
+   */
+  private readonly slotOnset = new Float32Array(PATTERN_BINS)
+  private readonly slotStrength = new Float32Array(PATTERN_BINS)
+  /**
+   * The pattern's MEMORY: each position's strength, averaged over
+   * PATTERN_MEMORY_SEC rather than over the window. A hit is reported at
+   * this level, so the groove the track has established is what is
+   * expected: through a breakdown the bass line landing on new positions
+   * comes up only as slowly as it persists, and the kicks are at full
+   * strength the moment they return.
+   */
+  private readonly slotMemory = new Float32Array(PATTERN_BINS)
+  private readonly onsetMemorySum = new Float64Array(PATTERN_BINS)
+  private readonly onsetMemory = new Float32Array(PATTERN_BINS)
+  /** The onset of the bar's strongest remembered slot: what a kick looks like in this track. */
+  private kickShape = 0
+  private readonly slotMemorySum = new Float64Array(PATTERN_BINS)
+  private memoryWeight = 0
+  /** The grid hop the bar is folded from, kept on the same beat of the bar across updates (NaN: none yet). */
+  private barPhase = NaN
+  /** The last onset reported, in absolute hops, so a grid nudged between two calls cannot report it twice. */
+  private lastPeak = NaN
   private strongHit = 0
   /** The media time `strongHit` was last raised at, for its decay. */
   private strongHitTime = 0
@@ -268,6 +373,7 @@ export class KickTracker {
 
   constructor(sampleRate: number) {
     this.hopSec = HOP / sampleRate
+    this.peakHops = Math.max(2, Math.round(PEAK_SEC / this.hopSec))
     const memoryHops = Math.round(BAND_MEMORY_SEC / this.hopSec)
     this.bands = ONSET_BANDS.map(([hz, q]) => new OnsetBand(sampleRate, hz, q, memoryHops))
     this.weights = ONSET_BANDS.map(([, , weight]) => weight)
@@ -285,10 +391,20 @@ export class KickTracker {
     this.period = NaN
     this.phase = NaN
     this.confidence = 0
+    this.confidentAt = -Infinity
     this.strongHit = 0
     this.strongHitTime = 0
     this.lastAsked = NaN
-    this.lastBeat = NaN
+    this.lastPeak = NaN
+    this.slotOnset.fill(0)
+    this.slotStrength.fill(0)
+    this.slotMemory.fill(0)
+    this.onsetMemorySum.fill(0)
+    this.onsetMemory.fill(0)
+    this.kickShape = 0
+    this.slotMemorySum.fill(0)
+    this.memoryWeight = 0
+    this.barPhase = NaN
   }
 
   /**
@@ -347,29 +463,35 @@ export class KickTracker {
       if (++this.hopFill === HOP) {
         this.hopFill = 0
         let product = 1
+        let pulse = 0
         let low = 1
         let lowWeight = 0
         for (let b = 0; b < bands.length; b++) {
           const rise = bands[b].closeHop(this.hopIndex)
           product *= rise ** this.weights[b]
+          pulse += rise * this.weights[b]
           if (b < LOW_BANDS) {
-            low *= rise ** this.weights[b]
+            // Strength is in the band's own energy, not normalised: it is
+            // compared across the window and against a remembered level,
+            // which a reference that moves with the music would make drift.
+            low *= bands[b].rise ** this.weights[b]
             lowWeight += this.weights[b]
           }
         }
         this.hopIndex++
-        this.pushOnset(product, low ** (1 / lowWeight))
+        this.pushOnset(product, pulse, low ** (1 / lowWeight))
       }
     }
   }
 
-  private pushOnset(value: number, strength: number): void {
+  private pushOnset(value: number, pulse: number, strength: number): void {
     if (this.count === CAPACITY) {
       this.head = (this.head + 1) % CAPACITY
       this.count--
       this.start++
     }
     this.onset[(this.head + this.count) % CAPACITY] = value
+    this.pulse[(this.head + this.count) % CAPACITY] = pulse
     this.strength[(this.head + this.count) % CAPACITY] = strength
     this.count++
     if (++this.hopsSinceGrid >= GRID_EVERY_HOPS) {
@@ -392,37 +514,55 @@ export class KickTracker {
       return
     }
     let mean = 0
-    for (let k = 0; k < n; k++) mean += this.onset[(this.head + k) % CAPACITY]
+    for (let k = 0; k < n; k++) mean += this.pulse[(this.head + k) % CAPACITY]
     mean /= n
     let zero = 0
     for (let k = 0; k < n; k++) {
-      const d = this.onset[(this.head + k) % CAPACITY] - mean
+      const d = this.pulse[(this.head + k) % CAPACITY] - mean
       zero += d * d
     }
     if (zero <= 0) {
-      this.period = NaN
+      // Silence: nothing to estimate from, and the grid holds as for any unconfident window.
       this.confidence = 0
       return
     }
     const hopsPerMinute = 60 / this.hopSec
     const minLag = Math.floor(hopsPerMinute / MAX_BPM)
     const maxLag = Math.ceil(hopsPerMinute / MIN_BPM)
-    const raw = new Float64Array(maxLag + 2)
-    let best = -1
-    let bestScore = -Infinity
-    for (let lag = minLag - 1; lag <= maxLag + 1; lag++) {
+    // The autocorrelation out to COMB_BEATS periods of the slowest tempo.
+    const lastLag = Math.min(n - 1, COMB_BEATS * maxLag + 1)
+    const raw = new Float64Array(lastLag + 1)
+    for (let lag = minLag - 1; lag <= lastLag; lag++) {
       let sum = 0
       for (let k = lag; k < n; k++) {
-        sum += (this.onset[(this.head + k) % CAPACITY] - mean) * (this.onset[(this.head + k - lag) % CAPACITY] - mean)
+        sum += (this.pulse[(this.head + k) % CAPACITY] - mean) * (this.pulse[(this.head + k - lag) % CAPACITY] - mean)
       }
       // Normalised by the overlap, so a long lag is not penalised for having fewer terms.
       raw[lag] = sum / (n - lag)
-      if (lag < minLag || lag > maxLag) continue
+    }
+    const at = (lag: number): number => {
+      const below = Math.floor(lag)
+      if (below + 1 > lastLag) return 0
+      return raw[below] + (raw[below + 1] - raw[below]) * (lag - below)
+    }
+    // A candidate period is scored by its COMB: the autocorrelation at one,
+    // two, three and four periods. A true beat repeats at every multiple; a
+    // period of a beat and a half (the syncopation of a break, or a dotted
+    // pattern) repeats at two of them and not at one or three, which on the
+    // autocorrelation alone it can win (a trace locked 84 BPM onto a 125 BPM
+    // track exactly so).
+    let best = -1
+    let bestScore = -Infinity
+    let bestComb = 0
+    for (let lag = minLag; lag <= maxLag; lag++) {
+      let comb = 0
+      for (let m = 1; m <= COMB_BEATS; m++) comb += at(m * lag)
       const octaves = Math.log2(hopsPerMinute / lag / PREFERRED_BPM) / PREFERENCE_OCTAVES
-      const score = raw[lag] * Math.exp(-0.5 * octaves * octaves)
+      const score = comb * Math.exp(-0.5 * octaves * octaves)
       if (score > bestScore) {
         bestScore = score
         best = lag
+        bestComb = comb
       }
     }
     // Parabolic refinement: a period between two whole hops is the norm (128 BPM at 48kHz is 87.9 hops).
@@ -431,7 +571,22 @@ export class KickTracker {
     const r = raw[best + 1]
     const curvature = l - 2 * c + r
     const period = best + (curvature < 0 ? (0.5 * (l - r)) / curvature : 0)
-    this.confidence = c / (zero / n)
+    // Confidence in the quantity that chose the period: the comb's mean
+    // against the signal's energy. The autocorrelation at one period alone
+    // reads a break, whose kicks do not repeat every beat, as no beat at all.
+    this.confidence = bestComb / COMB_BEATS / (zero / n)
+    // An estimate the window is not confident of does not replace the grid:
+    // the grid holds (period and phase both) for GRID_HOLD_SEC, so a
+    // breakdown or a busy passage carries the established beat through
+    // rather than dropping to unlocked and back on every update.
+    if (this.confidence < MIN_CONFIDENCE) {
+      if (!Number.isNaN(this.period)) {
+        this.placeBar()
+        this.learnPattern()
+      }
+      return
+    }
+    this.confidentAt = this.start + n
     this.period = period
     // Phase: the offset whose comb of beats across the window collects the most onset.
     const steps = Math.ceil(period)
@@ -446,9 +601,15 @@ export class KickTracker {
       }
     }
     this.phase = this.start + bestPhase
-    // The strong hits' level: the TOP_SHARE quantile of the grid beats' strengths.
+    this.placeBar()
+    this.learnPattern()
+    // The strong hits' level: the TOP_SHARE quantile of the strengths of the
+    // onsets the pattern accepts.
     const strengths: number[] = []
-    for (let beat = this.phase; beat < this.start + n; beat += period) strengths.push(this.snapped(beat))
+    for (let k = this.start; k < this.start + n; k++) {
+      const accepted = this.acceptedStrength(k)
+      if (accepted > 0) strengths.push(accepted)
+    }
     strengths.sort((a, b) => b - a)
     const current = strengths[Math.min(strengths.length - 1, Math.floor(strengths.length * TOP_SHARE))] ?? 0
     // Remembered with a slow decay, so through a breakdown the bass line is
@@ -462,12 +623,161 @@ export class KickTracker {
     }
   }
 
-  /** The strength of the strongest onset within SNAP_HOPS of a grid beat. */
-  private snapped(beat: number): number {
-    const centre = Math.round(beat)
-    let best = centre
-    for (let k = centre - SNAP_HOPS; k <= centre + SNAP_HOPS; k++) if (this.at(k) > this.at(best)) best = k
-    return this.strengthAt(best)
+  /**
+   * Learns where in the bar kicks land and how strong each is. The onset
+   * strength is folded onto one bar of the grid and averaged per position; a
+   * position that is a local maximum holding SLOT_SHARE of the strongest is
+   * a SLOT. Each onset peak in the window is then matched to the nearest slot
+   * within SNAP_HOPS, and a slot learns the mean onset and strength of its
+   * matches. A straight four-on-the-floor learns four slots, a break its
+   * syncopated kicks, a swung groove the late eighth where it actually
+   * falls, and a ghost kick a slot of small strength. The bar's first beat
+   * is wherever the fold starts: the pattern is matched in the frame it was
+   * learned in, so which beat is called the first does not matter.
+   */
+  private learnPattern(): void {
+    const sums = new Float64Array(PATTERN_BINS)
+    const counts = new Float64Array(PATTERN_BINS)
+    for (let k = 0; k < this.count; k++) {
+      const bin = this.binOf(this.start + k)
+      sums[bin] += this.onset[(this.head + k) % CAPACITY]
+      counts[bin]++
+    }
+    let strongest = 0
+    const means = new Float64Array(PATTERN_BINS)
+    for (let b = 0; b < PATTERN_BINS; b++) {
+      means[b] = counts[b] > 0 ? sums[b] / counts[b] : 0
+      strongest = Math.max(strongest, means[b])
+    }
+    const isSlot = new Uint8Array(PATTERN_BINS)
+    for (let b = 0; b < PATTERN_BINS; b++) {
+      const before = means[(b + PATTERN_BINS - 1) % PATTERN_BINS]
+      const after = means[(b + 1) % PATTERN_BINS]
+      isSlot[b] = strongest > 0 && means[b] >= before && means[b] > after && means[b] >= SLOT_SHARE * strongest ? 1 : 0
+    }
+    const onsetSum = new Float64Array(PATTERN_BINS)
+    const strengthSum = new Float64Array(PATTERN_BINS)
+    const matches = new Float64Array(PATTERN_BINS)
+    for (let k = this.start; k < this.start + this.count; k++) {
+      if (!this.isOnsetPeak(k)) continue
+      const slot = this.nearestSlot(k, isSlot)
+      if (slot < 0) continue
+      onsetSum[slot] += this.at(k)
+      strengthSum[slot] += this.strengthAt(k)
+      matches[slot]++
+    }
+    // An exponential average with its start-up bias divided out (the weight
+    // the average has accumulated so far), so the memory describes the
+    // pattern from the first update rather than ramping up from nothing over
+    // PATTERN_MEMORY_SEC, which made every onset at a slot pass as present.
+    const keep = 0.5 ** ((GRID_EVERY_HOPS * this.hopSec) / PATTERN_MEMORY_SEC)
+    this.memoryWeight = keep * this.memoryWeight + 1
+    let kickShape = 0
+    for (let b = 0; b < PATTERN_BINS; b++) {
+      this.slotOnset[b] = matches[b] > 0 ? onsetSum[b] / matches[b] : 0
+      this.slotStrength[b] = matches[b] > 0 ? strengthSum[b] / matches[b] : 0
+      // Rises at once, falls over PATTERN_MEMORY_SEC: a slot hit at full
+      // strength is unambiguous evidence (a drop lands at full strength on its
+      // first kick), while a quiet one may only be a breakdown.
+      this.slotMemorySum[b] = Math.max(keep * this.slotMemorySum[b] + this.slotStrength[b], this.slotStrength[b] * this.memoryWeight)
+      this.slotMemory[b] = this.slotMemorySum[b] / this.memoryWeight
+      this.onsetMemorySum[b] = Math.max(keep * this.onsetMemorySum[b] + this.slotOnset[b], this.slotOnset[b] * this.memoryWeight)
+      this.onsetMemory[b] = this.onsetMemorySum[b] / this.memoryWeight
+      kickShape = Math.max(kickShape, this.onsetMemory[b])
+    }
+    this.kickShape = kickShape
+  }
+
+  /**
+   * Places the bar on the new grid: of the four beats the new phase could
+   * call the first, the one nearest the bar's previous first beat, so the
+   * pattern's memory keeps describing the same positions. A grid whose
+   * period moved is still matched this way; the positions are shares of a
+   * bar, so they scale with it.
+   */
+  private placeBar(): void {
+    const bar = BEATS_PER_BAR * this.period
+    if (Number.isNaN(this.barPhase)) {
+      this.barPhase = this.phase
+      return
+    }
+    let best = this.phase
+    let bestDistance = Infinity
+    for (let j = 0; j < BEATS_PER_BAR; j++) {
+      const candidate = this.phase + j * this.period
+      const offset = (((candidate - this.barPhase) % bar) + bar) % bar
+      const distance = Math.min(offset, bar - offset)
+      if (distance < bestDistance) {
+        bestDistance = distance
+        best = candidate
+      }
+    }
+    this.barPhase = best
+  }
+
+  /** The pattern position of absolute hop `index`. */
+  private binOf(index: number): number {
+    const bar = BEATS_PER_BAR * this.period
+    const position = (((index - this.barPhase) % bar) + bar) % bar
+    return Math.floor((position / bar) * PATTERN_BINS) % PATTERN_BINS
+  }
+
+  /**
+   * How many bins either side a hit may land from its slot: SNAP_HOPS of timing.
+   */
+  private slotReach(): number {
+    return Math.ceil((SNAP_HOPS / (BEATS_PER_BAR * this.period)) * PATTERN_BINS)
+  }
+
+  /** The slot nearest hop `index` within SNAP_HOPS (`isSlot` marks them), or -1. */
+  private nearestSlot(index: number, isSlot: ArrayLike<number>): number {
+    const reach = this.slotReach()
+    const centre = this.binOf(index)
+    for (let d = 0; d <= reach; d++) {
+      for (const b of d === 0 ? [centre] : [centre - d, centre + d]) {
+        const bin = (b + PATTERN_BINS) % PATTERN_BINS
+        if (isSlot[bin]) return bin
+      }
+    }
+    return -1
+  }
+
+  /**
+   * The strength the pattern grants an onset peak at hop `index`, or 0: the
+   * peak must land on a slot, with the strength that slot usually carries
+   * and the shape of the track's kick (header, stage 4). So a kick the track
+   * leaves out gives nothing, a ghost kick its slot's faint level, and an
+   * onset between the learned positions never fires.
+   */
+  private acceptedStrength(index: number): number {
+    if (!this.isOnsetPeak(index)) return 0
+    const slot = this.nearestSlot(index, this.slotOnset)
+    if (slot < 0) return 0
+    // Read over the same reach a hit is matched within, so the memory moves
+    // with a slot that moves a bin between folds.
+    const reach = this.slotReach()
+    let remembered = 0
+    for (let d = -reach; d <= reach; d++) remembered = Math.max(remembered, this.slotMemory[(slot + d + PATTERN_BINS) % PATTERN_BINS])
+    // Present only with the low-band strength the slot usually carries AND an
+    // onset shaped like the bar's kick (its strongest remembered slot, not
+    // this one, which in a breakdown learns whatever lands on it): the
+    // breakdown's bass rises in the kick's band about as hard as the kick,
+    // but slowly and without the click, so its onset is a fraction of one.
+    const measured = this.strengthAt(index)
+    if (measured < PRESENCE_SHARE * remembered || this.at(index) < SHAPE_SHARE * this.kickShape) return 0
+    // Never more than the slot usually carries, never more than was measured.
+    return Math.abs(10 * Math.log10(measured / remembered)) <= STEADY_DB ? remembered : Math.min(measured, remembered)
+  }
+
+  /** True when the onset at `index` is the largest within a sixteenth's half either side (ties to the earlier). */
+  private isOnsetPeak(index: number): boolean {
+    const value = this.at(index)
+    if (value <= 0) return false
+    const reach = this.peakHops
+    for (let j = index - reach; j <= index + reach; j++) {
+      if (j !== index && (this.at(j) > value || (this.at(j) === value && j < index))) return false
+    }
+    return true
   }
 
   private strengthAt(index: number): number {
@@ -486,7 +796,7 @@ export class KickTracker {
   }
 
   private isLocked(): boolean {
-    return !Number.isNaN(this.period) && this.confidence >= MIN_CONFIDENCE
+    return !Number.isNaN(this.period) && (this.start + this.count - this.confidentAt) * this.hopSec < GRID_HOLD_SEC
   }
 
   /**
@@ -501,25 +811,15 @@ export class KickTracker {
     const from = (previous - this.originTime) / this.hopSec
     const to = (time - this.originTime) / this.hopSec
     let strength = 0
-    if (this.isLocked()) {
-      // The first grid beat after `from`, and every one up to `to`.
-      let beat = this.phase + Math.ceil((from - this.phase) / this.period) * this.period
-      if (beat <= from) beat += this.period
-      for (; beat <= to; beat += this.period) {
-        if (beat - this.lastBeat < this.period / 2) continue
-        this.lastBeat = beat
-        strength = Math.max(strength, this.snapped(beat))
-      }
-    } else {
-      for (let k = Math.floor(from) + 1; k <= Math.floor(to); k++) {
-        const value = this.at(k)
-        if (value <= 0) continue
-        let isPeak = true
-        for (let j = k - PEAK_HOPS; j <= k + PEAK_HOPS && isPeak; j++) {
-          if (j !== k && (this.at(j) > value || (this.at(j) === value && j < k))) isPeak = false
-        }
-        if (isPeak) strength = Math.max(strength, this.strengthAt(k))
-      }
+    // Until the beat is known there is nothing to tell a kick from the hats
+    // and bass around it, so nothing is shown: every onset peak, each its own
+    // reference, is the erratic flicker a beat display must never be.
+    if (!this.isLocked()) return 0
+    for (let k = Math.max(Math.floor(from) + 1, Number.isNaN(this.lastPeak) ? -Infinity : this.lastPeak + 1); k <= Math.floor(to); k++) {
+      const value = this.acceptedStrength(k)
+      if (value <= 0) continue
+      this.lastPeak = k
+      strength = Math.max(strength, value)
     }
     if (strength <= 0) return 0
     // In dB against the strong hits, so a kick that reads somewhat weaker
