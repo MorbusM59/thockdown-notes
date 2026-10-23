@@ -21,9 +21,10 @@ interface Track {
  * Four-on-the-floor house: a pitched-down kick on every beat, an off-beat
  * bass line in the kick's own band (ducked by the kick and swelling back, as
  * sidechained bass does), off-beat open hats, a clap on two and four, and a
- * kick-free breakdown between `breakFrom` and `breakTo`.
+ * kick-free breakdown between `breakFrom` and `breakTo`. `kickGain` scales
+ * the kick that starts at a given time.
  */
-function house(seconds: number, bpm: number, breakFrom = Infinity, breakTo = Infinity): Track {
+function house(seconds: number, bpm: number, breakFrom = Infinity, breakTo = Infinity, kickGain: (t0: number) => number = () => 1): Track {
   const n = Math.round(seconds * RATE)
   const out = new Float32Array(n)
   const beat = 60 / bpm
@@ -36,14 +37,15 @@ function house(seconds: number, bpm: number, breakFrom = Infinity, breakTo = Inf
     // Kick: a sine falling from 150Hz to 50Hz, decaying over a quarter second.
     if (!inBreak) {
       let phase = 0
+      const gain = kickGain(t0)
       for (let i = 0; i < 0.3 * RATE; i++) {
         const at = Math.round(t0 * RATE) + i
         if (at >= n) break
         const t = i / RATE
         phase += (2 * Math.PI * (50 + 100 * Math.exp(-t / 0.03))) / RATE
-        out[at] += 0.9 * Math.sin(phase) * Math.exp(-t / 0.12)
+        out[at] += gain * 0.9 * Math.sin(phase) * Math.exp(-t / 0.12)
         // The beater's click: a few milliseconds of noise.
-        out[at] += 0.25 * rand() * Math.exp(-t / 0.003)
+        out[at] += gain * 0.25 * rand() * Math.exp(-t / 0.003)
       }
     }
     // Bass: a 55/73Hz note on the off-beat, rising over 60ms, held, ducked into the next kick.
@@ -71,15 +73,27 @@ function house(seconds: number, bpm: number, breakFrom = Infinity, breakTo = Inf
   return { samples: out, kicks }
 }
 
+interface PlayOptions {
+  /** How far the hit asked for trails the feed, in seconds. */
+  lagSec?: number
+  /** Error in the media time each feed is stamped with, uniform within ±this, in seconds. */
+  stampJitterSec?: number
+  /** Every this many frames, the frame's samples are lost and only their count is reported. */
+  loseEvery?: number
+}
+
 /**
  * Plays a track through the tracker the way `musicBeat.ts` does: fed in
  * display-frame chunks of uneven size (a 60Hz display with jitter and the odd
  * long frame), and asked at each frame for the hit heard `lagSec` behind the
  * feed. Returns every hit reported, with its media time and response.
  */
-function play(track: Track, contrast: number, lagSec = 5): { hits: Array<{ at: number; response: number }>; tracker: KickTracker } {
+function play(track: Track, contrast: number, options: PlayOptions = {}): { hits: Array<{ at: number; response: number }>; tracker: KickTracker } {
+  const { lagSec = 5, stampJitterSec = 0, loseEvery = 0 } = options
   const tracker = new KickTracker(RATE)
   const rand = noise(3)
+  const jitter = noise(11)
+  let lost = 0
   const hits: Array<{ at: number; response: number }> = []
   let fed = 0
   let frame = 0
@@ -87,7 +101,12 @@ function play(track: Track, contrast: number, lagSec = 5): { hits: Array<{ at: n
     frame++
     const chunk = frame % 97 === 0 ? 2400 : Math.round(800 + 120 * rand())
     const end = Math.min(track.samples.length, fed + chunk)
-    tracker.feed(track.samples.subarray(fed, end), 0, (end - 1) / RATE)
+    if (loseEvery > 0 && frame % loseEvery === 0) {
+      lost += end - fed
+    } else {
+      tracker.feed(track.samples.subarray(fed, end), 0, (end - 1) / RATE + stampJitterSec * jitter(), lost)
+      lost = 0
+    }
     fed = end
     const heard = end / RATE - lagSec
     if (heard <= 0) continue
@@ -134,7 +153,7 @@ describe('KickTracker', () => {
 
   it('reports a hit within a frame of the kick', () => {
     const track = house(20, 128)
-    const { hits } = play(track, 0.5, 5)
+    const { hits } = play(track, 0.5)
     // Asked every frame (about 17ms apart), a hit lands within a frame of the
     // onset peak, which trails the kick's first sample by about 15ms. A
     // picture trailing its sound by under 45ms is not perceived as late
@@ -144,5 +163,41 @@ describe('KickTracker', () => {
       expect(offset).toBeGreaterThanOrEqual(0)
       expect(offset).toBeLessThan(0.04)
     }
+  })
+
+  it('keeps firing on every kick after one far louder than the rest', () => {
+    // A kick is judged against the band's recent kicks, so one outlier must
+    // count as a full hit and leave the ones after it reading as before.
+    const track = house(30, 128, Infinity, Infinity, (t0) => (Math.abs(t0 - 15) < 0.01 ? 3 : 1))
+    const { hits } = play(track, 0.5)
+    for (const kick of track.kicks.filter((k) => k > 12 && k < 24)) {
+      expect(hitFor(kick, hits)?.response ?? 0, `kick at ${kick.toFixed(3)}`).toBeGreaterThan(0.75)
+    }
+  })
+
+  it('stays on the kicks when the media time it is fed jitters by 10ms a frame', () => {
+    // The browser reports a media element's position with jitter of several
+    // milliseconds, more than a hop. The hop clock must follow the samples,
+    // with the media time only aligning it, or the jitter walks it off the music.
+    const track = house(30, 128)
+    const { hits } = play(track, 0.5, { stampJitterSec: 0.01 })
+    const kicks = track.kicks.filter((k) => k > 6 && k < 24)
+    for (const kick of kicks) expect(hitFor(kick, hits)?.response ?? 0, `kick at ${kick.toFixed(3)}`).toBeGreaterThan(0.75)
+    const between = hits.filter((h) => h.at > 6 && h.at < 24 && !kicks.some((k) => h.at >= k - EARLY_SEC && h.at <= k + LATE_SEC))
+    expect(between).toEqual([])
+  })
+
+  it('keeps time across frames whose samples were lost', () => {
+    const track = house(30, 128)
+    const { hits } = play(track, 0.5, { loseEvery: 41 })
+    const kicks = track.kicks.filter((k) => k > 10 && k < 24)
+    const found = kicks.filter((k) => (hitFor(k, hits)?.response ?? 0) > 0.5)
+    // A kick in a lost frame, or in the ~40ms the bands take to start over
+    // after one, is not seen: about one kick in six at a loss every 41 frames.
+    // What must hold is the clock: every kick that is seen lands on time and
+    // nothing lands between them.
+    expect(found.length).toBeGreaterThanOrEqual(Math.floor(kicks.length * 0.8))
+    const between = hits.filter((h) => h.at > 10 && h.at < 24 && !kicks.some((k) => h.at >= k - EARLY_SEC && h.at <= k + LATE_SEC))
+    expect(between).toEqual([])
   })
 })
