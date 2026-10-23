@@ -18,9 +18,14 @@
  *    reading does not ripple with the phase of one cycle in the window); its
  *    rise is how far that stands above its lowest over the last `RISE_HOPS`,
  *    in linear energy so a sound starting from silence is not an infinite
- *    climb; and each rise is measured against that band's own recent strong
- *    rises (`BAND_MEMORY_SEC`), so the bands' loudness in a given mix does
- *    not matter. The onset is the weighted GEOMETRIC MEAN of the three:
+ *    climb; and each rise is measured against that band's own recent PEAK
+ *    rises (one per climb, each fading with a half-life of
+ *    `BAND_MEMORY_SEC`), capped at 1, so the bands' loudness in a given mix
+ *    does not matter. The yardstick is the `REFERENCE_RANK`-th largest of
+ *    them rather than the largest: against the largest, one kick louder than
+ *    the rest became the yardstick and the ordinary kicks after it read as
+ *    faint for seconds. The fade is what keeps a breakdown faint: the bass
+ *    line is measured against kicks that are fading, not forgotten. The onset is the weighted GEOMETRIC MEAN of the three:
  *    large only when all three climb together.
  *
  * 2. TEMPO AND PHASE, from the whole window (`musicBeat.ts` keeps the scout
@@ -62,8 +67,13 @@ const ONSET_BANDS: ReadonlyArray<readonly [number, number, number]> = [
 ]
 /** The first bands of ONSET_BANDS, which alone say how strong a kick is. */
 const LOW_BANDS = 2
-/** How long a band remembers its strong rises, as a half-life, for normalising the next. */
+/** The half-life of a band's remembered peak rises, for normalising the next. */
 const BAND_MEMORY_SEC = 4
+/**
+ * Which of a band's remembered peak rises (largest first, as faded) a rise
+ * is measured against: the third, so up to two outliers do not set it.
+ */
+const REFERENCE_RANK = 3
 /** Window kept, in hops: a little over ten seconds at 48kHz. */
 const CAPACITY = 2048
 const MIN_BPM = 70
@@ -82,10 +92,21 @@ const TOP_SHARE = 0.25
 const CONTRAST_RANGE_DB = 20
 /** How slowly the strong hits' remembered level fades once the window holds nothing as strong. */
 const STRONG_HIT_HALF_LIFE_SEC = 20
-/** A gap in the feed longer than this restarts the tracker rather than being filled with silence. */
+/** Samples lost in one go beyond this restart the tracker rather than being filled with silence. */
 const MAX_GAP_SEC = 1
-/** Media time this far behind the samples fed (a stall) restarts the tracker. */
-const MAX_STALL_SEC = 0.25
+/** Media time this far from where the samples fed put it (a stall or a seek) restarts the tracker. */
+const MAX_DRIFT_SEC = 0.25
+/**
+ * How many feeds the media-time alignment averages over: each feed moves it
+ * by this share of how far its stamp disagrees. The stamps jitter by several
+ * milliseconds, more than a hop; the samples themselves do not.
+ */
+const ALIGN_FEEDS = 60
+
+/** The REFERENCE_RANK largest of `keys`, largest first (all of them, while fewer). */
+function topKeys(keys: readonly number[]): number[] {
+  return [...keys].sort((a, b) => b - a).slice(0, REFERENCE_RANK)
+}
 
 /** One band's band-pass, envelope and rise. */
 class OnsetBand {
@@ -100,10 +121,21 @@ class OnsetBand {
   private hopEnergy = 0
   private readonly recentEnergy = new Float64Array(ENVELOPE_HOPS)
   private readonly recentLevel = new Float64Array(RISE_HOPS)
-  /** The band's strong rise, decaying by `memoryDecay` a hop. */
-  private strongRise = 0
+  /** The last two rises, to find the hop a climb peaked at. */
+  private lastRise = 0
+  private riseBefore = 0
+  /**
+   * The band's remembered peak rises, oldest first, each as a KEY: log2 of
+   * the rise plus the hop it peaked at over `memoryHops` (the half-life in
+   * hops). A peak's faded value now is 2^(key - hop / memoryHops), so the
+   * keys compare peaks as faded at any moment, and one peak older and
+   * smaller than another stays smaller for good.
+   */
+  private peakKeys: number[] = []
+  /** Hops closed since the last reset; unlike a closeHop index, not restarted by a gap. */
+  private hop = 0
 
-  constructor(sampleRate: number, hz: number, q: number, private readonly memoryDecay: number) {
+  constructor(sampleRate: number, hz: number, q: number, private readonly memoryHops: number) {
     // RBJ band-pass, constant 0dB peak gain.
     const w = (2 * Math.PI * hz) / sampleRate
     const alpha = Math.sin(w) / (2 * q)
@@ -117,7 +149,10 @@ class OnsetBand {
   reset(): void {
     this.settle()
     this.hopEnergy = 0
-    this.strongRise = 0
+    this.lastRise = 0
+    this.riseBefore = 0
+    this.peakKeys = []
+    this.hop = 0
   }
 
   /** Clears the filter's memory, after a gap whose samples were never seen. */
@@ -148,12 +183,53 @@ class OnsetBand {
     this.recentLevel[index % RISE_HOPS] = level
     // Until the envelope spans its full window the first hops would read as a climb from nothing.
     const rise = index >= ENVELOPE_HOPS ? level - trough : 0
-    this.strongRise = Math.max(rise, this.strongRise * this.memoryDecay)
-    return this.strongRise > 0 ? rise / this.strongRise : 0
+    // The previous hop was a climb's peak when it stood above the hop before
+    // it and at least as high as this one.
+    if (this.lastRise > 0 && this.lastRise > this.riseBefore && this.lastRise >= rise) {
+      this.remember(Math.log2(this.lastRise) + (this.hop - 1) / this.memoryHops)
+    }
+    this.riseBefore = this.lastRise
+    this.lastRise = rise
+    this.hop++
+    if (rise <= 0) return 0
+    const keys = this.peakKeys
+    if (keys.length === 0) return 1
+    // The REFERENCE_RANK-th largest key, or the smallest while fewer are remembered.
+    const largest = topKeys(keys)
+    const reference = 2 ** (largest[largest.length - 1] - this.hop / this.memoryHops)
+    return Math.min(1, rise / reference)
+  }
+
+  /**
+   * Adds a peak's key, forgetting every older peak that REFERENCE_RANK newer
+   * ones now outrank: it can never be among the largest again, so the list
+   * stays a handful long however many small climbs a band makes.
+   */
+  private remember(key: number): void {
+    this.peakKeys.push(key)
+    const kept: number[] = []
+    let newer: number[] = []
+    for (let i = this.peakKeys.length - 1; i >= 0; i--) {
+      const own = this.peakKeys[i]
+      if (newer.length < REFERENCE_RANK || own > newer[REFERENCE_RANK - 1]) kept.push(own)
+      newer = topKeys([...newer, own])
+    }
+    this.peakKeys = kept.reverse()
   }
 }
 
+/** Why a feed restarted the tracker: too many samples lost, or a stamp too far from the clock. */
+export type KickRestart = 'gap' | 'drift'
+
 export class KickTracker {
+  /**
+   * For diagnostics (`beatTrace.ts`): how far the last feed's stamp was from
+   * where the sample count put it, in seconds (the jitter the alignment
+   * averages away), and whether that feed restarted the tracker and why.
+   */
+  lastDriftSec = 0
+  lastRestart: KickRestart | null = null
+
   private readonly hopSec: number
   private readonly bands: OnsetBand[]
   private readonly weights: number[]
@@ -175,7 +251,10 @@ export class KickTracker {
   /** Absolute index of the oldest kept hop, and the media time at absolute index 0. */
   private start = 0
   private originTime = 0
-  private lastFedTime = NaN
+  /** Samples taken since the last reset, lost ones (filled with silence) included: the hop clock. */
+  private fedSamples = 0
+  /** The media time of sample 0 since the last reset, as the stamps average out. */
+  private sampleOriginTime = 0
   private hopsSinceGrid = 0
   /** The grid, in absolute hop indices (period may be fractional); NaN while there is none. */
   private period = NaN
@@ -189,8 +268,8 @@ export class KickTracker {
 
   constructor(sampleRate: number) {
     this.hopSec = HOP / sampleRate
-    const memoryDecay = 0.5 ** (this.hopSec / BAND_MEMORY_SEC)
-    this.bands = ONSET_BANDS.map(([hz, q]) => new OnsetBand(sampleRate, hz, q, memoryDecay))
+    const memoryHops = Math.round(BAND_MEMORY_SEC / this.hopSec)
+    this.bands = ONSET_BANDS.map(([hz, q]) => new OnsetBand(sampleRate, hz, q, memoryHops))
     this.weights = ONSET_BANDS.map(([, , weight]) => weight)
   }
 
@@ -201,7 +280,7 @@ export class KickTracker {
     this.head = 0
     this.count = 0
     this.start = 0
-    this.lastFedTime = NaN
+    this.fedSamples = 0
     this.hopsSinceGrid = 0
     this.period = NaN
     this.phase = NaN
@@ -213,31 +292,54 @@ export class KickTracker {
   }
 
   /**
-   * Takes samples whose LAST one plays at media time `endTime`. Samples
-   * already fed are the caller's to leave out; a gap since the last feed is
-   * filled with silence so the hop clock keeps time with the music.
+   * Takes samples whose LAST one plays at media time `endTime`, after `lost`
+   * samples that were never seen (filled with silence). Samples already fed
+   * are the caller's to leave out.
+   *
+   * The hop clock is the COUNT of samples, which is exact; `endTime` only
+   * aligns that count with the music, averaged over `ALIGN_FEEDS` feeds. A
+   * media element's reported position jitters by more than a hop, and taken
+   * at its word each late stamp read as a gap and pushed the clock forward
+   * while an early one was ignored, so the clock walked off the music until
+   * the next seek. A stamp further off than `MAX_DRIFT_SEC` is a real stall
+   * or seek, and restarts the tracker.
    */
-  feed(samples: Float32Array, from: number, endTime: number): void {
-    const n = samples.length - from
-    if (n <= 0) return
-    const firstTime = endTime - (n - 1) * (this.hopSec / HOP)
-    if (!Number.isNaN(this.lastFedTime)) {
-      const gap = firstTime - this.lastFedTime - this.hopSec / HOP
-      // Media time running behind the samples means the element stalled while
-      // the context ran on: the hop clock no longer matches the music.
-      if (gap > MAX_GAP_SEC || gap < -MAX_STALL_SEC) this.reset()
-      else if (gap > this.hopSec) {
-        for (let k = Math.round(gap / this.hopSec); k > 0; k--) this.pushOnset(0, 0)
-        for (const band of this.bands) band.settle()
-        this.hopIndex = 0
-        this.hopFill = 0
+  feed(samples: Float32Array, from: number, endTime: number, lost = 0): void {
+    const n = Math.max(0, samples.length - from)
+    if (n === 0 && lost <= 0) return
+    const sampleSec = this.hopSec / HOP
+    this.lastDriftSec = 0
+    this.lastRestart = null
+    if (this.fedSamples > 0) {
+      const expected = this.sampleOriginTime + (this.fedSamples + lost + n - 1) * sampleSec
+      const drift = endTime - expected
+      this.lastDriftSec = drift
+      if (lost * sampleSec > MAX_GAP_SEC || Math.abs(drift) > MAX_DRIFT_SEC) {
+        this.lastRestart = lost * sampleSec > MAX_GAP_SEC ? 'gap' : 'drift'
+        this.reset()
+      } else {
+        this.sampleOriginTime += drift / ALIGN_FEEDS
+        this.originTime = this.sampleOriginTime - (ENVELOPE_HOPS / 2 - 1) * this.hopSec
+        if (lost > 0) {
+          this.take(new Float32Array(lost), 0)
+          // The silence is the clock's, not the music's: the bands start
+          // over from the next real sample rather than read it as a climb.
+          for (const band of this.bands) band.settle()
+          this.hopIndex = 0
+        }
       }
     }
-    // A hop's time is the centre of the envelope it closes, the moment its reading describes.
-    if (this.count === 0 && this.hopFill === 0) {
-      this.originTime = firstTime - (this.start + ENVELOPE_HOPS / 2 - 1) * this.hopSec
+    if (this.fedSamples === 0) {
+      // A hop's time is the centre of the envelope it closes, the moment its reading describes.
+      this.sampleOriginTime = endTime - (n - 1) * sampleSec
+      this.originTime = this.sampleOriginTime - (ENVELOPE_HOPS / 2 - 1) * this.hopSec
     }
-    this.lastFedTime = endTime
+    this.take(samples, from)
+  }
+
+  /** Runs samples through the bands, closing a hop every HOP of them. */
+  private take(samples: Float32Array, from: number): void {
+    this.fedSamples += samples.length - from
     const bands = this.bands
     for (let i = from; i < samples.length; i++) {
       const x = samples[i]
@@ -376,6 +478,11 @@ export class KickTracker {
   /** True when the grid is trusted, for tests and diagnostics. */
   get tempoBpm(): number {
     return this.isLocked() ? 60 / (this.period * this.hopSec) : NaN
+  }
+
+  /** The grid's confidence (its autocorrelation peak against the signal's energy), for diagnostics. */
+  get gridConfidence(): number {
+    return this.confidence
   }
 
   private isLocked(): boolean {

@@ -29,7 +29,10 @@
  * level: its analyser takes the scout unfiltered, and every new sample goes
  * to a `KickTracker` (`kickTracker.ts`), which finds the kicks and their
  * tempo in the same look-ahead window and answers, per frame, whether a kick
- * was heard since the last one. The fall turns each hit into a pulse.
+ * was heard since the last one. The tracker keeps time by counting samples
+ * and uses the scout's reported position only to align that count with the
+ * music (`KickTracker.feed`); `thockdown:debug-beat` traces how well
+ * (`beatTrace.ts`). The fall turns each hit into a pulse.
  *
  * What the listener HEARS trails the element's media time by the output's
  * latency (`AudioContext.outputLatency` and `baseLatency`, tens of
@@ -47,6 +50,7 @@ import { outputContext } from '@thockdown/soundscape/audioOutputBus'
 import { BEAT_FREQUENCY, type BeatChannel } from '../shared/beatSettings'
 import { fadeCurve } from '../flow/flowTrail'
 import { KickTracker } from './kickTracker'
+import { appendBeatTrace, BeatTraceWindow, isBeatTraceOn } from './beatTrace'
 import { musicPlayerService } from './MusicPlayerService'
 
 /** How far ahead of the listener the scout plays, in seconds: half the window. */
@@ -83,6 +87,8 @@ interface Band {
   /** A beat band's kick tracker, and the context time its analyser was last read at (NaN: never). */
   kicks: KickTracker | null
   lastReadAt: number
+  /** The beat trace's running window for this band, while the trace is on (`beatTrace.ts`). */
+  trace: BeatTraceWindow | null
   /** The last peak of the response and the listener time it was reached at, for the fall (`fallSec`, `fallShape`). */
   peak: number
   peakTime: number
@@ -221,6 +227,7 @@ function keepScoutAhead(listenerTime: number): boolean {
   const duration = element.duration
   const target = Number.isFinite(duration) ? Math.min(duration, listenerTime + LEAD_SEC) : listenerTime + LEAD_SEC
   if (Math.abs(element.currentTime - target) <= RESYNC_SEC) return false
+  if (isBeatTraceOn()) appendBeatTrace(`beat RESYNC at=${listenerTime.toFixed(3)} scout=${element.currentTime.toFixed(3)} target=${target.toFixed(3)}`)
   element.currentTime = target
   lastScoutTime = -1
   for (const band of bands) clearWindow(band)
@@ -248,8 +255,10 @@ function sample(scoutTime: number): void {
 /**
  * Hands a beat band's tracker the samples its analyser gained since the last
  * read: the context's clock says how many, and the analyser holds the latest
- * ONSET_TAP_SIZE of them. A frame longer than that loses the oldest, which
- * the tracker fills with silence from the media times.
+ * ONSET_TAP_SIZE of them. A frame longer than that loses the oldest; the
+ * context's clock says exactly how many, and the tracker fills them with
+ * silence. The media time only aligns the tracker's sample count with the
+ * music: it is the element's reported position, which jitters.
  */
 function feedKicks(band: Band, kicks: KickTracker, analyser: AnalyserNode, samples: Float32Array<ArrayBuffer>, scoutTime: number): void {
   const now = analyser.context.currentTime
@@ -259,7 +268,10 @@ function feedKicks(band: Band, kicks: KickTracker, analyser: AnalyserNode, sampl
   band.lastReadAt = now
   if (fresh <= 0) return
   analyser.getFloatTimeDomainData(samples)
-  kicks.feed(samples, Math.max(0, samples.length - fresh), scoutTime)
+  const lost = Math.max(0, fresh - samples.length)
+  kicks.feed(samples, Math.max(0, samples.length - fresh), scoutTime, lost)
+  if (isBeatTraceOn()) (band.trace ??= new BeatTraceWindow()).record(kicks, lost, scoutTime)
+  else band.trace = null
 }
 
 /** An analyser's current level in dB, floored at FLOOR_DB. */
@@ -398,6 +410,7 @@ export function subscribeMusicBand(channel: BeatChannel, listener: BeatListener)
     samples: null,
     kicks: null,
     lastReadAt: NaN,
+    trace: null,
     peak: 0,
     peakTime: 0,
     times: new Float64Array(CAPACITY),
