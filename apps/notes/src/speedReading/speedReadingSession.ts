@@ -163,6 +163,9 @@ export function startSpeedReadingSession(
   if (target.view === 'edit') {
     chunk = nextChunk(target.text, wordStartAt(target.text, target.from), widthBoxes)
       ?? nextChunk(target.text, 0, widthBoxes)
+    // A session opens on words: a line break the caret happens to sit before
+    // is a pause between lines, and there is no line before the first one.
+    while (chunk && chunk.words === 0) chunk = nextChunk(target.text, chunk.end, widthBoxes)
     if (!chunk) return null
   }
 
