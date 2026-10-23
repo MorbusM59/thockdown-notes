@@ -35,14 +35,14 @@
 // another finger lands -- which is how two and three resting fingers are
 // reached one finger at a time.
 
-import { HOLD_CONFIRM_MS } from './holdTiming'
+import { HOLD_CONFIRM_MS, HOLD_GRACE_TOUCH_PX } from './holdTiming'
 
 /**
- * How far a finger may wander, in CSS pixels, and still count as still.
- * Larger than a mouse's drag threshold because a fingertip is not a point:
- * its reported centre drifts by several pixels while it rests on the glass.
+ * How far a finger may wander, in CSS pixels, and still count as still: the
+ * hold grace for a finger (`holdTiming.ts`), so a finger that rests and a
+ * finger that holds are the same finger.
  */
-export const TOUCH_SLOP_PX = 10
+export const TOUCH_SLOP_PX = HOLD_GRACE_TOUCH_PX
 
 export interface TouchModifiers {
   ctrlKey: boolean

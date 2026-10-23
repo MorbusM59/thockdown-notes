@@ -16,7 +16,11 @@
 // within the reader's spin threshold, and the lift must follow the last
 // crossing within it too -- a finger that stopped and then lifted has asked
 // for nothing more. The coast starts at the mean of those gaps, one row a
-// step, so it continues at exactly the rate the finger set.
+// step, so it continues at the rate the finger set -- but never faster than
+// a held PageDown travels (`minGapMs`, the reader's own top scroll speed). A
+// finger is a far faster instrument than a wheel: a flick crosses rows
+// every millisecond or two, which handed to the coast as it stood sent the
+// view off at hundreds of rows a second, much further than the reader meant.
 //
 // Pure, so the rule can be tested without a browser; `CM6Editor.tsx` owns
 // the listeners.
@@ -77,7 +81,7 @@ export function moveFingerPan(pan: FingerPan, y: number, nowMs: number, lineHeig
  * fast enough to coast by the wheel's rule (see the module comment), or when
  * coasting is off (`thresholdMs <= 0`).
  */
-export function releaseFingerPan(pan: FingerPan, nowMs: number, thresholdMs: number): { direction: WheelSpinDirection; averageGapMs: number } | null {
+export function releaseFingerPan(pan: FingerPan, nowMs: number, thresholdMs: number, minGapMs: number): { direction: WheelSpinDirection; averageGapMs: number } | null {
   if (!pan.panning || pan.direction === null || !(thresholdMs > 0)) return null
   const crossings = pan.crossingsMs
   if (crossings.length < WHEEL_SPIN_NUDGE_COUNT) return null
@@ -88,5 +92,5 @@ export function releaseFingerPan(pan: FingerPan, nowMs: number, thresholdMs: num
   // Rows crossed within one event have gaps no shorter than a share of that
   // event's interval, so this is zero only if two events shared a timestamp.
   if (!(averageGapMs > 0)) return null
-  return { direction: pan.direction, averageGapMs }
+  return { direction: pan.direction, averageGapMs: Math.max(averageGapMs, minGapMs) }
 }

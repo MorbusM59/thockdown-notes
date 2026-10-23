@@ -43,29 +43,36 @@ describe('the coast after a lift', () => {
 
   it('coasts at the rate the finger set when it lifts mid-swipe', () => {
     const { pan, t } = swipe(8)
-    expect(releaseFingerPan(pan, t + 2, 20)).toEqual({ direction: 1, averageGapMs: 8 })
+    expect(releaseFingerPan(pan, t + 2, 20, 0)).toEqual({ direction: 1, averageGapMs: 8 })
   })
 
   it('does not coast a swipe slower than the spin threshold', () => {
     const { pan, t } = swipe(30)
-    expect(releaseFingerPan(pan, t + 2, 20)).toBeNull()
+    expect(releaseFingerPan(pan, t + 2, 20, 0)).toBeNull()
   })
 
   it('does not coast a finger that stopped before it lifted', () => {
     const { pan, t } = swipe(8)
-    expect(releaseFingerPan(pan, t + 200, 20)).toBeNull()
+    expect(releaseFingerPan(pan, t + 200, 20, 0)).toBeNull()
   })
 
   it('does not coast when coasting is off, or after a tap', () => {
     const { pan, t } = swipe(8)
-    expect(releaseFingerPan(pan, t + 2, 0)).toBeNull()
-    expect(releaseFingerPan(beginFingerPan(1, 0, 0), 5, 20)).toBeNull()
+    expect(releaseFingerPan(pan, t + 2, 0, 0)).toBeNull()
+    expect(releaseFingerPan(beginFingerPan(1, 0, 0), 5, 20, 0)).toBeNull()
   })
 
   it('reads several rows in one event as crossed in turn, not all at once', () => {
     const pan = beginFingerPan(1, 500, 0)
     moveFingerPan(pan, 488, 4, LINE, SLOP)
     moveFingerPan(pan, 500 - LINE * 3, 16, LINE, SLOP)
-    expect(releaseFingerPan(pan, 17, 20)?.averageGapMs).toBeCloseTo(4, 5)
+    expect(releaseFingerPan(pan, 17, 20, 0)?.averageGapMs).toBeCloseTo(4, 5)
+  })
+
+  it('never hands on a coast faster than the top speed allows', () => {
+    const pan = beginFingerPan(1, 500, 0)
+    moveFingerPan(pan, 488, 4, LINE, SLOP)
+    moveFingerPan(pan, 500 - LINE * 3, 16, LINE, SLOP)
+    expect(releaseFingerPan(pan, 17, 20, 12)?.averageGapMs).toBe(12)
   })
 })

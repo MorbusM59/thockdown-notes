@@ -5076,7 +5076,13 @@ export function CM6Editor({
       const pan = fingerPan;
       fingerPan = null;
       if (event.type !== 'pointerup' || isEditScrollInteractionBlocked()) return;
-      const coast = releaseFingerPan(pan, event.timeStamp, wheelSpinThresholdMs());
+      // The fastest a coast may start: one row per row-height at the speed a
+      // held PageDown reaches (see `startPageReleaseRampDown`).
+      const lineHeightPx = lineHeightPxRef.current;
+      const visibleRows = computeVisibleMiddleRows(view.scrollDOM.clientHeight, topBoundaryPxRef.current, bottomBoundaryPxRef.current, lineHeightPx);
+      const topSpeedPxPerSec = resolveApexSpeedPxPerSecFromCurrentParams(visibleRows * lineHeightPx) * EDITOR_PAGE_CONTINUOUS_SCROLL_APEX_MULTIPLIER;
+      const minGapMs = topSpeedPxPerSec > 0 ? (lineHeightPx / topSpeedPxPerSec) * 1000 : 0;
+      const coast = releaseFingerPan(pan, event.timeStamp, wheelSpinThresholdMs(), minGapMs);
       if (!coast) return;
       startWheelSpinCoast(wheelSpinState, { nowMs: performance.now(), direction: coast.direction, averageGapMs: coast.averageGapMs, rowsPerNudge: 1 });
       scheduleWheelSpinNudge();

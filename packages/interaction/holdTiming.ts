@@ -19,6 +19,14 @@
 // seems to want its own, the question to answer first is which of these two
 // it actually is.
 
+//
+// A HOLD IS HELD IN PLACE. A press that travels while it is down is a drag,
+// not a hold, so a hold whose pointer leaves a small grace radius around
+// where it landed is abandoned on the spot (`armHold` watches the pointer
+// itself), and leaving that same radius is what starts a drag
+// (`apps/notes/src/shared/pointerDrag.ts`). One radius for both, so there is
+// no distance at which a press is neither, or both.
+
 import { beginCursorHold, endCursorHold } from './cursorHoldFeedback'
 
 /** A deliberate press: past this, it was not an ordinary click. */
@@ -26,6 +34,73 @@ export const HOLD_CONFIRM_MS = 250
 
 /** An irreversible press: the wait is the confirmation. */
 export const HOLD_COMMIT_MS = 550
+
+/**
+ * How far a mouse or pen press may travel, in SCREEN pixels (a distance the
+ * hand travels, the same at every zoom), and still be held in place.
+ */
+export const HOLD_GRACE_PX = 5
+
+/**
+ * The same for a finger, in CSS pixels. Larger, because a fingertip is not a
+ * point: its reported centre drifts by several pixels while it rests.
+ */
+export const HOLD_GRACE_TOUCH_PX = 10
+
+/** Where a press landed: what `hasLeftHoldGrace` measures from. */
+export interface PressOrigin {
+  readonly pointerType: string
+  readonly screenX: number
+  readonly screenY: number
+  readonly clientX: number
+  readonly clientY: number
+}
+
+/** Has a press that landed at `origin` and is now at `at` left its grace radius? */
+export function hasLeftHoldGrace(origin: PressOrigin, at: { screenX: number; screenY: number; clientX: number; clientY: number }): boolean {
+  if (origin.pointerType === 'touch') return Math.hypot(at.clientX - origin.clientX, at.clientY - origin.clientY) > HOLD_GRACE_TOUCH_PX
+  return Math.hypot(at.screenX - origin.screenX, at.screenY - origin.screenY) >= HOLD_GRACE_PX
+}
+
+interface Press extends PressOrigin {
+  readonly pointerId: number
+  /** A hold completed during this press: it was held in place, not dragged. */
+  holdCompleted: boolean
+}
+
+/**
+ * The presses currently down, recorded in the window's capture phase so they
+ * are known before any control's own `pointerdown` handler arms a hold.
+ */
+const presses = new Map<number, Press>()
+let latestPress: Press | null = null
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('pointerdown', (event) => {
+    const press: Press = {
+      pointerId: event.pointerId,
+      pointerType: event.pointerType,
+      screenX: event.screenX,
+      screenY: event.screenY,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      holdCompleted: false,
+    }
+    presses.set(event.pointerId, press)
+    latestPress = press
+  }, true)
+  const release = (event: PointerEvent) => {
+    presses.delete(event.pointerId)
+    if (latestPress?.pointerId === event.pointerId) latestPress = null
+  }
+  window.addEventListener('pointerup', release, true)
+  window.addEventListener('pointercancel', release, true)
+}
+
+/** Did a hold complete during the press of `pointerId`, still down? */
+export function holdCompletedDuringPress(pointerId: number): boolean {
+  return presses.get(pointerId)?.holdCompleted === true
+}
 
 /**
  * Arms a hold, returning the function that abandons it.
@@ -51,21 +126,35 @@ export const HOLD_COMMIT_MS = 550
  * The cursor is told before `onComplete` runs, deliberately: it acknowledges
  * the GESTURE, which happened whatever the action then does or throws.
  */
-export function armHold(onComplete: () => void, holdMs: number = HOLD_CONFIRM_MS): () => void {
+export function armHold(onComplete: () => void, holdMs: number = HOLD_CONFIRM_MS, options: { isDragPickup?: boolean } = {}): () => void {
   let settled = false
   beginCursorHold(holdMs)
+
+  // The press this hold belongs to, if a pointer is down: a key hold has none
+  // and nothing to leave.
+  const press = latestPress
+  const onMove = (event: PointerEvent) => {
+    if (press && event.pointerId === press.pointerId && hasLeftHoldGrace(press, event)) abandon()
+  }
+  if (press) window.addEventListener('pointermove', onMove, true)
 
   const timerId = window.setTimeout(() => {
     if (settled) return
     settled = true
+    window.removeEventListener('pointermove', onMove, true)
+    // Picking a drag up is not a hold that claims the press: it is the drag's
+    // own way of starting on a touch screen, and must not stop itself.
+    if (press && !options.isDragPickup) press.holdCompleted = true
     endCursorHold(true)
     onComplete()
   }, holdMs)
 
-  return () => {
+  const abandon = () => {
     if (settled) return
     settled = true
     window.clearTimeout(timerId)
+    window.removeEventListener('pointermove', onMove, true)
     endCursorHold(false)
   }
+  return abandon
 }
