@@ -71,6 +71,7 @@ import { buildPersistedBlockMap } from '../editor/persistedBlockMap'
 import type { NoteUiStatePayload } from '../shared/noteLifecycle'
 import { requestFullBlockSplit } from '../editor/documentFactsClient'
 import type { NoteDocumentChange } from './noteDocumentStore'
+import { selectWholePane } from './wholePaneSelection'
 
 /**
  * Throwaway checkpoint logger for the commit-to-paint input-lag
@@ -253,6 +254,12 @@ export interface UseEditorSectionMountResult {
   restoreEditorSelection: () => void
   focusEditorInEditMode: (options?: { restoreSelection?: boolean }) => void
   scheduleFocusEditorInEditMode: (options?: { restoreSelection?: boolean }) => void
+  /**
+   * Selects the whole note in whichever view is on screen -- what Ctrl+A
+   * does when the keyboard reaches this slot from outside its text surface
+   * (App.tsx). See the implementation for what each view selects.
+   */
+  selectWholeNote: () => void
   /** Hand to the editor as `onSurfaceReady`: releases a focus request that arrived before the editor was usable. */
   handleEditorSurfaceReady: () => void
   /** Passed to the editor as `readInitialSelection` -- see readEstablishedSelection. */
@@ -879,6 +886,28 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       })
     }, 0)
   }, [adapterRef, focusEditorInEditMode, sectionContainerRef])
+
+  // THE WHOLE NOTE, in both views, and neither view has the whole note in
+  // the DOM: the edit view draws only the lines on screen and the render view
+  // mounts a window of blocks (usePreviewWindow.tsx). So neither is selected
+  // through the DOM's own select-all, which selects what is mounted -- and
+  // from a holder that is not a text surface, the whole PAGE, sidebar
+  // included, which is the defect this replaced.
+  //
+  // The edit view selects through the editor, whose selection is a range in
+  // its document and whose copy reads the document. The render view selects
+  // the pane's contents, and SectionEditorArea's copy handler writes the
+  // note's full text for that selection (wholePaneSelection.ts).
+  const selectWholeNote = useCallback(() => {
+    if (!activeNoteIdRef.current) return
+    if (!isPreviewModeRef.current) {
+      focusEditorInEditMode({ restoreSelection: false })
+      adapterRef.current?.selectAll()
+      return
+    }
+    const pane = previewScrollRef.current
+    if (pane) selectWholePane(pane)
+  }, [focusEditorInEditMode])
 
   const persistEditUiState = useCallback((noteId: string, options?: { immediate?: boolean }) => {
     const notesApi = window.thockdownNotes
@@ -3126,6 +3155,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     restoreEditorSelection,
     focusEditorInEditMode,
     scheduleFocusEditorInEditMode,
+    selectWholeNote,
     handleEditorSurfaceReady,
     readEstablishedSelection,
     persistEditUiState,

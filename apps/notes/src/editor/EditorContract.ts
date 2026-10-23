@@ -285,6 +285,14 @@ export interface EditorAdapter {
   // two are deliberately the same shape so a caller can ask either one.
   readVisibleSourceLineRange(): { fromLine: number; toLine: number } | null;
   /**
+   * Selects the whole document the editor holds -- all of it, not the part
+   * that is rendered, since the editor draws only what is on screen. What
+   * Ctrl+A does when the slot takes the chord rather than the editor's own
+   * keymap (App.tsx's select-all owner: read-only text, focus elsewhere);
+   * a copy after it takes the whole text.
+   */
+  selectAll(): void;
+  /**
    * Applies `changes` (each `from`..`to` replaced by `insert`, all in the
    * coordinates of the current text, none overlapping) as one undo step of
    * its own, the way an edit made in the editor would be (it is
