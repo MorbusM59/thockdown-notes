@@ -71,8 +71,8 @@ const CAPACITY = 4096
 /** The bounds of a band's analyser window, in samples. */
 const MIN_TAP_SIZE = 256
 const MAX_TAP_SIZE = 8192
-/** A beat band's analyser window: comfortably more than one display frame of samples. */
-const ONSET_TAP_SIZE = 4096
+/** A beat band's analyser window: a third of a second at 48kHz, so a slow frame loses no samples. */
+const ONSET_TAP_SIZE = 16384
 /** The smallest change a subscriber is told of. */
 const MIN_STEP = 0.001
 
@@ -108,7 +108,6 @@ let unsubscribePlaying: (() => void) | null = null
 let scout: HTMLAudioElement | null = null
 let scoutSource: MediaElementAudioSourceNode | null = null
 let scoutUrl: string | null = null
-let lastScoutTime = -1
 
 /** A bandpass's Q for a bell `octaves` wide between its half-power points. */
 function bandQ(octaves: number): number {
@@ -212,7 +211,6 @@ function teardownScout(): void {
   scout = null
   scoutSource = null
   scoutUrl = null
-  lastScoutTime = -1
 }
 
 /** Keeps the scout LEAD_SEC ahead; true when it was put back and the windows restart. */
@@ -229,7 +227,6 @@ function keepScoutAhead(listenerTime: number): boolean {
   if (Math.abs(element.currentTime - target) <= RESYNC_SEC) return false
   if (isBeatTraceOn()) appendBeatTrace(`beat RESYNC at=${listenerTime.toFixed(3)} scout=${element.currentTime.toFixed(3)} target=${target.toFixed(3)}`)
   element.currentTime = target
-  lastScoutTime = -1
   for (const band of bands) clearWindow(band)
   return true
 }
@@ -353,21 +350,49 @@ function outputLatencySec(): number {
   return (context.baseLatency || 0) + (context.outputLatency || 0)
 }
 
+/**
+ * A media element's position, read every frame. An element routed into Web
+ * Audio reports its position in steps (a chunk of the graph's pulls at a
+ * time), so between two reports the position is carried forward on the
+ * audio context's clock, which is the clock the element is played by. A new
+ * report is taken as it comes.
+ */
+class ElementClock {
+  private reported = NaN
+  private reportedAt = 0
+
+  reset(): void {
+    this.reported = NaN
+  }
+
+  read(reported: number, now: number): number {
+    if (reported !== this.reported) {
+      this.reported = reported
+      this.reportedAt = now
+      return reported
+    }
+    return reported + Math.max(0, now - this.reportedAt)
+  }
+}
+
+const listenerClock = new ElementClock()
+const scoutClock = new ElementClock()
+
 function tick(): void {
   frame = null
   if (!musicPlayerService.isPlaying || document.hidden || bands.size === 0) {
     stop()
     return
   }
-  const listenerTime = musicPlayerService.currentTime
-  keepScoutAhead(listenerTime)
-  const scoutTime = scout?.currentTime ?? 0
-  if (scoutTime !== lastScoutTime) {
-    // One reading per scout position: a frame that lands before the scout's
-    // clock moves would only repeat the last one.
-    lastScoutTime = scoutTime
-    sample(scoutTime)
-  }
+  const now = scoutSource?.context.currentTime ?? 0
+  const listenerTime = listenerClock.read(musicPlayerService.currentTime, now)
+  if (keepScoutAhead(musicPlayerService.currentTime)) scoutClock.reset()
+  // Every frame, not only when the scout's reported position moves: an
+  // element routed into Web Audio reports its position in steps of the
+  // chunks the graph pulls (about seven a second, read off the beat trace),
+  // and sampling only on a step lost nearly half the audio to the kick
+  // tracker and read the level bands at seven frames a second.
+  sample(scoutClock.read(scout?.currentTime ?? 0, now))
   const heardTime = listenerTime - outputLatencySec()
   for (const band of bands) publish(band, respond(band, heardTime))
   frame = requestAnimationFrame(tick)
