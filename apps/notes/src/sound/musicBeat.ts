@@ -26,16 +26,15 @@
  * for `LEAD_SEC` after that.
  *
  * A channel at `BEAT_FREQUENCY` follows KICK-DRUM HITS instead of a band's
- * level. A kick and a bass line share the low band, so its level cannot
- * tell them apart; their attacks can: a kick climbs from its trough to full
- * in a few milliseconds, a bass note swells or holds. So a beat band reads
- * the kick's band (`KICK_HZ`) and records its RISE: the level now above the
- * lowest it was over the last `RISE_SEC`. Measured against a short history
- * rather than the previous frame, because consecutive readings of a low band
- * differ by the phase of its cycle within the window, and that difference
- * is noise as large as a kick. The rise goes through the same window,
- * stretch and fall as a level, offset by `ONSET_OFFSET_DB` into the
- * histogram's range; the fall is what turns an attack into a pulse.
+ * level: its analyser takes the scout unfiltered, and every new sample goes
+ * to a `KickTracker` (`kickTracker.ts`), which finds the kicks and their
+ * tempo in the same look-ahead window and answers, per frame, whether a kick
+ * was heard since the last one. The fall turns each hit into a pulse.
+ *
+ * What the listener HEARS trails the element's media time by the output's
+ * latency (`AudioContext.outputLatency` and `baseLatency`, tens of
+ * milliseconds, far more over Bluetooth), so every band is answered for the
+ * heard moment rather than the reported one.
  *
  * Runs only while there is a subscriber, the music is playing and the window
  * is visible: the frame loop is started by the play-state and visibility
@@ -47,6 +46,7 @@
 import { outputContext } from '@thockdown/soundscape/audioOutputBus'
 import { BEAT_FREQUENCY, type BeatChannel } from '../shared/beatSettings'
 import { fadeCurve } from '../flow/flowTrail'
+import { KickTracker } from './kickTracker'
 import { musicPlayerService } from './MusicPlayerService'
 
 /** How far ahead of the listener the scout plays, in seconds: half the window. */
@@ -67,17 +67,8 @@ const CAPACITY = 4096
 /** The bounds of a band's analyser window, in samples. */
 const MIN_TAP_SIZE = 256
 const MAX_TAP_SIZE = 8192
-/** A beat band's kick band, in Hz and octaves. */
-const KICK_HZ = 55
-const KICK_OCTAVES = 1.5
-/** How far back a beat band looks for the trough an attack rises from. */
-const RISE_SEC = 0.12
-/** Readings of recent kick levels kept, enough for `RISE_SEC` at any display rate. */
-const RISE_CAPACITY = 64
-/** A beat band's analyser window: about two cycles of the kick, short enough not to smear its attack. */
-const ONSET_TAP_SIZE = 2048
-/** Where an onset of no rise sits in the histogram (whose range ends at 0 dB). */
-const ONSET_OFFSET_DB = -60
+/** A beat band's analyser window: comfortably more than one display frame of samples. */
+const ONSET_TAP_SIZE = 4096
 /** The smallest change a subscriber is told of. */
 const MIN_STEP = 0.001
 
@@ -89,11 +80,9 @@ interface Band {
   filter: BiquadFilterNode | null
   analyser: AnalyserNode | null
   samples: Float32Array<ArrayBuffer> | null
-  /** A beat band's recent kick levels (scout time, dB), oldest at `riseHead`. */
-  riseTimes: Float64Array
-  riseLevels: Float32Array
-  riseHead: number
-  riseCount: number
+  /** A beat band's kick tracker, and the context time its analyser was last read at (NaN: never). */
+  kicks: KickTracker | null
+  lastReadAt: number
   /** The last peak of the response and the listener time it was reached at, for the fall (`fallSec`, `fallShape`). */
   peak: number
   peakTime: number
@@ -130,8 +119,8 @@ function clearWindow(band: Band): void {
   band.count = 0
   band.bins.fill(0)
   band.peak = 0
-  band.riseHead = 0
-  band.riseCount = 0
+  band.kicks?.reset()
+  band.lastReadAt = NaN
 }
 
 function isBeat(channel: BeatChannel): boolean {
@@ -139,25 +128,31 @@ function isBeat(channel: BeatChannel): boolean {
 }
 
 function attachBand(band: Band): void {
-  if (!scoutSource || band.filter) return
+  if (!scoutSource || band.analyser) return
   const context = scoutSource.context
-  const filter = context.createBiquadFilter()
-  filter.type = 'bandpass'
   const analyser = context.createAnalyser()
-  scoutSource.connect(filter)
-  filter.connect(analyser)
-  band.filter = filter
   band.analyser = analyser
+  if (isBeat(band.channel)) {
+    // The tracker filters for itself, several bands from one signal.
+    scoutSource.connect(analyser)
+    band.kicks = new KickTracker(context.sampleRate)
+    band.lastReadAt = NaN
+  } else {
+    const filter = context.createBiquadFilter()
+    filter.type = 'bandpass'
+    scoutSource.connect(filter)
+    filter.connect(analyser)
+    band.filter = filter
+    band.kicks = null
+  }
   tuneBand(band)
 }
 
 /** Points a band's filter and analyser at its channel's frequency and width. */
 function tuneBand(band: Band): void {
   const { filter, analyser } = band
-  if (!filter || !analyser) return
-  if (isBeat(band.channel)) {
-    filter.frequency.value = KICK_HZ
-    filter.Q.value = bandQ(KICK_OCTAVES)
+  if (!analyser) return
+  if (!filter) {
     analyser.fftSize = ONSET_TAP_SIZE
     band.samples = new Float32Array(ONSET_TAP_SIZE)
     return
@@ -172,7 +167,8 @@ function tuneBand(band: Band): void {
 }
 
 function detachBand(band: Band): void {
-  if (band.filter && scoutSource) scoutSource.disconnect(band.filter)
+  const input = band.filter ?? band.analyser
+  if (input && scoutSource) scoutSource.disconnect(input)
   band.filter?.disconnect()
   band.filter = null
   band.analyser = null
@@ -235,10 +231,11 @@ function keepScoutAhead(listenerTime: number): boolean {
 function sample(scoutTime: number): void {
   for (const band of bands) {
     if (!band.analyser || !band.samples) continue
-    let db = levelDb(band.analyser, band.samples)
-    if (isBeat(band.channel)) {
-      db = ONSET_OFFSET_DB + Math.max(0, riseOf(band, scoutTime, db))
+    if (band.kicks) {
+      feedKicks(band, band.kicks, band.analyser, band.samples, scoutTime)
+      continue
     }
+    const db = levelDb(band.analyser, band.samples)
     if (band.count === CAPACITY) dropOldest(band)
     const at = (band.head + band.count) % CAPACITY
     band.times[at] = scoutTime
@@ -248,23 +245,21 @@ function sample(scoutTime: number): void {
   }
 }
 
-/** How far `db` stands above the lowest kick level of the last RISE_SEC, recording it. */
-function riseOf(band: Band, scoutTime: number, db: number): number {
-  while (band.riseCount > 0 && band.riseTimes[band.riseHead] < scoutTime - RISE_SEC) {
-    band.riseHead = (band.riseHead + 1) % RISE_CAPACITY
-    band.riseCount--
-  }
-  let trough = db
-  for (let k = 0; k < band.riseCount; k++) trough = Math.min(trough, band.riseLevels[(band.riseHead + k) % RISE_CAPACITY])
-  if (band.riseCount === RISE_CAPACITY) {
-    band.riseHead = (band.riseHead + 1) % RISE_CAPACITY
-    band.riseCount--
-  }
-  const at = (band.riseHead + band.riseCount) % RISE_CAPACITY
-  band.riseTimes[at] = scoutTime
-  band.riseLevels[at] = db
-  band.riseCount++
-  return db - trough
+/**
+ * Hands a beat band's tracker the samples its analyser gained since the last
+ * read: the context's clock says how many, and the analyser holds the latest
+ * ONSET_TAP_SIZE of them. A frame longer than that loses the oldest, which
+ * the tracker fills with silence from the media times.
+ */
+function feedKicks(band: Band, kicks: KickTracker, analyser: AnalyserNode, samples: Float32Array<ArrayBuffer>, scoutTime: number): void {
+  const now = analyser.context.currentTime
+  const fresh = Number.isNaN(band.lastReadAt)
+    ? samples.length
+    : Math.round((now - band.lastReadAt) * analyser.context.sampleRate)
+  band.lastReadAt = now
+  if (fresh <= 0) return
+  analyser.getFloatTimeDomainData(samples)
+  kicks.feed(samples, Math.max(0, samples.length - fresh), scoutTime)
 }
 
 /** An analyser's current level in dB, floored at FLOOR_DB. */
@@ -294,6 +289,20 @@ function percentile(band: Band, share: number): number {
 
 /** The response for what the listener hears at `listenerTime`, from the window around it. */
 function respond(band: Band, listenerTime: number): number {
+  const raw = band.kicks ? band.kicks.hitBetween(listenerTime, band.channel.contrast) : stretched(band, listenerTime)
+  // The fall: a response never drops faster than its last peak fades, on
+  // flow's fade curve (fallSec long, fallShape). A rise is taken at once.
+  const held = band.peak * fadeCurve(listenerTime - band.peakTime, band.channel.fallSec, band.channel.fallShape)
+  if (raw >= held) {
+    band.peak = raw
+    band.peakTime = listenerTime
+    return raw
+  }
+  return held
+}
+
+/** A level band's response: its level at `listenerTime`, stretched over the window around it. */
+function stretched(band: Band, listenerTime: number): number {
   while (band.count > 0 && band.times[band.head] < listenerTime - LEAD_SEC) dropOldest(band)
   // Right after a resync the scout's readings all lie ahead of the listener:
   // nothing has been heard yet that the window can describe.
@@ -316,22 +325,20 @@ function respond(band: Band, listenerTime: number): number {
   }
   const floor = percentile(band, band.channel.contrast)
   const top = Math.max(floor + MIN_SPAN_DB, percentile(band, 1 - TOP_SHARE))
-  const raw = Math.max(0, Math.min(1, (level - floor) / (top - floor)))
-  // The fall: a response never drops faster than its last peak fades, on
-  // flow's fade curve (fallSec long, fallShape). A rise is taken at once.
-  const held = band.peak * fadeCurve(listenerTime - band.peakTime, band.channel.fallSec, band.channel.fallShape)
-  if (raw >= held) {
-    band.peak = raw
-    band.peakTime = listenerTime
-    return raw
-  }
-  return held
+  return Math.max(0, Math.min(1, (level - floor) / (top - floor)))
 }
 
 function publish(band: Band, response: number): void {
   if (Math.abs(response - band.published) < MIN_STEP && !(response === 0 && band.published !== 0)) return
   band.published = response
   band.listener(response)
+}
+
+/** How far behind the media time the listener hears it: the context's processing and output latency. */
+function outputLatencySec(): number {
+  const context = scoutSource?.context
+  if (!(context instanceof AudioContext)) return 0
+  return (context.baseLatency || 0) + (context.outputLatency || 0)
 }
 
 function tick(): void {
@@ -349,7 +356,8 @@ function tick(): void {
     lastScoutTime = scoutTime
     sample(scoutTime)
   }
-  for (const band of bands) publish(band, respond(band, listenerTime))
+  const heardTime = listenerTime - outputLatencySec()
+  for (const band of bands) publish(band, respond(band, heardTime))
   frame = requestAnimationFrame(tick)
 }
 
@@ -388,10 +396,8 @@ export function subscribeMusicBand(channel: BeatChannel, listener: BeatListener)
     filter: null,
     analyser: null,
     samples: null,
-    riseTimes: new Float64Array(RISE_CAPACITY),
-    riseLevels: new Float32Array(RISE_CAPACITY),
-    riseHead: 0,
-    riseCount: 0,
+    kicks: null,
+    lastReadAt: NaN,
     peak: 0,
     peakTime: 0,
     times: new Float64Array(CAPACITY),
