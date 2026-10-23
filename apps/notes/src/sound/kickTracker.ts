@@ -757,7 +757,18 @@ export class KickTracker {
     // with a slot that moves a bin between folds.
     const reach = this.slotReach()
     let remembered = 0
-    for (let d = -reach; d <= reach; d++) remembered = Math.max(remembered, this.slotMemory[(slot + d + PATTERN_BINS) % PATTERN_BINS])
+    let usualShape = 0
+    for (let d = -reach; d <= reach; d++) {
+      const b = (slot + d + PATTERN_BINS) % PATTERN_BINS
+      remembered = Math.max(remembered, this.slotMemory[b])
+      usualShape = Math.max(usualShape, this.onsetMemory[b])
+    }
+    // The hit must also BELONG to its slot: no sharper than twice what the
+    // slot usually holds (SHAPE_SHARE inverted). The off-beat's bass and hats
+    // make slots too, and a fill's toms (a falling pitch, kick-shaped)
+    // landing on them pulsed just before the downbeat the fill leads into,
+    // so that kick, still inside the pulse's fall, read as missed.
+    if (this.at(index) * SHAPE_SHARE > usualShape) return 0
     // Present only with the low-band strength the slot usually carries AND an
     // onset shaped like the bar's kick (its strongest remembered slot, not
     // this one, which in a breakdown learns whatever lands on it): the

@@ -320,4 +320,42 @@ describe('KickTracker on grooves other than four on the floor', () => {
     expect(found).toBeGreaterThan(0.8)
     expect(strays).toEqual([])
   })
+
+  it('leaves the beat before a fill\'s downbeat dark, so the downbeat lands as a fresh hit', () => {
+    // Every eighth bar ends in two beats of sixteenth toms and no kick, into
+    // a kick and crash on the one. A tom pulsing a sixteenth before the one
+    // left the pulse still falling when it landed, and it read as missed.
+    const bpm = 126
+    const beat = 60 / bpm
+    const bar = 4 * beat
+    const barOf = (t: number) => Math.floor(t / bar + 1e-6)
+    const inFill = (t: number) => barOf(t) % 8 === 7 && t - barOf(t) * bar >= 2 * beat - 1e-6
+    const isOne = (t: number) => barOf(t) % 8 === 0 && t > 1 && t - barOf(t) * bar < 1e-6
+    const track = house(60, bpm, Infinity, Infinity, (t0) => (inFill(t0) ? 0 : isOne(t0) ? 1.4 : 1))
+    track.kicks = track.kicks.filter((k) => !inFill(k))
+    const rand = noise(21)
+    for (let b = 7; b * bar < 60; b += 8) {
+      for (let s = 0; s < 8; s++) {
+        const t0 = b * bar + 2 * beat + (s * beat) / 4
+        let phase = 0
+        for (let i = 0; i < 0.1 * RATE; i++) {
+          const at = Math.round(t0 * RATE) + i
+          if (at >= track.samples.length) break
+          const t = i / RATE
+          phase += (2 * Math.PI * 140 * (1 + 0.5 * Math.exp(-t / 0.02))) / RATE
+          track.samples[at] += 0.6 * Math.sin(phase) * Math.exp(-t / 0.08) + 0.3 * rand() * Math.exp(-t / 0.03)
+        }
+      }
+      for (let i = 0; i < 2 * RATE; i++) {
+        const at = Math.round((b + 1) * bar * RATE) + i
+        if (at < track.samples.length) track.samples[at] += 0.4 * rand() * Math.exp(-i / RATE / 0.6)
+      }
+    }
+    const { hits } = play(track, 0.5)
+    for (const one of track.kicks.filter((k) => isOne(k) && k > 8 && k < 55)) {
+      expect(hitFor(one, hits)?.response ?? 0, `downbeat at ${one.toFixed(3)}`).toBeGreaterThan(0.75)
+      const before = hits.filter((h) => h.at > one - beat && h.at < one - EARLY_SEC && h.response > 0.3)
+      expect(before, `before the downbeat at ${one.toFixed(3)}`).toEqual([])
+    }
+  })
 })
