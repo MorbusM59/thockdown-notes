@@ -343,6 +343,16 @@ function publish(band: Band, response: number): void {
   band.listener(response)
 }
 
+let visualDelaySec = 0
+
+/**
+ * Draws the pulse this much later than the latency the audio stack reports
+ * (the reader's per-device delay, `BeatSettings.delayMsByDevice`).
+ */
+export function setBeatVisualDelaySec(sec: number): void {
+  visualDelaySec = sec
+}
+
 /** How far behind the media time the listener hears it: the context's processing and output latency. */
 function outputLatencySec(): number {
   const context = scoutSource?.context
@@ -393,7 +403,7 @@ function tick(): void {
   // and sampling only on a step lost nearly half the audio to the kick
   // tracker and read the level bands at seven frames a second.
   sample(scoutClock.read(scout?.currentTime ?? 0, now))
-  const heardTime = listenerTime - outputLatencySec()
+  const heardTime = listenerTime - outputLatencySec() - visualDelaySec
   for (const band of bands) publish(band, respond(band, heardTime))
   frame = requestAnimationFrame(tick)
 }

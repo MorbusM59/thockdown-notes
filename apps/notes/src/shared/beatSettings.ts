@@ -36,6 +36,13 @@ export interface BeatSettings {
   caret: BeatChannel
   /** The active editor's inner shade; a response deepens it. */
   shade: BeatChannel
+  /**
+   * Milliseconds the pulse is drawn later than the music is heard, per output
+   * device (`sound/outputDevice.ts` names it), on top of the latency the audio
+   * stack reports: a wireless headset's delay is often not reported at all.
+   * A device with no entry is at 0. Negative draws it earlier.
+   */
+  delayMsByDevice: Record<string, number>
 }
 
 /** The frequency that means "follow the kick drum" rather than a band. */
@@ -49,6 +56,8 @@ export const BEAT_FALL_MIN_SEC = 0.02
 export const BEAT_FALL_MAX_SEC = 2
 export const BEAT_FALL_SHAPE_MIN = -5
 export const BEAT_FALL_SHAPE_MAX = 5
+export const BEAT_DELAY_MIN_MS = -200
+export const BEAT_DELAY_MAX_MS = 500
 
 export const DEFAULT_BEAT_CHANNEL: BeatChannel = {
   amount: 0.6,
@@ -63,6 +72,7 @@ export const DEFAULT_BEAT_SETTINGS: BeatSettings = {
   enabled: false,
   caret: DEFAULT_BEAT_CHANNEL,
   shade: DEFAULT_BEAT_CHANNEL,
+  delayMsByDevice: {},
 }
 
 function bounded(value: unknown, min: number, max: number, fallback: number): number {
@@ -92,5 +102,15 @@ export function sanitizeBeatSettings(input: unknown): BeatSettings {
     enabled: typeof source.enabled === 'boolean' ? source.enabled : DEFAULT_BEAT_SETTINGS.enabled,
     caret: sanitizeChannel(source.caret),
     shade: sanitizeChannel(source.shade),
+    delayMsByDevice: sanitizeDelays(source.delayMsByDevice),
   }
+}
+
+function sanitizeDelays(input: unknown): Record<string, number> {
+  const delays: Record<string, number> = {}
+  if (!input || typeof input !== 'object') return delays
+  for (const [device, ms] of Object.entries(input)) {
+    if (typeof ms === 'number' && Number.isFinite(ms)) delays[device] = Math.round(Math.max(BEAT_DELAY_MIN_MS, Math.min(BEAT_DELAY_MAX_MS, ms)))
+  }
+  return delays
 }

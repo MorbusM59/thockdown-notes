@@ -25,6 +25,8 @@ import {
   BEAT_FALL_SHAPE_MAX,
   BEAT_FALL_SHAPE_MIN,
   DEFAULT_BEAT_CHANNEL,
+  BEAT_DELAY_MAX_MS,
+  BEAT_DELAY_MIN_MS,
   type BeatChannel,
   type BeatSettings,
 } from '../shared/beatSettings'
@@ -203,6 +205,7 @@ import {
 import { LOADOUT_FACTORY_PRESET_COUNT, type UiLoadoutEntry } from '@thockdown/look/loadouts'
 import { DARK_PRESET_ICONS, DARK_PRESET_THEMES, LIGHT_PRESET_ICONS, LIGHT_PRESET_THEMES } from '@thockdown/look/presets'
 import { typingSoundManager } from '../sound/TypingSoundManager'
+import { useOutputDevice } from '../sound/outputDevice'
 import {
   DEFAULT_WHEEL_SPIN_DAMPEN_DIVISOR,
   DEFAULT_WHEEL_SPIN_THRESHOLD_MS,
@@ -1012,6 +1015,7 @@ export function SidebarOptionsPanel({
   startCaretColorCopyHold,
   clearCaretColorArmTimer,
 }: SidebarOptionsPanelProps) {
+    const outputDevice = useOutputDevice(beatSettings.enabled)
     // One element's five beat sliders: the same five for every element that follows the music.
     const renderBeatChannel = (key: 'caret' | 'shade', label: string, effect: string) => {
       const channel = beatSettings[key]
@@ -3173,6 +3177,23 @@ export function SidebarOptionsPanel({
           </div>
         </>) : null}
         {beatSettings.enabled ? (<>
+          <div className="utility-setting-slider-stack" aria-label="Beat timing">
+            <OptionsSliderRows rows={[1]}>
+              <CompactScrollbarSlider
+                id="beat-delay"
+                min={BEAT_DELAY_MIN_MS}
+                max={BEAT_DELAY_MAX_MS}
+                step={5}
+                value={beatSettings.delayMsByDevice[outputDevice] ?? 0}
+                trackLabel="delay"
+                tooltipLabel={`ms the pulse is drawn later than the music, for ${outputDevice || 'this output device'}: kept per device and picked up again when you switch back. Raise it if the pulse leads the music, as a wireless headset often makes it`}
+                ariaLabel="Beat pulse: visual delay in milliseconds for this output device"
+                defaultValue={0}
+                formatValue={(value) => Math.round(value).toString()}
+                onCommit={(value) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [outputDevice]: Math.round(value) } }))}
+              />
+            </OptionsSliderRows>
+          </div>
           {renderBeatChannel('caret', 'Caret beat', 'the caret dips from its peak')}
           {renderBeatChannel('shade', 'Shade beat', 'the active editor\'s inner shade deepens')}
         </>) : null}

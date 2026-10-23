@@ -270,6 +270,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 - While the caret follows the music it stops blinking and holds steady, and the music dips it; the shade deepens with it.
 - Each has its own **amount**; its **freq** and **width**, the band of the music it listens to (the lowest freq, **beat**, follows the kick drum instead); and **contrast**, how far the band must rise above the music around it before it responds; and **fall** and **shape**, how a peak falls away after a hit. It adjusts itself to each track and to your volume, and starts a few seconds into a track or after a jump.
+- **delay** draws the pulse later (or, below 0, earlier) if it runs ahead of what you hear, as wireless headphones often make it. It is remembered for each output device and comes back when you switch to it again.
 - It switches itself off while nothing is playing, and with Reduce visual effects.
 
 ### [Speed Reading](#speed-reading)

@@ -17,7 +17,8 @@
 
 import { useEffect, useRef } from 'react'
 import type { BeatChannel, BeatSettings } from '../shared/beatSettings'
-import { subscribeMusicBand, type MusicBandSubscription } from '../sound/musicBeat'
+import { setBeatVisualDelaySec, subscribeMusicBand, type MusicBandSubscription } from '../sound/musicBeat'
+import { useOutputDevice } from '../sound/outputDevice'
 import { setFlowStyle } from './flowStyle'
 
 function useBeatChannel(name: 'caret' | 'shade', channel: BeatChannel, on: boolean): void {
@@ -58,4 +59,7 @@ export function useBeatFeedback(settings: BeatSettings, disabled: boolean): void
   const on = settings.enabled && !disabled
   useBeatChannel('caret', settings.caret, on)
   useBeatChannel('shade', settings.shade, on)
+  const device = useOutputDevice(on)
+  const delayMs = settings.delayMsByDevice[device] ?? 0
+  useEffect(() => setBeatVisualDelaySec(delayMs / 1000), [delayMs])
 }
