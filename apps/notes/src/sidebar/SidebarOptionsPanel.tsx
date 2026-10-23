@@ -1,4 +1,4 @@
-import type { MouseEvent, MutableRefObject, PointerEvent } from 'react'
+import type { MouseEvent, MutableRefObject, PointerEvent, ReactNode } from 'react'
 import { IS_LINUX_DESKTOP } from '../shared/platform'
 import type * as React from 'react'
 import { useRef } from 'react'
@@ -26,6 +26,7 @@ import {
   BEAT_FALL_SHAPE_MIN,
   DEFAULT_BEAT_CHANNEL,
   BEAT_DELAY_MAX_MS,
+  DEFAULT_BEAT_SETTINGS,
   BEAT_DELAY_MIN_MS,
   type BeatChannel,
   type BeatSettings,
@@ -1017,7 +1018,7 @@ export function SidebarOptionsPanel({
 }: SidebarOptionsPanelProps) {
     const outputDevice = useOutputDevice(beatSettings.enabled)
     // One element's five beat sliders: the same five for every element that follows the music.
-    const renderBeatChannel = (key: 'caret' | 'shade', label: string, effect: string) => {
+    const renderBeatChannel = (key: 'caret' | 'shade', label: string, effect: string, extra?: ReactNode) => {
       const channel = beatSettings[key]
       const set = (patch: Partial<BeatChannel>) => setBeatSettings((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }))
       const slider = (field: keyof BeatChannel, trackLabel: string, min: number, max: number, step: number, tooltipLabel: string, ariaName: string, digits?: number) => (
@@ -1039,8 +1040,9 @@ export function SidebarOptionsPanel({
         <>
           <OptionsSubsectionLabel>{label}</OptionsSubsectionLabel>
           <div className="utility-setting-slider-stack" aria-label={`${label} settings`}>
-            <OptionsSliderRows rows={[2, 2, 2]}>
+            <OptionsSliderRows rows={extra ? [3, 2, 2] : [2, 2, 2]}>
               {slider('amount', 'amount', 0, 1, 0.01, `How far ${effect} at a full response; 0 leaves it as it is`, 'amount')}
+              {extra}
               {/* Frequency is heard on a log scale, so the slider moves in octaves (log2 Hz) and shows Hz.
                   Half an octave below the lowest band is one more position, BEAT, which follows
                   kick-drum hits rather than a band; the lower half of that stretch selects it. */}
@@ -3195,7 +3197,20 @@ export function SidebarOptionsPanel({
             </OptionsSliderRows>
           </div>
           {renderBeatChannel('caret', 'Caret beat', 'the caret dips from its peak')}
-          {renderBeatChannel('shade', 'Shade beat', 'the active editor\'s inner shade deepens')}
+          {renderBeatChannel('shade', 'Shade beat', 'the active editor\'s inner shade deepens', (
+            <CompactScrollbarSlider
+              id="beat-shade-outline"
+              min={0}
+              max={1}
+              step={0.01}
+              value={beatSettings.outlineAmount}
+              trackLabel="outline"
+              tooltipLabel="How far the box outlines brighten at a full response, in step with the shade; 0 leaves them as they are"
+              ariaLabel="Shade beat: outline amount"
+              defaultValue={DEFAULT_BEAT_SETTINGS.outlineAmount}
+              onCommit={(value) => setBeatSettings((prev) => ({ ...prev, outlineAmount: value }))}
+            />
+          ))}
         </>) : null}
       </AccordionSection>
 

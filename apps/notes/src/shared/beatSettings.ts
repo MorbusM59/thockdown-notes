@@ -37,6 +37,12 @@ export interface BeatSettings {
   /** The active editor's inner shade; a response deepens it. */
   shade: BeatChannel
   /**
+   * How far the box outlines brighten at a full response. They follow the
+   * shade's band and timing (one response drives both) and only their
+   * intensity is their own; `shade.amount` is the shade's alone.
+   */
+  outlineAmount: number
+  /**
    * Milliseconds the pulse is drawn later than the music is heard, per output
    * device (`sound/outputDevice.ts` names it), on top of the latency the audio
    * stack reports: a wireless headset's delay is often not reported at all.
@@ -72,6 +78,7 @@ export const DEFAULT_BEAT_SETTINGS: BeatSettings = {
   enabled: false,
   caret: DEFAULT_BEAT_CHANNEL,
   shade: DEFAULT_BEAT_CHANNEL,
+  outlineAmount: 0.6,
   delayMsByDevice: {},
 }
 
@@ -102,6 +109,7 @@ export function sanitizeBeatSettings(input: unknown): BeatSettings {
     enabled: typeof source.enabled === 'boolean' ? source.enabled : DEFAULT_BEAT_SETTINGS.enabled,
     caret: sanitizeChannel(source.caret),
     shade: sanitizeChannel(source.shade),
+    outlineAmount: bounded(source.outlineAmount, 0, 1, DEFAULT_BEAT_SETTINGS.outlineAmount),
     delayMsByDevice: sanitizeDelays(source.delayMsByDevice),
   }
 }

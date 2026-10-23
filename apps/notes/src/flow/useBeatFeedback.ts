@@ -21,8 +21,17 @@ import { setBeatVisualDelaySec, subscribeMusicBand, type MusicBandSubscription }
 import { useOutputDevice } from '../sound/outputDevice'
 import { setFlowStyle } from './flowStyle'
 
-function useBeatChannel(name: 'caret' | 'shade', channel: BeatChannel, on: boolean): void {
-  const active = on && channel.amount > 0
+/**
+ * Drives one element's variable from its band. `scale` is what a full
+ * response writes: the caret's amount, or 1 for the shade, whose layer holds
+ * two effects with intensities of their own (`--beat-shade-amount`,
+ * `--beat-outline-amount`), applied as static opacities inside it so the one
+ * value written per frame stays a compositor opacity.
+ */
+function useBeatChannel(name: 'caret' | 'shade', channel: BeatChannel, scale: number, on: boolean): void {
+  const active = on && scale > 0
+  const scaleRef = useRef(scale)
+  scaleRef.current = scale
   // The latest channel, read by the subscription without re-creating it: a
   // slider moving retunes the band in place and keeps its measurements.
   const channelRef = useRef(channel)
@@ -38,7 +47,7 @@ function useBeatChannel(name: 'caret' | 'shade', channel: BeatChannel, on: boole
       // Quantized to the 1/255 an 8-bit colour channel resolves: every step
       // that can change a pixel is written, and nothing finer (setFlowStyle
       // skips a value equal to the last).
-      const steps = Math.round(response * channelRef.current.amount * 255)
+      const steps = Math.round(response * scaleRef.current * 255)
       setFlowStyle(variable, steps <= 0 ? null : (steps / 255).toFixed(4))
     })
     subscriptionRef.current = subscription
@@ -57,8 +66,16 @@ function useBeatChannel(name: 'caret' | 'shade', channel: BeatChannel, on: boole
 
 export function useBeatFeedback(settings: BeatSettings, disabled: boolean): void {
   const on = settings.enabled && !disabled
-  useBeatChannel('caret', settings.caret, on)
-  useBeatChannel('shade', settings.shade, on)
+  useBeatChannel('caret', settings.caret, settings.caret.amount, on)
+  const shadeAmount = settings.shade.amount
+  const outlineAmount = settings.outlineAmount
+  useBeatChannel('shade', settings.shade, shadeAmount > 0 || outlineAmount > 0 ? 1 : 0, on)
+  // Static between slider moves, so set once on <html> for the one layer that reads them.
+  useEffect(() => {
+    const root = document.documentElement.style
+    root.setProperty('--beat-shade-amount', String(shadeAmount))
+    root.setProperty('--beat-outline-amount', String(outlineAmount))
+  }, [shadeAmount, outlineAmount])
   const device = useOutputDevice(on)
   const delayMs = settings.delayMsByDevice[device] ?? 0
   useEffect(() => setBeatVisualDelaySec(delayMs / 1000), [delayMs])

@@ -534,7 +534,6 @@
   border-radius:  inherit;
   pointer-events: none;
   z-index:        4;
-  box-shadow:     var(--box-shadow-beat-shade);
   opacity:        var(--beat-shade, 0);
   /* Clips the outline copy to the editor's rounded shape. */
   overflow:       hidden;
@@ -549,10 +548,20 @@
    of the shade into a promoted sibling of its own (the shade's rules, minus
    the box-shadow), and add an 'outline' channel to useBeatFeedback, which
    writes --beat-outline exactly as the shade's writes --beat-shade. */
+/* The shade itself, at its own intensity, in the same layer as the outline. */
+.editor-beat-shade::before {
+  content:       '';
+  position:      absolute;
+  inset:         0;
+  border-radius: inherit;
+  box-shadow:    var(--box-shadow-beat-shade);
+  opacity:       var(--beat-shade-amount, 1);
+}
+
 .editor-beat-outline {
   position:       absolute;
   pointer-events: none;
-  opacity:        var(--beat-outline, 1);
+  opacity:        calc(var(--beat-outline-amount, 1) * var(--beat-outline, 1));
   background-image:
     repeating-linear-gradient(to right, var(--color-beat-outline) 0, var(--color-beat-outline) 3px, transparent 3px, transparent var(--editor-cell-width)),
     repeating-linear-gradient(to bottom, var(--color-beat-outline) 0, var(--color-beat-outline) 3px, transparent 3px, transparent var(--editor-line-height));
