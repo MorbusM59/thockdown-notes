@@ -15,6 +15,7 @@ import {
 } from '../shared/flowSettings'
 import {
   BEAT_FREQUENCY_MAX_HZ,
+  BEAT_FREQUENCY,
   BEAT_FREQUENCY_MIN_HZ,
   BEAT_OCTAVES_MAX,
   BEAT_OCTAVES_MIN,
@@ -363,6 +364,10 @@ const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
   markdownChecked: 'Markdown checked task color',
   markdownUnchecked: 'Markdown unchecked task color',
 }
+
+/** The beat frequency slider's BEAT position: half an octave below the lowest band, chosen by the lower half of that stretch. */
+const BEAT_SLIDER_MIN = Math.log2(BEAT_FREQUENCY_MIN_HZ) - 0.5
+const BEAT_SLIDER_SPLIT = Math.log2(BEAT_FREQUENCY_MIN_HZ) - 0.25
 
 const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
   caret: 'fa-solid fa-i',
@@ -1032,19 +1037,23 @@ export function SidebarOptionsPanel({
           <div className="utility-setting-slider-stack" aria-label={`${label} settings`}>
             <OptionsSliderRows rows={[2, 2, 2]}>
               {slider('amount', 'amount', 0, 1, 0.01, `How far ${effect} at a full response; 0 leaves it as it is`, 'amount')}
-              {/* Frequency is heard on a log scale, so the slider moves in octaves (log2 Hz) and shows Hz. */}
+              {/* Frequency is heard on a log scale, so the slider moves in octaves (log2 Hz) and shows Hz.
+                  Half an octave below the lowest band is one more position, BEAT, which follows
+                  kick-drum hits rather than a band; the lower half of that stretch selects it. */}
               <CompactScrollbarSlider
                 id={`beat-${key}-frequencyHz`}
-                min={Math.log2(BEAT_FREQUENCY_MIN_HZ)}
+                min={BEAT_SLIDER_MIN}
                 max={Math.log2(BEAT_FREQUENCY_MAX_HZ)}
                 step={0.01}
-                value={Math.log2(channel.frequencyHz)}
+                value={channel.frequencyHz === BEAT_FREQUENCY ? BEAT_SLIDER_MIN : Math.log2(channel.frequencyHz)}
                 trackLabel="freq"
-                tooltipLabel="Hz: the centre of the band it listens to, from sub-bass to hi-hats"
-                ariaLabel={`${label}: frequency in Hz`}
+                tooltipLabel="Hz: the centre of the band it listens to, from sub-bass to hi-hats. The lowest position, beat, follows kick-drum hits instead"
+                ariaLabel={`${label}: frequency in Hz, or beat`}
                 defaultValue={Math.log2(DEFAULT_BEAT_CHANNEL.frequencyHz)}
-                formatValue={(value) => Math.round(2 ** value).toString()}
-                onCommit={(value) => set({ frequencyHz: Math.round(2 ** value) })}
+                formatValue={(value) => (value < BEAT_SLIDER_SPLIT ? 'beat' : Math.max(BEAT_FREQUENCY_MIN_HZ, Math.round(2 ** value)).toString())}
+                onCommit={(value) => set({
+                  frequencyHz: value < BEAT_SLIDER_SPLIT ? BEAT_FREQUENCY : Math.max(BEAT_FREQUENCY_MIN_HZ, Math.round(2 ** value)),
+                })}
               />
               {slider('octaves', 'width', BEAT_OCTAVES_MIN, BEAT_OCTAVES_MAX, 0.1, 'Octaves: how wide the bell around the frequency is', 'band width in octaves', 1)}
               {slider('contrast', 'contrast', 0, BEAT_CONTRAST_MAX, 0.01, 'How loud the band must be, against the ten seconds around it, before it responds: higher keeps only the biggest hits', 'contrast')}

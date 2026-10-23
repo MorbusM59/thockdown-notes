@@ -10,7 +10,10 @@
 export interface BeatChannel {
   /** The share of the element's effect a full response reaches, 0..1. */
   amount: number
-  /** The centre of the band, in Hz. */
+  /**
+   * The centre of the band, in Hz; `BEAT_FREQUENCY` (0) follows kick-drum
+   * hits instead of one band (`sound/musicBeat.ts`'s onset reading).
+   */
   frequencyHz: number
   /** The band's width, in octaves, between its half-power points. */
   octaves: number
@@ -35,6 +38,8 @@ export interface BeatSettings {
   shade: BeatChannel
 }
 
+/** The frequency that means "follow the kick drum" rather than a band. */
+export const BEAT_FREQUENCY = 0
 export const BEAT_FREQUENCY_MIN_HZ = 20
 export const BEAT_FREQUENCY_MAX_HZ = 20000
 export const BEAT_OCTAVES_MIN = 0.1
@@ -71,7 +76,9 @@ function sanitizeChannel(input: unknown): BeatChannel {
   const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<keyof BeatChannel, unknown>>
   return {
     amount: bounded(source.amount, 0, 1, d.amount),
-    frequencyHz: bounded(source.frequencyHz, BEAT_FREQUENCY_MIN_HZ, BEAT_FREQUENCY_MAX_HZ, d.frequencyHz),
+    frequencyHz: source.frequencyHz === BEAT_FREQUENCY
+      ? BEAT_FREQUENCY
+      : bounded(source.frequencyHz, BEAT_FREQUENCY_MIN_HZ, BEAT_FREQUENCY_MAX_HZ, d.frequencyHz),
     octaves: bounded(source.octaves, BEAT_OCTAVES_MIN, BEAT_OCTAVES_MAX, d.octaves),
     contrast: bounded(source.contrast, 0, BEAT_CONTRAST_MAX, d.contrast),
     fallSec: bounded(source.fallSec, BEAT_FALL_MIN_SEC, BEAT_FALL_MAX_SEC, d.fallSec),

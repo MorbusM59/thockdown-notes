@@ -25,6 +25,18 @@
  * long after a seek or a new track, and stretches from a part-filled window
  * for `LEAD_SEC` after that.
  *
+ * A channel at `BEAT_FREQUENCY` follows KICK-DRUM HITS instead of a band's
+ * level. A bass line and a kick share the low band, so its level cannot tell
+ * them apart; their onsets can. A kick reaches full in milliseconds and
+ * arrives with the beater's broadband click, where a bass note swells and
+ * holds. So a beat band reads two bands, the kick's body (`KICK_HZ`) and its
+ * click (`CLICK_HZ`), and records how much each ROSE since the last reading
+ * (dB, rises only): the reading is the smaller of the two rises, so it is
+ * large only when the low end and the click jump together. That onset
+ * strength goes through the same window, stretch and fall as a level, offset
+ * by `ONSET_OFFSET_DB` into the histogram's range; the fall is what turns an
+ * onset into a pulse.
+ *
  * Runs only while there is a subscriber, the music is playing and the window
  * is visible: the frame loop is started by the play-state and visibility
  * events and stops itself otherwise. A subscriber is told of every change
@@ -33,7 +45,7 @@
  */
 
 import { outputContext } from '@thockdown/soundscape/audioOutputBus'
-import type { BeatChannel } from '../shared/beatSettings'
+import { BEAT_FREQUENCY, type BeatChannel } from '../shared/beatSettings'
 import { fadeCurve } from '../flow/flowTrail'
 import { musicPlayerService } from './MusicPlayerService'
 
@@ -55,6 +67,15 @@ const CAPACITY = 4096
 /** The bounds of a band's analyser window, in samples. */
 const MIN_TAP_SIZE = 256
 const MAX_TAP_SIZE = 8192
+/** A beat band's kick body and click, in Hz, and their widths in octaves. */
+const KICK_HZ = 60
+const KICK_OCTAVES = 1.5
+const CLICK_HZ = 3500
+const CLICK_OCTAVES = 2
+/** A beat band's analyser window: short, so an onset is not smeared across a long window. */
+const ONSET_TAP_SIZE = 1024
+/** Where an onset of no rise sits in the histogram (whose range ends at 0 dB). */
+const ONSET_OFFSET_DB = -60
 /** The smallest change a subscriber is told of. */
 const MIN_STEP = 0.001
 
@@ -66,6 +87,12 @@ interface Band {
   filter: BiquadFilterNode | null
   analyser: AnalyserNode | null
   samples: Float32Array<ArrayBuffer> | null
+  /** A beat band's click band, and both bands' previous levels in dB (NaN before the first reading). */
+  clickFilter: BiquadFilterNode | null
+  clickAnalyser: AnalyserNode | null
+  clickSamples: Float32Array<ArrayBuffer> | null
+  lastKickDb: number
+  lastClickDb: number
   /** The last peak of the response and the listener time it was reached at, for the fall (`fallSec`, `fallShape`). */
   peak: number
   peakTime: number
@@ -102,6 +129,12 @@ function clearWindow(band: Band): void {
   band.count = 0
   band.bins.fill(0)
   band.peak = 0
+  band.lastKickDb = NaN
+  band.lastClickDb = NaN
+}
+
+function isBeat(channel: BeatChannel): boolean {
+  return channel.frequencyHz === BEAT_FREQUENCY
 }
 
 function attachBand(band: Band): void {
@@ -114,6 +147,15 @@ function attachBand(band: Band): void {
   filter.connect(analyser)
   band.filter = filter
   band.analyser = analyser
+  if (isBeat(band.channel)) {
+    const clickFilter = context.createBiquadFilter()
+    clickFilter.type = 'bandpass'
+    const clickAnalyser = context.createAnalyser()
+    scoutSource.connect(clickFilter)
+    clickFilter.connect(clickAnalyser)
+    band.clickFilter = clickFilter
+    band.clickAnalyser = clickAnalyser
+  }
   tuneBand(band)
 }
 
@@ -121,6 +163,19 @@ function attachBand(band: Band): void {
 function tuneBand(band: Band): void {
   const { filter, analyser } = band
   if (!filter || !analyser) return
+  if (isBeat(band.channel)) {
+    filter.frequency.value = KICK_HZ
+    filter.Q.value = bandQ(KICK_OCTAVES)
+    analyser.fftSize = ONSET_TAP_SIZE
+    band.samples = new Float32Array(ONSET_TAP_SIZE)
+    if (band.clickFilter && band.clickAnalyser) {
+      band.clickFilter.frequency.value = CLICK_HZ
+      band.clickFilter.Q.value = bandQ(CLICK_OCTAVES)
+      band.clickAnalyser.fftSize = ONSET_TAP_SIZE
+      band.clickSamples = new Float32Array(ONSET_TAP_SIZE)
+    }
+    return
+  }
   filter.frequency.value = band.channel.frequencyHz
   filter.Q.value = bandQ(band.channel.octaves)
   // About three periods of the band's centre, so a low band is not read
@@ -135,6 +190,11 @@ function detachBand(band: Band): void {
   band.filter?.disconnect()
   band.filter = null
   band.analyser = null
+  if (band.clickFilter && scoutSource) scoutSource.disconnect(band.clickFilter)
+  band.clickFilter?.disconnect()
+  band.clickFilter = null
+  band.clickAnalyser = null
+  band.clickSamples = null
 }
 
 /** The scout for the playing track, built (or re-pointed) on demand. */
@@ -194,11 +254,17 @@ function keepScoutAhead(listenerTime: number): boolean {
 function sample(scoutTime: number): void {
   for (const band of bands) {
     if (!band.analyser || !band.samples) continue
-    band.analyser.getFloatTimeDomainData(band.samples)
-    let sum = 0
-    for (let i = 0; i < band.samples.length; i++) sum += band.samples[i] * band.samples[i]
-    const rms = Math.sqrt(sum / band.samples.length)
-    const db = rms > 0 ? Math.max(FLOOR_DB, 20 * Math.log10(rms)) : FLOOR_DB
+    let db = levelDb(band.analyser, band.samples)
+    if (isBeat(band.channel)) {
+      if (!band.clickAnalyser || !band.clickSamples) continue
+      const clickDb = levelDb(band.clickAnalyser, band.clickSamples)
+      // The onset: how much the kick body and the click both rose since the
+      // last reading; the first reading after a restart has nothing to rise from.
+      const rise = Math.min(db - band.lastKickDb, clickDb - band.lastClickDb)
+      band.lastKickDb = db
+      band.lastClickDb = clickDb
+      db = ONSET_OFFSET_DB + (Number.isNaN(rise) ? 0 : Math.max(0, rise))
+    }
     if (band.count === CAPACITY) dropOldest(band)
     const at = (band.head + band.count) % CAPACITY
     band.times[at] = scoutTime
@@ -206,6 +272,15 @@ function sample(scoutTime: number): void {
     band.count++
     band.bins[binOf(db)]++
   }
+}
+
+/** An analyser's current level in dB, floored at FLOOR_DB. */
+function levelDb(analyser: AnalyserNode, samples: Float32Array<ArrayBuffer>): number {
+  analyser.getFloatTimeDomainData(samples)
+  let sum = 0
+  for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i]
+  const rms = Math.sqrt(sum / samples.length)
+  return rms > 0 ? Math.max(FLOOR_DB, 20 * Math.log10(rms)) : FLOOR_DB
 }
 
 function dropOldest(band: Band): void {
@@ -313,12 +388,18 @@ export interface MusicBandSubscription {
 }
 
 /** Follows one band of the music; `listener` gets the response whenever it moves. */
-export function subscribeMusicBand(channel: BeatChannel, listener: BeatListener): MusicBandSubscription {  const band: Band = {
+export function subscribeMusicBand(channel: BeatChannel, listener: BeatListener): MusicBandSubscription {
+  const band: Band = {
     channel,
     listener,
     filter: null,
     analyser: null,
     samples: null,
+    clickFilter: null,
+    clickAnalyser: null,
+    clickSamples: null,
+    lastKickDb: NaN,
+    lastClickDb: NaN,
     peak: 0,
     peakTime: 0,
     times: new Float64Array(CAPACITY),
@@ -337,8 +418,15 @@ export function subscribeMusicBand(channel: BeatChannel, listener: BeatListener)
   start()
   const update = (next: BeatChannel) => {
     const retune = next.frequencyHz !== band.channel.frequencyHz || next.octaves !== band.channel.octaves
+    const rebuild = isBeat(next) !== isBeat(band.channel)
     band.channel = next
-    if (retune) tuneBand(band)
+    if (rebuild) {
+      // A level and an onset are different quantities: the window holds one
+      // or the other, never a mixture.
+      detachBand(band)
+      clearWindow(band)
+      attachBand(band)
+    } else if (retune) tuneBand(band)
   }
   const unsubscribe = () => {
     bands.delete(band)
