@@ -70,6 +70,7 @@ import { createDocumentCommitCoalescer } from './documentCommitCoalescer'
 import { buildPersistedBlockMap } from '../editor/persistedBlockMap'
 import type { NoteUiStatePayload } from '../shared/noteLifecycle'
 import { requestFullBlockSplit } from '../editor/documentFactsClient'
+import type { NoteDocumentChange } from './noteDocumentStore'
 import { selectWholePane } from './wholePaneSelection'
 
 /**
@@ -145,7 +146,16 @@ export interface UseEditorSectionMountOptions {
   activeNoteHasDebugTagRef: MutableRefObject<boolean>
   setIsCaretSuspended: Dispatch<SetStateAction<boolean>>
 
-  queueSave: (text: string, cursorPos?: number | null) => void
+  /** Queues a write of the note's document (useNoteSaveQueue): the text written is the document's when the write starts, so none is passed. */
+  queueSave: (cursorPos?: number | null) => void
+  /**
+   * Tells the note's other views that this section changed the text
+   * (noteDocumentStore.ts's `publish`). Called for every change made here and
+   * for no change that arrived from elsewhere -- the one rule that keeps every
+   * view of a note on the same text.
+   */
+  /** `noteId` is the note the editor is showing (see NoteDocumentStore's `publish`). */
+  publishText: (noteId: string, text: string, from?: { previousText: string; edit: EditorTextEdit | null }) => void
   queueAppStateSave: (selectedNoteId: string | null) => void
   updateActiveNoteTitlePreview: (nextText: string) => void
   /** Only ever referenced in bindings' own dependency array (matching the original code), never actually called here. */
@@ -171,22 +181,8 @@ export interface UseEditorSectionMountOptions {
   /** Scopes the editor/scrollbar DOM lookups below to this section's own stage -- other sections render the same class names, so an unscoped document.querySelector would grab whichever section's stage happens to be first in the DOM. */
   sectionContainerRef: MutableRefObject<HTMLDivElement | null>
   /**
-   * True while `previewedSnapshotId` is non-null *because useSnapshotFreeze
-   * hibernated this section* (same note open live in another section),
-   * false while it's non-null because the user is genuinely browsing Time
-   * Machine history. Both cases render read-only "preview" content through
-   * the same `previewedSnapshotId` mechanism, but they need different
-   * restore targets: a frozen section has a real scroll/caret position
-   * worth preserving (wherever the user was when it hibernated); an
-   * arbitrary historical snapshot doesn't, so it starts at the top. Owned
-   * by EditorSection and written by useSnapshotFreeze/useNoteSnapshotTimeline
-   * -- read-only from here.
-   */
-  isFrozenSectionPreviewRef: MutableRefObject<boolean>
-  /**
    * The content of whichever Timeline snapshot `previewedSnapshotId` refers
-   * to, or null when not previewing a snapshot (genuinely live, or frozen --
-   * see isFrozenSectionPreviewRef). Populated as a plain ref mutation during
+   * to, or null when showing the live note. Populated as a plain ref mutation during
    * EditorSection's render (same pattern as `activeNoteHasDebugTagRef.current
    * = ...`) rather than an effect, because useNoteSnapshotTimeline (the
    * source of this content) is mounted later in the same component than this
@@ -282,6 +278,8 @@ export interface UseEditorSectionMountResult {
   toggleRenderViewMode: () => void
   isPreviewScrollInteractionBlocked: () => boolean
   applyProgrammaticEditorText: (nextText: string, selectionStart?: number, selectionEnd?: number) => void
+  /** Takes a change another view of the note made -- see its definition. */
+  receiveExternalChange: (noteId: string, change: NoteDocumentChange) => void
   /**
    * Background preview-block split cache. Populated by a deferred parse
    * while in edit mode so the first toggle to preview can warm-start
@@ -324,6 +322,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     activeNoteHasDebugTagRef,
     setIsCaretSuspended,
     queueSave,
+    publishText,
     queueAppStateSave,
     updateActiveNoteTitlePreview,
     buildTextDecorationTransformRef,
@@ -333,7 +332,6 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     buildToggleBulletedListTransformRef,
     buildToggleNumberedListTransformRef,
     sectionContainerRef,
-    isFrozenSectionPreviewRef,
     previewedSnapshotContentRef,
     previewBlockSplitCacheRef,
     previewBlocksCacheRef,
@@ -1039,17 +1037,17 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       payloadBase.cursorPos = cursorPos
     }
 
-    void (async () => {
-      // Same rule as the checkpoint above: absent, never null.
-      const previewBlockMap = await buildPersistedBlockMap(previewBlockSplitCacheRef.current, text)
-      if (previewBlockMap) payloadBase.previewBlockCache = previewBlockMap
-      debugLogPreviewBlockCache('persisting leave-note cache', {
-        noteId: activeNoteId,
-        hasCache: !!previewBlockMap,
-        ranges: previewBlockMap?.ranges.length,
-      })
-      await notesApi.saveNoteUiState({ id: activeNoteId, payload: payloadBase })
-    })()
+    // Same rule as the checkpoint above: absent, never null.
+    const previewBlockMap = await buildPersistedBlockMap(previewBlockSplitCacheRef.current, text)
+    if (previewBlockMap) payloadBase.previewBlockCache = previewBlockMap
+    debugLogPreviewBlockCache('persisting leave-note cache', {
+      noteId: activeNoteId,
+      hasCache: !!previewBlockMap,
+      ranges: previewBlockMap?.ranges.length,
+    })
+    // Awaited, so the quit routine's wait on this covers the write itself
+    // (src/shared/quitParticipants.ts).
+    await notesApi.saveNoteUiState({ id: activeNoteId, payload: payloadBase })
   }, [
     activeNoteId,
     readEditorText,
@@ -1539,6 +1537,24 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     ).cache
   }, [markdownEditRef, markdownInlineCacheRef])
 
+  /**
+   * Takes a change another view of note `noteId` made (noteDocumentStore.ts's
+   * `change` event). When the editor shows that note's live text it applies
+   * the change as an edit, and the section follows from the editor's report
+   * of it (`source: 'remote'` in onTextChange). Otherwise -- a Time Machine
+   * snapshot on screen, or a note switch the editor has not caught up with --
+   * the section takes the text, and the editor is brought to it by hydration
+   * when it next shows the live note.
+   */
+  const receiveExternalChange = useCallback((noteId: string, change: NoteDocumentChange) => {
+    if (adapterRef.current?.applyExternalChange(noteId, change)) return
+    const previousText = latestEditorTextRef.current
+    latestEditorTextRef.current = change.text
+    advanceMarkdownInlineCache(change.text, previousText, previousText === change.previousText ? change.edit : null)
+    sectionRequiresScrollUpdateRef.current = true
+    documentCommit.text(true)
+  }, [advanceMarkdownInlineCache, documentCommit, latestEditorTextRef])
+
   const commitTransformResult = useCallback((next: EditorTransformResult): EditorTransformResult => {
     // The inline-state cache is deliberately NOT advanced here. A transform's
     // result is dispatched to the editor by applyTransformResult after this
@@ -1548,7 +1564,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     // places to keep in step.
     commitEditorText(next.text)
     updateActiveNoteTitlePreview(next.text)
-    queueSave(next.text, next.selection.end)
+    queueSave(next.selection.end)
 
     latestEditorSelectionRef.current = next.selection
     setEditorSelection(next.selection)
@@ -1663,6 +1679,26 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         recordLiveSelectionInSnapshotCache(event.selection)
       }
 
+      if (event.source === 'remote') {
+        // Another view's change, already the note's document: shown with the
+        // rest of this frame, and nothing more -- it is not this section's to
+        // publish, save or play a sound for. The caret was mapped through it,
+        // so its offsets moved too.
+        documentCommit.text(true)
+        documentCommit.selection()
+        sectionRequiresScrollUpdateRef.current = true
+        return
+      }
+      // A hydration is the editor being handed the document, not a change to
+      // it. Everything else -- typing, undo, a transform, an image rewrite --
+      // is this section changing the note, and every other view must follow.
+      if (event.source !== 'initial-load') {
+        // The note on screen, which the editor's change was made to: the
+        // ref follows the committed render, not the slot's binding.
+        const shownNoteId = activeNoteIdRef.current
+        if (shownNoteId) publishText(shownNoteId, canonicalText, { previousText: event.previousText, edit: event.edit })
+      }
+
       const isDeferredPreviewTick = deferPreviewOnRapidInput && event.source === 'user-input'
       documentCommit.text(isDeferredPreviewTick)
       debugLogCheckpoint('after documentCommit.text')
@@ -1706,7 +1742,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         updateActiveNoteTitlePreview(canonicalText)
       }
       debugLogCheckpoint('after updateActiveNoteTitlePreview')
-      queueSave(canonicalText, event.selection.end)
+      queueSave(event.selection.end)
       debugLogCheckpoint('after queueSave (onTextChange end)')
 
       // Mark that a change occurred that requires recomputing scroll
@@ -2034,6 +2070,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     previewedSnapshotId,
     deferPreviewOnRapidInput,
     queueSave,
+    publishText,
     queueAppStateSave,
     applyEditRestoreSnapshot,
     updateActiveNoteTitlePreview,
@@ -2674,21 +2711,8 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       return
     }
 
-    // Section hibernation (useSnapshotFreeze) moves previewedSnapshotId
-    // without changing what the reader is looking at: the same note, at the
-    // same position, swapped between its live text and a snapshot of that
-    // same text taken moments earlier. There is no incoming content to
-    // land, so gating it hides a settled preview for no reason -- and since
-    // merely switching which slot is active freezes one section and thaws
-    // the other, that fired on BOTH panes on every activation change,
-    // reading as a flicker across the whole window.
-    if (isFrozenSectionPreviewRef.current) {
-      previewSettleGenerationRef.current = null
-      return
-    }
-
     previewSettleGenerationRef.current = gate.beginSettle()
-  }, [isPreviewMode, activeNoteId, previewedSnapshotId, isFrozenSectionPreviewRef])
+  }, [isPreviewMode, activeNoteId, previewedSnapshotId])
 
   useLayoutEffect(() => {
     if (!isPreviewMode) return
@@ -2996,26 +3020,13 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     // Derived from previewedSnapshotId directly rather than threaded in as
     // its own option: the fuller App.tsx definition also checks that the
     // snapshot's content actually resolved from noteSnapshots.snapshotsById,
-    // but previewedSnapshotId is only ever set (by handleNavigateSnapshot or
-    // useSnapshotFreeze) to an ID that genuinely exists, so this is
+    // but previewedSnapshotId is only ever set (by handleNavigateSnapshot)
+    // to an ID that genuinely exists, so this is
     // equivalent in every real code path without needing this hook to also
     // depend on the Time Machine snapshot list.
     const isPreviewingSnapshot = previewedSnapshotId !== null
 
     if (isPreviewingSnapshot) {
-      if (isFrozenSectionPreviewRef.current) {
-        // This "preview" is actually a hibernated section showing the same
-        // live note open elsewhere, frozen read-only -- not the user
-        // browsing history. It has a real scroll/caret position worth
-        // keeping (captured right before freezing), unlike an arbitrary
-        // historical snapshot -- restore that instead of snapping to top.
-        const cachedAtFreeze = editModeSnapshotByNoteIdRef.current.get(activeNoteId)
-        if (cachedAtFreeze) {
-          applyEditRestoreSnapshot(cachedAtFreeze, { restoreFullSelection: true, focusAfterApply: false })
-          return
-        }
-      }
-
       // A historical snapshot tracks its own canonical BLOCK independently
       // of the live note's, maintained the same way (see
       // docs/editor-contract.md's Viewport Model section) -- restore from
@@ -3075,12 +3086,14 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       },
       { restoreFullSelection: Boolean(cached), focusAfterApply: false },
     )
-  }, [getPreviewBlocksForText, activeNoteId, applyEditRestoreSnapshot, previewedSnapshotId, isFrozenSectionPreviewRef, previewedSnapshotContentRef, latestEditViewportRef, latestViewportRef])
+  }, [getPreviewBlocksForText, activeNoteId, applyEditRestoreSnapshot, previewedSnapshotId, previewedSnapshotContentRef, latestEditViewportRef, latestViewportRef])
   const applyProgrammaticEditorText = useCallback((nextText: string, selectionStart?: number, selectionEnd?: number) => {
     if (activeNoteHasDebugTagRef.current) return
 
     const canonicalText = normalizeInternalText(nextText)
     commitEditorText(canonicalText)
+    const shownNoteId = activeNoteIdRef.current
+    if (shownNoteId) publishText(shownNoteId, canonicalText)
     updateActiveNoteTitlePreview(canonicalText)
 
     if (typeof selectionStart === 'number' && typeof selectionEnd === 'number') {
@@ -3106,12 +3119,13 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         })
       })
 
-      queueSave(canonicalText, nextSelection.end)
+      queueSave(nextSelection.end)
     } else {
-      queueSave(canonicalText, latestEditorSelectionRef.current?.end)
+      queueSave(latestEditorSelectionRef.current?.end)
     }
   }, [
     queueSave,
+    publishText,
     updateActiveNoteTitlePreview,
     activeNoteHasDebugTagRef,
     latestEditorSelectionRef,
@@ -3152,6 +3166,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     toggleRenderViewMode,
     isPreviewScrollInteractionBlocked,
     applyProgrammaticEditorText,
+    receiveExternalChange,
     previewBlockSplitCacheRef,
     previewBlocksCacheRef,
   }

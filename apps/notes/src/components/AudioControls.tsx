@@ -102,6 +102,8 @@ export interface AudioControlsProps {
    * without triggering a re-render on every position tick.
    */
   playbackStateRef?: React.MutableRefObject<MusicPlaybackSnapshot>
+  /** The snapshot changed: a track change, a pause or a resume. Saved then, and on quit. */
+  onPlaybackStateChange?: () => void
 }
 
 export const AudioControls = memo(function AudioControls({
@@ -125,6 +127,7 @@ export const AudioControls = memo(function AudioControls({
   initialPositionSec,
   initialWasPlaying,
   playbackStateRef,
+  onPlaybackStateChange,
 }: AudioControlsProps) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentSong, setCurrentSong] = useState<MusicSongEntry | null>(null)
@@ -371,24 +374,19 @@ export const AudioControls = memo(function AudioControls({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSongId])
 
-  // Keep the parent-owned snapshot fresh so it can be persisted at any time
-  // (e.g. on the debounced app-state save, or on quit).
+  // The parent-owned snapshot follows the moments the position is saved at:
+  // a track change and a pause (and a resume, which is the same effect). In
+  // between, a save reads the live position itself (App's snapshot), so
+  // nothing has to keep the position fresh while a track plays.
+  const onPlaybackStateChangeRef = useRef(onPlaybackStateChange)
+  onPlaybackStateChangeRef.current = onPlaybackStateChange
   useEffect(() => {
     if (!playbackStateRef) return
     playbackStateRef.current.songId = currentSong?.id ?? null
     playbackStateRef.current.wasPlaying = isPlaying
     playbackStateRef.current.positionSec = musicPlayerService.currentTime
+    onPlaybackStateChangeRef.current?.()
   }, [playbackStateRef, currentSong, isPlaying])
-
-  // While playing, periodically refresh the saved position. Position isn't
-  // reactive state — polling avoids a re-render on every audio frame.
-  useEffect(() => {
-    if (!playbackStateRef || !isPlaying) return
-    const id = setInterval(() => {
-      playbackStateRef.current.positionSec = musicPlayerService.currentTime
-    }, 3000)
-    return () => clearInterval(id)
-  }, [playbackStateRef, isPlaying])
 
   // ---------------------------------------------------------------- play / stop
 

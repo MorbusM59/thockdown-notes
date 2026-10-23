@@ -3,10 +3,13 @@ import type { EventChannels, InvokeChannels } from './ipcContract';
 /** What the main process tells the window unprompted: a file the OS asked the app to open. */
 export interface ExternalFileEvents {
   opened: string;
+  /** The file behind this external note changed on disk (its note id). */
+  noteFileChanged: string;
 }
 
 export const EXTERNAL_FILE_EVENTS = {
   opened: 'external-files:opened',
+  noteFileChanged: 'external-files:note-file-changed',
 } as const satisfies EventChannels<ExternalFileEvents>;
 
 export const EXTERNAL_FILE_CHANNELS = {
@@ -15,6 +18,8 @@ export const EXTERNAL_FILE_CHANNELS = {
   writeFileContent: 'external-files:write-content',
   getFileBasename: 'external-files:basename',
   readFileSnapshot: 'external-files:read-snapshot',
+  watchNoteFiles: 'external-files:watch-note-files',
+  readNoteFile: 'external-files:read-note-file',
 } as const satisfies InvokeChannels<ExternalFilesApi>;
 
 export type ExternalFilesApi = {
@@ -40,4 +45,13 @@ export type ExternalFilesApi = {
    */
   readFileSnapshot(filePath: string): Promise<{ content: string; modifiedAtMs: number } | null>;
   onOpenFile(callback: (filePath: string) => void): () => void;
+  /**
+   * Watches the files behind exactly these notes (any that are not external
+   * notes are ignored) and stops watching every other: the notes open in the
+   * window, whose files are reconciled with them when they change.
+   */
+  watchNoteFiles(noteIds: string[]): Promise<void>;
+  /** `readFileSnapshot` of the file behind an external note; null for any other note, or a file that cannot be read. */
+  readNoteFile(noteId: string): Promise<{ content: string; modifiedAtMs: number } | null>;
+  onNoteFileChanged(callback: (noteId: string) => void): () => void;
 };

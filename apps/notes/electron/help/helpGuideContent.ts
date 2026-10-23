@@ -670,6 +670,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 - Becomes a temporary note tagged \`external\`, appearing only in the Date view (not Category, Archive, or Trash).
 - Your edits autosave into the app's own database as you type, but never touch the original file until you explicitly save.
+- If the file changes on disk while the note is open, the note takes the new content, unless you have edited it too: then your text stays, and the file's version goes on the [Time Machine Timeline](${guideLink('TIME-MACHINE', 'time-machine-timeline')}), and the save button's tooltip says that saving will overwrite it.
 - Characters that do not fit the editor's grid (see [Characters the Editor Keeps](#characters-the-editor-keeps)) are removed when the file opens, so saving it writes the file back without them.
 
 ### [Saving an External File](#saving-an-external-file)

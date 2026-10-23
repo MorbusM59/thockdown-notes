@@ -13,7 +13,7 @@ import {
 } from '../editor/ImageStorageRewrite'
 import { describeImageFailure } from '../shared/images'
 import { resolveStoredImages, storeImageSources } from '../shared/storedImages'
-import { SAVE_DEBOUNCE_MS } from './useNoteSaveQueue'
+import { SAVE_DEBOUNCE_MS } from './noteDocumentStore'
 
 // THE IMAGE BUTTON's state and its two actions (SectionEditorArea draws it).
 //

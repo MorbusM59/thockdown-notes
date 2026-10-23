@@ -3,7 +3,7 @@ const ENABLE_SECTION_ID_ASSERTIONS = import.meta.env.DEV
 /**
  * Every section-scoped hook (useActiveNoteId, useDisplayedNoteText,
  * usePreviewedSnapshot, useDisplayedNoteSelection, useDisplayedNoteRenderMode,
- * useSnapshotFreeze, useSectionTabs, useDocumentFind, useNoteSnapshots, ...)
+ * useSectionTabs, useDocumentFind, useNoteSnapshots, ...)
  * takes its own `sectionId` argument today even though there's only one
  * section and every call site hardcodes the same `DEFAULT_EDITOR_SECTION_ID`
  * constant. Most of these hooks don't read `sectionId` internally yet, so a

@@ -1,11 +1,13 @@
+import { withExternalFileTurn } from './externalFileSync'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent, MutableRefObject } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote } from '../shared/noteLifecycle'
 import { withSavedNote } from '../shared/noteContentStore'
 import { applyProtectedTagDestination } from '../shared/protectedTagActions'
-import { normalizeInternalText } from '../editor/TextPolicy'
+import { sanitizeDocumentText } from '../shared/textSanitization'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
+import type { NoteDocumentStore } from './noteDocumentStore'
 
 // A right-press on a note, or on the trash-view button, that means "this
 // one" rather than the ordinary click -- the app's CONFIRM threshold
@@ -35,6 +37,8 @@ export interface UseNoteProtectionActionsOptions {
   sidebarMode: SidebarModeForRemoval
   activeNoteExternalPathRef: MutableRefObject<string | null>
   externalNoteOriginalTextByIdRef: MutableRefObject<Map<string, string>>
+  /** The open notes' live documents (noteDocumentStore.ts). */
+  noteDocuments: NoteDocumentStore
   /** Called once a note is *permanently* removed from the DB (not archived/trashed) -- lets EditorSection.tsx evict any per-note-id caches (edit-mode restore snapshot, etc.) that would otherwise hold onto that id forever. */
   onNotePermanentlyDeleted?: (noteId: string) => void
   /** The chapter-aware "menu identity" note currently open in this section -- see useNoteChapters.ts's own doc comment. Used only to know whether a just-restored chapter's parent is the family currently on screen, so its chapter bar can be refreshed. */
@@ -107,6 +111,7 @@ export function useNoteProtectionActions({
   sidebarMode,
   activeNoteExternalPathRef,
   externalNoteOriginalTextByIdRef,
+  noteDocuments,
   onNotePermanentlyDeleted,
   menuIdentityNoteId,
   refreshChapters,
@@ -162,7 +167,10 @@ export function useNoteProtectionActions({
     }
   }, [notes, menuIdentityNoteId, refreshChapters])
 
-  const saveExternalNoteToFile = useCallback(async (noteId: string) => {
+  // In the note's turn with the file (externalFileSync.ts): the watcher
+  // reports this save's own write, and reconciling it before the save has
+  // recorded the new baseline would take the reader's save for a conflict.
+  const saveExternalNoteToFile = useCallback((noteId: string) => withExternalFileTurn(noteId, async () => {
     if (!window.thockdownNotes || !window.thockdownExternalFiles) return
 
     const summary = notes.find((note) => note.id === noteId)
@@ -245,7 +253,7 @@ export function useNoteProtectionActions({
     try {
       const diskBefore = await window.thockdownExternalFiles.readFileSnapshot(externalPath)
       if (diskBefore) {
-        const diskBeforeNormalized = normalizeInternalText(diskBefore.content)
+        const diskBeforeNormalized = sanitizeDocumentText(diskBefore.content)
         if (baselineText !== undefined && diskBeforeNormalized !== baselineText) {
           await window.thockdownNotes.saveNoteSnapshot({
             id: noteId,
@@ -326,6 +334,15 @@ export function useNoteProtectionActions({
       // the text BACKWARDS, taking the editor (through its hydration path)
       // with it. The first write is a no-op and the second is the bug above.
       try {
+        // An open note is written through its document, with the text it
+        // holds NOW: `currentText` was read before the file write, and a
+        // debounced save of newer typing may have landed since -- writing
+        // `currentText` here would roll the database back under it.
+        const resaving = noteDocuments.resave(noteId)
+        if (resaving) {
+          await resaving
+          return
+        }
         const savedSummary = await window.thockdownNotes.saveNote({ id: noteId, text: currentText })
         console.debug('[external-note] saveExternalNoteToFile persisted temp note text into DB', { noteId, externalPath, savedSummary })
 
@@ -362,7 +379,7 @@ export function useNoteProtectionActions({
       return
     }
 
-    const diskSanityNormalized = normalizeInternalText(diskSanityText)
+    const diskSanityNormalized = sanitizeDocumentText(diskSanityText)
     const isDiskEqual = currentText === diskSanityNormalized
 
     try {
@@ -413,7 +430,8 @@ export function useNoteProtectionActions({
       console.error('[external-note] failed to persist external note snapshots', { noteId, error })
     }
     await persistSavedText()
-  }, [
+  }), [
+    noteDocuments,
     activeNoteId,
     notes,
     activeNoteExternalPathRef,

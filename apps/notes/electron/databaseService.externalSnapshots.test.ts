@@ -62,6 +62,15 @@ describe('from-disk snapshots', () => {
     expect(baseline?.timestamp).toBe('2020-05-05T12:00:00.000Z')
   })
 
+  it('takes the most recently recorded file state as the baseline, whatever its file time', () => {
+    seedNote(db, 'n1', 'x')
+    db.saveNoteSnapshot('n1', 'first disk state', true, { isFromDisk: true, timestamp: '2026-02-01T00:00:00.000Z' })
+    // Copied in with its old modified time preserved.
+    db.saveNoteSnapshot('n1', 'copied over it', true, { isFromDisk: true, timestamp: '2025-01-01T00:00:00.000Z' })
+
+    expect(db.getLatestFromDiskSnapshot('n1')?.content).toBe('copied over it')
+  })
+
   it('never deduplicates a from-disk snapshot against matching content', () => {
     seedNote(db, 'n1', 'same bytes')
     db.saveNoteSnapshot('n1', 'same bytes', true, { isFromDisk: true, timestamp: '2026-01-01T00:00:00.000Z' })
