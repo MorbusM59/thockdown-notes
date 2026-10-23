@@ -49,6 +49,7 @@ import type { NoteSummary } from './shared/noteLifecycle'
 import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote, isSameNoteSummary } from './shared/noteLifecycle'
 import { adoptNoteSummaries, keepIfUnchanged, withSavedNote } from './shared/noteContentStore'
 import { applyNonOverlappingChanges, createNoteDocumentStore } from './editorSection/noteDocumentStore'
+import { musicPlayerService } from './sound/MusicPlayerService'
 import { registerQuitParticipant, settleForQuit } from './shared/quitParticipants'
 import { installExternalFileSync } from './editorSection/externalFileSync'
 import { getNoteListMetaKind } from './shared/noteListMeta'
@@ -288,6 +289,8 @@ import { stableStringify } from './shared/stableStringify'
 const NEW_NOTE_TEMPLATE = '# '
 const FALLBACK_NEW_NOTE_TITLE = 'Untitled'
 const GRID_DIVIDER_PX = 8
+/** How long the app state waits after its last change before it is written. */
+const APP_STATE_SAVE_DEBOUNCE_MS = 500
 // Sidebar width is derived (see sidebarWidthPx below), not a flat constant --
 // it has to fit the options panel's always-visible top section (font
 // settings + preset buttons), which is a 6-column grid of
@@ -2161,9 +2164,7 @@ function App() {
       // always through persistMenuStateNow, via its ref proxy (see
       // persistMenuStateNowRef's own doc comment for why -- this handler is
       // declared before persistMenuStateNow, same TDZ/staleness situation as
-      // toggleSidebarVisible above). An earlier hand-rolled build+save here,
-      // without updating persistedMenuStateRef, was the actual cause of
-      // double-size mode not surviving an AppImage restart on Linux.
+      // toggleSidebarVisible above).
       persistMenuStateNowRef.current({ isDoubleSizeMode: next })
 
       return next
@@ -3931,7 +3932,6 @@ function App() {
   const revealNoteInMenuStable = useCallback(() => revealNoteInMenuRef.current(), [])
   const writeDebugEntryStable = useCallback((functionName: string, lines: string[]) => writeDebugEntryRef.current(functionName, lines), [])
 
-  const persistedMenuStateRef = useRef<PersistedMenuState | null>(null)
 
   const buildMenuStateSnapshot = useCallback((overrides?: {
     sidebarMode?: SidebarMode
@@ -4011,7 +4011,10 @@ function App() {
       soundscapes: soundscapePreferences,
       musicActiveSlots,
       musicLastSongId: musicPlaybackRef.current.songId ?? undefined,
-      musicLastPositionSec: musicPlaybackRef.current.positionSec,
+      // Live while a track plays, so a save at any moment (quit included)
+      // has the position as it is; otherwise where the pause or the track
+      // change left it.
+      musicLastPositionSec: musicPlaybackRef.current.wasPlaying ? musicPlayerService.currentTime : musicPlaybackRef.current.positionSec,
       musicWasPlaying: musicPlaybackRef.current.wasPlaying,
       highlightCaretColor: highlightColors.caret,
       highlightSearchColor: highlightColors.search,
@@ -4181,33 +4184,16 @@ function App() {
   ])
 
   /**
-   * The one correct way to persist an app-state menu change *right now*
-   * (as opposed to the debounced queueAppStateSave path further down, meant
-   * for high-frequency changes like scrolling). Builds a fresh snapshot via
-   * buildMenuStateSnapshot, updates persistedMenuStateRef, then saves it.
-   *
-   * That ref update is load-bearing, not tidiness: queueAppStateSave's own
-   * debounced flush prefers persistedMenuStateRef.current over building a
-   * fresh snapshot itself, so if some *other* immediate-persist call site
-   * skips updating the ref, its correctly-saved value gets silently
-   * overwritten by the very next debounced flush -- triggered by anything
-   * at all (switching notes, scrolling), or even just idling for about a
-   * second while some unrelated background save was already pending.
-   *
-   * This is not a hypothetical: hand-rolling buildMenuStateSnapshot +
-   * saveAppState without this ref update independently caused the exact
-   * same silent-persistence-loss bug at least four separate times --
-   * double-size mode, sidebar visibility, the options-menu auto-show-
-   * sidebar path, and review-gutter visibility, the last of which even had
-   * its own doc comment describing the hand-rolled pattern as the norm
-   * other toggles should copy. If you're adding a new instant (non-
-   * debounced) menu-state toggle, call this -- do not hand-roll
-   * buildMenuStateSnapshot+saveAppState again.
+   * Persists the app state *right now*, for a change whose save must not
+   * wait for the debounce (the main process acts on the saved value, or a
+   * reload follows). Every other change is saved by the debounced save,
+   * which an effect queues whenever the snapshot changes. Both build their
+   * snapshot from the current state at the moment they write, so neither can
+   * write back a stale copy over the other.
    */
   const persistMenuStateNow = useCallback((overrides?: Parameters<typeof buildMenuStateSnapshot>[0]) => {
     if (!window.thockdownState || !persistenceReady) return undefined
     const snapshot = buildMenuStateSnapshot(overrides)
-    persistedMenuStateRef.current = snapshot
     const section = getActiveSection()
     return window.thockdownState.saveAppState({
       selectedNoteId: section?.activeNoteId ?? null,
@@ -4971,7 +4957,6 @@ function App() {
     await window.thockdownState.clearAppState()
     applyUiLayoutLoadout(uiMode === 'dark' ? DARK_FACTORY_PRESETS[0] : LIGHT_FACTORY_PRESETS[0])
     const refreshedMenuState = buildMenuStateSnapshot()
-    persistedMenuStateRef.current = refreshedMenuState
     await window.thockdownState.saveAppState({
       selectedNoteId: null,
       viewport: undefined,
@@ -4980,6 +4965,11 @@ function App() {
     window.location.reload()
   }, [applyUiLayoutLoadout, buildMenuStateSnapshot, clearAppStatePrimed, uiMode])
 
+  // The debounced save builds its snapshot when it FIRES, from the state as
+  // it is then: a snapshot kept from earlier is a copy that goes stale, and
+  // writing it back is how a setting changed since gets reverted.
+  const buildMenuStateSnapshotRef = useRef(buildMenuStateSnapshot)
+  buildMenuStateSnapshotRef.current = buildMenuStateSnapshot
   const queueAppStateSave = useCallback((selectedNoteId: string | null) => {
     if (!window.thockdownState) return
     if (!persistenceReady) return
@@ -4994,11 +4984,14 @@ function App() {
       void window.thockdownState?.saveAppState({
         selectedNoteId,
         viewport: viewport ?? undefined,
-        menu: persistedMenuStateRef.current ?? buildMenuStateSnapshot(),
+        menu: buildMenuStateSnapshotRef.current(),
       })
-    }, 150)
-  }, [buildMenuStateSnapshot, getActiveSection, persistenceReady])
+    }, APP_STATE_SAVE_DEBOUNCE_MS)
+  }, [getActiveSection, persistenceReady])
   queueAppStateSaveRef.current = queueAppStateSave
+  const queueActiveAppStateSave = useCallback(() => {
+    queueAppStateSave(getActiveSection()?.activeNoteId ?? null)
+  }, [getActiveSection, queueAppStateSave])
 
   const chooseExportFolder = useCallback(async () => {
     const folderPath = await window.thockdownExport?.selectExportFolder()
@@ -5006,14 +4999,8 @@ function App() {
 
     setExportFolder(folderPath)
 
-    const nextMenuState = {
-      ...(persistedMenuStateRef.current ?? buildMenuStateSnapshot()),
-      exportFolder: folderPath,
-    }
-    persistedMenuStateRef.current = nextMenuState
-    queueAppStateSave(getActiveSection()?.activeNoteId ?? null)
     return folderPath
-  }, [buildMenuStateSnapshot, getActiveSection, queueAppStateSave])
+  }, [])
 
   /**
    * The markdown an export writes, and the title its file is named after.
@@ -5083,7 +5070,7 @@ ${markdownHtml}
     await window.thockdownState.saveAppState({
       selectedNoteId,
       viewport: getActiveSection()?.latestViewportRef.current ?? undefined,
-      menu: persistedMenuStateRef.current ?? buildMenuStateSnapshot(),
+      menu: buildMenuStateSnapshot(),
     })
   }, [buildMenuStateSnapshot, getActiveSection])
 
@@ -6300,13 +6287,8 @@ ${markdownHtml}
               scrollTop: loadedSidebarViewState[appState.menu.sidebarMode].scrollTop,
             }
 
-            persistedMenuStateRef.current = {
-              ...appState.menu,
-              sidebarViewState: loadedSidebarViewState,
-            }
             setExportFolder(appState.menu.exportFolder ?? null)
           } else {
-            persistedMenuStateRef.current = null
             setExportFolder(null)
           }
 
@@ -7386,11 +7368,14 @@ ${markdownHtml}
     }
   }, [getActiveSection, exportFolder, isExportingMd, chooseExportFolder, buildExportMarkdown])
 
+  // Every change to anything the app state holds is saved a moment after it
+  // settles, so the saved state is never more than that behind the screen
+  // (a power cut, a killed process). `buildMenuStateSnapshot` is rebuilt
+  // exactly when one of the values it reads changes, which is what makes it
+  // the trigger.
   useEffect(() => {
-    const activeNoteId = activeSectionSnapshot?.activeNoteId
-    if (!window.thockdownState || !activeNoteId) return
-    queueAppStateSave(activeNoteId)
-  }, [activeSectionSnapshot?.activeNoteId, queueAppStateSave])
+    queueAppStateSave(activeSectionSnapshot?.activeNoteId ?? null)
+  }, [activeSectionSnapshot?.activeNoteId, buildMenuStateSnapshot, queueAppStateSave])
 
   useEffect(() => {
     if (!persistenceReady) return
@@ -10002,6 +9987,7 @@ ${markdownHtml}
                 initialPositionSec={musicRestorePositionSec}
                 initialWasPlaying={musicRestoreWasPlaying}
                 playbackStateRef={musicPlaybackRef}
+                onPlaybackStateChange={queueActiveAppStateSave}
                 isSoundOptionsOpen={musicSoundOptionsOpen}
                 onSoundOptionsOpenChange={setMusicSoundOptionsOpen}
               />

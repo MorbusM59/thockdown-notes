@@ -682,7 +682,11 @@ export class DatabaseService {
     const db = new BetterSqlite3(this.dbPath);
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
-    db.pragma('synchronous = NORMAL');
+    // FULL: a commit is on disk when it returns, so a power cut cannot take
+    // back a save that already reported success. NORMAL kept the database
+    // consistent but could lose the last commits; saves are debounced, so
+    // the extra sync per commit is not paid per keystroke.
+    db.pragma('synchronous = FULL');
 
     this.db = db;
     this.ensureSchema();

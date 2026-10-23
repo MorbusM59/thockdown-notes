@@ -1,3 +1,4 @@
+import { writeFileDurably } from './durableWrite';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type {
@@ -620,24 +621,6 @@ async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
-// Writes `text` to a sibling temp file and renames it over `filePath`, so a
-// crash mid-write leaves the previous file intact rather than a truncated one.
-// On Windows a rename over a file another process holds open (an antivirus
-// scan, a search indexer) fails with EPERM/EACCES/EBUSY; there the file is
-// written in place instead, which is what every write did before.
-async function writeFileReplacing(filePath: string, text: string): Promise<void> {
-  const tempPath = `${filePath}.tmp`;
-  await fs.writeFile(tempPath, text, 'utf8');
-  try {
-    await fs.rename(tempPath, filePath);
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code !== 'EPERM' && code !== 'EACCES' && code !== 'EBUSY') throw error;
-    await fs.writeFile(filePath, text, 'utf8');
-    await fs.rm(tempPath, { force: true });
-  }
-}
-
 export class StateService {
   private readonly appStatePath: string;
   private readonly windowStatePath: string;
@@ -662,7 +645,7 @@ export class StateService {
     // order of the calls; the directory is made inside the queued step.
     const write = previous.then(async () => {
       await fs.mkdir(path.dirname(filePath), { recursive: true });
-      await writeFileReplacing(filePath, text);
+      await writeFileDurably(filePath, text);
     });
     // A failed write is reported to its own caller and must not fail the next.
     this.writeQueues.set(filePath, write.catch(() => undefined));

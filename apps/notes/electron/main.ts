@@ -7,6 +7,7 @@ import { existsSync, promises as fsPromises } from 'node:fs'
 import { moveLegacyDevData } from './legacyDevDataMove'
 import { NoteLifecycleService } from './noteLifecycleService'
 import { ExternalFileWatcher } from './externalFileWatcher'
+import { writeFileDurably } from './durableWrite'
 import { createQuitRoutine, createRequestTracker, within } from './quitRoutine'
 import { FILE_SYNC_CHANNELS, type FileSyncApi } from '../src/shared/fileSync'
 import { NOTE_LIFECYCLE_CHANNELS, NOTE_LIFECYCLE_EVENTS, type NoteLifecycleApi, type NoteLifecycleEvents } from '../src/shared/noteLifecycle'
@@ -161,6 +162,8 @@ const handleTracked = (channel: string, listener: (event: IpcMainInvokeEvent, ..
   ipcMain.handle(channel, requestTracker.track(listener))
 }
 
+/** How long the window's bounds wait after a move or resize before they are written. */
+const WINDOW_STATE_SAVE_DEBOUNCE_MS = 500
 /** How long the window may take to write what it holds before the app quits without it. */
 const WINDOW_SETTLE_TIMEOUT_MS = 3000
 /** How long requests still being handled may take before the database closes under them. */
@@ -987,7 +990,7 @@ function registerIpcHandlers() {
       if (!isOpenableExternalFile(filePath)) return false;
       const normalizedPath = normalizeExternalFilePath(filePath);
       try {
-        await fsPromises.writeFile(normalizedPath, content, 'utf8');
+        await writeFileDurably(normalizedPath, content);
         return true;
       } catch {
         return false;
@@ -1659,9 +1662,17 @@ async function createWindow() {
     win.maximize();
   }
 
+  // Debounced: a drag or a resize raises these events many times a second,
+  // and each save is a write flushed to disk. The quit routine saves the
+  // final bounds itself.
+  let windowStateSaveTimer: ReturnType<typeof setTimeout> | null = null
   const persistWindowState = () => {
-    if (!win || !stateService) return;
-    void stateService.saveWindowState(readPersistableWindowState(win));
+    if (windowStateSaveTimer !== null) clearTimeout(windowStateSaveTimer)
+    windowStateSaveTimer = setTimeout(() => {
+      windowStateSaveTimer = null
+      if (!win || win.isDestroyed() || !stateService) return;
+      void stateService.saveWindowState(readPersistableWindowState(win));
+    }, WINDOW_STATE_SAVE_DEBOUNCE_MS)
   };
 
   win.on('resize', persistWindowState);

@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { writeFileDurably } from './durableWrite';
 import type {
   AddTagInput,
   BranchNoteFromSnapshotInput,
@@ -1181,7 +1182,7 @@ export class NoteLifecycleService {
     }
 
     try {
-      await fs.writeFile(record.externalPath, input.content, 'utf8');
+      await writeFileDurably(record.externalPath, input.content);
       const verification = await fs.readFile(record.externalPath, 'utf8');
       if (verification !== input.content) {
         return false;

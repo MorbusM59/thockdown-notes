@@ -501,6 +501,6 @@ describe('StateService concurrent writes', () => {
     const restored = await new StateService(dataRoot).loadAppState()
     expect(restored.selectedNoteId).toBe('note-39')
     // Each write lands through a temp file renamed over the target.
-    expect(readdirSync(dataRoot).filter((name) => name.endsWith('.tmp'))).toEqual([])
+    expect(readdirSync(dataRoot).filter((name) => name.includes('tmp'))).toEqual([])
   })
 })
