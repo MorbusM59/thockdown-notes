@@ -27,9 +27,9 @@
  *
  * Runs only while there is a subscriber, the music is playing and the window
  * is visible: the frame loop is started by the play-state and visibility
- * events and stops itself otherwise. A subscriber is told only of a change
- * of at least `MIN_STEP`, and of 0 when the loop stops, because each one
- * writes a style.
+ * events and stops itself otherwise. A subscriber is told of every change
+ * of at least `MIN_STEP` (finer than a subscriber's own output resolution,
+ * which decides what is worth writing), and of 0 when the loop stops.
  */
 
 import { outputContext } from '@thockdown/soundscape/audioOutputBus'
@@ -56,7 +56,7 @@ const CAPACITY = 4096
 const MIN_TAP_SIZE = 256
 const MAX_TAP_SIZE = 8192
 /** The smallest change a subscriber is told of. */
-const MIN_STEP = 0.01
+const MIN_STEP = 0.001
 
 type BeatListener = (response: number) => void
 
@@ -230,11 +230,20 @@ function respond(band: Band, listenerTime: number): number {
   // Right after a resync the scout's readings all lie ahead of the listener:
   // nothing has been heard yet that the window can describe.
   if (band.count === 0 || band.times[band.head] > listenerTime) return 0
-  // The reading for the listener's moment: the last one stamped at or before it.
+  // The level at the listener's moment, interpolated between the readings
+  // either side of it, so a frame between two readings does not hold the
+  // older one and then step.
   let level = band.levels[band.head]
-  for (let k = 0; k < band.count; k++) {
+  let before = band.head
+  for (let k = 1; k < band.count; k++) {
     const at = (band.head + k) % CAPACITY
-    if (band.times[at] > listenerTime) break
+    if (band.times[at] > listenerTime) {
+      const span = band.times[at] - band.times[before]
+      const share = span > 0 ? (listenerTime - band.times[before]) / span : 0
+      level = band.levels[before] + (band.levels[at] - band.levels[before]) * share
+      break
+    }
+    before = at
     level = band.levels[at]
   }
   const floor = percentile(band, band.channel.contrast)

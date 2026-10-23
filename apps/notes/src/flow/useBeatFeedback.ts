@@ -34,7 +34,11 @@ function useBeatChannel(name: 'caret' | 'shade', channel: BeatChannel, on: boole
     const root = document.documentElement
     root.setAttribute(`data-beat-${name}`, '')
     const subscription = subscribeMusicBand(channelRef.current, (response) => {
-      setFlowStyle(variable, response <= 0 ? null : (response * channelRef.current.amount).toFixed(3))
+      // Quantized to the 1/255 an 8-bit colour channel resolves: every step
+      // that can change a pixel is written, and nothing finer (setFlowStyle
+      // skips a value equal to the last).
+      const steps = Math.round(response * channelRef.current.amount * 255)
+      setFlowStyle(variable, steps <= 0 ? null : (steps / 255).toFixed(4))
     })
     subscriptionRef.current = subscription
     return () => {
