@@ -35,7 +35,7 @@ export type DecodedChunk = (samples: Float32Array, startTime: number) => void
 interface Opened {
   sink: AudioSampleSink
   sampleRate: number
-  /** Added to every decoded timestamp to put it on the element's timeline. */
+  /** Taken off every decoded timestamp to put it on the element's timeline. */
   shiftSec: number
 }
 
@@ -124,7 +124,7 @@ export class MusicDecodeStream {
     let mono = new Float32Array(0)
     let plane = new Float32Array(0)
     try {
-      for await (const sample of sink.samples(Math.max(0, fromSec - shiftSec))) {
+      for await (const sample of sink.samples(Math.max(0, fromSec + shiftSec))) {
         if (generation !== this.generation) {
           sample.close()
           break
@@ -141,7 +141,7 @@ export class MusicDecodeStream {
           for (let i = 0; i < frames; i++) mono[i] += plane[i]
         }
         if (channels > 1) for (let i = 0; i < frames; i++) mono[i] /= channels
-        const startTime = sample.timestamp + shiftSec
+        const startTime = sample.timestamp - shiftSec
         sample.close()
         onChunk(mono, startTime)
         this.frontier = startTime + frames / sampleRate

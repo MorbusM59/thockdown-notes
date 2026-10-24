@@ -153,6 +153,8 @@ function restartAnalysis(listenerTime: number): void {
   const url = musicPlayerService.trackUrl
   for (const band of bands) clearWindow(band)
   drums = null
+  // Every restart supersedes one still waiting for its file to open, whether or not it gets as far as starting one of its own.
+  const id = ++run
   if (stream?.url !== url) {
     stream?.dispose()
     stream = url ? new MusicDecodeStream(url) : null
@@ -160,7 +162,6 @@ function restartAnalysis(listenerTime: number): void {
   if (!stream) return
   stream.halt()
   const target = stream
-  const id = ++run
   if (isBeatTraceOn()) appendBeatTrace(`beat RESYNC at=${listenerTime.toFixed(3)}`)
   void target.sampleRate().then((sampleRate) => {
     if (id !== run || sampleRate === null) return

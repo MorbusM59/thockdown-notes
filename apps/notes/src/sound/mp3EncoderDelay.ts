@@ -5,7 +5,8 @@
  * LAME tag (LAME itself, and FFmpeg as "Lavc"/"Lavf") records the first in it.
  * Chromium's own decoder honours the tag and drops those samples, so what an
  * `<audio>` element plays at media time t is what a decoder that ignores the
- * tag (Mediabunny's) produces at t + this delay. Without a tag nothing is
+ * tag (Mediabunny's) produces at t + this delay (measured: a click Chromium
+ * decodes at 30.5s, Mediabunny decodes at 30.5251s). Without a tag nothing is
  * dropped by either, and the delay is 0.
  *
  * The tag sits in the first frame (the Xing or Info frame), after an ID3v2
