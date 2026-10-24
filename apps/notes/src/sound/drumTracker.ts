@@ -937,7 +937,6 @@ export class DrumTracker {
     return most
   }
 
-
   /** A voice's onset at absolute hop index `index`, 0 outside the window or before it has settled. */
   private at(voice: Voice, index: number): number {
     const k = index - this.start

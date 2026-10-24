@@ -75,4 +75,3 @@
 - [ ] **Two render-view regression scripts fail on `main` before and after this change, identically:** `verifyScrollBridge.mjs` ("a short journey does not raise one / stretch the thumb") and `verifyModeToggleRoundTrip.mjs` (a 13-block drift, the known item above). A third `verifyScrollBridge` check ("thumb holds still, stretched") fails intermittently. Separately, in cloud containers the scripts that launch Playwright's default browser fail before running, because the installed Playwright expects a newer headless-shell build than the container ships. Point `PLAYWRIGHT_BROWSERS_PATH` at a directory holding a `chromium_headless_shell-<expected>` symlink to the installed one.
 
 - [x] **Mobile schedule: assign by MARKING a soundscape.** Built as PICKING UP: a long press on a soundscape picks it up without playing it, and every slot tap fills a slot with it until a tap on it puts it down (`SoundscapeControls`' `onPickPreset`, `ScheduleGrid.tsx`).
-
