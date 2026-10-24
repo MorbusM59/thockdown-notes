@@ -421,9 +421,13 @@ export type DrumRestart = 'gap' | 'drift'
 /**
  * One reader's place in the hits: the last media time it asked about and the
  * last hit it was told of, so each hit is reported to it once whoever else
- * reads the same drum. `epoch` is the tracker's restart count it was last
- * used in; a restart forgets both.
+ * reads the same drum. `epoch` names the run of hops it was last used in;
+ * a cursor meeting another run forgets both, since its hop index belongs to
+ * the old one's numbering.
  */
+/** The next run's `epoch`, shared by every tracker. */
+let nextEpoch = 0
+
 export class DrumCursor {
   lastAsked = NaN
   lastPeak = NaN
@@ -561,8 +565,16 @@ export class DrumTracker {
   private resumedAt = -Infinity
   /** The absolute hop the silence filling that gap began at. */
   private gapFrom = -Infinity
-  /** Restarts so far, so a reader's cursor knows its place belongs to an earlier run. */
-  private epoch = 0
+  /**
+   * This run of hops, unique across EVERY tracker (`nextEpoch`), so a
+   * reader's cursor knows its place belongs to another run. A count per
+   * tracker repeated across trackers: a cursor carried from one tracker to
+   * a fresh one (`musicBeat.ts` keeps its cursors across every restart of
+   * the analysis) kept the old run's last hop index and skipped every hit
+   * until the new run's hops counted past it, which was as long as the
+   * music had played before the restart.
+   */
+  private epoch = nextEpoch++
   /** Brings the input to ANALYSIS_RATE; null when it is already there. */
   private readonly resampler: StreamResampler | null
 
@@ -613,7 +625,7 @@ export class DrumTracker {
     this.barPhase = NaN
     this.resumedAt = -Infinity
     this.gapFrom = -Infinity
-    this.epoch++
+    this.epoch = nextEpoch++
   }
 
   /**

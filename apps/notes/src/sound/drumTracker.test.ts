@@ -541,3 +541,30 @@ describe('DrumTracker on snares and hats', () => {
     expect(hits.filter((h) => h.at > 10 && h.at < 34 && h.response > 0.3 && !track.hats.some((t) => h.at >= t - EARLY_SEC && h.at <= t + LATE_SEC))).toEqual([])
   })
 })
+
+describe('DrumCursor', () => {
+  it('finds the hits of a new tracker at once after reading an older one, as a reader kept across a restart does', () => {
+    const track = house(60, 124)
+    const cursor = new DrumCursor()
+    // Each tracker is fed from LEAD before its first question, as the
+    // analysis decodes the window either side of the listener on a restart.
+    const LEAD = 6
+    const read = (from: number, to: number) => {
+      const tracker = new DrumTracker(RATE)
+      const at = Math.max(0, Math.round((from - 5) * RATE))
+      let fed = at
+      const hits: number[] = []
+      for (let heard = from; heard < to; heard += 1 / 60) {
+        const end = Math.min(track.samples.length, Math.round((heard + LEAD) * RATE))
+        if (end > fed) tracker.feed(track.samples.subarray(fed, end), 0, (end - 1) / RATE)
+        fed = Math.max(fed, end)
+        if (tracker.hitBetween('kick', cursor, heard, 0.5) > 0) hits.push(heard)
+      }
+      return hits
+    }
+    expect(read(0, 30).length).toBeGreaterThan(40)
+    // A seek back: the second tracker's hops count from zero again.
+    const after = read(10, 20)
+    expect(after[0]).toBeLessThan(11.5)
+  })
+})
