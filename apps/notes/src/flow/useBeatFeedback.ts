@@ -6,16 +6,17 @@
  *
  * - `--beat-caret`, the caret's DIP: while the caret follows the music its
  *   own blink is suspended and it holds at its peak (`html[data-beat-caret]`),
- *   and the value takes that share off its opacity. The caret does not follow
- *   detected hits: it ticks on a steady clock that follows the music's tempo
- *   (`subscribeMusicClock`), with its `mass` setting how heavy each beat is.
+ *   and the value takes that share off its opacity. Unlike the other two it
+ *   follows no band and no detected hit: it dips on every beat of a steady
+ *   clock that follows the music's tempo (`subscribeMusicClock`), each dip
+ *   as heavy as its `mass` makes it.
  * - `--beat-shade`, the opacity of the active editor's beat shade
  *   (`.editor-beat-shade`, shown and promoted under `html[data-beat-shade]`).
  * - `--beat-outline`, the opacity of the box outlines' copy
  *   (`.editor-beat-outline`, shown and promoted under `html[data-beat-outline]`).
  *
  * An inverted block (a negative effect) rests at its full effect while music plays and a hit
- * takes it away; with nothing playing every block is off either way, so an
+ * (or, for the caret, a beat) takes it away; with nothing playing every block is off either way, so an
  * inverted one does not sit over the editor in silence. A block with no
  * effect subscribes nothing and keeps its ordinary look; the `<html>`
  * attributes change once when a block is switched, never per frame. The two
@@ -24,29 +25,38 @@
  */
 
 import { useEffect, useRef } from 'react'
-import type { VisualizerChannel, VisualizerSettings } from '@thockdown/look/visualizer'
+import type { VisualizerCaret, VisualizerChannel, VisualizerSettings } from '@thockdown/look/visualizer'
 import type { BeatSettings } from '../shared/beatSettings'
 import { musicPlayerService } from '../sound/MusicPlayerService'
-import { setBeatVisualDelaySec, subscribeMusicBand, subscribeMusicClock, type MusicBandSubscription } from '../sound/musicBeat'
+import { setBeatVisualDelaySec, subscribeMusicBand, subscribeMusicClock } from '../sound/musicBeat'
 import { useOutputDevice } from '../sound/outputDevice'
 import { setFlowStyle } from './flowStyle'
 
 type BlockName = keyof VisualizerSettings
 
-function useBeatBlock(name: BlockName, channel: VisualizerChannel, on: boolean): void {
+/** What a block subscribes with: a band channel for the shade and outline, the caret's two fields for the caret's clock. */
+type BlockSettings = VisualizerChannel | VisualizerCaret
+
+interface BlockSubscription<T> {
+  update: (settings: T) => void
+  unsubscribe: () => void
+}
+
+type Subscribe<T> = (settings: T, listener: (response: number) => void) => BlockSubscription<T>
+
+function useBeatBlock<T extends BlockSettings>(name: BlockName, channel: T, on: boolean, subscribeTo: Subscribe<T>): void {
   const active = on && channel.effect !== 0
   // The latest channel, read by the subscription without re-creating it: a
   // slider moving retunes the band in place and keeps its measurements.
   const channelRef = useRef(channel)
   channelRef.current = channel
-  const subscriptionRef = useRef<MusicBandSubscription | null>(null)
+  const subscriptionRef = useRef<BlockSubscription<T> | null>(null)
 
   useEffect(() => {
     if (!active) return
     const variable = `--beat-${name}`
     const root = document.documentElement
     root.setAttribute(`data-beat-${name}`, '')
-    const subscribeTo = name === 'caret' ? subscribeMusicClock : subscribeMusicBand
     const subscription = subscribeTo(channelRef.current, (response) => {
       const { effect } = channelRef.current
       const value = !musicPlayerService.isPlaying ? 0 : effect < 0 ? -effect * (1 - response) : effect * response
@@ -63,7 +73,7 @@ function useBeatBlock(name: BlockName, channel: VisualizerChannel, on: boolean):
       setFlowStyle(variable, null)
       root.removeAttribute(`data-beat-${name}`)
     }
-  }, [name, active])
+  }, [name, active, subscribeTo])
 
   useEffect(() => {
     subscriptionRef.current?.update(channel)
@@ -72,9 +82,9 @@ function useBeatBlock(name: BlockName, channel: VisualizerChannel, on: boolean):
 
 export function useBeatFeedback(settings: BeatSettings, visualizer: VisualizerSettings, disabled: boolean): void {
   const on = settings.enabled && !disabled
-  useBeatBlock('caret', visualizer.caret, on)
-  useBeatBlock('shade', visualizer.shade, on)
-  useBeatBlock('outline', visualizer.outline, on)
+  useBeatBlock('caret', visualizer.caret, on, subscribeMusicClock)
+  useBeatBlock('shade', visualizer.shade, on, subscribeMusicBand)
+  useBeatBlock('outline', visualizer.outline, on, subscribeMusicBand)
   const shadeColor = visualizer.shade.color
   const outlineColor = visualizer.outline.color
   useEffect(() => {

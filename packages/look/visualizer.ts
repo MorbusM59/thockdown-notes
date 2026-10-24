@@ -48,14 +48,23 @@ export interface VisualizerChannel {
   mass: number
 }
 
+/**
+ * The caret's block: it ticks on a steady beat that follows the music's
+ * tempo (the notes app's `sound/beatClock.ts`) rather than a band or a drum,
+ * so it has only the depth of each beat (`effect`, as a channel's) and how
+ * heavy it is (`mass`: a faint flicker at 0, a full beat carrying to the next
+ * at 1, through `fallOf`).
+ */
+export type VisualizerCaret = Pick<VisualizerChannel, 'effect' | 'mass'>
+
 /** A block drawn in a colour of its own. */
 export interface VisualizerColorChannel extends VisualizerChannel {
   color: string
 }
 
 export interface VisualizerSettings {
-  /** The caret, held at its peak while it follows the music and dipped on a steady beat that follows its tempo; only `effect` and `mass` apply. */
-  caret: VisualizerChannel
+  /** The caret, held at its peak while it follows the music and dipped on a steady beat that follows its tempo. */
+  caret: VisualizerCaret
   /** The active editor's inner shade; a response deepens it. */
   shade: VisualizerColorChannel
   /** The box outlines; a response draws them over the grid's own. */
@@ -99,6 +108,11 @@ export const DEFAULT_VISUALIZER_CHANNEL: VisualizerChannel = {
   mass: 0.5,
 }
 
+export const DEFAULT_VISUALIZER_CARET: VisualizerCaret = {
+  effect: DEFAULT_VISUALIZER_CHANNEL.effect,
+  mass: DEFAULT_VISUALIZER_CHANNEL.mass,
+}
+
 /**
  * The defaults for a layout, which depend on whether it is inverted: a
  * colour is picked BEFORE the theme's invert, so a shade that darkens and
@@ -109,7 +123,7 @@ export function defaultVisualizer(inverted: boolean): VisualizerSettings {
   const dark = 'rgba(0, 0, 0, 0.9)'
   const light = 'rgba(255, 255, 255, 0.35)'
   return {
-    caret: DEFAULT_VISUALIZER_CHANNEL,
+    caret: DEFAULT_VISUALIZER_CARET,
     shade: { ...DEFAULT_VISUALIZER_CHANNEL, color: inverted ? 'rgba(255, 255, 255, 0.9)' : dark },
     outline: { ...DEFAULT_VISUALIZER_CHANNEL, color: inverted ? 'rgba(0, 0, 0, 0.35)' : light },
   }
@@ -143,10 +157,20 @@ function sanitizeChannel(input: unknown, d: VisualizerChannel): VisualizerChanne
     frequencyHz: bounded(source.frequencyHz, BEAT_FREQUENCY_MIN_HZ, BEAT_FREQUENCY_MAX_HZ, d.frequencyHz),
     octaves: bounded(source.octaves, BEAT_OCTAVES_MIN, BEAT_OCTAVES_MAX, d.octaves),
     contrast: bounded(source.contrast, 0, BEAT_CONTRAST_MAX, d.contrast),
-    mass: source.mass !== undefined
-      ? bounded(source.mass, 0, 1, d.mass)
-      : typeof source.fallSec === 'number' && source.fallSec > 0 ? bounded(massOfFallSec(source.fallSec), 0, 1, d.mass) : d.mass,
+    mass: sanitizeMass(source, d.mass),
   }
+}
+
+/** The mass; a layout saved with `fallSec` turns into the mass that falls as long. */
+function sanitizeMass(source: Partial<Record<string, unknown>>, fallback: number): number {
+  if (source.mass !== undefined) return bounded(source.mass, 0, 1, fallback)
+  return typeof source.fallSec === 'number' && source.fallSec > 0 ? bounded(massOfFallSec(source.fallSec), 0, 1, fallback) : fallback
+}
+
+/** The caret's two fields; anything else an older layout saved with it (a source, a band) is dropped. */
+function sanitizeCaret(input: unknown, d: VisualizerCaret): VisualizerCaret {
+  const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<string, unknown>>
+  return { effect: sanitizeEffect(source, d.effect), mass: sanitizeMass(source, d.mass) }
 }
 
 function sanitizeColorChannel(input: unknown, d: VisualizerColorChannel): VisualizerColorChannel {
@@ -159,7 +183,7 @@ export function sanitizeVisualizer(input: unknown, inverted: boolean): Visualize
   const d = defaultVisualizer(inverted)
   const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<keyof VisualizerSettings, unknown>>
   return {
-    caret: sanitizeChannel(source.caret, d.caret),
+    caret: sanitizeCaret(source.caret, d.caret),
     shade: sanitizeColorChannel(source.shade, d.shade),
     outline: sanitizeColorChannel(source.outline, d.outline),
   }
