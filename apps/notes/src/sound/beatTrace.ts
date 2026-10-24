@@ -5,17 +5,17 @@
 // from the console with the music already playing), then
 // `copy(window.__beatTrace.join('\n'))`. Attaches nothing when unset.
 //
-// Three kinds of line, all stamped with the scout's media time:
+// Three kinds of line, all stamped with the decoded media time:
 // - `beat sec`: once a second, the stamp jitter the tracker averaged away
-//   (the media element's reported position against where the sample count
-//   puts it: mean and spread, in ms), samples lost to long frames, and the
-//   tempo grid (BPM, or `--` while unlocked, and its confidence). A spread
-//   above about one hop (5.3ms) is what used to walk the clock off the music.
+//   (the stamp against where the sample count puts it: mean and spread, in
+//   ms; zero now that the samples come decoded with exact times), samples
+//   lost, and the tempo grid (BPM, or `--` while unlocked, and its
+//   confidence).
 // - `beat RESTART`: the tracker started over, and why: `gap` (more samples
 //   lost at once than it fills with silence) or `drift` (the stamp moved
 //   further than a seek or a stall would explain).
-// - `beat RESYNC`: the scout was put back on its lead (a seek, a new track,
-//   or the scout falling behind), which restarts every band.
+// - `beat RESYNC`: the analysis started over at the listener (a seek, a new
+//   track, a changed source or band), decoding the window around it afresh.
 
 import type { DrumTracker } from './drumTracker'
 

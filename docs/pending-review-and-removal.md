@@ -577,3 +577,23 @@ anything reading the staged colour from outside the section). Then both
 sections become a target list and the App.tsx handlers and props go.
 
 **Noticed.** Written with `StagedColorRow`, for the Visualizer section.
+
+### The drum tracker's stamp averaging and lost-sample handling
+
+**What it is.** `DrumTracker.feed`'s `endTime` alignment, averaged over
+`ALIGN_FEEDS` feeds with a `MAX_DRIFT_SEC` restart, and its `lost` parameter
+with the silence fill and the `gapFrom`/`resumedAt` handling around a gap
+(`apps/notes/src/sound/drumTracker.ts`).
+
+**Why it is suspect.** Both existed for samples tapped from a media element
+through an `AnalyserNode`: a reported position that jittered by more than a
+hop, and frames long enough to lose samples. The visualizer now decodes the
+track (`musicDecodeStream.ts`), so every feed carries exact, contiguous media
+times and `lost` is always 0.
+
+**What would have to be true to remove it.** That nothing else feeds the
+tracker from a live tap. Then `feed` takes a start time and the samples, the
+alignment and gap paths go, and their tests become a check that consecutive
+chunks join without a seam.
+
+**Noticed.** Moving the visualizer's analysis onto decoded audio.
