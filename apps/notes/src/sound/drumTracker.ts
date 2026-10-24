@@ -76,7 +76,17 @@
  */
 
 import type { VisualizerDrum } from '@thockdown/look/visualizer'
+import { StreamResampler } from './streamResampler'
 
+/**
+ * The rate every figure here was tuned and tested at, in samples per second:
+ * a band's filters, the hop and every count of hops. Audio at another rate is
+ * resampled to it on the way in (`StreamResampler`), because a hop of 256
+ * samples is a different length of time at 44.1kHz and the tempo search, the
+ * pattern's bins and the envelopes all shift with it (measured: at 44.1kHz the
+ * grid flipped between a tempo and its octave and never settled).
+ */
+const ANALYSIS_RATE = 48000
 const HOP = 256
 const ENVELOPE_HOPS = 8
 /** The hops a rise is measured over, for an envelope of `envelopeHops`: three quarters of it, six for the kick's eight. */
@@ -553,9 +563,12 @@ export class DrumTracker {
   private gapFrom = -Infinity
   /** Restarts so far, so a reader's cursor knows its place belongs to an earlier run. */
   private epoch = 0
+  /** Brings the input to ANALYSIS_RATE; null when it is already there. */
+  private readonly resampler: StreamResampler | null
 
-  constructor(sampleRate: number) {
-    this.hopSec = HOP / sampleRate
+  constructor(readonly sampleRate: number) {
+    this.resampler = sampleRate === ANALYSIS_RATE ? null : new StreamResampler(sampleRate, ANALYSIS_RATE)
+    this.hopSec = HOP / ANALYSIS_RATE
     this.peakHops = Math.max(2, Math.round(PEAK_SEC / this.hopSec))
     const memoryHops = Math.round(BAND_MEMORY_SEC / this.hopSec)
     const keys: string[] = []
@@ -566,7 +579,7 @@ export class DrumTracker {
       if (index < 0) {
         index = keys.length
         keys.push(key)
-        this.bands.push(new OnsetBand(sampleRate, hz, q, memoryHops, stages, envelopeHops))
+        this.bands.push(new OnsetBand(ANALYSIS_RATE, hz, q, memoryHops, stages, envelopeHops))
       }
       return index
     }
@@ -578,6 +591,11 @@ export class DrumTracker {
   }
 
   reset(): void {
+    this.resampler?.reset()
+    this.resetAnalysis()
+  }
+
+  private resetAnalysis(): void {
     for (const band of this.bands) band.reset()
     for (const voice of Object.values(this.voices)) voice.reset()
     this.hopFill = 0
@@ -612,6 +630,19 @@ export class DrumTracker {
    * or seek, and restarts the tracker.
    */
   feed(samples: Float32Array, from: number, endTime: number, lost = 0): void {
+    const resampler = this.resampler
+    if (!resampler) {
+      this.feedAnalysis(samples, from, endTime, lost)
+      return
+    }
+    // Interpolation cannot span samples it never saw: after a gap it starts over.
+    if (lost > 0) resampler.reset()
+    const { samples: out, behind } = resampler.process(samples, from)
+    this.feedAnalysis(out, 0, endTime - behind / this.sampleRate, Math.round((lost * ANALYSIS_RATE) / this.sampleRate))
+  }
+
+  /** `feed` at ANALYSIS_RATE. */
+  private feedAnalysis(samples: Float32Array, from: number, endTime: number, lost: number): void {
     const n = Math.max(0, samples.length - from)
     if (n === 0 && lost <= 0) return
     const sampleSec = this.hopSec / HOP
@@ -623,7 +654,7 @@ export class DrumTracker {
       this.lastDriftSec = drift
       if (lost * sampleSec > MAX_GAP_SEC || Math.abs(drift) > MAX_DRIFT_SEC) {
         this.lastRestart = lost * sampleSec > MAX_GAP_SEC ? 'gap' : 'drift'
-        this.reset()
+        this.resetAnalysis()
       } else {
         this.sampleOriginTime += drift / ALIGN_FEEDS
         this.originTime = this.sampleOriginTime - (ENVELOPE_HOPS / 2 - 1) * this.hopSec
