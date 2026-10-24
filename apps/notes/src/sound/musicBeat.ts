@@ -20,6 +20,13 @@
  * and as it could only be heard in real time, every new start left the
  * pulse absent for the whole of the look-ahead.
  *
+ * A CLOCK channel (the caret's, `subscribeMusicClock`) follows no band and
+ * no hit: it pulses on a steady `BeatClock` (`beatClock.ts`) steered by the
+ * drum analysis's tempo grid, so it keeps time through fills and breaks and
+ * glides to each new tempo of a compilation. Its pulse is the same fall a
+ * hit makes (`mass`, through `fallOf`), restarted on every beat and never
+ * longer than one.
+ *
  * A level band is measured by `BandLevelMeter` (a bandpass and an RMS).
  * A channel whose source is a DRUM (kick, snare or hat) follows that drum's
  * HITS instead of a band's level. Every drum channel reads ONE analysis
@@ -43,10 +50,11 @@
  */
 
 import { outputContext } from '@thockdown/soundscape/audioOutputBus'
-import type { VisualizerChannel as BeatChannel, VisualizerDrum } from '@thockdown/look/visualizer'
+import type { VisualizerChannel as BeatChannel, VisualizerCaret, VisualizerDrum } from '@thockdown/look/visualizer'
 import { fallOf } from '@thockdown/look/visualizer'
 import { fadeCurve } from '../flow/flowTrail'
 import { BandLevelMeter, LEVEL_FLOOR_DB } from './bandLevel'
+import { BeatClock } from './beatClock'
 import { DrumCursor, DrumTracker } from './drumTracker'
 import { appendBeatTrace, BeatTraceWindow, isBeatTraceOn } from './beatTrace'
 import { musicPlayerService } from './MusicPlayerService'
@@ -92,6 +100,23 @@ interface Band {
 }
 
 const bands = new Set<Band>()
+
+/** A CLOCK subscriber (the caret's): a steady beat and the fall its mass makes, worked out when the mass changes. */
+interface Clock {
+  clock: BeatClock
+  mass: number
+  fallSec: number
+  fallShape: number
+  listener: BeatListener
+  published: number
+}
+
+const clocks = new Set<Clock>()
+
+/** Everything the frame loop answers. */
+function subscriberCount(): number {
+  return bands.size + clocks.size
+}
 let frame: number | null = null
 let unsubscribePlaying: (() => void) | null = null
 
@@ -115,6 +140,11 @@ let lastNow = NaN
 
 function drumOf(channel: BeatChannel): VisualizerDrum | null {
   return channel.source === 'band' ? null : channel.source
+}
+
+/** Whether anything reads the drum analysis: a drum channel for its hits, a clock for its grid. */
+function needsDrums(): boolean {
+  return clocks.size > 0 || [...bands].some((band) => drumOf(band.channel) !== null)
 }
 
 function clearWindow(band: Band): void {
@@ -155,7 +185,13 @@ function restartAnalysis(listenerTime: number): void {
   drums = null
   // Every restart supersedes one still waiting for its file to open, whether or not it gets as far as starting one of its own.
   const id = ++run
-  if (stream?.url !== url) {
+  // A new track's beat is not the last one's; a seek in the same track keeps the tempo and seats on the next grid.
+  const newTrack = stream?.url !== url
+  for (const { clock } of clocks) {
+    if (newTrack) clock.reset()
+    else clock.restart()
+  }
+  if (newTrack) {
     stream?.dispose()
     stream = url ? new MusicDecodeStream(url) : null
   }
@@ -174,7 +210,7 @@ function restartAnalysis(listenerTime: number): void {
         band.meter = new BandLevelMeter(sampleRate, band.channel.frequencyHz, band.channel.octaves)
       }
     }
-    drums = [...bands].some((band) => drumOf(band.channel)) ? { tracker: new DrumTracker(sampleRate), trace: null } : null
+    drums = needsDrums() ? { tracker: new DrumTracker(sampleRate), trace: null } : null
     // The file may have taken a moment to open: start from where the listener is now.
     const at = Number.isNaN(lastListener) ? listenerTime : lastListener
     target.run(Math.max(0, at - LEAD_SEC), at + LEAD_SEC + DECODE_MARGIN_SEC, (samples, startTime) => analyse(samples, startTime, sampleRate))
@@ -223,6 +259,16 @@ function respond(band: Band, listenerTime: number): number {
   return held
 }
 
+/** A clock's response: the fall of its mass, restarted on each of its beats and cut at the next. */
+function pulse(subscriber: Clock, listenerTime: number): number {
+  const { clock } = subscriber
+  const tracker = drums?.tracker
+  clock.advance(listenerTime, tracker ? tracker.gridPeriodSec : NaN, tracker ? tracker.gridBeatTime : NaN)
+  const phase = clock.phase
+  if (Number.isNaN(phase)) return 0
+  return fadeCurve(phase * clock.period, Math.min(subscriber.fallSec, clock.period), subscriber.fallShape)
+}
+
 /** A level band's response: its level at `listenerTime`, stretched over the window around it. */
 function stretched(band: Band, listenerTime: number): number {
   while (band.count > 0 && band.times[band.head] < listenerTime - LEAD_SEC) dropOldest(band)
@@ -250,10 +296,10 @@ function stretched(band: Band, listenerTime: number): number {
   return Math.max(0, Math.min(1, (level - floor) / (top - floor)))
 }
 
-function publish(band: Band, response: number): void {
-  if (Math.abs(response - band.published) < MIN_STEP && !(response === 0 && band.published !== 0)) return
-  band.published = response
-  band.listener(response)
+function publish(subscriber: Band | Clock, response: number): void {
+  if (Math.abs(response - subscriber.published) < MIN_STEP && !(response === 0 && subscriber.published !== 0)) return
+  subscriber.published = response
+  subscriber.listener(response)
 }
 
 let visualDelaySec = 0
@@ -316,7 +362,7 @@ const listenerClock = new SmoothClock()
 
 function tick(): void {
   frame = null
-  if (!musicPlayerService.isPlaying || document.hidden || bands.size === 0) {
+  if (!musicPlayerService.isPlaying || document.hidden || subscriberCount() === 0) {
     stop()
     return
   }
@@ -332,11 +378,12 @@ function tick(): void {
   else stream?.want(listenerTime + LEAD_SEC + DECODE_MARGIN_SEC)
   const heardTime = listenerTime - outputLatencySec() - visualDelaySec
   for (const band of bands) publish(band, respond(band, heardTime))
+  for (const subscriber of clocks) publish(subscriber, pulse(subscriber, heardTime))
   frame = requestAnimationFrame(tick)
 }
 
 function start(): void {
-  if (frame !== null || bands.size === 0 || !musicPlayerService.isPlaying || document.hidden) return
+  if (frame !== null || subscriberCount() === 0 || !musicPlayerService.isPlaying || document.hidden) return
   frame = requestAnimationFrame(tick)
 }
 
@@ -346,6 +393,7 @@ function stop(): void {
   lastNow = NaN
   listenerClock.reset()
   for (const band of bands) publish(band, 0)
+  for (const subscriber of clocks) publish(subscriber, 0)
 }
 
 function onVisibility(): void {
@@ -357,6 +405,40 @@ export interface MusicBandSubscription {
   /** Follows the channel's new settings; a new source or band starts the analysis over. */
   update: (channel: BeatChannel) => void
   unsubscribe: () => void
+}
+
+export interface MusicClockSubscription {
+  /** Follows a new mass (and effect, which the clock does not read); nothing starts over, as the beat does not depend on either. */
+  update: (caret: VisualizerCaret) => void
+  unsubscribe: () => void
+}
+
+/** The first subscriber starts listening for play state and visibility; every new one marks the analysis stale. */
+function added(): void {
+  stale = true
+  if (subscriberCount() === 1) {
+    unsubscribePlaying = musicPlayerService.subscribePlaying((playing) => (playing ? start() : stop()))
+    document.addEventListener('visibilitychange', onVisibility)
+  }
+  start()
+}
+
+/** After a subscriber left: drops the drum analysis if nothing reads it, and everything once nothing is left. */
+function removed(): void {
+  if (subscriberCount() > 0) {
+    if (!needsDrums()) drums = null
+    return
+  }
+  stop()
+  run++
+  stream?.dispose()
+  stream = null
+  drums = null
+  stale = true
+  lastListener = NaN
+  unsubscribePlaying?.()
+  unsubscribePlaying = null
+  document.removeEventListener('visibilitychange', onVisibility)
 }
 
 /** Follows one band of the music; `listener` gets the response whenever it moves. */
@@ -376,12 +458,7 @@ export function subscribeMusicBand(channel: BeatChannel, listener: BeatListener)
     published: 0,
   }
   bands.add(band)
-  stale = true
-  if (bands.size === 1) {
-    unsubscribePlaying = musicPlayerService.subscribePlaying((playing) => (playing ? start() : stop()))
-    document.addEventListener('visibilitychange', onVisibility)
-  }
-  start()
+  added()
   const update = (next: BeatChannel) => {
     // A new source, frequency or width is a different quantity: the window
     // is measured again from the decoded track, which is immediate.
@@ -390,20 +467,27 @@ export function subscribeMusicBand(channel: BeatChannel, listener: BeatListener)
   }
   const unsubscribe = () => {
     bands.delete(band)
-    if (bands.size > 0) {
-      if (drumOf(band.channel) && ![...bands].some((other) => drumOf(other.channel))) drums = null
-      return
-    }
-    stop()
-    run++
-    stream?.dispose()
-    stream = null
-    drums = null
-    stale = true
-    lastListener = NaN
-    unsubscribePlaying?.()
-    unsubscribePlaying = null
-    document.removeEventListener('visibilitychange', onVisibility)
+    removed()
+  }
+  return { update, unsubscribe }
+}
+
+/** Pulses on a steady beat that follows the music's tempo (the header's CLOCK); of `caret` only `mass` is read. */
+export function subscribeMusicClock(caret: VisualizerCaret, listener: BeatListener): MusicClockSubscription {
+  const subscriber: Clock = { clock: new BeatClock(), mass: NaN, fallSec: 0, fallShape: 0, listener, published: 0 }
+  const update = (next: VisualizerCaret) => {
+    if (next.mass === subscriber.mass) return
+    subscriber.mass = next.mass
+    const fall = fallOf(next.mass)
+    subscriber.fallSec = fall.fallSec
+    subscriber.fallShape = fall.fallShape
+  }
+  update(caret)
+  clocks.add(subscriber)
+  added()
+  const unsubscribe = () => {
+    clocks.delete(subscriber)
+    removed()
   }
   return { update, unsubscribe }
 }

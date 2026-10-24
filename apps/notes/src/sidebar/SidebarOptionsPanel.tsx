@@ -24,6 +24,7 @@ import {
   BEAT_CONTRAST_MAX,
   DEFAULT_SHADE_BLUR_PX,
   DEFAULT_SHADE_SPREAD_PX,
+  DEFAULT_VISUALIZER_CARET,
   DEFAULT_VISUALIZER_CHANNEL,
   SHADE_BLUR_MAX_PX,
   SHADE_SPREAD_MAX_PX,
@@ -1021,8 +1022,41 @@ export function SidebarOptionsPanel({
   clearCaretColorArmTimer,
 }: SidebarOptionsPanelProps) {
     const outputDevice = useOutputDevice(beatSettings.enabled)
-    // One block's toggle and six sliders: the same for every block that follows the music, plus the shade's spread and blur.
-    const renderBeatChannel = (key: keyof VisualizerSettings, label: string, effect: string) => {
+    // The caret's block: it ticks on a steady clock that follows the music's
+    // tempo (musicBeat.ts, `subscribeMusicClock`), so it has only a depth and a mass.
+    const renderBeatCaret = () => {
+      const caret = visualizer.caret
+      const slider = (field: 'effect' | 'mass', min: number, tooltipLabel: string, ariaName: string) => (
+        <CompactScrollbarSlider
+          id={`beat-caret-${field}`}
+          min={min}
+          max={1}
+          step={0.01}
+          value={caret[field]}
+          trackLabel={field}
+          tooltipLabel={tooltipLabel}
+          ariaLabel={`Caret: ${ariaName}`}
+          defaultValue={DEFAULT_VISUALIZER_CARET[field]}
+          onCommit={(value) => setVisualizer((prev) => ({ ...prev, caret: { ...prev.caret, [field]: value } }))}
+        />
+      )
+      return (
+        <>
+          <div className="utility-setting-button-row" role="group" aria-label="Caret controls">
+            <OptionsSubsectionLabel>Caret</OptionsSubsectionLabel>
+          </div>
+          <div className="utility-setting-slider-stack" aria-label="Caret settings">
+            <OptionsSliderRows rows={[2]}>
+              {slider('effect', -1, 'How far the caret dips from its peak on each beat. Right of centre a beat adds it; left of centre it is inverted, resting at that much while music plays and a beat takes it away; the centre turns it off', 'effect, negative inverts')}
+              {slider('mass', 0, 'How heavy each beat is: light is a faint flicker, heavy a full beat that carries until the next. The caret keeps a steady beat that follows the tempo of the music playing now', 'mass')}
+            </OptionsSliderRows>
+          </div>
+        </>
+      )
+    }
+
+    // One band block's toggle and six sliders: the same for the shade and the outline, plus the shade's spread and blur.
+    const renderBeatChannel = (key: 'shade' | 'outline', label: string, effect: string) => {
       const channel: VisualizerChannel = visualizer[key]
       const set = (patch: Partial<VisualizerChannel>) => setVisualizer((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }))
       const slider = (field: Exclude<keyof VisualizerChannel, 'source'>, trackLabel: string, min: number, max: number, step: number, tooltipLabel: string, ariaName: string, digits?: number) => (
@@ -3131,7 +3165,7 @@ export function SidebarOptionsPanel({
               { id: 'outline', color: visualizer.outline.color, glyph: 'fa-regular fa-square', tooltip: 'Outline colour: click to apply the staged colour, hold right-click to copy it', onApply: (css) => setVisualizer((prev) => ({ ...prev, outline: { ...prev.outline, color: css } })) },
             ]}
           />
-          {renderBeatChannel('caret', 'Caret', 'the caret dips from its peak')}
+          {renderBeatCaret()}
           {renderBeatChannel('shade', 'Shade', 'the active editor\'s inner shade shows')}
           {renderBeatChannel('outline', 'Outline', 'the box outlines show')}
         </>) : null}

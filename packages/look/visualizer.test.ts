@@ -19,11 +19,16 @@ describe('sanitizeVisualizer', () => {
     expect(v.outline.color).toBe(defaultVisualizer(false).outline.color)
     expect(v.caret.effect).toBe(0.6)
   })
+
+  it('keeps only what the caret reads, so an older save with a source loads without it', () => {
+    const v = sanitizeVisualizer({ caret: { effect: 0.3, mass: 0.7, source: 'snare', frequencyHz: 300, contrast: 0.2 } }, false)
+    expect(v.caret).toEqual({ effect: 0.3, mass: 0.7 })
+  })
 })
 
 it('reads a layout saved before the source existed', () => {
-  const v = sanitizeVisualizer({ caret: { frequencyHz: 0 }, shade: { frequencyHz: 440 } }, false)
-  expect(v.caret.source).toBe('kick')
+  const v = sanitizeVisualizer({ outline: { frequencyHz: 0 }, shade: { frequencyHz: 440 } }, false)
+  expect(v.outline.source).toBe('kick')
   expect(v.shade).toMatchObject({ source: 'band', frequencyHz: 440 })
 })
 

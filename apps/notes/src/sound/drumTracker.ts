@@ -1337,6 +1337,20 @@ export class DrumTracker {
     return this.isLocked() ? 60 / (this.period * this.hopSec) : NaN
   }
 
+  /**
+   * The grid's beat period in seconds while it is trusted, NaN otherwise
+   * (the visualizer caret's clock, `beatClock.ts`). Two numbers rather than
+   * an object, as it is read every frame.
+   */
+  get gridPeriodSec(): number {
+    return this.isLocked() ? this.period * this.hopSec : NaN
+  }
+
+  /** The media time of one of the grid's beats while it is trusted, NaN otherwise. */
+  get gridBeatTime(): number {
+    return this.isLocked() ? this.originTime + this.phase * this.hopSec : NaN
+  }
+
   /** The grid's confidence (its autocorrelation peak against the signal's energy), for diagnostics. */
   get gridConfidence(): number {
     return this.confidence
