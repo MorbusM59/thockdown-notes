@@ -77,4 +77,4 @@
 - [x] **Mobile schedule: assign by MARKING a soundscape.** Built as PICKING UP: a long press on a soundscape picks it up without playing it, and every slot tap fills a slot with it until a tap on it puts it down (`SoundscapeControls`' `onPickPreset`, `ScheduleGrid.tsx`).
 
 - [ ] **Shade needs Spread and Blur sliders** (Joe, 2026-10-24): two more sliders on the shade setting, one for how far it spreads and one for how soft it is.
-- [ ] **The caret pulse ticks on its own steady beat** (Joe, 2026-10-24): it should no longer follow the drum detection hit by hit. Instead it ticks at a fixed tempo matching the music playing now, and follows tempo changes within one file (a 1h compilation holds songs at many tempos).
+- [ ] **The caret pulse ticks on its own steady beat** (Joe, 2026-10-24): it should no longer follow the drum detection hit by hit. Instead it ticks at a fixed tempo matching the music playing now, and follows tempo changes within one file (a 1h compilation holds songs at many tempos). It keeps a mass slider that sets how heavy the beat is, from a faint flicker to a full beat.
