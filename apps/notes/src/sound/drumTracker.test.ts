@@ -556,17 +556,31 @@ describe('DrumTracker on snares and hats', () => {
   })
 
   it.each([
-    ['a rock beat at 110', 110, rock],
-    ['sixteenth hats at 124', 124, { kicks: [0, 4, 8, 12], snares: [4, 12], hats: [...Array(16).keys()] }],
-  ])('fires on every hat of %s under strummed guitars and a voice', (_name, bpm, groove) => {
+    ['a rock beat at 110', 110, rock, 0.9, 0],
+    ['sixteenth hats at 124', 124, { kicks: [0, 4, 8, 12], snares: [4, 12], hats: [...Array(16).keys()] }, 0.9, 0],
+    // Every hat lands on a strum, so most of them are mixtures and the hat's
+    // own colour class is thin: 0.86 measured, from none before the learned
+    // line had to start below the spec's. One stray, a voice syllable in
+    // the last of a snare's noise, is a known open case.
+    ['off-beat hats at 110', 110, { kicks: [0, 8, 10], snares: [4, 12], hats: [2, 6, 10, 14] }, 0.8, 1],
+  ])('fires on every hat of %s under strummed guitars and a voice', (_name, bpm, groove, least, mostStrays) => {
     const track = kit(40, bpm, groove)
     addBusyMids(track.samples, bpm)
     const free = track.hats.filter((h) => !track.snares.some((s) => h > s - 0.001 && h < s + SNARE_RING_SEC))
     const { hits } = play({ samples: track.samples, kicks: free }, 0.5, {}, 'hat')
     const { found } = score({ samples: track.samples, kicks: free }, hits, 10, 34, 0.3)
     const strays = hits.filter((h) => h.at > 10 && h.at < 34 && h.response > 0.3 && !track.hats.some((t) => h.at >= t - EARLY_SEC && h.at <= t + LATE_SEC))
-    expect(found).toBeGreaterThan(0.9)
-    expect(strays).toEqual([])
+    expect(found).toBeGreaterThan(least)
+    expect(strays.length).toBeLessThanOrEqual(mostStrays)
+  }, 30_000)
+
+  it('fires on no snare of a beat with no hats under strummed guitars and a voice', () => {
+    // With no hats, the lowest colour class is the snare's (or the voice's
+    // under it), and a line learned above it let every snare through.
+    const track = kit(40, 110, { kicks: [0, 8, 10], snares: [4, 12], hats: [] })
+    addBusyMids(track.samples, 110)
+    const { hits } = play({ samples: track.samples, kicks: [] }, 0.5, {}, 'hat')
+    expect(hits.filter((h) => h.at > 10 && h.at < 34 && h.response > 0.3)).toEqual([])
   }, 30_000)
 
   it('leaves the kicks alone: neither the snare nor the hat fires on a kick by itself', () => {

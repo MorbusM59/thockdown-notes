@@ -828,8 +828,8 @@ export class DrumTracker {
    * against its level before the onset: a snare's noise is still there
    * that long after it struck, while a kick's beater click has gone, and a
    * voice or pad holding the band through the onset does not climb at all.
-   * It is compared with the TOP onset band's climb, the largest within the
-   * onset's peak reach (`peakHops`) so every hop of one sound is judged on
+   * It is compared with the TOP onset band's climb, the largest over the
+   * sound's climb so far (`eventMax`) so every hop of one sound is judged on
    * that sound's whole climb, not on how far up it has got; both as energy
    * per Hz (a band's level over its centre, which with a constant Q is in
    * proportion to its width), so noise with a flat spectrum, a snare's,
@@ -844,12 +844,7 @@ export class DrumTracker {
     const k = index - this.start
     if (k < 0) return
     const slot = (this.head + k) % CAPACITY
-    const around = (values: Float32Array, reach: number): number => {
-      let most = 0
-      for (let j = Math.max(0, k - reach); j <= Math.min(this.count - 1, k + reach); j++) most = Math.max(most, values[(this.head + j) % CAPACITY])
-      return most
-    }
-    const density = around(voice.density, this.peakHops)
+    const density = this.eventMax(voice.density, k)
     voice.rawOnset[slot] = voice.onset[slot]
     voice.colour[slot] = NaN
     // In a gap's silence, and within the reach a climb's start is looked for
@@ -907,29 +902,41 @@ export class DrumTracker {
   private isMixture(voice: Voice, k: number, past: number): boolean {
     const by = voice.spec.confirmedBy
     if (by === undefined || past >= MIXTURE_DECADES) return false
-    const confirming = this.voices[by]
+    if (this.isHeardBy(this.voices[by], k)) return false
+    return this.tiltAt(voice, k) >= TILT_SHARE * voice.usualTilt
+  }
+
+  /** Whether `confirming` hears a sound at hop `k` (window-relative): its onset within CONFIRM_HOPS reaches CONFIRM_SHARE of its usual hit. */
+  private isHeardBy(confirming: Voice, k: number): boolean {
     for (let j = Math.max(0, k - CONFIRM_HOPS); j <= Math.min(this.count - 1, k + CONFIRM_HOPS); j++) {
-      if (confirming.onset[(this.head + j) % CAPACITY] >= CONFIRM_SHARE * confirming.shape) return false
+      if (confirming.onset[(this.head + j) % CAPACITY] >= CONFIRM_SHARE * confirming.shape) return true
     }
-    return Number.isNaN(voice.usualTilt) || this.tiltAt(voice, k) >= TILT_SHARE * voice.usualTilt
+    return false
   }
 
   /**
    * A sound's TILT at hop `k` (window-relative): its top onset band's climb
-   * over its lowest's, per Hz, each the largest within the onset's peak reach
-   * so the sound is judged whole (`settle`). Infinite where the lowest band
+   * over its lowest's, per Hz, each the largest over the sound's climb
+   * (`eventMax`) so the sound is judged whole. Infinite where the lowest band
    * did not climb at all.
    */
   private tiltAt(voice: Voice, k: number): number {
-    let top = 0
-    let low = 0
-    for (let j = Math.max(0, k - this.peakHops); j <= Math.min(this.count - 1, k + 1); j++) {
-      const slot = (this.head + j) % CAPACITY
-      top = Math.max(top, voice.density[slot])
-      low = Math.max(low, voice.lowDensity[slot])
-    }
-    return low > 0 ? top / low : Infinity
+    const low = this.eventMax(voice.lowDensity, k)
+    return low > 0 ? this.eventMax(voice.density, k) / low : Infinity
   }
+
+  /**
+   * The largest of `values` over the climb of the sound whose onset peaks at
+   * hop `k` (window-relative): from a peak's reach before it to the hop after.
+   * Never later, so a sound starting just after this one (a hat a sixteenth
+   * after a strum) does not lend this one its climb.
+   */
+  private eventMax(values: Float32Array, k: number): number {
+    let most = 0
+    for (let j = Math.max(0, k - this.peakHops); j <= Math.min(this.count - 1, k + 1); j++) most = Math.max(most, values[(this.head + j) % CAPACITY])
+    return most
+  }
+
 
   /** A voice's onset at absolute hop index `index`, 0 outside the window or before it has settled. */
   private at(voice: Voice, index: number): number {
@@ -1109,6 +1116,14 @@ export class DrumTracker {
       total++
     }
     if (total >= COLOUR_MIN_PEAKS) voice.split = this.colourSplit(counts, width)
+    // The line must fall below what the confirming drum hears: in a track
+    // with no hats the lowest class is that drum itself (or a voice under
+    // it), and a line above it would let every one of its hits through.
+    const by = voice.spec.confirmedBy
+    if (by !== undefined && !Number.isNaN(voice.split) && this.voices[by].shape > 0) {
+      const heard = strong.filter((k) => this.isHeardBy(this.voices[by], k)).map((k) => voice.colour[(this.head + k) % CAPACITY]).filter(Number.isFinite).sort((a, b) => a - b)
+      if (heard.length >= COLOUR_MIN_PEAKS / 2 && voice.split >= heard[heard.length >> 1]) voice.split = NaN
+    }
     const limit = Number.isNaN(voice.split) ? Math.log10(voice.spec.exclude[0][2]) : voice.split
     const tilts = strong.filter((k) => voice.colour[(this.head + k) % CAPACITY] < limit).map((k) => this.tiltAt(voice, k)).filter(Number.isFinite)
     if (tilts.length >= COLOUR_MIN_PEAKS / 2) voice.usualTilt = tilts.sort((a, b) => a - b)[tilts.length >> 1]
