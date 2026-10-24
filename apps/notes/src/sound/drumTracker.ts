@@ -77,6 +77,7 @@
  */
 
 import type { VisualizerDrum } from '@thockdown/look/visualizer'
+import type { BeatGrid } from './beatClock'
 import { StreamResampler } from './streamResampler'
 
 /**
@@ -1137,6 +1138,15 @@ export class DrumTracker {
   /** The tempo while the grid is trusted, NaN otherwise; for tests and diagnostics. */
   get tempoBpm(): number {
     return this.isLocked() ? 60 / (this.period * this.hopSec) : NaN
+  }
+
+  /**
+   * The grid while it is trusted, null otherwise: its period and the media
+   * time of one of its beats (the visualizer caret's clock, `beatClock.ts`).
+   */
+  get beatGrid(): BeatGrid | null {
+    if (!this.isLocked()) return null
+    return { periodSec: this.period * this.hopSec, beatTime: this.originTime + this.phase * this.hopSec }
   }
 
   /** The grid's confidence (its autocorrelation peak against the signal's energy), for diagnostics. */

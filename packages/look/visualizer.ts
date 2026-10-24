@@ -54,7 +54,7 @@ export interface VisualizerColorChannel extends VisualizerChannel {
 }
 
 export interface VisualizerSettings {
-  /** The caret, held at its peak while it follows the music; a response dips it. */
+  /** The caret, held at its peak while it follows the music and dipped on a steady beat that follows its tempo; only `effect` and `mass` apply. */
   caret: VisualizerChannel
   /** The active editor's inner shade; a response deepens it. */
   shade: VisualizerColorChannel

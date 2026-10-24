@@ -6,7 +6,9 @@
  *
  * - `--beat-caret`, the caret's DIP: while the caret follows the music its
  *   own blink is suspended and it holds at its peak (`html[data-beat-caret]`),
- *   and the value takes that share off its opacity.
+ *   and the value takes that share off its opacity. The caret does not follow
+ *   detected hits: it ticks on a steady clock that follows the music's tempo
+ *   (`subscribeMusicClock`), with its `mass` setting how heavy each beat is.
  * - `--beat-shade`, the opacity of the active editor's beat shade
  *   (`.editor-beat-shade`, shown and promoted under `html[data-beat-shade]`).
  * - `--beat-outline`, the opacity of the box outlines' copy
@@ -25,7 +27,7 @@ import { useEffect, useRef } from 'react'
 import type { VisualizerChannel, VisualizerSettings } from '@thockdown/look/visualizer'
 import type { BeatSettings } from '../shared/beatSettings'
 import { musicPlayerService } from '../sound/MusicPlayerService'
-import { setBeatVisualDelaySec, subscribeMusicBand, type MusicBandSubscription } from '../sound/musicBeat'
+import { setBeatVisualDelaySec, subscribeMusicBand, subscribeMusicClock, type MusicBandSubscription } from '../sound/musicBeat'
 import { useOutputDevice } from '../sound/outputDevice'
 import { setFlowStyle } from './flowStyle'
 
@@ -44,7 +46,8 @@ function useBeatBlock(name: BlockName, channel: VisualizerChannel, on: boolean):
     const variable = `--beat-${name}`
     const root = document.documentElement
     root.setAttribute(`data-beat-${name}`, '')
-    const subscription = subscribeMusicBand(channelRef.current, (response) => {
+    const subscribeTo = name === 'caret' ? subscribeMusicClock : subscribeMusicBand
+    const subscription = subscribeTo(channelRef.current, (response) => {
       const { effect } = channelRef.current
       const value = !musicPlayerService.isPlaying ? 0 : effect < 0 ? -effect * (1 - response) : effect * response
       // Quantized to the 1/255 an 8-bit colour channel resolves: every step

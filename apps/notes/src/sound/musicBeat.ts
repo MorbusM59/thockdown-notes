@@ -20,6 +20,13 @@
  * and as it could only be heard in real time, every new start left the
  * pulse absent for the whole of the look-ahead.
  *
+ * A CLOCK channel (the caret's, `subscribeMusicClock`) follows no band and
+ * no hit: it pulses on a steady `BeatClock` (`beatClock.ts`) steered by the
+ * drum analysis's tempo grid, so it keeps time through fills and breaks and
+ * glides to each new tempo of a compilation. Its pulse is the same fall a
+ * hit makes (`mass`, through `fallOf`), restarted on every beat and never
+ * longer than one.
+ *
  * A level band is measured by `BandLevelMeter` (a bandpass and an RMS).
  * A channel whose source is a DRUM (kick, snare or hat) follows that drum's
  * HITS instead of a band's level. Every drum channel reads ONE analysis
@@ -47,6 +54,7 @@ import type { VisualizerChannel as BeatChannel, VisualizerDrum } from '@thockdow
 import { fallOf } from '@thockdown/look/visualizer'
 import { fadeCurve } from '../flow/flowTrail'
 import { BandLevelMeter, LEVEL_FLOOR_DB } from './bandLevel'
+import { BeatClock } from './beatClock'
 import { DrumCursor, DrumTracker } from './drumTracker'
 import { appendBeatTrace, BeatTraceWindow, isBeatTraceOn } from './beatTrace'
 import { musicPlayerService } from './MusicPlayerService'
@@ -79,6 +87,8 @@ interface Band {
   meter: BandLevelMeter | null
   /** A drum channel's place in the shared tracker's hits; null for a band. */
   cursor: DrumCursor | null
+  /** A clock channel's steady beat; null for a band or a drum. */
+  clock: BeatClock | null
   /** The last peak of the response and the listener time it was reached at, for the fall (`mass`, through `fallOf`). */
   peak: number
   peakTime: number
@@ -115,6 +125,11 @@ let lastNow = NaN
 
 function drumOf(channel: BeatChannel): VisualizerDrum | null {
   return channel.source === 'band' ? null : channel.source
+}
+
+/** Whether a band reads the drum analysis: a drum channel for its hits, a clock channel for its grid. */
+function readsDrums(band: Band): boolean {
+  return band.clock !== null || drumOf(band.channel) !== null
 }
 
 function clearWindow(band: Band): void {
@@ -156,6 +171,8 @@ function restartAnalysis(listenerTime: number): void {
   // Every restart supersedes one still waiting for its file to open, whether or not it gets as far as starting one of its own.
   const id = ++run
   if (stream?.url !== url) {
+    // A new track: its beat is not the last one's.
+    for (const band of bands) band.clock?.reset()
     stream?.dispose()
     stream = url ? new MusicDecodeStream(url) : null
   }
@@ -166,7 +183,10 @@ function restartAnalysis(listenerTime: number): void {
   void target.sampleRate().then((sampleRate) => {
     if (id !== run || sampleRate === null) return
     for (const band of bands) {
-      if (drumOf(band.channel)) {
+      if (band.clock) {
+        band.cursor = null
+        band.meter = null
+      } else if (drumOf(band.channel)) {
         band.cursor ??= new DrumCursor()
         band.meter = null
       } else {
@@ -174,7 +194,7 @@ function restartAnalysis(listenerTime: number): void {
         band.meter = new BandLevelMeter(sampleRate, band.channel.frequencyHz, band.channel.octaves)
       }
     }
-    drums = [...bands].some((band) => drumOf(band.channel)) ? { tracker: new DrumTracker(sampleRate), trace: null } : null
+    drums = [...bands].some(readsDrums) ? { tracker: new DrumTracker(sampleRate), trace: null } : null
     // The file may have taken a moment to open: start from where the listener is now.
     const at = Number.isNaN(lastListener) ? listenerTime : lastListener
     target.run(Math.max(0, at - LEAD_SEC), at + LEAD_SEC + DECODE_MARGIN_SEC, (samples, startTime) => analyse(samples, startTime, sampleRate))
@@ -206,6 +226,7 @@ function percentile(band: Band, share: number): number {
 
 /** The response for what the listener hears at `listenerTime`, from the window around it. */
 function respond(band: Band, listenerTime: number): number {
+  if (band.clock) return pulse(band, band.clock, listenerTime)
   const drum = drumOf(band.channel)
   const raw = drum
     ? (drums && band.cursor ? drums.tracker.hitBetween(drum, band.cursor, listenerTime, band.channel.contrast) : 0)
@@ -221,6 +242,15 @@ function respond(band: Band, listenerTime: number): number {
     return raw
   }
   return held
+}
+
+/** A clock channel's response: the fall of `mass`, restarted on each of the clock's beats and cut at the next. */
+function pulse(band: Band, clock: BeatClock, listenerTime: number): number {
+  clock.advance(listenerTime, drums?.tracker.beatGrid ?? null)
+  const phase = clock.phase
+  if (Number.isNaN(phase)) return 0
+  const { fallSec, fallShape } = fallOf(band.channel.mass)
+  return fadeCurve(phase * clock.period, Math.min(fallSec, clock.period), fallShape)
 }
 
 /** A level band's response: its level at `listenerTime`, stretched over the window around it. */
@@ -361,11 +391,24 @@ export interface MusicBandSubscription {
 
 /** Follows one band of the music; `listener` gets the response whenever it moves. */
 export function subscribeMusicBand(channel: BeatChannel, listener: BeatListener): MusicBandSubscription {
+  return subscribe(channel, listener, null)
+}
+
+/**
+ * Pulses on a steady beat that follows the music's tempo (the header's CLOCK
+ * channel); of `channel` only `mass` is read.
+ */
+export function subscribeMusicClock(channel: BeatChannel, listener: BeatListener): MusicBandSubscription {
+  return subscribe(channel, listener, new BeatClock())
+}
+
+function subscribe(channel: BeatChannel, listener: BeatListener, clock: BeatClock | null): MusicBandSubscription {
   const band: Band = {
     channel,
     listener,
     meter: null,
     cursor: null,
+    clock,
     peak: 0,
     peakTime: 0,
     times: new Float64Array(CAPACITY),
@@ -385,13 +428,13 @@ export function subscribeMusicBand(channel: BeatChannel, listener: BeatListener)
   const update = (next: BeatChannel) => {
     // A new source, frequency or width is a different quantity: the window
     // is measured again from the decoded track, which is immediate.
-    if (next.source !== band.channel.source || next.frequencyHz !== band.channel.frequencyHz || next.octaves !== band.channel.octaves) stale = true
+    if (!band.clock && (next.source !== band.channel.source || next.frequencyHz !== band.channel.frequencyHz || next.octaves !== band.channel.octaves)) stale = true
     band.channel = next
   }
   const unsubscribe = () => {
     bands.delete(band)
     if (bands.size > 0) {
-      if (drumOf(band.channel) && ![...bands].some((other) => drumOf(other.channel))) drums = null
+      if (readsDrums(band) && ![...bands].some(readsDrums)) drums = null
       return
     }
     stop()

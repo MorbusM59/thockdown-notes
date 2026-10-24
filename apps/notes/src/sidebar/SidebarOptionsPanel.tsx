@@ -1042,31 +1042,40 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel>{label}</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label={`${label} settings`}>
-            <OptionsSliderRows rows={[2, 2, 1]}>
-              {slider('effect', 'effect', -1, 1, 0.01, `How far ${effect} at a full response. Right of centre a hit adds it; left of centre it is inverted, resting at that much while music plays and a hit takes it away; the centre turns it off`, 'effect, negative inverts')}
-              {/* One track for every source (visualizer.ts, `sourceSliderValue`): the
-                  kick at the left end, the snare at the centre, the hat at the right,
-                  and the spectrum in octaves between them, shown in Hz. */}
-              <CompactScrollbarSlider
-                id={`beat-${key}-source`}
-                min={SOURCE_SLIDER_MIN}
-                max={SOURCE_SLIDER_MAX}
-                step={0.01}
-                value={sourceSliderValue(channel)}
-                trackLabel="freq"
-                tooltipLabel="What it follows: the kick drum at the left end, the snare (and claps and rim shots) at the centre, hi-hats (and other short bright hits) at the right end, or, in between, the level of one band of the music, in Hz"
-                ariaLabel={`${label}: kick, snare, hi-hat, or a frequency in Hz`}
-                defaultValue={sourceSliderValue(DEFAULT_VISUALIZER_CHANNEL)}
-                formatValue={(value) => {
-                  const at = sourceAtSlider(value, channel.frequencyHz)
-                  return at.source === 'band' ? at.frequencyHz.toString() : at.source
-                }}
-                onCommit={(value) => set(sourceAtSlider(value, channel.frequencyHz))}
-              />
-              {slider('octaves', 'width', BEAT_OCTAVES_MIN, BEAT_OCTAVES_MAX, 0.1, 'Octaves: how wide the bell around the frequency is; a drum does not use it', 'band width in octaves', 1)}
-              {slider('contrast', 'contrast', 0, BEAT_CONTRAST_MAX, 0.01, 'How loud the band must be, against the ten seconds around it, before it responds: higher keeps only the biggest hits', 'contrast')}
-              {slider('mass', 'mass', 0, 1, 0.01, 'How heavy each hit is: light flickers with every hit and is gone at once, heavy carries each hit and lets go slowly. A hit always lands at once', 'mass')}
-            </OptionsSliderRows>
+            {key === 'caret' ? (
+              // The caret ticks on a steady clock that follows the music's tempo
+              // (musicBeat.ts, `subscribeMusicClock`): it follows no band or drum.
+              <OptionsSliderRows rows={[2]}>
+                {slider('effect', 'effect', -1, 1, 0.01, `How far ${effect} on each beat. Right of centre a beat adds it; left of centre it is inverted, resting at that much while music plays and a beat takes it away; the centre turns it off`, 'effect, negative inverts')}
+                {slider('mass', 'mass', 0, 1, 0.01, 'How heavy each beat is: light is a faint flicker, heavy a full beat that carries until the next. The caret keeps a steady beat that follows the tempo of the music playing now', 'mass')}
+              </OptionsSliderRows>
+            ) : (
+              <OptionsSliderRows rows={[2, 2, 1]}>
+                {slider('effect', 'effect', -1, 1, 0.01, `How far ${effect} at a full response. Right of centre a hit adds it; left of centre it is inverted, resting at that much while music plays and a hit takes it away; the centre turns it off`, 'effect, negative inverts')}
+                {/* One track for every source (visualizer.ts, `sourceSliderValue`): the
+                    kick at the left end, the snare at the centre, the hat at the right,
+                    and the spectrum in octaves between them, shown in Hz. */}
+                <CompactScrollbarSlider
+                  id={`beat-${key}-source`}
+                  min={SOURCE_SLIDER_MIN}
+                  max={SOURCE_SLIDER_MAX}
+                  step={0.01}
+                  value={sourceSliderValue(channel)}
+                  trackLabel="freq"
+                  tooltipLabel="What it follows: the kick drum at the left end, the snare (and claps and rim shots) at the centre, hi-hats (and other short bright hits) at the right end, or, in between, the level of one band of the music, in Hz"
+                  ariaLabel={`${label}: kick, snare, hi-hat, or a frequency in Hz`}
+                  defaultValue={sourceSliderValue(DEFAULT_VISUALIZER_CHANNEL)}
+                  formatValue={(value) => {
+                    const at = sourceAtSlider(value, channel.frequencyHz)
+                    return at.source === 'band' ? at.frequencyHz.toString() : at.source
+                  }}
+                  onCommit={(value) => set(sourceAtSlider(value, channel.frequencyHz))}
+                />
+                {slider('octaves', 'width', BEAT_OCTAVES_MIN, BEAT_OCTAVES_MAX, 0.1, 'Octaves: how wide the bell around the frequency is; a drum does not use it', 'band width in octaves', 1)}
+                {slider('contrast', 'contrast', 0, BEAT_CONTRAST_MAX, 0.01, 'How loud the band must be, against the ten seconds around it, before it responds: higher keeps only the biggest hits', 'contrast')}
+                {slider('mass', 'mass', 0, 1, 0.01, 'How heavy each hit is: light flickers with every hit and is gone at once, heavy carries each hit and lets go slowly. A hit always lands at once', 'mass')}
+              </OptionsSliderRows>
+            )}
           </div>
         </>
       )
