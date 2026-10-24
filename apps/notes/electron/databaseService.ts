@@ -687,7 +687,11 @@ export class DatabaseService {
     const db = new BetterSqlite3(this.dbPath);
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
-    db.pragma('synchronous = NORMAL');
+    // FULL: a commit is on disk when it returns, so a power cut cannot take
+    // back a save that already reported success. NORMAL kept the database
+    // consistent but could lose the last commits; saves are debounced, so
+    // the extra sync per commit is not paid per keystroke.
+    db.pragma('synchronous = FULL');
 
     this.db = db;
     this.ensureSchema();
@@ -2451,6 +2455,12 @@ export class DatabaseService {
    * to be manual -- that older heuristic picked a different row as soon as a
    * second automatic snapshot existed, which is how "original" and "newest"
    * came to be two guesses over one undifferentiated pool.
+   *
+   * The most recently RECORDED, not the one with the latest timestamp: the
+   * timestamp is the file's own modified time, which a copy that preserves
+   * times (`cp -p`, rsync, an unzip, a sync client) sets into the past. Ordered
+   * by it, a newer record of the file sorted below an older one and the
+   * baseline stayed stale, so every later look at the file found it changed.
    */
   getLatestFromDiskSnapshot(noteId: string): { id: number; content: string; timestamp: string } | null {
     const db = this.requireDb();
@@ -2458,7 +2468,7 @@ export class DatabaseService {
       SELECT id, content, timestamp
       FROM note_snapshots
       WHERE noteId = ? AND isFromDisk = 1
-      ORDER BY datetime(timestamp) DESC, id DESC
+      ORDER BY id DESC
       LIMIT 1
     `).get(noteId) as { id: number; content: string; timestamp: string } | undefined;
     return row ?? null;

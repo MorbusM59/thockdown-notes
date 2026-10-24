@@ -1,4 +1,4 @@
-import type { InvokeChannels } from './ipcContract';
+import type { EventChannels, InvokeChannels } from './ipcContract';
 import { isExternalTagName } from './tags'
 
 export const NOTE_LIFECYCLE_CHANNELS = {
@@ -28,6 +28,16 @@ export const NOTE_LIFECYCLE_CHANNELS = {
   setNoteAssignedId: 'notes:set-internal-id',
   setNoteTimeless: 'notes:set-timeless',
 } as const satisfies InvokeChannels<NoteLifecycleApi>;
+
+/** What the main process tells the window about notes unprompted. */
+export interface NoteLifecycleEvents {
+  /** A note was deleted -- by a request, with its parent, or by a save that removed an auto-generated chapter. */
+  deleted: { id: string };
+}
+
+export const NOTE_LIFECYCLE_EVENTS = {
+  deleted: 'notes:deleted',
+} as const satisfies EventChannels<NoteLifecycleEvents>;
 
 export interface NoteSummary {
   id: string;
@@ -190,6 +200,8 @@ export type NoteUiState = {
 };
 
 export interface NoteLifecycleApi {
+  /** Calls `callback` for every note the main process deletes; returns its own unsubscribe. */
+  onNoteDeleted(callback: (payload: NoteLifecycleEvents['deleted']) => void): () => void;
   listNotes(): Promise<NoteSummaryWithContent[]>;
   loadNote(input: LoadNoteInput): Promise<NoteDocument>;
   createNote(input?: CreateNoteInput): Promise<NoteDocument>;

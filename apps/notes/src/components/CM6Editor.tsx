@@ -386,6 +386,13 @@ function toSelectionState(range: { anchor: number; head: number; from: number; t
 // edited.
 const ProgrammaticHydrationAnnotation = Annotation.define<true>();
 
+// Tags a change another view of the same note made, applied here through
+// `applyExternalChange` (editorSection/noteDocumentStore.ts). Reported as
+// `source: 'remote'`: not typed here, so it plays no sound, queues no save
+// and is published to no one, and kept out of this editor's undo history,
+// which maps its own entries through it instead.
+const ExternalChangeAnnotation = Annotation.define<true>();
+
 /**
  * The one contiguous `{from, to, insert}` a transaction made, or null when it
  * made more than one.
@@ -1044,6 +1051,12 @@ export function CM6Editor({
     documentKeyRef.current = `${noteId ?? ''}\u0000${historyKey ?? ''}`;
   }, [noteId, historyKey]);
   const previousTextRef = useRef('');
+  // The text an external change is known to produce, handed from
+  // applyExternalChange to the updateListener so the listener reports that
+  // exact string rather than rebuilding an equal one: the section and the
+  // note's document then hold one string, and the next change from another
+  // view is recognised as following on from it by identity.
+  const pendingExternalTextRef = useRef<string | null>(null);
   const previousSelectionRef = useRef<EditorSelectionState>({ anchor: 0, focus: 0, start: 0, end: 0, isCollapsed: true });
   // Real-usage input-lag diagnostics -- opt-in via
   // localStorage.setItem('thockdown:debug-input-lag', '1') + reload. Logs
@@ -4613,7 +4626,12 @@ export function CM6Editor({
           // heap allocation dropped ~2.3x (45MB->19MB per 30-keystroke
           // burst), GC time in the CDP profile dropped a clean ~20% (every
           // fixed run below every baseline run, no overlap).
-          const nextText = update.state.doc.toJSON().join('\n');
+          const isExternalChange = update.transactions.some((tr) => tr.annotation(ExternalChangeAnnotation));
+          const knownText = isExternalChange ? pendingExternalTextRef.current : null;
+          pendingExternalTextRef.current = null;
+          const nextText = knownText !== null && knownText.length === update.state.doc.length
+            ? knownText
+            : update.state.doc.toJSON().join('\n');
           debugCheckpoint('after doc.toJSON().join');
           const previousText = previousTextRef.current;
           const nextSelection = toSelectionState(update.state.selection.main);
@@ -4631,7 +4649,7 @@ export function CM6Editor({
           lastPhysicalKeyCodeRef.current = null;
 
           const event: EditorTextChangeEvent = {
-            source: isProgrammaticHydration ? 'initial-load' : 'user-input',
+            source: isExternalChange ? 'remote' : isProgrammaticHydration ? 'initial-load' : 'user-input',
             text: nextText,
             previousText,
             selection: nextSelection,
@@ -6376,6 +6394,27 @@ export function CM6Editor({
         const columnFromLineStart = head - line.from;
         const columnWithinRow = columnFromLineStart % columnsPerRow;
         return Math.max(0, Math.min(1, columnWithinRow / columnsPerRow));
+      },
+      applyExternalChange(changeNoteId, change) {
+        const view = viewRef.current;
+        // Only onto this note's LIVE text: the history key is the note's own
+        // id exactly when the editor shows that note and no snapshot of it.
+        if (!view || activeHistoryKeyRef.current !== changeNoteId || lastHydratedNoteIdRef.current !== changeNoteId) return false;
+        const currentText = previousTextRef.current;
+        if (currentText === change.text) return false;
+        // The edit is in the coordinates of the text the views were handed.
+        // An editor still holding that string can take it as it is; one that
+        // does not (its own hydration has not caught up yet) is brought to
+        // the new text by the smallest change that gets there.
+        const changes = change.edit && currentText === change.previousText
+          ? change.edit
+          : computeMinimalTextReplacement(currentText, change.text);
+        pendingExternalTextRef.current = change.text;
+        view.dispatch({
+          changes,
+          annotations: [ExternalChangeAnnotation.of(true), Transaction.addToHistory.of(false)],
+        });
+        return true;
       },
       applyEdit(changes, expectedText) {
         const view = viewRef.current;

@@ -4,6 +4,7 @@ import type { ChapterEntry } from '../shared/chapters'
 import { splitChapterFamily } from '../shared/chapters'
 import { isArchivedNote, type NoteSummary } from '../shared/noteLifecycle'
 import type { EditorSelectionState } from '../editor/EditorContract'
+import type { NoteDocumentStore } from '../editorSection/noteDocumentStore'
 import { collapseSurgerySite, trimBlankLines } from './chapterExtraction'
 import { useInlinePillEdit } from '../shared/useInlinePillEdit'
 
@@ -52,6 +53,8 @@ export interface UseNoteChaptersOptions {
   applyProgrammaticEditorText: (nextText: string, selectionStart?: number, selectionEnd?: number) => void
   /** Cancels any pending debounced autosave and writes immediately -- awaited after cutting a selection so the cut can't be lost to a crash/reload racing the normal 350ms debounce before the new chapter is created. */
   flushPendingSaveNow: () => Promise<void>
+  /** The open notes' documents (editorSection/noteDocumentStore.ts): a merge into a note open in some slot goes through its document, never past it. */
+  noteDocuments: NoteDocumentStore
   /** Called once a chapter note is permanently deleted (collapse/merge always deletes outright -- chapters have no independent trash state) -- lets EditorSection.tsx evict any per-note-id caches that would otherwise hold onto that id forever. */
   onNotePermanentlyDeleted?: (noteId: string) => void
 }
@@ -155,6 +158,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     editorSelection,
     applyProgrammaticEditorText,
     flushPendingSaveNow,
+    noteDocuments,
     onNotePermanentlyDeleted,
   } = options
 
@@ -577,10 +581,21 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     // chapter's previous is whichever one sits immediately before it.
     const previousId = currentIndex > 0 ? reorderableChapters[currentIndex - 1].chapterNoteId : menuIdentityNoteId
 
-    const previousDoc = await window.thockdownNotes.loadNote({ id: previousId })
-    const trimmedPrevious = previousDoc.text.replace(/\n+$/, '')
-    const mergedText = trimmedPrevious.length > 0 ? `${trimmedPrevious}\n\n${currentContent}` : currentContent
-    await window.thockdownNotes.saveNote({ id: previousId, text: mergedText })
+    const merge = (previousText: string) => {
+      const trimmedPrevious = previousText.replace(/\n+$/, '')
+      return trimmedPrevious.length > 0 ? `${trimmedPrevious}\n\n${currentContent}` : currentContent
+    }
+    let mergedText = ''
+    // The note merged INTO may be open in another slot, with typing there
+    // not yet written: merged into its live text, which that slot then shows,
+    // rather than into the database copy that slot would later write over.
+    if (noteDocuments.change(previousId, (previousText) => (mergedText = merge(previousText)))) {
+      await noteDocuments.flushSave(previousId)
+    } else {
+      const previousDoc = await window.thockdownNotes.loadNote({ id: previousId })
+      mergedText = merge(previousDoc.text)
+      await window.thockdownNotes.saveNote({ id: previousId, text: mergedText })
+    }
 
     const updatedChapters = await window.thockdownChapters.removeChapter(menuIdentityNoteId, currentChapterNoteId)
     // Permanently removed, not trashed -- chapters have no independent trash
@@ -593,7 +608,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     await refreshNotes(previousId)
     // Caret at the end of the merged note.
     await activateNote(previousId, mergedText.length)
-  }, [menuIdentityNoteId, activeNoteId, autoTocChapterNoteId, autoOpenItemsChapterNoteId, reorderableChapters, readEditorText, refreshNotes, activateNote, onNotePermanentlyDeleted])
+  }, [menuIdentityNoteId, activeNoteId, autoTocChapterNoteId, autoOpenItemsChapterNoteId, reorderableChapters, readEditorText, refreshNotes, activateNote, onNotePermanentlyDeleted, noteDocuments])
 
   // Chapter-pill drag-to-reorder only accepts drops onto actual chapter pills.
   // Any other drag target (the parent tab, the bar background, or any

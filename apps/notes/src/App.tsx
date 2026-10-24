@@ -48,6 +48,10 @@ import {
 import type { NoteSummary } from './shared/noteLifecycle'
 import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote, isSameNoteSummary } from './shared/noteLifecycle'
 import { adoptNoteSummaries, keepIfUnchanged, withSavedNote } from './shared/noteContentStore'
+import { applyNonOverlappingChanges, createNoteDocumentStore } from './editorSection/noteDocumentStore'
+import { musicPlayerService } from './sound/MusicPlayerService'
+import { registerQuitParticipant, settleForQuit } from './shared/quitParticipants'
+import { installExternalFileSync } from './editorSection/externalFileSync'
 import { getNoteListMetaKind } from './shared/noteListMeta'
 import {
   DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS,
@@ -194,7 +198,7 @@ import { readPageZoomFactor } from './window/pageZoom'
 import { splitChapterFamily } from './shared/chapters'
 import { trimBlankLines } from './chapters/chapterExtraction'
 import type { ExportScope } from './editorSection/EscapeHoldPanel'
-import { truncateTitle } from './shared/textSanitization'
+import { sanitizeDocumentText, truncateTitle } from './shared/textSanitization'
 import { deriveNoteTitleFromText } from './shared/noteTitle'
 import { isNoteSearchQueryActive, matchesNoteSearchQuery } from './shared/noteSearch'
 import { useAdventureEscapeMenu } from './adventure/useAdventureEscapeMenu'
@@ -286,6 +290,8 @@ import { stableStringify } from './shared/stableStringify'
 const NEW_NOTE_TEMPLATE = '# '
 const FALLBACK_NEW_NOTE_TITLE = 'Untitled'
 const GRID_DIVIDER_PX = 8
+/** How long the app state waits after its last change before it is written. */
+const APP_STATE_SAVE_DEBOUNCE_MS = 500
 // Sidebar width is derived (see sidebarWidthPx below), not a flat constant --
 // it has to fit the options panel's always-visible top section (font
 // settings + preset buttons), which is a 6-column grid of
@@ -971,6 +977,8 @@ type NoteListItemProps = {
   note: NoteSummary
   isActive: boolean
   isModified?: boolean
+  /** The note's file changed on disk while it held edits of its own (src/shared/externalFileReconcile.ts's `conflict`): a save overwrites that version, which is on the Timeline. */
+  isFileConflict?: boolean
   onSelect: (noteId: string) => void
   onPrimedLeftClick: (noteId: string) => void
   onSaveClick?: (noteId: string) => void
@@ -995,6 +1003,7 @@ const NoteListItem = memo(function NoteListItem({
   note,
   isActive,
   isModified = false,
+  isFileConflict = false,
   onSelect,
   onPrimedLeftClick,
   onSaveClick,
@@ -1131,6 +1140,12 @@ const NoteListItem = memo(function NoteListItem({
     event.dataTransfer.setData(NOTE_DRAG_MIME_TYPE, serializeNoteDragPayload({ noteId: note.id, sourceSectionId: null }))
   }, [note.id])
 
+  const saveTooltip = !isModified
+    ? 'Save disabled'
+    : isFileConflict
+      ? 'The file changed on disk while you were editing. Saving overwrites it; its version is on the Timeline'
+      : 'Save external note'
+
   const isArchived = isArchivedNote(note)
   const isDeleted = isDeletedNote(note)
   // A chapter can now carry its own 'archived'/'deleted' protected tag (see
@@ -1198,8 +1213,8 @@ const NoteListItem = memo(function NoteListItem({
                   type="button"
                   className="note-list-action-button note-list-action-button-save"
                   disabled={!isModified}
-                  aria-label={isModified ? 'Save external note' : 'Save disabled'}
-                  data-tooltip={isModified ? 'Save external note' : 'Save disabled'}
+                  aria-label={saveTooltip}
+                  data-tooltip={saveTooltip}
                   onClick={handleSaveClick}
                   onPointerDown={stopRowRightPress}
                   onPointerUp={stopRowRightPress}
@@ -1440,6 +1455,23 @@ function App() {
     ), previous))
   }, [])
   const readNoteContent = useCallback((noteId: string) => noteContentByIdRef.current.get(noteId) ?? '', [])
+  /**
+   * Every open note's document, shared by all slots: the text of a note while
+   * any slot shows it, and the one place it is written from
+   * (editorSection/noteDocumentStore.ts). `persist` writes a change no slot
+   * made -- a chapter merged into a note, an image renamed in it.
+   */
+  const [noteDocuments] = useState(() => createNoteDocumentStore({
+    persist: async (noteId, text) => {
+      if (!window.thockdownNotes) return
+      const saved = await window.thockdownNotes.saveNote({ id: noteId, text })
+      setNotes((previous) => withSavedNote(previous, saved, text))
+    },
+  }))
+  // A deleted note is let go of wherever it is open, however it was deleted
+  // (a purge, a chapter merged away, a parent taking its chapters with it, an
+  // empty Open Items chapter removed by a save).
+  useEffect(() => window.thockdownNotes?.onNoteDeleted((payload) => noteDocuments.remove(payload.id)), [noteDocuments])
   const notesRef = useRef<NoteSummary[]>([])
 
   useEffect(() => {
@@ -2055,17 +2087,6 @@ function App() {
     void sectionRegistryRef.current.get(sectionId)?.unpinNoteTab(noteId)
   }, [])
 
-  // Whether some section *other* than `sectionId` currently has `noteId`
-  // open -- used by useSnapshotFreeze to skip freezing an inactive section
-  // when nothing could actually change its note out from under it.
-  const isNoteOpenInOtherSection = useCallback((sectionId: string, noteId: string): boolean => {
-    for (const [otherSectionId, handle] of sectionRegistryRef.current) {
-      if (otherSectionId === sectionId) continue
-      if (handle.activeNoteId === noteId) return true
-    }
-    return false
-  }, [])
-
   // Reactive counterpart to the plain registry above: each <EditorSection>
   // instance calls this from its own effect every render (see its
   // reportSectionHandle prop). A plain Map read during the parent's render
@@ -2147,9 +2168,7 @@ function App() {
       // always through persistMenuStateNow, via its ref proxy (see
       // persistMenuStateNowRef's own doc comment for why -- this handler is
       // declared before persistMenuStateNow, same TDZ/staleness situation as
-      // toggleSidebarVisible above). An earlier hand-rolled build+save here,
-      // without updating persistedMenuStateRef, was the actual cause of
-      // double-size mode not surviving an AppImage restart on Linux.
+      // toggleSidebarVisible above).
       persistMenuStateNowRef.current({ isDoubleSizeMode: next })
 
       return next
@@ -2272,6 +2291,40 @@ function App() {
   const isWritingDebugEntryRef = useRef(false)
   const debugNoteCreationPromiseRef = useRef<Promise<string | null> | null>(null)
   const externalNoteOriginalTextByIdRef = useRef<Map<string, string>>(new Map())
+  const [externalFileConflictIds, setExternalFileConflictIds] = useState<ReadonlySet<string>>(() => new Set())
+  // An open external note follows its file: taken over when the reader has
+  // not edited the note, kept and marked unsaved when both changed
+  // (externalFileSync.ts).
+  useEffect(() => {
+    const notesApi = window.thockdownNotes
+    const externalFiles = window.thockdownExternalFiles
+    if (!notesApi || !externalFiles) return
+    return installExternalFileSync({
+      noteDocuments,
+      externalFiles,
+      notes: notesApi,
+      onBaseline: (noteId, text) => externalNoteOriginalTextByIdRef.current.set(noteId, text),
+      onSummary: (summary, text) => setNotes((previous) => withSavedNote(previous, summary, text)),
+      onConflict: (noteId, conflicted) => setExternalFileConflictIds((previous) => {
+        if (previous.has(noteId) === conflicted) return previous
+        const next = new Set(previous)
+        if (conflicted) next.add(noteId)
+        else next.delete(noteId)
+        return next
+      }),
+    })
+  }, [noteDocuments, setNotes])
+  // A conflict lasts while the note is unsaved: every way it becomes clean
+  // (a save from any route, an adoption, the file catching up) ends it, so
+  // it is ended here, from the one fact they share, rather than at each.
+  useEffect(() => {
+    setExternalFileConflictIds((previous) => {
+      if (previous.size === 0) return previous
+      const unsaved = new Set(notes.filter((note) => note.hasUnsavedChanges).map((note) => note.id))
+      const next = new Set([...previous].filter((noteId) => unsaved.has(noteId)))
+      return next.size === previous.size ? previous : next
+    })
+  }, [notes])
   const pendingSidebarScrollRestoreRef = useRef<{ mode: SidebarMode; scrollTop: number } | null>(null)
   // Stay here rather than move into useEditorSectionMount: activateNote and
   // queueAppStateSave (both still in App.tsx) also read/write these, and
@@ -3886,7 +3939,6 @@ function App() {
   const revealNoteInMenuStable = useCallback(() => revealNoteInMenuRef.current(), [])
   const writeDebugEntryStable = useCallback((functionName: string, lines: string[]) => writeDebugEntryRef.current(functionName, lines), [])
 
-  const persistedMenuStateRef = useRef<PersistedMenuState | null>(null)
 
   const buildMenuStateSnapshot = useCallback((overrides?: {
     sidebarMode?: SidebarMode
@@ -3966,7 +4018,10 @@ function App() {
       soundscapes: soundscapePreferences,
       musicActiveSlots,
       musicLastSongId: musicPlaybackRef.current.songId ?? undefined,
-      musicLastPositionSec: musicPlaybackRef.current.positionSec,
+      // Live while a track plays, so a save at any moment (quit included)
+      // has the position as it is; otherwise where the pause or the track
+      // change left it.
+      musicLastPositionSec: musicPlaybackRef.current.wasPlaying ? musicPlayerService.currentTime : musicPlaybackRef.current.positionSec,
       musicWasPlaying: musicPlaybackRef.current.wasPlaying,
       highlightCaretColor: highlightColors.caret,
       highlightSearchColor: highlightColors.search,
@@ -4136,33 +4191,16 @@ function App() {
   ])
 
   /**
-   * The one correct way to persist an app-state menu change *right now*
-   * (as opposed to the debounced queueAppStateSave path further down, meant
-   * for high-frequency changes like scrolling). Builds a fresh snapshot via
-   * buildMenuStateSnapshot, updates persistedMenuStateRef, then saves it.
-   *
-   * That ref update is load-bearing, not tidiness: queueAppStateSave's own
-   * debounced flush prefers persistedMenuStateRef.current over building a
-   * fresh snapshot itself, so if some *other* immediate-persist call site
-   * skips updating the ref, its correctly-saved value gets silently
-   * overwritten by the very next debounced flush -- triggered by anything
-   * at all (switching notes, scrolling), or even just idling for about a
-   * second while some unrelated background save was already pending.
-   *
-   * This is not a hypothetical: hand-rolling buildMenuStateSnapshot +
-   * saveAppState without this ref update independently caused the exact
-   * same silent-persistence-loss bug at least four separate times --
-   * double-size mode, sidebar visibility, the options-menu auto-show-
-   * sidebar path, and review-gutter visibility, the last of which even had
-   * its own doc comment describing the hand-rolled pattern as the norm
-   * other toggles should copy. If you're adding a new instant (non-
-   * debounced) menu-state toggle, call this -- do not hand-roll
-   * buildMenuStateSnapshot+saveAppState again.
+   * Persists the app state *right now*, for a change whose save must not
+   * wait for the debounce (the main process acts on the saved value, or a
+   * reload follows). Every other change is saved by the debounced save,
+   * which an effect queues whenever the snapshot changes. Both build their
+   * snapshot from the current state at the moment they write, so neither can
+   * write back a stale copy over the other.
    */
   const persistMenuStateNow = useCallback((overrides?: Parameters<typeof buildMenuStateSnapshot>[0]) => {
     if (!window.thockdownState || !persistenceReady) return undefined
     const snapshot = buildMenuStateSnapshot(overrides)
-    persistedMenuStateRef.current = snapshot
     const section = getActiveSection()
     return window.thockdownState.saveAppState({
       selectedNoteId: section?.activeNoteId ?? null,
@@ -4285,14 +4323,14 @@ function App() {
     })
   }, [persistMenuStateNow])
 
-  const persistMenuStateOnUnload = useCallback(() => {
+  const persistMenuStateForQuit = useCallback(() => {
     const currentModeSnapshot = captureSidebarModeState(sidebarMode)
     const nextSidebarViewStateByMode: SidebarViewStateByMode = {
       ...sidebarViewStateByMode,
       [sidebarMode]: currentModeSnapshot,
     }
 
-    persistMenuStateNow({
+    return persistMenuStateNow({
       sidebarMode,
       sidebarViewStateByMode: nextSidebarViewStateByMode,
     })
@@ -4838,17 +4876,23 @@ function App() {
     const section = `\n## ${timeStr} / ${functionName}\n${lines.map(l => `- ${l}`).join('\n')}`
 
     try {
-      const loaded = await window.thockdownNotes.loadNote({ id: noteId })
-      const savedText = `${loaded.text}${section}`
-      const updated = await window.thockdownNotes.saveNote({ id: noteId, text: savedText })
-      setNotes((previous) => withSavedNote(previous, updated, savedText))
+      // Through the note's document when a slot has it open, so the slot
+      // shows the entry and no later write of its older text drops it.
+      if (noteDocuments.change(noteId, (text) => `${text}${section}`)) {
+        await noteDocuments.flushSave(noteId)
+      } else {
+        const loaded = await window.thockdownNotes.loadNote({ id: noteId })
+        const savedText = `${loaded.text}${section}`
+        const updated = await window.thockdownNotes.saveNote({ id: noteId, text: savedText })
+        setNotes((previous) => withSavedNote(previous, updated, savedText))
+      }
     } catch (error) {
       const originalError = originalConsoleMethodsRef.current.error ?? console.error
       originalError.call(console, 'Failed to write debug entry', error)
     } finally {
       isWritingDebugEntryRef.current = false
     }
-  }, [debuggingEnabled, ensureDebugNoteExists, setNotes])
+  }, [debuggingEnabled, ensureDebugNoteExists, setNotes, noteDocuments])
   writeDebugEntryRef.current = writeDebugEntry
 
   useEffect(() => {
@@ -4920,7 +4964,6 @@ function App() {
     await window.thockdownState.clearAppState()
     applyUiLayoutLoadout(uiMode === 'dark' ? DARK_FACTORY_PRESETS[0] : LIGHT_FACTORY_PRESETS[0])
     const refreshedMenuState = buildMenuStateSnapshot()
-    persistedMenuStateRef.current = refreshedMenuState
     await window.thockdownState.saveAppState({
       selectedNoteId: null,
       viewport: undefined,
@@ -4929,6 +4972,11 @@ function App() {
     window.location.reload()
   }, [applyUiLayoutLoadout, buildMenuStateSnapshot, clearAppStatePrimed, uiMode])
 
+  // The debounced save builds its snapshot when it FIRES, from the state as
+  // it is then: a snapshot kept from earlier is a copy that goes stale, and
+  // writing it back is how a setting changed since gets reverted.
+  const buildMenuStateSnapshotRef = useRef(buildMenuStateSnapshot)
+  buildMenuStateSnapshotRef.current = buildMenuStateSnapshot
   const queueAppStateSave = useCallback((selectedNoteId: string | null) => {
     if (!window.thockdownState) return
     if (!persistenceReady) return
@@ -4943,11 +4991,14 @@ function App() {
       void window.thockdownState?.saveAppState({
         selectedNoteId,
         viewport: viewport ?? undefined,
-        menu: persistedMenuStateRef.current ?? buildMenuStateSnapshot(),
+        menu: buildMenuStateSnapshotRef.current(),
       })
-    }, 150)
-  }, [buildMenuStateSnapshot, getActiveSection, persistenceReady])
+    }, APP_STATE_SAVE_DEBOUNCE_MS)
+  }, [getActiveSection, persistenceReady])
   queueAppStateSaveRef.current = queueAppStateSave
+  const queueActiveAppStateSave = useCallback(() => {
+    queueAppStateSave(getActiveSection()?.activeNoteId ?? null)
+  }, [getActiveSection, queueAppStateSave])
 
   const chooseExportFolder = useCallback(async () => {
     const folderPath = await window.thockdownExport?.selectExportFolder()
@@ -4955,14 +5006,8 @@ function App() {
 
     setExportFolder(folderPath)
 
-    const nextMenuState = {
-      ...(persistedMenuStateRef.current ?? buildMenuStateSnapshot()),
-      exportFolder: folderPath,
-    }
-    persistedMenuStateRef.current = nextMenuState
-    queueAppStateSave(getActiveSection()?.activeNoteId ?? null)
     return folderPath
-  }, [buildMenuStateSnapshot, getActiveSection, queueAppStateSave])
+  }, [])
 
   /**
    * The markdown an export writes, and the title its file is named after.
@@ -5032,7 +5077,7 @@ ${markdownHtml}
     await window.thockdownState.saveAppState({
       selectedNoteId,
       viewport: getActiveSection()?.latestViewportRef.current ?? undefined,
-      menu: persistedMenuStateRef.current ?? buildMenuStateSnapshot(),
+      menu: buildMenuStateSnapshot(),
     })
   }, [buildMenuStateSnapshot, getActiveSection])
 
@@ -5288,11 +5333,35 @@ ${markdownHtml}
   // overlay record to the new name (imageLibraryStore.ts's renameImage).
   useEffect(() => {
     registerImageLibraryHost({
-      openNoteEditors: () => [...sectionRegistryRef.current.values()].flatMap((handle) => {
-        if (!handle.activeNoteId || handle.previewedSnapshotId !== null) return []
-        const adapter = handle.adapterRef.current
-        if (!adapter) return []
-        return [{ noteId: handle.activeNoteId, readText: handle.readEditorText, applyEdit: (changes, text) => adapter.applyEdit(changes, text) }]
+      // One per OPEN note, not per slot: a note in two slots is one document,
+      // and an edit applied in one slot reaches the other through it. Applied
+      // in an editor showing the note where there is one (one undo step there);
+      // otherwise -- the note open only in a Time Machine view, read-only, or
+      // still being written after its slot moved on -- to the document itself.
+      // Every open note is listed, because the main process rewrites only the
+      // notes nobody holds, and a document written later from an older text
+      // would undo its rewrite.
+      openNoteEditors: () => noteDocuments.openNoteIds().map((noteId) => {
+        // True only when the edit was made: `change` answers whether the note
+        // is open, and the edit is skipped when the text moved on meanwhile.
+        const applyToDocument = (changes: Array<{ from: number; to: number; insert: string }>, expectedText: string) => {
+          let applied = false
+          noteDocuments.change(noteId, (text) => {
+            if (text !== expectedText) return text
+            applied = true
+            return applyNonOverlappingChanges(text, changes)
+          })
+          return applied
+        }
+        const handle = [...sectionRegistryRef.current.values()].find((candidate) => (
+          candidate.activeNoteId === noteId && candidate.previewedSnapshotId === null && candidate.adapterRef.current
+        ))
+        const adapter = handle?.adapterRef.current
+        return {
+          noteId,
+          readText: () => noteDocuments.read(noteId) ?? '',
+          applyEdit: (changes, expectedText) => Boolean(adapter?.applyEdit(changes, expectedText)) || applyToDocument(changes, expectedText),
+        }
       }),
       onImageRenamed: (fromId, toId, rewrittenNoteIds) => {
         // The renderer's copy of each note main rewrote is stale (search,
@@ -5305,7 +5374,7 @@ ${markdownHtml}
         persistMenuStateNowRef.current({ slotOverlay: next })
       },
     })
-  }, [])
+  }, [noteDocuments])
 
   const openAdventureViewHere = useCallback(async () => {
     const handle = getActiveSection()
@@ -5688,7 +5757,7 @@ ${markdownHtml}
       // same main-process normalisation saveNote would apply, and set the
       // note clean and in sync; a second call wrote the whole file again
       // (and re-indexed it) for nothing.
-      const normalizedContent = normalizeInternalText(content)
+      const normalizedContent = sanitizeDocumentText(content)
       // The note's baseline: what the FILE held, stamped with the file's own
       // modified time rather than the moment of import. Marked isFromDisk so
       // it is identifiable outright -- everything that later asks "has this
@@ -6225,13 +6294,8 @@ ${markdownHtml}
               scrollTop: loadedSidebarViewState[appState.menu.sidebarMode].scrollTop,
             }
 
-            persistedMenuStateRef.current = {
-              ...appState.menu,
-              sidebarViewState: loadedSidebarViewState,
-            }
             setExportFolder(appState.menu.exportFolder ?? null)
           } else {
-            persistedMenuStateRef.current = null
             setExportFolder(null)
           }
 
@@ -7311,11 +7375,14 @@ ${markdownHtml}
     }
   }, [getActiveSection, exportFolder, isExportingMd, chooseExportFolder, buildExportMarkdown])
 
+  // Every change to anything the app state holds is saved a moment after it
+  // settles, so the saved state is never more than that behind the screen
+  // (a power cut, a killed process). `buildMenuStateSnapshot` is rebuilt
+  // exactly when one of the values it reads changes, which is what makes it
+  // the trigger.
   useEffect(() => {
-    const activeNoteId = activeSectionSnapshot?.activeNoteId
-    if (!window.thockdownState || !activeNoteId) return
-    queueAppStateSave(activeNoteId)
-  }, [activeSectionSnapshot?.activeNoteId, queueAppStateSave])
+    queueAppStateSave(activeSectionSnapshot?.activeNoteId ?? null)
+  }, [activeSectionSnapshot?.activeNoteId, buildMenuStateSnapshot, queueAppStateSave])
 
   useEffect(() => {
     if (!persistenceReady) return
@@ -9022,35 +9089,41 @@ ${markdownHtml}
     return () => window.removeEventListener('mousedown', refocusOnPress, true)
   }, [getActiveSection, isEscapeRingUp])
 
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      // Flush any pending debounced app-state save immediately so the main
-      // process receives the latest viewport/menu state before the renderer
-      // is torn down. The main process will also re-save its cached copy on
-      // before-quit as a belt-and-suspenders guarantee.
-      if (appStateSaveTimerRef.current !== null) {
-        window.clearTimeout(appStateSaveTimerRef.current)
-        appStateSaveTimerRef.current = null
-        const viewport = activeSection?.latestViewportRef.current
-        void window.thockdownState?.saveAppState({
-          selectedNoteId: activeSection?.activeNoteId ?? null,
-          viewport: viewport ?? undefined,
-          menu: persistedMenuStateRef.current ?? buildMenuStateSnapshot(),
-        })
-      }
-
-      // Flush every open section, not just the active one -- each has its
-      // own note with its own cursor/scroll position that would otherwise
-      // be lost on quit.
-      for (const section of sectionRegistryRef.current.values()) {
-        void section.persistActiveNoteEditModeStateNow()
-      }
-      persistMenuStateOnUnload()
+  // What App holds and saves later, settled when the app quits
+  // (src/shared/quitParticipants.ts).
+  useEffect(() => registerQuitParticipant('note text', () => noteDocuments.flushAll()), [noteDocuments])
+  useEffect(() => registerQuitParticipant('slots', () => Promise.all(
+    // Every open slot, not just the active one: each has its own note's
+    // caret and scroll position.
+    [...sectionRegistryRef.current.values()].map((section) => section.persistActiveNoteEditModeStateNow()),
+  )), [])
+  useEffect(() => registerQuitParticipant('app state', () => {
+    // The debounced save is superseded by this one, which carries the same
+    // snapshot as of now.
+    if (appStateSaveTimerRef.current !== null) {
+      window.clearTimeout(appStateSaveTimerRef.current)
+      appStateSaveTimerRef.current = null
     }
+    return persistMenuStateForQuit()
+  }), [persistMenuStateForQuit])
 
+  useEffect(() => {
+    let quitting = false
+    const unsubscribe = window.windowControls?.onPrepareToQuit?.((token) => {
+      quitting = true
+      void settleForQuit().then(() => window.windowControls?.quitPrepared(token))
+    })
+    // A reload unloads the page without quitting: the same writes, sent
+    // before the page goes, which is all that can be done there.
+    const handleBeforeUnload = () => {
+      if (!quitting) void settleForQuit()
+    }
     window.addEventListener('beforeunload', handleBeforeUnload)
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-  }, [activeSection, buildMenuStateSnapshot, persistMenuStateOnUnload])
+    return () => {
+      unsubscribe?.()
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+    }
+  }, [])
 
   const syncSidebarTexture = useCallback(() => {
     const scroller = sidebarTreeScrollerEl || sidebarContentRef.current
@@ -9393,6 +9466,7 @@ ${markdownHtml}
                               note={note}
                               isActive={isActive}
                               isModified={isModified}
+                              isFileConflict={isModified && externalFileConflictIds.has(note.id)}
                               chapterParentTitle={chapterParentTitle}
                               isChapterParentUnavailable={isChapterParentUnavailable}
                               onSelect={handleSelectNote}
@@ -9949,6 +10023,7 @@ ${markdownHtml}
                 initialPositionSec={musicRestorePositionSec}
                 initialWasPlaying={musicRestoreWasPlaying}
                 playbackStateRef={musicPlaybackRef}
+                onPlaybackStateChange={queueActiveAppStateSave}
                 isSoundOptionsOpen={musicSoundOptionsOpen}
                 onSoundOptionsOpenChange={setMusicSoundOptionsOpen}
               />
@@ -10121,7 +10196,7 @@ ${markdownHtml}
                   onSwapSection={(incomingSectionId) => void handleSwapSection(entry.id, incomingSectionId)}
                   onDeleteSection={(id) => void handleDeleteSection(id)}
                   unpinNoteFromSection={unpinNoteFromSection}
-                  isNoteOpenInOtherSection={isNoteOpenInOtherSection}
+                  noteDocuments={noteDocuments}
                   markSectionActive={markSectionActive}
                   isSidebarVisible={isSidebarShown}
                   toggleSidebarVisible={toggleSidebarVisible}
