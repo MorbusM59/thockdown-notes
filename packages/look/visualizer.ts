@@ -39,10 +39,13 @@ export interface VisualizerChannel {
    * the band: higher keeps only the biggest hits.
    */
   contrast: number
-  /** Seconds a peak takes to fall to nothing; a hit lifts the response at once. */
-  fallSec: number
-  /** The fall's shape: 0 falls evenly, higher drops early, lower holds and drops late. */
-  fallShape: number
+  /**
+   * How heavy each hit is, 0..1: how long and how fully it carries after the
+   * music lets go. Light is a short fall that drops early (a flicker), heavy
+   * a long one that holds and then drops (a slow glow). `fallOf` turns it into
+   * the fall's length and shape.
+   */
+  mass: number
 }
 
 /** A block drawn in a colour of its own. */
@@ -64,10 +67,28 @@ export const BEAT_FREQUENCY_MAX_HZ = 20000
 export const BEAT_OCTAVES_MIN = 0.1
 export const BEAT_OCTAVES_MAX = 4
 export const BEAT_CONTRAST_MAX = 0.95
-export const BEAT_FALL_MIN_SEC = 0.02
-export const BEAT_FALL_MAX_SEC = 2
-export const BEAT_FALL_SHAPE_MIN = -5
-export const BEAT_FALL_SHAPE_MAX = 5
+/** The fall at no mass and at full mass; the length is geometric between them, so each step of the slider feels the same. */
+const FALL_LIGHT_SEC = 0.04
+const FALL_HEAVY_SEC = 1.6
+/** The fall's shape (flow's `fadeCurve`): positive drops early, negative holds and drops late. */
+const FALL_SHAPE_LIGHT = 2
+const FALL_SHAPE_HEAVY = -2
+
+/**
+ * A mass as the fall it makes: its length in seconds and its shape. The
+ * middle (0.5) is a quarter-second even fall, the old defaults.
+ */
+export function fallOf(mass: number): { fallSec: number; fallShape: number } {
+  return {
+    fallSec: FALL_LIGHT_SEC * (FALL_HEAVY_SEC / FALL_LIGHT_SEC) ** mass,
+    fallShape: FALL_SHAPE_LIGHT + (FALL_SHAPE_HEAVY - FALL_SHAPE_LIGHT) * mass,
+  }
+}
+
+/** The mass whose fall is this long: reads a layout saved with a fall time. */
+function massOfFallSec(fallSec: number): number {
+  return Math.log(fallSec / FALL_LIGHT_SEC) / Math.log(FALL_HEAVY_SEC / FALL_LIGHT_SEC)
+}
 
 export const DEFAULT_VISUALIZER_CHANNEL: VisualizerChannel = {
   effect: 0.6,
@@ -75,8 +96,7 @@ export const DEFAULT_VISUALIZER_CHANNEL: VisualizerChannel = {
   frequencyHz: 70,
   octaves: 1,
   contrast: 0.5,
-  fallSec: 0.25,
-  fallShape: 0,
+  mass: 0.5,
 }
 
 /**
@@ -123,8 +143,9 @@ function sanitizeChannel(input: unknown, d: VisualizerChannel): VisualizerChanne
     frequencyHz: bounded(source.frequencyHz, BEAT_FREQUENCY_MIN_HZ, BEAT_FREQUENCY_MAX_HZ, d.frequencyHz),
     octaves: bounded(source.octaves, BEAT_OCTAVES_MIN, BEAT_OCTAVES_MAX, d.octaves),
     contrast: bounded(source.contrast, 0, BEAT_CONTRAST_MAX, d.contrast),
-    fallSec: bounded(source.fallSec, BEAT_FALL_MIN_SEC, BEAT_FALL_MAX_SEC, d.fallSec),
-    fallShape: bounded(source.fallShape, BEAT_FALL_SHAPE_MIN, BEAT_FALL_SHAPE_MAX, d.fallShape),
+    mass: source.mass !== undefined
+      ? bounded(source.mass, 0, 1, d.mass)
+      : typeof source.fallSec === 'number' && source.fallSec > 0 ? bounded(massOfFallSec(source.fallSec), 0, 1, d.mass) : d.mass,
   }
 }
 

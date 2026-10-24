@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultVisualizer, sanitizeVisualizer, SOURCE_SLIDER_MAX, SOURCE_SLIDER_MIN, sourceAtSlider, sourceSliderValue } from './visualizer'
+import { defaultVisualizer, fallOf, sanitizeVisualizer, SOURCE_SLIDER_MAX, SOURCE_SLIDER_MIN, sourceAtSlider, sourceSliderValue } from './visualizer'
 
 describe('sanitizeVisualizer', () => {
   it('fills a layout saved before the visualizer with the defaults for its inversion', () => {
@@ -32,6 +32,14 @@ it('turns a saved amount and invert into a signed effect', () => {
   expect(v.caret.effect).toBe(-0.4)
   expect(v.shade.effect).toBe(0.3)
   expect(v.caret).not.toHaveProperty('invert')
+})
+
+it('reads a saved fall time as the mass that falls as long', () => {
+  const v = sanitizeVisualizer({ caret: { fallSec: 0.25, fallShape: 3 }, shade: { fallSec: 99 } }, false)
+  expect(v.caret.mass).toBeCloseTo(0.5, 2)
+  expect(v.shade.mass).toBe(1)
+  expect(fallOf(0.5).fallSec).toBeCloseTo(0.25, 1)
+  expect(fallOf(0.5).fallShape).toBe(0)
 })
 
 describe('the source slider', () => {

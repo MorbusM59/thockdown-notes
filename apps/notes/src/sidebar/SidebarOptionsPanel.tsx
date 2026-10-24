@@ -22,10 +22,6 @@ import {
   BEAT_OCTAVES_MAX,
   BEAT_OCTAVES_MIN,
   BEAT_CONTRAST_MAX,
-  BEAT_FALL_MAX_SEC,
-  BEAT_FALL_MIN_SEC,
-  BEAT_FALL_SHAPE_MAX,
-  BEAT_FALL_SHAPE_MIN,
   DEFAULT_VISUALIZER_CHANNEL,
   SOURCE_SLIDER_MAX,
   SOURCE_SLIDER_MIN,
@@ -1046,7 +1042,7 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel>{label}</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label={`${label} settings`}>
-            <OptionsSliderRows rows={[2, 2, 2]}>
+            <OptionsSliderRows rows={[2, 2, 1]}>
               {slider('effect', 'effect', -1, 1, 0.01, `How far ${effect} at a full response. Right of centre a hit adds it; left of centre it is inverted, resting at that much while music plays and a hit takes it away; the centre turns it off`, 'effect, negative inverts')}
               {/* One track for every source (visualizer.ts, `sourceSliderValue`): the
                   kick at the left end, the snare at the centre, the hat at the right,
@@ -1069,8 +1065,7 @@ export function SidebarOptionsPanel({
               />
               {slider('octaves', 'width', BEAT_OCTAVES_MIN, BEAT_OCTAVES_MAX, 0.1, 'Octaves: how wide the bell around the frequency is; a drum does not use it', 'band width in octaves', 1)}
               {slider('contrast', 'contrast', 0, BEAT_CONTRAST_MAX, 0.01, 'How loud the band must be, against the ten seconds around it, before it responds: higher keeps only the biggest hits', 'contrast')}
-              {slider('fallSec', 'fall', BEAT_FALL_MIN_SEC, BEAT_FALL_MAX_SEC, 0.01, 'Seconds a peak takes to fall to nothing; a hit lifts it at once', 'fall time in seconds', 2)}
-              {slider('fallShape', 'shape', BEAT_FALL_SHAPE_MIN, BEAT_FALL_SHAPE_MAX, 0.1, 'Fall shape: 0 falls evenly, higher drops early, lower holds and drops late', 'fall shape', 1)}
+              {slider('mass', 'mass', 0, 1, 0.01, 'How heavy each hit is: light flickers with every hit and is gone at once, heavy carries each hit and lets go slowly. A hit always lands at once', 'mass')}
             </OptionsSliderRows>
           </div>
         </>
@@ -3146,7 +3141,7 @@ export function SidebarOptionsPanel({
           <OptionsSubsectionLabel>Flow</OptionsSubsectionLabel>
           <div className="utility-setting-slider-stack" aria-label="Typing flow settings">
             {/* How the trail fades (fade, shape) and how flow is answered (look, reverb, trail, amp). How the meter itself moves is fixed (shared/flowSettings.ts). */}
-            <OptionsSliderRows rows={[2, 2, 2]}>
+            <OptionsSliderRows rows={[2, 2, 1]}>
               <CompactScrollbarSlider
                 id="flow-fade-time"
                 min={FLOW_FADE_MAX_TIME_MIN}

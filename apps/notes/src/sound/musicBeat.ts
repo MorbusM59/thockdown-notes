@@ -50,6 +50,7 @@
 
 import { outputContext } from '@thockdown/soundscape/audioOutputBus'
 import type { VisualizerChannel as BeatChannel, VisualizerDrum } from '@thockdown/look/visualizer'
+import { fallOf } from '@thockdown/look/visualizer'
 import { fadeCurve } from '../flow/flowTrail'
 import { DrumCursor, DrumTracker } from './drumTracker'
 import { appendBeatTrace, BeatTraceWindow, isBeatTraceOn } from './beatTrace'
@@ -88,7 +89,7 @@ interface Band {
   samples: Float32Array<ArrayBuffer> | null
   /** A drum channel's place in the shared tracker's hits; null for a band. */
   cursor: DrumCursor | null
-  /** The last peak of the response and the listener time it was reached at, for the fall (`fallSec`, `fallShape`). */
+  /** The last peak of the response and the listener time it was reached at, for the fall (`mass`, through `fallOf`). */
   peak: number
   peakTime: number
   /** Ring of readings: scout media time and level in dB, oldest at `head`. */
@@ -336,8 +337,10 @@ function respond(band: Band, listenerTime: number): number {
     ? (drums && band.cursor ? drums.tracker.hitBetween(drum, band.cursor, listenerTime, band.channel.contrast) : 0)
     : stretched(band, listenerTime)
   // The fall: a response never drops faster than its last peak fades, on
-  // flow's fade curve (fallSec long, fallShape). A rise is taken at once.
-  const held = band.peak * fadeCurve(listenerTime - band.peakTime, band.channel.fallSec, band.channel.fallShape)
+  // flow's fade curve, as long and shaped as the block's mass makes it. A
+  // rise is taken at once.
+  const { fallSec, fallShape } = fallOf(band.channel.mass)
+  const held = band.peak * fadeCurve(listenerTime - band.peakTime, fallSec, fallShape)
   if (raw >= held) {
     band.peak = raw
     band.peakTime = listenerTime
