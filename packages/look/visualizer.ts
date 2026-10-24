@@ -53,11 +53,29 @@ export interface VisualizerColorChannel extends VisualizerChannel {
   color: string
 }
 
+/**
+ * The shade's geometry, which does not follow the music: only its opacity
+ * does. It is drawn as two inset shadows (editor.css's `.editor-beat-shade`),
+ * a crisp edge and a soft body.
+ */
+export interface VisualizerShadeChannel extends VisualizerColorChannel {
+  /** How far, in px, the shade's solid part reaches in from the editor's edges (both shadows' spread radius). */
+  spreadPx: number
+  /** How soft its edge is, in px: the soft body's blur radius; the crisp edge's is an eighth of it. */
+  blurPx: number
+}
+
+export const SHADE_SPREAD_MAX_PX = 200
+export const SHADE_BLUR_MAX_PX = 200
+/** Spread 0 and blur 32 are the shade as it was drawn before either was a setting (4px and 32px blur, no spread). */
+export const DEFAULT_SHADE_SPREAD_PX = 0
+export const DEFAULT_SHADE_BLUR_PX = 32
+
 export interface VisualizerSettings {
   /** The caret, held at its peak while it follows the music; a response dips it. */
   caret: VisualizerChannel
   /** The active editor's inner shade; a response deepens it. */
-  shade: VisualizerColorChannel
+  shade: VisualizerShadeChannel
   /** The box outlines; a response draws them over the grid's own. */
   outline: VisualizerColorChannel
 }
@@ -110,7 +128,12 @@ export function defaultVisualizer(inverted: boolean): VisualizerSettings {
   const light = 'rgba(255, 255, 255, 0.35)'
   return {
     caret: DEFAULT_VISUALIZER_CHANNEL,
-    shade: { ...DEFAULT_VISUALIZER_CHANNEL, color: inverted ? 'rgba(255, 255, 255, 0.9)' : dark },
+    shade: {
+      ...DEFAULT_VISUALIZER_CHANNEL,
+      color: inverted ? 'rgba(255, 255, 255, 0.9)' : dark,
+      spreadPx: DEFAULT_SHADE_SPREAD_PX,
+      blurPx: DEFAULT_SHADE_BLUR_PX,
+    },
     outline: { ...DEFAULT_VISUALIZER_CHANNEL, color: inverted ? 'rgba(0, 0, 0, 0.35)' : light },
   }
 }
@@ -154,13 +177,22 @@ function sanitizeColorChannel(input: unknown, d: VisualizerColorChannel): Visual
   return { ...sanitizeChannel(input, d), color: typeof color === 'string' && color.length > 0 ? color : d.color }
 }
 
+function sanitizeShadeChannel(input: unknown, d: VisualizerShadeChannel): VisualizerShadeChannel {
+  const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<string, unknown>>
+  return {
+    ...sanitizeColorChannel(input, d),
+    spreadPx: bounded(source.spreadPx, 0, SHADE_SPREAD_MAX_PX, d.spreadPx),
+    blurPx: bounded(source.blurPx, 0, SHADE_BLUR_MAX_PX, d.blurPx),
+  }
+}
+
 /** Every field bounded; a missing one takes the default for a layout of that inversion. */
 export function sanitizeVisualizer(input: unknown, inverted: boolean): VisualizerSettings {
   const d = defaultVisualizer(inverted)
   const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<keyof VisualizerSettings, unknown>>
   return {
     caret: sanitizeChannel(source.caret, d.caret),
-    shade: sanitizeColorChannel(source.shade, d.shade),
+    shade: sanitizeShadeChannel(source.shade, d.shade),
     outline: sanitizeColorChannel(source.outline, d.outline),
   }
 }
