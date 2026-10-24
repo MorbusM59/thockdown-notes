@@ -182,10 +182,14 @@ const PRESENCE_SHARE = 0.35
 /**
  * A hit within this many dB of the drum's full hit (its strongest remembered
  * slot) is reported AT that strength, so identical hits pulse identically
- * despite the measurement noise of a few dB, wherever in the bar they land;
- * one further off (a ghost note) is reported at the lesser of the two.
+ * wherever in the bar they land; one further off (a ghost note) is reported
+ * at the lesser of the two. A hit's strength is its CLIMB, which reads short
+ * where something else in the band changes as it lands (a kick on the stop
+ * of a bass note read about 2.5dB under an identical kick over silence),
+ * so this is set wide: a beat the pattern has established showing at full
+ * strength matters more than a ghost note a few dB down showing as one.
  */
-const STEADY_DB = 2
+const STEADY_DB = 6
 /**
  * The share of the track's kick onset (its strongest remembered slot's) an
  * onset needs to count as a kick at all. Tighter than PRESENCE_SHARE: a

@@ -549,9 +549,9 @@ describe('DrumTracker on identical hits', () => {
     const track = drums(60, 79.2, { kicks: () => [[0, 1], [3, 1], [6, 1], [10, 1], [11, 1]], snares: [4, 12] })
     const responses = play(track, 0.5).hits.filter((h) => h.at > 20).map((h) => h.response).sort((a, b) => a - b)
     expect(responses.length).toBeGreaterThan(50)
-    // A kick landing on the bass note's rise climbs less above it, which a
-    // steady measurement cannot hide, but no slot's memory may pull the rest down.
-    expect(responses.filter((r) => r > 0.99).length / responses.length).toBeGreaterThan(0.75)
+    // Including the kick that lands as a bass note stops, whose climb over
+    // the note reads a few dB short of an identical kick's over silence.
+    expect(responses.filter((r) => r > 0.99).length / responses.length).toBeGreaterThan(0.95)
   })
 })
 
