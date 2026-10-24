@@ -22,8 +22,12 @@ export type VisualizerSource = 'band' | VisualizerDrum
 
 /** How one block follows the music. */
 export interface VisualizerChannel {
-  /** The share of the block's effect a full response reaches, 0..1. */
-  amount: number
+  /**
+   * The share of the block's effect a full response reaches, -1..1. Positive:
+   * a hit adds it. Negative: inverted, the block rests at |effect| while music
+   * plays and a hit takes it away. Zero: off.
+   */
+  effect: number
   /** What it follows: a band (`frequencyHz`, `octaves`) or a drum. */
   source: VisualizerSource
   /** The centre of the band, in Hz; kept while a drum is followed, so going back to the band finds it where it was. */
@@ -39,11 +43,6 @@ export interface VisualizerChannel {
   fallSec: number
   /** The fall's shape: 0 falls evenly, higher drops early, lower holds and drops late. */
   fallShape: number
-  /**
-   * Turns the response over: the block rests at its full amount and a hit
-   * takes it away.
-   */
-  invert: boolean
 }
 
 /** A block drawn in a colour of its own. */
@@ -71,14 +70,13 @@ export const BEAT_FALL_SHAPE_MIN = -5
 export const BEAT_FALL_SHAPE_MAX = 5
 
 export const DEFAULT_VISUALIZER_CHANNEL: VisualizerChannel = {
-  amount: 0.6,
+  effect: 0.6,
   source: 'kick',
   frequencyHz: 70,
   octaves: 1,
   contrast: 0.5,
   fallSec: 0.25,
   fallShape: 0,
-  invert: false,
 }
 
 /**
@@ -109,17 +107,24 @@ function bounded(value: unknown, min: number, max: number, fallback: number): nu
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback
 }
 
+/** The signed effect; a layout saved with `amount` and `invert` turns into one. */
+function sanitizeEffect(source: Partial<Record<string, unknown>>, fallback: number): number {
+  if (source.effect !== undefined) return bounded(source.effect, -1, 1, fallback)
+  if (source.amount === undefined) return fallback
+  const amount = bounded(source.amount, 0, 1, Math.abs(fallback))
+  return source.invert === true ? -amount : amount
+}
+
 function sanitizeChannel(input: unknown, d: VisualizerChannel): VisualizerChannel {
-  const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<keyof VisualizerChannel, unknown>>
+  const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<string, unknown>>
   return {
-    amount: bounded(source.amount, 0, 1, d.amount),
+    effect: sanitizeEffect(source, d.effect),
     source: SOURCES.includes(source.source as VisualizerSource) ? source.source as VisualizerSource : legacySource(source.frequencyHz, d.source),
     frequencyHz: bounded(source.frequencyHz, BEAT_FREQUENCY_MIN_HZ, BEAT_FREQUENCY_MAX_HZ, d.frequencyHz),
     octaves: bounded(source.octaves, BEAT_OCTAVES_MIN, BEAT_OCTAVES_MAX, d.octaves),
     contrast: bounded(source.contrast, 0, BEAT_CONTRAST_MAX, d.contrast),
     fallSec: bounded(source.fallSec, BEAT_FALL_MIN_SEC, BEAT_FALL_MAX_SEC, d.fallSec),
     fallShape: bounded(source.fallShape, BEAT_FALL_SHAPE_MIN, BEAT_FALL_SHAPE_MAX, d.fallShape),
-    invert: typeof source.invert === 'boolean' ? source.invert : d.invert,
   }
 }
 

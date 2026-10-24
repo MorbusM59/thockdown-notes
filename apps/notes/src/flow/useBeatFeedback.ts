@@ -2,7 +2,7 @@
  * Hands the music's bands (`sound/musicBeat.ts`) to the visualizer's blocks
  * (`@thockdown/look/visualizer`), each a CSS variable on the one element that
  * reads it (`flowStyle.ts`, never `<html>`), already scaled by the block's
- * amount and turned over when the block is inverted, so CSS only reads it:
+ * effect and turned over when that effect is negative, so CSS only reads it:
  *
  * - `--beat-caret`, the caret's DIP: while the caret follows the music its
  *   own blink is suspended and it holds at its peak (`html[data-beat-caret]`),
@@ -12,10 +12,10 @@
  * - `--beat-outline`, the opacity of the box outlines' copy
  *   (`.editor-beat-outline`, shown and promoted under `html[data-beat-outline]`).
  *
- * An inverted block rests at its full amount while music plays and a hit
+ * An inverted block (a negative effect) rests at its full effect while music plays and a hit
  * takes it away; with nothing playing every block is off either way, so an
  * inverted one does not sit over the editor in silence. A block with no
- * amount subscribes nothing and keeps its ordinary look; the `<html>`
+ * effect subscribes nothing and keeps its ordinary look; the `<html>`
  * attributes change once when a block is switched, never per frame. The two
  * coloured blocks' colours are static between edits and are set once on
  * `<html>` (`--beat-shade-color`, `--beat-outline-color`).
@@ -32,7 +32,7 @@ import { setFlowStyle } from './flowStyle'
 type BlockName = keyof VisualizerSettings
 
 function useBeatBlock(name: BlockName, channel: VisualizerChannel, on: boolean): void {
-  const active = on && channel.amount > 0
+  const active = on && channel.effect !== 0
   // The latest channel, read by the subscription without re-creating it: a
   // slider moving retunes the band in place and keeps its measurements.
   const channelRef = useRef(channel)
@@ -45,8 +45,8 @@ function useBeatBlock(name: BlockName, channel: VisualizerChannel, on: boolean):
     const root = document.documentElement
     root.setAttribute(`data-beat-${name}`, '')
     const subscription = subscribeMusicBand(channelRef.current, (response) => {
-      const { amount, invert } = channelRef.current
-      const value = !musicPlayerService.isPlaying ? 0 : amount * (invert ? 1 - response : response)
+      const { effect } = channelRef.current
+      const value = !musicPlayerService.isPlaying ? 0 : effect < 0 ? -effect * (1 - response) : effect * response
       // Quantized to the 1/255 an 8-bit colour channel resolves: every step
       // that can change a pixel is written, and nothing finer (setFlowStyle
       // skips a value equal to the last).

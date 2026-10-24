@@ -8,16 +8,16 @@ describe('sanitizeVisualizer', () => {
     expect(defaultVisualizer(true).shade.color).not.toBe(defaultVisualizer(false).shade.color)
   })
 
-  it('keeps each block its own band, colour and invert, bounded', () => {
+  it('keeps each block its own band, colour and effect, bounded', () => {
     const v = sanitizeVisualizer({
-      shade: { source: 'snare', frequencyHz: 300, invert: true, color: 'rgba(1, 2, 3, 0.5)', amount: 7 },
+      shade: { source: 'snare', frequencyHz: 300, color: 'rgba(1, 2, 3, 0.5)', effect: -7 },
       outline: { source: 'cowbell', frequencyHz: 99999, color: '' },
     }, false)
-    expect(v.shade).toMatchObject({ source: 'snare', frequencyHz: 300, invert: true, color: 'rgba(1, 2, 3, 0.5)', amount: 1 })
+    expect(v.shade).toMatchObject({ source: 'snare', frequencyHz: 300, color: 'rgba(1, 2, 3, 0.5)', effect: -1 })
     expect(v.outline.frequencyHz).toBe(20000)
     expect(v.outline.source).toBe('band')
     expect(v.outline.color).toBe(defaultVisualizer(false).outline.color)
-    expect(v.caret.invert).toBe(false)
+    expect(v.caret.effect).toBe(0.6)
   })
 })
 
@@ -25,6 +25,13 @@ it('reads a layout saved before the source existed', () => {
   const v = sanitizeVisualizer({ caret: { frequencyHz: 0 }, shade: { frequencyHz: 440 } }, false)
   expect(v.caret.source).toBe('kick')
   expect(v.shade).toMatchObject({ source: 'band', frequencyHz: 440 })
+})
+
+it('turns a saved amount and invert into a signed effect', () => {
+  const v = sanitizeVisualizer({ caret: { amount: 0.4, invert: true }, shade: { amount: 0.3 } }, false)
+  expect(v.caret.effect).toBe(-0.4)
+  expect(v.shade.effect).toBe(0.3)
+  expect(v.caret).not.toHaveProperty('invert')
 })
 
 describe('the source slider', () => {

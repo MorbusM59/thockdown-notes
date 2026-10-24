@@ -1025,7 +1025,7 @@ export function SidebarOptionsPanel({
     const renderBeatChannel = (key: keyof VisualizerSettings, label: string, effect: string) => {
       const channel: VisualizerChannel = visualizer[key]
       const set = (patch: Partial<VisualizerChannel>) => setVisualizer((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }))
-      const slider = (field: Exclude<keyof VisualizerChannel, 'invert' | 'source'>, trackLabel: string, min: number, max: number, step: number, tooltipLabel: string, ariaName: string, digits?: number) => (
+      const slider = (field: Exclude<keyof VisualizerChannel, 'source'>, trackLabel: string, min: number, max: number, step: number, tooltipLabel: string, ariaName: string, digits?: number) => (
         <CompactScrollbarSlider
           id={`beat-${key}-${field}`}
           min={min}
@@ -1044,19 +1044,10 @@ export function SidebarOptionsPanel({
         <>
           <div className="utility-setting-button-row" role="group" aria-label={`${label} controls`}>
             <OptionsSubsectionLabel>{label}</OptionsSubsectionLabel>
-            <button
-              type="button"
-              className={`btn-icon${channel.invert ? ' is-active' : ''}`}
-              onClick={() => set({ invert: !channel.invert })}
-              aria-pressed={channel.invert}
-              data-tooltip={channel.invert ? `${label}: inverted, it rests at its full amount while music plays and a hit takes it away. Click to make a hit add it` : `${label}: a hit adds it. Click to invert, so it rests at its full amount while music plays and a hit takes it away`}
-            >
-              <span className="fa-solid fa-right-left" aria-hidden="true" />
-            </button>
           </div>
           <div className="utility-setting-slider-stack" aria-label={`${label} settings`}>
             <OptionsSliderRows rows={[2, 2, 2]}>
-              {slider('amount', 'amount', 0, 1, 0.01, `How far ${effect} at a full response; 0 leaves it as it is`, 'amount')}
+              {slider('effect', 'effect', -1, 1, 0.01, `How far ${effect} at a full response. Right of centre a hit adds it; left of centre it is inverted, resting at that much while music plays and a hit takes it away; the centre turns it off`, 'effect, negative inverts')}
               {/* One track for every source (visualizer.ts, `sourceSliderValue`): the
                   kick at the left end, the snare at the centre, the hat at the right,
                   and the spectrum in octaves between them, shown in Hz. */}
