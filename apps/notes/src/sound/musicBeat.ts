@@ -424,7 +424,40 @@ class ElementClock {
   }
 }
 
-const listenerClock = new ElementClock()
+/**
+ * The position the LISTENER is at, for drawing: the element's position run on
+ * the audio context's clock, which is smooth, and steered toward each report
+ * rather than set to it. Taking each report as it comes (as `ElementClock`
+ * does, which is right for the scout, whose samples are counted) jumps the
+ * time back and forth by up to a chunk several times a second, and a fall
+ * read off a time that jumps is drawn in steps. A report further off than
+ * `SNAP_SEC` is a seek and is taken at once; anything nearer closes a share
+ * of the gap per report, and the time never runs backwards.
+ */
+class SmoothClock {
+  private static readonly SNAP_SEC = 0.5
+  private static readonly STEER = 0.1
+  private offset = NaN
+  private reported = NaN
+  private last = -Infinity
+
+  read(reported: number, now: number): number {
+    if (reported !== this.reported) {
+      this.reported = reported
+      const gap = reported - now - this.offset
+      if (!Number.isFinite(this.offset) || Math.abs(gap) > SmoothClock.SNAP_SEC) {
+        this.offset = reported - now
+        this.last = -Infinity
+      } else {
+        this.offset += gap * SmoothClock.STEER
+      }
+    }
+    this.last = Math.max(this.last, now + this.offset)
+    return this.last
+  }
+}
+
+const listenerClock = new SmoothClock()
 const scoutClock = new ElementClock()
 
 function tick(): void {
