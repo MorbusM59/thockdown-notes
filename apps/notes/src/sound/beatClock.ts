@@ -39,8 +39,8 @@
  * UNSEATED: its period is kept, since the music around the new position is
  * most likely at the same tempo, but its phase means nothing there. An
  * unseated clock runs on its period from the moment it landed and takes the
- * next grid it is given AS IT IS, period and phase, rather than gliding to
- * it: gliding from a phase that was never the music's showed as several
+ * next grid it is given AS IT IS (in its own octave), period and phase,
+ * rather than gliding to it: gliding from a phase that was never the music's showed as several
  * uneven beats. A clock that has never seen a grid has no beat at all.
  */
 
@@ -98,8 +98,10 @@ export class BeatClock {
       this.time = time
     }
     if (grid && !this.seated) {
-      this.periodSec = gridPeriodSec
-      const target = (time - gridBeatTime) / gridPeriodSec
+      // In the octave the clock already keeps, if it has one: a seek lands in
+      // the same music, and the tracker's reading of it may be either octave.
+      this.periodSec = Number.isNaN(this.periodSec) ? gridPeriodSec : inOctaveOf(gridPeriodSec, this.periodSec)
+      const target = (time - gridBeatTime) / this.periodSec
       // Seated FORWARD, by less than a beat, so a seat can shorten one beat
       // but never runs the count back over a beat already shown.
       this.beats = Number.isNaN(this.beats) ? target : this.beats + (target - this.beats - Math.floor(target - this.beats))
