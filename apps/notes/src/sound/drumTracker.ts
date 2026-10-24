@@ -1,10 +1,19 @@
 /**
- * Finds the kick drum in a stream of samples, for the beat pulse's BEAT
- * position (`musicBeat.ts`). Pure: it is fed samples and media times and
+ * Finds the drums in a stream of samples: the KICK, the SNARE (claps and rim
+ * shots with it) and the HAT (any short bright hit), for the visualizer's
+ * drum sources (`musicBeat.ts`). Pure: it is fed samples and media times and
  * answered with media times, so it is tested on synthesized music
- * (`kickTracker.test.ts`) with no audio stack.
+ * (`drumTracker.test.ts`) with no audio stack.
  *
- * Three stages, each answering a question the one before cannot:
+ * ONE analysis serves every drum: the bands are filtered once, the tempo
+ * grid is one, and each drum is a VOICE (`VOICES`) with its own onset, its
+ * own learned bar and its own strong hits. Stages 1, 3 and 4 below are
+ * described for the kick, which they were built for; each voice runs them
+ * on its own bands, and `VOICES` says how the snare and the hat differ.
+ * Several readers may follow one drum; each keeps its own place in the hits
+ * (`DrumCursor`).
+ *
+ * Four stages, each answering a question the one before cannot:
  *
  * 1. ONSET STRENGTH, at a fixed rate (`HOP` samples, ~5ms), independent of
  *    the display's frame rate. A kick and a bass line share the sub band,
@@ -12,11 +21,11 @@
  *    from silence climbs as steeply as a kick). What a kick has and they do
  *    not is BREADTH: its attack is a pitch falling from a couple of hundred
  *    Hz into the sub, with the beater's click on top, so it climbs in three
- *    bands at once (`ONSET_BANDS`: sub, body, click) where a bass note climbs
+ *    bands at once (`VOICES.kick`: sub, body, click) where a bass note climbs
  *    in the low ones and a hat or clap in the high one. Each band's energy is
  *    averaged over `ENVELOPE_HOPS` hops (about two cycles of the kick, so the
  *    reading does not ripple with the phase of one cycle in the window); its
- *    rise is how far that stands above its lowest over the last `RISE_HOPS`,
+ *    rise is how far that stands above its lowest over the last `riseHopsOf` of them,
  *    in linear energy so a sound starting from silence is not an infinite
  *    climb; and each rise is measured against that band's own recent PEAK
  *    rises (one per climb, each fading with a half-life of
@@ -31,8 +40,8 @@
  *
  * 2. TEMPO AND PHASE, from the whole window (`musicBeat.ts` keeps the scout
  *    seconds ahead, so the window reaches past the listener as well as
- *    behind). Read from the PULSE, the bands' arithmetic mean, not the
- *    onset: a snare or hat lifts it too, and those are what tell a break's
+ *    behind). Read from the PULSE, the kick's bands' arithmetic mean, not
+ *    the onset: a snare or hat lifts it too, and those are what tell a break's
  *    meter from the syncopation of its kicks. A candidate period over
  *    70..180 BPM is scored by its COMB (the autocorrelation at one to
  *    `COMB_BEATS` periods), weighted towards 120 so a half or double tempo
@@ -66,23 +75,58 @@
  * the strong ones.
  */
 
+import type { VisualizerDrum } from '@thockdown/look/visualizer'
+
 const HOP = 256
 const ENVELOPE_HOPS = 8
-const RISE_HOPS = 6
+/** The hops a rise is measured over, for an envelope of `envelopeHops`: three quarters of it, six for the kick's eight. */
+function riseHopsOf(envelopeHops: number): number {
+  return Math.ceil((envelopeHops * 3) / 4)
+}
+/** A drum the tracker follows. */
+export type Drum = VisualizerDrum
+
+/** A band: centre in Hz, Q, weight, and how many band-passes in cascade (one when left out; `OnsetBand`). */
+type BandSpec = readonly [number, number, number, number?]
+
 /**
- * The bands a kick's attack climbs in together: centre in Hz, Q, and weight
- * in the geometric mean (summing to 1). The click weighs least: it says the
- * attack is percussive, but how loud a click is varies most between kicks,
- * and a clap or a hat landing on the kick would otherwise decide how strong
- * that kick reads.
+ * How one drum shows in the bands. Its ONSET is the weighted geometric mean
+ * of the `onset` bands' rises (weights summing to 1), and nothing where an
+ * `exclude` band (its third number a LIMIT, not a weight) climbs too, which
+ * says the sound is something else (`DrumTracker.settle`). Its STRENGTH is
+ * the geometric mean of the first `strengthBands` of `onset`, in raw energy.
  */
-const ONSET_BANDS: ReadonlyArray<readonly [number, number, number]> = [
-  [55, 0.9, 0.45],
-  [140, 0.9, 0.35],
-  [3500, 0.7, 0.2],
-]
-/** The first bands of ONSET_BANDS, which alone say how strong a kick is. */
-const LOW_BANDS = 2
+interface VoiceSpec {
+  onset: readonly BandSpec[]
+  /**
+   * Whether the onset is read in the bands' raw energy rather than their
+   * normalised rises. A drum that is the loudest thing in its bands (the
+   * kick, the snare) is normalised, so how loud each band is in a given mix
+   * does not matter; one that shares its bands with something louder (a hat
+   * under a snare's noise) is not, because its rises would be measured
+   * against the louder sound's and read as a few hundredths, scaled by
+   * whatever that sound last did. The exclusion is always judged on the
+   * normalised rises, where a snare reads as large in each band as the other.
+   */
+  raw: boolean
+  /**
+   * SHAPE_SHARE for this drum: the share of its strongest slot's onset a hit
+   * needs, and the inverse of how much sharper than its own slot's it may be.
+   * A kick or a snare is one sample played again and again, so its onset
+   * varies little; a played hat varies with every stroke.
+   */
+  shapeShare: number
+  /**
+   * The hops its onset bands' envelopes span (header, stage 1): about two
+   * cycles of a kick's sub, and far shorter for a hat, whose whole sound is
+   * shorter than a kick's envelope and would be averaged into the tail of
+   * whatever rang before it.
+   */
+  envelopeHops: number
+  strengthBands: number
+  exclude: readonly BandSpec[]
+}
+
 /** The half-life of a band's remembered peak rises, for normalising the next. */
 const BAND_MEMORY_SEC = 4
 /**
@@ -139,6 +183,14 @@ const STEADY_DB = 2
  * about a third of it once a breakdown has lowered the references.
  */
 const SHAPE_SHARE = 0.5
+/**
+ * How far on from an onset an exclude band's level is read, in hops (about
+ * 50ms): past the envelope's span (ENVELOPE_HOPS) of a kick's beater click,
+ * within a snare's noise.
+ */
+const EXCLUDE_AFTER_HOPS = 10
+/** An excluded sound rings until its exclude band's level falls below this share of what it climbed to (-6dB). */
+const RING_SHARE = 0.25
 /** How long the pattern remembers a position's strength, as a half-life. */
 const PATTERN_MEMORY_SEC = 30
 /**
@@ -165,6 +217,51 @@ const MAX_DRIFT_SEC = 0.25
  */
 const ALIGN_FEEDS = 60
 
+/**
+ * - KICK: a pitch falling from a couple of hundred Hz into the sub with the
+ *   beater's click on top, so it climbs in sub, body and click at once
+ *   where a bass note climbs in the low ones and a hat or clap in the high
+ *   one. The click weighs least: it says the attack is percussive, but how
+ *   loud a click is varies most between kicks, and a clap or a hat landing
+ *   on the kick would otherwise decide how strong that kick reads. Its
+ *   strength is the sub and body alone.
+ * - SNARE (and clap, rim shot): a body of a couple of hundred Hz under a
+ *   burst of noise across the upper mids, so it climbs in the body and the
+ *   noise together; a hat has no body and a kick barely reaches the noise.
+ *   Its strength is the body and the lower noise band: the top is where the
+ *   hats are, and they would decide its strength where they coincide.
+ * - HAT (and shaker, ride, any short bright tick): energy above 6kHz and
+ *   little below, so it climbs in the top two bands, and a climb in the
+ *   snare's noise band says the sound is a snare instead. On a snare the
+ *   snare wins, so a hat on the backbeat is not seen there.
+ */
+const VOICES: Record<Drum, VoiceSpec> = {
+  kick: {
+    onset: [[55, 0.9, 0.45], [140, 0.9, 0.35], [3500, 0.7, 0.2]],
+    raw: false,
+    shapeShare: SHAPE_SHARE,
+    envelopeHops: ENVELOPE_HOPS,
+    strengthBands: 2,
+    exclude: [],
+  },
+  snare: {
+    onset: [[210, 1.2, 0.3], [1800, 0.8, 0.4], [5000, 0.8, 0.3]],
+    raw: false,
+    shapeShare: SHAPE_SHARE,
+    envelopeHops: ENVELOPE_HOPS,
+    strengthBands: 2,
+    exclude: [],
+  },
+  hat: {
+    onset: [[8000, 0.9, 0.55, 2], [13000, 0.9, 0.45, 2]],
+    raw: true,
+    shapeShare: 0.25,
+    envelopeHops: 2,
+    strengthBands: 2,
+    exclude: [[1800, 0.8, 0.25, 2]],
+  },
+}
+
 /** The REFERENCE_RANK largest of `keys`, largest first (all of them, while fewer). */
 function topKeys(keys: readonly number[]): number[] {
   return [...keys].sort((a, b) => b - a).slice(0, REFERENCE_RANK)
@@ -176,13 +273,13 @@ class OnsetBand {
   private readonly b2: number
   private readonly a1: number
   private readonly a2: number
-  private x1 = 0
-  private x2 = 0
-  private y1 = 0
-  private y2 = 0
+  /** Per stage of the cascade: x1, x2, y1, y2. */
+  private readonly state: Float64Array
   private hopEnergy = 0
-  private readonly recentEnergy = new Float64Array(ENVELOPE_HOPS)
-  private readonly recentLevel = new Float64Array(RISE_HOPS)
+  private readonly recentEnergy: Float64Array
+  private readonly recentLevel: Float64Array
+  /** The envelope's level at the last hop closed. */
+  private lastLevel = 0
   /** The last two rises, to find the hop a climb peaked at. */
   private lastRise = 0
   private riseBefore = 0
@@ -197,7 +294,16 @@ class OnsetBand {
   /** Hops closed since the last reset; unlike a closeHop index, not restarted by a gap. */
   private hop = 0
 
-  constructor(sampleRate: number, hz: number, q: number, private readonly memoryHops: number) {
+  /**
+   * `stages` band-passes in cascade: one for a band read on its own, two
+   * for one whose energy is compared with a band far above or below it,
+   * since a single band-pass lets a strong kick through to the upper mids
+   * at a level that rivals a hat's in its own band.
+   */
+  constructor(sampleRate: number, hz: number, q: number, private readonly memoryHops: number, stages = 1, private readonly envelopeHops = ENVELOPE_HOPS) {
+    this.state = new Float64Array(4 * stages)
+    this.recentEnergy = new Float64Array(envelopeHops)
+    this.recentLevel = new Float64Array(riseHopsOf(envelopeHops))
     // RBJ band-pass, constant 0dB peak gain.
     const w = (2 * Math.PI * hz) / sampleRate
     const alpha = Math.sin(w) / (2 * q)
@@ -212,6 +318,7 @@ class OnsetBand {
     this.settle()
     this.hopEnergy = 0
     this.lastRise = 0
+    this.lastLevel = 0
     this.riseBefore = 0
     this.peakKeys = []
     this.hop = 0
@@ -219,15 +326,20 @@ class OnsetBand {
 
   /** Clears the filter's memory, after a gap whose samples were never seen. */
   settle(): void {
-    this.x1 = this.x2 = this.y1 = this.y2 = 0
+    this.state.fill(0)
   }
 
   add(x: number): void {
-    const y = this.b0 * x + this.b2 * this.x2 - this.a1 * this.y1 - this.a2 * this.y2
-    this.x2 = this.x1
-    this.x1 = x
-    this.y2 = this.y1
-    this.y1 = y
+    const s = this.state
+    let y = x
+    for (let k = 0; k < s.length; k += 4) {
+      const input = y
+      y = this.b0 * input + this.b2 * s[k + 1] - this.a1 * s[k + 2] - this.a2 * s[k + 3]
+      s[k + 1] = s[k]
+      s[k] = input
+      s[k + 3] = s[k + 2]
+      s[k + 2] = y
+    }
     this.hopEnergy += y * y
   }
 
@@ -237,19 +349,26 @@ class OnsetBand {
     return this.lastRise
   }
 
+  /** This hop's envelope level, as closeHop last measured it. */
+  get level(): number {
+    return this.lastLevel
+  }
+
   closeHop(index: number): number {
-    this.recentEnergy[index % ENVELOPE_HOPS] = this.hopEnergy / HOP
+    const envelopeHops = this.envelopeHops
+    const riseHops = this.recentLevel.length
+    this.recentEnergy[index % envelopeHops] = this.hopEnergy / HOP
     this.hopEnergy = 0
     let energy = 0
-    const filled = Math.min(index + 1, ENVELOPE_HOPS)
+    const filled = Math.min(index + 1, envelopeHops)
     for (let k = 0; k < filled; k++) energy += this.recentEnergy[k]
     const level = energy / filled
     let trough = level
-    const levels = Math.min(index, RISE_HOPS)
+    const levels = Math.min(index, riseHops)
     for (let k = 0; k < levels; k++) trough = Math.min(trough, this.recentLevel[k])
-    this.recentLevel[index % RISE_HOPS] = level
+    this.recentLevel[index % riseHops] = level
     // Until the envelope spans its full window the first hops would read as a climb from nothing.
-    const rise = index >= ENVELOPE_HOPS ? level - trough : 0
+    const rise = index >= envelopeHops ? level - trough : 0
     // The previous hop was a climb's peak when it stood above the hop before
     // it and at least as high as this one.
     if (this.lastRise > 0 && this.lastRise > this.riseBefore && this.lastRise >= rise) {
@@ -257,6 +376,7 @@ class OnsetBand {
     }
     this.riseBefore = this.lastRise
     this.lastRise = rise
+    this.lastLevel = level
     this.hop++
     if (rise <= 0) return 0
     const keys = this.peakKeys
@@ -286,39 +406,121 @@ class OnsetBand {
 }
 
 /** Why a feed restarted the tracker: too many samples lost, or a stamp too far from the clock. */
-export type KickRestart = 'gap' | 'drift'
+export type DrumRestart = 'gap' | 'drift'
 
-export class KickTracker {
+/**
+ * One reader's place in the hits: the last media time it asked about and the
+ * last hit it was told of, so each hit is reported to it once whoever else
+ * reads the same drum. `epoch` is the tracker's restart count it was last
+ * used in; a restart forgets both.
+ */
+export class DrumCursor {
+  lastAsked = NaN
+  lastPeak = NaN
+  epoch = -1
+}
+
+/** One drum's readings and learned bar (stages 1, 3 and 4 of the header). */
+class Voice {
+  /** Onset per hop, in the tracker's ring. */
+  readonly onset = new Float32Array(CAPACITY)
+  /**
+   * The same hops' STRENGTH: the voice's strength bands alone. For the kick
+   * the click decides WHERE the kicks are, not how strong one is, or a clap
+   * landing on every other kick would make the pulse alternate.
+   */
+  readonly strength = new Float32Array(CAPACITY)
+  /**
+   * The learned bar, per PATTERN_BINS position: whether hits land there
+   * (`slotOnset` above 0), the onset a hit there typically shows, and the
+   * strength it typically has.
+   */
+  readonly slotOnset = new Float32Array(PATTERN_BINS)
+  readonly slotStrength = new Float32Array(PATTERN_BINS)
+  /**
+   * The pattern's MEMORY: each position's strength, averaged over
+   * PATTERN_MEMORY_SEC rather than over the window. A hit is reported at
+   * this level, so the groove the track has established is what is
+   * expected: through a breakdown what lands on new positions comes up only
+   * as slowly as it persists, and the drum is at full strength the moment it
+   * returns.
+   */
+  readonly slotMemory = new Float32Array(PATTERN_BINS)
+  readonly slotMemorySum = new Float64Array(PATTERN_BINS)
+  readonly onsetMemorySum = new Float64Array(PATTERN_BINS)
+  readonly onsetMemory = new Float32Array(PATTERN_BINS)
+  /** The onset of the bar's strongest remembered slot: what this drum looks like in this track. */
+  shape = 0
+  strongHit = 0
+  /** The media time `strongHit` was last raised at, for its decay. */
+  strongHitTime = 0
+  /**
+   * Whether anybody reads this drum: only then is its bar learned (the
+   * costly part, against which storing its onset per hop is nothing). The
+   * kick's is always learned, since the bar's phase is read from it; another
+   * voice starts learning at the first grid update after it is first asked
+   * about, from the onsets the window already holds.
+   */
+  followed = false
+
+  /** Per hop, the onset bands' climb as energy per Hz, which an exclude band's is compared with. */
+  readonly density = new Float32Array(CAPACITY)
+  /** Per hop, each exclude band's envelope level as energy per Hz. */
+  readonly excludeLevel: Float32Array[]
+  /** Per exclude band, the level an excluded sound climbed to while it still rings, 0 once it has died away (`DrumTracker.settle`). */
+  readonly ringing: Float64Array
+
+  constructor(readonly spec: VoiceSpec, readonly onsetBands: number[], readonly excludeBands: number[]) {
+    this.excludeLevel = excludeBands.map(() => new Float32Array(CAPACITY))
+    this.ringing = new Float64Array(excludeBands.length)
+  }
+
+  /** Hops after its own that a hop waits for before its onset is final: its exclusion looks that far on. */
+  get settleHops(): number {
+    return this.excludeBands.length > 0 ? EXCLUDE_AFTER_HOPS : 0
+  }
+
+  reset(): void {
+    this.slotOnset.fill(0)
+    this.slotStrength.fill(0)
+    this.slotMemory.fill(0)
+    this.slotMemorySum.fill(0)
+    this.onsetMemorySum.fill(0)
+    this.onsetMemory.fill(0)
+    this.shape = 0
+    this.strongHit = 0
+    this.strongHitTime = 0
+    this.ringing.fill(0)
+  }
+}
+
+export class DrumTracker {
   /**
    * For diagnostics (`beatTrace.ts`): how far the last feed's stamp was from
    * where the sample count put it, in seconds (the jitter the alignment
    * averages away), and whether that feed restarted the tracker and why.
    */
   lastDriftSec = 0
-  lastRestart: KickRestart | null = null
+  lastRestart: DrumRestart | null = null
 
   private readonly hopSec: number
   /** PEAK_SEC in hops. */
   private readonly peakHops: number
+  /** Every distinct band the voices read, each filtered once. */
   private readonly bands: OnsetBand[]
-  private readonly weights: number[]
+  private readonly voices: Record<Drum, Voice>
+  /** The bands' normalised rises and raw rises at the hop being closed. */
+  private readonly rises: Float64Array
+  private readonly rawRises: Float64Array
   private hopFill = 0
   /** Hops closed since the last reset or gap. */
   private hopIndex = 0
-  /** Onset strength per hop, oldest at `head`; `firstTime` is the media time of hop index `start`. */
-  private readonly onset = new Float32Array(CAPACITY)
   /**
-   * The same hops' STRENGTH: the low bands alone (sub and body). The click
-   * decides WHERE the kicks are; how strong one is, it does not, or a clap
-   * landing on every other kick would make the pulse alternate.
-   */
-  private readonly strength = new Float32Array(CAPACITY)
-  /**
-   * Per hop, the weighted ARITHMETIC mean of every band's normalised rise:
-   * the broadband pulse the tempo is read from. Unlike the onset (a geometric
-   * mean, which only a kick lifts in all three bands at once) a snare or hat
-   * lifts it too, and those are what tell a break's meter from the
-   * syncopation of its kicks alone.
+   * Per hop, the weighted ARITHMETIC mean of the kick's bands' normalised
+   * rises: the broadband pulse the tempo is read from. Unlike the kick's
+   * onset (a geometric mean, which only a kick lifts in all three bands at
+   * once) a snare or hat lifts it too, and those are what tell a break's
+   * meter from the syncopation of its kicks alone.
    */
   private readonly pulse = new Float32Array(CAPACITY)
   private head = 0
@@ -337,50 +539,47 @@ export class KickTracker {
   private confidence = 0
   /** The absolute hop the grid was last confidently estimated at. */
   private confidentAt = -Infinity
-  /**
-   * The learned bar, per PATTERN_BINS position: whether kicks land there
-   * (`slotOnset` above 0), the onset a kick there typically shows, and the
-   * strength it typically has. A slot's hits are reported at its TYPICAL
-   * strength, so identical kicks pulse identically whatever the bass line
-   * under one of them did to its measurement.
-   */
-  private readonly slotOnset = new Float32Array(PATTERN_BINS)
-  private readonly slotStrength = new Float32Array(PATTERN_BINS)
-  /**
-   * The pattern's MEMORY: each position's strength, averaged over
-   * PATTERN_MEMORY_SEC rather than over the window. A hit is reported at
-   * this level, so the groove the track has established is what is
-   * expected: through a breakdown the bass line landing on new positions
-   * comes up only as slowly as it persists, and the kicks are at full
-   * strength the moment they return.
-   */
-  private readonly slotMemory = new Float32Array(PATTERN_BINS)
-  private readonly onsetMemorySum = new Float64Array(PATTERN_BINS)
-  private readonly onsetMemory = new Float32Array(PATTERN_BINS)
-  /** The onset of the bar's strongest remembered slot: what a kick looks like in this track. */
-  private kickShape = 0
-  private readonly slotMemorySum = new Float64Array(PATTERN_BINS)
+  /** The bar's memory weight: how much an exponential average over PATTERN_MEMORY_SEC has accumulated, shared by every voice. */
   private memoryWeight = 0
   /** The grid hop the bar is folded from, kept on the same beat of the bar across updates (NaN: none yet). */
   private barPhase = NaN
-  /** The last onset reported, in absolute hops, so a grid nudged between two calls cannot report it twice. */
-  private lastPeak = NaN
-  private strongHit = 0
-  /** The media time `strongHit` was last raised at, for its decay. */
-  private strongHitTime = 0
-  /** The media time the last answer was given for, so each hit is reported once. */
-  private lastAsked = NaN
+  /**
+   * The absolute hop the bands started over at after samples were lost
+   * (-Infinity: never). An exclusion judges a climb against the level before
+   * it, which for the hops after a gap is the silence the gap was filled with.
+   */
+  private resumedAt = -Infinity
+  /** The absolute hop the silence filling that gap began at. */
+  private gapFrom = -Infinity
+  /** Restarts so far, so a reader's cursor knows its place belongs to an earlier run. */
+  private epoch = 0
 
   constructor(sampleRate: number) {
     this.hopSec = HOP / sampleRate
     this.peakHops = Math.max(2, Math.round(PEAK_SEC / this.hopSec))
     const memoryHops = Math.round(BAND_MEMORY_SEC / this.hopSec)
-    this.bands = ONSET_BANDS.map(([hz, q]) => new OnsetBand(sampleRate, hz, q, memoryHops))
-    this.weights = ONSET_BANDS.map(([, , weight]) => weight)
+    const keys: string[] = []
+    this.bands = []
+    const bandOf = ([hz, q, , stages = 1]: BandSpec, envelopeHops = ENVELOPE_HOPS): number => {
+      const key = `${hz}/${q}/${stages}/${envelopeHops}`
+      let index = keys.indexOf(key)
+      if (index < 0) {
+        index = keys.length
+        keys.push(key)
+        this.bands.push(new OnsetBand(sampleRate, hz, q, memoryHops, stages, envelopeHops))
+      }
+      return index
+    }
+    const voiceOf = (spec: VoiceSpec) => new Voice(spec, spec.onset.map((band) => bandOf(band, spec.envelopeHops)), spec.exclude.map((band) => bandOf(band)))
+    this.voices = { kick: voiceOf(VOICES.kick), snare: voiceOf(VOICES.snare), hat: voiceOf(VOICES.hat) }
+    this.voices.kick.followed = true
+    this.rises = new Float64Array(this.bands.length)
+    this.rawRises = new Float64Array(this.bands.length)
   }
 
   reset(): void {
     for (const band of this.bands) band.reset()
+    for (const voice of Object.values(this.voices)) voice.reset()
     this.hopFill = 0
     this.hopIndex = 0
     this.head = 0
@@ -392,19 +591,11 @@ export class KickTracker {
     this.phase = NaN
     this.confidence = 0
     this.confidentAt = -Infinity
-    this.strongHit = 0
-    this.strongHitTime = 0
-    this.lastAsked = NaN
-    this.lastPeak = NaN
-    this.slotOnset.fill(0)
-    this.slotStrength.fill(0)
-    this.slotMemory.fill(0)
-    this.onsetMemorySum.fill(0)
-    this.onsetMemory.fill(0)
-    this.kickShape = 0
-    this.slotMemorySum.fill(0)
     this.memoryWeight = 0
     this.barPhase = NaN
+    this.resumedAt = -Infinity
+    this.gapFrom = -Infinity
+    this.epoch++
   }
 
   /**
@@ -437,11 +628,13 @@ export class KickTracker {
         this.sampleOriginTime += drift / ALIGN_FEEDS
         this.originTime = this.sampleOriginTime - (ENVELOPE_HOPS / 2 - 1) * this.hopSec
         if (lost > 0) {
+          this.gapFrom = this.start + this.count
           this.take(new Float32Array(lost), 0)
           // The silence is the clock's, not the music's: the bands start
           // over from the next real sample rather than read it as a climb.
           for (const band of this.bands) band.settle()
           this.hopIndex = 0
+          this.resumedAt = this.start + this.count
         }
       }
     }
@@ -462,48 +655,120 @@ export class KickTracker {
       for (const band of bands) band.add(x)
       if (++this.hopFill === HOP) {
         this.hopFill = 0
-        let product = 1
-        let pulse = 0
-        let low = 1
-        let lowWeight = 0
         for (let b = 0; b < bands.length; b++) {
-          const rise = bands[b].closeHop(this.hopIndex)
-          product *= rise ** this.weights[b]
-          pulse += rise * this.weights[b]
-          if (b < LOW_BANDS) {
-            // Strength is in the band's own energy, not normalised: it is
-            // compared across the window and against a remembered level,
-            // which a reference that moves with the music would make drift.
-            low *= bands[b].rise ** this.weights[b]
-            lowWeight += this.weights[b]
-          }
+          this.rises[b] = bands[b].closeHop(this.hopIndex)
+          this.rawRises[b] = bands[b].rise
         }
         this.hopIndex++
-        this.pushOnset(product, pulse, low ** (1 / lowWeight))
+        this.pushHop()
       }
     }
   }
 
-  private pushOnset(value: number, pulse: number, strength: number): void {
+  /** Stores the hop just closed: each voice's onset and strength, and the pulse. */
+  private pushHop(): void {
     if (this.count === CAPACITY) {
       this.head = (this.head + 1) % CAPACITY
       this.count--
       this.start++
     }
-    this.onset[(this.head + this.count) % CAPACITY] = value
-    this.pulse[(this.head + this.count) % CAPACITY] = pulse
-    this.strength[(this.head + this.count) % CAPACITY] = strength
+    const at = (this.head + this.count) % CAPACITY
+    for (const voice of Object.values(this.voices)) {
+      const { spec, onsetBands, excludeBands } = voice
+      let onset = 1
+      let density = 1
+      let low = 1
+      let lowWeight = 0
+      for (let k = 0; k < onsetBands.length; k++) {
+        const weight = spec.onset[k][2]
+        density *= (this.rawRises[onsetBands[k]] / spec.onset[k][0]) ** weight
+        onset *= (spec.raw ? this.rawRises[onsetBands[k]] : this.rises[onsetBands[k]]) ** weight
+        if (k < spec.strengthBands) {
+          // Strength is in the band's own energy, not normalised: it is
+          // compared across the window and against a remembered level,
+          // which a reference that moves with the music would make drift.
+          low *= this.rawRises[onsetBands[k]] ** weight
+          lowWeight += weight
+        }
+      }
+      voice.onset[at] = onset
+      voice.strength[at] = low ** (1 / lowWeight)
+      voice.density[at] = density
+      for (let k = 0; k < excludeBands.length; k++) voice.excludeLevel[k][at] = this.bands[excludeBands[k]].level / spec.exclude[k][0]
+    }
     this.count++
+    for (const voice of Object.values(this.voices)) if (voice.settleHops > 0) this.settle(voice, this.start + this.count - 1 - voice.settleHops)
+    const kick = this.voices.kick
+    let pulse = 0
+    for (let k = 0; k < kick.onsetBands.length; k++) pulse += this.rises[kick.onsetBands[k]] * kick.spec.onset[k][2]
+    this.pulse[at] = pulse
     if (++this.hopsSinceGrid >= GRID_EVERY_HOPS) {
       this.hopsSinceGrid = 0
       this.updateGrid()
     }
   }
 
-  /** The onset strength at absolute hop index `index`, 0 outside the window. */
-  private at(index: number): number {
+  /**
+   * Applies a voice's exclusions to hop `index`, now that the hops after it
+   * have arrived. An exclude band's climb is its level EXCLUDE_AFTER_HOPS on
+   * against its level before the onset: a snare's noise is still there
+   * that long after it struck, while a kick's beater click has gone, and a
+   * voice or pad holding the band through the onset does not climb at all.
+   * Both as energy per Hz (a band's level over its centre, which with a
+   * constant Q is in proportion to its width), so noise with a flat
+   * spectrum, a snare's, climbs as far in the excluded band as in the
+   * voice's own, and a hat barely at all; a share of the voice's climb past
+   * the exclude band's `limit` is not this drum.
+   */
+  private settle(voice: Voice, index: number): void {
     const k = index - this.start
-    return k >= 0 && k < this.count ? this.onset[(this.head + k) % CAPACITY] : 0
+    if (k < 0) return
+    const slot = (this.head + k) % CAPACITY
+    const density = voice.density[slot]
+    // In a gap's silence, and within the reach a climb's start is looked for
+    // after it, what the level climbed from is that silence: nothing there
+    // can be told from what is excluded, so nothing there is accepted, and
+    // whatever sounds there is taken to ring as an excluded sound would, so
+    // its decay after the span is not read as this drum either.
+    if (index >= this.gapFrom && index - this.resumedAt < 2 * ENVELOPE_HOPS) {
+      if (index >= this.resumedAt) {
+        for (let e = 0; e < voice.excludeBands.length; e++) voice.ringing[e] = Math.max(voice.ringing[e], voice.excludeLevel[e][slot])
+      }
+      voice.onset[slot] = 0
+      voice.strength[slot] = 0
+      return
+    }
+    let excluded = 1
+    for (let e = 0; e < voice.excludeBands.length; e++) {
+      const levels = voice.excludeLevel[e]
+      // The level it climbed from: the least over twice the envelope's span
+      // before this hop, so a hop late in a snare's climb (whose own onset is
+      // still well above a hat's) reaches back past where the snare began.
+      let before = Infinity
+      for (let j = Math.max(0, k - 2 * ENVELOPE_HOPS); j <= k; j++) before = Math.min(before, levels[(this.head + j) % CAPACITY])
+      const after = levels[(this.head + k + EXCLUDE_AFTER_HOPS) % CAPACITY]
+      const share = density > 0 ? Math.max(0, after - before) / density : Infinity
+      const limit = voice.spec.exclude[e][2]
+      if (density > 0 && share >= limit) voice.ringing[e] = Math.max(voice.ringing[e], after)
+      // While what was excluded still rings (its level falling from what it
+      // climbed to, and not yet below RING_SHARE of it), nothing in it is
+      // this drum either: in a snare's decaying noise, a short envelope's
+      // fluctuations climb like a hat. A level above what it climbed to is a
+      // new sound, judged on its own climb.
+      const now = levels[slot]
+      if (now < RING_SHARE * voice.ringing[e]) voice.ringing[e] = 0
+      const rings = voice.ringing[e] > 0 && now <= voice.ringing[e]
+      excluded *= rings ? 0 : Math.max(0, 1 - share / limit)
+    }
+    // A sound excluded is not this drum at all, so it has no strength as one either.
+    voice.onset[slot] *= excluded
+    voice.strength[slot] *= excluded
+  }
+
+  /** A voice's onset at absolute hop index `index`, 0 outside the window or before it has settled. */
+  private at(voice: Voice, index: number): number {
+    const k = index - this.start
+    return k >= 0 && k < this.count - voice.settleHops ? voice.onset[(this.head + k) % CAPACITY] : 0
   }
 
   private updateGrid(): void {
@@ -582,19 +847,22 @@ export class KickTracker {
     if (this.confidence < MIN_CONFIDENCE) {
       if (!Number.isNaN(this.period)) {
         this.placeBar()
-        this.learnPattern()
+        this.learnPatterns()
       }
       return
     }
     this.confidentAt = this.start + n
     this.period = period
-    // Phase: the offset whose comb of beats across the window collects the most onset.
+    // Phase: the offset whose comb of beats across the window collects the
+    // most KICK onset. Which beat it picks only names the bar's first; every
+    // voice's pattern is learned and matched in that one frame.
+    const kick = this.voices.kick
     const steps = Math.ceil(period)
     let bestPhase = 0
     let bestSum = -Infinity
     for (let p = 0; p < steps; p++) {
       let sum = 0
-      for (let beat = this.start + p; beat < this.start + n; beat += period) sum += this.at(Math.round(beat))
+      for (let beat = this.start + p; beat < this.start + n; beat += period) sum += this.at(kick, Math.round(beat))
       if (sum > bestSum) {
         bestSum = sum
         bestPhase = p
@@ -602,45 +870,55 @@ export class KickTracker {
     }
     this.phase = this.start + bestPhase
     this.placeBar()
-    this.learnPattern()
-    // The strong hits' level: the TOP_SHARE quantile of the strengths of the
-    // onsets the pattern accepts.
-    const strengths: number[] = []
-    for (let k = this.start; k < this.start + n; k++) {
-      const accepted = this.acceptedStrength(k)
-      if (accepted > 0) strengths.push(accepted)
-    }
-    strengths.sort((a, b) => b - a)
-    const current = strengths[Math.min(strengths.length - 1, Math.floor(strengths.length * TOP_SHARE))] ?? 0
-    // Remembered with a slow decay, so through a breakdown the bass line is
-    // still measured against the kick it stood beside rather than becoming the
-    // strongest thing in a window the kick has left.
+    this.learnPatterns()
     const now = this.originTime + (this.start + n) * this.hopSec
-    const remembered = this.strongHit * 0.5 ** ((now - this.strongHitTime) / STRONG_HIT_HALF_LIFE_SEC)
-    if (current >= remembered) {
-      this.strongHit = current
-      this.strongHitTime = now
+    for (const voice of Object.values(this.voices)) {
+      if (!voice.followed) continue
+      // The strong hits' level: the TOP_SHARE quantile of the strengths of the
+      // onsets the pattern accepts.
+      const strengths: number[] = []
+      for (let k = this.start; k < this.start + n; k++) {
+        const accepted = this.acceptedStrength(voice, k)
+        if (accepted > 0) strengths.push(accepted)
+      }
+      strengths.sort((a, b) => b - a)
+      const current = strengths[Math.min(strengths.length - 1, Math.floor(strengths.length * TOP_SHARE))] ?? 0
+      // Remembered with a slow decay, so through a breakdown the bass line is
+      // still measured against the drum it stood beside rather than becoming the
+      // strongest thing in a window the drum has left.
+      const remembered = voice.strongHit * 0.5 ** ((now - voice.strongHitTime) / STRONG_HIT_HALF_LIFE_SEC)
+      if (current >= remembered) {
+        voice.strongHit = current
+        voice.strongHitTime = now
+      }
     }
   }
 
+  /** Learns every voice's pattern, after one step of the shared memory weight. */
+  private learnPatterns(): void {
+    const keep = 0.5 ** ((GRID_EVERY_HOPS * this.hopSec) / PATTERN_MEMORY_SEC)
+    this.memoryWeight = keep * this.memoryWeight + 1
+    for (const voice of Object.values(this.voices)) if (voice.followed) this.learnPattern(voice, keep)
+  }
+
   /**
-   * Learns where in the bar kicks land and how strong each is. The onset
-   * strength is folded onto one bar of the grid and averaged per position; a
+   * Learns where in the bar a voice's hits land and how strong each is. The
+   * onset is folded onto one bar of the grid and averaged per position; a
    * position that is a local maximum holding SLOT_SHARE of the strongest is
    * a SLOT. Each onset peak in the window is then matched to the nearest slot
    * within SNAP_HOPS, and a slot learns the mean onset and strength of its
-   * matches. A straight four-on-the-floor learns four slots, a break its
+   * matches. A straight four-on-the-floor learns four kick slots, a break its
    * syncopated kicks, a swung groove the late eighth where it actually
-   * falls, and a ghost kick a slot of small strength. The bar's first beat
+   * falls, and a ghost note a slot of small strength. The bar's first beat
    * is wherever the fold starts: the pattern is matched in the frame it was
    * learned in, so which beat is called the first does not matter.
    */
-  private learnPattern(): void {
+  private learnPattern(voice: Voice, keep: number): void {
     const sums = new Float64Array(PATTERN_BINS)
     const counts = new Float64Array(PATTERN_BINS)
-    for (let k = 0; k < this.count; k++) {
+    for (let k = 0; k < this.count - voice.settleHops; k++) {
       const bin = this.binOf(this.start + k)
-      sums[bin] += this.onset[(this.head + k) % CAPACITY]
+      sums[bin] += voice.onset[(this.head + k) % CAPACITY]
       counts[bin]++
     }
     let strongest = 0
@@ -659,33 +937,31 @@ export class KickTracker {
     const strengthSum = new Float64Array(PATTERN_BINS)
     const matches = new Float64Array(PATTERN_BINS)
     for (let k = this.start; k < this.start + this.count; k++) {
-      if (!this.isOnsetPeak(k)) continue
+      if (!this.isOnsetPeak(voice, k)) continue
       const slot = this.nearestSlot(k, isSlot)
       if (slot < 0) continue
-      onsetSum[slot] += this.at(k)
-      strengthSum[slot] += this.strengthAt(k)
+      onsetSum[slot] += this.at(voice, k)
+      strengthSum[slot] += this.strengthAt(voice, k)
       matches[slot]++
     }
     // An exponential average with its start-up bias divided out (the weight
     // the average has accumulated so far), so the memory describes the
     // pattern from the first update rather than ramping up from nothing over
     // PATTERN_MEMORY_SEC, which made every onset at a slot pass as present.
-    const keep = 0.5 ** ((GRID_EVERY_HOPS * this.hopSec) / PATTERN_MEMORY_SEC)
-    this.memoryWeight = keep * this.memoryWeight + 1
-    let kickShape = 0
+    let shape = 0
     for (let b = 0; b < PATTERN_BINS; b++) {
-      this.slotOnset[b] = matches[b] > 0 ? onsetSum[b] / matches[b] : 0
-      this.slotStrength[b] = matches[b] > 0 ? strengthSum[b] / matches[b] : 0
+      voice.slotOnset[b] = matches[b] > 0 ? onsetSum[b] / matches[b] : 0
+      voice.slotStrength[b] = matches[b] > 0 ? strengthSum[b] / matches[b] : 0
       // Rises at once, falls over PATTERN_MEMORY_SEC: a slot hit at full
       // strength is unambiguous evidence (a drop lands at full strength on its
       // first kick), while a quiet one may only be a breakdown.
-      this.slotMemorySum[b] = Math.max(keep * this.slotMemorySum[b] + this.slotStrength[b], this.slotStrength[b] * this.memoryWeight)
-      this.slotMemory[b] = this.slotMemorySum[b] / this.memoryWeight
-      this.onsetMemorySum[b] = Math.max(keep * this.onsetMemorySum[b] + this.slotOnset[b], this.slotOnset[b] * this.memoryWeight)
-      this.onsetMemory[b] = this.onsetMemorySum[b] / this.memoryWeight
-      kickShape = Math.max(kickShape, this.onsetMemory[b])
+      voice.slotMemorySum[b] = Math.max(keep * voice.slotMemorySum[b] + voice.slotStrength[b], voice.slotStrength[b] * this.memoryWeight)
+      voice.slotMemory[b] = voice.slotMemorySum[b] / this.memoryWeight
+      voice.onsetMemorySum[b] = Math.max(keep * voice.onsetMemorySum[b] + voice.slotOnset[b], voice.slotOnset[b] * this.memoryWeight)
+      voice.onsetMemory[b] = voice.onsetMemorySum[b] / this.memoryWeight
+      shape = Math.max(shape, voice.onsetMemory[b])
     }
-    this.kickShape = kickShape
+    voice.shape = shape
   }
 
   /**
@@ -743,15 +1019,15 @@ export class KickTracker {
   }
 
   /**
-   * The strength the pattern grants an onset peak at hop `index`, or 0: the
-   * peak must land on a slot, with the strength that slot usually carries
-   * and the shape of the track's kick (header, stage 4). So a kick the track
-   * leaves out gives nothing, a ghost kick its slot's faint level, and an
-   * onset between the learned positions never fires.
+   * The strength the pattern grants a voice's onset peak at hop `index`, or
+   * 0: the peak must land on a slot, with the strength that slot usually
+   * carries and the shape of the track's hits of this drum (header, stage
+   * 4). So a hit the track leaves out gives nothing, a ghost note its slot's
+   * faint level, and an onset between the learned positions never fires.
    */
-  private acceptedStrength(index: number): number {
-    if (!this.isOnsetPeak(index)) return 0
-    const slot = this.nearestSlot(index, this.slotOnset)
+  private acceptedStrength(voice: Voice, index: number): number {
+    if (!this.isOnsetPeak(voice, index)) return 0
+    const slot = this.nearestSlot(index, voice.slotOnset)
     if (slot < 0) return 0
     // Read over the same reach a hit is matched within, so the memory moves
     // with a slot that moves a bin between folds.
@@ -760,43 +1036,45 @@ export class KickTracker {
     let usualShape = 0
     for (let d = -reach; d <= reach; d++) {
       const b = (slot + d + PATTERN_BINS) % PATTERN_BINS
-      remembered = Math.max(remembered, this.slotMemory[b])
-      usualShape = Math.max(usualShape, this.onsetMemory[b])
+      remembered = Math.max(remembered, voice.slotMemory[b])
+      usualShape = Math.max(usualShape, voice.onsetMemory[b])
     }
+    const onset = this.at(voice, index)
     // The hit must also BELONG to its slot: no sharper than twice what the
     // slot usually holds (SHAPE_SHARE inverted). The off-beat's bass and hats
-    // make slots too, and a fill's toms (a falling pitch, kick-shaped)
+    // make kick slots too, and a fill's toms (a falling pitch, kick-shaped)
     // landing on them pulsed just before the downbeat the fill leads into,
     // so that kick, still inside the pulse's fall, read as missed.
-    if (this.at(index) * SHAPE_SHARE > usualShape) return 0
-    // Present only with the low-band strength the slot usually carries AND an
-    // onset shaped like the bar's kick (its strongest remembered slot, not
-    // this one, which in a breakdown learns whatever lands on it): the
-    // breakdown's bass rises in the kick's band about as hard as the kick,
-    // but slowly and without the click, so its onset is a fraction of one.
-    const measured = this.strengthAt(index)
-    if (measured < PRESENCE_SHARE * remembered || this.at(index) < SHAPE_SHARE * this.kickShape) return 0
+    if (onset * voice.spec.shapeShare > usualShape) return 0
+    // Present only with the strength the slot usually carries AND an onset
+    // shaped like the bar's strongest hit of this drum (its strongest
+    // remembered slot, not this one, which in a breakdown learns whatever
+    // lands on it): the breakdown's bass rises in the kick's band about as
+    // hard as the kick, but slowly and without the click, so its onset is a
+    // fraction of one.
+    const measured = this.strengthAt(voice, index)
+    if (measured < PRESENCE_SHARE * remembered || onset < voice.spec.shapeShare * voice.shape) return 0
     // Never more than the slot usually carries, never more than was measured.
     return Math.abs(10 * Math.log10(measured / remembered)) <= STEADY_DB ? remembered : Math.min(measured, remembered)
   }
 
-  /** True when the onset at `index` is the largest within a sixteenth's half either side (ties to the earlier). */
-  private isOnsetPeak(index: number): boolean {
-    const value = this.at(index)
+  /** True when a voice's onset at `index` is the largest within a sixteenth's half either side (ties to the earlier). */
+  private isOnsetPeak(voice: Voice, index: number): boolean {
+    const value = this.at(voice, index)
     if (value <= 0) return false
     const reach = this.peakHops
     for (let j = index - reach; j <= index + reach; j++) {
-      if (j !== index && (this.at(j) > value || (this.at(j) === value && j < index))) return false
+      if (j !== index && (this.at(voice, j) > value || (this.at(voice, j) === value && j < index))) return false
     }
     return true
   }
 
-  private strengthAt(index: number): number {
+  private strengthAt(voice: Voice, index: number): number {
     const k = index - this.start
-    return k >= 0 && k < this.count ? this.strength[(this.head + k) % CAPACITY] : 0
+    return k >= 0 && k < this.count - voice.settleHops ? voice.strength[(this.head + k) % CAPACITY] : 0
   }
 
-  /** True when the grid is trusted, for tests and diagnostics. */
+  /** The tempo while the grid is trusted, NaN otherwise; for tests and diagnostics. */
   get tempoBpm(): number {
     return this.isLocked() ? 60 / (this.period * this.hopSec) : NaN
   }
@@ -811,31 +1089,41 @@ export class KickTracker {
   }
 
   /**
-   * The response of a hit heard between the last call and media time `time`
-   * (0..1), or 0 when none was. `contrast` (0..1) is the least share of the
-   * strong hits' strength a hit must have to show.
+   * The response of a hit of `drum` heard between `cursor`'s last call and
+   * media time `time` (0..1), or 0 when none was. `contrast` (0..1) is the
+   * least share of that drum's strong hits' strength a hit must have to show.
    */
-  hitBetween(time: number, contrast: number): number {
-    const previous = this.lastAsked
-    this.lastAsked = time
+  hitBetween(drum: Drum, cursor: DrumCursor, time: number, contrast: number): number {
+    if (cursor.epoch !== this.epoch) {
+      cursor.epoch = this.epoch
+      cursor.lastAsked = NaN
+      cursor.lastPeak = NaN
+    }
+    const previous = cursor.lastAsked
+    cursor.lastAsked = time
     if (Number.isNaN(previous) || time <= previous || time - previous > 0.25 || this.count === 0) return 0
-    const from = (previous - this.originTime) / this.hopSec
-    const to = (time - this.originTime) / this.hopSec
-    let strength = 0
-    // Until the beat is known there is nothing to tell a kick from the hats
-    // and bass around it, so nothing is shown: every onset peak, each its own
+    // Until the beat is known there is nothing to tell a drum from what
+    // surrounds it, so nothing is shown: every onset peak, each its own
     // reference, is the erratic flicker a beat display must never be.
     if (!this.isLocked()) return 0
-    for (let k = Math.max(Math.floor(from) + 1, Number.isNaN(this.lastPeak) ? -Infinity : this.lastPeak + 1); k <= Math.floor(to); k++) {
-      const value = this.acceptedStrength(k)
+    const voice = this.voices[drum]
+    voice.followed = true
+    // A hop's time is the centre of the envelope it closes (`feed`), which
+    // for a voice with a shorter envelope lies later in the hop.
+    const shift = (ENVELOPE_HOPS - voice.spec.envelopeHops) / 2
+    const from = (previous - this.originTime) / this.hopSec - shift
+    const to = (time - this.originTime) / this.hopSec - shift
+    let strength = 0
+    for (let k = Math.max(Math.floor(from) + 1, Number.isNaN(cursor.lastPeak) ? -Infinity : cursor.lastPeak + 1); k <= Math.floor(to); k++) {
+      const value = this.acceptedStrength(voice, k)
       if (value <= 0) continue
-      this.lastPeak = k
+      cursor.lastPeak = k
       strength = Math.max(strength, value)
     }
     if (strength <= 0) return 0
-    // In dB against the strong hits, so a kick that reads somewhat weaker
-    // (interfering with the bass line's tail, say) still reads as a kick.
-    const top = this.strongHit > 0 ? this.strongHit : strength
+    // In dB against the strong hits, so a hit that reads somewhat weaker
+    // (interfering with the bass line's tail, say) still reads as one.
+    const top = voice.strongHit > 0 ? voice.strongHit : strength
     const floorDb = -(1 - contrast) * CONTRAST_RANGE_DB
     const db = 10 * Math.log10(strength / top)
     return Math.max(0, Math.min(1, (db - floorDb) / -floorDb))

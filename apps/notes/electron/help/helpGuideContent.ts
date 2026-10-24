@@ -271,7 +271,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - The drum button switches it on for every layout, and **delay** draws it later (or, below 0, earlier) if it runs ahead of what you hear, as wireless headphones often make it. The delay is remembered for each output device.
 - Everything else belongs to the layout, so each layout can have its own visualizer.
 - Caret, shade and outline are three separate blocks. While the caret follows the music it stops blinking and holds steady, and the music dips it.
-- Each block has its own **amount**; its **freq** and **width**, the band of the music it listens to (the lowest freq, **beat**, follows the kick drum instead); **contrast**, how far the band must rise above the music around it before it responds; and **fall** and **shape**, how a peak falls away after a hit.
+- Each block has its own **amount**; its **freq**, what it follows: the **kick** drum at the left end of the slider, the **snare** (claps and rim shots too) at the centre, the **hat** (any short bright hit) at the right end, or in between the level of one band of the music, with **width** setting how wide that band is; **contrast**, how far the band must rise above the music around it before it responds; and **fall** and **shape**, how a peak falls away after a hit.
 - The arrows button inverts a block: it rests at its full amount while music plays and a hit takes it away.
 - The shade's and the outline's colours are set with the swatches above the blocks, the same way as the cursor's and caret's.
 - It switches itself off while nothing is playing, and with Reduce visual effects.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { KickTracker } from './kickTracker'
+import { DrumCursor, DrumTracker, type Drum } from './drumTracker'
 
 const RATE = 48000
 
@@ -159,9 +159,10 @@ interface PlayOptions {
  * long frame), and asked at each frame for the hit heard `lagSec` behind the
  * feed. Returns every hit reported, with its media time and response.
  */
-function play(track: Track, contrast: number, options: PlayOptions = {}): { hits: Array<{ at: number; response: number }>; tracker: KickTracker } {
+function play(track: Track, contrast: number, options: PlayOptions = {}, drum: Drum = 'kick'): { hits: Array<{ at: number; response: number }>; tracker: DrumTracker } {
   const { lagSec = 5, stampJitterSec = 0, loseEvery = 0 } = options
-  const tracker = new KickTracker(RATE)
+  const tracker = new DrumTracker(RATE)
+  const cursor = new DrumCursor()
   const rand = noise(3)
   const jitter = noise(11)
   let lost = 0
@@ -181,7 +182,7 @@ function play(track: Track, contrast: number, options: PlayOptions = {}): { hits
     fed = end
     const heard = end / RATE - lagSec
     if (heard <= 0) continue
-    const response = tracker.hitBetween(heard, contrast)
+    const response = tracker.hitBetween(drum, cursor, heard, contrast)
     if (response > 0) hits.push({ at: heard, response })
   }
   return { hits, tracker }
@@ -200,7 +201,7 @@ function hitFor(kick: number, hits: Array<{ at: number; response: number }>) {
   return hits.find((h) => h.at >= kick - EARLY_SEC && h.at <= kick + LATE_SEC)
 }
 
-describe('KickTracker', () => {
+describe('DrumTracker on kicks', () => {
   it('locks to the tempo of four-on-the-floor house', () => {
     const { tracker } = play(house(20, 126), 0.5)
     expect(tracker.tempoBpm).toBeGreaterThan(125)
@@ -277,7 +278,7 @@ describe('KickTracker', () => {
   })
 })
 
-describe('KickTracker on grooves other than four on the floor', () => {
+describe('DrumTracker on kicks in grooves other than four on the floor', () => {
   it.each([
     ['a jungle break at 172', 172, { kicks: () => [[0, 1], [2, 1], [10, 1], [11, 1]], snares: [4, 12] } as Groove],
     ['a hip-hop break at 92', 92, { kicks: () => [[0, 1], [7, 1], [10, 1]], snares: [4, 12] } as Groove],
@@ -357,5 +358,186 @@ describe('KickTracker on grooves other than four on the floor', () => {
       const before = hits.filter((h) => h.at > one - beat && h.at < one - EARLY_SEC && h.response > 0.3)
       expect(before, `before the downbeat at ${one.toFixed(3)}`).toEqual([])
     }
+  })
+})
+
+/** White noise through `order` one-pole high-passes at `hz`: a bright burst with little below it. */
+function brightNoise(hz: number, order: number, rand: () => number): () => number {
+  const a = 1 / (1 + (2 * Math.PI * hz) / RATE)
+  const x = new Float64Array(order + 1)
+  const y = new Float64Array(order + 1)
+  return () => {
+    let input = rand()
+    for (let k = 0; k < order; k++) {
+      y[k] = a * (y[k] + input - x[k])
+      x[k] = input
+      input = y[k]
+    }
+    return input
+  }
+}
+
+/** A snare: a 190Hz body decaying over 80ms under a burst of noise above 1kHz decaying over 120ms. */
+function addSnare(out: Float32Array, t0: number, gain: number, bright: () => number): void {
+  for (let i = 0; i < 0.5 * RATE; i++) {
+    const at = Math.round(t0 * RATE) + i
+    if (at >= out.length) break
+    const t = i / RATE
+    out[at] += gain * (0.5 * Math.sin(2 * Math.PI * 190 * t) * Math.exp(-t / 0.08) + 0.6 * bright() * Math.exp(-t / 0.12))
+  }
+}
+
+/** A closed hat: noise above 7kHz, decaying over 25ms. */
+function addHat(out: Float32Array, t0: number, gain: number, bright: () => number): void {
+  for (let i = 0; i < 0.15 * RATE; i++) {
+    const at = Math.round(t0 * RATE) + i
+    if (at < out.length) out[at] += gain * bright() * Math.exp(-i / RATE / 0.025)
+  }
+}
+
+/** White noise through two one-pole low-passes at `hz`. */
+function darkNoise(hz: number, rand: () => number): () => number {
+  const a = 1 - Math.exp((-2 * Math.PI * hz) / RATE)
+  let y1 = 0
+  let y2 = 0
+  return () => {
+    y1 += a * (rand() - y1)
+    y2 += a * (y1 - y2)
+    return y2
+  }
+}
+
+/**
+ * A mixed kick: `addKick`'s body with its beater click below 3kHz, where a
+ * mastered kick's click sits, some 10dB under its body. `addKick`'s click is white to the top of the
+ * spectrum, brighter than a hat, and a hat landing on it cannot be told from it.
+ */
+function addMixedKick(out: Float32Array, t0: number, click: () => number): void {
+  let phase = 0
+  for (let i = 0; i < 0.3 * RATE; i++) {
+    const at = Math.round(t0 * RATE) + i
+    if (at >= out.length) break
+    const t = i / RATE
+    phase += (2 * Math.PI * (50 + 100 * Math.exp(-t / 0.03))) / RATE
+    out[at] += 0.9 * Math.sin(phase) * Math.exp(-t / 0.12) + 0.3 * click() * Math.exp(-t / 0.004)
+  }
+}
+
+interface Kit {
+  /** Sixteenths in a bar carrying each drum. */
+  kicks: number[]
+  snares: number[]
+  hats: number[]
+  /** Clap-like snares: noise only, no body (a clap or a rim shot's crack). */
+  clap?: boolean
+}
+
+/**
+ * A full kit over a bass line on every beat's second eighth, with the times
+ * each drum was played. A snare is the same sound throughout; hats vary in
+ * gain the way a played hat does.
+ */
+function kit(seconds: number, bpm: number, groove: Kit): { samples: Float32Array; kicks: number[]; snares: number[]; hats: number[] } {
+  const out = new Float32Array(Math.round(seconds * RATE))
+  const rand = noise(9)
+  const click = darkNoise(3000, noise(17))
+  const snareNoise = brightNoise(1000, 2, noise(13))
+  const hatNoise = brightNoise(7000, 3, noise(15))
+  const sixteenth = 60 / bpm / 4
+  const played = { kicks: [] as number[], snares: [] as number[], hats: [] as number[] }
+  for (let bar = 0; bar * 16 * sixteenth < seconds; bar++) {
+    const at = (s: number) => (bar * 16 + s) * sixteenth
+    for (const s of groove.kicks) { addMixedKick(out, at(s), click); played.kicks.push(at(s)) }
+    for (const s of groove.snares) {
+      if (groove.clap) addHat(out, at(s), 0, hatNoise)
+      addSnare(out, at(s), 1, snareNoise)
+      played.snares.push(at(s))
+    }
+    for (const s of groove.hats) { addHat(out, at(s), 0.35 + 0.1 * rand(), hatNoise); played.hats.push(at(s)) }
+    for (let beat = 0; beat < 4; beat++) {
+      const t0 = at(beat * 4 + 2)
+      for (let i = 0; i < 2 * sixteenth * RATE; i++) {
+        const k = Math.round(t0 * RATE) + i
+        if (k >= out.length) break
+        const t = i / RATE
+        out[k] += 0.35 * Math.min(1, t / 0.04) * Math.sin(2 * Math.PI * 49 * t)
+      }
+    }
+  }
+  const within = (times: number[]) => times.filter((t) => t < seconds)
+  return { samples: out, kicks: within(played.kicks), snares: within(played.snares), hats: within(played.hats) }
+}
+
+/** `play` and `score` for one drum of a kit: the share of its hits found, and the hits that matched none of them. */
+function scoreDrum(track: ReturnType<typeof kit>, drum: Drum, times: number[], options: PlayOptions = {}) {
+  const { hits } = play({ samples: track.samples, kicks: times }, 0.5, options, drum)
+  return score({ samples: track.samples, kicks: times }, hits, 10, 34, 0.3)
+}
+
+/** How long the kit's snare rings over a hat after it: its noise falls 6dB in about 70ms, measured from the end of its climb. */
+const SNARE_RING_SEC = 0.15
+
+describe('DrumTracker on snares and hats', () => {
+  const rock: Kit = { kicks: [0, 8, 10], snares: [4, 12], hats: [0, 2, 4, 6, 8, 10, 12, 14] }
+
+  it.each([
+    ['a rock beat at 110', 110, rock],
+    ['a hip-hop break at 92', 92, { kicks: [0, 7, 10], snares: [4, 12], hats: [0, 2, 4, 6, 8, 10, 12, 14] }],
+    ['a jungle break at 172', 172, { kicks: [0, 2, 10, 11], snares: [4, 12], hats: [0, 2, 4, 6, 8, 10, 12, 14] }],
+    ['house with the clap on the kick at 126', 126, { kicks: [0, 4, 8, 12], snares: [4, 12], hats: [2, 6, 10, 14] }],
+  ])('fires on every snare of %s and nowhere else', (_name, bpm, groove) => {
+    const track = kit(40, bpm, groove)
+    const { found, strays } = scoreDrum(track, 'snare', track.snares)
+    expect(found).toBeGreaterThan(0.95)
+    expect(strays).toEqual([])
+  })
+
+  it.each([
+    ['a rock beat at 110', 110, rock],
+    ['sixteenth hats at 124', 124, { kicks: [0, 4, 8, 12], snares: [4, 12], hats: [...Array(16).keys()] }],
+    ['off-beat hats in house at 126', 126, { kicks: [0, 4, 8, 12], snares: [4, 12], hats: [2, 6, 10, 14] }],
+  ])('fires on every hat of %s off the snares, and nowhere else', (_name, bpm, groove) => {
+    const track = kit(40, bpm, groove)
+    // A hat on a snare, or in the ring of its noise after it, is the snare's: the snare wins (VOICES).
+    const free = track.hats.filter((h) => !track.snares.some((s) => h > s - 0.001 && h < s + SNARE_RING_SEC))
+    const { hits } = play({ samples: track.samples, kicks: free }, 0.5, {}, 'hat')
+    const { found } = score({ samples: track.samples, kicks: free }, hits, 10, 34, 0.3)
+    // 0.9, not the kick's 0.95: a quiet stroke over the last of a snare's
+    // noise, a quarter beat after it, is now and then lost under it.
+    expect(found).toBeGreaterThan(0.9)
+    const strays = hits.filter((h) => h.at > 10 && h.at < 34 && h.response > 0.3 && !track.hats.some((t) => h.at >= t - EARLY_SEC && h.at <= t + LATE_SEC))
+    expect(strays).toEqual([])
+  })
+
+  it('leaves the kicks alone: neither the snare nor the hat fires on a kick by itself', () => {
+    const track = kit(40, 110, rock)
+    const lone = track.kicks.filter((k) => !track.snares.concat(track.hats).some((t) => Math.abs(t - k) < 0.001))
+    for (const drum of ['snare', 'hat'] as const) {
+      const { hits } = play({ samples: track.samples, kicks: lone }, 0.5, {}, drum)
+      expect(lone.filter((k) => k > 10 && k < 34 && (hitFor(k, hits)?.response ?? 0) > 0.3), drum).toEqual([])
+    }
+  })
+
+  it('keeps the kick as it was when the kit has every drum', () => {
+    const track = kit(40, 110, rock)
+    const { found, strays } = scoreDrum(track, 'kick', track.kicks)
+    expect(found).toBeGreaterThan(0.95)
+    expect(strays).toEqual([])
+  })
+
+  it('keeps the snare and the hat on time while the media time jitters and frames are lost', () => {
+    const track = kit(40, 110, rock)
+    const options = { stampJitterSec: 0.01, loseEvery: 41 }
+    const snare = scoreDrum(track, 'snare', track.snares, options)
+    expect(snare.found).toBeGreaterThan(0.8)
+    expect(snare.strays).toEqual([])
+    const free = track.hats.filter((h) => !track.snares.some((s) => h > s - 0.001 && h < s + SNARE_RING_SEC))
+    const { hits } = play({ samples: track.samples, kicks: free }, 0.5, options, 'hat')
+    // A lost frame every 41 (one every 0.7s) blinds the hat for the frame
+    // and the 85ms after it, where what a climb started from is the silence
+    // the gap was filled with (`DrumTracker.settle`): about a fifth of these
+    // dense hats.
+    expect(score({ samples: track.samples, kicks: free }, hits, 10, 34, 0.3).found).toBeGreaterThan(0.7)
+    expect(hits.filter((h) => h.at > 10 && h.at < 34 && h.response > 0.3 && !track.hats.some((t) => h.at >= t - EARLY_SEC && h.at <= t + LATE_SEC))).toEqual([])
   })
 })

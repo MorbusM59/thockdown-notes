@@ -1,4 +1,4 @@
-// The opt-in beat-pulse trace: how well the kick tracker's clock follows the
+// The opt-in beat-pulse trace: how well the drum tracker's clock follows the
 // music, for a beat that drifts out of step in a real session.
 //
 // `localStorage['thockdown:debug-beat'] = '1'` (read live, so it can be set
@@ -17,7 +17,7 @@
 // - `beat RESYNC`: the scout was put back on its lead (a seek, a new track,
 //   or the scout falling behind), which restarts every band.
 
-import type { KickTracker } from './kickTracker'
+import type { DrumTracker } from './drumTracker'
 
 const BEAT_TRACE_FLAG = 'thockdown:debug-beat'
 const BEAT_TRACE_LIMIT = 400
@@ -51,7 +51,7 @@ export class BeatTraceWindow {
   private since = NaN
 
   /** Records the feed the tracker just took; writes a RESTART at once and a summary once a second. */
-  record(tracker: KickTracker, lost: number, mediaTime: number): void {
+  record(tracker: DrumTracker, lost: number, mediaTime: number): void {
     const at = mediaTime.toFixed(3)
     if (tracker.lastRestart) appendBeatTrace(`beat RESTART ${tracker.lastRestart} at=${at} drift=${(tracker.lastDriftSec * 1000).toFixed(1)}ms lost=${lost}`)
     else if (tracker.lastDriftSec !== 0) this.drifts.push(tracker.lastDriftSec * 1000)

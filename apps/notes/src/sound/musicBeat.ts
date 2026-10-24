@@ -25,14 +25,16 @@
  * long after a seek or a new track, and stretches from a part-filled window
  * for `LEAD_SEC` after that.
  *
- * A channel at `BEAT_FREQUENCY` follows KICK-DRUM HITS instead of a band's
- * level: its analyser takes the scout unfiltered, and every new sample goes
- * to a `KickTracker` (`kickTracker.ts`), which finds the kicks and their
- * tempo in the same look-ahead window and answers, per frame, whether a kick
- * was heard since the last one. The tracker keeps time by counting samples
- * and uses the scout's reported position only to align that count with the
- * music (`KickTracker.feed`); `thockdown:debug-beat` traces how well
- * (`beatTrace.ts`). The fall turns each hit into a pulse.
+ * A channel whose source is a DRUM (kick, snare or hat) follows that drum's
+ * HITS instead of a band's level. Every drum channel reads ONE analysis
+ * (`drums`): an analyser taking the scout unfiltered, whose every new sample
+ * goes to one `DrumTracker` (`drumTracker.ts`), which finds the tempo and
+ * each drum's hits in the same look-ahead window; each channel holds only
+ * its place in the hits (a `DrumCursor`) and asks, per frame, whether its
+ * drum was heard since it last asked. The tracker keeps time by counting
+ * samples and uses the scout's reported position only to align that count
+ * with the music (`DrumTracker.feed`); `thockdown:debug-beat` traces how
+ * well (`beatTrace.ts`). The fall turns each hit into a pulse.
  *
  * What the listener HEARS trails the element's media time by the output's
  * latency (`AudioContext.outputLatency` and `baseLatency`, tens of
@@ -47,9 +49,9 @@
  */
 
 import { outputContext } from '@thockdown/soundscape/audioOutputBus'
-import { BEAT_FREQUENCY, type VisualizerChannel as BeatChannel } from '@thockdown/look/visualizer'
+import type { VisualizerChannel as BeatChannel, VisualizerDrum } from '@thockdown/look/visualizer'
 import { fadeCurve } from '../flow/flowTrail'
-import { KickTracker } from './kickTracker'
+import { DrumCursor, DrumTracker } from './drumTracker'
 import { appendBeatTrace, BeatTraceWindow, isBeatTraceOn } from './beatTrace'
 import { musicPlayerService } from './MusicPlayerService'
 
@@ -71,8 +73,8 @@ const CAPACITY = 4096
 /** The bounds of a band's analyser window, in samples. */
 const MIN_TAP_SIZE = 256
 const MAX_TAP_SIZE = 8192
-/** A beat band's analyser window: a third of a second at 48kHz, so a slow frame loses no samples. */
-const ONSET_TAP_SIZE = 16384
+/** The drum analysis's analyser window: a third of a second at 48kHz, so a slow frame loses no samples. */
+const DRUM_TAP_SIZE = 16384
 /** The smallest change a subscriber is told of. */
 const MIN_STEP = 0.001
 
@@ -84,11 +86,8 @@ interface Band {
   filter: BiquadFilterNode | null
   analyser: AnalyserNode | null
   samples: Float32Array<ArrayBuffer> | null
-  /** A beat band's kick tracker, and the context time its analyser was last read at (NaN: never). */
-  kicks: KickTracker | null
-  lastReadAt: number
-  /** The beat trace's running window for this band, while the trace is on (`beatTrace.ts`). */
-  trace: BeatTraceWindow | null
+  /** A drum channel's place in the shared tracker's hits; null for a band. */
+  cursor: DrumCursor | null
   /** The last peak of the response and the listener time it was reached at, for the fall (`fallSec`, `fallShape`). */
   peak: number
   peakTime: number
@@ -103,6 +102,22 @@ interface Band {
 
 const bands = new Set<Band>()
 let frame: number | null = null
+
+/**
+ * The one drum analysis every drum channel reads, while there is one and
+ * the scout exists: the scout unfiltered into an analyser, and the tracker
+ * fed from it. `lastReadAt` is the context time the analyser was last read
+ * at (NaN: never).
+ */
+interface DrumAnalysis {
+  analyser: AnalyserNode
+  samples: Float32Array<ArrayBuffer>
+  tracker: DrumTracker
+  lastReadAt: number
+  /** The beat trace's running window, while the trace is on (`beatTrace.ts`). */
+  trace: BeatTraceWindow | null
+}
+let drums: DrumAnalysis | null = null
 let unsubscribePlaying: (() => void) | null = null
 
 let scout: HTMLAudioElement | null = null
@@ -124,44 +139,62 @@ function clearWindow(band: Band): void {
   band.count = 0
   band.bins.fill(0)
   band.peak = 0
-  band.kicks?.reset()
-  band.lastReadAt = NaN
 }
 
-function isBeat(channel: BeatChannel): boolean {
-  return channel.frequencyHz === BEAT_FREQUENCY
+/** Starts every window afresh, the drum analysis's included. */
+function clearWindows(): void {
+  for (const band of bands) clearWindow(band)
+  if (drums) {
+    drums.tracker.reset()
+    drums.lastReadAt = NaN
+  }
+}
+
+function drumOf(channel: BeatChannel): VisualizerDrum | null {
+  return channel.source === 'band' ? null : channel.source
 }
 
 function attachBand(band: Band): void {
-  if (!scoutSource || band.analyser) return
+  if (!scoutSource) return
+  if (drumOf(band.channel)) {
+    band.cursor ??= new DrumCursor()
+    ensureDrums()
+    return
+  }
+  if (band.analyser) return
   const context = scoutSource.context
   const analyser = context.createAnalyser()
+  const filter = context.createBiquadFilter()
+  filter.type = 'bandpass'
+  scoutSource.connect(filter)
+  filter.connect(analyser)
   band.analyser = analyser
-  if (isBeat(band.channel)) {
-    // The tracker filters for itself, several bands from one signal.
-    scoutSource.connect(analyser)
-    band.kicks = new KickTracker(context.sampleRate)
-    band.lastReadAt = NaN
-  } else {
-    const filter = context.createBiquadFilter()
-    filter.type = 'bandpass'
-    scoutSource.connect(filter)
-    filter.connect(analyser)
-    band.filter = filter
-    band.kicks = null
-  }
+  band.filter = filter
   tuneBand(band)
+}
+
+/** The drum analysis, built when the first drum channel needs it. */
+function ensureDrums(): void {
+  if (drums || !scoutSource) return
+  const context = scoutSource.context
+  const analyser = context.createAnalyser()
+  analyser.fftSize = DRUM_TAP_SIZE
+  // The tracker filters for itself, every drum's bands from one signal.
+  scoutSource.connect(analyser)
+  drums = { analyser, samples: new Float32Array(DRUM_TAP_SIZE), tracker: new DrumTracker(context.sampleRate), lastReadAt: NaN, trace: null }
+}
+
+/** Takes the drum analysis down once no channel follows a drum. */
+function releaseDrums(): void {
+  if (!drums || [...bands].some((band) => drumOf(band.channel))) return
+  scoutSource?.disconnect(drums.analyser)
+  drums = null
 }
 
 /** Points a band's filter and analyser at its channel's frequency and width. */
 function tuneBand(band: Band): void {
   const { filter, analyser } = band
-  if (!analyser) return
-  if (!filter) {
-    analyser.fftSize = ONSET_TAP_SIZE
-    band.samples = new Float32Array(ONSET_TAP_SIZE)
-    return
-  }
+  if (!analyser || !filter) return
   filter.frequency.value = band.channel.frequencyHz
   filter.Q.value = bandQ(band.channel.octaves)
   // About three periods of the band's centre, so a low band is not read
@@ -172,11 +205,11 @@ function tuneBand(band: Band): void {
 }
 
 function detachBand(band: Band): void {
-  const input = band.filter ?? band.analyser
-  if (input && scoutSource) scoutSource.disconnect(input)
+  if (band.filter && scoutSource) scoutSource.disconnect(band.filter)
   band.filter?.disconnect()
   band.filter = null
   band.analyser = null
+  band.cursor = null
 }
 
 /** The scout for the playing track, built (or re-pointed) on demand. */
@@ -194,7 +227,7 @@ function ensureScout(url: string): HTMLAudioElement {
   if (scoutUrl !== url) {
     scoutUrl = url
     scout.src = url
-    for (const band of bands) clearWindow(band)
+    clearWindows()
   }
   for (const band of bands) attachBand(band)
   return scout
@@ -202,6 +235,8 @@ function ensureScout(url: string): HTMLAudioElement {
 
 function teardownScout(): void {
   for (const band of bands) detachBand(band)
+  if (drums) scoutSource?.disconnect(drums.analyser)
+  drums = null
   if (scout) {
     scout.pause()
     scout.removeAttribute('src')
@@ -227,18 +262,15 @@ function keepScoutAhead(listenerTime: number): boolean {
   if (Math.abs(element.currentTime - target) <= RESYNC_SEC) return false
   if (isBeatTraceOn()) appendBeatTrace(`beat RESYNC at=${listenerTime.toFixed(3)} scout=${element.currentTime.toFixed(3)} target=${target.toFixed(3)}`)
   element.currentTime = target
-  for (const band of bands) clearWindow(band)
+  clearWindows()
   return true
 }
 
 /** Takes one reading from the scout into each band's window. */
 function sample(scoutTime: number): void {
+  if (drums) feedDrums(drums, scoutTime)
   for (const band of bands) {
     if (!band.analyser || !band.samples) continue
-    if (band.kicks) {
-      feedKicks(band, band.kicks, band.analyser, band.samples, scoutTime)
-      continue
-    }
     const db = levelDb(band.analyser, band.samples)
     if (band.count === CAPACITY) dropOldest(band)
     const at = (band.head + band.count) % CAPACITY
@@ -250,25 +282,26 @@ function sample(scoutTime: number): void {
 }
 
 /**
- * Hands a beat band's tracker the samples its analyser gained since the last
+ * Hands the drum tracker the samples its analyser gained since the last
  * read: the context's clock says how many, and the analyser holds the latest
- * ONSET_TAP_SIZE of them. A frame longer than that loses the oldest; the
+ * DRUM_TAP_SIZE of them. A frame longer than that loses the oldest; the
  * context's clock says exactly how many, and the tracker fills them with
  * silence. The media time only aligns the tracker's sample count with the
  * music: it is the element's reported position, which jitters.
  */
-function feedKicks(band: Band, kicks: KickTracker, analyser: AnalyserNode, samples: Float32Array<ArrayBuffer>, scoutTime: number): void {
+function feedDrums(analysis: DrumAnalysis, scoutTime: number): void {
+  const { analyser, samples, tracker } = analysis
   const now = analyser.context.currentTime
-  const fresh = Number.isNaN(band.lastReadAt)
+  const fresh = Number.isNaN(analysis.lastReadAt)
     ? samples.length
-    : Math.round((now - band.lastReadAt) * analyser.context.sampleRate)
-  band.lastReadAt = now
+    : Math.round((now - analysis.lastReadAt) * analyser.context.sampleRate)
+  analysis.lastReadAt = now
   if (fresh <= 0) return
   analyser.getFloatTimeDomainData(samples)
   const lost = Math.max(0, fresh - samples.length)
-  kicks.feed(samples, Math.max(0, samples.length - fresh), scoutTime, lost)
-  if (isBeatTraceOn()) (band.trace ??= new BeatTraceWindow()).record(kicks, lost, scoutTime)
-  else band.trace = null
+  tracker.feed(samples, Math.max(0, samples.length - fresh), scoutTime, lost)
+  if (isBeatTraceOn()) (analysis.trace ??= new BeatTraceWindow()).record(tracker, lost, scoutTime)
+  else analysis.trace = null
 }
 
 /** An analyser's current level in dB, floored at FLOOR_DB. */
@@ -298,7 +331,10 @@ function percentile(band: Band, share: number): number {
 
 /** The response for what the listener hears at `listenerTime`, from the window around it. */
 function respond(band: Band, listenerTime: number): number {
-  const raw = band.kicks ? band.kicks.hitBetween(listenerTime, band.channel.contrast) : stretched(band, listenerTime)
+  const drum = drumOf(band.channel)
+  const raw = drum
+    ? (drums && band.cursor ? drums.tracker.hitBetween(drum, band.cursor, listenerTime, band.channel.contrast) : 0)
+    : stretched(band, listenerTime)
   // The fall: a response never drops faster than its last peak fades, on
   // flow's fade curve (fallSec long, fallShape). A rise is taken at once.
   const held = band.peak * fadeCurve(listenerTime - band.peakTime, band.channel.fallSec, band.channel.fallShape)
@@ -443,9 +479,7 @@ export function subscribeMusicBand(channel: BeatChannel, listener: BeatListener)
     filter: null,
     analyser: null,
     samples: null,
-    kicks: null,
-    lastReadAt: NaN,
-    trace: null,
+    cursor: null,
     peak: 0,
     peakTime: 0,
     times: new Float64Array(CAPACITY),
@@ -464,19 +498,21 @@ export function subscribeMusicBand(channel: BeatChannel, listener: BeatListener)
   start()
   const update = (next: BeatChannel) => {
     const retune = next.frequencyHz !== band.channel.frequencyHz || next.octaves !== band.channel.octaves
-    const rebuild = isBeat(next) !== isBeat(band.channel)
+    const rebuild = next.source !== band.channel.source
     band.channel = next
     if (rebuild) {
-      // A level and an onset are different quantities: the window holds one
-      // or the other, never a mixture.
+      // A level and a drum's hits are different quantities, and two drums'
+      // hits different hits: the band starts over on its new source.
       detachBand(band)
       clearWindow(band)
       attachBand(band)
+      releaseDrums()
     } else if (retune) tuneBand(band)
   }
   const unsubscribe = () => {
     bands.delete(band)
     detachBand(band)
+    releaseDrums()
     if (bands.size > 0) return
     stop()
     teardownScout()

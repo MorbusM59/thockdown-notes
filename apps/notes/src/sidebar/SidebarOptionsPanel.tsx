@@ -19,9 +19,6 @@ import {
   type BeatSettings,
 } from '../shared/beatSettings'
 import {
-  BEAT_FREQUENCY_MAX_HZ,
-  BEAT_FREQUENCY,
-  BEAT_FREQUENCY_MIN_HZ,
   BEAT_OCTAVES_MAX,
   BEAT_OCTAVES_MIN,
   BEAT_CONTRAST_MAX,
@@ -30,6 +27,10 @@ import {
   BEAT_FALL_SHAPE_MAX,
   BEAT_FALL_SHAPE_MIN,
   DEFAULT_VISUALIZER_CHANNEL,
+  SOURCE_SLIDER_MAX,
+  SOURCE_SLIDER_MIN,
+  sourceAtSlider,
+  sourceSliderValue,
   type VisualizerChannel,
   type VisualizerSettings,
 } from '@thockdown/look/visualizer'
@@ -371,10 +372,6 @@ const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
   markdownChecked: 'Markdown checked task color',
   markdownUnchecked: 'Markdown unchecked task color',
 }
-
-/** The beat frequency slider's BEAT position: half an octave below the lowest band, chosen by the lower half of that stretch. */
-const BEAT_SLIDER_MIN = Math.log2(BEAT_FREQUENCY_MIN_HZ) - 0.5
-const BEAT_SLIDER_SPLIT = Math.log2(BEAT_FREQUENCY_MIN_HZ) - 0.25
 
 const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
   caret: 'fa-solid fa-i',
@@ -1028,7 +1025,7 @@ export function SidebarOptionsPanel({
     const renderBeatChannel = (key: keyof VisualizerSettings, label: string, effect: string) => {
       const channel: VisualizerChannel = visualizer[key]
       const set = (patch: Partial<VisualizerChannel>) => setVisualizer((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }))
-      const slider = (field: Exclude<keyof VisualizerChannel, 'invert'>, trackLabel: string, min: number, max: number, step: number, tooltipLabel: string, ariaName: string, digits?: number) => (
+      const slider = (field: Exclude<keyof VisualizerChannel, 'invert' | 'source'>, trackLabel: string, min: number, max: number, step: number, tooltipLabel: string, ariaName: string, digits?: number) => (
         <CompactScrollbarSlider
           id={`beat-${key}-${field}`}
           min={min}
@@ -1060,25 +1057,26 @@ export function SidebarOptionsPanel({
           <div className="utility-setting-slider-stack" aria-label={`${label} settings`}>
             <OptionsSliderRows rows={[2, 2, 2]}>
               {slider('amount', 'amount', 0, 1, 0.01, `How far ${effect} at a full response; 0 leaves it as it is`, 'amount')}
-              {/* Frequency is heard on a log scale, so the slider moves in octaves (log2 Hz) and shows Hz.
-                  Half an octave below the lowest band is one more position, BEAT, which follows
-                  kick-drum hits rather than a band; the lower half of that stretch selects it. */}
+              {/* One track for every source (visualizer.ts, `sourceSliderValue`): the
+                  kick at the left end, the snare at the centre, the hat at the right,
+                  and the spectrum in octaves between them, shown in Hz. */}
               <CompactScrollbarSlider
-                id={`beat-${key}-frequencyHz`}
-                min={BEAT_SLIDER_MIN}
-                max={Math.log2(BEAT_FREQUENCY_MAX_HZ)}
+                id={`beat-${key}-source`}
+                min={SOURCE_SLIDER_MIN}
+                max={SOURCE_SLIDER_MAX}
                 step={0.01}
-                value={channel.frequencyHz === BEAT_FREQUENCY ? BEAT_SLIDER_MIN : Math.log2(channel.frequencyHz)}
+                value={sourceSliderValue(channel)}
                 trackLabel="freq"
-                tooltipLabel="Hz: the centre of the band it listens to, from sub-bass to hi-hats. The lowest position, beat, follows kick-drum hits instead"
-                ariaLabel={`${label}: frequency in Hz, or beat`}
-                defaultValue={Math.log2(DEFAULT_VISUALIZER_CHANNEL.frequencyHz)}
-                formatValue={(value) => (value < BEAT_SLIDER_SPLIT ? 'beat' : Math.max(BEAT_FREQUENCY_MIN_HZ, Math.round(2 ** value)).toString())}
-                onCommit={(value) => set({
-                  frequencyHz: value < BEAT_SLIDER_SPLIT ? BEAT_FREQUENCY : Math.max(BEAT_FREQUENCY_MIN_HZ, Math.round(2 ** value)),
-                })}
+                tooltipLabel="What it follows: the kick drum at the left end, the snare (and claps and rim shots) at the centre, hi-hats (and other short bright hits) at the right end, or, in between, the level of one band of the music, in Hz"
+                ariaLabel={`${label}: kick, snare, hi-hat, or a frequency in Hz`}
+                defaultValue={sourceSliderValue(DEFAULT_VISUALIZER_CHANNEL)}
+                formatValue={(value) => {
+                  const at = sourceAtSlider(value, channel.frequencyHz)
+                  return at.source === 'band' ? at.frequencyHz.toString() : at.source
+                }}
+                onCommit={(value) => set(sourceAtSlider(value, channel.frequencyHz))}
               />
-              {slider('octaves', 'width', BEAT_OCTAVES_MIN, BEAT_OCTAVES_MAX, 0.1, 'Octaves: how wide the bell around the frequency is', 'band width in octaves', 1)}
+              {slider('octaves', 'width', BEAT_OCTAVES_MIN, BEAT_OCTAVES_MAX, 0.1, 'Octaves: how wide the bell around the frequency is; a drum does not use it', 'band width in octaves', 1)}
               {slider('contrast', 'contrast', 0, BEAT_CONTRAST_MAX, 0.01, 'How loud the band must be, against the ten seconds around it, before it responds: higher keeps only the biggest hits', 'contrast')}
               {slider('fallSec', 'fall', BEAT_FALL_MIN_SEC, BEAT_FALL_MAX_SEC, 0.01, 'Seconds a peak takes to fall to nothing; a hit lifts it at once', 'fall time in seconds', 2)}
               {slider('fallShape', 'shape', BEAT_FALL_SHAPE_MIN, BEAT_FALL_SHAPE_MAX, 0.1, 'Fall shape: 0 falls evenly, higher drops early, lower holds and drops late', 'fall shape', 1)}

@@ -1,7 +1,7 @@
 /**
  * The visualizer: elements of the look that follow the playing music, saved
  * with the layout like every other part of it (Options > Visualizer). Three
- * independent BLOCKS, each listening to its own band (or the kick drum) with
+ * independent BLOCKS, each listening to its own band (or a drum: kick, snare or hat) with
  * its own timing: the caret, which dips; the active editor's SHADE; and the
  * box OUTLINES. The shade and the outline each have a colour, picked like any
  * other layout colour (so a theme's invert applies to it as to the rest).
@@ -14,14 +14,19 @@
  * sanitizer, shared by the renderer and the main process.
  */
 
+/** A drum a block can follow instead of a band: its hits, found by the notes app's `sound/drumTracker.ts`. */
+export type VisualizerDrum = 'kick' | 'snare' | 'hat'
+
+/** What a block listens to: the level of one band of the music, or the hits of one drum. */
+export type VisualizerSource = 'band' | VisualizerDrum
+
 /** How one block follows the music. */
 export interface VisualizerChannel {
   /** The share of the block's effect a full response reaches, 0..1. */
   amount: number
-  /**
-   * The centre of the band, in Hz; `BEAT_FREQUENCY` (0) follows kick-drum
-   * hits instead of one band.
-   */
+  /** What it follows: a band (`frequencyHz`, `octaves`) or a drum. */
+  source: VisualizerSource
+  /** The centre of the band, in Hz; kept while a drum is followed, so going back to the band finds it where it was. */
   frequencyHz: number
   /** The band's width, in octaves, between its half-power points. */
   octaves: number
@@ -55,8 +60,6 @@ export interface VisualizerSettings {
   outline: VisualizerColorChannel
 }
 
-/** The frequency that means "follow the kick drum" rather than a band. */
-export const BEAT_FREQUENCY = 0
 export const BEAT_FREQUENCY_MIN_HZ = 20
 export const BEAT_FREQUENCY_MAX_HZ = 20000
 export const BEAT_OCTAVES_MIN = 0.1
@@ -69,6 +72,7 @@ export const BEAT_FALL_SHAPE_MAX = 5
 
 export const DEFAULT_VISUALIZER_CHANNEL: VisualizerChannel = {
   amount: 0.6,
+  source: 'kick',
   frequencyHz: 70,
   octaves: 1,
   contrast: 0.5,
@@ -93,6 +97,14 @@ export function defaultVisualizer(inverted: boolean): VisualizerSettings {
   }
 }
 
+const SOURCES: readonly VisualizerSource[] = ['band', 'kick', 'snare', 'hat']
+
+/** A layout saved before `source` existed said "the kick" with a frequency of 0, and a band with its frequency. */
+function legacySource(frequencyHz: unknown, fallback: VisualizerSource): VisualizerSource {
+  if (frequencyHz === 0) return 'kick'
+  return typeof frequencyHz === 'number' && Number.isFinite(frequencyHz) ? 'band' : fallback
+}
+
 function bounded(value: unknown, min: number, max: number, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback
 }
@@ -101,9 +113,8 @@ function sanitizeChannel(input: unknown, d: VisualizerChannel): VisualizerChanne
   const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<keyof VisualizerChannel, unknown>>
   return {
     amount: bounded(source.amount, 0, 1, d.amount),
-    frequencyHz: source.frequencyHz === BEAT_FREQUENCY
-      ? BEAT_FREQUENCY
-      : bounded(source.frequencyHz, BEAT_FREQUENCY_MIN_HZ, BEAT_FREQUENCY_MAX_HZ, d.frequencyHz),
+    source: SOURCES.includes(source.source as VisualizerSource) ? source.source as VisualizerSource : legacySource(source.frequencyHz, d.source),
+    frequencyHz: bounded(source.frequencyHz, BEAT_FREQUENCY_MIN_HZ, BEAT_FREQUENCY_MAX_HZ, d.frequencyHz),
     octaves: bounded(source.octaves, BEAT_OCTAVES_MIN, BEAT_OCTAVES_MAX, d.octaves),
     contrast: bounded(source.contrast, 0, BEAT_CONTRAST_MAX, d.contrast),
     fallSec: bounded(source.fallSec, BEAT_FALL_MIN_SEC, BEAT_FALL_MAX_SEC, d.fallSec),
@@ -126,4 +137,50 @@ export function sanitizeVisualizer(input: unknown, inverted: boolean): Visualize
     shade: sanitizeColorChannel(source.shade, d.shade),
     outline: sanitizeColorChannel(source.outline, d.outline),
   }
+}
+
+/**
+ * The frequency slider (Options > Visualizer) is one track for every
+ * source: the KICK at its left end, the SNARE at its centre and the HAT at
+ * its right, with the spectrum in octaves between them (20Hz up to the
+ * spectrum's geometric middle, about 630Hz, left of the snare; the rest of
+ * it right). Each drum holds a stretch of `SLIDER_STOP_OCTAVES`, and the
+ * snare's sits exactly at the track's centre because the stops at the two
+ * ends are the same width.
+ */
+export const SLIDER_STOP_OCTAVES = 0.5
+const LOW = Math.log2(BEAT_FREQUENCY_MIN_HZ)
+const HIGH = Math.log2(BEAT_FREQUENCY_MAX_HZ)
+const MIDDLE = (LOW + HIGH) / 2
+export const SOURCE_SLIDER_MIN = LOW - SLIDER_STOP_OCTAVES
+export const SOURCE_SLIDER_MAX = HIGH + 2 * SLIDER_STOP_OCTAVES
+
+/** Where a channel's source sits on the slider: a drum at the middle of its stop, a band at its frequency. */
+export function sourceSliderValue(channel: Pick<VisualizerChannel, 'source' | 'frequencyHz'>): number {
+  switch (channel.source) {
+    case 'kick': return LOW - SLIDER_STOP_OCTAVES / 2
+    case 'snare': return MIDDLE + SLIDER_STOP_OCTAVES / 2
+    case 'hat': return HIGH + 1.5 * SLIDER_STOP_OCTAVES
+    case 'band': {
+      const octave = Math.log2(channel.frequencyHz)
+      return octave <= MIDDLE ? octave : octave + SLIDER_STOP_OCTAVES
+    }
+  }
+}
+
+/**
+ * The source a slider position selects. A drum keeps the band's frequency
+ * the channel had, so the band comes back where it was; a band position
+ * gives its frequency, in whole Hz.
+ */
+export function sourceAtSlider(value: number, frequencyHz: number): Pick<VisualizerChannel, 'source' | 'frequencyHz'> {
+  const band = (octave: number) => ({
+    source: 'band' as const,
+    frequencyHz: Math.max(BEAT_FREQUENCY_MIN_HZ, Math.min(BEAT_FREQUENCY_MAX_HZ, Math.round(2 ** octave))),
+  })
+  if (value < LOW) return { source: 'kick', frequencyHz }
+  if (value <= MIDDLE) return band(value)
+  if (value < MIDDLE + SLIDER_STOP_OCTAVES) return { source: 'snare', frequencyHz }
+  if (value <= HIGH + SLIDER_STOP_OCTAVES) return band(value - SLIDER_STOP_OCTAVES)
+  return { source: 'hat', frequencyHz }
 }
