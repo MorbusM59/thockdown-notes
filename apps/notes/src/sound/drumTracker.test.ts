@@ -468,6 +468,52 @@ function kit(seconds: number, bpm: number, groove: Kit): { samples: Float32Array
   return { samples: out, kicks: within(played.kicks), snares: within(played.snares), hats: within(played.hats) }
 }
 
+/**
+ * What a song puts in the mids over a kit: a strummed chord on every eighth
+ * (sawtooth strings to 4kHz with a pick's click, each strum landing a little
+ * after the grid as a player's does) and a voice (noise between 300Hz and
+ * 3.5kHz in syllables of uneven length and loudness), neither reaching the
+ * hat's band. Added to `out` in place.
+ */
+function addBusyMids(out: Float32Array, bpm: number): void {
+  const rand = noise(21)
+  const pick = darkNoise(4000, brightNoise(800, 1, noise(23)))
+  const voice = darkNoise(3500, brightNoise(300, 1, noise(25)))
+  const eighth = 60 / bpm / 2
+  const chords = [[82, 123, 165, 207], [110, 165, 220, 277], [98, 147, 196, 247], [73, 110, 147, 185]]
+  for (let e = 0; e * eighth < out.length / RATE; e++) {
+    const t0 = e * eighth + 0.004 + 0.012 * Math.abs(rand())
+    const chord = chords[Math.floor(e / 8) % chords.length]
+    const gain = 0.12 + 0.05 * rand()
+    for (let i = 0; i < 0.6 * RATE; i++) {
+      const at = Math.round(t0 * RATE) + i
+      if (at >= out.length) break
+      const t = i / RATE
+      let s = 0
+      for (let n = 0; n < chord.length; n++) {
+        // Strummed: each string a few ms after the last.
+        const ts = t - 0.006 * n
+        if (ts < 0) continue
+        for (let h = 1; chord[n] * h < 4000; h++) s += Math.sin(2 * Math.PI * chord[n] * h * ts) / h
+      }
+      out[at] += gain * (0.25 * s * Math.min(1, t / 0.003) * Math.exp(-t / 0.25) + 0.6 * pick() * Math.exp(-t / 0.01))
+    }
+  }
+  // The voice: syllables 80-400ms long, each its own loudness, with breaths between phrases.
+  let t = 0
+  while (t < out.length / RATE) {
+    const length = 0.08 + 0.32 * Math.abs(rand())
+    const gain = (Math.floor(t / 4) % 2 === 0 ? 0.5 : 0) * (0.6 + 0.4 * Math.abs(rand()))
+    for (let i = 0; i < length * RATE; i++) {
+      const at = Math.round(t * RATE) + i
+      if (at >= out.length) break
+      const u = i / RATE
+      out[at] += gain * voice() * Math.min(1, u / 0.02) * Math.min(1, (length - u) / 0.03)
+    }
+    t += length + 0.03 * Math.abs(rand())
+  }
+}
+
 /** `play` and `score` for one drum of a kit: the share of its hits found, and the hits that matched none of them. */
 function scoreDrum(track: ReturnType<typeof kit>, drum: Drum, times: number[], options: PlayOptions = {}) {
   const { hits } = play({ samples: track.samples, kicks: times }, 0.5, options, drum)
@@ -508,6 +554,20 @@ describe('DrumTracker on snares and hats', () => {
     const strays = hits.filter((h) => h.at > 10 && h.at < 34 && h.response > 0.3 && !track.hats.some((t) => h.at >= t - EARLY_SEC && h.at <= t + LATE_SEC))
     expect(strays).toEqual([])
   })
+
+  it.each([
+    ['a rock beat at 110', 110, rock],
+    ['sixteenth hats at 124', 124, { kicks: [0, 4, 8, 12], snares: [4, 12], hats: [...Array(16).keys()] }],
+  ])('fires on every hat of %s under strummed guitars and a voice', (_name, bpm, groove) => {
+    const track = kit(40, bpm, groove)
+    addBusyMids(track.samples, bpm)
+    const free = track.hats.filter((h) => !track.snares.some((s) => h > s - 0.001 && h < s + SNARE_RING_SEC))
+    const { hits } = play({ samples: track.samples, kicks: free }, 0.5, {}, 'hat')
+    const { found } = score({ samples: track.samples, kicks: free }, hits, 10, 34, 0.3)
+    const strays = hits.filter((h) => h.at > 10 && h.at < 34 && h.response > 0.3 && !track.hats.some((t) => h.at >= t - EARLY_SEC && h.at <= t + LATE_SEC))
+    expect(found).toBeGreaterThan(0.9)
+    expect(strays).toEqual([])
+  }, 30_000)
 
   it('leaves the kicks alone: neither the snare nor the hat fires on a kick by itself', () => {
     const track = kit(40, 110, rock)

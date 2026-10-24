@@ -103,9 +103,11 @@ type BandSpec = readonly [number, number, number, number?]
 /**
  * How one drum shows in the bands. Its ONSET is the weighted geometric mean
  * of the `onset` bands' rises (weights summing to 1), and nothing where an
- * `exclude` band (its third number a LIMIT, not a weight) climbs too, which
- * says the sound is something else (`DrumTracker.settle`). Its STRENGTH is
- * the geometric mean of the first `strengthBands` of `onset`, in raw energy.
+ * `exclude` band climbs too far against the TOP onset band, which says the
+ * sound is something else (`DrumTracker.settle`; the exclude band's third
+ * number is the limit used until the track's own is learned, not a weight).
+ * Its STRENGTH is the geometric mean of the first `strengthBands` of `onset`,
+ * in raw energy.
  */
 interface VoiceSpec {
   onset: readonly BandSpec[]
@@ -136,6 +138,13 @@ interface VoiceSpec {
   envelopeHops: number
   strengthBands: number
   exclude: readonly BandSpec[]
+  /**
+   * The drum whose own onset has to confirm an exclusion (`DrumTracker.settle`):
+   * a sound coloured like what is excluded, but which that drum does not hear,
+   * is this drum with something else landing on it (a hat on a guitar's
+   * strum), not the excluded sound.
+   */
+  confirmedBy?: Drum
 }
 
 /** The half-life of a band's remembered peak rises, for normalising the next. */
@@ -206,6 +215,40 @@ const SHAPE_SHARE = 0.5
 const EXCLUDE_AFTER_HOPS = 10
 /** An excluded sound rings until its exclude band's level falls below this share of what it climbed to (-6dB). */
 const RING_SHARE = 0.25
+/**
+ * The colour histogram an exclusion's limit is learned from (`learnColour`):
+ * log10 of the exclude band's climb against the top onset band's, over
+ * LOWEST_COLOUR..HIGHEST_COLOUR in COLOUR_BINS. Below LOWEST_COLOUR (a
+ * thirtieth) the excluded band hardly moved, and every such hit is one class.
+ */
+const LOWEST_COLOUR = -1.5
+const HIGHEST_COLOUR = 3
+const COLOUR_BINS = 45
+/** Onset peaks below this share of the window's strong ones (its 90th percentile) say nothing about colour. */
+const COLOUR_FLOOR = 0.1
+/** The least colour peaks a window must hold before a limit is learned from it. */
+const COLOUR_MIN_PEAKS = 16
+/** A histogram peak this share of the highest counts as a class (`learnColour`). */
+const COLOUR_MODE_SHARE = 0.15
+/** Two classes closer than this, in decades of colour, are one class: no limit is learned. */
+const COLOUR_MIN_SEPARATION = 0.4
+/**
+ * How far past the limit, in decades, a sound may be coloured and still be
+ * this drum with something else landing on it (`settle`). A hat struck with a
+ * strum measured up to 1.3 decades past the limit; a voice's syllable on its
+ * own, 1.6 and more.
+ */
+const MIXTURE_DECADES = 1.4
+/** The share of the confirming drum's usual onset (its `shape`) that says it struck, within CONFIRM_HOPS either side. */
+const CONFIRM_SHARE = 0.3
+const CONFIRM_HOPS = 3
+/**
+ * The share of the track's usual TILT (the top onset band's climb over the
+ * lowest's) a mixed sound needs to be this drum: a sibilant or a pick's
+ * noise is a hat's colour in the low band but falls off well below a hat's
+ * top.
+ */
+const TILT_SHARE = 0.5
 /** How long the pattern remembers a position's strength, as a half-life. */
 const PATTERN_MEMORY_SEC = 30
 /**
@@ -245,10 +288,16 @@ const ALIGN_FEEDS = 60
  *   noise together; a hat has no body and a kick barely reaches the noise.
  *   Its strength is the body and the lower noise band: the top is where the
  *   hats are, and they would decide its strength where they coincide.
- * - HAT (and shaker, ride, any short bright tick): energy above 6kHz and
- *   little below, so it climbs in the top two bands, and a climb in the
- *   snare's noise band says the sound is a snare instead. On a snare the
- *   snare wins, so a hat on the backbeat is not seen there.
+ * - HAT (and shaker, ride, any short bright tick): energy above 6kHz, so it
+ *   climbs in the top two bands. What tells it from a snare is its COLOUR:
+ *   how far the band below (5.5kHz) climbs against the top one. A hat's
+ *   top is its loudest part and a snare's noise is flat or falls off, and
+ *   where the line between them lies is learned from each track
+ *   (`learnColour`), since a closed hat, an open hat, a ride and a shaker
+ *   each sit somewhere else. A sound past the line counts as a snare only
+ *   where the snare's own onset agrees, so a hat landing with a strum or a
+ *   chord stays a hat. On a snare the snare wins, so a hat on the backbeat
+ *   is not seen there.
  */
 const VOICES: Record<Drum, VoiceSpec> = {
   kick: {
@@ -273,7 +322,8 @@ const VOICES: Record<Drum, VoiceSpec> = {
     shapeShare: 0.25,
     envelopeHops: 2,
     strengthBands: 2,
-    exclude: [[1800, 0.8, 0.25, 2]],
+    exclude: [[5500, 1, 0.25, 2]],
+    confirmedBy: 'snare',
   },
 }
 
@@ -484,8 +534,17 @@ class Voice {
    */
   followed = false
 
-  /** Per hop, the onset bands' climb as energy per Hz, which an exclude band's is compared with. */
+  /** Per hop, the top onset band's climb as energy per Hz, which an exclude band's is compared with. */
   readonly density = new Float32Array(CAPACITY)
+  /** Per hop, the lowest onset band's climb as energy per Hz, which the top band's is compared with for the TILT (`TILT_SHARE`). */
+  readonly lowDensity = new Float32Array(CAPACITY)
+  /** Per hop, the onset before any exclusion, and its colour (log10 of the first exclude band's climb against `density`), for `learnColour`. */
+  readonly rawOnset = new Float32Array(CAPACITY)
+  readonly colour = new Float32Array(CAPACITY)
+  /** The colour (log10) past which a sound is excluded, as learned from the track; NaN until learned, when the spec's limit applies. */
+  split = NaN
+  /** The track's usual tilt of this drum's clean hits, NaN until learned. */
+  usualTilt = NaN
   /** Per hop, each exclude band's envelope level as energy per Hz. */
   readonly excludeLevel: Float32Array[]
   /** Per exclude band, the level an excluded sound climbed to while it still rings, 0 once it has died away (`DrumTracker.settle`). */
@@ -513,6 +572,8 @@ class Voice {
     this.strongHit = 0
     this.strongHitTime = 0
     this.ringing.fill(0)
+    this.split = NaN
+    this.usualTilt = NaN
   }
 }
 
@@ -727,12 +788,10 @@ export class DrumTracker {
     for (const voice of Object.values(this.voices)) {
       const { spec, onsetBands, excludeBands } = voice
       let onset = 1
-      let density = 1
       let low = 1
       let lowWeight = 0
       for (let k = 0; k < onsetBands.length; k++) {
         const weight = spec.onset[k][2]
-        density *= (this.rawRises[onsetBands[k]] / spec.onset[k][0]) ** weight
         onset *= (spec.raw ? this.rawRises[onsetBands[k]] : this.rises[onsetBands[k]]) ** weight
         if (k < spec.strengthBands) {
           // Strength is in the band's own energy, not normalised: it is
@@ -744,7 +803,11 @@ export class DrumTracker {
       }
       voice.onset[at] = onset
       voice.strength[at] = low ** (1 / lowWeight)
-      voice.density[at] = density
+      // The exclusion compares against the TOP band alone: a strum or a
+      // chord landing with a hat reaches the lower one, never the top.
+      const top = onsetBands.length - 1
+      voice.density[at] = this.rawRises[onsetBands[top]] / spec.onset[top][0]
+      voice.lowDensity[at] = this.rawRises[onsetBands[0]] / spec.onset[0][0]
       for (let k = 0; k < excludeBands.length; k++) voice.excludeLevel[k][at] = this.bands[excludeBands[k]].level / spec.exclude[k][0]
     }
     this.count++
@@ -765,17 +828,30 @@ export class DrumTracker {
    * against its level before the onset: a snare's noise is still there
    * that long after it struck, while a kick's beater click has gone, and a
    * voice or pad holding the band through the onset does not climb at all.
-   * Both as energy per Hz (a band's level over its centre, which with a
-   * constant Q is in proportion to its width), so noise with a flat
-   * spectrum, a snare's, climbs as far in the excluded band as in the
-   * voice's own, and a hat barely at all; a share of the voice's climb past
-   * the exclude band's `limit` is not this drum.
+   * It is compared with the TOP onset band's climb, the largest within the
+   * onset's peak reach (`peakHops`) so every hop of one sound is judged on
+   * that sound's whole climb, not on how far up it has got; both as energy
+   * per Hz (a band's level over its centre, which with a constant Q is in
+   * proportion to its width), so noise with a flat spectrum, a snare's,
+   * climbs as far in the excluded band as in the top one. The log10 of that
+   * share is the sound's COLOUR, and a colour past the voice's limit (the
+   * track's, `learnColour`, or the spec's until then) is not this drum --
+   * unless it is the drum with something else landing on it: a colour no
+   * further than MIXTURE_DECADES past the limit, which the `confirmedBy`
+   * drum does not hear and whose top end is this drum's (`TILT_SHARE`).
    */
   private settle(voice: Voice, index: number): void {
     const k = index - this.start
     if (k < 0) return
     const slot = (this.head + k) % CAPACITY
-    const density = voice.density[slot]
+    const around = (values: Float32Array, reach: number): number => {
+      let most = 0
+      for (let j = Math.max(0, k - reach); j <= Math.min(this.count - 1, k + reach); j++) most = Math.max(most, values[(this.head + j) % CAPACITY])
+      return most
+    }
+    const density = around(voice.density, this.peakHops)
+    voice.rawOnset[slot] = voice.onset[slot]
+    voice.colour[slot] = NaN
     // In a gap's silence, and within the reach a climb's start is looked for
     // after it, what the level climbed from is that silence: nothing there
     // can be told from what is excluded, so nothing there is accepted, and
@@ -785,11 +861,12 @@ export class DrumTracker {
       if (index >= this.resumedAt) {
         for (let e = 0; e < voice.excludeBands.length; e++) voice.ringing[e] = Math.max(voice.ringing[e], voice.excludeLevel[e][slot])
       }
+      voice.rawOnset[slot] = 0
       voice.onset[slot] = 0
       voice.strength[slot] = 0
       return
     }
-    let excluded = 1
+    let excluded = false
     for (let e = 0; e < voice.excludeBands.length; e++) {
       const levels = voice.excludeLevel[e]
       // The level it climbed from: the least over twice the envelope's span
@@ -798,9 +875,13 @@ export class DrumTracker {
       let before = Infinity
       for (let j = Math.max(0, k - 2 * ENVELOPE_HOPS); j <= k; j++) before = Math.min(before, levels[(this.head + j) % CAPACITY])
       const after = levels[(this.head + k + EXCLUDE_AFTER_HOPS) % CAPACITY]
-      const share = density > 0 ? Math.max(0, after - before) / density : Infinity
-      const limit = voice.spec.exclude[e][2]
-      if (density > 0 && share >= limit) voice.ringing[e] = Math.max(voice.ringing[e], after)
+      const colour = density > 0 ? Math.log10(Math.max(0, after - before) / density) : Infinity
+      if (e === 0) voice.colour[slot] = colour
+      const limit = e === 0 && !Number.isNaN(voice.split) ? voice.split : Math.log10(voice.spec.exclude[e][2])
+      const other = colour >= limit && !this.isMixture(voice, k, colour - limit)
+      // Only a sound of this drum's strength rings over it afterwards: the
+      // tail of a sound too faint to read as this drum cannot read as it either.
+      if (other && voice.strength[slot] >= voice.level) voice.ringing[e] = Math.max(voice.ringing[e], after)
       // While what was excluded still rings (its level falling from what it
       // climbed to, and not yet below RING_SHARE of it), nothing in it is
       // this drum either: in a snare's decaying noise, a short envelope's
@@ -809,11 +890,45 @@ export class DrumTracker {
       const now = levels[slot]
       if (now < RING_SHARE * voice.ringing[e]) voice.ringing[e] = 0
       const rings = voice.ringing[e] > 0 && now <= voice.ringing[e]
-      excluded *= rings ? 0 : Math.max(0, 1 - share / limit)
+      excluded ||= rings || other
     }
     // A sound excluded is not this drum at all, so it has no strength as one either.
-    voice.onset[slot] *= excluded
-    voice.strength[slot] *= excluded
+    if (excluded) {
+      voice.onset[slot] = 0
+      voice.strength[slot] = 0
+    }
+  }
+
+  /**
+   * Whether a sound at hop `k` (window-relative) coloured `past` decades
+   * beyond the voice's limit is this drum with something else landing on
+   * it, rather than what the limit excludes (`settle`).
+   */
+  private isMixture(voice: Voice, k: number, past: number): boolean {
+    const by = voice.spec.confirmedBy
+    if (by === undefined || past >= MIXTURE_DECADES) return false
+    const confirming = this.voices[by]
+    for (let j = Math.max(0, k - CONFIRM_HOPS); j <= Math.min(this.count - 1, k + CONFIRM_HOPS); j++) {
+      if (confirming.onset[(this.head + j) % CAPACITY] >= CONFIRM_SHARE * confirming.shape) return false
+    }
+    return Number.isNaN(voice.usualTilt) || this.tiltAt(voice, k) >= TILT_SHARE * voice.usualTilt
+  }
+
+  /**
+   * A sound's TILT at hop `k` (window-relative): its top onset band's climb
+   * over its lowest's, per Hz, each the largest within the onset's peak reach
+   * so the sound is judged whole (`settle`). Infinite where the lowest band
+   * did not climb at all.
+   */
+  private tiltAt(voice: Voice, k: number): number {
+    let top = 0
+    let low = 0
+    for (let j = Math.max(0, k - this.peakHops); j <= Math.min(this.count - 1, k + 1); j++) {
+      const slot = (this.head + j) % CAPACITY
+      top = Math.max(top, voice.density[slot])
+      low = Math.max(low, voice.lowDensity[slot])
+    }
+    return low > 0 ? top / low : Infinity
   }
 
   /** A voice's onset at absolute hop index `index`, 0 outside the window or before it has settled. */
@@ -950,6 +1065,74 @@ export class DrumTracker {
     const keep = 0.5 ** ((GRID_EVERY_HOPS * this.hopSec) / PATTERN_MEMORY_SEC)
     this.memoryWeight = keep * this.memoryWeight + 1
     for (const voice of Object.values(this.voices)) if (voice.followed) this.learnPattern(voice, keep)
+    for (const voice of Object.values(this.voices)) if (voice.followed && voice.excludeBands.length > 0) this.learnColour(voice)
+  }
+
+  /**
+   * Learns where a voice's exclusion lies in this track: the colour (log10
+   * of the first exclude band's climb against the top onset band's, `settle`)
+   * past which a sound is not this drum. A closed hat, an open hat, a ride
+   * and a shaker each have their own, and a fixed line either cut a track's
+   * open hats in half or let a bright snare through. The colours of the
+   * window's onset peaks (before any exclusion) form a histogram; this drum
+   * is the class with the LEAST climb below its top, so its mode is the
+   * lowest well-populated peak, and the limit is the least-populated point
+   * between it and the next peak above. With one class only, or two closer
+   * than COLOUR_MIN_SEPARATION, nothing here tells them apart and the
+   * spec's limit applies. The tilt of the clean hits below the limit
+   * becomes the usual tilt a mixed sound is measured by (`isMixture`).
+   */
+  private learnColour(voice: Voice): void {
+    const settled = this.count - voice.settleHops
+    const raw = (k: number) => (k >= 0 && k < settled ? voice.rawOnset[(this.head + k) % CAPACITY] : 0)
+    const peaks: number[] = []
+    for (let k = 0; k < settled; k++) {
+      const value = raw(k)
+      if (value <= 0) continue
+      let isPeak = true
+      for (let j = k - this.peakHops; j <= k + this.peakHops && isPeak; j++) if (j !== k && (raw(j) > value || (raw(j) === value && j < k))) isPeak = false
+      if (isPeak) peaks.push(k)
+    }
+    if (peaks.length < COLOUR_MIN_PEAKS) return
+    const values = peaks.map(raw).sort((a, b) => a - b)
+    const floor = COLOUR_FLOOR * values[Math.floor(0.9 * (values.length - 1))]
+    const strong = peaks.filter((k) => raw(k) >= floor)
+    const width = (HIGHEST_COLOUR - LOWEST_COLOUR) / COLOUR_BINS
+    const counts = new Float64Array(COLOUR_BINS)
+    let total = 0
+    for (const k of strong) {
+      const colour = voice.colour[(this.head + k) % CAPACITY]
+      // No climb at all in the excluded band is unambiguously this drum and
+      // says nothing about where the line lies; neither does no climb on top.
+      if (!Number.isFinite(colour)) continue
+      counts[Math.min(COLOUR_BINS - 1, Math.max(0, Math.floor((colour - LOWEST_COLOUR) / width)))]++
+      total++
+    }
+    if (total >= COLOUR_MIN_PEAKS) voice.split = this.colourSplit(counts, width)
+    const limit = Number.isNaN(voice.split) ? Math.log10(voice.spec.exclude[0][2]) : voice.split
+    const tilts = strong.filter((k) => voice.colour[(this.head + k) % CAPACITY] < limit).map((k) => this.tiltAt(voice, k)).filter(Number.isFinite)
+    if (tilts.length >= COLOUR_MIN_PEAKS / 2) voice.usualTilt = tilts.sort((a, b) => a - b)[tilts.length >> 1]
+  }
+
+  /** The colour between the lowest class of a colour histogram and the next (`learnColour`), or NaN where there is no second class. */
+  private colourSplit(counts: Float64Array, width: number): number {
+    // Smoothed with a triangle five bins wide, so a class is a peak and not every ripple in one.
+    const smooth = new Float64Array(COLOUR_BINS)
+    for (let b = 0; b < COLOUR_BINS; b++) for (let d = -2; d <= 2; d++) smooth[b] += (counts[b + d] ?? 0) * (3 - Math.abs(d))
+    const highest = Math.max(...smooth)
+    const modes: number[] = []
+    for (let b = 0; b < COLOUR_BINS && modes.length < 2; b++) {
+      if (smooth[b] >= COLOUR_MODE_SHARE * highest && (b === 0 || smooth[b] > smooth[b - 1]) && (b === COLOUR_BINS - 1 || smooth[b] >= smooth[b + 1])) modes.push(b)
+    }
+    if (modes.length < 2 || (modes[1] - modes[0]) * width < COLOUR_MIN_SEPARATION) return NaN
+    // The middle of the least-populated stretch between the two.
+    let first = modes[0] + 1
+    let last = first
+    for (let b = first; b < modes[1]; b++) {
+      if (smooth[b] < smooth[first]) first = last = b
+      else if (smooth[b] === smooth[first] && last === b - 1) last = b
+    }
+    return LOWEST_COLOUR + ((first + last) / 2 + 0.5) * width
   }
 
   /**
@@ -1168,6 +1351,8 @@ export class DrumTracker {
     if (!this.isLocked()) return 0
     const voice = this.voices[drum]
     voice.followed = true
+    // A drum whose exclusion another confirms needs that one's shape learned.
+    if (voice.spec.confirmedBy !== undefined) this.voices[voice.spec.confirmedBy].followed = true
     // A hop's time is the centre of the envelope it closes (`feed`), which
     // for a voice with a shorter envelope lies later in the hop.
     const shift = (ENVELOPE_HOPS - voice.spec.envelopeHops) / 2
