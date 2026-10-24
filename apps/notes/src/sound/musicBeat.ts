@@ -47,7 +47,7 @@
  */
 
 import { outputContext } from '@thockdown/soundscape/audioOutputBus'
-import { BEAT_FREQUENCY, type BeatChannel } from '../shared/beatSettings'
+import { BEAT_FREQUENCY, type VisualizerChannel as BeatChannel } from '@thockdown/look/visualizer'
 import { fadeCurve } from '../flow/flowTrail'
 import { KickTracker } from './kickTracker'
 import { appendBeatTrace, BeatTraceWindow, isBeatTraceOn } from './beatTrace'

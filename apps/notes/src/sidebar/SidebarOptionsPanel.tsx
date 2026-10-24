@@ -1,4 +1,4 @@
-import type { MouseEvent, MutableRefObject, PointerEvent, ReactNode } from 'react'
+import type { MouseEvent, MutableRefObject, PointerEvent } from 'react'
 import { IS_LINUX_DESKTOP } from '../shared/platform'
 import type * as React from 'react'
 import { useRef } from 'react'
@@ -14,6 +14,11 @@ import {
   type FlowSettings,
 } from '../shared/flowSettings'
 import {
+  BEAT_DELAY_MAX_MS,
+  BEAT_DELAY_MIN_MS,
+  type BeatSettings,
+} from '../shared/beatSettings'
+import {
   BEAT_FREQUENCY_MAX_HZ,
   BEAT_FREQUENCY,
   BEAT_FREQUENCY_MIN_HZ,
@@ -24,13 +29,11 @@ import {
   BEAT_FALL_MIN_SEC,
   BEAT_FALL_SHAPE_MAX,
   BEAT_FALL_SHAPE_MIN,
-  DEFAULT_BEAT_CHANNEL,
-  BEAT_DELAY_MAX_MS,
-  DEFAULT_BEAT_SETTINGS,
-  BEAT_DELAY_MIN_MS,
-  type BeatChannel,
-  type BeatSettings,
-} from '../shared/beatSettings'
+  DEFAULT_VISUALIZER_CHANNEL,
+  type VisualizerChannel,
+  type VisualizerSettings,
+} from '@thockdown/look/visualizer'
+import { StagedColorRow } from './StagedColorRow'
 import { exportSoundscapes, importSoundscapes } from '@thockdown/soundscape/soundscapeFileActions'
 import type { SoundscapePreferences } from '@thockdown/soundscape/soundscape'
 import {
@@ -586,6 +589,8 @@ export interface SidebarOptionsPanelProps {
   setSpeedReadingSettings: (updater: (previous: SpeedReadingSettings) => SpeedReadingSettings) => void
   beatSettings: BeatSettings
   setBeatSettings: (updater: (previous: BeatSettings) => BeatSettings) => void
+  visualizer: VisualizerSettings
+  setVisualizer: (updater: (previous: VisualizerSettings) => VisualizerSettings) => void
   reducedCaretAnimation: boolean
   setReducedCaretAnimation: (value: boolean) => void
   deferPreviewOnRapidInput: boolean
@@ -894,6 +899,8 @@ export function SidebarOptionsPanel({
   setSpeedReadingSettings,
   beatSettings,
   setBeatSettings,
+  visualizer,
+  setVisualizer,
   reducedCaretAnimation,
   setReducedCaretAnimation,
   deferPreviewOnRapidInput,
@@ -1017,11 +1024,11 @@ export function SidebarOptionsPanel({
   clearCaretColorArmTimer,
 }: SidebarOptionsPanelProps) {
     const outputDevice = useOutputDevice(beatSettings.enabled)
-    // One element's five beat sliders: the same five for every element that follows the music.
-    const renderBeatChannel = (key: 'caret' | 'shade', label: string, effect: string, extra?: ReactNode) => {
-      const channel = beatSettings[key]
-      const set = (patch: Partial<BeatChannel>) => setBeatSettings((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }))
-      const slider = (field: keyof BeatChannel, trackLabel: string, min: number, max: number, step: number, tooltipLabel: string, ariaName: string, digits?: number) => (
+    // One block's toggle and six sliders: the same for every block that follows the music.
+    const renderBeatChannel = (key: keyof VisualizerSettings, label: string, effect: string) => {
+      const channel: VisualizerChannel = visualizer[key]
+      const set = (patch: Partial<VisualizerChannel>) => setVisualizer((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }))
+      const slider = (field: Exclude<keyof VisualizerChannel, 'invert'>, trackLabel: string, min: number, max: number, step: number, tooltipLabel: string, ariaName: string, digits?: number) => (
         <CompactScrollbarSlider
           id={`beat-${key}-${field}`}
           min={min}
@@ -1031,18 +1038,28 @@ export function SidebarOptionsPanel({
           trackLabel={trackLabel}
           tooltipLabel={tooltipLabel}
           ariaLabel={`${label}: ${ariaName}`}
-          defaultValue={DEFAULT_BEAT_CHANNEL[field]}
+          defaultValue={DEFAULT_VISUALIZER_CHANNEL[field]}
           formatValue={digits === undefined ? undefined : (value) => value.toFixed(digits)}
           onCommit={(value) => set({ [field]: value })}
         />
       )
       return (
         <>
-          <OptionsSubsectionLabel>{label}</OptionsSubsectionLabel>
+          <div className="utility-setting-button-row" role="group" aria-label={`${label} controls`}>
+            <OptionsSubsectionLabel>{label}</OptionsSubsectionLabel>
+            <button
+              type="button"
+              className={`btn-icon${channel.invert ? ' is-active' : ''}`}
+              onClick={() => set({ invert: !channel.invert })}
+              aria-pressed={channel.invert}
+              data-tooltip={channel.invert ? `${label}: inverted, it rests at its full amount while music plays and a hit takes it away. Click to make a hit add it` : `${label}: a hit adds it. Click to invert, so it rests at its full amount while music plays and a hit takes it away`}
+            >
+              <span className="fa-solid fa-right-left" aria-hidden="true" />
+            </button>
+          </div>
           <div className="utility-setting-slider-stack" aria-label={`${label} settings`}>
-            <OptionsSliderRows rows={extra ? [3, 2, 2] : [2, 2, 2]}>
+            <OptionsSliderRows rows={[2, 2, 2]}>
               {slider('amount', 'amount', 0, 1, 0.01, `How far ${effect} at a full response; 0 leaves it as it is`, 'amount')}
-              {extra}
               {/* Frequency is heard on a log scale, so the slider moves in octaves (log2 Hz) and shows Hz.
                   Half an octave below the lowest band is one more position, BEAT, which follows
                   kick-drum hits rather than a band; the lower half of that stretch selects it. */}
@@ -1055,7 +1072,7 @@ export function SidebarOptionsPanel({
                 trackLabel="freq"
                 tooltipLabel="Hz: the centre of the band it listens to, from sub-bass to hi-hats. The lowest position, beat, follows kick-drum hits instead"
                 ariaLabel={`${label}: frequency in Hz, or beat`}
-                defaultValue={Math.log2(DEFAULT_BEAT_CHANNEL.frequencyHz)}
+                defaultValue={Math.log2(DEFAULT_VISUALIZER_CHANNEL.frequencyHz)}
                 formatValue={(value) => (value < BEAT_SLIDER_SPLIT ? 'beat' : Math.max(BEAT_FREQUENCY_MIN_HZ, Math.round(2 ** value)).toString())}
                 onCommit={(value) => set({
                   frequencyHz: value < BEAT_SLIDER_SPLIT ? BEAT_FREQUENCY : Math.max(BEAT_FREQUENCY_MIN_HZ, Math.round(2 ** value)),
@@ -3054,6 +3071,55 @@ export function SidebarOptionsPanel({
         </div>
       </AccordionSection>
 
+      <AccordionSection
+        className="sidebar-options-section-visualizer"
+        ariaLabel="Visualizer"
+        heading="Visualizer"
+        iconClass="fa-rectangle-list"
+        iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout. Switching the visualizer on and off, and its delay, are kept for every layout."
+      >
+<div className="utility-setting-button-row" role="group" aria-label="Visualizer controls">
+          <button
+            type="button"
+            className={`btn-icon${beatSettings.enabled ? ' is-active' : ''}`}
+            onClick={() => setBeatSettings((prev) => ({ ...prev, enabled: !prev.enabled }))}
+            aria-pressed={beatSettings.enabled}
+            data-tooltip={beatSettings.enabled ? 'Disable the visualizer' : 'Enable the visualizer: the caret, the active editor\'s shade and the box outlines follow the playing music'}
+          >
+            <span className="fa-solid fa-drum" aria-hidden="true" />
+          </button>
+        </div>
+        {beatSettings.enabled ? (<>
+          <div className="utility-setting-slider-stack" aria-label="Beat timing">
+            <OptionsSliderRows rows={[1]}>
+              <CompactScrollbarSlider
+                id="beat-delay"
+                min={BEAT_DELAY_MIN_MS}
+                max={BEAT_DELAY_MAX_MS}
+                step={5}
+                value={beatSettings.delayMsByDevice[outputDevice] ?? 0}
+                trackLabel="delay"
+                tooltipLabel={`ms the pulse is drawn later than the music, for ${outputDevice || 'this output device'}: kept per device and picked up again when you switch back. Raise it if the pulse leads the music, as a wireless headset often makes it`}
+                ariaLabel="Beat pulse: visual delay in milliseconds for this output device"
+                defaultValue={0}
+                formatValue={(value) => Math.round(value).toString()}
+                onCommit={(value) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [outputDevice]: Math.round(value) } }))}
+              />
+            </OptionsSliderRows>
+          </div>
+          <StagedColorRow
+            label="Visualizer colours"
+            targets={[
+              { id: 'shade', color: visualizer.shade.color, glyph: 'fa-solid fa-square', tooltip: 'Shade colour: click to apply the staged colour, hold right-click to copy it', onApply: (css) => setVisualizer((prev) => ({ ...prev, shade: { ...prev.shade, color: css } })) },
+              { id: 'outline', color: visualizer.outline.color, glyph: 'fa-regular fa-square', tooltip: 'Outline colour: click to apply the staged colour, hold right-click to copy it', onApply: (css) => setVisualizer((prev) => ({ ...prev, outline: { ...prev.outline, color: css } })) },
+            ]}
+          />
+          {renderBeatChannel('caret', 'Caret', 'the caret dips from its peak')}
+          {renderBeatChannel('shade', 'Shade', 'the active editor\'s inner shade shows')}
+          {renderBeatChannel('outline', 'Outline', 'the box outlines show')}
+        </>) : null}
+      </AccordionSection>
+
       <SoundscapeOptions
         preferences={soundscapePreferences}
         onChange={onSoundscapePreferencesChange}
@@ -3085,15 +3151,6 @@ export function SidebarOptionsPanel({
             data-tooltip={flowSettings.enabled ? 'Disable typing flow' : 'Enable typing flow: steady, fast typing builds a flow that the look, the reverb, the caret and its trail answer'}
           >
             <span className="fa-solid fa-water" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className={`btn-icon${beatSettings.enabled ? ' is-active' : ''}`}
-            onClick={() => setBeatSettings((prev) => ({ ...prev, enabled: !prev.enabled }))}
-            aria-pressed={beatSettings.enabled}
-            data-tooltip={beatSettings.enabled ? 'Disable beat pulse' : 'Enable beat pulse: the caret and the active editor\'s inner shade pulse with the bass of the playing music'}
-          >
-            <span className="fa-solid fa-drum" aria-hidden="true" />
           </button>
         </div>
         {flowSettings.enabled ? (<>
@@ -3177,40 +3234,6 @@ export function SidebarOptionsPanel({
               />
             </OptionsSliderRows>
           </div>
-        </>) : null}
-        {beatSettings.enabled ? (<>
-          <div className="utility-setting-slider-stack" aria-label="Beat timing">
-            <OptionsSliderRows rows={[1]}>
-              <CompactScrollbarSlider
-                id="beat-delay"
-                min={BEAT_DELAY_MIN_MS}
-                max={BEAT_DELAY_MAX_MS}
-                step={5}
-                value={beatSettings.delayMsByDevice[outputDevice] ?? 0}
-                trackLabel="delay"
-                tooltipLabel={`ms the pulse is drawn later than the music, for ${outputDevice || 'this output device'}: kept per device and picked up again when you switch back. Raise it if the pulse leads the music, as a wireless headset often makes it`}
-                ariaLabel="Beat pulse: visual delay in milliseconds for this output device"
-                defaultValue={0}
-                formatValue={(value) => Math.round(value).toString()}
-                onCommit={(value) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [outputDevice]: Math.round(value) } }))}
-              />
-            </OptionsSliderRows>
-          </div>
-          {renderBeatChannel('caret', 'Caret beat', 'the caret dips from its peak')}
-          {renderBeatChannel('shade', 'Shade beat', 'the active editor\'s inner shade deepens', (
-            <CompactScrollbarSlider
-              id="beat-shade-outline"
-              min={0}
-              max={1}
-              step={0.01}
-              value={beatSettings.outlineAmount}
-              trackLabel="outline"
-              tooltipLabel="How far the box outlines brighten at a full response, in step with the shade; 0 leaves them as they are"
-              ariaLabel="Shade beat: outline amount"
-              defaultValue={DEFAULT_BEAT_SETTINGS.outlineAmount}
-              onCommit={(value) => setBeatSettings((prev) => ({ ...prev, outlineAmount: value }))}
-            />
-          ))}
         </>) : null}
       </AccordionSection>
 

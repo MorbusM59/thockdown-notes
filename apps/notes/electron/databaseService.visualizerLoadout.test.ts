@@ -1,0 +1,74 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+import { DatabaseService } from './databaseService'
+import { NEUTRAL_BASE } from '@thockdown/look/presets'
+import type { UiLayoutLoadout } from '@thockdown/look/loadouts'
+import type { VisualizerSettings } from '@thockdown/look/visualizer'
+
+/**
+ * The visualizer's blocks are layout-scoped, so they ride the UiLayoutLoadout
+ * payload through the same two hand-maintained halves the caret's fields do
+ * (the normalizer, and the .tdl key list): see
+ * databaseService.caretLoadout.test.ts for why both are tested.
+ */
+describe('DatabaseService visualizer loadout', () => {
+  let dataRoot: string
+  let db: DatabaseService
+
+  // Every field different from NEUTRAL_BASE's, so a dropped one shows.
+  const visualizer: VisualizerSettings = {
+    caret: { amount: 0.3, frequencyHz: 440, octaves: 1.5, contrast: 0.4, fallSec: 0.5, fallShape: 1.5, invert: true },
+    shade: { amount: 0.7, frequencyHz: 0, octaves: 2, contrast: 0.2, fallSec: 0.3, fallShape: -1, invert: true, color: 'rgba(12, 34, 56, 0.5)' },
+    outline: { amount: 0.6, frequencyHz: 8000, octaves: 0.5, contrast: 0.6, fallSec: 0.1, fallShape: 2, invert: false, color: 'rgba(200, 100, 50, 0.25)' },
+  }
+
+  const activeLight = (service: DatabaseService): UiLayoutLoadout => {
+    const entry = service.listUiLoadouts().entries.find((row) => row.id > 0 && row.isActive)
+    if (!entry) throw new Error('no active light loadout')
+    return entry.payload
+  }
+
+  beforeEach(async () => {
+    dataRoot = mkdtempSync(path.join(tmpdir(), 'thockdown-visualizer-loadout-test-'))
+    db = new DatabaseService(dataRoot)
+    await db.initialize()
+  })
+
+  afterEach(() => {
+    db.close()
+    rmSync(dataRoot, { recursive: true, force: true })
+  })
+
+  it('round-trips the visualizer through a real restart', async () => {
+    db.updatePendingUiLoadout('light', { ...NEUTRAL_BASE, visualizer })
+    db.saveCustomUiLoadout('light')
+    db.close()
+    const reopened = new DatabaseService(dataRoot)
+    await reopened.initialize()
+    try {
+      expect(activeLight(reopened).visualizer).toEqual(visualizer)
+    } finally {
+      reopened.close()
+      db = reopened
+    }
+  })
+
+  it('carries the visualizer through a .tdl export/import cycle', async () => {
+    db.updatePendingUiLoadout('light', { ...NEUTRAL_BASE, visualizer })
+    db.saveCustomUiLoadout('light')
+    const tdl = db.buildTdlContent()
+    const freshRoot = mkdtempSync(path.join(tmpdir(), 'thockdown-visualizer-tdl-test-'))
+    const fresh = new DatabaseService(freshRoot)
+    await fresh.initialize()
+    try {
+      fresh.importTdlLoadouts(tdl)
+      const imported = fresh.listUiLoadouts().entries.filter((row) => row.id > 0).map((row) => row.payload.visualizer)
+      expect(imported).toContainEqual(visualizer)
+    } finally {
+      fresh.close()
+      rmSync(freshRoot, { recursive: true, force: true })
+    }
+  })
+})

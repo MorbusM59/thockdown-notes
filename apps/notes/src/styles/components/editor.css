@@ -518,15 +518,17 @@
   box-shadow: var(--box-shadow-active-editor);
 }
 
-/* The beat pulse's shade (Options > Tools; flow/useBeatFeedback.ts): a
-   stronger inner shade over the active editor's, whose opacity is the
-   music's bass (--beat-shade, set on this element alone). Present only on the
-   active editor and only while it follows the music (`html[data-beat-shade]`), and
+/* The visualizer's shade and outline blocks (Options > Visualizer;
+   flow/useBeatFeedback.ts). Each is a layer of its own over the active editor
+   whose opacity is its block's value (--beat-shade, --beat-outline, set on the
+   element alone), present only on the active editor and only while its block
+   follows the music (`html[data-beat-shade]`, `html[data-beat-outline]`), and
    only then promoted (will-change), so the per-frame change is a compositor
-   opacity rather than a repaint of the whole editor's area. It sits at the
-   shell level, outside the edit pane's texture mask, which is what keeps the
+   opacity rather than a repaint of the editor's area. Both sit at the shell
+   level, outside the edit pane's texture mask, which is what keeps the
    promotion from pulling the pane into a squashed overlap layer (the trap
-   .thockdown-block-caret's note describes). */
+   .thockdown-block-caret's note describes). Their colours are the layout's
+   (--beat-shade-color, --beat-outline-color). */
 .editor-beat-shade {
   display:        none;
   position:       absolute;
@@ -534,40 +536,29 @@
   border-radius:  inherit;
   pointer-events: none;
   z-index:        4;
+  box-shadow:
+    inset 0 0 4px var(--beat-shade-color),
+    inset 0 0 32px color-mix(in srgb, var(--beat-shade-color) 45%, transparent);
   opacity:        var(--beat-shade, 0);
-  /* Clips the outline copy to the editor's rounded shape. */
-  overflow:       hidden;
 }
 
-/* The box outlines, pulsing WITH the shade: a copy of the grid's outline
-   pattern inside the shade's layer, so it costs no layer of its own and no
-   repaint per frame. useBeatGridMirror keeps its box, tile and phase equal to
-   the real grid's (which sits in the edit pane, where a layer of its own
-   would pull the text into an overlap layer). Its own opacity is
-   --beat-outline, unset and so 1 today. To pulse it on its own: move it out
-   of the shade into a promoted sibling of its own (the shade's rules, minus
-   the box-shadow), and add an 'outline' channel to useBeatFeedback, which
-   writes --beat-outline exactly as the shade's writes --beat-shade. */
-/* The shade itself, at its own intensity, in the same layer as the outline. */
-.editor-beat-shade::before {
-  content:       '';
-  position:      absolute;
-  inset:         0;
-  border-radius: inherit;
-  box-shadow:    var(--box-shadow-beat-shade);
-  opacity:       var(--beat-shade-amount, 1);
-}
-
+/* The box outlines: a copy of the grid's outline pattern, whose box, tile and
+   phase useBeatGridMirror keeps equal to the real grid's (which sits in the
+   edit pane, where a layer of its own would pull the text into an overlap
+   layer). Clipped to the editor's rounded shape by its own radius. */
 .editor-beat-outline {
+  display:        none;
   position:       absolute;
   pointer-events: none;
-  opacity:        calc(var(--beat-outline-amount, 1) * var(--beat-outline, 1));
+  z-index:        4;
+  opacity:        var(--beat-outline, 0);
   background-image:
-    repeating-linear-gradient(to right, var(--color-beat-outline) 0, var(--color-beat-outline) 3px, transparent 3px, transparent var(--editor-cell-width)),
-    repeating-linear-gradient(to bottom, var(--color-beat-outline) 0, var(--color-beat-outline) 3px, transparent 3px, transparent var(--editor-line-height));
+    repeating-linear-gradient(to right, var(--beat-outline-color) 0, var(--beat-outline-color) 3px, transparent 3px, transparent var(--editor-cell-width)),
+    repeating-linear-gradient(to bottom, var(--beat-outline-color) 0, var(--beat-outline-color) 3px, transparent 3px, transparent var(--editor-line-height));
 }
 
-html[data-beat-shade] .editor-section-column.is-active .editor-beat-shade {
+html[data-beat-shade] .editor-section-column.is-active .editor-beat-shade,
+html[data-beat-outline] .editor-section-column.is-active .editor-beat-outline {
   display:     block;
   will-change: opacity;
 }

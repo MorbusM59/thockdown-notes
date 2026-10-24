@@ -293,8 +293,14 @@ export function SectionEditorArea({
 
   // The beat pulse's shade reads --beat-shade, set on it alone (flow/flowStyle.ts).
   const [beatShadeRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }))
-  // The box outlines pulse with the shade, as a copy inside its layer.
-  const beatGrid = useBeatGridMirror()
+  // The box outlines' copy, on a layer of its own beside the shade's
+  // (flow/useBeatGridMirror.ts); it reads --beat-outline.
+  const { gridRef: beatGridRef, mirrorRef: beatMirrorRef } = useBeatGridMirror()
+  const [beatOutlineRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }))
+  const setBeatOutlineEl = useCallback((el: HTMLDivElement | null) => {
+    beatOutlineRef(el)
+    beatMirrorRef(el)
+  }, [beatOutlineRef, beatMirrorRef])
   const setStageEl = useCallback((el: HTMLDivElement | null) => {
     sectionContainerRef.current = el
   }, [sectionContainerRef])
@@ -454,7 +460,7 @@ export function SectionEditorArea({
                   bindings={bindings}
                   adapterRef={adapterRef}
                   onSurfaceReady={onEditorSurfaceReady}
-                  gridOutlineRef={beatGrid.gridRef}
+                  gridOutlineRef={beatGridRef}
                   isSectionActive={isSectionActive}
                   isEditPaneVisible={!isPreviewMode}
                   noteId={activeNoteId}
@@ -555,9 +561,8 @@ export function SectionEditorArea({
             </div>
           </div>
         </div>
-        <div ref={beatShadeRef} className="editor-beat-shade" aria-hidden="true">
-          <div ref={beatGrid.mirrorRef} className="editor-beat-outline" />
-        </div>
+        <div ref={beatShadeRef} className="editor-beat-shade" aria-hidden="true" />
+        <div ref={setBeatOutlineEl} className="editor-beat-outline" aria-hidden="true" />
       </main>
       <aside className={`editor-scrollbar-slot${isChapterPanelOpen ? ' chapter-panel-is-open' : ''}${isPreviewMode ? ' is-preview-mode' : ''}`}>
         <div className="editor-scrollbar-slot-inner" aria-hidden={modeStatus ? undefined : true}>

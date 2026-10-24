@@ -36,6 +36,7 @@ import {
   DEFAULT_CUSTOM_DARK,
 } from '@thockdown/look/presets';
 import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '@thockdown/look/glaze';
+import { defaultVisualizer, sanitizeVisualizer } from '@thockdown/look/visualizer';
 import {
   DEFAULT_CUSTOM_CURSOR_SETTINGS,
   CURSOR_DOT_COUNT_MIN, CURSOR_DOT_COUNT_MAX,
@@ -208,6 +209,7 @@ const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
   caretAnimationDurationMs: DEFAULT_CARET_SETTINGS.animationDurationMs,
   caretFrameDurationMs: DEFAULT_CARET_SETTINGS.frameDurationMs,
   caretEffectStrengthPercent: DEFAULT_CARET_SETTINGS.effectStrengthPercent,
+  visualizer: defaultVisualizer(false),
 };
 
 type SqliteDatabase = import('better-sqlite3').Database;
@@ -590,6 +592,9 @@ export function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null
     caretAnimationDurationMs: clampInteger(source.caretAnimationDurationMs, CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS, DEFAULT_UI_LAYOUT_LOADOUT.caretAnimationDurationMs),
     caretFrameDurationMs: clampInteger(source.caretFrameDurationMs, CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS, DEFAULT_UI_LAYOUT_LOADOUT.caretFrameDurationMs),
     caretEffectStrengthPercent: clampInteger(source.caretEffectStrengthPercent, CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT, DEFAULT_UI_LAYOUT_LOADOUT.caretEffectStrengthPercent),
+    // A layout saved before the visualizer existed gets the defaults for its
+    // own inversion (its colours are picked before the theme's invert).
+    visualizer: sanitizeVisualizer(source.visualizer, (source.filterInvert ?? 0) > 0.5),
   };
 }
 
@@ -622,7 +627,7 @@ const TDL_SCALAR_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
 // Keys whose values are nested objects; they're emitted as inline JSON when
 // they differ from NEUTRAL_BASE (DEFAULT_CUSTOM_LIGHT).
 const TDL_OBJECT_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
-  'glaze', 'highlightColors', 'editorTextColors', 'textureMaterials',
+  'glaze', 'highlightColors', 'editorTextColors', 'textureMaterials', 'visualizer',
 ];
 
 /** Build the override fragment of one .tdl line against NEUTRAL_BASE. */

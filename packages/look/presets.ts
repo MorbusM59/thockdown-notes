@@ -16,6 +16,7 @@ import { DEFAULT_CARET_SETTINGS } from './caretSettings';
 import type { UiLayoutLoadout } from './loadouts';
 import { deriveFlowTrail, deriveLightFlowTrail } from './flowColor';
 import { sceneOf } from './scene';
+import { defaultVisualizer } from './visualizer';
 
 type PartialTextureMaterialSettings = Omit<Partial<TextureMaterialSettings>, 'color'> & {
   color?: Partial<TextureColorHsva>;
@@ -58,6 +59,17 @@ function mergeTextureMaterialSettings(
 // theme a brighter, glowier version of it as seen through its own scene.
 // Stored on the preset, so the colour picker shows and edits what the preset
 // actually uses.
+/**
+ * The colours a preset leaves unset that follow from it: the flow trail's
+ * from the grid, and the visualizer's from whether the layout is inverted
+ * (a preset that names its own visualizer keeps it).
+ */
+function withDerivedColors(loadout: UiLayoutLoadout): UiLayoutLoadout {
+  return withFlowTrail(loadout.visualizer === NEUTRAL_BASE.visualizer
+    ? { ...loadout, visualizer: defaultVisualizer(loadout.filterInvert > 0.5) }
+    : loadout);
+}
+
 function withFlowTrail(loadout: UiLayoutLoadout): UiLayoutLoadout {
   if (loadout.highlightColors.flowTrail) return loadout;
   const flowTrail = loadout.filterInvert > 0
@@ -67,7 +79,7 @@ function withFlowTrail(loadout: UiLayoutLoadout): UiLayoutLoadout {
 }
 
 function buildPreset(overrides: UiLayoutLoadoutOverrides): UiLayoutLoadout {
-  return withFlowTrail({
+  return withDerivedColors({
     ...NEUTRAL_BASE,
     ...overrides,
     glaze: {
@@ -183,13 +195,14 @@ export const NEUTRAL_BASE: UiLayoutLoadout = {
   caretAnimationDurationMs: DEFAULT_CARET_SETTINGS.animationDurationMs,
   caretFrameDurationMs: DEFAULT_CARET_SETTINGS.frameDurationMs,
   caretEffectStrengthPercent: DEFAULT_CARET_SETTINGS.effectStrengthPercent,
+  visualizer: defaultVisualizer(false),
 };
 
-export const DEFAULT_CUSTOM_LIGHT: UiLayoutLoadout = withFlowTrail({
+export const DEFAULT_CUSTOM_LIGHT: UiLayoutLoadout = withDerivedColors({
   ...NEUTRAL_BASE,
 });
 
-export const DEFAULT_CUSTOM_DARK: UiLayoutLoadout = withFlowTrail({
+export const DEFAULT_CUSTOM_DARK: UiLayoutLoadout = withDerivedColors({
   ...NEUTRAL_BASE,
   filterInvert: 1,
 });

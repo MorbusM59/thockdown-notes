@@ -261,16 +261,19 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - **look**, **reverb** and **trail** set how strongly each answers, and **amp** how strongly playing music's EQ does.
 - While you type, the caret stops blinking and holds steady; when you stop, it eases back into its blink.
 
-### [Beat Pulse](#beat-pulse)
+### [Visualizer](#visualizer)
 
 > **Where?**
-> Settings panel → Tools.
+> Settings panel → Visualizer.
 
-*The caret and the active editor's inner shade follow the bass of the music you are playing.*
+*The caret, the active editor's shade and the box outlines follow the music you are playing.*
 
-- While the caret follows the music it stops blinking and holds steady, and the music dips it; the shade deepens with it.
-- Each has its own **amount**; its **freq** and **width**, the band of the music it listens to (the lowest freq, **beat**, follows the kick drum instead); and **contrast**, how far the band must rise above the music around it before it responds; and **fall** and **shape**, how a peak falls away after a hit. The shade also has **outline**, how far the box outlines brighten in step with it. It adjusts itself to each track and to your volume, and starts a few seconds into a track or after a jump.
-- **delay** draws the pulse later (or, below 0, earlier) if it runs ahead of what you hear, as wireless headphones often make it. It is remembered for each output device and comes back when you switch to it again.
+- The drum button switches it on for every layout, and **delay** draws it later (or, below 0, earlier) if it runs ahead of what you hear, as wireless headphones often make it. The delay is remembered for each output device.
+- Everything else belongs to the layout, so each layout can have its own visualizer.
+- Caret, shade and outline are three separate blocks. While the caret follows the music it stops blinking and holds steady, and the music dips it.
+- Each block has its own **amount**; its **freq** and **width**, the band of the music it listens to (the lowest freq, **beat**, follows the kick drum instead); **contrast**, how far the band must rise above the music around it before it responds; and **fall** and **shape**, how a peak falls away after a hit.
+- The arrows button inverts a block: it rests at its full amount while music plays and a hit takes it away.
+- The shade's and the outline's colours are set with the swatches above the blocks, the same way as the cursor's and caret's.
 - It switches itself off while nothing is playing, and with Reduce visual effects.
 
 ### [Speed Reading](#speed-reading)

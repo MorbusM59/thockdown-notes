@@ -136,6 +136,7 @@ import { DEFAULT_SPEED_READING_SETTINGS, sanitizeSpeedReadingSettings, type Spee
 import { onSpeedReadingSettingsCommit, setSpeedReadingSettings as applySpeedReadingSettings } from './speedReading/speedReadingStore'
 import { useBeatFeedback } from './flow/useBeatFeedback'
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings, type BeatSettings } from './shared/beatSettings'
+import { defaultVisualizer, sanitizeVisualizer, type VisualizerSettings } from '@thockdown/look/visualizer'
 import { DEBUG_TAG_NAME, normalizeTagName } from './shared/tags'
 import { EditorSection } from './editorSection/EditorSection'
 import type { EscapeMenuContribution } from './escapeMenu/escapeMenuContract'
@@ -872,6 +873,7 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     caretAnimationDurationMs: clamp(Math.round(toFiniteNumber(source.caretAnimationDurationMs, DEFAULT_CARET_SETTINGS.animationDurationMs)), CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS),
     caretFrameDurationMs: clamp(Math.round(toFiniteNumber(source.caretFrameDurationMs, DEFAULT_CARET_SETTINGS.frameDurationMs)), CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS),
     caretEffectStrengthPercent: clamp(Math.round(toFiniteNumber(source.caretEffectStrengthPercent, DEFAULT_CARET_SETTINGS.effectStrengthPercent)), CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT),
+    visualizer: sanitizeVisualizer(source.visualizer, toFiniteNumber(source.filterInvert, 0) > 0.5),
   }
 }
 
@@ -1511,6 +1513,8 @@ function App() {
   const [caretAnimationDurationMs, setCaretAnimationDurationMs] = useState(DEFAULT_CARET_SETTINGS.animationDurationMs)
   const [caretFrameDurationMs, setCaretFrameDurationMs] = useState(DEFAULT_CARET_SETTINGS.frameDurationMs)
   const [caretEffectStrengthPercent, setCaretEffectStrengthPercent] = useState(DEFAULT_CARET_SETTINGS.effectStrengthPercent)
+  // The visualizer's blocks, part of the layout (Options > Visualizer).
+  const [visualizer, setVisualizer] = useState<VisualizerSettings>(() => defaultVisualizer(false))
   // Staged HSVA for the Caret section's own H/S/V/A drag controls -- a closed
   // loop over that section's two targets (outline, halo), exactly like
   // cursorColorHsva is for the Mouse section's four. See that state's comment.
@@ -2207,7 +2211,7 @@ function App() {
   const [audioSpatial, setAudioSpatial] = useState(0)
   const [reduceVisualEffects, setReduceVisualEffects] = useState(false)
   // A pulse is exactly the kind of visual effect that flag turns off.
-  useBeatFeedback(beatSettings, reduceVisualEffects)
+  useBeatFeedback(beatSettings, visualizer, reduceVisualEffects)
   // The setting lives in a module store (the preview's img component and the
   // export read it there); App subscribes so the persisted snapshot follows it.
   const allowRemoteImages = useRemoteImagesAllowed()
@@ -2680,6 +2684,7 @@ function App() {
       caretAnimationDurationMs,
       caretFrameDurationMs,
       caretEffectStrengthPercent,
+      visualizer,
     }
   }, [
     borderRadiusRegularPx,
@@ -2740,6 +2745,7 @@ function App() {
     caretAnimationDurationMs,
     caretFrameDurationMs,
     caretEffectStrengthPercent,
+    visualizer,
   ])
 
   const applyUiLayoutLoadout = useCallback((loadoutInput: unknown) => {
@@ -2940,6 +2946,7 @@ function App() {
       Math.round(loadout.caretEffectStrengthPercent ?? DEFAULT_CARET_SETTINGS.effectStrengthPercent),
       CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT,
     ))
+    setVisualizer(loadout.visualizer)
   }, [applyDarkModePreset])
 
   const capturedUiLayoutLoadout = useMemo(
@@ -9634,6 +9641,8 @@ ${markdownHtml}
                         speedReadingSettings={speedReadingSettings}
                         setSpeedReadingSettings={setSpeedReadingSettings}
                         beatSettings={beatSettings}
+                        visualizer={visualizer}
+                        setVisualizer={setVisualizer}
                         setBeatSettings={setBeatSettings}
                         reducedCaretAnimation={reducedCaretAnimation}
                         setReducedCaretAnimation={setReducedCaretAnimation}
