@@ -3141,7 +3141,7 @@ export function SidebarOptionsPanel({
           <OptionsSubsectionLabel>Flow</OptionsSubsectionLabel>
           <div className="utility-setting-slider-stack" aria-label="Typing flow settings">
             {/* How the trail fades (fade, shape) and how flow is answered (look, reverb, trail, amp). How the meter itself moves is fixed (shared/flowSettings.ts). */}
-            <OptionsSliderRows rows={[2, 2, 1]}>
+            <OptionsSliderRows rows={[2, 2, 2]}>
               <CompactScrollbarSlider
                 id="flow-fade-time"
                 min={FLOW_FADE_MAX_TIME_MIN}
