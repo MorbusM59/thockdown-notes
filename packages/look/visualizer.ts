@@ -56,12 +56,12 @@ export interface VisualizerColorChannel extends VisualizerChannel {
 /**
  * The shade's geometry, which does not follow the music: only its opacity
  * does. It is drawn as two inset shadows (editor.css's `.editor-beat-shade`),
- * a crisp edge and a soft body.
+ * a narrow edge (an eighth of the blur) and a soft body.
  */
 export interface VisualizerShadeChannel extends VisualizerColorChannel {
   /** How far, in px, the shade's solid part reaches in from the editor's edges (both shadows' spread radius). */
   spreadPx: number
-  /** How soft its edge is, in px: the soft body's blur radius; the crisp edge's is an eighth of it. */
+  /** How soft its edge is, in px: the soft body's blur radius; the narrow edge's is an eighth of it. */
   blurPx: number
 }
 
@@ -181,8 +181,8 @@ function sanitizeShadeChannel(input: unknown, d: VisualizerShadeChannel): Visual
   const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<string, unknown>>
   return {
     ...sanitizeColorChannel(input, d),
-    spreadPx: bounded(source.spreadPx, 0, SHADE_SPREAD_MAX_PX, d.spreadPx),
-    blurPx: bounded(source.blurPx, 0, SHADE_BLUR_MAX_PX, d.blurPx),
+    spreadPx: Math.round(bounded(source.spreadPx, 0, SHADE_SPREAD_MAX_PX, d.spreadPx)),
+    blurPx: Math.round(bounded(source.blurPx, 0, SHADE_BLUR_MAX_PX, d.blurPx)),
   }
 }
 

@@ -42,6 +42,12 @@ it('reads a saved fall time as the mass that falls as long', () => {
   expect(fallOf(0.5).fallShape).toBe(0)
 })
 
+it('gives a save without the shade geometry its defaults, and bounds and rounds what it has', () => {
+  expect(sanitizeVisualizer({ shade: {} }, false).shade).toMatchObject({ spreadPx: 0, blurPx: 32 })
+  expect(sanitizeVisualizer({ shade: { spreadPx: 14.7, blurPx: 900 } }, false).shade).toMatchObject({ spreadPx: 15, blurPx: 200 })
+  expect(sanitizeVisualizer({ shade: { spreadPx: -5, blurPx: 'x' } }, false).shade).toMatchObject({ spreadPx: 0, blurPx: 32 })
+})
+
 describe('the source slider', () => {
   it('puts the kick at the left end, the snare at the centre and the hat at the right end', () => {
     const at = (source: 'kick' | 'snare' | 'hat') => sourceSliderValue({ source, frequencyHz: 100 })
