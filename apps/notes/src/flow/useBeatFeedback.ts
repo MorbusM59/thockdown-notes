@@ -18,7 +18,7 @@
  * effect subscribes nothing and keeps its ordinary look; the `<html>`
  * attributes change once when a block is switched, never per frame. The two
  * coloured blocks' colours are static between edits and are set once on
- * `<html>` (`--beat-shade-color`, `--beat-outline-color`).
+ * `<html>` (`--beat-shade-color`, `--beat-shade-spread`, `--beat-shade-blur`, `--beat-outline-color`).
  */
 
 import { useEffect, useRef } from 'react'
@@ -73,12 +73,16 @@ export function useBeatFeedback(settings: BeatSettings, visualizer: VisualizerSe
   useBeatBlock('shade', visualizer.shade, on)
   useBeatBlock('outline', visualizer.outline, on)
   const shadeColor = visualizer.shade.color
+  const shadeSpreadPx = visualizer.shade.spreadPx
+  const shadeBlurPx = visualizer.shade.blurPx
   const outlineColor = visualizer.outline.color
   useEffect(() => {
     const root = document.documentElement.style
     root.setProperty('--beat-shade-color', shadeColor)
+    root.setProperty('--beat-shade-spread', `${shadeSpreadPx}px`)
+    root.setProperty('--beat-shade-blur', `${shadeBlurPx}px`)
     root.setProperty('--beat-outline-color', outlineColor)
-  }, [shadeColor, outlineColor])
+  }, [shadeColor, shadeSpreadPx, shadeBlurPx, outlineColor])
   const device = useOutputDevice(on)
   const delayMs = settings.delayMsByDevice[device] ?? 0
   useEffect(() => setBeatVisualDelaySec(delayMs / 1000), [delayMs])
