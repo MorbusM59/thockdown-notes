@@ -137,6 +137,8 @@ Order of operations, cheapest and most decisive first:
 
 **Smoke-load after touching hook-level code.** `tsc` does not catch temporal-dead-zone ordering (a `const` ref declared after the callback that closes over it), and the symptom is a blank app, not a type error. Load the app once before handing it back.
 
+**Smoke-open Options in the REAL Electron app after touching `SidebarOptionsPanel.tsx`** — this has blanked the window several times. `OptionsSliderRows` throws when its `rows` list does not add up to its sliders, and the throw takes down the whole app the moment Options opens; neither `tsc` nor the test suite renders the panel, and the browser build (`dev:browser`) omits desktop-only sections, so both look green. The usual cause is a find-and-replace of a `rows={[...]}` literal that also matched another section's identical list: edit that prop by its line, never by a text match that is not unique in the file. A cloud session can run the real app headless: `npx vite build` in `apps/notes`, then Playwright's `_electron.launch({ executablePath: <repo>/node_modules/electron/dist/electron, args: ['--no-sandbox', '.'] })` under `xvfb-run -a`, click the `[data-tooltip*="ptions"]` button, and fail on any `pageerror`.
+
 ## README.md
 Keep it barebones: version, install instructions, per-OS build instructions, and release-artifact layout only. Anything else (usage, features) belongs in `helpGuideContent.ts`, referenced from README, not duplicated into it.
 
