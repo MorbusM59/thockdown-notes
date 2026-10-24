@@ -542,6 +542,19 @@ describe('DrumTracker on snares and hats', () => {
   })
 })
 
+describe('DrumTracker on identical hits', () => {
+  it('pulses identical kicks of a syncopated groove identically, wherever in the bar they land', () => {
+    // A slow groove whose period is no whole number of hops, so each slot's
+    // memory smears across neighbouring bins by a different amount.
+    const track = drums(60, 79.2, { kicks: () => [[0, 1], [3, 1], [6, 1], [10, 1], [11, 1]], snares: [4, 12] })
+    const responses = play(track, 0.5).hits.filter((h) => h.at > 20).map((h) => h.response).sort((a, b) => a - b)
+    expect(responses.length).toBeGreaterThan(50)
+    // A kick landing on the bass note's rise climbs less above it, which a
+    // steady measurement cannot hide, but no slot's memory may pull the rest down.
+    expect(responses.filter((r) => r > 0.99).length / responses.length).toBeGreaterThan(0.75)
+  })
+})
+
 describe('DrumCursor', () => {
   it('finds the hits of a new tracker at once after reading an older one, as a reader kept across a restart does', () => {
     const track = house(60, 124)

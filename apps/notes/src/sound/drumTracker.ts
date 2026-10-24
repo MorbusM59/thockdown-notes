@@ -65,9 +65,10 @@
  *    `PEAK_SEC` either side) on a slot, with the low-band strength the slot
  *    usually carries (`PRESENCE_SHARE`) and an onset shaped like the
  *    track's kick (`SHAPE_SHARE`), so a breakdown's bass or clap landing on
- *    a kick slot does not pass. It reports its slot's remembered strength
- *    when it is within `STEADY_DB` of it, so identical kicks pulse
- *    identically, and otherwise the lesser of the two.
+ *    a kick slot does not pass. It reports the drum's full-hit strength
+ *    (its strongest slot's) when within `STEADY_DB` of it, so identical
+ *    kicks pulse identically wherever in the bar they land, and otherwise
+ *    the lesser of the two.
  *
  * A hit's response is its strength in dB against the window's strong hits
  * (`TOP_SHARE` of them), over a floor `contrast` sets: contrast 0 shows
@@ -179,10 +180,10 @@ const SLOT_SHARE = 0.2
 /** An onset at a slot is a kick when its strength is this share of the slot's remembered strength. */
 const PRESENCE_SHARE = 0.35
 /**
- * A hit within this many dB of its slot's remembered strength is reported AT
- * that strength, so identical kicks pulse identically despite the measurement
- * noise of a few dB; one further off (a ghost note, a breakdown's bass or
- * clap landing on a kick slot) is reported at the lesser of the two.
+ * A hit within this many dB of the drum's full hit (its strongest remembered
+ * slot) is reported AT that strength, so identical hits pulse identically
+ * despite the measurement noise of a few dB, wherever in the bar they land;
+ * one further off (a ghost note) is reported at the lesser of the two.
  */
 const STEADY_DB = 2
 /**
@@ -465,6 +466,8 @@ class Voice {
   readonly onsetMemory = new Float32Array(PATTERN_BINS)
   /** The onset of the bar's strongest remembered slot: what this drum looks like in this track. */
   shape = 0
+  /** The strength of the bar's strongest remembered slot: how strong this drum's full hit is in this track. */
+  level = 0
   strongHit = 0
   /** The media time `strongHit` was last raised at, for its decay. */
   strongHitTime = 0
@@ -502,6 +505,7 @@ class Voice {
     this.onsetMemorySum.fill(0)
     this.onsetMemory.fill(0)
     this.shape = 0
+    this.level = 0
     this.strongHit = 0
     this.strongHitTime = 0
     this.ringing.fill(0)
@@ -992,6 +996,7 @@ export class DrumTracker {
     // pattern from the first update rather than ramping up from nothing over
     // PATTERN_MEMORY_SEC, which made every onset at a slot pass as present.
     let shape = 0
+    let level = 0
     for (let b = 0; b < PATTERN_BINS; b++) {
       voice.slotOnset[b] = matches[b] > 0 ? onsetSum[b] / matches[b] : 0
       voice.slotStrength[b] = matches[b] > 0 ? strengthSum[b] / matches[b] : 0
@@ -1003,8 +1008,10 @@ export class DrumTracker {
       voice.onsetMemorySum[b] = Math.max(keep * voice.onsetMemorySum[b] + voice.slotOnset[b], voice.slotOnset[b] * this.memoryWeight)
       voice.onsetMemory[b] = voice.onsetMemorySum[b] / this.memoryWeight
       shape = Math.max(shape, voice.onsetMemory[b])
+      level = Math.max(level, voice.slotMemory[b])
     }
     voice.shape = shape
+    voice.level = level
   }
 
   /**
@@ -1097,8 +1104,14 @@ export class DrumTracker {
     // fraction of one.
     const measured = this.strengthAt(voice, index)
     if (measured < PRESENCE_SHARE * remembered || onset < voice.spec.shapeShare * voice.shape) return 0
-    // Never more than the slot usually carries, never more than was measured.
-    return Math.abs(10 * Math.log10(measured / remembered)) <= STEADY_DB ? remembered : Math.min(measured, remembered)
+    // Never more than the drum's full hit, never more than was measured.
+    // Measured against the drum's FULL hit, never its slot's: a slot's
+    // memory is smeared across neighbouring bins by a grid a fraction of a
+    // hop off, so in a syncopated groove some slots remember far less than
+    // the identical hits that land on them, and capping at the slot pulsed
+    // the same hit weaker for where in the bar it fell.
+    const level = voice.level
+    return Math.abs(10 * Math.log10(measured / level)) <= STEADY_DB ? level : Math.min(measured, level)
   }
 
   /** True when a voice's onset at `index` is the largest within a sixteenth's half either side (ties to the earlier). */
