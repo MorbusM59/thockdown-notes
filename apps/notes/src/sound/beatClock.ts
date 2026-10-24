@@ -13,11 +13,22 @@
  * - the PERIOD, toward the grid's, with a time constant of `TEMPO_TAU_SEC`.
  *   A long compilation track changes tempo between its pieces, and the
  *   tracker's grid (read from the ten seconds around the listener) follows
- *   each piece; the clock follows the grid.
- * - the PHASE, toward the grid's beat, by its error wrapped to half a beat
+ *   each piece; the clock follows the grid. It follows it in the clock's
+ *   own OCTAVE: the grid's period is first doubled or halved until it is
+ *   within half an octave of the clock's. The tracker can read one passage
+ *   at 79 beats a minute and the next at 158 (a song whose hats run in
+ *   eighths at one tempo and its snare on two and four at the other), and
+ *   both are the same music; a caret that halved its pace on such a flip
+ *   showed the tracker's doubt rather than the music. A real change of
+ *   tempo between pieces moves by less than half an octave, or lands on
+ *   a pace that fits the new piece as well at the octave the clock keeps.
+ * - the PHASE, toward the grid's beats, by its error wrapped to half a beat
  *   either way, with a time constant of `PHASE_TAU_SEC`, and never by more
  *   than `MAX_PHASE_RATE` of the clock's own advance, so a beat is never
- *   shortened or lengthened by more than that share while it re-locks.
+ *   shortened or lengthened by more than that share while it re-locks. The
+ *   error is measured in seconds against the finer of the two periods: a
+ *   clock at half the grid's pace may beat on any of its beats, and one at
+ *   twice its pace on every other.
  *
  * With no grid in force (the tracker unlocked through a break) the clock runs
  * on at its last period and phase, so a fill or a break is carried through on
@@ -43,6 +54,11 @@ const MAX_STEP_SEC = 0.5
 /** `x` wrapped into -0.5..0.5. */
 function wrapHalf(x: number): number {
   return x - Math.round(x)
+}
+
+/** `period` doubled or halved until it is within half an octave of `reference`. */
+function inOctaveOf(period: number, reference: number): number {
+  return period * 2 ** Math.round(Math.log2(reference / period))
 }
 
 export class BeatClock {
@@ -92,13 +108,17 @@ export class BeatClock {
       return
     }
     if (Number.isNaN(this.periodSec) || Number.isNaN(this.beats) || !(dt > 0 && dt <= MAX_STEP_SEC)) return
-    if (grid) this.periodSec += (gridPeriodSec - this.periodSec) * (1 - Math.exp(-dt / TEMPO_TAU_SEC))
+    if (grid) this.periodSec += (inOctaveOf(gridPeriodSec, this.periodSec) - this.periodSec) * (1 - Math.exp(-dt / TEMPO_TAU_SEC))
     const step = dt / this.periodSec
     let correction = 0
     if (grid && this.seated) {
-      const error = wrapHalf((time - gridBeatTime) / gridPeriodSec - (this.beats + step))
+      // Where the clock's beat falls against the grid's beats, in seconds,
+      // wrapped to half the finer of the two periods.
+      const fine = Math.min(this.periodSec, gridPeriodSec)
+      const clockBeatTime = time - (this.beats + step - Math.floor(this.beats + step)) * this.periodSec
+      const errorSec = wrapHalf((clockBeatTime - gridBeatTime) / fine) * fine
       const limit = MAX_PHASE_RATE * step
-      correction = Math.max(-limit, Math.min(limit, error * (1 - Math.exp(-dt / PHASE_TAU_SEC))))
+      correction = Math.max(-limit, Math.min(limit, (errorSec / this.periodSec) * (1 - Math.exp(-dt / PHASE_TAU_SEC))))
     }
     this.beats += step + correction
     this.time = time

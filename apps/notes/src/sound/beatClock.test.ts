@@ -71,16 +71,23 @@ describe('BeatClock', () => {
     for (const time of ticks.filter((t) => t > 45)) expect(offGrid(time, second)).toBeLessThanOrEqual(FRAME + 0.002)
   })
 
-  it('follows the tempo halving and doubling', () => {
-    const base = { periodSec: 0.5, beatTime: 0 }
-    const half = { periodSec: 1, beatTime: 0 }
-    const { ticks, doubled } = play([[0, 60]], (time) => (time < 20 ? base : time < 40 ? half : base))
+  it('keeps its own octave when the grid halves or doubles, beating on the grid all along', () => {
+    // The tracker reading one song at 79 and then at 158 beats a minute, back and forth.
+    const slow = { periodSec: 60 / 79, beatTime: 0.05 }
+    const fast = { periodSec: 60 / 158, beatTime: 0.05 }
+    const { ticks, doubled } = play([[0, 80]], (time) => (Math.floor(time / 9) % 2 === 0 ? slow : fast))
     expect(doubled).toBe(false)
-    expectSteady(ticks, 0.4)
-    for (const time of ticks.filter((t) => t > 32 && t < 40)) expect(offGrid(time, half)).toBeLessThanOrEqual(FRAME + 0.002)
-    const late = ticks.filter((t) => t > 52)
-    for (const time of late) expect(offGrid(time, base)).toBeLessThanOrEqual(FRAME + 0.002)
-    expect(late[late.length - 1] - late[late.length - 2]).toBeCloseTo(0.5, 1)
+    expectSteady(ticks, 0.001)
+    for (const time of ticks) expect(offGrid(time, slow)).toBeLessThanOrEqual(FRAME)
+  })
+
+  it('keeps its octave from the other side too, beating on every other beat of a slower grid', () => {
+    const fast = { periodSec: 0.4, beatTime: 0 }
+    const slow = { periodSec: 0.8, beatTime: 0.4 }
+    const { ticks, doubled } = play([[0, 40]], (time) => (time < 15 ? fast : slow))
+    expect(doubled).toBe(false)
+    expectSteady(ticks, 0.001)
+    for (const time of ticks) expect(offGrid(time, fast)).toBeLessThanOrEqual(FRAME + 1e-9)
   })
 
   it('holds the beat through a stretch with no grid', () => {
