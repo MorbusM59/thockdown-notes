@@ -38,7 +38,7 @@
  *    onset is the weighted GEOMETRIC MEAN of the three: large only when all
  *    three climb together.
  *
- * 2. TEMPO AND PHASE, from the whole window (`musicBeat.ts` keeps the scout
+ * 2. TEMPO AND PHASE, from the whole window (`musicBeat.ts` decodes the track
  *    seconds ahead, so the window reaches past the listener as well as
  *    behind). Read from the PULSE, the kick's bands' arithmetic mean, not
  *    the onset: a snare or hat lifts it too, and those are what tell a break's
