@@ -29,6 +29,7 @@ import {
 import { useHoldToAdjust } from '../shared/useHoldToAdjust'
 import { useNonPassiveWheel } from '@thockdown/interaction/useNonPassiveWheel'
 import { musicPlayerService, MissingFileError, resolveSeekPress } from '../sound/MusicPlayerService'
+import { publishNowPlaying } from '../sound/nowPlaying'
 // Playback resumed from the previous session (the initialWasPlaying restore
 // below) starts at silence and full reverb and ramps up over this span.
 import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
@@ -804,6 +805,14 @@ export const AudioControls = memo(function AudioControls({
       ? new MediaMetadata({ title: currentSong.title || '?', artist: currentSong.artist, album: 'Thockdown Notes' })
       : null
   }, [currentSong])
+
+  // The same song and the same previous/next for the visualizer mode's
+  // now-playing strip (sound/nowPlaying.ts). Through the ref, so the action
+  // published once stays current.
+  const publishedJumpSong = useCallback((direction: -1 | 1) => { void mediaActionsRef.current.jumpSong(direction) }, [])
+  useEffect(() => {
+    publishNowPlaying({ song: currentSong, jumpSong: publishedJumpSong })
+  }, [currentSong, publishedJumpSong])
 
   useEffect(() => {
     const session = navigator.mediaSession

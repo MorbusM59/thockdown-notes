@@ -1,0 +1,125 @@
+/**
+ * Where everything in the visualizer mode's scene goes, in whole boxes.
+ * Pure, so the rules are tested rather than reasoned about
+ * (visualizerLayout.test.ts); `VisualizerScene.tsx` draws what this returns.
+ *
+ * THE BOX IS SQUARE: as wide as the editor's real box at the reader's
+ * settings, and exactly as tall as it is wide. The grid is phase-anchored the
+ * way the editor's is (half a box in from the top-left, rounded to a whole
+ * pixel, CM6Editor.tsx's halfCellWidthPx), so the far edges cut a box off
+ * wherever the screen happens to end. Only FULL boxes are counted and used.
+ *
+ * TWO STRIPS OF EQUAL HEIGHT frame the scene: the spectrum at the bottom and
+ * the now-playing strip at the top. Their height is the spectrum's ceiling,
+ * at most `MAX_STRIP_ROWS` boxes and at most `MAX_STRIP_SHARE` of the
+ * screen's height. The top strip's rows, counted from the first full row:
+ * the progress track, a gap, the title, a gap, the credits (the artist, then
+ * `CREDITS_GAP_BOXES` empty boxes, then the album). A strip too short for
+ * all five drops the credits first and then the title; the progress track
+ * always stays.
+ *
+ * THE CUTOUT is the empty scene's square, centred, as many whole boxes wide
+ * as the empty state's own diameter (`--circle-diameter`) rounds to, so it is
+ * the size the empty scene has in immersive mode, laid onto the grid.
+ */
+
+export const MAX_STRIP_ROWS = 10
+export const MAX_STRIP_SHARE = 0.2
+export const CREDITS_GAP_BOXES = 3
+
+export type VisualizerLayout = {
+  boxPx: number
+  /** The grid's phase: the left and top edges of the first full box. */
+  originXPx: number
+  originYPx: number
+  /** Full boxes across and down. */
+  columns: number
+  rows: number
+  /** The height of each strip, in boxes. Zero when the screen is too small for one. */
+  stripRows: number
+  /** The top strip's rows (indices into the grid's rows), or null when the strip is too short for them. */
+  progressRow: number | null
+  titleRow: number | null
+  creditsRow: number | null
+  /** The first row of the spectrum strip. */
+  spectrumTopRow: number
+  /** The cutout, in boxes. Size zero when there is no room for it between the strips. */
+  cutout: { column: number; row: number; size: number }
+}
+
+/** The scene's layout for a `widthPx` by `heightPx` slot with square boxes of `boxPx`, and a cutout of about `cutoutPx`. */
+export function computeVisualizerLayout(widthPx: number, heightPx: number, boxPx: number, cutoutPx: number): VisualizerLayout {
+  const box = Math.max(1, boxPx)
+  const origin = Math.round(box / 2)
+  const columns = Math.max(0, Math.floor((widthPx - origin) / box))
+  const rows = Math.max(0, Math.floor((heightPx - origin) / box))
+  const ceiling = Math.min(MAX_STRIP_ROWS, Math.floor((MAX_STRIP_SHARE * heightPx) / box))
+  // Both strips have to fit with at least a row between them.
+  const stripRows = Math.max(0, Math.min(ceiling, Math.floor((rows - 1) / 2)))
+
+  const progressRow = stripRows >= 1 ? 0 : null
+  const titleRow = stripRows >= 3 ? 2 : null
+  const creditsRow = stripRows >= 5 ? 4 : null
+  const spectrumTopRow = rows - stripRows
+
+  const middleRows = rows - 2 * stripRows
+  const wanted = Math.max(1, Math.round(cutoutPx / box))
+  const size = Math.max(0, Math.min(wanted, middleRows, columns))
+  const cutout = {
+    column: Math.floor((columns - size) / 2),
+    row: stripRows + Math.floor((middleRows - size) / 2),
+    size,
+  }
+
+  return { boxPx: box, originXPx: origin, originYPx: origin, columns, rows, stripRows, progressRow, titleRow, creditsRow, spectrumTopRow, cutout }
+}
+
+/**
+ * The progress track, one row of `columns` boxes: the first and last boxes
+ * are the previous- and next-track buttons, the second and second-to-last
+ * are dead, and the TRACK is everything between. Fewer than five boxes
+ * leaves no track.
+ */
+export function trackSpan(columns: number): { first: number; count: number } {
+  return { first: 2, count: Math.max(0, columns - 4) }
+}
+
+/** Which box of the track is left empty for the playhead at `fraction` of the song, or null when there is no track. */
+export function playheadColumn(columns: number, fraction: number): number | null {
+  const { first, count } = trackSpan(columns)
+  if (count <= 0 || !Number.isFinite(fraction)) return null
+  const share = Math.max(0, Math.min(1, fraction))
+  return first + Math.min(count - 1, Math.floor(share * count))
+}
+
+/** Where in the song a press on track box `column` travels to: the start of that box's share, so the playhead lands on the box pressed. */
+export function columnToFraction(columns: number, column: number): number | null {
+  const { first, count } = trackSpan(columns)
+  if (count <= 0 || column < first || column >= first + count) return null
+  return (column - first) / count
+}
+
+export type ProgressPress = { kind: 'previous' } | { kind: 'next' } | { kind: 'seek'; fraction: number } | { kind: 'none' }
+
+/** What a press on box `column` of the progress row does. */
+export function progressPress(columns: number, column: number): ProgressPress {
+  if (column === 0) return { kind: 'previous' }
+  if (column === columns - 1 && columns > 1) return { kind: 'next' }
+  const fraction = columnToFraction(columns, column)
+  return fraction === null ? { kind: 'none' } : { kind: 'seek', fraction }
+}
+
+/**
+ * The credits row's characters, one per box: the artist, `CREDITS_GAP_BOXES`
+ * empty boxes, the album, cut at the row's last box. An empty part is left
+ * out with its gap. A space is an empty box.
+ */
+export function creditsLine(artist: string, album: string, columns: number): string {
+  const parts = [artist.trim(), album.trim()].filter((part) => part.length > 0)
+  return fitToRow(parts.join(' '.repeat(CREDITS_GAP_BOXES)), columns)
+}
+
+/** `text` cut to `columns` characters (by code point, so a character outside the BMP is not split). */
+export function fitToRow(text: string, columns: number): string {
+  return Array.from(text).slice(0, Math.max(0, columns)).join('')
+}

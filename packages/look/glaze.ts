@@ -18,6 +18,8 @@ export const GLAZE_LINEAR_OPACITY_MAX = 0.15;
 export const GLAZE_RADIAL_OPACITY_MAX = 0.25;
 export const GLAZE_GLOOM_OPACITY_MAX = 0.5;
 export const GLAZE_SHEEN_OPACITY_MAX = 0.5;
+export const GLAZE_LINEAR_STACK_MAX = 5;
+export const GLAZE_RADIAL_COUNT_MAX = 4;
 
 export const DEFAULT_GLAZE_SETTINGS: GlazeSettings = {
   linearStackCount: 3,
@@ -54,10 +56,10 @@ function toFinite(value: unknown, fallback: number): number {
 export function sanitizeGlazeSettings(input: unknown, fallback: GlazeSettings = DEFAULT_GLAZE_SETTINGS): GlazeSettings {
   const source = toRecord(input);
   return {
-    linearStackCount: clamp(Math.round(toFinite(source.linearStackCount, fallback.linearStackCount)), 0, 5),
+    linearStackCount: clamp(Math.round(toFinite(source.linearStackCount, fallback.linearStackCount)), 0, GLAZE_LINEAR_STACK_MAX),
     linearOpacity: clamp(toFinite(source.linearOpacity, fallback.linearOpacity), 0, GLAZE_LINEAR_OPACITY_MAX),
     linearSeed: clamp(Math.round(toFinite(source.linearSeed, fallback.linearSeed)), 0, 1000000),
-    radialCount: clamp(Math.round(toFinite(source.radialCount, fallback.radialCount)), 0, 4),
+    radialCount: clamp(Math.round(toFinite(source.radialCount, fallback.radialCount)), 0, GLAZE_RADIAL_COUNT_MAX),
     radialOpacity: clamp(toFinite(source.radialOpacity, fallback.radialOpacity), 0, GLAZE_RADIAL_OPACITY_MAX),
     radialSeed: clamp(Math.round(toFinite(source.radialSeed, fallback.radialSeed)), 0, 1000000),
     radialAboveLinear: typeof source.radialAboveLinear === 'boolean' ? source.radialAboveLinear : fallback.radialAboveLinear,
@@ -67,5 +69,24 @@ export function sanitizeGlazeSettings(input: unknown, fallback: GlazeSettings = 
     sheenPosition: clamp(toFinite(source.sheenPosition, fallback.sheenPosition), -0.5, 1.5),
     sheenShape: clamp(toFinite(source.sheenShape, fallback.sheenShape), 0, 2),
     sheenOpacity: clamp(toFinite(source.sheenOpacity, fallback.sheenOpacity), 0, GLAZE_SHEEN_OPACITY_MAX),
+  };
+}
+/** The least strength a swayed layer has in the notes app's visualizer mode. */
+export const VISUALIZER_GLAZE_MIN_OPACITY = 0.1;
+
+/**
+ * The glaze the notes app's visualizer mode sways: the layout's own seeds
+ * and shapes, with every linear stack and every radial source on, each at
+ * least `VISUALIZER_GLAZE_MIN_OPACITY` strong, so the mode always has
+ * something to move whatever the layout set. Gloom and sheen are not swayed
+ * and are left exactly as the layout has them.
+ */
+export function visualizerGlazeSettings(settings: GlazeSettings): GlazeSettings {
+  return {
+    ...settings,
+    linearStackCount: GLAZE_LINEAR_STACK_MAX,
+    radialCount: GLAZE_RADIAL_COUNT_MAX,
+    linearOpacity: Math.max(settings.linearOpacity, VISUALIZER_GLAZE_MIN_OPACITY),
+    radialOpacity: Math.max(settings.radialOpacity, VISUALIZER_GLAZE_MIN_OPACITY),
   };
 }

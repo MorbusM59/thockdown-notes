@@ -209,7 +209,8 @@ function mulberry32(seed: number): () => number {
   }
 }
 
-function buildLinearGlazeLayers(settings: GlazeSettings): string[] {
+/** One `background-image` per linear stack, in stacking order (the first is drawn on top). */
+export function buildLinearGlazeLayers(settings: GlazeSettings): string[] {
   if (settings.linearStackCount <= 0 || settings.linearOpacity <= 0) return []
 
   const rand = mulberry32(settings.linearSeed)
@@ -247,7 +248,8 @@ function buildLinearGlazeLayers(settings: GlazeSettings): string[] {
   return layers
 }
 
-function buildRadialGlazeLayers(settings: GlazeSettings): string[] {
+/** One `background-image` per radial source, in stacking order (the first is drawn on top). */
+export function buildRadialGlazeLayers(settings: GlazeSettings): string[] {
   if (settings.radialCount <= 0 || settings.radialOpacity <= 0) return []
 
   const rand = mulberry32(settings.radialSeed)

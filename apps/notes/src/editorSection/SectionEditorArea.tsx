@@ -7,6 +7,7 @@ import { CM6Editor } from '../components/CM6Editor'
 import { SnapshotTimelineSlider } from '../editor/SnapshotTimelineSlider'
 import { PresentStateCircle } from '../editor/PresentStateCircle'
 import { getEmptyStateSceneMaskUrl } from '../editor/EmptyStateScene'
+import { VisualizerScene } from '../visualizer/VisualizerScene'
 import type { EditorAdapter, EditorBindings, EditorSelectionState } from '../editor/EditorContract'
 import type { EditorRuntimeMetrics } from '../editor/EditorTypography'
 import type { UseNoteSnapshotsResult } from '../editor/useNoteSnapshots'
@@ -146,6 +147,12 @@ export interface SectionEditorAreaProps {
   showReviewFlags: boolean
   /** Immersive mode (App.tsx isImmersiveMode) -- the edit view draws its scroll track into the grid (CM6Editor). */
   isImmersiveMode: boolean
+  /**
+   * The visualizer mode (F3, App.tsx's `immersion`) is showing in THIS slot:
+   * the scene (visualizer/VisualizerScene.tsx) is drawn over the note, which
+   * stays mounted underneath and is not drawn.
+   */
+  isVisualizerMode: boolean
   onToggleReviewGutter: () => void
   onToggleReviewFlags: () => void
   /** Whether the active note (or its whole chapter family) is frozen in time -- see databaseService.ts's freezeNoteFamily. Forces the editor read-only, hides the Time Machine timeline, and disables chapter/tag mutation affordances, same shape as isViewingAutoTocChapter/isViewingAutoOpenItemsChapter below. */
@@ -271,6 +278,7 @@ export function SectionEditorArea({
   showLineNumbers,
   showReviewFlags,
   isImmersiveMode,
+  isVisualizerMode,
   onToggleReviewGutter,
   onToggleReviewFlags,
   isViewingTimelessNote,
@@ -292,7 +300,9 @@ export function SectionEditorArea({
   // the box outlines' copy, on a layer of its own beside the edge's
   // (flow/useBeatGridMirror.ts); in any view without a grid a flat wash
   // BEHIND the stage, so it lies under the texture and the text.
-  const { gridRef: beatGridRef, mirrorRef: beatMirrorRef, hasGrid: beatPaneHasGrid } = useBeatGridMirror(!isPreviewMode)
+  // The visualizer's scene has a grid of its own, over the editor's, and the
+  // pane copies that one instead (the editor's is not drawn meanwhile).
+  const { gridRef: beatGridRef, mirrorRef: beatMirrorRef, hasGrid: beatPaneHasGrid } = useBeatGridMirror(!isPreviewMode || isVisualizerMode)
   const [beatPaneRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }))
   const [beatWashRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }))
   const setBeatPaneEl = useCallback((el: HTMLDivElement | null) => {
@@ -362,10 +372,11 @@ export function SectionEditorArea({
   // The reroll easter egg is disabled while the quick-actions panel is up --
   // otherwise every click on the grid's own padding/gaps (anything that
   // isn't a button) would reroll the animation out from under the buttons.
+  const rerollScene = useCallback(() => setSceneRerollNonce((n) => n + 1), [])
   const handleEmptyStateClick = useCallback(() => {
     if (isEscapeHoldActive) return
-    setSceneRerollNonce((n) => n + 1)
-  }, [isEscapeHoldActive])
+    rerollScene()
+  }, [isEscapeHoldActive, rerollScene])
 
   const editorSpellCheckEnabled = resolveSpellCheckSurfaceState({
     globalToggleEnabled: spellCheckEditEnabled,
@@ -415,7 +426,7 @@ export function SectionEditorArea({
       <main className={`editor-shell${isChapterPanelOpen ? ' chapter-panel-is-open' : ''}`}>
         <div className="editor-background">
           <div ref={beatWashRef} className={`editor-beat-wash${beatPaneHasGrid ? '' : ' is-shown'}`} aria-hidden="true" />
-          <div ref={setStageEl} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}${!activeNoteId ? ' is-empty' : ''}`}>
+          <div ref={setStageEl} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}${!activeNoteId ? ' is-empty' : ''}${isVisualizerMode ? ' is-visualizer' : ''}`}>
             {isEscapeHoldActive ? (
               // Pure dim+blur backdrop: its backdrop-filter blurs whatever's
               // behind it (the real note content in edit/render-container
@@ -459,7 +470,7 @@ export function SectionEditorArea({
                   bindings={bindings}
                   adapterRef={adapterRef}
                   onSurfaceReady={onEditorSurfaceReady}
-                  gridOutlineRef={beatGridRef}
+                  gridOutlineRef={isVisualizerMode ? undefined : beatGridRef}
                   isSectionActive={isSectionActive}
                   isEditPaneVisible={!isPreviewMode}
                   noteId={activeNoteId}
@@ -557,6 +568,16 @@ export function SectionEditorArea({
                 onClose={onEscapeHoldPanelClose}
               />
             </div>
+            {isVisualizerMode ? (
+              <VisualizerScene
+                boxPx={editorRuntimeMetrics.cellWidthPx}
+                fontFamily={editorFontFamily}
+                fontSizePx={editorRuntimeMetrics.fontSizePx}
+                sceneMaskUrl={emptyStateSceneMaskUrl}
+                onCutoutClick={rerollScene}
+                gridOutlineRef={beatGridRef}
+              />
+            ) : null}
           </div>
         </div>
         <div ref={beatEdgeRef} className="editor-beat-edge" aria-hidden="true" />

@@ -995,7 +995,8 @@ html[data-beat-pane] .editor-section-column.is-active .editor-beat-wash.is-shown
    cutout tracing through it (edges as crisp fully-transparent seams, faces
    as softer partial cutouts per their own random opacity), instead of the
    shape itself being the only textured part. */
-.editor-empty-state::before {
+.editor-empty-state::before,
+.visualizer-cutout::before {
   content:        '';
   position:       absolute;
   inset:          0;

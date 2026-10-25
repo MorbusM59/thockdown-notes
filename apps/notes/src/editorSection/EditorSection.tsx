@@ -251,6 +251,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
   showLineNumbers,
   showReviewFlags,
   isImmersiveMode,
+  isVisualizerMode,
   onToggleReviewGutter,
   onToggleReviewFlags,
   isEscapeHoldPanelOpen,
@@ -1670,7 +1671,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
   const { isSpeedReading, isReadingEditView, toggleSpeedReading } = useSpeedReading({
     isPreviewMode,
     isSectionActive: sectionId === activeSectionId,
-    isEscapeRingUp: Boolean(escapeMenu?.activeMode) || (isEscapeHoldPanelOpen && sectionId === activeSectionId),
+    isNoteCovered: Boolean(escapeMenu?.activeMode) || (isEscapeHoldPanelOpen && sectionId === activeSectionId) || isVisualizerMode,
     activeNoteId,
     readDisplayedText,
     latestEditorSelectionRef,
@@ -2245,6 +2246,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
         showLineNumbers={showLineNumbers}
         showReviewFlags={showReviewFlags}
         isImmersiveMode={isImmersiveMode}
+        isVisualizerMode={isVisualizerMode}
         onToggleReviewGutter={onToggleReviewGutter}
         onToggleReviewFlags={onToggleReviewFlags}
         isViewingAutoTocChapter={isViewingAutoTocChapter}

@@ -332,6 +332,16 @@ function outputLatencySec(): number {
 }
 
 /**
+ * How long after the audio graph handles a sample it should be DRAWN: what
+ * the audio stack reports plus the reader's per-device delay. The beat pulse
+ * and the visualizer mode's spectrum (`visualizer/spectrumTap.ts`) both draw
+ * on it, so they cannot disagree about when the listener hears something.
+ */
+export function heardLagSec(): number {
+  return outputLatencySec() + visualDelaySec
+}
+
+/**
  * The position the LISTENER is at, for drawing: the element's position run on
  * the FRAME's clock (the `requestAnimationFrame` timestamp, the moment the
  * frame is shown), and steered toward each report rather than set to it.
@@ -395,7 +405,7 @@ function tick(frameTimeMs: number): void {
   lastNow = now
   if (stale || jumped || (stream?.url ?? null) !== musicPlayerService.trackUrl) restartAnalysis(listenerTime)
   else stream?.want(listenerTime + LEAD_SEC + DECODE_MARGIN_SEC)
-  const heardTime = listenerTime - outputLatencySec() - visualDelaySec
+  const heardTime = listenerTime - heardLagSec()
   for (const band of bands) publish(band, respond(band, heardTime))
   for (const subscriber of clocks) publish(subscriber, pulse(subscriber, heardTime))
   frame = requestAnimationFrame(tick)

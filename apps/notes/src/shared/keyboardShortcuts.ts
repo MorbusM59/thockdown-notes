@@ -171,6 +171,7 @@ export const SHORTCUTS = {
   newNoteFromClipboard: { section: 'content', chords: [{ key: 'n', ctrl: true, shift: true }], label: 'with pasted title' },
   toggleSidebar: { section: 'layout', chords: [{ code: 'Space', ctrl: true }], label: 'Show / hide sidebar' },
   immersive: { section: 'layout', chords: [{ code: 'Space', ctrl: true, shift: true }], label: 'Immersive mode' },
+  visualizer: { section: 'layout', chords: [{ key: 'F3' }], label: 'Visualizer' },
   switchSlot: { section: 'layout', chords: withMods(ARROWS_LR, { alt: true }), label: 'Previous / next slot' },
   jumpVertical: {
     section: 'gutter',

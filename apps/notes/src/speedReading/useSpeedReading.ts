@@ -24,8 +24,8 @@ import { startSpeedReadingSession, type SpeedReadingSession } from './speedReadi
 export interface UseSpeedReadingOptions {
   isPreviewMode: boolean
   isSectionActive: boolean
-  /** The escape ring, or a mode on it, is up over this slot. */
-  isEscapeRingUp: boolean
+  /** Something is drawn over this slot's note: the escape ring, a mode on it, or the visualizer scene. */
+  isNoteCovered: boolean
   activeNoteId: string | null
   readDisplayedText: () => string
   latestEditorSelectionRef: MutableRefObject<EditorSelectionState>
@@ -36,7 +36,7 @@ export interface UseSpeedReadingOptions {
 export function useSpeedReading({
   isPreviewMode,
   isSectionActive,
-  isEscapeRingUp,
+  isNoteCovered,
   activeNoteId,
   readDisplayedText,
   latestEditorSelectionRef,
@@ -55,7 +55,7 @@ export function useSpeedReading({
     })
   }, [adapterRef])
 
-  const shouldRun = isSpeedReading && isSectionActive && !isEscapeRingUp && activeNoteId !== null
+  const shouldRun = isSpeedReading && isSectionActive && !isNoteCovered && activeNoteId !== null
 
   useEffect(() => {
     if (!shouldRun) return

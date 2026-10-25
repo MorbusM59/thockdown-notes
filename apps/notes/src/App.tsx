@@ -126,6 +126,7 @@ import {
 } from './shared/uiBounds'
 import { applyDocumentTheme, themeFrame } from '@thockdown/look/loadoutTheme'
 import { ImageCorrectionFilter, ThemeBlendOverlays, ThemeGlazeLayers } from '@thockdown/look/ThemeLayers'
+import { VisualizerGlaze } from './visualizer/VisualizerGlaze'
 import { FlowOverlays } from './flow/FlowOverlays'
 import { useFlowFeedback } from './flow/useFlowFeedback'
 import { DEFAULT_FLOW_SETTINGS, sanitizeFlowSettings, type FlowSettings } from './shared/flowSettings'
@@ -1726,25 +1727,43 @@ function App() {
   // every sidebar toggle, and so did everything laid out from it.
   const [appShellMeasuredWidthPx, setAppShellMeasuredWidthPx] = useState(0)
   const [isSidebarVisible, setIsSidebarVisible] = useState(true)
-  // Immersive mode: the active slot alone, full screen, no chrome. Transient
-  // by design -- never persisted, so a launch always opens in the ordinary
-  // layout. While it lasts the sidebar is off screen WITHOUT its saved setting
-  // changing: isSidebarShown, not isSidebarVisible, is what the layout and
-  // anything asking "is the sidebar on screen" read. isSidebarVisible stays
-  // the reader's setting, and is exactly what leaving immersive returns to.
-  const [isImmersiveMode, setIsImmersiveMode] = useState(false)
+  // Immersion, ONE setting with three values. Immersive mode: the active
+  // slot alone, full screen, no chrome. The visualizer (F3) is immersive mode
+  // with the active slot showing the visualizer scene over its note
+  // (visualizer/VisualizerScene.tsx); being one setting rather than a second
+  // flag beside the first, "visualizer but not immersive" cannot be
+  // expressed. Transient by design -- never persisted, so a launch always
+  // opens in the ordinary layout. While it lasts the sidebar is off screen
+  // WITHOUT its saved setting changing: isSidebarShown, not
+  // isSidebarVisible, is what the layout and anything asking "is the sidebar
+  // on screen" read. isSidebarVisible stays the reader's setting, and is
+  // exactly what leaving immersion returns to.
+  const [immersion, setImmersionState] = useState<'off' | 'immersive' | 'visualizer'>('off')
+  const isImmersiveMode = immersion !== 'off'
+  const isVisualizerMode = immersion === 'visualizer'
+  // What F3 (or Escape) returns to when the visualizer is left.
+  const immersionBeforeVisualizerRef = useRef<'off' | 'immersive'>('off')
   const isSidebarShown = isSidebarVisible && !isImmersiveMode
   const appShellWidthPx = Math.max(
     isSidebarShown ? appShellMinWidthPx : appShellMinWidthPx - (sidebarWidthPx + GRID_DIVIDER_PX),
     appShellMeasuredWidthPx,
   )
-  const setImmersiveMode = useCallback((next: boolean) => {
+  const setImmersion = useCallback((next: 'off' | 'immersive' | 'visualizer') => {
     // Mini mode is the app at its smallest, immersive the editor at its
     // largest; the one is not a way into the other.
-    if (next && windowIsCollapsed) return
-    setIsImmersiveMode(next)
-    window.windowControls?.setFullScreen?.(next)
+    if (next !== 'off' && windowIsCollapsed) return
+    setImmersionState(next)
+    window.windowControls?.setFullScreen?.(next !== 'off')
   }, [windowIsCollapsed])
+  const setImmersiveMode = useCallback((next: boolean) => setImmersion(next ? 'immersive' : 'off'), [setImmersion])
+  const toggleVisualizerMode = useCallback(() => {
+    if (immersion === 'visualizer') {
+      setImmersion(immersionBeforeVisualizerRef.current)
+      return
+    }
+    immersionBeforeVisualizerRef.current = immersion
+    setImmersion('visualizer')
+  }, [immersion, setImmersion])
   const [isEscapeHoldPanelOpen, setIsEscapeHoldPanelOpen] = useState(false)
   const escapeHoldTimerRef = useRef<number | null>(null)
   const escapeHoldTriggeredRef = useRef(false)
@@ -4523,7 +4542,7 @@ function App() {
   // no longer has.
   useEffect(() => {
     const unsubscribe = window.windowControls?.onFullScreenStateChange?.((isFullScreen) => {
-      if (!isFullScreen) setIsImmersiveMode(false)
+      if (!isFullScreen) setImmersionState('off')
     })
     return () => unsubscribe?.()
   }, [])
@@ -8198,6 +8217,16 @@ ${markdownHtml}
       }
       if (event.defaultPrevented) return
 
+      // The visualizer, from anywhere: F3 in and out, and Escape out as well
+      // -- the press is spent on leaving, so its release does not also switch
+      // the hidden note's view. A held key toggles once, not per repeat.
+      if (matchShortcut(event, 'visualizer') || (isVisualizerMode && event.key === 'Escape')) {
+        event.preventDefault()
+        if (event.key === 'Escape') escapeConsumedByFieldRef.current = true
+        if (!event.repeat) toggleVisualizerMode()
+        return
+      }
+
       const target = event.target instanceof HTMLElement ? event.target : null
       const isEditorTarget = Boolean(target?.closest('.editor-stage'))
       const isSearchField = target === sidebarSearchInputRef.current
@@ -8522,10 +8551,12 @@ ${markdownHtml}
     isImmersiveMode,
     isReplaceMode,
     isSidebarShown,
+    isVisualizerMode,
     markSectionActive,
     setImmersiveMode,
     showSidebarInMode,
     toggleSidebarVisible,
+    toggleVisualizerMode,
   ])
 
   /**
@@ -8544,6 +8575,12 @@ ${markdownHtml}
    */
   const returnKeyboardToActiveSurface = useCallback(() => {
     const slot = document.querySelector<HTMLElement>(`[data-section-id="${CSS.escape(activeSectionId)}"]`)
+    // The visualizer's scene is the slot's surface while it is up: it takes
+    // F3 and Escape, and the hidden note must not take keystrokes.
+    if (isVisualizerMode) {
+      slot?.querySelector<HTMLElement>('[data-visualizer-scene]')?.focus({ preventScroll: true })
+      return
+    }
     if (isEscapeRingUp) {
       focusEscapeHoldRing(slot)
       return
@@ -8561,7 +8598,7 @@ ${markdownHtml}
       return
     }
     section?.scheduleFocusEditorInEditMode()
-  }, [activeSectionId, getActiveSection, isEscapeRingUp])
+  }, [activeSectionId, getActiveSection, isEscapeRingUp, isVisualizerMode])
 
   /**
    * TAB HAS ONE OWNER OF LAST RESORT.
@@ -8696,7 +8733,10 @@ ${markdownHtml}
   useEffect(() => {
     const reconcile = (onActivation = false) => {
       const holder = document.activeElement
-      if (holder && holder !== document.body && mayHoldKeyboard(holder)) {
+      // While the visualizer is up only its scene may hold the keyboard: the
+      // note under it would otherwise go on taking keystrokes unseen.
+      const isCoveredByVisualizer = isVisualizerMode && !holder?.closest('[data-visualizer-scene]')
+      if (holder && holder !== document.body && mayHoldKeyboard(holder) && !isCoveredByVisualizer) {
         // A holder inside ANOTHER slot is legitimate only until the active
         // slot changes: once it has, the keyboard belongs to the new slot,
         // with or without a note in it. Asked only on activation, never on
@@ -8729,7 +8769,7 @@ ${markdownHtml}
       window.removeEventListener('focusin', onFocusIn)
       window.removeEventListener('focusout', onFocusOut)
     }
-  }, [returnKeyboardToActiveSurface, activeSectionId, activeSection?.activeNoteId, activeSection?.isPreviewMode])
+  }, [returnKeyboardToActiveSurface, activeSectionId, activeSection?.activeNoteId, activeSection?.isPreviewMode, isVisualizerMode])
 
   /**
    * A PRESS DOES NOT MOVE THE KEYBOARD.
@@ -8898,7 +8938,13 @@ ${markdownHtml}
       ) : null}
       <style>{caretBlinkKeyframesCss}</style>
       <div className="app-saturate-wrapper" style={{ ...theme.wrapperStyle, position: 'fixed', inset: 0 }}>
-        <ThemeGlazeLayers glaze={theme.glaze} radialAboveLinear={glazeSettings.radialAboveLinear} />
+        {/* In the visualizer the linear and radial glaze sway, drawn by
+            VisualizerGlaze at full count; gloom and sheen stay as they are. */}
+        <ThemeGlazeLayers
+          glaze={isVisualizerMode ? { ...theme.glaze, linear: 'none', radial: 'none' } : theme.glaze}
+          radialAboveLinear={glazeSettings.radialAboveLinear}
+        />
+        {isVisualizerMode ? <VisualizerGlaze glaze={glazeSettings} /> : null}
         {/* Mounted here (inside .app-saturate-wrapper, not as a sibling of
             it like MouseCursorOverlay) deliberately -- unlike the cursor
             overlay, tooltips should still pick up this wrapper's own
@@ -8910,7 +8956,7 @@ ${markdownHtml}
         ) : null}
         <div className="app-sheen">
           <div
-            className={`app-shell app-grid${filterInvert > 0.5 ? ' shadow-flip' : ''}${windowIsCollapsed ? ' is-window-collapsed' : ''}${isImmersiveMode ? ' is-immersive' : ''}`}
+            className={`app-shell app-grid${filterInvert > 0.5 ? ' shadow-flip' : ''}${windowIsCollapsed ? ' is-window-collapsed' : ''}${isImmersiveMode ? ' is-immersive' : ''}${isVisualizerMode ? ' is-visualizer' : ''}`}
             ref={appShellRef}
             style={appShellStyle}
           >
@@ -9956,6 +10002,7 @@ ${markdownHtml}
                   showLineNumbers={reviewGutterVisibleBySection[entry.id] ?? false}
                   showReviewFlags={reviewFlagsVisibleBySection[entry.id] ?? false}
                   isImmersiveMode={isImmersiveMode}
+                  isVisualizerMode={isVisualizerMode && entry.id === activeSectionId}
                   onToggleReviewGutter={() => handleToggleReviewGutter(entry.id)}
                   onToggleReviewFlags={() => handleToggleReviewFlags(entry.id)}
                 />
