@@ -1609,9 +1609,11 @@ export function CM6Editor({
     }
 
     if (isEditScrollInteractionBlocked() && !options?.force) {
+      // Whether there is anything to scroll is not known here, so the flag
+      // keeps its last answer: immersive mode hides the scrollbar on it, and
+      // a transition or a restore must not blink the column out.
       setScrollThumbHeightPx(0);
       setScrollThumbTopPx(0);
-      setIsScrollThumbActive(false);
       paintScrollThumb(0, 0);
       return;
     }
@@ -6647,7 +6649,7 @@ export function CM6Editor({
         <>
           <div
             ref={gridScrollPaintRef}
-            className="absolute pointer-events-none immersive-scroll-column"
+            className={`absolute pointer-events-none immersive-scroll-column${isScrollThumbActive ? '' : ' is-inactive'}`}
             style={{ top: halfLineHeightPx, left: immersiveScrollColumnLeftPx, width: cellWidthPx, height: immersiveTrackRows * lineHeightPx, zIndex: 2 }}
           />
           <div

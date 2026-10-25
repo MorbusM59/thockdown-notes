@@ -155,6 +155,17 @@
   box-shadow: none;
 }
 
+/* Nothing to scroll, nothing drawn: in immersive mode a scrollbar appears only
+   while there is something to scroll. "Something to scroll" is the scrollbar
+   logic's own is-inactive, which also covers a slot with no note (the empty
+   scene). Hidden rather than removed, so the track keeps its geometry and the
+   text keeps its reserved column -- the layout does not move when a note
+   grows past one screen. */
+.app-grid.is-immersive .editor-scrollbar-slot .thockdown-scroll-thumb.is-inactive,
+.app-grid.is-immersive .immersive-scroll-column.is-inactive {
+  visibility: hidden;
+}
+
 /* The edit view's grid scrollbar (CM6Editor.tsx): track boxes in the gutter
    background, the thumb's boxes in the immersive scroll thumb colour painted
    over it. --thumb-start/--thumb-end are whole-row boundaries, written by
