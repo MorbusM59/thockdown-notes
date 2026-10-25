@@ -171,28 +171,10 @@ export interface PersistedMenuState {
   audioReverbAmount?: number;
   pitchJitterAmount?: number;
   audioSpatial?: number;
-  reduceVisualEffects?: boolean;
   /** The sidebar's date/category/archive/trash views list stored images instead of notes (imageLibrary/). */
   sidebarShowsImages?: boolean;
   /** Remote (http/https) images in notes load. Off unless the reader held the toggle on; see src/shared/remoteImages.ts. */
   allowRemoteImages?: boolean;
-  deferPreviewOnRapidInput?: boolean;
-  /**
-   * Where the reader has put the line between a note whose scrollbar is
-   * measured in pixels and one whose scrollbar counts characters. In BLOCKS
-   * (shown to the reader as paragraphs); see editor/documentPosition.ts for
-   * what the two sides mean and why blocks are the unit.
-   */
-  noteSizeThresholdBlocks?: number;
-  /**
-   * Put every note on the character-counting side, whatever its size.
-   *
-   * Not the same as setting the threshold to zero, which is why it is its own
-   * field: it says "never measure a document for the scrollbar" as a
-   * standing preference, and it survives the reader moving the threshold
-   * slider around underneath it.
-   */
-  forceCharacterScrollbarThumb?: boolean;
   typingSoundEnabled?: boolean;
   typingSoundSet?: 'A' | 'B' | 'C' | 'D';
   /**
@@ -227,10 +209,10 @@ export interface PersistedMenuState {
   sidebarViewState?: Partial<Record<SidebarMode, PersistedSidebarViewState>>;
   /** Which features exist at all: the toggle bar at the top of Options. See shared/features.ts. */
   features?: FeatureToggles;
-  /** Typing flow (Options > Tools); see flow/flowModel.ts. */
+  /** Typing flow's tuning (Options > Flow; on/off is `features.flow`); see flow/flowModel.ts. */
   flow?: FlowSettings;
   speedReading?: SpeedReadingSettings;
-  /** Beat pulse (Options > Tools); see sound/musicBeat.ts. */
+  /** The visualizer's per-device delay (Options > Visualizer; on/off is `features.visualizer`); see sound/musicBeat.ts. */
   beat?: BeatSettings;
   /** Whether the tab bar shows tag management or pinned quick-access note tabs. */
   chapterBarMode?: 'tags' | 'tabs';

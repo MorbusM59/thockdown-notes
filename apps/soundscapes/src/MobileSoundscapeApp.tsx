@@ -89,7 +89,7 @@ export function MobileSoundscapeApp() {
   // the same shared theme code the desktop uses (shared/loadoutTheme.ts).
   const [look, setLook] = useState<MobileLook>(loadLook)
   const loadout = PRESETS[look.mode][look.preset[look.mode]]
-  const theme = useMemo(() => themeFrame(loadout, { reduceVisualEffects: false, glaze: true, isPreviewMode: false }), [loadout])
+  const theme = useMemo(() => themeFrame(loadout, { glaze: true, isPreviewMode: false }), [loadout])
 
   const customPresets = preferences.customPresets
   // Whether the native session plays (playbackMode.ts); the engine is not

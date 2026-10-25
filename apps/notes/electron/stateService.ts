@@ -554,13 +554,9 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     audioReverbAmount: sanitizeOptionalNumber(input?.audioReverbAmount),
     pitchJitterAmount: sanitizeOptionalNumber(input?.pitchJitterAmount),
     audioSpatial: sanitizeOptionalNumber(input?.audioSpatial),
-    reduceVisualEffects: Boolean(input?.reduceVisualEffects),
     // Strictly true: anything else, absence included, keeps the app local.
     allowRemoteImages: input?.allowRemoteImages === true,
     sidebarShowsImages: input?.sidebarShowsImages === true,
-    deferPreviewOnRapidInput: Boolean(input?.deferPreviewOnRapidInput),
-    noteSizeThresholdBlocks: sanitizeOptionalNumber(input?.noteSizeThresholdBlocks),
-    forceCharacterScrollbarThumb: Boolean(input?.forceCharacterScrollbarThumb),
     typingSoundEnabled: Boolean(input?.typingSoundEnabled),
     typingSoundSet: sanitizeTypingSoundSet(input?.typingSoundSet),
     musicVolume: sanitizeOptionalNumber(input?.musicVolume),

@@ -212,7 +212,6 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - Hold the right click down to keep paging continuously, just like holding \`Page Up\`/\`Page Down\` on the keyboard. It stops when you release the button, or as soon as the thumb reaches your cursor.
 - **What the thumb measures depends on the size of the note.** On a smaller note it represents actual screen space, the way a scrollbar normally does, so you keep the familiar sense of orientation as you write. On a larger one — which in practice usually means an external file — it represents character count instead, to give you an exact idea of how much information is left in the document regardless of that note's internal geometry.
 - That second reading is why, on a large note in render view, your position means the same thing whatever your view settings are: changing the font size or the pane width can re-flow every line without moving the thumb, and dragging it to the bottom of the track lands at the end of the note whether or not you've read your way down there before.
-- **Where that line falls is yours to move.** The **note size threshold** slider in [Performance]($#performance) sets how many paragraphs a note may have before it switches to the second reading, and a toggle beside it puts every note on the character reading regardless of size.
 
 ### [Word and Character Count](#word-and-character-count)
 
@@ -250,7 +249,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Typing Flow](#typing-flow)
 
 > **Where?**
-> Settings panel → Tools.
+> Switched on in [Features](${guideLink('APPEARANCE-SETTINGS', 'features')}), tuned in Settings panel → Flow.
 
 *Steady, fast typing builds a flow that the colours, the reverb and the caret answer, and a playing soundscape's weather picks up with it, and playing music gets a punchier EQ.*
 
@@ -273,7 +272,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - Caret, shade and outline are three separate blocks. The caret takes part only while the basketball at the end of its blink buttons (Settings panel → Caret) is on: then, while music plays and a beat is found, it stops blinking and holds steady, and the music dips it on the beat. Without a beat it blinks as selected.
 - Each block has its own **effect**: right of the slider's centre a hit adds the block; left of centre the block is inverted, so it rests at full strength while music plays and a hit takes it away; at the centre it is off. Each also has its **freq**, what it follows: the **kick** drum at the left end of the slider, the **snare** (claps and rim shots too) at the centre, the **hat** (any short bright hit) at the right end, or in between the level of one band of the music, with **width** setting how wide that band is. On a drum the same slider is **groove**: how steadily the block keeps to the drum's pattern. At the left it shows only what it hears; at the right every hit of the pattern lands, even one drowned by a guitar, and a one-off is ignored. When the drum stops, the block stops at any groove. Then **contrast**, how far the band must rise above the music around it before it responds; and how each hit falls away: its **shape**, from a heavy thump that holds its weight and then lets go (left) to a sharp ride-cymbal point with a long, low tail (right), and its **fall**, how long it takes to fade.
 - The shade's and the outline's colours are set with the swatches above the blocks, the same way as the cursor's and caret's.
-- It switches itself off while nothing is playing, and with Reduce visual effects.
+- It switches itself off while nothing is playing.
 
 ### [Speed Reading](#speed-reading)
 
@@ -803,7 +802,7 @@ ${shortcutTable()}
 > **Where?**
 > Settings panel, the row below the theme presets.
 
-*Switches for [Spell Check](${guideLink('NOTES-EDITING', 'spell-check')}), the [custom cursor]($#mouse-options), [keystroke sounds]($#keystroke-sounds), the [Visualizer](${guideLink('NOTES-EDITING', 'visualizer')}), [Glaze]($#glaze) and the [caret blink]($#caret).*
+*Switches for [Spell Check](${guideLink('NOTES-EDITING', 'spell-check')}), the [custom cursor]($#mouse-options), [keystroke sounds]($#keystroke-sounds), the [Visualizer](${guideLink('NOTES-EDITING', 'visualizer')}), [Glaze]($#glaze) and [Typing Flow](${guideLink('NOTES-EDITING', 'typing-flow')}).*
 
 - A feature that is off is gone, not just hidden: its settings leave the panel and it costs nothing while it is off. Switch it back on and everything is as you left it.
 - These switches are the same for every layout. A layout still decides how a feature looks and sounds, and can have silent keys or no glaze of its own.
@@ -929,7 +928,7 @@ ${shortcutTable()}
 - **Cycle** (100–5000ms) is how long one full blink takes.
 - **Frame** (5–500ms) is how long the caret holds each step of the blink. At its lowest the blink is smooth; wind it up and the caret animates in visible chunks, like a machine that only redraws itself so often. Steps never cross a shape's own turning points — a step longer than the stretch it lands in just holds that whole stretch, and one that would split a stretch unevenly is spread evenly across it instead.
 - **Effect** (0–100%) is how much of the chosen shape actually reaches the caret. At 100 you get the blink at full strength; at 0 the caret is simply static, sitting at whatever colors you gave it; in between is a straight blend of the two, so you can keep a rhythm you like and just take the edge off it.
-- All of these are saved per layout, same as the rest of your theming. To stop the blink entirely, switch the caret blink off in [Features]($#features).
+- All of these are saved per layout, same as the rest of your theming. To stop the blink entirely, press the selected shape again; pressing any shape brings it back.
 
 ### [Sounds](#keystroke-sounds)
 
@@ -972,18 +971,6 @@ ${shortcutTable()}
 - [Import](${guideLink('IMPORT-BACKUP', 'import')}) notes and [Back Up All Notes](${guideLink('IMPORT-BACKUP', 'back-up-all-notes')}).
 - Export or import your custom appearance presets as a \`.tdl\` file, so you can carry your look between machines.
 - Export or import your custom soundscapes as a \`.tds\` file the same way. Importing adds them after your own, skipping any you already have, up to twelve.
-
-### [Performance](#performance)
-
-> **Where?**
-> Settings panel → Performance.
-
-*Toggles for easing load on constrained machines, and where a note stops being small.*
-
-- **Reduce visual effects** forces [Glaze]($#glaze), [Filters]($#filters), and the colorize filter off, without discarding your slider positions (Invert is kept, since it's often load-bearing for dark layouts).
-- **Allow asynchronous input** coalesces preview updates onto one frame during fast key-repeat (e.g. held Backspace).
-- **Force character based scrollbar thumb** puts every note on the character reading described under [Scrollbar Navigation](${guideLink('NOTES-EDITING', 'scrollbar-navigation')}), however short it is.
-- **Note size threshold** is where that switch happens when the toggle above is off: how many paragraphs a note may have before its scrollbar starts counting characters instead of measuring height. A whole list counts as one paragraph, as does a table or a code block. Hover the slider to read the current number.
 
 ### [Debugging](#debugging)
 

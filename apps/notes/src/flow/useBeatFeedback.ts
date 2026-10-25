@@ -91,11 +91,10 @@ function useBeatBlock<T extends BlockSettings>(name: BlockName, channel: T, on: 
   }, [channel])
 }
 
-export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visualizer: VisualizerSettings, disabled: boolean): void {
-  const on = enabled && !disabled
-  useBeatBlock('caret', visualizer.caret, on && visualizer.caret.followsMusic, subscribeClock)
-  useBeatBlock('shade', visualizer.shade, on, subscribeBand)
-  useBeatBlock('outline', visualizer.outline, on, subscribeBand)
+export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visualizer: VisualizerSettings): void {
+  useBeatBlock('caret', visualizer.caret, enabled && visualizer.caret.followsMusic, subscribeClock)
+  useBeatBlock('shade', visualizer.shade, enabled, subscribeBand)
+  useBeatBlock('outline', visualizer.outline, enabled, subscribeBand)
   const shadeColor = visualizer.shade.color
   const shadeSpreadPx = visualizer.shade.spreadPx
   const shadeBlurPx = visualizer.shade.blurPx
@@ -107,7 +106,7 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
     root.setProperty('--beat-shade-blur', `${shadeBlurPx}px`)
     root.setProperty('--beat-outline-color', outlineColor)
   }, [shadeColor, shadeSpreadPx, shadeBlurPx, outlineColor])
-  const device = useOutputDevice(on)
+  const device = useOutputDevice(enabled)
   const delayMs = settings.delayMsByDevice[device] ?? 0
   useEffect(() => setBeatVisualDelaySec(delayMs / 1000), [delayMs])
 }

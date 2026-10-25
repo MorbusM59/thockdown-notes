@@ -17,8 +17,8 @@ export interface UseDisplayedNoteTextResult {
   /**
    * Replaces the text and re-renders the section. With no argument, commits
    * whatever `latestEditorTextRef` already holds -- the editor writes that
-   * ref on every change and the commit coalescer decides when to render it
-   * (see documentCommitCoalescer.ts). The text must be canonical.
+   * ref on every change and its change handler commits it
+   * (useEditorSectionMount.ts). The text must be canonical.
    */
   commitEditorText: (text?: string) => void
   /**

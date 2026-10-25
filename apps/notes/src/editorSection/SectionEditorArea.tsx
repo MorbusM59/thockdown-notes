@@ -72,7 +72,6 @@ export interface SectionEditorAreaProps {
   borderRadiusRegularPx: number
   spacingRegularPx: number
   /** The Performance section's "Reduce visual effects" toggle (App.tsx) -- also picked up by the escape-hold ring to fall back from its curve-sampled dial rotation to a plain CSS transform transition. */
-  reduceVisualEffects: boolean
   spellCheckEditEnabled: boolean
   previewTextureRef: RefObject<HTMLDivElement>
   /** Where the long-journey bridge draws -- see editor/scrollBridge.ts. */
@@ -213,7 +212,6 @@ export function SectionEditorArea({
   isExportingMd,
   borderRadiusRegularPx,
   spacingRegularPx,
-  reduceVisualEffects,
   spellCheckEditEnabled,
   previewTextureRef,
   previewBridgeHostRef,
@@ -544,7 +542,6 @@ export function SectionEditorArea({
                 isExportingMd={isExportingMd}
                 borderRadiusRegularPx={borderRadiusRegularPx}
                 spacingRegularPx={spacingRegularPx}
-                reduceVisualEffects={reduceVisualEffects}
                 onCreateNote={onEscapeHoldCreateNote}
                 onCreateChapter={onEscapeHoldCreateChapter}
                 onExportPdf={onEscapeHoldExportPdf}

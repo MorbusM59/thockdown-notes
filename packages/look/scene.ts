@@ -43,24 +43,22 @@ function saturatePosToValue(x: number): number {
   return Math.max(0, Math.min(SATURATE_MAX, s))
 }
 
-export function sceneOf(settings: SceneSettings, reduceVisualEffects: boolean): SceneDescription {
+export function sceneOf(settings: SceneSettings): SceneDescription {
   const inverted = settings.filterInvert > 0.5
   const decorative: SceneEffect[] = []
-  if (!reduceVisualEffects) {
-    if (settings.filterSepia > 0) decorative.push({ kind: 'sepia', amount: settings.filterSepia })
-    if (settings.filterHueRotate !== 0) decorative.push({ kind: 'hue-rotate', deg: settings.filterHueRotate })
-    if (settings.filterBrightness !== 1) decorative.push({ kind: 'brightness', amount: settings.filterBrightness })
-    if (settings.filterContrast !== 1) decorative.push({ kind: 'contrast', amount: settings.filterContrast })
-    const saturate = saturatePosToValue(settings.filterSaturate)
-    if (Math.abs(saturate - 1) > 0.001) decorative.push({ kind: 'saturate', amount: saturate })
-  }
+  if (settings.filterSepia > 0) decorative.push({ kind: 'sepia', amount: settings.filterSepia })
+  if (settings.filterHueRotate !== 0) decorative.push({ kind: 'hue-rotate', deg: settings.filterHueRotate })
+  if (settings.filterBrightness !== 1) decorative.push({ kind: 'brightness', amount: settings.filterBrightness })
+  if (settings.filterContrast !== 1) decorative.push({ kind: 'contrast', amount: settings.filterContrast })
+  const saturate = saturatePosToValue(settings.filterSaturate)
+  if (Math.abs(saturate - 1) > 0.001) decorative.push({ kind: 'saturate', amount: saturate })
   // Invert alone is drawn as a blend overlay rather than a filter: a filter
   // re-rasterizes the whole subtree on every repaint, a blend is composited.
   const invertViaBlendMode = inverted && decorative.length === 0
   const filterEffects: SceneEffect[] = invertViaBlendMode
     ? decorative
     : (settings.filterInvert > 0 ? [{ kind: 'invert', amount: settings.filterInvert }, ...decorative] : decorative)
-  const colorize = settings.filterColorize > 0 && !reduceVisualEffects
+  const colorize = settings.filterColorize > 0
     ? { hueDeg: settings.filterHueRotate, opacity: settings.filterColorize }
     : null
   return { filterEffects, invertViaBlendMode, colorize }

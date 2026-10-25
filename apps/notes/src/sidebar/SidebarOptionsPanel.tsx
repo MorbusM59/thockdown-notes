@@ -40,13 +40,6 @@ import {
 import { StagedColorRow } from './StagedColorRow'
 import { exportSoundscapes, importSoundscapes } from '@thockdown/soundscape/soundscapeFileActions'
 import type { SoundscapePreferences } from '@thockdown/soundscape/soundscape'
-import {
-  CONTINUOUS_DOCUMENT_MAX_THRESHOLD_BLOCKS,
-  CONTINUOUS_DOCUMENT_MIN_THRESHOLD_BLOCKS,
-  CONTINUOUS_DOCUMENT_THRESHOLD_STEP_BLOCKS,
-  DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS,
-  clampContinuousDocumentThreshold,
-} from '../editor/documentPosition'
 import { type RgbaColor, type HsvaColor, rgbaToCssColor, hsvaToRgba } from '@thockdown/look/colorMath'
 import { isTextEntryElement } from '@thockdown/interaction/focusOwnership'
 import type { HighlightColorKey, HighlightColors } from '../shared/highlightColors'
@@ -579,8 +572,6 @@ export interface SidebarOptionsPanelProps {
   setPitchJitterAmount: (value: number) => void
   audioSpatial: number
   setAudioSpatial: (value: number) => void
-  reduceVisualEffects: boolean
-  setReduceVisualEffects: (value: boolean) => void
   allowRemoteImages: boolean
   onAllowRemoteImagesChange: (value: boolean) => void
   features: FeatureToggles
@@ -593,12 +584,6 @@ export interface SidebarOptionsPanelProps {
   setBeatSettings: (updater: (previous: BeatSettings) => BeatSettings) => void
   visualizer: VisualizerSettings
   setVisualizer: (updater: (previous: VisualizerSettings) => VisualizerSettings) => void
-  deferPreviewOnRapidInput: boolean
-  setDeferPreviewOnRapidInput: (value: boolean) => void
-  noteSizeThresholdBlocks: number
-  setNoteSizeThresholdBlocks: (value: number) => void
-  forceCharacterScrollbarThumb: boolean
-  setForceCharacterScrollbarThumb: (value: boolean) => void
 
   borderRadiusRegularPx: number
   setBorderRadiusRegularPx: (value: number) => void
@@ -638,8 +623,6 @@ export interface SidebarOptionsPanelProps {
   adventureTrueModeWouldWipe: boolean
   clearAppState: () => void
   clearAppStatePrimed: boolean
-  queueAppStateSave: (selectedNoteId: string | null) => void
-  activeNoteId: string | null
 
   customCursorDotColor: string
   customCursorCenterColor: string
@@ -882,8 +865,6 @@ export function SidebarOptionsPanel({
   setPitchJitterAmount,
   audioSpatial,
   setAudioSpatial,
-  reduceVisualEffects,
-  setReduceVisualEffects,
   allowRemoteImages,
   onAllowRemoteImagesChange,
   features,
@@ -896,12 +877,6 @@ export function SidebarOptionsPanel({
   setBeatSettings,
   visualizer,
   setVisualizer,
-  deferPreviewOnRapidInput,
-  setDeferPreviewOnRapidInput,
-  noteSizeThresholdBlocks,
-  setNoteSizeThresholdBlocks,
-  forceCharacterScrollbarThumb,
-  setForceCharacterScrollbarThumb,
   borderRadiusRegularPx,
   setBorderRadiusRegularPx,
   spacingRegularPx,
@@ -922,8 +897,6 @@ export function SidebarOptionsPanel({
   adventureTrueModeWouldWipe,
   clearAppState,
   clearAppStatePrimed,
-  queueAppStateSave,
-  activeNoteId,
   customCursorDotColor,
   customCursorCenterColor,
   customCursorTrailColor,
@@ -2935,24 +2908,38 @@ export function SidebarOptionsPanel({
             />
           </div>
 
-          {features.caretBlink ? (<>
           <OptionsSubsectionLabel>Blink</OptionsSubsectionLabel>
           {/* Animation shape. One button per curve, same visual language as the
-              custom-layout slots -- the selected one carries .is-active. */}
+              custom-layout slots -- the selected one carries .is-active.
+              Pressing the active one switches the blink off altogether (the
+              caretBlink feature, shared/features.ts): the caret holds steady,
+              no animation runs, and the sliders below leave the panel.
+              Pressing any shape switches it back on. */}
           <div className="options-caret-preset-row" role="group" aria-label="Caret blink animation">
-            {CARET_ANIMATION_PRESET_KEYS.map((presetKey) => (
-              <button
-                key={presetKey}
-                type="button"
-                className={`btn-icon options-color-swatch options-caret-preset-btn${caretAnimationPreset === presetKey ? ' is-active' : ''}`}
-                data-tooltip={CARET_ANIMATION_PRESETS[presetKey].label}
-                aria-label={CARET_ANIMATION_PRESETS[presetKey].label}
-                aria-pressed={caretAnimationPreset === presetKey}
-                onClick={() => setCaretAnimationPreset(presetKey)}
-              >
-                <span className={`fa-solid ${CARET_ANIMATION_PRESETS[presetKey].iconClass}`} aria-hidden="true" />
-              </button>
-            ))}
+            {CARET_ANIMATION_PRESET_KEYS.map((presetKey) => {
+              const isActive = features.caretBlink && caretAnimationPreset === presetKey
+              const label = CARET_ANIMATION_PRESETS[presetKey].label
+              return (
+                <button
+                  key={presetKey}
+                  type="button"
+                  className={`btn-icon options-color-swatch options-caret-preset-btn${isActive ? ' is-active' : ''}`}
+                  data-tooltip={isActive ? `${label}: press again to stop the blink` : label}
+                  aria-label={label}
+                  aria-pressed={isActive}
+                  onClick={() => {
+                    if (isActive) {
+                      setFeatures((prev) => ({ ...prev, caretBlink: false }))
+                      return
+                    }
+                    setCaretAnimationPreset(presetKey)
+                    if (!features.caretBlink) setFeatures((prev) => ({ ...prev, caretBlink: true }))
+                  }}
+                >
+                  <span className={`fa-solid ${CARET_ANIMATION_PRESETS[presetKey].iconClass}`} aria-hidden="true" />
+                </button>
+              )
+            })}
             {/* Not a blink but a switch beside them: the blink selected above
                 stays selected and is what the caret falls back to whenever
                 there is no beat to follow (VisualizerCaret.followsMusic). */}
@@ -2974,6 +2961,7 @@ export function SidebarOptionsPanel({
             </button>
           </div>
 
+          {features.caretBlink ? (<>
           <div className="options-glaze-cell options-glaze-cell-span-2">
             <CompactScrollbarSlider
               id="caret-animation-duration"
@@ -3224,24 +3212,12 @@ export function SidebarOptionsPanel({
         onChange={onSoundscapePreferencesChange}
       />
 
+      {features.flow ? (
       <AccordionSection
-        className="sidebar-options-section-tools"
-        ariaLabel="Tools"
-        heading="Tools"
+        className="sidebar-options-section-flow"
+        ariaLabel="Flow"
+        heading="Flow"
       >
-<div className="utility-setting-button-row" role="group" aria-label="Tool controls">
-          <button
-            type="button"
-            className={`btn-icon${flowSettings.enabled ? ' is-active' : ''}`}
-            onClick={() => setFlowSettings((prev) => ({ ...prev, enabled: !prev.enabled }))}
-            aria-pressed={flowSettings.enabled}
-            data-tooltip={flowSettings.enabled ? 'Disable typing flow' : 'Enable typing flow: steady, fast typing builds a flow that the look, the reverb, the caret and its trail answer'}
-          >
-            <span className="fa-solid fa-water" aria-hidden="true" />
-          </button>
-        </div>
-        {flowSettings.enabled ? (<>
-          <OptionsSubsectionLabel>Flow</OptionsSubsectionLabel>
           <div className="utility-setting-slider-stack" aria-label="Typing flow settings">
             {/* How the trail fades (fade, shape) and how flow is answered (look, reverb, trail, amp). How the meter itself moves is fixed (shared/flowSettings.ts). */}
             <OptionsSliderRows rows={[2, 2, 2]}>
@@ -3321,8 +3297,8 @@ export function SidebarOptionsPanel({
               />
             </OptionsSliderRows>
           </div>
-        </>) : null}
       </AccordionSection>
+      ) : null}
 
       <AccordionSection
         className="sidebar-options-section-animations"
@@ -3596,85 +3572,6 @@ export function SidebarOptionsPanel({
               )}
             />
           </OptionsSliderRows>
-        </div>
-      </AccordionSection>
-
-      <AccordionSection
-        className="sidebar-options-section-performance"
-        ariaLabel="Performance"
-        heading="Performance"
-      >
-        <OptionsSubsectionLabel>Modes</OptionsSubsectionLabel>
-<div className="utility-setting-button-row" role="group" aria-label="Performance controls">
-          <button
-            type="button"
-            className={`btn-icon${reduceVisualEffects ? ' is-active' : ''}`}
-            onClick={() => {
-              const next = !reduceVisualEffects
-              setReduceVisualEffects(next)
-              queueAppStateSave(activeNoteId)
-            }}
-            aria-pressed={reduceVisualEffects}
-            data-tooltip="Reduce visual effects"
-          >
-            <span className="fa-solid fa-spray-can-sparkles" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className={`btn-icon${deferPreviewOnRapidInput ? ' is-active' : ''}`}
-            onClick={() => {
-              const next = !deferPreviewOnRapidInput
-              setDeferPreviewOnRapidInput(next)
-              queueAppStateSave(activeNoteId)
-            }}
-            aria-pressed={deferPreviewOnRapidInput}
-            data-tooltip="Allow asynchronous input"
-          >
-            <span className="fa-solid fa-gauge-high" aria-hidden="true" />
-          </button>
-          {/* Puts every note on the character-counting side of the line
-              below, whatever its size -- which is why it also takes the
-              slider out of play rather than sitting beside it as an equal.
-              Deliberately not the same thing as dragging the slider to its
-              floor: this is a standing preference, and the slider keeps its
-              own value underneath it for when this is switched back off. */}
-          <button
-            type="button"
-            className={`btn-icon${forceCharacterScrollbarThumb ? ' is-active' : ''}`}
-            onClick={() => {
-              const next = !forceCharacterScrollbarThumb
-              setForceCharacterScrollbarThumb(next)
-              queueAppStateSave(activeNoteId)
-            }}
-            aria-pressed={forceCharacterScrollbarThumb}
-            data-tooltip="Force character based scrollbar thumb"
-          >
-            <span className="fa-solid fa-text-height" aria-hidden="true" />
-          </button>
-        </div>
-        <OptionsSubsectionLabel>Large notes</OptionsSubsectionLabel>
-        {/* Where the reader puts the line between a note whose scrollbar is
-            measured in pixels and one whose scrollbar counts characters --
-            see editor/documentPosition.ts for what each side means and why
-            the choice is theirs. The rail names the setting; the tooltip
-            names the unit, which is the more useful of the two on hover. */}
-        <div className="utility-setting-slider-stack" aria-label="Note size threshold">
-          <CompactScrollbarSlider
-            id="note-size-threshold"
-            min={CONTINUOUS_DOCUMENT_MIN_THRESHOLD_BLOCKS}
-            max={CONTINUOUS_DOCUMENT_MAX_THRESHOLD_BLOCKS}
-            step={CONTINUOUS_DOCUMENT_THRESHOLD_STEP_BLOCKS}
-            value={noteSizeThresholdBlocks}
-            trackLabel="note size threshold"
-            tooltipLabel="paragraphs"
-            ariaLabel="Note size threshold: how many paragraphs a note may have before its scrollbar counts characters instead of measuring height."
-            defaultValue={DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS}
-            disabled={forceCharacterScrollbarThumb}
-            onCommit={(value) => {
-              setNoteSizeThresholdBlocks(clampContinuousDocumentThreshold(value))
-              queueAppStateSave(activeNoteId)
-            }}
-          />
         </div>
       </AccordionSection>
 

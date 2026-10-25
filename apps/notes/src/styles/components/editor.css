@@ -831,18 +831,14 @@ html[data-beat-outline] .editor-section-column.is-active .editor-beat-outline {
   }
 }
 
-.editor-stage .editor-escape-hold-panel-btn:not(.is-unarrived):not(.is-simple-rotation)
+.editor-stage .editor-escape-hold-panel-btn:not(.is-unarrived)
   > .editor-escape-hold-panel-btn-icon {
   animation: escape-hold-cell-arrive var(--cell-arrival, 100ms) ease-in both;
 }
 
-/* The two ways a reader says they do not want this. `.is-simple-rotation` is
-   the app's own reduced-visual-effects setting (it is already what turns the
-   curve-driven rotation into a plain CSS step) and is excluded in the rule
-   above rather than here, because with that setting every cell arrives at
-   once and they would otherwise grow in unison. Either way the icon's own
-   resting state is fully opaque and unscaled, so switching the animation off
-   leaves the ring correct rather than blank. */
+/* A reader who asked the OS for reduced motion does not get this. The icon's
+   own resting state is fully opaque and unscaled, so switching the animation
+   off leaves the ring correct rather than blank. */
 @media (prefers-reduced-motion: reduce) {
   .editor-stage .editor-escape-hold-panel-btn > .editor-escape-hold-panel-btn-icon {
     animation: none;
@@ -856,19 +852,12 @@ html[data-beat-outline] .editor-section-column.is-active .editor-beat-outline {
   /* Ring placement (translate(-50%,-50%) centers the button on its point;
      the second translate(...) is the actual ring offset) comes from each
      button's own inline `transform` -- see EscapeHoldPanel.tsx. No
-     `transform` transition here by default: the default (reduceVisualEffects:
-     false) rotation is driven by a requestAnimationFrame loop that writes
+     `transform` transition here: the rotation is driven by a requestAnimationFrame loop that writes
      `style.transform` directly, every frame, from the shared smooth-scroll
      curve toolkit reused for this rotation (escapeHoldRotationCurve.ts) -- a
      CSS transition running at the same time would fight those per-frame
      writes, trying to re-ease between each one and turning the precise curve
-     into a laggy, over-smoothed blur. `.is-simple-rotation` (added only when
-     reduceVisualEffects is true, which skips that whole engine and just
-     jumps `topIndex` by one slot per key press) is the one place this
-     transition is actually wanted, timed by `--rotation-duration` (set
-     inline alongside `transform`) rather than a fixed number so it stays in
-     step with EscapeHoldPanel.tsx's own constant instead of two numbers
-     that can drift apart. */
+     into a laggy, over-smoothed blur. */
   width:           var(--btn-square-larger-size);
   height:          var(--btn-square-larger-size);
   min-width:       var(--btn-square-larger-size);
@@ -884,10 +873,6 @@ html[data-beat-outline] .editor-section-column.is-active .editor-beat-outline {
   color:           var(--color-text-60);
   transition:      background 0.2s, border-color 0.2s, color 0.2s;
   font-size: var(--btn-large-icon-size);
-}
-
-.editor-stage .editor-escape-hold-panel-btn.is-simple-rotation {
-  transition: background 0.2s, border-color 0.2s, color 0.2s, transform var(--rotation-duration, 200ms) ease;
 }
 
 .editor-stage .editor-escape-hold-panel-btn[data-pressed]

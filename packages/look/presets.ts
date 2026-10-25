@@ -73,7 +73,7 @@ function withDerivedColors(loadout: UiLayoutLoadout): UiLayoutLoadout {
 function withFlowTrail(loadout: UiLayoutLoadout): UiLayoutLoadout {
   if (loadout.highlightColors.flowTrail) return loadout;
   const flowTrail = loadout.filterInvert > 0
-    ? deriveFlowTrail(loadout.highlightColors.grid, sceneOf(loadout, false))
+    ? deriveFlowTrail(loadout.highlightColors.grid, sceneOf(loadout))
     : deriveLightFlowTrail(loadout.highlightColors.grid);
   return { ...loadout, highlightColors: { ...loadout.highlightColors, flowTrail } };
 }

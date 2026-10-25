@@ -14,7 +14,14 @@
  * `sanitizeMenu` can use it.
  */
 
-export const FEATURE_IDS = ['spellCheck', 'customCursor', 'keySounds', 'visualizer', 'glaze', 'caretBlink'] as const
+export const FEATURE_IDS = ['spellCheck', 'customCursor', 'keySounds', 'visualizer', 'glaze', 'flow', 'caretBlink'] as const
+
+/**
+ * The features the bar offers. The caret blink is a feature in every sense
+ * but this one: it is switched off and on where its shapes are chosen, by
+ * pressing the active one (Options > Caret, Blink).
+ */
+export const BAR_FEATURE_IDS: readonly FeatureId[] = FEATURE_IDS.filter((id) => id !== 'caretBlink')
 
 export type FeatureId = typeof FEATURE_IDS[number]
 
@@ -26,29 +33,33 @@ export const DEFAULT_FEATURE_TOGGLES: FeatureToggles = {
   keySounds: true,
   visualizer: false,
   glaze: true,
+  flow: false,
   caretBlink: true,
 }
 
 /**
  * Reads the persisted record, falling back for a save written before it
- * existed to the separate fields that held four of these flags then
- * (`spellCheckEnabled`, `customCursorEnabled`, `beat.enabled`, and
- * `reducedCaretAnimation`, which is the inverse of `caretBlink`), so an
- * upgrade keeps what the reader had chosen.
+ * existed to the separate fields that held five of these flags then
+ * (`spellCheckEnabled`, `customCursorEnabled`, `beat.enabled`, `flow.enabled`
+ * and `reducedCaretAnimation`, which is the inverse of `caretBlink`), so an
+ * upgrade keeps what the reader had chosen. A record saved before a feature
+ * joined it takes that feature's old field too.
  */
 export function sanitizeFeatureToggles(menu: unknown): FeatureToggles {
   const source = (menu && typeof menu === 'object' ? menu : {}) as Record<string, unknown>
   const stored = (source.features && typeof source.features === 'object' ? source.features : null) as Record<string, unknown> | null
   const beat = (source.beat && typeof source.beat === 'object' ? source.beat : {}) as Record<string, unknown>
+  const flow = (source.flow && typeof source.flow === 'object' ? source.flow : {}) as Record<string, unknown>
   const legacy: Partial<Record<FeatureId, unknown>> = {
     spellCheck: source.spellCheckEnabled,
     customCursor: source.customCursorEnabled,
     visualizer: beat.enabled,
+    flow: flow.enabled,
     caretBlink: typeof source.reducedCaretAnimation === 'boolean' ? !source.reducedCaretAnimation : undefined,
   }
   const result = { ...DEFAULT_FEATURE_TOGGLES }
   for (const id of FEATURE_IDS) {
-    const value = stored ? stored[id] : legacy[id]
+    const value = stored && id in stored ? stored[id] : legacy[id]
     if (typeof value === 'boolean') result[id] = value
   }
   return result

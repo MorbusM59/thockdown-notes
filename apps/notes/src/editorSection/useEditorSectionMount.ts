@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useEffect, useLayoutEffect, useState } from 'react'
+import { useCallback, useMemo, useRef, useEffect, useLayoutEffect } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import type { PersistedViewportState } from '../shared/appState'
 import type { NoteSummary } from '../shared/noteLifecycle'
@@ -66,7 +66,6 @@ import { ScrollTransitionController } from '../editor/ScrollTransitionController
 import type { PreviewScrollToSourceLineFn } from './usePreviewMarkdownRendering'
 import { createPreviewSettleGate, type PreviewSettleGate } from './previewSettleGate'
 import { traceSettle } from './previewSettleTrace'
-import { createDocumentCommitCoalescer } from './documentCommitCoalescer'
 import { buildPersistedBlockMap } from '../editor/persistedBlockMap'
 import type { NoteUiStatePayload } from '../shared/noteLifecycle'
 import { requestFullBlockSplit } from '../editor/documentFactsClient'
@@ -134,8 +133,6 @@ export interface UseEditorSectionMountOptions {
   previewedSnapshotId: number | null
   persistenceReady: boolean
   lineHeightPx: number
-  /** Opt-in perf toggle: coalesces the preview-driving text commit onto a single requestAnimationFrame per user-input burst instead of firing once per keystroke, so fast key-repeat (e.g. held Backspace) doesn't queue a full ReactMarkdown reparse per tick. Undo/redo/programmatic sources always stay synchronous. */
-  deferPreviewOnRapidInput: boolean
   latestEditorTextRef: MutableRefObject<string>
   latestEditorSelectionRef: MutableRefObject<EditorSelectionState>
 
@@ -312,7 +309,6 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     previewedSnapshotId,
     persistenceReady,
     lineHeightPx,
-    deferPreviewOnRapidInput,
     latestEditorTextRef,
     latestEditorSelectionRef,
     notes,
@@ -463,33 +459,6 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     return next
   }, [])
 
-  // The single writer of the displayed document's text AND selection state
-  // from editor events -- see documentCommitCoalescer.ts for why the two
-  // must commit as one snapshot under deferPreviewOnRapidInput. Created once
-  // per mount; it reads its sinks through this ref, so a new setter or title
-  // callback never orphans a pending frame. latestEditorTextRef and
-  // latestEditorSelectionRef are already current on every tick, so a frame
-  // commits whatever they hold when it fires rather than every intermediate
-  // value. The frame also carries the title preview: deriveNoteTitleFromText
-  // is its own O(document length) scan, and running it per tick would defeat
-  // the point for a large note under rapid input.
-  const documentCommitSinksRef = useRef({ readEditorText, commitEditorText, latestEditorSelectionRef, setEditorSelection, updateActiveNoteTitlePreview })
-  documentCommitSinksRef.current = { readEditorText, commitEditorText, latestEditorSelectionRef, setEditorSelection, updateActiveNoteTitlePreview }
-  const [documentCommit] = useState(() => createDocumentCommitCoalescer({
-    requestFrame: (callback) => requestAnimationFrame(callback),
-    cancelFrame: (handle) => cancelAnimationFrame(handle),
-    commitText: (reason) => {
-      const sinks = documentCommitSinksRef.current
-      sinks.commitEditorText()
-      if (reason === 'frame') sinks.updateActiveNoteTitlePreview(sinks.readEditorText())
-    },
-    commitSelection: () => {
-      const sinks = documentCommitSinksRef.current
-      sinks.setEditorSelection(sinks.latestEditorSelectionRef.current)
-    },
-  }))
-
-  useEffect(() => () => documentCommit.cancel(), [documentCommit])
 
   const readCurrentEditUiPayload = useCallback((): { progressEdit: number; cursorPos: number; scrollTop: number; sourceAnchorLine: number } | null => {
     const selection = latestEditorSelectionRef.current
@@ -1657,9 +1626,13 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         recordLiveSelectionInSnapshotCache(event.selection)
       }
 
-      const isDeferredPreviewTick = deferPreviewOnRapidInput && event.source === 'user-input'
-      documentCommit.text(isDeferredPreviewTick)
-      debugLogCheckpoint('after documentCommit.text')
+      // Text and selection are committed together, in one batch: every
+      // consumer of the pair (the formatting toolbar's active state,
+      // extract-to-chapter, ...) indexes the selection into the text, so a
+      // selection one keystroke newer than its text is a wrong answer.
+      commitEditorText()
+      setEditorSelection(event.selection)
+      debugLogCheckpoint('after committing text and selection')
 
       if (!activeNoteId || !persistenceReady) return
 
@@ -1691,14 +1664,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         return
       }
 
-      // Deferred already covers this: documentCommit's coalesced frame calls
-      // updateActiveNoteTitlePreview itself once the frame fires, using
-      // whatever text is latest by then -- calling it again here would
-      // just redo the same O(document length) title derivation twice for
-      // no benefit.
-      if (!isDeferredPreviewTick) {
-        updateActiveNoteTitlePreview(canonicalText)
-      }
+      updateActiveNoteTitlePreview(canonicalText)
       debugLogCheckpoint('after updateActiveNoteTitlePreview')
       queueSave(canonicalText, event.selection.end)
       debugLogCheckpoint('after queueSave (onTextChange end)')
@@ -1715,7 +1681,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       }
 
       latestEditorSelectionRef.current = event.selection
-      documentCommit.selection()
+      setEditorSelection(event.selection)
       recordLiveSelectionInSnapshotCache(event.selection)
     },
     onTabIndentTransform: ({ shiftKey, text, selection }) => {
@@ -2026,7 +1992,6 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     isPreviewMode,
     persistenceReady,
     previewedSnapshotId,
-    deferPreviewOnRapidInput,
     queueSave,
     queueAppStateSave,
     applyEditRestoreSnapshot,
@@ -2036,7 +2001,8 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     buildToggleBulletedListTransformRef,
     buildToggleCurrentLineHeadingTransformRef,
     buildToggleNumberedListTransformRef,
-    documentCommit,
+    commitEditorText,
+    setEditorSelection,
     deriveTypingSoundKeyId,
     resolveTypingSoundSpatialPan,
     latestEditorSelectionRef,

@@ -158,7 +158,6 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   documentFindCaseSensitiveRef: MutableRefObject<boolean>
 
   editorRuntimeMetrics: EditorRuntimeMetrics
-  deferPreviewOnRapidInput: boolean
   noteSizeThresholdBlocks: number
   forceCharacterScrollbarThumb: boolean
   viewStyle: ViewStyleKey
@@ -237,7 +236,6 @@ export function EditorSection(rawProps: EditorSectionProps) {
   restoredDocumentFindCaseSensitive,
   documentFindCaseSensitiveRef,
   editorRuntimeMetrics,
-  deferPreviewOnRapidInput,
   noteSizeThresholdBlocks,
   forceCharacterScrollbarThumb,
   viewStyle,
@@ -267,7 +265,6 @@ export function EditorSection(rawProps: EditorSectionProps) {
   isExportingMd,
   borderRadiusRegularPx,
   spacingRegularPx,
-  reduceVisualEffects,
   isLeftmostSlot,
   canCreateSlot,
   onCreateSlot,
@@ -475,7 +472,6 @@ export function EditorSection(rawProps: EditorSectionProps) {
     previewedSnapshotId,
     persistenceReady,
     lineHeightPx: editorRuntimeMetrics.lineHeightPx,
-    deferPreviewOnRapidInput,
     latestEditorTextRef,
     latestEditorSelectionRef,
     notes,
@@ -2235,7 +2231,6 @@ export function EditorSection(rawProps: EditorSectionProps) {
         isExportingMd={isExportingMd}
         borderRadiusRegularPx={borderRadiusRegularPx}
         spacingRegularPx={spacingRegularPx}
-        reduceVisualEffects={reduceVisualEffects}
         spellCheckEditEnabled={spellCheckEditEnabled}
         previewTextureRef={previewTextureRef}
         previewBridgeHostRef={previewBridgeHostRef}
