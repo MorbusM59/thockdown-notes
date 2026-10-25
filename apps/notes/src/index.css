@@ -209,7 +209,7 @@ html[data-beat-caret] .thockdown-block-caret {
   --beat-caret-hold: 1;
 }
 
-.thockdown-reduced-caret-animation .thockdown-block-caret {
+.thockdown-caret-blink-off .thockdown-block-caret {
   animation: none;
   /* The beat's dip is kept: it was chosen in its own right. */
   opacity: calc(0.8 * (1 - var(--beat-caret, 0) * var(--beat-caret-hold)));

@@ -136,6 +136,7 @@ import { DEFAULT_SPEED_READING_SETTINGS, sanitizeSpeedReadingSettings, type Spee
 import { onSpeedReadingSettingsCommit, setSpeedReadingSettings as applySpeedReadingSettings } from './speedReading/speedReadingStore'
 import { useBeatFeedback } from './flow/useBeatFeedback'
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings, type BeatSettings } from './shared/beatSettings'
+import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles, type FeatureToggles } from './shared/features'
 import { defaultVisualizer, sanitizeVisualizer, type VisualizerSettings } from '@thockdown/look/visualizer'
 import { EditorSection } from './editorSection/EditorSection'
 import type { EscapeMenuContribution } from './escapeMenu/escapeMenuContract'
@@ -1458,7 +1459,11 @@ function App() {
   const [isExportingPdf, setIsExportingPdf] = useState(false)
   const [isExportingMd, setIsExportingMd] = useState(false)
   const [exportFolder, setExportFolder] = useState<string | null>(null)
-  const [spellCheckEnabled, setSpellCheckEnabled] = useState(false)
+  // Which features exist at all (shared/features.ts): the toggle bar at the
+  // top of Options. Each consumer below reads its own flag and tears its
+  // feature down when it is off.
+  const [features, setFeatures] = useState<FeatureToggles>(DEFAULT_FEATURE_TOGGLES)
+  const spellCheckEnabled = features.spellCheck
   const [flowSettings, setFlowSettings] = useState<FlowSettings>(DEFAULT_FLOW_SETTINGS)
   useFlowFeedback(flowSettings)
   // Every change is persisted at once, through the one sanctioned path (see
@@ -1475,8 +1480,8 @@ function App() {
   useEffect(() => onSpeedReadingSettingsCommit(setSpeedReadingSettings), [])
   useEffect(() => {
     void persistMenuStateNowRef.current()
-  }, [flowSettings, beatSettings, speedReadingSettings])
-  const [customCursorEnabled, setCustomCursorEnabled] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.enabled)
+  }, [flowSettings, beatSettings, speedReadingSettings, features])
+  const customCursorEnabled = features.customCursor
   const [customCursorDotColor, setCustomCursorDotColor] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.dotColor)
   const [customCursorCenterColor, setCustomCursorCenterColor] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.centerColor)
   const [customCursorTrailColor, setCustomCursorTrailColor] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.trailColor)
@@ -2208,11 +2213,10 @@ function App() {
   const [audioSpatial, setAudioSpatial] = useState(0)
   const [reduceVisualEffects, setReduceVisualEffects] = useState(false)
   // A pulse is exactly the kind of visual effect that flag turns off.
-  useBeatFeedback(beatSettings, visualizer, reduceVisualEffects)
+  useBeatFeedback(features.visualizer, beatSettings, visualizer, reduceVisualEffects)
   // The setting lives in a module store (the preview's img component and the
   // export read it there); App subscribes so the persisted snapshot follows it.
   const allowRemoteImages = useRemoteImagesAllowed()
-  const [reducedCaretAnimation, setReducedCaretAnimation] = useState(false)
   const [deferPreviewOnRapidInput, setDeferPreviewOnRapidInput] = useState(false)
   const [noteSizeThresholdBlocks, setNoteSizeThresholdBlocks] = useState(DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS)
   const [forceCharacterScrollbarThumb, setForceCharacterScrollbarThumb] = useState(false)
@@ -2351,6 +2355,7 @@ function App() {
     filterColorize,
   }, {
     reduceVisualEffects,
+    glaze: features.glaze,
     isPreviewMode: activeSectionSnapshot?.isPreviewMode ?? false,
   }), [
     borderRadiusRegularPx,
@@ -2368,6 +2373,7 @@ function App() {
     filterSaturate,
     filterColorize,
     reduceVisualEffects,
+    features.glaze,
     activeSectionSnapshot?.isPreviewMode,
   ])
 
@@ -4005,7 +4011,7 @@ function App() {
           collapsedSecondary: archiveCollapsedSecondary,
         },
       },
-      spellCheckEnabled,
+      features,
       flow: flowSettings,
       beat: beatSettings,
       speedReading: speedReadingSettings,
@@ -4033,26 +4039,22 @@ function App() {
       reduceVisualEffects,
       allowRemoteImages: overrides?.allowRemoteImages ?? allowRemoteImages,
       sidebarShowsImages: overrides?.sidebarShowsImages ?? sidebarShowsImages,
-      reducedCaretAnimation,
       deferPreviewOnRapidInput,
       noteSizeThresholdBlocks,
       forceCharacterScrollbarThumb,
-      customCursorEnabled,
     }
   }, [
     archiveCollapsedPrimary,
     archiveCollapsedSecondary,
-    customCursorEnabled,
     categoryCollapsedPrimary,
     categoryCollapsedSecondary,
-    spellCheckEnabled,
+    features,
     flowSettings,
     beatSettings,
     speedReadingSettings,
     reduceVisualEffects,
     allowRemoteImages,
     sidebarShowsImages,
-    reducedCaretAnimation,
     deferPreviewOnRapidInput,
     noteSizeThresholdBlocks,
     forceCharacterScrollbarThumb,
@@ -5907,7 +5909,6 @@ ${markdownHtml}
             setReduceVisualEffects(appState.menu.reduceVisualEffects ?? false)
             setRemoteImagesAllowed(appState.menu.allowRemoteImages === true)
             setSidebarShowsImages(appState.menu.sidebarShowsImages === true)
-            setReducedCaretAnimation(appState.menu.reducedCaretAnimation ?? false)
             setDeferPreviewOnRapidInput(appState.menu.deferPreviewOnRapidInput ?? false)
             // Clamped on the way in as well as on the way out: a stored value
             // predating a change to the slider's range would otherwise put the
@@ -5993,7 +5994,7 @@ ${markdownHtml}
             })
             // Global texture enable is intentionally fixed on; per-surface alpha controls visibility.
             setTextureMaterials(cloneTextureMaterials(appState.menu.textureMaterials ?? DEFAULT_TEXTURE_MATERIALS))
-            setSpellCheckEnabled(appState.menu.spellCheckEnabled ?? false)
+            setFeatures(sanitizeFeatureToggles(appState.menu))
             setFlowSettings(sanitizeFlowSettings(appState.menu.flow))
             setSpeedReadingSettings(sanitizeSpeedReadingSettings(appState.menu.speedReading))
             setBeatSettings(sanitizeBeatSettings(appState.menu.beat))
@@ -6018,10 +6019,6 @@ ${markdownHtml}
 
             // Cursor appearance (color/size/speed) now lives in the active
             // UiLayoutLoadout, restored when that loadout is applied below.
-            // enabled is kept out of layouts on purpose -- always defaults
-            // to off and persists independently in app state.
-            setCustomCursorEnabled(appState.menu.customCursorEnabled ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.enabled)
-
             setCurrentPage(loadedSidebarViewState[appState.menu.sidebarMode].page)
             setCategoryCollapsedPrimary(loadedSidebarViewState.category.collapsedPrimary)
             setCategoryCollapsedSecondary(loadedSidebarViewState.category.collapsedSecondary)
@@ -6986,26 +6983,12 @@ ${markdownHtml}
   }, [applyResolvedSections, editorSections, toSlotWidthUpdates])
 
   useEffect(() => {
-    // Prime immediately once assets are loaded, not just on a later user
-    // gesture (see the effect below): Electron's default autoplay policy is
-    // no-user-gesture-required, so there's nothing to wait for, and if the
-    // user's first action after launch is typing rather than clicking, the
-    // pointerdown/focus listeners below would never have fired before that
-    // first keystroke -- leaving the ~100-300ms hardware spin-up to land on
-    // it anyway.
-    void typingSoundManager.load().then(() => {
-      typingSoundManager.primeAudioContext()
-    })
-  }, [])
-
-  useEffect(() => {
-    // Belt-and-suspenders fallback for contexts where the eager prime above
-    // couldn't run (resume() rejected, or load() still in flight when a
-    // gesture happens first anyway) -- resume the AudioContext on the
-    // earliest real user gesture (window focus, first pointer press) rather
-    // than waiting for the first keystroke. primeAudioContext()'s own
-    // ensureContextRunning() no-ops once the context is already running, so
-    // this is safe to fire alongside the eager prime above.
+    // Belt-and-suspenders fallback for contexts where the eager prime in
+    // TypingSoundManager.setTypingSoundEnabled couldn't run (resume()
+    // rejected) -- resume the AudioContext on the earliest real user gesture
+    // (window focus, first pointer press) rather than waiting for the first
+    // keystroke. primeAudioContext() no-ops while key sounds are off and once
+    // the context is already running, so this is safe to fire alongside it.
     const primeAudio = () => {
       typingSoundManager.primeAudioContext()
     }
@@ -7037,9 +7020,13 @@ ${markdownHtml}
     typingSoundManager.setTypingSoundSet(typingSoundSet)
   }, [typingSoundSet])
 
+  // Sounding keys needs both the keystroke-sounds feature (shared/features.ts)
+  // and the layout's own choice of a sound set. Off either way, the manager
+  // suspends its AudioContext; it loads and primes it the first time it is on.
+  const keySoundsAudible = features.keySounds && typingSoundEnabled
   useEffect(() => {
-    typingSoundManager.setTypingSoundEnabled(typingSoundEnabled)
-  }, [typingSoundEnabled])
+    typingSoundManager.setTypingSoundEnabled(keySoundsAudible)
+  }, [keySoundsAudible])
 
   useEffect(() => {
     typingSoundManager.setReverbStrength(audioReverbStrength)
@@ -7058,14 +7045,16 @@ ${markdownHtml}
   }, [audioSpatial])
 
   useEffect(() => {
-    // The blink animation keeps the compositor busy indefinitely while the
-    // caret is idle, not just while typing -- toggled via a body class
-    // rather than threading a prop through BlockCaretPlugin/Editor.tsx.
-    document.body.classList.toggle('thockdown-reduced-caret-animation', reducedCaretAnimation)
+    // The caret blink feature (shared/features.ts). The blink animation keeps
+    // the compositor busy indefinitely while the caret is idle, not just while
+    // typing, so switching it off removes the animation outright -- a body
+    // class rather than a prop threaded through the editor's caret layer.
+    const blinkOff = !features.caretBlink
+    document.body.classList.toggle('thockdown-caret-blink-off', blinkOff)
     return () => {
-      document.body.classList.remove('thockdown-reduced-caret-animation')
+      document.body.classList.remove('thockdown-caret-blink-off')
     }
-  }, [reducedCaretAnimation])
+  }, [features.caretBlink])
 
   useEffect(() => {
     typingSoundManager.setLayerGain('treble', audioTrebleVolume)
@@ -9441,8 +9430,8 @@ ${markdownHtml}
                         setReduceVisualEffects={setReduceVisualEffects}
                         allowRemoteImages={allowRemoteImages}
                         onAllowRemoteImagesChange={handleAllowRemoteImagesChange}
-                        spellCheckEnabled={spellCheckEnabled}
-                        setSpellCheckEnabled={setSpellCheckEnabled}
+                        features={features}
+                        setFeatures={setFeatures}
                         flowSettings={flowSettings}
                         setFlowSettings={setFlowSettings}
                         speedReadingSettings={speedReadingSettings}
@@ -9451,8 +9440,6 @@ ${markdownHtml}
                         visualizer={visualizer}
                         setVisualizer={setVisualizer}
                         setBeatSettings={setBeatSettings}
-                        reducedCaretAnimation={reducedCaretAnimation}
-                        setReducedCaretAnimation={setReducedCaretAnimation}
                         deferPreviewOnRapidInput={deferPreviewOnRapidInput}
                         setDeferPreviewOnRapidInput={setDeferPreviewOnRapidInput}
                         noteSizeThresholdBlocks={noteSizeThresholdBlocks}
@@ -9481,8 +9468,6 @@ ${markdownHtml}
                         clearAppStatePrimed={clearAppStatePrimed}
                         queueAppStateSave={queueAppStateSave}
                         activeNoteId={activeSection?.activeNoteId ?? null}
-                        customCursorEnabled={customCursorEnabled}
-                        setCustomCursorEnabled={setCustomCursorEnabled}
                         customCursorDotColor={customCursorDotColor}
                         customCursorCenterColor={customCursorCenterColor}
                         customCursorTrailColor={customCursorTrailColor}

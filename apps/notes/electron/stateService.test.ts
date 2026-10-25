@@ -3,6 +3,7 @@ import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { StateService } from './stateService'
+import type { PersistedMenuState } from '../src/shared/appState'
 import { UI_FONT_SCALE_MAX, UI_FONT_SCALE_MIN } from '../src/shared/UiTypography'
 import { THOCKQUEST } from '../src/adventure/content'
 import { choose, enterEntryScreen, type DirectorDeps } from '../src/adventure/core/director'
@@ -389,22 +390,22 @@ describe('StateService app-state field round-trip', () => {
     expect((await new StateService(dataRoot).loadAppState()).menu?.allowRemoteImages).toBe(false)
   })
 
-  it('persists the unified global spellcheck toggle across a save -> fresh-instance load', async () => {
-    const writer = new StateService(dataRoot)
-    await writer.saveAppState({
-      selectedNoteId: null,
-      menu: {
-        sidebarMode: 'date',
-        selectedMonths: [],
-        selectedYears: [],
-        searchQuery: '',
-        spellCheckEnabled: true,
-      },
-    })
+  it('persists the feature toggles across a save -> fresh-instance load', async () => {
+    const base = { sidebarMode: 'date' as const, selectedMonths: [], selectedYears: [], searchQuery: '' }
+    const features = { spellCheck: true, customCursor: false, keySounds: false, visualizer: true, glaze: false, caretBlink: false }
+    await new StateService(dataRoot).saveAppState({ selectedNoteId: null, menu: { ...base, features } })
+    expect((await new StateService(dataRoot).loadAppState()).menu?.features).toEqual(features)
+  })
 
-    const reader = new StateService(dataRoot)
-    const loaded = await reader.loadAppState()
-    expect(loaded.menu?.spellCheckEnabled).toBe(true)
+  it('reads an older save\'s separate flags into the feature toggles', async () => {
+    const legacy = {
+      sidebarMode: 'date', selectedMonths: [], selectedYears: [], searchQuery: '',
+      spellCheckEnabled: true, customCursorEnabled: false, reducedCaretAnimation: true, beat: { enabled: true },
+    }
+    await new StateService(dataRoot).saveAppState({ selectedNoteId: null, menu: legacy as unknown as PersistedMenuState })
+    expect((await new StateService(dataRoot).loadAppState()).menu?.features).toEqual({
+      spellCheck: true, customCursor: false, keySounds: true, visualizer: true, glaze: true, caretBlink: false,
+    })
   })
 
   // The music player's sound-options row replaced the sidebar's volume/reverb

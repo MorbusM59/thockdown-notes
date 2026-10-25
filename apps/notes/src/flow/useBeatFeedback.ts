@@ -91,8 +91,8 @@ function useBeatBlock<T extends BlockSettings>(name: BlockName, channel: T, on: 
   }, [channel])
 }
 
-export function useBeatFeedback(settings: BeatSettings, visualizer: VisualizerSettings, disabled: boolean): void {
-  const on = settings.enabled && !disabled
+export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visualizer: VisualizerSettings, disabled: boolean): void {
+  const on = enabled && !disabled
   useBeatBlock('caret', visualizer.caret, on && visualizer.caret.followsMusic, subscribeClock)
   useBeatBlock('shade', visualizer.shade, on, subscribeBand)
   useBeatBlock('outline', visualizer.outline, on, subscribeBand)

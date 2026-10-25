@@ -1,3 +1,4 @@
+import type { FeatureToggles } from './features';
 import type { FlowSettings } from './flowSettings';
 import type { SpeedReadingSettings } from '../speedReading/speedReadingSettings';
 import type { BeatSettings } from './beatSettings';
@@ -175,7 +176,6 @@ export interface PersistedMenuState {
   sidebarShowsImages?: boolean;
   /** Remote (http/https) images in notes load. Off unless the reader held the toggle on; see src/shared/remoteImages.ts. */
   allowRemoteImages?: boolean;
-  reducedCaretAnimation?: boolean;
   deferPreviewOnRapidInput?: boolean;
   /**
    * Where the reader has put the line between a note whose scrollbar is
@@ -225,7 +225,8 @@ export interface PersistedMenuState {
   renderScrollBaseDistanceRows?: number;
   renderScrollMaxDurationMultiplier?: number;
   sidebarViewState?: Partial<Record<SidebarMode, PersistedSidebarViewState>>;
-  spellCheckEnabled?: boolean;
+  /** Which features exist at all: the toggle bar at the top of Options. See shared/features.ts. */
+  features?: FeatureToggles;
   /** Typing flow (Options > Tools); see flow/flowModel.ts. */
   flow?: FlowSettings;
   speedReading?: SpeedReadingSettings;
@@ -249,14 +250,6 @@ export interface PersistedMenuState {
   slotOverlay?: SlotOverlay | null;
   /** Whether "double size" mode (2x page zoom + doubled window minimum) is on. See App.tsx's isDoubleSizeMode. */
   isDoubleSizeMode?: boolean;
-  /**
-   * Whether the custom animated mouse cursor overlay is on (Options > Mouse
-   * options). Deliberately kept out of UiLayoutLoadout and always defaults
-   * to off -- it must persist across layout switches and app restarts
-   * independent of whichever layout is active. Its appearance settings
-   * (colors, size, speed, etc.) live in UiLayoutLoadout instead.
-   */
-  customCursorEnabled?: boolean;
   /** Line-number gutter visibility, keyed per editor slot (sectionId), not per note. See App.tsx's reviewGutterVisibleBySection. */
   reviewGutterVisibleBySection?: Record<string, boolean>;
   /**

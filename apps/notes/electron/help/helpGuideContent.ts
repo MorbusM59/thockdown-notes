@@ -241,7 +241,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Spell Check](#spell-check)
 
 > **Where?**
-> Settings panel → Tools.
+> Settings panel → [Features](${guideLink('APPEARANCE-SETTINGS', 'features')}).
 
 *Underlines misspelled words using your OS's native spell checker.*
 
@@ -268,7 +268,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 *The caret, the active editor's shade and the box outlines follow the music you are playing.*
 
-- The drum button switches it on for every layout, and **delay** draws it later (or, below 0, earlier) if it runs ahead of what you hear, as wireless headphones often make it. The delay is remembered for each output device.
+- Its switch in [Features](${guideLink('APPEARANCE-SETTINGS', 'features')}) turns it on for every layout, and **delay** draws it later (or, below 0, earlier) if it runs ahead of what you hear, as wireless headphones often make it. The delay is remembered for each output device.
 - Everything else belongs to the layout, so each layout can have its own visualizer.
 - Caret, shade and outline are three separate blocks. The caret takes part only while the basketball at the end of its blink buttons (Settings panel → Caret) is on: then, while music plays and a beat is found, it stops blinking and holds steady, and the music dips it on the beat. Without a beat it blinks as selected.
 - Each block has its own **effect**: right of the slider's centre a hit adds the block; left of centre the block is inverted, so it rests at full strength while music plays and a hit takes it away; at the centre it is off. Each also has its **freq**, what it follows: the **kick** drum at the left end of the slider, the **snare** (claps and rim shots too) at the centre, the **hat** (any short bright hit) at the right end, or in between the level of one band of the music, with **width** setting how wide that band is; **contrast**, how far the band must rise above the music around it before it responds; and how each hit falls away: its **shape**, from a heavy thump that holds its weight and then lets go (left) to a sharp ride-cymbal point with a long, low tail (right), and its **fall**, how long it takes to fade.
@@ -782,7 +782,7 @@ ${shortcutTable()}
 ### [Editor Font](#editor-font)
 
 > **Where?**
-> Settings panel, directly below the theme presets.
+> Settings panel, directly below the feature switches.
 
 *Font family, size, spacing, and padding for the editor and the rendered preview.*
 
@@ -797,6 +797,16 @@ ${shortcutTable()}
 *A row of built-in light and dark theme presets.*
 
 - A "Custom" marker preset activates automatically once you've changed anything away from a built-in preset.
+
+### [Features](#features)
+
+> **Where?**
+> Settings panel, the row below the theme presets.
+
+*Switches for [Spell Check](${guideLink('NOTES-EDITING', 'spell-check')}), the [custom cursor]($#mouse-options), [keystroke sounds]($#keystroke-sounds), the [Visualizer](${guideLink('NOTES-EDITING', 'visualizer')}), [Glaze]($#glaze) and the [caret blink]($#caret).*
+
+- A feature that is off is gone, not just hidden: its settings leave the panel and it costs nothing while it is off. Switch it back on and everything is as you left it.
+- These switches are the same for every layout. A layout still decides how a feature looks and sounds, and can have silent keys or no glaze of its own.
 
 ### [Custom Layouts](#custom-layouts)
 
@@ -842,7 +852,7 @@ ${shortcutTable()}
 *A decorative multi-layer light overlay on top of the UI — purely cosmetic.*
 
 - Independent linear ("glare") and radial ("flair") gradient layers, plus dark and light gradient accents ("gloom" and "sheen"), each with its own position, shape, opacity, and randomizable seed.
-- Safe to leave at defaults, or turn off entirely via [Performance]($#performance).
+- Safe to leave at defaults, or turn off entirely in [Features]($#features).
 
 ### [Filters](#filters)
 
@@ -895,7 +905,7 @@ ${shortcutTable()}
 > **Where?**
 > Settings panel → Cursor.
 
-*An optional animated cursor replacement: orbiting dots with fading trails, a center dot, a soft halo, and a breathing pulse, all pinned to the real pointer position. On by default — switch it off in [Performance]($#performance).*
+*An optional animated cursor replacement: orbiting dots with fading trails, a center dot, a soft halo, and a breathing pulse, all pinned to the real pointer position. On by default — switch it off in [Features]($#features); while it is on, the native cursor is hidden everywhere in the app, not just the editor.*
 
 - Top-left button is a halo color swatch. The 4 buttons beside it (H, S, V, A) stage a color by dragging up/down or scrolling on each — left-click a swatch (halo, circling dots, center dot, trail) to paint it onto that element; hold right-click on a swatch to load its current color back into H/S/V/A.
 - Sliders: number of circling dots, orbit radius, spin speed (-4Hz to 4Hz, negative reverses direction, 0 freezes it), trail fade duration (how long a trail particle takes to decay after the head passes it — e.g. 1000ms at 1Hz spin sweeps exactly one full revolution), trail thickness (0–12px, 0 hides it), dot size (0–12px, 0 hides it), center dot size (0–12px, 0 hides it), halo radius (0 hides it, capped at the same max as orbit radius), fall-off (0–100 — how far out the halo's glow stays near-opaque before fading to nothing at its edge; low values fade fast near the center, high values stay bright almost all the way to the rim), and a pulse effect that breathes the orbit's radius outward — magnitude 0 keeps it locked at its base size, magnitude 1 breathes up to 200% of it — at a given speed. The halo is rendered centered behind the center dot. Colors and these sliders are saved per layout, same as the rest of your theming.
@@ -919,7 +929,7 @@ ${shortcutTable()}
 - **Cycle** (100–5000ms) is how long one full blink takes.
 - **Frame** (5–500ms) is how long the caret holds each step of the blink. At its lowest the blink is smooth; wind it up and the caret animates in visible chunks, like a machine that only redraws itself so often. Steps never cross a shape's own turning points — a step longer than the stretch it lands in just holds that whole stretch, and one that would split a stretch unevenly is spread evenly across it instead.
 - **Effect** (0–100%) is how much of the chosen shape actually reaches the caret. At 100 you get the blink at full strength; at 0 the caret is simply static, sitting at whatever colors you gave it; in between is a straight blend of the two, so you can keep a rhythm you like and just take the edge off it.
-- All of these are saved per layout, same as the rest of your theming. To stop the blink entirely, use **Reduce caret animation** in [Performance]($#performance).
+- All of these are saved per layout, same as the rest of your theming. To stop the blink entirely, switch the caret blink off in [Features]($#features).
 
 ### [Sounds](#keystroke-sounds)
 
@@ -968,14 +978,12 @@ ${shortcutTable()}
 > **Where?**
 > Settings panel → Performance.
 
-*Toggles for easing load on constrained machines, the custom cursor switch, and where a note stops being small.*
+*Toggles for easing load on constrained machines, and where a note stops being small.*
 
 - **Reduce visual effects** forces [Glaze]($#glaze), [Filters]($#filters), and the colorize filter off, without discarding your slider positions (Invert is kept, since it's often load-bearing for dark layouts).
-- **Reduce caret animation** stops the idle caret blink, easing compositor load.
 - **Allow asynchronous input** coalesces preview updates onto one frame during fast key-repeat (e.g. held Backspace).
 - **Force character based scrollbar thumb** puts every note on the character reading described under [Scrollbar Navigation](${guideLink('NOTES-EDITING', 'scrollbar-navigation')}), however short it is.
 - **Note size threshold** is where that switch happens when the toggle above is off: how many paragraphs a note may have before its scrollbar starts counting characters instead of measuring height. A whole list counts as one paragraph, as does a table or a code block. Hover the slider to read the current number.
-- The mouse button switches the [custom cursor]($#mouse-options) off (it is lit while the cursor is off); while the custom cursor is on, the native cursor is hidden everywhere in the app, not just the editor — sidebar, toolbar, dialogs, all of it. This toggle always starts on for a fresh install and isn't part of a layout — it stays as you left it across layout switches and app restarts until you flip it again.
 
 ### [Debugging](#debugging)
 

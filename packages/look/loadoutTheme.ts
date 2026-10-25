@@ -70,6 +70,8 @@ export type ThemeLoadout = Pick<
 export interface ThemeOptions {
   /** The low-power switch: drops glaze, colorize and every decorative filter (invert stays). */
   reduceVisualEffects: boolean
+  /** The glaze feature is on (the desktop app's feature toggle); off, no glaze layer is drawn at all. */
+  glaze: boolean
   /** Selection colour follows the active view: the render view has its own. */
   isPreviewMode: boolean
 }
@@ -351,7 +353,7 @@ export function themeFrame(loadout: ThemeLoadout, options: ThemeOptions): ThemeF
   const palette = derivePaletteTokensFromBaseColor(colors.base)
   const lineNumberRgba = parseCssColorToRgba(colors.lineNumber) ?? { r: 0, g: 0, b: 0, a: 0.6 }
 
-  const glaze: ThemeGlazeImages = reduce
+  const glaze: ThemeGlazeImages = reduce || !options.glaze
     ? { linear: 'none', radial: 'none', gloom: 'none', sheen: 'none' }
     : {
         linear: buildLinearGlazeLayers(loadout.glaze).join(', ') || 'none',
