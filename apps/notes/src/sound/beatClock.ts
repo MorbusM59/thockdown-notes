@@ -14,14 +14,13 @@
  *   A long compilation track changes tempo between its pieces, and the
  *   tracker's grid (read from the ten seconds around the listener) follows
  *   each piece; the clock follows the grid. It follows it in the clock's
- *   own OCTAVE: the grid's period is first doubled or halved until it is
- *   within half an octave of the clock's. The tracker can read one passage
- *   at 79 beats a minute and the next at 158 (a song whose hats run in
- *   eighths at one tempo and its snare on two and four at the other), and
- *   both are the same music; a caret that halved its pace on such a flip
- *   showed the tracker's doubt rather than the music. A real change of
- *   tempo between pieces moves by less than half an octave, or lands on
- *   a pace that fits the new piece as well at the octave the clock keeps.
+ *   own RANGE: the grid's period is first doubled or halved until its
+ *   tempo is at least `MIN_BPM` and below `MAX_BPM` (twice the minimum, so
+ *   every tempo has exactly one octave there). The tracker can read one
+ *   passage at 79 beats a minute and the next at 158, and both are the same
+ *   music; a caret that halved its pace on such a flip showed the tracker's
+ *   doubt rather than the music. A real tempo change across the range's
+ *   edge lands on the octave inside it, which fits the new piece as well.
  * - the PHASE, toward the grid's beats, by its error wrapped to half a beat
  *   either way, with a time constant of `PHASE_TAU_SEC`, and never by more
  *   than `MAX_PHASE_RATE` of the clock's own advance, so a beat is never
@@ -39,7 +38,7 @@
  * UNSEATED: its period is kept, since the music around the new position is
  * most likely at the same tempo, but its phase means nothing there. An
  * unseated clock runs on its period from the moment it landed and takes the
- * next grid it is given AS IT IS (in its own octave), period and phase,
+ * next grid it is given AS IT IS (in the range), period and phase,
  * rather than gliding to it: gliding from a phase that was never the music's showed as several
  * uneven beats. A clock that has never seen a grid has no beat at all.
  */
@@ -56,9 +55,13 @@ function wrapHalf(x: number): number {
   return x - Math.round(x)
 }
 
-/** `period` doubled or halved until it is within half an octave of `reference`. */
-function inOctaveOf(period: number, reference: number): number {
-  return period * 2 ** Math.round(Math.log2(reference / period))
+/** The caret's tempo range, in beats a minute: from MIN_BPM up to but not including MAX_BPM. */
+export const MIN_BPM = 70
+export const MAX_BPM = 2 * MIN_BPM
+
+/** `period` (seconds) doubled or halved until its tempo is in MIN_BPM..MAX_BPM. */
+export function inTempoRange(period: number): number {
+  return (60 / MIN_BPM) * 2 ** (Math.log2(period / (60 / MIN_BPM)) - Math.ceil(Math.log2(period / (60 / MIN_BPM))))
 }
 
 export class BeatClock {
@@ -98,9 +101,7 @@ export class BeatClock {
       this.time = time
     }
     if (grid && !this.seated) {
-      // In the octave the clock already keeps, if it has one: a seek lands in
-      // the same music, and the tracker's reading of it may be either octave.
-      this.periodSec = Number.isNaN(this.periodSec) ? gridPeriodSec : inOctaveOf(gridPeriodSec, this.periodSec)
+      this.periodSec = inTempoRange(gridPeriodSec)
       const target = (time - gridBeatTime) / this.periodSec
       // Seated FORWARD, by less than a beat, so a seat can shorten one beat
       // but never runs the count back over a beat already shown.
@@ -110,7 +111,7 @@ export class BeatClock {
       return
     }
     if (Number.isNaN(this.periodSec) || Number.isNaN(this.beats) || !(dt > 0 && dt <= MAX_STEP_SEC)) return
-    if (grid) this.periodSec += (inOctaveOf(gridPeriodSec, this.periodSec) - this.periodSec) * (1 - Math.exp(-dt / TEMPO_TAU_SEC))
+    if (grid) this.periodSec += (inTempoRange(gridPeriodSec) - this.periodSec) * (1 - Math.exp(-dt / TEMPO_TAU_SEC))
     const step = dt / this.periodSec
     let correction = 0
     if (grid && this.seated) {

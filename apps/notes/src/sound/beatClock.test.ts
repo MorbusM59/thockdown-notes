@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BeatClock, MAX_PHASE_RATE } from './beatClock'
+import { BeatClock, inTempoRange, MAX_PHASE_RATE } from './beatClock'
 
 const FRAME = 1 / 60
 
@@ -71,7 +71,7 @@ describe('BeatClock', () => {
     for (const time of ticks.filter((t) => t > 45)) expect(offGrid(time, second)).toBeLessThanOrEqual(FRAME + 0.002)
   })
 
-  it('keeps its own octave when the grid halves or doubles, beating on the grid all along', () => {
+  it('keeps its pace when the grid halves or doubles, beating on the grid all along', () => {
     // The tracker reading one song at 79 and then at 158 beats a minute, back and forth.
     const slow = { periodSec: 60 / 79, beatTime: 0.05 }
     const fast = { periodSec: 60 / 158, beatTime: 0.05 }
@@ -81,27 +81,36 @@ describe('BeatClock', () => {
     for (const time of ticks) expect(offGrid(time, slow)).toBeLessThanOrEqual(FRAME)
   })
 
-  it('keeps its octave from the other side too, beating on every other beat of a slower grid', () => {
+  it('folds every tempo into 70 up to but not including 140 beats a minute, by whole octaves', () => {
+    for (let bpm = 20; bpm < 400; bpm += 0.37) {
+      const folded = 60 / inTempoRange(60 / bpm)
+      expect(folded).toBeGreaterThanOrEqual(70 - 1e-9)
+      expect(folded).toBeLessThan(140)
+      expect(Math.abs(Math.log2(folded / bpm) - Math.round(Math.log2(folded / bpm)))).toBeLessThan(1e-9)
+    }
+    expect(60 / inTempoRange(60 / 140)).toBeCloseTo(70, 9)
+    expect(60 / inTempoRange(60 / 70)).toBeCloseTo(70, 9)
+  })
+
+  it('beats at the folded tempo on every other beat of a grid read at 150', () => {
     const fast = { periodSec: 0.4, beatTime: 0 }
-    const slow = { periodSec: 0.8, beatTime: 0.4 }
-    const { ticks, doubled } = play([[0, 40]], (time) => (time < 15 ? fast : slow))
+    const { ticks, doubled } = play([[0, 40]], () => fast)
     expect(doubled).toBe(false)
     expectSteady(ticks, 0.001)
+    for (let i = 1; i < ticks.length; i++) expect(ticks[i] - ticks[i - 1]).toBeCloseTo(0.8, 1)
     for (const time of ticks) expect(offGrid(time, fast)).toBeLessThanOrEqual(FRAME + 1e-9)
   })
 
-  it('keeps its octave across a seek that lands on a reading in the other one', () => {
+  it('keeps the folded tempo across a seek that lands on a reading in the other octave', () => {
     const fast = { periodSec: 60 / 158, beatTime: 0.05 }
     const slow = { periodSec: 60 / 79, beatTime: 0.05 }
     const { ticks, doubled } = play([[0, 20], [60, 80]], (time) => (time < 30 ? fast : slow))
     expect(doubled).toBe(false)
-    const after = ticks.filter((t) => t > 61)
-    for (let i = 1; i < after.length; i++) expect(after[i] - after[i - 1]).toBeCloseTo(fast.periodSec, 1)
-    // Twice the slow grid's pace: every one of its beats and every one between.
-    for (const time of after) expect(offGrid(time, { periodSec: slow.periodSec / 2, beatTime: slow.beatTime })).toBeLessThanOrEqual(FRAME + 1e-9)
+    for (let i = 1; i < ticks.length; i++) if (ticks[i] > ticks[i - 1] && ticks[i] - ticks[i - 1] < 5) expect(ticks[i] - ticks[i - 1]).toBeCloseTo(slow.periodSec, 1)
+    for (const time of ticks.filter((t) => t > 61)) expect(offGrid(time, slow)).toBeLessThanOrEqual(FRAME + 1e-9)
   })
 
-  it('locks onto a grid near an octave away from any offset, never stretching a beat past the phase limit and the glide', () => {
+  it('locks onto a grid near an octave away from any offset', () => {
     let seed = 7
     const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
     for (let trial = 0; trial < 40; trial++) {
@@ -110,7 +119,7 @@ describe('BeatClock', () => {
       const second = { periodSec: first.periodSec * ratio, beatTime: 5 + random() }
       const { ticks, doubled } = play([[0, 60]], (time) => (time < 5 ? first : second))
       expect(doubled).toBe(false)
-      const fine = { periodSec: Math.min(second.periodSec, second.periodSec / 2 ** Math.round(Math.log2(ratio))), beatTime: second.beatTime }
+      const fine = { periodSec: Math.min(second.periodSec, inTempoRange(second.periodSec)), beatTime: second.beatTime }
       for (const time of ticks.filter((t) => t > 45)) expect(offGrid(time, fine)).toBeLessThanOrEqual(FRAME + 0.003)
     }
   })
