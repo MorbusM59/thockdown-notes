@@ -71,8 +71,6 @@ export interface SectionEditorAreaProps {
   /** Live user-configurable corner-radius/spacing base units (options menu sliders) -- threaded through so the escape-hold ring (escapeHoldRingLayout.ts) recomputes to match .editor-empty-state's actual on-screen shape instead of drifting from a stale hardcoded mirror. */
   borderRadiusRegularPx: number
   spacingRegularPx: number
-  /** The Performance section's "Reduce visual effects" toggle (App.tsx) -- also picked up by the escape-hold ring to fall back from its curve-sampled dial rotation to a plain CSS transform transition. */
-  reduceVisualEffects: boolean
   spellCheckEditEnabled: boolean
   previewTextureRef: RefObject<HTMLDivElement>
   /** Where the long-journey bridge draws -- see editor/scrollBridge.ts. */
@@ -213,7 +211,6 @@ export function SectionEditorArea({
   isExportingMd,
   borderRadiusRegularPx,
   spacingRegularPx,
-  reduceVisualEffects,
   spellCheckEditEnabled,
   previewTextureRef,
   previewBridgeHostRef,
@@ -289,16 +286,19 @@ export function SectionEditorArea({
   // chapter of the guide is sealed too, not just its root.
   const isSealedNote = isSealedNoteId(menuIdentityNoteId) || isSealedNoteId(activeNoteId)
 
-  // The beat pulse's shade reads --beat-shade, set on it alone (flow/flowStyle.ts).
-  const [beatShadeRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }))
-  // The box outlines' copy, on a layer of its own beside the shade's
-  // (flow/useBeatGridMirror.ts); it reads --beat-outline.
-  const { gridRef: beatGridRef, mirrorRef: beatMirrorRef } = useBeatGridMirror()
-  const [beatOutlineRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }))
-  const setBeatOutlineEl = useCallback((el: HTMLDivElement | null) => {
-    beatOutlineRef(el)
+  // The visualizer's edge reads --beat-edge, set on it alone (flow/flowStyle.ts).
+  const [beatEdgeRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }))
+  // The visualizer's pane, two elements reading --beat-pane: in the edit view
+  // the box outlines' copy, on a layer of its own beside the edge's
+  // (flow/useBeatGridMirror.ts); in any view without a grid a flat wash
+  // BEHIND the stage, so it lies under the texture and the text.
+  const { gridRef: beatGridRef, mirrorRef: beatMirrorRef, hasGrid: beatPaneHasGrid } = useBeatGridMirror(!isPreviewMode)
+  const [beatPaneRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }))
+  const [beatWashRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }))
+  const setBeatPaneEl = useCallback((el: HTMLDivElement | null) => {
+    beatPaneRef(el)
     beatMirrorRef(el)
-  }, [beatOutlineRef, beatMirrorRef])
+  }, [beatPaneRef, beatMirrorRef])
   const setStageEl = useCallback((el: HTMLDivElement | null) => {
     sectionContainerRef.current = el
   }, [sectionContainerRef])
@@ -414,6 +414,7 @@ export function SectionEditorArea({
     >
       <main className={`editor-shell${isChapterPanelOpen ? ' chapter-panel-is-open' : ''}`}>
         <div className="editor-background">
+          <div ref={beatWashRef} className={`editor-beat-wash${beatPaneHasGrid ? '' : ' is-shown'}`} aria-hidden="true" />
           <div ref={setStageEl} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}${!activeNoteId ? ' is-empty' : ''}`}>
             {isEscapeHoldActive ? (
               // Pure dim+blur backdrop: its backdrop-filter blurs whatever's
@@ -544,7 +545,6 @@ export function SectionEditorArea({
                 isExportingMd={isExportingMd}
                 borderRadiusRegularPx={borderRadiusRegularPx}
                 spacingRegularPx={spacingRegularPx}
-                reduceVisualEffects={reduceVisualEffects}
                 onCreateNote={onEscapeHoldCreateNote}
                 onCreateChapter={onEscapeHoldCreateChapter}
                 onExportPdf={onEscapeHoldExportPdf}
@@ -559,8 +559,8 @@ export function SectionEditorArea({
             </div>
           </div>
         </div>
-        <div ref={beatShadeRef} className="editor-beat-shade" aria-hidden="true" />
-        <div ref={setBeatOutlineEl} className="editor-beat-outline" aria-hidden="true" />
+        <div ref={beatEdgeRef} className="editor-beat-edge" aria-hidden="true" />
+        <div ref={setBeatPaneEl} className={`editor-beat-pane${beatPaneHasGrid ? ' has-grid' : ''}`} aria-hidden="true" />
       </main>
       <aside className={`editor-scrollbar-slot${isChapterPanelOpen ? ' chapter-panel-is-open' : ''}${isPreviewMode ? ' is-preview-mode' : ''}`}>
         <div className="editor-scrollbar-slot-inner" aria-hidden={modeStatus ? undefined : true}>

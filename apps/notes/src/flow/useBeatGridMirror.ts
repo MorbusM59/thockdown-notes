@@ -1,7 +1,14 @@
 /**
  * Lines a copy of the editor's box-outline grid up with the real one, for
- * the visualizer's outline block (`.editor-beat-outline`, a sibling of
- * `.editor-beat-shade` in the editor shell).
+ * the visualizer's pane block (`.editor-beat-pane`, a sibling of
+ * `.editor-beat-edge` in the editor shell).
+ *
+ * The pane is the grid's copy only while a grid is SHOWN (the edit view,
+ * with the grid mounted): `hasGrid` says so, and the section marks the pane
+ * with it (`.has-grid`). In any other view (render, an empty slot, a mode
+ * that empties it) the pane is a separate flat wash behind the stage
+ * (`.editor-beat-wash`), and this copy is hidden with its placement taken
+ * back off it.
  *
  * The real grid sits inside the edit pane, between the caret and the text,
  * and giving anything there its own compositor layer pulls the pane's text
@@ -14,15 +21,20 @@
 
 import { useEffect, useState } from 'react'
 
-export function useBeatGridMirror(): {
+/** The inline properties `sync` writes, removed again when the grid goes so the flat pane fills the shell. */
+const MIRRORED_PROPERTIES = ['left', 'top', 'width', 'height', '--editor-cell-width', '--editor-line-height', 'background-size', 'background-position']
+
+export function useBeatGridMirror(isGridView: boolean): {
   gridRef: (el: HTMLDivElement | null) => void
   mirrorRef: (el: HTMLDivElement | null) => void
+  hasGrid: boolean
 } {
   const [grid, gridRef] = useState<HTMLDivElement | null>(null)
   const [mirror, mirrorRef] = useState<HTMLDivElement | null>(null)
+  const hasGrid = isGridView && grid !== null
 
   useEffect(() => {
-    if (!grid || !mirror) return
+    if (!hasGrid || !grid || !mirror) return
     // The editor shell, which the copy is positioned in. The copy itself is
     // hidden (display: none) until the block is on; observing it too places
     // it the moment it is shown.
@@ -55,8 +67,11 @@ export function useBeatGridMirror(): {
     return () => {
       resize.disconnect()
       restyle.disconnect()
+      // Removed property by property: the element's style also carries
+      // --beat-pane, written per frame by flowStyle.ts.
+      for (const property of MIRRORED_PROPERTIES) mirror.style.removeProperty(property)
     }
-  }, [grid, mirror])
+  }, [hasGrid, grid, mirror])
 
-  return { gridRef, mirrorRef }
+  return { gridRef, mirrorRef, hasGrid }
 }

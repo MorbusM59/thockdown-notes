@@ -1,23 +1,23 @@
 import { describe, expect, it } from 'vitest'
-import { defaultVisualizer, FALL_MAX_SEC, FALL_MIN_SEC, pulseCurve, sanitizeVisualizer, SOURCE_SLIDER_MAX, SOURCE_SLIDER_MIN, sourceAtSlider, sourceSliderValue } from './visualizer'
+import { DEFAULT_EDGE_BLUR_PX, DEFAULT_VISUALIZER_CARET, defaultVisualizer, FALL_MAX_SEC, FALL_MIN_SEC, pulseCurve, sanitizeVisualizer, SOURCE_SLIDER_MAX, SOURCE_SLIDER_MIN, sourceAtSlider, sourceSliderValue } from './visualizer'
 
 describe('sanitizeVisualizer', () => {
   it('fills a layout saved before the visualizer with the defaults for its inversion', () => {
     expect(sanitizeVisualizer(undefined, false)).toEqual(defaultVisualizer(false))
     expect(sanitizeVisualizer(undefined, true)).toEqual(defaultVisualizer(true))
-    expect(defaultVisualizer(true).shade.color).not.toBe(defaultVisualizer(false).shade.color)
+    expect(defaultVisualizer(true).edge.color).not.toBe(defaultVisualizer(false).edge.color)
   })
 
   it('keeps each block its own band, colour and effect, bounded', () => {
     const v = sanitizeVisualizer({
-      shade: { source: 'snare', frequencyHz: 300, color: 'rgba(1, 2, 3, 0.5)', effect: -7 },
-      outline: { source: 'cowbell', frequencyHz: 99999, color: '' },
+      edge: { source: 'snare', frequencyHz: 300, color: 'rgba(1, 2, 3, 0.5)', effect: -7 },
+      pane: { source: 'cowbell', frequencyHz: 99999, color: '' },
     }, false)
-    expect(v.shade).toMatchObject({ source: 'snare', frequencyHz: 300, color: 'rgba(1, 2, 3, 0.5)', effect: -1 })
-    expect(v.outline.frequencyHz).toBe(20000)
-    expect(v.outline.source).toBe('band')
-    expect(v.outline.color).toBe(defaultVisualizer(false).outline.color)
-    expect(v.caret.effect).toBe(0.6)
+    expect(v.edge).toMatchObject({ source: 'snare', frequencyHz: 300, color: 'rgba(1, 2, 3, 0.5)', effect: -1 })
+    expect(v.pane.frequencyHz).toBe(20000)
+    expect(v.pane.source).toBe('band')
+    expect(v.pane.color).toBe(defaultVisualizer(false).pane.color)
+    expect(v.caret.effect).toBe(DEFAULT_VISUALIZER_CARET.effect)
   })
 
   it('keeps only what the caret reads, so an older save with a source loads without it', () => {
@@ -28,7 +28,9 @@ describe('sanitizeVisualizer', () => {
   it('migrates a layout from before the caret switch: it followed the music whenever its caret had an effect', () => {
     expect(sanitizeVisualizer({ caret: { effect: 0.4 } }, false).caret.followsMusic).toBe(true)
     expect(sanitizeVisualizer({ caret: { effect: 0 } }, false).caret.followsMusic).toBe(false)
-    expect(sanitizeVisualizer(undefined, false).caret.followsMusic).toBe(false)
+    // A visualizer with no caret block never followed; no visualizer at all takes the defaults.
+    expect(sanitizeVisualizer({}, false).caret.followsMusic).toBe(false)
+    expect(sanitizeVisualizer(undefined, false).caret.followsMusic).toBe(DEFAULT_VISUALIZER_CARET.followsMusic)
     // The old bounce blink is now the switch's button.
     expect(sanitizeVisualizer(undefined, false, 'bounce').caret.followsMusic).toBe(true)
     expect(sanitizeVisualizer({ caret: { effect: 0 } }, false, 'bounce').caret.followsMusic).toBe(true)
@@ -38,31 +40,31 @@ describe('sanitizeVisualizer', () => {
 })
 
 it('keeps a drum\'s groove beside the band\'s width, bounded, and reads a layout saved before groove at 0', () => {
-  const v = sanitizeVisualizer({ shade: { source: 'hat', octaves: 2, groove: 0.8 }, outline: { source: 'kick', octaves: 3, groove: 7 } }, false)
-  expect(v.shade).toMatchObject({ octaves: 2, groove: 0.8 })
-  expect(v.outline).toMatchObject({ octaves: 3, groove: 1 })
-  expect(sanitizeVisualizer({ shade: { source: 'snare', octaves: 2 } }, false).shade.groove).toBe(0)
+  const v = sanitizeVisualizer({ edge: { source: 'hat', octaves: 2, groove: 0.8 }, pane: { source: 'kick', octaves: 3, groove: 7 } }, false)
+  expect(v.edge).toMatchObject({ octaves: 2, groove: 0.8 })
+  expect(v.pane).toMatchObject({ octaves: 3, groove: 1 })
+  expect(sanitizeVisualizer({ edge: { source: 'snare', octaves: 2 } }, false).edge.groove).toBe(0)
 })
 
 it('reads a layout saved before the source existed', () => {
-  const v = sanitizeVisualizer({ outline: { frequencyHz: 0 }, shade: { frequencyHz: 440 } }, false)
-  expect(v.outline.source).toBe('kick')
-  expect(v.shade).toMatchObject({ source: 'band', frequencyHz: 440 })
+  const v = sanitizeVisualizer({ pane: { frequencyHz: 0 }, edge: { frequencyHz: 440 } }, false)
+  expect(v.pane.source).toBe('kick')
+  expect(v.edge).toMatchObject({ source: 'band', frequencyHz: 440 })
 })
 
 it('turns a saved amount and invert into a signed effect', () => {
-  const v = sanitizeVisualizer({ caret: { amount: 0.4, invert: true }, shade: { amount: 0.3 } }, false)
+  const v = sanitizeVisualizer({ caret: { amount: 0.4, invert: true }, edge: { amount: 0.3 } }, false)
   expect(v.caret.effect).toBe(-0.4)
-  expect(v.shade.effect).toBe(0.3)
+  expect(v.edge.effect).toBe(0.3)
   expect(v.caret).not.toHaveProperty('invert')
 })
 
 it('reads the fall of a layout saved with one mass slider, or with the first fall shape', () => {
-  const v = sanitizeVisualizer({ caret: { mass: 0 }, shade: { mass: 1 }, outline: { fallSec: 99, fallShape: 3 } }, false)
+  const v = sanitizeVisualizer({ caret: { mass: 0 }, edge: { mass: 1 }, pane: { fallSec: 99, fallShape: 3 } }, false)
   expect(v.caret).toMatchObject({ shape: 1, fallSec: FALL_MIN_SEC })
-  expect(v.shade.shape).toBe(-1)
-  expect(v.shade.fallSec).toBeCloseTo(1.6, 6)
-  expect(v.outline).toMatchObject({ shape: 1, fallSec: FALL_MAX_SEC })
+  expect(v.edge.shape).toBe(-1)
+  expect(v.edge.fallSec).toBeCloseTo(1.6, 6)
+  expect(v.pane).toMatchObject({ shape: 1, fallSec: FALL_MAX_SEC })
 })
 
 describe('pulseCurve', () => {
@@ -113,10 +115,10 @@ describe('pulseCurve', () => {
   })
 })
 
-it('gives a save without the shade geometry its defaults, and bounds and rounds what it has', () => {
-  expect(sanitizeVisualizer({ shade: {} }, false).shade).toMatchObject({ spreadPx: 0, blurPx: 32 })
-  expect(sanitizeVisualizer({ shade: { spreadPx: 14.7, blurPx: 900 } }, false).shade).toMatchObject({ spreadPx: 15, blurPx: 200 })
-  expect(sanitizeVisualizer({ shade: { spreadPx: -5, blurPx: 'x' } }, false).shade).toMatchObject({ spreadPx: 0, blurPx: 32 })
+it('gives a save without the edge geometry its defaults, and bounds and rounds what it has', () => {
+  expect(sanitizeVisualizer({ edge: {} }, false).edge).toMatchObject({ spreadPx: 0, blurPx: DEFAULT_EDGE_BLUR_PX })
+  expect(sanitizeVisualizer({ edge: { spreadPx: 14.7, blurPx: 900 } }, false).edge).toMatchObject({ spreadPx: 15, blurPx: 200 })
+  expect(sanitizeVisualizer({ edge: { spreadPx: -5, blurPx: 'x' } }, false).edge).toMatchObject({ spreadPx: 0, blurPx: DEFAULT_EDGE_BLUR_PX })
 })
 
 describe('the source slider', () => {
@@ -150,4 +152,26 @@ describe('the source slider', () => {
     }
     expect(last).toBeGreaterThan(19000)
   })
+})
+
+it('reads a layout saved under the old block names, shade and outline, as the edge and the pane', () => {
+  const v = sanitizeVisualizer({ shade: { effect: 0.4, spreadPx: 12 }, outline: { effect: -0.3, color: 'rgba(1, 2, 3, 1)' } }, false)
+  expect(v.edge).toMatchObject({ effect: 0.4, spreadPx: 12 })
+  expect(v.pane).toMatchObject({ effect: -0.3, color: 'rgba(1, 2, 3, 1)' })
+  expect(sanitizeVisualizer({ edge: { effect: 0.1 }, shade: { effect: 0.9 } }, false).edge.effect).toBe(0.1)
+})
+
+// The fall slider (SidebarOptionsPanel's `renderFallSliders`) is a log track
+// whose step puts the block's default on the grid counted from the minimum;
+// a reset snaps the default to that grid (CompactScrollbarSlider's
+// `snapValue`), so it must land back on the default, for every block.
+it('every block\'s default fall survives the fall slider\'s reset', () => {
+  const v = defaultVisualizer(false)
+  for (const fall of [v.caret.fallSec, v.edge.fallSec, v.pane.fallSec]) {
+    const min = Math.log(FALL_MIN_SEC)
+    const step = Math.log(fall / FALL_MIN_SEC) / 90
+    const snapped = Math.exp(min + Math.round((Math.log(fall) - min) / step) * step)
+    expect(snapped).toBeCloseTo(fall, 12)
+    expect(Math.round(snapped * 1000)).toBe(Math.round(fall * 1000))
+  }
 })

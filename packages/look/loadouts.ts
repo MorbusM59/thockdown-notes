@@ -122,8 +122,8 @@ export type UiLayoutLoadout = {
   caretAnimationDurationMs: number;
   caretFrameDurationMs: number;
   caretEffectStrengthPercent: number;
-  // The visualizer's blocks (Options > Visualizer): how the caret, the shade
-  // and the box outlines follow the music. Its on/off and the per-device delay
+  // The visualizer's blocks (Options > Visualizer): how the caret, the edge
+  // and the pane follow the music. Its on/off and the per-device delay
   // are NOT here -- they live in PersistedMenuState.beat, which persists
   // across layout switches (see visualizer.ts).
   visualizer: VisualizerSettings;

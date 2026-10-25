@@ -2,8 +2,8 @@
  * The visualizer: elements of the look that follow the playing music, saved
  * with the layout like every other part of it (Options > Visualizer). Three
  * independent BLOCKS, each listening to its own band (or a drum: kick, snare or hat) with
- * its own timing: the caret, which dips; the active editor's SHADE; and the
- * box OUTLINES. The shade and the outline each have a colour, picked like any
+ * its own timing: the caret, which dips; the active editor's EDGE (an inner shadow); and the
+ * PANE (the box outlines in the edit view, a flat wash of colour anywhere else). The edge and the pane each have a colour, picked like any
  * other layout colour (so a theme's invert applies to it as to the rest).
  *
  * Whether the visualizer is on, and the per-device visual delay, are NOT
@@ -77,30 +77,33 @@ export interface VisualizerColorChannel extends VisualizerChannel {
 }
 
 /**
- * The shade's geometry, which does not follow the music: only its opacity
- * does. It is drawn as two inset shadows (editor.css's `.editor-beat-shade`),
+ * The edge's geometry, which does not follow the music: only its opacity
+ * does. It is drawn as two inset shadows (editor.css's `.editor-beat-edge`),
  * a narrow edge (an eighth of the blur) and a soft body.
  */
-export interface VisualizerShadeChannel extends VisualizerColorChannel {
-  /** How far, in px, the shade's solid part reaches in from the editor's edges (both shadows' spread radius). */
+export interface VisualizerEdgeChannel extends VisualizerColorChannel {
+  /** How far, in px, the edge's solid part reaches in from the editor's edges (both shadows' spread radius). */
   spreadPx: number
   /** How soft its edge is, in px: the soft body's blur radius; the narrow edge's is an eighth of it. */
   blurPx: number
 }
 
-export const SHADE_SPREAD_MAX_PX = 200
-export const SHADE_BLUR_MAX_PX = 200
-/** Spread 0 and blur 32 are the shade as it was drawn before either was a setting (4px and 32px blur, no spread). */
-export const DEFAULT_SHADE_SPREAD_PX = 0
-export const DEFAULT_SHADE_BLUR_PX = 32
+export const EDGE_SPREAD_MAX_PX = 200
+export const EDGE_BLUR_MAX_PX = 200
+export const DEFAULT_EDGE_SPREAD_PX = 0
+export const DEFAULT_EDGE_BLUR_PX = 100
 
 export interface VisualizerSettings {
   /** The caret, held at its peak while it follows the music and dipped on a steady beat that follows its tempo. */
   caret: VisualizerCaret
-  /** The active editor's inner shade; a response deepens it. */
-  shade: VisualizerShadeChannel
-  /** The box outlines; a response draws them over the grid's own. */
-  outline: VisualizerColorChannel
+  /** The active editor's edge, an inner shadow; a response deepens it. */
+  edge: VisualizerEdgeChannel
+  /**
+   * The pane: in the edit view, a copy of the box outlines over the grid's
+   * own; in any view without a grid, a flat wash of its colour over the
+   * editor. A response draws it.
+   */
+  pane: VisualizerColorChannel
 }
 
 export const BEAT_FREQUENCY_MIN_HZ = 20
@@ -147,6 +150,11 @@ function fallOfMass(mass: number): { shape: number; fallSec: number } {
  */
 const DEFAULT_GROOVE = 0
 
+/**
+ * The defaults are the visualizer of a layout the author saved (2026-10-25),
+ * its fall lengths rounded to the whole milliseconds the slider shows; a
+ * field that layout did not set keeps the value it had before.
+ */
 export const DEFAULT_VISUALIZER_CHANNEL: VisualizerChannel = {
   effect: 0.6,
   source: 'kick',
@@ -159,30 +167,43 @@ export const DEFAULT_VISUALIZER_CHANNEL: VisualizerChannel = {
 }
 
 export const DEFAULT_VISUALIZER_CARET: VisualizerCaret = {
-  followsMusic: false,
-  effect: DEFAULT_VISUALIZER_CHANNEL.effect,
-  shape: DEFAULT_VISUALIZER_CHANNEL.shape,
-  fallSec: DEFAULT_VISUALIZER_CHANNEL.fallSec,
+  followsMusic: true,
+  effect: -1,
+  shape: -1,
+  fallSec: 1.515,
+}
+
+/** The edge's and the pane's sliders, without their colours (which depend on the layout's inversion, `defaultVisualizer`). */
+export const DEFAULT_VISUALIZER_EDGE: Omit<VisualizerEdgeChannel, 'color'> = {
+  ...DEFAULT_VISUALIZER_CHANNEL,
+  effect: 0.2,
+  shape: -0.5,
+  fallSec: 0.5,
+  spreadPx: DEFAULT_EDGE_SPREAD_PX,
+  blurPx: DEFAULT_EDGE_BLUR_PX,
+}
+
+export const DEFAULT_VISUALIZER_PANE: VisualizerChannel = {
+  ...DEFAULT_VISUALIZER_CHANNEL,
+  effect: 0.5,
+  source: 'snare',
+  frequencyHz: 640,
+  fallSec: 0.25,
 }
 
 /**
  * The defaults for a layout, which depend on whether it is inverted: a
- * colour is picked BEFORE the theme's invert, so a shade that darkens and
- * outlines that brighten on screen are stored the other way round in an
+ * colour is picked BEFORE the theme's invert, so an edge that darkens and
+ * a pane that brightens on screen are stored the other way round in an
  * inverted layout.
  */
 export function defaultVisualizer(inverted: boolean): VisualizerSettings {
-  const dark = 'rgba(0, 0, 0, 0.9)'
-  const light = 'rgba(255, 255, 255, 0.35)'
   return {
     caret: DEFAULT_VISUALIZER_CARET,
-    shade: {
-      ...DEFAULT_VISUALIZER_CHANNEL,
-      color: inverted ? 'rgba(255, 255, 255, 0.9)' : dark,
-      spreadPx: DEFAULT_SHADE_SPREAD_PX,
-      blurPx: DEFAULT_SHADE_BLUR_PX,
-    },
-    outline: { ...DEFAULT_VISUALIZER_CHANNEL, color: inverted ? 'rgba(0, 0, 0, 0.35)' : light },
+    // An inverted (dark) layout's colours are the author's own picks, value 0 at
+    // alphas 200 and 25 of the picker's 255, not the light ones inverted.
+    edge: { ...DEFAULT_VISUALIZER_EDGE, color: inverted ? 'rgba(0, 0, 0, 0.784)' : 'rgba(0, 0, 0, 1)' },
+    pane: { ...DEFAULT_VISUALIZER_PANE, color: inverted ? 'rgba(0, 0, 0, 0.098)' : 'rgba(255, 255, 255, 0.499)' },
   }
 }
 
@@ -262,14 +283,17 @@ function sanitizeColorChannel(input: unknown, d: VisualizerColorChannel): Visual
   return { ...sanitizeChannel(input, d), color: typeof color === 'string' && color.length > 0 ? color : d.color }
 }
 
-function sanitizeShadeChannel(input: unknown, d: VisualizerShadeChannel): VisualizerShadeChannel {
+function sanitizeEdgeChannel(input: unknown, d: VisualizerEdgeChannel): VisualizerEdgeChannel {
   const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<string, unknown>>
   return {
     ...sanitizeColorChannel(input, d),
-    spreadPx: Math.round(bounded(source.spreadPx, 0, SHADE_SPREAD_MAX_PX, d.spreadPx)),
-    blurPx: Math.round(bounded(source.blurPx, 0, SHADE_BLUR_MAX_PX, d.blurPx)),
+    spreadPx: Math.round(bounded(source.spreadPx, 0, EDGE_SPREAD_MAX_PX, d.spreadPx)),
+    blurPx: Math.round(bounded(source.blurPx, 0, EDGE_BLUR_MAX_PX, d.blurPx)),
   }
 }
+
+/** What the edge and the pane were saved as before they had those names: `shade` and `outline`. */
+type LegacyBlockName = 'shade' | 'outline'
 
 /**
  * Every field bounded; a missing one takes the default for a layout of that
@@ -278,11 +302,15 @@ function sanitizeShadeChannel(input: unknown, d: VisualizerShadeChannel): Visual
  */
 export function sanitizeVisualizer(input: unknown, inverted: boolean, legacyCaretPreset?: unknown): VisualizerSettings {
   const d = defaultVisualizer(inverted)
-  const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<keyof VisualizerSettings, unknown>>
+  // A layout saved before the visualizer existed takes the defaults whole:
+  // the caret's legacy reading below (no caret block, not following) is for
+  // a layout that HAD a visualizer, saved before the caret's switch.
+  if (!input || typeof input !== 'object') return d
+  const source = input as Partial<Record<keyof VisualizerSettings | LegacyBlockName, unknown>>
   return {
     caret: sanitizeCaret(source.caret, d.caret, legacyCaretPreset),
-    shade: sanitizeShadeChannel(source.shade, d.shade),
-    outline: sanitizeColorChannel(source.outline, d.outline),
+    edge: sanitizeEdgeChannel(source.edge ?? source.shade, d.edge),
+    pane: sanitizeColorChannel(source.pane ?? source.outline, d.pane),
   }
 }
 

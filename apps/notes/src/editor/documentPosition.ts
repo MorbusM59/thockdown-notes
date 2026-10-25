@@ -67,37 +67,11 @@
 export const DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS = 100
 
 /**
- * The range the reader may move that line through, and the granularity.
- *
- * The floor is not zero: "never measure a document, whatever its size" is a
- * different decision rather than an extreme setting of this one, and it has
- * its own control (see `forceCharacterScrollbarThumb`). Keeping it out of the
- * slider's range means every position on the slider means the same KIND of
- * thing.
- *
- * A step of one because the quantity being tuned is not a round number -- it
- * is "which of my own notes fall on each side", which lands wherever the
- * reader's documents happen to land, and a paragraph is already a unit small
- * enough to count.
- */
-export const CONTINUOUS_DOCUMENT_MIN_THRESHOLD_BLOCKS = 10
-export const CONTINUOUS_DOCUMENT_MAX_THRESHOLD_BLOCKS = 100
-export const CONTINUOUS_DOCUMENT_THRESHOLD_STEP_BLOCKS = 1
-
-/** Keeps a stored or user-supplied threshold inside the range above. */
-export function clampContinuousDocumentThreshold(blockCount: number): number {
-  if (!Number.isFinite(blockCount)) return DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS
-  return Math.min(
-    CONTINUOUS_DOCUMENT_MAX_THRESHOLD_BLOCKS,
-    Math.max(CONTINUOUS_DOCUMENT_MIN_THRESHOLD_BLOCKS, Math.round(blockCount)),
-  )
-}
-
-/**
  * Whether a document of this many blocks gets the exact treatment.
  *
  * `thresholdBlocks` is passed in rather than read from a module constant
- * because it is a live setting now. Both the renderer and the scrollbar have
+ * so it can be tuned from one place (App.tsx passes it down; it was a reader
+ * setting once and may be again). Both the renderer and the scrollbar have
  * to agree on the answer -- a document rendered one way and described the
  * other would be a scrollbar that lies -- so callers are expected to resolve
  * it ONCE per commit and share that answer, not to call this independently

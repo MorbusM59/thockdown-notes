@@ -49,10 +49,7 @@ import type { NoteSummary } from './shared/noteLifecycle'
 import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote, isSameNoteSummary } from './shared/noteLifecycle'
 import { adoptNoteSummaries, keepIfUnchanged } from './shared/noteContentStore'
 import { getNoteListMetaKind } from './shared/noteListMeta'
-import {
-  DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS,
-  clampContinuousDocumentThreshold,
-} from './editor/documentPosition'
+import { DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS } from './editor/documentPosition'
 import { resolveIdentityLabel } from './shared/tabLabels'
 import { formatIdWithSigil } from './shared/assignedIds'
 import { NOTE_DRAG_MIME_TYPE, serializeNoteDragPayload } from './shared/noteDrag'
@@ -1465,7 +1462,7 @@ function App() {
   const [features, setFeatures] = useState<FeatureToggles>(DEFAULT_FEATURE_TOGGLES)
   const spellCheckEnabled = features.spellCheck
   const [flowSettings, setFlowSettings] = useState<FlowSettings>(DEFAULT_FLOW_SETTINGS)
-  useFlowFeedback(flowSettings)
+  useFlowFeedback(features.flow, flowSettings)
   // Every change is persisted at once, through the one sanctioned path (see
   // persistMenuStateNowRef). An effect rather than a call in the setter, so
   // the snapshot is built from the render that already holds the new value.
@@ -2211,15 +2208,16 @@ function App() {
   const [audioReverbSpace, setAudioReverbSpace] = useState(0)
   const [pitchJitterAmount, setPitchJitterAmount] = useState(0)
   const [audioSpatial, setAudioSpatial] = useState(0)
-  const [reduceVisualEffects, setReduceVisualEffects] = useState(false)
-  // A pulse is exactly the kind of visual effect that flag turns off.
-  useBeatFeedback(features.visualizer, beatSettings, visualizer, reduceVisualEffects)
+  useBeatFeedback(features.visualizer, beatSettings, visualizer)
   // The setting lives in a module store (the preview's img component and the
   // export read it there); App subscribes so the persisted snapshot follows it.
   const allowRemoteImages = useRemoteImagesAllowed()
-  const [deferPreviewOnRapidInput, setDeferPreviewOnRapidInput] = useState(false)
-  const [noteSizeThresholdBlocks, setNoteSizeThresholdBlocks] = useState(DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS)
-  const [forceCharacterScrollbarThumb, setForceCharacterScrollbarThumb] = useState(false)
+  // Where a note stops being measured in pixels and its scrollbar counts
+  // characters instead (editor/documentPosition.ts), and whether every note
+  // counts characters. These were reader settings and are fixed now, at the
+  // largest threshold; they stay props so the line can be tuned here.
+  const noteSizeThresholdBlocks = DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS
+  const forceCharacterScrollbarThumb = false
   const [typingSoundEnabled, setTypingSoundEnabled] = useState(false)
   const [typingSoundSet, setTypingSoundSet] = useState<'A' | 'B' | 'C' | 'D'>(DEFAULT_TYPING_SOUND_SET)
   const [musicVolume, setMusicVolume] = useState(0.8)
@@ -2354,7 +2352,6 @@ function App() {
     filterSaturate,
     filterColorize,
   }, {
-    reduceVisualEffects,
     glaze: features.glaze,
     isPreviewMode: activeSectionSnapshot?.isPreviewMode ?? false,
   }), [
@@ -2372,7 +2369,6 @@ function App() {
     filterContrast,
     filterSaturate,
     filterColorize,
-    reduceVisualEffects,
     features.glaze,
     activeSectionSnapshot?.isPreviewMode,
   ])
@@ -4033,15 +4029,8 @@ function App() {
       reviewGutterVisibleBySection: overrides?.reviewGutterVisibleBySection ?? reviewGutterVisibleBySection,
       reviewFlagsVisibleBySection: overrides?.reviewFlagsVisibleBySection ?? reviewFlagsVisibleBySection,
       adventure: overrides && 'adventure' in overrides ? overrides.adventure ?? null : adventureSave,
-      // Machine-level performance prefs, deliberately NOT part of
-      // UiLayoutLoadout -- these must survive switching between layouts
-      // rather than being reset to whatever each layout last had stored.
-      reduceVisualEffects,
       allowRemoteImages: overrides?.allowRemoteImages ?? allowRemoteImages,
       sidebarShowsImages: overrides?.sidebarShowsImages ?? sidebarShowsImages,
-      deferPreviewOnRapidInput,
-      noteSizeThresholdBlocks,
-      forceCharacterScrollbarThumb,
     }
   }, [
     archiveCollapsedPrimary,
@@ -4052,12 +4041,8 @@ function App() {
     flowSettings,
     beatSettings,
     speedReadingSettings,
-    reduceVisualEffects,
     allowRemoteImages,
     sidebarShowsImages,
-    deferPreviewOnRapidInput,
-    noteSizeThresholdBlocks,
-    forceCharacterScrollbarThumb,
     fontSizesByMode,
     editorGlyphPaddingPx,
     uiFontStyle,
@@ -5906,17 +5891,8 @@ ${markdownHtml}
             setAudioReverbSpace(appState.menu.audioReverbSpace ?? 0)
             setPitchJitterAmount(appState.menu.pitchJitterAmount ?? 0)
             setAudioSpatial(appState.menu.audioSpatial ?? 0)
-            setReduceVisualEffects(appState.menu.reduceVisualEffects ?? false)
             setRemoteImagesAllowed(appState.menu.allowRemoteImages === true)
             setSidebarShowsImages(appState.menu.sidebarShowsImages === true)
-            setDeferPreviewOnRapidInput(appState.menu.deferPreviewOnRapidInput ?? false)
-            // Clamped on the way in as well as on the way out: a stored value
-            // predating a change to the slider's range would otherwise put the
-            // handle off its own track.
-            setNoteSizeThresholdBlocks(clampContinuousDocumentThreshold(
-              appState.menu.noteSizeThresholdBlocks ?? DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS,
-            ))
-            setForceCharacterScrollbarThumb(appState.menu.forceCharacterScrollbarThumb ?? false)
             setTypingSoundEnabled(appState.menu.typingSoundEnabled ?? false)
             setTypingSoundSet(appState.menu.typingSoundSet ?? DEFAULT_TYPING_SOUND_SET)
             if (typeof appState.menu.musicVolume === 'number') setMusicVolume(appState.menu.musicVolume)
@@ -9426,8 +9402,6 @@ ${markdownHtml}
                         setPitchJitterAmount={setPitchJitterAmount}
                         audioSpatial={audioSpatial}
                         setAudioSpatial={setAudioSpatial}
-                        reduceVisualEffects={reduceVisualEffects}
-                        setReduceVisualEffects={setReduceVisualEffects}
                         allowRemoteImages={allowRemoteImages}
                         onAllowRemoteImagesChange={handleAllowRemoteImagesChange}
                         features={features}
@@ -9440,12 +9414,6 @@ ${markdownHtml}
                         visualizer={visualizer}
                         setVisualizer={setVisualizer}
                         setBeatSettings={setBeatSettings}
-                        deferPreviewOnRapidInput={deferPreviewOnRapidInput}
-                        setDeferPreviewOnRapidInput={setDeferPreviewOnRapidInput}
-                        noteSizeThresholdBlocks={noteSizeThresholdBlocks}
-                        setNoteSizeThresholdBlocks={setNoteSizeThresholdBlocks}
-                        forceCharacterScrollbarThumb={forceCharacterScrollbarThumb}
-                        setForceCharacterScrollbarThumb={setForceCharacterScrollbarThumb}
                         borderRadiusRegularPx={borderRadiusRegularPx}
                         setBorderRadiusRegularPx={setBorderRadiusRegularPx}
                         spacingRegularPx={spacingRegularPx}
@@ -9466,8 +9434,6 @@ ${markdownHtml}
                         adventureTrueModeWouldWipe={adventureTrueModeWouldWipe}
                         clearAppState={clearPersistedAppState}
                         clearAppStatePrimed={clearAppStatePrimed}
-                        queueAppStateSave={queueAppStateSave}
-                        activeNoteId={activeSection?.activeNoteId ?? null}
                         customCursorDotColor={customCursorDotColor}
                         customCursorCenterColor={customCursorCenterColor}
                         customCursorTrailColor={customCursorTrailColor}
@@ -9952,7 +9918,6 @@ ${markdownHtml}
                   restoredDocumentFindCaseSensitive={restoredDocumentFindCaseSensitive}
                   documentFindCaseSensitiveRef={documentFindCaseSensitiveRef}
                   editorRuntimeMetrics={editorRuntimeMetrics}
-                  deferPreviewOnRapidInput={deferPreviewOnRapidInput}
                   noteSizeThresholdBlocks={noteSizeThresholdBlocks}
                   forceCharacterScrollbarThumb={forceCharacterScrollbarThumb}
                   viewStyle={viewStyle}
@@ -9976,7 +9941,6 @@ ${markdownHtml}
                   isExportingMd={isExportingMd}
                   borderRadiusRegularPx={borderRadiusRegularPx}
                   spacingRegularPx={spacingRegularPx}
-                  reduceVisualEffects={reduceVisualEffects}
                   caretSizeDeviationPx={caretSizeDeviationPx}
                   showLineNumbers={reviewGutterVisibleBySection[entry.id] ?? false}
                   showReviewFlags={reviewFlagsVisibleBySection[entry.id] ?? false}
@@ -10003,7 +9967,7 @@ ${markdownHtml}
         <ImageCorrectionFilter theme={theme} />
       </div>
       {/* After the filter wrapper, not inside it: see FlowOverlays. */}
-      <FlowOverlays strength={flowSettings.enabled && !reduceVisualEffects ? flowSettings.look : 0} />
+      <FlowOverlays strength={features.flow ? flowSettings.look : 0} />
       {/* Mounted once, app-wide -- not scoped to the editor. See that
           component's own doc comment for why it's a sibling of
           .app-saturate-wrapper (not nested inside it) and how it tracks the

@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  CONTINUOUS_DOCUMENT_MAX_THRESHOLD_BLOCKS,
-  CONTINUOUS_DOCUMENT_MIN_THRESHOLD_BLOCKS,
   DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS,
-  clampContinuousDocumentThreshold,
   isContinuousDocument,
   resolveChunkedCharTarget,
   resolveChunkedThumbRatio,
@@ -30,22 +27,6 @@ describe('isContinuousDocument', () => {
     // moved -- which is the whole point of the setting.
     expect(isContinuousDocument(60, 100)).toBe(true)
     expect(isContinuousDocument(60, 20)).toBe(false)
-  })
-})
-
-describe('clampContinuousDocumentThreshold', () => {
-  it('holds a stored value inside the slider range', () => {
-    expect(clampContinuousDocumentThreshold(2)).toBe(CONTINUOUS_DOCUMENT_MIN_THRESHOLD_BLOCKS)
-    expect(clampContinuousDocumentThreshold(5_000)).toBe(CONTINUOUS_DOCUMENT_MAX_THRESHOLD_BLOCKS)
-    expect(clampContinuousDocumentThreshold(37)).toBe(37)
-  })
-
-  it('rounds a fractional value onto a whole paragraph', () => {
-    expect(clampContinuousDocumentThreshold(42.4)).toBe(42)
-  })
-
-  it('falls back to the default for a value that is not a number', () => {
-    expect(clampContinuousDocumentThreshold(Number.NaN)).toBe(DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS)
   })
 })
 

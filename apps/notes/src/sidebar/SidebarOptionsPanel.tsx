@@ -22,14 +22,13 @@ import {
   BEAT_OCTAVES_MAX,
   BEAT_OCTAVES_MIN,
   BEAT_CONTRAST_MAX,
-  DEFAULT_SHADE_BLUR_PX,
-  DEFAULT_SHADE_SPREAD_PX,
   DEFAULT_VISUALIZER_CARET,
   FALL_MAX_SEC,
   FALL_MIN_SEC,
-  DEFAULT_VISUALIZER_CHANNEL,
-  SHADE_BLUR_MAX_PX,
-  SHADE_SPREAD_MAX_PX,
+  DEFAULT_VISUALIZER_EDGE,
+  DEFAULT_VISUALIZER_PANE,
+  EDGE_BLUR_MAX_PX,
+  EDGE_SPREAD_MAX_PX,
   SOURCE_SLIDER_MAX,
   SOURCE_SLIDER_MIN,
   sourceAtSlider,
@@ -40,13 +39,6 @@ import {
 import { StagedColorRow } from './StagedColorRow'
 import { exportSoundscapes, importSoundscapes } from '@thockdown/soundscape/soundscapeFileActions'
 import type { SoundscapePreferences } from '@thockdown/soundscape/soundscape'
-import {
-  CONTINUOUS_DOCUMENT_MAX_THRESHOLD_BLOCKS,
-  CONTINUOUS_DOCUMENT_MIN_THRESHOLD_BLOCKS,
-  CONTINUOUS_DOCUMENT_THRESHOLD_STEP_BLOCKS,
-  DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS,
-  clampContinuousDocumentThreshold,
-} from '../editor/documentPosition'
 import { type RgbaColor, type HsvaColor, rgbaToCssColor, hsvaToRgba } from '@thockdown/look/colorMath'
 import { isTextEntryElement } from '@thockdown/interaction/focusOwnership'
 import type { HighlightColorKey, HighlightColors } from '../shared/highlightColors'
@@ -579,8 +571,6 @@ export interface SidebarOptionsPanelProps {
   setPitchJitterAmount: (value: number) => void
   audioSpatial: number
   setAudioSpatial: (value: number) => void
-  reduceVisualEffects: boolean
-  setReduceVisualEffects: (value: boolean) => void
   allowRemoteImages: boolean
   onAllowRemoteImagesChange: (value: boolean) => void
   features: FeatureToggles
@@ -593,12 +583,6 @@ export interface SidebarOptionsPanelProps {
   setBeatSettings: (updater: (previous: BeatSettings) => BeatSettings) => void
   visualizer: VisualizerSettings
   setVisualizer: (updater: (previous: VisualizerSettings) => VisualizerSettings) => void
-  deferPreviewOnRapidInput: boolean
-  setDeferPreviewOnRapidInput: (value: boolean) => void
-  noteSizeThresholdBlocks: number
-  setNoteSizeThresholdBlocks: (value: number) => void
-  forceCharacterScrollbarThumb: boolean
-  setForceCharacterScrollbarThumb: (value: boolean) => void
 
   borderRadiusRegularPx: number
   setBorderRadiusRegularPx: (value: number) => void
@@ -638,8 +622,6 @@ export interface SidebarOptionsPanelProps {
   adventureTrueModeWouldWipe: boolean
   clearAppState: () => void
   clearAppStatePrimed: boolean
-  queueAppStateSave: (selectedNoteId: string | null) => void
-  activeNoteId: string | null
 
   customCursorDotColor: string
   customCursorCenterColor: string
@@ -882,8 +864,6 @@ export function SidebarOptionsPanel({
   setPitchJitterAmount,
   audioSpatial,
   setAudioSpatial,
-  reduceVisualEffects,
-  setReduceVisualEffects,
   allowRemoteImages,
   onAllowRemoteImagesChange,
   features,
@@ -896,12 +876,6 @@ export function SidebarOptionsPanel({
   setBeatSettings,
   visualizer,
   setVisualizer,
-  deferPreviewOnRapidInput,
-  setDeferPreviewOnRapidInput,
-  noteSizeThresholdBlocks,
-  setNoteSizeThresholdBlocks,
-  forceCharacterScrollbarThumb,
-  setForceCharacterScrollbarThumb,
   borderRadiusRegularPx,
   setBorderRadiusRegularPx,
   spacingRegularPx,
@@ -922,8 +896,6 @@ export function SidebarOptionsPanel({
   adventureTrueModeWouldWipe,
   clearAppState,
   clearAppStatePrimed,
-  queueAppStateSave,
-  activeNoteId,
   customCursorDotColor,
   customCursorCenterColor,
   customCursorTrailColor,
@@ -1011,6 +983,11 @@ export function SidebarOptionsPanel({
   startCaretColorCopyHold,
   clearCaretColorArmTimer,
 }: SidebarOptionsPanelProps) {
+    // The follow-the-music switch is on but cannot act, so it is drawn dimmed and its tooltip says why.
+    // With the Visualizer off it cannot be used at all, so it is disabled (and
+    // faded in whichever state it holds); on with the caret's effect at its centre it is only dimmed.
+    const caretFollowUnavailable = !features.visualizer
+    const caretFollowWaits = caretFollowUnavailable || (visualizer.caret.followsMusic && visualizer.caret.effect === 0)
     const outputDevice = useOutputDevice(features.visualizer)
     // Every block's fall: its shape (visualizer.ts, `pulseCurve`) and its
     // length, the length on a log track so each step of it feels the same.
@@ -1081,9 +1058,10 @@ export function SidebarOptionsPanel({
       )
     }
 
-    // One band block's toggle and six sliders: the same for the shade and the outline, plus the shade's spread and blur.
-    const renderBeatChannel = (key: 'shade' | 'outline', label: string, effect: string) => {
+    // One band block's toggle and six sliders: the same for the edge and the pane, plus the edge's spread and blur.
+    const renderBeatChannel = (key: 'edge' | 'pane', label: string, effect: string) => {
       const channel: VisualizerChannel = visualizer[key]
+      const defaults: VisualizerChannel = key === 'edge' ? DEFAULT_VISUALIZER_EDGE : DEFAULT_VISUALIZER_PANE
       const set = (patch: Partial<VisualizerChannel>) => setVisualizer((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }))
       const slider = (field: Exclude<keyof VisualizerChannel, 'source' | 'shape' | 'fallSec'>, trackLabel: string, min: number, max: number, step: number, tooltipLabel: string, ariaName: string, digits?: number) => (
         <CompactScrollbarSlider
@@ -1095,7 +1073,7 @@ export function SidebarOptionsPanel({
           trackLabel={trackLabel}
           tooltipLabel={tooltipLabel}
           ariaLabel={`${label}: ${ariaName}`}
-          defaultValue={DEFAULT_VISUALIZER_CHANNEL[field]}
+          defaultValue={defaults[field]}
           formatValue={digits === undefined ? undefined : (value) => value.toFixed(digits)}
           onCommit={(value) => set({ [field]: value })}
         />
@@ -1106,7 +1084,7 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel>{label}</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label={`${label} settings`}>
-            <OptionsSliderRows rows={key === 'shade' ? [2, 2, 2, 2] : [2, 2, 2]}>
+            <OptionsSliderRows rows={key === 'edge' ? [2, 2, 2, 2] : [2, 2, 2]}>
               {slider('effect', 'effect', -1, 1, 0.01, `How far ${effect} at a full response. Right of centre a hit adds it; left of centre it is inverted, resting at that much while music plays and a hit takes it away; the centre turns it off`, 'effect, negative inverts')}
               {/* One track for every source (visualizer.ts, `sourceSliderValue`): the
                   kick at the left end, the snare at the centre, the hat at the right,
@@ -1120,7 +1098,7 @@ export function SidebarOptionsPanel({
                 trackLabel="freq"
                 tooltipLabel="What it follows: the kick drum at the left end, the snare (and claps and rim shots) at the centre, hi-hats (and other short bright hits) at the right end, or, in between, the level of one band of the music, in Hz"
                 ariaLabel={`${label}: kick, snare, hi-hat, or a frequency in Hz`}
-                defaultValue={sourceSliderValue(DEFAULT_VISUALIZER_CHANNEL)}
+                defaultValue={sourceSliderValue(defaults)}
                 formatValue={(value) => {
                   const at = sourceAtSlider(value, channel.frequencyHz)
                   return at.source === 'band' ? at.frequencyHz.toString() : at.source
@@ -1133,34 +1111,34 @@ export function SidebarOptionsPanel({
                 ? slider('octaves', 'width', BEAT_OCTAVES_MIN, BEAT_OCTAVES_MAX, 0.1, 'Octaves: how wide the bell around the frequency is', 'band width in octaves', 1)
                 : slider('groove', 'groove', 0, 1, 0.01, 'How steadily it holds the learned pattern against what it hears. At the left it shows only the hits it hears; towards the middle it also shows an accent off the pattern; at the right every hit of the pattern lands at full strength, even one drowned by another instrument, and a one-off is ignored. A break stops it at any setting', 'groove')}
               {slider('contrast', 'contrast', 0, BEAT_CONTRAST_MAX, 0.01, 'How loud the band must be, against the ten seconds around it, before it responds: higher keeps only the biggest hits', 'contrast')}
-              {renderFallSliders(`beat-${key}`, label, channel, DEFAULT_VISUALIZER_CHANNEL, 'each hit', set)}
+              {renderFallSliders(`beat-${key}`, label, channel, defaults, 'each hit', set)}
               {/* An array, not a fragment: OptionsSliderRows counts its children, and a fragment is one. */}
-              {key === 'shade' && [
+              {key === 'edge' && [
                   <CompactScrollbarSlider
                     key="spread"
-                    id="beat-shade-spread"
+                    id="beat-edge-spread"
                     min={0}
-                    max={SHADE_SPREAD_MAX_PX}
+                    max={EDGE_SPREAD_MAX_PX}
                     step={1}
-                    value={visualizer.shade.spreadPx}
+                    value={visualizer.edge.spreadPx}
                     trackLabel="spread"
-                    tooltipLabel="Pixels: how far the shade reaches in from the editor's edges before it starts to fade"
-                    ariaLabel="Shade: spread in pixels"
-                    defaultValue={DEFAULT_SHADE_SPREAD_PX}
-                    onCommit={(value) => setVisualizer((prev) => ({ ...prev, shade: { ...prev.shade, spreadPx: Math.round(value) } }))}
+                    tooltipLabel="Pixels: how far the edge reaches in from the editor's edges before it starts to fade"
+                    ariaLabel="Edge: spread in pixels"
+                    defaultValue={DEFAULT_VISUALIZER_EDGE.spreadPx}
+                    onCommit={(value) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, spreadPx: Math.round(value) } }))}
                   />,
                   <CompactScrollbarSlider
                     key="blur"
-                    id="beat-shade-blur"
+                    id="beat-edge-blur"
                     min={0}
-                    max={SHADE_BLUR_MAX_PX}
+                    max={EDGE_BLUR_MAX_PX}
                     step={1}
-                    value={visualizer.shade.blurPx}
+                    value={visualizer.edge.blurPx}
                     trackLabel="blur"
-                    tooltipLabel="Pixels: how soft the shade's inner edge is; 0 is a hard edge"
-                    ariaLabel="Shade: blur in pixels"
-                    defaultValue={DEFAULT_SHADE_BLUR_PX}
-                    onCommit={(value) => setVisualizer((prev) => ({ ...prev, shade: { ...prev.shade, blurPx: Math.round(value) } }))}
+                    tooltipLabel="Pixels: how soft the edge fades inward; 0 is a hard line"
+                    ariaLabel="Edge: blur in pixels"
+                    defaultValue={DEFAULT_VISUALIZER_EDGE.blurPx}
+                    onCommit={(value) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, blurPx: Math.round(value) } }))}
                   />,
               ]}
             </OptionsSliderRows>
@@ -1336,6 +1314,8 @@ export function SidebarOptionsPanel({
             <span className="fa-solid fa-marker" aria-hidden="true" />
           </button>
         </div>
+      </div>
+      <div className="preset-section" data-options-search-hidden={searchQuery.trim() !== '' ? '' : undefined}>
         <FeatureToggleBar features={features} setFeatures={setFeatures} />
       </div>
       <AccordionGroup filter={searchQuery}>
@@ -2930,39 +2910,60 @@ export function SidebarOptionsPanel({
             />
           </div>
 
-          {features.caretBlink ? (<>
           <OptionsSubsectionLabel>Blink</OptionsSubsectionLabel>
           {/* Animation shape. One button per curve, same visual language as the
-              custom-layout slots -- the selected one carries .is-active. */}
+              custom-layout slots -- the selected one carries .is-active.
+              Pressing the active one switches the blink off altogether (the
+              caretBlink feature, shared/features.ts): the caret holds steady,
+              no animation runs, and the sliders below leave the panel.
+              Pressing any shape switches it back on. */}
           <div className="options-caret-preset-row" role="group" aria-label="Caret blink animation">
-            {CARET_ANIMATION_PRESET_KEYS.map((presetKey) => (
-              <button
-                key={presetKey}
-                type="button"
-                className={`btn-icon options-color-swatch options-caret-preset-btn${caretAnimationPreset === presetKey ? ' is-active' : ''}`}
-                data-tooltip={CARET_ANIMATION_PRESETS[presetKey].label}
-                aria-label={CARET_ANIMATION_PRESETS[presetKey].label}
-                aria-pressed={caretAnimationPreset === presetKey}
-                onClick={() => setCaretAnimationPreset(presetKey)}
-              >
-                <span className={`fa-solid ${CARET_ANIMATION_PRESETS[presetKey].iconClass}`} aria-hidden="true" />
-              </button>
-            ))}
+            {CARET_ANIMATION_PRESET_KEYS.map((presetKey) => {
+              const isActive = features.caretBlink && caretAnimationPreset === presetKey
+              const label = CARET_ANIMATION_PRESETS[presetKey].label
+              return (
+                <button
+                  key={presetKey}
+                  type="button"
+                  className={`btn-icon options-color-swatch options-caret-preset-btn${isActive ? ' is-active' : ''}`}
+                  data-tooltip={isActive ? `${label}: press again to stop the blink` : label}
+                  aria-label={label}
+                  aria-pressed={isActive}
+                  onClick={() => {
+                    if (isActive) {
+                      setFeatures((prev) => ({ ...prev, caretBlink: false }))
+                      return
+                    }
+                    setCaretAnimationPreset(presetKey)
+                    if (!features.caretBlink) setFeatures((prev) => ({ ...prev, caretBlink: true }))
+                  }}
+                >
+                  <span className={`fa-solid ${CARET_ANIMATION_PRESETS[presetKey].iconClass}`} aria-hidden="true" />
+                </button>
+              )
+            })}
             {/* Not a blink but a switch beside them: the blink selected above
                 stays selected and is what the caret falls back to whenever
                 there is no beat to follow (VisualizerCaret.followsMusic). */}
             <button
               type="button"
-              className={`btn-icon options-color-swatch options-caret-preset-btn${visualizer.caret.followsMusic ? ' is-active' : ''}`}
-              data-tooltip="Follow the music: while music plays and a beat is found, the caret pulses on the beat instead of blinking (tuned under Visualizer). Otherwise it blinks as selected"
+              className={`btn-icon options-color-swatch options-caret-preset-btn${visualizer.caret.followsMusic ? ' is-active' : ''}${caretFollowWaits ? ' is-dimmed' : ''}`}
+              data-tooltip={caretFollowUnavailable
+                ? 'Follow the music needs the Visualizer: switch it on (the drum) in the feature bar. Until then the caret blinks as selected'
+                : caretFollowWaits
+                ? "Follow the music is on but not in effect: the caret's effect under Visualizer is at its centre. Until then the caret blinks as selected"
+                : 'Follow the music: while music plays and a beat is found, the caret pulses on the beat instead of blinking (tuned under Visualizer). Otherwise it blinks as selected'}
               aria-label="Caret follows the music"
               aria-pressed={visualizer.caret.followsMusic}
-              onClick={() => setVisualizer((prev) => ({ ...prev, caret: { ...prev.caret, followsMusic: !prev.caret.followsMusic } }))}
+              // aria-disabled rather than disabled, so the tooltip saying why still shows on hover.
+              aria-disabled={caretFollowUnavailable}
+              onClick={() => caretFollowUnavailable || setVisualizer((prev) => ({ ...prev, caret: { ...prev.caret, followsMusic: !prev.caret.followsMusic } }))}
             >
               <span className="fa-solid fa-music" aria-hidden="true" />
             </button>
           </div>
 
+          {features.caretBlink ? (<>
           <div className="options-glaze-cell options-glaze-cell-span-2">
             <CompactScrollbarSlider
               id="caret-animation-duration"
@@ -3198,13 +3199,13 @@ export function SidebarOptionsPanel({
           <StagedColorRow
             label="Visualizer colours"
             targets={[
-              { id: 'shade', color: visualizer.shade.color, glyph: 'fa-solid fa-square', tooltip: 'Shade colour: click to apply the staged colour, hold right-click to copy it', onApply: (css) => setVisualizer((prev) => ({ ...prev, shade: { ...prev.shade, color: css } })) },
-              { id: 'outline', color: visualizer.outline.color, glyph: 'fa-regular fa-square', tooltip: 'Outline colour: click to apply the staged colour, hold right-click to copy it', onApply: (css) => setVisualizer((prev) => ({ ...prev, outline: { ...prev.outline, color: css } })) },
+              { id: 'edge', color: visualizer.edge.color, glyph: 'fa-solid fa-square', tooltip: 'Edge colour: click to apply the staged colour, hold right-click to copy it', onApply: (css) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, color: css } })) },
+              { id: 'pane', color: visualizer.pane.color, glyph: 'fa-regular fa-square', tooltip: 'Pane colour: click to apply the staged colour, hold right-click to copy it', onApply: (css) => setVisualizer((prev) => ({ ...prev, pane: { ...prev.pane, color: css } })) },
             ]}
           />
           {visualizer.caret.followsMusic && renderBeatCaret()}
-          {renderBeatChannel('shade', 'Shade', 'the active editor\'s inner shade shows')}
-          {renderBeatChannel('outline', 'Outline', 'the box outlines show')}
+          {renderBeatChannel('edge', 'Edge', 'the active editor\'s edge shows')}
+          {renderBeatChannel('pane', 'Pane', 'the pane shows (the box outlines in the edit view, a flat wash of its colour elsewhere)')}
       </AccordionSection>
       ) : null}
 
@@ -3213,24 +3214,12 @@ export function SidebarOptionsPanel({
         onChange={onSoundscapePreferencesChange}
       />
 
+      {features.flow ? (
       <AccordionSection
-        className="sidebar-options-section-tools"
-        ariaLabel="Tools"
-        heading="Tools"
+        className="sidebar-options-section-flow"
+        ariaLabel="Flow"
+        heading="Flow"
       >
-<div className="utility-setting-button-row" role="group" aria-label="Tool controls">
-          <button
-            type="button"
-            className={`btn-icon${flowSettings.enabled ? ' is-active' : ''}`}
-            onClick={() => setFlowSettings((prev) => ({ ...prev, enabled: !prev.enabled }))}
-            aria-pressed={flowSettings.enabled}
-            data-tooltip={flowSettings.enabled ? 'Disable typing flow' : 'Enable typing flow: steady, fast typing builds a flow that the look, the reverb, the caret and its trail answer'}
-          >
-            <span className="fa-solid fa-water" aria-hidden="true" />
-          </button>
-        </div>
-        {flowSettings.enabled ? (<>
-          <OptionsSubsectionLabel>Flow</OptionsSubsectionLabel>
           <div className="utility-setting-slider-stack" aria-label="Typing flow settings">
             {/* How the trail fades (fade, shape) and how flow is answered (look, reverb, trail, amp). How the meter itself moves is fixed (shared/flowSettings.ts). */}
             <OptionsSliderRows rows={[2, 2, 2]}>
@@ -3310,8 +3299,8 @@ export function SidebarOptionsPanel({
               />
             </OptionsSliderRows>
           </div>
-        </>) : null}
       </AccordionSection>
+      ) : null}
 
       <AccordionSection
         className="sidebar-options-section-animations"
@@ -3585,85 +3574,6 @@ export function SidebarOptionsPanel({
               )}
             />
           </OptionsSliderRows>
-        </div>
-      </AccordionSection>
-
-      <AccordionSection
-        className="sidebar-options-section-performance"
-        ariaLabel="Performance"
-        heading="Performance"
-      >
-        <OptionsSubsectionLabel>Modes</OptionsSubsectionLabel>
-<div className="utility-setting-button-row" role="group" aria-label="Performance controls">
-          <button
-            type="button"
-            className={`btn-icon${reduceVisualEffects ? ' is-active' : ''}`}
-            onClick={() => {
-              const next = !reduceVisualEffects
-              setReduceVisualEffects(next)
-              queueAppStateSave(activeNoteId)
-            }}
-            aria-pressed={reduceVisualEffects}
-            data-tooltip="Reduce visual effects"
-          >
-            <span className="fa-solid fa-spray-can-sparkles" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className={`btn-icon${deferPreviewOnRapidInput ? ' is-active' : ''}`}
-            onClick={() => {
-              const next = !deferPreviewOnRapidInput
-              setDeferPreviewOnRapidInput(next)
-              queueAppStateSave(activeNoteId)
-            }}
-            aria-pressed={deferPreviewOnRapidInput}
-            data-tooltip="Allow asynchronous input"
-          >
-            <span className="fa-solid fa-gauge-high" aria-hidden="true" />
-          </button>
-          {/* Puts every note on the character-counting side of the line
-              below, whatever its size -- which is why it also takes the
-              slider out of play rather than sitting beside it as an equal.
-              Deliberately not the same thing as dragging the slider to its
-              floor: this is a standing preference, and the slider keeps its
-              own value underneath it for when this is switched back off. */}
-          <button
-            type="button"
-            className={`btn-icon${forceCharacterScrollbarThumb ? ' is-active' : ''}`}
-            onClick={() => {
-              const next = !forceCharacterScrollbarThumb
-              setForceCharacterScrollbarThumb(next)
-              queueAppStateSave(activeNoteId)
-            }}
-            aria-pressed={forceCharacterScrollbarThumb}
-            data-tooltip="Force character based scrollbar thumb"
-          >
-            <span className="fa-solid fa-text-height" aria-hidden="true" />
-          </button>
-        </div>
-        <OptionsSubsectionLabel>Large notes</OptionsSubsectionLabel>
-        {/* Where the reader puts the line between a note whose scrollbar is
-            measured in pixels and one whose scrollbar counts characters --
-            see editor/documentPosition.ts for what each side means and why
-            the choice is theirs. The rail names the setting; the tooltip
-            names the unit, which is the more useful of the two on hover. */}
-        <div className="utility-setting-slider-stack" aria-label="Note size threshold">
-          <CompactScrollbarSlider
-            id="note-size-threshold"
-            min={CONTINUOUS_DOCUMENT_MIN_THRESHOLD_BLOCKS}
-            max={CONTINUOUS_DOCUMENT_MAX_THRESHOLD_BLOCKS}
-            step={CONTINUOUS_DOCUMENT_THRESHOLD_STEP_BLOCKS}
-            value={noteSizeThresholdBlocks}
-            trackLabel="note size threshold"
-            tooltipLabel="paragraphs"
-            ariaLabel="Note size threshold: how many paragraphs a note may have before its scrollbar counts characters instead of measuring height."
-            defaultValue={DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS}
-            disabled={forceCharacterScrollbarThumb}
-            onCommit={(value) => {
-              setNoteSizeThresholdBlocks(clampContinuousDocumentThreshold(value))
-              queueAppStateSave(activeNoteId)
-            }}
-          />
         </div>
       </AccordionSection>
 

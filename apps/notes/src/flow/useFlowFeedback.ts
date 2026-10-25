@@ -30,8 +30,8 @@ function setCaretHold(hold: number): void {
   setFlowStyle('--flow-caret-effect', hold <= 0 ? null : hold.toFixed(3))
 }
 
-export function useFlowFeedback(settings: FlowSettings): void {
-  const { enabled, gainPercent, decayPercent, idleGraceMs, idleShape, idleDuration, fadeMaxTime, fadeShape, lineRamp, trail, reverb, amp } = settings
+export function useFlowFeedback(enabled: boolean, settings: FlowSettings): void {
+  const { gainPercent, decayPercent, idleGraceMs, idleShape, idleDuration, fadeMaxTime, fadeShape, lineRamp, trail, reverb, amp } = settings
 
   useEffect(() => {
     flowMeter.configure({ enabled, gainPercent, decayPercent, idleGraceMs, idleShape, idleDuration })

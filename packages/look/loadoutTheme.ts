@@ -68,8 +68,6 @@ export type ThemeLoadout = Pick<
 >
 
 export interface ThemeOptions {
-  /** The low-power switch: drops glaze, colorize and every decorative filter (invert stays). */
-  reduceVisualEffects: boolean
   /** The glaze feature is on (the desktop app's feature toggle); off, no glaze layer is drawn at all. */
   glaze: boolean
   /** Selection colour follows the active view: the render view has its own. */
@@ -348,12 +346,11 @@ function embossSecondary(primary: string): string {
  */
 export function themeFrame(loadout: ThemeLoadout, options: ThemeOptions): ThemeFrame {
   const colors = loadout.highlightColors
-  const reduce = options.reduceVisualEffects
   const inverted = loadout.filterInvert > 0.5
   const palette = derivePaletteTokensFromBaseColor(colors.base)
   const lineNumberRgba = parseCssColorToRgba(colors.lineNumber) ?? { r: 0, g: 0, b: 0, a: 0.6 }
 
-  const glaze: ThemeGlazeImages = reduce || !options.glaze
+  const glaze: ThemeGlazeImages = !options.glaze
     ? { linear: 'none', radial: 'none', gloom: 'none', sheen: 'none' }
     : {
         linear: buildLinearGlazeLayers(loadout.glaze).join(', ') || 'none',
@@ -431,7 +428,7 @@ export function themeFrame(loadout: ThemeLoadout, options: ThemeOptions): ThemeF
   // The scene's effects as DATA (scene.ts), so the filter string, the
   // image correction and the flow colour's on-screen value are read off one
   // description and cannot disagree about what the scene does.
-  const scene = sceneOf(loadout, reduce)
+  const scene = sceneOf(loadout)
   const { filterEffects, invertViaBlendMode, colorize } = scene
   // The flow overlays sit outside the scene, so they take the trail's
   // on-screen colour rather than its stored one (flowColor.ts).

@@ -518,20 +518,21 @@
   box-shadow: var(--box-shadow-active-editor);
 }
 
-/* The visualizer's shade and outline blocks (Options > Visualizer;
+/* The visualizer's edge and pane blocks (Options > Visualizer;
    flow/useBeatFeedback.ts). Each is a layer of its own over the active editor
-   whose opacity is its block's value (--beat-shade, --beat-outline, set on the
+   whose opacity is its block's value (--beat-edge, --beat-pane, set on the
    element alone), present only on the active editor and only while its block
-   follows the music (`html[data-beat-shade]`, `html[data-beat-outline]`), and
+   follows the music (`html[data-beat-edge]`, `html[data-beat-pane]`), and
    only then promoted (will-change), so the per-frame change is a compositor
-   opacity rather than a repaint of the editor's area. Both sit at the shell
-   level, outside the edit pane's texture mask, which is what keeps the
+   opacity rather than a repaint of the editor's area. The edge and the
+   pane's grid copy sit at the shell level (the pane's wash, behind the
+   stage, below), outside the edit pane's texture mask, which is what keeps the
    promotion from pulling the pane into a squashed overlap layer (the trap
    .thockdown-block-caret's note describes). Their colours are the layout's
-   (--beat-shade-color, --beat-outline-color); the shade's geometry is the
-   layout's too (--beat-shade-spread, --beat-shade-blur), written only when its
+   (--beat-edge-color, --beat-pane-color); the edge's geometry is the
+   layout's too (--beat-edge-spread, --beat-edge-blur), written only when its
    slider moves, so a beat never changes anything but the opacity. */
-.editor-beat-shade {
+.editor-beat-edge {
   display:        none;
   position:       absolute;
   inset:          0;
@@ -539,28 +540,47 @@
   pointer-events: none;
   z-index:        4;
   box-shadow:
-    inset 0 0 calc(var(--beat-shade-blur, 32px) / 8) var(--beat-shade-spread, 0px) var(--beat-shade-color),
-    inset 0 0 var(--beat-shade-blur, 32px) var(--beat-shade-spread, 0px) color-mix(in srgb, var(--beat-shade-color) 45%, transparent);
-  opacity:        var(--beat-shade, 0);
+    inset 0 0 calc(var(--beat-edge-blur, 32px) / 8) var(--beat-edge-spread, 0px) var(--beat-edge-color),
+    inset 0 0 var(--beat-edge-blur, 32px) var(--beat-edge-spread, 0px) color-mix(in srgb, var(--beat-edge-color) 45%, transparent);
+  opacity:        var(--beat-edge, 0);
 }
 
-/* The box outlines: a copy of the grid's outline pattern, whose box, tile and
-   phase useBeatGridMirror keeps equal to the real grid's (which sits in the
-   edit pane, where a layer of its own would pull the text into an overlap
-   layer). Clipped to the editor's rounded shape by its own radius. */
-.editor-beat-outline {
+/* The pane in the edit view: a copy of the grid's outline pattern, whose
+   box, tile and phase useBeatGridMirror keeps equal to the real grid's
+   (which sits in the edit pane, where a layer of its own would pull the
+   text into an overlap layer). Shown only while a grid is (.has-grid). In
+   any other view the pane is .editor-beat-wash instead. */
+.editor-beat-pane {
   display:        none;
   position:       absolute;
   pointer-events: none;
   z-index:        4;
-  opacity:        var(--beat-outline, 0);
+  opacity:        var(--beat-pane, 0);
   background-image:
-    repeating-linear-gradient(to right, var(--beat-outline-color) 0, var(--beat-outline-color) 3px, transparent 3px, transparent var(--editor-cell-width)),
-    repeating-linear-gradient(to bottom, var(--beat-outline-color) 0, var(--beat-outline-color) 3px, transparent 3px, transparent var(--editor-line-height));
+    repeating-linear-gradient(to right, var(--beat-pane-color) 0, var(--beat-pane-color) 3px, transparent 3px, transparent var(--editor-cell-width)),
+    repeating-linear-gradient(to bottom, var(--beat-pane-color) 0, var(--beat-pane-color) 3px, transparent 3px, transparent var(--editor-line-height));
 }
 
-html[data-beat-shade] .editor-section-column.is-active .editor-beat-shade,
-html[data-beat-outline] .editor-section-column.is-active .editor-beat-outline {
+/* The pane in any view without a grid (render view, an empty slot, a mode
+   that empties it): a flat wash of its colour, BEHIND the stage, so the
+   texture and the text are drawn over it. It sits in .editor-background
+   between that element's own fill and the stage, outside the stage's
+   masks; the stage overlapping a composited wash is promoted to a layer of
+   its own once, when the wash appears, and is not repainted by the wash's
+   opacity changing. */
+.editor-beat-wash {
+  display:          none;
+  position:         absolute;
+  inset:            0;
+  border-radius:    var(--border-radius-regular);
+  pointer-events:   none;
+  opacity:          var(--beat-pane, 0);
+  background-color: var(--beat-pane-color);
+}
+
+html[data-beat-edge] .editor-section-column.is-active .editor-beat-edge,
+html[data-beat-pane] .editor-section-column.is-active .editor-beat-pane.has-grid,
+html[data-beat-pane] .editor-section-column.is-active .editor-beat-wash.is-shown {
   display:     block;
   will-change: opacity;
 }
@@ -831,18 +851,14 @@ html[data-beat-outline] .editor-section-column.is-active .editor-beat-outline {
   }
 }
 
-.editor-stage .editor-escape-hold-panel-btn:not(.is-unarrived):not(.is-simple-rotation)
+.editor-stage .editor-escape-hold-panel-btn:not(.is-unarrived)
   > .editor-escape-hold-panel-btn-icon {
   animation: escape-hold-cell-arrive var(--cell-arrival, 100ms) ease-in both;
 }
 
-/* The two ways a reader says they do not want this. `.is-simple-rotation` is
-   the app's own reduced-visual-effects setting (it is already what turns the
-   curve-driven rotation into a plain CSS step) and is excluded in the rule
-   above rather than here, because with that setting every cell arrives at
-   once and they would otherwise grow in unison. Either way the icon's own
-   resting state is fully opaque and unscaled, so switching the animation off
-   leaves the ring correct rather than blank. */
+/* A reader who asked the OS for reduced motion does not get this. The icon's
+   own resting state is fully opaque and unscaled, so switching the animation
+   off leaves the ring correct rather than blank. */
 @media (prefers-reduced-motion: reduce) {
   .editor-stage .editor-escape-hold-panel-btn > .editor-escape-hold-panel-btn-icon {
     animation: none;
@@ -856,19 +872,12 @@ html[data-beat-outline] .editor-section-column.is-active .editor-beat-outline {
   /* Ring placement (translate(-50%,-50%) centers the button on its point;
      the second translate(...) is the actual ring offset) comes from each
      button's own inline `transform` -- see EscapeHoldPanel.tsx. No
-     `transform` transition here by default: the default (reduceVisualEffects:
-     false) rotation is driven by a requestAnimationFrame loop that writes
+     `transform` transition here: the rotation is driven by a requestAnimationFrame loop that writes
      `style.transform` directly, every frame, from the shared smooth-scroll
      curve toolkit reused for this rotation (escapeHoldRotationCurve.ts) -- a
      CSS transition running at the same time would fight those per-frame
      writes, trying to re-ease between each one and turning the precise curve
-     into a laggy, over-smoothed blur. `.is-simple-rotation` (added only when
-     reduceVisualEffects is true, which skips that whole engine and just
-     jumps `topIndex` by one slot per key press) is the one place this
-     transition is actually wanted, timed by `--rotation-duration` (set
-     inline alongside `transform`) rather than a fixed number so it stays in
-     step with EscapeHoldPanel.tsx's own constant instead of two numbers
-     that can drift apart. */
+     into a laggy, over-smoothed blur. */
   width:           var(--btn-square-larger-size);
   height:          var(--btn-square-larger-size);
   min-width:       var(--btn-square-larger-size);
@@ -884,10 +893,6 @@ html[data-beat-outline] .editor-section-column.is-active .editor-beat-outline {
   color:           var(--color-text-60);
   transition:      background 0.2s, border-color 0.2s, color 0.2s;
   font-size: var(--btn-large-icon-size);
-}
-
-.editor-stage .editor-escape-hold-panel-btn.is-simple-rotation {
-  transition: background 0.2s, border-color 0.2s, color 0.2s, transform var(--rotation-duration, 200ms) ease;
 }
 
 .editor-stage .editor-escape-hold-panel-btn[data-pressed]
