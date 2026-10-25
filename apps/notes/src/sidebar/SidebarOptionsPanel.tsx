@@ -1011,6 +1011,8 @@ export function SidebarOptionsPanel({
   startCaretColorCopyHold,
   clearCaretColorArmTimer,
 }: SidebarOptionsPanelProps) {
+    // The follow-the-music switch is on but cannot act, so it is drawn dimmed and its tooltip says why.
+    const caretFollowWaits = visualizer.caret.followsMusic && (!features.visualizer || visualizer.caret.effect === 0)
     const outputDevice = useOutputDevice(features.visualizer)
     // Every block's fall: its shape (visualizer.ts, `pulseCurve`) and its
     // length, the length on a log track so each step of it feels the same.
@@ -2953,8 +2955,10 @@ export function SidebarOptionsPanel({
                 there is no beat to follow (VisualizerCaret.followsMusic). */}
             <button
               type="button"
-              className={`btn-icon options-color-swatch options-caret-preset-btn${visualizer.caret.followsMusic ? ' is-active' : ''}`}
-              data-tooltip="Follow the music: while music plays and a beat is found, the caret pulses on the beat instead of blinking (tuned under Visualizer). Otherwise it blinks as selected"
+              className={`btn-icon options-color-swatch options-caret-preset-btn${visualizer.caret.followsMusic ? ' is-active' : ''}${caretFollowWaits ? ' is-dimmed' : ''}`}
+              data-tooltip={caretFollowWaits
+                ? `Follow the music is on but not in effect: ${features.visualizer ? "the caret's effect under Visualizer is at its centre" : 'switch the Visualizer (the drum) on in the feature bar'}. Until then the caret blinks as selected`
+                : 'Follow the music: while music plays and a beat is found, the caret pulses on the beat instead of blinking (tuned under Visualizer). Otherwise it blinks as selected'}
               aria-label="Caret follows the music"
               aria-pressed={visualizer.caret.followsMusic}
               onClick={() => setVisualizer((prev) => ({ ...prev, caret: { ...prev.caret, followsMusic: !prev.caret.followsMusic } }))}

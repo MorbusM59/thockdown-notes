@@ -207,6 +207,12 @@
 
 html[data-beat-caret] .thockdown-block-caret {
   --beat-caret-hold: 1;
+  /* The blink is paused, not stopped, while the beat drives the caret: at a
+     full hold every stop reads as the peak, so a paused blink costs no frame
+     and looks the same, and the blink resumes from where it paused, eased
+     back in as the hold falls. Paused during the ease-in it still converges,
+     since the hold carries whatever stop it froze on to the peak. */
+  animation-play-state: paused;
 }
 
 .thockdown-caret-blink-off .thockdown-block-caret {
