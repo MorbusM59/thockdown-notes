@@ -2957,7 +2957,7 @@ export function SidebarOptionsPanel({
               aria-pressed={visualizer.caret.followsMusic}
               onClick={() => setVisualizer((prev) => ({ ...prev, caret: { ...prev.caret, followsMusic: !prev.caret.followsMusic } }))}
             >
-              <span className="fa-solid fa-basketball" aria-hidden="true" />
+              <span className="fa-solid fa-music" aria-hidden="true" />
             </button>
           </div>
 
