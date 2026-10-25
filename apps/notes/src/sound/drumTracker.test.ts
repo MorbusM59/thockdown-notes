@@ -945,3 +945,93 @@ describe('DrumCursor', () => {
     expect(after[0]).toBeLessThan(11.5)
   })
 })
+
+/**
+ * A club track's arrangement at `bpm`, one section per run of beats: the
+ * groove (a kick on every beat, an off-beat bass and hat, a clap on two and
+ * four), a RISER (a noise sweep and nothing else), kick ROLLS on every eighth
+ * and then every sixteenth under the sweep, and a BREAKDOWN of a held chord
+ * and no drums. Every hit is placed up to `jitterSec` either way of its beat.
+ */
+type Section = 'groove' | 'riser' | 'roll8' | 'roll16' | 'breakdown'
+function arrangement(seconds: number, bpm: number, sectionAt: (beat: number) => Section, jitterSec: number): { samples: Float32Array; beats: number[] } {
+  const out = new Float32Array(Math.round(seconds * RATE))
+  const rand = noise(7)
+  const jitter = noise(13)
+  const beat = 60 / bpm
+  const beats: number[] = []
+  for (let b = 0; b * beat < seconds; b++) {
+    const t0 = b * beat
+    beats.push(t0)
+    const section = sectionAt(b)
+    const at = t0 + jitterSec * jitter()
+    if (section === 'groove') {
+      addKick(out, at, 1, rand)
+      addNoise(out, at + beat / 2, 0.15, 0.03, rand)
+      if (b % 2 === 1) addNoise(out, at, 0.3, 0.04, rand)
+      for (let i = 0; i < beat * 0.5 * RATE; i++) {
+        const k = Math.round((at + beat / 2) * RATE) + i
+        if (k >= out.length) break
+        const t = i / RATE
+        out[k] += 0.45 * Math.min(1, t / 0.06) * Math.sin(2 * Math.PI * 55 * t)
+      }
+    }
+    if (section === 'roll8' || section === 'roll16') {
+      const strokes = section === 'roll8' ? 2 : 4
+      for (let s = 0; s < strokes; s++) {
+        addKick(out, at + (s * beat) / strokes, 0.7, rand)
+        addNoise(out, at + (s * beat) / strokes, 0.3, 0.04, rand)
+      }
+    }
+    for (let i = 0; i < beat * RATE; i++) {
+      const k = Math.round(t0 * RATE) + i
+      if (k >= out.length) break
+      if (section === 'riser' || section === 'roll8' || section === 'roll16') out[k] += 0.1 * rand()
+      if (section === 'breakdown') out[k] += 0.2 * Math.sin((2 * Math.PI * 220 * k) / RATE)
+    }
+  }
+  return { samples: out, beats }
+}
+
+describe('DrumTracker grid through an arrangement', () => {
+  it('keeps the beat of the groove through a riser, kick rolls and a breakdown, and finds it again at the drop', () => {
+    // 96 beats of groove, 32 of riser, 16 of eighth and 16 of sixteenth
+    // rolls, 64 of breakdown, then the drop. A grid read from the riser or the
+    // breakdown's chord (whose rises, normalised to peaks that have faded,
+    // are as periodic as kicks) took 135 to 181 BPM, and one read from a roll
+    // moved by up to a quarter beat; each dragged the caret's clock with it.
+    const bpm = 128
+    const seconds = 150
+    const section = (b: number): Section => {
+      const m = b % 256
+      return m < 96 ? 'groove' : m < 128 ? 'riser' : m < 144 ? 'roll8' : m < 160 ? 'roll16' : m < 224 ? 'breakdown' : 'groove'
+    }
+    const track = arrangement(seconds, bpm, section, 0.002)
+    const tracker = new DrumTracker(RATE)
+    const LEAD = 6
+    let fed = 0
+    const misses: string[] = []
+    let lockedAfterDrop = false
+    const drop = 224 * (60 / bpm)
+    for (let heard = 0; heard < seconds - LEAD; heard += 0.25) {
+      const end = Math.min(track.samples.length, Math.round((heard + LEAD) * RATE))
+      tracker.feed(track.samples.subarray(fed, end), 0, (end - 1) / RATE)
+      fed = end
+      const period = tracker.gridPeriodSec
+      if (Number.isNaN(period)) continue
+      if (heard > drop + 2) lockedAfterDrop = true
+      // The tempo to an octave, and the grid's beat nearest the true beat
+      // nearest the listener (the onset peak trails a kick's first sample by
+      // up to 20ms).
+      const octaves = Math.log2((60 / period) / bpm)
+      const beatAt = track.beats.reduce((a, b) => (Math.abs(b - heard) < Math.abs(a - heard) ? b : a))
+      const steps = (beatAt - tracker.gridBeatTime) / period
+      const offset = (Math.round(steps) - steps) * period
+      if (Math.abs(octaves - Math.round(octaves)) > 0.01 || offset < -0.01 || offset > 0.03) {
+        misses.push(`${heard.toFixed(2)}s: ${(60 / period).toFixed(1)} BPM, ${(offset * 1000).toFixed(0)}ms`)
+      }
+    }
+    expect(misses).toEqual([])
+    expect(lockedAfterDrop).toBe(true)
+  })
+})
