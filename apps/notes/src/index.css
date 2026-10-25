@@ -211,7 +211,8 @@ html[data-beat-caret] .thockdown-block-caret {
 
 .thockdown-reduced-caret-animation .thockdown-block-caret {
   animation: none;
-  opacity: 0.8;
+  /* The beat's dip is kept: it was chosen in its own right. */
+  opacity: calc(0.8 * (1 - var(--beat-caret, 0) * var(--beat-caret-hold)));
 }
 
 /* Custom selection highlight overlay (drawn by CM6Editor.tsx) -- see the
