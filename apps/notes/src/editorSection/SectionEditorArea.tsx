@@ -49,7 +49,6 @@ export interface SectionEditorAreaProps {
   editorFontFamily: string
   editorRuntimeMetrics: EditorRuntimeMetrics
   editorFontLoadVersion: number
-  activeNoteHasDebugTag: boolean
   isPreviewingSnapshot: boolean
   isCaretSuspended: boolean
   isEscapeHoldPanelOpen: boolean
@@ -196,7 +195,6 @@ export function SectionEditorArea({
   editorFontFamily,
   editorRuntimeMetrics,
   editorFontLoadVersion,
-  activeNoteHasDebugTag,
   isPreviewingSnapshot,
   isCaretSuspended,
   isEscapeHoldPanelOpen,
@@ -474,7 +472,7 @@ export function SectionEditorArea({
                   lineHeightPx={editorRuntimeMetrics.lineHeightPx}
                   glyphWidthPx={editorRuntimeMetrics.glyphWidthPx}
                   cellWidthPx={editorRuntimeMetrics.cellWidthPx}
-                  editorReadOnly={isReadingEditView || activeNoteHasDebugTag || isPreviewingSnapshot || isViewingAutoTocChapter || isViewingAutoOpenItemsChapter || isViewingTimelessNote}
+                  editorReadOnly={isReadingEditView || isPreviewingSnapshot || isViewingAutoTocChapter || isViewingAutoOpenItemsChapter || isViewingTimelessNote}
                   spellCheckEnabled={editorSpellCheckEnabled}
                   fontReady={editorFontLoadVersion > 0}
                   caretSuspended={isCaretSuspended}

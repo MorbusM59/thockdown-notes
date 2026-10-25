@@ -579,7 +579,6 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     scrollBaseDistanceRows: sanitizePositive(input?.scrollBaseDistanceRows, DEFAULT_APP_STATE.menu!.scrollBaseDistanceRows ?? 1),
     scrollMaxDurationMultiplier: sanitizePositive(input?.scrollMaxDurationMultiplier, DEFAULT_APP_STATE.menu!.scrollMaxDurationMultiplier ?? 1),
     sidebarViewState: sanitizeSidebarViewState(input?.sidebarViewState),
-    debuggingEnabled: Boolean(input?.debuggingEnabled),
     spellCheckEnabled: Boolean(input?.spellCheckEnabled ?? false),
     flow: sanitizeFlowSettings(input?.flow),
     speedReading: sanitizeSpeedReadingSettings(input?.speedReading),

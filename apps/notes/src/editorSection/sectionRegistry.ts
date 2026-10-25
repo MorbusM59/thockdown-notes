@@ -13,7 +13,7 @@ import type { UseNoteChaptersResult } from '../chapters/useNoteChapters'
 /**
  * What one `<EditorSection>` instance publishes about itself for "chrome"
  * (App-level code outside any single section -- export, tag handlers, the
- * sidebar's reveal/open-note actions, the global toolbar, debug logging,
+ * sidebar's reveal/open-note actions, the global toolbar,
  * etc.) to read or act through. Chrome never reaches into a section's own
  * hook state directly; it goes through this handle, resolved via whichever
  * section is currently active (see `activeSectionId`/`markSectionActive`).

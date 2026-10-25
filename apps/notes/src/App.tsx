@@ -47,7 +47,7 @@ import {
 } from '@thockdown/look/loadouts'
 import type { NoteSummary } from './shared/noteLifecycle'
 import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote, isSameNoteSummary } from './shared/noteLifecycle'
-import { adoptNoteSummaries, keepIfUnchanged, withSavedNote } from './shared/noteContentStore'
+import { adoptNoteSummaries, keepIfUnchanged } from './shared/noteContentStore'
 import { getNoteListMetaKind } from './shared/noteListMeta'
 import {
   DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS,
@@ -137,7 +137,6 @@ import { onSpeedReadingSettingsCommit, setSpeedReadingSettings as applySpeedRead
 import { useBeatFeedback } from './flow/useBeatFeedback'
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings, type BeatSettings } from './shared/beatSettings'
 import { defaultVisualizer, sanitizeVisualizer, type VisualizerSettings } from '@thockdown/look/visualizer'
-import { DEBUG_TAG_NAME, normalizeTagName } from './shared/tags'
 import { EditorSection } from './editorSection/EditorSection'
 import type { EscapeMenuContribution } from './escapeMenu/escapeMenuContract'
 import { EditorToolbar } from './toolbar/EditorToolbar'
@@ -1459,7 +1458,6 @@ function App() {
   const [isExportingPdf, setIsExportingPdf] = useState(false)
   const [isExportingMd, setIsExportingMd] = useState(false)
   const [exportFolder, setExportFolder] = useState<string | null>(null)
-  const [debuggingEnabled, setDebuggingEnabled] = useState(false)
   const [spellCheckEnabled, setSpellCheckEnabled] = useState(false)
   const [flowSettings, setFlowSettings] = useState<FlowSettings>(DEFAULT_FLOW_SETTINGS)
   useFlowFeedback(flowSettings)
@@ -1538,7 +1536,6 @@ function App() {
   })
   const [cursorHsvaDragState, setCursorHsvaDragState] = useState<HsvaDragState | null>(null)
   const cursorColorArmTimerRef = useRef<(() => void) | null>(null)
-  const debugNoteIdRef = useRef<string | null>(null)
   const [windowIsMaximized, setWindowIsMaximized] = useState(false)
   const [windowIsCollapsed, setWindowIsCollapsed] = useState(false)
   const [windowModeTransitionOverlayNonce, setWindowModeTransitionOverlayNonce] = useState(0)
@@ -2259,7 +2256,6 @@ function App() {
   const [textureControlDragState, setTextureControlDragState] = useState<TextureControlDragState | null>(null)
   const colorArmTimerRef = useRef<(() => void) | null>(null)
   const pendingUpdateDebounceRef = useRef<number | null>(null)
-  type ConsoleMethodName = 'log' | 'info' | 'warn' | 'error' | 'debug'
   const appStateSaveTimerRef = useRef<number | null>(null)
   const noteTransitionLockRef = useRef(false)
   // Mirrors useSectionTabs' chapterBarMode so buildMenuStateSnapshot (defined
@@ -2268,9 +2264,6 @@ function App() {
   const chapterBarModeRef = useRef<'tags' | 'tabs'>('tabs')
   const [restoredTabBarMode, setRestoredTabBarMode] = useState<'tags' | 'tabs' | null>(null)
 
-  const originalConsoleMethodsRef = useRef<Partial<Record<ConsoleMethodName, (...args: unknown[]) => void>>>({})
-  const isWritingDebugEntryRef = useRef(false)
-  const debugNoteCreationPromiseRef = useRef<Promise<string | null> | null>(null)
   const externalNoteOriginalTextByIdRef = useRef<Map<string, string>>(new Map())
   const pendingSidebarScrollRestoreRef = useRef<{ mode: SidebarMode; scrollTop: number } | null>(null)
   // Stay here rather than move into useEditorSectionMount: activateNote and
@@ -3837,11 +3830,9 @@ function App() {
   const queueAppStateSaveRef = useRef<(selectedNoteId: string | null) => void>(() => {})
   const updateActiveNoteTitlePreviewRef = useRef<(nextText: string) => void>(() => {})
   const revealNoteInMenuRef = useRef<() => void>(() => {})
-  const writeDebugEntryRef = useRef<(functionName: string, lines: string[]) => Promise<void>>(async () => {})
-  const activeNoteHasDebugTagRef = useRef(false)
-  // Same ref-proxy technique as the four above, for the same TDZ reason --
+  // Same ref-proxy technique as the three above, for the same TDZ reason --
   // persistMenuStateNow is declared later than handleToggleDoubleSizeMode/
-  // toggleSidebarVisible, which both need to call it. Unlike those four,
+  // toggleSidebarVisible, which both need to call it. Unlike those three,
   // nothing needs a *stable-identity* wrapper around this one (it's only
   // ever called directly, never handed to a prop or another hook's deps
   // array), so there's no xStable counterpart -- callers just use
@@ -3884,7 +3875,6 @@ function App() {
   const queueAppStateSaveStable = useCallback((selectedNoteId: string | null) => queueAppStateSaveRef.current(selectedNoteId), [])
   const updateActiveNoteTitlePreviewStable = useCallback((nextText: string) => updateActiveNoteTitlePreviewRef.current(nextText), [])
   const revealNoteInMenuStable = useCallback(() => revealNoteInMenuRef.current(), [])
-  const writeDebugEntryStable = useCallback((functionName: string, lines: string[]) => writeDebugEntryRef.current(functionName, lines), [])
 
   const persistedMenuStateRef = useRef<PersistedMenuState | null>(null)
 
@@ -4015,7 +4005,6 @@ function App() {
           collapsedSecondary: archiveCollapsedSecondary,
         },
       },
-      debuggingEnabled,
       spellCheckEnabled,
       flow: flowSettings,
       beat: beatSettings,
@@ -4056,7 +4045,6 @@ function App() {
     customCursorEnabled,
     categoryCollapsedPrimary,
     categoryCollapsedSecondary,
-    debuggingEnabled,
     spellCheckEnabled,
     flowSettings,
     beatSettings,
@@ -4726,183 +4714,6 @@ function App() {
     document.documentElement.dataset.uiFont = uiFontStyle
   }, [uiFontStyle, uiFontScale])
 
-  // Writes a structured debug entry to a session-scoped debug note (tagged
-  // "debug"). No-ops when debuggingEnabled is false. Safe to call from any
-  // async or sync context â€” creation and tagging are fire-and-forget.
-  const createDebugNote = useCallback(async (): Promise<string | null> => {
-    if (!window.thockdownNotes) return null
-
-    const now = new Date()
-    const pad = (n: number) => String(n).padStart(2, '0')
-    const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
-    const title = `# Debug: ${dateStr} / ${pad(now.getHours())}:${pad(now.getMinutes())}`
-
-    try {
-      const created = await window.thockdownNotes.createNote({ initialText: `${title}\n` })
-      debugNoteIdRef.current = created.id
-      setNotes((previous) => {
-        const index = previous.findIndex(n => n.id === created.id)
-        if (index >= 0) return previous
-        return [created, ...previous]
-      })
-      await window.thockdownNotes.addTagToNote({ id: created.id, tagName: DEBUG_TAG_NAME, position: 0 }).catch(() => {})
-      return created.id
-    } catch (error) {
-      console.error('Failed to create debug note', error)
-      return null
-    }
-  }, [setNotes])
-
-  const findExistingDebugNoteId = useCallback(async (): Promise<string | null> => {
-    if (!window.thockdownNotes) return null
-
-    try {
-      const listed = await window.thockdownNotes.listNotes()
-      const existing = listed.find((note) => {
-        const normalizedTags = new Set(note.tags.map((tag) => normalizeTagName(tag)))
-        return normalizedTags.has(DEBUG_TAG_NAME) && !normalizedTags.has('deleted') && !normalizedTags.has('archived')
-      })
-
-      if (!existing) return null
-
-      debugNoteIdRef.current = existing.id
-      setNotes((previous) => {
-        const index = previous.findIndex((note) => note.id === existing.id)
-        if (index >= 0) return previous
-        return [existing, ...previous]
-      })
-      return existing.id
-    } catch {
-      return null
-    }
-  }, [setNotes])
-
-  const ensureDebugNoteExists = useCallback(async (): Promise<string | null> => {
-    if (!debuggingEnabled || !window.thockdownNotes) return null
-
-    if (debugNoteIdRef.current) {
-      try {
-        const loaded = await window.thockdownNotes.loadNote({ id: debugNoteIdRef.current })
-        const normalizedTags = new Set(loaded.tags.map((tag) => normalizeTagName(tag)))
-        const isDeletedOrArchived = normalizedTags.has('deleted') || normalizedTags.has('archived')
-        const isDebugTagged = normalizedTags.has(DEBUG_TAG_NAME)
-
-        if (isDebugTagged && !isDeletedOrArchived) {
-          return debugNoteIdRef.current
-        }
-      } catch {
-        // stale or deleted note id; fall through and create a fresh debug note.
-      }
-
-      debugNoteIdRef.current = null
-    }
-
-    if (debugNoteCreationPromiseRef.current) {
-      return debugNoteCreationPromiseRef.current
-    }
-
-    const promise = (async (): Promise<string | null> => {
-      const existingId = await findExistingDebugNoteId()
-      if (existingId) {
-        return existingId
-      }
-
-      return createDebugNote()
-    })()
-
-    debugNoteCreationPromiseRef.current = promise
-    const result = await promise
-    debugNoteCreationPromiseRef.current = null
-    return result
-  }, [createDebugNote, debuggingEnabled, findExistingDebugNoteId])
-
-  useEffect(() => {
-    if (!debuggingEnabled) return
-    if (!persistenceReady) return
-
-    void ensureDebugNoteExists()
-  }, [ensureDebugNoteExists, debuggingEnabled, persistenceReady])
-
-  const writeDebugEntry = useCallback(async (functionName: string, lines: string[]) => {
-    if (!debuggingEnabled) return
-    if (!window.thockdownNotes) return
-    if (isWritingDebugEntryRef.current) return
-
-    const noteId = await ensureDebugNoteExists()
-    if (!noteId) return
-
-    isWritingDebugEntryRef.current = true
-    const now = new Date()
-    const pad = (n: number) => String(n).padStart(2, '0')
-    const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
-    const section = `\n## ${timeStr} / ${functionName}\n${lines.map(l => `- ${l}`).join('\n')}`
-
-    try {
-      const loaded = await window.thockdownNotes.loadNote({ id: noteId })
-      const savedText = `${loaded.text}${section}`
-      const updated = await window.thockdownNotes.saveNote({ id: noteId, text: savedText })
-      setNotes((previous) => withSavedNote(previous, updated, savedText))
-    } catch (error) {
-      const originalError = originalConsoleMethodsRef.current.error ?? console.error
-      originalError.call(console, 'Failed to write debug entry', error)
-    } finally {
-      isWritingDebugEntryRef.current = false
-    }
-  }, [debuggingEnabled, ensureDebugNoteExists, setNotes])
-  writeDebugEntryRef.current = writeDebugEntry
-
-  useEffect(() => {
-    const consoleMethods: ConsoleMethodName[] = ['log', 'info', 'warn', 'error', 'debug']
-
-    if (!debuggingEnabled) {
-      if (originalConsoleMethodsRef.current.log) {
-        consoleMethods.forEach((method) => {
-          const original = originalConsoleMethodsRef.current[method]
-          if (original) {
-            console[method] = original
-          }
-        })
-        originalConsoleMethodsRef.current = {}
-      }
-      return
-    }
-
-    consoleMethods.forEach((method) => {
-      if (!originalConsoleMethodsRef.current[method]) {
-        originalConsoleMethodsRef.current[method] = console[method].bind(console)
-      }
-      console[method] = (...args: unknown[]) => {
-        const original = originalConsoleMethodsRef.current[method]
-        if (original) {
-          original(...args)
-        }
-        if (isWritingDebugEntryRef.current) {
-          return
-        }
-        const stringified = args.map((arg) => {
-          try {
-            if (typeof arg === 'string') return arg
-            if (arg instanceof Error) return arg.stack || arg.message
-            return JSON.stringify(arg)
-          } catch {
-            return String(arg)
-          }
-        })
-        void writeDebugEntry(`console.${method}`, stringified)
-      }
-    })
-
-    return () => {
-      consoleMethods.forEach((method) => {
-        const original = originalConsoleMethodsRef.current[method]
-        if (original) {
-          console[method] = original
-        }
-      })
-      originalConsoleMethodsRef.current = {}
-    }
-  }, [debuggingEnabled, writeDebugEntry])
-
   const [clearAppStatePrimed, setClearAppStatePrimed] = useState(false)
 
   const clearPersistedAppState = useCallback(async () => {
@@ -4912,9 +4723,6 @@ function App() {
     }
 
     setClearAppStatePrimed(false)
-
-    setDebuggingEnabled(false)
-    debugNoteIdRef.current = null
 
     if (!window.thockdownState) return
     await window.thockdownState.clearAppState()
@@ -6185,7 +5993,6 @@ ${markdownHtml}
             })
             // Global texture enable is intentionally fixed on; per-surface alpha controls visibility.
             setTextureMaterials(cloneTextureMaterials(appState.menu.textureMaterials ?? DEFAULT_TEXTURE_MATERIALS))
-            setDebuggingEnabled(appState.menu.debuggingEnabled ?? false)
             setSpellCheckEnabled(appState.menu.spellCheckEnabled ?? false)
             setFlowSettings(sanitizeFlowSettings(appState.menu.flow))
             setSpeedReadingSettings(sanitizeSpeedReadingSettings(appState.menu.speedReading))
@@ -9670,11 +9477,8 @@ ${markdownHtml}
                         setAdventureSettings={setAdventureSettings}
                         setAdventureTrueMode={setAdventureTrueMode}
                         adventureTrueModeWouldWipe={adventureTrueModeWouldWipe}
-                        debuggingEnabled={debuggingEnabled}
-                        setDebuggingEnabled={setDebuggingEnabled}
                         clearAppState={clearPersistedAppState}
                         clearAppStatePrimed={clearAppStatePrimed}
-                        debugNoteIdRef={debugNoteIdRef}
                         queueAppStateSave={queueAppStateSave}
                         activeNoteId={activeSection?.activeNoteId ?? null}
                         customCursorEnabled={customCursorEnabled}
@@ -10151,8 +9955,6 @@ ${markdownHtml}
                   queueAppStateSaveStable={queueAppStateSaveStable}
                   updateActiveNoteTitlePreviewStable={updateActiveNoteTitlePreviewStable}
                   revealNoteInMenuStable={revealNoteInMenuStable}
-                  writeDebugEntryStable={writeDebugEntryStable}
-                  activeNoteHasDebugTagRef={activeNoteHasDebugTagRef}
                   saveSelectedNoteState={saveSelectedNoteState}
                   refreshNotes={refreshNotes}
                   noteTransitionLockRef={noteTransitionLockRef}

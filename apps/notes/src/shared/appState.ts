@@ -225,7 +225,6 @@ export interface PersistedMenuState {
   renderScrollBaseDistanceRows?: number;
   renderScrollMaxDurationMultiplier?: number;
   sidebarViewState?: Partial<Record<SidebarMode, PersistedSidebarViewState>>;
-  debuggingEnabled?: boolean;
   spellCheckEnabled?: boolean;
   /** Typing flow (Options > Tools); see flow/flowModel.ts. */
   flow?: FlowSettings;

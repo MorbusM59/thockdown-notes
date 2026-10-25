@@ -368,9 +368,9 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 > **Where?**
 > Never typed directly — applied automatically by the corresponding action.
 
-*Four reserved tag names (\`archived\`, \`deleted\`, \`external\`, \`debug\`) that track note state rather than your own organization.*
+*Three reserved tag names (\`archived\`, \`deleted\`, \`external\`) that track note state rather than your own organization.*
 
-- Set and cleared only through [Archiving and Trash](${guideLink('ARCHIVE-TRASH', 'archiving-and-trash')}), [Restoring from Archive or Trash](${guideLink('ARCHIVE-TRASH', 'restoring-from-archive-or-trash')}), [Opening an External File](${guideLink('EXTERNAL-FILES', 'opening-an-external-file')}), and [Debugging](${guideLink('APPEARANCE-SETTINGS', 'debugging')}).
+- Set and cleared only through [Archiving and Trash](${guideLink('ARCHIVE-TRASH', 'archiving-and-trash')}), [Restoring from Archive or Trash](${guideLink('ARCHIVE-TRASH', 'restoring-from-archive-or-trash')}), and [Opening an External File](${guideLink('EXTERNAL-FILES', 'opening-an-external-file')}).
 - Can't be typed into the tag field directly, and are excluded from the suggested-tags list.
 `,
   `## Sidebar & Search
@@ -984,7 +984,6 @@ ${shortcutTable()}
 
 *Tools for diagnosing problems, not intended for everyday use.*
 
-- **Debug logging** routes the app's debug log into a dedicated note tagged \`debug\` — see [Protected Tags](${guideLink('TAGS', 'protected-tags')}).
 - A button opens a detached DevTools window.
 `,
   `## Music Player

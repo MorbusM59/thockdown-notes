@@ -65,7 +65,7 @@ type ViewStyleKey =
 export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   'sectionId' | 'isSectionActive' | 'activeNoteId' | 'isPreviewMode' | 'previewedSnapshotId' | 'bindings' | 'adapterRef' | 'sectionContainerRef'
   | 'onEditorSurfaceReady' | 'readEstablishedSelection'
-  | 'readDisplayedText' | 'displayedTextKey' | 'activeNoteHasDebugTag' | 'isPreviewingSnapshot' | 'isCaretSuspended' | 'previewTextureRef' | 'previewBridgeHostRef'
+  | 'readDisplayedText' | 'displayedTextKey' | 'isPreviewingSnapshot' | 'isCaretSuspended' | 'previewTextureRef' | 'previewBridgeHostRef'
   | 'previewScrollRef' | 'handlePreviewScroll' | 'blockPreviewEditMutation' | 'previewMarkdownElement'
   | 'previewScrollbarTrackRef' | 'handlePreviewTrackPointerDown' | 'handlePreviewTrackContextMenu' | 'previewScrollbarThumbRef' | 'isDraggingPreviewScrollThumb'
   | 'isPreviewScrollThumbActive' | 'handlePreviewThumbPointerDown' | 'activeNoteDocumentStats' | 'noteSnapshots'
@@ -140,8 +140,6 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   queueAppStateSaveStable: (selectedNoteId: string | null) => void
   updateActiveNoteTitlePreviewStable: (nextText: string) => void
   revealNoteInMenuStable: () => void
-  writeDebugEntryStable: (functionName: string, lines: string[]) => Promise<void>
-  activeNoteHasDebugTagRef: MutableRefObject<boolean>
 
   saveSelectedNoteState: (selectedNoteId: string | null) => Promise<void>
   refreshNotes: (preferredId?: string | null) => Promise<string | null>
@@ -227,8 +225,6 @@ export function EditorSection(rawProps: EditorSectionProps) {
   queueAppStateSaveStable,
   updateActiveNoteTitlePreviewStable,
   revealNoteInMenuStable,
-  writeDebugEntryStable,
-  activeNoteHasDebugTagRef,
   saveSelectedNoteState,
   refreshNotes,
   noteTransitionLockRef,
@@ -483,12 +479,10 @@ export function EditorSection(rawProps: EditorSectionProps) {
     latestEditorTextRef,
     latestEditorSelectionRef,
     notes,
-    activeNoteHasDebugTagRef,
     setIsCaretSuspended,
     queueSave,
     queueAppStateSave: queueAppStateSaveStable,
     updateActiveNoteTitlePreview: updateActiveNoteTitlePreviewStable,
-    writeDebugEntry: writeDebugEntryStable,
     buildTextDecorationTransformRef,
     buildToggleCurrentLineHeadingTransformRef,
     buildToggleBulletedListTransformRef,
@@ -1238,11 +1232,6 @@ export function EditorSection(rawProps: EditorSectionProps) {
     refreshChapters,
   })
 
-  const activeNoteHasDebugTag = useMemo(() => {
-    return activeNoteSummary?.tags.some((tag) => tag.trim().toLowerCase() === 'debug') ?? false
-  }, [activeNoteSummary])
-  activeNoteHasDebugTagRef.current = activeNoteHasDebugTag
-
   // The auto-TOC and auto-Open-Items chapters are materialized views,
   // regenerated from live state rather than typed into -- a snapshot
   // history for either is meaningless, so the whole Time Machine timeline
@@ -1304,7 +1293,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
   })
 
   const canRewriteImages = !isViewingTimelessNote && !isPreviewingSnapshot && !isViewingEphemeralAutoChapter && !isSealedNoteId(activeNoteId)
-  useImagePreviewGestures({ activeNoteId, scrollerRef: previewScrollRef, adapterRef, readEditorText, canEdit: canRewriteImages && isPreviewMode, activeNoteHasDebugTagRef })
+  useImagePreviewGestures({ activeNoteId, scrollerRef: previewScrollRef, adapterRef, readEditorText, canEdit: canRewriteImages && isPreviewMode })
   const imageStorage = useImageStorageButton({
     activeNoteId,
     readEditorText,
@@ -1314,8 +1303,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
     createSnapshot: handleCreateManualSnapshot,
   })
 
-  // Plain render-time mutation, not an effect (same idiom as
-  // activeNoteHasDebugTagRef.current's own assignment below) -- lets
+  // Plain render-time mutation, not an effect -- lets
   // handleManualSaveOrRefresh's own async closure below check, once its
   // awaits resolve, whether this section has since switched to a different
   // note, without needing activeNoteId in its own dependency array to stay
@@ -1473,7 +1461,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
   // negation) -- see usePreviewMarkdownRendering's isActiveNoteEditable doc
   // comment for why the preview pane's own checkbox-click mechanism needs
   // the same gate the real editor's read-only state already uses.
-  const isActiveNoteEditable = !activeNoteHasDebugTag && !isPreviewingSnapshot && !isViewingEphemeralAutoChapter && !isViewingTimelessNote
+  const isActiveNoteEditable = !isPreviewingSnapshot && !isViewingEphemeralAutoChapter && !isViewingTimelessNote
 
   // Stable identity (reads the gate through its ref at call time), so
   // handing it to the preview hook can never itself be the reason that hook
@@ -2229,7 +2217,6 @@ export function EditorSection(rawProps: EditorSectionProps) {
         editorFontFamily={editorFontFamily}
         editorRuntimeMetrics={editorRuntimeMetrics}
         editorFontLoadVersion={editorFontLoadVersion}
-        activeNoteHasDebugTag={activeNoteHasDebugTag}
         isPreviewingSnapshot={isPreviewingSnapshot}
         isCaretSuspended={isCaretSuspended}
         isEscapeHoldPanelOpen={isEscapeHoldPanelOpen}

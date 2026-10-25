@@ -141,15 +141,11 @@ export interface UseEditorSectionMountOptions {
 
   /** The full shared notes list -- read (not just written) by onTextChange's external-note bookkeeping. */
   notes: NoteSummary[]
-  /** A ref, not a direct value: activeNoteHasDebugTag is computed later in App.tsx than this hook is called, and every usage here is a synchronous read-at-call-time guard, never a reactive dependency. */
-  activeNoteHasDebugTagRef: MutableRefObject<boolean>
   setIsCaretSuspended: Dispatch<SetStateAction<boolean>>
 
   queueSave: (text: string, cursorPos?: number | null) => void
   queueAppStateSave: (selectedNoteId: string | null) => void
   updateActiveNoteTitlePreview: (nextText: string) => void
-  /** Only ever referenced in bindings' own dependency array (matching the original code), never actually called here. */
-  writeDebugEntry: (functionName: string, lines: string[]) => Promise<void>
 
   /** Markdown formatting commands -- shared with toolbar buttons, so they stay owned in App.tsx and get called from here, not moved in. */
   /**
@@ -187,8 +183,7 @@ export interface UseEditorSectionMountOptions {
    * The content of whichever Timeline snapshot `previewedSnapshotId` refers
    * to, or null when not previewing a snapshot (genuinely live, or frozen --
    * see isFrozenSectionPreviewRef). Populated as a plain ref mutation during
-   * EditorSection's render (same pattern as `activeNoteHasDebugTagRef.current
-   * = ...`) rather than an effect, because useNoteSnapshotTimeline (the
+   * EditorSection's render (a plain render-time ref assignment) rather than an effect, because useNoteSnapshotTimeline (the
    * source of this content) is mounted later in the same component than this
    * hook -- writing it during render guarantees this hook's own effects see
    * the up-to-date value on the same commit that changed
@@ -321,7 +316,6 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     latestEditorTextRef,
     latestEditorSelectionRef,
     notes,
-    activeNoteHasDebugTagRef,
     setIsCaretSuspended,
     queueSave,
     queueAppStateSave,
@@ -1667,7 +1661,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       documentCommit.text(isDeferredPreviewTick)
       debugLogCheckpoint('after documentCommit.text')
 
-      if (!activeNoteId || !persistenceReady || activeNoteHasDebugTagRef.current) return
+      if (!activeNoteId || !persistenceReady) return
 
       const isUserEditableSource =
         event.source === 'user-input' || event.source === 'history-undo' || event.source === 'history-redo'
@@ -1728,7 +1722,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       if (previewedSnapshotId !== null) {
         return null
       }
-      if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
+      if (!activeNoteId) return null
 
       // Canonical by construction -- CM6Editor.tsx's canonicalTextFilter is
       // the document's ingress invariant. Re-normalizing here would cost the
@@ -1806,7 +1800,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       if (previewedSnapshotId !== null) {
         return null
       }
-      if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
+      if (!activeNoteId) return null
 
       // Canonical by construction -- CM6Editor.tsx's canonicalTextFilter is
       // the document's ingress invariant. Re-normalizing here would cost the
@@ -1834,7 +1828,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       if (previewedSnapshotId !== null) {
         return null
       }
-      if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
+      if (!activeNoteId) return null
 
       // Canonical by construction -- CM6Editor.tsx's canonicalTextFilter is
       // the document's ingress invariant. Re-normalizing here would cost the
@@ -1858,7 +1852,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       if (previewedSnapshotId !== null) {
         return null
       }
-      if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
+      if (!activeNoteId) return null
 
       // Canonical by construction -- CM6Editor.tsx's canonicalTextFilter is
       // the document's ingress invariant. Re-normalizing here would cost the
@@ -1884,7 +1878,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       if (previewedSnapshotId !== null) {
         return null
       }
-      if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
+      if (!activeNoteId) return null
       suppressNextPlainTypingSoundOnce()
       void typingSoundManager.playRandomClick(ENTER_KEY_VOICE)
       // The section's shared inline-state cache turns Enter's fenced-code
@@ -1904,7 +1898,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       if (previewedSnapshotId !== null) {
         return null
       }
-      if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
+      if (!activeNoteId) return null
       const next = modifier === 'ctrl-shift'
         ? resolveTableDeleteColumnTransform({ text, selection }, isInFence(text))
         : resolveTableDeleteTransform({ modifier, text, selection }, isInFence(text))
@@ -1915,7 +1909,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       if (previewedSnapshotId !== null) {
         return null
       }
-      if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
+      if (!activeNoteId) return null
       const drop = resolveTableCellDrop({ text, selection, targetOffset }, isInFence(text))
       return drop ? commitTransformResult(drop.result) : null
     },
@@ -1923,7 +1917,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       if (previewedSnapshotId !== null) {
         return null
       }
-      if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
+      if (!activeNoteId) return null
       // A table's keys win over an image's: an image inside a table cell is
       // shaped in the preview, and its row and column still move here.
       const next = resolveTableMoveTransform({ direction, text, selection }, isInFence(text))
@@ -1932,7 +1926,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     },
     importImageFiles: async (files) => {
       if (previewedSnapshotId !== null) return null
-      if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
+      if (!activeNoteId) return null
       return importImageFilesAsMarkdown(files)
     },
     onViewportChange: (event: EditorViewportChangeEvent) => {
@@ -2038,7 +2032,6 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     applyEditRestoreSnapshot,
     updateActiveNoteTitlePreview,
     updateEditModeSnapshotCache,
-    activeNoteHasDebugTagRef,
     buildTextDecorationTransformRef,
     buildToggleBulletedListTransformRef,
     buildToggleCurrentLineHeadingTransformRef,
@@ -3077,8 +3070,6 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     )
   }, [getPreviewBlocksForText, activeNoteId, applyEditRestoreSnapshot, previewedSnapshotId, isFrozenSectionPreviewRef, previewedSnapshotContentRef, latestEditViewportRef, latestViewportRef])
   const applyProgrammaticEditorText = useCallback((nextText: string, selectionStart?: number, selectionEnd?: number) => {
-    if (activeNoteHasDebugTagRef.current) return
-
     const canonicalText = normalizeInternalText(nextText)
     commitEditorText(canonicalText)
     updateActiveNoteTitlePreview(canonicalText)
@@ -3113,7 +3104,6 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   }, [
     queueSave,
     updateActiveNoteTitlePreview,
-    activeNoteHasDebugTagRef,
     latestEditorSelectionRef,
     commitEditorText,
     setEditorSelection,

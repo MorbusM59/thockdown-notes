@@ -636,11 +636,8 @@ export interface SidebarOptionsPanelProps {
   setAdventureTrueMode: (value: boolean) => void
   /** Whether turning true mode on would cost a run -- past level one. */
   adventureTrueModeWouldWipe: boolean
-  debuggingEnabled: boolean
-  setDebuggingEnabled: (value: boolean) => void
   clearAppState: () => void
   clearAppStatePrimed: boolean
-  debugNoteIdRef: MutableRefObject<string | null>
   queueAppStateSave: (selectedNoteId: string | null) => void
   activeNoteId: string | null
 
@@ -927,11 +924,8 @@ export function SidebarOptionsPanel({
   setAdventureSettings,
   setAdventureTrueMode,
   adventureTrueModeWouldWipe,
-  debuggingEnabled,
-  setDebuggingEnabled,
   clearAppState,
   clearAppStatePrimed,
-  debugNoteIdRef,
   queueAppStateSave,
   activeNoteId,
   customCursorEnabled,
@@ -4037,25 +4031,6 @@ export function SidebarOptionsPanel({
         heading="Debugging"
       >
 <div className="options-loadout-grid" role="group" aria-label="Debug tools">
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-loadout-btn${debuggingEnabled ? ' is-active' : ''}`}
-            onClick={() => {
-              const next = !debuggingEnabled
-              setDebuggingEnabled(next)
-              if (!next) {
-                // Reset session debug note so a fresh note is created if
-                // debugging is re-enabled later in the same session
-                debugNoteIdRef.current = null
-              }
-              queueAppStateSave(activeNoteId)
-            }}
-            data-tooltip={debuggingEnabled ? 'Disable debug logging' : 'Enable debug logging to a note'}
-            aria-label={debuggingEnabled ? 'Disable debug logging' : 'Enable debug logging to a note'}
-            aria-pressed={debuggingEnabled}
-          >
-            <span className="fa-solid fa-bug" aria-hidden="true" />
-          </button>
           <button
             type="button"
             className="btn-icon options-color-swatch options-loadout-btn"

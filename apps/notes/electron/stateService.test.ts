@@ -472,7 +472,6 @@ describe('StateService app-state field round-trip', () => {
         selectedYears: [2024],
         searchQuery: 'stale query',
         slotOverlay: { kind: 'guide', sectionId: 'section-1', previousNoteId: 'note-2' },
-        debuggingEnabled: true,
       },
     })
 
@@ -484,7 +483,6 @@ describe('StateService app-state field round-trip', () => {
     expect(loaded.menu?.sidebarMode).toBe('date')
     expect(loaded.menu?.searchQuery).toBe('')
     expect(loaded.menu?.slotOverlay).toBeUndefined()
-    expect(loaded.menu?.debuggingEnabled).toBe(false)
   })
 })
 
