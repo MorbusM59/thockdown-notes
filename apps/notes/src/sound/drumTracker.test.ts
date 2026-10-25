@@ -662,7 +662,8 @@ function grooveScore(track: { samples: Float32Array }, drum: Drum, times: number
 
 /**
  * The tracks the groove-0 fixture (`drumTracker.groove0.fixture.json`) was
- * captured on, with the tracker as it was before groove existed (0289d71).
+ * captured on, with main's tracker, which has no groove (re-captured at 43031195, whose
+ * grid hold changed what groove 0 shows; first captured at 0289d71).
  */
 function groove0Tracks(): Array<[string, Float32Array]> {
   const busy = kit(20, 110, { kicks: [0, 8, 10], snares: [4, 12], hats: [2, 6, 10, 14] })
@@ -692,7 +693,7 @@ function playFrames(samples: Float32Array, feed: (chunk: Float32Array, endTime: 
 
 describe('DrumTracker with groove', () => {
   it('is the tracker as it was before groove existed at groove 0, response for response', () => {
-    // Captured from 0289d71's tracker on the same tracks, frames and contrast.
+    // Captured from main's tracker (43031195) on the same tracks, frames and contrast.
     const fixture = JSON.parse(readFileSync(new URL('./drumTracker.groove0.fixture.json', import.meta.url), 'utf8')) as Record<string, Array<[number, number]>>
     for (const [name, samples] of groove0Tracks()) {
       for (const drum of ['kick', 'snare', 'hat'] as const) {
@@ -891,6 +892,30 @@ describe('DrumTracker with groove', () => {
     expect(hats.found).toBeGreaterThan(0.9)
     expect(hats.strays.length).toBeLessThanOrEqual(1)
   }, 60_000)
+
+  it('never fires one hit twice where a jittered kick moves its slot between neighbouring bins', () => {
+    // Each kick lands off its sixteenth by up to most of a bin (a bin is a
+    // third of a sixteenth), so the learned slot moves between
+    // two neighbouring bins from fold to fold: the evidence can match a peak
+    // to one and the pattern find the other due a hop later.
+    for (const bpm of [96, 118, 124]) {
+      const jitter = noise(17)
+      const offsets = new Map<number, number>()
+      // Up to a fifth of a sixteenth (three fifths of a bin) either side, fixed per kick.
+      const nudge = (bar: number, s: number) => {
+        const key = bar * 16 + s
+        if (!offsets.has(key)) offsets.set(key, 0.2 * jitter())
+        return offsets.get(key)!
+      }
+      const track = drums(40, bpm, { kicks: (bar) => [0, 4, 8, 12].map((s) => [s + nudge(bar, s), 1] as [number, number]), snares: [4, 12] })
+      for (const groove of [0.5, 1]) {
+        const { hits } = play(track, 0.5, { groove })
+        const twice = hits.filter((h, i) => i > 0 && h.at - hits[i - 1].at < 0.08)
+        expect(twice.map((h) => h.at.toFixed(3)), `${bpm} at ${groove}`).toEqual([])
+        expect(score(track, hits, 10, 34, 0.5).found, `${bpm} at ${groove}`).toBeGreaterThan(0.95)
+      }
+    }
+  }, 120_000)
 
   it('answers two readers of one drum, each at its own groove, as if each read alone', () => {
     const track = kit(30, 110, { kicks: [0, 8, 10], snares: [4, 12], hats: [2, 6, 10, 14] })
