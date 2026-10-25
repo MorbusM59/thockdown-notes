@@ -71,7 +71,6 @@ export interface SectionEditorAreaProps {
   /** Live user-configurable corner-radius/spacing base units (options menu sliders) -- threaded through so the escape-hold ring (escapeHoldRingLayout.ts) recomputes to match .editor-empty-state's actual on-screen shape instead of drifting from a stale hardcoded mirror. */
   borderRadiusRegularPx: number
   spacingRegularPx: number
-  /** The Performance section's "Reduce visual effects" toggle (App.tsx) -- also picked up by the escape-hold ring to fall back from its curve-sampled dial rotation to a plain CSS transform transition. */
   spellCheckEditEnabled: boolean
   previewTextureRef: RefObject<HTMLDivElement>
   /** Where the long-journey bridge draws -- see editor/scrollBridge.ts. */

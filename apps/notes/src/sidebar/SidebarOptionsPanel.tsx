@@ -1314,6 +1314,8 @@ export function SidebarOptionsPanel({
             <span className="fa-solid fa-marker" aria-hidden="true" />
           </button>
         </div>
+      </div>
+      <div className="preset-section" data-options-search-hidden={searchQuery.trim() !== '' ? '' : undefined}>
         <FeatureToggleBar features={features} setFeatures={setFeatures} />
       </div>
       <AccordionGroup filter={searchQuery}>
