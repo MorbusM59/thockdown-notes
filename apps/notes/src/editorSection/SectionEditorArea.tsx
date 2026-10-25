@@ -288,11 +288,13 @@ export function SectionEditorArea({
 
   // The visualizer's edge reads --beat-edge, set on it alone (flow/flowStyle.ts).
   const [beatEdgeRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }))
-  // The visualizer's pane, on a layer of its own beside the edge's; it reads
-  // --beat-pane. In the edit view it is the box outlines' copy
-  // (flow/useBeatGridMirror.ts), anywhere else a flat wash.
+  // The visualizer's pane, two elements reading --beat-pane: in the edit view
+  // the box outlines' copy, on a layer of its own beside the edge's
+  // (flow/useBeatGridMirror.ts); in any view without a grid a flat wash
+  // BEHIND the stage, so it lies under the texture and the text.
   const { gridRef: beatGridRef, mirrorRef: beatMirrorRef, hasGrid: beatPaneHasGrid } = useBeatGridMirror(!isPreviewMode)
   const [beatPaneRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }))
+  const [beatWashRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }))
   const setBeatPaneEl = useCallback((el: HTMLDivElement | null) => {
     beatPaneRef(el)
     beatMirrorRef(el)
@@ -412,6 +414,7 @@ export function SectionEditorArea({
     >
       <main className={`editor-shell${isChapterPanelOpen ? ' chapter-panel-is-open' : ''}`}>
         <div className="editor-background">
+          <div ref={beatWashRef} className={`editor-beat-wash${beatPaneHasGrid ? '' : ' is-shown'}`} aria-hidden="true" />
           <div ref={setStageEl} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}${!activeNoteId ? ' is-empty' : ''}`}>
             {isEscapeHoldActive ? (
               // Pure dim+blur backdrop: its backdrop-filter blurs whatever's

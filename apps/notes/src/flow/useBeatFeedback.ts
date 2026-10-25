@@ -16,7 +16,7 @@
  * - `--beat-edge`, the opacity of the active editor's beat edge
  *   (`.editor-beat-edge`, shown and promoted under `html[data-beat-edge]`).
  * - `--beat-pane`, the opacity of the pane (the box outlines' copy, or a flat wash where there is no grid)
- *   (`.editor-beat-pane`, shown and promoted under `html[data-beat-pane]`).
+ *   (`.editor-beat-pane.has-grid` in the edit view, `.editor-beat-wash.is-shown` behind the stage elsewhere; shown and promoted under `html[data-beat-pane]`).
  *
  * An inverted block (a negative effect) rests at its full effect while music plays and a hit
  * (or, for the caret, a beat) takes it away; with nothing playing every block is off either way, so an

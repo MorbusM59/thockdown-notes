@@ -524,8 +524,9 @@
    element alone), present only on the active editor and only while its block
    follows the music (`html[data-beat-edge]`, `html[data-beat-pane]`), and
    only then promoted (will-change), so the per-frame change is a compositor
-   opacity rather than a repaint of the editor's area. Both sit at the shell
-   level, outside the edit pane's texture mask, which is what keeps the
+   opacity rather than a repaint of the editor's area. The edge and the
+   pane's grid copy sit at the shell level (the pane's wash, behind the
+   stage, below), outside the edit pane's texture mask, which is what keeps the
    promotion from pulling the pane into a squashed overlap layer (the trap
    .thockdown-block-caret's note describes). Their colours are the layout's
    (--beat-edge-color, --beat-pane-color); the edge's geometry is the
@@ -544,33 +545,42 @@
   opacity:        var(--beat-edge, 0);
 }
 
-/* The pane. Without a grid on screen (render view, an empty slot, a mode
-   that empties it) it is a flat wash of its colour over the whole editor.
-   With one (.has-grid, the edit view) it is a copy of the grid's outline
-   pattern instead, whose box, tile and phase useBeatGridMirror keeps equal
-   to the real grid's (which sits in the edit pane, where a layer of its own
-   would pull the text into an overlap layer); that inline box overrides the
-   inset. Either way only the opacity follows the music. */
+/* The pane in the edit view: a copy of the grid's outline pattern, whose
+   box, tile and phase useBeatGridMirror keeps equal to the real grid's
+   (which sits in the edit pane, where a layer of its own would pull the
+   text into an overlap layer). Shown only while a grid is (.has-grid). In
+   any other view the pane is .editor-beat-wash instead. */
 .editor-beat-pane {
-  display:          none;
-  position:         absolute;
-  inset:            0;
-  border-radius:    inherit;
-  pointer-events:   none;
-  z-index:          4;
-  opacity:          var(--beat-pane, 0);
-  background-color: var(--beat-pane-color);
-}
-
-.editor-beat-pane.has-grid {
-  background-color: transparent;
+  display:        none;
+  position:       absolute;
+  pointer-events: none;
+  z-index:        4;
+  opacity:        var(--beat-pane, 0);
   background-image:
     repeating-linear-gradient(to right, var(--beat-pane-color) 0, var(--beat-pane-color) 3px, transparent 3px, transparent var(--editor-cell-width)),
     repeating-linear-gradient(to bottom, var(--beat-pane-color) 0, var(--beat-pane-color) 3px, transparent 3px, transparent var(--editor-line-height));
 }
 
+/* The pane in any view without a grid (render view, an empty slot, a mode
+   that empties it): a flat wash of its colour, BEHIND the stage, so the
+   texture and the text are drawn over it. It sits in .editor-background
+   between that element's own fill and the stage, outside the stage's
+   masks; the stage overlapping a composited wash is promoted to a layer of
+   its own once, when the wash appears, and is not repainted by the wash's
+   opacity changing. */
+.editor-beat-wash {
+  display:          none;
+  position:         absolute;
+  inset:            0;
+  border-radius:    var(--border-radius-regular);
+  pointer-events:   none;
+  opacity:          var(--beat-pane, 0);
+  background-color: var(--beat-pane-color);
+}
+
 html[data-beat-edge] .editor-section-column.is-active .editor-beat-edge,
-html[data-beat-pane] .editor-section-column.is-active .editor-beat-pane {
+html[data-beat-pane] .editor-section-column.is-active .editor-beat-pane.has-grid,
+html[data-beat-pane] .editor-section-column.is-active .editor-beat-wash.is-shown {
   display:     block;
   will-change: opacity;
 }

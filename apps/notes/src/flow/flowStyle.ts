@@ -9,8 +9,8 @@
  * made the browser recompute the style of the whole document once a frame
  * while the reader typed -- measured at 16ms a frame on a 3,000-element page
  * against 0.1ms for the same write on the one element that uses it. The
- * readers are four leaves per editor (the caret, the trail's source, the
- * beat edge and the beat pane), so
+ * readers are a few leaves per editor (the caret, the trail's source, the
+ * beat edge, and the beat pane's grid copy and wash), so
  * each registers itself (`flowStyleTarget`) and receives the current values
  * on registration and every change after it.
  */

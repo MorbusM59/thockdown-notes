@@ -6,9 +6,9 @@
  * The pane is the grid's copy only while a grid is SHOWN (the edit view,
  * with the grid mounted): `hasGrid` says so, and the section marks the pane
  * with it (`.has-grid`). In any other view (render, an empty slot, a mode
- * that empties it) the pane is a flat wash of its colour over the whole
- * shell, so the copy's placement is taken back off it and CSS's `inset: 0`
- * applies again.
+ * that empties it) the pane is a separate flat wash behind the stage
+ * (`.editor-beat-wash`), and this copy is hidden with its placement taken
+ * back off it.
  *
  * The real grid sits inside the edit pane, between the caret and the text,
  * and giving anything there its own compositor layer pulls the pane's text
