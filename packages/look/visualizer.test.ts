@@ -22,7 +22,18 @@ describe('sanitizeVisualizer', () => {
 
   it('keeps only what the caret reads, so an older save with a source loads without it', () => {
     const v = sanitizeVisualizer({ caret: { effect: 0.3, shape: 0.2, fallSec: 0.5, source: 'snare', frequencyHz: 300, contrast: 0.2 } }, false)
-    expect(v.caret).toEqual({ effect: 0.3, shape: 0.2, fallSec: 0.5 })
+    expect(v.caret).toEqual({ followsMusic: true, effect: 0.3, shape: 0.2, fallSec: 0.5 })
+  })
+
+  it('migrates a layout from before the caret switch: it followed the music whenever its caret had an effect', () => {
+    expect(sanitizeVisualizer({ caret: { effect: 0.4 } }, false).caret.followsMusic).toBe(true)
+    expect(sanitizeVisualizer({ caret: { effect: 0 } }, false).caret.followsMusic).toBe(false)
+    expect(sanitizeVisualizer(undefined, false).caret.followsMusic).toBe(false)
+    // The old bounce blink is now the switch's button.
+    expect(sanitizeVisualizer(undefined, false, 'bounce').caret.followsMusic).toBe(true)
+    expect(sanitizeVisualizer({ caret: { effect: 0 } }, false, 'bounce').caret.followsMusic).toBe(true)
+    // A saved switch wins over both.
+    expect(sanitizeVisualizer({ caret: { effect: 0.4, followsMusic: false } }, false, 'bounce').caret.followsMusic).toBe(false)
   })
 })
 

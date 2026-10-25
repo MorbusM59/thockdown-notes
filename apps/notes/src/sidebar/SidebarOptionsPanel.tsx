@@ -50,6 +50,8 @@ import {
 import { type RgbaColor, type HsvaColor, rgbaToCssColor, hsvaToRgba } from '@thockdown/look/colorMath'
 import { isTextEntryElement } from '@thockdown/interaction/focusOwnership'
 import type { HighlightColorKey, HighlightColors } from '../shared/highlightColors'
+import type { FeatureToggles } from '../shared/features'
+import { FeatureToggleBar } from './FeatureToggleBar'
 import {
   BORDER_RADIUS_REGULAR_MIN_PX,
   BORDER_RADIUS_REGULAR_MAX_PX,
@@ -581,8 +583,8 @@ export interface SidebarOptionsPanelProps {
   setReduceVisualEffects: (value: boolean) => void
   allowRemoteImages: boolean
   onAllowRemoteImagesChange: (value: boolean) => void
-  spellCheckEnabled: boolean
-  setSpellCheckEnabled: (updater: (previous: boolean) => boolean) => void
+  features: FeatureToggles
+  setFeatures: (updater: (previous: FeatureToggles) => FeatureToggles) => void
   flowSettings: FlowSettings
   setFlowSettings: (updater: (previous: FlowSettings) => FlowSettings) => void
   speedReadingSettings: SpeedReadingSettings
@@ -591,8 +593,6 @@ export interface SidebarOptionsPanelProps {
   setBeatSettings: (updater: (previous: BeatSettings) => BeatSettings) => void
   visualizer: VisualizerSettings
   setVisualizer: (updater: (previous: VisualizerSettings) => VisualizerSettings) => void
-  reducedCaretAnimation: boolean
-  setReducedCaretAnimation: (value: boolean) => void
   deferPreviewOnRapidInput: boolean
   setDeferPreviewOnRapidInput: (value: boolean) => void
   noteSizeThresholdBlocks: number
@@ -636,16 +636,11 @@ export interface SidebarOptionsPanelProps {
   setAdventureTrueMode: (value: boolean) => void
   /** Whether turning true mode on would cost a run -- past level one. */
   adventureTrueModeWouldWipe: boolean
-  debuggingEnabled: boolean
-  setDebuggingEnabled: (value: boolean) => void
   clearAppState: () => void
   clearAppStatePrimed: boolean
-  debugNoteIdRef: MutableRefObject<string | null>
   queueAppStateSave: (selectedNoteId: string | null) => void
   activeNoteId: string | null
 
-  customCursorEnabled: boolean
-  setCustomCursorEnabled: (value: boolean) => void
   customCursorDotColor: string
   customCursorCenterColor: string
   customCursorTrailColor: string
@@ -891,8 +886,8 @@ export function SidebarOptionsPanel({
   setReduceVisualEffects,
   allowRemoteImages,
   onAllowRemoteImagesChange,
-  spellCheckEnabled,
-  setSpellCheckEnabled,
+  features,
+  setFeatures,
   flowSettings,
   setFlowSettings,
   speedReadingSettings,
@@ -901,8 +896,6 @@ export function SidebarOptionsPanel({
   setBeatSettings,
   visualizer,
   setVisualizer,
-  reducedCaretAnimation,
-  setReducedCaretAnimation,
   deferPreviewOnRapidInput,
   setDeferPreviewOnRapidInput,
   noteSizeThresholdBlocks,
@@ -927,15 +920,10 @@ export function SidebarOptionsPanel({
   setAdventureSettings,
   setAdventureTrueMode,
   adventureTrueModeWouldWipe,
-  debuggingEnabled,
-  setDebuggingEnabled,
   clearAppState,
   clearAppStatePrimed,
-  debugNoteIdRef,
   queueAppStateSave,
   activeNoteId,
-  customCursorEnabled,
-  setCustomCursorEnabled,
   customCursorDotColor,
   customCursorCenterColor,
   customCursorTrailColor,
@@ -1023,7 +1011,7 @@ export function SidebarOptionsPanel({
   startCaretColorCopyHold,
   clearCaretColorArmTimer,
 }: SidebarOptionsPanelProps) {
-    const outputDevice = useOutputDevice(beatSettings.enabled)
+    const outputDevice = useOutputDevice(features.visualizer)
     // Every block's fall: its shape (visualizer.ts, `pulseCurve`) and its
     // length, the length on a log track so each step of it feels the same.
     // An array, not a fragment: OptionsSliderRows counts its children.
@@ -1348,6 +1336,7 @@ export function SidebarOptionsPanel({
             <span className="fa-solid fa-marker" aria-hidden="true" />
           </button>
         </div>
+        <FeatureToggleBar features={features} setFeatures={setFeatures} />
       </div>
       <AccordionGroup filter={searchQuery}>
       <AccordionSection
@@ -2017,6 +2006,7 @@ export function SidebarOptionsPanel({
         ) : null}
       </AccordionSection>
 
+      {features.glaze ? (
       <AccordionSection
         ariaLabel="Glaze"
         heading="Glaze"
@@ -2350,6 +2340,7 @@ export function SidebarOptionsPanel({
           </div>
         </div>
       </AccordionSection>
+      ) : null}
 
       <AccordionSection
         ariaLabel="Filters"
@@ -2453,7 +2444,7 @@ export function SidebarOptionsPanel({
       </AccordionSection>
 
       {/* The custom cursor does not exist on Linux (shared/platform.ts). */}
-      {!IS_LINUX_DESKTOP ? (
+      {features.customCursor && !IS_LINUX_DESKTOP ? (
       <AccordionSection
         className="sidebar-options-section-mouse"
         ariaLabel="Cursor"
@@ -2939,6 +2930,7 @@ export function SidebarOptionsPanel({
             />
           </div>
 
+          {features.caretBlink ? (<>
           <OptionsSubsectionLabel>Blink</OptionsSubsectionLabel>
           {/* Animation shape. One button per curve, same visual language as the
               custom-layout slots -- the selected one carries .is-active. */}
@@ -2956,6 +2948,19 @@ export function SidebarOptionsPanel({
                 <span className={`fa-solid ${CARET_ANIMATION_PRESETS[presetKey].iconClass}`} aria-hidden="true" />
               </button>
             ))}
+            {/* Not a blink but a switch beside them: the blink selected above
+                stays selected and is what the caret falls back to whenever
+                there is no beat to follow (VisualizerCaret.followsMusic). */}
+            <button
+              type="button"
+              className={`btn-icon options-color-swatch options-caret-preset-btn${visualizer.caret.followsMusic ? ' is-active' : ''}`}
+              data-tooltip="Follow the music: while music plays and a beat is found, the caret pulses on the beat instead of blinking (tuned under Visualizer). Otherwise it blinks as selected"
+              aria-label="Caret follows the music"
+              aria-pressed={visualizer.caret.followsMusic}
+              onClick={() => setVisualizer((prev) => ({ ...prev, caret: { ...prev.caret, followsMusic: !prev.caret.followsMusic } }))}
+            >
+              <span className="fa-solid fa-music" aria-hidden="true" />
+            </button>
           </div>
 
           <div className="options-glaze-cell options-glaze-cell-span-2">
@@ -2997,9 +3002,11 @@ export function SidebarOptionsPanel({
               onCommit={(value) => setCaretEffectStrengthPercent(clamp(Math.round(value), CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT))}
             />
           </div>
+          </>) : null}
         </div>
       </AccordionSection>
 
+      {features.keySounds ? (
       <AccordionSection
         className="sidebar-options-section-audio"
         ariaLabel="Sounds"
@@ -3015,7 +3022,6 @@ export function SidebarOptionsPanel({
               className={`btn-icon options-audio-btn${!typingSoundEnabled ? ' is-active' : ''}`}
               onClick={() => {
                 setTypingSoundEnabled(false)
-                typingSoundManager.setTypingSoundEnabled(false)
               }}
               aria-pressed={!typingSoundEnabled}
               data-tooltip="No Key Sounds"
@@ -3030,7 +3036,6 @@ export function SidebarOptionsPanel({
                 onClick={() => {
                   setTypingSoundEnabled(true)
                   setTypingSoundSet(setId)
-                  typingSoundManager.setTypingSoundEnabled(true)
                   typingSoundManager.setTypingSoundSet(setId)
                 }}
                 aria-pressed={typingSoundEnabled && typingSoundSet === setId}
@@ -3163,26 +3168,16 @@ export function SidebarOptionsPanel({
           </OptionsSliderRows>
         </div>
       </AccordionSection>
+      ) : null}
 
+      {features.visualizer ? (
       <AccordionSection
         className="sidebar-options-section-visualizer"
         ariaLabel="Visualizer"
         heading="Visualizer"
         iconClass="fa-rectangle-list"
-        iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout. Switching the visualizer on and off, and its delay, are kept for every layout."
+        iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout. Its delay is kept for every layout."
       >
-<div className="utility-setting-button-row" role="group" aria-label="Visualizer controls">
-          <button
-            type="button"
-            className={`btn-icon${beatSettings.enabled ? ' is-active' : ''}`}
-            onClick={() => setBeatSettings((prev) => ({ ...prev, enabled: !prev.enabled }))}
-            aria-pressed={beatSettings.enabled}
-            data-tooltip={beatSettings.enabled ? 'Disable the visualizer' : 'Enable the visualizer: the caret, the active editor\'s shade and the box outlines follow the playing music'}
-          >
-            <span className="fa-solid fa-drum" aria-hidden="true" />
-          </button>
-        </div>
-        {beatSettings.enabled ? (<>
           <div className="utility-setting-slider-stack" aria-label="Beat timing">
             <OptionsSliderRows rows={[1]}>
               <CompactScrollbarSlider
@@ -3207,11 +3202,11 @@ export function SidebarOptionsPanel({
               { id: 'outline', color: visualizer.outline.color, glyph: 'fa-regular fa-square', tooltip: 'Outline colour: click to apply the staged colour, hold right-click to copy it', onApply: (css) => setVisualizer((prev) => ({ ...prev, outline: { ...prev.outline, color: css } })) },
             ]}
           />
-          {renderBeatCaret()}
+          {visualizer.caret.followsMusic && renderBeatCaret()}
           {renderBeatChannel('shade', 'Shade', 'the active editor\'s inner shade shows')}
           {renderBeatChannel('outline', 'Outline', 'the box outlines show')}
-        </>) : null}
       </AccordionSection>
+      ) : null}
 
       <SoundscapeOptions
         preferences={soundscapePreferences}
@@ -3224,18 +3219,6 @@ export function SidebarOptionsPanel({
         heading="Tools"
       >
 <div className="utility-setting-button-row" role="group" aria-label="Tool controls">
-          <button
-            type="button"
-            className={`btn-icon${spellCheckEnabled ? ' is-active' : ''}`}
-            onClick={() => {
-              setSpellCheckEnabled((prev) => !prev)
-              queueAppStateSave(activeNoteId)
-            }}
-            aria-pressed={spellCheckEnabled}
-            data-tooltip={spellCheckEnabled ? 'Disable spell check' : 'Enable spell check'}
-          >
-            <span className="fa-solid fa-spell-check" aria-hidden="true" />
-          </button>
           <button
             type="button"
             className={`btn-icon${flowSettings.enabled ? ' is-active' : ''}`}
@@ -3625,17 +3608,6 @@ export function SidebarOptionsPanel({
           >
             <span className="fa-solid fa-spray-can-sparkles" aria-hidden="true" />
           </button>
-          {!IS_LINUX_DESKTOP ? (
-            <button
-              type="button"
-              className={`btn-icon${!customCursorEnabled ? ' is-active' : ''}`}
-              onClick={() => setCustomCursorEnabled(!customCursorEnabled)}
-              aria-pressed={!customCursorEnabled}
-              data-tooltip="Disable custom mouse cursor"
-            >
-              <span className="fa-solid fa-computer-mouse" aria-hidden="true" />
-            </button>
-          ) : null}
           <button
             type="button"
             className={`btn-icon${deferPreviewOnRapidInput ? ' is-active' : ''}`}
@@ -3648,19 +3620,6 @@ export function SidebarOptionsPanel({
             data-tooltip="Allow asynchronous input"
           >
             <span className="fa-solid fa-gauge-high" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className={`btn-icon${reducedCaretAnimation ? ' is-active' : ''}`}
-            onClick={() => {
-              const next = !reducedCaretAnimation
-              setReducedCaretAnimation(next)
-              queueAppStateSave(activeNoteId)
-            }}
-            aria-pressed={reducedCaretAnimation}
-            data-tooltip="Reduce caret animation"
-          >
-            <span className="fa-solid fa-square" aria-hidden="true" />
           </button>
           {/* Puts every note on the character-counting side of the line
               below, whatever its size -- which is why it also takes the
@@ -4028,25 +3987,6 @@ export function SidebarOptionsPanel({
         heading="Debugging"
       >
 <div className="options-loadout-grid" role="group" aria-label="Debug tools">
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-loadout-btn${debuggingEnabled ? ' is-active' : ''}`}
-            onClick={() => {
-              const next = !debuggingEnabled
-              setDebuggingEnabled(next)
-              if (!next) {
-                // Reset session debug note so a fresh note is created if
-                // debugging is re-enabled later in the same session
-                debugNoteIdRef.current = null
-              }
-              queueAppStateSave(activeNoteId)
-            }}
-            data-tooltip={debuggingEnabled ? 'Disable debug logging' : 'Enable debug logging to a note'}
-            aria-label={debuggingEnabled ? 'Disable debug logging' : 'Enable debug logging to a note'}
-            aria-pressed={debuggingEnabled}
-          >
-            <span className="fa-solid fa-bug" aria-hidden="true" />
-          </button>
           <button
             type="button"
             className="btn-icon options-color-swatch options-loadout-btn"

@@ -47,7 +47,7 @@ import {
 } from '@thockdown/look/loadouts'
 import type { NoteSummary } from './shared/noteLifecycle'
 import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote, isSameNoteSummary } from './shared/noteLifecycle'
-import { adoptNoteSummaries, keepIfUnchanged, withSavedNote } from './shared/noteContentStore'
+import { adoptNoteSummaries, keepIfUnchanged } from './shared/noteContentStore'
 import { getNoteListMetaKind } from './shared/noteListMeta'
 import {
   DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS,
@@ -136,8 +136,8 @@ import { DEFAULT_SPEED_READING_SETTINGS, sanitizeSpeedReadingSettings, type Spee
 import { onSpeedReadingSettingsCommit, setSpeedReadingSettings as applySpeedReadingSettings } from './speedReading/speedReadingStore'
 import { useBeatFeedback } from './flow/useBeatFeedback'
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings, type BeatSettings } from './shared/beatSettings'
+import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles, type FeatureToggles } from './shared/features'
 import { defaultVisualizer, sanitizeVisualizer, type VisualizerSettings } from '@thockdown/look/visualizer'
-import { DEBUG_TAG_NAME, normalizeTagName } from './shared/tags'
 import { EditorSection } from './editorSection/EditorSection'
 import type { EscapeMenuContribution } from './escapeMenu/escapeMenuContract'
 import { EditorToolbar } from './toolbar/EditorToolbar'
@@ -873,7 +873,7 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     caretAnimationDurationMs: clamp(Math.round(toFiniteNumber(source.caretAnimationDurationMs, DEFAULT_CARET_SETTINGS.animationDurationMs)), CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS),
     caretFrameDurationMs: clamp(Math.round(toFiniteNumber(source.caretFrameDurationMs, DEFAULT_CARET_SETTINGS.frameDurationMs)), CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS),
     caretEffectStrengthPercent: clamp(Math.round(toFiniteNumber(source.caretEffectStrengthPercent, DEFAULT_CARET_SETTINGS.effectStrengthPercent)), CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT),
-    visualizer: sanitizeVisualizer(source.visualizer, toFiniteNumber(source.filterInvert, 0) > 0.5),
+    visualizer: sanitizeVisualizer(source.visualizer, toFiniteNumber(source.filterInvert, 0) > 0.5, source.caretAnimationPreset),
   }
 }
 
@@ -1459,8 +1459,11 @@ function App() {
   const [isExportingPdf, setIsExportingPdf] = useState(false)
   const [isExportingMd, setIsExportingMd] = useState(false)
   const [exportFolder, setExportFolder] = useState<string | null>(null)
-  const [debuggingEnabled, setDebuggingEnabled] = useState(false)
-  const [spellCheckEnabled, setSpellCheckEnabled] = useState(false)
+  // Which features exist at all (shared/features.ts): the toggle bar at the
+  // top of Options. Each consumer below reads its own flag and tears its
+  // feature down when it is off.
+  const [features, setFeatures] = useState<FeatureToggles>(DEFAULT_FEATURE_TOGGLES)
+  const spellCheckEnabled = features.spellCheck
   const [flowSettings, setFlowSettings] = useState<FlowSettings>(DEFAULT_FLOW_SETTINGS)
   useFlowFeedback(flowSettings)
   // Every change is persisted at once, through the one sanctioned path (see
@@ -1477,8 +1480,8 @@ function App() {
   useEffect(() => onSpeedReadingSettingsCommit(setSpeedReadingSettings), [])
   useEffect(() => {
     void persistMenuStateNowRef.current()
-  }, [flowSettings, beatSettings, speedReadingSettings])
-  const [customCursorEnabled, setCustomCursorEnabled] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.enabled)
+  }, [flowSettings, beatSettings, speedReadingSettings, features])
+  const customCursorEnabled = features.customCursor
   const [customCursorDotColor, setCustomCursorDotColor] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.dotColor)
   const [customCursorCenterColor, setCustomCursorCenterColor] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.centerColor)
   const [customCursorTrailColor, setCustomCursorTrailColor] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.trailColor)
@@ -1538,7 +1541,6 @@ function App() {
   })
   const [cursorHsvaDragState, setCursorHsvaDragState] = useState<HsvaDragState | null>(null)
   const cursorColorArmTimerRef = useRef<(() => void) | null>(null)
-  const debugNoteIdRef = useRef<string | null>(null)
   const [windowIsMaximized, setWindowIsMaximized] = useState(false)
   const [windowIsCollapsed, setWindowIsCollapsed] = useState(false)
   const [windowModeTransitionOverlayNonce, setWindowModeTransitionOverlayNonce] = useState(0)
@@ -2211,11 +2213,10 @@ function App() {
   const [audioSpatial, setAudioSpatial] = useState(0)
   const [reduceVisualEffects, setReduceVisualEffects] = useState(false)
   // A pulse is exactly the kind of visual effect that flag turns off.
-  useBeatFeedback(beatSettings, visualizer, reduceVisualEffects)
+  useBeatFeedback(features.visualizer, beatSettings, visualizer, reduceVisualEffects)
   // The setting lives in a module store (the preview's img component and the
   // export read it there); App subscribes so the persisted snapshot follows it.
   const allowRemoteImages = useRemoteImagesAllowed()
-  const [reducedCaretAnimation, setReducedCaretAnimation] = useState(false)
   const [deferPreviewOnRapidInput, setDeferPreviewOnRapidInput] = useState(false)
   const [noteSizeThresholdBlocks, setNoteSizeThresholdBlocks] = useState(DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS)
   const [forceCharacterScrollbarThumb, setForceCharacterScrollbarThumb] = useState(false)
@@ -2259,7 +2260,6 @@ function App() {
   const [textureControlDragState, setTextureControlDragState] = useState<TextureControlDragState | null>(null)
   const colorArmTimerRef = useRef<(() => void) | null>(null)
   const pendingUpdateDebounceRef = useRef<number | null>(null)
-  type ConsoleMethodName = 'log' | 'info' | 'warn' | 'error' | 'debug'
   const appStateSaveTimerRef = useRef<number | null>(null)
   const noteTransitionLockRef = useRef(false)
   // Mirrors useSectionTabs' chapterBarMode so buildMenuStateSnapshot (defined
@@ -2268,9 +2268,6 @@ function App() {
   const chapterBarModeRef = useRef<'tags' | 'tabs'>('tabs')
   const [restoredTabBarMode, setRestoredTabBarMode] = useState<'tags' | 'tabs' | null>(null)
 
-  const originalConsoleMethodsRef = useRef<Partial<Record<ConsoleMethodName, (...args: unknown[]) => void>>>({})
-  const isWritingDebugEntryRef = useRef(false)
-  const debugNoteCreationPromiseRef = useRef<Promise<string | null> | null>(null)
   const externalNoteOriginalTextByIdRef = useRef<Map<string, string>>(new Map())
   const pendingSidebarScrollRestoreRef = useRef<{ mode: SidebarMode; scrollTop: number } | null>(null)
   // Stay here rather than move into useEditorSectionMount: activateNote and
@@ -2358,6 +2355,7 @@ function App() {
     filterColorize,
   }, {
     reduceVisualEffects,
+    glaze: features.glaze,
     isPreviewMode: activeSectionSnapshot?.isPreviewMode ?? false,
   }), [
     borderRadiusRegularPx,
@@ -2375,6 +2373,7 @@ function App() {
     filterSaturate,
     filterColorize,
     reduceVisualEffects,
+    features.glaze,
     activeSectionSnapshot?.isPreviewMode,
   ])
 
@@ -3837,11 +3836,9 @@ function App() {
   const queueAppStateSaveRef = useRef<(selectedNoteId: string | null) => void>(() => {})
   const updateActiveNoteTitlePreviewRef = useRef<(nextText: string) => void>(() => {})
   const revealNoteInMenuRef = useRef<() => void>(() => {})
-  const writeDebugEntryRef = useRef<(functionName: string, lines: string[]) => Promise<void>>(async () => {})
-  const activeNoteHasDebugTagRef = useRef(false)
-  // Same ref-proxy technique as the four above, for the same TDZ reason --
+  // Same ref-proxy technique as the three above, for the same TDZ reason --
   // persistMenuStateNow is declared later than handleToggleDoubleSizeMode/
-  // toggleSidebarVisible, which both need to call it. Unlike those four,
+  // toggleSidebarVisible, which both need to call it. Unlike those three,
   // nothing needs a *stable-identity* wrapper around this one (it's only
   // ever called directly, never handed to a prop or another hook's deps
   // array), so there's no xStable counterpart -- callers just use
@@ -3884,7 +3881,6 @@ function App() {
   const queueAppStateSaveStable = useCallback((selectedNoteId: string | null) => queueAppStateSaveRef.current(selectedNoteId), [])
   const updateActiveNoteTitlePreviewStable = useCallback((nextText: string) => updateActiveNoteTitlePreviewRef.current(nextText), [])
   const revealNoteInMenuStable = useCallback(() => revealNoteInMenuRef.current(), [])
-  const writeDebugEntryStable = useCallback((functionName: string, lines: string[]) => writeDebugEntryRef.current(functionName, lines), [])
 
   const persistedMenuStateRef = useRef<PersistedMenuState | null>(null)
 
@@ -4015,8 +4011,7 @@ function App() {
           collapsedSecondary: archiveCollapsedSecondary,
         },
       },
-      debuggingEnabled,
-      spellCheckEnabled,
+      features,
       flow: flowSettings,
       beat: beatSettings,
       speedReading: speedReadingSettings,
@@ -4044,27 +4039,22 @@ function App() {
       reduceVisualEffects,
       allowRemoteImages: overrides?.allowRemoteImages ?? allowRemoteImages,
       sidebarShowsImages: overrides?.sidebarShowsImages ?? sidebarShowsImages,
-      reducedCaretAnimation,
       deferPreviewOnRapidInput,
       noteSizeThresholdBlocks,
       forceCharacterScrollbarThumb,
-      customCursorEnabled,
     }
   }, [
     archiveCollapsedPrimary,
     archiveCollapsedSecondary,
-    customCursorEnabled,
     categoryCollapsedPrimary,
     categoryCollapsedSecondary,
-    debuggingEnabled,
-    spellCheckEnabled,
+    features,
     flowSettings,
     beatSettings,
     speedReadingSettings,
     reduceVisualEffects,
     allowRemoteImages,
     sidebarShowsImages,
-    reducedCaretAnimation,
     deferPreviewOnRapidInput,
     noteSizeThresholdBlocks,
     forceCharacterScrollbarThumb,
@@ -4726,183 +4716,6 @@ function App() {
     document.documentElement.dataset.uiFont = uiFontStyle
   }, [uiFontStyle, uiFontScale])
 
-  // Writes a structured debug entry to a session-scoped debug note (tagged
-  // "debug"). No-ops when debuggingEnabled is false. Safe to call from any
-  // async or sync context â€” creation and tagging are fire-and-forget.
-  const createDebugNote = useCallback(async (): Promise<string | null> => {
-    if (!window.thockdownNotes) return null
-
-    const now = new Date()
-    const pad = (n: number) => String(n).padStart(2, '0')
-    const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
-    const title = `# Debug: ${dateStr} / ${pad(now.getHours())}:${pad(now.getMinutes())}`
-
-    try {
-      const created = await window.thockdownNotes.createNote({ initialText: `${title}\n` })
-      debugNoteIdRef.current = created.id
-      setNotes((previous) => {
-        const index = previous.findIndex(n => n.id === created.id)
-        if (index >= 0) return previous
-        return [created, ...previous]
-      })
-      await window.thockdownNotes.addTagToNote({ id: created.id, tagName: DEBUG_TAG_NAME, position: 0 }).catch(() => {})
-      return created.id
-    } catch (error) {
-      console.error('Failed to create debug note', error)
-      return null
-    }
-  }, [setNotes])
-
-  const findExistingDebugNoteId = useCallback(async (): Promise<string | null> => {
-    if (!window.thockdownNotes) return null
-
-    try {
-      const listed = await window.thockdownNotes.listNotes()
-      const existing = listed.find((note) => {
-        const normalizedTags = new Set(note.tags.map((tag) => normalizeTagName(tag)))
-        return normalizedTags.has(DEBUG_TAG_NAME) && !normalizedTags.has('deleted') && !normalizedTags.has('archived')
-      })
-
-      if (!existing) return null
-
-      debugNoteIdRef.current = existing.id
-      setNotes((previous) => {
-        const index = previous.findIndex((note) => note.id === existing.id)
-        if (index >= 0) return previous
-        return [existing, ...previous]
-      })
-      return existing.id
-    } catch {
-      return null
-    }
-  }, [setNotes])
-
-  const ensureDebugNoteExists = useCallback(async (): Promise<string | null> => {
-    if (!debuggingEnabled || !window.thockdownNotes) return null
-
-    if (debugNoteIdRef.current) {
-      try {
-        const loaded = await window.thockdownNotes.loadNote({ id: debugNoteIdRef.current })
-        const normalizedTags = new Set(loaded.tags.map((tag) => normalizeTagName(tag)))
-        const isDeletedOrArchived = normalizedTags.has('deleted') || normalizedTags.has('archived')
-        const isDebugTagged = normalizedTags.has(DEBUG_TAG_NAME)
-
-        if (isDebugTagged && !isDeletedOrArchived) {
-          return debugNoteIdRef.current
-        }
-      } catch {
-        // stale or deleted note id; fall through and create a fresh debug note.
-      }
-
-      debugNoteIdRef.current = null
-    }
-
-    if (debugNoteCreationPromiseRef.current) {
-      return debugNoteCreationPromiseRef.current
-    }
-
-    const promise = (async (): Promise<string | null> => {
-      const existingId = await findExistingDebugNoteId()
-      if (existingId) {
-        return existingId
-      }
-
-      return createDebugNote()
-    })()
-
-    debugNoteCreationPromiseRef.current = promise
-    const result = await promise
-    debugNoteCreationPromiseRef.current = null
-    return result
-  }, [createDebugNote, debuggingEnabled, findExistingDebugNoteId])
-
-  useEffect(() => {
-    if (!debuggingEnabled) return
-    if (!persistenceReady) return
-
-    void ensureDebugNoteExists()
-  }, [ensureDebugNoteExists, debuggingEnabled, persistenceReady])
-
-  const writeDebugEntry = useCallback(async (functionName: string, lines: string[]) => {
-    if (!debuggingEnabled) return
-    if (!window.thockdownNotes) return
-    if (isWritingDebugEntryRef.current) return
-
-    const noteId = await ensureDebugNoteExists()
-    if (!noteId) return
-
-    isWritingDebugEntryRef.current = true
-    const now = new Date()
-    const pad = (n: number) => String(n).padStart(2, '0')
-    const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
-    const section = `\n## ${timeStr} / ${functionName}\n${lines.map(l => `- ${l}`).join('\n')}`
-
-    try {
-      const loaded = await window.thockdownNotes.loadNote({ id: noteId })
-      const savedText = `${loaded.text}${section}`
-      const updated = await window.thockdownNotes.saveNote({ id: noteId, text: savedText })
-      setNotes((previous) => withSavedNote(previous, updated, savedText))
-    } catch (error) {
-      const originalError = originalConsoleMethodsRef.current.error ?? console.error
-      originalError.call(console, 'Failed to write debug entry', error)
-    } finally {
-      isWritingDebugEntryRef.current = false
-    }
-  }, [debuggingEnabled, ensureDebugNoteExists, setNotes])
-  writeDebugEntryRef.current = writeDebugEntry
-
-  useEffect(() => {
-    const consoleMethods: ConsoleMethodName[] = ['log', 'info', 'warn', 'error', 'debug']
-
-    if (!debuggingEnabled) {
-      if (originalConsoleMethodsRef.current.log) {
-        consoleMethods.forEach((method) => {
-          const original = originalConsoleMethodsRef.current[method]
-          if (original) {
-            console[method] = original
-          }
-        })
-        originalConsoleMethodsRef.current = {}
-      }
-      return
-    }
-
-    consoleMethods.forEach((method) => {
-      if (!originalConsoleMethodsRef.current[method]) {
-        originalConsoleMethodsRef.current[method] = console[method].bind(console)
-      }
-      console[method] = (...args: unknown[]) => {
-        const original = originalConsoleMethodsRef.current[method]
-        if (original) {
-          original(...args)
-        }
-        if (isWritingDebugEntryRef.current) {
-          return
-        }
-        const stringified = args.map((arg) => {
-          try {
-            if (typeof arg === 'string') return arg
-            if (arg instanceof Error) return arg.stack || arg.message
-            return JSON.stringify(arg)
-          } catch {
-            return String(arg)
-          }
-        })
-        void writeDebugEntry(`console.${method}`, stringified)
-      }
-    })
-
-    return () => {
-      consoleMethods.forEach((method) => {
-        const original = originalConsoleMethodsRef.current[method]
-        if (original) {
-          console[method] = original
-        }
-      })
-      originalConsoleMethodsRef.current = {}
-    }
-  }, [debuggingEnabled, writeDebugEntry])
-
   const [clearAppStatePrimed, setClearAppStatePrimed] = useState(false)
 
   const clearPersistedAppState = useCallback(async () => {
@@ -4912,9 +4725,6 @@ function App() {
     }
 
     setClearAppStatePrimed(false)
-
-    setDebuggingEnabled(false)
-    debugNoteIdRef.current = null
 
     if (!window.thockdownState) return
     await window.thockdownState.clearAppState()
@@ -6099,7 +5909,6 @@ ${markdownHtml}
             setReduceVisualEffects(appState.menu.reduceVisualEffects ?? false)
             setRemoteImagesAllowed(appState.menu.allowRemoteImages === true)
             setSidebarShowsImages(appState.menu.sidebarShowsImages === true)
-            setReducedCaretAnimation(appState.menu.reducedCaretAnimation ?? false)
             setDeferPreviewOnRapidInput(appState.menu.deferPreviewOnRapidInput ?? false)
             // Clamped on the way in as well as on the way out: a stored value
             // predating a change to the slider's range would otherwise put the
@@ -6185,8 +5994,7 @@ ${markdownHtml}
             })
             // Global texture enable is intentionally fixed on; per-surface alpha controls visibility.
             setTextureMaterials(cloneTextureMaterials(appState.menu.textureMaterials ?? DEFAULT_TEXTURE_MATERIALS))
-            setDebuggingEnabled(appState.menu.debuggingEnabled ?? false)
-            setSpellCheckEnabled(appState.menu.spellCheckEnabled ?? false)
+            setFeatures(sanitizeFeatureToggles(appState.menu))
             setFlowSettings(sanitizeFlowSettings(appState.menu.flow))
             setSpeedReadingSettings(sanitizeSpeedReadingSettings(appState.menu.speedReading))
             setBeatSettings(sanitizeBeatSettings(appState.menu.beat))
@@ -6211,10 +6019,6 @@ ${markdownHtml}
 
             // Cursor appearance (color/size/speed) now lives in the active
             // UiLayoutLoadout, restored when that loadout is applied below.
-            // enabled is kept out of layouts on purpose -- always defaults
-            // to off and persists independently in app state.
-            setCustomCursorEnabled(appState.menu.customCursorEnabled ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.enabled)
-
             setCurrentPage(loadedSidebarViewState[appState.menu.sidebarMode].page)
             setCategoryCollapsedPrimary(loadedSidebarViewState.category.collapsedPrimary)
             setCategoryCollapsedSecondary(loadedSidebarViewState.category.collapsedSecondary)
@@ -7179,26 +6983,12 @@ ${markdownHtml}
   }, [applyResolvedSections, editorSections, toSlotWidthUpdates])
 
   useEffect(() => {
-    // Prime immediately once assets are loaded, not just on a later user
-    // gesture (see the effect below): Electron's default autoplay policy is
-    // no-user-gesture-required, so there's nothing to wait for, and if the
-    // user's first action after launch is typing rather than clicking, the
-    // pointerdown/focus listeners below would never have fired before that
-    // first keystroke -- leaving the ~100-300ms hardware spin-up to land on
-    // it anyway.
-    void typingSoundManager.load().then(() => {
-      typingSoundManager.primeAudioContext()
-    })
-  }, [])
-
-  useEffect(() => {
-    // Belt-and-suspenders fallback for contexts where the eager prime above
-    // couldn't run (resume() rejected, or load() still in flight when a
-    // gesture happens first anyway) -- resume the AudioContext on the
-    // earliest real user gesture (window focus, first pointer press) rather
-    // than waiting for the first keystroke. primeAudioContext()'s own
-    // ensureContextRunning() no-ops once the context is already running, so
-    // this is safe to fire alongside the eager prime above.
+    // Belt-and-suspenders fallback for contexts where the eager prime in
+    // TypingSoundManager.setTypingSoundEnabled couldn't run (resume()
+    // rejected) -- resume the AudioContext on the earliest real user gesture
+    // (window focus, first pointer press) rather than waiting for the first
+    // keystroke. primeAudioContext() no-ops while key sounds are off and once
+    // the context is already running, so this is safe to fire alongside it.
     const primeAudio = () => {
       typingSoundManager.primeAudioContext()
     }
@@ -7230,9 +7020,13 @@ ${markdownHtml}
     typingSoundManager.setTypingSoundSet(typingSoundSet)
   }, [typingSoundSet])
 
+  // Sounding keys needs both the keystroke-sounds feature (shared/features.ts)
+  // and the layout's own choice of a sound set. Off either way, the manager
+  // suspends its AudioContext; it loads and primes it the first time it is on.
+  const keySoundsAudible = features.keySounds && typingSoundEnabled
   useEffect(() => {
-    typingSoundManager.setTypingSoundEnabled(typingSoundEnabled)
-  }, [typingSoundEnabled])
+    typingSoundManager.setTypingSoundEnabled(keySoundsAudible)
+  }, [keySoundsAudible])
 
   useEffect(() => {
     typingSoundManager.setReverbStrength(audioReverbStrength)
@@ -7251,14 +7045,16 @@ ${markdownHtml}
   }, [audioSpatial])
 
   useEffect(() => {
-    // The blink animation keeps the compositor busy indefinitely while the
-    // caret is idle, not just while typing -- toggled via a body class
-    // rather than threading a prop through BlockCaretPlugin/Editor.tsx.
-    document.body.classList.toggle('thockdown-reduced-caret-animation', reducedCaretAnimation)
+    // The caret blink feature (shared/features.ts). The blink animation keeps
+    // the compositor busy indefinitely while the caret is idle, not just while
+    // typing, so switching it off removes the animation outright -- a body
+    // class rather than a prop threaded through the editor's caret layer.
+    const blinkOff = !features.caretBlink
+    document.body.classList.toggle('thockdown-caret-blink-off', blinkOff)
     return () => {
-      document.body.classList.remove('thockdown-reduced-caret-animation')
+      document.body.classList.remove('thockdown-caret-blink-off')
     }
-  }, [reducedCaretAnimation])
+  }, [features.caretBlink])
 
   useEffect(() => {
     typingSoundManager.setLayerGain('treble', audioTrebleVolume)
@@ -9634,8 +9430,8 @@ ${markdownHtml}
                         setReduceVisualEffects={setReduceVisualEffects}
                         allowRemoteImages={allowRemoteImages}
                         onAllowRemoteImagesChange={handleAllowRemoteImagesChange}
-                        spellCheckEnabled={spellCheckEnabled}
-                        setSpellCheckEnabled={setSpellCheckEnabled}
+                        features={features}
+                        setFeatures={setFeatures}
                         flowSettings={flowSettings}
                         setFlowSettings={setFlowSettings}
                         speedReadingSettings={speedReadingSettings}
@@ -9644,8 +9440,6 @@ ${markdownHtml}
                         visualizer={visualizer}
                         setVisualizer={setVisualizer}
                         setBeatSettings={setBeatSettings}
-                        reducedCaretAnimation={reducedCaretAnimation}
-                        setReducedCaretAnimation={setReducedCaretAnimation}
                         deferPreviewOnRapidInput={deferPreviewOnRapidInput}
                         setDeferPreviewOnRapidInput={setDeferPreviewOnRapidInput}
                         noteSizeThresholdBlocks={noteSizeThresholdBlocks}
@@ -9670,15 +9464,10 @@ ${markdownHtml}
                         setAdventureSettings={setAdventureSettings}
                         setAdventureTrueMode={setAdventureTrueMode}
                         adventureTrueModeWouldWipe={adventureTrueModeWouldWipe}
-                        debuggingEnabled={debuggingEnabled}
-                        setDebuggingEnabled={setDebuggingEnabled}
                         clearAppState={clearPersistedAppState}
                         clearAppStatePrimed={clearAppStatePrimed}
-                        debugNoteIdRef={debugNoteIdRef}
                         queueAppStateSave={queueAppStateSave}
                         activeNoteId={activeSection?.activeNoteId ?? null}
-                        customCursorEnabled={customCursorEnabled}
-                        setCustomCursorEnabled={setCustomCursorEnabled}
                         customCursorDotColor={customCursorDotColor}
                         customCursorCenterColor={customCursorCenterColor}
                         customCursorTrailColor={customCursorTrailColor}
@@ -10151,8 +9940,6 @@ ${markdownHtml}
                   queueAppStateSaveStable={queueAppStateSaveStable}
                   updateActiveNoteTitlePreviewStable={updateActiveNoteTitlePreviewStable}
                   revealNoteInMenuStable={revealNoteInMenuStable}
-                  writeDebugEntryStable={writeDebugEntryStable}
-                  activeNoteHasDebugTagRef={activeNoteHasDebugTagRef}
                   saveSelectedNoteState={saveSelectedNoteState}
                   refreshNotes={refreshNotes}
                   noteTransitionLockRef={noteTransitionLockRef}

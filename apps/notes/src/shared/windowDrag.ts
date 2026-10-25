@@ -25,8 +25,10 @@ export const WINDOW_RESTORE_DRAG_THRESHOLD_PX = 12
 // Elements (and everything inside them) that must never start a window-drag
 // gesture: native form controls and links, the editor's own contenteditable
 // surface, anything that is itself dragged (tab/note reordering, section
-// dividers), the custom scrollbar rails, and a couple of panels that are
-// themselves nothing but densely-packed interactive controls.
+// dividers), the custom scrollbar rails, and the options panel. The music
+// player is NOT listed: its controls are buttons and role="slider" readouts,
+// already excluded, and the gaps between them are the main surface left to
+// move the window by in mini mode.
 // `.no-window-drag` / `[data-no-window-drag]` are escape hatches for
 // excluding one more element without editing this list.
 export const WINDOW_DRAG_EXCLUDED_SELECTOR = [
@@ -39,7 +41,6 @@ export const WINDOW_DRAG_EXCLUDED_SELECTOR = [
   '.editor-section-divider',
   '.tag-pill',
   '.sidebar-options-content',
-  '.audio-controls',
   '.no-window-drag', '[data-no-window-drag]',
 ].join(', ')
 

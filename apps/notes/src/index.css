@@ -185,19 +185,34 @@
 
 /* Low-power toggle: the blink otherwise repaints the caret indefinitely while
    idle, not just while typing. */
-/* The beat pulse on the caret (Options > Tools; flow/useBeatFeedback.ts):
-   while the caret follows the music its own blink is suspended and it holds
-   at its peak, and the music's response dips it (--beat-caret, set on the
-   caret alone). A plain opacity on a leaf, never promoted, so a frame's change
-   repaints the caret's own few pixels. */
-html[data-beat-caret] .thockdown-block-caret {
-  animation: none;
-  opacity:   calc(1 - var(--beat-caret, 0));
+/* The beat pulse on the caret (Options > Caret's follow-the-music switch;
+   flow/useBeatFeedback.ts): while the caret follows a beat its blink is held
+   at its peak (--beat-caret-hold, read by the blink keyframes) and the
+   music's response dips it (--beat-caret, set on the caret alone). The hold
+   is a registered number so it can TRANSITION: it eases in over one blink
+   cycle when a beat is found and back out when it is lost (a pause, a new
+   track, no tempo), so the blink and the beat hand over without a jump, and
+   the dip fades with it. A plain opacity on a leaf, never promoted, so a
+   frame's change repaints the caret's own few pixels. */
+@property --beat-caret-hold {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
 }
 
-.thockdown-reduced-caret-animation .thockdown-block-caret {
+.thockdown-block-caret {
+  opacity: calc(1 - var(--beat-caret, 0) * var(--beat-caret-hold));
+  transition: --beat-caret-hold var(--caret-animation-duration, 1200ms) ease-in-out;
+}
+
+html[data-beat-caret] .thockdown-block-caret {
+  --beat-caret-hold: 1;
+}
+
+.thockdown-caret-blink-off .thockdown-block-caret {
   animation: none;
-  opacity: 0.8;
+  /* The beat's dip is kept: it was chosen in its own right. */
+  opacity: calc(0.8 * (1 - var(--beat-caret, 0) * var(--beat-caret-hold)));
 }
 
 /* Custom selection highlight overlay (drawn by CM6Editor.tsx) -- see the

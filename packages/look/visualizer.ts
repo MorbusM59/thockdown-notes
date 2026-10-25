@@ -63,8 +63,13 @@ export interface VisualizerChannel {
  * tempo (the notes app's `sound/beatClock.ts`) rather than a band or a drum,
  * so it has only the depth of each beat (`effect`, as a channel's) and the
  * fall each beat makes (`shape` and `fallSec`, cut at the next beat).
+ *
+ * `followsMusic` is the switch (Options > Caret, the last button of the blink
+ * row): while it is on, music is playing and a beat has been found, the caret
+ * follows the beat; at any other moment it blinks with its own blink, which
+ * the switch leaves selected. The block's sliders are shown only while it is on.
  */
-export type VisualizerCaret = Pick<VisualizerChannel, 'effect' | 'shape' | 'fallSec'>
+export type VisualizerCaret = Pick<VisualizerChannel, 'effect' | 'shape' | 'fallSec'> & { followsMusic: boolean }
 
 /** A block drawn in a colour of its own. */
 export interface VisualizerColorChannel extends VisualizerChannel {
@@ -154,6 +159,7 @@ export const DEFAULT_VISUALIZER_CHANNEL: VisualizerChannel = {
 }
 
 export const DEFAULT_VISUALIZER_CARET: VisualizerCaret = {
+  followsMusic: false,
   effect: DEFAULT_VISUALIZER_CHANNEL.effect,
   shape: DEFAULT_VISUALIZER_CHANNEL.shape,
   fallSec: DEFAULT_VISUALIZER_CHANNEL.fallSec,
@@ -229,10 +235,26 @@ function sanitizeFall(source: Partial<Record<string, unknown>>, d: Pick<Visualiz
   }
 }
 
-/** The caret's fields; anything else an older layout saved with it (a source, a band) is dropped. */
-function sanitizeCaret(input: unknown, d: VisualizerCaret): VisualizerCaret {
-  const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<string, unknown>>
-  return { effect: sanitizeEffect(source, d.effect), ...sanitizeFall(source, d) }
+/**
+ * The blink preset that became the follow-the-music switch. A layout saved
+ * with it chose the button that is now the switch, so it reads as the switch
+ * on (and its blink falls back to the default, `sanitizeLoadout`'s job).
+ */
+export const LEGACY_FOLLOW_MUSIC_CARET_PRESET = 'bounce'
+
+/**
+ * The caret's fields; anything else an older layout saved with it (a source, a band) is dropped.
+ * A layout saved before the switch existed followed the music whenever its
+ * caret block had an effect, so that is what it reads as, or as on when its
+ * blink was the old bounce (`legacyCaretPreset`).
+ */
+function sanitizeCaret(input: unknown, d: VisualizerCaret, legacyCaretPreset: unknown): VisualizerCaret {
+  const source = (input && typeof input === 'object' ? input : null) as Partial<Record<string, unknown>> | null
+  const effect = sanitizeEffect(source ?? {}, d.effect)
+  const followsMusic = typeof source?.followsMusic === 'boolean'
+    ? source.followsMusic
+    : legacyCaretPreset === LEGACY_FOLLOW_MUSIC_CARET_PRESET || (source !== null && effect !== 0)
+  return { followsMusic, effect, ...sanitizeFall(source ?? {}, d) }
 }
 
 function sanitizeColorChannel(input: unknown, d: VisualizerColorChannel): VisualizerColorChannel {
@@ -249,12 +271,16 @@ function sanitizeShadeChannel(input: unknown, d: VisualizerShadeChannel): Visual
   }
 }
 
-/** Every field bounded; a missing one takes the default for a layout of that inversion. */
-export function sanitizeVisualizer(input: unknown, inverted: boolean): VisualizerSettings {
+/**
+ * Every field bounded; a missing one takes the default for a layout of that
+ * inversion. `legacyCaretPreset` is the layout's saved blink preset, read
+ * only to migrate a layout from before the caret's follow-the-music switch.
+ */
+export function sanitizeVisualizer(input: unknown, inverted: boolean, legacyCaretPreset?: unknown): VisualizerSettings {
   const d = defaultVisualizer(inverted)
   const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<keyof VisualizerSettings, unknown>>
   return {
-    caret: sanitizeCaret(source.caret, d.caret),
+    caret: sanitizeCaret(source.caret, d.caret, legacyCaretPreset),
     shade: sanitizeShadeChannel(source.shade, d.shade),
     outline: sanitizeColorChannel(source.outline, d.outline),
   }

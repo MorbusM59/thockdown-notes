@@ -14,6 +14,7 @@ import { isPlaylistSlot } from '../src/shared/audioPlayer';
 import { DEFAULT_FLOW_SETTINGS, sanitizeFlowSettings } from '../src/shared/flowSettings';
 import { sanitizeSpeedReadingSettings } from '../src/speedReading/speedReadingSettings';
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings } from '../src/shared/beatSettings';
+import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles } from '../src/shared/features';
 import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '@thockdown/look/glaze';
 import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureColorHsva, type TextureMaterialSettings, type TextureMaterialsBySurface, type TextureSurfaceKey } from '@thockdown/look/textureTypes';
 import { sanitizeSoundscapePreferences } from '@thockdown/soundscape/soundscape';
@@ -61,7 +62,7 @@ const DEFAULT_APP_STATE: AppState = {
       trash: { page: 1, scrollTop: 0 },
       find: { scrollTop: 0 },
     },
-    spellCheckEnabled: false,
+    features: DEFAULT_FEATURE_TOGGLES,
     flow: DEFAULT_FLOW_SETTINGS,
     beat: DEFAULT_BEAT_SETTINGS,
   },
@@ -557,7 +558,6 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     // Strictly true: anything else, absence included, keeps the app local.
     allowRemoteImages: input?.allowRemoteImages === true,
     sidebarShowsImages: input?.sidebarShowsImages === true,
-    reducedCaretAnimation: Boolean(input?.reducedCaretAnimation),
     deferPreviewOnRapidInput: Boolean(input?.deferPreviewOnRapidInput),
     noteSizeThresholdBlocks: sanitizeOptionalNumber(input?.noteSizeThresholdBlocks),
     forceCharacterScrollbarThumb: Boolean(input?.forceCharacterScrollbarThumb),
@@ -579,8 +579,8 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     scrollBaseDistanceRows: sanitizePositive(input?.scrollBaseDistanceRows, DEFAULT_APP_STATE.menu!.scrollBaseDistanceRows ?? 1),
     scrollMaxDurationMultiplier: sanitizePositive(input?.scrollMaxDurationMultiplier, DEFAULT_APP_STATE.menu!.scrollMaxDurationMultiplier ?? 1),
     sidebarViewState: sanitizeSidebarViewState(input?.sidebarViewState),
-    debuggingEnabled: Boolean(input?.debuggingEnabled),
-    spellCheckEnabled: Boolean(input?.spellCheckEnabled ?? false),
+    // Reads the record, or for an older save the separate fields it replaced.
+    features: sanitizeFeatureToggles(input),
     flow: sanitizeFlowSettings(input?.flow),
     speedReading: sanitizeSpeedReadingSettings(input?.speedReading),
     beat: sanitizeBeatSettings(input?.beat),
@@ -605,7 +605,6 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     // matching line here, or it silently never persists in the real app
     // regardless of how correct the renderer-side code is.
     isDoubleSizeMode: Boolean(input?.isDoubleSizeMode),
-    customCursorEnabled: Boolean(input?.customCursorEnabled),
     reviewGutterVisibleBySection: sanitizeReviewGutterVisibleBySection(input?.reviewGutterVisibleBySection),
     reviewFlagsVisibleBySection: sanitizeReviewGutterVisibleBySection(input?.reviewFlagsVisibleBySection),
   };
