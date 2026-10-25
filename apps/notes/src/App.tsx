@@ -1698,6 +1698,17 @@ function App() {
   const [itemsPerPage, setItemsPerPage] = useState(20)
   const [showPagination, setShowPagination] = useState(false)
   const [sidebarTreeScrollerEl, setSidebarTreeScrollerEl] = useState<HTMLDivElement | null>(null)
+  // The sidebar's own scroller, as state as well as a ref: immersive mode
+  // unmounts the sidebar and restores it with nothing else changed, so the
+  // custom scrollbar's listeners and observers -- and the thumb's position,
+  // which is written imperatively -- must key on the element itself or they
+  // stay attached to the detached one (the options view, which scrolls this
+  // element, came back with a thumb that never moved again).
+  const [sidebarContentEl, setSidebarContentEl] = useState<HTMLDivElement | null>(null)
+  const setSidebarContentRef = useCallback((el: HTMLDivElement | null) => {
+    sidebarContentRef.current = el
+    setSidebarContentEl(el)
+  }, [])
   // Set when the startup bootstrap (loading the note list / database) fails
   // repeatedly. Surfaced as a visible banner -- previously a failure here
   // just retried silently forever with only a console.error, leaving the
@@ -4170,8 +4181,8 @@ function App() {
       return sidebarTreeScrollerEl
     }
 
-    return sidebarContentRef.current
-  }, [sidebarTreeScrollerEl])
+    return sidebarContentEl
+  }, [sidebarContentEl, sidebarTreeScrollerEl])
 
   const captureSidebarModeState = useCallback((mode: SidebarMode): SidebarViewState => {
     const baseline = sidebarViewStateByMode[mode] ?? sanitizeSidebarViewState(undefined)
@@ -7481,7 +7492,7 @@ ${markdownHtml}
       return
     }
 
-    const scroller = sidebarTreeScrollerEl || sidebarContentRef.current
+    const scroller = sidebarTreeScrollerEl || sidebarContentEl
     const track = sidebarScrollbarTrackRef.current
     if (!scroller || !track) return
 
@@ -7492,15 +7503,15 @@ ${markdownHtml}
     const thumb = scrollThumbFor(scroller, track.clientHeight, sidebarScrollbarThumbRef.current?.offsetWidth ?? 0)
     applySidebarThumbDom(thumb.top, thumb.height)
     setIsSidebarScrollThumbActive(thumb.active)
-  }, [applySidebarThumbDom, isSidebarScrollbarMode, sidebarTreeScrollerEl])
+  }, [applySidebarThumbDom, isSidebarScrollbarMode, sidebarContentEl, sidebarTreeScrollerEl])
 
   const sidebarScrollFromThumbTop = useCallback((thumbTopPx: number) => {
-    const scroller = sidebarTreeScrollerEl || sidebarContentRef.current
+    const scroller = sidebarTreeScrollerEl || sidebarContentEl
     const track = sidebarScrollbarTrackRef.current
     if (!scroller || !track) return
 
     scroller.scrollTop = scrollTopForThumb(scroller, track.clientHeight, sidebarScrollThumbHeightRef.current, thumbTopPx)
-  }, [sidebarTreeScrollerEl])
+  }, [sidebarContentEl, sidebarTreeScrollerEl])
 
   const pagedVisibleNotes = useMemo(() => {
     if (sidebarMode !== 'date' && sidebarMode !== 'trash') {
@@ -7735,7 +7746,7 @@ ${markdownHtml}
     // entirely and would measure nonsense. Elsewhere the last good
     // measurement stands (or the arithmetic, if there hasn't been one yet).
     if ((sidebarMode !== 'date' && sidebarMode !== 'trash') || isImageLibraryShown) return
-    const contentEl = sidebarContentRef.current
+    const contentEl = sidebarContentEl
     const sidebarEl = contentEl?.closest('.notes-sidebar') as HTMLElement | null
     if (!contentEl || !sidebarEl) return
 
@@ -7808,9 +7819,9 @@ ${markdownHtml}
     // totalPagedNotes/itemsPerPage are in here so the card measurement re-runs
     // once notes actually populate the list -- the observers above only fire on
     // box changes, and filling an already-sized list isn't one.
-  // isSidebarShown, not isSidebarVisible: this measures the sidebar's DOM,
-  // which immersive mode unmounts and restores without the setting changing.
-  }, [isImageLibraryShown, isSidebarShown, sidebarMode, spacingRegularPx, totalPagedNotes, itemsPerPage])
+  // Keyed on the element: immersive mode unmounts the sidebar and restores
+  // it without any setting changing.
+  }, [isImageLibraryShown, sidebarContentEl, sidebarMode, spacingRegularPx, totalPagedNotes, itemsPerPage])
 
   useLayoutEffect(() => {
     // The image library's cards are not the notes being paged: measuring
@@ -7847,7 +7858,7 @@ ${markdownHtml}
       setShowPagination(shouldShowPagination)
     }
 
-    const container = sidebarContentRef.current
+    const container = sidebarContentEl
     const resizeObserver = new ResizeObserver(compute)
 
     if (container) {
@@ -7861,7 +7872,7 @@ ${markdownHtml}
       resizeObserver.disconnect()
       window.removeEventListener('resize', compute)
     }
-  }, [currentPage, isImageLibraryShown, itemsPerPage, sidebarMode, totalPagedNotes])
+  }, [currentPage, isImageLibraryShown, itemsPerPage, sidebarContentEl, sidebarMode, totalPagedNotes])
 
   useEffect(() => {
     if (!isSidebarScrollbarMode) return
@@ -7871,7 +7882,7 @@ ${markdownHtml}
   useEffect(() => {
     if (!isSidebarScrollbarMode) return
 
-    const scroller = sidebarTreeScrollerEl || sidebarContentRef.current
+    const scroller = sidebarTreeScrollerEl || sidebarContentEl
     if (!scroller) return
 
     const onScroll = () => {
@@ -7880,12 +7891,12 @@ ${markdownHtml}
 
     scroller.addEventListener('scroll', onScroll, { passive: true })
     return () => scroller.removeEventListener('scroll', onScroll)
-  }, [isSidebarScrollbarMode, sidebarTreeScrollerEl, syncSidebarCustomScrollbar])
+  }, [isSidebarScrollbarMode, sidebarContentEl, sidebarTreeScrollerEl, syncSidebarCustomScrollbar])
 
   useEffect(() => {
     if (!isSidebarScrollbarMode) return
 
-    const scroller = sidebarTreeScrollerEl || sidebarContentRef.current
+    const scroller = sidebarTreeScrollerEl || sidebarContentEl
     if (!scroller) return
 
     // Coalesced, not debounced: a request while one is pending joins it. It
@@ -7939,7 +7950,7 @@ ${markdownHtml}
         sidebarScrollbarRafRef.current = null
       }
     }
-  }, [isSidebarScrollbarMode, sidebarMode, sidebarTreeScrollerEl, syncSidebarCustomScrollbar])
+  }, [isSidebarScrollbarMode, sidebarMode, sidebarContentEl, sidebarTreeScrollerEl, syncSidebarCustomScrollbar])
 
   useEffect(() => {
     if (!isDraggingSidebarScrollThumb) return
@@ -7976,12 +7987,12 @@ ${markdownHtml}
     const thumbHeightPx = sidebarScrollThumbHeightRef.current
     const targetThumbTop = clickY - (thumbHeightPx / 2)
 
-    const scroller = sidebarTreeScrollerEl || sidebarContentRef.current
+    const scroller = sidebarTreeScrollerEl || sidebarContentEl
     if (!scroller) return
     const targetScrollTop = scrollTopForThumb(scroller, track.clientHeight, thumbHeightPx, targetThumbTop)
 
     scrollToNonQuantizedSmooth(scroller, targetScrollTop)
-  }, [sidebarTreeScrollerEl])
+  }, [sidebarContentEl, sidebarTreeScrollerEl])
 
   const handleSidebarThumbPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
     event.stopPropagation()
@@ -8825,10 +8836,10 @@ ${markdownHtml}
   }, [activeSection, buildMenuStateSnapshot, persistMenuStateOnUnload])
 
   const syncSidebarTexture = useCallback(() => {
-    const scroller = sidebarTreeScrollerEl || sidebarContentRef.current
+    const scroller = sidebarTreeScrollerEl || sidebarContentEl
     if (!scroller || !sidebarTextureRef.current) return
     syncTextureToScroll(scroller.scrollTop, sidebarTextureRef.current)
-  }, [sidebarTreeScrollerEl])
+  }, [sidebarContentEl, sidebarTreeScrollerEl])
 
   const handleSidebarScroll = useCallback(() => {
     syncSidebarTexture()
@@ -9098,7 +9109,7 @@ ${markdownHtml}
                 <div className="sidebar-wrapper">
                   <div
                     className={`sidebar-content${(sidebarMode === 'date' || sidebarMode === 'trash') && !isImageLibraryShown ? ' is-paged-mode' : ''}${isSidebarCustomScrollbarMode ? ' is-tree-mode' : ''}${isSidebarScrollbarMode && !isSidebarCustomScrollbarMode ? ' is-scrollbar-mode' : ''}`}
-                    ref={sidebarContentRef}
+                    ref={setSidebarContentRef}
                     onScroll={handleSidebarScroll}
                   >
                     <div ref={sidebarTextureRef} className="sidebar-content-texture" />
