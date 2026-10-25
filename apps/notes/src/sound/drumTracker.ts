@@ -49,7 +49,12 @@
  *    two of the four and loses. The comb's mean against the pulse's energy
  *    is the CONFIDENCE, and an estimate below `MIN_CONFIDENCE` does not
  *    replace the grid: it holds for `GRID_HOLD_SEC` through a breakdown or a
- *    busy passage. Recomputed every `GRID_EVERY_HOPS`, not per frame.
+ *    busy passage. The confidence is scale-free, so what a window may say is
+ *    also bounded by its DRIVE, the kick's raw strength: a stretch without
+ *    the drums the last grid was found in is silence to the estimate
+ *    (`GRID_DRIVE_SHARE`), an estimate contradicting a held grid has to
+ *    explain the window `CLEARLY_BETTER`, and one agreeing with it keeps its
+ *    beat. Recomputed every `GRID_EVERY_HOPS`, not per frame.
  *
  * 3. PATTERN. The onset is folded onto one bar of the grid
  *    (`PATTERN_BINS`, twelve to a beat, so sixteenths and triplet swing
@@ -171,6 +176,43 @@ const GRID_EVERY_HOPS = 96
 const MIN_CONFIDENCE = 0.1
 /** Periods a tempo's comb spans. */
 const COMB_BEATS = 4
+/**
+ * How far (in octaves) an estimate's period may sit from the held grid's, or
+ * from its double or half, and still be the SAME beat: the parabolic
+ * refinement wanders by a few tenths of a BPM between updates, and a tempo
+ * read an octave off is the clock's to fold (`beatClock.ts`), not a new beat.
+ */
+const AGREE_OCTAVES = 0.03
+/**
+ * The share of the last grid's DRIVE (the mean of the kick's strength over the
+ * window it was found in, as it fades) the drums around a hop need for that
+ * hop to count towards the tempo; a window with fewer than `MIN_GRID_HOPS`
+ * such hops holds the grid as an unconfident one does, however periodic it is. The confidence cannot say
+ * this: it is the comb against the pulse's own energy, and the pulse is made
+ * of rises normalised to the band's fading peaks, so in a riser or a
+ * breakdown, where the peaks have faded, a pad's ripple or a noise sweep is
+ * as periodic as a kick and read 0.2 to 0.9 at a tempo the music does not
+ * have (measured: 129 to 150 BPM on a 128 BPM track, the caret dragged a
+ * quarter beat off in the run-up to every break). The drive is raw band
+ * energy, which a fading reference cannot inflate.
+ */
+const GRID_DRIVE_SHARE = 0.25
+/** The half-life of the drive remembered for the held grid, so a track whose drums get quieter can still move it. */
+const GRID_DRIVE_HALF_LIFE_SEC = 10
+/**
+ * How much better a reading has to be than the held grid's, as a multiple,
+ * to replace it: a tempo that is not the held one (or an octave of it) has to
+ * score this much above the held tempo on the same window, and a phase off
+ * the held beat has to collect this much more kick than the best phase near
+ * it. A roll (kicks on every eighth or sixteenth before a drop) fits three
+ * sixteenths as well as four and every subdivision as well as the beat, and
+ * taking whichever won by a hair moved the grid to 171 BPM and by up to a
+ * quarter beat. The beat of a piece does not move; a new piece's does, by
+ * far more than this.
+ */
+const CLEARLY_BETTER = 1.5
+/** How near the held grid's extrapolated beat a phase counts as the same beat, as a share of the period either way. */
+const PHASE_HOLD_SHARE = 0.125
 /** How long a grid is held without a confident estimate before the tracker drops to unlocked. */
 const GRID_HOLD_SEC = 20
 /** Hops the grid needs before it is trusted: four seconds at 48kHz. */
@@ -606,6 +648,9 @@ export class DrumTracker {
    * meter from the syncopation of its kicks alone.
    */
   private readonly pulse = new Float32Array(CAPACITY)
+  /** `updateGrid`'s scratch: the kick's strength summed up to each hop of the window, and the pulse weighed by the drive around it. */
+  private readonly drives = new Float64Array(CAPACITY + 1)
+  private readonly tempoPulse = new Float64Array(CAPACITY)
   private head = 0
   private count = 0
   /** Absolute index of the oldest kept hop, and the media time at absolute index 0. */
@@ -620,6 +665,13 @@ export class DrumTracker {
   private period = NaN
   private phase = NaN
   private confidence = 0
+  /**
+   * The DRIVE of the window the grid was last established or confirmed in
+   * (the mean of the kick's strength, in raw band energy, which a fading
+   * reference cannot inflate) and the absolute hop it was measured at.
+   */
+  private gridDrive = 0
+  private gridDriveAt = -Infinity
   /** The absolute hop the grid was last confidently estimated at. */
   private confidentAt = -Infinity
   /** The bar's memory weight: how much an exponential average over PATTERN_MEMORY_SEC has accumulated, shared by every voice. */
@@ -690,6 +742,8 @@ export class DrumTracker {
     this.phase = NaN
     this.confidence = 0
     this.confidentAt = -Infinity
+    this.gridDrive = 0
+    this.gridDriveAt = -Infinity
     this.memoryWeight = 0
     this.barPhase = NaN
     this.resumedAt = -Infinity
@@ -950,12 +1004,39 @@ export class DrumTracker {
       this.confidence = 0
       return
     }
+    const hopsPerMinute = 60 / this.hopSec
+    const minLag = Math.floor(hopsPerMinute / MAX_BPM)
+    const maxLag = Math.ceil(hopsPerMinute / MIN_BPM)
+    // The window's DRIVE, and the last grid's as it has faded (GRID_DRIVE_SHARE).
+    const kick = this.voices.kick
+    const end = this.start + n
+    const drives = this.drives
+    drives[0] = 0
+    for (let k = 0; k < n; k++) drives[k + 1] = drives[k] + this.strengthAt(kick, this.start + k)
+    const heldDrive = this.gridDrive * 0.5 ** (((end - this.gridDriveAt) * this.hopSec) / GRID_DRIVE_HALF_LIFE_SEC)
+    // The pulse the tempo is read from, each hop weighed by the drive around
+    // it (over the slowest beat) against that share of the last grid's: a
+    // stretch of the window without drums is silence to the estimate rather
+    // than a pulse as loud as a kick's (the rises are normalised to peaks
+    // that fade), so a window reaching from a breakdown into the drop reads
+    // the drop's tempo and not the breakdown pad's.
+    const tempoPulse = this.tempoPulse
+    const reach = Math.ceil(maxLag / 2)
+    const floor = GRID_DRIVE_SHARE * heldDrive
+    let drivenHops = 0
+    for (let k = 0; k < n; k++) {
+      const from = Math.max(0, k - reach)
+      const to = Math.min(n, k + reach + 1)
+      const local = (drives[to] - drives[from]) / (to - from)
+      if (local >= floor) drivenHops++
+      tempoPulse[k] = this.pulse[(this.head + k) % CAPACITY] * (floor > 0 ? Math.min(1, local / floor) : 1)
+    }
     let mean = 0
-    for (let k = 0; k < n; k++) mean += this.pulse[(this.head + k) % CAPACITY]
+    for (let k = 0; k < n; k++) mean += tempoPulse[k]
     mean /= n
     let zero = 0
     for (let k = 0; k < n; k++) {
-      const d = this.pulse[(this.head + k) % CAPACITY] - mean
+      const d = tempoPulse[k] - mean
       zero += d * d
     }
     if (zero <= 0) {
@@ -963,16 +1044,13 @@ export class DrumTracker {
       this.confidence = 0
       return
     }
-    const hopsPerMinute = 60 / this.hopSec
-    const minLag = Math.floor(hopsPerMinute / MAX_BPM)
-    const maxLag = Math.ceil(hopsPerMinute / MIN_BPM)
     // The autocorrelation out to COMB_BEATS periods of the slowest tempo.
     const lastLag = Math.min(n - 1, COMB_BEATS * maxLag + 1)
     const raw = new Float64Array(lastLag + 1)
     for (let lag = minLag - 1; lag <= lastLag; lag++) {
       let sum = 0
       for (let k = lag; k < n; k++) {
-        sum += (this.pulse[(this.head + k) % CAPACITY] - mean) * (this.pulse[(this.head + k - lag) % CAPACITY] - mean)
+        sum += (tempoPulse[k] - mean) * (tempoPulse[k - lag] - mean)
       }
       // Normalised by the overlap, so a long lag is not penalised for having fewer terms.
       raw[lag] = sum / (n - lag)
@@ -988,14 +1066,21 @@ export class DrumTracker {
     // pattern) repeats at two of them and not at one or three, which on the
     // autocorrelation alone it can win (a trace locked 84 BPM onto a 125 BPM
     // track exactly so).
+    const combOf = (lag: number): number => {
+      let comb = 0
+      for (let m = 1; m <= COMB_BEATS; m++) comb += at(m * lag)
+      return comb
+    }
+    const preference = (lag: number): number => {
+      const octaves = Math.log2(hopsPerMinute / lag / PREFERRED_BPM) / PREFERENCE_OCTAVES
+      return Math.exp(-0.5 * octaves * octaves)
+    }
     let best = -1
     let bestScore = -Infinity
     let bestComb = 0
     for (let lag = minLag; lag <= maxLag; lag++) {
-      let comb = 0
-      for (let m = 1; m <= COMB_BEATS; m++) comb += at(m * lag)
-      const octaves = Math.log2(hopsPerMinute / lag / PREFERRED_BPM) / PREFERENCE_OCTAVES
-      const score = comb * Math.exp(-0.5 * octaves * octaves)
+      const comb = combOf(lag)
+      const score = comb * preference(lag)
       if (score > bestScore) {
         bestScore = score
         best = lag
@@ -1016,31 +1101,58 @@ export class DrumTracker {
     // the grid holds (period and phase both) for GRID_HOLD_SEC, so a
     // breakdown or a busy passage carries the established beat through
     // rather than dropping to unlocked and back on every update.
-    if (this.confidence < MIN_CONFIDENCE) {
+    //
+    // A window without the drums the last grid was found in (GRID_DRIVE_SHARE,
+    // against that grid's drive as it fades) says nothing about the beat,
+    // held or not: after a long breakdown has outlasted the hold, a pad's
+    // ripple is still no beat to take. A HELD grid is a hypothesis the
+    // window is weighed against: an estimate that agrees with it (the same
+    // tempo or an octave of it) refines it; one that contradicts it replaces
+    // it only when it explains the window CLEARLY_BETTER than the held tempo
+    // does.
+    const held = !Number.isNaN(this.period)
+    const octaves = held ? Math.log2(period / this.period) : NaN
+    const agrees = held && Math.abs(octaves - Math.round(octaves)) <= AGREE_OCTAVES && Math.abs(Math.round(octaves)) <= 1
+    const silent = drivenHops < MIN_GRID_HOPS
+    const explained = held && !agrees && bestScore <= CLEARLY_BETTER * combOf(this.period) * preference(this.period)
+    if (this.confidence < MIN_CONFIDENCE || silent || explained) {
       if (!Number.isNaN(this.period)) {
         this.placeBar()
         this.learnPatterns()
       }
       return
     }
-    this.confidentAt = this.start + n
-    this.period = period
+    this.confidentAt = end
+    this.gridDrive = Math.max(drives[n] / n, heldDrive)
+    this.gridDriveAt = end
     // Phase: the offset whose comb of beats across the window collects the
     // most KICK onset. Which beat it picks only names the bar's first; every
-    // voice's pattern is learned and matched in that one frame.
-    const kick = this.voices.kick
+    // voice's pattern is learned and matched in that one frame. While the
+    // estimate agrees with a held grid, the held grid's own beat (carried
+    // forward to this window) is kept unless another offset clearly collects
+    // more (CLEARLY_BETTER): the beat of a piece does not move, and an
+    // offset winning by a hair on a roll is the subdivision, not the beat.
     const steps = Math.ceil(period)
+    const heldOffset = agrees ? (((this.phase - this.start) % period) + period) % period : NaN
     let bestPhase = 0
     let bestSum = -Infinity
+    let nearPhase = -1
+    let nearSum = -Infinity
     for (let p = 0; p < steps; p++) {
       let sum = 0
-      for (let beat = this.start + p; beat < this.start + n; beat += period) sum += this.at(kick, Math.round(beat))
+      for (let beat = this.start + p; beat < end; beat += period) sum += this.at(kick, Math.round(beat))
       if (sum > bestSum) {
         bestSum = sum
         bestPhase = p
       }
+      const away = Math.abs(p - heldOffset)
+      if (Math.min(away, period - away) <= PHASE_HOLD_SHARE * period && sum > nearSum) {
+        nearSum = sum
+        nearPhase = p
+      }
     }
-    this.phase = this.start + bestPhase
+    this.period = period
+    this.phase = this.start + (nearPhase >= 0 && bestSum <= CLEARLY_BETTER * nearSum ? nearPhase : bestPhase)
     this.placeBar()
     this.learnPatterns()
     const now = this.originTime + (this.start + n) * this.hopSec
