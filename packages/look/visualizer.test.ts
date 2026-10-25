@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultVisualizer, fallOf, sanitizeVisualizer, SOURCE_SLIDER_MAX, SOURCE_SLIDER_MIN, sourceAtSlider, sourceSliderValue } from './visualizer'
+import { defaultVisualizer, FALL_MAX_SEC, FALL_MIN_SEC, pulseCurve, sanitizeVisualizer, SOURCE_SLIDER_MAX, SOURCE_SLIDER_MIN, sourceAtSlider, sourceSliderValue } from './visualizer'
 
 describe('sanitizeVisualizer', () => {
   it('fills a layout saved before the visualizer with the defaults for its inversion', () => {
@@ -21,8 +21,8 @@ describe('sanitizeVisualizer', () => {
   })
 
   it('keeps only what the caret reads, so an older save with a source loads without it', () => {
-    const v = sanitizeVisualizer({ caret: { effect: 0.3, mass: 0.7, source: 'snare', frequencyHz: 300, contrast: 0.2 } }, false)
-    expect(v.caret).toEqual({ effect: 0.3, mass: 0.7 })
+    const v = sanitizeVisualizer({ caret: { effect: 0.3, shape: 0.2, fallSec: 0.5, source: 'snare', frequencyHz: 300, contrast: 0.2 } }, false)
+    expect(v.caret).toEqual({ effect: 0.3, shape: 0.2, fallSec: 0.5 })
   })
 })
 
@@ -46,12 +46,60 @@ it('turns a saved amount and invert into a signed effect', () => {
   expect(v.caret).not.toHaveProperty('invert')
 })
 
-it('reads a saved fall time as the mass that falls as long', () => {
-  const v = sanitizeVisualizer({ caret: { fallSec: 0.25, fallShape: 3 }, shade: { fallSec: 99 } }, false)
-  expect(v.caret.mass).toBeCloseTo(0.5, 2)
-  expect(v.shade.mass).toBe(1)
-  expect(fallOf(0.5).fallSec).toBeCloseTo(0.25, 1)
-  expect(fallOf(0.5).fallShape).toBe(0)
+it('reads the fall of a layout saved with one mass slider, or with the first fall shape', () => {
+  const v = sanitizeVisualizer({ caret: { mass: 0 }, shade: { mass: 1 }, outline: { fallSec: 99, fallShape: 3 } }, false)
+  expect(v.caret).toMatchObject({ shape: 1, fallSec: FALL_MIN_SEC })
+  expect(v.shade.shape).toBe(-1)
+  expect(v.shade.fallSec).toBeCloseTo(1.6, 6)
+  expect(v.outline).toMatchObject({ shape: 1, fallSec: FALL_MAX_SEC })
+})
+
+describe('pulseCurve', () => {
+  const shapes = Array.from({ length: 41 }, (_, i) => -1 + i / 20)
+  const FRAME_SEC = 1 / 60
+
+  it('falls from exactly 1 to exactly 0, never rising, at every shape', () => {
+    for (const shape of shapes) {
+      expect(pulseCurve(0, shape)).toBe(1)
+      expect(pulseCurve(1, shape)).toBe(0)
+      let last = 1
+      for (let i = 1; i <= 1000; i++) {
+        const value = pulseCurve(i / 1000, shape)
+        expect(value).toBeLessThanOrEqual(last)
+        last = value
+      }
+    }
+  })
+
+  // The property the fall is for: drawn at 60 frames a second, every frame of
+  // its length shows a value of its own, and none of them is a jump to
+  // nothing -- at the shortest fall the step is bounded, the landing is soft,
+  // and every step shrinks in proportion as the fall gets longer.
+  it('is drawn as a run of distinct values on every frame, with a soft landing', () => {
+    for (const fallSec of [FALL_MIN_SEC, 0.25, 1, FALL_MAX_SEC]) {
+      const frames = Math.floor(fallSec / FRAME_SEC)
+      const scale = FALL_MIN_SEC / fallSec
+      for (const shape of shapes) {
+        let last = 1
+        let biggest = 0
+        for (let f = 1; f <= frames; f++) {
+          const value = pulseCurve((f * FRAME_SEC) / fallSec, shape)
+          expect(value).toBeLessThan(last)
+          biggest = Math.max(biggest, last - value)
+          last = value
+        }
+        // The step to nothing after the last frame drawn.
+        expect(last).toBeLessThan(0.3 * scale + 1e-9)
+        expect(biggest).toBeLessThan(Math.min(0.55, 0.55 * scale * 1.6 + 0.02))
+      }
+    }
+  })
+
+  it('puts a ride cymbal low early and a thump high late', () => {
+    expect(pulseCurve(0.25, 1)).toBeLessThan(0.35)
+    expect(pulseCurve(0.75, 1)).toBeGreaterThan(0)
+    expect(pulseCurve(0.6, -1)).toBeGreaterThan(0.7)
+  })
 })
 
 it('gives a save without the shade geometry its defaults, and bounds and rounds what it has', () => {

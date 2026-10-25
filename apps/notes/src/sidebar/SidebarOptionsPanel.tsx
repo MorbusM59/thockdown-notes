@@ -25,6 +25,8 @@ import {
   DEFAULT_SHADE_BLUR_PX,
   DEFAULT_SHADE_SPREAD_PX,
   DEFAULT_VISUALIZER_CARET,
+  FALL_MAX_SEC,
+  FALL_MIN_SEC,
   DEFAULT_VISUALIZER_CHANNEL,
   SHADE_BLUR_MAX_PX,
   SHADE_SPREAD_MAX_PX,
@@ -1022,11 +1024,46 @@ export function SidebarOptionsPanel({
   clearCaretColorArmTimer,
 }: SidebarOptionsPanelProps) {
     const outputDevice = useOutputDevice(beatSettings.enabled)
+    // Every block's fall: its shape (visualizer.ts, `pulseCurve`) and its
+    // length, the length on a log track so each step of it feels the same.
+    // An array, not a fragment: OptionsSliderRows counts its children.
+    type Fall = Pick<VisualizerChannel, 'shape' | 'fallSec'>
+    const renderFallSliders = (id: string, ariaPrefix: string, fall: Fall, defaults: Fall, what: string, onCommit: (patch: Partial<Fall>) => void) => [
+      <CompactScrollbarSlider
+        key="shape"
+        id={`${id}-shape`}
+        min={-1}
+        max={1}
+        step={0.01}
+        value={fall.shape}
+        trackLabel="shape"
+        tooltipLabel={`The shape of ${what}'s fall. Right of centre a sharp point that drops at once into a long, low tail, like a ride cymbal; left of centre it holds its full weight and then lets go, like a heavy thump`}
+        ariaLabel={`${ariaPrefix}: fall shape`}
+        defaultValue={defaults.shape}
+        formatValue={(value) => value.toFixed(2)}
+        onCommit={(value) => onCommit({ shape: value })}
+      />,
+      <CompactScrollbarSlider
+        key="fall"
+        id={`${id}-fall`}
+        min={Math.log(FALL_MIN_SEC)}
+        max={Math.log(FALL_MAX_SEC)}
+        step={0.01}
+        value={Math.log(fall.fallSec)}
+        trackLabel="fall"
+        tooltipLabel={`Milliseconds: how long ${what} takes to fall to nothing. A hit always lands at once`}
+        ariaLabel={`${ariaPrefix}: fall in milliseconds`}
+        defaultValue={Math.log(defaults.fallSec)}
+        formatValue={(value) => Math.round(Math.exp(value) * 1000).toString()}
+        onCommit={(value) => onCommit({ fallSec: Math.exp(value) })}
+      />,
+    ]
+
     // The caret's block: it ticks on a steady clock that follows the music's
-    // tempo (musicBeat.ts, `subscribeMusicClock`), so it has only a depth and a mass.
+    // tempo (musicBeat.ts, `subscribeMusicClock`), so it has only a depth and a fall.
     const renderBeatCaret = () => {
       const caret = visualizer.caret
-      const slider = (field: 'effect' | 'mass', min: number, tooltipLabel: string, ariaName: string) => (
+      const slider = (field: 'effect', min: number, tooltipLabel: string, ariaName: string) => (
         <CompactScrollbarSlider
           id={`beat-caret-${field}`}
           min={min}
@@ -1046,9 +1083,9 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel>Caret</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label="Caret settings">
-            <OptionsSliderRows rows={[2]}>
-              {slider('effect', -1, 'How far the caret dips from its peak on each beat. Right of centre a beat adds it; left of centre it is inverted, resting at that much while music plays and a beat takes it away; the centre turns it off', 'effect, negative inverts')}
-              {slider('mass', 0, 'How heavy each beat is: light is a faint flicker, heavy a full beat that carries until the next. The caret keeps a steady beat that follows the tempo of the music playing now', 'mass')}
+            <OptionsSliderRows rows={[1, 2]}>
+              {slider('effect', -1, 'How far the caret dips from its peak on each beat. Right of centre a beat adds it; left of centre it is inverted, resting at that much while music plays and a beat takes it away; the centre turns it off. The caret keeps a steady beat that follows the tempo of the music playing now', 'effect, negative inverts')}
+              {renderFallSliders('beat-caret', 'Caret', caret, DEFAULT_VISUALIZER_CARET, 'each beat', (patch) => setVisualizer((prev) => ({ ...prev, caret: { ...prev.caret, ...patch } })))}
             </OptionsSliderRows>
           </div>
         </>
@@ -1059,7 +1096,7 @@ export function SidebarOptionsPanel({
     const renderBeatChannel = (key: 'shade' | 'outline', label: string, effect: string) => {
       const channel: VisualizerChannel = visualizer[key]
       const set = (patch: Partial<VisualizerChannel>) => setVisualizer((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }))
-      const slider = (field: Exclude<keyof VisualizerChannel, 'source'>, trackLabel: string, min: number, max: number, step: number, tooltipLabel: string, ariaName: string, digits?: number) => (
+      const slider = (field: Exclude<keyof VisualizerChannel, 'source' | 'shape' | 'fallSec'>, trackLabel: string, min: number, max: number, step: number, tooltipLabel: string, ariaName: string, digits?: number) => (
         <CompactScrollbarSlider
           id={`beat-${key}-${field}`}
           min={min}
@@ -1080,7 +1117,7 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel>{label}</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label={`${label} settings`}>
-            <OptionsSliderRows rows={key === 'shade' ? [2, 2, 1, 2] : [2, 2, 1]}>
+            <OptionsSliderRows rows={key === 'shade' ? [2, 2, 2, 2] : [2, 2, 2]}>
               {slider('effect', 'effect', -1, 1, 0.01, `How far ${effect} at a full response. Right of centre a hit adds it; left of centre it is inverted, resting at that much while music plays and a hit takes it away; the centre turns it off`, 'effect, negative inverts')}
               {/* One track for every source (visualizer.ts, `sourceSliderValue`): the
                   kick at the left end, the snare at the centre, the hat at the right,
@@ -1107,7 +1144,7 @@ export function SidebarOptionsPanel({
                 ? slider('octaves', 'width', BEAT_OCTAVES_MIN, BEAT_OCTAVES_MAX, 0.1, 'Octaves: how wide the bell around the frequency is', 'band width in octaves', 1)
                 : slider('groove', 'groove', 0, 1, 0.01, 'How steadily it holds the learned pattern against what it hears. At the left it shows only the hits it hears; towards the middle it also shows an accent off the pattern; at the right every hit of the pattern lands at full strength, even one drowned by another instrument, and a one-off is ignored. A break stops it at any setting', 'groove')}
               {slider('contrast', 'contrast', 0, BEAT_CONTRAST_MAX, 0.01, 'How loud the band must be, against the ten seconds around it, before it responds: higher keeps only the biggest hits', 'contrast')}
-              {slider('mass', 'mass', 0, 1, 0.01, 'How heavy each hit is: light flickers with every hit and is gone at once, heavy carries each hit and lets go slowly. A hit always lands at once', 'mass')}
+              {renderFallSliders(`beat-${key}`, label, channel, DEFAULT_VISUALIZER_CHANNEL, 'each hit', set)}
               {/* An array, not a fragment: OptionsSliderRows counts its children, and a fragment is one. */}
               {key === 'shade' && [
                   <CompactScrollbarSlider

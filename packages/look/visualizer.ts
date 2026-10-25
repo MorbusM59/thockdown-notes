@@ -49,22 +49,22 @@ export interface VisualizerChannel {
    */
   contrast: number
   /**
-   * How heavy each hit is, 0..1: how long and how fully it carries after the
-   * music lets go. Light is a short fall that drops early (a flicker), heavy
-   * a long one that holds and then drops (a slow glow). `fallOf` turns it into
-   * the fall's length and shape.
+   * The fall's shape, -1..1 (`pulseCurve`): positive is a sharp point that
+   * drops at once into a long low tail (a ride cymbal), negative holds near
+   * full and then lets go (a heavy thump), 0 between.
    */
-  mass: number
+  shape: number
+  /** Seconds a hit takes to fall to nothing, `FALL_MIN_SEC`..`FALL_MAX_SEC`; a hit lifts the response at once. */
+  fallSec: number
 }
 
 /**
  * The caret's block: it ticks on a steady beat that follows the music's
  * tempo (the notes app's `sound/beatClock.ts`) rather than a band or a drum,
- * so it has only the depth of each beat (`effect`, as a channel's) and how
- * heavy it is (`mass`: a faint flicker at 0, a full beat carrying to the next
- * at 1, through `fallOf`).
+ * so it has only the depth of each beat (`effect`, as a channel's) and the
+ * fall each beat makes (`shape` and `fallSec`, cut at the next beat).
  */
-export type VisualizerCaret = Pick<VisualizerChannel, 'effect' | 'mass'>
+export type VisualizerCaret = Pick<VisualizerChannel, 'effect' | 'shape' | 'fallSec'>
 
 /** A block drawn in a colour of its own. */
 export interface VisualizerColorChannel extends VisualizerChannel {
@@ -103,27 +103,37 @@ export const BEAT_FREQUENCY_MAX_HZ = 20000
 export const BEAT_OCTAVES_MIN = 0.1
 export const BEAT_OCTAVES_MAX = 4
 export const BEAT_CONTRAST_MAX = 0.95
-/** The fall at no mass and at full mass; the length is geometric between them, so each step of the slider feels the same. */
-const FALL_LIGHT_SEC = 0.04
-const FALL_HEAVY_SEC = 1.6
-/** The fall's shape (flow's `fadeCurve`): positive drops early, negative holds and drops late. */
-const FALL_SHAPE_LIGHT = 2
-const FALL_SHAPE_HEAVY = -2
+/**
+ * The fall's length. The shortest still spans six frames at 60Hz, so even the
+ * sharpest fall is drawn as a run of values rather than as on and off.
+ */
+export const FALL_MIN_SEC = 0.1
+export const FALL_MAX_SEC = 2
+/** The exponents at the two ends of `shape` (`pulseCurve`). */
+const TAIL_POWER_MAX = 4
+const HOLD_POWER_MAX = 4
 
 /**
- * A mass as the fall it makes: its length in seconds and its shape. The
- * middle (0.5) is a quarter-second even fall, the old defaults.
+ * The fall, 1 at `u = 0` (the hit) to 0 at `u = 1` (its length elapsed):
+ * `(1 - u^q)^p`. `p` is the TAIL, raised from 2 to `TAIL_POWER_MAX` as
+ * `shape` goes positive (the drop gets sharper and the tail longer); `q` is
+ * the HOLD, raised from 1 to `HOLD_POWER_MAX` as it goes negative (it stays
+ * near full for longer, then drops). `p` never goes below 2, so every fall
+ * LANDS with zero slope: the last frames before nothing move by little, and
+ * no shape ends in a step (a root curve, which an earlier shape reached,
+ * left most of its value standing until its final frame).
  */
-export function fallOf(mass: number): { fallSec: number; fallShape: number } {
-  return {
-    fallSec: FALL_LIGHT_SEC * (FALL_HEAVY_SEC / FALL_LIGHT_SEC) ** mass,
-    fallShape: FALL_SHAPE_LIGHT + (FALL_SHAPE_HEAVY - FALL_SHAPE_LIGHT) * mass,
-  }
+export function pulseCurve(u: number, shape: number): number {
+  if (u <= 0) return 1
+  if (u >= 1) return 0
+  const p = 2 * (TAIL_POWER_MAX / 2) ** Math.max(0, shape)
+  const q = HOLD_POWER_MAX ** Math.max(0, -shape)
+  return (1 - u ** q) ** p
 }
 
-/** The mass whose fall is this long: reads a layout saved with a fall time. */
-function massOfFallSec(fallSec: number): number {
-  return Math.log(fallSec / FALL_LIGHT_SEC) / Math.log(FALL_HEAVY_SEC / FALL_LIGHT_SEC)
+/** A layout saved with one `mass` slider (light: short and early, heavy: long and held) as the fall it made. */
+function fallOfMass(mass: number): { shape: number; fallSec: number } {
+  return { shape: 1 - 2 * mass, fallSec: 0.04 * 40 ** mass }
 }
 
 /**
@@ -139,12 +149,14 @@ export const DEFAULT_VISUALIZER_CHANNEL: VisualizerChannel = {
   octaves: 1,
   groove: DEFAULT_GROOVE,
   contrast: 0.5,
-  mass: 0.5,
+  shape: 0,
+  fallSec: 0.25,
 }
 
 export const DEFAULT_VISUALIZER_CARET: VisualizerCaret = {
   effect: DEFAULT_VISUALIZER_CHANNEL.effect,
-  mass: DEFAULT_VISUALIZER_CHANNEL.mass,
+  shape: DEFAULT_VISUALIZER_CHANNEL.shape,
+  fallSec: DEFAULT_VISUALIZER_CHANNEL.fallSec,
 }
 
 /**
@@ -197,20 +209,30 @@ function sanitizeChannel(input: unknown, d: VisualizerChannel): VisualizerChanne
     octaves: bounded(source.octaves, BEAT_OCTAVES_MIN, BEAT_OCTAVES_MAX, d.octaves),
     groove: bounded(source.groove, 0, 1, d.groove),
     contrast: bounded(source.contrast, 0, BEAT_CONTRAST_MAX, d.contrast),
-    mass: sanitizeMass(source, d.mass),
+    ...sanitizeFall(source, d),
   }
 }
 
-/** The mass; a layout saved with `fallSec` turns into the mass that falls as long. */
-function sanitizeMass(source: Partial<Record<string, unknown>>, fallback: number): number {
-  if (source.mass !== undefined) return bounded(source.mass, 0, 1, fallback)
-  return typeof source.fallSec === 'number' && source.fallSec > 0 ? bounded(massOfFallSec(source.fallSec), 0, 1, fallback) : fallback
+/**
+ * The fall's shape and length. A layout saved with one `mass` slider reads
+ * as the fall it made; one saved with the first `fallShape` (an exponent of
+ * 2^fallShape, -5..5) keeps its sign, at half its value.
+ */
+function sanitizeFall(source: Partial<Record<string, unknown>>, d: Pick<VisualizerChannel, 'shape' | 'fallSec'>): Pick<VisualizerChannel, 'shape' | 'fallSec'> {
+  const legacy = source.shape === undefined && typeof source.mass === 'number' && Number.isFinite(source.mass)
+    ? fallOfMass(Math.max(0, Math.min(1, source.mass)))
+    : null
+  const shape = source.shape ?? legacy?.shape ?? (typeof source.fallShape === 'number' ? source.fallShape / 2 : undefined)
+  return {
+    shape: bounded(shape, -1, 1, d.shape),
+    fallSec: bounded(source.fallSec ?? legacy?.fallSec, FALL_MIN_SEC, FALL_MAX_SEC, d.fallSec),
+  }
 }
 
-/** The caret's two fields; anything else an older layout saved with it (a source, a band) is dropped. */
+/** The caret's fields; anything else an older layout saved with it (a source, a band) is dropped. */
 function sanitizeCaret(input: unknown, d: VisualizerCaret): VisualizerCaret {
   const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<string, unknown>>
-  return { effect: sanitizeEffect(source, d.effect), mass: sanitizeMass(source, d.mass) }
+  return { effect: sanitizeEffect(source, d.effect), ...sanitizeFall(source, d) }
 }
 
 function sanitizeColorChannel(input: unknown, d: VisualizerColorChannel): VisualizerColorChannel {
