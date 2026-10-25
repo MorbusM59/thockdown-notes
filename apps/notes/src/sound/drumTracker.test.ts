@@ -21,11 +21,11 @@ interface Track {
 /**
  * Four-on-the-floor house: a pitched-down kick on every beat, an off-beat
  * bass line in the kick's own band (ducked by the kick and swelling back, as
- * sidechained bass does), off-beat open hats, a clap on two and four, and a
- * kick-free breakdown between `breakFrom` and `breakTo`. `kickGain` scales
- * the kick that starts at a given time.
+ * sidechained bass does), off-beat open hats, a clap on two and four (unless
+ * `clap` is false), and a kick-free breakdown between `breakFrom` and
+ * `breakTo`. `kickGain` scales the kick that starts at a given time.
  */
-function house(seconds: number, bpm: number, breakFrom = Infinity, breakTo = Infinity, kickGain: (t0: number) => number = () => 1): Track {
+function house(seconds: number, bpm: number, breakFrom = Infinity, breakTo = Infinity, kickGain: (t0: number) => number = () => 1, clap = true): Track {
   const n = Math.round(seconds * RATE)
   const out = new Float32Array(n)
   const beat = 60 / bpm
@@ -64,7 +64,7 @@ function house(seconds: number, bpm: number, breakFrom = Infinity, breakTo = Inf
       const at = Math.round((t0 + beat / 2) * RATE) + i
       if (at < n) out[at] += 0.15 * rand() * Math.exp(-i / RATE / 0.03)
     }
-    if (b % 2 === 1) {
+    if (clap && b % 2 === 1) {
       for (let i = 0; i < 0.12 * RATE; i++) {
         const at = Math.round(t0 * RATE) + i
         if (at < n) out[at] += 0.3 * rand() * Math.exp(-i / RATE / 0.04)
@@ -1126,6 +1126,8 @@ interface CounterKit {
   /** Extra hits of the counter's sound per bar, off its pattern (a fill, a roll), scored as snares, at `fillGain` (0.8). */
   fill?: (bar: number) => number[]
   fillGain?: number
+  /** Sixteenths a sawtooth bass note (55Hz, filtered under 400Hz, a 5ms attack, held an eighth) starts on, besides the bass line: not snares. */
+  saw?: number[]
   /** Extra kicks and (loud) hats per bar, off the pattern: not snares. */
   extraKicks?: (bar: number) => number[]
   extraHats?: (bar: number) => number[]
@@ -1153,6 +1155,17 @@ function counterKit(seconds: number, bpm: number, options: CounterKit) {
     for (const s of options.counter) { voiceOf(options.sound(bar))(out, at(s), options.gain?.(bar, s) ?? 1); played.snares.push(at(s)) }
     for (const s of options.ghosts ?? []) { voiceOf(options.sound(bar))(out, at(s), 0.25); played.ghosts.push(at(s)) }
     for (const s of options.hats) { addHat(out, at(s), 0.35 + 0.1 * rand(), hatNoise); played.hats.push(at(s)) }
+    for (const s of options.saw ?? []) {
+      const t0 = at(s)
+      for (let i = 0; i < 2 * sixteenth * RATE; i++) {
+        const k = Math.round(t0 * RATE) + i
+        if (k >= out.length) break
+        const t = i / RATE
+        let saw = 0
+        for (let h = 1; 55 * h < 400; h++) saw += Math.sin(2 * Math.PI * 55 * h * t) / h
+        out[k] += 0.4 * Math.min(1, t / 0.005) * saw
+      }
+    }
     if (!options.reese) {
       for (let beat = 0; beat < 4; beat++) {
         const t0 = at(beat * 4 + 2)
@@ -1196,6 +1209,20 @@ function counterScore(track: ReturnType<typeof counterKit>, options: PlayOptions
 /** Logs a counter test's numbers when MEASURE is set, for the record of what each case measured. */
 function report(name: string, result: { found: number; full: number; strays: unknown[]; tracker: DrumTracker }): void {
   if (process.env.MEASURE) console.log(`MEASURE ${name}: found ${result.found.toFixed(2)} full ${result.full.toFixed(2)} strays ${result.strays.length} grid ${result.tracker.tempoBpm.toFixed(1)} cycle ${result.tracker.counterCycleBeats}`)
+}
+
+/** The media times (in steps of 800 samples) at which a tracker fed `samples`, with the snare followed, holds a counter. */
+function learnedAt(samples: Float32Array): number[] {
+  const tracker = new DrumTracker(RATE)
+  const cursor = new DrumCursor()
+  const learned: number[] = []
+  for (let fed = 0; fed < samples.length; fed += 800) {
+    const end = Math.min(samples.length, fed + 800)
+    tracker.feed(samples.subarray(fed, end), 0, (end - 1) / RATE)
+    tracker.hitBetween('snare', cursor, end / RATE - 5, 0.5)
+    if (tracker.counterCycleBeats > 0) learned.push(end / RATE)
+  }
+  return learned
 }
 
 const EIGHTHS = [0, 2, 4, 6, 8, 10, 12, 14]
@@ -1248,6 +1275,47 @@ describe('DrumTracker on counter hits the snare recipe does not describe', () =>
     expect(result.found).toBeGreaterThanOrEqual(0.95)
     expect(result.strays.map((h) => h.at.toFixed(2))).toEqual([])
   }, 60_000)
+
+  it('learns the clap of house on two and four, and shows no kick alone as a full snare', () => {
+    // The clap lands WITH a kick, so both sides of the backbeat carry one:
+    // what tells the clap's beats from the others is only what it adds
+    // above the kick, and with it removed there is nothing to learn.
+    const bpm = 128
+    const beat = 60 / bpm
+    const { hits, tracker } = play(house(30, bpm), 0.5, {}, 'snare')
+    expect(tracker.counterCycleBeats).toBe(2)
+    const claps = [...Array(Math.floor(30 / beat)).keys()].filter((b) => b % 2 === 1).map((b) => b * beat).filter((t) => t > 10 && t < 25)
+    expect(claps.filter((t) => (hitFor(t, hits)?.response ?? 0) > 0.95).length / claps.length).toBeGreaterThanOrEqual(0.95)
+    const full = hits.filter((h) => h.at > 10 && h.at < 25 && h.response > 0.95)
+    expect(full.filter((h) => !claps.some((t) => h.at >= t - EARLY_SEC && h.at <= t + LATE_SEC)).map((h) => h.at.toFixed(2))).toEqual([])
+    expect(learnedAt(house(30, bpm, Infinity, Infinity, () => 1, false).samples)).toEqual([])
+  }, 60_000)
+
+  it.each([['hats on the off-beat of 2 and 4', { kicks: [0, 8, 10], counter: [], hats: [6, 14] }], ['a sawtooth bass on 2 and 4', { kicks: [0, 8, 10], counter: [], hats: EIGHTHS, saw: [4, 12] }]] as Array<[string, Omit<CounterKit, 'sound'>]>)('never learns %s as the counter', (_, kit) => {
+    // Each recurs against the kick on a backbeat's cycle, but neither has a
+    // climb in the body of the spectrum (400Hz up, below the hats' bands)
+    // that a hit punching against the kick has.
+    for (const busy of [false, true]) {
+      const track = counterKit(40, 110, { ...kit, busy, sound: () => 'clap' })
+      expect(learnedAt(track.samples), `busy ${busy}`).toEqual([])
+    }
+  }, 60_000)
+
+  it.each([['sixteenths', SIXTEENTHS], ['eighths', EIGHTHS]])('keeps a steady counter through a whole track whose grid reads a hair off its tempo (hats in %s)', (name, hats) => {
+    // At 95 BPM the grid reads 95 to 96.4 from one window to the next, and a
+    // window's positions extrapolated from one phase across ten seconds land
+    // further off the hits than a snap at the window's far end.
+    const track = counterKit(70, 95, { kicks: [0, 7, 10], counter: [4, 12], ghosts: [2, 14], hats, sound: () => 'rim' })
+    const learned = learnedAt(track.samples)
+    expect(learned[0]).toBeLessThan(10)
+    // Learned from its first window to the end, without a gap.
+    const gaps = learned.slice(1).filter((t, i) => t - learned[i] > 0.1).map((t) => t.toFixed(1))
+    expect(gaps).toEqual([])
+    expect(learned[learned.length - 1]).toBeGreaterThan(69)
+    const result = counterScore(track, {}, 10, 65)
+    report(`95 rim ${name}`, result)
+    expect(result.found).toBeGreaterThanOrEqual(0.95)
+  }, 120_000)
 
   it('never learns a counter in four on the floor with nothing between the kicks', () => {
     // What the snare shows here is the recipe's alone, as before the counter

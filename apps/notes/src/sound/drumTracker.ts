@@ -84,7 +84,12 @@
  *    climb clearly above the positions half a cycle away (per-band two-hop
  *    spectral flux of the raw hop energy, `OnsetBand.hopLevel`), and whose
  *    side does not carry the kick (Goto 2001's backbeat-against-kick
- *    reading; the bar-pattern search of Krebs, Boeck and Widmer 2013). No
+ *    reading; the bar-pattern search of Krebs, Boeck and Widmer 2013), and
+ *    which climbs in the body of a hit (400Hz up, below the hats: a hat or
+ *    a bass note recurring on a backbeat's cycle is not a counter). The
+ *    positions are cut from the window's own beats (`placeCounterBeats`),
+ *    since the grid's period extrapolated across the window drifts further
+ *    than a snap. No
  *    beat is assumed to hold a kick, so a drum-and-bass two-step learns its
  *    snare at either tempo reading, and a four-on-the-floor track, whose
  *    positions are all alike, learns nothing. The bands that climb make a
@@ -95,7 +100,8 @@
  *    climbs with it (`isForeign`: a kick or a hat). A recipe hit that does
  *    not sound like the profile and does not recur a bar on is a FRILL,
  *    shown at `FRILL_WEIGHT` so the snare outshines it rather than it being
- *    dropped. `hitBetween` takes the larger of the counter's, the recipe's
+ *    dropped, and is still for `COUNTER_FRILL_HOLD_SEC` after the counter
+ *    is lost. `hitBetween` takes the larger of the counter's, the recipe's
  *    and the frill's answer: that max is the seam where a later blend of
  *    the band-delta and pattern readings would go.
  *
@@ -491,6 +497,15 @@ const COUNTER_BANDS: ReadonlyArray<readonly [BandSpec, number]> = [
   [VOICES.hat.onset[0], VOICES.hat.envelopeHops], [VOICES.hat.onset[1], VOICES.hat.envelopeHops],
 ]
 /**
+ * Which COUNTER_BANDS are the BODY of a hit: from 400Hz up, and not the hat's.
+ * A counter's profile needs one of them (`DrumTracker.findCounter`): whatever
+ * punches against the kick, a snare, a clap, a rim or a stab, climbs there,
+ * and a bass note (a sawtooth's harmonics thinning out above it) or a hat
+ * that recurs on a backbeat's cycle does not.
+ */
+const COUNTER_BODY_HZ = 400
+const COUNTER_BODY_BANDS: readonly boolean[] = COUNTER_BANDS.map(([band]) => band[0] >= COUNTER_BODY_HZ && !VOICES.hat.onset.includes(band))
+/**
  * The positions a beat of the grid is cut into to look for the counter
  * (`DrumTracker.learnCounter`): its sixteenths, or on a grid slow enough to be
  * reading the track at half its tempo (COUNTER_OFFBEAT_MAX_BPM), its
@@ -530,6 +545,8 @@ const COUNTER_FOREIGN_RATIO = 2
 const COUNTER_MARGIN_TIE = 0.15
 /** How long a learned counter is kept through windows that show none, in seconds (`DrumTracker.learnCounter`). */
 const COUNTER_HOLD_SEC = 10
+/** How long after a counter is lost the recipe's hits unlike it are still shown as frills, in seconds (`DrumTracker.isDemotingFrills`): about two bars, so a gap in the contrast is not a flash of full-strength kicks, and a snare that has really stopped gives the recipe back soon after. */
+const COUNTER_FRILL_HOLD_SEC = 4
 /** A band whose typical counter climb is under this share of the loudest profile band's (-10dB) is left out of the profile. */
 const COUNTER_BAND_FLOOR = 0.1
 /** Quantile of a set of occurrences read as "typical when played": high enough that a break's empty bars do not set it, low enough that one outlier does not. */
@@ -545,11 +562,42 @@ const COUNTER_OFFBEAT_MAX_BPM = MAX_BPM / 2
 /** A hit within this many dB of the counter's typical one is shown at full strength (as STEADY_DB for a slot). */
 const COUNTER_STEADY_DB = 3
 
-/** The `q` quantile (0..1, nearest rank) of the first `n` of `values`, which it sorts in place; 0 when `n` is 0. */
+/**
+ * The `q` quantile (0..1, nearest rank) of the first `n` of `values`, which it
+ * reorders in place; 0 when `n` is 0. A selection (Hoare's quickselect,
+ * median-of-three pivot) rather than a sort: one order statistic is wanted,
+ * and `findCounter` asks for some 1700 per pattern pass, so neither the
+ * O(n log n) of a sort nor a `subarray` view per call has earned its place.
+ */
 function quantile(values: Float64Array, n: number, q: number): number {
   if (n <= 0) return 0
-  const head = values.subarray(0, n).sort()
-  return head[Math.min(n - 1, Math.floor(q * (n - 1) + 0.5))]
+  const rank = Math.min(n - 1, Math.floor(q * (n - 1) + 0.5))
+  let lo = 0
+  let hi = n - 1
+  while (hi > lo) {
+    const mid = (lo + hi) >> 1
+    const a = values[lo]
+    const b = values[mid]
+    const c = values[hi]
+    const pivot = a < b ? (b < c ? b : a < c ? c : a) : a < c ? a : b < c ? c : b
+    let i = lo
+    let j = hi
+    while (i <= j) {
+      while (values[i] < pivot) i++
+      while (values[j] > pivot) j--
+      if (i <= j) {
+        const t = values[i]
+        values[i] = values[j]
+        values[j] = t
+        i++
+        j--
+      }
+    }
+    if (rank <= j) hi = j
+    else if (rank >= i) lo = i
+    else break
+  }
+  return values[rank]
 }
 
 /** The REFERENCE_RANK largest of `keys`, largest first (all of them, while fewer). */
@@ -960,9 +1008,11 @@ export class DrumTracker {
   private readonly counterRise: Float32Array
   /**
    * The learned COUNTER PROFILE (`learnCounter`): per counter band its weight
-   * (summing to 1; all 0 while no counter is learned) and its typical climb on
-   * the counter; the counter's cycle and offset in half beats from `phase`;
-   * the typical score of its hits and the least score one needs.
+   * (summing to 1; all 0 until a counter is learned, and kept for
+   * COUNTER_FRILL_HOLD_SEC after one is lost, `isDemotingFrills`) and its
+   * typical climb on the counter; the counter's cycle and offset in
+   * positions (`counterSteps` a beat) from `counterAnchor`; the typical score
+   * of its hits and the least score one needs.
    */
   private readonly counterWeight: Float64Array
   private readonly counterTypical: Float64Array
@@ -970,6 +1020,9 @@ export class DrumTracker {
   private counterCycle = 0
   /** Whether the learned counter's positions usually carry a kick too (`soundsLikeCounter`). */
   private counterKicked = false
+  /** The beats the counter's positions were cut from (`placeCounterBeats`): one beat's hop and the period. */
+  private counterAnchor = 0
+  private counterPeriod = 0
   /** The positions per beat the counter's cycle and offset count in (`COUNTER_STEPS_PER_BEAT`). */
   private counterSteps = COUNTER_STEPS_PER_BEAT
   private counterOffset = 0
@@ -992,10 +1045,12 @@ export class DrumTracker {
   private readonly bandLoud = new Float64Array(COUNTER_BANDS.length)
   /** The absolute hop the counter was last found at (`learnCounter`), and the profile kept while a new window is searched. */
   private counterLearnedAt = -Infinity
+  /** The absolute hop the counter was last lost at (`learnCounter`), its profile kept for `isDemotingFrills`. */
+  private counterLostAt = -Infinity
   private readonly keptWeight = new Float64Array(COUNTER_BANDS.length)
   private readonly keptTypical = new Float64Array(COUNTER_BANDS.length)
   private readonly keptUsual = new Float64Array(COUNTER_BANDS.length)
-  private readonly keptScalars = new Float64Array(3)
+  private readonly keptScalars = new Float64Array(5)
   /** Per counter band, its last three hops' energies, newest first, for the flux. */
   private readonly counterHopEnergy = new Float64Array(3 * COUNTER_BANDS.length)
   /** Brings the input to ANALYSIS_RATE; null when it is already there. */
@@ -1061,6 +1116,7 @@ export class DrumTracker {
     this.counterValid = false
     this.counterWeight.fill(0)
     this.counterLearnedAt = -Infinity
+    this.counterLostAt = -Infinity
     this.resumedAt = -Infinity
     this.gapFrom = -Infinity
     this.epoch = nextEpoch++
@@ -1563,13 +1619,28 @@ export class DrumTracker {
     // whose snare has stopped simply has no hits of it.
     const now = this.start + this.count
     const held = this.counterValid && (now - this.counterLearnedAt) * this.hopSec < COUNTER_HOLD_SEC
+    const wasValid = this.counterValid
     const learned = this.findCounter()
     if (learned) this.counterLearnedAt = now
     else if (held) this.restoreCounter()
-    else {
-      this.counterValid = false
-      this.counterWeight.fill(0)
+    else if (wasValid) {
+      // Lost: no hit is the counter's any more, but the profile it had is
+      // still what tells the recipe's frills from its snares for a while
+      // (`isDemotingFrills`), so a passing gap in the contrast does not put
+      // every kick the recipe takes back at full strength. (`findCounter`
+      // writes the profile only on finding one, so it is still in place.)
+      this.counterLostAt = now
     }
+  }
+
+  /**
+   * Whether the recipe's hits that do not sound like the counter are shown as
+   * frills (`hitBetween`): while a counter is learned, and for
+   * COUNTER_FRILL_HOLD_SEC after one is lost, on the profile it had.
+   */
+  private isDemotingFrills(): boolean {
+    if (this.counterValid) return true
+    return (this.start + this.count - this.counterLostAt) * this.hopSec < COUNTER_FRILL_HOLD_SEC
   }
 
   /**
@@ -1584,22 +1655,25 @@ export class DrumTracker {
     this.keptScalars[0] = this.counterLevel
     this.keptScalars[1] = this.counterThreshold
     this.keptScalars[2] = this.counterKicked ? 1 : 0
+    this.keptScalars[3] = this.counterAnchor
+    this.keptScalars[4] = this.counterPeriod
     this.counterValid = false
     const period = this.period
     if (Number.isNaN(period)) return false
     const slow = 60 / (period * this.hopSec) <= COUNTER_OFFBEAT_MAX_BPM
     const steps = slow ? 2 * COUNTER_STEPS_PER_BEAT : COUNTER_STEPS_PER_BEAT
-    const step = period / steps
     const bandCount = this.counterBands.length
     const snap = SNAP_HOPS
     const end = this.start + this.count - this.peakHops - 1
-    const first = Math.ceil((this.start + snap - this.phase) / step)
-    const last = Math.floor((end - snap - this.phase) / step)
+    const anchor = this.placeCounterBeats(this.start + snap, end - snap)
+    const step = this.counterPeriod / steps
+    const first = Math.ceil((this.start + snap - anchor) / step)
+    const last = Math.floor((end - snap - anchor) / step)
     const positions = last - first + 1
     if (positions < 8 * steps) return false
     const occ = this.occurrenceRise
     for (let p = 0; p < positions; p++) {
-      const centre = Math.round(this.phase + (first + p) * step)
+      const centre = Math.round(anchor + (first + p) * step)
       for (let b = 0; b < bandCount; b++) {
         let most = 0
         for (let j = centre - snap; j <= centre + snap; j++) most = Math.max(most, this.counterRise[((this.head + j - this.start) % CAPACITY) * bandCount + b])
@@ -1682,7 +1756,10 @@ export class DrumTracker {
           // band's loud ones in the window.
           weight[b] = c > 0 && c >= COUNTER_BAND_RATIO * r && c >= COUNTER_PRESENCE * loud[b] ? 1 - r / c : 0
           typical[b] = c
-          this.candidateUsual[b] = Math.max(c, r)
+          // Floored at the counter's presence share of the band's loud climbs:
+          // a band that is usually silent at both (a hat band under a lo-fi
+          // snare) would otherwise veto a hit on any ripple (`isForeign`).
+          this.candidateUsual[b] = Math.max(c, r, COUNTER_PRESENCE * loud[b])
           if (weight[b] > 0) loudest = Math.max(loudest, c)
         }
         // A band the counter barely reaches (the tail of a lowpassed snare in
@@ -1691,12 +1768,14 @@ export class DrumTracker {
         // hat's or a voice's ripple as a hit.
         let total = 0
         let bands = 0
+        let body = false
         for (let b = 0; b < bandCount; b++) {
           if (typical[b] < COUNTER_BAND_FLOOR * loudest) weight[b] = 0
           if (weight[b] > 0) bands++
+          if (weight[b] > 0 && COUNTER_BODY_BANDS[b]) body = true
           total += weight[b]
         }
-        if (bands < COUNTER_MIN_BANDS) continue
+        if (bands < COUNTER_MIN_BANDS || !body) continue
         for (let b = 0; b < bandCount; b++) weight[b] /= total
         for (let i = 0; i < counters; i++) values[i] = scoreAt(counterAt[i])
         const level = quantile(values, counters, COUNTER_QUANTILE)
@@ -1718,6 +1797,7 @@ export class DrumTracker {
         bestMargin = margin
         bestContrast = contrast
         this.counterValid = true
+        this.counterAnchor = anchor
         this.counterKicked = kickOnCounter >= COUNTER_KICK_SHARE * kickLoud
         this.counterCycle = cycle
         this.counterSteps = steps
@@ -1732,6 +1812,60 @@ export class DrumTracker {
     return this.counterValid
   }
 
+  /**
+   * Places the beats `findCounter` cuts the window between hops `from` and
+   * `to` into: sets `counterPeriod` and returns the hop of one beat (the
+   * anchor), every other lying a whole number of periods from it.
+   *
+   * The grid's period is an estimate the grid itself holds to within
+   * AGREE_OCTAVES (a 95 BPM track reads 95 to 96.4 from one window to the
+   * next), and the window spans some twenty beats: extrapolated from the
+   * grid's phase, its far end lands a dozen hops off the hits, twice what a
+   * snap absorbs, and the counter is lost on a steady track. So the window's
+   * own beats place them, by the grid's own rule (`updateGrid`'s phase): of
+   * the periods within AGREE_OCTAVES of the grid's, in steps that move the
+   * window's ends by at most a hop, and the beats within SNAP_HOPS of the
+   * grid beat nearest the window's middle, the comb collecting the most kick
+   * onset. The grid's own is kept unless another collects CLEARLY_BETTER, as
+   * the grid keeps its held beat: a syncopated kick an eighth off the beat
+   * fits a slightly wrong period by a hair, a drift across the window misses
+   * the beats at both ends outright.
+   */
+  private placeCounterBeats(from: number, to: number): number {
+    const kick = this.voices.kick
+    const period = this.period
+    const middle = this.phase + Math.round(((from + to) / 2 - this.phase) / period) * period
+    const comb = (anchor: number, beat: number): number => {
+      let sum = 0
+      for (let at = anchor - Math.floor((anchor - from) / beat) * beat; at <= to; at += beat) sum += this.at(kick, Math.round(at))
+      return sum
+    }
+    const slack = (2 ** AGREE_OCTAVES - 1) * period
+    const increment = (2 * period) / Math.max(1, to - from)
+    const increments = Math.floor(slack / increment)
+    const held = comb(middle, period)
+    let bestPeriod = period
+    let bestAnchor = middle
+    let bestComb = held
+    for (let i = -increments; i <= increments; i++) {
+      const beat = period + i * increment
+      for (let d = -SNAP_HOPS; d <= SNAP_HOPS; d++) {
+        const sum = comb(middle + d, beat)
+        if (sum > bestComb) {
+          bestComb = sum
+          bestPeriod = beat
+          bestAnchor = middle + d
+        }
+      }
+    }
+    if (bestComb <= CLEARLY_BETTER * held) {
+      this.counterPeriod = period
+      return middle
+    }
+    this.counterPeriod = bestPeriod
+    return bestAnchor
+  }
+
   /** Puts back the profile `findCounter` replaced, still valid. */
   private restoreCounter(): void {
     this.counterWeight.set(this.keptWeight)
@@ -1740,6 +1874,8 @@ export class DrumTracker {
     this.counterLevel = this.keptScalars[0]
     this.counterThreshold = this.keptScalars[1]
     this.counterKicked = this.keptScalars[2] > 0
+    this.counterAnchor = this.keptScalars[3]
+    this.counterPeriod = this.keptScalars[4]
     this.counterValid = true
   }
 
@@ -1778,16 +1914,17 @@ export class DrumTracker {
 
   /**
    * Whether media time `time` is on the learned counter's positions (within
-   * SNAP_HOPS and two hops of one), on the grid as it stands; for tests and
+   * SNAP_HOPS and two hops of one), on the beats it was learned on
+   * (`placeCounterBeats`), extended past that window; for tests and
    * diagnostics. Detection never asks this: a hit is found by its sound
    * wherever it lands (`counterHit`).
    */
   isOnCounter(time: number): boolean {
     if (!this.counterValid) return false
     const index = (time - this.originTime) / this.hopSec
-    const step = this.period / this.counterSteps
-    const m = Math.round((index - this.phase) / step)
-    return Math.abs(index - (this.phase + m * step)) <= SNAP_HOPS + 2 && ((((m - this.counterOffset) % this.counterCycle) + this.counterCycle) % this.counterCycle) === 0
+    const step = this.counterPeriod / this.counterSteps
+    const m = Math.round((index - this.counterAnchor) / step)
+    return Math.abs(index - (this.counterAnchor + m * step)) <= SNAP_HOPS + 2 && ((((m - this.counterOffset) % this.counterCycle) + this.counterCycle) % this.counterCycle) === 0
   }
 
   /** The learned counter's cycle in beats of the grid (1, 2 or 4), 0 while none is learned. For tests and diagnostics. */
@@ -2163,7 +2300,7 @@ export class DrumTracker {
       if (value <= 0) continue
       cursor.lastPeak = k
       let frill = false
-      if (voice === this.voices.snare && this.counterValid) {
+      if (voice === this.voices.snare && this.isDemotingFrills()) {
         // A hit the learned counter's sound finds is the counter's to show
         // (`counterResponse`), at its strength rather than the recipe's.
         if (this.isCounterHitNear(k)) continue
@@ -2175,7 +2312,10 @@ export class DrumTracker {
         // as the recipe hears it.
         frill = !this.soundsLikeCounter(this.counterNear(k), k) && !this.isCounterRecurring(cursor, k)
       }
-      if (voice === this.voices.snare && k - cursor.snareShownAt < this.occurrenceSpan()) continue
+      // One snare an occurrence between the two sources (`counterResponse`
+      // shows the counter's): with no counter learned there is one source,
+      // and its own peaks (a roll's thirty-seconds) are each a hit.
+      if (voice === this.voices.snare && this.counterValid && k - cursor.snareShownAt < this.occurrenceSpan()) continue
       if (frill) frillStrength = Math.max(frillStrength, value)
       else strength = Math.max(strength, value)
       peakAt = k
@@ -2204,7 +2344,8 @@ export class DrumTracker {
   /**
    * Whether the sound at hop `index` climbs, in a band ABOVE the profile's
    * lowest that is not itself in the profile, COUNTER_FOREIGN_RATIO times as
-   * far as the counter positions typically do there: something else (a
+   * far as the counter positions typically do there (`counterUsual`, floored
+   * so a usually silent band does not veto on a ripple): something else (a
    * voice, a strum's upper partials) with the counter's colour in part of
    * the spectrum. Bands below the profile are not asked, as a kick landing
    * with the counter climbs there.
@@ -2213,7 +2354,9 @@ export class DrumTracker {
     const k = index - this.start
     const bandCount = this.counterBands.length
     const base = ((this.head + k) % CAPACITY) * bandCount
-    for (let b = 0; b < bandCount; b++) {
+    let b = 0
+    while (b < bandCount && this.counterWeight[b] <= 0) b++
+    for (; b < bandCount; b++) {
       if (this.counterWeight[b] <= 0 && this.counterRise[base + b] > COUNTER_FOREIGN_RATIO * this.counterUsual[b]) return true
     }
     return false
