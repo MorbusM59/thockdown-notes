@@ -8,9 +8,12 @@
 //   2. Its size depends on the document's LENGTH and nothing else: two
 //      documents of the same character count get the same thumb whatever their
 //      shape, because the size comes from the viewport's character grid rather
-//      than from the text on screen. One of the two documents here is a LOOSE
-//      LIST, which markdown parses as a single block -- the case that broke
-//      resolveLastScreenChars by making a whole document its own last screen.
+//      than from the text on screen. One of the two documents is short list
+//      items, broken into many small lists so it has well over the
+//      character-thumb threshold in blocks (App.tsx fixes the threshold at
+//      DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS; a single loose list, the case
+//      that once broke resolveLastScreenChars, can no longer reach the
+//      character thumb at all).
 //   3. The thumb holds still while the reader scrolls, and advances.
 //   4. The thumb reaches both ends of its track, and the viewport reaches the
 //      document's last pixel.
@@ -37,12 +40,16 @@ function denseDocument(targetChars) {
   return out.join('\n\n')
 }
 
+// A heading every LIST_LENGTH items ends one list and starts the next, so the
+// block count is in the hundreds rather than one.
+const LIST_LENGTH = 40
+
 function sparseDocument(targetChars) {
   const out = []
   let total = 0
   let i = 0
   while (total < targetChars) {
-    const text = `- item ${i}`
+    const text = i % LIST_LENGTH === 0 ? `## Part ${i / LIST_LENGTH}` : `- item ${i}`
     out.push(text)
     total += text.length + 2
     i += 1
@@ -100,23 +107,8 @@ const READ_THUMB = () => {
 }
 
 async function openPreview(page, port, text) {
-  // Both documents on the CHARACTER thumb. Which pane a note gets is decided
-  // by its BLOCK count, and the loose list below is a single block -- so on
-  // defaults it is continuous, with a pixel thumb, and "same length, same
-  // thumb" would be comparing two different kinds of scrollbar. The override
-  // is the app's own (Debugging), persisted in the menu state -- written into
-  // the browser mock's stored state BEFORE the app boots, on every load:
-  // saving it through the running app does not hold, because the app writes
-  // its own menu state back.
-  await page.addInitScript(() => {
-    const key = 'thockdown-notes:browser-mock:v1'
-    try {
-      const store = JSON.parse(localStorage.getItem(key) ?? 'null')
-      if (!store?.appState) return
-      store.appState.menu = { ...(store.appState.menu ?? {}), forceCharacterScrollbarThumb: true }
-      localStorage.setItem(key, JSON.stringify(store))
-    } catch { /* a first load has no store yet; the reload after seeding does */ }
-  })
+  // Both documents are well past the character-thumb threshold in blocks,
+  // so both get the CHARACTER thumb with the app's own settings.
   await page.goto(`http://localhost:${port}/`)
   await seedLargeNoteAndReload(page, text)
   await placeCaretAt(page, 'start')
@@ -126,7 +118,13 @@ async function openPreview(page, port, text) {
   // one giant block shows nothing until its whole parse is done, which can
   // take seconds (the split cannot deliver a single block in instalments).
   await page.waitForSelector('.markdown-preview [data-index]', { timeout: 60000 })
-  await page.waitForTimeout(1500)
+  // The block split arrives in instalments, top first, and until the count
+  // passes the threshold the pane is continuous with a PIXEL thumb. The sparse
+  // document is ~13,000 tiny blocks and takes seconds to finish in dev; the
+  // app exposes no DOM signal for "split complete", so this is a generous
+  // hold rather than a wait on a condition. Measured: 1.5s caught the sparse
+  // document still on its pixel thumb (40px), 6s did not.
+  await page.waitForTimeout(6000)
 }
 
 async function main() {
