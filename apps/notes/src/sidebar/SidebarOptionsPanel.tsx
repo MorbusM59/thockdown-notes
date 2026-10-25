@@ -1012,7 +1012,10 @@ export function SidebarOptionsPanel({
   clearCaretColorArmTimer,
 }: SidebarOptionsPanelProps) {
     // The follow-the-music switch is on but cannot act, so it is drawn dimmed and its tooltip says why.
-    const caretFollowWaits = visualizer.caret.followsMusic && (!features.visualizer || visualizer.caret.effect === 0)
+    // With the Visualizer off it cannot be used at all, so it is disabled (and
+    // faded in whichever state it holds); on with the caret's effect at its centre it is only dimmed.
+    const caretFollowUnavailable = !features.visualizer
+    const caretFollowWaits = caretFollowUnavailable || (visualizer.caret.followsMusic && visualizer.caret.effect === 0)
     const outputDevice = useOutputDevice(features.visualizer)
     // Every block's fall: its shape (visualizer.ts, `pulseCurve`) and its
     // length, the length on a log track so each step of it feels the same.
@@ -2956,12 +2959,16 @@ export function SidebarOptionsPanel({
             <button
               type="button"
               className={`btn-icon options-color-swatch options-caret-preset-btn${visualizer.caret.followsMusic ? ' is-active' : ''}${caretFollowWaits ? ' is-dimmed' : ''}`}
-              data-tooltip={caretFollowWaits
-                ? `Follow the music is on but not in effect: ${features.visualizer ? "the caret's effect under Visualizer is at its centre" : 'switch the Visualizer (the drum) on in the feature bar'}. Until then the caret blinks as selected`
+              data-tooltip={caretFollowUnavailable
+                ? 'Follow the music needs the Visualizer: switch it on (the drum) in the feature bar. Until then the caret blinks as selected'
+                : caretFollowWaits
+                ? "Follow the music is on but not in effect: the caret's effect under Visualizer is at its centre. Until then the caret blinks as selected"
                 : 'Follow the music: while music plays and a beat is found, the caret pulses on the beat instead of blinking (tuned under Visualizer). Otherwise it blinks as selected'}
               aria-label="Caret follows the music"
               aria-pressed={visualizer.caret.followsMusic}
-              onClick={() => setVisualizer((prev) => ({ ...prev, caret: { ...prev.caret, followsMusic: !prev.caret.followsMusic } }))}
+              // aria-disabled rather than disabled, so the tooltip saying why still shows on hover.
+              aria-disabled={caretFollowUnavailable}
+              onClick={() => caretFollowUnavailable || setVisualizer((prev) => ({ ...prev, caret: { ...prev.caret, followsMusic: !prev.caret.followsMusic } }))}
             >
               <span className="fa-solid fa-music" aria-hidden="true" />
             </button>
