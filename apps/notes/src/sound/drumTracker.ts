@@ -1116,6 +1116,12 @@ export class DrumTracker {
     const silent = drivenHops < MIN_GRID_HOPS
     const explained = held && !agrees && bestScore <= CLEARLY_BETTER * combOf(this.period) * preference(this.period)
     if (this.confidence < MIN_CONFIDENCE || silent || explained) {
+      // A quiet window that still reads the held tempo keeps the grid locked
+      // without moving it: drums twenty dB down cannot be told from a pad by
+      // their energy, but they do not contradict the beat, and dropping the
+      // lock for the fifteen seconds the remembered drive takes to fade left
+      // a quieter verse with no hits.
+      if (silent && agrees && this.confidence >= MIN_CONFIDENCE) this.confidentAt = end
       if (!Number.isNaN(this.period)) {
         this.placeBar()
         this.learnPatterns()
