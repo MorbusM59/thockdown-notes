@@ -200,8 +200,10 @@ export const DEFAULT_VISUALIZER_PANE: VisualizerChannel = {
 export function defaultVisualizer(inverted: boolean): VisualizerSettings {
   return {
     caret: DEFAULT_VISUALIZER_CARET,
-    edge: { ...DEFAULT_VISUALIZER_EDGE, color: inverted ? 'rgba(255, 255, 255, 1)' : 'rgba(0, 0, 0, 1)' },
-    pane: { ...DEFAULT_VISUALIZER_PANE, color: inverted ? 'rgba(0, 0, 0, 0.499)' : 'rgba(255, 255, 255, 0.499)' },
+    // An inverted (dark) layout's colours are the author's own picks, value 0 at
+    // alphas 200 and 25 of the picker's 255, not the light ones inverted.
+    edge: { ...DEFAULT_VISUALIZER_EDGE, color: inverted ? 'rgba(0, 0, 0, 0.784)' : 'rgba(0, 0, 0, 1)' },
+    pane: { ...DEFAULT_VISUALIZER_PANE, color: inverted ? 'rgba(0, 0, 0, 0.098)' : 'rgba(255, 255, 255, 0.499)' },
   }
 }
 
