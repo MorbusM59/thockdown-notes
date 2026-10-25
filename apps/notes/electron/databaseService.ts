@@ -594,7 +594,7 @@ export function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null
     caretEffectStrengthPercent: clampInteger(source.caretEffectStrengthPercent, CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT, DEFAULT_UI_LAYOUT_LOADOUT.caretEffectStrengthPercent),
     // A layout saved before the visualizer existed gets the defaults for its
     // own inversion (its colours are picked before the theme's invert).
-    visualizer: sanitizeVisualizer(source.visualizer, (source.filterInvert ?? 0) > 0.5),
+    visualizer: sanitizeVisualizer(source.visualizer, (source.filterInvert ?? 0) > 0.5, source.caretAnimationPreset),
   };
 }
 

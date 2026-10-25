@@ -2952,6 +2952,19 @@ export function SidebarOptionsPanel({
                 <span className={`fa-solid ${CARET_ANIMATION_PRESETS[presetKey].iconClass}`} aria-hidden="true" />
               </button>
             ))}
+            {/* Not a blink but a switch beside them: the blink selected above
+                stays selected and is what the caret falls back to whenever
+                there is no beat to follow (VisualizerCaret.followsMusic). */}
+            <button
+              type="button"
+              className={`btn-icon options-color-swatch options-caret-preset-btn${visualizer.caret.followsMusic ? ' is-active' : ''}`}
+              data-tooltip="Follow the music: while music plays and a beat is found, the caret pulses on the beat instead of blinking (tuned under Visualizer). Otherwise it blinks as selected"
+              aria-label="Caret follows the music"
+              aria-pressed={visualizer.caret.followsMusic}
+              onClick={() => setVisualizer((prev) => ({ ...prev, caret: { ...prev.caret, followsMusic: !prev.caret.followsMusic } }))}
+            >
+              <span className="fa-solid fa-basketball" aria-hidden="true" />
+            </button>
           </div>
 
           <div className="options-glaze-cell options-glaze-cell-span-2">
@@ -3203,7 +3216,7 @@ export function SidebarOptionsPanel({
               { id: 'outline', color: visualizer.outline.color, glyph: 'fa-regular fa-square', tooltip: 'Outline colour: click to apply the staged colour, hold right-click to copy it', onApply: (css) => setVisualizer((prev) => ({ ...prev, outline: { ...prev.outline, color: css } })) },
             ]}
           />
-          {renderBeatCaret()}
+          {visualizer.caret.followsMusic && renderBeatCaret()}
           {renderBeatChannel('shade', 'Shade', 'the active editor\'s inner shade shows')}
           {renderBeatChannel('outline', 'Outline', 'the box outlines show')}
         </>) : null}

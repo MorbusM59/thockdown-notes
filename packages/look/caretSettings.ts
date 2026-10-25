@@ -18,7 +18,6 @@ export type CaretAnimationPresetKey =
   | 'fadeMid'
   | 'fadeEarly'
   | 'fadeLate'
-  | 'bounce'
 
 export interface CaretSettings {
   /**
@@ -188,30 +187,10 @@ export const CARET_ANIMATION_PRESETS: Record<CaretAnimationPresetKey, CaretAnima
       { atPercent: 100, alpha: 0 },
     ],
   },
-  // The playful one: a dropped ball. Each bounce comes back lower (1 -> 0.92
-  // -> 0.78 -> 0.6 -> 0.4) while the gaps between them stretch (6 -> 7 -> 8 ->
-  // 9 -> 11 -> 13 percent), then it snaps back to full to be dropped again.
-  bounce: {
-    label: 'Bounce',
-    iconClass: 'fa-basketball',
-    stops: [
-      { atPercent: 0, alpha: 1 },
-      { atPercent: 6, alpha: 0.12 },
-      { atPercent: 13, alpha: 0.92 },
-      { atPercent: 20, alpha: 0.1 },
-      { atPercent: 28, alpha: 0.78 },
-      { atPercent: 37, alpha: 0.08 },
-      { atPercent: 48, alpha: 0.6 },
-      { atPercent: 60, alpha: 0.06 },
-      { atPercent: 73, alpha: 0.4 },
-      { atPercent: 86, alpha: 0.05 },
-      { atPercent: 100, alpha: 1 },
-    ],
-  },
 }
 
 export const CARET_ANIMATION_PRESET_KEYS: readonly CaretAnimationPresetKey[] = [
-  'heartbeat', 'bigBeat', 'fadeMid', 'fadeEarly', 'fadeLate', 'bounce',
+  'heartbeat', 'bigBeat', 'fadeMid', 'fadeEarly', 'fadeLate',
 ]
 
 export function isCaretAnimationPresetKey(value: unknown): value is CaretAnimationPresetKey {
@@ -318,15 +297,18 @@ function formatNumber(value: number, decimals = 3): string {
  * keyframes DISCRETELY, flipping between stop values instead of ramping
  * between them, which silently reduced the whole blink to four hard steps and
  * made the frame setting invisible. Newer Chromium interpolates them fine,
- * which is exactly why the flow's alpha adjustments are the only deliberate
+ * which is exactly why the two holds' alpha adjustments are the only deliberate
  * `var()` exception here. Keep them limited to alpha math; do not add
  * `color-mix()` or unrelated variables to the animated stops.
  */
 /**
- * The flow's HOLD (`--flow-caret-effect`, 0..1) blends the animated alpha
- * toward the colour's own alpha, the peak of the blink: at 1, while the
- * reader types, the caret stands still at its peak, and as the hold falls
- * once typing stops, the blink takes over again.
+ * The caret's HOLD blends the animated alpha toward the colour's own alpha,
+ * the peak of the blink: at 1 the caret stands still at its peak, and as the
+ * hold falls the blink takes over again. Two holds, the larger wins: the
+ * flow's (`--flow-caret-effect`, 1 while the reader types, falling with the
+ * idle decay) and the music's (`--beat-caret-hold`, 1 while the caret follows
+ * a beat, eased in and out by a transition in index.css, so the blink and the
+ * beat hand over without a jump).
  */
 function flowAdjustedRgba(color: RgbaColor, alphaScale: number): string {
   const baseAlpha = formatNumber(clampAlphaChannel(color.a), 4)
@@ -334,7 +316,7 @@ function flowAdjustedRgba(color: RgbaColor, alphaScale: number): string {
     clampAlphaChannel(color.a * Math.max(0, Math.min(1, alphaScale))),
     4,
   )
-  const alpha = `calc(${animatedAlpha} + (${baseAlpha} - ${animatedAlpha}) * var(--flow-caret-effect, 0))`
+  const alpha = `calc(${animatedAlpha} + (${baseAlpha} - ${animatedAlpha}) * max(var(--flow-caret-effect, 0), var(--beat-caret-hold, 0)))`
   return `rgba(${clampColorChannel(color.r)}, ${clampColorChannel(color.g)}, ${clampColorChannel(color.b)}, ${alpha})`
 }
 

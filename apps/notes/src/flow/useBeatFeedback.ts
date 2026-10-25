@@ -5,11 +5,14 @@
  * effect and turned over when that effect is negative, so CSS only reads it:
  *
  * - `--beat-caret`, the caret's DIP: while the caret follows the music its
- *   own blink is suspended and it holds at its peak (`html[data-beat-caret]`),
- *   and the value takes that share off its opacity. Unlike the other two it
- *   follows no band and no detected hit: it dips on every beat of a steady
- *   clock that follows the music's tempo (`subscribeMusicClock`), each dip
- *   falling on its own shape and length.
+ *   own blink is held at its peak (`html[data-beat-caret]` eases
+ *   `--beat-caret-hold` to 1) and the value takes that share off its
+ *   opacity. Unlike the other two it follows no band and no detected hit: it
+ *   dips on every beat of a steady clock that follows the music's tempo
+ *   (`subscribeMusicClock`), each dip falling on its own shape and length.
+ *   It runs only while its switch is on (`VisualizerCaret.followsMusic`),
+ *   and the attribute is set only while that clock HAS a beat (music
+ *   playing, a tempo found): at any other moment the caret blinks.
  * - `--beat-shade`, the opacity of the active editor's beat shade
  *   (`.editor-beat-shade`, shown and promoted under `html[data-beat-shade]`).
  * - `--beat-outline`, the opacity of the box outlines' copy
@@ -42,7 +45,15 @@ interface BlockSubscription<T> {
   unsubscribe: () => void
 }
 
-type Subscribe<T> = (settings: T, listener: (response: number) => void) => BlockSubscription<T>
+/** `present` says whether the block is showing (its `<html>` attribute); a band's is from the start, the caret's only while its clock has a beat. */
+type Subscribe<T> = (settings: T, listener: (response: number) => void, present: (present: boolean) => void) => BlockSubscription<T>
+
+const subscribeBand: Subscribe<VisualizerChannel> = (channel, listener, present) => {
+  present(true)
+  return subscribeMusicBand(channel, listener)
+}
+
+const subscribeClock: Subscribe<VisualizerCaret> = (caret, listener, present) => subscribeMusicClock(caret, listener, present)
 
 function useBeatBlock<T extends BlockSettings>(name: BlockName, channel: T, on: boolean, subscribeTo: Subscribe<T>): void {
   const active = on && channel.effect !== 0
@@ -56,7 +67,7 @@ function useBeatBlock<T extends BlockSettings>(name: BlockName, channel: T, on: 
     if (!active) return
     const variable = `--beat-${name}`
     const root = document.documentElement
-    root.setAttribute(`data-beat-${name}`, '')
+    const attribute = `data-beat-${name}`
     const subscription = subscribeTo(channelRef.current, (response) => {
       const { effect } = channelRef.current
       const value = !musicPlayerService.isPlaying ? 0 : effect < 0 ? -effect * (1 - response) : effect * response
@@ -65,13 +76,13 @@ function useBeatBlock<T extends BlockSettings>(name: BlockName, channel: T, on: 
       // skips a value equal to the last).
       const steps = Math.round(value * 255)
       setFlowStyle(variable, steps <= 0 ? null : (steps / 255).toFixed(4))
-    })
+    }, (present) => root.toggleAttribute(attribute, present))
     subscriptionRef.current = subscription
     return () => {
       subscriptionRef.current = null
       subscription.unsubscribe()
       setFlowStyle(variable, null)
-      root.removeAttribute(`data-beat-${name}`)
+      root.removeAttribute(attribute)
     }
   }, [name, active, subscribeTo])
 
@@ -82,9 +93,9 @@ function useBeatBlock<T extends BlockSettings>(name: BlockName, channel: T, on: 
 
 export function useBeatFeedback(settings: BeatSettings, visualizer: VisualizerSettings, disabled: boolean): void {
   const on = settings.enabled && !disabled
-  useBeatBlock('caret', visualizer.caret, on, subscribeMusicClock)
-  useBeatBlock('shade', visualizer.shade, on, subscribeMusicBand)
-  useBeatBlock('outline', visualizer.outline, on, subscribeMusicBand)
+  useBeatBlock('caret', visualizer.caret, on && visualizer.caret.followsMusic, subscribeClock)
+  useBeatBlock('shade', visualizer.shade, on, subscribeBand)
+  useBeatBlock('outline', visualizer.outline, on, subscribeBand)
   const shadeColor = visualizer.shade.color
   const shadeSpreadPx = visualizer.shade.spreadPx
   const shadeBlurPx = visualizer.shade.blurPx

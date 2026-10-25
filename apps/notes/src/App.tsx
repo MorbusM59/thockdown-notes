@@ -873,7 +873,7 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     caretAnimationDurationMs: clamp(Math.round(toFiniteNumber(source.caretAnimationDurationMs, DEFAULT_CARET_SETTINGS.animationDurationMs)), CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS),
     caretFrameDurationMs: clamp(Math.round(toFiniteNumber(source.caretFrameDurationMs, DEFAULT_CARET_SETTINGS.frameDurationMs)), CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS),
     caretEffectStrengthPercent: clamp(Math.round(toFiniteNumber(source.caretEffectStrengthPercent, DEFAULT_CARET_SETTINGS.effectStrengthPercent)), CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT),
-    visualizer: sanitizeVisualizer(source.visualizer, toFiniteNumber(source.filterInvert, 0) > 0.5),
+    visualizer: sanitizeVisualizer(source.visualizer, toFiniteNumber(source.filterInvert, 0) > 0.5, source.caretAnimationPreset),
   }
 }
 

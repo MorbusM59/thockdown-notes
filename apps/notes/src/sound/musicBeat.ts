@@ -106,6 +106,18 @@ interface Clock {
   caret: VisualizerCaret
   listener: BeatListener
   published: number
+  /** Told whenever the clock gains or loses a beat (`locked`). */
+  lockListener: LockListener
+  /** Whether the clock has a beat to follow: music playing and a tempo found since the last track started. */
+  locked: boolean
+}
+
+type LockListener = (locked: boolean) => void
+
+function setLocked(subscriber: Clock, locked: boolean): void {
+  if (subscriber.locked === locked) return
+  subscriber.locked = locked
+  subscriber.lockListener(locked)
 }
 
 const clocks = new Set<Clock>()
@@ -261,6 +273,7 @@ function pulse(subscriber: Clock, listenerTime: number): number {
   const tracker = drums?.tracker
   clock.advance(listenerTime, tracker ? tracker.gridPeriodSec : NaN, tracker ? tracker.gridBeatTime : NaN)
   const phase = clock.phase
+  setLocked(subscriber, !Number.isNaN(phase))
   if (Number.isNaN(phase)) return 0
   const { fallSec, shape } = subscriber.caret
   return pulseCurve((phase * clock.period) / Math.min(fallSec, clock.period), shape)
@@ -396,7 +409,10 @@ function stop(): void {
   lastNow = NaN
   listenerClock.reset()
   for (const band of bands) publish(band, 0)
-  for (const subscriber of clocks) publish(subscriber, 0)
+  for (const subscriber of clocks) {
+    publish(subscriber, 0)
+    setLocked(subscriber, false)
+  }
 }
 
 function onVisibility(): void {
@@ -475,9 +491,15 @@ export function subscribeMusicBand(channel: BeatChannel, listener: BeatListener)
   return { update, unsubscribe }
 }
 
-/** Pulses on a steady beat that follows the music's tempo (the header's CLOCK); of `caret` only the fall is read. */
-export function subscribeMusicClock(caret: VisualizerCaret, listener: BeatListener): MusicClockSubscription {
-  const subscriber: Clock = { clock: new BeatClock(), caret, listener, published: 0 }
+/**
+ * Pulses on a steady beat that follows the music's tempo (the header's CLOCK); of `caret` only the fall is read.
+ * `lockListener` is told when the clock gains a beat (music playing and a
+ * tempo found since the track started; a break is carried through on the
+ * beat it had) and when it loses it (paused, hidden, a new track not yet
+ * read), so the caret can blink whenever there is no beat to follow.
+ */
+export function subscribeMusicClock(caret: VisualizerCaret, listener: BeatListener, lockListener: LockListener): MusicClockSubscription {
+  const subscriber: Clock = { clock: new BeatClock(), caret, listener, published: 0, lockListener, locked: false }
   const update = (next: VisualizerCaret) => {
     subscriber.caret = next
   }
