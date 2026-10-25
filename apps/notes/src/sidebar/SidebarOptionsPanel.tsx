@@ -22,12 +22,11 @@ import {
   BEAT_OCTAVES_MAX,
   BEAT_OCTAVES_MIN,
   BEAT_CONTRAST_MAX,
-  DEFAULT_EDGE_BLUR_PX,
-  DEFAULT_EDGE_SPREAD_PX,
   DEFAULT_VISUALIZER_CARET,
   FALL_MAX_SEC,
   FALL_MIN_SEC,
-  DEFAULT_VISUALIZER_CHANNEL,
+  DEFAULT_VISUALIZER_EDGE,
+  DEFAULT_VISUALIZER_PANE,
   EDGE_BLUR_MAX_PX,
   EDGE_SPREAD_MAX_PX,
   SOURCE_SLIDER_MAX,
@@ -1062,6 +1061,7 @@ export function SidebarOptionsPanel({
     // One band block's toggle and six sliders: the same for the edge and the pane, plus the edge's spread and blur.
     const renderBeatChannel = (key: 'edge' | 'pane', label: string, effect: string) => {
       const channel: VisualizerChannel = visualizer[key]
+      const defaults: VisualizerChannel = key === 'edge' ? DEFAULT_VISUALIZER_EDGE : DEFAULT_VISUALIZER_PANE
       const set = (patch: Partial<VisualizerChannel>) => setVisualizer((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }))
       const slider = (field: Exclude<keyof VisualizerChannel, 'source' | 'shape' | 'fallSec'>, trackLabel: string, min: number, max: number, step: number, tooltipLabel: string, ariaName: string, digits?: number) => (
         <CompactScrollbarSlider
@@ -1073,7 +1073,7 @@ export function SidebarOptionsPanel({
           trackLabel={trackLabel}
           tooltipLabel={tooltipLabel}
           ariaLabel={`${label}: ${ariaName}`}
-          defaultValue={DEFAULT_VISUALIZER_CHANNEL[field]}
+          defaultValue={defaults[field]}
           formatValue={digits === undefined ? undefined : (value) => value.toFixed(digits)}
           onCommit={(value) => set({ [field]: value })}
         />
@@ -1098,7 +1098,7 @@ export function SidebarOptionsPanel({
                 trackLabel="freq"
                 tooltipLabel="What it follows: the kick drum at the left end, the snare (and claps and rim shots) at the centre, hi-hats (and other short bright hits) at the right end, or, in between, the level of one band of the music, in Hz"
                 ariaLabel={`${label}: kick, snare, hi-hat, or a frequency in Hz`}
-                defaultValue={sourceSliderValue(DEFAULT_VISUALIZER_CHANNEL)}
+                defaultValue={sourceSliderValue(defaults)}
                 formatValue={(value) => {
                   const at = sourceAtSlider(value, channel.frequencyHz)
                   return at.source === 'band' ? at.frequencyHz.toString() : at.source
@@ -1111,7 +1111,7 @@ export function SidebarOptionsPanel({
                 ? slider('octaves', 'width', BEAT_OCTAVES_MIN, BEAT_OCTAVES_MAX, 0.1, 'Octaves: how wide the bell around the frequency is', 'band width in octaves', 1)
                 : slider('groove', 'groove', 0, 1, 0.01, 'How steadily it holds the learned pattern against what it hears. At the left it shows only the hits it hears; towards the middle it also shows an accent off the pattern; at the right every hit of the pattern lands at full strength, even one drowned by another instrument, and a one-off is ignored. A break stops it at any setting', 'groove')}
               {slider('contrast', 'contrast', 0, BEAT_CONTRAST_MAX, 0.01, 'How loud the band must be, against the ten seconds around it, before it responds: higher keeps only the biggest hits', 'contrast')}
-              {renderFallSliders(`beat-${key}`, label, channel, DEFAULT_VISUALIZER_CHANNEL, 'each hit', set)}
+              {renderFallSliders(`beat-${key}`, label, channel, defaults, 'each hit', set)}
               {/* An array, not a fragment: OptionsSliderRows counts its children, and a fragment is one. */}
               {key === 'edge' && [
                   <CompactScrollbarSlider
@@ -1124,7 +1124,7 @@ export function SidebarOptionsPanel({
                     trackLabel="spread"
                     tooltipLabel="Pixels: how far the edge reaches in from the editor's edges before it starts to fade"
                     ariaLabel="Edge: spread in pixels"
-                    defaultValue={DEFAULT_EDGE_SPREAD_PX}
+                    defaultValue={DEFAULT_VISUALIZER_EDGE.spreadPx}
                     onCommit={(value) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, spreadPx: Math.round(value) } }))}
                   />,
                   <CompactScrollbarSlider
@@ -1137,7 +1137,7 @@ export function SidebarOptionsPanel({
                     trackLabel="blur"
                     tooltipLabel="Pixels: how soft the edge fades inward; 0 is a hard line"
                     ariaLabel="Edge: blur in pixels"
-                    defaultValue={DEFAULT_EDGE_BLUR_PX}
+                    defaultValue={DEFAULT_VISUALIZER_EDGE.blurPx}
                     onCommit={(value) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, blurPx: Math.round(value) } }))}
                   />,
               ]}

@@ -90,9 +90,8 @@ export interface VisualizerEdgeChannel extends VisualizerColorChannel {
 
 export const EDGE_SPREAD_MAX_PX = 200
 export const EDGE_BLUR_MAX_PX = 200
-/** Spread 0 and blur 32 are the edge as it was drawn before either was a setting (4px and 32px blur, no spread). */
 export const DEFAULT_EDGE_SPREAD_PX = 0
-export const DEFAULT_EDGE_BLUR_PX = 32
+export const DEFAULT_EDGE_BLUR_PX = 100
 
 export interface VisualizerSettings {
   /** The caret, held at its peak while it follows the music and dipped on a steady beat that follows its tempo. */
@@ -151,6 +150,11 @@ function fallOfMass(mass: number): { shape: number; fallSec: number } {
  */
 const DEFAULT_GROOVE = 0
 
+/**
+ * The defaults are the visualizer of a layout the author saved (2026-10-25),
+ * its fall lengths rounded to the whole milliseconds the slider shows; a
+ * field that layout did not set keeps the value it had before.
+ */
 export const DEFAULT_VISUALIZER_CHANNEL: VisualizerChannel = {
   effect: 0.6,
   source: 'kick',
@@ -163,30 +167,41 @@ export const DEFAULT_VISUALIZER_CHANNEL: VisualizerChannel = {
 }
 
 export const DEFAULT_VISUALIZER_CARET: VisualizerCaret = {
-  followsMusic: false,
-  effect: DEFAULT_VISUALIZER_CHANNEL.effect,
-  shape: DEFAULT_VISUALIZER_CHANNEL.shape,
-  fallSec: DEFAULT_VISUALIZER_CHANNEL.fallSec,
+  followsMusic: true,
+  effect: -1,
+  shape: -1,
+  fallSec: 1.515,
+}
+
+/** The edge's and the pane's sliders, without their colours (which depend on the layout's inversion, `defaultVisualizer`). */
+export const DEFAULT_VISUALIZER_EDGE: Omit<VisualizerEdgeChannel, 'color'> = {
+  ...DEFAULT_VISUALIZER_CHANNEL,
+  effect: 0.2,
+  shape: -0.5,
+  fallSec: 0.5,
+  spreadPx: DEFAULT_EDGE_SPREAD_PX,
+  blurPx: DEFAULT_EDGE_BLUR_PX,
+}
+
+export const DEFAULT_VISUALIZER_PANE: VisualizerChannel = {
+  ...DEFAULT_VISUALIZER_CHANNEL,
+  effect: 0.5,
+  source: 'snare',
+  frequencyHz: 640,
+  fallSec: 0.25,
 }
 
 /**
  * The defaults for a layout, which depend on whether it is inverted: a
  * colour is picked BEFORE the theme's invert, so an edge that darkens and
- * outlines that brighten on screen are stored the other way round in an
+ * a pane that brightens on screen are stored the other way round in an
  * inverted layout.
  */
 export function defaultVisualizer(inverted: boolean): VisualizerSettings {
-  const dark = 'rgba(0, 0, 0, 0.9)'
-  const light = 'rgba(255, 255, 255, 0.35)'
   return {
     caret: DEFAULT_VISUALIZER_CARET,
-    edge: {
-      ...DEFAULT_VISUALIZER_CHANNEL,
-      color: inverted ? 'rgba(255, 255, 255, 0.9)' : dark,
-      spreadPx: DEFAULT_EDGE_SPREAD_PX,
-      blurPx: DEFAULT_EDGE_BLUR_PX,
-    },
-    pane: { ...DEFAULT_VISUALIZER_CHANNEL, color: inverted ? 'rgba(0, 0, 0, 0.35)' : light },
+    edge: { ...DEFAULT_VISUALIZER_EDGE, color: inverted ? 'rgba(255, 255, 255, 1)' : 'rgba(0, 0, 0, 1)' },
+    pane: { ...DEFAULT_VISUALIZER_PANE, color: inverted ? 'rgba(0, 0, 0, 0.499)' : 'rgba(255, 255, 255, 0.499)' },
   }
 }
 
@@ -285,7 +300,11 @@ type LegacyBlockName = 'shade' | 'outline'
  */
 export function sanitizeVisualizer(input: unknown, inverted: boolean, legacyCaretPreset?: unknown): VisualizerSettings {
   const d = defaultVisualizer(inverted)
-  const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<keyof VisualizerSettings | LegacyBlockName, unknown>>
+  // A layout saved before the visualizer existed takes the defaults whole:
+  // the caret's legacy reading below (no caret block, not following) is for
+  // a layout that HAD a visualizer, saved before the caret's switch.
+  if (!input || typeof input !== 'object') return d
+  const source = input as Partial<Record<keyof VisualizerSettings | LegacyBlockName, unknown>>
   return {
     caret: sanitizeCaret(source.caret, d.caret, legacyCaretPreset),
     edge: sanitizeEdgeChannel(source.edge ?? source.shade, d.edge),

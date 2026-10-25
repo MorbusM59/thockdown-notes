@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultVisualizer, FALL_MAX_SEC, FALL_MIN_SEC, pulseCurve, sanitizeVisualizer, SOURCE_SLIDER_MAX, SOURCE_SLIDER_MIN, sourceAtSlider, sourceSliderValue } from './visualizer'
+import { DEFAULT_EDGE_BLUR_PX, DEFAULT_VISUALIZER_CARET, defaultVisualizer, FALL_MAX_SEC, FALL_MIN_SEC, pulseCurve, sanitizeVisualizer, SOURCE_SLIDER_MAX, SOURCE_SLIDER_MIN, sourceAtSlider, sourceSliderValue } from './visualizer'
 
 describe('sanitizeVisualizer', () => {
   it('fills a layout saved before the visualizer with the defaults for its inversion', () => {
@@ -17,7 +17,7 @@ describe('sanitizeVisualizer', () => {
     expect(v.pane.frequencyHz).toBe(20000)
     expect(v.pane.source).toBe('band')
     expect(v.pane.color).toBe(defaultVisualizer(false).pane.color)
-    expect(v.caret.effect).toBe(0.6)
+    expect(v.caret.effect).toBe(DEFAULT_VISUALIZER_CARET.effect)
   })
 
   it('keeps only what the caret reads, so an older save with a source loads without it', () => {
@@ -28,7 +28,9 @@ describe('sanitizeVisualizer', () => {
   it('migrates a layout from before the caret switch: it followed the music whenever its caret had an effect', () => {
     expect(sanitizeVisualizer({ caret: { effect: 0.4 } }, false).caret.followsMusic).toBe(true)
     expect(sanitizeVisualizer({ caret: { effect: 0 } }, false).caret.followsMusic).toBe(false)
-    expect(sanitizeVisualizer(undefined, false).caret.followsMusic).toBe(false)
+    // A visualizer with no caret block never followed; no visualizer at all takes the defaults.
+    expect(sanitizeVisualizer({}, false).caret.followsMusic).toBe(false)
+    expect(sanitizeVisualizer(undefined, false).caret.followsMusic).toBe(DEFAULT_VISUALIZER_CARET.followsMusic)
     // The old bounce blink is now the switch's button.
     expect(sanitizeVisualizer(undefined, false, 'bounce').caret.followsMusic).toBe(true)
     expect(sanitizeVisualizer({ caret: { effect: 0 } }, false, 'bounce').caret.followsMusic).toBe(true)
@@ -114,9 +116,9 @@ describe('pulseCurve', () => {
 })
 
 it('gives a save without the edge geometry its defaults, and bounds and rounds what it has', () => {
-  expect(sanitizeVisualizer({ edge: {} }, false).edge).toMatchObject({ spreadPx: 0, blurPx: 32 })
+  expect(sanitizeVisualizer({ edge: {} }, false).edge).toMatchObject({ spreadPx: 0, blurPx: DEFAULT_EDGE_BLUR_PX })
   expect(sanitizeVisualizer({ edge: { spreadPx: 14.7, blurPx: 900 } }, false).edge).toMatchObject({ spreadPx: 15, blurPx: 200 })
-  expect(sanitizeVisualizer({ edge: { spreadPx: -5, blurPx: 'x' } }, false).edge).toMatchObject({ spreadPx: 0, blurPx: 32 })
+  expect(sanitizeVisualizer({ edge: { spreadPx: -5, blurPx: 'x' } }, false).edge).toMatchObject({ spreadPx: 0, blurPx: DEFAULT_EDGE_BLUR_PX })
 })
 
 describe('the source slider', () => {
@@ -157,4 +159,19 @@ it('reads a layout saved under the old block names, shade and outline, as the ed
   expect(v.edge).toMatchObject({ effect: 0.4, spreadPx: 12 })
   expect(v.pane).toMatchObject({ effect: -0.3, color: 'rgba(1, 2, 3, 1)' })
   expect(sanitizeVisualizer({ edge: { effect: 0.1 }, shade: { effect: 0.9 } }, false).edge.effect).toBe(0.1)
+})
+
+// The fall slider (SidebarOptionsPanel's `renderFallSliders`) is a log track
+// whose step puts the block's default on the grid counted from the minimum;
+// a reset snaps the default to that grid (CompactScrollbarSlider's
+// `snapValue`), so it must land back on the default, for every block.
+it('every block\'s default fall survives the fall slider\'s reset', () => {
+  const v = defaultVisualizer(false)
+  for (const fall of [v.caret.fallSec, v.edge.fallSec, v.pane.fallSec]) {
+    const min = Math.log(FALL_MIN_SEC)
+    const step = Math.log(fall / FALL_MIN_SEC) / 90
+    const snapped = Math.exp(min + Math.round((Math.log(fall) - min) / step) * step)
+    expect(snapped).toBeCloseTo(fall, 12)
+    expect(Math.round(snapped * 1000)).toBe(Math.round(fall * 1000))
+  }
 })
